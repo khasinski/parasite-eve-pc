@@ -1106,8 +1106,24 @@ static void Host_PauseForFocus(SDL_Window *game) {
     }
 }
 
+#ifndef PE_HOST_SETTINGS_TEST
+#include "bg_editor.h"
+#endif
+
 static bool Host_SettingsEvent(const SDL_Event *event) {
     SDL_Window *game = Psyz_GetWindow_SDL3();
+#ifndef PE_HOST_SETTINGS_TEST
+    if (s_bgEditor.active) {
+        if (event->type == SDL_EVENT_WINDOW_RESIZED ||
+            event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
+            event->type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) {
+            s_bgEditor.dirty = 1;
+            return false;
+        }
+        BgEditor_ProcessEvent(event, game, &s_bgEditor.quit);
+        return true;
+    }
+#endif
     if (s_overlayState.open) {
         if (event->type == SDL_EVENT_WINDOW_RESIZED ||
             event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
@@ -1125,6 +1141,14 @@ static bool Host_SettingsEvent(const SDL_Event *event) {
         Host_PauseForFocus(game);
         return true;
     }
+#ifndef PE_HOST_SETTINGS_TEST
+    if (event->type == SDL_EVENT_KEY_DOWN && event->key.scancode == SDL_SCANCODE_F2) {
+        if (!event->key.repeat) {
+            Host_RunBackgroundEditor(game, 0, 1);
+        }
+        return true;
+    }
+#endif
     if (event->type == SDL_EVENT_KEY_DOWN && event->key.scancode == SDL_SCANCODE_ESCAPE) {
         if (!event->key.repeat) {
             Host_Settings(game);
@@ -1249,6 +1273,8 @@ int main(int argc, char **argv) {
     unsigned internal_resolution = host_options.scale;
     int resolution_argument = 0;
     int headless_argument = 0;
+    int launch_bg_editor = 0;
+    int bg_editor_room = 1;
 
     for (int arg = 1; arg < argc; ++arg) {
         if (!strcmp(argv[arg], "--help")) {
@@ -1257,6 +1283,14 @@ int main(int argc, char **argv) {
         }
         if (!strcmp(argv[arg], "--choose-discs")) {
             choose_discs = 1;
+        } else if (!strcmp(argv[arg], "--bg-editor")) {
+            launch_bg_editor = 1;
+        } else if (!strcmp(argv[arg], "--room")) {
+            if (arg + 1 >= argc) {
+                fprintf(stderr, "Missing room number\n");
+                return EXIT_FAILURE;
+            }
+            bg_editor_room = atoi(argv[++arg]);
         } else if (!strcmp(argv[arg], "--headless") || !strcmp(argv[arg], "--headless-gpu")) {
             if (headless_argument++) {
                 fprintf(stderr, "Duplicate or conflicting headless mode\n");
@@ -1536,6 +1570,10 @@ images_ready:;
             }
 
             Scene_LoadFieldBg();
+            if (launch_bg_editor) {
+                launch_bg_editor = 0;
+                Host_RunBackgroundEditor(Psyz_GetWindow_SDL3(), bg_editor_room, 0);
+            }
             token = g_SceneDispatchToken;
             g_SceneDispatchCur = token;
 
