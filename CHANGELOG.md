@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed text and image shimmering when the game switches framebuffers, at all internal resolutions.
+
 ## 0.3-alpha
 
 - Moved the settings menu (`Esc`) to an in-window overlay rendered directly over the main game window instead of opening a separate window.
