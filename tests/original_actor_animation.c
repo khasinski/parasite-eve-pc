@@ -68,6 +68,11 @@
 #include "pe1/menu_sound.h"
 #include "pe1/draw_wipe_rect.h"
 #include "pe1/memcard.h"
+#include "pe1/reloc_block.h"
+#include "pe1/memcard_save_state.h"
+#ifdef PE_MODS
+#include "../mods/host/pe_mod_host.h"
+#endif
 
 #include "actor_animation/test_fixtures_and_core.inc"
 #include "actor_animation/test_fieldfx_and_glow.inc"

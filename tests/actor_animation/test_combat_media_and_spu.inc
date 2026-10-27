@@ -502,6 +502,66 @@ static int original_save_title_images(void)
     puts("Original save titles: 2700 USA CPU states across all450 room names, 36 full64-byte titles and complete M064 card header passed");return 1;
 }
 
+static void original_card_update_crc(u8 *image) {
+    memset(image + 0x1C8C, 0, 4);
+    u16 crc = 0xFFFF;
+    for (unsigned i = 0; i < 0x2000; ++i) {
+        crc ^= (u16)image[i] << 8;
+        for (unsigned bit = 0; bit < 8; ++bit)
+            crc = (u16)((crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1);
+    }
+    u32 stored = crc ^ 0xFFFFu;
+    memcpy(image + 0x1C8C, &stored, 4);
+}
+#ifdef PE_MODS
+static unsigned card_read_hooks;
+static int card_read_hook(void *ctx, void *user) {
+    (void)user;
+    if (!g_MemCardLoadSucceeded || memcmp(&g_SaveRuntimeState, (u8 *)ctx + 0x100, sizeof(g_SaveRuntimeState)))
+        card_read_hooks += 1000;
+    ++card_read_hooks;
+    return 0;
+}
+#endif
+
+static int native_save_hook_safety(void) {
+    memset(g_MemCardFileBuffer, 0, sizeof(g_MemCardFileBuffer));
+    SaveRuntimeState *candidate = (SaveRuntimeState *)(g_MemCardFileBuffer + 0x100);
+    candidate->windows.header.saveName[0] = 0xFF;
+    candidate->windows.header.ayaName[0] = 0xFF;
+    candidate->player.aya.inventory_slot_count = 50;
+    candidate->player.aya.equipped_weapon_slot = -1;
+    candidate->player.aya.equipped_armor_slot = -1;
+    g_SaveMetadataWindowIndex = 0;
+    original_card_update_crc(g_MemCardFileBuffer);
+#ifdef PE_MODS
+    PeHookInit init = {0, "/tmp/pe-save-hook-test/parasite-eve.toml"};
+    pe_host_init(&init);
+    if (pe_hook_add(PE_HOOK_SAVE_READ, card_read_hook, NULL, 0, "host")) return 0;
+    card_read_hooks = 0;
+#endif
+    MenuWidget_InitPool(); Menu_CreateMemCardProgressWidget(0);
+    Save_LoadCardFileIntoRuntime();
+    if (!g_MemCardLoadSucceeded) return 0;
+    SaveRuntimeState before = g_SaveRuntimeState;
+    for (unsigned fault = 0; fault < 3; ++fault) {
+        u32 link = fault == 0 ? 0x12345678 : 0;
+        memcpy(g_MemCardFileBuffer + 0x13E4 + 0x818 + 0x68, &link, 4);
+        if (fault == 2) candidate->player.aya.equipped_weapon_slot = 50;
+        original_card_update_crc(g_MemCardFileBuffer);
+        if (fault == 1) g_MemCardFileBuffer[0x100] ^= 1;
+        MenuWidget_InitPool(); Menu_CreateMemCardProgressWidget(0);
+        Save_LoadCardFileIntoRuntime();
+        if (g_MemCardLoadSucceeded || memcmp(&before, &g_SaveRuntimeState, sizeof(before))) return 0;
+#ifdef PE_MODS
+        if (card_read_hooks != 1) return 0;
+#endif
+    }
+    MenuWidget_InitPool(); g_MenuDeferredCallback = NULL;
+    puts("Save load transaction: CRC/link/inventory failures preserve runtime; read hooks observe committed state exactly once");
+    return 1;
+}
+
 static int original_save_card_images(PeDisc *disc)
 {
     PeDiscFile archive,exe;
@@ -609,6 +669,24 @@ static int original_save_card_images(PeDisc *disc)
     }
     /* Execute the complete original loader, including real modal widgets.
      * Synthetic image payloads deliberately exercise 32-bit timer wrapping. */
+    /* The byte-pattern fixtures above test lossless serialization, not valid
+     * inventory contents. Give the loader a structurally valid inventory. */
+    SaveRuntimeState *serialized = (SaveRuntimeState *)(g_MemCardFileBuffer + 0x100);
+    memset(&serialized->player, 0, sizeof(serialized->player));
+    serialized->player.aya.inventory_slot_count = 50;
+    serialized->player.aya.equipped_weapon_slot = -1;
+    serialized->player.aya.equipped_armor_slot = -1;
+    original_card_update_crc(g_MemCardFileBuffer);
+#ifdef PE_MODS
+    static int hook_registered;
+    if (!hook_registered) {
+        PeHookInit init = {0, "/tmp/pe-save-hook-test/parasite-eve.toml"};
+        pe_host_init(&init);
+        if (pe_hook_add(PE_HOOK_SAVE_READ, card_read_hook, NULL, 0, "host")) return 0;
+        hook_registered = 1;
+    }
+    card_read_hooks = 0;
+#endif
     static u8 image[0x2000];memcpy(image,g_MemCardFileBuffer,sizeof(image));
     int queued=g_AkaoMessageQueueCount;
     g_SaveMetadataWindowIndex=0;
@@ -622,19 +700,38 @@ static int original_save_card_images(PeDisc *disc)
        GAME_TIME_COUNTER(2)!=(s32)((u32)g_SaveRuntimeState.windows.header.playTimeMinutes*60u) ||
        GAME_TIME_COUNTER(0)!=(s32)((u32)g_SaveRuntimeState.windows.header.gameTimeMinutes*60u))valid=0;
     for(unsigned i=0;i<6;++i)if(g_KeyItemRecords[i].ammo!=g_SaveRuntimeState.categoryCounts[i])valid=0;
+#ifdef PE_MODS
+    if (card_read_hooks != 1) valid = 0;
+#endif
     const unsigned damaged[]={0,4,0x100,0x13E4,0x1C8C,0x1C90,0x1FFF};
-    for(unsigned fault=0;fault<8;++fault) {
+    for(unsigned fault=0;fault<20;++fault) {
         memcpy(g_MemCardFileBuffer,image,sizeof(image));
         if(fault<7) g_MemCardFileBuffer[damaged[fault]]^=0x40;
         else {
-            u32 bad=0x12345678;memcpy(g_MemCardFileBuffer+0x13E4+0x818+0x68,&bad,4);
-            memset(g_MemCardFileBuffer+0x1C8C,0,4);
-            u16 crc=0xFFFF;
-            for(unsigned i=0;i<sizeof(image);++i) {
-                crc^=(u16)g_MemCardFileBuffer[i]<<8;
-                for(unsigned b=0;b<8;++b)crc=(u16)((crc&0x8000)?(crc<<1)^0x1021:crc<<1);
+            if (fault == 7) {
+                u32 bad = 0x12345678; memcpy(g_MemCardFileBuffer + 0x13E4 + 0x818 + 0x68, &bad, 4);
+            } else {
+                SaveRuntimeState *candidate = (SaveRuntimeState *)(g_MemCardFileBuffer + 0x100);
+                AyaSaveState *aya = &candidate->player.aya;
+                InventoryRuntime *inv = &candidate->player.runtime.inventory;
+                switch (fault) {
+                case 8: inv->equipment[0] = (ItemDataRecord){.iconId=1,.itemId=0x78,.kind=255}; break;
+                case 9: inv->equipment[0] = (ItemDataRecord){.iconId=1,.itemId=0x78,.kind=1,.tailCount=11}; break;
+                case 10: inv->equipment[0] = (ItemDataRecord){.iconId=1,.itemId=0x78,.kind=1,.tailCapacity=255}; break;
+                case 11: aya->inventory_items[0] = 0x180; break;
+                case 12: inv->storage[99] = -1; break;
+                case 13: inv->specialStorage[81] = 0x209; break;
+                case 14: aya->inventory_items[0] = 0x100; break;
+                case 15: aya->equipped_weapon_slot = -128; break;
+                case 16: aya->equipped_armor_slot = 50; break;
+                case 17: aya->inventory_slot_count = 51; break;
+                case 18: aya->equipped_weapon_slot = 0; break;
+                case 19:
+                    inv->equipment[0] = (ItemDataRecord){.iconId=1,.itemId=0x78,.kind=1};
+                    aya->inventory_items[0] = 0x100; aya->equipped_armor_slot = 0; break;
+                }
             }
-            u32 stored=crc^0xFFFFu;memcpy(g_MemCardFileBuffer+0x1C8C,&stored,4);
+            original_card_update_crc(g_MemCardFileBuffer);
         }
         SaveRuntimeState before_runtime=g_SaveRuntimeState;Pe1GameState before_game=g_GameState;
         AyaBattleState before_aya=g_AyaBattleState;u32 before_variables[512];
@@ -644,6 +741,9 @@ static int original_save_card_images(PeDisc *disc)
         MenuWidget_InitPool();Menu_CreateMemCardProgressWidget(0);g_MemCardLoadSucceeded=1;
         Save_LoadCardFileIntoRuntime();
         child=MenuWidget_GetCurrentNode();
+#ifdef PE_MODS
+        if (card_read_hooks != 1) valid = 0;
+#endif
         if(g_MemCardLoadSucceeded || memcmp(&before_runtime,&g_SaveRuntimeState,sizeof(before_runtime)) ||
            memcmp(&before_game,&g_GameState,sizeof(before_game)) || memcmp(&before_aya,&g_AyaBattleState,sizeof(before_aya)) ||
            memcmp(before_variables,g_ScriptVariableBank,sizeof(before_variables)) ||
@@ -661,6 +761,9 @@ static int original_save_card_images(PeDisc *disc)
     memcpy(g_MemCardFileBuffer,image,sizeof(image));MenuWidget_InitPool();Menu_CreateMemCardProgressWidget(0);
     Save_LoadCardFileIntoRuntime();
     if(!g_MemCardLoadSucceeded || memcmp(image,g_MemCardFileBuffer,sizeof(image)))valid=0;
+#ifdef PE_MODS
+    if (card_read_hooks != 2) valid = 0;
+#endif
     MenuWidget_InitPool();g_MenuDeferredCallback=NULL;g_AkaoMessageQueueCount=queued;
     if(!original_card_file_services(g_MemCardFileBuffer))valid=0;
     /* A valid New Game image can also finish the original success callback.
@@ -726,7 +829,7 @@ static int original_save_card_images(PeDisc *disc)
     memcpy(g_ScriptVariableBank,saved_variables,sizeof(saved_variables));D_8009D2E8=saved_move;
     g_SceneDispatchToken=saved_token;g_SaveTitleStyleFlag=saved_style;g_ScreenTint.fadeMode=saved_fade;
     g_SaveIoCursor=saved_cursor;g_SaveSjisFormatArguments=saved_arguments;memcpy(g_SaveTitleBuffer,title,sizeof(title));
-    if(valid)puts("Original save image: 24 full 8 KiB USA MIPS images, SJIS titles/icons, CRC, unaligned tails and full loader with modal dialogs, CRC/link rejection and retry passed");
+    if(valid)puts("Original save image: 24 full 8 KiB USA MIPS images, SJIS titles/icons, CRC, unaligned tails and full loader with modal dialogs, CRC/link/inventory rejection, committed-state hooks and retry passed");
     return valid;
 }
 

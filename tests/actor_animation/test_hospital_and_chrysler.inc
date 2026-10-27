@@ -801,6 +801,11 @@ static int original_all_room_loads(void)
     if(!pe_disc_open(&disc2,second)){pe_disc_close(&disc);return 1;}
     ResetGraph(0);g_CdImageVolumes[0]=&disc;g_CdImageVolumes[1]=&disc2;
     int result=1;
+    struct CachedProgram { const u8 *data; size_t size; u64 hash; };
+    static struct CachedProgram programs[8192];
+    unsigned program_count = 0, program_lookups = 0;
+    size_t program_bytes = 0;
+    u64 lookup_ticks = 0;
     for(unsigned volume=0;volume<2;++volume){
     CdRom_BindImage(volume?&disc2:&disc,NULL);
     if(Asset_OpenPeImage()!=0)goto done;
@@ -819,11 +824,43 @@ static int original_all_room_loads(void)
            g_FieldFxTaskPrograms[38]!=&g_RoomHomingFlashProgram))goto done;
         if(homing)for(unsigned i=0;i<sizeof(g_RoomScriptArgs);++i)
             if(((unsigned char *)g_RoomScriptArgs)[i])goto done;
+        /* Catalogue real SFX programs on both discs. Retain their hashes
+         * across all room-buffer reuse and verify deduplication explicitly. */
+        SceneAssetBlob *archive = (SceneAssetBlob *)g_GameState.loaded_scene_assets;
+        SceneAssetDirectory *directory = SceneAsset_ResolveOffset(archive, archive->directoryOffset);
+        u32 packed = directory->streamEntries;
+        SceneCdStreamRecord *streams = SceneAsset_ResolveOffset(archive, packed & 0x3FFFFF);
+        for (unsigned entry = 0; entry < packed >> 22; ++entry) {
+            size_t size = streams[entry].reserved & 0xFFFFFF;
+            if (size < 8) continue;
+            const u8 *source = SceneAsset_ResolveOffset(archive, streams[entry].offset & 0xFFFFFF);
+            u64 start = SDL_GetPerformanceCounter();
+            const u8 *copy = Asset_FindTable2CByU16Key((char *)archive, streams[entry].key);
+            const u8 *again = Asset_FindTable2CByU16Key((char *)archive, streams[entry].key);
+            lookup_ticks += SDL_GetPerformanceCounter() - start; program_lookups += 2;
+            if (!copy || copy != again || memcmp(copy, source, size)) goto done;
+            unsigned i = 0; while (i < program_count && programs[i].data != copy) ++i;
+            if (i == program_count) {
+                if (program_count == 8192) goto done;
+                u64 hash = UINT64_C(14695981039346656037);
+                for (size_t byte = 0; byte < size; ++byte) hash = (hash ^ copy[byte]) * UINT64_C(1099511628211);
+                programs[program_count++] = (struct CachedProgram){copy, size, hash};
+                program_bytes += size;
+            }
+        }
         ++loaded;
     }
     if(loaded!=414 || empty!=36){fprintf(stderr,"Room catalog counts %u/%u\n",loaded,empty);goto done;}
     printf("Original disc%u room catalog: all 450 entries, 414 nonempty loads, 36 empty records, including all seven HomingFlash bindings and resets passed\n",volume+1);
     }
+    for (unsigned i = 0; i < program_count; ++i) {
+        u64 hash = UINT64_C(14695981039346656037);
+        for (size_t byte = 0; byte < programs[i].size; ++byte)
+            hash = (hash ^ programs[i].data[byte]) * UINT64_C(1099511628211);
+        if (hash != programs[i].hash) goto done;
+    }
+    printf("SFX cache catalogue: %u unique immutable programs, %zu payload bytes, %u lookups in %.3f ms; all hashes survived both disc catalogues\n",
+        program_count, program_bytes, program_lookups, 1000.0 * lookup_ticks / SDL_GetPerformanceFrequency());
     result=0;
 done:
     fx_image_io=0;CdRom_BindImage(NULL,NULL);g_CdImageVolumes[0]=g_CdImageVolumes[1]=NULL;

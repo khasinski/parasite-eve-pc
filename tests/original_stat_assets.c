@@ -547,6 +547,29 @@ static int inventory_sort_comparisons(void)
         for(int i=0;i<g_InvTransferItemCount;++i)
             CHECK(g_InvTransferItemList[i]>=0 && g_InvTransferItemList[i]<g_AyaSaveState.inventory_slot_count);
     }
+    /* Invalid serialized fields must not escape through sort-table indexes
+     * or shifts. Keep the IDs intact; load validation rejects these saves. */
+    for (unsigned kind = 24; kind <= 255; kind += kind == 24 ? 7 : kind == 31 ? 1 : 223) {
+        memset(&g_SaveRuntimeState, 0, sizeof(g_SaveRuntimeState));
+        g_AyaSaveState.inventory_slot_count = 10;
+        g_AyaSaveState.equipped_weapon_slot = -128;
+        g_AyaSaveState.equipped_armor_slot = 127;
+        g_AyaInventoryItems[0] = 0x100; g_AyaInventoryItems[1] = 0x101;
+        g_InventoryRuntime.equipment[0] = (ItemDataRecord){.iconId=1,.itemId=0x78,.kind=kind};
+        g_InventoryRuntime.equipment[1] = (ItemDataRecord){.iconId=1,.itemId=0x44,.kind=1};
+        CHECK(!Inv_ValidateSavedInventory(&g_SaveRuntimeState));
+        Inv_SortInventoryByMode(1, 0);
+        CHECK(g_AyaSaveState.equipped_weapon_slot == -1 && g_AyaSaveState.equipped_armor_slot == -1);
+        unsigned seen[2] = {0};
+        for (unsigned slot = 0; slot < 10; ++slot) {
+            int id = g_AyaInventoryItems[slot];
+            if (id == 0x100) ++seen[0]; else if (id == 0x101) ++seen[1]; else CHECK(!id);
+        }
+        CHECK(seen[0] == 1 && seen[1] == 1);
+        s16 missing = 0x180, existing = 0x101;
+        CHECK(Inv_CompareItemsByStatForSort(&missing, &existing) == 1);
+        if (kind == 255) break;
+    }
     g_SaveRuntimeState=before;g_InvBonusSlotCount=old_bonus;
     Inv_SetActiveListOverride(NULL,0);Inv_SelectActiveList(0);
     puts("Original inventory sorting: 64,800 USA MIPS comparisons, empty records and full inventory/storage sorting passed");

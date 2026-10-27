@@ -1,4 +1,5 @@
 #include "common.h"
+#include <SDL3/SDL.h>
 #include "pe_hooks.h"
 #include "pe1/game_timers.h"
 #include "pe1/geom_state.h"
@@ -33,6 +34,59 @@ static char g_MemCardSearchPattern[] = "bu00:*";
 char *g_MemCardSearchPatternPtr = g_MemCardSearchPattern;
 MemCardFileHeader g_MemCardIconHeader;
 _Alignas(16) u8 g_MemCardFileBuffer[0x2000];
+
+/* Keep the retail polling/UI states, but publish a complete native file only
+ * after it has been flushed and closed. An interrupted write never owns the
+ * previous save and must never erase it. */
+static struct {
+    SDL_IOStream *io;
+    char target[4096], temporary[4160], previous[4096];
+} card_writes[2];
+
+static void MemCard_CancelWrite(MemCardPortState *state) {
+    unsigned port = (unsigned)(state - g_MemCardPortStates);
+    if (port >= 2) return;
+    if (card_writes[port].io) SDL_CloseIO(card_writes[port].io);
+    if (*card_writes[port].temporary) SDL_RemovePath(card_writes[port].temporary);
+    memset(&card_writes[port], 0, sizeof(card_writes[port]));
+}
+
+static int MemCard_BeginWrite(MemCardPortState *state) {
+    unsigned port = (unsigned)(state - g_MemCardPortStates);
+    if (card_writes[port].io) return 1;
+    Psyz_AdjustPath(card_writes[port].target, g_MemCardFilePath,
+                    sizeof(card_writes[port].target));
+    char *slash = strrchr(card_writes[port].target, '/');
+    char *backslash = strrchr(card_writes[port].target, '\\');
+    if (!slash || (backslash && backslash > slash)) slash = backslash;
+    size_t prefix = slash ? (size_t)(slash + 1 - card_writes[port].target) : 0;
+    int n = snprintf(card_writes[port].temporary, sizeof(card_writes[port].temporary),
+        "%.*s.pe-save-%u-%llu.tmp", (int)prefix, card_writes[port].target,
+        port, (unsigned long long)SDL_GetTicksNS());
+    if (n < 0 || (size_t)n >= sizeof(card_writes[port].temporary)) return 0;
+    card_writes[port].io = SDL_IOFromFile(card_writes[port].temporary, "wb");
+    return card_writes[port].io != NULL;
+}
+
+static int MemCard_CommitWrite(MemCardPortState *state) {
+    unsigned port = (unsigned)(state - g_MemCardPortStates);
+    SDL_IOStream *io = card_writes[port].io;
+    if (!io) return 0;
+    int ok = SDL_FlushIO(io);
+    if (!SDL_CloseIO(io)) ok = 0;
+    card_writes[port].io = NULL;
+    if (!ok || !SDL_RenamePath(card_writes[port].temporary, card_writes[port].target)) {
+        MemCard_CancelWrite(state);
+        return 0;
+    }
+    /* Clear-data/normal saves use different names for the same card slot.
+     * Retire the previous name only after the new image is safely published. */
+    if (*card_writes[port].previous &&
+        strcmp(card_writes[port].previous, card_writes[port].target))
+        SDL_RemovePath(card_writes[port].previous);
+    memset(&card_writes[port], 0, sizeof(card_writes[port]));
+    return 1;
+}
 
 SaveSjisFormatArguments g_SaveSjisFormatArguments;
 u8 g_SaveTitleBuffer[0x44];
@@ -85,7 +139,6 @@ int Save_SerializeTail(void) {
 
 int Save_DeserializeTail(void) {
     u32 links[2];
-    PE_HOOK(PE_HOOK_SAVE_READ, g_MemCardFileBuffer);
     memcpy(links, g_SaveIoCursor + 0x818 + 0x68, sizeof(links));
     if ((links[0] && links[0] != 0x800B0CB0u) ||
         (links[1] && links[1] != 0x8009D1B0u)) return -1;
@@ -580,12 +633,7 @@ int Save_BuildCardFile(char *path) {
 
 void MemCard_AbortActiveOperation(MemCardPortState *state) {
     int state_index;
-    int retry;
-    int fd;
-    int slot;
-    int is_second;
-    MemCardPortState *base;
-    char path[0x20];
+    MemCard_CancelWrite(state);
 
     if (g_MemCardLoadSucceeded != 0) {
         Save_CancelUiFlow();
@@ -597,34 +645,6 @@ void MemCard_AbortActiveOperation(MemCardPortState *state) {
         state->fileDescriptor = -1;
     }
 
-    if (state->managerState == 9) {
-        char *name_buf;
-
-        base = g_MemCardPortStates;
-        is_second = base < state;
-        state_index = state - base;
-        name_buf = g_MemCardFilePath;
-        /* Scheduling dependency for the retail argument setup. */
-        retry = 0;
-        slot = state->selectedSlot;
-
-        sprintf(name_buf, g_MemCardFilenameFormatPtr, is_second,
-                        state->slots[slot].titleStyleFlag + 0x30, slot + 0x41);
-        sprintf(path, g_MemCardSaveSupportData.saveFileFormat, (long)state_index, g_MemCardFilePath);
-
-        do {
-            fd = open(path, 1);
-            if (fd != -1) {
-                break;
-            }
-            retry++;
-        } while (retry < 10);
-
-        if (retry < 10) {
-            close(fd);
-            erase(path);
-        }
-    }
 
     state_index = state - g_MemCardPortStates;
     Menu_CloseSaveSlotListView(state_index);
@@ -665,7 +685,9 @@ static inline void MemCard_NoteSaveFile(MemCardPortState *state,
                                         MemCardDirEntry *entry) {
     MemCardSaveSlot *slot;
 
-    if (strncmp(entry->name, &g_MemCardFilenameFormatPtr[6], 12) == 0) {
+    if (!strncmp(entry->name, ".pe-save-", 9)) return;
+    if (strncmp(entry->name, &g_MemCardFilenameFormatPtr[6], 12) == 0 &&
+        entry->name[19] >= 'A' && entry->name[19] <= 'O') {
         slot = &state->slots[entry->name[19] - 'A'];
         slot->state = MEMCARD_SLOT_OCCUPIED;
         slot->metadataReady = 0;
@@ -891,8 +913,7 @@ void MemCard_UpdateSaveState(int port) {
         }
         state->slots[state->selectedSlot].titleStyleFlag = g_SaveTitleStyleFlag;
         MemCard_FormatSlotFileName(state, state->selectedSlot);
-        if ((fd = state->fileDescriptor = open(g_MemCardFilePath, 0x10200)) >= 0) {
-            close(fd);
+        if (MemCard_BeginWrite(state)) {
             state->fileDescriptor = -1;
             state->managerState = 6;
             state->retryCount = 10;
@@ -921,7 +942,7 @@ void MemCard_UpdateSaveState(int port) {
             break;
         }
         MemCard_FormatSlotFileName(state, state->selectedSlot);
-        if ((state->fileDescriptor = open(g_MemCardFilePath, 2)) >= 0) {
+        if (card_writes[port].io) {
             state->managerState = 9;
             state->transferData = g_MemCardFileBuffer;
             state->retryCount = 30;
@@ -987,12 +1008,17 @@ void MemCard_UpdateSaveState(int port) {
         if (state->transferSize > 0x400) {
             size = 0x400;
         }
-        count = write(state->fileDescriptor, state->transferData, size);
+        count = card_writes[port].io ?
+            (int)SDL_WriteIO(card_writes[port].io, state->transferData, size) : -1;
         if (count > 0) {
             state->transferData += count;
             state->transferSize -= count;
             if (state->transferSize <= 0) {
-                close(state->fileDescriptor);
+                if (!MemCard_CommitWrite(state)) {
+                    state->retryCount = 0;
+                    MEMCARD_RETRY_OR_FAIL(state);
+                    break;
+                }
                 state->fileDescriptor = -1;
                 state->managerState = 3;
                 state->pendingError = 0;
@@ -1027,20 +1053,12 @@ void MemCard_UpdateSaveState(int port) {
             MemCard_AbortActiveOperation(state);
             break;
         }
+        MemCard_CancelWrite(state);
         MemCard_FormatSlotFileName(state, state->selectedSlot);
-        if ((fd = state->fileDescriptor = open(g_MemCardFilePath, 1)) >= 0) {
-            close(fd);
-            state->fileDescriptor = -1;
-            MemCard_FormatSlotFileName(state, state->selectedSlot);
-            if (erase(g_MemCardFilePath) != 0) {
-                state->managerState = 4;
-                state->retryCount = 10;
-            } else {
-                MEMCARD_RETRY_OR_FAIL(state);
-            }
-        } else {
-            MEMCARD_RETRY_OR_FAIL(state);
-        }
+        Psyz_AdjustPath(card_writes[port].previous, g_MemCardFilePath,
+                        sizeof(card_writes[port].previous));
+        state->managerState = 4;
+        state->retryCount = 10;
         break;
 
     case 12:
@@ -1168,13 +1186,15 @@ void Save_LoadCardFileIntoRuntime(void) {
         for (unsigned bit = 0; bit < 8; ++bit)
             crc = crc & 0x8000 ? (crc << 1) ^ 0x1021 : crc << 1;
     }
-    if ((~crc & 0xFFFF) == expected_crc) {
+    if ((~crc & 0xFFFF) == expected_crc &&
+        Inv_ValidateSavedInventory((const SaveRuntimeState *)&g_MemCardSaveStateBuffer)) {
         g_SaveIoCursor = g_MemCardFileBuffer + 0x100 + 0x12E4;
         if (Save_DeserializeTail() == 0) {
             memcpy(&g_SaveRuntimeState, &g_MemCardSaveStateBuffer, sizeof(g_SaveRuntimeState));
             g_SaveIoCursor += 4;
             Save_RestoreHeader();
             g_MemCardLoadSucceeded = 1;
+            PE_HOOK(PE_HOOK_SAVE_READ, g_MemCardFileBuffer);
             Menu_DestroyMemCardProgressWidget();
             Menu_CreateNotificationDialog(0x54, 0);
             Menu_SetDeferredCallback(Save_CancelUiFlow);
@@ -1222,6 +1242,7 @@ MemCardSaveSlot *MemCard_GetSlot(unsigned int port, int slot) {
 }
 
 void MemCard_InitState(void) {
+    for (unsigned port = 0; port < 2; ++port) MemCard_CancelWrite(&g_MemCardPortStates[port]);
     bzero(g_MemCardPortStates, sizeof(MemCardPortState) * 2);
     g_MemCardPortStates[1].fileDescriptor = -1;
     g_MemCardPortStates[0].fileDescriptor = -1;

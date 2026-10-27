@@ -3231,8 +3231,34 @@ static int native_object_slot_bounds(void)
     return 1;
 }
 
+static int native_task_relocation_safety(void) {
+    /* Truncated/oversized disk task tables must leave the previous native
+     * table alive. Deliberately use an unaligned serialized block. */
+    RelocBlock *old_tasks = g_SceneDataTable1;
+    u8 task_bytes[33] = {0}; u8 *task = task_bytes + 1;
+    u32 words[] = {16, 2, 20, 28}; memcpy(task, words, sizeof(words));
+    RelocBlock *resolved = Script_RelocBlock(task, 32);
+    if (!resolved || resolved->count != 2 || resolved->u0.base != task + 16 ||
+        resolved->offsets[0] != task + 20 || resolved->offsets[1] != task + 28) return 0;
+    for (unsigned fault = 0; fault < 6; ++fault) {
+        memcpy(task, words, sizeof(words));
+        u32 invalid = fault == 1 ? UINT32_MAX : 32;
+        size_t bytes = fault == 0 ? 7 : fault == 5 ? 12 : 32;
+        if (fault == 1) memcpy(task + 4, &invalid, 4);
+        if (fault == 2) memcpy(task, &invalid, 4);
+        if (fault == 3) memcpy(task + 8, &invalid, 4);
+        if (fault == 4) { invalid = UINT32_MAX; memcpy(task + 12, &invalid, 4); }
+        if (Script_RelocBlock(task, bytes) || g_SceneDataTable1 != resolved ||
+            resolved->offsets[0] != task + 20) return 0;
+    }
+    g_SceneDataTable1 = old_tasks;
+    puts("Task relocation bounds: unaligned valid block, truncated headers/tables, oversized counts and out-of-range offsets passed");
+    return 1;
+}
+
 static int process_static_task_programs(void)
 {
+    if (!native_task_relocation_safety()) return 0;
     Pe1GameState saved=g_GameState;PmTables tables=g_PmTables;u32 flags=g_GameStateFlags;
     void *programs[104];memcpy(programs,g_FieldFxTaskPrograms,sizeof(programs));
     FieldFxTaskProgram *native[]={&g_FieldFxTaskProgramCmd108,&g_FieldFxTaskProgramCmd109,

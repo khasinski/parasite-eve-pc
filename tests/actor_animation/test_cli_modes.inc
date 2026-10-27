@@ -1,3 +1,4 @@
+    if(argc==2 && !strcmp(argv[1],"--save-safety"))return native_save_safety();
     if(argc==2 && !strcmp(argv[1],"--all-room-loads"))return original_all_room_loads();
     if(argc==2 && !strcmp(argv[1],"--anim-event-completion")){
         RenderAnimationDataHeader animation={0};animation.frame_count=8;

@@ -1178,6 +1178,21 @@ int Scene_LoadRoom(unsigned int roomId)
         next_geometry_disk_entry_offset = header.entry_offset;
     }
 
+    /* Task offsets are serialized 32-bit values, never native pointers.
+     * Bound both their record and payload before committing scene state. */
+    size_t room_bytes = (size_t)g_RoomSectorTable[map].roomSectors * 2048;
+    size_t task_table = directory->taskBlock & 0x3FFFFF;
+    if (!(directory->taskBlock >> 22) || task_table % _Alignof(SceneRoomRecord) || task_table > room_bytes ||
+        sizeof(SceneRoomRecord) > room_bytes - task_table) goto invalid_tasks;
+    SceneRoomRecord *task = (SceneRoomRecord *)((u8 *)room + task_table);
+    u32 task_bytes;
+    memcpy(&task_bytes, task, 4); task_bytes &= 0xFFFFFF;
+    size_t task_offset = task->source.offsetAndSlot & 0xFFFFFF;
+    if (task_offset > room_bytes || task_bytes > room_bytes - task_offset)
+        goto invalid_tasks;
+    RelocBlock *tasks = Script_RelocBlock((u8 *)room + task_offset, task_bytes);
+    if (!tasks) goto invalid_tasks;
+
     state->requested_entity_bank = directory->entityBank;
     state->room_type = directory->roomType;
 
@@ -1194,8 +1209,7 @@ int Scene_LoadRoom(unsigned int roomId)
             SCENE_ROOM_PAYLOAD(room, &record[i]);
     }
 
-    state->bank_reset_944[0] =
-        Script_RelocBlock(SCENE_ROOM_PAYLOAD(room, SceneRoom_FirstRecord(room, directory->taskBlock)));
+    state->bank_reset_944[0] = tasks;
     state->bank_reset_948[0] = SCENE_ROOM_PAYLOAD(room, SceneRoom_FirstRecord(room, directory->taskData));
     free(geometry_owner);
     geometry_owner = next_geometry;
@@ -1302,6 +1316,11 @@ int Scene_LoadRoom(unsigned int roomId)
         state->pending_sample_bank = -1;
     }
     return 0;
+
+invalid_tasks:
+    free(next_geometry);
+    fprintf(stderr, "Scene_LoadRoom: invalid task block for M%03d\n", map + 1);
+    return -3;
 
 invalid_geometry:
     free(next_geometry);

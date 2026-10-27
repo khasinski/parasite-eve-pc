@@ -223,7 +223,7 @@ int Script_SpawnChildNode(int **args) {
     return 1;
 }
 
-RelocBlock *Script_RelocBlock(void *block) {
+RelocBlock *Script_RelocBlock(void *block, size_t size) {
     static RelocBlock *resolved;
     u8 *bytes = block;
     u32 offset, count;
@@ -232,8 +232,15 @@ RelocBlock *Script_RelocBlock(void *block) {
         g_SceneDataTable1 = resolved;
         return resolved;
     }
+    if (size < 8) return NULL;
     memcpy(&offset, bytes, sizeof(offset));
     memcpy(&count, bytes + 4, sizeof(count));
+    if (offset >= size || count > (size - 8) / 4) return NULL;
+    for (u32 i = 0; i < count; ++i) {
+        u32 entry;
+        memcpy(&entry, bytes + 8 + (size_t)i * 4, sizeof(entry));
+        if (entry >= size) return NULL;
+    }
 #if UINTPTR_MAX <= UINT32_MAX
     if (count > (SIZE_MAX - sizeof(RelocBlock)) / sizeof(u8 *)) return NULL;
 #endif

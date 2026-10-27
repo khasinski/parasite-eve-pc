@@ -458,6 +458,42 @@ void Inv_TransferItemBetweenLists(unsigned selection, int modifier, int flags, i
     }
 }
 
+/* Validate serialized references before they can reach menu/battle lookups.
+ * Preserve edited stats; only reject out-of-bounds structural fields. */
+int Inv_ValidateSavedInventory(const SaveRuntimeState *state) {
+    const AyaSaveState *aya = &state->player.aya;
+    const InventoryRuntime *inv = &state->player.runtime.inventory;
+    if (aya->inventory_slot_count > 50) return 0;
+    for (unsigned i = 0; i < 128; ++i) {
+        const ItemDataRecord *item = &inv->equipment[i];
+        if (item->iconId && (!item->itemId || item->kind >= 24 ||
+            item->tailCount > 10 || item->tailCapacity > 10)) return 0;
+    }
+    const s16 *lists[] = {aya->inventory_items, inv->storage, inv->specialStorage};
+    const unsigned counts[] = {50, 100, 82};
+    for (unsigned list = 0; list < 3; ++list) for (unsigned i = 0; i < counts[list]; ++i) {
+        unsigned id = (u16)lists[list][i];
+        if (id <= 255 || (id >= 0x200 && id <= 0x208)) continue;
+        if (id < 0x100 || id >= 0x180 || !inv->equipment[id - 0x100].iconId) return 0;
+    }
+    const int equipped[] = {aya->equipped_weapon_slot, aya->equipped_armor_slot};
+    for (unsigned i = 0; i < 2; ++i) {
+        int slot = equipped[i];
+        if (slot == -1) continue;
+        if (slot < 0 || slot >= 50) return 0;
+        unsigned id = (u16)aya->inventory_items[slot];
+        const ItemDataRecord *item = id >= 0x100 && id < 0x180 ?
+            &inv->equipment[id - 0x100] : id && id <= 255 ? Item_LookupBaseData(id - 1) : NULL;
+        if (!item || (i ? item->kind != 9 : !item->kind || item->kind > 8)) return 0;
+    }
+    return 1;
+}
+
+static int Inv_SortKindMatches(s16 id, unsigned mask) {
+    const ItemDataRecord *item = g_InvSortLookup(id);
+    return item && item->kind < 24 && ((mask >> item->kind) & 1);
+}
+
 int Inv_CompareItemsForSort(const void *leftElement, const void *rightElement) {
     const short *leftIndex = leftElement;
     const short *rightIndex = rightElement;
@@ -486,6 +522,8 @@ int Inv_CompareItemsForSort(const void *leftElement, const void *rightElement) {
 
     left = lookup(leftItem);
     right = g_InvSortLookup(rightItem);
+    if (left && left->kind >= 24) left = NULL;
+    if (right && right->kind >= 24) right = NULL;
     /* Retail reads low memory before checking unresolved records. Native C
      * must check first; missing entries sort after valid records. */
     if (left == NULL) return right != NULL;
@@ -533,6 +571,9 @@ int Inv_CompareItemsByStatForSort(const void *leftElement, const void *rightElem
     left = g_InvSortLookup(*leftIndex);
     right = g_InvSortLookup(*rightIndex);
 
+    if (!left) return right != NULL;
+    if (!right) return -1;
+
     switch (g_InvSortStatIndex) {
     case 0:
         leftValue = left->baseStats[0] + left->bonusStats[0];
@@ -574,7 +615,7 @@ void Inv_SortWeaponSubrange(void) {
     mask = 0x1FE;
     if (var_s0 < g_InvSortListBase + g_InvSortListCount) {
         while (*(s16 *) var_s0 != 0) {
-            if ((mask >> g_InvSortLookup((s16)*var_s0)->kind) & 1) {
+            if (Inv_SortKindMatches((s16)*var_s0, mask)) {
                 break;
             }
             var_s0 += 1;
@@ -588,7 +629,7 @@ void Inv_SortWeaponSubrange(void) {
             if (*(s16 *) var_s0 != 0) {
                 do {
                     var_a0 = tmpu << 0x10;
-                    if (!((mask >> g_InvSortLookup((s16)(var_a0 >> 0x10))->kind) & 1)) {
+                    if (!(Inv_SortKindMatches((s16)(var_a0 >> 0x10), mask))) {
                         break;
                     }
                     var_s0 += 1;
@@ -615,7 +656,7 @@ void Inv_SortAmmoSubrange(void) {
     mask = 0x200;
     if (var_s0 < g_InvSortListBase + g_InvSortListCount) {
         while (*(s16 *) var_s0 != 0) {
-            if ((mask >> g_InvSortLookup((s16)*var_s0)->kind) & 1) {
+            if (Inv_SortKindMatches((s16)*var_s0, mask)) {
                 break;
             }
             var_s0 += 1;
@@ -629,7 +670,7 @@ void Inv_SortAmmoSubrange(void) {
             if (*(s16 *) var_s0 != 0) {
                 do {
                     var_a0 = tmpu << 0x10;
-                    if (!((mask >> g_InvSortLookup((s16)(var_a0 >> 0x10))->kind) & 1)) {
+                    if (!(Inv_SortKindMatches((s16)(var_a0 >> 0x10), mask))) {
                         break;
                     }
                     var_s0 += 1;
@@ -674,12 +715,17 @@ void Inv_SortInventoryByMode(s32 arg0, s32 arg1) {
     g_InvSlotLimit = Inv_GetAyaSlotLimit();
     g_InvSelectionBits = g_InvSelectionBitStorage;
     g_InvSelectionBitWords = 2;
-    temp_s1 = g_InvItemPtr[g_AyaEquippedWeaponSlot[0]];
-    if (g_AyaEquippedArmorSlot[0] >= 0) {
+    int weapon_slot = g_AyaEquippedWeaponSlot[0];
+    temp_s1 = weapon_slot >= 0 && weapon_slot < g_InvSlotLimit ? g_InvItemPtr[weapon_slot] : -1;
+    if (temp_s1 <= 0) g_AyaEquippedWeaponSlot[0] = -1;
+    if (g_AyaEquippedArmorSlot[0] >= 0 && g_AyaEquippedArmorSlot[0] < g_InvSlotLimit) {
         var_s0 = g_InvItemPtr[g_AyaEquippedArmorSlot[0]];
     } else {
         var_s0 = -1;
     }
+    if (var_s0 <= 0) g_AyaEquippedArmorSlot[0] = -1;
+    if (!g_InvSortRankTable) g_InvSortRankTable = g_InvSortRankTableA;
+    if (!g_InvSortTypeRankTable) g_InvSortTypeRankTable = g_InvTypeRankTableA;
     g_InvSortLookup = &Inv_LookupData;
     g_InvSortListBase = g_InvItemPtr;
     g_InvSortListCount = g_InvSlotLimit;
