@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <SDL3/SDL.h>
 
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -58,8 +59,8 @@ static int pe_row_saved(const PeMenuRow *row) {
 }
 
 void pe_menu_save_settings(void) {
-    char path[1100], key[192];
-    FILE *f;
+    char path[1100], key[192], temporary[1180];
+    SDL_IOStream *f;
     int i;
     for (i = 0; i < s_row_count; i++) {
         PeSaved *saved;
@@ -72,13 +73,33 @@ void pe_menu_save_settings(void) {
         }
         if (saved) saved->value = *s_rows[i].value;
     }
-    if (pe_mod_path(path, sizeof(path), "pe_mods.ini") != 0 || !(f = fopen(path, "w"))) {
-        pe_mod_log(NULL, "cannot write pe_mods.ini");
+    if (pe_mod_path(path, sizeof(path), "pe_mods.ini") != 0) {
+        pe_mod_log(NULL, "cannot resolve pe_mods.ini");
         return;
     }
-    fprintf(f, "# Mods panel settings (page/label=value)\n");
-    for (i = 0; i < s_saved_count; i++) fprintf(f, "%s=%d\n", s_saved[i].key, s_saved[i].value);
-    fclose(f);
+    snprintf(temporary, sizeof(temporary), "%s.%llu.tmp", path,
+             (unsigned long long)SDL_GetTicksNS());
+    f = SDL_IOFromFile(temporary, "wbx");
+    if (!f) {
+        pe_mod_log(NULL, "cannot stage pe_mods.ini: %s", SDL_GetError());
+        pe_toast("Could not save mod settings. Changes apply for this session.");
+        return;
+    }
+    const char *header = "# Mods panel settings (page/label=value)\n";
+    int ok = SDL_WriteIO(f, header, strlen(header)) == strlen(header);
+    for (i = 0; ok && i < s_saved_count; i++) {
+        char line[256];
+        int length = snprintf(line, sizeof(line), "%s=%d\n", s_saved[i].key, s_saved[i].value);
+        ok = length > 0 && length < sizeof(line) && SDL_WriteIO(f, line, length) == length;
+    }
+    if (ok && !SDL_FlushIO(f)) ok = 0;
+    if (!SDL_CloseIO(f)) ok = 0;
+    if (!ok || !SDL_RenamePath(temporary, path)) {
+        pe_mod_log(NULL, "cannot save pe_mods.ini: %s", SDL_GetError());
+        SDL_RemovePath(temporary);
+        pe_toast("Could not save mod settings. Changes apply for this session.");
+    }
+
 }
 
 /* ---- registration ---- */

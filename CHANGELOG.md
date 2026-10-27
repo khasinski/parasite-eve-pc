@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Keep memory cards in the user data directory on every desktop platform; import old cards without deleting or overwriting saves.
+- Reset speed hold when a controller disconnects and handle keyboard and controller holds independently.
+- Preserve mod settings if writing the settings file fails.
+
 - Show keyboard bindings using the active keyboard layout.
 - Keep smooth color gradients when dithering is disabled.
 

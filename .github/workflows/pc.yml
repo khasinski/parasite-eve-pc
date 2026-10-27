@@ -54,11 +54,11 @@ jobs:
           cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DPE_MODS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build --parallel 4
           ./build/parasite-eve-pc --help
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit linux-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|original-game-save-safety)$'
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit linux-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|original-game-save-safety|mod-settings-save-safety)$'
           python3 - <<'PYTEST'
           import xml.etree.ElementTree as E
           r = E.parse('build/linux-source-only.xml')
-          assert len(r.findall('.//testcase')) == 22
+          assert len(r.findall('.//testcase')) == 23
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           PYTEST
       - name: Package Linux x86-64
@@ -126,14 +126,14 @@ jobs:
       - name: Run source-only Windows runtime checks (no retail images)
         run: |
           ./build/parasite-eve-pc.exe --help
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit windows-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|original-game-save-safety)$'
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit windows-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|original-game-save-safety|mod-settings-save-safety)$'
       - name: Require all selected source-only cases to execute
         shell: pwsh
         run: |
           [xml]$report = Get-Content build/windows-source-only.xml
           $cases = $report.SelectNodes('//testcase')
           $incomplete = $report.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error')
-          if ($cases.Count -ne 22 -or $incomplete.Count -ne 0) { throw 'Expected 22 executed source-only cases without failures or skips' }
+          if ($cases.Count -ne 23 -or $incomplete.Count -ne 0) { throw 'Expected 23 executed source-only cases without failures or skips' }
       - name: Capture settings thread stacks after a runtime failure
         if: failure()
         run: |

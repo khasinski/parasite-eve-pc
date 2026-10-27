@@ -69,6 +69,15 @@ static void Host_SetSpeed(unsigned speed) {
     }
 }
 
+static int host_speed_key_held;
+static struct { SDL_JoystickID id; int held; } host_speed_pads[16];
+
+static void Host_ResetSpeedHold(void) {
+    host_speed_key_held = 0;
+    memset(host_speed_pads, 0, sizeof(host_speed_pads));
+    Host_SetSpeed(1);
+}
+
 typedef enum HostSettingsPage {
     HOST_PAGE_GRAPHICS = 0,
     HOST_PAGE_CONTROLS = 1,
@@ -379,6 +388,8 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
         return -1;
     }
     const char *slash = strrchr(host_options.user_file, '/');
+    const char *backslash = strrchr(host_options.user_file, '\\');
+    if (backslash && (!slash || backslash > slash)) slash = backslash;
     if (!slash) {
         return -1;
     }
@@ -408,6 +419,67 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
         dst[0] = '\0';
     }
     return 0;
+}
+
+/* Import once, retaining every legacy file and never replacing a newer card.
+ * A completed-import marker prevents deleted slots reappearing at next launch. */
+static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char *dirname, const char *name) {
+    int *ok = userdata;
+    if (strlen(name) != 20 || strncmp(name, "BASLUS-00662", 11)) return SDL_ENUM_CONTINUE;
+    char source[8192], target[4096], device[64], temporary[4160];
+    snprintf(source, sizeof(source), "%s%s", dirname, name);
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(source, &info) || info.type != SDL_PATHTYPE_FILE || info.size != 8192)
+        return SDL_ENUM_CONTINUE;
+    /* Port is encoded by the legacy directory supplied to EnumerateDirectory. */
+    size_t length = strlen(dirname);
+    unsigned port = length >= 4 && dirname[length - 3] == '1';
+    snprintf(device, sizeof(device), "bu%u0:%s", port, name);
+    Host_CardPath(target, device, sizeof(target));
+    if (!*target) { *ok = 0; return SDL_ENUM_CONTINUE; }
+    if (SDL_GetPathInfo(target, &info)) return SDL_ENUM_CONTINUE;
+    size_t bytes = 0;
+    void *data = SDL_LoadFile(source, &bytes);
+    if (!data || bytes != 8192) { SDL_free(data); *ok = 0; return SDL_ENUM_CONTINUE; }
+    const char *last = strrchr(target, '/');
+    const char *backslash = strrchr(target, '\\');
+    if (backslash && (!last || backslash > last)) last = backslash;
+    snprintf(temporary, sizeof(temporary), "%.*s.pe-save-import-%llu.tmp",
+             last ? (int)(last - target + 1) : 0, target, (unsigned long long)SDL_GetTicksNS());
+    SDL_IOStream *io = SDL_IOFromFile(temporary, "wbx");
+    if (!io) { SDL_free(data); *ok = 0; return SDL_ENUM_CONTINUE; }
+    int written = SDL_WriteIO(io, data, bytes) == bytes && SDL_FlushIO(io);
+    if (!SDL_CloseIO(io)) written = 0;
+    SDL_free(data);
+    if (!written || !SDL_RenamePath(temporary, target)) {
+        SDL_RemovePath(temporary);
+        *ok = 0;
+    }
+    return SDL_ENUM_CONTINUE;
+}
+
+static int Host_InstallCardPaths(const char *base) {
+    char marker[4096], card[4096];
+    if (Host_CardPath(card, "bu00:*", sizeof(card)) || !*card) return 0;
+    snprintf(marker, sizeof(marker), "%s../.legacy-imported", card);
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(marker, &info)) {
+        int ok = 1;
+        char *cwd = SDL_GetCurrentDirectory();
+        const char *roots[] = {cwd, base};
+        for (unsigned root = 0; root < 2; ++root) if (roots[root]) {
+            for (unsigned port = 0; port < 2; ++port) {
+                char source[8192];
+                snprintf(source, sizeof(source), "%sbu%u0", roots[root], port);
+                if (SDL_GetPathInfo(source, &info) && info.type == SDL_PATHTYPE_DIRECTORY &&
+                    !SDL_EnumerateDirectory(source, Host_ImportCard, &ok)) ok = 0;
+            }
+        }
+        SDL_free(cwd);
+        if (!ok || !SDL_SaveFile(marker, "", 0)) return 0;
+    }
+    Psyz_AdjustPathCB(Host_CardPath);
+    return 1;
 }
 
 static void Host_InitOptions(int enabled) {
@@ -480,11 +552,9 @@ static void Host_InitOptions(int enabled) {
     if (*host_options.user_file) {
         Host_LoadOptions(host_options.user_file);
     }
-#ifdef __APPLE__
-    if (base && strstr(base, ".app/Contents/") && *host_options.user_file) {
-        Psyz_AdjustPathCB(Host_CardPath);
+    if (*host_options.user_file && !Host_InstallCardPaths(base)) {
+        fprintf(stderr, "Cannot prepare user memory cards; legacy cards remain in use.\n");
     }
-#endif
 }
 
 static void Host_ApplyOptions(SDL_Window *window) {
@@ -1253,7 +1323,7 @@ static void Host_Settings(SDL_Window *game) {
     int paused = Psyz_AudioIsPaused();
     Psyz_AudioPause();
     /* The panel draws at normal speed; the menu takes the hold's release. */
-    Host_SetSpeed(1);
+    Host_ResetSpeedHold();
 
     s_overlayState = (HostOverlayState){
         .open = 1,
@@ -1331,7 +1401,7 @@ static int Host_ConfirmMovieSkip(void) {
 
     Psyz_PauseHostClock_SDL3(true);
     Psyz_AudioPause();
-    Host_SetSpeed(1);
+    Host_ResetSpeedHold();
     if (game != NULL && s_overlayGpuDevice != NULL) {
         s_overlayState = (HostOverlayState){
             .open = 1,
@@ -1399,7 +1469,7 @@ static void Host_PauseForFocus(SDL_Window *game) {
 
     SDL_ResetKeyboard();
     /* A release while unfocused is never seen: drop back to 1x. */
-    Host_SetSpeed(1);
+    Host_ResetSpeedHold();
     Psyz_PauseHostClock_SDL3(false);
     if (!paused) {
         Psyz_AudioUnpause();
@@ -1408,37 +1478,50 @@ static void Host_PauseForFocus(SDL_Window *game) {
 
 /* The game runs at speed_factor while the bound key, button or trigger is held. */
 static bool Host_SpeedHoldEvent(const SDL_Event *event) {
-    static int trigger_held;
     int key = host_options.keys[HOST_SPEED_BINDING];
     int button = host_options.buttons[HOST_SPEED_BINDING];
-    int held;
-
+    SDL_JoystickID device = 0;
+    int held = 0, consumed = 0;
+    /* The Mods panel can reset PsyZ's speed while consuming release events. */
+    if (Psyz_VideoGetSpeed() != host_speed) Host_ResetSpeedHold();
     if (event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_KEY_UP) {
-        if (key == HOST_UNBOUND_KEY || (int)event->key.scancode != key) {
-            return false;
-        }
-        held = event->type == SDL_EVENT_KEY_DOWN;
+        if (key == HOST_UNBOUND_KEY || (int)event->key.scancode != key) return false;
+        if (!event->key.repeat) host_speed_key_held = event->type == SDL_EVENT_KEY_DOWN;
+        consumed = 1;
+    } else if (event->type == SDL_EVENT_GAMEPAD_REMOVED) {
+        for (unsigned i = 0; i < 16; ++i)
+            if (host_speed_pads[i].id == event->gdevice.which)
+                host_speed_pads[i].id = host_speed_pads[i].held = 0;
     } else if (event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ||
                event->type == SDL_EVENT_GAMEPAD_BUTTON_UP) {
-        if (button < 0 || event->gbutton.button != button) {
-            return false;
-        }
+        if (button < 0 || event->gbutton.button != button) return false;
+        device = event->gbutton.which;
         held = event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+        consumed = 1;
     } else if (event->type == SDL_EVENT_GAMEPAD_AXIS_MOTION) {
         int axis = button == SDL_GAMEPAD_BUTTON_COUNT ? SDL_GAMEPAD_AXIS_LEFT_TRIGGER
-                 : button == SDL_GAMEPAD_BUTTON_COUNT + 1 ? SDL_GAMEPAD_AXIS_RIGHT_TRIGGER
-                 : -1;
-        if (axis < 0 || event->gaxis.axis != axis) {
-            return false;
+                 : button == SDL_GAMEPAD_BUTTON_COUNT + 1 ? SDL_GAMEPAD_AXIS_RIGHT_TRIGGER : -1;
+        if (axis < 0 || event->gaxis.axis != axis) return false;
+        device = event->gaxis.which;
+        int was_held = 0;
+        for (unsigned i = 0; i < 16; ++i)
+            if (host_speed_pads[i].id == device) was_held = host_speed_pads[i].held;
+        held = event->gaxis.value > (was_held ? 8000 : 16000);
+    } else return false;
+    if (device) {
+        unsigned slot;
+        for (slot = 0; slot < 16; ++slot) if (host_speed_pads[slot].id == device) break;
+        if (slot == 16 && held)
+            for (slot = 0; slot < 16; ++slot) if (!host_speed_pads[slot].id) break;
+        if (slot < 16) {
+            host_speed_pads[slot].id = held ? device : 0;
+            host_speed_pads[slot].held = held;
         }
-        held = event->gaxis.value > (trigger_held ? 8000 : 16000);
-        trigger_held = held;
-    } else {
-        return false;
     }
-    Host_SetSpeed(held ? host_options.speed_factor : 1);
-    /* Trigger motion still reaches the pad state. */
-    return event->type != SDL_EVENT_GAMEPAD_AXIS_MOTION;
+    int any = host_speed_key_held;
+    for (unsigned i = 0; i < 16; ++i) any |= host_speed_pads[i].held;
+    Host_SetSpeed(any ? host_options.speed_factor : 1);
+    return consumed; /* axis and removal events still reach the pad backend */
 }
 
 static bool Host_SettingsEvent(const SDL_Event *event) {
