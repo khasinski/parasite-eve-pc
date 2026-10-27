@@ -69,6 +69,7 @@
 #include "pe1/draw_wipe_rect.h"
 #include "pe1/memcard.h"
 #include "pe1/reloc_block.h"
+#include "pe1/inventory_sort.h"
 #include "pe1/memcard_save_state.h"
 #ifdef PE_MODS
 #include "../mods/host/pe_mod_host.h"

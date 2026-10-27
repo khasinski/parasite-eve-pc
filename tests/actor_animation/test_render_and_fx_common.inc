@@ -208,6 +208,15 @@ static int native_save_safety(void) {
         }
         if (Inv_ValidateSavedInventory(&candidate)) valid = 0;
     }
+    /* Run the real sorter and selection-mask rebuild too, including the
+     * corrupt kind that previously indexed beyond the rank table. */
+    g_SaveRuntimeState = clean;
+    g_InventoryRuntime.equipment[0].kind = 255;
+    g_AyaSaveState.equipped_weapon_slot = -128;
+    g_AyaSaveState.equipped_armor_slot = 127;
+    g_InvBonusSlotCount = 0;
+    Inv_SortInventoryByMode(1, 0);
+    if (g_AyaSaveState.equipped_weapon_slot != -1 || g_AyaSaveState.equipped_armor_slot != -1) valid = 0;
     if (!native_task_relocation_safety() || !native_save_hook_safety()) valid = 0;
     g_ResidentDataPack = saved;
     return valid ? 0 : 1;

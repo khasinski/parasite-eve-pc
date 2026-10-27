@@ -413,8 +413,10 @@ void Inv_RebuildSelectableMask(void) {
     ItemDataRecord *item;
     for (list = 0; list < ListCount(); list++) {
         RestoreList(list);
-        for (i = 0; i < g_InvSlotLimit; i++)
-            if ((0xFE >> Kind(i)) & 1) break;
+        for (i = 0; i < g_InvSlotLimit; i++) {
+            unsigned kind = Kind(i);
+            if (kind < 8 && ((0xFEu >> kind) & 1)) break;
+        }
         hasWeapon |= i < g_InvSlotLimit;
         for (i = 0; i < g_InvSlotLimit; i++)
             if (Kind(i) == 9) break;
