@@ -416,8 +416,23 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
         if (n + 6 >= capacity) { dst[0] = '\0'; return 0; }
         memmove(dst + 8, dst + 2, n - 1); memcpy(dst, "\\\\?\\UNC\\", 8); n += 6;
     }
-    if (!strncmp(dst, "\\\\?\\", 4))
+    if (!strncmp(dst, "\\\\?\\", 4)) {
         for (char *p = dst; *p; ++p) if (*p == '/') *p = '\\';
+        /* SDL's recursive mkdir treats a leading UNC separator as an empty
+         * parent. Create ancestors individually, preserving the volume root. */
+        char *parent = dst + 4;
+        if (!strncmp(parent, "UNC\\", 4)) {
+            parent = strchr(parent + 4, '\\');
+            if (parent) parent = strchr(parent + 1, '\\');
+            if (parent) ++parent;
+        } else if (strlen(parent) >= 3 && parent[1] == ':') parent += 3;
+        for (char *p = parent; p && *p; ++p) if (*p == '\\') {
+            *p = '\0';
+            int created = SDL_CreateDirectory(dst);
+            *p = '\\';
+            if (!created) { dst[0] = '\0'; return 0; }
+        }
+    }
 #endif
     if (!SDL_CreateDirectory(dst)) { dst[0] = '\0'; return 0; }
 
