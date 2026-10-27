@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Preserve the previous save if writing a new save fails.
+- Reject malformed inventory data when loading and prevent invalid equipment from crashing sorting.
+- Check room task data before resolving its offsets into native pointers.
+
 ## 0.5
 
 - Added analog movement with a configurable field walk/run threshold in Controls settings.
