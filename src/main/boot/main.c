@@ -423,8 +423,14 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
 
 /* Import once, retaining every legacy file and never replacing a newer card.
  * A completed-import marker prevents deleted slots reappearing at next launch. */
+typedef struct HostCardImport {
+    int ok;
+    unsigned count;
+    char *created[128];
+} HostCardImport;
+
 static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char *dirname, const char *name) {
-    int *ok = userdata;
+    HostCardImport *import = userdata;
     if (strlen(name) != 20 || strncmp(name, "BASLUS-00662", 11)) return SDL_ENUM_CONTINUE;
     char source[8192], target[4096], device[64], temporary[4160];
     snprintf(source, sizeof(source), "%s%s", dirname, name);
@@ -436,24 +442,29 @@ static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char 
     unsigned port = length >= 4 && dirname[length - 3] == '1';
     snprintf(device, sizeof(device), "bu%u0:%s", port, name);
     Host_CardPath(target, device, sizeof(target));
-    if (!*target) { *ok = 0; return SDL_ENUM_CONTINUE; }
+    if (!*target) { import->ok = 0; return SDL_ENUM_CONTINUE; }
     if (SDL_GetPathInfo(target, &info)) return SDL_ENUM_CONTINUE;
+    if (import->count >= 128) { import->ok = 0; return SDL_ENUM_CONTINUE; }
     size_t bytes = 0;
     void *data = SDL_LoadFile(source, &bytes);
-    if (!data || bytes != 8192) { SDL_free(data); *ok = 0; return SDL_ENUM_CONTINUE; }
+    if (!data || bytes != 8192) { SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
     const char *last = strrchr(target, '/');
     const char *backslash = strrchr(target, '\\');
     if (backslash && (!last || backslash > last)) last = backslash;
     snprintf(temporary, sizeof(temporary), "%.*s.pe-save-import-%llu.tmp",
              last ? (int)(last - target + 1) : 0, target, (unsigned long long)SDL_GetTicksNS());
     SDL_IOStream *io = SDL_IOFromFile(temporary, "wbx");
-    if (!io) { SDL_free(data); *ok = 0; return SDL_ENUM_CONTINUE; }
+    if (!io) { SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
     int written = SDL_WriteIO(io, data, bytes) == bytes && SDL_FlushIO(io);
     if (!SDL_CloseIO(io)) written = 0;
     SDL_free(data);
     if (!written || !SDL_RenamePath(temporary, target)) {
         SDL_RemovePath(temporary);
-        *ok = 0;
+        import->ok = 0;
+    } else {
+        char *created = SDL_strdup(target);
+        if (!created) { SDL_RemovePath(target); import->ok = 0; }
+        else import->created[import->count++] = created;
     }
     return SDL_ENUM_CONTINUE;
 }
@@ -464,7 +475,7 @@ static int Host_InstallCardPaths(const char *base) {
     snprintf(marker, sizeof(marker), "%s../.legacy-imported", card);
     SDL_PathInfo info;
     if (!SDL_GetPathInfo(marker, &info)) {
-        int ok = 1;
+        HostCardImport import = {.ok = 1};
         char *cwd = SDL_GetCurrentDirectory();
         const char *roots[] = {cwd, base};
         for (unsigned root = 0; root < 2; ++root) if (roots[root]) {
@@ -472,11 +483,19 @@ static int Host_InstallCardPaths(const char *base) {
                 char source[8192];
                 snprintf(source, sizeof(source), "%sbu%u0", roots[root], port);
                 if (SDL_GetPathInfo(source, &info) && info.type == SDL_PATHTYPE_DIRECTORY &&
-                    !SDL_EnumerateDirectory(source, Host_ImportCard, &ok)) ok = 0;
+                    !SDL_EnumerateDirectory(source, Host_ImportCard, &import)) import.ok = 0;
             }
         }
         SDL_free(cwd);
-        if (!ok || !SDL_SaveFile(marker, "", 0)) return 0;
+        if (import.ok && !SDL_SaveFile(marker, "", 0)) {
+            SDL_RemovePath(marker);
+            import.ok = 0;
+        }
+        for (unsigned i = 0; i < import.count; ++i) {
+            if (!import.ok) SDL_RemovePath(import.created[i]);
+            SDL_free(import.created[i]);
+        }
+        if (!import.ok) return 0;
     }
     Psyz_AdjustPathCB(Host_CardPath);
     return 1;

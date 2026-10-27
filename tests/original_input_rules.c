@@ -181,8 +181,8 @@ static void TestUserCardMigration(void) {
         unsigned char newer[8192]; memset(newer, 0x59, sizeof(newer));
         assert(SDL_SaveFile(target, newer, sizeof(newer)));
         char directory[4096]; snprintf(directory, sizeof(directory), "%s/bu%u0", root, port);
-        int imported = 1;
-        assert(SDL_EnumerateDirectory(directory, Host_ImportCard, &imported) && imported);
+        HostCardImport imported = {.ok = 1};
+        assert(SDL_EnumerateDirectory(directory, Host_ImportCard, &imported) && imported.ok && imported.count == 0);
         size_t size; void *contents = SDL_LoadFile(target, &size);
         assert(contents && size == sizeof(newer) && !memcmp(contents, newer, size)); SDL_free(contents);
         /* Source remains intact. A deleted imported save must stay deleted. */
@@ -199,6 +199,11 @@ static void TestUserCardMigration(void) {
     test_card_rename_failure = true;
     assert(!Host_InstallCardPaths(NULL));
     SDL_PathInfo marker_info; assert(!SDL_GetPathInfo(marker, &marker_info));
+    for (unsigned port = 0; port < 2; ++port) {
+        char device[64]; snprintf(device, sizeof(device), "bu%u0:%s", port, names[port]);
+        assert(!Host_CardPath(target, device, sizeof(target)));
+        assert(!SDL_GetPathInfo(target, &marker_info));
+    }
     test_card_rename_failure = false;
     assert(Host_InstallCardPaths(NULL));
     assert(SDL_GetPathInfo(marker, &marker_info));
@@ -222,7 +227,7 @@ static bool TestMessageBox(SDL_MessageBoxFlags flags, const char *title, const c
 }
 
 static bool TestRename(const char *from, const char *to) {
-    if (test_card_rename_failure) return false;
+    if (test_card_rename_failure && strstr(from, "bu10")) return false;
     bool result = SDL_RenamePath(from, to);
     fprintf(stderr, "host-settings: preferences rename=%d error=%s\n", result, result ? "" : SDL_GetError());
     return result;
