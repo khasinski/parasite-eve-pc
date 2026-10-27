@@ -40,6 +40,7 @@ _Alignas(16) u8 g_MemCardFileBuffer[0x2000];
  * previous save and must never erase it. */
 static struct {
     SDL_IOStream *io;
+    int owns_temporary;
     char target[4096], temporary[4160], previous[4096];
 } card_writes[2];
 
@@ -47,7 +48,7 @@ static void MemCard_CancelWrite(MemCardPortState *state) {
     unsigned port = (unsigned)(state - g_MemCardPortStates);
     if (port >= 2) return;
     if (card_writes[port].io) SDL_CloseIO(card_writes[port].io);
-    if (*card_writes[port].temporary) SDL_RemovePath(card_writes[port].temporary);
+    if (card_writes[port].owns_temporary) SDL_RemovePath(card_writes[port].temporary);
     memset(&card_writes[port], 0, sizeof(card_writes[port]));
 }
 
@@ -64,8 +65,9 @@ static int MemCard_BeginWrite(MemCardPortState *state) {
         "%.*s.pe-save-%u-%llu.tmp", (int)prefix, card_writes[port].target,
         port, (unsigned long long)SDL_GetTicksNS());
     if (n < 0 || (size_t)n >= sizeof(card_writes[port].temporary)) return 0;
-    card_writes[port].io = SDL_IOFromFile(card_writes[port].temporary, "wb");
-    return card_writes[port].io != NULL;
+    card_writes[port].io = SDL_IOFromFile(card_writes[port].temporary, "wbx");
+    card_writes[port].owns_temporary = card_writes[port].io != NULL;
+    return card_writes[port].owns_temporary;
 }
 
 static int MemCard_CommitWrite(MemCardPortState *state) {
