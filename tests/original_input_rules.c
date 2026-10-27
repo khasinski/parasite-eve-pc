@@ -164,7 +164,9 @@ static void TestUserCardMigration(void) {
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/"
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc/preferences.toml", root);
     assert(!TestChdir(root));
-    assert(Host_InstallCardPaths(NULL));
+    int prepared = Host_InstallCardPaths(NULL);
+    if (!prepared) fprintf(stderr, "card import failed: %s\n", SDL_GetError());
+    assert(prepared);
     for (unsigned port = 0; port < 2; ++port) {
         char device[64]; snprintf(device, sizeof(device), "bu%u0:%s", port, names[port]);
         assert(!Host_CardPath(target, device, sizeof(target)));
@@ -194,7 +196,7 @@ static void TestUserCardMigration(void) {
     }
     char marker[4200];
     assert(!Host_CardPath(target, "bu00:*", sizeof(target)));
-    snprintf(marker, sizeof(marker), "%s../.legacy-imported", target);
+    snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(target) - 5, target);
     assert(SDL_RemovePath(marker));
     test_card_rename_failure = true;
     assert(!Host_InstallCardPaths(NULL));

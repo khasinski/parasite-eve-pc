@@ -405,16 +405,31 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
         host_options.user_file,
         src
     );
-    if (n < 0 || n >= capacity || !SDL_CreateDirectory(dst)) {
-        dst[0] = '\0';
-        return 0;
+    if (n < 0 || n >= capacity) { dst[0] = '\0'; return 0; }
+#ifdef _WIN32
+    /* SDL's Win32 calls also need the extended prefix for long paths. Leave
+     * short portable paths unchanged, including their usual slash spelling. */
+    if (n >= 200 && dst[1] == ':' && (dst[2] == '/' || dst[2] == '\\')) {
+        if (n + 4 >= capacity) { dst[0] = '\0'; return 0; }
+        memmove(dst + 4, dst, n + 1); memcpy(dst, "\\\\?\\", 4); n += 4;
+    } else if (n >= 200 && dst[0] == '\\' && dst[1] == '\\' && strncmp(dst, "\\\\?\\", 4)) {
+        if (n + 6 >= capacity) { dst[0] = '\0'; return 0; }
+        memmove(dst + 8, dst + 2, n - 1); memcpy(dst, "\\\\?\\UNC\\", 8); n += 6;
     }
+    if (!strncmp(dst, "\\\\?\\", 4))
+        for (char *p = dst; *p; ++p) if (*p == '/') *p = '\\';
+#endif
+    if (!SDL_CreateDirectory(dst)) { dst[0] = '\0'; return 0; }
 
     const char *name = src + 5;
     if (*name == '*') {
         name = "";
     }
-    int added = snprintf(dst + n, (size_t)(capacity - n), "/%s", name);
+    char separator = '/';
+#ifdef _WIN32
+    if (!strncmp(dst, "\\\\?\\", 4)) separator = '\\';
+#endif
+    int added = snprintf(dst + n, (size_t)(capacity - n), "%c%s", separator, name);
     if (added < 0 || added >= capacity - n) {
         dst[0] = '\0';
     }
@@ -472,7 +487,7 @@ static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char 
 static int Host_InstallCardPaths(const char *base) {
     char marker[4096], card[4096];
     if (Host_CardPath(card, "bu00:*", sizeof(card)) || !*card) return 0;
-    snprintf(marker, sizeof(marker), "%s../.legacy-imported", card);
+    snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(card) - 5, card);
     SDL_PathInfo info;
     if (!SDL_GetPathInfo(marker, &info)) {
         HostCardImport import = {.ok = 1};
