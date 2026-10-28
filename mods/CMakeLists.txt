@@ -65,6 +65,7 @@ set(pe_host_sources
     host/pe_economy_policy.c
     host/pe_content_api.c
     host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
+    host/pe_debug_control.c # commands from a test script (PE_DEBUG_CONTROL only)
     host/pe_present.c       # image presenter: pictures pasted into the finished frame
     host/pe_disc_assets.c   # read-only game data from the player's disc (rooms)
     host/pe_model_skin.c    # isolated Wardrobe asset reads
