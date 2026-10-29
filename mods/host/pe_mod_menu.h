@@ -68,6 +68,13 @@ int pe_menu_top_page(const char *page, const char *description, int order);
 
 /* Open an existing page synchronously; unknown pages fall back to Manage mods. */
 int pe_mod_panel_open_page(const char *page);
+/* An extra key and pad button (SDL_GAMEPAD_BUTTON_COUNT / + 1: left / right trigger) that open
+ * and close the panel besides F1 and Guide; <= 0 key and < 0 button for none. */
+void pe_mod_panel_set_open_binding(int key, int button);
+/* Open the panel where F1 would (synchronously); 0 when it cannot draw. */
+int pe_mod_panel_open(void);
+/* Close the panel once the current row's action returns (back to the game). */
+void pe_mod_panel_close(void);
 
 /* ---- for the panel ---- */
 
