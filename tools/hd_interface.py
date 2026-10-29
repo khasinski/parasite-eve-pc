@@ -241,37 +241,6 @@ def build(source, destination):
     print(f'{len(records)} materials, {sum(p.stat().st_size for p in destination.glob("*.webp"))} bytes')
 
 
-def build_models(source, generated, destination):
-    """Prototype Aya atlas: normalized UV layout, exact native alpha coverage."""
-    if destination.exists():raise FileExistsError(destination)
-    atlas=Image.open(generated).convert('RGBA')
-    if atlas.width!=atlas.height or atlas.width<1024:
-        raise ValueError('Expected a square atlas of at least 1024 pixels')
-    atlas=atlas.resize((1024,1024),Image.Resampling.LANCZOS)
-    regions=json.loads((source/'regions.json').read_text())
-    destination.mkdir(parents=True)
-    rows=[]
-    for row in regions:
-        if row['page']!=31:continue  # captured opening-scene Aya atlas only
-        x,y,w,h=(row[k] for k in ('x','y','w','h'))
-        if not re.fullmatch(r'[0-9a-f]{16}',row['key']) or min(x,y)<0 or min(w,h)<=0 or x+w>256 or y+h>256:
-            raise ValueError('Invalid source UV region')
-        native=Image.open(source/(row['key']+'.png')).convert('RGBA')
-        if native.size!=(w,h):raise ValueError('Source rectangle dimensions changed')
-        image=atlas.crop((x*4,y*4,(x+w)*4,(y+h)*4))
-        image.putalpha(native.getchannel('A').resize(image.size,Image.Resampling.NEAREST))
-        name='ui-'+row['key']+'.webp';path=destination/name
-        image.save(path,lossless=True,exact=True)
-        if Image.open(path).convert('RGBA').tobytes()!=image.tobytes():raise ValueError('Lossless verification failed')
-        rows.append(dict(file=name,sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-                         source_key=row['key'],width=w*4,height=h*4))
-    manifest=dict(format=1,kind='models',preview=True,materials=rows,
-        generated_sha256=hashlib.sha256(generated.read_bytes()).hexdigest(),
-        source_regions_sha256=hashlib.sha256((source/'regions.json').read_bytes()).hexdigest())
-    (destination/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
-    print(f'Built {len(rows)} Aya material previews in {destination}')
-
-
 def combine(base, interface, destination, version):
     """Build a separate verified artwork pack, keeping the working pack intact."""
     if destination.exists():raise FileExistsError(destination)
@@ -287,7 +256,7 @@ def combine(base, interface, destination, version):
         name=row['file']
         if not name.startswith('ui-') or Path(name).name!=name or name in files:
             raise ValueError('Invalid/duplicate interface filename')
-        files[name]=row['sha256'];additions.append(dict(file=name,kind=ui.get('kind','interface'),sha256=row['sha256']))
+        files[name]=row['sha256'];additions.append(dict(file=name,kind='interface',sha256=row['sha256']))
     destination.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=destination.name+'.partial-',dir=destination.parent) as temporary:
         stage=Path(temporary)/'pack';stage.mkdir()
@@ -301,7 +270,7 @@ def combine(base, interface, destination, version):
             shutil.copy2(source,stage/name)
         manifest.setdefault('extras',[]).extend(additions)
         manifest['version']=version
-        manifest[ui.get('kind','interface')]=dict(format=1,materials=len(additions),source_manifest_sha256=hashlib.sha256((interface/'manifest.json').read_bytes()).hexdigest())
+        manifest['interface']=dict(format=1,materials=len(additions),source_manifest_sha256=hashlib.sha256((interface/'manifest.json').read_bytes()).hexdigest())
         manifest['distribution_bytes']=sum(f.stat().st_size for f in stage.iterdir())
         (stage/'manifest.json').write_text(json.dumps(manifest,separators=(',',':'))+'\n')
         stage.rename(destination)
@@ -313,10 +282,8 @@ if __name__=='__main__':
     commands=parser.add_subparsers(dest='command',required=True)
     e=commands.add_parser('extract');e.add_argument('--disc-bin',type=Path,required=True);e.add_argument('--vram',type=Path,required=True);e.add_argument('--output',type=Path,required=True)
     b=commands.add_parser('build');b.add_argument('source',type=Path);b.add_argument('destination',type=Path)
-    m=commands.add_parser('models');m.add_argument('source',type=Path);m.add_argument('generated',type=Path);m.add_argument('destination',type=Path)
     c=commands.add_parser('combine');c.add_argument('base',type=Path);c.add_argument('interface',type=Path);c.add_argument('destination',type=Path);c.add_argument('--version',default='0.2-preview')
     args=parser.parse_args()
     if args.command=='extract':extract(args.disc_bin,args.vram,args.output)
     elif args.command=='build':build(args.source,args.destination)
-    elif args.command=='models':build_models(args.source,args.generated,args.destination)
     else:combine(args.base,args.interface,args.destination,args.version)
