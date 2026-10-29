@@ -49,20 +49,27 @@ typedef union RenderLinkAddress {
  * tile (a wall's last tiles hold a few columns of picture and the rest
  * transparent), which showed as a black strip at that side. The edge
  * columns' bands come from the whole tiles, so the picture never reaches past
- * them. */
+ * them. A band may end before the others where its picture ends in black:
+ * the stored pictures leave out tiles inside their black areas (M235's
+ * corridor has a few in the dark above its walls), and the 4:3 screen shows
+ * those gaps black too, so the other bands carry on past them. */
 #define WS_FIRST_X (-112)
 #define WS_COLUMNS 544
 #define WS_BANDS 14
 static struct {
     u16 bands[WS_COLUMNS]; /* picture: from the tiles' texels */
     u16 tiled[WS_COLUMNS]; /* whole linked tiles: for the screen's edge */
+    u16 lit[WS_COLUMNS];   /* picture that is not black: a band can't end next to it */
     int tiles;
 } s_WidescreenCover[2];
 
-/* Whether the tile's texel (i, j) holds picture (is not transparent), read
- * from PsyZ's VRAM copy; -1 when the copy cannot tell (not uploaded, drawn
- * over, 15-bit page...). Opaque black counts as picture: dark rooms store
- * real black past the screen. */
+/* Darkest picture a band may end on: every 5-bit channel at most this. */
+#define WS_DARK 2
+
+/* Whether the tile's texel (i, j) holds picture, read from PsyZ's VRAM copy:
+ * 0 transparent, 1 black (or nearly), 2 any other colour; -1 when the copy
+ * cannot tell (not uploaded, drawn over, 15-bit page...). Opaque black counts
+ * as picture: dark rooms store real black past the screen. */
 static int Render_WidescreenTexel(const RenderTilePacket *sprite, const RenderTexturePagePacket *page,
                                   int i, int j) {
     const unsigned char *known;
@@ -92,11 +99,16 @@ static int Render_WidescreenTexel(const RenderTilePacket *sprite, const RenderTe
     }
     if (!known[at]) return -1;
     c = vram[at];
-    return c != 0;
+    if (c == 0) return 0;
+    return (c & 31) <= WS_DARK && ((c >> 5) & 31) <= WS_DARK && ((c >> 10) & 31) <= WS_DARK ? 1 : 2;
 }
 
 static void Render_AddWidescreenTile(int slot, int x, int y, const RenderTilePacket *sprite,
                                      const RenderTexturePagePacket *page) {
+    /* Only columns next to the screen's edge or past it are asked whether
+     * they are black, so the tiles inside it stop at their first picture. */
+    int edge = x < 1 || x + 16 > 319;
+    unsigned lit = 0;
     int first = 16;
     int last = 0;
     int band;
@@ -112,11 +124,13 @@ static void Render_AddWidescreenTile(int slot, int x, int y, const RenderTilePac
             if (texel < 0) {
                 first = 0;
                 last = 16;
+                lit = 0xFFFF;
                 i = j = 16;
             } else if (texel) {
                 first = i < first ? i : first;
                 last = i + 1;
-                break;
+                if (texel > 1) lit |= 1u << i;
+                if (texel > 1 || !edge) break;
             }
         }
     }
@@ -128,6 +142,8 @@ static void Render_AddWidescreenTile(int slot, int x, int y, const RenderTilePac
             s_WidescreenCover[slot].tiled[column - WS_FIRST_X] |= (u16)(1u << band);
             if (column >= x + first && column < x + last)
                 s_WidescreenCover[slot].bands[column - WS_FIRST_X] |= (u16)(1u << band);
+            if (lit & (1u << (column - x)))
+                s_WidescreenCover[slot].lit[column - WS_FIRST_X] |= (u16)(1u << band);
         }
     }
     s_WidescreenCover[slot].tiles++;
@@ -142,19 +158,28 @@ static u16 Render_WidescreenEdgeBands(int slot, int first) {
     return rows;
 }
 
+/* Whether the next column out keeps the picture going: some of the bands
+ * still open have picture there, and every band that stops there ends on
+ * black in the column before it. */
+static int Render_WidescreenNextColumn(int slot, u16 *open, int column, int previous) {
+    u16 have = s_WidescreenCover[slot].bands[column - WS_FIRST_X] & *open;
+
+    if (have == 0 || (*open & ~have & s_WidescreenCover[slot].lit[previous - WS_FIRST_X]) != 0) return 0;
+    *open = have;
+    return 1;
+}
+
 void Render_GetWidescreenPicture(int slot, int *left, int *right) {
-    u16 edge;
+    u16 open;
 
     *left = 0;
     *right = 320;
     if (s_WidescreenCover[slot].tiles == 0) return;
-    edge = Render_WidescreenEdgeBands(slot, 0);
-    while (edge != 0 && *left > -RENDER_WIDESCREEN_MARGIN &&
-           (s_WidescreenCover[slot].bands[*left - 1 - WS_FIRST_X] & edge) == edge)
+    open = Render_WidescreenEdgeBands(slot, 0);
+    while (*left > -RENDER_WIDESCREEN_MARGIN && Render_WidescreenNextColumn(slot, &open, *left - 1, *left))
         --*left;
-    edge = Render_WidescreenEdgeBands(slot, 312);
-    while (edge != 0 && *right < 320 + RENDER_WIDESCREEN_MARGIN &&
-           (s_WidescreenCover[slot].bands[*right - WS_FIRST_X] & edge) == edge)
+    open = Render_WidescreenEdgeBands(slot, 312);
+    while (*right < 320 + RENDER_WIDESCREEN_MARGIN && Render_WidescreenNextColumn(slot, &open, *right, *right - 1))
         ++*right;
 }
 

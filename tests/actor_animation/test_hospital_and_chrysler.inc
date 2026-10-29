@@ -940,7 +940,7 @@ static int original_widescreen_rooms(void)
     size_t buffer_size=16u<<20;void *buffer=malloc(buffer_size);int result=1;
     unsigned rooms=0,full=0,classic=0,partial=0,positions=0;
     unsigned barred_before=0,barred_now=0,rooms_barred_before=0,rooms_barred_now=0;
-    unsigned trimmed=0,rooms_trimmed=0,animation_states=0;
+    unsigned trimmed=0,rooms_trimmed=0,past_black=0,rooms_past_black=0,animation_states=0;
     int animated=getenv("PE_WS_ANIMATIONS")!=NULL;
     if(!buffer || Asset_OpenPeImage()!=0 || Psyz_GpuSetVramCopy(1)!=0)goto done;
     Boot_InitGameState();D_8009CDC8='m';fx_image_io=1;
@@ -957,7 +957,7 @@ static int original_widescreen_rooms(void)
         unsigned groups=0;
         for(unsigned i=0;i<state->entry_count06;++i)groups|=1u<<(address.entry[i].group&31);
         int least=-RENDER_WIDESCREEN_MARGIN,most=320+RENDER_WIDESCREEN_MARGIN,widest=0,narrowest=0;
-        int room_black_before=0,room_black_now=0,room_trimmed=0;
+        int room_black_before=0,room_black_now=0,room_trimmed=0,room_past_black=0;
         for(unsigned group=0;group<32;++group){
             if(!(groups&(1u<<group)))continue;
             g_GeomScroll.state.position.groupSelect=(u8)group;void *end=NULL;
@@ -1005,20 +1005,22 @@ static int original_widescreen_rooms(void)
                 }
                 if(left>0 || right<320 || left<-RENDER_WIDESCREEN_MARGIN || right>320+RENDER_WIDESCREEN_MARGIN){
                     fprintf(stderr,"Widescreen M%03u group%u x%d: span %d..%d\n",map,group,x,left,right);goto done;}
+                /* A band may end early on black (mesh_list.c), but no column
+                 * past the screen is left without any of the edge's bands. */
                 if(left<0 || right>320){
                     u16 edge_left=0xFFFF,edge_right=0xFFFF;
                     for(int c=0;c<8;++c){edge_left&=widescreen_bands(on,n_on,c);edge_right&=widescreen_bands(on,n_on,312+c);}
                     for(int c=left;c<right;++c){
                         if(c>=0 && c<320)continue;
                         u16 edge=c<0?edge_left:edge_right;
-                        if((widescreen_bands(on,n_on,c)&edge)!=edge){
-                            fprintf(stderr,"Widescreen M%03u group%u x%d: hole at column %d inside %d..%d\n",map,group,x,c,left,right);goto done;}
+                        if(!(widescreen_bands(on,n_on,c)&edge)){
+                            fprintf(stderr,"Widescreen M%03u group%u x%d: empty column %d inside %d..%d\n",map,group,x,c,left,right);goto done;}
                     }
                 }
                 int tile_left,tile_right;widescreen_tile_span(on,n_on,&tile_left,&tile_right);
-                if(left<tile_left || right>tile_right){
-                    fprintf(stderr,"Widescreen M%03u group%u x%d: span %d..%d past the tiles %d..%d\n",map,group,x,left,right,tile_left,tile_right);goto done;}
-                if(left!=tile_left || right!=tile_right){++trimmed;room_trimmed=1;
+                if(left<tile_left || right>tile_right){++past_black;room_past_black=1;
+                    if(getenv("PE_WS_TRIMMED"))printf("Widescreen M%03u group%u x%d: texels %d..%d past black ends of tiles %d..%d\n",map,group,x,left,right,tile_left,tile_right);}
+                if(left>tile_left || right<tile_right){++trimmed;room_trimmed=1;
                     if(getenv("PE_WS_TRIMMED"))printf("Widescreen M%03u group%u x%d: texels %d..%d, tiles %d..%d\n",map,group,x,left,right,tile_left,tile_right);}
                 /* before: picture to 54 past the screen, view slid 14 at most */
                 int black_before=widescreen_black(left,right,54,14,0);
@@ -1042,14 +1044,17 @@ static int original_widescreen_rooms(void)
         ++rooms;
         if(narrowest==320+2*RENDER_WIDESCREEN_MARGIN)++full;else if(widest==320)++classic;else ++partial;
         rooms_barred_before+=room_black_before>0;rooms_barred_now+=room_black_now>0;rooms_trimmed+=room_trimmed;
+        rooms_past_black+=room_past_black;
         printf("Widescreen M%03u: %d..%d at every position, widest %d, most black %d (was %d)\n",
             map,least,most,widest,room_black_now,room_black_before);
     }
-    printf("Widescreen: %u rooms, %u positions; %u always 16:9, %u always 4:3, %u in between; no 4:3 tile moved, no hole\n",
+    printf("Widescreen: %u rooms, %u positions; %u always 16:9, %u always 4:3, %u in between; no 4:3 tile moved, no empty column\n",
         rooms,positions,full,classic,partial);
     printf("Widescreen bars: %u positions in %u rooms (was %u in %u)\n",
         barred_now,rooms_barred_now,barred_before,rooms_barred_before);
     printf("Widescreen texels: picture ends inside a tile at %u positions in %u rooms\n",trimmed,rooms_trimmed);
+    printf("Widescreen black ends: picture carries on past a band ending on black at %u positions in %u rooms\n",
+        past_black,rooms_past_black);
     printf("Widescreen animation: %u authored controller states checked%s\n",animation_states,animated?" at camera start, middle and end":" (static pass)");
     result=rooms==0 || (animated && !animation_states);
 done:
