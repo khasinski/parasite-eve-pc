@@ -13,6 +13,44 @@
 
 static void Render_RegisterInterpolationPackets(RenderObjectEntity *object,int reset);
 
+/* Keep a whole model material together: independently restored triangles would
+ * produce seams. Group original UVs by texture page and palette, then annotate
+ * both native packet buffers with that shared rectangle. */
+static void Render_RegisterModelMaterials(RenderObjectEntity *object) {
+    if(!Psyz_GpuModelMaterialsActive()||!object->header||!object->primitive_buffer)return;
+    struct Region {unsigned page,clut;int x,y,right,bottom;} regions[32];
+    unsigned region_count=0;
+    const unsigned counts[]={object->header->packet34_count,object->header->packet28_count};
+    const size_t sizes[]={sizeof(RenderPacket34),sizeof(RenderPacket28)};
+    for(unsigned pass=0;pass<2;++pass){
+        unsigned char *packet=object->primitive_buffer;
+        for(unsigned kind=0;kind<2;++kind)for(unsigned face=0;face<counts[kind];++face){
+            const RenderPacket34 *poly=(const void *)packet;
+            unsigned page=poly->page_bits&0x19f,clut=poly->clut,index=0;
+            for(;index<region_count;++index)if(regions[index].page==page&&regions[index].clut==clut)break;
+            if(!pass){
+                if(index==region_count){
+                    if(region_count==32)return; /* unusual model retains native materials */
+                    regions[region_count++]=(struct Region){page,clut,256,256,0,0};
+                }
+                struct Region *r=regions+index;
+                const unsigned char *uv=(const unsigned char *)&poly->u0;
+                for(unsigned vertex=0;vertex<(kind?3u:4u);++vertex,uv+=12){
+                    if(uv[0]<r->x)r->x=uv[0];if(uv[1]<r->y)r->y=uv[1];
+                    if(uv[0]>r->right)r->right=uv[0];if(uv[1]>r->bottom)r->bottom=uv[1];
+                }
+            }else if(index<region_count){
+                const struct Region *r=regions+index;
+                for(unsigned side=0;side<2;++side)
+                    Psyz_GpuRegisterModelMaterial(packet+side*sizes[kind]+sizeof(RenderNativeTag),
+                        r->x,r->y,r->right-r->x+1,r->bottom-r->y+1);
+            }
+            packet+=2*sizes[kind];
+        }
+    }
+}
+
+
 /* Original USA resident model-rendering data. The historical "identity"
  * name denotes an X-reflecting basis: its first signed halfword is -4096. */
 /* USA 0x8003E60C is a zero-initialized writable counter word. */
@@ -421,6 +459,7 @@ void Render_DrawObjectAlt(RenderObjectEntity *entity, s16 limit, u8 red, u8 gree
     if (!entity->header || !entity->draw_count)
         return;
     if(Psyz_GpuGetFrameInterpolation())Render_RegisterInterpolationPackets(entity,0);
+    Render_RegisterModelMaterials(entity);
     matrix = entity->matrices;
     for (i = 0; i < entity->header->part_count; i++, matrix++) {
         RenderObjectPart *part;
@@ -500,6 +539,7 @@ void Render_DrawObjectVariant(RenderObjectEntity *input, s16 limit, s32 *project
     if (!entity->header || !entity->draw_count)
         return;
     if(Psyz_GpuGetFrameInterpolation())Render_RegisterInterpolationPackets(entity,0);
+    Render_RegisterModelMaterials(entity);
     matrix = (s32 *)entity->matrices;
     i = 0;
     if (changed < entity->header->part_count) {
@@ -1386,6 +1426,7 @@ typedef union RenderPacketAddress {
  * packet classes are walked in turn through one shared descriptor cursor.
  * The room overlays carry a copy that keeps the negative winding instead. */
 void Render_DrawTexturedQuads(RenderObjectEntity *entity) {
+    Render_RegisterModelMaterials(entity);
     int i;
     s32 clip_area;
     s32 *area = &clip_area;
@@ -1579,6 +1620,7 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
     if (!entity->header || !entity->draw_count)
         return;
     if(Psyz_GpuGetFrameInterpolation())Render_RegisterInterpolationPackets(entity,0);
+    Render_RegisterModelMaterials(entity);
     *baseColour = g_RenderFadeColour;
     matrix = entity->matrices;
     gte_SetBackColor(entity->shade, entity->shade, entity->shade);

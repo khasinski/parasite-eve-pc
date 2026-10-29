@@ -53,4 +53,23 @@ with tempfile.TemporaryDirectory(prefix='pe-ui-pack-') as tmp:
     try:ui.build(source,root/'pack')
     except FileExistsError:pass
     else:raise AssertionError('Existing pack was overwritten')
+with tempfile.TemporaryDirectory(prefix='pe-model-pack-') as tmp:
+    root=Path(tmp);source=root/'source';source.mkdir()
+    native=Image.new('RGBA',(3,3));native.putpixel((1,1),(255,0,0,255))
+    native.save(source/(key+'.png'))
+    (source/'regions.json').write_text(json.dumps([dict(page=31,key=key,x=2,y=3,w=3,h=3)]))
+    generated=root/'generated.png';Image.new('RGB',(1024,1024),(0,255,0)).save(generated)
+    ui.build_models(source,generated,root/'models')
+    result=Image.open(root/'models'/('ui-'+key+'.webp')).convert('RGBA')
+    assert result.size==(12,12) and result.getpixel((5,5))==(0,255,0,255)
+    assert result.getchannel('A').tobytes()==native.getchannel('A').resize((12,12),Image.Resampling.NEAREST).tobytes()
+    base=root/'base';base.mkdir()
+    (base/'manifest.json').write_text(json.dumps(dict(atlases=[],extras=[],interface=dict(format=1,materials=618))))
+    ui.combine(base,root/'models',root/'combined','model-test')
+    combined=json.loads((root/'combined/manifest.json').read_text())
+    assert combined['interface']['materials']==618 and combined['models']['materials']==1
+    assert combined['extras'][0]['kind']=='models'
+    try:ui.build_models(source,generated,root/'models')
+    except FileExistsError:pass
+    else:raise AssertionError('Existing model pack was overwritten')
 print('PASS: UI keys, palette/native mask classes, lossless WebP and existing-pack protection')

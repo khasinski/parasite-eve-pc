@@ -1,4 +1,4 @@
-"""Headless real-disc UI pack comparison; native state/VRAM/PCM stay exact.
+"""Headless real-disc UI/model pack comparison; native state/VRAM/PCM stay exact.
 
 Set PE_TEST_DISC, PE_TEST_HD_BACKGROUNDS (the same pack without UI), and
 PE_TEST_UI_PACK (combined pack with UI). Optional PE_TEST_UI_CARD is a copied
@@ -35,14 +35,21 @@ def main(executable):
     if card:
         cases.append(('inventory',12500,20000,menu,menu_commands))
 
+    model_pack=os.getenv('PE_TEST_MODEL_PACK')
+    if model_pack and card:
+        cases=[('model',12500,20000,menu,menu_commands[:12]+['quit'])]
+
     def run(name,enabled,at,limit,inputs,commands):
         directory=root/f'{name}-{enabled}';directory.mkdir()
-        if name=='inventory':shutil.copytree(Path(card),directory/'bu00')
-        env=dict(os.environ,PE_CONFIG_HOME=str(directory/'config'),PE_HD_BACKGROUNDS=str(Path(pack if enabled else base).resolve()),
+        if name in ('inventory','model'):shutil.copytree(Path(card),directory/'bu00')
+        selected=(model_pack if enabled else pack) if name=='model' else (pack if enabled else base)
+        env=dict(os.environ,PE_CONFIG_HOME=str(directory/'config'),PE_HD_BACKGROUNDS=str(Path(selected).resolve()),
             SDL_AUDIODRIVER='dummy',PSYZ_AUDIO_CLOCK='video')
         args=[executable,'--disc',disc,'--headless-gpu','--internal-resolution','4','--frame-interpolation','0',
             '--control-at',str(at),'--frame-limit',str(limit),'--dump-frame',str(directory/'frame.ppm'),
             '--dump-vram',str(directory/'vram.bin'),'--dump-audio',str(directory/'audio.pcm')]
+        if name=='model' and os.getenv('PE_TEST_MODEL_GRAPHICS')=='1':
+            args+=['--geometry-correction','1','--antialiasing','1','--model-filtering','1']
         for tick,mask in inputs:args+=['--pad-at',f'{tick}:{mask}']
         child=subprocess.Popen(args,cwd=directory,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
         state=None;index=0
@@ -64,6 +71,7 @@ def main(executable):
         assert a[:2]==b[:2], f'{name}: native state/VRAM/PCM changed: {root}'
         assert a[2]!=b[2], f'{name}: replacement artwork is missing: {root}'
         if name=='title':assert b[0]['display']['rgb24']==1
+        elif name=='model':assert b[0]['actors'] and b[0]['menu'] is None
         elif name=='inventory':assert b[0]['menu'] and b[0]['menu']['selection']==0 and b[0]['actors']
         else:assert b[0]['actors'] and b[0]['display']['rgb24']==0
         print(f'PASS {name}: different rendered UI; exact native state/VRAM/PCM',flush=True)
