@@ -90,6 +90,5 @@ draw_buffer:
     }
 
 done:
-    Psyz_GpuClearInterfacePackets();
     g_ActiveDrawSlot = g_ActiveDrawSlot < 1U;
 }

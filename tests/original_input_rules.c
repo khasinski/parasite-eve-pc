@@ -632,8 +632,6 @@ static void TestHdInstaller(void) {
     assert(!strcmp(hash,"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
     char too_short[4]="old";assert(!HdPath(too_short,sizeof(too_short),"long","path"));assert(!*too_short);
     assert(!HdName("../escape.webp")&&!HdName("CON.png")&&!HdName("folder/file.png")&&!HdName(".webp")&&!HdName("0123456789abcdef.webp:stream"));
-    assert(HdName("ui-0123456789abcdef.webp")&&HdName("ui-rgb-0123456789abcdef.png"));
-    assert(!HdName("ui-../escape.webp")&&!HdName("ui-rgb-0123456789abcdef.webp:stream")&&!HdName("ui-0123456789abcdef.ref.png"));
     assert(HdName("0123456789abcdef.webp")&&HdName("0123456789abcdef.ref.png")&&HdName("0123456789abcdef-wide.bin"));
     HdShaInit(&sha);HdShaAdd(&sha,"payload",7);HdShaEnd(&sha,hash);
     for(int bad=0;bad<3;++bad) {

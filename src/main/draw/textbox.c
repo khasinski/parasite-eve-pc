@@ -1,5 +1,4 @@
 #include "common.h"
-#include <psyz/gpu.h>
 #include "pe_hooks.h"
 #include "pe1/draw_state.h"
 #include "pe1/boot_disc_check.h"
@@ -435,7 +434,6 @@ void Menu_DrawTextboxEntries(void) {
                             auxiliaryPacket->sprite.height = 12;
                             auxiliaryPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
                             auxiliaryPacket->sprite.clut = font->clut;
-                            Psyz_GpuRegisterInterfacePacket(&auxiliaryPacket->sprite.color.word);
 
                             temp_a1_2 = auxiliaryPacket;
                             auxiliaryPacket++;
@@ -476,7 +474,6 @@ void Menu_DrawTextboxEntries(void) {
                         currentPacket->sprite.height = 0xC;
                         currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
                         currentPacket->sprite.clut = g_TextboxFontPages[2].clut;
-                        Psyz_GpuRegisterInterfacePacket(&currentPacket->sprite.color.word);
                         stream++;
                         AddPrim(linkOrdering, (unsigned int *)linkPacket);
                         currentPacket++;
@@ -579,7 +576,6 @@ void Menu_DrawTextboxEntries(void) {
                                 auxiliaryPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
                                 temp_a1_3 = auxiliaryPacket;
                                 auxiliaryPacket->sprite.clut = font->clut;
-                                Psyz_GpuRegisterInterfacePacket(&auxiliaryPacket->sprite.color.word);
                                 auxiliaryPacket++;
                                 AddPrim(orderingTable, temp_a1_3);
                                 cursor.x += glyphAdvance;
@@ -618,7 +614,6 @@ void Menu_DrawTextboxEntries(void) {
                         selectionSprite = &g_TextboxChoiceCursor[selectionFrame].sprite;
                         selectionSprite->x = selectionCursor->x;
                         selectionSprite->y = (s16)(selectionCursor->y + ((s8)g_DialogueChoiceCursor * 12));
-                        Psyz_GpuRegisterInterfacePacket(&selectionSprite->color.word);
                         AddPrim(D_800B0E38.ordering[selectionFrame] + 1,
                                 &g_TextboxChoiceCursor[selectionFrame]);
                         break;
@@ -650,7 +645,6 @@ void Menu_DrawTextboxEntries(void) {
                         currentPacket->sprite.height = 0xC;
                         currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
                         currentPacket->sprite.clut = font->clut;
-                        Psyz_GpuRegisterInterfacePacket(&currentPacket->sprite.color.word);
                         stream++;
                         AddPrim(linkOrdering, (unsigned int *)linkPacket);
                         currentPacket++;
@@ -682,7 +676,6 @@ void Menu_DrawTextboxEntries(void) {
                     currentPacket->sprite.height = 0xC;
                     currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
                     currentPacket->sprite.clut = g_TextboxFontPages[1].clut;
-                    Psyz_GpuRegisterInterfacePacket(&currentPacket->sprite.color.word);
                     stream++;
                     AddPrim(linkOrdering, (unsigned int *)linkPacket);
                     currentPacket++;
@@ -712,7 +705,6 @@ void Menu_DrawTextboxEntries(void) {
                     currentPacket->sprite.height = 0xC;
                     currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
                     currentPacket->sprite.clut = g_TextboxFontPages[1].clut;
-                    Psyz_GpuRegisterInterfacePacket(&currentPacket->sprite.color.word);
                     stream++;
                     AddPrim(linkOrdering, (unsigned int *)linkPacket);
                     currentPacket++;
@@ -752,7 +744,6 @@ void Menu_DrawTextboxEntries(void) {
                     nextPacket++;
                     currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
                     currentPacket->sprite.clut = font->clut;
-                    Psyz_GpuRegisterInterfacePacket(&currentPacket->sprite.color.word);
 
                     AddPrim(orderingTable, (unsigned int *)(currentPacket++));
                     temp_v1_11 = g_TextboxGlyphSpacing[*stream].right;

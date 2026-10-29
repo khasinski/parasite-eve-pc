@@ -1,5 +1,4 @@
 #include "common.h"
-#include <psyz/gpu.h>
 #include "pe1/bounds_check.h"
 #include "pe1/draw_area.h"
 #include "pe1/draw_buffers.h"
@@ -255,7 +254,6 @@ void Draw_AllocSprite(int index) {
     sprite->u = glyph->u;
     sprite->v = glyph->v;
     sprite->clut = glyph->clut;
-    Psyz_GpuRegisterInterfacePacket(&sprite->color.word);
     sprite->width = glyph->width;
     sprite->height = glyph->height;
     RenderNativeTag *ordering = (RenderNativeTag *)g_DrawOrderingTableEntry;
@@ -353,7 +351,6 @@ void Draw_EmitGlyph(s32 arg0, s32 arg1) {
         RenderNativeTag *ot;
 
         packet->clut = glyph->clut;
-        Psyz_GpuRegisterInterfacePacket(&packet->color.word);
         packet->tpage = 7;
         ot = (RenderNativeTag *)g_DrawOrderingTableEntry;
         packet->tag.address = ot->address;
@@ -501,7 +498,6 @@ void Draw_AllocTexturedQuad(int code) {
         prim->u2 = u;
         prim->u0 = u;
         prim->clut = 0x89C;
-        Psyz_GpuRegisterInterfacePacket(&prim->color.word);
         half = spacing >> 1;
         prim->v1 = v;
         prim->v0 = v;
@@ -700,7 +696,6 @@ void Draw_EmitDigitSprite(int digit) {
             p->v2 = p->v3 = p->v0 + 7;
         }
         p->clut = g_DrawDigitFontTpageClut;
-        Psyz_GpuRegisterInterfacePacket(&p->color.word);
         p->tpage = 7;
         {
             RenderNativeTag *ot = (RenderNativeTag *)g_DrawOrderingTableEntry;
@@ -984,7 +979,6 @@ static inline void PushCursorAt(int x, int y)
         quad->u1 = quad->u3 = quad->u0; \
         quad->v2 = quad->v3 = quad->v0 + glyph->height; \
         quad->clut = glyph->clut; \
-        Psyz_GpuRegisterInterfacePacket(&quad->color.word); \
         quad->tpage = 7; \
         quad->tag.address = ((RenderNativeTag *)g_DrawOrderingTableEntry)->address; \
         ((RenderNativeTag *)g_DrawOrderingTableEntry)->address = (uintptr_t)quad; \

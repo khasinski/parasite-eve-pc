@@ -164,11 +164,8 @@ static int HdPath(char *out,size_t n,const char *a,const char *b){int k=snprintf
 static int HdHex(const char *s){if(!s||strlen(s)!=64)return 0;for(unsigned i=0;i<64;++i)if(!strchr("0123456789abcdef",s[i]))return 0;return 1;}
 static int HdName(const char *s){
     if(!s)return 0;if(!strcmp(s,"manifest.json")||!strcmp(s,"title.webp")||!strcmp(s,"title.png"))return 1;
-    int is_interface=0;
-    if(!strncmp(s,"ui-rgb-",7)){s+=7;is_interface=1;}else if(!strncmp(s,"ui-",3)){s+=3;is_interface=1;}
     size_t n=strlen(s);if(n<20||n>25)return 0;for(unsigned i=0;i<16;++i)if(!strchr("0123456789abcdef",s[i]))return 0;
-    if(!strcmp(s+16,".webp")||!strcmp(s+16,".png"))return 1;
-    return !is_interface&&(!strcmp(s+16,".ref.png")||!strcmp(s+16,"-wide.bin"));
+    return !strcmp(s+16,".webp")||!strcmp(s+16,".png")||!strcmp(s+16,".ref.png")||!strcmp(s+16,"-wide.bin");
 }
 static const char *HdString(const cJSON *j,const char *key){const cJSON *v=cJSON_GetObjectItemCaseSensitive(j,key);return cJSON_IsString(v)?v->valuestring:NULL;}
 static cJSON *HdJsonFile(const char *path,size_t limit){size_t n=0;char *data=SDL_LoadFile(path,&n);if(!data)return NULL;cJSON *j=n<=limit?cJSON_ParseWithLength(data,n):NULL;SDL_free(data);return j;}
@@ -276,7 +273,6 @@ static void Host_HdApply(void) {
     if (!host_hd.development && *host_hd.active)
         SDL_setenv_unsafe("PE_HD_BACKGROUNDS",host_hd.active,1);
     Psyz_GpuSetSpriteAtlasesEnabled(host_hd.enabled);
-    Psyz_GpuSetInterfacePack(host_hd.enabled?SDL_getenv("PE_HD_BACKGROUNDS"):NULL);
     Render_RefreshHdBackgrounds();
     MenuCard_RefreshHdBackground();
 }
@@ -294,8 +290,7 @@ static void Host_HdInit(void){
     char path[4096];if(HdPath(path,sizeof(path),host_hd.root,"active.json")){cJSON *j=HdJsonFile(path,16384);const char *directory=HdString(j,"directory"),*version=HdString(j,"version"),*sha=HdString(j,"sha256");if(directory&&version&&sha&&strlen(directory)<sizeof(host_hd.active)&&strlen(version)<sizeof(host_hd.version)&&HdHex(sha)&&!strncmp(directory,host_hd.root,strlen(host_hd.root))&&directory[strlen(host_hd.root)]=='/'){SDL_strlcpy(host_hd.active,directory,sizeof(host_hd.active));SDL_strlcpy(host_hd.version,version,sizeof(host_hd.version));SDL_strlcpy(host_hd.archive_sha,sha,sizeof(host_hd.archive_sha));host_hd.enabled=host_options.hd_backgrounds;}cJSON_Delete(j);}
     const char *dev=SDL_getenv("PE_HD_BACKGROUNDS");if(dev&&*dev){host_hd.development=1;host_hd.enabled=1;SDL_strlcpy(host_hd.active,dev,sizeof(host_hd.active));}
     else if(*host_hd.active)SDL_setenv_unsafe("PE_HD_BACKGROUNDS",host_hd.active,1);
-    Psyz_GpuSetSpriteAtlasesEnabled(host_hd.enabled);
-    Psyz_GpuSetInterfacePack(host_hd.enabled?SDL_getenv("PE_HD_BACKGROUNDS"):NULL);curl_global_init(CURL_GLOBAL_DEFAULT);
+    Psyz_GpuSetSpriteAtlasesEnabled(host_hd.enabled);curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 static void Host_HdStop(void){if(host_hd.thread){SDL_CompareAndSwapAtomicInt(&host_hd.cancel,0,1);SDL_WaitThread(host_hd.thread,NULL);host_hd.thread=NULL;}curl_global_cleanup();}
 
@@ -2494,7 +2489,6 @@ images_ready:;
     /* Widescreen reads background texels to find where a room's picture
      * ends (mesh_list.c); kept on so switching it on mid-game works. */
     Psyz_GpuSetVramCopy(1);
-    if(!interactive)Psyz_GpuSetInterfacePack(SDL_getenv("PE_HD_BACKGROUNDS"));
     Boot_InitSystem();
     if (Psyz_VideoGetInternalResolution() != internal_resolution) {
         fprintf(stderr, "Requested internal resolution unavailable\n");

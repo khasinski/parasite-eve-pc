@@ -2,17 +2,14 @@
 import hashlib,http.server,json,os,pathlib,subprocess,sys,tempfile,threading,time,unittest,zipfile,io
 BINARY=pathlib.Path(sys.argv.pop(1)).resolve() if len(sys.argv)>1 else None
 KEY='0123456789abcdef'
-UI_FILES={'ui-'+KEY+'.webp':b'interface material','ui-rgb-'+KEY+'.png':b'title UI material'}
 def pack(version,kind='good'):
  payload=b'background material'*(16384 if kind=='slow' else 1);ref=b'lossless reference'
  filename='../escape.webp' if kind=='traversal' else KEY+'.webp'
  manifest=dict(version=version,atlases=[dict(file=filename,atlas_sha256=hashlib.sha256(payload).hexdigest(),reference_file=KEY+'.ref.png',reference_sha256=hashlib.sha256(ref).hexdigest())])
- manifest['extras']=[dict(file=name,kind='interface',sha256=hashlib.sha256(data).hexdigest()) for name,data in UI_FILES.items()]
  data=io.BytesIO()
  with zipfile.ZipFile(data,'w',compression=zipfile.ZIP_STORED) as z:
   def write(name,data):z.writestr(zipfile.ZipInfo(name,(2026,1,1,0,0,0)),data)
   write('manifest.json',json.dumps(manifest));write(filename,b'corrupt' if kind=='corrupt' else payload);write(KEY+'.ref.png',ref)
-  for name,ui_payload in UI_FILES.items():write(name,ui_payload)
  return data.getvalue()
 class Handler(http.server.BaseHTTPRequestHandler):
  def log_message(self,*a):pass
@@ -46,7 +43,6 @@ class Installer(unittest.TestCase):
    pointer=config/'mods/upscale/active.json'
    try:
     result=run();self.assertEqual(result.returncode,0,result.stdout+result.stderr);self.assertTrue(pointer.is_file(),f'Installer wrote to the wrong Unicode path: {result.stdout} / {result.stderr}; files: {list(root.rglob(chr(42)))}');old=pointer.read_bytes();installed=pathlib.Path(json.loads(old)['directory']);self.assertEqual((installed/(KEY+'.webp')).read_bytes(),b'background material')
-    for name,data in UI_FILES.items():self.assertEqual((installed/name).read_bytes(),data)
     self.assertIn('X-PE-Version',server.client_headers);self.assertIn('X-PE-Build',server.client_headers);self.assertIn('ParasiteEve/',server.client_headers['User-Agent'])
     self.assertEqual(server.downloads,1);result=run();self.assertEqual(result.returncode,0,result.stdout);self.assertEqual(server.downloads,1);self.assertEqual(pointer.read_bytes(),old)
     self.assertEqual(run('--verify-backgrounds').returncode,0)
@@ -57,9 +53,5 @@ class Installer(unittest.TestCase):
     self.assertFalse(list(root.rglob('escape.webp')))
     (installed/(KEY+'.webp')).write_bytes(b'damaged on disk');self.assertNotEqual(run('--verify-backgrounds').returncode,0)
     server.mode='good';result=run();self.assertEqual(result.returncode,0,result.stdout);new=pathlib.Path(json.loads(pointer.read_bytes())['directory']);self.assertNotEqual(new,installed);self.assertEqual((new/(KEY+'.webp')).read_bytes(),b'background material');self.assertEqual((installed/(KEY+'.webp')).read_bytes(),b'damaged on disk')
-    ui_name=next(iter(UI_FILES));(new/ui_name).write_bytes(b'incomplete UI')
-    self.assertNotEqual(run('--verify-backgrounds').returncode,0)
-    result=run();self.assertEqual(result.returncode,0,result.stdout);repaired=pathlib.Path(json.loads(pointer.read_bytes())['directory'])
-    self.assertNotEqual(repaired,new);self.assertEqual((repaired/ui_name).read_bytes(),UI_FILES[ui_name]);self.assertEqual((new/ui_name).read_bytes(),b'incomplete UI')
    finally:server.shutdown();server.server_close()
 if __name__=='__main__':unittest.main()
