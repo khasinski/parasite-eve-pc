@@ -23,6 +23,7 @@ Keep each CUE file next to its BIN file.
 **HD backgrounds:** open **Escape → Mods → Background pack** to download or update the optional artwork.
 The game shows download progress and checks the files before installing. Use **2x or higher** in Graphics; the artwork applies immediately.
 You can also [download the pack manually](https://pe.polanka.ovh/).
+Development work on HD menu graphics and fonts is described in [HD interface artwork](docs/HD_INTERFACE.md).
 
 **Enter** is START and skips movies; in a story movie, START pauses it and asks whether to skip. View or change all bindings in **Escape → Controls**. A **speed** button can be bound there too: the game runs at 2x while it is held, or 3x or 4x with the arrows either side of the number (Left/Right on that row). It is unbound until you choose a key or button, and keeps your VSync setting.
 The left stick provides analog movement. **Escape → Controls → Field run threshold** sets how far to push it before Aya runs (85% by default).

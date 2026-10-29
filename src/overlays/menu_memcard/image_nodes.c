@@ -1,4 +1,5 @@
 #include "menu_memcard_image.h"
+#include <psyz/video.h>
 #include "menu_memcard_screen.h"
 
 MemcardImageNode *g_MemcardFreeImageNodes, *g_MemcardPendingNodeTail, *g_MemcardPendingNodeHead;
@@ -67,6 +68,7 @@ void MenuCard_RedrawImageNodes(void) {
         }
     }
 
+    Psyz_VideoBeginRgb24Interface(g_MemcardCurrentScreen->disp.disp.y);
     screen = g_MemcardCurrentScreen;
     if (screen->dirty.w > 0) {
         x = left;
@@ -114,6 +116,11 @@ void MenuCard_RedrawImageNodes(void) {
                 skip = area.w - node->width;
                 draw(node, g_MemcardCurrentScreen->overlayImage + (offset * 3 / 4) * 4, skip * 3 / 4,
                      area.w * 3 / 4);
+                if(draw==(MemcardNodeDraw)MenuCard_BlendImage)
+                    Psyz_VideoAddRgb24Interface((const u8 *)node->image+20,node->x,node->y,node->width,node->height,node->intensity);
+                else if(draw==(MemcardNodeDraw)MenuCard_BlendRotatedImage && node->intensity>0)
+                    Psyz_VideoAddRgb24Interface(NULL,node->x,node->y,node->width,
+                        node->width>node->height?node->width:node->height,0);
             }
         }
     }

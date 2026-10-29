@@ -1,4 +1,5 @@
 #include "common.h"
+#include <psyz/gpu.h>
 #include "pe1/battle.h"
 #include "pe1/field_actor.h"
 #include "pe1/battle_entity_anim.h"
@@ -355,6 +356,7 @@ void Battle_DrawStatusOverlay(RenderObjectEntity *object, int mode, int outOfRan
             Battle_LayoutStatusPrimRow(0x1C);
             packet->sprite.x = g_BattleStatusBarTiles[slot * 3].x0 + 0x1C;
             packet->sprite.y = g_BattleStatusBarTiles[slot * 3].y0 + 8;
+            Psyz_GpuRegisterInterfacePrimitive(packet);
             AddPrim(D_800B0E38.ordering[slot] + 4, packet);
             Battle_DrawStatusValue((s16)entityId, 0x12);
             break;
@@ -435,6 +437,7 @@ void Battle_BuildStatusPrimHeader(RenderObjectEntity *object, s8 outOfRange)
     STATUS_POINTER_TRI->y1 = projected[1].y;
     STATUS_POINTER_TRI->x2 = projected[2].x;
     STATUS_POINTER_TRI->y2 = projected[2].y;
+    Psyz_GpuRegisterInterfacePrimitive((unsigned int *)STATUS_POINTER_TRI);
     AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 5,
             (unsigned int *)STATUS_POINTER_TRI);
 
@@ -480,10 +483,13 @@ void Battle_BuildStatusPrimHeader(RenderObjectEntity *object, s8 outOfRange)
             object->projected_target_y - 35;
         g_BattleStatusPointerLines[g_ActiveDrawSlot][1].y1 = object->projected_target_y - 34;
     }
+    Psyz_GpuRegisterInterfacePrimitive((unsigned int *)&g_BattleStatusPointerLines[g_ActiveDrawSlot][1]);
     AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 7,
             (unsigned int *)&g_BattleStatusPointerLines[g_ActiveDrawSlot][1]);
+    Psyz_GpuRegisterInterfacePrimitive((unsigned int *)&g_BattleStatusPointerLines[g_ActiveDrawSlot][0]);
     AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 6,
             (unsigned int *)&g_BattleStatusPointerLines[g_ActiveDrawSlot][0]);
+    Psyz_GpuRegisterInterfacePrimitive((unsigned int *)&g_BattleStatusPointerSprites[g_ActiveDrawSlot]);
     AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 5,
             (unsigned int *)&g_BattleStatusPointerSprites[g_ActiveDrawSlot]);
 }
@@ -497,6 +503,7 @@ void Battle_LayoutStatusPrimRow(int bottomY)
         line->y0 = g_BattleStatusBarTiles[slot * 3].y0 + row;
         line->x1 = 0x50 - row * 2;
         line->y1 = (s8)bottomY - row * 2;
+        Psyz_GpuRegisterInterfacePrimitive(line);
         AddPrim(D_800B0E38.ordering[slot] + 7 - row, line);
     }
 }
@@ -554,6 +561,7 @@ void Battle_DrawTargetHighlight(void)
 
             at.gauge = packets;
             at.address = slot_offset + (index_offset + at.address);
+            Psyz_GpuRegisterInterfacePrimitive(at.words);
             AddPrim(D_800B0E38.ordering[slot] + 7, at.words);
         }
         ++index;
@@ -575,6 +583,7 @@ void Battle_DrawSpellName(void) {
         packet->sprite.x = g_BattleStatusBarTiles[slot * 3].x0 + 0x3C;
         packet->sprite.y = y;
         packet->sprite.clut = GetClut(0x130, 0x1FD);
+        Psyz_GpuRegisterInterfacePrimitive(packet);
         AddPrim((RenderNativeTag *)g_OtBufferTable[slot] + 4, packet);
         return;
     }
@@ -597,6 +606,7 @@ void Battle_DrawSpellName(void) {
         packet->sprite.x = x;
         packet->sprite.y = y;
         x -= 6;
+        Psyz_GpuRegisterInterfacePrimitive(packet);
         AddPrim((RenderNativeTag *)g_OtBufferTable[slot] + 4, packet);
     }
 }
@@ -612,6 +622,7 @@ void Battle_DrawStatusSymbol(s8 which) {
     packet->sprite.height = g_BattleStatusSymbolSize.bytes[index + 1];
     packet->sprite.x = g_BattleStatusBarTiles[slot * 3].x0 + g_BattleStatusSymbolOffset.bytes[index];
     packet->sprite.y = g_BattleStatusBarTiles[slot * 3].y0 + g_BattleStatusSymbolOffset.bytes[index + 1];
+    Psyz_GpuRegisterInterfacePrimitive(packet);
     AddPrim(D_800B0E38.ordering[slot] + 4, packet);
 }
 
@@ -637,6 +648,7 @@ void Battle_DrawATBGauge(void)
     ammo += *(unsigned short *)&g_ActiveActor->action->attackWord & 0x3ff;
     sprite->x = g_BattleStatusBarTiles[g_ActiveDrawSlot * 3].x0 + 8;
     sprite->y = y;
+    Psyz_GpuRegisterInterfacePrimitive((unsigned *)packet);
     AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 4, (unsigned *)packet);
     while (i < Pad_GetMenuPressedBitOrDisabled()) {
         int kind = g_BattleActionQueue[i].command;
@@ -667,6 +679,7 @@ void Battle_DrawStatusValue(int value, int yOffset)
     int y = g_BattleStatusBarTiles[slot * 3].y0 + yOffset;
     marker->sprite.x = g_BattleStatusBarTiles[slot * 3].x0 + 8;
     marker->sprite.y = y;
+    Psyz_GpuRegisterInterfacePrimitive(marker);
     AddPrim(D_800B0E38.ordering[slot] + 4, marker);
     Battle_DrawDecimalNumber(g_BattleStatusValueDigits[slot],
         g_BattleStatusBarTiles[slot * 3].x0 + 0x40, (s16)(y - 1), (s16)value, 1);
@@ -714,6 +727,7 @@ int Battle_DrawDecimalNumber(void *buffer, short x, short y, short value, short 
             packet->sprite.color.bytes.b = g_BattleStatusPointerSprites[g_ActiveDrawSlot].sprite.color.bytes.b;
         }
         x += 6;
+        Psyz_GpuRegisterInterfacePrimitive((unsigned *)packet);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 4, (unsigned *)packet);
     }
     return last;
@@ -754,6 +768,7 @@ void Battle_DrawStatusPanel(s32 mode, BattleStatusPanel *input) {
         missSprite->height = 8;
         missSprite->x = panel->x - 16;
         missSprite->y = panel->y + panel->timer - 30;
+        Psyz_GpuRegisterInterfacePrimitive(packet);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 7, packet);
     } else {
         value = number;
@@ -799,6 +814,7 @@ void Battle_DrawStatusPanel(s32 mode, BattleStatusPanel *input) {
             PANEL_DIGIT(n)->y = screenY;
             PANEL_DIGIT(n)->width = 8;
             PANEL_DIGIT(n)->height = 8;
+            Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattlePanelDigits[g_ActiveDrawSlot][g_BattleStatusPanelSlot][n]);
             AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 7, (u32 *)&g_BattlePanelDigits[g_ActiveDrawSlot][g_BattleStatusPanelSlot][n]);
         }
     }
@@ -830,6 +846,7 @@ void Draw_QueuePrimitive(void) {
 
     slot = g_ActiveDrawSlot;
     g_StatusMarkerPackets[slot].sprite.y -= 2;
+    Psyz_GpuRegisterInterfacePrimitive(&g_StatusMarkerPackets[slot]);
     AddPrim((RenderNativeTag *)g_OtBufferTable[slot] + 7, &g_StatusMarkerPackets[slot]);
     g_BattleSpritePrimCountdown--;
 }
@@ -839,6 +856,7 @@ void Draw_QueuePrimitive(void) {
     RenderPagedSpritePacket *icon = &g_StatusIconPackets[g_ActiveDrawSlot][(code_expr)]; \
     icon->sprite.x = s0; icon->sprite.y = s2; \
     s0 += s3; \
+    Psyz_GpuRegisterInterfacePrimitive(icon); \
     AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 7, icon); \
 } while (0)
 
@@ -1022,9 +1040,13 @@ void Battle_DrawActiveStatus(void)
         atbLabel = &g_BattleAtbLabels[g_ActiveDrawSlot].sprite;
         atbLabel->x = g_HudOrigin.x + 0x44;
         atbLabel->y = g_HudOrigin.y + 3;
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)atbTrack);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 6, (u32 *)atbTrack);
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattleAtbGauges[g_ActiveDrawSlot]);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 5, (u32 *)&g_BattleAtbGauges[g_ActiveDrawSlot]);
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattleAtbMarkers[g_ActiveDrawSlot]);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 4, (u32 *)&g_BattleAtbMarkers[g_ActiveDrawSlot]);
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattleAtbLabels[g_ActiveDrawSlot]);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 4, (u32 *)&g_BattleAtbLabels[g_ActiveDrawSlot]);
     }
     if (Menu_GetItemContextFlag() & 2) {
@@ -1049,8 +1071,11 @@ void Battle_DrawActiveStatus(void)
         peRemainder->y3 = g_HudOrigin.y + 0x1C;
         peLabel->x = g_HudOrigin.x + 0x44;
         peLabel->y = g_HudOrigin.y + 0x18;
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)peFill);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 5, (u32 *)peFill);
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattlePeGauges[g_ActiveDrawSlot][1]);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 5, (u32 *)&g_BattlePeGauges[g_ActiveDrawSlot][1]);
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattlePeLabels[g_ActiveDrawSlot]);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 4, (u32 *)&g_BattlePeLabels[g_ActiveDrawSlot]);
         if (g_GameStateFlags & 2) {
             tiles = g_BattleStatusBackgrounds;
@@ -1078,6 +1103,7 @@ void Battle_DrawActiveStatus(void)
         tiles[g_ActiveDrawSlot].tile.w = 0x54;
         tiles[g_ActiveDrawSlot].tile.h = 0x12;
     }
+    Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattleStatusBackgrounds[g_ActiveDrawSlot]);
     AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 7, (u32 *)&g_BattleStatusBackgrounds[g_ActiveDrawSlot]);
     Battle_DrawEnemyHP(g_ActiveActor->maxHP, g_ActiveActor->curHP);
     Draw_StatusIcons();
@@ -1135,6 +1161,7 @@ void Battle_DrawEnemyHP(s16 maximum, s16 current)
             MAX_HP_DIGIT(n)->color.bytes.b = 128;
         }
         x += 6;
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattleMaxHpDigits[g_ActiveDrawSlot][n]);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 5, (u32 *)&g_BattleMaxHpDigits[g_ActiveDrawSlot][n]);
     }
 
@@ -1169,6 +1196,7 @@ void Battle_DrawEnemyHP(s16 maximum, s16 current)
             CURRENT_HP_DIGIT(n)->color.bytes.b = 128;
         }
         x += 6;
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattleHpDigits[g_ActiveDrawSlot][n]);
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 5, (u32 *)&g_BattleHpDigits[g_ActiveDrawSlot][n]);
     }
 
@@ -1178,6 +1206,7 @@ void Battle_DrawEnemyHP(s16 maximum, s16 current)
         label = &g_BattleHpLabels[frame].sprite;
         label->x = g_HudOrigin.x + 0x44;
         label->y = g_HudOrigin.y + 0xE;
+        Psyz_GpuRegisterInterfacePrimitive((u32 *)&g_BattleHpLabels[frame]);
         AddPrim(D_800B0E38.ordering[frame] + 4, (u32 *)&g_BattleHpLabels[frame]);
     }
 }

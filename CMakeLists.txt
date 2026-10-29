@@ -575,6 +575,10 @@ if(BUILD_TESTING)
         add_test(NAME hd-mod-download-safety COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_mod_download.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(hd-mod-download-safety PROPERTIES TIMEOUT 90 LABELS "downloads")
+        add_test(NAME original-game-hd-interface COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/hd_interface_render.py $<TARGET_FILE:parasite-eve-pc>)
+        set_tests_properties(original-game-hd-interface PROPERTIES TIMEOUT 420 SKIP_RETURN_CODE 77 LABELS "game-assets;gpu")
+        add_test(NAME hd-interface-pack-format COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/hd_interface_pack.py)
+        set_tests_properties(hd-interface-pack-format PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77 LABELS "gpu;assets")
         add_test(NAME original-game-frame-interpolation COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/frame_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-frame-interpolation PROPERTIES SKIP_RETURN_CODE 77
@@ -835,6 +839,11 @@ if(BUILD_TESTING)
         target_include_directories(test-psyz-interpolation PRIVATE third_party/psyz/ztest)
         target_compile_definitions(test-psyz-interpolation PRIVATE __psyz PSYZ_TEST_SDL_GPU=1)
         target_link_libraries(test-psyz-interpolation PRIVATE psyz)
+        add_test(NAME original-gpu-interface-pack COMMAND test-psyz-interpolation "--filter=gpu::interface*,gpu::rgb24_hd_backdrop*")
+        set_tests_properties(original-gpu-interface-pack PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            SKIP_REGULAR_EXPRESSION "requires SDL GPU"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-frame-interpolation COMMAND test-psyz-interpolation --filter=gpu::interpolated*)
         set_tests_properties(original-gpu-frame-interpolation PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
