@@ -465,29 +465,81 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
     return 0;
 }
 
-/* Import once, retaining every legacy file and never replacing a newer card.
- * A completed-import marker prevents deleted slots reappearing at next launch. */
+/* Import each legacy save once, retaining every legacy file and never replacing a
+ * card already in the user folder. The marker lists the legacy files earlier passes
+ * considered ("bu00/<name>" lines), so saves copied beside the game after the first
+ * launch are still imported while a slot deleted after its import stays deleted.
+ * A 0.7 marker is empty: files that arrived before it was written count as listed. */
+#define HOST_CARD_MARKER_HEADER "# Legacy saves already considered for import\n"
+
 typedef struct HostCardImport {
     int ok;
-    unsigned count;
+    unsigned count, kept, rejected;
     char *created[128];
+    const char *listed;     /* the marker's list, "\n"-delimited; NULL when none */
+    SDL_Time before;        /* an empty 0.7 marker's write time, else 0 */
+    char *added;            /* entries considered by this pass, "\n"-delimited */
+    size_t added_length;
 } HostCardImport;
+
+static int Host_CardImportListed(const HostCardImport *import, const char *entry) {
+    return (import->listed && strstr(import->listed, entry)) || (import->added && strstr(import->added, entry));
+}
+
+/* Record `entry` ("\nbu00/<name>\n") as considered by this pass. */
+static int Host_CardImportRecord(HostCardImport *import, const char *entry) {
+    size_t length = strlen(entry + 1);
+    char *grown = SDL_realloc(import->added, import->added_length + length + 2);
+    if (!grown) return 0;
+    if (!import->added_length) grown[import->added_length++] = '\n';
+    memcpy(grown + import->added_length, entry + 1, length + 1);
+    import->added = grown;
+    import->added_length += length;
+    return 1;
+}
+
+static int Host_IsCardImage(const char *name) {
+    const char *dot = strrchr(name, '.');
+    static const char *const images[] = {".srm", ".mcr", ".mcd", ".gme", ".mcs", ".mc", ".psv", ".vmp"};
+    for (unsigned i = 0; dot && i < sizeof(images) / sizeof(images[0]); ++i)
+        if (!SDL_strcasecmp(dot, images[i])) return 1;
+    return 0;
+}
 
 static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char *dirname, const char *name) {
     HostCardImport *import = userdata;
-    if (strlen(name) != 20 || strncmp(name, "BASLUS-00662", 11)) return SDL_ENUM_CONTINUE;
-    char source[8192], target[4096], device[64], temporary[4160];
+    char source[8192], target[4096], device[64], temporary[4160], entry[64];
     snprintf(source, sizeof(source), "%s%s", dirname, name);
-    SDL_PathInfo info;
-    if (!SDL_GetPathInfo(source, &info) || info.type != SDL_PATHTYPE_FILE || info.size != 8192)
+    if (strlen(name) != 20 || strncmp(name, "BASLUS-00662", 11)) {
+        if (Host_IsCardImage(name)) {
+            ++import->rejected;
+            fprintf(stderr, "Memory cards: %s is a memory card image, not a PsyZ save; "
+                            "open it in the save editor to import its saves.\n", source);
+        }
         return SDL_ENUM_CONTINUE;
+    }
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(source, &info) || info.type != SDL_PATHTYPE_FILE || info.size != 8192) {
+        ++import->rejected;
+        fprintf(stderr, "Memory cards: %s is not an 8192-byte PsyZ save; not imported.\n", source);
+        return SDL_ENUM_CONTINUE;
+    }
     /* Port is encoded by the legacy directory supplied to EnumerateDirectory. */
     size_t length = strlen(dirname);
     unsigned port = length >= 4 && dirname[length - 3] == '1';
+    snprintf(entry, sizeof(entry), "\nbu%u0/%s\n", port, name);
+    if (Host_CardImportListed(import, entry)) return SDL_ENUM_CONTINUE;
+    if (!Host_CardImportRecord(import, entry)) { import->ok = 0; return SDL_ENUM_CONTINUE; }
+    SDL_Time arrived = info.create_time > info.modify_time ? info.create_time : info.modify_time;
+    if (import->before && arrived <= import->before) return SDL_ENUM_CONTINUE;
     snprintf(device, sizeof(device), "bu%u0:%s", port, name);
     Host_CardPath(target, device, sizeof(target));
     if (!*target) { import->ok = 0; return SDL_ENUM_CONTINUE; }
-    if (SDL_GetPathInfo(target, &info)) return SDL_ENUM_CONTINUE;
+    if (SDL_GetPathInfo(target, &info)) {
+        ++import->kept;
+        fprintf(stderr, "Memory cards: kept %s; the save of the same name in %s was not imported.\n", target, dirname);
+        return SDL_ENUM_CONTINUE;
+    }
     if (import->count >= 128) { import->ok = 0; return SDL_ENUM_CONTINUE; }
     size_t bytes = 0;
     void *data = SDL_LoadFile(source, &bytes);
@@ -517,30 +569,70 @@ static int Host_InstallCardPaths(const char *base) {
     char marker[4096], card[4096];
     if (Host_CardPath(card, "bu00:*", sizeof(card)) || !*card) return 0;
     snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(card) - 5, card);
+    HostCardImport import = {.ok = 1};
     SDL_PathInfo info;
-    if (!SDL_GetPathInfo(marker, &info)) {
-        HostCardImport import = {.ok = 1};
-        char *cwd = SDL_GetCurrentDirectory();
-        const char *roots[] = {cwd, base};
-        for (unsigned root = 0; root < 2; ++root) if (roots[root]) {
-            for (unsigned port = 0; port < 2; ++port) {
-                char source[8192];
-                snprintf(source, sizeof(source), "%sbu%u0", roots[root], port);
-                if (SDL_GetPathInfo(source, &info) && info.type == SDL_PATHTYPE_DIRECTORY &&
-                    !SDL_EnumerateDirectory(source, Host_ImportCard, &import)) import.ok = 0;
-            }
-        }
-        SDL_free(cwd);
-        if (import.ok && !SDL_SaveFile(marker, "", 0)) {
-            SDL_RemovePath(marker);
-            import.ok = 0;
-        }
-        for (unsigned i = 0; i < import.count; ++i) {
-            if (!import.ok) SDL_RemovePath(import.created[i]);
-            SDL_free(import.created[i]);
-        }
-        if (!import.ok) return 0;
+    size_t bytes = 0;
+    char *list = NULL;
+    if (SDL_GetPathInfo(marker, &info)) {
+        if (!(list = SDL_LoadFile(marker, &bytes))) return 0;
+        if (!bytes) import.before = info.modify_time;
     }
+    /* "\n" + list + "\n" lets every entry be found as "\n<entry>\n". */
+    char *listed = SDL_malloc(bytes + 3);
+    if (!listed) { SDL_free(list); return 0; }
+    listed[0] = '\n';
+    memcpy(listed + 1, list ? list : "", bytes);
+    listed[bytes + 1] = '\n';
+    listed[bytes + 2] = '\0';
+    import.listed = listed;
+
+    char *cwd = SDL_GetCurrentDirectory();
+    const char *roots[] = {cwd, base};
+    for (unsigned root = 0; root < 2; ++root) if (roots[root]) {
+        for (unsigned port = 0; port < 2; ++port) {
+            char source[8192];
+            snprintf(source, sizeof(source), "%sbu%u0", roots[root], port);
+            if (SDL_GetPathInfo(source, &info) && info.type == SDL_PATHTYPE_DIRECTORY &&
+                !SDL_EnumerateDirectory(source, Host_ImportCard, &import)) import.ok = 0;
+        }
+    }
+    SDL_free(cwd);
+    /* Rewrite the marker when this pass considered anything, and always replace an
+     * empty 0.7 marker or a missing one, so the list format takes over. */
+    if (import.ok && (!list || !bytes || import.added_length)) {
+        size_t header = strlen(HOST_CARD_MARKER_HEADER);
+        int has_header = bytes >= header && !memcmp(list, HOST_CARD_MARKER_HEADER, header);
+        size_t extra = import.added_length ? import.added_length - 1 : 0;
+        size_t total = (has_header ? 0 : header) + bytes + extra;
+        char *text = SDL_malloc(total + 1);
+        if (!text) import.ok = 0;
+        else {
+            size_t at = 0;
+            if (!has_header) { memcpy(text, HOST_CARD_MARKER_HEADER, header); at = header; }
+            if (bytes) { memcpy(text + at, list, bytes); at += bytes; }
+            if (extra) { memcpy(text + at, import.added + 1, extra); at += extra; }
+            /* Replace the list whole: a torn write would bring deleted slots back. */
+            char temporary[4160];
+            snprintf(temporary, sizeof(temporary), "%s.tmp", marker);
+            if (!SDL_SaveFile(temporary, text, at) || !SDL_RenamePath(temporary, marker)) {
+                SDL_RemovePath(temporary);
+                import.ok = 0;
+            }
+            SDL_free(text);
+        }
+    }
+    for (unsigned i = 0; i < import.count; ++i) {
+        if (!import.ok) SDL_RemovePath(import.created[i]);
+        SDL_free(import.created[i]);
+    }
+    SDL_free(import.added);
+    SDL_free(listed);
+    SDL_free(list);
+    if (!import.ok) return 0;
+    if (import.count || import.kept)
+        fprintf(stderr, "Memory cards: imported %u old save(s); kept %u current save(s) over older copies.\n",
+                import.count, import.kept);
+    fprintf(stderr, "Memory cards: %.*s (bu00 is card 1, bu10 card 2)\n", (int)strlen(card) - 6, card);
     Psyz_AdjustPathCB(Host_CardPath);
     return 1;
 }

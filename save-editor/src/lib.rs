@@ -1,3 +1,4 @@
+pub mod card_location;
 pub mod charset;
 pub mod cli;
 pub mod crc;

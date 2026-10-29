@@ -348,29 +348,12 @@ pub fn configured_disc_images() -> Vec<PathBuf> {
     out
 }
 
-/// Where the game keeps `parasite-eve.toml` (mirrors `main.c`'s options lookup).
+/// Where the game keeps `parasite-eve.toml` (mirrors `main.c`'s options lookup): the user
+/// settings folder (see `card_location`), then the files beside the game.
 fn game_config_files() -> Vec<PathBuf> {
-    let env = |k: &str| {
-        std::env::var_os(k)
-            .filter(|v| !v.is_empty())
-            .map(PathBuf::from)
-    };
     let mut dirs = Vec::new();
-    if let Some(home) = env("PE_CONFIG_HOME") {
-        dirs.push(home);
-    }
-    if cfg!(windows) {
-        if let Some(appdata) = env("APPDATA") {
-            dirs.push(appdata.join("Parasite Eve"));
-        }
-    } else if cfg!(target_os = "macos") {
-        if let Some(home) = env("HOME") {
-            dirs.push(home.join("Library/Application Support/Parasite Eve"));
-        }
-    } else if let Some(xdg) = env("XDG_CONFIG_HOME") {
-        dirs.push(xdg.join("parasite-eve"));
-    } else if let Some(home) = env("HOME") {
-        dirs.push(home.join(".config/parasite-eve"));
+    if let Some(settings) = crate::card_location::settings_dir() {
+        dirs.push(settings);
     }
     if let Some(exe_dir) = std::env::current_exe()
         .ok()

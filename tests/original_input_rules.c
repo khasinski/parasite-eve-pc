@@ -276,6 +276,7 @@ static void TestUserCardMigration(void) {
         char directory[4096]; snprintf(directory, sizeof(directory), "%s/bu%u0", root, port);
         HostCardImport imported = {.ok = 1};
         assert(SDL_EnumerateDirectory(directory, Host_ImportCard, &imported) && imported.ok && imported.count == 0);
+        assert(imported.kept == 1); SDL_free(imported.added);
         size_t size; void *contents = SDL_LoadFile(target, &size);
         assert(contents && size == sizeof(newer) && !memcmp(contents, newer, size)); SDL_free(contents);
         /* Source remains intact. A deleted imported save must stay deleted. */
@@ -306,6 +307,101 @@ static void TestUserCardMigration(void) {
     snprintf(host_options.user_file, sizeof(host_options.user_file), "%s", prefs);
     Psyz_AdjustPathCB(NULL);
     puts("PASS: both legacy cards imported once, originals retained, UTF-8/long user paths read and enumerated");
+}
+
+static void TestSaveFixture(const char *path, unsigned char fill) {
+    unsigned char data[8192]; memset(data, fill, sizeof(data));
+    assert(SDL_SaveFile(path, data, sizeof(data)));
+}
+
+static int TestFileHasFill(const char *path, unsigned char fill) {
+    size_t size; unsigned char *contents = SDL_LoadFile(path, &size);
+    int same = contents && size == 8192 && contents[0] == fill && contents[8191] == fill;
+    SDL_free(contents);
+    return same;
+}
+
+/* Prepare a launch folder with an empty legacy bu00 and its own user folder. */
+static void TestCardRoot(char *root, size_t size, const char *tag) {
+    snprintf(root, size, "%s/%s-%llx", test_directory, tag, (unsigned long long)SDL_GetPerformanceCounter());
+    assert(SDL_CreateDirectory(root));
+    char legacy[4200]; snprintf(legacy, sizeof(legacy), "%s/bu00", root); assert(SDL_CreateDirectory(legacy));
+    snprintf(host_options.user_file, sizeof(host_options.user_file), "%s/user/preferences.toml", root);
+    assert(!TestChdir(root));
+}
+
+static void TestLateCardImport(void) {
+    char *cwd = SDL_GetCurrentDirectory();
+    char prefs[4096], root[4096], legacy[4200], current[4096], marker[4200];
+    snprintf(prefs, sizeof(prefs), "%s", host_options.user_file);
+    TestCardRoot(root, sizeof(root), "late-cards");
+    /* First launch: nothing to import, but the marker is written. */
+    assert(Host_InstallCardPaths(NULL));
+    assert(!Host_CardPath(current, "bu00:*", sizeof(current)));
+    snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(current) - 5, current);
+    SDL_PathInfo info; assert(SDL_GetPathInfo(marker, &info) && info.size > 0);
+    /* A save copied beside the game after that launch is imported at the next one. */
+    snprintf(legacy, sizeof(legacy), "%s/bu00/BASLUS-006620000000A", root);
+    TestSaveFixture(legacy, 0x41);
+    assert(Host_InstallCardPaths(NULL));
+    assert(!Host_CardPath(current, "bu00:BASLUS-006620000000A", sizeof(current)));
+    assert(TestFileHasFill(current, 0x41) && TestFileHasFill(legacy, 0x41));
+    /* Deleted from the current card, it stays deleted. */
+    assert(SDL_RemovePath(current));
+    assert(Host_InstallCardPaths(NULL));
+    assert(!SDL_GetPathInfo(current, &info));
+    /* A legacy save never replaces a current save of the same name. */
+    assert(!Host_CardPath(current, "bu00:BASLUS-006620000001B", sizeof(current)));
+    TestSaveFixture(current, 0x62);
+    snprintf(legacy, sizeof(legacy), "%s/bu00/BASLUS-006620000001B", root);
+    TestSaveFixture(legacy, 0x42);
+    assert(Host_InstallCardPaths(NULL));
+    assert(TestFileHasFill(current, 0x62) && TestFileHasFill(legacy, 0x42));
+    /* A whole card image beside the game is reported, not copied. */
+    snprintf(legacy, sizeof(legacy), "%s/bu00/card.srm", root);
+    assert(SDL_SaveFile(legacy, "x", 1));
+    assert(Host_InstallCardPaths(NULL));
+    assert(!Host_CardPath(current, "bu00:card.srm", sizeof(current)) && !SDL_GetPathInfo(current, &info));
+    size_t size; char *list = SDL_LoadFile(marker, &size);
+    assert(list && strstr(list, "bu00/BASLUS-006620000000A\n") && strstr(list, "bu00/BASLUS-006620000001B\n"));
+    assert(!strstr(list, "card.srm")); SDL_free(list);
+    assert(!TestChdir(cwd)); SDL_free(cwd);
+    snprintf(host_options.user_file, sizeof(host_options.user_file), "%s", prefs);
+    Psyz_AdjustPathCB(NULL);
+    puts("PASS: saves copied after the first launch are imported; deleted ones stay deleted; current saves win");
+}
+
+static void TestOldCardMarker(void) {
+    char *cwd = SDL_GetCurrentDirectory();
+    char prefs[4096], root[4096], legacy[4200], current[4096], marker[4200];
+    snprintf(prefs, sizeof(prefs), "%s", host_options.user_file);
+    TestCardRoot(root, sizeof(root), "old-marker");
+    /* An empty 0.7 marker, written after one legacy save arrived and before another. */
+    snprintf(legacy, sizeof(legacy), "%s/bu00/BASLUS-006620000000A", root);
+    TestSaveFixture(legacy, 0x41);
+    SDL_Delay(50);
+    assert(!Host_CardPath(current, "bu00:*", sizeof(current)));
+    snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(current) - 5, current);
+    assert(SDL_SaveFile(marker, "", 0));
+    SDL_Delay(50);
+    snprintf(legacy, sizeof(legacy), "%s/bu00/BASLUS-006620000001B", root);
+    TestSaveFixture(legacy, 0x42);
+    assert(Host_InstallCardPaths(NULL));
+    SDL_PathInfo info;
+    assert(!Host_CardPath(current, "bu00:BASLUS-006620000000A", sizeof(current)) && !SDL_GetPathInfo(current, &info));
+    assert(!Host_CardPath(current, "bu00:BASLUS-006620000001B", sizeof(current)) && TestFileHasFill(current, 0x42));
+    /* The marker now lists both, so the next launch changes nothing. */
+    size_t size; char *list = SDL_LoadFile(marker, &size);
+    assert(list && !strncmp(list, HOST_CARD_MARKER_HEADER, strlen(HOST_CARD_MARKER_HEADER)));
+    assert(strstr(list, "bu00/BASLUS-006620000000A\n") && strstr(list, "bu00/BASLUS-006620000001B\n"));
+    SDL_free(list);
+    assert(SDL_RemovePath(current));
+    assert(Host_InstallCardPaths(NULL));
+    assert(!SDL_GetPathInfo(current, &info));
+    assert(!TestChdir(cwd)); SDL_free(cwd);
+    snprintf(host_options.user_file, sizeof(host_options.user_file), "%s", prefs);
+    Psyz_AdjustPathCB(NULL);
+    puts("PASS: a 0.7 marker keeps earlier saves handled and imports saves that arrived after it");
 }
 
 static int presents;
@@ -671,6 +767,9 @@ int main(int argc, char **argv) {
     snprintf(host_options.user_file, sizeof(host_options.user_file), "%s/preferences.toml", test_directory);
 
     TestUserCardMigration();
+    TestLateCardImport();
+    TestOldCardMarker();
+    snprintf(host_options.user_file, sizeof(host_options.user_file), "%s/preferences.toml", test_directory);
 
     char card_path[4096];
     char expected_card[4096];
