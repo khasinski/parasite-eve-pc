@@ -1,7 +1,7 @@
 {
   "name": "parasite-eve-lighting-editor",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.8.0",
   "description": "Local lighting workbench for original Parasite Eve room and actor assets",
   "dependencies": {
     "three": "0.187.0"
