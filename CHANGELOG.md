@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep the last working graphics resolution when a GPU allocation fails, and show the actual settings in the menu.
+- Recreate Direct3D 12 window buffers safely when switching fullscreen or resizing the window.
+
 ## 0.8
 
 - Added optional HD backgrounds, including the title screen. Download or update them in **Escape → Mods**, with progress, cancellation and file verification. Failed updates keep the previous copy; installation and on/off apply immediately.
