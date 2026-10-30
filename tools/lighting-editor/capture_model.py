@@ -32,10 +32,10 @@ def capture(game,disc,card,output,emit=True):
                   'advance 10 0','advance 1000 0',f'lighting-export {output}' if emit else 'advance 1 0','quit']
         if not card:commands=[f'lighting-export {output}' if emit else 'advance 1 0','quit']
         if len(str(output))>=500:raise ValueError('Output path too long for game control console')
-        child=subprocess.Popen(args,cwd=work,env=env,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+        child=subprocess.Popen(args,cwd=work,env=env,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding="utf-8",errors="replace")
         index=0
         try:
-            with output.with_suffix('.log' if emit else '.baseline.log').open('w') as log:
+            with output.with_suffix('.log' if emit else '.baseline.log').open('w',encoding='utf-8') as log:
                 for line in child.stdout:
                     log.write(line)
                     if line.startswith('{"event":"control"'):
