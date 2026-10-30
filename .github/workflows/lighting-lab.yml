@@ -72,6 +72,12 @@ jobs:
       - name: Generate copyright-free startup fixtures
         shell: bash
         run: python tools/lighting-editor/create_test_assets.py build/lighting-editor/ci-fixture
+      - name: Archive download
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+        run: python tools/lighting-editor/archive_desktop.py --platform "$PLATFORM" --arch "$ARCH" --version 0.8
       - name: Test packaged app with hidden windows
         shell: bash
         env:
@@ -88,12 +94,6 @@ jobs:
             export PE_LIGHTING_APP="$PWD/build/lighting-editor/desktop/Parasite Eve Lighting Lab-linux-$arch/Parasite Eve Lighting Lab"
             xvfb-run -a node tools/lighting-editor/test_desktop.cjs
           fi
-      - name: Archive download
-        shell: bash
-        env:
-          PLATFORM: ${{ matrix.platform }}
-          ARCH: ${{ matrix.arch }}
-        run: python tools/lighting-editor/archive_desktop.py --platform "$PLATFORM" --arch "$ARCH" --version 0.8
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -101,6 +101,7 @@ jobs:
           path: build/lighting-editor/desktop-evidence/
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: lighting-lab-${{ matrix.platform }}-${{ matrix.arch }}
           path: |

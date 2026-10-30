@@ -477,6 +477,7 @@ if (!app.requestSingleInstanceLock()) {
           sandbox: true,
           nodeIntegration: false,
           backgroundThrottling: false,
+          offscreen: !!argument("test-offscreen"),
         },
       });
       window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));

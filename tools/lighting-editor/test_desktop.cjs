@@ -24,6 +24,7 @@ async function launch(args = []) {
     args: [
       `--data-dir=${data}`,
       "--hidden=1",
+      ...(process.platform === "win32" ? ["--test-offscreen=1"] : []),
       ...(process.platform !== "darwin"
         ? [
             "--no-sandbox",
@@ -42,6 +43,13 @@ async function launch(args = []) {
     },
   });
   const page = await app.firstWindow();
+  page.on("pageerror", (error) =>
+    console.error("Renderer error:", error.message),
+  );
+  page.on("console", (message) => {
+    if (message.type() === "error")
+      console.error("Renderer console:", message.text());
+  });
   return page;
 }
 async function ready(page) {
