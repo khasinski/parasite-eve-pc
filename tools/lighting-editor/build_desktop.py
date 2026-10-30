@@ -42,7 +42,7 @@ def main():
     (licenses/'README.txt').write_text('Electron 45.1.0 and Chromium: adjacent licenses. Three.js 0.187.0: ../node_modules/three/LICENSE.\nPython, NumPy and Pillow: adjacent licenses. Python runtime is bundled by PyInstaller (GPL with bootloader exception).\nGame assets are read from the user-owned disc and capture, not shipped in this application.\n')
     resources=work/'desktop-resources/backend'
     if resources.exists():shutil.rmtree(resources)
-    resources.mkdir(parents=True);shutil.copytree(backend,resources/'lighting-backend')
+    resources.mkdir(parents=True);shutil.copytree(backend,resources/'lighting-backend',symlinks=True)
     if not args.game.exists():raise FileNotFoundError('Build the original game asset importer: '+str(args.game))
     shutil.copy2(args.game,resources/('lighting-capture.exe' if os.name=='nt' else 'lighting-capture'))
     out=work/'desktop';out.mkdir(exist_ok=True)

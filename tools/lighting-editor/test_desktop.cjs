@@ -24,7 +24,14 @@ async function launch(args = []) {
     args: [
       `--data-dir=${data}`,
       "--hidden=1",
-      ...(process.platform === "linux" ? ["--no-sandbox"] : []),
+      ...(process.platform === "linux"
+        ? [
+            "--no-sandbox",
+            "--use-gl=angle",
+            "--use-angle=swiftshader",
+            "--enable-unsafe-swiftshader",
+          ]
+        : []),
       ...args,
     ],
     timeout: 30000,
@@ -38,11 +45,17 @@ async function launch(args = []) {
   return page;
 }
 async function ready(page) {
-  await page.waitForFunction(
-    () => document.body.dataset.ready === "true",
-    null,
-    { timeout: 30000 },
-  );
+  try {
+    await page.waitForFunction(
+      () => document.body.dataset.ready === "true",
+      null,
+      { timeout: 30000 },
+    );
+  } catch (error) {
+    console.error("Renderer status:", await page.locator("body").innerText());
+    await page.screenshot({ path: path.join(evidence, "failed-startup.png") });
+    throw error;
+  }
 }
 function children() {
   if (process.platform === "win32") {
