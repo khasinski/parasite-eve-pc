@@ -845,7 +845,7 @@ if(BUILD_TESTING)
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_executable(test-gpu-resource-failures tests/gpu_resource_failures.c)
         target_link_libraries(test-gpu-resource-failures PRIVATE psyz)
-        foreach(mode upload readback reset resize)
+        foreach(mode upload readback reset resize swapchain-resize)
             add_test(NAME original-gpu-resource-${mode} COMMAND test-gpu-resource-failures --${mode})
             set_tests_properties(original-gpu-resource-${mode} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
                 LABELS "gpu" ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy")

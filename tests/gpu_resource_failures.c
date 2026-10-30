@@ -88,6 +88,26 @@ int main(int argc,char **argv) {
         Psyz_VideoSetInternalResolution(4);
         assert(internal_res==4 && scaled_vram_render!=old_render);
         puts("Failed first/second target allocations retain working pixels, AA and scale; retry succeeds");
+    }else if(!strcmp(argv[1],"--swapchain-resize")){
+        /* Claim the existing hidden window; no test may show it. */
+        assert(SDL_GetWindowFlags(sdl3_window) & SDL_WINDOW_HIDDEN);
+        swapchain_ok=SDL_ClaimWindowForGPUDevice(device,sdl3_window);
+        assert(swapchain_ok);
+        SDL_GetWindowSizeInPixels(sdl3_window,&swapchain_window_w,&swapchain_window_h);
+        for(unsigned i=0;i<8;++i){
+            PS1_RECT region={0,0,8,8};Draw_ClearImage(&region,255,0,0);
+            assert(SDL_SetWindowSize(sdl3_window,640+(i%2)*160,480+(i%2)*120));
+            SDL_SyncWindow(sdl3_window);
+            assert(RefreshWindowSwapchain());
+            assert(swapchain_ok && !pending_cmd);
+            int w,h;SDL_GetWindowSizeInPixels(sdl3_window,&w,&h);
+            assert(w==swapchain_window_w && h==swapchain_window_h);
+            unsigned char pixel[4]={0};
+            assert(DownloadVramRegionAsRGBA8888(0,0,1,1,pixel));
+            assert(pixel[0]>200 && !pixel[1] && !pixel[2]);
+            assert(SDL_GetWindowFlags(sdl3_window)&SDL_WINDOW_HIDDEN);
+        }
+        puts("Hidden window swapchain recreation retires pending work and preserves game VRAM");
     }else if(!strcmp(argv[1],"--reset")){
         PS1_RECT region={0,0,8,8};
         Draw_ClearImage(&region,255,0,0);assert(pending_cmd);
