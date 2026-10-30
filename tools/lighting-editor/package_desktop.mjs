@@ -14,7 +14,6 @@ const options = {
   asar: false,
   prune: false,
   overwrite: true,
-  extraResource: [resources],
 };
 if (process.platform === "darwin") options.icon = icon;
 const results = await packager(options);

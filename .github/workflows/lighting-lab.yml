@@ -95,6 +95,12 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: python tools/lighting-editor/archive_desktop.py --platform "$PLATFORM" --arch "$ARCH" --version 0.8
       - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighting-evidence-${{ matrix.platform }}-${{ matrix.arch }}
+          path: build/lighting-editor/desktop-evidence/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
         with:
           name: lighting-lab-${{ matrix.platform }}-${{ matrix.arch }}
           path: |

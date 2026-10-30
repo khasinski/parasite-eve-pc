@@ -30,6 +30,13 @@ def main():
     licenses=stage/'licenses';licenses.mkdir()
     for name in ['LICENSE','LICENSES.chromium.html']:
         shutil.copy2(ROOT/'node_modules/electron/dist'/name,licenses/('Electron-'+name))
+    shutil.copy2(REPO/'THIRD_PARTY_NOTICES.md',stage/'THIRD_PARTY_NOTICES.md')
+    for directory in [REPO/'third_party/psyz',REPO/'build/_deps']:
+        for source in directory.rglob('*'):
+            if '.git' in source.parts or not source.is_file() or not source.name.lower().startswith(('license','copying','notice','copyright')):continue
+            destination=licenses/'original-engine'/source.relative_to(REPO)
+            destination.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,destination)
+    (stage/'source-commit.txt').write_text(subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True))
     for name in ['numpy','Pillow','pyinstaller']:
         distribution=importlib.metadata.distribution(name)
         for file in distribution.files:
@@ -48,8 +55,13 @@ def main():
     out=work/'desktop';out.mkdir(exist_ok=True)
     run(['node',ROOT/'package_desktop.mjs',stage,out,resources,REPO/'packaging/macos/ParasiteEve.icns'])
     packages=json.loads((out/'packages.json').read_text())
+    package=Path(packages[0]);app=package/'Parasite Eve Lighting Lab.app'
+    destination=(app/'Contents/Resources' if sys.platform=='darwin' else package/'resources')/'backend'
+    if destination.exists():shutil.rmtree(destination)
+    shutil.copytree(resources,destination,symlinks=True)
+    for link in package.rglob('*'):
+        if link.is_symlink() and not link.resolve().is_relative_to(package):raise ValueError('External link in application: '+str(link))
     if sys.platform=='darwin':
-        app=Path(packages[0])/'Parasite Eve Lighting Lab.app'
         run(['codesign','--force','--deep','--sign','-',app])
         run(['codesign','--verify','--deep','--strict',app])
         print('Desktop application:',app)

@@ -24,7 +24,7 @@ async function launch(args = []) {
     args: [
       `--data-dir=${data}`,
       "--hidden=1",
-      ...(process.platform === "linux"
+      ...(process.platform !== "darwin"
         ? [
             "--no-sandbox",
             "--use-gl=angle",
@@ -196,7 +196,9 @@ async function closed() {
     }, png);
     await page.click("#screenshot");
     await page.waitForTimeout(500);
-    assert(fs.statSync(png).size > 10000);
+    const image = fs.readFileSync(png);
+    assert.equal(image.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+    assert(image.readUInt32BE(16) > 200 && image.readUInt32BE(20) > 100);
     // Reopening a saved profile works without the repo Python environment.
     await closed();
     page = await launch();
