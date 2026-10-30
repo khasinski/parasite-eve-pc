@@ -857,6 +857,14 @@ static void Host_ApplyOptions(SDL_Window *window) {
     Psyz_VideoSetGeometryCorrection(host_options.geometry_correction != 0);
     Psyz_VideoSetAntialiasing(host_options.antialiasing != 0);
     Psyz_VideoSetModelFiltering(host_options.model_filtering != 0);
+    /* An allocation failure keeps the last working renderer configuration.
+     * Before window creation the getters do not yet reflect pending options. */
+    if (window) {
+        host_options.scale = Psyz_VideoGetInternalResolution();
+        host_options.antialiasing = Psyz_VideoGetAntialiasing();
+        host_options.geometry_correction = Psyz_VideoGetGeometryCorrection();
+        host_options.model_filtering = Psyz_VideoGetModelFiltering();
+    }
     Psyz_VideoSetWidescreen(host_options.widescreen != 0);
     Psyz_AudioSetOutputVolume(host_options.volume);
     for (unsigned i = 0; i < 16; ++i) {

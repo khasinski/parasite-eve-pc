@@ -166,7 +166,7 @@ jobs:
       - name: Stress D3D12 descriptor batches without a visible window
         env:
           SDL_GPU_DRIVER: direct3d12
-        run: ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(descriptor-batches|frame-interpolation|resource-(upload|readback|reset))$'
+        run: ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(descriptor-batches|frame-interpolation|resource-(upload|readback|reset|resize))$'
       - name: Require all selected source-only cases to execute
         shell: pwsh
         run: |

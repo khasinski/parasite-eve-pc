@@ -8,7 +8,14 @@
 #include <stdio.h>
 #include <string.h>
 static bool fail_map, fail_wait, fail_submit, fail_acquire;
-static unsigned map_calls;
+static unsigned map_calls, texture_fail_after;
+static SDL_GPUTexture *test_texture(SDL_GPUDevice *device, const SDL_GPUTextureCreateInfo *info) {
+    if (texture_fail_after && !--texture_fail_after) {
+        SDL_SetError("Injected GPU allocation failure");
+        return NULL;
+    }
+    return SDL_CreateGPUTexture(device, info);
+}
 static SDL_GPUCommandBuffer *test_acquire(SDL_GPUDevice *device) {
     if(fail_acquire)return NULL;
     return SDL_AcquireGPUCommandBuffer(device);
@@ -26,11 +33,13 @@ static SDL_GPUFence *test_submit(SDL_GPUCommandBuffer *cmd) {
     if(fail_submit){SDL_CancelGPUCommandBuffer(cmd);return NULL;}
     return SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
 }
+#define SDL_CreateGPUTexture test_texture
 #define SDL_AcquireGPUCommandBuffer test_acquire
 #define SDL_MapGPUTransferBuffer test_map
 #define SDL_WaitForGPUFences test_wait
 #define SDL_SubmitGPUCommandBufferAndAcquireFence test_submit
 #include "../third_party/psyz/psyz/src/platform/sdl3_gpu.c"
+#undef SDL_CreateGPUTexture
 #undef SDL_AcquireGPUCommandBuffer
 #undef SDL_MapGPUTransferBuffer
 #undef SDL_WaitForGPUFences
@@ -59,6 +68,26 @@ int main(int argc,char **argv) {
         }
         fail_submit=fail_wait=false;
         puts("Failed submission/wait never maps or exposes unfinished VRAM data");
+    }else if(!strcmp(argv[1],"--resize")){
+        Psyz_VideoSetInternalResolution(2);
+        SDL_GPUTexture *old_render=scaled_vram_render,*old_sample=scaled_blend_sample;
+        assert(old_render && old_sample);
+        for(unsigned fail=1;fail<=2;++fail){
+            texture_fail_after=fail;
+            Psyz_VideoSetInternalResolution(4);
+            assert(internal_res==2 && set_internal_res==2);
+            assert(scaled_vram_render==old_render && scaled_blend_sample==old_sample);
+            PS1_RECT region={0,0,8,8};Draw_ClearImage(&region,255,0,0);
+            unsigned char pixel[4]={0};
+            assert(DownloadVramRegionAsRGBA8888(0,0,1,1,pixel));
+            assert(pixel[0]>200 && pixel[1]==0 && pixel[2]==0);
+        }
+        texture_fail_after=2;
+        Psyz_VideoSetAntialiasing(1);
+        assert(!Psyz_VideoGetAntialiasing() && Psyz_VideoGetInternalResolution()==2);
+        Psyz_VideoSetInternalResolution(4);
+        assert(internal_res==4 && scaled_vram_render!=old_render);
+        puts("Failed first/second target allocations retain working pixels, AA and scale; retry succeeds");
     }else if(!strcmp(argv[1],"--reset")){
         PS1_RECT region={0,0,8,8};
         Draw_ClearImage(&region,255,0,0);assert(pending_cmd);
