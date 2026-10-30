@@ -191,6 +191,13 @@ static int pe_scroll_input(MenuWidgetNode *list, unsigned int buttons) {
     return handled;
 }
 
+/* Model browsers are one-column lists. The stock grid consumes horizontal arrows
+ * even without a neighbouring column; let them bubble to the screen's rotation handler. */
+int pe_screen_preview_input(MenuWidgetNode *list, unsigned int buttons) {
+    if (buttons & (0x8000u | 0x2000u)) return 0;
+    return pe_scroll_input(list, buttons);
+}
+
 void pe_screen_open(PeScreen *s, MenuWidgetNode *from, int x, int y, int width, int rows_visible,
                     void (*draw)(MenuWidgetNode *), int (*input)(MenuWidgetNode *, unsigned int)) {
     pe_hide_panels();

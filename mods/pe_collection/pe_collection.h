@@ -63,6 +63,7 @@ unsigned pe_bestiary_new(int h);                         /* tiers known but not 
 void pe_bestiary_seen(int h);                            /* looked at: no longer NEW */
 
 /* For the Wardrobe screen in Aya's menu (pe_wardrobe_menu.c): costumes owned and wearable now. */
+int pe_wardrobe_story_bank(void);             /* original room outfit, before costume overrides */
 int pe_wardrobe_owned_count(void);
 const PeCostume *pe_wardrobe_owned(int k);
 const PeCostume *pe_wardrobe_worn(void);         /* NULL: Aya's own clothes */

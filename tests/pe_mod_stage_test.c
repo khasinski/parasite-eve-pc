@@ -59,7 +59,7 @@ int main(void) {
     assert(s_last_yaw == yaw && s_silhouette == 1);
     assert(pe_stage_show(&s, &parrot, 0));                         /* a new one: faces front again */
     pe_stage_draw(&s);
-    assert(s_last_yaw == 0);
+    assert(s_last_yaw == PE_STAGE_FRONT_YAW);
     (void)i;
 
     assert(pe_stage_show(&s, NULL, 0));                            /* nothing: an empty box */

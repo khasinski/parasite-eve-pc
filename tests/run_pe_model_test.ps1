@@ -13,9 +13,11 @@ foreach ($path in @('include','mods/host','third_party/psyz/psyz/include','third
 }
 $compileArgs+=Join-Path $root 'tests/pe_mod_model_test.c'
 $compileArgs+=Join-Path $root 'mods/host/pe_model.c'
+$compileArgs+=Join-Path $root 'mods/host/pe_model_skin.c'
 $compileArgs+=Join-Path $root 'mods/host/pe_model_view.c'
 $compileArgs+='-o'; $compileArgs+=$output
 & $compiler @compileArgs
 if ($LASTEXITCODE -ne 0) { throw 'Model test compilation failed.' }
+$env:PE_MODEL_TEST_DIR=$BuildDirectory
 & $output
 if ($LASTEXITCODE -ne 0) { throw 'Model regression test failed.' }

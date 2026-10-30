@@ -368,6 +368,7 @@ static void pe_open(MenuWidgetNode *main_list) {
     if (!s_areas) return;
     if (s_area >= s_areas) s_area = 0;
     pe_screen_open(&s_screen, main_list, x, y, PE_LIST_W, PE_LIST_ROWS, pe_draw_list, pe_input);
+    s_screen.list->update = pe_screen_preview_input;
     s_frame = pe_screen_panel(&s_screen, x + PE_LIST_W + PE_GAP, y, width - PE_LIST_W - PE_GAP, PE_LIST_ROWS, NULL);
     pe_screen_inside(s_screen.list, &ix, &iy, &iw, &ih);
     s_info = pe_screen_panel(&s_screen, x, iy + ih + 3 * PE_GAP, width, PE_INFO_ROWS, pe_draw_info);

@@ -20,6 +20,8 @@ typedef struct PeRoomBlobs {
  * (g_RoomSectorTable). 1 on success; 0 (and a log line) if there is no disc, no such room, or a read
  * fails. */
 int pe_disc_room(int map, PeRoomBlobs *out);
+/* Own copy of a playable Aya bundle (10, 12 or 13); free with pe_disc_room_free. */
+int pe_disc_player(int bank, PeRoomBlobs *out);
 void pe_disc_room_free(PeRoomBlobs *room);
 
 #endif

@@ -33,7 +33,7 @@ int pe_stage_show(PeModelStage *s, const PeModelSource *src, int silhouette) {
     if (s->has_source && s->model && pe_same_source(&s->source, src)) return 1;
     s->source = *src;
     s->has_source = 1;
-    s->yaw = 0;
+    s->yaw = PE_STAGE_FRONT_YAW;
     s->manual = 0;
     s->ticks = 0;
     s->model = pe_model_load(src);

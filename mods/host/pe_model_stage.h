@@ -7,6 +7,9 @@
  * (pe_model_view.h) and hands the picture to the image presenter (pe_present.h), each frame.
  * Full screen draws it over the whole game screen instead of its box. One stage per presenter slot. */
 
+/* Authored models face the viewer at this yaw (4096 units per turn). */
+#define PE_STAGE_FRONT_YAW 3072
+
 #include <stdint.h>
 #include "pe_model_view.h"
 #include "pe_services.h"

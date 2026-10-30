@@ -252,6 +252,8 @@ static int s_reload_after_menu;
 
 static int pe_owned_wearable(const PeCostume *c) { return pe_wearable(c) && (pe_profile_owned(c->key) || !c->price); }
 
+int pe_wardrobe_story_bank(void) { return pe_gameplay_bank(s_room_bank) ? s_room_bank : 12; }
+
 int pe_wardrobe_owned_count(void) {
     int n = 0, i;
     for (i = 0; i < s_costumes; ++i) n += pe_owned_wearable(s_costume[i]);

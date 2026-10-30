@@ -151,7 +151,7 @@ static uint32_t pe_row_length(PeBuf b, uint32_t off) {
     return pe_has(b, off, cur - off) ? cur - off : 0;
 }
 
-int pe_model_decode(const PeRoomBlobs *room, int slot, PeModel *out) {
+static int pe_decode(const PeRoomBlobs *room, int slot, int player, PeModel *out) {
     const PeBuf data = {room->data, room->data_size};
     uint32_t at, n, i, off = 0, trailing = 0, row = 0, row_id = 0xFFFFFFFFu;
     int found = 0;
@@ -171,8 +171,8 @@ int pe_model_decode(const PeRoomBlobs *room, int slot, PeModel *out) {
     if (pe_records(data, PE_DIR_ROWS, &at, &n))        /* the idle row; else this slot's lowest row */
         for (i = 0; i < n; ++i) {
             const uint32_t w = pe_u32(data, at + 12 * i + 4), group = pe_u8(data, at + 12 * i + 11), id = w >> 24;
-            if ((int)group != slot || row_id == PE_IDLE_ROW) continue;
-            if (id == PE_IDLE_ROW || id < row_id) { row_id = id; row = w & 0xFFFFFFu; }
+            if ((!player && (int)group != slot) || row_id == (player ? 0x15u : PE_IDLE_ROW)) continue;
+            if (id == (player ? 0x15u : PE_IDLE_ROW) || id < row_id) { row_id = id; row = w & 0xFFFFFFu; }
         }
     if (row_id != 0xFFFFFFFFu) {
         const uint32_t len = pe_row_length(data, row);
@@ -180,6 +180,9 @@ int pe_model_decode(const PeRoomBlobs *room, int slot, PeModel *out) {
     }
     return 1;
 }
+
+int pe_model_decode(const PeRoomBlobs *room, int slot, PeModel *out) { return pe_decode(room, slot, 0, out); }
+int pe_model_decode_player(const PeRoomBlobs *room, PeModel *out) { return pe_decode(room, 0, 1, out); }
 
 void pe_model_free(PeModel *m) {
     free(m->part); free(m->vert); free(m->face); free(m->command); free(m->vram); free(m->anim);
@@ -221,16 +224,17 @@ void pe_model_frame(const PeModel *m, int frame, int translation[3], uint16_t (*
 }
 
 /* ---- loading, with a small cache ---- */
-static struct { PeModelSource src; PeModel model; const PeModel *external; unsigned used; } s_cache[PE_CACHE];
+static struct { PeModelSource src; char folder[160]; PeModel model; const PeModel *external; unsigned used; } s_cache[PE_CACHE];
 static unsigned s_tick;
 
 static int pe_same(const PeModelSource *a, const PeModelSource *b) {
-    return a->kind == b->kind && a->map == b->map && a->actor == b->actor && a->load == b->load && a->user == b->user;
+    return a->kind == b->kind && a->map == b->map && a->actor == b->actor && a->load == b->load && a->user == b->user &&
+           (a->folder == b->folder || (a->folder && b->folder && strcmp(a->folder, b->folder) == 0));
 }
 
 const PeModel *pe_model_load(const PeModelSource *src) {
     int i, slot = 0;
-    if (!src) return NULL;
+    if (!src || (src->folder && strlen(src->folder) >= sizeof s_cache[0].folder)) return NULL;
     for (i = 0; i < PE_CACHE; ++i)
         if (s_cache[i].used && pe_same(&s_cache[i].src, src)) {
             s_cache[i].used = ++s_tick;
@@ -249,10 +253,16 @@ const PeModel *pe_model_load(const PeModelSource *src) {
         i = pe_model_decode(&room, src->actor, &s_cache[slot].model);
         pe_disc_room_free(&room);
         if (!i) { pe_mod_log(NULL, "model: M%03d slot %d did not decode", src->map, src->actor); return NULL; }
+    } else if (src->kind == PE_MODEL_SKIN) {
+        if (!pe_model_skin_load(src, &s_cache[slot].model)) return NULL;
     } else {
-        return NULL;                                      /* PE_MODEL_SKIN: later (the Wardrobe) */
+        return NULL;
     }
     s_cache[slot].src = *src;
+    if (src->folder) {
+        strcpy(s_cache[slot].folder, src->folder);
+        s_cache[slot].src.folder = s_cache[slot].folder;
+    }
     s_cache[slot].used = ++s_tick;
     return s_cache[slot].external ? s_cache[slot].external : &s_cache[slot].model;
 }
