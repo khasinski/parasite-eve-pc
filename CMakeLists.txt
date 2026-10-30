@@ -572,6 +572,9 @@ if(BUILD_TESTING)
     set_tests_properties(original-game-hd-backgrounds PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180 LABELS "game-assets;gpu;hd-assets")
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME lighting-editor-assets COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tools/lighting-editor/test_assets.py)
+        set_tests_properties(lighting-editor-assets PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77 LABELS "tools")
         add_test(NAME hd-mod-download-safety COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_mod_download.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(hd-mod-download-safety PROPERTIES TIMEOUT 90 LABELS "downloads")

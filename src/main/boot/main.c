@@ -2080,6 +2080,7 @@ static void Host_PrintHelp(const char *program_name) {
     printf("--headless uses native-resolution software rendering; --headless-gpu keeps the actual GPU window hidden and supports internal scaling.\n");
     printf("--dump-frame writes the rendered display as RGB888 PPM at each control/terminal boundary.\n");
     printf("--dump-audio writes stereo 44100 Hz signed-16-bit little-endian PCM; requires headless and PSYZ_AUDIO_CLOCK=video.\n");
+    printf("Headless editor capture: lighting-export PATH writes the original posed Aya mesh and PATH.vram (requires --dump-vram).\n");
     printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
     printf("Headless fixtures only: --diagnostic-hp-at VBLANK:EXPECTED_HP:VALUE (requires --frame-limit; output is marked coverage-only)\n");
     printf("--test-crash-after N / --test-abort-after N crash on purpose at VBlank N to check the crash report (its path is printed).\n");
