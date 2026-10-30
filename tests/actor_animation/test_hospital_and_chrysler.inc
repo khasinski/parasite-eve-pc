@@ -58,6 +58,43 @@ static int original_attack_effect_status_gate(void)
     return 1;
 }
 
+/* An earlier shot of the same volley can kill the target and release its core
+ * before the next shot's hit timer fires. That hit must finish without touching
+ * the missing core, and a live target must still be marked as before. */
+static int original_hit_on_released_target(void)
+{
+    Combatant active = {0}; BattleAction action = {0};
+    BattleEntity player = {0}, target = {0}; EnemyCombatant core = {0};
+    EnemyCoreFlagBits *bits = (EnemyCoreFlagBits *)&core.coreFlags;
+    BattleInitSlot old_slot = g_BattleActionQueue[0];
+    Combatant *old_actor = g_ActiveActor; FieldActor *old_player = g_PlayerEntity;
+    FieldActor *old_list = g_FieldActorListHead; u8 old_index = g_BattleActionIndex;
+    int ok = 1;
+    g_ActiveActor = &active; active.action = &action;
+    g_PlayerEntity = (FieldActor *)&player; g_FieldActorListHead = NULL;
+    g_BattleActionIndex = 0; g_BattleActionQueue[0].actor = &target;
+    action.hitTrigger = 1; action.range = 1;
+    target.renderObject.target_x = 2000; /* out of range: the shot misses */
+    /* Single target and chained shots, each as a sure hit and as a miss. */
+    for (unsigned variant = 0; variant < 4 && ok; ++variant) {
+        int sure_hit = (variant & 2) != 0;
+        action.actionCode.actionId = (variant & 1) ? 6 : 0;
+        active.stateFlags = sure_hit ? 0x100000 : 0;
+        target.core = NULL;
+        g_BattleHitTimer = 0; g_BattleHitPending = 1;
+        Battle_ResolveHitOnTimer();
+        if (g_BattleHitPending || g_BattleHitTimer || target.core) ok = 0;
+        memset(&core, 0, sizeof(core)); target.core = &core;
+        g_BattleHitTimer = 0; g_BattleHitPending = 1;
+        Battle_ResolveHitOnTimer();
+        if (g_BattleHitPending || (sure_hit ? bits->hitState != 1 : core.panelC_timer != 0x1E)) ok = 0;
+    }
+    g_BattleActionQueue[0] = old_slot; g_ActiveActor = old_actor; g_PlayerEntity = old_player;
+    g_FieldActorListHead = old_list; g_BattleActionIndex = old_index;
+    if (ok) puts("Original timed hits: released and live targets for single and chained shots passed");
+    return ok;
+}
+
 static int original_hospital_falling_states(void)
 {
     FieldFxState *old_script=g_FieldFxScriptState;int old_floor=g_RoomFloorY->y;u32 old_rng=Psyz_RandState();
