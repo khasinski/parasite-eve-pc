@@ -99,6 +99,12 @@ int main(int argc,char **argv) {
             assert(SDL_SetWindowSize(sdl3_window,640+(i%2)*160,480+(i%2)*120));
             SDL_SyncWindow(sdl3_window);
             assert(RefreshWindowSwapchain());
+            /* SDL also invalidates its views on a repeated size event. */
+            SDL_Event event={0};event.type=SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED;
+            event.window.windowID=SDL_GetWindowID(sdl3_window);
+            assert(WatchSwapchainResize(NULL,&event));
+            assert(SDL_GetAtomicInt(&swapchain_resize_pending));
+            assert(RefreshWindowSwapchain());
             assert(swapchain_ok && !pending_cmd);
             int w,h;SDL_GetWindowSizeInPixels(sdl3_window,&w,&h);
             assert(w==swapchain_window_w && h==swapchain_window_h);
