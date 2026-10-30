@@ -21,11 +21,16 @@ let app;
 async function launch(args = []) {
   app = await _electron.launch({
     executablePath: binary,
-    args: [`--data-dir=${data}`, "--hidden=1", ...args],
+    args: [
+      `--data-dir=${data}`,
+      "--hidden=1",
+      ...(process.platform === "linux" ? ["--no-sandbox"] : []),
+      ...args,
+    ],
     timeout: 30000,
     env: {
       ...process.env,
-      PATH: "/usr/bin:/bin",
+      ...(process.platform === "win32" ? {} : { PATH: "/usr/bin:/bin" }),
       PE_LIGHTING_PYTHON: "/missing/python",
     },
   });
@@ -40,6 +45,23 @@ async function ready(page) {
   );
 }
 function children() {
+  if (process.platform === "win32") {
+    const escaped = data.replaceAll("'", "''");
+    return execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'lighting-backend*' -and $_.CommandLine.Contains('${escaped}') } | Select-Object -ExpandProperty ProcessId`,
+      ],
+      { encoding: "utf8" },
+    )
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(Number);
+  }
   return execFileSync("ps", ["-axo", "pid,args"], { encoding: "utf8" })
     .split("\n")
     .filter((line) => line.includes("lighting-backend") && line.includes(data))

@@ -27,8 +27,10 @@ The application bundles Electron and a private Python asset reader: running a
 packaged build requires neither Python, Node.js, a browser nor a terminal.
 Game images and model captures are not included.
 
-On first launch, choose a USA CUE/BIN/ISO, an original Aya capture (`.json`
-with its matching `.json.vram` file), and a profile folder. The application
+On first launch, choose your North American **Disc 1 CUE/BIN/ISO** and a profile
+folder. Aya is imported automatically, using the bundled original C engine
+headlessly in a temporary directory. No save or developer export is required.
+An existing Aya capture remains an optional advanced input. The application
 remembers those choices and keeps a private copy of the small capture. Saved
 profiles and window settings live outside the app bundle; on macOS the default
 is `~/Library/Application Support/Parasite Eve Lighting Lab/`. Browser drafts
@@ -47,7 +49,8 @@ build/lighting-editor/venv/bin/python tools/lighting-editor/build_desktop.py
 
 The output is under `build/lighting-editor/desktop/`. `--reuse-backend` skips
 rebuilding the private runtime while iterating on the desktop interface.
-Only application code, runtime dependencies and licenses are packaged.
+Build the original asset importer first (`cmake --build build --target parasite-eve-pc`).
+Only application code, the original engine importer, runtime dependencies and licenses are packaged.
 For source development, set `PE_LIGHTING_PYTHON` to the Python environment above
 and run `npm start --prefix tools/lighting-editor`.
 

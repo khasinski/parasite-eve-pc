@@ -583,6 +583,17 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
     fflush(stdout);
 }
 
+static FILE *Boot_Utf8File(const char *path,const char *mode) {
+#ifdef _WIN32
+    wchar_t *wide_path=(wchar_t *)SDL_iconv_string("UTF-16LE","UTF-8",path,strlen(path)+1);
+    wchar_t *wide_mode=(wchar_t *)SDL_iconv_string("UTF-16LE","UTF-8",mode,strlen(mode)+1);
+    FILE *file=wide_path&&wide_mode?_wfopen(wide_path,wide_mode):NULL;
+    SDL_free(wide_path);SDL_free(wide_mode);return file;
+#else
+    return fopen(path,mode);
+#endif
+}
+
 /* Read-only editor capture of the original posed model, not a replacement
  * actor or gameplay renderer. Bone matrices are already in room coordinates. */
 static int Boot_ExportLightingModel(const char *path) {
@@ -595,7 +606,7 @@ static int Boot_ExportLightingModel(const char *path) {
     const unsigned char *known;
     const unsigned short *vram=Psyz_GpuGetVramCopy(&known);
     if(!vram)return 0;
-    FILE *file=fopen(path,"w");if(!file)return 0;
+    FILE *file=Boot_Utf8File(path,"w");if(!file)return 0;
     double origin[]={aya->pos_x/65536.0,aya->pos_y/65536.0,aya->pos_z/65536.0};
     fprintf(file,"{\"format\":1,\"origin\":[%.8g,%.8g,%.8g],\"vertices\":[",origin[0],origin[1],origin[2]);
     for(unsigned index=0;index<count;++index){
@@ -641,7 +652,7 @@ static int Boot_ExportLightingModel(const char *path) {
     fprintf(file,"]}\n");int success=!ferror(file);if(fclose(file))success=0;
     char raw[512];int n=snprintf(raw,sizeof(raw),"%s.vram",path);
     if(n<0||(size_t)n>=sizeof(raw))return 0;
-    file=fopen(raw,"wb");if(!file)return 0;
+    file=Boot_Utf8File(raw,"wb");if(!file)return 0;
     if(fwrite(vram,2,1024*512,file)!=1024*512)success=0;
     if(fclose(file))success=0;
     return success;

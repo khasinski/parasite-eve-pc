@@ -35,6 +35,7 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ]);
+let pendingCapture = null;
 let window = null,
   backend = null,
   backendURL = null,
@@ -63,6 +64,7 @@ function validSources(values) {
     throw Error("Choose an existing USA disc image.");
   if (!/\.(cue|bin|iso)$/i.test(values.disc))
     throw Error("Choose a CUE, BIN or ISO disc image.");
+  if (!values.model) return;
   if (typeof values.model !== "string" || !fs.existsSync(values.model))
     throw Error("Choose an original Aya model capture (.json).");
   const capture = JSON.parse(fs.readFileSync(values.model, "utf8"));
@@ -204,8 +206,78 @@ async function startBackend() {
     });
   });
 }
+async function importAya(disc) {
+  const helper = app.isPackaged
+    ? path.join(
+        process.resourcesPath,
+        "backend",
+        process.platform === "win32"
+          ? "lighting-capture.exe"
+          : "lighting-capture",
+      )
+    : argument("capture-game") ||
+      path.resolve(
+        root(),
+        "../../build/parasite-eve-pc" +
+          (process.platform === "win32" ? ".exe" : ""),
+      );
+  if (!fs.existsSync(helper))
+    throw Error(
+      "The automatic asset importer is missing. Reinstall Lighting Lab.",
+    );
+  const directory = path.join(app.getPath("userData"), "capture");
+  fs.mkdirSync(directory, { recursive: true });
+  const output = path.join(directory, `import-${crypto.randomUUID()}.json`);
+  const executable = backendExecutable();
+  const child = spawn(
+    executable.command,
+    [
+      ...executable.prefix,
+      "--disc",
+      disc,
+      "--model",
+      output,
+      "--capture-game",
+      helper,
+    ],
+    { stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+  );
+  pendingCapture = child;
+  return new Promise((resolve, reject) => {
+    let error = "";
+    const timeout = setTimeout(() => {
+      child.kill();
+      reject(
+        Error("Aya import timed out. Select your North American Disc 1 image."),
+      );
+    }, 120000);
+    child.stdout.resume();
+    child.stderr.on("data", (data) => {
+      error = (error + data).slice(-4000);
+    });
+    child.on("error", (e) => {
+      clearTimeout(timeout);
+      pendingCapture = null;
+      reject(e);
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timeout);
+      pendingCapture = null;
+      if (code === 0 && fs.existsSync(output + ".vram")) resolve(output);
+      else
+        reject(
+          Error(
+            "Could not import Aya. Select North American Disc 1. " +
+              error.trim().split("\n").at(-1),
+          ),
+        );
+    });
+  });
+}
 async function openWorkspace(values) {
   validSources(values);
+  if (!values.model)
+    values = { ...values, model: await importAya(values.disc) };
   const previous = { ...settings };
   const next = {
     ...settings,
@@ -454,6 +526,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("window-all-closed", () => app.quit());
   app.on("before-quit", () => {
     quitting = true;
+    if (pendingCapture) pendingCapture.kill();
     stopBackend();
   });
 }

@@ -2298,6 +2298,10 @@ int main(int argc, char **argv) {
             if (!Host_ParseHealthEventArg(argv[++arg], argc)) {
                 return EXIT_FAILURE;
             }
+        } else if (!strcmp(argv[arg], "--disc-env")) {
+            if (paths[0] || arg+1>=argc || !(paths[0]=SDL_GetEnvironmentVariable(SDL_GetEnvironment(),argv[++arg])) || !*paths[0]) {
+                fprintf(stderr,"Missing image environment variable\n");return EXIT_FAILURE;
+            }
         } else if (!strcmp(argv[arg], "--disc") || !strcmp(argv[arg], "--disc2")) {
             int slot = !strcmp(argv[arg], "--disc2");
             if (paths[slot] || arg + 1 >= argc) {

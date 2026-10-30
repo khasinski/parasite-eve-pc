@@ -107,8 +107,14 @@ def handler(app):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--disc',type=Path,required=True,help='USA Disc 1 or Disc 2 BIN')
     p.add_argument('--model',type=Path,required=True);p.add_argument('--profiles',type=Path,default=Path('build/lighting-editor/profiles'))
-    p.add_argument('--vendor',type=Path,default=ROOT/'node_modules/three');p.add_argument('--port',type=int,default=8766);p.add_argument('--assets-root',type=Path,default=ROOT);p.add_argument('--desktop',action='store_true')
-    args=p.parse_args();ROOT=args.assets_root.resolve();app=Workbench(args.disc,args.model,args.profiles,args.vendor)
+    p.add_argument('--vendor',type=Path,default=ROOT/'node_modules/three');p.add_argument('--port',type=int,default=8766);p.add_argument('--assets-root',type=Path,default=ROOT);p.add_argument('--desktop',action='store_true');p.add_argument('--capture-game',type=Path)
+    args=p.parse_args();ROOT=args.assets_root.resolve()
+    if args.capture_game:
+        from capture_model import capture
+        try:capture(args.capture_game,args.disc,None,args.model)
+        except Exception as error:p.error('Automatic Aya import failed. Use North American Disc 1: '+str(error))
+        sys.exit(0)
+    app=Workbench(args.disc,args.model,args.profiles,args.vendor)
     if not (args.vendor/'build/three.module.js').exists():p.error('Install pinned Three.js first; see README')
     server=ThreadingHTTPServer(('127.0.0.1',args.port),handler(app))
     if args.desktop:

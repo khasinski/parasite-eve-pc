@@ -7,7 +7,7 @@ REPO=ROOT.parents[1]
 def run(args):subprocess.run([str(a) for a in args],cwd=REPO,check=True)
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--reuse-backend',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--reuse-backend',action='store_true');parser.add_argument('--game',type=Path,default=REPO/('build/parasite-eve-pc.exe' if os.name=='nt' else 'build/parasite-eve-pc'));args=parser.parse_args()
     work=REPO/'build/lighting-editor';work.mkdir(parents=True,exist_ok=True)
     backend=work/'desktop-backend/lighting-backend'
     if not args.reuse_backend or not backend.exists():
@@ -43,6 +43,8 @@ def main():
     resources=work/'desktop-resources/backend'
     if resources.exists():shutil.rmtree(resources)
     resources.mkdir(parents=True);shutil.copytree(backend,resources/'lighting-backend')
+    if not args.game.exists():raise FileNotFoundError('Build the original game asset importer: '+str(args.game))
+    shutil.copy2(args.game,resources/('lighting-capture.exe' if os.name=='nt' else 'lighting-capture'))
     out=work/'desktop';out.mkdir(exist_ok=True)
     run(['node',ROOT/'package_desktop.mjs',stage,out,resources,REPO/'packaging/macos/ParasiteEve.icns'])
     packages=json.loads((out/'packages.json').read_text())

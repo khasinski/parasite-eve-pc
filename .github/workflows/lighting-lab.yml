@@ -1,0 +1,103 @@
+name: lighting-lab
+on:
+  push:
+    branches: ['release/lighting-lab-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+          - os: windows-latest
+            platform: windows
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - if: runner.os == 'Linux'
+        name: Install native dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ninja-build pkg-config libcurl4-openssl-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libdecor-0-dev libvulkan-dev libxtst-dev libxinerama-dev wayland-protocols libdrm-dev libgbm-dev libgles2-mesa-dev xvfb libnss3 libatk-bridge2.0-0 libgtk-3-0t64
+      - if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
+        with:
+          msystem: UCRT64
+          update: true
+          install: git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
+      - name: Fetch original engine dependencies
+        shell: bash
+        run: |
+          git submodule update --init third_party/psyz
+          git -C third_party/psyz submodule update --init external/SDL
+      - if: runner.os == 'Linux'
+        name: Build original asset importer
+        run: |
+          cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF -DPE_MODS=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target parasite-eve-pc --parallel 4
+          ./build/parasite-eve-pc --help
+      - if: runner.os == 'Windows'
+        name: Build original Windows asset importer
+        shell: msys2 {0}
+        run: |
+          cmake -S . -B build -G Ninja -DBUILD_TESTING=OFF -DPE_MODS=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target parasite-eve-pc --parallel 4
+          ./build/parasite-eve-pc.exe --help
+      - name: Install editor dependencies
+        shell: bash
+        run: |
+          python -m pip install -r tools/lighting-editor/requirements-desktop.txt
+          npm ci --prefix tools/lighting-editor
+          node tools/lighting-editor/node_modules/electron/install.js
+          python tools/lighting-editor/test_assets.py
+      - name: Package standalone application
+        shell: bash
+        run: python tools/lighting-editor/build_desktop.py
+      - name: Generate copyright-free startup fixtures
+        shell: bash
+        run: python tools/lighting-editor/create_test_assets.py build/lighting-editor/ci-fixture
+      - name: Test packaged app with hidden windows
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          export NODE_PATH="$PWD/tools/lighting-editor/node_modules"
+          export PE_TEST_DISC="$PWD/build/lighting-editor/ci-fixture/disc.iso"
+          export PE_LIGHTING_MODEL="$PWD/build/lighting-editor/ci-fixture/model.json"
+          if [ "$PLATFORM" = windows ]; then
+            export PE_LIGHTING_APP="$PWD/build/lighting-editor/desktop/Parasite Eve Lighting Lab-win32-x64/Parasite Eve Lighting Lab.exe"
+            node tools/lighting-editor/test_desktop.cjs
+          else
+            arch=$(node -p process.arch)
+            export PE_LIGHTING_APP="$PWD/build/lighting-editor/desktop/Parasite Eve Lighting Lab-linux-$arch/Parasite Eve Lighting Lab"
+            xvfb-run -a node tools/lighting-editor/test_desktop.cjs
+          fi
+      - name: Archive download
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+        run: python tools/lighting-editor/archive_desktop.py --platform "$PLATFORM" --arch "$ARCH" --version 0.8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lighting-lab-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            build/lighting-editor/release/*
+            build/lighting-editor/desktop-evidence/proof.json
+          if-no-files-found: error

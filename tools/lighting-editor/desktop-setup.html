@@ -19,12 +19,14 @@
       </div>
       <h1>Open a workspace</h1>
       <p>
-        Use your own game image and an original Aya model capture. Your files
-        stay on this computer.
+        Use your own game image and an original Aya model capture (optional).
+        Your files stay on this computer.
       </p>
       <label
         >Disc image
-        <span class="muted">USA Disc 1 or Disc 2 · CUE / BIN / ISO</span></label
+        <span class="muted"
+          >North American Disc 1 · CUE / BIN / ISO</span
+        ></label
       >
       <div class="setup-file">
         <input id="disc" readonly placeholder="Choose a disc image" /><button
@@ -34,14 +36,14 @@
         </button>
       </div>
       <label
-        >Aya model capture
+        >Aya model capture (optional)
         <span class="muted">JSON with its matching .json.vram file</span></label
       >
       <div class="setup-file">
         <input
           id="model"
           readonly
-          placeholder="Choose an original model capture"
+          placeholder="Import automatically from Disc 1"
         /><button id="chooseModel">Browse…</button>
       </div>
       <label>Lighting profiles</label>
@@ -51,8 +53,8 @@
         </button>
       </div>
       <p class="muted">
-        Captures are created by the original game's headless export tool. The
-        application keeps a private copy of the capture and remembers your
+        Leave the model field empty to import Aya automatically from your disc.
+        The application keeps a private copy of the capture and remembers your
         workspace.
       </p>
       <p id="setupError" role="alert"></p>
