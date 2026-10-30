@@ -6,7 +6,7 @@ try:
     from PIL import Image
 except ImportError:
     sys.exit(77)
-from assets import collision,model_texture,Rooms,payload,u32
+from assets import collision,model_texture,Rooms,payload,u32,Disc
 from serve import profile_valid,save_profile
 
 class Assets(unittest.TestCase):
@@ -23,6 +23,17 @@ class Assets(unittest.TestCase):
         self.assertEqual(collision(blob)[0]['points'],[[0,0,0],[100,-50,0],[0,-100,100]])
         struct.pack_into('<H',blob,88,65000)
         with self.assertRaises(ValueError):collision(blob)
+    def test_cue_resolves_its_relative_bin(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);data=bytearray(18*2048);data[16*2048+1:16*2048+6]=b'CD001'
+            (root/'disc image.bin').write_bytes(data)
+            cue=root/'disc.cue';cue.write_text('FILE "disc image.bin" BINARY\n  TRACK 01 MODE2/2352\n')
+            disc=Disc(cue)
+            try:self.assertEqual(disc.sectors(16,1)[1:6],b'CD001')
+            finally:disc.data.close();disc.file.close()
+            cue.write_text('REM invalid cue')
+            with self.assertRaises(ValueError):Disc(cue)
+
     def test_palette_mask_and_page_coordinates(self):
         vram=np.zeros((512,1024),dtype='<u2');vram[256,960]=0x3210;vram[448,0:4]=[0,31,0x8000,31<<10]
         image=Image.open(io.BytesIO(model_texture(vram,31,448<<6))).convert('RGBA')

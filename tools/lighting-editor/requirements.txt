@@ -1,2 +1,2 @@
 numpy>=2,<3
-Pillow>=12,<13
+Pillow>=12,<14

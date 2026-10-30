@@ -19,7 +19,54 @@ no reconstructed furniture occlusion and no background relighting. Animated
 backgrounds show their authored default static layers. The captured Aya is a
 single pose/outfit; use another suitable save to capture another original pose.
 
-## Setup
+## Desktop application
+
+The desktop version is **Parasite Eve Lighting Lab**. It has an English
+interface, native file pickers, a File menu, and native JSON/PNG save dialogs.
+The application bundles Electron and a private Python asset reader: running a
+packaged build requires neither Python, Node.js, a browser nor a terminal.
+Game images and model captures are not included.
+
+On first launch, choose a USA CUE/BIN/ISO, an original Aya capture (`.json`
+with its matching `.json.vram` file), and a profile folder. The application
+remembers those choices and keeps a private copy of the small capture. Saved
+profiles and window settings live outside the app bundle; on macOS the default
+is `~/Library/Application Support/Parasite Eve Lighting Lab/`. Browser drafts
+use a stable application origin and survive app restarts. Closing the window
+also stops its private asset-reader process.
+
+Build on the target platform (macOS builds produce a local ad-hoc-signed `.app`):
+
+```sh
+build/lighting-editor/venv/bin/pip install -r tools/lighting-editor/requirements-desktop.txt
+npm ci --prefix tools/lighting-editor
+# If npm suppressed Electron's installation script:
+node tools/lighting-editor/node_modules/electron/install.js
+build/lighting-editor/venv/bin/python tools/lighting-editor/build_desktop.py
+```
+
+The output is under `build/lighting-editor/desktop/`. `--reuse-backend` skips
+rebuilding the private runtime while iterating on the desktop interface.
+Only application code, runtime dependencies and licenses are packaged.
+For source development, set `PE_LIGHTING_PYTHON` to the Python environment above
+and run `npm start --prefix tools/lighting-editor`.
+
+The packaged-app test runs with hidden windows and scratch data directories:
+
+```sh
+PE_LIGHTING_APP='/path/to/Parasite Eve Lighting Lab.app/Contents/MacOS/Parasite Eve Lighting Lab' \
+PE_TEST_DISC='/path/to/Disc 1.cue' \
+PE_LIGHTING_MODEL="$PWD/build/lighting-editor/model.json" \
+NODE_PATH="$PWD/tools/lighting-editor/node_modules" \
+node tools/lighting-editor/test_desktop.cjs
+```
+
+It covers English labels, native picker cancellation and recovery, private
+capture import, profile and draft persistence across restarts, native exports,
+renderer isolation and helper-process cleanup. These process-lifecycle checks
+currently target macOS/Linux. The browser edition remains available below.
+
+## Browser setup
 
 Run from the repository root. Use Python 3.10+ with the dependencies below, and
 Node.js/npm for the pinned browser library. Once installed, the editor makes no

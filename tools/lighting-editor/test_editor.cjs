@@ -135,7 +135,7 @@ const path = require("node:path");
     );
     await page.locator("#save").click();
     await page.waitForFunction(() =>
-      document.querySelector("#saveState").textContent.startsWith("Zapisano"),
+      document.querySelector("#saveState").textContent.startsWith("Saved"),
     );
     await page.reload();
     await page.waitForFunction(() => document.body.dataset.ready === "true");

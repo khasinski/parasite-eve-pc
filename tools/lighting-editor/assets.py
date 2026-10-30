@@ -5,7 +5,7 @@ are decoded locally from the user's disc; none are shipped with this tool.
 """
 from pathlib import Path
 from functools import lru_cache
-import io,mmap,struct,unicodedata
+import io,mmap,struct,unicodedata,re
 import numpy as np
 from PIL import Image
 
@@ -17,6 +17,11 @@ def checked(b,o,size):
 
 class Disc:
     def __init__(self,path):
+        path=Path(path)
+        if path.suffix.lower()=='.cue':
+            match=re.search(r'(?im)^\s*FILE\s+"([^"]+)"\s+BINARY',path.read_text(encoding='utf-8-sig'))
+            if not match:raise ValueError('CUE must reference a BINARY disc image')
+            path=path.parent/match[1]
         self.file=open(path,'rb');self.data=mmap.mmap(self.file.fileno(),0,access=mmap.ACCESS_READ)
         self.stride=2352 if self.data[1:11]==b'\xff'*10 else 2048
         self.skip=24 if self.stride==2352 else 0

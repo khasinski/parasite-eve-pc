@@ -1,5 +1,5 @@
 """Local original-asset lighting editor. Requires Pillow, NumPy and local Three.js."""
-import argparse,hashlib,json,math,mimetypes,os,re,tempfile
+import argparse,hashlib,json,math,mimetypes,os,re,tempfile,threading,sys
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from functools import lru_cache
@@ -107,9 +107,14 @@ def handler(app):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--disc',type=Path,required=True,help='USA Disc 1 or Disc 2 BIN')
     p.add_argument('--model',type=Path,required=True);p.add_argument('--profiles',type=Path,default=Path('build/lighting-editor/profiles'))
-    p.add_argument('--vendor',type=Path,default=ROOT/'node_modules/three');p.add_argument('--port',type=int,default=8766)
-    args=p.parse_args();app=Workbench(args.disc,args.model,args.profiles,args.vendor)
+    p.add_argument('--vendor',type=Path,default=ROOT/'node_modules/three');p.add_argument('--port',type=int,default=8766);p.add_argument('--assets-root',type=Path,default=ROOT);p.add_argument('--desktop',action='store_true')
+    args=p.parse_args();ROOT=args.assets_root.resolve();app=Workbench(args.disc,args.model,args.profiles,args.vendor)
     if not (args.vendor/'build/three.module.js').exists():p.error('Install pinned Three.js first; see README')
     server=ThreadingHTTPServer(('127.0.0.1',args.port),handler(app))
-    print(f'Lighting editor: http://127.0.0.1:{args.port} — {len(app.rooms.catalog)} rooms; profiles: {app.profiles}',flush=True)
+    if args.desktop:
+        def lifeline():
+            sys.stdin.buffer.read()
+            server.shutdown()
+        threading.Thread(target=lifeline,daemon=True).start()
+    print(f'Lighting editor: http://127.0.0.1:{server.server_address[1]} — {len(app.rooms.catalog)} rooms; profiles: {app.profiles}',flush=True)
     server.serve_forever()

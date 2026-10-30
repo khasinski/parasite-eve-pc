@@ -217,8 +217,8 @@ function buildFloor(data) {
   );
   overlay.add(floorLines);
   $("meshBadge").textContent = coordinates.length
-    ? `${coordinates.length / 9} trójkątów podłoża`
-    : "Brak siatki w danych pokoju";
+    ? `${coordinates.length / 9} floor triangles`
+    : "This room has no floor mesh";
   $("center").disabled = !coordinates.length;
 }
 function floorAt(x, z, preferY = aya.position.y) {
@@ -237,7 +237,7 @@ function snapAya() {
   if (hit) aya.position.y = hit.y;
   else if (profile) {
     aya.position.copy(world(profile.aya.position));
-    $("hint").textContent = "Pozycja poza siatką — Aya pozostaje na podłożu.";
+    $("hint").textContent = "Outside the floor mesh — Aya stays on the floor.";
   }
 }
 function centerAya() {
@@ -401,7 +401,7 @@ function changed() {
   profile.exposure = +$("exposure").value;
   profile.roughness = +$("roughness").value;
   dirty = true;
-  $("saveState").textContent = "Niezapisane zmiany";
+  $("saveState").textContent = "Unsaved changes";
   localStorage.setItem(`pe-lighting-${profile.map}`, JSON.stringify(profile));
 }
 function renderLightList() {
@@ -415,7 +415,7 @@ function renderLightList() {
     s.className = "swatch";
     s.style.background = data.color;
     const label = document.createElement("span");
-    label.textContent = `${data.type === "point" ? "Punktowe" : data.type === "spot" ? "Reflektor" : "Kierunkowe"} · ${data.id}`;
+    label.textContent = `${data.type === "point" ? "Point" : data.type === "spot" ? "Spot" : "Directional"} · ${data.id}`;
     b.append(s, label);
     b.onclick = () => select(data.id);
     $("lights").append(b);
@@ -514,20 +514,20 @@ async function loadRoom(map, group = 0) {
     attachSelected();
     resetOrbit();
     $("roomTitle").textContent =
-      `${catalog.find((r) => r.map === map)?.id || map} · ujęcie ${group}`;
+      `${catalog.find((r) => r.map === map)?.id || map} · Camera ${group}`;
     $("roomInfo").textContent =
-      `${data.width} × ${data.height} · ${data.floor.length} trójkątów · ${data.background_animated ? "tło: zamrożona klatka animacji" : "oryginalne tło"}`;
+      `${data.width} × ${data.height} · ${data.floor.length} triangles · ${data.background_animated ? "background: frozen animation frame" : "original background"}`;
     $("background").src = `/api/room/${map}/${group}.png`;
     dirty = !!draft;
     $("saveState").textContent = dirty
-      ? "Przywrócono szkic"
+      ? "Draft restored"
       : saved.profile
-        ? "Wczytano zapis"
-        : "Nowy profil";
+        ? "Profile loaded"
+        : "New profile";
     $("view").replaceChildren();
     for (const v of catalog.find((r) => r.map === map).views) {
       const option = new Option(
-        `Ujęcie ${v.group} · ${v.width}×${v.height}`,
+        `Camera ${v.group} · ${v.width}×${v.height}`,
         v.group,
       );
       $("view").add(option);
@@ -538,7 +538,7 @@ async function loadRoom(map, group = 0) {
     if (token === loadToken) $("loading").hidden = true;
   } catch (e) {
     error(e);
-    $("loading").textContent = "Nie udało się wczytać pokoju.";
+    $("loading").textContent = "Could not load this room.";
   } finally {
     if (token === loadToken) loading = false;
   }
@@ -695,7 +695,7 @@ $("save").onclick = async () => {
     });
     dirty = false;
     localStorage.removeItem(`pe-lighting-${room.map}`);
-    $("saveState").textContent = `Zapisano ${result.saved}`;
+    $("saveState").textContent = `Saved ${result.saved}`;
   } catch (e) {
     error(e);
   }
@@ -715,7 +715,7 @@ $("import").onchange = async (event) => {
       data.lights.length > 16 ||
       data.map !== room.map
     )
-      throw Error("Wybierz pokój zgodny z importowanym profilem.");
+      throw Error("Select the room matching the imported profile.");
     await fetchJSON(`/api/profile/${room.map}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -787,7 +787,10 @@ try {
   await buildAya(model);
   for (const data of catalog)
     $("room").add(
-      new Option(`${data.id} · ${data.views.length} ujęć`, data.map),
+      new Option(
+        `${data.id} · ${data.views.length} ${data.views.length === 1 ? "camera" : "cameras"}`,
+        data.map,
+      ),
     );
   $("room").value = 20;
   await loadRoom(20);
