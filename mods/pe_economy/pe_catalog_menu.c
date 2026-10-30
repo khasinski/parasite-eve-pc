@@ -22,6 +22,7 @@
 #include "pe_game.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_draw_list.h"
 #include "pe1/menu_sound.h"
@@ -53,10 +54,10 @@ static u8 s_title[PE_TEXT_MAX + 1];
 static u8 s_row_text[PE_TEXT_MAX + 1];
 
 /* Menu text in the game's glyph code (pe_gametext.h), into a 0xFF-terminated buffer. */
-static u8 *pe_game_text(u8 *out, const char *ascii) { return pe_text_from_ascii(out, PE_TEXT_MAX + 1, ascii); }
+static u8 *pe_game_text(u8 *out, const char *ascii) { return pe_tr_ascii(out, PE_TEXT_MAX + 1, ascii); }
 
 /* Effect names: the Catalog's own (the game's from the host, the economy's 17-20). */
-static const char *pe_effect_name(int which, int e) { return pe_cat_effect_name(which, e); }
+static const char *pe_effect_name(int which, int e) { return pe_l10n_ui(pe_cat_effect_name(which, e)); }
 
 /* ---- rows ---- */
 static int pe_row_count(int step) {
@@ -72,7 +73,7 @@ static int pe_cursor(int step) { (void)step; return s_cat.list ? MenuWidget_Grid
 static void pe_item_row(int index) {
     char text[PE_TEXT_MAX];
     const ItemDataRecord *rec = pe_cat_record(index);
-    snprintf(text, sizeof text, "%s: %s", index ? "Armor" : "Gun", rec ? pe_cat_item_name(rec->itemId) : "None");
+    snprintf(text, sizeof text, "%s: %s", index ? pe_l10n_ui("Armor") : pe_l10n_ui("Gun"), rec ? pe_l10n_ui(pe_cat_item_name(rec->itemId)) : pe_l10n_ui("None"));
     Draw_SetTextDimmed(rec == 0);
     Draw_PrintRawText(pe_game_text(s_row_text, text));
     Draw_SetTextDimmed(0);
@@ -80,7 +81,7 @@ static void pe_item_row(int index) {
 
 static void pe_slot_row(int index) {
     char text[PE_TEXT_MAX];
-    if (pe_cat_slots(s_cat.which) <= 0) snprintf(text, sizeof text, "No mod slots");
+    if (pe_cat_slots(s_cat.which) <= 0) snprintf(text, sizeof text, "%s", pe_l10n_ui("No mod slots"));
     else snprintf(text, sizeof text, "%d  %s", index + 1, pe_effect_name(s_cat.which, pe_cat_slot_effect(s_cat.which, index)));
     Draw_PrintRawText(pe_game_text(s_row_text, text));
 }
@@ -90,14 +91,14 @@ static void pe_effect_row(int index) {
     const int e = pe_effect_of_row(index);
     int dim = 0;
     if (index == 0) {
-        snprintf(text, sizeof text, "Remove");
+        snprintf(text, sizeof text, "%s", pe_l10n_ui("Remove"));
         dim = pe_cat_slot_effect(s_cat.which, s_cat.slot) == 0;
     } else if (!pe_cat_unlocked(s_cat.which, e)) {
-        snprintf(text, sizeof text, "Locked");
+        snprintf(text, sizeof text, "%s", pe_l10n_ui("Locked"));
         dim = 1;
     } else {
         snprintf(text, sizeof text, "%-18s %u%s", pe_effect_name(s_cat.which, e), (unsigned)pe_cat_price(s_cat.which, e),
-                 pe_cat_needs_tool(s_cat.which, e) ? "+Tool" : "");
+                 pe_cat_needs_tool(s_cat.which, e) ? pe_l10n_ui("+Tool") : "");
         dim = pe_cat_install(s_cat.which, s_cat.slot, e, 1) != PE_CAT_OK;
     }
     Draw_SetTextDimmed(dim);
@@ -113,35 +114,35 @@ static void pe_draw_list(MenuWidgetNode *node) {
 /* ---- title bar ---- */
 static const char *pe_install_problem(int code) {
     switch (code) {
-    case PE_CAT_NO_ITEM: return "Equip it first";
-    case PE_CAT_NO_SLOTS: return "This item has no mod slots";
-    case PE_CAT_LOCKED: return "Locked: dismantle gear with this effect";
-    case PE_CAT_ALREADY: return "Already in this slot";
-    case PE_CAT_BAG: return "Bag mods can't be replaced here";
-    case PE_CAT_JUNK: return "Not enough Junk";
-    case PE_CAT_TOOL: return "Needs a Tool, or a Tool Kit";
-    case PE_CAT_EMPTY: return "This slot is empty";
-    case PE_CAT_OFF: return "Junk economy is off";
-    default: return "Can't do that now";
+    case PE_CAT_NO_ITEM: return pe_l10n_ui("Equip it first");
+    case PE_CAT_NO_SLOTS: return pe_l10n_ui("This item has no mod slots");
+    case PE_CAT_LOCKED: return pe_l10n_ui("Locked: dismantle gear with this effect");
+    case PE_CAT_ALREADY: return pe_l10n_ui("Already in this slot");
+    case PE_CAT_BAG: return pe_l10n_ui("Bag mods can't be replaced here");
+    case PE_CAT_JUNK: return pe_l10n_ui("Not enough Junk");
+    case PE_CAT_TOOL: return pe_l10n_ui("Needs a Tool, or a Tool Kit");
+    case PE_CAT_EMPTY: return pe_l10n_ui("This slot is empty");
+    case PE_CAT_OFF: return pe_l10n_ui("Junk economy is off");
+    default: return pe_l10n_ui("Can't do that now");
     }
 }
 
 static void pe_title_for(int step, char *out, size_t size) {
     const int row = pe_cursor(step);
     if (s_cat.result[0]) { snprintf(out, size, "%s", s_cat.result); return; }
-    if (step == STEP_ITEM) { snprintf(out, size, "Mod Catalog   Junk %u", (unsigned)pe_loot_junk()); return; }
-    if (step == STEP_SLOT) { snprintf(out, size, "Pick a slot   Junk %u", (unsigned)pe_loot_junk()); return; }
+    if (step == STEP_ITEM) { snprintf(out, size, pe_l10n_ui("Mod Catalog   Junk %u"), (unsigned)pe_loot_junk()); return; }
+    if (step == STEP_SLOT) { snprintf(out, size, pe_l10n_ui("Pick a slot   Junk %u"), (unsigned)pe_loot_junk()); return; }
     if (row == 0) {
         const int code = pe_cat_remove(s_cat.which, s_cat.slot, 1);
-        snprintf(out, size, "%s", code == PE_CAT_OK ? "Empty the slot. The effect stays unlocked" : pe_install_problem(code));
+        snprintf(out, size, "%s", code == PE_CAT_OK ? pe_l10n_ui("Empty the slot. The effect stays unlocked") : pe_install_problem(code));
         return;
     }
     {
         const int e = pe_effect_of_row(row), code = pe_cat_install(s_cat.which, s_cat.slot, e, 1);
-        if (s_cat.armed == row) snprintf(out, size, "Press again to install %s", pe_effect_name(s_cat.which, e));
+        if (s_cat.armed == row) snprintf(out, size, pe_l10n_ui("Press again to install %s"), pe_effect_name(s_cat.which, e));
         else if (code == PE_CAT_OK || code == PE_CAT_JUNK)
-            snprintf(out, size, "%s  %u Junk%s  (have %u)", pe_effect_name(s_cat.which, e), (unsigned)pe_cat_price(s_cat.which, e),
-                     pe_cat_needs_tool(s_cat.which, e) ? " + Tool" : "", (unsigned)pe_loot_junk());
+            snprintf(out, size, pe_l10n_ui("%s  %u Junk%s  (have %u)"), pe_effect_name(s_cat.which, e), (unsigned)pe_cat_price(s_cat.which, e),
+                     pe_cat_needs_tool(s_cat.which, e) ? pe_l10n_ui(" + Tool") : "", (unsigned)pe_loot_junk());
         else snprintf(out, size, "%s", pe_install_problem(code));
     }
 }
@@ -201,7 +202,7 @@ static void pe_effect_confirm(int row) {
     if (row == 0) {
         code = pe_cat_remove(s_cat.which, s_cat.slot, 0);
         if (code != PE_CAT_OK) { Menu_PlayErrorSound(); return; }
-        snprintf(s_cat.result, sizeof s_cat.result, "Removed. It stays unlocked");
+        snprintf(s_cat.result, sizeof s_cat.result, "%s", pe_l10n_ui("Removed. It stays unlocked"));
         Menu_PlayConfirmSound();
         return;
     }
@@ -214,7 +215,7 @@ static void pe_effect_confirm(int row) {
         code = pe_cat_install(s_cat.which, s_cat.slot, e, 0);
         s_cat.armed = -1;
         if (code != PE_CAT_OK) { Menu_PlayErrorSound(); return; }
-        snprintf(s_cat.result, sizeof s_cat.result, "Installed %s", name);
+        snprintf(s_cat.result, sizeof s_cat.result, pe_l10n_ui("Installed %s"), name);
         pe_log("catalog_menu", "install which=%d slot=%d effect=%d", s_cat.which, s_cat.slot, e);
         Menu_PlayConfirmSound();
     }

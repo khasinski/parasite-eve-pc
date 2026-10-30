@@ -29,6 +29,7 @@
 #include "pe_economy.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_requisition.h"
@@ -180,7 +181,7 @@ uint16_t pe_shop_item(int row) {
 
 const char *pe_shop_name(uint16_t id) {
     const int e = pe_econ_index(id), g = pe_goods_index(id);
-    return e >= 0 ? s_econ[e].name : g >= 0 ? s_goods[g].name : "None";
+    return e >= 0 ? pe_l10n_ui(s_econ[e].name) : g >= 0 ? pe_l10n_ui(s_goods[g].name) : "None";
 }
 
 uint32_t pe_shop_price(uint16_t id) {
@@ -205,10 +206,10 @@ void pe_shop_at_counter(int on) { s_at_counter = on; }
 
 /* Why the shop is closed right now, or NULL. */
 static const char *pe_shop_closed(void) {
-    if (!pe_game_loaded()) return "Load a game first";
-    if (!pe_loot_enabled()) return "Junk economy is off";
+    if (!pe_game_loaded()) return pe_l10n_ui("Load a game first");
+    if (!pe_loot_enabled()) return pe_l10n_ui("Junk economy is off");
     if (!s_at_counter && !pe_free_field())
-        return "Use Requisition in the field, outside battle and game menus";
+        return pe_l10n_ui("Use Requisition in the field, outside battle and game menus");
     return NULL;
 }
 
@@ -218,17 +219,17 @@ const char *pe_shop_blocked(uint16_t id) {
     int pool;
     if (closed) return closed;
     if (e >= 0) {
-        if (pe_catalog_armor_unlocked(s_econ[e].effect)) return "Already unlocked";
+        if (pe_catalog_armor_unlocked(s_econ[e].effect)) return pe_l10n_ui("Already unlocked");
     } else {
-        if (g < 0) return "No such goods";
-        if (id == PE_ITEM_TOOL && pe_has_tool_kit()) return "A Tool Kit already covers Tools";
-        if (!pe_base_item(id)) return "Item data unavailable";
+        if (g < 0) return pe_l10n_ui("No such goods");
+        if (id == PE_ITEM_TOOL && pe_has_tool_kit()) return pe_l10n_ui("A Tool Kit already covers Tools");
+        if (!pe_base_item(id)) return pe_l10n_ui("Item data unavailable");
         pool = pe_ammo_pool(id);
         if (pool >= 0) {
-            if (g_KeyItemRecords[pool].ammo >= pe_pool_capacity(pool)) return "Ammo is full";
-            if (pe_bag_find(PE_POOL_FIRST + pool) < 0 && pe_bag_find(0) < 0) return "Bag full";
+            if (g_KeyItemRecords[pool].ammo >= pe_pool_capacity(pool)) return pe_l10n_ui("Ammo is full");
+            if (pe_bag_find(PE_POOL_FIRST + pool) < 0 && pe_bag_find(0) < 0) return pe_l10n_ui("Bag full");
         } else if (pe_bag_find(0) < 0) {
-            return "Bag full";
+            return pe_l10n_ui("Bag full");
         }
     }
     return pe_loot_junk() < pe_shop_price(id) ? "Not enough Junk" : NULL;
@@ -239,11 +240,11 @@ int pe_shop_buy(uint16_t id, char *msg, size_t size) {
     const uint32_t price = why ? 0 : pe_shop_price(id);
     const int e = pe_econ_index(id);
     if (why) { snprintf(msg, size, "%s", why); return 0; }
-    if (price && !pe_loot_spend_junk(price)) { snprintf(msg, size, "Not enough Junk"); return 0; }
+    if (price && !pe_loot_spend_junk(price)) { snprintf(msg, size, "%s", pe_l10n_ui("Not enough Junk")); return 0; }
     if (e >= 0) {
         if (!pe_catalog_unlock_armor(s_econ[e].effect)) {   /* unlocked meanwhile: refund */
             if (price) pe_loot_give_junk(price);
-            snprintf(msg, size, "Already unlocked");
+            snprintf(msg, size, "%s", pe_l10n_ui("Already unlocked"));
             return 0;
         }
     } else {
@@ -259,7 +260,7 @@ int pe_shop_buy(uint16_t id, char *msg, size_t size) {
         if (id == PE_ITEM_TOOL && s_shop.tools_bought < 0xFFFF) ++s_shop.tools_bought;
     }
     pe_log("buy", "item=%s price=%u", pe_shop_name(id), (unsigned)price);
-    snprintf(msg, size, "Bought %s: %u Junk", pe_shop_name(id), (unsigned)price);
+    snprintf(msg, size, pe_l10n_ui("Bought %s: %u Junk"), pe_shop_name(id), (unsigned)price);
     return 1;
 }
 
@@ -278,25 +279,25 @@ int pe_shop_spare_club(char *msg, size_t size) {
     g_InventoryRuntime.equipment[record] = *base;
     g_AyaInventoryItems[slot] = (s16)(PE_EQUIPMENT_FIRST + record);
     pe_log("spare_club", "item=0x%02X", PE_ITEM_CLUB_1);
-    snprintf(msg, size, "Spare Club issued");
+    snprintf(msg, size, "%s", pe_l10n_ui("Spare Club issued"));
     return 1;
 }
 
 void pe_shop_details(uint16_t id, char *out, unsigned size) {
     const int e = pe_econ_index(id), pool = pe_ammo_pool(id);
     int used = 0, held = 0, i;
-    if (!pe_game_loaded()) { snprintf(out, size, "Load a game first"); return; }
+    if (!pe_game_loaded()) { snprintf(out, size, "%s", pe_l10n_ui("Load a game first")); return; }
     for (i = 0; i < pe_bag_limit(); ++i) {
         used += g_AyaInventoryItems[i] != 0;
         held += g_AyaInventoryItems[i] == id;
     }
     if (e >= 0)
-        snprintf(out, size, "%u Junk: unlocks in Mod Catalog", (unsigned)pe_shop_price(id));
+        snprintf(out, size, pe_l10n_ui("%u Junk: unlocks in Mod Catalog"), (unsigned)pe_shop_price(id));
     else if (pool >= 0)
-        snprintf(out, size, "%u Junk; ammo %u/%d; bag %d/%d", (unsigned)pe_shop_price(id),
+        snprintf(out, size, pe_l10n_ui("%u Junk; ammo %u/%d; bag %d/%d"), (unsigned)pe_shop_price(id),
                  (unsigned)g_KeyItemRecords[pool].ammo, pe_pool_capacity(pool), used, pe_bag_limit());
     else
-        snprintf(out, size, "%u Junk; carrying %d; bag %d/%d", (unsigned)pe_shop_price(id), held, used, pe_bag_limit());
+        snprintf(out, size, pe_l10n_ui("%u Junk; carrying %d; bag %d/%d"), (unsigned)pe_shop_price(id), held, used, pe_bag_limit());
 }
 
 /* ---- save block (recomp PESH v1) ---- */

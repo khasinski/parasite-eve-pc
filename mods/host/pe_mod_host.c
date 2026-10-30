@@ -349,6 +349,7 @@ int pe_host_init(const PeHookInit *init) {
 static const char *pe_hook_name(int id) {
     static const char *const names[PE_HOOK_COUNT] = {
         [PE_HOOK_INIT] = "init",
+        [PE_HOOK_TEXT_GLYPH] = "text glyph",
         [PE_HOOK_SCENE_START] = "scene start",
         [PE_HOOK_FRAME] = "frame",
         [PE_HOOK_HELP_TEXT] = "help text",

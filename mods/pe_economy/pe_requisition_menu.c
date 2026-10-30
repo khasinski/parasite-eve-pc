@@ -18,6 +18,7 @@
 #include "pe_economy.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_requisition.h"
@@ -60,7 +61,7 @@ static unsigned pe_goods_count(void) { return (unsigned)pe_shop_count(); }
 
 static const char *pe_goods_name(unsigned row) {
     const uint16_t id = pe_shop_item((int)row);
-    snprintf(s_label, sizeof s_label, "%s - %u Junk", pe_shop_name(id), (unsigned)pe_shop_price(id));
+    snprintf(s_label, sizeof s_label, pe_l10n_ui("%s - %u Junk"), pe_shop_name(id), (unsigned)pe_shop_price(id));
     return s_label;
 }
 
@@ -69,11 +70,11 @@ static void pe_details_text(char *out, unsigned size) { pe_shop_details(pe_shop_
 
 static void pe_status_text(char *out, unsigned size) {
     const char *why = pe_shop_blocked(pe_shop_item(s_selected));
-    snprintf(out, size, "%s", why ? why : "Ready to buy");
+    snprintf(out, size, "%s", why ? why : pe_l10n_ui("Ready to buy"));
 }
 
 static void pe_result_text(char *out, unsigned size) {
-    snprintf(out, size, "%s", s_result[0] ? s_result : "Choose goods, then press Buy twice");
+    snprintf(out, size, "%s", s_result[0] ? s_result : pe_l10n_ui("Choose goods, then press Buy twice"));
 }
 
 /* ---- actions ---- */
@@ -91,7 +92,7 @@ static void pe_buy(void) {
     price = pe_shop_price(id);
     if (s_armed.what != ARMED_BUY || s_armed.item != id || s_armed.price != price || !pe_bag_unchanged()) {
         pe_arm(ARMED_BUY, id, price);
-        snprintf(s_result, sizeof s_result, "Press Buy again: %s for %u Junk", pe_shop_name(id), (unsigned)price);
+        snprintf(s_result, sizeof s_result, pe_l10n_ui("Press Buy again: %s for %u Junk"), pe_shop_name(id), (unsigned)price);
         pe_toast(s_result);
         return;
     }
@@ -133,7 +134,7 @@ static void pe_tick(void) {
     }
     if (!s_rescue_warned) {
         s_rescue_warned = 1;
-        pe_toast("Aya cannot attack: F1 / Economy / Requisition has a spare Club");
+        pe_toast(pe_l10n_ui("Aya cannot attack: F1 / Economy / Requisition has a spare Club"));
     }
 }
 

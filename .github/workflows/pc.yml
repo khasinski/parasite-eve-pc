@@ -56,7 +56,7 @@ jobs:
           ./build/parasite-eve-pc --help
           ctest --test-dir build --output-on-failure --no-tests=error --output-junit linux-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
           ctest --test-dir build --output-on-failure --no-tests=error -R "^(original-m273-landing-cycle|original-callback-allocation-failure|original-m273-effect-pointers|original-menu-call-abi|original-game-pulled-sprite|host-crash-report|mod-crash-save-tail|mod-preserve-save-tail|mod-save-records|mod-save-registration-bounds|mod-rebalance-(vanilla|saved-vanilla|scoped|poison)|mod-atb|mod-combine|mod-panacea-off|mod-pe-(vanilla|saved-vanilla|cost|actor)|mod-inventory|mod-inventory-menu)$"
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage)$"
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage|lang-pack|lang-font|lang-selection)$"
           python3 - <<'PYTEST'
           import xml.etree.ElementTree as E
           r = E.parse('build/linux-source-only.xml')
@@ -162,7 +162,7 @@ jobs:
           ./build/parasite-eve-pc.exe --help
           ctest --test-dir build --output-on-failure --no-tests=error --output-junit windows-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
           ctest --test-dir build --output-on-failure --no-tests=error -R "^(original-m273-landing-cycle|original-callback-allocation-failure|original-m273-effect-pointers|original-menu-call-abi|original-game-pulled-sprite|host-crash-report|mod-crash-save-tail|mod-preserve-save-tail|mod-save-records|mod-save-registration-bounds|mod-rebalance-(vanilla|saved-vanilla|scoped|poison)|mod-atb|mod-combine|mod-panacea-off|mod-pe-(vanilla|saved-vanilla|cost|actor)|mod-inventory|mod-inventory-menu)$"
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage)$"
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage|lang-pack|lang-font|lang-selection)$"
       - name: Stress D3D12 descriptor batches without a visible window
         env:
           SDL_GPU_DRIVER: direct3d12

@@ -5,6 +5,7 @@
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe1/inventory_slots.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_dialog.h"
@@ -128,7 +129,7 @@ static int pe_on_row_title(void *ctx, void *user) {
     const PeMainMenuRow *row;
     (void)user;
     if (!pe_is_main_list(current) || !pe_menu_open_here()) return 0;
-    if ((row = pe_row_at(MenuWidget_GridCellIndex(current)))) *text = pe_text_from_ascii(s_row_title, sizeof s_row_title, row->title);
+    if ((row = pe_row_at(MenuWidget_GridCellIndex(current)))) *text = pe_tr_ascii(s_row_title, sizeof s_row_title, row->title);
     return 0;
 }
 
@@ -299,7 +300,7 @@ void pe_confirm(const char *question, int default_yes, void (*answer)(int yes)) 
     g_MenuActionTextBase = 5;                            /* Yes / No */
     MenuWidget_SetCurrentNode(choice);
     choice->cursor_x = default_yes ? 0 : 1;
-    pe_text_from_ascii(g_MenuItemLabelBuffer, sizeof g_MenuItemLabelBuffer, question);
+    pe_tr_ascii(g_MenuItemLabelBuffer, sizeof g_MenuItemLabelBuffer, question);
     g_MenuItemPrimListHandles[0] = 0;
     width = Draw_MeasureTextWidth(g_MenuItemLabelBuffer);
     if (width < 120) width = 120;                        /* the game's layout */

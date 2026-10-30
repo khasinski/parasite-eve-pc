@@ -5,6 +5,7 @@
 #include "pe_economy.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe1/item_ids.h"
@@ -46,8 +47,8 @@ static int pe_smoke_text(void *ctx, void *user) {
     PeHookTextLookup *text = ctx;
     (void)user;
     if (text->index == ITEM_ITEM24 - 1) {
-        if (text->table == 8) *text->text = s_name;
-        if (text->table == 12) *text->text = s_description;
+        if (text->table == 8) { pe_tr_ascii(s_name,sizeof s_name,"Smoke Grenade"); *text->text = s_name; }
+        if (text->table == 12) { pe_tr_ascii(s_description,sizeof s_description,"Sure Escape from Battle"); *text->text = s_description; }
     }
     return 0;
 }
@@ -60,7 +61,7 @@ static int pe_smoke_use(void *ctx, void *user) {
         /* The game already consumed the item; return it to the freed slot. */
         int slot = pe_empty_slot();
         if (slot >= 0) g_AyaInventoryItems[slot] = ITEM_ITEM24;
-        pe_toast(slot >= 0 ? "Cannot escape. Smoke Grenade returned" : "Cannot escape. No room to return Smoke Grenade");
+        pe_toast(slot >= 0 ? pe_l10n_ui("Cannot escape. Smoke Grenade returned") : pe_l10n_ui("Cannot escape. No room to return Smoke Grenade"));
         return 0;
     }
     g_BattleModeState = 4;
@@ -104,10 +105,10 @@ static void pe_buy_smoke(void) {
 }
 
 static void pe_price_text(char *out, unsigned size) {
-    snprintf(out, size, "%u Junk", (unsigned)pe_loot_price(15));
+    snprintf(out, size, pe_l10n_ui("%u Junk"), (unsigned)pe_loot_price(15));
 }
 static void pe_result_text(char *out, unsigned size) {
-    snprintf(out, size, "%s", s_result[0] ? s_result : "Escape item for ordinary fights");
+    snprintf(out, size, "%s", s_result[0] ? s_result : pe_l10n_ui("Escape item for ordinary fights"));
 }
 
 void pe_smoke_shutdown(void) {

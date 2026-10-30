@@ -1,0 +1,2560 @@
+[
+  {
+    "key": "mod/ui/005ef20f",
+    "text": "Status",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Status",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/021b41e6",
+    "text": "This item has no mod slots",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "This item has no mod slots",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c",
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/029e0cc7",
+    "text": "No such goods",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "No such goods",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/04d308c3",
+    "text": "COUNTER",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "COUNTER",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/067a61ab",
+    "text": "Added per Tool bought.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Added per Tool bought.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/06f0195e",
+    "text": "CONFUSE",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "CONFUSE",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/07616af8",
+    "text": "Bought %s: %u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bought %s: %u Junk",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ],
+    "format": "Bought %s: %u Junk"
+  },
+  {
+    "key": "mod/ui/09012620",
+    "text": "STL DN",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "STL DN",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/09cf610a",
+    "text": "Already in this slot",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Already in this slot",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/0b85883c",
+    "text": "The mod slot to fill or clear.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "The mod slot to fill or clear.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/0ec24245",
+    "text": "Details",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Details",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/0f640924",
+    "text": "Why this purchase is available or blocked.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Why this purchase is available or blocked.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/0fd2f0b1",
+    "text": "ROF 10",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "ROF 10",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/12d80ec7",
+    "text": "Saved equipment data is invalid",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Saved equipment data is invalid",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1398446d",
+    "text": "Pick a slot   Junk %u",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Pick a slot   Junk %u",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ],
+    "format": "Pick a slot   Junk %u"
+  },
+  {
+    "key": "mod/ui/13bf54af",
+    "text": " Day 4",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": " Day 4",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1482414b",
+    "text": "TRANQ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "TRANQ",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/14a521bd",
+    "text": "Revive price",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Revive price",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1540df49",
+    "text": "Full Cure",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Full Cure",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/16ac87c0",
+    "text": "Free Club 1 only if no usable weapon exists in bag or storage. Press twice.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Free Club 1 only if no usable weapon exists in bag or storage. Press twice.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/18a47e78",
+    "text": "Empty the slot. The effect stays unlocked",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Empty the slot. The effect stays unlocked",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1bb18a5b",
+    "text": "Rebuild markup %",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rebuild markup %",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ],
+    "format": "Rebuild markup %"
+  },
+  {
+    "key": "mod/ui/1da4cfad",
+    "text": "Clear catalog",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Clear catalog",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1da8d766",
+    "text": "Aya can still fight: no spare Club",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Aya can still fight: no spare Club",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c",
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1e0a295c",
+    "text": "Nothing to rebuild",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Nothing to rebuild",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1f648006",
+    "text": "Item",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Item",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1f9f36ed",
+    "text": "Can't install now",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Can't install now",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/205a6693",
+    "text": "HEAT",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "HEAT",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/207d4df3",
+    "text": "Dismantled gear, newest first.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Dismantled gear, newest first.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/207fa903",
+    "text": "Price to rebuild this item.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Price to rebuild this item.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/20f2e162",
+    "text": "Empty the slot. The effect stays unlocked.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Empty the slot. The effect stays unlocked.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2197ab82",
+    "text": "Uses 1 Mod Permit, you have ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Uses 1 Mod Permit, you have ",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/21a5901d",
+    "text": "Remove",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Remove",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c",
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/24e86297",
+    "text": "Removed. It stays unlocked",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Removed. It stays unlocked",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2505810a",
+    "text": "SALVAGE",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "SALVAGE",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/25c5b1d3",
+    "text": "Locked: dismantle an item with this effect",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Locked: dismantle an item with this effect",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/261b61d7",
+    "text": "Salvaged %s: +%u Junk, %d new effect s ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Salvaged %s: +%u Junk, %d new effect(s)",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ],
+    "format": "Salvaged %s: +%u Junk, %d new effect(s)"
+  },
+  {
+    "key": "mod/ui/299556f8",
+    "text": "Nothing to dismantle",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Nothing to dismantle",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2c591833",
+    "text": "%u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%u Junk",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ],
+    "format": "%u Junk"
+  },
+  {
+    "key": "mod/ui/2c8f7a75",
+    "text": "Rocket",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rocket",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/304ff7fb",
+    "text": "None",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "None",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c",
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/306f1baf",
+    "text": "Tools bought",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Tools bought",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/30d9dd7d",
+    "text": "Economy mod price %",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Economy mod price %",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ],
+    "format": "Economy mod price %"
+  },
+  {
+    "key": "mod/ui/32db53b1",
+    "text": "That slot is empty",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "That slot is empty",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/33a43782",
+    "text": "%u Junk: unlocks in Mod Catalog",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%u Junk: unlocks in Mod Catalog",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ],
+    "format": "%u Junk: unlocks in Mod Catalog"
+  },
+  {
+    "key": "mod/ui/33f83ed8",
+    "text": "Junk economy is off",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk economy is off",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c",
+      "mods/pe_economy/pe_requisition.c",
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3495228e",
+    "text": "Need %u Junk  have %u ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Need %u Junk (have %u)",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_dismantle.c",
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "Need %u Junk (have %u)"
+  },
+  {
+    "key": "mod/ui/34bc154e",
+    "text": " + Tool",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": " + Tool",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c",
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/34c18dd0",
+    "text": "Not enough Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Not enough Junk",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c",
+      "mods/pe_economy/pe_requisition.c",
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/37f45f7e",
+    "text": "Bag mods can't be replaced here",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bag mods can't be replaced here",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c",
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/38e1a788",
+    "text": "Tools disappear with a Tool Kit  effects disappear once unlocked.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Tools disappear with a Tool Kit; effects disappear once unlocked.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3982bf85",
+    "text": "Discard junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Discard junk",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c",
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3a727d65",
+    "text": "Price, carried amount and bag space.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Price, carried amount and bag space.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3b52892d",
+    "text": "SLOW AT",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "SLOW AT",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3cd13796",
+    "text": "Press again to install %s",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Press again to install %s",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ],
+    "format": "Press again to install %s"
+  },
+  {
+    "key": "mod/ui/3cee4628",
+    "text": "Mod Catalog   Junk %u",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod Catalog   Junk %u",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ],
+    "format": "Mod Catalog   Junk %u"
+  },
+  {
+    "key": "mod/ui/3cf6e6ee",
+    "text": "%s  %u Junk%s   have %u ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s  %u Junk%s  (have %u)",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ],
+    "format": "%s  %u Junk%s  (have %u)"
+  },
+  {
+    "key": "mod/ui/3e02cdce",
+    "text": "Tool price start",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Tool price start",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3e352725",
+    "text": "gun",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "gun",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c",
+      "mods/pe_economy/pe_catalog.c",
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3f30bc14",
+    "text": "Mod Catalog",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod Catalog",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3f49419e",
+    "text": "%s: DISMANTLE",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s: DISMANTLE",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ],
+    "format": "%s: DISMANTLE"
+  },
+  {
+    "key": "mod/ui/3fda20e6",
+    "text": "The effect's full name and what installing it costs.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "The effect's full name and what installing it costs.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4037b5c2",
+    "text": "CRIT UP",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "CRIT UP",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/406a5eb3",
+    "text": "Locked",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Locked",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/40ebc0ad",
+    "text": "ALREADY THERE",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "ALREADY THERE",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/423ee586",
+    "text": "Needs a Tool  or a Tool Kit ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Needs a Tool (or a Tool Kit)",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/46ee179b",
+    "text": "Already installed there",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Already installed there",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/476e636c",
+    "text": "%s replaced: kept in the Mod Catalog",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s replaced: kept in the Mod Catalog",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ],
+    "format": "%s replaced: kept in the Mod Catalog"
+  },
+  {
+    "key": "mod/ui/47939baf",
+    "text": "Requisition",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Requisition",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c",
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4824551c",
+    "text": "NONE EQUIPPED",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "NONE EQUIPPED",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/48560f86",
+    "text": "Bag mods can't be removed here",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bag mods can't be removed here",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/491d3e6e",
+    "text": "Bag full",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bag full",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c",
+      "mods/pe_economy/pe_requisition.c",
+      "mods/pe_economy/pe_requisition.c",
+      "mods/pe_economy/pe_dismantle.c",
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/495c803b",
+    "text": "%s: removed %s  stays unlocked ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s: removed %s (stays unlocked)",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ],
+    "format": "%s: removed %s (stays unlocked)"
+  },
+  {
+    "key": "mod/ui/4a4fe538",
+    "text": "Of each effect's individual price.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Of each effect's individual price.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4bcb7630",
+    "text": "Replaces",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Replaces",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4f03e7e5",
+    "text": "Bargain mod",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bargain mod",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4fefd16c",
+    "text": "Tool price step",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Tool price step",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4ffedc4c",
+    "text": "NOT FOUND YET",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "NOT FOUND YET",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/504af044",
+    "text": "Result",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Result",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/53bfefde",
+    "text": "  locked ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": " (locked)",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5401af21",
+    "text": "Junk and new Mod Catalog effects for this item.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk and new Mod Catalog effects for this item.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/54d916a4",
+    "text": "Press twice. Rechecks goods, price, balance and bag space.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Press twice. Rechecks goods, price, balance and bag space.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/55d70412",
+    "text": "%u Junk  carrying %d  bag %d/%d",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%u Junk; carrying %d; bag %d/%d",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ],
+    "format": "%u Junk; carrying %d; bag %d/%d"
+  },
+  {
+    "key": "mod/ui/560f0631",
+    "text": "Sets the next Tool's price.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Sets the next Tool's price.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/560f2626",
+    "text": ". Re-equip to grow the bag",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": ". Re-equip to grow the bag",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/574377c0",
+    "text": "Mod Catalog: all effects unlocked",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod Catalog: all effects unlocked",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5774e02c",
+    "text": "Dismantle",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Dismantle",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5780ead7",
+    "text": "Buy it back, with empty mod slots.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Buy it back, with empty mod slots.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5852ca61",
+    "text": "What installing takes out of the item.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "What installing takes out of the item.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/58fa1d69",
+    "text": "Medicine 4",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Medicine 4",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/59e9e3e8",
+    "text": "ACID",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "ACID",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/59fa1efc",
+    "text": "Medicine 3",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Medicine 3",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5a38e2bd",
+    "text": "Bargain",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bargain",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5abcff98",
+    "text": "That one has all its slots",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "That one has all its slots",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5afa208f",
+    "text": "Medicine 2",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Medicine 2",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5ba51a60",
+    "text": "RND ROF",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "RND ROF",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5bfa2222",
+    "text": "Medicine 1",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Medicine 1",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5c08678f",
+    "text": "Rebuild price vs dismantle payout.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rebuild price vs dismantle payout.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5f44420d",
+    "text": "Bullets x30",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bullets x30",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5febc186",
+    "text": " +TOOL",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": " +TOOL",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/619c3984",
+    "text": "Equip a gun first",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Equip a gun first",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/61e6be1a",
+    "text": "No",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "No",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6298c55f",
+    "text": "Work on your equipped gun or your equipped armor.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Work on your equipped gun or your equipped armor.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/65309179",
+    "text": "Cure-D",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Cure-D",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6630930c",
+    "text": "Cure-C",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Cure-C",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/67a6f75d",
+    "text": "Gives",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Gives",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/68506fb9",
+    "text": "ATK DN",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "ATK DN",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/68887f58",
+    "text": "Cost",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Cost",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6914b110",
+    "text": "Revive",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Revive",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/69b3d8e6",
+    "text": "Dismantle %s: +%u Junk, %d new effect s . Press again",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Dismantle %s: +%u Junk, %d new effect(s). Press again",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ],
+    "format": "Dismantle %s: +%u Junk, %d new effect(s). Press again"
+  },
+  {
+    "key": "mod/ui/69b421fe",
+    "text": "Lucky Find",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Lucky Find",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/69b80b99",
+    "text": "UNKNOWN",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "UNKNOWN",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6aae0f14",
+    "text": "Locked: dismantle gear with this effect",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Locked: dismantle gear with this effect",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6b581315",
+    "text": "NOTHING DISMANTLED YET",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "NOTHING DISMANTLED YET",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6c309c7e",
+    "text": "Cure-M",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Cure-M",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6c47428b",
+    "text": "BAG +1",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "BAG +1",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6cfb5162",
+    "text": "Ammo is full",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Ammo is full",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6d47441e",
+    "text": "BAG +2",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "BAG +2",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6ebc2674",
+    "text": "Effect",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Effect",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6f474744",
+    "text": "BAG +4",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "BAG +4",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6f88c1e3",
+    "text": "Next page",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Next page",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/710f4114",
+    "text": "Rebuild: nothing dismantled",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rebuild: nothing dismantled",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/73291c85",
+    "text": "The last action or pending confirmation.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "The last action or pending confirmation.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/736045d4",
+    "text": "Junk you have now.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk you have now.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/744f1bea",
+    "text": "2 CMDS",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "2 CMDS",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/74b21183",
+    "text": "Installed %s",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Installed %s",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ],
+    "format": "Installed %s"
+  },
+  {
+    "key": "mod/ui/760e7852",
+    "text": "Mod Catalog and Rebuild list cleared",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod Catalog and Rebuild list cleared",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/7629a1d1",
+    "text": "Goods",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Goods",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/77507440",
+    "text": "STEAL",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "STEAL",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/78ddf876",
+    "text": "CYANIDE",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "CYANIDE",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/7930b0f5",
+    "text": "Cure-P",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Cure-P",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/7c27412e",
+    "text": "ATK UP",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "ATK UP",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/7e5cec78",
+    "text": "Item data unavailable",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Item data unavailable",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/7f587724",
+    "text": "Spare Club",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Spare Club",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/80929fbb",
+    "text": "NO UNEQUIPPED GEAR",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "NO UNEQUIPPED GEAR",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/80bb92a0",
+    "text": "%u Junk  ammo %u/%d  bag %d/%d",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%u Junk; ammo %u/%d; bag %d/%d",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ],
+    "format": "%u Junk; ammo %u/%d; bag %d/%d"
+  },
+  {
+    "key": "mod/ui/810f3e45",
+    "text": "GUN",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "GUN",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/81a6aba4",
+    "text": "Goods prices, excluding Tools, Revive and economy mods.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Goods prices, excluding Tools, Revive and economy mods.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/83666550",
+    "text": "Unlock all effects",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Unlock all effects",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/84b84174",
+    "text": "Armor",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Armor",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/85bf7589",
+    "text": "STIFF",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "STIFF",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/869eb631",
+    "text": "POISON",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "POISON",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/875c5453",
+    "text": "NO MOD SLOTS",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "NO MOD SLOTS",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/87843bf8",
+    "text": "Mod Permit: no guns or armor",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod Permit: no guns or armor",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/889db16e",
+    "text": "Equip armor first",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Equip armor first",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/88ee5db2",
+    "text": "NO ARMOR EQUIPPED",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "NO ARMOR EQUIPPED",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/896e8d19",
+    "text": "Slot added, now %u",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Slot added, now %u",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ],
+    "format": "Slot added, now %u"
+  },
+  {
+    "key": "mod/ui/8a0dafc5",
+    "text": "DARK",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "DARK",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/8af5ac84",
+    "text": "+Tool",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "+Tool",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9111dd70",
+    "text": "Mod Permit   have ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod Permit   have ",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/91ecf9f1",
+    "text": "Junk for a premium effect  +Tool .",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk for a premium effect (+Tool).",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/95dcc530",
+    "text": "Rebuild",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rebuild",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_wayne_menu.c",
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/979c0c9b",
+    "text": "Scavenger",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Scavenger",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/989146f0",
+    "text": "STL ATK",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "STL ATK",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9946e0ea",
+    "text": "Equip it first",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Equip it first",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9a135ffb",
+    "text": "MAX HP",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "MAX HP",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9a24e858",
+    "text": "Rebuilt %s  -%u Junk ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rebuilt %s (-%u Junk)",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ],
+    "format": "Rebuilt %s (-%u Junk)"
+  },
+  {
+    "key": "mod/ui/9b163878",
+    "text": "Smoke Grenade",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Smoke Grenade",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9ee767cb",
+    "text": "LUCKY",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "LUCKY",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9fa3651c",
+    "text": "QUICK",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "QUICK",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a0268409",
+    "text": "No free equipment record",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "No free equipment record",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c",
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a06d93b0",
+    "text": "Mod price mid",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod price mid",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a0bfbec5",
+    "text": "Gun",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Gun",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a107dba3",
+    "text": "Most a Tool costs, after discounts.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Most a Tool costs, after discounts.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a1e1f465",
+    "text": "Wardrobe",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Wardrobe",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c",
+      "mods/pe_economy/pe_wayne_menu.c",
+      "mods/pe_collection/pe_wardrobe_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a1f2313b",
+    "text": "Mod price premium",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod price premium",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a28a8f5a",
+    "text": "Choose goods, then press Buy twice",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Choose goods, then press Buy twice",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a3461e74",
+    "text": "Mod Permit Card",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod Permit Card",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c",
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a72358fe",
+    "text": "%s - %u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s - %u Junk",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ],
+    "format": "%s - %u Junk"
+  },
+  {
+    "key": "mod/ui/a9459680",
+    "text": " slots",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": " slots",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ac3ee6bc",
+    "text": "Junk for a mid effect.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk for a mid effect.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ad19d5fe",
+    "text": "ATK ALL",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "ATK ALL",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/b2ff2fdb",
+    "text": "   Junk ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "   Junk ",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/b3a43630",
+    "text": "Yes",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Yes",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/b50cbd40",
+    "text": "Install",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Install",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/b56db0d1",
+    "text": "%u Junk, %d new effect%s",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%u Junk, %d new effect%s",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ],
+    "format": "%u Junk, %d new effect%s"
+  },
+  {
+    "key": "mod/ui/b714c05d",
+    "text": "Revive on later playthroughs.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Revive on later playthroughs.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/b86967f3",
+    "text": "What the last action did.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "What the last action did.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/b8af7c97",
+    "text": "%s: installed %s  -%u Junk%s %s",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s: installed %s (-%u Junk%s)%s",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ],
+    "format": "%s: installed %s (-%u Junk%s)%s"
+  },
+  {
+    "key": "mod/ui/b9c0ac11",
+    "text": "NO GUN EQUIPPED",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "NO GUN EQUIPPED",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ba38bdac",
+    "text": "Salvager mod",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Salvager mod",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/bb131907",
+    "text": "  worn",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "  worn",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/be1d333d",
+    "text": "Press twice. Its effects go to the Mod Catalog.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Press twice. Its effects go to the Mod Catalog.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c0017426",
+    "text": "Tool price cap",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Tool price cap",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c11fb374",
+    "text": "AUTOCUR",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "AUTOCUR",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c20a7674",
+    "text": "ARMOR",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "ARMOR",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c2677473",
+    "text": "No mod slots",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "No mod slots",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c2954bc2",
+    "text": "Back",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Back",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c",
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c58936dc",
+    "text": "Can't do that now",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Can't do that now",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c6496160",
+    "text": "Bullets x15",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bullets x15",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c69947a2",
+    "text": "Invalid saved equipment slots",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Invalid saved equipment slots",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c6b82824",
+    "text": "This slot is empty",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "This slot is empty",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c7363220",
+    "text": "Hold equipment",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Hold equipment",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c74b9c2d",
+    "text": "Ready to buy",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Ready to buy",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c935fe1c",
+    "text": "Your Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Your Junk",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_catalog_pages.c",
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ca131d2d",
+    "text": "FROST",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "FROST",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/cada780b",
+    "text": "Buy",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Buy",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/cc3cb351",
+    "text": "Junk for a common effect.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk for a common effect.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/cea3aa55",
+    "text": "No Mod Permit",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "No Mod Permit",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/cefcbc81",
+    "text": "BURST",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "BURST",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/cfaac8e4",
+    "text": "+TOOL",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "+TOOL",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/cfffac91",
+    "text": "Locked: dismantle gear with it to unlock.     already on the item.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Locked: dismantle gear with it to unlock. * = already on the item.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d1a15ae7",
+    "text": "Tool",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Tool",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d222da58",
+    "text": "Dismantled %s: +%u Junk  total %u ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Dismantled %s: +%u Junk (total %u)",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ],
+    "format": "Dismantled %s: +%u Junk (total %u)"
+  },
+  {
+    "key": "mod/ui/d29868fe",
+    "text": "Lucky Find mod",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Lucky Find mod",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d43ece28",
+    "text": "Salvager",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Salvager",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d59be72c",
+    "text": "First Tool's price.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "First Tool's price.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d5ead707",
+    "text": "Keep your last Club",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Keep your last Club",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d7ae0166",
+    "text": "The live Junk balance.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "The live Junk balance.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d80c23fc",
+    "text": "Slot %d, %d Junk%s: press again",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Slot %d, %d Junk%s: press again",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ],
+    "format": "Slot %d, %d Junk%s: press again"
+  },
+  {
+    "key": "mod/ui/d815acb0",
+    "text": "Aya cannot attack: F1 / Economy / Requisition has a spare Club",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Aya cannot attack: F1 / Economy / Requisition has a spare Club",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d81da7f6",
+    "text": "  owned",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "  owned",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d874045b",
+    "text": "Shop price %",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Shop price %",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ],
+    "format": "Shop price %"
+  },
+  {
+    "key": "mod/ui/d91564a3",
+    "text": "Mod price common",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod price common",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d92b753d",
+    "text": "BARGAIN",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "BARGAIN",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/dc188fab",
+    "text": "Use Requisition in the field with Junk economy on",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Use Requisition in the field with Junk economy on",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/dd3ec7ca",
+    "text": "Price",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Price",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/de219c90",
+    "text": "PE BRDN",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "PE BRDN",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e22bcc2c",
+    "text": "Workshop",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Workshop",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c",
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e2ddd8c1",
+    "text": "Revive price  EX Game ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Revive price (EX Game)",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e32c9aef",
+    "text": "Scavenger mod",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Scavenger mod",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e483a68d",
+    "text": "A Tool Kit already covers Tools",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "A Tool Kit already covers Tools",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e584fe07",
+    "text": "Needs a Tool, or a Tool Kit",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Needs a Tool, or a Tool Kit",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e6441cac",
+    "text": "SCAVENG",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "SCAVENG",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e84189dc",
+    "text": "Unknown item",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Unknown item",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e8d51b8c",
+    "text": "Use Requisition in the field, outside battle and game menus",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Use Requisition in the field, outside battle and game menus",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e8f7695f",
+    "text": "%s +%u SLOTS %u",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s +%u SLOTS %u",
+    "contexts": [
+      "mods/pe_economy/pe_dismantle.c"
+    ],
+    "format": "%s +%u SLOTS %u"
+  },
+  {
+    "key": "mod/ui/e9282f03",
+    "text": "A gun or armor you aren't wearing.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "A gun or armor you aren't wearing.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ee82c0ae",
+    "text": "ROF 2",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "ROF 2",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/eef5a916",
+    "text": "Load a game first",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Load a game first",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c",
+      "mods/pe_economy/pe_requisition.c",
+      "mods/pe_economy/pe_catalog.c",
+      "mods/pe_economy/pe_dismantle.c",
+      "mods/pe_economy/pe_dismantle.c",
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ef82c241",
+    "text": "ROF 3",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "ROF 3",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/efe26e4a",
+    "text": "Add a slot to ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Add a slot to ",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f08c025f",
+    "text": "3 CMDS",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "3 CMDS",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f0c19391",
+    "text": "Slot",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Slot",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f182c567",
+    "text": "ROF 5",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "ROF 5",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f245cadd",
+    "text": "Press Buy again: %s for %u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Press Buy again: %s for %u Junk",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ],
+    "format": "Press Buy again: %s for %u Junk"
+  },
+  {
+    "key": "mod/ui/f382c88d",
+    "text": "ROF 7",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "ROF 7",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f47a261f",
+    "text": "Revive on a first playthrough.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Revive on a first playthrough.",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f4964c01",
+    "text": "Spare Club issued",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Spare Club issued",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f4c340b4",
+    "text": " bag full",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": " bag full",
+    "contexts": [
+      "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f4c8ea0c",
+    "text": "Already unlocked",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Already unlocked",
+    "contexts": [
+      "mods/pe_economy/pe_requisition.c",
+      "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f5648648",
+    "text": "NOTHING  EMPTY SLOT ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "NOTHING (EMPTY SLOT)",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f84984d4",
+    "text": "armor",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "armor",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c",
+      "mods/pe_economy/pe_catalog.c",
+      "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f873f798",
+    "text": "AUTOMED",
+    "max_glyphs": 7,
+    "width": 70,
+    "source": "AUTOMED",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/fddd8d73",
+    "text": ", Tool",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": ", Tool",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/fdffd8d1",
+    "text": "Press Spare Club again to receive a free Club 1",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Press Spare Club again to receive a free Club 1",
+    "contexts": [
+      "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ff416c3d",
+    "text": "Press twice: put the effect in the slot.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Press twice: put the effect in the slot.",
+    "contexts": [
+      "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ffa08ffe",
+    "text": "Junk economy is off  Economy page ",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk economy is off (Economy page)",
+    "contexts": [
+      "mods/pe_economy/pe_catalog.c"
+    ]
+  }
+]

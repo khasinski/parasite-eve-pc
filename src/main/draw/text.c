@@ -1,4 +1,6 @@
 #include "common.h"
+#include "pe_hooks.h"
+#include "pe1/mod_text.h"
 #include "pe1/bounds_check.h"
 #include "pe1/draw_area.h"
 #include "pe1/draw_buffers.h"
@@ -531,11 +533,37 @@ void Draw_AllocTexturedQuad(int code) {
     AdvanceCursor(width + g_DrawGlyphAdvance);
 }
 
+/* The optional provider supplies UV only; native packet ownership, palette and dimming stay here. */
+static unsigned Draw_ExtendedGlyph(const u8 *text, int draw) {
+    if (!Pe_ExtendedGlyph(text, NULL)) return 0;
+    PeHookTextGlyph g = {0}; g.text = text; g.draw = draw;
+    if (!PE_HOOK(PE_HOOK_TEXT_GLYPH, &g)) return 0;
+    if (!draw) return g.advance;
+    u8 *old = g_DrawPacketCursor, *next = old + sizeof(RenderTexturedQuad);
+    if (next >= g_DrawPacketArenaBase + 0x4000) { Inv_BoundsCheckAssertStub(1); return g.bytes; }
+    g_DrawPacketCursor = next;
+    RenderTexturedQuad *p = (RenderTexturedQuad *)old;
+    p->color.word = g_DrawTextDimmed ? g_DrawColorShaded : g_DrawPrimColor;
+    p->tag.length = 9; p->color.bytes.code = 0x2C;
+    p->x0 = p->x2 = g_TextCursorX; p->x1 = p->x3 = g_TextCursorX + 12;
+    p->y0 = p->y1 = g_TextCursorY + 1; p->y2 = p->y3 = g_TextCursorY + 13;
+    p->u0 = p->u2 = g.u; p->u1 = p->u3 = g.u + 12;
+    p->v0 = p->v1 = g.v; p->v2 = p->v3 = g.v + 12;
+    p->clut = 0x89C; p->tpage = GetTPage(0, 0, 0x140, 0);
+    RenderNativeTag *ot = (RenderNativeTag *)g_DrawOrderingTableEntry;
+    p->tag.address = ot->address; ot->address = (uintptr_t)p;
+    AdvanceCursor(g.advance);
+    g_TextRenderMode = 0;
+    return g.bytes;
+}
+
 inline int Draw_MeasureTextWidth(u8 *text) {
     u8 *cursor = text;
     int width = 0;
 
     while (*cursor != 255) {
+        unsigned extended = Draw_ExtendedGlyph(cursor, 0);
+        if (extended) { width += extended; cursor += 4; g_TextRenderMode = 0; continue; }
         int glyph = DecodeGlyph(*cursor++);
         if (glyph >= 0) {
             int narrow = 0;
@@ -552,7 +580,9 @@ void Draw_PrintRawText(u8 *text) {
     if (text) {
         PushCursor();
         while (*text != 255) {
-            Draw_AllocTexturedQuad(*text++);
+            unsigned extended = Draw_ExtendedGlyph(text, 1);
+            if (extended) text += extended;
+            else Draw_AllocTexturedQuad(*text++);
         }
         PopCursor();
     }
@@ -563,7 +593,9 @@ static inline void PrintTextHere(u8 *text) {
     if (text) {
         SaveCursor(g_TextCursorX, g_TextCursorY);
         while (*text != 255) {
-            Draw_AllocTexturedQuad(*text++);
+            unsigned extended = Draw_ExtendedGlyph(text, 1);
+            if (extended) text += extended;
+            else Draw_AllocTexturedQuad(*text++);
         }
         PopCursor();
     }
@@ -589,7 +621,9 @@ void Draw_PrintTextById(unsigned int textId) {
     if (text) {
         PushCursor();
         while (*text != 255) {
-            Draw_AllocTexturedQuad(*text++);
+            unsigned extended = Draw_ExtendedGlyph(text, 1);
+            if (extended) text += extended;
+            else Draw_AllocTexturedQuad(*text++);
         }
         PopCursor();
     }
@@ -609,6 +643,8 @@ void Draw_PrintTextWrapped(u8 *text, int width) {
         while (used < width) {
             int code, glyph, narrow;
             if (*text == 0xFF) break;
+            unsigned extended = Draw_ExtendedGlyph(text, 1);
+            if (extended) { text += extended; used += 12; continue; }
             Draw_AllocTexturedQuad(*text);
             code = *text++;
             glyph = (u8)code;
@@ -880,7 +916,9 @@ static inline void PrintSign(u8 *text)
     if (text) {
         PushCursor();
         while (*text != 255) {
-            Draw_AllocTexturedQuad(*text++);
+            unsigned extended = Draw_ExtendedGlyph(text, 1);
+            if (extended) text += extended;
+            else Draw_AllocTexturedQuad(*text++);
         }
         PopCursor();
     }

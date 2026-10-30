@@ -4,6 +4,7 @@
  * Native table lookups supply its name/description to every menu printer. */
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_panacea.h"
 #include "pe1/game_state.h"
@@ -28,8 +29,8 @@ static int pe_panacea_text(void *ctx, void *user) {
     PeHookTextLookup *text = ctx;
     (void)user;
     if (g_pe_panacea && pe_game_loaded() && text->index == ITEM_ITEM25 - 1) {
-        if (text->table == 8) *text->text = s_name;
-        if (text->table == 12) *text->text = s_description;
+        if (text->table == 8) { pe_tr_ascii(s_name,sizeof s_name,"Panacea"); *text->text = s_name; }
+        if (text->table == 12) { pe_tr_ascii(s_description,sizeof s_description,"Restores 400 HP and Cures All Status"); *text->text = s_description; }
     }
     return 0;
 }

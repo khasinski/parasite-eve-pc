@@ -1,0 +1,1224 @@
+[
+  {
+    "key": "mod/ui/0011e794",
+    "text": "Frost Bullets",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Frost Bullets",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/040c0658",
+    "text": "Heal3",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Heal3",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/050c07eb",
+    "text": "Heal2",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Heal2",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/060c097e",
+    "text": "Heal1",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Heal1",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/0b859bb3",
+    "text": "Choose which PE powers cost half a turn bar.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Choose which PE powers cost half a turn bar.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/0bbd7508",
+    "text": "How gun and armor mods behave in battle.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "How gun and armor mods behave in battle.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/0db01eba",
+    "text": "PE Burden Down",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "PE Burden Down",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/0dc6b4aa",
+    "text": "Off",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Off",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/12b5a714",
+    "text": "Aya's outfits, bought once with Junk.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Aya's outfits, bought once with Junk.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/15d00057",
+    "source": "(off)",
+    "text": " off ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/196a8679",
+    "text": "Mod Effects",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mod Effects",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/1b6aa0f4",
+    "text": "Burst Spray",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Burst Spray",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1bc25380",
+    "text": "Browse pocketed keys and story items.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Browse pocketed keys and story items.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1ee61893",
+    "text": "Steal on Attack",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Steal on Attack",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2588d04b",
+    "text": "Bag +1",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bag +1",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2688d1de",
+    "text": "Bag +2",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bag +2",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2863e04a",
+    "source": "Quick powers",
+    "text": "Quick powers",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/2888d504",
+    "text": "Bag +4",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bag +4",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/28ccd13a",
+    "text": "Random Fire",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Random Fire",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2a610338",
+    "text": "Debug",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Debug",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/2efa3951",
+    "source": "Smoke Grenades",
+    "text": "Smoke Grenades",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/2f0e2d97",
+    "text": "Always run and how fast Aya moves.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Always run and how fast Aya moves.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/32bf61bc",
+    "text": "Open this page.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Open this page.",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/33411619",
+    "source": "Mod effects",
+    "text": "Mod effects",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/388e3a2a",
+    "text": "Quick Powers",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Quick Powers",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/3b1e707e",
+    "text": "Game text",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Game text",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/3df96fcd",
+    "text": "2 Commands",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "2 Commands",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/40ef67bf",
+    "source": "  (off)",
+    "text": "   off ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/44588981",
+    "text": "Resist Poison",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Resist Poison",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/45887ef3",
+    "text": "Attack Down",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Attack Down",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4773e11d",
+    "text": "In use",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "In use",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/4fe1bd2a",
+    "text": "Combine",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Combine",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/52daa997",
+    "text": "Economy",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Economy",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/555a5bbb",
+    "text": "Counterattack",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Counterattack",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/555d0867",
+    "text": "Bestiary and Wardrobe, kept across every game.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bestiary and Wardrobe, kept across every game.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/571ec55b",
+    "text": "Resist Confusion",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Resist Confusion",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5862301a",
+    "text": "Key-item pocket, remembered bag sorting and inventory counters.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Key-item pocket, remembered bag sorting and inventory counters.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5877c29e",
+    "text": "Resist Stiffness",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Resist Stiffness",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5a0cbe53",
+    "text": "Prices, unlock-all and test gear.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Prices, unlock-all and test gear.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5d4e86f0",
+    "text": "Mods",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Mods",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/5e503a1b",
+    "text": "Enter open",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Enter open",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/60e47df0",
+    "text": "On",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "On",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/6199dfa2",
+    "text": "Heat Bullets",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Heat Bullets",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/649603d7",
+    "text": "Loot",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Loot",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/65715141",
+    "text": "Combat",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Combat",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/65bf9b2c",
+    "text": "Damage rules, gun mods and Parasite Energy.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Damage rules, gun mods and Parasite Energy.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6631fdf4",
+    "source": "Parasite Energy",
+    "text": "Parasite Energy",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/6661cc9e",
+    "text": "Quickdraw",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Quickdraw",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/66cfa8b1",
+    "text": "Collection",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Collection",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/6786f622",
+    "text": "Attack All",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Attack All",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6cfba150",
+    "text": "Enter run",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Enter run",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/6d148508",
+    "text": "Scan",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Scan",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/705bff4a",
+    "text": "Install unlocked effects on your equipped gun or armor.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Install unlocked effects on your equipped gun or armor.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/71846444",
+    "text": "Buy dismantled gear back.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Buy dismantled gear back.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/73cf16e3",
+    "text": "Rate of Fire 5",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rate of Fire 5",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/75cf1a09",
+    "text": "Rate of Fire 7",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rate of Fire 7",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/78cf1ec2",
+    "text": "Rate of Fire 2",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rate of Fire 2",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/794e5504",
+    "source": "Loot tuning",
+    "text": "Loot tuning",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/79cf2055",
+    "text": "Rate of Fire 3",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rate of Fire 3",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/7aee0492",
+    "text": "Attack Up",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Attack Up",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/7d9aac45",
+    "text": "EnergyShot",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "EnergyShot",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/825f7509",
+    "text": "Esc back",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Esc back",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/839acfe6",
+    "text": "Esc close",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Esc close",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/86f53cd7",
+    "text": "Play with the game's text from a language pack.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Play with the game's text from a language pack.",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/8922a21e",
+    "source": "Owned",
+    "text": "Owned",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/8d57e66a",
+    "text": "Run",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Run",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/90458a20",
+    "source": "(none)",
+    "text": " none ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/909ceeb4",
+    "text": "Slower Active Time",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Slower Active Time",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9178a0fa",
+    "text": "Press Enter",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Press Enter",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/9235081a",
+    "text": "Preraise",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Preraise",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9456e431",
+    "source": "Sure Escape from Battle",
+    "text": "Sure Escape from Battle",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "pe_smoke.c"
+    ]
+  },
+  {
+    "key": "mod/ui/950dcfd8",
+    "text": "Key Items",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Key Items",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/96f770bd",
+    "text": "Detox",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Detox",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9a73db9b",
+    "text": "Language",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Language",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/9a7d1621",
+    "text": "Acid Bullets",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Acid Bullets",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9d1ea633",
+    "text": "Untranslated text stays as the game has it.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Untranslated text stays as the game has it.",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/a1d2600d",
+    "text": "Junk amounts, rare drop chances, debug Junk.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk amounts, rare drop chances, debug Junk.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a499f21e",
+    "text": "Confuse",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Confuse",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a5a9743f",
+    "text": "Auto Cure",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Auto Cure",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a60f1125",
+    "source": "The key item pocket is empty",
+    "text": "The key item pocket is empty",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/a944a5b7",
+    "text": "Cyanide Bullets",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Cyanide Bullets",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a9b62958",
+    "text": "FullRecover",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "FullRecover",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/aa614b1d",
+    "text": "Language packs",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Language packs",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/ac63fa43",
+    "text": "Left/Right change",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Left/Right change",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/ad77a422",
+    "text": "Up/Down select   %s%s%s   F1 close",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Up/Down select   %s%s%s   F1 close",
+    "contexts": [
+      "host display"
+    ],
+    "format": "Up/Down select   %s%s%s   F1 close"
+  },
+  {
+    "key": "mod/ui/b8cb915f",
+    "source": "Manage mods",
+    "text": "Manage mods",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/ba0ad7cd",
+    "text": "Rate of Fire 10",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rate of Fire 10",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/bb30fc7d",
+    "text": "Reset Bestiary and Wardrobe unlocks.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Reset Bestiary and Wardrobe unlocks.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c05e010e",
+    "text": "PE Balance",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "PE Balance",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/c098848a",
+    "source": "Combine items",
+    "text": "Combine items",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/c1ff5d87",
+    "text": "Combine carried medicines before a battle.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Combine carried medicines before a battle.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c40a1440",
+    "text": "Barrier",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Barrier",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c7c3250a",
+    "text": "GeneHeal",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "GeneHeal",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c8145bfc",
+    "text": "Nothing here yet.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Nothing here yet.",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/c8515ca4",
+    "text": "Max HP Up",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Max HP Up",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c8d2dcdf",
+    "text": "Inventory",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Inventory",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/d11b8007",
+    "text": "Less Stolen",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Less Stolen",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d1571f8e",
+    "text": "Empty",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Empty",
+    "contexts": [
+      "mods/host/pe_game_facts.c",
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d30fcdc9",
+    "text": "Medic",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Medic",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d37a72c6",
+    "text": "Tuning and test tools. Changes the balance.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Tuning and test tools. Changes the balance.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d437d1fc",
+    "text": "3 Commands",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "3 Commands",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/dc5e45c5",
+    "text": "Critical Up",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Critical Up",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/dd2f6010",
+    "text": "Haste",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Haste",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/dd444f02",
+    "text": "Auto Medicine",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Auto Medicine",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/dec0e51a",
+    "text": "Resist Darkness",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Resist Darkness",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/df128b3e",
+    "text": "Heals and Parasite Energy costs.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Heals and Parasite Energy costs.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e0c5265f",
+    "source": "Worn",
+    "text": "Worn",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/e1f6ee7f",
+    "text": "Tranquilizer",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Tranquilizer",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e27f8f78",
+    "text": "Movement",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Movement",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/e4a16b3e",
+    "text": "Junk, difficulty, and Wayne's Workshop services.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk, difficulty, and Wayne's Workshop services.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e7a48a0f",
+    "text": "Buy supplies and economy effects with Junk.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Buy supplies and economy effects with Junk.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e7ecf837",
+    "text": "Steal, half attack",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Steal, half attack",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/eb20faab",
+    "source": "Junk",
+    "text": "Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/ecbb26d1",
+    "text": "Liberate",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Liberate",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ed067f01",
+    "source": "No key items",
+    "text": "No key items",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/edc18ed8",
+    "text": "Slow",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Slow",
+    "contexts": [
+      "mods/host/pe_game_facts.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ef525e38",
+    "source": "Key items",
+    "text": "Key items",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/f25d816e",
+    "text": "Break down spare gear for Junk and new effects.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Break down spare gear for Junk and new effects.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f2a8ec59",
+    "text": "All mods",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "All mods",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/f53a44eb",
+    "text": "GAME PAUSED",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "GAME PAUSED",
+    "contexts": [
+      "host display"
+    ]
+  },
+  {
+    "key": "mod/ui/f7f6154e",
+    "text": "Buy an escape item for ordinary battles.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Buy an escape item for ordinary battles.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ffc394ac",
+    "text": "Creatures you've met: weaknesses and loot.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Creatures you've met: weaknesses and loot.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  }
+]

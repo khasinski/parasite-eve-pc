@@ -15,6 +15,7 @@
 #include "pe_catalog.h"
 #include "pe_economy.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 
@@ -53,8 +54,8 @@ static const char *pe_target_name(unsigned i) {
     const ItemDataRecord *rec;
     if (i > 1) return "";
     rec = pe_cat_record((int)i);
-    snprintf(s_target_names[i], sizeof s_target_names[0], "%s: %s", i ? "ARMOR" : "GUN",
-             rec ? pe_cat_item_name(rec->itemId) : "NONE EQUIPPED");
+    snprintf(s_target_names[i], sizeof s_target_names[0], "%s: %s", i ? pe_l10n_ui("ARMOR") : pe_l10n_ui("GUN"),
+             rec ? pe_l10n_ui(pe_cat_item_name(rec->itemId)) : pe_l10n_ui("NONE EQUIPPED"));
     return s_target_names[i];
 }
 
@@ -69,8 +70,8 @@ static const char *pe_grid_name(unsigned i) {
     const int unlocked = pe_cat_unlocked(s_target, e), seen = !unlocked && pe_game_loaded() && pe_seen(s_target, e);
     if (!e) return "";
     if (!unlocked && !seen) return "?";
-    snprintf(s_grid_label, sizeof s_grid_label, "%s%s%s%s", pe_cat_effect_short(s_target, e), seen ? " (locked)" : "",
-             pe_cat_needs_tool(s_target, e) ? " +TOOL" : "", pe_target_has(e) ? " *" : "");
+    snprintf(s_grid_label, sizeof s_grid_label, "%s%s%s%s", pe_l10n_ui(pe_cat_effect_short(s_target, e)), seen ? pe_l10n_ui(" (locked)") : "",
+             pe_cat_needs_tool(s_target, e) ? pe_l10n_ui(" +TOOL") : "", pe_target_has(e) ? " *" : "");
     return s_grid_label;
 }
 
@@ -94,7 +95,7 @@ static unsigned pe_slot_count(void) {
     const int n = rec ? pe_cat_mod_count(rec) : 0;
     int m;
     for (m = 0; m < n; ++m)
-        snprintf(s_slot_names[m], sizeof s_slot_names[0], "%d %s", m + 1, pe_cat_effect_name(s_target, rec->tailData[m] & 0x1F));
+        snprintf(s_slot_names[m], sizeof s_slot_names[0], "%d %s", m + 1, pe_l10n_ui(pe_cat_effect_name(s_target, rec->tailData[m] & 0x1F)));
     return n > 0 ? (unsigned)n : 1;
 }
 
@@ -102,7 +103,7 @@ static const char *pe_slot_name(unsigned i) {
     const ItemDataRecord *rec = pe_target();
     const int n = rec ? pe_cat_mod_count(rec) : 0;
     if (!rec) return s_target == PE_GUN ? "NO GUN EQUIPPED" : "NO ARMOR EQUIPPED";
-    if (n <= 0) return "NO MOD SLOTS";
+    if (n <= 0) return pe_l10n_ui("NO MOD SLOTS");
     return i < (unsigned)n ? s_slot_names[i] : "";
 }
 
@@ -110,10 +111,10 @@ static void pe_price_text(char *out, unsigned size) {
     const int e = pe_grid_effect();
     if (!e) { out[0] = '\0'; return; }
     if (pe_cat_unlocked(s_target, e))
-        snprintf(out, size, "%s %d%s", pe_cat_effect_name(s_target, e), pe_cat_tier_price(pe_cat_effect_tier(s_target, e)),
-                 pe_cat_needs_tool(s_target, e) ? "+TOOL" : "");
-    else if (pe_game_loaded() && pe_seen(s_target, e)) snprintf(out, size, "%s: DISMANTLE", pe_cat_effect_name(s_target, e));
-    else snprintf(out, size, "NOT FOUND YET");
+        snprintf(out, size, "%s %d%s", pe_l10n_ui(pe_cat_effect_name(s_target, e)), pe_cat_tier_price(pe_cat_effect_tier(s_target, e)),
+                 pe_cat_needs_tool(s_target, e) ? pe_l10n_ui("+TOOL") : "");
+    else if (pe_game_loaded() && pe_seen(s_target, e)) snprintf(out, size, pe_l10n_ui("%s: DISMANTLE"), pe_l10n_ui(pe_cat_effect_name(s_target, e)));
+    else snprintf(out, size, "%s", pe_l10n_ui("NOT FOUND YET"));
 }
 
 static void pe_replaces_text(char *out, unsigned size) {
@@ -122,11 +123,11 @@ static void pe_replaces_text(char *out, unsigned size) {
     const int n = rec ? pe_cat_mod_count(rec) : 0, e = pe_grid_effect();
     int k;
     if (!rec || n <= 0 || s_slot_choice < 0 || s_slot_choice >= n) { snprintf(out, size, "-"); return; }
-    if ((rec->tailData[s_slot_choice] & 0x1F) == e) { snprintf(out, size, "ALREADY THERE"); return; }
+    if ((rec->tailData[s_slot_choice] & 0x1F) == e) { snprintf(out, size, "%s", pe_l10n_ui("ALREADY THERE")); return; }
     k = pe_cat_replaces(s_target, s_slot_choice, e, taken, 2);
-    if (k == 2) snprintf(out, size, "%s, %s", pe_cat_effect_name(s_target, taken[0]), pe_cat_effect_name(s_target, taken[1]));
-    else if (k == 1) snprintf(out, size, "%s", pe_cat_effect_name(s_target, taken[0]));
-    else snprintf(out, size, "NOTHING (EMPTY SLOT)");
+    if (k == 2) snprintf(out, size, "%s, %s", pe_l10n_ui(pe_cat_effect_name(s_target, taken[0])), pe_l10n_ui(pe_cat_effect_name(s_target, taken[1])));
+    else if (k == 1) snprintf(out, size, "%s", pe_l10n_ui(pe_cat_effect_name(s_target, taken[0])));
+    else snprintf(out, size, "%s", pe_l10n_ui("NOTHING (EMPTY SLOT)"));
 }
 
 static void pe_junk_text(char *out, unsigned size) { snprintf(out, size, "%u", (unsigned)pe_loot_junk()); }
@@ -136,14 +137,14 @@ static void pe_gives_text(char *out, unsigned size) {
     int fresh = 0;
     const uint32_t pays = pe_dismantle_selected_payout(&fresh);
     if (!pays) snprintf(out, size, "-");
-    else snprintf(out, size, "%u Junk, %d new effect%s", (unsigned)pays, fresh, fresh == 1 ? "" : "s");
+    else snprintf(out, size, pe_l10n_ui("%u Junk, %d new effect%s"), (unsigned)pays, fresh, fresh == 1 ? "" : "s");
 }
 
 static void pe_cost_text(char *out, unsigned size) {
     const int i = *pe_rebuild_choice();
     const uint32_t cost = i >= 0 && i < pe_rebuild_count() ? pe_rebuild_price_index(i) : 0;
     if (!cost) snprintf(out, size, "-");
-    else snprintf(out, size, "%u Junk", (unsigned)cost);
+    else snprintf(out, size, pe_l10n_ui("%u Junk"), (unsigned)cost);
 }
 
 /* ---- actions ---- */
@@ -155,18 +156,18 @@ static void pe_install(void) {
     const ItemDataRecord *rec = pe_target();
     switch (pe_cat_install(s_target, s_slot_choice, e, 0)) {
     case PE_CAT_OK:
-        snprintf(msg, sizeof msg, "%s: installed %s (-%u Junk%s)%s", pe_cat_item_name(rec->itemId),
-                 pe_cat_effect_name(s_target, e), (unsigned)price, tier == 2 ? ", Tool" : "",
-                 pe_cat_is_bag_mod(s_target, e) ? ". Re-equip to grow the bag" : "");
+        snprintf(msg, sizeof msg, pe_l10n_ui("%s: installed %s (-%u Junk%s)%s"), pe_l10n_ui(pe_cat_item_name(rec->itemId)),
+                 pe_l10n_ui(pe_cat_effect_name(s_target, e)), (unsigned)price, tier == 2 ? pe_l10n_ui(", Tool") : "",
+                 pe_cat_is_bag_mod(s_target, e) ? pe_l10n_ui(". Re-equip to grow the bag") : "");
         break;
-    case PE_CAT_NO_ITEM: snprintf(msg, sizeof msg, s_target == PE_GUN ? "Equip a gun first" : "Equip armor first"); break;
-    case PE_CAT_NO_SLOTS: snprintf(msg, sizeof msg, "This item has no mod slots"); break;
-    case PE_CAT_LOCKED: snprintf(msg, sizeof msg, "Locked: dismantle an item with this effect"); break;
-    case PE_CAT_ALREADY: snprintf(msg, sizeof msg, "Already installed there"); break;
-    case PE_CAT_BAG: snprintf(msg, sizeof msg, "Bag mods can't be replaced here"); break;
-    case PE_CAT_JUNK: snprintf(msg, sizeof msg, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_loot_junk()); break;
-    case PE_CAT_TOOL: snprintf(msg, sizeof msg, "Needs a Tool (or a Tool Kit)"); break;
-    default: snprintf(msg, sizeof msg, "Can't install now"); break;
+    case PE_CAT_NO_ITEM: snprintf(msg, sizeof msg, "%s", s_target == PE_GUN ? pe_l10n_ui("Equip a gun first") : pe_l10n_ui("Equip armor first")); break;
+    case PE_CAT_NO_SLOTS: snprintf(msg, sizeof msg, "%s", pe_l10n_ui("This item has no mod slots")); break;
+    case PE_CAT_LOCKED: snprintf(msg, sizeof msg, "%s", pe_l10n_ui("Locked: dismantle an item with this effect")); break;
+    case PE_CAT_ALREADY: snprintf(msg, sizeof msg, "%s", pe_l10n_ui("Already installed there")); break;
+    case PE_CAT_BAG: snprintf(msg, sizeof msg, "%s", pe_l10n_ui("Bag mods can't be replaced here")); break;
+    case PE_CAT_JUNK: snprintf(msg, sizeof msg, pe_l10n_ui("Need %u Junk (have %u)"), (unsigned)price, (unsigned)pe_loot_junk()); break;
+    case PE_CAT_TOOL: snprintf(msg, sizeof msg, "%s", pe_l10n_ui("Needs a Tool (or a Tool Kit)")); break;
+    default: snprintf(msg, sizeof msg, "%s", pe_l10n_ui("Can't install now")); break;
     }
     pe_cat_say(msg);
 }
@@ -180,8 +181,8 @@ static void pe_install_press(void) {
     if (s_grid_armed != s_grid) {
         const int tier = pe_cat_effect_tier(s_target, e);
         s_grid_armed = s_grid;
-        snprintf(msg, sizeof msg, "Slot %d, %d Junk%s: press again", s_slot_choice + 1, pe_cat_tier_price(tier),
-                 tier == 2 ? " + Tool" : "");
+        snprintf(msg, sizeof msg, pe_l10n_ui("Slot %d, %d Junk%s: press again"), s_slot_choice + 1, pe_cat_tier_price(tier),
+                 tier == 2 ? pe_l10n_ui(" + Tool") : "");
         pe_cat_say(msg);
         return;
     }
@@ -197,10 +198,10 @@ static void pe_remove(void) {
     rec = pe_target();
     e = rec && s_slot_choice >= 0 && s_slot_choice < pe_cat_mod_count(rec) ? rec->tailData[s_slot_choice] & 0x1F : 0;
     switch (pe_cat_remove(s_target, s_slot_choice, 0)) {
-    case PE_CAT_OK: snprintf(msg, sizeof msg, "%s: removed %s (stays unlocked)", pe_cat_item_name(rec->itemId), pe_cat_effect_name(s_target, e)); break;
-    case PE_CAT_NO_ITEM: snprintf(msg, sizeof msg, s_target == PE_GUN ? "Equip a gun first" : "Equip armor first"); break;
-    case PE_CAT_EMPTY: snprintf(msg, sizeof msg, "That slot is empty"); break;
-    case PE_CAT_BAG: snprintf(msg, sizeof msg, "Bag mods can't be removed here"); break;
+    case PE_CAT_OK: snprintf(msg, sizeof msg, pe_l10n_ui("%s: removed %s (stays unlocked)"), pe_l10n_ui(pe_cat_item_name(rec->itemId)), pe_l10n_ui(pe_cat_effect_name(s_target, e))); break;
+    case PE_CAT_NO_ITEM: snprintf(msg, sizeof msg, "%s", s_target == PE_GUN ? pe_l10n_ui("Equip a gun first") : pe_l10n_ui("Equip armor first")); break;
+    case PE_CAT_EMPTY: snprintf(msg, sizeof msg, "%s", pe_l10n_ui("That slot is empty")); break;
+    case PE_CAT_BAG: snprintf(msg, sizeof msg, "%s", pe_l10n_ui("Bag mods can't be removed here")); break;
     default: return;
     }
     pe_cat_say(msg);

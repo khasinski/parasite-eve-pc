@@ -31,6 +31,7 @@
 #include "pe_economy.h"
 #include "pe_game.h"
 #include "pe_gametext.h"
+#include "pe_translate.h"
 #include "pe_mod_host.h"
 #include "pe_requisition.h"
 #include "pe1/game_timers.h"
@@ -61,6 +62,7 @@ static struct {
     TextboxEntry *entry;          /* the box we drive */
     u8 *orig_msg;                 /* Wayne's own message */
     u16 orig_y, orig_h, orig_w;
+    int junk_option;              /* identified from the original page, before translation */
     int wayne_count;              /* options in Wayne's own menu */
     int page;
     char note[48];                /* title line after an action */
@@ -89,22 +91,71 @@ static int pe_contains(const u8 *b, unsigned n, const char *ascii) {
 
 const u8 *pe_field_wayne_text(void);   /* pe_field_wayne.c: Warner's version of his menu */
 
+/* Wayne's menu is recognised by its English page ("Discard junk", "Hold equipment"). A language
+ * pack (pe_lang) shows another text for that page, so PE_HOOK_TEXT_PAGE notes the page while it
+ * is still the game's (before pe_lang) and the text its box will draw (after every handler). */
+static int s_page_is_wayne;
+static int s_page_junk_option, s_wayne_junk_option = -1;
+static const u8 *s_wayne_page;   /* what a box shows for Wayne's menu page, in whatever language */
+
+static int pe_english_wayne(const u8 *msg) {
+    unsigned n = 0;
+    while (n < PE_GAMETEXT_MAX - 1 && msg[n] != G_END) ++n;
+    return pe_contains(msg, n, "Discard junk") || pe_contains(msg, n, "Hold equipment");
+}
+
+/* Find the hand-in option by its original text. The translated label is never used
+ * as an action identifier, so Junk totals survive any wording in a language pack. */
+static int pe_junk_option(const u8 *msg) {
+    unsigned i = 0, start;
+    int row = 0;
+    while (i + 2 < PE_GAMETEXT_MAX && msg[i] != G_END && !(msg[i] == G_CODE && msg[i + 1] == G_CHOICE)) ++i;
+    if (i + 2 >= PE_GAMETEXT_MAX || msg[i] == G_END) return -1;
+    i += 3;
+    for (start = i; i < PE_GAMETEXT_MAX; ++i) {
+        if (msg[i] != G_NEWLINE && msg[i] != G_END) continue;
+        if (pe_contains(msg + start, i - start, "Discard junk")) return row;
+        if (msg[i] == G_END) break;
+        ++row; start = i + 1;
+    }
+    return -1;
+}
+
+static int pe_on_page_game(void *ctx, void *user) {
+    PeHookTextPage *page = ctx;
+    (void)user;
+    s_page_is_wayne = page->message && *page->message && pe_english_wayne(*page->message);
+    s_page_junk_option = s_page_is_wayne ? pe_junk_option(*page->message) : -1;
+    return 0;
+}
+
+static int pe_on_page_drawn(void *ctx, void *user) {
+    PeHookTextPage *page = ctx;
+    (void)user;
+    if (page->message && s_page_is_wayne) { s_wayne_page = *page->message; s_wayne_junk_option = s_page_junk_option; }
+    else if (page->message && *page->message == s_wayne_page) s_wayne_page = NULL;   /* reused for another page */
+    s_page_is_wayne = 0;
+    return 0;
+}
+
 /* Is `msg` Wayne's menu (or Warner's)? Copies it into s_orig if so. */
 static int pe_is_wayne_menu(const u8 *msg) {
     unsigned n = 0, choice_at = PE_GAMETEXT_MAX;
     int count;
-    const int warner = msg && msg == pe_field_wayne_text();
+    const int known = msg && (msg == pe_field_wayne_text() || msg == s_wayne_page);
     if (!msg || msg == s_buf) return 0;
     while (n < PE_GAMETEXT_MAX - 1 && msg[n] != G_END) {
         if (n >= 2 && msg[n - 2] == G_CODE && msg[n - 1] == G_CHOICE && choice_at == PE_GAMETEXT_MAX) choice_at = n;
         ++n;
     }
     if (choice_at == PE_GAMETEXT_MAX || n >= PE_GAMETEXT_MAX - 1) return 0;
-    if (!warner && !pe_contains(msg, n, "Discard junk") && !pe_contains(msg, n, "Hold equipment")) return 0;
+    if (!known && !pe_english_wayne(msg)) return 0;
     count = msg[choice_at] & 7;
     if (count < 2 || count + 1 > PE_CHOICE_MAX) return 0;    /* room for Workshop */
     memcpy(s_orig, msg, n + 1);
     s_orig_len = n;
+    s_ui.junk_option = pe_junk_option(msg);
+    if (s_ui.junk_option < 0 && msg == s_wayne_page) s_ui.junk_option = s_wayne_junk_option;
     s_ui.wayne_count = count;
     return 1;
 }
@@ -121,19 +172,19 @@ static void pe_build_wayne(PeText *t) {
     for (start = i; i <= s_orig_len; ++i) {
         if (i < s_orig_len && s_orig[i] != G_NEWLINE) continue;
         if (option == s_ui.wayne_count - 1) {           /* his last option is Cancel */
-            if (!pe_compact()) { pe_t_str(t, "    Mod Permit Card"); pe_t_byte(t, G_NEWLINE); }
-            pe_t_str(t, "    Workshop");
+            if (!pe_compact()) { pe_t_ui(t, "    "); pe_t_tr(t, "mod/pe_economy/wayne/permit", "Mod Permit Card", 24); pe_t_byte(t, G_NEWLINE); }
+            pe_t_ui(t, "    "); pe_t_tr(t, "mod/pe_economy/wayne/workshop", "Workshop", 24);
             pe_t_byte(t, G_NEWLINE);
         }
         for (k = start; k < i; ++k) pe_t_byte(t, s_orig[k]);
-        if (pe_contains(s_orig + start, i - start, "Discard junk")) {
-            pe_t_str(t, " ");
+        if (option == s_ui.junk_option) {
+            pe_t_ui(t, " ");
             pe_t_num(t, (unsigned)pe_loot_junk());
-            pe_t_str(t, ", ");
+            pe_t_ui(t, ", ");
             pe_t_num(t, pe_wayne_count());
-            pe_t_str(t, "/300");
-            if (pe_loot_handin_blocked()) pe_t_str(t, " bag full");
-            else if (pe_loot_wayne_waiting()) pe_t_str(t, " Day 4");
+            pe_t_ui(t, "/300");
+            if (pe_loot_handin_blocked()) pe_t_tr(t, "mod/pe_economy/wayne/bag-full", " bag full", 24);
+            else if (pe_loot_wayne_waiting()) pe_t_tr(t, "mod/pe_economy/wayne/day-four", " Day 4", 24);
         }
         if (i < s_orig_len) pe_t_byte(t, G_NEWLINE);
         ++option;
@@ -155,14 +206,14 @@ static int pe_list_options(int count, int *items_out) {
 }
 
 static void pe_list_tail(PeText *t, int count, int items) {
-    if (pe_pages(count) > 1) { pe_t_option(t, items == 0); pe_t_str(t, "Next page"); }
+    if (pe_pages(count) > 1) { pe_t_option(t, items == 0); pe_t_tr(t, "mod/pe_economy/wayne/next-page", "Next page", 24); }
     pe_t_option(t, items == 0 && pe_pages(count) == 1);
-    pe_t_str(t, "Back");
+    pe_t_tr(t, "mod/pe_economy/wayne/back", "Back", 24);
 }
 
-static void pe_title(PeText *t, const char *name) {
-    if (s_ui.note[0]) pe_t_str(t, s_ui.note);
-    else { pe_t_str(t, name); pe_t_str(t, "   Junk "); pe_t_num(t, (unsigned)pe_loot_junk()); }
+static void pe_title(PeText *t, const char *key, const char *name) {
+    if (s_ui.note[0]) pe_t_ui(t, s_ui.note);
+    else { pe_t_tr(t, key, name, 32); pe_t_tr(t, "mod/pe_economy/wayne/junk", "   Junk ", 24); pe_t_num(t, (unsigned)pe_loot_junk()); }
     pe_t_byte(t, G_NEWLINE);
 }
 
@@ -170,6 +221,7 @@ static void pe_title(PeText *t, const char *name) {
 
 static void pe_build_root(PeText *t) {
     static const char *const names[] = { "Requisition", "Rebuild", "Wardrobe", "Mod Permit Card", "Back" };
+    static const char *const keys[] = {"mod/pe_economy/wayne/requisition", "mod/pe_economy/wayne/rebuild", "mod/pe_economy/wayne/wardrobe", "mod/pe_economy/wayne/permit", "mod/pe_economy/wayne/back"};
     int i;
     s_ui.root_count = 0;
     s_ui.root[s_ui.root_count++] = ROOT_REQ;
@@ -177,9 +229,9 @@ static void pe_build_root(PeText *t) {
     if (pe_wardrobe()) s_ui.root[s_ui.root_count++] = ROOT_WARD;
     if (pe_compact()) s_ui.root[s_ui.root_count++] = ROOT_PERMIT;
     s_ui.root[s_ui.root_count++] = ROOT_BACK;
-    pe_title(t, "Workshop");
+    pe_title(t, "mod/pe_economy/wayne/workshop", "Workshop");
     pe_t_choice(t, s_ui.root_count);
-    for (i = 0; i < s_ui.root_count; ++i) { pe_t_option(t, i == 0); pe_t_str(t, names[s_ui.root[i]]); }
+    for (i = 0; i < s_ui.root_count; ++i) { pe_t_option(t, i == 0); pe_t_tr(t, keys[s_ui.root[i]], names[s_ui.root[i]], 24); }
 }
 
 static int pe_root_row(int what) {
@@ -192,7 +244,8 @@ static void pe_build_list(PeText *t, int rebuild) {
     const int count = rebuild ? pe_rebuild_count() : pe_shop_count();
     int items, k;
     const int options = pe_list_options(count, &items);
-    pe_title(t, rebuild ? (count ? "Rebuild" : "Rebuild: nothing dismantled") : "Requisition");
+    pe_title(t, rebuild ? (count ? "mod/pe_economy/wayne/rebuild" : "mod/pe_economy/wayne/rebuild-empty") : "mod/pe_economy/wayne/requisition",
+             rebuild ? (count ? "Rebuild" : "Rebuild: nothing dismantled") : "Requisition");
     pe_t_choice(t, options);
     for (k = 0; k < items; ++k) {
         const int i = s_ui.page * PE_PAGE_SIZE + k;
@@ -201,14 +254,14 @@ static void pe_build_list(PeText *t, int rebuild) {
         pe_t_option(t, k == 0);
         if (dim) pe_t_red(t, 1);
         if (rebuild) pe_t_item(t, pe_rebuild_item(i));
-        else if (id >= 0xF000) pe_t_str(t, pe_shop_name(id));   /* an economy effect */
+        else if (id >= 0xF000) pe_t_ui(t, pe_l10n_ui(pe_shop_name(id)));   /* an economy effect */
         else pe_t_item(t, id);
         if (rebuild && pe_rebuild_bought_slots(i)) {            /* built up with Mod Permits */
-            pe_t_str(t, " +");
+            pe_t_ui(t, " +");
             pe_t_num(t, pe_rebuild_bought_slots(i));
-            pe_t_str(t, " slots");
+            pe_t_tr(t, "mod/pe_economy/wayne/slots", " slots", 24);
         }
-        pe_t_str(t, "  ");
+        pe_t_ui(t, "  ");
         pe_t_num(t, (unsigned)(rebuild ? pe_rebuild_price_index(i) : pe_shop_price(id)));
         if (dim) pe_t_red(t, 0);
     }
@@ -220,17 +273,17 @@ static void pe_build_ward(PeText *t) {
     const int count = w ? w->count() : 0;
     int items, k;
     const int options = pe_list_options(count, &items);
-    pe_title(t, "Wardrobe");
+    pe_title(t, "mod/pe_economy/wayne/wardrobe", "Wardrobe");
     pe_t_choice(t, options);
     for (k = 0; k < items; ++k) {
         const int i = s_ui.page * PE_PAGE_SIZE + k, state = w->state(i);
         const int dim = state == 0 && w->price(i) > pe_loot_junk();
         pe_t_option(t, k == 0);
         if (dim) pe_t_red(t, 1);
-        pe_t_str(t, w->name(i));
-        if (state == 2) pe_t_str(t, "  worn");
-        else if (state == 1) pe_t_str(t, "  owned");
-        else { pe_t_str(t, "  "); pe_t_num(t, w->price(i)); }
+        pe_t_ui(t, w->name(i));
+        if (state == 2) pe_t_tr(t, "mod/pe_economy/wayne/worn", "  worn", 24);
+        else if (state == 1) pe_t_tr(t, "mod/pe_economy/wayne/owned", "  owned", 24);
+        else { pe_t_ui(t, "  "); pe_t_num(t, w->price(i)); }
         if (dim) pe_t_red(t, 0);
     }
     pe_list_tail(t, count, items);
@@ -274,9 +327,9 @@ static int pe_at_max(const ItemDataRecord *rec) { return rec->tailCount >= pe_sl
 static void pe_build_permit_list(PeText *t) {
     int gear[PE_BAG_SLOTS], items, k;
     const int count = pe_gear_list(gear), options = pe_list_options(count, &items), none = pe_permits() == 0;
-    if (s_ui.note[0]) pe_t_str(t, s_ui.note);
-    else if (!count) pe_t_str(t, "Mod Permit: no guns or armor");
-    else { pe_t_str(t, "Mod Permit   have "); pe_t_num(t, pe_permits()); }
+    if (s_ui.note[0]) pe_t_ui(t, s_ui.note);
+    else if (!count) pe_t_tr(t, "mod/pe_economy/wayne/permit-empty", "Mod Permit: no guns or armor", 32);
+    else { pe_t_tr(t, "mod/pe_economy/wayne/permit-count", "Mod Permit   have ", 32); pe_t_num(t, pe_permits()); }
     pe_t_byte(t, G_NEWLINE);
     pe_t_choice(t, options);
     for (k = 0; k < items; ++k) {
@@ -285,9 +338,9 @@ static void pe_build_permit_list(PeText *t) {
         pe_t_option(t, k == 0);
         if (dim) pe_t_red(t, 1);
         pe_t_item(t, rec->itemId);
-        pe_t_str(t, "  ");
+        pe_t_ui(t, "  ");
         pe_t_num(t, rec->tailCount);
-        pe_t_str(t, "/");
+        pe_t_ui(t, "/");
         pe_t_num(t, pe_slot_max(rec));
         if (dim) pe_t_red(t, 0);
     }
@@ -296,16 +349,16 @@ static void pe_build_permit_list(PeText *t) {
 
 static void pe_build_permit_ask(PeText *t) {
     const ItemDataRecord *rec = pe_gear(s_ui.pick);
-    pe_t_str(t, "Add a slot to ");
+    pe_t_tr(t, "mod/pe_economy/wayne/add-slot", "Add a slot to ", 32);
     if (rec) pe_t_item(t, rec->itemId);
-    pe_t_str(t, "?");
+    pe_t_ui(t, "?");
     pe_t_byte(t, G_NEWLINE);
-    pe_t_str(t, "Uses 1 Mod Permit, you have ");
+    pe_t_tr(t, "mod/pe_economy/wayne/permit-use", "Uses 1 Mod Permit, you have ", 32);
     pe_t_num(t, pe_permits());
     pe_t_byte(t, G_NEWLINE);
     pe_t_choice(t, 2);
-    pe_t_option(t, 1); pe_t_str(t, "Yes");
-    pe_t_option(t, 0); pe_t_str(t, "No");
+    pe_t_option(t, 1); pe_t_tr(t, "mod/pe_economy/wayne/yes", "Yes", 24);
+    pe_t_option(t, 0); pe_t_tr(t, "mod/pe_economy/wayne/no", "No", 24);
 }
 
 /* ---- the box ---- */
@@ -479,8 +532,8 @@ static uint32_t pe_input(uint32_t pressed, int cursor) {
             if (cursor < items) {
                 const int slot = gear[s_ui.page * PE_PAGE_SIZE + cursor];
                 const ItemDataRecord *rec = pe_gear(slot);
-                if (!pe_permits()) { snprintf(s_ui.note, sizeof s_ui.note, "No Mod Permit"); pe_show(SCR_PERMIT, cursor); }
-                else if (!rec || pe_at_max(rec)) { snprintf(s_ui.note, sizeof s_ui.note, "That one has all its slots"); pe_show(SCR_PERMIT, cursor); }
+                if (!pe_permits()) { snprintf(s_ui.note, sizeof s_ui.note, "%s", pe_l10n_ui("No Mod Permit")); pe_show(SCR_PERMIT, cursor); }
+                else if (!rec || pe_at_max(rec)) { snprintf(s_ui.note, sizeof s_ui.note, "%s", pe_l10n_ui("That one has all its slots")); pe_show(SCR_PERMIT, cursor); }
                 else { s_ui.pick = slot; s_ui.note[0] = '\0'; pe_show(SCR_PERMIT_ASK, 1); }   /* on No */
             } else if (pe_pages(count) > 1 && cursor == items) {
                 s_ui.page = (s_ui.page + 1) % pe_pages(count);
@@ -506,7 +559,7 @@ static uint32_t pe_input(uint32_t pressed, int cursor) {
             if (cursor == 0 && rec && !pe_at_max(rec) && pe_take_permit()) {
                 rec->tailData[rec->tailCount] = 0;                 /* the new slot starts empty */
                 ++rec->tailCount;
-                snprintf(s_ui.note, sizeof s_ui.note, "Slot added, now %u", (unsigned)rec->tailCount);
+                snprintf(s_ui.note, sizeof s_ui.note, pe_l10n_ui("Slot added, now %u"), (unsigned)rec->tailCount);
                 pe_log("permit_slot", "item=0x%02X slots=%u permits_left=%u", rec->itemId, (unsigned)rec->tailCount, pe_permits());
             }
             pe_show(SCR_PERMIT, back);
@@ -558,11 +611,15 @@ static int pe_on_reset(void *ctx, void *user) {
     (void)ctx;
     (void)user;
     pe_reset();
+    s_wayne_page = NULL;          /* a new room's bank can load where the last one was */
     return 0;
 }
 
 void pe_wayne_menu_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_TEXTBOXES, pe_on_textboxes, NULL, PE_PRIORITY_NORMAL, mod_id);
+    /* around every other page handler (pe_lang's is EARLY): the game's page, then the drawn one */
+    pe_hook_add(PE_HOOK_TEXT_PAGE, pe_on_page_game, NULL, PE_PRIORITY_EARLY - 100, mod_id);
+    pe_hook_add(PE_HOOK_TEXT_PAGE, pe_on_page_drawn, NULL, PE_PRIORITY_LATE + 100, mod_id);
     pe_hook_add(PE_HOOK_SCENE_START, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
 }

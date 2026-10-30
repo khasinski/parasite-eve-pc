@@ -49,6 +49,8 @@ mods/
   pe_rebalance/        mod effects, Parasite Energy balance, half-bar turns / Quick powers, Combine
   pe_economy/          Junk and loot, Mod Catalog / Dismantle / Rebuild, Requisition, Wayne and Warner
   pe_collection/       Bestiary and Wardrobe registries, skins, Wardrobe menu (packs register here)
+  pe_lang/             language packs: the game's text from a .pelang pack, F1 > Language (not built
+                       by default; docs/LOCALIZATION.md, tools in localization/)
   pe_hello/            example mod (not built by default)
 ```
 

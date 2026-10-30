@@ -14,6 +14,7 @@
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_draw_list.h"
 #include "pe1/menu_sound.h"
@@ -36,8 +37,8 @@ static void pe_row(int row) {
     const PeCostume *c = pe_row_costume(row);
     char line[80];
     if (row > 0 && !c) return;
-    snprintf(line, sizeof line, "%s%s", c ? c->name : "Aya's own clothes", pe_wardrobe_worn() == c ? "   Worn" : "");
-    Draw_PrintRawText(pe_text_from_ascii(s_text, sizeof s_text, line));
+    snprintf(line, sizeof line, "%s%s", c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own clothes"), pe_wardrobe_worn() == c ? pe_l10n_ui("   Worn") : "");
+    Draw_PrintRawText(pe_tr_ascii(s_text, sizeof s_text, line));
 }
 
 static void pe_draw_list(MenuWidgetNode *node) { MenuWidget_DrawList(node, pe_row); }
@@ -54,7 +55,7 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
         const PeCostume *c = pe_row_costume(row);
         if ((row > 0 && !c) || pe_wardrobe_worn() == c) { Menu_PlayErrorSound(); return 1; }
         pe_wardrobe_wear_later(c);
-        snprintf(s_note, sizeof s_note, "%s when you close the menu", c ? "Wearing it" : "Back to her own clothes");
+        snprintf(s_note, sizeof s_note, "%s when you close the menu", c ? pe_l10n_ui("Wearing it") : pe_l10n_ui("Back to her own clothes"));
         Menu_PlayConfirmSound();
         return 1;
     }
@@ -71,9 +72,9 @@ static int pe_on_help_text(void *ctx, void *user) {
     row = MenuWidget_GridCellIndex(s_screen.list);
     c = pe_row_costume(row);
     if (s_note[0]) snprintf(line, sizeof line, "%s", s_note);
-    else if (c) snprintf(line, sizeof line, "%s   %s", c->name, c->group ? c->group : "");
-    else snprintf(line, sizeof line, "The clothes the story gives Aya");
-    *text = pe_text_from_ascii(s_text, sizeof s_text, line);
+    else if (c) snprintf(line, sizeof line, "%s   %s", pe_l10n_ui(c->name), c->group ? pe_l10n_ui(c->group) : "");
+    else snprintf(line, sizeof line, "%s", pe_l10n_ui("The clothes the story gives Aya"));
+    *text = pe_tr_ascii(s_text, sizeof s_text, line);
     return 0;
 }
 

@@ -20,6 +20,7 @@ int *Asset_LoadTimImage(TimFile *tim) {
     TimBlock *image;
     int *pixels;
 
+    PE_HOOK(PE_HOOK_TIM_UPLOAD, tim);
     clut = 0;
     if ((tim->flags & 8) != 0) {
         clut = &tim->first_block;
