@@ -1,7 +1,7 @@
 # Mod host and mods, built only with -DPE_MODS=ON. See mods/README.md.
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it.
-set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_collection CACHE STRING "Mods built into the game (folder names)")
+set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_collection pe_stacks CACHE STRING "Mods built into the game (folder names)")
 
 set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs

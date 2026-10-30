@@ -53,6 +53,11 @@ typedef enum PeHookId {
     PE_HOOK_FRAME_DRAWN, /* NULL: Draw_RenderFrame, the previous frame finished drawing (DrawSync)
                           * and not yet shown; its buffer is g_RenderDrawEnvArray[1 - g_ActiveDrawSlot] */
     PE_HOOK_NEW_GAME,    /* PeHookNewGame: a new game starts; the host has reset every save record */
+    PE_HOOK_ITEM_REMOVE, /* PeHookItemRemove: Inv_RemoveActiveListItem entry; replaceable (result = id) */
+    PE_HOOK_INVENTORY_REBUILD, /* NULL: Inv_RebuildSelectableMask entry, before the masks are rebuilt */
+    PE_HOOK_STORAGE_TRANSFER, /* PeHookStorageTransfer: Inv_RebuildWithSlotLimit, bag <-> storage
+                               * move; replaceable */
+    PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -166,6 +171,27 @@ typedef struct PeHookItemActions {
     int context;                  /* g_MenuItemActionContext: 0 consumables, 1 and 2 others */
     int list_id, slot;            /* g_MenuActiveItemList (0 = Aya's bag), g_MenuActiveItemSlot */
 } PeHookItemActions;
+
+/* Removing the item on slot `index` of the active list (g_InvItemPtr). A handler that keeps the
+ * slot (it took one copy off a stack) sets result to the item id it gave and returns nonzero. */
+typedef struct PeHookItemRemove {
+    int index;
+    int result;
+} PeHookItemRemove;
+
+/* Inv_RebuildWithSlotLimit's arguments: modes 0x33 (Aya's bag, by transfer-list index) and 0x34
+ * (the open storage list, g_InvActiveItemList). */
+typedef struct PeHookStorageTransfer {
+    int from_mode, from_index, to_mode, to_index;
+    int result;  /* returned by the game when a handler returns nonzero */
+} PeHookStorageTransfer;
+
+/* After Menu_DrawActiveListSlot / Menu_DrawArmorItemDetail drew row `index` of `list`, with the
+ * draw cursor back at the row's start. */
+typedef struct PeHookSlotDrawn {
+    const short *list;
+    int index;
+} PeHookSlotDrawn;
 
 typedef struct PeHookMainMenuIcon {
     int row;     /* the list row */

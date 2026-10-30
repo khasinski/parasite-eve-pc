@@ -96,6 +96,6 @@ cmake --build build-mods --parallel
 ./build-mods/parasite-eve-pc
 ```
 
-`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_collection`).
+`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_collection;pe_stacks`).
 
 For development details, see [code organization](docs/CODE_ORGANIZATION.md).

@@ -363,6 +363,10 @@ static const char *pe_hook_name(int id) {
         [PE_HOOK_SCRIPT_RANDOM] = "script random",
         [PE_HOOK_INVENTORY_SORTED] = "inventory sorted",
         [PE_HOOK_MAIN_MENU_ICON] = "main menu icon",
+        [PE_HOOK_ITEM_REMOVE] = "item remove",
+        [PE_HOOK_INVENTORY_REBUILD] = "inventory rebuild",
+        [PE_HOOK_STORAGE_TRANSFER] = "storage transfer",
+        [PE_HOOK_SLOT_DRAWN] = "slot drawn",
     };
     if (id >= 0 && id < PE_HOOK_COUNT) return names[id] ? names[id] : "?";
     return id - PE_HOOK_COUNT < s_event_count ? s_events[id - PE_HOOK_COUNT] : "?";

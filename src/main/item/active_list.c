@@ -584,6 +584,7 @@ void Menu_DrawActiveListSlot(s32 arg0) {
     }
     if (var_v0 != NULL) {
         Menu_DrawSlotRow(var_v0, saved_a1);
+        PE_HOOK(PE_HOOK_SLOT_DRAWN, (&(PeHookSlotDrawn){g_InvItemPtr, arg0}));
     }
 }
 

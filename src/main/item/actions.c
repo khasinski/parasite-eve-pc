@@ -408,6 +408,7 @@ static inline u8 ConsumableEffect(ItemDataRecord *item) {
 /* First discover available equipment, then rebuild masks for the current menu.
  * Resolved record kinds must be below 32 for the weapon-kind variable shift. */
 void Inv_RebuildSelectableMask(void) {
+    PE_HOOK(PE_HOOK_INVENTORY_REBUILD, NULL);
     int hasWeapon = 0, hasArmor = 0, list = 0;
     int wasStorage = g_InvItemPtr != g_AyaInventoryItems;
     int i;
@@ -1024,6 +1025,8 @@ s32 Inv_RemoveActiveListItem(s32 arg0) {
     s32 selected;
     s32 removed;
     s32 activeList;
+    PeHookItemRemove hook = {arg0, 0};
+    if (PE_HOOK(PE_HOOK_ITEM_REMOVE, &hook)) return hook.result;
 
     selected = arg0;
     if ((g_InvItemPtr == g_AyaInventoryItems) && (g_AyaSaveState.equipped_armor_slot == selected)) {

@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_collection` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_collection;pe_stacks` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -49,8 +49,20 @@ mods/
   pe_rebalance/        mod effects, Parasite Energy balance, half-bar turns / Quick powers, Combine
   pe_economy/          Junk and loot, Mod Catalog / Dismantle / Rebuild, Requisition, Wayne and Warner
   pe_collection/       Bestiary and Wardrobe registries, skins, Wardrobe menu (packs register here)
+  pe_stacks/           stacked consumables (up to 99 per bag or storage slot), from the Pathogen Eve port
   pe_hello/            example mod (not built by default)
 ```
+
+## Stacked items (pe_stacks)
+
+F1 > PE Enhancements > Inventory > Stacked items (on by default). Lists keep plain item ids; the
+extra copies of a slot are counted per (list, item) in the mod. Hooks: ITEM_ADD (join a carried
+stack), ITEM_REMOVE (use / give / discard takes one copy), ITEM_COUNT and INV_CMD_COUNT_ITEM
+(story checks see every copy), STORAGE_TRANSFER (a bag stack goes into storage whole; storage
+gives one copy), INVENTORY_REBUILD (duplicates fold into one slot), SLOT_DRAWN (the count in the
+rounds column). Only base items of kinds 10 and 12..15 stack; Junk stays out while pe_economy's
+Junk economy is on. Saved as the `pe_stacks.counts` record (204 bytes, up to 100 stacks). With the
+mod or the option off, extra copies go back into free slots as plain items.
 
 ## A mod
 
