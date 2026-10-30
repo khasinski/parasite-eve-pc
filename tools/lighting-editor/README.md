@@ -1,4 +1,4 @@
-# Room lighting workbench
+# Parasite Eve Lighting Lab
 
 A local browser editor using the player's own North American disc images and
 Aya captured from the original C game. Choose any of the 414 field rooms and
@@ -21,7 +21,9 @@ single pose/outfit; use another suitable save to capture another original pose.
 
 ## Desktop application
 
-The desktop version is **Parasite Eve Lighting Lab**. It has an English
+Download the desktop app from [GitHub Releases](https://github.com/khasinski/parasite-eve-pc/releases/tag/0.8) for macOS (Apple Silicon), Windows (x86_64), or Linux (x86_64 / ARM64). The macOS download is signed and notarized. Linux requires libcurl.
+
+The desktop version has an English
 interface, native file pickers, a File menu, and native JSON/PNG save dialogs.
 The application bundles Electron and a private Python asset reader: running a
 packaged build requires neither Python, Node.js, a browser nor a terminal.
@@ -67,7 +69,7 @@ node tools/lighting-editor/test_desktop.cjs
 It covers English labels, native picker cancellation and recovery, private
 capture import, profile and draft persistence across restarts, native exports,
 renderer isolation and helper-process cleanup. These process-lifecycle checks
-currently target macOS/Linux. The browser edition remains available below.
+run against native packaged apps on macOS, Windows and both Linux architectures. The browser edition remains available below.
 
 ## Browser setup
 

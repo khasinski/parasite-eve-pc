@@ -101,4 +101,4 @@ cmake --build build-mods --parallel
 `PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_collection`).
 
 For development details, see [code organization](docs/CODE_ORGANIZATION.md).
-Lighting experiments have a separate [room lighting editor](tools/lighting-editor/README.md).
+[Parasite Eve Lighting Lab](tools/lighting-editor/README.md) is a separate desktop tool for experimenting with room lighting. Download it from [Releases](https://github.com/khasinski/parasite-eve-pc/releases). Lighting profiles are not yet used in the game.
