@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "description": "Local lighting workbench for original Parasite Eve room and actor assets",
-  "dependencies": { "three": "0.187.0" },
-  "devDependencies": { "playwright": "1.64.1" }
+  "dependencies": {
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
 }
