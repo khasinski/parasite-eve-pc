@@ -61,7 +61,7 @@ async function ready(page) {
     );
   } catch (error) {
     console.error("Renderer status:", await page.locator("body").innerText());
-    await page.screenshot({ path: path.join(evidence, "failed-startup.png") });
+    await page.screenshot({ path: path.join(evidence, "failed-startup.png"), timeout: 2000 }).catch(() => {});
     throw error;
   }
 }

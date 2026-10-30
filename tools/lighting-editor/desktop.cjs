@@ -433,6 +433,8 @@ if (!app.requestSingleInstanceLock()) {
       const map =
         fs
           .readFileSync(path.join(root(), "index.html"), "utf8")
+          // HTML parsing normalizes Windows line endings before CSP hashing.
+          .replace(/\r\n?/g, "\n")
           .match(/<script type="importmap">([\s\S]*?)<\/script>/)?.[1] || "";
       const hash = crypto.createHash("sha256").update(map).digest("base64");
       protocol.handle(SCHEME, async (request) => {
