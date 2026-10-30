@@ -20,6 +20,13 @@ def capture(game,disc,card,output,emit=True):
             for tick,mask in ((23000,8),(23600,8),(24200,16384),(24800,16384)):inputs.extend(((tick,mask),(tick+10,0)))
             for tick,buttons in inputs:args+=['--pad-at',f'{tick}:{buttons}']
         env=dict(os.environ,SDL_AUDIODRIVER='dummy',PSYZ_AUDIO_CLOCK='video',PE_HD_BACKGROUNDS='',PE_CONFIG_HOME=str(work/'config'),PE_LIGHTING_DISC=str(disc))
+        # PyInstaller's private libraries must not override the native game's system libraries.
+        if os.name != 'nt' and 'LD_LIBRARY_PATH' in env:
+            original = env.get('LD_LIBRARY_PATH_ORIG')
+            if original:
+                env['LD_LIBRARY_PATH'] = original
+            else:
+                env.pop('LD_LIBRARY_PATH', None)
         commands=['advance 1000 0','advance 10 16384','advance 10 0','advance 1000 0','advance 10 16384',
                   'advance 10 0','advance 1000 0','advance 10 4096','advance 120 0','advance 10 16384',
                   'advance 10 0','advance 1000 0',f'lighting-export {output}' if emit else 'advance 1 0','quit']
