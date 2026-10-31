@@ -1,0 +1,193 @@
+diff --git a/src/main/scene/room_load.c b/src/main/scene/room_load.c
+index 4678bfa..0b451d9 100644
+--- a/src/main/scene/room_load.c
++++ b/src/main/scene/room_load.c
+@@ -1383,6 +1383,8 @@ int CdRom_DetectDiscChange(void) {
+     return 0;
+ }
+ 
++#include "pe_texture_identity_capture.h"
++
+ /* Load the area textures and model/action bank through the original phases. */
+ int Scene_LoadEntityTexture(void)
+ {
+@@ -1411,6 +1413,7 @@ retry:
+             state->entity_texture_phase = 6;
+         break;
+     case 1:
++        PeTextureIdentity_Begin(bank);
+         index = bank + 3;
+         if (CdRom_ReadSectorsFromLba(lba + g_PeImageSectorTable[index],
+                 state->scene_load_scratch,
+@@ -1585,6 +1588,7 @@ s32 Scene_InitEntityPlayer(s32 resume) {
+             Render_SetupEntityPrims(&player->render_object, player->model_state.model_header,
+                                     (u8 *)player->allocation_block + 2 * sizeof(RenderShadowQuad), 0x3C0, 0x100, 0,
+                                     0x1C0, 2, &renderSetup, 1);
++            PeTextureIdentity_Export(&player->render_object, g_GameState.loaded_entity_bank);
+         }
+         {
+             FieldActor *player = g_PlayerEntity;
+diff --git a/include/pe_texture_identity_capture.h b/include/pe_texture_identity_capture.h
+new file mode 100644
+index 0000000..87d78aa
+--- /dev/null
++++ b/include/pe_texture_identity_capture.h
+@@ -0,0 +1,158 @@
++/* Optional private one-shot game-owned VRAM identity capture. No replacement code. */
++#ifndef PE_TEXTURE_IDENTITY_CAPTURE_H
++#define PE_TEXTURE_IDENTITY_CAPTURE_H
++#ifndef PE_PS5_TEXTURE_IDENTITY_CAPTURE
++#define PE_PS5_TEXTURE_IDENTITY_CAPTURE 0
++#endif
++#if defined(PE_PS5) && defined(PE_PS5_GPU_NATIVE) && PE_PS5_TEXTURE_IDENTITY_CAPTURE
++#include <SDL3/SDL.h>
++#include <psyz/gpu.h>
++#include <stdlib.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <errno.h>
++#ifndef PE_TEXTURE_IDENTITY_BUILD
++#error "Opt-in capture requires PE_TEXTURE_IDENTITY_BUILD string matching the release build"
++#endif
++static int pe_identity_started, pe_identity_armed, pe_identity_bank, pe_identity_truncated;
++static int PeTextureIdentity_CreateExclusive(const char *path) {
++    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
++    if (fd < 0) SDL_SetError("identity exclusive create failed errno=%d", errno);
++    return fd;
++}
++static void PeTextureIdentity_Begin(int bank) {
++    if (pe_identity_started) return;
++    pe_identity_started = 1;
++    pe_identity_bank = bank;
++    if (!PE_TEXTURE_IDENTITY_BUILD[0]) return;
++    /* One explicit human request, consumed before arming; no UI or stream. */
++    const char *request = "/data/parasite-eve/diagnostics/texture-identity/capture-next-player-bank.request";
++    char text[14], claimed[512]; SDL_IOStream *f = SDL_IOFromFile(request, "rb");
++    if (!f) return;
++    size_t got = SDL_ReadIO(f, text, sizeof text); int closed = SDL_CloseIO(f);
++    if (!closed || got != 13 || memcmp(text, "CAPTURE_ONCE\n", 13)) return;
++    for (unsigned i = 0; PE_TEXTURE_IDENTITY_BUILD[i]; ++i) {
++        unsigned char c = (unsigned char)PE_TEXTURE_IDENTITY_BUILD[i];
++        if (i > 80 || !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_')) return;
++    }
++    SDL_snprintf(claimed, sizeof claimed, "/data/parasite-eve/diagnostics/texture-identity/request-%s-%llu.claimed", PE_TEXTURE_IDENTITY_BUILD, (unsigned long long)SDL_GetTicksNS());
++    int claimed_fd = PeTextureIdentity_CreateExclusive(claimed);
++    if (claimed_fd < 0) return;
++    if (close(claimed_fd) < 0) { SDL_SetError("identity claim close failed errno=%d",errno); return; }
++    if (!SDL_RenamePath(request, claimed)) { SDL_Log("identity request claim rename failed: %s",SDL_GetError()); return; }
++
++    /* Existing mirror knows only actual uploads/fills/moves. Never mark missing words known. */
++    pe_identity_armed = Psyz_GpuSetVramCopy(1) == 0;
++    SDL_Log("texture identity capture build=%s armed=%d player texture bank=%d", PE_TEXTURE_IDENTITY_BUILD, pe_identity_armed, bank);
++}
++static int PeTextureIdentity_Write(const char *path, const void *data, size_t bytes) {
++    int fd = PeTextureIdentity_CreateExclusive(path), error = 0, ok;
++    if (fd < 0) return 0;
++    ok = write(fd, data, bytes) == (ssize_t)bytes;
++    if (!ok) error = errno;
++    if (ok && fsync(fd) < 0) { ok = 0; error = errno; }
++    if (close(fd) < 0 && ok) { ok = 0; error = errno; }
++    if (!ok) {
++        SDL_RemovePath(path); /* only the file this call created, no retry */
++        SDL_SetError("identity staged write/flush/close failed errno=%d", error);
++    }
++    return ok;
++}
++
++typedef struct { unsigned page, clut, u0, v0, u1, v1; } PeIdentityDraw;
++static void PeTextureIdentity_Add(PeIdentityDraw *d, unsigned *n, unsigned page, unsigned clut,
++                                  unsigned u0, unsigned v0, unsigned u1, unsigned v1) {
++    unsigned i;
++    for (i = 0; i < *n; ++i) if (d[i].page == page && d[i].clut == clut) break;
++    if (i == *n) {
++        if (*n == 64) { pe_identity_truncated = 1; return; }
++        d[i] = (PeIdentityDraw){page, clut, 255, 255, 0, 0};
++        ++*n;
++    }
++    if (u0 < d[i].u0) d[i].u0 = u0;
++    if (v0 < d[i].v0) d[i].v0 = v0;
++    if (u1 > d[i].u1) d[i].u1 = u1;
++    if (v1 > d[i].v1) d[i].v1 = v1;
++}
++static void PeTextureIdentity_Export(RenderObjectEntity *obj, int loaded_bank) {
++    const unsigned char *known = NULL;
++    const unsigned short *vram;
++    unsigned short *snapshot = NULL; unsigned char *snapshot_known = NULL;
++    PeIdentityDraw draws[64]; unsigned count = 0, i, j;
++    char prefix[512], raw[560], mask[560], temporary[560], manifest[560], lock[560], json[24576];
++    size_t used = 0; int n, raw_ok = 0, mask_ok = 0, tmp_ok = 0, manifest_reserved = 0;
++    RenderPacket34 *quad; RenderPacket28 *tri;
++    int reservation;
++    if (!pe_identity_armed) return;
++    pe_identity_armed = 0; pe_identity_truncated = 0; /* exactly one bounded attempt per launch, including failures */
++    if (!obj || !obj->header || !obj->primitive_buffer ||
++        obj->header->packet34_count < 0 || obj->header->packet34_count > 256 ||
++        obj->header->packet28_count < 0 || obj->header->packet28_count > 256) goto failed;
++    quad = (RenderPacket34 *)obj->primitive_buffer;
++    for (i = 0; i < (unsigned)obj->header->packet34_count; ++i) for (j = 0; j < 2; ++j, ++quad) {
++        unsigned u0 = SDL_min(SDL_min(quad->u0,quad->u1),SDL_min(quad->u2,quad->u3));
++        unsigned v0 = SDL_min(SDL_min(quad->v0,quad->v1),SDL_min(quad->v2,quad->v3));
++        unsigned u1 = SDL_max(SDL_max(quad->u0,quad->u1),SDL_max(quad->u2,quad->u3));
++        unsigned v1 = SDL_max(SDL_max(quad->v0,quad->v1),SDL_max(quad->v2,quad->v3));
++        PeTextureIdentity_Add(draws,&count,quad->page_bits,quad->clut,u0,v0,u1,v1);
++    }
++    tri = (RenderPacket28 *)quad;
++    for (i = 0; i < (unsigned)obj->header->packet28_count; ++i) for (j = 0; j < 2; ++j, ++tri)
++        PeTextureIdentity_Add(draws,&count,tri->page_bits,tri->clut,
++            SDL_min(SDL_min(tri->u0,tri->u1),tri->u2),SDL_min(SDL_min(tri->v0,tri->v1),tri->v2),
++            SDL_max(SDL_max(tri->u0,tri->u1),tri->u2),SDL_max(SDL_max(tri->v0,tri->v1),tri->v2));
++    snapshot = malloc(1024u*512u*2u); snapshot_known = malloc(1024u*512u);
++    if (!snapshot || !snapshot_known || !count || !Psyz_GpuCaptureNativeIdentityWords(snapshot,snapshot_known,1024u*512u)) goto failed;
++    vram = snapshot; known = snapshot_known;
++    /* Compile-time stamp is restricted to safe filename/JSON characters. */
++    for (i = 0; PE_TEXTURE_IDENTITY_BUILD[i]; ++i) {
++        unsigned char c = (unsigned char)PE_TEXTURE_IDENTITY_BUILD[i];
++        if (i > 80 || !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
++                        (c >= '0' && c <= '9') || c == '-' || c == '_')) goto failed;
++    }
++    if (!SDL_CreateDirectory("/data/parasite-eve/diagnostics/texture-identity")) goto failed;
++    n = SDL_snprintf(prefix,sizeof prefix,"/data/parasite-eve/diagnostics/texture-identity/%s-%llu",PE_TEXTURE_IDENTITY_BUILD,(unsigned long long)SDL_GetTicksNS());
++    if (n <= 0 || (size_t)n >= sizeof prefix) goto failed;
++    SDL_snprintf(lock,sizeof lock,"%s.lock",prefix);
++    reservation = PeTextureIdentity_CreateExclusive(lock);
++    if (reservation < 0) goto failed; /* namespace collision: never touch existing captures */
++    if (close(reservation) < 0) { SDL_SetError("identity namespace close failed errno=%d",errno); goto failed; }
++    SDL_snprintf(raw,sizeof raw,"%s.vram.bin",prefix); SDL_snprintf(mask,sizeof mask,"%s.known.bin",prefix);
++    SDL_snprintf(temporary,sizeof temporary,"%s.manifest.tmp",prefix); SDL_snprintf(manifest,sizeof manifest,"%s.json",prefix);
++    /* Reserve final target too: rename may replace only our own empty placeholder.
++     * Readers must parse a valid completed manifest, not just observe its name. */
++    reservation = PeTextureIdentity_CreateExclusive(manifest);
++    if (reservation < 0) goto cleanup;
++    manifest_reserved = 1;
++    if (close(reservation) < 0) { SDL_SetError("identity manifest reserve close failed errno=%d",errno); goto cleanup; }
++    raw_ok = PeTextureIdentity_Write(raw,vram,1024u*512u*2u);
++    if (raw_ok) mask_ok = PeTextureIdentity_Write(mask,known,1024u*512u);
++    if (!mask_ok) goto cleanup;
++#define PE_ID_JSON(...) do { n=SDL_snprintf(json+used,sizeof json-used,__VA_ARGS__); if(n<0||(size_t)n>=sizeof json-used) goto cleanup; used+=(size_t)n; } while(0)
++    PE_ID_JSON("{\"schema\":\"cpe.native-texture-capture.v1\",\"build\":\"%s\",\"bankAtUpload\":%d,\"loadedBankAtPlayerSetup\":%d,\"attribution\":\"active player render object at original room setup; wardrobe hooks may replace assets; not a character taxonomy\",\"rawSuffix\":\".vram.bin\",\"knownSuffix\":\".known.bin\",\"rawBytes\":1048576,\"knownBytes\":524288,\"draws\":[",PE_TEXTURE_IDENTITY_BUILD,pe_identity_bank,loaded_bank);
++    for (i=0;i<count;i++) {
++        unsigned mode=(draws[i].page>>7)&3;
++        PE_ID_JSON("%s{\"mode\":\"%s\",\"pageXWords\":%u,\"pageY\":%u,\"paletteXWords\":%u,\"paletteY\":%u,\"rawTpage\":%u,\"rawClut\":%u,\"uvBoundsInclusive\":[%u,%u,%u,%u]}",i?",":"",mode==0?"P4":mode==1?"P8":mode==2?"C16":"unsupported",(draws[i].page&15)*64,((draws[i].page>>4)&1)*256,(draws[i].clut&63)*16,draws[i].clut>>6,draws[i].page,draws[i].clut,draws[i].u0,draws[i].v0,draws[i].u1,draws[i].v1);
++    }
++    PE_ID_JSON("],\"drawLimit\":64,\"drawDescriptorsTruncated\":%s,\"maximumOutputBytes\":1600000,\"runtimeReplacement\":false,\"authority\":\"native-gpu-rgb5551-readback\",\"knownPolicy\":\"original-upload-known-and-readback-matches-shadow\",\"fullImageComplete\":false}\n",pe_identity_truncated?"true":"false");
++#undef PE_ID_JSON
++    tmp_ok = PeTextureIdentity_Write(temporary,json,used);
++    if (tmp_ok && SDL_RenamePath(temporary,manifest)) {
++        SDL_Log("texture identity capture complete build=%s manifest=%s",PE_TEXTURE_IDENTITY_BUILD,manifest);
++        free(snapshot); free(snapshot_known);
++        return; /* leave exclusive reservation; preserve unique namespace */
++    }
++cleanup:
++    if(manifest_reserved) SDL_RemovePath(manifest);
++    if(raw_ok) SDL_RemovePath(raw);
++    if(mask_ok) SDL_RemovePath(mask);
++    if(tmp_ok) SDL_RemovePath(temporary);
++failed:
++    free(snapshot); free(snapshot_known);
++    SDL_Log("texture identity capture failed or unavailable: %s",SDL_GetError());
++}
++#else
++#define PeTextureIdentity_Begin(bank) ((void)0)
++#define PeTextureIdentity_Export(object,bank) ((void)0)
++#endif
++#endif

@@ -1,0 +1,22 @@
+# Optional partial native GPU texture identity capture
+
+Source-only addon for PR18 ce80c5636a23ed24232fc0d835855efd6c66bad0. No assets, captures, index, binaries or DuckStation code are included. This is diagnostic evidence collection, not a replacement-texture feature.
+
+1. Apply recipe-hook.patch and recipe-config.patch from the parent native-gpu recipe directory.
+2. Run the unchanged parent prepare-source.cjs with its documented pinned archives into a fresh export.
+3. Run node identity-capture/prepare-addon.cjs <EXPORT_ROOT>. This refuses Git checkouts and verifies both patches before applying either, then checks four normalized source hashes against the reviewed 0AAE source.
+4. The ordinary parent build remains capture OFF. To compile ON before the first game compilation, set optional tools-config property identityCaptureBuild to a safe explicit build stamp, then run the parent build-native.cjs using the same documented toolchain/dependencies. The recipe forwards ON/stamp only when that property is explicitly present. Alternatively reconfigure an existing build-game directory with -DPE_PS5_IDENTITY_CAPTURE=ON -DPE_PS5_IDENTITY_CAPTURE_BUILD=<SAFE_BUILD_STAMP>. A safe stamp is 1..81 ASCII letters, digits, underscore or hyphen. One fresh CE80 public recipe preparation and ON full native SDK link passed with the explicit build stamp public_capture_proof_20261031. All four selected production source hashes matched 0AAE, generated shaders remained unchanged, and static import/runtime audits passed. No game execution, conversion, staging, marker creation or actual GPU readback occurred. Retained Mesa/ACO/SDK dependencies were digest-verified rather than rebuilt.
+
+The optional fragment adds SDL3::SDL3 linkage/include propagation and PsyZ headers to the separate original-entity-textures object target. It verifies the four reviewed sources before enabling the producer. OFF requires no capture dependencies or stamp. No marker is created by preparation/build.
+
+Human-only trigger: before the first player texture bank load, place exactly CAPTURE_ONCE followed by LF in /data/parasite-eve/diagnostics/texture-identity/capture-next-player-bank.request. One process makes at most one attempt. Do not automate marker creation.
+
+The producer reads only renderer-owned PSX VRAM. It flushes queued rendering and reads native GPU VRAM through existing GPU readback/fence APIs. Known words require prior upload knowledge AND an exact GPU/shadow match; unknown words are zero. fullImageComplete is always false. This does not establish complete VRAM authority, character classification or a DuckStation identity match. Fence waiting inherits the existing provider's unbounded wait limitation.
+
+The producer exclusively creates its claim/lock/data/manifest names via public open(O_CREAT|O_EXCL), checks write/fsync/close and replaces only its own reserved final manifest placeholder. A failed rename aborts without retry/bypass. Readers require valid schema JSON, not merely the presence of a filename. Fixed output is 1048576 raw bytes plus 524288 known-mask bytes, at most 64 draw descriptors and a bounded manifest.
+
+Offline tools require Node.js builtins only. preflight.cjs validates bounded manifests/bundles; candidate-window.cjs selects deterministic resumable metadata windows; annotate-coverage.cjs annotates UV rectangle overlap; pipeline.cjs composes these with caller-supplied trusted pageMap and hash functions. They neither download assets nor guess identity. Unknown pixels, palette ambiguity and collisions remain quarantined. Rectangle overlap is evidence only. No automatic loop exists.
+
+Remaining matching dependencies are deliberately NOT bundled: the independent project map-page.cjs/pageMap implementation and trusted hash callback, plus a compatible independently obtained metadata index. Historical project references are recorded in manifest.json as logical PROJECT_ROOT paths. The older map-capture-native wrapper and xxHash bridge are not necessary for preflight/window/coverage and are not exported. No claim of real matching is made.
+
+Licensing: parent pinned game source has no selected blanket open-source license; this addon does not grant rights to the game or authorize distribution of linked binaries. PsyZ/SDL and parent dependency notices/pins remain required. Project-authored capture glue and offline tools retain existing project provenance; no new license is inferred. DuckStation NC-ND source was not copied. Review publication rights separately.

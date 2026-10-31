@@ -1,0 +1,2723 @@
+diff --git a/cmake/ps5/bootstrap.cmake b/cmake/ps5/bootstrap.cmake
+new file mode 100644
+index 0000000..1b3d828
+--- /dev/null
++++ b/cmake/ps5/bootstrap.cmake
+@@ -0,0 +1,15 @@
++# Runtime selection must precede compiler detection and all PsyZ/SDL setup.
++option(PE_PS5_HOST_VALIDATE "Validate portable probes on the host; produces no PS5 payload" OFF)
++if(NOT PE_PS5_HOST_VALIDATE)
++    message(FATAL_ERROR
++        "PS5 runtime unavailable: public loader ABI compatibility with retail 13.60 "
++        "kstuff-lite/ShadowMount+ has not been verified. See docs/PS5_PORT.md. "
++        "PE_PS5_HOST_VALIDATE=ON builds host probes only.")
++endif()
++if(CMAKE_CROSSCOMPILING)
++    message(FATAL_ERROR "PE_PS5_HOST_VALIDATE requires a native host compiler")
++endif()
++enable_language(C)
++add_executable(pe-ps5-bootstrap-host "${CMAKE_CURRENT_LIST_DIR}/../../platform/ps5/bootstrap.c")
++set_target_properties(pe-ps5-bootstrap-host PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
++target_compile_definitions(pe-ps5-bootstrap-host PRIVATE PE_PS5_HOST_VALIDATE=1)
+diff --git a/cmake/ps5/game.cmake b/cmake/ps5/game.cmake
+new file mode 100644
+index 0000000..f27a44d
+--- /dev/null
++++ b/cmake/ps5/game.cmake
+@@ -0,0 +1,45 @@
++# Opt-in public SDK game build; desktop defaults remain in root CMake.
++if(NOT PS5 OR NOT EXISTS "${PSYZ_DIR}/psyz/CMakeLists.txt")
++    message(FATAL_ERROR "PE_PS5_GAME requires the PS5 toolchain and staged PSYZ_DIR")
++endif()
++find_package(SDL3 CONFIG REQUIRED)
++set(PE_PS5_GPU_NATIVE TRUE)
++add_compile_definitions(PE_PS5=1 PE_PS5_GPU_NATIVE=1 __BSD_VISIBLE=1)
++set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
++option(PE_PS5_PLUGINS "Built-in playtest assists and CPU panel; no dynamic loader" OFF)
++set(PE_MODS ${PE_PS5_PLUGINS} CACHE BOOL "" FORCE)
++if(PE_PS5_PLUGINS)
++    set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_collection pe_assists CACHE STRING "Reviewed PS5 built-ins" FORCE)
++    add_compile_definitions(PE_PS5_PLUGINS=1)
++endif()
++add_compile_options(-std=gnu11)
++link_libraries(SceVideoOut SceAudioOut ScePad SceUserService)
++# The public SDK Windows linker wrapper uses system() and cannot carry the game's
++# expanded object list. Invoke the same LLVM linker/script with Ninja response files.
++if(CMAKE_HOST_WIN32)
++    file(TO_CMAKE_PATH "${PE_PS5_LLVM_BIN}" llvm_bin)
++    file(TO_CMAKE_PATH "${PS5_PAYLOAD_SDK}" sdk_path)
++    set(CMAKE_C_LINK_EXECUTABLE "${llvm_bin}/ld.lld.exe -m elf_x86_64 -pie --eh-frame-hdr -z max-page-size=0x4000 -T ${sdk_path}/ldscripts/elf_x86_64.x --gc-sections -L${sdk_path}/target/lib <OBJECTS> -o <TARGET> <LINK_LIBRARIES> ${sdk_path}/target/lib/crt1.o -lc -lkernel_web -lSceLibcInternal -lSceNet")
++endif()
++# Recompile SDL's real core with the console-only GTK teardown excluded.
++# The installed archive is preserved; its SDL.c member is never extracted because
++# these real definitions are supplied directly to the executable.
++get_filename_component(sdl_build_root "${SDL3_DIR}/../../../../" ABSOLUTE)
++set(PE_PS5_SDL3_SOURCE "${sdl_build_root}/src" CACHE PATH "Generated public SDL3 sources matching the installed archive")
++set(PE_PS5_SDL3_BUILD "${sdl_build_root}/b" CACHE PATH "Matching generated SDL3 configuration")
++set(sdl_source "${PE_PS5_SDL3_SOURCE}")
++foreach(required "${sdl_source}/src/SDL.c" "${PE_PS5_SDL3_BUILD}/include-config-release/build_config/SDL_build_config.h")
++    if(NOT EXISTS "${required}")
++        message(FATAL_ERROR "SDL3 core override needs matching generated source/config: ${required}")
++    endif()
++endforeach()
++file(READ "${sdl_source}/src/SDL.c" sdl_core)
++string(REPLACE "&& !defined(SDL_PLATFORM_PRIVATE)" "&& !defined(SDL_PLATFORM_PRIVATE) && !defined(PE_PS5)" sdl_core "${sdl_core}")
++file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/SDL-ps5-core.c" "${sdl_core}")
++add_library(pe-ps5-sdl-core OBJECT "${CMAKE_CURRENT_BINARY_DIR}/SDL-ps5-core.c")
++target_include_directories(pe-ps5-sdl-core PRIVATE
++    "${sdl_source}/include" "${sdl_source}/src"
++    "${PE_PS5_SDL3_BUILD}/include-config-release/build_config"
++    "${PE_PS5_SDL3_BUILD}/include-revision")
++target_compile_definitions(pe-ps5-sdl-core PRIVATE SDL_STATIC_LIB USING_GENERATED_CONFIG_H
++    SDL_BUILD_MAJOR_VERSION=3 SDL_BUILD_MINOR_VERSION=4 SDL_BUILD_MICRO_VERSION=16)
+diff --git a/cmake/ps5/payload.cmake b/cmake/ps5/payload.cmake
+new file mode 100644
+index 0000000..3558a48
+--- /dev/null
++++ b/cmake/ps5/payload.cmake
+@@ -0,0 +1,10 @@
++if(NOT PS5 OR NOT CMAKE_CROSSCOMPILING)
++    message(FATAL_ERROR "PE_PS5_PAYLOAD requires the public SDK prospero.cmake toolchain")
++endif()
++if(PE_PS5_BOOTSTRAP)
++    message(FATAL_ERROR "Select only one of PE_PS5_PAYLOAD and PE_PS5_BOOTSTRAP")
++endif()
++add_executable(pe-ps5-io "${CMAKE_CURRENT_LIST_DIR}/../../platform/ps5/payload_io.c")
++set_target_properties(pe-ps5-io PROPERTIES
++    OUTPUT_NAME pe-ps5-io SUFFIX ".elf" C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
++target_compile_options(pe-ps5-io PRIVATE -Wall -Wextra -Werror)
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d8c8791..d7f061c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,10 +1,26 @@
+ cmake_minimum_required(VERSION 3.21..3.31)
++option(PE_PS5_PAYLOAD "Build only the public SDK logging/filesystem payload" OFF)
++if(PE_PS5_PAYLOAD)
++    project(pe-ps5-payload LANGUAGES C)
++    include(cmake/ps5/payload.cmake)
++    return()
++endif()
++option(PE_PS5_BOOTSTRAP "Build only the isolated PS5 bootstrap milestone" OFF)
++if(PE_PS5_BOOTSTRAP)
++    project(pe-ps5-bootstrap LANGUAGES NONE)
++    include(cmake/ps5/bootstrap.cmake)
++    return()
++endif()
+ # Explicit deployment target avoids inheriting the build host's macOS version.
+ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET
+    AND (NOT DEFINED CMAKE_SYSTEM_NAME OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum supported macOS version")
+ endif()
++option(PE_PS5_GAME "Build the native game with the public PS5 SDK" OFF)
+ project(parasite-eve-pc VERSION 0.8.0 LANGUAGES C)
++if(PE_PS5_GAME)
++    include(cmake/ps5/game.cmake)
++endif()
+ option(PE_MACOS_BUNDLE "Package the macOS application bundle" OFF)
+ 
+ set(CMAKE_C_STANDARD 11)
+@@ -31,7 +47,9 @@ if(PE_MODS)
+ endif()
+ 
+ # PsyZ belongs to the original game build, independently of the abandoned frontend.
+-set(PSYZ_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz)
++if(NOT PE_PS5_GAME)
++    set(PSYZ_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz)
++endif()
+ add_subdirectory(${PSYZ_DIR}/psyz ${CMAKE_CURRENT_BINARY_DIR}/psyz)
+ target_compile_definitions(psyz PRIVATE __psyz)
+ 
+@@ -76,6 +94,18 @@ add_library(parasite-eve-original-disc OBJECT src/main/cdrom/scene_assets.c)
+ pe_configure_object_library(parasite-eve-original-disc)
+ target_link_libraries(parasite-eve-original-disc PRIVATE psyz)
+ 
++# Desktop keeps the original download implementation and dependencies by default.
++set(pe_desktop_download_default ON)
++if(PE_PS5_GAME)
++    set(pe_desktop_download_default OFF)
++endif()
++option(PE_DESKTOP_MOD_DOWNLOADS "Build desktop HD pack download services" ${pe_desktop_download_default})
++if(PE_PS5_GAME AND PE_DESKTOP_MOD_DOWNLOADS)
++    message(FATAL_ERROR "Desktop HD downloads are unsupported on PS5")
++endif()
++add_library(pe_download_deps INTERFACE)
++if(PE_DESKTOP_MOD_DOWNLOADS)
++    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=1)
+ # Desktop mod downloads use native TLS through libcurl and a bounded ZIP reader.
+ include(FetchContent)
+ FetchContent_Declare(pe_json URL https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.19.tar.gz
+@@ -90,7 +120,6 @@ add_library(pe_download_zip STATIC ${pe_zip_SOURCE_DIR}/miniz.c ${pe_zip_SOURCE_
+     ${pe_zip_SOURCE_DIR}/miniz_tinfl.c ${pe_zip_SOURCE_DIR}/miniz_tdef.c)
+ target_include_directories(pe_download_zip PUBLIC ${pe_zip_SOURCE_DIR} ${pe_zip_BINARY_DIR})
+ target_compile_definitions(pe_download_zip PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
+-add_library(pe_download_deps INTERFACE)
+ target_link_libraries(pe_download_deps INTERFACE pe_download_json pe_download_zip)
+ if(APPLE)
+     target_link_libraries(pe_download_deps INTERFACE "-lcurl")
+@@ -118,17 +147,15 @@ else()
+     target_link_libraries(pe_download_deps INTERFACE CURL::libcurl)
+ endif()
+ 
++else()
++    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=0)
++endif()
++
+ # The executable starts the original game and compiles its modules in place.
+ add_executable(parasite-eve-pc src/main/boot/main.c src/main/boot/crash_report.c src/main/boot/crash_report_posix.c)
+ target_include_directories(parasite-eve-pc PRIVATE include)
+ target_link_libraries(parasite-eve-pc PRIVATE psyz pe_download_deps ${CMAKE_DL_LIBS})
+-execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+-    OUTPUT_VARIABLE PE_BUILD_ID OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+-execute_process(COMMAND git diff --quiet HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+-    RESULT_VARIABLE PE_BUILD_DIRTY ERROR_QUIET)
+-if(PE_BUILD_DIRTY)
+-    string(APPEND PE_BUILD_ID "-dirty")
+-endif()
++set(PE_BUILD_ID "8c52cdd-field-hd-integration-20261030")
+ target_compile_definitions(parasite-eve-pc PRIVATE __psyz PE_VERSION="${PROJECT_VERSION}" PE_BUILD_ID="${PE_BUILD_ID}")
+ if(APPLE AND PE_MACOS_BUNDLE)
+     set_target_properties(parasite-eve-pc PROPERTIES
+@@ -923,3 +950,8 @@ if(BUILD_TESTING)
+         endforeach()
+     endif()
+ endif()
++
++if(PE_PS5_GAME)
++    target_sources(parasite-eve-pc PRIVATE $<TARGET_OBJECTS:pe-ps5-sdl-core>)
++    set_target_properties(parasite-eve-pc PROPERTIES OUTPUT_NAME parasite-eve-ps5 SUFFIX ".elf")
++endif()
+diff --git a/docs/PS5_PORT.md b/docs/PS5_PORT.md
+new file mode 100644
+index 0000000..4831b66
+--- /dev/null
++++ b/docs/PS5_PORT.md
+@@ -0,0 +1,242 @@
++# PS5 bootstrap checkpoint — 2026-10-27
++
++## Tooling handoff — 2026-10-29 UTC
++
++Actual public SDK ELF builds now pass on Windows without WSL. This supersedes
++the older source-only/toolchain-not-installed statements below. No console run,
++deployment, loader validation, graphics, input or audio success is claimed.
++
++Public release checked against GitHub releases/latest: SDK `v0.45` (published
++2026-10-21), source checkout `a7685ce8e97ce1f8a4f38253a41d54241c9124f1`.
++Release archive SHA-256:
++`5fac64093d0e3e69f2584ce7935f24f703f622d9681f1495c85b9f00d1291a2c`.
++Official portable LLVM 18.1.8 Windows archive SHA-256, measured locally:
++`22c5907db053026cc2a8ff96d21c0f642a90d24d66c23c6d28ee7b1d572b82e8`.
++The LLVM hash pins the downloaded official release asset; it is not a publisher
++signature. URLs and license details are in `outputs/PS5-TOOLCHAIN.json` and
++`platform/ps5/setup-public-sdk.ps1`. LLVM is Apache-2.0 WITH LLVM-exception, with
++additional bundled notices. SDK GPLv3+ and individual BSD notices remain relevant.
++The pinned source's license is named `LICENSE`, despite header references to
++`COPYING`; setup retains it as `LICENSE.SDK` next to unchanged release files.
++
++```powershell
++./platform/ps5/setup-public-sdk.ps1
++./platform/ps5/build-public-payloads.ps1 `
++  -CMake C:/.pe/tools/cmake/cmake-4.4.4-windows-x86_64/bin/cmake.exe `
++  -Ninja C:/.pe/tools/ninja/ninja.exe
++```
++
++The paths above identify existing local CMake/Ninja executables used in this
++verification; on other machines provide equivalent paths or put both on PATH.
++Setup downloads/extracts only public archives under ignored `platform/ps5` tools
++and downloads directories. It preserves existing installations. It does not run
++an installer or change persistent PATH, registry, accounts or credentials.
++Builds use the release's unmodified `win/prospero-clang.cmd` and
++`win/prospero-lld.exe`, its sysroot, CRT and linker script. LLVM 18 is enforced.
++The upstream Windows linker wrapper requires SDK/output paths without spaces;
++the build script rejects those paths explicitly. Each build gets a fresh directory
++under `outputs/ps5`, with a transcript, ELF header inspection, hashes and an
++`UNTESTED ON CONSOLE` marker. Do not publish SDK/tools or build artifacts as part
++of the source PR without separate distribution review.
++
++Validated final output: `outputs/ps5/20261029T003225Z-b7d03c58`.
++`hello-sdk.elf` comes from the unmodified release sample `samples/hello_cmake/main.c`;
++`pe-ps5-io.elf` is the isolated CMake target (`PE_PS5_PAYLOAD=ON`), returning before
++PsyZ/SDL/game configuration. Both linked with Clang/LLD 18.1.8 and passed
++ELF64, little-endian, x86-64, ET_DYN, nonzero-entry and PT_LOAD inspection.
++Hashes and detailed commands are in the output directory and `outputs/RESULT.md`.
++
++The I/O payload requires two loader argv paths: a readable fixture and a new
++scratch file in a private writable directory. It uses exclusive creation,
++handles partial/interrupted descriptor I/O, reads back the same descriptor,
++compares contents, and removes its scratch file. It never writes when fixture
++opening/reading fails. Existing scratch files are preserved. Use a directory
++without concurrent path replacement. Exit 1 means failure; exit 2 means probes
++passed or unavailable argv, with console capabilities still unverified. This is
++not a game adapter. Native Windows validation passed roundtrip/removal, existing
++file preservation, missing-fixture write prevention and absent-argv cases.
++
++WSL `--list --verbose` confirmed no installed distro. The authorized
++`wsl --install -d Ubuntu-24.04 --no-launch` returned success with **changes will
++not be effective until the system is rebooted**. No reboot was performed.
++After the owner chooses to reboot, complete Ubuntu 24.04 installation/first-run
++account setup as needed, then run:
++
++```sh
++bash platform/ps5/setup-public-sdk.sh --install-dependencies
++bash platform/ps5/build-public-payloads.sh
++```
++
++Linux dependency install/build remains untested here. Shell scripts now have
++enforced LF checkout, correct archive root and LICENSE handling, staged extraction,
++LLVM 18 checks and unique output directories. WSL is no longer a blocker to the
++actual Windows ELF build milestone. Human console validation remains outstanding.
++
++Read-only upstream fetch found `upstream/main` at `da1f775e6` (0.7-alpha release).
++No checkout, reset, commit, integration or submodule pin change was performed;
++main owns integration. Qwen playlist and dispatch remain main's exclusive queue.
++
++Base: `49341628f0756817ab997b3ae8d75e98201cc47b`, branch
++`ps5/bootstrap-platform`. Manager owns Git. No console connection or gameplay
++test was performed. Human testing is required for every console claim.
++
++## Deliverable and capability boundary
++
++`PE_PS5_BOOTSTRAP=ON` returns from root CMake before the normal project,
++PsyZ, SDL, game sources, assets, and submodules are configured. Defaults are
++unchanged. Without `PE_PS5_HOST_VALIDATE=ON`, configuration fails explicitly:
++the confirmed retail firmware 13.60 + kstuff-lite + ShadowMount+ combination
++has no verified public payload runtime contract in this review.
++
++The native host executable contains real stdio logging, a caller-selected
++read probe, and an exclusively created scratch-file write/read/compare/remove
++probe. It never truncates existing files. Exit 1 means usage or I/O failure;
++exit 2 means portable probes passed but console/controller/graphics capabilities
++remain unavailable. It never reports full platform success. Flush/readback does
++not establish power-loss durability. Do not pass saves or assets as scratch paths.
++
++## Public SDK and samples reviewed
++
++Source-only review checkout (ignored, not a new submodule):
++`platform/ps5/sdk-review`, https://github.com/ps5-payload-dev/sdk at
++`a7685ce8e97ce1f8a4f38253a41d54241c9124f1`.
++Recreate with `git clone https://github.com/ps5-payload-dev/sdk.git platform/ps5/sdk-review`
++then `git -C platform/ps5/sdk-review checkout --detach a7685ce8e97ce1f8a4f38253a41d54241c9124f1`.
++No SDK binary or runtime dependency was installed or linked. SDK README license:
++GPLv3-or-later except FreeBSD headers under their individual BSD licenses;
++retain COPYING and per-file notices if distributing SDK material. Game licensing
++and eventual combined distribution require separate review.
++
++Reviewed README, host/toolchain/prospero.cmake, host/win compiler wrapper,
++samples/hello_cmake, sample inventory, include/ps5, and sce_stubs. The SDK
++documents dynamic-linked payloads with elfldr, websrv, bdj-ipv6-hen,
++elfloader/ps5-jar-loader, and remote_lua_loader. This list does not verify the
++human's particular loader/firmware/process context. ShadowMount+ availability
++alone does not identify a compatible ELF entry ABI or stdio route.
++
++The maintained SDK's hello_cmake demonstrates ordinary `main` and `printf`.
++No controller or graphics example exists in its reviewed sample inventory.
++libScePad/libSceVideoOut symbol stubs exist, but the reviewed public headers
++do not establish their structures, ownership, buffer registration, or usable
++application context. No function prototypes were guessed. Controller and
++graphics clear are explicitly unavailable. A compiler or successful link against
++symbol stubs would not resolve these questions.
++
++Public upstream SDL docs (`third_party/psyz/external/SDL/docs/README-ps5.md`)
++say the PS5 port lives separately and requires Sony NDA access. That port is
++outside this public-SDK-only task. No proprietary SDK, decrypted libraries,
++game assets, kernel installation, or network deployment is part of this build.
++
++## Reproduce host validation
++
++With CMake 3.21+, Ninja and a native C11 compiler available:
++
++```sh
++cmake -S . -B platform/ps5/build-host -G Ninja -DPE_PS5_BOOTSTRAP=ON -DPE_PS5_HOST_VALIDATE=ON
++cmake --build platform/ps5/build-host
++# Windows uses pe-ps5-bootstrap-host.exe.
++./platform/ps5/build-host/pe-ps5-bootstrap-host ./platform/ps5/bootstrap.c ./platform/ps5/probe-unused.tmp
++# Expected exit 2: both file stages passed, console capabilities unavailable.
++cmake -S . -B platform/ps5/build-blocked -G Ninja -DPE_PS5_BOOTSTRAP=ON
++# Expected runtime-unavailable configuration error.
++```
++
++Specify `CMAKE_C_COMPILER` and `CMAKE_MAKE_PROGRAM` explicitly when tools are
++not on PATH. Local verification used existing CMake 4.4.4, Ninja and Zig 0.15.2
++with a local compiler wrapper and build-local caches. That machine-specific
++wrapper is not part of the contribution.
++
++Native compilation and executable linking passed. Real file read and write
++roundtrip passed with exit 2. Missing read input returned 1. Existing scratch
++file returned 1 and retained its contents. Console configuration returned the
++intended runtime-unavailable error before compiler detection. `git diff --check`
++passed. No PC game build or console run was performed. The normal default CMake
++path has only the new default-OFF option added.
++
++## Upstream and local integration policy
++
++Track `https://github.com/khasinski/parasite-eve-pc` as `upstream` and fetch before
++starting each integration batch. At this checkpoint, fork HEAD and upstream/main
++both equal the base revision above. Keep PS5 changes on a feature branch; merge
++reviewed upstream changes without replacing local PS5 work. PsyZ remains pinned
++to the parent project's verified submodule revision, rather than a moving branch.
++
++The earlier local Windows port can supply behavior references and source fixes
++with recorded provenance. Compare available original and HD asset sets for visual
++quality and renderer compatibility, preserving both until user comparison. Retail
++game data, HD packs, saves and proprietary SDK files stay local and out of PRs.
++The existing Windows builds and save baselines must remain recoverable.
++
++## Incremental platform audit
++
++| Area | Existing dependency / next proof required |
++| --- | --- |
++| `sdl3_gl.c` | SDL window, GL context, shader compile, swap; no public PS5 GL context established. |
++| `sdl3_gpu.c` | SDL GPU device, shaders, textures, render passes and swapchain; no public PS5 SDL GPU driver established. |
++| `sdl3_software.c` | CPU rendering still needs SDL presentation/window support; not an automatic console fallback. |
++| `sdl3_audio.c` | SDL audio device stream, callback, mutex and frequency control; requires a real public audio backend. |
++| `sdl3_os.c` | SDL monotonic nanoseconds, thread IDs, detached threads, mutexes, semaphores and priority; validate semantics before substituting POSIX calls. |
++| Input | SDL event/gamepad mapping in `sdl3_common.h`; public controller structures and application context still required. |
++| Settings | `src/main/boot/main.c` uses SDL_GetPrefPath and host preference persistence; console sandbox paths unverified. |
++| Disc | Host options contain two disc paths and feed image loading; choose explicit read-only user-supplied mounts only after runtime path proof. |
++| Saves | `main.c` stores per-user memory-cards and preserves legacy imports; keep migration logic and old saves untouched. Test a separate scratch root first. |
++
++Next step: obtain public evidence identifying a compatible loader and userland
++entry/stdio context for 13.60, then build the pinned SDK's unmodified hello sample
++on this host. SDK Windows wrappers need clang plus the SDK sysroot, CRT and
++prospero-lld wrapper; Zig alone is not that toolchain. Only after that evidence
++should a PS5 adapter replace the deliberate configuration gate. Human records
++boot/log and scratch I/O output before any game integration. Graphics, input,
++audio, threads and timing each remain separate proof stages.
++
++## Native SDL3 game link handoff (2026-10-29)
++
++The actual native game now compiles/links with the public SDK and installed PS5 SDL3.
++`platform/ps5/build-game.ps1` exports/patches PsyZ in isolation and enables only
++`PE_PS5_GAME`; desktop defaults and pinned submodules remain unchanged. See
++`outputs/RESULT-GAME.md` for commands, input pins, Windows linker/GTK fixes,
++review evidence and outstanding console validation. Final ELF SHA256:
++`6996D2F50B40A6B9ECFFF8C65C628639EE73B73911C1FD01A40DCABF397DBAC2`.
++It is4,094,616bytes and has NOT been run on a console.
++
++Local-only test folder `outputs/PS5-native-game-20261029T013417Z-e12e85` contains
++that ELF, configuration, notices and explicitly selected validated original BINs
++with their original textures. The whole folder is Git-ignored; never upload it.
++Startup defaults to `/data/parasite-eve`; both disc paths are configured before
++startup. Configuration/cards use the existing portable logic under this root
++(PE_DATA_HOME/PE_CONFIG_HOME overrides). Touchpad is PS1 Select; L3+R3 opens
++same-window software settings. Rendering is the existing CPU PS1 rasterizer
++presented through real SDL3 PS5 VideoOut, with GPU-only options unavailable.
++The external HD PNG pack is unsupported pending a native replacement-texture
++loader. The owner handles every console transfer and runtime test.
++
++## Isolated upstream 0.7 candidate handoff (2026-10-29)
++
++`platform/ps5/prepare-upstream-source.ps1 -AcceptVersionResolution` exports
++upstream `da1f775e686ebe47fa5848c723f7efba73d59211` and three-way reconciles
++tracked local changes using common base `49341628f0756817ab997b3ae8d75e98201cc47b`.
++It creates a new ignored candidate, merge snapshots and a revision/conflict
++manifest. It does not change the checkout, index or submodule pins. The explicit
++switch accepts only the recognized CMake project-version/PS5-opt-in conflict;
++other conflicts require resolution in that generated candidate. Upstream 0.7
++gameplay and crash-report source changes remain present. The upstream crash
++reporter itself has no PS5 implementation; retaining it does not add one.
++
++`build-game.ps1 -SourceRoot <candidate>/src` builds that isolated source using
++the preserved PsyZ pin. `-Resume <candidate-build>` rejects changing source roots.
++`-SDL3Prefix`, `-SDL3Source` and `-SDL3Build` select a matching installed library,
++generated source and build configuration explicitly, including on resume.
++The real candidate ELF linked at
++`outputs/ps5/game-20261029T053325Z-c0bd4a/b/parasite-eve-ps5.elf`:
++4,113,384 bytes, SHA256
++`4386B8605B57F198E9AE81AC7FD64B28CFD352EF898E1A22D5A89D7393949563`.
++Main relinked it against the separate SDL3 `install-reviewfix` prefix at05:42:58Z;
++this supersedes the helper's earlier original-library hash. It is untested on
++console. Main must review/integrate the candidate before deciding on a new test package. The delivered
++baseline, original discs and saves remain preserved.
++
++`outputs/RESULT-UPSTREAM.md` records exact source/build state and remaining work.
++`outputs/NATIVE-HD-DESIGN.md` identifies native sampling, CLUT, mask, blending,
++VRAM-invalidation and high-resolution presentation work. The offline
++`inspect-hd-pack.ps1 -PackRoot <local-pack>` inspects filenames and PNG IHDR
++metadata without copying images. None of these changes enables HD replacements.
+diff --git a/include/pe1/geom_state.h b/include/pe1/geom_state.h
+index d6e2923..b7ebbd8 100644
+--- a/include/pe1/geom_state.h
++++ b/include/pe1/geom_state.h
+@@ -125,6 +125,7 @@ struct RenderTilePacket;
+ void Render_PrepareHdBackgrounds(void);
+ void Render_RefreshHdBackgrounds(void);
+ int Render_GetHdWidescreenPicture(int *left, int *right);
++void Render_TraceWidescreenMetadata(int buffer_y, unsigned tiles, int left, int right, int hd_available, int hd_left, int hd_right);
+ int Render_LoadMeshEntry(GeomEntry *entry, struct RenderTilePacket *buffer, void **end);
+ 
+ 
+diff --git a/include/pe1/model_fill_lighting.h b/include/pe1/model_fill_lighting.h
+new file mode 100644
+index 0000000..f153ef4
+--- /dev/null
++++ b/include/pe1/model_fill_lighting.h
+@@ -0,0 +1,17 @@
++#ifndef PE1_MODEL_FILL_LIGHTING_H
++#define PE1_MODEL_FILL_LIGHTING_H
++#include <stdint.h>
++/* Optional colour-only treatment of actual lit Render_DrawObject models.
++ * Not character classification, specular/rim lighting, reflection or geometry.
++ * 0 original,1 neutral soft fill,2 fixed world-direction fill.
++ */
++typedef struct CpeModelFillFrame {
++    float rotation[3][3];
++    int preset;
++    int directional;
++} CpeModelFillFrame;
++void Render_SetModelFillLighting(int preset);
++int Render_GetModelFillLighting(void);
++void CpeModelFillPrepare(CpeModelFillFrame *frame,const int16_t *rotation,int preset);
++uint32_t CpeModelFillColour(uint32_t colour,const int16_t *normal,const CpeModelFillFrame *frame);
++#endif
+diff --git a/include/pe1/render_object.h b/include/pe1/render_object.h
+index 0ddea23..097789c 100644
+--- a/include/pe1/render_object.h
++++ b/include/pe1/render_object.h
+@@ -666,6 +666,8 @@ void Render_CopyFrameData(RenderObjectEntity *dst, RenderObjectEntity *src, s32
+ void Render_CopyFrameDataDouble(RenderObjectEntity *dst, RenderObjectEntity *src, s32 frame);
+ void Pgxp_StoreBoneRotYXZ(const RenderMatrix *matrix, s16 rx, s16 ry, s16 rz);
+ void Pgxp_StoreModelMatrix(const RenderMatrix *matrix, s16 rx, s16 ry, s16 rz, s16 scale);
++/* Preserve available world-position fractions only in the visual PGXP cache. */
++void Pgxp_StoreModelPosition16(const RenderMatrix *matrix, s32 x, s32 y, s32 z);
+ int Render_Update(void);
+ void Render_Noop(void);
+ 
+diff --git a/mods/CMakeLists.txt b/mods/CMakeLists.txt
+index f3ac175..f7f0bcf 100644
+--- a/mods/CMakeLists.txt
++++ b/mods/CMakeLists.txt
+@@ -22,6 +22,10 @@ set(pe_host_sources
+     host/ui/pe_ui_gpu.c     # the overlay quad
+     host/ui/pe_toast.c)     # one-line messages
+ 
++if(PE_PS5_PLUGINS AND NOT PE_PS5_GPU_NATIVE)
++    list(REMOVE_ITEM pe_host_sources host/ui/pe_ui_gpu.c)
++    list(APPEND pe_host_sources host/ui/pe_ui_ps5_cpu.c)
++endif()
+ set(pe_mod_sources ${pe_host_sources})
+ set(pe_mod_decls "")
+ set(pe_mod_refs "")
+diff --git a/mods/host/pe_mod_host.c b/mods/host/pe_mod_host.c
+index 5a90b1e..29b3be7 100644
+--- a/mods/host/pe_mod_host.c
++++ b/mods/host/pe_mod_host.c
+@@ -81,13 +81,21 @@ void pe_log(const char *tag, const char *fmt, ...) {
+     va_end(args);
+     if (!play && !tried) {
+         tried = 1;
+-        if (pe_mod_path(path, sizeof(path), "pe_play.log") == 0) play = fopen(path, "a");
++#ifdef PE_PS5_PLUGINS
++        /* Keep play events in the same opt-in session as CRT and mod output. */
++        (void)path;
++#else
++        if (pe_mod_path(path, sizeof(path), "pe_play.log") == 0) { play = fopen(path, "a"); }
++#endif
+     }
+     if (play) {
+         fprintf(play, "%s %s\n", tag, text);
+         fflush(play);
+     }
+-    if (event < 0) event = pe_event_id(PE_EVENT_LOG_LINE);
++#ifdef PE_PS5_PLUGINS
++    fprintf(stderr, "[play] %s %s\n", tag, text);
++#endif
++    if (event < 0) { event = pe_event_id(PE_EVENT_LOG_LINE); }
+     line.tag = tag;
+     line.text = text;
+     pe_event_emit(event, &line);                 /* e.g. the detailed play log copies it */
+@@ -244,6 +252,10 @@ static void pe_manage_register(int mod_count) {
+                             "Applies the next time the game starts.", &s_all_on, NULL);
+     for (i = 0; i < mod_count; i++) {
+         s_mod_on[i] = 1;
++#ifdef PE_PS5_PLUGINS
++        /* Balance changes require an explicit per-mod choice on PS5. */
++        if (!strcmp(g_pe_mods[i]->id, "pe_rebalance")) s_mod_on[i] = 0;
++#endif
+         pe_menu_register_toggle(0, g_pe_mods[i]->name, s_mod_note[i], &s_mod_on[i], NULL);
+     }
+     pe_menu_begin(0);
+@@ -316,13 +328,25 @@ static void pe_host_start(const PeHookInit *init) {
+     s_interactive = init && init->interactive;
+     if (init && init->prefs_file && *init->prefs_file) {
+         const char *a = strrchr(init->prefs_file, '/'), *b = strrchr(init->prefs_file, '\\');
++#ifdef PE_PS5_PLUGINS
++        /* PS5 config paths use absolute POSIX paths, checked before startup. */
++        slash = a;
++        (void)b;
++#else
+         slash = a > b ? a : b;
++#endif
+         if (slash && (size_t)(slash - init->prefs_file + 1) < sizeof(s_prefs_dir))
+             snprintf(s_prefs_dir, sizeof(s_prefs_dir), "%.*s",
+                      (int)(slash - init->prefs_file + 1), init->prefs_file);
+     }
++#ifndef PE_PS5_PLUGINS
+     if (pe_mod_path(log_path, sizeof(log_path), "pe_mods.log") == 0)
+         s_log = fopen(log_path, "w");
++#else
++    /* PS5 diagnostics already reach stderr and its per-launch session sink.
++     * Do not truncate a second shared log behind the manager's back. */
++    (void)log_path;
++#endif
+     pe_mod_log(NULL, "mod host started (mod API %d, %s)", PE_MOD_API_VERSION, s_interactive ? "interactive" : "headless");
+     pe_menu_load_settings();
+     pe_pages_describe();
+@@ -342,6 +366,17 @@ static void pe_host_start(const PeHookInit *init) {
+ }
+ 
+ int pe_host_init(const PeHookInit *init) {
++#ifdef PE_PS5_PLUGINS
++    const char *slash;
++    /* Never fall back to cwd when an invalid/oversized preference directory
++     * cannot fit the host's existing bounded path storage. */
++    if (!init || !init->prefs_file || init->prefs_file[0] != '/' ||
++        !(slash = strrchr(init->prefs_file, '/')) ||
++        (size_t)(slash - init->prefs_file + 1) >= sizeof(s_prefs_dir)) {
++        fprintf(stderr, "[mods] PS5 host disabled: invalid absolute preferences path\n");
++        return -1;
++    }
++#endif
+     if (!s_started) pe_host_start(init);
+     return 0;
+ }
+diff --git a/mods/host/pe_mod_menu.h b/mods/host/pe_mod_menu.h
+index a7c70a4..2f642b4 100644
+--- a/mods/host/pe_mod_menu.h
++++ b/mods/host/pe_mod_menu.h
+@@ -62,6 +62,9 @@ int pe_menu_page(const char *sub, const char *description, int order);
+ int pe_menu_top_page(const char *page, const char *description, int order);
+ #define PE_MENU_MANAGE "Manage mods"   /* the host's page, last on the list */
+ 
++/* Open an existing page synchronously; unknown pages fall back to Manage mods. */
++int pe_mod_panel_open_page(const char *page);
++
+ /* ---- for the panel ---- */
+ 
+ typedef enum PeRowKind {
+diff --git a/mods/host/pe_mod_panel.c b/mods/host/pe_mod_panel.c
+index 960cfdd..8519d2b 100644
+--- a/mods/host/pe_mod_panel.c
++++ b/mods/host/pe_mod_panel.c
+@@ -204,6 +204,9 @@ static const char *pe_help_text(void) {
+ }
+ 
+ static const char *pe_key_hints(void) {
++#ifdef PE_PS5_PLUGINS
++    return "D-pad select/change   Cross open   Circle back   L1+R1+Touchpad close";
++#endif
+     const Entry *e = pe_selected();
+     const char *back = pe_at_top() ? "Esc close" : "Esc back";
+     static char hints[128];
+@@ -385,8 +388,10 @@ static void pe_panel_event(const SDL_Event *ev) {
+         case SDL_GAMEPAD_BUTTON_DPAD_DOWN: pe_move(1); break;
+         case SDL_GAMEPAD_BUTTON_DPAD_LEFT: pe_step(-1); break;
+         case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: pe_step(1); break;
++#ifndef PE_PS5_PLUGINS
+         case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: pe_page_move(-VISIBLE_ROWS); break;
+         case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: pe_page_move(VISIBLE_ROWS); break;
++#endif
+         case SDL_GAMEPAD_BUTTON_SOUTH: pe_accept(); break;
+         case SDL_GAMEPAD_BUTTON_EAST: pe_back(); break;
+         case SDL_GAMEPAD_BUTTON_GUIDE: s_panel.open = 0; break;
+@@ -426,7 +431,80 @@ static void pe_panel_run(void) {
+     pe_toast_block(0);
+ }
+ 
++#ifdef PE_PS5_PLUGINS
++/* Chord state belongs to one physical controller. Partial chord presses
++ * retain normal gameplay meaning while closed. Full release rearms toggle. */
++static SDL_JoystickID s_chord_pad;
++static unsigned s_chord_bits;
++static int s_chord_latched, s_pad_drain, s_direct_drain;
++int pe_ps5_mods_capture_pad(SDL_Gamepad *pad) {
++    int i;
++    if (s_panel.open) return 1;
++    if (s_direct_drain) {
++        int count, held = 0;
++        SDL_JoystickID *ids = SDL_GetGamepads(&count);
++        if (!ids) return 1;
++        for (int n = 0; n < count && !held; ++n) {
++            SDL_Gamepad *other = SDL_GetGamepadFromID(ids[n]);
++            if (!other) continue;
++            for (i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
++                if (SDL_GetGamepadButton(other,(SDL_GamepadButton)i)) held = 1;
++            for (i = 0; i < SDL_GAMEPAD_AXIS_COUNT; ++i) {
++                int v = SDL_GetGamepadAxis(other,(SDL_GamepadAxis)i);
++                if (v > 8000 || v < -8000) held = 1;
++            }
++        }
++        SDL_free(ids);
++        if (held) return 1;
++        s_direct_drain = 0;
++    }
++    if (!s_pad_drain || SDL_GetGamepadID(pad) != s_chord_pad) return 0;
++    for (i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
++        if (SDL_GetGamepadButton(pad, (SDL_GamepadButton)i)) return 1;
++    for (i = 0; i < SDL_GAMEPAD_AXIS_COUNT; ++i) {
++        int value = SDL_GetGamepadAxis(pad, (SDL_GamepadAxis)i);
++        if (value > 8000 || value < -8000) return 1;
++    }
++    s_pad_drain = 0;
++    return 0;
++}
++static int pe_ps5_chord(const SDL_Event *ev) {
++    unsigned bit = 0;
++    if (ev->type == SDL_EVENT_GAMEPAD_REMOVED && ev->gdevice.which == s_chord_pad) {
++        s_chord_pad = 0; s_chord_bits = 0;
++        s_chord_latched = s_pad_drain = 0;
++        return 0;
++    }
++    if (ev->type != SDL_EVENT_GAMEPAD_BUTTON_DOWN && ev->type != SDL_EVENT_GAMEPAD_BUTTON_UP) return 0;
++    switch (ev->gbutton.button) {
++    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: bit = 1; break;
++    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: bit = 2; break;
++    case SDL_GAMEPAD_BUTTON_TOUCHPAD: bit = 4; break;
++    default: return 0;
++    }
++    if (s_chord_pad && s_chord_pad != ev->gbutton.which && (s_chord_bits || s_chord_latched)) return 0;
++    s_chord_pad = ev->gbutton.which;
++    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) s_chord_bits |= bit;
++    else s_chord_bits &= ~bit;
++    if (!s_chord_bits) {
++        int consumed = s_chord_latched;
++        s_chord_latched = 0;
++        return consumed;
++    }
++    if (s_chord_latched) return 1;
++    if (s_chord_bits != 7) return 0;
++    s_chord_latched = s_pad_drain = 1;
++    if (s_panel.open) s_panel.open = 0;
++    else pe_panel_run();
++    return 1;
++}
++#endif
+ static bool pe_filter(const SDL_Event *ev) {
++#ifdef PE_PS5_PLUGINS
++    if (pe_ps5_chord(ev)) return true;
++    /* Device lifecycle must still reach PsyZ while the panel is modal. */
++    if (ev->type == SDL_EVENT_GAMEPAD_REMOVED || ev->type == SDL_EVENT_GAMEPAD_ADDED) return false;
++#endif
+     if (s_panel.open) {
+         if (ev->type == SDL_EVENT_WINDOW_RESIZED || ev->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
+             ev->type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) {
+@@ -447,6 +525,19 @@ static bool pe_filter(const SDL_Event *ev) {
+     return false;
+ }
+ 
++int pe_mod_panel_open_page(const char *page) {
++    int i, found = 0;
++    if (!pe_ui_gpu_ready() || s_panel.open) return 0;
++    if (page) for (i = 0; i < pe_menu_row_count(); ++i)
++        if (!strcmp(pe_menu_row(i)->page, page)) { found = 1; break; }
++    pe_go(found ? page : PE_MENU_MANAGE, 0);
++#ifdef PE_PS5_PLUGINS
++    s_direct_drain = 1; /* release the closing button before original pad polling */
++#endif
++    pe_panel_run();
++    return 1;
++}
++
+ void pe_panel_install(void) {
+     pe_ui_gpu_install();
+     pe_toast_install();
+diff --git a/mods/host/ui/pe_ui_gpu.c b/mods/host/ui/pe_ui_gpu.c
+index d64560f..b4487b9 100644
+--- a/mods/host/ui/pe_ui_gpu.c
++++ b/mods/host/ui/pe_ui_gpu.c
+@@ -7,12 +7,12 @@
+ #include <psyz/overlay.h>
+ #include <psyz/overlay_sdl3_gpu.h>
+ 
+-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.spv.h"
+-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.msl.h"
+-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.dxil.h"
+-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.spv.h"
+-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.msl.h"
+-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.dxil.h"
++#include "../../../../sdl3-src/src/render/gpu/shaders/tri_texture.vert.spv.h"
++#include "../../../../sdl3-src/src/render/gpu/shaders/tri_texture.vert.msl.h"
++#include "../../../../sdl3-src/src/render/gpu/shaders/tri_texture.vert.dxil.h"
++#include "../../../../sdl3-src/src/render/gpu/shaders/texture_rgba.frag.spv.h"
++#include "../../../../sdl3-src/src/render/gpu/shaders/texture_rgba.frag.msl.h"
++#include "../../../../sdl3-src/src/render/gpu/shaders/texture_rgba.frag.dxil.h"
+ 
+ #include "pe_ui.h"
+ 
+@@ -139,7 +139,16 @@ static void pe_quad(Vertex *v, float x0, float y0, float x1, float y1, float u0,
+     v[5] = (Vertex){x1, y1, 1, 1, 1, a, u1, v1};
+ }
+ 
+-int pe_ui_gpu_ready(void) { return s_device && s_window; }
++int pe_ui_gpu_ready(void) {
++    if (!s_device || !s_window) return 0;
++    /* Confirm actual GPU pipeline resources before a modal panel pauses
++     * the game and captures its controller. No invisible modal on failure. */
++    if (!pe_pipeline()) {
++        SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Native GPU mod overlay unavailable: %s", SDL_GetError());
++        return 0;
++    }
++    return 1;
++}
+ 
+ int pe_ui_gpu_window_size(int *w, int *h) {
+     *w = *h = 0;
+diff --git a/mods/host/ui/pe_ui_ps5_cpu.c b/mods/host/ui/pe_ui_ps5_cpu.c
+new file mode 100644
+index 0000000..77ee1fe
+--- /dev/null
++++ b/mods/host/ui/pe_ui_ps5_cpu.c
+@@ -0,0 +1,101 @@
++/* SPDX-License-Identifier: Apache-2.0
++ * Copyright 2026 PE-PORT contributors.
++ * Main-thread CPU presentation adapter for the existing premultiplied RGBA UI.
++ * No SDL surface/window or caller-owned canvas survives a callback.
++ */
++#include <SDL3/SDL.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++#include <psyz/overlay.h>
++#include "pe_ui.h"
++
++enum { MAX_SIDE = 4096, MAX_PITCH = MAX_SIDE * 8 };
++static uint8_t *s_pixels;
++static int s_w, s_h, s_x, s_y, s_win_w, s_win_h, s_visible;
++static unsigned s_dim;
++static PsyzOverlayDestroyCB s_prev_destroy;
++
++void pe_ui_gpu_hide(void) {
++    free(s_pixels);
++    s_pixels = NULL;
++    s_visible = 0;
++}
++static void pe_destroy(void) {
++    pe_ui_gpu_hide();
++    s_win_w = s_win_h = 0;
++    if (s_prev_destroy) s_prev_destroy();
++}
++void pe_ui_gpu_install(void) {
++    s_prev_destroy = Psyz_OverlayDestroyCB(pe_destroy);
++}
++int pe_ui_gpu_ready(void) { return s_win_w > 0 && s_win_h > 0; }
++int pe_ui_gpu_window_size(int *w, int *h) {
++    if (!w || !h) return 0;
++    *w = s_win_w; *h = s_win_h;
++    return pe_ui_gpu_ready();
++}
++int pe_ui_gpu_show(const PeSurface *s, int x, int y, float dim) {
++    uint8_t *copy;
++    size_t bytes;
++    if (!s || !s->pixels || s->w <= 0 || s->h <= 1 ||
++        s->w > MAX_SIDE || s->h > MAX_SIDE ||
++        x < -MAX_SIDE || y < -MAX_SIDE || x > MAX_SIDE || y > MAX_SIDE ||
++        !(dim >= 0.0f && dim <= 1.0f)) {
++        pe_ui_gpu_hide();
++        return 0;
++    }
++    /* Bounded before multiplication; exclude the rasterizer's solid texel row. */
++    bytes = (size_t)s->w * (size_t)(s->h - 1) * 4u;
++    copy = malloc(bytes);
++    if (!copy) { pe_ui_gpu_hide(); return 0; }
++    memcpy(copy, s->pixels, bytes);
++    free(s_pixels);
++    s_pixels = copy; s_w = s->w; s_h = s->h - 1;
++    s_x = x; s_y = y; s_dim = (unsigned)(dim * 255.0f + 0.5f);
++    s_visible = 1;
++    return 1;
++}
++
++void pe_ps5_mods_present(SDL_Surface *dst) {
++    const SDL_PixelFormatDetails *fmt;
++    int x, y;
++    s_win_w = s_win_h = 0;
++    if (!dst || !dst->pixels || dst->w <= 0 || dst->h <= 0 ||
++        dst->w > MAX_SIDE || dst->h > MAX_SIDE || dst->pitch < dst->w * 4 ||
++        dst->pitch > MAX_PITCH) return;
++    /* Only ordinary 32-bit RGB byte layouts; SDL reports shifts and masks.
++     * RGB565, indexed, planar, HDR and other layouts fail closed. */
++    fmt = SDL_GetPixelFormatDetails(dst->format);
++    if (!fmt || fmt->bytes_per_pixel != 4 || fmt->Rbits != 8 ||
++        fmt->Gbits != 8 || fmt->Bbits != 8 ||
++        (fmt->Abits != 0 && fmt->Abits != 8)) return;
++    s_win_w = dst->w; s_win_h = dst->h;
++    if (!s_visible || !s_pixels) return;
++    if (!SDL_LockSurface(dst)) return;
++    for (y = 0; y < dst->h; ++y) {
++        uint8_t *row = (uint8_t *)dst->pixels + (size_t)y * (size_t)dst->pitch;
++        for (x = 0; x < dst->w; ++x) {
++            uint32_t pixel, rgb[3];
++            const int sx = x - s_x, sy = y - s_y;
++            const uint8_t *src = NULL;
++            unsigned i, alpha = 0;
++            const unsigned shifts[3] = {fmt->Rshift, fmt->Gshift, fmt->Bshift};
++            memcpy(&pixel, row + (size_t)x * 4u, 4);
++            if (sx >= 0 && sy >= 0 && sx < s_w && sy < s_h) {
++                src = s_pixels + ((size_t)sy * (size_t)s_w + (size_t)sx) * 4u;
++                alpha = src[3];
++            }
++            for (i = 0; i < 3; ++i) {
++                unsigned value = (pixel >> shifts[i]) & 255u;
++                value = (value * (255u - s_dim) + 127u) / 255u;
++                value = (src ? src[i] : 0u) + (value * (255u - alpha) + 127u) / 255u;
++                rgb[i] = value > 255u ? 255u : value;
++            }
++            pixel = (pixel & ~(fmt->Rmask | fmt->Gmask | fmt->Bmask)) |
++                (rgb[0] << fmt->Rshift) | (rgb[1] << fmt->Gshift) | (rgb[2] << fmt->Bshift);
++            memcpy(row + (size_t)x * 4u, &pixel, 4);
++        }
++    }
++    SDL_UnlockSurface(dst);
++}
+diff --git a/mods/host/ui/pe_ui_raster.c b/mods/host/ui/pe_ui_raster.c
+index 5414d37..f845cef 100644
+--- a/mods/host/ui/pe_ui_raster.c
++++ b/mods/host/ui/pe_ui_raster.c
+@@ -30,6 +30,9 @@ int pe_ui_font_ready(void) {
+ }
+ 
+ int pe_ui_surface_begin(PeSurface *s, int w, int h) {
++#ifdef PE_PS5_PLUGINS
++    if (!s || w <= 0 || h <= 0 || w > 4096 || h >= 4096) return 0;
++#endif
+     if (!s->pixels || s->w != w || s->h != h + 1) {
+         free(s->pixels);
+         s->pixels = (uint8_t *)calloc((size_t)w * (size_t)(h + 1), 4u);
+diff --git a/mods/pe_assists/pe_assists.c b/mods/pe_assists/pe_assists.c
+new file mode 100644
+index 0000000..00bdbfa
+--- /dev/null
++++ b/mods/pe_assists/pe_assists.c
+@@ -0,0 +1,58 @@
++/* SPDX-License-Identifier: Apache-2.0
++ * Copyright 2026 PE-PORT contributors.
++ * Independent typed-hook assists; no legacy implementation or address patches.
++ */
++#include "pe_mod_host.h"
++#include "pe_mod_menu.h"
++#include "pe_game.h"
++
++#define MOD_ID "pe_assists"
++static int s_refill_hp = 0;
++static int s_free_powers = 0;
++
++static int refill_hp(void *ctx, void *user)
++{
++    Combatant *aya;
++    (void)ctx;
++    (void)user;
++    if (!s_refill_hp || !pe_game_loaded()) return 0;
++    aya = pe_aya_core();
++    if (aya && aya->curHP > 0 && aya->maxHP > 0 && aya->maxHP <= 9999 &&
++        aya->curHP < aya->maxHP)
++        aya->curHP = aya->maxHP;
++    return 0;
++}
++
++static int free_power_cost(void *ctx, void *user)
++{
++    PeHookPowerCost *query = ctx;
++    (void)user;
++    if (s_free_powers && pe_game_loaded() && query && query->cost &&
++        *query->cost > 0)
++        *query->cost = 0;
++    return 0;
++}
++
++static int assists_init(void)
++{
++    int failed = 0;
++    pe_menu_begin("Playtest assists");
++    failed |= pe_menu_register_toggle(NULL, "Refill HP while alive",
++        "Refills between updates; no revival or lethal-hit immunity.",
++        &s_refill_hp, NULL);
++    failed |= pe_menu_register_toggle(NULL, "Zero table-based PE cost",
++        "Waives hooked PE costs only; special power requirements remain.",
++        &s_free_powers, NULL);
++    pe_menu_begin(NULL);
++    failed |= pe_hook_add(PE_HOOK_FRAME, refill_hp, NULL,
++        PE_PRIORITY_LATE, MOD_ID);
++    failed |= pe_hook_add(PE_HOOK_BATTLE_UPDATE, refill_hp, NULL,
++        PE_PRIORITY_LATE, MOD_ID);
++    failed |= pe_hook_add(PE_HOOK_POWER_COST, free_power_cost, NULL,
++        PE_PRIORITY_LATE, MOD_ID);
++    return failed ? -1 : 0;
++}
++
++const PeMod pe_mod_pe_assists = {
++    MOD_ID, "Playtest assists (optional)", "0.1", NULL, assists_init, NULL
++};
+diff --git a/platform/ps5/.gitignore b/platform/ps5/.gitignore
+new file mode 100644
+index 0000000..9aead60
+--- /dev/null
++++ b/platform/ps5/.gitignore
+@@ -0,0 +1,7 @@
++/sdk-review/
++/build-host/
++/build-blocked/
++/probe-*
++/zig-host.cmd
++/downloads/
++/tools/
+diff --git a/platform/ps5/bootstrap.c b/platform/ps5/bootstrap.c
+new file mode 100644
+index 0000000..a5596f1
+--- /dev/null
++++ b/platform/ps5/bootstrap.c
+@@ -0,0 +1,61 @@
++/* Portable probe contract. This host executable is not a PS5 payload. */
++#include <errno.h>
++#include <stdio.h>
++#include <string.h>
++
++#ifndef PE_PS5_HOST_VALIDATE
++#error A verified PS5 runtime adapter is required before compiling a payload
++#endif
++
++static int read_probe(const char *path) {
++    unsigned char buffer[1024];
++    size_t total = 0, count;
++    FILE *file = fopen(path, "rb");
++    if (!file) {
++        fprintf(stderr, "file-read=failed errno=%d\n", errno);
++        return 1;
++    }
++    while ((count = fread(buffer, 1, sizeof buffer, file)) != 0) total += count;
++    int failed = ferror(file);
++    if (fclose(file) != 0) failed = 1;
++    printf("file-read=%s bytes=%zu\n", failed ? "failed" : "passed", total);
++    return failed;
++}
++
++static int write_probe(const char *path) {
++    static const char marker[] = "pe-ps5-bootstrap probe\n";
++    char actual[sizeof marker] = {0};
++    /* Exclusive creation: never truncate a save, asset, or existing probe. */
++    FILE *file = fopen(path, "wbx");
++    if (!file) {
++        fprintf(stderr, "file-write=failed errno=%d (requires unused scratch path)\n", errno);
++        return 1;
++    }
++    int failed = fwrite(marker, 1, sizeof marker - 1, file) != sizeof marker - 1;
++    if (fflush(file) != 0) failed = 1;
++    if (fclose(file) != 0) failed = 1;
++    file = fopen(path, "rb");
++    if (!file) failed = 1;
++    else {
++        if (fread(actual, 1, sizeof actual, file) != sizeof marker - 1 ||
++            ferror(file) || memcmp(actual, marker, sizeof marker - 1) != 0) failed = 1;
++        if (fclose(file) != 0) failed = 1;
++    }
++    if (remove(path) != 0) failed = 1;
++    printf("file-write-roundtrip=%s\n", failed ? "failed" : "passed");
++    return failed;
++}
++
++int main(int argc, char **argv) {
++    puts("boot=host-validation-only log=stdio");
++    if (fflush(stdout) != 0) return 1;
++    if (argc != 3) {
++        fprintf(stderr, "usage: %s READ_FIXTURE UNUSED_SCRATCH_PATH\n", argv[0]);
++        return 1;
++    }
++    int failed = read_probe(argv[1]);
++    failed |= write_probe(argv[2]);
++    puts("controller=unavailable graphics-clear=unavailable ps5-runtime=unverified");
++    /* 2 denotes unavailable capability; passing portable I/O is not a port. */
++    return failed ? 1 : 2;
++}
+diff --git a/src/main/boot/main.c b/src/main/boot/main.c
+index 32d059f..ae1252d 100644
+--- a/src/main/boot/main.c
++++ b/src/main/boot/main.c
+@@ -1,3 +1,7 @@
++#if defined(PE_PS5_GPU_NATIVE) && defined(PE_MODS)
++#include "../../../mods/host/pe_mod_menu.h"
++static int host_open_assists;
++#endif
+ #include "common.h"
+ #include <ctype.h>
+ #include <errno.h>
+@@ -29,6 +33,15 @@
+ #include "pe1/save_tail_state.h"
+ #include "pe1/scene_dispatch.h"
+ #include "pe_hooks.h"
++#ifdef PE_PS5_GPU_NATIVE
++#include "pe1/model_fill_lighting.h"
++#endif
++
++#ifdef PE_PS5
++/* Local staged PsyZ status; no upstream public ABI change. */
++extern int Psyz_PS5PlatformReady(void);
++extern const char *Psyz_PS5PlatformInitError(void);
++#endif
+ 
+ /* Desktop preferences belong to the original boot module. The modal loop
+  * never ticks the game, PS1 timers, scripts, or audio. */
+@@ -42,7 +55,15 @@ static struct {
+     int antialiasing;
+     int model_filtering;
+     int widescreen;
++#ifdef PE_PS5_GPU_NATIVE
++    int fsr1,fsr1_sharpness,model_fill_lighting,movie_blur;
++#endif
+     int hd_backgrounds;
++#ifdef PE_PS5
++    char hd_title_directory[4096];
++    int hd_field_materials;
++    char hd_field_directory[4096];
++#endif
+     int fullscreen;
+     /* 2..PSYZ_SPEED_MAX, used while the speed binding is held */
+     unsigned speed_factor;
+@@ -55,6 +76,61 @@ static struct {
+     int enabled;
+ } host_options;
+ 
++#ifdef PE_PS5
++#ifndef PE_PS5_DATA_ROOT
++#define PE_PS5_DATA_ROOT "/data/parasite-eve"
++#endif
++static char host_data_root[4096];
++
++/* PS5 application launches cannot depend on changing the process cwd. */
++static int Host_DataPath(char *out, size_t capacity, const char *path) {
++    int n = snprintf(out, capacity, "%s%s%s", path[0] == '/' ? "" : host_data_root,
++                     path[0] == '/' ? "" : "/", path);
++    if (n < 0 || (size_t)n >= capacity) {
++        if (capacity) out[0] = '\0';
++        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 path too long: %.200s", path);
++        return 0;
++    }
++    return 1;
++}
++
++static int Host_InitPaths(void) {
++    SDL_Environment *env = SDL_GetEnvironment();
++    const char *root = SDL_GetEnvironmentVariable(env, "PE_DATA_HOME");
++    if (!root || !*root) root = PE_PS5_DATA_ROOT;
++    if (root[0] != '/' || strlen(root) >= sizeof(host_data_root)) {
++        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 data root must be an absolute path: %.200s", root);
++        return 0;
++    }
++    strcpy(host_data_root, root);
++    size_t length = strlen(host_data_root);
++    while (length > 1 && host_data_root[length - 1] == '/') host_data_root[--length] = '\0';
++    const char *config = SDL_GetEnvironmentVariable(env, "PE_CONFIG_HOME");
++    char directory[4096];
++    if (!config || !*config) config = host_data_root;
++    if (!Host_DataPath(directory, sizeof(directory), config)) return 0;
++    int n = snprintf(host_options.user_file, sizeof(host_options.user_file),
++                     "%s/parasite-eve.toml", directory);
++    if (n < 0 || (size_t)n >= sizeof(host_options.user_file)) {
++        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 preferences path too long");
++        return 0;
++    }
++    SDL_Log("PS5 paths data=%s preferences=%s", host_data_root, host_options.user_file);
++    return 1;
++}
++
++static int Host_OpenDisc(PeDisc *disc, const char *path) {
++    char absolute[8192];
++    if (!Host_DataPath(absolute, sizeof(absolute), path)) return 0;
++    SDL_Log("PS5 disc open path=%s", absolute);
++    int ok = pe_disc_open(disc, absolute);
++    if (!ok) SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 disc open failed: %s", absolute);
++    return ok;
++}
++#else
++#define Host_OpenDisc pe_disc_open
++#endif
++
+ static int Host_SaveOptions(void);
+ 
+ #define HOST_BINDING_COUNT 17
+@@ -103,6 +179,7 @@ typedef enum HostBindDevice {
+     HOST_BIND_CONTROLLER = 1
+ } HostBindDevice;
+ 
++#if PE_DESKTOP_MOD_DOWNLOADS
+ /* Versioned desktop background packs. Only a fully verified staging directory
+  * can replace the active pointer; failed/cancelled downloads keep the old pack. */
+ /* curl imports WinSock and WinAPI; keep their historical typedefs separate
+@@ -304,6 +381,160 @@ static int Host_HdCli(int verify) {
+     puts(Host_HdStatus());int result=host_hd.success?0:1;Host_HdStop();return result;
+ }
+ 
++#else
++/* PS5 CPU: local title presentation only; field atlases remain unavailable. */
++static struct { int development, enabled; char active[4096], version[32]; } host_hd;
++#ifdef PE_PS5
++void MenuCard_RefreshHdBackground(void);
++/* Private PS5 CPU API: never grants GPU atlas or geometry-scale capability. */
++int Psyz_CpuFieldMaterialAvailable(void);
++int Psyz_CpuGeometryAvailable(void);
++int Psyz_CpuGeometryConfigure(unsigned scale);
++unsigned Psyz_CpuGeometryRequested(void);
++unsigned Psyz_CpuGeometryEffective(void);
++int Psyz_CpuFieldMaterialConfigure(int enabled,const char *directory);
++void Render_RefreshHdBackgrounds(void);
++static int Host_LocalTitlePath(const char *path) {
++    /* Trusted explicit local paths, never URLs or traversal aliases. */
++    if (!path || path[0]!='/' || strlen(path)>=sizeof(host_hd.active) ||
++        strstr(path,"/../") || strstr(path,"/./") || strchr(path,'\\')) return 0;
++    size_t n=strlen(path);
++    return !(n>=3 && !strcmp(path+n-3,"/..")) && !(n>=2 && !strcmp(path+n-2,"/."));
++}
++#ifdef PE_PS5_GPU_NATIVE
++/* Downloads are a desktop capability. Native PS5 consumes the same unpacked
++ * atlas files from a configured local directory; it never needs active.json. */
++static const char *Host_GpuHdDirectory(void) {
++    if (*host_options.hd_field_directory) return host_options.hd_field_directory;
++    if (*host_options.hd_title_directory) return host_options.hd_title_directory;
++    return SDL_getenv("PE_HD_BACKGROUNDS");
++}
++static int Host_GpuHdPackPresent(const char *directory) {
++    char filename[4096]; unsigned char marker=0;
++    if (!Host_LocalTitlePath(directory)) return 0;
++    int n=snprintf(filename,sizeof(filename),"%s/manifest.json",directory);
++    if(n<0 || (size_t)n>=sizeof(filename)) return 0;
++    SDL_IOStream *file=SDL_IOFromFile(filename,"rb");
++    if(!file) return 0;
++    int present=SDL_ReadIO(file,&marker,1)==1 && marker=='{';
++    SDL_CloseIO(file);
++    return present; /* Presence only; individual atlases remain renderer-validated. */
++}
++static const char *Host_HdStatus(void) {
++    if (!Host_GpuHdPackPresent(Host_GpuHdDirectory()))
++        return "Local HD pack not found. Set hd_field_directory to the unpacked pack; downloads are desktop only.";
++    return host_hd.enabled ? "Local GPU HD requested. Use 2x or higher; actual atlas loads are logged."
++                           : "Local pack found; HD is off. Toggle GPU HD backgrounds. No download is needed.";
++}
++static int Host_HdBusy(void) { return 0; }
++static int Host_HdPercent(void) { return 0; }
++static const char *Host_HdValue(int row) {
++    if(row==0) return host_hd.enabled ? "Requested" : "Off";
++    if(row==1) return Host_GpuHdPackPresent(Host_GpuHdDirectory()) ? "Found / reload" : "Not found / reload";
++    return "Desktop only / local copy";
++}
++static void Host_HdApply(void) {
++    const char *directory=Host_GpuHdDirectory();
++    int present=Host_GpuHdPackPresent(directory);
++    host_hd.enabled=host_options.hd_backgrounds && present;
++    if(present) SDL_strlcpy(host_hd.active,directory,sizeof(host_hd.active));
++    else host_hd.active[0]=0;
++    /* Publish before refresh: mesh_entry and menu-card both read this SDL env. */
++    SDL_SetEnvironmentVariable(SDL_GetEnvironment(),"PE_HD_BACKGROUNDS",host_hd.active,true);
++    SDL_SetEnvironmentVariable(SDL_GetEnvironment(),"PE_PS5_HD_TITLE",host_hd.enabled?"1":"0",true);
++    Psyz_GpuSetSpriteAtlasesEnabled(host_hd.enabled);
++    if (Psyz_PS5PlatformReady()) DrawSync(0);
++    Render_RefreshHdBackgrounds();
++    Psyz_VideoSetRgb24Backdrop(NULL,NULL,0,0,0,0);
++    if(host_hd.enabled) MenuCard_RefreshHdBackground();
++    SDL_Log("[PS5 GPU HD] directory=%s manifest_present=%d requested=%d atlas_enabled=%d download_capability=0 rendered=unobserved",
++        present?host_hd.active:"",present,host_options.hd_backgrounds,host_hd.enabled);
++}
++#else
++static const char *Host_HdStatus(void) {
++ #ifdef PE_PS5_GPU_NATIVE
++    return host_hd.enabled ? "Native GPU atlases requested from the local pack; console validation pending."
++                           : "Original GPU rendering; local HD background pack is optional.";
++ #endif
++    if (!Psyz_CpuFieldMaterialAvailable()) return "CPU field HD unavailable on this renderer. Title HD is separate.";
++    if (!host_options.hd_field_materials) return "CPU field HD off. Geometry scale and widescreen are separate.";
++    if (!Host_LocalTitlePath(host_options.hd_field_directory)) return "CPU field HD needs a local hd_field_directory. Original pixels retained.";
++    return "Ordered field HD requested at 1x or scaled geometry. Admitted tiles use 2x material samples; see coverage logs.";
++}
++static int Host_HdBusy(void) { return 0; }
++static int Host_HdPercent(void) { return 0; }
++static const char *Host_HdValue(int row) {
++#ifdef PE_PS5_GPU_NATIVE
++    if (row==0) return host_hd.enabled ? "GPU atlases requested" : "Original";
++ #else
++    if (row==0) return host_hd.enabled ? "Title HD only" : "Original";
++ #endif
++    if (row==1) return !Psyz_CpuFieldMaterialAvailable() ? "Unavailable" :
++        !host_options.hd_field_materials ? "Off" :
++        Host_LocalTitlePath(host_options.hd_field_directory) ? "Requested (experimental)" : "Needs pack directory";
++    return *host_options.hd_field_directory ? "Local / no download" : "Set hd_field_directory";
++}
++static void Host_HdApply(void) {
++    const char *directory=*host_options.hd_title_directory ? host_options.hd_title_directory
++        : SDL_getenv("PE_HD_BACKGROUNDS");
++    host_hd.enabled=host_options.hd_backgrounds && Host_LocalTitlePath(directory);
++    SDL_SetEnvironmentVariable(SDL_GetEnvironment(),"PE_PS5_HD_TITLE",host_hd.enabled?"1":"0",true);
++#ifdef PE_PS5_GPU_NATIVE
++    Psyz_GpuSetSpriteAtlasesEnabled(host_hd.enabled);
++ #else
++    Psyz_GpuSetSpriteAtlasesEnabled(0); /* CPU path has no GPU atlas. */
++ #endif
++#ifdef PE_PS5_GPU_NATIVE
++    if (Psyz_PS5PlatformReady()) DrawSync(0);
++ #else
++    if(Psyz_CpuFieldMaterialAvailable())DrawSync(0);
++ #endif
++    Psyz_CpuFieldMaterialConfigure(host_options.hd_field_materials,
++        Host_LocalTitlePath(host_options.hd_field_directory)?host_options.hd_field_directory:"");
++    Render_RefreshHdBackgrounds();
++    Psyz_VideoSetRgb24Backdrop(NULL,NULL,0,0,0,0);
++    if (host_hd.enabled) {
++        SDL_strlcpy(host_hd.active,directory,sizeof(host_hd.active));
++        SDL_SetEnvironmentVariable(SDL_GetEnvironment(),"PE_HD_BACKGROUNDS",host_hd.active,true);
++        MenuCard_RefreshHdBackground();
++    } else host_hd.active[0]=0;
++}
++#endif
++static void Host_HdPoll(void) {}
++static void Host_HdAction(int row) {
++    #ifdef PE_PS5_GPU_NATIVE
++    if(row==0) host_options.hd_backgrounds=!host_options.hd_backgrounds;
++    else if(row!=1) return; /* Reload local pack; no unsupported download action. */
++#else
++    if (row==0) host_options.hd_backgrounds=!host_options.hd_backgrounds;
++    else if (row==1) {
++        if (!host_options.hd_field_materials && !Psyz_CpuFieldMaterialAvailable()) return;
++        host_options.hd_field_materials=!host_options.hd_field_materials;
++    } else return;
++#endif
++    Host_HdApply();
++    SDL_Log("[V2 DIRECT DISPLAY toggle] title_HD=%d field_HD=%d",host_options.hd_backgrounds,host_options.hd_field_materials);
++    if (host_options.enabled) Host_SaveOptions();
++}
++static void Host_HdInit(void) { Host_HdApply(); }
++static void Host_HdStop(void) {
++    Psyz_CpuFieldMaterialConfigure(0,"");
++    Psyz_VideoSetRgb24Backdrop(NULL,NULL,0,0,0,0);
++}
++static int Host_HdCli(int verify) { (void)verify; puts(Host_HdStatus()); return EXIT_FAILURE; }
++#else
++static const char *Host_HdStatus(void) { return "HD backgrounds are unavailable on this platform."; }
++static int Host_HdBusy(void) { return 0; }
++static int Host_HdPercent(void) { return 0; }
++static const char *Host_HdValue(int row) { (void)row; return "Unavailable"; }
++static void Host_HdApply(void) { host_hd.enabled=0; Psyz_GpuSetSpriteAtlasesEnabled(0); }
++static void Host_HdPoll(void) {}
++static void Host_HdAction(int row) { (void)row; }
++static void Host_HdInit(void) { Host_HdApply(); }
++static void Host_HdStop(void) {}
++static int Host_HdCli(int verify) { (void)verify; puts(Host_HdStatus()); return EXIT_FAILURE; }
++#endif /* PE_PS5 local title */
++#endif
+ #include "settings_overlay.h"
+ 
+ static char *Host_Trim(char *s) {
+@@ -363,6 +594,20 @@ static int Host_String(char *text, char *out, size_t size) {
+ }
+ 
+ static int Host_ParseOptionValue(const char *section, const char *key, char *value) {
++#ifdef PE_PS5
++    if (!strcmp(section,"mods") && !strcmp(key,"hd_field_directory")) {
++        char decoded[4096];
++        if (!Host_String(value,decoded,sizeof(decoded)) || (*decoded && !Host_LocalTitlePath(decoded))) return 0;
++        SDL_strlcpy(host_options.hd_field_directory,decoded,sizeof(host_options.hd_field_directory));return 1;
++    }
++    if (!strcmp(section,"mods") && !strcmp(key,"hd_title_directory")) {
++        char decoded[4096];
++        if (!Host_String(value,decoded,sizeof(decoded)) ||
++            (*decoded && !Host_LocalTitlePath(decoded))) return 0;
++        SDL_strlcpy(host_options.hd_title_directory,decoded,sizeof(host_options.hd_title_directory));
++        return 1;
++    }
++#endif
+     if (!strcmp(section, "discs")) {
+         int slot = !strcmp(key, "disc1") ? 0 : !strcmp(key, "disc2") ? 1 : -1;
+         if (slot >= 0) {
+@@ -404,7 +649,11 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
+         }
+     } else if (!strcmp(section, "graphics")) {
+         if (!strcmp(key, "internal_resolution")) {
+-            if (v < 1 || v > 8) {
++            if (v < 1 || v > 8
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++                || !(v==1 || v==2 || v==4 || v==6 || v==8)
++#endif
++            ) {
+                 return 0;
+             }
+             host_options.scale = (unsigned)v;
+@@ -432,12 +681,26 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
+         } else if (!strcmp(key, "widescreen")) {
+             if (v > 1) return 0;
+             host_options.widescreen = v;
++#ifdef PE_PS5_GPU_NATIVE
++        } else if (!strcmp(key, "movie_blur")) {
++            if(v>1)return 0;host_options.movie_blur=v;
++        } else if (!strcmp(key, "fsr1")) {
++            if(v>1)return 0;host_options.fsr1=v;
++        } else if (!strcmp(key, "fsr1_sharpness")) {
++            if(v>2)return 0;host_options.fsr1_sharpness=v;
++        } else if (!strcmp(key, "model_fill_lighting")) {
++            if(v>2)return 0;host_options.model_fill_lighting=v;
++#endif
+         } else if (!strcmp(key, "geometry_correction")) {
+             if (v > 1) {
+                 return 0;
+             }
+             host_options.geometry_correction = v;
+         }
++#ifdef PE_PS5
++    } else if (!strcmp(section,"mods") && !strcmp(key,"hd_field_materials")) {
++        if(v<0||v>1)return 0;host_options.hd_field_materials=v;
++#endif
+     } else if (!strcmp(section,"mods") && !strcmp(key,"hd_backgrounds")) {
+         if(v<0||v>1)return 0;host_options.hd_backgrounds=v;
+     } else if (!strcmp(section, "audio") && !strcmp(key, "volume")) {
+@@ -487,6 +750,11 @@ static FILE *Host_OptionsFile(const char *path,const char *mode) {
+ 
+ static void Host_LoadOptions(const char *path) {
+     FILE *file = Host_OptionsFile(path, "r");
++#ifdef PE_PS5
++    int error = file ? 0 : errno;
++    SDL_Log("PS5 preferences open path=%s success=%d errno=%d", path, file != NULL, error);
++    errno = error;
++#endif
+     if (!file) {
+         return;
+     }
+@@ -568,7 +836,11 @@ static int Host_SaveOptions(void) {
+         "geometry_correction = %s\n"
+         "antialiasing = %s\n"
+         "model_filtering = %s\n"
+-        "widescreen = %s\n\n"
++        "widescreen = %s\n"
++#ifdef PE_PS5_GPU_NATIVE
++        "fsr1 = %s\nfsr1_sharpness = %u\nmodel_fill_lighting = %u\nmovie_blur = %s\n"
++#endif
++        "\n"
+         "[audio]\n"
+         "volume = %u\n\n"
+         "[game]\n"
+@@ -585,6 +857,9 @@ static int Host_SaveOptions(void) {
+         host_options.antialiasing ? "true" : "false",
+         host_options.model_filtering ? "true" : "false",
+         host_options.widescreen ? "true" : "false",
++#ifdef PE_PS5_GPU_NATIVE
++        host_options.fsr1 ? "true" : "false",(unsigned)host_options.fsr1_sharpness,(unsigned)host_options.model_fill_lighting,host_options.movie_blur?"true":"false",
++#endif
+         host_options.volume,
+         host_options.speed_factor,
+         host_options.analog_run_threshold
+@@ -594,6 +869,13 @@ static int Host_SaveOptions(void) {
+     Host_WriteString(file, host_options.discs[1]);
+ 
+     fprintf(file,"\n\n[mods]\nhd_backgrounds = %s\n",host_options.hd_backgrounds?"true":"false");
++#ifdef PE_PS5
++    fprintf(file,"hd_field_materials = %s\n",host_options.hd_field_materials?"true":"false");
++    fputs("hd_field_directory = ",file);Host_WriteString(file,host_options.hd_field_directory);fputc('\n',file);
++    fputs("hd_title_directory = ",file);
++    Host_WriteString(file,host_options.hd_title_directory);
++    fputc('\n',file);
++#endif
+     fputs("\n[keyboard]\n", file);
+     for (unsigned i = 0; i < HOST_BINDING_COUNT; ++i) {
+         fprintf(file, "%s = %d\n", host_button_names[i], host_options.keys[i]);
+@@ -617,18 +899,34 @@ static int Host_SaveOptions(void) {
+ /* Bundled desktop launches have no useful writable working directory.
+  * Keep PS1 card files alongside the per-user preferences, without changing
+  * relative image paths or the working directory used by headless replays. */
++static void Host_CardDiagnostic(const char *operation, const char *path) {
++#ifdef PE_PS5
++    static unsigned count;
++    int error = errno;
++    if (count++ < 32)
++        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
++                     "PS5 card failure operation=%s path=%.700s errno=%d SDL=%.400s",
++                     operation, path, error, SDL_GetError());
++    errno = error;
++#else
++    (void)operation; (void)path;
++#endif
++}
+ static int Host_CardPath(char *dst, const char *src, int capacity) {
+     if (strlen(src) < 5 || src[0] != 'b' || src[1] != 'u' || src[4] != ':' ||
+         src[2] < '0' || src[2] > '1' || src[3] < '0' || src[3] > '3') {
++        Host_CardDiagnostic("invalid-device", src);
+         return -1;
+     }
+     const char *slash = strrchr(host_options.user_file, '/');
+     const char *backslash = strrchr(host_options.user_file, '\\');
+     if (backslash && (!slash || backslash > slash)) slash = backslash;
+     if (!slash) {
++        Host_CardDiagnostic("preferences-no-parent", host_options.user_file);
+         return -1;
+     }
+     if (capacity <= 0) {
++        Host_CardDiagnostic("invalid-capacity", src);
+         return 0;
+     }
+ 
+@@ -640,7 +938,7 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
+         host_options.user_file,
+         src
+     );
+-    if (n < 0 || n >= capacity) { dst[0] = '\0'; return 0; }
++    if (n < 0 || n >= capacity) { Host_CardDiagnostic("directory-format-truncated", src); dst[0] = '\0'; return 0; }
+ #ifdef _WIN32
+     /* SDL's Win32 calls also need the extended prefix for long paths. Leave
+      * short portable paths unchanged, including their usual slash spelling. */
+@@ -669,7 +967,7 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
+         }
+     }
+ #endif
+-    if (!SDL_CreateDirectory(dst)) { dst[0] = '\0'; return 0; }
++    if (!SDL_CreateDirectory(dst)) { Host_CardDiagnostic("SDL_CreateDirectory", dst); dst[0] = '\0'; return 0; }
+ 
+     const char *name = src + 5;
+     if (*name == '*') {
+@@ -681,6 +979,7 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
+ #endif
+     int added = snprintf(dst + n, (size_t)(capacity - n), "%c%s", separator, name);
+     if (added < 0 || added >= capacity - n) {
++        Host_CardDiagnostic("filename-format-truncated", src);
+         dst[0] = '\0';
+     }
+     return 0;
+@@ -707,28 +1006,30 @@ static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char
+     unsigned port = length >= 4 && dirname[length - 3] == '1';
+     snprintf(device, sizeof(device), "bu%u0:%s", port, name);
+     Host_CardPath(target, device, sizeof(target));
+-    if (!*target) { import->ok = 0; return SDL_ENUM_CONTINUE; }
++    if (!*target) { Host_CardDiagnostic("import-card-callback", device); import->ok = 0; return SDL_ENUM_CONTINUE; }
+     if (SDL_GetPathInfo(target, &info)) return SDL_ENUM_CONTINUE;
+-    if (import->count >= 128) { import->ok = 0; return SDL_ENUM_CONTINUE; }
++    if (import->count >= 128) { Host_CardDiagnostic("import-count-limit", source); import->ok = 0; return SDL_ENUM_CONTINUE; }
+     size_t bytes = 0;
+     void *data = SDL_LoadFile(source, &bytes);
+-    if (!data || bytes != 8192) { SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
++    if (!data || bytes != 8192) { Host_CardDiagnostic("import-load-or-size", source); SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
+     const char *last = strrchr(target, '/');
+     const char *backslash = strrchr(target, '\\');
+     if (backslash && (!last || backslash > last)) last = backslash;
+     snprintf(temporary, sizeof(temporary), "%.*s.pe-save-import-%llu.tmp",
+              last ? (int)(last - target + 1) : 0, target, (unsigned long long)SDL_GetTicksNS());
+     SDL_IOStream *io = SDL_IOFromFile(temporary, "wbx");
+-    if (!io) { SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
++    if (!io) { Host_CardDiagnostic("import-exclusive-open", temporary); SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
+     int written = SDL_WriteIO(io, data, bytes) == bytes && SDL_FlushIO(io);
+-    if (!SDL_CloseIO(io)) written = 0;
++    if (!written) Host_CardDiagnostic("import-write-or-flush", temporary);
++    if (!SDL_CloseIO(io)) { Host_CardDiagnostic("import-close", temporary); written = 0; }
+     SDL_free(data);
+     if (!written || !SDL_RenamePath(temporary, target)) {
++        if (written) Host_CardDiagnostic("import-rename", target);
+         SDL_RemovePath(temporary);
+         import->ok = 0;
+     } else {
+         char *created = SDL_strdup(target);
+-        if (!created) { SDL_RemovePath(target); import->ok = 0; }
++        if (!created) { Host_CardDiagnostic("import-track-allocation", target); SDL_RemovePath(target); import->ok = 0; }
+         else import->created[import->count++] = created;
+     }
+     return SDL_ENUM_CONTINUE;
+@@ -736,23 +1037,31 @@ static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char
+ 
+ static int Host_InstallCardPaths(const char *base) {
+     char marker[4096], card[4096];
+-    if (Host_CardPath(card, "bu00:*", sizeof(card)) || !*card) return 0;
++    if (Host_CardPath(card, "bu00:*", sizeof(card)) || !*card) { Host_CardDiagnostic("install-card-callback", "bu00:*"); return 0; }
+     snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(card) - 5, card);
+     SDL_PathInfo info;
+     if (!SDL_GetPathInfo(marker, &info)) {
+         HostCardImport import = {.ok = 1};
++#ifdef PE_PS5
++        char *cwd = SDL_malloc(strlen(host_data_root) + 2);
++        if (!cwd) { Host_CardDiagnostic("import-root-allocation", host_data_root); return 0; }
++        snprintf(cwd, strlen(host_data_root) + 2, "%s/", host_data_root);
++        if (base && base[0] != '/') base = NULL;
++#else
+         char *cwd = SDL_GetCurrentDirectory();
++#endif
+         const char *roots[] = {cwd, base};
+         for (unsigned root = 0; root < 2; ++root) if (roots[root]) {
+             for (unsigned port = 0; port < 2; ++port) {
+                 char source[8192];
+                 snprintf(source, sizeof(source), "%sbu%u0", roots[root], port);
+                 if (SDL_GetPathInfo(source, &info) && info.type == SDL_PATHTYPE_DIRECTORY &&
+-                    !SDL_EnumerateDirectory(source, Host_ImportCard, &import)) import.ok = 0;
++                    !SDL_EnumerateDirectory(source, Host_ImportCard, &import)) { Host_CardDiagnostic("import-enumerate", source); import.ok = 0; }
+             }
+         }
+         SDL_free(cwd);
+         if (import.ok && !SDL_SaveFile(marker, "", 0)) {
++            Host_CardDiagnostic("import-marker-save", marker);
+             SDL_RemovePath(marker);
+             import.ok = 0;
+         }
+@@ -772,12 +1081,30 @@ static void Host_InitOptions(int enabled) {
+     host_options.geometry_correction = 1;
+     host_options.antialiasing = 0;
+     host_options.model_filtering = 0;
++#ifdef PE_PS5_GPU_NATIVE
++    host_options.widescreen = 1; /* Genuine wide default only when no saved choice. */
++#else
+     host_options.widescreen = 0;
++#endif
++#ifdef PE_PS5_GPU_NATIVE
++    host_options.fsr1=0;host_options.fsr1_sharpness=1;host_options.model_fill_lighting=0;host_options.movie_blur=1; /* Default ON only when configuration has no explicit value. */
++#endif
++#ifdef PE_PS5
++    host_options.hd_backgrounds = 0; /* Original until explicitly selected. */
++    host_options.hd_title_directory[0]=0;
++    host_options.hd_field_materials=0;
++    host_options.hd_field_directory[0]=0;
++#else
+     host_options.hd_backgrounds = 1;
++#endif
+     host_options.volume = 100;
+     host_options.speed_factor = 2;
+     host_options.analog_run_threshold = 85;
+     Boot_InitHostBindings();
++#ifdef PE_PS5
++    /* Public ScePad mapping exposes touchpad; there is no physical Back. */
++    Psyz_SetGamepadBinding_SDL3(8, SDL_GAMEPAD_BUTTON_TOUCHPAD);
++#endif
+     for (unsigned i = 0; i < 16; ++i) {
+         host_options.keys[i] = Psyz_GetKeyboardBinding_SDL3(i);
+         host_options.buttons[i] = Psyz_GetGamepadBinding_SDL3(i);
+@@ -788,6 +1115,12 @@ static void Host_InitOptions(int enabled) {
+         return;
+     }
+ 
++#ifdef PE_PS5
++    char path[4096];
++    if (Host_DataPath(path, sizeof(path), "parasite-eve.toml") &&
++        strcmp(path, host_options.user_file)) Host_LoadOptions(path);
++    Host_LoadOptions(host_options.user_file);
++#else
+     const char *base = SDL_GetBasePath();
+     char path[4096];
+     if (base) {
+@@ -841,17 +1174,62 @@ static void Host_InitOptions(int enabled) {
+     if (*host_options.user_file && !Host_InstallCardPaths(base)) {
+         fprintf(stderr, "Cannot prepare user memory cards; legacy cards remain in use.\n");
+     }
++#endif
++}
++
++/* Selection ownership is host_options; the renderer may still bound a genuine
++ * wide view to available room artwork. Report these as different states. */
++static void Host_TraceAspectSelection(const char *phase, int force) {
++#if defined(PE_PS5_GPU_NATIVE)
++    static int last_aspect=-1, last_wide=-1;
++    int requested=host_options.widescreen ? PSYZ_ASPECT_DISPLAY : host_options.aspect;
++    int effective_aspect=Psyz_VideoGetAspectMode();
++    int effective_wide=Psyz_VideoGetWidescreen();
++    if (force || requested!=last_aspect || host_options.widescreen!=last_wide ||
++        requested!=effective_aspect || !!host_options.widescreen!=!!effective_wide) {
++        SDL_Log("[GPU aspect selection] phase=%s requested_aspect=%d requested_wide=%d committed=%d runtime_aspect=%d runtime_wide=%d viewport=next_prepared_present",
++            phase,requested,host_options.widescreen,
++            requested==effective_aspect && !!host_options.widescreen==!!effective_wide,
++            effective_aspect,effective_wide);
++        Psyz_GpuTraceAspectOnce(phase);
++        last_aspect=requested;last_wide=host_options.widescreen;
++    }
++#else
++    (void)phase; (void)force;
++#endif
+ }
+ 
+ static void Host_ApplyOptions(SDL_Window *window) {
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++    if(Psyz_CpuGeometryConfigure(host_options.scale)<0)host_options.scale=1;
++    host_options.geometry_correction = 0;
++    host_options.antialiasing = 0;
++    host_options.model_filtering = 0;
++    host_options.fullscreen = 0;
++#endif
+     g_FieldAnalogRunThreshold = host_options.analog_run_threshold;
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++    Psyz_VideoSetInternalResolution(1); /* GPU-only resolution stays native. */
++#else
+     Psyz_VideoSetInternalResolution(host_options.scale);
++#endif
+     Psyz_VideoSetAspectMode(host_options.widescreen ? PSYZ_ASPECT_DISPLAY : (PsyzAspectMode)host_options.aspect);
+     Psyz_VideoSetDitheringMode((PsyzDitherMode)host_options.dither);
+     Psyz_VideoSetGeometryCorrection(host_options.geometry_correction != 0);
+     Psyz_VideoSetAntialiasing(host_options.antialiasing != 0);
+     Psyz_VideoSetModelFiltering(host_options.model_filtering != 0);
+     Psyz_VideoSetWidescreen(host_options.widescreen != 0);
++#ifdef PE_PS5_GPU_NATIVE
++    Psyz_VideoSetFsr1(host_options.fsr1,host_options.fsr1_sharpness);
++    Psyz_VideoSetMovieBlur(host_options.movie_blur);
++    Render_SetModelFillLighting(host_options.model_fill_lighting);
++    static int lastModelFill=-1;
++    if(lastModelFill!=host_options.model_fill_lighting){
++        SDL_Log("[Model fill] requested=%d scope=lit models/props; colour only; original GTE lighting retained; rendered=unobserved",host_options.model_fill_lighting);
++        lastModelFill=host_options.model_fill_lighting;
++    }
++#endif
++    Host_TraceAspectSelection("apply", 0);
+     Psyz_AudioSetOutputVolume(host_options.volume);
+     for (unsigned i = 0; i < 16; ++i) {
+         Psyz_SetKeyboardBinding_SDL3(i, (SDL_Scancode)host_options.keys[i]);
+@@ -893,6 +1271,11 @@ static void SDLCALL Host_DiscChosen(void *userdata, const char *const *files, in
+ }
+ 
+ static int Host_ChooseDiscs(const char **paths) {
++#ifdef PE_PS5
++    (void)paths;
++    fprintf(stderr, "Configure disc paths in parasite-eve.toml or pass --disc/--disc2.\n");
++    return -1;
++#endif
+     static const SDL_DialogFileFilter filters[] = {
+         {"Parasite Eve - select both Disc 1 and Disc 2 CUE images", "cue;bin"}
+     };
+@@ -929,6 +1312,11 @@ static int Host_ChooseDiscs(const char **paths) {
+ static PeDisc *host_images;
+ 
+ static int Host_SelectImage(unsigned identity, char *path, size_t size) {
++#ifdef PE_PS5
++    (void)identity; (void)path; (void)size;
++    fprintf(stderr, "Disc image missing; configure both disc paths before startup.\n");
++    return -1;
++#endif
+     static const SDL_DialogFileFilter filters[] = {
+         {"Parasite Eve USA CUE/BIN image", "cue;bin"}
+     };
+@@ -979,7 +1367,7 @@ static int Host_InstallImage(unsigned identity, const char *path) {
+ 
+     PeDisc *image = &host_images[slot];
+     unsigned found = 0;
+-    if (!pe_disc_open(image, path)) {
++    if (!Host_OpenDisc(image, path)) {
+         return 0;
+     }
+ 
+@@ -1002,6 +1390,11 @@ static int Host_AddImage(unsigned identity, int required) {
+     if (g_CdImageVolumes[identity - 1]) {
+         return 1;
+     }
++#ifdef PE_PS5
++    (void)required;
++    fprintf(stderr, "Disc %u is unavailable; configure both disc images before console startup.\n", identity);
++    return 0;
++#endif
+ 
+     Psyz_PauseHostClock_SDL3(true);
+     int paused = Psyz_AudioIsPaused();
+@@ -1095,10 +1488,14 @@ static void Host_OverlayRenderFallback(
+     if (h <= 0) {
+         h = 600;
+     }
+-    OverlayComputeLayout(state->page, w, h, &layout);
++    OverlayComputeStateLayout(state, w, h, &layout);
+     s_overlayLayout = layout;
+     if (OverlayFontReady() && OverlaySurfaceResize(&s_overlaySurface, layout.w, layout.h)) {
+-        OverlayPaint(&s_overlaySurface, state, &layout);
++        if (state->prompt) {
++            OverlayPaintPrompt(&s_overlaySurface, state, &layout);
++        } else {
++            OverlayPaint(&s_overlaySurface, state, &layout);
++        }
+         if (*texture == NULL || *texW != layout.w || *texH != layout.h) {
+             if (*texture != NULL) {
+                 SDL_DestroyTexture(*texture);
+@@ -1129,6 +1526,9 @@ static void Host_OverlayRenderFallback(
+         SDL_RenderTexture(renderer, *texture, NULL, &dst);
+     }
+     SDL_RenderPresent(renderer);
++#ifdef PE_PS5
++    SDL_UpdateWindowSurface(window);
++#endif
+ }
+ 
+ static void Host_SwitchSettingsPage(HostOverlayState *state, int nextPage) {
+@@ -1174,8 +1574,29 @@ static void Host_ApplySettingsAction(
+             index = (index + action + setting->count) % setting->count;
+         }
+         setting->set(index);
++#ifdef PE_PS5
++        SDL_Log("[V2 DIRECT DISPLAY toggle] %s requested=%s stored_index=%d",setting->label,setting->names[index],setting->get());
++#endif
+     } else if (state->page == HOST_PAGE_MODS) {
++#ifdef PE_PS5_GPU_NATIVE
++#ifdef PE_MODS
++        if(state->row==4){
++            if(activate_only){host_open_assists=1;state->open=0;}
++            return;
++        }
++#endif
++        if(state->row==3){
++            host_options.movie_blur=!host_options.movie_blur;
++            Psyz_VideoSetMovieBlur(host_options.movie_blur);
++            SDL_Log("[Movie side fill toggle] requested=%d scope=RGB24-with-bars",host_options.movie_blur);
++            state->status=NULL;state->dirty=1;return;
++        }
++#endif
++#ifdef PE_PS5
++        if(activate_only || state->row<=1)Host_HdAction(state->row);
++#else
+         if(activate_only || state->row==0)Host_HdAction(state->row);
++#endif
+         state->status=Host_HdStatus();state->dirty=1;return;
+     } else if (state->page == HOST_PAGE_IMAGES) {
+         if (!activate_only) {
+@@ -1304,7 +1725,11 @@ static void Host_ProcessSettingsPointer(
+         int isStepper = hitRow < pureCount &&
+                         !(state->page == HOST_PAGE_CONTROLS && hitRow >= 1 && hitRow != HOST_ANALOG_RUN_ROW) &&
+                         state->page != HOST_PAGE_IMAGES &&
+-                        !(state->page==HOST_PAGE_MODS && hitRow>0);
++                        !(state->page==HOST_PAGE_MODS && hitRow>0
++#ifdef PE_PS5_GPU_NATIVE
++                          && hitRow!=3
++#endif
++                          );
+         int action = isStepper ? (x < OverlayValueCentre() ? -1 : 1) : 1;
+         Host_ApplySettingsAction(state, action, !isStepper, game);
+     }
+@@ -1571,12 +1996,17 @@ static void Host_ProcessSettingsEvent(
+             break;
+         }
+     } else if (event->type == SDL_EVENT_MOUSE_WHEEL) {
+-        if (state->page == OVERLAY_PAGE_CONTROLS && event->wheel.y != 0.0f) {
++        if ((state->page == OVERLAY_PAGE_CONTROLS || state->page == OVERLAY_PAGE_GRAPHICS) && event->wheel.y != 0.0f) {
+             int step = event->wheel.y > 0.0f ? -1 : 1;
+             if (event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+                 step = -step;
+             }
+-            int nextScroll = Host_ClampControlsScroll(state->scroll + step);
++            int nextScroll = state->scroll+step;
++            if(state->page==OVERLAY_PAGE_CONTROLS)nextScroll=Host_ClampControlsScroll(nextScroll);
++            else {
++                int maximum=Host_SettingsPureRowCount(state->page)-Host_SettingsVisibleSettingCount(state->page);
++                if(nextScroll<0)nextScroll=0;if(nextScroll>maximum)nextScroll=maximum;
++            }
+             if (nextScroll != state->scroll) {
+                 state->scroll = nextScroll;
+                 state->dirty = 1;
+@@ -1602,6 +2032,15 @@ static void Host_Settings(SDL_Window *game) {
+     int fallbackTexW = 0, fallbackTexH = 0;
+ 
+     if (!useGpuOverlay) {
++#ifdef PE_PS5
++        fallbackWindow = game;
++        SDL_Surface *surface = game ? SDL_GetWindowSurface(game) : NULL;
++        fallbackRenderer = surface ? SDL_CreateSoftwareRenderer(surface) : NULL;
++        if (!fallbackRenderer) {
++            fprintf(stderr, "Cannot open console settings: %s\n", SDL_GetError());
++            return;
++        }
++#else
+         fallbackWindow = SDL_CreateWindow(
+             "Parasite Eve - Settings", 640, 600, SDL_WINDOW_HIGH_PIXEL_DENSITY
+         );
+@@ -1613,6 +2052,7 @@ static void Host_Settings(SDL_Window *game) {
+             SDL_DestroyWindow(fallbackWindow);
+             return;
+         }
++#endif
+         SDL_PumpEvents();
+         SDL_FlushEvents(SDL_EVENT_WINDOW_FIRST, SDL_EVENT_WINDOW_LAST);
+     }
+@@ -1659,14 +2099,19 @@ static void Host_Settings(SDL_Window *game) {
+ 
+     int quit = s_overlayState.quit;
+     s_overlayState.open = 0;
++    Host_TraceAspectSelection("menu_resume", 1);
+ 
+     if (!Host_SaveOptions()) {
++#ifdef PE_PS5
++        fprintf(stderr, "Could not save preferences; changes apply for this session.\n");
++#else
+         SDL_ShowSimpleMessageBox(
+             SDL_MESSAGEBOX_ERROR,
+             "Parasite Eve",
+             "Could not save preferences. Changes apply for this session.",
+             fallbackWindow ? fallbackWindow : game
+         );
++#endif
+     }
+     if (fallbackTexture != NULL) {
+         SDL_DestroyTexture(fallbackTexture);
+@@ -1675,7 +2120,9 @@ static void Host_Settings(SDL_Window *game) {
+         SDL_DestroyRenderer(fallbackRenderer);
+     }
+     if (fallbackWindow != NULL) {
++#ifndef PE_PS5
+         SDL_DestroyWindow(fallbackWindow);
++#endif
+     }
+ 
+     /* Avoid a held menu key leaking into the resumed original pad poll. */
+@@ -1684,6 +2131,12 @@ static void Host_Settings(SDL_Window *game) {
+     if (!paused) {
+         Psyz_AudioUnpause();
+     }
++#if defined(PE_PS5_GPU_NATIVE) && defined(PE_MODS)
++    if(host_open_assists){
++        host_open_assists=0;
++        if(!quit)pe_mod_panel_open_page("Playtest assists");
++    }
++#endif
+     if (quit) {
+         SDL_Event event;
+         SDL_zero(event);
+@@ -1718,6 +2171,26 @@ static int Host_ConfirmMovieSkip(void) {
+         quit = s_overlayState.quit;
+         s_overlayState = (HostOverlayState){0};
+     } else {
++#ifdef PE_PS5
++        SDL_Surface *surface = game ? SDL_GetWindowSurface(game) : NULL;
++        SDL_Renderer *renderer = surface ? SDL_CreateSoftwareRenderer(surface) : NULL;
++        SDL_Texture *texture = NULL;
++        int texW = 0, texH = 0;
++        if (renderer) {
++            s_overlayState = (HostOverlayState){.open = 1, .row = 1, .dirty = 1, .prompt = 1};
++            while (s_overlayState.open) {
++                Host_OverlayRenderFallback(renderer, game, &s_overlayState, &texture, &texW, &texH);
++                SDL_Event event;
++                if (SDL_WaitEventTimeout(&event, 20))
++                    Host_ProcessSettingsEvent(&s_overlayState, &event, game, NULL);
++            }
++            skip = s_overlayState.skip;
++            quit = s_overlayState.quit;
++            s_overlayState = (HostOverlayState){0};
++            SDL_DestroyTexture(texture);
++            SDL_DestroyRenderer(renderer);
++        }
++#else
+         SDL_MessageBoxButtonData buttons[] = {
+             {0, 1, "Yes"},
+             {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No"}
+@@ -1732,6 +2205,7 @@ static int Host_ConfirmMovieSkip(void) {
+         };
+         int choice = 0;
+         skip = SDL_ShowMessageBox(&box, &choice) && choice == 1;
++#endif
+     }
+ 
+     /* Avoid the answering key leaking into the resumed original pad poll. */
+@@ -1844,6 +2318,18 @@ static bool Host_SettingsEvent(const SDL_Event *event) {
+         Host_PauseForFocus(game);
+         return true;
+     }
++#ifdef PE_PS5
++    if (event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN &&
++        (event->gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK ||
++         event->gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK)) {
++        SDL_Gamepad *pad = SDL_GetGamepadFromID(event->gbutton.which);
++        if (pad && SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_STICK) &&
++            SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_RIGHT_STICK)) {
++            Host_Settings(game);
++            return true;
++        }
++    }
++#endif
+     if (event->type == SDL_EVENT_KEY_DOWN && event->key.scancode == SDL_SCANCODE_ESCAPE) {
+         if (!event->key.repeat) {
+             Host_Settings(game);
+@@ -1927,14 +2413,24 @@ static void Host_DescribeCrash(char *out, size_t size) {
+     Host_CrashAppend(out, size, &used,
+                      "\r\n== Settings ==\r\n"
+                      "Settings file: %s\r\n"
++#ifdef PE_PS5
++                     "Graphics: requested CPU geometry %ux (last prepared %ux), fullscreen %s, aspect ratio %s, "
++#else
+                      "Graphics: render resolution %ux (renderer %ux), fullscreen %s, aspect ratio %s, "
++#endif
+                      "dithering %s, geometry correction %s, antialiasing %s, model textures %s\r\n"
+                      "Audio: master volume %u%%\r\n"
+                      "Controls: speed-up %ux while held, field run threshold %u\r\n"
+                      "Discs: disc 1 %s, disc 2 %s\r\n",
+                      host_options.enabled && *host_options.user_file ? Host_CrashFileName(host_options.user_file)
+                                                                       : "none (defaults, not saved)",
+-                     host_options.scale, Psyz_VideoGetInternalResolution(), kSwitchNames[host_options.fullscreen != 0],
++                     host_options.scale,
++#ifdef PE_PS5
++                     Psyz_CpuGeometryEffective(),
++#else
++                     Psyz_VideoGetInternalResolution(),
++#endif
++                     kSwitchNames[host_options.fullscreen != 0],
+                      kAspectNames[host_options.aspect != 0], kDitherNames[host_options.dither != 0],
+                      kSwitchNames[host_options.geometry_correction != 0], kAntialiasNames[host_options.antialiasing != 0],
+                      kFilterNames[host_options.model_filtering != 0], host_options.volume, host_options.speed_factor,
+@@ -2145,6 +2641,9 @@ static int Host_ParseHealthEventArg(const char *cursor, int argc) {
+ }
+ 
+ int main(int argc, char **argv) {
++#ifdef PE_PS5
++    if (!Host_InitPaths()) return EXIT_FAILURE;
++#endif
+     int mode;
+     u32 token;
+     Pe1GameState *state;
+@@ -2171,6 +2670,20 @@ int main(int argc, char **argv) {
+     CrashReport_SetMods(pe_mod_crash_describe);
+ #endif
+     Host_InitOptions(interactive);
++#ifdef PE_PS5
++    SDL_Log("[CPE NATIVE GPU launch] SDL_GPU/static RADV requested; normal display preferences; controls/audio/cheats/paths preserved; exclusive launch log");
++#endif
++#ifdef PE_PS5
++    if (!Host_InstallCardPaths(SDL_GetBasePath())) {
++        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 memory card path setup failed: %s", host_options.user_file);
++        return EXIT_FAILURE;
++    }
++#ifndef PE_PS5_GPU_NATIVE
++    /* The legacy CPU renderer still cannot enable GPU-only features. */
++    host_options.geometry_correction = host_options.antialiasing = host_options.model_filtering = 0;
++    host_options.widescreen = 0;
++#endif
++#endif
+     if(argc==2 && (!strcmp(argv[1],"--download-backgrounds") || !strcmp(argv[1],"--verify-backgrounds")))return Host_HdCli(!strcmp(argv[1],"--verify-backgrounds"));
+     unsigned internal_resolution = host_options.scale;
+     int resolution_argument = 0;
+@@ -2202,7 +2715,11 @@ int main(int argc, char **argv) {
+             errno = 0;
+             const char *value = argv[++arg];
+             unsigned long scale = strtoul(value, &end, 10);
+-            if (*value < '1' || *value > '9' || *end || errno || scale > PSYZ_INTERNAL_RES_MAX) {
++            if (*value < '1' || *value > '9' || *end || errno || scale > PSYZ_INTERNAL_RES_MAX
++#ifdef PE_PS5
++                || !(scale==1 || scale==2 || scale==4 || scale==6 || scale==8)
++#endif
++            ) {
+                 fprintf(stderr, "Invalid internal resolution\n");
+                 return EXIT_FAILURE;
+             }
+@@ -2301,6 +2818,14 @@ int main(int argc, char **argv) {
+         }
+     }
+ 
++#ifdef PE_PS5
++    char capture_paths[3][4096];
++    const char **capture_targets[] = {&g_BootHostVramPath, &g_BootHostFramePath, &g_BootHostAudioPath};
++    for (unsigned i = 0; i < 3; ++i) if (*capture_targets[i]) {
++        if (!Host_DataPath(capture_paths[i], sizeof(capture_paths[i]), *capture_targets[i])) return EXIT_FAILURE;
++        *capture_targets[i] = capture_paths[i];
++    }
++#endif
+     if (interactive) {
+         if (!paths[0] && !paths[1]) {
+             for (unsigned i = 0; i < 2; ++i) {
+@@ -2384,7 +2909,7 @@ mount_images:
+         if (!paths[slot]) {
+             continue;
+         }
+-        if (!pe_disc_open(&images[slot], paths[slot])) {
++        if (!Host_OpenDisc(&images[slot], paths[slot])) {
+             fprintf(stderr, "Cannot open image: %s\n", images[slot].error);
+             goto image_error;
+         }
+@@ -2405,6 +2930,9 @@ image_error:
+     g_CdImageVolumes[0] = g_CdImageVolumes[1] = NULL;
+     pe_disc_close(&images[0]);
+     pe_disc_close(&images[1]);
++#ifdef PE_PS5
++    goto shutdown;
++#endif
+     if (!interactive) {
+         goto shutdown;
+     }
+@@ -2464,7 +2992,13 @@ images_ready:;
+ 
+     g_BootHostActive = 1;
+     PE_HOOK(PE_HOOK_INIT, (&(PeHookInit){interactive, host_options.user_file}));
+-    if (Psyz_VideoSetInternalResolution(internal_resolution) < 0) {
++    if (
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++        Psyz_CpuGeometryConfigure(internal_resolution)<0 || Psyz_VideoSetInternalResolution(1)<0
++#else
++        Psyz_VideoSetInternalResolution(internal_resolution)<0
++#endif
++    ) {
+         fprintf(stderr, "Cannot select internal resolution\n");
+         goto shutdown;
+     }
+@@ -2480,7 +3014,20 @@ images_ready:;
+      * ends (mesh_list.c); kept on so switching it on mid-game works. */
+     Psyz_GpuSetVramCopy(1);
+     Boot_InitSystem();
+-    if (Psyz_VideoGetInternalResolution() != internal_resolution) {
++#ifdef PE_PS5
++    if (!Psyz_PS5PlatformReady()) {
++        fprintf(stderr, "PS5 platform initialization failed: %s\n",
++                Psyz_PS5PlatformInitError());
++        goto shutdown;
++    }
++#endif
++    if (
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++        (internal_resolution>1 && !Psyz_CpuGeometryAvailable()) || Psyz_CpuGeometryRequested()!=internal_resolution
++#else
++        Psyz_VideoGetInternalResolution()!=internal_resolution
++#endif
++    ) {
+         fprintf(stderr, "Requested internal resolution unavailable\n");
+         goto shutdown;
+     }
+@@ -2622,3 +3169,4 @@ shutdown:
+     return result;
+ }
+ #endif
++
+diff --git a/src/main/boot/settings_overlay.h b/src/main/boot/settings_overlay.h
+index a319aba..53243da 100644
+--- a/src/main/boot/settings_overlay.h
++++ b/src/main/boot/settings_overlay.h
+@@ -130,16 +130,28 @@ static const char *const kSwitchNames[] = {"Off", "On"};
+ 
+ /* graphics */
+ 
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++static const char *const kScaleNames[]={"1x original","2x experimental","4x experimental","6x experimental","8x experimental"};
++static const unsigned kCpuScales[]={1,2,4,6,8};
++static int GetScale(void){for(int i=0;i<5;++i)if(host_options.scale==kCpuScales[i])return i;return 0;}
++static void SetScale(int i){if(i<0 || i>=5)return;host_options.scale=kCpuScales[i];}
++#else
+ static const char *const kScaleNames[] = {
+     "1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x"
+ };
+ ACCESSORS(Scale, ClampIndex((int)host_options.scale - 1, COUNT_OF(kScaleNames)),
+           host_options.scale = (unsigned)(i + 1))
+ 
++#endif
++
+ ACCESSORS(Fullscreen, host_options.fullscreen != 0,
+           host_options.fullscreen = i)
+ 
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++static const char *const kAspectNames[] = {"Classic 4:3", "Square pixels", "Wide (experimental)"};
++#else
+ static const char *const kAspectNames[] = {"Classic 4:3", "Square pixels", "Widescreen"};
++#endif
+ ACCESSORS(Aspect, host_options.widescreen ? 2 : host_options.aspect != 0,
+           (host_options.widescreen = i == 2, host_options.aspect = i == 1))
+ 
+@@ -157,21 +169,61 @@ static const char *const kFilterNames[] = {"Original", "Bilinear"};
+ ACCESSORS(ModelFiltering, host_options.model_filtering != 0,
+           host_options.model_filtering = i)
+ 
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++static const char *const kUnavailableNames[]={"Unavailable (CPU)"};
++static int GetUnavailable(void){return 0;}
++static void SetUnavailable(int i){(void)i;}
++#endif
++#ifdef PE_PS5_GPU_NATIVE
++static const char *const kFsrStatus[]={"Off","Bypassed","Active","Fallback"};
++ACCESSORS(FsrStatus,ClampIndex(Psyz_VideoGetFsr1Status(),4),(void)i)
++static const char *const kFsrSharpness[]={"Strong (0 stops)","Balanced (1 stop)","Soft (2 stops)"};
++ACCESSORS(Fsr1,host_options.fsr1!=0,host_options.fsr1=i)
++static const char *const kMovieBars[]={"Original black","Blurred backdrop"};
++ACCESSORS(MovieBlur,host_options.movie_blur!=0,host_options.movie_blur=i)
++ACCESSORS(FsrSharpness,ClampIndex(host_options.fsr1_sharpness,3),host_options.fsr1_sharpness=i)
++static const char *const kModelFillNames[]={"Original","Soft fill","World key fill"};
++ACCESSORS(ModelFill,ClampIndex(host_options.model_fill_lighting,3),host_options.model_fill_lighting=i)
++#endif
+ static const OverlaySetting kGraphics[] = {
+-    SETTING("Render resolution", "Higher values increase image detail and GPU load.",
+-            kScaleNames, Scale),
+-    SETTING("Fullscreen", "Switch between windowed and fullscreen display.",
+-            kSwitchNames, Fullscreen),
+-    SETTING("Aspect ratio", "Classic 4:3 matches the PlayStation. Widescreen is 16:9 where the background allows.",
+-            kAspectNames, Aspect),
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++    SETTING("CPU SCALE TEST v2", "Experimental; rejected frames use original 1x. Ordered field HD at every scale. Unsupported frames use 1x; see logs.", kScaleNames, Scale),
++#else
++    SETTING("Render resolution", "Higher values increase image detail and GPU load.", kScaleNames, Scale),
++#endif
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++    SETTING("Fullscreen", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
++#else
++    SETTING("Fullscreen", "Switch between windowed and fullscreen display.", kSwitchNames, Fullscreen),
++#endif
++#ifdef PE_PS5_GPU_NATIVE
++    SETTING("FSR1 spatial upscale", "Optional EASU + RCAS before UI. Original fallback on errors or downscale; not frame generation.", kSwitchNames, Fsr1),
++    SETTING("FSR1 status", "Last frame: active, bypassed for downscaling, or original fallback after an error. Read only.", kFsrStatus, FsrStatus),
++    SETTING("FSR1 sharpness", "RCAS strength; only active when FSR1 succeeds. Lower stops sharpen more.", kFsrSharpness, FsrSharpness),
++    SETTING("Model fill lighting", "Colour-only fill for lit 3D models and props as they update. World key uses original normals. No reflections or geometry smoothing.", kModelFillNames, ModelFill),
++#endif
++#ifdef PE_PS5_GPU_NATIVE
++    SETTING("Aspect ratio", "New game frames use this choice. Frozen L3+R3 preview retains its recorded shape until Resume. Genuine wide still follows available room artwork.", kAspectNames, Aspect),
++#else
++    SETTING("Aspect ratio", "Classic 4:3 matches the PlayStation. Wide draws extra room geometry, with bars at room edges. Native0.8 HD side art covers limited rooms. Unsupported frames use classic output.", kAspectNames, Aspect),
++#endif
+     SETTING("Dithering", "PlayStation 15-bit color dithering on shaded polygons.",
+             kDitherNames, Dither),
+-    SETTING("Geometry correction", "Subpixel vertex precision and perspective-correct 3D textures.",
+-            kSwitchNames, GeometryCorrection),
+-    SETTING("Antialiasing", "Smoother edges: twice each axis, four samples per pixel. Uses more GPU time and memory.",
+-            kAntialiasNames, Antialiasing),
+-    SETTING("Model textures", "Bilinear filtering for 3D models; backgrounds and text keep original sampling.",
+-            kFilterNames, ModelFiltering),
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++    SETTING("Geometry correction", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
++#else
++    SETTING("Geometry correction", "Subpixel vertex precision and perspective-correct 3D textures.", kSwitchNames, GeometryCorrection),
++#endif
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++    SETTING("Antialiasing", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
++#else
++    SETTING("Antialiasing", "Smoother edges: twice each axis, four samples per pixel. Uses more GPU time and memory.", kAntialiasNames, Antialiasing),
++#endif
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++    SETTING("Model textures", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
++#else
++    SETTING("Model textures", "Bilinear filtering for 3D models; backgrounds and text keep original sampling.", kFilterNames, ModelFiltering),
++#endif
+ };
+ 
+ /* audio */
+@@ -214,7 +266,17 @@ static int Host_SettingsPureRowCount(int page) {
+     if (page == OVERLAY_PAGE_GRAPHICS) return COUNT_OF(kGraphics);
+     if (page == OVERLAY_PAGE_CONTROLS) return 2 + HOST_BINDING_COUNT;
+     if (page == OVERLAY_PAGE_AUDIO) return COUNT_OF(kAudio);
+-    if (page == OVERLAY_PAGE_MODS) return 3;
++    if (page == OVERLAY_PAGE_MODS) {
++#ifdef PE_PS5_GPU_NATIVE
++#ifdef PE_MODS
++        return 5;
++#else
++        return 4;
++#endif
++#else
++        return 3;
++#endif
++    }
+     return 2;
+ }
+ 
+@@ -246,6 +308,17 @@ static int Host_ClampControlsScroll(int scroll) {
+ /* Scrolls Controls by the minimum amount needed to keep a selected binding
+  * or field-threshold row in view. Mouse hover never calls this. */
+ static void Host_EnsureControlsRowVisible(HostOverlayState *state) {
++    if(state->page==OVERLAY_PAGE_GRAPHICS){
++        int capacity=Host_SettingsVisibleSettingCount(state->page);
++        int maximum=Host_SettingsPureRowCount(state->page)-capacity;
++        if(state->scroll<0)state->scroll=0;
++        if(state->scroll>maximum)state->scroll=maximum;
++        if(state->row<Host_SettingsPureRowCount(state->page)){
++            if(state->row<state->scroll)state->scroll=state->row;
++            if(state->row>=state->scroll+capacity)state->scroll=state->row-capacity+1;
++        }
++        return;
++    }
+     state->scroll = Host_ClampControlsScroll(state->scroll);
+     if (state->page != OVERLAY_PAGE_CONTROLS) {
+         return;
+@@ -515,6 +588,11 @@ static int OverlayVisibleSlotForRow(const HostOverlayState *state, int row) {
+     if (row >= pureCount) {
+         return visibleSettings + (row - pureCount);
+     }
++    if(page==OVERLAY_PAGE_GRAPHICS){
++        int maximum=pureCount-visibleSettings;
++        int scroll=state->scroll<0?0:state->scroll>maximum?maximum:state->scroll;
++        return row>=scroll&&row<scroll+visibleSettings?row-scroll:-1;
++    }
+     if (page != OVERLAY_PAGE_CONTROLS) {
+         return row;
+     }
+@@ -720,7 +798,27 @@ static void PaintRows(const Painter *p) {
+                     }
+                 }
+             } else if (page == OVERLAY_PAGE_MODS) {
++#ifdef PE_PS5
++#ifdef PE_PS5_GPU_NATIVE
++                const char *names[]={"GPU HD backgrounds","Local background pack","Download / update","Movie side fill"
++#ifdef PE_MODS
++,"Cheats / assists"
++#endif
++};
++ #else
++                const char *names[]={"Title HD","CPU field HD (experimental)","Field pack directory"};
++ #endif
++#else
+                 const char *names[]={"HD backgrounds","Background pack","Integrity check"};
++#endif
++#ifdef PE_PS5_GPU_NATIVE
++#ifdef PE_MODS
++                if(row==4)PaintValueRow(p,names[row],"Open menu",mid,baseline,selected,0,label);
++                else
++#endif
++                if(row==3)PaintValueRow(p,names[row],host_options.movie_blur?"On":"Off",mid,baseline,selected,0,label);
++                else
++#endif
+                 if(row==0)PaintValueRow(p,names[row],Host_HdValue(row),mid,baseline,selected,0,label);
+                 else {
+                     DrawText(p->surface,OVERLAY_PAD*s,baseline,17*s,names[row],label,ALIGN_LEFT);
+@@ -749,10 +847,21 @@ static void PaintRows(const Painter *p) {
+             FillRoundRect(p->surface,x,y+18*s,w,10*s,5*s,WithAlpha(kText,.12f));
+             FillRoundRect(p->surface,x,y+18*s,w*Host_HdPercent()/100.f,10*s,5*s,kAccent);
+         } else {
++#if defined(PE_PS5_GPU_NATIVE)
++            char text[96];snprintf(text,sizeof(text),"Local pack: %s",Host_GpuHdPackPresent(Host_GpuHdDirectory())?"found (atlas checks on use)":"not found");
++#else
+             char text[96];snprintf(text,sizeof(text),"Installed version: %s",*host_hd.version?host_hd.version:host_hd.development?"local preview":"none");
++#endif
+             DrawText(p->surface,x,y,15*s,text,kMuted,ALIGN_LEFT);
+         }
+     }
++    if(page==OVERLAY_PAGE_GRAPHICS && pureCount>visibleSettings){
++        float trackTop=(OVERLAY_HEADER_H+4)*s,trackH=(visibleSettings*OVERLAY_ROW_H-8)*s;
++        float thumbH=trackH*(float)visibleSettings/(float)pureCount;
++        float top=trackTop+(trackH-thumbH)*(float)p->state->scroll/(float)(pureCount-visibleSettings);
++        FillRoundRect(p->surface,(OVERLAY_PANEL_W-12)*s,trackTop,4*s,trackH,2*s,WithAlpha(kText,.10f));
++        FillRoundRect(p->surface,(OVERLAY_PANEL_W-12)*s,top,4*s,thumbH,2*s,WithAlpha(kAccent,.65f));
++    }
+     if (page == OVERLAY_PAGE_CONTROLS) {
+         int scroll = Host_ClampControlsScroll(p->state->scroll);
+         float trackTop = (OverlayRowTop(visibleSettings, 1) + 4.0f) * s;
+@@ -776,6 +885,10 @@ static const char *OverlayRowHelp(const HostOverlayState *state) {
+     if (state->capturing_binding) {
+         return "Press a key or controller button to bind. Esc cancels.";
+     }
++#ifdef PE_PS5_GPU_NATIVE
++    if(state->page==OVERLAY_PAGE_MODS&&state->row==3)
++        return "Blurred RGB24 movie/still side fill; unchanged center aspect. Frames with no bars skip it. Left/Right or confirm toggles.";
++#endif
+     int pureCount = Host_SettingsPureRowCount(state->page);
+     if (state->row == pureCount) {
+         return "Return to the game.";
+@@ -786,6 +899,13 @@ static const char *OverlayRowHelp(const HostOverlayState *state) {
+     int declCount = 0;
+     const OverlaySetting *settings = OverlayPageSettings(state->page, &declCount);
+     if (settings != NULL && state->row >= 0 && state->row < declCount) {
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++        if(state->page==OVERLAY_PAGE_GRAPHICS && state->row==0){
++            static char status[240];
++            snprintf(status,sizeof(status),"CPU geometry requested %ux; last prepared frame %ux. Experimental; rejected epochs use canonical 1x. Geometry overrides field HD.",Psyz_CpuGeometryRequested(),Psyz_CpuGeometryEffective());
++            return status;
++        }
++#endif
+         return settings[state->row].help;
+     }
+     if (state->page == OVERLAY_PAGE_CONTROLS) {
+diff --git a/src/main/entity/frame_update.c b/src/main/entity/frame_update.c
+index f59afb1..507099c 100644
+--- a/src/main/entity/frame_update.c
++++ b/src/main/entity/frame_update.c
+@@ -301,6 +301,8 @@ void Entity_FrameUpdate(void) {
+                     Pgxp_StoreModelMatrix(&entity->render_object.model_matrix,
+                                           entity->rot_x, entity->rot_y, entity->rot_z,
+                                           entity->move_speed);
++                    Pgxp_StoreModelPosition16(&entity->render_object.model_matrix,
++                                             entity->pos_x, entity->pos_y, entity->pos_z);
+                 }
+             }
+         }
+diff --git a/src/main/render/mesh_entry.c b/src/main/render/mesh_entry.c
+index c2c5d86..87d9870 100644
+--- a/src/main/render/mesh_entry.c
++++ b/src/main/render/mesh_entry.c
+@@ -12,7 +12,19 @@ u16 GetTPage(int tp, int abr, int x, int y);
+ #include <psyz/video.h>
+ #include <SDL3/SDL.h>
+ 
++#ifdef PE_PS5
++const char *Psyz_CpuFieldMaterialDirectory(void);
++#endif
++static const char *Render_HdPackDirectory(void) {
++#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
++    return Psyz_CpuFieldMaterialDirectory();
++#else
++    return SDL_getenv("PE_HD_BACKGROUNDS");
++#endif
++}
+ static uint64_t hd_geometry_key;
++/* Trace status0notattempted,1openfailed,2invalid,3loaded; no load policy change. */
++static int hd_wide_trace_status;
+ static char hd_background_directory[4096];
+ static const char *hd_background_path = hd_background_directory;
+ static const GeomState *hd_prepared_state;
+@@ -45,6 +57,7 @@ static struct {
+ } hd_wide[HD_WIDE_GROUPS];
+ 
+ static void Render_ResetHdWidescreen(void) {
++    hd_wide_trace_status=0;
+     /* Queued ordering tables may still point at these two packet buffers. */
+     for (unsigned i=0;i<HD_WIDE_GROUPS;++i)
+         if(hd_wide[i].count){DrawSync(0);break;}
+@@ -65,10 +78,14 @@ static int Render_ReadHdWide(SDL_IOStream *file, unsigned bytes, uint64_t *value
+ }
+ 
+ static void Render_LoadHdWidescreen(void) {
++    hd_wide_trace_status=1;
+     char filename[4096];
+     int size=snprintf(filename,sizeof(filename),"%s/%016" PRIx64 "-wide.bin",hd_background_path,hd_geometry_key);
+     if(size<0 || (size_t)size>=sizeof(filename))return;
+     SDL_IOStream *file=SDL_IOFromFile(filename,"rb");if(!file)return;
++    hd_wide_trace_status=2;
++    Sint64 wide_bytes=SDL_GetIOSize(file);
++    if(wide_bytes<8 || wide_bytes>8+HD_WIDE_GROUPS*32+HD_WIDE_CELLS*4){SDL_CloseIO(file);return;}
+     uint64_t magic,groups,value;
+     unsigned total=0;
+     int valid=Render_ReadHdWide(file,4,&magic) && magic==0x31574550u &&
+@@ -94,6 +111,8 @@ static void Render_LoadHdWidescreen(void) {
+         }
+         for(unsigned n=0;valid && n<count;++n) {
+             int x=hd_wide[group].xy[n*2],y=hd_wide[group].xy[n*2+1];
++            /* Bounds describe the visible span, not complete-cell extents.
++             * Official side art overlaps the right edge; presenter crops it. */
+             if(x<l || x>=r || y<y0 || y>=y1)valid=0;
+         }
+         if(!valid)break;
+@@ -108,7 +127,18 @@ static void Render_LoadHdWidescreen(void) {
+     }
+     unsigned char trailing;if(valid && SDL_ReadIO(file,&trailing,1)!=0)valid=0;
+     SDL_CloseIO(file);
+-    if(!valid){Render_ResetHdWidescreen();Psyz_GpuResetSpriteAtlases();fprintf(stderr,"Ignoring incomplete HD widescreen geometry %016" PRIx64 "\n",hd_geometry_key);}
++    if(!valid){Render_ResetHdWidescreen();hd_wide_trace_status=2;Psyz_GpuResetSpriteAtlases();fprintf(stderr,"Ignoring incomplete HD widescreen geometry %016" PRIx64 "\n",hd_geometry_key);}
++    else hd_wide_trace_status=3;
++}
++
++void Render_TraceWidescreenMetadata(int buffer_y,unsigned tiles,int left,int right,int available,int hd_left,int hd_right) {
++#if defined(PE_PS5) && defined(PE_PS5_GPU_NATIVE)
++    unsigned group=g_GeomScroll.state.position.groupSelect;
++    Psyz_GpuTraceResolutionRoom(buffer_y,tiles,left,right,available,hd_left,hd_right,
++        (unsigned long long)hd_geometry_key,group,hd_wide[group].count,hd_wide_trace_status);
++#else
++    (void)buffer_y;(void)tiles;(void)left;(void)right;(void)available;(void)hd_left;(void)hd_right;
++#endif
+ }
+ 
+ int Render_GetHdWidescreenPicture(int *left,int *right) {
+@@ -151,7 +181,7 @@ void Render_LinkHdWidescreenBackdrop(int slot,RenderNativeTag *ordering) {
+ void Render_PrepareHdBackgrounds(void) {
+     const uint64_t previous_key=hd_geometry_key;
+     Render_ResetHdWidescreen();
+-    const char *pack=SDL_getenv("PE_HD_BACKGROUNDS");
++    const char *pack=Render_HdPackDirectory();
+     snprintf(hd_background_directory,sizeof(hd_background_directory),"%s",pack?pack:"");
+     hd_prepared_state=g_GeomState;
+     hd_geometry_key=0;
+@@ -176,7 +206,7 @@ void Render_PrepareHdBackgrounds(void) {
+  * re-hash descriptors after scripts have animated them. */
+ void Render_RefreshHdBackgrounds(void) {
+     if (!hd_geometry_key || !g_GeomState || hd_prepared_state!=g_GeomState) return;
+-    const char *pack=SDL_getenv("PE_HD_BACKGROUNDS");
++    const char *pack=Render_HdPackDirectory();
+     DrawSync(0);
+     Render_ResetHdWidescreen();
+     Psyz_GpuResetSpriteAtlases();
+diff --git a/src/main/render/mesh_list.c b/src/main/render/mesh_list.c
+index 9e7c9b2..6d1ac52 100644
+--- a/src/main/render/mesh_list.c
++++ b/src/main/render/mesh_list.c
+@@ -49,20 +49,27 @@ typedef union RenderLinkAddress {
+  * tile (a wall's last tiles hold a few columns of picture and the rest
+  * transparent), which showed as a black strip at that side. The edge
+  * columns' bands come from the whole tiles, so the picture never reaches past
+- * them. */
++ * them. A band may end before the others where its picture ends in black:
++ * the stored pictures leave out tiles inside their black areas (M235's
++ * corridor has a few in the dark above its walls), and the 4:3 screen shows
++ * those gaps black too, so the other bands carry on past them. */
+ #define WS_FIRST_X (-112)
+ #define WS_COLUMNS 544
+ #define WS_BANDS 14
+ static struct {
+     u16 bands[WS_COLUMNS]; /* picture: from the tiles' texels */
+     u16 tiled[WS_COLUMNS]; /* whole linked tiles: for the screen's edge */
++    u16 lit[WS_COLUMNS];   /* picture that is not black: a band can't end next to it */
+     int tiles;
+ } s_WidescreenCover[2];
+ 
+-/* Whether the tile's texel (i, j) holds picture (is not transparent), read
+- * from PsyZ's VRAM copy; -1 when the copy cannot tell (not uploaded, drawn
+- * over, 15-bit page...). Opaque black counts as picture: dark rooms store
+- * real black past the screen. */
++/* Darkest picture a band may end on: every 5-bit channel at most this. */
++#define WS_DARK 2
++
++/* Whether the tile's texel (i, j) holds picture, read from PsyZ's VRAM copy:
++ * 0 transparent, 1 black (or nearly), 2 any other colour; -1 when the copy
++ * cannot tell (not uploaded, drawn over, 15-bit page...). Opaque black counts
++ * as picture: dark rooms store real black past the screen. */
+ static int Render_WidescreenTexel(const RenderTilePacket *sprite, const RenderTexturePagePacket *page,
+                                   int i, int j) {
+     const unsigned char *known;
+@@ -92,11 +99,16 @@ static int Render_WidescreenTexel(const RenderTilePacket *sprite, const RenderTe
+     }
+     if (!known[at]) return -1;
+     c = vram[at];
+-    return c != 0;
++    if (c == 0) return 0;
++    return (c & 31) <= WS_DARK && ((c >> 5) & 31) <= WS_DARK && ((c >> 10) & 31) <= WS_DARK ? 1 : 2;
+ }
+ 
+ static void Render_AddWidescreenTile(int slot, int x, int y, const RenderTilePacket *sprite,
+                                      const RenderTexturePagePacket *page) {
++    /* Only columns next to the screen's edge or past it are asked whether
++     * they are black, so the tiles inside it stop at their first picture. */
++    int edge = x < 1 || x + 16 > 319;
++    unsigned lit = 0;
+     int first = 16;
+     int last = 0;
+     int band;
+@@ -112,11 +124,13 @@ static void Render_AddWidescreenTile(int slot, int x, int y, const RenderTilePac
+             if (texel < 0) {
+                 first = 0;
+                 last = 16;
++                lit = 0xFFFF;
+                 i = j = 16;
+             } else if (texel) {
+                 first = i < first ? i : first;
+                 last = i + 1;
+-                break;
++                if (texel > 1) lit |= 1u << i;
++                if (texel > 1 || !edge) break;
+             }
+         }
+     }
+@@ -128,6 +142,8 @@ static void Render_AddWidescreenTile(int slot, int x, int y, const RenderTilePac
+             s_WidescreenCover[slot].tiled[column - WS_FIRST_X] |= (u16)(1u << band);
+             if (column >= x + first && column < x + last)
+                 s_WidescreenCover[slot].bands[column - WS_FIRST_X] |= (u16)(1u << band);
++            if (lit & (1u << (column - x)))
++                s_WidescreenCover[slot].lit[column - WS_FIRST_X] |= (u16)(1u << band);
+         }
+     }
+     s_WidescreenCover[slot].tiles++;
+@@ -142,19 +158,28 @@ static u16 Render_WidescreenEdgeBands(int slot, int first) {
+     return rows;
+ }
+ 
++/* Whether the next column out keeps the picture going: some of the bands
++ * still open have picture there, and every band that stops there ends on
++ * black in the column before it. */
++static int Render_WidescreenNextColumn(int slot, u16 *open, int column, int previous) {
++    u16 have = s_WidescreenCover[slot].bands[column - WS_FIRST_X] & *open;
++
++    if (have == 0 || (*open & ~have & s_WidescreenCover[slot].lit[previous - WS_FIRST_X]) != 0) return 0;
++    *open = have;
++    return 1;
++}
++
+ void Render_GetWidescreenPicture(int slot, int *left, int *right) {
+-    u16 edge;
++    u16 open;
+ 
+     *left = 0;
+     *right = 320;
+     if (s_WidescreenCover[slot].tiles == 0) return;
+-    edge = Render_WidescreenEdgeBands(slot, 0);
+-    while (edge != 0 && *left > -RENDER_WIDESCREEN_MARGIN &&
+-           (s_WidescreenCover[slot].bands[*left - 1 - WS_FIRST_X] & edge) == edge)
++    open = Render_WidescreenEdgeBands(slot, 0);
++    while (*left > -RENDER_WIDESCREEN_MARGIN && Render_WidescreenNextColumn(slot, &open, *left - 1, *left))
+         --*left;
+-    edge = Render_WidescreenEdgeBands(slot, 312);
+-    while (edge != 0 && *right < 320 + RENDER_WIDESCREEN_MARGIN &&
+-           (s_WidescreenCover[slot].bands[*right - WS_FIRST_X] & edge) == edge)
++    open = Render_WidescreenEdgeBands(slot, 312);
++    while (*right < 320 + RENDER_WIDESCREEN_MARGIN && Render_WidescreenNextColumn(slot, &open, *right, *right - 1))
+         ++*right;
+ }
+ 
+@@ -169,8 +194,10 @@ void Render_CommitWidescreenPicture(int slot, int buffer_y) {
+     if (buffer_y >= 0 && Psyz_VideoGetWidescreen()) {
+         int left, right;
+         Render_GetWidescreenPicture(slot, &left, &right);
+-        int hd_left,hd_right;
+-        if (s_WidescreenCover[slot].tiles && Render_GetHdWidescreenPicture(&hd_left,&hd_right)) {
++        int hd_left=0,hd_right=0;
++        int hd_available=Render_GetHdWidescreenPicture(&hd_left,&hd_right);
++        Render_TraceWidescreenMetadata(buffer_y,s_WidescreenCover[slot].tiles,left,right,hd_available,hd_left,hd_right);
++        if (s_WidescreenCover[slot].tiles && hd_available) {
+             if(hd_left<left)left=hd_left;
+             if(hd_right>right)right=hd_right;
+         }
+diff --git a/src/main/render/model_fill_lighting.c b/src/main/render/model_fill_lighting.c
+new file mode 100644
+index 0000000..51af93f
+--- /dev/null
++++ b/src/main/render/model_fill_lighting.c
+@@ -0,0 +1,55 @@
++/* CPE original optional stylized model fill. Original game lighting remains
++ * authoritative and is not evaluated by this helper. No GTE state is touched. */
++#include "pe1/model_fill_lighting.h"
++#include <math.h>
++#include <string.h>
++static int selected_preset; /* off unless explicitly enabled */
++void Render_SetModelFillLighting(int preset) {
++    selected_preset=preset>=0&&preset<=2?preset:0;
++}
++int Render_GetModelFillLighting(void){return selected_preset;}
++void CpeModelFillPrepare(CpeModelFillFrame *f,const int16_t *rotation,int preset) {
++    memset(f,0,sizeof(*f));f->preset=preset>=0&&preset<=2?preset:0;
++    if(f->preset!=2||!rotation)return;
++    float n[3]={0};
++    for(int r=0;r<3;r++)for(int c=0;c<3;c++){
++        const float v=rotation[r*3+c]/4096.0f;
++        f->rotation[r][c]=v;n[r]+=v*v;
++    }
++    // For a uniform orthogonal transform, normalizing R*N is equivalent to
++    // the inverse-transpose direction. Decline nonuniform/sheared matrices
++    // rather than pretend the same formula is a correct normal transform.
++    float mean=(n[0]+n[1]+n[2])/3.0f;
++    if(mean<1e-8f||!isfinite(mean))return;
++    for(int r=0;r<3;r++)if(fabsf(n[r]-mean)>mean*0.02f)return;
++    for(int r=0;r<3;r++)for(int c=r+1;c<3;c++){
++        float dot=0;for(int k=0;k<3;k++)dot+=f->rotation[r][k]*f->rotation[c][k];
++        if(fabsf(dot)>mean*0.02f)return;
++    }
++    f->directional=1;
++}
++uint32_t CpeModelFillColour(uint32_t colour,const int16_t *normal,const CpeModelFillFrame *f) {
++    if(!f||!f->preset)return colour; // exact off path, no normal access/math
++    unsigned r=colour&255,g=(colour>>8)&255,b=(colour>>16)&255;
++    unsigned brightest=r>g?r:g;if(b>brightest)brightest=b;
++    if(!brightest||brightest==255)return colour;
++    unsigned strength=40; // modest neutral fill; fallback for invalid normals
++    if(f->preset==2&&f->directional&&normal){
++        float world[3]={0};
++        for(int row=0;row<3;row++)for(int col=0;col<3;col++)world[row]+=f->rotation[row][col]*normal[col];
++        float len2=world[0]*world[0]+world[1]*world[1]+world[2]*world[2];
++        if(len2>1e-8f&&isfinite(len2)){
++            // Fixed world-space key (0,-0.8,-0.6), not a camera-facing rim.
++            float ndl=(-0.8f*world[1]-0.6f*world[2])/sqrtf(len2);
++            ndl=ndl<0?0:ndl>1?1:ndl;
++            strength=24+(unsigned)(40.0f*ndl+0.5f);
++        }
++    }
++    // One shared multiplicative lift preserves hue/zero channels and fades.
++    // The brightest channel limits headroom; no new light appears at black.
++    unsigned headroom=255-brightest;
++    r+=(r*headroom*strength+32768u)>>16;
++    g+=(g*headroom*strength+32768u)>>16;
++    b+=(b*headroom*strength+32768u)>>16;
++    return (colour&0xff000000u)|(r>255?255:r)|((g>255?255:g)<<8)|((b>255?255:b)<<16);
++}
+diff --git a/src/main/render/object.c b/src/main/render/object.c
+index 1c688aa..7efca61 100644
+--- a/src/main/render/object.c
++++ b/src/main/render/object.c
+@@ -9,6 +9,9 @@
+ #include "pe1/render_object.h"
+ #include "pe1/render_setup.h"
+ #include "pe1/render_tint.h"
++#ifdef PE_PS5_GPU_NATIVE
++#include "pe1/model_fill_lighting.h"
++#endif
+ 
+ /* Original USA resident model-rendering data. The historical "identity"
+  * name denotes an X-reflecting basis: its first signed halfword is -4096. */
+@@ -1554,6 +1557,9 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
+     s16 *lightMatrix = &lightMatrixStorage.m[0][0];
+     RenderMatrix *matrix;
+     int i, j;
++#ifdef PE_PS5_GPU_NATIVE
++    const int fillPreset=Render_GetModelFillLighting();
++#endif
+ 
+     if (!entity->header || !entity->draw_count)
+         return;
+@@ -1570,6 +1576,14 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
+         if (part->visible != 1)
+             continue;
+         gte_MulMatrix0(view, matrix, lightMatrix);
++#ifdef PE_PS5_GPU_NATIVE
++        CpeModelFillFrame fillFrame;
++        if(fillPreset){
++            s16 fillRotation[9];
++            for(int r=0;r<3;r++)for(int c=0;c<3;c++)fillRotation[r*3+c]=matrix->rotation[r][c];
++            CpeModelFillPrepare(&fillFrame,fillRotation,fillPreset);
++        }
++#endif
+         gte_SetLightMatrix(lightMatrix);
+         first = part->vertex_start;
+         mainColours = &g_RenderClutLookupTable[first];
+@@ -1592,6 +1606,16 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
+             gte_ncct();
+             vertex += 3;
+             gte_strgb3(mainColours, mainColours + 1, mainColours + 2);
++#ifdef PE_PS5_GPU_NATIVE
++            if(fillPreset){
++                const RenderVec3s *normals[3]={normal0,normal1,normal2};
++                int count=part->vertex_count-j;if(count>remaining)count=remaining;if(count>3)count=3;
++                for(int c=0;c<count;c++){
++                    const s16 fillNormal[3]={normals[c]->x,normals[c]->y,normals[c]->z};
++                    mainColours[c]=CpeModelFillColour(mainColours[c],fillNormal,&fillFrame);
++                }
++            }
++#endif
+             k = first + j;
+             colours = (RenderColor *)entity->vertex_colours;
+             if (colours[k].code)
+@@ -1604,6 +1628,16 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
+                 continue;
+             gte_ncct();
+             gte_strgb3(altColours, altColours + 1, altColours + 2);
++#ifdef PE_PS5_GPU_NATIVE
++            if(fillPreset){
++                const RenderVec3s *normals[3]={normal0,normal1,normal2};
++                int count=part->vertex_count-j;if(count>remaining)count=remaining;if(count>3)count=3;
++                for(int c=0;c<count;c++){
++                    const s16 fillNormal[3]={normals[c]->x,normals[c]->y,normals[c]->z};
++                    altColours[c]=CpeModelFillColour(altColours[c],fillNormal,&fillFrame);
++                }
++            }
++#endif
+         }
+     }
+ }
+@@ -1849,6 +1883,18 @@ void Pgxp_StoreModelMatrix(const RenderMatrix *matrix, s16 rx, s16 ry, s16 rz, s
+     Pgxp_StoreBoneMatrix(matrix, &mat);
+ }
+ 
++void Pgxp_StoreModelPosition16(const RenderMatrix *matrix, s32 x, s32 y, s32 z) {
++    PgxpBoneMatrix mat;
++    Pgxp_LoadBoneMatrix(matrix, &mat);
++    /* The gameplay GTE matrix deliberately retains signed16 whole coordinates.
++     * Its visual companion must not discard the entity's original16.16 fraction.
++     * No temporal interpolation or integer gameplay/collision update occurs. */
++    mat.trans[0] = (double)x / 65536.0;
++    mat.trans[1] = (double)y / 65536.0;
++    mat.trans[2] = (double)z / 65536.0;
++    Pgxp_StoreBoneMatrix(matrix, &mat);
++}
++
+ static void Pgxp_ComposeBoneMatrix(const PgxpBoneMatrix *parent,
+                                    const PgxpBoneMatrix *source,
+                                    double tx, double ty, double tz,
+diff --git a/src/main/battle/attack.c b/src/main/battle/attack.c
+index 0634d71..3d7a402 100644
+--- a/src/main/battle/attack.c
++++ b/src/main/battle/attack.c
+@@ -272,10 +272,15 @@ s8 g_EvasionReaction;
+  * weapon category and the reaction in the core flags; an unresolved one
+  * opens the floating panel.
+  * The steal path reaches this through jump cross-jumping into the
+- * single-target copy, as in retail. */
++ * single-target copy, as in retail.
++ * A target killed earlier in the same volley can already have released its
++ * core when the next shot's timer fires. Retail then writes to PS1 address 1,
++ * which is mapped kernel RAM; here there is nothing left to mark. */
+ static inline void ApplyEvasionOutcome(BattleEntity *target)
+ {
+     EnemyCombatant *core = target->core;
++    if (core == NULL)
++        return;
+     if (g_EvasionOutcome.status == 1)
+     {
+         EnemyCoreFlagBits *bits = (EnemyCoreFlagBits *)&core->coreFlags;
+@@ -316,7 +321,8 @@ void Battle_ResolveHitOnTimer(void)
+         {
+             BattleEntity *thief = selectedSlot->actor;
+             Asset_Find08Alt(0x46D, 0, thief->renderObject.target_x, thief->renderObject.target_y, thief->renderObject.target_z);
+-            if (g_ActiveActor->action->turnWord & 0x6000)
++            /* A released target has nothing left to steal. */
++            if ((g_ActiveActor->action->turnWord & 0x6000) && thief->core != NULL)
+             {
+                 stealMode = (((EnemyCombatant *)selectedSlot->actor->core)->statusFlags2 >> 0xC) & 3;
+                 switch (stealMode)
+diff --git a/src/overlays/room_lib/mirror_model.c b/src/overlays/room_lib/mirror_model.c
+index db23aea..afb8a20 100644
+--- a/src/overlays/room_lib/mirror_model.c
++++ b/src/overlays/room_lib/mirror_model.c
+@@ -119,6 +119,13 @@ void RoomEffect_MirrorNoOp6(void) {}
+ 
+ void RoomEffect_ModelBind(FieldActor *actor, FieldActor *owner, int x0, int z0, int x1, int z1)
+ {
++    /* M319's script gives Aya's reflection a line tilted about 2.5 degrees
++     * (z -902 to -1004) in front of a straight painted mirror, so her
++     * reflection slides sideways the further she stands from it. Straighten
++     * it at its middle depth; no other room uses this line. */
++    if (x0 == 1123 && z0 == -902 && x1 == -1169 && z1 == -1004) {
++        z0 = z1 = -953;
++    }
+     actor->render_object.animation_state = 5;
+     actor->render_object.reflection_owner = owner;
+     actor->mirror_line.x0 = (u16)x0;

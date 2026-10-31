@@ -1,0 +1,135 @@
+{
+  "schema": "cpe.identity-addon-sdk-proof.v1",
+  "base": "ce80c5636a23ed24232fc0d835855efd6c66bad0",
+  "buildStamp": "public_capture_proof_20261031",
+  "sourceFiles": [
+    {
+      "component": "game",
+      "path": "src/main/scene/room_load.c",
+      "sha256": "1ef51212793b08fba07050ca3b0b020db8585bf6b3f9fad379ea8cc7b4043ea4"
+    },
+    {
+      "component": "game",
+      "path": "include/pe_texture_identity_capture.h",
+      "sha256": "4b5cc767ad904709294277731eadc81c95f9476e64bed62b7af1094709a1f856"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/include/psyz/gpu.h",
+      "sha256": "0a8ce64524896fc656f32062e9bd480c1245624271902adc7f994e97c9f53cc4"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/sdl3_gpu.c",
+      "sha256": "e9e97ba30c7761082a430c9ea777688c87cc8907af0d588afec23544e489abe0"
+    }
+  ],
+  "elf": {
+    "path": "<FRESH_EXPORT>/build-game/parasite-eve-ps5.elf",
+    "sha256": "eaa028cd5b44d9e3a67088f6d9ae8dde1f46038a4a759215d27894d79c27dfee",
+    "bytes": 105542704,
+    "entry": "0x120590"
+  },
+  "shadersUnchangedFromCE80": [
+    {
+      "name": "clear.frag.spv",
+      "sha256": "9537bab221713ed80e9451c533a8e48d72836d8de09fad60803834931d77e6b9"
+    },
+    {
+      "name": "clear.vert.spv",
+      "sha256": "65edc362089ff3936f98d1fb8fa8e27eec6d9167f04402d5b5ab1cfa13233017"
+    },
+    {
+      "name": "fsr1-fsr1_easu.frag.spv",
+      "sha256": "70bab58c1300299e5c3a9800dee5bab64ae5ac7f95c2bcace9fa512903e17462"
+    },
+    {
+      "name": "fsr1-fsr1_rcas.frag.spv",
+      "sha256": "e2de18c1a459dda493da30dba60cbaf7dc78603d23e44fdc823c85d71bcf8c9c"
+    },
+    {
+      "name": "fsr1-fullscreen.vert.spv",
+      "sha256": "9302f1b4f15fb2f52d20a0ce5d4bb66fdd98f8c6e4dfc330c1da077ae6ede8e9"
+    },
+    {
+      "name": "movie-cpe_fullscreen_vert.spv",
+      "sha256": "9302f1b4f15fb2f52d20a0ce5d4bb66fdd98f8c6e4dfc330c1da077ae6ede8e9"
+    },
+    {
+      "name": "movie-cpe_movie_blur_frag.spv",
+      "sha256": "9723eef96ca1f376a031a2a1763e8347da2c9f45373ce7ab5dd355856c15f6c1"
+    },
+    {
+      "name": "psx.frag.spv",
+      "sha256": "7a36b31f5c50c4c82996676b20f1ccfeb3d2f555a1c361afdf22eca2a3c68504"
+    },
+    {
+      "name": "psx.vert.spv",
+      "sha256": "e0f2bf9c75fed6205a6ef45d0ae5997a651960bfa9cb72a0ece1007d8c9123c8"
+    }
+  ],
+  "retainedDependencyVerification": true,
+  "mesaRebuilt": false,
+  "rebuilt": [
+    "native CRT",
+    "compiler-rt helpers",
+    "heap bridge",
+    "SDL",
+    "PsyZ",
+    "game",
+    "GLSL"
+  ],
+  "runtimeAudit": {
+    "passed": true,
+    "issues": [],
+    "sha256": "fe4c7bbfa1e41689289691117384060d406a306de641b5d672ec777acecc32a4"
+  },
+  "importAudit": {
+    "sha256": "2822bcc2f55a8753404ee781f884563e0cb0d7e7f86eb085210883f2ebd58d0f",
+    "count": 352,
+    "newProviderImports": []
+  },
+  "gameExecuted": false,
+  "consoleExecuted": false,
+  "convertedOrStaged": false,
+  "markerCreated": false,
+  "readbackPerformed": false,
+  "licenseClearanceClaim": false,
+  "commands": [
+    "git apply <ADDON>/recipe-hook.patch",
+    "git apply <ADDON>/recipe-config.patch",
+    "node <RECIPE>/prepare-source.cjs <PINNED_ARCHIVES> <FRESH_EXPORT>",
+    "node <ADDON>/prepare-addon.cjs <FRESH_EXPORT>",
+    "node <RECIPE>/build-native.cjs <FRESH_EXPORT> <PUBLIC_PREFIX> <TOOLS_CONFIG_WITH_IDENTITY_CAPTURE_BUILD>",
+    "audit-application-imports.ps1 and audit-application-runtime.ps1 against linked ELF"
+  ],
+  "captureIoProviders": [
+    {
+      "Binding": "GLOBAL",
+      "Module": "libkernel.sprx",
+      "Symbol": "open"
+    },
+    {
+      "Binding": "GLOBAL",
+      "Module": "libkernel.sprx",
+      "Symbol": "close"
+    },
+    {
+      "Binding": "GLOBAL",
+      "Module": "libkernel.sprx",
+      "Symbol": "write"
+    },
+    {
+      "Binding": "GLOBAL",
+      "Module": "libkernel.sprx",
+      "Symbol": "fsync"
+    },
+    {
+      "Binding": "GLOBAL",
+      "Module": "libkernel.sprx",
+      "Symbol": "rename"
+    }
+  ],
+  "compileTargetPropagation": "ON initial game configure; entity object target received capture/stamp and SDL/PsyZ dependencies",
+  "prepareScriptPostBuildChange": "Git-checkout refusal corrected SDL source directory spelling to sdl3-src; producer/config untouched"
+}

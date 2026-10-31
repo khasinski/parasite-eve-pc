@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "sourceReviewBase": "97cd8e121",
+  "buildDateUtc": "2026-10-31T10:06:49.023Z",
+  "recipeFilesVerified": 43,
+  "recipeChangesNeeded": false,
+  "preparedSourceOutputs": 74,
+  "generatedHeaders": 6,
+  "allSourceAndShaderHashesMatch": true,
+  "commands": [
+    "node <RECIPE>/prepare-source.cjs <PINNED_ARCHIVES> <FRESH_EXPORT>",
+    "node <RECIPE>/build-native.cjs <FRESH_EXPORT> <PUBLIC_PREFIX> <TOOLS_CONFIG>",
+    "pwsh -NoProfile -File <PS5_RECIPE>/audit-application-imports.ps1 -Elf <FRESH_EXPORT>/build-game/parasite-eve-ps5.elf -StubDirectory <PUBLIC_PREFIX>/deps/ps5-payload-sdk/target/lib -ReadElf <PUBLIC_PREFIX>/deps/llvm/bin/llvm-readelf.exe -Output <FRESH_EXPORT>/imports.json",
+    "pwsh -NoProfile -File <PS5_RECIPE>/audit-application-runtime.ps1 -Elf <FRESH_EXPORT>/build-game/parasite-eve-ps5.elf -ImportAudit <FRESH_EXPORT>/imports.json -LlvmBin <PUBLIC_PREFIX>/deps/llvm/bin -Output <FRESH_EXPORT>/runtime.json"
+  ],
+  "elf": {
+    "path": "<FRESH_EXPORT>/build-game/parasite-eve-ps5.elf",
+    "sha256": "b63669986087fa4178bea998a6498a84456d49f8a610df3060faac750ba9ce3b",
+    "bytes": 105524536
+  },
+  "rebuilt": [
+    "native CRT",
+    "compiler-rt helpers",
+    "heap bridge",
+    "SDL",
+    "PsyZ",
+    "game",
+    "GLSL"
+  ],
+  "retainedInputTreesVerified": 11,
+  "callerTools": {
+    "cmake": {
+      "sha256": "3a329667300846abc8dffccbdcb1c8c2d4a6cebe342d499181825205ea8c766c",
+      "version": "cmake version 4.4.4\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
+      "policy": "caller-supplied identity recorded (not recipe-pinned)"
+    },
+    "ninja": {
+      "sha256": "e52a7ad9538d9618c67a0bd777964e2eec8a30f68b810a2f6adce1f2daf847b8",
+      "version": "1.13.2",
+      "policy": "caller-supplied identity recorded (not recipe-pinned)"
+    }
+  },
+  "imports": {
+    "count": 352,
+    "directoryProvider": "libkernel.sprx:getdents",
+    "refusedLibcDirectoryImports": false,
+    "auditSha256": "1e426d5b92cfabeb3f09f40dafccb6b0dfe6b4892c3701ec88e3aeb7dbf0eace"
+  },
+  "runtime": {
+    "passed": true,
+    "issues": [],
+    "auditSha256": "a9fac9c1a1aaa103f7cafd6d3ed81074b5fcf43c9743dfe498fd6456431e6eb6"
+  },
+  "mesaRebuilt": false,
+  "gameExecuted": false,
+  "consoleExecuted": false,
+  "convertedOrStaged": false,
+  "licenseClearanceClaim": false
+}

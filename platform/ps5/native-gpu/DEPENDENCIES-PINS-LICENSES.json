@@ -1,0 +1,305 @@
+{
+  "utc": "2026-10-30T09:01:45.247Z",
+  "repositories": [
+    {
+      "repo": "griches/PS5_DevilutionX",
+      "sha": "4dc807484de4bd1c1020da3d7d67a886c9dd6c3a",
+      "branch": "main",
+      "license": null
+    },
+    {
+      "repo": "griches/PS5_Dusklight",
+      "sha": "72d6885cc8b4ff4c5f6be23682ab11578ec926c4",
+      "branch": "main",
+      "license": {
+        "key": "gpl-3.0",
+        "name": "GNU General Public License v3.0",
+        "spdx_id": "GPL-3.0",
+        "url": "https://api.github.com/licenses/gpl-3.0",
+        "node_id": "MDc6TGljZW5zZTk="
+      }
+    },
+    {
+      "repo": "mihawk-99/PS5_Vulkan",
+      "sha": "f410e67a0241b3e8edcdbcd2a9b285dfc4a412ed",
+      "branch": "main",
+      "license": {
+        "key": "gpl-3.0",
+        "name": "GNU General Public License v3.0",
+        "spdx_id": "GPL-3.0",
+        "url": "https://api.github.com/licenses/gpl-3.0",
+        "node_id": "MDc6TGljZW5zZTk="
+      }
+    },
+    {
+      "repo": "mpereiraesaa/ps5-agc-gears",
+      "sha": "1ae1f9182abd2770c131b97419034fb85173c2dc",
+      "branch": "main",
+      "license": {
+        "key": "gpl-3.0",
+        "name": "GNU General Public License v3.0",
+        "spdx_id": "GPL-3.0",
+        "url": "https://api.github.com/licenses/gpl-3.0",
+        "node_id": "MDc6TGljZW5zZTk="
+      }
+    },
+    {
+      "repo": "Rufidj/ps5link-sdk",
+      "sha": "ea771e535378740b6a058b8e5419eb8a0e0e0ec8",
+      "branch": "master",
+      "license": {
+        "key": "gpl-3.0",
+        "name": "GNU General Public License v3.0",
+        "spdx_id": "GPL-3.0",
+        "url": "https://api.github.com/licenses/gpl-3.0",
+        "node_id": "MDc6TGljZW5zZTk="
+      }
+    },
+    {
+      "repo": "SynoPiia/PSXS5",
+      "sha": "5c17ea31aec5791c12451e915386fa98d670adb4",
+      "branch": "main",
+      "license": {
+        "key": "gpl-3.0",
+        "name": "GNU General Public License v3.0",
+        "spdx_id": "GPL-3.0",
+        "url": "https://api.github.com/licenses/gpl-3.0",
+        "node_id": "MDc6TGljZW5zZTk="
+      }
+    }
+  ],
+  "toolRevisions": [
+    {
+      "repo": "ps5-payload-dev/sdk",
+      "sha": "a7685ce8e97ce1f8a4f38253a41d54241c9124f1",
+      "tag": "v0.45"
+    },
+    {
+      "repo": "KhronosGroup/glslang",
+      "sha": "e1b562a8bed273a02f30b59b66a5d499793cede5",
+      "tag": "16.6.0"
+    }
+  ],
+  "linkedComponents": [
+    {
+      "component": "SDL3",
+      "revision": "fa2c02bb6e21974a89ea9824bc53c9932abe5f9c plus preserved public PS5 overlay and four task changes",
+      "license": "Zlib and bundled per-file notices",
+      "licenseFile": "sdl3-src/LICENSE.txt"
+    },
+    {
+      "component": "Native SDL display bootstrap",
+      "revision": "griches/PS5_Dusklight@72d6885cc8b4ff4c5f6be23682ab11578ec926c4",
+      "license": "Zlib",
+      "licenseFile": "upstream/PS5_Dusklight-72d6885cc8b4ff4c5f6be23682ab11578ec926c4/licenses/Zlib.txt"
+    },
+    {
+      "component": "Static Vulkan hooks reference",
+      "revision": "griches/PS5_DevilutionX@4dc807484de4bd1c1020da3d7d67a886c9dd6c3a, individually licensed SDL file only",
+      "license": "Zlib"
+    },
+    {
+      "component": "Mesa RADV PS5 driver",
+      "revision": "7b59ef27c1b09b9671bc4153c41940c3155c3af2",
+      "license": "MIT; retain individual component notices",
+      "licenseFile": "upstream/PS5_Mesa-7b59ef27c1b09b9671bc4153c41940c3155c3af2/docs/license.rst"
+    },
+    {
+      "component": "Public platform heap/libc/thread/FP layer",
+      "revision": "b83202be73e930050e00de0f1b4d9ec46c0391bf",
+      "license": "GPL-3.0-or-later; bundled dlmalloc MIT",
+      "library": {
+        "path": "deps/radv-sdk/ps5-payload-sdk/target/lib/libps5platform.a",
+        "sha256": "a6b6f96ec969a3aa1c9de2dc3d0b744cb50bd44c4e2d1398538b52ee9ba3c00e",
+        "bytes": 371844
+      }
+    },
+    {
+      "component": "Gears ABI/command/video/fence helpers, separate AGC demo only",
+      "revision": "1ae1f9182abd2770c131b97419034fb85173c2dc",
+      "license": "GPL-3.0-or-later",
+      "licenseFile": "upstream/ps5-agc-gears-1ae1f9182abd2770c131b97419034fb85173c2dc/LICENSE"
+    },
+    {
+      "component": "Target C++/ABI/unwind runtime",
+      "revision": "Exact libraries from digest-verified PSXS5 SDK archive; libc++ header reports LLVM 18.1.0, exact build patch version not established",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "libraries": [
+        {
+          "path": "deps/radv-sdk/ps5-payload-sdk/target/lib/libc++.a",
+          "sha256": "b1480e6edcb7cffba5ea999cb13da0d40b0def4c215ead442649bba71d32414f",
+          "bytes": 2304096
+        },
+        {
+          "path": "deps/radv-sdk/ps5-payload-sdk/target/lib/libc++abi.a",
+          "sha256": "fe074aba4cfd2d81025d05c248d4468a954b5b8e2eaef82c8da99d36c4cbbcc5",
+          "bytes": 692520
+        },
+        {
+          "path": "deps/radv-sdk/ps5-payload-sdk/target/lib/libunwind.a",
+          "sha256": "d5942a5ffb6585952855160d9230f6e597df1851e5f3dda1b338e08e24b2f2d0",
+          "bytes": 130658
+        }
+      ]
+    },
+    {
+      "component": "LLVM compiler-rt TLS/integer/CPU helpers",
+      "revision": "llvmorg-18.1.8; source built locally",
+      "license": "Apache-2.0 WITH LLVM-exception",
+      "licenseFile": "deps/compiler-rt/LICENSE.TXT"
+    },
+    {
+      "component": "libwebp decoder",
+      "revision": "v1.6.0 archive SHA256 93a852c2b3efafee3723efd4636de855b46f9fe1efddd607e1f42f60fc8f2136",
+      "license": "BSD-3-Clause plus PATENTS",
+      "source": "<WEBP_SOURCE>"
+    },
+    {
+      "component": "PsyZ existing renderer/runtime",
+      "revision": "db796262b2a696241ec8f3965ebbfbcbc45bfc30 plus preserved local changes",
+      "license": "MPL-2.0 platform/runtime, MIT decomp, explicitly unlicensed portions; private game license boundary applies",
+      "licenseFile": "psyz-src/LICENSE"
+    },
+    {
+      "component": "Existing native application CRT",
+      "revision": "Exact object/source hashes below",
+      "license": "GPL-3.0-or-later header; original BlackBearReloaded shell plus existing project logging adaptation"
+    },
+    {
+      "component": "Independent demo shaders",
+      "revision": "Current source and SHADER-PROVENANCE.json",
+      "license": "MIT; demo shell GPL-3.0-or-later"
+    }
+  ],
+  "archives": [
+    {
+      "path": "deps/glslang-16.6.0-windows-x86_64-release.zip",
+      "sha256": "82bf434e69b9bb4829de7e2b4bc2c5e7a7861e53d66cf75e5cc70f5f694a8d9b",
+      "bytes": 13734779
+    },
+    {
+      "path": "deps/ps5-payload-sdk.tar.zst",
+      "sha256": "a58ceff61921b4e4c1f8306e53ee2372be16c8dd7f994c3c44b379c388ece522",
+      "bytes": 6075268
+    },
+    {
+      "path": "deps/radv-release.tar.zst",
+      "sha256": "001599671261e794a528a444a67370218927aed7a49108f93a5f937be592ce96",
+      "bytes": 53446446
+    },
+    {
+      "path": "deps/sdk-v0.45.zip",
+      "sha256": "5fac64093d0e3e69f2584ce7935f24f703f622d9681f1495c85b9f00d1291a2c",
+      "bytes": 8838658
+    }
+  ],
+  "sourceArchives": [
+    {
+      "path": "griches--PS5_DevilutionX.zip",
+      "sha256": "fce8a88794d9877e368fe7b2643196f58a1a42bc69678c4e7e5a841476145064",
+      "bytes": 17974259
+    },
+    {
+      "path": "griches--PS5_Dusklight.zip",
+      "sha256": "923e6ab474a5774952c18f6ae24d454672eb03a70033bb1bbe253936f50aef3c",
+      "bytes": 18122267
+    },
+    {
+      "path": "mihawk-99--PS5_Vulkan.zip",
+      "sha256": "658675c1453c23f043d9e93fb7b839966a997d148c42f8cc7a7b7ce700c6d2b6",
+      "bytes": 40343047
+    },
+    {
+      "path": "mpereiraesaa--ps5-agc-gears.zip",
+      "sha256": "eb9f38d27310bd0d70f88f47299d1a8b0f46a944d2f27f00f05286970ab095cb",
+      "bytes": 3262892
+    },
+    {
+      "path": "PS5_Mesa-7b59ef27c1b09b9671bc4153c41940c3155c3af2.zip",
+      "sha256": "3c3b5d9459758634b3b25f8865612c8313a19c14f74801145e3cbc6538467d4b",
+      "bytes": 119988443
+    },
+    {
+      "path": "PS5_PayloadSDK-b83202be73e930050e00de0f1b4d9ec46c0391bf.zip",
+      "sha256": "3d2ae5cc6fb27dcdd96205c506f593feca09d21b78bb3148d08fd9c03a1f138f",
+      "bytes": 5651169
+    },
+    {
+      "path": "Rufidj--ps5link-sdk.zip",
+      "sha256": "994da53e21d43f8a8056d8f651c2ee79d2a1634317f26195cda96e18af382de7",
+      "bytes": 137577
+    },
+    {
+      "path": "SynoPiia--PSXS5.zip",
+      "sha256": "f5c01eed032633b669cb18e67371d70df4a1df3452bdae1ce70634525aae1299",
+      "bytes": 7396597
+    }
+  ],
+  "radv": {
+    "source": "mihawk-99/PS5_Mesa",
+    "revision": "7b59ef27c1b09b9671bc4153c41940c3155c3af2",
+    "buildRecipe": "mihawk-99/PS5_Vulkan@fde9e3798c2ec1d8fccc90d5067cd6060490607f",
+    "platform": "mihawk-99/PS5_PayloadSDK@b83202be73e930050e00de0f1b4d9ec46c0391bf",
+    "original": {
+      "path": "deps/radv-release/lib/libvulkan_radeon.ps5.a",
+      "sha256": "39921c4e1c19fecc5c7914e022cd10be01e0325ca990cc027960a1777cf85b96",
+      "bytes": 272620698
+    },
+    "provenance": "RADV for the PlayStation 5, built by tools/build-radv.sh release\nfork: /home/runner/work/_temp/src/PS5_Vulkan/../PS5_Mesa\nrevision: 7b59ef27c1b09b9671bc4153c41940c3155c3af2\nassertions: off\nsdk: b83202be73e930050e00de0f1b4d9ec46c0391bf\narchive sha256: 39921c4e1c19fecc5c7914e022cd10be01e0325ca990cc027960a1777cf85b96\n",
+    "release": "https://github.com/SynoPiia/PSXS5/releases/tag/deps-radv-7b59ef27",
+    "notes": "Game-only derived archive renames six driver directory imports to ps5_*; original prebuilt bytes retained. zlib recipe pin in Mesa subprojects/zlib.wrap; archive member inventory retained. No independent driver rebuild or hardware qualification."
+  },
+  "licenseBoundary": "Independent demos use GPL-3.0-or-later, compatible SDL Zlib, Mesa MIT, and LLVM Apache-2.0 WITH LLVM-exception components. Game candidate remains private: the original game has no selected source license and PsyZ identifies unlicensed portions. No game redistribution, blanket relicensing, clean-room or GPL distribution compatibility claim.",
+  "referenceOnly": [
+    "Rufidj/ps5link-sdk: GPL3; SharpProspero shader-container origins not adopted",
+    "griches/PS5_DevilutionX: use only individually Zlib SDL hook reference; combined game Sustainable Use/GPL incompatibility documented upstream",
+    "blackbearreloaded/ps5-opengl: API404, no source/binary adopted",
+    "pacbrew dynamic GL/EGL/Vulkan archive: inspected only, not linked; payload dynamic loader unsuitable for this title"
+  ],
+  "existingSources": {
+    "game": "8c52cdde5d60ee52f00913517ffb593e9521bf2d plus preserved local candidate changes",
+    "psyz": "db796262b2a696241ec8f3965ebbfbcbc45bfc30 plus preserved local HD/wide renderer changes; regenerated shaders",
+    "nativeCRT": {
+      "path": "inputs/frozen-base/support/app_crt.o",
+      "sha256": "fdb6d71805e8c6e22637d70623793f16ed48098e057b214a2ad7c187831a78d2",
+      "bytes": 14416
+    },
+    "nativeCRTSource": {
+      "path": "inputs/frozen-base/support/native-debug/app_crt.cpp",
+      "sha256": "96fc51f0b4f432fe77d9b1b96826916ab882e1953c211e01854e479e8bb3853e",
+      "bytes": 2764
+    }
+  },
+  "nativeEffectsSources": [
+    {
+      "repo": "GPUOpen-Effects/FidelityFX-FSR",
+      "revision": "a21ffb8f6c13233ba336352bdff293894c706575",
+      "license": "MIT",
+      "scope": "Unmodified public AMD headers/license; project-authored GLSL/module glue; no assets",
+      "files": [
+        {
+          "path": "psyz/src/platform/fsr1/third_party/fsr1/ffx_a.h",
+          "sha256": "f60e2722fcd13989523b9164d776ab382b3692791767f3bf8bb19967f763f3fb",
+          "gitBlobSha1": "d04bff55cbe5f0c77af7a39d6a3452f2744dc6f4"
+        },
+        {
+          "path": "psyz/src/platform/fsr1/third_party/fsr1/ffx_fsr1.h",
+          "sha256": "93c3922362ea7fc99cbcc698ca30c98de4f8c246d1fbb0b09e015ddef38ce3a5",
+          "gitBlobSha1": "4e0b3d548553e61eedd384021409f24e3eb74de3"
+        },
+        {
+          "path": "psyz/src/platform/fsr1/third_party/fsr1/LICENSE.txt",
+          "sha256": "db089274ce766da70f5b7d791029c3486f9f9e27c8c79c652689603d3192e802",
+          "gitBlobSha1": "324cba594d11f918191907676a99deed2fea51d0"
+        }
+      ]
+    }
+  ],
+  "updateScope": {
+    "selectedBuild": "widescreen-card-loading-20261031-a1",
+    "selectedEboot": "11fd5508105667c7595186e6a3f1465f2894818d19848deabb65643f5ba70d80",
+    "excludedParticleEboot": "8af7f85c3c08f21a9018a1b4c63c958bb25776158a56ca45b4c9b1b1f4993a5c",
+    "retainedDependenciesRebuilt": false,
+    "publicationLicenseClearanceAsserted": false
+  }
+}

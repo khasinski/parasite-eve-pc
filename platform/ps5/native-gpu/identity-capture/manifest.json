@@ -1,0 +1,79 @@
+{
+  "schema": "cpe.identity-addon.v1",
+  "publicBaseCommit": "ce80c5636a23ed24232fc0d835855efd6c66bad0",
+  "selectedEbootSource": "0aae9f509ca49a1a585ee569fd6c7030fcb5e9a2edd641dbf5b365f0f8711b4f",
+  "basePins": {
+    "game": "8c52cdde5d60ee52f00913517ffb593e9521bf2d",
+    "psyz": "db796262b2a696241ec8f3965ebbfbcbc45bfc30",
+    "sdl": "fa2c02bb6e21974a89ea9824bc53c9932abe5f9c"
+  },
+  "sourceNormalization": "UTF8 CRLF-to-LF",
+  "patches": [
+    {
+      "component": "game",
+      "path": "patches/game.patch",
+      "sha256": "4ec790bfb904f14e7197ee6834597d4aa2ab1200710889cbc02741858415b441"
+    },
+    {
+      "component": "psyz",
+      "path": "patches/psyz.patch",
+      "sha256": "1c1103219abc93c9cb3c2913fecdd3d9a2fc92199e77f3b5769de3e911fd0241"
+    }
+  ],
+  "files": [
+    {
+      "component": "game",
+      "path": "src/main/scene/room_load.c",
+      "before": "7b6ff4db2dafe34a8df3eee5d6784e5f53f389d302dbbf3737d831545c559fda",
+      "after": "1ef51212793b08fba07050ca3b0b020db8585bf6b3f9fad379ea8cc7b4043ea4"
+    },
+    {
+      "component": "game",
+      "path": "include/pe_texture_identity_capture.h",
+      "before": null,
+      "after": "4b5cc767ad904709294277731eadc81c95f9476e64bed62b7af1094709a1f856"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/include/psyz/gpu.h",
+      "before": "d418df9c252744ad6d2992d87605d9c418c316cda955397f0e203403b78f6bd8",
+      "after": "0a8ce64524896fc656f32062e9bd480c1245624271902adc7f994e97c9f53cc4"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/sdl3_gpu.c",
+      "before": "3b97cc89d30fcdf013cc8d20197811b708d3fb5df33bc42ac1d0ae02e82b2fd6",
+      "after": "e9e97ba30c7761082a430c9ea777688c87cc8907af0d588afec23544e489abe0"
+    }
+  ],
+  "tools": [
+    {
+      "path": "tools/preflight.cjs",
+      "originalPath": "<PROJECT_ROOT>/ps5-native/capture-manifest-preflight-20261031/preflight.cjs",
+      "originalSha256": "3f8ef65ac9fc622566422523f7a745b65ff85b8c77b3c9dd3796a6cc976e8b74",
+      "exportSha256": "3f8ef65ac9fc622566422523f7a745b65ff85b8c77b3c9dd3796a6cc976e8b74",
+      "change": "unchanged LF-normalized source"
+    },
+    {
+      "path": "tools/candidate-window.cjs",
+      "originalPath": "<PROJECT_ROOT>/ps5-native/identity-evidence-windows-20261031/candidate-window.cjs",
+      "originalSha256": "dabf36dfd032936fa4462bcf3c90d047cdbf1b4652f908f8dd9111b8f8115657",
+      "exportSha256": "dabf36dfd032936fa4462bcf3c90d047cdbf1b4652f908f8dd9111b8f8115657",
+      "change": "unchanged LF-normalized source"
+    },
+    {
+      "path": "tools/annotate-coverage.cjs",
+      "originalPath": "<PROJECT_ROOT>/ps5-native/identity-evidence-windows-20261031/annotate-coverage.cjs",
+      "originalSha256": "6c61a6727ffd385bef639540e3a84f39993c584f057b9d2e4fa4aa8366efdcf3",
+      "exportSha256": "6c61a6727ffd385bef639540e3a84f39993c584f057b9d2e4fa4aa8366efdcf3",
+      "change": "unchanged LF-normalized source"
+    },
+    {
+      "path": "tools/pipeline.cjs",
+      "originalPath": "<PROJECT_ROOT>/ps5-native/identity-evidence-windows-20261031/pipeline.cjs",
+      "originalSha256": "352aa9132458b44bcec08da4284c6753d6e902681f9fa9145596d3f57ebbcf9c",
+      "exportSha256": "6495562a58eed5f92d29ddf7a1a50a9ec11026f43cbb77d488b5200db192ad9d",
+      "change": "same-package preflight require path only"
+    }
+  ]
+}

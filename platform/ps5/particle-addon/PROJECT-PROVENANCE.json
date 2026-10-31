@@ -1,0 +1,8 @@
+{
+  "source": "psyz-src/psyz/src/psyz/libgte.c",
+  "sourceSha256": "0236c37506f7b3fb0fd10e77e92fa3d177503f31219a79d807950ed446103aca",
+  "repositoryLicenseSha256": "9b94b69a84f835bf22a06a879778541fc32ecb89d66622cce44a5fb067785d04",
+  "license": "MPL-2.0 (file-scoped adapted projector header)",
+  "copied": "257-byte UNR reciprocal table; Newton refinement and integer output rounding behavior",
+  "modifications": "Pure explicit argument projector; rejects saturation domains; no GTE/PGXP writes; no hardware code or assets"
+}
