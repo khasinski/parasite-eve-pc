@@ -99,7 +99,7 @@ const PeMod pe_mod_<folder> = {"<folder>", "Readable name", "0.1", requires, ini
 
 Versions: the mod API is `PE_MOD_API_VERSION` (pe_mod_host.h, now 1), raised only when a change
 would break existing mods; the PE Enhancements suite is `PE_ENHANCEMENTS_VERSION` (pe_pages.h,
-now 0.9.0), one version for all of its mods.
+now 0.10.0), one version for all of its mods.
 
 `init` registers the mod's rows, hooks and services. Each feature lives in its own file with
 one `pe_<feature>_register(mod_id)` function that the mod's main file calls, so a feature can be

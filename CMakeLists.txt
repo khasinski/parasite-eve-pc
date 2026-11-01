@@ -17,7 +17,7 @@ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET
     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum supported macOS version")
 endif()
 option(PE_PS5_GAME "Build the native game with the public PS5 SDK" OFF)
-project(parasite-eve-pc VERSION 0.9.0 LANGUAGES C)
+project(parasite-eve-pc VERSION 0.10.0 LANGUAGES C)
 if(PE_PS5_GAME)
     include(cmake/ps5/game.cmake)
 endif()
