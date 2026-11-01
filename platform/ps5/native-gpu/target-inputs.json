@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "algorithm": "SHA256 of sorted UTF-8 relative-file-path + NUL + raw-file-SHA256 + newline; symlinks rejected",
+  "trees": [
+    {
+      "scope": "publicPrefix",
+      "path": "deps/ps5-payload-sdk/target/include",
+      "files": 2756,
+      "bytes": 22030615,
+      "treeSha256": "8ddf5e397712267a1d3f04c587eed08467cd44710ab721120c6058e0fd1e5342"
+    },
+    {
+      "scope": "publicPrefix",
+      "path": "deps/radv-sdk/ps5-payload-sdk/target/include/c++/v1",
+      "files": 1017,
+      "bytes": 7420210,
+      "treeSha256": "6ca1fa6bbac7e9b72e206af6ba05c03dfd0cb40a3e261b3a9069a33b6c227d37"
+    },
+    {
+      "scope": "publicPrefix",
+      "path": "deps/ps5-payload-sdk/toolchain",
+      "files": 4,
+      "bytes": 7308,
+      "treeSha256": "fbea0e62d94bde643d31092357a7c9401cc60581646e5a81bd942c1d2c5b1fb3"
+    },
+    {
+      "scope": "publicPrefix",
+      "path": "deps/ps5-payload-sdk/win",
+      "files": 7,
+      "bytes": 1877654,
+      "treeSha256": "ed53814812d8c3672b7374b20ce71842513c0ee828b5f63ab90bc105ea84c5f5"
+    },
+    {
+      "scope": "publicPrefix",
+      "path": "deps/ps5-payload-sdk/bin",
+      "files": 27,
+      "bytes": 51929,
+      "treeSha256": "2c0aad5009aa50358e7aed537d56f3292eb3eea2a0e9dd8c48a44cb0aeb46393"
+    },
+    {
+      "scope": "publicPrefix",
+      "path": "deps/ps5-payload-sdk/ldscripts",
+      "files": 1,
+      "bytes": 2524,
+      "treeSha256": "d60981cb02d9c807ebd44a66717b0d37ed44d83de4ea07e6577f6df181f778bb"
+    },
+    {
+      "scope": "publicPrefix",
+      "path": "deps/ps5-payload-sdk/target/lib",
+      "files": 51,
+      "bytes": 5425492,
+      "treeSha256": "3067c8d3e626ae16db5124b25db7f9a1643cc7dec5358952c77ad629c429915c"
+    },
+    {
+      "scope": "publicPrefix",
+      "path": "deps/llvm/lib/clang/18/include",
+      "files": 255,
+      "bytes": 14082869,
+      "treeSha256": "a9af59d1fc3b320408a8e097cd119abb37c04df2925a6bf3215783ef72b88bc6"
+    },
+    {
+      "scope": "publicPrefix",
+      "path": "upstream/PS5_PayloadSDK-b83202be73e930050e00de0f1b4d9ec46c0391bf/platform/include",
+      "files": 12,
+      "bytes": 42352,
+      "treeSha256": "081ba0ced1f865f6b587607f5676bd8e818d7c63252610090be7b2fee77581d0"
+    },
+    {
+      "scope": "webpSource",
+      "files": 339,
+      "bytes": 8072041,
+      "treeSha256": "8410d4c670fdaa71a07dc45c17115407604cee780690254ab1b002fbf4bd5926"
+    },
+    {
+      "scope": "publicPrefix",
+      "path": "deps/radv-sdk/ps5-payload-sdk/target/include",
+      "files": 2752,
+      "bytes": 21899947,
+      "treeSha256": "140a7ee5891da0b72fa3954c2e0febb5d4474702019e923d6340f0f94f02bef0"
+    }
+  ]
+}

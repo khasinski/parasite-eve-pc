@@ -1,0 +1,335 @@
+{
+  "files": [
+    {
+      "path": "deps/compiler-rt/cpu_model.h",
+      "sha256": "cfb51c855bbffc0216e21f64a0f792d0354a6f07e693c56564a309bbe2e17757",
+      "bytes": 1503
+    },
+    {
+      "path": "deps/compiler-rt/CPU-MODEL-INPUTS.json",
+      "sha256": "37e46fd6a2bb5461404cdb35d79e63ff9641b718176ac363369047e1d905e9ba",
+      "bytes": 578
+    },
+    {
+      "path": "deps/compiler-rt/divti3.c",
+      "sha256": "b8392be2b070cda2a01bc33c7912e06ab83ce9a1ec7995fe0acbe44540cf92ae",
+      "bytes": 829
+    },
+    {
+      "path": "deps/compiler-rt/emutls.c",
+      "sha256": "a4437f3e329a0835adbc7df38e36df12f358d05c073b11813c409f849c2345d2",
+      "bytes": 13660
+    },
+    {
+      "path": "deps/compiler-rt/int_div_impl.inc",
+      "sha256": "833906405d418f0f421d6155acc5abf79d9902ed37a44903d01c95ff55d3a010",
+      "bytes": 3429
+    },
+    {
+      "path": "deps/compiler-rt/int_endianness.h",
+      "sha256": "ec5175561075845b7b16a92ad5ecdfd42a284de2736dd07e4ca7011b75c37709",
+      "bytes": 2804
+    },
+    {
+      "path": "deps/compiler-rt/int_lib.h",
+      "sha256": "b31130f10484636895daa13b91b63d47ea82b45547f29e4dd136b48a67854d30",
+      "bytes": 5106
+    },
+    {
+      "path": "deps/compiler-rt/int_math.h",
+      "sha256": "97d4f8e0be9cd48ff3153ca7ca5e88383e699c9c487fdb0c56dd2d26636c2296",
+      "bytes": 3783
+    },
+    {
+      "path": "deps/compiler-rt/int_types.h",
+      "sha256": "26517abcfb05e989f4ac18b38779bc118637e0a5b3e44536c3733cc47b33026e",
+      "bytes": 7061
+    },
+    {
+      "path": "deps/compiler-rt/int_util.h",
+      "sha256": "63d06198ab720a75c20bfd84be895c2746581b129168bae6201e7384bbb0473b",
+      "bytes": 2221
+    },
+    {
+      "path": "deps/compiler-rt/LICENSE.TXT",
+      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d",
+      "bytes": 16708
+    },
+    {
+      "path": "deps/compiler-rt/modti3.c",
+      "sha256": "23b5f5af57a8a3ccdab785eec6e486bffef932cee87ff1152b3beedaa6296414",
+      "bytes": 828
+    },
+    {
+      "path": "deps/compiler-rt/udivmodti4.c",
+      "sha256": "2cfaca7399d1392c92ec4dd6458da22933b4ad2e0cd58769f22b52be98116760",
+      "bytes": 4988
+    },
+    {
+      "path": "deps/compiler-rt/udivti3.c",
+      "sha256": "c0b20f06f6e0e8a6b5423ca6674cf0c57219d07554f6f35c9ecc36bf28915355",
+      "bytes": 699
+    },
+    {
+      "path": "deps/compiler-rt/umodti3.c",
+      "sha256": "3d88088419d87b486858a4bf54ff08209944ae526c77b8dc5e0c0b6b8001c1e9",
+      "bytes": 717
+    },
+    {
+      "path": "deps/compiler-rt/x86.c",
+      "sha256": "76e43483ff498d8849b933d04e63d9710bca1ae7624057a044bb117b6477aa51",
+      "bytes": 27818
+    },
+    {
+      "path": "deps/llvm/bin/clang.exe",
+      "sha256": "03e9199b6f87683a3c479c2d629bca4bc33e380bc7194e4fcce56fe8163ad275",
+      "bytes": 119562240
+    },
+    {
+      "path": "deps/llvm/bin/ld.lld.exe",
+      "sha256": "dfc7d9a43d8f09d456c48420e64b2be5f54303085e8affdecd34ff346bb42571",
+      "bytes": 88154112
+    },
+    {
+      "path": "deps/llvm/bin/llvm-ar.exe",
+      "sha256": "5a1e07b68014f7ee864dd595e84c4fcbaf27adb46efb71783bbeebff9c5e5f82",
+      "bytes": 31028224
+    },
+    {
+      "path": "deps/llvm/bin/llvm-objcopy.exe",
+      "sha256": "890ea11a8197032a398c8ba168db2f2713e925a070ac3a622ee327c8099c1c3f",
+      "bytes": 3993088
+    },
+    {
+      "path": "deps/glslang/bin/glslang.exe",
+      "sha256": "9643709c02c83e26773f96b6a87f197ab2e84f78be0879ad8fb3619418b5d9ad",
+      "bytes": 5119488
+    },
+    {
+      "path": "upstream/PSXS5-5c17ea31aec5791c12451e915386fa98d670adb4/tooling/native/app_cpp_runtime.cpp",
+      "sha256": "7379cd8df8f41af0e1a178c9300992f2235f3a3f8b910171caf91608568dac67",
+      "bytes": 3466
+    },
+    {
+      "path": "upstream/PSXS5-5c17ea31aec5791c12451e915386fa98d670adb4/tooling/native/app-symbols.map",
+      "sha256": "f3e1e4694ad55538a0833555213eb6eeee8eb08a1085650bb9ea16c3c49f8d1e",
+      "bytes": 475
+    },
+    {
+      "path": "upstream/PSXS5-5c17ea31aec5791c12451e915386fa98d670adb4/tooling/native/ps5-pie.ld",
+      "sha256": "fbc52518761b58b703a2225c847c5f44a81523cd0e751755adf890ae0f0dd74c",
+      "bytes": 2388
+    },
+    {
+      "path": "upstream/PSXS5-5c17ea31aec5791c12451e915386fa98d670adb4/tooling/psbc/ps5-pie-unwind.ld",
+      "sha256": "fed519884d92e96b079e6b2b3421de06d192be474dd323e7e2b35ac25478adbf",
+      "bytes": 776
+    },
+    {
+      "path": "upstream/PS5_PayloadSDK-b83202be73e930050e00de0f1b4d9ec46c0391bf/platform/src/heap_wrap.c",
+      "sha256": "88188f58a64a3aa67ab845e760300d3f21e2b651ae9dd56d06fb529c356a5d34",
+      "bytes": 5270
+    },
+    {
+      "path": "deps/radv-release/lib/libvulkan_radeon.ps5.a",
+      "sha256": "39921c4e1c19fecc5c7914e022cd10be01e0325ca990cc027960a1777cf85b96",
+      "bytes": 272620698
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libc.a",
+      "sha256": "da521a59f3e40686f33ee423ed0f960a2785a14dc7d71f8a61dfe7fbbd583856",
+      "bytes": 306992
+    },
+    {
+      "path": "deps/radv-sdk/ps5-payload-sdk/target/lib/libc++.a",
+      "sha256": "b1480e6edcb7cffba5ea999cb13da0d40b0def4c215ead442649bba71d32414f",
+      "bytes": 2304096
+    },
+    {
+      "path": "deps/radv-sdk/ps5-payload-sdk/target/lib/libc++abi.a",
+      "sha256": "fe074aba4cfd2d81025d05c248d4468a954b5b8e2eaef82c8da99d36c4cbbcc5",
+      "bytes": 692520
+    },
+    {
+      "path": "deps/radv-sdk/ps5-payload-sdk/target/lib/libunwind.a",
+      "sha256": "d5942a5ffb6585952855160d9230f6e597df1851e5f3dda1b338e08e24b2f2d0",
+      "bytes": 130658
+    },
+    {
+      "path": "deps/radv-sdk/ps5-payload-sdk/target/lib/libps5platform.a",
+      "sha256": "a6b6f96ec969a3aa1c9de2dc3d0b744cb50bd44c4e2d1398538b52ee9ba3c00e",
+      "bytes": 371844
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libc_stub_weak.so",
+      "sha256": "584bfabbb1b2d81322a93c3eb98dbf37b515a58ba66cc1e5f6fb93165d5bf544",
+      "bytes": 358048
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libkernel_stub_weak.so",
+      "sha256": "266c51203325ab218750af68bd339622466cd980ae2e86ae868166a628917117",
+      "bytes": 120464
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libkernel.so",
+      "sha256": "3bc1a6679e06f935787aec50c7f91d5aa51cd9c833503a07fb4f60130d056dc9",
+      "bytes": 123864
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libmonosgen-2.0.so",
+      "sha256": "7bae1c4c1b0ce37fa54465c7cc1ef0f532ddc8534fefa12e8ae13dfbf9df2b25",
+      "bytes": 108488
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceAgc.so",
+      "sha256": "42060d7197c624b6e1284c74908736bd6a22db6cc840018bdb75a6e8b4c04cc4",
+      "bytes": 25864
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceAgcDriver.so",
+      "sha256": "a128a7d79ffe46820d3c4a8adc24ace69376a71f16d66e4244dee15caa44f18e",
+      "bytes": 16560
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceAppInstUtil.so",
+      "sha256": "cbe93db741b9fb674c2b44865af96f3197f0a79956e9bd328f27cacf19e23898",
+      "bytes": 16016
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceAudioOut.so",
+      "sha256": "85c83136dc22b4d610791d0716b3b9dd3bf043c28f8399e29338c9c5d1d4f7f4",
+      "bytes": 18016
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceFsInternalForVsh.so",
+      "sha256": "19e5b26e958f46d10c6d6370f83f58f01bedab7b0fb6cc77f93b9c2ef1b3145e",
+      "bytes": 29096
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceGLSlimVSH.so",
+      "sha256": "d788fd23abac40a87a18cb0b65c647663033a12ffa3ee0efa7c3bf473d2eca81",
+      "bytes": 22288
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceGnmDriver.so",
+      "sha256": "1bbc14493ef4b6ddf5c7406d336161aa5ecb35d25ec6418f349caef63ca552ed",
+      "bytes": 21128
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceGnmDriverForNeoMode.so",
+      "sha256": "454065e2f51dd777e4ed79a289fff35d43b1fcc6c06b721d53ad04e9144db0c4",
+      "bytes": 21144
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceHttp.so",
+      "sha256": "2d914b3ab6b13aa522d303c6eca89f713e57a7e3b1f89ff487e03c3e21abe162",
+      "bytes": 14384
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceHttp2.so",
+      "sha256": "9326fc35dcc0a03d972ca271eac3564979a017931019b62065b4e1ae10f623df",
+      "bytes": 7904
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceImeDialog.so",
+      "sha256": "8696df4ba5a9593a437e8a4de0469f1f6ebf905ae0edf88331376e3c495ca6e9",
+      "bytes": 3320
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceIpmi.so",
+      "sha256": "7a15706c881e57d09024d887e857cc14e78a79bb4b9ba56370b194d7907c6358",
+      "bytes": 15816
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceKeyboard.so",
+      "sha256": "3f86008e37ad0f5ee3885ddf05a13ec806d29ea684d26c24215dcf1f7bc78975",
+      "bytes": 4088
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceLibcInternal.so",
+      "sha256": "584bfabbb1b2d81322a93c3eb98dbf37b515a58ba66cc1e5f6fb93165d5bf544",
+      "bytes": 358048
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceNet.so",
+      "sha256": "0465429119ae0d48d3a462ab3442e480b161235518fd4868c432d15c9583e271",
+      "bytes": 25680
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceNetCtl.so",
+      "sha256": "1a7a2129af9136b4f9ca708e418f9f9c8244d52f97adae774abfb056d5a5d644",
+      "bytes": 13160
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceNotification.so",
+      "sha256": "20ef748567b9d7b07b3c97ce786986992ed522b58f87c0b4f361b6e5f950b6ac",
+      "bytes": 1936
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libScePad.so",
+      "sha256": "e737bf3588d02757a2a5d86755583222e701ec54fbbda143481c509505457549",
+      "bytes": 16720
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libScePosixForWebKit.so",
+      "sha256": "92f0f44d3ea5f2d6f8c494fc8fb8d9542037bedaf52ff857499d387a959420f8",
+      "bytes": 4888
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceRandom.so",
+      "sha256": "deb43cb9aabaaac0a653b87fee6b52f73fa63fede50877bed93d675dea0043fc",
+      "bytes": 1824
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceRegMgr.so",
+      "sha256": "8c95f4dc3a426419348167f37b3a85e3847538fc92fa36ec3a7ed549831559e7",
+      "bytes": 8568
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceRemoteplay.so",
+      "sha256": "91cf5964186b318a6129a2af41b3be3e792f7588c0de7f1eb302f6e50fef39c2",
+      "bytes": 6880
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceSsl.so",
+      "sha256": "b13d07413529d45378c97f20054ea6ac5bacca2e30274a925f49fbed6752f54d",
+      "bytes": 7312
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceSysCore.so",
+      "sha256": "43e9487de44d51d7eacfedacc1129b5a9fcd5f8966f71ba4fb1e4e4ddff0d40b",
+      "bytes": 11608
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceSysmodule.so",
+      "sha256": "ebe335bd300c993200745eaf49fcc82f6ffa5e481f36db5b821d92b993e876d5",
+      "bytes": 3752
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceSystemService.so",
+      "sha256": "2f0ef160e33b5810760a06cb9e7cc079d8b925019c451a011ae7ccbfc84e32be",
+      "bytes": 72200
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceUserService.so",
+      "sha256": "272d2397228f0b65d9bf25e42b16b43417312632e9038fae714be19789612a1b",
+      "bytes": 66336
+    },
+    {
+      "path": "deps/ps5-payload-sdk/target/lib/libSceVideoOut.so",
+      "sha256": "5a6ea69630dd290e9c5973d53dd665b62aa07e4c7cffb17b8b73715c0d5a9470",
+      "bytes": 22760
+    },
+    {
+      "path": "deps/llvm/bin/llvm-ranlib.exe",
+      "sha256": "5a1e07b68014f7ee864dd595e84c4fcbaf27adb46efb71783bbeebff9c5e5f82",
+      "bytes": 31028224
+    },
+    {
+      "path": "deps/llvm/bin/llvm-readelf.exe",
+      "sha256": "ee82ad5fe6e10577d84a14693f1919f9d111631903e0f75e51b7e89ee34c8bee",
+      "bytes": 6142976
+    }
+  ],
+  "note": "Retained legally public dependency bytes checked; Mesa itself is not rebuilt"
+}
