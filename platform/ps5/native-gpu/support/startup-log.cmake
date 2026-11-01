@@ -53,3 +53,23 @@ target_sources(parasite-eve-pc PRIVATE "@ROOT@/game-src/src/main/render/model_fi
 # Matching public provider ABI isolated from game DIR layout.
 set(PE_NATIVE_DIRECTORY_PROVIDER_SYSROOT "@BASE@/deps/radv-sdk/ps5-payload-sdk/target")
 include("${CMAKE_CURRENT_LIST_DIR}/pe-native-directory.cmake")
+
+# Optional bounded render-only FallingSprite augmentation.
+target_sources(parasite-eve-pc PRIVATE "@ROOT@/game-src/src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.c" "@ROOT@/game-src/src/main/fieldfx/particle_mesh/pe_falling_sprite_adapter.c" "@ROOT@/game-src/src/main/fieldfx/particle_mesh/pe_particle_render.c")
+set_source_files_properties("@ROOT@/game-src/src/main/fieldfx/particle_mesh/pe_falling_sprite_adapter.c" PROPERTIES COMPILE_DEFINITIONS PE_BATTLE_PARTICLE_PROTOTYPE=1)
+
+target_sources(psyz PRIVATE "@ROOT@/psyz-src/psyz/src/platform/movie_cleanup/movie_cleanup.c")
+
+target_sources(parasite-eve-pc PRIVATE
+ "@ROOT@/game-src/src/main/boot/installer/pe_bootstrap.c"
+ "@ROOT@/game-src/src/main/boot/installer/pe_bootstrap_game_disc.c"
+ "@ROOT@/game-src/src/main/boot/installer/pe_pack_check.c")
+
+set(PE_NATIVE_STATE_CPU_COMPONENTS ON)
+include("@ROOT@/state/state-components.cmake")
+
+include("@ROOT@/state/state-assists.cmake")
+
+# Optional dialogue glyph adapter; retained Plex/OFL and stb notices remain.
+target_sources(parasite-eve-pc PRIVATE "@ROOT@/game-src/src/main/render/dialogue_alpha.c")
+target_include_directories(parasite-eve-pc PRIVATE "@ROOT@/game-src/src/main/boot")

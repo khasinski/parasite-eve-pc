@@ -24,17 +24,17 @@
     {
       "component": "game",
       "path": "patches/game.patch",
-      "sha256": "11087952c30ceb5211a5fc2c8194764e1b7a9c650d0f2046cb602117ccaa9f18"
+      "sha256": "58fed5a47002ad7393917d8489047fb4b3a4e70780b76c70ca2c689f8b597d20"
     },
     {
       "component": "psyz",
       "path": "patches/psyz.patch",
-      "sha256": "62cfb9f5cfb565387545911fd0663b804034e451c5f1d784f18a4892cebf42ad"
+      "sha256": "1f93079b7d59f4c0f9701a0f133448f204f3687da260b5cabb098495ade08d0f"
     },
     {
       "component": "sdl",
       "path": "patches/sdl.patch",
-      "sha256": "7c4915e06dfcf067dbe6463d523eb9be987e56be87606c5e692ef0355d202be3"
+      "sha256": "17ec682deebf34481c286064ced88e95e6918892fe5dea89c0cee352494463ba"
     }
   ],
   "files": [
@@ -72,11 +72,11 @@
     },
     {
       "component": "game",
-      "path": "docs/PS5_PORT.md",
+      "path": "include/pe1/dialogue_alpha.h",
       "added": true,
-      "size": 14830,
+      "size": 900,
       "before": null,
-      "after": "256e221c34ffe1686a2b4d30783230f23d119d03e322a0a229930828cd5b68b6"
+      "after": "f0a56ce35bb50af4f829d285092f3a93bfa69a807560b027586815dfd8f940cd"
     },
     {
       "component": "game",
@@ -88,11 +88,35 @@
     },
     {
       "component": "game",
+      "path": "include/pe1/gte.h",
+      "added": false,
+      "size": 39691,
+      "before": "8f19066c964cafd5d66ae5c1f02eeec4388abed0c1083b712ab5195013b40104",
+      "after": "fa473fadef57b0531650c637c57904dabab30a024d8c320505e3ddeb0f096f95"
+    },
+    {
+      "component": "game",
+      "path": "include/pe1/hp_loss_hook.h",
+      "added": true,
+      "size": 362,
+      "before": null,
+      "after": "f782027894c40a851d996b2570b4e2a89528d724af243ae9358d283a59487c5c"
+    },
+    {
+      "component": "game",
       "path": "include/pe1/model_fill_lighting.h",
       "added": true,
       "size": 707,
       "before": null,
       "after": "b8fd83f0ef662d47252813b860a6711d9ec3050b8dfb6e8651944a1c06cb620f"
+    },
+    {
+      "component": "game",
+      "path": "include/pe1/particle_augment.h",
+      "added": true,
+      "size": 1737,
+      "before": null,
+      "after": "8b7a77dc644db4ef5b2873bc005e010d0c1fb5bed733b05f9fd40228a1a42724"
     },
     {
       "component": "game",
@@ -104,6 +128,22 @@
     },
     {
       "component": "game",
+      "path": "include/pe_hooks.h",
+      "added": false,
+      "size": 10118,
+      "before": "e3f55ebc813c7967383e06f21cc3e5379172671e57ad88f99ee8c96fa1a12175",
+      "after": "1d80811ab9abb593ffe0bafd9ccc53897a37ab585dcf510ac9ff9c164fbb1015"
+    },
+    {
+      "component": "game",
+      "path": "include/pe_model_texture_pages.h",
+      "added": true,
+      "size": 1039,
+      "before": null,
+      "after": "fbbe4eddd6e33e1b3ee1b3e517dfc56faf5617a9bf763d3e25642df66140298c"
+    },
+    {
+      "component": "game",
       "path": "mods/CMakeLists.txt",
       "added": false,
       "size": 11543,
@@ -112,11 +152,35 @@
     },
     {
       "component": "game",
+      "path": "mods/host/pe_equip_sync.c",
+      "added": false,
+      "size": 4422,
+      "before": "6be8c2eb4ce785db34e5bad393c083488d27976bcf254a12baf43410c0e0fb02",
+      "after": "c90d9d47023f388b1a4d930561c028daa66d842a9d36369ec2830a1839eabe41"
+    },
+    {
+      "component": "game",
+      "path": "mods/host/pe_main_menu.c",
+      "added": false,
+      "size": 13814,
+      "before": "abf01ae306aa9ffe2f3856685da0d2216b071d048dffc1ec3538d77ae3e0c7c9",
+      "after": "b599ae68c38b26d9f615910c31360100d7e10cd379b79d32c0704816dd5a378c"
+    },
+    {
+      "component": "game",
       "path": "mods/host/pe_mod_host.c",
       "added": false,
-      "size": 20568,
+      "size": 25413,
       "before": "00d27dc3dbb60c67e3f582a26944da45b04349f21334f4e3fec8bd6482707f4f",
-      "after": "8f800519ffb7659d2abfed4af2669c7a745c3fe763eb1c7e7c2049b11b5203a2"
+      "after": "89ae9be21530602525b68bdad1139a8c61c7860f03a79546b1c84d8237b1905a"
+    },
+    {
+      "component": "game",
+      "path": "mods/host/pe_mod_host.h",
+      "added": false,
+      "size": 3945,
+      "before": "230f7e195c96f52e351dfd20febda12a597df3097b6507960fb2cafd8e89dd7c",
+      "after": "2f6e3a53b84e6a3c4f36be56fcfe6c6e9f9b6439f3da0899b1fe877b68d4775b"
     },
     {
       "component": "game",
@@ -130,9 +194,25 @@
       "component": "game",
       "path": "mods/host/pe_mod_panel.c",
       "added": false,
-      "size": 22510,
+      "size": 22987,
       "before": "d0998d41110f5a1d9ff5d84af5ec6342e443ba86571d7c9dd60eff395e485c39",
-      "after": "b2b1d70b06f8144333d3239cfc30e6dedc1578b15c4436025dc8b2c4cef37342"
+      "after": "d9c490483c265efb2e4436b6aeb50a77ad76f92215734f38b089ecaa29053229"
+    },
+    {
+      "component": "game",
+      "path": "mods/host/pe_present.c",
+      "added": false,
+      "size": 6256,
+      "before": "f3dd39be105bd21fb527b529b64ddac6f7dc2ee61b4f9ab0059cb7d9aa886527",
+      "after": "308c22b1a700c94f4225c4b7b93be3f93508295ca0d4314ef200c90ff77bed84"
+    },
+    {
+      "component": "game",
+      "path": "mods/host/pe_save.c",
+      "added": false,
+      "size": 21676,
+      "before": "36ce4a4a220410ff0ade6c1fbac4ca42be06929dcea92e2070ffae40e83fda31",
+      "after": "c1e9345f0a659345aed63930e7e06042803d0deacfdc48d47cfd5620180512d2"
     },
     {
       "component": "game",
@@ -162,17 +242,9 @@
       "component": "game",
       "path": "mods/pe_assists/pe_assists.c",
       "added": true,
-      "size": 1797,
+      "size": 2938,
       "before": null,
-      "after": "3aaea5c08ea5c9da17cd82961ea682fd2f9950a219bd3f108656c641a8a92522"
-    },
-    {
-      "component": "game",
-      "path": "platform/ps5/.gitignore",
-      "added": true,
-      "size": 85,
-      "before": null,
-      "after": "ac9e89858acb20f54df8145cb86415e6bf98e480eeb99ef48869b57276657ab3"
+      "after": "8a152d0defdd26aec3cf196a99c6be3cae7e19140e911e1dd931b610e2dd37c4"
     },
     {
       "component": "game",
@@ -184,19 +256,163 @@
     },
     {
       "component": "game",
+      "path": "src/main/akao/voice_bank.c",
+      "added": false,
+      "size": 65731,
+      "before": "d961c3f96bfdd233f29c0920239db565a84c2ec236a8d8e925d1f8c95b1dc622",
+      "after": "e2cc86f3bcf3b668ec79b183e623630af6d0a11f4b8c22af74efe9cb1068e0a8"
+    },
+    {
+      "component": "game",
+      "path": "src/main/battle/attack.c",
+      "added": false,
+      "size": 39433,
+      "before": "a3e4ee7571fb4bda38df2d01f6d6b7267f71e4c5492cfccf990db27f794d9fdb",
+      "after": "40d15630835a9348ecd4e8d09c71caa1ba8276dc84f66dff0f25708228c99959"
+    },
+    {
+      "component": "game",
+      "path": "src/main/battle/enemy_actions.c",
+      "added": false,
+      "size": 10453,
+      "before": "2647aafcc9b440f841afc4ba5b9424be328bddc54d29c5cf4f937c268d0f7206",
+      "after": "3201ded65d67c6755c7993341e146d39a5fb93fe436d2d2c426905d024a17f6d"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/frame_loop.c",
+      "added": false,
+      "size": 9478,
+      "before": "b0196698bd0eb3d2cdb7f6b374e74e863b1a7a3cfa1deeddad0154b25b9427e7",
+      "after": "4270ae65060fe5a3e39fb52f60c98cc49d66fb9cef8a6bb70c047f839c0bf8b1"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/installer/pe_bootstrap.c",
+      "added": true,
+      "size": 10993,
+      "before": null,
+      "after": "d0dff3e03e29682695f7027f811f6d0aaba1a3f1bb94cbae2b91dfa896d52755"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/installer/pe_bootstrap.h",
+      "added": true,
+      "size": 1899,
+      "before": null,
+      "after": "8d132e8500e3401b26c227cbb0eb405a4ecec887c5a890d379a9b2f2ac7eb6ac"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/installer/pe_bootstrap_game_disc.c",
+      "added": true,
+      "size": 457,
+      "before": null,
+      "after": "b990daf0b2f36d1ed3de55e262d36d04f8f48e330cde93331e3d7cd430972c9b"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/installer/pe_install_paint.h",
+      "added": true,
+      "size": 4516,
+      "before": null,
+      "after": "159cccd23fc01db3c04a01164cf9dd48c998d89ccf0868c1fd803c718c9c5511"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/installer/pe_install_view.h",
+      "added": true,
+      "size": 647,
+      "before": null,
+      "after": "26928f810111c37bf9e32937a95c1ca0dce43fddc0b119f0ad7c60490696656f"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/installer/pe_native_install_ui.h",
+      "added": true,
+      "size": 11601,
+      "before": null,
+      "after": "15c7bf94c3efbea8aeba40a07a0bea4cb01b281552eda4b8ab02e062af06cafa"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/installer/pe_pack_check.c",
+      "added": true,
+      "size": 4030,
+      "before": null,
+      "after": "58f31a10ec238c0f1b1374ccce95bf6ee0b302025dda19b68fa3378dd781369f"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/installer/pe_pack_check.h",
+      "added": true,
+      "size": 468,
+      "before": null,
+      "after": "ac792dd41458e1540c03e49d674c841c612e9099148b05ed5c48a9698557fe7a"
+    },
+    {
+      "component": "game",
       "path": "src/main/boot/main.c",
       "added": false,
-      "size": 140296,
+      "size": 155733,
       "before": "1b43b1264a57cc201a275fc619137e8907ed2cb73072760f15f5ab67209d6e8c",
-      "after": "69c4cd90c995f4a3c869079b8b6d243f82030ee60946da03b752b19147e47320"
+      "after": "1c9e03ff329a0bfa59d21ba9fb5e8f631c7d7ea7aebeb7a4da42da348dc482a6"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/native_tabs.h",
+      "added": true,
+      "size": 9179,
+      "before": null,
+      "after": "a2e34bfae5e1f708ea475585a3f55f2602750ebc47908a45bc9215c17d053566"
     },
     {
       "component": "game",
       "path": "src/main/boot/settings_overlay.h",
       "added": false,
-      "size": 57263,
+      "size": 69995,
       "before": "27325339465873edfc2d481dfdd78c42283fc8d4ce9dda6f7990a6a92271cc87",
-      "after": "d6173dadbc68d746e76e3bc9913f94d233bd60299a430878958d08bc4c1be1fd"
+      "after": "fcdfc5fbce157b7c1746eadfa7a444d0ca1a1f6ed7fe42c7988c5ef6981a8a2c"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/state_ui.h",
+      "added": true,
+      "size": 12354,
+      "before": null,
+      "after": "9f82c8cc911f9126c2cb6e5533169fa00f14817059009fd62ef1be32b6cc5c87"
+    },
+    {
+      "component": "game",
+      "path": "src/main/draw/frame.c",
+      "added": false,
+      "size": 3154,
+      "before": "7bcbb18fcb31a6c911228cb81872ced994644646f945a1919c295597a911ce78",
+      "after": "5ed98de63b2e1a52defc4cf47ca3e419fe7293017499b0bcf6bd6e006390b6a8"
+    },
+    {
+      "component": "game",
+      "path": "src/main/draw/textbox.c",
+      "added": false,
+      "size": 33166,
+      "before": "83243369468e55229fa867315ae183bddd6a9da56e7a371bdfb55b54e4a1ab84",
+      "after": "d88241d4762032a5a891dde465bd9ad276635bc8c6c3214deb35e21d08fda4f3"
+    },
+    {
+      "component": "game",
+      "path": "src/main/entity/allocation.c",
+      "added": false,
+      "size": 12032,
+      "before": "ea397efac325df10302f41588cfd2f5e85fda8a19568dff6eb2e5f42299bea5f",
+      "after": "2a39caa508bf8ee5ddee6770a834edbd18f1663d47dfed2eb6dfabc9db933e2a"
+    },
+    {
+      "component": "game",
+      "path": "src/main/entity/combat.c",
+      "added": false,
+      "size": 16133,
+      "before": "1680e65e7fe743d4e2564e57a97e475b1d44d5c18de99d0930eab78b226226d9",
+      "after": "0366569dd4a19f413ee8523c51239a50a1dfd0d12fc167ddeb45cf1162ab62b2"
     },
     {
       "component": "game",
@@ -205,6 +421,126 @@
       "size": 22228,
       "before": "bebcfc8d708930a770605ac21d501fc58041291aa791e006de8679191dc5a1b9",
       "after": "8f7cb666333486f34b03f64013cbe21facf690b8637d4997bd445bf1c356edc9"
+    },
+    {
+      "component": "game",
+      "path": "src/main/entity/pool.c",
+      "added": false,
+      "size": 1840,
+      "before": "2a38215c5d7cc8ebec7de0e4edf5dd98744778c8b060665256410874de9c7e70",
+      "after": "c400cfd559d5ec80da421698f6529f67bae36ad51787c90a96fcb63164af0b71"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/emitters.c",
+      "added": false,
+      "size": 63566,
+      "before": "1232b74d49a7509342e198e7596d83ac21a77ca45e702a4550e3cf68cd79eba4",
+      "after": "df9f065b27c41f7eafd4264eabd779160181b295d812eebc48d4686f004dd8f3"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/geometry.c",
+      "added": false,
+      "size": 89200,
+      "before": "8724e8cbffd784615bbd751ea915e65f75a5d98f983a2dc8eb427558131e169d",
+      "after": "63d443099064bb0f4cf5566ffec75fec9d2c634a9e4748b87a538c57ecfa83df"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/model.c",
+      "added": false,
+      "size": 14828,
+      "before": "a25ba1cb63ec03de5f8e382a859f29cf36a19133d19a17f34beecddfbc6593df",
+      "after": "f0105de3f0c1ab1532fc8fa9391890b981c6f8fba8e2d274ac0a5df4bcb12519"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.c",
+      "added": true,
+      "size": 1613,
+      "before": null,
+      "after": "89ca8cc0f0ab067b9a82355df2b10cba4aaab31f2efc20fb39daa7ddfe8f6a9c"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.h",
+      "added": true,
+      "size": 798,
+      "before": null,
+      "after": "6e05828b49337962bc96ee3917f1ad99a39e6696475df57027d8630884fc7034"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/particle_mesh/pe_falling_sprite_adapter.c",
+      "added": true,
+      "size": 525,
+      "before": null,
+      "after": "ad65aa50cf4c2a038c965710de95979de792395fa537a3e4631821fa575f20d1"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/particle_mesh/pe_particle_light_native.h",
+      "added": true,
+      "size": 7845,
+      "before": null,
+      "after": "4d23dfdbb1c8a4f825f42ce70c30de9e9d7f93de3fb0a949ddd2a398b47745fc"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/particle_mesh/pe_particle_project.h",
+      "added": true,
+      "size": 3233,
+      "before": null,
+      "after": "196ad4252b838df7af8f6c366493b405f56372513ed35ba2a1bb5817455c81b5"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/particle_mesh/pe_particle_render.c",
+      "added": true,
+      "size": 20417,
+      "before": null,
+      "after": "8cd206a11f2ad4b59659a9f8e5eadb5007e2b7ea3991b9e646cb74d953e896de"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/sprite_effects.c",
+      "added": false,
+      "size": 76477,
+      "before": "d25184462f79202ae5857950ae081a94fc6fc4bd84dfefabcac5786369dabbdf",
+      "after": "edd2e793ba2980509a257da1de7af05a331ecfd8c3e56d52c040edbacde4a174"
+    },
+    {
+      "component": "game",
+      "path": "src/main/fieldfx/sprite_render.c",
+      "added": false,
+      "size": 46874,
+      "before": "ca31ea7eae17be868c4253bee7afa1c795b7d077d0db3c3f18111451fa10136b",
+      "after": "f0108e35055392368f6caa41f27a97ab7568560f618e1e196d2cb0c6e313168a"
+    },
+    {
+      "component": "game",
+      "path": "src/main/memcard/save_flow.c",
+      "added": false,
+      "size": 51441,
+      "before": "955908792c280daa3a42db7b15687c8aa20f993dff79a41d6601ec7e56d79084",
+      "after": "7c64a9845d57e144e56d1dde20bad86e2db12b1f886930a21f872dddb831a9b0"
+    },
+    {
+      "component": "game",
+      "path": "src/main/menu/main_update.c",
+      "added": false,
+      "size": 39712,
+      "before": "63a9c7c5955a006e0b2700c76d8a0c1d86b95fa51261087626f25dccf66afdb0",
+      "after": "2ca4d6f60d2dfc31859d1ba543b6786abe61c2d7b8507aaafc744e9a7c0ee6b5"
+    },
+    {
+      "component": "game",
+      "path": "src/main/render/dialogue_alpha.c",
+      "added": true,
+      "size": 11449,
+      "before": null,
+      "after": "d96108291532c04e066fcb6e680b14868dc8d4ad7c78d17bb4809e10c126eb87"
     },
     {
       "component": "game",
@@ -234,9 +570,81 @@
       "component": "game",
       "path": "src/main/render/object.c",
       "added": false,
-      "size": 80120,
+      "size": 89679,
       "before": "a281e3f408407c11c8a4daf07c06c5d6627e1f8b052254378abdc12c81b949b3",
-      "after": "0a4a7facabe2a63c67ad99e26ecf9ced7b16a5b569bf6b09c8f7ad8f4ef0390b"
+      "after": "9587a8aaaa5b5211cb1be99b20ee197a80aa601002c5b21e9257ea5b9ed0414b"
+    },
+    {
+      "component": "game",
+      "path": "src/main/scene/room_load.c",
+      "added": false,
+      "size": 85224,
+      "before": "7b6ff4db2dafe34a8df3eee5d6784e5f53f389d302dbbf3737d831545c559fda",
+      "after": "a05bc3360ff908db1d5987c07aa7d53d370a87a3a7cfc5286bfd9e7ac8dfbd1c"
+    },
+    {
+      "component": "game",
+      "path": "src/main/script/actor_opcodes.c",
+      "added": false,
+      "size": 46346,
+      "before": "6fdf64397530d7e0aa988c997ecb56f4188bc900e976dff1d3567087968c02b3",
+      "after": "569bef893f74b1a7d1b1cbb80298e078f489346a562ebc69221aafa986a95a96"
+    },
+    {
+      "component": "game",
+      "path": "src/main/script/node_actions.c",
+      "added": false,
+      "size": 24084,
+      "before": "2f21d0bb0afb5640706bde8f08e63d9f6c8af764d77243a925ffeec170954746",
+      "after": "b43a59b7b1ab53bfd050e36d7e1454d829e88b7657eb3ccdadd7e2e92846346f"
+    },
+    {
+      "component": "game",
+      "path": "src/main/script/node_pool.c",
+      "added": false,
+      "size": 7720,
+      "before": "cbcd00456d944f086b95ee0e6e4b8c0bae67ef599ead5b932a480cfc8f2f1c33",
+      "after": "838416418aa1ed297c75d152cb935b80d76de007c0b4c0c3cb34f7fb1cd17105"
+    },
+    {
+      "component": "game",
+      "path": "src/overlays/menu_memcard/display_reset.inc",
+      "added": false,
+      "size": 2293,
+      "before": "2b6bc5d88553893490b2503c621770b1c56283c0998ec1b0a1b2bb2d3a6fc8d4",
+      "after": "155c3a8e329b608f137a1d44e05699e2ef925f4f471d223df7ba009b114f419d"
+    },
+    {
+      "component": "game",
+      "path": "src/overlays/menu_memcard/glint_effects.c",
+      "added": false,
+      "size": 43281,
+      "before": "fc534845c8adf6e9b1a69df69510282d7bdcb68ef35a6ec887f0429715af2f88",
+      "after": "486e3410430e4078abb06703bfb5a908d7286a5e97dd4cbd929d1a241711cc13"
+    },
+    {
+      "component": "game",
+      "path": "src/overlays/menu_memcard/video_open.inc",
+      "added": false,
+      "size": 4826,
+      "before": "6acc038cedfd32cbd6ce7d2b3999722d44389c183bf63b2471c1769a5cdc0fc1",
+      "after": "f33bc1642b7f1327acf0e02c08e31818020a6b6aa79020cc081006c5760a535b"
+    },
+    {
+      "component": "game",
+      "path": "src/overlays/room_lib/mirror_model.c",
+      "added": false,
+      "size": 13881,
+      "before": "b322af5a2bbc1f5b4d9216c133c05415193ac1451357068c5be3ee058e6e98e7",
+      "after": "b56b5786e6a493f01c71bfa5e566cfa10f2aeea85b8013ebf563f3014f824c82"
+    },
+    {
+      "component": "game",
+      "path": "src/overlays/room_lib/spark_attacks.c",
+      "added": false,
+      "size": 49043,
+      "before": "d1490ef6c905231657ea515f0420693a311d1f3f3d3804b075396f9b42a47fe7",
+      "after": "be3e65144b514a1db837cd2ab8be5c0380474c6e0c1144e4d4fd12fce8f8d7f4"
     },
     {
       "component": "psyz",
@@ -250,9 +658,9 @@
       "component": "psyz",
       "path": "psyz/include/psyz/gpu.h",
       "added": false,
-      "size": 6059,
+      "size": 7173,
       "before": "1a08cf9cbf5bd5c009f597e7d3043fea26b047be1a452fbed81411a20e7138aa",
-      "after": "d418df9c252744ad6d2992d87605d9c418c316cda955397f0e203403b78f6bd8"
+      "after": "aafd5b94c11f10fbd5c95973f2569fa5d6ef8c3f82a4be4cb53b19303fd1515a"
     },
     {
       "component": "psyz",
@@ -264,11 +672,51 @@
     },
     {
       "component": "psyz",
+      "path": "psyz/include/psyz/state_audio.h",
+      "added": true,
+      "size": 661,
+      "before": null,
+      "after": "e955cb2b0b59ed6ea54b05efa5acd6d0544318c95ce606a2d25242b9ba22dde2"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/include/psyz/state_gpu.h",
+      "added": true,
+      "size": 1087,
+      "before": null,
+      "after": "4fb588737b7d091d8855a9402a9b9c14e90f708aa2e0d4d7998a38360db28b24"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/include/psyz/state_numeric.h",
+      "added": true,
+      "size": 380,
+      "before": null,
+      "after": "498e2dc471c658e3d3b01c24cb2c14f4ea1c53ac720a75ec083463a9ed20fa1e"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/include/psyz/state_producers.h",
+      "added": true,
+      "size": 522,
+      "before": null,
+      "after": "ee02b1367adde855bef0d5476e8d69c7807941415d3b6143be2ed4c6a305113c"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/include/psyz/video.h",
+      "added": false,
+      "size": 15853,
+      "before": "6705af21711870c1124faf14037da09f3e7b3ce4ed20349c2678161a58351cf0",
+      "after": "f6377416daa2ff933b39783d1dbd37d4ee01800c8d20c8e93db675a4bc36a388"
+    },
+    {
+      "component": "psyz",
       "path": "psyz/src/internal.h",
       "added": false,
-      "size": 2654,
+      "size": 2699,
       "before": "fc56e7fdf1a347465b49a5c7fe39599ee99e93a9b4d1065806524bef8fd28bd6",
-      "after": "3b997d6c287aefd87a5399331d34c940bb7427ba468a7ce9097cd50b72fc10c0"
+      "after": "e6170a10b0a4686d19e680f927fd604153ad9d18f66884699dab1289a165aac0"
     },
     {
       "component": "psyz",
@@ -301,6 +749,46 @@
       "size": 12773,
       "before": null,
       "after": "d467725499636eae38dc37abe6313c5d4a34bff3b9c4990a7988ba0e4b2f7638"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/dialogue_font_generation.h",
+      "added": true,
+      "size": 2061,
+      "before": null,
+      "after": "d2ea8f9bd5f6cb024e7a0329938863f9f45ea8066911ed4e78b3828e7ae45f15"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/dialogue_font_gpu.h",
+      "added": true,
+      "size": 4226,
+      "before": null,
+      "after": "bdd2c66aad0956b6bbcc87fc9f0b16effc3c29d00fa7f2838fb73118b0fccd15"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/duck_models.h",
+      "added": true,
+      "size": 24895,
+      "before": null,
+      "after": "1ed4eb0d10c002a3d4fd4062db2a30c016f02919f5f552e30b9a81209428ee64"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/duck_state_sha256.h",
+      "added": true,
+      "size": 2970,
+      "before": null,
+      "after": "919a4604b34a20e02f0f31f988fc4dc6cc8725a0ff66c576c7e44f45e59aa7f4"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/duck_xxhash.h",
+      "added": true,
+      "size": 268319,
+      "before": null,
+      "after": "17973c0dc49d9854ca26caa191f0e12f7a424b68858d9a78de3860d959d85e4b"
     },
     {
       "component": "psyz",
@@ -378,9 +866,49 @@
       "component": "psyz",
       "path": "psyz/src/platform/movie_blur.h",
       "added": true,
-      "size": 6716,
+      "size": 10067,
       "before": null,
-      "after": "ea978f8dcb26e526f87f2a8430935fb347cde2ee6604298e093917b9e9dc52d2"
+      "after": "7a7cd957c9cb6427ad22646fe26b8a6fda952e30b91aa3f527aa86a138f59224"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/movie_cleanup/movie_cleanup.c",
+      "added": true,
+      "size": 5247,
+      "before": null,
+      "after": "67568315cf6a3d776e1aa0e34cb675f081e667feb27418860592b77addbce40c"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/movie_cleanup/movie_cleanup.frag",
+      "added": true,
+      "size": 1915,
+      "before": null,
+      "after": "cec58d49f6486b19a3bd9e703c5b60ea6ec0b62f481e4a4a0285fcb9fe5d72e9"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/movie_cleanup/movie_cleanup.h",
+      "added": true,
+      "size": 1085,
+      "before": null,
+      "after": "3e770a59f1457b33dbc1c269463fcc8ef9f46df24d712c361939ca260f3b15ac"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/movie_cleanup/movie_cleanup.vert",
+      "added": true,
+      "size": 235,
+      "before": null,
+      "after": "3cb1f93e60bb8e51aadfb1d70be45c4ad37d90c553f4ffade16e9c3f9c317cf8"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/movie_cleanup/present_movie_cleanup.h",
+      "added": true,
+      "size": 1068,
+      "before": null,
+      "after": "deb664799a541c8f50288981bbfdd6c9a8529805291e613bbb0d2b5cd00a70b4"
     },
     {
       "component": "psyz",
@@ -408,19 +936,43 @@
     },
     {
       "component": "psyz",
+      "path": "psyz/src/platform/sdl3_audio.c",
+      "added": false,
+      "size": 7748,
+      "before": "aa5df0bd48aca368ac4b5b0a825f0b29cd4c97555fe25a9dc603daf418454e41",
+      "after": "a161660e823c97ad1ff6a2bc141af1e7eecb426c230f0437176ce7dcfaaa25c7"
+    },
+    {
+      "component": "psyz",
       "path": "psyz/src/platform/sdl3_common.h",
       "added": false,
-      "size": 33669,
+      "size": 34024,
       "before": "ee759af279de9d0b4ffcc881647fb373ba5c76658fbb1071d9f7a17258f1a640",
-      "after": "e6a519b755c8dfee483ccc243a0815e1fb6bf413193bc997a5a14876307bca0d"
+      "after": "f2a8468bdafcea5b36130c7ebfb04af030325d383d9b05cde5c4037f3f8ef154"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/sdl3_draw.h",
+      "added": false,
+      "size": 6722,
+      "before": "6402c04ccc07400de69e2c7e374f5a8fb22b1ac0a5a8577e5c3e8e3b9266a63c",
+      "after": "456432734a687fd616cc8f8c121c87714b88a8927be638dfe7edc5b9bd600a5a"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/sdl3_gl.c",
+      "added": false,
+      "size": 54375,
+      "before": "dcc57d50f9172ea993aa1fff1041380c9c6eb42d96fad998dbf93136b4fc74b3",
+      "after": "06f9bc04d780d92daa5adeac2d158cfc3bc5b76efbe4a7c57ed3f8b64dde4dec"
     },
     {
       "component": "psyz",
       "path": "psyz/src/platform/sdl3_gpu.c",
       "added": false,
-      "size": 155650,
+      "size": 180928,
       "before": "f1c848057214c0330d03e01ee48149444e262c27b7d925460330785f83436184",
-      "after": "3b97cc89d30fcdf013cc8d20197811b708d3fb5df33bc42ac1d0ae02e82b2fd6"
+      "after": "03c006c57d38db260e511d6f0f7ff7c9d59bc8e2e2b968a039edc3b38cc1b95b"
     },
     {
       "component": "psyz",
@@ -432,6 +984,22 @@
     },
     {
       "component": "psyz",
+      "path": "psyz/src/platform/shaders/psx.frag.glsl",
+      "added": false,
+      "size": 9787,
+      "before": "aef7b7f12dc00def2b36b1e44bcd58981246ab0ba01101c1c1458bdd48ef7926",
+      "after": "f9a59f08d89902c518058d1c1c1092ae33689331dbab8342bd4a616207741ed7"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/psyz/kernel.c",
+      "added": false,
+      "size": 29083,
+      "before": "f10b33167f6c3aefba5b417f0facce751a690c121d68ca2a4a6fbc51ad8ced93",
+      "after": "75b914ca46fb80cd08cacd14be0a0c4357165ca5d18964fb914c36129c833d8b"
+    },
+    {
+      "component": "psyz",
       "path": "psyz/src/psyz/libcard.c",
       "added": false,
       "size": 3566,
@@ -440,11 +1008,35 @@
     },
     {
       "component": "psyz",
+      "path": "psyz/src/psyz/libcd.c",
+      "added": false,
+      "size": 46417,
+      "before": "0b85ebddce55d7a30096b3aa9d5a8a4e23599fec56e6d8d1f8b59fcd7e012d45",
+      "after": "d223949444d706964d9645ecbb9e6f2a15762bb7ae7b0f817313368d2c5212e1"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/psyz/libgpu.c",
+      "added": false,
+      "size": 17935,
+      "before": "ce4684776ecb4c24cdb01b517a2903dfe0a62b56cbac14ddbbb31afb6fb550f9",
+      "after": "c139468d3ed0c5327d9ad207cec879cd845f84b11e39ed831cf7d7c11a84ec77"
+    },
+    {
+      "component": "psyz",
       "path": "psyz/src/psyz/libgte.c",
       "added": false,
-      "size": 171162,
+      "size": 187165,
       "before": "d0303665e0424db31336205f513fae35d53b18db5ae3382917c3c42d963509f7",
-      "after": "0236c37506f7b3fb0fd10e77e92fa3d177503f31219a79d807950ed446103aca"
+      "after": "9838529caca4711081b4660b54d32a611b0a64ad7f0aef46d472d10d39682bba"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/psyz/psyz_spu.c",
+      "added": false,
+      "size": 418741,
+      "before": "8f398fefc410f8388f168f1e8f72b20d4fc08140b57426e038c11983b3359691",
+      "after": "bc9d9364d3d8adf43d1a09c58e8500c4b7c5938619ae0685fa2ce2142c28b7b3"
     },
     {
       "component": "sdl",
@@ -474,7 +1066,7 @@
       "component": "sdl",
       "path": "include/SDL3/SDL_gpu.h",
       "added": false,
-      "size": 187207,
+      "size": 182588,
       "before": "e6061d4e5278e6903b2cf282ac4f7ac38c543dc28d260918a480ab92f11dd66d",
       "after": "4ff89236838f6d646624cfddb64aa550fd4ecf1ef2a3a53a2c3fb1bd64e7de85"
     },
@@ -629,22 +1221,6 @@
       "size": 23351,
       "before": "18d62830869e5a1254ba51c119ca347ef22984ff6acbdad61cef70293b3dcf33",
       "after": "c4e13f2a849f0a9e6908694f74876661727c655c84ef167136222760ef22ffd3"
-    },
-    {
-      "component": "game",
-      "path": "src/main/battle/attack.c",
-      "added": false,
-      "size": 39433,
-      "before": "a3e4ee7571fb4bda38df2d01f6d6b7267f71e4c5492cfccf990db27f794d9fdb",
-      "after": "40d15630835a9348ecd4e8d09c71caa1ba8276dc84f66dff0f25708228c99959"
-    },
-    {
-      "component": "game",
-      "path": "src/overlays/room_lib/mirror_model.c",
-      "added": false,
-      "size": 13881,
-      "before": "b322af5a2bbc1f5b4d9216c133c05415193ac1451357068c5be3ee058e6e98e7",
-      "after": "b56b5786e6a493f01c71bfa5e566cfa10f2aeea85b8013ebf563f3014f824c82"
     }
   ],
   "generatedShaders": [
@@ -658,6 +1234,26 @@
   "generatedExpected": [
     {
       "component": "psyz",
+      "path": "psyz/src/platform/shaders/psx_vert_spv.h",
+      "after": "768efd12c5e4d242307197031287740269436bafb5b2eff494dc83ecbe54519a"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/psx_frag_spv.h",
+      "after": "346a2e7d8eb0d9395823d0631a03841beed7cdaca27d76cbdca684709be6b1c3"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/clear_vert_spv.h",
+      "after": "6f8d1d70b6d3f427ccad252cb317a4099885ec4bb7ca24d3a5cc4ceb101277da"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/clear_frag_spv.h",
+      "after": "2b66cdee7cd591468d05665842e3242906f108ac2bc2b37cdbd78c8124931e0a"
+    },
+    {
+      "component": "psyz",
       "path": "psyz/src/platform/fsr1/generated/fsr1_shaders.h",
       "after": "c09a61ecab81471d2a8afe9bb0d4893c782d785bdc68bceb6450717b329a0eaa"
     },
@@ -668,25 +1264,579 @@
     },
     {
       "component": "psyz",
-      "path": "psyz/src/platform/shaders/clear_frag_spv.h",
-      "after": "2b66cdee7cd591468d05665842e3242906f108ac2bc2b37cdbd78c8124931e0a"
-    },
-    {
-      "component": "psyz",
-      "path": "psyz/src/platform/shaders/clear_vert_spv.h",
-      "after": "6f8d1d70b6d3f427ccad252cb317a4099885ec4bb7ca24d3a5cc4ceb101277da"
-    },
-    {
-      "component": "psyz",
-      "path": "psyz/src/platform/shaders/psx_frag_spv.h",
-      "after": "385b2c4b29683cd03177f7fabc4654602bbcfe8c5e520e4a147cc590c7adb1a1"
-    },
-    {
-      "component": "psyz",
-      "path": "psyz/src/platform/shaders/psx_vert_spv.h",
-      "after": "768efd12c5e4d242307197031287740269436bafb5b2eff494dc83ecbe54519a"
+      "path": "psyz/src/platform/movie_cleanup/movie_cleanup_shaders.h",
+      "after": "a64b8e310dc22c6c817f302668669078e9e3d35c439312e8cb15ae10b5eb9e39"
     }
   ],
-  "selectedEboot": "11fd5508105667c7595186e6a3f1465f2894818d19848deabb65643f5ba70d80",
-  "excludedParticleEboot": "8af7f85c"
+  "selectedEboot": "b0ed11f15607101427f85dcf2e2104c8fa4b06ca5c4ac8a8ddffa1f4cf82d294",
+  "shaderHeaderComments": {
+    "psx_vert_spv.h": "// Generated from psx.vert.glsl by pinned glslang; see SHADER-PROVENANCE.json.",
+    "psx_frag_spv.h": "/* Generated from retained MPL2 PsyZ shader + original dialogue alpha hunk + retained native Duck z5. */",
+    "clear_vert_spv.h": "// Generated from clear.vert.glsl by pinned glslang; see SHADER-PROVENANCE.json.",
+    "clear_frag_spv.h": "// Generated from clear.frag.glsl by pinned glslang; see SHADER-PROVENANCE.json."
+  },
+  "sourceMirrors": [
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/EGL/egl.h",
+      "sdlPath": "src/video/khronos/EGL/egl.h",
+      "after": "f5f41711f5d7517eb50d63726d786d471a3e84a52b94fd9aca9b6262b629347c"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/EGL/eglext.h",
+      "sdlPath": "src/video/khronos/EGL/eglext.h",
+      "after": "efc117e5cbbf21fa4f2e9dbfb3899eedb3235c0152a2f6d9ca4510b7505e400f"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/EGL/eglplatform.h",
+      "sdlPath": "src/video/khronos/EGL/eglplatform.h",
+      "after": "25b5391655effcf363a38fa00c3154f356a3eab3d35dc067847875513cf1e441"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES2/gl2.h",
+      "sdlPath": "src/video/khronos/GLES2/gl2.h",
+      "after": "3a2855122942ddc6bed5195cae901a8468e7c633ac999e3f3d70b98949a28652"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES2/gl2ext.h",
+      "sdlPath": "src/video/khronos/GLES2/gl2ext.h",
+      "after": "574de987d1f0751a132406abd893928cc7bc5b15c1df8ecea959f2732631b184"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES2/gl2platform.h",
+      "sdlPath": "src/video/khronos/GLES2/gl2platform.h",
+      "after": "f5da0747540a50be5f44aad264aae45bdf157a192c40f17487dd9a2f99c71b6c"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl3.h",
+      "sdlPath": "src/video/khronos/GLES3/gl3.h",
+      "after": "d2f93787d1493c0cd4ca15382b77355d1c248bb8d2af9f4f3e0a54cf6fb018c3"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl31.h",
+      "sdlPath": "src/video/khronos/GLES3/gl31.h",
+      "after": "612fc3a3c483baa3b04dfa6be3cb44217ad5ebb92c3af05531dcac2c159b177a"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl32.h",
+      "sdlPath": "src/video/khronos/GLES3/gl32.h",
+      "after": "e580e7db6bfc6b86860ae6b02fa27eb9acfe6726bab71f9c268568cdbf80baea"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl3platform.h",
+      "sdlPath": "src/video/khronos/GLES3/gl3platform.h",
+      "after": "a9e060dae5a2b11c5a889b679692b7089a10a7e03ebfbb6cf28217f6e322fb08"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/KHR/khrplatform.h",
+      "sdlPath": "src/video/khronos/KHR/khrplatform.h",
+      "after": "7b1e01aaa7ad8f6fc34b5c7bdf79ebf5189bb09e2c4d2e79fc5d350623d11e83"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codecs_common.h",
+      "sdlPath": "src/video/khronos/vk_video/vulkan_video_codecs_common.h",
+      "after": "78cf3c99d3d57afa7ab1782ec6018b4bcdbe273f2843d76e3375282db875b71e"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_av1std.h",
+      "sdlPath": "src/video/khronos/vk_video/vulkan_video_codec_av1std.h",
+      "after": "f3ab53dbfdeb36a349f674656d50bd507f2e4b3c883343da74aace0df4f02a02"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_av1std_decode.h",
+      "sdlPath": "src/video/khronos/vk_video/vulkan_video_codec_av1std_decode.h",
+      "after": "96f923dc01cd3e266c081d88fa020525a20d63ffe4ce09a4c807a04ef3aaf97e"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h264std.h",
+      "sdlPath": "src/video/khronos/vk_video/vulkan_video_codec_h264std.h",
+      "after": "072ee6eac80e73d93bb4bfe0059f99e581fc8b55b1437236185bb4ff377914b1"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h264std_decode.h",
+      "sdlPath": "src/video/khronos/vk_video/vulkan_video_codec_h264std_decode.h",
+      "after": "e1708b3996a740eeedb79f51d0f0e379f9bcae13566538375acaf73301023b58"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h264std_encode.h",
+      "sdlPath": "src/video/khronos/vk_video/vulkan_video_codec_h264std_encode.h",
+      "after": "052a6e357be8d88bf4be0db1b3da5a9cc1a6011cf4b3533759ff588e1e26f9f1"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h265std.h",
+      "sdlPath": "src/video/khronos/vk_video/vulkan_video_codec_h265std.h",
+      "after": "0cbdfd6c45ee8ca902e9c961cd7e49a4d601d443ea0ef2a60a8496b127ed397c"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h265std_decode.h",
+      "sdlPath": "src/video/khronos/vk_video/vulkan_video_codec_h265std_decode.h",
+      "after": "800946aa19d83d305d504e2e4141bc938f989e0cf8872cef97480238eefef1ea"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h265std_encode.h",
+      "sdlPath": "src/video/khronos/vk_video/vulkan_video_codec_h265std_encode.h",
+      "after": "7239f9f4e811546639111e562a8be1ec73ad5bef1c23d5fad80889f35e125e9c"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vk_icd.h",
+      "sdlPath": "src/video/khronos/vulkan/vk_icd.h",
+      "after": "6c80200a7fcc4c7da3170ef9dc674eab142c92767bfc9733c98649bce78aecb9"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vk_layer.h",
+      "sdlPath": "src/video/khronos/vulkan/vk_layer.h",
+      "after": "861cd0ea24c7d81b935e5726520d184dbbc00e571f9089e17a723ccbbc1944e2"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vk_platform.h",
+      "sdlPath": "src/video/khronos/vulkan/vk_platform.h",
+      "after": "c4cabbcf699c90cde344095ae54da9435d117951aad114ba3a540c5997d7906f"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan.h",
+      "after": "52297513cc6b6cc8db2921aa849f72e3f55d678b3a58a2c3eb297c02ded7a837"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_android.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_android.h",
+      "after": "f815593b7d20f291850b8d85e21e3d47fb123932805ba3606df631bdff4cb1e7"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_beta.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_beta.h",
+      "after": "fd7eaa882fb01dd0b798f3d11aeba0f20fc7de1b27dff50cae0a2b8ceb3ed373"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_core.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_core.h",
+      "after": "439a6b8cb5c9688404947c9173a47c8a2d81a6382b5ddb514dc322b2400d9528"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_directfb.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_directfb.h",
+      "after": "dad1fe7c78d6d3113bc4416ee85530da221708bc2d505609e118115bf03b903f"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_fuchsia.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_fuchsia.h",
+      "after": "780e5d646ecc21e8884e8860be3c1afc0ac4aa165f5aaeca7cbd6238061d4a36"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_ggp.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_ggp.h",
+      "after": "fe67e4ff5d3442f4749096391a30bd4b7866f6ebf773739b06fe99a435013da5"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_ios.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_ios.h",
+      "after": "341027604524623c7c8d9433b75d75e520f151fe691bd1bd92b212989391173b"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_macos.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_macos.h",
+      "after": "5a2ac88f5ac809dab80a6353240302fac1d2fd7010eb377560996a12d392b030"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_metal.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_metal.h",
+      "after": "ba1b8ef95c08ab6cf6213cb783d0bc54f37986980df94c13cee887decfc04a89"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_screen.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_screen.h",
+      "after": "71bff61ec120bb60efdccf2fe7d40e64b52336232c32fbd85ae435ad23b43e54"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_vi.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_vi.h",
+      "after": "73f34c7d87515ad6caf6d91bfad17d5d11959261f99386c14978ec7aba4d1f5a"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_wayland.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_wayland.h",
+      "after": "ebf1981d5b6cf3119f9945759e11f900918d911724bdd25ddf1706f1e323ac09"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_win32.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_win32.h",
+      "after": "fa3a9263d1764b82b634180ec5d3010adc216108bae11c02b157f733073f87f8"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_xcb.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_xcb.h",
+      "after": "3d9c38165d2ffa24f585ae1b287ee89e32b54cc49bc28ac142f3ab92d00c8818"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_xlib.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_xlib.h",
+      "after": "e8878c1efe85ce965d3e5019c1ca48043671e1a782804c4ec68eb460d45f7042"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_xlib_xrandr.h",
+      "sdlPath": "src/video/khronos/vulkan/vulkan_xlib_xrandr.h",
+      "after": "b33d51ee2feb28890cb5b2db3cd4c8b0553553d81c71d6057ed91bb5029d844e"
+    }
+  ],
+  "selectedBuild": "dialogue-modern-owned-20261101-a1",
+  "publicSourceExceptions": [
+    "Private native pack index absent/caller-generated; explicit no-pack failure guard",
+    "Source-cohort identity regenerated for actual public-prepared sources/dependencies",
+    "Generated shader headers reproduced from selected original GLSL/pinned compiler; no binary outputs supplied"
+  ],
+  "shaderCompilerSha256": "9643709c02c83e26773f96b6a87f197ab2e84f78be0879ad8fb3619418b5d9ad",
+  "auxiliaryFiles": [
+    {
+      "path": "state/pe_state_actor_prepare.c",
+      "sha256": "3ffc4eb5b48ec01fb254c48a2a6e08e4ae70e9a6cf2db6dd60508507fe4c5e7e",
+      "bytes": 3201
+    },
+    {
+      "path": "state/pe_state_actor_prepare.h",
+      "sha256": "c539f0f9fcd0cb52949a3a502807789c87e436cf3b8591c232e789653323648b",
+      "bytes": 225
+    },
+    {
+      "path": "state/pe_state_akao.c",
+      "sha256": "d4af5b50a75c5707129ee826d3b4bb3fdac2d5f89a7d90827eab81b645ce75af",
+      "bytes": 8275
+    },
+    {
+      "path": "state/pe_state_assets.c",
+      "sha256": "14c4bfe836da88028112704ff76f9176a8886b577224f0761d6e064414ae6ca3",
+      "bytes": 4099
+    },
+    {
+      "path": "state/pe_state_assets.h",
+      "sha256": "688d747677c2543dbbef73b2d7231cd18c452d39419a534b418ca7570a57a167",
+      "bytes": 805
+    },
+    {
+      "path": "state/pe_state_audio.c",
+      "sha256": "a4f8f525e54a8a9f6af4cfa1dd59618b3a07c5faaaf4643b207ea776f1bfd5f9",
+      "bytes": 5250
+    },
+    {
+      "path": "state/pe_state_battle.c",
+      "sha256": "e9666fefe8232646cc54124c2981156ba029e2840fdc423cd1b48bf8e755b273",
+      "bytes": 32639
+    },
+    {
+      "path": "state/pe_state_battle.h",
+      "sha256": "77f3e2f56c2d1245b42a055cf02c165318f6864439d438df758fcd8d9d8d60d0",
+      "bytes": 471
+    },
+    {
+      "path": "state/pe_state_boundary.c",
+      "sha256": "e918e9cce01c9dc6d0993e652c1c389a40e53067e6e9bfe696b2fa9c779d0b6f",
+      "bytes": 2744
+    },
+    {
+      "path": "state/pe_state_boundary.h",
+      "sha256": "7562562ae4460b1994ed8085d5916ce27c6bfbd0e2a4d657273429a49d4e81f1",
+      "bytes": 652
+    },
+    {
+      "path": "state/pe_state_checkpoint.c",
+      "sha256": "badbdd92cdba6b9b9d6ba0d88bb541d5428b2be19498a8db1c418e9453f94470",
+      "bytes": 8361
+    },
+    {
+      "path": "state/pe_state_checkpoint.h",
+      "sha256": "671dc2baf2e19bd112fecf2162919cb739b9450dea9328ea7ff4caaf2499e4fa",
+      "bytes": 472
+    },
+    {
+      "path": "state/pe_state_files.c",
+      "sha256": "127251e85537ecf81853f81b0fb1de5bcd2c5ee3f04d88bd8a0590bef322a0d2",
+      "bytes": 4525
+    },
+    {
+      "path": "state/pe_state_files.h",
+      "sha256": "0ba0795265c110f654c9786a7774b38cd27595d4501be017df96ce8cc6b12f61",
+      "bytes": 468
+    },
+    {
+      "path": "state/pe_state_geometry.c",
+      "sha256": "fbf010ec68494d1669f120e6349c3b178c8a38f500ec94ae0e47c9b5c3340bb5",
+      "bytes": 9750
+    },
+    {
+      "path": "state/pe_state_globals.c",
+      "sha256": "853701511ef81876529a302c84ec68123dfac592ee18bc3f90d7104028bafedc",
+      "bytes": 11351
+    },
+    {
+      "path": "state/pe_state_gpu.c",
+      "sha256": "565adc2948ee404288bc6e5d9a4b1ed5a9cdeed0cb0519c37a876d4e0e65e5ad",
+      "bytes": 2370
+    },
+    {
+      "path": "state/pe_state_gte.c",
+      "sha256": "1350282429774353ce6dbb29b5c6a1f2a871023af869143334a9bc647753b560",
+      "bytes": 908
+    },
+    {
+      "path": "state/pe_state_lifetime.c",
+      "sha256": "b62bb522178442137acd7d5e1a88e588807d375afc6e95696a9e06e04554a112",
+      "bytes": 658
+    },
+    {
+      "path": "state/pe_state_lifetime.h",
+      "sha256": "f41bacf9fc866aa5998454adf1009b9de2e8f71d7db6fb9e67e3f3019ca29183",
+      "bytes": 296
+    },
+    {
+      "path": "state/pe_state_mirror.c",
+      "sha256": "12a78d53b6a4752681cdb501c25732b915098103aa0e568fce14251c79f56c6c",
+      "bytes": 4642
+    },
+    {
+      "path": "state/pe_state_mirror.h",
+      "sha256": "3e610b0d7ab91fc6065aa4b51be0c49dbbcff2ccf37f999b23f8c4d04862818a",
+      "bytes": 440
+    },
+    {
+      "path": "state/pe_state_mod_contract.h",
+      "sha256": "50dfac72ac8e3cfceef207844f02e44548846be30febb07bc43e88db609db360",
+      "bytes": 288
+    },
+    {
+      "path": "state/pe_state_node_types.c",
+      "sha256": "928e8a3b2e1af201a2500c60080a16235642558c76b863542a6fff4292e68c9d",
+      "bytes": 1123
+    },
+    {
+      "path": "state/pe_state_node_types.h",
+      "sha256": "adf59451e2ab400ee3d5dcd9ffb5f4ca58ec9210624624a244c2d24f24d714a8",
+      "bytes": 408
+    },
+    {
+      "path": "state/pe_state_producers.c",
+      "sha256": "c767da1cfb1419ff743f528cefd4c4b749177afb32514b5b645f49f6ea5a4a8c",
+      "bytes": 1297
+    },
+    {
+      "path": "state/pe_state_render.c",
+      "sha256": "c3b013a9b385ddb14475f1778cbbfdc5c176d3036c3f29dc203341a1fbd1ec7c",
+      "bytes": 15264
+    },
+    {
+      "path": "state/pe_state_render.h",
+      "sha256": "dfbd96f2d538b658235b59a7ce3397e38f10e149a548392d0262324d99747d42",
+      "bytes": 1094
+    },
+    {
+      "path": "state/pe_state_rng.c",
+      "sha256": "9d906d9335bc3a8a28db01390cc15eefe908be77490637786c388eadc0bd0445",
+      "bytes": 1027
+    },
+    {
+      "path": "state/pe_state_room_object.c",
+      "sha256": "f4fa8be09f0f2900532739e80996b75e139c236286e8e38580538bc592cd2817",
+      "bytes": 7814
+    },
+    {
+      "path": "state/pe_state_room_object.h",
+      "sha256": "d7e9b2078329f2c068ad7f6212bd48fe8ed8afa66f138e7cdedc31aa0574a782",
+      "bytes": 295
+    },
+    {
+      "path": "state/pe_state_script_sprites.h",
+      "sha256": "801b12985c1054769004b0d45ee6a266f8725fa66230070fca29dcb16e875d58",
+      "bytes": 213
+    },
+    {
+      "path": "state/pe_state_session.c",
+      "sha256": "299241be84056c98e7043eaa3de130e4cae6b6b134a779be49e0bee147dfea2f",
+      "bytes": 7917
+    },
+    {
+      "path": "state/pe_state_session.h",
+      "sha256": "b41676d1b5299d2480aa6d74e8b3c022c0906d0d10236ea94afc0676b5cba6b1",
+      "bytes": 1754
+    },
+    {
+      "path": "state/pe_state_theater.c",
+      "sha256": "6a205527db8ac88716c0d86918026fd0e340e8b3a9d6027c4482094a87d5afb7",
+      "bytes": 2778
+    },
+    {
+      "path": "state/pe_state_theater.h",
+      "sha256": "8a5b036127ab9a31850b8363a615abb43f180fac10d8cf3c709f4fe8f278c3aa",
+      "bytes": 257
+    },
+    {
+      "path": "state/pe_state_world.c",
+      "sha256": "02ed888f24386297ad553e75b8bd7123cd5aeb720d29b84abb6e76346f8e116d",
+      "bytes": 36494
+    },
+    {
+      "path": "state/pe_state_world.h",
+      "sha256": "3e21379f665e69b95d09b09c9eaae9bc5f47673ad9dbcc366018a2df4d70717a",
+      "bytes": 1652
+    },
+    {
+      "path": "state/pe_state.c",
+      "sha256": "3c45f6c0cf114f81ff425ce26460a520d46f2d616b9c6e319b1de8d474a2cc7f",
+      "bytes": 12240
+    },
+    {
+      "path": "state/pe_state.h",
+      "sha256": "fa239411a24895471651c950851a6dfea4f1006ec6f9f2c1f197fd2d8144ae89",
+      "bytes": 3605
+    },
+    {
+      "path": "state/state-assists.cmake",
+      "sha256": "899d9a194611464070a3d72e0cf3b1b7059a2bbdb7d5b8572c97642d8be67a81",
+      "bytes": 254
+    },
+    {
+      "path": "state/state-components.cmake",
+      "sha256": "e639cc5d1ef93112e21c3491e6d243df85ca5dae1fc103f5fec9052416d6f386",
+      "bytes": 2937
+    },
+    {
+      "path": "support/app_crt.cpp",
+      "sha256": "96fc51f0b4f432fe77d9b1b96826916ab882e1953c211e01854e479e8bb3853e",
+      "bytes": 2764
+    },
+    {
+      "path": "support/application-allocation-log.c",
+      "sha256": "30ff7c51833d5412048049e529d5d1f68612d5d7bf33eb2fabc4fb9d557a1eef",
+      "bytes": 3595
+    },
+    {
+      "path": "support/application-startup-log.c",
+      "sha256": "0aa39322e010c0bc1a148fdb20b594cfb44a9b0bff362543ca8a5dd59df9f048",
+      "bytes": 3118
+    },
+    {
+      "path": "support/application-static-dlfcn.c",
+      "sha256": "bb150989018c64e9bb6ab2a1c77dfd42645b5eaf17e1c58430552140c64cc3f0",
+      "bytes": 877
+    },
+    {
+      "path": "support/application.cmake",
+      "sha256": "07975b2be6f2125fb1d997c299d4c92d21bf9ac48289a55068d4b55ed6f597af",
+      "bytes": 1132
+    },
+    {
+      "path": "support/gpu-trace.c",
+      "sha256": "8f7d13784828ac25087f967254e9c95815446f6f4d21cb9c6cbe8455bb491e50",
+      "bytes": 2824
+    },
+    {
+      "path": "support/LINK-ARGS.template.rsp",
+      "sha256": "e2a0457769aa98cb5c512ab5606ce7d334855818dfdc2f1f0a8f39b4d6623f41",
+      "bytes": 6307
+    },
+    {
+      "path": "support/pe-build-identity.h",
+      "sha256": "1400594b9f1c24c0a7b255e6e658820af01a5b3fe765713b8b1f9b136ea9bf9b",
+      "bytes": 254
+    },
+    {
+      "path": "support/pe-game-directory.c",
+      "sha256": "e0da1e72230ed44485b2a2413e4e0825c458fe6be7d5d8bb00888b3e2355a1b4",
+      "bytes": 5026
+    },
+    {
+      "path": "support/pe-native-directory-bridge.c",
+      "sha256": "ffe64fca26ff755c8a9cad530226674216bea81dde50108467d2de3af909b923",
+      "bytes": 1275
+    },
+    {
+      "path": "support/pe-native-directory.cmake",
+      "sha256": "4ecb31dd5cb135fb59fb4b89df6676b1e1d8d60f2ba0520aeb18e1984fed8fac",
+      "bytes": 1255
+    },
+    {
+      "path": "support/provider-headers/errno.h",
+      "sha256": "0b360bf11808bfa2a61473f0df3c429f158386f08c461ea638cfff9b4897ef63",
+      "bytes": 100
+    },
+    {
+      "path": "support/SDL-application-filesystem.c",
+      "sha256": "bedfd04c4d1872e2a3b074f92dddad4a5f7470e1d6e85f75fc3f914b13b725a6",
+      "bytes": 17074
+    },
+    {
+      "path": "support/startup-log.c",
+      "sha256": "72c926b78e8163305e00168f32b492c37bcceff0bcfba6d605858ca869a2b89d",
+      "bytes": 11901
+    },
+    {
+      "path": "support/startup-log.cmake",
+      "sha256": "7974dfc525502df502c8a2702a74c3dea09cc36533f3c1cf75778e7ced1d5d7d",
+      "bytes": 4710
+    },
+    {
+      "path": "support/startup-project.cmake",
+      "sha256": "09398b38f6a1d5674ae3f602496d37d1b5365e5e6a48b07d332011bc1d6217eb",
+      "bytes": 78
+    },
+    {
+      "path": "support/unsupported.c",
+      "sha256": "5a496c2ee3e716e99b87de334e34be1220c78bad76b563a13f9605dfdd39d48a",
+      "bytes": 663
+    }
+  ],
+  "shaderHeaderTemplates": {
+    "psx_vert_spv.h": {
+      "prefix": "// Generated from psx.vert.glsl by pinned glslang; see SHADER-PROVENANCE.json.\nunsigned char psx_vert_spv[] = {\n",
+      "suffix": "\n};\nunsigned int psx_vert_spv_len = {{BYTES}};\n"
+    },
+    "psx_frag_spv.h": {
+      "prefix": "/* Generated from retained MPL2 PsyZ shader + original dialogue alpha hunk + retained native Duck z5. */\nunsigned char psx_frag_spv[]={\n",
+      "suffix": "\n};\nunsigned int psx_frag_spv_len={{BYTES}};\n"
+    },
+    "clear_vert_spv.h": {
+      "prefix": "// Generated from clear.vert.glsl by pinned glslang; see SHADER-PROVENANCE.json.\nunsigned char clear_vert_spv[] = {\n",
+      "suffix": "\n};\nunsigned int clear_vert_spv_len = {{BYTES}};\n"
+    },
+    "clear_frag_spv.h": {
+      "prefix": "// Generated from clear.frag.glsl by pinned glslang; see SHADER-PROVENANCE.json.\nunsigned char clear_frag_spv[] = {\n",
+      "suffix": "\n};\nunsigned int clear_frag_spv_len = {{BYTES}};\n"
+    }
+  }
 }

@@ -296,10 +296,25 @@
     }
   ],
   "updateScope": {
+    "selectedBuild": "dialogue-modern-owned-20261101-a1",
+    "selectedEboot": "b0ed11f15607101427f85dcf2e2104c8fa4b06ca5c4ac8a8ddffa1f4cf82d294",
+    "retainedDependenciesRebuilt": false,
+    "publicationLicenseClearanceAsserted": false
+  },
+  "historicalUpdateScope": {
     "selectedBuild": "widescreen-card-loading-20261031-a1",
     "selectedEboot": "11fd5508105667c7595186e6a3f1465f2894818d19848deabb65643f5ba70d80",
     "excludedParticleEboot": "8af7f85c3c08f21a9018a1b4c63c958bb25776158a56ca45b4c9b1b1f4993a5c",
     "retainedDependenciesRebuilt": false,
     "publicationLicenseClearanceAsserted": false
+  },
+  "currentCharacterMatcher": {
+    "implementation": "Project-authored native player-page adapter; no DuckStation code copied",
+    "hash": "xxHash/XXH3",
+    "copyright": "2012-2023 Yann Collet",
+    "license": "BSD-2-Clause",
+    "source": "PsyZ duck_xxhash.h retained from public Mesa7b59ef27c1b09b9671bc4153c41940c3155c3af2 input",
+    "notice": "notices/xxHash-BSD2.txt",
+    "privateTextureImagesOrIndexIncluded": false
   }
 }

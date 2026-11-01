@@ -10,7 +10,7 @@ target_sources(pe-ps5-sdl-core PRIVATE "@ROOT@/sdl3-src/src/process/dummy/SDL_du
 target_compile_definitions(pe-ps5-sdl-core PRIVATE SDL_PROCESS_DUMMY=1)
 # Generated filesystem source retains upstream relative include paths.
 target_include_directories(pe-ps5-sdl-core PRIVATE "@ROOT@/sdl3-src/src/filesystem/unix")
-set(CMAKE_C_LINK_EXECUTABLE "\"@BASE@/deps/llvm/bin/ld.lld.exe\" <OBJECTS> -o <TARGET> <LINK_LIBRARIES> \"@@ROOT@/GAME-RADV-ARGS.rsp\"")
+set(CMAKE_C_LINK_EXECUTABLE "@BASE@/deps/llvm/bin/ld.lld.exe <OBJECTS> -o <TARGET> <LINK_LIBRARIES> @@ROOT@/GAME-RADV-ARGS.rsp")
 
 
 

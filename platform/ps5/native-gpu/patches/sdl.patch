@@ -1,5 +1,3 @@
-diff --git a/cmake/sdlplatform.cmake b/cmake/sdlplatform.cmake
-index f16fe3f..3399e82 100644
 --- a/cmake/sdlplatform.cmake
 +++ b/cmake/sdlplatform.cmake
 @@ -1,6 +1,8 @@
@@ -12,11 +10,9 @@ index f16fe3f..3399e82 100644
      set(sdl_cmake_platform Windows)
    elseif(PSP)
      set(sdl_cmake_platform psp)
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 0f2ff40..f12641f 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -368,7 +368,7 @@ dep_option(SDL_RENDER_D3D12        "Enable the Direct3D 12 render driver" ON "SD
+@@ -368,7 +368,7 @@
  dep_option(SDL_RENDER_METAL        "Enable the Metal render driver" ON "SDL_RENDER;APPLE" OFF)
  dep_option(SDL_RENDER_GPU          "Enable the SDL_GPU render driver" ON "SDL_RENDER;SDL_GPU" OFF)
  dep_option(SDL_VIVANTE             "Use Vivante EGL video driver" ON "${UNIX_SYS};SDL_CPU_ARM32" OFF)
@@ -25,7 +21,7 @@ index 0f2ff40..f12641f 100644
  dep_option(SDL_RENDER_VULKAN       "Enable the Vulkan render driver" ON "SDL_RENDER;SDL_VULKAN" OFF)
  dep_option(SDL_METAL               "Enable Metal support" ON "APPLE" OFF)
  set_option(SDL_OPENVR              "Use OpenVR video driver" OFF)
-@@ -1771,6 +1771,9 @@ elseif(EMSCRIPTEN)
+@@ -1771,6 +1771,9 @@
    CheckPTHREAD()
    CheckLibUnwind()
  
@@ -35,7 +31,7 @@ index 0f2ff40..f12641f 100644
  elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
  
    set(SDL_DISABLE_DLOPEN_NOTES TRUE)
-@@ -3469,7 +3472,7 @@ if(WINDOWS)
+@@ -3469,7 +3472,7 @@
    )
    set(SDL_PROCESS_WINDOWS 1)
    set(HAVE_SDL_PROCESS TRUE)
@@ -44,8 +40,6 @@ index 0f2ff40..f12641f 100644
    check_c_source_compiles("
  #include <spawn.h>
  #include <unistd.h>
-diff --git a/include/build_config/SDL_build_config.h.cmake b/include/build_config/SDL_build_config.h.cmake
-index 17cb8f2..82353d1 100644
 --- a/include/build_config/SDL_build_config.h.cmake
 +++ b/include/build_config/SDL_build_config.h.cmake
 @@ -287,6 +287,7 @@
@@ -72,11 +66,9 @@ index 17cb8f2..82353d1 100644
  #cmakedefine SDL_VIDEO_DRIVER_PSP 1
  #cmakedefine SDL_VIDEO_DRIVER_RISCOS 1
  #cmakedefine SDL_VIDEO_DRIVER_ROCKCHIP 1
-diff --git a/include/SDL3/SDL_gpu.h b/include/SDL3/SDL_gpu.h
-index 2236cb7..e14ee2d 100644
 --- a/include/SDL3/SDL_gpu.h
 +++ b/include/SDL3/SDL_gpu.h
-@@ -2392,6 +2392,11 @@ extern SDL_DECLSPEC SDL_GPUDevice * SDLCALL SDL_CreateGPUDeviceWithProperties(
+@@ -2392,6 +2392,11 @@
  #define SDL_PROP_GPU_DEVICE_CREATE_D3D12_AGILITY_SDK_VERSION_NUMBER             "SDL.gpu.device.create.d3d12.agility_sdk_version"
  #define SDL_PROP_GPU_DEVICE_CREATE_D3D12_AGILITY_SDK_PATH_STRING                "SDL.gpu.device.create.d3d12.agility_sdk_path"
  #define SDL_PROP_GPU_DEVICE_CREATE_VULKAN_REQUIRE_HARDWARE_ACCELERATION_BOOLEAN "SDL.gpu.device.create.vulkan.requirehardwareacceleration"
@@ -88,9 +80,6 @@ index 2236cb7..e14ee2d 100644
  #define SDL_PROP_GPU_DEVICE_CREATE_VULKAN_OPTIONS_POINTER                       "SDL.gpu.device.create.vulkan.options"
  #define SDL_PROP_GPU_DEVICE_CREATE_METAL_ALLOW_MACFAMILY1_BOOLEAN               "SDL.gpu.device.create.metal.allowmacfamily1"
  
-diff --git a/pe-public-ps5.cmake b/pe-public-ps5.cmake
-new file mode 100644
-index 0000000..c7ec97e
 --- /dev/null
 +++ b/pe-public-ps5.cmake
 @@ -0,0 +1,63 @@
@@ -157,9 +146,6 @@ index 0000000..c7ec97e
 +set(SDL_GPU_VULKAN 1)
 +set(SDL_GPU_ENABLED_BY_DEFAULT TRUE)
 +set(HAVE_SDL_GPU TRUE)
-diff --git a/src/audio/ps5/SDL_ps5audio.c b/src/audio/ps5/SDL_ps5audio.c
-new file mode 100644
-index 0000000..d912ce7
 --- /dev/null
 +++ b/src/audio/ps5/SDL_ps5audio.c
 @@ -0,0 +1,170 @@
@@ -333,9 +319,6 @@ index 0000000..d912ce7
 +
 +#endif /* SDL_AUDIO_DRIVER_PS5 */
 +
-diff --git a/src/audio/ps5/SDL_ps5audio.h b/src/audio/ps5/SDL_ps5audio.h
-new file mode 100644
-index 0000000..92de177
 --- /dev/null
 +++ b/src/audio/ps5/SDL_ps5audio.h
 @@ -0,0 +1,56 @@
@@ -395,11 +378,9 @@ index 0000000..92de177
 +
 +#endif
 +
-diff --git a/src/audio/SDL_audio.c b/src/audio/SDL_audio.c
-index aed406c..9ef0435 100644
 --- a/src/audio/SDL_audio.c
 +++ b/src/audio/SDL_audio.c
-@@ -65,6 +65,9 @@ static const AudioBootStrap *const bootstrap[] = {
+@@ -65,6 +65,9 @@
  #ifdef SDL_AUDIO_DRIVER_OPENSLES
      &OPENSLES_bootstrap,
  #endif
@@ -409,11 +390,9 @@ index aed406c..9ef0435 100644
  #ifdef SDL_AUDIO_DRIVER_PS2
      &PS2AUDIO_bootstrap,
  #endif
-diff --git a/src/audio/SDL_sysaudio.h b/src/audio/SDL_sysaudio.h
-index 9104be8..6054386 100644
 --- a/src/audio/SDL_sysaudio.h
 +++ b/src/audio/SDL_sysaudio.h
-@@ -383,6 +383,7 @@ extern AudioBootStrap DISKAUDIO_bootstrap;
+@@ -383,6 +383,7 @@
  extern AudioBootStrap DUMMYAUDIO_bootstrap;
  extern AudioBootStrap AAUDIO_bootstrap;
  extern AudioBootStrap OPENSLES_bootstrap;
@@ -421,8 +400,6 @@ index 9104be8..6054386 100644
  extern AudioBootStrap PS2AUDIO_bootstrap;
  extern AudioBootStrap PSPAUDIO_bootstrap;
  extern AudioBootStrap VITAAUD_bootstrap;
-diff --git a/src/gpu/vulkan/SDL_gpu_vulkan.c b/src/gpu/vulkan/SDL_gpu_vulkan.c
-index 330bb1a..aa98d47 100644
 --- a/src/gpu/vulkan/SDL_gpu_vulkan.c
 +++ b/src/gpu/vulkan/SDL_gpu_vulkan.c
 @@ -20,6 +20,18 @@
@@ -444,7 +421,7 @@ index 330bb1a..aa98d47 100644
  
  #ifdef SDL_GPU_VULKAN
  
-@@ -1129,6 +1141,7 @@ struct VulkanRenderer
+@@ -1129,6 +1141,7 @@
      bool debugMode;
      bool preferLowPower;
      bool requireHardwareAcceleration;
@@ -452,7 +429,7 @@ index 330bb1a..aa98d47 100644
      SDL_PropertiesID props;
      Uint32 allowedFramesInFlight;
  
-@@ -1301,6 +1314,7 @@ static inline const char *VkErrorMessages(VkResult code)
+@@ -1301,6 +1314,7 @@
              if (renderer->debugMode) {                                                  \
                  SDL_LogError(SDL_LOG_CATEGORY_GPU, "%s %s", #fn, VkErrorMessages(res)); \
              }                                                                           \
@@ -460,7 +437,7 @@ index 330bb1a..aa98d47 100644
              SDL_SetError("%s %s", #fn, VkErrorMessages(res));                           \
              return (ret);                                                               \
          }                                                                               \
-@@ -1863,6 +1877,7 @@ static Uint8 VULKAN_INTERNAL_AllocateMemory(
+@@ -1863,6 +1877,7 @@
          NULL,
          &allocation->memory);
  
@@ -468,7 +445,7 @@ index 330bb1a..aa98d47 100644
      if (result != VK_SUCCESS) {
          // Uh oh, we couldn't allocate, time to clean up
          SDL_free(allocation->freeRegions);
-@@ -4795,6 +4810,7 @@ static Uint32 VULKAN_INTERNAL_CreateSwapchain(
+@@ -4795,6 +4810,7 @@
          NULL,
          &windowData->swapchain);
  
@@ -476,7 +453,7 @@ index 330bb1a..aa98d47 100644
      if (swapchainCreateInfo.oldSwapchain != VK_NULL_HANDLE) {
          renderer->vkDestroySwapchainKHR(renderer->logicalDevice, swapchainCreateInfo.oldSwapchain, NULL);
      }
-@@ -6725,8 +6741,10 @@ static SDL_GPUComputePipeline *VULKAN_CreateComputePipeline(
+@@ -6725,8 +6741,10 @@
          NULL,
          &vulkanComputePipeline->shaderModule);
  
@@ -487,7 +464,7 @@ index 330bb1a..aa98d47 100644
          CHECK_VULKAN_ERROR_AND_RETURN(vulkanResult, vkCreateShaderModule, NULL);
      }
  
-@@ -6882,6 +6900,7 @@ static SDL_GPUShader *VULKAN_CreateShader(
+@@ -6882,6 +6900,7 @@
          NULL,
          &vulkanShader->shaderModule);
  
@@ -495,7 +472,7 @@ index 330bb1a..aa98d47 100644
      if (vulkanResult != VK_SUCCESS) {
          SDL_free(vulkanShader);
          CHECK_VULKAN_ERROR_AND_RETURN(vulkanResult, vkCreateShaderModule, NULL);
-@@ -10892,10 +10911,12 @@ static bool VULKAN_Submit(
+@@ -10892,10 +10911,12 @@
          vulkanCommandBuffer->inFlightFence->fence);
  
      if (vulkanResult != VK_SUCCESS) {
@@ -508,7 +485,7 @@ index 330bb1a..aa98d47 100644
      // Present, if applicable
      for (Uint32 j = 0; j < vulkanCommandBuffer->presentDataCount; j += 1) {
          presentData = &vulkanCommandBuffer->presentDatas[j];
-@@ -10939,6 +10960,7 @@ static bool VULKAN_Submit(
+@@ -10939,6 +10960,7 @@
                  SDL_UnlockMutex(renderer->submitLock);
              }
  
@@ -516,7 +493,7 @@ index 330bb1a..aa98d47 100644
              CHECK_VULKAN_ERROR_AND_RETURN(presentResult, vkQueuePresentKHR, false);
          }
  
-@@ -12094,6 +12116,27 @@ static Uint8 VULKAN_INTERNAL_CreateInstance(VulkanRenderer *renderer, VulkanFeat
+@@ -12094,6 +12116,27 @@
      return 1;
  }
  
@@ -544,7 +521,7 @@ index 330bb1a..aa98d47 100644
  static bool VULKAN_INTERNAL_GetDeviceRank(
      VulkanRenderer *renderer,
      VkPhysicalDevice physicalDevice,
-@@ -12116,6 +12159,7 @@ static bool VULKAN_INTERNAL_GetDeviceRank(
+@@ -12116,6 +12159,7 @@
      };
      const Uint8 *devicePriority = renderer->preferLowPower ? DEVICE_PRIORITY_LOWPOWER : DEVICE_PRIORITY_HIGHPERFORMANCE;
      bool isConformant;
@@ -552,7 +529,7 @@ index 330bb1a..aa98d47 100644
  
      VkPhysicalDeviceType deviceType;
      if (physicalDeviceExtensions->KHR_driver_properties || physicalDeviceExtensions->MSFT_layered_driver) {
-@@ -12150,6 +12194,12 @@ static bool VULKAN_INTERNAL_GetDeviceRank(
+@@ -12150,6 +12194,12 @@
  
          if (physicalDeviceExtensions->KHR_driver_properties) {
              isConformant = (physicalDeviceDriverProperties.conformanceVersion.major >= 1);
@@ -565,7 +542,7 @@ index 330bb1a..aa98d47 100644
          } else {
              isConformant = true; // We can't check this, so just assume it's conformant
          }
-@@ -12182,7 +12232,7 @@ static bool VULKAN_INTERNAL_GetDeviceRank(
+@@ -12182,7 +12232,7 @@
              deviceType != VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU &&
              deviceType != VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU) {
              // In addition to CPU, "Other" drivers (including layered drivers) don't count as hardware-accelerated
@@ -574,7 +551,7 @@ index 330bb1a..aa98d47 100644
          }
      }
  
-@@ -12192,7 +12242,11 @@ static bool VULKAN_INTERNAL_GetDeviceRank(
+@@ -12192,7 +12242,11 @@
       * -flibit
       */
      if (!isConformant) {
@@ -587,7 +564,7 @@ index 330bb1a..aa98d47 100644
      }
  
      /* Apply a large bias on the devicePriority so that we always respect the order in the priority arrays.
-@@ -12267,14 +12321,20 @@ static Uint8 VULKAN_INTERNAL_IsDeviceSuitable(
+@@ -12267,14 +12321,20 @@
          (!deviceFeatures.drawIndirectFirstInstance && features->desiredVulkan10DeviceFeatures.drawIndirectFirstInstance) ||
          (!deviceFeatures.sampleRateShading && features->desiredVulkan10DeviceFeatures.sampleRateShading) ||
          (!deviceFeatures.samplerAnisotropy && features->desiredVulkan10DeviceFeatures.samplerAnisotropy)) {
@@ -610,7 +587,7 @@ index 330bb1a..aa98d47 100644
          }
      }
  
-@@ -12283,7 +12343,7 @@ static Uint8 VULKAN_INTERNAL_IsDeviceSuitable(
+@@ -12283,7 +12343,7 @@
              features,
              physicalDevice,
              physicalDeviceExtensions)) {
@@ -619,7 +596,7 @@ index 330bb1a..aa98d47 100644
      }
  
      renderer->vkGetPhysicalDeviceQueueFamilyProperties(
-@@ -12357,7 +12417,7 @@ static Uint8 VULKAN_INTERNAL_IsDeviceSuitable(
+@@ -12357,7 +12417,7 @@
  
      if (*queueFamilyIndex == SDL_MAX_UINT32) {
          // Somehow no graphics queues existed. Compute-only device?
@@ -628,7 +605,7 @@ index 330bb1a..aa98d47 100644
      }
  
      // FIXME: Need better structure for checking vs storing swapchain support details
-@@ -12382,7 +12442,7 @@ static Uint8 VULKAN_INTERNAL_DeterminePhysicalDevice(VulkanRenderer *renderer, V
+@@ -12382,7 +12442,7 @@
  
      if (physicalDeviceCount == 0) {
          SDL_LogInfo(SDL_LOG_CATEGORY_GPU, "Failed to find any GPUs with Vulkan support");
@@ -637,7 +614,7 @@ index 330bb1a..aa98d47 100644
      }
  
      physicalDevices = SDL_stack_alloc(VkPhysicalDevice, physicalDeviceCount);
-@@ -12451,6 +12511,7 @@ static Uint8 VULKAN_INTERNAL_DeterminePhysicalDevice(VulkanRenderer *renderer, V
+@@ -12451,6 +12511,7 @@
          renderer->supports = physicalDeviceExtensions[suitableIndex];
          renderer->physicalDevice = physicalDevices[suitableIndex];
          renderer->queueFamilyIndex = suitableQueueFamilyIndex;
@@ -645,7 +622,7 @@ index 330bb1a..aa98d47 100644
      } else {
          SDL_stack_free(physicalDevices);
          SDL_stack_free(physicalDeviceExtensions);
-@@ -12711,10 +12772,12 @@ static bool VULKAN_INTERNAL_PrepareVulkan(
+@@ -12711,10 +12772,12 @@
      VULKAN_INTERNAL_AddOptInVulkanOptions(props, renderer, features);
  
      renderer->requireHardwareAcceleration = SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_VULKAN_REQUIRE_HARDWARE_ACCELERATION_BOOLEAN, false);
@@ -659,7 +636,7 @@ index 330bb1a..aa98d47 100644
      }
  
  #define VULKAN_INSTANCE_FUNCTION(func) \
-@@ -12723,7 +12786,7 @@ static bool VULKAN_INTERNAL_PrepareVulkan(
+@@ -12723,7 +12786,7 @@
  
      if (!VULKAN_INTERNAL_DeterminePhysicalDevice(renderer, features)) {
          SDL_LogWarn(SDL_LOG_CATEGORY_GPU, "Vulkan: Failed to determine a suitable physical device");
@@ -668,7 +645,7 @@ index 330bb1a..aa98d47 100644
      }
      return true;
  }
-@@ -12735,19 +12798,21 @@ static bool VULKAN_PrepareDriver(SDL_VideoDevice *_this, SDL_PropertiesID props)
+@@ -12735,19 +12798,21 @@
      VulkanFeatures features;
      bool result = false;
  
@@ -693,7 +670,7 @@ index 330bb1a..aa98d47 100644
      if (renderer) {
          // This needs to be set early for log filtering
          renderer->debugMode = SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, false);
-@@ -12755,6 +12820,7 @@ static bool VULKAN_PrepareDriver(SDL_VideoDevice *_this, SDL_PropertiesID props)
+@@ -12755,6 +12820,7 @@
          renderer->preferLowPower = SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_PREFERLOWPOWER_BOOLEAN, false);
  
          result = VULKAN_INTERNAL_PrepareVulkan(renderer, &features, props);
@@ -701,7 +678,7 @@ index 330bb1a..aa98d47 100644
          if (result) {
              renderer->vkDestroyInstance(renderer->instance, NULL);
          }
-@@ -12808,6 +12874,7 @@ static SDL_GPUDevice *VULKAN_CreateDevice(bool debugMode, bool preferLowPower, S
+@@ -12808,6 +12874,7 @@
  
      // Record device name
      const char *deviceName = renderer->physicalDeviceProperties.properties.deviceName;
@@ -709,9 +686,6 @@ index 330bb1a..aa98d47 100644
      SDL_SetStringProperty(
          renderer->props,
          SDL_PROP_GPU_DEVICE_NAME_STRING,
-diff --git a/src/joystick/ps5/SDL_ps5joystick.c b/src/joystick/ps5/SDL_ps5joystick.c
-new file mode 100644
-index 0000000..fdeefe5
 --- /dev/null
 +++ b/src/joystick/ps5/SDL_ps5joystick.c
 @@ -0,0 +1,303 @@
@@ -1018,9 +992,6 @@ index 0000000..fdeefe5
 +    PS5_JoystickGetGamepadMapping
 +};
 +#endif
-diff --git a/src/joystick/ps5/SDL_ps5pad.h b/src/joystick/ps5/SDL_ps5pad.h
-new file mode 100644
-index 0000000..a9dfbab
 --- /dev/null
 +++ b/src/joystick/ps5/SDL_ps5pad.h
 @@ -0,0 +1,138 @@
@@ -1162,11 +1133,9 @@ index 0000000..a9dfbab
 +int sceUserServiceInitialize(void *);
 +int sceUserServiceGetLoginUserIdList(int userId[4]);
 +int sceUserServiceGetUserName(int userId, char* name, size_t size);
-diff --git a/src/joystick/SDL_joystick.c b/src/joystick/SDL_joystick.c
-index ccf6572..d52d031 100644
 --- a/src/joystick/SDL_joystick.c
 +++ b/src/joystick/SDL_joystick.c
-@@ -94,6 +94,9 @@ static SDL_JoystickDriver *SDL_joystick_drivers[] = {
+@@ -94,6 +94,9 @@
  #ifdef SDL_JOYSTICK_PS2
      &SDL_PS2_JoystickDriver,
  #endif
@@ -1176,11 +1145,9 @@ index ccf6572..d52d031 100644
  #ifdef SDL_JOYSTICK_PSP
      &SDL_PSP_JoystickDriver,
  #endif
-diff --git a/src/joystick/SDL_sysjoystick.h b/src/joystick/SDL_sysjoystick.h
-index 47ce42c..833d9a4 100644
 --- a/src/joystick/SDL_sysjoystick.h
 +++ b/src/joystick/SDL_sysjoystick.h
-@@ -259,6 +259,7 @@ extern SDL_JoystickDriver SDL_WGI_JoystickDriver;
+@@ -259,6 +259,7 @@
  extern SDL_JoystickDriver SDL_WINDOWS_JoystickDriver;
  extern SDL_JoystickDriver SDL_WINMM_JoystickDriver;
  extern SDL_JoystickDriver SDL_PS2_JoystickDriver;
@@ -1188,8 +1155,6 @@ index 47ce42c..833d9a4 100644
  extern SDL_JoystickDriver SDL_PSP_JoystickDriver;
  extern SDL_JoystickDriver SDL_VITA_JoystickDriver;
  extern SDL_JoystickDriver SDL_N3DS_JoystickDriver;
-diff --git a/src/SDL.c b/src/SDL.c
-index 3e61b8a..58584aa 100644
 --- a/src/SDL.c
 +++ b/src/SDL.c
 @@ -30,7 +30,7 @@
@@ -1201,7 +1166,7 @@ index 3e61b8a..58584aa 100644
  #include "core/unix/SDL_gtk.h"
  #endif
  
-@@ -717,7 +717,7 @@ void SDL_Quit(void)
+@@ -717,7 +717,7 @@
      SDL_DBus_Quit();
  #endif
  
@@ -1210,9 +1175,6 @@ index 3e61b8a..58584aa 100644
      SDL_Gtk_Quit();
  #endif
  
-diff --git a/src/video/ps5/SDL_ps5native.h b/src/video/ps5/SDL_ps5native.h
-new file mode 100644
-index 0000000..aa97453
 --- /dev/null
 +++ b/src/video/ps5/SDL_ps5native.h
 @@ -0,0 +1,61 @@
@@ -1277,9 +1239,6 @@ index 0000000..aa97453
 +
 +
 +#endif
-diff --git a/src/video/ps5/SDL_ps5tilemap.c b/src/video/ps5/SDL_ps5tilemap.c
-new file mode 100644
-index 0000000..e5bebb8
 --- /dev/null
 +++ b/src/video/ps5/SDL_ps5tilemap.c
 @@ -0,0 +1,270 @@
@@ -1553,9 +1512,6 @@ index 0000000..e5bebb8
 +/* c-basic-offset: 4 */
 +/* indent-tabs-mode: nil */
 +/* End: */
-diff --git a/src/video/ps5/SDL_ps5tilemap.h b/src/video/ps5/SDL_ps5tilemap.h
-new file mode 100644
-index 0000000..8e2bb27
 --- /dev/null
 +++ b/src/video/ps5/SDL_ps5tilemap.h
 @@ -0,0 +1,44 @@
@@ -1603,9 +1559,6 @@ index 0000000..8e2bb27
 +#endif /* SDL_ps5tilemap_h_ */
 +
 +/* vi: set ts=4 sw=4 expandtab: */
-diff --git a/src/video/ps5/SDL_ps5video.c b/src/video/ps5/SDL_ps5video.c
-new file mode 100644
-index 0000000..8c04bab
 --- /dev/null
 +++ b/src/video/ps5/SDL_ps5video.c
 @@ -0,0 +1,97 @@
@@ -1706,9 +1659,6 @@ index 0000000..8c04bab
 +};
 +
 +#endif // SDL_VIDEO_DRIVER_PS5
-diff --git a/src/video/ps5/SDL_ps5vulkan.c b/src/video/ps5/SDL_ps5vulkan.c
-new file mode 100644
-index 0000000..ef63d75
 --- /dev/null
 +++ b/src/video/ps5/SDL_ps5vulkan.c
 @@ -0,0 +1,126 @@
@@ -1838,11 +1788,9 @@ index 0000000..ef63d75
 +    device->Vulkan_DestroySurface = PS5_Vulkan_DestroySurface;
 +}
 +#endif
-diff --git a/src/video/SDL_sysvideo.h b/src/video/SDL_sysvideo.h
-index 1fdc5bf..4189995 100644
 --- a/src/video/SDL_sysvideo.h
 +++ b/src/video/SDL_sysvideo.h
-@@ -530,6 +530,7 @@ extern VideoBootStrap HAIKU_bootstrap;
+@@ -530,6 +530,7 @@
  extern VideoBootStrap UIKIT_bootstrap;
  extern VideoBootStrap Android_bootstrap;
  extern VideoBootStrap PS2_bootstrap;
@@ -1850,11 +1798,9 @@ index 1fdc5bf..4189995 100644
  extern VideoBootStrap PSP_bootstrap;
  extern VideoBootStrap VITA_bootstrap;
  extern VideoBootStrap RISCOS_bootstrap;
-diff --git a/src/video/SDL_video.c b/src/video/SDL_video.c
-index ce942bf..6a03d6a 100644
 --- a/src/video/SDL_video.c
 +++ b/src/video/SDL_video.c
-@@ -119,6 +119,9 @@ static VideoBootStrap *bootstrap[] = {
+@@ -119,6 +119,9 @@
  #ifdef SDL_VIDEO_DRIVER_PS2
      &PS2_bootstrap,
  #endif
@@ -1864,11 +1810,9 @@ index ce942bf..6a03d6a 100644
  #ifdef SDL_VIDEO_DRIVER_PSP
      &PSP_bootstrap,
  #endif
-diff --git a/src/video/SDL_vulkan_utils.c b/src/video/SDL_vulkan_utils.c
-index 93931a9..d407b38 100644
 --- a/src/video/SDL_vulkan_utils.c
 +++ b/src/video/SDL_vulkan_utils.c
-@@ -167,6 +167,24 @@ VkExtensionProperties *SDL_Vulkan_CreateInstanceExtensionsList(
+@@ -167,6 +167,24 @@
  }
  
  // Alpha modes, in order of preference
@@ -1893,7 +1837,7 @@ index 93931a9..d407b38 100644
  static const VkDisplayPlaneAlphaFlagBitsKHR alphaModes[4] = {
      VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR,
      VK_DISPLAY_PLANE_ALPHA_GLOBAL_BIT_KHR,
-@@ -174,10 +192,10 @@ static const VkDisplayPlaneAlphaFlagBitsKHR alphaModes[4] = {
+@@ -174,10 +192,10 @@
      VK_DISPLAY_PLANE_ALPHA_PER_PIXEL_PREMULTIPLIED_BIT_KHR,
  };
  
@@ -1906,7 +1850,7 @@ index 93931a9..d407b38 100644
  {
      PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
          (PFN_vkGetInstanceProcAddr)vkGetInstanceProcAddr_;
-@@ -211,11 +229,15 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -211,11 +229,15 @@
      }
      chosenDisplayId = SDL_GetHint(SDL_HINT_VULKAN_DISPLAY);
      if (chosenDisplayId) {
@@ -1923,7 +1867,7 @@ index 93931a9..d407b38 100644
      if (rc != VK_SUCCESS) {
          SDL_SetError("Could not enumerate Vulkan physical devices");
          goto error;
-@@ -232,6 +254,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -232,6 +254,7 @@
      }
  
      rc = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
@@ -1931,7 +1875,7 @@ index 93931a9..d407b38 100644
      if (rc != VK_SUCCESS) {
          SDL_SetError("Error enumerating physical devices");
          goto error;
-@@ -255,6 +278,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -255,6 +278,7 @@
  
          // Get information about the physical displays
          rc = vkGetPhysicalDeviceDisplayPropertiesKHR(physicalDevice, &displayPropertiesCount, NULL);
@@ -1939,7 +1883,7 @@ index 93931a9..d407b38 100644
          if (rc != VK_SUCCESS || displayPropertiesCount == 0) {
              // This device has no physical device display properties, move on to next.
              continue;
-@@ -274,6 +298,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -274,6 +298,7 @@
          }
  
          rc = vkGetPhysicalDeviceDisplayPropertiesKHR(physicalDevice, &displayPropertiesCount, displayProperties);
@@ -1947,7 +1891,7 @@ index 93931a9..d407b38 100644
          if (rc != VK_SUCCESS || displayPropertiesCount == 0) {
              SDL_free(displayProperties);
              SDL_SetError("Error enumerating physical device displays");
-@@ -290,6 +315,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -290,6 +315,7 @@
  
          // Get display mode properties for the chosen display
          rc = vkGetDisplayModePropertiesKHR(physicalDevice, display, &displayModePropertiesCount, NULL);
@@ -1955,7 +1899,7 @@ index 93931a9..d407b38 100644
          if (rc != VK_SUCCESS || displayModePropertiesCount == 0) {
              SDL_SetError("Error enumerating display modes");
              goto error;
-@@ -302,12 +328,22 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -302,12 +328,22 @@
          }
  
          rc = vkGetDisplayModePropertiesKHR(physicalDevice, display, &displayModePropertiesCount, displayModeProperties);
@@ -1978,7 +1922,7 @@ index 93931a9..d407b38 100644
          // Try to find a display mode that matches the native resolution
          for (i = 0; i < displayModePropertiesCount; ++i) {
              if (displayModeProperties[i].parameters.visibleRegion.width == extent.width &&
-@@ -324,6 +360,10 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -324,6 +360,10 @@
              goto error;
          }
  
@@ -1989,7 +1933,7 @@ index 93931a9..d407b38 100644
          SDL_zero(createInfo);
          createInfo.displayMode = displayModeProperties[bestMatchIndex].displayMode;
          SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "vulkandisplay: Matching mode %ux%u with refresh rate %u",
-@@ -336,6 +376,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -336,6 +376,7 @@
  
          // Try to find a plane index that supports our display
          rc = vkGetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice, &displayPlanePropertiesCount, NULL);
@@ -1997,7 +1941,7 @@ index 93931a9..d407b38 100644
          if (rc != VK_SUCCESS || displayPlanePropertiesCount == 0) {
              SDL_SetError("Error enumerating display planes");
              goto error;
-@@ -348,6 +389,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -348,6 +389,7 @@
          }
  
          rc = vkGetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice, &displayPlanePropertiesCount, displayPlaneProperties);
@@ -2005,7 +1949,7 @@ index 93931a9..d407b38 100644
          if (rc != VK_SUCCESS || displayPlanePropertiesCount == 0) {
              SDL_SetError("Error enumerating display plane properties");
              SDL_free(displayPlaneProperties);
-@@ -366,6 +408,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -366,6 +408,7 @@
  
              // Check supported displays for this plane.
              rc = vkGetDisplayPlaneSupportedDisplaysKHR(physicalDevice, i, &planeSupportedDisplaysCount, NULL);
@@ -2013,7 +1957,7 @@ index 93931a9..d407b38 100644
              if (rc != VK_SUCCESS || planeSupportedDisplaysCount == 0) {
                  continue; // No supported displays, on to next plane.
              }
-@@ -379,6 +422,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -379,6 +422,7 @@
              }
  
              rc = vkGetDisplayPlaneSupportedDisplaysKHR(physicalDevice, i, &planeSupportedDisplaysCount, planeSupportedDisplays);
@@ -2021,7 +1965,7 @@ index 93931a9..d407b38 100644
              if (rc != VK_SUCCESS || planeSupportedDisplaysCount == 0) {
                  SDL_SetError("Error enumerating supported displays, or no supported displays");
                  SDL_free(planeSupportedDisplays);
-@@ -398,6 +442,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -398,6 +442,7 @@
              }
  
              rc = vkGetDisplayPlaneCapabilitiesKHR(physicalDevice, createInfo.displayMode, i, &planeCaps);
@@ -2029,7 +1973,7 @@ index 93931a9..d407b38 100644
              if (rc != VK_SUCCESS) {
                  SDL_SetError("Error getting display plane capabilities");
                  SDL_free(displayPlaneProperties);
-@@ -455,6 +500,7 @@ bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
+@@ -455,6 +500,7 @@
      createInfo.globalAlpha = 1.0f;
  
      rc = vkCreateDisplayPlaneSurfaceKHR(instance, &createInfo, allocator, surface);
@@ -2037,10 +1981,12 @@ index 93931a9..d407b38 100644
      if (rc != VK_SUCCESS) {
          SDL_SetError("vkCreateDisplayPlaneSurfaceKHR failed: %s", SDL_Vulkan_GetResultString(rc));
          goto error;
-@@ -484,4 +530,15 @@ void SDL_Vulkan_DestroySurface_Internal(void *vkGetInstanceProcAddr_,
+@@ -482,6 +528,17 @@
+     if (vkDestroySurfaceKHR) {
+         vkDestroySurfaceKHR(instance, surface, allocator);
      }
- }
- 
++}
++
 +
 +#if defined(SDL_VIDEO_DRIVER_PS5) && defined(SDL_VIDEO_VULKAN)
 +bool CPE_Vulkan_QueryDisplay(void *get, VkInstance instance, Uint32 *w, Uint32 *h, Uint32 *mhz) {
@@ -2050,6 +1996,6 @@ index 93931a9..d407b38 100644
 +bool SDL_Vulkan_Display_CreateSurface(void *get, VkInstance instance, const struct VkAllocationCallbacks *allocator, VkSurfaceKHR *surface) {
 +    if (!surface) return SDL_SetError("Missing Vulkan surface output");
 +    return CPE_DisplaySelect(get, instance, allocator, surface, NULL, NULL, NULL);
-+}
-+
+ }
+ 
  #endif

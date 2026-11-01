@@ -14,8 +14,13 @@ int pe_native_directory_next(void *opaque, char name[256], unsigned *type,
     errno = 0;
     struct dirent *e = ps5_readdir((DIR *)opaque);
     if (!e) { *error = errno; return 0; }
-    unsigned n = e->d_namlen;
-    if (n > 255 || e->d_name[n] != 0) { *error = EIO; return 0; }
+    /* The pinned public provider validates raw getdents records, then
+     * returns only d_type and d_name in its zeroed dirent. d_namlen is not
+     * populated: reading it rejects every nonempty valid name as EIO. */
+    const char *end = memchr(e->d_name, 0, sizeof e->d_name);
+    if (!end) { *error = EIO; return 0; }
+    size_t n = (size_t)(end - e->d_name);
+    if (n > 255) { *error = EIO; return 0; }
     memcpy(name,e->d_name,n+1); *type=e->d_type; *inode=e->d_fileno; *error=0;
     return 1;
 }

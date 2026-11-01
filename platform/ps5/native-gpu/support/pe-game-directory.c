@@ -7,6 +7,17 @@
 #include <string.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdarg.h>
+#include <SDL3/SDL_log.h>
+/* stderr dup2 is refused by this title; use its existing captured SDL sink. */
+static void pe_directory_log(const char *fmt,...) {
+    static unsigned budget=96;
+    if(!budget)return;
+    --budget;
+    int saved=errno;
+    char text[1024];va_list ap;va_start(ap,fmt);vsnprintf(text,sizeof(text),fmt,ap);va_end(ap);
+    SDL_Log("%s",text);errno=saved;
+}
 void *pe_native_directory_open(const char *,int *);
 int pe_native_directory_next(void *,char [256],unsigned *,uint32_t *,int *);
 int pe_native_directory_close(void *,int *);
@@ -44,16 +55,18 @@ int __wrap_closedir(DIR *opaque) {
 int __wrap_scandir(const char *path,struct dirent ***out,
     int (*filter)(const struct dirent *),
     int (*compare)(const struct dirent **,const struct dirent **)) {
-    DIR *d;struct dirent *e,**list=NULL,**grown;size_t count=0,capacity=0;int saved=0;
+    DIR *d;struct dirent *e,**list=NULL,**grown;size_t count=0,capacity=0,seen=0,regular=0,unknown=0;int saved=0;
+    pe_directory_log("[native directory] scandir entered path=%.700s",path?path:"(null)");
     if(!out){errno=EINVAL;return -1;}*out=NULL;
     if(!(d=pe_game_opendir(path))){
         int error=errno;
-        fprintf(stderr,"[native directory] scandir open failed path=%s errno=%d\n",path?path:"(null)",error);
+        pe_directory_log("[native directory] scandir open failed path=%s errno=%d\n",path?path:"(null)",error);
         errno=error;return -1;
     }
     for(;;){
         errno=0;e=pe_game_readdir(d);
         if(!e){saved=errno;break;}
+        ++seen;if(e->d_type==DT_REG)++regular;else if(e->d_type==DT_UNKNOWN)++unknown;
         if(filter&&!filter(e))continue;
         if(count==INT_MAX){saved=EOVERFLOW;break;}
         if(count==capacity){
@@ -67,7 +80,7 @@ int __wrap_scandir(const char *path,struct dirent ***out,
         memcpy(list[count++],e,sizeof **list);
     }
     if(__wrap_closedir(d)<0&&!saved)saved=errno;
-    if(saved){while(count)free(list[--count]);free(list);fprintf(stderr,"[native directory] scandir read failed path=%s errno=%d\n",path,saved);errno=saved;return -1;}
+    if(saved){while(count)free(list[--count]);free(list);pe_directory_log("[native directory] scandir read failed path=%s errno=%d\n",path,saved);errno=saved;return -1;}
     /* Stable bounded O(n log n) sorting; exact callback type, no qsort cast or
      * global comparator state shared between directory readers. */
     if(compare && count>1){
@@ -90,6 +103,6 @@ int __wrap_scandir(const char *path,struct dirent ***out,
         free(work);
     }
     *out=list;
-    fprintf(stderr,"[native directory] scandir path=%s entries=%zu provider=ps5platform-getdents copied-game-ABI\n",path,count);
+    pe_directory_log("[native directory] scandir path=%s entries=%zu seen=%zu regular=%zu unknown_type=%zu provider=ps5platform-getdents copied-game-ABI\n",path,count,seen,regular,unknown);
     return (int)count;
 }
