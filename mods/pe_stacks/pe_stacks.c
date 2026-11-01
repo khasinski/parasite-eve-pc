@@ -34,7 +34,9 @@
 #include "pe1/inventory_slots.h"
 #include "pe1/inventory_state.h"
 #include "pe1/menu_context_help.h"
+#include "pe1/menu_equipment.h"
 #include "pe1/menu_inventory.h"
+#include "pe1/menu_state.h"
 #include "pe1/text.h"
 
 #define MOD_ID "pe_stacks"
@@ -173,9 +175,78 @@ static int pe_on_command(void *ctx, void *user) {
     return 1;
 }
 
+static int pe_api_count(int l, int slot) {
+    int id;
+    if (l < 0 || l >= PE_LISTS || slot < 0 || slot >= pe_list_size(l)) return 0;
+    id = pe_list(l)[slot];
+    if (id <= 0) return 0;
+    return pe_on() ? pe_count(l, slot) : 1;
+}
+static int pe_api_total(int l, uint16_t item) {
+    const s16 *list;
+    int count = 0, n;
+    if (l < 0 || l >= PE_LISTS || !item) return 0;
+    list = pe_list(l);
+    n = pe_list_size(l);
+    for (int i = 0; i < n; ++i) if (list[i] == (s16)item) ++count;
+    if (count && pe_on() && item <= 0xFF && pe_stackable(item)) count += s_extra[l][item];
+    return count;
+}
+static int pe_api_can_add(int l, uint16_t item) {
+    if (l < 0 || l >= PE_LISTS || !item) return 0;
+    if (pe_on() && pe_stackable(item) && pe_find(l, item) >= 0 && 1 + s_extra[l][item] < PE_STACK_MAX)
+        return 1;
+    return pe_find(l, 0) >= 0;
+}
+static int pe_api_add(int l, uint16_t item, int prefer) {
+    s16 *list;
+    int at;
+    if (l < 0 || l >= PE_LISTS || !item) return 0;
+    if (pe_on() && pe_join(l, item)) return 1;
+    list = pe_list(l);
+    at = prefer >= 0 && prefer < pe_list_size(l) && !list[prefer] ? prefer : pe_find(l, 0);
+    if (at < 0) return 0;
+    list[at] = (s16)item;
+    return 1;
+}
+static int pe_api_take(int l, int slot) {
+    s16 *list;
+    int id;
+    if (l < 0 || l >= PE_LISTS || slot < 0 || slot >= pe_list_size(l)) return 0;
+    list = pe_list(l);
+    id = list[slot];
+    if (id <= 0) return 0;
+    if (pe_on() && pe_stackable(id) && s_extra[l][id] && pe_find(l, id) == slot) {
+        s_extra[l][id]--;
+        return 1;
+    }
+    list[slot] = 0;
+    return 1;
+}
+static const PeStacksApi s_api = {
+    pe_api_count, pe_api_total, pe_api_can_add, pe_api_add, pe_api_take,
+};
+
+static void pe_sync_tool_counts(void) {
+    static const uint16_t k_tools[2] = { 0x0B, 0x0C };
+    if (!g_MenuLayoutLocked) return;
+    for (int l = 0; l < 2; ++l) {
+        for (int t = 0; t < 2; ++t) {
+            int idx = l * 2 + t;
+            if (g_StatBaseTable[idx] <= 0 || g_StatBaseTable[idx] >= 999) continue;
+            int total = pe_api_total(l, k_tools[t]);
+            if (total > 998) total = 998;
+            g_StatBaseTable[idx] = total;
+        }
+    }
+}
+
 static int pe_on_rebuild(void *ctx, void *user) {
     (void)ctx; (void)user;
-    if (pe_on()) pe_merge_all();
+    if (pe_on()) {
+        pe_merge_all();
+        pe_sync_tool_counts();
+    }
     return 0;
 }
 
@@ -369,6 +440,7 @@ static void pe_stacks_fill(void) {
 }
 
 static int stacks_init(void) {
+    pe_service_publish("stacks", 1, &s_api, MOD_ID);
     pe_hook_add(PE_HOOK_ITEM_ADD, pe_on_add, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_ITEM_REMOVE, pe_on_remove, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_ITEM_COUNT, pe_on_count, NULL, PE_PRIORITY_NORMAL, MOD_ID);

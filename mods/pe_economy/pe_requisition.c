@@ -34,6 +34,7 @@
 #include "pe_pages.h"
 #include "pe_requisition.h"
 #include "pe_save.h"
+#include "pe_services.h"
 #include "pe1/script_queue.h"
 
 /* Items */
@@ -228,8 +229,10 @@ const char *pe_shop_blocked(uint16_t id) {
         if (pool >= 0) {
             if (g_KeyItemRecords[pool].ammo >= pe_pool_capacity(pool)) return pe_l10n_ui("Ammo is full");
             if (pe_bag_find(PE_POOL_FIRST + pool) < 0 && pe_bag_find(0) < 0) return pe_l10n_ui("Bag full");
-        } else if (pe_bag_find(0) < 0) {
-            return pe_l10n_ui("Bag full");
+        } else {
+            const PeStacksApi *stacks = pe_service_get("stacks", 1);
+            if (stacks && stacks->can_add ? !stacks->can_add(0, id) : pe_bag_find(0) < 0)
+                return pe_l10n_ui("Bag full");
         }
     }
     return pe_loot_junk() < pe_shop_price(id) ? "Not enough Junk" : NULL;
@@ -255,7 +258,9 @@ int pe_shop_buy(uint16_t id, char *msg, size_t size) {
             rounds = g_KeyItemRecords[pool].ammo + pe_base_item(id)->ammo;
             g_KeyItemRecords[pool].ammo = (u16)(rounds > pe_pool_capacity(pool) ? pe_pool_capacity(pool) : rounds);
         } else {
-            g_AyaInventoryItems[pe_bag_find(0)] = (s16)id;
+            const PeStacksApi *stacks = pe_service_get("stacks", 1);
+            if (stacks && stacks->add) stacks->add(0, id, -1);
+            else g_AyaInventoryItems[pe_bag_find(0)] = (s16)id;
         }
         if (id == PE_ITEM_TOOL && s_shop.tools_bought < 0xFFFF) ++s_shop.tools_bought;
     }
@@ -290,6 +295,10 @@ void pe_shop_details(uint16_t id, char *out, unsigned size) {
     for (i = 0; i < pe_bag_limit(); ++i) {
         used += g_AyaInventoryItems[i] != 0;
         held += g_AyaInventoryItems[i] == id;
+    }
+    {
+        const PeStacksApi *stacks = pe_service_get("stacks", 1);
+        if (stacks && stacks->total) held = stacks->total(0, id);
     }
     if (e >= 0)
         snprintf(out, size, pe_l10n_ui("%u Junk: unlocks in Mod Catalog"), (unsigned)pe_shop_price(id));

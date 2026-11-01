@@ -7,6 +7,7 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_services.h"
 #include "pe1/game_timers.h"
 
 enum { PE_CRAFT_COST = 300 };
@@ -15,8 +16,13 @@ static int s_valid, s_armed;
 static unsigned s_prev_counter, s_junk_before;
 
 static unsigned pe_bad_roll_count(void) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
     unsigned n = 0;
     int i;
+    if (stacks && stacks->total) {
+        return (unsigned)(stacks->total(0, 0x0B) + stacks->total(0, 0x0C) +
+                          stacks->total(1, 0x0B) + stacks->total(1, 0x0C));
+    }
     for (i = 0; i < 50; ++i)
         n += g_AyaInventoryItems[i] == 0x0B || g_AyaInventoryItems[i] == 0x0C;
     for (i = 0; i < 100; ++i)

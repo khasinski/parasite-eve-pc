@@ -137,12 +137,25 @@ int pe_cat_carried(int id) {
 
 /* One Tool for a premium install: free with a Tool Kit, else one from the bag, then storage. */
 int pe_cat_take_tool(int dry_run) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
     int i;
     if (pe_cat_carried(PE_ITEM_TOOL_KIT) || pe_cat_carried(PE_ITEM_SUPER_TOOL_KIT)) return 1;
     for (i = 0; i < PE_BAG_SLOTS; ++i)
-        if (g_AyaSaveState.inventory_items[i] == PE_ITEM_TOOL) { if (!dry_run) g_AyaSaveState.inventory_items[i] = 0; return 1; }
+        if (g_AyaSaveState.inventory_items[i] == PE_ITEM_TOOL) {
+            if (!dry_run) {
+                if (stacks && stacks->take) stacks->take(0, i);
+                else g_AyaSaveState.inventory_items[i] = 0;
+            }
+            return 1;
+        }
     for (i = 0; i < PE_STORAGE_SLOTS; ++i)
-        if (g_WayneStorageItems[i] == PE_ITEM_TOOL) { if (!dry_run) g_WayneStorageItems[i] = 0; return 1; }
+        if (g_WayneStorageItems[i] == PE_ITEM_TOOL) {
+            if (!dry_run) {
+                if (stacks && stacks->take) stacks->take(1, i);
+                else g_WayneStorageItems[i] = 0;
+            }
+            return 1;
+        }
     return 0;
 }
 

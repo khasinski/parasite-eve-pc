@@ -5,9 +5,10 @@
  * place so no mod includes another mod's headers. A service is a versioned table of functions;
  * a mod that doesn't find one carries on without it.
  *
- *   "junk"      v1  pe_economy  the Junk counter
- *   "catalog"   v1  pe_economy  armor effects unlocked in the Mod Catalog
- *   "keys"      v1  pe_qol      the key item pocket
+ *   "junk"      v1  pe_economy     the Junk counter
+ *   "catalog"   v1  pe_economy     armor effects unlocked in the Mod Catalog
+ *   "keys"      v1  pe_qol         the key item pocket
+ *   "stacks"    v1  pe_stacks      stack counts and stack-aware add/take for bag and crate
  *   "wardrobe"  v1  pe_collection  costumes that can be worn now (for shops such as Wayne's)
  *   "bestiary"  v1  pe_collection  register creatures, map enemies to them, unlock entries
  *   "costumes"  v1  pe_collection  register costumes (the game's outfits or a mod's own models)
@@ -46,6 +47,15 @@ typedef struct PeCatalogApi {
 typedef struct PeKeysApi {
     int (*take)(uint16_t item);        /* pocket a key; 1 means handled */
 } PeKeysApi;
+
+/* list: 0 Aya's bag, 1 Wayne's crate. */
+typedef struct PeStacksApi {
+    int (*count)(int list, int slot);                /* copies in slot (0 if empty, >=1 if occupied) */
+    int (*total)(int list, uint16_t item);           /* total copies of item in list */
+    int (*can_add)(int list, uint16_t item);         /* 1 if list can accept 1 more copy of item */
+    int (*add)(int list, uint16_t item, int prefer); /* 1 if added (stacks or uses prefer/free slot) */
+    int (*take)(int list, int slot);                 /* consumes 1 copy from slot; clears slot on last */
+} PeStacksApi;
 
 /* state: 0 for sale, 1 owned, 2 worn. Wayne's Workshop shows a Wardrobe row while published. */
 typedef struct PeWardrobeApi {

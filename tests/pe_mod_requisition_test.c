@@ -40,6 +40,7 @@ void pe_toast(const char *s) { snprintf(message,sizeof message,"%s",s); }
 const char *pe_mod_current(void) { return "test"; }
 int pe_mod_active(const char *m) { (void)m;return 1; }
 void pe_mod_log(const char *m,const char *fmt,...) { (void)m;(void)fmt; }
+const void *pe_service_get(const char *n,int v) { (void)n;(void)v;return NULL; }
 int pe_hook_add(int id,PeHookFn fn,void *u,int p,const char *m) {
     (void)u;(void)p;(void)m;hooks[nh].id=id;hooks[nh++].fn=fn;return 0;
 }

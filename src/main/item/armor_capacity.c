@@ -399,7 +399,14 @@ void Inv_TransferItemBetweenLists(unsigned selection, int modifier, int flags, i
         if (flags & 2) {
             for (slot = 0; slot < 100; ++slot)
                 if (g_WayneStorageItems[slot] && Item_LookupBaseData(g_WayneStorageItems[slot] - 1)->kind == cost) break;
-            if (slot < 100) g_WayneStorageItems[slot] = 0;
+            if (slot < 100) {
+                s16 *saved_ptr = g_InvItemPtr;
+                PeHookItemRemove remove = {slot, 0};
+                g_InvItemPtr = g_WayneStorageItems;
+                if (!PE_HOOK(PE_HOOK_ITEM_REMOVE, &remove))
+                    g_WayneStorageItems[slot] = 0;
+                g_InvItemPtr = saved_ptr;
+            }
         } else {
             g_InvItemPtr = g_AyaInventoryItems;
             g_InvSlotLimit = Inv_GetAyaSlotLimit();
@@ -408,14 +415,17 @@ void Inv_TransferItemBetweenLists(unsigned selection, int modifier, int flags, i
             for (slot = 0; slot < g_InvSlotLimit; ++slot)
                 if (ItemKind(slot) == cost) break;
             if (slot < g_InvSlotLimit) {
-                if (g_InvItemPtr == g_AyaInventoryItems && GetTracked(2) == slot)
-                    Inv_GetActiveSlotCount(&reserve);
-                DeleteSlot(slot);
-                if (g_InvItemPtr == g_AyaInventoryItems && GetTracked(2) == slot) {
-                    SetTracked(2, -1);
-                    Inv_CheckFreeSlotCapacity(reserve);
-                    Inv_CompactActiveListSlots();
-                    Inv_SetActiveList(3, 0);
+                PeHookItemRemove remove = {slot, 0};
+                if (!PE_HOOK(PE_HOOK_ITEM_REMOVE, &remove)) {
+                    if (g_InvItemPtr == g_AyaInventoryItems && GetTracked(2) == slot)
+                        Inv_GetActiveSlotCount(&reserve);
+                    DeleteSlot(slot);
+                    if (g_InvItemPtr == g_AyaInventoryItems && GetTracked(2) == slot) {
+                        SetTracked(2, -1);
+                        Inv_CheckFreeSlotCapacity(reserve);
+                        Inv_CompactActiveListSlots();
+                        Inv_SetActiveList(3, 0);
+                    }
                 }
             }
         }

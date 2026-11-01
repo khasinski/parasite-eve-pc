@@ -3,6 +3,7 @@
 #include <string.h>
 #include "pe_catalog.h"
 #include "pe_economy.h"
+#include "pe_services.h"
 SaveRuntimeState g_SaveRuntimeState;
 GameStateBlock g_GameStateBlock;
 Pe1GameState g_GameState;
@@ -22,6 +23,15 @@ ItemDataRecord *pe_base_item(unsigned id) { return id<256?&bases[id]:NULL; }
 ItemDataRecord *pe_equipped(int armor) { return pe_cat_bag_record(armor?g_AyaSaveState.equipped_armor_slot:g_AyaSaveState.equipped_weapon_slot); }
 void pe_toast(const char *text) { (void)text; }
 void pe_log(const char *tag,const char *fmt,...) { (void)tag;(void)fmt; }
+static int stack_extra;
+static int test_take(int l,int slot) {
+    if(l==0 && g_AyaSaveState.inventory_items[slot] && stack_extra>0){--stack_extra;return 1;}
+    if(l==0)g_AyaSaveState.inventory_items[slot]=0;
+    else g_WayneStorageItems[slot]=0;
+    return 1;
+}
+static const PeStacksApi test_stacks={.take=test_take};
+const void *pe_service_get(const char *n,int v) { return (!strcmp(n,"stacks")&&v==1&&stack_extra>=0)?&test_stacks:NULL; }
 int main(void) {
     g_AyaSaveState.inventory_slot_count=10;
     g_AyaSaveState.equipped_weapon_slot=0;g_AyaSaveState.equipped_armor_slot=1;
@@ -35,7 +45,9 @@ int main(void) {
     assert(pe_cat_install(0,1,2,1)==PE_CAT_OK && !memcmp(&before,gun,sizeof before) && junk==balance);
     assert(pe_cat_install(0,1,2,0)==PE_CAT_OK && gun->tailData[0]==0 && gun->tailData[1]==0x22 && junk==balance-30);
     assert(pe_cat_install(0,2,20,0)==PE_CAT_TOOL);
-    g_AyaSaveState.inventory_items[2]=0x16;balance=junk;
+    g_AyaSaveState.inventory_items[2]=0x16;stack_extra=2;balance=junk;
+    assert(pe_cat_install(0,2,20,0)==PE_CAT_OK && gun->tailData[2]==0x74 && g_AyaSaveState.inventory_items[2]==0x16 && stack_extra==1 && junk==balance-80);
+    gun->tailData[2]=0;stack_extra=0;balance=junk;
     assert(pe_cat_install(0,2,20,0)==PE_CAT_OK && gun->tailData[2]==0x74 && g_AyaSaveState.inventory_items[2]==0 && junk==balance-80);
     armor->tailData[0]=0xa9;
     assert(pe_cat_remove(1,0,0)==PE_CAT_BAG && pe_cat_install(1,0,12,0)==PE_CAT_BAG);

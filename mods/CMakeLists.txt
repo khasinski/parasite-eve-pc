@@ -74,7 +74,8 @@ endif()
 
 if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     add_executable(test-mod-inventory ${PROJECT_SOURCE_DIR}/tests/pe_mod_inventory_test.c
-        pe_qol/pe_key_items.c pe_qol/pe_bag_sort.c host/pe_save.c ${PROJECT_SOURCE_DIR}/src/main/item/armor_capacity.c)
+        pe_qol/pe_key_items.c pe_qol/pe_bag_sort.c pe_stacks/pe_stacks.c host/pe_save.c
+        ${PROJECT_SOURCE_DIR}/src/main/item/armor_capacity.c)
     add_executable(test-mod-inventory-menu ${PROJECT_SOURCE_DIR}/tests/pe_mod_inventory_menu_test.c
         pe_qol/pe_inventory_menu.c)
     foreach(target test-mod-inventory test-mod-inventory-menu)

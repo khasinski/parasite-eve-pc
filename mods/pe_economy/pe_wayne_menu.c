@@ -307,17 +307,31 @@ static int pe_gear_list(int *out) {
 }
 
 static unsigned pe_permits(void) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
     unsigned n = 0;
     int i;
+    if (stacks && stacks->total)
+        return (unsigned)(stacks->total(0, PE_ITEM_MOD_PERMIT) + stacks->total(1, PE_ITEM_MOD_PERMIT));
     for (i = 0; i < PE_BAG_SLOTS; ++i) n += g_AyaInventoryItems[i] == PE_ITEM_MOD_PERMIT;
     for (i = 0; i < PE_STORAGE_SLOTS; ++i) n += g_WayneStorageItems[i] == PE_ITEM_MOD_PERMIT;
     return n;
 }
 
 static int pe_take_permit(void) {                       /* the bag's first, else storage */
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
     int i;
-    for (i = 0; i < PE_BAG_SLOTS; ++i) if (g_AyaInventoryItems[i] == PE_ITEM_MOD_PERMIT) { g_AyaInventoryItems[i] = 0; return 1; }
-    for (i = 0; i < PE_STORAGE_SLOTS; ++i) if (g_WayneStorageItems[i] == PE_ITEM_MOD_PERMIT) { g_WayneStorageItems[i] = 0; return 1; }
+    for (i = 0; i < PE_BAG_SLOTS; ++i)
+        if (g_AyaInventoryItems[i] == PE_ITEM_MOD_PERMIT) {
+            if (stacks && stacks->take) stacks->take(0, i);
+            else g_AyaInventoryItems[i] = 0;
+            return 1;
+        }
+    for (i = 0; i < PE_STORAGE_SLOTS; ++i)
+        if (g_WayneStorageItems[i] == PE_ITEM_MOD_PERMIT) {
+            if (stacks && stacks->take) stacks->take(1, i);
+            else g_WayneStorageItems[i] = 0;
+            return 1;
+        }
     return 0;
 }
 
