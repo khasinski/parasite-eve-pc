@@ -39,12 +39,39 @@
     "geometryChanges": false
   },
   "theaterTasks": {
-    "schema": 13,
-    "magic": "PEPMID13",
-    "suffix": "PETCTX02",
-    "supported": "source-bound P115/P117 tasks including typed JointBeacon model-resource state; exact source/alias/constructed preflight",
-    "unsupported": "P118 and unknown task callbacks remain rejected"
+    "schema": 16,
+    "magic": "PEPMID16",
+    "suffix": "PETCTX05/PETASK03",
+    "supported": "typed P115 plus source-room-gated P117room5 and P118room23; held or initialPC requires source-known owner/player combat cores; exact native descriptorcount1",
+    "limitations": "same launch/room/source/settings and exact typed callbacks; unknown callbacks/owners remain rejected"
   },
   "taskJointGuard": "bank-source-bounded header; P117required21; P115required1/26 from actual/captured third arg; current,target,constructed before writes",
-  "authored115118Vfx": "optional Hybrid accents and source-derived lights; capture generation checked again before use; explicit Original unchanged"
+  "authored115118Vfx": "optional Hybrid accents and source-derived lights; capture generation checked again before use; explicit Original unchanged",
+  "checkpointFlow": {
+    "newSaveSelectsExactFile": true,
+    "refreshPreservesObservedFilename": true,
+    "missingSelectionRequiresExplicitChoice": true,
+    "visibleFiles": 64,
+    "rawScanLimit": 4096,
+    "recentRunLabels": 64,
+    "labelsAuthorizeLoad": false,
+    "deepPageSelection": "readonly file plus previous/next; generic community dynamic APIs unchanged",
+    "postModalErrors": "visible allocation/queue/disc-stage/file/component results"
+  },
+  "movieCleanup": {
+    "modes": [
+      "Original",
+      "Gentle",
+      "Stronger",
+      "Block smoothing"
+    ],
+    "newModeOptional": 3,
+    "modernFactory": 2,
+    "maximumTextureBytes": 2097152,
+    "passes": 1,
+    "history": false
+  },
+  "residentRecovery": "typed original85–87 source callbacks and six canonical derivedcolourtracks; no broader resident allowlist",
+  "residentAilments": "typed original88–90 sourcecallbacks plus startuptexture selector/sourceCRC; header320 and all recordoffsets moved together; strict runtimeguards",
+  "movieSourceRetry": "one retry budget on realnewmovie serial; no same-movie allocation loop; serialsaturates, no resources/prefs/wirechange"
 }

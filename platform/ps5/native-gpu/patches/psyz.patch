@@ -13073,7 +13073,7 @@
 +}
 --- /dev/null
 +++ b/psyz/src/platform/movie_blur.h
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,88 @@
 +// Project original optional native RGB24 backdrop. No frame submission/waits.
 +#include "movie_blur_shaders.h"
 +#include "movie_lifecycle.h"
@@ -13085,7 +13085,7 @@
 +static SDL_GPUGraphicsPipeline *movie_blur_pipeline;
 +static SDL_GPUSampler *movie_blur_sampler;
 +static Uint32 movie_blur_w,movie_blur_h;
-+static unsigned movie_blur_log_count;
++static unsigned movie_blur_log_count,movie_blur_source_serial;
 +/* Bounded source/output decisions, not a claim of observed pixels. */
 +static unsigned movie_output_trace_count;
 +static int movie_output_trace_valid;
@@ -13106,7 +13106,7 @@
 +
 +void Psyz_VideoSetMoviePresentation(int mode){if(mode<0||mode>2)mode=0;if(mode!=movie_presentation){movie_presentation=mode;movie_blur_status=-1;INFOF("Movie presentation mode=%d 0Stretch16:9-1Aspect+blur-2Originalbars",mode);}}
 +void Psyz_VideoSetMovieBlur(int enabled){enabled=enabled!=0;if(enabled!=movie_blur_requested){movie_blur_requested=enabled;movie_blur_failed=0;movie_blur_status=-1;INFOF("Movie backdrop requested=%d original-center-aspect=preserved",enabled);}}
-+static void MovieBlurLog(int status){if(status!=movie_blur_status&&movie_blur_log_count<32){INFOF("Movie backdrop requested=%d effective=%s reason=%s stage=RGB24-movie-or-still input=%ux%u rendered_output=unobserved",movie_blur_requested,status==1?"blur-commands-recorded":status==2?"original-fallback":"original-bars-or-no-bars",movie_blur_reason,movie_blur_w,movie_blur_h);movie_blur_log_count++;movie_blur_status=status;}}
++static void MovieBlurLog(int status){if(status!=movie_blur_status&&movie_blur_log_count<32){INFOF("Movie backdrop requested=%d effective=%s reason=%s stage=original-movie-lifecycle source_serial=%u input=%ux%u rendered_output=unobserved",movie_blur_requested,status==1?"blur-commands-recorded":status==2?"original-fallback":"original-bars-or-no-bars",movie_blur_reason,native_movie_source_serial,movie_blur_w,movie_blur_h);movie_blur_log_count++;movie_blur_status=status;}}
 +static void MovieBlurDestroy(void){
 +    if(movie_blur_input)SDL_ReleaseGPUTexture(device,movie_blur_input);
 +    if(movie_blur_temp)SDL_ReleaseGPUTexture(device,movie_blur_temp);
@@ -13138,11 +13138,19 @@
 +    SDL_GPURenderPass *pass=SDL_BeginGPURenderPass(cmd,&target,1,NULL);if(!pass)return false;
 +    SDL_BindGPUGraphicsPipeline(pass,movie_blur_pipeline);SDL_GPUTextureSamplerBinding binding={src,movie_blur_sampler};SDL_BindGPUFragmentSamplers(pass,0,&binding,1);float u[4]={x,y,dim,0};SDL_PushGPUFragmentUniformData(cmd,0,u,sizeof(u));SDL_DrawGPUPrimitives(pass,3,1,0,0);SDL_EndGPURenderPass(pass);return true;
 +}
++/* Observe only after normal movie/unused-space admission. A failure stays
++ * latched for this movie, but does not permanently disable later movies. */
++static int MovieBlurTakeSourceRetry(void){
++    if(!native_movie_source_serial||movie_blur_source_serial==native_movie_source_serial)return 0;
++    movie_blur_source_serial=native_movie_source_serial;int retry=movie_blur_failed;
++    movie_blur_failed=0;movie_blur_status=-1;return retry;
++}
 +static bool MovieBlurPresent(SDL_GPUCommandBuffer *cmd,SDL_GPUBlitRegion src,SDL_GPUTexture *swapchain,WndSize win,SDL_Rect center,bool rgb24){
 +    if(movie_presentation>=0&&movie_presentation!=1){movie_blur_reason=movie_presentation==0?"movie-stretch-selected":"original-bars-selected";MovieBlurLog(0);return false;}
 +    movie_blur_reason=!movie_blur_requested?"disabled":!native_movie_active?"not-original-movie":!src.texture||!src.w||!src.h?"invalid-source":win.w<=0||win.h<=0?"invalid-output":
 +        center.x==0&&center.y==0&&center.w==win.w&&center.h==win.h?"no-unused-space":"recording";
 +    if(!movie_blur_requested||!native_movie_active||!src.texture||!src.w||!src.h||win.w<=0||win.h<=0||(center.x==0&&center.y==0&&center.w==win.w&&center.h==win.h)){MovieBlurLog(0);return false;}
++    if(MovieBlurTakeSourceRetry()&&movie_blur_log_count<32)INFOF("Movie backdrop new-source retry source_serial=%u previous-resource-failure=1 no-per-frame-retry=1",native_movie_source_serial);
 +    if(movie_blur_failed){movie_blur_reason="latched-resource-failure";MovieBlurLog(2);return false;}
 +    float ratio=SDL_min(1.f,256.f/(float)SDL_max(src.w,src.h));Uint32 w=SDL_max(1u,(Uint32)((float)src.w*ratio)),h=SDL_max(1u,(Uint32)((float)src.h*ratio));
 +    if(!MovieBlurPrepare(w,h))goto failed;
@@ -13211,7 +13219,7 @@
 +}
 +SDL_GPUBlitRegion CpeMovieCleanup_Apply(CpeMovieCleanup *s,SDL_GPUCommandBuffer *cmd,SDL_GPUBlitRegion src,bool video,Uint32 w,Uint32 h,int mode){
 +    if(!s)return src;
-+    if(mode<0||mode>2)mode=0;
++    if(mode<0||mode>3)mode=0;
 +    if(mode!=s->last_mode)s->failed=0;
 +    if(!mode||!video){status(s,mode,0,!mode?"original-OFF":"original-not-video");return src;}
 +    if(!cmd||!src.texture||src.texture==s->output||!src.w||!src.h||!w||!h||w>1024||h>512||src.x>131072||src.y>131072||src.w>131072||src.h>131072||src.mip_level||src.layer_or_depth_plane){status(s,mode,2,"original-invalid-bounds");return src;}
@@ -13221,14 +13229,14 @@
 +    SDL_GPURenderPass *pass=SDL_BeginGPURenderPass(cmd,&target,1,NULL);if(!pass)goto fail;
 +    SDL_BindGPUGraphicsPipeline(pass,s->pipeline);SDL_GPUViewport viewport={0,0,(float)w,(float)h,0,1};SDL_Rect scissor={0,0,(int)w,(int)h};SDL_SetGPUViewport(pass,&viewport);SDL_SetGPUScissor(pass,&scissor);
 +    SDL_GPUTextureSamplerBinding binding={src.texture,s->sampler};SDL_BindGPUFragmentSamplers(pass,0,&binding,1);
-+    float parameters[8]={(float)src.x,(float)src.y,(float)src.w,(float)src.h,(float)w,(float)h,mode==1?0.06f:0.10f,mode==1?0.30f:0.55f};
++    float parameters[8]={(float)src.x,(float)src.y,(float)src.w,(float)src.h,(float)w,(float)h,mode==3?0.12f:mode==1?0.06f:0.10f,mode==3?0.70f:mode==1?0.30f:0.55f};
 +    SDL_PushGPUFragmentUniformData(cmd,0,parameters,sizeof(parameters));SDL_DrawGPUPrimitives(pass,3,1,0,0);SDL_EndGPURenderPass(pass);
 +    status(s,mode,1,"spatial-commands-recorded");return (SDL_GPUBlitRegion){.texture=s->output,.w=w,.h=h};
 +fail:s->failed=1;SDL_Log("[Movie cleanup] resource fallback: %s",SDL_GetError());status(s,mode,2,"original-resource-fallback");return src;
 +}
 --- /dev/null
 +++ b/psyz/src/platform/movie_cleanup/movie_cleanup.frag
-@@ -0,0 +1,40 @@
+@@ -0,0 +1,65 @@
 +#version 450
 +// SPDX-License-Identifier: MIT
 +// Independently authored bounded spatial filter. Operates on encoded UNORM
@@ -13249,9 +13257,34 @@
 +    ivec2 pixel=ivec2(floor(params.source_rect.xy+relative*params.source_rect.zw));
 +    return texelFetch(movie_source,clamp(pixel,lo,hi),0).rgb;
 +}
++// Optional mode3 only: a bounded nominal8-pixel seam heuristic. No codec
++// metadata, motion history or reconstructed detail is claimed. True contrast
++// and textured slopes reject smoothing; all results are convex/clamped RGB.
++float channel_max(vec3 value) { return max(value.r,max(value.g,value.b)); }
++vec3 smooth_block_axis(ivec2 pixel,ivec2 axis,vec3 center) {
++    int position=axis.x!=0?pixel.x:pixel.y;
++    int residue=position&7;
++    if(residue!=0&&residue!=7)return center;
++    int boundary=position+(residue==7?1:0);
++    int extent=axis.x!=0?int(params.logical_strength.x):int(params.logical_strength.y);
++    if(boundary<2||boundary+1>=extent)return center;
++    ivec2 first=pixel+axis*(boundary-position);
++    vec3 p1=sample_logical(first-axis*2),p0=sample_logical(first-axis);
++    vec3 q0=sample_logical(first),q1=sample_logical(first+axis);
++    float slope=max(channel_max(abs(p1-p0)),channel_max(abs(q1-q0)));
++    float contrast=channel_max(abs(p0-q0));
++    float flatness=max(0.0,1.0-slope/(params.logical_strength.z*0.35));
++    float edge_keep=max(0.0,1.0-contrast/(params.logical_strength.z*1.5));
++    vec3 average=(p1+2.0*p0+2.0*q0+q1)/6.0;
++    return mix(center,average,0.45*flatness*edge_keep);
++}
 +void main() {
 +    ivec2 pixel=ivec2(gl_FragCoord.xy);
 +    vec3 center=sample_logical(pixel);
++    if(params.logical_strength.w>0.65) {
++        center=smooth_block_axis(pixel,ivec2(1,0),center);
++        center=smooth_block_axis(pixel,ivec2(0,1),center);
++    }
 +    vec3 sum=center*4.0;
 +    float weight_sum=4.0;
 +    for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++) {
@@ -13279,7 +13312,7 @@
 +#include <SDL3/SDL_gpu.h>
 +#include <stdbool.h>
 +typedef struct CpeMovieCleanup CpeMovieCleanup;
-+enum { CPE_MOVIE_ORIGINAL=0, CPE_MOVIE_GENTLE=1, CPE_MOVIE_STRONGER=2 };
++enum { CPE_MOVIE_ORIGINAL=0, CPE_MOVIE_GENTLE=1, CPE_MOVIE_STRONGER=2, CPE_MOVIE_BLOCKS=3 };
 +CpeMovieCleanup *CpeMovieCleanup_Create(SDL_GPUDevice *device);
 +void CpeMovieCleanup_Destroy(CpeMovieCleanup *state);
 +/* Explicit user mode change permits one fresh resource attempt. */
@@ -13304,34 +13337,46 @@
 +}
 --- /dev/null
 +++ b/psyz/src/platform/movie_cleanup/present_movie_cleanup.h
-@@ -0,0 +1,19 @@
+@@ -0,0 +1,28 @@
 +/* SPDX-License-Identifier: MIT
 + * Native-only integration seam, included after movie_blur.h/device state. */
 +#include "movie_cleanup.h"
 +static CpeMovieCleanup *movie_cleanup_state;
++static unsigned movie_cleanup_source_serial;
++static int movie_cleanup_create_failed;
 +static int movie_cleanup_requested; /* Original OFF until explicit selection. */
 +void Psyz_VideoSetMovieCleanup(int mode){
-+    if(mode<0||mode>2)mode=0;
++    if(mode<0||mode>3)mode=0;
 +    if(mode!=movie_cleanup_requested){
-+        CpeMovieCleanup_ResetFailure(movie_cleanup_state);
-+        SDL_Log("[Movie cleanup] requested=%d 0Original-1Gentle-2Stronger actual-video-only=1",mode);
++        CpeMovieCleanup_ResetFailure(movie_cleanup_state);movie_cleanup_create_failed=0;
++        SDL_Log("[Movie cleanup] requested=%d 0Original-1Gentle-2Stronger-3Block-smoothing actual-video-only=1",mode);
 +    }
 +    movie_cleanup_requested=mode;
 +}
 +static SDL_GPUBlitRegion MovieCleanupPresent(SDL_GPUCommandBuffer *cmd,SDL_GPUBlitRegion src){
 +    if(!movie_cleanup_requested||!native_movie_active)return src;
-+    if(!movie_cleanup_state)movie_cleanup_state=CpeMovieCleanup_Create(device);
++    if(native_movie_source_serial&&movie_cleanup_source_serial!=native_movie_source_serial){
++        movie_cleanup_source_serial=native_movie_source_serial;
++        CpeMovieCleanup_ResetFailure(movie_cleanup_state);movie_cleanup_create_failed=0;
++    }
++    if(!movie_cleanup_state&&!movie_cleanup_create_failed){
++        movie_cleanup_state=CpeMovieCleanup_Create(device);
++        if(!movie_cleanup_state){movie_cleanup_create_failed=1;SDL_Log("[Movie cleanup] original-state-allocation-fallback source_serial=%u retry=next-movie-or-option-change",native_movie_source_serial);}
++    }
 +    return CpeMovieCleanup_Apply(movie_cleanup_state,cmd,src,true,(Uint32)display_size.x,(Uint32)display_size.y,movie_cleanup_requested);
 +}
-+static void MovieCleanupDestroy(void){CpeMovieCleanup_Destroy(movie_cleanup_state);movie_cleanup_state=NULL;}
++static void MovieCleanupDestroy(void){CpeMovieCleanup_Destroy(movie_cleanup_state);movie_cleanup_state=NULL;movie_cleanup_source_serial=0;movie_cleanup_create_failed=0;}
 --- /dev/null
 +++ b/psyz/src/platform/movie_lifecycle.h
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,39 @@
 +/* SPDX-License-Identifier: MIT -- native movie presentation ownership.
 + * A stop request is not proof that the display environment changed. */
 +#ifndef PE_MOVIE_LIFECYCLE_H
 +#define PE_MOVIE_LIFECYCLE_H
 +static int native_movie_active;
++/* One resource retry budget per actual successful original movie open.
++ * Repeated Active1 on the same running source never advances this serial. */
++static unsigned native_movie_source_serial;
 +/* 0 running/none,1 restoring saved game display,2 awaiting PutDispEnv,
 + * 3 awaiting a post-environment original OT,4 awaiting copied-queue consumption. */
 +static unsigned native_movie_retire_phase;
@@ -13339,7 +13384,7 @@
 +static unsigned native_movie_lifecycle_logs;
 +static void MovieLifecycleTrace(const char*stage){if(native_movie_lifecycle_logs>=64)return;++native_movie_lifecycle_logs;INFOF("Movie ownership stage=%s active=%d retire_phase=%u flush_failed=%d (source/queue witness; pixels unobserved)",stage,native_movie_active,native_movie_retire_phase,native_movie_flush_failed);}
 +void Psyz_VideoSetMovieActive(int active){
-+ if(active){native_movie_active=1;native_movie_retire_phase=0;native_movie_flush_failed=0;MovieLifecycleTrace("movie-start");}
++ if(active){if((!native_movie_active||native_movie_retire_phase)&&native_movie_source_serial!=~0u)++native_movie_source_serial;native_movie_active=1;native_movie_retire_phase=0;native_movie_flush_failed=0;MovieLifecycleTrace("movie-start");}
 + else if(native_movie_active&&!native_movie_retire_phase){native_movie_retire_phase=1;native_movie_flush_failed=0;MovieLifecycleTrace("retire-request");}
 +}
 +void Psyz_VideoMovieRestoreReady(void){

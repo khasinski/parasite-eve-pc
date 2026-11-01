@@ -24,12 +24,12 @@
     {
       "component": "game",
       "path": "patches/game.patch",
-      "sha256": "b4dde306bb8070deffed1c97e86a6d48e7b4b080f5f00a1743a17fa06d45d32c"
+      "sha256": "4ec4c3a65916b309ccf2d21488cc536dc05f239a03d6e104b54ceb02ba10ef07"
     },
     {
       "component": "psyz",
       "path": "patches/psyz.patch",
-      "sha256": "4daa91d856417e7ba6e0a2425b6ab5b4f9d42a31d6f3877d068eaacfd9fbd747"
+      "sha256": "9ae98e800cc8561885ce2092065b2beaf4e31230a4b80c5ce54b15dba87cc001"
     },
     {
       "component": "sdl",
@@ -716,7 +716,7 @@
       "added": false,
       "size": 165797,
       "before": "1b43b1264a57cc201a275fc619137e8907ed2cb73072760f15f5ab67209d6e8c",
-      "after": "c5feb9e8a23cb40795f416e7f4baa84bcdebc72d8fad5a26d8a4576d1ea5afc9"
+      "after": "ef294a08631f8795391af089350ccf94e2236f67a54a0d4aa9ba820eb16414cb"
     },
     {
       "component": "game",
@@ -724,7 +724,7 @@
       "added": true,
       "size": 4026,
       "before": null,
-      "after": "d749e02cfe10eabd7e11ffd19f850b2d620cc8609780f5c70ae4811ffcc1315d"
+      "after": "d1b051756acd93d7275fb75a03e4e811233977e6faa9057ea40412f0e0f6b11f"
     },
     {
       "component": "game",
@@ -738,25 +738,25 @@
       "component": "game",
       "path": "src/main/boot/native_tabs.h",
       "added": true,
-      "size": 7114,
+      "size": 6908,
       "before": null,
-      "after": "b234563fd720747f55452b9b66682a4d52b02428bb486457908a8272e8297869"
+      "after": "74c6cc3042865fc954d75ceba70245034bb1e5cf1dd8d0e5b3fd847f6a1bdcc7"
     },
     {
       "component": "game",
       "path": "src/main/boot/settings_overlay.h",
       "added": false,
-      "size": 76471,
+      "size": 76514,
       "before": "27325339465873edfc2d481dfdd78c42283fc8d4ce9dda6f7990a6a92271cc87",
-      "after": "744a66587a302179a5450134d51acbab21d78dd3ca9834394cfc66fb2fe48220"
+      "after": "57c63ffcdebbd1596bffb0b81b9df55187f62ac17ed811f913c80a1f2471632f"
     },
     {
       "component": "game",
       "path": "src/main/boot/state_ui.h",
       "added": true,
-      "size": 13727,
+      "size": 22511,
       "before": null,
-      "after": "4cb9097d3b6995a563da913b4dd73dc514357fbbf282a4e0f8d0ac2c9dbfcac8"
+      "after": "f3d37b23c6eccf91c90d689d5977ec3e883ea7e9c16315748d2a1381b5565b14"
     },
     {
       "component": "game",
@@ -1322,33 +1322,33 @@
       "component": "psyz",
       "path": "psyz/src/platform/movie_blur.h",
       "added": true,
-      "size": 9870,
+      "size": 10577,
       "before": null,
-      "after": "d453f03dcc360d057d69683545b3d2a29f0b757030bd2ed0bd1792dc0d6e9bbf"
+      "after": "5f01407ccb9338719fb803cfc00198115e341088253497f3be0ddf989285189f"
     },
     {
       "component": "psyz",
       "path": "psyz/src/platform/movie_cleanup/movie_cleanup.c",
       "added": true,
-      "size": 5247,
+      "size": 5275,
       "before": null,
-      "after": "67568315cf6a3d776e1aa0e34cb675f081e667feb27418860592b77addbce40c"
+      "after": "f2473ba17ea1fbca16754a1c19388a695546cf61946947fce424b5b4d92222fe"
     },
     {
       "component": "psyz",
       "path": "psyz/src/platform/movie_cleanup/movie_cleanup.frag",
       "added": true,
-      "size": 1915,
+      "size": 3296,
       "before": null,
-      "after": "cec58d49f6486b19a3bd9e703c5b60ea6ec0b62f481e4a4a0285fcb9fe5d72e9"
+      "after": "5e5773ba33494bb7d9f0457520eefda7827938354ff295534c6aa208f6eb7b46"
     },
     {
       "component": "psyz",
       "path": "psyz/src/platform/movie_cleanup/movie_cleanup.h",
       "added": true,
-      "size": 1085,
+      "size": 1105,
       "before": null,
-      "after": "3e770a59f1457b33dbc1c269463fcc8ef9f46df24d712c361939ca260f3b15ac"
+      "after": "a3da8c87b142271d85d206e5916ee4d8fcc5732b86789debe55994e375050e81"
     },
     {
       "component": "psyz",
@@ -1362,17 +1362,17 @@
       "component": "psyz",
       "path": "psyz/src/platform/movie_cleanup/present_movie_cleanup.h",
       "added": true,
-      "size": 1068,
+      "size": 1763,
       "before": null,
-      "after": "deb664799a541c8f50288981bbfdd6c9a8529805291e613bbb0d2b5cd00a70b4"
+      "after": "5c10e217f5818b4e4fc09c1262d48f48f6154d764c88de574b451ad4d16b9fcd"
     },
     {
       "component": "psyz",
       "path": "psyz/src/platform/movie_lifecycle.h",
       "added": true,
-      "size": 2418,
+      "size": 2727,
       "before": null,
-      "after": "8db1ce33a8f2a4d79e032430dafe2a4f18c7d759bbe79c8af89ba692fc99c33f"
+      "after": "1ad8b8f97dcbaa006d8c7dcb49f4172ffa4f6b5bb4e8c0c28d76cb9cadb93bff"
     },
     {
       "component": "psyz",
@@ -1737,10 +1737,10 @@
     {
       "component": "psyz",
       "path": "psyz/src/platform/movie_cleanup/movie_cleanup_shaders.h",
-      "after": "a64b8e310dc22c6c817f302668669078e9e3d35c439312e8cb15ae10b5eb9e39"
+      "after": "444beeabcae47d78e5e8d53337f39475c69bd201b852c41b64845737ba57332c"
     }
   ],
-  "selectedEboot": "fb36c51386de398a526cfc09cdfbd9c15d95eb59af05b88d34e3717e9a895282",
+  "selectedEboot": "c7a47dfc44d773eb3e485538a4a5c211bf678908f5c1e3945f1068c300a5a394",
   "shaderHeaderComments": {
     "psx_vert_spv.h": "// Generated by native60 vertex ABI build; see SHADER-ABI-PROOF.json.",
     "psx_frag_spv.h": "/* Generated from retained MPL2 PsyZ shader + original dialogue alpha hunk + retained native Duck z5. */",
@@ -1989,7 +1989,7 @@
       "after": "b33d51ee2feb28890cb5b2db3cd4c8b0553553d81c71d6057ed91bb5029d844e"
     }
   ],
-  "selectedBuild": "field-models-theater-vfx-owned-20261101-a1",
+  "selectedBuild": "resident-ailments-movie-retry-owned-20261101-a1",
   "publicSourceExceptions": [
     "Private native pack index absent/caller-generated; explicit no-pack failure guard",
     "Source-cohort identity regenerated for actual public-prepared sources/dependencies",
@@ -2034,8 +2034,8 @@
     },
     {
       "path": "support/pe-build-identity.h",
-      "sha256": "668f5e2030a05d4819f32fa6ac8fb454d78cbf83daa231a80cd8f73853465d58",
-      "bytes": 272
+      "sha256": "66f5e8332b0821127bf9e9cdac6c4b320bf7f7e6414c177979c4371fb11fdf79",
+      "bytes": 282
     },
     {
       "path": "support/pe-game-directory.c",
@@ -2154,8 +2154,8 @@
     },
     {
       "path": "state/pe_state_checkpoint.c",
-      "sha256": "00d5000e2054d1c80710eddfa8b40bdc9bf5f79851dc70b0a94f01d5a8db9544",
-      "bytes": 10303
+      "sha256": "4974dd96b10aa4ef61185a77e0051da53cc4aa68df4f5fad000638d9a0db3c9b",
+      "bytes": 10333
     },
     {
       "path": "state/pe_state_checkpoint.h",
@@ -2164,13 +2164,13 @@
     },
     {
       "path": "state/pe_state_field_models.c",
-      "sha256": "83bca0893aefbf9e5fbc4575ce325f7f095173eea5d0cf724a13a30e22c666a9",
-      "bytes": 11807
+      "sha256": "6b4803c0a3f27c0ce89b26227a5ef63f7d7f150980aac08b9d519aaca6f11680",
+      "bytes": 12144
     },
     {
       "path": "state/pe_state_field_models.h",
-      "sha256": "4055afd4d228cf1c572b5bfe0a39bd7c39ca1cecca5199ddb1175696745918af",
-      "bytes": 726
+      "sha256": "35e81a38ba005870fc6b7bb2ce5fef2f785fa631a4dc0058ebf4fdaa5db5ceb6",
+      "bytes": 768
     },
     {
       "path": "state/pe_state_files.c",
@@ -2284,8 +2284,8 @@
     },
     {
       "path": "state/pe_state_session.c",
-      "sha256": "2446fa6ca048fd622aedcc0c780fbe008fdb2757876a7c599bb3eede5f77efb8",
-      "bytes": 12181
+      "sha256": "4be13d6ce06269f54234120fc19df6f6c25d88aa3ec444db830bc4ee2600786e",
+      "bytes": 12274
     },
     {
       "path": "state/pe_state_session.h",
@@ -2294,8 +2294,8 @@
     },
     {
       "path": "state/pe_state_theater.c",
-      "sha256": "6a205527db8ac88716c0d86918026fd0e340e8b3a9d6027c4482094a87d5afb7",
-      "bytes": 2778
+      "sha256": "f394741c8e7bf88d1a13a2d91b7a14e382cbe606b9343a7ca92b6be6fc08153c",
+      "bytes": 3879
     },
     {
       "path": "state/pe_state_theater.h",
@@ -2304,13 +2304,13 @@
     },
     {
       "path": "state/pe_state_theater_tasks.c",
-      "sha256": "733cb853e154caad4db5010651c4651f425466f58439e8413ac6b223ed9b1a5b",
-      "bytes": 16703
+      "sha256": "7444d29536acf97cbe3e43cb5704df75850eb8b116402f2fd45b20916360d7c6",
+      "bytes": 30241
     },
     {
       "path": "state/pe_state_theater_tasks.h",
-      "sha256": "7dee59f56aa23b3a4f5413304e475dd4962fd0686665eba757fac74db2f45925",
-      "bytes": 1080
+      "sha256": "51222dba68df723e96d749c893976ec7e116b4fa3652d809615ffba27493d741",
+      "bytes": 1158
     },
     {
       "path": "state/pe_state_transition.c",

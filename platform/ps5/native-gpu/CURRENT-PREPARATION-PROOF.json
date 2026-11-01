@@ -1,7 +1,7 @@
 {
   "schema": 3,
-  "selectedBuild": "field-models-theater-vfx-owned-20261101-a1",
-  "selectedPrivateEboot": "fb36c51386de398a526cfc09cdfbd9c15d95eb59af05b88d34e3717e9a895282",
+  "selectedBuild": "resident-ailments-movie-retry-owned-20261101-a1",
+  "selectedPrivateEboot": "c7a47dfc44d773eb3e485538a4a5c211bf678908f5c1e3945f1068c300a5a394",
   "originalArchivePins": [
     {
       "name": "game",
@@ -27,6 +27,7 @@
   "supportStateSourceInputsVerified": 71,
   "allSevenSelectedShaderHeadersReproduced": true,
   "compilerSha256": "9643709c02c83e26773f96b6a87f197ab2e84f78be0879ad8fb3619418b5d9ad",
+  "publicSourceCohortGenerated": false,
   "publicFullGameBuildRun": false,
   "publicNoPackVerifierActualSdkTuCompiles": false,
   "privateNativeFullBuildIsSeparateEvidence": true,

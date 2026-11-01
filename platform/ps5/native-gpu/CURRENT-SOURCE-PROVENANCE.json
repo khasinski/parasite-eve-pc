@@ -25,9 +25,9 @@
     "psyz": "deb979278b3a1bee4c0a4123587fb530afa4dfcf",
     "wholePinClaim": false
   },
-  "selectedNativeBuild": "field-models-theater-vfx-owned-20261101-a1",
-  "selectedNativeEbootSha256": "FB36C51386DE398A526CFC09CDFBD9C15D95EB59AF05B88D34E3717E9A895282",
-  "selectedSourceCohort": "56774FE0E778AF57FE44A3CD569021292C35E82EC36D837250D1E1608082E4FB",
+  "selectedNativeBuild": "resident-ailments-movie-retry-owned-20261101-a1",
+  "selectedNativeEbootSha256": "C7A47DFC44D773EB3E485538A4A5C211BF678908F5C1E3945F1068C300A5A394",
+  "selectedSourceCohort": "70C1649FF7505FB607DDBE9B2524C3DB910C4F4A0F9821F8AA2A58AEE02F04D4",
   "sourceRecords": 207,
   "SDLSourceMirrors": 40,
   "sourceOnly": true,

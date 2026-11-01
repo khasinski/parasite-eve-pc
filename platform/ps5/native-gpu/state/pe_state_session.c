@@ -1,3 +1,4 @@
+#include "pe_state_theater_tasks.h"
 #include "pe_state.h"
 #include "pe_state_session.h"
 #include "pe_state_assets.h"
@@ -29,7 +30,7 @@ return "Experimental checkpoint within this launch and room; supported actor cha
 #else
 return "Experimental same-room checkpoint; unchanged actors and settings only";
 #endif
-case 1:return "Resume gameplay to reach the checkpoint boundary";case 2:return "Wait for active effects or menu jobs to finish";case 3:case 11:return "Finish the movie first";case 4:return "No player is active";case 10:return CPE_StateHostReasonText(CPE_StateHostReasonBits());case 12:return "This room has native event/effect code not yet serialized";case 16:return "Checkpoint file rejected or storage failed; inspect launch log";case 18:return "Saved actor layout unavailable or game resources changed; use a recent same-room capture from this launch";case 19:return "Normal save loaded; queued checkpoint cancelled and old layouts invalidated";case 20:return "Room changed; queued checkpoint cancelled and old layouts invalidated";case 17:return "Checkpoint rollback failed; restart before further checkpoint operations";case 13:return "Current room asset ownership is unavailable";default:return "A state owner or actor graph rejected this boundary";}}
+case 1:return "Resume gameplay to reach the checkpoint boundary";case 2:{const char*detail=PeStateTasks_Blocker();return detail?detail:"Wait for active effects or menu jobs to finish";}case 3:case 11:return "Finish the movie first";case 4:return "No player is active";case 10:return CPE_StateHostReasonText(CPE_StateHostReasonBits());case 12:return "This room has native event/effect code not yet serialized";case 16:return "Checkpoint file rejected or storage failed; inspect launch log";case 18:return "Saved actor layout unavailable or game resources changed; use a recent same-room capture from this launch";case 19:return "Normal save loaded; queued checkpoint cancelled and old layouts invalidated";case 20:return "Room changed; queued checkpoint cancelled and old layouts invalidated";case 17:return "Checkpoint rollback failed; restart before further checkpoint operations";case 13:return "Current room asset ownership is unavailable";default:return "A state owner or actor graph rejected this boundary";}}
 int PeCpuStateSession_MetadataStatus(const PeCpuStateSession*s,PeStateMetadataStatus*out){if(!s||!out)return 0;memset(out,0,sizeof*out);
 #if PE_NATIVE_STATE_CHANGED_COHORTS
     out->capacity=PE_STATE_GRAPH_ARCHIVE_SLOTS;out->reason=PeStateBoundary_InvalidationReason();uint64_t session=PeStateBoundary_Session(),scene=PeStateBoundary_SceneEpoch();out->stale=s->world.scene&&s->world.scene!=scene;

@@ -50,8 +50,11 @@ int PeFieldModels_Walk(const unsigned char*in,unsigned char*out,int apply){if((!
 
 #include "pe1/fieldfx_task.h"
 #include "pe1/room_m005_beacon.h"
-int PeFieldModels_Ready(unsigned program,int current){ModelBinding b[3];uint32_t room;uint64_t epoch;if(!model_bindings(b,&room,&epoch))return 0;if(program==117)return room==5&&b[0].data&&b[1].data&&(!current||(g_RoomM005BeaconModel0==b[0].data&&g_RoomM005BeaconModel1==b[1].data));return 0;}
+#include "pe1/room_m023_beacon.h"
+int PeFieldModels_Ready(unsigned program,int current){ModelBinding b[3];uint32_t room;uint64_t epoch;if(!model_bindings(b,&room,&epoch))return 0;if(program==117)return room==5&&b[0].data&&b[1].data&&(!current||(g_RoomM005BeaconModel0==b[0].data&&g_RoomM005BeaconModel1==b[1].data));if(program==118)return room==23&&b[2].data&&(!current||g_RoomM023BeaconModel==(char*)b[2].data);return 0;}
 
 
 
 
+
+void *PeFieldModels_KeyPointer(uint32_t key){ModelBinding b[3];uint32_t room;uint64_t epoch;if(!model_bindings(b,&room,&epoch))return 0;for(unsigned j=0;j<3;j++)if(b[j].key==key)return b[j].data;return 0;}

@@ -11,6 +11,7 @@ int PeFieldModel_Validate(const void *,size_t,const unsigned char *,size_t);
 int PeFieldModel_Restore(void *,size_t,const unsigned char *,size_t);
 int PeFieldModels_Walk(const unsigned char *,unsigned char *,int);
 int PeFieldModels_Ready(unsigned,int);
+void *PeFieldModels_KeyPointer(uint32_t);
 #endif
 
 
