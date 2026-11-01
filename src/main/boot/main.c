@@ -11,6 +11,7 @@ static int host_open_assists;
 #include "common.h"
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -37,6 +38,7 @@ static bool Host_StateChord(const SDL_Event *event);
 #include "pe1/field_bg_load.h"
 #include "pe1/game_state.h"
 #include "pe1/game_timers.h"
+#include "pe1/geom_state.h"
 #include "pe1/pad_state.h"
 #include "pe1/psyq_gpu.h"
 #include "pe1/save.h"
@@ -86,9 +88,11 @@ static struct {
     /* 1: the speed binding switches the speed-up on and off instead of holding it */
     int speed_toggle;
     unsigned analog_run_threshold;
-    /* 16 pad buttons, then the speed hold (unbound by default) */
-    int keys[17];
-    int buttons[17];
+    /* 16 pad buttons, then speed hold and screenshot capture (unbound by default) */
+    int keys[18];
+    int buttons[18];
+    int screenshot_auto_upload;
+    char screenshot_upload_url[4096];
     char discs[2][4096];
     char user_file[4096];
     int enabled;
@@ -157,8 +161,9 @@ static int Host_SaveOptions(void);
 static void Host_NativeApplicationShutdown(void);
 #endif
 
-#define HOST_BINDING_COUNT 17
+#define HOST_BINDING_COUNT 18
 #define HOST_SPEED_BINDING 16
+#define HOST_SCREENSHOT_BINDING 17
 #define HOST_ANALOG_RUN_ROW (HOST_BINDING_COUNT + 1)
 #define HOST_SPEED_MODE_ROW (HOST_BINDING_COUNT + 2)
 #define HOST_UNBOUND_KEY SDL_SCANCODE_UNKNOWN
@@ -169,8 +174,12 @@ static const char *const host_button_names[HOST_BINDING_COUNT] = {
     "Triangle", "Circle", "Cross", "Square",
     "Select", "L3", "R3", "Start",
     "Up", "Right", "Down", "Left",
-    "Speed"
+    "Speed", "Screenshot"
 };
+
+static int Host_IsOptionalBinding(unsigned index) {
+    return index == HOST_SPEED_BINDING || index == HOST_SCREENSHOT_BINDING;
+}
 
 /* speed_factor while the speed binding is held; every start is 1x. */
 static unsigned host_speed = 1;
@@ -682,6 +691,14 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
         }
         return 1;
     }
+    if (!strcmp(section, "screenshots") && !strcmp(key, "upload_url")) {
+        char decoded[4096];
+        if (!Host_String(value, decoded, sizeof(decoded))) {
+            return 0;
+        }
+        memcpy(host_options.screenshot_upload_url, decoded, strlen(decoded) + 1);
+        return 1;
+    }
 
     int v = 0;
     if (!strncmp(value, "true", 4) &&
@@ -700,8 +717,10 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
         }
         v = (int)parsed;
     }
-    /* -1 only marks an unbound controller speed binding. */
-    if (v < 0 && (strcmp(section, "controller") || strcmp(key, host_button_names[HOST_SPEED_BINDING]))) {
+    /* -1 only marks an unbound controller optional binding (Speed or Screenshot). */
+    if (v < 0 && (strcmp(section, "controller") ||
+                  (strcmp(key, host_button_names[HOST_SPEED_BINDING]) &&
+                   strcmp(key, host_button_names[HOST_SCREENSHOT_BINDING])))) {
         return 0;
     }
 
@@ -811,6 +830,9 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
         else if(!strcmp(key,"menu_text_size")){if(v<0||v>1)return 0;host_options.menu_text_size=v;}
         else if(!strcmp(key,"menu_pointer")){if(v<0||v>2)return 0;host_options.menu_pointer=v;}
 #endif
+    } else if (!strcmp(section, "screenshots") && !strcmp(key, "auto_upload")) {
+        if (v < 0 || v > 1) return 0;
+        host_options.screenshot_auto_upload = v;
     } else if (!strcmp(section, "audio") && !strcmp(key, "volume")) {
         if (v > 100) {
             return 0;
@@ -829,15 +851,15 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
     } else if (!strcmp(section, "keyboard") || !strcmp(section, "controller")) {
         for (unsigned i = 0; i < HOST_BINDING_COUNT; ++i) {
             if (!strcmp(key, host_button_names[i])) {
-                int speed = i == HOST_SPEED_BINDING;
+                int optional = Host_IsOptionalBinding(i);
                 if (!strcmp(section, "keyboard")) {
-                    if (!(speed && v == HOST_UNBOUND_KEY) &&
+                    if (!(optional && v == HOST_UNBOUND_KEY) &&
                         (v <= SDL_SCANCODE_UNKNOWN || v >= SDL_SCANCODE_COUNT || v == SDL_SCANCODE_ESCAPE)) {
                         return 0;
                     }
                     host_options.keys[i] = v;
                 } else {
-                    if (!(speed && v == HOST_UNBOUND_BUTTON) && (v < 0 || v > SDL_GAMEPAD_BUTTON_COUNT + 1)) {
+                    if (!(optional && v == HOST_UNBOUND_BUTTON) && (v < 0 || v > SDL_GAMEPAD_BUTTON_COUNT + 1)) {
                         return 0;
                     }
                     host_options.buttons[i] = v;
@@ -1007,7 +1029,10 @@ static int Host_SaveOptions(void) {
     fprintf(file,"hd_models = %s\nhd_model_directory = ",host_options.hd_models?"true":"false");Host_WriteString(file,host_options.hd_model_directory);
     fprintf(file,"\n\n[interface]\nshow_fps = %d\nmenu_style = %d\nmenu_text_size = %d\nmenu_pointer = %d\n",host_options.show_fps,host_options.menu_style,host_options.menu_text_size,host_options.menu_pointer);
 #endif
-    fputs("\n[keyboard]\n", file);
+    fprintf(file, "\n[screenshots]\nauto_upload = %s\nupload_url = ",
+            host_options.screenshot_auto_upload ? "true" : "false");
+    Host_WriteString(file, host_options.screenshot_upload_url);
+    fputs("\n\n[keyboard]\n", file);
     for (unsigned i = 0; i < HOST_BINDING_COUNT; ++i) {
         fprintf(file, "%s = %d\n", host_button_names[i], host_options.keys[i]);
     }
@@ -1330,6 +1355,8 @@ static void Host_InitOptions(int enabled) {
     host_options.speed_factor = 2;
     host_options.speed_toggle = 0;
     host_options.analog_run_threshold = 85;
+    host_options.screenshot_auto_upload = 1;
+    host_options.screenshot_upload_url[0] = '\0';
     Boot_InitHostBindings();
 #ifdef PE_PS5
     /* Public ScePad mapping exposes touchpad; there is no physical Back. */
@@ -1341,6 +1368,8 @@ static void Host_InitOptions(int enabled) {
     }
     host_options.keys[HOST_SPEED_BINDING] = HOST_UNBOUND_KEY;
     host_options.buttons[HOST_SPEED_BINDING] = HOST_UNBOUND_BUTTON;
+    host_options.keys[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_KEY;
+    host_options.buttons[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_BUTTON;
     #ifdef PE_PS5_GPU_NATIVE
     /* Fresh Modern baseline. Saved individual choices load afterward. */
     host_options.scale=8;host_options.antialiasing=1;host_options.dynamic_lighting=1;host_options.effect_geometry_correction=1;host_options.movie_cleanup=2;host_options.fsr1=1;host_options.fsr1_sharpness=0;host_options.model_fill_lighting=2;host_options.model_filtering=1;host_options.hd_backgrounds=1;host_options.hd_models=1;
@@ -1795,6 +1824,8 @@ static void Host_OverlayRenderFallback(
     if (OverlayFontReady() && OverlaySurfaceResize(&s_overlaySurface, layout.w, layout.h)) {
         if (state->prompt) {
             OverlayPaintPrompt(&s_overlaySurface, state, &layout);
+        } else if (state->screenshot) {
+            OverlayPaintScreenshot(&s_overlaySurface, state, &layout);
         } else {
             OverlayPaint(&s_overlaySurface, state, &layout);
         }
@@ -1983,15 +2014,19 @@ static void Host_ApplySettingsAction(
     Host_ApplyOptions(game);
 }
 
-/* Only the speed binding can be left unbound. */
+/* Optional bindings (Speed and Screenshot) can be left unbound. */
 static void Host_ClearSpeedBinding(HostOverlayState *state) {
-    if (state->page != HOST_PAGE_CONTROLS || state->row != HOST_SPEED_BINDING + 1) {
+    if (state->page != HOST_PAGE_CONTROLS || state->row < 1) {
+        return;
+    }
+    unsigned idx = (unsigned)(state->row - 1);
+    if (!Host_IsOptionalBinding(idx)) {
         return;
     }
     if (state->bind_device == HOST_BIND_KEYBOARD) {
-        host_options.keys[HOST_SPEED_BINDING] = HOST_UNBOUND_KEY;
+        host_options.keys[idx] = HOST_UNBOUND_KEY;
     } else {
-        host_options.buttons[HOST_SPEED_BINDING] = HOST_UNBOUND_BUTTON;
+        host_options.buttons[idx] = HOST_UNBOUND_BUTTON;
     }
     state->status = NULL;
     state->dirty = 1;
@@ -2192,6 +2227,304 @@ static void Host_ProcessPromptEvent(
     }
 }
 
+static void Host_ScreenshotAppendText(HostOverlayState *state, const char *text) {
+    if (!text) return;
+    size_t len = strlen(state->note);
+    for (const unsigned char *p = (const unsigned char *)text; *p; ++p) {
+        if (*p >= 32 && *p < 127 && len + 1 < sizeof(state->note)) {
+            state->note[len++] = (char)*p;
+            state->note[len] = '\0';
+        }
+    }
+    state->status = NULL;
+    state->dirty = 1;
+}
+
+static void Host_ScreenshotBackspace(HostOverlayState *state) {
+    size_t len = strlen(state->note);
+    if (len > 0) {
+        state->note[len - 1] = '\0';
+        state->status = NULL;
+        state->dirty = 1;
+    }
+}
+
+static void Host_ScreenshotOskActivate(HostOverlayState *state) {
+    const char *key = kScreenshotOskKeys[state->osk_row][state->osk_col];
+    if (!strcmp(key, "Done")) {
+        state->osk_open = 0;
+        state->dirty = 1;
+    } else if (!strcmp(key, "Clear")) {
+        state->note[0] = '\0';
+        state->dirty = 1;
+    } else if (!strcmp(key, "Bksp")) {
+        Host_ScreenshotBackspace(state);
+    } else if (!strcmp(key, "Space")) {
+        Host_ScreenshotAppendText(state, " ");
+    } else {
+        Host_ScreenshotAppendText(state, key);
+    }
+}
+
+static void Host_ApplyScreenshotRowAction(
+    HostOverlayState *state,
+    int action,
+    int activate_only
+) {
+    int tagCount = COUNT_OF(kScreenshotTagNames);
+    if (state->row == SCREENSHOT_ROW_TAG) {
+        state->tag_index = (state->tag_index + action + tagCount) % tagCount;
+        state->status = NULL;
+        state->dirty = 1;
+    } else if (state->row == SCREENSHOT_ROW_NOTE) {
+        if (activate_only) {
+            state->osk_open = !state->osk_open;
+            state->status = NULL;
+            state->dirty = 1;
+        }
+    } else if (state->row == SCREENSHOT_ROW_UPLOAD) {
+        if (Host_ScreenshotUploadUrl() != NULL) {
+            host_options.screenshot_auto_upload = !host_options.screenshot_auto_upload;
+            state->status = NULL;
+        } else {
+            state->status = "Set [screenshots] upload_url in parasite-eve.toml or PE_SCREENSHOT_UPLOAD_URL.";
+        }
+        state->dirty = 1;
+    } else if (state->row == SCREENSHOT_ROW_SAVE) {
+        if (activate_only) {
+            state->save_shot = 1;
+            state->open = 0;
+        }
+    } else if (state->row == SCREENSHOT_ROW_CANCEL) {
+        if (activate_only) {
+            state->save_shot = 0;
+            state->open = 0;
+        }
+    }
+}
+
+static void Host_ProcessScreenshotPointer(
+    HostOverlayState *state,
+    float windowX,
+    float windowY,
+    int click,
+    SDL_Window *game,
+    SDL_Window *fallbackWindow
+) {
+    SDL_Window *targetWin = fallbackWindow ? fallbackWindow : game;
+    float density = targetWin ? SDL_GetWindowPixelDensity(targetWin) : 1.0f;
+    if (density <= 0.0f) {
+        density = 1.0f;
+    }
+    float scale = s_overlayLayout.scale > 0.0f ? s_overlayLayout.scale : 1.0f;
+    float x = (windowX * density - (float)s_overlayLayout.x) / scale;
+    float y = (windowY * density - (float)s_overlayLayout.y) / scale;
+    int designH = OverlayScreenshotDesignHeight(state);
+
+    if (state->osk_open) {
+        for (int r = 0; r < SCREENSHOT_OSK_ROWS; r++) {
+            for (int c = 0; c < SCREENSHOT_OSK_COLS; c++) {
+                OverlayRect cell = OverlayScreenshotOskKeyRect(r, c);
+                if (x >= cell.x && x < cell.x + cell.w && y >= cell.y && y < cell.y + cell.h) {
+                    if (state->osk_row != r || state->osk_col != c) {
+                        state->osk_row = r;
+                        state->osk_col = c;
+                        state->dirty = 1;
+                    }
+                    if (click) {
+                        Host_ScreenshotOskActivate(state);
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    int hitRow = -1;
+    for (int r = 0; r < SCREENSHOT_ROWS; r++) {
+        OverlayRect rect = OverlayScreenshotRowRect(state, r);
+        if (x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h) {
+            hitRow = r;
+            break;
+        }
+    }
+    if (hitRow >= 0 && state->row != hitRow) {
+        state->row = hitRow;
+        if (hitRow != SCREENSHOT_ROW_NOTE && state->osk_open) {
+            state->osk_open = 0;
+        }
+        state->dirty = 1;
+    }
+    if (!click) {
+        return;
+    }
+    if (x < 0.0f || x >= (float)SCREENSHOT_PANEL_W || y < 0.0f || y >= (float)designH) {
+        state->save_shot = 0;
+        state->open = 0;
+        return;
+    }
+    if (hitRow >= 0) {
+        int isStepper = hitRow == SCREENSHOT_ROW_TAG || hitRow == SCREENSHOT_ROW_UPLOAD;
+        int action = isStepper ? (x < OverlayValueCentre() ? -1 : 1) : 1;
+        Host_ApplyScreenshotRowAction(state, action, !isStepper);
+    }
+}
+
+static void Host_ProcessScreenshotEvent(
+    HostOverlayState *state,
+    const SDL_Event *event,
+    SDL_Window *game,
+    SDL_Window *fallbackWindow
+) {
+    if (event->type == SDL_EVENT_TEXT_INPUT) {
+        Host_ScreenshotAppendText(state, event->text.text);
+        return;
+    }
+    if (event->type == SDL_EVENT_KEY_DOWN) {
+        int repeat = event->key.repeat != 0;
+        switch (event->key.scancode) {
+        case SDL_SCANCODE_ESCAPE:
+            if (!repeat) {
+                if (state->osk_open) {
+                    state->osk_open = 0;
+                    state->dirty = 1;
+                } else {
+                    state->save_shot = 0;
+                    state->open = 0;
+                }
+            }
+            break;
+        case SDL_SCANCODE_BACKSPACE:
+        case SDL_SCANCODE_DELETE:
+            Host_ScreenshotBackspace(state);
+            break;
+        case SDL_SCANCODE_UP:
+            if (state->osk_open) {
+                state->osk_row = (state->osk_row + SCREENSHOT_OSK_ROWS - 1) % SCREENSHOT_OSK_ROWS;
+            } else {
+                state->row = (state->row + SCREENSHOT_ROWS - 1) % SCREENSHOT_ROWS;
+            }
+            state->dirty = 1;
+            break;
+        case SDL_SCANCODE_DOWN:
+            if (state->osk_open) {
+                state->osk_row = (state->osk_row + 1) % SCREENSHOT_OSK_ROWS;
+            } else {
+                state->row = (state->row + 1) % SCREENSHOT_ROWS;
+            }
+            state->dirty = 1;
+            break;
+        case SDL_SCANCODE_LEFT:
+            if (state->osk_open) {
+                state->osk_col = (state->osk_col + SCREENSHOT_OSK_COLS - 1) % SCREENSHOT_OSK_COLS;
+                state->dirty = 1;
+            } else if (!repeat && state->row != SCREENSHOT_ROW_NOTE) {
+                Host_ApplyScreenshotRowAction(state, -1, 0);
+            }
+            break;
+        case SDL_SCANCODE_RIGHT:
+            if (state->osk_open) {
+                state->osk_col = (state->osk_col + 1) % SCREENSHOT_OSK_COLS;
+                state->dirty = 1;
+            } else if (!repeat && state->row != SCREENSHOT_ROW_NOTE) {
+                Host_ApplyScreenshotRowAction(state, 1, 0);
+            }
+            break;
+        case SDL_SCANCODE_RETURN:
+        case SDL_SCANCODE_KP_ENTER:
+            if (!repeat) {
+                if (state->osk_open) {
+                    Host_ScreenshotOskActivate(state);
+                } else {
+                    Host_ApplyScreenshotRowAction(state, 1, 1);
+                }
+            }
+            break;
+        default:
+            break;
+        }
+    } else if (event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+        if (state->osk_open) {
+            switch (event->gbutton.button) {
+            case SDL_GAMEPAD_BUTTON_DPAD_UP:
+                state->osk_row = (state->osk_row + SCREENSHOT_OSK_ROWS - 1) % SCREENSHOT_OSK_ROWS;
+                state->dirty = 1;
+                break;
+            case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+                state->osk_row = (state->osk_row + 1) % SCREENSHOT_OSK_ROWS;
+                state->dirty = 1;
+                break;
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+                state->osk_col = (state->osk_col + SCREENSHOT_OSK_COLS - 1) % SCREENSHOT_OSK_COLS;
+                state->dirty = 1;
+                break;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+                state->osk_col = (state->osk_col + 1) % SCREENSHOT_OSK_COLS;
+                state->dirty = 1;
+                break;
+            case SDL_GAMEPAD_BUTTON_SOUTH:
+                Host_ScreenshotOskActivate(state);
+                break;
+            case SDL_GAMEPAD_BUTTON_WEST:
+                Host_ScreenshotBackspace(state);
+                break;
+            case SDL_GAMEPAD_BUTTON_NORTH:
+                Host_ScreenshotAppendText(state, " ");
+                break;
+            case SDL_GAMEPAD_BUTTON_START:
+                state->osk_open = 0;
+                state->row = SCREENSHOT_ROW_SAVE;
+                state->dirty = 1;
+                break;
+            case SDL_GAMEPAD_BUTTON_EAST:
+                state->osk_open = 0;
+                state->dirty = 1;
+                break;
+            default:
+                break;
+            }
+        } else {
+            switch (event->gbutton.button) {
+            case SDL_GAMEPAD_BUTTON_DPAD_UP:
+                state->row = (state->row + SCREENSHOT_ROWS - 1) % SCREENSHOT_ROWS;
+                state->dirty = 1;
+                break;
+            case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+                state->row = (state->row + 1) % SCREENSHOT_ROWS;
+                state->dirty = 1;
+                break;
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+                Host_ApplyScreenshotRowAction(state, -1, 0);
+                break;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+                Host_ApplyScreenshotRowAction(state, 1, 0);
+                break;
+            case SDL_GAMEPAD_BUTTON_SOUTH:
+                Host_ApplyScreenshotRowAction(state, 1, 1);
+                break;
+            case SDL_GAMEPAD_BUTTON_WEST:
+                Host_ScreenshotBackspace(state);
+                break;
+            case SDL_GAMEPAD_BUTTON_START:
+                state->save_shot = 1;
+                state->open = 0;
+                break;
+            case SDL_GAMEPAD_BUTTON_EAST:
+                state->save_shot = 0;
+                state->open = 0;
+                break;
+            default:
+                break;
+            }
+        }
+    } else if (event->type == SDL_EVENT_MOUSE_MOTION) {
+        Host_ProcessScreenshotPointer(state, event->motion.x, event->motion.y, 0, game, fallbackWindow);
+    } else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+               event->button.button == SDL_BUTTON_LEFT) {
+        Host_ProcessScreenshotPointer(state, event->button.x, event->button.y, 1, game, fallbackWindow);
+    }
+}
+
 static void Host_ProcessSettingsEvent(
     HostOverlayState *state,
     const SDL_Event *event,
@@ -2214,6 +2547,10 @@ static void Host_ProcessSettingsEvent(
     }
     if (state->prompt) {
         Host_ProcessPromptEvent(state, event, game);
+        return;
+    }
+    if (state->screenshot) {
+        Host_ProcessScreenshotEvent(state, event, game, fallbackWindow);
         return;
     }
 
@@ -2737,6 +3074,453 @@ static bool Host_SpeedHoldEvent(const SDL_Event *event) {
     return consumed; /* axis and removal events still reach the pad backend */
 }
 
+/* The room number, decoded as mods/host/pe_game.c does (-1: the token is not
+ * a room). Only reads values. */
+static int Host_CrashRoom(void) {
+    const unsigned token = (unsigned)g_SceneDispatchToken;
+    int room = 0;
+    for (int i = 2; i < 5 && room >= 0; ++i) {
+        const char c = (char)g_Base32CharTable[(token >> ((5 - i) * 5 + 2)) & 0x1Fu];
+        room = c >= '0' && c <= '9' ? room * 10 + (c - '0') : -1;
+    }
+    return room;
+}
+
+static size_t Host_DiscardCurlWrite(char *ptr, size_t size, size_t nmemb, void *userdata) {
+    (void)ptr;
+    (void)userdata;
+    return size * nmemb;
+}
+
+static int Host_UploadScreenshotFiles(
+    const char *url,
+    const char *png_path,
+    const char *json_path,
+    const char *summary_message
+) {
+    if (!url || !*url) return 0;
+    CURL *curl = curl_easy_init();
+    if (!curl) return 0;
+
+    cJSON *payload = cJSON_CreateObject();
+    if (!payload) {
+        curl_easy_cleanup(curl);
+        return 0;
+    }
+    cJSON_AddStringToObject(payload, "content", summary_message ? summary_message : "Parasite Eve screenshot");
+    char *payload_text = cJSON_PrintUnformatted(payload);
+    cJSON_Delete(payload);
+    if (!payload_text) {
+        curl_easy_cleanup(curl);
+        return 0;
+    }
+
+    curl_mime *mime = curl_mime_init(curl);
+    curl_mimepart *part = NULL;
+    if (!mime) {
+        cJSON_free(payload_text);
+        curl_easy_cleanup(curl);
+        return 0;
+    }
+
+    part = curl_mime_addpart(mime);
+    curl_mime_name(part, "payload_json");
+    curl_mime_data(part, payload_text, CURL_ZERO_TERMINATED);
+    curl_mime_type(part, "application/json");
+
+    part = curl_mime_addpart(mime);
+    curl_mime_name(part, "files[0]");
+    curl_mime_filedata(part, png_path);
+    curl_mime_type(part, "image/png");
+
+    part = curl_mime_addpart(mime);
+    curl_mime_name(part, "files[1]");
+    curl_mime_filedata(part, json_path);
+    curl_mime_type(part, "application/json");
+
+    char ua[160];
+    snprintf(ua, sizeof(ua), "ParasiteEve/%s (%s; build %s)", PE_VERSION, SDL_GetPlatform(), PE_BUILD_ID);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, ua);
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https,http");
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, Host_DiscardCurlWrite);
+
+    CURLcode res = curl_easy_perform(curl);
+    long status = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+    curl_mime_free(mime);
+    cJSON_free(payload_text);
+    curl_easy_cleanup(curl);
+    return res == CURLE_OK && status >= 200 && status < 300;
+}
+
+static char host_last_screenshot_png[4096];
+static char host_last_screenshot_json[4096];
+
+static int Host_SaveAndUploadScreenshot(
+    const HostOverlayState *state,
+    const unsigned char *rgb,
+    int w,
+    int h,
+    const PeBackgroundInfo *bg,
+    int room
+) {
+    if (!rgb || w <= 0 || h <= 0 || !bg) {
+        return 0;
+    }
+
+    char dir[4096];
+    const char *slash = strrchr(host_options.user_file, '/');
+    const char *back = strrchr(host_options.user_file, '\\');
+    if (back && (!slash || back > slash)) slash = back;
+    if (slash) {
+        snprintf(dir, sizeof(dir), "%.*s/screenshots", (int)(slash - host_options.user_file), host_options.user_file);
+    } else {
+        snprintf(dir, sizeof(dir), "screenshots");
+    }
+    SDL_CreateDirectory(dir);
+
+    SDL_Time now = 0;
+    SDL_DateTime dt = {0};
+    char ts[32], iso[32];
+    if (SDL_GetCurrentTime(&now) && SDL_TimeToDateTime(now, &dt, false)) {
+        snprintf(ts, sizeof(ts), "%04d%02d%02d-%02d%02d%02d",
+                 dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
+        snprintf(iso, sizeof(iso), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+                 dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
+    } else {
+        unsigned long long ticks = (unsigned long long)SDL_GetTicks();
+        snprintf(ts, sizeof(ts), "ticks-%llu", ticks);
+        snprintf(iso, sizeof(iso), "ticks-%llu", ticks);
+    }
+
+    char base_name[160], png_name[180], png_path[4096], json_path[4096];
+    if (room >= 0) {
+        snprintf(base_name, sizeof(base_name), "screenshot-%s-room%03d-%016" PRIx64,
+                 ts, room, bg->geometry_key);
+    } else {
+        snprintf(base_name, sizeof(base_name), "screenshot-%s-scene-%016" PRIx64,
+                 ts, bg->geometry_key);
+    }
+    snprintf(png_name, sizeof(png_name), "%s.png", base_name);
+    if (snprintf(png_path, sizeof(png_path), "%s/%s.png", dir, base_name) >= (int)sizeof(png_path) ||
+        snprintf(json_path, sizeof(json_path), "%s/%s.json", dir, base_name) >= (int)sizeof(json_path)) {
+        return 0;
+    }
+
+    size_t png_size = 0;
+    void *png_bytes = tdefl_write_image_to_png_file_in_memory(rgb, w, h, 3, &png_size);
+    if (!png_bytes || !png_size) {
+        if (png_bytes) mz_free(png_bytes);
+        return 0;
+    }
+    int saved_png = SDL_SaveFile(png_path, png_bytes, png_size);
+    mz_free(png_bytes);
+    if (!saved_png) {
+        return 0;
+    }
+
+    int tagIdx = ClampIndex(state->tag_index, COUNT_OF(kScreenshotTagNames));
+    const char *tagName = kScreenshotTagNames[tagIdx];
+    const char *packVer = *host_hd.version ? host_hd.version : (host_hd.development ? "local-preview" : "none");
+    char geom_hex[17], wide_hex[17], token_hex[16];
+    snprintf(geom_hex, sizeof(geom_hex), "%016" PRIx64, bg->geometry_key);
+    snprintf(wide_hex, sizeof(wide_hex), "%016" PRIx64, bg->widescreen_key);
+    snprintf(token_hex, sizeof(token_hex), "0x%08X", (unsigned)g_SceneDispatchToken);
+
+    cJSON *root = cJSON_CreateObject();
+    if (!root) {
+        return 0;
+    }
+    cJSON_AddStringToObject(root, "version", PE_VERSION);
+    cJSON_AddStringToObject(root, "build_id", PE_BUILD_ID);
+    cJSON_AddStringToObject(root, "timestamp_utc", iso);
+    cJSON_AddStringToObject(root, "screenshot_file", png_name);
+    cJSON_AddStringToObject(root, "issue_tag", tagName);
+    cJSON_AddStringToObject(root, "note", state->note);
+
+    cJSON *bg_obj = cJSON_CreateObject();
+    if (bg_obj) {
+        cJSON_AddStringToObject(bg_obj, "hd_geometry_key", geom_hex);
+        cJSON_AddNumberToObject(bg_obj, "active_group", bg->active_group);
+        cJSON_AddStringToObject(bg_obj, "widescreen_key", wide_hex);
+        cJSON *entries = cJSON_CreateArray();
+        if (entries) {
+            for (unsigned i = 0; i < bg->active_entry_count; ++i) {
+                char entry_hex[17];
+                snprintf(entry_hex, sizeof(entry_hex), "%016" PRIx64, bg->active_entry_keys[i]);
+                cJSON_AddItemToArray(entries, cJSON_CreateString(entry_hex));
+            }
+            cJSON_AddItemToObject(bg_obj, "active_entry_keys", entries);
+        }
+        cJSON_AddNumberToObject(bg_obj, "total_entries", bg->total_entry_count);
+        cJSON_AddNumberToObject(bg_obj, "disp_x", bg->disp_x);
+        cJSON_AddNumberToObject(bg_obj, "disp_y", bg->disp_y);
+        cJSON_AddBoolToObject(bg_obj, "hd_enabled", bg->hd_enabled != 0);
+        cJSON_AddStringToObject(bg_obj, "hd_pack_version", packVer);
+        cJSON_AddItemToObject(root, "background", bg_obj);
+    }
+
+    cJSON *game_obj = cJSON_CreateObject();
+    if (game_obj) {
+        cJSON_AddNumberToObject(game_obj, "room", room);
+        cJSON_AddStringToObject(game_obj, "scene_token", token_hex);
+        cJSON_AddNumberToObject(game_obj, "story_day", g_GameState.current_story_day);
+        cJSON_AddBoolToObject(game_obj, "in_battle", (g_GameStateFlags & 2) != 0);
+        cJSON_AddNumberToObject(game_obj, "disc", (unsigned)g_PeImageMountFlags);
+        cJSON_AddNumberToObject(game_obj, "vblank", (unsigned)g_BootHostVBlankCount);
+        cJSON_AddItemToObject(root, "game", game_obj);
+    }
+
+    cJSON *gfx_obj = cJSON_CreateObject();
+    if (gfx_obj) {
+        cJSON_AddNumberToObject(gfx_obj, "internal_resolution", host_options.scale);
+        cJSON_AddBoolToObject(gfx_obj, "widescreen", host_options.widescreen != 0);
+        cJSON_AddBoolToObject(gfx_obj, "hd_backgrounds", host_options.hd_backgrounds != 0);
+        cJSON_AddBoolToObject(gfx_obj, "geometry_correction", host_options.geometry_correction != 0);
+        cJSON_AddBoolToObject(gfx_obj, "antialiasing", host_options.antialiasing != 0);
+        cJSON_AddBoolToObject(gfx_obj, "model_filtering", host_options.model_filtering != 0);
+        cJSON_AddBoolToObject(gfx_obj, "frame_interpolation", host_options.frame_interpolation != 0);
+        cJSON_AddBoolToObject(gfx_obj, "dynamic_lighting", host_options.dynamic_lighting != 0);
+        cJSON_AddBoolToObject(gfx_obj, "effect_geometry_correction", host_options.effect_geometry_correction != 0);
+        cJSON_AddItemToObject(root, "graphics", gfx_obj);
+    }
+
+    char *json_text = cJSON_Print(root);
+    cJSON_Delete(root);
+    if (!json_text) {
+        return 0;
+    }
+    int saved_json = SDL_SaveFile(json_path, json_text, strlen(json_text));
+    cJSON_free(json_text);
+    if (!saved_json) {
+        return 0;
+    }
+
+    SDL_strlcpy(host_last_screenshot_png, png_path, sizeof(host_last_screenshot_png));
+    SDL_strlcpy(host_last_screenshot_json, json_path, sizeof(host_last_screenshot_json));
+    fprintf(stderr, "Screenshot saved: %s (metadata: %s)\n", png_path, json_path);
+
+    const char *uploadUrl = Host_ScreenshotUploadUrl();
+    if (uploadUrl && host_options.screenshot_auto_upload) {
+        char summary[512];
+        snprintf(summary, sizeof(summary),
+                 "**[%s]** %s\nRoom: `%d` | BG: `%s` (group `%u`, wide `%s`) | Pack: `%s`",
+                 tagName, state->note[0] ? state->note : "(no note)",
+                 room, geom_hex, bg->active_group, wide_hex, packVer);
+        if (Host_UploadScreenshotFiles(uploadUrl, png_path, json_path, summary)) {
+            fprintf(stderr, "Screenshot uploaded to %s\n", uploadUrl);
+        } else {
+            fprintf(stderr, "Screenshot upload failed (%s); local files kept.\n", uploadUrl);
+        }
+    }
+    return 1;
+}
+
+static void Host_FormatBackgroundSummary(char *out, size_t size, const PeBackgroundInfo *bg, int room) {
+    if (room >= 0 && bg->geometry_key != 0) {
+        snprintf(out, size, "Room %d   BG: %016" PRIx64 "   Group: %u",
+                 room, bg->geometry_key, bg->active_group);
+    } else if (bg->geometry_key != 0) {
+        snprintf(out, size, "BG: %016" PRIx64 "   Group: %u",
+                 bg->geometry_key, bg->active_group);
+    } else if (room >= 0) {
+        snprintf(out, size, "Room %d   Scene: 0x%08X", room, (unsigned)g_SceneDispatchToken);
+    } else {
+        snprintf(out, size, "Scene: 0x%08X", (unsigned)g_SceneDispatchToken);
+    }
+}
+
+static void Host_TakeScreenshot(SDL_Window *game) {
+    /* Capture the clean game frame before drawing the screenshot modal. */
+    int frameW = 0, frameH = 0;
+    unsigned char *rgb = (unsigned char *)Psyz_VideoAllocRenderedFrame(&frameW, &frameH);
+    if (!rgb || frameW <= 0 || frameH <= 0) {
+        if (rgb) free(rgb);
+        rgb = (unsigned char *)Psyz_VideoAllocCapturedFrame(&frameW, &frameH);
+    }
+    if (!rgb || frameW <= 0 || frameH <= 0) {
+        if (rgb) free(rgb);
+        frameW = 16;
+        frameH = 16;
+        rgb = (unsigned char *)calloc((size_t)frameW * (size_t)frameH * 3u, 1);
+    }
+
+    PeBackgroundInfo bg;
+    Render_GetBackgroundInfo(&bg);
+    int room = Host_CrashRoom();
+
+    int useGpuOverlay = (game != NULL && s_overlayGpuDevice != NULL);
+    SDL_Window *fallbackWindow = NULL;
+    SDL_Renderer *fallbackRenderer = NULL;
+    SDL_Texture *fallbackTexture = NULL;
+    int fallbackTexW = 0, fallbackTexH = 0;
+
+    if (!useGpuOverlay) {
+        fallbackWindow = SDL_CreateWindow(
+            "Parasite Eve - Save Screenshot", 680, 620, SDL_WINDOW_HIGH_PIXEL_DENSITY
+        );
+        if (!fallbackWindow) {
+            free(rgb);
+            return;
+        }
+        fallbackRenderer = SDL_CreateRenderer(fallbackWindow, NULL);
+        if (!fallbackRenderer) {
+            SDL_DestroyWindow(fallbackWindow);
+            free(rgb);
+            return;
+        }
+        SDL_PumpEvents();
+        SDL_FlushEvents(SDL_EVENT_WINDOW_FIRST, SDL_EVENT_WINDOW_LAST);
+    }
+
+    Psyz_PauseHostClock_SDL3(true);
+    int paused = Psyz_AudioIsPaused();
+    Psyz_AudioPause();
+    Host_ResetSpeedHold();
+
+    SDL_Window *inputWin = fallbackWindow ? fallbackWindow : game;
+    if (inputWin) {
+        SDL_StartTextInput(inputWin);
+    }
+
+    s_overlayState = (HostOverlayState){
+        .open = 1,
+        .row = SCREENSHOT_ROW_NOTE,
+        .dirty = 1,
+        .screenshot = 1,
+        .save_shot = 0,
+        .tag_index = 0,
+        .osk_open = 0,
+        .osk_row = 0,
+        .osk_col = 0
+    };
+    Host_FormatBackgroundSummary(
+        s_overlayState.bg_summary, sizeof(s_overlayState.bg_summary), &bg, room
+    );
+
+    while (s_overlayState.open) {
+        if (useGpuOverlay) {
+            Host_OverlayRefreshGPU(s_overlayGpuDevice, game, &s_overlayState);
+            Psyz_VideoVSync(0);
+        } else {
+            Host_OverlayRenderFallback(
+                fallbackRenderer,
+                fallbackWindow,
+                &s_overlayState,
+                &fallbackTexture,
+                &fallbackTexW,
+                &fallbackTexH
+            );
+            SDL_Event event;
+            if (SDL_WaitEventTimeout(&event, 20)) {
+                Host_ProcessSettingsEvent(&s_overlayState, &event, game, fallbackWindow);
+            }
+        }
+    }
+
+    if (inputWin) {
+        SDL_StopTextInput(inputWin);
+    }
+
+    int should_save = s_overlayState.save_shot;
+    int quit = s_overlayState.quit;
+    HostOverlayState finishedState = s_overlayState;
+    s_overlayState = (HostOverlayState){0};
+
+    if (should_save) {
+        Host_SaveAndUploadScreenshot(&finishedState, rgb, frameW, frameH, &bg, room);
+        Host_SaveOptions();
+    }
+    free(rgb);
+
+    if (fallbackTexture != NULL) {
+        SDL_DestroyTexture(fallbackTexture);
+    }
+    if (fallbackRenderer != NULL) {
+        SDL_DestroyRenderer(fallbackRenderer);
+    }
+    if (fallbackWindow != NULL) {
+        SDL_DestroyWindow(fallbackWindow);
+    }
+
+    SDL_ResetKeyboard();
+    Psyz_PauseHostClock_SDL3(false);
+    if (!paused) {
+        Psyz_AudioUnpause();
+    }
+    if (quit) {
+        SDL_Event event;
+        SDL_zero(event);
+        event.type = SDL_EVENT_QUIT;
+        SDL_PushEvent(&event);
+    }
+}
+
+static struct { SDL_JoystickID id; int held; } host_screenshot_pads[16];
+
+static bool Host_ScreenshotTriggerEvent(const SDL_Event *event, SDL_Window *game) {
+    int key = host_options.keys[HOST_SCREENSHOT_BINDING];
+    int button = host_options.buttons[HOST_SCREENSHOT_BINDING];
+    if (event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_KEY_UP) {
+        if (key == HOST_UNBOUND_KEY || (int)event->key.scancode != key) return false;
+        if (event->type == SDL_EVENT_KEY_DOWN && !event->key.repeat) {
+            Host_TakeScreenshot(game);
+        }
+        return true;
+    }
+    if (event->type == SDL_EVENT_GAMEPAD_REMOVED) {
+        for (unsigned i = 0; i < 16; ++i)
+            if (host_screenshot_pads[i].id == event->gdevice.which)
+                host_screenshot_pads[i].id = host_screenshot_pads[i].held = 0;
+        return false;
+    }
+    if (event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN ||
+        event->type == SDL_EVENT_GAMEPAD_BUTTON_UP) {
+        if (button < 0 || event->gbutton.button != button) return false;
+        if (event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
+            Host_TakeScreenshot(game);
+        }
+        return true;
+    }
+    if (event->type == SDL_EVENT_GAMEPAD_AXIS_MOTION) {
+        int axis = button == SDL_GAMEPAD_BUTTON_COUNT ? SDL_GAMEPAD_AXIS_LEFT_TRIGGER
+                 : button == SDL_GAMEPAD_BUTTON_COUNT + 1 ? SDL_GAMEPAD_AXIS_RIGHT_TRIGGER : -1;
+        if (axis < 0 || event->gaxis.axis != axis) return false;
+        SDL_JoystickID device = event->gaxis.which;
+        int was_held = 0;
+        unsigned slot = 16;
+        for (unsigned i = 0; i < 16; ++i) {
+            if (host_screenshot_pads[i].id == device) {
+                was_held = host_screenshot_pads[i].held;
+                slot = i;
+                break;
+            }
+        }
+        int held = event->gaxis.value > (was_held ? 8000 : 16000);
+        if (slot == 16 && held) {
+            for (unsigned i = 0; i < 16; ++i) {
+                if (!host_screenshot_pads[i].id) {
+                    slot = i;
+                    break;
+                }
+            }
+        }
+        if (slot < 16) {
+            host_screenshot_pads[slot].id = held ? device : 0;
+            host_screenshot_pads[slot].held = held;
+        }
+        if (held && !was_held) {
+            Host_TakeScreenshot(game);
+        }
+    }
+    return false;
+}
+
 static bool Host_SettingsEvent(const SDL_Event *event) {
 #ifdef PE_PS5_GPU_NATIVE
     if(s_install.active)return Host_InstallerEvent(event)!=0;
@@ -2778,6 +3562,9 @@ static bool Host_SettingsEvent(const SDL_Event *event) {
         if (!event->key.repeat) {
             Host_Settings(game);
         }
+        return true;
+    }
+    if (Host_ScreenshotTriggerEvent(event, game)) {
         return true;
     }
     return Host_SpeedHoldEvent(event);
@@ -2849,18 +3636,6 @@ static const char *Host_CrashFileName(const char *path) {
         if (*s == '/' || *s == '\\') name = s + 1;
     }
     return *name ? name : "(not set)";
-}
-
-/* The room number, decoded as mods/host/pe_game.c does (-1: the token is not
- * a room). Only reads values. */
-static int Host_CrashRoom(void) {
-    const unsigned token = (unsigned)g_SceneDispatchToken;
-    int room = 0;
-    for (int i = 2; i < 5 && room >= 0; ++i) {
-        const char c = (char)g_Base32CharTable[(token >> ((5 - i) * 5 + 2)) & 0x1Fu];
-        room = c >= '0' && c <= '9' ? room * 10 + (c - '0') : -1;
-    }
-    return room;
 }
 
 /* Crash report: what the game was doing and every desktop setting. Runs

@@ -73,7 +73,21 @@ enum {
     PROMPT_PANEL_W = 460,
     PROMPT_HEADER_H = 112,
     PROMPT_ROWS = 2, /* Yes, No */
-    PROMPT_FOOTER_H = 60
+    PROMPT_FOOTER_H = 60,
+
+    SCREENSHOT_PANEL_W = 600,
+    SCREENSHOT_HEADER_H = 112,
+    SCREENSHOT_ROW_TAG = 0,
+    SCREENSHOT_ROW_NOTE = 1,
+    SCREENSHOT_ROW_UPLOAD = 2,
+    SCREENSHOT_ROW_SAVE = 3,
+    SCREENSHOT_ROW_CANCEL = 4,
+    SCREENSHOT_ROWS = 5,
+    SCREENSHOT_OSK_ROWS = 4,
+    SCREENSHOT_OSK_COLS = 10,
+    SCREENSHOT_OSK_ROW_H = 38,
+    SCREENSHOT_OSK_H = 164,
+    SCREENSHOT_FOOTER_H = 68
 };
 
 typedef struct OverlaySurface {
@@ -111,8 +125,16 @@ typedef struct HostOverlayState {
     int quit;
     int dirty;
     const char *status;
-    int prompt; /* the skip-movie question instead of the settings panel */
-    int skip;   /* the question's answer */
+    int prompt;     /* the skip-movie question instead of the settings panel */
+    int skip;       /* the question's answer */
+    int screenshot; /* the screenshot note & report modal */
+    int save_shot;  /* 1 when confirmed to save (and optionally upload) */
+    int tag_index;  /* preset issue tag index */
+    int osk_open;   /* 1 when on-screen controller keyboard is open */
+    int osk_row;    /* 0..3 */
+    int osk_col;    /* 0..9 */
+    char note[128]; /* user sentence saved alongside the screenshot */
+    char bg_summary[128];
 } HostOverlayState;
 
 #ifdef PE_PS5_GPU_NATIVE
@@ -691,6 +713,35 @@ static OverlayRect OverlayPromptRowRect(int row) {
                          (float)OVERLAY_ROW_H};
 }
 
+static int OverlayScreenshotDesignHeight(const HostOverlayState *state) {
+    return SCREENSHOT_HEADER_H + SCREENSHOT_ROWS * OVERLAY_ROW_H +
+           (state->osk_open ? SCREENSHOT_OSK_H : 0) + OVERLAY_ACTION_GAP +
+           SCREENSHOT_FOOTER_H;
+}
+
+static OverlayRect OverlayScreenshotRowRect(const HostOverlayState *state, int row) {
+    float top = (float)(SCREENSHOT_HEADER_H + row * OVERLAY_ROW_H);
+    if (state->osk_open && row > SCREENSHOT_ROW_NOTE) {
+        top += (float)SCREENSHOT_OSK_H;
+    }
+    if (row >= SCREENSHOT_ROW_SAVE) {
+        top += (float)OVERLAY_ACTION_GAP;
+    }
+    return (OverlayRect){(float)(OVERLAY_PAD / 2), top,
+                         (float)(SCREENSHOT_PANEL_W - OVERLAY_PAD),
+                         (float)OVERLAY_ROW_H};
+}
+
+static OverlayRect OverlayScreenshotOskKeyRect(int oskRow, int oskCol) {
+    float pad = (float)OVERLAY_PAD;
+    float gridW = (float)SCREENSHOT_PANEL_W - 2.0f * pad;
+    float cellW = gridW / (float)SCREENSHOT_OSK_COLS;
+    float top = (float)(SCREENSHOT_HEADER_H + 2 * OVERLAY_ROW_H + 6) +
+                (float)oskRow * (float)SCREENSHOT_OSK_ROW_H;
+    return (OverlayRect){pad + (float)oskCol * cellW + 2.0f, top,
+                         cellW - 4.0f, (float)(SCREENSHOT_OSK_ROW_H - 4)};
+}
+
 static void OverlayComputeStateLayout(const HostOverlayState *state, int windowW,
                                       int windowH, OverlayLayout *layout) {
 #ifdef PE_PS5_GPU_NATIVE
@@ -699,6 +750,9 @@ static void OverlayComputeStateLayout(const HostOverlayState *state, int windowW
     if (state->prompt) {
         OverlayFitLayout(PROMPT_PANEL_W, OverlayPromptDesignHeight(), windowW, windowH,
                          layout);
+    } else if (state->screenshot) {
+        OverlayFitLayout(SCREENSHOT_PANEL_W, OverlayScreenshotDesignHeight(state), windowW,
+                         windowH, layout);
     } else {
         OverlayComputeLayout(state->page, windowW, windowH, layout);
     }
@@ -1133,6 +1187,9 @@ static const char *OverlayRowHelp(const HostOverlayState *state) {
         if (state->row == HOST_SPEED_MODE_ROW) {
             return "Hold: fast while the speed button is held. Toggle: each press switches it on or off.";
         }
+        if (state->row == HOST_SCREENSHOT_BINDING + 1) {
+            return "Capture a screenshot with note & background ID. Enter/South binds; Del/West unbinds.";
+        }
         return "Press Enter or South button to rebind. Duplicate bindings swap automatically.";
     }
     if (state->page == OVERLAY_PAGE_DISCS) {
@@ -1247,6 +1304,134 @@ static void OverlayPaintPrompt(OverlaySurface *surface, const HostOverlayState *
                   WithAlpha(kText, 0.10f));
     DrawText(surface, (float)OVERLAY_PAD * s, footerTop + 36.0f * s, 13.0f * s,
              "Up/Down select   Enter confirm   Esc keep watching",
+             WithAlpha(kMuted, 0.7f), ALIGN_LEFT);
+    solid = surface->pixels + (size_t)(surface->h - 1) * (size_t)surface->w * 4u;
+    solid[3] = 255;
+}
+
+static const char *const kScreenshotTagNames[] = {
+    "None",
+    "Background hallucination",
+    "Lighting / tint issue",
+    "Widescreen seam / edge",
+    "Depth / mask layering",
+    "Missing / wrong tile",
+    "Geometry / alignment"
+};
+
+static const char *const kScreenshotOskKeys[SCREENSHOT_OSK_ROWS][SCREENSHOT_OSK_COLS] = {
+    {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"},
+    {"k", "l", "m", "n", "o", "p", "q", "r", "s", "t"},
+    {"u", "v", "w", "x", "y", "z", "0", "1", "2", "3"},
+    {"4", "5", "6", "7", "8", "9", "Space", "Bksp", "Clear", "Done"}
+};
+
+static const char *Host_ScreenshotUploadUrl(void) {
+    const char *env = SDL_getenv("PE_SCREENSHOT_UPLOAD_URL");
+    if (env && *env) return env;
+    if (*host_options.screenshot_upload_url) return host_options.screenshot_upload_url;
+    return NULL;
+}
+
+static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlayState *state,
+                                   const OverlayLayout *layout) {
+    Painter painter = {surface, state, layout->scale};
+    const float s = layout->scale;
+    int designH = OverlayScreenshotDesignHeight(state);
+    float footerTop = (float)(designH - SCREENSHOT_FOOTER_H) * s;
+    const char *uploadUrl = Host_ScreenshotUploadUrl();
+    int tagIdx = ClampIndex(state->tag_index, COUNT_OF(kScreenshotTagNames));
+    uint8_t *solid;
+    int row;
+
+    memset(surface->pixels, 0, (size_t)surface->w * (size_t)surface->h * 4u);
+    PaintFrame(&painter, (float)SCREENSHOT_PANEL_W * s, (float)designH * s);
+    DrawText(surface, (float)OVERLAY_PAD * s, 40.0f * s, 26.0f * s, "Save screenshot",
+             kText, ALIGN_LEFT);
+    DrawText(surface, (float)(SCREENSHOT_PANEL_W - OVERLAY_PAD) * s, 38.0f * s, 14.0f * s,
+             "GAME PAUSED", kMuted, ALIGN_RIGHT);
+    DrawText(surface, (float)OVERLAY_PAD * s, 78.0f * s, 15.0f * s,
+             state->bg_summary[0] ? state->bg_summary : "Background ID: none",
+             WithAlpha(kAccent, 0.92f), ALIGN_LEFT);
+    FillRoundRect(surface, (float)OVERLAY_PAD * s, (float)(SCREENSHOT_HEADER_H - 12) * s,
+                  (float)(SCREENSHOT_PANEL_W - 2 * OVERLAY_PAD) * s, 1.0f, 0.0f,
+                  WithAlpha(kText, 0.10f));
+
+    for (row = 0; row < SCREENSHOT_ROWS; row++) {
+        OverlayRect rect = OverlayScreenshotRowRect(state, row);
+        float top = rect.y * s;
+        float mid = top + (float)OVERLAY_ROW_H * 0.5f * s;
+        float baseline = mid + 6.0f * s;
+        int selected = !state->osk_open && row == state->row;
+        Color label = selected ? kText : WithAlpha(kText, 0.82f);
+
+        if (selected || (state->osk_open && row == SCREENSHOT_ROW_NOTE)) {
+            FillRoundRect(surface, rect.x * s, top + 3.0f * s, rect.w * s,
+                          (float)(OVERLAY_ROW_H - 6) * s, 9.0f * s,
+                          WithAlpha(kAccent, 0.16f));
+            FillRoundRect(surface, rect.x * s + 4.0f * s, mid - 10.0f * s, 3.0f * s,
+                          20.0f * s, 1.5f * s, kAccent);
+        }
+
+        if (row == SCREENSHOT_ROW_TAG) {
+            PaintValueRow(&painter, "Issue tag", kScreenshotTagNames[tagIdx], mid, baseline,
+                          selected, 0, label);
+        } else if (row == SCREENSHOT_ROW_NOTE) {
+            char displayNote[140];
+            DrawText(surface, (float)OVERLAY_PAD * s, baseline, 17.0f * s, "Note", label,
+                     ALIGN_LEFT);
+            if (state->note[0] != '\0' || state->osk_open || selected) {
+                snprintf(displayNote, sizeof(displayNote), "%s%s", state->note,
+                         (selected || state->osk_open) ? "|" : "");
+                DrawText(surface, (float)(OVERLAY_PAD + 90) * s, baseline, 16.0f * s,
+                         displayNote, kText, ALIGN_LEFT);
+            } else {
+                DrawText(surface, (float)(OVERLAY_PAD + 90) * s, baseline, 15.0f * s,
+                         "Type or press Enter / South for keyboard...", kMuted, ALIGN_LEFT);
+            }
+        } else if (row == SCREENSHOT_ROW_UPLOAD) {
+            const char *val = !uploadUrl ? "Not configured"
+                              : (host_options.screenshot_auto_upload ? "On" : "Off");
+            PaintValueRow(&painter, "Auto-upload", val, mid, baseline, selected, 0, label);
+        } else if (row == SCREENSHOT_ROW_SAVE) {
+            const char *saveLabel = (uploadUrl && host_options.screenshot_auto_upload)
+                                        ? "Save & upload screenshot"
+                                        : "Save screenshot";
+            DrawText(surface, (float)OVERLAY_PAD * s, baseline, 17.0f * s, saveLabel,
+                     selected ? kAccent : label, ALIGN_LEFT);
+        } else if (row == SCREENSHOT_ROW_CANCEL) {
+            DrawText(surface, (float)OVERLAY_PAD * s, baseline, 17.0f * s, "Cancel",
+                     selected ? kDanger : label, ALIGN_LEFT);
+        }
+    }
+
+    if (state->osk_open) {
+        for (int r = 0; r < SCREENSHOT_OSK_ROWS; r++) {
+            for (int c = 0; c < SCREENSHOT_OSK_COLS; c++) {
+                OverlayRect cell = OverlayScreenshotOskKeyRect(r, c);
+                int active = (r == state->osk_row && c == state->osk_col);
+                FillRoundRect(surface, cell.x * s, cell.y * s, cell.w * s, cell.h * s,
+                              6.0f * s,
+                              active ? WithAlpha(kAccent, 0.35f) : WithAlpha(kText, 0.08f));
+                DrawText(surface, (cell.x + cell.w * 0.5f) * s,
+                         (cell.y + cell.h * 0.5f + 5.0f) * s, 14.0f * s,
+                         kScreenshotOskKeys[r][c], active ? kText : kMuted, ALIGN_CENTRE);
+            }
+        }
+    }
+
+    FillRoundRect(surface, (float)OVERLAY_PAD * s, footerTop,
+                  (float)(SCREENSHOT_PANEL_W - 2 * OVERLAY_PAD) * s, 1.0f, 0.0f,
+                  WithAlpha(kText, 0.10f));
+    const char *help = (state->status && state->status[0])
+                           ? state->status
+                       : state->osk_open
+                           ? "D-pad select key   South/Enter type   West Bksp   North Space   Start Done"
+                           : "Type note or press South/Enter on Note for controller keyboard. Start saves.";
+    DrawText(surface, (float)OVERLAY_PAD * s, footerTop + 26.0f * s, 14.0f * s, help, kMuted,
+             ALIGN_LEFT);
+    DrawText(surface, (float)OVERLAY_PAD * s, footerTop + 50.0f * s, 13.0f * s,
+             "Up/Down select   Left/Right change   Start/Enter save   Esc/East cancel",
              WithAlpha(kMuted, 0.7f), ALIGN_LEFT);
     solid = surface->pixels + (size_t)(surface->h - 1) * (size_t)surface->w * 4u;
     solid[3] = 255;
@@ -1650,6 +1835,8 @@ static void Host_OverlayRefreshGPU(
 #endif
     if (state->prompt) {
         OverlayPaintPrompt(&s_overlaySurface, state, &raster);
+    } else if (state->screenshot) {
+        OverlayPaintScreenshot(&s_overlaySurface, state, &raster);
     } else {
         OverlayPaint(&s_overlaySurface, state, &raster);
     }

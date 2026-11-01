@@ -803,6 +803,7 @@ if(BUILD_TESTING)
     target_sources(test-original-actor-animation PRIVATE $<TARGET_OBJECTS:parasite-eve-original-pad>)
     target_sources(test-original-input-rules PRIVATE $<TARGET_OBJECTS:parasite-eve-original-pad>)
     target_sources(test-host-settings PRIVATE $<TARGET_OBJECTS:parasite-eve-original-pad>
+        $<TARGET_OBJECTS:parasite-eve-original-camera>
         $<TARGET_OBJECTS:parasite-eve-original-disc> $<TARGET_OBJECTS:parasite-eve-original-actor-animation>)
 
     pe_add_common_unit_test(test-original-actor-lifecycle original-game-actor-lifecycle tests/original_actor_lifecycle.c

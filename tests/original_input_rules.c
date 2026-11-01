@@ -671,6 +671,213 @@ static void PromptAnswers(void) {
     fprintf(stderr, "host-settings: skip-movie question passed\n");
 }
 
+static int SDLCALL DriveScreenshotModal(void *unused) {
+    (void)unused;
+    WaitPanel();
+    SDL_Event text_ev;
+    SDL_zero(text_ev);
+    text_ev.type = SDL_EVENT_TEXT_INPUT;
+    text_ev.text.text = "seam on left door";
+    assert(SDL_PushEvent(&text_ev));
+    Key(SDL_SCANCODE_UP);     /* Note -> Issue tag */
+    Key(SDL_SCANCODE_RIGHT);  /* None -> Background hallucination */
+    Key(SDL_SCANCODE_DOWN);   /* Note */
+    Key(SDL_SCANCODE_DOWN);   /* Auto-upload */
+    Key(SDL_SCANCODE_DOWN);   /* Save */
+    Key(SDL_SCANCODE_RETURN); /* Confirm save */
+    return 0;
+}
+
+static void TestScreenshotFeature(void) {
+    /* 1. Screenshot binding defaults, rebinding, clearing, and TOML persistence. */
+    assert(host_options.keys[HOST_SCREENSHOT_BINDING] == HOST_UNBOUND_KEY);
+    assert(host_options.buttons[HOST_SCREENSHOT_BINDING] == HOST_UNBOUND_BUTTON);
+    assert(host_options.screenshot_auto_upload == 1);
+    assert(host_options.screenshot_upload_url[0] == '\0');
+
+    HostOverlayState bind_state = {
+        .open = 1,
+        .page = OVERLAY_PAGE_CONTROLS,
+        .row = HOST_SCREENSHOT_BINDING + 1,
+        .bind_device = HOST_BIND_KEYBOARD,
+        .capturing_binding = 1
+    };
+    SDL_Event key_ev;
+    SDL_zero(key_ev);
+    key_ev.type = SDL_EVENT_KEY_DOWN;
+    key_ev.key.scancode = SDL_SCANCODE_F12;
+    key_ev.key.down = true;
+    Host_ProcessSettingsEvent(&bind_state, &key_ev, NULL, NULL);
+    assert(!bind_state.capturing_binding);
+    assert(host_options.keys[HOST_SCREENSHOT_BINDING] == SDL_SCANCODE_F12);
+
+    bind_state.bind_device = HOST_BIND_CONTROLLER;
+    bind_state.capturing_binding = 1;
+    SDL_Event pad_ev;
+    SDL_zero(pad_ev);
+    pad_ev.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_MISC1;
+    Host_ProcessSettingsEvent(&bind_state, &pad_ev, NULL, NULL);
+    assert(!bind_state.capturing_binding);
+    assert(host_options.buttons[HOST_SCREENSHOT_BINDING] == SDL_GAMEPAD_BUTTON_MISC1);
+
+    char url_val[] = "\"https://example.invalid/webhook\"";
+    assert(Host_ParseOptionValue("screenshots", "upload_url", url_val));
+    assert(Host_ParseOptionValue("screenshots", "auto_upload", "false"));
+    assert(!strcmp(host_options.screenshot_upload_url, "https://example.invalid/webhook"));
+    assert(host_options.screenshot_auto_upload == 0);
+    assert(Host_SaveOptions());
+
+    host_options.keys[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_KEY;
+    host_options.buttons[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_BUTTON;
+    host_options.screenshot_upload_url[0] = '\0';
+    host_options.screenshot_auto_upload = 1;
+    Host_LoadOptions(host_options.user_file);
+    assert(host_options.keys[HOST_SCREENSHOT_BINDING] == SDL_SCANCODE_F12);
+    assert(host_options.buttons[HOST_SCREENSHOT_BINDING] == SDL_GAMEPAD_BUTTON_MISC1);
+    assert(!strcmp(host_options.screenshot_upload_url, "https://example.invalid/webhook"));
+    assert(host_options.screenshot_auto_upload == 0);
+
+    /* Clear optional Screenshot binding on both keyboard and controller. */
+    bind_state.bind_device = HOST_BIND_KEYBOARD;
+    key_ev.key.scancode = SDL_SCANCODE_DELETE;
+    Host_ProcessSettingsEvent(&bind_state, &key_ev, NULL, NULL);
+    assert(host_options.keys[HOST_SCREENSHOT_BINDING] == HOST_UNBOUND_KEY);
+
+    bind_state.bind_device = HOST_BIND_CONTROLLER;
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_WEST;
+    Host_ProcessSettingsEvent(&bind_state, &pad_ev, NULL, NULL);
+    assert(host_options.buttons[HOST_SCREENSHOT_BINDING] == HOST_UNBOUND_BUTTON);
+    host_options.screenshot_upload_url[0] = '\0';
+    host_options.screenshot_auto_upload = 1;
+    assert(Host_SaveOptions());
+
+    /* 2. Screenshot modal controller OSK & direct text input + surface paint. */
+    HostOverlayState shot = {
+        .open = 1,
+        .row = SCREENSHOT_ROW_NOTE,
+        .dirty = 1,
+        .screenshot = 1
+    };
+    SDL_strlcpy(shot.bg_summary, "Room 102   BG: 0123456789abcdef   Group: 0", sizeof(shot.bg_summary));
+
+    /* Open controller OSK on Note row. */
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    assert(shot.osk_open);
+
+    /* Type 'a' (0,0), move right to 'b' (0,1), type 'b', North (space), 'b', West (backspace). */
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_NORTH;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_WEST;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    assert(!strcmp(shot.note, "ab "));
+
+    /* Append physical keyboard text input as well. */
+    SDL_Event txt;
+    SDL_zero(txt);
+    txt.type = SDL_EVENT_TEXT_INPUT;
+    txt.text.text = "glitch";
+    Host_ProcessSettingsEvent(&shot, &txt, NULL, NULL);
+    assert(!strcmp(shot.note, "ab glitch"));
+
+    /* Paint screenshot overlay with OSK open. */
+    OverlayLayout shot_layout = {0};
+    OverlayComputeStateLayout(&shot, 1280, 720, &shot_layout);
+    OverlaySurface shot_surface = {0};
+    assert(OverlaySurfaceResize(&shot_surface, shot_layout.w, shot_layout.h));
+    OverlayPaintScreenshot(&shot_surface, &shot, &shot_layout);
+    SDL_Surface *shot_img = SDL_CreateSurfaceFrom(
+        shot_surface.w, shot_surface.h, SDL_PIXELFORMAT_RGBA32, shot_surface.pixels, shot_surface.w * 4
+    );
+    assert(shot_img);
+    char shot_bmp[4096];
+    snprintf(shot_bmp, sizeof(shot_bmp), "%s/screenshot-modal.bmp", test_directory);
+    assert(SDL_SaveBMP(shot_img, shot_bmp));
+    SDL_DestroySurface(shot_img);
+    OverlaySurfaceRelease(&shot_surface);
+
+    /* Press Start in OSK -> closes OSK and jumps to Save row; Start again -> saves. */
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_START;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    assert(!shot.osk_open && shot.row == SCREENSHOT_ROW_SAVE && shot.open);
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    assert(!shot.open && shot.save_shot == 1);
+
+    /* 3. End-to-end trigger via bound key, modal interaction, PNG + JSON verification. */
+    host_options.keys[HOST_SCREENSHOT_BINDING] = SDL_SCANCODE_F12;
+    struct GeomFixture {
+        GeomState header;
+        GeomEntry entry;
+        u32 pos[1];
+        u32 uv[2];
+    } geom_fixture;
+    memset(&geom_fixture, 0, sizeof(geom_fixture));
+    geom_fixture.header.entry_count06 = 1;
+    geom_fixture.header.entry_offset = (s32)offsetof(struct GeomFixture, entry);
+    geom_fixture.entry.head.b.flags = 2;
+    geom_fixture.entry.group = 0;
+    geom_fixture.entry.prim_count = 1;
+    geom_fixture.entry.u28.pos_ptr = (s32)(offsetof(struct GeomFixture, pos) - offsetof(struct GeomFixture, entry));
+    geom_fixture.entry.u2C.uv_ptr = (s32)(offsetof(struct GeomFixture, uv) - offsetof(struct GeomFixture, entry));
+    geom_fixture.pos[0] = 0x11223344u;
+    geom_fixture.uv[0] = 0x55667788u;
+    geom_fixture.uv[1] = 0x99aabbccu;
+    g_GeomState = &geom_fixture.header;
+    g_GeomScroll.state.position.groupSelect = 0;
+    Render_PrepareHdBackgrounds();
+    PeBackgroundInfo expected_bg;
+    Render_GetBackgroundInfo(&expected_bg);
+    assert(expected_bg.geometry_key != 0 && expected_bg.active_entry_count == 1);
+    char expected_geom_hex[17], expected_entry_hex[17];
+    snprintf(expected_geom_hex, sizeof(expected_geom_hex), "%016" PRIx64, expected_bg.geometry_key);
+    snprintf(expected_entry_hex, sizeof(expected_entry_hex), "%016" PRIx64, expected_bg.active_entry_keys[0]);
+
+    host_last_screenshot_png[0] = '\0';
+    host_last_screenshot_json[0] = '\0';
+
+    SDL_SetAtomicInt(&panel_ready, 0);
+    SDL_Thread *shot_thread = SDL_CreateThread(DriveScreenshotModal, "screenshot input", NULL);
+    assert(shot_thread);
+    key_ev.key.scancode = SDL_SCANCODE_F12;
+    assert(Host_SettingsEvent(&key_ev));
+    SDL_WaitThread(shot_thread, NULL);
+
+    assert(host_last_screenshot_png[0] != '\0');
+    assert(host_last_screenshot_json[0] != '\0');
+    size_t png_len = 0, json_len = 0;
+    unsigned char *png_data = (unsigned char *)SDL_LoadFile(host_last_screenshot_png, &png_len);
+    char *json_data = (char *)SDL_LoadFile(host_last_screenshot_json, &json_len);
+    static const unsigned char kPngSig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+    assert(png_data && png_len > 8 && !memcmp(png_data, kPngSig, 8));
+    assert(json_data && json_len > 0);
+
+    cJSON *meta = cJSON_ParseWithLength(json_data, json_len);
+    assert(meta);
+    assert(!strcmp(HdString(meta, "issue_tag"), "Background hallucination"));
+    assert(!strcmp(HdString(meta, "note"), "seam on left door"));
+    const cJSON *bg_meta = cJSON_GetObjectItemCaseSensitive(meta, "background");
+    assert(bg_meta);
+    assert(!strcmp(HdString(bg_meta, "hd_geometry_key"), expected_geom_hex));
+    const cJSON *entries_meta = cJSON_GetObjectItemCaseSensitive(bg_meta, "active_entry_keys");
+    assert(cJSON_IsArray(entries_meta) && cJSON_GetArraySize(entries_meta) == 1);
+    assert(!strcmp(cJSON_GetArrayItem(entries_meta, 0)->valuestring, expected_entry_hex));
+
+    cJSON_Delete(meta);
+    SDL_free(png_data);
+    SDL_free(json_data);
+    host_options.keys[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_KEY;
+    g_GeomState = NULL;
+    puts("PASS: screenshot binding, controller OSK, note input, PNG encoding and background ID JSON metadata");
+}
+
 static int SDLCALL ClosePanel(void *unused) {
     (void)unused;
     WaitPanel();
@@ -1267,6 +1474,7 @@ int main(int argc, char **argv) {
         }
     }
     assert(quits == 1 && !SDL_HasEvent(SDL_EVENT_QUIT));
+    TestScreenshotFeature();
     Psyz_AudioDestroy();
     fprintf(stderr, "host-settings: paused settings completed; checking disc images\n");
     PromptAnswers();

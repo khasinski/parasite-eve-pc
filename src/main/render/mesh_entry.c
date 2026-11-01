@@ -206,6 +206,29 @@ void Render_PrepareHdBackgrounds(void) {
     fprintf(stderr,"HD background geometry %016" PRIx64 " (%u entries)\n",hash,(unsigned)g_GeomState->entry_count06);
 }
 
+void Render_GetBackgroundInfo(PeBackgroundInfo *out) {
+    if (!out) return;
+    memset(out, 0, sizeof(*out));
+    out->geometry_key = hd_geometry_key;
+    out->hd_enabled = Psyz_GpuGetSpriteAtlasesEnabled() != 0;
+    out->hd_pack_path = hd_background_directory;
+    if (!g_GeomState) return;
+    unsigned group = g_GeomScroll.state.position.groupSelect;
+    out->active_group = group;
+    out->disp_x = (short)g_GeomState->out_disp_x;
+    out->disp_y = (short)g_GeomState->out_disp_y;
+    out->total_entry_count = g_GeomState->entry_count06;
+    if (group < HD_WIDE_GROUPS) out->widescreen_key = hd_wide[group].key;
+    if (!hd_geometry_key) return;
+    const GeomEntry *entries = (const void *)((const u8 *)g_GeomState + g_GeomState->entry_offset);
+    for (u32 i = 0; i < g_GeomState->entry_count06; ++i) {
+        if (entries[i].group == group && (entries[i].head.b.flags & 2)) {
+            if (out->active_entry_count < 16)
+                out->active_entry_keys[out->active_entry_count++] = Render_HdHash(hd_geometry_key, &i, 4);
+        }
+    }
+}
+
 /* Replace presentation metadata only. Never rebuild native mesh packets or
  * re-hash descriptors after scripts have animated them. */
 void Render_RefreshHdBackgrounds(void) {
