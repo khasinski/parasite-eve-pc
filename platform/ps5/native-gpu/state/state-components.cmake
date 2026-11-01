@@ -20,6 +20,8 @@ target_sources(parasite-eve-pc PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/pe_state_room_object.c"
     "${CMAKE_CURRENT_LIST_DIR}/pe_state_checkpoint.c"
     "${CMAKE_CURRENT_LIST_DIR}/pe_state_mirror.c"
+    "${CMAKE_CURRENT_LIST_DIR}/pe_state_theater_tasks.c"
+    "${CMAKE_CURRENT_LIST_DIR}/pe_state_field_models.c"
     "${CMAKE_CURRENT_LIST_DIR}/pe_state_globals.c"
     "${CMAKE_CURRENT_LIST_DIR}/pe_state_geometry.c"
     "${CMAKE_CURRENT_LIST_DIR}/pe_state_files.c"

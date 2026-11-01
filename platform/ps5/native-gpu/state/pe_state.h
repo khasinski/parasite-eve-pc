@@ -25,6 +25,12 @@ typedef int (*PeStatePrepare)(void *,const unsigned char *,size_t,int mode);
 typedef struct PeStateModule {uint32_t id,schema;size_t maximumBytes;PeStateCapture capture;void *context;PeStateValidate validate;PeStateRestore restore;PeStatePrepare prepare;} PeStateModule;
 typedef struct PeStateRegistry {PeStateModule modules[PE_STATE_MAX_CHUNKS];unsigned count;} PeStateRegistry;
 typedef struct PeStateBarrier {void *context;int (*begin)(void *,uint64_t *);int (*unchanged)(void *,uint64_t);void (*end)(void *);} PeStateBarrier;
+/* Bounded diagnostic witness only: never used to authorize or change restoration. */
+typedef struct PeStateFailure{uint32_t module,stage,rollbackModule,rollbackStage;}PeStateFailure;
+void PeState_ClearFailure(void);
+PeStateFailure PeState_LastFailure(void);
+const char*PeState_FailureStageText(uint32_t);
+const char*PeState_FailureOwnerText(uint32_t);
 int PeState_Register(PeStateRegistry *,PeStateModule);
 int PeState_RegisterBiosRng(PeStateRegistry *);
 int PeState_RegisterAkaoTracks(PeStateRegistry *);
@@ -33,6 +39,11 @@ int PeState_RegisterAudioSubset(PeStateRegistry *);
 int PeState_RegisterNativeVram(PeStateRegistry *);
 int PeState_RegisterNumericGte(PeStateRegistry *);
 /* Explicit partial COMPONENT transaction only; never restores an arbitrary game frame. */
+/* Distinct retained target and CURRENT rollback contexts. Exact module order,
+ * schema, size and mutation callbacks must match. Both graphs preflight before
+ * any write. Caller owns contexts/buffers for the entire cooperative barrier.
+ * This generic primitive does not authorize a changed-cohort game load. */
+int PeState_RestorePairedComponents(const PeStateRegistry *,const PeStateRegistry *,const PeStateBarrier *,const PeStateIdentity *,const unsigned char *,size_t,unsigned char *,size_t);
 int PeState_RestoreComponents(const PeStateRegistry *,const PeStateBarrier *,const PeStateIdentity *,const unsigned char *,size_t,unsigned char *,size_t);
 uint32_t PeState_MissingRuntime(const PeStateRegistry *);
 int PeState_Encode(unsigned char *,size_t,size_t *,uint32_t,uint64_t,const PeStateIdentity *,const PeStateChunk *,unsigned);

@@ -25,10 +25,10 @@
     "psyz": "deb979278b3a1bee4c0a4123587fb530afa4dfcf",
     "wholePinClaim": false
   },
-  "selectedNativeBuild": "dialogue-modern-owned-20261101-a1",
-  "selectedNativeEbootSha256": "b0ed11f15607101427f85dcf2e2104c8fa4b06ca5c4ac8a8ddffa1f4cf82d294",
-  "selectedSourceCohort": "975aa2e850f9ccabb792486a13538c7f76bbc6fa307ac9e3c5049b73bd6b88be",
-  "sourceRecords": 148,
+  "selectedNativeBuild": "field-models-theater-vfx-owned-20261101-a1",
+  "selectedNativeEbootSha256": "FB36C51386DE398A526CFC09CDFBD9C15D95EB59AF05B88D34E3717E9A895282",
+  "selectedSourceCohort": "56774FE0E778AF57FE44A3CD569021292C35E82EC36D837250D1E1608082E4FB",
+  "sourceRecords": 207,
   "SDLSourceMirrors": 40,
   "sourceOnly": true,
   "privatePackIndexIncluded": false,
@@ -40,7 +40,7 @@
   "publicFullBuildRun": false,
   "targetRun": false,
   "licenses": "Existing project default copyright retained; MIT only explicit marked files; dependency notices unchanged",
-  "supportStateInputs": 59,
+  "supportStateInputs": 71,
   "privateCharacterIndexIncluded": false,
   "gitExecuted": false
 }

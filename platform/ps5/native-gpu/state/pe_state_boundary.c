@@ -1,16 +1,20 @@
 #include "pe_state_boundary.h"
 #include <SDL3/SDL.h>
-static struct {SDL_ThreadID thread;uint64_t session,scene,frame;int servicing,locked,reentered;PeStateBoundaryWork work,cancel;void *context;} boundary;
-void PeStateBoundary_SceneChanged(void) {
+static struct {SDL_ThreadID thread;uint64_t session,scene,frame;int servicing,locked,reentered;unsigned reason;PeStateBoundaryWork work,cancel;void *context;} boundary;
+void PeStateBoundary_Invalidate(unsigned reason) {
+    if(reason!=PE_STATE_INVALIDATE_ROOM&&reason!=PE_STATE_INVALIDATE_NORMAL_LOAD)return;
     SDL_ThreadID thread=SDL_GetCurrentThreadID();
     if(!boundary.thread){boundary.thread=thread;boundary.session=SDL_GetPerformanceCounter();if(!boundary.session)boundary.session=1;}
     if(thread!=boundary.thread)return;
+    boundary.reason=reason;
     ++boundary.scene;if(!boundary.scene)++boundary.scene;
     ++boundary.frame;if(!boundary.frame)++boundary.frame;
     if(boundary.servicing)boundary.reentered=1;
     if(boundary.work&&boundary.cancel)boundary.cancel(boundary.context);
     boundary.work=0;boundary.cancel=0;boundary.context=0;
 }
+void PeStateBoundary_SceneChanged(void){PeStateBoundary_Invalidate(PE_STATE_INVALIDATE_ROOM);}
+unsigned PeStateBoundary_InvalidationReason(void){return boundary.reason;}
 int PeStateBoundary_RequestWithCancel(PeStateBoundaryWork work,PeStateBoundaryWork cancel,void *context) {
     if(!work||!boundary.thread||SDL_GetCurrentThreadID()!=boundary.thread||boundary.work||boundary.servicing)return PE_STATE_BUSY;
     boundary.work=work;boundary.cancel=cancel;boundary.context=context;return 0;

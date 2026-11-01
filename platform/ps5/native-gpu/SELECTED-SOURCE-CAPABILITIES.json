@@ -1,0 +1,50 @@
+{
+  "PE_PS5": true,
+  "PE_PS5_GPU_NATIVE": true,
+  "PE_NATIVE_STATE_CPU_COMPONENTS": true,
+  "PE_NATIVE_STATE_CHANGED_COHORTS": true,
+  "shadowDefault": "Original",
+  "shadowPreferenceControlMagic": "PEGPUC05",
+  "scope": "Manager explicitly selected current candidate; actual configure/cache/caller definitions must match before delivery",
+  "interpolation": {
+    "requestedDefault": true,
+    "requestedOffset": 996,
+    "effectiveOffset": 1000,
+    "zeroTailFrom": 1004,
+    "extraTarget": "1024*512*4*effectiveScale^2; transactional fallback; no resolution bump"
+  },
+  "fps": "Temporary actual accepted swapchain presentation commits; modal refreshes excluded",
+  "hdReload": {
+    "identity": "PEDUCK03",
+    "readonlyEpochOffset": 28,
+    "stagedIndex": true,
+    "cacheRetirement": "copied queue drain + witnessed GPU fence/idle",
+    "oldAtlasCells": "retained, never reused",
+    "preference": "unchanged by reload"
+  },
+  "normalLoadCheckpointInvalidation": "validated save links, before first live deserialize write",
+  "groundAccent": "Hybrid only; source-known BurstOrb authored floor; bounded shared queue",
+  "crossFlare": "M005/P117 phase2 joints9/20; original always retained; Hybrid only optional billboard; existing light switch/mode gates",
+  "glowQueue": "single8quad budget; kind0ember/1ground/2cross; exact source-family luminous policies",
+  "pm69": "source-world target context; reconstructed mask/roles checked before PM headers; full current rollback capture retained",
+  "actorTextures": {
+    "types": "nonplayer1..9,P4 only; real source/allocation guarded imminent actor draw",
+    "pageCapacity": 64,
+    "runtimeImmutableCacheBytes": 16777216,
+    "validatorEncodedTotal": 41943040,
+    "validatorDecodedTotal": 41943040,
+    "validatorEncodedImage": 4194304,
+    "validatorDecodedImage": 4194304,
+    "shaderChanges": false,
+    "geometryChanges": false
+  },
+  "theaterTasks": {
+    "schema": 13,
+    "magic": "PEPMID13",
+    "suffix": "PETCTX02",
+    "supported": "source-bound P115/P117 tasks including typed JointBeacon model-resource state; exact source/alias/constructed preflight",
+    "unsupported": "P118 and unknown task callbacks remain rejected"
+  },
+  "taskJointGuard": "bank-source-bounded header; P117required21; P115required1/26 from actual/captured third arg; current,target,constructed before writes",
+  "authored115118Vfx": "optional Hybrid accents and source-derived lights; capture generation checked again before use; explicit Original unchanged"
+}

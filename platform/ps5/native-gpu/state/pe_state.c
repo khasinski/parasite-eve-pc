@@ -1,4 +1,10 @@
 #include "pe_state.h"
+static PeStateFailure failure;
+void PeState_ClearFailure(void){failure=(PeStateFailure){0};}
+PeStateFailure PeState_LastFailure(void){return failure;}
+static void failed(uint32_t id,uint32_t stage){if(stage>=9&&stage<=11){if(!failure.rollbackStage){failure.rollbackModule=id;failure.rollbackStage=stage;}}else if(!failure.stage){failure.module=id;failure.stage=stage;}}
+const char*PeState_FailureStageText(uint32_t stage){static const char*const labels[]={"none","capture","capture-constructor-preflight","target-validate","rollback-capture","target-constructor-preflight","target-construct","post-construction-validate","target-restore","rollback-construct","rollback-validate","rollback-restore","barrier-begin","barrier-changed","buffer-bounds","rollback-constructor-preflight"};return stage<sizeof labels/sizeof*labels?labels[stage]:"unknown";}
+const char*PeState_FailureOwnerText(uint32_t id){static const char*const names[]={"none","original-save","rng","scene","scripts","actor-render-graph","battle","scheduler","audio","gpu-and-texture-owners","events","disc","mods","host","gte","asset-identity","akao","persistent-inventory","game-globals","pm-and-mod-private-state","geometry"};return id<sizeof names/sizeof*names?names[id]:"unknown";}
 #include <string.h>
 static uint32_t rd(const unsigned char *p){
     return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;
@@ -134,6 +140,7 @@ int PeState_Inspect(const unsigned char *in,size_t bytes,const PeStateIdentity *
     return 0;
 }
 int PeState_CapturePartial(const PeStateRegistry *r,const PeStateBarrier *barrier,const PeStateIdentity *identity,unsigned char *out,size_t cap,size_t *used){
+    PeState_ClearFailure();
     uint64_t epoch;
     size_t off=100;
     PeStateChunk chunks[16];
@@ -149,27 +156,27 @@ int PeState_CapturePartial(const PeStateRegistry *r,const PeStateBarrier *barrie
         j<i;
         j++)if(r->modules[j].id==m->id)return PE_STATE_INVALID;
     }
-    if(!barrier->begin(barrier->context,&epoch))return PE_STATE_BUSY;
+    if(!barrier->begin(barrier->context,&epoch)){failed(0,12);return PE_STATE_BUSY;}
     for(unsigned i=0;
     i<r->count;
     i++){
         const PeStateModule *m=&r->modules[i];
         size_t n=0;
         if(off>cap||cap-off<16||m->maximumBytes>cap-off-16){
-            result=PE_STATE_BOUNDS;
+            failed(m->id,14);result=PE_STATE_BOUNDS;
             break;
         }
         if(!m->capture(m->context,out+off+16,m->maximumBytes,&n)||!n||n>m->maximumBytes){
-            result=PE_STATE_INCOMPLETE;
+            failed(m->id,1);result=PE_STATE_INCOMPLETE;
             break;
         }
-        if(m->prepare&&m->prepare(m->context,out+off+16,n,-1)!=1){result=PE_STATE_INCOMPATIBLE;break;}
+        if(m->prepare&&m->prepare(m->context,out+off+16,n,-1)!=1){failed(m->id,2);result=PE_STATE_INCOMPATIBLE;break;}
         chunks[i]=(PeStateChunk){
             m->id,m->schema,out+off+16,n}
             ;
             off+=16+n;
         }
-        if(!result&&!barrier->unchanged(barrier->context,epoch))result=PE_STATE_BUSY;
+        if(!result&&!barrier->unchanged(barrier->context,epoch)){failed(0,13);result=PE_STATE_BUSY;}
         if(!result)result=PeState_Encode(out,cap,used,PE_STATE_PARTIAL,epoch,identity,chunks,r->count);
         barrier->end(barrier->context);
         if(result)*used=0;
@@ -198,14 +205,15 @@ int PeState_CapturePartial(const PeStateRegistry *r,const PeStateBarrier *barrie
 /* Prepare all component payloads and rollback images before the first write.
  * Only modules whose restore can reverse their own partial failure may register.
  * This remains a partial COMPONENT transaction; no full-frame loader exists. */
-int PeState_RestoreComponents(const PeStateRegistry *r,const PeStateBarrier *barrier,
+int PeState_RestorePairedComponents(const PeStateRegistry *r,const PeStateRegistry *current,const PeStateBarrier *barrier,
     const PeStateIdentity *identity,const unsigned char *input,size_t bytes,
     unsigned char *scratch,size_t scratchBytes) {
+    PeState_ClearFailure();
     PeStateInfo info;
     const unsigned char *payload[16];size_t lengths[16];
     unsigned char *rollback[16];size_t rollbackBytes[16];
     size_t offset=100,used=0;uint64_t epoch;int result;
-    if(!r||!r->count||r->count>16||!barrier||!barrier->begin||!barrier->unchanged||!barrier->end||!scratch||scratchBytes>PE_STATE_MAX_BYTES)return PE_STATE_INVALID;
+    if(!r||!current||current->count!=r->count||!r->count||r->count>16||!barrier||!barrier->begin||!barrier->unchanged||!barrier->end||!scratch||scratchBytes>PE_STATE_MAX_BYTES)return PE_STATE_INVALID;
     result=PeState_Inspect(input,bytes,identity,&info);if(result)return result;
     if(info.kind!=PE_STATE_PARTIAL||info.count!=r->count)return PE_STATE_INCOMPLETE;
     uintptr_t a=(uintptr_t)input,b=(uintptr_t)scratch;
@@ -213,6 +221,8 @@ int PeState_RestoreComponents(const PeStateRegistry *r,const PeStateBarrier *bar
     if(a<b+scratchBytes&&b<a+bytes)return PE_STATE_INVALID;
     for(unsigned i=0;i<r->count;i++) {
         const PeStateModule *module=&r->modules[i];int found=0;
+        const PeStateModule *previous=&current->modules[i];
+        if(previous->id!=module->id||previous->schema!=module->schema||previous->maximumBytes!=module->maximumBytes||previous->capture!=module->capture||previous->restore!=module->restore||previous->prepare!=module->prepare||previous->validate!=module->validate||!previous->validate)return PE_STATE_INCOMPATIBLE;
         if(!idvalid(module->id)||!module->schema||!module->capture||!module->validate||!module->restore||!module->maximumBytes||module->maximumBytes>PE_STATE_MAX_BYTES)return PE_STATE_INCOMPLETE;
         for(unsigned j=0;j<i;j++)if(r->modules[j].id==module->id)return PE_STATE_INVALID;
         offset=100;
@@ -226,32 +236,39 @@ int PeState_RestoreComponents(const PeStateRegistry *r,const PeStateBarrier *bar
         }
         if(!found)return PE_STATE_INCOMPLETE;
     }
-    if(!barrier->begin(barrier->context,&epoch))return PE_STATE_BUSY;
+    if(!barrier->begin(barrier->context,&epoch)){failed(0,12);return PE_STATE_BUSY;}
     result=PE_STATE_OK;
     for(unsigned i=0;i<r->count;i++) {
         const PeStateModule *module=&r->modules[i];
-        if(!module->validate(module->context,payload[i],lengths[i])){result=PE_STATE_INVALID;break;}
-        if(used>scratchBytes||module->maximumBytes>scratchBytes-used){result=PE_STATE_BOUNDS;break;}
+        if(!module->validate(module->context,payload[i],lengths[i])){failed(module->id,3);result=PE_STATE_INVALID;break;}
+        if(used>scratchBytes||module->maximumBytes>scratchBytes-used){failed(module->id,14);result=PE_STATE_BOUNDS;break;}
         rollback[i]=scratch+used;rollbackBytes[i]=0;
-        if(!module->capture(module->context,rollback[i],module->maximumBytes,&rollbackBytes[i])||!rollbackBytes[i]||rollbackBytes[i]>module->maximumBytes||!module->validate(module->context,rollback[i],rollbackBytes[i])){result=PE_STATE_INCOMPLETE;break;}
+        const PeStateModule *previous=&current->modules[i];
+        if(!previous->capture(previous->context,rollback[i],previous->maximumBytes,&rollbackBytes[i])||!rollbackBytes[i]||rollbackBytes[i]>previous->maximumBytes||!previous->validate(previous->context,rollback[i],rollbackBytes[i])){failed(module->id,4);result=PE_STATE_INCOMPLETE;break;}
         used+=rollbackBytes[i];
     }
-    if(!result&&!barrier->unchanged(barrier->context,epoch))result=PE_STATE_BUSY;
+    if(!result&&!barrier->unchanged(barrier->context,epoch)){failed(0,13);result=PE_STATE_BUSY;}
     int graphTouched=0;
-    if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(module->prepare&&module->prepare(module->context,payload[i],lengths[i],-1)!=1){result=PE_STATE_INCOMPATIBLE;break;}}
-    if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(module->prepare){int prepared=module->prepare(module->context,payload[i],lengths[i],0);if(prepared!=0)graphTouched=1;if(prepared!=1){result=PE_STATE_INCOMPLETE;break;}}}
-    if(!result&&!barrier->unchanged(barrier->context,epoch))result=PE_STATE_BUSY;
-    if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(!module->validate(module->context,payload[i],lengths[i])){result=PE_STATE_INCOMPATIBLE;break;}}
-    if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];graphTouched=1;if(!module->restore(module->context,payload[i],lengths[i])){result=PE_STATE_INCOMPLETE;break;}}
-    if(!result&&!barrier->unchanged(barrier->context,epoch))result=PE_STATE_BUSY;
+    if(!result&&current!=r)for(unsigned i=0;i<current->count;i++){const PeStateModule *module=&current->modules[i];if(module->prepare&&module->prepare(module->context,rollback[i],rollbackBytes[i],-1)!=1){failed(module->id,15);result=PE_STATE_INCOMPATIBLE;break;}}
+    if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(module->prepare&&module->prepare(module->context,payload[i],lengths[i],-1)!=1){failed(module->id,5);result=PE_STATE_INCOMPATIBLE;break;}}
+    if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(module->prepare){int prepared=module->prepare(module->context,payload[i],lengths[i],0);if(prepared!=0)graphTouched=1;if(prepared!=1){failed(module->id,6);result=PE_STATE_INCOMPLETE;break;}}}
+    if(!result&&!barrier->unchanged(barrier->context,epoch)){failed(0,13);result=PE_STATE_BUSY;}
+    if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(!module->validate(module->context,payload[i],lengths[i])){failed(module->id,7);result=PE_STATE_INCOMPATIBLE;break;}}
+    if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];graphTouched=1;if(!module->restore(module->context,payload[i],lengths[i])){failed(module->id,8);result=PE_STATE_INCOMPLETE;break;}}
+    if(!result&&!barrier->unchanged(barrier->context,epoch)){failed(0,13);result=PE_STATE_BUSY;}
     if(result&&graphTouched){
         /* A graph constructor may touch pools/equipment beyond its own chunk.
          * Reconstruct and restore ALL prior owners, never only a written prefix. */
         int prepared=1;
-        for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(module->prepare&&module->prepare(module->context,rollback[i],rollbackBytes[i],1)!=1){prepared=0;break;}}
-        if(prepared)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(!module->validate(module->context,rollback[i],rollbackBytes[i])){prepared=0;break;}}
-        if(prepared){for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(!module->restore(module->context,rollback[i],rollbackBytes[i]))result=PE_STATE_ROLLBACK_FAILED;}}
+        for(unsigned i=0;i<current->count;i++){const PeStateModule *module=&current->modules[i];if(module->prepare&&module->prepare(module->context,rollback[i],rollbackBytes[i],1)!=1){failed(module->id,9);prepared=0;break;}}
+        if(prepared)for(unsigned i=0;i<current->count;i++){const PeStateModule *module=&current->modules[i];if(!module->validate(module->context,rollback[i],rollbackBytes[i])){failed(module->id,10);prepared=0;break;}}
+        if(prepared){for(unsigned i=0;i<current->count;i++){const PeStateModule *module=&current->modules[i];if(!module->restore(module->context,rollback[i],rollbackBytes[i])){failed(module->id,11);result=PE_STATE_ROLLBACK_FAILED;}}}
         else result=PE_STATE_ROLLBACK_FAILED;
     }
     barrier->end(barrier->context);return result;
 }
+
+/* Original API preserves identical-context behavior and wire format. */
+int PeState_RestoreComponents(const PeStateRegistry*r,const PeStateBarrier*b,const PeStateIdentity*i,const unsigned char*in,size_t n,unsigned char*scratch,size_t cap){return PeState_RestorePairedComponents(r,r,b,i,in,n,scratch,cap);}
+
+

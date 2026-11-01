@@ -8,6 +8,8 @@ typedef struct PeActorConstruction {uint32_t alive,type,sub,full,slot,blocks,pac
 typedef struct PeActorConstructionPlan {uint32_t liveMask,usedBlockMask;PeActorConstruction actor[14];} PeActorConstructionPlan;
 /* Pure same-room source/slot preflight; does NOT destructively recreate actors. */
 int PeStateRender_GetConstructionPlan(const unsigned char *,size_t,PeActorConstructionPlan *);
+/* Read-only target parse: does not require the target actor set be live. */
+int PeStateRender_PreflightTarget(const unsigned char*,size_t);
 uint64_t PeStateRender_Revision(void);
 int PeStateRender_CurrentCandidateValid(const unsigned char *,size_t);
 int PeStateRender_BeginConstruction(void);

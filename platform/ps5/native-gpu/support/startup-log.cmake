@@ -67,9 +67,15 @@ target_sources(parasite-eve-pc PRIVATE
 
 set(PE_NATIVE_STATE_CPU_COMPONENTS ON)
 include("@ROOT@/state/state-components.cmake")
+# Manager explicitly selected typed same-run/current-room transactions.
+include("@ROOT@/state/state-bank-sources.cmake")
+include("@ROOT@/state/state-transition.cmake")
 
 include("@ROOT@/state/state-assists.cmake")
 
 # Optional dialogue glyph adapter; retained Plex/OFL and stb notices remain.
 target_sources(parasite-eve-pc PRIVATE "@ROOT@/game-src/src/main/render/dialogue_alpha.c")
 target_include_directories(parasite-eve-pc PRIVATE "@ROOT@/game-src/src/main/boot")
+
+# Native prepared character subset validation, no download or asset writes.
+target_sources(parasite-eve-pc PRIVATE "@ROOT@/game-src/src/main/boot/installer/pe_character_pack.c")

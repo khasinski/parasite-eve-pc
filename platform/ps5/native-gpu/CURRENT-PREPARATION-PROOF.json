@@ -1,7 +1,7 @@
 {
-  "schema": 2,
-  "selectedBuild": "dialogue-modern-owned-20261101-a1",
-  "selectedPrivateEboot": "b0ed11f15607101427f85dcf2e2104c8fa4b06ca5c4ac8a8ddffa1f4cf82d294",
+  "schema": 3,
+  "selectedBuild": "field-models-theater-vfx-owned-20261101-a1",
+  "selectedPrivateEboot": "fb36c51386de398a526cfc09cdfbd9c15d95eb59af05b88d34e3717e9a895282",
   "originalArchivePins": [
     {
       "name": "game",
@@ -22,36 +22,18 @@
       "archiveSha256": "7b36fe7f802450aa0c98af2e151159c6c8d0e28ea8b0e4356187a21c2d3680a1"
     }
   ],
-  "sourceRecordsVerified": 148,
+  "sourceRecordsVerified": 207,
   "SDLSourceMirrorsVerified": 40,
-  "supportStateSourceInputsVerified": 59,
+  "supportStateSourceInputsVerified": 71,
   "allSevenSelectedShaderHeadersReproduced": true,
   "compilerSha256": "9643709c02c83e26773f96b6a87f197ab2e84f78be0879ad8fb3619418b5d9ad",
-  "exactSourceOverlayNegativeCases": [
-    {
-      "test": "unlisted",
-      "rejected": true
-    },
-    {
-      "test": "traversal",
-      "rejected": true
-    },
-    {
-      "test": "stale-context",
-      "rejected": true
-    },
-    {
-      "test": "new-collision",
-      "rejected": true
-    }
-  ],
-  "publicNoPackVerifierActualSdkTuCompiles": true,
   "publicFullGameBuildRun": false,
+  "publicNoPackVerifierActualSdkTuCompiles": false,
   "privateNativeFullBuildIsSeparateEvidence": true,
   "privateBackgroundOrCharacterIndexesIncluded": false,
   "assetsSavesSettingsLogsCredentialsOrBinariesIncluded": false,
   "gitExecuted": false,
   "targetExecuted": false,
   "publicPublished": false,
-  "noPackVerifierStaticallyReturnsFalse": true
+  "auxiliaryHashAudit": true
 }

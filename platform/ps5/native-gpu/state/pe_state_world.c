@@ -3,6 +3,8 @@
 #include "pe_state_assets.h"
 #include "pe_state_node_types.h"
 #include "pe_state_lifetime.h"
+#include "pe_state_bank_sources.h"
+#include "pe1/collision_database.h"
 #include "pe1/entity_allocation.h"
 #include "pe1/entity_frame_update.h"
 #include "pe1/battle_runtime.h"
@@ -34,19 +36,35 @@ int PeWorld_RegisterScriptRegion(PeWorldState *s,uint32_t id,const unsigned char
     for(unsigned i=0;i<s->regionCount;i++){const PeWorldRegion *r=&s->regions[i];uintptr_t a=(uintptr_t)base,b=(uintptr_t)r->base;if(r->id==id||(a<b+r->bytes&&b<a+bytes))return PE_STATE_INVALID;}
     s->regions[s->regionCount++]=(PeWorldRegion){id,(uint32_t)bytes,checksum(base,bytes),base};s->regionBytes+=bytes;return 0;
 }
+static int source_role(const void*p,size_t bytes,PeWorldSourceRole*out){unsigned id;uint32_t offset;size_t available;uint64_t epoch;if(!PeStateBankSource_Locate(p,bytes,&id,&offset,&available,&epoch))return 0;*out=(PeWorldSourceRole){id,offset,epoch};return 1;}
+static int same_source(const void*p,size_t bytes,const PeWorldSourceRole*expected){PeWorldSourceRole now;return source_role(p,bytes,&now)&&now.source==expected->source&&now.offset==expected->offset&&now.epoch==expected->epoch;}
+static int retained_bindings_known(const PeWorldState*);
+/* Only source opcodes Set/ClearObjEntryFlag80 mutate triangle kind bit80.
+ * Other bytes remain source identity; blocked bits are explicitly serialized. */
+static uint32_t collision_crc(const PeWorldState*s){uint32_t crc=~0u;const unsigned char*p=s->collisionBase;size_t bytes=(size_t)s->collisionCount*s->collisionStride;for(size_t i=0;i<bytes;i++){unsigned v=p[i];if(i%s->collisionStride==0)v&=127;crc^=v;for(unsigned j=0;j<8;j++)crc=(crc>>1)^(0xedb88320u&-(int32_t)(crc&1));}return ~crc;}
+static int collision_layout(uint32_t*out){if(!out||(g_CollisionDb?g_CollisionDb->planes.pointer:0)!=g_CollisionPlaneTable)return 0;*out=g_CollisionDb?(g_CollisionPlaneTable?sizeof(CollisionTriangleXYZ):sizeof(CollisionTriangleXZ)):0;return 1;}
+static int snapshot_sources(PeWorldState*s){uint32_t stride;if(!collision_layout(&stride))return 0;s->storyDay=g_CurrentStoryDay[0];for(unsigned i=0;i<10;i++)for(unsigned j=0;j<48;j++)if(g_GameState.bank_rows[i][j]&&!source_role(g_GameState.bank_rows[i][j],1,&s->rowSources[i][j]))return 0;for(unsigned i=0;i<10;i++)if(g_GameState.bank_slots[i]&&!source_role(g_GameState.bank_slots[i],sizeof(RenderObjectHeader),&s->bankSources[i]))return 0;s->collisionBase=g_CollisionDb?g_CollisionDb->triangles.pointer:0;s->collisionCount=g_CollisionDb?g_CollisionDb->triangleCount:0;s->collisionStride=stride;if(s->collisionCount&&(!s->collisionBase||!source_role(s->collisionBase,(size_t)s->collisionCount*s->collisionStride,&s->collisionSource)))return 0;s->collisionCrc=collision_crc(s);return 1;}
+/* Immutable source compatibility is independent from actor allocation/cohort. */
+static int source_bound(const PeWorldState*s){uint32_t stride;if(!collision_layout(&stride))return 0;if(!s||!s->binding||!PeStateBoundary_AtCpuPoint()||s->geometryOwner!=g_GameState.geometry_state||s->assetGeneration!=PeStateAssets_Generation()||s->session!=PeStateBoundary_Session()||s->scene!=PeStateBoundary_SceneEpoch()||s->storyDay!=g_CurrentStoryDay[0])return 0;for(unsigned i=0;i<10;i++){if(g_GameState.bank_slots[i]){if(!same_source(g_GameState.bank_slots[i],sizeof(RenderObjectHeader),&s->bankSources[i]))return 0;}else if(s->bankSources[i].source)return 0;for(unsigned j=0;j<48;j++)if(s->bankRows[i][j]!=g_GameState.bank_rows[i][j]||(s->bankRows[i][j]&&!same_source(s->bankRows[i][j],1,&s->rowSources[i][j])))return 0;}if(s->collisionBase!=(g_CollisionDb?g_CollisionDb->triangles.pointer:0)||s->collisionCount!=(g_CollisionDb?g_CollisionDb->triangleCount:0)||s->collisionStride!=stride)return 0;if(s->collisionCount&&!same_source(s->collisionBase,(size_t)s->collisionCount*s->collisionStride,&s->collisionSource))return 0;if(collision_crc(s)!=s->collisionCrc)return 0;for(unsigned i=0;i<s->regionCount;i++)if(checksum(s->regions[i].base,s->regions[i].bytes)!=s->regions[i].crc)return 0;return retained_bindings_known(s);}
 int PeWorld_BindCurrentScene(PeWorldState *s){
     static uint64_t bindings;
     if(!PeStateBoundary_AtCpuPoint()||!s||!PeStateBoundary_Session()||!PeStateBoundary_SceneEpoch()||!live_mask(&s->liveMask))return PE_STATE_INCOMPLETE;
     s->session=PeStateBoundary_Session();s->scene=PeStateBoundary_SceneEpoch();s->binding=++bindings;if(!s->binding)s->binding=++bindings;
     s->assetGeneration=PeStateAssets_Generation();s->resourceEpoch=PeStateResource_Epoch();
-    memcpy(s->bankRows,g_GameState.bank_rows,sizeof s->bankRows);s->geometryOwner=g_GameState.geometry_state;
+    memcpy(s->bankRows,g_GameState.bank_rows,sizeof s->bankRows);s->geometryOwner=g_GameState.geometry_state;if(!snapshot_sources(s))return PE_STATE_INCOMPLETE;
     s->constructorPlayerId=actor_id(g_PlayerEntity);
     s->serialCounter=g_EntitySerialCounter;s->liveCount=g_EntityFreePoolCount;
-    for(unsigned i=0;i<14;i++){const FieldActor *a=&g_EntityPool[i];s->actor[i]=(PeWorldBinding){a->state,a->model_state.model_header,a->render_object.header,a->action_data,a->script_base,a->frame_callback,a->contact_callback,a->field_sfx_id};}
+    for(unsigned i=0;i<14;i++){const FieldActor *a=&g_EntityPool[i];s->actor[i]=(PeWorldBinding){a->state,a->model_state.model_header,a->render_object.header,a->action_data,a->script_base,a->frame_callback,a->contact_callback,a->field_sfx_id};s->actor[i].type=a->type_id;s->actor[i].sub=a->sub_id;if((s->liveMask&(1u<<i))&&!PeWorld_NativeActorRoles(a,&s->actor[i].coreRole,&s->actor[i].frameRole,&s->actor[i].contactRole))return PE_STATE_INCOMPLETE;}
     return 0;
 }
-static int bound(const PeWorldState *s){uint32_t mask;if(!PeStateBoundary_AtCpuPoint()||!s||!s->binding||s->geometryOwner!=g_GameState.geometry_state||s->resourceEpoch!=PeStateResource_Epoch()||s->assetGeneration!=PeStateAssets_Generation()||s->session!=PeStateBoundary_Session()||s->scene!=PeStateBoundary_SceneEpoch()||s->serialCounter!=g_EntitySerialCounter||s->liveCount!=g_EntityFreePoolCount||!live_mask(&mask)||mask!=s->liveMask)return 0;
-    for(unsigned i=0;i<14;i++)if(mask&(1u<<i)){const FieldActor *a=&g_EntityPool[i];const PeWorldBinding *b=&s->actor[i];if(b->state!=a->state||b->model!=a->model_state.model_header||b->header!=a->render_object.header||b->script!=a->script_base||b->frame!=a->frame_callback||b->contact!=a->contact_callback||b->serial!=a->field_sfx_id)return 0;}
+static int bound(const PeWorldState *s){uint32_t mask;if(!source_bound(s)||!s||!s->binding||s->geometryOwner!=g_GameState.geometry_state||s->resourceEpoch!=PeStateResource_Epoch()||s->assetGeneration!=PeStateAssets_Generation()||s->session!=PeStateBoundary_Session()||s->scene!=PeStateBoundary_SceneEpoch()||s->serialCounter!=g_EntitySerialCounter||s->liveCount!=g_EntityFreePoolCount||!live_mask(&mask)||mask!=s->liveMask)return 0;
+    for(unsigned i=0;i<14;i++)if(mask&(1u<<i)){const FieldActor *a=&g_EntityPool[i];const PeWorldBinding *b=&s->actor[i];if(b->type!=a->type_id||b->sub!=a->sub_id||b->state!=a->state||b->model!=a->model_state.model_header||b->header!=a->render_object.header||b->script!=a->script_base||b->frame!=a->frame_callback||b->contact!=a->contact_callback||b->serial!=a->field_sfx_id)return 0;}
+    for(unsigned i=0;i<10;i++)for(unsigned j=0;j<48;j++)if(s->bankRows[i][j]!=g_GameState.bank_rows[i][j])return 0;
+    for(unsigned i=0;i<s->regionCount;i++)if(checksum(s->regions[i].base,s->regions[i].bytes)!=s->regions[i].crc)return 0;return 1;
+}
+int PeWorld_IsCurrent(const PeWorldState*s){return bound(s);}
+static int constructed_bound(const PeWorldState *s){uint32_t mask;if(!source_bound(s)||!s||!s->binding||s->geometryOwner!=g_GameState.geometry_state||s->assetGeneration!=PeStateAssets_Generation()||s->session!=PeStateBoundary_Session()||s->scene!=PeStateBoundary_SceneEpoch()||s->serialCounter!=g_EntitySerialCounter||s->liveCount!=g_EntityFreePoolCount||!live_mask(&mask)||mask!=s->liveMask)return 0;
+    for(unsigned i=0;i<14;i++)if(mask&(1u<<i)){const FieldActor *a=&g_EntityPool[i];const PeWorldBinding *b=&s->actor[i];if(b->type!=a->type_id||b->sub!=a->sub_id||b->state!=a->state||b->model!=a->model_state.model_header||b->header!=a->render_object.header||b->script!=a->script_base||b->frame!=a->frame_callback||b->contact!=a->contact_callback||b->serial!=a->field_sfx_id)return 0;}
     for(unsigned i=0;i<10;i++)for(unsigned j=0;j<48;j++)if(s->bankRows[i][j]!=g_GameState.bank_rows[i][j])return 0;
     for(unsigned i=0;i<s->regionCount;i++)if(checksum(s->regions[i].base,s->regions[i].bytes)!=s->regions[i].crc)return 0;return 1;
 }
@@ -433,20 +451,23 @@ static void actor_restore(FieldActor *a,const uint32_t *values){
     a->mirror_line.z1=(unsigned short)values[122];
 }
 
-static uint32_t face_ref(PeWorldState *s,const void *p){if(!p)return 0;for(unsigned i=0;i<s->faceCount;i++)if(s->faces[i]==p)return i+1;if(s->faceCount==64)return UINT32_MAX;s->faces[s->faceCount++]=p;return s->faceCount;}
+/* Original collision producers select only the canonical triangle table. */
+static uint32_t face_ref(PeWorldState*s,const void*p){if(!p)return 0;if(!s->collisionBase||!s->collisionStride)return UINT32_MAX;uintptr_t value=(uintptr_t)p,base=(uintptr_t)s->collisionBase;if(value<base||value-base>=(size_t)s->collisionCount*s->collisionStride||(value-base)%s->collisionStride)return UINT32_MAX;return(uint32_t)((value-base)/s->collisionStride)+1;}
+static void*face_ptr(PeWorldState*s,uint32_t id){return id?(void*)((const unsigned char*)s->collisionBase+(size_t)(id-1)*s->collisionStride):0;}
 static uint32_t action_ref(const FieldActor *a){if(!a->action_data)return 0;if(a->type_id>=10)return UINT32_MAX;for(unsigned j=0;j<48;j++)if(g_GameState.bank_rows[a->type_id][j]==a->action_data)return j+1;return UINT32_MAX;}
 typedef struct ActorRecord {uint32_t alive,next,prev,parent,actionRef,faces[2],heads[3],values[ACTOR_VALUES];Ref script[3];} ActorRecord;
 typedef struct NodeRecord {uint32_t flags,seq,trigger,active,t14,t1c,t20,next,prev,targetKind,targetValue;Ref current,pending;} NodeRecord;
-typedef struct WorldDecoded {uint32_t actorHead,actorFree,player,currentActor,nodeFree,currentNode,sequence;Ref cursor;ActorRecord actor[14];NodeRecord node[72];uint32_t variables[512],activeFlags[64];} WorldDecoded;
+typedef struct WorldDecoded {uint32_t actorHead,actorFree,player,currentActor,nodeFree,currentNode,sequence;Ref cursor;ActorRecord actor[14];NodeRecord node[72];uint32_t variables[512],activeFlags[64],collisionBlocked[2048];} WorldDecoded;
 static int get_world(PeWorldState *,const unsigned char *,size_t,WorldDecoded *);
 static int put_world(void *context,unsigned char *out,size_t capacity,size_t *used){
     PeWorldState *s=context;Cursor c={0,out,capacity,0,1};if(used)*used=0;
     if(!s)return 0;s->lastError=PE_WORLD_READY;
     if(!used||!out||!bound(s)){s->lastError=PE_WORLD_UNBOUND;return 0;}
-    put(&c,0x34574c50u);put64(&c,s->session);put64(&c,s->scene);put64(&c,s->binding);
+    put(&c,0x35574c50u);put64(&c,s->session);put64(&c,s->scene);put64(&c,s->binding);
     put(&c,(uint32_t)g_SceneDispatchToken);put(&c,(uint32_t)g_SceneDispatchCur);
     put(&c,s->serialCounter);put(&c,s->liveCount);put(&c,s->liveMask);put(&c,s->regionCount);
     for(unsigned i=0;i<s->regionCount;i++){put(&c,s->regions[i].id);put(&c,s->regions[i].bytes);put(&c,s->regions[i].crc);}
+    put(&c,s->collisionCount);put(&c,s->collisionStride);put(&c,s->collisionCrc);for(unsigned w=0;w<(s->collisionCount+31)/32;w++){uint32_t bits=0;for(unsigned j=0;j<32&&w*32+j<s->collisionCount;j++){const CollisionTriangleHeader*h=(const void*)((const unsigned char*)s->collisionBase+(size_t)(w*32+j)*s->collisionStride);if(h->kind&128)bits|=1u<<j;}put(&c,bits);}
     put(&c,actor_id(g_FieldActorListHead));put(&c,actor_id(g_EntityFreeListHead));put(&c,actor_id(g_PlayerEntity));put(&c,actor_id(g_CurrentEntity));
     put(&c,node_id(g_ScriptNodeFreeListHead));put(&c,node_id(g_ScriptNodePool));putref(&c,s,g_ScriptCursor);
     put(&c,g_ScriptNodeSeqCounter[0]);
@@ -480,11 +501,12 @@ static int put_world(void *context,unsigned char *out,size_t capacity,size_t *us
 }
 static int chain_actor(const WorldDecoded *d,uint32_t head,int alive){uint32_t seen=0,previous=0;unsigned steps=0;while(head){if(head>14||steps++>=14||(seen&(1u<<(head-1))))return 0;const ActorRecord *a=&d->actor[head-1];if((int)a->alive!=alive||(alive&&a->prev!=previous))return 0;seen|=1u<<(head-1);previous=head;head=a->next;}for(unsigned i=0;i<14;i++)if((int)d->actor[i].alive==alive&&!(seen&(1u<<i)))return 0;return 1;}
 static int chain_nodes(const WorldDecoded *d,uint32_t head,uint32_t *owned,int freeList){uint32_t previous=0;unsigned steps=0;while(head){if(head>72||steps++>=72)return 0;unsigned i=head-1;if(owned[i/32]&(1u<<(i%32)))return 0;owned[i/32]|=1u<<(i%32);const NodeRecord *n=&d->node[i];if(!freeList&&n->prev!=previous)return 0;if(freeList&&(n->current.region||n->pending.region))return 0;previous=head;head=n->next;}return 1;}
-static int get_world(PeWorldState *s,const unsigned char *data,size_t bytes,WorldDecoded *d){
-    Cursor c={data,0,bytes,0,1};if(!data||!d||bytes>PE_WORLD_MAX_BYTES||!bound(s))return 0;memset(d,0,sizeof *d);
-    if(get(&c)!=0x34574c50u||get64(&c)!=s->session||get64(&c)!=s->scene||get64(&c)!=s->binding)return 0;
+static int get_world_mode(PeWorldState *s,const unsigned char *data,size_t bytes,WorldDecoded *d,int target){
+    Cursor c={data,0,bytes,0,1};if(!data||!d||bytes>PE_WORLD_MAX_BYTES||!(target?source_bound(s):bound(s)))return 0;memset(d,0,sizeof *d);
+    if(get(&c)!=0x35574c50u||get64(&c)!=s->session||get64(&c)!=s->scene||get64(&c)!=s->binding)return 0;
     if(get(&c)!=(uint32_t)g_SceneDispatchToken||get(&c)!=(uint32_t)g_SceneDispatchCur||get(&c)!=s->serialCounter||get(&c)!=s->liveCount||get(&c)!=s->liveMask||get(&c)!=s->regionCount)return 0;
     for(unsigned i=0;i<s->regionCount;i++)if(get(&c)!=s->regions[i].id||get(&c)!=s->regions[i].bytes||get(&c)!=s->regions[i].crc)return 0;
+    if(get(&c)!=s->collisionCount||get(&c)!=s->collisionStride||get(&c)!=s->collisionCrc)return 0;unsigned collisionWords=(s->collisionCount+31)/32;if(collisionWords>2048)return 0;for(unsigned w=0;w<collisionWords;w++)d->collisionBlocked[w]=get(&c);if(collisionWords&&(s->collisionCount%32)&&(d->collisionBlocked[collisionWords-1]>>(s->collisionCount%32)))return 0;
     d->actorHead=get(&c);d->actorFree=get(&c);d->player=get(&c);d->currentActor=get(&c);d->nodeFree=get(&c);d->currentNode=get(&c);d->cursor=getref(&c,s);d->sequence=get(&c);
     if(d->actorHead>14||d->actorFree>14||d->player>14||d->currentActor>14||d->nodeFree>72||d->currentNode>72||d->sequence>65535)return 0;
     if((d->player&&!(s->liveMask&(1u<<(d->player-1))))||(d->currentActor&&!(s->liveMask&(1u<<(d->currentActor-1)))))return 0;
@@ -494,8 +516,8 @@ static int get_world(PeWorldState *s,const unsigned char *data,size_t bytes,Worl
         a->prev=get(&c);a->parent=get(&c);if(a->prev>14||a->parent>14||a->parent==i+1)return 0;
         for(unsigned j=0;j<3;j++){a->heads[j]=get(&c);if(a->heads[j]>72)return 0;}
         for(unsigned j=0;j<3;j++)a->script[j]=getref(&c,s);
-        a->actionRef=get(&c);if(a->actionRef>48)return 0;a->faces[0]=get(&c);a->faces[1]=get(&c);if(a->faces[0]>s->faceCount||a->faces[1]>s->faceCount)return 0;
-        if(!actor_read(&c,a->values)||a->values[0]!=g_EntityPool[i].type_id||a->values[1]!=g_EntityPool[i].sub_id||a->values[10]!=s->actor[i].serial)return 0;
+        a->actionRef=get(&c);if(a->actionRef>48)return 0;a->faces[0]=get(&c);a->faces[1]=get(&c);if(a->faces[0]>s->collisionCount||a->faces[1]>s->collisionCount)return 0;
+        if(!actor_read(&c,a->values)||a->values[0]!=s->actor[i].type||a->values[1]!=s->actor[i].sub||a->values[10]!=s->actor[i].serial)return 0;
         if(a->actionRef&&(a->values[0]>=10||!s->bankRows[a->values[0]][a->actionRef-1]))return 0;
         if(a->parent&&!(s->liveMask&(1u<<(a->parent-1))))return 0;
     }
@@ -511,13 +533,16 @@ static int get_world(PeWorldState *s,const unsigned char *data,size_t bytes,Worl
     for(unsigned i=0;i<14;i++)if(d->actor[i].alive)for(unsigned j=0;j<3;j++)if(!chain_nodes(d,d->actor[i].heads[j],owned,0))return 0;
     return 1;
 }
-static int validate_world(void *context,const unsigned char *data,size_t bytes){WorldDecoded decoded;return get_world(context,data,bytes,&decoded);}
+static int get_world(PeWorldState*s,const unsigned char*data,size_t bytes,WorldDecoded*d){return get_world_mode(s,data,bytes,d,0);}
+int PeWorld_PreflightTarget(PeWorldState*s,const unsigned char*data,size_t bytes){WorldDecoded d;return get_world_mode(s,data,bytes,&d,1);}
+static int validate_world(void *context,const unsigned char *data,size_t bytes){PeWorldState*s=context;WorldDecoded decoded;return s&&s->targetMode?get_world_mode(s,data,bytes,&decoded,1):get_world(s,data,bytes,&decoded);}
 static int restore_world(void *context,const unsigned char *data,size_t bytes){
-    PeWorldState *s=context;WorldDecoded d;if(!get_world(s,data,bytes,&d))return 0;
+    PeWorldState *s=context;WorldDecoded d;if(!s||!(s->targetMode?constructed_bound(s)&&get_world_mode(s,data,bytes,&d,1):get_world(s,data,bytes,&d)))return 0;
     /* Every reference and whole graph is checked before the first live write. */
+    for(unsigned i=0;i<s->collisionCount;i++){CollisionTriangleHeader*h=(void*)((unsigned char*)s->collisionBase+(size_t)i*s->collisionStride);h->kind=(u8)((h->kind&127u)|(((d.collisionBlocked[i/32]>>(i%32))&1u)<<7));}
     for(unsigned i=0;i<14;i++){
         FieldActor *a=&g_EntityPool[i];ActorRecord *v=&d.actor[i];a->next=actor_ptr(v->next);if(!v->alive)continue;
-        actor_restore(a,v->values);a->action_data=v->actionRef?s->bankRows[v->values[0]][v->actionRef-1]:0;a->collision_face=v->faces[0]?(void *)s->faces[v->faces[0]-1]:0;a->collision_face_mirror=v->faces[1]?(void *)s->faces[v->faces[1]-1]:0;a->prev=actor_ptr(v->prev);a->parent=actor_ptr(v->parent);
+        actor_restore(a,v->values);a->action_data=v->actionRef?s->bankRows[v->values[0]][v->actionRef-1]:0;a->collision_face=face_ptr(s,v->faces[0]);a->collision_face_mirror=face_ptr(s,v->faces[1]);a->prev=actor_ptr(v->prev);a->parent=actor_ptr(v->parent);
         for(unsigned j=0;j<3;j++)a->script_node_lists[j]=node_ptr(v->heads[j]);
         a->script_base=decode_ref(s,v->script[0]);a->script_cursor_19c=decode_ref(s,v->script[1]);a->script_cursor_1a0=decode_ref(s,v->script[2]);
     }
@@ -535,7 +560,7 @@ static int restore_world(void *context,const unsigned char *data,size_t bytes){
     g_ScriptNodeFreeListHead=node_ptr(d.nodeFree);g_ScriptNodePool=node_ptr(d.currentNode);g_ScriptCursor=decode_ref(s,d.cursor);g_ScriptNodeSeqCounter[0]=(unsigned short)d.sequence;
     return 1;
 }
-int PeState_RegisterWorldSubset(PeStateRegistry *registry,PeWorldState *context){PeStateModule module={PE_STATE_SCENE,4,PE_WORLD_MAX_BYTES,put_world,context,validate_world,restore_world,0};return PeState_Register(registry,module);}
+int PeState_RegisterWorldSubset(PeStateRegistry *registry,PeWorldState *context){PeStateModule module={PE_STATE_SCENE,5,PE_WORLD_MAX_BYTES,put_world,context,validate_world,restore_world,0};return PeState_Register(registry,module);}
 
 int PeWorld_BindLoadedScene(PeWorldState *state){
     PeScriptAsset asset;
@@ -546,19 +571,24 @@ int PeWorld_BindLoadedScene(PeWorldState *state){
     return PeWorld_BindCurrentScene(state);
 }
 
+static uint32_t native_core_id(const void*p){if(!p)return 0;if(p==(const void*)&g_AyaBattleState)return 1;for(unsigned i=0;i<7;i++)if(p==(const void*)&g_BattleEnemySlots[i].combatant)return 2+i;return UINT32_MAX;}
+static void*native_core_ptr(uint32_t id){return !id?0:id==1?(void*)&g_AyaBattleState:id<=8?(void*)&g_BattleEnemySlots[id-2].combatant:0;}
+int PeWorld_NativeActorRoles(const FieldActor*a,uint32_t*core,uint32_t*frame,uint32_t*contact){if(!a||!core||!frame||!contact||a->type_id>=13)return 0;unsigned type=a->type_id;PeScriptAsset asset;if(!PeStateAssets_Get(&asset)||type>=asset.count||a->script_base!=asset.view->offsets[type])return 0;*core=native_core_id(a->state);if(*core==UINT32_MAX)return 0;*frame=!a->frame_callback?0:a->frame_callback==g_FieldActorTypeCallbacks[type].frame?1:UINT32_MAX;*contact=!a->contact_callback?0:a->contact_callback==g_FieldActorTypeCallbacks[type].contact?1:a->contact_callback==Entity_CheckActionIdMatch?2:UINT32_MAX;return *frame!=UINT32_MAX&&*contact!=UINT32_MAX;}
+static int retained_bindings_known(const PeWorldState*s){PeScriptAsset asset;if(!PeStateAssets_Get(&asset))return 0;for(unsigned i=0;i<14;i++)if(s->liveMask&(1u<<i)){const PeWorldBinding*b=&s->actor[i];unsigned type=b->type;if(type>=13||type>=asset.count||b->sub>255||b->coreRole>8||b->frameRole>1||b->contactRole>2||native_core_ptr(b->coreRole)!=b->state||b->script!=asset.view->offsets[type]||b->model!=(type<10?g_GameState.bank_slots[type]:0)||b->header!=b->model)return 0;if((b->frameRole?g_FieldActorTypeCallbacks[type].frame:0)!=b->frame||(b->contactRole==2?Entity_CheckActionIdMatch:b->contactRole?g_FieldActorTypeCallbacks[type].contact:0)!=b->contact)return 0;if(b->action){int found=0;if(type<10)for(unsigned j=0;j<48;j++)if(b->action==s->bankRows[type][j])found=1;if(!found)return 0;}}return 1;}
 static int known_core(const void *p){if(!p||p==(const void *)&g_AyaBattleState)return 1;for(unsigned i=0;i<7;i++)if(p==(const void *)&g_BattleEnemySlots[i].combatant)return 1;return 0;}
+int PeWorld_ValidateTargetConstruction(const PeWorldState*s,const uint32_t types[14],uint32_t mask){if(!types||!source_bound(s)||mask!=s->liveMask||!s->constructorPlayerId||s->constructorPlayerId>14||!(mask&(1u<<(s->constructorPlayerId-1))))return 0;unsigned count=0;for(unsigned i=0;i<14;i++)if(mask&(1u<<i)){if(types[i]!=s->actor[i].type)return 0;count++;}return count==s->liveCount;}
 int PeWorld_ValidateEquivalentConstruction(const PeWorldState *s,const uint32_t types[14],uint32_t mask){
     if(!s||!types||!PeStateBoundary_AtCpuPoint()||!s->binding||s->liveMask!=mask||s->geometryOwner!=g_GameState.geometry_state||s->resourceEpoch!=PeStateResource_Epoch()||s->assetGeneration!=PeStateAssets_Generation()||s->session!=PeStateBoundary_Session()||s->scene!=PeStateBoundary_SceneEpoch())return 0;
     unsigned count=0;for(unsigned i=0;i<14;i++)if(mask&(1u<<i))count++;if(count!=s->liveCount||!s->constructorPlayerId||s->constructorPlayerId>14||!(mask&(1u<<(s->constructorPlayerId-1))))return 0;
     for(unsigned i=0;i<10;i++)for(unsigned j=0;j<48;j++)if(s->bankRows[i][j]!=g_GameState.bank_rows[i][j])return 0;
     for(unsigned i=0;i<s->regionCount;i++)if(checksum(s->regions[i].base,s->regions[i].bytes)!=s->regions[i].crc)return 0;
     PeScriptAsset asset;if(!PeStateAssets_Get(&asset))return 0;
-    for(unsigned i=0;i<14;i++)if(mask&(1u<<i)){const PeWorldBinding *b=&s->actor[i];unsigned type=types[i];if(type>=13||type>=asset.count||!known_core(b->state)||b->script!=asset.view->offsets[type]||b->frame!=g_FieldActorTypeCallbacks[type].frame||(b->contact!=g_FieldActorTypeCallbacks[type].contact&&b->contact!=Entity_CheckActionIdMatch)||b->model!=(type<10?g_GameState.bank_slots[type]:0))return 0;if(b->model&&b->header!=b->model)return 0;}
+    for(unsigned i=0;i<14;i++)if(mask&(1u<<i)){const PeWorldBinding *b=&s->actor[i];unsigned type=types[i];if(b->coreRole>8||b->frameRole>1||b->contactRole>2||native_core_ptr(b->coreRole)!=b->state||(b->frameRole?g_FieldActorTypeCallbacks[type<13?type:0].frame:0)!=b->frame||(b->contactRole==2?Entity_CheckActionIdMatch:b->contactRole?g_FieldActorTypeCallbacks[type<13?type:0].contact:0)!=b->contact)return 0;if(type>=13||type>=asset.count||!known_core(b->state)||b->script!=asset.view->offsets[type]||b->frame!=g_FieldActorTypeCallbacks[type].frame||(b->contact!=g_FieldActorTypeCallbacks[type].contact&&b->contact!=Entity_CheckActionIdMatch)||b->model!=(type<10?g_GameState.bank_slots[type]:0))return 0;if(b->model&&b->header!=b->model)return 0;}
     return 1;
 }
 int PeWorld_RestoreConstructorBindings(PeWorldState *s){
     if(!s||!PeStateResource_IsRebuilding()||g_EntityFreePoolCount!=s->liveCount)return 0;
     uint32_t mask;if(!live_mask(&mask)||mask!=s->liveMask)return 0;
-    for(unsigned i=0;i<14;i++)if(mask&(1u<<i)){FieldActor *a=&g_EntityPool[i];const PeWorldBinding *b=&s->actor[i];if(!known_core(b->state))return 0;a->state=(FieldActorState *)b->state;a->frame_callback=b->frame;a->contact_callback=b->contact;a->field_sfx_id=b->serial;a->script_base=(unsigned char *)b->script;}
-    g_EntitySerialCounter=s->serialCounter;g_PlayerEntity=actor_ptr(s->constructorPlayerId);return bound(s);
+    for(unsigned i=0;i<14;i++)if(mask&(1u<<i)){FieldActor *a=&g_EntityPool[i];const PeWorldBinding *b=&s->actor[i];if(b->coreRole>8||b->frameRole>1||b->contactRole>2||native_core_ptr(b->coreRole)!=b->state)return 0;unsigned type=a->type_id;if(type>=13)return 0;a->state=(FieldActorState*)native_core_ptr(b->coreRole);a->frame_callback=b->frameRole?g_FieldActorTypeCallbacks[type].frame:0;a->contact_callback=b->contactRole==2?Entity_CheckActionIdMatch:b->contactRole?g_FieldActorTypeCallbacks[type].contact:0;a->field_sfx_id=b->serial;a->script_base=(unsigned char *)b->script;}
+    g_EntitySerialCounter=s->serialCounter;g_PlayerEntity=actor_ptr(s->constructorPlayerId);return s->targetMode?constructed_bound(s):bound(s);
 }

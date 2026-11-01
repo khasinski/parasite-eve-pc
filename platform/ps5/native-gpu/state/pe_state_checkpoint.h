@@ -5,5 +5,7 @@ enum PeCheckpointBlocker {PE_CHECKPOINT_SUPPORTED_IDLE=0,PE_CHECKPOINT_NOT_AT_CP
 int PeStateCheckpoint_Boundary(void);
 int PeState_RegisterGeometry(PeStateRegistry *);
 int PeState_RegisterGameGlobals(PeStateRegistry *);
+struct PeWorldState;
+int PeState_RegisterCheckpointOwnersForGraph(PeStateRegistry*,struct PeWorldState*);
 int PeState_RegisterCheckpointOwners(PeStateRegistry *);
 #endif
