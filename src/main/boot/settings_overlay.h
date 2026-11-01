@@ -235,7 +235,7 @@ static const OverlaySetting *OverlayPageSettings(int page, int *count) {
 
 static int Host_SettingsPureRowCount(int page) {
     if (page == OVERLAY_PAGE_GRAPHICS) return COUNT_OF(kGraphics);
-    if (page == OVERLAY_PAGE_CONTROLS) return 2 + HOST_BINDING_COUNT;
+    if (page == OVERLAY_PAGE_CONTROLS) return 3 + HOST_BINDING_COUNT;
     if (page == OVERLAY_PAGE_AUDIO) return COUNT_OF(kAudio);
     if (page == OVERLAY_PAGE_MODS) return 3;
     return 2;
@@ -246,7 +246,7 @@ static int Host_SettingsTotalRowCount(int page) {
 }
 
 enum {
-    OVERLAY_CONTROLS_ITEM_COUNT = HOST_BINDING_COUNT + 1,
+    OVERLAY_CONTROLS_ITEM_COUNT = HOST_BINDING_COUNT + 2,
     OVERLAY_CONTROLS_VISIBLE_BINDINGS = OVERLAY_VISIBLE_CONTROLS - 1,
     OVERLAY_CONTROLS_MAX_SCROLL = OVERLAY_CONTROLS_ITEM_COUNT - OVERLAY_CONTROLS_VISIBLE_BINDINGS
 };
@@ -729,6 +729,9 @@ static void PaintRows(const Painter *p) {
                     char value[32];
                     snprintf(value, sizeof(value), "%u%%", host_options.analog_run_threshold);
                     PaintValueRow(p, "Field run threshold", value, mid, baseline, selected, 0, label);
+                } else if (row == HOST_SPEED_MODE_ROW) {
+                    PaintValueRow(p, "Speed button", host_options.speed_toggle ? "Toggle" : "Hold",
+                                  mid, baseline, selected, 0, label);
                 } else {
                     int idx = row - 1;
                     int capturing = selected && p->state->capturing_binding;
@@ -819,7 +822,12 @@ static const char *OverlayRowHelp(const HostOverlayState *state) {
             return "Left-stick deflection needed to run in the field. Lower values start running sooner.";
         }
         if (state->row == HOST_SPEED_BINDING + 1) {
-            return "Hold to speed up. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds.";
+            return host_options.speed_toggle
+                       ? "Press to speed up, again for normal. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds."
+                       : "Hold to speed up. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds.";
+        }
+        if (state->row == HOST_SPEED_MODE_ROW) {
+            return "Hold: fast while the speed button is held. Toggle: each press switches it on or off.";
         }
         return "Press Enter or South button to rebind. Duplicate bindings swap automatically.";
     }

@@ -10,7 +10,8 @@
 - Fixed a battle crash when a delayed hit lands on an already released target.
 - Memory cards: import saves copied beside the game after the first launch, and automatically open the active memory card in the save editor.
 - Redesigned Mod Catalog with native Tune Up panels and independent scrolling, and upgraded the Wardrobe menu with a Bestiary-style browser and 3D previews.
-- Added optional stacked consumables (`pe_stacks`) and story checkpoint Warp menu (`pe_warp`) mods.
+- Added a **Hold / Toggle** mode for the speed-up button in **Escape → Controls**.
+- Added optional stacked consumables (`pe_stacks`), story checkpoint Warp (`pe_warp`), 10-slot quick save (`pe_quicksave`, F10/F11/F12) and Cheats (`pe_cheats`) mods.
 - Added optional language pack support (`pe_lang`) with multilingual fonts, localization build tools and a Latin American Spanish interface pilot.
 
 ## 0.8

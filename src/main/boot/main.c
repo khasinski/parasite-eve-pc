@@ -47,8 +47,10 @@ static struct {
     int effect_geometry_correction;
     int hd_backgrounds;
     int fullscreen;
-    /* 2..PSYZ_SPEED_MAX, used while the speed binding is held */
+    /* 2..PSYZ_SPEED_MAX, used while the speed binding is held (or toggled on) */
     unsigned speed_factor;
+    /* 1: the speed binding switches the speed-up on and off instead of holding it */
+    int speed_toggle;
     unsigned analog_run_threshold;
     /* 16 pad buttons, then the speed hold (unbound by default) */
     int keys[17];
@@ -63,6 +65,7 @@ static int Host_SaveOptions(void);
 #define HOST_BINDING_COUNT 17
 #define HOST_SPEED_BINDING 16
 #define HOST_ANALOG_RUN_ROW (HOST_BINDING_COUNT + 1)
+#define HOST_SPEED_MODE_ROW (HOST_BINDING_COUNT + 2)
 #define HOST_UNBOUND_KEY SDL_SCANCODE_UNKNOWN
 #define HOST_UNBOUND_BUTTON -1
 
@@ -86,9 +89,12 @@ static void Host_SetSpeed(unsigned speed) {
 
 static int host_speed_key_held;
 static struct { SDL_JoystickID id; int held; } host_speed_pads[16];
+/* Toggle mode: the binding was down at the last event, and whether the speed-up is on. */
+static int host_speed_was_held, host_speed_toggled;
 
 static void Host_ResetSpeedHold(void) {
     host_speed_key_held = 0;
+    host_speed_was_held = host_speed_toggled = 0;
     memset(host_speed_pads, 0, sizeof(host_speed_pads));
     Host_SetSpeed(1);
 }
@@ -468,6 +474,11 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
             return 0;
         }
         host_options.speed_factor = (unsigned)v;
+    } else if (!strcmp(section, "game") && !strcmp(key, "speed_toggle")) {
+        if (v > 1) {
+            return 0;
+        }
+        host_options.speed_toggle = v;
     } else if (!strcmp(section, "keyboard") || !strcmp(section, "controller")) {
         for (unsigned i = 0; i < HOST_BINDING_COUNT; ++i) {
             if (!strcmp(key, host_button_names[i])) {
@@ -593,7 +604,8 @@ static int Host_SaveOptions(void) {
         "[audio]\n"
         "volume = %u\n\n"
         "[game]\n"
-        "speed = %u\n\n"
+        "speed = %u\n"
+        "speed_toggle = %s\n\n"
         "[controls]\n"
         "field_run_threshold = %u\n\n"
         "[discs]\n"
@@ -611,6 +623,7 @@ static int Host_SaveOptions(void) {
         host_options.effect_geometry_correction ? "true" : "false",
         host_options.volume,
         host_options.speed_factor,
+        host_options.speed_toggle ? "true" : "false",
         host_options.analog_run_threshold
     );
     Host_WriteString(file, host_options.discs[0]);
@@ -894,6 +907,7 @@ static void Host_InitOptions(int enabled) {
     host_options.hd_backgrounds = 1;
     host_options.volume = 100;
     host_options.speed_factor = 2;
+    host_options.speed_toggle = 0;
     host_options.analog_run_threshold = 85;
     Boot_InitHostBindings();
     for (unsigned i = 0; i < 16; ++i) {
@@ -1324,6 +1338,9 @@ static void Host_ApplySettingsAction(
         if (threshold < 0) threshold = 0;
         if (threshold > 100) threshold = 100;
         host_options.analog_run_threshold = (unsigned)threshold;
+    } else if (state->page == HOST_PAGE_CONTROLS && state->row == HOST_SPEED_MODE_ROW) {
+        host_options.speed_toggle = !host_options.speed_toggle;
+        Host_ResetSpeedHold();
     } else if (state->row == 0) {
         state->bind_device = (state->bind_device == HOST_BIND_CONTROLLER)
                                  ? HOST_BIND_KEYBOARD
@@ -1434,9 +1451,10 @@ static void Host_ProcessSettingsPointer(
     if (hitRow >= 0) {
         int pureCount = Host_SettingsPureRowCount(state->page);
         int isStepper = hitRow < pureCount &&
-                        !(state->page == HOST_PAGE_CONTROLS && hitRow >= 1 && hitRow != HOST_ANALOG_RUN_ROW) &&
+                        !(state->page == HOST_PAGE_CONTROLS && hitRow >= 1 && hitRow != HOST_ANALOG_RUN_ROW &&
+                          hitRow != HOST_SPEED_MODE_ROW) &&
                         state->page != HOST_PAGE_IMAGES &&
-                        !(state->page==HOST_PAGE_MODS && hitRow>0);
+                        !(state->page == HOST_PAGE_MODS && hitRow > 0);
         int action = isStepper ? (x < OverlayValueCentre() ? -1 : 1) : 1;
         Host_ApplySettingsAction(state, action, !isStepper, game);
     }
@@ -1953,6 +1971,11 @@ static bool Host_SpeedHoldEvent(const SDL_Event *event) {
     }
     int any = host_speed_key_held;
     for (unsigned i = 0; i < 16; ++i) any |= host_speed_pads[i].held;
+    if (host_options.speed_toggle) {
+        if (any && !host_speed_was_held) host_speed_toggled = !host_speed_toggled;
+        host_speed_was_held = any;
+        any = host_speed_toggled;
+    }
     Host_SetSpeed(any ? host_options.speed_factor : 1);
     return consumed; /* axis and removal events still reach the pad backend */
 }
@@ -2063,7 +2086,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
                      "dithering %s, geometry correction %s, antialiasing %s, model textures %s, "
                      "dynamic lighting %s, effect geometry %s\r\n"
                      "Audio: master volume %u%%\r\n"
-                     "Controls: speed-up %ux while held, field run threshold %u\r\n"
+                     "Controls: speed-up %ux while %s, field run threshold %u\r\n"
                      "Discs: disc 1 %s, disc 2 %s\r\n",
                      host_options.enabled && *host_options.user_file ? Host_CrashFileName(host_options.user_file)
                                                                       : "none (defaults, not saved)",
@@ -2074,6 +2097,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
                      kSwitchNames[host_options.dynamic_lighting != 0],
                      kSwitchNames[host_options.effect_geometry_correction != 0],
                      host_options.volume, host_options.speed_factor,
+                     host_options.speed_toggle ? "toggled on" : "held",
                      host_options.analog_run_threshold, Host_CrashFileName(host_options.discs[0]),
                      Host_CrashFileName(host_options.discs[1]));
     Host_CrashAppend(out, size, &used, "Keyboard:");
