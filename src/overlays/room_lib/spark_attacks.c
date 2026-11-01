@@ -22,6 +22,9 @@
 #include "pe1/room_line_burst.h"
 #include "pe1/room_sound_slot.h"
 #include "pe1/room_spark_attacks.h"
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/particle_augment.h"
+#endif
 
 static const GteRotation s_BurstOrbRingRotation = { 0x400, 0, 0, 1 };
 static const GteRotation s_BurstOrbRotation = { 0, 0, 0, 0 };
@@ -253,7 +256,13 @@ int RoomEffect_BurstOrbParticle(int mode, void *data, intptr_t argument) {
                 palette = g_FieldFxPaletteTable[kind];
                 if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
                 clut = GetClut(0, palette);
+#ifdef PE_PS5_GPU_NATIVE
+                FieldFx_BeginBurstGroundGlow(shadow.x,shadow.y,shadow.z);
+#endif
                 FieldFx_DrawShapeQuads(&shadow, &shadowRotation, 0x3000, 0x3000, 0, clut, 3, 0x50, 0);
+#ifdef PE_PS5_GPU_NATIVE
+                FieldFx_EndBurstGroundGlow();
+#endif
             }
             return 0;
         case 1:
@@ -299,8 +308,15 @@ int RoomEffect_BurstOrbParticle(int mode, void *data, intptr_t argument) {
             palette = g_FieldFxPaletteTable[kind];
             if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
             clut = GetClut(0x10, palette);
+            #ifdef PE_PS5_GPU_NATIVE
+            FieldFx_BeginFallingOriginal();
+#endif
             FieldFx_DrawShapeQuads((GteShortVector *)spark, 0, scale * 9 / 4, scale * 9 / 4,
                           (s16)g_FieldFxSpriteParams.parameter02 * size + 0x20, clut, 1, 0x80, 0);
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_EndFallingOriginal();
+            FieldFx_QueueBurstOrbDebris(spark->x,spark->y,spark->z,spark->timer,(unsigned)spark->state);
+#endif
             return 0;
         }
         case 3: {
@@ -318,9 +334,16 @@ int RoomEffect_BurstOrbParticle(int mode, void *data, intptr_t argument) {
             palette = g_FieldFxPaletteTable[kind];
             if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
             clut = GetClut(0x30, palette);
+            #ifdef PE_PS5_GPU_NATIVE
+            FieldFx_BeginFallingOriginal();
+#endif
             FieldFx_DrawShapeQuads((GteShortVector *)spark, 0, scale * 3, scale * 3,
                           (s16)g_FieldFxSpriteParams.parameter02 * (s16)((s16)spark->timer / 6) + 0x80,
                           clut, 1, fade, 0);
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_EndFallingOriginal();
+            FieldFx_QueueBurstOrbDebris(spark->x,spark->y,spark->z,spark->timer,(unsigned)spark->state);
+#endif
             break;
         }
         case 4:
@@ -507,9 +530,16 @@ int RoomEffect_DampedSparkParticle(int mode, void *data, intptr_t argument) {
             palette = g_FieldFxPaletteTable[kind];
             if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
             clut = GetClut(0x10, palette);
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_BeginFallingOriginal();
+#endif
             FieldFx_DrawShapeQuads((GteShortVector *)spark, 0, 0xC00, 0xC00,
                           (s16)g_FieldFxSpriteParams.parameter02 * scale + 0x20, clut, 1,
                           0x80, 0);
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_EndFallingOriginal();
+            FieldFx_QueueDampedSpark(spark->x,spark->y,spark->z,spark->timer,(unsigned)spark->state);
+#endif
             break;
         }
         case 1: {
@@ -522,9 +552,16 @@ int RoomEffect_DampedSparkParticle(int mode, void *data, intptr_t argument) {
             palette = g_FieldFxPaletteTable[kind];
             if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
             clut = GetClut(0x30, palette);
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_BeginFallingOriginal();
+#endif
             FieldFx_DrawShapeQuads((GteShortVector *)spark, 0, scale, scale,
                           (s16)g_FieldFxSpriteParams.parameter02 * ((s16)spark->timer / 4) + 0x80,
                           clut, 1, 0x60, 0);
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_EndFallingOriginal();
+            FieldFx_QueueDampedSpark(spark->x,spark->y,spark->z,spark->timer,(unsigned)spark->state);
+#endif
             break;
         }
         }

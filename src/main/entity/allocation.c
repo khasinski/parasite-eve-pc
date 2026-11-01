@@ -1,3 +1,8 @@
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_node_types.h"
+#include "pe_state_lifetime.h"
+#include "pe_state_actor_prepare.h"
+#endif
 #include "common.h"
 #include "pe1/entity_allocation.h"
 #include "pe1/entity_frame_update.h"
@@ -40,6 +45,10 @@ static inline void Scene_LinkContactTask(FieldActor *self, FieldActor *other)
             node->flags |= 1;
             node->trigger_value = other->field_sfx_id;
             node->target18.coordinate = other->type_id;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+
+            PeStateNode_Tag(node, PE_NODE_COORDINATE);
+#endif
             node->target1c = other->sub_id;
             head = self->script_node_lists[1];
             if (head != 0) {
@@ -216,6 +225,10 @@ void Scene_UpdateEntityPositions(void)
 
 
 void *Entity_AllocBlock(u32 size) {
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    void *restored=0;int prepared=PeStateActor_ConsumeAllocation(size,&restored);
+    if(prepared)return prepared>0?restored:0;
+#endif
     s32 blocks;
     u8 slot;
     u32 count;
@@ -260,6 +273,9 @@ void *Entity_AllocBlock(u32 size) {
                 g_EntityAllocationTable[slot].blockCount = count;
                 address = (uintptr_t)(scratch + slot * ENTITY_ALLOCATION_BLOCK_SIZE);
                 g_EntityAllocationTable[slot].address = address;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+                PeStateResource_Changed();
+#endif
                 return (void *)address;
             }
         } else {
@@ -281,6 +297,9 @@ void Entity_FreeAllocationBlock(uintptr_t arg0) {
     while ((unsigned int)(i & 0xFF) < 0x10U) {
         if (g_EntityAllocationTable[i & 0xFF].address == arg0) {
             g_EntityAllocationTable[i & 0xFF].address = 0;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+            PeStateResource_Changed();
+#endif
             return;
         }
         i++;

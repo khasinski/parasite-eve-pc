@@ -176,3 +176,10 @@ void pe_pe_balance_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_POWER_COST, pe_power_cost, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SPELL, pe_on_spell, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_rebalance.h"
+int pe_rb_pebalance_walk(const unsigned char*in,unsigned char*out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_rb_pebalance_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_S(w,s_rules,0,2,1);PE_CK_S(w,s_rules_shown,-1,2,0);for(int i=0;i<PE_ROWS;i++){int value=*s_rows[i].value;PE_CK_S(w,value,s_rows[i].min,s_rows[i].max,1);}for(int i=0;i<20;i++)PE_CK_S(w,s_quick[i],0,1,1);
+return pe_rb_finish(&w);}
+#endif

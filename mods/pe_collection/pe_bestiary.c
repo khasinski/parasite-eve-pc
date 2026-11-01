@@ -36,6 +36,9 @@ static int s_maps;
 static PeBestiaryResolver s_resolver[PE_MAX_RESOLVERS];
 static int s_resolvers;
 static int s_event = -1;
+static uint32_t s_checkpoint_epoch=1;
+static void pe_checkpoint_changed(void){if(s_checkpoint_epoch<UINT32_MAX)++s_checkpoint_epoch;}
+
 
 static int pe_valid(int h) { return h >= 0 && h < s_creatures; }
 
@@ -51,6 +54,7 @@ static int pe_add(const PeCreatureInfo *info) {
         pe_mod_log("pe_collection", "bestiary: creature %s refused", info && info->key ? info->key : "?");
         return -1;
     }
+    pe_checkpoint_changed();
     s_creature[s_creatures] = info;
     return s_creatures++;
 }
@@ -59,6 +63,7 @@ static const PeCreatureInfo *pe_info(int h) { return pe_valid(h) ? s_creature[h]
 
 static int pe_replace(int h, const PeCreatureInfo *info) {
     if (!pe_valid(h) || !info || !info->key || strcmp(info->key, s_creature[h]->key) != 0) return 0;
+    pe_checkpoint_changed();
     s_creature[h] = info;
     return 1;
 }
@@ -67,8 +72,9 @@ static int pe_map(int room, unsigned identity, int h) {
     int i;
     if (!pe_valid(h) || room < 0) return 0;
     for (i = 0; i < s_maps; ++i)
-        if (s_map[i].room == room && s_map[i].identity == identity) { s_map[i].handle = (int16_t)h; return 1; }
+        if (s_map[i].room == room && s_map[i].identity == identity) { pe_checkpoint_changed(); s_map[i].handle = (int16_t)h; return 1; }
     if (s_maps == PE_MAX_MAPPINGS) return 0;
+    pe_checkpoint_changed();
     s_map[s_maps].room = (uint16_t)room;
     s_map[s_maps].identity = (uint16_t)identity;
     s_map[s_maps++].handle = (int16_t)h;
@@ -77,6 +83,7 @@ static int pe_map(int room, unsigned identity, int h) {
 
 static int pe_add_resolver(PeBestiaryResolver fn) {
     if (!fn || s_resolvers == PE_MAX_RESOLVERS) return 0;
+    pe_checkpoint_changed();
     s_resolver[s_resolvers++] = fn;
     return 1;
 }
@@ -134,6 +141,7 @@ static int pe_set_model(int h, int form, const PeModelSource *src) {
     if (!pe_valid(h) || form < 0 || form >= PE_BESTIARY_MAX_FORMS || !src || src->kind == PE_MODEL_NONE ||
         src->kind > PE_MODEL_CALLBACK || (src->kind == PE_MODEL_SKIN && (!src->folder || !*src->folder)) ||
         (src->kind == PE_MODEL_CALLBACK && !src->load)) return 0;
+    pe_checkpoint_changed();
     s_model[h][form] = *src;
     return 1;
 }
@@ -485,3 +493,12 @@ void pe_bestiary_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_battle, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_SPELL, pe_on_spell, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_collection.h"
+int pe_bestiary_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){
+if(s_checkpoint_epoch==UINT32_MAX)return 0;if(apply&&(!in||!pe_bestiary_checkpoint_walk(in,0,0)))return 0;
+PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_creatures,0,PE_MAX_CREATURES,1);PE_CK_S(w,s_maps,0,PE_MAX_MAPPINGS,1);PE_CK_S(w,s_resolvers,0,PE_MAX_RESOLVERS,1);PE_CK_S(w,s_event,-1,INT_MAX,1);
+for(unsigned i=0;i<PE_ENEMY_SLOTS;i++){PE_CK_S(w,s_slot[i].tracking,0,1,0);PE_CK_U(w,s_slot[i].entity_id,0,255,0);PE_CK_U(w,s_slot[i].identity,0,65535,0);PE_CK_S(w,s_slot[i].hp,INT_MIN,INT_MAX,0);}return w.ok&&w.at==132;
+}
+#endif

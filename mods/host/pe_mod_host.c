@@ -8,6 +8,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef PE_PS5_PLUGINS
+#include <SDL3/SDL_log.h>
+#endif
 
 #include "pe_game.h"
 #include "pe_main_menu.h"
@@ -81,13 +84,21 @@ void pe_log(const char *tag, const char *fmt, ...) {
     va_end(args);
     if (!play && !tried) {
         tried = 1;
-        if (pe_mod_path(path, sizeof(path), "pe_play.log") == 0) play = fopen(path, "a");
+#ifdef PE_PS5_PLUGINS
+        /* Keep play events in the same opt-in session as CRT and mod output. */
+        (void)path;
+#else
+        if (pe_mod_path(path, sizeof(path), "pe_play.log") == 0) { play = fopen(path, "a"); }
+#endif
     }
     if (play) {
         fprintf(play, "%s %s\n", tag, text);
         fflush(play);
     }
-    if (event < 0) event = pe_event_id(PE_EVENT_LOG_LINE);
+#ifdef PE_PS5_PLUGINS
+    fprintf(stderr, "[play] %s %s\n", tag, text);
+#endif
+    if (event < 0) { event = pe_event_id(PE_EVENT_LOG_LINE); }
     line.tag = tag;
     line.text = text;
     pe_event_emit(event, &line);                 /* e.g. the detailed play log copies it */
@@ -226,6 +237,8 @@ static void pe_shutdown_mods(void) {
     s_log = NULL;
 }
 
+void pe_mods_shutdown_now(void){pe_shutdown_mods();}
+
 /* ---- Manage mods (F1): every built-in mod, on or off from the next start ----
  * "All mods" first, OFF by default: until a player turns it on, no mod starts and the game plays
  * as the original (only F1 and this page are there, to turn it on). Then a toggle per mod. All are
@@ -233,39 +246,78 @@ static void pe_shutdown_mods(void) {
  * start at all (nor do the mods that need it). */
 static int s_all_on;
 static int s_mod_on[PE_MAX_MODS];
-static char s_mod_note[PE_MAX_MODS][160];
+static char s_mod_note[PE_MAX_MODS][192];
+static char s_all_note[192];
+static int s_manage_count, s_manage_ready, s_boot_all;
+static int s_boot_mod_on[PE_MAX_MODS], s_boot_state[PE_MAX_MODS];
+enum { PE_MOD_RUNNING, PE_MOD_OFF, PE_MOD_NEEDS, PE_MOD_FAILED, PE_MOD_ALL_OFF };
+static int pe_manage_requested(int i, unsigned visiting) {
+    const char *const *req; int j;
+    if(!s_all_on || !s_mod_on[i] || (visiting & (1u << i)))return 0;
+    visiting |= 1u << i;
+    for(req=g_pe_mods[i]->requires;req && *req;req++) {
+        for(j=0;j<s_manage_count;j++)if(!strcmp(*req,g_pe_mods[j]->id))break;
+        if(j==s_manage_count || !pe_manage_requested(j,visiting))return 0;
+    }
+    return 1;
+}
+void pe_mod_manage_refresh(void) {
+    static int logged_all=-1,logged_mods[PE_MAX_MODS];
+    static unsigned log_budget=64;
+    static const char *const now[]={"running","Off","dependency blocked","failed to start","Off (master was Off)"};
+    int i,pending=0,changed;
+    if(!s_manage_ready)return;
+    changed=logged_all!=s_all_on;
+    pending=s_all_on!=s_boot_all;
+    for(i=0;i<s_manage_count;i++) {
+        if(s_mod_on[i]!=s_boot_mod_on[i])pending=1;
+        if(s_mod_on[i]!=logged_mods[i])changed=1;
+    }
+    snprintf(s_all_note,sizeof(s_all_note),"Master now: %s. Next launch: %s. %s",s_boot_all?"On":"Off",s_all_on?"On":"Off",pending?"Restart game to apply.":"No pending change.");
+    for(i=0;i<s_manage_count;i++) {
+        int requested=pe_manage_requested(i,0);
+        snprintf(s_mod_note[i],sizeof(s_mod_note[i]),"%s %s. Now: %s. Next launch: %s. %s",g_pe_mods[i]->id,g_pe_mods[i]->version,now[s_boot_state[i]],requested?"enabled":(!s_all_on?"master Off":(!s_mod_on[i]?"Off":"dependency blocked")),pending?"Restart game to apply.":"Startup activation; settings do not hot-start mods.");
+    }
+#ifdef PE_PS5_PLUGINS
+    if(changed && log_budget) {
+        --log_budget;
+        SDL_Log("[PS5 mods] master_now=%d master_next_launch=%d restart_required=%d activation=startup-only prefs=pe_mods.ini",s_boot_all,s_all_on,pending);
+        for(i=0;i<s_manage_count;i++)SDL_Log("[PS5 mods] id=%s startup_state=%d requested_toggle=%d next_dependencies_enabled=%d",g_pe_mods[i]->id,s_boot_state[i],s_mod_on[i],pe_manage_requested(i,0));
+    }
+#else
+    (void)changed;(void)log_budget;
+#endif
+    logged_all=s_all_on;for(i=0;i<s_manage_count;i++)logged_mods[i]=s_mod_on[i];
+}
 
 static void pe_manage_register(int mod_count) {
     int i;
     pe_menu_top_page(PE_MENU_MANAGE, "Turn mods on or off. Changes apply the next time the game starts.", 100000);
     pe_menu_begin(PE_MENU_MANAGE);
+#if defined(PE_PS5_PLUGINS) && defined(PE_PS5_GPU_NATIVE)
+    s_all_on = 1; /* Temporary native debug default ONLY; restored explicit Off wins. */
+#else
     s_all_on = 0;
-    pe_menu_register_toggle(0, "All mods", "Off: no mod starts and the game plays as the original. "
-                            "Applies the next time the game starts.", &s_all_on, NULL);
+#endif
+    s_manage_count=mod_count;
+    pe_menu_register_toggle(0, "All mods", s_all_note, &s_all_on, NULL);
     for (i = 0; i < mod_count; i++) {
         s_mod_on[i] = 1;
+#ifdef PE_PS5_PLUGINS
+        /* Balance changes require an explicit per-mod choice on PS5. */
+        if (!strcmp(g_pe_mods[i]->id, "pe_rebalance")) s_mod_on[i] = 0;
+#endif
         pe_menu_register_toggle(0, g_pe_mods[i]->name, s_mod_note[i], &s_mod_on[i], NULL);
     }
     pe_menu_begin(0);
 }
 
-/* Each row's footer: what the mod is, what it needs, and how it is now. */
+/* Startup state remains immutable; requested values are refreshed while paused. */
 static void pe_manage_notes(int mod_count, const int *state) {
-    static const char *const states[] = {
-        "Running.", "Off: starts with the game again once turned on.", "Not running: a mod it needs is off or missing.",
-        "Not running: it failed to start (see pe_mods.log).", "Not running: All mods is off.",
-    };
-    int i;
-    for (i = 0; i < mod_count; i++) {
-        const PeMod *mod = g_pe_mods[i];
-        const char *const *req;
-        size_t n = (size_t)snprintf(s_mod_note[i], sizeof s_mod_note[0], "%s %s. %s", mod->id, mod->version, states[state[i]]);
-        for (req = mod->requires; req && *req && n < sizeof s_mod_note[0]; req++)
-            n += (size_t)snprintf(s_mod_note[i] + n, sizeof s_mod_note[0] - n, "%s %s", req == mod->requires ? " Needs" : ",", *req);
-    }
+    int i;s_boot_all=s_all_on;
+    for(i=0;i<mod_count;i++){s_boot_mod_on[i]=s_mod_on[i];s_boot_state[i]=state[i];}
+    s_manage_ready=1;pe_mod_manage_refresh();
 }
-
-enum { PE_MOD_RUNNING, PE_MOD_OFF, PE_MOD_NEEDS, PE_MOD_FAILED, PE_MOD_ALL_OFF };
 
 static void pe_start_mods(void) {
     int mod_count = 0, tried[PE_MAX_MODS] = {0}, state[PE_MAX_MODS] = {0}, progress = 1, i;
@@ -316,13 +368,25 @@ static void pe_host_start(const PeHookInit *init) {
     s_interactive = init && init->interactive;
     if (init && init->prefs_file && *init->prefs_file) {
         const char *a = strrchr(init->prefs_file, '/'), *b = strrchr(init->prefs_file, '\\');
+#ifdef PE_PS5_PLUGINS
+        /* PS5 config paths use absolute POSIX paths, checked before startup. */
+        slash = a;
+        (void)b;
+#else
         slash = a > b ? a : b;
+#endif
         if (slash && (size_t)(slash - init->prefs_file + 1) < sizeof(s_prefs_dir))
             snprintf(s_prefs_dir, sizeof(s_prefs_dir), "%.*s",
                      (int)(slash - init->prefs_file + 1), init->prefs_file);
     }
+#ifndef PE_PS5_PLUGINS
     if (pe_mod_path(log_path, sizeof(log_path), "pe_mods.log") == 0)
         s_log = fopen(log_path, "w");
+#else
+    /* PS5 diagnostics already reach stderr and its per-launch session sink.
+     * Do not truncate a second shared log behind the manager's back. */
+    (void)log_path;
+#endif
     pe_mod_log(NULL, "mod host started (mod API %d, %s)", PE_MOD_API_VERSION, s_interactive ? "interactive" : "headless");
     pe_menu_load_settings();
     pe_pages_describe();
@@ -342,6 +406,17 @@ static void pe_host_start(const PeHookInit *init) {
 }
 
 int pe_host_init(const PeHookInit *init) {
+#ifdef PE_PS5_PLUGINS
+    const char *slash;
+    /* Never fall back to cwd when an invalid/oversized preference directory
+     * cannot fit the host's existing bounded path storage. */
+    if (!init || !init->prefs_file || init->prefs_file[0] != '/' ||
+        !(slash = strrchr(init->prefs_file, '/')) ||
+        (size_t)(slash - init->prefs_file + 1) >= sizeof(s_prefs_dir)) {
+        fprintf(stderr, "[mods] PS5 host disabled: invalid absolute preferences path\n");
+        return -1;
+    }
+#endif
     if (!s_started) pe_host_start(init);
     return 0;
 }
@@ -478,3 +553,152 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread) {
     pe_save_crash_describe(out, size, &n);
 #undef PE_OUT
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include <stdint.h>
+#include "pe_state_mod_contract.h"
+extern int pe_mod_state_panel_closed(void);
+extern int pe_main_menu_state_empty(void);
+extern int pe_present_state_empty(void);
+extern int pe_save_state_idle(void);
+#if PE_NATIVE_STATE_ASSISTS
+extern int pe_assists_state_options(uint32_t [3]);
+#endif
+#if PE_NATIVE_STATE_QOL
+#include "pe_checkpoint_qol.h"
+#endif
+#if PE_NATIVE_STATE_ECONOMY
+#include "pe_checkpoint_economy.h"
+#endif
+#if PE_NATIVE_STATE_COLLECTION
+#include "pe_checkpoint_collection.h"
+#endif
+#if PE_NATIVE_STATE_REBALANCE
+#include "pe_checkpoint_rebalance.h"
+#endif
+extern int pe_save_checkpoint_walk(const unsigned char *,unsigned char *,size_t,int);
+extern void pe_equip_sync_state_invalidate(void);
+static int s_state_blocker;
+static const char*s_state_blocker_mod;
+static char s_state_blocker_text[128];
+int pe_mod_state_options(uint32_t out[4]){s_state_blocker=0;s_state_blocker_mod=0;
+#define STATE_DENY(reason) do{s_state_blocker=(reason);return 0;}while(0)
+ if(!out||!s_started)STATE_DENY(1);if(s_call_depth||s_current_mod)STATE_DENY(2);if(!pe_mod_state_panel_closed())STATE_DENY(3);if(!pe_save_state_idle())STATE_DENY(4);
+ for(int i=0;i<s_manage_count;i++){const char *id=g_pe_mods[i]->id;if(strcmp(id,"pe_assists")&&strcmp(id,"pe_qol")&&strcmp(id,"pe_rebalance")&&strcmp(id,"pe_economy")&&strcmp(id,"pe_collection"))STATE_DENY(5);}
+ for(int i=0;i<s_handler_count;i++)if(s_handlers[i].active&&s_handlers[i].mod_id){const char *id=s_handlers[i].mod_id;if(strcmp(id,"host")&&strcmp(id,"menu")&&strcmp(id,"present")&&strcmp(id,"pe_assists")
+#if PE_NATIVE_STATE_QOL
+ &&strcmp(id,"pe_qol")
+#endif
+#if PE_NATIVE_STATE_ECONOMY
+ &&strcmp(id,"pe_economy")
+#endif
+#if PE_NATIVE_STATE_COLLECTION
+ &&strcmp(id,"pe_collection")
+#endif
+#if PE_NATIVE_STATE_REBALANCE
+ &&strcmp(id,"pe_rebalance")
+#endif
+ ){s_state_blocker_mod=id;STATE_DENY(6);}}
+ if(!s_boot_all&&!s_all_on&&!s_running_count){out[0]=out[1]=out[2]=out[3]=0;return 1;}
+ if(!s_boot_all||!s_all_on)STATE_DENY(6);
+ for(int i=0;i<s_manage_count;i++)if(s_mod_on[i]!=s_boot_mod_on[i])STATE_DENY(10);
+ unsigned mask=0;for(int i=0;i<s_running_count;i++){if(!strcmp(s_running[i]->id,"pe_assists"))mask|=1u;
+#if PE_NATIVE_STATE_QOL
+ else if(!strcmp(s_running[i]->id,"pe_qol"))mask|=2u;
+#endif
+#if PE_NATIVE_STATE_ECONOMY
+ else if(!strcmp(s_running[i]->id,"pe_economy"))mask|=4u;
+#endif
+#if PE_NATIVE_STATE_COLLECTION
+ else if(!strcmp(s_running[i]->id,"pe_collection"))mask|=8u;
+#endif
+#if PE_NATIVE_STATE_REBALANCE
+ else if(!strcmp(s_running[i]->id,"pe_rebalance"))mask|=16u;
+#endif
+ else {s_state_blocker_mod=s_running[i]->id;STATE_DENY(6);}}
+ if(!pe_main_menu_state_empty()||!pe_present_state_empty())STATE_DENY(7);
+ out[0]=2u|(mask<<8);out[1]=out[2]=out[3]=0;
+#if PE_NATIVE_STATE_ASSISTS
+ if((mask&1)&&!pe_assists_state_options(out+1))STATE_DENY(8);
+#else
+ if(mask&1)STATE_DENY(5);
+#endif
+#if PE_NATIVE_STATE_QOL
+ if((mask&2)&&!pe_qol_checkpoint_ready())STATE_DENY(9);
+#endif
+#if PE_NATIVE_STATE_ECONOMY
+ if((mask&4)&&!pe_economy_checkpoint_ready())STATE_DENY(11);
+#endif
+#if PE_NATIVE_STATE_COLLECTION
+ if((mask&8)&&!pe_collection_checkpoint_ready())STATE_DENY(12);
+#endif
+#if PE_NATIVE_STATE_REBALANCE
+ if((mask&16)&&!pe_rebalance_checkpoint_ready())STATE_DENY(13);
+#endif
+ return 1;
+#undef STATE_DENY
+}
+const char *pe_mod_state_blocker(void){uint32_t exact[4];if(pe_mod_state_options(exact))return "Experimental current-room checkpoint";switch(s_state_blocker){case 1:return "Mods host is not initialized";case 2:return "A mod callback is still running";case 3:return "Close the Mods panel before checkpointing";case 4:return "Pending or live mod-save data is not checkpoint-owned";case 5:return "This build contains an unowned mod; use the supported mod list";case 6:if(s_state_blocker_mod){snprintf(s_state_blocker_text,sizeof s_state_blocker_text,"%s still needs checkpoint ownership",s_state_blocker_mod);return s_state_blocker_text;}return "The current startup mod configuration is not checkpoint-owned";case 7:return "Close the custom mod screen or picture first";case 9:return "Finish the QOL inventory/key-screen job first";case 10:return "A mod activation change is pending; restore it or restart";case 13:
+#if PE_NATIVE_STATE_REBALANCE
+return pe_rebalance_checkpoint_blocker();
+#else
+return "Rebalance checkpoint ownership is not included";
+#endif
+case 12:
+#if PE_NATIVE_STATE_COLLECTION
+return pe_collection_checkpoint_blocker();
+#else
+return "Collection ownership is not included in this build";
+#endif
+case 11:return "Finish the Economy/Wayne menu or item-list transaction first";default:return "Assist settings are invalid";}}
+int pe_mod_state_walk(const unsigned char *in,unsigned char *out,size_t bytes,int apply){
+ if(bytes!=PE_MOD_STATE_BYTES||(!in&&!out))return 0;uint32_t exact[4];if(!pe_mod_state_options(exact))return 0;
+ if(apply&&(!in||!pe_mod_state_walk(in,0,bytes,0)))return 0;
+ unsigned caps=0;
+#if PE_NATIVE_STATE_QOL
+ caps|=1u;
+#endif
+#if PE_NATIVE_STATE_ECONOMY
+ caps|=2u;
+#endif
+#if PE_NATIVE_STATE_COLLECTION
+ caps|=4u;
+#endif
+#if PE_NATIVE_STATE_REBALANCE
+ caps|=8u;
+#endif
+ if(out){memset(out,0,bytes);memcpy(out,PE_MOD_STATE_MAGIC,8);for(unsigned i=0;i<4;i++)out[8+i]=(unsigned char)(PE_MOD_STATE_BYTES>>(i*8));out[12]=(unsigned char)caps;}
+ else if(memcmp(in,PE_MOD_STATE_MAGIC,8)||((uint32_t)in[8]|(uint32_t)in[9]<<8|(uint32_t)in[10]<<16|(uint32_t)in[11]<<24)!=PE_MOD_STATE_BYTES||in[12]!=caps||in[13]||in[14]||in[15])return 0;
+ if(!pe_save_checkpoint_walk(in?in+16:0,out?out+16:0,1536,apply))return 0;
+#if PE_NATIVE_STATE_QOL
+ if(!pe_qol_checkpoint_walk(in?in+1552:0,out?out+1552:0,512,apply))return 0;
+#else
+ if(in)for(unsigned i=1552;i<2064;i++)if(in[i])return 0;
+#endif
+#if PE_NATIVE_STATE_ECONOMY
+ if(!pe_economy_checkpoint_walk(in?in+2064:0,out?out+2064:0,4096,apply))return 0;
+#else
+ if(in)for(unsigned i=2064;i<6160;i++)if(in[i])return 0;
+#endif
+#if PE_NATIVE_STATE_COLLECTION
+ if(!pe_collection_checkpoint_walk(in?in+6160:0,out?out+6160:0,1024,apply))return 0;
+#else
+ if(in)for(unsigned i=6160;i<7184;i++)if(in[i])return 0;
+#endif
+#if PE_NATIVE_STATE_REBALANCE
+ if(!pe_rebalance_checkpoint_walk(in?in+7184:0,out?out+7184:0,3088,apply))return 0;
+#else
+ if(in)for(unsigned i=7184;i<PE_MOD_STATE_BYTES;i++)if(in[i])return 0;
+#endif
+ return 1;
+}
+int pe_mod_state_idle(void){uint32_t exact[4];return pe_mod_state_options(exact);}
+void pe_mod_state_after_restore(void){/* Pure derived-cache reset on both target and rollback outcomes. */pe_equip_sync_state_invalidate();}
+#endif
+
+#ifdef PE_PS5_GPU_NATIVE
+int pe_mod_master_active_now(void){return s_boot_all;}
+int pe_mod_master_requested(void){return s_all_on;}
+void pe_mod_master_toggle_next_launch(void){if(!s_manage_ready)return;s_all_on=!s_all_on;pe_mod_manage_refresh();pe_menu_save_settings();}
+int pe_mod_request_assists_only(void){if(!s_manage_ready)return 0;int found=0;for(int i=0;i<s_manage_count;i++)if(!strcmp(g_pe_mods[i]->id,"pe_assists"))found=1;if(!found)return 0;for(int i=0;i<s_manage_count;i++)s_mod_on[i]=!strcmp(g_pe_mods[i]->id,"pe_assists");s_all_on=1;pe_mod_manage_refresh();pe_menu_save_settings();return 1;}
+#endif

@@ -223,6 +223,27 @@ void FieldFx_ModelDraw(FieldTexturedModel *model, GteMatrix *placement)
     CompMatrix(g_GeomScroll.words.viewMatrix, placement, &sp->matrix);
     SetTransMatrix(&sp->matrix);
     SetRotMatrix(&sp->matrix);
+    Psyz_GteSetPgxpEffectMode(1);
+    {
+        const GteMatrix *view_mat = (const GteMatrix *)g_GeomScroll.words.viewMatrix;
+        double pgxp_rot[3][3];
+        double pgxp_trans[3];
+        int r, c;
+        for (r = 0; r < 3; ++r) {
+            pgxp_trans[r] = (double)view_mat->t[r] +
+                ((double)view_mat->m[r][0] * (double)placement->t[0] +
+                 (double)view_mat->m[r][1] * (double)placement->t[1] +
+                 (double)view_mat->m[r][2] * (double)placement->t[2]) / 4096.0;
+            for (c = 0; c < 3; ++c) {
+                pgxp_rot[r][c] =
+                    ((double)view_mat->m[r][0] * (double)placement->m[0][c] +
+                     (double)view_mat->m[r][1] * (double)placement->m[1][c] +
+                     (double)view_mat->m[r][2] * (double)placement->m[2][c]) /
+                    (4096.0 * 4096.0);
+            }
+        }
+        Psyz_GteSetPgxpMatrix(pgxp_rot, pgxp_trans);
+    }
     header = &model->header;
     tri = header->tris;
     ft3 = (FieldModelFt3Packet *)(D_800B0E38.packets[g_ActiveDrawSlot] + g_DrawPacketOffset);
@@ -393,6 +414,8 @@ void FieldFx_ModelDraw(FieldTexturedModel *model, GteMatrix *placement)
             }
         }
     }
+    Psyz_GteSetPgxpEffectMode(0);
+    Psyz_GteClearPgxpMatrix();
 }
 
 void FieldFx_TransformPackedVertex(RenderPackedGeometry *geometry,

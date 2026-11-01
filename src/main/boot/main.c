@@ -1,3 +1,13 @@
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/particle_augment.h"
+#include "pe1/dialogue_alpha.h"
+#include "pe1/planar_shadow.h"
+#endif
+#if defined(PE_PS5_GPU_NATIVE) && defined(PE_MODS)
+#include "../../../mods/host/pe_mod_menu.h"
+#include "../../../mods/host/pe_mod_host.h"
+static int host_open_assists;
+#endif
 #include "common.h"
 #include <ctype.h>
 #include <errno.h>
@@ -7,6 +17,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <SDL3/SDL.h>
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+static void Host_StateUiRegister(void);
+static bool Host_StateChord(const SDL_Event *event);
+#endif
 #include <psyz/audio.h>
 #include <psyz/gpu.h>
 #include <psyz/overlay_sdl3.h>
@@ -29,6 +43,15 @@
 #include "pe1/save_tail_state.h"
 #include "pe1/scene_dispatch.h"
 #include "pe_hooks.h"
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/model_fill_lighting.h"
+#endif
+
+#ifdef PE_PS5
+/* Local staged PsyZ status; no upstream public ABI change. */
+extern int Psyz_PS5PlatformReady(void);
+extern const char *Psyz_PS5PlatformInitError(void);
+#endif
 
 /* Desktop preferences belong to the original boot module. The modal loop
  * never ticks the game, PS1 timers, scripts, or audio. */
@@ -41,8 +64,22 @@ static struct {
     int geometry_correction;
     int antialiasing;
     int model_filtering;
+    int dynamic_lighting;
+    int effect_geometry_correction;
+    int frame_interpolation;
     int widescreen;
+#ifdef PE_PS5_GPU_NATIVE
+    int fsr1,fsr1_sharpness,model_fill_lighting,movie_blur,movie_presentation,battle_debris_3d,gameplay_fill,movie_cleanup,sprite_filtering;
+    int show_fps;
+    int menu_style,menu_text_size,menu_pointer,hd_models,particle_lighting,dialogue_text,triangle_menu_font,player_shadow;
+    char hd_model_directory[4096];
+#endif
     int hd_backgrounds;
+#ifdef PE_PS5
+    char hd_title_directory[4096];
+    int hd_field_materials;
+    char hd_field_directory[4096];
+#endif
     int fullscreen;
     /* 2..PSYZ_SPEED_MAX, used while the speed binding is held */
     unsigned speed_factor;
@@ -54,8 +91,69 @@ static struct {
     char user_file[4096];
     int enabled;
 } host_options;
+#ifdef PE_PS5_GPU_NATIVE
+#include "native_experience.h"
+#endif
+
+#ifdef PE_PS5
+#ifndef PE_PS5_DATA_ROOT
+#define PE_PS5_DATA_ROOT "/data/parasite-eve"
+#endif
+static char host_data_root[4096];
+
+/* PS5 application launches cannot depend on changing the process cwd. */
+static int Host_DataPath(char *out, size_t capacity, const char *path) {
+    int n = snprintf(out, capacity, "%s%s%s", path[0] == '/' ? "" : host_data_root,
+                     path[0] == '/' ? "" : "/", path);
+    if (n < 0 || (size_t)n >= capacity) {
+        if (capacity) out[0] = '\0';
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 path too long: %.200s", path);
+        return 0;
+    }
+    return 1;
+}
+
+static int Host_InitPaths(void) {
+    SDL_Environment *env = SDL_GetEnvironment();
+    const char *root = SDL_GetEnvironmentVariable(env, "PE_DATA_HOME");
+    if (!root || !*root) root = PE_PS5_DATA_ROOT;
+    if (root[0] != '/' || strlen(root) >= sizeof(host_data_root)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 data root must be an absolute path: %.200s", root);
+        return 0;
+    }
+    strcpy(host_data_root, root);
+    size_t length = strlen(host_data_root);
+    while (length > 1 && host_data_root[length - 1] == '/') host_data_root[--length] = '\0';
+    const char *config = SDL_GetEnvironmentVariable(env, "PE_CONFIG_HOME");
+    char directory[4096];
+    if (!config || !*config) config = host_data_root;
+    if (!Host_DataPath(directory, sizeof(directory), config)) return 0;
+    int n = snprintf(host_options.user_file, sizeof(host_options.user_file),
+                     "%s/parasite-eve.toml", directory);
+    if (n < 0 || (size_t)n >= sizeof(host_options.user_file)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 preferences path too long");
+        return 0;
+    }
+    SDL_Log("PS5 paths data=%s preferences=%s", host_data_root, host_options.user_file);
+    return 1;
+}
+
+static int Host_OpenDisc(PeDisc *disc, const char *path) {
+    char absolute[8192];
+    if (!Host_DataPath(absolute, sizeof(absolute), path)) return 0;
+    SDL_Log("PS5 disc open path=%s", absolute);
+    int ok = pe_disc_open(disc, absolute);
+    if (!ok) SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 disc open failed: %s", absolute);
+    return ok;
+}
+#else
+#define Host_OpenDisc pe_disc_open
+#endif
 
 static int Host_SaveOptions(void);
+#ifdef PE_PS5_GPU_NATIVE
+static void Host_NativeApplicationShutdown(void);
+#endif
 
 #define HOST_BINDING_COUNT 17
 #define HOST_SPEED_BINDING 16
@@ -91,11 +189,16 @@ static void Host_ResetSpeedHold(void) {
 }
 
 typedef enum HostSettingsPage {
+#ifdef PE_PS5_GPU_NATIVE
+    HOST_PAGE_GRAPHICS=0, HOST_PAGE_MODS=1, HOST_PAGE_CHEATS=2, HOST_PAGE_STATES=3,
+    HOST_PAGE_AUDIO=4, HOST_PAGE_CONTROLS=5, HOST_PAGE_IMAGES=6
+#else
     HOST_PAGE_GRAPHICS = 0,
     HOST_PAGE_CONTROLS = 1,
     HOST_PAGE_AUDIO = 2,
     HOST_PAGE_IMAGES = 3,
     HOST_PAGE_MODS = 4
+#endif
 } HostSettingsPage;
 
 typedef enum HostBindDevice {
@@ -103,6 +206,7 @@ typedef enum HostBindDevice {
     HOST_BIND_CONTROLLER = 1
 } HostBindDevice;
 
+#if PE_DESKTOP_MOD_DOWNLOADS
 /* Versioned desktop background packs. Only a fully verified staging directory
  * can replace the active pointer; failed/cancelled downloads keep the old pack. */
 /* curl imports WinSock and WinAPI; keep their historical typedefs separate
@@ -304,7 +408,188 @@ static int Host_HdCli(int verify) {
     puts(Host_HdStatus());int result=host_hd.success?0:1;Host_HdStop();return result;
 }
 
+#else
+/* PS5 CPU: local title presentation only; field atlases remain unavailable. */
+static struct { int development, enabled; char active[4096], version[32]; } host_hd;
+#ifdef PE_PS5
+void MenuCard_RefreshHdBackground(void);
+/* Private PS5 CPU API: never grants GPU atlas or geometry-scale capability. */
+int Psyz_CpuFieldMaterialAvailable(void);
+int Psyz_CpuGeometryAvailable(void);
+int Psyz_CpuGeometryConfigure(unsigned scale);
+unsigned Psyz_CpuGeometryRequested(void);
+unsigned Psyz_CpuGeometryEffective(void);
+int Psyz_CpuFieldMaterialConfigure(int enabled,const char *directory);
+void Render_RefreshHdBackgrounds(void);
+static int Host_LocalTitlePath(const char *path) {
+    /* Trusted explicit local paths, never URLs or traversal aliases. */
+    if (!path || path[0]!='/' || strlen(path)>=sizeof(host_hd.active) ||
+        strstr(path,"/../") || strstr(path,"/./") || strchr(path,'\\')) return 0;
+    size_t n=strlen(path);
+    return !(n>=3 && !strcmp(path+n-3,"/..")) && !(n>=2 && !strcmp(path+n-2,"/."));
+}
+#ifdef PE_PS5_GPU_NATIVE
+/* Downloads are a desktop capability. Native PS5 consumes the same unpacked
+ * atlas files from a configured local directory; it never needs active.json. */
+static const char *Host_GpuHdDirectory(void) {
+    if (*host_options.hd_field_directory) return host_options.hd_field_directory;
+    if (*host_options.hd_title_directory) return host_options.hd_title_directory;
+    return SDL_getenv("PE_HD_BACKGROUNDS");
+}
+static int Host_GpuHdPackPresent(const char *directory) {
+    char filename[4096]; unsigned char marker=0;
+    if (!Host_LocalTitlePath(directory)) return 0;
+    int n=snprintf(filename,sizeof(filename),"%s/manifest.json",directory);
+    if(n<0 || (size_t)n>=sizeof(filename)) return 0;
+    SDL_IOStream *file=SDL_IOFromFile(filename,"rb");
+    if(!file) return 0;
+    int present=SDL_ReadIO(file,&marker,1)==1 && marker=='{';
+    SDL_CloseIO(file);
+    return present; /* Presence only; individual atlases remain renderer-validated. */
+}
+static const char *Host_HdStatus(void) {
+    if (!Host_GpuHdPackPresent(Host_GpuHdDirectory()))
+        return "Local HD pack not found. Set hd_field_directory to the unpacked pack; downloads are desktop only.";
+    return host_hd.enabled ? "Local GPU HD requested. Use 2x or higher; actual atlas loads are logged."
+                           : "Local pack found; HD is off. Toggle GPU HD backgrounds. No download is needed.";
+}
+static int Host_HdBusy(void) { return 0; }
+static int Host_HdPercent(void) { return 0; }
+static const char *Host_HdValue(int row) {
+    if(row==0) return host_hd.enabled ? "Requested" : "Off";
+    if(row==1) return Host_GpuHdPackPresent(Host_GpuHdDirectory()) ? "Found / reload" : "Not found / reload";
+    return "Desktop only / local copy";
+}
+static void Host_HdApply(void) {
+    const char *directory=Host_GpuHdDirectory();
+    int present=Host_GpuHdPackPresent(directory);
+    host_hd.enabled=host_options.hd_backgrounds && present;
+    if(present) SDL_strlcpy(host_hd.active,directory,sizeof(host_hd.active));
+    else host_hd.active[0]=0;
+    /* Publish before refresh: mesh_entry and menu-card both read this SDL env. */
+    SDL_SetEnvironmentVariable(SDL_GetEnvironment(),"PE_HD_BACKGROUNDS",host_hd.active,true);
+    SDL_SetEnvironmentVariable(SDL_GetEnvironment(),"PE_PS5_HD_TITLE",host_hd.enabled?"1":"0",true);
+    Psyz_GpuSetSpriteAtlasesEnabled(host_hd.enabled);
+    if (Psyz_PS5PlatformReady()) DrawSync(0);
+    Render_RefreshHdBackgrounds();
+    Psyz_VideoSetRgb24Backdrop(NULL,NULL,0,0,0,0);
+    if(host_hd.enabled) MenuCard_RefreshHdBackground();
+    SDL_Log("[PS5 GPU HD] directory=%s manifest_present=%d requested=%d atlas_enabled=%d download_capability=0 rendered=unobserved",
+        present?host_hd.active:"",present,host_options.hd_backgrounds,host_hd.enabled);
+}
+#else
+static const char *Host_HdStatus(void) {
+ #ifdef PE_PS5_GPU_NATIVE
+    return host_hd.enabled ? "Native GPU atlases requested from the local pack; console validation pending."
+                           : "Original GPU rendering; local HD background pack is optional.";
+ #endif
+    if (!Psyz_CpuFieldMaterialAvailable()) return "CPU field HD unavailable on this renderer. Title HD is separate.";
+    if (!host_options.hd_field_materials) return "CPU field HD off. Geometry scale and widescreen are separate.";
+    if (!Host_LocalTitlePath(host_options.hd_field_directory)) return "CPU field HD needs a local hd_field_directory. Original pixels retained.";
+    return "Ordered field HD requested at 1x or scaled geometry. Admitted tiles use 2x material samples; see coverage logs.";
+}
+static int Host_HdBusy(void) { return 0; }
+static int Host_HdPercent(void) { return 0; }
+static const char *Host_HdValue(int row) {
+#ifdef PE_PS5_GPU_NATIVE
+    if (row==0) return host_hd.enabled ? "GPU atlases requested" : "Original";
+ #else
+    if (row==0) return host_hd.enabled ? "Title HD only" : "Original";
+ #endif
+    if (row==1) return !Psyz_CpuFieldMaterialAvailable() ? "Unavailable" :
+        !host_options.hd_field_materials ? "Off" :
+        Host_LocalTitlePath(host_options.hd_field_directory) ? "Requested (experimental)" : "Needs pack directory";
+    return *host_options.hd_field_directory ? "Local / no download" : "Set hd_field_directory";
+}
+static void Host_HdApply(void) {
+    const char *directory=*host_options.hd_title_directory ? host_options.hd_title_directory
+        : SDL_getenv("PE_HD_BACKGROUNDS");
+    host_hd.enabled=host_options.hd_backgrounds && Host_LocalTitlePath(directory);
+    SDL_SetEnvironmentVariable(SDL_GetEnvironment(),"PE_PS5_HD_TITLE",host_hd.enabled?"1":"0",true);
+#ifdef PE_PS5_GPU_NATIVE
+    Psyz_GpuSetSpriteAtlasesEnabled(host_hd.enabled);
+ #else
+    Psyz_GpuSetSpriteAtlasesEnabled(0); /* CPU path has no GPU atlas. */
+ #endif
+#ifdef PE_PS5_GPU_NATIVE
+    if (Psyz_PS5PlatformReady()) DrawSync(0);
+ #else
+    if(Psyz_CpuFieldMaterialAvailable())DrawSync(0);
+ #endif
+    Psyz_CpuFieldMaterialConfigure(host_options.hd_field_materials,
+        Host_LocalTitlePath(host_options.hd_field_directory)?host_options.hd_field_directory:"");
+    Render_RefreshHdBackgrounds();
+    Psyz_VideoSetRgb24Backdrop(NULL,NULL,0,0,0,0);
+    if (host_hd.enabled) {
+        SDL_strlcpy(host_hd.active,directory,sizeof(host_hd.active));
+        SDL_SetEnvironmentVariable(SDL_GetEnvironment(),"PE_HD_BACKGROUNDS",host_hd.active,true);
+        MenuCard_RefreshHdBackground();
+    } else host_hd.active[0]=0;
+}
+#endif
+static void Host_HdPoll(void) {}
+static void Host_HdAction(int row) {
+    #ifdef PE_PS5_GPU_NATIVE
+    if(row==0) host_options.hd_backgrounds=!host_options.hd_backgrounds;
+    else if(row!=1) return; /* Reload local pack; no unsupported download action. */
+#else
+    if (row==0) host_options.hd_backgrounds=!host_options.hd_backgrounds;
+    else if (row==1) {
+        if (!host_options.hd_field_materials && !Psyz_CpuFieldMaterialAvailable()) return;
+        host_options.hd_field_materials=!host_options.hd_field_materials;
+    } else return;
+#endif
+    Host_HdApply();
+    SDL_Log("[V2 DIRECT DISPLAY toggle] title_HD=%d field_HD=%d",host_options.hd_backgrounds,host_options.hd_field_materials);
+    if (host_options.enabled) Host_SaveOptions();
+}
+static void Host_HdInit(void) { Host_HdApply(); }
+static void Host_HdStop(void) {
+    Psyz_CpuFieldMaterialConfigure(0,"");
+    Psyz_VideoSetRgb24Backdrop(NULL,NULL,0,0,0,0);
+}
+static int Host_HdCli(int verify) { (void)verify; puts(Host_HdStatus()); return EXIT_FAILURE; }
+#else
+static const char *Host_HdStatus(void) { return "HD backgrounds are unavailable on this platform."; }
+static int Host_HdBusy(void) { return 0; }
+static int Host_HdPercent(void) { return 0; }
+static const char *Host_HdValue(int row) { (void)row; return "Unavailable"; }
+static void Host_HdApply(void) { host_hd.enabled=0; Psyz_GpuSetSpriteAtlasesEnabled(0); }
+static void Host_HdPoll(void) {}
+static void Host_HdAction(int row) { (void)row; }
+static void Host_HdInit(void) { Host_HdApply(); }
+static void Host_HdStop(void) {}
+static int Host_HdCli(int verify) { (void)verify; puts(Host_HdStatus()); return EXIT_FAILURE; }
+#endif /* PE_PS5 local title */
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+#include "installer/pe_install_view.h"
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+struct HostOverlayState;
+static void Host_RegistryGoTo(struct HostOverlayState*,int,const char*);
+static int Host_RegistryRouteScope(const char*,int*);
+static int Host_RegistryBack(struct HostOverlayState *state);
+static const char *Host_RegistryTitle(int page);
+static int Host_ModernRowCount(int page);
+static const char *Host_ModernRowLabel(int page,int row);
+static const char *Host_ModernRowHelp(int page,int row);
+static void Host_ModernRowValue(int page,int row,char *out,unsigned size);
+static int Host_ModernRowKind(int page,int row); /*0info,1action,2choice*/
+static int Host_ModernAction(int page,int row,int direction,int activate);
+static void Host_OpenSettingsTab(int page);
+static int Host_NativePickMissingDisc(unsigned identity);
+static void Host_CharacterPackAction(int choose);
+static int host_requested_settings_page=-1,host_last_settings_page;
+static int host_registry_open_pending,host_registry_open_scope;
+static char host_registry_open_path[96];
+static int host_saved_rows[7],host_saved_scrolls[7];
+static const char *host_pending_mod_page;
+#endif
 #include "settings_overlay.h"
+#ifdef PE_PS5_GPU_NATIVE
+static void Host_RegistryClose(void){s_overlayState.open=0;}
+#endif
 
 static char *Host_Trim(char *s) {
     while (isspace((unsigned char)*s)) {
@@ -363,6 +648,23 @@ static int Host_String(char *text, char *out, size_t size) {
 }
 
 static int Host_ParseOptionValue(const char *section, const char *key, char *value) {
+#ifdef PE_PS5_GPU_NATIVE
+    if(!strcmp(section,"mods")&&!strcmp(key,"hd_model_directory")){char decoded[4096];if(!Host_String(value,decoded,sizeof decoded)||(*decoded&&!Host_LocalTitlePath(decoded)))return 0;SDL_strlcpy(host_options.hd_model_directory,decoded,sizeof host_options.hd_model_directory);return 1;}
+#endif
+#ifdef PE_PS5
+    if (!strcmp(section,"mods") && !strcmp(key,"hd_field_directory")) {
+        char decoded[4096];
+        if (!Host_String(value,decoded,sizeof(decoded)) || (*decoded && !Host_LocalTitlePath(decoded))) return 0;
+        SDL_strlcpy(host_options.hd_field_directory,decoded,sizeof(host_options.hd_field_directory));return 1;
+    }
+    if (!strcmp(section,"mods") && !strcmp(key,"hd_title_directory")) {
+        char decoded[4096];
+        if (!Host_String(value,decoded,sizeof(decoded)) ||
+            (*decoded && !Host_LocalTitlePath(decoded))) return 0;
+        SDL_strlcpy(host_options.hd_title_directory,decoded,sizeof(host_options.hd_title_directory));
+        return 1;
+    }
+#endif
     if (!strcmp(section, "discs")) {
         int slot = !strcmp(key, "disc1") ? 0 : !strcmp(key, "disc2") ? 1 : -1;
         if (slot >= 0) {
@@ -397,6 +699,9 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
         return 0;
     }
 
+    #ifdef PE_PS5_GPU_NATIVE
+    {int handled=Host_VisualParse(section,key,v);if(handled>=0)return handled;}
+    #endif
     if (!strcmp(section, "controls")) {
         if (!strcmp(key, "field_run_threshold")) {
             if (v > 100) return 0;
@@ -404,7 +709,11 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
         }
     } else if (!strcmp(section, "graphics")) {
         if (!strcmp(key, "internal_resolution")) {
-            if (v < 1 || v > 8) {
+            if (v < 1 || v > 8
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+                || !(v==1 || v==2 || v==4 || v==6 || v==8)
+#endif
+            ) {
                 return 0;
             }
             host_options.scale = (unsigned)v;
@@ -426,20 +735,67 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
         } else if (!strcmp(key, "antialiasing")) {
             if (v > 1) return 0;
             host_options.antialiasing = v;
+        } else if (!strcmp(key, "dynamic_lighting")) {
+            if(v>1)return 0;host_options.dynamic_lighting=v;
+        } else if (!strcmp(key, "frame_interpolation")) {
+            if(v>1)return 0;host_options.frame_interpolation=v;
+        } else if (!strcmp(key, "effect_geometry_correction")) {
+            if(v>1)return 0;host_options.effect_geometry_correction=v;
         } else if (!strcmp(key, "model_filtering")) {
             if (v > 1) return 0;
             host_options.model_filtering = v;
         } else if (!strcmp(key, "widescreen")) {
             if (v > 1) return 0;
             host_options.widescreen = v;
+#ifdef PE_PS5_GPU_NATIVE
+        } else if (!strcmp(key, "gameplay_fill")) {
+            if(v>1)return 0;host_options.gameplay_fill=v;
+        } else if (!strcmp(key, "battle_debris_3d")) {
+            if(v>2)return 0;host_options.battle_debris_3d=v; /* Legacy booltrue maps to Hybrid1. */
+        } else if (!strcmp(key, "movie_presentation")) {
+            if(v>2)return 0;host_options.movie_presentation=v==2?1:v;
+            if(v==2)SDL_Log("[Movie preference migration] saved_mode=2 next_mode=1 reason=Off-is-original-aspect-plus-blur other_settings=preserved");
+        } else if (!strcmp(key, "sprite_filtering")) {
+            if(v>1)return 0;host_options.sprite_filtering=v;
+        } else if (!strcmp(key, "movie_cleanup")) {
+            if(v>3)return 0;host_options.movie_cleanup=v;
+        } else if (!strcmp(key, "movie_blur")) {
+            if(v>1)return 0;host_options.movie_blur=v;
+        } else if (!strcmp(key, "fsr1")) {
+            if(v>1)return 0;host_options.fsr1=v;
+        } else if (!strcmp(key, "fsr1_sharpness")) {
+            if(v>2)return 0;host_options.fsr1_sharpness=v;
+        } else if (!strcmp(key, "triangle_menu_font")) {
+            if(v>1)return 0;host_options.triangle_menu_font=v;
+        } else if (!strcmp(key, "dialogue_text")) {
+            if(v>1)return 0;host_options.dialogue_text=v;
+        } else if (!strcmp(key, "particle_lighting")) {
+            if(v>1)return 0;host_options.particle_lighting=v;
+        } else if (!strcmp(key, "player_shadow")) {
+            if(v>1)return 0;host_options.player_shadow=v;
+        } else if (!strcmp(key, "model_fill_lighting")) {
+            if(v>2)return 0;host_options.model_fill_lighting=v;
+#endif
         } else if (!strcmp(key, "geometry_correction")) {
             if (v > 1) {
                 return 0;
             }
             host_options.geometry_correction = v;
         }
+#ifdef PE_PS5
+    } else if (!strcmp(section,"mods") && !strcmp(key,"hd_field_materials")) {
+        if(v<0||v>1)return 0;host_options.hd_field_materials=v;
+#endif
     } else if (!strcmp(section,"mods") && !strcmp(key,"hd_backgrounds")) {
         if(v<0||v>1)return 0;host_options.hd_backgrounds=v;
+#ifdef PE_PS5_GPU_NATIVE
+    } else if(!strcmp(section,"mods")&&!strcmp(key,"hd_models")){if(v<0||v>1)return 0;host_options.hd_models=v;
+    } else if(!strcmp(section,"interface")){
+        if(!strcmp(key,"show_fps")){if(v<0||v>1)return 0;host_options.show_fps=v;}
+        else if(!strcmp(key,"menu_style")){if(v<0||v>1)return 0;host_options.menu_style=v;}
+        else if(!strcmp(key,"menu_text_size")){if(v<0||v>1)return 0;host_options.menu_text_size=v;}
+        else if(!strcmp(key,"menu_pointer")){if(v<0||v>2)return 0;host_options.menu_pointer=v;}
+#endif
     } else if (!strcmp(section, "audio") && !strcmp(key, "volume")) {
         if (v > 100) {
             return 0;
@@ -487,6 +843,11 @@ static FILE *Host_OptionsFile(const char *path,const char *mode) {
 
 static void Host_LoadOptions(const char *path) {
     FILE *file = Host_OptionsFile(path, "r");
+#ifdef PE_PS5
+    int error = file ? 0 : errno;
+    SDL_Log("PS5 preferences open path=%s success=%d errno=%d", path, file != NULL, error);
+    errno = error;
+#endif
     if (!file) {
         return;
     }
@@ -546,6 +907,9 @@ static void Host_WriteString(FILE *file, const char *value) {
 }
 
 static int Host_SaveOptions(void) {
+#ifdef PE_PS5_GPU_NATIVE
+    /* Preserve requested preference even when memory admission falls back. */
+#endif
     if (!host_options.enabled || !*host_options.user_file) {
         return 0;
     }
@@ -557,6 +921,9 @@ static int Host_SaveOptions(void) {
         return 0;
     }
 
+    #ifdef PE_PS5_GPU_NATIVE
+    Host_VisualWrite(file);
+    #endif
     fprintf(
         file,
         "# Parasite Eve desktop preferences\n"
@@ -568,7 +935,14 @@ static int Host_SaveOptions(void) {
         "geometry_correction = %s\n"
         "antialiasing = %s\n"
         "model_filtering = %s\n"
-        "widescreen = %s\n\n"
+        "dynamic_lighting = %s\n"
+        "frame_interpolation = %s\n"
+        "effect_geometry_correction = %s\n"
+        "widescreen = %s\n"
+#ifdef PE_PS5_GPU_NATIVE
+        "sprite_filtering = %s\nmovie_cleanup = %u\ngameplay_fill = %s\nfsr1 = %s\nfsr1_sharpness = %u\nmodel_fill_lighting = %u\nparticle_lighting = %s\ndialogue_text = %s\ntriangle_menu_font = %s\nmovie_blur = %s\nmovie_presentation = %u\nbattle_debris_3d = %u\nplayer_shadow = %u\n"
+#endif
+        "\n"
         "[audio]\n"
         "volume = %u\n\n"
         "[game]\n"
@@ -584,7 +958,13 @@ static int Host_SaveOptions(void) {
         host_options.geometry_correction ? "true" : "false",
         host_options.antialiasing ? "true" : "false",
         host_options.model_filtering ? "true" : "false",
+        host_options.dynamic_lighting ? "true" : "false",
+        host_options.frame_interpolation ? "true" : "false",
+        host_options.effect_geometry_correction ? "true" : "false",
         host_options.widescreen ? "true" : "false",
+#ifdef PE_PS5_GPU_NATIVE
+        host_options.sprite_filtering?"true":"false",(unsigned)host_options.movie_cleanup,host_options.gameplay_fill ? "true" : "false",host_options.fsr1 ? "true" : "false",(unsigned)host_options.fsr1_sharpness,(unsigned)host_options.model_fill_lighting,host_options.particle_lighting?"true":"false",host_options.dialogue_text?"true":"false",host_options.triangle_menu_font?"true":"false",host_options.movie_presentation==1?"true":"false",(unsigned)host_options.movie_presentation,(unsigned)host_options.battle_debris_3d,(unsigned)host_options.player_shadow,
+#endif
         host_options.volume,
         host_options.speed_factor,
         host_options.analog_run_threshold
@@ -594,6 +974,17 @@ static int Host_SaveOptions(void) {
     Host_WriteString(file, host_options.discs[1]);
 
     fprintf(file,"\n\n[mods]\nhd_backgrounds = %s\n",host_options.hd_backgrounds?"true":"false");
+#ifdef PE_PS5
+    fprintf(file,"hd_field_materials = %s\n",host_options.hd_field_materials?"true":"false");
+    fputs("hd_field_directory = ",file);Host_WriteString(file,host_options.hd_field_directory);fputc('\n',file);
+    fputs("hd_title_directory = ",file);
+    Host_WriteString(file,host_options.hd_title_directory);
+    fputc('\n',file);
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    fprintf(file,"hd_models = %s\nhd_model_directory = ",host_options.hd_models?"true":"false");Host_WriteString(file,host_options.hd_model_directory);
+    fprintf(file,"\n\n[interface]\nshow_fps = %d\nmenu_style = %d\nmenu_text_size = %d\nmenu_pointer = %d\n",host_options.show_fps,host_options.menu_style,host_options.menu_text_size,host_options.menu_pointer);
+#endif
     fputs("\n[keyboard]\n", file);
     for (unsigned i = 0; i < HOST_BINDING_COUNT; ++i) {
         fprintf(file, "%s = %d\n", host_button_names[i], host_options.keys[i]);
@@ -617,18 +1008,34 @@ static int Host_SaveOptions(void) {
 /* Bundled desktop launches have no useful writable working directory.
  * Keep PS1 card files alongside the per-user preferences, without changing
  * relative image paths or the working directory used by headless replays. */
+static void Host_CardDiagnostic(const char *operation, const char *path) {
+#ifdef PE_PS5
+    static unsigned count;
+    int error = errno;
+    if (count++ < 32)
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "PS5 card failure operation=%s path=%.700s errno=%d SDL=%.400s",
+                     operation, path, error, SDL_GetError());
+    errno = error;
+#else
+    (void)operation; (void)path;
+#endif
+}
 static int Host_CardPath(char *dst, const char *src, int capacity) {
     if (strlen(src) < 5 || src[0] != 'b' || src[1] != 'u' || src[4] != ':' ||
         src[2] < '0' || src[2] > '1' || src[3] < '0' || src[3] > '3') {
+        Host_CardDiagnostic("invalid-device", src);
         return -1;
     }
     const char *slash = strrchr(host_options.user_file, '/');
     const char *backslash = strrchr(host_options.user_file, '\\');
     if (backslash && (!slash || backslash > slash)) slash = backslash;
     if (!slash) {
+        Host_CardDiagnostic("preferences-no-parent", host_options.user_file);
         return -1;
     }
     if (capacity <= 0) {
+        Host_CardDiagnostic("invalid-capacity", src);
         return 0;
     }
 
@@ -640,7 +1047,7 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
         host_options.user_file,
         src
     );
-    if (n < 0 || n >= capacity) { dst[0] = '\0'; return 0; }
+    if (n < 0 || n >= capacity) { Host_CardDiagnostic("directory-format-truncated", src); dst[0] = '\0'; return 0; }
 #ifdef _WIN32
     /* SDL's Win32 calls also need the extended prefix for long paths. Leave
      * short portable paths unchanged, including their usual slash spelling. */
@@ -669,7 +1076,7 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
         }
     }
 #endif
-    if (!SDL_CreateDirectory(dst)) { dst[0] = '\0'; return 0; }
+    if (!SDL_CreateDirectory(dst)) { Host_CardDiagnostic("SDL_CreateDirectory", dst); dst[0] = '\0'; return 0; }
 
     const char *name = src + 5;
     if (*name == '*') {
@@ -681,6 +1088,7 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
 #endif
     int added = snprintf(dst + n, (size_t)(capacity - n), "%c%s", separator, name);
     if (added < 0 || added >= capacity - n) {
+        Host_CardDiagnostic("filename-format-truncated", src);
         dst[0] = '\0';
     }
     return 0;
@@ -707,28 +1115,30 @@ static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char 
     unsigned port = length >= 4 && dirname[length - 3] == '1';
     snprintf(device, sizeof(device), "bu%u0:%s", port, name);
     Host_CardPath(target, device, sizeof(target));
-    if (!*target) { import->ok = 0; return SDL_ENUM_CONTINUE; }
+    if (!*target) { Host_CardDiagnostic("import-card-callback", device); import->ok = 0; return SDL_ENUM_CONTINUE; }
     if (SDL_GetPathInfo(target, &info)) return SDL_ENUM_CONTINUE;
-    if (import->count >= 128) { import->ok = 0; return SDL_ENUM_CONTINUE; }
+    if (import->count >= 128) { Host_CardDiagnostic("import-count-limit", source); import->ok = 0; return SDL_ENUM_CONTINUE; }
     size_t bytes = 0;
     void *data = SDL_LoadFile(source, &bytes);
-    if (!data || bytes != 8192) { SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
+    if (!data || bytes != 8192) { Host_CardDiagnostic("import-load-or-size", source); SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
     const char *last = strrchr(target, '/');
     const char *backslash = strrchr(target, '\\');
     if (backslash && (!last || backslash > last)) last = backslash;
     snprintf(temporary, sizeof(temporary), "%.*s.pe-save-import-%llu.tmp",
              last ? (int)(last - target + 1) : 0, target, (unsigned long long)SDL_GetTicksNS());
     SDL_IOStream *io = SDL_IOFromFile(temporary, "wbx");
-    if (!io) { SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
+    if (!io) { Host_CardDiagnostic("import-exclusive-open", temporary); SDL_free(data); import->ok = 0; return SDL_ENUM_CONTINUE; }
     int written = SDL_WriteIO(io, data, bytes) == bytes && SDL_FlushIO(io);
-    if (!SDL_CloseIO(io)) written = 0;
+    if (!written) Host_CardDiagnostic("import-write-or-flush", temporary);
+    if (!SDL_CloseIO(io)) { Host_CardDiagnostic("import-close", temporary); written = 0; }
     SDL_free(data);
     if (!written || !SDL_RenamePath(temporary, target)) {
+        if (written) Host_CardDiagnostic("import-rename", target);
         SDL_RemovePath(temporary);
         import->ok = 0;
     } else {
         char *created = SDL_strdup(target);
-        if (!created) { SDL_RemovePath(target); import->ok = 0; }
+        if (!created) { Host_CardDiagnostic("import-track-allocation", target); SDL_RemovePath(target); import->ok = 0; }
         else import->created[import->count++] = created;
     }
     return SDL_ENUM_CONTINUE;
@@ -736,23 +1146,31 @@ static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char 
 
 static int Host_InstallCardPaths(const char *base) {
     char marker[4096], card[4096];
-    if (Host_CardPath(card, "bu00:*", sizeof(card)) || !*card) return 0;
+    if (Host_CardPath(card, "bu00:*", sizeof(card)) || !*card) { Host_CardDiagnostic("install-card-callback", "bu00:*"); return 0; }
     snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(card) - 5, card);
     SDL_PathInfo info;
     if (!SDL_GetPathInfo(marker, &info)) {
         HostCardImport import = {.ok = 1};
+#ifdef PE_PS5
+        char *cwd = SDL_malloc(strlen(host_data_root) + 2);
+        if (!cwd) { Host_CardDiagnostic("import-root-allocation", host_data_root); return 0; }
+        snprintf(cwd, strlen(host_data_root) + 2, "%s/", host_data_root);
+        if (base && base[0] != '/') base = NULL;
+#else
         char *cwd = SDL_GetCurrentDirectory();
+#endif
         const char *roots[] = {cwd, base};
         for (unsigned root = 0; root < 2; ++root) if (roots[root]) {
             for (unsigned port = 0; port < 2; ++port) {
                 char source[8192];
                 snprintf(source, sizeof(source), "%sbu%u0", roots[root], port);
                 if (SDL_GetPathInfo(source, &info) && info.type == SDL_PATHTYPE_DIRECTORY &&
-                    !SDL_EnumerateDirectory(source, Host_ImportCard, &import)) import.ok = 0;
+                    !SDL_EnumerateDirectory(source, Host_ImportCard, &import)) { Host_CardDiagnostic("import-enumerate", source); import.ok = 0; }
             }
         }
         SDL_free(cwd);
         if (import.ok && !SDL_SaveFile(marker, "", 0)) {
+            Host_CardDiagnostic("import-marker-save", marker);
             SDL_RemovePath(marker);
             import.ok = 0;
         }
@@ -772,22 +1190,61 @@ static void Host_InitOptions(int enabled) {
     host_options.geometry_correction = 1;
     host_options.antialiasing = 0;
     host_options.model_filtering = 0;
+    host_options.dynamic_lighting = 0;
+    host_options.effect_geometry_correction = 0;
+    host_options.frame_interpolation = 1; /* Owner requested display-only 60 Hz; saved explicit choice loads afterward. */
+#ifdef PE_PS5_GPU_NATIVE
+    host_options.widescreen = 1; /* Genuine wide default only when no saved choice. */
+#else
     host_options.widescreen = 0;
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    host_options.show_fps=1; /* Temporary owner-requested display counter. */
+    host_options.player_shadow=0; /* Optional experimental shadow remains Original, even in fresh Modern. */
+    host_options.triangle_menu_font=0;host_options.dialogue_text=0;host_options.particle_lighting=0;host_options.menu_style=1;host_options.menu_text_size=1;host_options.menu_pointer=2;host_options.hd_models=0;SDL_strlcpy(host_options.hd_model_directory,"/mnt/usb0/parasite-eve-data/mods/characters/duck-models",sizeof host_options.hd_model_directory);
+    host_options.sprite_filtering=0;host_options.movie_cleanup=0;host_options.gameplay_fill=1;host_options.fsr1=0;host_options.fsr1_sharpness=1;host_options.model_fill_lighting=0;host_options.battle_debris_3d=0;host_options.movie_blur=1;host_options.movie_presentation=0; /* New setting absent: Stretch16:9; legacy blur flag cannot override it. */
+#endif
+#ifdef PE_PS5
+    host_options.hd_backgrounds = 0; /* Original until explicitly selected. */
+    host_options.hd_title_directory[0]=0;
+    host_options.hd_field_materials=0;
+    host_options.hd_field_directory[0]=0;
+#else
     host_options.hd_backgrounds = 1;
+#endif
     host_options.volume = 100;
     host_options.speed_factor = 2;
     host_options.analog_run_threshold = 85;
     Boot_InitHostBindings();
+#ifdef PE_PS5
+    /* Public ScePad mapping exposes touchpad; there is no physical Back. */
+    Psyz_SetGamepadBinding_SDL3(8, SDL_GAMEPAD_BUTTON_TOUCHPAD);
+#endif
     for (unsigned i = 0; i < 16; ++i) {
         host_options.keys[i] = Psyz_GetKeyboardBinding_SDL3(i);
         host_options.buttons[i] = Psyz_GetGamepadBinding_SDL3(i);
     }
     host_options.keys[HOST_SPEED_BINDING] = HOST_UNBOUND_KEY;
     host_options.buttons[HOST_SPEED_BINDING] = HOST_UNBOUND_BUTTON;
+    #ifdef PE_PS5_GPU_NATIVE
+    /* Fresh Modern baseline. Saved individual choices load afterward. */
+    host_options.scale=8;host_options.antialiasing=1;host_options.dynamic_lighting=1;host_options.effect_geometry_correction=1;host_options.movie_cleanup=2;host_options.fsr1=1;host_options.fsr1_sharpness=0;host_options.model_fill_lighting=2;host_options.model_filtering=1;host_options.hd_backgrounds=1;host_options.hd_models=1;
+    host_options.dialogue_text=1;host_options.triangle_menu_font=1;host_options.battle_debris_3d=0;host_options.particle_lighting=1;
+    host_options.dither=1;host_options.movie_presentation=1;
+    #endif
     if (!enabled) {
+#ifdef PE_PS5_GPU_NATIVE
+        Host_VisualLoaded();
+#endif
         return;
     }
 
+#ifdef PE_PS5
+    char path[4096];
+    if (Host_DataPath(path, sizeof(path), "parasite-eve.toml") &&
+        strcmp(path, host_options.user_file)) Host_LoadOptions(path);
+    Host_LoadOptions(host_options.user_file);
+#else
     const char *base = SDL_GetBasePath();
     char path[4096];
     if (base) {
@@ -841,17 +1298,100 @@ static void Host_InitOptions(int enabled) {
     if (*host_options.user_file && !Host_InstallCardPaths(base)) {
         fprintf(stderr, "Cannot prepare user memory cards; legacy cards remain in use.\n");
     }
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    Host_VisualLoaded();
+#endif
+}
+
+/* Selection ownership is host_options; the renderer may still bound a genuine
+ * wide view to available room artwork. Report these as different states. */
+static void Host_TraceAspectSelection(const char *phase, int force) {
+#if defined(PE_PS5_GPU_NATIVE)
+    static int last_aspect=-1, last_wide=-1;
+    int requested=host_options.widescreen ? PSYZ_ASPECT_DISPLAY : host_options.aspect;
+    int effective_aspect=Psyz_VideoGetAspectMode();
+    int effective_wide=Psyz_VideoGetWidescreen();
+    if (force || requested!=last_aspect || host_options.widescreen!=last_wide ||
+        requested!=effective_aspect || !!host_options.widescreen!=!!effective_wide) {
+        SDL_Log("[GPU aspect selection] phase=%s requested_aspect=%d requested_wide=%d committed=%d runtime_aspect=%d runtime_wide=%d viewport=next_prepared_present",
+            phase,requested,host_options.widescreen,
+            requested==effective_aspect && !!host_options.widescreen==!!effective_wide,
+            effective_aspect,effective_wide);
+        Psyz_GpuTraceAspectOnce(phase);
+        last_aspect=requested;last_wide=host_options.widescreen;
+    }
+#else
+    (void)phase; (void)force;
+#endif
 }
 
 static void Host_ApplyOptions(SDL_Window *window) {
+#ifdef PE_PS5_GPU_NATIVE
+    Psyz_VideoSetShutdownCallback(Host_NativeApplicationShutdown);
+    Host_VisualSafety();
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    /* Native PS5 output owns the entire television; not a gameplay aspect toggle. */
+    host_options.fullscreen = 1;
+#endif
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+    if(Psyz_CpuGeometryConfigure(host_options.scale)<0)host_options.scale=1;
+    host_options.geometry_correction = 0;
+    host_options.antialiasing = 0;
+    host_options.model_filtering = 0;
+    host_options.fullscreen = 0;
+#endif
     g_FieldAnalogRunThreshold = host_options.analog_run_threshold;
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+    Psyz_VideoSetInternalResolution(1); /* GPU-only resolution stays native. */
+#else
     Psyz_VideoSetInternalResolution(host_options.scale);
+#endif
     Psyz_VideoSetAspectMode(host_options.widescreen ? PSYZ_ASPECT_DISPLAY : (PsyzAspectMode)host_options.aspect);
     Psyz_VideoSetDitheringMode((PsyzDitherMode)host_options.dither);
     Psyz_VideoSetGeometryCorrection(host_options.geometry_correction != 0);
     Psyz_VideoSetAntialiasing(host_options.antialiasing != 0);
     Psyz_VideoSetModelFiltering(host_options.model_filtering != 0);
+#ifdef PE_PS5_GPU_NATIVE
+    Psyz_GpuSetFrameInterpolation(host_options.frame_interpolation != 0);
+    /* Effective admission is reported separately; never overwrite the request. */
+    Psyz_VideoSetDynamicLighting(host_options.dynamic_lighting != 0);
+    Psyz_VideoSetEffectGeometryCorrection(host_options.effect_geometry_correction != 0);
+    if(window) {
+        host_options.dynamic_lighting=Psyz_VideoGetDynamicLighting();
+        host_options.effect_geometry_correction=Psyz_VideoGetEffectGeometryCorrection();
+    }
+#endif
     Psyz_VideoSetWidescreen(host_options.widescreen != 0);
+#ifdef PE_PS5_GPU_NATIVE
+    static int appliedBackgrounds=-1;
+    if(appliedBackgrounds!=host_options.hd_backgrounds){Host_HdApply();appliedBackgrounds=host_options.hd_backgrounds;}
+    if(Psyz_GpuSetHdModels(host_options.hd_models,host_options.hd_model_directory)<0){host_options.hd_models=0;Psyz_GpuSetHdModels(0,NULL);SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,"HD player texture root rejected; original models retained");}
+    Psyz_VideoSetFsr1(host_options.fsr1,host_options.fsr1_sharpness);
+    Psyz_VideoSetSpriteFiltering(host_options.sprite_filtering);
+    if(window)host_options.sprite_filtering=Psyz_VideoGetSpriteFiltering();
+    Psyz_VideoSetMovieCleanup(host_options.movie_cleanup);
+    Psyz_VideoSetGameplayFill(host_options.gameplay_fill);
+    Psyz_VideoSetMoviePresentation(host_options.movie_presentation);
+    Psyz_VideoSetMovieBlur(host_options.movie_presentation==1);
+    FieldFx_SetParticleAugment(host_options.battle_debris_3d);
+    FieldFx_SetParticleLighting(host_options.particle_lighting);
+    PeDialogue_SetEnabled(host_options.dialogue_text);
+    PeMenuFont_SetEnabled(host_options.triangle_menu_font);
+    static int lastTriangleFont=-1;if(lastTriangleFont!=host_options.triangle_menu_font){SDL_Log("[Triangle menu font] requested=%d configured=%d prepared=%d policy=canonical-font-alpha/original-vertex-tint; original-FT4-CLUT-preserved; pixels=unobserved",host_options.triangle_menu_font,PeMenuFont_GetEnabled(),PeMenuFont_GetEffective());lastTriangleFont=host_options.triangle_menu_font;}
+    static int lastDialogue=-1;if(lastDialogue!=host_options.dialogue_text){SDL_Log("[Dialogue font] requested=%d configured=%d prepared=%d scope=supported Latin dialogue; pixels=unobserved",host_options.dialogue_text,PeDialogue_GetEnabled(),PeDialogue_GetEffective());lastDialogue=host_options.dialogue_text;}
+    static int lastParticleLights=-1;if(lastParticleLights!=host_options.particle_lighting){SDL_Log("[Particle lights] requested=%d configured=%d extra_geometry=%d eligible=%d scope=source-known sparks/flame on actors; pixels=unobserved",host_options.particle_lighting,FieldFx_GetParticleLighting(),FieldFx_GetParticleAugment(),FieldFx_GetParticleLighting()&&FieldFx_GetParticleAugment()!=0);lastParticleLights=host_options.particle_lighting;}
+    PeShadow_SetStyle(host_options.player_shadow);host_options.player_shadow=PeShadow_GetStyle();
+    static int lastShadowStyle=-1;if(lastShadowStyle!=host_options.player_shadow){SDL_Log("[Player shadow] configured=%d 0Original-1ProjectedMesh scope=player/known-horizontal-floor fixed-light fallback=original pixels=unobserved",host_options.player_shadow);lastShadowStyle=host_options.player_shadow;}
+    Render_SetModelFillLighting(host_options.model_fill_lighting);
+    static int lastModelFill=-1;
+    if(lastModelFill!=host_options.model_fill_lighting){
+        SDL_Log("[Model fill] requested=%d scope=lit models/props; colour only; original GTE lighting retained; rendered=unobserved",host_options.model_fill_lighting);
+        lastModelFill=host_options.model_fill_lighting;
+    }
+#endif
+    Host_TraceAspectSelection("apply", 0);
     Psyz_AudioSetOutputVolume(host_options.volume);
     for (unsigned i = 0; i < 16; ++i) {
         Psyz_SetKeyboardBinding_SDL3(i, (SDL_Scancode)host_options.keys[i]);
@@ -893,6 +1433,11 @@ static void SDLCALL Host_DiscChosen(void *userdata, const char *const *files, in
 }
 
 static int Host_ChooseDiscs(const char **paths) {
+#ifdef PE_PS5
+    (void)paths;
+    fprintf(stderr, "Configure disc paths in parasite-eve.toml or pass --disc/--disc2.\n");
+    return -1;
+#endif
     static const SDL_DialogFileFilter filters[] = {
         {"Parasite Eve - select both Disc 1 and Disc 2 CUE images", "cue;bin"}
     };
@@ -927,8 +1472,33 @@ static int Host_ChooseDiscs(const char **paths) {
 /* Main owns the two streams; adding an absent volume never replaces one that
  * the original asynchronous archive reader might still be using. */
 static PeDisc *host_images;
+#ifdef PE_PS5_GPU_NATIVE
+static int host_shutdown_complete;
+static void Host_NativeApplicationShutdown(void){
+    if(host_shutdown_complete)return;host_shutdown_complete=1;
+    SDL_Log("[Native quit] stage=game-cleanup-begin");
+    pe_mod_panel_set_native_close(NULL);s_overlayState.open=0;
+    Host_HdStop();
+    if(g_BootDisplayPlaybackActive)BootDisplay_WaitForCdAndRestoreCallbacks();
+#ifdef PE_MODS
+    extern void pe_mods_shutdown_now(void);pe_mods_shutdown_now();
+#endif
+    Psyz_AudioDestroy();CdRom_BindImage(NULL,NULL);
+    g_CdImageVolumes[0]=g_CdImageVolumes[1]=NULL;g_CdImageRequest=NULL;
+    g_BootMovieSkipConfirm=NULL;g_BootSceneStarted=NULL;
+    if(host_images){pe_disc_close(&host_images[0]);pe_disc_close(&host_images[1]);host_images=NULL;}
+    free(g_BootHostHealthEvents);g_BootHostHealthEvents=NULL;g_BootHostHealthEventCount=g_BootHostHealthApplied=0;
+    free(g_BootHostPadEvents);g_BootHostPadEvents=NULL;g_BootHostPadEventCount=0;
+    SDL_Log("[Native quit] stage=game-cleanup-end");
+}
+#endif
 
 static int Host_SelectImage(unsigned identity, char *path, size_t size) {
+#ifdef PE_PS5
+    (void)identity; (void)path; (void)size;
+    fprintf(stderr, "Disc image missing; configure both disc paths before startup.\n");
+    return -1;
+#endif
     static const SDL_DialogFileFilter filters[] = {
         {"Parasite Eve USA CUE/BIN image", "cue;bin"}
     };
@@ -979,7 +1549,7 @@ static int Host_InstallImage(unsigned identity, const char *path) {
 
     PeDisc *image = &host_images[slot];
     unsigned found = 0;
-    if (!pe_disc_open(image, path)) {
+    if (!Host_OpenDisc(image, path)) {
         return 0;
     }
 
@@ -1002,6 +1572,11 @@ static int Host_AddImage(unsigned identity, int required) {
     if (g_CdImageVolumes[identity - 1]) {
         return 1;
     }
+#ifdef PE_PS5
+    (void)required;
+    fprintf(stderr, "Disc %u is unavailable; configure both disc images before console startup.\n", identity);
+    return 0;
+#endif
 
     Psyz_PauseHostClock_SDL3(true);
     int paused = Psyz_AudioIsPaused();
@@ -1095,10 +1670,14 @@ static void Host_OverlayRenderFallback(
     if (h <= 0) {
         h = 600;
     }
-    OverlayComputeLayout(state->page, w, h, &layout);
+    OverlayComputeStateLayout(state, w, h, &layout);
     s_overlayLayout = layout;
     if (OverlayFontReady() && OverlaySurfaceResize(&s_overlaySurface, layout.w, layout.h)) {
-        OverlayPaint(&s_overlaySurface, state, &layout);
+        if (state->prompt) {
+            OverlayPaintPrompt(&s_overlaySurface, state, &layout);
+        } else {
+            OverlayPaint(&s_overlaySurface, state, &layout);
+        }
         if (*texture == NULL || *texW != layout.w || *texH != layout.h) {
             if (*texture != NULL) {
                 SDL_DestroyTexture(*texture);
@@ -1129,20 +1708,31 @@ static void Host_OverlayRenderFallback(
         SDL_RenderTexture(renderer, *texture, NULL, &dst);
     }
     SDL_RenderPresent(renderer);
+#ifdef PE_PS5
+    SDL_UpdateWindowSurface(window);
+#endif
 }
 
 static void Host_SwitchSettingsPage(HostOverlayState *state, int nextPage) {
     int normalized = (nextPage % OVERLAY_PAGE_COUNT + OVERLAY_PAGE_COUNT) % OVERLAY_PAGE_COUNT;
     if (state->page != normalized) {
-        state->page = normalized;
-        state->row = 0;
-        state->scroll = 0;
-        state->bind_device = HOST_BIND_KEYBOARD;
+#ifdef PE_PS5_GPU_NATIVE
+        state->page_rows[state->page]=state->row;state->page_scrolls[state->page]=state->scroll;
+        state->page=normalized;state->row=state->page_rows[normalized];state->scroll=state->page_scrolls[normalized];
+        if(state->row>=Host_SettingsTotalRowCount(normalized))state->row=0;
+        Host_EnsureControlsRowVisible(state);
+#else
+        state->page = normalized;state->row = 0;state->scroll = 0;state->bind_device=HOST_BIND_KEYBOARD;
+#endif
         state->capturing_binding = 0;
         state->status = NULL;
         state->dirty = 1;
     }
 }
+
+#ifdef PE_PS5_GPU_NATIVE
+static int Host_SettingsBack(HostOverlayState *state){if(Host_RegistryBack(state))return 1;if(state->page==OVERLAY_PAGE_AUDIO){Host_SwitchSettingsPage(state,OVERLAY_PAGE_GRAPHICS);return 1;}return 0;}
+#endif
 
 static void Host_ApplySettingsAction(
     HostOverlayState *state,
@@ -1153,7 +1743,14 @@ static void Host_ApplySettingsAction(
     int pureCount = Host_SettingsPureRowCount(state->page);
     if (state->row >= pureCount) {
         if (activate_only) {
-            if (state->row == pureCount) {
+            if (state->row == pureCount
+#ifdef PE_PS5_GPU_NATIVE
+                ||state->row==pureCount+1
+#endif
+            ) {
+#ifdef PE_PS5_GPU_NATIVE
+                if(state->row==pureCount+1&&Host_SettingsBack(state))return;
+#endif
                 state->open = 0;
             } else {
                 state->quit = 1;
@@ -1163,19 +1760,69 @@ static void Host_ApplySettingsAction(
         return;
     }
 
+#ifdef PE_PS5_GPU_NATIVE
+    if(state->page==HOST_PAGE_GRAPHICS&&state->row==1){if(activate_only)Host_SwitchSettingsPage(state,OVERLAY_PAGE_AUDIO);return;}
+    if(state->page==HOST_PAGE_MODS||state->page==HOST_PAGE_CHEATS||state->page==HOST_PAGE_STATES||(state->page==HOST_PAGE_IMAGES&&state->row>=3)){
+        state->status=NULL;
+        if(Host_ModernAction(state->page,state->row,action,activate_only))state->open=0;
+        state->dirty=1;return;
+    }
+#endif
     int declCount = 0;
     const OverlaySetting *settings = OverlayPageSettings(state->page, &declCount);
     if (settings != NULL && state->row >= 0 && state->row < declCount) {
         const OverlaySetting *setting = &settings[state->row];
-        int index = setting->get();
-        if (state->page == OVERLAY_PAGE_AUDIO) {
+#ifdef PE_PS5_GPU_NATIVE
+        if((setting->set==SetFsrStatus||setting->set==SetDialogueStatus||setting->set==SetTriangleFontStatus))return;
+#endif
+        int index = setting->get(); /* User intent is relative to the currently displayed value. */
+        if (state->page == OVERLAY_PAGE_AUDIO
+#ifndef PE_PS5_GPU_NATIVE
+            
+#else
+            &&0
+#endif
+        ) {
             index = ClampIndex(index + action, setting->count);
         } else {
             index = (index + action + setting->count) % setting->count;
         }
+        #ifdef PE_PS5_GPU_NATIVE
+        /* Restore other Modern choices, then apply only this explicitly edited field. */
+        if(state->page==OVERLAY_PAGE_AUDIO&&setting->set!=SetShowFps&&!host_presentation)SetPresentation(1);
+        #endif
         setting->set(index);
+#ifdef PE_PS5
+        SDL_Log("[V2 DIRECT DISPLAY toggle] %s requested=%s stored_index=%d",setting->label,setting->names[index],setting->get());
+#endif
     } else if (state->page == HOST_PAGE_MODS) {
+#ifdef PE_PS5_GPU_NATIVE
+#ifdef PE_MODS
+        if(state->row==4){
+            if(activate_only){host_open_assists=1;state->open=0;}
+            return;
+        }
+#endif
+        if(state->row==5){
+            host_options.battle_debris_3d=(host_options.battle_debris_3d+action+3)%3;
+            FieldFx_SetParticleAugment(host_options.battle_debris_3d);
+            SDL_Log("[3D falling debris] requested=%d scope=FallingSprite+BurstOrb-debris2-3-render-only 0Original1Hybrid2Geometry-only-original-on-failure",host_options.battle_debris_3d);
+            state->status=NULL;state->dirty=1;return;
+        }
+        if(state->row==3){
+            host_options.movie_presentation=host_options.movie_presentation==0?1:0;
+            host_options.movie_blur=host_options.movie_presentation==1;
+            Psyz_VideoSetMoviePresentation(host_options.movie_presentation);
+            Psyz_VideoSetMovieBlur(host_options.movie_blur);
+            SDL_Log("[Movie presentation] mode=%d 0Stretch16:9-1Aspect+blur-2Originalbars scope=RGB24",host_options.movie_presentation);
+            state->status=NULL;state->dirty=1;return;
+        }
+#endif
+#ifdef PE_PS5
+        if(activate_only || state->row<=1)Host_HdAction(state->row);
+#else
         if(activate_only || state->row==0)Host_HdAction(state->row);
+#endif
         state->status=Host_HdStatus();state->dirty=1;return;
     } else if (state->page == HOST_PAGE_IMAGES) {
         if (!activate_only) {
@@ -1237,11 +1884,17 @@ static void Host_ControlHd(int enabled,const char *directory) {
 
 static void Host_ControlGraphics(int geometry, int antialiasing, int filtering) {
     const int values[3] = {geometry, antialiasing, filtering};
+    int (*const getters[3])(void) = {GetGeometryCorrection, GetAntialiasing, GetModelFiltering};
     HostOverlayState state = {.open=1, .page=HOST_PAGE_GRAPHICS};
+    SDL_Window *window=Psyz_GetWindow_SDL3();
+    /* Native Graphics has additional rows: find the actual option identity. */
     for (int i=0;i<3;++i) {
-        state.row=4+i;
-        if (kGraphics[state.row].get()!=values[i])
-            Host_ApplySettingsAction(&state, 1, 0, NULL);
+        for(int row=0;row<COUNT_OF(kGraphics);++row) {
+            if(kGraphics[row].get!=getters[i])continue;
+            state.row=row;
+            if(kGraphics[row].get()!=values[i])Host_ApplySettingsAction(&state,1,0,window);
+            break;
+        }
     }
 }
 
@@ -1304,8 +1957,20 @@ static void Host_ProcessSettingsPointer(
         int isStepper = hitRow < pureCount &&
                         !(state->page == HOST_PAGE_CONTROLS && hitRow >= 1 && hitRow != HOST_ANALOG_RUN_ROW) &&
                         state->page != HOST_PAGE_IMAGES &&
-                        !(state->page==HOST_PAGE_MODS && hitRow>0);
+                        !(state->page==HOST_PAGE_MODS && hitRow>0
+#ifdef PE_PS5_GPU_NATIVE
+                          && hitRow!=3 && hitRow!=5
+#endif
+                          );
+#ifdef PE_PS5_GPU_NATIVE
+        if(hitRow<pureCount&&(state->page==HOST_PAGE_MODS||state->page==HOST_PAGE_CHEATS||state->page==HOST_PAGE_STATES||state->page==HOST_PAGE_IMAGES)){
+            int kind=Host_ModernRowKind(state->page,hitRow);if(!kind)return;isStepper=kind==2;
+        }
+#endif
         int action = isStepper ? (x < OverlayValueCentre() ? -1 : 1) : 1;
+        #ifdef PE_PS5_GPU_NATIVE
+        if(state->page==HOST_PAGE_GRAPHICS&&hitRow==1)isStepper=0;
+        #endif
         Host_ApplySettingsAction(state, action, !isStepper, game);
     }
 }
@@ -1485,6 +2150,9 @@ static void Host_ProcessSettingsEvent(
         switch (event->key.scancode) {
         case SDL_SCANCODE_ESCAPE:
             if (!repeat) {
+#ifdef PE_PS5_GPU_NATIVE
+                if(Host_SettingsBack(state))break;
+#endif
                 state->open = 0;
             }
             break;
@@ -1533,9 +2201,22 @@ static void Host_ProcessSettingsEvent(
         default:
             break;
         }
+    } else if (event->type == SDL_EVENT_GAMEPAD_AXIS_MOTION &&
+               (event->gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX || event->gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY)) {
+        int vertical=event->gaxis.axis==SDL_GAMEPAD_AXIS_LEFTY;
+        int *held=vertical?&state->stick_y:&state->stick_x;
+        int value=event->gaxis.value;
+        int next=value>16000?1:value < -16000?-1:(value>-8000&&value<8000?0:*held);
+        if(next!=*held){*held=next;if(next){
+            if(vertical){state->row=(state->row+totalRows+next)%totalRows;Host_EnsureControlsRowVisible(state);state->dirty=1;}
+            else Host_ApplySettingsAction(state,next,0,game);
+        }}
     } else if (event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) {
         switch (event->gbutton.button) {
         case SDL_GAMEPAD_BUTTON_EAST:
+#ifdef PE_PS5_GPU_NATIVE
+            if(Host_SettingsBack(state))break;
+#endif
         case SDL_GAMEPAD_BUTTON_START:
             state->open = 0;
             break;
@@ -1571,14 +2252,22 @@ static void Host_ProcessSettingsEvent(
             break;
         }
     } else if (event->type == SDL_EVENT_MOUSE_WHEEL) {
-        if (state->page == OVERLAY_PAGE_CONTROLS && event->wheel.y != 0.0f) {
+        if (Host_SettingsPureRowCount(state->page)>Host_SettingsVisibleSettingCount(state->page) && event->wheel.y != 0.0f) {
             int step = event->wheel.y > 0.0f ? -1 : 1;
             if (event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
                 step = -step;
             }
-            int nextScroll = Host_ClampControlsScroll(state->scroll + step);
+            int nextScroll = state->scroll+step;
+            if(state->page==OVERLAY_PAGE_CONTROLS)nextScroll=Host_ClampControlsScroll(nextScroll);
+            else {
+                int maximum=Host_SettingsPureRowCount(state->page)-Host_SettingsVisibleSettingCount(state->page);
+                if(maximum<0)maximum=0;if(nextScroll<0)nextScroll=0;if(nextScroll>maximum)nextScroll=maximum;
+            }
             if (nextScroll != state->scroll) {
                 state->scroll = nextScroll;
+#ifdef PE_PS5_GPU_NATIVE
+                if(state->row<Host_SettingsPureRowCount(state->page)&&OverlayVisibleSlotForRow(state,state->row)<0)state->row=state->page==HOST_PAGE_CONTROLS?1+nextScroll:nextScroll;
+#endif
                 state->dirty = 1;
             }
         }
@@ -1590,10 +2279,19 @@ static void Host_ProcessSettingsEvent(
     }
 }
 
+void CPE_StateUi_AfterModalClosed(void);
 static void Host_Settings(SDL_Window *game) {
+#ifdef PE_PS5_GPU_NATIVE
+    Psyz_GpuResetInterpolation();
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    /* Native SDL surface flags do not describe output ownership. */
+    host_options.fullscreen = 1;
+#else
     if (game) {
         host_options.fullscreen = (SDL_GetWindowFlags(game) & SDL_WINDOW_FULLSCREEN) != 0;
     }
+#endif
 
     int useGpuOverlay = (game != NULL && s_overlayGpuDevice != NULL);
     SDL_Window *fallbackWindow = NULL;
@@ -1602,6 +2300,15 @@ static void Host_Settings(SDL_Window *game) {
     int fallbackTexW = 0, fallbackTexH = 0;
 
     if (!useGpuOverlay) {
+#ifdef PE_PS5
+        fallbackWindow = game;
+        SDL_Surface *surface = game ? SDL_GetWindowSurface(game) : NULL;
+        fallbackRenderer = surface ? SDL_CreateSoftwareRenderer(surface) : NULL;
+        if (!fallbackRenderer) {
+            fprintf(stderr, "Cannot open console settings: %s\n", SDL_GetError());
+            return;
+        }
+#else
         fallbackWindow = SDL_CreateWindow(
             "Parasite Eve - Settings", 640, 600, SDL_WINDOW_HIGH_PIXEL_DENSITY
         );
@@ -1613,6 +2320,7 @@ static void Host_Settings(SDL_Window *game) {
             SDL_DestroyWindow(fallbackWindow);
             return;
         }
+#endif
         SDL_PumpEvents();
         SDL_FlushEvents(SDL_EVENT_WINDOW_FIRST, SDL_EVENT_WINDOW_LAST);
     }
@@ -1625,7 +2333,11 @@ static void Host_Settings(SDL_Window *game) {
 
     s_overlayState = (HostOverlayState){
         .open = 1,
+#ifdef PE_PS5_GPU_NATIVE
+        .page=host_requested_settings_page>=0?host_requested_settings_page:host_last_settings_page,
+#else
         .page = HOST_PAGE_GRAPHICS,
+#endif
         .row = 0,
         .bind_device = HOST_BIND_KEYBOARD,
         .capturing_binding = 0,
@@ -1634,10 +2346,20 @@ static void Host_Settings(SDL_Window *game) {
         .status = NULL
     };
 
+#ifdef PE_PS5_GPU_NATIVE
+    host_requested_settings_page=-1;
+    memcpy(s_overlayState.page_rows,host_saved_rows,sizeof host_saved_rows);memcpy(s_overlayState.page_scrolls,host_saved_scrolls,sizeof host_saved_scrolls);
+    s_overlayState.row=s_overlayState.page_rows[s_overlayState.page];s_overlayState.scroll=s_overlayState.page_scrolls[s_overlayState.page];
+    s_overlayState.bind_device=HOST_BIND_CONTROLLER;Host_EnsureControlsRowVisible(&s_overlayState);
+#endif
+    #ifdef PE_PS5_GPU_NATIVE
+    pe_mod_panel_set_native_close(Host_RegistryClose);
+    #endif
+    if(host_registry_open_pending){host_registry_open_pending=0;Host_RegistryGoTo(&s_overlayState,host_registry_open_scope,host_registry_open_path);}
     while (s_overlayState.open) {
         int hd_was_busy=Host_HdBusy();Host_HdPoll();
         if(hd_was_busy || Host_HdBusy())s_overlayState.dirty=1;
-        if(s_overlayState.page==HOST_PAGE_MODS)s_overlayState.status=Host_HdStatus();
+        /* Each unified tab supplies its own selected-row context help. */
         if (useGpuOverlay) {
             Host_OverlayRefreshGPU(s_overlayGpuDevice, game, &s_overlayState);
             Psyz_VideoVSync(0);
@@ -1657,16 +2379,29 @@ static void Host_Settings(SDL_Window *game) {
         }
     }
 
+#ifdef PE_PS5_GPU_NATIVE
+    s_overlayState.page_rows[s_overlayState.page]=s_overlayState.row;s_overlayState.page_scrolls[s_overlayState.page]=s_overlayState.scroll;
+    memcpy(host_saved_rows,s_overlayState.page_rows,sizeof host_saved_rows);memcpy(host_saved_scrolls,s_overlayState.page_scrolls,sizeof host_saved_scrolls);host_last_settings_page=s_overlayState.page;
+#endif
+    #ifdef PE_PS5_GPU_NATIVE
+    pe_mod_panel_set_native_close(NULL);
+    pe_menu_save_settings(); /* Includes dynamic choices normalized while painting. */
+    #endif
     int quit = s_overlayState.quit;
     s_overlayState.open = 0;
+    Host_TraceAspectSelection("menu_resume", 1);
 
     if (!Host_SaveOptions()) {
+#ifdef PE_PS5
+        fprintf(stderr, "Could not save preferences; changes apply for this session.\n");
+#else
         SDL_ShowSimpleMessageBox(
             SDL_MESSAGEBOX_ERROR,
             "Parasite Eve",
             "Could not save preferences. Changes apply for this session.",
             fallbackWindow ? fallbackWindow : game
         );
+#endif
     }
     if (fallbackTexture != NULL) {
         SDL_DestroyTexture(fallbackTexture);
@@ -1675,7 +2410,9 @@ static void Host_Settings(SDL_Window *game) {
         SDL_DestroyRenderer(fallbackRenderer);
     }
     if (fallbackWindow != NULL) {
+#ifndef PE_PS5
         SDL_DestroyWindow(fallbackWindow);
+#endif
     }
 
     /* Avoid a held menu key leaking into the resumed original pad poll. */
@@ -1684,6 +2421,15 @@ static void Host_Settings(SDL_Window *game) {
     if (!paused) {
         Psyz_AudioUnpause();
     }
+#if defined(PE_PS5_GPU_NATIVE) && defined(PE_MODS)
+    if(host_open_assists){
+        host_open_assists=0;
+        if(!quit)pe_mod_panel_open_page(host_pending_mod_page?host_pending_mod_page:"Playtest assists");host_pending_mod_page=NULL;
+    }
+#endif
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    if(!quit)CPE_StateUi_AfterModalClosed();
+#endif
     if (quit) {
         SDL_Event event;
         SDL_zero(event);
@@ -1694,6 +2440,22 @@ static void Host_Settings(SDL_Window *game) {
 
 /* g_BootMovieSkipConfirm: the movie, game clock and audio stay paused until
  * the question is answered. No keeps watching. */
+#ifdef PE_PS5_GPU_NATIVE
+static void Host_OpenSettingsTab(int page){
+    if(s_install.active||s_overlayState.prompt||s_overlayState.capturing_binding)return;
+    if(s_overlayState.open){Host_SwitchSettingsPage(&s_overlayState,page);return;}
+    host_requested_settings_page=page;Host_Settings(Psyz_GetWindow_SDL3());
+}
+int CPE_HostOpenCheatsTab(void){Host_OpenSettingsTab(HOST_PAGE_CHEATS);return 1;}
+int CPE_HostOpenRegistryPage(const char *page){
+    int tab=HOST_PAGE_MODS;
+    if(page&&strlen(page)>=sizeof host_registry_open_path)return 0;
+    int scope=Host_RegistryRouteScope(page,&tab);
+    if(s_overlayState.open){Host_SwitchSettingsPage(&s_overlayState,tab);Host_RegistryGoTo(&s_overlayState,scope,page?page:"");return 1;}
+    host_registry_open_pending=1;host_registry_open_scope=scope;SDL_strlcpy(host_registry_open_path,page?page:"",sizeof host_registry_open_path);
+    Host_OpenSettingsTab(tab);return 1;
+}
+#endif
 static int Host_ConfirmMovieSkip(void) {
     SDL_Window *game = Psyz_GetWindow_SDL3();
     int paused = Psyz_AudioIsPaused();
@@ -1718,6 +2480,26 @@ static int Host_ConfirmMovieSkip(void) {
         quit = s_overlayState.quit;
         s_overlayState = (HostOverlayState){0};
     } else {
+#ifdef PE_PS5
+        SDL_Surface *surface = game ? SDL_GetWindowSurface(game) : NULL;
+        SDL_Renderer *renderer = surface ? SDL_CreateSoftwareRenderer(surface) : NULL;
+        SDL_Texture *texture = NULL;
+        int texW = 0, texH = 0;
+        if (renderer) {
+            s_overlayState = (HostOverlayState){.open = 1, .row = 1, .dirty = 1, .prompt = 1};
+            while (s_overlayState.open) {
+                Host_OverlayRenderFallback(renderer, game, &s_overlayState, &texture, &texW, &texH);
+                SDL_Event event;
+                if (SDL_WaitEventTimeout(&event, 20))
+                    Host_ProcessSettingsEvent(&s_overlayState, &event, game, NULL);
+            }
+            skip = s_overlayState.skip;
+            quit = s_overlayState.quit;
+            s_overlayState = (HostOverlayState){0};
+            SDL_DestroyTexture(texture);
+            SDL_DestroyRenderer(renderer);
+        }
+#else
         SDL_MessageBoxButtonData buttons[] = {
             {0, 1, "Yes"},
             {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No"}
@@ -1732,6 +2514,7 @@ static int Host_ConfirmMovieSkip(void) {
         };
         int choice = 0;
         skip = SDL_ShowMessageBox(&box, &choice) && choice == 1;
+#endif
     }
 
     /* Avoid the answering key leaking into the resumed original pad poll. */
@@ -1826,7 +2609,13 @@ static bool Host_SpeedHoldEvent(const SDL_Event *event) {
 }
 
 static bool Host_SettingsEvent(const SDL_Event *event) {
+#ifdef PE_PS5_GPU_NATIVE
+    if(s_install.active)return Host_InstallerEvent(event)!=0;
+#endif
     SDL_Window *game = Psyz_GetWindow_SDL3();
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    if(!s_overlayState.prompt&&!s_overlayState.capturing_binding && Host_StateChord(event))return true;
+#endif
     if (s_overlayState.open) {
         if (event->type == SDL_EVENT_WINDOW_RESIZED ||
             event->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
@@ -1844,6 +2633,18 @@ static bool Host_SettingsEvent(const SDL_Event *event) {
         Host_PauseForFocus(game);
         return true;
     }
+#ifdef PE_PS5
+    if (event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN &&
+        (event->gbutton.button == SDL_GAMEPAD_BUTTON_LEFT_STICK ||
+         event->gbutton.button == SDL_GAMEPAD_BUTTON_RIGHT_STICK)) {
+        SDL_Gamepad *pad = SDL_GetGamepadFromID(event->gbutton.which);
+        if (pad && SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_STICK) &&
+            SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_RIGHT_STICK)) {
+            Host_Settings(game);
+            return true;
+        }
+    }
+#endif
     if (event->type == SDL_EVENT_KEY_DOWN && event->key.scancode == SDL_SCANCODE_ESCAPE) {
         if (!event->key.repeat) {
             Host_Settings(game);
@@ -1854,11 +2655,49 @@ static bool Host_SettingsEvent(const SDL_Event *event) {
 }
 
 static void Host_InstallSettingsOverlay(void) {
+    static int installed;if(installed)return;installed=1;
     s_prevOverlayInit = Psyz_OverlayInit_SDL3GPU(Host_OverlayInitGPU);
     s_prevOverlayRender = Psyz_OverlayRender_SDL3GPU(Host_OverlayRenderGPU);
     s_prevOverlayDestroy = Psyz_OverlayDestroyCB(Host_OverlayDestroyGPU);
     Psyz_SetOverlayEventFilter_SDL3(Host_SettingsEvent);
 }
+
+#ifdef PE_PS5_GPU_NATIVE
+#include "installer/pe_native_install_ui.h"
+
+/* Explicit in-session asset setup, reusing the existing controller browser and
+ * validated read-only subset adapter. The caller already owns the paused menu. */
+static void Host_CharacterPackAction(int choose){
+    static char status[256];
+    if(s_install.active)return;
+    HostOverlayState previous=s_overlayState;memset(&s_install,0,sizeof s_install);s_install.active=1;
+    SDL_strlcpy(s_install.characters,Psyz_GpuHdModelsRoot(),sizeof s_install.characters);
+    s_overlayState.installer=1;s_overlayState.dirty=1;
+    int selected=1;
+    if(choose){
+        if(!pe_install_character_pack_hint(s_install.characters))InstallFindCharacters();
+        InstallBrowse(4);
+        while(!s_install.cancel&&s_install.phase==PE_IV_BROWSER)InstallFrame();
+        selected=s_install.browser_selected&&!s_install.cancel;
+    }
+    int committed=0;status[0]=0;
+    if(selected&&!s_install.cancel){
+        s_install.phase=PE_IV_PROGRESS;s_overlayState.dirty=1;InstallFrame();
+        if(InstallCheckCharacters(s_install.characters,NULL)&&!s_install.cancel){
+            if(Psyz_GpuReloadHdModels(s_install.characters)==0){
+                SDL_strlcpy(host_options.hd_model_directory,s_install.characters,sizeof host_options.hd_model_directory);
+                int saved=Host_SaveOptions();committed=1;
+                if(!saved)SDL_strlcpy(status,"Character pack reloaded for this launch; settings could not be saved",sizeof status);
+                else SDL_strlcpy(status,host_options.hd_models?"Character pack checked and reloaded; waiting for exact matches":"Character pack checked and reloaded; HD models remain Off",sizeof status);
+            }else SDL_strlcpy(status,"Character pack reload failed; previous pack retained",sizeof status);
+        }else if(!s_install.cancel)SDL_strlcpy(status,s_install.status[0]?s_install.status:"Choose a valid USB native character texture folder",sizeof status);
+    }
+    if(!status[0])SDL_strlcpy(status,"Character pack check cancelled; previous pack retained",sizeof status);
+    SDL_Log("[HD models setup] choose=%d committed=%d requested=%d root=%s result=%s",choose,committed,host_options.hd_models,host_options.hd_model_directory,status);
+    s_install.active=0;s_overlayState=previous;s_overlayState.status=status;s_overlayState.dirty=1;SDL_ResetKeyboard();pe_toast(status);
+}
+
+#endif
 
 #define STATE_FLAG_IMAGE_BUSY 0x00100000U
 #define STATE_FLAG_READY 0x00000100U
@@ -1927,14 +2766,24 @@ static void Host_DescribeCrash(char *out, size_t size) {
     Host_CrashAppend(out, size, &used,
                      "\r\n== Settings ==\r\n"
                      "Settings file: %s\r\n"
+#ifdef PE_PS5
+                     "Graphics: requested CPU geometry %ux (last prepared %ux), fullscreen %s, aspect ratio %s, "
+#else
                      "Graphics: render resolution %ux (renderer %ux), fullscreen %s, aspect ratio %s, "
+#endif
                      "dithering %s, geometry correction %s, antialiasing %s, model textures %s\r\n"
                      "Audio: master volume %u%%\r\n"
                      "Controls: speed-up %ux while held, field run threshold %u\r\n"
                      "Discs: disc 1 %s, disc 2 %s\r\n",
                      host_options.enabled && *host_options.user_file ? Host_CrashFileName(host_options.user_file)
                                                                       : "none (defaults, not saved)",
-                     host_options.scale, Psyz_VideoGetInternalResolution(), kSwitchNames[host_options.fullscreen != 0],
+                     host_options.scale,
+#ifdef PE_PS5
+                     Psyz_CpuGeometryEffective(),
+#else
+                     Psyz_VideoGetInternalResolution(),
+#endif
+                     kSwitchNames[host_options.fullscreen != 0],
                      kAspectNames[host_options.aspect != 0], kDitherNames[host_options.dither != 0],
                      kSwitchNames[host_options.geometry_correction != 0], kAntialiasNames[host_options.antialiasing != 0],
                      kFilterNames[host_options.model_filtering != 0], host_options.volume, host_options.speed_factor,
@@ -2145,10 +2994,16 @@ static int Host_ParseHealthEventArg(const char *cursor, int argc) {
 }
 
 int main(int argc, char **argv) {
+#ifdef PE_PS5
+    if (!Host_InitPaths()) return EXIT_FAILURE;
+#endif
     int mode;
     u32 token;
     Pe1GameState *state;
     PeDisc images[2] = {{0}};
+#ifdef PE_PS5_GPU_NATIVE
+    host_images=images; /* Also own early-open failure cleanup, before image admission. */
+#endif
     const char *paths[2] = {NULL, NULL};
     int result = EXIT_FAILURE;
     int interactive = 1;
@@ -2171,6 +3026,20 @@ int main(int argc, char **argv) {
     CrashReport_SetMods(pe_mod_crash_describe);
 #endif
     Host_InitOptions(interactive);
+#ifdef PE_PS5
+    SDL_Log("[CPE NATIVE GPU launch] SDL_GPU/static RADV requested; normal display preferences; controls/audio/cheats/paths preserved; exclusive launch log");
+#endif
+#ifdef PE_PS5
+    if (!Host_InstallCardPaths(SDL_GetBasePath())) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "PS5 memory card path setup failed: %s", host_options.user_file);
+        return EXIT_FAILURE;
+    }
+#ifndef PE_PS5_GPU_NATIVE
+    /* The legacy CPU renderer still cannot enable GPU-only features. */
+    host_options.geometry_correction = host_options.antialiasing = host_options.model_filtering = 0;
+    host_options.widescreen = 0;
+#endif
+#endif
     if(argc==2 && (!strcmp(argv[1],"--download-backgrounds") || !strcmp(argv[1],"--verify-backgrounds")))return Host_HdCli(!strcmp(argv[1],"--verify-backgrounds"));
     unsigned internal_resolution = host_options.scale;
     int resolution_argument = 0;
@@ -2202,7 +3071,11 @@ int main(int argc, char **argv) {
             errno = 0;
             const char *value = argv[++arg];
             unsigned long scale = strtoul(value, &end, 10);
-            if (*value < '1' || *value > '9' || *end || errno || scale > PSYZ_INTERNAL_RES_MAX) {
+            if (*value < '1' || *value > '9' || *end || errno || scale > PSYZ_INTERNAL_RES_MAX
+#ifdef PE_PS5
+                || !(scale==1 || scale==2 || scale==4 || scale==6 || scale==8)
+#endif
+            ) {
                 fprintf(stderr, "Invalid internal resolution\n");
                 return EXIT_FAILURE;
             }
@@ -2301,6 +3174,20 @@ int main(int argc, char **argv) {
         }
     }
 
+#ifdef PE_PS5
+    char capture_paths[3][4096];
+    const char **capture_targets[] = {&g_BootHostVramPath, &g_BootHostFramePath, &g_BootHostAudioPath};
+    for (unsigned i = 0; i < 3; ++i) if (*capture_targets[i]) {
+        if (!Host_DataPath(capture_paths[i], sizeof(capture_paths[i]), *capture_targets[i])) return EXIT_FAILURE;
+        *capture_targets[i] = capture_paths[i];
+    }
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    if(interactive){int first_run=Host_NativeFirstRun();if(first_run<0)return EXIT_FAILURE;if(!first_run)return EXIT_SUCCESS;if(first_run==2){
+        int geo=host_options.geometry_correction,aa=host_options.antialiasing,filter=host_options.model_filtering,wide=host_options.widescreen;
+        Host_LoadOptions(host_options.user_file);if(effect_arguments&1)host_options.geometry_correction=geo;if(effect_arguments&2)host_options.antialiasing=aa;if(effect_arguments&4)host_options.model_filtering=filter;if(effect_arguments&8)host_options.widescreen=wide;
+        if(!resolution_argument)internal_resolution=host_options.scale;}}
+#endif
     if (interactive) {
         if (!paths[0] && !paths[1]) {
             for (unsigned i = 0; i < 2; ++i) {
@@ -2384,7 +3271,7 @@ mount_images:
         if (!paths[slot]) {
             continue;
         }
-        if (!pe_disc_open(&images[slot], paths[slot])) {
+        if (!Host_OpenDisc(&images[slot], paths[slot])) {
             fprintf(stderr, "Cannot open image: %s\n", images[slot].error);
             goto image_error;
         }
@@ -2405,6 +3292,9 @@ image_error:
     g_CdImageVolumes[0] = g_CdImageVolumes[1] = NULL;
     pe_disc_close(&images[0]);
     pe_disc_close(&images[1]);
+#ifdef PE_PS5
+    goto shutdown;
+#endif
     if (!interactive) {
         goto shutdown;
     }
@@ -2464,7 +3354,16 @@ images_ready:;
 
     g_BootHostActive = 1;
     PE_HOOK(PE_HOOK_INIT, (&(PeHookInit){interactive, host_options.user_file}));
-    if (Psyz_VideoSetInternalResolution(internal_resolution) < 0) {
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    Host_StateUiRegister();
+#endif
+    if (
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+        Psyz_CpuGeometryConfigure(internal_resolution)<0 || Psyz_VideoSetInternalResolution(1)<0
+#else
+        Psyz_VideoSetInternalResolution(internal_resolution)<0
+#endif
+    ) {
         fprintf(stderr, "Cannot select internal resolution\n");
         goto shutdown;
     }
@@ -2480,7 +3379,20 @@ images_ready:;
      * ends (mesh_list.c); kept on so switching it on mid-game works. */
     Psyz_GpuSetVramCopy(1);
     Boot_InitSystem();
-    if (Psyz_VideoGetInternalResolution() != internal_resolution) {
+#ifdef PE_PS5
+    if (!Psyz_PS5PlatformReady()) {
+        fprintf(stderr, "PS5 platform initialization failed: %s\n",
+                Psyz_PS5PlatformInitError());
+        goto shutdown;
+    }
+#endif
+    if (
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+        (internal_resolution>1 && !Psyz_CpuGeometryAvailable()) || Psyz_CpuGeometryRequested()!=internal_resolution
+#else
+        Psyz_VideoGetInternalResolution()!=internal_resolution
+#endif
+    ) {
         fprintf(stderr, "Requested internal resolution unavailable\n");
         goto shutdown;
     }
@@ -2600,6 +3512,11 @@ images_ready:;
     }
 
 shutdown:
+#ifdef PE_PS5_GPU_NATIVE
+    Psyz_VideoSetShutdownCallback(Host_NativeApplicationShutdown);
+    Psyz_VideoShutdown();
+    return result; /* Existing CRT exit/constructors/loader teardown remain authoritative. */
+#else
     Host_HdStop();
     if (g_BootDisplayPlaybackActive) {
         BootDisplay_WaitForCdAndRestoreCallbacks();
@@ -2620,5 +3537,47 @@ shutdown:
     g_BootHostPadEvents = NULL;
     g_BootHostPadEventCount = 0;
     return result;
+#endif
 }
+#endif
+
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "state_ui.h"
+/* Scoped addon only: merge into manager's latest boot main, never replace it.
+ * Platform GPU metadata separately rejects every paused modal/focus/background. */
+unsigned CPE_StateHostReasonBits(void){
+#if defined(PE_PS5_GPU_NATIVE) && defined(PE_MODS)
+    extern int pe_mod_state_idle(void);unsigned bits=0;
+    const char *headless=SDL_GetEnvironmentVariable(SDL_GetEnvironment(),"PSYZ_HEADLESS");
+    if(headless&&headless[0]&&strcmp(headless,"0"))bits|=1u;
+    if(host_open_assists)bits|=2u;if(s_overlayState.open)bits|=4u;if(s_install.active)bits|=8u;if(s_state_preparing)bits|=16u;
+    if(!host_options.enabled)bits|=32u;if(host_options.battle_debris_3d<0||host_options.battle_debris_3d>2||host_options.battle_debris_3d!=FieldFx_GetParticleAugment())bits|=64u;
+    if(Psyz_AudioIsPaused())bits|=128u;if(g_BootHostControlAt)bits|=256u;if(g_BootHostVBlankLimit)bits|=512u;
+    if(g_BootHostPadEventCount)bits|=1024u;if(g_BootHostHealthEventCount)bits|=2048u;if(!pe_mod_state_idle())bits|=4096u;if(!Psyz_GpuHdModelsStateSafe())bits|=16384u;if(!g_CdImageVolumes[0]||!g_CdImageVolumes[1])bits|=32768u;
+    return bits;
+#else
+    return 8192u;
+#endif
+}
+const char *CPE_StateHostReasonText(unsigned bits){
+    if(bits&32768u)return "Add both USA disc images in System before checkpointing";
+    if(bits&16384u)return "HD character texture pack: waiting for a valid character texture index";
+    if(bits&64u)return "Particle mode has not applied; reselect Extra particle geometry in Advanced";
+    if(bits&1u)return "Headless mode cannot capture gameplay";
+    if(bits&2u)return "Finish opening the Cheats menu";
+    if(bits&4u)return "Close Settings and resume gameplay";
+    if(bits&8u)return "Finish or cancel the installer operation";
+    if(bits&16u)return "Wait for disc identity verification";
+    if(bits&32u)return "Interactive gameplay is required";
+    if(bits&128u)return "Resume gameplay audio after closing pause menus";
+    if(bits&(256u|512u|1024u|2048u))return "Remove diagnostic input/frame-limit launch options";
+    if(bits&4096u)return pe_mod_state_blocker();
+    if(bits)return "This build has no native checkpoint host";
+    return "Host ready; game owners are checked at the CPU boundary";
+}
+int CPE_StateHostIdle(void){return CPE_StateHostReasonBits()==0;}
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+#include "native_tabs.h"
 #endif

@@ -410,3 +410,9 @@ void pe_bestiary_menu_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_help_text, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_collection.h"
+const char*pe_bestiary_menu_checkpoint_blocker(void){if(s_stage.rgba)return "Collection preview cache is retained; restart before checkpointing";return "Close the Bestiary screen and pending purchase first";}
+int pe_bestiary_menu_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){(void)in;(void)out;if(s_screen.panel||s_screen.list||s_buying>=0||s_stage.shown||s_stage.has_source||s_stage.model||s_stage.rgba)return 0;for(unsigned i=0;i<PE_SCREEN_EXTRA;i++)if(s_screen.extra[i])return 0;if(apply){memset(&s_screen,0,sizeof s_screen);s_frame=s_info=0;s_shown=s_shown_form=s_shown_mode=-1;s_text[0]=0;s_said[0]=0;s_fresh=0;s_looked=0;s_look_tick=0;}return 1;}
+#endif

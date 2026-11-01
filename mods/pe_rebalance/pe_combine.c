@@ -194,3 +194,11 @@ void pe_combine_register(const char *mod_id) {
     pe_menu_register_action(PE_PAGE_COMBINE, "Combine", "Press twice: consumes two items and gives the result.", pe_combine);
     pe_menu_register_tick(pe_disarm_tick);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_rebalance.h"
+static int pe_rb_combine_idle(void){MenuWidgetNode*n=g_MenuWidgetActiveListHead;unsigned visited=0;while(n&&n!=&g_MenuWidgetNodePoolSentinel){unsigned role=24;for(unsigned i=0;i<23;i++)if(n==&g_MenuWidgetNodePool[i]){role=i;break;}if(role==24||(visited&(1u<<role)))return 0;visited|=1u<<role;if(n->draw==pe_menu_draw||n->update==pe_menu_step)return 0;n=n->next;}return 1;}
+int pe_rb_combine_walk(const unsigned char*in,unsigned char*out,int apply){if((!in&&!out)||(!pe_rb_combine_idle()))return 0;if(apply&&(!in||!pe_rb_combine_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_S(w,s_menu_row,0,1,1);PE_CK_S(w,s_recipe,0,3,0);PE_CK_S(w,s_armed,-1,3,0);for(unsigned i=0;i<50;i++)PE_CK_S(w,s_bag[i],INT16_MIN,INT16_MAX,0);PE_CK_S(w,s_menu_slot,0,49,0);PE_CK_S(w,s_menu_partner,0,49,0);PE_CK_S(w,s_menu_result,0,255,0);if(apply&&w.ok){s_result[0]=0;s_label[0]=0;}
+return pe_rb_finish(&w);}
+#endif

@@ -146,3 +146,23 @@ void pe_inventory_menu_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_SCENE_START, pe_menu_restore, NULL, PE_PRIORITY_EARLY, mod_id);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_menu_command, NULL, PE_PRIORITY_EARLY, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_qol.h"
+#include "pe1/inventory_slots.h"
+static s16 *pe_qol_item_role(unsigned role){switch(role){case 1:return g_AyaInventoryItems;case 2:return g_InventoryRuntime.slots;case 3:return g_InventoryRuntime.storage;case 4:return g_InventoryRuntime.specialStorage;case 5:return g_InvActiveListItems;default:return 0;}}
+static unsigned pe_qol_item_capacity(unsigned role){static const unsigned n[]={0,50,50,100,82,10};return role<6?n[role]:0;}
+static unsigned pe_qol_item_id(const s16 *p){if(!p)return 0;for(unsigned i=1;i<6;i++)if(p==pe_qol_item_role(i))return i;return UINT32_MAX;}
+int pe_inventory_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){
+ if((!in&&!out)||s_hidden)return 0;if(apply&&(!in||!pe_inventory_checkpoint_walk(in,0,0)))return 0;
+ PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_square,0,1,0);PE_CK_U(w,s_hidden,0,0,0);PE_CK_S(w,s_hidden_mask,INT32_MIN,INT32_MAX,0);PE_CK_U(w,s_tips,0,1,1);PE_CK_U(w,s_tip_shown,0,1,0);
+ PE_CK_S(w,g_InvActiveListCount,0,10,0);for(unsigned i=0;i<10;i++){PE_CK_S(w,g_InvActiveListItems[i],-32768,32767,0);}
+ unsigned override=pe_qol_item_id(g_InvActiveListOverride),items=pe_qol_item_id(g_InvItemPtr);if(override==UINT32_MAX||items==UINT32_MAX)return 0;
+ override=pe_checkpoint_u32(&w,override,0,5,0);PE_CK_S(w,g_InvOverrideSlotLimit,0,65535,0);items=pe_checkpoint_u32(&w,items,0,5,0);PE_CK_S(w,g_InvSlotLimit,0,65535,0);
+ unsigned overrideLimit=out?(unsigned)g_InvOverrideSlotLimit:(unsigned)in[68]|(unsigned)in[69]<<8|(unsigned)in[70]<<16|(unsigned)in[71]<<24;
+ unsigned itemLimit=out?(unsigned)g_InvSlotLimit:(unsigned)in[76]|(unsigned)in[77]<<8|(unsigned)in[78]<<16|(unsigned)in[79]<<24;
+ if(overrideLimit>pe_qol_item_capacity(override)||itemLimit>pe_qol_item_capacity(items))return 0;
+ if(apply&&w.ok){g_InvActiveListOverride=pe_qol_item_role(override);g_InvItemPtr=pe_qol_item_role(items);memset(s_tip,0,sizeof s_tip);}return w.ok&&w.at==80u;
+}
+#endif

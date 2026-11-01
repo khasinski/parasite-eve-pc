@@ -1,5 +1,10 @@
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_render.h"
+#endif
+#include <psyz/gpu.h>
 #include "common.h"
 #include <math.h>
+#include <psyz/video.h>
 #include "pe1/entity_frame_update.h"
 #include "pe1/field_actor.h"
 #include "pe1/gte.h"
@@ -9,6 +14,18 @@
 #include "pe1/render_object.h"
 #include "pe1/render_setup.h"
 #include "pe1/render_tint.h"
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/model_fill_lighting.h"
+#endif
+
+typedef struct {
+    double rot[3][3];
+    double trans[3];
+} PgxpBoneMatrix;
+
+static void Pgxp_StoreBoneMatrix(const RenderMatrix *addr, const PgxpBoneMatrix *mat);
+static void Pgxp_LoadBoneMatrix(const RenderMatrix *addr, PgxpBoneMatrix *out);
+static void Pgxp_CopyBoneMatrix(const RenderMatrix *dst, const RenderMatrix *src);
 
 /* Original USA resident model-rendering data. The historical "identity"
  * name denotes an X-reflecting basis: its first signed halfword is -4096. */
@@ -281,9 +298,60 @@ RenderVec3s g_RenderNormalTable[240] = {
  * view-composed part matrix into the screen and depth buffers. */
 
 
+static void Render_RegisterInterpolationPackets(RenderObjectEntity *object,int reset);
+
 void Render_DrawEntity(RenderObjectEntity *object, void *viewMatrix) {
+    static int s_PrevDynLight = -1;
+    static u32 s_DynLightGen = 1;
+    static struct {
+        const RenderObjectEntity *entity;
+        u32 gen;
+    } s_EntityGen[64];
+    static u32 s_EntityGenWrite = 0;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    static uint64_t lastStateRevision;
+    uint64_t stateRevision=PeStateRender_Revision();
+    if(stateRevision!=lastStateRevision){for(unsigned i=0;i<64;i++){s_EntityGen[i].entity=0;s_EntityGen[i].gen=0;}s_EntityGenWrite=0;s_PrevDynLight=-1;lastStateRevision=stateRevision;}
+#endif
+    int cur_dyn = Psyz_VideoGetDynamicLighting() ? 1 : 0;
+    int has_light;
+    int relight_both = 0;
     u16 flags;
+
     if (object->header == 0 || object->draw_count == 0) return;
+    has_light = (object->shade != 0 || object->lightPositiveY != 0 || object->lightNegativeY != 0) &&
+                !(object->flags_9C & 0x200) &&
+                object->primitive_red == 0x80 &&
+                object->primitive_green == 0x80 &&
+                object->primitive_blue == 0x80;
+    if (s_PrevDynLight != cur_dyn) {
+        s_PrevDynLight = cur_dyn;
+        s_DynLightGen++;
+        if (s_DynLightGen == 0) {
+            s_DynLightGen = 1;
+        }
+    }
+    {
+        u32 i;
+        int found = 0;
+        for (i = 0; i < 64; ++i) {
+            if (s_EntityGen[i].entity == object) {
+                found = 1;
+                if (s_EntityGen[i].gen != s_DynLightGen) {
+                    s_EntityGen[i].gen = s_DynLightGen;
+                    if (has_light) {
+                        relight_both = 1;
+                    }
+                }
+                break;
+            }
+        }
+        if (!found) {
+            u32 slot = s_EntityGenWrite++ & 63u;
+            s_EntityGen[slot].entity = object;
+            s_EntityGen[slot].gen = s_DynLightGen;
+        }
+    }
     if (object->flags_9C & 0x800) {
         Render_SetObjectTexturePage(object, 0);
         Render_SetEntityBlendMode(object, 0);
@@ -319,9 +387,17 @@ void Render_DrawEntity(RenderObjectEntity *object, void *viewMatrix) {
         Render_DrawObject(object, &g_RenderLightingState);
         Render_DrawObjectAlt(object, object->script_value9a, object->script_param97,
                              object->script_param98, object->script_param99);
-    } else if (flags & 1) {
+    } else if ((flags & 1) || (cur_dyn && has_light) || relight_both) {
+        if (!(flags & 1)) {
+            Render_InitRoomPrimState(object);
+        }
         Render_DrawObject(object, &g_RenderLightingState);
-        Render_UpdateClutTable(object, 0, g_ActiveDrawSlot);
+        if (relight_both) {
+            Render_UpdateClutTable(object, 1, 0);
+            Render_UpdateClutTable(object, 1, 1);
+        } else {
+            Render_UpdateClutTable(object, 0, g_ActiveDrawSlot);
+        }
     }
 }
 
@@ -334,6 +410,7 @@ typedef union RenderMatrixWords {
 void Render_BuildEntityMatrix(RenderObjectEntity *object, s16 bufferIndex)
 {
     s32 saved[8];
+    PgxpBoneMatrix saved_pgxp;
     RenderMatrixWords *model;
     FieldActor *actor;
     s32 first;
@@ -341,6 +418,7 @@ void Render_BuildEntityMatrix(RenderObjectEntity *object, s16 bufferIndex)
     RenderMatrixWords *player;
 
     if (object != &g_PlayerBattleEntity) {
+        Pgxp_LoadBoneMatrix(&object->model_matrix, &saved_pgxp);
         model = (RenderMatrixWords *)&object->model_matrix;
         first = model->words[0];
         saved[1] = model->words[1];
@@ -373,6 +451,7 @@ void Render_BuildEntityMatrix(RenderObjectEntity *object, s16 bufferIndex)
         model->words[5] = saved[5];
         model->words[6] = saved[6];
         model->words[7] = saved[7];
+        Pgxp_StoreBoneMatrix(&object->model_matrix, &saved_pgxp);
         actor = (FieldActor *)((char *)object - PE1_OFFSETOF(FieldActor, render_object));
         Anim_BuildRotationMatrices(object, actor->action_data, (s16)actor->anim.parts.integer);
         Render_TransformVertices(object);
@@ -417,6 +496,7 @@ void Render_DrawObjectAlt(RenderObjectEntity *entity, s16 limit, u8 red, u8 gree
 
     if (!entity->header || !entity->draw_count)
         return;
+    if(Psyz_GpuGetFrameInterpolation())Render_RegisterInterpolationPackets(entity,0);
     matrix = entity->matrices;
     for (i = 0; i < entity->header->part_count; i++, matrix++) {
         RenderObjectPart *part;
@@ -495,6 +575,7 @@ void Render_DrawObjectVariant(RenderObjectEntity *input, s16 limit, s32 *project
     projected = &projectedStorage;
     if (!entity->header || !entity->draw_count)
         return;
+    if(Psyz_GpuGetFrameInterpolation())Render_RegisterInterpolationPackets(entity,0);
     matrix = (s32 *)entity->matrices;
     i = 0;
     if (changed < entity->header->part_count) {
@@ -980,6 +1061,19 @@ void Anim_SetInterpRate(RenderObjectEntity *obj, int arg1) {
     obj->fade_blue_step = divisor;
 }
 
+static void Render_RegisterInterpolationPackets(RenderObjectEntity *object,int reset) {
+    if(!object->header||!object->primitive_buffer)return;
+    unsigned char *packet=object->primitive_buffer;
+    const RenderObjectHeader *header=object->header;
+    const unsigned counts[]={header->packet34_count,header->packet28_count,header->packet24_count,header->packet1c_count};
+    const size_t sizes[]={sizeof(RenderPacket34),sizeof(RenderPacket28),sizeof(RenderPacket24),sizeof(RenderPacket1C)};
+    for(unsigned kind=0;kind<4;++kind)for(unsigned face=0;face<counts[kind];++face){
+        if(reset)Psyz_GpuRegisterInterpolationPair(packet+sizeof(RenderNativeTag),packet+sizes[kind]+sizeof(RenderNativeTag));
+        else Psyz_GpuEnsureInterpolationPair(packet+sizeof(RenderNativeTag),packet+sizes[kind]+sizeof(RenderNativeTag));
+        packet+=2*sizes[kind];
+    }
+}
+
 int Render_SetupEntityPrims(RenderObjectEntity *obj, RenderObjectHeader *model,
                             u8 *packetBuffer, s16 x, s16 y, s16 unused,
                             s16 paletteRow, s16 initCount, s8 **textureOut,
@@ -1091,6 +1185,7 @@ int Render_SetupEntityPrims(RenderObjectEntity *obj, RenderObjectHeader *model,
     cursor.commands += bytes;
 
     if (setup) {
+        Render_RegisterInterpolationPackets(obj,1);
         RenderPrimCursor out;
 
         src = cursor;
@@ -1209,6 +1304,9 @@ int Render_SetupEntityPrims(RenderObjectEntity *obj, RenderObjectHeader *model,
         obj->rotation_overrides[i].flags = 0;
     }
     obj->animation_data = 0;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    PeStateRender_Configured(obj,model,packetBuffer,x,y,unused,paletteRow,initCount,setup);
+#endif
     return 1;
 }
 
@@ -1543,6 +1641,120 @@ void Render_DrawTexturedQuads(RenderObjectEntity *entity) {
 
 u32 g_RenderFadeColour = 0x808080;
 
+static inline int ClampLight(int value)
+{
+    if (value < 0) return 0;
+    if (value > 255) return 255;
+    return value;
+}
+
+static u32 Render_EvalDynamicVertexColor(const PgxpBoneMatrix *f_bone,
+                                         const GteMatrix *view_mat,
+                                         const RenderVec3s *normal,
+                                         double amb,
+                                         double pos_r, double pos_g, double pos_b,
+                                         double neg_r, double neg_g, double neg_b,
+                                         u32 rgbc) {
+    double nx = f_bone->rot[0][0] * (double)normal->x +
+                f_bone->rot[0][1] * (double)normal->y +
+                f_bone->rot[0][2] * (double)normal->z;
+    double ny = f_bone->rot[1][0] * (double)normal->x +
+                f_bone->rot[1][1] * (double)normal->y +
+                f_bone->rot[1][2] * (double)normal->z;
+    double nz = f_bone->rot[2][0] * (double)normal->x +
+                f_bone->rot[2][1] * (double)normal->y +
+                f_bone->rot[2][2] * (double)normal->z;
+    double len = sqrt(nx * nx + ny * ny + nz * nz);
+    double enx, eny, enz;
+    double v_pos, v_neg;
+    double ndotl, d_pos, d_neg, amb_scale;
+    double ndoth, spec;
+    double w_pos, w_neg;
+    double lr, lg, lb;
+    /* Match GTE NCCT's COLOR_APPLY + COLOR_FIFO_PUSH scale:
+     * ((RGB << 4) * (L << 4) >> 12) >> 4 = RGB * L / 256. */
+    double in_r = (double)(rgbc & 0xFFu) / 256.0;
+    double in_g = (double)((rgbc >> 8) & 0xFFu) / 256.0;
+    double in_b = (double)((rgbc >> 16) & 0xFFu) / 256.0;
+    int out_r, out_g, out_b;
+
+    if (len > 1e-6) {
+        nx /= len;
+        ny /= len;
+        nz /= len;
+    } else {
+        nx = 0.0;
+        ny = 1.0;
+        nz = 0.0;
+    }
+
+    if (view_mat != NULL &&
+        (view_mat->m[0][0] | view_mat->m[1][1] | view_mat->m[2][2]) != 0) {
+        double elen;
+        enx = ((double)view_mat->m[0][0] * nx +
+               (double)view_mat->m[0][1] * ny +
+               (double)view_mat->m[0][2] * nz) / 4096.0;
+        eny = ((double)view_mat->m[1][0] * nx +
+               (double)view_mat->m[1][1] * ny +
+               (double)view_mat->m[1][2] * nz) / 4096.0;
+        enz = ((double)view_mat->m[2][0] * nx +
+               (double)view_mat->m[2][1] * ny +
+               (double)view_mat->m[2][2] * nz) / 4096.0;
+        elen = sqrt(enx * enx + eny * eny + enz * enz);
+        if (elen > 1e-6) {
+            enx /= elen;
+            eny /= elen;
+            enz /= elen;
+        }
+    } else {
+        enx = nx;
+        eny = ny;
+        enz = nz;
+    }
+
+    /* Vanilla GTE vertical hemisphere terms (+Y vs -Y in world space). */
+    v_pos = (ny > 0.0) ? ny : 0.0;
+    v_neg = (-ny > 0.0) ? (-ny) : 0.0;
+
+    /* 3D directional key light in camera/eye space from upper-front-left
+     * (-X is left, -Y is up, -Z is toward the camera in PS1 eye space).
+     * Blending with Vanilla's vertical terms preserves overall room energy
+     * while adding clear 3D normal shading across folds and rotations. */
+    ndotl = -0.48 * enx - 0.42 * eny - 0.77 * enz;
+    d_pos = (ndotl > 0.0) ? ndotl : 0.0;
+    d_neg = (-ndotl > 0.0) ? (-ndotl) : 0.0;
+    if (ndotl > 0.0) {
+        ndoth = -0.28 * enx - 0.25 * eny - 0.927 * enz;
+        if (ndoth > 0.0) {
+            double s2 = ndoth * ndoth;
+            spec = s2 * s2 * s2 * s2 * 0.22;
+        } else {
+            spec = 0.0;
+        }
+    } else {
+        spec = 0.0;
+    }
+
+    amb_scale = 0.92 + 0.16 * ndotl;
+    w_pos = 0.40 * v_pos + 0.65 * d_pos + spec;
+    w_neg = 0.40 * v_neg + 0.25 * d_neg;
+
+    lr = amb * amb_scale + pos_r * w_pos + neg_r * w_neg;
+    lg = amb * amb_scale + pos_g * w_pos + neg_g * w_neg;
+    lb = amb * amb_scale + pos_b * w_pos + neg_b * w_neg;
+    if (lr < 0.0) lr = 0.0;
+    else if (lr > 2047.9375) lr = 2047.9375;
+    if (lg < 0.0) lg = 0.0;
+    else if (lg > 2047.9375) lg = 2047.9375;
+    if (lb < 0.0) lb = 0.0;
+    else if (lb > 2047.9375) lb = 2047.9375;
+
+    out_r = ClampLight((int)lrint(lr * in_r));
+    out_g = ClampLight((int)lrint(lg * in_g));
+    out_b = ClampLight((int)lrint(lb * in_b));
+    return (u32)out_r | ((u32)out_g << 8) | ((u32)out_b << 16) | (rgbc & 0xFF000000u);
+}
+
 /* Lights an object's visible parts: each part's light matrix is the view
  * light matrix times the part matrix, every vertex triple gets an NCCT colour
  * from the base colour, and the first coded vertex colour of the triple gets
@@ -1552,13 +1764,41 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
     GteMatrix lightMatrixStorage = {0};
     u32 *baseColour = &baseColourStorage;
     s16 *lightMatrix = &lightMatrixStorage.m[0][0];
+    const GteMatrix *view_mat = (const GteMatrix *)g_GeomScroll.words.viewMatrix;
     RenderMatrix *matrix;
+    int dynamic_light;
+    double amb = 0.0;
+    double pos_r = 0.0, pos_g = 0.0, pos_b = 0.0;
+    double neg_r = 0.0, neg_g = 0.0, neg_b = 0.0;
     int i, j;
+#ifdef PE_PS5_GPU_NATIVE
+    const int fillPreset=Render_GetModelFillLighting();
+#endif
 
     if (!entity->header || !entity->draw_count)
         return;
+    if(Psyz_GpuGetFrameInterpolation())Render_RegisterInterpolationPackets(entity,0);
     *baseColour = g_RenderFadeColour;
     matrix = entity->matrices;
+    dynamic_light = Psyz_VideoGetDynamicLighting() && (view == &g_RenderLightingState);
+    if (dynamic_light) {
+        double pos_int = (double)ClampLight(entity->shade + entity->lightPositiveY);
+        double neg_int = (double)ClampLight(entity->shade + entity->lightNegativeY);
+        double tr = (double)g_RoomLightTint.r / 256.0;
+        double tg = (double)g_RoomLightTint.g / 256.0;
+        double tb = (double)g_RoomLightTint.b / 256.0;
+        if (entity->lightPositiveY == entity->lightNegativeY) {
+            pos_int = (double)ClampLight((int)lrint(pos_int * 1.08));
+            neg_int = (double)ClampLight((int)lrint(neg_int * 0.90));
+        }
+        amb = (double)entity->shade;
+        pos_r = pos_int * tr;
+        pos_g = pos_int * tg;
+        pos_b = pos_int * tb;
+        neg_r = neg_int * tr;
+        neg_g = neg_int * tg;
+        neg_b = neg_int * tb;
+    }
     gte_SetBackColor(entity->shade, entity->shade, entity->shade);
     for (i = 0; i < entity->header->part_count; matrix++, i++) {
         RenderObjectPart *part = &entity->parts[i];
@@ -1566,11 +1806,24 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
         u32 *mainColours;
         u32 *altColours;
         RenderVec3s *vertex;
+        PgxpBoneMatrix f_bone;
 
         if (part->visible != 1)
             continue;
-        gte_MulMatrix0(view, matrix, lightMatrix);
-        gte_SetLightMatrix(lightMatrix);
+        if (dynamic_light) {
+            Pgxp_LoadBoneMatrix(matrix, &f_bone);
+        } else {
+            gte_MulMatrix0(view, matrix, lightMatrix);
+            gte_SetLightMatrix(lightMatrix);
+        }
+#ifdef PE_PS5_GPU_NATIVE
+        CpeModelFillFrame fillFrame;
+        if(fillPreset){
+            s16 fillRotation[9];
+            for(int r=0;r<3;r++)for(int c=0;c<3;c++)fillRotation[r*3+c]=matrix->rotation[r][c];
+            CpeModelFillPrepare(&fillFrame,fillRotation,fillPreset);
+        }
+#endif
         first = part->vertex_start;
         mainColours = &g_RenderClutLookupTable[first];
         altColours = &g_RenderVertexWorkWords[first];
@@ -1587,13 +1840,47 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
             const RenderVec3s *normal0 = &g_RenderNormalTable[vertex[0].pad];
             const RenderVec3s *normal1 = remaining > 1 ? &g_RenderNormalTable[vertex[1].pad] : normal0;
             const RenderVec3s *normal2 = remaining > 2 ? &g_RenderNormalTable[vertex[2].pad] : normal1;
+            vertex += 3;
+            k = first + j;
+            colours = (RenderColor *)entity->vertex_colours;
+            if (dynamic_light) {
+                u32 alt_rgbc = 0;
+                mainColours[0] = Render_EvalDynamicVertexColor(
+                    &f_bone, view_mat, normal0, amb, pos_r, pos_g, pos_b, neg_r, neg_g, neg_b, *baseColour);
+                mainColours[1] = Render_EvalDynamicVertexColor(
+                    &f_bone, view_mat, normal1, amb, pos_r, pos_g, pos_b, neg_r, neg_g, neg_b, *baseColour);
+                mainColours[2] = Render_EvalDynamicVertexColor(
+                    &f_bone, view_mat, normal2, amb, pos_r, pos_g, pos_b, neg_r, neg_g, neg_b, *baseColour);
+                if (colours[k].code)
+                    memcpy(&alt_rgbc, &colours[k], sizeof(alt_rgbc));
+                else if (colours[k + 1].code)
+                    memcpy(&alt_rgbc, &colours[k + 1], sizeof(alt_rgbc));
+                else if (colours[k + 2].code)
+                    memcpy(&alt_rgbc, &colours[k + 2], sizeof(alt_rgbc));
+                else
+                    continue;
+                altColours[0] = Render_EvalDynamicVertexColor(
+                    &f_bone, view_mat, normal0, amb, pos_r, pos_g, pos_b, neg_r, neg_g, neg_b, alt_rgbc);
+                altColours[1] = Render_EvalDynamicVertexColor(
+                    &f_bone, view_mat, normal1, amb, pos_r, pos_g, pos_b, neg_r, neg_g, neg_b, alt_rgbc);
+                altColours[2] = Render_EvalDynamicVertexColor(
+                    &f_bone, view_mat, normal2, amb, pos_r, pos_g, pos_b, neg_r, neg_g, neg_b, alt_rgbc);
+                continue;
+            }
             gte_ldv3(normal0, normal1, normal2);
             gte_ldrgb(baseColour);
             gte_ncct();
-            vertex += 3;
             gte_strgb3(mainColours, mainColours + 1, mainColours + 2);
-            k = first + j;
-            colours = (RenderColor *)entity->vertex_colours;
+#ifdef PE_PS5_GPU_NATIVE
+            if(fillPreset){
+                const RenderVec3s *normals[3]={normal0,normal1,normal2};
+                int count=part->vertex_count-j;if(count>remaining)count=remaining;if(count>3)count=3;
+                for(int c=0;c<count;c++){
+                    const s16 fillNormal[3]={normals[c]->x,normals[c]->y,normals[c]->z};
+                    mainColours[c]=CpeModelFillColour(mainColours[c],fillNormal,&fillFrame);
+                }
+            }
+#endif
             if (colours[k].code)
                 gte_ldrgb(&colours[k]);
             else if (colours[k + 1].code)
@@ -1604,6 +1891,16 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
                 continue;
             gte_ncct();
             gte_strgb3(altColours, altColours + 1, altColours + 2);
+#ifdef PE_PS5_GPU_NATIVE
+            if(fillPreset){
+                const RenderVec3s *normals[3]={normal0,normal1,normal2};
+                int count=part->vertex_count-j;if(count>remaining)count=remaining;if(count>3)count=3;
+                for(int c=0;c<count;c++){
+                    const s16 fillNormal[3]={normals[c]->x,normals[c]->y,normals[c]->z};
+                    altColours[c]=CpeModelFillColour(altColours[c],fillNormal,&fillFrame);
+                }
+            }
+#endif
         }
     }
 }
@@ -1679,13 +1976,6 @@ void Render_UpdateClutTable(RenderObjectEntity *arg0, s16 arg1, s16 arg2) {
 }
 
 
-static inline int ClampLight(int value)
-{
-    if (value < 0) return 0;
-    if (value > 255) return 255;
-    return value;
-}
-
 /* Build two opposite Y lights and upload their color matrix to the GTE. */
 int Render_InitRoomPrimState(void *objectArg)
 {
@@ -1725,11 +2015,6 @@ int Render_InitRoomPrimState(void *objectArg)
 /* The serialized command-byte count is u16; this ordinary memory buffer
  * replaces the shared PS1 scratchpad stack for every possible valid depth. */
 static RenderMatrix g_RenderTransformStack[65536];
-
-typedef struct {
-    double rot[3][3];
-    double trans[3];
-} PgxpBoneMatrix;
 
 typedef struct {
     const RenderMatrix *addr;
@@ -1846,6 +2131,18 @@ void Pgxp_StoreModelMatrix(const RenderMatrix *matrix, s16 rx, s16 ry, s16 rz, s
     mat.trans[0] = (double)(s16)matrix->translation[0];
     mat.trans[1] = (double)(s16)matrix->translation[1];
     mat.trans[2] = (double)matrix->translation[2];
+    Pgxp_StoreBoneMatrix(matrix, &mat);
+}
+
+void Pgxp_StoreModelPosition16(const RenderMatrix *matrix, s32 x, s32 y, s32 z) {
+    PgxpBoneMatrix mat;
+    Pgxp_LoadBoneMatrix(matrix, &mat);
+    /* The gameplay GTE matrix deliberately retains signed16 whole coordinates.
+     * Its visual companion must not discard the entity's original16.16 fraction.
+     * No temporal interpolation or integer gameplay/collision update occurs. */
+    mat.trans[0] = (double)x / 65536.0;
+    mat.trans[1] = (double)y / 65536.0;
+    mat.trans[2] = (double)z / 65536.0;
     Pgxp_StoreBoneMatrix(matrix, &mat);
 }
 

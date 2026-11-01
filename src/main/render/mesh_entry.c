@@ -12,7 +12,19 @@ u16 GetTPage(int tp, int abr, int x, int y);
 #include <psyz/video.h>
 #include <SDL3/SDL.h>
 
+#ifdef PE_PS5
+const char *Psyz_CpuFieldMaterialDirectory(void);
+#endif
+static const char *Render_HdPackDirectory(void) {
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+    return Psyz_CpuFieldMaterialDirectory();
+#else
+    return SDL_getenv("PE_HD_BACKGROUNDS");
+#endif
+}
 static uint64_t hd_geometry_key;
+/* Trace status0notattempted,1openfailed,2invalid,3loaded; no load policy change. */
+static int hd_wide_trace_status;
 static char hd_background_directory[4096];
 static const char *hd_background_path = hd_background_directory;
 static const GeomState *hd_prepared_state;
@@ -45,6 +57,7 @@ static struct {
 } hd_wide[HD_WIDE_GROUPS];
 
 static void Render_ResetHdWidescreen(void) {
+    hd_wide_trace_status=0;
     /* Queued ordering tables may still point at these two packet buffers. */
     for (unsigned i=0;i<HD_WIDE_GROUPS;++i)
         if(hd_wide[i].count){DrawSync(0);break;}
@@ -65,10 +78,14 @@ static int Render_ReadHdWide(SDL_IOStream *file, unsigned bytes, uint64_t *value
 }
 
 static void Render_LoadHdWidescreen(void) {
+    hd_wide_trace_status=1;
     char filename[4096];
     int size=snprintf(filename,sizeof(filename),"%s/%016" PRIx64 "-wide.bin",hd_background_path,hd_geometry_key);
     if(size<0 || (size_t)size>=sizeof(filename))return;
     SDL_IOStream *file=SDL_IOFromFile(filename,"rb");if(!file)return;
+    hd_wide_trace_status=2;
+    Sint64 wide_bytes=SDL_GetIOSize(file);
+    if(wide_bytes<8 || wide_bytes>8+HD_WIDE_GROUPS*32+HD_WIDE_CELLS*4){SDL_CloseIO(file);return;}
     uint64_t magic,groups,value;
     unsigned total=0;
     int valid=Render_ReadHdWide(file,4,&magic) && magic==0x31574550u &&
@@ -94,6 +111,8 @@ static void Render_LoadHdWidescreen(void) {
         }
         for(unsigned n=0;valid && n<count;++n) {
             int x=hd_wide[group].xy[n*2],y=hd_wide[group].xy[n*2+1];
+            /* Bounds describe the visible span, not complete-cell extents.
+             * Official side art overlaps the right edge; presenter crops it. */
             if(x<l || x>=r || y<y0 || y>=y1)valid=0;
         }
         if(!valid)break;
@@ -103,12 +122,25 @@ static void Render_LoadHdWidescreen(void) {
             if(size>=0 && (size_t)size<sizeof(filename))loaded=Psyz_GpuLoadSpriteAtlas(key,filename)==1;
         }
         if(!loaded){valid=0;break;}
+        for(unsigned n=0;n<count;++n)
+            Psyz_GpuRegisterInterpolationBackgroundPair(&hd_wide[group].packets[0][n].r,&hd_wide[group].packets[1][n].r);
         hd_wide[group].count=(unsigned)count;hd_wide[group].key=key;
         hd_wide[group].left=l;hd_wide[group].right=r;
     }
     unsigned char trailing;if(valid && SDL_ReadIO(file,&trailing,1)!=0)valid=0;
     SDL_CloseIO(file);
-    if(!valid){Render_ResetHdWidescreen();Psyz_GpuResetSpriteAtlases();fprintf(stderr,"Ignoring incomplete HD widescreen geometry %016" PRIx64 "\n",hd_geometry_key);}
+    if(!valid){Render_ResetHdWidescreen();hd_wide_trace_status=2;Psyz_GpuResetSpriteAtlases();fprintf(stderr,"Ignoring incomplete HD widescreen geometry %016" PRIx64 "\n",hd_geometry_key);}
+    else hd_wide_trace_status=3;
+}
+
+void Render_TraceWidescreenMetadata(int buffer_y,unsigned tiles,int left,int right,int available,int hd_left,int hd_right) {
+#if defined(PE_PS5) && defined(PE_PS5_GPU_NATIVE)
+    unsigned group=g_GeomScroll.state.position.groupSelect;
+    Psyz_GpuTraceResolutionRoom(buffer_y,tiles,left,right,available,hd_left,hd_right,
+        (unsigned long long)hd_geometry_key,group,hd_wide[group].count,hd_wide_trace_status);
+#else
+    (void)buffer_y;(void)tiles;(void)left;(void)right;(void)available;(void)hd_left;(void)hd_right;
+#endif
 }
 
 int Render_GetHdWidescreenPicture(int *left,int *right) {
@@ -133,6 +165,7 @@ void Render_LinkHdWidescreenBackdrop(int slot,RenderNativeTag *ordering) {
         }
     }
     for(unsigned i=0;i<hd_wide[group].count;++i) {
+        Psyz_GpuEnsureInterpolationBackgroundPair(&hd_wide[group].packets[0][i].r,&hd_wide[group].packets[1][i].r);
         RenderTilePacket *sprite=&hd_wide[group].packets[slot][i];
         int x=hd_wide[group].xy[i*2]+(short)g_GeomState->out_disp_x;
         int y=hd_wide[group].xy[i*2+1]+(short)g_GeomState->out_disp_y;
@@ -149,9 +182,10 @@ void Render_LinkHdWidescreenBackdrop(int slot,RenderNativeTag *ordering) {
 /* Hash immutable descriptors before scripts animate the native entries. The
  * exporter hashes the same little-endian fields, independent of host pointers. */
 void Render_PrepareHdBackgrounds(void) {
+    Psyz_GpuResetInterpolation();
     const uint64_t previous_key=hd_geometry_key;
     Render_ResetHdWidescreen();
-    const char *pack=SDL_getenv("PE_HD_BACKGROUNDS");
+    const char *pack=Render_HdPackDirectory();
     snprintf(hd_background_directory,sizeof(hd_background_directory),"%s",pack?pack:"");
     hd_prepared_state=g_GeomState;
     hd_geometry_key=0;
@@ -176,7 +210,7 @@ void Render_PrepareHdBackgrounds(void) {
  * re-hash descriptors after scripts have animated them. */
 void Render_RefreshHdBackgrounds(void) {
     if (!hd_geometry_key || !g_GeomState || hd_prepared_state!=g_GeomState) return;
-    const char *pack=SDL_getenv("PE_HD_BACKGROUNDS");
+    const char *pack=Render_HdPackDirectory();
     DrawSync(0);
     Render_ResetHdWidescreen();
     Psyz_GpuResetSpriteAtlases();
@@ -248,6 +282,8 @@ int Render_LoadMeshEntry(GeomEntry *entry, RenderTilePacket *buffer, void **end)
         }
         if (!loaded) atlas_key=0;
     }
+    for(unsigned i=0;i<count;++i)
+        Psyz_GpuRegisterInterpolationBackgroundPair(&buffer[i].r,&buffer[count+i].r);
     entry->u30.prim = buffer;
     /* The page pointer and disp_x are stored through pointers to the fields.
      * GCC 2.7 lets a load of a fixed scalar pass a structure field store, but

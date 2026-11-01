@@ -37,6 +37,9 @@ static const PeCostume *s_costume[PE_MAX_COSTUMES];
 static int s_costumes;
 static const PeCostume *s_loaded;      /* the provider costume whose load(1) ran last */
 static int s_event = -1;
+static uint32_t s_checkpoint_epoch=1;
+static void pe_checkpoint_changed(void){if(s_checkpoint_epoch<UINT32_MAX)++s_checkpoint_epoch;}
+
 
 static int pe_gameplay_bank(int b) { return b == 10 || b == 12 || b == 13; }
 
@@ -53,6 +56,7 @@ static int pe_add(const PeCostume *c) {
         pe_mod_log("pe_collection", "wardrobe: costume %s refused", c && c->key ? c->key : "?");
         return -1;
     }
+    pe_checkpoint_changed();
     s_costume[s_costumes] = c;
     return s_costumes++;
 }
@@ -324,3 +328,8 @@ void pe_wardrobe_register(const char *mod_id) {
     pe_service_publish("wardrobe", 1, &s_wardrobe, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_BANK, pe_on_player_bank, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_collection.h"
+int pe_wardrobe_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){if(s_checkpoint_epoch==UINT32_MAX||s_loaded||s_reload_after_menu)return 0;if(apply&&(!in||!pe_wardrobe_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_costumes,0,PE_MAX_COSTUMES,1);PE_CK_S(w,s_event,-1,INT_MAX,1);PE_CK_S(w,s_room_bank,-1,255,1);return w.ok&&w.at==16;}
+#endif

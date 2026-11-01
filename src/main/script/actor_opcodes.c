@@ -1,3 +1,6 @@
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_node_types.h"
+#endif
 #include "common.h"
 #include "pe_hooks.h"
 #include "pe1/akao.h"
@@ -370,6 +373,10 @@ int Render_CameraTrackRelativeOffset(int **args) {
         init_state->target14 = turn_speed;
         init_state->target1c = target_z;
         init_state->target18.coordinate = target_x;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+
+        PeStateNode_Tag(init_state, PE_NODE_COORDINATE);
+#endif
     } else {
         turn_speed = init_state->target14;
         target_x = init_state->target18.coordinate;
@@ -494,6 +501,10 @@ s32 Render_CameraStepAngleFade(s32 **arg0) {
             g_ScriptNodePool->target14 = -step;
         }
         g_ScriptNodePool->target18.coordinate = target;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+
+        PeStateNode_Tag(g_ScriptNodePool, PE_NODE_COORDINATE);
+#endif
     }
     step = g_ScriptNodePool->target14;
     target = g_ScriptNodePool->target18.coordinate;
@@ -541,6 +552,9 @@ int Script_PointInPoly(int **arg0) {
 
 /* Scene audio slots (bit per slot) a script started while a movie plays. */
 static u8 g_MovieMusicSlots;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+int PeStateScript_TransientIdle(void){return g_MovieMusicSlots==0;}
+#endif
 
 /* Played through, music started with a movie ends with it; a skipped movie
  * stops it the way script op 0xC9 does. */

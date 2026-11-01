@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "buildDateUtc": "2026-10-31T13:51:40.865Z",
+  "sourceBase": "PR18 pinned11FD export; separate optional particles",
+  "copiedBaseRecipeFiles": 43,
+  "copiedAddonFiles": 9,
+  "onlyRecipeChange": "Reviewed build-native-optional.patch",
+  "optionalEnabled": true,
+  "exactParticleOutputs": 13,
+  "particleChanged": 7,
+  "particleAdded": 6,
+  "combinedReviewedSourceOutputs": 85,
+  "generatedHeaders": 6,
+  "allSourceAndShaderHashesMatch": true,
+  "wholeExportedPsyzTreeUnchangedFiles": 1546,
+  "commands": [
+    "node <RECIPE>/prepare-source.cjs <PINNED_ARCHIVES> <FRESH_EXPORT>",
+    "node <ADAPTED_RECIPE>/build-native.cjs <FRESH_EXPORT> <PUBLIC_PREFIX> <TOOLS_CONFIG_WITH_PARTICLE_ADDON_ON>",
+    "pwsh -NoProfile -File <PS5_RECIPE>/audit-application-imports.ps1 -Elf <FRESH_EXPORT>/build-game/parasite-eve-ps5.elf -StubDirectory <PUBLIC_PREFIX>/deps/ps5-payload-sdk/target/lib -ReadElf <PUBLIC_PREFIX>/deps/llvm/bin/llvm-readelf.exe -Output <FRESH_EXPORT>/imports.json",
+    "pwsh -NoProfile -File <PS5_RECIPE>/audit-application-runtime.ps1 -Elf <FRESH_EXPORT>/build-game/parasite-eve-ps5.elf -ImportAudit <FRESH_EXPORT>/imports.json -LlvmBin <PUBLIC_PREFIX>/deps/llvm/bin -Output <FRESH_EXPORT>/runtime.json"
+  ],
+  "elf": {
+    "path": "<FRESH_EXPORT>/build-game/parasite-eve-ps5.elf",
+    "sha256": "8515cae01458cb8bcfd3417080fe892ee6a277013141d39f853bbc4255810877",
+    "bytes": 105544288
+  },
+  "rebuilt": [
+    "native CRT",
+    "compiler-rt helpers",
+    "heap bridge",
+    "SDL",
+    "PsyZ",
+    "game",
+    "GLSL"
+  ],
+  "retainedInputTreesVerified": 11,
+  "callerTools": {
+    "cmake": {
+      "sha256": "3a329667300846abc8dffccbdcb1c8c2d4a6cebe342d499181825205ea8c766c",
+      "version": "cmake version 4.4.4\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).",
+      "policy": "caller-supplied identity recorded (not recipe-pinned)"
+    },
+    "ninja": {
+      "sha256": "e52a7ad9538d9618c67a0bd777964e2eec8a30f68b810a2f6adce1f2daf847b8",
+      "version": "1.13.2",
+      "policy": "caller-supplied identity recorded (not recipe-pinned)"
+    }
+  },
+  "imports": {
+    "count": 352,
+    "directoryProvider": "libkernel.sprx:getdents",
+    "sameSetAsSelectedD9D4": true,
+    "auditSha256": "ca1b3f97c5f78147f26acde6066ef33f9bb4f2d96b4f565a0eb3584f031da6f4"
+  },
+  "runtime": {
+    "passed": true,
+    "issues": [],
+    "auditSha256": "759270ddbdedfff12ee4e7ceff978f0a5a9a31c6d009ec3e3189da8a3a4c45e3"
+  },
+  "mesaRebuilt": false,
+  "gameExecuted": false,
+  "consoleExecuted": false,
+  "convertedOrStaged": false,
+  "licenseClearanceClaim": false
+}

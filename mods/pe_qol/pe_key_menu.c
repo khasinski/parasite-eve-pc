@@ -77,3 +77,10 @@ void pe_key_menu_register(const char *mod_id) {
     pe_main_menu_add(&s_row, 20);                   /* after the Mod Catalog */
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_help_text, NULL, PE_PRIORITY_LATE, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_qol.h"
+int pe_key_menu_checkpoint_ready(void){return !s_screen.panel&&!s_screen.list&&!s_screen.extras;}
+void pe_key_menu_checkpoint_reset(void){if(pe_key_menu_checkpoint_ready()){s_screen=(PeScreen){0};memset(s_text,0,sizeof s_text);}}
+#endif

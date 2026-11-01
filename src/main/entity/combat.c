@@ -1,3 +1,4 @@
+#include "pe1/hp_loss_hook.h"
 #include "common.h"
 #include "pe1/asset_find.h"
 #include "pe1/battle.h"
@@ -89,7 +90,7 @@ void Entity_ResolveDropTable(void *arg0) {
                 if (action->effectType == 0xA) {
                     value /= 2;
                 }
-                after_state->curHP = after_state->curHP - value;
+                after_state->curHP = after_state->curHP - Pe_FilterCombatHpLoss(after_state,(s16)after_state->curHP,value,1);
             }
             if ((s16)g_ActiveActor->curHP != 0) {
                 Entity_ApplyHitAndSetAnim(arg0);

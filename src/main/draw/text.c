@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe1/dialogue_alpha.h"
 #include "pe1/bounds_check.h"
 #include "pe1/draw_area.h"
 #include "pe1/draw_buffers.h"
@@ -527,6 +528,9 @@ void Draw_AllocTexturedQuad(int code) {
 
         prim->tag.address = ot->address;
         ot->address = (uintptr_t)prim;
+#ifdef PE_PS5_GPU_NATIVE
+        PeMenuFont_Tag(ot,prim,(unsigned)glyph,(unsigned)nibble,(unsigned)width);
+#endif
     }
     AdvanceCursor(width + g_DrawGlyphAdvance);
 }

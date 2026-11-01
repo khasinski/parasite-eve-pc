@@ -91,6 +91,7 @@ static const uint16_t s_preset_pity_step[3] = { 150, 100, 60 };
 static const uint16_t s_preset_price[3] = { 75, 100, 125 };
 static const char *const s_handin_names[] = { "Next gun", "All Junk" };
 
+static int s_was_enabled = -1, s_wayne_check; /* checkpoint-owned tick latches */
 static int s_in_battle, s_boss_battle;
 static struct {
     uint16_t rare_shown[2];
@@ -719,7 +720,7 @@ static void pe_junk_without_room(void) {
 }
 
 static void pe_loot_tick(void) {
-    static int s_was_enabled = -1, s_wayne_check;
+
     int battle, i, s;
     ++s_frames;
     if (s_was_enabled != s_enabled) {
@@ -901,3 +902,66 @@ void pe_loot_register(const char *mod_id) {
     pe_save_register(&s_save_record);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_save_read, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_loot_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(s_list_redirected))return 0;if(apply&&(!in||!pe_loot_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_U(w,s_st.junk,0,99999,0);
+PE_CK_U(w,s_st.steal_bank,0,65535,0);
+for(unsigned i=0;i<7;i++){PE_CK_U(w,s_st.hits[i],0,65535,0);}
+PE_CK_U(w,s_st.rare_dry,0,65535,0);
+PE_CK_U(w,s_st.rare_carry,0,65535,0);
+PE_CK_U(w,s_st.rng,0,UINT32_MAX,0);
+PE_CK_U(w,s_st.charm_left,0,65535,0);
+PE_CK_U(w,s_st.preset,0,2,0);
+PE_CK_U(w,s_st.disabled,0,1,0);
+PE_CK_U(w,s_st.econ_since,0,255,0);
+PE_CK_U(w,s_st.permit_since,0,255,0);
+PE_CK_U(w,s_enabled,0,1,1);
+PE_CK_U(w,s_handin_mode,0,1,1);
+PE_CK_S(w,s_tune_floor,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_exp_per_junk,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_battle_cap,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_boss_cap,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_nohit_bonus,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_rare_base,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_rare_step,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_rare_guarantee,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_econ_guarantee,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_permit_guarantee,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tune_empty_steal,INT32_MIN,INT32_MAX,1);
+PE_CK_U(w,s_in_battle,0,1,0);
+PE_CK_U(w,s_boss_battle,0,1,0);
+for(unsigned i=0;i<2;i++){PE_CK_U(w,s_found.rare_shown[i],0,65535,0);}
+for(unsigned i=0;i<2;i++){PE_CK_U(w,s_found.rare_before[i],0,UINT32_MAX,0);}
+for(unsigned i=0;i<2;i++){PE_CK_U(w,s_found.rare_is_econ[i],0,1,0);}
+PE_CK_U(w,s_found.rare_list_seen,0,1,0);
+PE_CK_U(w,s_found.junk_list_seen,0,1,0);
+PE_CK_U(w,s_found.econ_list_seen,0,1,0);
+PE_CK_U(w,s_found.junk_shown,0,UINT32_MAX,0);
+PE_CK_U(w,s_found.bag_junk_before,0,UINT32_MAX,0);
+PE_CK_U(w,s_found.permits_before,0,UINT32_MAX,0);
+PE_CK_S(w,s_found.econ_shown,-1,PE_ECON_COUNT-1,0);
+PE_CK_U(w,s_frames,0,UINT32_MAX,0);
+PE_CK_U(w,s_last_count_frame,0,UINT32_MAX,0);
+PE_CK_U(w,s_free_frames,0,UINT32_MAX,0);
+PE_CK_U(w,s_handin_active,0,1,0);
+PE_CK_U(w,s_list_redirected,0,0,0);
+PE_CK_U(w,s_wayne_waiting,0,1,0);
+PE_CK_U(w,s_wayne_dropped,0,1,0);
+PE_CK_U(w,s_next_add_is_steal,0,1,0);
+PE_CK_U(w,s_handin_left,0,UINT32_MAX,0);
+PE_CK_S(w,s_saved_limit,INT32_MIN,INT32_MAX,0);
+PE_CK_U(w,s_wayne_prev,0,65535,0);
+PE_CK_U(w,s_color_saved,0,1,0);
+PE_CK_U(w,s_saved_color,0,UINT32_MAX,0);
+PE_CK_U(w,s_saved_color_shaded,0,UINT32_MAX,0);
+PE_CK_U(w,s_steal_item,0,65535,0);
+PE_CK_U(w,s_steal_frame,0,UINT32_MAX,0);
+PE_CK_U(w,g_DrawPrimColor,0,UINT32_MAX,0);
+PE_CK_U(w,g_DrawColorShaded,0,UINT32_MAX,0);
+
+PE_CK_S(w,s_was_enabled,-1,1,0);PE_CK_S(w,s_wayne_check,0,1,0);
+if(apply&&w.ok){memset(s_scratch,0,sizeof s_scratch);memset(s_junk_label,0,sizeof s_junk_label);memset(s_econ_label,0,sizeof s_econ_label);s_cascade_path[0]=0;}return w.ok&&w.at==260u;}
+#endif

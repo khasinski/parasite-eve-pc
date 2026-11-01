@@ -310,3 +310,19 @@ void pe_catalog_register(const char *mod_id) {
     pe_dismantle_register(mod_id);
     pe_catalog_pages_register();
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_catalog_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_catalog_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+for(unsigned i=0;i<2;i++){PE_CK_U(w,s_cat.bits[i],0,UINT32_MAX,0);}
+PE_CK_U(w,s_cat.rebuild_count,0,30,0);
+for(unsigned i=0;i<3;i++){PE_CK_U(w,s_cat.pad[i],0,255,0);}
+unsigned count=out?s_cat.rebuild_count:pe_econ_word(in+8);for(unsigned i=0;i<30;i++){unsigned id=out?s_cat.rebuild[i].id:pe_econ_word(in+24+i*24);if(i<count){const ItemDataRecord *record=pe_base_item((int)id);unsigned slots=out?s_cat.rebuild[i].slots:pe_econ_word(in+28+i*24);if(!record||record->kind<1||record->kind>9||slots>10)return 0;}PE_CK_U(w,s_cat.rebuild[i].id,0,255,0);PE_CK_U(w,s_cat.rebuild[i].slots,0,255,0);for(unsigned j=0;j<3;j++){PE_CK_S(w,s_cat.rebuild[i].bonus[j],-32768,32767,0);}PE_CK_U(w,s_cat.rebuild[i].payout,0,65535,0);}
+PE_CK_S(w,s_price[0],INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_price[1],INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_price[2],INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_rebuild_markup,INT32_MIN,INT32_MAX,1);
+
+if(apply&&w.ok){memset(s_said,0,sizeof s_said);s_said[0]='-';}return w.ok&&w.at==760u;}
+#endif

@@ -1,0 +1,5 @@
+{
+  "cmake": "<CMAKE_EXECUTABLE>",
+  "ninja": "<NINJA_EXECUTABLE>",
+  "webpSource": "<WEBP_SOURCE>"
+}

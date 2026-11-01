@@ -154,3 +154,11 @@ void pe_profile_load(void) {
     fclose(f);
     s_dirty = 0;
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_collection.h"
+/* Unlocks and purchases belong to the global account profile, not the room snapshot.
+ * Keep progress/dirty state; never run profile callbacks or write a file here. The
+ * worn selection must be identical, as a different outfit changes resource owners. */
+int pe_profile_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){(void)apply;if(!memchr(s_worn,0,sizeof s_worn))return 0;unsigned char canonical[64]={0};memcpy(canonical,s_worn,strlen(s_worn));if(in&&memcmp(in,canonical,64))return 0;if(out)memcpy(out,canonical,64);return 1;}
+#endif

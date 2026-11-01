@@ -349,3 +349,21 @@ void pe_requisition_register(const char *mod_id) {
     pe_menu_register_live_int(PE_PAGE_DEBUG_LOOT, "Tools bought", "Sets the next Tool's price.", 0, 0xFFFF, 1,
                               pe_get_tools_bought, pe_set_tools_bought);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_requisition_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_requisition_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_U(w,s_shop.tools_bought,0,65535,0);
+PE_CK_U(w,s_shop.pad,0,65535,0);
+PE_CK_S(w,s_price_pct,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_econ_pct,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tool_start,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tool_step,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tool_cap,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_revive,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_revive_ex,INT32_MIN,INT32_MAX,1);
+PE_CK_U(w,s_at_counter,0,1,0);
+
+if(apply&&w.ok){}return w.ok&&w.at==40u;}
+#endif

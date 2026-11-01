@@ -156,3 +156,7 @@ static int pe_on_frame_drawn(void *ctx, void *user) {
 void pe_present_install(void) {
     pe_hook_add(PE_HOOK_FRAME_DRAWN, pe_on_frame_drawn, NULL, PE_PRIORITY_NORMAL, "present");
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+int pe_present_state_empty(void){for(unsigned i=0;i<PE_PRESENT_SLOTS;i++)if(s_slot[i].shown||s_slot[i].pixels||s_slot[i].runs)return 0;return 1;}
+#endif

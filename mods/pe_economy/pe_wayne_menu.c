@@ -566,3 +566,11 @@ void pe_wayne_menu_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_SCENE_START, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_wayne_menu_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(s_ui.screen!=SCR_NONE||s_highlight.saved))return 0;if(apply&&(!in||!pe_wayne_menu_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+
+if(apply&&w.ok){memset(&s_ui,0,sizeof s_ui);memset(&s_highlight,0,sizeof s_highlight);s_orig_len=0;memset(s_buf,0,sizeof s_buf);memset(s_orig,0,sizeof s_orig);}return w.ok&&w.at==0u;}
+#endif

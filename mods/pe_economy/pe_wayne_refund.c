@@ -62,3 +62,16 @@ void pe_wayne_refund_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_SAVE_READ, pe_refund_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_refund_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_refund_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_refund_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_U(w,s_enabled,0,1,1);
+PE_CK_U(w,s_valid,0,1,0);
+PE_CK_U(w,s_armed,0,1,0);
+PE_CK_U(w,s_prev_counter,0,UINT32_MAX,0);
+PE_CK_U(w,s_junk_before,0,UINT32_MAX,0);
+
+if(apply&&w.ok){}return w.ok&&w.at==20u;}
+#endif

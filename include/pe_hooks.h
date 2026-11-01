@@ -53,11 +53,19 @@ typedef enum PeHookId {
     PE_HOOK_FRAME_DRAWN, /* NULL: Draw_RenderFrame, the previous frame finished drawing (DrawSync)
                           * and not yet shown; its buffer is g_RenderDrawEnvArray[1 - g_ActiveDrawSlot] */
     PE_HOOK_NEW_GAME,    /* PeHookNewGame: a new game starts; the host has reset every save record */
+    PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
     PE_HOOK_COUNT
 } PeHookId;
 
 /* The factor belongs to the current calculation, not the actor. A handler
  * may change it for this input step only and must not retain its address. */
+typedef struct PeHookHpLoss {
+    const void *actor;
+    int current_hp;
+    int *loss;
+    unsigned source; /* 1hit,2contact,3periodic,4HP-reduction attack */
+} PeHookHpLoss;
+
 typedef struct PeHookPlayerMove {
     const void *actor;
     int *factor;

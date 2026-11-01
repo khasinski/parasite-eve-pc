@@ -158,3 +158,14 @@ void pe_discard_dismantle_register(const char *mod_id) {
         "Discard on gear in Aya's menu dismantles it: Junk, Catalog effects, Rebuild.", &s_enabled, NULL);
     pe_hook_add(PE_HOOK_ITEM_ACTIONS, pe_on_item_actions, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+/* Only live authoritative pool nodes own callbacks; cancelled stale s_rec is not a job. */
+static int pe_discard_checkpoint_idle(void){MenuWidgetNode*n=g_MenuWidgetActiveListHead;unsigned visited=0;while(n&&n!=&g_MenuWidgetNodePoolSentinel){unsigned role=24;for(unsigned i=0;i<23;i++)if(n==&g_MenuWidgetNodePool[i]){role=i;break;}if(role==24||(visited&(1u<<role)))return 0;visited|=1u<<role;if(n->draw==pe_list_draw||n->update==pe_step||(n->update==Menu_ConfirmDialogHandler&&g_MenuConfirmCallback==pe_on_confirm))return 0;n=n->next;}return 1;}
+int pe_discard_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||!pe_discard_checkpoint_idle())return 0;if(apply&&(!in||!pe_discard_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_U(w,s_enabled,0,1,1);
+
+if(apply&&w.ok){s_rec=NULL;s_row=-1;memset(s_label,0,sizeof s_label);}return w.ok&&w.at==4u;}
+#endif

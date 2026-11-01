@@ -105,3 +105,8 @@ void pe_wardrobe_menu_register(const char *mod_id) {
     pe_main_menu_add(&s_row, 30);                    /* after the Mod Catalog and Key Items */
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_help_text, NULL, PE_PRIORITY_LATE, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_collection.h"
+int pe_wardrobe_menu_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){(void)in;(void)out;if(s_screen.panel||s_screen.list)return 0;for(unsigned i=0;i<PE_SCREEN_EXTRA;i++)if(s_screen.extra[i])return 0;if(apply){memset(&s_screen,0,sizeof s_screen);memset(s_text,0,sizeof s_text);s_note[0]=0;}return 1;}
+#endif

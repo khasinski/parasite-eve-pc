@@ -433,3 +433,16 @@ void pe_dismantle_debug_test_armor(void) {
 void pe_dismantle_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_TOOL_TRANSFER, pe_on_tool_transfer, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_dismantle_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_dismantle_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_S(w,s_dis_choice,-1,49,0);
+for(unsigned i=0;i<50;i++){PE_CK_S(w,s_dis_slots[i],0,49,0);}
+PE_CK_S(w,s_dis_armed,-1,49,0);
+PE_CK_U(w,s_dis_count,0,50,0);
+PE_CK_S(w,s_rb_choice,-1,29,0);
+
+if(apply&&w.ok){memset(s_dis_names,0,sizeof s_dis_names);memset(s_rb_names,0,sizeof s_rb_names);}return w.ok&&w.at==216u;}
+#endif

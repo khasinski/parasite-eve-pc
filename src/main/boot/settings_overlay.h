@@ -28,6 +28,11 @@
 /* ---- geometry, in design units that scale with the window (from rage-racer-pc) ---- */
 
 enum {
+#ifdef PE_PS5_GPU_NATIVE
+    OVERLAY_PAGE_GRAPHICS=0,OVERLAY_PAGE_MODS=1,OVERLAY_PAGE_CHEATS=2,OVERLAY_PAGE_STATES=3,
+    OVERLAY_PAGE_AUDIO=4,OVERLAY_PAGE_CONTROLS=5,OVERLAY_PAGE_DISCS=6,OVERLAY_PAGE_COUNT=7,
+    OVERLAY_ACTION_ROWS=3,
+#else
     OVERLAY_PAGE_GRAPHICS = 0,
     OVERLAY_PAGE_CONTROLS = 1,
     OVERLAY_PAGE_AUDIO = 2,
@@ -35,15 +40,28 @@ enum {
     OVERLAY_PAGE_MODS = 4,
     OVERLAY_PAGE_COUNT = 5,
     OVERLAY_ACTION_ROWS = 2,
+#endif
     OVERLAY_VISIBLE_CONTROLS = 7,
 
+#ifdef PE_PS5_GPU_NATIVE
+    OVERLAY_PANEL_W = 840,
+#else
     OVERLAY_PANEL_W = 600,
+#endif
     OVERLAY_PAD = 32,
     OVERLAY_HEADER_H = 128,
     OVERLAY_ROW_H = 46,
     OVERLAY_ACTION_GAP = 14,
+#ifdef PE_PS5_GPU_NATIVE
+    OVERLAY_FOOTER_H = 94,
+#else
     OVERLAY_FOOTER_H = 74,
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    OVERLAY_VALUE_W = 320,
+#else
     OVERLAY_VALUE_W = 250,
+#endif
     /* "< 2x >" stepper in front of the speed row's label */
     OVERLAY_SPEED_STEP_CENTRE = 22,
     OVERLAY_SPEED_STEP_REACH = 18,
@@ -78,9 +96,16 @@ typedef struct Color {
 
 typedef struct HostOverlayState {
     int open;
+#ifdef PE_PS5_GPU_NATIVE
+    int installer;
+#endif
     int page;
     int row;
     int scroll;
+#ifdef PE_PS5_GPU_NATIVE
+    int page_rows[OVERLAY_PAGE_COUNT],page_scrolls[OVERLAY_PAGE_COUNT];
+#endif
+    int stick_x, stick_y; /* Menu-only hysteresis, no gameplay mapping changes. */
     int bind_device;
     int capturing_binding;
     int quit;
@@ -90,9 +115,19 @@ typedef struct HostOverlayState {
     int skip;   /* the question's answer */
 } HostOverlayState;
 
+#ifdef PE_PS5_GPU_NATIVE
+static const Color kPanelModern={0.052f,0.066f,0.064f,0.965f},kPanelOriginal={0.075f,0.082f,0.102f,0.96f};
+#define kPanel (host_options.menu_style?kPanelModern:kPanelOriginal)
+#else
 static const Color kPanel = {0.075f, 0.082f, 0.102f, 0.96f};
+#endif
 static const Color kBorder = {1.0f, 1.0f, 1.0f, 0.10f};
+#ifdef PE_PS5_GPU_NATIVE
+static const Color kAccentModern={0.38f,0.72f,0.62f,1.0f},kAccentOriginal={0.27f,0.62f,1.0f,1.0f};
+#define kAccent (host_options.menu_style?kAccentModern:kAccentOriginal)
+#else
 static const Color kAccent = {0.27f, 0.62f, 1.0f, 1.0f};
+#endif
 static const Color kText = {0.93f, 0.95f, 0.98f, 1.0f};
 static const Color kMuted = {0.60f, 0.65f, 0.73f, 1.0f};
 static const Color kDanger = {1.0f, 0.45f, 0.42f, 1.0f};
@@ -130,16 +165,28 @@ static const char *const kSwitchNames[] = {"Off", "On"};
 
 /* graphics */
 
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+static const char *const kScaleNames[]={"1x original","2x experimental","4x experimental","6x experimental","8x experimental"};
+static const unsigned kCpuScales[]={1,2,4,6,8};
+static int GetScale(void){for(int i=0;i<5;++i)if(host_options.scale==kCpuScales[i])return i;return 0;}
+static void SetScale(int i){if(i<0 || i>=5)return;host_options.scale=kCpuScales[i];}
+#else
 static const char *const kScaleNames[] = {
     "1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x"
 };
 ACCESSORS(Scale, ClampIndex((int)host_options.scale - 1, COUNT_OF(kScaleNames)),
           host_options.scale = (unsigned)(i + 1))
 
+#endif
+
 ACCESSORS(Fullscreen, host_options.fullscreen != 0,
           host_options.fullscreen = i)
 
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+static const char *const kAspectNames[] = {"Classic 4:3", "Square pixels", "Wide (experimental)"};
+#else
 static const char *const kAspectNames[] = {"Classic 4:3", "Square pixels", "Widescreen"};
+#endif
 ACCESSORS(Aspect, host_options.widescreen ? 2 : host_options.aspect != 0,
           (host_options.widescreen = i == 2, host_options.aspect = i == 1))
 
@@ -157,21 +204,126 @@ static const char *const kFilterNames[] = {"Original", "Bilinear"};
 ACCESSORS(ModelFiltering, host_options.model_filtering != 0,
           host_options.model_filtering = i)
 
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+static const char *const kUnavailableNames[]={"Unavailable (CPU)"};
+static int GetUnavailable(void){return 0;}
+static void SetUnavailable(int i){(void)i;}
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+static const char *const kFrameRateNames[]={"30 Hz (original)","60 Hz requested"};
+ACCESSORS(FrameInterpolation,host_options.frame_interpolation!=0,host_options.frame_interpolation=i)
+static const char *const kFsrStatus[]={"Off","Bypassed","Active","Fallback"};
+ACCESSORS(FsrStatus,ClampIndex(Psyz_VideoGetFsr1Status(),4),(void)i)
+static const char *const kFsrSharpness[]={"Strong (0 stops)","Balanced (1 stop)","Soft (2 stops)"};
+ACCESSORS(Fsr1,host_options.fsr1!=0,host_options.fsr1=i)
+static const char *const kNativeBackgroundNames[]={"Original","HD pack requested"};
+static const char *const kNativeModelNames[]={"Original","Duck images requested"};
+static const char *const kMovieBars[]={"Original black","Blurred backdrop"};
+ACCESSORS(MovieBlur,host_options.movie_blur!=0,host_options.movie_blur=i)
+ACCESSORS(FsrSharpness,ClampIndex(host_options.fsr1_sharpness,3),host_options.fsr1_sharpness=i)
+static const char *const kModelFillNames[]={"Original","Soft fill","World key fill"};
+ACCESSORS(ModelFill,ClampIndex(host_options.model_fill_lighting,3),host_options.model_fill_lighting=i)
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+static const char *const kNativeOutputNames[]={"Always fullscreen"};
+ACCESSORS(NativeOutput,0,(void)i)
+ACCESSORS(GameplayFill,host_options.gameplay_fill!=0,host_options.gameplay_fill=i)
+static const char *const kMovieCleanupNames[]={"Original","Gentle","Stronger","Block smoothing"};
+ACCESSORS(MovieCleanup,ClampIndex(host_options.movie_cleanup,4),host_options.movie_cleanup=i)
+ACCESSORS(ShowFps,!!host_options.show_fps,host_options.show_fps=i)
+static const char *const kPlayerShadowNames[]={"Original","Projected mesh"};
+ACCESSORS(PlayerShadow,ClampIndex(host_options.player_shadow,2),host_options.player_shadow=i)
+ACCESSORS(SpriteFiltering,host_options.sprite_filtering!=0,host_options.sprite_filtering=i)
+ACCESSORS(MovieStretch,host_options.movie_presentation==0,host_options.movie_presentation=i?0:1;host_options.movie_blur=!i)
+static const char *const kMovieFrameNames[]={"Original + blurred sides","Fill screen (stretch)"};
+ACCESSORS(MovieFrame,host_options.movie_presentation==0,host_options.movie_presentation=i?0:1;host_options.movie_blur=!i)
+ACCESSORS(HdBackgrounds,host_options.hd_backgrounds!=0,if(i!=!!host_options.hd_backgrounds)Host_HdAction(0))
+ACCESSORS(HdModels,host_options.hd_models!=0,host_options.hd_models=i)
+static const char *const kParticleModes[]={"Original","Hybrid","New geometry"};
+static const char *const kDialogueNames[]={"Original","Modern (Plex)"};
+ACCESSORS(DialogueText,host_options.dialogue_text!=0,host_options.dialogue_text=i)
+static const char *const kTriangleFontNames[]={"Original","Modern (Plex)"};
+ACCESSORS(TriangleFont,host_options.triangle_menu_font!=0,host_options.triangle_menu_font=i)
+static const char *const kTriangleFontStatus[]={"Original","Prepared for menu","Original fallback / waiting"};
+ACCESSORS(TriangleFontStatus,!host_options.triangle_menu_font?0:PeMenuFont_GetEffective()?1:2,(void)i)
+static const char *const kDialogueStatus[]={"Original","Prepared for dialogue","Original fallback / waiting"};
+ACCESSORS(DialogueStatus,!host_options.dialogue_text?0:PeDialogue_GetEffective()?1:2,(void)i)
+static const char *const kParticleLights[]={"Off","On"};
+ACCESSORS(ParticleLights,host_options.particle_lighting!=0,host_options.particle_lighting=i)
+ACCESSORS(ParticleMode,ClampIndex(host_options.battle_debris_3d,3),host_options.battle_debris_3d=i)
+static const char *const kMenuStyles[]={"Original overlay","Modern"};
+static const char *const kMenuTextSizes[]={"Original","Large"};
+static const char *const kMenuPointers[]={"Original bar","Chevron","Both"};
+ACCESSORS(MenuStyle,ClampIndex(host_options.menu_style,2),host_options.menu_style=i)
+ACCESSORS(MenuTextSize,ClampIndex(host_options.menu_text_size,2),host_options.menu_text_size=i)
+ACCESSORS(MenuPointer,ClampIndex(host_options.menu_pointer,3),host_options.menu_pointer=i)
+static const OverlaySetting kSystem[]={
+ SETTING("Menu appearance","Previous native overlay or charcoal/teal styling. Text size and pointer are independent; the game's Triangle menu is unchanged.",kMenuStyles,MenuStyle),
+ SETTING("Menu text","Uses the existing licensed Plex font. Original restores the previous native row size; Large improves TV readability.",kMenuTextSizes,MenuTextSize),
+ SETTING("Focus pointer","Select the previous native focus bar, a restrained chevron, or both. No game art is replaced.",kMenuPointers,MenuPointer),
+};
+ACCESSORS(DynamicLighting,host_options.dynamic_lighting!=0,host_options.dynamic_lighting=i)
+ACCESSORS(EffectGeometryCorrection,host_options.effect_geometry_correction!=0,host_options.effect_geometry_correction=i)
+#endif
 static const OverlaySetting kGraphics[] = {
-    SETTING("Render resolution", "Higher values increase image detail and GPU load.",
-            kScaleNames, Scale),
-    SETTING("Fullscreen", "Switch between windowed and fullscreen display.",
-            kSwitchNames, Fullscreen),
-    SETTING("Aspect ratio", "Classic 4:3 matches the PlayStation. Widescreen is 16:9 where the background allows.",
-            kAspectNames, Aspect),
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+    SETTING("CPU SCALE TEST v2", "Experimental; rejected frames use original 1x. Ordered field HD at every scale. Unsupported frames use 1x; see logs.", kScaleNames, Scale),
+#else
+    SETTING("Picture detail", "Higher values increase image detail and GPU load.", kScaleNames, Scale),
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    SETTING("Fill the TV", "On stretches gameplay to fill the TV. Off preserves the selected scene aspect. Genuine widescreen and movie stretch are separate.", kSwitchNames, GameplayFill),
+#elif defined(PE_PS5)
+    SETTING("Fullscreen", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
+#else
+    SETTING("Fullscreen", "Switch between windowed and fullscreen display.", kSwitchNames, Fullscreen),
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    SETTING("HD backgrounds","Native background replacements from your installed pack. Independent of character textures and filtering; original assets remain the fallback.",kNativeBackgroundNames,HdBackgrounds),
+    SETTING("HD character textures","Matched player and supported nonplayer images on original geometry. Unregistered, unsupported or ambiguous matches remain original; independent of backgrounds and filtering.",kNativeModelNames,HdModels),
+    SETTING("Movie framing","Original proportions with blurred sides is the default. Fill screen stretches movies for comparison; gameplay framing is separate.",kMovieFrameNames,MovieFrame),
+    SETTING("Dialogue font","Optional Modern Plex for supported Latin dialogue. Original spacing/layout retained; requires 2x or above. Other game menus and unsupported glyphs remain original.",kDialogueNames,DialogueText),
+    SETTING("Dialogue font status","Updates as dialogue is drawn. Unsupported letters keep the original font; if the new font is not ready, the original remains.",kDialogueStatus,DialogueStatus),
+    SETTING("Triangle menu font","Plex lettering for supported Latin text in the game's Triangle menu. Keeps spacing and controls; modern letters use a grayscale base with the game's tint colours. Settings appearance is separate.",kTriangleFontNames,TriangleFont),
+    SETTING("Triangle font status","Only supported letters are replaced. The original font is used if the new font is not ready. Change the Settings menu's look in System.",kTriangleFontStatus,TriangleFontStatus),
+    SETTING("Show FPS","Temporary display frame counter. Counts submitted TV frames, not game logic updates.",kSwitchNames,ShowFps),
+    SETTING("Player shadow","Experimental player-outline projection onto supported flat floors using a fixed light direction. Other actors, unsupported scenes and source/resource failures keep original shadows. No wall or stair occlusion.",kPlayerShadowNames,PlayerShadow),
+    SETTING("Particle lights","Supported sparks/flame can light nearby actors. Original effects disables their contribution even when this switch is On. No shadows or ray tracing.",kParticleLights,ParticleLights),
+    SETTING("Extra particle geometry","Original disables extra meshes. Hybrid/New geometry affect only supported families; no gameplay or simulation speed changes.",kParticleModes,ParticleMode),
+
+    SETTING("Movie cleanup", "Optional smoothing for decoded movies. Block smoothing reduces compression seams but can soften detail; no added detail or frames. Original is unfiltered; failures keep it.", kMovieCleanupNames, MovieCleanup),
+    SETTING("FSR1 spatial upscale", "Optional EASU + RCAS before UI. Original fallback on errors or downscale; not frame generation.", kSwitchNames, Fsr1),
+    SETTING("FSR1 status", "Last frame: active, bypassed for downscaling, or original fallback after an error. Read only.", kFsrStatus, FsrStatus),
+    SETTING("FSR1 sharpness", "RCAS strength; only active when FSR1 succeeds. Lower stops sharpen more.", kFsrSharpness, FsrSharpness),
+    SETTING("Model fill lighting", "Colour-only fill for lit 3D models and props as they update. World key uses original normals. No reflections or geometry smoothing.", kModelFillNames, ModelFill),
+    SETTING("Gameplay display", "Requests smoother presentation. Game timing stays original. Extra GPU memory; allocation failure keeps original presentation while retaining your request. The FPS counter reports actual submitted frames.", kFrameRateNames, FrameInterpolation),
+    SETTING("Dynamic lighting", "Upstream smooth directional lighting on characters and monsters. Separate from experimental model fill.", kSwitchNames, DynamicLighting),
+    SETTING("Effect geometry", "Upstream subpixel precision for original spell and particle geometry; does not replace sprites with models.", kSwitchNames, EffectGeometryCorrection),
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    SETTING("Scene framing", "Classic 4:3 or square pixels preserve the original scene shape when Force wide gameplay is Off. Widescreen requests available extra room imagery; no missing side art is invented.", kAspectNames, Aspect),
+#else
+    SETTING("Aspect ratio", "Classic 4:3 matches the PlayStation. Wide draws extra room geometry, with bars at room edges. Native0.8 HD side art covers limited rooms. Unsupported frames use classic output.", kAspectNames, Aspect),
+#endif
     SETTING("Dithering", "PlayStation 15-bit color dithering on shaded polygons.",
             kDitherNames, Dither),
-    SETTING("Geometry correction", "Subpixel vertex precision and perspective-correct 3D textures.",
-            kSwitchNames, GeometryCorrection),
-    SETTING("Antialiasing", "Smoother edges: twice each axis, four samples per pixel. Uses more GPU time and memory.",
-            kAntialiasNames, Antialiasing),
-    SETTING("Model textures", "Bilinear filtering for 3D models; backgrounds and text keep original sampling.",
-            kFilterNames, ModelFiltering),
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+    SETTING("Geometry correction", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
+#else
+#ifndef PE_PS5_GPU_NATIVE
+    SETTING("Geometry correction", "Subpixel vertex precision and perspective-correct 3D textures.", kSwitchNames, GeometryCorrection),
+#endif
+#endif
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+    SETTING("Antialiasing", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
+#else
+    SETTING("Antialiasing", "Smoother edges: twice each axis, four samples per pixel. Uses more GPU time and memory.", kAntialiasNames, Antialiasing),
+#endif
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+    SETTING("Model textures", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
+#else
+    SETTING("Model filtering", "Bilinear filtering of the original 3D texture; separate from HD player replacements.", kFilterNames, ModelFiltering),
+#endif
 };
 
 /* audio */
@@ -188,8 +340,18 @@ static const OverlaySetting kAudio[] = {
             kVolumeNames, Volume),
 };
 
+
+#ifdef PE_PS5_GPU_NATIVE
+static const char *const kPresentationNames[]={"Classic","Modern"};
+static const OverlaySetting kExperience[]={SETTING("Presentation","Modern remembers your custom visual choices. Classic uses original presentation with required rendering corrections. Gameplay mods, cheats, controls, audio and saves are unaffected.",kPresentationNames,Presentation)};
+#endif
+
 static const char *const kPageNames[OVERLAY_PAGE_COUNT] = {
+#ifdef PE_PS5_GPU_NATIVE
+    "Experience", "Mods", "Cheats", "Save states", "Advanced", "Controls", "System"
+#else
     "Graphics", "Controls", "Audio", "Discs", "Mods"
+#endif
 };
 
 static const char *OverlayPageName(int page) {
@@ -197,6 +359,11 @@ static const char *OverlayPageName(int page) {
 }
 
 static const OverlaySetting *OverlayPageSettings(int page, int *count) {
+#ifdef PE_PS5_GPU_NATIVE
+    if(page==OVERLAY_PAGE_GRAPHICS){*count=COUNT_OF(kExperience);return kExperience;}
+    if(page==OVERLAY_PAGE_AUDIO){*count=COUNT_OF(kGraphics);return kGraphics;}
+    if(page==OVERLAY_PAGE_DISCS){*count=COUNT_OF(kSystem);return kSystem;}
+#endif
     switch (page) {
     case OVERLAY_PAGE_GRAPHICS:
         *count = COUNT_OF(kGraphics);
@@ -211,10 +378,25 @@ static const OverlaySetting *OverlayPageSettings(int page, int *count) {
 }
 
 static int Host_SettingsPureRowCount(int page) {
+#ifdef PE_PS5_GPU_NATIVE
+    if(page==OVERLAY_PAGE_GRAPHICS)return 2;
+    if(page==OVERLAY_PAGE_AUDIO)return COUNT_OF(kGraphics);
+    if(page==OVERLAY_PAGE_MODS||page==OVERLAY_PAGE_CHEATS||page==OVERLAY_PAGE_STATES||page==OVERLAY_PAGE_DISCS)return Host_ModernRowCount(page);
+#endif
     if (page == OVERLAY_PAGE_GRAPHICS) return COUNT_OF(kGraphics);
     if (page == OVERLAY_PAGE_CONTROLS) return 2 + HOST_BINDING_COUNT;
     if (page == OVERLAY_PAGE_AUDIO) return COUNT_OF(kAudio);
-    if (page == OVERLAY_PAGE_MODS) return 3;
+    if (page == OVERLAY_PAGE_MODS) {
+#ifdef PE_PS5_GPU_NATIVE
+#ifdef PE_MODS
+        return 6;
+#else
+        return 4;
+#endif
+#else
+        return 3;
+#endif
+    }
     return 2;
 }
 
@@ -246,6 +428,17 @@ static int Host_ClampControlsScroll(int scroll) {
 /* Scrolls Controls by the minimum amount needed to keep a selected binding
  * or field-threshold row in view. Mouse hover never calls this. */
 static void Host_EnsureControlsRowVisible(HostOverlayState *state) {
+    if(state->page!=OVERLAY_PAGE_CONTROLS){
+        int capacity=Host_SettingsVisibleSettingCount(state->page);
+        int maximum=Host_SettingsPureRowCount(state->page)-capacity;if(maximum<0)maximum=0;
+        if(state->scroll<0)state->scroll=0;
+        if(state->scroll>maximum)state->scroll=maximum;
+        if(state->row<Host_SettingsPureRowCount(state->page)){
+            if(state->row<state->scroll)state->scroll=state->row;
+            if(state->row>=state->scroll+capacity)state->scroll=state->row-capacity+1;
+        }
+        return;
+    }
     state->scroll = Host_ClampControlsScroll(state->scroll);
     if (state->page != OVERLAY_PAGE_CONTROLS) {
         return;
@@ -481,6 +674,9 @@ static OverlayRect OverlayPromptRowRect(int row) {
 
 static void OverlayComputeStateLayout(const HostOverlayState *state, int windowW,
                                       int windowH, OverlayLayout *layout) {
+#ifdef PE_PS5_GPU_NATIVE
+    if(state->installer){OverlayFitLayout(600,650,windowW,windowH,layout);return;}
+#endif
     if (state->prompt) {
         OverlayFitLayout(PROMPT_PANEL_W, OverlayPromptDesignHeight(), windowW, windowH,
                          layout);
@@ -514,6 +710,11 @@ static int OverlayVisibleSlotForRow(const HostOverlayState *state, int row) {
     int visibleSettings = Host_SettingsVisibleSettingCount(page);
     if (row >= pureCount) {
         return visibleSettings + (row - pureCount);
+    }
+    if(page!=OVERLAY_PAGE_CONTROLS){
+        int maximum=pureCount-visibleSettings;if(maximum<0)maximum=0;
+        int scroll=state->scroll<0?0:state->scroll>maximum?maximum:state->scroll;
+        return row>=scroll&&row<scroll+visibleSettings?row-scroll:-1;
     }
     if (page != OVERLAY_PAGE_CONTROLS) {
         return row;
@@ -564,8 +765,12 @@ static void PaintHeader(const Painter *p) {
     const float s = p->s;
     int page;
 
-    DrawText(p->surface, (float)OVERLAY_PAD * s, 40.0f * s, 26.0f * s,
-             "Settings", kText, ALIGN_LEFT);
+#ifdef PE_PS5_GPU_NATIVE
+    if(host_options.menu_style)DrawText(p->surface,OVERLAY_PAD*s,14*s,11*s,"PARASITE EVE",kAccent,ALIGN_LEFT);
+    DrawText(p->surface,OVERLAY_PAD*s,(host_options.menu_style?44:40)*s,(host_options.menu_style?28:26)*s,Host_RegistryTitle(p->state->page),kText,ALIGN_LEFT);
+#else
+    DrawText(p->surface, (float)OVERLAY_PAD * s, 40.0f * s, 26.0f * s,"Settings", kText, ALIGN_LEFT);
+#endif
     DrawText(p->surface, (float)(OVERLAY_PANEL_W - OVERLAY_PAD) * s, 38.0f * s,
              14.0f * s, "GAME PAUSED", kMuted, ALIGN_RIGHT);
     for (page = 0; page < OVERLAY_PAGE_COUNT; page++) {
@@ -586,6 +791,14 @@ static void PaintHeader(const Painter *p) {
                   WithAlpha(kText, 0.10f));
 }
 
+#ifdef PE_PS5_GPU_NATIVE
+static const char *FitRowText(const char*text,float em,float width,char out[1024]){
+ SDL_strlcpy(out,text?text:"",1024);size_t n=strlen(out);if(TextWidth(out,em)<=width)return out;
+ while(n){do{--n;}while(n&&((unsigned char)out[n]&0xc0)==0x80);out[n]=0;if(n+3<1024){strcat(out,"...");if(TextWidth(out,em)<=width)return out;out[n]=0;}}
+ out[0]=0;return out;
+}
+#endif
+
 static void PaintValueRow(const Painter *p, const char *labelText,
                           const char *valueText, float mid, float baseline,
                           int selected, int highlightValue, Color label) {
@@ -594,13 +807,21 @@ static void PaintValueRow(const Painter *p, const char *labelText,
     float reach = ((float)OVERLAY_VALUE_W * 0.5f - 14.0f) * s;
     Color chevron = selected ? kAccent : WithAlpha(kMuted, 0.75f);
 
-    DrawText(p->surface, (float)OVERLAY_PAD * s, baseline, 17.0f * s,
-             labelText, label, ALIGN_LEFT);
+    float rowEm=17.0f*s;
+#ifdef PE_PS5_GPU_NATIVE
+    rowEm=(host_options.menu_text_size?19.0f:17.0f)*s;
+#endif
+    #ifdef PE_PS5_GPU_NATIVE
+    char fittedLabel[1024],fittedValue[1024];
+    labelText=FitRowText(labelText,rowEm,(OVERLAY_PANEL_W-2*OVERLAY_PAD-OVERLAY_VALUE_W-20)*s,fittedLabel);
+    valueText=FitRowText(valueText,rowEm,(OVERLAY_VALUE_W-52)*s,fittedValue);
+    #endif
+    DrawText(p->surface, (float)OVERLAY_PAD * s, baseline,rowEm,labelText,label,ALIGN_LEFT);
     DrawChevron(p->surface, centre - reach, mid, 5.0f * s, -1, 2.0f * s,
                 chevron);
     DrawChevron(p->surface, centre + reach, mid, 5.0f * s, 1, 2.0f * s,
                 chevron);
-    DrawText(p->surface, centre, baseline, 17.0f * s, valueText,
+    DrawText(p->surface, centre, baseline,rowEm,valueText,
              highlightValue ? kAccent : (selected ? kText : WithAlpha(kText, 0.9f)),
              ALIGN_CENTRE);
 }
@@ -632,7 +853,14 @@ static void PaintSettingRow(const Painter *p, const OverlaySetting *setting,
     int value = setting->get();
     if (value < 0) value = 0;
     if (value >= setting->count) value = setting->count - 1;
-    PaintValueRow(p, setting->label, setting->names[value], mid, baseline,
+#ifdef PE_PS5_GPU_NATIVE
+    if((setting->set==SetFsrStatus||setting->set==SetDialogueStatus||setting->set==SetTriangleFontStatus)){char fitLabel[1024],fitValue[1024];float em=(host_options.menu_text_size?19:17)*p->s;DrawText(p->surface,OVERLAY_PAD*p->s,baseline,em,FitRowText(setting->label,em,(OVERLAY_PANEL_W-2*OVERLAY_PAD-OVERLAY_VALUE_W-20)*p->s,fitLabel),label,ALIGN_LEFT);DrawText(p->surface,(OVERLAY_PANEL_W-OVERLAY_PAD)*p->s,baseline,17*p->s,FitRowText(setting->names[value],17*p->s,OVERLAY_VALUE_W*p->s,fitValue),selected?kText:kMuted,ALIGN_RIGHT);return;}
+#endif
+    const char *valueText=setting->names[value];
+#ifdef PE_PS5_GPU_NATIVE
+    if(setting->set==SetParticleLights&&value&&!FieldFx_GetParticleAugment())valueText="On; Original effects";
+#endif
+    PaintValueRow(p, setting->label, valueText, mid, baseline,
                   selected, 0, label);
 }
 
@@ -688,6 +916,10 @@ static void PaintRows(const Painter *p) {
                           top + 3.0f * s, (float)(OVERLAY_PANEL_W - OVERLAY_PAD) * s,
                           (float)(OVERLAY_ROW_H - 6) * s, 9.0f * s,
                           WithAlpha(kAccent, 0.16f));
+#ifdef PE_PS5_GPU_NATIVE
+            if(host_options.menu_pointer==1||host_options.menu_pointer==2)DrawChevron(p->surface,(OVERLAY_PAD/2+4)*s,mid,5*s,1,2*s,kAccent);
+            if(host_options.menu_pointer!=1)
+#endif
             FillRoundRect(p->surface, (float)(OVERLAY_PAD / 2) * s + 4.0f * s,
                           mid - 10.0f * s, 3.0f * s, 20.0f * s, 1.5f * s,
                           kAccent);
@@ -695,6 +927,13 @@ static void PaintRows(const Painter *p) {
         if (row < pureCount) {
             if (settings != NULL && row < declCount) {
                 PaintSettingRow(p, &settings[row], mid, baseline, selected, label);
+#ifdef PE_PS5_GPU_NATIVE
+            } else if(page==OVERLAY_PAGE_GRAPHICS&&row==1){PaintValueRow(p,"Advanced picture settings","Open",mid,baseline,selected,0,label);
+            } else if(page==OVERLAY_PAGE_MODS||page==OVERLAY_PAGE_CHEATS||page==OVERLAY_PAGE_STATES||page==OVERLAY_PAGE_DISCS){
+                char value[160];Host_ModernRowValue(page,row,value,sizeof value);
+                if(Host_ModernRowKind(page,row)==2)PaintValueRow(p,Host_ModernRowLabel(page,row),value,mid,baseline,selected,0,label);
+                else {char fitLabel[1024],fitValue[1024];float em=(host_options.menu_text_size?19.0f:17.0f)*s;DrawText(p->surface,OVERLAY_PAD*s,baseline,em,FitRowText(Host_ModernRowLabel(page,row),em,(OVERLAY_PANEL_W-2*OVERLAY_PAD-OVERLAY_VALUE_W-20)*s,fitLabel),label,ALIGN_LEFT);DrawText(p->surface,(OVERLAY_PANEL_W-OVERLAY_PAD)*s,baseline,16*s,FitRowText(value,16*s,OVERLAY_VALUE_W*s,fitValue),selected?kText:kMuted,ALIGN_RIGHT);}
+#endif
             } else if (page == OVERLAY_PAGE_CONTROLS) {
                 if (row == 0) {
                     const char *dev = p->state->bind_device == HOST_BIND_CONTROLLER
@@ -720,7 +959,28 @@ static void PaintRows(const Painter *p) {
                     }
                 }
             } else if (page == OVERLAY_PAGE_MODS) {
+#ifdef PE_PS5
+#ifdef PE_PS5_GPU_NATIVE
+                const char *names[]={"GPU HD backgrounds","Local background pack","Download / update","Stretch movies"
+#ifdef PE_MODS
+,"Cheats / assists","3D effects (experimental)"
+#endif
+};
+ #else
+                const char *names[]={"Title HD","CPU field HD (experimental)","Field pack directory"};
+ #endif
+#else
                 const char *names[]={"HD backgrounds","Background pack","Integrity check"};
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+#ifdef PE_MODS
+                if(row==4)PaintValueRow(p,names[row],"Open menu",mid,baseline,selected,0,label);
+                else
+#endif
+                if(row==5)PaintValueRow(p,names[row],host_options.battle_debris_3d==2?"New geometry":host_options.battle_debris_3d?"Hybrid geometry":"Original",mid,baseline,selected,0,label);
+                else if(row==3)PaintValueRow(p,names[row],host_options.movie_presentation==0?"On":"Off (aspect + blur)",mid,baseline,selected,0,label);
+                else
+#endif
                 if(row==0)PaintValueRow(p,names[row],Host_HdValue(row),mid,baseline,selected,0,label);
                 else {
                     DrawText(p->surface,OVERLAY_PAD*s,baseline,17*s,names[row],label,ALIGN_LEFT);
@@ -733,25 +993,48 @@ static void PaintRows(const Painter *p) {
                 PaintValueRow(p, discLabel, val, mid, baseline, selected, 0, label);
             }
         } else {
+#ifdef PE_PS5_GPU_NATIVE
+            int quit = row == pureCount + 2;
+#else
             int quit = row == pureCount + 1;
+#endif
 
             DrawText(p->surface, (float)OVERLAY_PAD * s, baseline, 17.0f * s,
+#ifdef PE_PS5_GPU_NATIVE
+                     quit ? "Quit game" : row==pureCount+1 ? "Back" : "Resume game",quit?kDanger:label,
+#else
                      quit ? "Quit game" : "Resume game", quit ? kDanger : label,
+#endif
                      ALIGN_LEFT);
         }
     }
 
-    if(page==OVERLAY_PAGE_MODS) {
-        float x=OVERLAY_PAD*s,y=(OVERLAY_HEADER_H+5*OVERLAY_ROW_H)*s,w=(OVERLAY_PANEL_W-2*OVERLAY_PAD)*s;
+    if(page==OVERLAY_PAGE_MODS
+#ifdef PE_PS5_GPU_NATIVE
+       &&0 /* Native pack details live in rows/help, never over the pinned actions. */
+#endif
+    ) {
+        float x=OVERLAY_PAD*s,y=(OVERLAY_HEADER_H+Host_SettingsPureRowCount(OVERLAY_PAGE_MODS)*OVERLAY_ROW_H)*s,w=(OVERLAY_PANEL_W-2*OVERLAY_PAD)*s;
         if(Host_HdBusy()) {
             char text[80];snprintf(text,sizeof(text),"Downloading / verifying: %d%%",Host_HdPercent());
             DrawText(p->surface,x,y,15*s,text,kText,ALIGN_LEFT);
             FillRoundRect(p->surface,x,y+18*s,w,10*s,5*s,WithAlpha(kText,.12f));
             FillRoundRect(p->surface,x,y+18*s,w*Host_HdPercent()/100.f,10*s,5*s,kAccent);
         } else {
+#if defined(PE_PS5_GPU_NATIVE)
+            char text[96];snprintf(text,sizeof(text),"Local pack: %s",Host_GpuHdPackPresent(Host_GpuHdDirectory())?"found (atlas checks on use)":"not found");
+#else
             char text[96];snprintf(text,sizeof(text),"Installed version: %s",*host_hd.version?host_hd.version:host_hd.development?"local preview":"none");
+#endif
             DrawText(p->surface,x,y,15*s,text,kMuted,ALIGN_LEFT);
         }
+    }
+    if(page!=OVERLAY_PAGE_CONTROLS && pureCount>visibleSettings){
+        float trackTop=(OVERLAY_HEADER_H+4)*s,trackH=(visibleSettings*OVERLAY_ROW_H-8)*s;
+        float thumbH=trackH*(float)visibleSettings/(float)pureCount;
+        float top=trackTop+(trackH-thumbH)*(float)p->state->scroll/(float)(pureCount-visibleSettings);
+        FillRoundRect(p->surface,(OVERLAY_PANEL_W-12)*s,trackTop,4*s,trackH,2*s,WithAlpha(kText,.10f));
+        FillRoundRect(p->surface,(OVERLAY_PANEL_W-12)*s,top,4*s,thumbH,2*s,WithAlpha(kAccent,.65f));
     }
     if (page == OVERLAY_PAGE_CONTROLS) {
         int scroll = Host_ClampControlsScroll(p->state->scroll);
@@ -770,22 +1053,47 @@ static void PaintRows(const Painter *p) {
 }
 
 static const char *OverlayRowHelp(const HostOverlayState *state) {
+#ifdef PE_PS5_GPU_NATIVE
+    if(state->page==OVERLAY_PAGE_GRAPHICS&&state->row==1)return "Adjust individual picture choices. Changes become part of your remembered Modern presentation; gameplay and audio preferences are unchanged.";
+    int customCount=Host_SettingsPureRowCount(state->page);
+    if(state->row<customCount&&(state->page==OVERLAY_PAGE_MODS||state->page==OVERLAY_PAGE_CHEATS||state->page==OVERLAY_PAGE_STATES||(state->page==OVERLAY_PAGE_DISCS&&state->row>=3)))return Host_ModernRowHelp(state->page,state->row);
+    if(state->row==customCount)return "Resume the game with your current settings.";
+    if(state->row==customCount+1)return state->page==OVERLAY_PAGE_AUDIO?"Return to Experience; your picture choices are kept.":(state->page==OVERLAY_PAGE_MODS||state->page==OVERLAY_PAGE_CHEATS)?"Return to the parent page, or resume from a category root. Choices are kept.":"Back to the game; current choices are kept, like Circle.";
+    if(state->row==customCount+2)return "Quit the game. Save normal progress before leaving.";
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    if(state->page==OVERLAY_PAGE_MODS&&state->row==5)
+        return "Supported spark/debris meshes. Hybrid also accents Program109 flames. Unsupported or rejected effects retain originals; not universal fire or smoke.";
+    if(state->page==OVERLAY_PAGE_MODS&&state->row==4)
+        return "Open cheats and assists. Circle goes back to mod pages, including Manage mods. Master changes need a game restart.";
+#endif
     if (state->status != NULL && state->status[0] != '\0') {
         return state->status;
     }
     if (state->capturing_binding) {
         return "Press a key or controller button to bind. Esc cancels.";
     }
+#ifdef PE_PS5_GPU_NATIVE
+    if(state->page==OVERLAY_PAGE_MODS&&state->row==3)
+        return "On fills the TV. Off keeps the original movie aspect with blurred borders. Applies to both original video formats.";
+#endif
     int pureCount = Host_SettingsPureRowCount(state->page);
     if (state->row == pureCount) {
         return "Return to the game.";
     }
-    if (state->row == pureCount + 1) {
+    if (state->row == pureCount + OVERLAY_ACTION_ROWS-1) {
         return "Close the game.";
     }
     int declCount = 0;
     const OverlaySetting *settings = OverlayPageSettings(state->page, &declCount);
     if (settings != NULL && state->row >= 0 && state->row < declCount) {
+#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
+        if(state->page==OVERLAY_PAGE_GRAPHICS && state->row==0){
+            static char status[240];
+            snprintf(status,sizeof(status),"CPU geometry requested %ux; last prepared frame %ux. Experimental; rejected epochs use canonical 1x. Geometry overrides field HD.",Psyz_CpuGeometryRequested(),Psyz_CpuGeometryEffective());
+            return status;
+        }
+#endif
         return settings[state->row].help;
     }
     if (state->page == OVERLAY_PAGE_CONTROLS) {
@@ -808,6 +1116,21 @@ static const char *OverlayRowHelp(const HostOverlayState *state) {
     return "";
 }
 
+#ifdef PE_PS5_GPU_NATIVE
+/* Two bounded help lines: long option descriptions must not leave the panel. */
+static void DrawNativeHelp(const Painter *p,float top,const char *text){
+    const float width=(OVERLAY_PANEL_W-2*OVERLAY_PAD)*p->s,em=13*p->s;
+    char line[256];
+    for(int row=0;row<2 && text && *text;row++){
+        size_t n=0,last_space=0;
+        while(text[n] && n<sizeof(line)-4){line[n]=text[n];line[n+1]=0;if(TextWidth(line,em)>width)break;if(text[n]==' ')last_space=n;n++;}
+        if(text[n] && row==0 && last_space)n=last_space;
+        line[n]=0;text+=n;while(*text==' ')text++;
+        if(row==1 && *text){while(n && TextWidth(line,em)+TextWidth("...",em)>width)line[--n]=0;strcat(line,"...");}
+        DrawText(p->surface,OVERLAY_PAD*p->s,top+(23+18*row)*p->s,em,line,kMuted,ALIGN_LEFT);
+    }
+}
+#endif
 static void PaintFooter(const Painter *p, int visibleRowCount) {
     const float s = p->s;
     float footerTop = (float)(OverlayDesignHeight(visibleRowCount) - OVERLAY_FOOTER_H) * s;
@@ -816,11 +1139,24 @@ static void PaintFooter(const Painter *p, int visibleRowCount) {
     FillRoundRect(p->surface, (float)OVERLAY_PAD * s, footerTop,
                   (float)(OVERLAY_PANEL_W - 2 * OVERLAY_PAD) * s, 1.0f, 0.0f,
                   WithAlpha(kText, 0.10f));
+#ifdef PE_PS5_GPU_NATIVE
+    DrawNativeHelp(p,footerTop,help);
+#else
     DrawText(p->surface, (float)OVERLAY_PAD * s, footerTop + 28.0f * s,
              14.0f * s, help, kMuted, ALIGN_LEFT);
-    DrawText(p->surface, (float)OVERLAY_PAD * s, footerTop + 54.0f * s,
+#endif
+    DrawText(p->surface, (float)OVERLAY_PAD * s, footerTop +
+#ifdef PE_PS5_GPU_NATIVE
+             72.0f * s,
+#else
+             54.0f * s,
+#endif
              13.0f * s,
+#ifdef PE_PS5_GPU_NATIVE
+             "D-pad / left stick select   Left/right change   Cross confirm   L1/R1 tabs   Circle back",
+#else
              p->state->page==OVERLAY_PAGE_MODS?"Enter / click activate   PgUp/PgDn page   Esc resume":"Up/Down select   Left/Right change   PgUp/PgDn page   Esc resume",
+#endif
              WithAlpha(kMuted, 0.7f), ALIGN_LEFT);
 }
 
@@ -1131,6 +1467,7 @@ static void Host_WriteOverlayQuad(
     out[5] = (OverlayGpuVertex){x1, y1, 1.0f, 1.0f, 1.0f, alpha, u1, v1};
 }
 
+static int s_overlayIsFps;
 static int Host_UploadOverlaySurfaceAndVertices(SDL_GPUDevice *device) {
     if (s_overlaySurface.w <= 0 || s_overlaySurface.h <= 0 || s_overlayWindowW <= 0 ||
         s_overlayWindowH <= 0) {
@@ -1163,7 +1500,7 @@ static int Host_UploadOverlaySurfaceAndVertices(SDL_GPUDevice *device) {
     float h = (float)s_overlayWindowH;
     float solidU = 0.5f / (float)s_overlayTextureW;
     float solidV = ((float)s_overlayTextureH - 0.5f) / (float)s_overlayTextureH;
-    Host_WriteOverlayQuad(verts, -1.0f, 1.0f, 1.0f, -1.0f, solidU, solidV, solidU, solidV, 0.62f);
+    Host_WriteOverlayQuad(verts, -1.0f, 1.0f, 1.0f, -1.0f, solidU, solidV, solidU, solidV, s_overlayIsFps?0.0f:0.62f);
 
     float x0 = (float)s_overlayLayout.x / w * 2.0f - 1.0f;
     float y0 = 1.0f - (float)s_overlayLayout.y / h * 2.0f;
@@ -1197,6 +1534,7 @@ static int Host_UploadOverlaySurfaceAndVertices(SDL_GPUDevice *device) {
         return 0;
     }
     SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(command);
+    if(!copy){SDL_CancelGPUCommandBuffer(command);SDL_ReleaseGPUTransferBuffer(device,transfer);return 0;}
 
     SDL_GPUTextureTransferInfo texSrc;
     SDL_zero(texSrc);
@@ -1226,16 +1564,20 @@ static int Host_UploadOverlaySurfaceAndVertices(SDL_GPUDevice *device) {
     SDL_UploadToGPUBuffer(copy, &vtxSrc, &vtxDst, false);
 
     SDL_EndGPUCopyPass(copy);
-    SDL_SubmitGPUCommandBuffer(command);
+    bool submitted=SDL_SubmitGPUCommandBuffer(command);
     SDL_ReleaseGPUTransferBuffer(device, transfer);
-    return 1;
+    return submitted;
 }
 
+#ifdef PE_PS5_GPU_NATIVE
+#include "installer/pe_install_paint.h"
+#endif
 static void Host_OverlayRefreshGPU(
     SDL_GPUDevice *device,
     SDL_Window *window,
     HostOverlayState *state
 ) {
+    s_overlayIsFps=0;
     int w = 0, h = 0;
     OverlayLayout layout;
     SDL_GetWindowSizeInPixels(window, &w, &h);
@@ -1253,13 +1595,34 @@ static void Host_OverlayRefreshGPU(
     if (!state->dirty) {
         return;
     }
-    if (!OverlaySurfaceResize(&s_overlaySurface, layout.w, layout.h)) {
-        return;
+    OverlayLayout raster=layout;
+#ifdef PE_PS5_GPU_NATIVE
+    /* Keep the UI allocation bounded; scale the completed Plex panel to its
+     * physical layout, never allocate a full4K CPU game framebuffer. */
+    static float rasterScaleLimit=2.5f;
+    const double budget=6.0*1024.0*1024.0;
+    float designW=(float)layout.w/layout.scale,designH=(float)layout.h/layout.scale;
+    float limit=(float)sqrt(budget/(4.0*(double)designW*(double)designH));
+    if(limit>rasterScaleLimit)limit=rasterScaleLimit;
+    if(raster.scale>limit)raster.scale=floorf(limit*8.0f)/8.0f;
+    if(raster.scale<0.5f)raster.scale=0.5f;
+    for(;;){
+        raster.w=(int)ceilf(designW*raster.scale);raster.h=(int)ceilf(designH*raster.scale);
+        if(OverlaySurfaceResize(&s_overlaySurface,raster.w,raster.h))break;
+        if(raster.scale<=0.5f){SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,"Native menu raster allocation failed at bounded minimum");return;}
+        raster.scale=floorf(raster.scale*0.75f*8.0f)/8.0f;if(raster.scale<0.5f)raster.scale=0.5f;
+        rasterScaleLimit=raster.scale; /* Do not retry a known failed allocation next repaint. */
     }
+#else
+    if(!OverlaySurfaceResize(&s_overlaySurface,layout.w,layout.h))return;
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+    if(state->installer)OverlayPaintInstaller(&s_overlaySurface,&raster);else
+#endif
     if (state->prompt) {
-        OverlayPaintPrompt(&s_overlaySurface, state, &layout);
+        OverlayPaintPrompt(&s_overlaySurface, state, &raster);
     } else {
-        OverlayPaint(&s_overlaySurface, state, &layout);
+        OverlayPaint(&s_overlaySurface, state, &raster);
     }
     if (Host_EnsureOverlayPipeline(device, SDL_GetGPUSwapchainTextureFormat(device, window))) {
         Host_UploadOverlaySurfaceAndVertices(device);
@@ -1267,11 +1630,37 @@ static void Host_OverlayRefreshGPU(
     state->dirty = 0;
 }
 
+/* Reuses the existing Plex raster, overlay pipeline/context and transfer
+ * path. No full-screen surface, extra renderer or shader. Update at most4Hz. */
+#ifdef PE_PS5_GPU_NATIVE
+extern float Psyz_GpuGetPresentedFps(void);
+static void Host_FpsRefreshGPU(void){
+    SDL_Window *window=Psyz_GetWindow_SDL3();int w=0,h=0;if(!window||!s_overlayGpuDevice||!OverlayFontReady())return;
+    SDL_GetWindowSizeInPixels(window,&w,&h);if(w<=0||h<=0)return;
+    static Uint64 last;Uint64 now=SDL_GetTicks();
+    if(s_overlayIsFps&&w==s_overlayWindowW&&h==s_overlayWindowH&&now-last<250)return;
+    if(!OverlaySurfaceResize(&s_overlaySurface,260,55))return;
+    memset(s_overlaySurface.pixels,0,260u*55u*4u);
+    FillRoundRect(&s_overlaySurface,0,0,260,54,8,(Color){0.02f,0.025f,0.03f,0.80f});
+    char label[64];float fps=Psyz_GpuGetPresentedFps();
+    if(fps>0&&fps<10000)snprintf(label,sizeof label,"Display %.1f FPS",fps);else SDL_strlcpy(label,"Display FPS: measuring",sizeof label);
+    DrawText(&s_overlaySurface,14,35,23,label,kText,ALIGN_LEFT);
+    float scale=(float)h/1080;if(scale<1)scale=1;if(scale>3)scale=3;
+    s_overlayWindowW=w;s_overlayWindowH=h;s_overlayLayout=(OverlayLayout){.x=(int)(w*0.03f),.y=(int)(h*0.03f),.w=(int)(260*scale),.h=(int)(54*scale),.scale=scale};
+    if(!Host_EnsureOverlayPipeline(s_overlayGpuDevice,SDL_GetGPUSwapchainTextureFormat(s_overlayGpuDevice,window)))return;
+    s_overlayIsFps=1;
+    if(!Host_UploadOverlaySurfaceAndVertices(s_overlayGpuDevice)){s_overlayIsFps=0;return;}
+    last=now;s_overlayState.dirty=1; /* Next real menu must repaint its own panel. */
+}
+#endif
 static void Host_OverlayRenderGPU(SDL_GPUCommandBuffer *command, SDL_GPURenderPass *pass) {
     if (s_prevOverlayRender != NULL) {
         s_prevOverlayRender(command, pass);
     }
-    if (!s_overlayState.open || s_overlayPipeline == NULL || s_overlayTexture == NULL ||
+    #ifdef PE_PS5_GPU_NATIVE
+    if(!s_overlayState.open&&host_options.show_fps)Host_FpsRefreshGPU();
+    #endif
+    if ((!s_overlayState.open&&(!host_options.show_fps||!s_overlayIsFps)) || s_overlayPipeline == NULL || s_overlayTexture == NULL ||
         s_overlayVertexBuffer == NULL || s_overlayWindowW <= 0 || s_overlayWindowH <= 0) {
         return;
     }

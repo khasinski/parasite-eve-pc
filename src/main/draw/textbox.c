@@ -9,6 +9,9 @@
 #include "pe1/render_prim.h"
 #include "pe1/textbox.h"
 #include "pe1/textbox_open.h"
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/dialogue_alpha.h"
+#endif
 
 int g_ScriptCollisionFlag;
 u8 *g_TextboxMessageSource;
@@ -295,6 +298,9 @@ void Menu_DrawTextboxEntries(void) {
         if (g_TextboxEntries[textboxIndex].state != 0) g_TextboxDrawnThisFrame = 1;
     }
     packetLimit = nextPacket + TEXTBOX_GLYPH_PACKET_CAPACITY;
+#ifdef PE_PS5_GPU_NATIVE
+    if(g_TextboxDrawnThisFrame)PeDialogue_Prepare();
+#endif
     if (g_ScriptCollisionFlag != 0) {
         AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + 2,
                 &g_TextboxFogTilePackets[g_ActiveDrawSlot]);
@@ -438,6 +444,9 @@ void Menu_DrawTextboxEntries(void) {
                             temp_a1_2 = auxiliaryPacket;
                             auxiliaryPacket++;
                             AddPrim(orderingTable, temp_a1_2);
+#ifdef PE_PS5_GPU_NATIVE
+                            PeDialogue_Tag(orderingTable,(TextboxGlyphPacket*)temp_a1_2,nameGlyph);
+#endif
                             nextNameIndex = nameIndex + 1;
                             nameIndex = nextNameIndex;
                             cursor.x += g_TextboxGlyphSpacing[nameGlyph].right;
@@ -745,7 +754,11 @@ void Menu_DrawTextboxEntries(void) {
                     currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
                     currentPacket->sprite.clut = font->clut;
 
-                    AddPrim(orderingTable, (unsigned int *)(currentPacket++));
+                    AddPrim(orderingTable, (unsigned int *)currentPacket);
+#ifdef PE_PS5_GPU_NATIVE
+                    PeDialogue_Tag(orderingTable,currentPacket,*stream);
+#endif
+                    currentPacket++;
                     temp_v1_11 = g_TextboxGlyphSpacing[*stream].right;
                     stream += 1;
                     var_v0_3 = cursor.x + temp_v1_11;

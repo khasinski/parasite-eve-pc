@@ -50,3 +50,9 @@ void pe_encounters_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_SAVE_READ, pe_encounters_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_encounters_command, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_qol.h"
+int pe_encounters_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||0)return 0;if(apply&&(!in||!pe_encounters_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_force,0,1,0);return w.ok&&w.at==4u;}
+#endif

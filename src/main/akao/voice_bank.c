@@ -1,3 +1,6 @@
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+extern void PeStateAkao_Changed(void);
+#endif
 #include "common.h"
 #include <psyz/audio.h>
 #include <string.h>
@@ -107,6 +110,9 @@ void Akao_StepSequencerVoice(void *arg0) {
     kFFFa = 0xFFFFFF;
     p2c8a = g_AkaoCurTrack;
     ((AkaoSequencerBank *)p2c8a)->sequence_base = arg0v;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    PeStateAkao_Changed();
+#endif
     tld = *(s32 *)arg0v; /* sequence header word 0: channel mask */
     mask = tld & kFFFa;
     tret = Akao_ForEachVoiceMasked(g_AkaoVoiceStateTable2, ((AkaoSequencerState *)p2c8a)->secondary.active_voice_mask);
@@ -714,6 +720,9 @@ void Akao_UpdateVoiceMask(AkaoU8 *new_base) {
     old_status = bank->status_flags;
     allocation = bank->allocated_voice_mask;
     bank->sequence_base = new_base;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    PeStateAkao_Changed();
+#endif
     key_on_state &= 0x100;
     old_status |= key_on_state;
     bank->status_flags = old_status;

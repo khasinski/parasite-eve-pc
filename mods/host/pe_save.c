@@ -478,3 +478,37 @@ void pe_save_crash_describe(char *out, size_t size, size_t *used) {
 void pe_save_install(void) {
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, -1000, "host");
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+/* No deferred release callback or live mod-save payload may escape the barrier.
+ * Only-assists has no save records; inactive carried metadata is left unchanged. */
+#include "pe_checkpoint_wire.h"
+#define PE_MOD_SAVE_STATE_BYTES 1536u
+static int pe_save_checkpoint_owned(int i){const PeSaveRecord *r=s_reg[i].record;if(r->version!=1)return 0;
+#if PE_NATIVE_STATE_QOL
+ if(!strcmp(s_reg[i].mod_id,"pe_qol")&&((!strcmp(r->name,"pe_qol.keys")&&r->size==68)||(!strcmp(r->name,"pe_qol.sort")&&r->size==24)))return 1;
+#endif
+#if PE_NATIVE_STATE_ECONOMY
+ if(!strcmp(s_reg[i].mod_id,"pe_economy")&&((!strcmp(r->name,"pe_economy.loot")&&r->size==36)||(!strcmp(r->name,"pe_economy.catalog")&&r->size==312)||(!strcmp(r->name,"pe_economy.shop")&&r->size==4)))return 1;
+#endif
+ return 0;
+}
+int pe_save_state_idle(void){for(int i=0;i<s_reg_count;i++)if(s_reg[i].release_due||((pe_mod_active(s_reg[i].mod_id)||s_reg[i].released)&&!pe_save_checkpoint_owned(i)))return 0;return 1;}
+int pe_save_checkpoint_walk(const unsigned char *in,unsigned char *out,size_t bytes,int apply){
+ if(bytes!=PE_MOD_SAVE_STATE_BYTES||(!in&&!out)||!pe_save_state_idle()||s_reg_count<0||s_reg_count>PE_SAVE_MAX_RECORDS)return 0;
+ if(apply&&(!in||!pe_save_checkpoint_walk(in,0,bytes,0)))return 0;
+ if(out){memset(out,0,bytes);memcpy(out,"PEMDS001",8);pe_put32(out+8,(unsigned)s_reg_count);}
+ else if(memcmp(in,"PEMDS001",8)||pe_get32(in+8)!=(unsigned)s_reg_count||pe_get32(in+12))return 0;
+ size_t at=16;
+ for(int i=0;i<PE_SAVE_MAX_RECORDS;i++,at+=20){
+  if(i>=s_reg_count){if(in)for(unsigned j=0;j<20;j++)if(in[at+j])return 0;continue;}
+  const PeSaveRecord *r=s_reg[i].record;uint32_t values[5]={s_reg[i].id,r->version,r->size,(unsigned)s_reg[i].kept,(unsigned)s_reg[i].released};
+  for(unsigned j=0;j<5;j++){uint32_t v=out?values[j]:pe_get32(in+at+j*4);if((j<3&&v!=values[j])||(j>=3&&v>1)||(j==4&&v&&!pe_save_checkpoint_owned(i)))return 0;if(out)pe_put32(out+at+j*4,v);else if(apply&&j==3)s_reg[i].kept=(int)v;else if(apply&&j==4)s_reg[i].released=(int)v;}
+ }
+ /* Reparse known bounded host metadata, never dispatch save/reset/release hooks.
+  * Record payloads live in their explicit feature owners, not this tail copy. */
+ if(out)memcpy(out+at,s_tail,sizeof s_tail);
+ else{uint8_t linear[PE_SAVE_ROOM];PeSaveEntry entries[PE_SAVE_MAX_ENTRIES];PeSaveInfo info;(void)pe_parse(in+at,linear,entries,&info);if(apply){memcpy(s_tail,in+at,sizeof s_tail);int n=pe_parse(s_tail,s_lin,s_car,&s_car_info);s_car_count=n<0?0:n;s_foreign=n== -2;}}
+ return at+sizeof s_tail==bytes;
+}
+#endif

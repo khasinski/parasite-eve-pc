@@ -29,3 +29,11 @@ static void rebalance_shutdown(void) {
 }
 
 const PeMod pe_mod_pe_rebalance = {MOD_ID, "PE Enhancements: rebalance", PE_ENHANCEMENTS_VERSION, NULL, rebalance_init, rebalance_shutdown};
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_rebalance.h"
+#include "pe_game.h"
+const char*pe_rebalance_checkpoint_blocker(void){unsigned char b[512];if(!pe_rb_effects_walk(0,b,0))return pe_rb_effects_blocker();if(!pe_rb_combine_walk(0,b,0))return "Finish the live Combine item-action list first";return "Rebalance settings or typed battle bookkeeping are invalid";}
+int pe_rebalance_checkpoint_ready(void){if(!pe_game_loaded())return 0;unsigned char b[512];if(!pe_rb_atb_walk(0,b,0))return 0;if(!pe_rb_effects_walk(0,b,0))return 0;if(!pe_rb_pebalance_walk(0,b,0))return 0;if(!pe_rb_panacea_walk(0,b,0))return 0;if(!pe_rb_combine_walk(0,b,0))return 0;if(!pe_rb_power_walk(0,b,0))return 0;return 1;}
+int pe_rebalance_checkpoint_walk(const unsigned char*in,unsigned char*out,size_t bytes,int apply){if(bytes!=PE_REBALANCE_STATE_BYTES||(!in&&!out)||!pe_rebalance_checkpoint_ready())return 0;if(apply&&(!in||!pe_rebalance_checkpoint_walk(in,0,bytes,0)))return 0;if(out){memset(out,0,bytes);memcpy(out,"PERBL001",8);}else{if(memcmp(in,"PERBL001",8))return 0;for(unsigned i=8;i<16;i++)if(in[i])return 0;}size_t at=16;if(!pe_rb_atb_walk(in?in+at:0,out?out+at:0,apply))return 0;at+=512;if(!pe_rb_effects_walk(in?in+at:0,out?out+at:0,apply))return 0;at+=512;if(!pe_rb_pebalance_walk(in?in+at:0,out?out+at:0,apply))return 0;at+=512;if(!pe_rb_panacea_walk(in?in+at:0,out?out+at:0,apply))return 0;at+=512;if(!pe_rb_combine_walk(in?in+at:0,out?out+at:0,apply))return 0;at+=512;if(!pe_rb_power_walk(in?in+at:0,out?out+at:0,apply))return 0;at+=512;return at==bytes;}
+#endif

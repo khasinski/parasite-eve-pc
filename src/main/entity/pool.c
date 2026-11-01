@@ -1,3 +1,6 @@
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_lifetime.h"
+#endif
 #include "common.h"
 #include <string.h>
 #include "pe1/entity_allocation.h"
@@ -17,6 +20,9 @@ u32 g_EntitySerialCounter;
 
 void Entity_ResetAllPools(void)
 {
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    PeStateResource_Changed();
+#endif
     unsigned int i;
     int *ptr;
 
@@ -50,6 +56,9 @@ void Entity_ResetAllPools(void)
 
 void Entity_InitFreePool(void)
 {
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    PeStateResource_Changed();
+#endif
     unsigned i;
     g_EntityFreePoolCount = 0;
     g_FieldActorListHead = 0;

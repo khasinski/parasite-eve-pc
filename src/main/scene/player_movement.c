@@ -1,4 +1,5 @@
 #include "pe_hooks.h"
+#include "pe1/dialogue_alpha.h"
 #include "pe1/geom_state.h"
 #include "pe1/asset_tim.h"
 #include "pe1/battle_runtime.h"
@@ -29,8 +30,14 @@ int *Asset_LoadTimImage(TimFile *tim) {
     }
 
     pixels = image->header.pixels;
+#ifdef PE_PS5_GPU_NATIVE
+    PeMenuFont_SourceUpload(&image->header.rect,pixels);
+#endif
     LoadImage(&image->header.rect, pixels);
     if (clut != 0) {
+#ifdef PE_PS5_GPU_NATIVE
+        PeMenuFont_SourceUpload(&clut->header.rect,clut->header.pixels);
+#endif
         LoadImage(&clut->header.rect, clut->header.pixels);
     }
     return pixels;

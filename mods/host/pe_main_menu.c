@@ -321,3 +321,7 @@ void pe_main_menu_init(void) {
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_row_title, NULL, PE_PRIORITY_LATE, PE_HOST_ID);
     pe_hook_add(PE_HOOK_MAIN_MENU_ACTION, pe_on_main_action, NULL, PE_PRIORITY_NORMAL, PE_HOST_ID);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+int pe_main_menu_state_empty(void){if(pe_confirm_open())return 0;/* Inactive mods register pages at startup too. Never call row->shown here. */for(int i=0;i<s_row_count;i++)if(pe_mod_active(s_rows[i].mod_id)&&(!s_rows[i].mod_id||(strcmp(s_rows[i].mod_id,"pe_qol")&&strcmp(s_rows[i].mod_id,"pe_economy")&&strcmp(s_rows[i].mod_id,"pe_collection")&&strcmp(s_rows[i].mod_id,"pe_rebalance"))))return 0;return 1;}
+#endif

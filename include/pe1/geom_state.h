@@ -125,6 +125,7 @@ struct RenderTilePacket;
 void Render_PrepareHdBackgrounds(void);
 void Render_RefreshHdBackgrounds(void);
 int Render_GetHdWidescreenPicture(int *left, int *right);
+void Render_TraceWidescreenMetadata(int buffer_y, unsigned tiles, int left, int right, int hd_available, int hd_left, int hd_right);
 int Render_LoadMeshEntry(GeomEntry *entry, struct RenderTilePacket *buffer, void **end);
 
 

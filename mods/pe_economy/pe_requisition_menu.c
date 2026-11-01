@@ -163,3 +163,18 @@ void pe_requisition_menu_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_SCENE_START, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_requisition_menu_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_requisition_menu_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_S(w,s_selected,0,255,0);
+PE_CK_S(w,s_armed.what,0,255,0);
+PE_CK_U(w,s_armed.item,0,65535,0);
+PE_CK_U(w,s_armed.price,0,UINT32_MAX,0);
+for(unsigned i=0;i<50;i++){PE_CK_S(w,s_armed.bag[i],-32768,32767,0);}
+PE_CK_U(w,s_frames,0,UINT32_MAX,0);
+PE_CK_U(w,s_rescue_warned,0,1,0);
+
+if(apply&&w.ok){memset(s_result,0,sizeof s_result);memset(s_label,0,sizeof s_label);}return w.ok&&w.at==224u;}
+#endif

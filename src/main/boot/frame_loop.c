@@ -1,3 +1,11 @@
+#include <psyz/gpu.h>
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_boundary.h"
+#endif
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/particle_augment.h"
+#include "pe1/planar_shadow.h"
+#endif
 #include "common.h"
 #include "pe1/akao_send.h"
 #include "pe1/battle_runtime.h"
@@ -47,6 +55,7 @@ void Akao_Cmd_F1(void);
 int Asset_UnloadTableEntries(void);
 
 void Boot_FlushSceneFast(void) {
+    Psyz_GpuResetInterpolation();
     RECT rect;
     u32 status;
     u32 first_status;
@@ -59,6 +68,7 @@ void Boot_FlushSceneFast(void) {
         ClearImage(&rect, 0, 0, 1);
     }
     DrawSync(0);
+    Psyz_GpuClearInterpolationPackets();
     Akao_Cmd_F1();
     Render_Noop();
     Asset_UnloadTableEntries();
@@ -122,12 +132,22 @@ int Boot_RunFrame(void)
         state = &g_GameState;
         fade = (RenderTintTargetView *)&g_ScreenTint.targetR;
         PE_HOOK(PE_HOOK_SCENE_START, NULL);
+        Psyz_GpuResetInterpolation();
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+        PeStateBoundary_SceneChanged();
+#endif
         if (g_BootSceneStarted) g_BootSceneStarted();
         do {
             /* Geometry belongs to this game frame, not to each VBlank.
              * Draw_RenderFrame waits after the OT has already been built. */
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+            PeStateBoundary_FrameBegin();
+#endif
             Psyz_PgxpNextFrame();
             g_DrawPacketOffset = 0;
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_ParticleBeginFrame();PeShadow_BeginFrame();
+#endif
             *scene_flags = 0;
             Field_HandleStateTransition();
             PE_HOOK(PE_HOOK_FRAME, NULL);
@@ -200,6 +220,15 @@ int Boot_RunFrame(void)
                 break;
             }
 loop_end_check:
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_ParticleEndFrame();PeShadow_EndFrame();
+#endif
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+            /* Final CPU point: after scripts/actors/frame cleanup, never inside a VSync handler. */
+            PeStateBoundary_Service(g_SceneDispatchCur==g_SceneDispatchToken &&
+                !(g_GameStateFlags & 0x2000) && !(state->flags & 0x300) && Draw_CheckDrawStatus()==0);
+            extern void CPE_StateUi_Poll(void);CPE_StateUi_Poll();
+#endif
             ;
         } while (g_SceneDispatchCur == g_SceneDispatchToken);
     }
@@ -212,6 +241,7 @@ loop_end_check:
         ClearImage(&clear_rect, 0, 0, 1);
     }
     DrawSync(0);
+    Psyz_GpuClearInterpolationPackets();
     Akao_Cmd_F1();
     Render_Noop();
     Asset_UnloadTableEntries();

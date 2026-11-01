@@ -5,6 +5,9 @@
 #include "pe1/room_fx.h"
 #include "pe1/fieldfx_task.h"
 #include "pe1/pm.h"
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/particle_augment.h"
+#endif
 
 /* Spark that drifts with damped velocity for 44 frames; state 0 draws a
  * flickering coloured glow, state 1 a larger glow that fades with a sine. */
@@ -325,9 +328,15 @@ int MenuCard_RisingEmberParticle(int mode, void *state, intptr_t argument) {
             kind = g_FieldFxSpriteParams.palette;
             palette = g_FieldFxPaletteTable[kind];
             if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_BeginEmberGlow(spark->x,spark->y,spark->z,(unsigned)(u16)spark->timer);
+#endif
             FieldFx_DrawShapeQuads((GteShortVector *)spark, 0, size / 2, size / 2,
                           (s16)g_FieldFxSpriteParams.parameter02 * (spark->timer & 3) + 104,
                           GetClut(16, palette), 3, fade, 0);
+#ifdef PE_PS5_GPU_NATIVE
+            FieldFx_EndEmberGlow();
+#endif
             break;
         }
         case 2: {

@@ -100,3 +100,9 @@ void pe_equip_sync_init(void) {
     pe_hook_add(PE_HOOK_SCENE_START, pe_on_reset, NULL, PE_PRIORITY_NORMAL, "host");
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_reset, NULL, PE_PRIORITY_NORMAL, "host");
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+/* Original SAVE_READ/SCENE_START reset semantics: learn restored caches on next tick.
+ * Never dispatch a general mod hook or rebuild gameplay stats during restoration. */
+void pe_equip_sync_state_invalidate(void){s_have_built=0;}
+#endif

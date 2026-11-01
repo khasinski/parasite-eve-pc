@@ -7,12 +7,12 @@
 #include <psyz/overlay.h>
 #include <psyz/overlay_sdl3_gpu.h>
 
-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.spv.h"
-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.msl.h"
-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.dxil.h"
-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.spv.h"
-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.msl.h"
-#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.dxil.h"
+#include "../../../../sdl3-src/src/render/gpu/shaders/tri_texture.vert.spv.h"
+#include "../../../../sdl3-src/src/render/gpu/shaders/tri_texture.vert.msl.h"
+#include "../../../../sdl3-src/src/render/gpu/shaders/tri_texture.vert.dxil.h"
+#include "../../../../sdl3-src/src/render/gpu/shaders/texture_rgba.frag.spv.h"
+#include "../../../../sdl3-src/src/render/gpu/shaders/texture_rgba.frag.msl.h"
+#include "../../../../sdl3-src/src/render/gpu/shaders/texture_rgba.frag.dxil.h"
 
 #include "pe_ui.h"
 
@@ -139,7 +139,16 @@ static void pe_quad(Vertex *v, float x0, float y0, float x1, float y1, float u0,
     v[5] = (Vertex){x1, y1, 1, 1, 1, a, u1, v1};
 }
 
-int pe_ui_gpu_ready(void) { return s_device && s_window; }
+int pe_ui_gpu_ready(void) {
+    if (!s_device || !s_window) return 0;
+    /* Confirm actual GPU pipeline resources before a modal panel pauses
+     * the game and captures its controller. No invisible modal on failure. */
+    if (!pe_pipeline()) {
+        SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Native GPU mod overlay unavailable: %s", SDL_GetError());
+        return 0;
+    }
+    return 1;
+}
 
 int pe_ui_gpu_window_size(int *w, int *h) {
     *w = *h = 0;

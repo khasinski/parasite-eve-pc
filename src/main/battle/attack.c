@@ -272,10 +272,15 @@ s8 g_EvasionReaction;
  * weapon category and the reaction in the core flags; an unresolved one
  * opens the floating panel.
  * The steal path reaches this through jump cross-jumping into the
- * single-target copy, as in retail. */
+ * single-target copy, as in retail.
+ * A target killed earlier in the same volley can already have released its
+ * core when the next shot's timer fires. Retail then writes to PS1 address 1,
+ * which is mapped kernel RAM; here there is nothing left to mark. */
 static inline void ApplyEvasionOutcome(BattleEntity *target)
 {
     EnemyCombatant *core = target->core;
+    if (core == NULL)
+        return;
     if (g_EvasionOutcome.status == 1)
     {
         EnemyCoreFlagBits *bits = (EnemyCoreFlagBits *)&core->coreFlags;
@@ -316,7 +321,8 @@ void Battle_ResolveHitOnTimer(void)
         {
             BattleEntity *thief = selectedSlot->actor;
             Asset_Find08Alt(0x46D, 0, thief->renderObject.target_x, thief->renderObject.target_y, thief->renderObject.target_z);
-            if (g_ActiveActor->action->turnWord & 0x6000)
+            /* A released target has nothing left to steal. */
+            if ((g_ActiveActor->action->turnWord & 0x6000) && thief->core != NULL)
             {
                 stealMode = (((EnemyCombatant *)selectedSlot->actor->core)->statusFlags2 >> 0xC) & 3;
                 switch (stealMode)

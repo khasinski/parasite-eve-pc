@@ -1,3 +1,7 @@
+#ifdef PE_PS5_GPU_NATIVE
+#include <psyz/video.h>
+#include <SDL3/SDL_log.h>
+#endif
 #ifndef MENUCARD_OPEN_VIDEO_NAME
 #define MENUCARD_OPEN_VIDEO_NAME MenuCard_OpenVideo
 #define MENUCARD_VIDEO_TABLE g_MenuCardScreenVideoTable
@@ -62,6 +66,9 @@ s32 MENUCARD_OPEN_VIDEO_NAME(s32 number) {
 
     /* A failed replacement must not leave the preceding movie audible. */
     MenuCard_StopMovieAudio();
+#ifdef PE_PS5_GPU_NATIVE
+    Psyz_VideoSetMovieActive(0);
+#endif
     DecDCToutCallback(NULL);
     if (number < 0 || number >= 47 || !g_CdImage || !MENUCARD_VIDEO_PTR0 || !MENUCARD_VIDEO_PTR5) {
         return 0;
@@ -105,5 +112,13 @@ s32 MENUCARD_OPEN_VIDEO_NAME(s32 number) {
 
         (*active)++;
     }
+#ifdef PE_PS5_GPU_NATIVE
+    Psyz_VideoSetMovieActive(1);
+    {static unsigned native_movie_starts;if(native_movie_starts++<32)
+        SDL_Log("[PS5 movie] player=%s index=%d decode_rgb24=%d display=%dx%d frame_region=%d,%d/%dx%d presentation=independent-of-scene",
+            __func__,number,g_MovieWide!=0,g_RenderDispEnvArray[0].disp.w,g_RenderDispEnvArray[0].disp.h,
+            MENUCARD_VIDEO_DISPLAY.regions[0].x,MENUCARD_VIDEO_DISPLAY.regions[0].y,MENUCARD_VIDEO_DISPLAY.regions[0].w,MENUCARD_VIDEO_DISPLAY.regions[0].h);
+    }
+#endif
     return 1;
 }

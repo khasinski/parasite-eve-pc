@@ -319,3 +319,13 @@ void pe_atb_items_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_SCENE_START, pe_atb_scene, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_atb_loaded, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_rebalance.h"
+int pe_rb_atb_walk(const unsigned char*in,unsigned char*out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_rb_atb_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_S(w,g_pe_half_enabled,0,1,1);for(int i=0;i<ACT_COUNT;i++)PE_CK_S(w,g_pe_half_allow[i],0,1,1);PE_CK_U(w,g_pe_quick_mask,0,0xfffff,1);PE_CK_S(w,s_st.borrowed,0,1,0);PE_CK_S(w,s_st.borrow_pending,0,1,0);PE_CK_S(w,s_st.turn_active,0,1,0);PE_CK_S(w,s_st.track_full,0,1,0);PE_CK_S(w,s_st.tab_saved,0,1,0);PE_CK_S(w,s_st.have_normal,0,1,0);PE_CK_S(w,s_st.tinted,0,1,0);PE_CK_U(w,s_st.saved_gauge,0,65535,0);PE_CK_U(w,s_st.saved_rate,0,65535,0);PE_CK_U(w,s_st.last_rate,0,65535,0);PE_CK_U(w,s_st.saved_tabs,0,UINT32_MAX,0);PE_CK_U(w,s_st.debt,0,9000,0);PE_CK_U(w,s_st.last_gauge,0,65535,0);PE_CK_S(w,s_st.action,ACT_OTHER,ACT_COUNT-1,0);PE_CK_S(w,s_st.pe_index,-1,19,0);for(int i=0;i<50;i++)PE_CK_U(w,s_st.bag[i],0,65535,0);PE_CK_U(w,s_st.weapon_slot,0,255,0);PE_CK_U(w,s_st.armor_slot,0,255,0);for(int i=0;i<2;i++)for(int j=0;j<4;j++)for(int k=0;k<3;k++)PE_CK_U(w,s_st.normal[i][j][k],0,255,0);
+PE_CK_U(w,g_MenuItemContextFlag,0,UINT32_MAX,0);
+/* These live HUD byte fields retain their original packet/tag ownership. */
+for(int slot=0;slot<2;slot++){RenderGouraudQuad*q=&g_BattleAtbGauges[slot];uint8_t*colors[]={&q->r0,&q->g0,&q->b0,&q->r1,&q->g1,&q->b1,&q->r2,&q->g2,&q->b2,&q->r3,&q->g3,&q->b3};for(unsigned i=0;i<12;i++)PE_CK_U(w,*colors[i],0,255,0);}
+return pe_rb_finish(&w);}
+#endif

@@ -30,6 +30,9 @@ int pe_ui_font_ready(void) {
 }
 
 int pe_ui_surface_begin(PeSurface *s, int w, int h) {
+#ifdef PE_PS5_PLUGINS
+    if (!s || w <= 0 || h <= 0 || w > 4096 || h >= 4096) return 0;
+#endif
     if (!s->pixels || s->w != w || s->h != h + 1) {
         free(s->pixels);
         s->pixels = (uint8_t *)calloc((size_t)w * (size_t)(h + 1), 4u);

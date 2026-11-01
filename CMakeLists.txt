@@ -1,10 +1,26 @@
 cmake_minimum_required(VERSION 3.21..3.31)
+option(PE_PS5_PAYLOAD "Build only the public SDK logging/filesystem payload" OFF)
+if(PE_PS5_PAYLOAD)
+    project(pe-ps5-payload LANGUAGES C)
+    include(cmake/ps5/payload.cmake)
+    return()
+endif()
+option(PE_PS5_BOOTSTRAP "Build only the isolated PS5 bootstrap milestone" OFF)
+if(PE_PS5_BOOTSTRAP)
+    project(pe-ps5-bootstrap LANGUAGES NONE)
+    include(cmake/ps5/bootstrap.cmake)
+    return()
+endif()
 # Explicit deployment target avoids inheriting the build host's macOS version.
 if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET
    AND (NOT DEFINED CMAKE_SYSTEM_NAME OR CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum supported macOS version")
 endif()
+option(PE_PS5_GAME "Build the native game with the public PS5 SDK" OFF)
 project(parasite-eve-pc VERSION 0.8.0 LANGUAGES C)
+if(PE_PS5_GAME)
+    include(cmake/ps5/game.cmake)
+endif()
 option(PE_MACOS_BUNDLE "Package the macOS application bundle" OFF)
 
 set(CMAKE_C_STANDARD 11)
@@ -31,7 +47,9 @@ if(PE_MODS)
 endif()
 
 # PsyZ belongs to the original game build, independently of the abandoned frontend.
-set(PSYZ_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz)
+if(NOT PE_PS5_GAME)
+    set(PSYZ_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz)
+endif()
 add_subdirectory(${PSYZ_DIR}/psyz ${CMAKE_CURRENT_BINARY_DIR}/psyz)
 target_compile_definitions(psyz PRIVATE __psyz)
 
@@ -76,6 +94,18 @@ add_library(parasite-eve-original-disc OBJECT src/main/cdrom/scene_assets.c)
 pe_configure_object_library(parasite-eve-original-disc)
 target_link_libraries(parasite-eve-original-disc PRIVATE psyz)
 
+# Desktop keeps the original download implementation and dependencies by default.
+set(pe_desktop_download_default ON)
+if(PE_PS5_GAME)
+    set(pe_desktop_download_default OFF)
+endif()
+option(PE_DESKTOP_MOD_DOWNLOADS "Build desktop HD pack download services" ${pe_desktop_download_default})
+if(PE_PS5_GAME AND PE_DESKTOP_MOD_DOWNLOADS)
+    message(FATAL_ERROR "Desktop HD downloads are unsupported on PS5")
+endif()
+add_library(pe_download_deps INTERFACE)
+if(PE_DESKTOP_MOD_DOWNLOADS)
+    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=1)
 # Desktop mod downloads use native TLS through libcurl and a bounded ZIP reader.
 include(FetchContent)
 FetchContent_Declare(pe_json URL https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.19.tar.gz
@@ -90,7 +120,6 @@ add_library(pe_download_zip STATIC ${pe_zip_SOURCE_DIR}/miniz.c ${pe_zip_SOURCE_
     ${pe_zip_SOURCE_DIR}/miniz_tinfl.c ${pe_zip_SOURCE_DIR}/miniz_tdef.c)
 target_include_directories(pe_download_zip PUBLIC ${pe_zip_SOURCE_DIR} ${pe_zip_BINARY_DIR})
 target_compile_definitions(pe_download_zip PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
-add_library(pe_download_deps INTERFACE)
 target_link_libraries(pe_download_deps INTERFACE pe_download_json pe_download_zip)
 if(APPLE)
     target_link_libraries(pe_download_deps INTERFACE "-lcurl")
@@ -118,17 +147,15 @@ else()
     target_link_libraries(pe_download_deps INTERFACE CURL::libcurl)
 endif()
 
+else()
+    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=0)
+endif()
+
 # The executable starts the original game and compiles its modules in place.
 add_executable(parasite-eve-pc src/main/boot/main.c src/main/boot/crash_report.c src/main/boot/crash_report_posix.c)
 target_include_directories(parasite-eve-pc PRIVATE include)
 target_link_libraries(parasite-eve-pc PRIVATE psyz pe_download_deps ${CMAKE_DL_LIBS})
-execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_VARIABLE PE_BUILD_ID OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-execute_process(COMMAND git diff --quiet HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    RESULT_VARIABLE PE_BUILD_DIRTY ERROR_QUIET)
-if(PE_BUILD_DIRTY)
-    string(APPEND PE_BUILD_ID "-dirty")
-endif()
+set(PE_BUILD_ID "8c52cdd-field-hd-integration-20261030")
 target_compile_definitions(parasite-eve-pc PRIVATE __psyz PE_VERSION="${PROJECT_VERSION}" PE_BUILD_ID="${PE_BUILD_ID}")
 if(APPLE AND PE_MACOS_BUNDLE)
     set_target_properties(parasite-eve-pc PROPERTIES
@@ -922,4 +949,9 @@ if(BUILD_TESTING)
             endif()
         endforeach()
     endif()
+endif()
+
+if(PE_PS5_GAME)
+    target_sources(parasite-eve-pc PRIVATE $<TARGET_OBJECTS:pe-ps5-sdl-core>)
+    set_target_properties(parasite-eve-pc PROPERTIES OUTPUT_NAME parasite-eve-ps5 SUFFIX ".elf")
 endif()

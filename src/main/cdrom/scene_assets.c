@@ -1,3 +1,4 @@
+#include "pe1/dialogue_alpha.h"
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -733,6 +734,9 @@ int Draw_LoadTimAsset(TimUploadRecord *asset, void *base) {
 
     mask = 0xFFFFFF;
     rect.h = h;
+#ifdef PE_PS5_GPU_NATIVE
+    PeMenuFont_SourceUpload(&rect,(void *)(saved_base + (asset->image_source.offsetAndHeight & mask)));
+#endif
     LoadImage(&rect, (void *)(saved_base + (asset->image_source.offsetAndHeight & mask)));
 
     secondary = asset->secondary_source.offsetAndHeight & mask;
@@ -747,6 +751,9 @@ int Draw_LoadTimAsset(TimUploadRecord *asset, void *base) {
         image_offset = asset->image_source.offsetAndHeight & mask;
         image_address = saved_base + image_offset;
         offset = asset->secondary_source.offsetAndHeight & mask;
+#ifdef PE_PS5_GPU_NATIVE
+        PeMenuFont_SourceUpload(&rect,(void *)(offset + image_address));
+#endif
         LoadImage(&rect, (void *)(offset + image_address));
     }
 

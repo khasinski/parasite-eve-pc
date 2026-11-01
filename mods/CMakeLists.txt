@@ -22,6 +22,10 @@ set(pe_host_sources
     host/ui/pe_ui_gpu.c     # the overlay quad
     host/ui/pe_toast.c)     # one-line messages
 
+if(PE_PS5_PLUGINS AND NOT PE_PS5_GPU_NATIVE)
+    list(REMOVE_ITEM pe_host_sources host/ui/pe_ui_gpu.c)
+    list(APPEND pe_host_sources host/ui/pe_ui_ps5_cpu.c)
+endif()
 set(pe_mod_sources ${pe_host_sources})
 set(pe_mod_decls "")
 set(pe_mod_refs "")

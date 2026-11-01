@@ -1,3 +1,6 @@
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_boundary.h"
+#endif
 #include "common.h"
 #include <SDL3/SDL.h>
 #include "pe_hooks.h"
@@ -149,6 +152,11 @@ int Save_DeserializeTail(void) {
     memcpy(links, g_SaveIoCursor + 0x818 + 0x68, sizeof(links));
     if ((links[0] && links[0] != 0x800B0CB0u) ||
         (links[1] && links[1] != 0x8009D1B0u)) return -1;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    /* The only rejecting tail validation precedes this point. Cancel graph
+     * work before replacing script/player state, even for a same-room card load. */
+    PeStateBoundary_Invalidate(PE_STATE_INVALIDATE_NORMAL_LOAD);
+#endif
     SAVE_GET(SaveBytes800, g_ScriptVariableBank);
     SAVE_GET(SaveBytes4, &D_8009D2E8);
     SAVE_GET(SaveBytes4, &g_SceneDispatchToken);
@@ -313,6 +321,32 @@ u32 Save_CalcCrc16(u32 size, u8_1 *data) {
     return ~crc & 0xFFFF;
 }
 
+#if defined(PE_PS5) && defined(PE_PS5_GPU_NATIVE)
+#include <SDL3/SDL_log.h>
+#include <errno.h>
+/* Temporary bounded control-flow evidence, never saved file contents. */
+static void MemCard_TraceFlow(const char *phase,int port,const MemCardPortState *state,int force) {
+    typedef struct {int card,present,manager,next,retry,pending,service,events;} Snapshot;
+    static Snapshot last[2];static unsigned seen[2],phase_seen[2],budget=96;
+    if(port<0||port>1||!budget)return;
+    int events=(g_MemCardEventF400Spec0004Flag?1:0)|(g_MemCardEventF400Spec2000Flag?2:0)|
+        (g_MemCardRemovedEventPending?4:0)|(g_MemCardEventF000Spec0004Flag?8:0)|
+        (g_MemCardEventF000Spec8000Flag?16:0)|(g_MemCardEventF000Spec2000Flag?32:0);
+    Snapshot now={state->cardState,state->present,state->managerState,state->nextState,state->retryCount,g_McOpPending,g_MemCardServicedPort,events};
+    unsigned phase_bit=!strcmp(phase,"poll")?1u:!strcmp(phase,"manager")?2u:0u;
+    int first_phase=phase_bit && !(phase_seen[port]&phase_bit);phase_seen[port]|=phase_bit;
+    if(!force&&!first_phase&&seen[port]&&!memcmp(&last[port],&now,sizeof(now)))return;
+    last[port]=now;seen[port]=1;--budget;
+    int admitted=0;for(int slot=0;slot<15;++slot)if(state->slots[slot].state==MEMCARD_SLOT_OCCUPIED)++admitted;
+    int prior_errno=errno;
+    SDL_Log("[native card flow] phase=%s port=%d card=%d present=%d manager=%d next=%d retry=%d pending=%d service=%d event_bits=%02x poll_countdown=%d has_files=%d sequence=%d admitted_slots=%d (F400IOE=1,F400NEW=2,removed=4,F000IOE=8,F000ERROR=16,F000NEW=32)",
+        phase,port,now.card,now.present,now.manager,now.next,now.retry,now.pending,now.service,now.events,g_MemCardInfoPollCountdown,state->hasFiles,state->sequence,admitted);
+    errno=prior_errno;
+}
+#else
+#define MemCard_TraceFlow(phase,port,state,force) ((void)0)
+#endif
+
 void MemCard_ClearPort1Events(void) {
     TestEvent(g_MemCardEventHandles[MEMCARD_EVENT_HW_IO_END]);
     TestEvent(g_MemCardEventHandles[MEMCARD_EVENT_HW_ERROR]);
@@ -386,6 +420,7 @@ void MemCard_StepPortState(int port) {
 
     state = &g_MemCardPortStates[port];
 
+    MemCard_TraceFlow("poll",port,state,0);
     switch (state->cardState) {
     case 0:
         state->present = 0;
@@ -463,6 +498,7 @@ void MemCard_StepPortState(int port) {
             g_MemCardEventF400Spec0004Flag = 0;
             state->cardState = 4;
             if (Menu_IsMemCardDialogOpen() != 0) {
+                MemCard_TraceFlow("dialog_skips_background_read",port,state,1);
                 g_MemCardInfoPollCountdown = 0;
                 g_MemCardServicedPort = g_MemCardServicedPort < 1;
                 return;
@@ -570,6 +606,8 @@ void MemCard_InitManager(void) {
         ((u8 *)g_MemCardPortStates)[value] = 0;
         value -= sizeof(MemCardPortState);
     } while (value >= 0);
+    MemCard_TraceFlow("init",0,&g_MemCardPortStates[0],1);
+    MemCard_TraceFlow("init",1,&g_MemCardPortStates[1],1);
 }
 
 const MemCardSaveSupportData g_MemCardSaveSupportData __attribute__((used)) = {
@@ -757,6 +795,7 @@ void MemCard_UpdateSaveState(int port) {
     MemCardSavePreview *preview;
 
     state = &g_MemCardPortStates[port];
+    MemCard_TraceFlow("manager",port,state,0);
     switch (state->managerState) {
     case 0:
     case 15:
@@ -817,6 +856,7 @@ void MemCard_UpdateSaveState(int port) {
         for (i = 14; i >= 0; i--) {
             state->slots[i].state = current;
         }
+        MemCard_TraceFlow("firstfile",port,state,1);
         if (firstfile(g_MemCardSearchPatternPtr, &entry) != 0) {
             MemCard_NoteSaveFile(state, &entry);
             while (nextfile(&entry) != 0) {
@@ -826,6 +866,7 @@ void MemCard_UpdateSaveState(int port) {
         } else {
             state->retryCount--;
         }
+        MemCard_TraceFlow("postscan",port,state,1);
         if (state->retryCount > 0) {
             break;
         }
@@ -1388,6 +1429,7 @@ int MemCard_GetPortSequence(int arg0) {
 void MemCard_StartRead(int port, int arg1) {
     MemCardPortState *state = &g_MemCardPortStates[port];
 
+    MemCard_TraceFlow(arg1?"request_interactive":"request_background",port,state,1);
     if (state->managerState == 0 || state->managerState == 12) {
         state->managerState = 1;
         state->nextState = 2;

@@ -1,0 +1,211 @@
+{
+  "schema": 1,
+  "base": "PR18 source-only 11FD prepared export",
+  "baseManifestSha256": "1bda0e8a191cd211100b3fd9da6d1690f1ebc0716c25d2229e802c16b050abd7",
+  "pins": [
+    {
+      "name": "game",
+      "revision": "8c52cdde5d60ee52f00913517ffb593e9521bf2d",
+      "archiveSha256": "61e4ecb0fd56a4f7a89cddf40c4ae362c4262f06698828c38d80661587c2b068"
+    },
+    {
+      "name": "psyz",
+      "revision": "db796262b2a696241ec8f3965ebbfbcbc45bfc30",
+      "archiveSha256": "4a639c9dc1305ee4caa2b5efa9c9cf22c0b99d89e414f42d32d2448a57d9d8d8"
+    },
+    {
+      "name": "sdl",
+      "revision": "fa2c02bb6e21974a89ea9824bc53c9932abe5f9c",
+      "archiveSha256": "7b36fe7f802450aa0c98af2e151159c6c8d0e28ea8b0e4356187a21c2d3680a1"
+    }
+  ],
+  "selectedSource": "D9D484AEB23254821594D7E35E6767C3D1A8685B0DE0D1105E915A419AFE682E",
+  "patchSha256": "64b9bebedff31816371a886a47d37e8c715c3dcdc8c947fe767d14dc4482c3ec",
+  "files": [
+    {
+      "path": "include/pe1/particle_augment.h",
+      "before": null,
+      "after": "9cc81ad2ce0de999c8a31fb874b7642c3a7e4282b23ba3412b319c18fa6dc060",
+      "added": true
+    },
+    {
+      "path": "src/main/boot/frame_loop.c",
+      "before": "b0196698bd0eb3d2cdb7f6b374e74e863b1a7a3cfa1deeddad0154b25b9427e7",
+      "after": "d186a467fc12cdb1e8d7d7ae28e068e30959059ae222654be05c6b4658d96a5d",
+      "added": false
+    },
+    {
+      "path": "src/main/boot/main.c",
+      "before": "69c4cd90c995f4a3c869079b8b6d243f82030ee60946da03b752b19147e47320",
+      "after": "9a33d4464df742466f4c13f6a6a4c12ba0fa5265c3be0eb59d506c74ad32d4a6",
+      "added": false
+    },
+    {
+      "path": "src/main/boot/settings_overlay.h",
+      "before": "d6173dadbc68d746e76e3bc9913f94d233bd60299a430878958d08bc4c1be1fd",
+      "after": "9aef75cfbcee6560ed3737e6d40cb226ba01efb740dd5e373e9aa0cd750c8ab2",
+      "added": false
+    },
+    {
+      "path": "src/main/draw/frame.c",
+      "before": "7bcbb18fcb31a6c911228cb81872ced994644646f945a1919c295597a911ce78",
+      "after": "674279aa9c5950626b632102f43b4a842bf3fef256abbe11517640cab0cc4612",
+      "added": false
+    },
+    {
+      "path": "src/main/fieldfx/geometry.c",
+      "before": "8724e8cbffd784615bbd751ea915e65f75a5d98f983a2dc8eb427558131e169d",
+      "after": "9eb4e20bd406bcf8e61d83b3ff95e63ca1ed0defdc64a15e8d727e2f13a285fa",
+      "added": false
+    },
+    {
+      "path": "src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.c",
+      "before": null,
+      "after": "89ca8cc0f0ab067b9a82355df2b10cba4aaab31f2efc20fb39daa7ddfe8f6a9c",
+      "added": true
+    },
+    {
+      "path": "src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.h",
+      "before": null,
+      "after": "6e05828b49337962bc96ee3917f1ad99a39e6696475df57027d8630884fc7034",
+      "added": true
+    },
+    {
+      "path": "src/main/fieldfx/particle_mesh/pe_falling_sprite_adapter.c",
+      "before": null,
+      "after": "ad65aa50cf4c2a038c965710de95979de792395fa537a3e4631821fa575f20d1",
+      "added": true
+    },
+    {
+      "path": "src/main/fieldfx/particle_mesh/pe_particle_project.h",
+      "before": null,
+      "after": "196ad4252b838df7af8f6c366493b405f56372513ed35ba2a1bb5817455c81b5",
+      "added": true
+    },
+    {
+      "path": "src/main/fieldfx/particle_mesh/pe_particle_render.c",
+      "before": null,
+      "after": "94490cdbcb2501c4b063bcf290d7252c5098ed4c11a0ad27c95d033a3d51e6f2",
+      "added": true
+    },
+    {
+      "path": "src/main/fieldfx/sprite_effects.c",
+      "before": "d25184462f79202ae5857950ae081a94fc6fc4bd84dfefabcac5786369dabbdf",
+      "after": "edd2e793ba2980509a257da1de7af05a331ecfd8c3e56d52c040edbacde4a174",
+      "added": false
+    },
+    {
+      "path": "src/overlays/room_lib/spark_attacks.c",
+      "before": "d1490ef6c905231657ea515f0420693a311d1f3f3d3804b075396f9b42a47fe7",
+      "after": "beb5cecab3052adb3778764d7754f66dac20a6a9c9e3182d9fe7193416baba29",
+      "added": false
+    }
+  ],
+  "unchangedPsyz": [
+    {
+      "path": "psyz/CMakeLists.txt",
+      "sha256": "312e17fbd138f600836f5ec0de64295b19ebcd0b679d887e3875d61fa523472e"
+    },
+    {
+      "path": "psyz/include/psyz/gpu.h",
+      "sha256": "d418df9c252744ad6d2992d87605d9c418c316cda955397f0e203403b78f6bd8"
+    },
+    {
+      "path": "psyz/include/psyz/overlay_sdl3_gpu.h",
+      "sha256": "f05d7826617cbc4b61f764a200aa2bb49a2fb01fc1f000af6054ca2008b32ed3"
+    },
+    {
+      "path": "psyz/src/internal.h",
+      "sha256": "3b997d6c287aefd87a5399331d34c940bb7427ba468a7ce9097cd50b72fc10c0"
+    },
+    {
+      "path": "psyz/src/platform/committed_presentation.h",
+      "sha256": "5a0cea5e5ea3af517d5d80204336f5884aca1e9937ebbc14dc196ed481d4184d"
+    },
+    {
+      "path": "psyz/src/platform/cpu-material-adapter.h",
+      "sha256": "542d226a6d074c78b798b9ab75c9874cad2c13e174b8b8630b477c8c28998f4c"
+    },
+    {
+      "path": "psyz/src/platform/cpu-raster2x.h",
+      "sha256": "b14da934429505da9791af94f49d31ee8c069bca9e45baafa81d3c3cf78da9d2"
+    },
+    {
+      "path": "psyz/src/platform/cpu-widescreen.h",
+      "sha256": "d467725499636eae38dc37abe6313c5d4a34bff3b9c4990a7988ba0e4b2f7638"
+    },
+    {
+      "path": "psyz/src/platform/fsr1/cpe_fsr1.c",
+      "sha256": "bc7891798f92566c534233e38983d3a83321439254a40f339fa0a7c66e95bb29"
+    },
+    {
+      "path": "psyz/src/platform/fsr1/cpe_fsr1.h",
+      "sha256": "c7b3bd2bc7d4f36fe97aabac678d4f67bba75cb2b8b60d5ab371ed62f95f7c46"
+    },
+    {
+      "path": "psyz/src/platform/fsr1/shaders/fsr1_easu.frag",
+      "sha256": "6d15bb256b7916c578fb635653da77cd9818afe8c9a72abb8298eccbe9116e78"
+    },
+    {
+      "path": "psyz/src/platform/fsr1/shaders/fsr1_rcas.frag",
+      "sha256": "6a628d67be093c63414f067147f6488014fca7da1a7190e17c33d1dae59b95da"
+    },
+    {
+      "path": "psyz/src/platform/fsr1/shaders/fullscreen.vert",
+      "sha256": "0679b971f50df475ff087db0e813049645b89c6cd138b8de3863e8a7822b75e2"
+    },
+    {
+      "path": "psyz/src/platform/fsr1/third_party/fsr1/ffx_a.h",
+      "sha256": "f60e2722fcd13989523b9164d776ab382b3692791767f3bf8bb19967f763f3fb"
+    },
+    {
+      "path": "psyz/src/platform/fsr1/third_party/fsr1/ffx_fsr1.h",
+      "sha256": "93c3922362ea7fc99cbcc698ca30c98de4f8c246d1fbb0b09e015ddef38ce3a5"
+    },
+    {
+      "path": "psyz/src/platform/fsr1/third_party/fsr1/LICENSE.txt",
+      "sha256": "db089274ce766da70f5b7d791029c3486f9f9e27c8c79c652689603d3192e802"
+    },
+    {
+      "path": "psyz/src/platform/movie_blur.frag",
+      "sha256": "d6f3c99eff55ca69092a1030c9d7cf569b13211bc1aae737b2e47b662367376a"
+    },
+    {
+      "path": "psyz/src/platform/movie_blur.h",
+      "sha256": "ea978f8dcb26e526f87f2a8430935fb347cde2ee6604298e093917b9e9dc52d2"
+    },
+    {
+      "path": "psyz/src/platform/pe-ps5-render-buffer.h",
+      "sha256": "9196abb8ba90992fdc039855e3b6bb32e507ff4a2be233a2f9c9c4b285b55d44"
+    },
+    {
+      "path": "psyz/src/platform/present_fsr1.h",
+      "sha256": "3dd2f784968242dcdc31a2d78904ee335df3ac022822c107034cef7f0cea3d56"
+    },
+    {
+      "path": "psyz/src/platform/rasterizer.h",
+      "sha256": "390a93732f64f37d3f01cc2c3711f6dabc09fd8d75d9eff9cd001742c9bf6dd2"
+    },
+    {
+      "path": "psyz/src/platform/sdl3_common.h",
+      "sha256": "e6a519b755c8dfee483ccc243a0815e1fb6bf413193bc997a5a14876307bca0d"
+    },
+    {
+      "path": "psyz/src/platform/sdl3_gpu.c",
+      "sha256": "3b97cc89d30fcdf013cc8d20197811b708d3fb5df33bc42ac1d0ae02e82b2fd6"
+    },
+    {
+      "path": "psyz/src/platform/sdl3_software.c",
+      "sha256": "6b00b8478faa8e5be5c1f50b1534c6547ca923a04ed325ed409c5238130dacfc"
+    },
+    {
+      "path": "psyz/src/psyz/libcard.c",
+      "sha256": "6b56ac4249b7a9cdb36259ac31856456a9d5ceda0631bd0c5160722bdd8e5ea8"
+    },
+    {
+      "path": "psyz/src/psyz/libgte.c",
+      "sha256": "0236c37506f7b3fb0fd10e77e92fa3d177503f31219a79d807950ed446103aca"
+    }
+  ],
+  "normalization": "LF text only"
+}

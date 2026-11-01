@@ -184,6 +184,7 @@ static int pe_page_active(const char *page) {
 #define PE_OFF_NOTE "Off: turn it on in Manage mods, then restart. "
 
 static const char *pe_help_text(void) {
+    pe_mod_manage_refresh();
     static char text[320];
     const Entry *e = pe_selected();
     const PeMenuPageInfo *info;
@@ -204,6 +205,9 @@ static const char *pe_help_text(void) {
 }
 
 static const char *pe_key_hints(void) {
+#ifdef PE_PS5_PLUGINS
+    return "D-pad select/change   Cross open   Circle back   L1+R1+Touchpad close";
+#endif
     const Entry *e = pe_selected();
     const char *back = pe_at_top() ? "Esc close" : "Esc back";
     static char hints[128];
@@ -385,8 +389,10 @@ static void pe_panel_event(const SDL_Event *ev) {
         case SDL_GAMEPAD_BUTTON_DPAD_DOWN: pe_move(1); break;
         case SDL_GAMEPAD_BUTTON_DPAD_LEFT: pe_step(-1); break;
         case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: pe_step(1); break;
+#ifndef PE_PS5_PLUGINS
         case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: pe_page_move(-VISIBLE_ROWS); break;
         case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: pe_page_move(VISIBLE_ROWS); break;
+#endif
         case SDL_GAMEPAD_BUTTON_SOUTH: pe_accept(); break;
         case SDL_GAMEPAD_BUTTON_EAST: pe_back(); break;
         case SDL_GAMEPAD_BUTTON_GUIDE: s_panel.open = 0; break;
@@ -424,9 +430,92 @@ static void pe_panel_run(void) {
     Psyz_PauseHostClock_SDL3(false);
     if (!audio_paused) Psyz_AudioUnpause();
     pe_toast_block(0);
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    extern void CPE_StateUi_AfterModalClosed(void);
+    CPE_StateUi_AfterModalClosed();
+#endif
 }
 
+#ifdef PE_PS5_PLUGINS
+/* Chord state belongs to one physical controller. Partial chord presses
+ * retain normal gameplay meaning while closed. Full release rearms toggle. */
+static SDL_JoystickID s_chord_pad;
+static unsigned s_chord_bits;
+static int s_chord_latched, s_pad_drain, s_direct_drain;
+int pe_ps5_mods_capture_pad(SDL_Gamepad *pad) {
+    int i;
+    if (s_panel.open) return 1;
+    if (s_direct_drain) {
+        int count, held = 0;
+        SDL_JoystickID *ids = SDL_GetGamepads(&count);
+        if (!ids) return 1;
+        for (int n = 0; n < count && !held; ++n) {
+            SDL_Gamepad *other = SDL_GetGamepadFromID(ids[n]);
+            if (!other) continue;
+            for (i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
+                if (SDL_GetGamepadButton(other,(SDL_GamepadButton)i)) held = 1;
+            for (i = 0; i < SDL_GAMEPAD_AXIS_COUNT; ++i) {
+                int v = SDL_GetGamepadAxis(other,(SDL_GamepadAxis)i);
+                if (v > 8000 || v < -8000) held = 1;
+            }
+        }
+        SDL_free(ids);
+        if (held) return 1;
+        s_direct_drain = 0;
+    }
+    if (!s_pad_drain || SDL_GetGamepadID(pad) != s_chord_pad) return 0;
+    for (i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
+        if (SDL_GetGamepadButton(pad, (SDL_GamepadButton)i)) return 1;
+    for (i = 0; i < SDL_GAMEPAD_AXIS_COUNT; ++i) {
+        int value = SDL_GetGamepadAxis(pad, (SDL_GamepadAxis)i);
+        if (value > 8000 || value < -8000) return 1;
+    }
+    s_pad_drain = 0;
+    return 0;
+}
+static int pe_ps5_chord(const SDL_Event *ev) {
+    unsigned bit = 0;
+    if (ev->type == SDL_EVENT_GAMEPAD_REMOVED && ev->gdevice.which == s_chord_pad) {
+        s_chord_pad = 0; s_chord_bits = 0;
+        s_chord_latched = s_pad_drain = 0;
+        return 0;
+    }
+    if (ev->type != SDL_EVENT_GAMEPAD_BUTTON_DOWN && ev->type != SDL_EVENT_GAMEPAD_BUTTON_UP) return 0;
+    switch (ev->gbutton.button) {
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: bit = 1; break;
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: bit = 2; break;
+    case SDL_GAMEPAD_BUTTON_TOUCHPAD: bit = 4; break;
+    default: return 0;
+    }
+    if (s_chord_pad && s_chord_pad != ev->gbutton.which && (s_chord_bits || s_chord_latched)) return 0;
+    s_chord_pad = ev->gbutton.which;
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) s_chord_bits |= bit;
+    else s_chord_bits &= ~bit;
+    if (!s_chord_bits) {
+        int consumed = s_chord_latched;
+        s_chord_latched = 0;
+        return consumed;
+    }
+    if (s_chord_latched) return 1;
+    if (s_chord_bits != 7) return 0;
+    s_chord_latched = s_pad_drain = 1;
+    if (s_panel.open) s_panel.open = 0;
+    else {
+#ifdef PE_PS5_GPU_NATIVE
+        extern int CPE_HostOpenCheatsTab(void);CPE_HostOpenCheatsTab();
+#else
+        pe_panel_run();
+#endif
+    }
+    return 1;
+}
+#endif
 static bool pe_filter(const SDL_Event *ev) {
+#ifdef PE_PS5_PLUGINS
+    if (pe_ps5_chord(ev)) return true;
+    /* Device lifecycle must still reach PsyZ while the panel is modal. */
+    if (ev->type == SDL_EVENT_GAMEPAD_REMOVED || ev->type == SDL_EVENT_GAMEPAD_ADDED) return false;
+#endif
     if (s_panel.open) {
         if (ev->type == SDL_EVENT_WINDOW_RESIZED || ev->type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED ||
             ev->type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) {
@@ -441,10 +530,30 @@ static bool pe_filter(const SDL_Event *ev) {
     }
     if ((ev->type == SDL_EVENT_KEY_DOWN && ev->key.scancode == SDL_SCANCODE_F1 && !ev->key.repeat) ||
         (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && ev->gbutton.button == SDL_GAMEPAD_BUTTON_GUIDE)) {
+#ifdef PE_PS5_GPU_NATIVE
+        extern int CPE_HostOpenRegistryPage(const char *);CPE_HostOpenRegistryPage(NULL);
+#else
         pe_panel_run();
+#endif
         return true;
     }
     return false;
+}
+
+int pe_mod_panel_open_page(const char *page) {
+#ifdef PE_PS5_GPU_NATIVE
+    extern int CPE_HostOpenRegistryPage(const char *);return CPE_HostOpenRegistryPage(page);
+#endif
+    int i, found = 0;
+    if (!pe_ui_gpu_ready() || s_panel.open) return 0;
+    if (page) for (i = 0; i < pe_menu_row_count(); ++i)
+        if (!strcmp(pe_menu_row(i)->page, page)) { found = 1; break; }
+    pe_go(found ? page : PE_MENU_MANAGE, 0);
+#ifdef PE_PS5_PLUGINS
+    s_direct_drain = 1; /* release the closing button before original pad polling */
+#endif
+    pe_panel_run();
+    return 1;
 }
 
 void pe_panel_install(void) {
@@ -453,3 +562,13 @@ void pe_panel_install(void) {
     s_prev_filter = Psyz_SetOverlayEventFilter_SDL3(pe_filter);
     pe_mod_log(NULL, "Mods panel on F1");
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+int pe_mod_state_panel_closed(void){return !s_panel.open;}
+#endif
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+static void (*s_native_close)(void);
+void pe_mod_panel_set_native_close(void (*callback)(void)){s_native_close=callback;}
+void pe_mod_panel_close(void){s_panel.open=0;if(s_native_close)s_native_close();}
+#endif

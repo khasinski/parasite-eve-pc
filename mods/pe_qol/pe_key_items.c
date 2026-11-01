@@ -175,3 +175,9 @@ void pe_key_items_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_SAVE_WRITE, pe_key_save, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_save_register(&s_key_record);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_qol.h"
+int pe_keys_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||0)return 0;if(apply&&(!in||!pe_keys_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_enabled,0,1,1);unsigned count=out?s_keys.count:(unsigned)in[4]|(unsigned)in[5]<<8|(unsigned)in[6]<<16|(unsigned)in[7]<<24;PE_CK_U(w,s_keys.count,0,PE_KEY_MAX,0);PE_CK_U(w,s_keys.pad,0,65535,0);uint16_t ids[PE_KEY_MAX];for(unsigned i=0;i<PE_KEY_MAX;i++){uint32_t v=out?s_keys.ids[i]:(uint32_t)in[12+i*4]|(uint32_t)in[13+i*4]<<8|(uint32_t)in[14+i*4]<<16|(uint32_t)in[15+i*4]<<24;ids[i]=(uint16_t)v;if(i<count){if(!pe_is_key(v))return 0;for(unsigned j=0;j<i;j++)if(ids[j]==v)return 0;}PE_CK_U(w,s_keys.ids[i],0,65535,0);}PE_CK_S(w,s_selected,0,PE_KEY_MAX-1,0);return w.ok&&w.at==144u;}
+#endif

@@ -1,3 +1,6 @@
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_node_types.h"
+#endif
 #include "common.h"
 #include <string.h>
 #include <stdlib.h>
@@ -24,6 +27,9 @@ void Script_InitNodePool(void) {
     g_ScriptNodeFreeListHead = 0;
 
     memset(g_ScriptNodes, 0, sizeof(g_ScriptNodes));
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    PeStateNode_Reset();
+#endif
 
     g_ScriptCursorAddress = 0;
 
@@ -85,12 +91,18 @@ ScriptNode *Script_AllocNode(unsigned int *script, ScriptNode *arg1) {
     seq = g_ScriptNodeSeqCounter[0];
     value = 1;
     node->trigger_value = 0;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    PeStateNode_Allocating(node);
+#endif
     node->current.script = script;
     node->next_value = 0;
     node->active = value;
     node->flags = 0;
     value = seq + 1;
     node->seq = seq;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    PeStateNode_Allocated(node);
+#endif
     g_ScriptNodeSeqCounter[0] = value;
 
     return node;

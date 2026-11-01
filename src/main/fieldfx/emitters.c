@@ -1,3 +1,6 @@
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/particle_augment.h"
+#endif
 #include "common.h"
 #include "pe1/geom_state.h"
 #include "pe1/battle_runtime.h"
@@ -502,10 +505,17 @@ int FieldFx_RisingJitterSprite(int mode, void *data, intptr_t argument)
         scale = rsin((g_FieldFxCurrentAge << 11) / 14);
         selector = g_FieldFxSpriteParams.palette;
         palette = g_FieldFxPaletteTable[selector];
+#ifdef PE_PS5_GPU_NATIVE
+        if(scale>0)FieldFx_BeginFallingOriginal();
+#endif
         FieldFx_DrawShapeQuads(state, &rotation, scale, scale, 226,
                       GetClut(0, (selector == 4 && g_FieldFxAltPaletteFlag) ? palette + 6
                                                               : palette + 2),
                       1, 128, &color);
+#ifdef PE_PS5_GPU_NATIVE
+        FieldFx_EndFallingOriginal();
+        if(scale>0)FieldFx_QueueRisingSpark(state->x,state->y,state->z,(unsigned)g_FieldFxCurrentAge,color.r,color.g,color.b);
+#endif
         break;
     }
     return 0;

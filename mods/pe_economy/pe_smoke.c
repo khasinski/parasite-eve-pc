@@ -125,3 +125,17 @@ void pe_smoke_register(const char *mod_id) {
     pe_menu_register_info(PE_PAGE_SMOKE, "Result", "The last purchase result or confirmation.", pe_result_text);
     pe_menu_register_action(PE_PAGE_SMOKE, "Buy Smoke Grenade", "Press twice. Uses Junk and one free bag slot.", pe_buy_smoke);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_smoke_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_smoke_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+ItemDataRecord *base=pe_base_item(ITEM_ITEM24);unsigned role=!s_record?0:s_record==base?1:UINT32_MAX;role=pe_checkpoint_u32(&w,role,0,1,0);if(role&&!base)return 0;
+PE_CK_U(w,s_old_flags,0,255,0);
+PE_CK_U(w,s_our_flags,0,255,0);
+PE_CK_S(w,s_armed_slot,-1,49,0);
+PE_CK_U(w,s_armed_price,0,UINT32_MAX,0);
+unsigned flags=base?base->flags:0;flags=pe_checkpoint_u32(&w,flags,0,255,0);if(!base&&flags)return 0;if(apply&&w.ok){s_record=role?base:NULL;if(base)base->flags=(u8)flags;}
+
+if(apply&&w.ok){memset(s_result,0,sizeof s_result);}return w.ok&&w.at==24u;}
+#endif

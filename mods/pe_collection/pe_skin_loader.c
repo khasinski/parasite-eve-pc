@@ -79,6 +79,9 @@ static PeSkin *s_room_pack;             /* the room pack whose rows are in, with
 static void *s_replaced[PE_ROWS_PER_BANK];   /* the game's row each pointed slot held */
 static int s_gun_written = -1;
 static int s_instant;                   /* F1: swap in place (off until it is proven in game) */
+static uint32_t s_checkpoint_epoch=1;
+static void pe_checkpoint_changed(void){if(s_checkpoint_epoch<UINT32_MAX)++s_checkpoint_epoch;}
+
 
 int pe_skin_instant(void) { return s_instant; }
 
@@ -217,6 +220,7 @@ static void pe_keep_game_textures(void) {
     u8 *copy;
     if (!size || size > PE_FILE_MAX || !(copy = realloc(s_game_tex.data, size))) return;
     memcpy(copy, g_GameState.scene_load_scratch, size);
+    pe_checkpoint_changed();
     s_game_tex.data = copy;
     s_game_tex.size = size;
     s_game_tex_bank = g_SceneAreaType;
@@ -533,3 +537,11 @@ void pe_skin_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_battle, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_load, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_collection.h"
+int pe_skin_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){
+if(s_checkpoint_epoch==UINT32_MAX||s_tex||s_pointed||s_room_pack)return 0;for(int i=0;i<s_skins;i++)if(s_skin[i].loaded)return 0;for(int i=0;i<PE_ROWS_PER_BANK;i++)if(s_replaced[i])return 0;
+if((s_game_tex.size&&!s_game_tex.data)||s_game_tex.size>PE_FILE_MAX)return 0;
+if(apply&&(!in||!pe_skin_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_game_tex_bank,-1,255,1);PE_CK_U(w,s_game_tex.size,0,PE_FILE_MAX,1);PE_CK_S(w,s_instant,0,1,1);PE_CK_S(w,s_tex_known,0,1,0);PE_CK_S(w,s_gun_written,-1,INT_MAX,0);return w.ok&&w.at==24;}
+#endif

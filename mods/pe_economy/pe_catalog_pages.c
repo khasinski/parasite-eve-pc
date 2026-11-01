@@ -18,6 +18,7 @@
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 
+static int s_last = -1, s_last_target = -1; /* checkpoint-owned selection latches */
 static int s_target;          /* PE_GUN / PE_ARMOR */
 static int s_grid;            /* Effect row: board index */
 static int s_grid_armed = -1; /* board index armed by the first Install press */
@@ -208,7 +209,7 @@ static void pe_remove(void) {
 
 /* The Effect or Item row moved: disarm, and pick the slot an install would use. */
 static void pe_grid_tick(void) {
-    static int s_last = -1, s_last_target = -1;
+
     int slot;
     if (s_grid == s_last && s_target == s_last_target) return;
     s_last = s_grid;
@@ -251,3 +252,16 @@ void pe_catalog_pages_register(void) {
     pe_menu_register_action(PE_PAGE_DEBUG_CATALOG, "Give test armor", "Debug: N Protector, 4 armor mods.", pe_dismantle_debug_test_armor);
     pe_menu_register_tick(pe_grid_tick);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_catalog_pages_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_catalog_pages_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_S(w,s_target,0,1,0);
+PE_CK_S(w,s_grid,0,31,0);
+PE_CK_S(w,s_grid_armed,-1,31,0);
+PE_CK_S(w,s_slot_choice,-1,127,0);
+
+PE_CK_S(w,s_last,-1,31,0);PE_CK_S(w,s_last_target,-1,1,0);
+if(apply&&w.ok){memset(s_slot_names,0,sizeof s_slot_names);memset(s_target_names,0,sizeof s_target_names);memset(s_grid_label,0,sizeof s_grid_label);}return w.ok&&w.at==24u;}
+#endif
