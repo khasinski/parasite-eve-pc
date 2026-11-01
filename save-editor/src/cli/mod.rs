@@ -46,7 +46,34 @@ pub fn run_cli_command(cmd: Command) -> Result<()> {
             slot,
         } => cmd_import_json(&input, &target, slot),
         Command::ListItems { filter } => cmd_list_items(filter.as_deref()),
+        Command::Cards => cmd_cards(),
     }
+}
+
+fn cmd_cards() -> Result<()> {
+    use crate::card_location as cards;
+    match cards::settings_dir() {
+        Some(settings) => {
+            println!("Game settings folder: {}", settings.display());
+            for (i, dir) in cards::cards_in(&settings).iter().enumerate() {
+                let state = if dir.is_dir() {
+                    format!("{} save(s)", cards::save_count(dir))
+                } else {
+                    "not created yet".to_string()
+                };
+                println!("  card {}: {} ({})", i + 1, dir.display(), state);
+            }
+        }
+        None => println!("Game settings folder: unknown (no PE_CONFIG_HOME, APPDATA or HOME)"),
+    }
+    let legacy = cards::legacy_cards();
+    if !legacy.is_empty() {
+        println!("Old card folders (before 0.7; the game imports new saves from them at start):");
+        for dir in legacy {
+            println!("  {} ({} save(s))", dir.display(), cards::save_count(&dir));
+        }
+    }
+    Ok(())
 }
 
 fn resolve_slot_index(

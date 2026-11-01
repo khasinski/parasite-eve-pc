@@ -6,6 +6,7 @@ use eframe::egui::{
     TextWrapMode, TextureHandle, TextureOptions, Vec2,
 };
 
+use crate::card_location::{self, StartCard};
 use crate::memcard::{MemoryCardContainer, MAX_CARD_SLOTS};
 use crate::save::{EquipmentRecord, PeSaveSlot, SCRIPT_VAR_SIZE};
 use crate::tables::{

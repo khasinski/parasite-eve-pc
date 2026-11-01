@@ -424,6 +424,7 @@ int pe_host_init(const PeHookInit *init) {
 static const char *pe_hook_name(int id) {
     static const char *const names[PE_HOOK_COUNT] = {
         [PE_HOOK_INIT] = "init",
+        [PE_HOOK_TEXT_GLYPH] = "text glyph",
         [PE_HOOK_SCENE_START] = "scene start",
         [PE_HOOK_FRAME] = "frame",
         [PE_HOOK_HELP_TEXT] = "help text",
@@ -438,6 +439,10 @@ static const char *pe_hook_name(int id) {
         [PE_HOOK_SCRIPT_RANDOM] = "script random",
         [PE_HOOK_INVENTORY_SORTED] = "inventory sorted",
         [PE_HOOK_MAIN_MENU_ICON] = "main menu icon",
+        [PE_HOOK_ITEM_REMOVE] = "item remove",
+        [PE_HOOK_INVENTORY_REBUILD] = "inventory rebuild",
+        [PE_HOOK_STORAGE_TRANSFER] = "storage transfer",
+        [PE_HOOK_SLOT_DRAWN] = "slot drawn",
     };
     if (id >= 0 && id < PE_HOOK_COUNT) return names[id] ? names[id] : "?";
     return id - PE_HOOK_COUNT < s_event_count ? s_events[id - PE_HOOK_COUNT] : "?";

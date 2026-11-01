@@ -1,0 +1,2572 @@
+[
+  {
+    "key": "mod/ui/00151eda",
+    "source": "Giant Slime",
+    "text": "Giant Slime",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/00cb28d2",
+    "source": "Bird",
+    "text": "Bird",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0236f8ec",
+    "source": "Elements",
+    "text": "Elements",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/024f642f",
+    "source": "nothing 80%, Ammo 30 20%",
+    "text": "nothing 80%, Ammo 30 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/03613887",
+    "source": "Main cast",
+    "text": "Main cast",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0363575b",
+    "source": "Walk speed",
+    "text": "Walk speed",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/044ae783",
+    "source": "Junk economy",
+    "text": "Junk economy",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0486277a",
+    "source": "nothing 80%, Ammo 15 20%",
+    "text": "nothing 80%, Ammo 15 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/04a76024",
+    "source": "Medicine 2 80%, nothing 20%",
+    "text": "Medicine 2 80%, nothing 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0574902c",
+    "source": "Group",
+    "text": "Group",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/05fec203",
+    "source": "Unlock all Bestiary",
+    "text": "Unlock all Bestiary",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/075920ac",
+    "source": "Next tier",
+    "text": "Next tier",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0a2abb9b",
+    "source": "Rare guarantee",
+    "text": "Rare guarantee",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0ab61b3d",
+    "source": "Cure P 80%, Medicine 1 20%",
+    "text": "Cure P 80%, Medicine 1 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0bca3294",
+    "source": "Ready",
+    "text": "Ready",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0be626c2",
+    "source": "Ammo 6 90%, nothing 10%",
+    "text": "Ammo 6 90%, nothing 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0c012f5d",
+    "source": ": %u Junk",
+    "text": ": %u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0c81d50e",
+    "source": "Ammo 6 90%, Ammo 30 10%",
+    "text": "Ammo 6 90%, Ammo 30 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0d55af2e",
+    "source": "Ammo 6 80%, nothing 20%",
+    "text": "Ammo 6 80%, nothing 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0d8cdc05",
+    "source": "Grey Rat",
+    "text": "Grey Rat",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0d9cbb2e",
+    "source": "Yellow Rat",
+    "text": "Yellow Rat",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/0df8c777",
+    "source": "nothing 66%, Medicine 4 34%",
+    "text": "nothing 66%, Medicine 4 34%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/108524ac",
+    "source": "Drop",
+    "text": "Drop",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/12bb54c9",
+    "source": "Ultimate Being",
+    "text": "Ultimate Being",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/12e72983",
+    "source": "Crab",
+    "text": "Crab",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/13e2423d",
+    "source": "Bullet Cap 1 50%, Cr Evade 1 50%",
+    "text": "Bullet Cap 1 50%, Cr Evade 1 50%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/14f4d7a7",
+    "source": "Ingredients",
+    "text": "Ingredients",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/15d4c13d",
+    "source": "Cannot escape. No room to return Smoke Grenade",
+    "text": "Cannot escape. No room to return Smoke Grenade",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/16615c78",
+    "source": "Mod Permit guarantee",
+    "text": "Mod Permit guarantee",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/16d85ca1",
+    "source": "Medicine 2 90%, Ammo 15 10%",
+    "text": "Medicine 2 90%, Ammo 15 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/17b25f13",
+    "source": "Medicine 2 80%, Cure M 20%",
+    "text": "Medicine 2 80%, Cure M 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/19fa8417",
+    "source": "Give test armor",
+    "text": "Give test armor",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/1a36a166",
+    "source": "Progress",
+    "text": "Progress",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/1a70a049",
+    "source": "Rare drop within",
+    "text": "Rare drop within",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/1c70dd7a",
+    "source": "Dinosaur",
+    "text": "Dinosaur",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/1db18fa4",
+    "source": "Monster Box",
+    "text": "Monster Box",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/1db5d664",
+    "source": "Area",
+    "text": "Area",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/1e276768",
+    "source": "Junk 66%, Medicine 2 34%",
+    "text": "Junk 66%, Medicine 2 34%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/1e743f07",
+    "source": "Frog",
+    "text": "Frog",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/1e848c15",
+    "source": "Reset creature",
+    "text": "Reset creature",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/1f7ddff0",
+    "source": "nothing 95%, Medicine 3 5%",
+    "text": "nothing 95%, Medicine 3 5%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/217d7a51",
+    "source": "Ammo 6",
+    "text": "Ammo 6",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/21b44b83",
+    "source": "Medicine 2 95%, Revive 5%",
+    "text": "Medicine 2 95%, Revive 5%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/227bfa82",
+    "source": "Fly",
+    "text": "Fly",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/265e994c",
+    "source": "Gold Spider",
+    "text": "Gold Spider",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/274e6ae6",
+    "source": "Combined into Medicine 2",
+    "text": "Combined into Medicine 2",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/282dffef",
+    "source": "Battle Junk cap",
+    "text": "Battle Junk cap",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/284e6c79",
+    "source": "Combined into Medicine 3",
+    "text": "Combined into Medicine 3",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/288dfe42",
+    "source": "Pterodactyl",
+    "text": "Pterodactyl",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/294e6e0c",
+    "source": "Combined into Medicine 4",
+    "text": "Combined into Medicine 4",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/29742e5c",
+    "source": "Show",
+    "text": "Show",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/2bb23f7b",
+    "source": "Slime",
+    "text": "Slime",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/305b92da",
+    "source": "Ammo 15 90%, Medicine 3 10%",
+    "text": "Ammo 15 90%, Medicine 3 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/31ee76a8",
+    "source": "Defense 1 29 66%, Ammo 15 34%",
+    "text": "Defense 1 29 66%, Ammo 15 34%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/3228aff2",
+    "source": "Cure C 80%, Revive 20%",
+    "text": "Cure C 80%, Revive 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/339f0e17",
+    "source": "Tyrannosaur",
+    "text": "Tyrannosaur",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/33c36501",
+    "source": "nothing 80%, Range 2 20%",
+    "text": "nothing 80%, Range 2 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/3428a11e",
+    "source": "Ammo 30 66%, Revive 34%",
+    "text": "Ammo 30 66%, Revive 34%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/349787b9",
+    "source": "Add a kill",
+    "text": "Add a kill",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/350c7aef",
+    "source": "Recipe",
+    "text": "Recipe",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/37d99ae7",
+    "source": "Medicine 3 90%, Range 2 10%",
+    "text": "Medicine 3 90%, Range 2 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/38e9a645",
+    "source": "Parrot",
+    "text": "Parrot",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/3c44b9ea",
+    "source": "Items   Square in the bag: Sort",
+    "text": "Items   Square in the bag: Sort",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/3c7dc065",
+    "source": "Wayne junk refund",
+    "text": "Wayne junk refund",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/3e905f5c",
+    "source": "Reset collection",
+    "text": "Reset collection",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/3ed17df0",
+    "source": "Ammo 30 80%, Medicine 4 20%",
+    "text": "Ammo 30 80%, Medicine 4 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/3f719ff9",
+    "source": "Combined into Panacea",
+    "text": "Combined into Panacea",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/3f828727",
+    "source": "Medicine 1 90%, nothing 10%",
+    "text": "Medicine 1 90%, nothing 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/4090a86d",
+    "source": "Ammo 15 90%, Medicine 2 10%",
+    "text": "Ammo 15 90%, Medicine 2 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/420aa7b2",
+    "source": "nothing 99%, Offense 1 1%",
+    "text": "nothing 99%, Offense 1 1%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/428b2d80",
+    "source": "Rules",
+    "text": "Rules",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/44a62d68",
+    "source": "Actress",
+    "text": "Actress",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/450fc6d3",
+    "source": "Giant Spider",
+    "text": "Giant Spider",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/470ebe3d",
+    "source": "Dismantled %s: +%u Junk",
+    "text": "Dismantled %s: +%u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/48606e9f",
+    "source": "Clear all NEW",
+    "text": "Clear all NEW",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/49090458",
+    "source": "Medicine 4 90%, Revive 10%",
+    "text": "Medicine 4 90%, Revive 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/4cedf87e",
+    "source": "Squirrel",
+    "text": "Squirrel",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/4f87ac58",
+    "source": "Square: Sort   Auto sort is on",
+    "text": "Square: Sort   Auto sort is on",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/50d54662",
+    "source": "Ammo 6 90%, Medicine 1 10%",
+    "text": "Ammo 6 90%, Medicine 1 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/521b9bbc",
+    "source": "Buy Smoke Grenade",
+    "text": "Buy Smoke Grenade",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/527dae8a",
+    "source": "nothing",
+    "text": "nothing",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/547d56a9",
+    "source": "Buy / wear",
+    "text": "Buy / wear",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5573cecf",
+    "source": "late addition",
+    "text": "late addition",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5623ac14",
+    "source": "Cure D 90%, Ammo 6 10%",
+    "text": "Cure D 90%, Ammo 6 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/56423673",
+    "source": "Choose a recipe",
+    "text": "Choose a recipe",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/56923c7e",
+    "source": "Rare step %",
+    "text": "Rare step %",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/57718c28",
+    "source": "Monkey",
+    "text": "Monkey",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/57de7b9a",
+    "source": "Harlequin",
+    "text": "Harlequin",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/582d4ffb",
+    "source": "Snake",
+    "text": "Snake",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/58d4cf6d",
+    "source": "Offense 1 50%, Cr Evade 1 50%",
+    "text": "Offense 1 50%, Cr Evade 1 50%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/58d70076",
+    "source": "Warner helps out",
+    "text": "Warner helps out",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/58de2772",
+    "source": "Normal",
+    "text": "Normal",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/59f875f1",
+    "source": "Battle frequency",
+    "text": "Battle frequency",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5a752399",
+    "source": "Kv Vest 1",
+    "text": "Kv Vest 1",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5b85255d",
+    "source": "Queen Bee",
+    "text": "Queen Bee",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5bda0d91",
+    "source": "Empty steal Junk",
+    "text": "Empty steal Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5c3384a6",
+    "source": "Super Tool",
+    "text": "Super Tool",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5ca0a184",
+    "source": ": %u Junk, rebuildable",
+    "text": ": %u Junk, rebuildable",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5ca42c8d",
+    "source": "Medicine 2 90%, Junk 10%",
+    "text": "Medicine 2 90%, Junk 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5cbeb39c",
+    "source": "nothing 99%, Revive 1%",
+    "text": "nothing 99%, Revive 1%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5cc60d9c",
+    "source": ": %u Junk, %d mod%s recovered, rebuildable",
+    "text": ": %u Junk, %d mod%s recovered, rebuildable",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/5e3931e7",
+    "source": "nothing 95%, Medicine 4 5%",
+    "text": "nothing 95%, Medicine 4 5%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/6144c39f",
+    "source": "Medicine 2 90%, Medicine 4 10%",
+    "text": "Medicine 2 90%, Medicine 4 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/61afbc74",
+    "source": "Cure P 80%, Medicine 2 20%",
+    "text": "Cure P 80%, Medicine 2 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/637704ca",
+    "source": "Give test gun",
+    "text": "Give test gun",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/64efa7fc",
+    "source": "Hard",
+    "text": "Hard",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/65f264d3",
+    "source": "Inventory tips",
+    "text": "Inventory tips",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/67ffedc2",
+    "source": "Ammo 6 80%, Cure P 20%",
+    "text": "Ammo 6 80%, Cure P 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/68fef3a7",
+    "source": "Cat",
+    "text": "Cat",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/6a0b4eb3",
+    "source": "Medicine 1 90%, Medicine 3 10%",
+    "text": "Medicine 1 90%, Medicine 3 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/6af506c7",
+    "source": "Escape item for ordinary fights",
+    "text": "Escape item for ordinary fights",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/6b104740",
+    "source": "Cure P",
+    "text": "Cure P",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/6b295136",
+    "source": "Cockroach",
+    "text": "Cockroach",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/6c33113b",
+    "source": "Easy",
+    "text": "Easy",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/6e3ddba8",
+    "source": "nothing 80%, Rocket 20%",
+    "text": "nothing 80%, Rocket 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/6efc732c",
+    "source": "Red Snake",
+    "text": "Red Snake",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/7221444c",
+    "source": "Aya's outfits",
+    "text": "Aya's outfits",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/7277f5b8",
+    "source": "Creature",
+    "text": "Creature",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/734fbb44",
+    "source": "nothing 90%, Cure M 10%",
+    "text": "nothing 90%, Cure M 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/7485ef41",
+    "source": "Press Combine again to consume the two ingredients",
+    "text": "Press Combine again to consume the two ingredients",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/79228550",
+    "source": "Cure P 90%, Ammo 6 10%",
+    "text": "Cure P 90%, Ammo 6 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/796b5401",
+    "source": "Junk floor",
+    "text": "Junk floor",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/7a2e5385",
+    "source": ": %u Junk, %d mod%s recovered",
+    "text": ": %u Junk, %d mod%s recovered",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/7afc4a64",
+    "source": "Combined into %s",
+    "text": "Combined into %s",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/7d6431fc",
+    "source": "Giant Dogman",
+    "text": "Giant Dogman",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/7ef4b96e",
+    "source": "nothing 80%, Medicine 2 20%",
+    "text": "nothing 80%, Medicine 2 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/81a40b9b",
+    "source": "Defense 1 29 90%, Tool 10%",
+    "text": "Defense 1 29 90%, Tool 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/826389d6",
+    "source": "Nightmare",
+    "text": "Nightmare",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/83624a7a",
+    "source": "Mole",
+    "text": "Mole",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/842669e7",
+    "source": "Ammo 30 90%, Offense 1 10%",
+    "text": "Ammo 30 90%, Offense 1 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/84e9e508",
+    "source": "Scorpion",
+    "text": "Scorpion",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/84f37a6e",
+    "source": "Combat speed",
+    "text": "Combat speed",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/8520a210",
+    "source": "Difficulty",
+    "text": "Difficulty",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/861f9557",
+    "source": ", %d new effect%s",
+    "text": ", %d new effect%s",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/86da86de",
+    "source": "Cure M 90%, Medicine 3 10%",
+    "text": "Cure M 90%, Medicine 3 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/879b6af3",
+    "source": "nothing 90%, Ammo 30 10%",
+    "text": "nothing 90%, Ammo 30 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/87d2780e",
+    "source": "Test creature",
+    "text": "Test creature",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/881074e7",
+    "source": "Cure M",
+    "text": "Cure M",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/886a3682",
+    "source": "Unlock next tier",
+    "text": "Unlock next tier",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/8aa37f14",
+    "source": "Ammo 15 90%, Medicine 1 10%",
+    "text": "Ammo 15 90%, Medicine 1 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/8b6e1d21",
+    "source": "Run speed",
+    "text": "Run speed",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/8dc56832",
+    "source": "Plant",
+    "text": "Plant",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/8dd6a977",
+    "source": "Ammo 6 50%, Cure M 50%",
+    "text": "Ammo 6 50%, Cure M 50%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/8fe1e625",
+    "source": "Info",
+    "text": "Info",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/9175fee9",
+    "source": "Medicine 1 99%, Offense 2 1%",
+    "text": "Medicine 1 99%, Offense 2 1%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/91ab11b6",
+    "source": "Medicine 2 90%, Cure P 10%",
+    "text": "Medicine 2 90%, Cure P 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/91fe9bf4",
+    "source": "Armadillo",
+    "text": "Armadillo",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/936dad3b",
+    "source": "Cure M 95%, Revive 5%",
+    "text": "Cure M 95%, Revive 5%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/93dfa07b",
+    "source": "Dogman",
+    "text": "Dogman",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/9525b78e",
+    "source": "Custom",
+    "text": "Custom",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/96151203",
+    "source": "Ammo 6 50%, Ammo 15 50%",
+    "text": "Ammo 6 50%, Ammo 15 50%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/96c470fa",
+    "source": "Medicine 4 80%, Ammo 30 20%",
+    "text": "Medicine 4 80%, Ammo 30 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/9765558c",
+    "source": "Medicine 3 90%, Medicine 4 10%",
+    "text": "Medicine 3 90%, Medicine 4 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/9782a619",
+    "source": "Cure M 90%, Ammo 15 10%",
+    "text": "Cure M 90%, Ammo 15 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/98856e25",
+    "source": "Economy mod guarantee",
+    "text": "Economy mod guarantee",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/99b94be3",
+    "source": "Junk 90%, Medicine 4 10%",
+    "text": "Junk 90%, Medicine 4 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/99d8d3e8",
+    "source": "Lock all costumes",
+    "text": "Lock all costumes",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/9a31a2fb",
+    "source": "nothing 95%, Defense 1 29 5%",
+    "text": "nothing 95%, Defense 1 29 5%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/9a5affc9",
+    "source": "Reset Bestiary",
+    "text": "Reset Bestiary",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/9cb58053",
+    "source": "Combine in item menu",
+    "text": "Combine in item menu",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/9e0b9e78",
+    "source": "Large Bee",
+    "text": "Large Bee",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a09a0b16",
+    "source": "Very Hard",
+    "text": "Very Hard",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/a12a12bf",
+    "source": "DPS turn clock",
+    "text": "DPS turn clock",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a1804e13",
+    "source": "Medicine 2 66%, nothing 34%",
+    "text": "Medicine 2 66%, nothing 34%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a2be371f",
+    "source": "Set Junk",
+    "text": "Set Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a389a5d8",
+    "source": "Rat",
+    "text": "Rat",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a3a9c137",
+    "source": "Ammo 30 90%, Revive 10%",
+    "text": "Ammo 30 90%, Revive 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a3c9cd89",
+    "source": "Always run",
+    "text": "Always run",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a53437af",
+    "source": "Ammo 6 50%, Medicine 2 50%",
+    "text": "Ammo 6 50%, Medicine 2 50%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a7516e08",
+    "source": "Buy next tier",
+    "text": "Buy next tier",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a7e60af7",
+    "source": "Blackbird",
+    "text": "Blackbird",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a8378291",
+    "source": "nothing 80%, Medicine 3 20%",
+    "text": "nothing 80%, Medicine 3 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/a9b85284",
+    "source": "Ammo 15 50%, Ammo 30 50%",
+    "text": "Ammo 15 50%, Ammo 30 50%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/aa6e3fcc",
+    "source": "Green Snake",
+    "text": "Green Snake",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/aa7d19ae",
+    "source": "Instant swap (experimental)",
+    "text": "Instant swap  experimental ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ab8a96c9",
+    "source": "Day 4",
+    "text": "Day 4",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ab8f484e",
+    "source": "Ammo 30",
+    "text": "Ammo 30",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ac8a985c",
+    "source": "Day 3",
+    "text": "Day 3",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ad8a99ef",
+    "source": "Day 2",
+    "text": "Day 2",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ae8a9b82",
+    "source": "Day 1",
+    "text": "Day 1",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/afa77f85",
+    "source": "Unlock all costumes",
+    "text": "Unlock all costumes",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/aff36a50",
+    "source": "Test state",
+    "text": "Test state",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b022dcf4",
+    "source": "Alligator",
+    "text": "Alligator",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b0d30a32",
+    "source": "Medicine 4 80%, Revive 20%",
+    "text": "Medicine 4 80%, Revive 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b1c0fa95",
+    "source": "Square: Sort the bag",
+    "text": "Square: Sort the bag",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b2985634",
+    "source": "nothing 80%, Medicine 4 20%",
+    "text": "nothing 80%, Medicine 4 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b42a7d6b",
+    "source": "Chrysler Key5",
+    "text": "Chrysler Key5",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b52a7efe",
+    "source": "Chrysler Key6",
+    "text": "Chrysler Key6",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b5407a00",
+    "source": "Steal",
+    "text": "Steal",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b62a8091",
+    "source": "Chrysler Key7",
+    "text": "Chrysler Key7",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b79842cc",
+    "source": "Junk 80%, Medicine 3 20%",
+    "text": "Junk 80%, Medicine 3 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b82a83b7",
+    "source": "Chrysler Key1",
+    "text": "Chrysler Key1",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b850f787",
+    "source": "Medicine 1 90%, Cure D 10%",
+    "text": "Medicine 1 90%, Cure D 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/b97a7428",
+    "source": "Medicine 2 80%, Cure D 20%",
+    "text": "Medicine 2 80%, Cure D 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ba2a86dd",
+    "source": "Chrysler Key3",
+    "text": "Chrysler Key3",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/babc9ed6",
+    "source": "Items   Square: Sort   Auto sort on",
+    "text": "Items   Square: Sort   Auto sort on",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/bad6e29b",
+    "source": "Give 100 Junk",
+    "text": "Give 100 Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/bc6f52c9",
+    "source": "Medicine 4 90%, Full Cure 10%",
+    "text": "Medicine 4 90%, Full Cure 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/be0f88c7",
+    "source": "Missing ingredients",
+    "text": "Missing ingredients",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/c0e329fb",
+    "source": "Ammo 6 90%, Ammo 15 10%",
+    "text": "Ammo 6 90%, Ammo 15 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/c10f1246",
+    "source": "Medicine 3 90%, Cure M 10%",
+    "text": "Medicine 3 90%, Cure M 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/c3dc7049",
+    "source": "Ammo 6 99%, Offense 1 1%",
+    "text": "Ammo 6 99%, Offense 1 1%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/c47b9e5f",
+    "source": "Junk counter",
+    "text": "Junk counter",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/c61c9cc6",
+    "source": "Medicine 3 95%, Revive 5%",
+    "text": "Medicine 3 95%, Revive 5%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/c6929d38",
+    "source": "Spawn",
+    "text": "Spawn",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/c80fa431",
+    "source": "Costume",
+    "text": "Costume",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/c88545f0",
+    "source": "Take out Junk",
+    "text": "Take out Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/c96c625b",
+    "source": "Bag sort",
+    "text": "Bag sort",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/cb691d8e",
+    "source": "Extras",
+    "text": "Extras",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/cd33a04f",
+    "source": "Supporting cast",
+    "text": "Supporting cast",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/cd69f1b9",
+    "source": "Lizard",
+    "text": "Lizard",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/cda96350",
+    "source": "Ammo 6 90%, Cure P 10%",
+    "text": "Ammo 6 90%, Cure P 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/cdb9ad1c",
+    "source": "Junk 90%, Medicine 1 10%",
+    "text": "Junk 90%, Medicine 1 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/cdf3b2c8",
+    "source": "Weapon power (DPS)",
+    "text": "Weapon power  DPS ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ce88b965",
+    "source": "Defense 1 29 80%, Defense 2 20%",
+    "text": "Defense 1 29 80%, Defense 2 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/cfbd712a",
+    "source": "Cure D 95%, Medicine 3 5%",
+    "text": "Cure D 95%, Medicine 3 5%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/d04bd0ef",
+    "source": "Mark creature NEW",
+    "text": "Mark creature NEW",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/d091f4d0",
+    "source": "Small Bee",
+    "text": "Small Bee",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/d1df46ec",
+    "source": "Ratman",
+    "text": "Ratman",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/d21a38f3",
+    "source": "Chrysler Key2 50%, Revive 50%",
+    "text": "Chrysler Key2 50%, Revive 50%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/d239abd4",
+    "source": "Days 4-5",
+    "text": "Days 4-5",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/d3b41917",
+    "source": "Aya: Evening dress",
+    "text": "Aya: Evening dress",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/d4c9acce",
+    "source": "Offense 1 50%, Defense 1 29 50%",
+    "text": "Offense 1 50%, Defense 1 29 50%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/d5bc7448",
+    "source": "Bat",
+    "text": "Bat",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/d6df53a8",
+    "source": "Range 1 80%, Bullet Cap 1 20%",
+    "text": "Range 1 80%, Bullet Cap 1 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/da07c6b5",
+    "source": "Aya: T-shirt",
+    "text": "Aya: T-shirt",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/daa121fd",
+    "source": "Cannot escape. Smoke Grenade returned",
+    "text": "Cannot escape. Smoke Grenade returned",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/db4bd8e6",
+    "source": "Centipede",
+    "text": "Centipede",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/db6aea28",
+    "source": "Spider",
+    "text": "Spider",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/dfae6a1c",
+    "source": "Gold Rat",
+    "text": "Gold Rat",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e1046f2d",
+    "source": "Medicine 2 90%, Cure M 10%",
+    "text": "Medicine 2 90%, Cure M 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e17224f8",
+    "source": "Cure M 90%, Medicine 1 10%",
+    "text": "Cure M 90%, Medicine 1 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e1a1dbc1",
+    "source": "Rare base %",
+    "text": "Rare base %",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e1c527f2",
+    "source": "Worm",
+    "text": "Worm",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e4157dfe",
+    "source": "Wayne hand-in",
+    "text": "Wayne hand-in",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e5e1bc35",
+    "source": "Junk 90%, Medicine 2 10%",
+    "text": "Junk 90%, Medicine 2 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e7ed1791",
+    "source": "Give 1000 Junk",
+    "text": "Give 1000 Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e8379526",
+    "source": "Medicine 1 80%, Medicine 2 20%",
+    "text": "Medicine 1 80%, Medicine 2 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e87bbf13",
+    "source": "EXP per Junk",
+    "text": "EXP per Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/e8b7a333",
+    "source": "Ammo 15 80%, Tool 20%",
+    "text": "Ammo 15 80%, Tool 20%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/eb779282",
+    "source": "Ammo 6 50%, Medicine 1 50%",
+    "text": "Ammo 6 50%, Medicine 1 50%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ed0b8c9f",
+    "source": "Discard dismantles",
+    "text": "Discard dismantles",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ed497c8b",
+    "source": "nothing 90%, Revive 10%",
+    "text": "nothing 90%, Revive 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ee7285ed",
+    "source": "Giant Rat",
+    "text": "Giant Rat",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/ef296762",
+    "source": "B Vest 1",
+    "text": "B Vest 1",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/f131e373",
+    "source": "Bear",
+    "text": "Bear",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/f1c01182",
+    "source": "No-hit bonus %",
+    "text": "No-hit bonus %",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/f2b8eb17",
+    "source": "Revive 90%, Medicine 1 10%",
+    "text": "Revive 90%, Medicine 1 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/f2db36ac",
+    "source": "Ammo 15 90%, Ammo 30 10%",
+    "text": "Ammo 15 90%, Ammo 30 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/f2dfebc8",
+    "source": "Battle start speed",
+    "text": "Battle start speed",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/f492f8f4",
+    "source": "nothing 95%, Revive 5%",
+    "text": "nothing 95%, Revive 5%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/f70c5e21",
+    "source": "Wear Aya's own",
+    "text": "Wear Aya's own",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/f7f222f2",
+    "source": "Boss Junk cap",
+    "text": "Boss Junk cap",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/f809c629",
+    "source": "Chrysler (EX)",
+    "text": "Chrysler  EX ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/fdda4d42",
+    "source": "Make all NEW",
+    "text": "Make all NEW",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/fde1727e",
+    "source": "No random battles",
+    "text": "No random battles",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  },
+  {
+    "key": "mod/ui/fdfe6461",
+    "source": "Ammo 15 90%, Cure M 10%",
+    "text": "Ammo 15 90%, Cure M 10%",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "settings or collection display"
+    ]
+  }
+]

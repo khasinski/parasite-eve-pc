@@ -284,6 +284,19 @@ void Draw_ClearOnFlag(void) {
 #include <ctype.h>
 #include <stdarg.h>
 #include <string.h>
+#include <SDL3/SDL_stdinc.h>
+FILE *Disc_Utf8File(const char *path,const char *mode) {
+#ifdef _WIN32
+    wchar_t *wide_path=(wchar_t *)SDL_iconv_string("UTF-16LE","UTF-8",path,strlen(path)+1);
+    wchar_t *wide_mode=(wchar_t *)SDL_iconv_string("UTF-16LE","UTF-8",mode,strlen(mode)+1);
+    FILE *file=wide_path&&wide_mode?_wfopen(wide_path,wide_mode):NULL;
+    SDL_free(wide_path);SDL_free(wide_mode);return file;
+#else
+    return fopen(path,mode);
+#endif
+}
+
+
 #include <stdlib.h>
 
 #ifdef _WIN32
@@ -355,7 +368,7 @@ static int decode_record(PeDisc *disc, const unsigned char *record,
 /* Deliberately reject layouts we cannot interpret instead of silently reading
  * the wrong track. The USA game uses one MODE2/2352 data track per disc. */
 static int cue_image(PeDisc *disc, const char *path, char *image, size_t capacity) {
-    FILE *cue = fopen(path, "rb");
+    FILE *cue = Disc_Utf8File(path, "rb");
     if (!cue) return fail(disc, "Cannot open CUE: %s", path);
     char line[4096], filename[4096] = {0};
     int have_file = 0, have_track = 0, have_index = 0, valid = 1;
@@ -432,7 +445,7 @@ int pe_disc_open(PeDisc *disc, const char *path) {
         if (!cue_image(disc, path, image_path, sizeof(image_path))) return 0;
         path = image_path;
     }
-    disc->stream = fopen(path, "rb");
+    disc->stream = Disc_Utf8File(path, "rb");
     if (!disc->stream) return fail(disc, "Cannot open disc image: %s", path);
     if (pe_seek(disc->stream, 0, SEEK_END) != 0 || pe_tell(disc->stream) < 0) {
         pe_disc_close(disc);

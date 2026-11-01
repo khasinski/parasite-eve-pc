@@ -7,12 +7,21 @@
 #include <psyz/overlay.h>
 #include <psyz/overlay_sdl3_gpu.h>
 
+#if __has_include("../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.spv.h")
+#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.spv.h"
+#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.msl.h"
+#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.dxil.h"
+#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.spv.h"
+#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.msl.h"
+#include "../../../third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.dxil.h"
+#else
 #include "../../../../sdl3-src/src/render/gpu/shaders/tri_texture.vert.spv.h"
 #include "../../../../sdl3-src/src/render/gpu/shaders/tri_texture.vert.msl.h"
 #include "../../../../sdl3-src/src/render/gpu/shaders/tri_texture.vert.dxil.h"
 #include "../../../../sdl3-src/src/render/gpu/shaders/texture_rgba.frag.spv.h"
 #include "../../../../sdl3-src/src/render/gpu/shaders/texture_rgba.frag.msl.h"
 #include "../../../../sdl3-src/src/render/gpu/shaders/texture_rgba.frag.dxil.h"
+#endif
 
 #include "pe_ui.h"
 

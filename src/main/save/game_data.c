@@ -156,10 +156,10 @@ void Save_LoadMetadataWindowText(void) {
 
     dst = g_SaveMetadataCursor;
     if (g_SaveMetadataSourceRecord != 0) {
-        lookup = Text_LookupTable8(g_SaveMetadataSourceRecord->itemId - 1);
+        lookup = Text_LookupEditableName(8, g_SaveMetadataSourceRecord->itemId - 1);
         out = dst;
     } else {
-        lookup = Text_LookupTable4(0x1E);
+        lookup = Text_LookupEditableName(4, 0x1E);
         out = dst;
     }
 
@@ -728,9 +728,9 @@ static inline void InitName(u8 *buffer, int length, ItemDataRecord *item) {
         *p = 255;
     dest = g_SaveMetadataCursor;
     if (g_SaveMetadataSourceRecord)
-        source = Text_LookupTable8(g_SaveMetadataSourceRecord->itemId - 1);
+        source = Text_LookupEditableName(8, g_SaveMetadataSourceRecord->itemId - 1);
     else
-        source = Text_LookupTable4(30);
+        source = Text_LookupEditableName(4, 30);
     CopyName(dest, source);
 }
 

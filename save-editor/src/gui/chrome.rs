@@ -47,29 +47,90 @@ impl SaveEditorApp {
                     }
 
                     ui.menu_button("⚡ Quick Open", |ui| {
-                        for (label, rel_path) in [
-                            ("PsyZ Card 1 (./bu00)", "bu00"),
-                            ("PsyZ Card 1 (../bu00)", "../bu00"),
-                            ("PsyZ Card 2 (./bu10)", "bu10"),
-                            ("PsyZ Card 2 (../bu10)", "../bu10"),
-                            (
-                                "Sample PS1 Card (7 Saves)",
-                                "samples/Parasite_Eve_PS1_Sample_Card.srm",
-                            ),
-                            (
-                                "Sample PS1 Card (save-editor/samples)",
-                                "save-editor/samples/Parasite_Eve_PS1_Sample_Card.srm",
-                            ),
-                        ] {
-                            let p = PathBuf::from(rel_path);
-                            if p.exists() && ui.button(label).clicked() {
-                                self.load_path(ctx, p);
+                        // The cards the game uses now, then pre-0.7 folders, then samples.
+                        match card_location::current_cards() {
+                            Some(cards) => {
+                                for (i, dir) in cards.iter().enumerate() {
+                                    let label = format!(
+                                        "Game Card {} ({} saves) — {}",
+                                        i + 1,
+                                        card_location::save_count(dir),
+                                        dir.display()
+                                    );
+                                    if ui
+                                        .add_enabled(dir.is_dir(), egui::Button::new(label))
+                                        .on_disabled_hover_text(
+                                            "The game creates this folder the first time it starts.",
+                                        )
+                                        .clicked()
+                                    {
+                                        self.load_path(ctx, dir.clone());
+                                        ui.close_menu();
+                                    }
+                                }
+                                let root = cards[0].parent().map(Path::to_path_buf);
+                                if let Some(root) = root.filter(|r| r.is_dir()) {
+                                    if ui.button("📁 Show the Game's Card Folder").clicked() {
+                                        if let Err(e) = card_location::reveal(&root) {
+                                            self.set_status(format!("{e:#}"), true);
+                                        }
+                                        ui.close_menu();
+                                    }
+                                }
+                            }
+                            None => {
+                                ui.label(
+                                    RichText::new("The game's card folder is unknown on this system.")
+                                        .color(TEXT_MUTED),
+                                );
+                            }
+                        }
+                        let legacy = card_location::legacy_cards();
+                        if !legacy.is_empty() {
+                            ui.separator();
+                            ui.label(RichText::new("Old folders (before 0.7)").color(TEXT_MUTED).small());
+                            for dir in legacy {
+                                let label = format!(
+                                    "Old Folder ({} saves) — {}",
+                                    card_location::save_count(&dir),
+                                    dir.display()
+                                );
+                                if ui.button(label).clicked() {
+                                    self.load_path(ctx, dir);
+                                    ui.close_menu();
+                                }
+                            }
+                        }
+                        let samples: Vec<PathBuf> = [
+                            "samples/Parasite_Eve_PS1_Sample_Card.srm",
+                            "save-editor/samples/Parasite_Eve_PS1_Sample_Card.srm",
+                        ]
+                        .iter()
+                        .map(PathBuf::from)
+                        .filter(|p| p.exists())
+                        .collect();
+                        if let Some(sample) = samples.into_iter().next() {
+                            ui.separator();
+                            if ui.button("Sample PS1 Card (7 saves, not yours)").clicked() {
+                                self.load_path(ctx, sample);
                                 ui.close_menu();
                             }
                         }
                     });
 
                     ui.menu_button("⇄ Convert / Export", |ui| {
+                        if ui
+                            .button("📥 Import Old Saves into the Game's Card…")
+                            .on_hover_text(
+                                "Copy saves from an old bu00/bu10 folder into the card the game uses. \
+                                 Saves already on the card are never replaced.",
+                            )
+                            .clicked()
+                        {
+                            ui.close_menu();
+                            self.import_old_saves(ctx);
+                        }
+                        ui.separator();
                         let has_container = self.container.is_some();
                         if ui
                             .add_enabled(

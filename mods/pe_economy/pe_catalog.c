@@ -24,6 +24,7 @@
 #include "pe_economy.h"
 #include "pe_item_table.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_save.h"
@@ -77,13 +78,13 @@ static int pe_valid(int which, int e) { return e >= 0 && e <= (which == PE_GUN ?
 const char *pe_cat_effect_name(int which, int e) {
     const char *name;
     if (!pe_valid(which, e)) return "?";
-    if (which == PE_ARMOR && e >= PE_FX_BARGAIN) return s_economy_names[e - PE_FX_BARGAIN];
+    if (which == PE_ARMOR && e >= PE_FX_BARGAIN) return pe_l10n_ui(s_economy_names[e - PE_FX_BARGAIN]);
     name = pe_mod_effect_name(which == PE_ARMOR, e);
-    return name ? name : "";
+    return name ? pe_l10n_ui(name) : "";
 }
 const char *pe_cat_effect_short(int which, int e) {
     if (!pe_valid(which, e)) return "?";
-    return which == PE_GUN ? s_gun_short[e] : s_armor_short[e];
+    return pe_l10n_ui(which == PE_GUN ? s_gun_short[e] : s_armor_short[e]);
 }
 int pe_cat_effect_tier(int which, int e) { return pe_valid(which, e) ? (which == PE_GUN ? s_gun_tier[e] : s_armor_tier[e]) : 0; }
 int pe_cat_tier_price(int tier) { return (int)pe_loot_price((uint32_t)s_price[tier]); }
@@ -96,8 +97,8 @@ static int pe_is_bag_mod(int which, int e) { return which == PE_ARMOR && e >= 8 
 const char *pe_cat_item_name(int id) {
     unsigned i;
     for (i = 0; i < PE_ITEM_COUNT; i++)
-        if (pe_item_ids[i] == id) return pe_item_names[i];
-    return "UNKNOWN";
+        if (pe_item_ids[i] == id) return pe_l10n_item((unsigned)id,pe_item_names[i]);
+    return pe_l10n_ui("UNKNOWN");
 }
 
 int pe_cat_bag_limit(void) {

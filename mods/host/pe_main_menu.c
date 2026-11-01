@@ -5,6 +5,7 @@
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe1/inventory_slots.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_dialog.h"
@@ -128,7 +129,7 @@ static int pe_on_row_title(void *ctx, void *user) {
     const PeMainMenuRow *row;
     (void)user;
     if (!pe_is_main_list(current) || !pe_menu_open_here()) return 0;
-    if ((row = pe_row_at(MenuWidget_GridCellIndex(current)))) *text = pe_text_from_ascii(s_row_title, sizeof s_row_title, row->title);
+    if ((row = pe_row_at(MenuWidget_GridCellIndex(current)))) *text = pe_tr_ascii(s_row_title, sizeof s_row_title, row->title);
     return 0;
 }
 
@@ -189,6 +190,13 @@ static int pe_scroll_input(MenuWidgetNode *list, unsigned int buttons) {
         list->scroll_adjust = 0;
     }
     return handled;
+}
+
+/* Model browsers are one-column lists. The stock grid consumes horizontal arrows
+ * even without a neighbouring column; let them bubble to the screen's rotation handler. */
+int pe_screen_preview_input(MenuWidgetNode *list, unsigned int buttons) {
+    if (buttons & (0x8000u | 0x2000u)) return 0;
+    return pe_scroll_input(list, buttons);
 }
 
 void pe_screen_open(PeScreen *s, MenuWidgetNode *from, int x, int y, int width, int rows_visible,
@@ -299,7 +307,7 @@ void pe_confirm(const char *question, int default_yes, void (*answer)(int yes)) 
     g_MenuActionTextBase = 5;                            /* Yes / No */
     MenuWidget_SetCurrentNode(choice);
     choice->cursor_x = default_yes ? 0 : 1;
-    pe_text_from_ascii(g_MenuItemLabelBuffer, sizeof g_MenuItemLabelBuffer, question);
+    pe_tr_ascii(g_MenuItemLabelBuffer, sizeof g_MenuItemLabelBuffer, question);
     g_MenuItemPrimListHandles[0] = 0;
     width = Draw_MeasureTextWidth(g_MenuItemLabelBuffer);
     if (width < 120) width = 120;                        /* the game's layout */

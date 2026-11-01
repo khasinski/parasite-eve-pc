@@ -86,8 +86,8 @@ struct PeModel;
 typedef struct PeModelSource {
     uint8_t kind;
     uint8_t actor;                       /* PE_MODEL_ROOM */
-    uint16_t map;                        /* PE_MODEL_ROOM */
-    const char *folder;                  /* PE_MODEL_SKIN */
+    uint16_t map;                        /* PE_MODEL_ROOM: room; PE_MODEL_SKIN without folder: Aya bank */
+    const char *folder;                  /* PE_MODEL_SKIN: pe_skins folder, or NULL for Aya bank */
     struct PeModel *(*load)(void *user); /* PE_MODEL_CALLBACK */
     void *user;
 } PeModelSource;

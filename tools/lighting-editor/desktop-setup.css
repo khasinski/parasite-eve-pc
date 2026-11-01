@@ -1,0 +1,45 @@
+body.setup {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 50% 35%, #20332f, #0c1116 70%);
+}
+.setup-card {
+  width: 640px;
+  padding: 36px;
+  border: 1px solid #344b43;
+  border-radius: 14px;
+  background: #121a21;
+  box-shadow: 0 25px 80px #0005;
+  display: block;
+  min-height: 0;
+}
+.setup-card h1 {
+  font-size: 28px;
+  margin-top: 28px;
+}
+.setup-card p {
+  line-height: 1.6;
+  color: #adbdc4;
+}
+.setup-card label {
+  margin-top: 22px;
+}
+.setup-card label .muted {
+  display: block;
+}
+.setup-file {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.setup-file input {
+  min-width: 0;
+}
+.setup-card #setupError {
+  color: #f4a497;
+  min-height: 20px;
+}
+.setup-card .wide {
+  padding: 12px;
+}

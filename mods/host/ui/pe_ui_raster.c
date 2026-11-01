@@ -9,6 +9,8 @@
 #include "../../../src/main/boot/fonts/ibm_plex_sans.ttf.inc"
 
 #include "pe_ui.h"
+#include "pe_utf8.h"
+#include "pe_localize.h"
 
 const PeColor pe_ui_panel = {0.075f, 0.082f, 0.102f, 0.96f};
 const PeColor pe_ui_border = {1.0f, 1.0f, 1.0f, 0.10f};
@@ -81,24 +83,26 @@ void pe_ui_fill_round_rect(PeSurface *s, float x, float y, float w, float h, flo
 }
 
 float pe_ui_text_width(const char *text, float em) {
+    text = pe_l10n_ui(text);
     const float scale = stbtt_ScaleForMappingEmToPixels(&s_font, em);
     float width = 0.0f;
-    for (; *text; text++) {
+    while (*text) {
         int advance, bearing;
-        stbtt_GetCodepointHMetrics(&s_font, (unsigned char)*text, &advance, &bearing);
+        stbtt_GetCodepointHMetrics(&s_font, (int)pe_utf8_next(&text), &advance, &bearing);
         width += (float)advance * scale;
     }
     return width;
 }
 
 void pe_ui_draw_text(PeSurface *s, float x, float baseline, float em, const char *text, PeColor c, PeAlign align) {
+    text = pe_l10n_ui(text);
     enum { GLYPH_MAX = 256 };
     static uint8_t glyph[GLYPH_MAX * GLYPH_MAX];
     const float scale = stbtt_ScaleForMappingEmToPixels(&s_font, em);
     const float width = pe_ui_text_width(text, em);
     x -= align == PE_ALIGN_CENTRE ? width * 0.5f : align == PE_ALIGN_RIGHT ? width : 0.0f;
-    for (; *text; text++) {
-        int cp = (unsigned char)*text, advance, bearing, x0, y0, x1, y1, gx, gy;
+    while (*text) {
+        int cp = (int)pe_utf8_next(&text), advance, bearing, x0, y0, x1, y1, gx, gy;
         stbtt_GetCodepointHMetrics(&s_font, cp, &advance, &bearing);
         stbtt_GetCodepointBitmapBox(&s_font, cp, scale, scale, &x0, &y0, &x1, &y1);
         if (x1 > x0 && y1 > y0 && x1 - x0 <= GLYPH_MAX && y1 - y0 <= GLYPH_MAX) {

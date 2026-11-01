@@ -10,7 +10,17 @@
 
 void pe_mod_log(const char *mod, const char *fmt, ...) { (void)mod; (void)fmt; }
 int pe_disc_room(int map, PeRoomBlobs *out) { (void)map; memset(out, 0, sizeof *out); return 0; }
-void pe_disc_room_free(PeRoomBlobs *r) { (void)r; }
+static int player_reads;
+int pe_disc_player(int bank, PeRoomBlobs *r) { (void)bank; ++player_reads; memset(r, 0, sizeof *r); return 0; }
+void pe_disc_room_free(PeRoomBlobs *r) { free(r->data); free(r->texture); free(r->scratch); memset(r,0,sizeof *r); }
+static int real_assets;
+int pe_mod_path(char *out, size_t size, const char *file) {
+    const char *root = getenv(real_assets ? "PE_MODEL_SKIN_ROOT" : "PE_MODEL_TEST_DIR");
+    const char *name = strrchr(file, '/');
+    if (!root) return -1;
+    if (real_assets) return snprintf(out,size,"%s/%s",root,file) < (int)size ? 0 : -1;
+    return snprintf(out,size,"%s/model-fixture-%s",root,name ? name+1 : file) < (int)size ? 0 : -1;
+}
 
 static void w16(uint8_t *b, unsigned at, unsigned v) { b[at] = (uint8_t)v; b[at + 1] = (uint8_t)(v >> 8); }
 static void w32(uint8_t *b, unsigned at, unsigned v) { w16(b, at, v & 0xFFFF); w16(b, at + 2, v >> 16); }
@@ -79,6 +89,43 @@ int main(void) {
         if (rgba[4 * i + 3]) { assert(rgba[4 * i] == 0x10 && rgba[4 * i + 2] == 0x18); ++drawn; }
     assert(drawn == red);
     pe_model_free(&m);
+    /* Player idle is 0x15, not enemy idle 2. Player rows do not use enemy group IDs. */
+    w32(data,0x144,MODEL); data[0x16B]=99;
+    w32(data,0x110,0x160 | 2u<<22);
+    w32(data,0x170,0x500 | 2u<<24); data[0x177]=0;
+    memcpy(data+0x500,data+ROW,36); data[0x500+13]=7;
+    assert(pe_model_decode_player(&room,&m));
+    assert(m.anim && m.anim[13]==0); pe_model_free(&m);
+    assert(pe_model_decode(&room,0,&m)); /* enemy slot grouping and idle 2 remain unchanged */
+    assert(m.anim && m.anim[13]==7); pe_model_free(&m);
+    /* Cache keys include folder contents and retain their own folder string. */
+    char path[1200], folder[32]="first";
+    FILE *file;
+    assert(!pe_mod_path(path,sizeof path,"model.bin"));
+    file=fopen(path,"wb"); assert(file); assert(fwrite(data,1,sizeof data,file)==sizeof data); fclose(file);
+    assert(!pe_mod_path(path,sizeof path,"texture.bin"));
+    file=fopen(path,"wb"); assert(file); assert(fwrite(tex,1,sizeof tex,file)==sizeof tex); fclose(file);
+    PeModelSource src={.kind=PE_MODEL_SKIN,.folder=folder};
+    const PeModel *first=pe_model_load(&src); assert(first && first->anim && first->vram);
+    strcpy(folder,"second"); const PeModel *second=pe_model_load(&src); assert(second && second!=first);
+    src.folder="first"; assert(pe_model_load(&src)==first);
+    pe_model_release_all();
+    pe_mod_path(path,sizeof path,"model.bin"); remove(path);
+    pe_mod_path(path,sizeof path,"texture.bin"); remove(path);
+    assert(!pe_model_load(&src));             /* missing assets fail cleanly */
+    src.folder=NULL; src.map=12;
+    assert(!pe_model_load(&src) && player_reads==1); /* no disc: no live actor fallback */
+    if (getenv("PE_MODEL_SKIN_ROOT")) {
+        static const char *folders[]={"harlequin","baker","maya"};
+        real_assets=1;
+        for (i=0;i<3;++i) {
+            src.folder=folders[i];
+            const PeModel *skin=pe_model_load(&src); assert(skin && skin->anim && pe_model_fit(skin,&fit));
+            assert(pe_model_frames(skin)>=1); /* player idle may intentionally be a single pose */
+            printf("Real skin preview decoded: %s (%d parts, %d idle frames)\n",folders[i],skin->parts,pe_model_frames(skin));
+        }
+        pe_model_release_all();
+    }
     puts("Model checks passed: decode, slot lookup, idle row, fit, texture, see-through texels, turning, silhouette.");
     return 0;
 }

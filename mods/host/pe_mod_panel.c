@@ -19,6 +19,7 @@
 #include <psyz/video.h>
 
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "ui/pe_ui.h"
 
@@ -190,7 +191,7 @@ static const char *pe_help_text(void) {
     const PeMenuPageInfo *info;
     const char *description;
     int off;
-    if (!e) return "Nothing here yet.";
+    if (!e) return pe_l10n_ui("Nothing here yet.");
     if (e->row >= 0) {
         description = pe_menu_row(e->row)->description;
         off = !pe_menu_row_active(pe_menu_row(e->row));
@@ -200,6 +201,7 @@ static const char *pe_help_text(void) {
         off = !pe_page_active(e->page);
     }
     if (!off) return description;
+    description = pe_l10n_ui(description);
     snprintf(text, sizeof text, "%s%s", PE_OFF_NOTE, description);   /* browse and set up, nothing runs */
     return text;
 }
@@ -215,7 +217,7 @@ static const char *pe_key_hints(void) {
     if (e && e->row < 0) action = "Enter open";
     else if (e && pe_menu_row(e->row)->kind == PE_ROW_ACTION) action = "Enter run";
     else if (e && pe_menu_row_adjustable(pe_menu_row(e->row))) action = "Left/Right change";
-    snprintf(hints, sizeof hints, "Up/Down select   %s%s%s   F1 close", action, *action ? "   " : "", back);
+    snprintf(hints, sizeof hints, pe_l10n_ui("Up/Down select   %s%s%s   F1 close"), action, *action ? "   " : "", back);
     return hints;
 }
 
@@ -223,10 +225,20 @@ static const char *pe_key_hints(void) {
 static void pe_breadcrumb(char *out, size_t size) {
     size_t o = 0;
     const char *p;
-    if (!s_panel.path[0]) { snprintf(out, size, "All mods"); return; }
-    for (p = s_panel.path; *p && o + 4 < size; ++p) {
-        if (*p == '/') { out[o++] = ' '; out[o++] = '/'; out[o++] = ' '; }
-        else out[o++] = *p;
+    if (!s_panel.path[0]) { snprintf(out, size, "%s", pe_l10n_ui("All mods")); return; }
+    for (p = s_panel.path; *p && o + 4 < size;) {
+        char segment[96];
+        size_t n = strcspn(p, "/");
+        if (n >= sizeof segment) break;
+        memcpy(segment, p, n); segment[n] = 0;
+        const char *label = pe_l10n_ui(segment);
+        size_t bytes = strlen(label);
+        if (bytes >= size-o) break;
+        memcpy(out+o,label,bytes); o += bytes; p += n;
+        if (*p == '/') {
+            if (o + 4 >= size) break;
+            out[o++]=' '; out[o++]='/'; out[o++]=' '; ++p;
+        }
     }
     out[o] = '\0';
     if (!pe_page_active(s_panel.path) && o + 7 < size) snprintf(out + o, size - o, "  (off)");

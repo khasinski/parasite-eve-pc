@@ -24,8 +24,15 @@ void FieldFx_EndEmberGlow(void);
 void FieldFx_BeginCrossFlareGlow(int x,int y,int z,unsigned age,unsigned joint);
 void FieldFx_EndCrossFlareGlow(void);
 /* Authored P115 controller / P118 JointGlow additive billboard only. */
+#ifdef PE_PS5_GPU_NATIVE
 void FieldFx_BeginAuthoredFlareGlow(unsigned program,int x,int y,int z,unsigned age,unsigned joint);
 void FieldFx_EndAuthoredFlareGlow(void);
+#else
+static inline void FieldFx_BeginAuthoredFlareGlow(unsigned program,int x,int y,int z,unsigned age,unsigned joint){
+    (void)program;(void)x;(void)y;(void)z;(void)age;(void)joint;
+}
+static inline void FieldFx_EndAuthoredFlareGlow(void){}
+#endif
 /* Only wraps the authored BurstOrb state0 floor quad; Hybrid additive accent. */
 void FieldFx_BeginBurstGroundGlow(int x,int y,int z);
 void FieldFx_EndBurstGroundGlow(void);

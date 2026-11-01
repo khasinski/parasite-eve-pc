@@ -22,6 +22,7 @@
 #include "pe_collection.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe1/game_state.h"
@@ -127,7 +128,7 @@ static void pe_set_worn(const PeCostume *c, int now) {
     pe_log("wardrobe", "wear=%s reload=%d", c ? c->key : "own", reload);
     pe_event_emit(s_event, (void *)c);
     if (!now) return;
-    snprintf(msg, sizeof msg, !reload || pe_reload() ? "Wearing %s" : "Wearing %s from the next room", c ? c->name : "Aya's own clothes");
+    snprintf(msg, sizeof msg, !reload || pe_reload() ? pe_l10n_ui("Wearing %s") : pe_l10n_ui("Wearing %s from the next room"), c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own clothes"));
     pe_col_say(msg);
 }
 
@@ -135,7 +136,7 @@ static void pe_set_worn(const PeCostume *c, int now) {
 static int pe_buy(const PeCostume *c, char *msg, size_t size) {
     if (pe_profile_owned(c->key) || !c->price) return 1;
     if (!pe_col_junk_ready(msg, (unsigned)size)) return 0;
-    if (!pe_col_spend(c->price)) { snprintf(msg, size, "Need %u Junk (have %u)", (unsigned)c->price, pe_col_junk()); return 0; }
+    if (!pe_col_spend(c->price)) { snprintf(msg, size, pe_l10n_ui("Need %u Junk (have %u)"), (unsigned)c->price, pe_col_junk()); return 0; }
     pe_profile_own(c->key);
     pe_log("wardrobe", "bought=%s price=%u", c->key, (unsigned)c->price);
     return 1;
@@ -186,11 +187,11 @@ static const char *pe_name(unsigned n) {
     const PeCostume *c;
     const char *state;
     pe_filter();
-    if (!s_count) return "None";
+    if (!s_count) return pe_l10n_ui("None");
     if (n >= (unsigned)s_count) n = 0;
     c = s_costume[s_list[n]];
-    if ((state = pe_state_name(c))) snprintf(s_name, sizeof s_name, "%s  [%s]  (%u/%d)", c->name, state, n + 1, s_count);
-    else snprintf(s_name, sizeof s_name, "%s  %u Junk  (%u/%d)", c->name, (unsigned)c->price, n + 1, s_count);
+    if ((state = pe_state_name(c))) snprintf(s_name, sizeof s_name, "%s  [%s]  (%u/%d)", pe_l10n_ui(c->name), state, n + 1, s_count);
+    else snprintf(s_name, sizeof s_name, "%s  %u Junk  (%u/%d)", pe_l10n_ui(c->name), (unsigned)c->price, n + 1, s_count);
     return s_name;
 }
 
@@ -212,7 +213,7 @@ static void pe_default(void) {
 
 static void pe_status(char *out, unsigned size) {
     const PeCostume *c = pe_worn();
-    snprintf(out, size, "Wearing %s   Junk %u", c ? c->name : "Aya's own", pe_col_junk());
+    snprintf(out, size, pe_l10n_ui("Wearing %s   Junk %u"), c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own"), pe_col_junk());
 }
 
 static void pe_result(char *out, unsigned size) { snprintf(out, size, "%s", pe_col_last_said()); }
@@ -230,7 +231,7 @@ static int pe_ward_count(void) { int n = 1, i; for (i = 0; i < s_costumes; ++i) 
 static const char *pe_ward_name(int k) {
     int own;
     const PeCostume *c = pe_ward_costume(k, &own);
-    return own ? "Aya's own clothes" : c ? c->name : "";
+    return own ? "Aya's own clothes" : c ? pe_l10n_ui(c->name) : "";
 }
 static unsigned pe_ward_price(int k) { int own; const PeCostume *c = pe_ward_costume(k, &own); return c ? c->price : 0u; }
 static int pe_ward_state(int k) {
@@ -246,7 +247,7 @@ static int pe_ward_pick(int k, char *msg, size_t size) {   /* buy if needed, the
     if (!own && !c) return 0;
     if (c && !pe_buy(c, msg, size)) return 0;
     pe_set_worn(c, 0);
-    snprintf(msg, size, "Wearing %s when you leave", c ? c->name : "Aya's own clothes");
+    snprintf(msg, size, pe_l10n_ui("Wearing %s when you leave"), c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own clothes"));
     return 1;
 }
 static const PeWardrobeApi s_wardrobe = { pe_ward_count, pe_ward_name, pe_ward_price, pe_ward_state, pe_ward_pick };
@@ -255,6 +256,8 @@ static const PeWardrobeApi s_wardrobe = { pe_ward_count, pe_ward_name, pe_ward_p
 static int s_reload_after_menu;
 
 static int pe_owned_wearable(const PeCostume *c) { return pe_wearable(c) && (pe_profile_owned(c->key) || !c->price); }
+
+int pe_wardrobe_story_bank(void) { return pe_gameplay_bank(s_room_bank) ? s_room_bank : 12; }
 
 int pe_wardrobe_owned_count(void) {
     int n = 0, i;

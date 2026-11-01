@@ -56,14 +56,14 @@ jobs:
           ./build/parasite-eve-pc --help
           ctest --test-dir build --output-on-failure --no-tests=error --output-junit linux-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
           ctest --test-dir build --output-on-failure --no-tests=error -R "^(original-m273-landing-cycle|original-callback-allocation-failure|original-m273-effect-pointers|original-menu-call-abi|original-game-pulled-sprite|host-crash-report|mod-crash-save-tail|mod-preserve-save-tail|mod-save-records|mod-save-registration-bounds|mod-rebalance-(vanilla|saved-vanilla|scoped|poison)|mod-atb|mod-combine|mod-panacea-off|mod-pe-(vanilla|saved-vanilla|cost|actor)|mod-inventory|mod-inventory-menu)$"
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage)$"
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage|lang-pack|lang-font|lang-selection)$"
           python3 - <<'PYTEST'
           import xml.etree.ElementTree as E
           r = E.parse('build/linux-source-only.xml')
           assert len(r.findall('.//testcase')) == 26
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           r = E.parse('build/mod-features.xml')
-          assert len(r.findall('.//testcase')) == 12
+          assert len(r.findall('.//testcase')) == 15
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           PYTEST
       - name: Verify and build save editor
@@ -92,16 +92,16 @@ jobs:
           PYLICENSE
           ldd build/parasite-eve-pc > "$stage/runtime-dependencies.txt"
           git rev-parse HEAD > "$stage/source-commit.txt"
-          tar -czf Parasite-Eve-0.8-linux-x86_64.tar.gz -C package Parasite-Eve-linux-x86_64
-          sha256sum Parasite-Eve-0.8-linux-x86_64.tar.gz > linux-x86_64-sha256.txt
-          editor=package/Parasite-Eve-Save-Editor-0.8-linux-x86_64
+          tar -czf Parasite-Eve-0.9-linux-x86_64.tar.gz -C package Parasite-Eve-linux-x86_64
+          sha256sum Parasite-Eve-0.9-linux-x86_64.tar.gz > linux-x86_64-sha256.txt
+          editor=package/Parasite-Eve-Save-Editor-0.9-linux-x86_64
           mkdir -p "$editor/licenses"
           cp save-editor/target/release/pe-save-editor LICENSE.md "$editor/"
           python3 - <<'PYEDITORLICENSE'
           from pathlib import Path
           import os, shutil
           registry = Path(os.environ.get('CARGO_HOME', str(Path.home() / '.cargo'))) / 'registry/src'
-          dest = Path('package/Parasite-Eve-Save-Editor-0.8-linux-x86_64/licenses')
+          dest = Path('package/Parasite-Eve-Save-Editor-0.9-linux-x86_64/licenses')
           for index in registry.iterdir():
               for crate in index.iterdir():
                   for path in crate.rglob('*'):
@@ -110,13 +110,13 @@ jobs:
                           target.parent.mkdir(parents=True, exist_ok=True)
                           shutil.copy2(path, target)
           PYEDITORLICENSE
-          tar -czf Parasite-Eve-Save-Editor-0.8-linux-x86_64.tar.gz -C package Parasite-Eve-Save-Editor-0.8-linux-x86_64
+          tar -czf Parasite-Eve-Save-Editor-0.9-linux-x86_64.tar.gz -C package Parasite-Eve-Save-Editor-0.9-linux-x86_64
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linux-x86_64-package
           path: |
-            Parasite-Eve-0.8-linux-x86_64.tar.gz
-            Parasite-Eve-Save-Editor-0.8-linux-x86_64.tar.gz
+            Parasite-Eve-0.9-linux-x86_64.tar.gz
+            Parasite-Eve-Save-Editor-0.9-linux-x86_64.tar.gz
             linux-x86_64-sha256.txt
             build/linux-source-only.xml
 
@@ -162,11 +162,11 @@ jobs:
           ./build/parasite-eve-pc.exe --help
           ctest --test-dir build --output-on-failure --no-tests=error --output-junit windows-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
           ctest --test-dir build --output-on-failure --no-tests=error -R "^(original-m273-landing-cycle|original-callback-allocation-failure|original-m273-effect-pointers|original-menu-call-abi|original-game-pulled-sprite|host-crash-report|mod-crash-save-tail|mod-preserve-save-tail|mod-save-records|mod-save-registration-bounds|mod-rebalance-(vanilla|saved-vanilla|scoped|poison)|mod-atb|mod-combine|mod-panacea-off|mod-pe-(vanilla|saved-vanilla|cost|actor)|mod-inventory|mod-inventory-menu)$"
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage)$"
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage|lang-pack|lang-font|lang-selection)$"
       - name: Stress D3D12 descriptor batches without a visible window
         env:
           SDL_GPU_DRIVER: direct3d12
-        run: ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(descriptor-batches|resource-(upload|readback|reset))$'
+        run: ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(descriptor-batches|frame-interpolation|resource-(upload|readback|reset|resize|swapchain-resize))$'
       - name: Require all selected source-only cases to execute
         shell: pwsh
         run: |
@@ -175,7 +175,7 @@ jobs:
           $incomplete = $report.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error')
           if ($cases.Count -ne 26 -or $incomplete.Count -ne 0) { throw 'Expected 26 executed source-only cases without failures or skips' }
           [xml]$features = Get-Content build/mod-features.xml
-          if ($features.SelectNodes('//testcase').Count -ne 12 -or $features.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error').Count -ne 0) { throw 'Expected all 12 mod feature regressions without failures or skips' }
+          if ($features.SelectNodes('//testcase').Count -ne 15 -or $features.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error').Count -ne 0) { throw 'Expected all 15 mod feature regressions without failures or skips' }
       - name: Build and test Windows save editor
         shell: pwsh
         env:
@@ -191,8 +191,8 @@ jobs:
       - name: Package Windows game and save editor
         shell: pwsh
         run: |
-          $game = 'package/Parasite-Eve-0.8-windows-x86_64'
-          $editor = 'package/Parasite-Eve-Save-Editor-0.8-windows-x86_64'
+          $game = 'package/Parasite-Eve-0.9-windows-x86_64'
+          $editor = 'package/Parasite-Eve-Save-Editor-0.9-windows-x86_64'
           New-Item -ItemType Directory -Force "$game/docs/images", "$game/mods", "$game/licenses", $editor | Out-Null
           Copy-Item build/parasite-eve-pc.exe, README.md, CHANGELOG.md, LICENSE.md, THIRD_PARTY_NOTICES.md $game
           Copy-Item docs/images/gameplay.png "$game/docs/images/"
@@ -214,14 +214,14 @@ jobs:
             Copy-Item $_.FullName $target
           }
           'Open pe-save-editor.exe to edit a backup of your save. Optional: select your North American disc image for item data. The game must be closed while replacing saves.' | Set-Content "$editor/Read me.txt"
-          Compress-Archive -Path $game -DestinationPath Parasite-Eve-0.8-windows-x86_64-experimental.zip
-          Compress-Archive -Path $editor -DestinationPath Parasite-Eve-Save-Editor-0.8-windows-x86_64.zip
+          Compress-Archive -Path $game -DestinationPath Parasite-Eve-0.9-windows-x86_64-experimental.zip
+          Compress-Archive -Path $editor -DestinationPath Parasite-Eve-Save-Editor-0.9-windows-x86_64.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-release-packages
           path: |
-            Parasite-Eve-0.8-windows-x86_64-experimental.zip
-            Parasite-Eve-Save-Editor-0.8-windows-x86_64.zip
+            Parasite-Eve-0.9-windows-x86_64-experimental.zip
+            Parasite-Eve-Save-Editor-0.9-windows-x86_64.zip
       - name: Diagnose native Windows crash handler failures
         if: failure()
         run: |

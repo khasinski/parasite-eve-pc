@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include "pe_inventory.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_save.h"
@@ -141,14 +142,14 @@ static void pe_key_release(void *data) {
     if (!s_keys.count) return;
     left = pe_keys_return(pe_inventory_limit());
     pe_mod_log("pe_qol", "mod off: pocketed keys returned to the bag, %d left (bag full)", left);
-    if (left) pe_toast("Key items didn't fit in the bag: turn quality of life back on to use them");
+    if (left) pe_toast(pe_l10n_ui("Key items didn't fit in the bag: turn quality of life back on to use them"));
 }
 static const PeSaveRecord s_key_record = {
     "pe_qol.keys", 1, &s_keys, sizeof s_keys, pe_key_check, pe_key_upgrade, pe_key_reset, pe_key_release,
 };
 static unsigned pe_key_rows(void) { return s_keys.count ? s_keys.count : 1; }
 static const char *pe_key_name(unsigned i) {
-    if (i >= s_keys.count) return "Pocket empty";
+    if (i >= s_keys.count) return pe_l10n_ui("Pocket empty");
     const u8 *text = Text_LookupTable8(s_keys.ids[i] - 1);
     unsigned n = 0;
     while (text && *text != 0xFF && n + 1 < sizeof s_name) {

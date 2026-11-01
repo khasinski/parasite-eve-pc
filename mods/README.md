@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_collection` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_collection;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -49,8 +49,45 @@ mods/
   pe_rebalance/        mod effects, Parasite Energy balance, half-bar turns / Quick powers, Combine
   pe_economy/          Junk and loot, Mod Catalog / Dismantle / Rebuild, Requisition, Wayne and Warner
   pe_collection/       Bestiary and Wardrobe registries, skins, Wardrobe menu (packs register here)
+  pe_stacks/           stacked consumables (up to 99 per bag or storage slot), from the Pathogen Eve port
+  pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
+  pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
+  pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
+  pe_lang/             language packs: the game's text from a .pelang pack, F1 > Language (not built
+                       by default; docs/LOCALIZATION.md, tools in localization/)
   pe_hello/            example mod (not built by default)
 ```
+
+## Stacked items (pe_stacks)
+
+F1 > PE Enhancements > Inventory > Stacked items (on by default). Lists keep plain item ids; the
+extra copies of a slot are counted per (list, item) in the mod. Hooks: ITEM_ADD (join a carried
+stack), ITEM_REMOVE (use / give / discard takes one copy), ITEM_COUNT and INV_CMD_COUNT_ITEM
+(story checks see every copy), STORAGE_TRANSFER (a bag stack goes into storage whole; storage
+gives one copy), INVENTORY_REBUILD (duplicates fold into one slot), SLOT_DRAWN (the count in the
+rounds column). Only base items of kinds 10 and 12..15 stack; Junk stays out while pe_economy's
+Junk economy is on. Saved as the `pe_stacks.counts` record (204 bytes, up to 100 stacks). With the
+mod or the option off, extra copies go back into free slots as plain items.
+
+## Warp (pe_warp)
+
+F1 > Warp: pick a story checkpoint and Warp. It sets script variable 74 (story progress) to that
+point and runs the field script's own room transfer (Script_EncodeBarcode) on the next free field
+frame, never during a battle, an event, a room change or a movie.
+
+## Quick save (pe_quicksave)
+
+F10 saves to the current slot, F11 loads it, F12 picks the next of 10 slots (also F1 > Quick save).
+A quick save is the game's own 8 KB card file (Save_BuildCardFile, with every mod's records), made
+in the free field and kept beside the preferences as quicksave_<slot>.mcd. Loading commits it the
+way Save_LoadCardFileIntoRuntime does, without the card menu's dialogs, then runs the field
+script's room transfer to the saved room: the room starts again as after a loaded save. It holds
+what a save holds, not Aya's place in the room or a fight in progress.
+
+## Cheats (pe_cheats)
+
+F1 > Cheats: God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers.
+All off until chosen; while they are off the mod writes nothing.
 
 ## A mod
 
@@ -400,7 +437,21 @@ without touching these files.
   bridge's build_outfit_rooms.py): rooms install Aya's animations for the outfit the story has her
   in (29, 31 or 23 parts), so the evening dress worn on a jacket day gets them retargeted to its own.
 - `pe_wardrobe_menu.c`: a Wardrobe row in Aya's main menu (icon: the Equip Armor icon, twice) once a
-  costume is owned: pick an owned costume like armor; it shows when the menu closes.
+  costume is owned. Uses the Bestiary's six-row list, right-hand model preview and three-row details
+  panel (outfit name, wear status/action, and preview control; no cast/category detail row). L1/R1 filter owned outfits by registered group; Left/Right rotate, Triangle opens/closes
+  full view, Square (default keyboard V) pauses. Previews start facing the viewer. Both Wardrobe
+  and Bestiary use `pe_screen_preview_input` to pass Left/Right through the native list to rotation. Cross wears the selected outfit when the menu closes; Circle returns.
+  There are no purchases, prices or unlock actions here. Missing/unowned outfits stay out of the list.
+  Names are fitted to the native font and capped to leave room for the title and side rail in the
+  16 KB menu drawing buffer. Groups remember their scroll position while the screen is open.
+  Preview loading is separate from equipment: `host/pe_model_skin.c` reads standalone skin blobs
+  or Aya's original disc bundles into private model/texture memory, using player idle row 0x15.
+  It never calls a costume's gameplay `load` callback. Callback-only costumes without standalone
+  assets remain wearable with a Preview unavailable message. Presenter slot 3 is reserved for this
+  screen (Bestiary uses 2). `tests/run_pe_wardrobe_menu_test.ps1` covers controls, scrolling, long
+  names, the drawing budget, owned-only choices and cleanup; the model fixture covers player idle,
+  skin source caching and missing files. Set `PE_MODEL_SKIN_ROOT` to the preference directory when
+  running `tests/run_pe_model_test.ps1` to also decode installed Harlequin, Baker and Maya assets.
 - `pe_profile.c`: unlocks by key in pe_collection.ini beside the preferences, kept across every
   game; records of packs that aren't loaded are kept untouched. The recomp's pe_collection.dat is
   imported once.

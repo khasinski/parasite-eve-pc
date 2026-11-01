@@ -16,6 +16,7 @@
 #include "pe_collection.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 
@@ -109,7 +110,7 @@ static void pe_unlock_why(int h, unsigned bits, const char *why) {
     char msg[96];
     if (!c || now == old) return;
     pe_profile_set_creature(c->key, now, pe_kills(h));
-    snprintf(msg, sizeof msg, "Bestiary: %s%s%s%s", c->name, gained & PE_BESTIARY_WEAK ? " - weaknesses" : "",
+    snprintf(msg, sizeof msg, "Bestiary: %s%s%s%s", pe_l10n_ui(c->name), gained & PE_BESTIARY_WEAK ? " - weaknesses" : "",
              gained & PE_BESTIARY_LOOT ? " - loot" : "", gained == PE_BESTIARY_MET ? " - new entry" : "");
     pe_toast(msg);
     pe_log("bestiary", "creature=%s bits=0x%02X why=%s", c->key, now, why);
@@ -246,12 +247,12 @@ static const char *pe_name(unsigned i) {
     const PeCreatureInfo *c;
     unsigned s;
     pe_filter();
-    if (!s_count) return "None";
+    if (!s_count) return pe_l10n_ui("None");
     if (i >= (unsigned)s_count) i = 0;
     c = s_creature[s_list[i]];
     s = pe_state(s_list[i]);
     if (!(s & PE_BESTIARY_MET)) snprintf(s_name, sizeof s_name, "???  (%u/%d)", i + 1, s_count);
-    else snprintf(s_name, sizeof s_name, "%s%s%s  (%u/%d)", c->ex ? "EX " : "", c->name,
+    else snprintf(s_name, sizeof s_name, "%s%s%s  (%u/%d)", c->ex ? "EX " : "", pe_l10n_ui(c->name),
                   (s & PE_BESTIARY_WEAK) && (s & PE_BESTIARY_LOOT) ? " *" : c->boss ? " (boss)" : "", i + 1, s_count);
     return s_name;
 }
@@ -281,21 +282,21 @@ static void pe_elements_row(char *out, unsigned size) {
     if (!c) { snprintf(out, size, "-"); return; }
     if (pe_state(h) & PE_BESTIARY_WEAK)
         snprintf(out, size, "Weak: %s  Strong: %s", pe_elems(c->weak, weak, sizeof weak), pe_elems(c->strong, strong, sizeof strong));
-    else snprintf(out, size, "Scan, %s or %u Junk", c->boss ? "defeat" : "5 kills", c->price_weak);
+    else snprintf(out, size, "Scan, %s or %u Junk", c->boss ? pe_l10n_ui("defeat") : pe_l10n_ui("5 kills"), c->price_weak);
 }
 
 static void pe_drop_row(char *out, unsigned size) {
     const int h = pe_current();
     const PeCreatureInfo *c = pe_info(h);
     if (!c) snprintf(out, size, "-");
-    else if (pe_state(h) & PE_BESTIARY_LOOT) snprintf(out, size, "%s", c->drop ? c->drop : "nothing");
+    else if (pe_state(h) & PE_BESTIARY_LOOT) snprintf(out, size, "%s", c->drop ? c->drop : pe_l10n_ui("nothing"));
     else snprintf(out, size, "%s%u Junk", c->boss ? "" : "15 kills or ", c->price_loot);
 }
 
 static void pe_steal_row(char *out, unsigned size) {
     const int h = pe_current();
     const PeCreatureInfo *c = pe_info(h);
-    snprintf(out, size, "%s", c && (pe_state(h) & PE_BESTIARY_LOOT) ? (c->steal ? c->steal : "nothing") : "-");
+    snprintf(out, size, "%s", c && (pe_state(h) & PE_BESTIARY_LOOT) ? (c->steal ? c->steal : pe_l10n_ui("nothing")) : "-");
 }
 
 /* Buying: the next locked tier, weaknesses then loot, of a met creature. */
@@ -318,7 +319,7 @@ int pe_bestiary_buy(int h) {
     if (!bit) { pe_col_say("Already complete"); return 0; }
     if (!pe_col_junk_ready(msg, sizeof msg)) { pe_col_say(msg); return 0; }
     if (!pe_col_spend(price)) {
-        snprintf(msg, sizeof msg, "Need %u Junk (have %u)", price, pe_col_junk());
+        snprintf(msg, sizeof msg, pe_l10n_ui("Need %u Junk (have %u)"), price, pe_col_junk());
         pe_col_say(msg);
         return 0;
     }
@@ -339,7 +340,7 @@ static void pe_buy_label(char *out, unsigned size) {
     unsigned bit = 0;
     const unsigned price = h >= 0 ? pe_bestiary_next_price(h, &bit) : 0;
     if (!bit) snprintf(out, size, "Complete");
-    else snprintf(out, size, "%s for %u Junk (have %u)", bit == PE_BESTIARY_WEAK ? "Weaknesses" : "Loot", price, pe_col_junk());
+    else snprintf(out, size, "%s for %u Junk (have %u)", bit == PE_BESTIARY_WEAK ? "Weaknesses" : pe_l10n_ui("Loot"), price, pe_col_junk());
 }
 
 static void pe_progress(char *out, unsigned size) {
@@ -390,14 +391,14 @@ static int pe_test(void) { return pe_valid(s_test) ? s_test : -1; }
 static unsigned pe_test_count(void) { return s_creatures ? (unsigned)s_creatures : 1u; }
 static const char *pe_test_name(unsigned i) {
     const PeCreatureInfo *c = pe_info((int)i);
-    if (!c) return "None";
-    snprintf(s_test_name, sizeof s_test_name, "%s%s  (%u/%d)", c->ex ? "EX " : "", c->name, i + 1, s_creatures);
+    if (!c) return pe_l10n_ui("None");
+    snprintf(s_test_name, sizeof s_test_name, "%s%s  (%u/%d)", c->ex ? "EX " : "", pe_l10n_ui(c->name), i + 1, s_creatures);
     return s_test_name;
 }
 
 static void pe_tiers(char *out, unsigned size, unsigned bits) {
     snprintf(out, size, "%s%s%s%s", bits & PE_BESTIARY_MET ? "met " : "", bits & PE_BESTIARY_WEAK ? "weak " : "",
-             bits & PE_BESTIARY_LOOT ? "loot" : "", bits ? "" : "none");
+             bits & PE_BESTIARY_LOOT ? pe_l10n_ui("loot") : "", bits ? "" : pe_l10n_ui("none"));
 }
 
 static void pe_test_state(char *out, unsigned size) {

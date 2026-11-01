@@ -7,6 +7,7 @@
 #include "pe1/planar_shadow.h"
 #endif
 #include "common.h"
+#include <psyz/gpu.h>
 #include "pe1/akao_send.h"
 #include "pe1/battle_runtime.h"
 #include "pe1/battle_status.h"

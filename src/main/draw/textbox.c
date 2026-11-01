@@ -1,5 +1,6 @@
 #include "common.h"
 #include "pe_hooks.h"
+#include "pe1/mod_text.h"
 #include "pe1/draw_state.h"
 #include "pe1/boot_disc_check.h"
 #include "pe1/field_pad.h"
@@ -229,6 +230,30 @@ u8 g_TextboxGlyphColorR;
 u8 g_TextboxGlyphColorG;
 u8 g_TextboxGlyphColorB;
 
+/* 0 keeps the native byte path, -1 means the packet pool is full. */
+static int Textbox_ExtendedGlyph(const u8 *text, TextboxGlyphPacket **next,
+                                TextboxGlyphPacket *limit, TextboxPoint *cursor,
+                                RenderNativeTag *ordering) {
+    if (!Pe_ExtendedGlyph(text, NULL)) return 0;
+    PeHookTextGlyph g = {0}; g.text = text; g.draw = 1;
+    if (!PE_HOOK(PE_HOOK_TEXT_GLYPH, &g)) return 0;
+    if (*next >= limit) return -1;
+    TextboxGlyphPacket *p = (*next)++;
+    SetDrawTPage(p, 0, 1, g_TextboxFontPages[0].tpage);
+    SetSprt(&p->sprite);
+    if (MargePrim(p, &p->sprite) != 0) exit(-1);
+    p->sprite.x = cursor->x; p->sprite.y = cursor->y;
+    p->sprite.u = g.u; p->sprite.v = g.v;
+    p->sprite.width = p->sprite.height = 12;
+    p->sprite.color.bytes.r = g_TextboxGlyphColorR;
+    p->sprite.color.bytes.g = g_TextboxGlyphColorG;
+    p->sprite.color.bytes.b = g_TextboxGlyphColorB;
+    p->sprite.clut = g_TextboxFontPages[0].clut;
+    AddPrim(ordering, p);
+    cursor->x += g.advance;
+    return (int)g.bytes;
+}
+
 void Menu_DrawTextboxEntries(void) {
     TextboxPoint cursor;
     TextboxPoint uv;
@@ -330,6 +355,8 @@ void Menu_DrawTextboxEntries(void) {
                     }
                     textbox->message++;
                 }
+                PE_HOOK(PE_HOOK_TEXT_PAGE, (&(PeHookTextPage){g_TextboxMessageSource,
+                                                              (unsigned)textbox->page_id, &textbox->message}));
             }
             baseX = 0x14;
             cursor.y = 0xAE;
@@ -378,6 +405,14 @@ void Menu_DrawTextboxEntries(void) {
                 font = &g_TextboxFontPages[0];
                 temp_v1_3 = *stream;
                 switch (temp_v1_3) {
+                case 0xF1: {
+                    int consumed = Textbox_ExtendedGlyph(stream, &nextPacket, packetLimit, &cursor, orderingTable);
+                    if (consumed < 0) return;
+                    if (!consumed) goto native_single_glyph;
+                    currentPacket = nextPacket;
+                    stream += consumed;
+                    break;
+                }
                 case 0xF7:
                     stream += 1;
                     cursor.x = baseX;
@@ -412,15 +447,26 @@ void Menu_DrawTextboxEntries(void) {
                             u32 fontRow;
                             u16 nameU, nameV;
                             if ((unsigned)nameIndex >= sizeof(g_TextboxNameGlyphs.glyphs)) return;
+                            if (g_TextboxNameGlyphs.count - nameIndex >= 4 &&
+                                sizeof(g_TextboxNameGlyphs.glyphs) - (unsigned)nameIndex >= 4) {
+                                int consumed = Textbox_ExtendedGlyph(g_TextboxNameGlyphs.glyphs+nameIndex,
+                                    &nextPacket, packetLimit, &cursor, orderingTable);
+                                if (consumed < 0) return;
+                                if (consumed) {
+                                    currentPacket = auxiliaryPacket = nextPacket;
+                                    nameIndex += consumed; nextNameIndex = nameIndex;
+                                    continue;
+                                }
+                            }
                             nameGlyph = g_TextboxNameGlyphs.glyphs[(s8)nameIndex];
-                            if (nameGlyph >= sizeof(g_TextboxGlyphSpacing) / sizeof(*g_TextboxGlyphSpacing)) return;
+                            if (nameGlyph >= g_TextboxGlyphCount) return;
 
                             fontRow = nameGlyph / 21;
                             nameU = ((nameGlyph - (fontRow * 0x15)) & 0xFF) * 0xC;
                             nameV = (fontRow & 0xFF) * 0xC;
                             uv.x = nameU;
                             uv.y = nameV;
-                            cursor.x -= g_TextboxGlyphSpacing[nameGlyph].left;
+                            cursor.x -= g_TextboxGlyphWidths[nameGlyph].left;
                             if (nextPacket >= packetLimit) return;
                             SetDrawTPage(nextPacket, 0, 1, font->tpage);
                             SetSprt(&nextPacket->sprite);
@@ -449,7 +495,7 @@ void Menu_DrawTextboxEntries(void) {
 #endif
                             nextNameIndex = nameIndex + 1;
                             nameIndex = nextNameIndex;
-                            cursor.x += g_TextboxGlyphSpacing[nameGlyph].right;
+                            cursor.x += g_TextboxGlyphWidths[nameGlyph].right;
                         } while ((s8)nextNameIndex < g_TextboxNameGlyphs.count);
                     }
                     stream += 1;
@@ -726,6 +772,7 @@ void Menu_DrawTextboxEntries(void) {
                     }
                     /* fallthrough */
                 default:
+                native_single_glyph:
                     temp_a0_5 = *stream;
 
                     uv.x = (u8)((unsigned int)temp_a0_5 % 21) * 12;
@@ -733,8 +780,8 @@ void Menu_DrawTextboxEntries(void) {
 
                     workingValue = (u8)((unsigned int)temp_v0_7 / 21);
                     uv.y = workingValue * 12;
-                    if (*stream >= sizeof(g_TextboxGlyphSpacing) / sizeof(*g_TextboxGlyphSpacing)) return;
-                    cursor.x -= g_TextboxGlyphSpacing[*stream].left;
+                    if (*stream >= g_TextboxGlyphCount) return;
+                    cursor.x -= g_TextboxGlyphWidths[*stream].left;
                     if (nextPacket >= packetLimit) return;
                     SetDrawTPage(nextPacket, 0, 1, font->tpage);
                     SetSprt(&nextPacket->sprite);
@@ -759,7 +806,7 @@ void Menu_DrawTextboxEntries(void) {
                     PeDialogue_Tag(orderingTable,currentPacket,*stream);
 #endif
                     currentPacket++;
-                    temp_v1_11 = g_TextboxGlyphSpacing[*stream].right;
+                    temp_v1_11 = g_TextboxGlyphWidths[*stream].right;
                     stream += 1;
                     var_v0_3 = cursor.x + temp_v1_11;
                     cursor.x = var_v0_3;

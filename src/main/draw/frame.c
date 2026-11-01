@@ -4,10 +4,12 @@
 #include "pe1/particle_augment.h"
 #endif
 #include "pe1/battle_status.h"
+#include <psyz/gpu.h>
 #include "pe1/boot.h"
 #include "pe1/boot_disc_check.h"
 #include "pe1/draw_buffers.h"
 #include "pe1/game_state.h"
+#include "pe1/geom_state.h"
 #include "pe1/menu_background.h"
 #include "pe1/menu_widget.h"
 #include "pe1/psyq_gpu.h"
@@ -94,8 +96,6 @@ draw_buffer:
          * debris only into the real remaining arena, immediately before DMA. */
 #ifdef PE_PS5_GPU_NATIVE
         FieldFx_FlushParticleAugment();
-#endif
-#ifdef PE_PS5_GPU_NATIVE
         FieldFx_ApplyParticleLights();
 #endif
         Psyz_GpuBeginInterpolationFrame();

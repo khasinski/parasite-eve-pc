@@ -377,6 +377,25 @@ int main(int argc,char **argv)
         CHECK(linked==1 && q->tag.address!=(uintptr_t)q);
         CHECK(q->xy0!=q->xy1 && q->xy0!=q->xy2);
     }
+    CHECK(Psyz_VideoSetDynamicLighting(1)==0 && Psyz_VideoGetDynamicLighting()==1);
+    CHECK(Psyz_VideoSetEffectGeometryCorrection(1)==0 && Psyz_VideoGetEffectGeometryCorrection()==1);
+    Psyz_PgxpSetActive(1);
+    Psyz_GteSetPgxpEffectMode(1);
+    {
+        double m[3][3]={{1.0,0.0,0.0},{0.0,0.0,-1.0},{0.0,1.0,0.0}};
+        double t[3]={0.0,0.0,1024.0};
+        u32 fx_sxy=(163u)|((112u)<<16);
+        float sx=0.0f, sy=0.0f, sz=0.0f;
+        Psyz_GteSetPgxpMatrix(m, t);
+        Psyz_GteProjectFloatVertex(12.25, -8.5, 0.0, &fx_sxy, fx_sxy);
+        CHECK(Psyz_PgxpLookupVertex(&fx_sxy, fx_sxy, &sx, &sy, &sz)==2);
+        CHECK(sx > 163.0f && sx < 163.2f);
+        Psyz_VideoSetEffectGeometryCorrection(0);
+        CHECK(Psyz_PgxpLookupVertex(&fx_sxy, fx_sxy, &sx, &sy, &sz)==0);
+    }
+    Psyz_GteSetPgxpEffectMode(0);
+    Psyz_VideoSetEffectGeometryCorrection(0);
+    Psyz_VideoSetDynamicLighting(0);
     RenderShadowQuad saved=packets[1];
     actor.flags=0x400; CHECK(Render_DrawActorShadow(&actor)==0 && !memcmp(&saved,&packets[1],sizeof(saved)));
     actor.flags=0; actor.render_object.variant_visible=0;

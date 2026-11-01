@@ -62,12 +62,12 @@ static struct {
     int aspect;
     int dither;
     int geometry_correction;
+    int frame_interpolation;
     int antialiasing;
     int model_filtering;
+    int widescreen;
     int dynamic_lighting;
     int effect_geometry_correction;
-    int frame_interpolation;
-    int widescreen;
 #ifdef PE_PS5_GPU_NATIVE
     int fsr1,fsr1_sharpness,model_fill_lighting,movie_blur,movie_presentation,battle_debris_3d,gameplay_fill,movie_cleanup,sprite_filtering;
     int show_fps;
@@ -81,8 +81,10 @@ static struct {
     char hd_field_directory[4096];
 #endif
     int fullscreen;
-    /* 2..PSYZ_SPEED_MAX, used while the speed binding is held */
+    /* 2..PSYZ_SPEED_MAX, used while the speed binding is held (or toggled on) */
     unsigned speed_factor;
+    /* 1: the speed binding switches the speed-up on and off instead of holding it */
+    int speed_toggle;
     unsigned analog_run_threshold;
     /* 16 pad buttons, then the speed hold (unbound by default) */
     int keys[17];
@@ -158,6 +160,7 @@ static void Host_NativeApplicationShutdown(void);
 #define HOST_BINDING_COUNT 17
 #define HOST_SPEED_BINDING 16
 #define HOST_ANALOG_RUN_ROW (HOST_BINDING_COUNT + 1)
+#define HOST_SPEED_MODE_ROW (HOST_BINDING_COUNT + 2)
 #define HOST_UNBOUND_KEY SDL_SCANCODE_UNKNOWN
 #define HOST_UNBOUND_BUTTON -1
 
@@ -181,9 +184,12 @@ static void Host_SetSpeed(unsigned speed) {
 
 static int host_speed_key_held;
 static struct { SDL_JoystickID id; int held; } host_speed_pads[16];
+/* Toggle mode: the binding was down at the last event, and whether the speed-up is on. */
+static int host_speed_was_held, host_speed_toggled;
 
 static void Host_ResetSpeedHold(void) {
     host_speed_key_held = 0;
+    host_speed_was_held = host_speed_toggled = 0;
     memset(host_speed_pads, 0, sizeof(host_speed_pads));
     Host_SetSpeed(1);
 }
@@ -716,6 +722,9 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
             ) {
                 return 0;
             }
+            if (v > 1 && (v & 1)) {
+                ++v;
+            }
             host_options.scale = (unsigned)v;
         } else if (!strcmp(key, "fullscreen")) {
             if (v > 1) {
@@ -735,12 +744,6 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
         } else if (!strcmp(key, "antialiasing")) {
             if (v > 1) return 0;
             host_options.antialiasing = v;
-        } else if (!strcmp(key, "dynamic_lighting")) {
-            if(v>1)return 0;host_options.dynamic_lighting=v;
-        } else if (!strcmp(key, "frame_interpolation")) {
-            if(v>1)return 0;host_options.frame_interpolation=v;
-        } else if (!strcmp(key, "effect_geometry_correction")) {
-            if(v>1)return 0;host_options.effect_geometry_correction=v;
         } else if (!strcmp(key, "model_filtering")) {
             if (v > 1) return 0;
             host_options.model_filtering = v;
@@ -776,11 +779,23 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
         } else if (!strcmp(key, "model_fill_lighting")) {
             if(v>2)return 0;host_options.model_fill_lighting=v;
 #endif
+        } else if (!strcmp(key, "frame_interpolation")) {
+            if(v>1)return 0;host_options.frame_interpolation=v;
         } else if (!strcmp(key, "geometry_correction")) {
             if (v > 1) {
                 return 0;
             }
             host_options.geometry_correction = v;
+        } else if (!strcmp(key, "dynamic_lighting")) {
+            if (v > 1) {
+                return 0;
+            }
+            host_options.dynamic_lighting = v;
+        } else if (!strcmp(key, "effect_geometry_correction")) {
+            if (v > 1) {
+                return 0;
+            }
+            host_options.effect_geometry_correction = v;
         }
 #ifdef PE_PS5
     } else if (!strcmp(section,"mods") && !strcmp(key,"hd_field_materials")) {
@@ -806,6 +821,11 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
             return 0;
         }
         host_options.speed_factor = (unsigned)v;
+    } else if (!strcmp(section, "game") && !strcmp(key, "speed_toggle")) {
+        if (v > 1) {
+            return 0;
+        }
+        host_options.speed_toggle = v;
     } else if (!strcmp(section, "keyboard") || !strcmp(section, "controller")) {
         for (unsigned i = 0; i < HOST_BINDING_COUNT; ++i) {
             if (!strcmp(key, host_button_names[i])) {
@@ -933,12 +953,12 @@ static int Host_SaveOptions(void) {
         "square_pixels = %s\n"
         "disable_dithering = %s\n"
         "geometry_correction = %s\n"
+        "frame_interpolation = %s\n"
         "antialiasing = %s\n"
         "model_filtering = %s\n"
-        "dynamic_lighting = %s\n"
-        "frame_interpolation = %s\n"
-        "effect_geometry_correction = %s\n"
         "widescreen = %s\n"
+        "dynamic_lighting = %s\n"
+        "effect_geometry_correction = %s\n"
 #ifdef PE_PS5_GPU_NATIVE
         "sprite_filtering = %s\nmovie_cleanup = %u\ngameplay_fill = %s\nfsr1 = %s\nfsr1_sharpness = %u\nmodel_fill_lighting = %u\nparticle_lighting = %s\ndialogue_text = %s\ntriangle_menu_font = %s\nmovie_blur = %s\nmovie_presentation = %u\nbattle_debris_3d = %u\nplayer_shadow = %u\n"
 #endif
@@ -946,7 +966,8 @@ static int Host_SaveOptions(void) {
         "[audio]\n"
         "volume = %u\n\n"
         "[game]\n"
-        "speed = %u\n\n"
+        "speed = %u\n"
+        "speed_toggle = %s\n\n"
         "[controls]\n"
         "field_run_threshold = %u\n\n"
         "[discs]\n"
@@ -956,17 +977,18 @@ static int Host_SaveOptions(void) {
         host_options.aspect ? "true" : "false",
         host_options.dither ? "true" : "false",
         host_options.geometry_correction ? "true" : "false",
+        host_options.frame_interpolation ? "true" : "false",
         host_options.antialiasing ? "true" : "false",
         host_options.model_filtering ? "true" : "false",
-        host_options.dynamic_lighting ? "true" : "false",
-        host_options.frame_interpolation ? "true" : "false",
-        host_options.effect_geometry_correction ? "true" : "false",
         host_options.widescreen ? "true" : "false",
+        host_options.dynamic_lighting ? "true" : "false",
+        host_options.effect_geometry_correction ? "true" : "false",
 #ifdef PE_PS5_GPU_NATIVE
         host_options.sprite_filtering?"true":"false",(unsigned)host_options.movie_cleanup,host_options.gameplay_fill ? "true" : "false",host_options.fsr1 ? "true" : "false",(unsigned)host_options.fsr1_sharpness,(unsigned)host_options.model_fill_lighting,host_options.particle_lighting?"true":"false",host_options.dialogue_text?"true":"false",host_options.triangle_menu_font?"true":"false",host_options.movie_presentation==1?"true":"false",(unsigned)host_options.movie_presentation,(unsigned)host_options.battle_debris_3d,(unsigned)host_options.player_shadow,
 #endif
         host_options.volume,
         host_options.speed_factor,
+        host_options.speed_toggle ? "true" : "false",
         host_options.analog_run_threshold
     );
     Host_WriteString(file, host_options.discs[0]);
@@ -1094,29 +1116,81 @@ static int Host_CardPath(char *dst, const char *src, int capacity) {
     return 0;
 }
 
-/* Import once, retaining every legacy file and never replacing a newer card.
- * A completed-import marker prevents deleted slots reappearing at next launch. */
+/* Import each legacy save once, retaining every legacy file and never replacing a
+ * card already in the user folder. The marker lists the legacy files earlier passes
+ * considered ("bu00/<name>" lines), so saves copied beside the game after the first
+ * launch are still imported while a slot deleted after its import stays deleted.
+ * A 0.7 marker is empty: files that arrived before it was written count as listed. */
+#define HOST_CARD_MARKER_HEADER "# Legacy saves already considered for import\n"
+
 typedef struct HostCardImport {
     int ok;
-    unsigned count;
+    unsigned count, kept, rejected;
     char *created[128];
+    const char *listed;     /* the marker's list, "\n"-delimited; NULL when none */
+    SDL_Time before;        /* an empty 0.7 marker's write time, else 0 */
+    char *added;            /* entries considered by this pass, "\n"-delimited */
+    size_t added_length;
 } HostCardImport;
+
+static int Host_CardImportListed(const HostCardImport *import, const char *entry) {
+    return (import->listed && strstr(import->listed, entry)) || (import->added && strstr(import->added, entry));
+}
+
+/* Record `entry` ("\nbu00/<name>\n") as considered by this pass. */
+static int Host_CardImportRecord(HostCardImport *import, const char *entry) {
+    size_t length = strlen(entry + 1);
+    char *grown = SDL_realloc(import->added, import->added_length + length + 2);
+    if (!grown) return 0;
+    if (!import->added_length) grown[import->added_length++] = '\n';
+    memcpy(grown + import->added_length, entry + 1, length + 1);
+    import->added = grown;
+    import->added_length += length;
+    return 1;
+}
+
+static int Host_IsCardImage(const char *name) {
+    const char *dot = strrchr(name, '.');
+    static const char *const images[] = {".srm", ".mcr", ".mcd", ".gme", ".mcs", ".mc", ".psv", ".vmp"};
+    for (unsigned i = 0; dot && i < sizeof(images) / sizeof(images[0]); ++i)
+        if (!SDL_strcasecmp(dot, images[i])) return 1;
+    return 0;
+}
 
 static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char *dirname, const char *name) {
     HostCardImport *import = userdata;
-    if (strlen(name) != 20 || strncmp(name, "BASLUS-00662", 11)) return SDL_ENUM_CONTINUE;
-    char source[8192], target[4096], device[64], temporary[4160];
+    char source[8192], target[4096], device[64], temporary[4160], entry[64];
     snprintf(source, sizeof(source), "%s%s", dirname, name);
-    SDL_PathInfo info;
-    if (!SDL_GetPathInfo(source, &info) || info.type != SDL_PATHTYPE_FILE || info.size != 8192)
+    if (strlen(name) != 20 || strncmp(name, "BASLUS-00662", 11)) {
+        if (Host_IsCardImage(name)) {
+            ++import->rejected;
+            fprintf(stderr, "Memory cards: %s is a memory card image, not a PsyZ save; "
+                            "open it in the save editor to import its saves.\n", source);
+        }
         return SDL_ENUM_CONTINUE;
+    }
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(source, &info) || info.type != SDL_PATHTYPE_FILE || info.size != 8192) {
+        ++import->rejected;
+        fprintf(stderr, "Memory cards: %s is not an 8192-byte PsyZ save; not imported.\n", source);
+        return SDL_ENUM_CONTINUE;
+    }
     /* Port is encoded by the legacy directory supplied to EnumerateDirectory. */
     size_t length = strlen(dirname);
     unsigned port = length >= 4 && dirname[length - 3] == '1';
+    snprintf(entry, sizeof(entry), "\nbu%u0/%s\n", port, name);
+    if (Host_CardImportListed(import, entry)) return SDL_ENUM_CONTINUE;
+    if (!Host_CardImportRecord(import, entry)) { import->ok = 0; return SDL_ENUM_CONTINUE; }
+    SDL_Time arrived = info.create_time > info.modify_time ? info.create_time : info.modify_time;
+    if (import->before && arrived <= import->before) return SDL_ENUM_CONTINUE;
     snprintf(device, sizeof(device), "bu%u0:%s", port, name);
     Host_CardPath(target, device, sizeof(target));
     if (!*target) { Host_CardDiagnostic("import-card-callback", device); import->ok = 0; return SDL_ENUM_CONTINUE; }
-    if (SDL_GetPathInfo(target, &info)) return SDL_ENUM_CONTINUE;
+    if (SDL_GetPathInfo(target, &info)) {
+        ++import->kept;
+        fprintf(stderr, "Memory cards: kept %s; the save of the same name in %s was not imported.\n", target, dirname);
+        return SDL_ENUM_CONTINUE;
+    }
     if (import->count >= 128) { Host_CardDiagnostic("import-count-limit", source); import->ok = 0; return SDL_ENUM_CONTINUE; }
     size_t bytes = 0;
     void *data = SDL_LoadFile(source, &bytes);
@@ -1148,38 +1222,77 @@ static int Host_InstallCardPaths(const char *base) {
     char marker[4096], card[4096];
     if (Host_CardPath(card, "bu00:*", sizeof(card)) || !*card) { Host_CardDiagnostic("install-card-callback", "bu00:*"); return 0; }
     snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(card) - 5, card);
+    HostCardImport import = {.ok = 1};
     SDL_PathInfo info;
-    if (!SDL_GetPathInfo(marker, &info)) {
-        HostCardImport import = {.ok = 1};
-#ifdef PE_PS5
-        char *cwd = SDL_malloc(strlen(host_data_root) + 2);
-        if (!cwd) { Host_CardDiagnostic("import-root-allocation", host_data_root); return 0; }
-        snprintf(cwd, strlen(host_data_root) + 2, "%s/", host_data_root);
-        if (base && base[0] != '/') base = NULL;
-#else
-        char *cwd = SDL_GetCurrentDirectory();
-#endif
-        const char *roots[] = {cwd, base};
-        for (unsigned root = 0; root < 2; ++root) if (roots[root]) {
-            for (unsigned port = 0; port < 2; ++port) {
-                char source[8192];
-                snprintf(source, sizeof(source), "%sbu%u0", roots[root], port);
-                if (SDL_GetPathInfo(source, &info) && info.type == SDL_PATHTYPE_DIRECTORY &&
-                    !SDL_EnumerateDirectory(source, Host_ImportCard, &import)) { Host_CardDiagnostic("import-enumerate", source); import.ok = 0; }
-            }
-        }
-        SDL_free(cwd);
-        if (import.ok && !SDL_SaveFile(marker, "", 0)) {
-            Host_CardDiagnostic("import-marker-save", marker);
-            SDL_RemovePath(marker);
-            import.ok = 0;
-        }
-        for (unsigned i = 0; i < import.count; ++i) {
-            if (!import.ok) SDL_RemovePath(import.created[i]);
-            SDL_free(import.created[i]);
-        }
-        if (!import.ok) return 0;
+    size_t bytes = 0;
+    char *list = NULL;
+    if (SDL_GetPathInfo(marker, &info)) {
+        if (!(list = SDL_LoadFile(marker, &bytes))) return 0;
+        if (!bytes) import.before = info.modify_time;
     }
+    /* "\n" + list + "\n" lets every entry be found as "\n<entry>\n". */
+    char *listed = SDL_malloc(bytes + 3);
+    if (!listed) { SDL_free(list); return 0; }
+    listed[0] = '\n';
+    memcpy(listed + 1, list ? list : "", bytes);
+    listed[bytes + 1] = '\n';
+    listed[bytes + 2] = '\0';
+    import.listed = listed;
+
+#ifdef PE_PS5
+    char *cwd = SDL_malloc(strlen(host_data_root) + 2);
+    if (!cwd) { Host_CardDiagnostic("import-root-allocation", host_data_root); SDL_free(listed); SDL_free(list); return 0; }
+    snprintf(cwd, strlen(host_data_root) + 2, "%s/", host_data_root);
+    if (base && base[0] != '/') base = NULL;
+#else
+    char *cwd = SDL_GetCurrentDirectory();
+#endif
+    const char *roots[] = {cwd, base};
+    for (unsigned root = 0; root < 2; ++root) if (roots[root]) {
+        for (unsigned port = 0; port < 2; ++port) {
+            char source[8192];
+            snprintf(source, sizeof(source), "%sbu%u0", roots[root], port);
+            if (SDL_GetPathInfo(source, &info) && info.type == SDL_PATHTYPE_DIRECTORY &&
+                !SDL_EnumerateDirectory(source, Host_ImportCard, &import)) { Host_CardDiagnostic("import-enumerate", source); import.ok = 0; }
+        }
+    }
+    SDL_free(cwd);
+    /* Rewrite the marker when this pass considered anything, and always replace an
+     * empty 0.7 marker or a missing one, so the list format takes over. */
+    if (import.ok && (!list || !bytes || import.added_length)) {
+        size_t header = strlen(HOST_CARD_MARKER_HEADER);
+        int has_header = bytes >= header && !memcmp(list, HOST_CARD_MARKER_HEADER, header);
+        size_t extra = import.added_length ? import.added_length - 1 : 0;
+        size_t total = (has_header ? 0 : header) + bytes + extra;
+        char *text = SDL_malloc(total + 1);
+        if (!text) import.ok = 0;
+        else {
+            size_t at = 0;
+            if (!has_header) { memcpy(text, HOST_CARD_MARKER_HEADER, header); at = header; }
+            if (bytes) { memcpy(text + at, list, bytes); at += bytes; }
+            if (extra) { memcpy(text + at, import.added + 1, extra); at += extra; }
+            /* Replace the list whole: a torn write would bring deleted slots back. */
+            char temporary[4160];
+            snprintf(temporary, sizeof(temporary), "%s.tmp", marker);
+            if (!SDL_SaveFile(temporary, text, at) || !SDL_RenamePath(temporary, marker)) {
+                SDL_RemovePath(temporary);
+                import.ok = 0;
+            }
+            SDL_free(text);
+        }
+    }
+    for (unsigned i = 0; i < import.count; ++i) {
+        if (!import.ok) SDL_RemovePath(import.created[i]);
+        SDL_free(import.created[i]);
+    }
+    SDL_free(import.added);
+    SDL_free(listed);
+    SDL_free(list);
+    if (!import.ok) return 0;
+    if (import.count || import.kept)
+        fprintf(stderr, "Memory cards: imported %u old save(s); kept %u current save(s) over older copies.\n",
+                import.count, import.kept);
+    fprintf(stderr, "Memory cards: %.*s (bu00 is card 1, bu10 card 2)\n", (int)strlen(card) - 6, card);
     Psyz_AdjustPathCB(Host_CardPath);
     return 1;
 }
@@ -1192,10 +1305,11 @@ static void Host_InitOptions(int enabled) {
     host_options.model_filtering = 0;
     host_options.dynamic_lighting = 0;
     host_options.effect_geometry_correction = 0;
-    host_options.frame_interpolation = 1; /* Owner requested display-only 60 Hz; saved explicit choice loads afterward. */
 #ifdef PE_PS5_GPU_NATIVE
+    host_options.frame_interpolation = 1; /* Owner requested display-only 60 Hz; saved explicit choice loads afterward. */
     host_options.widescreen = 1; /* Genuine wide default only when no saved choice. */
 #else
+    host_options.frame_interpolation = 0;
     host_options.widescreen = 0;
 #endif
 #ifdef PE_PS5_GPU_NATIVE
@@ -1214,6 +1328,7 @@ static void Host_InitOptions(int enabled) {
 #endif
     host_options.volume = 100;
     host_options.speed_factor = 2;
+    host_options.speed_toggle = 0;
     host_options.analog_run_threshold = 85;
     Boot_InitHostBindings();
 #ifdef PE_PS5
@@ -1350,19 +1465,24 @@ static void Host_ApplyOptions(SDL_Window *window) {
 #endif
     Psyz_VideoSetAspectMode(host_options.widescreen ? PSYZ_ASPECT_DISPLAY : (PsyzAspectMode)host_options.aspect);
     Psyz_VideoSetDitheringMode((PsyzDitherMode)host_options.dither);
+    Psyz_GpuSetFrameInterpolation(host_options.frame_interpolation);
     Psyz_VideoSetGeometryCorrection(host_options.geometry_correction != 0);
     Psyz_VideoSetAntialiasing(host_options.antialiasing != 0);
     Psyz_VideoSetModelFiltering(host_options.model_filtering != 0);
-#ifdef PE_PS5_GPU_NATIVE
-    Psyz_GpuSetFrameInterpolation(host_options.frame_interpolation != 0);
-    /* Effective admission is reported separately; never overwrite the request. */
     Psyz_VideoSetDynamicLighting(host_options.dynamic_lighting != 0);
     Psyz_VideoSetEffectGeometryCorrection(host_options.effect_geometry_correction != 0);
-    if(window) {
-        host_options.dynamic_lighting=Psyz_VideoGetDynamicLighting();
-        host_options.effect_geometry_correction=Psyz_VideoGetEffectGeometryCorrection();
-    }
+    /* An allocation failure keeps the last working renderer configuration.
+     * Before window creation the getters do not yet reflect pending options. */
+    if (window) {
+#ifndef PE_PS5_GPU_NATIVE
+        host_options.scale = Psyz_VideoGetInternalResolution();
+        host_options.antialiasing = Psyz_VideoGetAntialiasing();
+        host_options.geometry_correction = Psyz_VideoGetGeometryCorrection();
+        host_options.model_filtering = Psyz_VideoGetModelFiltering();
 #endif
+        host_options.dynamic_lighting = Psyz_VideoGetDynamicLighting();
+        host_options.effect_geometry_correction = Psyz_VideoGetEffectGeometryCorrection();
+    }
     Psyz_VideoSetWidescreen(host_options.widescreen != 0);
 #ifdef PE_PS5_GPU_NATIVE
     static int appliedBackgrounds=-1;
@@ -1840,6 +1960,9 @@ static void Host_ApplySettingsAction(
         if (threshold < 0) threshold = 0;
         if (threshold > 100) threshold = 100;
         host_options.analog_run_threshold = (unsigned)threshold;
+    } else if (state->page == HOST_PAGE_CONTROLS && state->row == HOST_SPEED_MODE_ROW) {
+        host_options.speed_toggle = !host_options.speed_toggle;
+        Host_ResetSpeedHold();
     } else if (state->row == 0) {
         state->bind_device = (state->bind_device == HOST_BIND_CONTROLLER)
                                  ? HOST_BIND_KEYBOARD
@@ -1955,7 +2078,8 @@ static void Host_ProcessSettingsPointer(
     if (hitRow >= 0) {
         int pureCount = Host_SettingsPureRowCount(state->page);
         int isStepper = hitRow < pureCount &&
-                        !(state->page == HOST_PAGE_CONTROLS && hitRow >= 1 && hitRow != HOST_ANALOG_RUN_ROW) &&
+                        !(state->page == HOST_PAGE_CONTROLS && hitRow >= 1 && hitRow != HOST_ANALOG_RUN_ROW &&
+                          hitRow != HOST_SPEED_MODE_ROW) &&
                         state->page != HOST_PAGE_IMAGES &&
                         !(state->page==HOST_PAGE_MODS && hitRow>0
 #ifdef PE_PS5_GPU_NATIVE
@@ -2354,8 +2478,8 @@ static void Host_Settings(SDL_Window *game) {
 #endif
     #ifdef PE_PS5_GPU_NATIVE
     pe_mod_panel_set_native_close(Host_RegistryClose);
-    #endif
     if(host_registry_open_pending){host_registry_open_pending=0;Host_RegistryGoTo(&s_overlayState,host_registry_open_scope,host_registry_open_path);}
+    #endif
     while (s_overlayState.open) {
         int hd_was_busy=Host_HdBusy();Host_HdPoll();
         if(hd_was_busy || Host_HdBusy())s_overlayState.dirty=1;
@@ -2604,6 +2728,11 @@ static bool Host_SpeedHoldEvent(const SDL_Event *event) {
     }
     int any = host_speed_key_held;
     for (unsigned i = 0; i < 16; ++i) any |= host_speed_pads[i].held;
+    if (host_options.speed_toggle) {
+        if (any && !host_speed_was_held) host_speed_toggled = !host_speed_toggled;
+        host_speed_was_held = any;
+        any = host_speed_toggled;
+    }
     Host_SetSpeed(any ? host_options.speed_factor : 1);
     return consumed; /* axis and removal events still reach the pad backend */
 }
@@ -2771,9 +2900,10 @@ static void Host_DescribeCrash(char *out, size_t size) {
 #else
                      "Graphics: render resolution %ux (renderer %ux), fullscreen %s, aspect ratio %s, "
 #endif
-                     "dithering %s, geometry correction %s, antialiasing %s, model textures %s\r\n"
+                     "dithering %s, geometry correction %s, antialiasing %s, model textures %s, "
+                     "dynamic lighting %s, effect geometry %s\r\n"
                      "Audio: master volume %u%%\r\n"
-                     "Controls: speed-up %ux while held, field run threshold %u\r\n"
+                     "Controls: speed-up %ux while %s, field run threshold %u\r\n"
                      "Discs: disc 1 %s, disc 2 %s\r\n",
                      host_options.enabled && *host_options.user_file ? Host_CrashFileName(host_options.user_file)
                                                                       : "none (defaults, not saved)",
@@ -2786,7 +2916,11 @@ static void Host_DescribeCrash(char *out, size_t size) {
                      kSwitchNames[host_options.fullscreen != 0],
                      kAspectNames[host_options.aspect != 0], kDitherNames[host_options.dither != 0],
                      kSwitchNames[host_options.geometry_correction != 0], kAntialiasNames[host_options.antialiasing != 0],
-                     kFilterNames[host_options.model_filtering != 0], host_options.volume, host_options.speed_factor,
+                     kFilterNames[host_options.model_filtering != 0],
+                     kSwitchNames[host_options.dynamic_lighting != 0],
+                     kSwitchNames[host_options.effect_geometry_correction != 0],
+                     host_options.volume, host_options.speed_factor,
+                     host_options.speed_toggle ? "toggled on" : "held",
                      host_options.analog_run_threshold, Host_CrashFileName(host_options.discs[0]),
                      Host_CrashFileName(host_options.discs[1]));
     Host_CrashAppend(out, size, &used, "Keyboard:");
@@ -2912,7 +3046,8 @@ static void Host_DescribeSaveData(char *out, size_t size) {
 static void Host_PrintHelp(const char *program_name) {
     printf(
         "Usage: %s [--disc <USA Disc 1 CUE/BIN>] [--disc2 <USA Disc 2 CUE/BIN>] [--choose-discs] "
-        "[--geometry-correction 0|1] [--antialiasing 0|1] [--model-filtering 0|1] [--widescreen 0|1] "
+        "[--geometry-correction 0|1] [--antialiasing 0|1] [--model-filtering 0|1] [--widescreen 0|1] [--frame-interpolation 0|1] "
+        "[--dynamic-lighting 0|1] [--effect-geometry-correction 0|1] "
         "[--headless | --headless-gpu] [--internal-resolution 1..8] [--frame-limit N] [--control-at N] "
         "[--dump-vram PATH] [--dump-frame PATH] [--dump-audio PATH] [--pad-at VBLANK:BUTTON_MASK ...] "
         "[--test-crash-after N | --test-abort-after N]\n",
@@ -2923,6 +3058,7 @@ static void Host_PrintHelp(const char *program_name) {
     printf("--headless uses native-resolution software rendering; --headless-gpu keeps the actual GPU window hidden and supports internal scaling.\n");
     printf("--dump-frame writes the rendered display as RGB888 PPM at each control/terminal boundary.\n");
     printf("--dump-audio writes stereo 44100 Hz signed-16-bit little-endian PCM; requires headless and PSYZ_AUDIO_CLOCK=video.\n");
+    printf("Headless editor capture: lighting-export PATH writes the original posed Aya mesh and PATH.vram (requires --dump-vram).\n");
     printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
     printf("Headless fixtures only: --diagnostic-hp-at VBLANK:EXPECTED_HP:VALUE (requires --frame-limit; output is marked coverage-only)\n");
     printf("--test-crash-after N / --test-abort-after N crash on purpose at VBlank N to check the crash report (its path is printed).\n");
@@ -3083,10 +3219,16 @@ int main(int argc, char **argv) {
         } else if (!strcmp(argv[arg], "--geometry-correction") ||
                    !strcmp(argv[arg], "--antialiasing") ||
                    !strcmp(argv[arg], "--model-filtering") ||
-                   !strcmp(argv[arg], "--widescreen")) {
+                   !strcmp(argv[arg], "--widescreen") ||
+                   !strcmp(argv[arg], "--frame-interpolation") ||
+                   !strcmp(argv[arg], "--dynamic-lighting") ||
+                   !strcmp(argv[arg], "--effect-geometry-correction")) {
             unsigned effect = !strcmp(argv[arg], "--geometry-correction") ? 1u :
                               !strcmp(argv[arg], "--antialiasing") ? 2u :
-                              !strcmp(argv[arg], "--model-filtering") ? 4u : 8u;
+                              !strcmp(argv[arg], "--model-filtering") ? 4u :
+                              !strcmp(argv[arg], "--widescreen") ? 8u :
+                              !strcmp(argv[arg], "--frame-interpolation") ? 16u :
+                              !strcmp(argv[arg], "--dynamic-lighting") ? 32u : 64u;
             if ((effect_arguments & effect) || arg + 1 >= argc ||
                 (strcmp(argv[arg+1], "0") && strcmp(argv[arg+1], "1"))) {
                 fprintf(stderr, "Missing, invalid or duplicate graphics effect (use 0 or 1)\n");
@@ -3097,7 +3239,10 @@ int main(int argc, char **argv) {
             if (effect == 1u) host_options.geometry_correction = enabled;
             else if (effect == 2u) host_options.antialiasing = enabled;
             else if (effect == 4u) host_options.model_filtering = enabled;
-            else host_options.widescreen = enabled;
+            else if(effect==8u) host_options.widescreen = enabled;
+            else if (effect == 16u) host_options.frame_interpolation=enabled;
+            else if (effect == 32u) host_options.dynamic_lighting = enabled;
+            else host_options.effect_geometry_correction = enabled;
         } else if (!strcmp(argv[arg], "--frame-limit")) {
             char *end = NULL;
             errno = 0;
@@ -3160,6 +3305,10 @@ int main(int argc, char **argv) {
             }
             if (!Host_ParseHealthEventArg(argv[++arg], argc)) {
                 return EXIT_FAILURE;
+            }
+        } else if (!strcmp(argv[arg], "--disc-env")) {
+            if (paths[0] || arg+1>=argc || !(paths[0]=SDL_GetEnvironmentVariable(SDL_GetEnvironment(),argv[++arg])) || !*paths[0]) {
+                fprintf(stderr,"Missing image environment variable\n");return EXIT_FAILURE;
             }
         } else if (!strcmp(argv[arg], "--disc") || !strcmp(argv[arg], "--disc2")) {
             int slot = !strcmp(argv[arg], "--disc2");
@@ -3371,9 +3520,12 @@ images_ready:;
         if (internal_resolution > 1 || (effect_arguments & 1u) ||
             host_options.antialiasing || host_options.model_filtering)
             Psyz_VideoSetGeometryCorrection(host_options.geometry_correction != 0);
+        Psyz_GpuSetFrameInterpolation(host_options.frame_interpolation);
         Psyz_VideoSetAntialiasing(host_options.antialiasing);
         Psyz_VideoSetModelFiltering(host_options.model_filtering);
         Psyz_VideoSetWidescreen(host_options.widescreen);
+        Psyz_VideoSetDynamicLighting(host_options.dynamic_lighting != 0);
+        Psyz_VideoSetEffectGeometryCorrection(host_options.effect_geometry_correction != 0);
     }
     /* Widescreen reads background texels to find where a room's picture
      * ends (mesh_list.c); kept on so switching it on mid-game works. */
@@ -3389,8 +3541,11 @@ images_ready:;
     if (
 #if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
         (internal_resolution>1 && !Psyz_CpuGeometryAvailable()) || Psyz_CpuGeometryRequested()!=internal_resolution
-#else
+#elif defined(PE_PS5_GPU_NATIVE)
         Psyz_VideoGetInternalResolution()!=internal_resolution
+#else
+        (!interactive || resolution_argument) &&
+        Psyz_VideoGetInternalResolution() != internal_resolution
 #endif
     ) {
         fprintf(stderr, "Requested internal resolution unavailable\n");
@@ -3399,6 +3554,7 @@ images_ready:;
     if (interactive) {
         SDL_Window *window = Psyz_GetWindow_SDL3();
         Host_ApplyOptions(window);
+        Host_SaveOptions();
     }
     mode = 0;
 

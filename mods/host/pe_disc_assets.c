@@ -5,6 +5,7 @@
 #include "pe_disc_assets.h"
 #include "pe_mod_host.h"
 #include "pe1/cdrom.h"
+#include "pe1/pe_image.h"
 #include "pe1/scene_room.h"
 
 #define PE_SECTOR 2048u
@@ -47,6 +48,23 @@ int pe_disc_room(int map, PeRoomBlobs *out) {
         !pe_run(&archive, r->start + r->scratchSectors, r->textureSectors, &out->texture, &out->texture_size) ||
         !pe_run(&archive, r->start + r->scratchSectors + r->textureSectors, r->roomSectors, &out->data, &out->data_size)) {
         pe_mod_log(NULL, "disc: room M%03d could not be read", map);
+        pe_disc_room_free(out);
+        return 0;
+    }
+    return 1;
+}
+
+/* Player bundles use the same immutable containers, without a room or live actor. */
+int pe_disc_player(int bank, PeRoomBlobs *out) {
+    PeDiscFile archive;
+    uint32_t t, m;
+    memset(out, 0, sizeof *out);
+    if ((bank != 10 && bank != 12 && bank != 13) || !pe_archive(&archive)) return 0;
+    t = bank + 3; m = bank + 8;
+    if (g_PeImageSectorTable[t + 1] <= g_PeImageSectorTable[t] ||
+        g_PeImageSectorTable[m + 1] <= g_PeImageSectorTable[m] ||
+        !pe_run(&archive, g_PeImageSectorTable[t], g_PeImageSectorTable[t + 1] - g_PeImageSectorTable[t], &out->texture, &out->texture_size) ||
+        !pe_run(&archive, g_PeImageSectorTable[m], g_PeImageSectorTable[m + 1] - g_PeImageSectorTable[m], &out->data, &out->data_size)) {
         pe_disc_room_free(out);
         return 0;
     }

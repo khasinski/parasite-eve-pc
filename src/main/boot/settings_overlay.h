@@ -171,11 +171,18 @@ static const unsigned kCpuScales[]={1,2,4,6,8};
 static int GetScale(void){for(int i=0;i<5;++i)if(host_options.scale==kCpuScales[i])return i;return 0;}
 static void SetScale(int i){if(i<0 || i>=5)return;host_options.scale=kCpuScales[i];}
 #else
+static const unsigned kScaleValues[] = {1, 2, 4, 6, 8};
 static const char *const kScaleNames[] = {
-    "1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x"
+    "1x", "2x", "4x", "6x", "8x"
 };
-ACCESSORS(Scale, ClampIndex((int)host_options.scale - 1, COUNT_OF(kScaleNames)),
-          host_options.scale = (unsigned)(i + 1))
+static int ScaleIndex(unsigned scale) {
+    for (int i = 0; i < COUNT_OF(kScaleValues); ++i) {
+        if (scale <= kScaleValues[i]) return i;
+    }
+    return COUNT_OF(kScaleValues) - 1;
+}
+ACCESSORS(Scale, ScaleIndex(host_options.scale),
+          host_options.scale = kScaleValues[ClampIndex(i, COUNT_OF(kScaleValues))])
 
 #endif
 
@@ -223,8 +230,6 @@ ACCESSORS(MovieBlur,host_options.movie_blur!=0,host_options.movie_blur=i)
 ACCESSORS(FsrSharpness,ClampIndex(host_options.fsr1_sharpness,3),host_options.fsr1_sharpness=i)
 static const char *const kModelFillNames[]={"Original","Soft fill","World key fill"};
 ACCESSORS(ModelFill,ClampIndex(host_options.model_fill_lighting,3),host_options.model_fill_lighting=i)
-#endif
-#ifdef PE_PS5_GPU_NATIVE
 static const char *const kNativeOutputNames[]={"Always fullscreen"};
 ACCESSORS(NativeOutput,0,(void)i)
 ACCESSORS(GameplayFill,host_options.gameplay_fill!=0,host_options.gameplay_fill=i)
@@ -264,6 +269,16 @@ static const OverlaySetting kSystem[]={
 };
 ACCESSORS(DynamicLighting,host_options.dynamic_lighting!=0,host_options.dynamic_lighting=i)
 ACCESSORS(EffectGeometryCorrection,host_options.effect_geometry_correction!=0,host_options.effect_geometry_correction=i)
+#else
+static const char *const kFrameRateNames[]={"30 Hz (original)","60 Hz (interpolated)"};
+ACCESSORS(FrameInterpolation,host_options.frame_interpolation!=0,
+          host_options.frame_interpolation=i)
+
+ACCESSORS(DynamicLighting, host_options.dynamic_lighting != 0,
+          host_options.dynamic_lighting = i)
+
+ACCESSORS(EffectGeometryCorrection, host_options.effect_geometry_correction != 0,
+          host_options.effect_geometry_correction = i)
 #endif
 static const OverlaySetting kGraphics[] = {
 #if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
@@ -309,20 +324,24 @@ static const OverlaySetting kGraphics[] = {
             kDitherNames, Dither),
 #if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
     SETTING("Geometry correction", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
-#else
-#ifndef PE_PS5_GPU_NATIVE
-    SETTING("Geometry correction", "Subpixel vertex precision and perspective-correct 3D textures.", kSwitchNames, GeometryCorrection),
-#endif
-#endif
-#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
     SETTING("Antialiasing", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
-#else
-    SETTING("Antialiasing", "Smoother edges: twice each axis, four samples per pixel. Uses more GPU time and memory.", kAntialiasNames, Antialiasing),
-#endif
-#if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
     SETTING("Model textures", "This GPU option is unavailable on the CPU renderer.", kUnavailableNames, Unavailable),
-#else
+#elif defined(PE_PS5_GPU_NATIVE)
+    SETTING("Antialiasing", "Smoother edges: twice each axis, four samples per pixel. Uses more GPU time and memory.", kAntialiasNames, Antialiasing),
     SETTING("Model filtering", "Bilinear filtering of the original 3D texture; separate from HD player replacements.", kFilterNames, ModelFiltering),
+#else
+    SETTING("Geometry correction", "Subpixel vertex precision and perspective-correct 3D textures.",
+            kSwitchNames, GeometryCorrection),
+    SETTING("Antialiasing", "Smoother edges: twice each axis, four samples per pixel. Uses more GPU time and memory.",
+            kAntialiasNames, Antialiasing),
+    SETTING("Model textures", "Bilinear filtering for 3D models; backgrounds and text keep original sampling.",
+            kFilterNames, ModelFiltering),
+    SETTING("Gameplay display", "Interpolate models and scrolling between original game frames. Game speed and input timing stay original.",
+            kFrameRateNames, FrameInterpolation),
+    SETTING("Dynamic lighting", "Smooth 3D directional lighting on characters and monsters.",
+            kSwitchNames, DynamicLighting),
+    SETTING("Effect geometry", "Subpixel vertex precision for spell and particle effects.",
+            kSwitchNames, EffectGeometryCorrection),
 #endif
 };
 
@@ -384,7 +403,7 @@ static int Host_SettingsPureRowCount(int page) {
     if(page==OVERLAY_PAGE_MODS||page==OVERLAY_PAGE_CHEATS||page==OVERLAY_PAGE_STATES||page==OVERLAY_PAGE_DISCS)return Host_ModernRowCount(page);
 #endif
     if (page == OVERLAY_PAGE_GRAPHICS) return COUNT_OF(kGraphics);
-    if (page == OVERLAY_PAGE_CONTROLS) return 2 + HOST_BINDING_COUNT;
+    if (page == OVERLAY_PAGE_CONTROLS) return 3 + HOST_BINDING_COUNT;
     if (page == OVERLAY_PAGE_AUDIO) return COUNT_OF(kAudio);
     if (page == OVERLAY_PAGE_MODS) {
 #ifdef PE_PS5_GPU_NATIVE
@@ -405,14 +424,14 @@ static int Host_SettingsTotalRowCount(int page) {
 }
 
 enum {
-    OVERLAY_CONTROLS_ITEM_COUNT = HOST_BINDING_COUNT + 1,
+    OVERLAY_CONTROLS_ITEM_COUNT = HOST_BINDING_COUNT + 2,
     OVERLAY_CONTROLS_VISIBLE_BINDINGS = OVERLAY_VISIBLE_CONTROLS - 1,
     OVERLAY_CONTROLS_MAX_SCROLL = OVERLAY_CONTROLS_ITEM_COUNT - OVERLAY_CONTROLS_VISIBLE_BINDINGS
 };
 
 static int Host_SettingsVisibleSettingCount(int page) {
     (void)page;
-    return OVERLAY_VISIBLE_CONTROLS;
+    return COUNT_OF(kGraphics)>OVERLAY_VISIBLE_CONTROLS ? COUNT_OF(kGraphics) : OVERLAY_VISIBLE_CONTROLS;
 }
 
 static int Host_SettingsVisibleRowCount(int page) {
@@ -945,6 +964,9 @@ static void PaintRows(const Painter *p) {
                     char value[32];
                     snprintf(value, sizeof(value), "%u%%", host_options.analog_run_threshold);
                     PaintValueRow(p, "Field run threshold", value, mid, baseline, selected, 0, label);
+                } else if (row == HOST_SPEED_MODE_ROW) {
+                    PaintValueRow(p, "Speed button", host_options.speed_toggle ? "Toggle" : "Hold",
+                                  mid, baseline, selected, 0, label);
                 } else {
                     int idx = row - 1;
                     int capturing = selected && p->state->capturing_binding;
@@ -1104,7 +1126,12 @@ static const char *OverlayRowHelp(const HostOverlayState *state) {
             return "Left-stick deflection needed to run in the field. Lower values start running sooner.";
         }
         if (state->row == HOST_SPEED_BINDING + 1) {
-            return "Hold to speed up. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds.";
+            return host_options.speed_toggle
+                       ? "Press to speed up, again for normal. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds."
+                       : "Hold to speed up. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds.";
+        }
+        if (state->row == HOST_SPEED_MODE_ROW) {
+            return "Hold: fast while the speed button is held. Toggle: each press switches it on or off.";
         }
         return "Press Enter or South button to rebind. Duplicate bindings swap automatically.";
     }
@@ -1470,7 +1497,7 @@ static void Host_WriteOverlayQuad(
 static int s_overlayIsFps;
 static int Host_UploadOverlaySurfaceAndVertices(SDL_GPUDevice *device) {
     if (s_overlaySurface.w <= 0 || s_overlaySurface.h <= 0 || s_overlayWindowW <= 0 ||
-        s_overlayWindowH <= 0) {
+        s_overlayWindowH <= 0 || s_overlayVertexBuffer == NULL) {
         return 0;
     }
     if (s_overlayTexture == NULL || s_overlayTextureW != s_overlaySurface.w ||
@@ -1488,11 +1515,13 @@ static int Host_UploadOverlaySurfaceAndVertices(SDL_GPUDevice *device) {
         info.layer_count_or_depth = 1;
         info.num_levels = 1;
         s_overlayTexture = SDL_CreateGPUTexture(device, &info);
-        s_overlayTextureW = s_overlaySurface.w;
-        s_overlayTextureH = s_overlaySurface.h;
         if (s_overlayTexture == NULL) {
+            s_overlayTextureW = 0;
+            s_overlayTextureH = 0;
             return 0;
         }
+        s_overlayTextureW = s_overlaySurface.w;
+        s_overlayTextureH = s_overlaySurface.h;
     }
 
     OverlayGpuVertex verts[12];
@@ -1624,10 +1653,10 @@ static void Host_OverlayRefreshGPU(
     } else {
         OverlayPaint(&s_overlaySurface, state, &raster);
     }
-    if (Host_EnsureOverlayPipeline(device, SDL_GetGPUSwapchainTextureFormat(device, window))) {
-        Host_UploadOverlaySurfaceAndVertices(device);
+    if (Host_EnsureOverlayPipeline(device, SDL_GetGPUSwapchainTextureFormat(device, window)) &&
+        Host_UploadOverlaySurfaceAndVertices(device)) {
+        state->dirty = 0;
     }
-    state->dirty = 0;
 }
 
 /* Reuses the existing Plex raster, overlay pipeline/context and transfer
@@ -1657,13 +1686,18 @@ static void Host_OverlayRenderGPU(SDL_GPUCommandBuffer *command, SDL_GPURenderPa
     if (s_prevOverlayRender != NULL) {
         s_prevOverlayRender(command, pass);
     }
-    #ifdef PE_PS5_GPU_NATIVE
+#ifdef PE_PS5_GPU_NATIVE
     if(!s_overlayState.open&&host_options.show_fps)Host_FpsRefreshGPU();
-    #endif
     if ((!s_overlayState.open&&(!host_options.show_fps||!s_overlayIsFps)) || s_overlayPipeline == NULL || s_overlayTexture == NULL ||
         s_overlayVertexBuffer == NULL || s_overlayWindowW <= 0 || s_overlayWindowH <= 0) {
         return;
     }
+#else
+    if (!s_overlayState.open || s_overlayPipeline == NULL || s_overlayTexture == NULL ||
+        s_overlayVertexBuffer == NULL || s_overlayWindowW <= 0 || s_overlayWindowH <= 0) {
+        return;
+    }
+#endif
 
     static const float kIdentityMvp[16] = {
         1.0f, 0.0f, 0.0f, 0.0f,

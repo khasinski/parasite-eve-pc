@@ -1,9 +1,9 @@
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 #include "pe_state_render.h"
 #endif
-#include <psyz/gpu.h>
 #include "common.h"
 #include <math.h>
+#include <psyz/gpu.h>
 #include <psyz/video.h>
 #include "pe1/entity_frame_update.h"
 #include "pe1/field_actor.h"
@@ -26,6 +26,7 @@ typedef struct {
 static void Pgxp_StoreBoneMatrix(const RenderMatrix *addr, const PgxpBoneMatrix *mat);
 static void Pgxp_LoadBoneMatrix(const RenderMatrix *addr, PgxpBoneMatrix *out);
 static void Pgxp_CopyBoneMatrix(const RenderMatrix *dst, const RenderMatrix *src);
+static void Render_RegisterInterpolationPackets(RenderObjectEntity *object,int reset);
 
 /* Original USA resident model-rendering data. The historical "identity"
  * name denotes an X-reflecting basis: its first signed halfword is -4096. */
@@ -1061,6 +1062,8 @@ void Anim_SetInterpRate(RenderObjectEntity *obj, int arg1) {
     obj->fade_blue_step = divisor;
 }
 
+/* Presentation metadata only; surviving actors can acquire fresh history
+ * after a room flush without rebuilding or modifying their native packets. */
 static void Render_RegisterInterpolationPackets(RenderObjectEntity *object,int reset) {
     if(!object->header||!object->primitive_buffer)return;
     unsigned char *packet=object->primitive_buffer;

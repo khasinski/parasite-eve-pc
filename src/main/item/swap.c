@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe_hooks.h"
 #include "pe1/aya.h"
 #include "pe1/draw_state.h"
 #include "pe1/inventory.h"
@@ -351,6 +352,7 @@ void Menu_DrawArmorItemDetail(int slot) {
         }
 
         Menu_DrawSlotRow(entry, display);
+        PE_HOOK(PE_HOOK_SLOT_DRAWN, (&(PeHookSlotDrawn){g_InvActiveItemList, slot}));
     }
 }
 
@@ -496,6 +498,8 @@ int Inv_RebuildWithSlotLimit(int fromMode, int fromIndex, int toMode, int toInde
     g_InvSlotLimit = Inv_GetAyaSlotLimit();
     g_InvSelectionBits = g_InvSelectionBitStorage;
     g_InvSelectionBitWords = 2;
+    PeHookStorageTransfer hook = {fromMode, fromIndex, toMode, toIndex, 0};
+    if (PE_HOOK(PE_HOOK_STORAGE_TRANSFER, &hook)) return hook.result;
     if (fromMode == 0x34 && toMode == fromMode) {
         SwapSlots(&g_InvActiveItemList[fromIndex], &g_InvActiveItemList[toIndex]);
         Inv_RebuildSelectableMask();

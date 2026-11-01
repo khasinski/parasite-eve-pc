@@ -33,7 +33,8 @@ typedef struct PeModel {
     uint32_t anim_size;
 } PeModel;
 
-/* Load a model (PE_MODEL_ROOM: room and bank slot on the bound disc; PE_MODEL_CALLBACK: the
+/* Load a model (PE_MODEL_ROOM: room and bank slot on the bound disc; PE_MODEL_SKIN: standalone
+ * skin folder or native player bank, decoded with player idle; PE_MODEL_CALLBACK: the
  * provider's loader). The last few are kept, so loading again is cheap; the model stays valid until
  * pe_model_release or until it falls out of that cache. NULL (and a log line) on failure. */
 const PeModel *pe_model_load(const PeModelSource *src);
@@ -42,6 +43,10 @@ void pe_model_release_all(void);
 /* Decode a model from a room's blobs (for tests and pe_model_load). 1 on success. */
 struct PeRoomBlobs;
 int pe_model_decode(const struct PeRoomBlobs *room, int slot, PeModel *out);
+/* Player bundles have slot 0 and idle row 0x15, independent of enemy row grouping. */
+int pe_model_decode_player(const struct PeRoomBlobs *room, PeModel *out);
+/* Internal source loader, isolated in pe_model_skin.c; never equips or uploads to game VRAM. */
+int pe_model_skin_load(const PeModelSource *src, PeModel *out);
 void pe_model_free(PeModel *m);
 
 /* The idle animation: its frame count (at least 1), and one frame's root translation and per-part

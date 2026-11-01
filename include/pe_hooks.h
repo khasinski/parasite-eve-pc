@@ -32,7 +32,8 @@ typedef enum PeHookId {
     PE_HOOK_PAD_MAP,     /* PeHookPadMap: local run-button mapping for this poll */
     PE_HOOK_ACTOR_STEP,  /* PeHookActorStep: local scripted speed or animation increment */
     PE_HOOK_ITEM_USE,    /* int *: Battle_ApplyDamage item id before its effects */
-    PE_HOOK_TEXT_LOOKUP, /* PeHookTextLookup: item name/description lookup result */
+    PE_HOOK_TEXT_LOOKUP, /* PeHookTextLookup: a resident text table lookup's result (system messages,
+                          * item names and descriptions, the rest); may be replaced */
     PE_HOOK_INVENTORY_SORTED, /* NULL: Aya's native bag sort completed */
     PE_HOOK_INVENTORY_HEADER, /* MenuWidgetNode *: after Aya's Quantity header is drawn */
     PE_HOOK_EQUIP_EFFECT, /* PeHookEquipEffect: effect icon draw; nonzero replaces sprite */
@@ -53,6 +54,16 @@ typedef enum PeHookId {
     PE_HOOK_FRAME_DRAWN, /* NULL: Draw_RenderFrame, the previous frame finished drawing (DrawSync)
                           * and not yet shown; its buffer is g_RenderDrawEnvArray[1 - g_ActiveDrawSlot] */
     PE_HOOK_NEW_GAME,    /* PeHookNewGame: a new game starts; the host has reset every save record */
+    PE_HOOK_TEXT_PAGE,   /* PeHookTextPage: a dialogue box found its page in the room's message bank;
+                          * the text it draws may be replaced */
+    PE_HOOK_TIM_UPLOAD,  /* TimFile *: Asset_LoadTimImage, before the image goes to VRAM (fonts,
+                          * backgrounds, area glyph pages); its pixels may be changed in place */
+    PE_HOOK_TEXT_GLYPH,  /* PeHookTextGlyph: optional multi-byte glyph; nonzero handles it */
+    PE_HOOK_ITEM_REMOVE, /* PeHookItemRemove: Inv_RemoveActiveListItem entry; replaceable (result = id) */
+    PE_HOOK_INVENTORY_REBUILD, /* NULL: Inv_RebuildSelectableMask entry, before the masks are rebuilt */
+    PE_HOOK_STORAGE_TRANSFER, /* PeHookStorageTransfer: Inv_RebuildWithSlotLimit, bag <-> storage
+                               * move; replaceable */
+    PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
     PE_HOOK_COUNT
 } PeHookId;
@@ -91,10 +102,29 @@ typedef struct PeHookScriptRandom {
     const unsigned int *next;
 } PeHookScriptRandom;
 
+/* Caller owns packet allocation, ordering, color and palette. Measurement never uploads.
+ * A provider returns nonzero only for a complete token it owns, setting bytes/advance/UV. */
+typedef struct PeHookTextGlyph {
+    const unsigned char *text;
+    unsigned bytes, advance;
+    int draw;
+    unsigned char u, v;
+} PeHookTextGlyph;
+
 typedef struct PeHookTextLookup {
-    unsigned table, index; /* table 8 = item names, 12 = item descriptions */
+    unsigned table, index; /* table 4 = system messages, 8 = item names, 12 = item descriptions,
+                            * 16 = the rest (Text_LookupTable4 / 8 / C / 10) */
     void **text;
+    int persistent; /* nonzero: editable name copied into a save; use stable byte glyphs only */
 } PeHookTextLookup;
+
+/* The box's text starts after the page's FE <id> and runs to its FF or F9. A replacement must
+ * end the same way and outlive the box; the bank itself is left as loaded. */
+typedef struct PeHookTextPage {
+    const unsigned char *bank; /* the message bank the box reads (g_TextboxMessageSource) */
+    unsigned page;             /* the page the script opened */
+    unsigned char **message;   /* the text the box will draw */
+} PeHookTextPage;
 
 typedef struct PeHookRewards {
     int exp;
@@ -174,6 +204,27 @@ typedef struct PeHookItemActions {
     int context;                  /* g_MenuItemActionContext: 0 consumables, 1 and 2 others */
     int list_id, slot;            /* g_MenuActiveItemList (0 = Aya's bag), g_MenuActiveItemSlot */
 } PeHookItemActions;
+
+/* Removing the item on slot `index` of the active list (g_InvItemPtr). A handler that keeps the
+ * slot (it took one copy off a stack) sets result to the item id it gave and returns nonzero. */
+typedef struct PeHookItemRemove {
+    int index;
+    int result;
+} PeHookItemRemove;
+
+/* Inv_RebuildWithSlotLimit's arguments: modes 0x33 (Aya's bag, by transfer-list index) and 0x34
+ * (the open storage list, g_InvActiveItemList). */
+typedef struct PeHookStorageTransfer {
+    int from_mode, from_index, to_mode, to_index;
+    int result;  /* returned by the game when a handler returns nonzero */
+} PeHookStorageTransfer;
+
+/* After Menu_DrawActiveListSlot / Menu_DrawArmorItemDetail drew row `index` of `list`, with the
+ * draw cursor back at the row's start. */
+typedef struct PeHookSlotDrawn {
+    const short *list;
+    int index;
+} PeHookSlotDrawn;
 
 typedef struct PeHookMainMenuIcon {
     int row;     /* the list row */

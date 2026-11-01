@@ -55,6 +55,9 @@ void pe_screen_open(PeScreen *s, struct MenuWidgetNode *from, int x, int y, int 
 /* The same, flush where the game's own screens sit (the inventory panel's layout, descriptor 1). */
 void pe_screen_open_game(PeScreen *s, struct MenuWidgetNode *from, int rows_visible,
                          void (*draw)(struct MenuWidgetNode *), int (*input)(struct MenuWidgetNode *, unsigned int));
+/* Opt-in list update for model browsers: Up/Down scroll normally; Left/Right
+ * reach the parent panel instead of being consumed by the native grid. */
+int pe_screen_preview_input(struct MenuWidgetNode *list, unsigned int buttons);
 void pe_screen_close(PeScreen *s);   /* back to `from` (extra panels go with it) */
 /* An extra panel on an open screen: a framed box at (x, y), `width` wide and `rows` rows tall, its
  * rows drawn by `draw` (NULL: an empty frame, e.g. for a picture the image presenter puts inside).
