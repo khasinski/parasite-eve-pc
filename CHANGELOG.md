@@ -3,8 +3,9 @@
 ## 0.10
 
 - Added an optional **Screenshot** binding in **Escape → Controls** for keyboard and controller, opening an in-game modal with issue tags, a note field (with an on-screen controller keyboard), PNG + JSON metadata export (including exact background and widescreen IDs) and optional automatic webhook upload.
+- Added an optional **Quick save** mod (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Saves are kept beside the preferences as `quicksave_<slot>.mcd` and include every mod's records; loading restarts the saved room the way a loaded save does. Works in the free field, outside battles, movies and room changes.
+- Added an optional **Cheats** mod (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod writes nothing to the game state.
 - Added a **Hold / Toggle** mode for the speed-up button in **Escape → Controls**.
-- Added optional 10-slot quick save (`pe_quicksave`, `F10`/`F11`/`F12`) and Cheats (`pe_cheats`) mods.
 - Fixed the **Combine** item action and `F1` recipe shortcut when item stacking (`pe_stacks`) is enabled so stacked ingredients in a single slot can be combined and results merge onto existing stacks.
 - Fixed Tool and Super Tool parameter transfers, Mod Catalog installs, Wayne's Mod Permits and Requisition purchases consuming or miscounting entire stacks when item stacking (`pe_stacks`) is enabled.
 - Integrated open-source PS5 payload build support (`-DPE_PS5_GAME=ON`), native GPU presentation/upscaling options (`-DPE_PS5_GPU_NATIVE=ON`), state snapshots (`src/main/state/`), particle mesh augmentation and `pe_assists` mod support (contributed by @GUMMIBRI in #42).

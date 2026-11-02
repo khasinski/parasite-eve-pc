@@ -73,6 +73,16 @@ Open **F1 → PE Enhancements** to configure them.
   Aya's outfits and character skins to unlock and wear. Skins are built from your own disc with
   the decomp bridge tools and stay hidden until present. Unlocks are kept across games in
   `pe_collection.ini`; other mods can register their own creatures and costumes.
+- **Quick save** (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to
+  the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Files
+  are kept beside the preferences as `quicksave_<slot>.mcd`; loading restarts the saved room the
+  way a loaded save does. Works in the free field, outside battles, movies and room changes.
+- **Cheats** (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle,
+  and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod
+  writes nothing to the game state.
+- **Warp** (`pe_warp`): **F1 → Warp** — jump to any story checkpoint. It sets the story-progress
+  variable and runs the room transfer on the next free field frame, never during a battle, an
+  event, a room change or a movie.
 
 Mod builds are experimental; a passing build or test does not establish full in-game compatibility.
 
