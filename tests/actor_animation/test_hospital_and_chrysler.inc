@@ -95,6 +95,35 @@ static int original_hit_on_released_target(void)
     return ok;
 }
 
+/* Stop on one of Eve's parts (M273) asks for pose 2, which the part's model
+ * has no animation for. Both pose setters must keep the current animation
+ * then, and still switch to a pose the model does have. */
+static int original_missing_action_pose(void)
+{
+    enum { ROW = 9 };
+    void *old_rows[48];
+    RenderAnimationDataHeader stand = {0}, stopped = {0};
+    BattleEntity entity = {0};
+    int ok = 1;
+    memcpy(old_rows, g_GameState.bank_rows[ROW], sizeof(old_rows));
+    memset(g_GameState.bank_rows[ROW], 0, sizeof(old_rows));
+    stand.frame_count = 5; stopped.frame_count = 8;
+    g_GameState.bank_rows[ROW][0] = &stand;
+    entity.modelIndex = ROW;
+    Entity_SetActionMode(&entity, 0);
+    if (entity.actionMode != 0 || entity.actionData != &stand || entity.animLastFrame != 4) ok = 0;
+    Entity_SetActionMode(&entity, 2);
+    if (entity.actionMode != 0 || entity.actionData != &stand || entity.animLastFrame != 4) ok = 0;
+    Entity_SetAction(&entity, 2);
+    if (entity.actionMode != 0 || entity.actionData != &stand || entity.animLastFrame != 4) ok = 0;
+    g_GameState.bank_rows[ROW][2] = &stopped;
+    Entity_SetAction(&entity, 2);
+    if (entity.actionMode != 2 || entity.actionData != &stopped || entity.animLastFrame != 7) ok = 0;
+    memcpy(g_GameState.bank_rows[ROW], old_rows, sizeof(old_rows));
+    if (ok) puts("Original action poses: missing poses keep the current animation, present ones switch");
+    return ok;
+}
+
 static int original_hospital_falling_states(void)
 {
     FieldFxState *old_script=g_FieldFxScriptState;int old_floor=g_RoomFloorY->y;u32 old_rng=Psyz_RandState();
