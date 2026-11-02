@@ -11,7 +11,7 @@ int PeStateTaskContext_Validate(const unsigned char *,size_t);
 int PeStateTaskContext_Restore(FieldFxTaskContext *,const unsigned char *,size_t);
 
 #include "pe_state_world.h"
-#define PE_STATE_TASKS_BYTES (320u+11u*(16u+PE_STATE_TASK_CONTEXT_BYTES))
+#define PE_STATE_TASKS_BYTES (704u+11u*(16u+PE_STATE_TASK_CONTEXT_BYTES))
 int PeStateTasks_HeaderSupported(unsigned,unsigned,unsigned);
 int PeStateTasks_CurrentSupported(unsigned);
 int PeStateTasks_WalkForWorld(const PeWorldState *,const unsigned char *,const unsigned char *,const unsigned char *,unsigned char *,int);

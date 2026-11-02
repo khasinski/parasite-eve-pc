@@ -12,6 +12,10 @@ int PeFieldModel_Restore(void *,size_t,const unsigned char *,size_t);
 int PeFieldModels_Walk(const unsigned char *,unsigned char *,int);
 int PeFieldModels_Ready(unsigned,int);
 void *PeFieldModels_KeyPointer(uint32_t);
+typedef struct PeFieldModelShape{uint32_t triangles,quads,colours,colourOffset,faceEnd,extent;uint16_t counts[4];}PeFieldModelShape;
+int PeFieldModel_Describe(const void*,size_t,PeFieldModelShape*);
+int PeFieldModel_MutableByte(const PeFieldModelShape*,size_t);
+int PeFieldModels_SourceDisjoint(const void*,size_t);
 #endif
 
 

@@ -316,5 +316,15 @@
     "source": "PsyZ duck_xxhash.h retained from public Mesa7b59ef27c1b09b9671bc4153c41940c3155c3af2 input",
     "notice": "notices/xxHash-BSD2.txt",
     "privateTextureImagesOrIndexIncluded": false
+  },
+  "currentExport": {
+    "selectedBuild": "game-test-point7-owned-20261102-a1",
+    "selectedPrivateEboot": "58058fe6287667b980c1a19cc4542157119a183552ed09e99e147b34d29b9520",
+    "privateSourceCohort": "97b40f82c23218e69f2cff9900377a57b0d0be759afc3d361d31df500f2998e9",
+    "scope": "PS5 public logic/data-boundary adapter only",
+    "noOriginalRetailInputDistributed": true,
+    "noOriginalDataLicenseClearanceClaim": true,
+    "retroFontLicense": "notices/OFL-ChakraPetch.txt",
+    "noSeparatePcBuild": true
   }
 }
