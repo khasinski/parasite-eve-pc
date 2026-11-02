@@ -37,6 +37,7 @@ static const struct { int first, second, result; const char *name; } s_recipes[]
 };
 static int s_recipe, s_armed = -1;
 static s16 s_bag[50];
+static uint8_t snapshot_stacks[50];
 static char s_result[96];
 
 static unsigned pe_recipe_count(void) { return g_pe_panacea ? 4 : 3; }
@@ -97,6 +98,15 @@ static void pe_result(const char *text) {
     pe_toast(text);
 }
 
+static int pe_bag_stacks_same(const s16 *snapshot) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
+    if (!stacks || !stacks->count) return memcmp(snapshot, g_AyaInventoryItems, sizeof s_bag) == 0;
+    if (memcmp(snapshot, g_AyaInventoryItems, sizeof s_bag) != 0) return 0;
+    for (int i = 0; i < (int)(sizeof s_bag / sizeof s_bag[0]); ++i)
+        if (g_AyaInventoryItems[i] > 0 && stacks->count(0, i) != snapshot_stacks[i]) return 0;
+    return 1;
+}
+
 static void pe_combine(void) {
     const PeJunkApi *junk = pe_service_get("junk", 1);
     int a, b;
@@ -105,9 +115,14 @@ static void pe_combine(void) {
     }
     if (!junk || !junk->enabled()) { s_armed = -1; pe_result("Turn on Junk economy to combine items"); return; }
     if (!pe_pair(&a, &b)) { s_armed = -1; pe_result("The ingredients must be in Aya's bag"); return; }
-    if (s_armed != s_recipe || memcmp(s_bag, g_AyaInventoryItems, sizeof s_bag)) {
+    if (s_armed != s_recipe || !pe_bag_stacks_same(s_bag)) {
         s_armed = s_recipe;
         memcpy(s_bag, g_AyaInventoryItems, sizeof s_bag);
+        {
+            const PeStacksApi *stacks = pe_service_get("stacks", 1);
+            for (int i = 0; i < (int)(sizeof s_bag / sizeof s_bag[0]); ++i)
+                snapshot_stacks[i] = stacks && stacks->count ? stacks->count(0, i) : 0;
+        }
         pe_result("Press Combine again to consume the two ingredients");
         return;
     }

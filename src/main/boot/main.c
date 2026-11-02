@@ -3161,6 +3161,32 @@ static int Host_UploadScreenshotFiles(
 static char host_last_screenshot_png[4096];
 static char host_last_screenshot_json[4096];
 
+typedef struct HostScreenshotUpload {
+    char url[4096];
+    char png_path[4096];
+    char json_path[4096];
+    char summary[512];
+    SDL_Thread *thread;
+} HostScreenshotUpload;
+static HostScreenshotUpload host_screenshot_upload;
+
+static int SDLCALL Host_ScreenshotUploadWorker(void *userdata) {
+    HostScreenshotUpload *job = (HostScreenshotUpload *)userdata;
+    if (Host_UploadScreenshotFiles(job->url, job->png_path, job->json_path, job->summary)) {
+        fprintf(stderr, "Screenshot uploaded to %s\n", job->url);
+    } else {
+        fprintf(stderr, "Screenshot upload failed (%s); local files kept.\n", job->url);
+    }
+    return 0;
+}
+
+static void Host_ScreenshotUploadWait(void) {
+    if (host_screenshot_upload.thread) {
+        SDL_WaitThread(host_screenshot_upload.thread, NULL);
+        host_screenshot_upload.thread = NULL;
+    }
+}
+
 static int Host_SaveAndUploadScreenshot(
     const HostOverlayState *state,
     const unsigned char *rgb,
@@ -3307,15 +3333,22 @@ static int Host_SaveAndUploadScreenshot(
 
     const char *uploadUrl = Host_ScreenshotUploadUrl();
     if (uploadUrl && host_options.screenshot_auto_upload) {
-        char summary[512];
-        snprintf(summary, sizeof(summary),
+        HostScreenshotUpload *job = &host_screenshot_upload;
+        Host_ScreenshotUploadWait();
+        snprintf(job->summary, sizeof(job->summary),
                  "**[%s]** %s\nRoom: `%d` | BG: `%s` (group `%u`, wide `%s`) | Pack: `%s`",
                  tagName, state->note[0] ? state->note : "(no note)",
                  room, geom_hex, bg->active_group, wide_hex, packVer);
-        if (Host_UploadScreenshotFiles(uploadUrl, png_path, json_path, summary)) {
-            fprintf(stderr, "Screenshot uploaded to %s\n", uploadUrl);
-        } else {
-            fprintf(stderr, "Screenshot upload failed (%s); local files kept.\n", uploadUrl);
+        /* Copy the paths before handing them to the worker: the caller's
+         * buffers are locals of this function. */
+        snprintf(job->url, sizeof(job->url), "%s", uploadUrl);
+        snprintf(job->png_path, sizeof(job->png_path), "%s", png_path);
+        snprintf(job->json_path, sizeof(job->json_path), "%s", json_path);
+        /* Upload off the main thread: a slow webhook must not freeze the
+         * game for up to 30 s. Only one job runs at a time. */
+        job->thread = SDL_CreateThread(Host_ScreenshotUploadWorker, "screenshot-upload", job);
+        if (!job->thread) {
+            fprintf(stderr, "Screenshot upload failed (%s): no thread; local files kept.\n", uploadUrl);
         }
     }
     return 1;
@@ -3353,6 +3386,14 @@ static void Host_TakeScreenshot(SDL_Window *game) {
     PeBackgroundInfo bg;
     Render_GetBackgroundInfo(&bg);
     int room = Host_CrashRoom();
+
+    /* Another overlay (the settings panel) is open: keep its state instead of
+     * wiping it, and leave this trigger unhandled so its own keybinds stay in
+     * charge. The screenshot key can be pressed again after closing it. */
+    if (s_overlayState.open) {
+        free(rgb);
+        return;
+    }
 
     int useGpuOverlay = (game != NULL && s_overlayGpuDevice != NULL);
     SDL_Window *fallbackWindow = NULL;
@@ -4448,6 +4489,7 @@ shutdown:
     Psyz_VideoShutdown();
     return result; /* Existing CRT exit/constructors/loader teardown remain authoritative. */
 #else
+    Host_ScreenshotUploadWait();
     Host_HdStop();
     if (g_BootDisplayPlaybackActive) {
         BootDisplay_WaitForCdAndRestoreCallbacks();

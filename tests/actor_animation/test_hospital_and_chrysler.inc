@@ -1,3 +1,5 @@
+#include "test_aya_released_target.inc"
+
 static int original_tool_equipped_donor(void)
 {
     for (int fallback = -1; fallback < 15; ++fallback) {

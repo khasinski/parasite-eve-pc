@@ -1275,6 +1275,7 @@
     }
     if(argc==2 && !strcmp(argv[1],"--attack-effect-status-gate"))return original_attack_effect_status_gate()?0:158;
     if(argc==2 && !strcmp(argv[1],"--hit-on-released-target"))return original_hit_on_released_target()?0:162;
+    if(argc==2 && !strcmp(argv[1],"--aya-step-released-target"))return original_aya_step_released_target()?0:164;
     if(argc==2 && !strcmp(argv[1],"--missing-action-pose"))return original_missing_action_pose()?0:163;
     if(argc==2 && !strcmp(argv[1],"--tool-equipped-donor"))return original_tool_equipped_donor()?0:157;
 

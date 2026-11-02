@@ -888,16 +888,21 @@ s32 Battle_StepAyaAction(void)
         s32 product;
         int reachScale;
         targetEntity = g_BattleActionQueue[g_BattleActionIndex].actor;
-        reachScale = (targetEntity && targetEntity->core)
-            ? ((((EnemyCombatant *) targetEntity->core)->statusFlags2 >> 0x13) & 0x1F)
-            : 0;
-        targetDistance = ((targetEntity->renderObject.hit_cylinder.radius * reachScale) / 10) + D_8009D254->renderObject.hit_cylinder.radius;
-        targetAngle = Battle_CalcAngleToTarget(&targetEntity->renderObject, &g_AyaSavedPos);
+        if (targetEntity == NULL || targetEntity->core == NULL) {
+          /* A target released mid-volley has no core (and possibly no actor):
+           * stand still on this step instead of reading through NULL. */
+          targetDistance = D_8009D254->renderObject.hit_cylinder.radius;
+          targetAngle = 0;
+        } else {
+          reachScale = ((((EnemyCombatant *) targetEntity->core)->statusFlags2 >> 0x13) & 0x1F);
+          targetDistance = ((targetEntity->renderObject.hit_cylinder.radius * reachScale) / 10) + D_8009D254->renderObject.hit_cylinder.radius;
+          targetAngle = Battle_CalcAngleToTarget(&targetEntity->renderObject, &g_AyaSavedPos);
+        }
         D_8009D254->facingAngle = targetAngle;
         product = targetDistance * rsin(targetAngle);
-        D_8009D254->posX.fixed = (g_BattleActionQueue[g_BattleActionIndex].actor->renderObject.target_x * 65536) + (product * 16);
+        D_8009D254->posX.fixed = (targetEntity ? (targetEntity->renderObject.target_x * 65536) : 0) + (product * 16);
         product = targetDistance * rcos(D_8009D254->facingAngle);
-        D_8009D254->posZ.fixed = (g_BattleActionQueue[g_BattleActionIndex].actor->renderObject.target_z * 65536) + (product * 16);
+        D_8009D254->posZ.fixed = (targetEntity ? (targetEntity->renderObject.target_z * 65536) : 0) + (product * 16);
       }
       D_8009D254->baseX = D_8009D254->posX.fixed;
       D_8009D254->baseY = D_8009D254->posY.fixed;

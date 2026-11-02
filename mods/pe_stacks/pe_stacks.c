@@ -36,7 +36,6 @@
 #include "pe1/menu_context_help.h"
 #include "pe1/menu_equipment.h"
 #include "pe1/menu_inventory.h"
-#include "pe1/menu_state.h"
 #include "pe1/text.h"
 
 #define MOD_ID "pe_stacks"
@@ -233,6 +232,8 @@ static void pe_sync_tool_counts(void) {
     for (int l = 0; l < 2; ++l) {
         for (int t = 0; t < 2; ++t) {
             int idx = l * 2 + t;
+            /* Values the game pinned (0 when the equipment view is off, 999
+             * while a kit covers Tools) must win over the real crate counts. */
             if (g_StatBaseTable[idx] <= 0 || g_StatBaseTable[idx] >= 999) continue;
             int total = pe_api_total(l, k_tools[t]);
             if (total > 998) total = 998;
