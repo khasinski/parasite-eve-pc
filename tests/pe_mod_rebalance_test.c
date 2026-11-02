@@ -108,6 +108,16 @@ static void scoped(void){
     g_BattleEnemySlots[1].active=1;g_BattleEnemySlots[1].combatant.hpAlive=4;
     action.powerBonus=500;action.turnWord=1|0xC0;
     for(unsigned i=0;i<8;++i){e->coreFlags=0x10000;Battle_StepEnemyMovement(&target);assert(e->hpAlive>=1);assert(action.powerBonus==500);}
+    /* Secondary boss hitboxes (slot 1 is the boss, or entity has 0x2000) keep their status immunity. */
+    setup();setting("Acid/Tranq vs resist %",100);action.turnWord=1|0x1000;
+    e=target.core;e->statusFlags2=1u<<4;
+    g_BattleEnemySlots[1].active=1;g_BattleEnemySlots[1].combatant.hpAlive=1000;
+    g_BattleEnemySlots[1].combatant.statusFlags2=0x40000u;
+    target.actionMode=2;Battle_StepEnemyMovement(&target);
+    assert(!(e->coreFlags&0x1800u) && target.actionMode==2);
+    g_BattleEnemySlots[1].active=0;target.entityFlags=0x2000u;
+    Battle_StepEnemyMovement(&target);
+    assert(!(e->coreFlags&0x1800u) && target.actionMode==2);
     puts("Rebalance: scoped hit inputs, owned animation restore and Attack All cap at minimum damage");
 }
 static void poison(void){

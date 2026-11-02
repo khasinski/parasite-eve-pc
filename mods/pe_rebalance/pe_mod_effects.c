@@ -216,13 +216,27 @@ static int pe_hit_damage(int s, int pb, unsigned shots, unsigned def, uint32_t c
     return dmg;
 }
 
-/* R-A applies in ordinary fights: two or more enemies alive and none of them a boss (0x40000). */
-static int pe_crowd_fight(void) {
-    int alive = 0, i;
+/* Boss fight: any active enemy has the no-escape boss flag (0x40000), or the target is a
+ * bone-attached boss hitbox (0x2000) that shares the fight with a boss slot. */
+static int pe_boss_fight(const BattleEntity *entity, const EnemyCombatant *enemy) {
+    int i;
+    if (entity && (entity->entityFlags & 0x2000u)) return 1;
+    if (enemy && (enemy->statusFlags2 & 0x40000u)) return 1;
     for (i = 0; i < PE_ENEMY_SLOTS; ++i) {
         const EnemyCombatant *core = &g_BattleEnemySlots[i].combatant;
         if (!g_BattleEnemySlots[i].active || core->hpAlive <= 0) continue;
-        if (core->statusFlags2 & 0x40000u) return 0;
+        if (core->statusFlags2 & 0x40000u) return 1;
+    }
+    return 0;
+}
+
+/* R-A applies in ordinary fights: two or more enemies alive and none of them a boss (0x40000). */
+static int pe_crowd_fight(void) {
+    int alive = 0, i;
+    if (pe_boss_fight(NULL, NULL)) return 0;
+    for (i = 0; i < PE_ENEMY_SLOTS; ++i) {
+        const EnemyCombatant *core = &g_BattleEnemySlots[i].combatant;
+        if (!g_BattleEnemySlots[i].active || core->hpAlive <= 0) continue;
         ++alive;
     }
     return alive >= 2;
@@ -302,7 +316,7 @@ static int pe_on_enemy_hit(void *ctx, void *user) {
     turn = action->turnWord;
     shots = turn & 0xFu;
     s2 = enemy->statusFlags2;
-    boss = (s2 & 0x40000u) != 0;
+    boss = pe_boss_fight(entity, enemy);
     ++s_bt.hits;
 
     if (s_rof_volley > 0 && pe_installed_rof(shots)) {   /* R-E: whole volley % */

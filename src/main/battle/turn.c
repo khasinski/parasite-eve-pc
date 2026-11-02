@@ -1176,10 +1176,12 @@ stepDeathAnimation:
                             if (deadKind == 1) {
                                 actor->entityFlags |= 0x10;
                                 Battle_SlotFree(actor);
-                                actor->parent->motionX = 0;
-                                actor->parent->motionY = 0;
-                                actor->parent->motionZ = 0;
-                                Battle_StepEntityAnimState(actor->parent);
+                                if (actor->parent != 0) {
+                                    actor->parent->motionX = 0;
+                                    actor->parent->motionY = 0;
+                                    actor->parent->motionZ = 0;
+                                    Battle_StepEntityAnimState(actor->parent);
+                                }
                             }
                         } else {
                             goto stepDeathAnimation;

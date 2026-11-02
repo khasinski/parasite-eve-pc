@@ -132,12 +132,12 @@ void Entity_SetActionMode(BattleEntity *arg0, int arg1) {
     entity = arg0;
     mode = arg1;
     idx = entity->modelIndex;
-    table = g_GameState.bank_rows[idx];
+    table = idx < 10 ? g_GameState.bank_rows[idx] : 0;
     /* Some models have no animation for a pose the battle code asks for
      * (Eve's parts in M273 have no Stop pose 2). Retail then reads the frame
      * count from PS1 address 2, which is mapped kernel RAM; here the entity
      * keeps its current animation. */
-    if (table[(unsigned short)mode] == NULL)
+    if (!table || (unsigned short)mode >= 48 || table[(unsigned short)mode] == NULL)
         return;
     action = table[(unsigned short)mode];
     entity->actionMode = mode;
@@ -174,9 +174,9 @@ void Entity_SetAction(BattleEntity *arg0, int arg1) {
     mode = (unsigned short)raw_mode;
     if (entity->actionMode != mode) {
         idx = entity->modelIndex;
-            table = g_GameState.bank_rows[idx];
+        table = idx < 10 ? g_GameState.bank_rows[idx] : 0;
         /* A missing pose keeps the current animation, as in Entity_SetActionMode. */
-        if (table[mode] == NULL)
+        if (!table || mode >= 48 || table[mode] == NULL)
             return;
         entity->animFrame = 0;
         entity->animPrev.fixed = 0;
