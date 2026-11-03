@@ -13,6 +13,7 @@ set(pe_host_sources
     host/pe_main_menu.c     # extra rows in Aya's main menu, screens from game widgets
     host/pe_equip_sync.c    # edited equipment reaches the next battle
     host/pe_save.c          # mods' per-save data: records the host saves, loads and carries
+    host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
     host/pe_present.c       # image presenter: pictures pasted into the finished frame
     host/pe_disc_assets.c   # read-only game data from the player's disc (rooms)
     host/pe_model_skin.c    # isolated Wardrobe asset reads
@@ -59,7 +60,7 @@ if(BUILD_TESTING)
     target_link_libraries(test-mod-settings PRIVATE psyz)
     add_test(NAME mod-settings-save-safety COMMAND test-mod-settings "${CMAKE_CURRENT_BINARY_DIR}/settings-evidence")
 
-    add_executable(test-mod-crash-tail ${PROJECT_SOURCE_DIR}/tests/pe_mod_crash_tail_test.c host/pe_mod_host.c host/pe_save.c)
+    add_executable(test-mod-crash-tail ${PROJECT_SOURCE_DIR}/tests/pe_mod_crash_tail_test.c host/pe_mod_host.c host/pe_save.c host/pe_registry.c)
     target_include_directories(test-mod-crash-tail PRIVATE ${PROJECT_SOURCE_DIR}/include host
         "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
     target_compile_definitions(test-mod-crash-tail PRIVATE __psyz PE_MODS=1)
@@ -166,6 +167,9 @@ if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
     pe_feature_test(catalog-menu ${PROJECT_SOURCE_DIR}/tests/pe_mod_catalog_menu_test.c)
     pe_feature_test(requisition ${PROJECT_SOURCE_DIR}/tests/pe_mod_requisition_test.c pe_economy/pe_requisition.c host/pe_save.c pe_economy/pe_requisition_menu.c)
     pe_feature_test(smoke ${PROJECT_SOURCE_DIR}/tests/pe_mod_smoke_test.c pe_economy/pe_smoke.c)
+endif()
+if(BUILD_TESTING)
+    pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
 endif()
 if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
     pe_feature_test(skin-bounds ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_bounds_test.c)

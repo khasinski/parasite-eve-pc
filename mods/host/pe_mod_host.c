@@ -15,6 +15,7 @@
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_present.h"
+#include "pe_registry.h"
 #include "pe_save.h"
 
 #define PE_INV_CMD_START_NEW_GAME 1117   /* the EX Game's start (Inv_DispatchCommand) */
@@ -305,6 +306,7 @@ static void pe_start_mods(void) {
             state[i] = PE_MOD_NEEDS;
             pe_mod_log(g_pe_mods[i]->id, "missing a required mod, mod off");
         }
+    pe_registry_seal();          /* every mod has started: the definitions they declared are judged now */
     pe_manage_notes(mod_count, state);
     atexit(pe_shutdown_mods);
 }

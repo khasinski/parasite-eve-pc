@@ -91,7 +91,17 @@ moved, disabled or updated without touching the others. Add the folder name to `
 
 Service definitions live in `host/pe_services.h`, never in a mod's folder: `junk` v1 and
 `catalog` v1 (pe_economy), `keys` v1 (pe_qol), `bestiary` v1 (pe_collection), `wardrobe` and
-`costumes` v1 (pe_wardrobe). Events: `play.log` (every pe_log row), `bestiary.unlock`, `wardrobe.worn`.
+`costumes` v1 (pe_wardrobe).
+
+The shared registry (host/pe_registry.h; bridge findings D6 §11) is for mods' definitions that
+other mods build on: custom content, equipment effects, Catalog entries and shop offers. During
+its init a mod declares batches (`pe_reg_batch`) and submits entries (`pe_reg_submit`) under its
+own namespace, "<mod id>/<name>"; it gets a receipt, not a definition. Once every mod has started
+the host seals the registry: limits, keys declared twice (every claimant fails, nothing wins),
+references and batch requirements, to a fixed point, the same whatever order mods start in. Then
+`pe_reg_find`, `pe_reg_count` / `pe_reg_key` (canonical order) and `pe_reg_batch_result` (with the
+reason) answer; nothing new is accepted until the next start. No mod uses it yet.
+`tests/pe_mod_registry_test.c` runs the D6 §11.6 examples. Events: `play.log` (every pe_log row), `bestiary.unlock`, `wardrobe.worn`.
 A mod that registers into another mod's service at init lists that mod in its `requires`.
 
 ## The Mods panel
