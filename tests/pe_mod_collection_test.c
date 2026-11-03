@@ -428,6 +428,34 @@ int main(void) {
     pe_ward_profile_load();
     assert(!pe_ward_profile_owned("ff7/cloud") && has_line(ward, "imported none"));
     assert(pe_profile_creature("ff7/cactuar", &kills) == 7 && kills == 3);
+    /* Both profiles start "format 1"; one from a newer format is read but never rewritten. */
+    assert(has_line(ward, "format 1") && has_line("pe_collection.ini", "format 1"));
+    f = fopen(path, "w");
+    fprintf(f, "format 2\ncreature ff7/cactuar 7 3\nnewthing x\n");
+    fclose(f);
+    pe_profile_load();
+    assert(pe_profile_creature("ff7/cactuar", &kills) == 7);
+    pe_profile_set_creature("ff7/cactuar", 1, 0);
+    pe_profile_save();
+    assert(has_line("pe_collection.ini", "format 2") && has_line("pe_collection.ini", "newthing x"));
+    remove_file(ward);
+    pe_ward_profile_load();
+    {
+        char wpath[600];
+        pe_mod_path(wpath, sizeof wpath, ward);
+        f = fopen(wpath, "w");
+        fprintf(f, "format 2\ncostume ff7/cloud\nnewthing y\n");
+        fclose(f);
+    }
+    pe_ward_profile_load();
+    assert(pe_ward_profile_owned("ff7/cloud"));
+    pe_ward_profile_forget("ff7/cloud");
+    pe_ward_profile_save();
+    assert(has_line(ward, "format 2") && has_line(ward, "newthing y") && has_line(ward, "costume ff7/cloud"));
+    remove(path);
+    remove_file(ward);
+    pe_profile_load();
+
     /* A fresh profile says so. */
     remove(path);
     remove_file(ward);

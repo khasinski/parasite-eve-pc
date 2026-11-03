@@ -18,6 +18,7 @@
 
 /* ---- profile (pe_wardrobe_profile.c) ----
  * pe_wardrobe.ini beside the preferences, a line per record:
+ *   format 1                 (first; a newer format is read but never rewritten)
  *   imported <source>        (where its records first came from; see the profile's import)
  *   costume <key>            (owned)
  *   worn <key>

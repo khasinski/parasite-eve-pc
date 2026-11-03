@@ -16,6 +16,7 @@
 
 /* ---- profile (pe_profile.c) ----
  * pe_collection.ini beside the preferences, a line per record:
+ *   format 1                               (first; a newer format is read but never rewritten)
  *   creature <key> <bits> <kills> <seen>   (seen: tiers looked at in the Bestiary; optional)
  * Records of packs that aren't loaded are kept as read. The psxrecomp build's pe_collection.dat
  * (creatures by index) is imported once through the PE pack's keys. The costume and worn lines of

@@ -13,6 +13,7 @@
  * SPL-02); only the recomp's .dat, if still there, is imported again. */
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pe_mod_host.h"
@@ -23,11 +24,13 @@
 #define PE_V1_FILE      "pe_collection.dat"   /* the psxrecomp build's */
 #define PE_MAX          512
 #define PE_KEY_MAX      64
+#define PE_FORMAT       1                     /* the first line, "format 1" */
 
 static char s_owned[PE_MAX][PE_KEY_MAX];
 static int s_count, s_dirty;
 static char s_worn[PE_KEY_MAX];
 static char s_imported[24];            /* where the records first came from */
+static int s_newer;                    /* written by a newer format: read, never overwritten */
 
 static int pe_index(const char *key) {
     int i;
@@ -64,7 +67,9 @@ void pe_ward_profile_save(void) {
     FILE *f;
     int i;
     s_dirty = 0;
+    if (s_newer) return;
     if (pe_mod_path(path, sizeof path, PE_FILE) != 0 || !(f = fopen(path, "w"))) return;
+    fprintf(f, "format %d\n", PE_FORMAT);
     fprintf(f, "# Parasite Eve Wardrobe: costumes kept across every game.\n"
                "# imported <where these first came from>; costume <key> = owned; worn <key>\n");
     fprintf(f, "imported %s\n", s_imported[0] ? s_imported : "none");
@@ -85,6 +90,7 @@ static int pe_read(const char *file) {
         if (strcmp(type, "worn") == 0) snprintf(s_worn, sizeof s_worn, "%s", key), ++n;
         else if (strcmp(type, "costume") == 0) pe_ward_profile_own(key), ++n;
         else if (strcmp(type, "imported") == 0) snprintf(s_imported, sizeof s_imported, "%s", key);
+        else if (strcmp(type, "format") == 0 && atoi(key) > PE_FORMAT) s_newer = 1;
     }
     fclose(f);
     return n;
@@ -123,8 +129,10 @@ void pe_ward_profile_load(void) {
     s_count = 0;
     s_worn[0] = 0;
     s_imported[0] = 0;
+    s_newer = 0;
     if (pe_read(PE_FILE) >= 0) {
         if (!s_imported[0]) snprintf(s_imported, sizeof s_imported, "none");
+        if (s_newer) pe_mod_log("pe_wardrobe", "%s is from a newer Wardrobe: read only, never rewritten", PE_FILE);
         s_dirty = 0;
         return;
     }

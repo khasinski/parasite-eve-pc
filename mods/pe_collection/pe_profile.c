@@ -1,6 +1,7 @@
 /* The Collection's profile: Bestiary unlocks by stable key, kept across games. See pe_collection.h. */
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pe_collection.h"
@@ -11,6 +12,7 @@
 #define PE_WARDROBE_FILE "pe_wardrobe.ini"  /* the Wardrobe's, since its split */
 #define PE_MAX       1024
 #define PE_KEY_MAX   64
+#define PE_FORMAT    1                      /* the first line, "format 1" */
 
 enum { R_CREATURE, R_COSTUME };
 
@@ -19,6 +21,7 @@ typedef struct { uint8_t type; char key[PE_KEY_MAX]; uint8_t bits, kills, seen; 
 static PeRecord s_rec[PE_MAX];
 static int s_count, s_dirty;
 static char s_worn[PE_KEY_MAX];
+static int s_newer;                         /* written by a newer format: read, never overwritten */
 
 static PeRecord *pe_find(int type, const char *key, int create) {
     int i;
@@ -86,7 +89,9 @@ void pe_profile_save(void) {
     int i;
     const int carry = !pe_wardrobe_imported();     /* costume lines the Wardrobe hasn't taken yet */
     s_dirty = 0;
+    if (s_newer) return;
     if (pe_mod_path(path, sizeof path, PE_FILE) != 0 || !(f = fopen(path, "w"))) return;
+    fprintf(f, "format %d\n", PE_FORMAT);
     fprintf(f, "# Parasite Eve Collection: Bestiary unlocks kept across every game.\n"
                "# creature <key> <bits: 1 met, 2 weaknesses, 4 loot> <kills> <bits looked at>\n");
     if (carry && s_worn[0]) fprintf(f, "worn %s\n", s_worn);
@@ -133,6 +138,7 @@ void pe_profile_load(void) {
     FILE *f;
     s_count = 0;
     s_worn[0] = 0;
+    s_newer = 0;
     if (pe_mod_path(path, sizeof path, PE_FILE) != 0 || !(f = fopen(path, "r"))) {
         if (pe_import_v1()) pe_profile_save();
         s_dirty = 0;
@@ -140,7 +146,8 @@ void pe_profile_load(void) {
     }
     while (fgets(line, sizeof line, f)) {
         if (line[0] == '#' || sscanf(line, "%15s %63s", type, key) != 2) continue;
-        if (strcmp(type, "worn") == 0) snprintf(s_worn, sizeof s_worn, "%s", key);
+        if (strcmp(type, "format") == 0 && atoi(key) > PE_FORMAT) s_newer = 1;
+        else if (strcmp(type, "worn") == 0) snprintf(s_worn, sizeof s_worn, "%s", key);
         else if (strcmp(type, "costume") == 0) (void)pe_find(R_COSTUME, key, 1);
         else if (strcmp(type, "creature") == 0 && sscanf(line, "%*s %*s %u %u", &bits, &kills) == 2) {
             PeRecord *r = pe_find(R_CREATURE, key, 1);
