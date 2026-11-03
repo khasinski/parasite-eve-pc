@@ -17,6 +17,7 @@ void pe_armor_effect_display_register(const char *mod_id);
 void pe_junk_counter_register(const char *mod_id);
 void pe_smoke_register(const char *mod_id);
 void pe_wayne_menu_register(const char *mod_id); /* pe_wayne_menu.c: the Workshop in Wayne's menu */
+void pe_workshop_screen_register(const char *mod_id); /* pe_workshop_screen.c: the Workshop as a menu screen */
 void pe_field_wayne_register(const char *mod_id); /* pe_field_wayne.c: Warner's services */
 void pe_smoke_shutdown(void);
 
@@ -30,6 +31,7 @@ static int economy_init(void) {
     pe_catalog_menu_register(MOD_ID);
     pe_discard_dismantle_register(MOD_ID);
     pe_wayne_refund_register(MOD_ID);
+    pe_workshop_screen_register(MOD_ID);
     pe_smoke_register(MOD_ID);
     pe_wayne_menu_register(MOD_ID);
     pe_field_wayne_register(MOD_ID);

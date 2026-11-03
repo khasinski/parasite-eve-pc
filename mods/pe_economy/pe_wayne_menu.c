@@ -53,6 +53,9 @@
 
 extern u8 g_DialogueChoiceCursor;
 
+int pe_workshop_screen_open(void);    /* pe_workshop_screen.c */
+int pe_workshop_screen_busy(void);
+
 enum { SCR_NONE, SCR_WAYNE, SCR_ROOT, SCR_REQ, SCR_REB, SCR_PERMIT, SCR_PERMIT_ASK, SCR_WARD };
 enum { ROOT_REQ, ROOT_REB, ROOT_WARD, ROOT_PERMIT, ROOT_BACK };
 
@@ -419,7 +422,7 @@ static uint32_t pe_input(uint32_t pressed, int cursor) {
     case SCR_WAYNE:
         if (!(pressed & PE_IN_CONFIRM)) return 0;
         if (cursor == permit) { s_ui.note[0] = '\0'; s_ui.page = 0; pe_show(SCR_PERMIT, 0); return PE_IN_CONFIRM; }
-        if (cursor == workshop) { s_ui.note[0] = '\0'; pe_show(SCR_ROOT, 0); return PE_IN_CONFIRM; }
+        if (cursor == workshop) { s_ui.note[0] = '\0'; pe_workshop_screen_open(); return PE_IN_CONFIRM; }
         if (cursor == workshop + 1) g_DialogueChoiceCursor = (u8)his_cancel;   /* the script's own Cancel */
         return 0;
     case SCR_ROOT:
@@ -549,6 +552,10 @@ static int pe_on_textboxes(void *ctx, void *user) {
         if (s_ui.screen == SCR_NONE) return 0;
     }
     pe_shop_at_counter(1);                                 /* his box is the shop counter */
+    if (pe_workshop_screen_busy()) {                       /* the Workshop screen has the pad */
+        g_FieldPadPressed = 0;
+        return 0;
+    }
     taken = pe_input(g_FieldPadPressed, (s8)g_DialogueChoiceCursor);
     if (taken) g_FieldPadPressed &= ~taken;                /* the game never sees it */
     return 0;
