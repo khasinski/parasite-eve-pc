@@ -35,6 +35,9 @@ int pe_loot_spend_junk(uint32_t n) { if(fail_spend || junk<n)return 0;junk-=n;re
 void pe_loot_give_junk(uint32_t n) { junk+=n; }
 int pe_catalog_armor_unlocked(int e) { return !!(unlocked&(1u<<e)); }
 int pe_catalog_unlock_armor(int e) { if(pe_catalog_armor_unlocked(e))return 0;unlocked|=1u<<e;return 1; }
+/* The Mod Catalog is its own mod: Requisition reaches it through the "catalog" service. */
+static const PeCatalogApi catalog={pe_catalog_armor_unlocked,pe_catalog_unlock_armor};
+const void *pe_service_get(const char *name,int version) { (void)version;return !strcmp(name,"catalog")?&catalog:NULL; }
 void pe_log(const char *t,const char *f,...) { (void)t;(void)f; }
 void pe_toast(const char *s) { snprintf(message,sizeof message,"%s",s); }
 const char *pe_mod_current(void) { return "test"; }

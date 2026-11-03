@@ -21,7 +21,7 @@
 #include <string.h>
 
 #include "pe_catalog.h"
-#include "pe_economy.h"
+#include "pe_catalog_mod.h"
 #include "pe_item_table.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -86,7 +86,7 @@ const char *pe_cat_effect_short(int which, int e) {
     return which == PE_GUN ? s_gun_short[e] : s_armor_short[e];
 }
 int pe_cat_effect_tier(int which, int e) { return pe_valid(which, e) ? (which == PE_GUN ? s_gun_tier[e] : s_armor_tier[e]) : 0; }
-int pe_cat_tier_price(int tier) { return (int)pe_loot_price((uint32_t)s_price[tier]); }
+int pe_cat_tier_price(int tier) { return (int)pe_catw_price((uint32_t)s_price[tier]); }
 int pe_cat_rebuild_markup(void) { return s_rebuild_markup; }
 
 static int pe_is_bag_mod(int which, int e) { return which == PE_ARMOR && e >= 8 && e <= 10; }
@@ -157,7 +157,7 @@ const char *pe_cat_last_said(void) { return s_said; }
 
 int pe_cat_ready(void) {
     if (!pe_game_loaded()) { pe_cat_say("Load a game first"); return 0; }
-    if (!pe_loot_enabled()) { pe_cat_say("Junk economy is off (Economy page)"); return 0; }
+    if (!pe_catw_enabled()) { pe_cat_say("Junk economy is off (Economy page)"); return 0; }
     return 1;
 }
 
@@ -195,7 +195,7 @@ int pe_cat_install(int which, int slot, int e, int dry_run) {
     int n, current, group, tier, m;
     uint32_t price;
     if (!pe_game_loaded()) return PE_CAT_NO_GAME;
-    if (!pe_loot_enabled()) return PE_CAT_OFF;
+    if (!pe_catw_enabled()) return PE_CAT_OFF;
     if (!(rec = pe_equipped_record(which))) return PE_CAT_NO_ITEM;
     n = pe_cat_mod_count(rec);
     if (n <= 0 || slot < 0 || slot >= n) return PE_CAT_NO_SLOTS;
@@ -209,7 +209,7 @@ int pe_cat_install(int which, int slot, int e, int dry_run) {
             return PE_CAT_BAG;
     tier = pe_cat_effect_tier(which, e);
     price = (uint32_t)pe_cat_tier_price(tier);
-    if (pe_loot_junk() < price) return PE_CAT_JUNK;
+    if (pe_catw_junk() < price) return PE_CAT_JUNK;
     if (tier == 2 && !pe_cat_take_tool(1)) return PE_CAT_TOOL;
     if (dry_run) return PE_CAT_OK;
 
@@ -218,7 +218,7 @@ int pe_cat_install(int which, int slot, int e, int dry_run) {
     pe_log("install", "%s slot=%d effect=%d was=%d price=%u tool=%d", which ? "armor" : "gun", slot, e, current,
            (unsigned)price, tier == 2);
     rec->tailData[slot] = (u8)((group << 5) | e);
-    pe_loot_spend_junk(price);
+    pe_catw_spend_junk(price);
     if (tier == 2) pe_cat_take_tool(0);
     return PE_CAT_OK;
 }
@@ -227,7 +227,7 @@ int pe_cat_remove(int which, int slot, int dry_run) {
     ItemDataRecord *rec;
     int e;
     if (!pe_game_loaded()) return PE_CAT_NO_GAME;
-    if (!pe_loot_enabled()) return PE_CAT_OFF;
+    if (!pe_catw_enabled()) return PE_CAT_OFF;
     if (!(rec = pe_equipped_record(which))) return PE_CAT_NO_ITEM;
     if (pe_cat_mod_count(rec) <= 0 || slot < 0 || slot >= pe_cat_mod_count(rec)) return PE_CAT_NO_SLOTS;
     e = rec->tailData[slot] & 0x1F;
@@ -264,6 +264,8 @@ int pe_catalog_unlock_armor(int effect) {
     return 1;
 }
 static const PeCatalogApi s_catalog_api = { pe_catalog_armor_unlocked, pe_catalog_unlock_armor };
+static const PeRebuildApi s_rebuild_api = { pe_rebuild_count, pe_rebuild_item, pe_rebuild_bought_slots, pe_rebuild_price_index,
+                                            pe_rebuild_index };
 
 /* ---- save block ---- */
 
@@ -294,6 +296,9 @@ static int pe_save_upgrade(void *data, const uint8_t *at, unsigned size, unsigne
     return 0;
 }
 
+/* The record keeps the name it had in the economy mod, so saves from before the Mod Catalog became
+ * its own mod load unchanged: never rename it. A new layout needs a new version and an upgrade(). */
+_Static_assert(sizeof(PeCatalogState) == 312, "pe_economy.catalog v1 holds these 312 bytes: raise the version for a new layout");
 static const PeSaveRecord s_save_record = {
     "pe_economy.catalog", 1, &s_cat, sizeof s_cat, pe_save_check, pe_save_upgrade, NULL,
 };
@@ -302,6 +307,7 @@ static const PeSaveRecord s_save_record = {
 
 void pe_catalog_register(const char *mod_id) {
     pe_service_publish("catalog", 1, &s_catalog_api, mod_id);
+    pe_service_publish("rebuild", 1, &s_rebuild_api, mod_id);
     pe_save_register(&s_save_record);
     pe_menu_register_int(PE_PAGE_DEBUG_CATALOG, "Mod price common", "Junk for a common effect.", &s_price[0], 0, 500, 5);
     pe_menu_register_int(PE_PAGE_DEBUG_CATALOG, "Mod price mid", "Junk for a mid effect.", &s_price[1], 0, 500, 5);

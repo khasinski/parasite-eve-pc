@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_collection;pe_wardrobe` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_collection;pe_wardrobe` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -47,7 +47,8 @@ mods/
     ui/                  drawing (pe_ui_raster), the overlay quad (pe_ui_gpu), toasts
   pe_qol/              quality of life: movement, encounters, key item pocket, bag sort, Key Items menu
   pe_rebalance/        mod effects, Parasite Energy balance, half-bar turns / Quick powers, Combine
-  pe_economy/          the Junk wallet, Mod Catalog / Dismantle / Rebuild, Requisition, Wayne and Warner
+  pe_economy/          the Junk wallet, Requisition, Wayne and Warner
+  pe_catalog/          Mod Catalog / Dismantle / Rebuild (its record keeps the name pe_economy.catalog)
   pe_rewards/          battle rewards: extra Junk, rare drops and pity (needs pe_economy)
   pe_collection/       Bestiary registry and menu (creature packs register here)
   pe_wardrobe/         Wardrobe registry, skins, Wardrobe menu (costume packs register here)
@@ -91,7 +92,7 @@ moved, disabled or updated without touching the others. Add the folder name to `
 - **Events**: `pe_event_id("name")` and `pe_event_emit(id, ctx)` for announcements.
 
 Service definitions live in `host/pe_services.h`, never in a mod's folder: `junk` v1 and
-`catalog` v1 (pe_economy), `keys` v1 (pe_qol), `bestiary` v1 (pe_collection), `wardrobe` and
+`catalog` and `rebuild` v1 (pe_catalog), `keys` v1 (pe_qol), `bestiary` v1 (pe_collection), `wardrobe` and
 `costumes` v1 (pe_wardrobe).
 
 The shared registry (host/pe_registry.h; bridge findings D6 §11) is for mods' definitions that
@@ -171,7 +172,7 @@ Records today:
 | Record | Holds | Owner |
 |---|---|---|
 | `pe_economy.loot` | Junk, rare pity, difficulty (the rewards' fields through the `wallet` service, D10) | pe_economy/pe_loot.c |
-| `pe_economy.catalog` | Mod Catalog unlocks, Rebuild list | pe_economy/pe_catalog.c |
+| `pe_economy.catalog` | Mod Catalog unlocks, Rebuild list (the name from before the split) | pe_catalog/pe_catalog.c |
 | `pe_economy.shop` | Requisition | pe_economy/pe_requisition.c |
 | `pe_qol.keys` | key item pocket | pe_qol/pe_key_items.c |
 | `pe_qol.sort` | bag sort | pe_qol/pe_bag_sort.c |
@@ -495,13 +496,19 @@ Writing a pack (another mod):
 4. Keys are saved in players' profiles: never rename one once released.
 `tests/run_pe_collection_test.ps1` drives the registries the way such a pack would.
 
-## Mod Catalog files
+## Mod Catalog files (mods/pe_catalog)
+
+Its own mod since November 2026, "PE Enhancements: Mod Catalog". It reaches the Junk wallet only
+through the `junk` service (`pe_catalog_wallet.c`): without the economy mod running, paid actions
+are refused, never free. It publishes `catalog` (unlocks) and `rebuild` (the Rebuild list, for
+Wayne's Workshop). A player who had the economy off starts with it off too.
+
 
 - `pe_catalog.c`: effects, prices, install / remove rules, unlocks, the PECT save block, the
   `catalog` service.
 - `pe_dismantle.c`: Dismantle, Rebuild and Tool salvage.
 - `pe_catalog_pages.c`: the F1 pages. `pe_catalog_menu.c`: the Catalog in Aya's own menu.
-- `pe_catalog.h`: their private interface; other files use the `pe_cat_*` calls in pe_economy.h.
+- `pe_catalog.h`: their private interface; the mod's other files use the `pe_cat_*` calls in pe_catalog_mod.h.
 - `pe_discard_dismantle.c`: Discard on a gun or armor in Aya's menu or Wayne's storage reads
   Dismantle and confirms with what it pays (PE_HOOK_ITEM_ACTIONS); the equipped gear and the last
   Club keep the plain Discard. F1 > Economy > Discard dismantles.

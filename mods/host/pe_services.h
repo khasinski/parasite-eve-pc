@@ -6,13 +6,14 @@
  * a mod that doesn't find one carries on without it.
  *
  *   "junk"      v1  pe_economy  the Junk counter
- *   "catalog"   v1  pe_economy  armor effects unlocked in the Mod Catalog
+ *   "catalog"   v1  pe_catalog   armor effects unlocked in the Mod Catalog
  *   "keys"      v1  pe_qol      the key item pocket
  *   "wardrobe"  v1  pe_wardrobe    costumes that can be worn now (for shops such as Wayne's)
  *   "bestiary"  v1  pe_collection  register creatures, map enemies to them, unlock entries
  *   "costumes"  v1  pe_wardrobe    register costumes (the game's outfits or a mod's own models)
  *   "costume_rules" v1 pe_economy  whether costumes must be unlocked before they are worn
  *   "wallet"    v1  pe_economy  battle rewards' fields in the Junk record (bridge findings D10)
+ *   "rebuild"   v1  pe_catalog  dismantled gear to buy back (Wayne's Workshop)
  *
  * Providers (an import pack, a randomizer) register at their init, so they list "pe_collection"
  * in their PeMod requires. Keys are stable names saved in the player's profile ("pe1/rat",
@@ -66,6 +67,16 @@ typedef struct PeCatalogApi {
     int (*armor_unlocked)(int effect);
     int (*unlock_armor)(int effect);   /* 1 if it was new */
 } PeCatalogApi;
+
+/* `rebuild` v1: the Mod Catalog's Rebuild list, newest first, for shop fronts (Wayne's Workshop).
+ * rebuild() buys entry i back (Junk through the wallet); msg says what happened. */
+typedef struct PeRebuildApi {
+    int (*count)(void);
+    uint8_t (*item)(int i);
+    unsigned (*bought_slots)(int i);      /* slots added with Mod Permits before dismantling */
+    uint32_t (*price)(int i);
+    int (*rebuild)(int i, char *msg, size_t size);   /* 1 if rebuilt */
+} PeRebuildApi;
 
 typedef struct PeKeysApi {
     int (*take)(uint16_t item);        /* pocket a key; 1 means handled */

@@ -16,7 +16,7 @@
 #include <string.h>
 
 #include "pe_catalog.h"
-#include "pe_economy.h"
+#include "pe_catalog_mod.h"
 #include "pe_game.h"
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
@@ -59,7 +59,7 @@ static int pe_is_last_club(const ItemDataRecord *rec) {
 /* The selected item, if Discard would dismantle it. */
 static const ItemDataRecord *pe_dismantlable(int list_id, int slot) {
     const ItemDataRecord *rec;
-    if (!s_enabled || !pe_loot_enabled()) return NULL;
+    if (!s_enabled || !pe_catw_enabled()) return NULL;
     Inv_SelectActiveList(list_id);
     rec = Inv_LookupActiveListData(slot);
     if (!rec || rec->kind < 1 || rec->kind > 9 || pe_is_last_club(rec)) return NULL;

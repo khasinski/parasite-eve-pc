@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "pe_economy.h"
+#include "pe_catalog_mod.h"
 #include "pe_catalog.h"
 #include "pe_catalog_menu_state.h"
 #include "pe_catalog_menu_view.h"
@@ -128,7 +128,7 @@ static void cat_answer(int yes) {
     if (yes) {
         const ItemDataRecord *rec=pe_cat_record(s_cat.ask_which);
         int code;
-        if (!rec || memcmp(rec,&s_cat.before,sizeof *rec) || pe_loot_junk()!=s_cat.ask_junk ||
+        if (!rec || memcmp(rec,&s_cat.before,sizeof *rec) || pe_catw_junk()!=s_cat.ask_junk ||
             (s_cat.ask_effect && pe_cat_price(s_cat.ask_which,s_cat.ask_effect)!=s_cat.ask_price)) {
             snprintf(s_cat.result,sizeof s_cat.result,"Equipment or price changed. Review again");
             Menu_PlayErrorSound();
@@ -160,7 +160,7 @@ static void cat_review(int effect) {
     if (effect) s_cat.removed_count=pe_cat_replaces(s_cat.which,slot,effect,s_cat.removed,count);
     else { s_cat.removed[0]=pe_cat_slot_effect(s_cat.which,slot); s_cat.removed_count=1; }
     s_cat.ask_which=s_cat.which; s_cat.ask_slot=slot; s_cat.ask_effect=effect;
-    s_cat.before=*rec; s_cat.ask_price=effect ? pe_cat_price(s_cat.which,effect) : 0; s_cat.ask_junk=pe_loot_junk();
+    s_cat.before=*rec; s_cat.ask_price=effect ? pe_cat_price(s_cat.which,effect) : 0; s_cat.ask_junk=pe_catw_junk();
     s_cat.ask_valid=1; s_cat.review=1;
     s_cat.review_count=6+(s_cat.removed_count ? s_cat.removed_count : 1);
     cat_rows(s_screen.list,s_cat.review_count,(PeCatalogCursor){0,0});
@@ -257,7 +257,7 @@ static int cat_help(void *ctx,void *user) {
     else if (s_cat.review) cat_review_text(node->cursor_y,line,sizeof line);
     else if (node==s_cat.selector) snprintf(line,sizeof line,"Choose Weapon or Armor / X select");
     else if (node==s_cat.slots) snprintf(line,sizeof line,"Slot %d: %s",node->cursor_y+1,pe_cat_effect_name(s_cat.which,pe_cat_slot_effect(s_cat.which,node->cursor_y)));
-    else snprintf(line,sizeof line,"%s / Junk %u",cat_effect()?pe_cat_effect_name(s_cat.which,cat_effect()):"Remove effect",(unsigned)pe_loot_junk());
+    else snprintf(line,sizeof line,"%s / Junk %u",cat_effect()?pe_cat_effect_name(s_cat.which,cat_effect()):"Remove effect",(unsigned)pe_catw_junk());
     pe_text_from_ascii(title,sizeof title,line);
     /* The wide title bar is still finite, even with custom names. */
     size_t n=0;while(title[n]!=0xFF)++n;
@@ -272,7 +272,7 @@ static int cat_frame(void *ctx,void *user) {
     if (s_cat.removed && !cat_alive()) cat_clear_review();
     return 0;
 }
-static const PeMainMenuRow s_row={"Mod Catalog",0,pe_loot_enabled,cat_open};
+static const PeMainMenuRow s_row={"Mod Catalog",0,pe_catw_enabled,cat_open};
 void pe_catalog_menu_register(const char *mod_id) {
     pe_main_menu_add(&s_row,10);
     pe_hook_add(PE_HOOK_FRAME,cat_frame,NULL,PE_PRIORITY_NORMAL,mod_id);

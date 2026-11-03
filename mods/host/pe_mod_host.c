@@ -332,6 +332,7 @@ static void pe_host_start(const PeHookInit *init) {
     pe_menu_alias_setting(PE_MENU_MANAGE "/PE Enhancements: wardrobe", PE_MENU_MANAGE "/PE Enhancements: collection");
     /* The battle rewards left the economy mod (bridge findings D10): the same for them. */
     pe_menu_alias_setting(PE_MENU_MANAGE "/PE Enhancements: battle rewards", PE_MENU_MANAGE "/PE Enhancements: economy");
+    pe_menu_alias_setting(PE_MENU_MANAGE "/PE Enhancements: Mod Catalog", PE_MENU_MANAGE "/PE Enhancements: economy");
     pe_pages_describe();
     pe_start_mods();
     if (s_all_on) {                              /* off: nothing but F1 touches the game */

@@ -4,7 +4,7 @@
 #include "pe_catalog_menu_view.h"
 #include "pe_catalog_effect_icons.h"
 #include "pe_catalog.h"
-#include "pe_economy.h"
+#include "pe_catalog_mod.h"
 #include "pe_gametext.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_draw_list.h"

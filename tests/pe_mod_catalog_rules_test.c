@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "pe_catalog.h"
-#include "pe_economy.h"
+#include "pe_catalog_mod.h"
 SaveRuntimeState g_SaveRuntimeState;
 GameStateBlock g_GameStateBlock;
 Pe1GameState g_GameState;
@@ -12,12 +12,12 @@ int g_InvBonusSlotCount;
 static unsigned junk=1000;
 static int enabled=1;
 int pe_game_loaded(void) { return 1; }
-int pe_loot_enabled(void) { return enabled; }
-uint32_t pe_loot_price(uint32_t v) { return v; }
-uint32_t pe_loot_junk(void) { return junk; }
-void pe_loot_give_junk(uint32_t n) { junk+=n; }
-int pe_loot_spend_junk(uint32_t n) { if(junk<n)return 0;junk-=n;return 1; }
-int pe_loot_armor_has(int e) { (void)e;return 0; }
+int pe_catw_enabled(void) { return enabled; }
+uint32_t pe_catw_price(uint32_t v) { return v; }
+uint32_t pe_catw_junk(void) { return junk; }
+void pe_catw_give_junk(uint32_t n) { junk+=n; }
+int pe_catw_spend_junk(uint32_t n) { if(junk<n)return 0;junk-=n;return 1; }
+int pe_catw_armor_has(int e) { (void)e;return 0; }
 ItemDataRecord *pe_base_item(unsigned id) { return id<256?&bases[id]:NULL; }
 ItemDataRecord *pe_equipped(int armor) { return pe_cat_bag_record(armor?g_AyaSaveState.equipped_armor_slot:g_AyaSaveState.equipped_weapon_slot); }
 void pe_toast(const char *text) { (void)text; }

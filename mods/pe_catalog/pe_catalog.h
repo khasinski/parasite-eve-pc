@@ -5,7 +5,7 @@
  *   pe_catalog.c        effects, prices and rules; install / remove; unlocks; the PECT save block
  *   pe_dismantle.c      Dismantle, Rebuild and Tool salvage
  *   pe_catalog_pages.c  the F1 pages (Mod Catalog, Dismantle, Rebuild, Debug)
- * The rest of the mod uses the public calls in pe_economy.h (pe_cat_*, pe_rebuild_*). */
+ * The rest of the mod uses the calls in pe_catalog_mod.h (pe_cat_*, pe_rebuild_*). */
 
 #include <stdint.h>
 

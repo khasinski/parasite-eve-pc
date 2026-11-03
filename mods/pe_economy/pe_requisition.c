@@ -159,10 +159,16 @@ int pe_shop_rescue_needed(void) {
 /* Goods rows shown: all of them, minus the Tool while a kit is carried. */
 static int pe_goods_shown(void) { return PE_GOODS_COUNT - (pe_game_loaded() && pe_has_tool_kit()); }
 
+/* Economy effects unlock in the Mod Catalog (its own mod): with no Catalog running none is for
+ * sale, and an unlock that can't happen is refunded. */
+static const PeCatalogApi *pe_req_catalog(void) { return (const PeCatalogApi *)pe_service_get("catalog", 1); }
+static int pe_req_unlocked(int effect) { const PeCatalogApi *c = pe_req_catalog(); return !c || c->armor_unlocked(effect); }
+static int pe_req_unlock(int effect) { const PeCatalogApi *c = pe_req_catalog(); return c && c->unlock_armor(effect); }
+
 int pe_shop_count(void) {
     int n = pe_goods_shown(), i;
     if (pe_game_loaded())
-        for (i = 0; i < PE_ECON_COUNT; ++i) n += !pe_catalog_armor_unlocked(s_econ[i].effect);
+        for (i = 0; i < PE_ECON_COUNT; ++i) n += !pe_req_unlocked(s_econ[i].effect);
     return n;
 }
 
@@ -174,7 +180,7 @@ uint16_t pe_shop_item(int row) {
     row -= goods;
     if (pe_game_loaded())
         for (i = 0; i < PE_ECON_COUNT; ++i)
-            if (!pe_catalog_armor_unlocked(s_econ[i].effect) && row-- == 0) return (uint16_t)(PE_ECON_ID_FIRST + i);
+            if (!pe_req_unlocked(s_econ[i].effect) && row-- == 0) return (uint16_t)(PE_ECON_ID_FIRST + i);
     return 0;
 }
 
@@ -218,7 +224,7 @@ const char *pe_shop_blocked(uint16_t id) {
     int pool;
     if (closed) return closed;
     if (e >= 0) {
-        if (pe_catalog_armor_unlocked(s_econ[e].effect)) return "Already unlocked";
+        if (pe_req_unlocked(s_econ[e].effect)) return "Already unlocked";
     } else {
         if (g < 0) return "No such goods";
         if (id == PE_ITEM_TOOL && pe_has_tool_kit()) return "A Tool Kit already covers Tools";
@@ -241,7 +247,7 @@ int pe_shop_buy(uint16_t id, char *msg, size_t size) {
     if (why) { snprintf(msg, size, "%s", why); return 0; }
     if (price && !pe_loot_spend_junk(price)) { snprintf(msg, size, "Not enough Junk"); return 0; }
     if (e >= 0) {
-        if (!pe_catalog_unlock_armor(s_econ[e].effect)) {   /* unlocked meanwhile: refund */
+        if (!pe_req_unlock(s_econ[e].effect)) {   /* unlocked meanwhile: refund */
             if (price) pe_loot_give_junk(price);
             snprintf(msg, size, "Already unlocked");
             return 0;

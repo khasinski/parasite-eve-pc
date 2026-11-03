@@ -82,6 +82,19 @@ static u8 s_orig[PE_GAMETEXT_MAX];  /* copy of Wayne's */
 static unsigned s_orig_len;
 static struct { int saved; u8 r, g, b; } s_highlight;
 
+/* The Mod Catalog's Rebuild list (its own mod): empty while the Catalog isn't running. */
+static const PeRebuildApi *pe_wm_rebuild(void) { return (const PeRebuildApi *)pe_service_get("rebuild", 1); }
+static int pe_wm_rebuild_count(void) { const PeRebuildApi *r = pe_wm_rebuild(); return r ? r->count() : 0; }
+static uint8_t pe_wm_rebuild_item(int i) { const PeRebuildApi *r = pe_wm_rebuild(); return r ? r->item(i) : 0; }
+static unsigned pe_wm_rebuild_bought_slots(int i) { const PeRebuildApi *r = pe_wm_rebuild(); return r ? r->bought_slots(i) : 0u; }
+static uint32_t pe_wm_rebuild_price_index(int i) { const PeRebuildApi *r = pe_wm_rebuild(); return r ? r->price(i) : 0u; }
+static int pe_wm_rebuild_index(int i, char *msg, size_t size) {
+    const PeRebuildApi *r = pe_wm_rebuild();
+    if (r) return r->rebuild(i, msg, size);
+    snprintf(msg, size, "Mod Catalog is off");
+    return 0;
+}
+
 static const PeWardrobeApi *pe_wardrobe(void) { return (const PeWardrobeApi *)pe_service_get("wardrobe", 1); }
 
 /* ---- Wayne's menu ---- */
@@ -198,7 +211,7 @@ static int pe_root_row(int what) {
 }
 
 static void pe_build_list(PeText *t, int rebuild) {
-    const int count = rebuild ? pe_rebuild_count() : pe_shop_count();
+    const int count = rebuild ? pe_wm_rebuild_count() : pe_shop_count();
     int items, k;
     const int options = pe_list_options(count, &items);
     pe_title(t, rebuild ? (count ? "Rebuild" : "Rebuild: nothing dismantled") : "Requisition");
@@ -206,19 +219,19 @@ static void pe_build_list(PeText *t, int rebuild) {
     for (k = 0; k < items; ++k) {
         const int i = s_ui.page * PE_PAGE_SIZE + k;
         const uint16_t id = rebuild ? 0 : pe_shop_item(i);
-        const int dim = rebuild ? pe_rebuild_price_index(i) > pe_loot_junk() : pe_shop_blocked(id) != NULL;
+        const int dim = rebuild ? pe_wm_rebuild_price_index(i) > pe_loot_junk() : pe_shop_blocked(id) != NULL;
         pe_t_option(t, k == 0);
         if (dim) pe_t_red(t, 1);
-        if (rebuild) pe_t_item(t, pe_rebuild_item(i));
+        if (rebuild) pe_t_item(t, pe_wm_rebuild_item(i));
         else if (id >= 0xF000) pe_t_str(t, pe_shop_name(id));   /* an economy effect */
         else pe_t_item(t, id);
-        if (rebuild && pe_rebuild_bought_slots(i)) {            /* built up with Mod Permits */
+        if (rebuild && pe_wm_rebuild_bought_slots(i)) {            /* built up with Mod Permits */
             pe_t_str(t, " +");
-            pe_t_num(t, pe_rebuild_bought_slots(i));
+            pe_t_num(t, pe_wm_rebuild_bought_slots(i));
             pe_t_str(t, " slots");
         }
         pe_t_str(t, "  ");
-        pe_t_num(t, (unsigned)(rebuild ? pe_rebuild_price_index(i) : pe_shop_price(id)));
+        pe_t_num(t, (unsigned)(rebuild ? pe_wm_rebuild_price_index(i) : pe_shop_price(id)));
         if (dim) pe_t_red(t, 0);
     }
     pe_list_tail(t, count, items);
@@ -389,16 +402,16 @@ static void pe_turn_page(int screen, int count, uint32_t pressed) {
 }
 
 static void pe_list_confirm(int rebuild, int cursor) {
-    const int count = rebuild ? pe_rebuild_count() : pe_shop_count();
+    const int count = rebuild ? pe_wm_rebuild_count() : pe_shop_count();
     int items, left;
     const int options = pe_list_options(count, &items);
     if (cursor < items) {
         const int i = s_ui.page * PE_PAGE_SIZE + cursor;
         int keep = cursor;
-        if (rebuild) pe_rebuild_index(i, s_ui.note, sizeof s_ui.note);
+        if (rebuild) pe_wm_rebuild_index(i, s_ui.note, sizeof s_ui.note);
         else pe_shop_buy(pe_shop_item(i), s_ui.note, sizeof s_ui.note);
         pe_short_note();
-        left = (rebuild ? pe_rebuild_count() : pe_shop_count()) - s_ui.page * PE_PAGE_SIZE;   /* the list may shrink */
+        left = (rebuild ? pe_wm_rebuild_count() : pe_shop_count()) - s_ui.page * PE_PAGE_SIZE;   /* the list may shrink */
         if (left <= 0 && s_ui.page > 0) { --s_ui.page; keep = 0; }
         else if (keep >= left) keep = left > 0 ? left - 1 : 0;
         pe_show(rebuild ? SCR_REB : SCR_REQ, keep);
@@ -448,7 +461,7 @@ static uint32_t pe_input(uint32_t pressed, int cursor) {
     case SCR_REQ:
     case SCR_REB: {
         const int rebuild = s_ui.screen == SCR_REB;
-        const int count = rebuild ? pe_rebuild_count() : pe_shop_count();
+        const int count = rebuild ? pe_wm_rebuild_count() : pe_shop_count();
         if (pressed & PE_IN_CONFIRM) { pe_list_confirm(rebuild, cursor); return PE_IN_CONFIRM; }
         if (pressed & PE_IN_CANCEL) {
             s_ui.note[0] = '\0';

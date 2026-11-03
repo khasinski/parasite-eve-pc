@@ -13,7 +13,7 @@
 #include <stdio.h>
 
 #include "pe_catalog.h"
-#include "pe_economy.h"
+#include "pe_catalog_mod.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
@@ -129,7 +129,7 @@ static void pe_replaces_text(char *out, unsigned size) {
     else snprintf(out, size, "NOTHING (EMPTY SLOT)");
 }
 
-static void pe_junk_text(char *out, unsigned size) { snprintf(out, size, "%u", (unsigned)pe_loot_junk()); }
+static void pe_junk_text(char *out, unsigned size) { snprintf(out, size, "%u", (unsigned)pe_catw_junk()); }
 static void pe_result_text(char *out, unsigned size) { snprintf(out, size, "%s", pe_cat_last_said()); }
 
 static void pe_gives_text(char *out, unsigned size) {
@@ -164,7 +164,7 @@ static void pe_install(void) {
     case PE_CAT_LOCKED: snprintf(msg, sizeof msg, "Locked: dismantle an item with this effect"); break;
     case PE_CAT_ALREADY: snprintf(msg, sizeof msg, "Already installed there"); break;
     case PE_CAT_BAG: snprintf(msg, sizeof msg, "Bag mods can't be replaced here"); break;
-    case PE_CAT_JUNK: snprintf(msg, sizeof msg, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_loot_junk()); break;
+    case PE_CAT_JUNK: snprintf(msg, sizeof msg, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_catw_junk()); break;
     case PE_CAT_TOOL: snprintf(msg, sizeof msg, "Needs a Tool (or a Tool Kit)"); break;
     default: snprintf(msg, sizeof msg, "Can't install now"); break;
     }

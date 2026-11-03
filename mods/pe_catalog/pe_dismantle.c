@@ -19,7 +19,7 @@
 #include <string.h>
 
 #include "pe_catalog.h"
-#include "pe_economy.h"
+#include "pe_catalog_mod.h"
 #include "pe_mod_host.h"
 #include "pe1/inventory_slots.h"
 
@@ -40,7 +40,7 @@ static uint32_t pe_salvage_payout(int which, int bonus_sum, const uint8_t *mods,
         if (pe_catalog_is_unlocked(which, e)) ++dupes; else ++unlocks;
     }
     payout += 2u * (uint32_t)dupes;
-    if (pe_loot_armor_has(PE_FX_SALVAGER)) payout += payout / 2u;
+    if (pe_catw_armor_has(PE_FX_SALVAGER)) payout += payout / 2u;
     if (payout > PE_PAYOUT_CAP) payout = PE_PAYOUT_CAP;
     if (unlocks_out) *unlocks_out = unlocks;
     return payout;
@@ -99,7 +99,7 @@ static uint32_t pe_salvage(const ItemDataRecord *rec, int which, int *unlocks_ou
     const int n = pe_read_mods(rec, mods);
     const uint32_t payout = pe_salvage_payout(which, pe_cat_bonus_sum(rec), mods, n, unlocks_out);
     pe_record_salvage(which, rec->itemId, rec->tailCount, rec->bonusStats, mods, n, payout);
-    pe_loot_give_junk(payout);
+    pe_catw_give_junk(payout);
     return payout;
 }
 
@@ -198,7 +198,7 @@ void pe_dismantle_run(void) {
     pe_salvage(rec, which, NULL);
     memset(rec, 0, sizeof *rec);                   /* free the record */
     g_AyaSaveState.inventory_items[slot] = 0;
-    snprintf(msg, sizeof msg, "Dismantled %s: +%u Junk (total %u)", name, (unsigned)payout, (unsigned)pe_loot_junk());
+    snprintf(msg, sizeof msg, "Dismantled %s: +%u Junk (total %u)", name, (unsigned)payout, (unsigned)pe_catw_junk());
     pe_cat_say(msg);
 }
 
@@ -232,10 +232,10 @@ static uint32_t pe_rebuild_floor(const PeRebuildEntry *r) {
 static uint32_t pe_rebuild_price(const PeRebuildEntry *r) {
     uint32_t p, floor;
     if (pe_top_tier(r->id)) {
-        p = pe_loot_price(PE_REBUILD_CAP);
+        p = pe_catw_price(PE_REBUILD_CAP);
         if (p > PE_REBUILD_CAP) p = PE_REBUILD_CAP;
     } else {
-        p = pe_loot_price((uint32_t)r->payout * (uint32_t)pe_cat_rebuild_markup() / 100u);
+        p = pe_catw_price((uint32_t)r->payout * (uint32_t)pe_cat_rebuild_markup() / 100u);
         if (p < r->payout) p = r->payout;
         if (p > PE_REBUILD_CAP) p = PE_REBUILD_CAP;
     }
@@ -276,14 +276,14 @@ int pe_rebuild_index(int i, char *msg, size_t msg_size) {
     PeRebuildEntry r;
     uint32_t price;
     if (!pe_game_loaded()) { snprintf(msg, msg_size, "Load a game first"); return 0; }
-    if (!pe_loot_enabled()) { snprintf(msg, msg_size, "Junk economy is off"); return 0; }
+    if (!pe_catw_enabled()) { snprintf(msg, msg_size, "Junk economy is off"); return 0; }
     if (i < 0 || i >= cat->rebuild_count) { snprintf(msg, msg_size, "Nothing to rebuild"); return 0; }
     r = cat->rebuild[i];
     if (r.slots > PE_CAT_MAX_MODS) { snprintf(msg, msg_size, "Saved equipment data is invalid"); return 0; }
     price = pe_rebuild_price(&r);
-    if (pe_loot_junk() < price) { snprintf(msg, msg_size, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_loot_junk()); return 0; }
+    if (pe_catw_junk() < price) { snprintf(msg, msg_size, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_catw_junk()); return 0; }
     if (!pe_create_item(r.id, r.slots, r.bonus, NULL, 0)) { snprintf(msg, msg_size, "Bag full"); return 0; }
-    pe_loot_spend_junk(price);
+    pe_catw_spend_junk(price);
     pe_log("rebuild", "item=0x%02X price=%u", r.id, (unsigned)price);
     memmove(&cat->rebuild[i], &cat->rebuild[i + 1], sizeof(PeRebuildEntry) * (size_t)(cat->rebuild_count - i - 1));
     --cat->rebuild_count;
@@ -365,7 +365,7 @@ static int pe_on_tool_transfer(void *ctx, void *user) {
     uint32_t payout;
     char msg[64];
     (void)user;
-    if (!pe_loot_enabled() || !pe_game_loaded()) return 0;
+    if (!pe_catw_enabled() || !pe_game_loaded()) return 0;
     src = pe_selection_record(t->selection);
     dest = pe_selection_record(t->selection ^ 1u);
     if ((which = pe_cat_record_type(src)) < 0 || !dest) return 0;
@@ -392,7 +392,7 @@ static int pe_on_tool_transfer(void *ctx, void *user) {
     for (i = 0; i < 3; ++i) if (bonus[i] > 0) bonus_sum += bonus[i];
     payout = pe_salvage_payout(which, bonus_sum, mods, n, &unlocks);
     pe_record_salvage(which, src->itemId, src->tailCount, bonus, mods, n, payout);
-    pe_loot_give_junk(payout);
+    pe_catw_give_junk(payout);
     snprintf(msg, sizeof msg, "Salvaged %s: +%u Junk, %d new effect(s)", pe_cat_item_name(src->itemId), (unsigned)payout,
              unlocks + kept_new);
     pe_cat_note(msg);           /* the game's Tool screen is up: no toast */

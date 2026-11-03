@@ -1,6 +1,6 @@
 /* Native equipment-menu presentation for the economy's added armor effects.
  * Retail effects and weapon icons continue through the game's own renderer. */
-#include "pe_economy.h"
+#include "pe_catalog_mod.h"
 #include "pe_mod_host.h"
 #include "pe1/draw_state.h"
 #include "pe1/inventory.h"
