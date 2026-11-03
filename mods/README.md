@@ -436,12 +436,14 @@ In pe_wardrobe/:
   the reason on F1 > Collection > Wardrobe > Packs: an id installed twice (every copy), a bad or
   reserved id (`pe1`, `local`), no LICENSE, another format or kind (recipe packs need the
   builder), and zips with unsafe or duplicate names, encryption, links, files over 4 MiB, over
-  64 MiB unpacked or suspicious compression. A character missing a file is refused alone. Tiers
-  price 25 / 50 / 100 / 250 / 400 Junk while unlock rules apply. Not yet: the menu preview of pack
-  costumes (host/pe_model_skin.c reads pe_skins/ only), recipe packs, default-appearance
-  replacement, and the build_skin.py structure checks before listing (the loader checks a file's
-  structure when the costume is first worn). `tests/pe_mod_packs_test.c` writes real zips and
-  folders.
+  64 MiB unpacked or suspicious compression. A character missing a file, or not shaped like Aya
+  (host `pe_model_check_skin`, the bridge's check_skins_struct.py: at least 29 parts, draw commands
+  visiting each part once in order, every animation row one channel set per part, meta.bin's gun
+  part a part), is refused alone. Tiers price 25 / 50 / 100 / 250 / 400 Junk while unlock rules
+  apply. Previews in Aya's Wardrobe menu read the pack through `pe_model_skin_set_reader`, set by
+  the Wardrobe (the host never calls it by name). Not yet: recipe packs and default-appearance
+  replacement. `tests/pe_mod_packs_test.c` writes real zips and folders; the model fixture covers
+  the preview reader and the shape check's refusals.
 - `pe_wardrobe_profile.c`: costumes owned and the one worn, by key, in pe_wardrobe.ini beside the
   preferences, kept across every game; records of packs that aren't loaded are kept untouched. The
   first time the file is missing, it imports the costume lines of pe_collection.ini (or, with none,

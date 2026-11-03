@@ -10,11 +10,22 @@
 #include "miniz.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_model.h"
 #include "pe_wardrobe.h"
 
 static char s_dir[512];
 int pe_mod_path(char *out, size_t size, const char *file) { snprintf(out, size, "%s/%s", s_dir, file); return 0; }
 void pe_mod_log(const char *m, const char *f, ...) { (void)m; (void)f; }
+
+/* The host's skin shape check (pe_model.c, tested with the model fixture): here a model.bin
+ * starting "BAD" isn't Aya's shape; every other file must have been handed over. */
+int pe_model_check_skin(const PeSkinFiles *f, char *why, size_t size) {
+    int i;
+    for (i = 0; i < 8; ++i) assert(f->day[i] && f->day_size[i]);
+    assert(f->texture && f->model);
+    if (!memcmp(f->model, "BAD", 3)) { snprintf(why, size, "only 1 parts (not Aya's layout)"); return 0; }
+    return 1;
+}
 
 /* The registry: what the packs added. */
 static const PeCostume *s_added[64];
@@ -161,6 +172,12 @@ int main(void) {
     mkdirs(packs);
     zip_pack("good-1.0.zip", "good", "assets", "claire.re2", "zombie.re2", NULL, "day5.bin");   /* zombie lacks a file */
     folder_pack("leon", "leon-pack", "leon.re2$rpd", "special", "", 1);
+    folder_pack("shape", "shape-pack", "wrong.re2", "main", "", 1);
+    {   /* a model that isn't shaped like Aya: refused before it is listed */
+        char path[700];
+        snprintf(path, sizeof path, "%s/packs/shape/characters/wrong.re2/model.bin", s_dir);
+        put_file(path, "BAD-MODEL-BLOB", 14);
+    }
     folder_pack("nolicense", "no-license", "x.re2", "main", "", 0);
     folder_pack("dup-folder", "twice", "a.re2", "main", "", 1);
     zip_pack("dup.zip", "twice", "assets", "b.re2", NULL, NULL, NULL);
@@ -191,6 +208,7 @@ int main(void) {
     /* Refused, each with its reason on the Packs page. */
     assert(strstr(status_of("Pack good"), "1 characters; 1 refused"));
     assert(strstr(status_of("Pack leon-pack"), "1 characters loaded"));
+    assert(strstr(status_of("Pack shape-pack"), "0 characters; 1 refused") && !find("shape-pack/wrong.re2"));
     assert(strstr(status_of("Pack no-license"), "no LICENSE"));
     assert(strstr(status_of("Pack twice"), "installed twice"));
     assert(strstr(status_of("dup.zip"), "installed twice") || strstr(status_of("Pack twice"), "installed twice"));

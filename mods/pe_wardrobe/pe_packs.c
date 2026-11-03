@@ -16,8 +16,8 @@
  * (every copy: the author field can't prove which is genuine, so the player removes one), a bad
  * or reserved id, a missing LICENSE, another format or kind (recipe packs need the builder), and
  * zips with unsafe or duplicate names, encryption, links or sizes past the limits below. A
- * character missing a file is refused alone; the pack's others load. The files' own structure is
- * checked by the skin loader when a costume is first worn.
+ * character missing a file, or not shaped like Aya (host pe_model_check_skin: the bridge's
+ * check_skins_struct.py), is refused alone; the pack's others load.
  *
  * Prices: packs state a tier, never Junk. Until Economy sets prices itself (D8 §4.3, `wardrobe`
  * v2), the tier maps to the kept curve 25 / 50 / 100 / 250 / 400 Junk, charged only while
@@ -32,6 +32,7 @@
 #include "miniz.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_model.h"
 #include "pe_pages.h"
 #include "pe_wardrobe.h"
 
@@ -261,7 +262,33 @@ static unsigned pe_tier_price(const char *tier) {
 static const char *const s_required[] = {"texture.bin", "model.bin", "day1.bin", "day2.bin", "day3.bin", "day4.bin",
                                          "day5.bin", "day6.bin", "day7.bin", "day8.bin"};
 
-/* One character: its character.json and every required file. */
+/* The character's files read and checked for Aya's shape; 0 with the reason if not. */
+static int pe_check_char(const PePack *p, const char *folder, char *why, size_t size) {
+    static const char *const optional[2] = {"rooms.bin", "meta.bin"};
+    unsigned char *data[12] = {0};
+    unsigned bytes[12] = {0}, i;
+    char rel[160];
+    PeSkinFiles f;
+    int ok = 1;
+    for (i = 0; ok && i < 12; ++i) {
+        const char *name = i < 10 ? s_required[i] : optional[i - 10];
+        snprintf(rel, sizeof rel, "characters/%s/%s", folder, name);
+        if (!pe_pack_file(p, rel, &data[i], &bytes[i], PE_FILE_BYTES) && i < 10) { snprintf(why, size, "%s unreadable", name); ok = 0; }
+    }
+    if (ok) {
+        memset(&f, 0, sizeof f);
+        f.texture = data[0]; f.texture_size = bytes[0];
+        f.model = data[1]; f.model_size = bytes[1];
+        for (i = 0; i < 8; ++i) { f.day[i] = data[2 + i]; f.day_size[i] = bytes[2 + i]; }
+        f.rooms = data[10]; f.rooms_size = bytes[10];
+        f.meta = data[11]; f.meta_size = bytes[11];
+        ok = pe_model_check_skin(&f, why, size);
+    }
+    for (i = 0; i < 12; ++i) free(data[i]);
+    return ok;
+}
+
+/* One character: its character.json, every required file, and their shape. */
 static int pe_read_char(PePack *p, const char *folder) {
     PePackChar *c;
     char rel[160];
@@ -290,6 +317,15 @@ static int pe_read_char(PePack *p, const char *folder) {
         snprintf(rel, sizeof rel, "characters/%s/%s", folder, s_required[i]);
         if (!pe_pack_exists(p, rel)) {
             pe_mod_log("pe_wardrobe", "pack %s: character %s refused (%s missing)", p->id, folder, s_required[i]);
+            ++p->refused_chars;
+            cJSON_Delete(j);
+            return 0;
+        }
+    }
+    {
+        char why[96];
+        if (!pe_check_char(p, folder, why, sizeof why)) {
+            pe_mod_log("pe_wardrobe", "pack %s: character %s refused (%s)", p->id, folder, why);
             ++p->refused_chars;
             cJSON_Delete(j);
             return 0;

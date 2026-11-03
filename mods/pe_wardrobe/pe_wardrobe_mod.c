@@ -12,6 +12,7 @@
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_model.h"
 #include "pe_pages.h"
 #include "pe_wardrobe.h"
 
@@ -54,6 +55,7 @@ static int wardrobe_init(void) {
     pe_pack_pe1_costumes_register();
     pe_packs_scan();
     pe_packs_register();
+    pe_model_skin_set_reader(pe_pack_read);          /* menu previews of pack costumes */
     pe_packs_page_register();
     pe_menu_register_action(PE_PAGE_DEBUG_COLLECTION, "Reset wardrobe", "Forget all costume unlocks and the costume worn.", pe_reset);
     pe_menu_register_tick(pe_ward_profile_tick);

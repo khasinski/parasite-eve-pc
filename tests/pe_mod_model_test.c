@@ -22,6 +22,18 @@ int pe_mod_path(char *out, size_t size, const char *file) {
     return snprintf(out,size,"%s/model-fixture-%s",root,name ? name+1 : file) < (int)size ? 0 : -1;
 }
 
+/* A character pack's files ("@" folders), as the Wardrobe's pack reader hands them over. */
+static const uint8_t *s_pack_model, *s_pack_tex;
+static unsigned s_pack_model_size, s_pack_tex_size;
+static int pack_read(const char *folder, const char *name, unsigned char **data, unsigned *size, unsigned max) {
+    const uint8_t *src = !strcmp(name, "model.bin") ? s_pack_model : !strcmp(name, "texture.bin") ? s_pack_tex : NULL;
+    const unsigned n = src == s_pack_model ? s_pack_model_size : s_pack_tex_size;
+    if (strcmp(folder, "@pack/aya.test") || !src || n > max || !(*data = malloc(n))) return 0;
+    memcpy(*data, src, n);
+    *size = n;
+    return 1;
+}
+
 static void w16(uint8_t *b, unsigned at, unsigned v) { b[at] = (uint8_t)v; b[at + 1] = (uint8_t)(v >> 8); }
 static void w32(uint8_t *b, unsigned at, unsigned v) { w16(b, at, v & 0xFFFF); w16(b, at + 2, v >> 16); }
 
@@ -115,6 +127,25 @@ int main(void) {
     assert(!pe_model_load(&src));             /* missing assets fail cleanly */
     src.folder=NULL; src.map=12;
     assert(!pe_model_load(&src) && player_reads==1); /* no disc: no live actor fallback */
+    /* A character pack's costume previews through the reader its owner sets; none set, none shown. */
+    src.folder="@pack/aya.test";
+    s_pack_model=data; s_pack_model_size=sizeof data; s_pack_tex=tex; s_pack_tex_size=sizeof tex;
+    assert(!pe_model_load(&src));
+    pe_model_skin_set_reader(pack_read);
+    assert(pe_model_load(&src) && pe_model_load(&src)->anim);
+    src.folder="@pack/other"; assert(!pe_model_load(&src));
+    pe_model_release_all();
+    pe_model_skin_set_reader(NULL);
+    /* Skin structure (check_skins_struct.py): this one-part model isn't Aya's layout; a model that
+     * doesn't decode says so. */
+    {
+        char why[96];
+        PeSkinFiles f = {0};
+        f.model=data; f.model_size=sizeof data; f.texture=tex; f.texture_size=sizeof tex;
+        assert(!pe_model_check_skin(&f,why,sizeof why) && strstr(why,"only 1 parts"));
+        f.model=tex; f.model_size=sizeof tex;
+        assert(!pe_model_check_skin(&f,why,sizeof why) && strstr(why,"doesn't decode"));
+    }
     if (getenv("PE_MODEL_SKIN_ROOT")) {
         static const char *folders[]={"harlequin","baker","maya"};
         real_assets=1;

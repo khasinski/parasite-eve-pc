@@ -10,6 +10,7 @@
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_model.h"
 #include "pe_wardrobe.h"
 #include "pe1/game_state.h"
 
@@ -89,6 +90,8 @@ int pe_skin_instant(void) { return 0; }
 void pe_packs_scan(void) {}                                   /* character packs: their own test */
 void pe_packs_register(void) {}
 void pe_packs_page_register(void) {}
+void pe_model_skin_set_reader(PeSkinReader read) { (void)read; }
+int pe_pack_read(const char *r, const char *n, unsigned char **d, unsigned *s, unsigned m) { (void)r; (void)n; (void)m; *d = NULL; *s = 0; return 0; }
 
 /* The last entry of an F1 filter row (Area, Group). */
 static const char *last_filter(const char *label) {
