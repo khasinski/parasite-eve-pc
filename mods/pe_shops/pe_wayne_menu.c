@@ -28,7 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "pe_economy.h"
+#include "pe_shops.h"
 #include "pe_game.h"
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
@@ -150,12 +150,12 @@ static void pe_build_wayne(PeText *t) {
         for (k = start; k < i; ++k) pe_t_byte(t, s_orig[k]);
         if (pe_contains(s_orig + start, i - start, "Discard junk")) {
             pe_t_str(t, " ");
-            pe_t_num(t, (unsigned)pe_loot_junk());
+            pe_t_num(t, (unsigned)pe_shopw_junk());
             pe_t_str(t, ", ");
             pe_t_num(t, pe_wayne_count());
             pe_t_str(t, "/300");
-            if (pe_loot_handin_blocked()) pe_t_str(t, " bag full");
-            else if (pe_loot_wayne_waiting()) pe_t_str(t, " Day 4");
+            if (pe_shopw_handin_blocked()) pe_t_str(t, " bag full");
+            else if (pe_shopw_wayne_waiting()) pe_t_str(t, " Day 4");
         }
         if (i < s_orig_len) pe_t_byte(t, G_NEWLINE);
         ++option;
@@ -184,7 +184,7 @@ static void pe_list_tail(PeText *t, int count, int items) {
 
 static void pe_title(PeText *t, const char *name) {
     if (s_ui.note[0]) pe_t_str(t, s_ui.note);
-    else { pe_t_str(t, name); pe_t_str(t, "   Junk "); pe_t_num(t, (unsigned)pe_loot_junk()); }
+    else { pe_t_str(t, name); pe_t_str(t, "   Junk "); pe_t_num(t, (unsigned)pe_shopw_junk()); }
     pe_t_byte(t, G_NEWLINE);
 }
 
@@ -219,7 +219,7 @@ static void pe_build_list(PeText *t, int rebuild) {
     for (k = 0; k < items; ++k) {
         const int i = s_ui.page * PE_PAGE_SIZE + k;
         const uint16_t id = rebuild ? 0 : pe_shop_item(i);
-        const int dim = rebuild ? pe_wm_rebuild_price_index(i) > pe_loot_junk() : pe_shop_blocked(id) != NULL;
+        const int dim = rebuild ? pe_wm_rebuild_price_index(i) > pe_shopw_junk() : pe_shop_blocked(id) != NULL;
         pe_t_option(t, k == 0);
         if (dim) pe_t_red(t, 1);
         if (rebuild) pe_t_item(t, pe_wm_rebuild_item(i));
@@ -246,7 +246,7 @@ static void pe_build_ward(PeText *t) {
     pe_t_choice(t, options);
     for (k = 0; k < items; ++k) {
         const int i = s_ui.page * PE_PAGE_SIZE + k, state = w->state(i);
-        const int dim = state == 0 && w->price(i) > pe_loot_junk();
+        const int dim = state == 0 && w->price(i) > pe_shopw_junk();
         pe_t_option(t, k == 0);
         if (dim) pe_t_red(t, 1);
         pe_t_str(t, w->name(i));
@@ -556,7 +556,7 @@ static int pe_on_textboxes(void *ctx, void *user) {
         else if (e->message == s_ui.orig_msg) pe_show(SCR_WAYNE, g_DialogueChoiceCursor);
     }
     if (s_ui.screen == SCR_NONE) {
-        if (!pe_loot_enabled()) return 0;
+        if (!pe_shopw_enabled()) return 0;
         for (i = 0; i < 4; ++i) {
             TextboxEntry *e = &g_TextboxEntries[i];
             if (e->state != PE_TEXTBOX_SHOWN || !pe_is_wayne_menu(e->message)) continue;

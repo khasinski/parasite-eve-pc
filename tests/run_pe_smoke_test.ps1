@@ -8,7 +8,7 @@ if (!$match.Success) { throw 'Configure the native CMake build first.' }
 $compiler=$match.Groups[1].Value.Trim()
 $output=Join-Path $BuildDirectory 'test-pe-mod-smoke.exe'
 $compileArgs=@('-D__psyz','-DPE_MODS=1','-std=c11','-O1','-fno-strict-aliasing','-Wno-pointer-sign')
-foreach ($path in @('include','mods/host','mods/pe_economy','mods/pe_catalog','third_party/psyz/psyz/include','third_party/psyz/external/SDL/include')) {
+foreach ($path in @('include','mods/host','mods/pe_economy','mods/pe_catalog','mods/pe_shops','third_party/psyz/psyz/include','third_party/psyz/external/SDL/include')) {
     $compileArgs+='-I'; $compileArgs+=Join-Path $root $path
 }
 $compileArgs+=Join-Path $root 'tests/pe_mod_smoke_test.c'

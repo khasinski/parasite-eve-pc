@@ -2,7 +2,7 @@
  * With the Junk economy on, Super/Duper Junk already pay their bundle value;
  * this feature only refunds vanilla crafts while that economy is off.
  * Transient craft tracking resets on scene changes, loads and new games. */
-#include "pe_economy.h"
+#include "pe_shops.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -33,7 +33,7 @@ static int pe_refund_reset(void *ctx, void *user) {
 
 static void pe_refund_tick(void) {
     unsigned counter;
-    if (!s_enabled || !pe_game_loaded() || pe_loot_enabled()) {
+    if (!s_enabled || !pe_game_loaded() || pe_shopw_enabled()) {
         s_valid = s_armed = 0;
         return;
     }

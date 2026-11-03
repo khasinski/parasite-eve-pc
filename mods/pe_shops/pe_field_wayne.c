@@ -23,7 +23,7 @@
  */
 #include <string.h>
 
-#include "pe_economy.h"
+#include "pe_shops.h"
 #include "pe_game.h"
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
@@ -197,7 +197,7 @@ static int pe_on_textboxes(void *ctx, void *user) {
         s_menu_box = NULL;
         if (s_warner) pe_field_event(PE_FIELD_UNLOCK);
     }
-    if (!s_enabled || !pe_loot_enabled()) {             /* an open menu still unlocks as it closes */
+    if (!s_enabled || !pe_shopw_enabled()) {             /* an open menu still unlocks as it closes */
         if (!s_menu_box) pe_forget();
         return 0;
     }

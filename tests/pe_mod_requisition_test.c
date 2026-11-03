@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "pe_requisition.h"
-#include "pe_economy.h"
+#include "pe_shops.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -26,13 +26,13 @@ static PeMenuGet get_tools;
 static char message[128];
 int pe_game_loaded(void) { return loaded; }
 int pe_free_field(void) { return !(g_GameStateFlags & 0x2006u) && !(g_GameStateFlagsWord & 0xB600u); }   /* as host/pe_game.c */
-int pe_loot_enabled(void) { return economy; }
+int pe_shopw_enabled(void) { return economy; }
 int Inv_GetAyaSlotLimit(void) { return limit; }
 ItemDataRecord *pe_base_item(unsigned id) { return id>0 && id<256?&bases[id]:NULL; }
-uint32_t pe_loot_junk(void) { return junk; }
-uint32_t pe_loot_price(uint32_t p) { return discount?p*85/100:p; }
-int pe_loot_spend_junk(uint32_t n) { if(fail_spend || junk<n)return 0;junk-=n;return 1; }
-void pe_loot_give_junk(uint32_t n) { junk+=n; }
+uint32_t pe_shopw_junk(void) { return junk; }
+uint32_t pe_shopw_price(uint32_t p) { return discount?p*85/100:p; }
+int pe_shopw_spend_junk(uint32_t n) { if(fail_spend || junk<n)return 0;junk-=n;return 1; }
+void pe_shopw_give_junk(uint32_t n) { junk+=n; }
 int pe_catalog_armor_unlocked(int e) { return !!(unlocked&(1u<<e)); }
 int pe_catalog_unlock_armor(int e) { if(pe_catalog_armor_unlocked(e))return 0;unlocked|=1u<<e;return 1; }
 /* The Mod Catalog is its own mod: Requisition reaches it through the "catalog" service. */

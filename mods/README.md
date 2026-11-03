@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_collection;pe_wardrobe` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -47,7 +47,8 @@ mods/
     ui/                  drawing (pe_ui_raster), the overlay quad (pe_ui_gpu), toasts
   pe_qol/              quality of life: movement, encounters, key item pocket, bag sort, Key Items menu
   pe_rebalance/        mod effects, Parasite Energy balance, half-bar turns / Quick powers, Combine
-  pe_economy/          the Junk wallet, Requisition, Wayne and Warner
+  pe_economy/          the Junk wallet (counter, Difficulty, prices), Costume unlock rules, Smoke Grenades
+  pe_shops/            Requisition, Wayne's menu and Workshop, Warner, craft refunds (needs pe_economy)
   pe_catalog/          Mod Catalog / Dismantle / Rebuild (its record keeps the name pe_economy.catalog)
   pe_rewards/          battle rewards: extra Junk, rare drops and pity (needs pe_economy)
   pe_collection/       Bestiary registry and menu (creature packs register here)
@@ -173,7 +174,7 @@ Records today:
 |---|---|---|
 | `pe_economy.loot` | Junk, rare pity, difficulty (the rewards' fields through the `wallet` service, D10) | pe_economy/pe_loot.c |
 | `pe_economy.catalog` | Mod Catalog unlocks, Rebuild list (the name from before the split) | pe_catalog/pe_catalog.c |
-| `pe_economy.shop` | Requisition | pe_economy/pe_requisition.c |
+| `pe_economy.shop` | Requisition (the name from before the split) | pe_shops/pe_requisition.c |
 | `pe_qol.keys` | key item pocket | pe_qol/pe_key_items.c |
 | `pe_qol.sort` | bag sort | pe_qol/pe_bag_sort.c |
 

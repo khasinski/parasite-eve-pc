@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "pe_economy.h"
+#include "pe_shops.h"
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
@@ -105,7 +105,7 @@ static void pe_info_row(int row) {
     line[0] = 0;
     if (s_mode == MODE_WORKSHOP) {
         const int c = pe_cursor();
-        if (row == 0) snprintf(line, sizeof line, "Junk %u", (unsigned)pe_loot_junk());
+        if (row == 0) snprintf(line, sizeof line, "Junk %u", (unsigned)pe_shopw_junk());
         else if (c >= 0 && c < s_nservices) snprintf(line, sizeof line, "%s", pe_ws_service_help(s_services[c]));
     } else {
         PeWsGoods g;
@@ -206,7 +206,7 @@ static int pe_help(void *ctx, void *user) {
     if (!s_open || !s_screen.list || MenuWidget_GetCurrentNode() != s_screen.list) return 0;
     if (s_note[0]) snprintf(line, sizeof line, "%s", s_note);
     else if (s_mode == MODE_WORKSHOP) snprintf(line, sizeof line, "Workshop   X: Open   O: Back to Wayne");
-    else snprintf(line, sizeof line, "Requisition   Junk %u   X: Buy   O: Back", (unsigned)pe_loot_junk());
+    else snprintf(line, sizeof line, "Requisition   Junk %u   X: Buy   O: Back", (unsigned)pe_shopw_junk());
     *text = pe_text_from_ascii(s_text, sizeof s_text, line);
     return 0;
 }

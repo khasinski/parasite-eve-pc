@@ -3,7 +3,7 @@
  * (src/mods/pe_loot_shop.c). This file holds the shop's rules and its save block; the F1 page
  * is pe_requisition_menu.c, so a future Wayne's Workshop menu can share the same backend.
  *
- * Goods and prices (before the difficulty preset and Bargain, pe_loot_price):
+ * Goods and prices (before the difficulty preset and Bargain, pe_shopw_price):
  *   - Medicine, cures, ammo, Smoke Grenades: fixed prices, scaled by "Shop price %".
  *   - Ammo goes into its pool (the special records 0x200..0x202), up to the pool's capacity;
  *     the pool's bag entry is added if missing.
@@ -26,7 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "pe_economy.h"
+#include "pe_shops.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -192,17 +192,17 @@ const char *pe_shop_name(uint16_t id) {
 uint32_t pe_shop_price(uint16_t id) {
     const int e = pe_econ_index(id), g = pe_goods_index(id);
     uint32_t price;
-    if (e >= 0) return pe_loot_price(s_econ[e].price * (unsigned)s_econ_pct / 100u);
+    if (e >= 0) return pe_shopw_price(s_econ[e].price * (unsigned)s_econ_pct / 100u);
     if (g < 0) return 0;
     if (id == PE_ITEM_TOOL) {
-        price = pe_loot_price((unsigned)s_tool_start + (unsigned)s_tool_step * s_shop.tools_bought);
+        price = pe_shopw_price((unsigned)s_tool_start + (unsigned)s_tool_step * s_shop.tools_bought);
         return price > (unsigned)s_tool_cap ? (unsigned)s_tool_cap : price;
     }
     if (id == PE_ITEM_REVIVE)
-        return pe_loot_price((unsigned)(g_ScriptVariableBank[PE_EX_GAME_VAR] > 0x10000u ? s_revive_ex : s_revive));
+        return pe_shopw_price((unsigned)(g_ScriptVariableBank[PE_EX_GAME_VAR] > 0x10000u ? s_revive_ex : s_revive));
     if (id == PE_ITEM_BULLETS_15 && pe_shop_rescue_needed()) return 0;
     price = (s_goods[g].price * (unsigned)s_price_pct + 50u) / 100u;
-    return pe_loot_price(price ? price : 1u);
+    return pe_shopw_price(price ? price : 1u);
 }
 
 /* Wayne's Workshop is a counter: buying in his dialogue box is fine though the field is busy. */
@@ -212,7 +212,7 @@ void pe_shop_at_counter(int on) { s_at_counter = on; }
 /* Why the shop is closed right now, or NULL. */
 static const char *pe_shop_closed(void) {
     if (!pe_game_loaded()) return "Load a game first";
-    if (!pe_loot_enabled()) return "Junk economy is off";
+    if (!pe_shopw_enabled()) return "Junk economy is off";
     if (!s_at_counter && !pe_free_field())
         return "Use Requisition in the field, outside battle and game menus";
     return NULL;
@@ -237,7 +237,7 @@ const char *pe_shop_blocked(uint16_t id) {
             return "Bag full";
         }
     }
-    return pe_loot_junk() < pe_shop_price(id) ? "Not enough Junk" : NULL;
+    return pe_shopw_junk() < pe_shop_price(id) ? "Not enough Junk" : NULL;
 }
 
 int pe_shop_buy(uint16_t id, char *msg, size_t size) {
@@ -245,10 +245,10 @@ int pe_shop_buy(uint16_t id, char *msg, size_t size) {
     const uint32_t price = why ? 0 : pe_shop_price(id);
     const int e = pe_econ_index(id);
     if (why) { snprintf(msg, size, "%s", why); return 0; }
-    if (price && !pe_loot_spend_junk(price)) { snprintf(msg, size, "Not enough Junk"); return 0; }
+    if (price && !pe_shopw_spend_junk(price)) { snprintf(msg, size, "Not enough Junk"); return 0; }
     if (e >= 0) {
         if (!pe_req_unlock(s_econ[e].effect)) {   /* unlocked meanwhile: refund */
-            if (price) pe_loot_give_junk(price);
+            if (price) pe_shopw_give_junk(price);
             snprintf(msg, size, "Already unlocked");
             return 0;
         }

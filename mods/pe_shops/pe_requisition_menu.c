@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "pe_economy.h"
+#include "pe_shops.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -64,7 +64,7 @@ static const char *pe_goods_name(unsigned row) {
     return s_label;
 }
 
-static void pe_junk_text(char *out, unsigned size) { snprintf(out, size, "%u", (unsigned)pe_loot_junk()); }
+static void pe_junk_text(char *out, unsigned size) { snprintf(out, size, "%u", (unsigned)pe_shopw_junk()); }
 static void pe_details_text(char *out, unsigned size) { pe_shop_details(pe_shop_item(s_selected), out, size); }
 
 static void pe_status_text(char *out, unsigned size) {
@@ -102,7 +102,7 @@ static void pe_buy(void) {
 
 static void pe_spare_club(void) {
     char msg[96];
-    if (!pe_game_loaded() || !pe_loot_enabled() || !pe_free_field()) {
+    if (!pe_game_loaded() || !pe_shopw_enabled() || !pe_free_field()) {
         s_armed.what = ARMED_NONE;
         pe_result("Use Requisition in the field with Junk economy on");
         return;
@@ -126,7 +126,7 @@ static void pe_spare_club(void) {
 
 static void pe_tick(void) {
     s_armed.what = ARMED_NONE;    /* the game ran a frame: F1 was left, so the confirmation lapses */
-    if (++s_frames % PE_RESCUE_CHECK_FRAMES || !pe_game_loaded() || !pe_loot_enabled() || !pe_free_field()) return;
+    if (++s_frames % PE_RESCUE_CHECK_FRAMES || !pe_game_loaded() || !pe_shopw_enabled() || !pe_free_field()) return;
     if (!pe_shop_rescue_needed()) {
         s_rescue_warned = 0;
         return;
