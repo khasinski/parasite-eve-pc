@@ -33,6 +33,7 @@
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
 #include "pe_requisition.h"
+#include "pe_workshop_model.h"
 #include "pe1/game_timers.h"
 #include "pe1/pad_state.h"
 #include "pe1/textbox.h"
@@ -55,6 +56,11 @@ extern u8 g_DialogueChoiceCursor;
 
 int pe_workshop_screen_open(void);    /* pe_workshop_screen.c */
 int pe_workshop_screen_busy(void);
+
+/* A Workshop service without a screen of its own yet (PE_WS_*): once the Workshop screen has
+ * closed, Wayne's box shows its dialogue version. */
+static int s_after_workshop = -1;
+void pe_wayne_menu_after_workshop(int service) { s_after_workshop = service; }
 
 enum { SCR_NONE, SCR_WAYNE, SCR_ROOT, SCR_REQ, SCR_REB, SCR_PERMIT, SCR_PERMIT_ASK, SCR_WARD };
 enum { ROOT_REQ, ROOT_REB, ROOT_WARD, ROOT_PERMIT, ROOT_BACK };
@@ -553,6 +559,15 @@ static int pe_on_textboxes(void *ctx, void *user) {
     }
     pe_shop_at_counter(1);                                 /* his box is the shop counter */
     if (pe_workshop_screen_busy()) {                       /* the Workshop screen has the pad */
+        g_FieldPadPressed = 0;
+        return 0;
+    }
+    if (s_after_workshop >= 0) {
+        const int service = s_after_workshop;
+        s_after_workshop = -1;
+        s_ui.note[0] = '\0';
+        s_ui.page = 0;
+        pe_show(service == PE_WS_REBUILD ? SCR_REB : service == PE_WS_WARDROBE ? SCR_WARD : SCR_PERMIT, 0);
         g_FieldPadPressed = 0;
         return 0;
     }
