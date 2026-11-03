@@ -11,6 +11,7 @@
  *   "wardrobe"  v1  pe_wardrobe    costumes that can be worn now (for shops such as Wayne's)
  *   "bestiary"  v1  pe_collection  register creatures, map enemies to them, unlock entries
  *   "costumes"  v1  pe_wardrobe    register costumes (the game's outfits or a mod's own models)
+ *   "costume_rules" v1 pe_economy  whether costumes must be unlocked before they are worn
  *
  * Providers (an import pack, a randomizer) register at their init, so they list "pe_collection"
  * in their PeMod requires. Keys are stable names saved in the player's profile ("pe1/rat",
@@ -55,6 +56,15 @@ typedef struct PeWardrobeApi {
     int (*state)(int k);
     int (*pick)(int k, char *msg, size_t size);   /* buy or wear; msg says what happened */
 } PeWardrobeApi;
+
+/* `costume_rules` v1: a mod's rule that costumes must be owned (or free) before they are worn
+ * (bridge findings D8 §12, D6 §15.5). The Wardrobe asks; it never calls the provider's code
+ * otherwise, and the provider never edits the Wardrobe's profile. With no provider running, or
+ * active() 0 (the player turned the rule off), every installed costume can be worn, without
+ * becoming owned. active() is read only: it never grants, spends or saves. */
+typedef struct PeCostumeRulesApi {
+    int (*active)(void);
+} PeCostumeRulesApi;
 
 /* ---- Bestiary ----
  * A creature's entry has three tiers: basics (met: first kill or any purchase), weaknesses (Scan,

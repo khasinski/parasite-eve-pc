@@ -42,10 +42,14 @@ static int junk_enabled(void) { return 1; }
 static uint32_t junk_count(void) { return s_junk; }
 static int junk_spend(uint32_t n) { if (n > s_junk) return 0; s_junk -= n; return 1; }
 static const PeJunkApi s_junk_api = { junk_enabled, junk_count, junk_spend };
+static int s_rules = 1, s_rules_published = 1;      /* pe_economy's Costume unlock rules, on by default */
+static int rules_active(void) { return s_rules; }
+static const PeCostumeRulesApi s_rules_api = { rules_active };
 const void *pe_service_get(const char *name, int v) {
     int i;
     (void)v;
     if (strcmp(name, "junk") == 0) return &s_junk_api;
+    if (strcmp(name, "costume_rules") == 0) return s_rules_published ? &s_rules_api : NULL;
     for (i = 0; i < s_nsvc; ++i) if (strcmp(s_svc[i].name, name) == 0) return s_svc[i].api;
     return NULL;
 }
@@ -373,6 +377,34 @@ int main(void) {
         remove(path);
         remove_file(ward);
     }
+    /* Unlock rules (D8 §12): off, every installed costume can be worn without being bought or
+     * owned; what Aya wears follows a rule change only at a room load, keeping the key asked for. */
+    {
+        const uint32_t junk = s_junk = 1000;
+        int claire_k;
+        pe_ward_profile_clear();
+        g_GameState.entity_texture_phase = 0;
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);          /* a room load under the rule */
+        assert((claire_k = find_shop(shop, "Claire")) >= 0 && shop->state(claire_k) == 0);
+        s_rules = 0;
+        assert(shop->state(claire_k) == 1 && pe_wardrobe_owned_count() > 0);
+        assert(shop->pick(claire_k, msg, sizeof msg) && s_junk == junk && !pe_ward_profile_owned("re2/claire"));
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);          /* worn from the next room */
+        assert(w->worn() == &s_claire);
+        s_rules = 1;                                      /* the rule back on: no charge, no grant */
+        assert(w->worn() == &s_claire && shop->state(claire_k) == 2);   /* not mid-room */
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);
+        assert(w->worn() == NULL && strcmp(pe_ward_profile_worn(), "re2/claire") == 0);
+        assert(s_junk == junk && !pe_ward_profile_owned("re2/claire") && shop->state(claire_k) == 0);
+        s_rules_published = 0;                            /* no Economy: unrestricted again */
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);
+        assert(w->worn() == &s_claire && !pe_ward_profile_owned("re2/claire"));
+        s_rules_published = 1;
+        assert(shop->pick(claire_k, msg, sizeof msg) && s_junk == junk - 25 && pe_ward_profile_owned("re2/claire"));
+        pe_ward_profile_clear();
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);
+    }
+
     /* Split ownership: each mod's reset clears only its own records. Before the Wardrobe has
      * imported a profile, the Collection carries its costume lines untouched, reset included. */
     assert(reset_wardrobe && reset_collection);

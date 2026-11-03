@@ -410,7 +410,8 @@ In pe_wardrobe/:
   panel (outfit name, wear status/action, and preview control; no cast/category detail row). L1/R1 filter owned outfits by registered group; Left/Right rotate, Triangle opens/closes
   full view, Square (default keyboard V) pauses. Previews start facing the viewer. Both Wardrobe
   and Bestiary use `pe_screen_preview_input` to pass Left/Right through the native list to rotation. Cross wears the selected outfit when the menu closes; Circle returns.
-  There are no purchases, prices or unlock actions here. Missing/unowned outfits stay out of the list.
+  There are no purchases, prices or unlock actions here. Missing outfits stay out of the list, and
+  so do unowned ones while unlock rules apply (below).
   Names are fitted to the native font and capped to leave room for the title and side rail in the
   16 KB menu drawing buffer. Groups remember their scroll position while the screen is open.
   Preview loading is separate from equipment: `host/pe_model_skin.c` reads standalone skin blobs
@@ -421,6 +422,11 @@ In pe_wardrobe/:
   names, the drawing budget, owned-only choices and cleanup; the model fixture covers player idle,
   skin source caching and missing files. Set `PE_MODEL_SKIN_ROOT` to the preference directory when
   running `tests/run_pe_model_test.ps1` to also decode installed Harlequin, Baker and Maya assets.
+- Unlock rules: a mod publishing `costume_rules` v1 (pe_economy's F1 > Economy > Costume unlock
+  rules, on by default) restricts wearing to owned or free costumes, bought with Junk. With the
+  rule off, or no such mod running, every installed costume can be worn and nothing is bought or
+  written as owned. What Aya wears follows a rule change at the next room load only; a costume the
+  rule locks comes off there with its key kept (bridge findings D8 §12).
 - `pe_wardrobe_profile.c`: costumes owned and the one worn, by key, in pe_wardrobe.ini beside the
   preferences, kept across every game; records of packs that aren't loaded are kept untouched. The
   first time the file is missing, it imports the costume lines of pe_collection.ini (or, with none,

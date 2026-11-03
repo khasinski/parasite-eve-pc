@@ -15,6 +15,13 @@
  *
  * Also publishes `wardrobe` v1 (what can be worn now, for shops: Wayne's Workshop) and announces
  * changes as the "wardrobe.worn" event.
+ *
+ * Unlock rules (bridge findings D8 §12): while a mod publishes `costume_rules` with active() on
+ * (pe_economy's Costume unlock rules, the default), only owned or free costumes can be worn and the
+ * others are bought with Junk. With no such mod running, or the rule off, every installed costume
+ * can be worn and nothing is bought or written as owned. Lists and buying follow the rule at once;
+ * what Aya wears follows it only at a room load (never mid-room or mid-battle): a costume the rule
+ * now locks comes off there, its key kept, and is worn again once the rule allows it.
  */
 #include <stdio.h>
 #include <string.h>
@@ -63,9 +70,31 @@ static int pe_wearable(const PeCostume *c) {
     return c && (!c->available || c->available()) && (!pe_is_skin(c) || pe_skin_available(c->bundle));
 }
 
-static const PeCostume *pe_worn(void) {
+/* ---- unlock rules ---- */
+static int s_rules_worn = -1;     /* the rule Aya's costume was last put on under (-1: not yet) */
+
+static int pe_rules_live(void) {
+    const PeCostumeRulesApi *r = (const PeCostumeRulesApi *)pe_service_get("costume_rules", 1);
+    return r && r->active && r->active();
+}
+static int pe_rules_for_worn(void) {
+    if (s_rules_worn < 0) s_rules_worn = pe_rules_live();
+    return s_rules_worn;
+}
+/* Can `c` be worn under `rules`? Eligibility only: it never makes a costume owned. */
+static int pe_eligible(const PeCostume *c, int rules) {
+    return pe_wearable(c) && (!rules || pe_ward_profile_owned(c->key) || !c->price);
+}
+
+/* The costume asked for, if it can be worn now (else Aya's own clothes; the key is kept). */
+static const PeCostume *pe_wanted(void) {
     const int i = pe_find(pe_ward_profile_worn());
     return i >= 0 && pe_wearable(s_costume[i]) ? s_costume[i] : NULL;
+}
+
+static const PeCostume *pe_worn(void) {
+    const PeCostume *c = pe_wanted();
+    return c && pe_eligible(c, pe_rules_for_worn()) ? c : NULL;
 }
 
 /* The game's same-room reload, so a new costume shows when F1 closes. */
@@ -82,10 +111,12 @@ const PeCostumesApi g_pe_costumes_api = { pe_add, pe_worn, pe_reload };
 static int s_room_bank = -1;            /* the bank the room itself asked for, before any costume */
 
 static int pe_on_player_bank(void *ctx, void *user) {
-    const PeCostume *c = pe_worn();
+    const PeCostume *c;
     (void)ctx;
     (void)user;
     if (!pe_save_loaded() || g_GameState.entity_texture_phase != 0) return 0;   /* the actor is rebuilt meanwhile */
+    s_rules_worn = pe_rules_live();                           /* a room load: the safe moment for a new rule */
+    c = pe_worn();
     s_room_bank = g_SceneAreaType;                            /* phase 0 comes once a load */
     if (s_loaded && s_loaded != c) { s_loaded->load(0); s_loaded = NULL; }   /* a provider costume comes off */
     if (!c || !pe_gameplay_bank(g_SceneAreaType)) return 0;                /* not in Liberate, story scenes */
@@ -129,7 +160,7 @@ static void pe_set_worn(const PeCostume *c, int now) {
 
 /* Buy (if needed); 0 with a reason in msg if it can't. */
 static int pe_buy(const PeCostume *c, char *msg, size_t size) {
-    if (pe_ward_profile_owned(c->key) || !c->price) return 1;
+    if (!pe_rules_live() || pe_ward_profile_owned(c->key) || !c->price) return 1;   /* no rule: worn, not bought */
     if (!pe_ward_junk_ready(msg, (unsigned)size)) return 0;
     if (!pe_ward_spend(c->price)) { snprintf(msg, size, "Need %u Junk (have %u)", (unsigned)c->price, pe_ward_junk()); return 0; }
     pe_ward_profile_own(c->key);
@@ -175,7 +206,8 @@ static unsigned pe_count(void) { pe_filter(); return s_count ? (unsigned)s_count
 
 static const char *pe_state_name(const PeCostume *c) {
     if (pe_worn() == c) return "worn";
-    return pe_ward_profile_owned(c->key) || !c->price ? "owned" : NULL;
+    if (pe_ward_profile_owned(c->key) || !c->price) return "owned";
+    return pe_rules_live() ? NULL : "free to wear";
 }
 
 static const char *pe_name(unsigned n) {
@@ -234,7 +266,7 @@ static int pe_ward_state(int k) {
     const PeCostume *c = pe_ward_costume(k, &own);
     if (own) return pe_worn() ? 1 : 2;
     if (!c) return 0;
-    return pe_worn() == c ? 2 : pe_ward_profile_owned(c->key) || !c->price;
+    return pe_worn() == c ? 2 : pe_eligible(c, pe_rules_live());
 }
 static int pe_ward_pick(int k, char *msg, size_t size) {   /* buy if needed, then wear (from the next room) */
     int own;
@@ -250,7 +282,7 @@ static const PeWardrobeApi s_wardrobe = { pe_ward_count, pe_ward_name, pe_ward_p
 /* ---- for the Wardrobe screen in Aya's menu ---- */
 static int s_reload_after_menu;
 
-static int pe_owned_wearable(const PeCostume *c) { return pe_wearable(c) && (pe_ward_profile_owned(c->key) || !c->price); }
+static int pe_owned_wearable(const PeCostume *c) { return pe_eligible(c, pe_rules_live()); }
 
 int pe_wardrobe_story_bank(void) { return pe_gameplay_bank(s_room_bank) ? s_room_bank : 12; }
 
@@ -274,8 +306,25 @@ void pe_wardrobe_wear_later(const PeCostume *c) {
     pe_set_worn(c, 0);
 }
 
+/* When the rule changes, say what happens to the costume Aya wears: it changes at the next room. */
+static void pe_rules_tick(void) {
+    static int seen = -1;
+    const int live = pe_rules_live();
+    const PeCostume *c = pe_wanted();
+    char msg[96];
+    if (live == seen) return;
+    if (seen >= 0 && c && pe_eligible(c, live) != pe_eligible(c, seen)) {
+        snprintf(msg, sizeof msg, live ? "%s isn't unlocked: Aya changes back at the next room"
+                                       : "%s can be worn again from the next room", c->name);
+        pe_ward_say(msg);
+        pe_log("wardrobe", "rules=%d worn=%s eligible=%d", live, c->key, pe_eligible(c, live));
+    }
+    seen = live;
+}
+
 /* Once Aya's menu has closed, the room reloads so the costume picked there shows. */
 static void pe_reload_tick(void) {
+    pe_rules_tick();
     if (!s_reload_after_menu || !pe_game_loaded() || !pe_free_field()) return;
     s_reload_after_menu = 0;
     (void)pe_reload();
