@@ -1,0 +1,35 @@
+{
+  "issue": "https://github.com/khasinski/parasite-eve-pc/issues/56",
+  "branch": "fix/hd-backgrounds-56",
+  "corrected_atlases": 143,
+  "pack_bytes": 323846485,
+  "pack_manifest_sha256": "fa437f26a688984d4f446c66074d2c4f7b150b5f28c94b3eac8548e59dd3cdca",
+  "rooms": [
+    "M046",
+    "M092",
+    "M094",
+    "M095",
+    "M097",
+    "M099",
+    "M103",
+    "M239"
+  ],
+  "source_only_placeholder_preserved": "M097 entry12",
+  "baseline_pack_retained": true,
+  "native_reference_planes_byte_identical": true,
+  "source_artifacts_excluded_from_git": true,
+  "offsite_backup_verified_files": 8145,
+  "art_review": "10 exact-active-entry background reconstructions; actors, live scripts, palette effects, mirrors and camera omitted",
+  "limitations": [
+    "HD matte is conservative contour reconstruction, not manually segmented HD geometry",
+    "GPU tests executed on macOS Metal; SPIR-V and DXIL regenerated, Linux/Windows not executed",
+    "No affected-room actor-occlusion traversal performed; synthetic foreground overlap and native VRAM verified"
+  ],
+  "validation": {
+    "gpu": 61,
+    "authoring_png": 7,
+    "authoring_webp": 4,
+    "interpolation_and_widescreen": 2,
+    "native_game_state_vram_pcm_equal": true
+  }
+}

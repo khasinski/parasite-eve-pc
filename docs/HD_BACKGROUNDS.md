@@ -1,11 +1,9 @@
-# HD backgrounds — work in progress
+# HD backgrounds
 
-This branch prototypes optional replacement backgrounds in the original room
-renderer. Enable a locally generated pack with `PE_HD_BACKGROUNDS=/path/to/pack`.
-Missing assets retain original rendering. The experimental atlas path currently
-requires SDL_GPU; this is not a release feature.
+Optional replacement backgrounds use the original room renderer. Enable a locally generated pack with `PE_HD_BACKGROUNDS=/path/to/pack`.
+Missing assets retain original rendering. The scaled atlas path requires SDL_GPU.
 
-The Day 1 study covers M001–M037: 33 maps with 2D layers, 43 views and 62 original
+The initial Day 1 study covers M001–M037: 33 maps with 2D layers, 43 views and 62 original
 animation controllers. Original tile coverage, transparency, depth, timing,
 scripts, native VRAM and audio remain authoritative. Atlas storage is recycled
 at room transitions.
@@ -97,8 +95,9 @@ stationary-camera dialogue. The latter requires `PE_TEST_DISC` and
 
 `compress_webp.py SOURCE DESTINATION --quality 95` creates a separate pack.
 Each `<key>.webp` stores only the 4x HD material. Its `<key>.ref.png` retains the
-native reference plane losslessly, so palette fallback, coverage, STP and native
-VRAM are unchanged. The title uses lossless WebP. Original PNG packs remain
+native reference plane losslessly, so palette fallback, STP and native VRAM
+remain unchanged. Legacy materials use native coverage; reviewed RGBA materials
+can refine opaque HD presentation coverage as described below. The title uses lossless WebP. Original PNG packs remain
 intact. The runtime prefers WebP, then PNG/BMP; a missing or invalid reference
 plane rejects that WebP and allows the existing fallback path.
 
@@ -143,3 +142,31 @@ Headless GPU control: `backgrounds 0|1 /absolute/pack/path` applies the same ref
 and advances eight blanks. `tests/hd_hot_apply.py` compares late activation and
 off/on against a startup-loaded pack on the title and a live field scene, including
 exact native state, VRAM and PCM checks.
+
+
+### Reviewed foreground coverage (issue #56)
+
+Regular RGB packs keep the original native cutout rules. An RGBA material with
+non-opaque alpha explicitly opts into a refined coverage matte for opaque HD
+presentation at internal resolutions above 1x. Its native reference plane still
+owns palette matching, PS1 STP, native VRAM/readback and gameplay. Semitransparent
+primitives keep native coverage and ABR blending. Existing packs remain compatible.
+
+`hd-poc/pack.py --coverage-aa` traces each complete native entry before cutting
+16px tiles, simplifies long stair-step contours within half a native pixel,
+and rasterizes an antialiased 4x mask. Small holes remain unsimplified. Newly
+covered edge texels inherit foreground colour; matching gutters avoid tile seams.
+The packer writes RGBA PNG; WebP compression preserves the alpha losslessly.
+This is conservative contour reconstruction, not a hand-authored HD segmentation.
+
+Material discontinuities need coherent artwork in every intersecting depth layer.
+Do not remove a source-authored seam merely because an upscale emphasizes it.
+For M103 the intact lobby is M046 (M041 is a different office); its wide and
+close views must share one source-faithful bridge painting and NYPD plaque.
+The fallen board in M099 must reuse the intact M042 board. Preserve foreground
+objects crossing a corrected plane, including the globe lamp over the painting.
+
+The offline compositor accepts WebP and RGBA coverage and `--capture-json` to
+reconstruct exactly the active entries recorded in a screenshot report. These
+previews omit actors, live scripts, mirrors and camera movement; they complement
+hidden-GPU tests rather than proving those gameplay paths.

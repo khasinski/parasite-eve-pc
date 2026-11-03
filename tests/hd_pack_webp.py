@@ -19,6 +19,18 @@ class WebpPack(unittest.TestCase):
   manifest=json.loads((self.dest/'manifest.json').read_text());r=manifest['atlases'][0]
   with Image.open(self.dest/r['file']) as a,Image.open(self.dest/r['reference_file']) as b:self.assertEqual(r['pixel_sha256'],hashlib.sha256(a.convert('RGBA').tobytes()+b.convert('RGBA').tobytes()).hexdigest())
   self.assertFalse(manifest['compression']['lossless'])
+ def test_authored_coverage_alpha_is_lossless(self):
+  self.image=self.image.convert('RGBA')
+  for y in range(68):
+   for x in range(68):
+    rgb=self.image.getpixel((x,y))[:3];self.image.putpixel((x,y),(*rgb,(x*17+y*31)%256))
+  path=self.source/(self.key+'.png');self.image.save(path)
+  self.manifest['atlases'][0]['atlas_sha256']=hashlib.sha256(path.read_bytes()).hexdigest();self.write()
+  module.convert(self.source,self.dest,workers=1)
+  with Image.open(self.dest/(self.key+'.webp')) as material:
+   self.assertEqual(material.convert('RGBA').getchannel('A').tobytes(),self.image.crop((0,0,68,68)).getchannel('A').tobytes())
+  with Image.open(self.dest/(self.key+'.ref.png')) as reference:
+   self.assertEqual(reference.convert('RGBA').tobytes(),self.image.crop((0,68,68,136)).tobytes())
  def test_bad_source_never_activates(self):
   self.manifest['atlases'][0]['atlas_sha256']='0'*64;self.write()
   with self.assertRaises(ValueError):module.convert(self.source,self.dest,workers=1)

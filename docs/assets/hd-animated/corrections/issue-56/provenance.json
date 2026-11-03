@@ -1,0 +1,8 @@
+{
+  "issue": "https://github.com/khasinski/parasite-eve-pc/issues/56",
+  "method": "Built-in imagegen, localized source-guided edits; full generated crop retained; only reviewed polygons enter candidate pack",
+  "prompts": {
+    "glass": "Use case: precise-object-edit. Edit target image 1 is an HD game-background crop. Image 2 is its original low-resolution geometry reference. Fix ONLY the broken glass at the lower left of the entrance door: it has been misinterpreted as a nest of white metal wires. Render flat angular translucent fractured glass planes, thin subdued reflective edges and the original dark openings, following the reference's silhouette. Preserve door frame, door opening, wooden floor, lighting, perspective and every other object exactly. No wires or tubing. Maintain the original prerendered game artwork style, not photographic restyling. Output the exact same crop composition and aspect ratio as image 1, no framing or margins.",
+    "keyboard": "Use case: precise-object-edit. Image 1 is the edit target, a close crop of a prerendered 1998 police laboratory desk. Image 2 is the authoritative original geometry reference. Fix ONLY the computer keyboard in the center: replace the hallucinated curved keys and bent key rows with a simple straight rectangular period beige/grey PC keyboard. Keys must be small straight regular rows following the original perspective and rectangular outline. Preserve the keyboard size, angle and location exactly. Preserve all other pixels/composition: papers, book, monitor, yellow note, wood, color, shadows. Retain the game render style. No new labels or readable invented text. Return the same aspect ratio and exact crop, no borders."
+  }
+}

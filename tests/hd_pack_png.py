@@ -47,6 +47,45 @@ class PackConversion(unittest.TestCase):
                 self.assertEqual(original.convert("RGBA").tobytes(), png.convert("RGBA").tobytes())
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.source.iterdir()})
 
+    def test_authored_matte_keeps_native_reference_and_tile_boundaries(self):
+        import subprocess, sys
+        try:
+            import numpy as np
+            import cv2
+        except ImportError:
+            self.skipTest("numpy and opencv required for matte authoring")
+        root = self.root / "authoring"
+        (root / "refs").mkdir(parents=True)
+        (root / "HD").mkdir()
+        key = "0123456789abcdef"
+        refs = np.full((2,16,16), 0x03e0, np.uint16)
+        # A diagonal hole crosses a tile boundary. The packed matte must be
+        # calculated on the complete native entry, never each tile separately.
+        for x in range(32):
+            for y in range(16):
+                if y > x // 2: refs[x//16,y,x%16] = 0
+        refs[0,0,0] = 0x8000 # opaque black is coverage, not a transparent hole
+        np.save(root / "refs/ref.npy", refs)
+        Image.new("RGB",(128,64),(220,80,30)).save(root / "HD/source.png")
+        task = dict(room="M001",group=0,entry=0,control=None,key=key,input="source.png",ref="ref.npy",tiles=[[0,0],[16,0]])
+        (root / "tasks.json").write_text(json.dumps(dict(tasks=[task])))
+        script = Path(__file__).resolve().parents[1] / "docs/assets/hd-poc/pack.py"
+        subprocess.run([sys.executable,str(script),"HD","--root",str(root),"--coverage-aa"],check=True,capture_output=True)
+        with Image.open(root / "pack-HD" / (key+".png")) as image:
+            rgba = np.array(image)
+            self.assertEqual(image.mode,"RGBA")
+            self.assertEqual(int(rgba[2,2,3]),255)
+            top = rgba[:68]
+            self.assertTrue(np.any((top[:,:,3]>0)&(top[:,:,3]<255)))
+            for i, ref in enumerate(refs):
+                native_rgb = np.stack([(ref&31)*255//31,((ref>>5)&31)*255//31,((ref>>10)&31)*255//31],axis=-1).astype("uint8")
+                reference = rgba[70:134,i*68+2:i*68+66]
+                expected = np.repeat(np.repeat(native_rgb,4,0),4,1)
+                self.assertEqual(reference[:,:,:3].tobytes(), expected.tobytes())
+                self.assertTrue(np.all(reference[:,:,3]==255))
+            # Far from the diagonal no accidental transparent tile seam.
+            self.assertTrue(np.all(top[2:6,62:74,3]==255))
+
     def test_bad_hash_never_activates_partial_pack(self):
         self.manifest["atlases"][0]["atlas_sha256"] = "0" * 64
         self.write_manifest()
