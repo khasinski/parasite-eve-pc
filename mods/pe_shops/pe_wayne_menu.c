@@ -9,21 +9,14 @@
  *
  * At the entry of Menu_DrawTextboxEntries (PE_HOOK_TEXTBOXES), every frame:
  *   - a box showing Wayne's menu (a choice with "Discard junk", or "Hold equipment" on the ship)
- *     is pointed at our copy: "Workshop" above Cancel, and "Discard junk
- *     <your Junk>, <his count>/300" (plus "bag full" when a hand-in has no free slot, or "Day 4"
- *     when he holds 300 but can't build yet);
- *   - Cross on Workshop is taken from the game and the box shows our screens instead: Workshop
- *     (Requisition / Rebuild / Wardrobe while a mod offers one / Back), Requisition and Rebuild
- *     lists (5 a page, Left/Right turn pages; rows that can't be bought now are dimmed) and Mod
- *     Permit Card (the bag's guns and armor with their slots; Yes / No before a permit is spent
- *     for one more slot -- vanilla's Torres tune-up without the risk). The title line shows
- *     your Junk or what the last action did. Circle goes back a screen;
+ *     is pointed at our copy: "Workshop" above Cancel, and "Discard junk <your Junk>, <his
+ *     count>/300" (plus "bag full" when a hand-in has no free slot, or "Day 4" when he holds 300
+ *     but can't build yet);
+ *   - Cross on Workshop is taken from the game and opens the Workshop screen
+ *     (pe_workshop_screen.c: Requisition, Rebuild, Wardrobe, Mod Permit Card). His box stays open
+ *     -- the script is waiting for its answer -- below the screen, out of sight, and comes back
+ *     where it was when the screen closes;
  *   - Cross on our Cancel moves the cursor up first, so the script gets its own Cancel.
- * Mod Permit Card lives on the Workshop screen only (it used to sit in Wayne's own menu too, except
- * at the Chrysler, where his 6 options left room for Workshop alone).
- *
- * Dimmed rows use the text box's red highlight codes, drawn in the menus' dimmed gray while our
- * screens are up (g_TextboxHighlightColor*, restored afterwards).
  */
 #include <stdio.h>
 #include <string.h>
@@ -33,23 +26,12 @@
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
 #include "pe_requisition.h"
-#include "pe_workshop_model.h"
-#include "pe1/game_timers.h"
 #include "pe1/pad_state.h"
 #include "pe1/textbox.h"
 
 #define PE_TEXTBOX_SHOWN    2      /* state: fully typed out, choices active */
 #define PE_IN_CONFIRM       0x0100u
-#define PE_IN_CANCEL        0x0400u
-#define PE_IN_LEFT          0x0040u
-#define PE_IN_RIGHT         0x0010u
-#define PE_PAGE_SIZE        5
 #define PE_CHOICE_MAX       7
-#define PE_ITEM_MOD_PERMIT  0x37
-#define PE_BAG_SLOTS        50
-#define PE_STORAGE_SLOTS    100
-#define PE_MAX_MOD_SLOTS    10
-#define PE_DIM_GRAY         0x40   /* the menus' dimmed text: 0x80 >> 1 */
 #define PE_SCREEN_RIGHT     312    /* boxes stay inside the screen */
 #define PE_OFF_SCREEN_Y     0x1F0  /* below the 240-line screen: his box out of sight, still open */
 
@@ -58,24 +40,12 @@ extern u8 g_DialogueChoiceCursor;
 int pe_workshop_screen_open(void);    /* pe_workshop_screen.c */
 int pe_workshop_screen_busy(void);
 
-/* A Workshop service without a screen of its own yet (PE_WS_*): once the Workshop screen has
- * closed, Wayne's box shows its dialogue version. */
-static int s_after_workshop = -1;
-void pe_wayne_menu_after_workshop(int service) { s_after_workshop = service; }
-
-enum { SCR_NONE, SCR_WAYNE, SCR_ROOT, SCR_REQ, SCR_REB, SCR_PERMIT, SCR_PERMIT_ASK, SCR_WARD };
-enum { ROOT_REQ, ROOT_REB, ROOT_WARD, ROOT_PERMIT, ROOT_BACK };
-
 static struct {
-    int screen;
+    int shown;                    /* our copy is in his box */
     TextboxEntry *entry;          /* the box we drive */
     u8 *orig_msg;                 /* Wayne's own message */
-    u16 orig_y, orig_h, orig_w;
+    u16 orig_y, orig_h, orig_w;   /* his box, before ours grows it by the Workshop row */
     int wayne_count;              /* options in Wayne's own menu */
-    int page;
-    char note[48];                /* title line after an action */
-    int pick;                     /* Mod Permit: the bag slot being asked about */
-    int root[5], root_count;      /* the Workshop screen's options, ROOT_* */
     int hidden;                   /* moved off screen while the Workshop screen is up */
     u16 shown_y;                  /* where it was */
 } s_ui;
@@ -83,24 +53,6 @@ static struct {
 static u8 s_buf[PE_GAMETEXT_MAX];   /* our message */
 static u8 s_orig[PE_GAMETEXT_MAX];  /* copy of Wayne's */
 static unsigned s_orig_len;
-static struct { int saved; u8 r, g, b; } s_highlight;
-
-/* The Mod Catalog's Rebuild list (its own mod): empty while the Catalog isn't running. */
-static const PeRebuildApi *pe_wm_rebuild(void) { return (const PeRebuildApi *)pe_service_get("rebuild", 1); }
-static int pe_wm_rebuild_count(void) { const PeRebuildApi *r = pe_wm_rebuild(); return r ? r->count() : 0; }
-static uint8_t pe_wm_rebuild_item(int i) { const PeRebuildApi *r = pe_wm_rebuild(); return r ? r->item(i) : 0; }
-static unsigned pe_wm_rebuild_bought_slots(int i) { const PeRebuildApi *r = pe_wm_rebuild(); return r ? r->bought_slots(i) : 0u; }
-static uint32_t pe_wm_rebuild_price_index(int i) { const PeRebuildApi *r = pe_wm_rebuild(); return r ? r->price(i) : 0u; }
-static int pe_wm_rebuild_index(int i, char *msg, size_t size) {
-    const PeRebuildApi *r = pe_wm_rebuild();
-    if (r) return r->rebuild(i, msg, size);
-    snprintf(msg, size, "Mod Catalog is off");
-    return 0;
-}
-
-static const PeWardrobeApi *pe_wardrobe(void) { return (const PeWardrobeApi *)pe_service_get("wardrobe", 1); }
-
-/* ---- Wayne's menu ---- */
 
 static int pe_contains(const u8 *b, unsigned n, const char *ascii) {
     const unsigned m = (unsigned)strlen(ascii);
@@ -162,207 +114,13 @@ static void pe_build_wayne(PeText *t) {
     }
 }
 
-/* ---- list paging ---- */
-
-static int pe_pages(int count) { return count <= PE_PAGE_SIZE ? 1 : (count + PE_PAGE_SIZE - 1) / PE_PAGE_SIZE; }
-
-/* Options on a list page: its items, Next page (if more than one page), Back. */
-static int pe_list_options(int count, int *items_out) {
-    int items = count - s_ui.page * PE_PAGE_SIZE;
-    if (items > PE_PAGE_SIZE) items = PE_PAGE_SIZE;
-    if (items < 0) items = 0;
-    *items_out = items;
-    return items + (pe_pages(count) > 1) + 1;
-}
-
-static void pe_list_tail(PeText *t, int count, int items) {
-    if (pe_pages(count) > 1) { pe_t_option(t, items == 0); pe_t_str(t, "Next page"); }
-    pe_t_option(t, items == 0 && pe_pages(count) == 1);
-    pe_t_str(t, "Back");
-}
-
-static void pe_title(PeText *t, const char *name) {
-    if (s_ui.note[0]) pe_t_str(t, s_ui.note);
-    else { pe_t_str(t, name); pe_t_str(t, "   Junk "); pe_t_num(t, (unsigned)pe_shopw_junk()); }
-    pe_t_byte(t, G_NEWLINE);
-}
-
-/* ---- screens ---- */
-
-static void pe_build_root(PeText *t) {
-    static const char *const names[] = { "Requisition", "Rebuild", "Wardrobe", "Mod Permit Card", "Back" };
-    int i;
-    s_ui.root_count = 0;
-    s_ui.root[s_ui.root_count++] = ROOT_REQ;
-    s_ui.root[s_ui.root_count++] = ROOT_REB;
-    if (pe_wardrobe()) s_ui.root[s_ui.root_count++] = ROOT_WARD;
-    s_ui.root[s_ui.root_count++] = ROOT_PERMIT;
-    s_ui.root[s_ui.root_count++] = ROOT_BACK;
-    pe_title(t, "Workshop");
-    pe_t_choice(t, s_ui.root_count);
-    for (i = 0; i < s_ui.root_count; ++i) { pe_t_option(t, i == 0); pe_t_str(t, names[s_ui.root[i]]); }
-}
-
-static int pe_root_row(int what) {
-    int i;
-    for (i = 0; i < s_ui.root_count; ++i) if (s_ui.root[i] == what) return i;
-    return 0;
-}
-
-static void pe_build_list(PeText *t, int rebuild) {
-    const int count = rebuild ? pe_wm_rebuild_count() : pe_shop_count();
-    int items, k;
-    const int options = pe_list_options(count, &items);
-    pe_title(t, rebuild ? (count ? "Rebuild" : "Rebuild: nothing dismantled") : "Requisition");
-    pe_t_choice(t, options);
-    for (k = 0; k < items; ++k) {
-        const int i = s_ui.page * PE_PAGE_SIZE + k;
-        const uint16_t id = rebuild ? 0 : pe_shop_item(i);
-        const int dim = rebuild ? pe_wm_rebuild_price_index(i) > pe_shopw_junk() : pe_shop_blocked(id) != NULL;
-        pe_t_option(t, k == 0);
-        if (dim) pe_t_red(t, 1);
-        if (rebuild) pe_t_item(t, pe_wm_rebuild_item(i));
-        else if (id >= 0xF000) pe_t_str(t, pe_shop_name(id));   /* an economy effect */
-        else pe_t_item(t, id);
-        if (rebuild && pe_wm_rebuild_bought_slots(i)) {            /* built up with Mod Permits */
-            pe_t_str(t, " +");
-            pe_t_num(t, pe_wm_rebuild_bought_slots(i));
-            pe_t_str(t, " slots");
-        }
-        pe_t_str(t, "  ");
-        pe_t_num(t, (unsigned)(rebuild ? pe_wm_rebuild_price_index(i) : pe_shop_price(id)));
-        if (dim) pe_t_red(t, 0);
-    }
-    pe_list_tail(t, count, items);
-}
-
-static void pe_build_ward(PeText *t) {
-    const PeWardrobeApi *w = pe_wardrobe();
-    const int count = w ? w->count() : 0;
-    int items, k;
-    const int options = pe_list_options(count, &items);
-    pe_title(t, "Wardrobe");
-    pe_t_choice(t, options);
-    for (k = 0; k < items; ++k) {
-        const int i = s_ui.page * PE_PAGE_SIZE + k, state = w->state(i);
-        const int dim = state == 0 && w->price(i) > pe_shopw_junk();
-        pe_t_option(t, k == 0);
-        if (dim) pe_t_red(t, 1);
-        pe_t_str(t, w->name(i));
-        if (state == 2) pe_t_str(t, "  worn");
-        else if (state == 1) pe_t_str(t, "  owned");
-        else { pe_t_str(t, "  "); pe_t_num(t, w->price(i)); }
-        if (dim) pe_t_red(t, 0);
-    }
-    pe_list_tail(t, count, items);
-}
-
-/* ---- Mod Permit Card: one more slot on a gun or armor ---- */
-
-static ItemDataRecord *pe_gear(int bag_slot) {
-    int value;
-    if (bag_slot < 0 || bag_slot >= Inv_GetAyaSlotLimit() || bag_slot >= PE_BAG_SLOTS) return NULL;
-    value = g_AyaInventoryItems[bag_slot];
-    if (value < 0x100 || value >= 0x180) return NULL;
-    return g_InventoryRuntime.equipment[value - 0x100].kind >= 1 && g_InventoryRuntime.equipment[value - 0x100].kind <= 9
-               ? &g_InventoryRuntime.equipment[value - 0x100] : NULL;
-}
-
-static int pe_gear_list(int *out) {
-    int n = 0, i;
-    for (i = 0; i < PE_BAG_SLOTS; ++i) if (pe_gear(i)) out[n++] = i;
-    return n;
-}
-
-static unsigned pe_permits(void) {
-    unsigned n = 0;
-    int i;
-    for (i = 0; i < PE_BAG_SLOTS; ++i) n += g_AyaInventoryItems[i] == PE_ITEM_MOD_PERMIT;
-    for (i = 0; i < PE_STORAGE_SLOTS; ++i) n += g_WayneStorageItems[i] == PE_ITEM_MOD_PERMIT;
-    return n;
-}
-
-static int pe_take_permit(void) {                       /* the bag's first, else storage */
-    int i;
-    for (i = 0; i < PE_BAG_SLOTS; ++i) if (g_AyaInventoryItems[i] == PE_ITEM_MOD_PERMIT) { g_AyaInventoryItems[i] = 0; return 1; }
-    for (i = 0; i < PE_STORAGE_SLOTS; ++i) if (g_WayneStorageItems[i] == PE_ITEM_MOD_PERMIT) { g_WayneStorageItems[i] = 0; return 1; }
-    return 0;
-}
-
-static unsigned pe_slot_max(const ItemDataRecord *rec) { return rec->tailCapacity < PE_MAX_MOD_SLOTS ? rec->tailCapacity : PE_MAX_MOD_SLOTS; }
-static int pe_at_max(const ItemDataRecord *rec) { return rec->tailCount >= pe_slot_max(rec); }
-
-static void pe_build_permit_list(PeText *t) {
-    int gear[PE_BAG_SLOTS], items, k;
-    const int count = pe_gear_list(gear), options = pe_list_options(count, &items), none = pe_permits() == 0;
-    if (s_ui.note[0]) pe_t_str(t, s_ui.note);
-    else if (!count) pe_t_str(t, "Mod Permit: no guns or armor");
-    else { pe_t_str(t, "Mod Permit   have "); pe_t_num(t, pe_permits()); }
-    pe_t_byte(t, G_NEWLINE);
-    pe_t_choice(t, options);
-    for (k = 0; k < items; ++k) {
-        const ItemDataRecord *rec = pe_gear(gear[s_ui.page * PE_PAGE_SIZE + k]);
-        const int dim = none || pe_at_max(rec);
-        pe_t_option(t, k == 0);
-        if (dim) pe_t_red(t, 1);
-        pe_t_item(t, rec->itemId);
-        pe_t_str(t, "  ");
-        pe_t_num(t, rec->tailCount);
-        pe_t_str(t, "/");
-        pe_t_num(t, pe_slot_max(rec));
-        if (dim) pe_t_red(t, 0);
-    }
-    pe_list_tail(t, count, items);
-}
-
-static void pe_build_permit_ask(PeText *t) {
-    const ItemDataRecord *rec = pe_gear(s_ui.pick);
-    pe_t_str(t, "Add a slot to ");
-    if (rec) pe_t_item(t, rec->itemId);
-    pe_t_str(t, "?");
-    pe_t_byte(t, G_NEWLINE);
-    pe_t_str(t, "Uses 1 Mod Permit, you have ");
-    pe_t_num(t, pe_permits());
-    pe_t_byte(t, G_NEWLINE);
-    pe_t_choice(t, 2);
-    pe_t_option(t, 1); pe_t_str(t, "Yes");
-    pe_t_option(t, 0); pe_t_str(t, "No");
-}
-
-/* ---- the box ---- */
-
-static void pe_dim_gray(int on) {
-    if (on && !s_highlight.saved) {
-        s_highlight.saved = 1;
-        s_highlight.r = g_TextboxHighlightColorR;
-        s_highlight.g = g_TextboxHighlightColorG;
-        s_highlight.b = g_TextboxHighlightColorB;
-    }
-    if (on) {
-        g_TextboxHighlightColorR = g_TextboxHighlightColorG = g_TextboxHighlightColorB = PE_DIM_GRAY;
-    } else if (s_highlight.saved) {
-        g_TextboxHighlightColorR = s_highlight.r;
-        g_TextboxHighlightColorG = s_highlight.g;
-        g_TextboxHighlightColorB = s_highlight.b;
-        s_highlight.saved = 0;
-    }
-}
-
-/* Write screen `screen` into the box, sized to fit, the cursor on `cursor`. */
-static void pe_show(int screen, int cursor) {
+/* Put our copy of his menu in his box, sized to fit (growing upwards), the cursor on `cursor`. */
+static void pe_show(int cursor) {
     PeText t;
     TextboxEntry *e = s_ui.entry;
     unsigned height, bottom, width;
     pe_t_init(&t);
-    s_ui.screen = screen;
-    switch (screen) {
-    case SCR_WAYNE: pe_build_wayne(&t); break;
-    case SCR_ROOT: pe_build_root(&t); break;
-    case SCR_PERMIT: pe_build_permit_list(&t); break;
-    case SCR_PERMIT_ASK: pe_build_permit_ask(&t); break;
-    case SCR_WARD: pe_build_ward(&t); break;
-    default: pe_build_list(&t, screen == SCR_REB); break;
-    }
+    pe_build_wayne(&t);
     pe_t_byte(&t, G_END);
     memcpy(s_buf, t.b, t.n);
     height = (unsigned)t.lines * 12u + 10u;
@@ -374,168 +132,26 @@ static void pe_show(int screen, int cursor) {
     e->height = (u16)height;
     e->y = (u16)(bottom > height ? bottom - height : 0);
     e->width = (u16)width;
+    if (s_ui.hidden) {                                    /* still behind the Workshop screen */
+        s_ui.shown_y = e->y;
+        e->y = PE_OFF_SCREEN_Y;
+    }
+    s_ui.shown = 1;
     g_DialogueChoiceCursor = (u8)cursor;
-    pe_dim_gray(screen != SCR_WAYNE);
 }
 
 static void pe_reset(void) {
     if (s_ui.hidden && s_ui.entry) s_ui.entry->y = s_ui.shown_y;   /* never leave a box below the screen */
-    pe_dim_gray(0);
     pe_shop_at_counter(0);
     memset(&s_ui, 0, sizeof s_ui);
 }
 
-/* Drop the details after a colon or parenthesis, for a short title line. */
-static void pe_short_note(void) {
-    char *cut = strchr(s_ui.note, ':');
-    if (cut) *cut = '\0';
-    if ((cut = strchr(s_ui.note, '('))) *cut = '\0';
-}
-
-/* ---- input ---- */
-
-static void pe_turn_page(int screen, int count, uint32_t pressed) {
-    const int pages = pe_pages(count);
-    s_ui.page = (s_ui.page + ((pressed & PE_IN_RIGHT) ? 1 : pages - 1)) % pages;
-    s_ui.note[0] = '\0';
-    pe_show(screen, 0);
-}
-
-static void pe_list_confirm(int rebuild, int cursor) {
-    const int count = rebuild ? pe_wm_rebuild_count() : pe_shop_count();
-    int items, left;
-    const int options = pe_list_options(count, &items);
-    if (cursor < items) {
-        const int i = s_ui.page * PE_PAGE_SIZE + cursor;
-        int keep = cursor;
-        if (rebuild) pe_wm_rebuild_index(i, s_ui.note, sizeof s_ui.note);
-        else pe_shop_buy(pe_shop_item(i), s_ui.note, sizeof s_ui.note);
-        pe_short_note();
-        left = (rebuild ? pe_wm_rebuild_count() : pe_shop_count()) - s_ui.page * PE_PAGE_SIZE;   /* the list may shrink */
-        if (left <= 0 && s_ui.page > 0) { --s_ui.page; keep = 0; }
-        else if (keep >= left) keep = left > 0 ? left - 1 : 0;
-        pe_show(rebuild ? SCR_REB : SCR_REQ, keep);
-    } else if (pe_pages(count) > 1 && cursor == items) {
-        s_ui.page = (s_ui.page + 1) % pe_pages(count);
-        s_ui.note[0] = '\0';
-        pe_show(rebuild ? SCR_REB : SCR_REQ, 0);
-    } else if (cursor == options - 1) {
-        s_ui.note[0] = '\0';
-        pe_show(SCR_ROOT, pe_root_row(rebuild ? ROOT_REB : ROOT_REQ));
-    }
-}
-
-/* Leave the permit list: back to the Workshop's options. */
-static void pe_permit_back(void) {
-    s_ui.note[0] = '\0';
-    pe_show(SCR_ROOT, pe_root_row(ROOT_PERMIT));
-}
-
 static uint32_t pe_input(uint32_t pressed, int cursor) {
     const int workshop = s_ui.wayne_count - 1;        /* just above Cancel */
-    const int his_cancel = s_ui.wayne_count - 1;
-    switch (s_ui.screen) {
-    case SCR_WAYNE:
-        if (!(pressed & PE_IN_CONFIRM)) return 0;
-        if (cursor == workshop) { s_ui.note[0] = '\0'; pe_workshop_screen_open(); return PE_IN_CONFIRM; }
-        if (cursor == workshop + 1) g_DialogueChoiceCursor = (u8)his_cancel;   /* the script's own Cancel */
-        return 0;
-    case SCR_ROOT:
-        if (pressed & PE_IN_CONFIRM) {
-            const int what = cursor >= 0 && cursor < s_ui.root_count ? s_ui.root[cursor] : ROOT_BACK;
-            s_ui.page = 0;
-            s_ui.note[0] = '\0';
-            if (what == ROOT_REQ) pe_show(SCR_REQ, 0);
-            else if (what == ROOT_REB) pe_show(SCR_REB, 0);
-            else if (what == ROOT_WARD) pe_show(SCR_WARD, 0);
-            else if (what == ROOT_PERMIT) pe_show(SCR_PERMIT, 0);
-            else pe_show(SCR_WAYNE, workshop);
-            return PE_IN_CONFIRM;
-        }
-        if (pressed & PE_IN_CANCEL) { pe_show(SCR_WAYNE, workshop); return PE_IN_CANCEL; }
-        return 0;
-    case SCR_REQ:
-    case SCR_REB: {
-        const int rebuild = s_ui.screen == SCR_REB;
-        const int count = rebuild ? pe_wm_rebuild_count() : pe_shop_count();
-        if (pressed & PE_IN_CONFIRM) { pe_list_confirm(rebuild, cursor); return PE_IN_CONFIRM; }
-        if (pressed & PE_IN_CANCEL) {
-            s_ui.note[0] = '\0';
-            pe_show(SCR_ROOT, pe_root_row(rebuild ? ROOT_REB : ROOT_REQ));
-            return PE_IN_CANCEL;
-        }
-        if ((pressed & (PE_IN_LEFT | PE_IN_RIGHT)) && pe_pages(count) > 1) pe_turn_page(s_ui.screen, count, pressed);
-        return 0;
-    }
-    case SCR_WARD: {
-        const PeWardrobeApi *w = pe_wardrobe();
-        const int count = w ? w->count() : 0;
-        int items;
-        const int options = pe_list_options(count, &items);
-        if (pressed & PE_IN_CONFIRM) {
-            if (cursor < items && w) {
-                w->pick(s_ui.page * PE_PAGE_SIZE + cursor, s_ui.note, sizeof s_ui.note);
-                pe_show(SCR_WARD, cursor);
-            } else if (pe_pages(count) > 1 && cursor == items) {
-                s_ui.page = (s_ui.page + 1) % pe_pages(count);
-                s_ui.note[0] = '\0';
-                pe_show(SCR_WARD, 0);
-            } else if (cursor == options - 1) {
-                s_ui.note[0] = '\0';
-                pe_show(SCR_ROOT, pe_root_row(ROOT_WARD));
-            }
-            return PE_IN_CONFIRM;
-        }
-        if (pressed & PE_IN_CANCEL) { s_ui.note[0] = '\0'; pe_show(SCR_ROOT, pe_root_row(ROOT_WARD)); return PE_IN_CANCEL; }
-        if ((pressed & (PE_IN_LEFT | PE_IN_RIGHT)) && pe_pages(count) > 1) pe_turn_page(SCR_WARD, count, pressed);
-        return 0;
-    }
-    case SCR_PERMIT: {
-        int gear[PE_BAG_SLOTS], items;
-        const int count = pe_gear_list(gear), options = pe_list_options(count, &items);
-        if (pressed & PE_IN_CONFIRM) {
-            if (cursor < items) {
-                const int slot = gear[s_ui.page * PE_PAGE_SIZE + cursor];
-                const ItemDataRecord *rec = pe_gear(slot);
-                if (!pe_permits()) { snprintf(s_ui.note, sizeof s_ui.note, "No Mod Permit"); pe_show(SCR_PERMIT, cursor); }
-                else if (!rec || pe_at_max(rec)) { snprintf(s_ui.note, sizeof s_ui.note, "That one has all its slots"); pe_show(SCR_PERMIT, cursor); }
-                else { s_ui.pick = slot; s_ui.note[0] = '\0'; pe_show(SCR_PERMIT_ASK, 1); }   /* on No */
-            } else if (pe_pages(count) > 1 && cursor == items) {
-                s_ui.page = (s_ui.page + 1) % pe_pages(count);
-                s_ui.note[0] = '\0';
-                pe_show(SCR_PERMIT, 0);
-            } else if (cursor == options - 1) {
-                pe_permit_back();
-            }
-            return PE_IN_CONFIRM;
-        }
-        if (pressed & PE_IN_CANCEL) { pe_permit_back(); return PE_IN_CANCEL; }
-        if ((pressed & (PE_IN_LEFT | PE_IN_RIGHT)) && pe_pages(count) > 1) pe_turn_page(SCR_PERMIT, count, pressed);
-        return 0;
-    }
-    case SCR_PERMIT_ASK: {
-        int gear[PE_BAG_SLOTS], back = 0, i;
-        const int count = pe_gear_list(gear);
-        for (i = 0; i < count; ++i) if (gear[i] == s_ui.pick) back = i - s_ui.page * PE_PAGE_SIZE;
-        if (back < 0 || back >= PE_PAGE_SIZE) back = 0;
-        if (pressed & PE_IN_CONFIRM) {
-            ItemDataRecord *rec = pe_gear(s_ui.pick);
-            s_ui.note[0] = '\0';
-            if (cursor == 0 && rec && !pe_at_max(rec) && pe_take_permit()) {
-                rec->tailData[rec->tailCount] = 0;                 /* the new slot starts empty */
-                ++rec->tailCount;
-                snprintf(s_ui.note, sizeof s_ui.note, "Slot added, now %u", (unsigned)rec->tailCount);
-                pe_log("permit_slot", "item=0x%02X slots=%u permits_left=%u", rec->itemId, (unsigned)rec->tailCount, pe_permits());
-            }
-            pe_show(SCR_PERMIT, back);
-            return PE_IN_CONFIRM;
-        }
-        if (pressed & PE_IN_CANCEL) { s_ui.note[0] = '\0'; pe_show(SCR_PERMIT, back); return PE_IN_CANCEL; }
-        return 0;
-    }
-    default:
-        return 0;
-    }
+    if (!(pressed & PE_IN_CONFIRM)) return 0;
+    if (cursor == workshop) { pe_workshop_screen_open(); return PE_IN_CONFIRM; }
+    if (cursor == workshop + 1) g_DialogueChoiceCursor = (u8)(s_ui.wayne_count - 1);   /* the script's own Cancel */
+    return 0;
 }
 
 /* ---- every frame, before the boxes draw ---- */
@@ -546,12 +162,12 @@ static int pe_on_textboxes(void *ctx, void *user) {
     (void)ctx;
     (void)user;
     if (!pe_game_loaded()) return 0;
-    if (s_ui.screen != SCR_NONE) {                         /* still driving our box? */
+    if (s_ui.shown) {                                      /* still driving our box? */
         TextboxEntry *e = s_ui.entry;
         if (e->state != PE_TEXTBOX_SHOWN || (e->message != s_buf && e->message != s_ui.orig_msg)) pe_reset();
-        else if (e->message == s_ui.orig_msg) pe_show(SCR_WAYNE, g_DialogueChoiceCursor);
+        else if (e->message == s_ui.orig_msg) pe_show(g_DialogueChoiceCursor);
     }
-    if (s_ui.screen == SCR_NONE) {
+    if (!s_ui.shown) {
         if (!pe_shopw_enabled()) return 0;
         for (i = 0; i < 4; ++i) {
             TextboxEntry *e = &g_TextboxEntries[i];
@@ -561,10 +177,10 @@ static int pe_on_textboxes(void *ctx, void *user) {
             s_ui.orig_y = e->y;
             s_ui.orig_h = e->height;
             s_ui.orig_w = e->width;
-            pe_show(SCR_WAYNE, g_DialogueChoiceCursor);
+            pe_show(g_DialogueChoiceCursor);
             break;
         }
-        if (s_ui.screen == SCR_NONE) return 0;
+        if (!s_ui.shown) return 0;
     }
     pe_shop_at_counter(1);                                 /* his box is the shop counter */
     if (pe_workshop_screen_busy()) {                       /* the Workshop screen has the pad */
@@ -581,15 +197,6 @@ static int pe_on_textboxes(void *ctx, void *user) {
     if (s_ui.hidden) {
         s_ui.hidden = 0;
         s_ui.entry->y = s_ui.shown_y;
-    }
-    if (s_after_workshop >= 0) {
-        const int service = s_after_workshop;
-        s_after_workshop = -1;
-        s_ui.note[0] = '\0';
-        s_ui.page = 0;
-        pe_show(service == PE_WS_REBUILD ? SCR_REB : service == PE_WS_WARDROBE ? SCR_WARD : SCR_PERMIT, 0);
-        g_FieldPadPressed = 0;
-        return 0;
     }
     taken = pe_input(g_FieldPadPressed, (s8)g_DialogueChoiceCursor);
     if (taken) g_FieldPadPressed &= ~taken;                /* the game never sees it */

@@ -11,8 +11,9 @@
  *                do: its three stats under the game's own labels, the "+N" bonuses, and its slots.
  *   Wardrobe     outfits with their prices (or owned / worn) beside the model turning in a frame,
  *                as the Wardrobe browser; Cross buys (after Yes / No) or wears an owned one.
- * Mod Permit Card isn't a screen yet: its row closes this screen and Wayne's box shows its
- * dialogue version (pe_wayne_menu.c).
+ *   Mod Permit   the bag's guns and armor with their slots (used / most), scrolling; the panel
+ *                shows the item as Rebuild does and how many Mod Permits you have; Cross asks
+ *                Yes / No before one is used for one more slot (pe_permit.c holds the rules).
  *
  * Entering: what the field does on Start (Entity_FrameUpdate, src/main/entity/frame_update.c):
  * Render_BeginSceneLoad, field actors paused (g_GameStateBlock.flags 4) and the game in menu mode
@@ -68,10 +69,8 @@
 #define PE_SQUARE           0x80u
 #define PE_REPEAT           0x20000u
 
-void pe_wayne_menu_after_workshop(int service);   /* pe_wayne_menu.c: show its dialogue version */
-
-enum { MODE_WORKSHOP, MODE_REQUISITION, MODE_REBUILD, MODE_WARDROBE, MODES };
-static const int s_info_rows[MODES] = { 2, 2, 4, 3 };
+enum { MODE_WORKSHOP, MODE_REQUISITION, MODE_REBUILD, MODE_WARDROBE, MODE_PERMIT, MODES };
+static const int s_info_rows[MODES] = { 2, 2, 4, 3, 4 };
 
 static PeScreen s_screen;
 static MenuWidgetNode *s_info, *s_frame;
@@ -79,6 +78,7 @@ static PeModelStage s_stage;
 static int s_open, s_mode;
 static int s_services[PE_WS_SERVICES], s_nservices;
 static int s_cursor[MODES];                   /* each mode's row, kept while the screen is open */
+static int s_gear[64], s_ngear;               /* Mod Permit: the bag slots listed, refreshed per mode */
 static char s_note[64];
 static int s_buy_row = -1;                    /* the row the open Yes / No is about */
 static int s_tick, s_drawn_tick, s_shown = -1, s_preview, s_paused;
@@ -155,6 +155,13 @@ static void pe_row(int row) {
         if (!pe_ws_rebuild(row, &b, NULL)) { if (row == 0) pe_print("Nothing dismantled yet"); return; }
         snprintf(price, sizeof price, "%u", (unsigned)b.price);
         pe_priced_row(NULL, b.id, price, b.blocked != NULL);
+        return;
+    }
+    case MODE_PERMIT: {
+        const ItemDataRecord *rec = row >= 0 && row < s_ngear ? pe_permit_record(s_gear[row]) : NULL;
+        if (!rec) { if (row == 0) pe_print("No guns or armor in the bag"); return; }
+        snprintf(price, sizeof price, "%u/%u", (unsigned)rec->tailCount, pe_permit_slot_max(rec));
+        pe_priced_row(NULL, rec->itemId, price, pe_permit_blocked(s_gear[row]) != NULL);
         return;
     }
     default: {
@@ -250,6 +257,20 @@ static void pe_info_row(int row) {
         else snprintf(line, sizeof line, "Slots %u   %s", (unsigned)rec.tailCount, b.blocked ? b.blocked : "X: Rebuild");
         break;
     }
+    case MODE_PERMIT: {
+        const int c = pe_cursor();
+        const ItemDataRecord *rec = c >= 0 && c < s_ngear ? pe_permit_record(s_gear[c]) : NULL;
+        const char *why;
+        if (!rec) {
+            if (row == 0) snprintf(line, sizeof line, "Mod Permits: %u", pe_permit_count());
+            break;
+        }
+        if (row < 3) { pe_stat_row(rec, row); return; }
+        why = pe_permit_blocked(s_gear[c]);
+        snprintf(line, sizeof line, "Slots %u/%u   %s", (unsigned)rec->tailCount, pe_permit_slot_max(rec),
+                 why ? why : "X: Add a slot");
+        break;
+    }
     default: {
         const PeWardrobeApi *w = pe_ward();
         const int i = pe_cursor();
@@ -278,6 +299,7 @@ static int pe_mode_rows(int mode) {
     case MODE_WORKSHOP: return s_nservices;
     case MODE_REQUISITION: return pe_shop_count();
     case MODE_REBUILD: return pe_ws_rebuild_count();
+    case MODE_PERMIT: return s_ngear = pe_permit_gear(s_gear);
     default: return w ? w->count() : 0;
     }
 }
@@ -351,6 +373,8 @@ static void pe_answer(int yes) {
         ok = pe_shop_buy(g.id, said, sizeof said);
     } else if (s_mode == MODE_REBUILD) {
         ok = pe_ws_rebuild_do(row, said, sizeof said);
+    } else if (s_mode == MODE_PERMIT) {
+        ok = row >= 0 && row < s_ngear && pe_permit_add_slot(s_gear[row], said, sizeof said);   /* rechecks */
     } else if (pe_ward()) {
         ok = pe_ward()->pick(row, said, sizeof said);
         s_shown = -1;                                            /* the state changed */
@@ -385,10 +409,15 @@ static void pe_cross(void) {
         if (service == PE_WS_REQUISITION) pe_show_mode(MODE_REQUISITION, s_cursor[MODE_REQUISITION]);
         else if (service == PE_WS_REBUILD) pe_show_mode(MODE_REBUILD, s_cursor[MODE_REBUILD]);
         else if (service == PE_WS_WARDROBE) pe_show_mode(MODE_WARDROBE, s_cursor[MODE_WARDROBE]);
-        else if (service >= 0) {                              /* not a screen yet: Wayne's box shows it */
-            pe_wayne_menu_after_workshop(service);
-            pe_close();
-        }
+        else if (service == PE_WS_PERMIT) pe_show_mode(MODE_PERMIT, s_cursor[MODE_PERMIT]);
+        return;
+    }
+    case MODE_PERMIT: {
+        const ItemDataRecord *rec = row >= 0 && row < s_ngear ? pe_permit_record(s_gear[row]) : NULL;
+        const char *why = rec ? pe_permit_blocked(s_gear[row]) : "No guns or armor in the bag";
+        if (why) { pe_refuse(why); return; }
+        snprintf(msg, sizeof msg, "Add a slot to %s?", pe_ws_item_name(rec->itemId));   /* the count is in the title */
+        pe_ask(row, msg);
         return;
     }
     case MODE_REQUISITION:
@@ -424,7 +453,7 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
         if (s_mode == MODE_WORKSHOP) { pe_close(); return 1; }
         s_cursor[s_mode] = pe_cursor();
         {
-            static const int service[MODES] = { -1, PE_WS_REQUISITION, PE_WS_REBUILD, PE_WS_WARDROBE };
+            static const int service[MODES] = { -1, PE_WS_REQUISITION, PE_WS_REBUILD, PE_WS_WARDROBE, PE_WS_PERMIT };
             int i, back = s_cursor[MODE_WORKSHOP];
             for (i = 0; i < s_nservices; ++i) if (s_services[i] == service[s_mode]) back = i;
             pe_show_mode(MODE_WORKSHOP, back);
@@ -454,6 +483,7 @@ static int pe_help(void *ctx, void *user) {
     else if (s_mode == MODE_WORKSHOP) snprintf(line, sizeof line, "Workshop   X: Open   O: Back to Wayne");
     else if (s_mode == MODE_REQUISITION) snprintf(line, sizeof line, "Requisition   Junk %u   X: Buy   O: Back", (unsigned)pe_shopw_junk());
     else if (s_mode == MODE_REBUILD) snprintf(line, sizeof line, "Rebuild   Junk %u   X: Rebuild   O: Back", (unsigned)pe_shopw_junk());
+    else if (s_mode == MODE_PERMIT) snprintf(line, sizeof line, "Mod Permits %u   X: Add a slot   O: Back", pe_permit_count());
     else snprintf(line, sizeof line, "Wardrobe   Junk %u   X: Buy or wear   O: Back", (unsigned)pe_shopw_junk());
     *text = pe_text_from_ascii(s_text, sizeof s_text, line);
     return 0;

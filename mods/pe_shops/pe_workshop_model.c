@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "pe_item_table.h"
 #include "pe_mod_host.h"
 #include "pe_requisition.h"
 #include "pe_services.h"
@@ -50,6 +51,12 @@ int pe_ws_cross(int row, char *msg, size_t size) {
     return PE_WS_ASK;
 }
 
+const char *pe_ws_item_name(unsigned id) {
+    unsigned i;
+    for (i = 0; i < PE_ITEM_COUNT; ++i) if (pe_item_ids[i] == id) return pe_item_names[i];
+    return "it";
+}
+
 /* ---- Rebuild ---- */
 static const PeRebuildApi *pe_ws_rebuild_api(void) { return (const PeRebuildApi *)pe_service_get("rebuild", 1); }
 
@@ -71,7 +78,7 @@ int pe_ws_rebuild_cross(int row, char *msg, size_t size) {
     PeWsRebuild b;
     if (!pe_ws_rebuild(row, &b, NULL)) { snprintf(msg, size, "Nothing to rebuild"); return PE_WS_REFUSE; }
     if (b.blocked) { snprintf(msg, size, "%s", b.blocked); return PE_WS_REFUSE; }
-    snprintf(msg, size, "Rebuild %s for %u Junk?", pe_shop_name(b.id), (unsigned)b.price);
+    snprintf(msg, size, "Rebuild %s for %u Junk?", pe_ws_item_name(b.id), (unsigned)b.price);
     return PE_WS_ASK;
 }
 

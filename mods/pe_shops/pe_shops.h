@@ -20,4 +20,13 @@ uint32_t pe_shopw_price(uint32_t base);
 int pe_shopw_wayne_waiting(void);
 int pe_shopw_handin_blocked(void);
 
+/* Mod Permit Card: one more slot on a gun or armor in the bag (pe_permit.c). */
+struct ItemDataRecord;
+struct ItemDataRecord *pe_permit_record(int bag_slot);      /* the gun or armor there, else NULL */
+int pe_permit_gear(int *bag_slots);                         /* bag slots holding guns and armor; how many */
+unsigned pe_permit_count(void);                             /* Mod Permits in the bag and Wayne's storage */
+unsigned pe_permit_slot_max(const struct ItemDataRecord *rec);
+const char *pe_permit_blocked(int bag_slot);                /* why no slot can be added now, or NULL */
+int pe_permit_add_slot(int bag_slot, char *msg, size_t size);   /* uses one permit; 1 if added */
+
 #endif

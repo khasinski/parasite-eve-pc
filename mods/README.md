@@ -367,10 +367,13 @@ Tool-price, rescue/storage, confirmation, guard and save-layout checks.
 
 pe_economy/pe_wayne_menu.c rewrites Wayne's own choice box (PE_HOOK_TEXTBOXES, before the
 boxes draw): Workshop above Cancel, Junk and his count on Discard junk.
-Workshop opens Requisition, Rebuild (5 a page, Left/Right pages, dimmed rows can't be bought
-now), a Wardrobe row while a mod publishes the `wardrobe` v1 service, and Mod Permit Card, which adds
-one mod slot after a Yes / No. Circle goes back. While his box is the counter the shop allows
-buying though the field is busy (pe_shop_at_counter). Messages use pe_gametext.h.
+Workshop opens a menu screen of its own (pe_shops/pe_workshop_screen.c), his box waiting below
+the screen: Requisition, Rebuild (the rebuilt item's stats as the equip screens show them), a
+Wardrobe row while a mod publishes the `wardrobe` v1 service (outfits beside their model), and
+Mod Permit Card (pe_permit.c: the bag's guns and armor; one permit adds one mod slot). Lists
+scroll; gray rows can't be had now and say why; every purchase asks Yes / No. Circle goes back.
+While his box is the counter the shop allows buying though the field is busy
+(pe_shop_at_counter). Messages use pe_gametext.h.
 
 host/pe_equip_sync.c (a host feature, so it works whichever mods are loaded) reruns the game's
 equipment rebuild in free field whenever the equipped gun or armor record changes, so Catalog,

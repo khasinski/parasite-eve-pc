@@ -33,7 +33,7 @@ static uint32_t s_junk = 100;
 int pe_shopw_enabled(void) { return s_economy_on; }
 uint32_t pe_shopw_junk(void) { return s_junk; }
 static int rb_count(void) { return 2; }
-static uint8_t rb_item(int i) { return i == 0 ? 0x14 : 0x0B; }
+static uint8_t rb_item(int i) { return i == 0 ? 0x45 : 0x0B; }   /* M9; Super Junk */
 static unsigned rb_bought(int i) { return i == 0 ? 2u : 0u; }
 static uint32_t rb_price(int i) { return i == 0 ? 40u : 150u; }
 static int rb_rebuilt = -1;
@@ -89,11 +89,12 @@ int main(void) {
         PeWsRebuild b;
         ItemDataRecord rec;
         assert(pe_ws_rebuild_count() == 2);
-        assert(pe_ws_rebuild(0, &b, &rec) && b.id == 0x14 && b.price == 40 && b.bought == 2 && !b.blocked);
+        assert(pe_ws_rebuild(0, &b, &rec) && b.id == 0x45 && b.price == 40 && b.bought == 2 && !b.blocked);
         assert(rec.kind == 1 && rec.baseStats[0] == 30 && rec.bonusStats[0] == 5 && rec.tailCount == 4);
         assert(pe_ws_rebuild(1, &b, NULL) && b.blocked && !strcmp(b.blocked, "Not enough Junk"));
         assert(!pe_ws_rebuild(2, &b, NULL) && !pe_ws_rebuild(-1, &b, NULL));
-        assert(pe_ws_rebuild_cross(0, msg, sizeof msg) == PE_WS_ASK && !strcmp(msg, "Rebuild Medicine 1 for 40 Junk?"));
+        assert(pe_ws_rebuild_cross(0, msg, sizeof msg) == PE_WS_ASK && !strcmp(msg, "Rebuild M9 for 40 Junk?"));
+        assert(!strcmp(pe_ws_item_name(0x45), "M9") && !strcmp(pe_ws_item_name(0xFF), "it"));
         assert(pe_ws_rebuild_cross(1, msg, sizeof msg) == PE_WS_REFUSE && !strcmp(msg, "Not enough Junk"));
         assert(pe_ws_rebuild_do(0, msg, sizeof msg) && rb_rebuilt == 0);
         s_economy_on = 0;

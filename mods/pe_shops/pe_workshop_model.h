@@ -35,6 +35,9 @@ int pe_ws_goods(int row, PeWsGoods *out);
 enum { PE_WS_REFUSE, PE_WS_ASK };
 int pe_ws_cross(int row, char *msg, size_t size);
 
+/* An item's name in ASCII for questions (pe_item_table.h); "it" for one it doesn't know. */
+const char *pe_ws_item_name(unsigned id);
+
 /* ---- Rebuild: the Mod Catalog's `rebuild` service; no rows while the Catalog isn't running ---- */
 struct ItemDataRecord;
 typedef struct PeWsRebuild {
