@@ -3,13 +3,16 @@
 #include <stdio.h>
 #include <string.h>
 #include "../mods/pe_economy/pe_loot.c"
+#include "../mods/pe_rewards/pe_rewards.c"
 SaveRuntimeState g_SaveRuntimeState;
 GameStateBlock g_GameStateBlock;
 Pe1GameState g_GameState;
 InventoryItemWorkspace g_InventoryItemWorkspace;
 ItemDataRecord *pe_equipped(int armor) { (void)armor;return NULL; }
 int pe_rec_has_effect(const ItemDataRecord *rec,int effect) { (void)rec;(void)effect;return 0; }
-const void *pe_service_get(const char *name,int version) { (void)name;(void)version;return NULL; }
+const void *pe_service_get(const char *name,int version) { (void)version; return !strcmp(name,"wallet")?(const void *)&s_wallet_api:!strcmp(name,"junk")?(const void *)&s_junk_api:NULL; }
+/* The battle end as the host runs it: wallet early, rewards, wallet late. */
+static void pe_on_rewards(PeHookRewards *r,void *u) { pe_on_rewards_early(r,u); pe_rw_on_rewards(r,u); pe_on_rewards_late(r,u); }
 void pe_log(const char *tag,const char *fmt,...) { (void)tag;(void)fmt; }
 int main(void) {
     s_st.junk=100;
@@ -24,7 +27,7 @@ int main(void) {
     pe_on_rewards(&reward,NULL);
     assert(!memcmp(before,list,sizeof list) && s_st.junk==0);
     s_enabled=1;s_st.preset=1;s_st.steal_bank=2;
-    s_tune_rare_base=s_tune_rare_step=0;s_tune_rare_guarantee=200;
+    s_rw_tune_rare_base=s_rw_tune_rare_step=0;s_rw_tune_rare_guarantee=200;
     pe_on_rewards(&reward,NULL);
     assert(list[0].id==6 && list[1].id==0x14 && list[2].id==0);
     assert(s_found.junk_shown==16 && s_st.steal_bank==0 && s_st.junk==0);
