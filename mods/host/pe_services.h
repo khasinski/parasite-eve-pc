@@ -12,6 +12,7 @@
  *   "bestiary"  v1  pe_collection  register creatures, map enemies to them, unlock entries
  *   "costumes"  v1  pe_wardrobe    register costumes (the game's outfits or a mod's own models)
  *   "costume_rules" v1 pe_economy  whether costumes must be unlocked before they are worn
+ *   "wallet"    v1  pe_economy  battle rewards' fields in the Junk record (bridge findings D10)
  *
  * Providers (an import pack, a randomizer) register at their init, so they list "pe_collection"
  * in their PeMod requires. Keys are stable names saved in the player's profile ("pe1/rat",
@@ -38,6 +39,28 @@ typedef struct PeJunkApi {
     int (*wayne_waiting)(void);        /* he holds 300+ but can't build before Day 4 */
     int (*handin_blocked)(void);       /* a hand-in needs one free bag slot */
 } PeJunkApi;
+
+/* `wallet` v1: for the battle rewards only (bridge findings D10). The Junk wallet owns the
+ * "pe_economy.loot" save record whole; the rewards' fields in it are copied in and out here, so
+ * the wallet stays its only writer and keeps them as loaded while the rewards are off. None of
+ * these spend, grant or save; the save host saves the record when the game saves. */
+typedef struct PeRewardState {
+    uint16_t hits[7];                   /* per enemy slot, this battle (the no-hit bonus) */
+    uint16_t rare_dry, rare_carry;      /* pity progress; a rare that didn't fit the list */
+    uint32_t rng;
+    uint16_t charm_left;
+    uint8_t econ_since, permit_since;   /* rares since an economy mod / a Mod Permit */
+} PeRewardState;
+
+typedef struct PeWalletApi {
+    uint32_t struct_size;               /* sizeof(PeWalletApi) */
+    void (*get_rewards)(PeRewardState *out);
+    void (*put_rewards)(const PeRewardState *in);
+    int (*preset)(void);                /* Difficulty: 0 Relaxed, 1 Normal, 2 Grind */
+    /* Extra Junk for the battle being won, added before the items-found list is built: the wallet
+     * shows it with vanilla Junk and steals as one "Junk xN" entry. */
+    void (*battle_junk)(uint32_t n);
+} PeWalletApi;
 
 typedef struct PeCatalogApi {
     int (*armor_unlocked)(int effect);

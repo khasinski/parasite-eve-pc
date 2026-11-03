@@ -26,8 +26,9 @@
  *   - Saved by the host as the "pe_economy.loot" record (host/pe_save.h); saves from before, with
  *     the recomp build's "PELT" block, still load. A new game resets it.
  *
- * Other mods: publishes the "junk" service (pe_economy.h); uses "catalog" (economy mod unlocks)
- * and "keys" (key item pocket) when those are present.
+ * Other mods: publishes the "junk" service (pe_economy.h) and "wallet" (the battle rewards' fields
+ * in this record, bridge findings D10, ahead of the rewards becoming their own mod); uses
+ * "catalog" (economy mod unlocks) and "keys" (key item pocket) when those are present.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -92,6 +93,7 @@ static const uint16_t s_preset_price[3] = { 75, 100, 125 };
 static const char *const s_handin_names[] = { "Next gun", "All Junk" };
 
 static int s_in_battle, s_boss_battle;
+static uint32_t s_battle_extra;   /* Junk added through wallet.battle_junk for this battle */
 static struct {
     uint16_t rare_shown[2];
     uint32_t rare_before[2];
@@ -315,6 +317,8 @@ static int pe_on_rewards(void *ctx, void *user) {
     if (hits < 4) earned += earned * (uint32_t)s_tune_nohit_bonus * (4u - hits) / 400u;
     earned = earned * s_preset_junk[s_st.preset < 3 ? s_st.preset : 1] / 100u;
     if (pe_loot_armor_has(PE_FX_SCAVENGER)) earned += earned / 2u;
+    earned += s_battle_extra;           /* another mod's, through the wallet service */
+    s_battle_extra = 0;
 
     s_found.junk_shown = 0;
     s_found.junk_list_seen = 0;
@@ -599,6 +603,31 @@ static int pe_save_upgrade(void *data, const uint8_t *at, unsigned size, unsigne
     }
     return 0;
 }
+
+/* ---- the "wallet" service: the rewards' fields, copied in and out ---- */
+static void pe_wallet_get_rewards(PeRewardState *out) {
+    memcpy(out->hits, s_st.hits, sizeof out->hits);
+    out->rare_dry = s_st.rare_dry;
+    out->rare_carry = s_st.rare_carry;
+    out->rng = s_st.rng;
+    out->charm_left = s_st.charm_left;
+    out->econ_since = s_st.econ_since;
+    out->permit_since = s_st.permit_since;
+}
+static void pe_wallet_put_rewards(const PeRewardState *in) {
+    memcpy(s_st.hits, in->hits, sizeof s_st.hits);
+    s_st.rare_dry = in->rare_dry;
+    s_st.rare_carry = in->rare_carry;
+    s_st.rng = in->rng;
+    s_st.charm_left = in->charm_left;
+    s_st.econ_since = in->econ_since;
+    s_st.permit_since = in->permit_since;
+}
+static int pe_wallet_preset(void) { return s_st.preset < 3 ? s_st.preset : 1; }
+static void pe_wallet_battle_junk(uint32_t n) { s_battle_extra = n >= 99999u - s_battle_extra ? 99999u : s_battle_extra + n; }
+static const PeWalletApi s_wallet_api = {
+    sizeof(PeWalletApi), pe_wallet_get_rewards, pe_wallet_put_rewards, pe_wallet_preset, pe_wallet_battle_junk,
+};
 
 static const PeSaveRecord s_save_record = {
     "pe_economy.loot", 1, &s_st, sizeof s_st, pe_save_check, pe_save_upgrade, pe_save_reset,
@@ -892,6 +921,7 @@ void pe_loot_register(const char *mod_id) {
     pe_menu_register_live_int(PE_TUNING_PAGE, "Set Junk", "Debug: change the Junk counter.", 0, 99999, 10, pe_get_junk, pe_set_junk_debug);
 
     pe_service_publish("junk", 1, &s_junk_api, mod_id);
+    pe_service_publish("wallet", 1, &s_wallet_api, mod_id);
     pe_hook_add(PE_HOOK_BATTLE_REWARDS, pe_on_rewards, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SLOT_ROW, pe_on_slot_row, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_STEAL, pe_on_steal, NULL, PE_PRIORITY_NORMAL, mod_id);
