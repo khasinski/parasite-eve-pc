@@ -214,7 +214,7 @@ int main(void) {
     assert(strstr(status_of("dup.zip"), "installed twice") || strstr(status_of("Pack twice"), "installed twice"));
     assert(!find("twice/a.re2") && !find("twice/b.re2"));
     assert(strstr(status_of("evil.zip"), "unsafe name"));
-    assert(strstr(status_of("Pack recipe-pack"), "recipe pack"));
+    assert(strstr(status_of("Pack recipe-pack"), "pe_pack_build.py"));
     assert(strstr(status_of("Pack Bad_Id"), "bad id"));
     assert(strstr(status_of("Pack pe1"), "bad id"));          /* the game's own namespace */
 

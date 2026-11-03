@@ -441,8 +441,10 @@ In pe_wardrobe/:
   visiting each part once in order, every animation row one channel set per part, meta.bin's gun
   part a part), is refused alone. Tiers price 25 / 50 / 100 / 250 / 400 Junk while unlock rules
   apply. Previews in Aya's Wardrobe menu read the pack through `pe_model_skin_set_reader`, set by
-  the Wardrobe (the host never calls it by name). Not yet: recipe packs and default-appearance
-  replacement. `tests/pe_mod_packs_test.c` writes real zips and folders; the model fixture covers
+  the Wardrobe (the host never calls it by name). Recipe packs (Parasite Eve's own characters,
+  shared as instructions) are listed as needing a build: the bridge's
+  tools/pe_assets/pe_pack_build.py builds them from the player's disc into an assets pack here.
+  Not yet: default-appearance replacement. `tests/pe_mod_packs_test.c` writes real zips and folders; the model fixture covers
   the preview reader and the shape check's refusals.
 - `pe_wardrobe_profile.c`: costumes owned and the one worn, by key, in pe_wardrobe.ini beside the
   preferences, kept across every game; records of packs that aren't loaded are kept untouched. The

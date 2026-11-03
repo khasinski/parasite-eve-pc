@@ -12,6 +12,10 @@
  * costume's key, saved in profiles, is "<pack id>/<folder>" (at most 63 bytes) and must never
  * change; the old pe_skins/ folders keep their own keys (pe_pack_pe1_costumes.c).
  *
+ * A "recipe" pack (characters from the Parasite Eve disc, shared as instructions only) is built
+ * into an assets pack in this folder by the bridge's tools/pe_assets/pe_pack_build.py, from the
+ * player's own disc; the recipe itself is listed as needing that.
+ *
  * Refused, with the reason on F1 > Collection > Wardrobe > Packs: a pack whose id appears twice
  * (every copy: the author field can't prove which is genuine, so the player removes one), a bad
  * or reserved id, a missing LICENSE, another format or kind (recipe packs need the builder), and
@@ -405,7 +409,8 @@ static void pe_read_pack(const char *entry, int zip) {
     else if (!id || !pe_valid_id(id)) snprintf(p->refused, sizeof p->refused, "bad id (a-z, 0-9, -; at most 31)");
     else if (cJSON_IsNumber(minw) && minw->valueint > 1) snprintf(p->refused, sizeof p->refused, "needs a newer Wardrobe");
     else if (kind && strcmp(kind, "assets") != 0)
-        snprintf(p->refused, sizeof p->refused, strcmp(kind, "recipe") == 0 ? "recipe pack: needs the pack builder" : "unknown kind");
+        snprintf(p->refused, sizeof p->refused, strcmp(kind, "recipe") == 0
+                 ? "recipe: build it from your disc with pe_pack_build.py" : "unknown kind");
     else if (!pe_pack_exists(p, "LICENSE")) snprintf(p->refused, sizeof p->refused, "no LICENSE");
     cJSON_Delete(j);
     if (!p->refused[0]) pe_read_chars(p);
