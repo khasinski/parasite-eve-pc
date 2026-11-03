@@ -9,7 +9,7 @@
  *
  * At the entry of Menu_DrawTextboxEntries (PE_HOOK_TEXTBOXES), every frame:
  *   - a box showing Wayne's menu (a choice with "Discard junk", or "Hold equipment" on the ship)
- *     is pointed at our copy: "Mod Permit Card" and "Workshop" above Cancel, and "Discard junk
+ *     is pointed at our copy: "Workshop" above Cancel, and "Discard junk
  *     <your Junk>, <his count>/300" (plus "bag full" when a hand-in has no free slot, or "Day 4"
  *     when he holds 300 but can't build yet);
  *   - Cross on Workshop is taken from the game and the box shows our screens instead: Workshop
@@ -19,8 +19,8 @@
  *     for one more slot -- vanilla's Torres tune-up without the risk). The title line shows
  *     your Junk or what the last action did. Circle goes back a screen;
  *   - Cross on our Cancel moves the cursor up first, so the script gets its own Cancel.
- * Wayne's Chrysler menu already has 6 options, so there only Workshop is added and Mod Permit
- * moves onto the Workshop screen.
+ * Mod Permit Card lives on the Workshop screen only (it used to sit in Wayne's own menu too, except
+ * at the Chrysler, where his 6 options left room for Workshop alone).
  *
  * Dimmed rows use the text box's red highlight codes, drawn in the menus' dimmed gray while our
  * screens are up (g_TextboxHighlightColor*, restored afterwards).
@@ -51,6 +51,7 @@
 #define PE_MAX_MOD_SLOTS    10
 #define PE_DIM_GRAY         0x40   /* the menus' dimmed text: 0x80 >> 1 */
 #define PE_SCREEN_RIGHT     312    /* boxes stay inside the screen */
+#define PE_OFF_SCREEN_Y     0x1F0  /* below the 240-line screen: his box out of sight, still open */
 
 extern u8 g_DialogueChoiceCursor;
 
@@ -75,6 +76,8 @@ static struct {
     char note[48];                /* title line after an action */
     int pick;                     /* Mod Permit: the bag slot being asked about */
     int root[5], root_count;      /* the Workshop screen's options, ROOT_* */
+    int hidden;                   /* moved off screen while the Workshop screen is up */
+    u16 shown_y;                  /* where it was */
 } s_ui;
 
 static u8 s_buf[PE_GAMETEXT_MAX];   /* our message */
@@ -131,19 +134,15 @@ static int pe_is_wayne_menu(const u8 *msg) {
     return 1;
 }
 
-/* With 6 options of his own there's room for Workshop only; Mod Permit moves inside. */
-static int pe_compact(void) { return s_ui.wayne_count + 2 > PE_CHOICE_MAX; }
-
 static void pe_build_wayne(PeText *t) {
     unsigned i = 0, k, start;
     int option = 0;
     while (i < s_orig_len && !(s_orig[i] == G_CODE && i + 1 < s_orig_len && s_orig[i + 1] == G_CHOICE)) pe_t_byte(t, s_orig[i++]);
     i += 3;                                              /* FB 09 n */
-    pe_t_choice(t, s_ui.wayne_count + (pe_compact() ? 1 : 2));
+    pe_t_choice(t, s_ui.wayne_count + 1);
     for (start = i; i <= s_orig_len; ++i) {
         if (i < s_orig_len && s_orig[i] != G_NEWLINE) continue;
         if (option == s_ui.wayne_count - 1) {           /* his last option is Cancel */
-            if (!pe_compact()) { pe_t_str(t, "    Mod Permit Card"); pe_t_byte(t, G_NEWLINE); }
             pe_t_str(t, "    Workshop");
             pe_t_byte(t, G_NEWLINE);
         }
@@ -197,7 +196,7 @@ static void pe_build_root(PeText *t) {
     s_ui.root[s_ui.root_count++] = ROOT_REQ;
     s_ui.root[s_ui.root_count++] = ROOT_REB;
     if (pe_wardrobe()) s_ui.root[s_ui.root_count++] = ROOT_WARD;
-    if (pe_compact()) s_ui.root[s_ui.root_count++] = ROOT_PERMIT;
+    s_ui.root[s_ui.root_count++] = ROOT_PERMIT;
     s_ui.root[s_ui.root_count++] = ROOT_BACK;
     pe_title(t, "Workshop");
     pe_t_choice(t, s_ui.root_count);
@@ -380,6 +379,7 @@ static void pe_show(int screen, int cursor) {
 }
 
 static void pe_reset(void) {
+    if (s_ui.hidden && s_ui.entry) s_ui.entry->y = s_ui.shown_y;   /* never leave a box below the screen */
     pe_dim_gray(0);
     pe_shop_at_counter(0);
     memset(&s_ui, 0, sizeof s_ui);
@@ -425,22 +425,18 @@ static void pe_list_confirm(int rebuild, int cursor) {
     }
 }
 
-/* Leave the permit list: back where it was opened from. */
+/* Leave the permit list: back to the Workshop's options. */
 static void pe_permit_back(void) {
-    const int permit = s_ui.wayne_count - 1;
     s_ui.note[0] = '\0';
-    if (pe_compact()) pe_show(SCR_ROOT, pe_root_row(ROOT_PERMIT));
-    else pe_show(SCR_WAYNE, permit);
+    pe_show(SCR_ROOT, pe_root_row(ROOT_PERMIT));
 }
 
 static uint32_t pe_input(uint32_t pressed, int cursor) {
-    const int permit = pe_compact() ? -1 : s_ui.wayne_count - 1;
-    const int workshop = s_ui.wayne_count - (pe_compact() ? 1 : 0);
+    const int workshop = s_ui.wayne_count - 1;        /* just above Cancel */
     const int his_cancel = s_ui.wayne_count - 1;
     switch (s_ui.screen) {
     case SCR_WAYNE:
         if (!(pressed & PE_IN_CONFIRM)) return 0;
-        if (cursor == permit) { s_ui.note[0] = '\0'; s_ui.page = 0; pe_show(SCR_PERMIT, 0); return PE_IN_CONFIRM; }
         if (cursor == workshop) { s_ui.note[0] = '\0'; pe_workshop_screen_open(); return PE_IN_CONFIRM; }
         if (cursor == workshop + 1) g_DialogueChoiceCursor = (u8)his_cancel;   /* the script's own Cancel */
         return 0;
@@ -572,8 +568,19 @@ static int pe_on_textboxes(void *ctx, void *user) {
     }
     pe_shop_at_counter(1);                                 /* his box is the shop counter */
     if (pe_workshop_screen_busy()) {                       /* the Workshop screen has the pad */
+        /* and the screen: his box would show through it, so it waits below the screen, still
+         * open (the script is waiting for its answer), and comes back where it was. */
+        if (!s_ui.hidden) {
+            s_ui.hidden = 1;
+            s_ui.shown_y = s_ui.entry->y;
+            s_ui.entry->y = PE_OFF_SCREEN_Y;
+        }
         g_FieldPadPressed = 0;
         return 0;
+    }
+    if (s_ui.hidden) {
+        s_ui.hidden = 0;
+        s_ui.entry->y = s_ui.shown_y;
     }
     if (s_after_workshop >= 0) {
         const int service = s_after_workshop;

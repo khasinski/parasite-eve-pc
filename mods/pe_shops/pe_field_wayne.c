@@ -14,7 +14,7 @@
  *   - when his task ends, the field is locked again the way his script does it (field event 0xFE
  *     from him, Script_QueueFieldSfx) and a dialogue box of ours opens: "Torres sent supplies."
  *     and Store equipment / Store item / Cancel, in Wayne's window style. Wayne's Workshop
- *     (pe_wayne_menu.c) recognises it and adds Mod Permit Card and Workshop above Cancel;
+ *     (pe_wayne_menu.c) recognises it and adds Workshop above Cancel;
  *   - when it closes, the field is unlocked (event 0xFF, as his script ends) and, on Store
  *     equipment or Store item, the storage screen opens the way his script opcode would
  *     (Script_BeginSceneTransition: Render_BeginSceneLoad, Menu_OpenEquipScreen, menu flags).

@@ -277,7 +277,20 @@ static int pe_ward_pick(int k, char *msg, size_t size) {   /* buy if needed, the
     snprintf(msg, size, "Wearing %s when you leave", c ? c->name : "Aya's own clothes");
     return 1;
 }
-static const PeWardrobeApi s_wardrobe = { pe_ward_count, pe_ward_name, pe_ward_price, pe_ward_state, pe_ward_pick };
+/* The Wardrobe screen's rule: a skin bank or bundle, never a provider's gameplay loader. */
+static int pe_ward_preview(int k, PeModelSource *src) {
+    int own;
+    const PeCostume *c = pe_ward_costume(k, &own);
+    if (!own && !c) return 0;
+    if (c && c->bank < 0 && (c->load || !c->bundle || !*c->bundle)) return 0;
+    memset(src, 0, sizeof *src);
+    src->kind = PE_MODEL_SKIN;
+    src->map = (uint16_t)(c && c->bank >= 0 ? c->bank : pe_wardrobe_story_bank());
+    if (c && c->bank < 0) src->folder = c->bundle;
+    return 1;
+}
+static const PeWardrobeApi s_wardrobe = { pe_ward_count, pe_ward_name, pe_ward_price, pe_ward_state, pe_ward_pick,
+                                          pe_ward_preview };
 
 /* ---- for the Wardrobe screen in Aya's menu ---- */
 static int s_reload_after_menu;

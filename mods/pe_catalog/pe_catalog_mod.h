@@ -45,6 +45,7 @@ uint8_t pe_rebuild_item(int i);
 uint32_t pe_rebuild_price_index(int i);
 unsigned pe_rebuild_bought_slots(int i);
 int pe_rebuild_index(int i, char *msg, size_t msg_size);
+int pe_rebuild_preview(int i, struct ItemDataRecord *out);
 
 void pe_catalog_register(const char *mod_id);            /* pe_catalog.c */
 void pe_catalog_menu_register(const char *mod_id);       /* pe_catalog_menu.c: the Catalog in Aya's menu */

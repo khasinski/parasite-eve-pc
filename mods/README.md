@@ -366,9 +366,9 @@ Tool-price, rescue/storage, confirmation, guard and save-layout checks.
 ## Wayne's Workshop
 
 pe_economy/pe_wayne_menu.c rewrites Wayne's own choice box (PE_HOOK_TEXTBOXES, before the
-boxes draw): Mod Permit Card and Workshop above Cancel, Junk and his count on Discard junk.
+boxes draw): Workshop above Cancel, Junk and his count on Discard junk.
 Workshop opens Requisition, Rebuild (5 a page, Left/Right pages, dimmed rows can't be bought
-now) and a Wardrobe row while a mod publishes the `wardrobe` v1 service. Mod Permit Card adds
+now), a Wardrobe row while a mod publishes the `wardrobe` v1 service, and Mod Permit Card, which adds
 one mod slot after a Yes / No. Circle goes back. While his box is the counter the shop allows
 buying though the field is busy (pe_shop_at_counter). Messages use pe_gametext.h.
 
@@ -520,7 +520,7 @@ pe_economy/pe_field_wayne.c: wherever Warner stands guard (map 374) he offers St
 Store item and the Workshop. His retail talk task (checked word for word, read-only) plays
 untouched; when it ends, the field is locked again the way his script does it (field event 0xFE)
 and our menu opens in a dialogue box of its own near the screen centre (PE_HOOK_TEXTBOXES, ahead
-of pe_wayne_menu.c, which adds Mod Permit Card and Workshop). Closing it unlocks the field (0xFF);
+of pe_wayne_menu.c, which adds Workshop). Closing it unlocks the field (0xFF);
 a storage choice then opens the game's storage screen. Nothing in his script is patched. F1 >
 Economy > Warner helps out.
 

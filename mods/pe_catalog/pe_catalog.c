@@ -265,7 +265,7 @@ int pe_catalog_unlock_armor(int effect) {
 }
 static const PeCatalogApi s_catalog_api = { pe_catalog_armor_unlocked, pe_catalog_unlock_armor };
 static const PeRebuildApi s_rebuild_api = { pe_rebuild_count, pe_rebuild_item, pe_rebuild_bought_slots, pe_rebuild_price_index,
-                                            pe_rebuild_index };
+                                            pe_rebuild_index, pe_rebuild_preview };
 
 /* ---- save block ---- */
 

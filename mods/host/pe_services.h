@@ -70,12 +70,16 @@ typedef struct PeCatalogApi {
 
 /* `rebuild` v1: the Mod Catalog's Rebuild list, newest first, for shop fronts (Wayne's Workshop).
  * rebuild() buys entry i back (Junk through the wallet); msg says what happened. */
+struct ItemDataRecord;
 typedef struct PeRebuildApi {
     int (*count)(void);
     uint8_t (*item)(int i);
     unsigned (*bought_slots)(int i);      /* slots added with Mod Permits before dismantling */
     uint32_t (*price)(int i);
     int (*rebuild)(int i, char *msg, size_t size);   /* 1 if rebuilt */
+    /* Added to v1 (NULL from builds before): the record rebuild(i) would make (stats, bonuses,
+     * slot count, empty slots), for a stats view; 0 if there is no entry i. Changes nothing. */
+    int (*preview)(int i, struct ItemDataRecord *out);
 } PeRebuildApi;
 
 typedef struct PeKeysApi {
@@ -83,12 +87,16 @@ typedef struct PeKeysApi {
 } PeKeysApi;
 
 /* state: 0 for sale, 1 owned, 2 worn. Wayne's Workshop shows a Wardrobe row while published. */
+struct PeModelSource;   /* below */
 typedef struct PeWardrobeApi {
     int (*count)(void);
     const char *(*name)(int k);
     unsigned (*price)(int k);
     int (*state)(int k);
     int (*pick)(int k, char *msg, size_t size);   /* buy or wear; msg says what happened */
+    /* Added to v1 (NULL from builds before: no previews): outfit k's model for a model stage; 0
+     * when it has none to show while browsing (one only its provider's own loader can make). */
+    int (*preview)(int k, struct PeModelSource *src);
 } PeWardrobeApi;
 
 /* `costume_rules` v1: a mod's rule that costumes must be owned (or free) before they are worn

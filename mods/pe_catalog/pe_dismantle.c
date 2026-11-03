@@ -271,6 +271,18 @@ uint8_t pe_rebuild_item(int i) { return i >= 0 && i < pe_rebuild_count() ? pe_ca
 unsigned pe_rebuild_bought_slots(int i) { return i >= 0 && i < pe_rebuild_count() ? pe_bought_slots(&pe_catalog_state()->rebuild[i]) : 0u; }
 uint32_t pe_rebuild_price_index(int i) { return i >= 0 && i < pe_rebuild_count() ? pe_rebuild_price(&pe_catalog_state()->rebuild[i]) : 0; }
 
+/* What pe_rebuild_index(i) would put in the bag, for the Workshop's stats view. */
+int pe_rebuild_preview(int i, ItemDataRecord *out) {
+    const PeCatalogState *cat = pe_catalog_state();
+    const ItemDataRecord *base;
+    if (i < 0 || i >= cat->rebuild_count || !(base = pe_base_item(cat->rebuild[i].id))) return 0;
+    *out = *base;
+    memcpy(out->bonusStats, cat->rebuild[i].bonus, sizeof out->bonusStats);
+    out->tailCount = cat->rebuild[i].slots;
+    memset(out->tailData, 0, sizeof out->tailData);
+    return 1;
+}
+
 int pe_rebuild_index(int i, char *msg, size_t msg_size) {
     PeCatalogState *cat = pe_catalog_state();
     PeRebuildEntry r;

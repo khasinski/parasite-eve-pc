@@ -5,7 +5,9 @@
 #include "pe_mod_host.h"
 #include "pe_requisition.h"
 #include "pe_services.h"
+#include "pe_shops.h"
 #include "pe_workshop_model.h"
+#include "pe1/inventory.h"
 
 #define PE_ECON_FIRST 0xF000u
 #define PE_OWNED_WHY  "Already unlocked"     /* pe_shop_blocked's word for an economy effect bought */
@@ -46,4 +48,36 @@ int pe_ws_cross(int row, char *msg, size_t size) {
     if (g.blocked) { snprintf(msg, size, "%s", g.owned ? "Already owned" : g.blocked); return PE_WS_REFUSE; }
     snprintf(msg, size, "Buy %s for %u Junk?", g.name ? g.name : pe_shop_name(g.id), (unsigned)g.price);
     return PE_WS_ASK;
+}
+
+/* ---- Rebuild ---- */
+static const PeRebuildApi *pe_ws_rebuild_api(void) { return (const PeRebuildApi *)pe_service_get("rebuild", 1); }
+
+int pe_ws_rebuild_count(void) { const PeRebuildApi *r = pe_ws_rebuild_api(); return r ? r->count() : 0; }
+
+int pe_ws_rebuild(int row, PeWsRebuild *out, ItemDataRecord *rec) {
+    const PeRebuildApi *r = pe_ws_rebuild_api();
+    memset(out, 0, sizeof *out);
+    if (!r || row < 0 || row >= r->count() || !(out->id = r->item(row))) return 0;
+    out->price = r->price(row);
+    out->bought = r->bought_slots(row);
+    if (!pe_shopw_enabled()) out->blocked = "Junk economy is off";
+    else if (out->price > pe_shopw_junk()) out->blocked = "Not enough Junk";
+    if (rec && (!r->preview || !r->preview(row, rec))) memset(rec, 0, sizeof *rec);   /* no stats from older Catalogs */
+    return 1;
+}
+
+int pe_ws_rebuild_cross(int row, char *msg, size_t size) {
+    PeWsRebuild b;
+    if (!pe_ws_rebuild(row, &b, NULL)) { snprintf(msg, size, "Nothing to rebuild"); return PE_WS_REFUSE; }
+    if (b.blocked) { snprintf(msg, size, "%s", b.blocked); return PE_WS_REFUSE; }
+    snprintf(msg, size, "Rebuild %s for %u Junk?", pe_shop_name(b.id), (unsigned)b.price);
+    return PE_WS_ASK;
+}
+
+int pe_ws_rebuild_do(int row, char *msg, size_t size) {
+    const PeRebuildApi *r = pe_ws_rebuild_api();
+    if (r) return r->rebuild(row, msg, size);
+    snprintf(msg, size, "Mod Catalog is off");
+    return 0;
 }

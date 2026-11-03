@@ -35,4 +35,19 @@ int pe_ws_goods(int row, PeWsGoods *out);
 enum { PE_WS_REFUSE, PE_WS_ASK };
 int pe_ws_cross(int row, char *msg, size_t size);
 
+/* ---- Rebuild: the Mod Catalog's `rebuild` service; no rows while the Catalog isn't running ---- */
+struct ItemDataRecord;
+typedef struct PeWsRebuild {
+    uint8_t id;                  /* base item */
+    uint32_t price;
+    unsigned bought;             /* slots added with Mod Permits */
+    const char *blocked;         /* why it can't be rebuilt now (gray), or NULL */
+} PeWsRebuild;
+
+int pe_ws_rebuild_count(void);
+/* Rebuild row `row`, and into *rec (if not NULL) the item it makes; 0 if there is no such row. */
+int pe_ws_rebuild(int row, PeWsRebuild *out, struct ItemDataRecord *rec);
+int pe_ws_rebuild_cross(int row, char *msg, size_t size);   /* PE_WS_ASK / PE_WS_REFUSE */
+int pe_ws_rebuild_do(int row, char *msg, size_t size);      /* 1 if rebuilt */
+
 #endif
