@@ -828,13 +828,13 @@ static OverlayRect OverlayRowRect(const HostOverlayState *state, int row) {
     };
 }
 
-/* ---- the game's look: deep navy window, silver double frame, Parasite Eve red ----
+/* ---- the refined look: deep navy window, silver double frame, red ----
  * The PC menu wears it; the PS5 native menu keeps its own Original/Modern menu styles. */
 
 #ifdef PE_PS5_GPU_NATIVE
-#define OVERLAY_GAME_LOOK 0
+#define OVERLAY_REFINED_LOOK 0
 #else
-#define OVERLAY_GAME_LOOK 1
+#define OVERLAY_REFINED_LOOK 1
 #endif
 
 static const Color kLookRed = {0.90f, 0.14f, 0.15f, 1.0f};
@@ -843,8 +843,8 @@ static const Color kLookSilver = {0.80f, 0.86f, 0.95f, 1.0f};
 static const Color kLookText = {0.92f, 0.94f, 0.98f, 1.0f};
 static const Color kLookDim = {0.55f, 0.62f, 0.74f, 1.0f};
 
-/* Where row labels start: right of the red cursor in the game's look. */
-static float OverlayLabelX(void) { return (float)(OVERLAY_PAD + (OVERLAY_GAME_LOOK ? 16 : 0)); }
+/* Where row labels start: right of the red cursor in the refined look. */
+static float OverlayLabelX(void) { return (float)(OVERLAY_PAD + (OVERLAY_REFINED_LOOK ? 16 : 0)); }
 
 static int LookThick(float s) { return (int)(2.0f * s) > 1 ? (int)(2.0f * s) : 2; }
 
@@ -1015,7 +1015,7 @@ static void LookHelpBox(const Painter *p, float panelW, float boxTop, float boxH
 static void PaintFrame(const Painter *p, float width, float height) {
     const float s = p->s;
 
-    if (OVERLAY_GAME_LOOK) {   /* navy to black, faint scanlines, a silver double frame with bright corners */
+    if (OVERLAY_REFINED_LOOK) {   /* navy to black, faint scanlines, a silver double frame with bright corners */
         const int w = (int)ceilf(width), h = (int)ceilf(height), inset = (int)(5.0f * s);
         int i;
         LookVGradient(p->surface, 0, 0, w, h, (Color){0.055f, 0.075f, 0.140f, 0.97f}, (Color){0.010f, 0.014f, 0.032f, 0.97f});
@@ -1035,7 +1035,7 @@ static void PaintHeader(const Painter *p) {
     const float s = p->s;
     int page;
 
-    if (OVERLAY_GAME_LOOK) {
+    if (OVERLAY_REFINED_LOOK) {
         LookTitle(p, (float)OVERLAY_PANEL_W, (float)(OVERLAY_HEADER_H - 20), "SETTINGS", "GAME PAUSED");
         for (page = 0; page < OVERLAY_PAGE_COUNT; page++) {
             OverlayRect tab = OverlayTabRect(page);
@@ -1096,7 +1096,7 @@ static void PaintValueRow(const Painter *p, const char *labelText,
     float reach = ((float)OVERLAY_VALUE_W * 0.5f - 14.0f) * s;
     Color chevron = selected ? kAccent : WithAlpha(kMuted, 0.75f);
 
-    if (OVERLAY_GAME_LOOK) {   /* the label, a framed field for the value, red arrows on the selected row */
+    if (OVERLAY_REFINED_LOOK) {   /* the label, a framed field for the value, red arrows on the selected row */
         const float arrows = ((float)OVERLAY_VALUE_W * 0.5f - 20.0f) * s;
         const int fx = (int)(centre - ((float)OVERLAY_VALUE_W * 0.5f - 6.0f) * s);
         const int fy = (int)(mid - (float)(OVERLAY_ROW_H - 16) * 0.5f * s);
@@ -1153,7 +1153,7 @@ static void PaintSpeedLabel(const Painter *p, float mid, float baseline,
     char text[8];
 
     snprintf(text, sizeof(text), "%ux", factor);
-    if (OVERLAY_GAME_LOOK) {
+    if (OVERLAY_REFINED_LOOK) {
         const float x = OverlayLabelX() * s;
         const Color arrow = selected ? kLookRed : WithAlpha(kLookDim, 0.75f), end = WithAlpha(kLookDim, 0.3f);
         centre = x + (float)OVERLAY_SPEED_STEP_CENTRE * s;
@@ -1236,10 +1236,10 @@ static void PaintRows(const Painter *p) {
         float mid = top + (float)OVERLAY_ROW_H * 0.5f * s;
         float baseline = mid + 6.0f * s;
         int selected = row == p->state->row;
-        Color label = OVERLAY_GAME_LOOK ? WithAlpha(kLookText, selected ? 1.0f : 0.78f)
+        Color label = OVERLAY_REFINED_LOOK ? WithAlpha(kLookText, selected ? 1.0f : 0.78f)
                                         : (selected ? kText : WithAlpha(kText, 0.82f));
 
-        if (OVERLAY_GAME_LOOK) {
+        if (OVERLAY_REFINED_LOOK) {
             LookRowBand(p, (float)OVERLAY_PANEL_W, top, mid, selected, slot == 0 || slot == visibleSettings);
         } else if (selected) {
             FillRoundRect(p->surface, (float)(OVERLAY_PAD / 2) * s,
@@ -1317,7 +1317,7 @@ static void PaintRows(const Painter *p) {
                 if(row==0)PaintValueRow(p,names[row],Host_HdValue(row),mid,baseline,selected,0,label);
                 else {
                     DrawText(p->surface,OverlayLabelX()*s,baseline,17*s,names[row],label,ALIGN_LEFT);
-                    if (OVERLAY_GAME_LOOK)
+                    if (OVERLAY_REFINED_LOOK)
                         DrawText(p->surface,OverlayValueCentre()*s,baseline,17*s,Host_HdValue(row),selected?kLookRed:WithAlpha(kLookText,0.85f),ALIGN_CENTRE);
                     else
                         DrawText(p->surface,OverlayValueCentre()*s,baseline,17*s,Host_HdValue(row),selected?kAccent:kText,ALIGN_CENTRE);
@@ -1342,7 +1342,7 @@ static void PaintRows(const Painter *p) {
                      quit ? "Quit game" : "Resume game", quit ? WithAlpha(kLookRed, selected ? 1.0f : 0.85f) : label,
 #endif
                      ALIGN_LEFT);
-            if (OVERLAY_GAME_LOOK && selected) {
+            if (OVERLAY_REFINED_LOOK && selected) {
                 DrawSpaced(p->surface, OverlayValueCentre() * s, baseline - 1.0f * s, 12.0f * s, 2.5f * s,
                            "PRESS ENTER", kLookRed, ALIGN_CENTRE);
             }
@@ -1374,7 +1374,7 @@ static void PaintRows(const Painter *p) {
         float trackTop=(OVERLAY_HEADER_H+4)*s,trackH=(visibleSettings*OVERLAY_ROW_H-8)*s;
         float thumbH=trackH*(float)visibleSettings/(float)pureCount;
         float top=trackTop+(trackH-thumbH)*(float)p->state->scroll/(float)(pureCount-visibleSettings);
-        if (OVERLAY_GAME_LOOK) LookScrollBar(p,(OVERLAY_PANEL_W-13)*s,trackTop,trackH,top,thumbH);
+        if (OVERLAY_REFINED_LOOK) LookScrollBar(p,(OVERLAY_PANEL_W-13)*s,trackTop,trackH,top,thumbH);
         else {
         FillRoundRect(p->surface,(OVERLAY_PANEL_W-12)*s,trackTop,4*s,trackH,2*s,WithAlpha(kText,.10f));
         FillRoundRect(p->surface,(OVERLAY_PANEL_W-12)*s,top,4*s,thumbH,2*s,WithAlpha(kAccent,.65f));
@@ -1389,7 +1389,7 @@ static void PaintRows(const Painter *p) {
                                  (float)OVERLAY_CONTROLS_ITEM_COUNT);
         float thumbTop = trackTop + (trackH - thumbH) *
                          ((float)scroll / (float)OVERLAY_CONTROLS_MAX_SCROLL);
-        if (OVERLAY_GAME_LOOK) {
+        if (OVERLAY_REFINED_LOOK) {
             LookScrollBar(p, trackX - 1.0f * s, trackTop, trackH, thumbTop, thumbH);
         } else {
             FillRoundRect(p->surface, trackX, trackTop, 4.0f * s, trackH, 2.0f * s,
@@ -1492,7 +1492,7 @@ static void PaintFooter(const Painter *p, int visibleRowCount) {
     float footerTop = (float)(OverlayDesignHeight(visibleRowCount) - OVERLAY_FOOTER_H) * s;
     const char *help = OverlayRowHelp(p->state);
 
-    if (OVERLAY_GAME_LOOK) {
+    if (OVERLAY_REFINED_LOOK) {
         LookHelpBox(p, (float)OVERLAY_PANEL_W, footerTop / s + 8.0f, (float)(OVERLAY_FOOTER_H - 20), help,
                     p->state->page == OVERLAY_PAGE_MODS
                         ? "Enter / click activate   PgUp/PgDn page   Esc resume"
@@ -1551,7 +1551,7 @@ static void OverlayPaintPrompt(OverlaySurface *surface, const HostOverlayState *
 
     memset(surface->pixels, 0, (size_t)surface->w * (size_t)surface->h * 4u);
     PaintFrame(&painter, (float)PROMPT_PANEL_W * s, (float)OverlayPromptDesignHeight() * s);
-    if (OVERLAY_GAME_LOOK) {
+    if (OVERLAY_REFINED_LOOK) {
         LookTitle(&painter, (float)PROMPT_PANEL_W, 66.0f, "SKIP CUTSCENE", "MOVIE PAUSED");
         DrawText(surface, (float)OVERLAY_PAD * s, 96.0f * s, 16.0f * s, "Do you want to skip the cutscene?",
                  WithAlpha(kLookText, 0.82f), ALIGN_LEFT);
@@ -1647,7 +1647,7 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
 
     memset(surface->pixels, 0, (size_t)surface->w * (size_t)surface->h * 4u);
     PaintFrame(&painter, (float)SCREENSHOT_PANEL_W * s, (float)designH * s);
-    if (OVERLAY_GAME_LOOK) {
+    if (OVERLAY_REFINED_LOOK) {
         LookTitle(&painter, (float)SCREENSHOT_PANEL_W, 66.0f, "SAVE SCREENSHOT", "GAME PAUSED");
         DrawText(surface, (float)OVERLAY_PAD * s, 96.0f * s, 15.0f * s,
                  state->bg_summary[0] ? state->bg_summary : "Background ID: none", kLookSteel, ALIGN_LEFT);
@@ -1670,11 +1670,11 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
         float mid = top + (float)OVERLAY_ROW_H * 0.5f * s;
         float baseline = mid + 6.0f * s;
         int selected = !state->osk_open && row == state->row;
-        Color label = OVERLAY_GAME_LOOK ? WithAlpha(kLookText, selected ? 1.0f : 0.78f)
+        Color label = OVERLAY_REFINED_LOOK ? WithAlpha(kLookText, selected ? 1.0f : 0.78f)
                                         : (selected ? kText : WithAlpha(kText, 0.82f));
         const float labelX = OverlayLabelX() * s;
 
-        if (OVERLAY_GAME_LOOK) {
+        if (OVERLAY_REFINED_LOOK) {
             LookRowBand(&painter, (float)SCREENSHOT_PANEL_W, top, mid,
                         selected || (state->osk_open && row == SCREENSHOT_ROW_NOTE),
                         row == 0 || row == SCREENSHOT_ROW_SAVE);
@@ -1697,10 +1697,10 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
                 snprintf(displayNote, sizeof(displayNote), "%s%s", state->note,
                          (selected || state->osk_open) ? "|" : "");
                 DrawText(surface, labelX + 90.0f * s, baseline, 16.0f * s,
-                         displayNote, OVERLAY_GAME_LOOK ? kLookText : kText, ALIGN_LEFT);
+                         displayNote, OVERLAY_REFINED_LOOK ? kLookText : kText, ALIGN_LEFT);
             } else {
                 DrawText(surface, labelX + 90.0f * s, baseline, 15.0f * s,
-                         "Type or press Enter / South for keyboard...", OVERLAY_GAME_LOOK ? kLookDim : kMuted,
+                         "Type or press Enter / South for keyboard...", OVERLAY_REFINED_LOOK ? kLookDim : kMuted,
                          ALIGN_LEFT);
             }
         } else if (row == SCREENSHOT_ROW_UPLOAD) {
@@ -1712,10 +1712,10 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
                                         ? "Save & upload screenshot"
                                         : "Save screenshot";
             DrawText(surface, labelX, baseline, 17.0f * s, saveLabel,
-                     selected ? (OVERLAY_GAME_LOOK ? kLookText : kAccent) : label, ALIGN_LEFT);
+                     selected ? (OVERLAY_REFINED_LOOK ? kLookText : kAccent) : label, ALIGN_LEFT);
         } else if (row == SCREENSHOT_ROW_CANCEL) {
             DrawText(surface, labelX, baseline, 17.0f * s, "Cancel",
-                     selected ? (OVERLAY_GAME_LOOK ? kLookRed : kDanger) : label, ALIGN_LEFT);
+                     selected ? (OVERLAY_REFINED_LOOK ? kLookRed : kDanger) : label, ALIGN_LEFT);
         }
     }
 
@@ -1724,7 +1724,7 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
             for (int c = 0; c < SCREENSHOT_OSK_COLS; c++) {
                 OverlayRect cell = OverlayScreenshotOskKeyRect(r, c);
                 int active = (r == state->osk_row && c == state->osk_col);
-                if (OVERLAY_GAME_LOOK) {   /* framed keys; the one under the cursor glows red */
+                if (OVERLAY_REFINED_LOOK) {   /* framed keys; the one under the cursor glows red */
                     const int kx = (int)(cell.x * s), ky = (int)(cell.y * s), kw = (int)(cell.w * s), kh = (int)(cell.h * s);
                     LookRect(surface, kx, ky, kw, kh, active ? WithAlpha(kLookRed, 0.30f) : (Color){0.0f, 0.0f, 0.0f, 0.35f});
                     LookFrame(surface, kx, ky, kw, kh, active ? kLookRed : WithAlpha(kLookSilver, 0.18f));
@@ -1747,7 +1747,7 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
                        : state->osk_open
                            ? "D-pad select key   South/Enter type   West Bksp   North Space   Start Done"
                            : "Type note or press South/Enter on Note for controller keyboard. Start saves.";
-    if (OVERLAY_GAME_LOOK) {
+    if (OVERLAY_REFINED_LOOK) {
         LookHelpBox(&painter, (float)SCREENSHOT_PANEL_W, footerTop / s + 6.0f, (float)(SCREENSHOT_FOOTER_H - 16), help,
                     "Up/Down select   Left/Right change   Start/Enter save   Esc/East cancel");
     } else {

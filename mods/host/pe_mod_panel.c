@@ -155,7 +155,7 @@ static int pe_visible_rows(void) {
     return n > 0 ? n : 1;
 }
 
-/* Every page wears the game's own look (pe_paint): a dark window, a framed help box. */
+/* Every page wears the refined look (pe_paint): a dark window, a framed help box. */
 static int pe_design_h(void) { return HEADER_H + pe_visible_rows() * ROW_H + FOOTER_H; }
 
 static float pe_layout_scale(int win_w, int win_h) {
@@ -223,7 +223,7 @@ static const char *pe_key_hints(void) {
     return hints;
 }
 
-/* ---- the game's look: deep navy window, silver double frame, PE red ---- */
+/* ---- the refined look: deep navy window, silver double frame, red ---- */
 static const PeColor pe_look_red = {0.90f, 0.14f, 0.15f, 1.0f};
 static const PeColor pe_look_steel = {0.42f, 0.58f, 0.80f, 1.0f};
 static const PeColor pe_look_silver = {0.80f, 0.86f, 0.95f, 1.0f};
