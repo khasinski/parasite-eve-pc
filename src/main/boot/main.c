@@ -2463,6 +2463,9 @@ images_ready:;
     }
 
     g_BootHostActive = 1;
+#ifdef PE_MODS
+    pe_mod_bind_native();
+#endif
     PE_HOOK(PE_HOOK_INIT, (&(PeHookInit){interactive, host_options.user_file}));
     if (Psyz_VideoSetInternalResolution(internal_resolution) < 0) {
         fprintf(stderr, "Cannot select internal resolution\n");

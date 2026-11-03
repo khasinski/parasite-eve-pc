@@ -1026,6 +1026,9 @@ s32 Inv_RemoveActiveListItem(s32 arg0) {
     s32 activeList;
 
     selected = arg0;
+#ifdef PE_MODS
+    if (PE_HOOK(PE_HOOK_EQUIPMENT_GUARD,(&(PeHookEquipmentGuard){.kind=0,.value=g_InvItemPtr[selected]}))) return 0;
+#endif
     if ((g_InvItemPtr == g_AyaInventoryItems) && (g_AyaSaveState.equipped_armor_slot == selected)) {
         Inv_GetActiveSlotCount(&sp10);
     }

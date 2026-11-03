@@ -1,3 +1,5 @@
+#include "pe_legacy_guard.h"
+#include "pe_services.h"
 /*
  * Dismantle, Rebuild and Tool salvage: the ways gear feeds the Mod Catalog. Ported from the
  * psxrecomp build (src/mods/pe_loot_catalog.c; decisions 10-12, 42; loot cascade design section 6).
@@ -185,6 +187,7 @@ void pe_dismantle_run(void) {
     const char *name;
     if (!pe_cat_ready()) return;
     if (!(rec = pe_selected(&slot)) || (which = pe_cat_record_type(rec)) < 0) { pe_cat_say("Nothing to dismantle"); return; }
+    if (!pe_legacy_record_editable(rec)) { pe_cat_say("Custom gear needs its provider to dismantle"); s_dis_armed=-1; return; }
     if (pe_is_last_club(slot)) { pe_cat_say("Keep your last Club"); s_dis_armed = -1; return; }
     name = pe_cat_item_name(rec->itemId);
     payout = pe_dismantle_selected_payout(&unlocks);

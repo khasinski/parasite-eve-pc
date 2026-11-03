@@ -547,3 +547,7 @@ and kill counts and discards old enemy HP tracking. Both save immediately;
 costume ownership, the worn outfit, Junk and unloaded packs' records remain
 unchanged. The actions live in pe_bestiary.c and use the existing profile
 API. Collection checks cover persistence, repeat use and post-reset kills.
+
+## Extension APIs
+
+The native-compatible v1 services, ownership rules, next-save purchase behavior and supported limits are documented in [the extension API guide](host/EXTENSION_APIS.md). The existing gameplay defaults are unchanged.

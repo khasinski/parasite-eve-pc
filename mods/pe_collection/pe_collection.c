@@ -66,6 +66,7 @@ static void pe_reset(void) {
 
 static int collection_init(void) {
     pe_profile_load();
+    pe_profile_transactions_init();
     pe_service_publish("bestiary", 1, &g_pe_bestiary_api, MOD_ID);
     pe_menu_register_live_int(PE_PAGE_DEBUG_COLLECTION, "Junk", "Testing: Junk for buying Bestiary tiers.",
                               0, 99999, 100, pe_junk_get, pe_junk_set);

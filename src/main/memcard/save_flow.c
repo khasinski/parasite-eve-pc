@@ -45,6 +45,9 @@ static struct {
 } card_writes[2];
 
 static void MemCard_CancelWrite(MemCardPortState *state) {
+#ifdef PE_MODS
+    pe_mod_save_cancelled();
+#endif
     unsigned port = (unsigned)(state - g_MemCardPortStates);
     if (port >= 2) return;
     if (card_writes[port].io) SDL_CloseIO(card_writes[port].io);
@@ -77,10 +80,18 @@ static int MemCard_CommitWrite(MemCardPortState *state) {
     int ok = SDL_FlushIO(io);
     if (!SDL_CloseIO(io)) ok = 0;
     card_writes[port].io = NULL;
-    if (!ok || !SDL_RenamePath(card_writes[port].temporary, card_writes[port].target)) {
+#ifdef PE_MODS
+    int published=ok&&pe_mod_save_publish(card_writes[port].temporary,card_writes[port].target);
+#else
+    int published=ok&&SDL_RenamePath(card_writes[port].temporary,card_writes[port].target);
+#endif
+    if (!published) {
         MemCard_CancelWrite(state);
         return 0;
     }
+    #ifdef PE_MODS
+    pe_mod_save_committed(card_writes[port].target);
+    #endif
     /* Clear-data/normal saves use different names for the same card slot.
      * Retire the previous name only after the new image is safely published. */
     if (*card_writes[port].previous &&
@@ -109,7 +120,7 @@ int g_MemCardEventF000Spec0004Flag, g_MemCardEventF000Spec8000Flag, g_MemCardEve
     g_SaveIoCursor += sizeof(type)
 
 int Save_SerializeTail(void) {
-    PE_HOOK(PE_HOOK_SAVE_WRITE, g_MemCardFileBuffer);
+    if (PE_HOOK(PE_HOOK_SAVE_WRITE, g_MemCardFileBuffer) < 0) return -1;
     return Save_SerializeTailData();
 }
 
@@ -582,6 +593,11 @@ const MemCardSaveSupportData g_MemCardSaveSupportData __attribute__((used)) = {
 };
 
 int Save_BuildCardFile(char *path) {
+#ifdef PE_MODS
+    char mapped_save_path[4096];
+    Psyz_AdjustPath(mapped_save_path,path,sizeof mapped_save_path);
+    if(pe_mod_save_path(mapped_save_path)<0)return -1;
+#endif
     u8 *resolved;
     MemCardFileHeader *file;
     u32 crc;
@@ -1124,6 +1140,12 @@ void Save_StartWriteSlot(int port, int arg_slot) {
     path = g_MemCardFilePath;
     if (Save_BuildCardFile(path) < 0) {
         state->sequence = sequence;
+        /* No temporary file or replacement was started. Leave the progress widget through
+         * the existing failure flow instead of leaving a refused save waiting forever. */
+        MemCard_AbortActiveOperation(state);
+        Menu_CreateTwoLineDialog(0x3D, 0x3F);
+        state->pendingError = 0;
+        state->managerState = 12;
         return;
     }
 
@@ -1195,6 +1217,13 @@ void Save_LoadCardFileIntoRuntime(void) {
     }
     if ((~crc & 0xFFFF) == expected_crc &&
         Inv_ValidateSavedInventory((const SaveRuntimeState *)&g_MemCardSaveStateBuffer)) {
+#ifdef PE_MODS
+        char mapped_load_path[4096];
+        Psyz_AdjustPath(mapped_load_path,g_MemCardFilePath,sizeof mapped_load_path);
+        if(pe_mod_load_admit(mapped_load_path,g_MemCardFileBuffer)<0){
+            Menu_DestroyMemCardProgressWidget();Menu_CreateTwoLineDialog(0x55,0x56);return;
+        }
+#endif
         g_SaveIoCursor = g_MemCardFileBuffer + 0x100 + 0x12E4;
         if (Save_DeserializeTail() == 0) {
             memcpy(&g_SaveRuntimeState, &g_MemCardSaveStateBuffer, sizeof(g_SaveRuntimeState));

@@ -202,4 +202,33 @@ typedef struct PeBestiaryEvent {
     const char *why;          /* "kill", "scan", "junk", or a mod's own */
 } PeBestiaryEvent;
 
+/* Optional core guard for legacy mod frontends. A host without custom identities permits its
+ * existing behavior. Native engine paths use PE_HOOK_EQUIPMENT_GUARD through their normal hook
+ * boundary, so standalone native units never link against the extension implementation. */
+typedef struct PeEquipmentGuardApi {
+    uint32_t struct_size;
+    int (*record_editable)(const struct ItemDataRecord *record);
+} PeEquipmentGuardApi;
+
+/* Host-owned next-save transactions. Provider adapters own their profile format. Their admit
+ * and owned callbacks are pure; promote is idempotent and writes atomically. Promote runs only
+ * after the native card commits, or while replaying receipts from a validated loaded card.
+ * Pending unlocks are visible now, but must never be copied into independently saved profile
+ * progress (e.g. an earned Bestiary kill must merge only committed/earned bits).
+ */
+typedef struct PeProfileTransactionAdapter {
+    uint32_t struct_size;
+    const char *key;
+    unsigned supported_bits;
+    int (*admit)(const char *key,unsigned bits);
+    unsigned (*owned)(const char *key);
+    int (*promote)(const char *key,unsigned bits);
+} PeProfileTransactionAdapter;
+typedef struct PeProfileTransactionsApi {
+    uint32_t struct_size;
+    int (*add)(const PeProfileTransactionAdapter *adapter); /* init, owning namespace */
+    unsigned (*pending)(const char *adapter,const char *key);
+    int (*buy)(const char *adapter,const char *key,unsigned bits,uint32_t junk_price);
+} PeProfileTransactionsApi;
+
 #endif

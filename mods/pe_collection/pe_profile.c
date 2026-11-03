@@ -6,6 +6,8 @@
 
 #include "pe_collection.h"
 #include "pe_mod_host.h"
+#include "pe_file_io.h"
+#include "pe_services.h"
 
 #define PE_FILE      "pe_collection.ini"
 #define PE_V1_FILE   "pe_collection.dat"   /* the psxrecomp build's */
@@ -20,6 +22,7 @@ typedef struct { uint8_t type; char key[PE_KEY_MAX]; uint8_t bits, kills, seen; 
 
 static PeRecord s_rec[PE_MAX];
 static int s_count, s_dirty;
+static unsigned s_retry_frames;
 static char s_worn[PE_KEY_MAX];
 static int s_newer;                         /* written by a newer format: read, never overwritten */
 
@@ -81,16 +84,17 @@ void pe_profile_clear(void) {
     s_dirty = 1;
 }
 void pe_profile_changed(void) { s_dirty = 1; }
-void pe_profile_tick(void) { if (s_dirty) pe_profile_save(); }
+void pe_profile_tick(void) { if(s_retry_frames){--s_retry_frames;return;} if (s_dirty) pe_profile_save(); }
 
-void pe_profile_save(void) {
-    char path[1100];
+static int pe_profile_save_checked(void) {
+    char path[1100],temp[1200];
     FILE *f;
     int i;
     const int carry = !pe_wardrobe_imported();     /* costume lines the Wardrobe hasn't taken yet */
-    s_dirty = 0;
-    if (s_newer) return;
-    if (pe_mod_path(path, sizeof path, PE_FILE) != 0 || !(f = fopen(path, "w"))) return;
+    if (s_newer) return 0;
+    if (pe_mod_path(path,sizeof path,PE_FILE)!=0 || !pe_profile_target_ok(path))return 0;
+    if(snprintf(temp,sizeof temp,"%s.tmp.%lu",path,pe_profile_process())>=(int)sizeof temp)return 0;
+    if(!(f=fopen(temp,"w")))return 0;
     fprintf(f, "format %d\n", PE_FORMAT);
     fprintf(f, "# Parasite Eve Collection: Bestiary unlocks kept across every game.\n"
                "# creature <key> <bits: 1 met, 2 weaknesses, 4 loot> <kills> <bits looked at>\n");
@@ -99,8 +103,12 @@ void pe_profile_save(void) {
         if (s_rec[i].type == R_CREATURE) fprintf(f, "creature %s %u %u %u\n", s_rec[i].key, s_rec[i].bits, s_rec[i].kills, s_rec[i].seen);
         else if (carry) fprintf(f, "costume %s\n", s_rec[i].key);
     }
-    fclose(f);
+    int ok=pe_profile_flush(f);if(fclose(f))ok=0;
+    if(!ok||!pe_profile_replace(temp,path)){remove(temp);return 0;}
+    s_dirty=0;return 1;
 }
+
+void pe_profile_save(void){s_retry_frames=pe_profile_save_checked()?0:60;}
 
 /* ---- the psxrecomp build's pe_collection.dat, imported once ---- */
 typedef struct PeProfileV1 {
@@ -161,4 +169,18 @@ void pe_profile_load(void) {
     }
     fclose(f);
     s_dirty = 0;
+}
+
+static int pe_transaction_admit(const char*key,unsigned bits){
+    return bits && !(bits&~7u) && !s_newer && key && *key && strlen(key)<PE_KEY_MAX && (pe_find(R_CREATURE,key,0)||s_count<PE_MAX);
+}
+static unsigned pe_transaction_owned(const char*key){return pe_profile_creature(key,NULL);}
+static int pe_transaction_promote(const char*key,unsigned bits){
+    if(!pe_transaction_admit(key,bits))return 0;unsigned kills;
+    unsigned old=pe_profile_creature(key,&kills);pe_profile_set_creature(key,old|bits,kills);return pe_profile_save_checked();
+}
+void pe_profile_transactions_init(void){
+    static const PeProfileTransactionAdapter a={sizeof a,"pe_collection/knowledge",7,pe_transaction_admit,pe_transaction_owned,pe_transaction_promote};
+    const PeProfileTransactionsApi*t=pe_service_get("profile_transactions",1);
+    if(t&&t->struct_size>=sizeof *t&&!t->add(&a))pe_mod_log("pe_collection","profile transaction adapter unavailable");
 }

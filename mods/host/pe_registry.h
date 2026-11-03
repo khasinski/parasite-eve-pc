@@ -30,6 +30,12 @@
  *   - a mod over its count or byte limit in a domain loses its whole contribution there;
  *   - declarations over a whole domain's limit make that domain unavailable this start;
  *   - more than PE_REG_MAX_OWNERS mods taking part make this start's registry unavailable.
+ * Threading: bootstrap/reset binds the game thread before mod init; worker mutations are refused
+ * with WRONG_THREAD and worker lookups return unavailable. Seal is private until publication.
+ * Required staging/publication allocation failures refuse readiness instead of publishing a subset.
+ * Reference arrays are sized to actual use. A separate checked heap+static envelope bounds real
+ * registry metadata to 1 MiB, in addition to the per-domain logical key/payload/reference limits.
+ * Exhausting that physical envelope makes the generation unavailable, without selecting a winner.
  * Payloads are copied; the registry owns its copies until the next start.
  */
 #include <stddef.h>
@@ -58,6 +64,7 @@ extern const PeRegLimits g_pe_reg_limits[PE_REG_DOMAINS];
 typedef struct PeRegRef {
     uint8_t domain;
     const char *key;
+    uint32_t schema;              /* 0: untyped; otherwise target must have this schema */
 } PeRegRef;
 
 typedef struct PeRegEntry {
@@ -67,6 +74,8 @@ typedef struct PeRegEntry {
     uint32_t size;
     const PeRegRef *refs;          /* definitions this one needs, any mod's; copied */
     uint8_t nrefs;
+    uint32_t schema;              /* optional typed payload contract, compared at seal */
+    uint32_t unique_slot;         /* nonzero: unique within owner/domain/schema */
 } PeRegEntry;
 
 /* ---- COLLECT: during your mod's init ---- */
@@ -82,10 +91,19 @@ int pe_reg_domain_ready(int domain);
 const void *pe_reg_find(int domain, const char *key, uint32_t *size, const char **owner);
 /* Ready entries of a domain in canonical order (owner, batch, key): the same every start. */
 int pe_reg_count(int domain);
+const void *pe_reg_find_typed(int domain,const char *key,uint32_t schema,uint32_t expected_size);
 const char *pe_reg_key(int domain, int index);
 /* How a batch came out: PE_REG_OK, PE_REG_PENDING (not sealed yet) or why it failed, in `why`. */
 PeRegResult pe_reg_batch_result(const char *owner, const char *batch, char *why, size_t size);
 const char *pe_reg_result_name(PeRegResult r);
+
+/* Thread/phase gate for core runtime APIs; never binds affinity from a worker. */
+PeRegResult pe_reg_access(void);
+PeRegResult pe_reg_registration_access(void);
+/* Pure callback scope: core mutation APIs and nested evaluations must refuse. */
+int pe_reg_readonly_begin(void);
+void pe_reg_readonly_end(void);
+int pe_reg_callback_active(void);
 
 /* ---- the host ---- */
 void pe_registry_seal(void);                /* once every mod has started */

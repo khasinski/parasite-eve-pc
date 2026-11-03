@@ -23,6 +23,7 @@
  * profiles from before the Wardrobe's split are carried as read until pe_wardrobe.ini says it
  * imported them, then dropped (pe_wardrobe/pe_wardrobe_profile.c). */
 void pe_profile_load(void);
+void pe_profile_transactions_init(void);
 void pe_profile_save(void);               /* now */
 void pe_profile_changed(void);            /* at the next field frame */
 void pe_profile_tick(void);

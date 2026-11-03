@@ -16,7 +16,7 @@
  * Also publishes `wardrobe` v1 (what can be worn now, for shops: Wayne's Workshop) and announces
  * changes as the "wardrobe.worn" event.
  *
- * Unlock rules (bridge findings D8 §12): while a mod publishes `costume_rules` with active() on
+ * Unlock rules (bridge findings D8 Â§12): while a mod publishes `costume_rules` with active() on
  * (pe_economy's Costume unlock rules, the default), only owned or free costumes can be worn and the
  * others are bought with Junk. With no such mod running, or the rule off, every installed costume
  * can be worn and nothing is bought or written as owned. Lists and buying follow the rule at once;
@@ -159,13 +159,37 @@ static void pe_set_worn(const PeCostume *c, int now) {
 }
 
 /* Buy (if needed); 0 with a reason in msg if it can't. */
+static int s_acquiring;
 static int pe_buy(const PeCostume *c, char *msg, size_t size) {
-    if (!pe_rules_live() || pe_ward_profile_owned(c->key) || !c->price) return 1;   /* no rule: worn, not bought */
-    if (!pe_ward_junk_ready(msg, (unsigned)size)) return 0;
-    if (!pe_ward_spend(c->price)) { snprintf(msg, size, "Need %u Junk (have %u)", (unsigned)c->price, pe_ward_junk()); return 0; }
-    pe_ward_profile_own(c->key);
+    int result = 0;
+    if (s_acquiring) { snprintf(msg, size, "A costume purchase is already in progress"); return 0; }
+    s_acquiring = 1; /* includes the external policy query, not just wallet calls */
+    if (!pe_rules_live() || pe_ward_profile_owned(c->key) || !c->price) { result = 1; goto done; }
+    if (!pe_ward_junk_ready(msg, (unsigned)size)) goto done;
+    const PeProfileTransactionsApi*t=pe_service_get("profile_transactions",1);
+    if(t&&t->struct_size>=sizeof *t){
+        if(!t->buy("pe_wardrobe/ownership",c->key,1,c->price)){
+            snprintf(msg,size,"Cannot buy costume now; no Junk spent");goto done;
+        }
+        snprintf(msg,size,"Costume available; save the game to keep this purchase");result=1;goto done;
+    }
+    if (!pe_ward_profile_prepare_owned(c->key)) {
+        snprintf(msg, size, "Cannot save costume ownership; no Junk spent"); goto done;
+    }
+    if (!pe_ward_spend(c->price)) {
+        pe_ward_profile_cancel_owned();
+        snprintf(msg, size, "Need %u Junk (have %u)", (unsigned)c->price, pe_ward_junk()); goto done;
+    }
+    if (!pe_ward_profile_commit_owned()) {
+        int refunded = pe_ward_refund(c->price);
+        snprintf(msg, size, refunded ? "Cannot save costume; Junk returned" : "Cannot save costume; wallet refund failed");
+        goto done;
+    }
     pe_log("wardrobe", "bought=%s price=%u", c->key, (unsigned)c->price);
-    return 1;
+    result = 1;
+done:
+    s_acquiring = 0;
+    return result;
 }
 
 /* ---- F1 pages: a group row, a costume row browsed with left / right, buy / wear ---- */
@@ -274,7 +298,10 @@ static int pe_ward_pick(int k, char *msg, size_t size) {   /* buy if needed, the
     if (!own && !c) return 0;
     if (c && !pe_buy(c, msg, size)) return 0;
     pe_set_worn(c, 0);
-    snprintf(msg, size, "Wearing %s when you leave", c ? c->name : "Aya's own clothes");
+    const PeProfileTransactionsApi*t=pe_service_get("profile_transactions",1);
+    if(c&&t&&t->struct_size>=sizeof *t&&t->pending("pe_wardrobe/ownership",c->key))
+        snprintf(msg,size,"Wearing %s; save the game to keep this purchase",c->name);
+    else snprintf(msg, size, "Wearing %s when you leave", c ? c->name : "Aya's own clothes");
     return 1;
 }
 /* The Wardrobe screen's rule: a skin bank or bundle, never a provider's gameplay loader. */

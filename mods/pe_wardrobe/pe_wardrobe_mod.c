@@ -32,6 +32,14 @@ int pe_ward_junk_ready(char *why, unsigned size) {
 unsigned pe_ward_junk(void) { const PeJunkApi *j = pe_junk(); return j && pe_game_loaded() ? (unsigned)j->junk() : 0u; }
 int pe_ward_spend(unsigned n) { const PeJunkApi *j = pe_junk(); return j && j->enabled() && j->spend(n); }
 
+int pe_ward_refund(unsigned n) {
+    const PeJunkApi *j = pe_junk();
+    if (!j || !j->give || !j->junk) return 0;
+    uint32_t before = j->junk();
+    j->give(n);
+    return j->junk() >= before && j->junk() - before == n;
+}
+
 void pe_ward_say(const char *text) {
     snprintf(s_said, sizeof s_said, "%s", text);
     pe_toast(text);
@@ -48,6 +56,7 @@ static void pe_reset(void) {
 
 static int wardrobe_init(void) {
     pe_ward_profile_load();
+    pe_ward_profile_transactions_init();
     pe_service_publish("costumes", 1, &g_pe_costumes_api, MOD_ID);
     pe_wardrobe_register(MOD_ID);
     pe_wardrobe_menu_register(MOD_ID);

@@ -25,7 +25,12 @@
  *   worn <key>
  * Records of packs that aren't loaded are kept as read. */
 void pe_ward_profile_load(void);
-void pe_ward_profile_save(void);              /* now */
+void pe_ward_profile_transactions_init(void);
+int pe_ward_profile_save(void);              /* checked staged write; 0 keeps dirty state */
+/* Acquisition staging is private, single-owner and process-local; not a two-file crash journal. */
+int pe_ward_profile_prepare_owned(const char *key);
+int pe_ward_profile_commit_owned(void);
+void pe_ward_profile_cancel_owned(void);
 void pe_ward_profile_tick(void);              /* saves if changed */
 void pe_ward_profile_clear(void);
 int pe_ward_profile_owned(const char *key);
@@ -42,6 +47,7 @@ void pe_pack_pe1_costumes_register(void);
 int pe_ward_junk_ready(char *why, unsigned size);   /* 0 with a reason when Junk can't be spent */
 unsigned pe_ward_junk(void);
 int pe_ward_spend(unsigned n);
+int pe_ward_refund(unsigned n);
 void pe_ward_say(const char *text);         /* a toast, also kept for the pages' Result rows */
 const char *pe_ward_last_said(void);
 

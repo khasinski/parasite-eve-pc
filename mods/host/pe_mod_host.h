@@ -36,6 +36,8 @@ typedef int (*PeHookFn)(void *ctx, void *user);
 
 enum { PE_PRIORITY_EARLY = -100, PE_PRIORITY_NORMAL = 0, PE_PRIORITY_LATE = 100 };
 
+/* Registration while dispatching is refused (-1). Same-event recursion and nesting beyond eight
+ * dispatches are refused (-1); distinct nested events remain supported. Save requests cannot nest. */
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id);
 
 int pe_event_id(const char *name);

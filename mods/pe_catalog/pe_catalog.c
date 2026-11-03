@@ -1,3 +1,4 @@
+#include "pe_legacy_guard.h"
 /*
  * The Mod Catalog's rules, ported from the psxrecomp build (src/mods/pe_loot_catalog.c; bridge
  * findings pe-loot-overhaul-design-2026-10-11.md decisions 9-12, 25, 26, 36, 37).
@@ -197,6 +198,7 @@ int pe_cat_install(int which, int slot, int e, int dry_run) {
     if (!pe_game_loaded()) return PE_CAT_NO_GAME;
     if (!pe_catw_enabled()) return PE_CAT_OFF;
     if (!(rec = pe_equipped_record(which))) return PE_CAT_NO_ITEM;
+    if (!pe_legacy_record_editable(rec)) return PE_CAT_LOCKED;
     n = pe_cat_mod_count(rec);
     if (n <= 0 || slot < 0 || slot >= n) return PE_CAT_NO_SLOTS;
     if (e <= 0 || !pe_catalog_is_unlocked(which, e)) return PE_CAT_LOCKED;
@@ -229,6 +231,7 @@ int pe_cat_remove(int which, int slot, int dry_run) {
     if (!pe_game_loaded()) return PE_CAT_NO_GAME;
     if (!pe_catw_enabled()) return PE_CAT_OFF;
     if (!(rec = pe_equipped_record(which))) return PE_CAT_NO_ITEM;
+    if (!pe_legacy_record_editable(rec)) return PE_CAT_LOCKED;
     if (pe_cat_mod_count(rec) <= 0 || slot < 0 || slot >= pe_cat_mod_count(rec)) return PE_CAT_NO_SLOTS;
     e = rec->tailData[slot] & 0x1F;
     if (!e) return PE_CAT_EMPTY;
