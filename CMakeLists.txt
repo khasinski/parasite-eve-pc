@@ -923,3 +923,16 @@ if(BUILD_TESTING)
         endforeach()
     endif()
 endif()
+
+# Every program built from the mods' objects also needs what they link (the Wardrobe's character
+# packs read zips and pack.json): object libraries don't pass their link libraries on.
+if(PE_MODS)
+    get_property(pe_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(pe_target IN LISTS pe_targets)
+        get_target_property(pe_type ${pe_target} TYPE)
+        get_target_property(pe_sources ${pe_target} SOURCES)
+        if(pe_type STREQUAL "EXECUTABLE" AND pe_sources AND "${pe_sources}" MATCHES "TARGET_OBJECTS:pe-mods")
+            target_link_libraries(${pe_target} PRIVATE pe_download_json pe_download_zip)
+        endif()
+    endforeach()
+endif()

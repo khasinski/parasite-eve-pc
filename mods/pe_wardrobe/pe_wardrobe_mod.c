@@ -52,6 +52,9 @@ static int wardrobe_init(void) {
     pe_wardrobe_menu_register(MOD_ID);
     pe_skin_register(MOD_ID);
     pe_pack_pe1_costumes_register();
+    pe_packs_scan();
+    pe_packs_register();
+    pe_packs_page_register();
     pe_menu_register_action(PE_PAGE_DEBUG_COLLECTION, "Reset wardrobe", "Forget all costume unlocks and the costume worn.", pe_reset);
     pe_menu_register_tick(pe_ward_profile_tick);
     return 0;

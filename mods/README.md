@@ -427,6 +427,21 @@ In pe_wardrobe/:
   rule off, or no such mod running, every installed costume can be worn and nothing is bought or
   written as owned. What Aya wears follows a rule change at the next room load only; a costume the
   rule locks comes off there with its key kept (bridge findings D8 §12).
+- `pe_packs.c`: character packs (bridge findings D8 §3, format v1) dropped in
+  `<preferences>/packs/` as a plain zip or the same layout unzipped: `pack.json` (`format` 1, `id`
+  of a-z / 0-9 / -, at most 31, `kind` "assets"), `LICENSE`, and `characters/<folder>/` with
+  `character.json` (`name`, `group`, `tier`: extra, outfit, supporting, main or special) and the
+  skin loader's files. Read at start-up only. Keys are `<pack id>/<folder>` (at most 63 bytes,
+  never renamed); the bundle `@<pack id>/<folder>` sends the skin loader to the pack. Refused, with
+  the reason on F1 > Collection > Wardrobe > Packs: an id installed twice (every copy), a bad or
+  reserved id (`pe1`, `local`), no LICENSE, another format or kind (recipe packs need the
+  builder), and zips with unsafe or duplicate names, encryption, links, files over 4 MiB, over
+  64 MiB unpacked or suspicious compression. A character missing a file is refused alone. Tiers
+  price 25 / 50 / 100 / 250 / 400 Junk while unlock rules apply. Not yet: the menu preview of pack
+  costumes (host/pe_model_skin.c reads pe_skins/ only), recipe packs, default-appearance
+  replacement, and the build_skin.py structure checks before listing (the loader checks a file's
+  structure when the costume is first worn). `tests/pe_mod_packs_test.c` writes real zips and
+  folders.
 - `pe_wardrobe_profile.c`: costumes owned and the one worn, by key, in pe_wardrobe.ini beside the
   preferences, kept across every game; records of packs that aren't loaded are kept untouched. The
   first time the file is missing, it imports the costume lines of pe_collection.ini (or, with none,

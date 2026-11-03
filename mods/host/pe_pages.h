@@ -36,6 +36,7 @@
 #define PE_PAGE_COLLECTION      "Collection"
 #define PE_PAGE_BESTIARY        "Collection/Bestiary"
 #define PE_PAGE_WARDROBE        "Collection/Wardrobe"
+#define PE_PAGE_WARDROBE_PACKS  "Collection/Wardrobe/Packs"
 #define PE_PAGE_DEBUG          "Debug"
 #define PE_PAGE_DEBUG_COLLECTION "Debug/Collection"
 #define PE_PAGE_DEBUG_LOOT     "Debug/Loot tuning"

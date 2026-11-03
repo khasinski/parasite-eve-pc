@@ -86,6 +86,9 @@ void pe_bestiary_menu_register(const char *m) { (void)m; }   /* the Bestiary scr
 void pe_skin_register(const char *m) { (void)m; }            /* the loader: game buffers, VRAM */
 int pe_skin_available(const char *folder) { return strcmp(folder, "test_skin") == 0; }
 int pe_skin_instant(void) { return 0; }
+void pe_packs_scan(void) {}                                   /* character packs: their own test */
+void pe_packs_register(void) {}
+void pe_packs_page_register(void) {}
 
 /* The last entry of an F1 filter row (Area, Group). */
 static const char *last_filter(const char *label) {

@@ -8,6 +8,7 @@
  *   pe_wardrobe_menu.c         the Wardrobe screen in Aya's menu
  *   pe_skin_loader.c           character skins (costumes with a `bundle` folder)
  *   pe_pack_pe1_costumes.c     Parasite Eve's own costumes, registered like any other pack
+ *   pe_packs.c                 character packs from <preferences>/packs/ (zip or folder)
  * The Wardrobe is a mod of its own (bridge findings D8 §12, D9): it needs no other mod. Junk is
  * reached through the `junk` service when a mod publishes it. Other mods add costumes through the
  * services (host/pe_services.h), never through these files. */
@@ -56,6 +57,14 @@ const PeCostume *pe_wardrobe_owned(int k);
 const PeCostume *pe_wardrobe_worn(void);         /* NULL: Aya's own clothes */
 void pe_wardrobe_wear_later(const PeCostume *c); /* worn from the next room load (the menu's close) */
 void pe_wardrobe_menu_register(const char *mod_id);
+
+/* ---- character packs (pe_packs.c) ----
+ * A pack costume's bundle is "@<pack id>/<folder>"; the skin loader reads its files through here. */
+void pe_packs_scan(void);                        /* at start-up */
+void pe_packs_register(void);                    /* their costumes into the registry */
+void pe_packs_page_register(void);               /* F1 > Collection > Wardrobe > Packs */
+int pe_pack_read(const char *ref, const char *name, unsigned char **data, unsigned *size, unsigned max);
+int pe_pack_has(const char *ref, const char *name);
 
 /* ---- skins (pe_skin_loader.c): costumes with a `bundle` folder ---- */
 int pe_skin_available(const char *folder);       /* its files are there */

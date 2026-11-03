@@ -7,7 +7,8 @@
  *                     day1-8.bin    the per-day row blobs
  *                     rooms.bin     optional: room animations retargeted ("PERR", fingerprint table)
  *                     meta.bin      optional: "PEMT", the part the weapon follows
- * Any pack can name a folder (PeCostume.bundle); the Wardrobe loads it here. A game outfit
+ * Any pack can name a folder (PeCostume.bundle); the Wardrobe loads it here. A bundle starting
+ * "@" is a character pack's ("@<pack id>/<folder>", pe_packs.c), read from its zip or folder. A game outfit
  * (PeCostume.bank >= 0) may name a room pack: a folder with rooms.bin alone (the bridge's
  * build_outfit_rooms.py), whose rows replace the room's animations for Aya's other skeletons.
  *
@@ -60,7 +61,7 @@
 typedef struct { u8 *data; u32 size; } PeBlob;
 
 typedef struct {
-    char folder[48];
+    char folder[72];
     int checked, present;   /* model.bin found (lists ask every frame) */
     int loaded, ok;
     PeBlob model, tex, day[9], rooms;
@@ -89,6 +90,15 @@ static int pe_read(const char *folder, const char *name, PeBlob *b) {
     char rel[160], path[1200];
     FILE *f;
     long n;
+    if (folder[0] == '@') {                                  /* a character pack's */
+        unsigned char *data;
+        unsigned size;
+        if (!pe_pack_read(folder, name, &data, &size, PE_FILE_MAX)) return 0;
+        if (size <= 8) { free(data); return 0; }
+        b->data = data;
+        b->size = (u32)size;
+        return 1;
+    }
     snprintf(rel, sizeof rel, "pe_skins/%s/%s", folder, name);
     if (pe_mod_path(path, sizeof path, rel) != 0 || !(f = fopen(path, "rb"))) return 0;
     fseek(f, 0, SEEK_END);
@@ -177,6 +187,7 @@ int pe_skin_available(const char *folder) {
     if (k->loaded) return k->ok;
     if (!k->checked) {
         k->checked = 1;
+        if (folder[0] == '@') return k->present = pe_pack_has(folder, "model.bin");
         snprintf(rel, sizeof rel, "pe_skins/%s/model.bin", folder);
         if (pe_mod_path(path, sizeof path, rel) == 0 && (f = fopen(path, "rb"))) { fclose(f); k->present = 1; }
     }
