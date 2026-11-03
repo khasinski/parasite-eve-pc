@@ -54,6 +54,7 @@ void pe_equip_sync_init(void) {}
 void pe_present_install(void) {}
 void pe_menu_begin(const char *page) { (void)page; }
 void pe_menu_load_settings(void) {}
+void pe_menu_alias_setting(const char *key, const char *legacy) { (void)key; (void)legacy; }
 int pe_menu_register_toggle(const char *sub, const char *label, const char *description, int *flag,
                             PeMenuPerFrame per_frame) {
     (void)sub; (void)label; (void)description; (void)per_frame;

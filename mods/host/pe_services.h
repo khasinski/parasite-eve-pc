@@ -8,9 +8,9 @@
  *   "junk"      v1  pe_economy  the Junk counter
  *   "catalog"   v1  pe_economy  armor effects unlocked in the Mod Catalog
  *   "keys"      v1  pe_qol      the key item pocket
- *   "wardrobe"  v1  pe_collection  costumes that can be worn now (for shops such as Wayne's)
+ *   "wardrobe"  v1  pe_wardrobe    costumes that can be worn now (for shops such as Wayne's)
  *   "bestiary"  v1  pe_collection  register creatures, map enemies to them, unlock entries
- *   "costumes"  v1  pe_collection  register costumes (the game's outfits or a mod's own models)
+ *   "costumes"  v1  pe_wardrobe    register costumes (the game's outfits or a mod's own models)
  *
  * Providers (an import pack, a randomizer) register at their init, so they list "pe_collection"
  * in their PeMod requires. Keys are stable names saved in the player's profile ("pe1/rat",

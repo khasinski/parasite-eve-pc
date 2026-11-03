@@ -54,6 +54,16 @@ void pe_menu_load_settings(void) {
     fclose(f);
 }
 
+/* A row renamed or split off keeps the player's choice: `key` starts from `legacy`'s saved value
+ * the first time (and only while `key` itself has none). */
+void pe_menu_alias_setting(const char *key, const char *legacy) {
+    const PeSaved *old = pe_saved_find(legacy);
+    if (!old || pe_saved_find(key) || s_saved_count >= PE_MAX_SAVED) return;
+    snprintf(s_saved[s_saved_count].key, sizeof(s_saved[0].key), "%s", key);
+    s_saved[s_saved_count++].value = old->value;
+    pe_mod_log(NULL, "setting %s starts from %s (%d)", key, legacy, old->value);
+}
+
 static int pe_row_saved(const PeMenuRow *row) {
     return row->kind == PE_ROW_TOGGLE || row->kind == PE_ROW_CHOICE || row->kind == PE_ROW_INT;
 }

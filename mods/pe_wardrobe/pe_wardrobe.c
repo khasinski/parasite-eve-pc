@@ -19,7 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "pe_collection.h"
+#include "pe_wardrobe.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -50,7 +50,7 @@ static int pe_find(const char *key) {
 static int pe_add(const PeCostume *c) {
     if (!c || !c->key || !*c->key || !c->name || s_costumes == PE_MAX_COSTUMES || pe_find(c->key) >= 0 ||
         (c->bank >= 0 && !pe_gameplay_bank(c->bank)) || (c->bank < 0 && !c->load && !(c->bundle && *c->bundle))) {
-        pe_mod_log("pe_collection", "wardrobe: costume %s refused", c && c->key ? c->key : "?");
+        pe_mod_log("pe_wardrobe", "wardrobe: costume %s refused", c && c->key ? c->key : "?");
         return -1;
     }
     s_costume[s_costumes] = c;
@@ -64,7 +64,7 @@ static int pe_wearable(const PeCostume *c) {
 }
 
 static const PeCostume *pe_worn(void) {
-    const int i = pe_find(pe_profile_worn());
+    const int i = pe_find(pe_ward_profile_worn());
     return i >= 0 && pe_wearable(s_costume[i]) ? s_costume[i] : NULL;
 }
 
@@ -118,21 +118,21 @@ static int pe_needs_reload(const PeCostume *c) {
 static void pe_set_worn(const PeCostume *c, int now) {
     char msg[96];
     const int reload = pe_needs_reload(c);
-    pe_profile_set_worn(c ? c->key : "");
-    pe_profile_save();
+    pe_ward_profile_set_worn(c ? c->key : "");
+    pe_ward_profile_save();
     pe_log("wardrobe", "wear=%s reload=%d", c ? c->key : "own", reload);
     pe_event_emit(s_event, (void *)c);
     if (!now) return;
     snprintf(msg, sizeof msg, !reload || pe_reload() ? "Wearing %s" : "Wearing %s from the next room", c ? c->name : "Aya's own clothes");
-    pe_col_say(msg);
+    pe_ward_say(msg);
 }
 
 /* Buy (if needed); 0 with a reason in msg if it can't. */
 static int pe_buy(const PeCostume *c, char *msg, size_t size) {
-    if (pe_profile_owned(c->key) || !c->price) return 1;
-    if (!pe_col_junk_ready(msg, (unsigned)size)) return 0;
-    if (!pe_col_spend(c->price)) { snprintf(msg, size, "Need %u Junk (have %u)", (unsigned)c->price, pe_col_junk()); return 0; }
-    pe_profile_own(c->key);
+    if (pe_ward_profile_owned(c->key) || !c->price) return 1;
+    if (!pe_ward_junk_ready(msg, (unsigned)size)) return 0;
+    if (!pe_ward_spend(c->price)) { snprintf(msg, size, "Need %u Junk (have %u)", (unsigned)c->price, pe_ward_junk()); return 0; }
+    pe_ward_profile_own(c->key);
     pe_log("wardrobe", "bought=%s price=%u", c->key, (unsigned)c->price);
     return 1;
 }
@@ -175,7 +175,7 @@ static unsigned pe_count(void) { pe_filter(); return s_count ? (unsigned)s_count
 
 static const char *pe_state_name(const PeCostume *c) {
     if (pe_worn() == c) return "worn";
-    return pe_profile_owned(c->key) || !c->price ? "owned" : NULL;
+    return pe_ward_profile_owned(c->key) || !c->price ? "owned" : NULL;
 }
 
 static const char *pe_name(unsigned n) {
@@ -196,22 +196,22 @@ static void pe_accept(void) {
     pe_filter();
     if (!s_count) return;
     c = s_costume[s_list[s_sel]];
-    if (pe_worn() == c) { pe_col_say("Already wearing it"); return; }
-    if (!pe_buy(c, msg, sizeof msg)) { pe_col_say(msg); return; }
+    if (pe_worn() == c) { pe_ward_say("Already wearing it"); return; }
+    if (!pe_buy(c, msg, sizeof msg)) { pe_ward_say(msg); return; }
     pe_set_worn(c, 1);
 }
 
 static void pe_default(void) {
-    if (!pe_worn()) { pe_col_say("Already wearing Aya's own clothes"); return; }
+    if (!pe_worn()) { pe_ward_say("Already wearing Aya's own clothes"); return; }
     pe_set_worn(NULL, 1);
 }
 
 static void pe_status(char *out, unsigned size) {
     const PeCostume *c = pe_worn();
-    snprintf(out, size, "Wearing %s   Junk %u", c ? c->name : "Aya's own", pe_col_junk());
+    snprintf(out, size, "Wearing %s   Junk %u", c ? c->name : "Aya's own", pe_ward_junk());
 }
 
-static void pe_result(char *out, unsigned size) { snprintf(out, size, "%s", pe_col_last_said()); }
+static void pe_result(char *out, unsigned size) { snprintf(out, size, "%s", pe_ward_last_said()); }
 
 /* ---- `wardrobe` v1 (shops): Aya's own clothes, then every costume that can be worn now ---- */
 static const PeCostume *pe_ward_costume(int k, int *own) {
@@ -234,7 +234,7 @@ static int pe_ward_state(int k) {
     const PeCostume *c = pe_ward_costume(k, &own);
     if (own) return pe_worn() ? 1 : 2;
     if (!c) return 0;
-    return pe_worn() == c ? 2 : pe_profile_owned(c->key) || !c->price;
+    return pe_worn() == c ? 2 : pe_ward_profile_owned(c->key) || !c->price;
 }
 static int pe_ward_pick(int k, char *msg, size_t size) {   /* buy if needed, then wear (from the next room) */
     int own;
@@ -250,7 +250,7 @@ static const PeWardrobeApi s_wardrobe = { pe_ward_count, pe_ward_name, pe_ward_p
 /* ---- for the Wardrobe screen in Aya's menu ---- */
 static int s_reload_after_menu;
 
-static int pe_owned_wearable(const PeCostume *c) { return pe_wearable(c) && (pe_profile_owned(c->key) || !c->price); }
+static int pe_owned_wearable(const PeCostume *c) { return pe_wearable(c) && (pe_ward_profile_owned(c->key) || !c->price); }
 
 int pe_wardrobe_story_bank(void) { return pe_gameplay_bank(s_room_bank) ? s_room_bank : 12; }
 
@@ -287,25 +287,25 @@ static void pe_unlock_all(void) {
     int unlocked = 0;
     for (int i = 0; i < s_costumes; ++i) {
         const char *key = s_costume[i]->key;
-        if (!pe_profile_owned(key)) {
-            pe_profile_own(key);
-            unlocked += pe_profile_owned(key);
+        if (!pe_ward_profile_owned(key)) {
+            pe_ward_profile_own(key);
+            unlocked += pe_ward_profile_owned(key);
         }
     }
-    pe_profile_save();
+    pe_ward_profile_save();
     char msg[80];
     snprintf(msg, sizeof msg, "Unlocked %d costumes", unlocked);
-    pe_col_say(msg);
+    pe_ward_say(msg);
 }
 static void pe_lock_all(void) {
     int locked = 0;
-    if (pe_find(pe_profile_worn()) >= 0) pe_set_worn(NULL, 1);
+    if (pe_find(pe_ward_profile_worn()) >= 0) pe_set_worn(NULL, 1);
     for (int i = 0; i < s_costumes; ++i)
-        locked += pe_profile_forget_costume(s_costume[i]->key);
-    pe_profile_save();
+        locked += pe_ward_profile_forget(s_costume[i]->key);
+    pe_ward_profile_save();
     char msg[80];
     snprintf(msg, sizeof msg, "Cleared %d costume unlocks; free outfits remain available", locked);
-    pe_col_say(msg);
+    pe_ward_say(msg);
 }
 void pe_wardrobe_reset(void) { s_sel = 0; }
 

@@ -69,6 +69,7 @@ void pe_toast(const char *text);
 void pe_mod_call_begin(const char *mod_id, const char *what, const char *detail);
 void pe_mod_call_end(void);
 void pe_menu_load_settings(void);
+void pe_menu_alias_setting(const char *key, const char *legacy);
 void pe_menu_save_settings(void);
 void pe_panel_install(void);
 

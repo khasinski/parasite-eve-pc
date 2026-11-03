@@ -4,7 +4,7 @@
  */
 #include <stdio.h>
 #include <string.h>
-#include "pe_collection.h"
+#include "pe_wardrobe.h"
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"

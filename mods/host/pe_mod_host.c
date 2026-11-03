@@ -325,6 +325,9 @@ static void pe_host_start(const PeHookInit *init) {
         s_log = fopen(log_path, "w");
     pe_mod_log(NULL, "mod host started (mod API %d, %s)", PE_MOD_API_VERSION, s_interactive ? "interactive" : "headless");
     pe_menu_load_settings();
+    /* The Wardrobe left the Collection (November 2026): a player who turned the Collection off
+     * keeps the Wardrobe off too. */
+    pe_menu_alias_setting(PE_MENU_MANAGE "/PE Enhancements: wardrobe", PE_MENU_MANAGE "/PE Enhancements: collection");
     pe_pages_describe();
     pe_start_mods();
     if (s_all_on) {                              /* off: nothing but F1 touches the game */

@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "pe_collection.h"
+#include "pe_wardrobe.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"

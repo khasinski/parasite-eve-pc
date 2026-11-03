@@ -1,4 +1,4 @@
-/* The Collection's profile: unlocks by stable key, kept across games. See pe_collection.h. */
+/* The Collection's profile: Bestiary unlocks by stable key, kept across games. See pe_collection.h. */
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,6 +8,7 @@
 
 #define PE_FILE      "pe_collection.ini"
 #define PE_V1_FILE   "pe_collection.dat"   /* the psxrecomp build's */
+#define PE_WARDROBE_FILE "pe_wardrobe.ini"  /* the Wardrobe's, since its split */
 #define PE_MAX       1024
 #define PE_KEY_MAX   64
 
@@ -58,22 +59,24 @@ void pe_profile_set_creature_seen(const char *key, unsigned seen) {
     s_dirty = 1;
 }
 
-int pe_profile_owned(const char *key) { return pe_find(R_COSTUME, key, 0) != NULL; }
-void pe_profile_own(const char *key) { if (pe_find(R_COSTUME, key, 1)) s_dirty = 1; }
-/* Forget one costume only: Bestiary and unloaded packs' records stay intact. */
-int pe_profile_forget_costume(const char *key) {
-    PeRecord *r = pe_find(R_COSTUME, key, 0);
-    if (!r) return 0;
-    int at = (int)(r - s_rec);
-    memmove(r, r + 1, (size_t)(s_count - at - 1) * sizeof *r);
-    --s_count;
-    s_dirty = 1;
-    return 1;
+/* Has the Wardrobe imported this file's costume lines? Its profile says so once it has. */
+static int pe_wardrobe_imported(void) {
+    char path[1100], line[256];
+    FILE *f;
+    int yes = 0;
+    if (pe_mod_path(path, sizeof path, PE_WARDROBE_FILE) != 0 || !(f = fopen(path, "r"))) return 0;
+    while (!yes && fgets(line, sizeof line, f)) yes = strncmp(line, "imported ", 9) == 0;
+    fclose(f);
+    return yes;
 }
-const char *pe_profile_worn(void) { return s_worn; }
-void pe_profile_set_worn(const char *key) { snprintf(s_worn, sizeof s_worn, "%s", key ? key : ""); s_dirty = 1; }
 
-void pe_profile_clear(void) { s_count = 0; s_worn[0] = 0; s_dirty = 1; }
+/* The Bestiary's records only: costume lines still waiting for the Wardrobe stay. */
+void pe_profile_clear(void) {
+    int i, n = 0;
+    for (i = 0; i < s_count; ++i) if (s_rec[i].type != R_CREATURE) s_rec[n++] = s_rec[i];
+    s_count = n;
+    s_dirty = 1;
+}
 void pe_profile_changed(void) { s_dirty = 1; }
 void pe_profile_tick(void) { if (s_dirty) pe_profile_save(); }
 
@@ -81,14 +84,15 @@ void pe_profile_save(void) {
     char path[1100];
     FILE *f;
     int i;
+    const int carry = !pe_wardrobe_imported();     /* costume lines the Wardrobe hasn't taken yet */
     s_dirty = 0;
     if (pe_mod_path(path, sizeof path, PE_FILE) != 0 || !(f = fopen(path, "w"))) return;
-    fprintf(f, "# Parasite Eve Collection: unlocks kept across every game.\n"
-               "# creature <key> <bits: 1 met, 2 weaknesses, 4 loot> <kills> <bits looked at>; costume <key> = owned; worn <key>\n");
-    if (s_worn[0]) fprintf(f, "worn %s\n", s_worn);
+    fprintf(f, "# Parasite Eve Collection: Bestiary unlocks kept across every game.\n"
+               "# creature <key> <bits: 1 met, 2 weaknesses, 4 loot> <kills> <bits looked at>\n");
+    if (carry && s_worn[0]) fprintf(f, "worn %s\n", s_worn);
     for (i = 0; i < s_count; ++i) {
         if (s_rec[i].type == R_CREATURE) fprintf(f, "creature %s %u %u %u\n", s_rec[i].key, s_rec[i].bits, s_rec[i].kills, s_rec[i].seen);
-        else fprintf(f, "costume %s\n", s_rec[i].key);
+        else if (carry) fprintf(f, "costume %s\n", s_rec[i].key);
     }
     fclose(f);
 }
@@ -96,7 +100,7 @@ void pe_profile_save(void) {
 /* ---- the psxrecomp build's pe_collection.dat, imported once ---- */
 typedef struct PeProfileV1 {
     uint32_t magic, version;
-    uint64_t skins;                 /* bit i: skin i owned */
+    uint64_t skins;                 /* the Wardrobe's */
     uint8_t worn, reserved[7];
     uint8_t creature[128];          /* bits 0-2, kills in 3-7 */
     uint32_t checksum;
@@ -119,9 +123,6 @@ static int pe_import_v1(void) {
     for (i = 0; i < 128; ++i)
         if (v1.creature[i] && (key = pe_pack_pe1_creature_key((int)i)))
             pe_profile_set_creature(key, v1.creature[i] & 7u, v1.creature[i] >> 3);
-    for (i = 1; i < 64; ++i)
-        if (((v1.skins >> i) & 1u) && (key = pe_pack_pe1_costume_key((int)i))) pe_profile_own(key);
-    if ((key = pe_pack_pe1_costume_key(v1.worn)) && v1.worn) pe_profile_set_worn(key);
     pe_mod_log("pe_collection", "imported the recomp's %s", PE_V1_FILE);
     return 1;
 }
