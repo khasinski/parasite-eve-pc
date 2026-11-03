@@ -451,7 +451,13 @@ static int Host_SettingsTotalRowCount(int page) {
 
 enum {
     OVERLAY_CONTROLS_ITEM_COUNT = HOST_BINDING_COUNT + 2,
+#ifdef PE_PS5_GPU_NATIVE
     OVERLAY_CONTROLS_VISIBLE_BINDINGS = OVERLAY_VISIBLE_CONTROLS - 1,
+#else
+    /* The window is as tall as the longest page: bindings fill it instead of leaving a gap. */
+    OVERLAY_CONTROLS_VISIBLE_BINDINGS =
+        (COUNT_OF(kGraphics) > OVERLAY_VISIBLE_CONTROLS ? COUNT_OF(kGraphics) : OVERLAY_VISIBLE_CONTROLS) - 1,
+#endif
     OVERLAY_CONTROLS_MAX_SCROLL = OVERLAY_CONTROLS_ITEM_COUNT - OVERLAY_CONTROLS_VISIBLE_BINDINGS
 };
 
