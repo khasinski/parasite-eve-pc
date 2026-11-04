@@ -113,6 +113,11 @@ static void test_policy_path(void) {
     c.price_pct = 75;
     assert(pe_econ_store_apply(&c) == PE_ECON_OK);
     assert(s_wallet_api.policy() == state && state->progress.rng_payment && state->progress.next_sequence == 1);
+    {   /* Apply seeds from the clock; a fixed seed makes every award below repeatable. */
+        PeEconProgress fixed = state->progress;
+        pe_econ_seed(&fixed, 0x5EED0001u);
+        pe_econ_store_commit(&fixed);
+    }
     assert(pe_loot_price(100) == 75);     /* the path's own price */
     memset(&before, 0, sizeof before); memset(&after, 0, sizeof after);
     s_wallet_api.get_rewards(&before);
