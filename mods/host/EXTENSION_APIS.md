@@ -105,7 +105,7 @@ custom definition by this change.
 
 The policy service is opt-in for a configurable payout owner. Legacy Enhanced calculation does
 not invoke contributors and remains unchanged. Registering a preset never automatically applies
-it. Player-facing preset menus remain separate work.
+it. The F1 playstyle picker lists registered presets and applies one only when the player chooses Apply.
 
 Provider preset keys use the registry's `<mod_id>/<name>` format. The Economy settings
 validator and its persisted policy accept that format directly, while retaining older

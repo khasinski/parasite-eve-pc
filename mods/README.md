@@ -125,7 +125,7 @@ moved, disabled or updated without touching the others. Add the folder name to `
 
 ## Talking to other mods
 
-- **Services**: `pe_service_publish("junk", 1, &api)` / `pe_service_get("junk", 1)`. A service is
+- **Services**: `pe_service_publish("junk", 1, &api, MOD_ID)` / `pe_service_get("junk", 1)`. A service is
   a versioned struct of functions; a mod that finds none carries on without it.
 - **Events**: `pe_event_id("name")` and `pe_event_emit(id, ctx)` for announcements.
 
@@ -587,4 +587,4 @@ API. Collection checks cover persistence, repeat use and post-reset kills.
 
 ## Extension APIs
 
-The native-compatible v1 services, ownership rules, next-save purchase behavior and supported limits are documented in [the extension API guide](host/EXTENSION_APIS.md). The existing gameplay defaults are unchanged.
+The native-compatible v1 services, ownership rules, next-save purchase behavior and supported limits are documented in [the extension API guide](host/EXTENSION_APIS.md). For the whole mod API, start with [the API reference](../docs/MOD_API.md). The existing gameplay defaults are unchanged.
