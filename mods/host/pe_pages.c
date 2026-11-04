@@ -16,6 +16,11 @@ void pe_pages_describe(void) {
     pe_menu_page(PE_PAGE_CATALOG, "Install unlocked effects on your equipped gun or armor.", 10);
     pe_menu_page(PE_PAGE_DISMANTLE, "Break down spare gear for Junk and new effects.", 20);
     pe_menu_page(PE_PAGE_REBUILD, "Buy dismantled gear back.", 30);
+    pe_menu_page(PE_PAGE_ECON_STORAGE, "Custom playstyle: where normal Junk goes.", 40);
+    pe_menu_page(PE_PAGE_ECON_INCOME, "Custom playstyle: extra Junk for won battles.", 50);
+    pe_menu_page(PE_PAGE_ECON_BONUS, "Custom playstyle: bonus rare items and bundles.", 60);
+    pe_menu_page(PE_PAGE_ECON_REDEEM, "Custom playstyle: turning bundles into Junk.", 70);
+    pe_menu_page(PE_PAGE_ECON_LEGACY, "Enhanced's Difficulty. The other playstyles ignore it.", 80);
     pe_menu_page(PE_PAGE_INVENTORY, "Key-item pocket, remembered bag sorting and inventory counters.", 40);
     pe_menu_page(PE_PAGE_KEYS, "Browse pocketed keys and story items.", 10);
     pe_menu_page(PE_PAGE_COLLECTION, "Bestiary and Wardrobe, kept across every game.", 50);

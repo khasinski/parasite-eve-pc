@@ -619,6 +619,24 @@ static void pe_loot_tick(void) {
 }
 
 /* ---- menu ---- */
+/* What the Economy preview can't see for itself. Read only. */
+void pe_loot_econ_context(PeEconContext *out) {
+    const PeStacksApi *stacks = (const PeStacksApi *)pe_service_get("stacks", 1);
+    int i;
+    memset(out, 0, sizeof *out);
+    out->enhanced_price_pct = s_preset_price[s_st.preset < 3 ? s_st.preset : 1];
+    out->legacy_carried = s_st.rare_carry;
+    for (i = 0; i < PE_BAG_SLOTS + PE_STORAGE_SLOTS; ++i) {
+        const int list = i < PE_BAG_SLOTS ? 0 : 1, at = list ? i - PE_BAG_SLOTS : i;
+        const int item = list ? g_WayneStorageItems[at] : g_AyaSaveState.inventory_items[at];
+        uint32_t copies;
+        if (item != PE_ITEM_SUPER_JUNK && item != PE_ITEM_DUPER_JUNK) continue;
+        copies = stacks ? (uint32_t)stacks->count(list, at) : 1u;
+        if (!copies) copies = 1;
+        if (item == PE_ITEM_SUPER_JUNK) out->held_super += copies;
+        else out->held_duper += copies;
+    }
+}
 static int pe_get_junk(void) { return (int)s_st.junk; }
 static void pe_take_out_junk(void) {
     char msg[80];
@@ -654,7 +672,7 @@ static void pe_junk_text(char *out, unsigned size) {
 
 void pe_loot_register(const char *mod_id) {
     pe_menu_register_info(PE_PAGE_ECONOMY, "Junk", "Earned in battles and chests; spent in the Workshop.", pe_junk_text);
-    pe_menu_register_live_choice(PE_PAGE_ECONOMY, "Difficulty", "Junk earned, rare luck and prices. Change any time.",
+    pe_menu_register_live_choice(PE_PAGE_ECON_LEGACY, "Difficulty", "Enhanced only: Junk earned, rare luck and prices together.",
                                  s_preset_names, 3, pe_get_preset, pe_set_preset);
     pe_menu_register_choice(PE_PAGE_ECONOMY, "Wayne hand-in", "How much Junk Wayne's Discard junk gives him.",
                             &s_handin_mode, s_handin_names, 2);

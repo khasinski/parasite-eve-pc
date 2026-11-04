@@ -559,8 +559,15 @@ static int pe_rw_rare_within(void) {
     return left < 1 ? 1 : (left + step - 1) / step;
 }
 static void pe_rw_rare_text(char *out, unsigned size) {
-    if (!pe_game_loaded() || !pe_rw_wallet()) snprintf(out, size, "-");
-    else snprintf(out, size, "%d battle%s", pe_rw_rare_within(), pe_rw_rare_within() == 1 ? "" : "s");
+    const PeWalletApi *wallet = pe_rw_wallet();
+    const PeEconState *policy = wallet ? wallet->policy() : NULL;
+    if (!pe_game_loaded() || !wallet) snprintf(out, size, "-");
+    else if (policy) {   /* the new path has its own guarantee, or none */
+        const int guarantee = (policy->config.flags & PE_ECON_F_BONUS_ITEM) ? policy->config.item_guarantee : 0;
+        const int left = guarantee - (int)policy->progress.dry;
+        if (!guarantee) snprintf(out, size, "-");
+        else snprintf(out, size, "%d battle%s", left < 1 ? 1 : left, left <= 1 ? "" : "s");
+    } else snprintf(out, size, "%d battle%s", pe_rw_rare_within(), pe_rw_rare_within() == 1 ? "" : "s");
 }
 
 static int rewards_init(void) {

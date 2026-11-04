@@ -227,6 +227,21 @@ int pe_menu_register_dynamic_choice(const char *sub, const char *label, const ch
     return 0;
 }
 
+int pe_menu_register_live_dynamic_choice(const char *sub, const char *label, const char *description,
+                                         unsigned max_count, PeMenuChoiceCount count_fn,
+                                         PeMenuChoiceName name_fn, PeMenuGet get, PeMenuSet set) {
+    PeMenuRow *row;
+    if (!max_count || !count_fn || !name_fn || !get || !set ||
+        !(row = pe_row_new(PE_ROW_LIVE_CHOICE, sub, label, description)))
+        return -1;
+    row->count = max_count;
+    row->count_fn = count_fn;
+    row->name_fn = name_fn;
+    row->get = get;
+    row->set = set;
+    return 0;
+}
+
 int pe_menu_register_info(const char *sub, const char *label, const char *description, PeMenuText text) {
     PeMenuRow *row;
     if (!text || !(row = pe_row_new(PE_ROW_INFO, sub, label, description))) return -1;
@@ -336,6 +351,12 @@ void pe_menu_row_value_text(PeMenuRow *row, char *out, unsigned size) {
     case PE_ROW_CHOICE:
     case PE_ROW_LIVE_CHOICE:
         v = row->kind == PE_ROW_CHOICE ? *row->value : row->get();
+        if (row->count_fn) {
+            unsigned n = row->count_fn();
+            if (n > row->count) n = row->count;
+            snprintf(out, size, "%s", v >= 0 && (unsigned)v < n ? row->name_fn((unsigned)v) : "?");
+            break;
+        }
         snprintf(out, size, "%s", v >= 0 && (unsigned)v < row->count ? row->names[v] : "?");
         break;
     case PE_ROW_INT:
@@ -373,7 +394,9 @@ void pe_menu_row_step(PeMenuRow *row, int direction) {
         *row->value = pe_wrap(*row->value + direction, (int)row->count);
         break;
     case PE_ROW_LIVE_CHOICE:
-        row->set(pe_wrap(row->get() + direction, (int)row->count));
+        count = row->count_fn ? row->count_fn() : row->count;
+        if (count > row->count) count = row->count;
+        row->set(pe_wrap(row->get() + direction, (int)count));
         break;
     case PE_ROW_INT:
         *row->value = pe_clamp(*row->value + direction * row->step, row->minimum, row->maximum);
