@@ -15,6 +15,7 @@ const void *pe_service_get(const char *name,int version) { (void)version; return
 /* The battle end as the host runs it: wallet early, rewards, wallet late. */
 static void pe_on_rewards(PeHookRewards *r,void *u) { pe_on_rewards_early(r,u); pe_rw_on_rewards(r,u); pe_on_rewards_late(r,u); }
 void pe_log(const char *tag,const char *fmt,...) { (void)tag;(void)fmt; }
+void pe_toast(const char *text) { (void)text; }
 int main(void) {
     s_st.junk=100;
     pe_loot_give_junk(UINT32_MAX);
