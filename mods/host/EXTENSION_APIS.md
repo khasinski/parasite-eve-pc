@@ -105,7 +105,12 @@ custom definition by this change.
 
 The policy service is opt-in for a configurable payout owner. Legacy Enhanced calculation does
 not invoke contributors and remains unchanged. Registering a preset never automatically applies
-it. New preset menus and automatic integration of a configurable battle pipeline are separate work.
+it. Player-facing preset menus remain separate work.
+
+Provider preset keys use the registry's `<mod_id>/<name>` format. The Economy settings
+validator and its persisted policy accept that format directly, while retaining older
+`namespace.name` keys and the built-in `pe.*` keys. Do not rename or flatten a registered
+key before passing it to `pe_econ_from_preset`; preview is pure and Apply is explicit.
 
 Modifiers add 0–65,535 whole Junk and contribute a factor of 0–40,000 basis points. Factors combine
 by additive deviations from 10,000, not registration-order multiplication. For example, two 1.5×

@@ -40,9 +40,11 @@ static int key_ok(const char key[48]) {
         if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.' || ch == '/'))
             return 0;
     }
-    /* namespace.name, both parts present */
-    const char *dot = memchr(key, '.', (size_t)(end - key));
-    return dot && dot != key && dot + 1 != end;
+    /* Registry providers use owner/name; retain namespace.name for existing saves
+     * and the built-in pe.* presets. Both parts must be present. */
+    const char *separator = memchr(key, '/', (size_t)(end - key));
+    if (!separator) separator = memchr(key, '.', (size_t)(end - key));
+    return separator && separator != key && separator + 1 != end;
 }
 
 static PeEconResult settings_valid(const PeEconConfig *c) {

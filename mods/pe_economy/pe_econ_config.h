@@ -30,7 +30,7 @@ typedef struct {
     uint16_t super_chance, duper_chance;      /* together at most 10,000 */
     uint16_t super_value, duper_value;        /* kept while redemption is off */
     uint16_t performance_pct, steal_junk;
-    char key[48];                             /* zero padded; empty: Custom, else namespace.name in a-z 0-9 _ - . / */
+    char key[48];                             /* zero padded; empty: Custom; owner/name or legacy namespace.name, a-z 0-9 _ - . / */
 } PeEconConfig;
 
 typedef enum {
