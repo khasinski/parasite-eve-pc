@@ -117,7 +117,7 @@ static void pe_load(int slot) {
     }
     if (state == PE_CHECKPOINT_SLOT_CURRENT) {
         pe_slot_path(path, sizeof path, slot);
-        if (pe_checkpoint_read(path, "BASLUS-00662PEQUICKSAVE000A", g_MemCardFileBuffer)) {
+        if (pe_checkpoint_read(path, PE_CHECKPOINT_BINDING, g_MemCardFileBuffer)) {
             pe_toast("Quick load refused: checkpoint is damaged or incompatible"); return;
         }
     } else {

@@ -27,6 +27,7 @@ The pre-split Loot and Catalog private runtime serializers reference layouts tha
 - PS5 compatibility export test verifies every source digest, stale-source pruning and refusal before writes.
 - Native host/provider syntax checks pass with CPU-components, changed-cohort and native-GPU flags. Native state sources other than the POSIX storage adapter also pass host syntax checks.
 - `git diff --check` passes.
+- The first in-game Quick Load refused its own checkpoint: loads bound the full card path while the companion carries the 20-byte mapped name. Both names are now constants, and the portable checkpoint test builds its save path with the real `Psyz_AdjustPath`.
 - Older quick saves: the portable checkpoint test covers slot state, exact-size reading, admission of an unlinked card, refusal of an unresolved link, and the older file surviving a save. The slot row, the toasts and `pe_load`'s order in `pe_quicksave.c` need the game and have no automated test; no real older quick save has been loaded.
 
 Local evidence lives beside this checkout in `.port-staging/`: `compat-push-tests.log`, `compat-final-latches-build.log`, `compat-native-syntax.log`, `compat-native-state-syntax.log`, and broader build/test logs.

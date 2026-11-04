@@ -3875,7 +3875,7 @@
     },
     {
       "path": "mods/host/pe_checkpoint_game.c",
-      "sha256": "5f5c749595bac2771db67d43f1c437d8074905ba7895fb13c17f8be42f9acc84"
+      "sha256": "4d827a98d4cade3af8fbe8894a42958d83d3bd7730c3d5c461e70d7743d2af4a"
     },
     {
       "path": "mods/host/pe_checkpoint_game.h",
@@ -3927,7 +3927,7 @@
     },
     {
       "path": "mods/host/pe_extension_store.h",
-      "sha256": "9fc5f4181c8f36cab9787e7e4601ac2c1929c37e7290693f0c7f125bb45b583a"
+      "sha256": "0d5853ce93443aa18a294c9822137c4e3c34f49e9a138e9ecefb7e0c727b0b55"
     },
     {
       "path": "mods/host/pe_file_io.h",
@@ -4415,7 +4415,7 @@
     },
     {
       "path": "mods/pe_quicksave/pe_quicksave.c",
-      "sha256": "5e730dd58f77554d0295e61ea0e505a7d2fd9b66c209dfcd8ce6dd35e748c4bc"
+      "sha256": "6a6adf4d025fb565c277568e280c4874e08a51661b8ecc55eacadb7efcaff4d5"
     },
     {
       "path": "mods/pe_rebalance/pe_atb_items.c",

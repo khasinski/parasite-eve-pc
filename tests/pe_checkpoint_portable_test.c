@@ -5,6 +5,7 @@
 #include "pe_extension_store.h"
 #include "pe_save_admission.h"
 #include "pe_save_emission.h"
+#include <psyz/system.h>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -20,8 +21,14 @@ static int migrate(void *out,const void *old,unsigned size,unsigned version){
 static int reject(const void *data){(void)data;return -1;}
 void pe_profile_transactions_committed(void){}
 int main(int argc,char **argv){
-    assert(argc==2);char binding[1024],checkpoint[1024];
-    snprintf(binding,sizeof binding,"%s/BASLUS-00662PEQUICKSAVE000A",argv[1]);
+    assert(argc==2);char checkpoint[1024],card_path[1024],save_path[1024];
+    /* As the game does it: saves name the companion after the mapped path, loads use the binding. */
+    const char *binding=PE_CHECKPOINT_BINDING;
+    assert(strlen(PE_CHECKPOINT_CARD_PATH)==0x19&&PE_CHECKPOINT_CARD_PATH[0x18]=='A');
+    Psyz_AdjustPath(save_path,PE_CHECKPOINT_CARD_PATH,sizeof save_path);
+    assert(!strcmp(save_path,binding));
+    snprintf(card_path,sizeof card_path,"%s/%s",argv[1],PE_CHECKPOINT_CARD_PATH);
+    Psyz_AdjustPath(save_path,card_path,sizeof save_path);
     snprintf(checkpoint,sizeof checkpoint,"%s/test.pec",argv[1]);
     unsigned char block[8192]={0},restored[8192],old[8192];
     unsigned original[2]={321,99},v,n,got[2];
@@ -40,7 +47,7 @@ int main(int argc,char **argv){
     pe_save_new_game();pe_extension_new_game();data=123;
     assert(pe_extension_enable(&section)==PE_REG_OK);
     reserve[0]=1;reserve[4]=1;reserve[5]=49;assert(pe_extension_enable(&stacks)==PE_REG_OK);
-    assert(!pe_extension_set_save_path(binding));assert(!pe_extension_stage());
+    assert(!pe_extension_set_save_path(save_path));assert(!pe_extension_stage());
     memset(block,0,sizeof block);assert(!pe_save_try_write(block));
     assert(!pe_checkpoint_write(checkpoint,block));pe_extension_cancel();
     /* Companion generation was removed; checkpoint is independently loadable. */
@@ -50,7 +57,7 @@ int main(int argc,char **argv){
     pe_save_on_read(restored);pe_extension_apply_load();assert(data==123);
 #ifdef _WIN32
     /* Publication fails after staging; the previous checkpoint stays readable. */
-    assert(!pe_extension_set_save_path(binding));assert(!pe_extension_stage());
+    assert(!pe_extension_set_save_path(save_path));assert(!pe_extension_stage());
     unsigned char next[8192]={0};assert(!pe_save_try_write(next));
     assert(SetFileAttributesA(checkpoint,FILE_ATTRIBUTE_READONLY));
     assert(pe_checkpoint_write(checkpoint,next)<0);
@@ -65,7 +72,7 @@ int main(int argc,char **argv){
     assert(!pe_checkpoint_read(checkpoint,binding,restored));
     pe_save_on_read(restored);pe_extension_apply_load();
     assert(!pe_extension_available(&section));
-    assert(!pe_extension_set_save_path(binding));assert(!pe_extension_stage());
+    assert(!pe_extension_set_save_path(save_path));assert(!pe_extension_stage());
     unsigned char preserved[8192]={0};assert(!pe_save_try_write(preserved));
     /* Rejected v1 section remains opaque through an actual subsequent save. */
     char retry[1024];snprintf(retry,sizeof retry,"%s/rejected.pec",argv[1]);
@@ -128,7 +135,7 @@ int main(int argc,char **argv){
     assert(pe_mod_load_admit(slot_mcd,linked)<0);
     /* Saving to the slot makes the checkpoint current and keeps the older file intact. */
     assert(!pe_mod_load_admit(slot_mcd,block));pe_save_on_read(block);pe_extension_apply_load();
-    assert(!pe_extension_set_save_path(binding));assert(!pe_extension_stage());
+    assert(!pe_extension_set_save_path(save_path));assert(!pe_extension_stage());
     unsigned char fresh[8192]={0};assert(!pe_save_try_write(fresh));
     assert(!pe_checkpoint_write(slot_pec,fresh));pe_extension_cancel();
     assert(pe_checkpoint_slot_state(slot_pec,slot_mcd)==PE_CHECKPOINT_SLOT_CURRENT);

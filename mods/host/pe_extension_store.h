@@ -8,6 +8,11 @@
  */
 #define PE_EXT_FILE_LIMIT 8192u
 #define PE_EXT_SECTION_LIMIT 16
+/* Save_BuildCardFile's path for a checkpoint: byte 0x18 is the title's slot letter. The companion
+ * inside is named after the mapped path, which Psyz_AdjustPath cuts to a 20-byte card name, so
+ * loads must bind to that shorter name. */
+#define PE_CHECKPOINT_CARD_PATH "BASLUS-00662PEQUICKSAVE0A"
+#define PE_CHECKPOINT_BINDING "BASLUS-00662PEQUICKS"
 int pe_checkpoint_pack(unsigned char *, unsigned, unsigned *, const unsigned char *);
 int pe_checkpoint_unpack(const unsigned char *, unsigned, const char *, unsigned char *);
 int pe_checkpoint_write(const char *path, const unsigned char *block);

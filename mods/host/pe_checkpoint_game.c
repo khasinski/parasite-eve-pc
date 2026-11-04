@@ -22,7 +22,7 @@ int pe_checkpoint_build_card(void) {
     const int transfer = D_800A5D50;
     int r;
 
-    snprintf(path, sizeof path, "BASLUS-00662PEQUICKSAVE000A");
+    snprintf(path, sizeof path, "%s", PE_CHECKPOINT_CARD_PATH);
     memcpy(&header, &g_SaveRuntimeState, sizeof header);
     Save_BuildHeader();
     if (action && action != &g_SavedBattleStateTail) g_AyaBattleState.action = &g_SavedBattleStateTail;
@@ -56,7 +56,7 @@ int pe_checkpoint_prepare_portable(const unsigned char *in,unsigned bytes) {
     /* Native structural checks precede callbacks and live changes. */
     if(bytes<32+8192||!pe_checkpoint_native_valid(in+32))return -1;
     unsigned char candidate[8192];
-    if(pe_checkpoint_unpack(in,bytes,"BASLUS-00662PEQUICKSAVE000A",candidate))return -1;
+    if(pe_checkpoint_unpack(in,bytes,PE_CHECKPOINT_BINDING,candidate))return -1;
     memcpy(g_MemCardFileBuffer,candidate,8192);return 0;
 }
 int pe_checkpoint_commit_portable(void) {
