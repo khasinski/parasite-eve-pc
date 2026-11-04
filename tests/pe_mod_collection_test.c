@@ -92,8 +92,8 @@ static const PeCreatureInfo s_zombie = { "re2/zombie", "Zombie", "Resident Evil 
 static struct PeModel *zombie_model(void *user) { (void)user; return NULL; }   /* an import's own decoder */
 static const PeCreatureInfo s_zombie_rnd = { "re2/zombie", "Zombie", "Resident Evil 2", 0, 0, 60, 10, 2, 0, "Medicine 1 100%", "nothing", 5, 10 };
 static const PeCreatureInfo s_impostor = { "re2/licker", "Licker", "Resident Evil 2", 0, 0, 60, 10, 0, 0, "", "", 5, 10 };
-static int s_rnd_handle = -1;
-static int shuffle(int room, unsigned identity, const struct EnemyCombatant *e) { (void)e; return room == 374 && identity == 0x99 ? s_rnd_handle : -1; }
+static int s_rnd_handle = -1, s_rnd_native;
+static int shuffle(int room, unsigned identity, const struct EnemyCombatant *e) { (void)e; return (room == 374 && identity == 0x99) || (s_rnd_native && room == 263 && identity == 0x1A) ? s_rnd_handle : -1; }
 static int s_loads[2];
 static void claire_load(int wearing) { ++s_loads[wearing ? 1 : 0]; }
 static const PeCostume s_claire = { "re2/claire", "Claire (RE2)", "Resident Evil", 25, -1, NULL, claire_load };
@@ -150,7 +150,15 @@ static void native_species_regressions(const PeBestiaryApi *b) {
     for (int i = 0; i < PE_CREATURES; ++i) before[i] = b->kills(handles[i]);
     kill_once(0, 0x001A);
     for (int i = 0; i < PE_CREATURES; ++i) assert(b->kills(handles[i]) == before[i]);
-    puts("Native Bestiary: 370 model-aware kill/Scan mappings; shared rat/spider and lizard/armadillo identities isolated");
+    /* A later randomizer resolver must still override a real native model. */
+    g_FieldActorListHead = (struct FieldActor *)&actor; actor.modelIndex = 7;
+    s_rnd_native = 1;
+    unsigned imported = b->kills(s_rnd_handle);
+    kill_once(0, 0x001A);
+    assert(b->kills(s_rnd_handle) == imported + 1);
+    for (int i = 0; i < PE_CREATURES; ++i) assert(b->kills(handles[i]) == before[i]);
+    s_rnd_native = 0; g_FieldActorListHead = NULL;
+    printf("Native Bestiary: %d model-aware kill/Scan mappings; shared species isolated; randomizer precedence retained\n", PE_CREATURE_KEYS);
 }
 
 static int find_shop(const PeWardrobeApi *shop, const char *part) {
