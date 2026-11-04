@@ -108,6 +108,11 @@ extern u8 D_8009CDC8; /* room name prefix letter */
 /* USA resident room range table, including its empty final slot. */
 #define SCENE_ROOM_COUNT 450
 extern SceneRoomSectorRange g_RoomSectorTable[SCENE_ROOM_COUNT];
+/* Script slots (PM commands 0..84, field-effect programs 85..188), for the battle randomizer: a slot's handler,
+ * a slot set back, and room `room_number`'s record (slot, PS1 address) installed now; NULL if none binds. */
+const void *SceneRoom_ScriptSlot(unsigned int slot);
+void SceneRoom_SetScriptSlot(unsigned int slot, const void *native);
+const void *SceneRoom_InstallRoomScript(int room_number, unsigned int slot, u32 address);
 #include "pe1/pe_image.h"
 
 #include "pe1/reloc_block.h"

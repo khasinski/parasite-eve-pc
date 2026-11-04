@@ -1,0 +1,13 @@
+# Foe swaps the battle randomizer's table leaves out (enemyai.py --table --deny): slot room < source room:entity,
+# found by mod-randomizer-foefights. The Chrysler Building bee parts (M418 e3, e4: parts of e5's Queen Bee fight) in
+# the lone-boss slots of the Actress, Sheeva and the Ultimate Being: the battle never starts (no op 85), because the
+# slot's own script has a part in starting it (M428 e2 sets N0x13 = 1, which its spawner e3 waits for; M005's run
+# sets V0xa|0x4, the bee run doesn't). The same parts win in the Eve (M023, M089), Alligator (M034) and M430 slots.
+M005<M418:3
+M005<M418:4
+M123<M418:3
+M123<M418:4
+M350<M418:3
+M350<M418:4
+M428<M418:3
+M428<M418:4

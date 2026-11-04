@@ -1,0 +1,10 @@
+# Story gates (pe_rand_locks.h) with the real mod: ctest mod-randomizer-gate (test-mod-randomizer-run, gate lines).
+# Seed 000039 Hard (logic 12, table 13) moves the NYPD Weapons Storage Key out of its vanilla spot (76, M114) to spot 14.
+# M051's weapons storage door asks for it at +4A0: shut before its story bit V0x2d|0x800, open after.
+M051 0x88 0x0 gate win keys=all press at=-201,247,2048 shut=+4A0 seed=39,2
+M051 0x88 0x0 V0x2d=0x800 gate win keys=all press at=-201,247,2048 open=+4A0 flag=V0x2d|0x40000 seed=39,2
+# A key still in its vanilla spot is never gated: the Subway Gate Key (M190) doesn't move, its bit V0x36|0x200000 unset.
+M183 0x278 0x3e7 gate win keys=all press at=40,3442,0 open=+9AC flag=V0x36|0x8000000 seed=39,2
+# A gift on a full bag: in the game the Day 3 NYPD gift in M116 (spot 77, here 0x16) fails and her done flags are
+# set anyway (the item is lost; a non-gate bag=full line shows bagged=+000490:1); with the mod the give goes one slot past the bag (11/10) and the item is held.
+M116 0x88 0x74 gate win keys=all press at=@2,0 want=+490 seed=39,2 bag=full has=16 id=gift-fullbag-m116
