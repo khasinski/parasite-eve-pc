@@ -15,17 +15,25 @@
  *   merge    PE_HOOK_INVENTORY_REBUILD: duplicates of a stackable item fold into their first slot.
  *   draw     PE_HOOK_SLOT_DRAWN: the count is drawn where a weapon shows its rounds.
  *
- * Saved by the host as the "pe_stacks.counts" record: (item, extra copies) pairs per list. With
- * the mod off, or the option switched off, the extra copies go back into free slots of their list
- * as plain items; what doesn't fit stays counted. */
+ * Saved in the save's companion file as the "pe_stacks/counts" section: (item, extra copies) pairs
+ * per list. The tail has no room for it beside the host's companion link. A copy only stacks once
+ * the section is enabled; if that is refused it takes its own slot, so nothing is lost. A save with
+ * the older "pe_stacks.counts" tail record moves to the section on load and the record is dropped;
+ * if the section is refused, that save stays on the record. With the option switched off, the
+ * extra copies go back into free slots of their list as plain items; what doesn't fit stays
+ * counted. With the mod off, an old record is released the same way, and a companion section is
+ * kept untouched until the mod is on again. */
 #include <stdio.h>
 #include <string.h>
 
+#include "pe_extension_store.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_save.h"
+#include "pe_save_emission.h"
+#include "pe_save_query.h"
 #include "pe_services.h"
 #include "pe1/battle_update.h"
 #include "pe1/draw_state.h"
@@ -52,7 +60,15 @@ static struct {
     uint8_t count[PE_LISTS], pad;
     uint8_t pair[PE_STACK_PAIRS][2];
 } s_rec;
-_Static_assert(sizeof s_rec == 204, "pe_stacks.counts v1 holds these 204 bytes: raise the version for a new layout");
+_Static_assert(sizeof s_rec == 204, "pe_stacks/counts v1 holds these 204 bytes: raise the version for a new layout");
+
+/* The older tail record: read and moved on load; written only by a save that couldn't move. */
+static unsigned char s_old_rec[sizeof s_rec];
+static int s_old_live;
+static const PeExtensionSection s_section = {"pe_stacks/counts", 1, 1, sizeof s_rec, &s_rec};
+
+/* Before any extra copy exists: the companion must be able to hold it. */
+static int pe_store_ready(void) { return s_old_live || pe_extension_enable(&s_section) == PE_REG_OK; }
 
 /* ---- lists ---- */
 
@@ -98,7 +114,7 @@ static int pe_count(int l, int index) {
     return 1 + s_extra[l][id];
 }
 static int pe_join(int l, int id) {
-    if (!pe_stackable(id) || pe_find(l, id) < 0 || 1 + s_extra[l][id] >= PE_STACK_MAX) return 0;
+    if (!pe_stackable(id) || pe_find(l, id) < 0 || 1 + s_extra[l][id] >= PE_STACK_MAX || !pe_store_ready()) return 0;
     s_extra[l][id]++;
     return 1;
 }
@@ -112,7 +128,7 @@ static void pe_merge(int l) {
         const int id = list[i];
         if (!pe_stackable(id)) continue;
         if (!seen[id]) { seen[id] = 1; continue; }
-        if (1 + s_extra[l][id] < PE_STACK_MAX) { s_extra[l][id]++; list[i] = 0; }
+        if (1 + s_extra[l][id] < PE_STACK_MAX && pe_store_ready()) { s_extra[l][id]++; list[i] = 0; }
     }
     for (int id = 1; id < 256; ++id) if (!seen[id]) s_extra[l][id] = 0;
 }
@@ -263,7 +279,7 @@ static int pe_store_copies(int l, int id, int copies, int prefer) {
     } else {
         room = PE_STACK_MAX - 1 - s_extra[l][id];
     }
-    if (copies > room) return 0;
+    if (copies > room || ((copies > 1 || list[at]) && !pe_store_ready())) return 0;
     if (!list[at]) { list[at] = (s16)id; s_extra[l][id] = 0; copies--; }
     s_extra[l][id] += (uint8_t)copies;
     return 1;
@@ -310,7 +326,7 @@ static int pe_on_transfer(void *ctx, void *user) {
     if (t->from_mode == 0x34) {
         id = store[at];
         if (pe_stackable(id) && pe_find(0, id) >= 0 && pe_find(l, id) == at &&
-            1 + s_extra[0][id] < PE_STACK_MAX) {
+            1 + s_extra[0][id] < PE_STACK_MAX && pe_store_ready()) {
             /* the bag has a stack of it already: one copy joins it */
             if (s_extra[l][id]) s_extra[l][id]--; else store[at] = 0;
             s_extra[0][id]++;
@@ -376,45 +392,89 @@ static void pe_unpack(void) {
         for (unsigned i = 0; i < s_rec.count[l]; ++i, ++k) s_extra[l][s_rec.pair[k][0]] = s_rec.pair[k][1];
 }
 
-static int pe_on_save(void *ctx, void *user) { (void)ctx; (void)user; pe_pack(); return 0; }
+static void pe_publish(void) {
+    pe_pack();
+    if (s_old_live) memcpy(s_old_rec, &s_rec, sizeof s_rec);
+}
+static int pe_on_save(void *ctx, void *user) { (void)ctx; (void)user; pe_publish(); return 0; }
+
+static int pe_counts_bad(const void *data) {
+    const uint8_t *b = data;
+    unsigned total = 0;
+    for (int l = 0; l < PE_LISTS; ++l) total += b[l];
+    if (total > PE_STACK_PAIRS) return 1;
+    for (unsigned k = 0; k < total; ++k) {
+        const uint8_t *pair = b + 4 + k * 2;
+        if (!pair[0] || !pair[1] || pair[1] >= PE_STACK_MAX) return 1;
+    }
+    return 0;
+}
+static int pe_counts_any(const void *data) {
+    const uint8_t *b = data;
+    return b[0] || b[1] || b[2];
+}
+
+static const PeSaveRecord s_record;
+
+/* The host has put back the record and the section. A section wins: a record beside one is stale. */
 static int pe_on_load(void *ctx, void *user) {
+    PeSaveRecordStatus old;
+    int have_old;
     (void)ctx; (void)user;
+    if (pe_counts_bad(&s_rec)) {
+        pe_mod_log(MOD_ID, "save: the companion's stack counts didn't pass their checks, reset");
+        memset(&s_rec, 0, sizeof s_rec);
+    }
+    s_old_live = 0;
+    have_old = !pe_save_query_record(s_record.name, &old) && (old.flags & PE_SAVE_RECORD_LIVE);
+    if (have_old) {
+        const int move = pe_counts_any(s_old_rec) && !pe_counts_any(&s_rec);
+        /* First: the companion's link only fits once this record's room is free. */
+        pe_save_retire_record(&s_record);
+        if (move) {
+            memcpy(&s_rec, s_old_rec, sizeof s_rec);
+            if (pe_extension_enable(&s_section) == PE_REG_OK) {
+                pe_mod_log(MOD_ID, "save: stack counts moved from the save tail to the companion");
+            } else if (pe_save_enable_record(&s_record) == PE_SAVE_EMISSION_OK) {
+                s_old_live = 1;
+                pe_mod_log(MOD_ID, "save: companion refused, stack counts stay in the save tail");
+            } else {
+                pe_mod_log(MOD_ID, "save: stack counts can't be saved in the companion or the tail");
+                pe_toast("Stacked items can't be saved with this save: its extra copies may be lost");
+            }
+        }
+    }
     pe_unpack();
     pe_merge_all();
     return 0;
 }
 static int pe_on_scene(void *ctx, void *user) {
     (void)ctx; (void)user;
-    if (pe_save_loaded()) pe_pack();   /* crash reports copy the record as it stands */
+    if (pe_save_loaded()) pe_publish();   /* crash reports copy the section as it stands */
     return 0;
 }
 static int pe_on_new_game(void *ctx, void *user) {
     (void)ctx; (void)user;
     memset(s_extra, 0, sizeof s_extra);
+    s_old_live = 0;
     return 0;
 }
 
-static int pe_rec_check(void *data) {
-    unsigned total = 0;
-    (void)data;
-    for (int l = 0; l < PE_LISTS; ++l) total += s_rec.count[l];
-    if (total > PE_STACK_PAIRS) return 1;
-    for (unsigned k = 0; k < total; ++k)
-        if (!s_rec.pair[k][0] || !s_rec.pair[k][1] || s_rec.pair[k][1] >= PE_STACK_MAX) return 1;
-    return 0;
-}
-/* The mod is off this session: the copies only the record holds go back as plain items. */
+static int pe_rec_check(void *data) { return pe_counts_bad(data); }
+/* The mod is off this session: the copies only the old record holds go back as plain items. */
 static void pe_rec_release(void *data) {
     int left;
     (void)data;
+    memcpy(&s_rec, s_old_rec, sizeof s_rec);
     pe_unpack();
     left = pe_unstack(s_extra);
     pe_pack();
+    memcpy(s_old_rec, &s_rec, sizeof s_rec);
     pe_mod_log(MOD_ID, "mod off: stacked copies returned to their lists, %d left (lists full)", left);
     if (left) pe_toast("Some stacked items didn't fit: turn Stacked items back on to keep them");
 }
 static const PeSaveRecord s_record = {
-    "pe_stacks.counts", 1, &s_rec, sizeof s_rec, pe_rec_check, NULL, NULL, pe_rec_release,
+    "pe_stacks.counts", 1, s_old_rec, sizeof s_old_rec, pe_rec_check, NULL, NULL, pe_rec_release,
 };
 
 /* ---- rows ---- */
@@ -434,7 +494,7 @@ static void pe_stacks_total(char *out, unsigned size) {
 }
 
 static void pe_stacks_fill(void) {
-    if (!pe_on()) return;
+    if (!pe_on() || !pe_store_ready()) return;
     for (int id = 1; id < 256; ++id)
         if (pe_stackable(id) && pe_find(0, id) >= 0) s_extra[0][id] = PE_STACK_MAX - 1;
     pe_toast("Every stack in the bag is now 99");
@@ -453,7 +513,8 @@ static int stacks_init(void) {
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_load, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_SCENE_START, pe_on_scene, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_on_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);
-    pe_save_register(&s_record);
+    pe_save_register_conditional(&s_record);
+    pe_extension_register(&s_section);
 
     pe_menu_register_toggle(PE_PAGE_INVENTORY, "Stacked items",
                             "Up to 99 of a consumable per bag or storage slot. Off unstacks as space allows.",

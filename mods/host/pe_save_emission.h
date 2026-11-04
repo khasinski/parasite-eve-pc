@@ -28,5 +28,7 @@ enum {
  * returning to a legacy preset. New Game or loading an absent record clears the sticky bit.
  * Newer/invalid records and uncertain/no loaded source cannot be opted into silently. */
 int pe_save_enable_record(const PeSaveRecord *record);
+/* Stops emitting a conditional record and drops its carried copy: the owner moved the data elsewhere. */
+int pe_save_retire_record(const PeSaveRecord *record);
 
 #endif

@@ -70,7 +70,7 @@ stack), ITEM_REMOVE (use / give / discard takes one copy), ITEM_COUNT and INV_CM
 (story checks see every copy), STORAGE_TRANSFER (a bag stack goes into storage whole; storage
 gives one copy), INVENTORY_REBUILD (duplicates fold into one slot), SLOT_DRAWN (the count in the
 rounds column). Only base items of kinds 10 and 12..15 stack; Junk stays out while pe_economy's
-Junk economy is on. Saved as the `pe_stacks.counts` record (204 bytes, up to 100 stacks). With the
+Junk economy is on. Saved in the companion file as the `pe_stacks/counts` section (204 bytes, up to 100 stacks); an older `pe_stacks.counts` record moves there on load. With the
 mod or the option off, extra copies go back into free slots as plain items.
 
 ## Warp (pe_warp)

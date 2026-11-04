@@ -47,15 +47,20 @@ static struct {
     char target[4096], temporary[4160], previous[4096];
 } card_writes[2];
 
-static void MemCard_CancelWrite(MemCardPortState *state) {
-#ifdef PE_MODS
-    pe_mod_save_cancelled();
-#endif
+/* The native file's half of a write. The save itself goes on: its staged companion stays. */
+static void MemCard_ResetWrite(MemCardPortState *state) {
     unsigned port = (unsigned)(state - g_MemCardPortStates);
     if (port >= 2) return;
     if (card_writes[port].io) SDL_CloseIO(card_writes[port].io);
     if (card_writes[port].owns_temporary) SDL_RemovePath(card_writes[port].temporary);
     memset(&card_writes[port], 0, sizeof(card_writes[port]));
+}
+
+static void MemCard_CancelWrite(MemCardPortState *state) {
+#ifdef PE_MODS
+    pe_mod_save_cancelled();
+#endif
+    MemCard_ResetWrite(state);
 }
 
 static int MemCard_BeginWrite(MemCardPortState *state) {
@@ -1117,7 +1122,7 @@ void MemCard_UpdateSaveState(int port) {
             MemCard_AbortActiveOperation(state);
             break;
         }
-        MemCard_CancelWrite(state);
+        MemCard_ResetWrite(state);   /* overwriting a slot: the save goes on, keep its companion */
         MemCard_FormatSlotFileName(state, state->selectedSlot);
         Psyz_AdjustPath(card_writes[port].previous, g_MemCardFilePath,
                         sizeof(card_writes[port].previous));

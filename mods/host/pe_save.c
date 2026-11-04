@@ -248,6 +248,24 @@ int pe_save_enable_record(const PeSaveRecord *record) {
     return PE_SAVE_EMISSION_OK;
 }
 
+int pe_save_retire_record(const PeSaveRecord *record) {
+    int i, j;
+    if (!record) return PE_SAVE_EMISSION_BAD_ARGUMENT;
+    if (s_write_dispatch || s_lifecycle_dispatch) return PE_SAVE_EMISSION_BUSY;
+    for (i = 0; i < s_reg_count && s_reg[i].record != record; ++i) {}
+    if (i == s_reg_count) return PE_SAVE_EMISSION_BAD_ARGUMENT;
+    if (!s_reg[i].conditional) return PE_SAVE_EMISSION_NOT_CONDITIONAL;
+    if (!pe_mod_active(s_reg[i].mod_id)) return PE_SAVE_EMISSION_INACTIVE;
+    s_reg[i].emitting = 0;
+    for (j = 0; j < s_car_count; ++j)
+        if (s_car[j].id == s_reg[i].id) {
+            memmove(&s_car[j], &s_car[j + 1], sizeof(s_car[0]) * (size_t)(s_car_count - j - 1));
+            --s_car_count;
+            break;
+        }
+    return PE_SAVE_EMISSION_OK;
+}
+
 static int pe_admit_write(void) {
     PeSavePlan plan;
     /* This host cannot rewrite a foreign format: it preserves the complete tail verbatim,
