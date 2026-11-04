@@ -16,6 +16,10 @@ typedef struct {
 int pe_extension_register(const PeExtensionSection *section);
 PeRegResult pe_extension_enable(const PeExtensionSection *section);
 int pe_extension_available(const PeExtensionSection *section);
+/* Snapshot into caller memory only; patch replaces an existing v1 section in the copy.
+ * Neutral filename/generation are rebound by Restore. No callbacks, allocation, I/O or live changes. */
+int pe_extension_snapshot(unsigned char *out,unsigned capacity,unsigned *size,unsigned char link[20],
+    const char *patch_key,const void *patch,unsigned patch_size);
 /* Core initialization and native save boundary (not provider callbacks). */
 void pe_extension_install(void);
 void pe_extension_new_game(void);

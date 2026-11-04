@@ -14,4 +14,5 @@ typedef struct {
 } PeInventoryGrantPlan;
 PeRegResult pe_inventory_prepare_grant(const char *, PeInventoryGrantPlan *);
 uint32_t pe_inventory_commit_grant(const PeInventoryGrantPlan *);
+int pe_inventory_snapshot_ledger(unsigned char *out,unsigned size,const unsigned char *native,unsigned native_size);
 #endif

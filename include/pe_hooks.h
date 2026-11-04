@@ -192,6 +192,14 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread);
  * 8 KB card block) as a real save would, when a room starts. -1 while mod code
  * is running; the block stays zeroed. */
 int pe_mod_snapshot_save_tail(unsigned char *block);
+#define PE_RECOVERY_NATIVE_SIZE (0x12E4u+0x8A8u)
+#define PE_RECOVERY_COMPANION_MAX 8192u
+typedef struct PeModRecoverySnapshot {
+    unsigned version, companion_size, checksum;
+    unsigned char card[8192], companion[PE_RECOVERY_COMPANION_MAX];
+} PeModRecoverySnapshot;
+/* Coherent room recovery copy; game-thread only, with no mod callback/allocation/file I/O. */
+int pe_mod_snapshot_recovery(const unsigned char *native,unsigned native_size,PeModRecoverySnapshot *out);
 /* Native card publication boundary: companion data is staged before the native checksum. */
 void pe_mod_bind_native(void);
 int pe_mod_save_path(const char *mapped_path);

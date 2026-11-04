@@ -715,3 +715,23 @@ int pe_save_peek(const uint8_t *block,const char *name,unsigned *version,void *o
 }
 
 void pe_save_abort_write(void){s_write_dispatch=0;}
+
+#include "pe_save_recovery.h"
+
+int pe_save_recovery_patch(uint8_t*block,const char*name,unsigned version,const void*bytes,unsigned size){
+    uint8_t lin[PE_SAVE_ROOM];PeSaveEntry entries[PE_SAVE_MAX_ENTRIES];PeSaveInfo info;
+    if(!block||!name||!bytes)return -1;
+    const uint8_t*tail=block+PE_SAVE_TAIL_OFFSET;
+    int n=pe_parse(tail,lin,entries,&info);
+    if(n<0||info.damaged||memcmp(lin,PE_SAVE_MAGIC,4)||lin[4]!=1||lin[5])return -1;
+    uint32_t id=pe_fnv(name);
+    for(int i=0;i<n;++i)if(entries[i].id==id){
+        if(entries[i].version!=version||entries[i].size!=size)return -1;
+        unsigned at=(unsigned)(entries[i].bytes-lin)-PE_SAVE_RECORD_HEADER_SIZE;
+        memcpy(lin+at+PE_SAVE_RECORD_HEADER_SIZE,bytes,size);
+        pe_put32(lin+at+8,pe_record_crc(lin+at,lin+at+PE_SAVE_RECORD_HEADER_SIZE,size));
+        pe_put32(lin+8,0);pe_put32(lin+8,pe_crc32(lin,pe_get16(lin+6)));
+        uint8_t result[PE_SAVE_TAIL_SIZE];memcpy(result,tail,sizeof result);
+        pe_scatter(lin,result);memcpy(block+PE_SAVE_TAIL_OFFSET,result,sizeof result);return 0;
+    }return -1;
+}

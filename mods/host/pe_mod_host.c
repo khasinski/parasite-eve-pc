@@ -18,6 +18,7 @@
 #include "pe_registry.h"
 #include "pe_save.h"
 #include "pe_save_dispatch.h"
+#include "pe_recovery_snapshot.h"
 #include "pe_extension_store.h"
 #include "pe_inventory_api.h"
 #include "pe_shop_api.h"
@@ -531,4 +532,9 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread) {
     PE_OUT("Mods' save data (the room snapshot): ");
     pe_save_crash_describe(out, size, &n);
 #undef PE_OUT
+}
+
+int pe_mod_snapshot_recovery(const unsigned char*native,unsigned size,PeModRecoverySnapshot*out){
+    if(s_call_depth||s_dispatch_depth||!s_started||pe_reg_callback_active())return -1;
+    return pe_recovery_snapshot_capture(native,size,out);
 }

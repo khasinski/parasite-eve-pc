@@ -1963,9 +1963,10 @@ static void Host_DescribeCrash(char *out, size_t size) {
 /* Crash report room snapshot: what a save made at the start of the current
  * room would hold, file offsets 0x100 up to the checksum at 0x1C8C (Aya,
  * items, key items, equipment, storage, then script variables, day and Aya's
- * battle record), and with mods the save's free tail from 0x1C90 (each mod's
- * per-save data, filled by the mods' save write handlers into a blank card
- * block; its layout depends on the mods loaded). Taken whole each time a room
+ * battle record), and with mods the save's free tail from 0x1C90 and the
+ * companion file's sections (each mod's per-save data, packed from memory with
+ * no mod code running, one checksum over all of it; PE Restore publishes the
+ * companion with the rebuilt save). Taken whole each time a room
  * starts outside a battle, on the game thread, so a save can be rebuilt from
  * any report and the crash handler only copies it out. Two copies: a crash
  * while one is being taken reports the other, never a part of one.
@@ -1976,8 +1977,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
 typedef struct HostRoomSnapshot {
     u8 data[0x12E4 + 0x8A8];
 #ifdef PE_MODS
-    u8 card[0x2000];
-    int have_mod_tail;
+    PeModRecoverySnapshot recovery;
 #endif
     int room, story_day, links_fixed;
     u32 vblank;
@@ -1985,6 +1985,9 @@ typedef struct HostRoomSnapshot {
 
 static HostRoomSnapshot host_room_snapshots[2];
 static SDL_AtomicInt host_room_snapshot = {-1}; /* the complete copy, -1: none yet */
+#ifdef PE_MODS
+static unsigned host_room_snapshots_skipped; /* rooms since then whose mods' data couldn't be taken */
+#endif
 
 static void Host_TakeRoomSnapshot(void) {
     static SaveRuntimeState header;
@@ -2012,8 +2015,21 @@ static void Host_TakeRoomSnapshot(void) {
     g_AyaBattleState.attributes = attributes;
     if (!have_tail) return;
 #ifdef PE_MODS
-    memset(snapshot->card, 0, sizeof(snapshot->card));
-    snapshot->have_mod_tail = pe_mod_snapshot_save_tail(snapshot->card) == 0;
+    /* Never publish new native bytes with absent or stale companion state: while a complete
+     * snapshot exists, it stays when this room's mods' data can't be taken (mod code running, a
+     * purchase in flight, mods' data over capacity). With none to keep, the native bytes are still
+     * published, marked as having no mods' data (version 0), so a report can always rebuild the game's own save. */
+    if (pe_mod_snapshot_recovery(snapshot->data, sizeof(snapshot->data), &snapshot->recovery) < 0) {
+        const int current = SDL_GetAtomicInt(&host_room_snapshot);
+        if (current >= 0 && host_room_snapshots[current].recovery.version) {
+            ++host_room_snapshots_skipped;
+            return;
+        }
+        snapshot->recovery.version = 0;
+        snapshot->recovery.companion_size = 0;
+    } else {
+        host_room_snapshots_skipped = 0;
+    }
 #endif
     snapshot->room = Host_CrashRoom();
     snapshot->story_day = g_GameState.current_story_day;
@@ -2051,11 +2067,25 @@ static void Host_DescribeSaveData(char *out, size_t size) {
     Host_CrashHex(out, size, &used, snapshot->data, sizeof(snapshot->data), 0x100u);
 #ifdef PE_MODS
     Host_CrashAppend(out, size, &used, "\r\n== Save tail (save file bytes from 0x1C90) ==\r\n");
-    if (snapshot->have_mod_tail) {
-        Host_CrashHex(out, size, &used, snapshot->card + 0x1C90, sizeof(snapshot->card) - 0x1C90, 0x1C90u);
-    } else {
+    if (!snapshot->recovery.version) {
         Host_CrashAppend(out, size, &used,
-                         "Not available: mod code was running when the room started, so the mods' save data was not taken.\r\n");
+                         "Not available: the mods' save data could not be taken when the room started.\r\n");
+        return;
+    }
+    Host_CrashHex(out, size, &used, snapshot->recovery.card + 0x1C90, 0x2000 - 0x1C90, 0x1C90u);
+    Host_CrashAppend(out, size, &used,
+                     "\r\n== Mod recovery snapshot v1 ==\r\n"
+                     "Native bytes: %u\r\nTail bytes: %u\r\nCompanion bytes: %u\r\nSnapshot CRC32: %08X\r\n",
+                     (unsigned)sizeof(snapshot->data), 0x2000u - 0x1C90u, snapshot->recovery.companion_size,
+                     snapshot->recovery.checksum);
+    if (host_room_snapshots_skipped) {
+        Host_CrashAppend(out, size, &used,
+                         "Note: this is the last complete snapshot; the mods' data of %u newer room(s) could not be taken.\r\n",
+                         host_room_snapshots_skipped);
+    }
+    if (snapshot->recovery.companion_size) {
+        Host_CrashAppend(out, size, &used, "\r\n== Mod companion (PEEX v1, snapshot bytes from 0x0000) ==\r\n");
+        Host_CrashHex(out, size, &used, snapshot->recovery.companion, snapshot->recovery.companion_size, 0);
     }
 #endif
 }

@@ -414,3 +414,15 @@ int pe_mod_tool_guard(unsigned selection) {
 
 const PeEquipmentGuardApi g_pe_equipment_guard_api = {sizeof(PeEquipmentGuardApi),
                                                       pe_mod_equipment_record_guard};
+
+int pe_inventory_snapshot_ledger(unsigned char*out,unsigned size,const unsigned char*native,unsigned native_size){
+    const unsigned at=offsetof(SaveRuntimeState,player.runtime.inventory);
+    if(!out||size!=sizeof s_ledger||!native||native_size<at+sizeof(InventoryRuntime)||!valid())return -1;
+    memcpy(out,s_ledger,sizeof s_ledger);if(!out[0])return 0;
+    uint32_t h=2166136261u;
+    const unsigned pool=at+offsetof(InventoryRuntime,equipment);
+    for(unsigned i=0;i<128;++i){ItemDataRecord record;memcpy(&record,native+pool+i*sizeof record,sizeof record);
+        h=(h^record.iconId)*16777619u;h=(h^fingerprint(&record))*16777619u;
+    }
+    wr(out+8,h);return 0;
+}

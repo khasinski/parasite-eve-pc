@@ -14,6 +14,7 @@ set(pe_host_sources
     host/pe_equip_sync.c    # edited equipment reaches the next battle
     host/pe_save_query.c
     host/pe_save.c          # mods' per-save data: records the host saves, loads and carries
+    host/pe_recovery_snapshot.c
     host/pe_legacy_guard.c
     host/pe_api_native.c
     host/pe_api_native_game.c
@@ -72,7 +73,7 @@ if(BUILD_TESTING)
 
     add_executable(test-mod-crash-tail ${PROJECT_SOURCE_DIR}/tests/pe_mod_crash_tail_test.c host/pe_mod_host.c host/pe_save.c host/pe_save_query.c host/pe_registry.c
         host/pe_legacy_guard.c host/pe_api_native.c host/pe_game_facts.c host/pe_content_api.c host/pe_economy_policy.c
-        host/pe_extension_store.c host/pe_inventory_api.c host/pe_shop_api.c host/pe_profile_transactions.c)
+        host/pe_recovery_snapshot.c host/pe_extension_store.c host/pe_inventory_api.c host/pe_shop_api.c host/pe_profile_transactions.c)
     target_include_directories(test-mod-crash-tail PRIVATE ${PROJECT_SOURCE_DIR}/include host
         "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
     target_compile_definitions(test-mod-crash-tail PRIVATE __psyz PE_MODS=1)

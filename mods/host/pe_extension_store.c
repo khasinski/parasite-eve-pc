@@ -212,6 +212,32 @@ int pe_extension_set_save_path(const char *path) {
     strcpy(s_path, path);
     return 0;
 }
+static unsigned encode(unsigned char*out,const Entry*entries,const unsigned char*const*bytes,int n,
+                       uint32_t generation,const char*name,uint32_t previous){
+    unsigned total = HEADER + n * DIRECTORY;
+    memset(out, 0, PE_EXT_FILE_LIMIT);
+    memcpy(out, "PEEX", 4);
+    wr16(out + 4, 1);
+    wr16(out + 6, HEADER);
+    wr32(out + 8, generation);
+    wr16(out + 16, n);
+    snprintf((char *)out + 20, 64, "%s", name);
+    for (int i = 0; i < n; ++i) {
+        unsigned char *p = out + HEADER + i * DIRECTORY;
+        memcpy(p, entries[i].key, 48);
+        wr16(p + 48, entries[i].version);
+        wr16(p + 50, entries[i].min_reader);
+        wr32(p + 52, total);
+        wr32(p + 56, entries[i].size);
+        wr32(p + 60, crc(bytes[i], entries[i].size));
+        memcpy(out + total, bytes[i], entries[i].size);
+        total += entries[i].size;
+    }
+    wr32(out + 12, total);
+    wr32(out+84,previous);
+    wr32(out + 88, crc(out, total));
+    return total;
+}
 int pe_extension_stage(void) {
     Entry entries[PE_EXT_SECTION_LIMIT];
     const unsigned char *bytes[PE_EXT_SECTION_LIMIT];
@@ -237,28 +263,8 @@ int pe_extension_stage(void) {
         break;
     }
     if (!gen || !free_generation) return -1;
-    unsigned total = HEADER + n * DIRECTORY;
-    memset(s_build, 0, sizeof s_build);
-    memcpy(s_build, "PEEX", 4);
-    wr16(s_build + 4, 1);
-    wr16(s_build + 6, HEADER);
-    wr32(s_build + 8, gen);
-    wr16(s_build + 16, n);
-    snprintf((char *)s_build + 20, 64, "%s", name);
-    for (int i = 0; i < n; ++i) {
-        unsigned char *p = s_build + HEADER + i * DIRECTORY;
-        memcpy(p, entries[i].key, 48);
-        wr16(p + 48, entries[i].version);
-        wr16(p + 50, entries[i].min_reader);
-        wr32(p + 52, total);
-        wr32(p + 56, entries[i].size);
-        wr32(p + 60, crc(bytes[i], entries[i].size));
-        memcpy(s_build + total, bytes[i], entries[i].size);
-        total += entries[i].size;
-    }
-    wr32(s_build + 12, total);
-    if (!strcmp(s_committed_path, s_path)) wr32(s_build + 84, s_generation);
-    wr32(s_build + 88, crc(s_build, total));
+    unsigned total=encode(s_build,entries,bytes,n,gen,name,
+        !strcmp(s_committed_path,s_path)?s_generation:0);
     if (snprintf(temp, sizeof temp, "%s.tmp.%lu", file, pe_profile_process()) >= (int)sizeof temp) return -1;
     f = fopen(temp, "wbx");
     if (!f) return -1;
@@ -408,4 +414,19 @@ int pe_mod_save_publish(const char *temporary, const char *target) {
     int ok = pe_profile_flush(f);
     if (fclose(f)) ok = 0;
     return ok && pe_profile_replace(temporary, target);
+}
+
+int pe_extension_snapshot(unsigned char*out,unsigned capacity,unsigned*size,unsigned char link[20],
+                          const char*patch_key,const void*patch,unsigned patch_size){
+    if(pe_reg_access()!=PE_REG_OK||!s_source||s_staged||!out||capacity<PE_EXT_FILE_LIMIT||!size||!link)return -1;
+    Entry entries[PE_EXT_SECTION_LIMIT];const unsigned char*bytes[PE_EXT_SECTION_LIMIT];
+    int n=plan(entries,bytes,-1);if(n<0)return -1;
+    if(!n){*size=0;memset(link,0,20);return 0;}
+    for(int i=0;i<n;++i)if(patch_key&&!strcmp(entries[i].key,patch_key)){
+        if(!patch||entries[i].version!=1||entries[i].min_reader>1||entries[i].size!=patch_size)return -1;
+        bytes[i]=patch;
+    }
+    unsigned total=encode(out,entries,bytes,n,1,"pe-crash",0);
+    memset(link,0,20);link[0]=1;link[1]=1;wr32(link+4,1);wr32(link+8,total);wr32(link+12,crc(out,total));link[16]=n;
+    *size=total;return 0;
 }
