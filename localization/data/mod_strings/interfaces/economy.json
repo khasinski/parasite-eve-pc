@@ -31,6 +31,16 @@
     ]
   },
   {
+    "key": "mod/ui/02f383a6",
+    "text": "Bundle Redemption",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bundle Redemption",
+    "contexts": [
+      "mods/host/pe_pages.h"
+    ]
+  },
+  {
     "key": "mod/ui/04d308c3",
     "text": "COUNTER",
     "max_glyphs": 7,
@@ -72,6 +82,26 @@
     "format": "Bought %s: %u Junk"
   },
   {
+    "key": "mod/ui/0838836e",
+    "text": "Bonus Drops",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bonus Drops",
+    "contexts": [
+      "mods/host/pe_pages.h"
+    ]
+  },
+  {
+    "key": "mod/ui/088f1bf8",
+    "text": "load a game",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "load a game",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/09012620",
     "text": "STL DN",
     "max_glyphs": 7,
@@ -90,6 +120,17 @@
     "contexts": [
       "mods/pe_economy/pe_catalog_menu.c"
     ]
+  },
+  {
+    "key": "mod/ui/0a2537f0",
+    "text": "%u for %u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%u for %u Junk",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ],
+    "format": "%u for %u Junk"
   },
   {
     "key": "mod/ui/0b85883c",
@@ -122,6 +163,16 @@
     ]
   },
   {
+    "key": "mod/ui/0f774ce5",
+    "text": "Pays more when Aya took fewer than 4 hits.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Pays more when Aya took fewer than 4 hits.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/0fd2f0b1",
     "text": "ROF 10",
     "max_glyphs": 128,
@@ -129,6 +180,26 @@
     "source": "ROF 10",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1052918a",
+    "text": "Rares",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rares",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/10da5605",
+    "text": "Shop prices",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Shop prices",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -183,6 +254,16 @@
     ]
   },
   {
+    "key": "mod/ui/151b089f",
+    "text": "Redeem Duper Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Redeem Duper Junk",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/1540df49",
     "text": "Full Cure",
     "max_glyphs": 128,
@@ -203,6 +284,16 @@
     ]
   },
   {
+    "key": "mod/ui/16ce7a69",
+    "text": "The preset key is malformed.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "The preset key is malformed.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
     "key": "mod/ui/18a47e78",
     "text": "Empty the slot. The effect stays unlocked",
     "max_glyphs": 128,
@@ -210,6 +301,46 @@
     "source": "Empty the slot. The effect stays unlocked",
     "contexts": [
       "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1978528f",
+    "text": "What this save uses now. It is saved with the game.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "What this save uses now. It is saved with the game.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/198451a8",
+    "text": "Enhanced - locked",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Enhanced (locked)",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/19afb168",
+    "text": "Waits for Enhanced",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Waits for Enhanced",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/1a60139b",
+    "text": "This save's companion can't hold the settings. Nothing changed.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "This save's companion can't hold the settings. Nothing changed.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
     ]
   },
   {
@@ -222,6 +353,16 @@
       "mods/pe_economy/pe_catalog.c"
     ],
     "format": "Rebuild markup %"
+  },
+  {
+    "key": "mod/ui/1cf1cb80",
+    "text": "Browse freely. Nothing changes until Apply.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Browse freely. Nothing changes until Apply.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
   },
   {
     "key": "mod/ui/1da4cfad",
@@ -274,6 +415,16 @@
     "source": "Can't install now",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/204bb4ab",
+    "text": "Custom playstyle: extra Junk for won battles.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Custom playstyle: extra Junk for won battles.",
+    "contexts": [
+      "mods/host/pe_pages.c"
     ]
   },
   {
@@ -368,6 +519,16 @@
     ]
   },
   {
+    "key": "mod/ui/260fe221",
+    "text": "Junk on top of normal drops for won battles.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk on top of normal drops for won battles.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/261b61d7",
     "text": "Salvaged %s: +%u Junk, %d new effect s ",
     "max_glyphs": 128,
@@ -379,6 +540,16 @@
     "format": "Salvaged %s: +%u Junk, %d new effect(s)"
   },
   {
+    "key": "mod/ui/279fda4f",
+    "text": "Base price must be 75, 100 or 125.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Base price must be 75, 100 or 125.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
     "key": "mod/ui/299556f8",
     "text": "Nothing to dismantle",
     "max_glyphs": 128,
@@ -386,6 +557,16 @@
     "source": "Nothing to dismantle",
     "contexts": [
       "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2a0596ee",
+    "text": "Apply would",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Apply would",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -400,6 +581,16 @@
     "format": "%u Junk"
   },
   {
+    "key": "mod/ui/2c7fb7de",
+    "text": "Progress kept",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Progress kept",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/2c8f7a75",
     "text": "Rocket",
     "max_glyphs": 128,
@@ -410,6 +601,16 @@
     ]
   },
   {
+    "key": "mod/ui/2d1d8a94",
+    "text": "Kept while redemption is off.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Kept while redemption is off.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/304ff7fb",
     "text": "None",
     "max_glyphs": 128,
@@ -417,6 +618,7 @@
     "source": "None",
     "contexts": [
       "mods/pe_economy/pe_catalog_menu.c",
+      "mods/pe_economy/pe_econ_menu.c",
       "mods/pe_economy/pe_requisition.c"
     ]
   },
@@ -428,6 +630,16 @@
     "source": "Tools bought",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3077d0f3",
+    "text": "Applied. Battle rewards need the rewards mod, which is off.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Applied. Battle rewards need the rewards mod, which is off.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -511,6 +723,46 @@
     ]
   },
   {
+    "key": "mod/ui/34c35ffa",
+    "text": "Treasure Hunter",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Treasure Hunter",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
+    "key": "mod/ui/36b63cdd",
+    "text": "A rare drop that didn't fit waits for Enhanced. It isn't lost or paid here.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "A rare drop that didn't fit waits for Enhanced. It isn't lost or paid here.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/36dfcf13",
+    "text": "Unknown setting switched on.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Unknown setting switched on.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
+    "key": "mod/ui/37ebdef0",
+    "text": "Bonus rare items",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bonus rare items",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/37f45f7e",
     "text": "Bag mods can't be replaced here",
     "max_glyphs": 128,
@@ -560,6 +812,26 @@
     "source": "SLOW AT",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3b558402",
+    "text": "Steady Income",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Steady Income",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
+    "key": "mod/ui/3cb8fff3",
+    "text": "Turn Junk economy on first",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Turn Junk economy on first",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -649,6 +921,16 @@
     ]
   },
   {
+    "key": "mod/ui/3ff9f845",
+    "text": "A chance is above 100%.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "A chance is above 100%.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
     "key": "mod/ui/4037b5c2",
     "text": "CRIT UP",
     "max_glyphs": 7,
@@ -676,6 +958,16 @@
     "source": "ALREADY THERE",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/414350e3",
+    "text": "Unknown Junk routing.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Unknown Junk routing.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
     ]
   },
   {
@@ -741,6 +1033,16 @@
     ]
   },
   {
+    "key": "mod/ui/48ebc1ec",
+    "text": "Redemption needs a value above 0.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Redemption needs a value above 0.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
     "key": "mod/ui/491d3e6e",
     "text": "Bag full",
     "max_glyphs": 128,
@@ -766,6 +1068,16 @@
     "format": "%s: removed %s (stays unlocked)"
   },
   {
+    "key": "mod/ui/495ee5d2",
+    "text": "Advanced Legacy",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Advanced Legacy",
+    "contexts": [
+      "mods/host/pe_pages.h"
+    ]
+  },
+  {
     "key": "mod/ui/4a4fe538",
     "text": "Of each effect's individual price.",
     "max_glyphs": 128,
@@ -773,6 +1085,16 @@
     "source": "Of each effect's individual price.",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4a95ad85",
+    "text": "Pays when stealing from an enemy with nothing to steal.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Pays when stealing from an enemy with nothing to steal.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -786,6 +1108,26 @@
     ]
   },
   {
+    "key": "mod/ui/4bf7e8c3",
+    "text": "Super Junk value",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Super Junk value",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4e3c09e5",
+    "text": "Few-hits bonus",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Few-hits bonus",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/4f03e7e5",
     "text": "Bargain mod",
     "max_glyphs": 128,
@@ -793,6 +1135,16 @@
     "source": "Bargain mod",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4f6bd4a0",
+    "text": "These settings need a reward algorithm this version doesn't have.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "These settings need a reward algorithm this version doesn't have.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
     ]
   },
   {
@@ -829,6 +1181,16 @@
     ]
   },
   {
+    "key": "mod/ui/5345b61a",
+    "text": "Junk Storage",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk Storage",
+    "contexts": [
+      "mods/host/pe_pages.h"
+    ]
+  },
+  {
     "key": "mod/ui/53bfefde",
     "text": "  locked ",
     "max_glyphs": 128,
@@ -856,6 +1218,16 @@
     "source": "Press twice. Rechecks goods, price, balance and bag space.",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/54dae6e1",
+    "text": "Custom playstyle: turning bundles into Junk.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Custom playstyle: turning bundles into Junk.",
+    "contexts": [
+      "mods/host/pe_pages.c"
     ]
   },
   {
@@ -940,6 +1312,16 @@
     ]
   },
   {
+    "key": "mod/ui/59622d3d",
+    "text": "Enhanced - damaged",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Enhanced (damaged)",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/59e9e3e8",
     "text": "ACID",
     "max_glyphs": 128,
@@ -1020,6 +1402,16 @@
     ]
   },
   {
+    "key": "mod/ui/5e299018",
+    "text": "Duper Junk chance %",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Duper Junk chance %",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/5f44420d",
     "text": "Bullets x30",
     "max_glyphs": 128,
@@ -1037,6 +1429,16 @@
     "source": " +TOOL",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/604e3f94",
+    "text": "Won battles until one is certain. 0: never guaranteed.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Won battles until one is certain. 0: never guaranteed.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -1071,6 +1473,16 @@
     ]
   },
   {
+    "key": "mod/ui/62af0814",
+    "text": "Enhanced's held rare",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Enhanced's held rare",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/65309179",
     "text": "Cure-D",
     "max_glyphs": 128,
@@ -1088,6 +1500,16 @@
     "source": "Cure-C",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/672d19fb",
+    "text": "Back to Enhanced",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Back to Enhanced",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -1162,6 +1584,16 @@
     ]
   },
   {
+    "key": "mod/ui/6a77fe85",
+    "text": "Bundles in the bag and trunk, Wayne's too, become Junk. Off keeps the item.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bundles in the bag and trunk, Wayne's too, become Junk. Off keeps the item.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/6aae0f14",
     "text": "Locked: dismantle gear with this effect",
     "max_glyphs": 128,
@@ -1172,6 +1604,16 @@
     ]
   },
   {
+    "key": "mod/ui/6b38bfe2",
+    "text": "Bag keeps Junk as items. Extra income and redemption need Counter.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bag keeps Junk as items. Extra income and redemption need Counter.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/6b581315",
     "text": "NOTHING DISMANTLED YET",
     "max_glyphs": 128,
@@ -1179,6 +1621,16 @@
     "source": "NOTHING DISMANTLED YET",
     "contexts": [
       "mods/pe_economy/pe_dismantle.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6b9b526f",
+    "text": "Paid for an ordinary won battle.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Paid for an ordinary won battle.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -1259,6 +1711,16 @@
     "source": "Rebuild: nothing dismantled",
     "contexts": [
       "mods/pe_economy/pe_wayne_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/7286aaed",
+    "text": "Extra battle Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Extra battle Junk",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -1365,6 +1827,26 @@
     ]
   },
   {
+    "key": "mod/ui/7c5183b1",
+    "text": "Junk per boss",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk per boss",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/7e2d1439",
+    "text": "A reward is on but can never pay. Raise its amount or chance, or switch it off.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "A reward is on but can never pay. Raise its amount or chance, or switch it off.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
     "key": "mod/ui/7e5cec78",
     "text": "Item data unavailable",
     "max_glyphs": 128,
@@ -1382,6 +1864,16 @@
     "source": "Spare Club",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/804e92f6",
+    "text": "Separate from rare items.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Separate from rare items.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -1426,6 +1918,16 @@
     ]
   },
   {
+    "key": "mod/ui/81e9c26a",
+    "text": "Chance per won battle.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Chance per won battle.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/83666550",
     "text": "Unlock all effects",
     "max_glyphs": 128,
@@ -1436,6 +1938,26 @@
     ]
   },
   {
+    "key": "mod/ui/8421d70a",
+    "text": "Normal drops only",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Normal drops only",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/847711aa",
+    "text": "Junk per battle",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk per battle",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/84b84174",
     "text": "Armor",
     "max_glyphs": 128,
@@ -1443,6 +1965,16 @@
     "source": "Armor",
     "contexts": [
       "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/8526704b",
+    "text": "Empty steal amount",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Empty steal amount",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -1497,6 +2029,16 @@
     ]
   },
   {
+    "key": "mod/ui/88be6226",
+    "text": "Not affected",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Not affected",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/88ee5db2",
     "text": "NO ARMOR EQUIPPED",
     "max_glyphs": 128,
@@ -1538,6 +2080,36 @@
     ]
   },
   {
+    "key": "mod/ui/8c0227e8",
+    "text": "Apply playstyle",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Apply playstyle",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/8e56a4f6",
+    "text": "Enhanced's Difficulty. The other playstyles ignore it.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Enhanced's Difficulty. The other playstyles ignore it.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9061401f",
+    "text": "This preset can't be used.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "This preset can't be used.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
     "key": "mod/ui/9111dd70",
     "text": "Mod Permit   have ",
     "max_glyphs": 128,
@@ -1548,6 +2120,16 @@
     ]
   },
   {
+    "key": "mod/ui/91b5d104",
+    "text": "Chance per won battle. With Duper, at most 100%.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Chance per won battle. With Duper, at most 100%.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/91ecf9f1",
     "text": "Junk for a premium effect  +Tool .",
     "max_glyphs": 128,
@@ -1555,6 +2137,16 @@
     "source": "Junk for a premium effect (+Tool).",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/92d8588d",
+    "text": "Already in use",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Already in use",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -1570,6 +2162,16 @@
     ]
   },
   {
+    "key": "mod/ui/975df17f",
+    "text": "Duper Junk drops",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Duper Junk drops",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/979c0c9b",
     "text": "Scavenger",
     "max_glyphs": 128,
@@ -1577,6 +2179,16 @@
     "source": "Scavenger",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/98798de4",
+    "text": "Redeem Super Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Redeem Super Junk",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -1628,6 +2240,56 @@
     "source": "Smoke Grenade",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9c0dca3c",
+    "text": "The performance bonus needs extra income on.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "The performance bonus needs extra income on.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9c40d9f1",
+    "text": "Added rewards",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Added rewards",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9c6622ce",
+    "text": "Battle Income",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Battle Income",
+    "contexts": [
+      "mods/host/pe_pages.h"
+    ]
+  },
+  {
+    "key": "mod/ui/9d8a9f01",
+    "text": "Custom playstyle: where normal Junk goes.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Custom playstyle: where normal Junk goes.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/9eb3ef87",
+    "text": "Choose playstyle",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Choose playstyle",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -1714,6 +2376,16 @@
     ]
   },
   {
+    "key": "mod/ui/a1fd5626",
+    "text": "What Apply does to this save's reward progress.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "What Apply does to this save's reward progress.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/a28a8f5a",
     "text": "Choose goods, then press Buy twice",
     "max_glyphs": 128,
@@ -1735,6 +2407,36 @@
     ]
   },
   {
+    "key": "mod/ui/a3b7709a",
+    "text": "No change",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "No change",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a3c7498c",
+    "text": "Bonus per hit avoided - %",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bonus per hit avoided (%)",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/a4bab764",
+    "text": "Duper Junk value",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Duper Junk value",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/a72358fe",
     "text": "%s - %u Junk",
     "max_glyphs": 128,
@@ -1744,6 +2446,16 @@
       "mods/pe_economy/pe_requisition_menu.c"
     ],
     "format": "%s - %u Junk"
+  },
+  {
+    "key": "mod/ui/a8fa0ed7",
+    "text": "Enhanced",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Enhanced",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
   },
   {
     "key": "mod/ui/a9459680",
@@ -1773,6 +2485,16 @@
     "source": "ATK ALL",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/b2d5062f",
+    "text": "Vanilla drops + inventory QoL",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Vanilla drops + inventory QoL",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
     ]
   },
   {
@@ -1880,6 +2602,36 @@
     ]
   },
   {
+    "key": "mod/ui/bbb3cf04",
+    "text": "Payment chance %",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Payment chance %",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/bd8eddec",
+    "text": "Added to the payment for each hit under 4.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Added to the payment for each hit under 4.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/bda1492f",
+    "text": "Light economy",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Light economy",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
     "key": "mod/ui/be1d333d",
     "text": "Press twice. Its effects go to the Mod Catalog.",
     "max_glyphs": 128,
@@ -1930,6 +2682,16 @@
     ]
   },
   {
+    "key": "mod/ui/c27b9562",
+    "text": "Bundles",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bundles",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/c2954bc2",
     "text": "Back",
     "max_glyphs": 128,
@@ -1941,6 +2703,36 @@
     ]
   },
   {
+    "key": "mod/ui/c3242ac0",
+    "text": "Unknown reward engine.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Unknown reward engine.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c3a1373b",
+    "text": "Battle Junk + rares",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Battle Junk + rares",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c4a85e99",
+    "text": "Super Junk chance %",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Super Junk chance %",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/c58936dc",
     "text": "Can't do that now",
     "max_glyphs": 128,
@@ -1948,6 +2740,16 @@
     "source": "Can't do that now",
     "contexts": [
       "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c5a2a2d7",
+    "text": "Settings can only change in free field.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Settings can only change in free field.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
     ]
   },
   {
@@ -1981,6 +2783,26 @@
     ]
   },
   {
+    "key": "mod/ui/c6f92fd3",
+    "text": "Empty-steal Junk needs an amount above 0.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Empty-steal Junk needs an amount above 0.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c71e7965",
+    "text": "Current playstyle",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Current playstyle",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/c7363220",
     "text": "Hold equipment",
     "max_glyphs": 128,
@@ -2001,6 +2823,16 @@
     ]
   },
   {
+    "key": "mod/ui/c8bc5fd1",
+    "text": "Bag",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bag",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/c935fe1c",
     "text": "Your Junk",
     "max_glyphs": 128,
@@ -2011,6 +2843,16 @@
       "mods/pe_economy/pe_catalog_pages.c",
       "mods/pe_economy/pe_catalog_pages.c",
       "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c97457f0",
+    "text": "Rare chance %",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Rare chance %",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -2031,6 +2873,16 @@
     "source": "Buy",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/cc0f945f",
+    "text": "Bundles redeemed",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bundles redeemed",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -2094,6 +2946,16 @@
     ]
   },
   {
+    "key": "mod/ui/d1b4e718",
+    "text": "Use the playstyle chosen above. Only works in free field.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Use the playstyle chosen above. Only works in free field.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/d222da58",
     "text": "Dismantled %s: +%u Junk  total %u ",
     "max_glyphs": 128,
@@ -2122,6 +2984,36 @@
     "source": "Salvager",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d5284d12",
+    "text": "Chance per won battle of getting that payment.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Chance per won battle of getting that payment.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d5342018",
+    "text": "The rewards this playstyle adds. Normal enemy drops are never removed.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "The rewards this playstyle adds. Normal enemy drops are never removed.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d5806feb",
+    "text": "Economy settings applied. Save your game to keep them.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Economy settings applied. Save your game to keep them.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -2217,6 +3109,16 @@
     ]
   },
   {
+    "key": "mod/ui/d961e1e4",
+    "text": "Super Junk drops",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Super Junk drops",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/dc188fab",
     "text": "Use Requisition in the field with Junk economy on",
     "max_glyphs": 128,
@@ -2237,6 +3139,16 @@
     ]
   },
   {
+    "key": "mod/ui/de10f3e9",
+    "text": "Leaves Enhanced",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Leaves Enhanced",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/de219c90",
     "text": "PE BRDN",
     "max_glyphs": 7,
@@ -2245,6 +3157,47 @@
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
     ]
+  },
+  {
+    "key": "mod/ui/dfd6d304",
+    "text": "Custom playstyle: bonus rare items and bundles.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Custom playstyle: bonus rare items and bundles.",
+    "contexts": [
+      "mods/host/pe_pages.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e0a7a1cf",
+    "text": "Held Super and Duper Junk, in the bag and trunk, that become Junk after Apply.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Held Super and Duper Junk, in the bag and trunk, that become Junk after Apply.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e17b27f3",
+    "text": "Normal Junk goes to",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Normal Junk goes to",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e216d756",
+    "text": "%u%% to %u%%",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%u%% to %u%%",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ],
+    "format": "%u%% to %u%%"
   },
   {
     "key": "mod/ui/e22bcc2c",
@@ -2278,6 +3231,26 @@
     ]
   },
   {
+    "key": "mod/ui/e3662fb4",
+    "text": "Unknown result.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Unknown result.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e3893c73",
+    "text": "Extra rewards. Off doesn't remove normal enemy drops.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Extra rewards. Off doesn't remove normal enemy drops.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/e483a68d",
     "text": "A Tool Kit already covers Tools",
     "max_glyphs": 128,
@@ -2295,6 +3268,16 @@
     "source": "Needs a Tool, or a Tool Kit",
     "contexts": [
       "mods/pe_economy/pe_catalog_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e63f43aa",
+    "text": "Can't apply",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Can't apply",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
@@ -2349,6 +3332,16 @@
     ]
   },
   {
+    "key": "mod/ui/ecbeaaf3",
+    "text": "Chance per won battle. With Super, at most 100%.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Chance per won battle. With Super, at most 100%.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/ee82c0ae",
     "text": "ROF 2",
     "max_glyphs": 128,
@@ -2365,12 +3358,10 @@
     "width": 320,
     "source": "Load a game first",
     "contexts": [
-      "mods/pe_economy/pe_requisition.c",
-      "mods/pe_economy/pe_requisition.c",
       "mods/pe_economy/pe_catalog.c",
       "mods/pe_economy/pe_dismantle.c",
-      "mods/pe_economy/pe_dismantle.c",
-      "mods/pe_economy/pe_dismantle.c"
+      "mods/pe_economy/pe_econ_menu.c",
+      "mods/pe_economy/pe_requisition.c"
     ]
   },
   {
@@ -2414,6 +3405,16 @@
     ]
   },
   {
+    "key": "mod/ui/f0cd28fb",
+    "text": "Junk for each empty steal.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk for each empty steal.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/f182c567",
     "text": "ROF 5",
     "max_glyphs": 128,
@@ -2442,6 +3443,16 @@
     "source": "ROF 7",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f41e1bf1",
+    "text": "The saved Economy settings are damaged.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "The saved Economy settings are damaged.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
     ]
   },
   {
@@ -2496,6 +3507,16 @@
     ]
   },
   {
+    "key": "mod/ui/f66c451b",
+    "text": "Base price level. Bargain still applies on top.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Base price level. Bargain still applies on top.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/f84984d4",
     "text": "armor",
     "max_glyphs": 128,
@@ -2518,6 +3539,36 @@
     ]
   },
   {
+    "key": "mod/ui/f876d13b",
+    "text": "Super and Duper Junk chances add up to more than 100%.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Super and Duper Junk chances add up to more than 100%.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
+    ]
+  },
+  {
+    "key": "mod/ui/fa7a4ed4",
+    "text": "Paid for a won boss battle.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Paid for a won boss battle.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/fc0f33c3",
+    "text": "Counter",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Counter",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/fddd8d73",
     "text": ", Tool",
     "max_glyphs": 128,
@@ -2535,6 +3586,16 @@
     "source": "Press Spare Club again to receive a free Club 1",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/fe00a6d9",
+    "text": "Extra income, empty-steal Junk and redemption need native Junk routed to the counter.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Extra income, empty-steal Junk and redemption need native Junk routed to the counter.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_config.c"
     ]
   },
   {

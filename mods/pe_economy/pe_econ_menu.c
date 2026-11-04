@@ -7,6 +7,7 @@
 
 #include "pe_econ_store.h"
 #include "pe_game.h"
+#include "pe_localize.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
@@ -147,8 +148,18 @@ static void summary_text(char *out, unsigned size) {
     if (!c) snprintf(out, size, "Battle Junk + rares");
     else if (!(c->flags & (PE_ECON_F_INCOME | PE_ECON_F_BONUS_ITEM | PE_ECON_F_SUPER_DROP | PE_ECON_F_DUPER_DROP)))
         snprintf(out, size, "Normal drops only");
-    else snprintf(out, size, "%s%s%s", c->flags & PE_ECON_F_INCOME ? "Junk " : "", c->flags & PE_ECON_F_BONUS_ITEM ? "Rares " : "",
-                  c->flags & (PE_ECON_F_SUPER_DROP | PE_ECON_F_DUPER_DROP) ? "Bundles" : "");
+    else {
+        const char *const words[] = {c->flags & PE_ECON_F_INCOME ? "Junk" : NULL, c->flags & PE_ECON_F_BONUS_ITEM ? "Rares" : NULL,
+                                     c->flags & (PE_ECON_F_SUPER_DROP | PE_ECON_F_DUPER_DROP) ? "Bundles" : NULL};
+        unsigned used = 0;
+        out[0] = 0;
+        for (unsigned i = 0; i < 3; ++i) {
+            if (words[i] && used < size) {
+                const int n = snprintf(out + used, size - used, "%s%s", used ? " " : "", pe_l10n_ui(words[i]));
+                if (n > 0) used += (unsigned)n;
+            }
+        }
+    }
 }
 static void change_text(char *out, unsigned size) {
     PeEconPreview p;
@@ -163,14 +174,14 @@ static void redeem_text(char *out, unsigned size) {
     PeEconPreview p;
     if (!pe_game_loaded()) { snprintf(out, size, "-"); return; }
     preview_now(&p);
-    if (p.redeem_super + p.redeem_duper) snprintf(out, size, "%u for %u Junk", (unsigned)(p.redeem_super + p.redeem_duper), (unsigned)p.redeem_junk);
+    if (p.redeem_super + p.redeem_duper) snprintf(out, size, pe_l10n_ui("%u for %u Junk"), (unsigned)(p.redeem_super + p.redeem_duper), (unsigned)p.redeem_junk);
     else snprintf(out, size, "None");
 }
 static void price_text(char *out, unsigned size) {
     PeEconPreview p;
     if (!pe_game_loaded()) { snprintf(out, size, "-"); return; }
     preview_now(&p);
-    if (p.price_from != p.price_to) snprintf(out, size, "%u%% to %u%%", (unsigned)p.price_from, (unsigned)p.price_to);
+    if (p.price_from != p.price_to) snprintf(out, size, pe_l10n_ui("%u%% to %u%%"), (unsigned)p.price_from, (unsigned)p.price_to);
     else snprintf(out, size, "%u%%", (unsigned)p.price_to);
 }
 static void carried_text(char *out, unsigned size) {
@@ -184,22 +195,22 @@ static void apply_now(void) {
     PeEconConfig target;
     PeEconPreview p;
     PeEconResult r;
-    if (!pe_game_loaded()) { pe_toast("Load a game first"); return; }
-    if (pe_econ_store_status() == PE_ECON_STORE_DAMAGED) { pe_toast(pe_econ_reason(PE_ECON_BAD_STATE)); return; }
-    if (pe_econ_store_status() == PE_ECON_STORE_UNSUPPORTED) { pe_toast(pe_econ_reason(PE_ECON_STORE_REFUSED)); return; }
+    if (!pe_game_loaded()) { pe_toast(pe_l10n_ui("Load a game first")); return; }
+    if (pe_econ_store_status() == PE_ECON_STORE_DAMAGED) { pe_toast(pe_l10n_ui(pe_econ_reason(PE_ECON_BAD_STATE))); return; }
+    if (pe_econ_store_status() == PE_ECON_STORE_UNSUPPORTED) { pe_toast(pe_l10n_ui(pe_econ_reason(PE_ECON_STORE_REFUSED))); return; }
     target_of(&target);
     preview_now(&p);
-    if (p.result != PE_ECON_OK) { pe_toast(pe_econ_reason(p.result)); return; }
-    if (p.transition == PE_ECON_NO_CHANGE) { pe_toast("Already in use"); return; }
-    if (target.engine == PE_ECON_CONFIGURABLE && !pe_loot_enabled()) { pe_toast("Turn Junk economy on first"); return; }
+    if (p.result != PE_ECON_OK) { pe_toast(pe_l10n_ui(pe_econ_reason(p.result))); return; }
+    if (p.transition == PE_ECON_NO_CHANGE) { pe_toast(pe_l10n_ui("Already in use")); return; }
+    if (target.engine == PE_ECON_CONFIGURABLE && !pe_loot_enabled()) { pe_toast(pe_l10n_ui("Turn Junk economy on first")); return; }
     r = pe_econ_store_apply(&target);
-    if (r != PE_ECON_OK) { pe_toast(pe_econ_reason(r)); return; }
+    if (r != PE_ECON_OK) { pe_toast(pe_l10n_ui(pe_econ_reason(r))); return; }
     pe_mod_log(MOD_ID, "applied %s", pick_name((unsigned)pick_of(&target)));
     draft_sync();
     if (target.engine == PE_ECON_CONFIGURABLE && !pe_mod_active("pe_rewards") &&
         (target.flags & (PE_ECON_F_INCOME | PE_ECON_F_BONUS_ITEM | PE_ECON_F_SUPER_DROP | PE_ECON_F_DUPER_DROP)))
-        pe_toast("Applied. Battle rewards need the rewards mod, which is off.");
-    else pe_toast("Economy settings applied. Save your game to keep them.");
+        pe_toast(pe_l10n_ui("Applied. Battle rewards need the rewards mod, which is off."));
+    else pe_toast(pe_l10n_ui("Economy settings applied. Save your game to keep them."));
 }
 
 static const char *const s_off_on[] = {"Off", "On"};
@@ -226,7 +237,7 @@ void pe_econ_menu_register(const char *mod_id) {
     pe_menu_register_live_int(PE_PAGE_ECON_INCOME, "Junk per boss", "Paid for a won boss battle.", 0, 200, 1, get_boss_income, set_boss_income);
     pe_menu_register_live_int(PE_PAGE_ECON_INCOME, "Payment chance %", "Chance per won battle of getting that payment.", 0, 100, 1, get_payment_chance, set_payment_chance);
     flag_row(PE_PAGE_ECON_INCOME, "Few-hits bonus", "Pays more when Aya took fewer than 4 hits.", get_f_performance, set_f_performance);
-    pe_menu_register_live_int(PE_PAGE_ECON_INCOME, "Bonus % per hit avoided", "Added to the payment for each hit under 4.", 0, 100, 5, get_performance_pct, set_performance_pct);
+    pe_menu_register_live_int(PE_PAGE_ECON_INCOME, "Bonus per hit avoided (%)", "Added to the payment for each hit under 4.", 0, 100, 5, get_performance_pct, set_performance_pct);
     flag_row(PE_PAGE_ECON_INCOME, "Empty steal Junk", "Pays when stealing from an enemy with nothing to steal.", get_f_steal, set_f_steal);
     pe_menu_register_live_int(PE_PAGE_ECON_INCOME, "Empty steal amount", "Junk for each empty steal.", 0, 20, 1, get_steal_junk, set_steal_junk);
 
