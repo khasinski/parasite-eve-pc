@@ -1180,7 +1180,12 @@ void Save_StartWriteSlot(int port, int arg_slot) {
     formattedSlot = (u8)slot;
     sprintf(path, g_MemCardFilenameFormatPtr,
                     state > g_MemCardPortStates,
+#ifdef PE_MODS
+                    /* The name this save will publish under (case 4), so its companion matches. */
+                    g_SaveTitleStyleFlag + 0x30,
+#else
                     state->slots[formattedSlot].titleStyleFlag + 0x30,
+#endif
                     formattedSlot + firstSlotLetter);
     /* Recompute the path address after formatting it. */
     path = g_MemCardFilePath;

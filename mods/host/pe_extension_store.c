@@ -408,7 +408,8 @@ void pe_mod_save_cancelled(void) {
 }
 
 int pe_mod_save_publish(const char *temporary, const char *target) {
-    if (!temporary || !target || strcmp(target, s_path)) return 0;
+    /* A staged companion belongs to s_path; a save with none has nothing to keep in step. */
+    if (!temporary || !target || (s_staged && strcmp(target, s_path))) return 0;
     FILE *f = fopen(temporary, "r+b");
     if (!f) return 0;
     int ok = pe_profile_flush(f);
