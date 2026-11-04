@@ -25,22 +25,17 @@ impl SaveEditorApp {
                 match self.wayne_subtab {
                     WayneSubTab::EquipmentVault => {
                         let idx = self.selected_wayne_special_slot.min(81);
+                        render_stack_controls(ui,save,2,idx);
                         let val = save.special_storage[idx];
                         let (_, title, _, _) = slot_value_icon_and_title(save, val);
 
                         ui.horizontal_wrapped(|ui| {
                             ui.heading(format!("Wayne Vault #{:02} — {}", idx + 1, title));
                             if val != 0 && ui.button("🎒 Move to Aya's Bag").clicked() {
-                                if let Some(free_s) =
-                                    save.inventory_items.iter().position(|&v| v == 0)
-                                {
-                                    save.inventory_items[free_s] = val;
-                                    save.special_storage[idx] = 0;
-                                    return;
-                                }
+                                if let Err(e)=save.move_inventory_slot(2,idx,0) { ui.colored_label(egui::Color32::LIGHT_RED,e.to_string()); }
                             }
                             if val != 0 && ui.button("🗑 Clear").clicked() {
-                                save.special_storage[idx] = 0;
+                                if let Err(e)=save.replace_inventory_slot(2,idx,0) { ui.colored_label(egui::Color32::LIGHT_RED,e.to_string()); }
                             }
                         });
                         ui.separator();
@@ -99,7 +94,7 @@ impl SaveEditorApp {
                                             if let Some(eq_val) =
                                                 save.allocate_equipment_from_item(meta.id)
                                             {
-                                                save.special_storage[idx] = eq_val;
+                                                if let Err(e)=save.replace_inventory_slot(2,idx,eq_val) { ui.colored_label(egui::Color32::LIGHT_RED,e.to_string()); }
                                             }
                                         }
                                         ui.add_space(2.0);
@@ -109,21 +104,17 @@ impl SaveEditorApp {
                     }
                     WayneSubTab::RegularItems => {
                         let idx = self.selected_wayne_regular_slot.min(99);
+                        render_stack_controls(ui,save,1,idx);
                         let val = save.storage[idx];
                         let (_, title, _, _) = slot_value_icon_and_title(save, val);
 
                         ui.horizontal_wrapped(|ui| {
                             ui.heading(format!("Wayne Item #{:02} — {}", idx + 1, title));
                             if val != 0 && ui.button("🎒 Move to Aya's Bag").clicked() {
-                                if let Some(free_s) =
-                                    save.inventory_items.iter().position(|&v| v == 0)
-                                {
-                                    save.inventory_items[free_s] = val;
-                                    save.storage[idx] = 0;
-                                }
+                                if let Err(e)=save.move_inventory_slot(1,idx,0) { ui.colored_label(egui::Color32::LIGHT_RED,e.to_string()); }
                             }
                             if val != 0 && ui.button("🗑 Clear").clicked() {
-                                save.storage[idx] = 0;
+                                if let Err(e)=save.replace_inventory_slot(1,idx,0) { ui.colored_label(egui::Color32::LIGHT_RED,e.to_string()); }
                             }
                         });
                         ui.separator();

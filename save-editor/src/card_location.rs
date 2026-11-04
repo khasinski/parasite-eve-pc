@@ -219,16 +219,7 @@ pub fn run_import(plan: &ImportPlan) -> Result<usize> {
         if let Some(dir) = dest.parent() {
             fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
         }
-        let tmp = dest.with_extension("pe-editor-import.tmp");
-        fs::copy(src, &tmp).with_context(|| format!("cannot copy {}", src.display()))?;
-        if dest.exists() {
-            let _ = fs::remove_file(&tmp);
-            continue;
-        }
-        if let Err(e) = fs::rename(&tmp, dest) {
-            let _ = fs::remove_file(&tmp);
-            return Err(e).with_context(|| format!("cannot write {}", dest.display()));
-        }
+        crate::companion::copy_native(src, dest)?;
         done += 1;
     }
     Ok(done)
