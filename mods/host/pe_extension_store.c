@@ -521,6 +521,25 @@ int pe_checkpoint_read(const char *path,const char *binding,unsigned char *block
     int ok=!ferror(f)&&fgetc(f)==EOF;fclose(f);
     return ok?pe_checkpoint_unpack(bytes,total,binding,block):-1;
 }
+static int file_exists(const char *path) {
+    FILE *f=path?fopen(path,"rb"):NULL;
+    if(f)fclose(f);
+    return f!=NULL;
+}
+int pe_checkpoint_slot_state(const char *checkpoint,const char *legacy) {
+    if(file_exists(checkpoint))return PE_CHECKPOINT_SLOT_CURRENT;
+    return file_exists(legacy)?PE_CHECKPOINT_SLOT_LEGACY:PE_CHECKPOINT_SLOT_EMPTY;
+}
+int pe_checkpoint_read_legacy(const char *path,unsigned char *block) {
+    unsigned char bytes[8192];
+    FILE *f=path&&block?fopen(path,"rb"):NULL;
+    if(!f)return -1;
+    int ok=fread(bytes,1,sizeof bytes,f)==sizeof bytes&&fgetc(f)==EOF&&!ferror(f);
+    fclose(f);
+    if(!ok)return -1;
+    memcpy(block,bytes,sizeof bytes);
+    return 0;
+}
 /* Host-owned v1 stack reserve. A missing provider never owns the only copy.
  * Materialize from reserve only: consuming native slots cannot recreate items. */
 void pe_extension_refill_stacks(short *lists[3],const unsigned sizes[3]) {

@@ -93,6 +93,46 @@ int main(int argc,char **argv){
     FILE *f=fopen(checkpoint,"r+b");assert(f);assert(!fseek(f,64,SEEK_SET));fputc(0xff,f);fclose(f);
     assert(pe_checkpoint_read(checkpoint,binding,restored)<0);
     assert(!memcmp(old,restored,sizeof old));
-    puts("PASS: rejected migration preserved, independent checkpoint round trip, corruption refusal, section migration, missing-provider reserve conservation");
+    /* An older quick save: a plain card file beside where the checkpoint would be. */
+    char slot_pec[1024],slot_mcd[1024];
+    snprintf(slot_pec,sizeof slot_pec,"%s/quicksave_0.pec",argv[1]);
+    snprintf(slot_mcd,sizeof slot_mcd,"%s/quicksave_0.mcd",argv[1]);
+    remove(slot_pec);remove(slot_mcd);
+    assert(pe_checkpoint_slot_state(slot_pec,slot_mcd)==PE_CHECKPOINT_SLOT_EMPTY);
+    assert(pe_checkpoint_read_legacy(slot_mcd,restored)<0);
+    unsigned kept[2]={777,5};
+    tail_begin(block);tail_add(block,fnv("pe_economy.loot"),1,kept,sizeof kept);tail_end(block);
+    f=fopen(slot_mcd,"wb");assert(f);assert(fwrite(block,1,8192,f)==8192);fclose(f);
+    assert(pe_checkpoint_slot_state(slot_pec,slot_mcd)==PE_CHECKPOINT_SLOT_LEGACY);
+    memset(restored,0xcc,sizeof restored);
+    assert(!pe_checkpoint_read_legacy(slot_mcd,restored));assert(!memcmp(block,restored,8192));
+    /* No companion link: admitted, its record back, companion sections usable for the next save. */
+    assert(!pe_mod_load_admit(slot_mcd,restored));
+    pe_save_on_read(restored);pe_extension_apply_load();
+    assert(pe_save_peek(restored,"pe_economy.loot",&v,got,sizeof got,&n)==1);
+    assert(v==1&&!memcmp(got,kept,sizeof kept));
+    assert(pe_extension_available(&section));
+    /* A wrong size is damage, and leaves the caller's buffer alone. */
+    memcpy(old,restored,sizeof old);
+    unsigned char extra[8193]={0};
+    char slot_bad[1024];snprintf(slot_bad,sizeof slot_bad,"%s/quicksave_1.mcd",argv[1]);
+    f=fopen(slot_bad,"wb");assert(f);assert(fwrite(extra,1,100,f)==100);fclose(f);
+    assert(pe_checkpoint_read_legacy(slot_bad,restored)<0);
+    f=fopen(slot_bad,"wb");assert(f);assert(fwrite(extra,1,8193,f)==8193);fclose(f);
+    assert(pe_checkpoint_read_legacy(slot_bad,restored)<0);
+    assert(!memcmp(old,restored,sizeof old));
+    /* A companion link it can't resolve is refused rather than dropping that data. */
+    unsigned char dangling[20]={1,1,0,0,1,0,0,0,0,4,0,0};
+    unsigned char linked[8192]={0};
+    tail_begin(linked);tail_add(linked,fnv("pe_host.extlink"),1,dangling,sizeof dangling);tail_end(linked);
+    assert(pe_mod_load_admit(slot_mcd,linked)<0);
+    /* Saving to the slot makes the checkpoint current and keeps the older file intact. */
+    assert(!pe_mod_load_admit(slot_mcd,block));pe_save_on_read(block);pe_extension_apply_load();
+    assert(!pe_extension_set_save_path(binding));assert(!pe_extension_stage());
+    unsigned char fresh[8192]={0};assert(!pe_save_try_write(fresh));
+    assert(!pe_checkpoint_write(slot_pec,fresh));pe_extension_cancel();
+    assert(pe_checkpoint_slot_state(slot_pec,slot_mcd)==PE_CHECKPOINT_SLOT_CURRENT);
+    assert(!pe_checkpoint_read_legacy(slot_mcd,restored));assert(!memcmp(block,restored,8192));
+    puts("PASS: rejected migration preserved, independent checkpoint round trip, corruption refusal, section migration, missing-provider reserve conservation, older quick save slots");
     return 0;
 }

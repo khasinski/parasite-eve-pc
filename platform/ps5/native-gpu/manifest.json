@@ -3923,11 +3923,11 @@
     },
     {
       "path": "mods/host/pe_extension_store.c",
-      "sha256": "cd95bb5eae0915675f16e09bd1637e320821f472604a9294e0d4fd2a1f543f7f"
+      "sha256": "3d1c538d9f8a634272e123939d277104f6cf6e6ab535606742a4984c1f7c8e36"
     },
     {
       "path": "mods/host/pe_extension_store.h",
-      "sha256": "271d9b8ce089f79091b83a2b725f97ed5d61a927a59dbf9bab22f34d426241bd"
+      "sha256": "9fc5f4181c8f36cab9787e7e4601ac2c1929c37e7290693f0c7f125bb45b583a"
     },
     {
       "path": "mods/host/pe_file_io.h",
@@ -4415,7 +4415,7 @@
     },
     {
       "path": "mods/pe_quicksave/pe_quicksave.c",
-      "sha256": "ba01fb3ac3ac0038cde0a2d81974a3ec4047c1195caafcc1db45c99ec14c5caa"
+      "sha256": "5e730dd58f77554d0295e61ea0e505a7d2fd9b66c209dfcd8ce6dd35e748c4bc"
     },
     {
       "path": "mods/pe_rebalance/pe_atb_items.c",

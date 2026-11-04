@@ -5,7 +5,7 @@ Implemented in PR #62's audited checkout (`pr/economy-overhaul`, based on 90a11a
 ## Behavior
 
 - PC Quick Save uses a bounded PECP container containing the native save and full companion payload, with checksums and a native US save-v1 identity. Atomic publication retains the previous checkpoint on failure.
-- Quick Load admits embedded companion data and native inventory/tail structure before committing. Legacy MCD imports still require their referenced companion. An existing corrupt PECP never silently selects an older MCD.
+- Quick Load admits embedded companion data and native inventory/tail structure before committing. Legacy MCD imports still require their referenced companion. An existing corrupt PECP never silently selects an older MCD. A slot holding only an older `quicksave_<slot>.mcd` shows as "Saved, older format" and loads after its native checks and admission; saving to that slot writes the checkpoint, which then takes over, and leaves the MCD on disk unused. Builds with the companion store could not write these files (their blank save name fails the companion path check), so older quick saves carry no companion link; a link they can't resolve is refused.
 - PS5 file checkpoints use PEHYB001: a required PECP component plus optional exact runtime bytes. Required disc identity and complete framing/checksums are validated first. Matching supported runtime owners may restore exactly; changed builds, settings, sessions, rooms, assets or unsupported split-provider layouts select a saved-room restart. A failed rollback never falls through to portable commit. Legacy partial component files have no portable contract and remain refused by the new file-load path.
 - Startup activation stays with the current launch. Unsupported optional provider data remains opaque and preserved; its hooks, services and menu mutations are unavailable while its state is locked.
 - Native records prepare checked migration candidates before load commit. Shipped record callbacks now use the supplied candidate rather than writing their globals during preparation. Failed migration or validation preserves the original valid record through later saves and legacy-window writes.
@@ -27,6 +27,7 @@ The pre-split Loot and Catalog private runtime serializers reference layouts tha
 - PS5 compatibility export test verifies every source digest, stale-source pruning and refusal before writes.
 - Native host/provider syntax checks pass with CPU-components, changed-cohort and native-GPU flags. Native state sources other than the POSIX storage adapter also pass host syntax checks.
 - `git diff --check` passes.
+- Older quick saves: the portable checkpoint test covers slot state, exact-size reading, admission of an unlinked card, refusal of an unresolved link, and the older file surviving a save. The slot row, the toasts and `pe_load`'s order in `pe_quicksave.c` need the game and have no automated test; no real older quick save has been loaded.
 
 Local evidence lives beside this checkout in `.port-staging/`: `compat-push-tests.log`, `compat-final-latches-build.log`, `compat-native-syntax.log`, `compat-native-state-syntax.log`, and broader build/test logs.
 

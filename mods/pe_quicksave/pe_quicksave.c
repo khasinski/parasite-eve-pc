@@ -2,7 +2,9 @@
  *
  * A quick save is the game's own memory-card save, made anywhere in the free field: the same 8 KB
  * card file Save_BuildCardFile writes (with every mod's save records), kept beside the user's
- * preferences as quicksave_<slot>.mcd. Loading one is the card load (Save_LoadCardFileIntoRuntime
+ * preferences as quicksave_<slot>.pec with its companion data. A slot with only an older
+ * quicksave_<slot>.mcd still loads; saving to it leaves that file in place, no longer used.
+ * Loading one is the card load (Save_LoadCardFileIntoRuntime
  * without its dialogs) followed by the field script's own room transfer to the saved room, so the
  * game restarts that room the way a loaded save does. A quick save holds what a save holds:
  * Aya, items, storage, story and the room, not her place in it or a fight in progress.
@@ -50,6 +52,19 @@ static void pe_slot_path(char *out, size_t size, int slot) {
     if (pe_mod_path(out, size, name) != 0) snprintf(out, size, "%s", name);
 }
 
+static void pe_legacy_path(char *out, size_t size, int slot) {
+    char name[32];
+    snprintf(name, sizeof name, "quicksave_%d.mcd", slot);
+    if (pe_mod_path(out, size, name) != 0) snprintf(out, size, "%s", name);
+}
+
+static int pe_slot_state(int slot) {
+    char path[1024], legacy[1024];
+    pe_slot_path(path, sizeof path, slot);
+    pe_legacy_path(legacy, sizeof legacy, slot);
+    return pe_checkpoint_slot_state(path, legacy);
+}
+
 static int pe_field_ready(void) {
     const unsigned token = (unsigned)g_SceneDispatchToken;
     if (!pe_game_loaded() || !token || token == PE_TOKEN_TITLE || token == PE_TOKEN_NEW_GAME ||
@@ -91,40 +106,38 @@ static void pe_save(int slot) {
 
 static void pe_load(int slot) {
     char path[1024], msg[64];
-    FILE *f;
-    size_t n;
     u32 crc;
-    int token, *args[1] = {&token};
+    int token;
+    const int state = pe_slot_state(slot);
 
-    pe_slot_path(path, sizeof path, slot);
-    f = fopen(path, "rb");
-    const int have_checkpoint = f != NULL;
-    if (f) fclose(f);
-    if (pe_checkpoint_read(path, "BASLUS-00662PEQUICKSAVE000A", g_MemCardFileBuffer)) {
-        if (have_checkpoint) {
+    if (state == PE_CHECKPOINT_SLOT_EMPTY) {
+        snprintf(msg, sizeof msg, "Slot %d is empty", slot);
+        pe_toast(msg);
+        return;
+    }
+    if (state == PE_CHECKPOINT_SLOT_CURRENT) {
+        pe_slot_path(path, sizeof path, slot);
+        if (pe_checkpoint_read(path, "BASLUS-00662PEQUICKSAVE000A", g_MemCardFileBuffer)) {
             pe_toast("Quick load refused: checkpoint is damaged or incompatible"); return;
         }
-        /* Explicit legacy import: legacy companion links still require their source. */
-        char name[32]; snprintf(name, sizeof name, "quicksave_%d.mcd", slot);
-        if (pe_mod_path(path, sizeof path, name)) {
-            pe_toast("Quick load failed: checkpoint unavailable"); return;
-        }
-        f = fopen(path, "rb");
-        if (!f) { pe_toast("Quick load failed: checkpoint unavailable or damaged"); return; }
-        n = fread(g_MemCardFileBuffer, 1, PE_CARD_SIZE, f);
-        int complete = n == PE_CARD_SIZE && fgetc(f) == EOF;
-        fclose(f);
-        if (!complete || pe_mod_load_admit(path, g_MemCardFileBuffer)) {
-            pe_toast("Legacy quick save is damaged or its companion is missing"); return;
+    } else {
+        pe_legacy_path(path, sizeof path, slot);
+        if (pe_checkpoint_read_legacy(path, g_MemCardFileBuffer)) {
+            snprintf(msg, sizeof msg, "Slot %d is damaged", slot);
+            pe_toast(msg);
+            return;
         }
     }
-    n = PE_CARD_SIZE;
     memcpy(&crc, g_MemCardFileBuffer + PE_CARD_CRC, sizeof crc);
-    if (n != PE_CARD_SIZE || !pe_checkpoint_native_valid(g_MemCardFileBuffer) || pe_card_crc(g_MemCardFileBuffer) != crc ||
+    if (!pe_checkpoint_native_valid(g_MemCardFileBuffer) || pe_card_crc(g_MemCardFileBuffer) != crc ||
         !Inv_ValidateSavedInventory((const SaveRuntimeState *)&g_MemCardSaveStateBuffer)) {
         snprintf(msg, sizeof msg, "Slot %d is damaged", slot);
         pe_toast(msg);
         return;
+    }
+    /* Native checks first, as a checkpoint's are: admission runs the records' load preparation. */
+    if (state == PE_CHECKPOINT_SLOT_LEGACY && pe_mod_load_admit(path, g_MemCardFileBuffer)) {
+        pe_toast("Older quick save can't be loaded: its mod data was refused"); return;
     }
     if(pe_checkpoint_commit_portable())return;
     token=g_SceneDispatchToken;
@@ -174,12 +187,9 @@ static int pe_on_new_game(void *ctx, void *user) {
 static void pe_ask_save(void) { s_pending = PE_SAVE; }
 static void pe_ask_load(void) { s_pending = PE_LOAD; }
 static void pe_slot_info(char *out, unsigned size) {
-    char path[1024];
-    FILE *f;
-    pe_slot_path(path, sizeof path, s_slot);
-    f = fopen(path, "rb");
-    snprintf(out, size, "%s", f ? "Saved" : "Empty");
-    if (f) fclose(f);
+    const int state = pe_slot_state(s_slot);
+    snprintf(out, size, "%s", state == PE_CHECKPOINT_SLOT_CURRENT ? "Saved" :
+                              state == PE_CHECKPOINT_SLOT_LEGACY ? "Saved, older format" : "Empty");
 }
 
 static int quicksave_init(void) {

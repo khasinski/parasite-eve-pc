@@ -12,6 +12,11 @@ int pe_checkpoint_pack(unsigned char *, unsigned, unsigned *, const unsigned cha
 int pe_checkpoint_unpack(const unsigned char *, unsigned, const char *, unsigned char *);
 int pe_checkpoint_write(const char *path, const unsigned char *block);
 int pe_checkpoint_read(const char *path, const char *binding, unsigned char *block);
+/* A slot's file: a checkpoint wins over an old plain card file kept beside it. */
+enum { PE_CHECKPOINT_SLOT_EMPTY, PE_CHECKPOINT_SLOT_CURRENT, PE_CHECKPOINT_SLOT_LEGACY };
+int pe_checkpoint_slot_state(const char *checkpoint, const char *legacy);
+/* Exactly one 8 KB card file; admit it with pe_mod_load_admit once its native checks pass. */
+int pe_checkpoint_read_legacy(const char *path, unsigned char *block);
 void pe_extension_refill_stacks(short *lists[3], const unsigned sizes[3]);
 typedef struct {
     const char *key;
