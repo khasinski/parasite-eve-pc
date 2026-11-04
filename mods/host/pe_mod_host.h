@@ -51,6 +51,10 @@ int pe_mod_is_running(const char *mod_id);
  * registers), else NULL. pe_mod_active(): NULL and the host's own are always active. */
 const char *pe_mod_current(void);
 int pe_mod_active(const char *mod_id);
+/* In a mod's init: when this mod runs this session, no other mod does (they stay inactive, as if off
+ * in Manage mods, until a start without the request). For a mod whose play must not mix with other
+ * mods' (the randomizer). The first request wins; -1 outside an init or after another mod's. */
+int pe_mod_run_alone(void);
 int pe_mod_interactive(void);
 /* Refresh requested-vs-started mod notes; never starts/stops a mod. */
 void pe_mod_manage_refresh(void);

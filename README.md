@@ -84,6 +84,10 @@ Open **F1 → PE Enhancements** to configure them.
   variable and runs the room transfer on the next free field frame, never during a battle, an
   event, a room change or a movie.
 
+- **Randomizer** (`pe_randomizer`): **F1 → Randomizer**, before New Game — shuffles items and keys
+  from a six-digit seed, with keys moved only where the key logic allows, and writes a spoiler file. It runs alone: with
+  it on, the other mods stay off until it is turned off and the game restarted.
+
 Mod builds are experimental; a passing build or test does not establish full in-game compatibility.
 
 ## Build

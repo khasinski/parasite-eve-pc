@@ -65,6 +65,10 @@ typedef enum PeHookId {
                                * move; replaceable */
     PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
+    PE_HOOK_ENEMY_FIELD, /* PeHookEnemyField: Entity_WriteFieldByCmd entry (script ops 90 / 206 on an
+                          * actor); the value may be changed */
+    PE_HOOK_ENEMY_POWER, /* PeHookEnemyPower: an actor's script sets an attack's power (ops 112 / 183); the
+                          * power may be changed */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -155,6 +159,17 @@ typedef enum PeNewGameKind {
     PE_NEW_GAME_EX = 2,        /* the EX Game, from a Clear Data save */
     PE_NEW_GAME_TUTORIAL = 3,  /* MenuCard_RunListScreen result 3 */
 } PeNewGameKind;
+
+typedef struct PeHookEnemyField {
+    struct FieldActor *actor;
+    int code;  /* field code, 0x28+ (battle/context.c) */
+    int value;
+} PeHookEnemyField;
+
+typedef struct PeHookEnemyPower {
+    struct FieldActor *actor;
+    int power;
+} PeHookEnemyPower;
 
 typedef struct PeHookNewGame {
     int kind; /* PeNewGameKind */

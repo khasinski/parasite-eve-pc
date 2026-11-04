@@ -184,6 +184,13 @@ const void *pe_service_get(const char *name, int version) {
 static const char *s_inited_ids[PE_MAX_MODS];
 static int s_inited_count;
 static const char *s_current_mod;          /* the mod whose init is running */
+static const char *s_alone_mod;            /* asked to run alone (pe_mod_run_alone) */
+
+int pe_mod_run_alone(void) {
+    if (!s_current_mod || (s_alone_mod && strcmp(s_alone_mod, s_current_mod) != 0)) return -1;
+    s_alone_mod = s_current_mod;
+    return 0;
+}
 
 int pe_mod_is_running(const char *mod_id) {
     int i;
@@ -250,7 +257,7 @@ static char s_mod_note[PE_MAX_MODS][192];
 static char s_all_note[192];
 static int s_manage_count, s_manage_ready, s_boot_all;
 static int s_boot_mod_on[PE_MAX_MODS], s_boot_state[PE_MAX_MODS];
-enum { PE_MOD_RUNNING, PE_MOD_OFF, PE_MOD_NEEDS, PE_MOD_FAILED, PE_MOD_ALL_OFF };
+enum { PE_MOD_RUNNING, PE_MOD_OFF, PE_MOD_NEEDS, PE_MOD_FAILED, PE_MOD_ALL_OFF, PE_MOD_ALONE };
 static int pe_manage_requested(int i, unsigned visiting) {
     const char *const *req; int j;
     if(!s_all_on || !s_mod_on[i] || (visiting & (1u << i)))return 0;
@@ -264,7 +271,7 @@ static int pe_manage_requested(int i, unsigned visiting) {
 void pe_mod_manage_refresh(void) {
     static int logged_all=-1,logged_mods[PE_MAX_MODS];
     static unsigned log_budget=64;
-    static const char *const now[]={"running","Off","dependency blocked","failed to start","Off (master was Off)"};
+    static const char *const now[]={"running","Off","dependency blocked","failed to start","Off (master was Off)","Off (another mod runs alone)"};
     int i,pending=0,changed;
     if(!s_manage_ready)return;
     changed=logged_all!=s_all_on;
@@ -346,7 +353,6 @@ static void pe_start_mods(void) {
             else if (!pe_requires_met(mod)) state[i] = PE_MOD_NEEDS;
             else {
                 s_running[s_running_count++] = mod;
-                pe_mod_log(mod->id, "started %s %s", mod->name, mod->version);
                 continue;
             }
             pe_mod_log(mod->id, "inactive (%s): pages only", state[i] == PE_MOD_NEEDS ? "a mod it needs is off" : "off");
@@ -357,6 +363,20 @@ static void pe_start_mods(void) {
             state[i] = PE_MOD_NEEDS;
             pe_mod_log(g_pe_mods[i]->id, "missing a required mod, mod off");
         }
+    /* A running mod that asked to run alone: every other one goes back to inactive (inits only
+     * register, so nothing of theirs has touched the game yet). */
+    if (s_alone_mod && pe_mod_is_running(s_alone_mod)) {
+        for (i = 0; i < mod_count; i++)
+            if (state[i] == PE_MOD_RUNNING && strcmp(g_pe_mods[i]->id, s_alone_mod) != 0) {
+                state[i] = PE_MOD_ALONE;
+                pe_mod_log(g_pe_mods[i]->id, "inactive (%s runs alone): pages only", s_alone_mod);
+            }
+        s_running_count = 0;
+        for (i = 0; i < mod_count; i++)
+            if (strcmp(g_pe_mods[i]->id, s_alone_mod) == 0) s_running[s_running_count++] = g_pe_mods[i];
+    }
+    for (i = 0; i < s_running_count; i++)
+        pe_mod_log(s_running[i]->id, "started %s %s", s_running[i]->name, s_running[i]->version);
     pe_manage_notes(mod_count, state);
     atexit(pe_shutdown_mods);
 }

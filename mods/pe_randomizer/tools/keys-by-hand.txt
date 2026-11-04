@@ -1,0 +1,61 @@
+# Key logic written by hand (same format as keylogic.py's output): python -I spottable.py <disc.bin> <randomizer-rooms.txt> keys-by-hand.txt
+#
+# Day 3 hospital: from the hand-checked map, python -I hospital_logic.py hospital-map.txt ../pe_rand_spots.h
+# (stages cut off by one-way doors; a key goes to a chest reachable without it in the stage it is used in).
+# Elsewhere one rule: a key may go to a chest in the same room as its own spot (any version of that room).
+# The player is in that room exactly when they would have picked the key up, so the key turns up when it
+# does in the unmodified game. Keys without a chest in their room keep theirs.
+#
+# needs: the keys of the days before (all the game asks while a day's keys arrive as in vanilla), plus the
+# hospital's own gates. before: the keys a chest may take; late= (empty): no key from a later day either. Days 2 and 5 have no candidate chest and stay
+# without data. Replace with keylogic.py output from logged play when there is one.
+
+# Day 3 NYPD key spots
+M103+024C68 needs=CA before=   # Special Good Luck Charm
+M114+016FF8 needs=CA before=   # NYPD Weapons Storage Key
+M121+02DF1C needs=CA before=   # NYPD Locker Key
+
+# Day 3 NYPD chests in a key's room
+M114+016CA4 needs=CA before=D6      # Weapons Storage Key's room
+
+# Day 3 hospital (hospital_logic.py output)
+M125+016D64 needs=CA before=   # 83 gift M125 M331 Helpful Good Luck Charm
+M126+015238 needs=CA before= late=   # 84 chest M126: spawns only after a touch in M126 (V0x42|0x1), so it takes no keys
+M126+0159BC needs=CA before=CC,DA   # 85 chest M126
+M137+0236B0 needs=CA before=CC,CE,CF,D0,D1,D2,DA   # 86 chest M137 M324
+M138+008C50 needs=CA before=CC,CE,CF,D0,D1,D2,DA   # 87 chest M138 M325
+M139+014518 needs=CA before=   # 88 gift M139 M326 Fuse 1
+M139+015890 needs=CA before=CC,CE,CF,D0,D1,D2,DA   # 89 chest M139 M326
+M139+015FEC needs=CA before=CC,CE,CF,D0,D1,D2,DA   # 90 chest M139 M326
+M140+023994 needs=CA,D1 before=CC,CE,CF,D0,D2,DA   # 91 chest M140 M327
+M140+02410C needs=CA,D1 before=CC,CE,CF,D0,D2,DA   # 92 chest M140 M327
+M141+02E568 needs=CA,D1 before=   # 93 gift M141 M328 Fuse 2
+M141+02FD08 needs=CA,D1 before=CC,CE,CF,D0,D2,DA   # 94 chest M141 M328
+M142+007D88 needs=CA,D1,D2 before=CC,CE,CF,D0,DA   # 95 chest M142 M329
+M143+002F0C needs=CA,D1,D2 before=   # 96 pickup M143 M330
+M145+020FDC needs=CA,D1,D2 before=   # 97 gift M145 M332 Fuse 3
+M145+021F74 needs=CA,D1,D2 before=CC,CE,CF,D0,DA   # 98 chest M145 M332
+M145+0226F8 needs=CA,D1,D2 before=CC,CE,CF,D0,DA   # 99 chest M145 M332
+M146+03C78C needs=CA,CE,CF,D0,D1,D2 before=   # 100 pickup M146
+M146+03E60C needs=CA,CE,CF,D0,D1,D2 before=CC,D3,DA   # 101 chest M146
+M147+031E5C needs=CA,CE,CF,D0,D1,D2 before=   # 102 gift M147 Green Magnetic Cardkey
+M147+0341AC needs=CA,CE,CF,D0,D1,D2 before=CC,D3,DA   # 103 chest M147
+M148+00630C needs=CA,CE,CF,D0,D1,D2,D3 before=CC,DA   # 104 chest M148
+M149+014D08 needs=CA,CE,CF,D0,D1,D2,D3 before=CC,DA   # 105 chest M149
+M152+02DE54 needs=CA,CE,CF,D0,D1,D2,D3 before=   # 106 pickup M152
+M152+02DFC4 needs=CA,CE,CF,D0,D1,D2,D3 before=   # 107 pickup M152
+M152+02EF88 needs=CA,CE,CF,D0,D1,D2,D3 before=CC,DA   # 108 chest M152
+M153+034094 needs=CA,CE,CF,D0,D1,D2,D3 before=CC,DA   # 109 chest M153
+M154+03A8E4 needs=CA,CE,CF,D0,D1,D2,D3 before=   # 110 gift M154
+M154+03AEBC needs=CA,CE,CF,D0,D1,D2,D3 before=   # 111 gift M154 Elevator Key
+M154+03C5BC needs=CA,CE,CF,D0,D1,D2,D3 before=CC,DA   # 112 chest M154
+M154+03CD40 needs=CA,CE,CF,D0,D1,D2,D3 before=CC,DA   # 113 chest M154
+M325+0086D8 needs=CA before=   # 179 gift M325 St. Francis Hospital Key
+M328+02E73C needs=CA,D1 before=   # 180 gift M328 Blue Magnetic Cardkey
+
+# Day 4 key spots
+M165+01D2AC needs=CA,CC,CD,CE,CF,D0,D1,D2,D3,D6,D7,DA before=   # Good Luck Charm
+M190+00BB6C needs=CA,CC,CD,CE,CF,D0,D1,D2,D3,D6,D7,DA before=   # Subway Gate Key
+
+# Day 4 chests in a key's room
+M165+01EE4C needs=CA,CC,CD,CE,CF,D0,D1,D2,D3,D6,D7,DA before=CB   # Good Luck Charm's room

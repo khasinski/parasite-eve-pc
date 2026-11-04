@@ -1,0 +1,87 @@
+# mod-randomizer-foegame: the enemy option end to end. Every gate line runs with F1 Randomize enemies on (foes), seed 123456
+# Hard: the mod's own New Game puts the seed's foe plan in, and each room the plan moves must have exactly those swaps;
+# ai= lists the moved actors that fight there (they must run their new script and win). Written by
+# foeruns.py <keys> <run> 123456 ... --out foesgame --lines (gate -> gate foes, ai= lines only): rewrite it when
+# PE_RAND_FOES_VERSION changes, and give M013's line ran=+2740 again (its spawner e3's battle start on event 0x70: a
+# foe there must be spawned with its lead sub id, pe_rand_ai.c; headless `win` can't see a battle that never starts).
+M012 0x0 0x0 win stats gate foes seed=123456,2 at=-90,-1612 ai=5<M087:3 id=seed123456-M012
+M013 0x0 0x0 win stats gate foes seed=123456,2 ai=2<M406:3 ran=+2740 id=seed123456-M013
+M014 0x0 0x0 win stats gate foes seed=123456,2 at=-454,-278 at=-326,740 ai=6<M065:3 ai=7<M167:8 id=seed123456-M014
+M027 0x0 0x0 win stats gate foes seed=123456,2 at=2,-3719 ai=3<M420:6 id=seed123456-M027
+M028 0x0 0x0 win stats gate foes seed=123456,2 at=-158,-3179 ai=7<M391:3 ai=8<M311:3 id=seed123456-M028
+M030 0x0 0x0 win stats gate foes seed=123456,2 at=823,4510 at=-766,4510 ai=5<M394:4 id=seed123456-M030
+M032 0x0 0x0 win stats gate foes seed=123456,2 at=-14154,2299 ai=6<M114:6 id=seed123456-M032
+M059 0x0 0x0 win stats gate foes seed=123456,2 at=1717,-6312 at=1149,-5206 ai=5<M421:3 ai=6<M410:3 id=seed123456-M059
+M062 0x0 0x0 win stats gate foes seed=123456,2 at=1133,-1020 ai=6<M032:6 id=seed123456-M062
+M063 0x0 0x0 win stats gate foes seed=123456,2 at=278,1747 at=-759,2405 ai=3<M407:3 id=seed123456-M063
+M065 0x0 0x0 win stats gate foes seed=123456,2 at=1871,4144 ai=3<M392:3 id=seed123456-M065
+M066 0x0 0x0 win stats gate foes seed=123456,2 at=4918,-1228 at=3909,-98 ai=5<M234:5 id=seed123456-M066
+M067 0x0 0x0 win stats gate foes seed=123456,2 at=-1544,3578 at=-970,3539 ai=3<M435:5 ai=4<M311:4 id=seed123456-M067
+M075 0x0 0x0 win stats gate foes seed=123456,2 at=1527,387 ai=5<M229:5 id=seed123456-M075
+M078 0x0 0x0 win stats gate foes seed=123456,2 at=-2286,1 ai=4<M414:3 ai=5<M396:4 id=seed123456-M078
+M080 0x0 0x0 win stats gate foes seed=123456,2 at=3109,633 at=350,262 ai=5<M113:6 id=seed123456-M080
+M082 0x0 0x0 win stats gate foes seed=123456,2 at=-1122,1153 at=-2894,767 ai=3<M434:4 ai=5<M419:6 id=seed123456-M082
+M083 0x0 0x0 win stats gate foes seed=123456,2 at=2086,-3876 at=2038,-2609 ai=3<M012:5 id=seed123456-M083
+M085 0x0 0x0 win stats gate foes seed=123456,2 at=1397,443 at=-1388,476 ai=3<M168:9 id=seed123456-M085
+M087 0x0 0x0 win stats gate foes seed=123456,2 at=-119,113 ai=3<M078:4 id=seed123456-M087
+M100 0x0 0x0 win stats gate foes seed=123456,2 at=-230,-3826 at=235,-3821 ai=6<M408:4 id=seed123456-M100
+M104 0x0 0x0 win stats gate foes seed=123456,2 at=-269,-831 ai=4<M146:6 id=seed123456-M104
+M107 0x0 0x0 win stats gate foes seed=123456,2 at=-33,-3003 ai=5<M311:3 id=seed123456-M107
+M110 0x0 0x0 win stats gate foes seed=123456,2 at=-74,-1072 ai=5<M398:4 id=seed123456-M110
+M111 0x0 0x0 win stats gate foes seed=123456,2 at=212,-231 ai=6<M435:5 id=seed123456-M111
+M113 0x0 0x0 win stats gate foes seed=123456,2 at=-808,-3 at=-1346,-115 ai=6<M389:4 ai=7<M389:4 id=seed123456-M113
+M114 0x0 0x0 win stats gate foes seed=123456,2 at=-18,-637 ai=6<M137:4 id=seed123456-M114
+M115 0x0 0x0 win stats gate foes seed=123456,2 at=-607,-2453 at=-109,-2491 ai=5<M141:7 id=seed123456-M115
+M116 0x0 0x0 win stats gate foes seed=123456,2 at=575,994 ai=7<M419:6 id=seed123456-M116
+M120 0x0 0x0 win stats gate foes seed=123456,2 at=-764,-1293 ai=4<M391:6 id=seed123456-M120
+M121 0x0 0x0 win stats gate foes seed=123456,2 at=-1011,445 ai=9<M399:3 id=seed123456-M121
+M122 0x0 0x0 win stats gate foes seed=123456,2 at=799,110 at=-196,115 ai=3<M391:4 ai=5<M298:4 id=seed123456-M122
+M126 0x1e8 0x0 win stats gate foes seed=123456,2 at=242,720 at=631,1404 ai=7<M387:3 id=seed123456-M126
+M129 0x0 0x0 win stats gate foes seed=123456,2 at=-873,265 ai=3<M122:3 id=seed123456-M129
+M137 0x0 0x0 win stats gate foes seed=123456,2 at=-6,-2026 ai=4<M168:9 ai=5<M410:4 id=seed123456-M137
+M139 0x0 0x0 win stats gate foes seed=123456,2 at=-229,860 ai=6<M395:3 id=seed123456-M139
+M140 0x0 0x0 win stats gate foes seed=123456,2 at=570,-115 ai=5<M030:5 ai=6<M417:4 id=seed123456-M140
+M141 0x0 0x0 win stats gate foes seed=123456,2 at=816,-916 ai=6<M415:3 ai=7<M115:5 id=seed123456-M141
+M146 0x0 0x0 win stats gate foes seed=123456,2 at=800,130 ai=6<M392:6 ai=7<M146:6 id=seed123456-M146
+M147 0x0 0x0 win stats gate foes seed=123456,2 at=-721,-1494 ai=5<M409:4 ai=6<M387:3 id=seed123456-M147
+M152 0x0 0x0 win stats gate foes seed=123456,2 at=46,-1895 ai=6<M396:5 id=seed123456-M152
+M153 0x0 0x0 win stats gate foes seed=123456,2 at=384,-3151 at=828,-3223 ai=6<M162:5 id=seed123456-M153
+M154 0x0 0x0 win stats gate foes seed=123456,2 at=930,-2145 ai=9<M169:8 id=seed123456-M154
+M162 0x0 0x0 win stats gate foes seed=123456,2 at=57,1248 at=144,-559 ai=5<M139:6 id=seed123456-M162
+M163 0x0 0x0 win stats gate foes seed=123456,2 at=12,770 at=60,-1934 ai=7<M065:3 ai=8<M139:6 id=seed123456-M163
+M167 0x0 0x0 win stats gate foes seed=123456,2 at=1200,-259 at=-19,1300 at=-1400,-67 at=136,-1400 ai=7<M402:3 id=seed123456-M167
+M168 0x0 0x0 win stats gate foes seed=123456,2 at=-8172,-954 at=-4562,5 ai=9<M408:3 id=seed123456-M168
+M169 0x0 0x0 win stats gate foes seed=123456,2 at=-1650,392 at=539,296 ai=7<M405:5 id=seed123456-M169
+M173 0x0 0x0 win stats gate foes seed=123456,2 at=-438,126 at=3000,101 ai=7<M419:3 id=seed123456-M173
+M178 0x0 0x0 win stats gate foes seed=123456,2 at=-1634,-38 ai=3<M410:3 id=seed123456-M178
+M186 0x0 0x0 win stats gate foes seed=123456,2 at=51,-8658 at=52,-6154 ai=4<M169:8 ai=5<M028:7 id=seed123456-M186
+M187 0x0 0x0 win stats gate foes seed=123456,2 at=-772,-6590 ai=4<M218:4 id=seed123456-M187
+M201 0x0 0x0 win stats gate foes seed=123456,2 at=-50,-925 at=275,-2250 ai=3<M393:4 id=seed123456-M201
+M223 0x0 0x0 win stats gate foes seed=123456,2 at=92,721 at=2225,-1207 ai=4<M434:4 id=seed123456-M223
+M232 0x0 0x0 win stats gate foes seed=123456,2 at=-24,1551 at=391,590 at=19,-28 ai=5<M115:5 id=seed123456-M232
+M234 0x0 0x0 win stats gate foes seed=123456,2 at=-3613,4299 at=-1536,3716 ai=5<M113:6 id=seed123456-M234
+M243 0x0 0x0 win stats gate foes seed=123456,2 at=-108,1275 at=-114,-876 ai=3<M308:4 id=seed123456-M243
+M265 0x0 0x0 win stats gate foes seed=123456,2 at=-169,985 at=-183,-1392 ai=3<M384:3 id=seed123456-M265
+M324 0x0 0x0 win stats gate foes seed=123456,2 at=-6,-2026 ai=4<M400:3 ai=5<M420:6 id=seed123456-M324
+M326 0x0 0x0 win stats gate foes seed=123456,2 at=-229,860 ai=6<M218:4 id=seed123456-M326
+M327 0x0 0x0 win stats gate foes seed=123456,2 at=570,-115 ai=5<M263:8 ai=6<M110:5 id=seed123456-M327
+M328 0x0 0x0 win stats gate foes seed=123456,2 at=816,-916 ai=6<M152:6 ai=7<M392:3 id=seed123456-M328
+M333 0x0 0x0 win stats gate foes seed=123456,2 at=400,-31 ai=4<M419:6 id=seed123456-M333
+M358 0x0 0x0 win stats gate foes seed=123456,2 at=-4947,6289 at=-4624,5889 ai=4<M434:4 id=seed123456-M358
+M385 0x0 0x0 win stats gate foes seed=123456,2 at=-1200,-450 at=1200,-450 ai=3<M298:4 id=seed123456-M385
+M398 0x0 0x0 win stats gate foes seed=123456,2 at=-1260,-672 at=1032,-654 ai=3<M424:4 ai=4<M405:5 id=seed123456-M398
+M400 0x0 0x0 win stats gate foes seed=123456,2 at=1400,-550 at=-15,-1275 ai=3<M413:4 ai=4<M393:4 id=seed123456-M400
+M403 0x0 0x0 win stats gate foes seed=123456,2 at=50,200 at=700,-855 ai=3<M243:3 ai=4<M396:5 id=seed123456-M403
+M405 0x0 0x0 win stats gate foes seed=123456,2 at=-1260,-672 at=1032,-654 ai=3<M407:4 ai=4<M402:3 ai=5<M059:5 id=seed123456-M405
+M406 0x0 0x0 win stats gate foes seed=123456,2 at=-1200,-450 at=1200,-450 ai=4<M298:3 id=seed123456-M406
+M407 0x0 0x0 win stats gate foes seed=123456,2 at=1400,-550 at=-15,-1275 ai=3<M223:4 ai=4<M419:3 id=seed123456-M407
+M408 0x0 0x0 win stats gate foes seed=123456,2 at=-381,-592 at=1021,-1222 ai=3<M078:4 id=seed123456-M408
+M409 0x0 0x0 win stats gate foes seed=123456,2 at=0,-1700 at=700,-600 ai=3<M419:3 ai=5<M032:6 id=seed123456-M409
+M410 0x0 0x0 win stats gate foes seed=123456,2 at=50,200 at=700,-855 ai=3<M218:4 id=seed123456-M410
+M413 0x0 0x0 win stats gate foes seed=123456,2 at=-1200,-450 at=1200,-450 ai=3<M231:4 ai=4<M422:4 id=seed123456-M413
+M416 0x0 0x0 win stats gate foes seed=123456,2 at=0,-1700 at=700,-600 ai=3<M420:6 ai=4<M399:3 id=seed123456-M416
+M417 0x0 0x0 win stats gate foes seed=123456,2 at=50,200 at=700,-855 ai=3<M392:6 id=seed123456-M417
+M434 0x0 0x0 win stats gate foes seed=123456,2 ai=4<M087:3 id=seed123456-M434
+M435 0x0 0x0 win stats gate foes seed=123456,2 ai=4<M324:5 id=seed123456-M435
+M436 0x0 0x0 win stats gate foes seed=123456,2 ai=4<M122:3 id=seed123456-M436
+M437 0x0 0x0 win stats gate foes seed=123456,2 ai=5<M154:9 id=seed123456-M437

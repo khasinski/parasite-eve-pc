@@ -1,0 +1,15 @@
+# Doors hardwalk.py table may not use (--deny): room, target, state (a: the walk's merged state, m: the sure
+# bits' copy, which has no bits), below V0x4a (default: always). Each fired in one state only, on a flag the
+# player may not have at that value; the same room's runs with only that flag cleared never reach the target.
+# Doors that fired in one state only and stay usable (not listed): M012 -> M014/M016/M319 (the Theater keys'
+# flags; M018's 0x54 and M023's 0x5e are only behind them, so Day 1 can't end without both); the museum's
+# V0x22 >= 0xb6 / 0xd2 doors (the Klamp Key's lock M243 itself needs V0x22 >= 0xd2); M094 -> M095 (Hard sets
+# the flag, pe_randomizer.c s_flags); M176 -> M180 (its two levers in M176, which the run test can't pull);
+# M258 -> M250 (the car's floor menu); M126, M127, M142, M144, M228, M339 (no pair needs them).
+M115 M121 a          # V0x2c|0x400000, M044's Day 3 event; without it the door leads to M044, which doesn't open M121
+M116 M115 a 0x1b0    # at 0x190: V0x2c 0x800 (M111), 0x1000 (M099), 0x40000 (M121); from 0x1b0 another door, no flag
+M129 M132 a 0x1e8    # the hospital elevator needs power (V0x41|0x4000, the fuse box, which moves the story to 0x1e8)
+M197 M196 m          # V0x22 < 0xb6: the museum counter is past it when the Klamp Key's lock asks
+M227 M228 m          # V0x22 < 0xb6, as above
+M246 M246 m          # V0x22 < 0xd2, as above
+M266 M333 a          # V0x2f|0x2, the Port Storage Key's event in the warehouse
