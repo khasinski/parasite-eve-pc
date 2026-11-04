@@ -45,6 +45,7 @@ static void draft_sync(void) {
 static int on_save_changed(void *ctx, void *user) {
     (void)ctx; (void)user;
     draft_sync();
+    if (pe_econ_store_active() && !pe_loot_enabled()) pe_toast(pe_l10n_ui("Junk economy is off, so this playstyle's rewards are paused."));
     return 0;
 }
 
@@ -141,11 +142,14 @@ static void current_text(char *out, unsigned size) {
     if (!pe_game_loaded()) snprintf(out, size, "load a game");
     else if (status == PE_ECON_STORE_DAMAGED) snprintf(out, size, "Enhanced (damaged)");
     else if (status == PE_ECON_STORE_UNSUPPORTED) snprintf(out, size, "Enhanced (locked)");
+    else if (pe_econ_store_active() && !pe_loot_enabled())
+        snprintf(out, size, pe_l10n_ui("%s (paused)"), pe_l10n_ui(pick_name((unsigned)pick_of(&pe_econ_store_state()->config))));
     else snprintf(out, size, "%s", pick_name((unsigned)pick_of(&pe_econ_store_state()->config)));
 }
 static void summary_text(char *out, unsigned size) {
     const PeEconConfig *c = pe_econ_store_active();
-    if (!c) snprintf(out, size, "Battle Junk + rares");
+    if (c && !pe_loot_enabled()) snprintf(out, size, "Paused");
+    else if (!c) snprintf(out, size, "Battle Junk + rares");
     else if (!(c->flags & (PE_ECON_F_INCOME | PE_ECON_F_BONUS_ITEM | PE_ECON_F_SUPER_DROP | PE_ECON_F_DUPER_DROP)))
         snprintf(out, size, "Normal drops only");
     else {
@@ -165,7 +169,7 @@ static void change_text(char *out, unsigned size) {
     PeEconPreview p;
     if (!pe_game_loaded()) { snprintf(out, size, "-"); return; }
     preview_now(&p);
-    if (p.result != PE_ECON_OK) { snprintf(out, size, "Can't apply"); return; }
+    if (p.result != PE_ECON_OK || (!pe_loot_enabled() && p.transition != PE_ECON_NO_CHANGE)) { snprintf(out, size, "Can't apply"); return; }
     snprintf(out, size, "%s", p.transition == PE_ECON_NO_CHANGE ? "No change"
                               : p.transition == PE_ECON_ENTER_NEW ? "Leaves Enhanced"
                               : p.transition == PE_ECON_RETURN_ENHANCED ? "Back to Enhanced" : "Progress kept");
@@ -202,7 +206,7 @@ static void apply_now(void) {
     preview_now(&p);
     if (p.result != PE_ECON_OK) { pe_toast(pe_l10n_ui(pe_econ_reason(p.result))); return; }
     if (p.transition == PE_ECON_NO_CHANGE) { pe_toast(pe_l10n_ui("Already in use")); return; }
-    if (target.engine == PE_ECON_CONFIGURABLE && !pe_loot_enabled()) { pe_toast(pe_l10n_ui("Turn Junk economy on first")); return; }
+    if (!pe_loot_enabled()) { pe_toast(pe_l10n_ui("Turn Junk economy on first")); return; }   /* a paused save doesn't change */
     r = pe_econ_store_apply(&target);
     if (r != PE_ECON_OK) { pe_toast(pe_l10n_ui(pe_econ_reason(r))); return; }
     pe_mod_log(MOD_ID, "applied %s", pick_name((unsigned)pick_of(&target)));
@@ -221,7 +225,7 @@ static void flag_row(const char *page, const char *label, const char *descriptio
 }
 
 void pe_econ_menu_register(const char *mod_id) {
-    pe_menu_register_info(PE_PAGE_ECONOMY, "Current playstyle", "What this save uses now. It is saved with the game.", current_text);
+    pe_menu_register_info(PE_PAGE_ECONOMY, "Current playstyle", "What this save uses. Its rewards pause while Junk economy is off.", current_text);
     pe_menu_register_info(PE_PAGE_ECONOMY, "Added rewards", "The rewards this playstyle adds. Normal enemy drops are never removed.", summary_text);
     pe_menu_register_live_dynamic_choice(PE_PAGE_ECONOMY, "Choose playstyle", "Browse freely. Nothing changes until Apply.", 16, pick_count, pick_name, get_pick, set_pick);
     pe_menu_register_info(PE_PAGE_ECONOMY, "Apply would", "What Apply does to this save's reward progress.", change_text);

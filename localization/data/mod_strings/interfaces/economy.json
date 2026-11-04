@@ -304,16 +304,6 @@
     ]
   },
   {
-    "key": "mod/ui/1978528f",
-    "text": "What this save uses now. It is saved with the game.",
-    "max_glyphs": 128,
-    "width": 320,
-    "source": "What this save uses now. It is saved with the game.",
-    "contexts": [
-      "mods/pe_economy/pe_econ_menu.c"
-    ]
-  },
-  {
     "key": "mod/ui/198451a8",
     "text": "Enhanced - locked",
     "max_glyphs": 128,
@@ -2468,6 +2458,16 @@
     ]
   },
   {
+    "key": "mod/ui/a9b1c3e9",
+    "text": "Junk economy is off, so this playstyle's rewards are paused.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Junk economy is off, so this playstyle's rewards are paused.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
     "key": "mod/ui/ac3ee6bc",
     "text": "Junk for a mid effect.",
     "max_glyphs": 128,
@@ -3159,6 +3159,27 @@
     ]
   },
   {
+    "key": "mod/ui/de281feb",
+    "text": "Paused",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Paused",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/df284d2a",
+    "text": "%s - paused",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s (paused)",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
+    ],
+    "format": "%s (paused)"
+  },
+  {
     "key": "mod/ui/dfd6d304",
     "text": "Custom playstyle: bonus rare items and bundles.",
     "max_glyphs": 128,
@@ -3288,6 +3309,16 @@
     "source": "SCAVENG",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e7e56e8c",
+    "text": "What this save uses. Its rewards pause while Junk economy is off.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "What this save uses. Its rewards pause while Junk economy is off.",
+    "contexts": [
+      "mods/pe_economy/pe_econ_menu.c"
     ]
   },
   {
