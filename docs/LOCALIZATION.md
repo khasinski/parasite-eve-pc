@@ -240,7 +240,9 @@ to `pelang.py template`, `pseudo` or `build`. It is merged with extracted game k
 duplicate keys, unknown keys and namespace collisions are rejected. Non-CJK packs stay v1; CJK
 mod labels use the same optional v2 dictionary as game text.
 `petext/modtext.py` owns this validation separately from game dialogue and menu checks. A mod label
-cannot contain controls even when deliberate layout overflow is enabled. Fragment limits cover
+cannot contain controls even when deliberate layout overflow is enabled. A row with a `surface`
+(`panel-help` for F1 descriptions, `toast` for messages) is measured in the UI font those draw with
+(`petext/panelfont.py`), against that surface's room, instead of the 320 px game-glyph cap. Fragment limits cover
 the fragment itself; a complete message that combines names, counts and fragments still needs an
 in-game layout check.
 

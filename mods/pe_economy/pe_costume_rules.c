@@ -17,7 +17,6 @@ static const PeCostumeRulesApi s_api = { pe_rules_active };
 
 void pe_costume_rules_register(const char *mod_id) {
     pe_menu_register_toggle(PE_PAGE_ECONOMY, "Costume unlock rules",
-        "On: Wardrobe costumes are bought with Junk before they can be worn. Off: every costume can be worn; "
-        "costumes already bought stay yours.", &s_rules, NULL);
+        "On: costumes must be bought with Junk. Off: all can be worn. Bought ones stay yours.", &s_rules, NULL);
     pe_service_publish("costume_rules", 1, &s_api, mod_id);
 }

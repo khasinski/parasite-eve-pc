@@ -101,7 +101,8 @@ def template_rows(strings: dict[str, dict]) -> list[dict]:
         if dialogue:
             box = "; ".join(r.get("boxes") or [])
         elif r.get("mod_label"):
-            box = f"mod label: {r['max_glyphs']} glyphs, {r['width']} px, single line"
+            box = (f"F1 {r['surface']}: {r['width']} units in the panel font, single line" if r.get("surface")
+                   else f"mod label: {r['max_glyphs']} glyphs, {r['width']} px, single line")
         else:
             box = menu_limits(key, layouts)
         # The pages before and after in the same bank: a page's scene, for whoever translates it.

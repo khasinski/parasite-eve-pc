@@ -54,11 +54,12 @@
     "key": "mod/ui/067a61ab",
     "text": "Added per Tool bought.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Added per Tool bought.",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/06f0195e",
@@ -136,11 +137,12 @@
     "key": "mod/ui/0b85883c",
     "text": "The mod slot to fill or clear.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "The mod slot to fill or clear.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/0ec24245",
@@ -156,11 +158,12 @@
     "key": "mod/ui/0f640924",
     "text": "Why this purchase is available or blocked.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Why this purchase is available or blocked.",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/0f774ce5",
@@ -277,21 +280,23 @@
     "key": "mod/ui/16ac87c0",
     "text": "Free Club 1 only if no usable weapon exists in bag or storage. Press twice.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Free Club 1 only if no usable weapon exists in bag or storage. Press twice.",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/16ce7a69",
     "text": "The preset key is malformed.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "The preset key is malformed.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/18a47e78",
@@ -327,11 +332,12 @@
     "key": "mod/ui/1a60139b",
     "text": "This save's companion can't hold the settings. Nothing changed.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "This save's companion can't hold the settings. Nothing changed.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/1bb18a5b",
@@ -348,11 +354,12 @@
     "key": "mod/ui/1cf1cb80",
     "text": "Browse freely. Nothing changes until Apply.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Browse freely. Nothing changes until Apply.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/1da4cfad",
@@ -411,11 +418,12 @@
     "key": "mod/ui/204bb4ab",
     "text": "Custom playstyle: extra Junk for won battles.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Custom playstyle: extra Junk for won battles.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/205a6693",
@@ -431,31 +439,34 @@
     "key": "mod/ui/207d4df3",
     "text": "Dismantled gear, newest first.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Dismantled gear, newest first.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/207fa903",
     "text": "Price to rebuild this item.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Price to rebuild this item.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/20f2e162",
     "text": "Empty the slot. The effect stays unlocked.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Empty the slot. The effect stays unlocked.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/2197ab82",
@@ -533,11 +544,12 @@
     "key": "mod/ui/279fda4f",
     "text": "Base price must be 75, 100 or 125.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Base price must be 75, 100 or 125.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/299556f8",
@@ -594,11 +606,12 @@
     "key": "mod/ui/2d1d8a94",
     "text": "Kept while redemption is off.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Kept while redemption is off.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/304ff7fb",
@@ -626,11 +639,12 @@
     "key": "mod/ui/3077d0f3",
     "text": "Applied. Battle rewards need the rewards mod, which is off.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Applied. Battle rewards need the rewards mod, which is off.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/30d9dd7d",
@@ -726,21 +740,23 @@
     "key": "mod/ui/36b63cdd",
     "text": "A rare drop that didn't fit waits for Enhanced. It isn't lost or paid here.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "A rare drop that didn't fit waits for Enhanced. It isn't lost or paid here.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/36dfcf13",
     "text": "Unknown setting switched on.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Unknown setting switched on.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/37ebdef0",
@@ -767,11 +783,12 @@
     "key": "mod/ui/38e1a788",
     "text": "Tools disappear with a Tool Kit  effects disappear once unlocked.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Tools disappear with a Tool Kit; effects disappear once unlocked.",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/3982bf85",
@@ -788,11 +805,12 @@
     "key": "mod/ui/3a727d65",
     "text": "Price, carried amount and bag space.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Price, carried amount and bag space.",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/3b52892d",
@@ -818,11 +836,12 @@
     "key": "mod/ui/3cb8fff3",
     "text": "Turn Junk economy on first",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Turn Junk economy on first",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/3cd13796",
@@ -904,21 +923,23 @@
     "key": "mod/ui/3fda20e6",
     "text": "The effect's full name and what installing it costs.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "The effect's full name and what installing it costs.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/3ff9f845",
     "text": "A chance is above 100%.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "A chance is above 100%.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/4037b5c2",
@@ -954,11 +975,12 @@
     "key": "mod/ui/414350e3",
     "text": "Unknown Junk routing.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Unknown Junk routing.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/423ee586",
@@ -1026,11 +1048,12 @@
     "key": "mod/ui/48ebc1ec",
     "text": "Redemption needs a value above 0.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Redemption needs a value above 0.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/491d3e6e",
@@ -1071,11 +1094,12 @@
     "key": "mod/ui/4a4fe538",
     "text": "Of each effect's individual price.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Of each effect's individual price.",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/4a95ad85",
@@ -1131,11 +1155,12 @@
     "key": "mod/ui/4f6bd4a0",
     "text": "These settings need a reward algorithm this version doesn't have.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "These settings need a reward algorithm this version doesn't have.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/4fefd16c",
@@ -1194,31 +1219,34 @@
     "key": "mod/ui/5401af21",
     "text": "Junk and new Mod Catalog effects for this item.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Junk and new Mod Catalog effects for this item.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/54d916a4",
     "text": "Press twice. Rechecks goods, price, balance and bag space.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Press twice. Rechecks goods, price, balance and bag space.",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/54dae6e1",
     "text": "Custom playstyle: turning bundles into Junk.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Custom playstyle: turning bundles into Junk.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/55d70412",
@@ -1235,11 +1263,12 @@
     "key": "mod/ui/560f0631",
     "text": "Sets the next Tool's price.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Sets the next Tool's price.",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/560f2626",
@@ -1275,21 +1304,23 @@
     "key": "mod/ui/5780ead7",
     "text": "Buy it back, with empty mod slots.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Buy it back, with empty mod slots.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/5852ca61",
     "text": "What installing takes out of the item.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "What installing takes out of the item.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/58fa1d69",
@@ -1385,11 +1416,12 @@
     "key": "mod/ui/5c08678f",
     "text": "Rebuild price vs dismantle payout.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Rebuild price vs dismantle payout.",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/5e299018",
@@ -1425,11 +1457,12 @@
     "key": "mod/ui/604e3f94",
     "text": "Won battles until one is certain. 0: never guaranteed.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Won battles until one is certain. 0: never guaranteed.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/619c3984",
@@ -1456,11 +1489,12 @@
     "key": "mod/ui/6298c55f",
     "text": "Work on your equipped gun or your equipped armor.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Work on your equipped gun or your equipped armor.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/62af0814",
@@ -1597,11 +1631,12 @@
     "key": "mod/ui/6b38bfe2",
     "text": "Bag keeps Junk as items. Extra income and redemption need Counter.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Bag keeps Junk as items. Extra income and redemption need Counter.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/6b581315",
@@ -1617,10 +1652,22 @@
     "key": "mod/ui/6b9b526f",
     "text": "Paid for an ordinary won battle.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Paid for an ordinary won battle.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
+    ],
+    "surface": "panel-help"
+  },
+  {
+    "key": "mod/ui/6c0aa43a",
+    "text": "On: costumes must be bought with Junk. Off: all can be worn. Bought ones stay yours.",
+    "max_glyphs": 128,
+    "width": 640,
+    "surface": "panel-help",
+    "source": "On: costumes must be bought with Junk. Off: all can be worn. Bought ones stay yours.",
+    "contexts": [
+      "mods/pe_economy/pe_costume_rules.c"
     ]
   },
   {
@@ -1717,23 +1764,25 @@
     "key": "mod/ui/73291c85",
     "text": "The last action or pending confirmation.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "The last action or pending confirmation.",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/736045d4",
     "text": "Junk you have now.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Junk you have now.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c",
       "mods/pe_economy/pe_catalog_pages.c",
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/744f1bea",
@@ -1830,11 +1879,12 @@
     "key": "mod/ui/7e2d1439",
     "text": "A reward is on but can never pay. Raise its amount or chance, or switch it off.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "A reward is on but can never pay. Raise its amount or chance, or switch it off.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/7e5cec78",
@@ -1901,21 +1951,23 @@
     "key": "mod/ui/81a6aba4",
     "text": "Goods prices, excluding Tools, Revive and economy mods.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Goods prices, excluding Tools, Revive and economy mods.",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/81e9c26a",
     "text": "Chance per won battle.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Chance per won battle.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/83666550",
@@ -2083,21 +2135,23 @@
     "key": "mod/ui/8e56a4f6",
     "text": "Enhanced's Difficulty. The other playstyles ignore it.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Enhanced's Difficulty. The other playstyles ignore it.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/9061401f",
     "text": "This preset can't be used.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "This preset can't be used.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/9111dd70",
@@ -2113,31 +2167,34 @@
     "key": "mod/ui/91b5d104",
     "text": "Chance per won battle. With Duper, at most 100%.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Chance per won battle. With Duper, at most 100%.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/91ecf9f1",
     "text": "Junk for a premium effect  +Tool .",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Junk for a premium effect (+Tool).",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/92d8588d",
     "text": "Already in use",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Already in use",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/95dcc530",
@@ -2236,11 +2293,12 @@
     "key": "mod/ui/9c0dca3c",
     "text": "The performance bonus needs extra income on.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "The performance bonus needs extra income on.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/9c40d9f1",
@@ -2266,11 +2324,12 @@
     "key": "mod/ui/9d8a9f01",
     "text": "Custom playstyle: where normal Junk goes.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Custom playstyle: where normal Junk goes.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/9eb3ef87",
@@ -2337,11 +2396,12 @@
     "key": "mod/ui/a107dba3",
     "text": "Most a Tool costs, after discounts.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Most a Tool costs, after discounts.",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/a1e1f465",
@@ -2369,11 +2429,12 @@
     "key": "mod/ui/a1fd5626",
     "text": "What Apply does to this save's reward progress.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "What Apply does to this save's reward progress.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/a28a8f5a",
@@ -2461,21 +2522,23 @@
     "key": "mod/ui/a9b1c3e9",
     "text": "Junk economy is off, so this playstyle's rewards are paused.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Junk economy is off, so this playstyle's rewards are paused.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/ac3ee6bc",
     "text": "Junk for a mid effect.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Junk for a mid effect.",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/ad19d5fe",
@@ -2542,23 +2605,25 @@
     "key": "mod/ui/b714c05d",
     "text": "Revive on later playthroughs.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Revive on later playthroughs.",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/b86967f3",
     "text": "What the last action did.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "What the last action did.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c",
       "mods/pe_economy/pe_catalog_pages.c",
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/b8af7c97",
@@ -2615,11 +2680,12 @@
     "key": "mod/ui/bd8eddec",
     "text": "Added to the payment for each hit under 4.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Added to the payment for each hit under 4.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/bda1492f",
@@ -2635,11 +2701,12 @@
     "key": "mod/ui/be1d333d",
     "text": "Press twice. Its effects go to the Mod Catalog.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Press twice. Its effects go to the Mod Catalog.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/c0017426",
@@ -2706,11 +2773,12 @@
     "key": "mod/ui/c3242ac0",
     "text": "Unknown reward engine.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Unknown reward engine.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/c3a1373b",
@@ -2746,11 +2814,12 @@
     "key": "mod/ui/c5a2a2d7",
     "text": "Settings can only change in free field.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Settings can only change in free field.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/c6496160",
@@ -2786,11 +2855,12 @@
     "key": "mod/ui/c6f92fd3",
     "text": "Empty-steal Junk needs an amount above 0.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Empty-steal Junk needs an amount above 0.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/c71e7965",
@@ -2889,11 +2959,12 @@
     "key": "mod/ui/cc3cb351",
     "text": "Junk for a common effect.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Junk for a common effect.",
     "contexts": [
       "mods/pe_economy/pe_catalog.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/cea3aa55",
@@ -2929,11 +3000,12 @@
     "key": "mod/ui/cfffac91",
     "text": "Locked: dismantle gear with it to unlock.     already on the item.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Locked: dismantle gear with it to unlock. * = already on the item.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/d1a15ae7",
@@ -2949,11 +3021,12 @@
     "key": "mod/ui/d1b4e718",
     "text": "Use the playstyle chosen above. Only works in free field.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Use the playstyle chosen above. Only works in free field.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/d222da58",
@@ -2990,41 +3063,45 @@
     "key": "mod/ui/d5284d12",
     "text": "Chance per won battle of getting that payment.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Chance per won battle of getting that payment.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/d5342018",
     "text": "The rewards this playstyle adds. Normal enemy drops are never removed.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "The rewards this playstyle adds. Normal enemy drops are never removed.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/d5806feb",
     "text": "Economy settings applied. Save your game to keep them.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Economy settings applied. Save your game to keep them.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/d59be72c",
     "text": "First Tool's price.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "First Tool's price.",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/d5ead707",
@@ -3040,11 +3117,12 @@
     "key": "mod/ui/d7ae0166",
     "text": "The live Junk balance.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "The live Junk balance.",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/d80c23fc",
@@ -3061,11 +3139,12 @@
     "key": "mod/ui/d815acb0",
     "text": "Aya cannot attack: F1 / Economy / Requisition has a spare Club",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Aya cannot attack: F1 / Economy / Requisition has a spare Club",
     "contexts": [
       "mods/pe_economy/pe_requisition_menu.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/d81da7f6",
@@ -3183,21 +3262,23 @@
     "key": "mod/ui/dfd6d304",
     "text": "Custom playstyle: bonus rare items and bundles.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Custom playstyle: bonus rare items and bundles.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/e0a7a1cf",
     "text": "Held Super and Duper Junk, in the bag and trunk, that become Junk after Apply.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Held Super and Duper Junk, in the bag and trunk, that become Junk after Apply.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/e17b27f3",
@@ -3255,11 +3336,12 @@
     "key": "mod/ui/e3662fb4",
     "text": "Unknown result.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Unknown result.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/e3893c73",
@@ -3315,11 +3397,12 @@
     "key": "mod/ui/e7e56e8c",
     "text": "What this save uses. Its rewards pause while Junk economy is off.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "What this save uses. Its rewards pause while Junk economy is off.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/e84189dc",
@@ -3356,21 +3439,23 @@
     "key": "mod/ui/e9282f03",
     "text": "A gun or armor you aren't wearing.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "A gun or armor you aren't wearing.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/ecbeaaf3",
     "text": "Chance per won battle. With Super, at most 100%.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Chance per won battle. With Super, at most 100%.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/ee82c0ae",
@@ -3386,14 +3471,15 @@
     "key": "mod/ui/eef5a916",
     "text": "Load a game first",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Load a game first",
     "contexts": [
       "mods/pe_economy/pe_catalog.c",
       "mods/pe_economy/pe_dismantle.c",
       "mods/pe_economy/pe_econ_menu.c",
       "mods/pe_economy/pe_requisition.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/ef82c241",
@@ -3439,11 +3525,12 @@
     "key": "mod/ui/f0cd28fb",
     "text": "Junk for each empty steal.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Junk for each empty steal.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/f182c567",
@@ -3480,21 +3567,23 @@
     "key": "mod/ui/f41e1bf1",
     "text": "The saved Economy settings are damaged.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "The saved Economy settings are damaged.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/f47a261f",
     "text": "Revive on a first playthrough.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Revive on a first playthrough.",
     "contexts": [
       "mods/pe_economy/pe_requisition.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/f4964c01",
@@ -3541,11 +3630,12 @@
     "key": "mod/ui/f66c451b",
     "text": "Base price level. Bargain still applies on top.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Base price level. Bargain still applies on top.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/f84984d4",
@@ -3573,21 +3663,23 @@
     "key": "mod/ui/f876d13b",
     "text": "Super and Duper Junk chances add up to more than 100%.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Super and Duper Junk chances add up to more than 100%.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/fa7a4ed4",
     "text": "Paid for a won boss battle.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Paid for a won boss battle.",
     "contexts": [
       "mods/pe_economy/pe_econ_menu.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/fc0f33c3",
@@ -3623,21 +3715,23 @@
     "key": "mod/ui/fe00a6d9",
     "text": "Extra income, empty-steal Junk and redemption need native Junk routed to the counter.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Extra income, empty-steal Junk and redemption need native Junk routed to the counter.",
     "contexts": [
       "mods/pe_economy/pe_econ_config.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/ff416c3d",
     "text": "Press twice: put the effect in the slot.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Press twice: put the effect in the slot.",
     "contexts": [
       "mods/pe_economy/pe_catalog_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/ffa08ffe",
