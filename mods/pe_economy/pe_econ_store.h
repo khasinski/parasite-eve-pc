@@ -15,6 +15,10 @@ const PeEconState *pe_econ_store_state(void);
 PeEconStoreStatus pe_econ_store_status(void);
 /* Refused: settings, progress and the section stay as they were. */
 PeEconResult pe_econ_store_apply(const PeEconConfig *target);
+/* The new path's settings, or NULL while Enhanced is active. */
+const PeEconConfig *pe_econ_store_active(void);
+/* The reward engine's result, in one step; crash reports copy it as it stands. */
+void pe_econ_store_commit(const PeEconProgress *progress);
 
 #ifdef PE_ECON_STORE_TEST
 uint8_t *pe_econ_store_test_bytes(void);

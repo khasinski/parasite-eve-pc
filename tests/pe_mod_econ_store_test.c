@@ -9,6 +9,7 @@
 #define RMDIR rmdir
 #endif
 #include "pe_econ_store.h"
+#include "pe_economy_policy.h"
 #include "pe_extension_store.h"
 #include "pe_hooks.h"
 #include "pe_mod_host.h"
@@ -20,7 +21,29 @@ int pe_mod_load_admit(const char *path, const unsigned char *block);
 void pe_mod_save_committed(const char *path);
 
 static int s_free_field = 1, s_toasts;
-static int econ_init(void) { pe_econ_store_register("pe_economy"); return 0; }
+/* The payout API as a battle end really calls it: from inside a hook, with Scavenger last. */
+static PeRegResult s_preview_result = PE_REG_CAPACITY;
+static PePayoutResult s_preview_out;
+static int on_rewards(void *ctx, void *user) {
+    PePayoutContext c;
+    (void)ctx; (void)user;
+    memset(&c, 0, sizeof c);
+    c.api.version = 1;
+    c.api.size = sizeof c;
+    c.generation = pe_reg_generation();
+    c.operation = 1;
+    c.nominal_10000 = 10000;
+    c.remainder = 60000000u;
+    c.final_factor_10000 = 15000;
+    c.configurable = 1;
+    s_preview_result = pe_economy_policy_preview(&c, &s_preview_out);
+    return 0;
+}
+static int econ_init(void) {
+    pe_econ_store_register("pe_economy");
+    pe_hook_add(PE_HOOK_BATTLE_REWARDS, on_rewards, NULL, PE_PRIORITY_NORMAL, "pe_economy");
+    return 0;
+}
 static const PeMod econ_mod = {"pe_economy", "Economy", "1", NULL, econ_init, NULL};
 const PeMod *const g_pe_mods[] = {&econ_mod, NULL};
 
@@ -101,6 +124,13 @@ int main(void) {
     CHECK(pe_econ_builtin(0, 75, &enhanced) == PE_ECON_OK);
     pe_hook_dispatch(PE_HOOK_NEW_GAME, &(PeHookNewGame){PE_NEW_GAME_TITLE});
 
+    /* 1 Junk * 1.5 + 0.6 carried = 2.1. */
+    {
+        PeHookRewards reward = {.exp = 0, .list = NULL};
+        pe_hook_dispatch(PE_HOOK_BATTLE_REWARDS, &reward);
+        CHECK(s_preview_result == PE_REG_OK && s_preview_out.junk == 2 && s_preview_out.remainder == 10000000u);
+    }
+
     /* Never leaving Enhanced writes no companion. */
     save(plain);
     CHECK(companion_count() == 0);
@@ -125,6 +155,19 @@ int main(void) {
     load(light_save);
     CHECK(s->initialized && s->config.engine == PE_ECON_CONFIGURABLE && s->config.income == 1 && s->config.price_pct == 75);
     CHECK(!strcmp(s->config.key, "pe.light") && !memcmp(&s->progress, &before.progress, sizeof before.progress));
+    CHECK(s->progress.rng_payment && s->progress.rng_item && s->progress.rng_bundle);
+
+    /* What the reward engine commits is what a save holds. */
+    {
+        PeEconProgress g = s->progress;
+        g.remainder = 1234;
+        g.dry = 7;
+        pe_econ_store_commit(&g);
+        save(light_save);
+        load(light_save);
+        CHECK(s->progress.remainder == 1234 && s->progress.dry == 7);
+    }
+    CHECK(pe_econ_store_active() == &s->config);
 
     /* A save without the section never inherits the one loaded before it. */
     load(plain);

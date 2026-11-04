@@ -87,7 +87,14 @@ PeRegResult pe_economy_policy_preview(const PePayoutContext *c, PePayoutResult *
     }
     pe_reg_readonly_end();
     if (f < 0 || ((uint64_t)f && n > (UINT64_MAX - c->remainder) / (uint64_t)f)) return PE_REG_CONFLICT;
-    uint64_t v = n * (uint64_t)f + c->remainder;
+    uint64_t v = n * (uint64_t)f;
+    if (c->final_factor_10000) {
+        /* Split so the product can't overflow; only under 1/100,000,000 of a Junk can round away. */
+        const uint64_t whole = v / 10000u, part = v % 10000u;
+        if (whole > (UINT64_MAX - c->remainder) / 2u / c->final_factor_10000) return PE_REG_CONFLICT;
+        v = whole * c->final_factor_10000 + part * c->final_factor_10000 / 10000u;
+    }
+    v += c->remainder;
     PePayoutResult result = {(uint32_t)(v / 100000000u > 99999 ? 99999 : v / 100000000u),
                              v / 100000000u >= 99999 ? 0 : (uint32_t)(v % 100000000u)};
     *out = result;

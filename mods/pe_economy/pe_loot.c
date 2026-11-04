@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "pe_econ_store.h"
 #include "pe_economy.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
@@ -129,6 +130,11 @@ static int pe_free_bag_slot(int limit) {
 }
 static int pe_items_found_open(void) { return g_InvActiveListOverride && g_InvItemPtr == g_InvActiveListOverride; }
 static const u8 *pe_item_name(int id) { return id > 0 ? (const u8 *)Text_LookupTable8((unsigned)id - 1u) : NULL; }
+/* The opt-in path with native Junk kept as items. Enhanced is never this. */
+static int pe_junk_stays_item(void) {
+    const PeEconConfig *policy = pe_econ_store_active();
+    return policy && policy->route == PE_ECON_ROUTE_ITEMS;
+}
 
 /* ---- the "junk" service ---- */
 int pe_loot_enabled(void) { return s_enabled; }
@@ -147,6 +153,7 @@ uint32_t pe_loot_price(uint32_t base) {
     uint32_t pct, p;
     if (!base) return 0;
     pct = s_preset_price[s_st.preset < 3 ? s_st.preset : 1];
+    if (pe_econ_store_active()) pct = pe_econ_store_active()->price_pct;
     if (pe_loot_armor_has(PE_FX_BARGAIN)) pct = pct * 85u / 100u;
     p = (base * pct + 50u) / 100u;
     return p ? p : 1u;
@@ -169,7 +176,7 @@ static int pe_on_rewards_early(void *ctx, void *user) {
     s_battle_vanilla = 0;
     s_found.junk_shown = 0;
     s_found.junk_list_seen = 0;
-    if (!s_enabled || !r->list) return 0;
+    if (!s_enabled || !r->list || pe_junk_stays_item()) return 0;
     for (i = 0; i < PE_REWARD_SLOTS; ++i) {
         const BattleRewardSlot e = r->list[i];
         if (e.id == 0) break;
@@ -242,11 +249,14 @@ static int pe_on_item_add(void *ctx, void *user) {
         s_steal_frame = s_frames;
     }
     if (from_steal && !*item && s_enabled && pe_game_loaded()) {   /* empty steal: a little Junk */
-        const uint32_t bank = (uint32_t)s_st.steal_bank + (uint32_t)s_tune_empty_steal;
+        const PeEconConfig *policy = pe_econ_store_active();
+        const uint32_t amount = !policy ? (uint32_t)s_tune_empty_steal
+                                : (policy->flags & PE_ECON_F_EMPTY_STEAL) ? policy->steal_junk : 0u;
+        const uint32_t bank = (uint32_t)s_st.steal_bank + amount;
         s_st.steal_bank = bank > 0xFFFFu ? 0xFFFFu : (uint16_t)bank;
         return 0;
     }
-    if (!s_enabled || !pe_game_loaded() || *item != PE_ITEM_JUNK) return 0;
+    if (!s_enabled || !pe_game_loaded() || *item != PE_ITEM_JUNK || pe_junk_stays_item()) return 0;
     *item = 0;                                                   /* adds nothing, returns success */
     if (s_found.junk_shown && g_InvActiveListOverride) {
         pe_log("junk_take", "n=%u", (unsigned)s_found.junk_shown);
@@ -401,8 +411,14 @@ static void pe_wallet_put_rewards(const PeRewardState *in) {
 }
 static int pe_wallet_preset(void) { return s_st.preset < 3 ? s_st.preset : 1; }
 static void pe_wallet_battle_junk(uint32_t n) { s_battle_extra = n >= 99999u - s_battle_extra ? 99999u : s_battle_extra + n; }
+static const PeEconState *pe_wallet_policy(void) { return pe_econ_store_active() ? pe_econ_store_state() : NULL; }
+static uint32_t pe_wallet_room(void) {
+    const uint64_t taken = (uint64_t)s_st.junk + s_battle_extra + s_battle_vanilla + s_st.steal_bank;
+    return taken >= 99999u ? 0u : 99999u - (uint32_t)taken;
+}
 static const PeWalletApi s_wallet_api = {
     sizeof(PeWalletApi), pe_wallet_get_rewards, pe_wallet_put_rewards, pe_wallet_preset, pe_wallet_battle_junk,
+    pe_wallet_policy, pe_econ_store_commit, pe_wallet_room,
 };
 
 static const PeSaveRecord s_save_record = {
@@ -420,10 +436,36 @@ static int pe_on_save_read(void *ctx, void *user) {
 }
 
 /* ---- per frame ---- */
+/* The opt-in path: routing and redemption follow its settings, and a slot is only emptied when
+ * the wallet can take all of it, stacked copies included. */
+static void pe_sweep_policy(const PeEconConfig *policy) {
+    const PeStacksApi *stacks = (const PeStacksApi *)pe_service_get("stacks", 1);
+    int i;
+    for (i = 0; i < PE_BAG_SLOTS + PE_STORAGE_SLOTS; ++i) {
+        const int list = i < PE_BAG_SLOTS ? 0 : 1, at = list ? i - PE_BAG_SLOTS : i;
+        s16 *slot = list ? &g_WayneStorageItems[at] : &g_AyaSaveState.inventory_items[at];
+        const int item = *slot;
+        uint32_t value = 0, copies, total;
+        if (item == PE_ITEM_JUNK && policy->route == PE_ECON_ROUTE_COUNTER) value = 1;
+        else if (item == PE_ITEM_SUPER_JUNK && (policy->flags & PE_ECON_F_SUPER_REDEEM)) value = policy->super_value;
+        else if (item == PE_ITEM_DUPER_JUNK && (policy->flags & PE_ECON_F_DUPER_REDEEM)) value = policy->duper_value;
+        if (!value) continue;
+        copies = stacks ? (uint32_t)stacks->count(list, at) : 1u;
+        if (!copies) copies = 1;
+        total = copies * value;
+        if (total > 99999u - s_st.junk) continue;   /* stays until there's room */
+        if (stacks) { uint32_t n; for (n = 0; n < copies; ++n) stacks->take(list, at); }
+        *slot = 0;
+        if (value > 1u) pe_log("bundle", "item=0x%02X junk=%u", (unsigned)item, (unsigned)total);
+        pe_add_junk(total);
+    }
+}
+
 static void pe_sweep(void) {
     uint32_t moved = 0;
     int i;
     if (s_found.junk_shown) return;
+    if (pe_econ_store_active()) { pe_sweep_policy(pe_econ_store_active()); return; }
     for (i = 0; i < PE_BAG_SLOTS + PE_STORAGE_SLOTS; ++i) {
         s16 *slot = i < PE_BAG_SLOTS ? &g_AyaSaveState.inventory_items[i] : &g_WayneStorageItems[i - PE_BAG_SLOTS];
         const uint32_t bundle = pe_bundle_value(*slot);
@@ -499,6 +541,7 @@ static void pe_junk_without_room(void) {
     if (g_InvActiveListOverride != g_InvActiveListItems || pe_free_bag_slot(pe_bag_limit()) >= 0) return;
     for (i = 0; i < n && keys; ++i)
         if (g_InvActiveListItems[i] && keys->take((uint16_t)g_InvActiveListItems[i])) g_InvActiveListItems[i] = 0;
+    if (pe_junk_stays_item()) return;
     for (i = 0; i < n; ++i) {
         uint32_t pay;
         if (g_InvActiveListItems[i] != PE_ITEM_JUNK) continue;

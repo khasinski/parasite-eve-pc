@@ -54,6 +54,8 @@ typedef struct PeRewardState {
     uint8_t econ_since, permit_since;   /* rares since an economy mod / a Mod Permit */
 } PeRewardState;
 
+struct PeEconState;
+struct PeEconProgress;
 typedef struct PeWalletApi {
     uint32_t struct_size;               /* sizeof(PeWalletApi) */
     void (*get_rewards)(PeRewardState *out);
@@ -62,6 +64,11 @@ typedef struct PeWalletApi {
     /* Extra Junk for the battle being won, added before the items-found list is built: the wallet
      * shows it with vanilla Junk and steals as one "Junk xN" entry. */
     void (*battle_junk)(uint32_t n);
+    /* The opt-in Economy path. policy: the applied state while it is active, else NULL, and then
+     * nothing below may be used. room: Junk the wallet can still take whole this battle. */
+    const struct PeEconState *(*policy)(void);
+    void (*policy_commit)(const struct PeEconProgress *progress);
+    uint32_t (*room)(void);
 } PeWalletApi;
 
 typedef struct PeCatalogApi {

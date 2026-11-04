@@ -154,6 +154,8 @@ static void test_state_validate(void) {
     s.initialized = 1;
     s.config = preset(STEADY);
     s.progress.next_sequence = 1;
+    assert(pe_econ_state_validate(&s) == PE_ECON_BAD_STATE);   /* streams must be seeded */
+    s.progress.rng_payment = s.progress.rng_item = s.progress.rng_bundle = 1;
     assert(pe_econ_state_validate(&s) == PE_ECON_OK);
     s.config.engine = PE_ECON_LEGACY;
     assert(pe_econ_state_validate(&s) == PE_ECON_OK);

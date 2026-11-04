@@ -105,8 +105,8 @@ typedef struct {
 } PeEconPending;
 
 /* The new path's progress. It waits untouched while Enhanced is active. */
-typedef struct {
-    uint32_t rng_payment, rng_item, rng_bundle;
+typedef struct PeEconProgress {
+    uint32_t rng_payment, rng_item, rng_bundle;   /* nonzero once initialized */
     uint16_t dry;
     uint8_t effect_progress, permit_progress;
     uint32_t remainder;        /* 0..99,999,999 */
@@ -115,7 +115,7 @@ typedef struct {
 } PeEconProgress;
 
 /* The applied settings and progress: the pe_economy/policy companion section. */
-typedef struct {
+typedef struct PeEconState {
     PeEconConfig config;       /* kept when back on Enhanced, whose engine is Legacy */
     PeEconProgress progress;
     uint8_t initialized;       /* new-path progress has been set up, once */

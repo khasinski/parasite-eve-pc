@@ -21,10 +21,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../pe_economy/pe_econ_engine.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_registry.h"
 #include "pe_services.h"
 #include "pe1/battle.h"
 #include "pe1/draw_state.h"
@@ -229,6 +231,122 @@ static uint16_t pe_rw_roll_rare(uint32_t exp) {
     return 0;
 }
 
+/* ---- the opt-in Economy path: one engine per battle, so Enhanced's fields above stay frozen ---- */
+static uint32_t s_rw_policy_seq[2];   /* the pending entries on the open list, by sequence */
+
+static uint32_t pe_rw_copies(int item) {
+    const PeStacksApi *stacks = (const PeStacksApi *)pe_service_get("stacks", 1);
+    return stacks ? (uint32_t)stacks->total(0, (uint16_t)item) + (uint32_t)stacks->total(1, (uint16_t)item) : pe_rw_held(item);
+}
+
+static int pe_rw_list_has(const PeHookRewards *r, uint32_t kept, int item) {
+    uint32_t i;
+    for (i = 0; i < kept; ++i) if (r->list[i].id == item) return 1;
+    return 0;
+}
+
+/* Show the pending item and bundle at the end of the list; what doesn't fit waits. */
+static void pe_rw_policy_show(const PeHookRewards *r, PeEconProgress *g) {
+    static const int slots[2] = {PE_ECON_SLOT_ITEM, PE_ECON_SLOT_BUNDLE};
+    const PeCatalogApi *cat = pe_rw_catalog();
+    uint32_t kept = 0;
+    int a;
+    while (kept < PE_RW_REWARD_SLOTS && r->list[kept].id != 0) ++kept;
+    s_rw_found.rare_shown[0] = s_rw_found.rare_shown[1] = 0;
+    s_rw_found.rare_is_econ[0] = s_rw_found.rare_is_econ[1] = 0;
+    s_rw_found.rare_list_seen = 0;
+    s_rw_found.econ_shown = -1;
+    s_rw_found.econ_list_seen = 0;
+    s_rw_policy_seq[0] = s_rw_policy_seq[1] = 0;
+    for (a = 0; a < 2; ++a) {
+        PeEconPending *e = &g->pending[slots[a]];
+        int id = e->content;
+        if (!e->kind) continue;
+        if (e->kind == PE_ECON_PENDING_EFFECT) {
+            const int mod = e->content % PE_ECON_COUNT;
+            if (!cat) continue;                 /* no Mod Catalog: it waits */
+            if (cat->armor_unlocked(s_rw_econ_mods[mod].effect)) {
+                /* Unlocked some other way: already satisfied, with no Junk and no reroll. */
+                char msg[64];
+                pe_log("econ_settled", "mod=%s", s_rw_econ_mods[mod].name);
+                snprintf(msg, sizeof msg, "%s: already unlocked", s_rw_econ_mods[mod].name);
+                pe_toast(msg);
+                memset(e, 0, sizeof *e);
+                continue;
+            }
+            /* Carried by a Mod Permit entry: never next to a real one. */
+            if (pe_rw_list_has(r, kept, PE_RW_ITEM_MOD_PERMIT)) continue;
+            s_rw_found.econ_shown = mod;
+            s_rw_found.permits_before = pe_rw_bag_count_of(PE_RW_ITEM_MOD_PERMIT);
+            id = PE_RW_ITEM_MOD_PERMIT;
+        }
+        if (kept >= PE_RW_REWARD_SLOTS) {
+            if (e->kind == PE_ECON_PENDING_EFFECT) s_rw_found.econ_shown = -1;
+            continue;
+        }
+        r->list[kept].id = (s16)id;
+        r->list[kept++].extra = -1;
+        s_rw_found.rare_shown[a] = (uint16_t)id;
+        s_rw_found.rare_before[a] = pe_rw_bag_count_of(id);
+        s_rw_found.rare_is_econ[a] = e->kind == PE_ECON_PENDING_EFFECT;
+        s_rw_policy_seq[a] = e->sequence;
+    }
+}
+
+static void pe_rw_policy_battle(const PeHookRewards *r, const PeWalletApi *wallet, const PeEconState *state) {
+    PeEconProgress g = state->progress;
+    PeEconBattleIn in;
+    PeEconBattleOut out;
+    int missing[PE_ECON_COUNT], econ, s, i;
+    memset(&in, 0, sizeof in);
+    econ = pe_rw_econ_missing(missing);
+    for (i = 0; i < econ; ++i) in.econ_missing |= (uint8_t)(1u << missing[i]);
+    for (s = 0; s < PE_RW_ENEMY_SLOTS; ++s) in.hits += s_rw.hits[s];
+    in.exp = (uint32_t)r->exp;
+    in.wallet_room = wallet->room();
+    in.generation = pe_reg_generation();
+    in.held_super_tool = pe_rw_copies(0x36);
+    in.held_permits = pe_rw_copies(PE_RW_ITEM_MOD_PERMIT);
+    in.held_tools = pe_rw_copies(0x16);
+    in.tool_kit = pe_rw_copies(0x35) || in.held_super_tool;
+    in.boss = (uint8_t)s_rw_boss_battle;
+    in.has_list = r->list != NULL;
+    in.scavenger = (uint8_t)pe_rw_armor_has(PE_FX_SCAVENGER);
+    in.lucky_find = (uint8_t)pe_rw_armor_has(PE_FX_LUCKY_FIND);
+    in.econ_guarantee = (uint8_t)s_rw_tune_econ_guarantee;
+    in.permit_guarantee = (uint8_t)s_rw_tune_permit_guarantee;
+    in.preview = pe_economy_policy_preview;
+    pe_econ_battle(&state->config, &g, &in, &out);
+    if (r->list) pe_rw_policy_show(r, &g);
+    wallet->policy_commit(&g);
+    if (out.junk) wallet->battle_junk(out.junk);
+    if (out.notify) (void)pe_economy_policy_notify(&out.context, &out.result);   /* after the commit */
+    if (out.paused) pe_toast("Junk counter is full: extra Junk is waiting and income is paused");
+    if (out.preview_failed) pe_log("policy", "payout preview refused: no extra Junk this battle");
+    pe_log("loot", "policy exp=%u junk=%u hits=%u boss=%d dry=%u item=%u bundle=%u held=%u",
+           (unsigned)in.exp, (unsigned)out.junk, (unsigned)in.hits, s_rw_boss_battle, (unsigned)g.dry,
+           (unsigned)g.pending[PE_ECON_SLOT_ITEM].kind, (unsigned)g.pending[PE_ECON_SLOT_BUNDLE].kind,
+           (unsigned)g.pending[PE_ECON_SLOT_CURRENCY].amount);
+}
+
+/* The list closed: taken or left, what it showed is finished (left means declined). */
+static void pe_rw_policy_settle(void) {
+    static const int slots[2] = {PE_ECON_SLOT_ITEM, PE_ECON_SLOT_BUNDLE};
+    const PeWalletApi *wallet = pe_rw_wallet();
+    const PeEconState *state = wallet ? wallet->policy() : NULL;
+    int a, changed = 0;
+    if (state) {
+        PeEconProgress g = state->progress;
+        for (a = 0; a < 2; ++a)
+            if (s_rw_policy_seq[a] && g.pending[slots[a]].sequence == s_rw_policy_seq[a]) {
+                memset(&g.pending[slots[a]], 0, sizeof g.pending[slots[a]]);
+                changed = 1;
+            }
+        if (changed) wallet->policy_commit(&g);
+    }
+    s_rw_policy_seq[0] = s_rw_policy_seq[1] = 0;
+}
+
 /* ---- battle end: our Junk, then our rares at the end of the list (the wallet took vanilla Junk
  * off it first and puts the "Junk xN" entry last after us) ---- */
 static int pe_rw_on_rewards(void *ctx, void *user) {
@@ -241,6 +359,10 @@ static int pe_rw_on_rewards(void *ctx, void *user) {
     (void)user;
     if (!pe_rw_enabled()) return 0;
     pe_rw_load();
+    if (wallet->policy()) {
+        pe_rw_policy_battle(r, wallet, wallet->policy());
+        return 0;
+    }
     if (earned > cap) earned = cap;
     for (s = 0; s < PE_RW_ENEMY_SLOTS; ++s) hits += s_rw.hits[s];
     if (hits < 4) earned += earned * (uint32_t)s_rw_tune_nohit_bonus * (4u - hits) / 400u;
@@ -399,12 +521,14 @@ static void pe_rw_tick(void) {
                 pe_log(pe_rw_bag_count_of(s_rw_found.rare_shown[a]) > s_rw_found.rare_before[a] ? "rare_take" : "rare_left",
                        "item=0x%02X", (unsigned)s_rw_found.rare_shown[a]);
             }
+            pe_rw_policy_settle();
             s_rw_found.rare_shown[0] = s_rw_found.rare_shown[1] = 0;
         }
     }
 
     battle = pe_in_battle();
     if (battle && !s_rw_in_battle) {       /* a battle starts */
+        s_rw_policy_seq[0] = s_rw_policy_seq[1] = 0;   /* not closed: still pending */
         s_rw_found.rare_shown[0] = s_rw_found.rare_shown[1] = 0;
         s_rw_found.econ_shown = -1;
         s_rw_boss_battle = 0;

@@ -13,6 +13,7 @@
 #include <string.h>
 #include "../mods/pe_economy/pe_loot.c"
 #include "../mods/pe_rewards/pe_rewards.c"
+#include "pe_econ_test_host.inc"
 
 SaveRuntimeState g_SaveRuntimeState;
 GameStateBlock g_GameStateBlock;
@@ -22,10 +23,13 @@ static int s_scavenger;
 static ItemDataRecord s_armor;
 ItemDataRecord *pe_equipped(int armor) { return armor ? &s_armor : NULL; }
 int pe_rec_has_effect(const ItemDataRecord *rec, int effect) { (void)rec; return s_scavenger && effect == PE_FX_SCAVENGER; }
+static int s_test_free_field, s_test_loaded, s_test_toasts;
+static const PeCatalogApi *s_test_catalog;   /* the parity run has none */
 const void *pe_service_get(const char *name, int version) {
     (void)version;
     if (!strcmp(name, "wallet")) return &s_wallet_api;
     if (!strcmp(name, "junk")) return &s_junk_api;
+    if (!strcmp(name, "catalog")) return s_test_catalog;
     return NULL;                                  /* no Mod Catalog: economy mods can't drop */
 }
 
@@ -47,14 +51,14 @@ s16 g_InvActiveListItems[10];
 s16 *g_InvActiveListOverride, *g_InvItemPtr;
 u8 g_InvItemMessageBuffer[32];
 void *Text_LookupTable8(unsigned int index) { (void)index; return NULL; }
-int pe_free_field(void) { return 0; }
-int pe_game_loaded(void) { return 0; }
+int pe_free_field(void) { return s_test_free_field; }
+int pe_game_loaded(void) { return s_test_loaded; }
 int pe_in_battle(void) { return 0; }
 unsigned pe_wayne_count(void) { return 0; }
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id) { (void)id; (void)fn; (void)user; (void)priority; (void)mod_id; return 0; }
 int pe_service_publish(const char *name, int version, const void *api, const char *mod_id) { (void)name; (void)version; (void)api; (void)mod_id; return 0; }
 void pe_mod_log(const char *mod_id, const char *fmt, ...) { (void)mod_id; (void)fmt; }
-void pe_toast(const char *text) { (void)text; }
+void pe_toast(const char *text) { (void)text; ++s_test_toasts; }
 int pe_save_register(const PeSaveRecord *record) { (void)record; return 0; }
 int pe_menu_register_toggle(const char *sub, const char *label, const char *description, int *flag, PeMenuPerFrame per_frame) { (void)sub; (void)label; (void)description; (void)flag; (void)per_frame; return 0; }
 int pe_menu_register_action(const char *sub, const char *label, const char *description, PeMenuAction action) { (void)sub; (void)label; (void)description; (void)action; return 0; }
@@ -65,7 +69,210 @@ int pe_menu_register_live_choice(const char *sub, const char *label, const char 
 int pe_menu_register_tick(PeMenuPerFrame fn) { (void)fn; return 0; }
 int pe_menu_register_info(const char *sub, const char *label, const char *description, PeMenuText text) { (void)sub; (void)label; (void)description; (void)text; return 0; }
 
-#define PINNED 0xA31B4CD7B0A66B68ull   /* the economy mod before D10 step 1, and after it: identical */
+/* The opt-in path through the same real handlers. Runs after the hash is checked. */
+static int s_unlocked[32];
+static int test_armor_unlocked(int effect) { return s_unlocked[effect]; }
+static int test_unlock_armor(int effect) { const int was = s_unlocked[effect]; s_unlocked[effect] = 1; return !was; }
+static const PeCatalogApi s_catalog = {test_armor_unlocked, test_unlock_armor};
+
+static PeEconConfig builtin(int i) {
+    PeEconConfig c;
+    assert(pe_econ_builtin(i, 100, &c) == PE_ECON_OK);
+    return c;
+}
+static void clear_list(BattleRewardSlot *list) {
+    memset(list, 0, sizeof(BattleRewardSlot) * 10);
+    for (int i = 0; i < 10; ++i) list[i].extra = -1;
+}
+static int on_list(const BattleRewardSlot *list, int id) {
+    for (int i = 0; i < 10; ++i) if (list[i].id == id) return 1;
+    return 0;
+}
+
+static void test_policy_path(void) {
+    BattleRewardSlot list[10];
+    PeHookRewards reward = {.exp = 500, .list = list};
+    PeRewardState before, after;
+    PeEconConfig c;
+    const PeEconState *state = pe_econ_store_state();
+    enum { ENHANCED, VANILLA, LIGHT, STEADY, TREASURE };
+
+    pe_save_reset(NULL);
+    s_found.junk_shown = 0;
+    s_st.preset = 2;                      /* Grind: Enhanced's price is 125 */
+    s_st.rng = 0xC0FFEEu; s_st.rare_dry = 7; s_st.rare_carry = 0x31; s_st.econ_since = 2; s_st.permit_since = 3;
+    s_test_free_field = 1;
+    s_test_loaded = 1;
+    s_rw_boss_battle = 0;
+    s_scavenger = 0;
+    assert(pe_loot_price(100) == 125);
+    assert(!s_wallet_api.policy());
+
+    /* Steady: fixed income shown with native Junk; Enhanced's progress doesn't move. */
+    c = builtin(STEADY);
+    c.price_pct = 75;
+    assert(pe_econ_store_apply(&c) == PE_ECON_OK);
+    assert(s_wallet_api.policy() == state && state->progress.rng_payment && state->progress.next_sequence == 1);
+    assert(pe_loot_price(100) == 75);     /* the path's own price */
+    memset(&before, 0, sizeof before); memset(&after, 0, sizeof after);
+    s_wallet_api.get_rewards(&before);
+    clear_list(list);
+    list[0].id = PE_ITEM_JUNK; list[1].id = 6;
+    s_test_notices = 0;
+    battle_end(&reward);
+    assert(s_found.junk_shown == 3u + 1u && list[0].id == 6 && list[1].id == PE_ITEM_JUNK && !list[2].id);
+    assert(s_test_notices == 1);
+    s_wallet_api.get_rewards(&after);
+    assert(!memcmp(&before, &after, sizeof before));
+    pe_add_junk(s_found.junk_shown); s_found.junk_shown = 0;
+
+    /* Vanilla drops: nothing beyond what the battle dropped, and no bonus for empty steals. */
+    c = builtin(VANILLA);
+    assert(pe_econ_store_apply(&c) == PE_ECON_OK);
+    clear_list(list);
+    list[0].id = 6;
+    s_st.junk = 0;
+    battle_end(&reward);
+    assert(!s_found.junk_shown && list[0].id == 6 && !list[1].id && !s_st.junk);
+    {
+        s32 item = 0;
+        pe_on_steal(NULL, NULL);
+        pe_on_item_add(&item, NULL);
+        assert(!s_st.steal_bank);
+    }
+
+    /* Bundles stay as items; native Junk still goes to the counter. */
+    memset(g_AyaSaveState.inventory_items, 0, sizeof g_AyaSaveState.inventory_items);
+    memset(g_WayneStorageItems, 0, sizeof g_WayneStorageItems);
+    g_AyaSaveState.inventory_items[0] = PE_ITEM_SUPER_JUNK;
+    g_AyaSaveState.inventory_items[1] = PE_ITEM_DUPER_JUNK;
+    g_AyaSaveState.inventory_items[2] = PE_ITEM_JUNK;
+    g_WayneStorageItems[0] = PE_ITEM_DUPER_JUNK;
+    pe_sweep();
+    assert(s_st.junk == 1 && g_AyaSaveState.inventory_items[0] == PE_ITEM_SUPER_JUNK);
+    assert(g_AyaSaveState.inventory_items[1] == PE_ITEM_DUPER_JUNK && !g_AyaSaveState.inventory_items[2]);
+
+    /* Light redeems at its values, all or nothing. */
+    c = builtin(LIGHT);
+    assert(pe_econ_store_apply(&c) == PE_ECON_OK);
+    s_st.junk = 99999u - 15u;             /* room for a Super (10), not a Duper (20) */
+    pe_sweep();
+    assert(s_st.junk == 99999u - 5u && !g_AyaSaveState.inventory_items[0]);
+    assert(g_AyaSaveState.inventory_items[1] == PE_ITEM_DUPER_JUNK && g_WayneStorageItems[0] == PE_ITEM_DUPER_JUNK);
+    s_st.junk = 0;
+    pe_sweep();
+    assert(s_st.junk == 40u && !g_AyaSaveState.inventory_items[1] && !g_WayneStorageItems[0]);
+
+    /* Items routing: native Junk stays what it is, everywhere. */
+    c = builtin(VANILLA);
+    c.route = PE_ECON_ROUTE_ITEMS;
+    assert(pe_econ_store_apply(&c) == PE_ECON_OK);
+    s_st.junk = 0;
+    clear_list(list);
+    list[0].id = PE_ITEM_JUNK;
+    battle_end(&reward);
+    assert(list[0].id == PE_ITEM_JUNK && !s_found.junk_shown && !s_st.junk);
+    {
+        s32 item = PE_ITEM_JUNK;
+        pe_on_item_add(&item, NULL);
+        assert(item == PE_ITEM_JUNK && !s_st.junk);
+    }
+    g_AyaSaveState.inventory_items[3] = PE_ITEM_JUNK;
+    pe_sweep();
+    assert(g_AyaSaveState.inventory_items[3] == PE_ITEM_JUNK && !s_st.junk);
+    g_AyaSaveState.inventory_items[3] = 0;
+
+    /* A full wallet: the payment waits whole, with a message; room delivers it. */
+    c = builtin(STEADY);
+    assert(pe_econ_store_apply(&c) == PE_ECON_OK);
+    s_st.junk = 99998u;
+    clear_list(list);
+    s_test_toasts = 0;
+    battle_end(&reward);
+    assert(state->progress.pending[PE_ECON_SLOT_CURRENCY].amount == 3 && s_test_toasts == 1);
+    assert(s_st.junk == 99998u && !s_found.junk_shown);
+    s_st.junk = 0;
+    clear_list(list);
+    battle_end(&reward);
+    assert(s_found.junk_shown == 3 && !state->progress.pending[PE_ECON_SLOT_CURRENCY].kind);
+    s_found.junk_shown = 0;
+
+    /* Treasure: the award stays pending until its list closes, then it's finished either way. */
+    c = builtin(TREASURE);
+    c.item_chance = 10000;
+    assert(pe_econ_store_apply(&c) == PE_ECON_OK);
+    s_test_catalog = NULL;
+    clear_list(list);
+    battle_end(&reward);
+    assert(state->progress.pending[PE_ECON_SLOT_ITEM].kind == PE_ECON_PENDING_ITEM);
+    assert(on_list(list, state->progress.pending[PE_ECON_SLOT_ITEM].content));
+    pe_rw_policy_settle();
+    assert(!state->progress.pending[PE_ECON_SLOT_ITEM].kind);
+
+    /* A full list: nothing is lost, and it comes next time, with no new roll. */
+    clear_list(list);
+    for (int i = 0; i < 10; ++i) list[i].id = 6;
+    battle_end(&reward);
+    {
+        const uint32_t seq = state->progress.pending[PE_ECON_SLOT_ITEM].sequence;
+        assert(seq);
+        pe_rw_policy_settle();            /* it wasn't shown: settling leaves it */
+        assert(state->progress.pending[PE_ECON_SLOT_ITEM].sequence == seq);
+        clear_list(list);
+        battle_end(&reward);
+        assert(state->progress.pending[PE_ECON_SLOT_ITEM].sequence == seq);
+        assert(on_list(list, state->progress.pending[PE_ECON_SLOT_ITEM].content));
+        pe_rw_policy_settle();
+    }
+
+    /* Rule 1: a waiting economy mod unlocked another way counts as delivered: no reroll, no Junk. */
+    s_test_catalog = &s_catalog;
+    memset(s_unlocked, 0, sizeof s_unlocked);
+    {
+        PeEconProgress g = state->progress;
+        PeEconConfig quiet = builtin(VANILLA);
+        g.pending[PE_ECON_SLOT_ITEM] = (PeEconPending){PE_ECON_PENDING_EFFECT, 0, 0, 2, 0, 1, g.next_sequence++};
+        assert(pe_econ_store_apply(&quiet) == PE_ECON_OK);
+        pe_econ_store_commit(&g);
+        s_unlocked[s_rw_econ_mods[2].effect] = 1;
+        s_st.junk = 0;
+        s_test_toasts = 0;
+        clear_list(list);
+        battle_end(&reward);
+        assert(!state->progress.pending[PE_ECON_SLOT_ITEM].kind && s_test_toasts == 1);
+        assert(!list[0].id && !s_found.junk_shown && !s_st.junk);
+    }
+
+    /* Still locked: shown as its mod on a Mod Permit row, unless a real one is on the list. */
+    {
+        PeEconProgress g = state->progress;
+        memset(s_unlocked, 0, sizeof s_unlocked);
+        g.pending[PE_ECON_SLOT_ITEM] = (PeEconPending){PE_ECON_PENDING_EFFECT, 0, 0, 2, 0, 1, g.next_sequence++};
+        pe_econ_store_commit(&g);
+        clear_list(list);
+        list[0].id = PE_ITEM_MOD_PERMIT;
+        battle_end(&reward);
+        assert(s_rw_found.econ_shown < 0 && state->progress.pending[PE_ECON_SLOT_ITEM].kind == PE_ECON_PENDING_EFFECT);
+        clear_list(list);
+        battle_end(&reward);
+        assert(s_rw_found.econ_shown == 2 && list[0].id == PE_ITEM_MOD_PERMIT);
+        pe_rw_policy_settle();            /* Rule 2: left means declined, and it stays locked */
+        assert(!state->progress.pending[PE_ECON_SLOT_ITEM].kind && !s_unlocked[s_rw_econ_mods[2].effect]);
+        s_rw_found.econ_shown = -1;
+        s_test_catalog = NULL;
+    }
+
+    /* Back on Enhanced: its progress resumes where it stopped, and its price with Difficulty. */
+    c = builtin(ENHANCED);
+    assert(pe_econ_store_apply(&c) == PE_ECON_OK);
+    assert(!s_wallet_api.policy() && pe_loot_price(100) == 125);
+    s_wallet_api.get_rewards(&after);
+    assert(!memcmp(&before, &after, sizeof before));
+    s_test_free_field = 0;
+    s_test_loaded = 0;
+}
+
+#define PINNED 0xA31B4CD7B0A66B68ull  /* the economy mod before D10 step 1, and after it: identical */
 
 static uint64_t s_hash = 1469598103934665603ull;
 static void mix(const void *p, size_t n) {
@@ -163,6 +370,7 @@ int main(void) {
     }
     printf("parity hash 0x%016llX (pinned 0x%016llX)\n", (unsigned long long)s_hash, (unsigned long long)PINNED);
     assert(s_hash == PINNED);
-    puts("Loot parity: 400 scripted battles match the pinned record, lists and Junk; wallet copy in / out, battle_junk and rewards-off passed");
+    test_policy_path();
+    puts("Loot parity: 400 scripted battles match the pinned record, lists and Junk; wallet copy in / out, battle_junk, rewards-off and the opt-in path passed");
     return 0;
 }

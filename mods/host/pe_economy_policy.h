@@ -11,6 +11,7 @@ typedef struct {
     uint64_t operation;
     uint32_t nominal_10000; /* owner's nominal payment in ten-thousandths of one Junk */
     uint32_t remainder;     /* previous remainder, 0..99,999,999 */
+    uint32_t final_factor_10000; /* owner's factor after contributors, e.g. Scavenger; 0: none */
     uint8_t configurable, boss;
 } PePayoutContext;
 typedef struct {

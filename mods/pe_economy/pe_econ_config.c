@@ -189,7 +189,7 @@ void pe_econ_state_reset(PeEconState *s) {
 _Static_assert(sizeof(PeEconProgress) == 72, "no padding: progress compares by bytes");
 
 static int progress_ok(const PeEconProgress *g) {
-    if (g->remainder > 99999999u || !g->next_sequence) return 0;
+    if (g->remainder > 99999999u || !g->next_sequence || !g->rng_payment || !g->rng_item || !g->rng_bundle) return 0;
     for (int i = 0; i < PE_ECON_SLOTS; ++i) {
         const PeEconPending *e = &g->pending[i];
         int kind_ok;

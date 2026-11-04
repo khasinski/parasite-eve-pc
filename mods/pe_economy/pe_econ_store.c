@@ -1,5 +1,8 @@
 #include "pe_econ_store.h"
 
+#include <time.h>
+
+#include "pe_econ_engine.h"
 #include "pe_extension_store.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
@@ -18,10 +21,24 @@ PeEconStoreStatus pe_econ_store_status(void) { return s_status; }
 
 PeEconResult pe_econ_store_apply(const PeEconConfig *target) {
     PeEconResult r;
+    const int first = !s_state.initialized;
     if (s_status == PE_ECON_STORE_DAMAGED) return PE_ECON_BAD_STATE;
     r = pe_econ_apply(&s_state, target, pe_free_field(), enable_section);
-    if (r == PE_ECON_OK) pe_econ_encode(&s_state, s_bytes);   /* crash reports copy it as it stands */
-    return r;
+    if (r != PE_ECON_OK) return r;
+    /* Once, before any draw: from the clock, so no game or legacy RNG moves. */
+    if (first && s_state.initialized) pe_econ_seed(&s_state.progress, (uint32_t)time(NULL) ^ (uint32_t)clock());
+    pe_econ_encode(&s_state, s_bytes);   /* crash reports copy it as it stands */
+    return PE_ECON_OK;
+}
+
+const PeEconConfig *pe_econ_store_active(void) {
+    return s_state.config.engine == PE_ECON_CONFIGURABLE ? &s_state.config : NULL;
+}
+
+void pe_econ_store_commit(const PeEconProgress *progress) {
+    if (!pe_econ_store_active()) return;
+    s_state.progress = *progress;
+    pe_econ_encode(&s_state, s_bytes);
 }
 
 /* The host has already put this save's section, or zeros, in s_bytes. */
