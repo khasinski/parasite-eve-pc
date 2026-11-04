@@ -10,6 +10,7 @@
 #define MOD_ID "pe_economy"
 
 void pe_loot_register(const char *mod_id);    /* pe_loot.c: the Junk wallet */
+void pe_econ_store_register(const char *mod_id); /* pe_econ_store.c: the saved Economy settings */
 void pe_junk_counter_register(const char *mod_id);
 void pe_smoke_register(const char *mod_id);
 void pe_costume_rules_register(const char *mod_id); /* pe_costume_rules.c: the Wardrobe's unlock rules */
@@ -17,6 +18,7 @@ void pe_smoke_shutdown(void);
 
 static int economy_init(void) {
     pe_loot_register(MOD_ID);
+    pe_econ_store_register(MOD_ID);
     pe_junk_counter_register(MOD_ID);
     pe_costume_rules_register(MOD_ID);
     pe_smoke_register(MOD_ID);

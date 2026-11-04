@@ -95,11 +95,38 @@ typedef struct {
     uint8_t first_opt_in;
 } PeEconPreview;
 
-/* The applied settings. Saved in step 3. */
+/* One reward waiting to be delivered: the final amount and identity, never a callback. */
+enum { PE_ECON_PENDING_ITEM = 1, PE_ECON_PENDING_EFFECT, PE_ECON_PENDING_PERMIT, PE_ECON_PENDING_BUNDLE, PE_ECON_PENDING_CURRENCY };
+enum { PE_ECON_SLOT_ITEM, PE_ECON_SLOT_BUNDLE, PE_ECON_SLOT_CURRENCY, PE_ECON_SLOTS };
+typedef struct {
+    uint8_t kind, origin;      /* kind 0: empty, every other field 0 */
+    uint16_t flags, content, reserved;
+    uint32_t amount, sequence;
+} PeEconPending;
+
+/* The new path's progress. It waits untouched while Enhanced is active. */
+typedef struct {
+    uint32_t rng_payment, rng_item, rng_bundle;
+    uint16_t dry;
+    uint8_t effect_progress, permit_progress;
+    uint32_t remainder;        /* 0..99,999,999 */
+    uint32_t next_sequence;    /* from 1; exhaustion stops new awards, it never wraps */
+    PeEconPending pending[PE_ECON_SLOTS];
+} PeEconProgress;
+
+/* The applied settings and progress: the pe_economy/policy companion section. */
 typedef struct {
     PeEconConfig config;       /* kept when back on Enhanced, whose engine is Legacy */
+    PeEconProgress progress;
     uint8_t initialized;       /* new-path progress has been set up, once */
 } PeEconState;
+
+/* D3 section 3's fixed little-endian layout. All zero means no policy: a state that never left
+ * Enhanced encodes to that, and it decodes to the reset state. */
+enum { PE_ECON_RECORD_SIZE = 160 };
+void pe_econ_encode(const PeEconState *state, uint8_t out[PE_ECON_RECORD_SIZE]);
+/* Refused: `state` stays as it was. */
+PeEconResult pe_econ_decode(const uint8_t in[PE_ECON_RECORD_SIZE], PeEconState *state);
 
 void pe_econ_state_reset(PeEconState *state);
 /* For loading: also checks the settings kept while on Enhanced, which pe_econ_validate doesn't. */

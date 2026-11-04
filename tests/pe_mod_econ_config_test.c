@@ -153,12 +153,95 @@ static void test_state_validate(void) {
     /* Settings kept while on Enhanced are checked too. */
     s.initialized = 1;
     s.config = preset(STEADY);
+    s.progress.next_sequence = 1;
     assert(pe_econ_state_validate(&s) == PE_ECON_OK);
     s.config.engine = PE_ECON_LEGACY;
     assert(pe_econ_state_validate(&s) == PE_ECON_OK);
     s.config.price_pct = 80;
     assert(pe_econ_validate(&s.config) == PE_ECON_OK && pe_econ_state_validate(&s) == PE_ECON_BAD_PRICE);
     assert(pe_econ_state_validate(NULL) == PE_ECON_BAD_STATE);
+}
+
+static PeEconState full_state(void) {
+    PeEconState s;
+    memset(&s, 0, sizeof s);
+    s.initialized = 1;
+    s.config = preset(LIGHT);
+    s.config.flags |= PE_ECON_F_BONUS_ITEM | PE_ECON_F_EMPTY_STEAL | PE_ECON_F_PERFORMANCE;
+    s.config.price_pct = 125;
+    s.config.item_chance = 1234; s.config.item_guarantee = 7;
+    s.config.super_chance = 300; s.config.duper_chance = 200;
+    s.config.performance_pct = 15; s.config.steal_junk = 9;
+    s.progress.rng_payment = 0x11223344u; s.progress.rng_item = 0x55667788u; s.progress.rng_bundle = 0x99AABBCCu;
+    s.progress.dry = 0xBEEF; s.progress.effect_progress = 3; s.progress.permit_progress = 4;
+    s.progress.remainder = 99999999u; s.progress.next_sequence = 10;
+    s.progress.pending[PE_ECON_SLOT_ITEM] = (PeEconPending){PE_ECON_PENDING_PERMIT, 2, 0, 0x37, 0, 1, 7};
+    s.progress.pending[PE_ECON_SLOT_BUNDLE] = (PeEconPending){PE_ECON_PENDING_BUNDLE, 1, 0, 0x40, 0, 1, 8};
+    s.progress.pending[PE_ECON_SLOT_CURRENCY] = (PeEconPending){PE_ECON_PENDING_CURRENCY, 3, 0, 0, 0, 99999, 9};
+    return s;
+}
+
+static void test_record(void) {
+    PeEconState s = full_state(), back, fresh;
+    uint8_t b[PE_ECON_RECORD_SIZE], again[PE_ECON_RECORD_SIZE], bad[PE_ECON_RECORD_SIZE];
+
+    /* The whole state survives, at D3's offsets, little-endian. */
+    pe_econ_encode(&s, b);
+    memset(&back, 0, sizeof back);
+    assert(pe_econ_decode(b, &back) == PE_ECON_OK);
+    assert(!memcmp(&back.config, &s.config, sizeof s.config) && !memcmp(&back.progress, &s.progress, sizeof s.progress));
+    assert(back.initialized == 1);
+    pe_econ_encode(&back, again);
+    assert(!memcmp(b, again, sizeof b));
+    assert(b[0] == 1 && b[4] == 125 && b[6] == 1 && b[8] == 3 && b[10] == 0x10 && b[11] == 0x27);
+    assert(b[28] == strlen("pe.light") && b[29] == 1 && !strcmp((const char *)b + 32, "pe.light"));
+    assert(b[80] == 0x44 && b[83] == 0x11 && b[92] == 0xEF && b[94] == 3 && b[95] == 4 && b[100] == 10);
+    assert(b[104] == PE_ECON_PENDING_PERMIT && b[120] == PE_ECON_PENDING_BUNDLE && b[136] == PE_ECON_PENDING_CURRENCY);
+    assert(b[152] == 1);
+
+    /* Never left Enhanced: all zero, and zero reads back as that. */
+    pe_econ_state_reset(&fresh);
+    pe_econ_encode(&fresh, again);
+    for (int i = 0; i < PE_ECON_RECORD_SIZE; ++i) assert(!again[i]);
+    s = full_state();
+    assert(pe_econ_decode(again, &s) == PE_ECON_OK && !s.initialized && s.config.engine == PE_ECON_LEGACY);
+
+    /* Enhanced with kept settings stays decodable, and they come back. */
+    s = full_state();
+    s.config.engine = PE_ECON_LEGACY;
+    pe_econ_encode(&s, again);
+    assert(pe_econ_decode(again, &back) == PE_ECON_OK && back.config.engine == PE_ECON_LEGACY && back.config.income == 1);
+
+    /* Refused, each one leaving the state as it was. */
+    {
+        static const struct { int at; uint8_t value; } breaks[] = {
+            {0, 2},      /* engine */
+            {1, 2},      /* route */
+            {3, 1},      /* unknown flag */
+            {4, 80},     /* price */
+            {11, 0xFF},  /* payment chance */
+            {28, 3},     /* key length */
+            {29, 2},     /* algorithm */
+            {30, 1}, {31, 1},   /* reserved */
+            {32, 'A'},   /* key characters */
+            {99, 0xFF},  /* remainder */
+            {100, 0}, {100, 7},   /* next sequence: gone; a pending entry at or past it */
+            {104, 99},   /* kind in the wrong slot */
+            {106, 1}, {110, 1},   /* entry flags, entry reserved */
+            {120, PE_ECON_PENDING_CURRENCY},
+            {152, 0}, {152, 3},   /* progress flags */
+            {156, 1}, {159, 1},   /* reserved */
+        };
+        s = full_state();
+        pe_econ_encode(&s, b);
+        for (size_t i = 0; i < sizeof breaks / sizeof breaks[0]; ++i) {
+            memcpy(bad, b, sizeof b);
+            bad[breaks[i].at] = breaks[i].value;
+            memset(&back, 0x5A, sizeof back);
+            assert(pe_econ_decode(bad, &back) != PE_ECON_OK);
+            assert(back.initialized == 0x5A);
+        }
+    }
 }
 
 static void test_preview_and_apply(void) {
@@ -221,6 +304,7 @@ int main(void) {
     test_matching();
     test_provider_preset();
     test_state_validate();
+    test_record();
     test_preview_and_apply();
     puts("Economy settings: presets, validation, matching, preview and Apply passed");
     return 0;

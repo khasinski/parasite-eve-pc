@@ -84,6 +84,17 @@ if(BUILD_TESTING)
     target_compile_definitions(test-mod-crash-tail PRIVATE __psyz PE_MODS=1)
     target_link_libraries(test-mod-crash-tail PRIVATE psyz)
     add_test(NAME mod-crash-save-tail COMMAND test-mod-crash-tail)
+
+    add_executable(test-mod-econ-store ${PROJECT_SOURCE_DIR}/tests/pe_mod_econ_store_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c
+        host/pe_mod_host.c host/pe_save.c host/pe_save_query.c host/pe_registry.c
+        host/pe_legacy_guard.c host/pe_api_native.c host/pe_game_facts.c host/pe_content_api.c host/pe_economy_policy.c
+        host/pe_recovery_snapshot.c host/pe_extension_store.c host/pe_inventory_api.c host/pe_shop_api.c host/pe_profile_transactions.c)
+    target_include_directories(test-mod-econ-store PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_economy
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-mod-econ-store PRIVATE __psyz PE_MODS=1 PE_ECON_STORE_TEST=1)
+    target_compile_options(test-mod-econ-store PRIVATE $<IF:$<BOOL:${MSVC}>,/UNDEBUG,-UNDEBUG>)
+    target_link_libraries(test-mod-econ-store PRIVATE psyz)
+    add_test(NAME mod-econ-store COMMAND test-mod-econ-store)
 endif()
 
 if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)

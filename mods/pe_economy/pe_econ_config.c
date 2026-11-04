@@ -186,16 +186,143 @@ void pe_econ_state_reset(PeEconState *s) {
     s->config.engine = PE_ECON_LEGACY;
 }
 
+_Static_assert(sizeof(PeEconProgress) == 72, "no padding: progress compares by bytes");
+
+static int progress_ok(const PeEconProgress *g) {
+    if (g->remainder > 99999999u || !g->next_sequence) return 0;
+    for (int i = 0; i < PE_ECON_SLOTS; ++i) {
+        const PeEconPending *e = &g->pending[i];
+        int kind_ok;
+        if (!e->kind) {
+            if (e->origin || e->flags || e->content || e->reserved || e->amount || e->sequence) return 0;
+            continue;
+        }
+        kind_ok = i == PE_ECON_SLOT_ITEM ? e->kind >= PE_ECON_PENDING_ITEM && e->kind <= PE_ECON_PENDING_PERMIT
+                : i == PE_ECON_SLOT_BUNDLE ? e->kind == PE_ECON_PENDING_BUNDLE
+                                           : e->kind == PE_ECON_PENDING_CURRENCY;
+        if (!kind_ok || e->flags || e->reserved || !e->sequence || e->sequence >= g->next_sequence) return 0;
+        if (e->kind == PE_ECON_PENDING_CURRENCY && (!e->amount || e->amount > 99999u)) return 0;
+    }
+    return 1;
+}
+
 PeEconResult pe_econ_state_validate(const PeEconState *s) {
     PeEconResult r;
     if (!s || s->initialized > 1) return PE_ECON_BAD_STATE;
     if (!s->initialized) {   /* never left Enhanced: exactly the reset state */
         PeEconState fresh;
         pe_econ_state_reset(&fresh);
-        return memcmp(&s->config, &fresh.config, sizeof fresh.config) ? PE_ECON_BAD_STATE : PE_ECON_OK;
+        return memcmp(&s->config, &fresh.config, sizeof fresh.config) ||
+                       memcmp(&s->progress, &fresh.progress, sizeof fresh.progress)
+                   ? PE_ECON_BAD_STATE
+                   : PE_ECON_OK;
     }
     r = pe_econ_validate(&s->config);
-    return r == PE_ECON_OK ? settings_valid(&s->config) : r;
+    if (r == PE_ECON_OK) r = settings_valid(&s->config);
+    if (r != PE_ECON_OK) return r;
+    return progress_ok(&s->progress) ? PE_ECON_OK : PE_ECON_BAD_STATE;
+}
+
+static void wr16(uint8_t *p, unsigned v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
+static void wr32(uint8_t *p, uint32_t v) { wr16(p, v & 0xFFFFu); wr16(p + 2, v >> 16); }
+static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
+static uint32_t rd32(const uint8_t *p) { return rd16(p) | (uint32_t)rd16(p + 2) << 16; }
+
+void pe_econ_encode(const PeEconState *s, uint8_t out[PE_ECON_RECORD_SIZE]) {
+    const PeEconConfig *c = &s->config;
+    const PeEconProgress *g = &s->progress;
+    memset(out, 0, PE_ECON_RECORD_SIZE);
+    if (!s->initialized) return;
+    out[0] = c->engine;
+    out[1] = c->route;
+    wr16(out + 2, c->flags);
+    wr16(out + 4, c->price_pct);
+    wr16(out + 6, c->income);
+    wr16(out + 8, c->boss_income);
+    wr16(out + 10, c->payment_chance);
+    wr16(out + 12, c->item_chance);
+    wr16(out + 14, c->item_guarantee);
+    wr16(out + 16, c->super_chance);
+    wr16(out + 18, c->duper_chance);
+    wr16(out + 20, c->super_value);
+    wr16(out + 22, c->duper_value);
+    wr16(out + 24, c->performance_pct);
+    wr16(out + 26, c->steal_junk);
+    out[28] = (uint8_t)strnlen(c->key, sizeof c->key);
+    out[29] = c->algorithm;
+    memcpy(out + 32, c->key, sizeof c->key);
+    wr32(out + 80, g->rng_payment);
+    wr32(out + 84, g->rng_item);
+    wr32(out + 88, g->rng_bundle);
+    wr16(out + 92, g->dry);
+    out[94] = g->effect_progress;
+    out[95] = g->permit_progress;
+    wr32(out + 96, g->remainder);
+    wr32(out + 100, g->next_sequence);
+    for (int i = 0; i < PE_ECON_SLOTS; ++i) {
+        uint8_t *p = out + 104 + i * 16;
+        p[0] = g->pending[i].kind;
+        p[1] = g->pending[i].origin;
+        wr16(p + 2, g->pending[i].flags);
+        wr16(p + 4, g->pending[i].content);
+        wr16(p + 6, g->pending[i].reserved);
+        wr32(p + 8, g->pending[i].amount);
+        wr32(p + 12, g->pending[i].sequence);
+    }
+    wr32(out + 152, 1u);
+}
+
+PeEconResult pe_econ_decode(const uint8_t in[PE_ECON_RECORD_SIZE], PeEconState *out) {
+    static const uint8_t zero[PE_ECON_RECORD_SIZE];
+    PeEconState s;
+    PeEconResult r;
+    if (!memcmp(in, zero, sizeof zero)) {
+        pe_econ_state_reset(out);
+        return PE_ECON_OK;
+    }
+    if (rd32(in + 152) != 1u || rd16(in + 30) || rd32(in + 156)) return PE_ECON_BAD_STATE;
+    memset(&s, 0, sizeof s);
+    s.initialized = 1;
+    s.config.engine = in[0];
+    s.config.route = in[1];
+    s.config.flags = rd16(in + 2);
+    s.config.price_pct = rd16(in + 4);
+    s.config.income = rd16(in + 6);
+    s.config.boss_income = rd16(in + 8);
+    s.config.payment_chance = rd16(in + 10);
+    s.config.item_chance = rd16(in + 12);
+    s.config.item_guarantee = rd16(in + 14);
+    s.config.super_chance = rd16(in + 16);
+    s.config.duper_chance = rd16(in + 18);
+    s.config.super_value = rd16(in + 20);
+    s.config.duper_value = rd16(in + 22);
+    s.config.performance_pct = rd16(in + 24);
+    s.config.steal_junk = rd16(in + 26);
+    s.config.algorithm = in[29];
+    memcpy(s.config.key, in + 32, sizeof s.config.key);
+    if (in[28] != strnlen(s.config.key, sizeof s.config.key)) return PE_ECON_BAD_KEY;
+    s.progress.rng_payment = rd32(in + 80);
+    s.progress.rng_item = rd32(in + 84);
+    s.progress.rng_bundle = rd32(in + 88);
+    s.progress.dry = rd16(in + 92);
+    s.progress.effect_progress = in[94];
+    s.progress.permit_progress = in[95];
+    s.progress.remainder = rd32(in + 96);
+    s.progress.next_sequence = rd32(in + 100);
+    for (int i = 0; i < PE_ECON_SLOTS; ++i) {
+        const uint8_t *p = in + 104 + i * 16;
+        s.progress.pending[i].kind = p[0];
+        s.progress.pending[i].origin = p[1];
+        s.progress.pending[i].flags = rd16(p + 2);
+        s.progress.pending[i].content = rd16(p + 4);
+        s.progress.pending[i].reserved = rd16(p + 6);
+        s.progress.pending[i].amount = rd32(p + 8);
+        s.progress.pending[i].sequence = rd32(p + 12);
+    }
+    r = pe_econ_state_validate(&s);
+    if (r != PE_ECON_OK) return r;
+    *out = s;
+    return PE_ECON_OK;
 }
 
 static PeEconTransition transition_of(const PeEconState *s, const PeEconConfig *t) {
@@ -238,6 +365,7 @@ PeEconResult pe_econ_apply(PeEconState *s, const PeEconConfig *t, int free_field
         return PE_ECON_OK;
     }
     s->config = *t;
+    if (!s->initialized) s->progress.next_sequence = 1;
     s->initialized = 1;
     return PE_ECON_OK;
 }
