@@ -18,8 +18,10 @@ PeRegResult pe_economy_policy_register(const char *batch, const PeEconomyPolicyD
     } else if (d->kind == PE_POLICY_PRESET) {
         const PeEconomyPreset *p = &d->preset;
         if (d->modifier || d->observer || !header(&p->api, sizeof *p)) return PE_REG_BAD_VERSION;
-        if (p->bonus_chance_10000 > 10000 || p->vanilla_drops > 1 || p->rare_drops > 1 || p->extra_junk > 1 ||
-            p->special_junk > 1 || p->performance_bonus > 1)
+        if (p->bonus_chance_10000 > 10000 || p->payment_chance_10000 > 10000 ||
+            (unsigned)p->super_chance_10000 + p->duper_chance_10000 > 10000 || p->vanilla_drops > 1 ||
+            p->rare_drops > 1 || p->extra_junk > 1 || p->super_drops > 1 || p->duper_drops > 1 || p->redeem_super > 1 ||
+            p->redeem_duper > 1 || p->performance_bonus > 1 || p->empty_steal > 1 || p->native_to_counter > 1)
             return PE_REG_BAD_ARGUMENT;
     } else return PE_REG_BAD_ARGUMENT;
     PeRegEntry e = {PE_REG_CONTENT, d->key, d, sizeof *d, NULL, 0, PE_SCHEMA_POLICY};

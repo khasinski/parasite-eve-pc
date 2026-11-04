@@ -26,7 +26,10 @@ typedef struct {
     /* Complete self-contained preset, not a partial overlay. No callback and no auto-apply. */
     uint16_t battle_junk, boss_junk, super_value, duper_value;
     uint16_t bonus_chance_10000, bonus_guarantee;
-    uint8_t vanilla_drops, rare_drops, extra_junk, special_junk, performance_bonus;
+    uint16_t payment_chance_10000, super_chance_10000, duper_chance_10000;
+    uint16_t performance_pct, empty_steal_junk;
+    uint8_t vanilla_drops, rare_drops, extra_junk, super_drops, duper_drops;
+    uint8_t redeem_super, redeem_duper, performance_bonus, empty_steal, native_to_counter;
 } PeEconomyPreset;
 enum { PE_POLICY_MODIFIER = 1, PE_POLICY_OBSERVER = 2, PE_POLICY_PRESET = 3 };
 typedef struct {

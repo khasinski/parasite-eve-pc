@@ -1,0 +1,207 @@
+#include "pe_econ_config.h"
+
+#include <string.h>
+
+_Static_assert(sizeof(PeEconConfig) == 76, "no padding: configurations compare by bytes");
+
+const char *pe_econ_reason(PeEconResult r) {
+    switch (r) {
+    case PE_ECON_OK: return "OK.";
+    case PE_ECON_BAD_ENGINE: return "Unknown reward engine.";
+    case PE_ECON_BAD_ROUTE: return "Unknown Junk routing.";
+    case PE_ECON_BAD_FLAGS: return "Unknown setting switched on.";
+    case PE_ECON_BAD_PRICE: return "Base price must be 75, 100 or 125.";
+    case PE_ECON_BAD_CHANCE: return "A chance is above 100%.";
+    case PE_ECON_BUNDLE_CHANCES: return "Super and Duper Junk chances add up to more than 100%.";
+    case PE_ECON_ROUTE_NEEDS_COUNTER: return "Extra income and redemption need native Junk routed to the counter.";
+    case PE_ECON_REDEEM_ZERO: return "Redemption needs a value above 0.";
+    case PE_ECON_STEAL_ZERO: return "Empty-steal Junk needs an amount above 0.";
+    case PE_ECON_PERFORMANCE_NO_INCOME: return "The performance bonus needs extra income on.";
+    case PE_ECON_BAD_KEY: return "The preset key is malformed.";
+    case PE_ECON_BAD_PRESET: return "This preset can't be used.";
+    case PE_ECON_NOT_FREE_FIELD: return "Settings can only change in free field.";
+    case PE_ECON_STORE_REFUSED: return "This save's companion can't hold the settings. Nothing changed.";
+    }
+    return "Unknown result.";
+}
+
+static int price_ok(unsigned p) { return p == 75 || p == 100 || p == 125; }
+
+static int key_ok(const char key[48]) {
+    const char *end = memchr(key, 0, 48);
+    if (!end) return 0;
+    for (const char *p = end; p < key + 48; ++p) if (*p) return 0;
+    return 1;
+}
+
+PeEconResult pe_econ_validate(const PeEconConfig *c) {
+    if (!c || c->engine > PE_ECON_CONFIGURABLE) return PE_ECON_BAD_ENGINE;
+    if (!key_ok(c->key)) return PE_ECON_BAD_KEY;
+    if (c->engine == PE_ECON_LEGACY) return PE_ECON_OK;   /* Enhanced's settings live elsewhere */
+    if (c->route > PE_ECON_ROUTE_ITEMS) return PE_ECON_BAD_ROUTE;
+    if (c->flags & ~(unsigned)PE_ECON_F_ALL) return PE_ECON_BAD_FLAGS;
+    if (!price_ok(c->price_pct)) return PE_ECON_BAD_PRICE;
+    if (c->payment_chance > 10000 || c->item_chance > 10000 || c->super_chance > 10000 || c->duper_chance > 10000)
+        return PE_ECON_BAD_CHANCE;
+    if ((unsigned)c->super_chance + c->duper_chance > 10000) return PE_ECON_BUNDLE_CHANCES;
+    if (c->route == PE_ECON_ROUTE_ITEMS &&
+        (c->flags & (PE_ECON_F_INCOME | PE_ECON_F_PERFORMANCE | PE_ECON_F_EMPTY_STEAL | PE_ECON_F_SUPER_REDEEM | PE_ECON_F_DUPER_REDEEM)))
+        return PE_ECON_ROUTE_NEEDS_COUNTER;
+    if (((c->flags & PE_ECON_F_SUPER_REDEEM) && !c->super_value) || ((c->flags & PE_ECON_F_DUPER_REDEEM) && !c->duper_value))
+        return PE_ECON_REDEEM_ZERO;
+    if ((c->flags & PE_ECON_F_EMPTY_STEAL) && !c->steal_junk) return PE_ECON_STEAL_ZERO;
+    if ((c->flags & PE_ECON_F_PERFORMANCE) && !(c->flags & PE_ECON_F_INCOME)) return PE_ECON_PERFORMANCE_NO_INCOME;
+    return PE_ECON_OK;
+}
+
+/* D1 section 4. Provisional numbers, for playtesting. */
+static const struct {
+    const char *key, *name;
+    uint16_t flags, income, boss_income, item_chance, item_guarantee;
+} s_builtin[] = {
+    {"pe.enhanced", "Enhanced", 0, 0, 0, 0, 0},
+    {"pe.vanilla_drops", "Vanilla drops + inventory QoL", 0, 0, 0, 0, 0},
+    {"pe.light", "Light economy", PE_ECON_F_INCOME | PE_ECON_F_SUPER_REDEEM | PE_ECON_F_DUPER_REDEEM, 1, 3, 0, 0},
+    {"pe.steady", "Steady Income", PE_ECON_F_INCOME, 3, 10, 0, 0},
+    {"pe.treasure", "Treasure Hunter", PE_ECON_F_BONUS_ITEM, 0, 0, 1000, 10},
+};
+enum { BUILTIN_COUNT = (int)(sizeof s_builtin / sizeof s_builtin[0]) };
+
+int pe_econ_builtin_count(void) { return BUILTIN_COUNT; }
+const char *pe_econ_builtin_name(int i) { return i >= 0 && i < BUILTIN_COUNT ? s_builtin[i].name : NULL; }
+
+static void set_key(PeEconConfig *c, const char *key) {
+    memset(c->key, 0, sizeof c->key);
+    strncpy(c->key, key, sizeof c->key - 1);
+}
+
+PeEconResult pe_econ_builtin(int i, uint16_t price_pct, PeEconConfig *out) {
+    if (i < 0 || i >= BUILTIN_COUNT || !out) return PE_ECON_BAD_PRESET;
+    if (!price_ok(price_pct)) return PE_ECON_BAD_PRICE;
+    memset(out, 0, sizeof *out);
+    out->engine = i == 0 ? PE_ECON_LEGACY : PE_ECON_CONFIGURABLE;
+    out->route = PE_ECON_ROUTE_COUNTER;
+    out->flags = s_builtin[i].flags;
+    out->price_pct = price_pct;
+    out->income = s_builtin[i].income;
+    out->boss_income = s_builtin[i].boss_income;
+    out->payment_chance = 10000;
+    out->item_chance = s_builtin[i].item_chance;
+    out->item_guarantee = s_builtin[i].item_guarantee;
+    out->super_value = 10;     /* shown even while redemption is off */
+    out->duper_value = 20;
+    set_key(out, s_builtin[i].key);
+    return pe_econ_validate(out);
+}
+
+PeEconResult pe_econ_from_preset(const char *key, const PeEconomyPreset *p, uint16_t price_pct, PeEconConfig *out) {
+    if (!key || !p || !out || strlen(key) >= sizeof out->key) return PE_ECON_BAD_PRESET;
+    if (p->vanilla_drops != 1) return PE_ECON_BAD_PRESET;   /* native drops are never changed */
+    memset(out, 0, sizeof *out);
+    out->engine = PE_ECON_CONFIGURABLE;
+    out->route = p->native_to_counter ? PE_ECON_ROUTE_COUNTER : PE_ECON_ROUTE_ITEMS;
+    out->flags = (uint16_t)((p->extra_junk ? PE_ECON_F_INCOME : 0) | (p->rare_drops ? PE_ECON_F_BONUS_ITEM : 0) |
+                            (p->super_drops ? PE_ECON_F_SUPER_DROP : 0) | (p->duper_drops ? PE_ECON_F_DUPER_DROP : 0) |
+                            (p->redeem_super ? PE_ECON_F_SUPER_REDEEM : 0) | (p->redeem_duper ? PE_ECON_F_DUPER_REDEEM : 0) |
+                            (p->performance_bonus ? PE_ECON_F_PERFORMANCE : 0) | (p->empty_steal ? PE_ECON_F_EMPTY_STEAL : 0));
+    out->price_pct = price_pct;
+    out->income = p->battle_junk;
+    out->boss_income = p->boss_junk;
+    out->payment_chance = p->payment_chance_10000;
+    out->item_chance = p->bonus_chance_10000;
+    out->item_guarantee = p->bonus_guarantee;
+    out->super_chance = p->super_chance_10000;
+    out->duper_chance = p->duper_chance_10000;
+    out->super_value = p->super_value;
+    out->duper_value = p->duper_value;
+    out->performance_pct = p->performance_pct;
+    out->steal_junk = p->empty_steal_junk;
+    set_key(out, key);
+    return pe_econ_validate(out);
+}
+
+/* `c` with what's behind switched-off controls, the key and the price cleared. */
+static void effective(const PeEconConfig *from, PeEconConfig *c) {
+    const unsigned f = from->flags;
+    *c = *from;
+    memset(c->key, 0, sizeof c->key);
+    c->price_pct = 0;
+    if (c->engine == PE_ECON_LEGACY) {
+        const uint8_t engine = c->engine;
+        memset(c, 0, sizeof *c);
+        c->engine = engine;
+        return;
+    }
+    if (!(f & PE_ECON_F_INCOME)) c->income = c->boss_income = c->payment_chance = 0;
+    if (!(f & PE_ECON_F_BONUS_ITEM)) c->item_chance = c->item_guarantee = 0;
+    if (!(f & PE_ECON_F_SUPER_DROP)) c->super_chance = 0;
+    if (!(f & PE_ECON_F_DUPER_DROP)) c->duper_chance = 0;
+    if (!(f & PE_ECON_F_SUPER_REDEEM)) c->super_value = 0;
+    if (!(f & PE_ECON_F_DUPER_REDEEM)) c->duper_value = 0;
+    if (!(f & PE_ECON_F_PERFORMANCE)) c->performance_pct = 0;
+    if (!(f & PE_ECON_F_EMPTY_STEAL)) c->steal_junk = 0;
+}
+
+int pe_econ_same_settings(const PeEconConfig *a, const PeEconConfig *b) {
+    PeEconConfig x, y;
+    effective(a, &x);
+    effective(b, &y);
+    return !memcmp(&x, &y, sizeof x);
+}
+
+int pe_econ_match_builtin(const PeEconConfig *c) {
+    for (int i = 0; i < BUILTIN_COUNT; ++i) {
+        PeEconConfig preset;
+        if (pe_econ_builtin(i, 100, &preset) == PE_ECON_OK && pe_econ_same_settings(c, &preset)) return i;
+    }
+    return -1;
+}
+
+void pe_econ_state_reset(PeEconState *s) {
+    memset(s, 0, sizeof *s);
+    s->config.engine = PE_ECON_LEGACY;
+}
+
+static PeEconTransition transition_of(const PeEconState *s, const PeEconConfig *t) {
+    if (s->config.engine == PE_ECON_LEGACY)
+        return t->engine == PE_ECON_LEGACY ? PE_ECON_NO_CHANGE : PE_ECON_ENTER_NEW;
+    if (t->engine == PE_ECON_LEGACY) return PE_ECON_RETURN_ENHANCED;
+    return memcmp(&s->config, t, sizeof *t) ? PE_ECON_WITHIN_NEW : PE_ECON_NO_CHANGE;
+}
+
+void pe_econ_preview(const PeEconState *s, const PeEconConfig *t, const PeEconContext *ctx, PeEconPreview *out) {
+    const int was_new = s->config.engine == PE_ECON_CONFIGURABLE;
+    memset(out, 0, sizeof *out);
+    out->result = pe_econ_validate(t);
+    if (out->result != PE_ECON_OK) return;
+    out->transition = transition_of(s, t);
+    out->price_from = was_new ? s->config.price_pct : ctx->enhanced_price_pct;
+    out->price_to = t->engine == PE_ECON_CONFIGURABLE ? t->price_pct : ctx->enhanced_price_pct;
+    if (out->transition == PE_ECON_NO_CHANGE) return;
+    if (t->engine == PE_ECON_CONFIGURABLE) {
+        if (t->flags & PE_ECON_F_SUPER_REDEEM) out->redeem_super = ctx->held_super;
+        if (t->flags & PE_ECON_F_DUPER_REDEEM) out->redeem_duper = ctx->held_duper;
+        out->redeem_junk = out->redeem_super * t->super_value + out->redeem_duper * t->duper_value;
+    }
+    if (out->transition == PE_ECON_ENTER_NEW) {
+        out->freezes_legacy_carried = ctx->legacy_carried != 0;
+        out->first_opt_in = !s->initialized;
+    }
+}
+
+PeEconResult pe_econ_apply(PeEconState *s, const PeEconConfig *t, int free_field, int (*enable_store)(void)) {
+    PeEconTransition move;
+    const PeEconResult valid = pe_econ_validate(t);
+    if (valid != PE_ECON_OK) return valid;
+    move = transition_of(s, t);
+    if (move == PE_ECON_NO_CHANGE) return PE_ECON_OK;
+    if (!free_field) return PE_ECON_NOT_FREE_FIELD;
+    if (move == PE_ECON_ENTER_NEW && (!enable_store || !enable_store())) return PE_ECON_STORE_REFUSED;
+    if (move == PE_ECON_RETURN_ENHANCED) {
+        s->config.engine = PE_ECON_LEGACY;   /* the new path's settings wait for the next return */
+        return PE_ECON_OK;
+    }
+    s->config = *t;
+    s->initialized = 1;
+    return PE_ECON_OK;
+}
