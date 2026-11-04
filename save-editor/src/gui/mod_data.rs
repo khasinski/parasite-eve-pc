@@ -8,6 +8,22 @@ use eframe::egui;
 
 pub(super) fn show(ui: &mut egui::Ui, save: &mut PeSaveSlot) {
     ui.heading("Mod Save Data");
+    if let Some(companion) = &save.companion {
+        ui.label("Companion data is loaded and will travel with this save.");
+        match companion.sections() {
+            Ok(sections) => {
+                for section in sections {
+                    ui.label(format!(
+                        "{} (version {}, {} bytes)",
+                        section.key, section.version, section.size
+                    ));
+                }
+            }
+            Err(e) => {
+                ui.colored_label(egui::Color32::YELLOW, e.to_string());
+            }
+        }
+    }
     ui.label(
         "Unknown records are preserved. Normal save edits leave the entire mod tail unchanged.",
     );

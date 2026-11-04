@@ -43,21 +43,23 @@
     "key": "mod/ui/0b859bb3",
     "text": "Choose which PE powers cost half a turn bar.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Choose which PE powers cost half a turn bar.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/0bbd7508",
     "text": "How gun and armor mods behave in battle.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "How gun and armor mods behave in battle.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/0db01eba",
@@ -83,11 +85,12 @@
     "key": "mod/ui/12b5a714",
     "text": "Aya's outfits, bought once with Junk.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Aya's outfits, bought once with Junk.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/15d00057",
@@ -123,11 +126,12 @@
     "key": "mod/ui/1bc25380",
     "text": "Browse pocketed keys and story items.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Browse pocketed keys and story items.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/1ee61893",
@@ -213,11 +217,12 @@
     "key": "mod/ui/2f0e2d97",
     "text": "Always run and how fast Aya moves.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Always run and how fast Aya moves.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/32bf61bc",
@@ -343,11 +348,12 @@
     "key": "mod/ui/555d0867",
     "text": "Bestiary and Wardrobe, kept across every game.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Bestiary and Wardrobe, kept across every game.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/571ec55b",
@@ -363,11 +369,12 @@
     "key": "mod/ui/5862301a",
     "text": "Key-item pocket, remembered bag sorting and inventory counters.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Key-item pocket, remembered bag sorting and inventory counters.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/5877c29e",
@@ -383,11 +390,12 @@
     "key": "mod/ui/5a0cbe53",
     "text": "Prices, unlock-all and test gear.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Prices, unlock-all and test gear.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/5d4e86f0",
@@ -453,11 +461,12 @@
     "key": "mod/ui/65bf9b2c",
     "text": "Damage rules, gun mods and Parasite Energy.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Damage rules, gun mods and Parasite Energy.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/6631fdf4",
@@ -523,21 +532,23 @@
     "key": "mod/ui/705bff4a",
     "text": "Install unlocked effects on your equipped gun or armor.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Install unlocked effects on your equipped gun or armor.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/71846444",
     "text": "Buy dismantled gear back.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Buy dismantled gear back.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/73cf16e3",
@@ -633,11 +644,12 @@
     "key": "mod/ui/86f53cd7",
     "text": "Play with the game's text from a language pack.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Play with the game's text from a language pack.",
     "contexts": [
       "host display"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/8922a21e",
@@ -753,21 +765,23 @@
     "key": "mod/ui/9d1ea633",
     "text": "Untranslated text stays as the game has it.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Untranslated text stays as the game has it.",
     "contexts": [
       "host display"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/a1d2600d",
     "text": "Junk amounts, rare drop chances, debug Junk.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Junk amounts, rare drop chances, debug Junk.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/a499f21e",
@@ -874,11 +888,12 @@
     "key": "mod/ui/bb30fc7d",
     "text": "Reset Bestiary and Wardrobe unlocks.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Reset Bestiary and Wardrobe unlocks.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/c05e010e",
@@ -904,11 +919,12 @@
     "key": "mod/ui/c1ff5d87",
     "text": "Combine carried medicines before a battle.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Combine carried medicines before a battle.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/c40a1440",
@@ -995,11 +1011,12 @@
     "key": "mod/ui/d37a72c6",
     "text": "Tuning and test tools. Changes the balance.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Tuning and test tools. Changes the balance.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/d437d1fc",
@@ -1055,11 +1072,12 @@
     "key": "mod/ui/df128b3e",
     "text": "Heals and Parasite Energy costs.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Heals and Parasite Energy costs.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/e0c5265f",
@@ -1095,21 +1113,23 @@
     "key": "mod/ui/e4a16b3e",
     "text": "Junk, difficulty, and Wayne's Workshop services.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Junk, difficulty, and Wayne's Workshop services.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/e7a48a0f",
     "text": "Buy supplies and economy effects with Junk.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Buy supplies and economy effects with Junk.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/e7ecf837",
@@ -1175,11 +1195,12 @@
     "key": "mod/ui/f25d816e",
     "text": "Break down spare gear for Junk and new effects.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Break down spare gear for Junk and new effects.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/f2a8ec59",
@@ -1205,20 +1226,22 @@
     "key": "mod/ui/f7f6154e",
     "text": "Buy an escape item for ordinary battles.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Buy an escape item for ordinary battles.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/ffc394ac",
     "text": "Creatures you've met: weaknesses and loot.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Creatures you've met: weaknesses and loot.",
     "contexts": [
       "mods/host/pe_pages.c"
-    ]
+    ],
+    "surface": "panel-help"
   }
 ]

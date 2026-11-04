@@ -33,11 +33,12 @@
     "key": "mod/ui/2f842069",
     "text": "Story checks can use these even with a full bag.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Story checks can use these even with a full bag.",
     "contexts": [
       "mods/pe_qol/pe_key_items.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/4862d933",
@@ -83,11 +84,12 @@
     "key": "mod/ui/58d4bb09",
     "text": "Keys leave the bag. Off returns them as space allows.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Keys leave the bag. Off returns them as space allows.",
     "contexts": [
       "mods/pe_qol/pe_key_items.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/60e98b7f",
@@ -103,11 +105,12 @@
     "key": "mod/ui/6104be48",
     "text": "Key items didn't fit in the bag: turn quality of life back on to use them",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 1033,
     "source": "Key items didn't fit in the bag: turn quality of life back on to use them",
     "contexts": [
       "mods/pe_qol/pe_key_items.c"
-    ]
+    ],
+    "surface": "toast"
   },
   {
     "key": "mod/ui/6301d17f",
@@ -263,11 +266,12 @@
     "key": "mod/ui/d47f4398",
     "text": "Unique key and story items stored outside the bag.",
     "max_glyphs": 128,
-    "width": 320,
+    "width": 640,
     "source": "Unique key and story items stored outside the bag.",
     "contexts": [
       "mods/pe_qol/pe_key_items.c"
-    ]
+    ],
+    "surface": "panel-help"
   },
   {
     "key": "mod/ui/d747aeeb",

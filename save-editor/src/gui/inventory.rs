@@ -51,6 +51,7 @@ impl SaveEditorApp {
                         );
                     }
                 });
+                render_stack_controls(ui, save, 0, idx);
                 ui.label(RichText::new(sub).color(accent).size(12.0));
 
                 ui.add_space(4.0);
@@ -88,17 +89,16 @@ impl SaveEditorApp {
                         }
 
                         if ui.button("🏛 Move to Wayne").clicked() {
-                            if let Some(free_w) = save.special_storage.iter().position(|&v| v == 0)
-                            {
-                                save.special_storage[free_w] = val;
-                                save.inventory_items[idx] = 0;
-                                return;
+                            if let Err(e) = save.move_inventory_slot(0, idx, 2) {
+                                ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
                             }
                         }
                     }
 
                     if val != 0 && ui.button("🗑 Empty Slot").clicked() {
-                        save.inventory_items[idx] = 0;
+                        if let Err(e) = save.replace_inventory_slot(0, idx, 0) {
+                            ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
+                        }
                         self.inv_replace_mode = false;
                     }
                 });

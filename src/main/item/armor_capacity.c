@@ -318,6 +318,10 @@ void Inv_TransferItemBetweenLists(unsigned selection, int modifier, int flags, i
     ItemDataRecord *source, *dest, *ammo;
     int reserve;
     int slot, i, j, value, group, move;
+#ifdef PE_MODS
+    /* Refuse before observers can salvage the donor: a blocked transfer must never pay Junk. */
+    if(PE_HOOK(PE_HOOK_EQUIPMENT_GUARD,(&(PeHookEquipmentGuard){.kind=2,.selection=selection}))){Menu_CreateNotificationDialog(7,0);return;}
+#endif
     PE_HOOK(PE_HOOK_TOOL_TRANSFER, (&(PeHookToolTransfer){selection, modifier, flags, cost}));
     {
         int index = RestoreSelection(selection);
@@ -333,6 +337,11 @@ void Inv_TransferItemBetweenLists(unsigned selection, int modifier, int flags, i
             dest = Inv_LookupItemRecordScaled(g_InvItemPtr[index]);
         }
     }
+#ifdef PE_MODS
+    if (PE_HOOK(PE_HOOK_EQUIPMENT_GUARD,(&(PeHookEquipmentGuard){.kind=1,.record=source})) || PE_HOOK(PE_HOOK_EQUIPMENT_GUARD,(&(PeHookEquipmentGuard){.kind=1,.record=dest}))) {
+        Menu_CreateNotificationDialog(7,0); return;
+    }
+#endif
     if (modifier >= 0) {
         value = source->tailData[modifier];
         group = value & 0xE0;

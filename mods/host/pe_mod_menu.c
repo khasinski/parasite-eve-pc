@@ -54,6 +54,16 @@ void pe_menu_load_settings(void) {
     fclose(f);
 }
 
+/* A row renamed or split off keeps the player's choice: `key` starts from `legacy`'s saved value
+ * the first time (and only while `key` itself has none). */
+void pe_menu_alias_setting(const char *key, const char *legacy) {
+    const PeSaved *old = pe_saved_find(legacy);
+    if (!old || pe_saved_find(key) || s_saved_count >= PE_MAX_SAVED) return;
+    snprintf(s_saved[s_saved_count].key, sizeof(s_saved[0].key), "%s", key);
+    s_saved[s_saved_count++].value = old->value;
+    pe_mod_log(NULL, "setting %s starts from %s (%d)", key, legacy, old->value);
+}
+
 static int pe_row_saved(const PeMenuRow *row) {
     return row->kind == PE_ROW_TOGGLE || row->kind == PE_ROW_CHOICE || row->kind == PE_ROW_INT;
 }
@@ -121,7 +131,7 @@ static PeMenuRow *pe_row_new(PeRowKind kind, const char *sub, const char *label,
     return row;
 }
 
-int pe_menu_row_active(const PeMenuRow *row) { return pe_mod_active(row->mod_id); }
+int pe_menu_row_active(const PeMenuRow *row) { return pe_mod_data_available(row->mod_id); }
 
 static void pe_row_restore(PeMenuRow *row) {
     char key[192];
@@ -217,6 +227,21 @@ int pe_menu_register_dynamic_choice(const char *sub, const char *label, const ch
     return 0;
 }
 
+int pe_menu_register_live_dynamic_choice(const char *sub, const char *label, const char *description,
+                                         unsigned max_count, PeMenuChoiceCount count_fn,
+                                         PeMenuChoiceName name_fn, PeMenuGet get, PeMenuSet set) {
+    PeMenuRow *row;
+    if (!max_count || !count_fn || !name_fn || !get || !set ||
+        !(row = pe_row_new(PE_ROW_LIVE_CHOICE, sub, label, description)))
+        return -1;
+    row->count = max_count;
+    row->count_fn = count_fn;
+    row->name_fn = name_fn;
+    row->get = get;
+    row->set = set;
+    return 0;
+}
+
 int pe_menu_register_info(const char *sub, const char *label, const char *description, PeMenuText text) {
     PeMenuRow *row;
     if (!text || !(row = pe_row_new(PE_ROW_INFO, sub, label, description))) return -1;
@@ -275,7 +300,7 @@ static int pe_menu_tick(void *ctx, void *user) {
     (void)ctx;
     (void)user;
     for (i = 0; i < s_tick_count; i++)
-        if (pe_mod_active(s_tick_mod[i])) {
+        if (pe_mod_data_available(s_tick_mod[i])) {
             pe_mod_call_begin(s_tick_mod[i], "per-frame tick", NULL);
             s_ticks[i]();
             pe_mod_call_end();
@@ -326,6 +351,12 @@ void pe_menu_row_value_text(PeMenuRow *row, char *out, unsigned size) {
     case PE_ROW_CHOICE:
     case PE_ROW_LIVE_CHOICE:
         v = row->kind == PE_ROW_CHOICE ? *row->value : row->get();
+        if (row->count_fn) {
+            unsigned n = row->count_fn();
+            if (n > row->count) n = row->count;
+            snprintf(out, size, "%s", v >= 0 && (unsigned)v < n ? row->name_fn((unsigned)v) : "?");
+            break;
+        }
         snprintf(out, size, "%s", v >= 0 && (unsigned)v < row->count ? row->names[v] : "?");
         break;
     case PE_ROW_INT:
@@ -363,7 +394,9 @@ void pe_menu_row_step(PeMenuRow *row, int direction) {
         *row->value = pe_wrap(*row->value + direction, (int)row->count);
         break;
     case PE_ROW_LIVE_CHOICE:
-        row->set(pe_wrap(row->get() + direction, (int)row->count));
+        count = row->count_fn ? row->count_fn() : row->count;
+        if (count > row->count) count = row->count;
+        row->set(pe_wrap(row->get() + direction, (int)count));
         break;
     case PE_ROW_INT:
         *row->value = pe_clamp(*row->value + direction * row->step, row->minimum, row->maximum);

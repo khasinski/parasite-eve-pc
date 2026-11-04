@@ -2,7 +2,7 @@
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it. pe_lang (language packs) is
 # opt-in too.
-set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_collection pe_stacks pe_warp pe_quicksave pe_cheats CACHE STRING "Mods built into the game (folder names)")
+set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats CACHE STRING "Mods built into the game (folder names)")
 
 set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs
@@ -13,7 +13,20 @@ set(pe_host_sources
     host/pe_game_facts.c    # game facts as tables: effect names and groups, power tags
     host/pe_main_menu.c     # extra rows in Aya's main menu, screens from game widgets
     host/pe_equip_sync.c    # edited equipment reaches the next battle
+    host/pe_save_query.c
     host/pe_save.c          # mods' per-save data: records the host saves, loads and carries
+    host/pe_recovery_snapshot.c
+    host/pe_legacy_guard.c
+    host/pe_api_native.c
+    host/pe_api_native_game.c
+    host/pe_profile_transactions.c
+    host/pe_inventory_api.c
+    host/pe_shop_api.c
+    host/pe_extension_store.c
+    host/pe_checkpoint_game.c
+    host/pe_economy_policy.c
+    host/pe_content_api.c
+    host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
     host/pe_present.c       # image presenter: pictures pasted into the finished frame
     host/pe_disc_assets.c   # read-only game data from the player's disc (rooms)
     host/pe_model_skin.c    # isolated Wardrobe asset reads
@@ -44,6 +57,9 @@ target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 target_compile_definitions(pe-mods PRIVATE __psyz)
 target_link_libraries(pe-mods PRIVATE psyz)
+if(TARGET pe_download_json AND TARGET pe_download_zip)
+    target_link_libraries(pe-mods PRIVATE pe_download_json pe_download_zip)
+endif()
 
 if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     add_executable(pe-mod-frequency
@@ -64,12 +80,25 @@ if(BUILD_TESTING)
     target_link_libraries(test-mod-settings PRIVATE psyz)
     add_test(NAME mod-settings-save-safety COMMAND test-mod-settings "${CMAKE_CURRENT_BINARY_DIR}/settings-evidence")
 
-    add_executable(test-mod-crash-tail ${PROJECT_SOURCE_DIR}/tests/pe_mod_crash_tail_test.c host/pe_mod_host.c host/pe_save.c)
+    add_executable(test-mod-crash-tail ${PROJECT_SOURCE_DIR}/tests/pe_mod_crash_tail_test.c host/pe_mod_host.c host/pe_save.c host/pe_save_query.c host/pe_registry.c
+        host/pe_legacy_guard.c host/pe_api_native.c host/pe_game_facts.c host/pe_content_api.c host/pe_economy_policy.c
+        host/pe_recovery_snapshot.c host/pe_extension_store.c host/pe_inventory_api.c host/pe_shop_api.c host/pe_profile_transactions.c)
     target_include_directories(test-mod-crash-tail PRIVATE ${PROJECT_SOURCE_DIR}/include host
         "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
     target_compile_definitions(test-mod-crash-tail PRIVATE __psyz PE_MODS=1)
     target_link_libraries(test-mod-crash-tail PRIVATE psyz)
     add_test(NAME mod-crash-save-tail COMMAND test-mod-crash-tail)
+
+    add_executable(test-mod-econ-store ${PROJECT_SOURCE_DIR}/tests/pe_mod_econ_store_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c
+        host/pe_mod_host.c host/pe_save.c host/pe_save_query.c host/pe_registry.c
+        host/pe_legacy_guard.c host/pe_api_native.c host/pe_game_facts.c host/pe_content_api.c host/pe_economy_policy.c
+        host/pe_recovery_snapshot.c host/pe_extension_store.c host/pe_inventory_api.c host/pe_shop_api.c host/pe_profile_transactions.c)
+    target_include_directories(test-mod-econ-store PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_economy
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-mod-econ-store PRIVATE __psyz PE_MODS=1 PE_ECON_STORE_TEST=1)
+    target_compile_options(test-mod-econ-store PRIVATE $<IF:$<BOOL:${MSVC}>,/UNDEBUG,-UNDEBUG>)
+    target_link_libraries(test-mod-econ-store PRIVATE psyz)
+    add_test(NAME mod-econ-store COMMAND test-mod-econ-store)
 endif()
 
 if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
@@ -98,6 +127,14 @@ if(BUILD_TESTING)
     target_compile_definitions(test-mod-save PRIVATE __psyz PE_MODS=1)
     target_link_libraries(test-mod-save PRIVATE psyz)
     add_test(NAME mod-save-records COMMAND test-mod-save)
+    add_executable(test-portable-checkpoint ${PROJECT_SOURCE_DIR}/tests/pe_checkpoint_portable_test.c
+        host/pe_save.c host/pe_extension_store.c)
+    target_include_directories(test-portable-checkpoint PRIVATE ${PROJECT_SOURCE_DIR}/include host)
+    target_compile_definitions(test-portable-checkpoint PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(test-portable-checkpoint PRIVATE psyz)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/portable-checkpoint-evidence")
+    add_test(NAME mod-portable-checkpoint COMMAND test-portable-checkpoint
+        "${CMAKE_CURRENT_BINARY_DIR}/portable-checkpoint-evidence")
 endif()
 
 if(BUILD_TESTING AND "pe_rebalance" IN_LIST PE_MOD_LIST)
@@ -150,7 +187,7 @@ endif()
 # than only through the standalone PowerShell helpers.
 function(pe_feature_test name)
     add_executable(test-mod-${name} ${ARGN})
-    target_include_directories(test-mod-${name} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_economy pe_collection)
+    target_include_directories(test-mod-${name} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_economy pe_catalog pe_shops pe_collection pe_wardrobe)
     # These isolated fixtures have no service host; full interface checks stay in pe-native-debug.
     target_compile_definitions(test-mod-${name} PRIVATE __psyz PE_MODS=1 PE_INTERFACE_TEXT_FALLBACK=1)
     target_link_libraries(test-mod-${name} PRIVATE psyz)
@@ -166,21 +203,37 @@ function(pe_feature_test name)
     add_test(NAME mod-${name} COMMAND test-mod-${name})
 endfunction()
 if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
-    pe_feature_test(loot ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_test.c)
+    pe_feature_test(loot ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
+    pe_feature_test(loot-parity ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_parity_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
+    pe_feature_test(econ-config ${PROJECT_SOURCE_DIR}/tests/pe_mod_econ_config_test.c pe_economy/pe_econ_config.c)
+    pe_feature_test(econ-engine ${PROJECT_SOURCE_DIR}/tests/pe_mod_econ_engine_test.c pe_economy/pe_econ_engine.c pe_economy/pe_econ_config.c)
     pe_feature_test(junk-counter ${PROJECT_SOURCE_DIR}/tests/pe_mod_junk_counter_test.c pe_economy/pe_junk_counter.c)
-    pe_feature_test(armor-effect-display ${PROJECT_SOURCE_DIR}/tests/pe_mod_armor_effect_display_test.c pe_economy/pe_armor_effect_display.c)
-    pe_feature_test(catalog-rules ${PROJECT_SOURCE_DIR}/tests/pe_mod_catalog_rules_test.c pe_economy/pe_catalog.c pe_economy/pe_dismantle.c host/pe_game_facts.c)
+    pe_feature_test(armor-effect-display ${PROJECT_SOURCE_DIR}/tests/pe_mod_armor_effect_display_test.c pe_catalog/pe_armor_effect_display.c)
+    pe_feature_test(catalog-rules ${PROJECT_SOURCE_DIR}/tests/pe_mod_catalog_rules_test.c pe_catalog/pe_catalog.c pe_catalog/pe_dismantle.c host/pe_legacy_guard.c host/pe_game_facts.c)
     pe_feature_test(catalog-menu ${PROJECT_SOURCE_DIR}/tests/pe_mod_catalog_menu_test.c)
-    pe_feature_test(requisition ${PROJECT_SOURCE_DIR}/tests/pe_mod_requisition_test.c pe_economy/pe_requisition.c host/pe_save.c pe_economy/pe_requisition_menu.c)
+    pe_feature_test(catalog-wallet ${PROJECT_SOURCE_DIR}/tests/pe_mod_catalog_wallet_test.c pe_catalog/pe_catalog_wallet.c)
+    pe_feature_test(requisition ${PROJECT_SOURCE_DIR}/tests/pe_mod_requisition_test.c pe_shops/pe_requisition.c host/pe_save.c pe_shops/pe_requisition_menu.c)
     pe_feature_test(smoke ${PROJECT_SOURCE_DIR}/tests/pe_mod_smoke_test.c pe_economy/pe_smoke.c)
+    pe_feature_test(workshop ${PROJECT_SOURCE_DIR}/tests/pe_mod_workshop_test.c pe_shops/pe_workshop_model.c)
+endif()
+if(BUILD_TESTING)
+    pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
+endif()
+if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
+    pe_feature_test(skin-bounds ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_bounds_test.c)
+    pe_feature_test(wardrobe-menu ${PROJECT_SOURCE_DIR}/tests/pe_mod_wardrobe_menu_test.c)
+    pe_feature_test(packs ${PROJECT_SOURCE_DIR}/tests/pe_mod_packs_test.c pe_wardrobe/pe_packs.c)
+    target_link_libraries(test-mod-packs PRIVATE pe_download_json pe_download_zip)
+    set_tests_properties(mod-packs PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
+    pe_feature_test(collection ${PROJECT_SOURCE_DIR}/tests/pe_mod_collection_test.c pe_collection/pe_collection.c pe_collection/pe_profile.c pe_collection/pe_bestiary.c pe_collection/pe_pack_pe1.c
+        pe_wardrobe/pe_wardrobe_mod.c pe_wardrobe/pe_wardrobe_profile.c pe_wardrobe/pe_wardrobe.c pe_wardrobe/pe_pack_pe1_costumes.c)
+    set_tests_properties(mod-collection PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST)
-    pe_feature_test(skin-bounds ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_bounds_test.c)
-    pe_feature_test(collection ${PROJECT_SOURCE_DIR}/tests/pe_mod_collection_test.c pe_collection/pe_collection.c pe_collection/pe_profile.c pe_collection/pe_bestiary.c pe_collection/pe_wardrobe.c pe_collection/pe_pack_pe1.c)
-    set_tests_properties(mod-collection PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
     pe_feature_test(model ${PROJECT_SOURCE_DIR}/tests/pe_mod_model_test.c host/pe_model.c host/pe_model_skin.c host/pe_model_view.c)
     set_tests_properties(mod-model PROPERTIES ENVIRONMENT "PE_MODEL_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
-    pe_feature_test(wardrobe-menu ${PROJECT_SOURCE_DIR}/tests/pe_mod_wardrobe_menu_test.c)
     pe_feature_test(present ${PROJECT_SOURCE_DIR}/tests/pe_mod_present_test.c host/pe_present.c)
     pe_feature_test(stage ${PROJECT_SOURCE_DIR}/tests/pe_mod_stage_test.c host/pe_model_stage.c)
 endif()
@@ -226,5 +279,38 @@ if(BUILD_TESTING)
         target_compile_options(test-editor-mod-save PRIVATE /UNDEBUG)
     else()
         target_compile_options(test-editor-mod-save PRIVATE -UNDEBUG)
+    endif()
+endif()
+
+if(BUILD_TESTING)
+    add_executable(test-ps5-checkpoint-session ${PROJECT_SOURCE_DIR}/tests/pe_ps5_checkpoint_session_test.c
+        ${PROJECT_SOURCE_DIR}/platform/ps5/native-gpu/state/pe_state.c)
+    target_include_directories(test-ps5-checkpoint-session PRIVATE ${PROJECT_SOURCE_DIR}/tests/ps5_state_stubs ${PROJECT_SOURCE_DIR}/include host
+        ${PROJECT_SOURCE_DIR}/platform/ps5/native-gpu/state ${PSYZ_DIR}/psyz/include
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-ps5-checkpoint-session PRIVATE __psyz)
+    add_test(NAME mod-ps5-checkpoint-session COMMAND test-ps5-checkpoint-session)
+endif()
+if(BUILD_TESTING AND WIN32)
+    add_executable(test-preservation-regressions ${PROJECT_SOURCE_DIR}/tests/pe_preservation_regressions.c
+        host/pe_registry.c host/pe_legacy_guard.c host/pe_api_native.c host/pe_game_facts.c
+        host/pe_content_api.c host/pe_economy_policy.c host/pe_recovery_snapshot.c
+        host/pe_extension_store.c host/pe_inventory_api.c host/pe_shop_api.c
+        host/pe_profile_transactions.c host/pe_save.c host/pe_save_query.c)
+    target_include_directories(test-preservation-regressions PRIVATE ${PROJECT_SOURCE_DIR}/include host)
+    target_compile_definitions(test-preservation-regressions PRIVATE __psyz PE_MODS=1)
+    foreach(scenario unknown-preservation definition-revision receipt-provider-off save-load
+        cancelled-save missing-companion save-io-failure retention identity-refusal receipt-replay)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/preservation-${scenario}")
+        add_test(NAME mod-preservation-${scenario} COMMAND test-preservation-regressions
+            ${scenario} "${CMAKE_CURRENT_BINARY_DIR}/preservation-${scenario}")
+    endforeach()
+endif()
+
+if(BUILD_TESTING)
+    find_program(PE_COMPAT_NODE node)
+    if(PE_COMPAT_NODE)
+        add_test(NAME mod-ps5-compatibility-export COMMAND ${PE_COMPAT_NODE}
+            ${PROJECT_SOURCE_DIR}/tests/pe_compatibility_export_test.cjs ${CMAKE_CURRENT_BINARY_DIR})
     endif()
 endif()

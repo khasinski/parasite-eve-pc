@@ -39,6 +39,9 @@ pub use equipment::EquipmentRecord;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeSaveSlot {
+    /// Complete companion, included in JSON exports.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub companion: Option<crate::companion::Companion>,
     /// Optional slot number on memory card (0..15)
     pub slot_index: usize,
     /// Optional PsyZ / PS1 20-char filename (`BASLUS-006620000000A`)

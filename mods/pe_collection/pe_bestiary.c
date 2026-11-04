@@ -101,15 +101,21 @@ static int pe_resolve(int room, unsigned identity, const EnemyCombatant *enemy) 
     return -1;
 }
 
-static unsigned pe_state(int h) { return pe_valid(h) ? pe_profile_creature(s_creature[h]->key, NULL) : 0u; }
+static unsigned pe_state(int h) {
+    if(!pe_valid(h))return 0;
+    const PeProfileTransactionsApi*t=pe_service_get("profile_transactions",1);
+    return pe_profile_creature(s_creature[h]->key,NULL) | (t&&t->struct_size>=sizeof *t?t->pending("pe_collection/knowledge",s_creature[h]->key):0);
+}
 static unsigned pe_kills(int h) { unsigned k = 0; if (pe_valid(h)) (void)pe_profile_creature(s_creature[h]->key, &k); return k; }
 
 static void pe_unlock_why(int h, unsigned bits, const char *why) {
     const unsigned old = pe_state(h), now = (old | bits | PE_BESTIARY_MET) & 7u, gained = now & ~old;
     const PeCreatureInfo *c = pe_info(h);
     char msg[96];
-    if (!c || now == old) return;
-    pe_profile_set_creature(c->key, now, pe_kills(h));
+    if (!c) return;
+    unsigned committed=pe_profile_creature(c->key,NULL),earned=(committed|bits|PE_BESTIARY_MET)&7u;
+    if(earned!=committed)pe_profile_set_creature(c->key,earned,pe_kills(h));
+    if(now==old)return;
     snprintf(msg, sizeof msg, "Bestiary: %s%s%s%s", pe_l10n_ui(c->name), gained & PE_BESTIARY_WEAK ? " - weaknesses" : "",
              gained & PE_BESTIARY_LOOT ? " - loot" : "", gained == PE_BESTIARY_MET ? " - new entry" : "");
     pe_toast(msg);
@@ -126,7 +132,7 @@ static void pe_kill(int h) {
     const PeCreatureInfo *c = pe_info(h);
     unsigned k = pe_kills(h) + 1u, bits = PE_BESTIARY_MET;
     if (!c) return;
-    pe_profile_set_creature(c->key, pe_state(h), k);
+    pe_profile_set_creature(c->key, pe_profile_creature(c->key,NULL), k);
     if (c->boss) bits |= PE_BESTIARY_WEAK;                 /* defeated: its weaknesses are known */
     else {
         if (k >= PE_KILLS_WEAK) bits |= PE_BESTIARY_WEAK;
@@ -318,6 +324,13 @@ int pe_bestiary_buy(int h) {
     price = pe_bestiary_next_price(h, &bit);
     if (!bit) { pe_col_say("Already complete"); return 0; }
     if (!pe_col_junk_ready(msg, sizeof msg)) { pe_col_say(msg); return 0; }
+    const PeProfileTransactionsApi*t=pe_service_get("profile_transactions",1);
+    if(t&&t->struct_size>=sizeof *t){
+        if(!t->buy("pe_collection/knowledge",s_creature[h]->key,bit,price)){
+            pe_col_say("Cannot buy information now; no Junk spent");return 0;
+        }
+        pe_col_say("Information available; save the game to keep this purchase");return 1;
+    }
     if (!pe_col_spend(price)) {
         snprintf(msg, sizeof msg, pe_l10n_ui("Need %u Junk (have %u)"), price, pe_col_junk());
         pe_col_say(msg);

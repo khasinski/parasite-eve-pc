@@ -36,6 +36,8 @@ typedef int (*PeHookFn)(void *ctx, void *user);
 
 enum { PE_PRIORITY_EARLY = -100, PE_PRIORITY_NORMAL = 0, PE_PRIORITY_LATE = 100 };
 
+/* Registration while dispatching is refused (-1). Same-event recursion and nesting beyond eight
+ * dispatches are refused (-1); distinct nested events remain supported. Save requests cannot nest. */
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id);
 
 int pe_event_id(const char *name);
@@ -50,6 +52,7 @@ int pe_mod_is_running(const char *mod_id);
  * main-menu rows are skipped. pe_mod_current(): the mod whose init is running (owner of what it
  * registers), else NULL. pe_mod_active(): NULL and the host's own are always active. */
 const char *pe_mod_current(void);
+int pe_mod_data_available(const char *mod_id);
 int pe_mod_active(const char *mod_id);
 int pe_mod_interactive(void);
 /* Refresh requested-vs-started mod notes; never starts/stops a mod. */
@@ -71,6 +74,7 @@ void pe_toast(const char *text);
 void pe_mod_call_begin(const char *mod_id, const char *what, const char *detail);
 void pe_mod_call_end(void);
 void pe_menu_load_settings(void);
+void pe_menu_alias_setting(const char *key, const char *legacy);
 void pe_menu_save_settings(void);
 /* Explicit UI requests only; running mod set stays unchanged until restart. */
 int pe_mod_master_active_now(void);

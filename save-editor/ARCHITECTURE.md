@@ -66,6 +66,15 @@ stat synchronization, raw-byte preservation and CRC update are unchanged.
 `memcard.rs` owns containers, slot placement and filesystem writes/backups;
 `crc.rs` and `charset.rs` own their respective low-level encodings.
 
+`companion.rs` validates bounded PEEX v1 files and the native `pe_host.extlink`,
+preserves provider payloads, rebinds filenames/generations and publishes the new
+companion before atomically replacing the native file. `PeSaveSlot.companion`
+travels through cloning and JSON; older JSON without it is accepted only when
+the native tail does not require a companion. `stacks.rs` owns stack schemas and
+inventory operations shared by GUI and CLI. Provider-owned custom equipment
+records are protected; unrelated equipment changes update the identity stamp
+only when the original baseline matches.
+
 Do not add filesystem or GUI dependencies to save operations. New editing
 operations should act on `PeSaveSlot`/`EquipmentRecord`, and both GUI and CLI
 should call those operations rather than reimplement them.

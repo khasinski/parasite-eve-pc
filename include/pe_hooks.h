@@ -65,8 +65,16 @@ typedef enum PeHookId {
                                * move; replaceable */
     PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
+    PE_HOOK_EQUIPMENT_GUARD, /* PeHookEquipmentGuard: nonzero refuses BEFORE native mutation */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookEquipmentGuard {
+    int kind; /* 0 native value, 1 record, 2 Tools selections */
+    int value;
+    const struct ItemDataRecord *record;
+    unsigned selection;
+} PeHookEquipmentGuard;
 
 /* The factor belongs to the current calculation, not the actor. A handler
  * may change it for this input step only and must not retain its address. */
@@ -243,6 +251,25 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread);
  * 8 KB card block) as a real save would, when a room starts. -1 while mod code
  * is running; the block stays zeroed. */
 int pe_mod_snapshot_save_tail(unsigned char *block);
+#define PE_RECOVERY_NATIVE_SIZE (0x12E4u+0x8A8u)
+#define PE_RECOVERY_COMPANION_MAX 8192u
+typedef struct PeModRecoverySnapshot {
+    unsigned version, companion_size, checksum;
+    unsigned char card[8192], companion[PE_RECOVERY_COMPANION_MAX];
+} PeModRecoverySnapshot;
+/* Coherent room recovery copy; game-thread only, with no mod callback/allocation/file I/O. */
+int pe_mod_snapshot_recovery(const unsigned char *native,unsigned native_size,PeModRecoverySnapshot *out);
+/* Native card publication boundary: companion data is staged before the native checksum. */
+void pe_mod_bind_native(void);
+int pe_mod_save_path(const char *mapped_path);
+int pe_mod_load_admit(const char *mapped_path,const unsigned char *block);
+void pe_mod_save_committed(const char *mapped_path);
+void pe_mod_save_cancelled(void);
+int pe_mod_save_publish(const char *temporary,const char *target);
+int pe_mod_equipment_guard(int native_value);
+int pe_mod_tool_guard(unsigned selection);
+struct ItemDataRecord;
+int pe_mod_equipment_record_guard(const struct ItemDataRecord *record);
 #define PE_HOOK(id, ctx) \
     ((id) == PE_HOOK_INIT ? pe_host_init((const PeHookInit *)(const void *)(ctx)) : pe_hook_dispatch((id), (ctx)))
 #else
