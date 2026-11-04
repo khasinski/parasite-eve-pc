@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "pe_collection.h"
+#include "pe_collection_data.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -16,6 +17,7 @@ extern const PeMod pe_mod_pe_collection;
 Pe1GameState g_GameState;
 GameStateBlock g_GameStateBlock;
 BattleEnemySlot g_BattleEnemySlots[7];
+struct FieldActor *g_FieldActorListHead;
 static int s_room = 374;
 static char s_dir[512];
 static uint32_t s_junk = 1000;
@@ -111,6 +113,44 @@ static void kill_once(int slot, unsigned identity) {
     s_hook[PE_HOOK_BATTLE_UPDATE](NULL, NULL);      /* killed */
     e->active = 0;
     s_hook[PE_HOOK_BATTLE_UPDATE](NULL, NULL);
+}
+
+/* Exercise the production service/hook path for every extracted native actor
+ * key. Deliberately use identical HP/defense: identity must survive scaling and
+ * combat-stat changes, including multiple species sharing rank/kind. */
+static void native_species_regressions(const PeBestiaryApi *b) {
+    BattleEntity actor = {0};
+    unsigned before[PE_CREATURES];
+    int handles[PE_CREATURES];
+    for (int i = 0; i < PE_CREATURES; ++i) {
+        handles[i] = b->find(pe_pack_pe1_creature_key(i));
+        assert(handles[i] >= 0);
+    }
+    actor.core = &g_BattleEnemySlots[0].combatant;
+    g_FieldActorListHead = (struct FieldActor *)&actor;
+    for (int n = 0; n < PE_CREATURE_KEYS; ++n) {
+        const PeCreatureKey *k = &g_pe_creature_keys[n];
+        s_room = k->map; actor.modelIndex = k->actor;
+        for (int i = 0; i < PE_CREATURES; ++i) before[i] = b->kills(handles[i]);
+        kill_once(0, k->id);
+        for (int i = 0; i < PE_CREATURES; ++i)
+            assert(b->kills(handles[i]) == before[i] + (unsigned)(i == k->creature));
+        /* Scan must resolve the same actor without granting another species
+         * weaknesses. Existing progress is restored through public profile IO. */
+        for (int i = 0; i < PE_CREATURES; ++i)
+            pe_profile_set_creature(pe_pack_pe1_creature_key(i), 0, b->kills(handles[i]));
+        PeHookSpell scan = {0}; scan.spell = 7; scan.target = &actor;
+        s_hook[PE_HOOK_SPELL](&scan, NULL);
+        for (int i = 0; i < PE_CREATURES; ++i)
+            assert(((b->state(handles[i]) & PE_BESTIARY_WEAK) != 0) == (i == k->creature));
+    }
+    /* Without an actor, a shared rank/kind cannot identify the species. Do
+     * not turn a missing model into the last registered creature's kill. */
+    g_FieldActorListHead = NULL; s_room = 263;
+    for (int i = 0; i < PE_CREATURES; ++i) before[i] = b->kills(handles[i]);
+    kill_once(0, 0x001A);
+    for (int i = 0; i < PE_CREATURES; ++i) assert(b->kills(handles[i]) == before[i]);
+    puts("Native Bestiary: 370 model-aware kill/Scan mappings; shared rat/spider and lizard/armadillo identities isolated");
 }
 
 static int find_shop(const PeWardrobeApi *shop, const char *part) {
@@ -330,6 +370,7 @@ int main(void) {
         remove(old);
         remove(path);
     }
+    native_species_regressions(b);
     puts("Collection checks passed: PE pack keys, import creatures and costumes, resolvers, replace, events, profile, recomp import.");
     return 0;
 }
