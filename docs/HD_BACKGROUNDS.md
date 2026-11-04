@@ -146,6 +146,14 @@ exact native state, VRAM and PCM checks.
 
 ### Reviewed foreground coverage (issue #56)
 
+Legacy packs also receive inward edge feathering for matched opaque HD room
+sprites above 1x. This filters native coverage inside its existing silhouette;
+it never adds foreground colour outside native coverage. Tile bounds are clamped
+to prevent neighbouring VRAM texels from contaminating the matte. SPIR-V, Metal
+and DXIL are generated from the same shader. This fallback reduces hard cutout
+edges in the current pack; coordinated artwork and authored mattes address the
+remaining material seams in the reviewed replacement pack.
+
 Regular RGB packs keep the original native cutout rules. An RGBA material with
 non-opaque alpha explicitly opts into a refined coverage matte for opaque HD
 presentation at internal resolutions above 1x. Its native reference plane still
