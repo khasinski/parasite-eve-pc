@@ -415,7 +415,8 @@ without touching these files.
   The native PE pack resolves `(room, rank/kind, model bank slot)` through its resolver:
   rank/kind alone is shared by different species in the same room. Its 370 actor keys retain
   all 331 previous room/identity/species associations and all 75 stable profile keys. HP,
-  defense and other mutable combat stats are not used as species identifiers. A unique
+  defense and other mutable combat stats are not used as species identifiers. If EX/progression
+  changes rank, a unique room/model association still resolves the same species. A unique
   legacy mapping remains available when the actor is detached; ambiguous identities never
   guess the last registered species. Later import/randomizer resolvers still take precedence.
 - `pe_bestiary_menu.c`: a Bestiary row in Aya's main menu (icon: the B of the BP icon) once a creature is

@@ -135,6 +135,11 @@ static void native_species_regressions(const PeBestiaryApi *b) {
         kill_once(0, k->id);
         for (int i = 0; i < PE_CREATURES; ++i)
             assert(b->kills(handles[i]) == before[i] + (unsigned)(i == k->creature));
+        /* EX/progression can change rank; the room/model still identifies
+         * this species even when the original rank/kind is no longer present. */
+        kill_once(0, k->id ^ 0x0080u);
+        for (int i = 0; i < PE_CREATURES; ++i)
+            assert(b->kills(handles[i]) == before[i] + 2u * (unsigned)(i == k->creature));
         /* Scan must resolve the same actor without granting another species
          * weaknesses. Existing progress is restored through public profile IO. */
         for (int i = 0; i < PE_CREATURES; ++i)

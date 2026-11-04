@@ -91,12 +91,17 @@ static int pe_enemy_creature(int room, unsigned identity, const EnemyCombatant *
     if (!enemy) return -1;
     for (entity = (const BattleEntity *)g_FieldActorListHead; entity; entity = entity->next) {
         if (entity->core != enemy) continue;
+        int candidate = -1, ambiguous = 0;
         for (i = 0; i < PE_CREATURE_KEYS; ++i) {
             const PeCreatureKey *k = &g_pe_creature_keys[i];
-            if (k->map == room && k->id == identity && k->actor == entity->modelIndex)
-                return s_handle[k->creature];
+            if (k->map != room || k->actor != entity->modelIndex) continue;
+            if (k->id == identity) return s_handle[k->creature];
+            if (candidate < 0) candidate = s_handle[k->creature];
+            else if (candidate != s_handle[k->creature]) ambiguous = 1;
         }
-        return -1;
+        /* EX/progression and mods may scale rank without changing the model.
+         * A unique room/model association still identifies the species. */
+        return ambiguous ? -1 : candidate;
     }
     return -1;
 }
