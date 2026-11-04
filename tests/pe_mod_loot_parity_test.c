@@ -37,6 +37,34 @@ static void battle_end(PeHookRewards *reward) {
 }
 void pe_log(const char *tag, const char *fmt, ...) { (void)tag; (void)fmt; }
 
+/* The whole modules are included, so their menus and hooks need these to link, on Windows above
+ * all. The battles below run the handlers directly, with no host behind them. */
+BattleEnemySlot g_BattleEnemySlots[7];
+u8 *g_CurItemEffectData;
+unsigned int g_DrawColorShaded, g_DrawPrimColor;
+int g_InvActiveListCount, g_InvBonusSlotCount, g_InvSlotLimit;
+s16 g_InvActiveListItems[10];
+s16 *g_InvActiveListOverride, *g_InvItemPtr;
+u8 g_InvItemMessageBuffer[32];
+void *Text_LookupTable8(unsigned int index) { (void)index; return NULL; }
+int pe_free_field(void) { return 0; }
+int pe_game_loaded(void) { return 0; }
+int pe_in_battle(void) { return 0; }
+unsigned pe_wayne_count(void) { return 0; }
+int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id) { (void)id; (void)fn; (void)user; (void)priority; (void)mod_id; return 0; }
+int pe_service_publish(const char *name, int version, const void *api, const char *mod_id) { (void)name; (void)version; (void)api; (void)mod_id; return 0; }
+void pe_mod_log(const char *mod_id, const char *fmt, ...) { (void)mod_id; (void)fmt; }
+void pe_toast(const char *text) { (void)text; }
+int pe_save_register(const PeSaveRecord *record) { (void)record; return 0; }
+int pe_menu_register_toggle(const char *sub, const char *label, const char *description, int *flag, PeMenuPerFrame per_frame) { (void)sub; (void)label; (void)description; (void)flag; (void)per_frame; return 0; }
+int pe_menu_register_action(const char *sub, const char *label, const char *description, PeMenuAction action) { (void)sub; (void)label; (void)description; (void)action; return 0; }
+int pe_menu_register_choice(const char *sub, const char *label, const char *description, int *index, const char *const *names, unsigned count) { (void)sub; (void)label; (void)description; (void)index; (void)names; (void)count; return 0; }
+int pe_menu_register_int(const char *sub, const char *label, const char *description, int *value, int minimum, int maximum, int step) { (void)sub; (void)label; (void)description; (void)value; (void)minimum; (void)maximum; (void)step; return 0; }
+int pe_menu_register_live_int(const char *sub, const char *label, const char *description, int minimum, int maximum, int step, PeMenuGet get, PeMenuSet set) { (void)sub; (void)label; (void)description; (void)minimum; (void)maximum; (void)step; (void)get; (void)set; return 0; }
+int pe_menu_register_live_choice(const char *sub, const char *label, const char *description, const char *const *names, unsigned count, PeMenuGet get, PeMenuSet set) { (void)sub; (void)label; (void)description; (void)names; (void)count; (void)get; (void)set; return 0; }
+int pe_menu_register_tick(PeMenuPerFrame fn) { (void)fn; return 0; }
+int pe_menu_register_info(const char *sub, const char *label, const char *description, PeMenuText text) { (void)sub; (void)label; (void)description; (void)text; return 0; }
+
 #define PINNED 0xA31B4CD7B0A66B68ull   /* the economy mod before D10 step 1, and after it: identical */
 
 static uint64_t s_hash = 1469598103934665603ull;
