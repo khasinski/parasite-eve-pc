@@ -30,7 +30,9 @@ typedef struct {
     uint16_t performance_pct, empty_steal_junk;
     uint8_t vanilla_drops, rare_drops, extra_junk, super_drops, duper_drops;
     uint8_t redeem_super, redeem_duper, performance_bonus, empty_steal, native_to_counter;
+    uint8_t algorithm; /* PE_ECON_ALGORITHM_1 */
 } PeEconomyPreset;
+enum { PE_ECON_ALGORITHM_1 = 1 };
 enum { PE_POLICY_MODIFIER = 1, PE_POLICY_OBSERVER = 2, PE_POLICY_PRESET = 3 };
 typedef struct {
     PeApiHeader api;

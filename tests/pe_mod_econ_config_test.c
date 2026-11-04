@@ -47,8 +47,35 @@ static void test_validation(void) {
     c.flags = PE_ECON_F_SUPER_REDEEM;
     c.route = PE_ECON_ROUTE_ITEMS;
     assert(pe_econ_validate(&c) == PE_ECON_ROUTE_NEEDS_COUNTER);
-    c.flags = PE_ECON_F_BONUS_ITEM;   /* non-currency rewards may stay */
+    c.flags = PE_ECON_F_EMPTY_STEAL; c.steal_junk = 5;
+    assert(pe_econ_validate(&c) == PE_ECON_ROUTE_NEEDS_COUNTER);
+    assert(strstr(pe_econ_reason(PE_ECON_ROUTE_NEEDS_COUNTER), "empty-steal"));
+    c.flags = PE_ECON_F_BONUS_ITEM; c.item_chance = 1000;   /* non-currency rewards may stay */
     assert(pe_econ_validate(&c) == PE_ECON_OK);
+
+    /* Switched on but can never award anything. */
+    c = preset(STEADY); c.payment_chance = 0; assert(pe_econ_validate(&c) == PE_ECON_NEVER_PAYS);
+    c = preset(STEADY); c.income = c.boss_income = 0; assert(pe_econ_validate(&c) == PE_ECON_NEVER_PAYS);
+    c = preset(STEADY); c.income = 0; assert(pe_econ_validate(&c) == PE_ECON_OK);   /* bosses still pay */
+    c = preset(TREASURE); c.item_guarantee = 0; assert(pe_econ_validate(&c) == PE_ECON_OK);
+    c.item_chance = 0; assert(pe_econ_validate(&c) == PE_ECON_NEVER_PAYS);
+    c = preset(VANILLA); c.flags = PE_ECON_F_SUPER_DROP; assert(pe_econ_validate(&c) == PE_ECON_NEVER_PAYS);
+    c = preset(VANILLA); c.flags = PE_ECON_F_DUPER_DROP; assert(pe_econ_validate(&c) == PE_ECON_NEVER_PAYS);
+    c = preset(STEADY); c.flags |= PE_ECON_F_PERFORMANCE; assert(pe_econ_validate(&c) == PE_ECON_NEVER_PAYS);
+
+    /* Algorithm and key shape. */
+    c = preset(VANILLA); c.algorithm = 2; assert(pe_econ_validate(&c) == PE_ECON_BAD_ALGORITHM);
+    c = preset(VANILLA); c.reserved = 1; assert(pe_econ_validate(&c) == PE_ECON_BAD_ALGORITHM);
+    {
+        static const char *const bad_keys[] = {"steady", ".steady", "pe.", "PE.steady", "pe.st eady", "pe.\xff"};
+        for (size_t i = 0; i < sizeof bad_keys / sizeof bad_keys[0]; ++i) {
+            c = preset(VANILLA);
+            memset(c.key, 0, sizeof c.key);
+            strcpy(c.key, bad_keys[i]);
+            assert(pe_econ_validate(&c) == PE_ECON_BAD_KEY);
+        }
+    }
+    c = preset(VANILLA); memset(c.key, 0, sizeof c.key); assert(pe_econ_validate(&c) == PE_ECON_OK);   /* Custom */
 
     c = preset(VANILLA); c.route = 2; assert(pe_econ_validate(&c) == PE_ECON_BAD_ROUTE);
     c = preset(VANILLA); c.engine = 2; assert(pe_econ_validate(&c) == PE_ECON_BAD_ENGINE);
@@ -92,14 +119,46 @@ static void test_provider_preset(void) {
     PeEconomyPreset p;
     PeEconConfig c;
     memset(&p, 0, sizeof p);
+    p.algorithm = PE_ECON_ALGORITHM_1;
     p.vanilla_drops = 1; p.native_to_counter = 1; p.extra_junk = 1; p.battle_junk = 3; p.boss_junk = 10;
     p.payment_chance_10000 = 10000; p.super_value = 10; p.duper_value = 20;
     assert(pe_econ_from_preset("example.steady", &p, 75, &c) == PE_ECON_OK);
     assert(pe_econ_match_builtin(&c) == STEADY && c.price_pct == 75 && !strcmp(c.key, "example.steady"));
     p.native_to_counter = 0;
     assert(pe_econ_from_preset("example.steady", &p, 75, &c) == PE_ECON_ROUTE_NEEDS_COUNTER);
-    p.native_to_counter = 1; p.vanilla_drops = 0;
+    p.native_to_counter = 1;
+    assert(pe_econ_from_preset("pe.steady", &p, 75, &c) == PE_ECON_BAD_KEY);   /* reserved for built-ins */
+    p.algorithm = 0;
+    assert(pe_econ_from_preset("example.steady", &p, 75, &c) == PE_ECON_BAD_ALGORITHM);
+    p.algorithm = PE_ECON_ALGORITHM_1;
+    p.payment_chance_10000 = 0;                /* left unset: refused, not silently unpaid */
+    assert(pe_econ_from_preset("example.steady", &p, 75, &c) == PE_ECON_NEVER_PAYS);
+    p.payment_chance_10000 = 10000; p.vanilla_drops = 0;
     assert(pe_econ_from_preset("example.steady", &p, 75, &c) == PE_ECON_BAD_PRESET);
+}
+
+static void test_state_validate(void) {
+    PeEconState s;
+    pe_econ_state_reset(&s);
+    assert(pe_econ_state_validate(&s) == PE_ECON_OK);
+    s.config.income = 3;                       /* never left Enhanced, yet has settings */
+    assert(pe_econ_state_validate(&s) == PE_ECON_BAD_STATE);
+    pe_econ_state_reset(&s);
+    s.config.engine = PE_ECON_CONFIGURABLE;
+    assert(pe_econ_state_validate(&s) == PE_ECON_BAD_STATE);
+    pe_econ_state_reset(&s);
+    s.initialized = 2;
+    assert(pe_econ_state_validate(&s) == PE_ECON_BAD_STATE);
+
+    /* Settings kept while on Enhanced are checked too. */
+    s.initialized = 1;
+    s.config = preset(STEADY);
+    assert(pe_econ_state_validate(&s) == PE_ECON_OK);
+    s.config.engine = PE_ECON_LEGACY;
+    assert(pe_econ_state_validate(&s) == PE_ECON_OK);
+    s.config.price_pct = 80;
+    assert(pe_econ_validate(&s.config) == PE_ECON_OK && pe_econ_state_validate(&s) == PE_ECON_BAD_PRICE);
+    assert(pe_econ_state_validate(NULL) == PE_ECON_BAD_STATE);
 }
 
 static void test_preview_and_apply(void) {
@@ -161,6 +220,7 @@ int main(void) {
     test_validation();
     test_matching();
     test_provider_preset();
+    test_state_validate();
     test_preview_and_apply();
     puts("Economy settings: presets, validation, matching, preview and Apply passed");
     return 0;

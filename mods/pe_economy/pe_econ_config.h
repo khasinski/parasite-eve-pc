@@ -22,6 +22,7 @@ enum {
 
 typedef struct {
     uint8_t engine, route;
+    uint8_t algorithm, reserved;              /* PE_ECON_ALGORITHM_1; reserved stays 0 */
     uint16_t flags;
     uint16_t price_pct;                       /* base price, captured from Difficulty: 75/100/125 */
     uint16_t income, boss_income, payment_chance;
@@ -29,7 +30,7 @@ typedef struct {
     uint16_t super_chance, duper_chance;      /* together at most 10,000 */
     uint16_t super_value, duper_value;        /* kept while redemption is off */
     uint16_t performance_pct, steal_junk;
-    char key[48];                             /* zero padded; empty: Custom */
+    char key[48];                             /* zero padded; empty: Custom, else namespace.name in a-z 0-9 _ - . / */
 } PeEconConfig;
 
 typedef enum {
@@ -40,12 +41,15 @@ typedef enum {
     PE_ECON_BAD_PRICE,
     PE_ECON_BAD_CHANCE,
     PE_ECON_BUNDLE_CHANCES,
-    PE_ECON_ROUTE_NEEDS_COUNTER,   /* extra income or redemption with native Junk kept as items */
+    PE_ECON_ROUTE_NEEDS_COUNTER,   /* added income or redemption with native Junk kept as items */
     PE_ECON_REDEEM_ZERO,
     PE_ECON_STEAL_ZERO,
     PE_ECON_PERFORMANCE_NO_INCOME,
+    PE_ECON_NEVER_PAYS,            /* switched on, with amounts or chances that can't award anything */
+    PE_ECON_BAD_ALGORITHM,
     PE_ECON_BAD_KEY,
     PE_ECON_BAD_PRESET,
+    PE_ECON_BAD_STATE,
     PE_ECON_NOT_FREE_FIELD,
     PE_ECON_STORE_REFUSED,
 } PeEconResult;
@@ -98,6 +102,8 @@ typedef struct {
 } PeEconState;
 
 void pe_econ_state_reset(PeEconState *state);
+/* For loading: also checks the settings kept while on Enhanced, which pe_econ_validate doesn't. */
+PeEconResult pe_econ_state_validate(const PeEconState *state);
 /* Pure: changes nothing and calls nothing. */
 void pe_econ_preview(const PeEconState *state, const PeEconConfig *target, const PeEconContext *context, PeEconPreview *out);
 /* `enable_store` makes the settings saveable and runs only when entering the new path, before any

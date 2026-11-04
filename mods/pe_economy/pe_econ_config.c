@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-_Static_assert(sizeof(PeEconConfig) == 76, "no padding: configurations compare by bytes");
+_Static_assert(sizeof(PeEconConfig) == 78, "no padding: configurations compare by bytes");
 
 const char *pe_econ_reason(PeEconResult r) {
     switch (r) {
@@ -13,12 +13,15 @@ const char *pe_econ_reason(PeEconResult r) {
     case PE_ECON_BAD_PRICE: return "Base price must be 75, 100 or 125.";
     case PE_ECON_BAD_CHANCE: return "A chance is above 100%.";
     case PE_ECON_BUNDLE_CHANCES: return "Super and Duper Junk chances add up to more than 100%.";
-    case PE_ECON_ROUTE_NEEDS_COUNTER: return "Extra income and redemption need native Junk routed to the counter.";
+    case PE_ECON_ROUTE_NEEDS_COUNTER: return "Extra income, empty-steal Junk and redemption need native Junk routed to the counter.";
     case PE_ECON_REDEEM_ZERO: return "Redemption needs a value above 0.";
     case PE_ECON_STEAL_ZERO: return "Empty-steal Junk needs an amount above 0.";
     case PE_ECON_PERFORMANCE_NO_INCOME: return "The performance bonus needs extra income on.";
+    case PE_ECON_NEVER_PAYS: return "A reward is on but can never pay. Raise its amount or chance, or switch it off.";
+    case PE_ECON_BAD_ALGORITHM: return "These settings need a reward algorithm this version doesn't have.";
     case PE_ECON_BAD_KEY: return "The preset key is malformed.";
     case PE_ECON_BAD_PRESET: return "This preset can't be used.";
+    case PE_ECON_BAD_STATE: return "The saved Economy settings are damaged.";
     case PE_ECON_NOT_FREE_FIELD: return "Settings can only change in free field.";
     case PE_ECON_STORE_REFUSED: return "This save's companion can't hold the settings. Nothing changed.";
     }
@@ -31,13 +34,19 @@ static int key_ok(const char key[48]) {
     const char *end = memchr(key, 0, 48);
     if (!end) return 0;
     for (const char *p = end; p < key + 48; ++p) if (*p) return 0;
-    return 1;
+    if (end == key) return 1;   /* Custom */
+    for (const char *p = key; p < end; ++p) {
+        const char ch = *p;
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.' || ch == '/'))
+            return 0;
+    }
+    /* namespace.name, both parts present */
+    const char *dot = memchr(key, '.', (size_t)(end - key));
+    return dot && dot != key && dot + 1 != end;
 }
 
-PeEconResult pe_econ_validate(const PeEconConfig *c) {
-    if (!c || c->engine > PE_ECON_CONFIGURABLE) return PE_ECON_BAD_ENGINE;
-    if (!key_ok(c->key)) return PE_ECON_BAD_KEY;
-    if (c->engine == PE_ECON_LEGACY) return PE_ECON_OK;   /* Enhanced's settings live elsewhere */
+static PeEconResult settings_valid(const PeEconConfig *c) {
+    if (c->algorithm != PE_ECON_ALGORITHM_1 || c->reserved) return PE_ECON_BAD_ALGORITHM;
     if (c->route > PE_ECON_ROUTE_ITEMS) return PE_ECON_BAD_ROUTE;
     if (c->flags & ~(unsigned)PE_ECON_F_ALL) return PE_ECON_BAD_FLAGS;
     if (!price_ok(c->price_pct)) return PE_ECON_BAD_PRICE;
@@ -51,7 +60,20 @@ PeEconResult pe_econ_validate(const PeEconConfig *c) {
         return PE_ECON_REDEEM_ZERO;
     if ((c->flags & PE_ECON_F_EMPTY_STEAL) && !c->steal_junk) return PE_ECON_STEAL_ZERO;
     if ((c->flags & PE_ECON_F_PERFORMANCE) && !(c->flags & PE_ECON_F_INCOME)) return PE_ECON_PERFORMANCE_NO_INCOME;
+    if (((c->flags & PE_ECON_F_INCOME) && (!c->payment_chance || (!c->income && !c->boss_income))) ||
+        ((c->flags & PE_ECON_F_BONUS_ITEM) && !c->item_chance && !c->item_guarantee) ||
+        ((c->flags & PE_ECON_F_SUPER_DROP) && !c->super_chance) ||
+        ((c->flags & PE_ECON_F_DUPER_DROP) && !c->duper_chance) ||
+        ((c->flags & PE_ECON_F_PERFORMANCE) && !c->performance_pct))
+        return PE_ECON_NEVER_PAYS;
     return PE_ECON_OK;
+}
+
+PeEconResult pe_econ_validate(const PeEconConfig *c) {
+    if (!c || c->engine > PE_ECON_CONFIGURABLE) return PE_ECON_BAD_ENGINE;
+    if (!key_ok(c->key)) return PE_ECON_BAD_KEY;
+    if (c->engine == PE_ECON_LEGACY) return PE_ECON_OK;   /* Enhanced's settings live elsewhere */
+    return settings_valid(c);
 }
 
 /* D1 section 4. Provisional numbers, for playtesting. */
@@ -81,6 +103,7 @@ PeEconResult pe_econ_builtin(int i, uint16_t price_pct, PeEconConfig *out) {
     memset(out, 0, sizeof *out);
     out->engine = i == 0 ? PE_ECON_LEGACY : PE_ECON_CONFIGURABLE;
     out->route = PE_ECON_ROUTE_COUNTER;
+    out->algorithm = PE_ECON_ALGORITHM_1;
     out->flags = s_builtin[i].flags;
     out->price_pct = price_pct;
     out->income = s_builtin[i].income;
@@ -97,8 +120,10 @@ PeEconResult pe_econ_builtin(int i, uint16_t price_pct, PeEconConfig *out) {
 PeEconResult pe_econ_from_preset(const char *key, const PeEconomyPreset *p, uint16_t price_pct, PeEconConfig *out) {
     if (!key || !p || !out || strlen(key) >= sizeof out->key) return PE_ECON_BAD_PRESET;
     if (p->vanilla_drops != 1) return PE_ECON_BAD_PRESET;   /* native drops are never changed */
+    if (!strncmp(key, "pe.", 3)) return PE_ECON_BAD_KEY;    /* the built-in presets' namespace */
     memset(out, 0, sizeof *out);
     out->engine = PE_ECON_CONFIGURABLE;
+    out->algorithm = p->algorithm;
     out->route = p->native_to_counter ? PE_ECON_ROUTE_COUNTER : PE_ECON_ROUTE_ITEMS;
     out->flags = (uint16_t)((p->extra_junk ? PE_ECON_F_INCOME : 0) | (p->rare_drops ? PE_ECON_F_BONUS_ITEM : 0) |
                             (p->super_drops ? PE_ECON_F_SUPER_DROP : 0) | (p->duper_drops ? PE_ECON_F_DUPER_DROP : 0) |
@@ -160,6 +185,18 @@ int pe_econ_match_builtin(const PeEconConfig *c) {
 void pe_econ_state_reset(PeEconState *s) {
     memset(s, 0, sizeof *s);
     s->config.engine = PE_ECON_LEGACY;
+}
+
+PeEconResult pe_econ_state_validate(const PeEconState *s) {
+    PeEconResult r;
+    if (!s || s->initialized > 1) return PE_ECON_BAD_STATE;
+    if (!s->initialized) {   /* never left Enhanced: exactly the reset state */
+        PeEconState fresh;
+        pe_econ_state_reset(&fresh);
+        return memcmp(&s->config, &fresh.config, sizeof fresh.config) ? PE_ECON_BAD_STATE : PE_ECON_OK;
+    }
+    r = pe_econ_validate(&s->config);
+    return r == PE_ECON_OK ? settings_valid(&s->config) : r;
 }
 
 static PeEconTransition transition_of(const PeEconState *s, const PeEconConfig *t) {
