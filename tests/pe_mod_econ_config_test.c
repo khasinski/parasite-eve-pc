@@ -120,7 +120,7 @@ static void test_provider_preset(void) {
     PeEconConfig c;
     memset(&p, 0, sizeof p);
     p.algorithm = PE_ECON_ALGORITHM_1;
-    p.vanilla_drops = 1; p.native_to_counter = 1; p.extra_junk = 1; p.battle_junk = 3; p.boss_junk = 10;
+    p.native_to_counter = 1; p.extra_junk = 1; p.battle_junk = 3; p.boss_junk = 10;
     p.payment_chance_10000 = 10000; p.super_value = 10; p.duper_value = 20;
     assert(pe_econ_from_preset("example.steady", &p, 75, &c) == PE_ECON_OK);
     assert(pe_econ_match_builtin(&c) == STEADY && c.price_pct == 75 && !strcmp(c.key, "example.steady"));
@@ -133,8 +133,8 @@ static void test_provider_preset(void) {
     p.algorithm = PE_ECON_ALGORITHM_1;
     p.payment_chance_10000 = 0;                /* left unset: refused, not silently unpaid */
     assert(pe_econ_from_preset("example.steady", &p, 75, &c) == PE_ECON_NEVER_PAYS);
-    p.payment_chance_10000 = 10000; p.vanilla_drops = 0;
-    assert(pe_econ_from_preset("example.steady", &p, 75, &c) == PE_ECON_BAD_PRESET);
+    p.payment_chance_10000 = 10000;
+    assert(pe_econ_from_preset(NULL, &p, 75, &c) == PE_ECON_BAD_PRESET);
 }
 
 static void test_state_validate(void) {

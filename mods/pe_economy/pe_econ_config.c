@@ -119,7 +119,6 @@ PeEconResult pe_econ_builtin(int i, uint16_t price_pct, PeEconConfig *out) {
 
 PeEconResult pe_econ_from_preset(const char *key, const PeEconomyPreset *p, uint16_t price_pct, PeEconConfig *out) {
     if (!key || !p || !out || strlen(key) >= sizeof out->key) return PE_ECON_BAD_PRESET;
-    if (p->vanilla_drops != 1) return PE_ECON_BAD_PRESET;   /* native drops are never changed */
     if (!strncmp(key, "pe.", 3)) return PE_ECON_BAD_KEY;    /* the built-in presets' namespace */
     memset(out, 0, sizeof *out);
     out->engine = PE_ECON_CONFIGURABLE;

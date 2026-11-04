@@ -28,7 +28,7 @@ typedef struct {
     uint16_t bonus_chance_10000, bonus_guarantee;
     uint16_t payment_chance_10000, super_chance_10000, duper_chance_10000;
     uint16_t performance_pct, empty_steal_junk;
-    uint8_t vanilla_drops, rare_drops, extra_junk, super_drops, duper_drops;
+    uint8_t rare_drops, extra_junk, super_drops, duper_drops;
     uint8_t redeem_super, redeem_duper, performance_bonus, empty_steal, native_to_counter;
     uint8_t algorithm; /* PE_ECON_ALGORITHM_1 */
 } PeEconomyPreset;
