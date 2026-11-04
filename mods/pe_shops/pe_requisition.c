@@ -79,7 +79,7 @@ static const struct { int effect; const char *name; unsigned price; } s_econ[] =
 };
 #define PE_ECON_COUNT ((int)(sizeof s_econ / sizeof s_econ[0]))
 
-static struct { uint16_t tools_bought, pad; } s_shop;   /* the PESH payload */
+static struct PeShopPersistent { uint16_t tools_bought, pad; } s_shop;   /* the PESH payload */
 _Static_assert(sizeof s_shop == 4, "recomp PESH v1 payload");
 
 /* Tuning (Debug > Loot tuning) */
@@ -327,14 +327,15 @@ static uint32_t pe_checksum(const void *payload) {
 
 /* Saves from before: the "PESH" block. */
 static int pe_save_upgrade(void *data, const uint8_t *at, unsigned size, unsigned version) {
+    struct PeShopPersistent *candidate = data;
     uint32_t header[4];
     (void)data;
-    if (version != 0 || size < sizeof header + sizeof s_shop) return 1;
+    if (version != 0 || size < sizeof header + sizeof (*candidate)) return 1;
     memcpy(header, at, sizeof header);
-    if (header[0] != PE_SAVE_MAGIC || header[1] != PE_SAVE_VERSION || header[2] != sizeof s_shop ||
+    if (header[0] != PE_SAVE_MAGIC || header[1] != PE_SAVE_VERSION || header[2] != sizeof (*candidate) ||
         header[3] != pe_checksum(at + sizeof header))
         return 1;
-    memcpy(&s_shop, at + sizeof header, sizeof s_shop);
+    memcpy(&(*candidate), at + sizeof header, sizeof (*candidate));
     return 0;
 }
 

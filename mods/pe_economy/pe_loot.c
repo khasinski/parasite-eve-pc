@@ -59,7 +59,7 @@
 #define PE_HANDIN_MAX       999u
 #define PE_ENEMY_SLOTS      7
 
-static struct {
+static struct PeLootPersistent {
     uint32_t junk;
     uint16_t steal_bank;        /* Junk stolen this battle, paid on a win */
     uint16_t hits[PE_ENEMY_SLOTS];
@@ -335,55 +335,58 @@ static uint32_t pe_get32(const u8 *p) { uint32_t v; memcpy(&v, p, 4); return v; 
 /* A save without Junk data (vanilla, or New Game): start at 0, the sweep converts; difficulty and
  * the switch stay. */
 static void pe_save_reset(void *data) {
-    const uint8_t preset = s_st.preset < 3 ? s_st.preset : 1;
+    struct PeLootPersistent *candidate = data ? data : &s_st;
+    const uint8_t preset = (*candidate).preset < 3 ? (*candidate).preset : 1;
     (void)data;
-    memset(&s_st, 0, sizeof s_st);
-    s_st.preset = preset;
-    s_st.disabled = (uint8_t)!s_enabled;
+    memset(&(*candidate), 0, sizeof (*candidate));
+    (*candidate).preset = preset;
+    (*candidate).disabled = (uint8_t)!s_enabled;
 }
 
 /* Only the lasting fields carry over; what belongs to a battle starts fresh. */
 static int pe_save_check(void *data) {
+    struct PeLootPersistent *candidate = data ? data : &s_st;
     (void)data;
-    if (s_st.junk > 99999u) return 1;
-    if (s_st.preset > 2) s_st.preset = 1;
-    s_st.disabled &= 1u;
-    s_st.steal_bank = 0;
-    memset(s_st.hits, 0, sizeof s_st.hits);
-    s_st.rng = 0;
+    if ((*candidate).junk > 99999u) return 1;
+    if ((*candidate).preset > 2) (*candidate).preset = 1;
+    (*candidate).disabled &= 1u;
+    (*candidate).steal_bank = 0;
+    memset((*candidate).hits, 0, sizeof (*candidate).hits);
+    (*candidate).rng = 0;
     return 0;
 }
 
 /* Saves from before: the recomp build's "PELT" block, versions 1 to 4. */
 static int pe_save_upgrade(void *data, const uint8_t *at, unsigned size, unsigned version) {
+    struct PeLootPersistent *candidate = data ? data : &s_st;
     uint32_t junk;
     (void)data;
     if (version != 0 || size < 32) return 1;
-    pe_save_reset(NULL);
+    pe_save_reset(data);
     if (pe_get32(at) != PE_TAIL_MAGIC || (junk = pe_get32(at + 8)) > 99999u) return 1;
     version = pe_get32(at + 4);
     if (version == 1u) {
-        if ((junk ^ 0xA5A5A5A5u) == pe_get32(at + 12)) s_st.junk = junk;
+        if ((junk ^ 0xA5A5A5A5u) == pe_get32(at + 12)) (*candidate).junk = junk;
     } else if (version == 2u) {
         const uint32_t packed = pe_get32(at + 12);
         if ((junk ^ packed ^ 0xA5A5A5A5u) == pe_get32(at + 16)) {
-            s_st.junk = junk;
-            s_st.rare_dry = (uint16_t)packed;
-            s_st.rare_carry = (uint16_t)(packed >> 16);
+            (*candidate).junk = junk;
+            (*candidate).rare_dry = (uint16_t)packed;
+            (*candidate).rare_carry = (uint16_t)(packed >> 16);
         }
     } else if (version == 3u || version == 4u) {
         const uint32_t packed = pe_get32(at + 12), extra = pe_get32(at + 16);
         if ((junk ^ packed ^ extra ^ 0xA5A5A5A5u) == pe_get32(at + 20)) {
             const uint32_t since = pe_get32(at + 24);
-            s_st.junk = junk;
-            s_st.rare_dry = (uint16_t)packed;
-            s_st.rare_carry = (uint16_t)(packed >> 16);
-            s_st.charm_left = (uint16_t)extra;
-            s_st.preset = (uint8_t)(extra >> 16) < 3 ? (uint8_t)(extra >> 16) : 1;
-            s_st.disabled = (uint8_t)((extra >> 24) & 1u);
+            (*candidate).junk = junk;
+            (*candidate).rare_dry = (uint16_t)packed;
+            (*candidate).rare_carry = (uint16_t)(packed >> 16);
+            (*candidate).charm_left = (uint16_t)extra;
+            (*candidate).preset = (uint8_t)(extra >> 16) < 3 ? (uint8_t)(extra >> 16) : 1;
+            (*candidate).disabled = (uint8_t)((extra >> 24) & 1u);
             if (version == 4u && (since ^ 0x5A5A5A5Au) == pe_get32(at + 28)) {
-                s_st.econ_since = (uint8_t)since;
-                s_st.permit_since = (uint8_t)(since >> 8);
+                (*candidate).econ_since = (uint8_t)since;
+                (*candidate).permit_since = (uint8_t)(since >> 8);
             }
         }
     }
@@ -699,64 +702,9 @@ void pe_loot_register(const char *mod_id) {
 }
 
 #if PE_NATIVE_STATE_CPU_COMPONENTS
-#include "pe_checkpoint_wire.h"
-#include "pe_checkpoint_economy.h"
-int pe_loot_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(s_list_redirected))return 0;if(apply&&(!in||!pe_loot_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
-PE_CK_U(w,s_st.junk,0,99999,0);
-PE_CK_U(w,s_st.steal_bank,0,65535,0);
-for(unsigned i=0;i<7;i++){PE_CK_U(w,s_st.hits[i],0,65535,0);}
-PE_CK_U(w,s_st.rare_dry,0,65535,0);
-PE_CK_U(w,s_st.rare_carry,0,65535,0);
-PE_CK_U(w,s_st.rng,0,UINT32_MAX,0);
-PE_CK_U(w,s_st.charm_left,0,65535,0);
-PE_CK_U(w,s_st.preset,0,2,0);
-PE_CK_U(w,s_st.disabled,0,1,0);
-PE_CK_U(w,s_st.econ_since,0,255,0);
-PE_CK_U(w,s_st.permit_since,0,255,0);
-PE_CK_U(w,s_enabled,0,1,1);
-PE_CK_U(w,s_handin_mode,0,1,1);
-PE_CK_S(w,s_tune_floor,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_exp_per_junk,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_battle_cap,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_boss_cap,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_nohit_bonus,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_rare_base,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_rare_step,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_rare_guarantee,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_econ_guarantee,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_permit_guarantee,INT32_MIN,INT32_MAX,1);
-PE_CK_S(w,s_tune_empty_steal,INT32_MIN,INT32_MAX,1);
-PE_CK_U(w,s_in_battle,0,1,0);
-PE_CK_U(w,s_boss_battle,0,1,0);
-for(unsigned i=0;i<2;i++){PE_CK_U(w,s_found.rare_shown[i],0,65535,0);}
-for(unsigned i=0;i<2;i++){PE_CK_U(w,s_found.rare_before[i],0,UINT32_MAX,0);}
-for(unsigned i=0;i<2;i++){PE_CK_U(w,s_found.rare_is_econ[i],0,1,0);}
-PE_CK_U(w,s_found.rare_list_seen,0,1,0);
-PE_CK_U(w,s_found.junk_list_seen,0,1,0);
-PE_CK_U(w,s_found.econ_list_seen,0,1,0);
-PE_CK_U(w,s_found.junk_shown,0,UINT32_MAX,0);
-PE_CK_U(w,s_found.bag_junk_before,0,UINT32_MAX,0);
-PE_CK_U(w,s_found.permits_before,0,UINT32_MAX,0);
-PE_CK_S(w,s_found.econ_shown,-1,PE_ECON_COUNT-1,0);
-PE_CK_U(w,s_frames,0,UINT32_MAX,0);
-PE_CK_U(w,s_last_count_frame,0,UINT32_MAX,0);
-PE_CK_U(w,s_free_frames,0,UINT32_MAX,0);
-PE_CK_U(w,s_handin_active,0,1,0);
-PE_CK_U(w,s_list_redirected,0,0,0);
-PE_CK_U(w,s_wayne_waiting,0,1,0);
-PE_CK_U(w,s_wayne_dropped,0,1,0);
-PE_CK_U(w,s_next_add_is_steal,0,1,0);
-PE_CK_U(w,s_handin_left,0,UINT32_MAX,0);
-PE_CK_S(w,s_saved_limit,INT32_MIN,INT32_MAX,0);
-PE_CK_U(w,s_wayne_prev,0,65535,0);
-PE_CK_U(w,s_color_saved,0,1,0);
-PE_CK_U(w,s_saved_color,0,UINT32_MAX,0);
-PE_CK_U(w,s_saved_color_shaded,0,UINT32_MAX,0);
-PE_CK_U(w,s_steal_item,0,65535,0);
-PE_CK_U(w,s_steal_frame,0,UINT32_MAX,0);
-PE_CK_U(w,g_DrawPrimColor,0,UINT32_MAX,0);
-PE_CK_U(w,g_DrawColorShaded,0,UINT32_MAX,0);
-
-PE_CK_S(w,s_was_enabled,-1,1,0);PE_CK_S(w,s_wayne_check,0,1,0);
-if(apply&&w.ok){memset(s_scratch,0,sizeof s_scratch);memset(s_junk_label,0,sizeof s_junk_label);memset(s_econ_label,0,sizeof s_econ_label);s_cascade_path[0]=0;}return w.ok&&w.at==260u;}
+/* The pre-split private runtime layout no longer exists. Persistent recovery is
+ * supported; refuse this optional exact owner rather than restore stale fields. */
+int pe_loot_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply) {
+    (void)in;(void)out;(void)apply;return 0;
+}
 #endif

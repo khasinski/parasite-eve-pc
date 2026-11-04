@@ -24,6 +24,7 @@
 #include "pe_recovery_snapshot.h"
 #include "pe_extension_store.h"
 #include "pe_inventory_api.h"
+#include "pe_api_native.h"
 #include "pe_shop_api.h"
 #include "pe_profile_transactions.h"
 #include "pe_economy_policy.h"
@@ -184,7 +185,7 @@ const void *pe_service_get(const char *name, int version) {
     int i;
     for (i = 0; i < s_service_count; i++)
         if (s_services[i].version == version && strcmp(s_services[i].name, name) == 0)
-            return pe_mod_active(s_services[i].mod_id) ? s_services[i].api : NULL;
+            return pe_mod_active(s_services[i].mod_id) && pe_save_owner_available(s_services[i].mod_id) && pe_extension_owner_available(s_services[i].mod_id) ? s_services[i].api : NULL;
     return NULL;
 }
 
@@ -489,6 +490,16 @@ int pe_hook_dispatch(int id, void *ctx) {
     if (s_dispatch_depth == (int)(sizeof s_dispatch_ids / sizeof s_dispatch_ids[0])) return -1;
     for (i = 0; i < s_dispatch_depth; ++i) if (s_dispatch_ids[i] == id) return -1;
     s_dispatch_ids[s_dispatch_depth++] = id;
+    if (id == PE_HOOK_FRAME && pe_free_field()) {
+        const PeApiNative *native = pe_api_native();
+        if(native->inventory && native->bag_limit) {
+            short *lists[3] = {native->inventory->slots, native->inventory->storage, native->inventory->specialStorage};
+            int limit = native->bag_limit();
+            unsigned sizes[3] = {limit < 0 ? 0u : limit > 50 ? 50u : (unsigned)limit, 100, 82};
+            pe_extension_refill_stacks(lists, sizes);
+            if (!pe_mod_is_running("pe_stacks")) pe_save_refill_legacy_stacks(lists, sizes);
+        }
+    }
     if (id == PE_HOOK_SAVE_WRITE && ctx) {
         int result = pe_save_begin_write();
         if (result < 0) { --s_dispatch_depth; pe_save_report_refusal(result); return result; }
@@ -507,6 +518,8 @@ int pe_hook_dispatch(int id, void *ctx) {
         if (s_handlers[i].id < id) continue;
         if (s_handlers[i].id > id) break;
         if (!s_handlers[i].active) continue;
+        if (id != PE_HOOK_NEW_GAME && (!pe_save_owner_available(s_handlers[i].mod_id) ||
+            !pe_extension_owner_available(s_handlers[i].mod_id))) continue;
         pe_mod_call_begin(s_handlers[i].mod_id, id < PE_HOOK_COUNT ? "hook" : "event", pe_hook_name(id));
         result = s_handlers[i].fn(ctx, s_handlers[i].user);
         pe_mod_call_end();
@@ -767,3 +780,7 @@ int pe_mod_master_requested(void){return s_all_on;}
 void pe_mod_master_toggle_next_launch(void){if(!s_manage_ready)return;s_all_on=!s_all_on;pe_mod_manage_refresh();pe_menu_save_settings();}
 int pe_mod_request_assists_only(void){if(!s_manage_ready)return 0;int found=0;for(int i=0;i<s_manage_count;i++)if(!strcmp(g_pe_mods[i]->id,"pe_assists"))found=1;if(!found)return 0;for(int i=0;i<s_manage_count;i++)s_mod_on[i]=!strcmp(g_pe_mods[i]->id,"pe_assists");s_all_on=1;pe_mod_manage_refresh();pe_menu_save_settings();return 1;}
 #endif
+
+int pe_mod_data_available(const char *owner) {
+    return pe_mod_active(owner)&&pe_save_owner_available(owner)&&pe_extension_owner_available(owner);
+}

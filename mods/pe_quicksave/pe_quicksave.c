@@ -14,6 +14,8 @@
 #include <SDL3/SDL.h>
 
 #include "pe_game.h"
+#include "pe_extension_store.h"
+#include "pe_checkpoint_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe1/battle_modifiers.h"
@@ -44,7 +46,7 @@ static bool s_keys_down[3];
 
 static void pe_slot_path(char *out, size_t size, int slot) {
     char name[32];
-    snprintf(name, sizeof name, "quicksave_%d.mcd", slot);
+    snprintf(name, sizeof name, "quicksave_%d.pec", slot);
     if (pe_mod_path(out, size, name) != 0) snprintf(out, size, "%s", name);
 }
 
@@ -69,48 +71,18 @@ static u32 pe_card_crc(const u8 *card) {
 /* The card file of a save made now, into g_MemCardFileBuffer, as the crash report's room snapshot
  * makes it: the save menu's header fields for the copy only, and Aya's two record links set back
  * to the saved records for the copy when something changed them. */
-static int pe_build_card(void) {
-    static SaveRuntimeState header;
-    char path[0x40];
-    BattleStateTail *action = g_AyaBattleState.action;
-    BattleAttributes *attributes = g_AyaBattleState.attributes;
-    const int transfer = D_800A5D50;
-    int r;
-
-    memset(path, ' ', sizeof path);
-    path[0x18] = 'A';                       /* the title's slot letter */
-    path[sizeof path - 1] = 0;
-    memcpy(&header, &g_SaveRuntimeState, sizeof header);
-    Save_BuildHeader();
-    if (action && action != &g_SavedBattleStateTail) g_AyaBattleState.action = &g_SavedBattleStateTail;
-    if (attributes && attributes != &g_BattleEquipStateBlock) g_AyaBattleState.attributes = &g_BattleEquipStateBlock;
-    r = Save_BuildCardFile(path);
-    g_AyaBattleState.action = action;
-    g_AyaBattleState.attributes = attributes;
-    memcpy(&g_SaveRuntimeState, &header, sizeof header);
-    D_800A5D50 = transfer;
-    return r;
-}
-
 static void pe_save(int slot) {
-    char path[1024], temp[1040], msg[64];
-    FILE *f;
+    char path[1024], msg[64];
     int ok;
-    if (pe_build_card() < 0) { pe_toast("Quick save failed: the game can't be saved right now"); return; }
-    pe_slot_path(path, sizeof path, slot);
-    snprintf(temp, sizeof temp, "%s.tmp", path);
-    f = fopen(temp, "wb");
-    ok = f && fwrite(g_MemCardFileBuffer, 1, PE_CARD_SIZE, f) == PE_CARD_SIZE;
-    if (f) ok = fclose(f) == 0 && ok;
-    if (ok) {
-        SDL_RemovePath(path);
-        ok = SDL_RenamePath(temp, path);
+    if (pe_checkpoint_build_card() < 0) {
+        pe_mod_save_cancelled();
+        pe_toast("Quick save failed: the game can't be saved right now"); return;
     }
+    pe_slot_path(path, sizeof path, slot);
+    ok = pe_checkpoint_write(path, g_MemCardFileBuffer) == 0;
+    pe_mod_save_cancelled();
     if (!ok) {
-        SDL_RemovePath(temp);
-        pe_mod_log(MOD_ID, "slot %d: can't write %s", slot, path);
-        pe_toast("Quick save failed: the file couldn't be written");
-        return;
+        pe_toast("Quick save failed: the previous checkpoint was kept"); return;
     }
     snprintf(msg, sizeof msg, "Quick saved to slot %d", slot);
     pe_toast(msg);
@@ -126,29 +98,36 @@ static void pe_load(int slot) {
 
     pe_slot_path(path, sizeof path, slot);
     f = fopen(path, "rb");
-    if (!f) { snprintf(msg, sizeof msg, "Slot %d is empty", slot); pe_toast(msg); return; }
-    n = fread(g_MemCardFileBuffer, 1, PE_CARD_SIZE, f);
-    fclose(f);
+    const int have_checkpoint = f != NULL;
+    if (f) fclose(f);
+    if (pe_checkpoint_read(path, "BASLUS-00662PEQUICKSAVE000A", g_MemCardFileBuffer)) {
+        if (have_checkpoint) {
+            pe_toast("Quick load refused: checkpoint is damaged or incompatible"); return;
+        }
+        /* Explicit legacy import: legacy companion links still require their source. */
+        char name[32]; snprintf(name, sizeof name, "quicksave_%d.mcd", slot);
+        if (pe_mod_path(path, sizeof path, name)) {
+            pe_toast("Quick load failed: checkpoint unavailable"); return;
+        }
+        f = fopen(path, "rb");
+        if (!f) { pe_toast("Quick load failed: checkpoint unavailable or damaged"); return; }
+        n = fread(g_MemCardFileBuffer, 1, PE_CARD_SIZE, f);
+        int complete = n == PE_CARD_SIZE && fgetc(f) == EOF;
+        fclose(f);
+        if (!complete || pe_mod_load_admit(path, g_MemCardFileBuffer)) {
+            pe_toast("Legacy quick save is damaged or its companion is missing"); return;
+        }
+    }
+    n = PE_CARD_SIZE;
     memcpy(&crc, g_MemCardFileBuffer + PE_CARD_CRC, sizeof crc);
-    if (n != PE_CARD_SIZE || pe_card_crc(g_MemCardFileBuffer) != crc ||
+    if (n != PE_CARD_SIZE || !pe_checkpoint_native_valid(g_MemCardFileBuffer) || pe_card_crc(g_MemCardFileBuffer) != crc ||
         !Inv_ValidateSavedInventory((const SaveRuntimeState *)&g_MemCardSaveStateBuffer)) {
         snprintf(msg, sizeof msg, "Slot %d is damaged", slot);
         pe_toast(msg);
         return;
     }
-    /* Save_LoadCardFileIntoRuntime's commit, without the card menu's dialogs. */
-    g_SaveIoCursor = g_MemCardFileBuffer + 0x100 + 0x12E4;
-    if (Save_DeserializeTail() != 0) { pe_toast("Quick load failed: the save's records don't match"); return; }
-    memcpy(&g_SaveRuntimeState, &g_MemCardSaveStateBuffer, sizeof g_SaveRuntimeState);
-    g_SaveIoCursor += 4;
-    Save_RestoreHeader();
-    PE_HOOK(PE_HOOK_SAVE_READ, g_MemCardFileBuffer);
-    /* Into the saved room, the way a field script changes rooms. The frame loop only ends for a
-     * new token, so a save of the room Aya is in also asks for the game's same-room reload (the
-     * Wardrobe's, script command 2101). */
-    token = g_SceneDispatchToken;
-    (void)Script_EncodeBarcode(args);
-    if (token == g_SceneDispatchCur) g_GameState.flags |= PE_RELOAD_SAME;
+    if(pe_checkpoint_commit_portable())return;
+    token=g_SceneDispatchToken;
     snprintf(msg, sizeof msg, "Quick loaded slot %d", slot);
     pe_toast(msg);
     pe_log("quickload", "slot=%d token=%08X", slot, (unsigned)token);

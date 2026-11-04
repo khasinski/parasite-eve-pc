@@ -281,9 +281,9 @@ void pe_catalog_menu_register(const char *mod_id) {
 }
 
 #if PE_NATIVE_STATE_CPU_COMPONENTS
-#include "pe_checkpoint_wire.h"
-#include "pe_checkpoint_economy.h"
-int pe_catalog_menu_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(s_screen.panel||s_screen.list||s_screen.extras||s_cat.list))return 0;if(apply&&(!in||!pe_catalog_menu_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
-
-if(apply&&w.ok){s_screen=(PeScreen){0};memset(&s_cat,0,sizeof s_cat);s_cat.armed=-1;memset(s_title,0,sizeof s_title);memset(s_row_text,0,sizeof s_row_text);}return w.ok&&w.at==0u;}
+/* The pre-split private runtime layout no longer exists. Persistent recovery is
+ * supported; refuse this optional exact owner rather than restore stale fields. */
+int pe_catalog_menu_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply) {
+    (void)in;(void)out;(void)apply;return 0;
+}
 #endif

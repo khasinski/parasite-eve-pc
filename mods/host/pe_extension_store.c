@@ -30,6 +30,8 @@ static int s_count, s_source, s_pending_valid, s_staged;
 static unsigned char s_link[20], s_disk[PE_EXT_FILE_LIMIT], s_pending[PE_EXT_FILE_LIMIT],
     s_build[PE_EXT_FILE_LIMIT];
 static unsigned s_disk_size, s_pending_size;
+_Alignas(max_align_t) static unsigned char s_candidates[PE_EXT_SECTION_LIMIT][2048];
+static int s_candidate_status[PE_EXT_SECTION_LIMIT];
 static uint32_t s_generation, s_staged_generation;
 static char s_path[4096], s_staged_path[4224], s_committed_path[4096], s_pending_path[4096],
     s_previous_file[4224];
@@ -112,6 +114,7 @@ static int paths(const char *path, uint32_t generation, char *dir, size_t ds, ch
 static PeSaveRecord s_record = {"pe_host.extlink", 1, s_link, sizeof s_link, NULL, NULL, NULL, NULL};
 void pe_extension_install(void) {
     (void)pe_save_register_conditional(&s_record);
+    (void)pe_save_host_stack_record();
 }
 int pe_extension_register(const PeExtensionSection *d) {
     const char *owner = pe_mod_current();
@@ -286,7 +289,7 @@ int pe_extension_stage(void) {
     snprintf(s_staged_path, sizeof s_staged_path, "%s", file);
     return 0;
 }
-int pe_extension_validate_load(const char *path, const unsigned char *block) {
+static int validate_load(const char *path, const unsigned char *block, const unsigned char *embedded, unsigned embedded_size) {
     unsigned char link[20];
     unsigned version = 0, size = 0;
     s_pending_valid = 0;
@@ -296,6 +299,10 @@ int pe_extension_validate_load(const char *path, const unsigned char *block) {
     int found = pe_save_peek(block, "pe_host.extlink", &version, link, sizeof link, &size);
     if (found < 0) return -1;
     if (!found) {
+        if (embedded_size) return -1;
+        if(!pe_reg_readonly_begin())return -1;
+        int prepared=pe_save_prepare_load(block);pe_reg_readonly_end();
+        if(prepared)return -1;
         s_pending_valid = 1;
         return 0;
     }
@@ -307,10 +314,17 @@ int pe_extension_validate_load(const char *path, const unsigned char *block) {
     char dir[4160], file[4224];
     const char *name;
     if (!paths(path, gen, dir, sizeof dir, file, sizeof file, &name)) return -1;
-    FILE *f = fopen(file, "rb");
-    if (!f) return -1;
-    int ok = fread(s_pending, 1, n, f) == n && fgetc(f) == EOF;
-    fclose(f);
+    int ok;
+    if (embedded) {
+        if (embedded_size != n) return -1;
+        memcpy(s_pending, embedded, n);
+        ok = 1;
+    } else {
+        FILE *f = fopen(file, "rb");
+        if (!f) return -1;
+        ok = fread(s_pending, 1, n, f) == n && fgetc(f) == EOF;
+        fclose(f);
+    }
     if (!ok || !memchr(s_pending + 20, 0, 64) || crc(s_pending, n) != rd32(link + 12) ||
         rd32(s_pending + 8) != gen || strcmp((char *)s_pending + 20, name))
         return -1;
@@ -327,14 +341,47 @@ int pe_extension_validate_load(const char *path, const unsigned char *block) {
         if (!strcmp(entries[i].key, "pe_host/content") &&
             (entries[i].version != 1 || entries[i].min_reader > 1 || entries[i].size != 2048))
             return -1;
+    if(!pe_reg_readonly_begin())return -1;
+    memset(s_candidate_status, 0, sizeof s_candidate_status);
+    for (int i = 0; i < s_count; ++i) {
+        const PeExtensionSection *d = s_sections[i].d;
+        for (int j = 0; j < count; ++j) if (!strcmp(s_sections[i].key, entries[j].key)) {
+            Entry *e = &entries[j];
+            unsigned char *candidate = s_candidates[i];
+            memset(candidate, 0, d->size);
+            int ok = 0;
+            if (e->version == d->version && e->min_reader <= 1 && e->size == d->size) {
+                memcpy(candidate, s_pending + e->offset, d->size); ok = 1;
+            } else if (e->version < d->version && e->min_reader <= 1 && d->upgrade) {
+                ok = !d->upgrade(candidate, s_pending + e->offset, e->size, e->version);
+            }
+            if (ok && d->check) ok = !d->check(candidate);
+            if (ok && d->check_native) ok = !d->check_native(candidate, block);
+            s_candidate_status[i] = ok ? 1 : -1;
+            break;
+        }
+    }
+    int prepared=pe_save_prepare_load(block);
+    pe_reg_readonly_end();
+    if(prepared)return -1;
+    for(int i=0;i<s_count;i++)if(!strcmp(s_sections[i].key,"pe_host/content")&&s_candidate_status[i]<0)return -1;
     s_pending_size = n;
     s_pending_valid = 1;
     return 0;
+}
+int pe_extension_validate_load(const char *path, const unsigned char *block) {
+    return validate_load(path, block, NULL, 0);
 }
 void pe_extension_apply_load(void) {
     if (!s_pending_valid) {
         s_source = 0;
         return;
+    }
+    /* A companion wins over a stale legacy record, including with its provider absent. */
+    if (s_pending_size) {
+        Entry es[PE_EXT_SECTION_LIMIT];int count=parse(s_pending,s_pending_size,es);
+        for(int i=0;i<count;i++)if(!strcmp(es[i].key,"pe_stacks/counts"))
+            pe_save_retire_record(pe_save_host_stack_record());
     }
     s_disk_size = s_pending_size;
     if (s_disk_size) memcpy(s_disk, s_pending, s_disk_size);
@@ -357,12 +404,11 @@ void pe_extension_apply_load(void) {
         memset(d->data, 0, d->size);
         for (int j = 0; j < n; ++j)
             if (!strcmp(s_sections[i].key, entries[j].key)) {
-                if (entries[j].version != d->version || entries[j].min_reader > 1 ||
-                    entries[j].size != d->size) {
+                if (s_candidate_status[i] != 1) {
                     s_sections[i].locked = 1;
                     break;
                 }
-                memcpy(d->data, s_disk + entries[j].offset, d->size);
+                memcpy(d->data, s_candidates[i], d->size);
                 s_sections[i].enabled = 1;
                 break;
             }
@@ -430,4 +476,90 @@ int pe_extension_snapshot(unsigned char*out,unsigned capacity,unsigned*size,unsi
     unsigned total=encode(out,entries,bytes,n,1,"pe-crash",0);
     memset(link,0,20);link[0]=1;link[1]=1;wr32(link+4,1);wr32(link+8,total);wr32(link+12,crc(out,total));link[16]=n;
     *size=total;return 0;
+}
+/* PECP v1: native US save-v1 plus companion, entirely self-contained. */
+
+int pe_checkpoint_pack(unsigned char *bytes,unsigned cap,unsigned *used,const unsigned char *block) {
+    unsigned char link[20];unsigned version=0,size=0,n=s_staged?rd32(s_build+12):0;
+    if(!bytes||!used||!block||cap<32+8192+n)return -1;
+    int found=pe_save_peek(block,"pe_host.extlink",&version,link,sizeof link,&size);
+    if(found<0 || (!!found != !!n))return -1;
+    if(found&&(version!=1||size!=20||rd32(link+8)!=n||rd32(link+12)!=crc(s_build,n)))return -1;
+    memset(bytes,0,32);memcpy(bytes,"PECP",4);wr32(bytes+4,1);wr32(bytes+8,8192);
+    wr32(bytes+12,n);wr32(bytes+16,0x50455531u);
+    memcpy(bytes+32,block,8192);if(n)memcpy(bytes+32+8192,s_build,n);
+    wr32(bytes+20,crc(bytes,32+8192+n));*used=32+8192+n;return 0;
+}
+int pe_checkpoint_unpack(const unsigned char *bytes,unsigned total,const char *binding,unsigned char *block) {
+    s_pending_valid=0;s_pending_size=0;
+    if(!bytes||!binding||!block||total<32+8192||total>32+8192+PE_EXT_FILE_LIMIT||
+       memcmp(bytes,"PECP",4)||rd32(bytes+4)!=1||rd32(bytes+8)!=8192||
+       rd32(bytes+12)>PE_EXT_FILE_LIMIT||total!=32+8192+rd32(bytes+12)||
+       rd32(bytes+16)!=0x50455531u||rd32(bytes+24)||rd32(bytes+28))return -1;
+    unsigned char copy[32+8192+PE_EXT_FILE_LIMIT];memcpy(copy,bytes,total);
+    uint32_t checksum=rd32(copy+20);wr32(copy+20,0);
+    if(crc(copy,total)!=checksum)return -1;
+    if(validate_load(binding,bytes+32,bytes+32+8192,rd32(bytes+12)))return -1;
+    memcpy(block,bytes+32,8192);return 0;
+}
+int pe_checkpoint_write(const char *path,const unsigned char *block) {
+    unsigned char bytes[32+8192+PE_EXT_FILE_LIMIT];unsigned total;
+    if(!path||pe_checkpoint_pack(bytes,sizeof bytes,&total,block))return -1;
+    char temp[4224];
+    if(snprintf(temp,sizeof temp,"%s.tmp.%lu",path,pe_profile_process()) >= (int)sizeof temp)return -1;
+    FILE *f=fopen(temp,"wbx");if(!f)return -1;
+    int ok=fwrite(bytes,1,total,f)==total&&pe_profile_flush(f);if(fclose(f))ok=0;
+    if(ok)ok=pe_profile_replace(temp,path);if(!ok)remove(temp);
+    if(ok)pe_profile_transactions_committed();return ok?0:-1;
+}
+int pe_checkpoint_read(const char *path,const char *binding,unsigned char *block) {
+    unsigned char bytes[32+8192+PE_EXT_FILE_LIMIT];
+    s_pending_valid=0;s_pending_size=0;
+    if(!path||!binding||!block)return -1;
+    FILE *f=fopen(path,"rb");if(!f)return -1;
+    unsigned total=(unsigned)fread(bytes,1,sizeof bytes,f);
+    int ok=!ferror(f)&&fgetc(f)==EOF;fclose(f);
+    return ok?pe_checkpoint_unpack(bytes,total,binding,block):-1;
+}
+/* Host-owned v1 stack reserve. A missing provider never owns the only copy.
+ * Materialize from reserve only: consuming native slots cannot recreate items. */
+void pe_extension_refill_stacks(short *lists[3],const unsigned sizes[3]) {
+    if(!s_source||s_staged||pe_mod_is_running("pe_stacks")||!s_disk_size)return;
+    Entry entries[PE_EXT_SECTION_LIMIT];int n=parse(s_disk,s_disk_size,entries);
+    for(int j=0;j<n;++j)if(!strcmp(entries[j].key,"pe_stacks/counts")) {
+        Entry *e=&entries[j];if(e->version!=1||e->min_reader>1||e->size!=204)return;
+        unsigned char *b=s_disk+e->offset;unsigned total=b[0]+b[1]+b[2];
+        if(total>100||b[3])return;
+        unsigned k=0;
+        for(int l=0;l<3;++l) {
+            unsigned char seen[256]={0};
+            for(unsigned i=0;i<b[l];++i,++k) {
+                unsigned id=b[4+k*2],qty=b[5+k*2];
+                if(!id||qty>98||seen[id])return;
+                seen[id]=1;
+            }
+        }
+        k=0;
+        for(int l=0;l<3;++l)for(unsigned i=0;i<b[l];++i,++k) {
+            unsigned char *pair=b+4+k*2;
+            for(unsigned slot=0;slot<sizes[l]&&pair[1];++slot)
+                if(!lists[l][slot]){lists[l][slot]=pair[0];--pair[1];}
+        }
+        unsigned char packed[204]={0}; unsigned out=0; k=0;
+        for(int l=0;l<3;++l)for(unsigned i=0;i<b[l];++i,++k)
+            if(b[5+k*2]) {
+                packed[l]++;packed[4+out*2]=b[4+k*2];
+                packed[5+out*2]=b[5+k*2];++out;
+            }
+        memcpy(b,packed,sizeof packed);
+        wr32(s_disk+HEADER+j*DIRECTORY+60,crc(b,e->size));
+        wr32(s_disk+88,0);wr32(s_disk+88,crc(s_disk,s_disk_size));
+        return;
+    }
+}
+
+int pe_extension_owner_available(const char *owner) {
+    if(!owner)return 1;
+    for(int i=0;i<s_count;i++)if(!strcmp(owner,s_sections[i].owner)&&s_sections[i].locked)return 0;
+    return 1;
 }

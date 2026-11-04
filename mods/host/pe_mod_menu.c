@@ -131,7 +131,7 @@ static PeMenuRow *pe_row_new(PeRowKind kind, const char *sub, const char *label,
     return row;
 }
 
-int pe_menu_row_active(const PeMenuRow *row) { return pe_mod_active(row->mod_id); }
+int pe_menu_row_active(const PeMenuRow *row) { return pe_mod_data_available(row->mod_id); }
 
 static void pe_row_restore(PeMenuRow *row) {
     char key[192];
@@ -300,7 +300,7 @@ static int pe_menu_tick(void *ctx, void *user) {
     (void)ctx;
     (void)user;
     for (i = 0; i < s_tick_count; i++)
-        if (pe_mod_active(s_tick_mod[i])) {
+        if (pe_mod_data_available(s_tick_mod[i])) {
             pe_mod_call_begin(s_tick_mod[i], "per-frame tick", NULL);
             s_ticks[i]();
             pe_mod_call_end();

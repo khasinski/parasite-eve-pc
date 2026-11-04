@@ -120,7 +120,8 @@ void pe_profile_transactions_committed(void) {
         if (at < 0) continue;
         /* A failing/absent provider keeps its receipt. Promote may write but must be idempotent. */
         if (!pe_reg_readonly_begin()) continue;
-        int ok = s_adapters[at].api.promote((char *)p + 48, p[112]);
+        unsigned owned=s_adapters[at].api.owned((char *)p + 48);
+        int ok=(owned&p[112])==p[112] || s_adapters[at].api.promote((char *)p + 48, p[112]);
         pe_reg_readonly_end();
         if (ok) memset(p, 0, 116);
     }

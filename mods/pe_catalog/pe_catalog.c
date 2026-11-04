@@ -293,23 +293,25 @@ static uint32_t pe_checksum(const uint8_t *p, uint32_t n) {
 }
 
 static int pe_save_check(void *data) {
+    PeCatalogState *candidate = data;
     (void)data;
-    if (s_cat.rebuild_count > PE_REBUILD_MAX) s_cat.rebuild_count = 0;
+    if ((*candidate).rebuild_count > PE_REBUILD_MAX) (*candidate).rebuild_count = 0;
     pe_mod_log("pe_economy", "Mod Catalog loaded: %d gun / %d armor effects, %u to rebuild",
-               __builtin_popcount(s_cat.bits[PE_GUN]), __builtin_popcount(s_cat.bits[PE_ARMOR]), (unsigned)s_cat.rebuild_count);
+               __builtin_popcount((*candidate).bits[PE_GUN]), __builtin_popcount((*candidate).bits[PE_ARMOR]), (unsigned)(*candidate).rebuild_count);
     return 0;
 }
 
 /* Saves from before: the "PECT" block. */
 static int pe_save_upgrade(void *data, const uint8_t *at, unsigned size, unsigned version) {
+    PeCatalogState *candidate = data;
     uint32_t header[4];
     (void)data;
-    if (version != 0 || size < sizeof header + sizeof s_cat) return 1;
+    if (version != 0 || size < sizeof header + sizeof (*candidate)) return 1;
     memcpy(header, at, sizeof header);
-    if (header[0] != PE_SAVE_MAGIC || header[1] != PE_SAVE_VERSION || header[2] != sizeof s_cat ||
-        header[3] != pe_checksum(at + sizeof header, sizeof s_cat))
+    if (header[0] != PE_SAVE_MAGIC || header[1] != PE_SAVE_VERSION || header[2] != sizeof (*candidate) ||
+        header[3] != pe_checksum(at + sizeof header, sizeof (*candidate)))
         return 1;
-    memcpy(&s_cat, at + sizeof header, sizeof s_cat);
+    memcpy(&(*candidate), at + sizeof header, sizeof (*candidate));
     return 0;
 }
 

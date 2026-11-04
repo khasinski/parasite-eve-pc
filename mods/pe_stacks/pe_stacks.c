@@ -63,9 +63,12 @@ static struct {
 _Static_assert(sizeof s_rec == 204, "pe_stacks/counts v1 holds these 204 bytes: raise the version for a new layout");
 
 /* The older tail record: read and moved on load; written only by a save that couldn't move. */
-static unsigned char s_old_rec[sizeof s_rec];
+static unsigned char *s_old_rec;
+static const PeSaveRecord *s_host_record;
+#define s_record (*s_host_record)
 static int s_old_live;
-static const PeExtensionSection s_section = {"pe_stacks/counts", 1, 1, sizeof s_rec, &s_rec};
+static int pe_counts_bad(const void *data);
+static const PeExtensionSection s_section = {"pe_stacks/counts", 1, 1, sizeof s_rec, &s_rec, NULL, pe_counts_bad};
 
 /* Before any extra copy exists: the companion must be able to hold it. */
 static int pe_store_ready(void) { return s_old_live || pe_extension_enable(&s_section) == PE_REG_OK; }
@@ -113,8 +116,14 @@ static int pe_count(int l, int index) {
     if (id < 1 || id > 0xFF || pe_find(l, id) != index) return 1;
     return 1 + s_extra[l][id];
 }
+static int pe_reserve_room(int l,int id) {
+    if(s_extra[l][id])return 1;
+    unsigned count=0;
+    for(int list=0;list<PE_LISTS;list++)for(int item=1;item<256;item++)count+=s_extra[list][item]!=0;
+    return count<PE_STACK_PAIRS;
+}
 static int pe_join(int l, int id) {
-    if (!pe_stackable(id) || pe_find(l, id) < 0 || 1 + s_extra[l][id] >= PE_STACK_MAX || !pe_store_ready()) return 0;
+    if (!pe_stackable(id) || pe_find(l, id) < 0 || 1 + s_extra[l][id] >= PE_STACK_MAX || (!pe_reserve_room(l,id) || !pe_store_ready())) return 0;
     s_extra[l][id]++;
     return 1;
 }
@@ -128,9 +137,15 @@ static void pe_merge(int l) {
         const int id = list[i];
         if (!pe_stackable(id)) continue;
         if (!seen[id]) { seen[id] = 1; continue; }
-        if (1 + s_extra[l][id] < PE_STACK_MAX && pe_store_ready()) { s_extra[l][id]++; list[i] = 0; }
+        if (1 + s_extra[l][id] < PE_STACK_MAX && pe_reserve_room(l,id) && pe_store_ready()) { s_extra[l][id]++; list[i] = 0; }
     }
-    for (int id = 1; id < 256; ++id) if (!seen[id]) s_extra[l][id] = 0;
+    /* A reserve can outlive its native anchor while grouping is disabled.
+     * Promote one reserved copy when space exists; never discard overflow. */
+    for (int id = 1; id < 256; ++id) if (!seen[id] && s_extra[l][id]) {
+        for (int i = 0, n = pe_list_size(l); i < n; ++i) if (!list[i]) {
+            list[i] = (s16)id; --s_extra[l][id]; break;
+        }
+    }
 }
 static void pe_merge_all(void) { for (int l = 0; l < PE_LISTS; ++l) pe_merge(l); }
 
@@ -279,7 +294,8 @@ static int pe_store_copies(int l, int id, int copies, int prefer) {
     } else {
         room = PE_STACK_MAX - 1 - s_extra[l][id];
     }
-    if (copies > room || ((copies > 1 || list[at]) && !pe_store_ready())) return 0;
+    if (copies > room || (copies > (list[at] ? 0 : 1) && !pe_reserve_room(l,id)) ||
+        ((copies > 1 || list[at]) && !pe_store_ready())) return 0;
     if (!list[at]) { list[at] = (s16)id; s_extra[l][id] = 0; copies--; }
     s_extra[l][id] += (uint8_t)copies;
     return 1;
@@ -326,7 +342,7 @@ static int pe_on_transfer(void *ctx, void *user) {
     if (t->from_mode == 0x34) {
         id = store[at];
         if (pe_stackable(id) && pe_find(0, id) >= 0 && pe_find(l, id) == at &&
-            1 + s_extra[0][id] < PE_STACK_MAX && pe_store_ready()) {
+            1 + s_extra[0][id] < PE_STACK_MAX && pe_reserve_room(0,id) && pe_store_ready()) {
             /* the bag has a stack of it already: one copy joins it */
             if (s_extra[l][id]) s_extra[l][id]--; else store[at] = 0;
             s_extra[0][id]++;
@@ -414,7 +430,7 @@ static int pe_counts_any(const void *data) {
     return b[0] || b[1] || b[2];
 }
 
-static const PeSaveRecord s_record;
+
 
 /* The host has put back the record and the section. A section wins: a record beside one is stale. */
 static int pe_on_load(void *ctx, void *user) {
@@ -460,23 +476,6 @@ static int pe_on_new_game(void *ctx, void *user) {
     return 0;
 }
 
-static int pe_rec_check(void *data) { return pe_counts_bad(data); }
-/* The mod is off this session: the copies only the old record holds go back as plain items. */
-static void pe_rec_release(void *data) {
-    int left;
-    (void)data;
-    memcpy(&s_rec, s_old_rec, sizeof s_rec);
-    pe_unpack();
-    left = pe_unstack(s_extra);
-    pe_pack();
-    memcpy(s_old_rec, &s_rec, sizeof s_rec);
-    pe_mod_log(MOD_ID, "mod off: stacked copies returned to their lists, %d left (lists full)", left);
-    if (left) pe_toast("Some stacked items didn't fit: turn Stacked items back on to keep them");
-}
-static const PeSaveRecord s_record = {
-    "pe_stacks.counts", 1, s_old_rec, sizeof s_old_rec, pe_rec_check, NULL, NULL, pe_rec_release,
-};
-
 /* ---- rows ---- */
 
 /* Option switched off: unstack in free field as space allows. */
@@ -496,7 +495,7 @@ static void pe_stacks_total(char *out, unsigned size) {
 static void pe_stacks_fill(void) {
     if (!pe_on() || !pe_store_ready()) return;
     for (int id = 1; id < 256; ++id)
-        if (pe_stackable(id) && pe_find(0, id) >= 0) s_extra[0][id] = PE_STACK_MAX - 1;
+        if (pe_stackable(id) && pe_find(0, id) >= 0 && pe_reserve_room(0,id)) s_extra[0][id] = PE_STACK_MAX - 1;
     pe_toast("Every stack in the bag is now 99");
 }
 
@@ -513,7 +512,9 @@ static int stacks_init(void) {
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_load, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_SCENE_START, pe_on_scene, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_on_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);
-    pe_save_register_conditional(&s_record);
+    s_host_record = pe_save_host_stack_record();
+    if (!s_host_record) return -1;
+    s_old_rec = s_host_record->data;
     pe_extension_register(&s_section);
 
     pe_menu_register_toggle(PE_PAGE_INVENTORY, "Stacked items",

@@ -8,11 +8,22 @@
  */
 #define PE_EXT_FILE_LIMIT 8192u
 #define PE_EXT_SECTION_LIMIT 16
+int pe_checkpoint_pack(unsigned char *, unsigned, unsigned *, const unsigned char *);
+int pe_checkpoint_unpack(const unsigned char *, unsigned, const char *, unsigned char *);
+int pe_checkpoint_write(const char *path, const unsigned char *block);
+int pe_checkpoint_read(const char *path, const char *binding, unsigned char *block);
+void pe_extension_refill_stacks(short *lists[3], const unsigned sizes[3]);
 typedef struct {
     const char *key;
     uint16_t version, min_reader, size;
     void *data;
+    /* Pure, bounded adapters: no gameplay, profile I/O, RNG or publication.
+     * Return zero for success. Failure locks and preserves the original bytes. */
+    int (*upgrade)(void *candidate, const void *old, unsigned size, unsigned version);
+    int (*check)(const void *candidate);
+    int (*check_native)(const void *candidate, const unsigned char *native_block);
 } PeExtensionSection;
+int pe_extension_owner_available(const char *);
 int pe_extension_register(const PeExtensionSection *section);
 PeRegResult pe_extension_enable(const PeExtensionSection *section);
 int pe_extension_available(const PeExtensionSection *section);

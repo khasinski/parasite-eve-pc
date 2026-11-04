@@ -52,6 +52,7 @@ int pe_mod_is_running(const char *mod_id);
  * main-menu rows are skipped. pe_mod_current(): the mod whose init is running (owner of what it
  * registers), else NULL. pe_mod_active(): NULL and the host's own are always active. */
 const char *pe_mod_current(void);
+int pe_mod_data_available(const char *mod_id);
 int pe_mod_active(const char *mod_id);
 int pe_mod_interactive(void);
 /* Refresh requested-vs-started mod notes; never starts/stops a mod. */

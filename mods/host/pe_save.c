@@ -204,7 +204,7 @@ static void pe_window(uint8_t *win, const uint8_t *live) {
         uint32_t id = pe_fnv(s_legacy[i].name);
         if (!pe_in_window(i)) continue;
         for (j = 0; j < s_reg_count && s_reg[j].id != id; ++j) {}
-        if (j < s_reg_count && pe_save_live(j))
+        if (j < s_reg_count && !s_reg[j].kept && pe_save_live(j))
             memcpy(win + s_legacy[i].at - PE_SAVE_WINDOW_AT, live + s_legacy[i].at, s_legacy[i].size);
     }
 }
@@ -374,10 +374,43 @@ static int pe_call_check(int i) {
     return r->check ? r->check(r->data) : 0;
 }
 
+static union { max_align_t align; unsigned char bytes[PE_SAVE_ROOM]; } s_prepared[PE_SAVE_MAX_RECORDS];
+static PeSaveRecordLoad s_prepared_load[PE_SAVE_MAX_RECORDS];
+static uint32_t s_prepared_hash;static int s_prepared_valid;
+int pe_save_prepare_load(const uint8_t *block) {
+    uint8_t linear[PE_SAVE_ROOM];PeSaveEntry entries[PE_SAVE_MAX_ENTRIES];PeSaveInfo info;
+    s_prepared_valid=0;
+    if(!block)return -1;
+    int count=pe_parse(block+PE_SAVE_TAIL_OFFSET,linear,entries,&info);
+    if(count<0||info.damaged)return -1;
+    ++s_lifecycle_dispatch;
+    for(int i=0;i<s_reg_count;i++) {
+        const PeSaveRecord *r=s_reg[i].record;const PeSaveEntry *e=NULL;
+        for(int j=0;j<count;j++)if(entries[j].id==s_reg[i].id)e=&entries[j];
+        unsigned char *candidate=s_prepared[i].bytes;memcpy(candidate,r->data,r->size);
+        s_prepared_load[i]=PE_SAVE_RECORD_MISSING;
+        if(!pe_mod_active(s_reg[i].mod_id)&&!r->release)continue;
+        if(!e){if(r->reset)r->reset(candidate);else memset(candidate,0,r->size);continue;}
+        int ok=0;
+        if(e->version==r->version&&e->size==r->size){memcpy(candidate,e->bytes,r->size);ok=1;s_prepared_load[i]=PE_SAVE_RECORD_LOADED;}
+        else if(e->version<r->version&&r->upgrade){ok=!r->upgrade(candidate,e->bytes,e->size,e->version);s_prepared_load[i]=PE_SAVE_RECORD_UPGRADED;}
+        if(ok&&r->check)ok=!r->check(candidate);
+        if(!ok){s_prepared_load[i]=e->version>r->version?PE_SAVE_RECORD_NEWER:PE_SAVE_RECORD_REJECTED;memset(candidate,0,r->size);}
+    }
+    --s_lifecycle_dispatch;
+    s_prepared_hash=pe_crc32(block,8192);s_prepared_valid=1;return 0;
+}
+
 static void pe_load_one(int i) {
     const PeSaveRecord *r = s_reg[i].record;
     const PeSaveEntry *e = pe_carried(s_reg[i].id);
     const char *mod = s_reg[i].mod_id;
+    if(s_prepared_valid) {
+        s_reg[i].load=s_prepared_load[i];
+        s_reg[i].kept=e&&(s_reg[i].load==PE_SAVE_RECORD_REJECTED||s_reg[i].load==PE_SAVE_RECORD_NEWER);
+        s_reg[i].initialized=!s_reg[i].kept;
+        memcpy(r->data,s_prepared[i].bytes,r->size);return;
+    }
     s_reg[i].kept = 0;
     s_reg[i].initialized = 1;
     s_reg[i].load = PE_SAVE_RECORD_MISSING;
@@ -415,6 +448,9 @@ static void pe_load_one(int i) {
                    (unsigned)e->version, (unsigned)e->size, r->version, r->size);
         pe_reset(i);
     }
+    /* Rejected data is not missing data. Keep the original valid-CRC payload
+     * for ordinary records too; a later save must not replace it with defaults. */
+    if (e && s_reg[i].load == PE_SAVE_RECORD_REJECTED) s_reg[i].kept = 1;
     if (s_reg[i].conditional && (s_reg[i].load == PE_SAVE_RECORD_REJECTED ||
         s_reg[i].load == PE_SAVE_RECORD_NEWER || s_reg[i].load == PE_SAVE_RECORD_UNAVAILABLE)) {
         s_reg[i].initialized = 0;
@@ -470,6 +506,7 @@ int pe_save_register_conditional(const PeSaveRecord *record) { return pe_registe
 
 void pe_save_on_read(const uint8_t *block) {
     int i;
+    if(s_prepared_valid&&s_prepared_hash!=pe_crc32(block,8192))s_prepared_valid=0;
     ++s_lifecycle_dispatch;
     pe_carry(block + PE_SAVE_TAIL_OFFSET, 1);
     for (i = 0; i < s_reg_count; ++i) {
@@ -488,6 +525,7 @@ void pe_save_on_read(const uint8_t *block) {
             pe_load_one(i);
             s_reg[i].released = s_reg[i].release_due = !s_reg[i].kept && pe_carried(s_reg[i].id) != NULL;
         }
+    s_prepared_valid=0;
     --s_lifecycle_dispatch;
 }
 
@@ -556,6 +594,7 @@ void pe_save_on_write(uint8_t *block) {
 }
 
 void pe_save_new_game(void) {
+    s_prepared_valid=0;
     int i;
     ++s_lifecycle_dispatch;
     memset(s_tail, 0, sizeof s_tail);
@@ -759,7 +798,7 @@ int pe_save_recovery_patch(uint8_t*block,const char*name,unsigned version,const 
  * Only-assists has no save records; inactive carried metadata is left unchanged. */
 #include "pe_checkpoint_wire.h"
 #define PE_MOD_SAVE_STATE_BYTES 1536u
-static int pe_save_checkpoint_owned(int i){const PeSaveRecord *r=s_reg[i].record;if(r->version!=1)return 0;
+static int pe_save_checkpoint_owned(int i){const PeSaveRecord *r=s_reg[i].record;if(r->version!=1||!s_reg[i].mod_id)return 0;
 #if PE_NATIVE_STATE_QOL
  if(!strcmp(s_reg[i].mod_id,"pe_qol")&&((!strcmp(r->name,"pe_qol.keys")&&r->size==68)||(!strcmp(r->name,"pe_qol.sort")&&r->size==24)))return 1;
 #endif
@@ -768,7 +807,7 @@ static int pe_save_checkpoint_owned(int i){const PeSaveRecord *r=s_reg[i].record
 #endif
  return 0;
 }
-int pe_save_state_idle(void){for(int i=0;i<s_reg_count;i++)if(s_reg[i].release_due||((pe_mod_active(s_reg[i].mod_id)||s_reg[i].released)&&!pe_save_checkpoint_owned(i)))return 0;return 1;}
+int pe_save_state_idle(void){for(int i=0;i<s_reg_count;i++)if(s_reg[i].release_due||(pe_save_live(i)&&!pe_save_checkpoint_owned(i)))return 0;return 1;}
 int pe_save_checkpoint_walk(const unsigned char *in,unsigned char *out,size_t bytes,int apply){
  if(bytes!=PE_MOD_SAVE_STATE_BYTES||(!in&&!out)||!pe_save_state_idle()||s_reg_count<0||s_reg_count>PE_SAVE_MAX_RECORDS)return 0;
  if(apply&&(!in||!pe_save_checkpoint_walk(in,0,bytes,0)))return 0;
@@ -787,3 +826,40 @@ int pe_save_checkpoint_walk(const unsigned char *in,unsigned char *out,size_t by
  return at+sizeof s_tail==bytes;
 }
 #endif
+
+/* Legacy stacks are a host record even when the provider is not linked. */
+static unsigned char s_host_stacks[204];
+static int stack_check(void *p) {
+    const unsigned char *b=p;unsigned total=b[0]+b[1]+b[2],k=0;
+    if(total>100||b[3])return -1;
+    for(unsigned l=0;l<3;l++){unsigned char seen[256]={0};
+        for(unsigned j=0;j<b[l];j++,k++){
+            unsigned id=b[4+2*k],q=b[5+2*k];
+            if(!id||!q||q>98||seen[id])return -1;seen[id]=1;
+        }}return 0;
+}
+static const PeSaveRecord s_host_stack_record={"pe_stacks.counts",1,s_host_stacks,204,stack_check,NULL,NULL,NULL};
+const PeSaveRecord *pe_save_host_stack_record(void) {
+    for(int i=0;i<s_reg_count;i++)if(s_reg[i].record==&s_host_stack_record)return &s_host_stack_record;
+    const char *owner=pe_mod_current();
+    if(pe_save_register_conditional(&s_host_stack_record))return NULL;
+    /* This internal record belongs to the host, not the calling provider. */
+    s_reg[s_reg_count-1].mod_id=NULL;(void)owner;
+    return &s_host_stack_record;
+}
+void pe_save_refill_legacy_stacks(short *lists[3],const unsigned sizes[3]) {
+    int at=-1;for(int i=0;i<s_reg_count;i++)if(s_reg[i].record==&s_host_stack_record)at=i;
+    if(at<0||s_reg[at].kept||!s_reg[at].emitting||stack_check(s_host_stacks))return;
+    unsigned char packed[204]={0};unsigned k=0,out=0;
+    for(unsigned l=0;l<3;l++)for(unsigned j=0;j<s_host_stacks[l];j++,k++) {
+        unsigned id=s_host_stacks[4+k*2],q=s_host_stacks[5+k*2];
+        for(unsigned i=0;i<sizes[l]&&q;i++)if(!lists[l][i]){lists[l][i]=(short)id;--q;}
+        if(q){packed[l]++;packed[4+out*2]=id;packed[5+out*2]=q;out++;}
+    }memcpy(s_host_stacks,packed,204);
+}
+
+int pe_save_owner_available(const char *owner) {
+    if(!owner)return 1;
+    for(int i=0;i<s_reg_count;i++)if(s_reg[i].mod_id&&!strcmp(owner,s_reg[i].mod_id)&&s_reg[i].kept)return 0;
+    return 1;
+}

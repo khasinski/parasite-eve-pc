@@ -1,3 +1,15 @@
+#if defined(PE_PS5_GPU_NATIVE) && PE_PS5_GPU_NATIVE
+/* Desktop ZIP packs are optional providers. The native build keeps profile keys
+ * and built-in costumes; it does not acquire desktop download/ZIP dependencies. */
+#include <stddef.h>
+void pe_packs_scan(void) {}
+void pe_packs_register(void) {}
+void pe_packs_page_register(void) {}
+int pe_pack_read(const char *ref,const char *name,unsigned char **data,unsigned *size,unsigned max) {
+    (void)ref;(void)name;(void)max;if(data)*data=NULL;if(size)*size=0;return 0;
+}
+int pe_pack_has(const char *ref,const char *name) {(void)ref;(void)name;return 0;}
+#else
 /*
  * Character packs (bridge findings D8 §3, format v1): costumes a player drops into
  * <preferences>/packs/, either as a plain zip or as the same layout unzipped in a folder:
@@ -489,3 +501,5 @@ void pe_packs_page_register(void) {
     pe_menu_register_info(PE_PAGE_WARDROBE_PACKS, "Folder", "Where packs go. Changes apply the next time the game starts.",
                           pe_pack_folder);
 }
+
+#endif

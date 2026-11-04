@@ -23,6 +23,7 @@ set(pe_host_sources
     host/pe_inventory_api.c
     host/pe_shop_api.c
     host/pe_extension_store.c
+    host/pe_checkpoint_game.c
     host/pe_economy_policy.c
     host/pe_content_api.c
     host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
@@ -55,7 +56,10 @@ add_library(pe-mods OBJECT ${pe_mod_sources} ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_
 target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 target_compile_definitions(pe-mods PRIVATE __psyz)
-target_link_libraries(pe-mods PRIVATE psyz pe_download_json pe_download_zip)   # character packs: zip and pack.json
+target_link_libraries(pe-mods PRIVATE psyz)
+if(TARGET pe_download_json AND TARGET pe_download_zip)
+    target_link_libraries(pe-mods PRIVATE pe_download_json pe_download_zip)
+endif()
 
 if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     add_executable(pe-mod-frequency
@@ -123,6 +127,14 @@ if(BUILD_TESTING)
     target_compile_definitions(test-mod-save PRIVATE __psyz PE_MODS=1)
     target_link_libraries(test-mod-save PRIVATE psyz)
     add_test(NAME mod-save-records COMMAND test-mod-save)
+    add_executable(test-portable-checkpoint ${PROJECT_SOURCE_DIR}/tests/pe_checkpoint_portable_test.c
+        host/pe_save.c host/pe_extension_store.c)
+    target_include_directories(test-portable-checkpoint PRIVATE ${PROJECT_SOURCE_DIR}/include host)
+    target_compile_definitions(test-portable-checkpoint PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(test-portable-checkpoint PRIVATE psyz)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/portable-checkpoint-evidence")
+    add_test(NAME mod-portable-checkpoint COMMAND test-portable-checkpoint
+        "${CMAKE_CURRENT_BINARY_DIR}/portable-checkpoint-evidence")
 endif()
 
 if(BUILD_TESTING AND "pe_rebalance" IN_LIST PE_MOD_LIST)
@@ -267,5 +279,38 @@ if(BUILD_TESTING)
         target_compile_options(test-editor-mod-save PRIVATE /UNDEBUG)
     else()
         target_compile_options(test-editor-mod-save PRIVATE -UNDEBUG)
+    endif()
+endif()
+
+if(BUILD_TESTING)
+    add_executable(test-ps5-checkpoint-session ${PROJECT_SOURCE_DIR}/tests/pe_ps5_checkpoint_session_test.c
+        ${PROJECT_SOURCE_DIR}/platform/ps5/native-gpu/state/pe_state.c)
+    target_include_directories(test-ps5-checkpoint-session PRIVATE ${PROJECT_SOURCE_DIR}/tests/ps5_state_stubs ${PROJECT_SOURCE_DIR}/include host
+        ${PROJECT_SOURCE_DIR}/platform/ps5/native-gpu/state ${PSYZ_DIR}/psyz/include
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-ps5-checkpoint-session PRIVATE __psyz)
+    add_test(NAME mod-ps5-checkpoint-session COMMAND test-ps5-checkpoint-session)
+endif()
+if(BUILD_TESTING AND WIN32)
+    add_executable(test-preservation-regressions ${PROJECT_SOURCE_DIR}/tests/pe_preservation_regressions.c
+        host/pe_registry.c host/pe_legacy_guard.c host/pe_api_native.c host/pe_game_facts.c
+        host/pe_content_api.c host/pe_economy_policy.c host/pe_recovery_snapshot.c
+        host/pe_extension_store.c host/pe_inventory_api.c host/pe_shop_api.c
+        host/pe_profile_transactions.c host/pe_save.c host/pe_save_query.c)
+    target_include_directories(test-preservation-regressions PRIVATE ${PROJECT_SOURCE_DIR}/include host)
+    target_compile_definitions(test-preservation-regressions PRIVATE __psyz PE_MODS=1)
+    foreach(scenario unknown-preservation definition-revision receipt-provider-off save-load
+        cancelled-save missing-companion save-io-failure retention identity-refusal receipt-replay)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/preservation-${scenario}")
+        add_test(NAME mod-preservation-${scenario} COMMAND test-preservation-regressions
+            ${scenario} "${CMAKE_CURRENT_BINARY_DIR}/preservation-${scenario}")
+    endforeach()
+endif()
+
+if(BUILD_TESTING)
+    find_program(PE_COMPAT_NODE node)
+    if(PE_COMPAT_NODE)
+        add_test(NAME mod-ps5-compatibility-export COMMAND ${PE_COMPAT_NODE}
+            ${PROJECT_SOURCE_DIR}/tests/pe_compatibility_export_test.cjs ${CMAKE_CURRENT_BINARY_DIR})
     endif()
 endif()

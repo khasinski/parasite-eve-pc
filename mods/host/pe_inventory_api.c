@@ -12,7 +12,9 @@
 #define INST (DICT + 12u * 52u)
 #define ATT (INST + 32u * 16u)
 static unsigned char s_ledger[2048];
-static PeExtensionSection s_section = {"pe_host/content", 1, 1, sizeof s_ledger, s_ledger};
+static int valid_ledger(const void *);
+static int valid_native_ledger(const void *,const unsigned char *);
+static PeExtensionSection s_section = {"pe_host/content", 1, 1, sizeof s_ledger, s_ledger, NULL, valid_ledger, valid_native_ledger};
 static uint32_t rd(const unsigned char *p) {
     return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
 }
@@ -41,43 +43,45 @@ static uint32_t stamp(void) {
     }
     return h;
 }
-static int valid(void) {
-    if (!s_ledger[0]) {
-        for (unsigned i = 0; i < sizeof s_ledger; ++i)
-            if (s_ledger[i]) return 0;
-        return 1;
-    }
-    if (memcmp(s_ledger, "PEC1", 4) || s_ledger[12] > 12 || s_ledger[13] > 32 || s_ledger[14] > 16 ||
-        s_ledger[15])
+static int valid_ledger(const void *data) {
+    const unsigned char *ledger=data;
+    if (!ledger[0]) {
+        for (unsigned i = 0; i < 2048; ++i)
+            if (ledger[i]) return -1;
         return 0;
-    for (int i = 0; i < s_ledger[12]; ++i) {
-        unsigned char *d = s_ledger + DICT + i * 52;
-        if (!d[0] || !memchr(d, 0, 48) || !d[50] || d[50] > 2) return 0;
     }
-    for (int i = 0; i < s_ledger[13]; ++i) {
-        unsigned char *p = s_ledger + INST + i * 16;
-        if (!rd(p) || rd(s_ledger + 4) <= rd(p) || p[7] > 1 || p[4] >= s_ledger[12] || p[5] >= 128 ||
-            p[6] < 1 || p[6] > 4 || s_ledger[DICT + p[4] * 52 + 50] != 1)
-            return 0;
+    if (memcmp(ledger, "PEC1", 4) || ledger[12] > 12 || ledger[13] > 32 || ledger[14] > 16 ||
+        ledger[15])
+        return -1;
+    for (int i = 0; i < ledger[12]; ++i) {
+        const unsigned char *d = ledger + DICT + i * 52;
+        if (!d[0] || !memchr(d, 0, 48) || !d[50] || d[50] > 2) return -1;
+    }
+    for (int i = 0; i < ledger[13]; ++i) {
+        const unsigned char *p = ledger + INST + i * 16;
+        if (!rd(p) || rd(ledger + 4) <= rd(p) || p[7] > 1 || p[4] >= ledger[12] || p[5] >= 128 ||
+            p[6] < 1 || p[6] > 4 || ledger[DICT + p[4] * 52 + 50] != 1)
+            return -1;
         for (int j = 0; j < i; ++j) {
-            unsigned char *q = s_ledger + INST + j * 16;
-            if (rd(p) == rd(q) || p[5] == q[5]) return 0;
+            const unsigned char *q = ledger + INST + j * 16;
+            if (rd(p) == rd(q) || p[5] == q[5]) return -1;
         }
     }
-    for (int i = 0; i < s_ledger[14]; ++i) {
-        unsigned char *p = s_ledger + ATT + i * 32;
+    for (int i = 0; i < ledger[14]; ++i) {
+        const unsigned char *p = ledger + ATT + i * 32;
         int found = 0;
-        for (int j = 0; j < s_ledger[13]; ++j)
-            found |= rd(s_ledger + INST + j * 16) == rd(p);
-        if (!found || p[4] >= s_ledger[12] || s_ledger[DICT + p[4] * 52 + 50] != 2 || p[5] >= 10 || p[7] > 1)
-            return 0;
+        for (int j = 0; j < ledger[13]; ++j)
+            found |= rd(ledger + INST + j * 16) == rd(p);
+        if (!found || p[4] >= ledger[12] || ledger[DICT + p[4] * 52 + 50] != 2 || p[5] >= 10 || p[7] > 1)
+            return -1;
         for (int j = 0; j < i; ++j) {
-            unsigned char *q = s_ledger + ATT + j * 32;
-            if (rd(p) == rd(q) && p[5] == q[5]) return 0;
+            const unsigned char *q = ledger + ATT + j * 32;
+            if (rd(p) == rd(q) && p[5] == q[5]) return -1;
         }
     }
-    return 1;
+    return 0;
 }
+static int valid(void){return !valid_ledger(s_ledger);}
 static int dictionary(const char *key, unsigned kind, unsigned revision) {
     for (int i = 0; i < s_ledger[12]; ++i)
         if (s_ledger[DICT + i * 52 + 50] == kind &&
@@ -425,4 +429,15 @@ int pe_inventory_snapshot_ledger(unsigned char*out,unsigned size,const unsigned 
         h=(h^record.iconId)*16777619u;h=(h^fingerprint(&record))*16777619u;
     }
     wr(out+8,h);return 0;
+}
+
+static int valid_native_ledger(const void *data,const unsigned char *block) {
+    const unsigned char *ledger=data;
+    if(valid_ledger(data))return -1;
+    if(!ledger[0])return 0;
+    const unsigned pool=0x100+offsetof(SaveRuntimeState,player.runtime.inventory)+offsetof(InventoryRuntime,equipment);
+    uint32_t h=2166136261u;
+    for(unsigned i=0;i<128;i++) {ItemDataRecord r;memcpy(&r,block+pool+i*sizeof r,sizeof r);
+        h=(h^r.iconId)*16777619u;h=(h^fingerprint(&r))*16777619u;}
+    return h==rd(ledger+8)?0:-1;
 }
