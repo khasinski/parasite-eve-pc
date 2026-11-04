@@ -92,13 +92,14 @@ int Entity_TriggerAnimEvent(BattleEntity *entity, u8 slot)
     case 6: case 8: case 10: case 12: case 14:
         if (actor->animLastFrame >= actor->animPrev.parts.integer &&
             actor->animLastFrame < nextFrame) {
-            Entity_SetActionMode(actor, core->active->exitMode);
+            Entity_SetActionMode(actor, core->active ? core->active->exitMode : 0);
             Asset_Find08w(core->assetId, 0,
                          actor->renderObject.target_x,
                          actor->renderObject.target_y,
                          actor->renderObject.target_z);
-            actor->animStep = core->active->exitStep;
-            core->active->state = 1;
+            actor->animStep = core->active ? core->active->exitStep : 0;
+            if (core->active)
+                core->active->state = 1;
         }
         break;
     case 7: case 9: case 11: case 13: case 15:
@@ -108,15 +109,17 @@ int Entity_TriggerAnimEvent(BattleEntity *entity, u8 slot)
             actor->animStep = 0x10000;
             if (slot < 3) {
                 result = 1;
-                core->active->state = 4;
+                if (core->active)
+                    core->active->state = 4;
             }
         }
         if (core->kind == 0 && (core->flags.raw & 0x6000)) {
-            if (core->active->state < 2)
+            if (core->active && core->active->state < 2)
                 core->active->state = 4;
             result = 2;
         }
-        if (slot < 3 && (core->active->category == 1 || core->active->category == 3)) {
+        if (slot < 3 && core->active &&
+            (core->active->category == 1 || core->active->category == 3)) {
             u32 frame = actor->animFrame;
 
             if (core->active->frame < (frame >> 16) &&
@@ -284,7 +287,8 @@ void Battle_SetContextField(int arg0, int arg1) {
 }
 
 s32 Battle_GetEnemyContextField(FieldActor *arg0, s32 arg1) {
-    EnemyCombatant *ctx = (EnemyCombatant *)arg0->state;
+    static EnemyCombatant zeroEnemy;
+    EnemyCombatant *ctx = (arg0 && arg0->state) ? (EnemyCombatant *)arg0->state : &zeroEnemy;
     s32 ret = -1000;
     u32 word;
     s32 flags;
@@ -347,6 +351,8 @@ void Entity_WriteFieldByCmd(FieldActor *arg0, s32 arg1, s32 arg2) {
     s32 temp_a1;
     FieldActorState *temp_a0;
 
+    if (!arg0 || !arg0->state)
+        return;
     temp_a0 = arg0->state;
     temp_a1 = arg1 & 0xFF;
     switch (temp_a1) {                              /* switch 1 */
@@ -571,8 +577,11 @@ void Battle_RollEnemySpawn(void *arg0)
     int threshold;
     int bonus;
 
+    if (!arg0) {
+        return;
+    }
     ctx = ((BattleEntity *)arg0)->core;
-    if (ctx->hpAlive <= 0) {
+    if (!ctx || ctx->hpAlive <= 0) {
         return;
     }
 

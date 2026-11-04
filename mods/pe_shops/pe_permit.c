@@ -8,6 +8,7 @@
 
 #include "pe_shops.h"
 #include "pe_mod_host.h"
+#include "pe_services.h"
 #include "pe1/inventory.h"
 #include "pe1/inventory_queries.h"
 #include "pe1/inventory_runtime_types.h"
@@ -35,8 +36,11 @@ int pe_permit_gear(int *bag_slots) {
 }
 
 unsigned pe_permit_count(void) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
     unsigned n = 0;
     int i;
+    if (stacks && stacks->total)
+        return (unsigned)(stacks->total(0, PE_ITEM_MOD_PERMIT) + stacks->total(1, PE_ITEM_MOD_PERMIT));
     for (i = 0; i < PE_BAG_SLOTS; ++i) n += g_AyaInventoryItems[i] == PE_ITEM_MOD_PERMIT;
     for (i = 0; i < PE_STORAGE_SLOTS; ++i) n += g_WayneStorageItems[i] == PE_ITEM_MOD_PERMIT;
     return n;
@@ -55,9 +59,20 @@ const char *pe_permit_blocked(int bag_slot) {
 }
 
 static int pe_take_permit(void) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
     int i;
-    for (i = 0; i < PE_BAG_SLOTS; ++i) if (g_AyaInventoryItems[i] == PE_ITEM_MOD_PERMIT) { g_AyaInventoryItems[i] = 0; return 1; }
-    for (i = 0; i < PE_STORAGE_SLOTS; ++i) if (g_WayneStorageItems[i] == PE_ITEM_MOD_PERMIT) { g_WayneStorageItems[i] = 0; return 1; }
+    for (i = 0; i < PE_BAG_SLOTS; ++i)
+        if (g_AyaInventoryItems[i] == PE_ITEM_MOD_PERMIT) {
+            if (stacks && stacks->take) stacks->take(0, i);
+            else g_AyaInventoryItems[i] = 0;
+            return 1;
+        }
+    for (i = 0; i < PE_STORAGE_SLOTS; ++i)
+        if (g_WayneStorageItems[i] == PE_ITEM_MOD_PERMIT) {
+            if (stacks && stacks->take) stacks->take(1, i);
+            else g_WayneStorageItems[i] = 0;
+            return 1;
+        }
     return 0;
 }
 

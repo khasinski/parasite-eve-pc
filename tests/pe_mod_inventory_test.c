@@ -21,6 +21,9 @@ u32 *g_InvSelectionBits, g_InvSelectionBitStorage[4];
 int g_InvSelectionBitWords;
 int g_InvOverrideSlotLimit, g_InvPackedListCount, g_MenuBattleEquipMode;
 u32 g_InvStorageSelectionBits[4];
+int g_MenuLayoutLocked, g_StatBaseTable[4];
+s16 *g_InvActiveItemList;
+extern const PeMod pe_mod_pe_stacks;
 /* Unused equipment-transfer paths in the stock translation unit. */
 int Inv_CheckFreeSlotCapacity(int n) { (void)n;assert(0);return 0; }
 void Inv_CompactActiveListSlots(void) { assert(0); }
@@ -29,17 +32,26 @@ void Inv_SetActiveList(int mode,void *slot) { (void)mode;(void)slot;assert(0); }
 int Inv_GetBonusSlotCount(void) { assert(0);return 0; }
 void Menu_CreateNotificationDialog(int a,int b) { (void)a;(void)b;assert(0); }
 int Inv_TransferItemAlt2(int mask) { (void)mask;assert(0);return 0; }
+int Inv_GetWayneListItemByIndex(int i) { return i; }
+int Inv_IsSlotEquipped(int i) { (void)i;return 1; }
+void Menu_SetSwapReturnFlag(void) {}
+void Draw_StatePush(void) {}
+void Draw_OffsetCursor(int x,int y) { (void)x;(void)y; }
+void Draw_PrintNumberWidth3Unk(int n) { (void)n; }
+void Draw_StatePop(void) {}
 static ItemDataRecord s_base[256];
-static int loaded = 1, sort_calls, *pocket_enabled;
+static int loaded = 1, sort_calls, *pocket_enabled, *stacks_enabled;
 static PeMenuGet get_sort;
 static PeMenuSet set_sort;
 static PeMenuChoiceCount key_count;
-static PeMenuPerFrame ticks[2];
+static PeMenuPerFrame ticks[4];
 static int tick_count;
 static const PeKeysApi *keys;
+static const PeStacksApi *stacks;
 static struct { int id; PeHookFn fn; } hooks[24];
 static int hook_count;
 int pe_game_loaded(void) { return loaded; }
+int pe_save_loaded(void) { return loaded; }
 int pe_free_field(void) { return !(g_GameStateFlags & 0x2006u) && !(g_GameStateFlagsWord & 0xB600u); }   /* as host/pe_game.c */
 int pe_in_battle(void) { return (g_GameStateFlags & 2) != 0; }
 int Inv_GetAyaSlotLimit(void) { return 10; }
@@ -57,7 +69,7 @@ int Inv_CountByValue(int id) {
     for(int i=0;i<g_InvSlotLimit;++i) n+=g_InvItemPtr[i]==id;
     return n;
 }
-void Inv_RebuildSelectableMask(void) { ++sort_calls; }
+void Inv_RebuildSelectableMask(void) { ++sort_calls; pe_hook_dispatch(PE_HOOK_INVENTORY_REBUILD, NULL); }
 void *Text_LookupTable8(unsigned index) { static u8 name[]={0x10,0xFF};(void)index;return name; }
 void pe_log(const char *tag,const char *fmt,...) { (void)tag;(void)fmt; }
 int pe_hook_add(int id,PeHookFn fn,void *u,int p,const char *m) {
@@ -76,12 +88,26 @@ const char *pe_mod_current(void) { return "pe_qol"; }
 int pe_mod_active(const char *m) { (void)m;return 1; }
 void pe_mod_log(const char *m,const char *fmt,...) { (void)m;(void)fmt; }
 void pe_toast(const char *t) { (void)t; }
+const void *pe_service_get(const char *name,int version) {
+    (void)version;
+    if(!strcmp(name,"stacks")) return stacks;
+    return NULL;
+}
 int pe_service_publish(const char *name,int version,const void *api,const char *mod) {
-    (void)mod;assert(!strcmp(name,"keys")&&version==1);keys=api;return 0;
+    (void)mod;assert(version==1);
+    if(!strcmp(name,"keys")) { keys=api; return 0; }
+    if(!strcmp(name,"stacks")) { stacks=api; return 0; }
+    assert(0);return -1;
 }
 int pe_menu_register_tick(PeMenuPerFrame fn) { ticks[tick_count++]=fn;return 0; }
 int pe_menu_register_toggle(const char *p,const char *l,const char *d,int *v,PeMenuPerFrame t) {
-    (void)p;(void)l;(void)d;pocket_enabled=v;return pe_menu_register_tick(t);
+    (void)p;(void)d;
+    if(!strcmp(l,"Stacked items")) stacks_enabled=v;
+    else pocket_enabled=v;
+    return pe_menu_register_tick(t);
+}
+int pe_menu_register_action(const char *p,const char *l,const char *d,PeMenuAction a) {
+    (void)p;(void)l;(void)d;(void)a;return 0;
 }
 int pe_menu_register_dynamic_choice(const char *p,const char *l,const char *d,int *v,unsigned max,
         PeMenuChoiceCount c,PeMenuChoiceName n) {
@@ -125,9 +151,10 @@ static void old_block(unsigned char *card,unsigned at,const void *data,unsigned 
 }
 int main(void) {
     unsigned char card[8192],bad[8192];s16 full[50];const unsigned char *saved;unsigned size=0;
-    pe_save_install();pe_key_items_register("pe_qol");pe_bag_sort_register("pe_qol");reset();
+    pe_save_install();pe_key_items_register("pe_qol");pe_bag_sort_register("pe_qol");pe_mod_pe_stacks.init();reset();
     assert(!get_sort());
     for(int i=1;i<256;++i){s_base[i].itemId=i;s_base[i].kind=10;}
+    s_base[0x0B].kind=12;s_base[0x0C].kind=13;
     g_AyaInventoryItems[1]=0xC8;g_AyaInventoryItems[2]=0x38;g_AyaInventoryItems[3]=0xDD;
     ticks[0]();assert(!g_AyaInventoryItems[1]&&!g_AyaInventoryItems[2]&&g_AyaInventoryItems[3]==0xDD);
     for(int i=0;i<10;++i)g_AyaInventoryItems[i]=6;
@@ -201,6 +228,47 @@ int main(void) {
     memset(card,0,sizeof card);old_sort.rank=0x12345678;old_block(card,0x1EF0,&old_sort,sizeof old_sort,0x54524F53u,0x736F7274u);
     pe_hook_dispatch(PE_HOOK_SAVE_READ,card);assert(!get_sort());
     reset();key=0xD1;assert(!pe_hook_dispatch(PE_HOOK_ITEM_COUNT,args));
-    puts("Passed native inventory tests: pocket/full-bag story counts and consumption, disabled-pocket draining, pickup/reward handling, recomp-compatible saves, checksum/ID validation, real native auto-sort, equipped items, manual override, and battle/script guards.");
+    /* Issue #49: Tool & Super Tool transfers consume 1 copy off a stack instead of wiping the stack. */
+    reset();
+    *stacks_enabled=1;
+    g_InventoryRuntime.tracked[0]=1;g_InventoryRuntime.tracked[2]=-1;
+    for(int i=2;i<9;++i) g_AyaInventoryItems[i]=0x0B; /* 7 Tools in bag */
+    for(int i=0;i<4;++i) g_WayneStorageItems[i]=0x0C; /* 4 Super Tools in storage */
+    g_MenuLayoutLocked=1;
+    g_StatBaseTable[0]=1;g_StatBaseTable[1]=0;g_StatBaseTable[2]=0;g_StatBaseTable[3]=1;
+    Inv_RebuildSelectableMask();
+    assert(g_AyaInventoryItems[2]==0x0B && !g_AyaInventoryItems[3]);
+    assert(stacks->count(0,2)==7 && stacks->total(0,0x0B)==7 && g_StatBaseTable[0]==7);
+    assert(g_WayneStorageItems[0]==0x0C && !g_WayneStorageItems[1]);
+    assert(stacks->count(1,0)==4 && stacks->total(1,0x0C)==4 && g_StatBaseTable[3]==4);
+    assert(g_StatBaseTable[1]==0 && g_StatBaseTable[2]==0);
+    for(int left=6;left>=0;--left) {
+        g_InventoryRuntime.equipment[0]=(ItemDataRecord){.iconId=1,.itemId=0x44,.kind=1,.bonusStats={5,0,0}};
+        g_InventoryRuntime.equipment[1]=(ItemDataRecord){.iconId=1,.itemId=0x45,.kind=1};
+        g_AyaInventoryItems[0]=0x100;g_AyaInventoryItems[1]=0x101;
+        g_InvItemPtr=g_AyaInventoryItems;
+        Inv_RememberSelection(0,0);Inv_RememberSelection(1,1);
+        Inv_TransferItemBetweenLists(0,-1,0,g_StatBaseTable[0]);
+        Inv_RebuildSelectableMask();
+        assert(g_InventoryRuntime.equipment[1].bonusStats[0]==5);
+        assert(stacks->total(0,0x0B)==left);
+        if(left>0) {
+            assert(g_AyaInventoryItems[2]==0x0B && stacks->count(0,2)==left && g_StatBaseTable[0]==left);
+        } else {
+            assert(g_AyaInventoryItems[2]==0);
+        }
+    }
+    /* Super Tool from Wayne's crate (flags = 3: Super Tool + storage). */
+    g_InventoryRuntime.equipment[0]=(ItemDataRecord){.iconId=1,.itemId=0x44,.kind=1,.bonusStats={0,7,0}};
+    g_InventoryRuntime.equipment[1]=(ItemDataRecord){.iconId=1,.itemId=0x45,.kind=1};
+    g_AyaInventoryItems[0]=0x100;g_AyaInventoryItems[1]=0x101;
+    g_InvItemPtr=g_AyaInventoryItems;
+    Inv_RememberSelection(0,0);Inv_RememberSelection(1,1);
+    Inv_TransferItemBetweenLists(0,-1,3,g_StatBaseTable[3]);
+    Inv_RebuildSelectableMask();
+    assert(g_InventoryRuntime.equipment[1].bonusStats[1]==7 && g_AyaInventoryItems[0]==0x100);
+    assert(g_WayneStorageItems[0]==0x0C && stacks->count(1,0)==3 && g_StatBaseTable[3]==3);
+    g_MenuLayoutLocked=0;
+    puts("Passed native inventory tests: pocket/full-bag story counts and consumption, disabled-pocket draining, pickup/reward handling, recomp-compatible saves, checksum/ID validation, real native auto-sort, equipped items, manual override, battle/script guards, and stacked Tool/Super Tool consumption.");
     return 0;
 }

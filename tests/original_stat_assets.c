@@ -36,6 +36,9 @@ int MemCard_HasDelayedCallback(void);
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#ifdef PE_MODS
+#include "../mods/host/pe_mod_host.h"
+#endif
 int Aya_StatBinarySearch(int value,int *table);
 int Aya_StatOverflowQuery(int kind,int value);
 #define CHECK(x) do { if(!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x); return 1; } } while(0)
@@ -101,6 +104,40 @@ static int original_item_messages(void)
     printf("Original item messages: %u USA MIPS buffers, all 255 authored names, prefix/suffix order, longest %u bytes, full 32-byte output and malformed/boundary guards passed\n",cases,maximum);
     return 0;
 }
+
+#ifdef PE_MODS
+/* Text a PE_HOOK_TEXT_LOOKUP handler gives (a language pack's item name or suffix) lives outside
+ * the resident pack; the steal messages still use it, bounded by the buffer. */
+static u8 replaced_name[]={0x10,0x11,0x12,255},replaced_suffix[]={0x0F,0x13,255},long_name[40];
+static int replace_text(void *ctx,void *user)
+{
+    PeHookTextLookup *lookup=ctx;(void)user;
+    if(lookup->table==8 && lookup->index==0) *lookup->text=user==long_name?long_name:replaced_name;
+    if(lookup->table==4 && lookup->index==16) *lookup->text=replaced_suffix;
+    return 0;
+}
+static int replaced_item_messages(void)
+{
+    int saved_window=g_SaveMetadataWindowIndex;
+    PeHookInit init={0,"/tmp/pe-item-message-test/parasite-eve.toml"};
+    pe_host_init(&init);
+    CHECK(pe_hook_add(PE_HOOK_TEXT_LOOKUP,replace_text,NULL,PE_PRIORITY_LATE,"host")==0);
+    const u8 window0[]={0x10,0x11,0x12,0x0F,0x13,255},window1[]={0x0F,0x13,0x10,0x11,0x12,255};
+    for(unsigned window=0;window<2;++window){
+        g_SaveMetadataWindowIndex=window;memset(g_InvItemMessageBuffer,0xA5,32);
+        CHECK(Inv_GetItemEffectData(1,0)==g_InvItemMessageBuffer);
+        CHECK(!memcmp(g_InvItemMessageBuffer,window?window1:window0,6));
+    }
+    /* Too long for the buffer: still nothing rather than a cut message. */
+    memset(long_name,0x10,sizeof(long_name)-1);long_name[sizeof(long_name)-1]=255;
+    CHECK(pe_hook_add(PE_HOOK_TEXT_LOOKUP,replace_text,long_name,PE_PRIORITY_LATE+1,"host")==0);
+    g_SaveMetadataWindowIndex=0;
+    CHECK(Inv_GetItemEffectData(1,0)==g_InvItemMessageBuffer && g_InvItemMessageBuffer[0]==255);
+    g_SaveMetadataWindowIndex=saved_window;
+    puts("Replaced item messages: a text-lookup handler's name and suffix reach the steal messages, bounded");
+    return 0;
+}
+#endif
 
 static int pending_command_stack(void)
 {
@@ -1144,6 +1181,9 @@ int main(void)
     CHECK(inventory_selection()==0);
     CHECK(recalc_stats()==0);
     CHECK(original_menu_bootstrap()==0);
+#ifdef PE_MODS
+    CHECK(replaced_item_messages()==0);        /* last: it starts the mod host */
+#endif
     puts("Original player stat recalculation: 297 level/modifier combinations and inventory capacity passed");
     pe_disc_close(&disc);
     printf("Original stat queries: %u values across seven real growth tables, level/sublevel/distance/overflow passed\n",queries);

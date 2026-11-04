@@ -17,7 +17,7 @@
  * current page; pe_pages_describe() gives each page its description and order. */
 
 /* The PE Enhancements suite's version, one for all of its mods: they are released together. */
-#define PE_ENHANCEMENTS_VERSION "0.9.0"
+#define PE_ENHANCEMENTS_VERSION "0.10.0"
 
 #define PE_PAGE_MOVEMENT       "Movement"
 #define PE_PAGE_COMBAT         "Combat"

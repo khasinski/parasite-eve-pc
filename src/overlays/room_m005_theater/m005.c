@@ -10,6 +10,9 @@
 #include "pe1/room_m005_beacon.h"
 #include "pe1/room_script_record.h"
 #include "pe1/room_sound_slot.h"
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/particle_augment.h"
+#endif
 
 #include "../room_lib/room_lib.h"
 #include "RoomM005_FxOrbiter_externs.h"
@@ -244,16 +247,28 @@ int RoomM005_CrossFlare(int mode, void *data, intptr_t argument) {
                 int kind = g_FieldFxSpriteParams.palette;
                 int palette = g_FieldFxPaletteTable[kind];
                 if (kind == 4 && g_FieldFxAltPaletteFlag) palette += 4;
+#ifdef PE_PS5_GPU_NATIVE
+                FieldFx_BeginCrossFlareGlow(position.x,position.y,position.z,(unsigned)g_FieldFxCurrentAge,9);
+#endif
                 FieldFx_DrawShapeQuads(&position, &rotation, 0x1000, 0x1000, 2,
                               GetClut(0x10, palette), 1, level, 0);
+#ifdef PE_PS5_GPU_NATIVE
+                FieldFx_EndCrossFlareGlow();
+#endif
             }
             position.x += 0x20;
             {
                 int kind = g_FieldFxSpriteParams.palette;
                 int palette = g_FieldFxPaletteTable[kind];
                 if (kind == 4 && g_FieldFxAltPaletteFlag) palette += 4;
+#ifdef PE_PS5_GPU_NATIVE
+                FieldFx_BeginCrossFlareGlow(position.x,position.y,position.z,(unsigned)g_FieldFxCurrentAge,9);
+#endif
                 FieldFx_DrawShapeQuads(&position, &rotation, 0x1000, 0x1000, 2,
                               GetClut(0x10, palette), 1, level, 0);
+#ifdef PE_PS5_GPU_NATIVE
+                FieldFx_EndCrossFlareGlow();
+#endif
             }
         }
         g_FieldFxSpriteParams.depth = 0x18;
@@ -286,9 +301,15 @@ int RoomM005_CrossFlare(int mode, void *data, intptr_t argument) {
             {
                 int kind = g_FieldFxSpriteParams.palette;
                 int palette = g_FieldFxPaletteTable[kind];
+#ifdef PE_PS5_GPU_NATIVE
+                FieldFx_BeginCrossFlareGlow(position.x,position.y,position.z,(unsigned)g_FieldFxCurrentAge,20);
+#endif
                 FieldFx_DrawShapeQuads(&position, &rotation, size, size, 0x40,
                               GetClut(0, (kind == 4 && g_FieldFxAltPaletteFlag) ? palette + 6 : palette + 2),
                               1, 0x60, &color);
+#ifdef PE_PS5_GPU_NATIVE
+                FieldFx_EndCrossFlareGlow();
+#endif
             }
         }
         break;

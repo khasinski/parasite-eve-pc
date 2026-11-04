@@ -16,6 +16,7 @@
 #include "pe_collection.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 
@@ -36,6 +37,9 @@ static int s_maps;
 static PeBestiaryResolver s_resolver[PE_MAX_RESOLVERS];
 static int s_resolvers;
 static int s_event = -1;
+static uint32_t s_checkpoint_epoch=1;
+static void pe_checkpoint_changed(void){if(s_checkpoint_epoch<UINT32_MAX)++s_checkpoint_epoch;}
+
 
 static int pe_valid(int h) { return h >= 0 && h < s_creatures; }
 
@@ -51,6 +55,7 @@ static int pe_add(const PeCreatureInfo *info) {
         pe_mod_log("pe_collection", "bestiary: creature %s refused", info && info->key ? info->key : "?");
         return -1;
     }
+    pe_checkpoint_changed();
     s_creature[s_creatures] = info;
     return s_creatures++;
 }
@@ -59,6 +64,7 @@ static const PeCreatureInfo *pe_info(int h) { return pe_valid(h) ? s_creature[h]
 
 static int pe_replace(int h, const PeCreatureInfo *info) {
     if (!pe_valid(h) || !info || !info->key || strcmp(info->key, s_creature[h]->key) != 0) return 0;
+    pe_checkpoint_changed();
     s_creature[h] = info;
     return 1;
 }
@@ -67,8 +73,9 @@ static int pe_map(int room, unsigned identity, int h) {
     int i;
     if (!pe_valid(h) || room < 0) return 0;
     for (i = 0; i < s_maps; ++i)
-        if (s_map[i].room == room && s_map[i].identity == identity) { s_map[i].handle = (int16_t)h; return 1; }
+        if (s_map[i].room == room && s_map[i].identity == identity) { pe_checkpoint_changed(); s_map[i].handle = (int16_t)h; return 1; }
     if (s_maps == PE_MAX_MAPPINGS) return 0;
+    pe_checkpoint_changed();
     s_map[s_maps].room = (uint16_t)room;
     s_map[s_maps].identity = (uint16_t)identity;
     s_map[s_maps++].handle = (int16_t)h;
@@ -77,6 +84,7 @@ static int pe_map(int room, unsigned identity, int h) {
 
 static int pe_add_resolver(PeBestiaryResolver fn) {
     if (!fn || s_resolvers == PE_MAX_RESOLVERS) return 0;
+    pe_checkpoint_changed();
     s_resolver[s_resolvers++] = fn;
     return 1;
 }
@@ -108,7 +116,7 @@ static void pe_unlock_why(int h, unsigned bits, const char *why) {
     unsigned committed=pe_profile_creature(c->key,NULL),earned=(committed|bits|PE_BESTIARY_MET)&7u;
     if(earned!=committed)pe_profile_set_creature(c->key,earned,pe_kills(h));
     if(now==old)return;
-    snprintf(msg, sizeof msg, "Bestiary: %s%s%s%s", c->name, gained & PE_BESTIARY_WEAK ? " - weaknesses" : "",
+    snprintf(msg, sizeof msg, "Bestiary: %s%s%s%s", pe_l10n_ui(c->name), gained & PE_BESTIARY_WEAK ? " - weaknesses" : "",
              gained & PE_BESTIARY_LOOT ? " - loot" : "", gained == PE_BESTIARY_MET ? " - new entry" : "");
     pe_toast(msg);
     pe_log("bestiary", "creature=%s bits=0x%02X why=%s", c->key, now, why);
@@ -140,6 +148,7 @@ static int pe_set_model(int h, int form, const PeModelSource *src) {
     if (!pe_valid(h) || form < 0 || form >= PE_BESTIARY_MAX_FORMS || !src || src->kind == PE_MODEL_NONE ||
         src->kind > PE_MODEL_CALLBACK || (src->kind == PE_MODEL_SKIN && (!src->folder || !*src->folder)) ||
         (src->kind == PE_MODEL_CALLBACK && !src->load)) return 0;
+    pe_checkpoint_changed();
     s_model[h][form] = *src;
     return 1;
 }
@@ -244,12 +253,12 @@ static const char *pe_name(unsigned i) {
     const PeCreatureInfo *c;
     unsigned s;
     pe_filter();
-    if (!s_count) return "None";
+    if (!s_count) return pe_l10n_ui("None");
     if (i >= (unsigned)s_count) i = 0;
     c = s_creature[s_list[i]];
     s = pe_state(s_list[i]);
     if (!(s & PE_BESTIARY_MET)) snprintf(s_name, sizeof s_name, "???  (%u/%d)", i + 1, s_count);
-    else snprintf(s_name, sizeof s_name, "%s%s%s  (%u/%d)", c->ex ? "EX " : "", c->name,
+    else snprintf(s_name, sizeof s_name, "%s%s%s  (%u/%d)", c->ex ? "EX " : "", pe_l10n_ui(c->name),
                   (s & PE_BESTIARY_WEAK) && (s & PE_BESTIARY_LOOT) ? " *" : c->boss ? " (boss)" : "", i + 1, s_count);
     return s_name;
 }
@@ -279,21 +288,21 @@ static void pe_elements_row(char *out, unsigned size) {
     if (!c) { snprintf(out, size, "-"); return; }
     if (pe_state(h) & PE_BESTIARY_WEAK)
         snprintf(out, size, "Weak: %s  Strong: %s", pe_elems(c->weak, weak, sizeof weak), pe_elems(c->strong, strong, sizeof strong));
-    else snprintf(out, size, "Scan, %s or %u Junk", c->boss ? "defeat" : "5 kills", c->price_weak);
+    else snprintf(out, size, "Scan, %s or %u Junk", c->boss ? pe_l10n_ui("defeat") : pe_l10n_ui("5 kills"), c->price_weak);
 }
 
 static void pe_drop_row(char *out, unsigned size) {
     const int h = pe_current();
     const PeCreatureInfo *c = pe_info(h);
     if (!c) snprintf(out, size, "-");
-    else if (pe_state(h) & PE_BESTIARY_LOOT) snprintf(out, size, "%s", c->drop ? c->drop : "nothing");
+    else if (pe_state(h) & PE_BESTIARY_LOOT) snprintf(out, size, "%s", c->drop ? c->drop : pe_l10n_ui("nothing"));
     else snprintf(out, size, "%s%u Junk", c->boss ? "" : "15 kills or ", c->price_loot);
 }
 
 static void pe_steal_row(char *out, unsigned size) {
     const int h = pe_current();
     const PeCreatureInfo *c = pe_info(h);
-    snprintf(out, size, "%s", c && (pe_state(h) & PE_BESTIARY_LOOT) ? (c->steal ? c->steal : "nothing") : "-");
+    snprintf(out, size, "%s", c && (pe_state(h) & PE_BESTIARY_LOOT) ? (c->steal ? c->steal : pe_l10n_ui("nothing")) : "-");
 }
 
 /* Buying: the next locked tier, weaknesses then loot, of a met creature. */
@@ -323,7 +332,7 @@ int pe_bestiary_buy(int h) {
         pe_col_say("Information available; save the game to keep this purchase");return 1;
     }
     if (!pe_col_spend(price)) {
-        snprintf(msg, sizeof msg, "Need %u Junk (have %u)", price, pe_col_junk());
+        snprintf(msg, sizeof msg, pe_l10n_ui("Need %u Junk (have %u)"), price, pe_col_junk());
         pe_col_say(msg);
         return 0;
     }
@@ -344,7 +353,7 @@ static void pe_buy_label(char *out, unsigned size) {
     unsigned bit = 0;
     const unsigned price = h >= 0 ? pe_bestiary_next_price(h, &bit) : 0;
     if (!bit) snprintf(out, size, "Complete");
-    else snprintf(out, size, "%s for %u Junk (have %u)", bit == PE_BESTIARY_WEAK ? "Weaknesses" : "Loot", price, pe_col_junk());
+    else snprintf(out, size, "%s for %u Junk (have %u)", bit == PE_BESTIARY_WEAK ? "Weaknesses" : pe_l10n_ui("Loot"), price, pe_col_junk());
 }
 
 static void pe_progress(char *out, unsigned size) {
@@ -395,14 +404,14 @@ static int pe_test(void) { return pe_valid(s_test) ? s_test : -1; }
 static unsigned pe_test_count(void) { return s_creatures ? (unsigned)s_creatures : 1u; }
 static const char *pe_test_name(unsigned i) {
     const PeCreatureInfo *c = pe_info((int)i);
-    if (!c) return "None";
-    snprintf(s_test_name, sizeof s_test_name, "%s%s  (%u/%d)", c->ex ? "EX " : "", c->name, i + 1, s_creatures);
+    if (!c) return pe_l10n_ui("None");
+    snprintf(s_test_name, sizeof s_test_name, "%s%s  (%u/%d)", c->ex ? "EX " : "", pe_l10n_ui(c->name), i + 1, s_creatures);
     return s_test_name;
 }
 
 static void pe_tiers(char *out, unsigned size, unsigned bits) {
     snprintf(out, size, "%s%s%s%s", bits & PE_BESTIARY_MET ? "met " : "", bits & PE_BESTIARY_WEAK ? "weak " : "",
-             bits & PE_BESTIARY_LOOT ? "loot" : "", bits ? "" : "none");
+             bits & PE_BESTIARY_LOOT ? pe_l10n_ui("loot") : "", bits ? "" : pe_l10n_ui("none"));
 }
 
 static void pe_test_state(char *out, unsigned size) {
@@ -498,3 +507,12 @@ void pe_bestiary_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_battle, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_SPELL, pe_on_spell, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_collection.h"
+int pe_bestiary_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){
+if(s_checkpoint_epoch==UINT32_MAX)return 0;if(apply&&(!in||!pe_bestiary_checkpoint_walk(in,0,0)))return 0;
+PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_creatures,0,PE_MAX_CREATURES,1);PE_CK_S(w,s_maps,0,PE_MAX_MAPPINGS,1);PE_CK_S(w,s_resolvers,0,PE_MAX_RESOLVERS,1);PE_CK_S(w,s_event,-1,INT_MAX,1);
+for(unsigned i=0;i<PE_ENEMY_SLOTS;i++){PE_CK_S(w,s_slot[i].tracking,0,1,0);PE_CK_U(w,s_slot[i].entity_id,0,255,0);PE_CK_U(w,s_slot[i].identity,0,65535,0);PE_CK_S(w,s_slot[i].hp,INT_MIN,INT_MAX,0);}return w.ok&&w.at==132;
+}
+#endif

@@ -168,3 +168,9 @@ void pe_move_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_ACTOR_STEP, pe_on_actor_step, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_MOVE, pe_on_player_move, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_qol.h"
+int pe_move_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||0)return 0;if(apply&&(!in||!pe_move_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_always_run,0,1,1);PE_CK_U(w,s_run_choice,0,7,1);PE_CK_U(w,s_walk_choice,0,7,1);PE_CK_U(w,s_combat_choice,0,7,1);PE_CK_U(w,s_entry_choice,0,4,1);return w.ok&&w.at==20u;}
+#endif

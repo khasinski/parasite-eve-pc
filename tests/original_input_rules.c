@@ -276,6 +276,7 @@ static void TestUserCardMigration(void) {
         char directory[4096]; snprintf(directory, sizeof(directory), "%s/bu%u0", root, port);
         HostCardImport imported = {.ok = 1};
         assert(SDL_EnumerateDirectory(directory, Host_ImportCard, &imported) && imported.ok && imported.count == 0);
+        assert(imported.kept == 1); SDL_free(imported.added);
         size_t size; void *contents = SDL_LoadFile(target, &size);
         assert(contents && size == sizeof(newer) && !memcmp(contents, newer, size)); SDL_free(contents);
         /* Source remains intact. A deleted imported save must stay deleted. */
@@ -306,6 +307,101 @@ static void TestUserCardMigration(void) {
     snprintf(host_options.user_file, sizeof(host_options.user_file), "%s", prefs);
     Psyz_AdjustPathCB(NULL);
     puts("PASS: both legacy cards imported once, originals retained, UTF-8/long user paths read and enumerated");
+}
+
+static void TestSaveFixture(const char *path, unsigned char fill) {
+    unsigned char data[8192]; memset(data, fill, sizeof(data));
+    assert(SDL_SaveFile(path, data, sizeof(data)));
+}
+
+static int TestFileHasFill(const char *path, unsigned char fill) {
+    size_t size; unsigned char *contents = SDL_LoadFile(path, &size);
+    int same = contents && size == 8192 && contents[0] == fill && contents[8191] == fill;
+    SDL_free(contents);
+    return same;
+}
+
+/* Prepare a launch folder with an empty legacy bu00 and its own user folder. */
+static void TestCardRoot(char *root, size_t size, const char *tag) {
+    snprintf(root, size, "%s/%s-%llx", test_directory, tag, (unsigned long long)SDL_GetPerformanceCounter());
+    assert(SDL_CreateDirectory(root));
+    char legacy[4200]; snprintf(legacy, sizeof(legacy), "%s/bu00", root); assert(SDL_CreateDirectory(legacy));
+    snprintf(host_options.user_file, sizeof(host_options.user_file), "%s/user/preferences.toml", root);
+    assert(!TestChdir(root));
+}
+
+static void TestLateCardImport(void) {
+    char *cwd = SDL_GetCurrentDirectory();
+    char prefs[4096], root[4096], legacy[4200], current[4096], marker[4200];
+    snprintf(prefs, sizeof(prefs), "%s", host_options.user_file);
+    TestCardRoot(root, sizeof(root), "late-cards");
+    /* First launch: nothing to import, but the marker is written. */
+    assert(Host_InstallCardPaths(NULL));
+    assert(!Host_CardPath(current, "bu00:*", sizeof(current)));
+    snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(current) - 5, current);
+    SDL_PathInfo info; assert(SDL_GetPathInfo(marker, &info) && info.size > 0);
+    /* A save copied beside the game after that launch is imported at the next one. */
+    snprintf(legacy, sizeof(legacy), "%s/bu00/BASLUS-006620000000A", root);
+    TestSaveFixture(legacy, 0x41);
+    assert(Host_InstallCardPaths(NULL));
+    assert(!Host_CardPath(current, "bu00:BASLUS-006620000000A", sizeof(current)));
+    assert(TestFileHasFill(current, 0x41) && TestFileHasFill(legacy, 0x41));
+    /* Deleted from the current card, it stays deleted. */
+    assert(SDL_RemovePath(current));
+    assert(Host_InstallCardPaths(NULL));
+    assert(!SDL_GetPathInfo(current, &info));
+    /* A legacy save never replaces a current save of the same name. */
+    assert(!Host_CardPath(current, "bu00:BASLUS-006620000001B", sizeof(current)));
+    TestSaveFixture(current, 0x62);
+    snprintf(legacy, sizeof(legacy), "%s/bu00/BASLUS-006620000001B", root);
+    TestSaveFixture(legacy, 0x42);
+    assert(Host_InstallCardPaths(NULL));
+    assert(TestFileHasFill(current, 0x62) && TestFileHasFill(legacy, 0x42));
+    /* A whole card image beside the game is reported, not copied. */
+    snprintf(legacy, sizeof(legacy), "%s/bu00/card.srm", root);
+    assert(SDL_SaveFile(legacy, "x", 1));
+    assert(Host_InstallCardPaths(NULL));
+    assert(!Host_CardPath(current, "bu00:card.srm", sizeof(current)) && !SDL_GetPathInfo(current, &info));
+    size_t size; char *list = SDL_LoadFile(marker, &size);
+    assert(list && strstr(list, "bu00/BASLUS-006620000000A\n") && strstr(list, "bu00/BASLUS-006620000001B\n"));
+    assert(!strstr(list, "card.srm")); SDL_free(list);
+    assert(!TestChdir(cwd)); SDL_free(cwd);
+    snprintf(host_options.user_file, sizeof(host_options.user_file), "%s", prefs);
+    Psyz_AdjustPathCB(NULL);
+    puts("PASS: saves copied after the first launch are imported; deleted ones stay deleted; current saves win");
+}
+
+static void TestOldCardMarker(void) {
+    char *cwd = SDL_GetCurrentDirectory();
+    char prefs[4096], root[4096], legacy[4200], current[4096], marker[4200];
+    snprintf(prefs, sizeof(prefs), "%s", host_options.user_file);
+    TestCardRoot(root, sizeof(root), "old-marker");
+    /* An empty 0.7 marker, written after one legacy save arrived and before another. */
+    snprintf(legacy, sizeof(legacy), "%s/bu00/BASLUS-006620000000A", root);
+    TestSaveFixture(legacy, 0x41);
+    SDL_Delay(50);
+    assert(!Host_CardPath(current, "bu00:*", sizeof(current)));
+    snprintf(marker, sizeof(marker), "%.*s.legacy-imported", (int)strlen(current) - 5, current);
+    assert(SDL_SaveFile(marker, "", 0));
+    SDL_Delay(50);
+    snprintf(legacy, sizeof(legacy), "%s/bu00/BASLUS-006620000001B", root);
+    TestSaveFixture(legacy, 0x42);
+    assert(Host_InstallCardPaths(NULL));
+    SDL_PathInfo info;
+    assert(!Host_CardPath(current, "bu00:BASLUS-006620000000A", sizeof(current)) && !SDL_GetPathInfo(current, &info));
+    assert(!Host_CardPath(current, "bu00:BASLUS-006620000001B", sizeof(current)) && TestFileHasFill(current, 0x42));
+    /* The marker now lists both, so the next launch changes nothing. */
+    size_t size; char *list = SDL_LoadFile(marker, &size);
+    assert(list && !strncmp(list, HOST_CARD_MARKER_HEADER, strlen(HOST_CARD_MARKER_HEADER)));
+    assert(strstr(list, "bu00/BASLUS-006620000000A\n") && strstr(list, "bu00/BASLUS-006620000001B\n"));
+    SDL_free(list);
+    assert(SDL_RemovePath(current));
+    assert(Host_InstallCardPaths(NULL));
+    assert(!SDL_GetPathInfo(current, &info));
+    assert(!TestChdir(cwd)); SDL_free(cwd);
+    snprintf(host_options.user_file, sizeof(host_options.user_file), "%s", prefs);
+    Psyz_AdjustPathCB(NULL);
+    puts("PASS: a 0.7 marker keeps earlier saves handled and imports saves that arrived after it");
 }
 
 static int presents;
@@ -575,6 +671,213 @@ static void PromptAnswers(void) {
     fprintf(stderr, "host-settings: skip-movie question passed\n");
 }
 
+static int SDLCALL DriveScreenshotModal(void *unused) {
+    (void)unused;
+    WaitPanel();
+    SDL_Event text_ev;
+    SDL_zero(text_ev);
+    text_ev.type = SDL_EVENT_TEXT_INPUT;
+    text_ev.text.text = "seam on left door";
+    assert(SDL_PushEvent(&text_ev));
+    Key(SDL_SCANCODE_UP);     /* Note -> Issue tag */
+    Key(SDL_SCANCODE_RIGHT);  /* None -> Background hallucination */
+    Key(SDL_SCANCODE_DOWN);   /* Note */
+    Key(SDL_SCANCODE_DOWN);   /* Auto-upload */
+    Key(SDL_SCANCODE_DOWN);   /* Save */
+    Key(SDL_SCANCODE_RETURN); /* Confirm save */
+    return 0;
+}
+
+static void TestScreenshotFeature(void) {
+    /* 1. Screenshot binding defaults, rebinding, clearing, and TOML persistence. */
+    assert(host_options.keys[HOST_SCREENSHOT_BINDING] == HOST_UNBOUND_KEY);
+    assert(host_options.buttons[HOST_SCREENSHOT_BINDING] == HOST_UNBOUND_BUTTON);
+    assert(host_options.screenshot_auto_upload == 1);
+    assert(host_options.screenshot_upload_url[0] == '\0');
+
+    HostOverlayState bind_state = {
+        .open = 1,
+        .page = OVERLAY_PAGE_CONTROLS,
+        .row = HOST_SCREENSHOT_BINDING + 1,
+        .bind_device = HOST_BIND_KEYBOARD,
+        .capturing_binding = 1
+    };
+    SDL_Event key_ev;
+    SDL_zero(key_ev);
+    key_ev.type = SDL_EVENT_KEY_DOWN;
+    key_ev.key.scancode = SDL_SCANCODE_F12;
+    key_ev.key.down = true;
+    Host_ProcessSettingsEvent(&bind_state, &key_ev, NULL, NULL);
+    assert(!bind_state.capturing_binding);
+    assert(host_options.keys[HOST_SCREENSHOT_BINDING] == SDL_SCANCODE_F12);
+
+    bind_state.bind_device = HOST_BIND_CONTROLLER;
+    bind_state.capturing_binding = 1;
+    SDL_Event pad_ev;
+    SDL_zero(pad_ev);
+    pad_ev.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_MISC1;
+    Host_ProcessSettingsEvent(&bind_state, &pad_ev, NULL, NULL);
+    assert(!bind_state.capturing_binding);
+    assert(host_options.buttons[HOST_SCREENSHOT_BINDING] == SDL_GAMEPAD_BUTTON_MISC1);
+
+    char url_val[] = "\"https://example.invalid/webhook\"";
+    assert(Host_ParseOptionValue("screenshots", "upload_url", url_val));
+    assert(Host_ParseOptionValue("screenshots", "auto_upload", "false"));
+    assert(!strcmp(host_options.screenshot_upload_url, "https://example.invalid/webhook"));
+    assert(host_options.screenshot_auto_upload == 0);
+    assert(Host_SaveOptions());
+
+    host_options.keys[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_KEY;
+    host_options.buttons[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_BUTTON;
+    host_options.screenshot_upload_url[0] = '\0';
+    host_options.screenshot_auto_upload = 1;
+    Host_LoadOptions(host_options.user_file);
+    assert(host_options.keys[HOST_SCREENSHOT_BINDING] == SDL_SCANCODE_F12);
+    assert(host_options.buttons[HOST_SCREENSHOT_BINDING] == SDL_GAMEPAD_BUTTON_MISC1);
+    assert(!strcmp(host_options.screenshot_upload_url, "https://example.invalid/webhook"));
+    assert(host_options.screenshot_auto_upload == 0);
+
+    /* Clear optional Screenshot binding on both keyboard and controller. */
+    bind_state.bind_device = HOST_BIND_KEYBOARD;
+    key_ev.key.scancode = SDL_SCANCODE_DELETE;
+    Host_ProcessSettingsEvent(&bind_state, &key_ev, NULL, NULL);
+    assert(host_options.keys[HOST_SCREENSHOT_BINDING] == HOST_UNBOUND_KEY);
+
+    bind_state.bind_device = HOST_BIND_CONTROLLER;
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_WEST;
+    Host_ProcessSettingsEvent(&bind_state, &pad_ev, NULL, NULL);
+    assert(host_options.buttons[HOST_SCREENSHOT_BINDING] == HOST_UNBOUND_BUTTON);
+    host_options.screenshot_upload_url[0] = '\0';
+    host_options.screenshot_auto_upload = 1;
+    assert(Host_SaveOptions());
+
+    /* 2. Screenshot modal controller OSK & direct text input + surface paint. */
+    HostOverlayState shot = {
+        .open = 1,
+        .row = SCREENSHOT_ROW_NOTE,
+        .dirty = 1,
+        .screenshot = 1
+    };
+    SDL_strlcpy(shot.bg_summary, "Room 102   BG: 0123456789abcdef   Group: 0", sizeof(shot.bg_summary));
+
+    /* Open controller OSK on Note row. */
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    assert(shot.osk_open);
+
+    /* Type 'a' (0,0), move right to 'b' (0,1), type 'b', North (space), 'b', West (backspace). */
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_NORTH;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_WEST;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    assert(!strcmp(shot.note, "ab "));
+
+    /* Append physical keyboard text input as well. */
+    SDL_Event txt;
+    SDL_zero(txt);
+    txt.type = SDL_EVENT_TEXT_INPUT;
+    txt.text.text = "glitch";
+    Host_ProcessSettingsEvent(&shot, &txt, NULL, NULL);
+    assert(!strcmp(shot.note, "ab glitch"));
+
+    /* Paint screenshot overlay with OSK open. */
+    OverlayLayout shot_layout = {0};
+    OverlayComputeStateLayout(&shot, 1280, 720, &shot_layout);
+    OverlaySurface shot_surface = {0};
+    assert(OverlaySurfaceResize(&shot_surface, shot_layout.w, shot_layout.h));
+    OverlayPaintScreenshot(&shot_surface, &shot, &shot_layout);
+    SDL_Surface *shot_img = SDL_CreateSurfaceFrom(
+        shot_surface.w, shot_surface.h, SDL_PIXELFORMAT_RGBA32, shot_surface.pixels, shot_surface.w * 4
+    );
+    assert(shot_img);
+    char shot_bmp[4096];
+    snprintf(shot_bmp, sizeof(shot_bmp), "%s/screenshot-modal.bmp", test_directory);
+    assert(SDL_SaveBMP(shot_img, shot_bmp));
+    SDL_DestroySurface(shot_img);
+    OverlaySurfaceRelease(&shot_surface);
+
+    /* Press Start in OSK -> closes OSK and jumps to Save row; Start again -> saves. */
+    pad_ev.gbutton.button = SDL_GAMEPAD_BUTTON_START;
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    assert(!shot.osk_open && shot.row == SCREENSHOT_ROW_SAVE && shot.open);
+    Host_ProcessSettingsEvent(&shot, &pad_ev, NULL, NULL);
+    assert(!shot.open && shot.save_shot == 1);
+
+    /* 3. End-to-end trigger via bound key, modal interaction, PNG + JSON verification. */
+    host_options.keys[HOST_SCREENSHOT_BINDING] = SDL_SCANCODE_F12;
+    struct GeomFixture {
+        GeomState header;
+        GeomEntry entry;
+        u32 pos[1];
+        u32 uv[2];
+    } geom_fixture;
+    memset(&geom_fixture, 0, sizeof(geom_fixture));
+    geom_fixture.header.entry_count06 = 1;
+    geom_fixture.header.entry_offset = (s32)offsetof(struct GeomFixture, entry);
+    geom_fixture.entry.head.b.flags = 2;
+    geom_fixture.entry.group = 0;
+    geom_fixture.entry.prim_count = 1;
+    geom_fixture.entry.u28.pos_ptr = (s32)(offsetof(struct GeomFixture, pos) - offsetof(struct GeomFixture, entry));
+    geom_fixture.entry.u2C.uv_ptr = (s32)(offsetof(struct GeomFixture, uv) - offsetof(struct GeomFixture, entry));
+    geom_fixture.pos[0] = 0x11223344u;
+    geom_fixture.uv[0] = 0x55667788u;
+    geom_fixture.uv[1] = 0x99aabbccu;
+    g_GeomState = &geom_fixture.header;
+    g_GeomScroll.state.position.groupSelect = 0;
+    Render_PrepareHdBackgrounds();
+    PeBackgroundInfo expected_bg;
+    Render_GetBackgroundInfo(&expected_bg);
+    assert(expected_bg.geometry_key != 0 && expected_bg.active_entry_count == 1);
+    char expected_geom_hex[17], expected_entry_hex[17];
+    snprintf(expected_geom_hex, sizeof(expected_geom_hex), "%016" PRIx64, expected_bg.geometry_key);
+    snprintf(expected_entry_hex, sizeof(expected_entry_hex), "%016" PRIx64, expected_bg.active_entry_keys[0]);
+
+    host_last_screenshot_png[0] = '\0';
+    host_last_screenshot_json[0] = '\0';
+
+    SDL_SetAtomicInt(&panel_ready, 0);
+    SDL_Thread *shot_thread = SDL_CreateThread(DriveScreenshotModal, "screenshot input", NULL);
+    assert(shot_thread);
+    key_ev.key.scancode = SDL_SCANCODE_F12;
+    assert(Host_SettingsEvent(&key_ev));
+    SDL_WaitThread(shot_thread, NULL);
+
+    assert(host_last_screenshot_png[0] != '\0');
+    assert(host_last_screenshot_json[0] != '\0');
+    size_t png_len = 0, json_len = 0;
+    unsigned char *png_data = (unsigned char *)SDL_LoadFile(host_last_screenshot_png, &png_len);
+    char *json_data = (char *)SDL_LoadFile(host_last_screenshot_json, &json_len);
+    static const unsigned char kPngSig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+    assert(png_data && png_len > 8 && !memcmp(png_data, kPngSig, 8));
+    assert(json_data && json_len > 0);
+
+    cJSON *meta = cJSON_ParseWithLength(json_data, json_len);
+    assert(meta);
+    assert(!strcmp(HdString(meta, "issue_tag"), "Background hallucination"));
+    assert(!strcmp(HdString(meta, "note"), "seam on left door"));
+    const cJSON *bg_meta = cJSON_GetObjectItemCaseSensitive(meta, "background");
+    assert(bg_meta);
+    assert(!strcmp(HdString(bg_meta, "hd_geometry_key"), expected_geom_hex));
+    const cJSON *entries_meta = cJSON_GetObjectItemCaseSensitive(bg_meta, "active_entry_keys");
+    assert(cJSON_IsArray(entries_meta) && cJSON_GetArraySize(entries_meta) == 1);
+    assert(!strcmp(cJSON_GetArrayItem(entries_meta, 0)->valuestring, expected_entry_hex));
+
+    cJSON_Delete(meta);
+    SDL_free(png_data);
+    SDL_free(json_data);
+    host_options.keys[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_KEY;
+    g_GeomState = NULL;
+    puts("PASS: screenshot binding, controller OSK, note input, PNG encoding and background ID JSON metadata");
+}
+
 static int SDLCALL ClosePanel(void *unused) {
     (void)unused;
     WaitPanel();
@@ -714,6 +1017,9 @@ int main(int argc, char **argv) {
     snprintf(host_options.user_file, sizeof(host_options.user_file), "%s/preferences.toml", test_directory);
 
     TestUserCardMigration();
+    TestLateCardImport();
+    TestOldCardMarker();
+    snprintf(host_options.user_file, sizeof(host_options.user_file), "%s/preferences.toml", test_directory);
 
     char card_path[4096];
     char expected_card[4096];
@@ -785,7 +1091,49 @@ int main(int argc, char **argv) {
     assert(host_options.widescreen && !host_options.aspect && kGraphics[2].get() == 2);
     kGraphics[2].set(0);
     assert(!host_options.widescreen && !host_options.aspect && kGraphics[2].get() == 0);
-    assert(COUNT_OF(kGraphics) <= OVERLAY_VISIBLE_CONTROLS);
+    assert(COUNT_OF(kGraphics) <= Host_SettingsVisibleSettingCount(HOST_PAGE_GRAPHICS));
+    assert(host_options.frame_interpolation==0);
+    assert(Host_ParseOptionValue("graphics","frame_interpolation",enabled_effect));
+    assert(Host_SaveOptions());host_options.frame_interpolation=0;
+    Host_LoadOptions(host_options.user_file);assert(host_options.frame_interpolation==1);
+    assert(!Host_ParseOptionValue("graphics","frame_interpolation",invalid_effect));
+    assert(kGraphics[7].get==GetFrameInterpolation && kGraphics[7].count==2);
+    host_options.frame_interpolation=0;
+
+    assert(kGraphics[0].get == GetScale && kGraphics[0].count == 5);
+    const unsigned expected_scales[5] = {1, 2, 4, 6, 8};
+    for (int i = 0; i < 5; ++i) {
+        kGraphics[0].set(i);
+        assert(host_options.scale == expected_scales[i] && kGraphics[0].get() == i);
+    }
+    char odd_scale[] = "5";
+    assert(Host_ParseOptionValue("graphics", "internal_resolution", odd_scale));
+    assert(host_options.scale == 6 && kGraphics[0].get() == 3);
+    kGraphics[0].set(0);
+    assert(host_options.scale == 1);
+
+    assert(host_options.dynamic_lighting == 0);
+    assert(host_options.effect_geometry_correction == 0);
+    assert(Host_ParseOptionValue("graphics", "dynamic_lighting", enabled_effect));
+    assert(Host_ParseOptionValue("graphics", "effect_geometry_correction", enabled_effect));
+    assert(Host_SaveOptions());
+    host_options.dynamic_lighting = host_options.effect_geometry_correction = 0;
+    Host_LoadOptions(host_options.user_file);
+    assert(host_options.dynamic_lighting == 1 &&
+           host_options.effect_geometry_correction == 1);
+    assert(!Host_ParseOptionValue("graphics", "dynamic_lighting", invalid_effect));
+    assert(!Host_ParseOptionValue("graphics", "effect_geometry_correction", invalid_effect));
+    assert(kGraphics[8].get == GetDynamicLighting && kGraphics[8].count == 2 && kGraphics[8].get() == 1);
+    assert(kGraphics[9].get == GetEffectGeometryCorrection && kGraphics[9].count == 2 && kGraphics[9].get() == 1);
+    Host_ApplyOptions(NULL);
+    assert(Psyz_VideoGetDynamicLighting() == 1 &&
+           Psyz_VideoGetEffectGeometryCorrection() == 1);
+    kGraphics[8].set(0);
+    kGraphics[9].set(0);
+    Host_ApplyOptions(NULL);
+    assert(Psyz_VideoGetDynamicLighting() == 0 &&
+           Psyz_VideoGetEffectGeometryCorrection() == 0);
+    assert(Host_SaveOptions());
 
     char invalid[4096];
     snprintf(invalid, sizeof(invalid), "%s/invalid.toml", test_directory);
@@ -1126,6 +1474,7 @@ int main(int argc, char **argv) {
         }
     }
     assert(quits == 1 && !SDL_HasEvent(SDL_EVENT_QUIT));
+    TestScreenshotFeature();
     Psyz_AudioDestroy();
     fprintf(stderr, "host-settings: paused settings completed; checking disc images\n");
     PromptAnswers();

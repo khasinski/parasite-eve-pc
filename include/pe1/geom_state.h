@@ -125,6 +125,7 @@ struct RenderTilePacket;
 void Render_PrepareHdBackgrounds(void);
 void Render_RefreshHdBackgrounds(void);
 int Render_GetHdWidescreenPicture(int *left, int *right);
+void Render_TraceWidescreenMetadata(int buffer_y, unsigned tiles, int left, int right, int hd_available, int hd_left, int hd_right);
 int Render_LoadMeshEntry(GeomEntry *entry, struct RenderTilePacket *buffer, void **end);
 
 
@@ -372,5 +373,19 @@ int Render_SetEntryFlags(int index, int bits);
 
 int Render_TransformPoint(GeomEntry *entry, int x, int y, int depth);
 int Render_ClipPoint(int x, int y, int z);
+
+typedef struct PeBackgroundInfo {
+    uint64_t geometry_key;
+    uint64_t widescreen_key;
+    uint64_t active_entry_keys[16];
+    unsigned active_entry_count;
+    unsigned total_entry_count;
+    unsigned active_group;
+    int disp_x, disp_y;
+    int hd_enabled;
+    const char *hd_pack_path;
+} PeBackgroundInfo;
+
+void Render_GetBackgroundInfo(PeBackgroundInfo *out);
 
 #endif /* PE1_GEOM_STATE_H */

@@ -1,3 +1,4 @@
+#include "pe1/hp_loss_hook.h"
 #include "common.h"
 #include "pe1/akao.h"
 #include "pe1/asset_find.h"
@@ -528,7 +529,7 @@ void Menu_MainUpdate(s32 arg0) {
                                 temp_v1_9 = *temp_s2;
                                 if (!(temp_v1_9 & 0x01000000) && (temp_v1_5->hpAlive > 0)) {
                                     if (!(temp_v1_9 & 0x200)) {
-                                        g_ActiveActor->curHP = (s16) (g_ActiveActor->curHP - temp_v1_5->contactDamage);
+                                        g_ActiveActor->curHP = (s16) (g_ActiveActor->curHP - Pe_FilterCombatHpLoss(g_ActiveActor,(s16)g_ActiveActor->curHP,temp_v1_5->contactDamage,2));
                                     }
                                     {
                                     s32 s2_flags2;

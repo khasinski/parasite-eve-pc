@@ -55,6 +55,20 @@ int Draw_LookupGlyphMetrics(int glyph) {
     return g_ResidentDataPack.bytes[glyph + g_ResidentDataPack.directory.glyphMetrics];
 }
 
+/* The text a PE_HOOK_TEXT_LOOKUP handler gave in place of the last lookup's resident entry, or
+ * NULL. Handlers own that text and end it with FF; copies that bound resident text to the pack
+ * accept it through Text_IsLookupReplacement. */
+static const void *s_TextLookupReplacement;
+
+static void *Text_NoteLookup(void *resident, void *text) {
+    s_TextLookupReplacement = text != resident ? text : NULL;
+    return text;
+}
+
+int Text_IsLookupReplacement(const void *text) {
+    return text && text == s_TextLookupReplacement;
+}
+
 void *Text_LookupTable4(unsigned int index) {
     ResidentDataPack *pack = &g_ResidentDataPack;
     TextTableDirectory *directory;
@@ -68,7 +82,23 @@ void *Text_LookupTable4(unsigned int index) {
     }
 
     offset = table->header.offsets[index];
-    return &table->bytes[offset];
+    void *resident = &table->bytes[offset], *text = resident;
+    PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){4, index, &text}));
+    return Text_NoteLookup(resident, text);
+}
+
+/* Saves keep the edited name as bytes. Providers must avoid pack-local glyph IDs here;
+ * ordinary inventory lookups still receive the translated display name. */
+void *Text_LookupEditableName(unsigned int kind, unsigned int index) {
+    if (kind != 4 && kind != 8) return NULL;
+    ResidentDataPack *pack = &g_ResidentDataPack;
+    TextTableDirectory *directory = (TextTableDirectory *)&pack->bytes[pack->directory.text];
+    unsigned slot = kind == 4 ? 0 : 1;
+    TextOffsetTable *table = (TextOffsetTable *)&directory->bytes[directory->header.tableOffsets[slot]];
+    if (index >= table->header.count) return NULL;
+    void *resident = &table->bytes[table->header.offsets[index]], *text = resident;
+    PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){kind, index, &text, 1}));
+    return Text_NoteLookup(resident, text);
 }
 
 void *Text_LookupTable8(unsigned int index) {
@@ -84,9 +114,9 @@ void *Text_LookupTable8(unsigned int index) {
     }
 
     offset = table->header.offsets[index];
-    void *text = &table->bytes[offset];
+    void *resident = &table->bytes[offset], *text = resident;
     PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){8, index, &text}));
-    return text;
+    return Text_NoteLookup(resident, text);
 }
 
 void *Text_LookupTableC(unsigned int index) {
@@ -102,9 +132,9 @@ void *Text_LookupTableC(unsigned int index) {
     }
 
     offset = table->header.offsets[index];
-    void *text = &table->bytes[offset];
+    void *resident = &table->bytes[offset], *text = resident;
     PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){12, index, &text}));
-    return text;
+    return Text_NoteLookup(resident, text);
 }
 
 void *Text_LookupTable10(unsigned int index) {
@@ -120,7 +150,9 @@ void *Text_LookupTable10(unsigned int index) {
     }
 
     offset = table->header.offsets[index];
-    return &table->bytes[offset];
+    void *resident = &table->bytes[offset], *text = resident;
+    PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){16, index, &text}));
+    return Text_NoteLookup(resident, text);
 }
 
 /* Text-table-3 entry naming the location of map `map`. */
@@ -143,7 +175,9 @@ void *Text_LookupMapLocationText(int map) {
     }
 
     offset = table->header.offsets[index];
-    return &table->bytes[offset];
+    void *resident = &table->bytes[offset], *text = resident;
+    PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){16, (unsigned)index, &text}));
+    return Text_NoteLookup(resident, text);
 }
 
 /* Location name of map `map` (-1 selects name 15); names are NUL-separated. */
@@ -255,6 +289,8 @@ TextboxGlyphSpacing g_TextboxGlyphSpacing[78] = {
     {0,7},{0,7},{0,8},{0,9},{0,5},{0,4},{0,8},{0,5},{0,11},{0,9},{0,7},{0,8},{0,8},
     {0,7},{0,6},{0,5},{0,9},{0,9},{0,11},{0,7},{0,9},{0,6},{0,4},{0,4},{0,7},{0,0},
 };
+const TextboxGlyphSpacing *g_TextboxGlyphWidths = g_TextboxGlyphSpacing;
+unsigned g_TextboxGlyphCount = sizeof(g_TextboxGlyphSpacing) / sizeof(*g_TextboxGlyphSpacing);
 
 /* Original USA per-window escape failure and prohibition messages. */
 u8 g_EscapeFailedTexts[34] = {0xfb,0x19,0x68,0xa0,0x82,0x7f,0xfb,0x0b,0xfb,0x11,0x6b,0x74,0xff,0x00,0x00,0x00,0x00,0x15,0x30,0x38,0x3b,0x34,0x33,0x0f,0x43,0x3e,0x0f,0x34,0x42,0x32,0x30,0x3f,0x34,0xff};

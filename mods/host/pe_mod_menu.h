@@ -62,6 +62,9 @@ int pe_menu_page(const char *sub, const char *description, int order);
 int pe_menu_top_page(const char *page, const char *description, int order);
 #define PE_MENU_MANAGE "Manage mods"   /* the host's page, last on the list */
 
+/* Open an existing page synchronously; unknown pages fall back to Manage mods. */
+int pe_mod_panel_open_page(const char *page);
+
 /* ---- for the panel ---- */
 
 typedef enum PeRowKind {
@@ -105,4 +108,6 @@ void pe_menu_row_value_text(PeMenuRow *row, char *out, unsigned size);
 void pe_menu_row_step(PeMenuRow *row, int direction); /* left/right */
 void pe_menu_row_accept(PeMenuRow *row);              /* Enter */
 
+/* Optional native settings owner, installed only while its modal is open. */
+void pe_mod_panel_set_native_close(void (*close_callback)(void));
 #endif

@@ -73,6 +73,8 @@ pub enum Command {
         #[arg(short, long)]
         slot: Option<usize>,
     },
+    /// Show where the game keeps its memory cards (and old pre-0.7 folders), with save counts
+    Cards,
     /// List all 256 Parasite Eve Item IDs, 32 Weapon/Armor Mods, and 20 Parasite Energy spells
     ListItems {
         /// Optional case-insensitive search filter

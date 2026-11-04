@@ -4,6 +4,7 @@
 #include "pe1/room_drift_pulse.h"
 #include "pe1/room_m023_beacon.h"
 #include "pe1/room_m023_effects.h"
+#include "pe1/particle_augment.h"
 
 /* Drift/pulse sprite for room_m023. The glow strip's anchor is taken into
  * a local pointer first: its address load is what keeps the frame counter
@@ -261,8 +262,10 @@ int RoomM023_JointGlow(int mode, void *data, intptr_t argument) {
             kind = g_FieldFxSpriteParams.palette;
             palette = g_FieldFxPaletteTable[kind];
             if (kind == 4 && g_FieldFxAltPaletteFlag) palette += 4;
+            FieldFx_BeginAuthoredFlareGlow(118,position.x,position.y,position.z,(unsigned)g_FieldFxCurrentAge,(unsigned)glow->joint);
             FieldFx_DrawShapeQuads(&position, &rotation, size * 3 / 2, size * 3 / 2, 0x80,
                           GetClut(0x30, palette), 1, intensity / ((g_FieldFxCurrentAge & 1) + 1), 0);
+            FieldFx_EndAuthoredFlareGlow();
         }
         {
             kind = g_FieldFxSpriteParams.palette;

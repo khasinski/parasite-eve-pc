@@ -1,3 +1,6 @@
+#ifdef PE_PS5_GPU_NATIVE
+#include <psyz/video.h>
+#endif
 #include "pe1/display_env.h"
 #include "pe1/psyq_gpu.h"
 #include "pe1/gpu_image.h"
@@ -29,6 +32,9 @@ void MENUCARD_RESET_DISPLAY_STATE_NAME(void) {
     MemcardRect rect;
 
     MenuCard_StopMovieAudio();
+#ifdef PE_PS5_GPU_NATIVE
+    Psyz_VideoSetMovieActive(0);
+#endif
     active = &g_DrawEnabled.bits;
     if (*active != 0) {
         MENUCARD_DISPLAY_PTR0 = 0;
@@ -63,6 +69,10 @@ void MENUCARD_RESET_DISPLAY_STATE_NAME(void) {
             rect.h = 0x40;
             MoveImage(&rect, 0, 0x1C0);
         }
+#ifdef PE_PS5_GPU_NATIVE
+        /* Retain movie presentation through the old-display VSync above. */
+        Psyz_VideoMovieRestoreReady();
+#endif
     }
 }
 

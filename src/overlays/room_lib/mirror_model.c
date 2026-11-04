@@ -119,6 +119,13 @@ void RoomEffect_MirrorNoOp6(void) {}
 
 void RoomEffect_ModelBind(FieldActor *actor, FieldActor *owner, int x0, int z0, int x1, int z1)
 {
+    /* M319's script gives Aya's reflection a line tilted about 2.5 degrees
+     * (z -902 to -1004) in front of a straight painted mirror, so her
+     * reflection slides sideways the further she stands from it. Straighten
+     * it at its middle depth; no other room uses this line. */
+    if (x0 == 1123 && z0 == -902 && x1 == -1169 && z1 == -1004) {
+        z0 = z1 = -953;
+    }
     actor->render_object.animation_state = 5;
     actor->render_object.reflection_owner = owner;
     actor->mirror_line.x0 = (u16)x0;

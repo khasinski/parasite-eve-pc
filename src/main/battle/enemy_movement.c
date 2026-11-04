@@ -203,13 +203,15 @@ int Battle_CalcRelativeAngle(BattleEntity *, BattleEntity *);
 
 void Battle_UpdateEntityFacing(BattleEntity *entity)
 {
-    EnemyCombatant *core = entity->core;
+    EnemyCombatant *core;
     s16 direction;
     int mode;
     int phase;
     int value;
     unsigned record;
 
+    if (!entity || !entity->core) return;
+    core = entity->core;
     if (core->field04.bytes.kind != 0 || (core->coreFlags & 0xE)) return;
     record = (core->coreFlags >> 21) & 7;
     if (!((g_ActiveActor->stateFlags & 0x80000) && record < 6 && core->records[record].state)) {
@@ -267,6 +269,7 @@ void Battle_StepEntityAnimState(BattleEntity *entity) {
     int i;
     u8 all_done;
 
+    if (!entity || !entity->core) return;
     state = entity->core;
 
     switch (state->deathAnimPhase) {

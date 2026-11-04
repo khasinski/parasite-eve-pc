@@ -1,0 +1,50 @@
+name: localization
+
+# Checks and builds every submitted language from the committed source manifest (no discs, no
+# game text): localization/translations/*.csv and localization/pilots/*.csv. The packs and the
+# compiler's reports are kept as a build artifact. With the DISCORD_WEBHOOK_LOCALIZATION secret
+# set, a push also posts the summary and the packs to that Discord channel (pull requests from
+# forks get no secrets, so they only get the artifact).
+
+on:
+  push:
+    paths: [ "localization/**", ".github/workflows/localization.yml" ]
+  pull_request:
+    paths: [ "localization/**", ".github/workflows/localization.yml" ]
+
+jobs:
+  translations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compiler tests
+        run: python -I -m unittest discover -s localization/tests
+      - name: Check and build the languages
+        id: build
+        run: |
+          set +e
+          python -I localization/check_translations.py --out out/ci
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat out/ci/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: language-packs
+          path: out/ci/
+      - name: Post to Discord
+        if: github.event_name == 'push' && env.WEBHOOK != ''
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_LOCALIZATION }}
+        run: |
+          msg=$(printf 'Language packs for `%s` (%s):\n%s' "${GITHUB_REF_NAME}" "${GITHUB_SHA::9}" "$(cat out/ci/summary.md)")
+          args=(-F "payload_json=$(jq -n --arg c "${msg:0:1900}" '{content: $c}')")
+          i=0
+          for f in out/ci/*.pelang out/ci/*.txt; do args+=(-F "files[$i]=@$f"); i=$((i+1)); [ $i -ge 10 ] && break; done
+          curl -sS -f "${args[@]}" "$WEBHOOK" > /dev/null
+      - name: Fail on errors
+        if: steps.build.outputs.code != '0'
+        run: |
+          echo "A language has errors: see its report in the language-packs artifact."
+          exit 1

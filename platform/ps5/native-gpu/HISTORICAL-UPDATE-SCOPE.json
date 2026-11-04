@@ -1,0 +1,101 @@
+{
+  "baseReview": "97cd8e121",
+  "originalPins": [
+    {
+      "name": "game",
+      "revision": "8c52cdde5d60ee52f00913517ffb593e9521bf2d",
+      "archive": "game.zip",
+      "archiveSha256": "61e4ecb0fd56a4f7a89cddf40c4ae362c4262f06698828c38d80661587c2b068"
+    },
+    {
+      "name": "psyz",
+      "revision": "db796262b2a696241ec8f3965ebbfbcbc45bfc30",
+      "archive": "psyz.zip",
+      "archiveSha256": "4a639c9dc1305ee4caa2b5efa9c9cf22c0b99d89e414f42d32d2448a57d9d8d8"
+    },
+    {
+      "name": "sdl",
+      "revision": "fa2c02bb6e21974a89ea9824bc53c9932abe5f9c",
+      "archive": "sdl.zip",
+      "archiveSha256": "7b36fe7f802450aa0c98af2e151159c6c8d0e28ea8b0e4356187a21c2d3680a1"
+    }
+  ],
+  "selectedBuild": "widescreen-card-loading-20261031-a1",
+  "selectedEboot": "11fd5508105667c7595186e6a3f1465f2894818d19848deabb65643f5ba70d80",
+  "sourceOutputs": 74,
+  "generatedHeaders": 6,
+  "particleExcluded": {
+    "eboot": "8af7f85c3c08f21a9018a1b4c63c958bb25776158a56ca45b4c9b1b1f4993a5c",
+    "gameChanged": 5,
+    "gameAdded": 6,
+    "files": [
+      {
+        "path": "include/pe1/particle_augment.h",
+        "added": true,
+        "particleSha256": "c035199a0911080addeade51c4a946b073659a35cfedcd7d694fdd5c742d41a8"
+      },
+      {
+        "path": "src/main/boot/frame_loop.c",
+        "added": false,
+        "particleSha256": "bfcd35cc3005a85012c293fb7263a1caafbf11d9fed3b2cf9c70bb4ada97aeee"
+      },
+      {
+        "path": "src/main/boot/main.c",
+        "added": false,
+        "particleSha256": "8dff3eb08fe36b2c7bf929acfde6a8d80f71422571eaba4aeb75b3c24d0c0424"
+      },
+      {
+        "path": "src/main/boot/settings_overlay.h",
+        "added": false,
+        "particleSha256": "d922af740ce3bbc88c6c8cc67ebba0697c406aa230be9441bff21b7453aecd7d"
+      },
+      {
+        "path": "src/main/draw/frame.c",
+        "added": false,
+        "particleSha256": "e3c265168d10a94d82d0301836ac3a7be512cf27ddc4c12c54952c3ce69c3569"
+      },
+      {
+        "path": "src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.c",
+        "added": true,
+        "particleSha256": "89ca8cc0f0ab067b9a82355df2b10cba4aaab31f2efc20fb39daa7ddfe8f6a9c"
+      },
+      {
+        "path": "src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.h",
+        "added": true,
+        "particleSha256": "6e05828b49337962bc96ee3917f1ad99a39e6696475df57027d8630884fc7034"
+      },
+      {
+        "path": "src/main/fieldfx/particle_mesh/pe_falling_sprite_adapter.c",
+        "added": true,
+        "particleSha256": "ad65aa50cf4c2a038c965710de95979de792395fa537a3e4631821fa575f20d1"
+      },
+      {
+        "path": "src/main/fieldfx/particle_mesh/pe_particle_project.h",
+        "added": true,
+        "particleSha256": "196ad4252b838df7af8f6c366493b405f56372513ed35ba2a1bb5817455c81b5"
+      },
+      {
+        "path": "src/main/fieldfx/particle_mesh/pe_particle_render.c",
+        "added": true,
+        "particleSha256": "53c2cd95983f481c9a0ae1bd1c357798322ca229048cc03c2f829654c53c89eb"
+      },
+      {
+        "path": "src/main/fieldfx/sprite_effects.c",
+        "added": false,
+        "particleSha256": "170dfeea418ec0cb2448c84dabf6a9bceb469f03727a1fefdf5f6c6b618dcdf8"
+      }
+    ],
+    "reason": "Independent optional particle scope; do not mix into committed-aspect/card export"
+  },
+  "otherExcluded": [
+    "CRT filter experiment",
+    "G11/G12/G13 investigation",
+    "G07/G16 shader ABI gate",
+    "private packs/assets/saves/credentials",
+    "compiled SDK/dependency/game artifacts",
+    "metadata-restoration operation",
+    "upstream PR403 action"
+  ],
+  "historicalGameLinkEvidence": "Selected11FD previously linked; now separately one full fresh public recipe build and native import/runtime audits pass (BUILD-PROOF.json).",
+  "newEvidence": "Fresh original-pin apply,74source/sixgeneratedheader exact hashes,11inputtrees verified, full fresh native SDK build ELF B63669986087FA4178BEA998A6498A84456D49F8A610DF3060FAAC750BA9CE3B; no target execution"
+}

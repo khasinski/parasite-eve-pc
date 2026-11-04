@@ -10,6 +10,7 @@
 #include "pe_game.h"
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_panacea.h"
@@ -26,6 +27,7 @@
 
 void Menu_ContextPick(int row);   /* lists.c: draws one of the game's action rows */
 void Inv_SelectActiveList(int list);
+void Inv_RebuildSelectableMask(void);
 
 static const struct { int first, second, result; const char *name; } s_recipes[] = {
     {ITEM_MEDICINE_1, ITEM_MEDICINE_1, ITEM_MEDICINE_2, "2 Medicine 1 into Medicine 2"},
@@ -35,10 +37,43 @@ static const struct { int first, second, result; const char *name; } s_recipes[]
 };
 static int s_recipe, s_armed = -1;
 static s16 s_bag[50];
+static uint8_t snapshot_stacks[50];
 static char s_result[96];
 
 static unsigned pe_recipe_count(void) { return g_pe_panacea ? 4 : 3; }
 static const char *pe_recipe_name(unsigned i) { return i < pe_recipe_count() ? s_recipes[i].name : "None"; }
+
+static int pe_slot_count(int slot) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
+    if (stacks && stacks->count) return stacks->count(0, slot);
+    return (slot >= 0 && slot < 50 && g_AyaInventoryItems[slot] > 0) ? 1 : 0;
+}
+
+static int pe_can_place_result(int a, int b, int result) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
+    int limit = Inv_GetAyaSlotLimit();
+    if (limit > 50) limit = 50;
+    if (a == b ? pe_slot_count(a) == 2 : (pe_slot_count(a) == 1 || pe_slot_count(b) == 1))
+        return 1;
+    if (stacks && stacks->can_add) return stacks->can_add(0, (uint16_t)result);
+    for (int i = 0; i < limit; ++i)
+        if (!g_AyaInventoryItems[i]) return 1;
+    return 0;
+}
+
+static void pe_apply_combine(int a, int b, int result) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
+    if (stacks && stacks->take && stacks->add) {
+        int prefer;
+        stacks->take(0, a);
+        stacks->take(0, b);
+        prefer = !g_AyaInventoryItems[a] ? a : b;
+        stacks->add(0, (uint16_t)result, prefer);
+    } else {
+        g_AyaInventoryItems[a] = (s16)result;
+        if (b != a) g_AyaInventoryItems[b] = 0;
+    }
+}
 
 static int pe_pair(int *a, int *b) {
     int limit = Inv_GetAyaSlotLimit();
@@ -47,15 +82,29 @@ static int pe_pair(int *a, int *b) {
     if (limit > 50) limit = 50;
     for (int i = 0; i < limit; ++i) {
         int item = g_AyaInventoryItems[i];
-        if (*a < 0 && item == s_recipes[s_recipe].first) *a = i;
-        else if (*b < 0 && item == s_recipes[s_recipe].second) *b = i;
+        if (*a < 0 && item == s_recipes[s_recipe].first) {
+            *a = i;
+            if (*b < 0 && item == s_recipes[s_recipe].second && pe_slot_count(i) >= 2)
+                *b = i;
+        } else if (*b < 0 && item == s_recipes[s_recipe].second) {
+            *b = i;
+        }
     }
-    return *a >= 0 && *b >= 0;
+    return *a >= 0 && *b >= 0 && pe_can_place_result(*a, *b, s_recipes[s_recipe].result);
 }
 
 static void pe_result(const char *text) {
     snprintf(s_result, sizeof s_result, "%s", text);
     pe_toast(text);
+}
+
+static int pe_bag_stacks_same(const s16 *snapshot) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
+    if (!stacks || !stacks->count) return memcmp(snapshot, g_AyaInventoryItems, sizeof s_bag) == 0;
+    if (memcmp(snapshot, g_AyaInventoryItems, sizeof s_bag) != 0) return 0;
+    for (int i = 0; i < (int)(sizeof s_bag / sizeof s_bag[0]); ++i)
+        if (g_AyaInventoryItems[i] > 0 && stacks->count(0, i) != snapshot_stacks[i]) return 0;
+    return 1;
 }
 
 static void pe_combine(void) {
@@ -66,15 +115,19 @@ static void pe_combine(void) {
     }
     if (!junk || !junk->enabled()) { s_armed = -1; pe_result("Turn on Junk economy to combine items"); return; }
     if (!pe_pair(&a, &b)) { s_armed = -1; pe_result("The ingredients must be in Aya's bag"); return; }
-    if (s_armed != s_recipe || memcmp(s_bag, g_AyaInventoryItems, sizeof s_bag)) {
+    if (s_armed != s_recipe || !pe_bag_stacks_same(s_bag)) {
         s_armed = s_recipe;
         memcpy(s_bag, g_AyaInventoryItems, sizeof s_bag);
+        {
+            const PeStacksApi *stacks = pe_service_get("stacks", 1);
+            for (int i = 0; i < (int)(sizeof s_bag / sizeof s_bag[0]); ++i)
+                snapshot_stacks[i] = stacks && stacks->count ? stacks->count(0, i) : 0;
+        }
         pe_result("Press Combine again to consume the two ingredients");
         return;
     }
     s_armed = -1;
-    g_AyaInventoryItems[a] = s_recipes[s_recipe].result;
-    g_AyaInventoryItems[b] = 0;
+    pe_apply_combine(a, b, s_recipes[s_recipe].result);
     pe_log("combine", "from=0x%02X into=0x%02X", s_recipes[s_recipe].first, s_recipes[s_recipe].result);
     pe_result(s_recipe == 3 ? "Combined into Panacea" : s_recipe == 2 ? "Combined into Medicine 4" :
               s_recipe == 1 ? "Combined into Medicine 3" : "Combined into Medicine 2");
@@ -101,8 +154,17 @@ static int pe_partner(int slot, int *result) {
         if (item == s_recipes[r].first) partner = s_recipes[r].second;
         else if (item == s_recipes[r].second) partner = s_recipes[r].first;
         else continue;
+        if (partner == item && pe_slot_count(slot) >= 2 &&
+            pe_can_place_result(slot, slot, s_recipes[r].result)) {
+            *result = s_recipes[r].result;
+            return slot;
+        }
         for (i = 0; i < limit; ++i)
-            if (i != slot && g_AyaInventoryItems[i] == partner) { *result = s_recipes[r].result; return i; }
+            if (i != slot && g_AyaInventoryItems[i] == partner &&
+                pe_can_place_result(slot, i, s_recipes[r].result)) {
+                *result = s_recipes[r].result;
+                return i;
+            }
     }
     return -1;
 }
@@ -146,11 +208,11 @@ static int pe_menu_step(MenuWidgetNode *panel, unsigned int flags) {
     other = pe_partner(s_menu_slot, &result);
     if (other < 0 || other != s_menu_partner || result != s_menu_result) { Menu_PlayErrorSound(); return 1; }
     pe_log("combine", "from=0x%02X into=0x%02X menu=1", g_AyaInventoryItems[s_menu_slot], result);
-    g_AyaInventoryItems[s_menu_slot] = (s16)result;
-    g_AyaInventoryItems[other] = 0;
+    pe_apply_combine(s_menu_slot, other, result);
+    Inv_RebuildSelectableMask();
     into = result == ITEM_ITEM25 ? "Panacea" : result == ITEM_MEDICINE_4 ? "Medicine 4" :
            result == ITEM_MEDICINE_3 ? "Medicine 3" : "Medicine 2";
-    snprintf(msg, sizeof msg, "Combined into %s", into);
+    snprintf(msg, sizeof msg, pe_l10n_ui("Combined into %s"), into);
     pe_toast(msg);
     MenuWidget_DestroyNode(panel);
     Menu_PlayConfirmSound();
@@ -164,7 +226,7 @@ static int pe_on_item_actions(void *ctx, void *user) {
     (void)user;
     if (!pe_combine_available() || a->context != 0 || a->list_id != 0) return 0;
     if ((partner = pe_partner(a->slot, &result)) < 0) return 0;
-    if (!s_label[0]) pe_text_from_ascii(s_label, sizeof s_label, "Combine");
+    pe_tr_ascii(s_label, sizeof s_label, "Combine");
     s_menu_slot = a->slot;
     s_menu_partner = partner;
     s_menu_result = result;
@@ -177,9 +239,9 @@ static int pe_on_item_actions(void *ctx, void *user) {
 
 static void pe_ingredients(char *out, unsigned size) {
     int a, b;
-    snprintf(out, size, "%s", pe_game_loaded() && pe_pair(&a, &b) ? "Ready" : "Missing ingredients");
+    snprintf(out, size, "%s", pe_game_loaded() && pe_pair(&a, &b) ? pe_l10n_ui("Ready") : pe_l10n_ui("Missing ingredients"));
 }
-static void pe_last_result(char *out, unsigned size) { snprintf(out, size, "%s", s_result[0] ? s_result : "Choose a recipe"); }
+static void pe_last_result(char *out, unsigned size) { snprintf(out, size, "%s", s_result[0] ? s_result : pe_l10n_ui("Choose a recipe")); }
 static void pe_disarm_tick(void) { s_armed = -1; }
 
 void pe_combine_register(const char *mod_id) {
@@ -194,3 +256,11 @@ void pe_combine_register(const char *mod_id) {
     pe_menu_register_action(PE_PAGE_COMBINE, "Combine", "Press twice: consumes two items and gives the result.", pe_combine);
     pe_menu_register_tick(pe_disarm_tick);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_rebalance.h"
+static int pe_rb_combine_idle(void){MenuWidgetNode*n=g_MenuWidgetActiveListHead;unsigned visited=0;while(n&&n!=&g_MenuWidgetNodePoolSentinel){unsigned role=24;for(unsigned i=0;i<23;i++)if(n==&g_MenuWidgetNodePool[i]){role=i;break;}if(role==24||(visited&(1u<<role)))return 0;visited|=1u<<role;if(n->draw==pe_menu_draw||n->update==pe_menu_step)return 0;n=n->next;}return 1;}
+int pe_rb_combine_walk(const unsigned char*in,unsigned char*out,int apply){if((!in&&!out)||(!pe_rb_combine_idle()))return 0;if(apply&&(!in||!pe_rb_combine_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_S(w,s_menu_row,0,1,1);PE_CK_S(w,s_recipe,0,3,0);PE_CK_S(w,s_armed,-1,3,0);for(unsigned i=0;i<50;i++)PE_CK_S(w,s_bag[i],INT16_MIN,INT16_MAX,0);PE_CK_S(w,s_menu_slot,0,49,0);PE_CK_S(w,s_menu_partner,0,49,0);PE_CK_S(w,s_menu_result,0,255,0);if(apply&&w.ok){s_result[0]=0;s_label[0]=0;}
+return pe_rb_finish(&w);}
+#endif

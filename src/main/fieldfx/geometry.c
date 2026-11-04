@@ -1,4 +1,8 @@
 #include "common.h"
+#include <math.h>
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/particle_augment.h"
+#endif
 #include "pe1/field_sprite_params.h"
 #include "pe1/field_texture_tables.h"
 #include "pe1/asset_find.h"
@@ -314,6 +318,7 @@ void FieldFx_DrawShapeQuads(GteShortVector *position, GteRotation *rotation,
     }
     gte_ldrotmatrix((const GteMatrixWords *)&matrix);
     gte_ldtransmatrix((const GteMatrixWords *)&matrix);
+    Psyz_GteSetPgxpEffectMode(1);
     vertex = g_FieldFxShapeVertexTable[g_FieldFxSpriteParams.parameter0A];
     i = 0;
     if (i < g_FieldFxStripPacketCounts[g_FieldFxSpriteParams.parameter0A]) {
@@ -359,15 +364,18 @@ void FieldFx_DrawShapeQuads(GteShortVector *position, GteRotation *rotation,
             gte_rtps_command();
             depth -= bias;
             if ((u32)depth < 0x1000) {
-                FieldStripLink link;
-
                 {
                     s16 *p3 = &packet->x3;
                                         gte_stsxy2(p3);
                 }
+#ifdef PE_PS5_GPU_NATIVE
+                FieldFx_LinkFallingOriginal(STRIP_OT(depth),&packet->tag);
+#else
+                FieldStripLink link;
                 packet->tag.address = STRIP_OT(depth)->address;
                 link.tag = &packet->tag;
                 STRIP_OT(depth)->address = link.word;
+#endif
             }
             i++;
             packet++;
@@ -376,6 +384,7 @@ void FieldFx_DrawShapeQuads(GteShortVector *position, GteRotation *rotation,
                 break;
         }
     }
+    Psyz_GteSetPgxpEffectMode(0);
 }
 
 /* Field colour animation: colour-key interpolation and the rotating
@@ -884,6 +893,7 @@ void FieldFx_DrawStarFan(GteShortVector *position, int width, int height, int se
         MulRotMatrix(&matrix);
     gte_ldrotmatrix((const GteMatrixWords *)&matrix);
     gte_ldtransmatrix((const GteMatrixWords *)&matrix);
+    Psyz_GteSetPgxpEffectMode(1);
     SetPolyG3(&template);
     template.r0 = centre.r;
     template.g0 = centre.g;
@@ -930,6 +940,20 @@ void FieldFx_DrawStarFan(GteShortVector *position, int width, int height, int se
             s16 *xy2 = &packet->x2;
             gte_stsxy3(xy0, xy1, xy2);
         }
+        {
+            const double kTwoPi = 6.28318530717958647692;
+            double a0 = kTwoPi * (double)i / (double)segments;
+            double a1 = kTwoPi * (double)(i + 1) / (double)segments;
+            double r0 = (double)radii[i & 1];
+            double r1 = (double)radii[(i + 1) & 1];
+            u32 sxy0, sxy1, sxy2;
+            memcpy(&sxy0, &packet->x0, sizeof(sxy0));
+            memcpy(&sxy1, &packet->x1, sizeof(sxy1));
+            memcpy(&sxy2, &packet->x2, sizeof(sxy2));
+            Psyz_GteProjectFloatVertex(0.0, 0.0, 0.0, &packet->x0, sxy0);
+            Psyz_GteProjectFloatVertex(cos(a0) * r0, sin(a0) * r0, 0.0, &packet->x1, sxy1);
+            Psyz_GteProjectFloatVertex(cos(a1) * r1, sin(a1) * r1, 0.0, &packet->x2, sxy2);
+        }
         gte_cop2_hazard_slot();
         gte_cop2_hazard_slot();
         gte_avsz3_command();
@@ -941,8 +965,10 @@ void FieldFx_DrawStarFan(GteShortVector *position, int width, int height, int se
             *out = z >> 2;
         }
         depth -= bias;
-        if (depth >= 0x1000)
+        if (depth >= 0x1000) {
+            Psyz_GteSetPgxpEffectMode(0);
             return;
+        }
         TILE_OT_ENTRY(ot, table, D_800B0E38.ordering[g_ActiveDrawSlot], depth);
         if (mode != 0xFF) {
             drawMode = (RenderTintMode *)(D_800B0E38.packets[g_ActiveDrawSlot] + g_DrawPacketOffset);
@@ -957,6 +983,7 @@ void FieldFx_DrawStarFan(GteShortVector *position, int width, int height, int se
             TILE_OT_ADDPRIM(ot, packet, link);
         }
     }
+    Psyz_GteSetPgxpEffectMode(0);
 }
 
 /* `segments` quads around `position` between radius `inner` (shaded by
@@ -1036,6 +1063,7 @@ void FieldFx_DrawRingBand(GteShortVector *position, int inner, int outer, int se
     ScaleMatrix(&matrix, &scale);
     gte_ldrotmatrix((const GteMatrixWords *)&matrix);
     gte_ldtransmatrix((const GteMatrixWords *)&matrix);
+    Psyz_GteSetPgxpEffectMode(1);
     SetPolyG4(&template);
     template.r1 = template.r0 = outerColor.r;
     template.g1 = template.g0 = outerColor.g;
@@ -1101,9 +1129,29 @@ void FieldFx_DrawRingBand(GteShortVector *position, int inner, int outer, int se
         gte_cop2_hazard_slot();
         gte_rtps_command();
         depth -= bias;
-        if (depth >= 0x1000)
+        if (depth >= 0x1000) {
+            Psyz_GteSetPgxpEffectMode(0);
             return;
+        }
         gte_stsxy2(&packet->x3);
+        {
+            const double kTwoPi = 6.28318530717958647692;
+            double a0 = kTwoPi * (double)i / (double)segments;
+            double a1 = kTwoPi * (double)(i + 1) / (double)segments;
+            double ca0 = cos(a0), sa0 = sin(a0);
+            double ca1 = cos(a1), sa1 = sin(a1);
+            double r_out = (double)outer;
+            double r_in = (double)inner;
+            u32 sxy0, sxy1, sxy2, sxy3;
+            memcpy(&sxy0, &packet->x0, sizeof(sxy0));
+            memcpy(&sxy1, &packet->x1, sizeof(sxy1));
+            memcpy(&sxy2, &packet->x2, sizeof(sxy2));
+            memcpy(&sxy3, &packet->x3, sizeof(sxy3));
+            Psyz_GteProjectFloatVertex(ca0 * r_out, sa0 * r_out, 0.0, &packet->x0, sxy0);
+            Psyz_GteProjectFloatVertex(ca1 * r_out, sa1 * r_out, 0.0, &packet->x1, sxy1);
+            Psyz_GteProjectFloatVertex(ca0 * r_in, sa0 * r_in, 0.0, &packet->x2, sxy2);
+            Psyz_GteProjectFloatVertex(ca1 * r_in, sa1 * r_in, 0.0, &packet->x3, sxy3);
+        }
         TILE_OT_ENTRY(ot, table, D_800B0E38.ordering[g_ActiveDrawSlot], depth);
         entry = ot.tag;
         if (mode != 0xFF) {
@@ -1119,6 +1167,7 @@ void FieldFx_DrawRingBand(GteShortVector *position, int inner, int outer, int se
             RING_OT_ADDPRIM(entry, packet, link);
         }
     }
+    Psyz_GteSetPgxpEffectMode(0);
 }
 
 /* Triangle with its apex at `position` and a `breadth` wide base `length`
@@ -1178,6 +1227,7 @@ void FieldFx_DrawRotatedTriangle(GteShortVector *position, GteRotation *rotation
         gte_ldrotmatrix(words);
         gte_ldtransmatrix(words);
     }
+    Psyz_GteSetPgxpEffectMode(1);
     gte_ldv3(&corners[0], &corners[1], &corners[2]);
     gte_rtpt_padded();
     SetPolyG3(packet);
@@ -1223,6 +1273,7 @@ void FieldFx_DrawRotatedTriangle(GteShortVector *position, GteRotation *rotation
             }
         }
     }
+    Psyz_GteSetPgxpEffectMode(0);
 }
 
 /* Push the pair (head, tail) onto the `count`-deep history and draw the
@@ -1306,6 +1357,7 @@ void FieldFx_DrawHistoryTrail(GteShortVector *head, GteShortVector *tail, u32 co
     }
     gte_ldrotmatrix(view);
     gte_ldtransmatrix(view);
+    Psyz_GteSetPgxpEffectMode(1);
     for (i = 0; i < count; i++, history++, packet++) {
         if (history[0].head.vector.pad & history[0].tail.vector.pad & history[1].head.vector.pad &
             history[1].tail.vector.pad) {
@@ -1313,6 +1365,7 @@ void FieldFx_DrawHistoryTrail(GteShortVector *head, GteShortVector *tail, u32 co
             gte_rtpt_padded();
             gte_stmac0(&depth);
             if (depth == 0) {
+                Psyz_GteSetPgxpEffectMode(0);
                 return;
             }
             gte_stsxy3(&packet->x0, &packet->x1, &packet->x2);
@@ -1322,6 +1375,7 @@ void FieldFx_DrawHistoryTrail(GteShortVector *head, GteShortVector *tail, u32 co
             gte_stszotz(&depth);
             depth -= bias;
             if (depth >= 0x1000) {
+                Psyz_GteSetPgxpEffectMode(0);
                 return;
             }
             gte_ldv0(&history[1].tail.vector);
@@ -1359,6 +1413,7 @@ void FieldFx_DrawHistoryTrail(GteShortVector *head, GteShortVector *tail, u32 co
             }
         }
     }
+    Psyz_GteSetPgxpEffectMode(0);
 }
 
 /* Full-screen 320x240 tile in `color` scaled by scale/128, linked at
@@ -1583,6 +1638,7 @@ void FieldFx_DrawRotatedQuad(GteShortVector *position, GteRotation *rotation,
         gte_ldrotmatrix(words);
         gte_ldtransmatrix(words);
     }
+    Psyz_GteSetPgxpEffectMode(1);
     gte_ldv3(&corners[0], &corners[1], &corners[2]);
     gte_rtpt_padded();
     if (color0 == 0) {
@@ -1630,6 +1686,7 @@ void FieldFx_DrawRotatedQuad(GteShortVector *position, GteRotation *rotation,
             link_packet((RenderGpuTag *)D_800B0E38.ordering[g_ActiveDrawSlot] + depth, packet);
         }
     }
+    Psyz_GteSetPgxpEffectMode(0);
 }
 
 /* Haloed point at distance `x` from the view origin rotated by `y` about Z.
@@ -1718,6 +1775,7 @@ void FieldFx_DrawGlowLine(GteShortVector *from, GteShortVector *to, u8 *color0,
     g_DrawPacketOffset += sizeof(FieldLineG2Packet);
     glow = (FieldGlowQuadPacket *)(D_800B0E38.packets[g_ActiveDrawSlot] + g_DrawPacketOffset);
     g_DrawPacketOffset += sizeof(FieldGlowQuadPacket);
+    Psyz_GteSetPgxpEffectMode(1);
     gte_ldv0(from);
     gte_cop2_hazard_slot();
     gte_cop2_hazard_slot();
@@ -1737,6 +1795,8 @@ void FieldFx_DrawGlowLine(GteShortVector *from, GteShortVector *to, u8 *color0,
         gte_stszotz(out);
     }
     gte_stsxy2(&line->x0);
+    float fx0 = 0.0f, fy0 = 0.0f, fw0 = 1.0f;
+    int has_p0 = Psyz_GteGetLastPgxpVertex(&fx0, &fy0, &fw0);
     line->tag.length = 4;
     line->code = 0x50;
     gte_ldv0(to);
@@ -1757,6 +1817,8 @@ void FieldFx_DrawGlowLine(GteShortVector *from, GteShortVector *to, u8 *color0,
         gte_stszotz(out);
     }
     gte_stsxy2(&line->x1);
+    float fx1 = 0.0f, fy1 = 0.0f, fw1 = 1.0f;
+    int has_p1 = Psyz_GteGetLastPgxpVertex(&fx1, &fy1, &fw1);
     depth[0] = (int)(depth[0] + depth[1]) / 2 - (u16)g_FieldFxSpriteParams.depth;
     if (depth[0] < 0x1000) {
         TILE_OT_ENTRY(ot, table, D_800B0E38.ordering[g_ActiveDrawSlot], depth[0]);
@@ -1795,6 +1857,30 @@ void FieldFx_DrawGlowLine(GteShortVector *from, GteShortVector *to, u8 *color0,
         glow->y2 = line->y1 + alongY + acrossY;
         glow->x3 = line->x1 + along - across;
         glow->y3 = line->y1 + alongY - acrossY;
+        if (has_p0 && has_p1) {
+            double fdx = (double)(fx1 - fx0);
+            double fdy = (double)(fy1 - fy0);
+            double flen = hypot(fdx, fdy);
+            float f_along = (float)along, f_alongY = (float)alongY;
+            float f_across = (float)across, f_acrossY = (float)acrossY;
+            u32 sxy0, sxy1, sxy2, sxy3;
+            if (flen > 1e-4) {
+                double ux = fdx / flen;
+                double uy = fdy / flen;
+                f_along = (float)(ux * 16.0);
+                f_alongY = (float)(uy * 16.0);
+                f_across = (float)(-uy * 8.0);
+                f_acrossY = (float)(ux * 8.0);
+            }
+            memcpy(&sxy0, &glow->x0, sizeof(sxy0));
+            memcpy(&sxy1, &glow->x1, sizeof(sxy1));
+            memcpy(&sxy2, &glow->x2, sizeof(sxy2));
+            memcpy(&sxy3, &glow->x3, sizeof(sxy3));
+            Psyz_GteStorePgxpVertex(&glow->x0, sxy0, fx0 - f_along + f_across, fy0 - f_alongY + f_acrossY, fw0);
+            Psyz_GteStorePgxpVertex(&glow->x1, sxy1, fx0 - f_along - f_across, fy0 - f_alongY - f_acrossY, fw0);
+            Psyz_GteStorePgxpVertex(&glow->x2, sxy2, fx1 + f_along + f_across, fy1 + f_alongY + f_acrossY, fw1);
+            Psyz_GteStorePgxpVertex(&glow->x3, sxy3, fx1 + f_along - f_across, fy1 + f_alongY - f_acrossY, fw1);
+        }
         glow->u0 = 0x90;
         glow->u2 = 0x90;
         glow->v0 = 0xD0;
@@ -1817,6 +1903,7 @@ void FieldFx_DrawGlowLine(GteShortVector *from, GteShortVector *to, u8 *color0,
         glow->b3 = line->b1;
         link_packet((RenderGpuTag *)D_800B0E38.ordering[g_ActiveDrawSlot] + depth[0], glow);
     }
+    Psyz_GteSetPgxpEffectMode(0);
 }
 
 /* Draw a textured ribbon `width` wide through `count` points: every joint
@@ -1867,6 +1954,7 @@ void FieldFx_DrawTexturedRibbon(GteShortVector *points, s16 count, int width, in
     left.x = -width / 2;
     angles.x = angles.y = 0;
     point = points;
+    Psyz_GteSetPgxpEffectMode(1);
     for (i = 0; i < count; i++) {
         gte_ldrotmatrix(D_800BCFA4.value);
         gte_ldtransmatrix(D_800BCFA4.value);
@@ -1887,6 +1975,7 @@ void FieldFx_DrawTexturedRibbon(GteShortVector *points, s16 count, int width, in
         gte_stszotz(&depth);
         depth -= bias;
         if (depth >= 0x1000) {
+            Psyz_GteSetPgxpEffectMode(0);
             return;
         }
         dx = screen1.x - screen0.x;
@@ -1935,6 +2024,8 @@ void FieldFx_DrawTexturedRibbon(GteShortVector *points, s16 count, int width, in
             link_packet((RenderGpuTag *)D_800B0E38.ordering[g_ActiveDrawSlot] + previousDepth, &packet[-1]);
             packet->p0.word = packet[-1].p2.word;
             packet->p1.word = packet[-1].p3.word;
+            Psyz_GteCopyPgxpSxy(&packet[-1].p2, &packet->p0, packet->p0.word);
+            Psyz_GteCopyPgxpSxy(&packet[-1].p3, &packet->p1, packet->p1.word);
             packet->c0.bytes.rgb[0] = packet->c1.bytes.rgb[0] = color.bytes.rgb[0];
             packet->c0.bytes.rgb[1] = packet->c1.bytes.rgb[1] = color.bytes.rgb[1];
             packet->c0.bytes.rgb[2] = packet->c1.bytes.rgb[2] = color.bytes.rgb[2];
@@ -1964,6 +2055,8 @@ void FieldFx_DrawTexturedRibbon(GteShortVector *points, s16 count, int width, in
             link_packet((RenderGpuTag *)D_800B0E38.ordering[g_ActiveDrawSlot] + previousDepth, &packet[-1]);
             packet->p0.word = packet[-1].p2.word;
             packet->p1.word = packet[-1].p3.word;
+            Psyz_GteCopyPgxpSxy(&packet[-1].p2, &packet->p0, packet->p0.word);
+            Psyz_GteCopyPgxpSxy(&packet[-1].p3, &packet->p1, packet->p1.word);
             packet->c0.bytes.rgb[0] = packet->c1.bytes.rgb[0] = color.bytes.rgb[0];
             packet->c0.bytes.rgb[1] = packet->c1.bytes.rgb[1] = color.bytes.rgb[1];
             packet->c0.bytes.rgb[2] = packet->c1.bytes.rgb[2] = color.bytes.rgb[2];
@@ -1990,6 +2083,7 @@ void FieldFx_DrawTexturedRibbon(GteShortVector *points, s16 count, int width, in
         }
         point++;
     }
+    Psyz_GteSetPgxpEffectMode(0);
 }
 
 void FieldFx_UpdatePointHistory(RenderHistoryPoint *history, s16 count,
@@ -2070,6 +2164,7 @@ void FieldFx_DrawPulledSprite(GteShortVector *position, int scale_x, int scale_y
     }
     gte_ldrotmatrix(D_800BCFA4.value);
     gte_ldtransmatrix(D_800BCFA4.value);
+    Psyz_GteSetPgxpEffectMode(1);
     gte_ldv0(position);
     gte_cop2_hazard_slot();
     gte_cop2_hazard_slot();
@@ -2090,6 +2185,8 @@ void FieldFx_DrawPulledSprite(GteShortVector *position, int scale_x, int scale_y
     packet->v1 = packet->v0 = v;
     packet->u1 = packet->u3 = u + width - 1;
     packet->v2 = packet->v3 = v + height - 1;
+    float fw_ext = (float)width * (float)scale_x / 8192.0f;
+    float fh_ext = (float)height * (float)scale_y / 8192.0f;
     width = width * scale_x / 8192;
     height = height * scale_y / 8192;
     gte_stszotz(&depth);
@@ -2098,15 +2195,33 @@ void FieldFx_DrawPulledSprite(GteShortVector *position, int scale_x, int scale_y
         depth = 14;
     }
     if (depth < 0x1000) {
+        float fx = 0.0f, fy = 0.0f, fw = 1.0f;
+        int has_pgxp;
         gte_stsxy2(&screen);
+        has_pgxp = Psyz_GteGetLastPgxpVertex(&fx, &fy, &fw);
         pull *= 2;
         LoadAverageShort12(&screen, &center, 0x1000 - pull, pull, &screen);
         packet->x0 = packet->x2 = screen.x - width;
         packet->y0 = packet->y1 = screen.y - height;
         packet->x1 = packet->x3 = screen.x + width;
         packet->y2 = packet->y3 = screen.y + height;
+        if (has_pgxp) {
+            float t_pull = (float)pull / 4096.0f;
+            float cx = fx * (1.0f - t_pull) + (float)center.x * t_pull;
+            float cy = fy * (1.0f - t_pull) + (float)center.y * t_pull;
+            u32 sxy0, sxy1, sxy2, sxy3;
+            memcpy(&sxy0, &packet->x0, sizeof(sxy0));
+            memcpy(&sxy1, &packet->x1, sizeof(sxy1));
+            memcpy(&sxy2, &packet->x2, sizeof(sxy2));
+            memcpy(&sxy3, &packet->x3, sizeof(sxy3));
+            Psyz_GteStorePgxpVertex(&packet->x0, sxy0, cx - fw_ext, cy - fh_ext, fw);
+            Psyz_GteStorePgxpVertex(&packet->x1, sxy1, cx + fw_ext, cy - fh_ext, fw);
+            Psyz_GteStorePgxpVertex(&packet->x2, sxy2, cx - fw_ext, cy + fh_ext, fw);
+            Psyz_GteStorePgxpVertex(&packet->x3, sxy3, cx + fw_ext, cy + fh_ext, fw);
+        }
         link_packet(STRIP_OT(depth), packet);
     }
+    Psyz_GteSetPgxpEffectMode(0);
 }
 
 int FieldFx_PlaySoundAtOwner(int arg0, int arg1) {
@@ -2379,6 +2494,7 @@ int FieldFx_DrawTasks(PmSlotHeader *raw)
     g_FieldFxTaskContext = context;
     if (context->flags)
         g_FieldFxAltPaletteFlag = Asset_SearchByKeyType(owner->prefix.asset_type);
+    Psyz_GteSetPgxpEffectMode(1);
     for (i = 0; i < 8; i++, slot++) {
         if (slot->id != 0xFFFF) {
             gte_ldrotmatrix((const GteMatrixWords *)D_800BCFA4.value);
@@ -2390,6 +2506,8 @@ int FieldFx_DrawTasks(PmSlotHeader *raw)
                 FieldFx_DrawCallbackList(slot->end);
         }
     }
+    Psyz_GteSetPgxpEffectMode(0);
+    Psyz_GteClearPgxpMatrix();
     return 0;
 }
 

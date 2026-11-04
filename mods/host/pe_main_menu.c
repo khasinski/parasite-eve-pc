@@ -5,6 +5,7 @@
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe1/inventory_slots.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_dialog.h"
@@ -128,7 +129,7 @@ static int pe_on_row_title(void *ctx, void *user) {
     const PeMainMenuRow *row;
     (void)user;
     if (!pe_is_main_list(current) || !pe_menu_open_here()) return 0;
-    if ((row = pe_row_at(MenuWidget_GridCellIndex(current)))) *text = pe_text_from_ascii(s_row_title, sizeof s_row_title, row->title);
+    if ((row = pe_row_at(MenuWidget_GridCellIndex(current)))) *text = pe_tr_ascii(s_row_title, sizeof s_row_title, row->title);
     return 0;
 }
 
@@ -306,7 +307,7 @@ void pe_confirm(const char *question, int default_yes, void (*answer)(int yes)) 
     g_MenuActionTextBase = 5;                            /* Yes / No */
     MenuWidget_SetCurrentNode(choice);
     choice->cursor_x = default_yes ? 0 : 1;
-    pe_text_from_ascii(g_MenuItemLabelBuffer, sizeof g_MenuItemLabelBuffer, question);
+    pe_tr_ascii(g_MenuItemLabelBuffer, sizeof g_MenuItemLabelBuffer, question);
     g_MenuItemPrimListHandles[0] = 0;
     width = Draw_MeasureTextWidth(g_MenuItemLabelBuffer);
     if (width < 120) width = 120;                        /* the game's layout */
@@ -328,3 +329,7 @@ void pe_main_menu_init(void) {
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_row_title, NULL, PE_PRIORITY_LATE, PE_HOST_ID);
     pe_hook_add(PE_HOOK_MAIN_MENU_ACTION, pe_on_main_action, NULL, PE_PRIORITY_NORMAL, PE_HOST_ID);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+int pe_main_menu_state_empty(void){if(pe_confirm_open())return 0;/* Inactive mods register pages at startup too. Never call row->shown here. */for(int i=0;i<s_row_count;i++)if(pe_mod_active(s_rows[i].mod_id)&&(!s_rows[i].mod_id||(strcmp(s_rows[i].mod_id,"pe_qol")&&strcmp(s_rows[i].mod_id,"pe_economy")&&strcmp(s_rows[i].mod_id,"pe_collection")&&strcmp(s_rows[i].mod_id,"pe_rebalance"))))return 0;return 1;}
+#endif

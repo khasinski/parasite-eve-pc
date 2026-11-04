@@ -1,0 +1,4 @@
+# Text extracted from the player's discs, packs built from it, OCR work files: game data, never committed.
+out/
+*.pelang
+__pycache__/

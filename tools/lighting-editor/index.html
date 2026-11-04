@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Parasite Eve · Lighting Lab</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/vendor/build/three.module.js",
+          "three/addons/": "/vendor/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="mark">PE</span>
+        <div>
+          LIGHTING LAB<small>Original model · room-space lighting</small>
+        </div>
+      </div>
+      <div class="actions">
+        <span id="saveState">Loading…</span
+        ><button id="export">Export JSON</button
+        ><label class="button"
+          >Import JSON<input
+            id="import"
+            type="file"
+            accept="application/json"
+            hidden /></label
+        ><button id="save" class="primary">Save room</button>
+      </div>
+    </header>
+    <div class="workspace">
+      <aside class="sidebar">
+        <section>
+          <h2>Room</h2>
+          <input
+            id="search"
+            placeholder="Search, e.g. M020"
+            aria-label="Search rooms"
+          /><select id="room" aria-label="Room"></select
+          ><label>Camera<select id="view" aria-label="Camera"></select></label>
+          <p id="roomInfo" class="muted"></p>
+        </section>
+        <section>
+          <h2>Aya</h2>
+          <button id="selectAya" class="wide">Select Aya</button
+          ><label class="check"
+            ><input id="place" type="checkbox" checked />Click the floor to
+            place Aya</label
+          >
+          <div class="xyz">
+            <label>X<input id="ayaX" type="number" step="10" /></label
+            ><label>Y<input id="ayaY" type="number" readonly /></label
+            ><label>Z<input id="ayaZ" type="number" step="10" /></label>
+          </div>
+          <label
+            >Rotation <output id="yawLabel">0°</output
+            ><input
+              id="yaw"
+              type="range"
+              min="-180"
+              max="180"
+              value="0" /></label
+          ><button id="center" class="wide">Center on floor mesh</button
+          ><label
+            >Preview<select id="shading">
+              <option value="lit">Relit model</option>
+              <option value="unlit">Texture / color only</option>
+              <option value="normals">Surface normals</option>
+            </select></label
+          >
+        </section>
+        <section>
+          <h2>Ambient light</h2>
+          <div class="row">
+            <input
+              id="ambientColor"
+              type="color"
+              value="#ffffff"
+              aria-label="Ambient color"
+            /><input
+              id="ambientIntensity"
+              type="range"
+              min="0"
+              max="2"
+              step="0.01"
+              value="0.25"
+              aria-label="Ambient intensity"
+            />
+          </div>
+          <label
+            >Exposure<input
+              id="exposure"
+              type="range"
+              min="0.1"
+              max="3"
+              step="0.05"
+              value="1" /></label
+          ><label
+            >Material roughness<input
+              id="roughness"
+              type="range"
+              min="0.05"
+              max="1"
+              step="0.01"
+              value="0.8"
+          /></label>
+        </section>
+        <section>
+          <h2>Preview</h2>
+          <label class="check"
+            ><input id="wire" type="checkbox" checked />Floor mesh</label
+          ><label class="check"
+            ><input id="helpers" type="checkbox" checked />Light positions and
+            axes</label
+          ><button id="screenshot" class="wide">Save game-camera image</button>
+          <p class="muted">
+            The background remains a 2D image. Lights affect Aya only.
+            Coordinates use game units; Y follows the floor height.
+          </p>
+        </section>
+      </aside>
+      <main>
+        <div class="panelhead">
+          <div>
+            <span class="eyebrow">GAME CAMERA</span>
+            <h1 id="roomTitle">Loading room</h1>
+          </div>
+          <span id="meshBadge" class="badge">Original floor mesh</span>
+        </div>
+        <div id="gameArea">
+          <div id="stage">
+            <img id="background" alt="Original room background" /><canvas
+              id="game"
+            ></canvas>
+            <div id="loading">Loading original assets…</div>
+          </div>
+        </div>
+        <footer>
+          <span id="hint"
+            >Click the floor to place Aya. Drag the colored axes to move
+            lights.</span
+          ><span id="coordinates"></span>
+        </footer>
+      </main>
+      <aside class="inspector">
+        <div class="panelhead">
+          <span class="eyebrow">3D WORKSPACE</span
+          ><button id="resetOrbit">Recenter</button>
+        </div>
+        <canvas id="orbit" aria-label="Free 3D view"></canvas>
+        <p class="muted orbitHelp">
+          Drag: orbit · wheel: zoom · right-drag: pan
+        </p>
+        <section>
+          <h2>Lights <span id="lightCount"></span></h2>
+          <div class="row">
+            <button id="addPoint">+ Point</button
+            ><button id="addSpot">+ Spot</button
+            ><button id="addDirectional">+ Directional</button>
+          </div>
+          <div id="lights"></div>
+        </section>
+        <section id="lightEditor" hidden>
+          <div class="row">
+            <h2 id="selectedTitle">Light</h2>
+            <button id="remove" class="danger">Remove</button>
+          </div>
+          <label>Color<input id="lightColor" type="color" /></label
+          ><label
+            >Intensity<input
+              id="lightIntensity"
+              type="range"
+              min="0"
+              max="150"
+              step="0.1"
+          /></label>
+          <div class="xyz">
+            <label>X<input id="lightX" type="number" step="10" /></label
+            ><label>Y<input id="lightY" type="number" step="10" /></label
+            ><label>Z<input id="lightZ" type="number" step="10" /></label>
+          </div>
+          <label
+            >Range (0 = unlimited)<input
+              id="lightRange"
+              type="number"
+              min="0"
+              max="100000"
+              step="50" /></label
+          ><label id="angleRow"
+            >Spot cone angle<input
+              id="lightAngle"
+              type="range"
+              min="1"
+              max="89"
+              step="1"
+          /></label>
+          <div id="targetFields">
+            <label>Light target</label>
+            <div class="xyz">
+              <label>X<input id="targetX" type="number" step="10" /></label
+              ><label>Y<input id="targetY" type="number" step="10" /></label
+              ><label>Z<input id="targetZ" type="number" step="10" /></label>
+            </div>
+          </div>
+          <button id="aim" class="wide">Aim at Aya</button>
+          <p class="muted">
+            Directional and spot lights aim at the last selected position on
+            Aya.
+          </p>
+        </section>
+        <section>
+          <h2>About this experiment</h2>
+          <p class="muted">
+            Original pose, textures and vertex normals. Per-pixel lighting,
+            without shadows on the background. Animated backgrounds show their
+            initial frame. The editor does not change the game or save files.
+          </p>
+          <p id="error" role="alert"></p>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="/editor.js"></script>
+  </body>
+</html>

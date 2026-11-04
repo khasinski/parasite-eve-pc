@@ -1,4 +1,5 @@
 #include "pe1/boot_disc_check.h"
+#include "pe1/dialogue_alpha.h"
 #include "pe1/bounds_check.h"
 #include "pe1/draw_buffers.h"
 #include "pe1/draw_state.h"
@@ -360,6 +361,9 @@ void Draw_SetPresentImage(void *arg0) {
 }
 
 void Draw_SelectBuffer(void) {
+#ifdef PE_PS5_GPU_NATIVE
+    PeMenuFont_Prepare();
+#endif
     int index;
     DrawFrameBuffer *frame;
     u8 *packets;

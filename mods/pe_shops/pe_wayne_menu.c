@@ -24,6 +24,7 @@
 #include "pe_shops.h"
 #include "pe_game.h"
 #include "pe_gametext.h"
+#include "pe_translate.h"
 #include "pe_mod_host.h"
 #include "pe_requisition.h"
 #include "pe1/pad_state.h"
@@ -45,6 +46,7 @@ static struct {
     TextboxEntry *entry;          /* the box we drive */
     u8 *orig_msg;                 /* Wayne's own message */
     u16 orig_y, orig_h, orig_w;   /* his box, before ours grows it by the Workshop row */
+    int junk_option;              /* identified from the original page, before translation */
     int wayne_count;              /* options in Wayne's own menu */
     int hidden;                   /* moved off screen while the Workshop screen is up */
     u16 shown_y;                  /* where it was */
@@ -66,22 +68,71 @@ static int pe_contains(const u8 *b, unsigned n, const char *ascii) {
 
 const u8 *pe_field_wayne_text(void);   /* pe_field_wayne.c: Warner's version of his menu */
 
+/* Wayne's menu is recognised by its English page ("Discard junk", "Hold equipment"). A language
+ * pack (pe_lang) shows another text for that page, so PE_HOOK_TEXT_PAGE notes the page while it
+ * is still the game's (before pe_lang) and the text its box will draw (after every handler). */
+static int s_page_is_wayne;
+static int s_page_junk_option, s_wayne_junk_option = -1;
+static const u8 *s_wayne_page;   /* what a box shows for Wayne's menu page, in whatever language */
+
+static int pe_english_wayne(const u8 *msg) {
+    unsigned n = 0;
+    while (n < PE_GAMETEXT_MAX - 1 && msg[n] != G_END) ++n;
+    return pe_contains(msg, n, "Discard junk") || pe_contains(msg, n, "Hold equipment");
+}
+
+/* Find the hand-in option by its original text. The translated label is never used
+ * as an action identifier, so Junk totals survive any wording in a language pack. */
+static int pe_junk_option(const u8 *msg) {
+    unsigned i = 0, start;
+    int row = 0;
+    while (i + 2 < PE_GAMETEXT_MAX && msg[i] != G_END && !(msg[i] == G_CODE && msg[i + 1] == G_CHOICE)) ++i;
+    if (i + 2 >= PE_GAMETEXT_MAX || msg[i] == G_END) return -1;
+    i += 3;
+    for (start = i; i < PE_GAMETEXT_MAX; ++i) {
+        if (msg[i] != G_NEWLINE && msg[i] != G_END) continue;
+        if (pe_contains(msg + start, i - start, "Discard junk")) return row;
+        if (msg[i] == G_END) break;
+        ++row; start = i + 1;
+    }
+    return -1;
+}
+
+static int pe_on_page_game(void *ctx, void *user) {
+    PeHookTextPage *page = ctx;
+    (void)user;
+    s_page_is_wayne = page->message && *page->message && pe_english_wayne(*page->message);
+    s_page_junk_option = s_page_is_wayne ? pe_junk_option(*page->message) : -1;
+    return 0;
+}
+
+static int pe_on_page_drawn(void *ctx, void *user) {
+    PeHookTextPage *page = ctx;
+    (void)user;
+    if (page->message && s_page_is_wayne) { s_wayne_page = *page->message; s_wayne_junk_option = s_page_junk_option; }
+    else if (page->message && *page->message == s_wayne_page) s_wayne_page = NULL;   /* reused for another page */
+    s_page_is_wayne = 0;
+    return 0;
+}
+
 /* Is `msg` Wayne's menu (or Warner's)? Copies it into s_orig if so. */
 static int pe_is_wayne_menu(const u8 *msg) {
     unsigned n = 0, choice_at = PE_GAMETEXT_MAX;
     int count;
-    const int warner = msg && msg == pe_field_wayne_text();
+    const int known = msg && (msg == pe_field_wayne_text() || msg == s_wayne_page);
     if (!msg || msg == s_buf) return 0;
     while (n < PE_GAMETEXT_MAX - 1 && msg[n] != G_END) {
         if (n >= 2 && msg[n - 2] == G_CODE && msg[n - 1] == G_CHOICE && choice_at == PE_GAMETEXT_MAX) choice_at = n;
         ++n;
     }
     if (choice_at == PE_GAMETEXT_MAX || n >= PE_GAMETEXT_MAX - 1) return 0;
-    if (!warner && !pe_contains(msg, n, "Discard junk") && !pe_contains(msg, n, "Hold equipment")) return 0;
+    if (!known && !pe_english_wayne(msg)) return 0;
     count = msg[choice_at] & 7;
     if (count < 2 || count + 1 > PE_CHOICE_MAX) return 0;    /* room for Workshop */
     memcpy(s_orig, msg, n + 1);
     s_orig_len = n;
+    s_ui.junk_option = pe_junk_option(msg);
+    if (s_ui.junk_option < 0 && msg == s_wayne_page) s_ui.junk_option = s_wayne_junk_option;
     s_ui.wayne_count = count;
     return 1;
 }
@@ -95,18 +146,18 @@ static void pe_build_wayne(PeText *t) {
     for (start = i; i <= s_orig_len; ++i) {
         if (i < s_orig_len && s_orig[i] != G_NEWLINE) continue;
         if (option == s_ui.wayne_count - 1) {           /* his last option is Cancel */
-            pe_t_str(t, "    Workshop");
+            pe_t_ui(t, "    "); pe_t_tr(t, "mod/pe_economy/wayne/workshop", "Workshop", 24);
             pe_t_byte(t, G_NEWLINE);
         }
         for (k = start; k < i; ++k) pe_t_byte(t, s_orig[k]);
-        if (pe_contains(s_orig + start, i - start, "Discard junk")) {
-            pe_t_str(t, " ");
+        if (option == s_ui.junk_option) {
+            pe_t_ui(t, " ");
             pe_t_num(t, (unsigned)pe_shopw_junk());
-            pe_t_str(t, ", ");
+            pe_t_ui(t, ", ");
             pe_t_num(t, pe_wayne_count());
-            pe_t_str(t, "/300");
-            if (pe_shopw_handin_blocked()) pe_t_str(t, " bag full");
-            else if (pe_shopw_wayne_waiting()) pe_t_str(t, " Day 4");
+            pe_t_ui(t, "/300");
+            if (pe_shopw_handin_blocked()) pe_t_tr(t, "mod/pe_economy/wayne/bag-full", " bag full", 24);
+            else if (pe_shopw_wayne_waiting()) pe_t_tr(t, "mod/pe_economy/wayne/day-four", " Day 4", 24);
         }
         if (i < s_orig_len) pe_t_byte(t, G_NEWLINE);
         ++option;
@@ -207,11 +258,23 @@ static int pe_on_reset(void *ctx, void *user) {
     (void)ctx;
     (void)user;
     pe_reset();
+    s_wayne_page = NULL;          /* a new room's bank can load where the last one was */
     return 0;
 }
 
 void pe_wayne_menu_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_TEXTBOXES, pe_on_textboxes, NULL, PE_PRIORITY_NORMAL, mod_id);
+    /* around every other page handler (pe_lang's is EARLY): the game's page, then the drawn one */
+    pe_hook_add(PE_HOOK_TEXT_PAGE, pe_on_page_game, NULL, PE_PRIORITY_EARLY - 100, mod_id);
+    pe_hook_add(PE_HOOK_TEXT_PAGE, pe_on_page_drawn, NULL, PE_PRIORITY_LATE + 100, mod_id);
     pe_hook_add(PE_HOOK_SCENE_START, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_wayne_menu_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||s_ui.shown)return 0;if(apply&&(!in||!pe_wayne_menu_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+
+if(apply&&w.ok){memset(&s_ui,0,sizeof s_ui);s_orig_len=0;memset(s_buf,0,sizeof s_buf);memset(s_orig,0,sizeof s_orig);}return w.ok&&w.at==0u;}
+#endif

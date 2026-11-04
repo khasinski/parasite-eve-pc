@@ -4,6 +4,7 @@
  * Native table lookups supply its name/description to every menu printer. */
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_panacea.h"
 #include "pe1/game_state.h"
@@ -28,8 +29,8 @@ static int pe_panacea_text(void *ctx, void *user) {
     PeHookTextLookup *text = ctx;
     (void)user;
     if (g_pe_panacea && pe_game_loaded() && text->index == ITEM_ITEM25 - 1) {
-        if (text->table == 8) *text->text = s_name;
-        if (text->table == 12) *text->text = s_description;
+        if (text->table == 8) { pe_tr_ascii(s_name,sizeof s_name,"Panacea"); *text->text = s_name; }
+        if (text->table == 12) { pe_tr_ascii(s_description,sizeof s_description,"Restores 400 HP and Cures All Status"); *text->text = s_description; }
     }
     return 0;
 }
@@ -79,3 +80,11 @@ void pe_panacea_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_ITEM_USE, pe_panacea_use, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_TEXT_LOOKUP, pe_panacea_text, NULL, PE_PRIORITY_LATE, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_rebalance.h"
+
+int pe_rb_panacea_walk(const unsigned char*in,unsigned char*out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_rb_panacea_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+ItemDataRecord*base=pe_base_item(ITEM_ITEM25);if(!base)return 0;unsigned role=s_record?1:0;if(s_record&&s_record!=base)return 0;unsigned target=pe_checkpoint_u32(&w,role,0,1,0);PE_CK_S(w,g_pe_panacea,0,1,1);PE_CK_U(w,s_old_flags,0,255,0);PE_CK_U(w,s_old_icon,0,255,0);PE_CK_U(w,s_our_flags,0,255,0);PE_CK_U(w,s_our_icon,0,255,0);unsigned flags=pe_checkpoint_u32(&w,base->flags,0,255,0),icon=pe_checkpoint_u32(&w,base->iconId,0,255,0);if(apply&&w.ok){s_record=target?base:0;base->flags=(u8)flags;base->iconId=(u8)icon;}
+return pe_rb_finish(&w);}
+#endif

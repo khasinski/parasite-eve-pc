@@ -54,6 +54,10 @@ extern u8 g_TextboxDrawnThisFrame;
 
 /* USA has 78 variable-width base glyphs; extended glyphs use fixed cells. */
 extern TextboxGlyphSpacing g_TextboxGlyphSpacing[78];
+/* The spacing the dialogue box draws with: the authored table above, unless a mod points it at a
+ * longer one to draw glyphs past code 77 (codes from g_TextboxGlyphCount on stop the box). */
+extern const TextboxGlyphSpacing *g_TextboxGlyphWidths;
+extern unsigned g_TextboxGlyphCount;
 enum { TEXTBOX_GLYPH_PACKET_CAPACITY = 0x2400 / 28 };
 
 /* The dialogue choice cursor, one texture-page + sprite packet per frame

@@ -5,6 +5,7 @@
 #include "pe_economy.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe1/item_ids.h"
@@ -46,8 +47,8 @@ static int pe_smoke_text(void *ctx, void *user) {
     PeHookTextLookup *text = ctx;
     (void)user;
     if (text->index == ITEM_ITEM24 - 1) {
-        if (text->table == 8) *text->text = s_name;
-        if (text->table == 12) *text->text = s_description;
+        if (text->table == 8) { pe_tr_ascii(s_name,sizeof s_name,"Smoke Grenade"); *text->text = s_name; }
+        if (text->table == 12) { pe_tr_ascii(s_description,sizeof s_description,"Sure Escape from Battle"); *text->text = s_description; }
     }
     return 0;
 }
@@ -60,7 +61,7 @@ static int pe_smoke_use(void *ctx, void *user) {
         /* The game already consumed the item; return it to the freed slot. */
         int slot = pe_empty_slot();
         if (slot >= 0) g_AyaInventoryItems[slot] = ITEM_ITEM24;
-        pe_toast(slot >= 0 ? "Cannot escape. Smoke Grenade returned" : "Cannot escape. No room to return Smoke Grenade");
+        pe_toast(slot >= 0 ? pe_l10n_ui("Cannot escape. Smoke Grenade returned") : pe_l10n_ui("Cannot escape. No room to return Smoke Grenade"));
         return 0;
     }
     g_BattleModeState = 4;
@@ -104,10 +105,10 @@ static void pe_buy_smoke(void) {
 }
 
 static void pe_price_text(char *out, unsigned size) {
-    snprintf(out, size, "%u Junk", (unsigned)pe_loot_price(15));
+    snprintf(out, size, pe_l10n_ui("%u Junk"), (unsigned)pe_loot_price(15));
 }
 static void pe_result_text(char *out, unsigned size) {
-    snprintf(out, size, "%s", s_result[0] ? s_result : "Escape item for ordinary fights");
+    snprintf(out, size, "%s", s_result[0] ? s_result : pe_l10n_ui("Escape item for ordinary fights"));
 }
 
 void pe_smoke_shutdown(void) {
@@ -125,3 +126,17 @@ void pe_smoke_register(const char *mod_id) {
     pe_menu_register_info(PE_PAGE_SMOKE, "Result", "The last purchase result or confirmation.", pe_result_text);
     pe_menu_register_action(PE_PAGE_SMOKE, "Buy Smoke Grenade", "Press twice. Uses Junk and one free bag slot.", pe_buy_smoke);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_smoke_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_smoke_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+ItemDataRecord *base=pe_base_item(ITEM_ITEM24);unsigned role=!s_record?0:s_record==base?1:UINT32_MAX;role=pe_checkpoint_u32(&w,role,0,1,0);if(role&&!base)return 0;
+PE_CK_U(w,s_old_flags,0,255,0);
+PE_CK_U(w,s_our_flags,0,255,0);
+PE_CK_S(w,s_armed_slot,-1,49,0);
+PE_CK_U(w,s_armed_price,0,UINT32_MAX,0);
+unsigned flags=base?base->flags:0;flags=pe_checkpoint_u32(&w,flags,0,255,0);if(!base&&flags)return 0;if(apply&&w.ok){s_record=role?base:NULL;if(base)base->flags=(u8)flags;}
+
+if(apply&&w.ok){memset(s_result,0,sizeof s_result);}return w.ok&&w.at==24u;}
+#endif

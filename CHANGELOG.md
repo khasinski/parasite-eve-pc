@@ -1,6 +1,27 @@
 # Changelog
 
-## Unreleased
+## 0.10
+
+- Added an optional **Screenshot** binding in **Escape → Controls** for keyboard and controller, opening an in-game modal with issue tags, a note field (with an on-screen controller keyboard), PNG + JSON metadata export (including exact background and widescreen IDs) and optional automatic webhook upload.
+- Added an optional **Quick save** mod (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Saves are kept beside the preferences as `quicksave_<slot>.mcd` and include every mod's records; loading restarts the saved room the way a loaded save does. Works in the free field, outside battles, movies and room changes.
+- Added an optional **Cheats** mod (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod writes nothing to the game state.
+- Added a **Hold / Toggle** mode for the speed-up button in **Escape → Controls**.
+- Fixed the **Combine** item action and `F1` recipe shortcut when item stacking (`pe_stacks`) is enabled so stacked ingredients in a single slot can be combined and results merge onto existing stacks.
+- Fixed Tool and Super Tool parameter transfers, Mod Catalog installs, Wayne's Mod Permits and Requisition purchases consuming or miscounting entire stacks when item stacking (`pe_stacks`) is enabled.
+- Integrated open-source PS5 payload build support (`-DPE_PS5_GAME=ON`), native GPU presentation/upscaling options (`-DPE_PS5_GPU_NATIVE=ON`), state snapshots (`src/main/state/`), particle mesh augmentation and `pe_assists` mod support (contributed by @GUMMIBRI in #42).
+
+## 0.9
+
+- Keep the last working graphics resolution when a GPU allocation fails, and show the actual settings in the menu.
+- Recreate Direct3D 12 window buffers safely when switching fullscreen or resizing the window.
+- Added optional 60 Hz interpolated gameplay presentation, dynamic actor lighting and effect geometry PGXP in **Escape → Graphics**.
+- Fixed 1px vertical seams on HD widescreen backgrounds and removed odd internal resolution multipliers (`3x`, `5x`, `7x`) that produced tile seam artifacts.
+- Fixed widescreen background edge detection past black cutouts and straightened Aya's mirror line in the rehearsal room (`M319`).
+- Fixed a battle crash when a delayed hit lands on an already released target.
+- Memory cards: import saves copied beside the game after the first launch, and automatically open the active memory card in the save editor.
+- Redesigned Mod Catalog with native Tune Up panels and independent scrolling, and upgraded the Wardrobe menu with a Bestiary-style browser and 3D previews.
+- Added optional stacked consumables (`pe_stacks`) and story checkpoint Warp menu (`pe_warp`) mods.
+- Added optional language pack support (`pe_lang`) with multilingual fonts, localization build tools and a Latin American Spanish interface pilot.
 
 ## 0.8
 

@@ -1,3 +1,6 @@
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/particle_augment.h"
+#endif
 #include <stdio.h>
 #include "pe1/geom_state.h"
 #include "pe1/battle_runtime.h"
@@ -62,8 +65,15 @@ int FieldFx_FallingSprite(int mode, void *data, intptr_t argument)
         if (g_FieldFxSpriteParams.palette == 4 && g_FieldFxAltPaletteFlag)
             palette += 4;
         clut = GetClut(32, palette);
+#ifdef PE_PS5_GPU_NATIVE
+        FieldFx_BeginFallingOriginal();
+#endif
         FieldFx_DrawShapeQuads(&position, &rotation, scale, scale,
                       (s16)g_FieldFxSpriteParams.parameter02 * (g_FieldFxCurrentAge % 7) + 0xE8, clut, 1, 128, &color);
+#ifdef PE_PS5_GPU_NATIVE
+        FieldFx_EndFallingOriginal();
+        FieldFx_QueueFallingParticle(state,(unsigned)g_FieldFxCurrentAge);
+#endif
         break;
     }
     return 0;

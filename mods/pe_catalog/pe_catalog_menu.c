@@ -11,6 +11,7 @@
 #include "pe_game.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_gametext.h"
 #include "pe1/menu_draw_list.h"
 #include "pe1/menu_scroll_cursor.h"
@@ -81,13 +82,13 @@ static void cat_board_row(int row) {
 }
 static void cat_review_text(int row, char *out, size_t size) {
     int n = s_cat.removed_count ? s_cat.removed_count : 1;
-    if (row==0) snprintf(out,size,"%s",s_cat.ask_effect ? pe_cat_effect_name(s_cat.ask_which,s_cat.ask_effect) : "Remove effect");
-    else if (row==1) snprintf(out,size,"Junk: %u",(unsigned)s_cat.ask_price);
-    else if (row==2) snprintf(out,size,"%s",s_cat.ask_effect && pe_cat_needs_tool(s_cat.ask_which,s_cat.ask_effect) ? "Tool / Kit needed" : "No Tool needed");
-    else if (row==3) snprintf(out,size,"After: %u",(unsigned)(s_cat.ask_junk-s_cat.ask_price));
-    else if (row==4) snprintf(out,size,"Removes:");
-    else if (row<5+n) snprintf(out,size,"%s",s_cat.removed_count ? pe_cat_effect_name(s_cat.ask_which,s_cat.removed[row-5]) : "Nothing");
-    else snprintf(out,size,"X yes/no  O back");
+    if (row==0) snprintf(out,size,"%s",s_cat.ask_effect ? pe_l10n_ui(pe_cat_effect_name(s_cat.ask_which,s_cat.ask_effect)) : pe_l10n_ui("Remove effect"));
+    else if (row==1) snprintf(out,size,pe_l10n_ui("Junk: %u"),(unsigned)s_cat.ask_price);
+    else if (row==2) snprintf(out,size,"%s",s_cat.ask_effect && pe_cat_needs_tool(s_cat.ask_which,s_cat.ask_effect) ? pe_l10n_ui("Tool / Kit needed") : pe_l10n_ui("No Tool needed"));
+    else if (row==3) snprintf(out,size,pe_l10n_ui("After: %u"),(unsigned)(s_cat.ask_junk-s_cat.ask_price));
+    else if (row==4) snprintf(out,size,"%s",pe_l10n_ui("Removes:"));
+    else if (row<5+n) snprintf(out,size,"%s",s_cat.removed_count ? pe_l10n_ui(pe_cat_effect_name(s_cat.ask_which,s_cat.removed[row-5])) : pe_l10n_ui("Nothing"));
+    else snprintf(out,size,"%s",pe_l10n_ui("X yes/no  O back"));
 }
 static void cat_review_row(int row) {
     if(row==0 && s_cat.ask_effect) {
@@ -255,10 +256,10 @@ static int cat_help(void *ctx,void *user) {
         snprintf(line,sizeof line,"????");
     else if (s_cat.result[0]) snprintf(line,sizeof line,"%s",s_cat.result);
     else if (s_cat.review) cat_review_text(node->cursor_y,line,sizeof line);
-    else if (node==s_cat.selector) snprintf(line,sizeof line,"Choose Weapon or Armor / X select");
-    else if (node==s_cat.slots) snprintf(line,sizeof line,"Slot %d: %s",node->cursor_y+1,pe_cat_effect_name(s_cat.which,pe_cat_slot_effect(s_cat.which,node->cursor_y)));
-    else snprintf(line,sizeof line,"%s / Junk %u",cat_effect()?pe_cat_effect_name(s_cat.which,cat_effect()):"Remove effect",(unsigned)pe_catw_junk());
-    pe_text_from_ascii(title,sizeof title,line);
+    else if (node==s_cat.selector) snprintf(line,sizeof line,"%s",pe_l10n_ui("Choose Weapon or Armor / X select"));
+    else if (node==s_cat.slots) snprintf(line,sizeof line,pe_l10n_ui("Slot %d: %s"),node->cursor_y+1,pe_l10n_ui(pe_cat_effect_name(s_cat.which,pe_cat_slot_effect(s_cat.which,node->cursor_y))));
+    else snprintf(line,sizeof line,pe_l10n_ui("%s / Junk %u"),cat_effect()?pe_l10n_ui(pe_cat_effect_name(s_cat.which,cat_effect())):pe_l10n_ui("Remove effect"),(unsigned)pe_catw_junk());
+    pe_tr_ascii(title,sizeof title,line);
     /* The wide title bar is still finite, even with custom names. */
     size_t n=0;while(title[n]!=0xFF)++n;
     if(n>48){n=48;title[n]=0xFF;} /* also bound packets with very narrow replacement fonts */
@@ -278,3 +279,11 @@ void pe_catalog_menu_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_FRAME,cat_frame,NULL,PE_PRIORITY_NORMAL,mod_id);
     pe_hook_add(PE_HOOK_HELP_TEXT,cat_help,NULL,PE_PRIORITY_LATE,mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_catalog_menu_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(s_screen.panel||s_screen.list||s_screen.extras||s_cat.list))return 0;if(apply&&(!in||!pe_catalog_menu_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+
+if(apply&&w.ok){s_screen=(PeScreen){0};memset(&s_cat,0,sizeof s_cat);s_cat.armed=-1;memset(s_title,0,sizeof s_title);memset(s_row_text,0,sizeof s_row_text);}return w.ok&&w.at==0u;}
+#endif

@@ -16,6 +16,7 @@
 #include "pe1/scene_flags.h"
 #include "pe1/script_node.h"
 #include "pe1/script_queue.h"
+#include "pe_actor_texture_pages.h"
 
 /* Original USA per-type integration callbacks (800915DC). */
 FieldActorCallbacks g_FieldActorTypeCallbacks[13] = {
@@ -301,6 +302,8 @@ void Entity_FrameUpdate(void) {
                     Pgxp_StoreModelMatrix(&entity->render_object.model_matrix,
                                           entity->rot_x, entity->rot_y, entity->rot_z,
                                           entity->move_speed);
+                    Pgxp_StoreModelPosition16(&entity->render_object.model_matrix,
+                                             entity->pos_x, entity->pos_y, entity->pos_z);
                 }
             }
         }
@@ -336,6 +339,7 @@ void Entity_FrameUpdate(void) {
                 Render_TransformSkinnedVertices(object, g_EntityRenderScratch);
                 if (!(entity->flags & 0x20000000)) {
                     Render_TransformMorphVertices(object, g_EntityRenderScratch);
+                    PeModelTextures_Actor(entity);
                     Render_DrawEntity(object, g_EntityRenderScratch);
                     if (entity->flags & 0x8800) {
                         entity->render_object.flags_9C |= 1;

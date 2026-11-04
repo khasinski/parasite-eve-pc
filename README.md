@@ -5,7 +5,7 @@
 A native PC port of Parasite Eve, built from the original game code with
 [our PsyZ fork](https://github.com/khasinski/parasite-eve-psyz).
 
-![Parasite Eve running in the native port](docs/images/gameplay.png)
+![Parasite Eve running in the native port](docs/images/gameplay.png?v=3)
 
 ## Play
 
@@ -24,10 +24,12 @@ Keep each CUE file next to its BIN file.
 The game shows download progress and checks the files before installing. Use **2x or higher** in Graphics; the artwork applies immediately.
 You can also [download the pack manually](https://pe.polanka.ovh/).
 
-**Enter** is START and skips movies; in a story movie, START pauses it and asks whether to skip. View or change all bindings in **Escape → Controls**. A **speed** button can be bound there too: the game runs at 2x while it is held, or 3x or 4x with the arrows either side of the number (Left/Right on that row). It is unbound until you choose a key or button, and keeps your VSync setting.
+**Enter** is START and skips movies; in a story movie, START pauses it and asks whether to skip. View or change all bindings in **Escape → Controls**. A **speed** button can be bound there too: the game runs at 2x while it is held, or 3x or 4x with the arrows either side of the number (Left/Right on that row). **Speed button: Toggle** makes each press switch the speed-up on or off instead. It is unbound until you choose a key or button, and keeps your VSync setting.
 The left stick provides analog movement. **Escape → Controls → Field run threshold** sets how far to push it before Aya runs (85% by default).
 Settings and selected disc paths are saved automatically. Memory cards are kept in `memory-cards` beside your user preferences. Older `bu00`/`bu10` cards from the launch or executable folder are imported once, keeping the original files.
 **Escape → Graphics** includes geometry correction, antialiasing, model texture filtering and an optional **Widescreen** aspect ratio. Widescreen shows more of the original background where available; narrow scenes and movies stay in 4:3.
+
+For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.
 
 If the game crashes, it saves a report and shows where to find it. Attach that file when reporting the problem on Discord.
 
@@ -73,6 +75,16 @@ Open **F1 → PE Enhancements** to configure them.
   built from your own disc with the decomp bridge tools and stay hidden until present. Unlocks are
   kept across games in `pe_wardrobe.ini` (imported once from `pe_collection.ini`). Other mods can
   register their own creatures and costumes.
+- **Quick save** (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to
+  the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Files
+  are kept beside the preferences as `quicksave_<slot>.mcd`; loading restarts the saved room the
+  way a loaded save does. Works in the free field, outside battles, movies and room changes.
+- **Cheats** (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle,
+  and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod
+  writes nothing to the game state.
+- **Warp** (`pe_warp`): **F1 → Warp** — jump to any story checkpoint. It sets the story-progress
+  variable and runs the room transfer on the next free field frame, never during a battle, an
+  event, a room change or a movie.
 
 Mod builds are experimental; a passing build or test does not establish full in-game compatibility.
 
@@ -98,6 +110,11 @@ cmake --build build-mods --parallel
 ./build-mods/parasite-eve-pc
 ```
 
-`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe`).
+`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats`).
+
+### PS5 payload & native GPU options
+
+Cross-compilation support for the open-source PS5 payload SDK (`-DPE_PS5_GAME=ON`, producing `parasite-eve-ps5.elf`) and optional extended native GPU / state / assist features (`-DPE_PS5_GPU_NATIVE=ON`) live in [`platform/ps5/`](platform/ps5/) and [`cmake/ps5/`](cmake/ps5/) (contributed by [@GUMMIBRI](https://github.com/GUMMIBRI)).
 
 For development details, see [code organization](docs/CODE_ORGANIZATION.md).
+[Parasite Eve Lighting Lab](tools/lighting-editor/README.md) is a separate desktop tool for experimenting with room lighting. Download it from [Releases](https://github.com/khasinski/parasite-eve-pc/releases). Lighting profiles are not yet used in the game.

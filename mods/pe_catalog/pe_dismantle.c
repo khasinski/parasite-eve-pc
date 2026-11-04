@@ -23,6 +23,7 @@
 #include "pe_catalog.h"
 #include "pe_catalog_mod.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe1/inventory_slots.h"
 
 #define PE_KIND_CLUB       8
@@ -144,7 +145,7 @@ unsigned pe_dismantle_list_count(void) {
 }
 
 const char *pe_dismantle_list_name(unsigned i) {
-    if (!s_dis_count) return "NO UNEQUIPPED GEAR";
+    if (!s_dis_count) return pe_l10n_ui("NO UNEQUIPPED GEAR");
     return i < s_dis_count ? s_dis_names[i] : "";
 }
 
@@ -193,7 +194,7 @@ void pe_dismantle_run(void) {
     payout = pe_dismantle_selected_payout(&unlocks);
     if (s_dis_armed != slot) {                     /* first press: say what happens */
         s_dis_armed = slot;
-        snprintf(msg, sizeof msg, "Dismantle %s: +%u Junk, %d new effect(s). Press again", name, (unsigned)payout, unlocks);
+        snprintf(msg, sizeof msg, pe_l10n_ui("Dismantle %s: +%u Junk, %d new effect(s). Press again"), name, (unsigned)payout, unlocks);
         pe_cat_say(msg);
         return;
     }
@@ -201,7 +202,7 @@ void pe_dismantle_run(void) {
     pe_salvage(rec, which, NULL);
     memset(rec, 0, sizeof *rec);                   /* free the record */
     g_AyaSaveState.inventory_items[slot] = 0;
-    snprintf(msg, sizeof msg, "Dismantled %s: +%u Junk (total %u)", name, (unsigned)payout, (unsigned)pe_catw_junk());
+    snprintf(msg, sizeof msg, pe_l10n_ui("Dismantled %s: +%u Junk (total %u)"), name, (unsigned)payout, (unsigned)pe_catw_junk());
     pe_cat_say(msg);
 }
 
@@ -290,19 +291,19 @@ int pe_rebuild_index(int i, char *msg, size_t msg_size) {
     PeCatalogState *cat = pe_catalog_state();
     PeRebuildEntry r;
     uint32_t price;
-    if (!pe_game_loaded()) { snprintf(msg, msg_size, "Load a game first"); return 0; }
-    if (!pe_catw_enabled()) { snprintf(msg, msg_size, "Junk economy is off"); return 0; }
-    if (i < 0 || i >= cat->rebuild_count) { snprintf(msg, msg_size, "Nothing to rebuild"); return 0; }
+    if (!pe_game_loaded()) { snprintf(msg, msg_size, "%s", pe_l10n_ui("Load a game first")); return 0; }
+    if (!pe_catw_enabled()) { snprintf(msg, msg_size, "%s", pe_l10n_ui("Junk economy is off")); return 0; }
+    if (i < 0 || i >= cat->rebuild_count) { snprintf(msg, msg_size, "%s", pe_l10n_ui("Nothing to rebuild")); return 0; }
     r = cat->rebuild[i];
-    if (r.slots > PE_CAT_MAX_MODS) { snprintf(msg, msg_size, "Saved equipment data is invalid"); return 0; }
+    if (r.slots > PE_CAT_MAX_MODS) { snprintf(msg, msg_size, "%s", pe_l10n_ui("Saved equipment data is invalid")); return 0; }
     price = pe_rebuild_price(&r);
-    if (pe_catw_junk() < price) { snprintf(msg, msg_size, "Need %u Junk (have %u)", (unsigned)price, (unsigned)pe_catw_junk()); return 0; }
-    if (!pe_create_item(r.id, r.slots, r.bonus, NULL, 0)) { snprintf(msg, msg_size, "Bag full"); return 0; }
+    if (pe_catw_junk() < price) { snprintf(msg, msg_size, pe_l10n_ui("Need %u Junk (have %u)"), (unsigned)price, (unsigned)pe_catw_junk()); return 0; }
+    if (!pe_create_item(r.id, r.slots, r.bonus, NULL, 0)) { snprintf(msg, msg_size, "%s", pe_l10n_ui("Bag full")); return 0; }
     pe_catw_spend_junk(price);
     pe_log("rebuild", "item=0x%02X price=%u", r.id, (unsigned)price);
     memmove(&cat->rebuild[i], &cat->rebuild[i + 1], sizeof(PeRebuildEntry) * (size_t)(cat->rebuild_count - i - 1));
     --cat->rebuild_count;
-    snprintf(msg, msg_size, "Rebuilt %s (-%u Junk)", pe_cat_item_name(r.id), (unsigned)price);
+    snprintf(msg, msg_size, pe_l10n_ui("Rebuilt %s (-%u Junk)"), pe_cat_item_name(r.id), (unsigned)price);
     return 1;
 }
 
@@ -312,7 +313,7 @@ unsigned pe_rebuild_list_count(void) {
     for (i = 0; i < cat->rebuild_count; ++i) {
         const unsigned bought = pe_bought_slots(&cat->rebuild[i]);
         if (bought)
-            snprintf(s_rb_names[i], sizeof s_rb_names[0], "%s +%u SLOTS %u", pe_cat_item_name(cat->rebuild[i].id), bought,
+            snprintf(s_rb_names[i], sizeof s_rb_names[0], pe_l10n_ui("%s +%u SLOTS %u"), pe_cat_item_name(cat->rebuild[i].id), bought,
                      (unsigned)pe_rebuild_price(&cat->rebuild[i]));
         else
             snprintf(s_rb_names[i], sizeof s_rb_names[0], "%s %u", pe_cat_item_name(cat->rebuild[i].id),
@@ -322,7 +323,7 @@ unsigned pe_rebuild_list_count(void) {
 }
 
 const char *pe_rebuild_list_name(unsigned i) {
-    if (!pe_rebuild_count()) return "NOTHING DISMANTLED YET";
+    if (!pe_rebuild_count()) return pe_l10n_ui("NOTHING DISMANTLED YET");
     return i < (unsigned)pe_rebuild_count() ? s_rb_names[i] : "";
 }
 
@@ -392,7 +393,7 @@ static int pe_on_tool_transfer(void *ctx, void *user) {
             cat->bits[dest_which] |= 1u << old;
             kept_new = 1;
             if (t->flags & 1) {
-                snprintf(msg, sizeof msg, "%s replaced: kept in the Mod Catalog", pe_cat_effect_name(dest_which, old));
+                snprintf(msg, sizeof msg, pe_l10n_ui("%s replaced: kept in the Mod Catalog"), pe_cat_effect_name(dest_which, old));
                 pe_cat_note(msg);           /* the game's Tool screen is up: no toast */
             }
         }
@@ -408,7 +409,7 @@ static int pe_on_tool_transfer(void *ctx, void *user) {
     payout = pe_salvage_payout(which, bonus_sum, mods, n, &unlocks);
     pe_record_salvage(which, src->itemId, src->tailCount, bonus, mods, n, payout);
     pe_catw_give_junk(payout);
-    snprintf(msg, sizeof msg, "Salvaged %s: +%u Junk, %d new effect(s)", pe_cat_item_name(src->itemId), (unsigned)payout,
+    snprintf(msg, sizeof msg, pe_l10n_ui("Salvaged %s: +%u Junk, %d new effect(s)"), pe_cat_item_name(src->itemId), (unsigned)payout,
              unlocks + kept_new);
     pe_cat_note(msg);           /* the game's Tool screen is up: no toast */
     return 0;
@@ -448,3 +449,16 @@ void pe_dismantle_debug_test_armor(void) {
 void pe_dismantle_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_TOOL_TRANSFER, pe_on_tool_transfer, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_dismantle_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_dismantle_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_S(w,s_dis_choice,-1,49,0);
+for(unsigned i=0;i<50;i++){PE_CK_S(w,s_dis_slots[i],0,49,0);}
+PE_CK_S(w,s_dis_armed,-1,49,0);
+PE_CK_U(w,s_dis_count,0,50,0);
+PE_CK_S(w,s_rb_choice,-1,29,0);
+
+if(apply&&w.ok){memset(s_dis_names,0,sizeof s_dis_names);memset(s_rb_names,0,sizeof s_rb_names);}return w.ok&&w.at==216u;}
+#endif

@@ -1,0 +1,10 @@
+if(NOT PS5 OR NOT CMAKE_CROSSCOMPILING)
+    message(FATAL_ERROR "PE_PS5_PAYLOAD requires the public SDK prospero.cmake toolchain")
+endif()
+if(PE_PS5_BOOTSTRAP)
+    message(FATAL_ERROR "Select only one of PE_PS5_PAYLOAD and PE_PS5_BOOTSTRAP")
+endif()
+add_executable(pe-ps5-io "${CMAKE_CURRENT_LIST_DIR}/../../platform/ps5/payload_io.c")
+set_target_properties(pe-ps5-io PROPERTIES
+    OUTPUT_NAME pe-ps5-io SUFFIX ".elf" C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+target_compile_options(pe-ps5-io PRIVATE -Wall -Wextra -Werror)

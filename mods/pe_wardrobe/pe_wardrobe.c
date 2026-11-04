@@ -29,6 +29,7 @@
 #include "pe_wardrobe.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe1/game_state.h"
@@ -44,6 +45,9 @@ static const PeCostume *s_costume[PE_MAX_COSTUMES];
 static int s_costumes;
 static const PeCostume *s_loaded;      /* the provider costume whose load(1) ran last */
 static int s_event = -1;
+static uint32_t s_checkpoint_epoch=1;
+static void pe_checkpoint_changed(void){if(s_checkpoint_epoch<UINT32_MAX)++s_checkpoint_epoch;}
+
 
 static int pe_gameplay_bank(int b) { return b == 10 || b == 12 || b == 13; }
 
@@ -60,6 +64,7 @@ static int pe_add(const PeCostume *c) {
         pe_mod_log("pe_wardrobe", "wardrobe: costume %s refused", c && c->key ? c->key : "?");
         return -1;
     }
+    pe_checkpoint_changed();
     s_costume[s_costumes] = c;
     return s_costumes++;
 }
@@ -154,7 +159,7 @@ static void pe_set_worn(const PeCostume *c, int now) {
     pe_log("wardrobe", "wear=%s reload=%d", c ? c->key : "own", reload);
     pe_event_emit(s_event, (void *)c);
     if (!now) return;
-    snprintf(msg, sizeof msg, !reload || pe_reload() ? "Wearing %s" : "Wearing %s from the next room", c ? c->name : "Aya's own clothes");
+    snprintf(msg, sizeof msg, !reload || pe_reload() ? pe_l10n_ui("Wearing %s") : pe_l10n_ui("Wearing %s from the next room"), c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own clothes"));
     pe_ward_say(msg);
 }
 
@@ -162,27 +167,27 @@ static void pe_set_worn(const PeCostume *c, int now) {
 static int s_acquiring;
 static int pe_buy(const PeCostume *c, char *msg, size_t size) {
     int result = 0;
-    if (s_acquiring) { snprintf(msg, size, "A costume purchase is already in progress"); return 0; }
+    if (s_acquiring) { snprintf(msg, size, pe_l10n_ui("A costume purchase is already in progress")); return 0; }
     s_acquiring = 1; /* includes the external policy query, not just wallet calls */
     if (!pe_rules_live() || pe_ward_profile_owned(c->key) || !c->price) { result = 1; goto done; }
     if (!pe_ward_junk_ready(msg, (unsigned)size)) goto done;
     const PeProfileTransactionsApi*t=pe_service_get("profile_transactions",1);
     if(t&&t->struct_size>=sizeof *t){
         if(!t->buy("pe_wardrobe/ownership",c->key,1,c->price)){
-            snprintf(msg,size,"Cannot buy costume now; no Junk spent");goto done;
+            snprintf(msg,size,pe_l10n_ui("Cannot buy costume now; no Junk spent"));goto done;
         }
-        snprintf(msg,size,"Costume available; save the game to keep this purchase");result=1;goto done;
+        snprintf(msg,size,pe_l10n_ui("Costume available; save the game to keep this purchase"));result=1;goto done;
     }
     if (!pe_ward_profile_prepare_owned(c->key)) {
-        snprintf(msg, size, "Cannot save costume ownership; no Junk spent"); goto done;
+        snprintf(msg, size, pe_l10n_ui("Cannot save costume ownership; no Junk spent")); goto done;
     }
     if (!pe_ward_spend(c->price)) {
         pe_ward_profile_cancel_owned();
-        snprintf(msg, size, "Need %u Junk (have %u)", (unsigned)c->price, pe_ward_junk()); goto done;
+        snprintf(msg, size, pe_l10n_ui("Need %u Junk (have %u)"), (unsigned)c->price, pe_ward_junk()); goto done;
     }
     if (!pe_ward_profile_commit_owned()) {
         int refunded = pe_ward_refund(c->price);
-        snprintf(msg, size, refunded ? "Cannot save costume; Junk returned" : "Cannot save costume; wallet refund failed");
+        snprintf(msg, size, refunded ? pe_l10n_ui("Cannot save costume; Junk returned") : pe_l10n_ui("Cannot save costume; wallet refund failed"));
         goto done;
     }
     pe_log("wardrobe", "bought=%s price=%u", c->key, (unsigned)c->price);
@@ -238,11 +243,11 @@ static const char *pe_name(unsigned n) {
     const PeCostume *c;
     const char *state;
     pe_filter();
-    if (!s_count) return "None";
+    if (!s_count) return pe_l10n_ui("None");
     if (n >= (unsigned)s_count) n = 0;
     c = s_costume[s_list[n]];
-    if ((state = pe_state_name(c))) snprintf(s_name, sizeof s_name, "%s  [%s]  (%u/%d)", c->name, state, n + 1, s_count);
-    else snprintf(s_name, sizeof s_name, "%s  %u Junk  (%u/%d)", c->name, (unsigned)c->price, n + 1, s_count);
+    if ((state = pe_state_name(c))) snprintf(s_name, sizeof s_name, "%s  [%s]  (%u/%d)", pe_l10n_ui(c->name), state, n + 1, s_count);
+    else snprintf(s_name, sizeof s_name, "%s  %u Junk  (%u/%d)", pe_l10n_ui(c->name), (unsigned)c->price, n + 1, s_count);
     return s_name;
 }
 
@@ -264,7 +269,7 @@ static void pe_default(void) {
 
 static void pe_status(char *out, unsigned size) {
     const PeCostume *c = pe_worn();
-    snprintf(out, size, "Wearing %s   Junk %u", c ? c->name : "Aya's own", pe_ward_junk());
+    snprintf(out, size, pe_l10n_ui("Wearing %s   Junk %u"), c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own"), pe_ward_junk());
 }
 
 static void pe_result(char *out, unsigned size) { snprintf(out, size, "%s", pe_ward_last_said()); }
@@ -282,7 +287,7 @@ static int pe_ward_count(void) { int n = 1, i; for (i = 0; i < s_costumes; ++i) 
 static const char *pe_ward_name(int k) {
     int own;
     const PeCostume *c = pe_ward_costume(k, &own);
-    return own ? "Aya's own clothes" : c ? c->name : "";
+    return own ? "Aya's own clothes" : c ? pe_l10n_ui(c->name) : "";
 }
 static unsigned pe_ward_price(int k) { int own; const PeCostume *c = pe_ward_costume(k, &own); return c ? c->price : 0u; }
 static int pe_ward_state(int k) {
@@ -300,8 +305,8 @@ static int pe_ward_pick(int k, char *msg, size_t size) {   /* buy if needed, the
     pe_set_worn(c, 0);
     const PeProfileTransactionsApi*t=pe_service_get("profile_transactions",1);
     if(c&&t&&t->struct_size>=sizeof *t&&t->pending("pe_wardrobe/ownership",c->key))
-        snprintf(msg,size,"Wearing %s; save the game to keep this purchase",c->name);
-    else snprintf(msg, size, "Wearing %s when you leave", c ? c->name : "Aya's own clothes");
+        snprintf(msg,size,pe_l10n_ui("Wearing %s; save the game to keep this purchase"),pe_l10n_ui(c->name));
+    else snprintf(msg, size, pe_l10n_ui("Wearing %s when you leave"), c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own clothes"));
     return 1;
 }
 /* The Wardrobe screen's rule: a skin bank or bundle, never a provider's gameplay loader. */
@@ -415,3 +420,8 @@ void pe_wardrobe_register(const char *mod_id) {
     pe_service_publish("wardrobe", 1, &s_wardrobe, mod_id);
     pe_hook_add(PE_HOOK_PLAYER_BANK, pe_on_player_bank, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_collection.h"
+int pe_wardrobe_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){if(s_checkpoint_epoch==UINT32_MAX||s_loaded||s_reload_after_menu)return 0;if(apply&&(!in||!pe_wardrobe_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_costumes,0,PE_MAX_COSTUMES,1);PE_CK_S(w,s_event,-1,INT_MAX,1);PE_CK_S(w,s_room_bank,-1,255,1);return w.ok&&w.at==16;}
+#endif

@@ -1,0 +1,644 @@
+[
+  {
+    "key": "mod/ui/01fa1b49",
+    "text": "Meet it first",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Meet it first",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/06f768f3",
+    "source": "PE Enhancements: collection",
+    "text": "PE Enhancements: collection",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/08734cfe",
+    "text": "Drop: %s",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Drop: %s",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "Drop: %s"
+  },
+  {
+    "key": "mod/ui/15f02898",
+    "source": "Crew",
+    "text": "Crew",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/19feed6d",
+    "source": "Aya: transformed",
+    "text": "Aya: transformed",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/1babfa0d",
+    "source": "Aya: long dress",
+    "text": "Aya: long dress",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/22693293",
+    "text": "heat",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "heat",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/24ea2948",
+    "source": "Charred body",
+    "text": "Charred body",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/2d127e05",
+    "text": "Everything about it is known",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Everything about it is known",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2e066476",
+    "source": "Guard (jumpsuit)",
+    "text": "Guard  jumpsuit ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/2ec735ed",
+    "source": "Klamp (lab coat)",
+    "text": "Klamp  lab coat ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/34e863aa",
+    "text": "Steal: %s",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Steal: %s",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "Steal: %s"
+  },
+  {
+    "key": "mod/ui/37210561",
+    "source": "PE Enhancements: economy",
+    "text": "PE Enhancements: economy",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/373e0f49",
+    "source": "Nix (gun drawn)",
+    "text": "Nix  gun drawn ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/3a77c57a",
+    "source": "Maeda (backpack)",
+    "text": "Maeda  backpack ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/3df9c95e",
+    "text": "defeat",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "defeat",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4098a672",
+    "text": "Learned its %s   Junk %u",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Learned its %s   Junk %u",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "Learned its %s   Junk %u"
+  },
+  {
+    "key": "mod/ui/4153258a",
+    "text": "L1 R1: Area   Left Right: Turn",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "L1 R1: Area   Left Right: Turn",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4e56dd8c",
+    "text": "%s   %d / %d   Junk %u",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s   %d / %d   Junk %u",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "%s   %d / %d   Junk %u"
+  },
+  {
+    "key": "mod/ui/550683a8",
+    "text": "acid",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "acid",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/56b69fe0",
+    "source": "Usher",
+    "text": "Usher",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/57b2a12b",
+    "text": "Learn its %s for %u Junk?",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Learn its %s for %u Junk?",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "Learn its %s for %u Junk?"
+  },
+  {
+    "key": "mod/ui/585aa37b",
+    "text": "Wearing it",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Wearing it",
+    "contexts": [
+      "mods/pe_collection/pe_wardrobe_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/5905c6b0",
+    "text": "Weak: %s   Strong: %s",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Weak: %s   Strong: %s",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "Weak: %s   Strong: %s"
+  },
+  {
+    "key": "mod/ui/5909a08b",
+    "source": "Opera king",
+    "text": "Opera king",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/5c680daf",
+    "source": "Opera actress",
+    "text": "Opera actress",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/5cd09591",
+    "source": "Opera knight",
+    "text": "Opera knight",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/63868f1e",
+    "source": "PE Enhancements: rebalance",
+    "text": "PE Enhancements: rebalance",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/69440bab",
+    "text": "tranq",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "tranq",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/695bf8ad",
+    "source": "Admiral",
+    "text": "Admiral",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/6f612252",
+    "text": "Weaknesses: Scan, %s or %u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Weaknesses: Scan, %s or %u Junk",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "Weaknesses: Scan, %s or %u Junk"
+  },
+  {
+    "key": "mod/ui/746a8992",
+    "source": "Cameraman",
+    "text": "Cameraman",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/77c61347",
+    "source": "Daniel (gun drawn)",
+    "text": "Daniel  gun drawn ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/7c4a1c82",
+    "source": "Opera (doublet)",
+    "text": "Opera  doublet ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/7cbedd77",
+    "source": "Aya: evening dress",
+    "text": "Aya: evening dress",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/88fa678b",
+    "source": "Captain",
+    "text": "Captain",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/95615aae",
+    "source": "Police officer (cap)",
+    "text": "Police officer  cap ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/96dacba7",
+    "text": "Loot: 15 kills or %u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Loot: 15 kills or %u Junk",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "Loot: 15 kills or %u Junk"
+  },
+  {
+    "key": "mod/ui/9d5aab4a",
+    "source": "Nurse",
+    "text": "Nurse",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/a42abcc9",
+    "text": "   Worn",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "   Worn",
+    "contexts": [
+      "mods/pe_collection/pe_wardrobe_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/aa817c40",
+    "text": "Back to her own clothes",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Back to her own clothes",
+    "contexts": [
+      "mods/pe_collection/pe_wardrobe_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ac7f807e",
+    "source": "Police officer (light uniform)",
+    "text": "Police officer  light uniform ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/acd2e6bf",
+    "text": "%s  HP %u  Def %u  Kills %u",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "%s  HP %u  Def %u  Kills %u",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "%s  HP %u  Def %u  Kills %u"
+  },
+  {
+    "key": "mod/ui/ad06282b",
+    "text": "X: Buy   Triangle: View   Square: Pause",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "X: Buy   Triangle: View   Square: Pause",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ada7afdb",
+    "text": "none",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "none",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/b3366df3",
+    "source": "Chief Baker",
+    "text": "Chief Baker",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/bf959361",
+    "text": "The clothes the story gives Aya",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "The clothes the story gives Aya",
+    "contexts": [
+      "mods/pe_collection/pe_wardrobe_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/c164162f",
+    "source": "Eddie (gun drawn)",
+    "text": "Eddie  gun drawn ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/c739848c",
+    "text": "Not met yet: defeat one to learn about it",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Not met yet: defeat one to learn about it",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/cb5adc60",
+    "source": "Aya's date",
+    "text": "Aya's date",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/cd778e55",
+    "source": "Soldier",
+    "text": "Soldier",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/cf1bdf9a",
+    "text": "Not met yet",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Not met yet",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d6dd9c19",
+    "text": "5 kills",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "5 kills",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d9d943dc",
+    "text": "Aya's own clothes",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Aya's own clothes",
+    "contexts": [
+      "mods/pe_collection/pe_wardrobe_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/db738c60",
+    "source": "Policewoman (vest)",
+    "text": "Policewoman  vest ",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/dcde3a11",
+    "source": "Scientist",
+    "text": "Scientist",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/dfb6e340",
+    "text": "Bestiary",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Bestiary",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e1ef4eb7",
+    "text": "loot",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "loot",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c",
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e75e0ecd",
+    "text": "frost",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "frost",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/ec47ff91",
+    "source": "PE Enhancements: quality of life",
+    "text": "PE Enhancements: quality of life",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "collection names or difficulty"
+    ]
+  },
+  {
+    "key": "mod/ui/f61b73a6",
+    "text": "weaknesses",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "weaknesses",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c",
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f6b1d396",
+    "text": "cyanide",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "cyanide",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ]
+  },
+  {
+    "key": "mod/ui/f6f87723",
+    "text": "Loot: %u Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Loot: %u Junk",
+    "contexts": [
+      "mods/pe_collection/pe_bestiary_menu.c"
+    ],
+    "format": "Loot: %u Junk"
+  }
+]

@@ -121,7 +121,7 @@ void Battle_AdvancePhase(void) {
                     loop_limit = lastSlot;
                     do {
                         temp_v1_2 = g_BattleActionQueue[var_s0 & 0xFF].actor;
-                        if ((temp_v1_2 == NULL) || (((EnemyCombatant *)temp_v1_2->core)->hpAlive <= 0) || (*(s32 *)&temp_v1_2->entityFlags & 0x4000)) {
+                        if ((temp_v1_2 == NULL) || (temp_v1_2->core == NULL) || (((EnemyCombatant *)temp_v1_2->core)->hpAlive <= 0) || (*(s32 *)&temp_v1_2->entityFlags & 0x4000)) {
                             var_s0 += 1;
                         } else {
                             var_a2 = temp_v1_2;
@@ -165,7 +165,7 @@ void Battle_AdvancePhase(void) {
             else
             {
             temp_v1_6 = g_BattleActionQueue[firstSlot].actor;
-            if ((temp_v1_6 == NULL) || (((EnemyCombatant *)temp_v1_6->core)->hpAlive <= 0) || (*(s32 *)&temp_v1_6->entityFlags & 0x4000)) {
+            if ((temp_v1_6 == NULL) || (temp_v1_6->core == NULL) || (((EnemyCombatant *)temp_v1_6->core)->hpAlive <= 0) || (*(s32 *)&temp_v1_6->entityFlags & 0x4000)) {
                 var_v0_3 = g_BattleActionIndex + 1;
                 temp_v1_3 = var_v0_3 & 0xFF;
                 temp_v1_3 = (u16)g_BattleActionQueue[temp_v1_3].command;
@@ -254,7 +254,7 @@ void Battle_AdvancePhase(void) {
             if (var_a2_2 < end_slot) {
                 do {
                     facingTarget = g_BattleActionQueue[var_a2_2].actor;
-                    if (facingTarget != ((void *)D_8009D254)) {
+                    if (facingTarget != NULL && facingTarget != ((void *)D_8009D254) && facingTarget->core != NULL) {
                         Battle_UpdateEntityFacing(facingTarget);
                     }
                     var_s0_4 += 1;

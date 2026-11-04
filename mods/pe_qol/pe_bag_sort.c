@@ -129,3 +129,9 @@ void pe_bag_sort_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_SAVE_WRITE, pe_sort_save, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_save_register(&s_sort_record);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_qol.h"
+int pe_sort_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||s_sorting)return 0;if(apply&&(!in||!pe_sort_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_sort.mode,0,1,0);PE_CK_U(w,s_sort.rank_ptr,0,UINT32_MAX,0);PE_CK_U(w,s_sort.type_ptr,0,UINT32_MAX,0);PE_CK_U(w,s_sort.weapon_stat,0,2,0);PE_CK_U(w,s_sort.armor_stat,0,2,0);PE_CK_U(w,s_sort.row_hidden,0,1,0);uint32_t rank=out?s_sort.rank_ptr:(uint32_t)in[4]|(uint32_t)in[5]<<8|(uint32_t)in[6]<<16|(uint32_t)in[7]<<24,type=out?s_sort.type_ptr:(uint32_t)in[8]|(uint32_t)in[9]<<8|(uint32_t)in[10]<<16|(uint32_t)in[11]<<24;unsigned mode=out?s_sort.mode:(unsigned)in[0]|(unsigned)in[1]<<8|(unsigned)in[2]<<16|(unsigned)in[3]<<24;if((rank&&!pe_rank(rank))||(type&&!pe_type(type))||(mode&&(!rank||!type)))return 0;for(unsigned i=0;i<50;i++){PE_CK_S(w,s_last[i],-32768,32767,0);}PE_CK_U(w,s_seen,0,1,0);uint32_t liveRank=0,liveType=0;static const uint32_t roles[]={0x800923F8u,0x80092410u,0x80092428u,0x80092440u};for(unsigned i=0;i<4;i++)if(g_InvSortRankTable==pe_rank(roles[i]))liveRank=i+1;if(g_InvSortRankTable&&!liveRank)return 0;if(g_InvSortTypeRankTable==g_InvTypeRankTableA)liveType=1;else if(g_InvSortTypeRankTable==g_InvTypeRankTableB)liveType=2;else if(g_InvSortTypeRankTable)return 0;PE_CK_U(w,liveRank,0,4,0);PE_CK_U(w,liveType,0,2,0);PE_CK_S(w,g_InvWeaponSortStatIndex,0,2,0);PE_CK_S(w,g_InvAmmoSortStatIndex,0,2,0);if(apply&&w.ok){g_InvSortRankTable=liveRank?pe_rank(roles[liveRank-1]):0;g_InvSortTypeRankTable=liveType==1?g_InvTypeRankTableA:liveType==2?g_InvTypeRankTableB:0;}return w.ok&&w.at==244u;}
+#endif

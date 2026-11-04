@@ -1,0 +1,598 @@
+diff --git a/include/pe1/particle_augment.h b/include/pe1/particle_augment.h
+new file mode 100644
+--- /dev/null
++++ b/include/pe1/particle_augment.h
+@@ -0,0 +1,16 @@
++#ifndef PE1_PARTICLE_AUGMENT_H
++#define PE1_PARTICLE_AUGMENT_H
++struct RenderBouncingSprite;
++struct RenderNativeTag;
++enum { PE_PARTICLE_ORIGINAL=0, PE_PARTICLE_HYBRID=1, PE_PARTICLE_GEOMETRY=2 };
++void FieldFx_SetParticleAugment(int enabled);
++void FieldFx_ParticleBeginFrame(void);
++void FieldFx_ParticleEndFrame(void);
++void FieldFx_QueueFallingParticle(const struct RenderBouncingSprite *state,unsigned age);
++void FieldFx_FlushParticleAugment(void);
++/* Explicit room-world fields: no cast between unrelated particle layouts. */
++void FieldFx_QueueBurstOrbDebris(int x,int y,int z,unsigned age,unsigned state);
++void FieldFx_BeginFallingOriginal(void);
++void FieldFx_EndFallingOriginal(void);
++void FieldFx_LinkFallingOriginal(struct RenderNativeTag *entry,struct RenderNativeTag *primitive);
++#endif
+diff --git a/src/main/boot/frame_loop.c b/src/main/boot/frame_loop.c
+--- a/src/main/boot/frame_loop.c
++++ b/src/main/boot/frame_loop.c
+@@ -1,3 +1,6 @@
++#ifdef PE_PS5_GPU_NATIVE
++#include "pe1/particle_augment.h"
++#endif
+ #include "common.h"
+ #include "pe1/akao_send.h"
+ #include "pe1/battle_runtime.h"
+@@ -128,6 +131,9 @@ int Boot_RunFrame(void)
+              * Draw_RenderFrame waits after the OT has already been built. */
+             Psyz_PgxpNextFrame();
+             g_DrawPacketOffset = 0;
++#ifdef PE_PS5_GPU_NATIVE
++            FieldFx_ParticleBeginFrame();
++#endif
+             *scene_flags = 0;
+             Field_HandleStateTransition();
+             PE_HOOK(PE_HOOK_FRAME, NULL);
+@@ -200,6 +206,9 @@ int Boot_RunFrame(void)
+                 break;
+             }
+ loop_end_check:
++#ifdef PE_PS5_GPU_NATIVE
++            FieldFx_ParticleEndFrame();
++#endif
+             ;
+         } while (g_SceneDispatchCur == g_SceneDispatchToken);
+     }
+diff --git a/src/main/boot/main.c b/src/main/boot/main.c
+--- a/src/main/boot/main.c
++++ b/src/main/boot/main.c
+@@ -1,3 +1,6 @@
++#ifdef PE_PS5_GPU_NATIVE
++#include "pe1/particle_augment.h"
++#endif
+ #if defined(PE_PS5_GPU_NATIVE) && defined(PE_MODS)
+ #include "../../../mods/host/pe_mod_menu.h"
+ static int host_open_assists;
+@@ -56,7 +59,7 @@ static struct {
+     int model_filtering;
+     int widescreen;
+ #ifdef PE_PS5_GPU_NATIVE
+-    int fsr1,fsr1_sharpness,model_fill_lighting,movie_blur;
++    int fsr1,fsr1_sharpness,model_fill_lighting,movie_blur,battle_debris_3d;
+ #endif
+     int hd_backgrounds;
+ #ifdef PE_PS5
+@@ -682,6 +685,8 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
+             if (v > 1) return 0;
+             host_options.widescreen = v;
+ #ifdef PE_PS5_GPU_NATIVE
++        } else if (!strcmp(key, "battle_debris_3d")) {
++            if(v>2)return 0;host_options.battle_debris_3d=v; /* Legacy booltrue maps to Hybrid1. */
+         } else if (!strcmp(key, "movie_blur")) {
+             if(v>1)return 0;host_options.movie_blur=v;
+         } else if (!strcmp(key, "fsr1")) {
+@@ -838,7 +843,7 @@ static int Host_SaveOptions(void) {
+         "model_filtering = %s\n"
+         "widescreen = %s\n"
+ #ifdef PE_PS5_GPU_NATIVE
+-        "fsr1 = %s\nfsr1_sharpness = %u\nmodel_fill_lighting = %u\nmovie_blur = %s\n"
++        "fsr1 = %s\nfsr1_sharpness = %u\nmodel_fill_lighting = %u\nmovie_blur = %s\nbattle_debris_3d = %u\n"
+ #endif
+         "\n"
+         "[audio]\n"
+@@ -858,7 +863,7 @@ static int Host_SaveOptions(void) {
+         host_options.model_filtering ? "true" : "false",
+         host_options.widescreen ? "true" : "false",
+ #ifdef PE_PS5_GPU_NATIVE
+-        host_options.fsr1 ? "true" : "false",(unsigned)host_options.fsr1_sharpness,(unsigned)host_options.model_fill_lighting,host_options.movie_blur?"true":"false",
++        host_options.fsr1 ? "true" : "false",(unsigned)host_options.fsr1_sharpness,(unsigned)host_options.model_fill_lighting,host_options.movie_blur?"true":"false",(unsigned)host_options.battle_debris_3d,
+ #endif
+         host_options.volume,
+         host_options.speed_factor,
+@@ -1087,7 +1092,7 @@ static void Host_InitOptions(int enabled) {
+     host_options.widescreen = 0;
+ #endif
+ #ifdef PE_PS5_GPU_NATIVE
+-    host_options.fsr1=0;host_options.fsr1_sharpness=1;host_options.model_fill_lighting=0;host_options.movie_blur=1; /* Default ON only when configuration has no explicit value. */
++    host_options.fsr1=0;host_options.fsr1_sharpness=1;host_options.model_fill_lighting=0;host_options.battle_debris_3d=0;host_options.movie_blur=1; /* Default ON only when configuration has no explicit value. */
+ #endif
+ #ifdef PE_PS5
+     host_options.hd_backgrounds = 0; /* Original until explicitly selected. */
+@@ -1222,6 +1227,7 @@ static void Host_ApplyOptions(SDL_Window *window) {
+ #ifdef PE_PS5_GPU_NATIVE
+     Psyz_VideoSetFsr1(host_options.fsr1,host_options.fsr1_sharpness);
+     Psyz_VideoSetMovieBlur(host_options.movie_blur);
++    FieldFx_SetParticleAugment(host_options.battle_debris_3d);
+     Render_SetModelFillLighting(host_options.model_fill_lighting);
+     static int lastModelFill=-1;
+     if(lastModelFill!=host_options.model_fill_lighting){
+@@ -1585,6 +1591,12 @@ static void Host_ApplySettingsAction(
+             return;
+         }
+ #endif
++        if(state->row==5){
++            host_options.battle_debris_3d=(host_options.battle_debris_3d+action+3)%3;
++            FieldFx_SetParticleAugment(host_options.battle_debris_3d);
++            SDL_Log("[3D falling debris] requested=%d scope=FallingSprite+BurstOrb-debris2-3-render-only 0Original1Hybrid2Geometry-only-original-on-failure",host_options.battle_debris_3d);
++            state->status=NULL;state->dirty=1;return;
++        }
+         if(state->row==3){
+             host_options.movie_blur=!host_options.movie_blur;
+             Psyz_VideoSetMovieBlur(host_options.movie_blur);
+@@ -1727,7 +1739,7 @@ static void Host_ProcessSettingsPointer(
+                         state->page != HOST_PAGE_IMAGES &&
+                         !(state->page==HOST_PAGE_MODS && hitRow>0
+ #ifdef PE_PS5_GPU_NATIVE
+-                          && hitRow!=3
++                          && hitRow!=3 && hitRow!=5
+ #endif
+                           );
+         int action = isStepper ? (x < OverlayValueCentre() ? -1 : 1) : 1;
+diff --git a/src/main/boot/settings_overlay.h b/src/main/boot/settings_overlay.h
+--- a/src/main/boot/settings_overlay.h
++++ b/src/main/boot/settings_overlay.h
+@@ -269,7 +269,7 @@ static int Host_SettingsPureRowCount(int page) {
+     if (page == OVERLAY_PAGE_MODS) {
+ #ifdef PE_PS5_GPU_NATIVE
+ #ifdef PE_MODS
+-        return 5;
++        return 6;
+ #else
+         return 4;
+ #endif
+@@ -802,7 +802,7 @@ static void PaintRows(const Painter *p) {
+ #ifdef PE_PS5_GPU_NATIVE
+                 const char *names[]={"GPU HD backgrounds","Local background pack","Download / update","Movie side fill"
+ #ifdef PE_MODS
+-,"Cheats / assists"
++,"Cheats / assists","3D debris"
+ #endif
+ };
+  #else
+@@ -816,7 +816,8 @@ static void PaintRows(const Painter *p) {
+                 if(row==4)PaintValueRow(p,names[row],"Open menu",mid,baseline,selected,0,label);
+                 else
+ #endif
+-                if(row==3)PaintValueRow(p,names[row],host_options.movie_blur?"On":"Off",mid,baseline,selected,0,label);
++                if(row==5)PaintValueRow(p,names[row],host_options.battle_debris_3d==2?"Geometry only":host_options.battle_debris_3d?"Hybrid geometry":"Original",mid,baseline,selected,0,label);
++                else if(row==3)PaintValueRow(p,names[row],host_options.movie_blur?"On":"Off",mid,baseline,selected,0,label);
+                 else
+ #endif
+                 if(row==0)PaintValueRow(p,names[row],Host_HdValue(row),mid,baseline,selected,0,label);
+@@ -840,7 +841,7 @@ static void PaintRows(const Painter *p) {
+     }
+ 
+     if(page==OVERLAY_PAGE_MODS) {
+-        float x=OVERLAY_PAD*s,y=(OVERLAY_HEADER_H+5*OVERLAY_ROW_H)*s,w=(OVERLAY_PANEL_W-2*OVERLAY_PAD)*s;
++        float x=OVERLAY_PAD*s,y=(OVERLAY_HEADER_H+Host_SettingsPureRowCount(OVERLAY_PAGE_MODS)*OVERLAY_ROW_H)*s,w=(OVERLAY_PANEL_W-2*OVERLAY_PAD)*s;
+         if(Host_HdBusy()) {
+             char text[80];snprintf(text,sizeof(text),"Downloading / verifying: %d%%",Host_HdPercent());
+             DrawText(p->surface,x,y,15*s,text,kText,ALIGN_LEFT);
+@@ -879,6 +880,10 @@ static void PaintRows(const Painter *p) {
+ }
+ 
+ static const char *OverlayRowHelp(const HostOverlayState *state) {
++#ifdef PE_PS5_GPU_NATIVE
++    if(state->page==OVERLAY_PAGE_MODS&&state->row==5)
++        return "Falling / burst-orb debris only; failed geometry keeps Original.";
++#endif
+     if (state->status != NULL && state->status[0] != '\0') {
+         return state->status;
+     }
+diff --git a/src/main/draw/frame.c b/src/main/draw/frame.c
+--- a/src/main/draw/frame.c
++++ b/src/main/draw/frame.c
+@@ -1,3 +1,6 @@
++#ifdef PE_PS5_GPU_NATIVE
++#include "pe1/particle_augment.h"
++#endif
+ #include "pe1/battle_status.h"
+ #include "pe1/boot.h"
+ #include "pe1/boot_disc_check.h"
+@@ -66,6 +69,9 @@ void Draw_RenderFrame(void) {
+         idx = g_ActiveDrawSlot;
+         PutDrawEnv(DrawAddress(idx));
+         Render_CommitWidescreenPicture(idx, -1);
++#ifdef PE_PS5_GPU_NATIVE
++        FieldFx_ParticleEndFrame();
++#endif
+         g_ActiveDrawSlot = g_ActiveDrawSlot < 1U;
+         return;
+     }
+@@ -79,9 +85,17 @@ draw_buffer:
+         Render_LinkFieldSubpixel(drawSlot, orderingTable);
+         Render_CommitWidescreenPicture(drawSlot, g_RenderDrawEnvArray[drawSlot].clip.y);
+         Render_CentreWidescreenOverlay(drawSlot, orderingTable, Draw_WidescreenOverlayEntry());
++        /* All original packet writers/hooks have completed. Admit optional
++         * debris only into the real remaining arena, immediately before DMA. */
++#ifdef PE_PS5_GPU_NATIVE
++        FieldFx_FlushParticleAugment();
++#endif
+         DrawOTagEnv(orderingTable + 4095, &g_RenderDrawEnvArray[drawSlot]);
+     }
+ 
+ done:
++#ifdef PE_PS5_GPU_NATIVE
++    FieldFx_ParticleEndFrame();
++#endif
+     g_ActiveDrawSlot = g_ActiveDrawSlot < 1U;
+ }
+diff --git a/src/main/fieldfx/geometry.c b/src/main/fieldfx/geometry.c
+--- a/src/main/fieldfx/geometry.c
++++ b/src/main/fieldfx/geometry.c
+@@ -1,4 +1,7 @@
+ #include "common.h"
++#ifdef PE_PS5_GPU_NATIVE
++#include "pe1/particle_augment.h"
++#endif
+ #include "pe1/field_sprite_params.h"
+ #include "pe1/field_texture_tables.h"
+ #include "pe1/asset_find.h"
+@@ -359,15 +362,18 @@ void FieldFx_DrawShapeQuads(GteShortVector *position, GteRotation *rotation,
+             gte_rtps_command();
+             depth -= bias;
+             if ((u32)depth < 0x1000) {
+-                FieldStripLink link;
+-
+                 {
+                     s16 *p3 = &packet->x3;
+                                         gte_stsxy2(p3);
+                 }
++#ifdef PE_PS5_GPU_NATIVE
++                FieldFx_LinkFallingOriginal(STRIP_OT(depth),&packet->tag);
++#else
++                FieldStripLink link;
+                 packet->tag.address = STRIP_OT(depth)->address;
+                 link.tag = &packet->tag;
+                 STRIP_OT(depth)->address = link.word;
++#endif
+             }
+             i++;
+             packet++;
+diff --git a/src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.c b/src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.c
+new file mode 100644
+--- /dev/null
++++ b/src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.c
+@@ -0,0 +1,31 @@
++#include "pe_battle_particle_mesh.h"
++unsigned PeBattleParticle_Build(int enabled, PeParticleWorldPoint anchor,
++    unsigned age, unsigned duration, unsigned available_triangles,
++    PeParticleFace out[4]) {
++    static const unsigned faces[4][3]={{0,2,1},{0,1,3},{0,3,2},{1,2,3}};
++    PeParticleWorldPoint p[4];
++    unsigned i,j,phase,r,fade;
++    if(!enabled || !out || !duration || duration>4096 || age>=duration || available_triangles<4) return 0;
++    /* Same bounded world domain used by the original short-vector projector.
++     * Reserve enough room for geometry instead of wrapping coordinates. */
++    if(anchor.x < -32700 || anchor.x>32700 || anchor.y < -32700 || anchor.y>32700 || anchor.z < -32700 || anchor.z>32700) return 0;
++    fade=(duration-age)*255/duration;
++    r=4+(duration-age)*8/duration;
++    p[0]=(PeParticleWorldPoint){0,-(int32_t)(2*r),0};
++    p[1]=(PeParticleWorldPoint){(int32_t)r,(int32_t)r,0};
++    p[2]=(PeParticleWorldPoint){-(int32_t)r,(int32_t)r,(int32_t)r};
++    p[3]=(PeParticleWorldPoint){-(int32_t)r,(int32_t)r,-(int32_t)r};
++    phase=(age/3)&3; /* geometry-only repeatable spin; no original rand() calls */
++    for(i=0;i<4;i++){
++        int32_t x=p[i].x,z=p[i].z;
++        if(phase==1){p[i].x=-z;p[i].z=x;}
++        else if(phase==2){p[i].x=-x;p[i].z=-z;}
++        else if(phase==3){p[i].x=z;p[i].z=-x;}
++        p[i].x+=anchor.x;p[i].y+=anchor.y;p[i].z+=anchor.z;
++    }
++    for(i=0;i<4;i++){
++        for(j=0;j<3;j++)out[i].vertices[j]=p[faces[i][j]];
++        out[i].rgba[0]=255;out[i].rgba[1]=(uint8_t)(160-i*18);out[i].rgba[2]=32;out[i].rgba[3]=(uint8_t)fade;
++    }
++    return 4;
++}
+diff --git a/src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.h b/src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.h
+new file mode 100644
+--- /dev/null
++++ b/src/main/fieldfx/particle_mesh/pe_battle_particle_mesh.h
+@@ -0,0 +1,16 @@
++/* Independently authored procedural geometry; no texture/model assets. */
++#ifndef PE_BATTLE_PARTICLE_MESH_H
++#define PE_BATTLE_PARTICLE_MESH_H
++#include <stdint.h>
++#ifndef PE_BATTLE_PARTICLE_PROTOTYPE
++#define PE_BATTLE_PARTICLE_PROTOTYPE 0
++#endif
++typedef struct { int32_t x,y,z; } PeParticleWorldPoint;
++typedef struct { PeParticleWorldPoint vertices[3]; uint8_t rgba[4]; } PeParticleFace;
++/* A render-only augmentation. Returns4 faces or0. Input world coordinates are
++ * original sprite state, NOT projected screen pixels. Caller keeps original
++ * sprites, timing, damage and RNG untouched. No hidden allocations/state. */
++unsigned PeBattleParticle_Build(int enabled, PeParticleWorldPoint anchor,
++    unsigned age, unsigned duration, unsigned available_triangles,
++    PeParticleFace out[4]);
++#endif
+diff --git a/src/main/fieldfx/particle_mesh/pe_falling_sprite_adapter.c b/src/main/fieldfx/particle_mesh/pe_falling_sprite_adapter.c
+new file mode 100644
+--- /dev/null
++++ b/src/main/fieldfx/particle_mesh/pe_falling_sprite_adapter.c
+@@ -0,0 +1,9 @@
++/* Source-only adapter to the actual game's 3D sprite state. Not registered. */
++#include "pe1/render_object.h"
++#include "pe_battle_particle_mesh.h"
++unsigned PeBattleParticle_FromFallingSprite(int enabled, const RenderBouncingSprite *s,
++    unsigned age, unsigned available_triangles, PeParticleFace out[4]) {
++    if(!PE_BATTLE_PARTICLE_PROTOTYPE || !s || s->duration<=0) return 0;
++    return PeBattleParticle_Build(enabled,(PeParticleWorldPoint){s->x,s->y,s->z},age,
++        (unsigned)s->duration,available_triangles,out);
++}
+diff --git a/src/main/fieldfx/particle_mesh/pe_particle_project.h b/src/main/fieldfx/particle_mesh/pe_particle_project.h
+new file mode 100644
+--- /dev/null
++++ b/src/main/fieldfx/particle_mesh/pe_particle_project.h
+@@ -0,0 +1,49 @@
++/* SPDX-License-Identifier: MPL-2.0
++ * Adapted read-only integer projection math/table from retained PsyZ
++ * psyz/src/psyz/libgte.c (MPL2.0 per its repository LICENSE).
++ * Modifications: explicit input/output arguments, reject saturation domains,
++ * no GTE/PGXP global state access. Exact source hash in PROJECT-PROVENANCE.json.
++ * License: https://www.mozilla.org/MPL/2.0/ */
++#ifndef PE_PARTICLE_PROJECT_H
++#define PE_PARTICLE_PROJECT_H
++static const unsigned char particle_unr_table[257] = {
++    0xFF, 0xFD, 0xFB, 0xF9, 0xF7, 0xF5, 0xF3, 0xF1, 0xEF, 0xEE, 0xEC, 0xEA,
++    0xE8, 0xE6, 0xE4, 0xE3, 0xE1, 0xDF, 0xDD, 0xDC, 0xDA, 0xD8, 0xD6, 0xD5,
++    0xD3, 0xD1, 0xD0, 0xCE, 0xCD, 0xCB, 0xC9, 0xC8, 0xC6, 0xC5, 0xC3, 0xC1,
++    0xC0, 0xBE, 0xBD, 0xBB, 0xBA, 0xB8, 0xB7, 0xB5, 0xB4, 0xB2, 0xB1, 0xB0,
++    0xAE, 0xAD, 0xAB, 0xAA, 0xA9, 0xA7, 0xA6, 0xA4, 0xA3, 0xA2, 0xA0, 0x9F,
++    0x9E, 0x9C, 0x9B, 0x9A, 0x99, 0x97, 0x96, 0x95, 0x94, 0x92, 0x91, 0x90,
++    0x8F, 0x8D, 0x8C, 0x8B, 0x8A, 0x89, 0x87, 0x86, 0x85, 0x84, 0x83, 0x82,
++    0x81, 0x7F, 0x7E, 0x7D, 0x7C, 0x7B, 0x7A, 0x79, 0x78, 0x77, 0x75, 0x74,
++    0x73, 0x72, 0x71, 0x70, 0x6F, 0x6E, 0x6D, 0x6C, 0x6B, 0x6A, 0x69, 0x68,
++    0x67, 0x66, 0x65, 0x64, 0x63, 0x62, 0x61, 0x60, 0x5F, 0x5E, 0x5D, 0x5D,
++    0x5C, 0x5B, 0x5A, 0x59, 0x58, 0x57, 0x56, 0x55, 0x54, 0x53, 0x53, 0x52,
++    0x51, 0x50, 0x4F, 0x4E, 0x4D, 0x4D, 0x4C, 0x4B, 0x4A, 0x49, 0x48, 0x48,
++    0x47, 0x46, 0x45, 0x44, 0x43, 0x43, 0x42, 0x41, 0x40, 0x3F, 0x3F, 0x3E,
++    0x3D, 0x3C, 0x3C, 0x3B, 0x3A, 0x39, 0x39, 0x38, 0x37, 0x36, 0x36, 0x35,
++    0x34, 0x33, 0x33, 0x32, 0x31, 0x31, 0x30, 0x2F, 0x2E, 0x2E, 0x2D, 0x2C,
++    0x2C, 0x2B, 0x2A, 0x2A, 0x29, 0x28, 0x28, 0x27, 0x26, 0x26, 0x25, 0x24,
++    0x24, 0x23, 0x22, 0x22, 0x21, 0x20, 0x20, 0x1F, 0x1E, 0x1E, 0x1D, 0x1D,
++    0x1C, 0x1B, 0x1B, 0x1A, 0x19, 0x19, 0x18, 0x18, 0x17, 0x16, 0x16, 0x15,
++    0x15, 0x14, 0x14, 0x13, 0x12, 0x12, 0x11, 0x11, 0x10, 0x0F, 0x0F, 0x0E,
++    0x0E, 0x0D, 0x0D, 0x0C, 0x0C, 0x0B, 0x0A, 0x0A, 0x09, 0x09, 0x08, 0x08,
++    0x07, 0x07, 0x06, 0x06, 0x05, 0x05, 0x04, 0x04, 0x03, 0x03, 0x02, 0x02,
++    0x01, 0x01, 0x00, 0x00, 0x00};
++static unsigned particle_divide(unsigned h,unsigned z){
++    unsigned shift=0;while((z<<shift)<0x8000u)shift++;
++    unsigned n=h<<shift,d=z<<shift,u=particle_unr_table[(d-0x7fc0u)>>7]+0x101u;
++    d=(0x2000080u-d*u)>>8;d=(0x80u+d*u)>>8;
++    unsigned long long r=((unsigned long long)n*d+0x8000ull)>>16;
++    return r>0x1ffffu?0x1ffffu:(unsigned)r;
++}
++static int PeParticle_Project(const PeParticleWorldPoint *p,const GteMatrix *view,unsigned h,s32 ox,s32 oy,s16 *x,s16 *y,unsigned *z){
++    int64_t camera[3];for(unsigned r=0;r<3;r++)camera[r]=(((int64_t)view->m[r][0]*p->x+(int64_t)view->m[r][1]*p->y+(int64_t)view->m[r][2]*p->z)>>12)+view->t[r];
++    if(!h||camera[2]<=0||camera[2]>65535||(int64_t)h>=camera[2]*2||
++       camera[0]<-32768||camera[0]>32767||camera[1]<-32768||camera[1]>32767)return 0;
++    unsigned div=particle_divide(h,(unsigned)camera[2]);
++    int64_t sx=(int64_t)ox/65536+(((int64_t)div*camera[0])>>16);
++    int64_t sy=(int64_t)oy/65536+(((int64_t)div*camera[1])>>16);
++    if(sx < -1024||sx>1023||sy < -1024||sy>1023)return 0;
++    *x=(s16)sx;*y=(s16)sy;*z=(unsigned)camera[2];return 1;
++}
++#endif
+diff --git a/src/main/fieldfx/particle_mesh/pe_particle_render.c b/src/main/fieldfx/particle_mesh/pe_particle_render.c
+new file mode 100644
+--- /dev/null
++++ b/src/main/fieldfx/particle_mesh/pe_particle_render.c
+@@ -0,0 +1,139 @@
++/* Original project optional render-only tetrahedra. Original sprite stays. */
++#include "pe1/particle_augment.h"
++#include "pe1/game_state.h"
++#include "pe1/geom_state.h"
++#include "pe1/gte.h"
++#include "pe1/render_matrix_slot.h"
++#include "pe1/render_object.h"
++#include "pe1/render_animation_frame.h"
++#include "pe1/render_buffers.h"
++#include "pe1/render_packets.h"
++#include "pe1/field_sprite_params.h"
++#include "pe1/psyq_gpu.h"
++#include "pe_battle_particle_mesh.h"
++#include <stdint.h>
++#include <stddef.h>
++#include <string.h>
++#include <stdio.h>
++extern int g_ActiveDrawSlot;
++unsigned PeBattleParticle_FromFallingSprite(int,const RenderBouncingSprite*,unsigned,unsigned,PeParticleFace[4]);
++enum{PARTICLE_TRIANGLE_BUDGET=64,PARTICLE_GROUP_BUDGET=32,PARTICLE_ANCHOR_BUDGET=256,PARTICLE_NO_GROUP=0xffffffffu};
++typedef struct{RenderNativeTag tag;u8 r,g,b,code;s16 x0,y0,x1,y1,x2,y2;}ParticleTriangle;
++PE1_STATIC_ASSERT(sizeof(ParticleTriangle)==sizeof(RenderNativeTag)+16,particle_triangle_native_size);
++typedef struct{ParticleTriangle packet;unsigned depth,group;}QueuedParticleTriangle;
++/* Zero-length native OT entries are legal link-only nodes. Stable private
++ * anchors let us suppress one owned packet without searching/changing other
++ * nodes, even after unrelated writers prepend to that bucket. */
++typedef struct{RenderNativeTag tag;RenderNativeTag *original;uintptr_t original_next;unsigned group;}ParticleOriginalAnchor;
++typedef struct{int complete,admitted;}ParticleOriginalGroup;
++static ParticleOriginalAnchor particle_anchors[2][PARTICLE_ANCHOR_BUDGET];
++static unsigned particle_anchor_count[2],particle_group_count,particle_last_group=PARTICLE_NO_GROUP;
++static ParticleOriginalGroup particle_groups[PARTICLE_GROUP_BUDGET];
++static int particle_capture_active;
++static QueuedParticleTriangle particle_queue[PARTICLE_TRIANGLE_BUDGET];
++static unsigned particle_count;
++static int particle_enabled,particle_frame_open,particle_slot;
++static unsigned particle_log_count;
++void FieldFx_SetParticleAugment(int mode){if(mode<0||mode>2)mode=0;if(mode!=particle_enabled){particle_log_count=0;fprintf(stderr,"[3D falling debris] mode=%d (0Original1Hybrid2Geometry-only) render-only\n",mode);}particle_enabled=mode;}
++void FieldFx_ParticleBeginFrame(void){particle_count=0;particle_frame_open=1;particle_slot=g_ActiveDrawSlot;particle_group_count=0;particle_capture_active=0;particle_last_group=PARTICLE_NO_GROUP;if((unsigned)particle_slot<2)particle_anchor_count[particle_slot]=0;}
++void FieldFx_ParticleEndFrame(void){particle_count=0;particle_frame_open=0;particle_capture_active=0;particle_last_group=PARTICLE_NO_GROUP;particle_group_count=0;}
++void FieldFx_BeginFallingOriginal(void){
++    particle_capture_active=0;particle_last_group=PARTICLE_NO_GROUP;
++    if(particle_enabled!=PE_PARTICLE_GEOMETRY||!particle_frame_open||particle_slot!=g_ActiveDrawSlot||
++       (unsigned)particle_slot>=2||particle_count>PARTICLE_TRIANGLE_BUDGET-4||particle_group_count>=PARTICLE_GROUP_BUDGET)return;
++    particle_last_group=particle_group_count++;particle_groups[particle_last_group]=(ParticleOriginalGroup){1,0};particle_capture_active=1;
++}
++void FieldFx_EndFallingOriginal(void){particle_capture_active=0;}
++void FieldFx_LinkFallingOriginal(RenderNativeTag *entry,RenderNativeTag *primitive){
++    /* Direct path matches the original two native link stores exactly. */
++    primitive->address=entry->address;
++    if(particle_capture_active&&particle_enabled==PE_PARTICLE_GEOMETRY&&particle_last_group<particle_group_count){
++        unsigned group=particle_last_group;uintptr_t start=(uintptr_t)g_RenderAnimBufferBase[particle_slot],ptr=(uintptr_t)primitive;
++        if(!start||ptr<start||ptr-start>RENDER_ANIM_BUFFER_BYTES-sizeof(*primitive)-36||
++           g_DrawPacketOffset<0||ptr-start+sizeof(*primitive)+36>(unsigned)g_DrawPacketOffset||
++           (ptr-start)%_Alignof(RenderNativeTag)||primitive->length!=9||
++           (((const u8*)primitive)[sizeof(*primitive)+3]&~3u)!=0x2cu||
++           particle_anchor_count[particle_slot]>=PARTICLE_ANCHOR_BUDGET){particle_groups[group].complete=0;}
++        else {
++            ParticleOriginalAnchor *a=&particle_anchors[particle_slot][particle_anchor_count[particle_slot]++];
++            a->tag=(RenderNativeTag){(uintptr_t)primitive,0};a->original=primitive;a->original_next=primitive->address;a->group=group;
++            entry->address=(uintptr_t)&a->tag;return;
++        }
++    }
++    entry->address=(uintptr_t)primitive;
++}
++/* Read-only projection: does not change any GTE register or PGXP companion. */
++#include "pe_particle_project.h"
++
++static void FieldFx_QueueParticleFaces(const PeParticleFace faces[4],unsigned group){
++    unsigned h=Psyz_GteCtrlRead(26)&65535;int zsf=(s16)Psyz_GteCtrlRead(29);
++    s32 ox=(s32)Psyz_GteCtrlRead(24),oy=(s32)Psyz_GteCtrlRead(25);
++    if(!h||zsf<=0)return;
++    QueuedParticleTriangle pending[4];unsigned accepted=0;memset(pending,0,sizeof(pending));
++    for(unsigned f=0;f<4;f++){
++        s16 xy[6];unsigned depth[3];for(unsigned v=0;v<3;v++)if(!PeParticle_Project(&faces[f].vertices[v],g_ViewMatrixSlot.value,h,ox,oy,&xy[v*2],&xy[v*2+1],&depth[v]))return;
++        int64_t area=(int64_t)(xy[2]-xy[0])*(xy[5]-xy[1])-(int64_t)(xy[4]-xy[0])*(xy[3]-xy[1]);if(!area)continue;
++        int64_t ot=(((int64_t)depth[0]+depth[1]+depth[2])*zsf)>>12;
++        if(ot>65535)ot=65535; /* GTE AVSZ3 unsigned OTZ saturation. */
++        ot-=(u16)g_FieldFxSpriteParams.depth;
++        if(ot<0||ot>=4096)return;
++        ParticleTriangle *t=&pending[accepted].packet;t->tag.length=4;t->code=0x20;
++        t->r=(unsigned)faces[f].rgba[0]*faces[f].rgba[3]/255;t->g=(unsigned)faces[f].rgba[1]*faces[f].rgba[3]/255;t->b=(unsigned)faces[f].rgba[2]*faces[f].rgba[3]/255;
++        t->x0=xy[0];t->y0=xy[1];t->x1=xy[2];t->y1=xy[3];t->x2=xy[4];t->y2=xy[5];pending[accepted].depth=(unsigned)ot;pending[accepted].group=group;accepted++;
++    }
++    memcpy(particle_queue+particle_count,pending,accepted*sizeof(*pending));particle_count+=accepted;
++}
++void FieldFx_QueueFallingParticle(const RenderBouncingSprite *state,unsigned age){
++    unsigned group=particle_last_group;particle_last_group=PARTICLE_NO_GROUP;
++    if(!particle_enabled||!particle_frame_open||particle_slot!=g_ActiveDrawSlot||
++       particle_count>PARTICLE_TRIANGLE_BUDGET-4||!g_ViewMatrixSlot.value)return;
++    if(particle_enabled==PE_PARTICLE_GEOMETRY&&(group>=particle_group_count||!particle_groups[group].complete))return;
++    PeParticleFace faces[4];if(PeBattleParticle_FromFallingSprite(1,state,age,4,faces)!=4)return;
++    FieldFx_QueueParticleFaces(faces,group);
++}
++void FieldFx_QueueBurstOrbDebris(int x,int y,int z,unsigned age,unsigned state){
++    unsigned group=particle_last_group;particle_last_group=PARTICLE_NO_GROUP;
++    if(!particle_enabled||!particle_frame_open||particle_slot!=g_ActiveDrawSlot||
++       particle_count>PARTICLE_TRIANGLE_BUDGET-4||!g_ViewMatrixSlot.value)return;
++    /* Exactly the two FT4 debris sub-states; all orb/ring/halo draws remain. */
++    unsigned duration=state==2?16:state==3?24:0;
++    if(!duration||(particle_enabled==PE_PARTICLE_GEOMETRY&&(group>=particle_group_count||!particle_groups[group].complete)))return;
++    PeParticleFace faces[4];PeParticleWorldPoint point={x,y,z};
++    if(PeBattleParticle_Build(1,point,age,duration,4,faces)!=4)return;
++    FieldFx_QueueParticleFaces(faces,group);
++}
++
++void FieldFx_FlushParticleAugment(void){
++    unsigned count=particle_count;particle_count=0;int open=particle_frame_open;particle_frame_open=0;
++    if(!particle_enabled||!open||!count||(unsigned)g_ActiveDrawSlot>=2||particle_slot!=g_ActiveDrawSlot||
++       !D_800B0E38.ordering[g_ActiveDrawSlot]||!g_RenderAnimBufferBase[g_ActiveDrawSlot]||
++       D_800B0E38.packets[g_ActiveDrawSlot]!=(char*)g_RenderAnimBufferBase[g_ActiveDrawSlot]||g_DrawPacketOffset<0)return;
++    if(particle_enabled==PE_PARTICLE_GEOMETRY)for(unsigned a=0;a<particle_anchor_count[particle_slot];a++){
++        ParticleOriginalAnchor *anchor=&particle_anchors[particle_slot][a];
++        uintptr_t start=(uintptr_t)g_RenderAnimBufferBase[particle_slot],ptr=(uintptr_t)anchor->original;
++        int valid=ptr>=start&&ptr-start<=RENDER_ANIM_BUFFER_BYTES-sizeof(RenderNativeTag)-36&&
++            ptr-start+sizeof(RenderNativeTag)+36<=(unsigned)g_DrawPacketOffset;
++        if(anchor->group>=particle_group_count||!valid||anchor->tag.length||anchor->tag.address!=(uintptr_t)anchor->original||
++           anchor->original->length!=9||(((const u8*)anchor->original)[sizeof(RenderNativeTag)+3]&~3u)!=0x2cu||
++           anchor->original->address!=anchor->original_next){if(anchor->group<particle_group_count)particle_groups[anchor->group].complete=0;}
++    }
++    unsigned eligible=0;for(unsigned i=0;i<count;i++)if(particle_enabled!=PE_PARTICLE_GEOMETRY||(particle_queue[i].group<particle_group_count&&particle_groups[particle_queue[i].group].complete))eligible++;
++    if(!eligible)return;
++    size_t offset=(unsigned)g_DrawPacketOffset,alignment=_Alignof(ParticleTriangle);
++    if((uintptr_t)g_RenderAnimBufferBase[g_ActiveDrawSlot]%alignment||offset>RENDER_ANIM_BUFFER_BYTES)return;
++    offset=(offset+alignment-1)&~(alignment-1);
++    /* REAL initialized animation arena, after all original frame writers.
++     * All-or-none admission; never force original writers out of their room. */
++    size_t bytes=(size_t)eligible*sizeof(ParticleTriangle);if(offset>RENDER_ANIM_BUFFER_BYTES||bytes>RENDER_ANIM_BUFFER_BYTES-offset){if(particle_log_count++<16)fprintf(stderr,"[3D falling debris] packets=0 capacity-rejected used=%zu capacity=%u originals-retained=1\n",offset,(unsigned)RENDER_ANIM_BUFFER_BYTES);return;}
++    ParticleTriangle *out=(ParticleTriangle*)(g_RenderAnimBufferBase[g_ActiveDrawSlot]+offset);
++    unsigned written=0;for(unsigned i=0;i<count;i++){
++        unsigned group=particle_queue[i].group;if(particle_enabled==PE_PARTICLE_GEOMETRY&&(group>=particle_group_count||!particle_groups[group].complete))continue;
++        out[written]=particle_queue[i].packet;AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot]+particle_queue[i].depth,&out[written++]);if(group<particle_group_count)particle_groups[group].admitted=1;
++    }
++    unsigned suppressed=0;if(particle_enabled==PE_PARTICLE_GEOMETRY)for(unsigned a=0;a<particle_anchor_count[particle_slot];a++){
++        ParticleOriginalAnchor *anchor=&particle_anchors[particle_slot][a];
++        if(anchor->group<particle_group_count&&particle_groups[anchor->group].complete&&particle_groups[anchor->group].admitted){anchor->tag.address=anchor->original_next;suppressed++;}
++    }
++    g_DrawPacketOffset=(int)(offset+bytes);
++    if(particle_log_count++<16)fprintf(stderr,"[3D falling debris] mode=%d packets-linked=%u original-packets-suppressed=%u used=%d capacity=%u GPU-output=unobserved\n",particle_enabled,written,suppressed,g_DrawPacketOffset,(unsigned)RENDER_ANIM_BUFFER_BYTES);
++}
+diff --git a/src/main/fieldfx/sprite_effects.c b/src/main/fieldfx/sprite_effects.c
+--- a/src/main/fieldfx/sprite_effects.c
++++ b/src/main/fieldfx/sprite_effects.c
+@@ -1,3 +1,6 @@
++#ifdef PE_PS5_GPU_NATIVE
++#include "pe1/particle_augment.h"
++#endif
+ #include <stdio.h>
+ #include "pe1/geom_state.h"
+ #include "pe1/battle_runtime.h"
+@@ -62,8 +65,15 @@ int FieldFx_FallingSprite(int mode, void *data, intptr_t argument)
+         if (g_FieldFxSpriteParams.palette == 4 && g_FieldFxAltPaletteFlag)
+             palette += 4;
+         clut = GetClut(32, palette);
++#ifdef PE_PS5_GPU_NATIVE
++        FieldFx_BeginFallingOriginal();
++#endif
+         FieldFx_DrawShapeQuads(&position, &rotation, scale, scale,
+                       (s16)g_FieldFxSpriteParams.parameter02 * (g_FieldFxCurrentAge % 7) + 0xE8, clut, 1, 128, &color);
++#ifdef PE_PS5_GPU_NATIVE
++        FieldFx_EndFallingOriginal();
++        FieldFx_QueueFallingParticle(state,(unsigned)g_FieldFxCurrentAge);
++#endif
+         break;
+     }
+     return 0;
+diff --git a/src/overlays/room_lib/spark_attacks.c b/src/overlays/room_lib/spark_attacks.c
+--- a/src/overlays/room_lib/spark_attacks.c
++++ b/src/overlays/room_lib/spark_attacks.c
+@@ -22,6 +22,9 @@
+ #include "pe1/room_line_burst.h"
+ #include "pe1/room_sound_slot.h"
+ #include "pe1/room_spark_attacks.h"
++#ifdef PE_PS5_GPU_NATIVE
++#include "pe1/particle_augment.h"
++#endif
+ 
+ static const GteRotation s_BurstOrbRingRotation = { 0x400, 0, 0, 1 };
+ static const GteRotation s_BurstOrbRotation = { 0, 0, 0, 0 };
+@@ -299,8 +302,15 @@ int RoomEffect_BurstOrbParticle(int mode, void *data, intptr_t argument) {
+             palette = g_FieldFxPaletteTable[kind];
+             if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
+             clut = GetClut(0x10, palette);
++            #ifdef PE_PS5_GPU_NATIVE
++            FieldFx_BeginFallingOriginal();
++#endif
+             FieldFx_DrawShapeQuads((GteShortVector *)spark, 0, scale * 9 / 4, scale * 9 / 4,
+                           (s16)g_FieldFxSpriteParams.parameter02 * size + 0x20, clut, 1, 0x80, 0);
++#ifdef PE_PS5_GPU_NATIVE
++            FieldFx_EndFallingOriginal();
++            FieldFx_QueueBurstOrbDebris(spark->x,spark->y,spark->z,spark->timer,(unsigned)spark->state);
++#endif
+             return 0;
+         }
+         case 3: {
+@@ -318,9 +328,16 @@ int RoomEffect_BurstOrbParticle(int mode, void *data, intptr_t argument) {
+             palette = g_FieldFxPaletteTable[kind];
+             if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
+             clut = GetClut(0x30, palette);
++            #ifdef PE_PS5_GPU_NATIVE
++            FieldFx_BeginFallingOriginal();
++#endif
+             FieldFx_DrawShapeQuads((GteShortVector *)spark, 0, scale * 3, scale * 3,
+                           (s16)g_FieldFxSpriteParams.parameter02 * (s16)((s16)spark->timer / 6) + 0x80,
+                           clut, 1, fade, 0);
++#ifdef PE_PS5_GPU_NATIVE
++            FieldFx_EndFallingOriginal();
++            FieldFx_QueueBurstOrbDebris(spark->x,spark->y,spark->z,spark->timer,(unsigned)spark->state);
++#endif
+             break;
+         }
+         case 4:

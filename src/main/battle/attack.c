@@ -272,10 +272,15 @@ s8 g_EvasionReaction;
  * weapon category and the reaction in the core flags; an unresolved one
  * opens the floating panel.
  * The steal path reaches this through jump cross-jumping into the
- * single-target copy, as in retail. */
+ * single-target copy, as in retail.
+ * A target killed earlier in the same volley can already have released its
+ * core when the next shot's timer fires. Retail then writes to PS1 address 1,
+ * which is mapped kernel RAM; here there is nothing left to mark. */
 static inline void ApplyEvasionOutcome(BattleEntity *target)
 {
     EnemyCombatant *core = target->core;
+    if (core == NULL)
+        return;
     if (g_EvasionOutcome.status == 1)
     {
         EnemyCoreFlagBits *bits = (EnemyCoreFlagBits *)&core->coreFlags;
@@ -316,7 +321,8 @@ void Battle_ResolveHitOnTimer(void)
         {
             BattleEntity *thief = selectedSlot->actor;
             Asset_Find08Alt(0x46D, 0, thief->renderObject.target_x, thief->renderObject.target_y, thief->renderObject.target_z);
-            if (g_ActiveActor->action->turnWord & 0x6000)
+            /* A released target has nothing left to steal. */
+            if ((g_ActiveActor->action->turnWord & 0x6000) && thief->core != NULL)
             {
                 stealMode = (((EnemyCombatant *)selectedSlot->actor->core)->statusFlags2 >> 0xC) & 3;
                 switch (stealMode)
@@ -640,16 +646,17 @@ void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
     case PE_SPELL_SCAN:
         {
             /* Scan: note which of the target's status pairs read 2. */
-            EnemyCombatant *e = ent->core;
+            EnemyCombatant *e = ent ? ent->core : NULL;
+            u32 statusFlags2 = e ? e->statusFlags2 : 0;
             BattleResultFlags result;result.flags=g_BattleResultFlags;
-            result.bits.scanPair3 = (e->statusFlags2 & 3) == 2;
-            result.bits.scanPairC = (e->statusFlags2 & 0xC) == 8;
-            result.bits.scanPair30 = (e->statusFlags2 & 0x30) == 0x20;
-            result.bits.scanPairC000 = (e->statusFlags2 & 0xC000) == 0x8000;
-            result.bits.scanPair30000 = (e->statusFlags2 & 0x30000) == 0x20000;
-            result.bits.scanPair3000 = (e->statusFlags2 & 0x3000) == 0x2000;
-            result.bits.scanPairC00 = (e->statusFlags2 & 0xC00) == 0x800;
-            if (((((EnemyCombatant *)ent->core)->statusFlags2 >> 6) & 3) == 2) {
+            result.bits.scanPair3 = (statusFlags2 & 3) == 2;
+            result.bits.scanPairC = (statusFlags2 & 0xC) == 8;
+            result.bits.scanPair30 = (statusFlags2 & 0x30) == 0x20;
+            result.bits.scanPairC000 = (statusFlags2 & 0xC000) == 0x8000;
+            result.bits.scanPair30000 = (statusFlags2 & 0x30000) == 0x20000;
+            result.bits.scanPair3000 = (statusFlags2 & 0x3000) == 0x2000;
+            result.bits.scanPairC00 = (statusFlags2 & 0xC00) == 0x800;
+            if (((statusFlags2 >> 6) & 3) == 2) {
                 result.bits.scanPairC0 = 1;
             } else {
                 result.bits.scanPairC0 = 0;
@@ -663,14 +670,14 @@ void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
         break;
     case PE_SPELL_SLOW:
         /* Slow: certain when the target's pair reads 2, a coin flip at 0. */
-        {
+        if (ent && ent->core) {
             s32 pair = (((EnemyCombatant *)ent->core)->statusFlags2 >> 8) & 3;
             if (pair != 0 ? pair == 2 : !(rand() & 1)) {
                 EnemyCombatant *e = ent->core;
                 e->coreFlags |= 1;
             }
-            dmg = 0x5A0000;
         }
+        dmg = 0x5A0000;
         break;
     case PE_SPELL_HASTE:
         /* Haste: also cures a stiffness affliction. */
@@ -687,7 +694,7 @@ void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
         break;
     case PE_SPELL_CONFUSE:
         /* Confuse: certain when the target's pair reads 2, a coin flip at 0. */
-        {
+        if (ent && ent->core) {
             s32 pair = (((EnemyCombatant *)ent->core)->statusFlags2 >> 0xA) & 3;
             if (pair != 0 ? pair == 2 : !(rand() & 1)) {
                 s32 r = rand();
@@ -698,8 +705,8 @@ void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
                 Entity_SetActionMode(ent, 4);
                 ent->entityFlags |= 0x1000;
             }
-            dmg = 0x960000;
         }
+        dmg = 0x960000;
         break;
     case PE_SPELL_GENE_HEAL:
         dmg = 0x01900000;
@@ -881,14 +888,21 @@ s32 Battle_StepAyaAction(void)
         s32 product;
         int reachScale;
         targetEntity = g_BattleActionQueue[g_BattleActionIndex].actor;
-        reachScale = (((EnemyCombatant *) targetEntity->core)->statusFlags2 >> 0x13) & 0x1F;
-        targetDistance = ((targetEntity->renderObject.hit_cylinder.radius * reachScale) / 10) + D_8009D254->renderObject.hit_cylinder.radius;
-        targetAngle = Battle_CalcAngleToTarget(&targetEntity->renderObject, &g_AyaSavedPos);
+        if (targetEntity == NULL || targetEntity->core == NULL) {
+          /* A target released mid-volley has no core (and possibly no actor):
+           * stand still on this step instead of reading through NULL. */
+          targetDistance = D_8009D254->renderObject.hit_cylinder.radius;
+          targetAngle = 0;
+        } else {
+          reachScale = ((((EnemyCombatant *) targetEntity->core)->statusFlags2 >> 0x13) & 0x1F);
+          targetDistance = ((targetEntity->renderObject.hit_cylinder.radius * reachScale) / 10) + D_8009D254->renderObject.hit_cylinder.radius;
+          targetAngle = Battle_CalcAngleToTarget(&targetEntity->renderObject, &g_AyaSavedPos);
+        }
         D_8009D254->facingAngle = targetAngle;
         product = targetDistance * rsin(targetAngle);
-        D_8009D254->posX.fixed = (g_BattleActionQueue[g_BattleActionIndex].actor->renderObject.target_x * 65536) + (product * 16);
+        D_8009D254->posX.fixed = (targetEntity ? (targetEntity->renderObject.target_x * 65536) : 0) + (product * 16);
         product = targetDistance * rcos(D_8009D254->facingAngle);
-        D_8009D254->posZ.fixed = (g_BattleActionQueue[g_BattleActionIndex].actor->renderObject.target_z * 65536) + (product * 16);
+        D_8009D254->posZ.fixed = (targetEntity ? (targetEntity->renderObject.target_z * 65536) : 0) + (product * 16);
       }
       D_8009D254->baseX = D_8009D254->posX.fixed;
       D_8009D254->baseY = D_8009D254->posY.fixed;
@@ -943,11 +957,15 @@ s32 Battle_StepAyaAction(void)
         targetIndex = g_BattleActionIndex;
         g_EvasionOutcome.reaction = 2;
         g_EvasionOutcome.status = 1;
-        targetCore = g_BattleActionQueue[targetIndex].actor->core;
-        bits = (EnemyCoreFlagBits *)&targetCore->coreFlags;
-        bits->hitState = 1;
-        bits->category = g_ActiveActor->action->attackWord >> 20;
-        bits->reaction = g_EvasionOutcome.reaction;
+        targetCore = g_BattleActionQueue[targetIndex].actor
+            ? g_BattleActionQueue[targetIndex].actor->core
+            : NULL;
+        if (targetCore != NULL) {
+          bits = (EnemyCoreFlagBits *)&targetCore->coreFlags;
+          bits->hitState = 1;
+          bits->category = g_ActiveActor->action->attackWord >> 20;
+          bits->reaction = g_EvasionOutcome.reaction;
+        }
         if (g_AyaAttackStep == 2)
         {
           effectTarget = g_BattleActionQueue[targetIndex].actor;

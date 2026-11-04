@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'"
+    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Parasite Eve Lighting Lab</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="desktop-setup.css" />
+  </head>
+  <body class="setup">
+    <main class="setup-card">
+      <div class="brand">
+        <span class="mark">PE</span>
+        <div>LIGHTING LAB<small>A room-space lighting workbench</small></div>
+      </div>
+      <h1>Open a workspace</h1>
+      <p>
+        Use your own game image and an original Aya model capture (optional).
+        Your files stay on this computer.
+      </p>
+      <label
+        >Disc image
+        <span class="muted"
+          >North American Disc 1 · CUE / BIN / ISO</span
+        ></label
+      >
+      <div class="setup-file">
+        <input id="disc" readonly placeholder="Choose a disc image" /><button
+          id="chooseDisc"
+        >
+          Browse…
+        </button>
+      </div>
+      <label
+        >Aya model capture (optional)
+        <span class="muted">JSON with its matching .json.vram file</span></label
+      >
+      <div class="setup-file">
+        <input
+          id="model"
+          readonly
+          placeholder="Import automatically from Disc 1"
+        /><button id="chooseModel">Browse…</button>
+      </div>
+      <label>Lighting profiles</label>
+      <div class="setup-file">
+        <input id="profiles" readonly /><button id="chooseProfiles">
+          Browse…
+        </button>
+      </div>
+      <p class="muted">
+        Leave the model field empty to import Aya automatically from your disc.
+        The application keeps a private copy of the capture and remembers your
+        workspace.
+      </p>
+      <p id="setupError" role="alert"></p>
+      <button id="openWorkspace" class="primary wide">Open workspace</button>
+      <p id="setupStatus" class="muted"></p>
+    </main>
+    <script src="desktop-setup.js"></script>
+  </body>
+</html>

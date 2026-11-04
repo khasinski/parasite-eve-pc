@@ -10,6 +10,11 @@
 #include <psyz/overlay_sdl3.h>
 #include <psyz/system.h>
 #include <psyz/video.h>
+#include <psyz/gpu.h>
+#include "pe1/field_actor.h"
+#include "pe1/geom_state.h"
+#include "pe1/render_object.h"
+#include "pe1/render_buffers.h"
 /* Public LIBETC endpoint: initialize native gamepad discovery. */
 void PadInit(int mode);
 #include "common.h"
@@ -578,8 +583,74 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
     fflush(stdout);
 }
 
+FILE *Disc_Utf8File(const char *path, const char *mode);
+
+/* Read-only editor capture of the original posed model, not a replacement
+ * actor or gameplay renderer. Bone matrices are already in room coordinates. */
+static int Boot_ExportLightingModel(const char *path) {
+    char raw[1040];int n=snprintf(raw,sizeof(raw),"%s.vram",path);
+    if(n<0||(size_t)n>=sizeof(raw))return 0;
+    FieldActor *aya=g_PlayerEntity;
+    if(!aya || !aya->render_object.header || !aya->render_object.matrices)return 0;
+    RenderObjectEntity *obj=&aya->render_object;
+    if(!obj->parts||!obj->vertices||!obj->vertex_colours||!obj->primitive_descriptors||!obj->primitive_buffer||!obj->header->part_count)return 0;
+    unsigned count=obj->header->vertex_count;
+    if(!count || count>8192)return 0;
+    const unsigned char *known;
+    const unsigned short *vram=Psyz_GpuGetVramCopy(&known);
+    if(!vram)return 0;
+    FILE *file=Disc_Utf8File(path,"w");if(!file)return 0;
+    double origin[]={aya->pos_x/65536.0,aya->pos_y/65536.0,aya->pos_z/65536.0};
+    fprintf(file,"{\"format\":1,\"origin\":[%.8g,%.8g,%.8g],\"vertices\":[",origin[0],origin[1],origin[2]);
+    for(unsigned index=0;index<count;++index){
+        unsigned bone=0;
+        for(unsigned b=0;b<obj->header->part_count;++b)
+            if(index>=obj->parts[b].vertex_start && index<obj->parts[b].vertex_start+obj->parts[b].vertex_count){bone=b;break;}
+        RenderMatrix *matrix=obj->matrices+bone;
+        RenderVec3s *vertex=obj->vertices+index;
+        const GteShortVector *normal=vertex->pad>=0 && vertex->pad<240?(const GteShortVector *)&g_RenderNormalTable[vertex->pad]:NULL;
+        double position[3],direction[3];
+        for(unsigned r=0;r<3;++r){
+            position[r]=matrix->translation[r]-origin[r]+(matrix->rotation[r][0]*(double)vertex->x+matrix->rotation[r][1]*(double)vertex->y+matrix->rotation[r][2]*(double)vertex->z)/4096.0;
+            direction[r]=normal?(matrix->rotation[r][0]*(double)normal->x+matrix->rotation[r][1]*(double)normal->y+matrix->rotation[r][2]*(double)normal->z)/16777216.0:(r==1?-1.0:0.0);
+        }
+        fprintf(file,"%s[%.8g,%.8g,%.8g,%.8g,%.8g,%.8g]",index?",":"",position[0],position[1],position[2],direction[0],direction[1],direction[2]);
+    }
+    fprintf(file,"],\"faces\":[");
+    unsigned char *packet=obj->primitive_buffer;
+    const unsigned counts[]={obj->header->packet34_count,obj->header->packet28_count,obj->header->packet24_count,obj->header->packet1c_count};
+    const size_t sizes[]={sizeof(RenderPacket34),sizeof(RenderPacket28),sizeof(RenderPacket24),sizeof(RenderPacket1C)};
+    RenderPrimitiveDescriptor *desc=obj->primitive_descriptors;unsigned total=0;
+    for(unsigned kind=0;kind<4;++kind)for(unsigned face=0;face<counts[kind];++face,++desc,packet+=2*sizes[kind]){
+        unsigned vertices=(kind==0||kind==2)?4:3;
+        int valid=1;for(unsigned v=0;v<vertices;++v){
+            unsigned index=desc->lookup_indices[v];int visible=0;
+            if(index>=count){valid=0;continue;}
+            for(unsigned b=0;b<obj->header->part_count;++b)
+                if(index>=obj->parts[b].vertex_start && index<obj->parts[b].vertex_start+obj->parts[b].vertex_count && obj->parts[b].visible==1)visible=1;
+            if(!visible)valid=0;
+        }
+        if(!valid)continue;
+        RenderPacket34 *poly=(void *)packet;
+        fprintf(file,"%s{\"indices\":[",total++?",":"");
+        for(unsigned v=0;v<vertices;++v)fprintf(file,"%s%u",v?",":"",desc->lookup_indices[v]);
+        fprintf(file,"],\"uv\":[");
+        for(unsigned v=0;v<vertices;++v){const unsigned char *uv=(const unsigned char *)&poly->u0+v*12;
+            fprintf(file,"%s[%u,%u]",v?",":"",kind<2?uv[0]:0,kind<2?uv[1]:0);}
+        fprintf(file,"],\"page\":%d,\"clut\":%u,\"colors\":[",kind<2?poly->page_bits:-1,kind<2?poly->clut:0);
+        for(unsigned v=0;v<vertices;++v){u32 color=obj->vertex_colours[desc->lookup_indices[v]];
+            fprintf(file,"%s[%u,%u,%u]",v?",":"",color&255,(color>>8)&255,(color>>16)&255);}
+        fprintf(file,"]}");
+    }
+    fprintf(file,"]}\n");int success=!ferror(file);if(fclose(file))success=0;
+    file=Disc_Utf8File(raw,"wb");if(!file)return 0;
+    if(fwrite(vram,2,1024*512,file)!=1024*512)success=0;
+    if(fclose(file))success=0;
+    return success;
+}
+
 static void Boot_ReadHostControlCommand(void) {
-    char line[128];
+    char line[1024];
     char *end = NULL;
     char *mask_end = NULL;
     size_t length = 0;
@@ -623,6 +694,11 @@ static void Boot_ReadHostControlCommand(void) {
         _Exit(2);
     }
     line[strcspn(line, "\r\n")] = '\0';
+    if(!strncmp(line,"lighting-export ",16)){
+        if(!Boot_ExportLightingModel(line+16)){fprintf(stderr,"Lighting model export failed\n");fflush(stderr);_Exit(2);}
+        g_BootHostControlAt=g_BootHostVBlankCount;
+        return;
+    }
     if (!strcmp(line, "quit")) {
         BOOT_WRITE_PROFILE();
         _Exit(EXIT_SUCCESS);

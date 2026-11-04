@@ -237,3 +237,12 @@ void pe_field_wayne_register(const char *mod_id) {
                             &s_enabled, pe_field_wayne_tick);
     pe_hook_add(PE_HOOK_TEXTBOXES, pe_on_textboxes, NULL, PE_PRIORITY_EARLY, mod_id);  /* before pe_wayne_menu */
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_field_wayne_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(s_menu_box||s_pending>=0||s_boxes_this_talk||s_last_message))return 0;if(apply&&(!in||!pe_field_wayne_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_U(w,s_enabled,0,1,1);
+
+if(apply&&w.ok){s_token=-1;s_warner=NULL;s_boxes_this_talk=0;s_last_message=NULL;s_menu_box=NULL;s_pending=-1;s_pending_wait=0;s_text_ready=0;memset(s_text,0,sizeof s_text);}return w.ok&&w.at==4u;}
+#endif

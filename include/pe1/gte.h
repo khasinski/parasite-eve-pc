@@ -11,10 +11,17 @@ unsigned int Psyz_GteCtrlRead(unsigned reg);
 void Psyz_GteCtrlWrite(unsigned reg, unsigned int value);
 void Psyz_GteCommand(unsigned int command);
 void Psyz_GteSetPgxpMatrix(const double rot[3][3], const double trans[3]);
+void Psyz_PgxpSetActive(int active);
 void Psyz_PgxpNextFrame(void);
 void Psyz_GteClearPgxpMatrix(void);
+void Psyz_GteSetPgxpEffectMode(int enabled);
+int Psyz_GteGetLastPgxpVertex(float *x, float *y, float *w);
+void Psyz_GteStorePgxpVertex(const void *dst, unsigned int sxy, float x, float y, float w);
+void Psyz_GteProjectFloatVertex(double vx, double vy, double vz, const void *dst, unsigned int sxy);
 void Psyz_GteStoreSxyTo(unsigned reg, void *dst_addr);
 void Psyz_GteCopyPgxpSxy(const void *src_addr, const void *dst_addr, unsigned int sxy);
+int Psyz_PgxpLookupVertex(const void *packet_sxy_addr, unsigned int sxy,
+                          float *x, float *y, float *w);
 int Psyz_GtePgxpNclip3(const void *s0, unsigned int xy0, const void *s1, unsigned int xy1,
                        const void *s2, unsigned int xy2, int int_area);
 int Psyz_GtePgxpNclip4(const void *s0, unsigned int xy0, const void *s1, unsigned int xy1,

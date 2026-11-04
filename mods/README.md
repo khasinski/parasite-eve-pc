@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -53,8 +53,45 @@ mods/
   pe_rewards/          battle rewards: extra Junk, rare drops and pity (needs pe_economy)
   pe_collection/       Bestiary registry and menu (creature packs register here)
   pe_wardrobe/         Wardrobe registry, skins, Wardrobe menu (costume packs register here)
+  pe_stacks/           stacked consumables (up to 99 per bag or storage slot), from the Pathogen Eve port
+  pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
+  pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
+  pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
+  pe_lang/             language packs: the game's text from a .pelang pack, F1 > Language (not built
+                       by default; docs/LOCALIZATION.md, tools in localization/)
   pe_hello/            example mod (not built by default)
 ```
+
+## Stacked items (pe_stacks)
+
+F1 > PE Enhancements > Inventory > Stacked items (on by default). Lists keep plain item ids; the
+extra copies of a slot are counted per (list, item) in the mod. Hooks: ITEM_ADD (join a carried
+stack), ITEM_REMOVE (use / give / discard takes one copy), ITEM_COUNT and INV_CMD_COUNT_ITEM
+(story checks see every copy), STORAGE_TRANSFER (a bag stack goes into storage whole; storage
+gives one copy), INVENTORY_REBUILD (duplicates fold into one slot), SLOT_DRAWN (the count in the
+rounds column). Only base items of kinds 10 and 12..15 stack; Junk stays out while pe_economy's
+Junk economy is on. Saved as the `pe_stacks.counts` record (204 bytes, up to 100 stacks). With the
+mod or the option off, extra copies go back into free slots as plain items.
+
+## Warp (pe_warp)
+
+F1 > Warp: pick a story checkpoint and Warp. It sets script variable 74 (story progress) to that
+point and runs the field script's own room transfer (Script_EncodeBarcode) on the next free field
+frame, never during a battle, an event, a room change or a movie.
+
+## Quick save (pe_quicksave)
+
+F10 saves to the current slot, F11 loads it, F12 picks the next of 10 slots (also F1 > Quick save).
+A quick save is the game's own 8 KB card file (Save_BuildCardFile, with every mod's records), made
+in the free field and kept beside the preferences as quicksave_<slot>.mcd. Loading commits it the
+way Save_LoadCardFileIntoRuntime does, without the card menu's dialogs, then runs the field
+script's room transfer to the saved room: the room starts again as after a loaded save. It holds
+what a save holds, not Aya's place in the room or a fight in progress.
+
+## Cheats (pe_cheats)
+
+F1 > Cheats: God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers.
+All off until chosen; while they are off the mod writes nothing.
 
 ## A mod
 
@@ -66,7 +103,7 @@ const PeMod pe_mod_<folder> = {"<folder>", "Readable name", "0.1", requires, ini
 
 Versions: the mod API is `PE_MOD_API_VERSION` (pe_mod_host.h, now 1), raised only when a change
 would break existing mods; the PE Enhancements suite is `PE_ENHANCEMENTS_VERSION` (pe_pages.h,
-now 0.9.0), one version for all of its mods.
+now 0.10.0), one version for all of its mods.
 
 `init` registers the mod's rows, hooks and services. Each feature lives in its own file with
 one `pe_<feature>_register(mod_id)` function that the mod's main file calls, so a feature can be

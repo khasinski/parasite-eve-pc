@@ -1,3 +1,4 @@
+#include "pe1/hp_loss_hook.h"
 #include "common.h"
 #include "pe1/battle.h"
 #include "pe1/battle_entity_anim.h"
@@ -16,8 +17,9 @@ void Battle_SubActionStep(void) {
 
     state = g_ActiveActor;
     if (state->subActionCounter >= state->subActionPeriod) {
-        state->curHP -= state->subActionStep;
-        state->hpMirror -= state->subActionStep;
+        int admitted_loss=Pe_FilterCombatHpLoss(state,(s16)state->curHP,state->subActionStep,3);
+        state->curHP -= admitted_loss;
+        state->hpMirror -= admitted_loss;
         state->subActionCounter = 0;
         state->panelAux_val = state->subActionStep;
         actor = (BattleEntity *)g_PlayerEntity;
@@ -201,7 +203,7 @@ void Battle_ApplyEnemyAttack(EnemyCombatant *ent) {
             Combatant *pD = g_ActiveActor;
             s32 tmp = pD->curHP << 16;
             if ((tmp >> 16) >= 2) {
-                *(s16 *)&pD->curHP = tmp >> 17;
+                *(s16 *)&pD->curHP = (tmp >> 16) - Pe_FilterCombatHpLoss(pD,tmp >> 16,(tmp >> 16)-(tmp >> 17),4);
             }
         }
         break;
@@ -219,9 +221,9 @@ void Battle_ApplyEnemyAttack(EnemyCombatant *ent) {
             f &= ~AYA_PRERAISE;
             pD->stateFlags = f;
             if (hp >= 2) {
-                *(s16 *)&pD->curHP = 1;
+                *(s16 *)&pD->curHP = hp - Pe_FilterCombatHpLoss(pD,hp,hp-1,4);
             } else if (hp == 1) {
-                *(s16 *)&pD->curHP = -1;
+                *(s16 *)&pD->curHP = hp - Pe_FilterCombatHpLoss(pD,hp,hp+1,4);
             }
         }
         break;
@@ -261,7 +263,7 @@ void Battle_ApplyEnemyAttack(EnemyCombatant *ent) {
             Combatant *pD = g_ActiveActor;
             s16 t = *(s16 *)&pD->curHP;
             if (t >= 2) {
-                *(s16 *)&pD->curHP = (t * 3) / 4;
+                *(s16 *)&pD->curHP = t - Pe_FilterCombatHpLoss(pD,t,t-(t*3)/4,4);
             }
         }
         break;

@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: MIT
+# Use as CMAKE_PROJECT_parasite-eve-pc_INCLUDE, retaining the public base hook.
+option(PE_PS5_PARTICLE_ADDON "Enable optional narrow native debris rendering" OFF)
+if(NOT DEFINED PE_PS5_BASE_STARTUP_PROJECT OR NOT EXISTS "${PE_PS5_BASE_STARTUP_PROJECT}")
+  message(FATAL_ERROR "PE_PS5_BASE_STARTUP_PROJECT must name the prepared public startup-project.cmake")
+endif()
+include("${PE_PS5_BASE_STARTUP_PROJECT}")
+if(NOT PE_PS5_PARTICLE_ADDON)
+  if(EXISTS "${CMAKE_SOURCE_DIR}/.PE-PS5-PARTICLE-ADDON.json" OR EXISTS "${CMAKE_SOURCE_DIR}/include/pe1/particle_augment.h")
+    message(FATAL_ERROR "Particle source was already patched ON; use a fresh public export to return to OFF")
+  endif()
+  return()
+endif()
+if(NOT PE_PS5_GAME)
+  message(FATAL_ERROR "This add-on requires the native PE_PS5_GAME build")
+endif()
+find_program(PE_PS5_PARTICLE_NODE NAMES node REQUIRED)
+execute_process(COMMAND "${PE_PS5_PARTICLE_NODE}" "${CMAKE_CURRENT_LIST_DIR}/apply-addon.cjs" "${CMAKE_SOURCE_DIR}"
+  RESULT_VARIABLE _pe_particles_result OUTPUT_VARIABLE _pe_particles_output ERROR_VARIABLE _pe_particles_error)
+if(NOT _pe_particles_result EQUAL 0)
+  message(FATAL_ERROR "Particle source preparation failed: ${_pe_particles_error}")
+endif()
+message(STATUS "Optional particle source: ${_pe_particles_output}")
+# Bind literal paths now: DEFER must not resolve another caller's list directory.
+cmake_language(EVAL CODE "cmake_language(DEFER CALL include [[${CMAKE_CURRENT_LIST_DIR}/register.cmake]])")

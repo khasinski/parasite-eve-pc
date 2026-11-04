@@ -1,0 +1,397 @@
+{
+  "omissions": [
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/LICENSE.txt",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/color.frag.dxil.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/color.frag.msl.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/color.frag.spv.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/dxil.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/linepoint.vert.dxil.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/linepoint.vert.msl.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/linepoint.vert.spv.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/msl.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/spir-v.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_advanced.frag.dxil.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_advanced.frag.msl.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_advanced.frag.spv.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgb.frag.dxil.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgb.frag.msl.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgb.frag.spv.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.dxil.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.msl.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.spv.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_color.vert.dxil.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_color.vert.msl.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_color.vert.spv.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.dxil.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.msl.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.spv.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/EGL/egl.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/EGL/eglext.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/EGL/eglplatform.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES2/gl2.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES2/gl2ext.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES2/gl2platform.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl3.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl31.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl32.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl3platform.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/KHR/khrplatform.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codecs_common.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_av1std.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_av1std_decode.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h264std.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h264std_decode.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h264std_encode.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h265std.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h265std_decode.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h265std_encode.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vk_icd.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vk_layer.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vk_platform.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_android.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_beta.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_core.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_directfb.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_fuchsia.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_ggp.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_ios.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_macos.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_metal.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_screen.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_vi.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_wayland.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_win32.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_xcb.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_xlib.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_xlib_xrandr.h",
+      "reason": "pinned nested submodule/shader mirror; prepared from selected component source"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/fsr1/generated/BUILD-MANIFEST.json",
+      "reason": "generated binary/local build evidence; regenerated or not needed"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/fsr1/generated/check-host.pdb",
+      "reason": "generated binary/local build evidence; regenerated or not needed"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/fsr1/generated/fsr1_easu.frag.spv",
+      "reason": "generated binary/local build evidence; regenerated or not needed"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/fsr1/generated/fsr1_rcas.frag.spv",
+      "reason": "generated binary/local build evidence; regenerated or not needed"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/fsr1/generated/fullscreen.vert.spv",
+      "reason": "generated binary/local build evidence; regenerated or not needed"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/fsr1/shaders/fullscreen.vert.spv",
+      "reason": "generated binary/local build evidence; regenerated or not needed"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/movie_blur.frag.spv",
+      "reason": "generated binary/local build evidence; regenerated or not needed"
+    }
+  ],
+  "generatedFromSource": [
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/fsr1/generated/fsr1_shaders.h",
+      "after": "c09a61ecab81471d2a8afe9bb0d4893c782d785bdc68bceb6450717b329a0eaa"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/movie_blur_shaders.h",
+      "after": "09abc4b8a49ce6114b3390b0053020487793f2eb065f655fbfdb26c024a05405"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/clear_frag_spv.h",
+      "after": "2b66cdee7cd591468d05665842e3242906f108ac2bc2b37cdbd78c8124931e0a"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/clear_vert_spv.h",
+      "after": "6f8d1d70b6d3f427ccad252cb317a4099885ec4bb7ca24d3a5cc4ceb101277da"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/psx_frag_spv.h",
+      "after": "385b2c4b29683cd03177f7fabc4654602bbcfe8c5e520e4a147cc590c7adb1a1"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/psx_vert_spv.h",
+      "after": "768efd12c5e4d242307197031287740269436bafb5b2eff494dc83ecbe54519a"
+    }
+  ],
+  "noAssetBytesIncluded": true
+}

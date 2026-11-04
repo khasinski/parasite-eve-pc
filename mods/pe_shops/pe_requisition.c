@@ -29,10 +29,12 @@
 #include "pe_shops.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_requisition.h"
 #include "pe_save.h"
+#include "pe_services.h"
 #include "pe1/script_queue.h"
 
 /* Items */
@@ -186,7 +188,7 @@ uint16_t pe_shop_item(int row) {
 
 const char *pe_shop_name(uint16_t id) {
     const int e = pe_econ_index(id), g = pe_goods_index(id);
-    return e >= 0 ? s_econ[e].name : g >= 0 ? s_goods[g].name : "None";
+    return e >= 0 ? pe_l10n_ui(s_econ[e].name) : g >= 0 ? pe_l10n_ui(s_goods[g].name) : "None";
 }
 
 uint32_t pe_shop_price(uint16_t id) {
@@ -211,10 +213,10 @@ void pe_shop_at_counter(int on) { s_at_counter = on; }
 
 /* Why the shop is closed right now, or NULL. */
 static const char *pe_shop_closed(void) {
-    if (!pe_game_loaded()) return "Load a game first";
-    if (!pe_shopw_enabled()) return "Junk economy is off";
+    if (!pe_game_loaded()) return pe_l10n_ui("Load a game first");
+    if (!pe_shopw_enabled()) return pe_l10n_ui("Junk economy is off");
     if (!s_at_counter && !pe_free_field())
-        return "Use Requisition in the field, outside battle and game menus";
+        return pe_l10n_ui("Use Requisition in the field, outside battle and game menus");
     return NULL;
 }
 
@@ -224,17 +226,19 @@ const char *pe_shop_blocked(uint16_t id) {
     int pool;
     if (closed) return closed;
     if (e >= 0) {
-        if (pe_req_unlocked(s_econ[e].effect)) return "Already unlocked";
+        if (pe_req_unlocked(s_econ[e].effect)) return pe_l10n_ui("Already unlocked");
     } else {
-        if (g < 0) return "No such goods";
-        if (id == PE_ITEM_TOOL && pe_has_tool_kit()) return "A Tool Kit already covers Tools";
-        if (!pe_base_item(id)) return "Item data unavailable";
+        if (g < 0) return pe_l10n_ui("No such goods");
+        if (id == PE_ITEM_TOOL && pe_has_tool_kit()) return pe_l10n_ui("A Tool Kit already covers Tools");
+        if (!pe_base_item(id)) return pe_l10n_ui("Item data unavailable");
         pool = pe_ammo_pool(id);
         if (pool >= 0) {
-            if (g_KeyItemRecords[pool].ammo >= pe_pool_capacity(pool)) return "Ammo is full";
-            if (pe_bag_find(PE_POOL_FIRST + pool) < 0 && pe_bag_find(0) < 0) return "Bag full";
-        } else if (pe_bag_find(0) < 0) {
-            return "Bag full";
+            if (g_KeyItemRecords[pool].ammo >= pe_pool_capacity(pool)) return pe_l10n_ui("Ammo is full");
+            if (pe_bag_find(PE_POOL_FIRST + pool) < 0 && pe_bag_find(0) < 0) return pe_l10n_ui("Bag full");
+        } else {
+            const PeStacksApi *stacks = pe_service_get("stacks", 1);
+            if (stacks && stacks->can_add ? !stacks->can_add(0, id) : pe_bag_find(0) < 0)
+                return pe_l10n_ui("Bag full");
         }
     }
     return pe_shopw_junk() < pe_shop_price(id) ? "Not enough Junk" : NULL;
@@ -245,11 +249,11 @@ int pe_shop_buy(uint16_t id, char *msg, size_t size) {
     const uint32_t price = why ? 0 : pe_shop_price(id);
     const int e = pe_econ_index(id);
     if (why) { snprintf(msg, size, "%s", why); return 0; }
-    if (price && !pe_shopw_spend_junk(price)) { snprintf(msg, size, "Not enough Junk"); return 0; }
+    if (price && !pe_shopw_spend_junk(price)) { snprintf(msg, size, "%s", pe_l10n_ui("Not enough Junk")); return 0; }
     if (e >= 0) {
         if (!pe_req_unlock(s_econ[e].effect)) {   /* unlocked meanwhile: refund */
             if (price) pe_shopw_give_junk(price);
-            snprintf(msg, size, "Already unlocked");
+            snprintf(msg, size, "%s", pe_l10n_ui("Already unlocked"));
             return 0;
         }
     } else {
@@ -260,12 +264,14 @@ int pe_shop_buy(uint16_t id, char *msg, size_t size) {
             rounds = g_KeyItemRecords[pool].ammo + pe_base_item(id)->ammo;
             g_KeyItemRecords[pool].ammo = (u16)(rounds > pe_pool_capacity(pool) ? pe_pool_capacity(pool) : rounds);
         } else {
-            g_AyaInventoryItems[pe_bag_find(0)] = (s16)id;
+            const PeStacksApi *stacks = pe_service_get("stacks", 1);
+            if (stacks && stacks->add) stacks->add(0, id, -1);
+            else g_AyaInventoryItems[pe_bag_find(0)] = (s16)id;
         }
         if (id == PE_ITEM_TOOL && s_shop.tools_bought < 0xFFFF) ++s_shop.tools_bought;
     }
     pe_log("buy", "item=%s price=%u", pe_shop_name(id), (unsigned)price);
-    snprintf(msg, size, "Bought %s: %u Junk", pe_shop_name(id), (unsigned)price);
+    snprintf(msg, size, pe_l10n_ui("Bought %s: %u Junk"), pe_shop_name(id), (unsigned)price);
     return 1;
 }
 
@@ -284,25 +290,29 @@ int pe_shop_spare_club(char *msg, size_t size) {
     g_InventoryRuntime.equipment[record] = *base;
     g_AyaInventoryItems[slot] = (s16)(PE_EQUIPMENT_FIRST + record);
     pe_log("spare_club", "item=0x%02X", PE_ITEM_CLUB_1);
-    snprintf(msg, size, "Spare Club issued");
+    snprintf(msg, size, "%s", pe_l10n_ui("Spare Club issued"));
     return 1;
 }
 
 void pe_shop_details(uint16_t id, char *out, unsigned size) {
     const int e = pe_econ_index(id), pool = pe_ammo_pool(id);
     int used = 0, held = 0, i;
-    if (!pe_game_loaded()) { snprintf(out, size, "Load a game first"); return; }
+    if (!pe_game_loaded()) { snprintf(out, size, "%s", pe_l10n_ui("Load a game first")); return; }
     for (i = 0; i < pe_bag_limit(); ++i) {
         used += g_AyaInventoryItems[i] != 0;
         held += g_AyaInventoryItems[i] == id;
     }
+    {
+        const PeStacksApi *stacks = pe_service_get("stacks", 1);
+        if (stacks && stacks->total) held = stacks->total(0, id);
+    }
     if (e >= 0)
-        snprintf(out, size, "%u Junk: unlocks in Mod Catalog", (unsigned)pe_shop_price(id));
+        snprintf(out, size, pe_l10n_ui("%u Junk: unlocks in Mod Catalog"), (unsigned)pe_shop_price(id));
     else if (pool >= 0)
-        snprintf(out, size, "%u Junk; ammo %u/%d; bag %d/%d", (unsigned)pe_shop_price(id),
+        snprintf(out, size, pe_l10n_ui("%u Junk; ammo %u/%d; bag %d/%d"), (unsigned)pe_shop_price(id),
                  (unsigned)g_KeyItemRecords[pool].ammo, pe_pool_capacity(pool), used, pe_bag_limit());
     else
-        snprintf(out, size, "%u Junk; carrying %d; bag %d/%d", (unsigned)pe_shop_price(id), held, used, pe_bag_limit());
+        snprintf(out, size, pe_l10n_ui("%u Junk; carrying %d; bag %d/%d"), (unsigned)pe_shop_price(id), held, used, pe_bag_limit());
 }
 
 /* ---- save block (recomp PESH v1) ---- */
@@ -355,3 +365,21 @@ void pe_requisition_register(const char *mod_id) {
     pe_menu_register_live_int(PE_PAGE_DEBUG_LOOT, "Tools bought", "Sets the next Tool's price.", 0, 0xFFFF, 1,
                               pe_get_tools_bought, pe_set_tools_bought);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_requisition_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_requisition_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_U(w,s_shop.tools_bought,0,65535,0);
+PE_CK_U(w,s_shop.pad,0,65535,0);
+PE_CK_S(w,s_price_pct,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_econ_pct,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tool_start,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tool_step,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_tool_cap,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_revive,INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_revive_ex,INT32_MIN,INT32_MAX,1);
+PE_CK_U(w,s_at_counter,0,1,0);
+
+if(apply&&w.ok){}return w.ok&&w.at==40u;}
+#endif

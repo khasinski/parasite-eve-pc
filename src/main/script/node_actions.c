@@ -1,3 +1,6 @@
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_node_types.h"
+#endif
 #include "common.h"
 #include "pe_hooks.h"
 #include "pe1/script_state.h"
@@ -161,6 +164,10 @@ int Script_TurnTowardPointStep(int **arg0) {
         node->target14 = x;
         node->target1c = step;
         node->target18.coordinate = y;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+
+        PeStateNode_Tag(node, PE_NODE_COORDINATE);
+#endif
     } else {
         x = node->target14;
         y = node->target18.coordinate;
@@ -261,6 +268,10 @@ int Script_MoveTowardPoint(int **args) {
         turn_speed = *args[2];
         g_ScriptNodePool->target14 = target_x;
         g_ScriptNodePool->target18.coordinate = target_z;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+
+        PeStateNode_Tag(g_ScriptNodePool, PE_NODE_COORDINATE);
+#endif
         g_ScriptNodePool->target1c = turn_speed;
         g_ScriptNodePool->flags |= 0x20;
     } else {
@@ -396,6 +407,10 @@ int Render_CameraTrackEntityAngle(int **args) {
 
         g_ScriptNodePool->target14 = target_x;
         g_ScriptNodePool->target18.coordinate = target_z;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+
+        PeStateNode_Tag(g_ScriptNodePool, PE_NODE_COORDINATE);
+#endif
         g_ScriptNodePool->target1c = turn_speed;
         g_ScriptNodePool->flags |= 0x20;
     } else {
@@ -492,6 +507,10 @@ int Render_CameraSnapToEntity(int **args) {
 
         speed = *args[2];
         g_ScriptNodePool->target18.actor = target;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+
+        PeStateNode_Tag(g_ScriptNodePool, PE_NODE_ACTOR);
+#endif
         g_ScriptNodePool->flags |= 0x20;
         g_ScriptNodePool->target14 = speed;
     } else {
@@ -600,6 +619,10 @@ int Render_CameraTrackEntityZoom(int **args) {
         g_ScriptNodePool->flags |= 0x20;
         turn_speed = *args[2];
         g_ScriptNodePool->target18.actor = target;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+
+        PeStateNode_Tag(g_ScriptNodePool, PE_NODE_ACTOR);
+#endif
         g_ScriptNodePool->target14 = turn_speed;
         target_move_id = target->field_sfx_id;
         g_ScriptNodePool->target1c = target_move_id;

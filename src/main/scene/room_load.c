@@ -1,4 +1,13 @@
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_bank_sources.h"
+#endif
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_state_assets.h"
+#endif
 #include "common.h"
+#ifdef PE_PS5_GPU_NATIVE
+#include "pe1/dialogue_alpha.h"
+#endif
 #include "pe_hooks.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -167,6 +176,9 @@ int Scene_LoadFieldBg(void)
     if (!(state->flags & 1))
         return 0;
 
+#ifdef PE_PS5_GPU_NATIVE
+    PeMenuFont_SourceBegin();
+#endif
     lba = g_PeImageBaseLba;
 
     for (;;) {
@@ -332,6 +344,9 @@ int Scene_LoadFieldBg(void)
         state->scene_audio.tracks.keys[1][0] = -1;
     }
     state->flags &= ~1;
+#ifdef PE_PS5_GPU_NATIVE
+    PeDialogue_FontBankLoaded();
+#endif
     return 0;
 }
 
@@ -1038,6 +1053,11 @@ int Scene_LoadRoom(unsigned int roomId)
         if ((u64)base + g_RoomSectorTable[map].start + g_RoomSectorTable[map].scratchSectors +
             g_RoomSectorTable[map].textureSectors + g_RoomSectorTable[map].roomSectors >
             UINT64_C(0x100000000)) return -1;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+        /* Invalidate BEFORE buffers can be overwritten; stale regions must not be read. */
+        PeStateAssets_Invalidate();
+        PeStateBankSource_Invalidate(PE_STATE_BANK_ROOM);
+#endif
         if ((ready = CdRom_ReadSectorsFromLba(base + g_RoomSectorTable[map].start,
                                         state->scene_load_scratch,
                                         g_RoomSectorTable[map].scratchSectors)) == -1) return -1;
@@ -1316,6 +1336,14 @@ int Scene_LoadRoom(unsigned int roomId)
     } else if (!(flags & 0x40)) {
         state->pending_sample_bank = -1;
     }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+    /* Exact bounds already verified above; offset words stay in this owned task blob. */
+    PeStateAssets_Commit((uint32_t)(map+1),(uint32_t)task_offset,
+        (const unsigned char *)room+task_offset,task_bytes,tasks);
+    PeStateAssets_SetNativeDescriptors((uint32_t)(directory->scripts>>22));
+    (void)PeStateBankSource_Commit(PE_STATE_BANK_ROOM,room,room_bytes);
+#endif
     return 0;
 
 invalid_tasks:
@@ -1382,6 +1410,8 @@ int CdRom_DetectDiscChange(void) {
 
     return 0;
 }
+
+#include "pe_model_texture_pages.h"
 
 /* Load the area textures and model/action bank through the original phases. */
 int Scene_LoadEntityTexture(void)
@@ -1455,6 +1485,9 @@ retry:
         break;
     case 4:
         index = bank + 8;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+        PeStateBankSource_Invalidate(PE_STATE_BANK_PLAYER);
+#endif
         if (CdRom_ReadSectorsFromLba(lba + g_PeImageSectorTable[index],
                 state->voice_bank_base_1400,
                 g_PeImageSectorBoundsNext[index] - g_PeImageSectorTable[index]) == -1) return -1;
@@ -1475,6 +1508,9 @@ retry:
     case 6:
         blob = (SceneAssetBlob *)state->voice_bank_base_1400;
         directory = SceneAsset_ResolveOffset(blob, blob->directoryOffset);
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+        {int source_index=bank+8;int sectors=g_PeImageSectorBoundsNext[source_index]-g_PeImageSectorTable[source_index];if(sectors>0)(void)PeStateBankSource_Commit(PE_STATE_BANK_PLAYER,blob,(size_t)sectors*2048u);}
+#endif
         {
             SceneBankAssetRecord *root = SceneAsset_ResolveOffset(blob, directory->bankRootEntries & 0x3fffff);
             state->bank_slots[0] = SceneAsset_ResolveOffset(blob, root->source.offsetAndId & 0xffffff);
@@ -1585,6 +1621,7 @@ s32 Scene_InitEntityPlayer(s32 resume) {
             Render_SetupEntityPrims(&player->render_object, player->model_state.model_header,
                                     (u8 *)player->allocation_block + 2 * sizeof(RenderShadowQuad), 0x3C0, 0x100, 0,
                                     0x1C0, 2, &renderSetup, 1);
+            PeModelTextures_Player(&player->render_object,g_GameState.loaded_entity_bank);
         }
         {
             FieldActor *player = g_PlayerEntity;
@@ -1733,6 +1770,9 @@ retry:
         break;
     case 4:
         sectorIndex = (state->requested_entity_bank - 10) / 2 * 8 + day + 0x16;
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+        PeStateBankSource_Invalidate(PE_STATE_BANK_ENTITY);
+#endif
         if (CdRom_ReadSectorsFromLba(lba + g_PeImageSectorTable[sectorIndex],
                 state->entity_texture_blob,
                 g_PeImageSectorBoundsNext[sectorIndex] - g_PeImageSectorTable[sectorIndex]) == -1) return -1;
@@ -1754,6 +1794,9 @@ retry:
         state->scene_init_subphase = 6;
         break;
     case 6:
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+        {unsigned bankIndex=(state->requested_entity_bank-10)/2*8+day+0x16;size_t bankBytes=(size_t)(g_PeImageSectorBoundsNext[bankIndex]-g_PeImageSectorTable[bankIndex])*2048u;PeStateBankSource_Commit(PE_STATE_BANK_ENTITY,state->entity_texture_blob,bankBytes);}
+#endif
         view = state->entity_texture_blob;
         directory = SCENE_ASSET_AT(view, view->header.directoryOffset);
         firstRecord = SCENE_ASSET_AT(view, directory->bankRowEntries & 0x3fffff);

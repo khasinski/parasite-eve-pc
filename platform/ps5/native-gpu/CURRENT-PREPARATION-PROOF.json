@@ -1,0 +1,40 @@
+{
+  "schema": 3,
+  "selectedBuild": "resident-ailments-movie-retry-owned-20261101-a1",
+  "selectedPrivateEboot": "c7a47dfc44d773eb3e485538a4a5c211bf678908f5c1e3945f1068c300a5a394",
+  "originalArchivePins": [
+    {
+      "name": "game",
+      "revision": "8c52cdde5d60ee52f00913517ffb593e9521bf2d",
+      "archive": "game.zip",
+      "archiveSha256": "61e4ecb0fd56a4f7a89cddf40c4ae362c4262f06698828c38d80661587c2b068"
+    },
+    {
+      "name": "psyz",
+      "revision": "db796262b2a696241ec8f3965ebbfbcbc45bfc30",
+      "archive": "psyz.zip",
+      "archiveSha256": "4a639c9dc1305ee4caa2b5efa9c9cf22c0b99d89e414f42d32d2448a57d9d8d8"
+    },
+    {
+      "name": "sdl",
+      "revision": "fa2c02bb6e21974a89ea9824bc53c9932abe5f9c",
+      "archive": "sdl.zip",
+      "archiveSha256": "7b36fe7f802450aa0c98af2e151159c6c8d0e28ea8b0e4356187a21c2d3680a1"
+    }
+  ],
+  "sourceRecordsVerified": 207,
+  "SDLSourceMirrorsVerified": 40,
+  "supportStateSourceInputsVerified": 71,
+  "allSevenSelectedShaderHeadersReproduced": true,
+  "compilerSha256": "9643709c02c83e26773f96b6a87f197ab2e84f78be0879ad8fb3619418b5d9ad",
+  "publicSourceCohortGenerated": false,
+  "publicFullGameBuildRun": false,
+  "publicNoPackVerifierActualSdkTuCompiles": false,
+  "privateNativeFullBuildIsSeparateEvidence": true,
+  "privateBackgroundOrCharacterIndexesIncluded": false,
+  "assetsSavesSettingsLogsCredentialsOrBinariesIncluded": false,
+  "gitExecuted": false,
+  "targetExecuted": false,
+  "publicPublished": false,
+  "auxiliaryHashAudit": true
+}

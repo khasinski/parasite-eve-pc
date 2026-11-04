@@ -1,0 +1,74 @@
+{
+  "compiler": {
+    "path": "<PUBLIC_PREFIX>/deps/glslang/bin/glslang.exe",
+    "sha256": "9643709c02c83e26773f96b6a87f197ab2e84f78be0879ad8fb3619418b5d9ad",
+    "version": "Glslang Version: 11:16.6.0\r\nESSL Version: OpenGL ES GLSL 3.20 glslang Khronos. 16.6.0\r\nGLSL Version: 4.60 glslang Khronos. 16.6.0\r\nSPIR-V Version 0x00010600, Revision 1\r\nGLSL.std.450 Version 100, Revision 1\r\nKhronos Tool ID 8\r\nSPIR-V Generator Version 11\r\nGL_KHR_vulkan_glsl version 100\r\nARB_GL_gl_spirv version 100\r\n"
+  },
+  "shaders": [
+    {
+      "output": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/fsr1/generated/fsr1_shaders.h",
+      "normalizedSha256": "c09a61ecab81471d2a8afe9bb0d4893c782d785bdc68bceb6450717b329a0eaa",
+      "sourceGenerated": true
+    },
+    {
+      "output": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/movie_blur_shaders.h",
+      "normalizedSha256": "09abc4b8a49ce6114b3390b0053020487793f2eb065f655fbfdb26c024a05405",
+      "sourceGenerated": true
+    },
+    {
+      "output": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/shaders/clear_frag_spv.h",
+      "normalizedSha256": "2b66cdee7cd591468d05665842e3242906f108ac2bc2b37cdbd78c8124931e0a",
+      "sourceGenerated": true
+    },
+    {
+      "output": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/shaders/clear_vert_spv.h",
+      "normalizedSha256": "6f8d1d70b6d3f427ccad252cb317a4099885ec4bb7ca24d3a5cc4ceb101277da",
+      "sourceGenerated": true
+    },
+    {
+      "output": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/shaders/psx_frag_spv.h",
+      "normalizedSha256": "385b2c4b29683cd03177f7fabc4654602bbcfe8c5e520e4a147cc590c7adb1a1",
+      "sourceGenerated": true
+    },
+    {
+      "output": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/shaders/psx_vert_spv.h",
+      "normalizedSha256": "768efd12c5e4d242307197031287740269436bafb5b2eff494dc83ecbe54519a",
+      "sourceGenerated": true
+    }
+  ],
+  "inputSources": [
+    {
+      "path": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/shaders/psx.vert.glsl",
+      "sha256": "eb70ef2e21f59f733f0954ede5114ba4da94bf45cbe3c1a26cf75ec7d8879418"
+    },
+    {
+      "path": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/shaders/psx.frag.glsl",
+      "sha256": "f9bbc0a116b3f4564083b582065062d3a5f3d2d0c02fde7b75b7beeb4220e61e"
+    },
+    {
+      "path": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/shaders/clear.vert.glsl",
+      "sha256": "8a6b6135df37468fedb4c82baf75dc92403d597d20d812ebc65dfa233809e5e3"
+    },
+    {
+      "path": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/shaders/clear.frag.glsl",
+      "sha256": "fb0c0586b92809ea0bbf18a48856da123a1ee9e483123da25016ab13dfa9ce05"
+    },
+    {
+      "path": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/fsr1/shaders/fullscreen.vert",
+      "sha256": "0679b971f50df475ff087db0e813049645b89c6cd138b8de3863e8a7822b75e2"
+    },
+    {
+      "path": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/fsr1/shaders/fsr1_easu.frag",
+      "sha256": "6d15bb256b7916c578fb635653da77cd9818afe8c9a72abb8298eccbe9116e78"
+    },
+    {
+      "path": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/fsr1/shaders/fsr1_rcas.frag",
+      "sha256": "6a628d67be093c63414f067147f6488014fca7da1a7190e17c33d1dae59b95da"
+    },
+    {
+      "path": "<EXPORT_ROOT>/psyz-src/psyz/src/platform/movie_blur.frag",
+      "sha256": "d6f3c99eff55ca69092a1030c9d7cf569b13211bc1aae737b2e47b662367376a"
+    }
+  ],
+  "scope": "Exact shader generation/compiler proof; no G07/G16 ABI gate exported, no device/game execution"
+}

@@ -25,6 +25,7 @@
 #include "pe_catalog_mod.h"
 #include "pe_item_table.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_save.h"
@@ -78,13 +79,13 @@ static int pe_valid(int which, int e) { return e >= 0 && e <= (which == PE_GUN ?
 const char *pe_cat_effect_name(int which, int e) {
     const char *name;
     if (!pe_valid(which, e)) return "?";
-    if (which == PE_ARMOR && e >= PE_FX_BARGAIN) return s_economy_names[e - PE_FX_BARGAIN];
+    if (which == PE_ARMOR && e >= PE_FX_BARGAIN) return pe_l10n_ui(s_economy_names[e - PE_FX_BARGAIN]);
     name = pe_mod_effect_name(which == PE_ARMOR, e);
-    return name ? name : "";
+    return name ? pe_l10n_ui(name) : "";
 }
 const char *pe_cat_effect_short(int which, int e) {
     if (!pe_valid(which, e)) return "?";
-    return which == PE_GUN ? s_gun_short[e] : s_armor_short[e];
+    return pe_l10n_ui(which == PE_GUN ? s_gun_short[e] : s_armor_short[e]);
 }
 int pe_cat_effect_tier(int which, int e) { return pe_valid(which, e) ? (which == PE_GUN ? s_gun_tier[e] : s_armor_tier[e]) : 0; }
 int pe_cat_tier_price(int tier) { return (int)pe_catw_price((uint32_t)s_price[tier]); }
@@ -97,8 +98,8 @@ static int pe_is_bag_mod(int which, int e) { return which == PE_ARMOR && e >= 8 
 const char *pe_cat_item_name(int id) {
     unsigned i;
     for (i = 0; i < PE_ITEM_COUNT; i++)
-        if (pe_item_ids[i] == id) return pe_item_names[i];
-    return "UNKNOWN";
+        if (pe_item_ids[i] == id) return pe_l10n_item((unsigned)id,pe_item_names[i]);
+    return pe_l10n_ui("UNKNOWN");
 }
 
 int pe_cat_bag_limit(void) {
@@ -137,12 +138,25 @@ int pe_cat_carried(int id) {
 
 /* One Tool for a premium install: free with a Tool Kit, else one from the bag, then storage. */
 int pe_cat_take_tool(int dry_run) {
+    const PeStacksApi *stacks = pe_service_get("stacks", 1);
     int i;
     if (pe_cat_carried(PE_ITEM_TOOL_KIT) || pe_cat_carried(PE_ITEM_SUPER_TOOL_KIT)) return 1;
     for (i = 0; i < PE_BAG_SLOTS; ++i)
-        if (g_AyaSaveState.inventory_items[i] == PE_ITEM_TOOL) { if (!dry_run) g_AyaSaveState.inventory_items[i] = 0; return 1; }
+        if (g_AyaSaveState.inventory_items[i] == PE_ITEM_TOOL) {
+            if (!dry_run) {
+                if (stacks && stacks->take) stacks->take(0, i);
+                else g_AyaSaveState.inventory_items[i] = 0;
+            }
+            return 1;
+        }
     for (i = 0; i < PE_STORAGE_SLOTS; ++i)
-        if (g_WayneStorageItems[i] == PE_ITEM_TOOL) { if (!dry_run) g_WayneStorageItems[i] = 0; return 1; }
+        if (g_WayneStorageItems[i] == PE_ITEM_TOOL) {
+            if (!dry_run) {
+                if (stacks && stacks->take) stacks->take(1, i);
+                else g_WayneStorageItems[i] = 0;
+            }
+            return 1;
+        }
     return 0;
 }
 
@@ -319,3 +333,19 @@ void pe_catalog_register(const char *mod_id) {
     pe_dismantle_register(mod_id);
     pe_catalog_pages_register();
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_wire.h"
+#include "pe_checkpoint_economy.h"
+int pe_catalog_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_catalog_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+for(unsigned i=0;i<2;i++){PE_CK_U(w,s_cat.bits[i],0,UINT32_MAX,0);}
+PE_CK_U(w,s_cat.rebuild_count,0,30,0);
+for(unsigned i=0;i<3;i++){PE_CK_U(w,s_cat.pad[i],0,255,0);}
+unsigned count=out?s_cat.rebuild_count:pe_econ_word(in+8);for(unsigned i=0;i<30;i++){unsigned id=out?s_cat.rebuild[i].id:pe_econ_word(in+24+i*24);if(i<count){const ItemDataRecord *record=pe_base_item((int)id);unsigned slots=out?s_cat.rebuild[i].slots:pe_econ_word(in+28+i*24);if(!record||record->kind<1||record->kind>9||slots>10)return 0;}PE_CK_U(w,s_cat.rebuild[i].id,0,255,0);PE_CK_U(w,s_cat.rebuild[i].slots,0,255,0);for(unsigned j=0;j<3;j++){PE_CK_S(w,s_cat.rebuild[i].bonus[j],-32768,32767,0);}PE_CK_U(w,s_cat.rebuild[i].payout,0,65535,0);}
+PE_CK_S(w,s_price[0],INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_price[1],INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_price[2],INT32_MIN,INT32_MAX,1);
+PE_CK_S(w,s_rebuild_markup,INT32_MIN,INT32_MAX,1);
+
+if(apply&&w.ok){memset(s_said,0,sizeof s_said);s_said[0]='-';}return w.ok&&w.at==760u;}
+#endif

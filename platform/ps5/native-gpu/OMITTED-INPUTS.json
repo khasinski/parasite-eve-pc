@@ -1,0 +1,377 @@
+{
+  "exclusions": [
+    {
+      "component": "game",
+      "path": "src/main/boot/installer/pe_native_pack_index.inc",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "src/main/boot/state_build_identity.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/LICENSE.txt",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/color.frag.dxil.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/color.frag.msl.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/color.frag.spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/dxil.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/linepoint.vert.dxil.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/linepoint.vert.msl.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/linepoint.vert.spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/msl.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/spir-v.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_advanced.frag.dxil.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_advanced.frag.msl.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_advanced.frag.spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgb.frag.dxil.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgb.frag.msl.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgb.frag.spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.dxil.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.msl.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/texture_rgba.frag.spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_color.vert.dxil.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_color.vert.msl.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_color.vert.spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.dxil.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.msl.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "game",
+      "path": "third_party/psyz/external/SDL/src/render/gpu/shaders/tri_texture.vert.spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/EGL/egl.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/EGL/eglext.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/EGL/eglplatform.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES2/gl2.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES2/gl2ext.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES2/gl2platform.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl3.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl31.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl32.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/GLES3/gl3platform.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/KHR/khrplatform.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codecs_common.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_av1std.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_av1std_decode.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h264std.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h264std_decode.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h264std_encode.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h265std.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h265std_decode.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vk_video/vulkan_video_codec_h265std_encode.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vk_icd.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vk_layer.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vk_platform.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_android.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_beta.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_core.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_directfb.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_fuchsia.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_ggp.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_ios.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_macos.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_metal.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_screen.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_vi.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_wayland.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_win32.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_xcb.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_xlib.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "external/SDL/src/video/khronos/vulkan/vulkan_xlib_xrandr.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/fsr1/generated/fsr1_shaders.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/movie_blur_shaders.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/movie_cleanup/movie_cleanup_shaders.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/clear_frag_spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/clear_vert_spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/psx_frag_spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    },
+    {
+      "component": "psyz",
+      "path": "psyz/src/platform/shaders/psx_vert_spv.h",
+      "reason": "Generated shader/source identity or SDL mirror; private pack index never published"
+    }
+  ],
+  "privatePackIndexPublished": false,
+  "assetsPublished": false,
+  "privateCharacterIndexPublished": false
+}

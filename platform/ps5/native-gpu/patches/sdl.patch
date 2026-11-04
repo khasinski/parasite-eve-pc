@@ -1,0 +1,2001 @@
+--- a/cmake/sdlplatform.cmake
++++ b/cmake/sdlplatform.cmake
+@@ -1,6 +1,8 @@
+ function(SDL_DetectCMakePlatform)
+   set(sdl_cmake_platform )
+-  if(WIN32)
++  if(PS5)
++    set(sdl_cmake_platform PS5)
++  elseif(WIN32)
+     set(sdl_cmake_platform Windows)
+   elseif(PSP)
+     set(sdl_cmake_platform psp)
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -368,7 +368,7 @@
+ dep_option(SDL_RENDER_METAL        "Enable the Metal render driver" ON "SDL_RENDER;APPLE" OFF)
+ dep_option(SDL_RENDER_GPU          "Enable the SDL_GPU render driver" ON "SDL_RENDER;SDL_GPU" OFF)
+ dep_option(SDL_VIVANTE             "Use Vivante EGL video driver" ON "${UNIX_SYS};SDL_CPU_ARM32" OFF)
+-dep_option(SDL_VULKAN              "Enable Vulkan support" ON "SDL_VIDEO;ANDROID OR APPLE OR LINUX OR FREEBSD OR OPENBSD OR WINDOWS" OFF)
++dep_option(SDL_VULKAN              "Enable Vulkan support" ON "SDL_VIDEO;ANDROID OR APPLE OR LINUX OR FREEBSD OR OPENBSD OR WINDOWS OR PS5" OFF)
+ dep_option(SDL_RENDER_VULKAN       "Enable the Vulkan render driver" ON "SDL_RENDER;SDL_VULKAN" OFF)
+ dep_option(SDL_METAL               "Enable Metal support" ON "APPLE" OFF)
+ set_option(SDL_OPENVR              "Use OpenVR video driver" OFF)
+@@ -1771,6 +1771,9 @@
+   CheckPTHREAD()
+   CheckLibUnwind()
+ 
++elseif(PS5)
++  include("${SDL3_SOURCE_DIR}/pe-public-ps5.cmake")
++
+ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
+ 
+   set(SDL_DISABLE_DLOPEN_NOTES TRUE)
+@@ -3469,7 +3472,7 @@
+   )
+   set(SDL_PROCESS_WINDOWS 1)
+   set(HAVE_SDL_PROCESS TRUE)
+-elseif(NOT ANDROID)
++elseif(NOT ANDROID AND NOT PS5)
+   check_c_source_compiles("
+ #include <spawn.h>
+ #include <unistd.h>
+--- a/include/build_config/SDL_build_config.h.cmake
++++ b/include/build_config/SDL_build_config.h.cmake
+@@ -287,6 +287,7 @@
+ #cmakedefine SDL_AUDIO_DRIVER_WASAPI 1
+ #cmakedefine SDL_AUDIO_DRIVER_VITA 1
+ #cmakedefine SDL_AUDIO_DRIVER_PSP 1
++#cmakedefine SDL_AUDIO_DRIVER_PS5 1
+ #cmakedefine SDL_AUDIO_DRIVER_PS2 1
+ #cmakedefine SDL_AUDIO_DRIVER_N3DS 1
+ #cmakedefine SDL_AUDIO_DRIVER_NGAGE 1
+@@ -312,6 +313,7 @@
+ #cmakedefine SDL_JOYSTICK_MFI 1
+ #cmakedefine SDL_JOYSTICK_N3DS 1
+ #cmakedefine SDL_JOYSTICK_PS2 1
++#cmakedefine SDL_JOYSTICK_PS5 1
+ #cmakedefine SDL_JOYSTICK_PSP 1
+ #cmakedefine SDL_JOYSTICK_RAWINPUT 1
+ #cmakedefine SDL_JOYSTICK_USBHID 1
+@@ -407,6 +409,7 @@
+ #cmakedefine SDL_VIDEO_DRIVER_NGAGE 1
+ #cmakedefine SDL_VIDEO_DRIVER_OFFSCREEN 1
+ #cmakedefine SDL_VIDEO_DRIVER_PS2 1
++#cmakedefine SDL_VIDEO_DRIVER_PS5 1
+ #cmakedefine SDL_VIDEO_DRIVER_PSP 1
+ #cmakedefine SDL_VIDEO_DRIVER_RISCOS 1
+ #cmakedefine SDL_VIDEO_DRIVER_ROCKCHIP 1
+--- a/include/SDL3/SDL_gpu.h
++++ b/include/SDL3/SDL_gpu.h
+@@ -2392,6 +2392,11 @@
+ #define SDL_PROP_GPU_DEVICE_CREATE_D3D12_AGILITY_SDK_VERSION_NUMBER             "SDL.gpu.device.create.d3d12.agility_sdk_version"
+ #define SDL_PROP_GPU_DEVICE_CREATE_D3D12_AGILITY_SDK_PATH_STRING                "SDL.gpu.device.create.d3d12.agility_sdk_path"
+ #define SDL_PROP_GPU_DEVICE_CREATE_VULKAN_REQUIRE_HARDWARE_ACCELERATION_BOOLEAN "SDL.gpu.device.create.vulkan.requirehardwareacceleration"
++/* CPE-local extension, default false. Only the native PS5 build can allow an
++ * AMD integrated MESA_RADV driver named radv reporting conformance 0.0.0.0.
++ * This does not certify conformance or relax feature/extension/queue checks.
++ * Not an official upstream SDL property or environment hint. */
++#define CPE_PROP_GPU_DEVICE_CREATE_PS5_RADV_NONCONFORMANT_BOOLEAN "CPE.gpu.device.create.ps5.radv.nonconformant"
+ #define SDL_PROP_GPU_DEVICE_CREATE_VULKAN_OPTIONS_POINTER                       "SDL.gpu.device.create.vulkan.options"
+ #define SDL_PROP_GPU_DEVICE_CREATE_METAL_ALLOW_MACFAMILY1_BOOLEAN               "SDL.gpu.device.create.metal.allowmacfamily1"
+ 
+--- /dev/null
++++ b/pe-public-ps5.cmake
+@@ -0,0 +1,63 @@
++# Public PS5 platform fragment for a generated copy of pinned SDL3.
++# This is not Sony's private SDL backend. Video is CPU/software presentation.
++sdl_compile_definitions(PRIVATE SDL_PLATFORM_PS5=1)
++
++if(SDL_AUDIO)
++  set(SDL_AUDIO_DRIVER_PS5 1)
++  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/audio/ps5/*.c"
++                   "${SDL3_SOURCE_DIR}/src/audio/ps5/*.h")
++  sdl_include_directories(PRIVATE "${SDL3_SOURCE_DIR}/src/audio")
++  sdl_link_dependency(ps5-audio LIBS SceAudioOut)
++  set(HAVE_SDL_AUDIO TRUE)
++endif()
++
++if(SDL_VIDEO)
++  set(SDL_VIDEO_DRIVER_PS5 1)
++  sdl_sources("${SDL3_SOURCE_DIR}/src/video/ps5/SDL_ps5video.c" "${SDL3_SOURCE_DIR}/src/video/ps5/SDL_ps5vulkan.c")
++  sdl_include_directories(PRIVATE "${SDL3_SOURCE_DIR}/src/video")
++  sdl_link_dependency(ps5-video LIBS SceVideoOut SceSystemService)
++  set(HAVE_SDL_VIDEO TRUE)
++endif()
++
++if(SDL_JOYSTICK)
++  set(SDL_JOYSTICK_PS5 1)
++  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/joystick/ps5/*.c"
++                   "${SDL3_SOURCE_DIR}/src/joystick/ps5/*.h")
++  sdl_include_directories(PRIVATE "${SDL3_SOURCE_DIR}/src/joystick")
++  sdl_link_dependency(ps5-pad LIBS ScePad SceUserService)
++  set(HAVE_SDL_JOYSTICK TRUE)
++endif()
++
++# Public SDK libc provides these POSIX facilities. CMake checks pthread
++# signatures through the actual cross compiler, without -lpthread host linkage.
++set(SDL_PTHREADS_PRIVATE ON)
++CheckPTHREAD()
++if(NOT HAVE_PTHREADS)
++  message(FATAL_ERROR "Public PS5 SDL3 requires working SDK pthread headers/linkage")
++endif()
++
++set(SDL_FILESYSTEM_UNIX 1)
++sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/unix/*.c")
++set(HAVE_SDL_FILESYSTEM TRUE)
++set(SDL_FSOPS_POSIX 1)
++sdl_sources("${SDL3_SOURCE_DIR}/src/filesystem/posix/SDL_sysfsops.c")
++set(HAVE_SDL_FSOPS TRUE)
++set(SDL_STORAGE_GENERIC 1)
++sdl_glob_sources("${SDL3_SOURCE_DIR}/src/storage/generic/*.c")
++set(HAVE_SDL_STORAGE TRUE)
++set(SDL_TIME_UNIX 1)
++sdl_glob_sources("${SDL3_SOURCE_DIR}/src/time/unix/*.c")
++set(HAVE_SDL_TIME TRUE)
++set(SDL_TIMER_UNIX 1)
++sdl_glob_sources("${SDL3_SOURCE_DIR}/src/timer/unix/*.c")
++set(HAVE_SDL_TIMERS TRUE)
++set(SDL_LOADSO_DUMMY 1)
++sdl_sources("${SDL3_SOURCE_DIR}/src/loadso/dummy/SDL_sysloadso.c")
++set(HAVE_SDL_LOADSO TRUE)
++
++# CPE_STATIC_RADV
++set(SDL_VIDEO_VULKAN 1)
++set(HAVE_VULKAN TRUE)
++set(SDL_GPU_VULKAN 1)
++set(SDL_GPU_ENABLED_BY_DEFAULT TRUE)
++set(HAVE_SDL_GPU TRUE)
+--- /dev/null
++++ b/src/audio/ps5/SDL_ps5audio.c
+@@ -0,0 +1,170 @@
++/*
++  Simple DirectMedia Layer
++  Copyright (C) 1997-2015 Sam Lantinga <slouken@libsdl.org>
++
++  This software is provided 'as-is', without any express or implied
++  warranty.  In no event will the authors be held liable for any damages
++  arising from the use of this software.
++
++  Permission is granted to anyone to use this software for any purpose,
++  including commercial applications, and to alter it and redistribute it
++  freely, subject to the following restrictions:
++
++  1. The origin of this software must not be misrepresented; you must not
++     claim that you wrote the original software. If you use this software
++     in a product, an acknowledgment in the product documentation would be
++     appreciated but is not required.
++  2. Altered source versions must be plainly marked as such, and must not be
++     misrepresented as being the original software.
++  3. This notice may not be removed or altered from any source distribution.
++*/
++
++/* Altered source: SDL3 private-driver adaptation of ps5-payload-dev/SDL
++ * src/audio/ps5/SDL_ps5audio.{c,h} at
++ * ee4c47dc0d617b3bc8f35108f9956baf228a1322.
++ * Targets SDL3 fa2c02bb6e21974a89ea9824bc53c9932abe5f9c.
++ * No proprietary Sony headers; console output remains owner-validated.
++ */
++
++#include "SDL_internal.h"
++
++#ifdef SDL_AUDIO_DRIVER_PS5
++
++#include "SDL_ps5audio.h"
++
++static bool PS5AUDIO_OpenDevice(SDL_AudioDevice *device)
++{
++    const SDL_AudioFormat *formats;
++    SDL_AudioFormat format;
++    unsigned int native_format;
++
++    if (device->recording) {
++        return SDL_SetError("PS5 audio recording is unavailable");
++    }
++    device->hidden = SDL_calloc(1, sizeof(*device->hidden));
++    if (!device->hidden) {
++        return false;
++    }
++    device->hidden->handle = -1;
++
++    formats = SDL_ClosestAudioFormats(device->spec.format);
++    while ((format = *formats++) != SDL_AUDIO_UNKNOWN) {
++        if (format == SDL_AUDIO_S16LE || format == SDL_AUDIO_F32LE) {
++            break;
++        }
++    }
++    if (format == SDL_AUDIO_UNKNOWN) {
++        return SDL_SetError("PS5 audio has no supported device format");
++    }
++
++    device->spec.format = format;
++    device->spec.freq = 48000;
++    device->spec.channels = device->spec.channels == 1 ? 1 : 2;
++
++    /* Public SDL2 backend uses grains 256, 512, ... 2048 frames. */
++    device->sample_frames = SDL_clamp(device->sample_frames, 256, 2048);
++    device->sample_frames = (device->sample_frames / 256) * 256;
++    SDL_UpdatedAudioDeviceFormat(device);
++
++    if (format == SDL_AUDIO_S16LE) {
++        native_format = device->spec.channels == 1 ? PS5_AUDIO_OUT_FORMAT_S16_MONO : PS5_AUDIO_OUT_FORMAT_S16_STEREO;
++    } else {
++        native_format = device->spec.channels == 1 ? PS5_AUDIO_OUT_FORMAT_FLOAT_MONO : PS5_AUDIO_OUT_FORMAT_FLOAT_STEREO;
++    }
++
++    const int handle = sceAudioOutOpen(PS5_AUDIO_SYSTEM_USER, PS5_AUDIO_OUT_PORT_TYPE_MAIN,
++                                      0, device->sample_frames, device->spec.freq, native_format);
++    /* Preserve the public SDL2 backend's handle < 1 failure check. */
++    if (handle < 1) {
++        return SDL_SetError("sceAudioOutOpen failed: 0x%08x", (unsigned int)handle);
++    }
++    device->hidden->handle = handle;
++    device->hidden->mixbuf = SDL_aligned_alloc(64, device->buffer_size);
++    if (!device->hidden->mixbuf) {
++        return false; /* SDL3 calls CloseDevice for partial initialization. */
++    }
++    SDL_memset(device->hidden->mixbuf, device->silence_value, device->buffer_size);
++    return true;
++}
++
++static Uint8 *PS5AUDIO_GetDeviceBuf(SDL_AudioDevice *device, int *buffer_size)
++{
++    *buffer_size = device->buffer_size;
++    return device->hidden->mixbuf;
++}
++
++static bool PS5AUDIO_WaitDevice(SDL_AudioDevice *device)
++{
++    /* SDL3 calls this on the same playback thread, after releasing the physical
++     * device mutex. CloseDevice cannot free the buffer until this thread joins.
++     * No other thread reads or writes pending, so it needs no second lock.
++     */
++    if (!device->hidden->pending) {
++        return true;
++    }
++    device->hidden->pending = false;
++    if (SDL_GetAtomicInt(&device->shutdown)) {
++        return true; /* Do not submit a new grain after close was requested. */
++    }
++    const int result = sceAudioOutOutput(device->hidden->handle, device->hidden->mixbuf);
++    if (result < 0) {
++        return SDL_SetError("sceAudioOutOutput failed: 0x%08x", (unsigned int)result);
++    }
++    return true;
++}
++
++static bool PS5AUDIO_PlayDevice(SDL_AudioDevice *device, const Uint8 *buffer, int buflen)
++{
++    if (buffer != device->hidden->mixbuf || buflen != device->buffer_size) {
++        return SDL_SetError("PS5 audio received an incomplete playback grain");
++    }
++    if (device->hidden->pending) {
++        return SDL_SetError("PS5 audio playback grain has not been consumed");
++    }
++    /* PlayDevice runs under SDL3's physical-device mutex: validate and publish
++     * only. The playback thread owns mixbuf until WaitDevice returns; it cannot
++     * start filling the next grain while native output still reads this one.
++     */
++    device->hidden->pending = true;
++    return true;
++}
++
++static void PS5AUDIO_CloseDevice(SDL_AudioDevice *device)
++{
++    if (device->hidden) {
++        if (device->hidden->handle >= 1) {
++            sceAudioOutClose(device->hidden->handle);
++            device->hidden->handle = -1;
++        }
++        SDL_aligned_free(device->hidden->mixbuf);
++        SDL_free(device->hidden);
++        device->hidden = NULL;
++    }
++}
++
++static bool PS5AUDIO_Init(SDL_AudioDriverImpl *impl)
++{
++    static bool initialized;
++    if (!initialized) {
++        const int result = sceAudioOutInit();
++        if (result != 0) {
++            return SDL_SetError("sceAudioOutInit failed: 0x%08x", (unsigned int)result);
++        }
++        initialized = true;
++    }
++
++    impl->OpenDevice = PS5AUDIO_OpenDevice;
++    impl->CloseDevice = PS5AUDIO_CloseDevice;
++    impl->GetDeviceBuf = PS5AUDIO_GetDeviceBuf;
++    impl->WaitDevice = PS5AUDIO_WaitDevice;
++    impl->PlayDevice = PS5AUDIO_PlayDevice;
++    impl->OnlyHasDefaultPlaybackDevice = true;
++    return true;
++}
++
++AudioBootStrap PS5AUDIO_bootstrap = {
++    "ps5", "PS5 public homebrew audio driver", PS5AUDIO_Init, false, false
++};
++
++#endif /* SDL_AUDIO_DRIVER_PS5 */
++
+--- /dev/null
++++ b/src/audio/ps5/SDL_ps5audio.h
+@@ -0,0 +1,56 @@
++/*
++  Simple DirectMedia Layer
++  Copyright (C) 1997-2015 Sam Lantinga <slouken@libsdl.org>
++
++  This software is provided 'as-is', without any express or implied
++  warranty.  In no event will the authors be held liable for any damages
++  arising from the use of this software.
++
++  Permission is granted to anyone to use this software for any purpose,
++  including commercial applications, and to alter it and redistribute it
++  freely, subject to the following restrictions:
++
++  1. The origin of this software must not be misrepresented; you must not
++     claim that you wrote the original software. If you use this software
++     in a product, an acknowledgment in the product documentation would be
++     appreciated but is not required.
++  2. Altered source versions must be plainly marked as such, and must not be
++     misrepresented as being the original software.
++  3. This notice may not be removed or altered from any source distribution.
++*/
++
++/* Altered source: SDL3 private-driver adaptation of ps5-payload-dev/SDL
++ * src/audio/ps5/SDL_ps5audio.{c,h} at
++ * ee4c47dc0d617b3bc8f35108f9956baf228a1322.
++ * Targets SDL3 fa2c02bb6e21974a89ea9824bc53c9932abe5f9c.
++ * No proprietary Sony headers; console output remains owner-validated.
++ */
++
++#ifndef SDL_ps5audio_h_
++#define SDL_ps5audio_h_
++
++#include "SDL_sysaudio.h"
++
++struct SDL_PrivateAudioData
++{
++    int handle;
++    Uint8 *mixbuf;
++    bool pending;
++};
++
++#define PS5_AUDIO_OUT_PORT_TYPE_MAIN 0
++#define PS5_AUDIO_OUT_FORMAT_S16_MONO 0
++#define PS5_AUDIO_OUT_FORMAT_S16_STEREO 1
++#define PS5_AUDIO_OUT_FORMAT_FLOAT_MONO 3
++#define PS5_AUDIO_OUT_FORMAT_FLOAT_STEREO 4
++#define PS5_AUDIO_SYSTEM_USER 0xff
++
++/* Declarations retained from the public SDL2 PS5 backend, not Sony SDK headers. */
++int sceAudioOutInit(void);
++int sceAudioOutOpen(int user_id, int type, int index,
++                    unsigned int frames, unsigned int frequency, unsigned int format);
++int sceAudioOutOutput(int handle, const void *buffer);
++int sceAudioOutClose(int handle);
++
++#endif
++
+--- a/src/audio/SDL_audio.c
++++ b/src/audio/SDL_audio.c
+@@ -65,6 +65,9 @@
+ #ifdef SDL_AUDIO_DRIVER_OPENSLES
+     &OPENSLES_bootstrap,
+ #endif
++#ifdef SDL_AUDIO_DRIVER_PS5
++    &PS5AUDIO_bootstrap,
++#endif
+ #ifdef SDL_AUDIO_DRIVER_PS2
+     &PS2AUDIO_bootstrap,
+ #endif
+--- a/src/audio/SDL_sysaudio.h
++++ b/src/audio/SDL_sysaudio.h
+@@ -383,6 +383,7 @@
+ extern AudioBootStrap DUMMYAUDIO_bootstrap;
+ extern AudioBootStrap AAUDIO_bootstrap;
+ extern AudioBootStrap OPENSLES_bootstrap;
++extern AudioBootStrap PS5AUDIO_bootstrap;
+ extern AudioBootStrap PS2AUDIO_bootstrap;
+ extern AudioBootStrap PSPAUDIO_bootstrap;
+ extern AudioBootStrap VITAAUD_bootstrap;
+--- a/src/gpu/vulkan/SDL_gpu_vulkan.c
++++ b/src/gpu/vulkan/SDL_gpu_vulkan.c
+@@ -20,6 +20,18 @@
+ */
+ 
+ #include "SDL_internal.h"
++extern void CPE_GPUTrace(const char *, long long, unsigned long long, unsigned long long) __attribute__((weak));
++#define GPU_TRACE(s,r,a,b) do { if (CPE_GPUTrace) CPE_GPUTrace(s,r,a,b); } while (0)
++
++
++/* Altered CPE version: first backend rejection diagnostics only. */
++static bool CPE_VulkanReject(const char *stage, unsigned long long detail) {
++    char reason[512];
++    /* Snapshot before cleanup/selection can replace SDL's thread-local error. */
++    SDL_snprintf(reason, sizeof reason, "%s: %s", stage, SDL_GetError());
++    GPU_TRACE(reason, -1, detail, 0);
++    return false;
++}
+ 
+ #ifdef SDL_GPU_VULKAN
+ 
+@@ -1129,6 +1141,7 @@
+     bool debugMode;
+     bool preferLowPower;
+     bool requireHardwareAcceleration;
++    bool cpePS5RADVNonconformantOptIn;
+     SDL_PropertiesID props;
+     Uint32 allowedFramesInFlight;
+ 
+@@ -1301,6 +1314,7 @@
+             if (renderer->debugMode) {                                                  \
+                 SDL_LogError(SDL_LOG_CATEGORY_GPU, "%s %s", #fn, VkErrorMessages(res)); \
+             }                                                                           \
++            GPU_TRACE(#fn, res, 0, 0); \
+             SDL_SetError("%s %s", #fn, VkErrorMessages(res));                           \
+             return (ret);                                                               \
+         }                                                                               \
+@@ -1863,6 +1877,7 @@
+         NULL,
+         &allocation->memory);
+ 
++    GPU_TRACE("vkAllocateMemory", result, allocationSize, memoryTypeIndex);
+     if (result != VK_SUCCESS) {
+         // Uh oh, we couldn't allocate, time to clean up
+         SDL_free(allocation->freeRegions);
+@@ -4795,6 +4810,7 @@
+         NULL,
+         &windowData->swapchain);
+ 
++    GPU_TRACE("vkCreateSwapchainKHR", vulkanResult, ((Uint64)windowData->width << 32) | windowData->height, windowData->format);
+     if (swapchainCreateInfo.oldSwapchain != VK_NULL_HANDLE) {
+         renderer->vkDestroySwapchainKHR(renderer->logicalDevice, swapchainCreateInfo.oldSwapchain, NULL);
+     }
+@@ -6725,8 +6741,10 @@
+         NULL,
+         &vulkanComputePipeline->shaderModule);
+ 
++    GPU_TRACE("vkCreateShaderModule_compute", vulkanResult, createinfo->code_size, 0);
+     if (vulkanResult != VK_SUCCESS) {
+         SDL_free(vulkanComputePipeline);
++        GPU_TRACE("vkCreateShaderModule", vulkanResult, createinfo->code_size, 0);
+         CHECK_VULKAN_ERROR_AND_RETURN(vulkanResult, vkCreateShaderModule, NULL);
+     }
+ 
+@@ -6882,6 +6900,7 @@
+         NULL,
+         &vulkanShader->shaderModule);
+ 
++    GPU_TRACE("vkCreateShaderModule_graphics", vulkanResult, createinfo->code_size, 0);
+     if (vulkanResult != VK_SUCCESS) {
+         SDL_free(vulkanShader);
+         CHECK_VULKAN_ERROR_AND_RETURN(vulkanResult, vkCreateShaderModule, NULL);
+@@ -10892,10 +10911,12 @@
+         vulkanCommandBuffer->inFlightFence->fence);
+ 
+     if (vulkanResult != VK_SUCCESS) {
++        GPU_TRACE("queue_submit_error", vulkanResult, 0, 0);
+         SDL_UnlockMutex(renderer->submitLock);
+         CHECK_VULKAN_ERROR_AND_RETURN(vulkanResult, vkQueueSubmit, false);
+     }
+ 
++    GPU_TRACE("queue_admitted", vulkanResult, vulkanCommandBuffer->presentDataCount, 0);
+     // Present, if applicable
+     for (Uint32 j = 0; j < vulkanCommandBuffer->presentDataCount; j += 1) {
+         presentData = &vulkanCommandBuffer->presentDatas[j];
+@@ -10939,6 +10960,7 @@
+                 SDL_UnlockMutex(renderer->submitLock);
+             }
+ 
++            GPU_TRACE("queue_present_error", presentResult, 0, 0);
+             CHECK_VULKAN_ERROR_AND_RETURN(presentResult, vkQueuePresentKHR, false);
+         }
+ 
+@@ -12094,6 +12116,27 @@
+     return 1;
+ }
+ 
++/* CPE-local policy, not an upstream SDL hint. Native PS5 RADV advertises
++ * 0.0.0.0 until CTS qualification. Admit only this explicit application opt-in
++ * and observed driver identity; never rewrite conformance or device features. */
++static bool CPE_PS5RADVNonconformanceOptIn(const VulkanRenderer *renderer,
++    const VkPhysicalDeviceProperties *properties,
++    const VkPhysicalDeviceDriverPropertiesKHR *driver)
++{
++#if defined(SDL_PLATFORM_PS5)
++    return renderer->cpePS5RADVNonconformantOptIn &&
++        properties->vendorID == 0x1002 &&
++        properties->deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU &&
++        driver->driverID == VK_DRIVER_ID_MESA_RADV &&
++        SDL_strcmp(driver->driverName, "radv") == 0 &&
++        driver->conformanceVersion.major == 0 && driver->conformanceVersion.minor == 0 &&
++        driver->conformanceVersion.subminor == 0 && driver->conformanceVersion.patch == 0;
++#else
++    (void)renderer; (void)properties; (void)driver;
++    return false;
++#endif
++}
++
+ static bool VULKAN_INTERNAL_GetDeviceRank(
+     VulkanRenderer *renderer,
+     VkPhysicalDevice physicalDevice,
+@@ -12116,6 +12159,7 @@
+     };
+     const Uint8 *devicePriority = renderer->preferLowPower ? DEVICE_PRIORITY_LOWPOWER : DEVICE_PRIORITY_HIGHPERFORMANCE;
+     bool isConformant;
++    bool allowPS5RADVNonconformant = false;
+ 
+     VkPhysicalDeviceType deviceType;
+     if (physicalDeviceExtensions->KHR_driver_properties || physicalDeviceExtensions->MSFT_layered_driver) {
+@@ -12150,6 +12194,12 @@
+ 
+         if (physicalDeviceExtensions->KHR_driver_properties) {
+             isConformant = (physicalDeviceDriverProperties.conformanceVersion.major >= 1);
++            if (renderer->cpePS5RADVNonconformantOptIn) {
++                GPU_TRACE("device_rank.driver_identified", physicalDeviceDriverProperties.driverID,
++                    physicalDeviceProperties.properties.vendorID, physicalDeviceProperties.properties.deviceType);
++            }
++            allowPS5RADVNonconformant = CPE_PS5RADVNonconformanceOptIn(renderer,
++                &physicalDeviceProperties.properties, &physicalDeviceDriverProperties);
+         } else {
+             isConformant = true; // We can't check this, so just assume it's conformant
+         }
+@@ -12182,7 +12232,7 @@
+             deviceType != VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU &&
+             deviceType != VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU) {
+             // In addition to CPU, "Other" drivers (including layered drivers) don't count as hardware-accelerated
+-            return 0;
++            return CPE_VulkanReject("device_rank.hardware_required", deviceType);
+         }
+     }
+ 
+@@ -12192,7 +12242,11 @@
+      * -flibit
+      */
+     if (!isConformant) {
+-        return 0;
++        if (!allowPS5RADVNonconformant) {
++            return CPE_VulkanReject("device_rank.conformance", deviceType);
++        }
++        GPU_TRACE("device_rank.ps5_radv_nonconformant_accepted", 0, deviceType, 0);
++        SDL_LogWarn(SDL_LOG_CATEGORY_GPU, "CPE PS5 RADV conformance opt-in accepted (reported 0.0.0.0; capability checks still required)");
+     }
+ 
+     /* Apply a large bias on the devicePriority so that we always respect the order in the priority arrays.
+@@ -12267,14 +12321,20 @@
+         (!deviceFeatures.drawIndirectFirstInstance && features->desiredVulkan10DeviceFeatures.drawIndirectFirstInstance) ||
+         (!deviceFeatures.sampleRateShading && features->desiredVulkan10DeviceFeatures.sampleRateShading) ||
+         (!deviceFeatures.samplerAnisotropy && features->desiredVulkan10DeviceFeatures.samplerAnisotropy)) {
+-        return 0;
++        unsigned long long missing = 0;
++        #define CPE_MISSING(feature, bit) if (!deviceFeatures.feature && features->desiredVulkan10DeviceFeatures.feature) missing |= 1ULL << bit
++        CPE_MISSING(independentBlend,0); CPE_MISSING(imageCubeArray,1); CPE_MISSING(depthClamp,2);
++        CPE_MISSING(shaderClipDistance,3); CPE_MISSING(drawIndirectFirstInstance,4);
++        CPE_MISSING(sampleRateShading,5); CPE_MISSING(samplerAnisotropy,6);
++        #undef CPE_MISSING
++        return CPE_VulkanReject("device_suitability.required_features", missing);
+     }
+ 
+     // Check opt-in device features
+     if (features->usesCustomVulkanOptions) {
+         bool supportsAllFeatures = VULKAN_INTERNAL_ValidateOptInFeatures(renderer, features, physicalDevice, &deviceFeatures);
+         if (!supportsAllFeatures) {
+-            return 0;
++            return CPE_VulkanReject("device_suitability.opt_in_features", 0);
+         }
+     }
+ 
+@@ -12283,7 +12343,7 @@
+             features,
+             physicalDevice,
+             physicalDeviceExtensions)) {
+-        return 0;
++        return CPE_VulkanReject("device_suitability.required_extensions", 0);
+     }
+ 
+     renderer->vkGetPhysicalDeviceQueueFamilyProperties(
+@@ -12357,7 +12417,7 @@
+ 
+     if (*queueFamilyIndex == SDL_MAX_UINT32) {
+         // Somehow no graphics queues existed. Compute-only device?
+-        return 0;
++        return CPE_VulkanReject("device_suitability.present_graphics_queue", queueFamilyCount);
+     }
+ 
+     // FIXME: Need better structure for checking vs storing swapchain support details
+@@ -12382,7 +12442,7 @@
+ 
+     if (physicalDeviceCount == 0) {
+         SDL_LogInfo(SDL_LOG_CATEGORY_GPU, "Failed to find any GPUs with Vulkan support");
+-        return 0;
++        return CPE_VulkanReject("physical_device.count_zero", 0);
+     }
+ 
+     physicalDevices = SDL_stack_alloc(VkPhysicalDevice, physicalDeviceCount);
+@@ -12451,6 +12511,7 @@
+         renderer->supports = physicalDeviceExtensions[suitableIndex];
+         renderer->physicalDevice = physicalDevices[suitableIndex];
+         renderer->queueFamilyIndex = suitableQueueFamilyIndex;
++        GPU_TRACE("physical_device_queue_selected", 0, suitableIndex, suitableQueueFamilyIndex);
+     } else {
+         SDL_stack_free(physicalDevices);
+         SDL_stack_free(physicalDeviceExtensions);
+@@ -12711,10 +12772,12 @@
+     VULKAN_INTERNAL_AddOptInVulkanOptions(props, renderer, features);
+ 
+     renderer->requireHardwareAcceleration = SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_VULKAN_REQUIRE_HARDWARE_ACCELERATION_BOOLEAN, false);
++    renderer->cpePS5RADVNonconformantOptIn = SDL_GetBooleanProperty(props,
++        CPE_PROP_GPU_DEVICE_CREATE_PS5_RADV_NONCONFORMANT_BOOLEAN, false);
+ 
+     if (!VULKAN_INTERNAL_CreateInstance(renderer, features)) {
+         SDL_LogWarn(SDL_LOG_CATEGORY_GPU, "Vulkan: Could not create Vulkan instance");
+-        return false;
++        return CPE_VulkanReject("prepare_vulkan.create_instance", 0);
+     }
+ 
+ #define VULKAN_INSTANCE_FUNCTION(func) \
+@@ -12723,7 +12786,7 @@
+ 
+     if (!VULKAN_INTERNAL_DeterminePhysicalDevice(renderer, features)) {
+         SDL_LogWarn(SDL_LOG_CATEGORY_GPU, "Vulkan: Failed to determine a suitable physical device");
+-        return false;
++        return CPE_VulkanReject("prepare_vulkan.physical_device", 0);
+     }
+     return true;
+ }
+@@ -12735,19 +12798,21 @@
+     VulkanFeatures features;
+     bool result = false;
+ 
++    GPU_TRACE("prepare_driver_enter", 0, 0, 0);
+     if (!SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, false)) {
+-        return false;
++        return CPE_VulkanReject("prepare_driver.spirv_not_requested", 0);
+     }
+ 
+     if (_this->Vulkan_CreateSurface == NULL) {
+-        return false;
++        return CPE_VulkanReject("prepare_driver.surface_hook_missing", 0);
+     }
+ 
+     if (!SDL_Vulkan_LoadLibrary(NULL)) {
+-        return false;
++        return CPE_VulkanReject("prepare_driver.load_library", 0);
+     }
+ 
+     renderer = (VulkanRenderer *)SDL_calloc(1, sizeof(*renderer));
++    GPU_TRACE("prepare_driver.renderer_allocation", renderer ? 0 : -1, sizeof(*renderer), 0);
+     if (renderer) {
+         // This needs to be set early for log filtering
+         renderer->debugMode = SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, false);
+@@ -12755,6 +12820,7 @@
+         renderer->preferLowPower = SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_PREFERLOWPOWER_BOOLEAN, false);
+ 
+         result = VULKAN_INTERNAL_PrepareVulkan(renderer, &features, props);
++        if (!result) CPE_VulkanReject("prepare_driver.prepare_vulkan", 0);
+         if (result) {
+             renderer->vkDestroyInstance(renderer->instance, NULL);
+         }
+@@ -12808,6 +12874,7 @@
+ 
+     // Record device name
+     const char *deviceName = renderer->physicalDeviceProperties.properties.deviceName;
++    GPU_TRACE(deviceName, 0, renderer->physicalDeviceProperties.properties.vendorID, renderer->physicalDeviceProperties.properties.deviceID);
+     SDL_SetStringProperty(
+         renderer->props,
+         SDL_PROP_GPU_DEVICE_NAME_STRING,
+--- /dev/null
++++ b/src/joystick/ps5/SDL_ps5joystick.c
+@@ -0,0 +1,303 @@
++/*
++  Simple DirectMedia Layer
++  Copyright (C) 1997-2015 Sam Lantinga <slouken@libsdl.org>
++
++  This software is provided 'as-is', without any express or implied
++  warranty.  In no event will the authors be held liable for any damages
++  arising from the use of this software.
++
++  Permission is granted to anyone to use this software for any purpose,
++  including commercial applications, and to alter it and redistribute it
++  freely, subject to the following restrictions:
++
++  1. The origin of this software must not be misrepresented; you must not
++     claim that you wrote the original software. If you use this software
++     in a product, an acknowledgment in the product documentation would be
++     appreciated but is not required.
++  2. Altered source versions must be plainly marked as such, and must not be
++     misrepresented as being the original software.
++  3. This notice may not be removed or altered from any source distribution.
++*/
++
++/* Altered SDL3 backend; public source ee4c47dc0d617b3bc8f35108f9956baf228a1322. */
++#include "SDL_internal.h"
++#ifdef SDL_JOYSTICK_PS5
++#include "joystick/SDL_sysjoystick.h"
++#include "SDL_ps5pad.h"
++
++#define PS5_MAX_USERS 4
++#define PS5_VENDOR 0x054c
++#define PS5_PRODUCT 0x0ce6
++
++_Static_assert(sizeof(PS5_PadData) == 120, "public PS5 pad layout changed");
++_Static_assert(offsetof(PS5_PadData, timestamp) == 80, "public PS5 timestamp offset changed");
++
++typedef struct {
++    int user_id;
++    int handle;
++    SDL_JoystickID instance_id;
++    bool owns_handle, rumble;
++    char name[255];
++} PS5_PadContext;
++
++struct joystick_hwdata {
++    PS5_PadContext *context;
++    SDL_JoystickID instance_id;
++};
++
++static PS5_PadContext pads[PS5_MAX_USERS];
++static const Uint32 buttons[] = {
++    PS5_PAD_BUTTON_CROSS, PS5_PAD_BUTTON_CIRCLE,
++    PS5_PAD_BUTTON_SQUARE, PS5_PAD_BUTTON_TRIANGLE,
++    PS5_PAD_BUTTON_TOUCH_PAD, 0, PS5_PAD_BUTTON_OPTIONS,
++    PS5_PAD_BUTTON_L3, PS5_PAD_BUTTON_R3, PS5_PAD_BUTTON_L1,
++    PS5_PAD_BUTTON_R1, PS5_PAD_BUTTON_UP, PS5_PAD_BUTTON_DOWN,
++    PS5_PAD_BUTTON_LEFT, PS5_PAD_BUTTON_RIGHT, PS5_PAD_BUTTON_L2,
++    PS5_PAD_BUTTON_R2
++};
++
++static PS5_PadContext *PS5_GetDevice(int index)
++{
++    if (index < 0) return NULL;
++    for (int i = 0; i < PS5_MAX_USERS; ++i) {
++        if (pads[i].instance_id && index-- == 0) return &pads[i];
++    }
++    return NULL;
++}
++
++static PS5_PadContext *PS5_GetContext(SDL_Joystick *joystick)
++{
++    struct joystick_hwdata *hardware = joystick->hwdata;
++    if (!hardware || hardware->context->instance_id != hardware->instance_id) return NULL;
++    return hardware->context;
++}
++
++static void PS5_CloseHandle(PS5_PadContext *context)
++{
++    if (context->handle >= 0 && context->owns_handle) scePadClose(context->handle);
++    context->handle = -1;
++    context->owns_handle = false;
++    context->rumble = false;
++}
++
++static void PS5_JoystickDetect(void)
++{
++    int users[PS5_MAX_USERS] = {-1, -1, -1, -1};
++    int result = sceUserServiceGetLoginUserIdList(users);
++    if (result) { SDL_SetError("sceUserServiceGetLoginUserIdList: 0x%x", (unsigned)result); return; }
++    /* Match user IDs rather than array positions: login-list reordering must
++     * not remove a still-present controller or transfer an opened handle. */
++    for (int i = 0; i < PS5_MAX_USERS; ++i) {
++        bool present = false;
++        if (!pads[i].instance_id) continue;
++        for (int j = 0; j < PS5_MAX_USERS; ++j) present |= users[j] == pads[i].user_id;
++        if (!present) {
++            SDL_JoystickID removed = pads[i].instance_id;
++            pads[i].instance_id = 0;
++            PS5_CloseHandle(&pads[i]);
++            pads[i].user_id = -1;
++            SDL_PrivateJoystickRemoved(removed);
++        }
++    }
++    for (int i = 0; i < PS5_MAX_USERS; ++i) {
++        bool present = false;
++        if (users[i] == -1) continue;
++        for (int j = 0; j < PS5_MAX_USERS; ++j)
++            present |= pads[j].instance_id && pads[j].user_id == users[i];
++        if (present) continue;
++        for (int j = 0; j < PS5_MAX_USERS; ++j) {
++            PS5_PadContext *context = &pads[j];
++            if (context->instance_id) continue;
++            context->user_id = users[i];
++            context->instance_id = SDL_GetNextObjectID();
++            if (sceUserServiceGetUserName(users[i], context->name, sizeof(context->name)))
++                SDL_snprintf(context->name, sizeof(context->name), "PS5 controller user %08x", (unsigned)users[i]);
++            context->name[sizeof(context->name) - 1] = '\0';
++            SDL_PrivateJoystickAdded(context->instance_id);
++            break;
++        }
++    }
++}
++
++static bool PS5_JoystickInit(void)
++{
++    int result;
++    SDL_zero(pads);
++    for (int i = 0; i < PS5_MAX_USERS; ++i) { pads[i].handle = -1; pads[i].user_id = -1; }
++    result = sceUserServiceInitialize(NULL);
++    if (result && (Uint32)result != UINT32_C(0x80960003))
++        return SDL_SetError("sceUserServiceInitialize: 0x%x", (unsigned)result);
++    result = scePadInit();
++    if (result) return SDL_SetError("scePadInit: 0x%x", (unsigned)result);
++    PS5_JoystickDetect();
++    return true;
++}
++
++static int PS5_JoystickGetCount(void)
++{
++    int count = 0;
++    for (int i = 0; i < PS5_MAX_USERS; ++i) count += pads[i].instance_id != 0;
++    return count;
++}
++
++static bool PS5_JoystickIsDevicePresent(Uint16 vendor, Uint16 product, Uint16 version, const char *name)
++{
++    (void)version; (void)name;
++    return vendor == PS5_VENDOR && product == PS5_PRODUCT && PS5_JoystickGetCount() > 0;
++}
++static const char *PS5_JoystickGetDeviceName(int index)
++{ PS5_PadContext *context = PS5_GetDevice(index); return context ? context->name : NULL; }
++static const char *PS5_JoystickGetDevicePath(int index) { (void)index; return NULL; }
++static int PS5_JoystickGetDeviceSteamVirtualGamepadSlot(int index) { (void)index; return -1; }
++static int PS5_JoystickGetDevicePlayerIndex(int index)
++{ PS5_PadContext *context = PS5_GetDevice(index); return context ? (int)(context - pads) : -1; }
++static void PS5_JoystickSetDevicePlayerIndex(int index, int player) { (void)index; (void)player; }
++static SDL_GUID PS5_JoystickGetDeviceGUID(int index)
++{
++    SDL_GUID empty = {0};
++    if (!PS5_GetDevice(index)) return empty;
++    return SDL_CreateJoystickGUID(SDL_HARDWARE_BUS_USB, PS5_VENDOR, PS5_PRODUCT, 0,
++                                  "Sony", "DualSense", 'p', 0);
++}
++static SDL_JoystickID PS5_JoystickGetDeviceInstanceID(int index)
++{ PS5_PadContext *context = PS5_GetDevice(index); return context ? context->instance_id : 0; }
++
++static bool PS5_JoystickOpen(SDL_Joystick *joystick, int index)
++{
++    PS5_PadContext *context = PS5_GetDevice(index);
++    struct joystick_hwdata *hardware;
++    if (!context) return SDL_SetError("PS5 joystick index unavailable");
++    hardware = SDL_malloc(sizeof(*hardware));
++    if (!hardware) return SDL_OutOfMemory();
++    context->handle = scePadOpen(context->user_id, PS5_PAD_PORT_TYPE_STANDARD, 0, NULL);
++    context->owns_handle = context->handle >= 0;
++    /* A borrowed native handle must not be closed on SDL close/removal. */
++    if ((Uint32)context->handle == PS5_PAD_ERROR_ALREADY_OPENED)
++        context->handle = scePadGetHandle(context->user_id, PS5_PAD_PORT_TYPE_STANDARD, 0);
++    if (context->handle < 0) {
++        int result = context->handle;
++        SDL_free(hardware);
++        return SDL_SetError("scePadOpen/GetHandle: 0x%x", (unsigned)result);
++    }
++    context->rumble = scePadSetVibrationMode(context->handle, 2) == 0;
++    hardware->context = context;
++    hardware->instance_id = context->instance_id;
++    joystick->hwdata = hardware;
++    joystick->naxes = 6;
++    joystick->nbuttons = (int)SDL_arraysize(buttons);
++    joystick->nhats = 1;
++    SDL_SetBooleanProperty(SDL_GetJoystickProperties(joystick), SDL_PROP_JOYSTICK_CAP_RUMBLE_BOOLEAN, context->rumble);
++    SDL_SetBooleanProperty(SDL_GetJoystickProperties(joystick), SDL_PROP_JOYSTICK_CAP_RGB_LED_BOOLEAN, true);
++    return true;
++}
++
++static Sint16 PS5_Stick(Uint8 value)
++{
++    if (value < 127) return (Sint16)(((int)value - 127) * 32768 / 127);
++    if (value > 128) return (Sint16)(((int)value - 128) * 32767 / 127);
++    return 0;
++}
++
++static void PS5_JoystickUpdate(SDL_Joystick *joystick)
++{
++    PS5_PadContext *context = PS5_GetContext(joystick);
++    PS5_PadData pad = {0};
++    Uint64 timestamp = SDL_GetTicksNS();
++    Uint8 hat = SDL_HAT_CENTERED;
++    int result;
++    if (!context || context->handle < 0) return;
++    result = scePadReadState(context->handle, &pad);
++    if (result) {
++        SDL_PrivateJoystickForceRecentering(joystick);
++        SDL_SetError("scePadReadState: 0x%x", (unsigned)result);
++        return;
++    }
++    if (!pad.connected) {
++        SDL_zero(pad);
++        pad.leftStick.x = pad.leftStick.y = pad.rightStick.x = pad.rightStick.y = 128;
++    }
++    SDL_SendJoystickAxis(timestamp, joystick, 0, PS5_Stick(pad.leftStick.x));
++    SDL_SendJoystickAxis(timestamp, joystick, 1, PS5_Stick(pad.leftStick.y));
++    SDL_SendJoystickAxis(timestamp, joystick, 2, PS5_Stick(pad.rightStick.x));
++    SDL_SendJoystickAxis(timestamp, joystick, 3, PS5_Stick(pad.rightStick.y));
++    SDL_SendJoystickAxis(timestamp, joystick, 4, (Sint16)((int)pad.analogButtons.l2 * 257 - 32768));
++    SDL_SendJoystickAxis(timestamp, joystick, 5, (Sint16)((int)pad.analogButtons.r2 * 257 - 32768));
++    for (unsigned i = 0; i < SDL_arraysize(buttons); ++i)
++        SDL_SendJoystickButton(timestamp, joystick, (Uint8)i, (pad.buttons & buttons[i]) != 0);
++    if (pad.buttons & PS5_PAD_BUTTON_UP) hat |= SDL_HAT_UP;
++    if (pad.buttons & PS5_PAD_BUTTON_DOWN) hat |= SDL_HAT_DOWN;
++    if (pad.buttons & PS5_PAD_BUTTON_LEFT) hat |= SDL_HAT_LEFT;
++    if (pad.buttons & PS5_PAD_BUTTON_RIGHT) hat |= SDL_HAT_RIGHT;
++    SDL_SendJoystickHat(timestamp, joystick, 0, hat);
++}
++
++static bool PS5_JoystickRumble(SDL_Joystick *joystick, Uint16 low, Uint16 high)
++{
++    PS5_PadContext *context = PS5_GetContext(joystick);
++    PS5_PadVibration vibration = {(Uint8)(low >> 8), (Uint8)(high >> 8)};
++    int result;
++    if (!context || context->handle < 0 || !context->rumble) return SDL_Unsupported();
++    result = scePadSetVibration(context->handle, &vibration);
++    return result ? SDL_SetError("scePadSetVibration: 0x%x", (unsigned)result) : true;
++}
++static bool PS5_JoystickSetLED(SDL_Joystick *joystick, Uint8 red, Uint8 green, Uint8 blue)
++{
++    PS5_PadContext *context = PS5_GetContext(joystick);
++    PS5_PadColor color = {red, green, blue, 255};
++    int result;
++    if (!context || context->handle < 0) return SDL_SetError("PS5 pad is not open");
++    result = scePadSetLightBar(context->handle, &color);
++    return result ? SDL_SetError("scePadSetLightBar: 0x%x", (unsigned)result) : true;
++}
++static bool PS5_JoystickRumbleTriggers(SDL_Joystick *joystick, Uint16 left, Uint16 right)
++{ (void)joystick; (void)left; (void)right; return SDL_Unsupported(); }
++static bool PS5_JoystickSendEffect(SDL_Joystick *joystick, const void *data, int size)
++{ (void)joystick; (void)data; (void)size; return SDL_Unsupported(); }
++static bool PS5_JoystickSetSensorsEnabled(SDL_Joystick *joystick, bool enabled)
++{ (void)joystick; (void)enabled; return SDL_Unsupported(); }
++static void PS5_JoystickClose(SDL_Joystick *joystick)
++{
++    PS5_PadContext *context = PS5_GetContext(joystick);
++    if (context) PS5_CloseHandle(context);
++    SDL_free(joystick->hwdata);
++    joystick->hwdata = NULL;
++}
++static void PS5_JoystickQuit(void)
++{
++    for (int i = 0; i < PS5_MAX_USERS; ++i) {
++        PS5_CloseHandle(&pads[i]);
++        pads[i].instance_id = 0;
++        pads[i].user_id = -1;
++    }
++}
++
++static bool PS5_JoystickGetGamepadMapping(int index, SDL_GamepadMapping *out)
++{
++    if (!PS5_GetDevice(index)) return false;
++    SDL_zero(*out);
++#define MAP_BUTTON(field, button) out->field.kind = EMappingKind_Button; out->field.target = button
++    MAP_BUTTON(a, 0); MAP_BUTTON(b, 1); MAP_BUTTON(x, 2); MAP_BUTTON(y, 3);
++    MAP_BUTTON(touchpad, 4); MAP_BUTTON(start, 6);
++    MAP_BUTTON(leftstick, 7); MAP_BUTTON(rightstick, 8);
++    MAP_BUTTON(leftshoulder, 9); MAP_BUTTON(rightshoulder, 10);
++    MAP_BUTTON(dpup, 11); MAP_BUTTON(dpdown, 12); MAP_BUTTON(dpleft, 13); MAP_BUTTON(dpright, 14);
++#undef MAP_BUTTON
++#define MAP_AXIS(field, axis) out->field.kind = EMappingKind_Axis; out->field.target = axis
++    MAP_AXIS(leftx, 0); MAP_AXIS(lefty, 1); MAP_AXIS(rightx, 2); MAP_AXIS(righty, 3);
++    MAP_AXIS(lefttrigger, 4); MAP_AXIS(righttrigger, 5);
++#undef MAP_AXIS
++    return true;
++}
++
++SDL_JoystickDriver SDL_PS5_JoystickDriver = {
++    PS5_JoystickInit, PS5_JoystickGetCount, PS5_JoystickDetect,
++    PS5_JoystickIsDevicePresent, PS5_JoystickGetDeviceName,
++    PS5_JoystickGetDevicePath, PS5_JoystickGetDeviceSteamVirtualGamepadSlot,
++    PS5_JoystickGetDevicePlayerIndex, PS5_JoystickSetDevicePlayerIndex,
++    PS5_JoystickGetDeviceGUID, PS5_JoystickGetDeviceInstanceID,
++    PS5_JoystickOpen, PS5_JoystickRumble, PS5_JoystickRumbleTriggers,
++    PS5_JoystickSetLED, PS5_JoystickSendEffect, PS5_JoystickSetSensorsEnabled,
++    PS5_JoystickUpdate, PS5_JoystickClose, PS5_JoystickQuit,
++    PS5_JoystickGetGamepadMapping
++};
++#endif
+--- /dev/null
++++ b/src/joystick/ps5/SDL_ps5pad.h
+@@ -0,0 +1,138 @@
++/*
++  Simple DirectMedia Layer
++  Copyright (C) 1997-2015 Sam Lantinga <slouken@libsdl.org>
++
++  This software is provided 'as-is', without any express or implied
++  warranty.  In no event will the authors be held liable for any damages
++  arising from the use of this software.
++
++  Permission is granted to anyone to use this software for any purpose,
++  including commercial applications, and to alter it and redistribute it
++  freely, subject to the following restrictions:
++
++  1. The origin of this software must not be misrepresented; you must not
++     claim that you wrote the original software. If you use this software
++     in a product, an acknowledgment in the product documentation would be
++     appreciated but is not required.
++  2. Altered source versions must be plainly marked as such, and must not be
++     misrepresented as being the original software.
++  3. This notice may not be removed or altered from any source distribution.
++*/
++
++/* Altered for SDL3; public source ee4c47dc0d617b3bc8f35108f9956baf228a1322. */
++#include <stddef.h>
++#pragma once
++
++#include <stdint.h>
++
++#define PS5_PAD_PORT_TYPE_STANDARD       0
++#define PS5_PAD_PORT_TYPE_REMOTE_CONTROL 16
++
++#define PS5_USER_ID_SYSTEM 0xff
++
++#define PS5_PAD_ERROR_ALREADY_OPENED 0x80920004u
++
++#define PS5_PAD_BUTTON_L3        0x0002
++#define PS5_PAD_BUTTON_R3        0x0004
++#define PS5_PAD_BUTTON_OPTIONS   0x0008
++#define PS5_PAD_BUTTON_UP        0x0010
++#define PS5_PAD_BUTTON_RIGHT     0x0020
++#define PS5_PAD_BUTTON_DOWN      0x0040
++#define PS5_PAD_BUTTON_LEFT      0x0080
++#define PS5_PAD_BUTTON_L2        0x0100
++#define PS5_PAD_BUTTON_R2        0x0200
++#define PS5_PAD_BUTTON_L1        0x0400
++#define PS5_PAD_BUTTON_R1        0x0800
++#define PS5_PAD_BUTTON_TRIANGLE  0x1000
++#define PS5_PAD_BUTTON_CIRCLE    0x2000
++#define PS5_PAD_BUTTON_CROSS     0x4000
++#define PS5_PAD_BUTTON_SQUARE    0x8000
++#define PS5_PAD_BUTTON_TOUCH_PAD 0x100000
++
++typedef struct PS5_PadTouch
++{
++    uint16_t x;
++    uint16_t y;
++    uint8_t finger;
++    uint8_t pad[3];
++} PS5_PadTouch;
++
++typedef struct PS5_PadTouchData
++{
++    uint8_t fingers;
++    uint8_t pad1[3];
++    uint32_t pad2;
++    PS5_PadTouch touch[2];
++} PS5_PadTouchData;
++
++typedef struct PS5_PadColor
++{
++    uint8_t r;
++    uint8_t g;
++    uint8_t b;
++    uint8_t a;
++} PS5_PadColor;
++
++typedef struct PS5_PadVibration {
++    uint8_t large_motor;
++    uint8_t small_motor;
++} PS5_PadVibration;
++
++typedef struct PS5_PadData
++{
++    uint32_t buttons;
++    struct
++    {
++        uint8_t x;
++        uint8_t y;
++    } leftStick;
++    struct
++    {
++        uint8_t x;
++        uint8_t y;
++    } rightStick;
++    struct
++    {
++        uint8_t l2;
++        uint8_t r2;
++    } analogButtons;
++    uint16_t padding;
++    struct
++    {
++        float x;
++        float y;
++        float z;
++        float w;
++    } quat;
++    struct
++    {
++        float x;
++        float y;
++        float z;
++    } vel;
++    struct
++    {
++        float x;
++        float y;
++        float z;
++    } acell;
++    PS5_PadTouchData touch;
++    uint8_t connected;
++    uint64_t timestamp;
++    uint8_t ext[16];
++    uint8_t count;
++    uint8_t unknown[15];
++} PS5_PadData;
++
++int scePadInit(void);
++int scePadOpen(int user_id, int type, int index, void *param);
++int scePadGetHandle(int user_id, int type, int index);
++int scePadReadState(int handle, PS5_PadData *data);
++int scePadSetLightBar(int handle, const PS5_PadColor* color);
++int scePadSetVibrationMode(int handle, int mode);
++int scePadSetVibration(int handle, const PS5_PadVibration* vib);
++int scePadClose(int handle);
++
++int sceUserServiceInitialize(void *);
++int sceUserServiceGetLoginUserIdList(int userId[4]);
++int sceUserServiceGetUserName(int userId, char* name, size_t size);
+--- a/src/joystick/SDL_joystick.c
++++ b/src/joystick/SDL_joystick.c
+@@ -94,6 +94,9 @@
+ #ifdef SDL_JOYSTICK_PS2
+     &SDL_PS2_JoystickDriver,
+ #endif
++#ifdef SDL_JOYSTICK_PS5
++    &SDL_PS5_JoystickDriver,
++#endif
+ #ifdef SDL_JOYSTICK_PSP
+     &SDL_PSP_JoystickDriver,
+ #endif
+--- a/src/joystick/SDL_sysjoystick.h
++++ b/src/joystick/SDL_sysjoystick.h
+@@ -259,6 +259,7 @@
+ extern SDL_JoystickDriver SDL_WINDOWS_JoystickDriver;
+ extern SDL_JoystickDriver SDL_WINMM_JoystickDriver;
+ extern SDL_JoystickDriver SDL_PS2_JoystickDriver;
++extern SDL_JoystickDriver SDL_PS5_JoystickDriver;
+ extern SDL_JoystickDriver SDL_PSP_JoystickDriver;
+ extern SDL_JoystickDriver SDL_VITA_JoystickDriver;
+ extern SDL_JoystickDriver SDL_N3DS_JoystickDriver;
+--- a/src/SDL.c
++++ b/src/SDL.c
+@@ -30,7 +30,7 @@
+ // this checks for HAVE_DBUS_DBUS_H internally.
+ #include "core/linux/SDL_dbus.h"
+ 
+-#if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID)
++#if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID) && !defined(SDL_PLATFORM_PS5)
+ #include "core/unix/SDL_gtk.h"
+ #endif
+ 
+@@ -717,7 +717,7 @@
+     SDL_DBus_Quit();
+ #endif
+ 
+-#if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID) && !defined(SDL_PLATFORM_EMSCRIPTEN) && !defined(SDL_PLATFORM_PRIVATE)
++#if defined(SDL_PLATFORM_UNIX) && !defined(SDL_PLATFORM_ANDROID) && !defined(SDL_PLATFORM_EMSCRIPTEN) && !defined(SDL_PLATFORM_PRIVATE) && !defined(SDL_PLATFORM_PS5)
+     SDL_Gtk_Quit();
+ #endif
+ 
+--- /dev/null
++++ b/src/video/ps5/SDL_ps5native.h
+@@ -0,0 +1,61 @@
++/*
++  Simple DirectMedia Layer
++  Copyright (C) 1997-2024 Sam Lantinga <slouken@libsdl.org>
++
++  This software is provided 'as-is', without any express or implied
++  warranty.  In no event will the authors be held liable for any damages
++  arising from the use of this software.
++
++  Permission is granted to anyone to use this software for any purpose,
++  including commercial applications, and to alter it and redistribute it
++  freely, subject to the following restrictions:
++
++  1. The origin of this software must not be misrepresented; you must not
++     claim that you wrote the original software. If you use this software
++     in a product, an acknowledgment in the product documentation would be
++     appreciated but is not required.
++  2. Altered source versions must be plainly marked as such, and must not be
++     misrepresented as being the original software.
++  3. This notice may not be removed or altered from any source distribution.
++*/
++
++/* Altered: SDL3 public ABI declarations, same pinned SDL2 source above. */
++#ifndef PE_SDL3_PS5_NATIVE_H
++#define PE_SDL3_PS5_NATIVE_H
++#include <sys/types.h>
++#include <sys/event.h>
++#include <stdint.h>
++typedef struct PS5_VideoBuf {
++    void *data;
++    uint64_t junk0[3];
++} PS5_VideoBuf;
++
++typedef struct PS5_VideoAttr {
++    uint8_t junk0[80];
++} PS5_VideoAttr;
++
++int sceSystemServiceHideSplashScreen(void);
++
++int sceKernelAllocateMainDirectMemory(size_t, size_t, int, intptr_t*);
++int sceKernelMapDirectMemory(void**, size_t, int, int, intptr_t, size_t);
++int sceKernelReleaseDirectMemory(intptr_t, size_t);
++
++int sceKernelCreateEqueue(struct kevent **, const char *);
++int sceKernelWaitEqueue(struct kevent*, struct kevent*, int, int*, uint*);
++int sceKernelDeleteEqueue(struct kevent*);
++
++int sceVideoOutOpen(int, int, int, const void*);
++void sceVideoOutClose(int);
++
++int sceVideoOutAddFlipEvent(struct kevent*, int, void*);
++int sceVideoOutSetFlipRate(int, int);
++int sceVideoOutSubmitFlip(int, int, uint32_t, int64_t);
++int sceVideoOutDeleteFlipEvent(struct kevent*, int);
++
++void sceVideoOutSetBufferAttribute2(PS5_VideoAttr*, uint64_t, uint32_t, uint32_t,
++                                    uint32_t, uint64_t, uint32_t, uint64_t);
++int sceVideoOutRegisterBuffers2(int, int, int, PS5_VideoBuf*, int, PS5_VideoAttr*,
++                                int, void*);
++
++
++#endif
+--- /dev/null
++++ b/src/video/ps5/SDL_ps5tilemap.c
+@@ -0,0 +1,270 @@
++/* Altered for SDL3 from ps5-payload-dev/SDL ee4c47dc0d617b3bc8f35108f9956baf228a1322. */
++/*
++  Simple DirectMedia Layer
++  Copyright (C) 2026 John Törnblom <john.tornblom@gmail.com>
++
++  This software is provided 'as-is', without any express or implied
++  warranty.  In no event will the authors be held liable for any damages
++  arising from the use of this software.
++
++  Permission is granted to anyone to use this software for any purpose,
++  including commercial applications, and to alter it and redistribute it
++  freely, subject to the following restrictions:
++
++  1. The origin of this software must not be misrepresented; you must not
++     claim that you wrote the original software. If you use this software
++     in a product, an acknowledgment in the product documentation would be
++     appreciated but is not required.
++  2. Altered source versions must be plainly marked as such, and must not be
++     misrepresented as being the original software.
++  3. This notice may not be removed or altered from any source distribution.
++*/
++
++#include "SDL_internal.h"
++
++#ifdef SDL_VIDEO_DRIVER_PS5
++
++#include <immintrin.h>
++
++#include "video/SDL_sysvideo.h"
++
++#define PS5_TILE_WIDTH  512
++#define PS5_TILE_HEIGHT 128
++#define PS5_TILE_SIZE   (PS5_TILE_WIDTH * PS5_TILE_HEIGHT)
++#define PS5_TILE_BAND   8
++
++typedef struct PS5_Tilemap
++{
++    Uint32 width;
++    Uint32 height;
++    Uint32 *colx;
++    Uint32 yoff[PS5_TILE_HEIGHT];
++    SDL_Rect pending[2];
++    bool full[2];
++} PS5_Tilemap;
++
++static Uint32 PS5_TileOffset(Uint32 x, Uint32 y)
++{
++    return (((x) & 1u) << 0 |
++            ((x >>  1) & 1u) << 1 |
++            ((y >>  0) & 1u) << 2 |
++            ((y >>  1) & 1u) << 3 |
++            ((y >>  2) & 1u) << 4 |
++            ((x >>  2) & 1u) << 5 |
++            (((x >> 3) ^ (y >> 3)) & 1u) << 6 |
++            (((x >> 4) ^ (y >> 4)) & 1u) << 7 |
++            (((x >> 6) ^ (y >> 5)) & 1u) << 8 |
++            (((x >> 5) ^ (y >> 6)) & 1u) << 9 |
++            ((y >>  3) & 1u) << 10 |
++            ((x >>  4) & 1u) << 11 |
++            ((y >>  6) & 1u) << 12 |
++            ((x >>  6) & 1u) << 13 |
++            ((x >>  7) & 1u) << 14 |
++            ((x >>  8) & 1u) << 15);
++}
++
++static Uint32 PS5_TilePixel(Uint32 x, Uint32 y, Uint32 width)
++{
++    return ((x / PS5_TILE_WIDTH) * PS5_TILE_SIZE +
++            (y / PS5_TILE_HEIGHT) * (PS5_TILE_HEIGHT * width) +
++            ((PS5_TileOffset((x % PS5_TILE_WIDTH), 0) ^
++              PS5_TileOffset(0, (y % PS5_TILE_HEIGHT)))));
++}
++
++__attribute__((target("avx2")))
++static void PS5_TileArea(const PS5_Tilemap *tmap,
++                         const Uint32 *src, Uint32 pitch, Uint32 *dst,
++                         Uint32 x0, Uint32 x1, Uint32 y0, Uint32 y1)
++{
++    const Uint32 *colx = tmap->colx;
++    const Uint32 width = tmap->width;
++    const Uint32 quads = x1 / 4;
++    const Uint32 *p;
++    const Uint32 *s;
++    Uint32 rows;
++    Uint32 base;
++    Uint32 yo;
++    Uint32 *d;
++    Uint32 *o;
++    __m256i v;
++    Uint32 x;
++    Uint32 y;
++    Uint32 k;
++    Uint32 g;
++
++    for(y = y0; y < y1; y += PS5_TILE_BAND) {
++        base = (y / PS5_TILE_HEIGHT) * (PS5_TILE_HEIGHT * width);
++        yo = tmap->yoff[y % PS5_TILE_HEIGHT];
++        s = src + y * pitch;
++        d = dst + base;
++        rows = SDL_min(PS5_TILE_BAND, y1 - y);
++
++        for(g = x0 / 4; g < quads; g++) {
++            p = s + (g << 2);
++            o = d + (colx[g] ^ yo);
++
++            for(k = 0; k + 1 < rows; k += 2) {
++                v = _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_loadu_si128((const __m128i *)p)),
++                                            _mm_loadu_si128((const __m128i *)(p + pitch)), 1);
++                _mm256_stream_si256((__m256i *)o, v);
++                p += 2 * pitch;
++                o += 8;
++            }
++
++            if (rows & 1) {
++                _mm_stream_si128((__m128i *)o, _mm_loadu_si128((const __m128i *)p));
++            }
++        }
++
++        for(k=0; k<rows; k++) {
++            p = s + k * pitch;
++            for(x=quads*4; x<x1; x++) {
++                dst[PS5_TilePixel(x, y + k, width)] = p[x];
++            }
++        }
++    }
++    _mm_sfence();
++}
++
++static void PS5_Tilemap_RectUnion(SDL_Rect *acc, const SDL_Rect *r)
++{
++    int x0;
++    int x1;
++    int y0;
++    int y1;
++
++    if(SDL_RectEmpty(r)) {
++        return;
++    }
++    if(SDL_RectEmpty(acc)) {
++        *acc = *r;
++        return;
++    }
++
++    x0 = SDL_min(acc->x, r->x);
++    y0 = SDL_min(acc->y, r->y);
++    x1 = SDL_max(acc->x + acc->w, r->x + r->w);
++    y1 = SDL_max(acc->y + acc->h, r->y + r->h);
++
++    acc->x = x0;
++    acc->y = y0;
++    acc->w = x1 - x0;
++    acc->h = y1 - y0;
++}
++
++size_t PS5_Tilemap_BufferSize(Uint32 width, Uint32 height)
++{
++    Uint32 last_band = ((height-1) / PS5_TILE_HEIGHT) * (PS5_TILE_HEIGHT*width);
++    Uint32 last_tile = ((width-1) / PS5_TILE_WIDTH) * PS5_TILE_SIZE;
++
++    return (last_band + last_tile + PS5_TILE_SIZE) * sizeof(Uint32);
++}
++
++PS5_Tilemap* PS5_Tilemap_Create(Uint32 width, Uint32 height)
++{
++    PS5_Tilemap* tmap;
++    Uint32 x;
++    Uint32 y;
++
++    tmap = (PS5_Tilemap*)SDL_malloc(sizeof(PS5_Tilemap));
++    if(!tmap) {
++        return NULL;
++    }
++
++    tmap->colx = (Uint32*)SDL_malloc(sizeof(Uint32) * (width / 4 + 1));
++    if(!tmap->colx) {
++        SDL_free(tmap);
++        return NULL;
++    }
++
++    for(x = 0; x < width; x += 4) {
++        tmap->colx[x / 4] = (x / PS5_TILE_WIDTH) * PS5_TILE_SIZE +
++            PS5_TileOffset((x % PS5_TILE_WIDTH), 0);
++    }
++    for(y = 0; y < PS5_TILE_HEIGHT; y++) {
++        tmap->yoff[y] = PS5_TileOffset(0, y);
++    }
++
++    tmap->width = width;
++    tmap->height = height;
++    SDL_zero(tmap->pending);
++    tmap->full[0] = tmap->full[1] = true;
++
++    return tmap;
++}
++
++void PS5_Tilemap_Blit(PS5_Tilemap *tmap,
++                      const void *pixels, int pitch, void *tiled,
++                      int buf_idx, const SDL_Rect *rects, int numrects,
++                      int off_x, int off_y)
++{
++    const SDL_Rect screen = {0, 0, tmap->width, tmap->height};
++    SDL_Rect damage;
++    SDL_Rect area;
++    SDL_Rect r;
++    int i;
++
++    SDL_zero(damage);
++    if(rects && numrects > 0) {
++        for(i = 0; i < numrects; i++) {
++            r = rects[i];
++            r.x += off_x;
++            r.y += off_y;
++            if(SDL_GetRectIntersection(&r, &screen, &r)) {
++                PS5_Tilemap_RectUnion(&damage, &r);
++            }
++        }
++    } else {
++        damage = screen;
++    }
++
++    if(tmap->full[buf_idx]) {
++        area = screen;
++    } else {
++        area = tmap->pending[buf_idx];
++        PS5_Tilemap_RectUnion(&area, &damage);
++    }
++
++    tmap->full[buf_idx] = false;
++    SDL_zero(tmap->pending[buf_idx]);
++    PS5_Tilemap_RectUnion(&tmap->pending[buf_idx ^ 1], &damage);
++
++    if(SDL_RectEmpty(&area)) {
++        return;
++    }
++
++    area.w += area.x & 3;
++    area.x &= ~3;
++    area.w = SDL_min((area.w + 3) & ~3, (int)tmap->width - area.x);
++
++    area.h += area.y & (PS5_TILE_BAND - 1);
++    area.y &= ~(PS5_TILE_BAND - 1);
++    area.h = SDL_min((area.h + PS5_TILE_BAND - 1) & ~(PS5_TILE_BAND - 1),
++                     (int)tmap->height - area.y);
++
++    PS5_TileArea(tmap, (const Uint32*)pixels, pitch, (Uint32*)tiled,
++                 area.x, area.x + area.w, area.y, area.y + area.h);
++}
++
++
++void PS5_Tilemap_Destroy(PS5_Tilemap *tmap)
++{
++    if(!tmap) {
++        return;
++    }
++
++    SDL_free(tmap->colx);
++    SDL_free(tmap);
++}
++
++
++#endif /* SDL_VIDEO_DRIVER_PS5 */
++
++/* vi: set ts=4 sw=4 expandtab: */
++
++/* emacs: */
++/* Local Variables: */
++/* tab-width: 4 */
++/* c-basic-offset: 4 */
++/* indent-tabs-mode: nil */
++/* End: */
+--- /dev/null
++++ b/src/video/ps5/SDL_ps5tilemap.h
+@@ -0,0 +1,44 @@
++/* Altered for SDL3 from ps5-payload-dev/SDL ee4c47dc0d617b3bc8f35108f9956baf228a1322. */
++/*
++  Simple DirectMedia Layer
++  Copyright (C) 2026 John Törnblom <john.tornblom@gmail.com>
++
++  This software is provided 'as-is', without any express or implied
++  warranty.  In no event will the authors be held liable for any damages
++  arising from the use of this software.
++
++  Permission is granted to anyone to use this software for any purpose,
++  including commercial applications, and to alter it and redistribute it
++  freely, subject to the following restrictions:
++
++  1. The origin of this software must not be misrepresented; you must not
++     claim that you wrote the original software. If you use this software
++     in a product, an acknowledgment in the product documentation would be
++     appreciated but is not required.
++  2. Altered source versions must be plainly marked as such, and must not be
++     misrepresented as being the original software.
++  3. This notice may not be removed or altered from any source distribution.
++*/
++
++#ifndef SDL_ps5tilemap_h_
++#define SDL_ps5tilemap_h_
++
++#include <SDL3/SDL_rect.h>
++#include <SDL3/SDL_stdinc.h>
++
++typedef struct PS5_Tilemap PS5_Tilemap;
++
++size_t PS5_Tilemap_BufferSize(Uint32 width, Uint32 height);
++
++PS5_Tilemap* PS5_Tilemap_Create(Uint32 width, Uint32 height);
++
++void PS5_Tilemap_Blit(PS5_Tilemap *tmap, const void *pixels, int pitch,
++		      void *tiled, int buf_idx,
++		      const SDL_Rect *rects, int numrects,
++		      int off_x, int off_y);
++
++void PS5_Tilemap_Destroy(PS5_Tilemap *tmap);
++
++#endif /* SDL_ps5tilemap_h_ */
++
++/* vi: set ts=4 sw=4 expandtab: */
+--- /dev/null
++++ b/src/video/ps5/SDL_ps5video.c
+@@ -0,0 +1,97 @@
++/*
++ * Dusklight for the PlayStation 5 - SDL3's video driver for the console.
++ *
++ * The console has one output and no windows: this gives SDL one display and
++ * lets it keep its window bookkeeping (size, flags, events) for a window that
++ * is the whole screen. Nothing is drawn through SDL; the title's renderer
++ * presents through VK_KHR_display on its own.
++ *
++ * Public RADV selects the actual mode. SDL_PS5_DISPLAY must match an advertised mode.
++ *
++ * Altered CPE version: static RADV hooks installed; no software scanout.
++ * SPDX-License-Identifier: Zlib
++ */
++#include "SDL_internal.h"
++
++#ifdef SDL_VIDEO_DRIVER_PS5
++
++#include "video/SDL_sysvideo.h"
++#include "events/SDL_events_c.h"
++
++static bool PS5_VideoInit(SDL_VideoDevice *_this)
++{
++    SDL_DisplayMode mode;
++    extern bool CPE_PS5_QueryDisplay(SDL_VideoDevice *, SDL_DisplayMode *);
++    if (!CPE_PS5_QueryDisplay(_this, &mode)) return false;
++    return SDL_AddBasicVideoDisplay(&mode) != 0;
++}
++
++static void PS5_VideoQuit(SDL_VideoDevice *_this)
++{
++}
++
++static void PS5_PumpEvents(SDL_VideoDevice *_this)
++{
++}
++
++static bool PS5_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesID props)
++{
++    /* The window is the screen, and always has the pad's focus */
++    SDL_VideoDisplay *display = SDL_GetVideoDisplay(SDL_GetPrimaryDisplay());
++    if (!display) return false;
++    window->w = display->desktop_mode.w; window->h = display->desktop_mode.h;
++    window->windowed.w = window->w; window->windowed.h = window->h;
++    SDL_SetKeyboardFocus(window);
++    return true;
++}
++
++static bool PS5_SetWindowPosition(SDL_VideoDevice *_this, SDL_Window *window)
++{
++    return true;
++}
++
++static void PS5_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
++{
++    SDL_VideoDisplay *display = SDL_GetVideoDisplay(SDL_GetPrimaryDisplay());
++    if (display) { window->w = display->desktop_mode.w; window->h = display->desktop_mode.h; }
++}
++
++static SDL_FullscreenResult PS5_SetWindowFullscreen(SDL_VideoDevice *_this, SDL_Window *window, SDL_VideoDisplay *display, SDL_FullscreenOp fullscreen)
++{
++    return SDL_FULLSCREEN_SUCCEEDED;
++}
++
++static void PS5_DeleteDevice(SDL_VideoDevice *device)
++{
++    SDL_free(device);
++}
++
++extern void CPE_PS5_InstallVulkanHooks(SDL_VideoDevice *device);
++
++static SDL_VideoDevice *PS5_CreateDevice(void)
++{
++    SDL_VideoDevice *device = (SDL_VideoDevice *)SDL_calloc(1, sizeof(SDL_VideoDevice));
++    if (!device) {
++        return NULL;
++    }
++    CPE_PS5_InstallVulkanHooks(device);
++    device->VideoInit = PS5_VideoInit;
++    device->VideoQuit = PS5_VideoQuit;
++    device->PumpEvents = PS5_PumpEvents;
++    device->CreateSDLWindow = PS5_CreateWindow;
++    device->SetWindowPosition = PS5_SetWindowPosition;
++    device->SetWindowSize = PS5_SetWindowSize;
++    device->SetWindowFullscreen = PS5_SetWindowFullscreen;
++    device->free = PS5_DeleteDevice;
++    device->device_caps = VIDEO_DEVICE_CAPS_FULLSCREEN_ONLY;
++    return device;
++}
++
++VideoBootStrap PS5_bootstrap = {
++    "ps5", "PlayStation 5 video driver",
++    PS5_CreateDevice,
++    NULL, // no ShowMessageBox implementation
++    false
++};
++
++#endif // SDL_VIDEO_DRIVER_PS5
+--- /dev/null
++++ b/src/video/ps5/SDL_ps5vulkan.c
+@@ -0,0 +1,126 @@
++/*
++ * SDL PS5 static RADV Vulkan hooks.
++ * Altered CPE version, 2026-10-30, based on griches/PS5_DevilutionX
++ * ps5/sdl/SDL_ps5video.c at 4dc807484de4bd1c1020da3d7d67a886c9dd6c3a.
++ * SPDX-License-Identifier: Zlib
++ * See upstream/PS5_Dusklight-72d6885cc8b4ff4c5f6be23682ab11578ec926c4/licenses/Zlib.txt.
++ */
++#include "SDL_internal.h"
++#if defined(SDL_VIDEO_DRIVER_PS5) && defined(SDL_VIDEO_VULKAN)
++#include "video/SDL_sysvideo.h"
++#include "video/SDL_vulkan_internal.h"
++
++
++extern void CPE_GPUTrace(const char *, long long, unsigned long long, unsigned long long) __attribute__((weak));
++#define GPU_TRACE(s,r,a,b) do { if (CPE_GPUTrace) CPE_GPUTrace(s,r,a,b); } while (0)
++extern PFN_vkVoidFunction vk_icdGetInstanceProcAddr(VkInstance instance, const char *name);
++
++static Uint32 selected_w, selected_h, selected_mhz;
++static char selected_display[64], selected_override[64];
++static const char *value(const char *s) { return s ? s : ""; }
++extern bool CPE_Vulkan_QueryDisplay(void *, VkInstance, Uint32 *, Uint32 *, Uint32 *);
++static bool PS5_Vulkan_LoadLibrary(SDL_VideoDevice *device, const char *path)
++{
++    /* A title has no payload-injected dlopen/dlsym callbacks. The ICD is
++     * linked whole and its entry point is resolved by the static linker. */
++    if (path && *path && SDL_strcmp(path, "radv") != 0)
++        return SDL_SetError("PS5 Vulkan accepts only the statically linked RADV driver");
++    PFN_vkEnumerateInstanceExtensionProperties enumerate =
++        (PFN_vkEnumerateInstanceExtensionProperties)vk_icdGetInstanceProcAddr(
++            VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties");
++    if (!enumerate || !vk_icdGetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateInstance"))
++        return SDL_SetError("Static PS5 RADV entry points unavailable");
++    Uint32 count = 0;
++    VkExtensionProperties *extensions = SDL_Vulkan_CreateInstanceExtensionsList(enumerate, &count);
++    if (!extensions) return false;
++    bool surface = false, display = false;
++    for (Uint32 i = 0; i < count; ++i) {
++        surface |= SDL_strcmp(extensions[i].extensionName, VK_KHR_SURFACE_EXTENSION_NAME) == 0;
++        display |= SDL_strcmp(extensions[i].extensionName, VK_KHR_DISPLAY_EXTENSION_NAME) == 0;
++    }
++    SDL_free(extensions);
++    if (!surface || !display)
++        return SDL_SetError("Static PS5 RADV requires VK_KHR_surface and VK_KHR_display");
++    device->vulkan_config.vkGetInstanceProcAddr = (void *)vk_icdGetInstanceProcAddr;
++    device->vulkan_config.vkEnumerateInstanceExtensionProperties = (void *)enumerate;
++    SDL_strlcpy(device->vulkan_config.loader_path, "radv", sizeof(device->vulkan_config.loader_path));
++    GPU_TRACE("static_icd_ready", 0, count, 0);
++    return true;
++}
++static void PS5_Vulkan_UnloadLibrary(SDL_VideoDevice *device)
++{
++    device->vulkan_config.vkGetInstanceProcAddr = NULL;
++    device->vulkan_config.vkEnumerateInstanceExtensionProperties = NULL;
++    device->vulkan_config.loader_path[0] = '\0';
++}
++static const char *const *PS5_Vulkan_GetInstanceExtensions(SDL_VideoDevice *device, Uint32 *count)
++{
++    (void)device;
++    static const char *const names[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_DISPLAY_EXTENSION_NAME};
++    if (count) *count = SDL_arraysize(names);
++    return names;
++}
++static bool PS5_Vulkan_CreateSurface(SDL_VideoDevice *device, SDL_Window *window,
++    VkInstance instance, const struct VkAllocationCallbacks *allocator, VkSurfaceKHR *surface)
++{
++    Uint32 w=0,h=0,mhz=0;
++    if (SDL_strcmp(selected_display, value(SDL_GetHint(SDL_HINT_VULKAN_DISPLAY))) ||
++        SDL_strcmp(selected_override, value(SDL_getenv("SDL_PS5_DISPLAY"))))
++        return SDL_SetError("Display selection changed after bootstrap; restart required");
++    if (!CPE_Vulkan_QueryDisplay((void *)vk_icdGetInstanceProcAddr, instance, &w,&h,&mhz)) return false;
++    if (w != selected_w || h != selected_h || mhz != selected_mhz || (Uint32)window->w != w || (Uint32)window->h != h)
++        return SDL_SetError("RADV mode/window changed after bootstrap; restart required");
++    if (!device->vulkan_config.vkGetInstanceProcAddr || !surface)
++        return SDL_SetError("PS5 Vulkan surface requested without a loaded static driver");
++    return SDL_Vulkan_Display_CreateSurface(device->vulkan_config.vkGetInstanceProcAddr,
++        instance, allocator, surface);
++}
++static void PS5_Vulkan_DestroySurface(SDL_VideoDevice *device, VkInstance instance,
++    VkSurfaceKHR surface, const struct VkAllocationCallbacks *allocator)
++{
++    if (device->vulkan_config.vkGetInstanceProcAddr && surface)
++        SDL_Vulkan_DestroySurface_Internal(device->vulkan_config.vkGetInstanceProcAddr,
++            instance, surface, allocator);
++}
++extern bool CPE_Vulkan_QueryDisplay(void *, VkInstance, Uint32 *, Uint32 *, Uint32 *);
++bool CPE_PS5_QueryDisplay(SDL_VideoDevice *device, SDL_DisplayMode *mode) {
++    if (!PS5_Vulkan_LoadLibrary(device, NULL)) return false;
++    PFN_vkCreateInstance create = (PFN_vkCreateInstance)vk_icdGetInstanceProcAddr(VK_NULL_HANDLE, "vkCreateInstance");
++    const char *names[] = {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_DISPLAY_EXTENSION_NAME};
++    VkApplicationInfo app = {0}; app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO; app.apiVersion = VK_API_VERSION_1_0;
++    VkInstanceCreateInfo info = {0}; info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
++    info.pApplicationInfo = &app; info.enabledExtensionCount = 2; info.ppEnabledExtensionNames = names;
++    VkInstance instance = VK_NULL_HANDLE;
++    VkResult result = create(&info, NULL, &instance);
++    GPU_TRACE("display_probe_vkCreateInstance", result, 0, 0);
++    if (result != VK_SUCCESS) return SDL_SetError("RADV display probe vkCreateInstance=%d", result);
++    PFN_vkDestroyInstance destroy = (PFN_vkDestroyInstance)vk_icdGetInstanceProcAddr(instance, "vkDestroyInstance");
++    /* Core destroy is mandatory for a valid Vulkan instance. */
++    Uint32 w=0,h=0,mhz=0;
++    bool ok = CPE_Vulkan_QueryDisplay((void *)vk_icdGetInstanceProcAddr, instance, &w, &h, &mhz);
++    destroy(instance, NULL);
++    GPU_TRACE("public_display_query", ok ? 0 : -1, ((Uint64)w << 32) | h, mhz);
++    if (!ok) return false;
++    if (!w || !h || !mhz || w > 16384 || h > 16384) return SDL_SetError("RADV display mode outside supported bounds");
++    const char *display = value(SDL_GetHint(SDL_HINT_VULKAN_DISPLAY));
++    const char *override = value(SDL_getenv("SDL_PS5_DISPLAY"));
++    if (SDL_strlen(display) >= sizeof selected_display || SDL_strlen(override) >= sizeof selected_override)
++        return SDL_SetError("Display selector exceeds supported length");
++    SDL_strlcpy(selected_display, display, sizeof selected_display);
++    SDL_strlcpy(selected_override, override, sizeof selected_override);
++    selected_w=w; selected_h=h; selected_mhz=mhz;
++    SDL_zero(*mode); mode->format = SDL_PIXELFORMAT_XRGB8888;
++    mode->w = (int)w; mode->h = (int)h; mode->refresh_rate = mhz / 1000.0f;
++    mode->refresh_rate_numerator = mhz; mode->refresh_rate_denominator = 1000;
++    SDL_LogInfo(SDL_LOG_CATEGORY_VIDEO, "GPU selected public RADV mode=%ux%u refresh_millihertz=%u", w,h,mhz);
++    return true;
++}
++void CPE_PS5_InstallVulkanHooks(SDL_VideoDevice *device)
++{
++    device->Vulkan_LoadLibrary = PS5_Vulkan_LoadLibrary;
++    device->Vulkan_UnloadLibrary = PS5_Vulkan_UnloadLibrary;
++    device->Vulkan_GetInstanceExtensions = PS5_Vulkan_GetInstanceExtensions;
++    device->Vulkan_CreateSurface = PS5_Vulkan_CreateSurface;
++    device->Vulkan_DestroySurface = PS5_Vulkan_DestroySurface;
++}
++#endif
+--- a/src/video/SDL_sysvideo.h
++++ b/src/video/SDL_sysvideo.h
+@@ -530,6 +530,7 @@
+ extern VideoBootStrap UIKIT_bootstrap;
+ extern VideoBootStrap Android_bootstrap;
+ extern VideoBootStrap PS2_bootstrap;
++extern VideoBootStrap PS5_bootstrap;
+ extern VideoBootStrap PSP_bootstrap;
+ extern VideoBootStrap VITA_bootstrap;
+ extern VideoBootStrap RISCOS_bootstrap;
+--- a/src/video/SDL_video.c
++++ b/src/video/SDL_video.c
+@@ -119,6 +119,9 @@
+ #ifdef SDL_VIDEO_DRIVER_PS2
+     &PS2_bootstrap,
+ #endif
++#ifdef SDL_VIDEO_DRIVER_PS5
++    &PS5_bootstrap,
++#endif
+ #ifdef SDL_VIDEO_DRIVER_PSP
+     &PSP_bootstrap,
+ #endif
+--- a/src/video/SDL_vulkan_utils.c
++++ b/src/video/SDL_vulkan_utils.c
+@@ -167,6 +167,24 @@
+ }
+ 
+ // Alpha modes, in order of preference
++extern void CPE_GPUTrace(const char *, long long, unsigned long long, unsigned long long) __attribute__((weak));
++#define CPE_DISPLAY_TRACE(name, result) do { if (CPE_GPUTrace) CPE_GPUTrace(name, result, 0, 0); } while (0)
++/* CPE altered 2026-10-30: strict bounded mode override; shared query/surface selection. */
++static bool CPE_ParseExtent(const char *text, Uint32 *w, Uint32 *h) {
++    Uint32 values[2] = {0,0};
++    for (int part=0; part<2; ++part) {
++        if (*text < '0' || *text > '9') return false;
++        while (*text >= '0' && *text <= '9') {
++            unsigned digit = (unsigned)(*text++ - '0');
++            if (values[part] > 1638 || (values[part] == 1638 && digit > 4)) return false;
++            values[part] = values[part]*10 + digit;
++        }
++        if (!values[part]) return false;
++        if (part == 0) { if (*text++ != 'x') return false; }
++        else if (*text) return false;
++    }
++    *w=values[0]; *h=values[1]; return true;
++}
+ static const VkDisplayPlaneAlphaFlagBitsKHR alphaModes[4] = {
+     VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR,
+     VK_DISPLAY_PLANE_ALPHA_GLOBAL_BIT_KHR,
+@@ -174,10 +192,10 @@
+     VK_DISPLAY_PLANE_ALPHA_PER_PIXEL_PREMULTIPLIED_BIT_KHR,
+ };
+ 
+-bool SDL_Vulkan_Display_CreateSurface(void *vkGetInstanceProcAddr_,
++static bool CPE_DisplaySelect(void *vkGetInstanceProcAddr_,
+                                       VkInstance instance,
+                                       const struct VkAllocationCallbacks *allocator,
+-                                      VkSurfaceKHR *surface)
++                                      VkSurfaceKHR *surface, Uint32 *width, Uint32 *height, Uint32 *millihertz)
+ {
+     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
+         (PFN_vkGetInstanceProcAddr)vkGetInstanceProcAddr_;
+@@ -211,11 +229,15 @@
+     }
+     chosenDisplayId = SDL_GetHint(SDL_HINT_VULKAN_DISPLAY);
+     if (chosenDisplayId) {
+-        displayId = SDL_atoi(chosenDisplayId);
++        char tail;
++        if (SDL_sscanf(chosenDisplayId, "%d%c", &displayId, &tail) != 1 || displayId < 0) {
++            SDL_SetError("Invalid Vulkan display index"); goto error;
++        }
+     }
+ 
+     // Enumerate physical devices
+     rc = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, NULL);
++    CPE_DISPLAY_TRACE("vkEnumeratePhysicalDevices", rc);
+     if (rc != VK_SUCCESS) {
+         SDL_SetError("Could not enumerate Vulkan physical devices");
+         goto error;
+@@ -232,6 +254,7 @@
+     }
+ 
+     rc = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
++    CPE_DISPLAY_TRACE("vkEnumeratePhysicalDevices", rc);
+     if (rc != VK_SUCCESS) {
+         SDL_SetError("Error enumerating physical devices");
+         goto error;
+@@ -255,6 +278,7 @@
+ 
+         // Get information about the physical displays
+         rc = vkGetPhysicalDeviceDisplayPropertiesKHR(physicalDevice, &displayPropertiesCount, NULL);
++    CPE_DISPLAY_TRACE("vkGetPhysicalDeviceDisplayPropertiesKHR", rc);
+         if (rc != VK_SUCCESS || displayPropertiesCount == 0) {
+             // This device has no physical device display properties, move on to next.
+             continue;
+@@ -274,6 +298,7 @@
+         }
+ 
+         rc = vkGetPhysicalDeviceDisplayPropertiesKHR(physicalDevice, &displayPropertiesCount, displayProperties);
++    CPE_DISPLAY_TRACE("vkGetPhysicalDeviceDisplayPropertiesKHR", rc);
+         if (rc != VK_SUCCESS || displayPropertiesCount == 0) {
+             SDL_free(displayProperties);
+             SDL_SetError("Error enumerating physical device displays");
+@@ -290,6 +315,7 @@
+ 
+         // Get display mode properties for the chosen display
+         rc = vkGetDisplayModePropertiesKHR(physicalDevice, display, &displayModePropertiesCount, NULL);
++    CPE_DISPLAY_TRACE("vkGetDisplayModePropertiesKHR", rc);
+         if (rc != VK_SUCCESS || displayModePropertiesCount == 0) {
+             SDL_SetError("Error enumerating display modes");
+             goto error;
+@@ -302,12 +328,22 @@
+         }
+ 
+         rc = vkGetDisplayModePropertiesKHR(physicalDevice, display, &displayModePropertiesCount, displayModeProperties);
++    CPE_DISPLAY_TRACE("vkGetDisplayModePropertiesKHR", rc);
+         if (rc != VK_SUCCESS || displayModePropertiesCount == 0) {
+             SDL_SetError("Error enumerating display modes");
+             SDL_free(displayModeProperties);
+             goto error;
+         }
+ 
++        /* Explicit override must match an enumerated mode, shared by probe and surface. */
++        const char *override = SDL_getenv("SDL_PS5_DISPLAY");
++        if (override && *override) {
++            Uint32 w = 0, h = 0;
++            if (!CPE_ParseExtent(override, &w, &h)) {
++                SDL_free(displayModeProperties); SDL_SetError("Invalid SDL_PS5_DISPLAY override"); goto error;
++            }
++            extent.width = w; extent.height = h;
++        }
+         // Try to find a display mode that matches the native resolution
+         for (i = 0; i < displayModePropertiesCount; ++i) {
+             if (displayModeProperties[i].parameters.visibleRegion.width == extent.width &&
+@@ -324,6 +360,10 @@
+             goto error;
+         }
+ 
++        if (!surface) {
++            *width = extent.width; *height = extent.height; *millihertz = refreshRate;
++            SDL_free(displayModeProperties); SDL_free(physicalDevices); return true;
++        }
+         SDL_zero(createInfo);
+         createInfo.displayMode = displayModeProperties[bestMatchIndex].displayMode;
+         SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "vulkandisplay: Matching mode %ux%u with refresh rate %u",
+@@ -336,6 +376,7 @@
+ 
+         // Try to find a plane index that supports our display
+         rc = vkGetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice, &displayPlanePropertiesCount, NULL);
++    CPE_DISPLAY_TRACE("vkGetPhysicalDeviceDisplayPlanePropertiesKHR", rc);
+         if (rc != VK_SUCCESS || displayPlanePropertiesCount == 0) {
+             SDL_SetError("Error enumerating display planes");
+             goto error;
+@@ -348,6 +389,7 @@
+         }
+ 
+         rc = vkGetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice, &displayPlanePropertiesCount, displayPlaneProperties);
++    CPE_DISPLAY_TRACE("vkGetPhysicalDeviceDisplayPlanePropertiesKHR", rc);
+         if (rc != VK_SUCCESS || displayPlanePropertiesCount == 0) {
+             SDL_SetError("Error enumerating display plane properties");
+             SDL_free(displayPlaneProperties);
+@@ -366,6 +408,7 @@
+ 
+             // Check supported displays for this plane.
+             rc = vkGetDisplayPlaneSupportedDisplaysKHR(physicalDevice, i, &planeSupportedDisplaysCount, NULL);
++    CPE_DISPLAY_TRACE("vkGetDisplayPlaneSupportedDisplaysKHR", rc);
+             if (rc != VK_SUCCESS || planeSupportedDisplaysCount == 0) {
+                 continue; // No supported displays, on to next plane.
+             }
+@@ -379,6 +422,7 @@
+             }
+ 
+             rc = vkGetDisplayPlaneSupportedDisplaysKHR(physicalDevice, i, &planeSupportedDisplaysCount, planeSupportedDisplays);
++    CPE_DISPLAY_TRACE("vkGetDisplayPlaneSupportedDisplaysKHR", rc);
+             if (rc != VK_SUCCESS || planeSupportedDisplaysCount == 0) {
+                 SDL_SetError("Error enumerating supported displays, or no supported displays");
+                 SDL_free(planeSupportedDisplays);
+@@ -398,6 +442,7 @@
+             }
+ 
+             rc = vkGetDisplayPlaneCapabilitiesKHR(physicalDevice, createInfo.displayMode, i, &planeCaps);
++    CPE_DISPLAY_TRACE("vkGetDisplayPlaneCapabilitiesKHR", rc);
+             if (rc != VK_SUCCESS) {
+                 SDL_SetError("Error getting display plane capabilities");
+                 SDL_free(displayPlaneProperties);
+@@ -455,6 +500,7 @@
+     createInfo.globalAlpha = 1.0f;
+ 
+     rc = vkCreateDisplayPlaneSurfaceKHR(instance, &createInfo, allocator, surface);
++    CPE_DISPLAY_TRACE("vkCreateDisplayPlaneSurfaceKHR", rc);
+     if (rc != VK_SUCCESS) {
+         SDL_SetError("vkCreateDisplayPlaneSurfaceKHR failed: %s", SDL_Vulkan_GetResultString(rc));
+         goto error;
+@@ -482,6 +528,17 @@
+     if (vkDestroySurfaceKHR) {
+         vkDestroySurfaceKHR(instance, surface, allocator);
+     }
++}
++
++
++#if defined(SDL_VIDEO_DRIVER_PS5) && defined(SDL_VIDEO_VULKAN)
++bool CPE_Vulkan_QueryDisplay(void *get, VkInstance instance, Uint32 *w, Uint32 *h, Uint32 *mhz) {
++    return CPE_DisplaySelect(get, instance, NULL, NULL, w, h, mhz);
++}
++#endif
++bool SDL_Vulkan_Display_CreateSurface(void *get, VkInstance instance, const struct VkAllocationCallbacks *allocator, VkSurfaceKHR *surface) {
++    if (!surface) return SDL_SetError("Missing Vulkan surface output");
++    return CPE_DisplaySelect(get, instance, allocator, surface, NULL, NULL, NULL);
+ }
+ 
+ #endif

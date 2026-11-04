@@ -179,3 +179,10 @@ void pe_weapon_power_register(const char *mod_id) {
     pe_menu_register_tick(pe_clock_tick);
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_help_text, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_rebalance.h"
+int pe_rb_power_walk(const unsigned char*in,unsigned char*out,int apply){if((!in&&!out)||(0))return 0;if(apply&&(!in||!pe_rb_power_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+PE_CK_S(w,s_show_power,0,1,1);/* Calibration and its function-static VSync stopwatch are display-only live measurements. Keep them, not stale clock epochs; text is regenerated. */
+return pe_rb_finish(&w);}
+#endif

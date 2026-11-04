@@ -12,6 +12,7 @@
 #include "pe1/room_flare.h"
 #include "pe1/fieldfx_task.h"
 #include "pe1/room_module.h"
+#include "pe1/particle_augment.h"
 
 static const GteRotation s_OrbitFlareRotation = { 0, 0, -60, 0 };
 static const GteRotation s_OrbitFlareSpin = { 0, 0, 0, 0 };
@@ -214,9 +215,11 @@ int RoomEffect_OrbitFlareController(int mode, void *data, intptr_t argument) {
             palette = g_FieldFxPaletteTable[kind];
             if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
             clut = GetClut(0x40, palette);
+            FieldFx_BeginAuthoredFlareGlow(115,state->x,state->y,state->z,(unsigned)g_FieldFxCurrentAge,0);
             FieldFx_DrawShapeQuads((GteShortVector *)state, &spin, state->height, state->height,
                           (s16)g_FieldFxSpriteParams.parameter02 * 2 + 0xDC, clut, 1,
                           state->spread, 0);
+            FieldFx_EndAuthoredFlareGlow();
             }
             {
             u16 clut;
@@ -261,8 +264,10 @@ int RoomEffect_OrbitFlareController(int mode, void *data, intptr_t argument) {
             palette = g_FieldFxPaletteTable[kind];
             if (kind == 4 && g_FieldFxAltPaletteFlag != 0) palette += 4;
             clut = GetClut(0x40, palette);
+            FieldFx_BeginAuthoredFlareGlow(115,state->x,state->y,state->z,(unsigned)g_FieldFxCurrentAge,0);
             FieldFx_DrawShapeQuads((GteShortVector *)state, 0, scale, scale,
                           (s16)g_FieldFxSpriteParams.parameter02 + 0xFD, clut, 1, fade, 0);
+            FieldFx_EndAuthoredFlareGlow();
             }
             {
             u16 clut;

@@ -8,6 +8,7 @@
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_model_stage.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_draw_list.h"
@@ -54,12 +55,11 @@ static int pe_current(void) {
 /* Six names of at most 16 glyphs plus 72 info glyphs stay below 10 KB of native
  * text packets, reserving over 6 KB of the 16 KB menu arena for the stock chrome. */
 static void pe_print(const char *line, int width, unsigned cap) {
-    size_t n;
-    pe_text_from_ascii(s_text, cap + 1, line);
-    n = strlen(line);
-    if (n > cap) n = cap;
-    if (n >= sizeof s_text) n = sizeof s_text - 1;
-    if (strlen(line) > cap || Draw_MeasureTextWidth(s_text) > width) {
+    const char *translated = pe_l10n_ui(line);
+    size_t n = 0;
+    pe_tr_ascii(s_text, cap + 1, translated);
+    while (n < sizeof s_text - 1 && s_text[n] != 0xFF) ++n;
+    if (strlen(translated) > cap || Draw_MeasureTextWidth(s_text) > width) {
         while (n && (s_text[n] = 0xFF, Draw_MeasureTextWidth(s_text) > width)) --n;
         if (n >= 3) s_text[n - 3] = s_text[n - 2] = s_text[n - 1] = pe_glyph('.');
         while (n && Draw_MeasureTextWidth(s_text) > width) s_text[--n] = 0xFF;
@@ -160,7 +160,7 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
     if (buttons & PE_MENU_CROSS) {
         if (index < 0 || (index > 0 && !c) || pe_wardrobe_worn() == c) { Menu_PlayErrorSound(); return 1; }
         pe_wardrobe_wear_later(c);
-        snprintf(s_note, sizeof s_note, "%s when you close the menu", c ? "Wearing it" : "Back to her own clothes");
+        snprintf(s_note, sizeof s_note, pe_l10n_ui("%s when you close the menu"), c ? pe_l10n_ui("Wearing it") : pe_l10n_ui("Back to her own clothes"));
         s_note_tick = s_tick;
         Menu_PlayConfirmSound(); return 1;
     }
@@ -182,11 +182,12 @@ static int pe_on_help_text(void *ctx, void *user) {
     (void)user;
     if (!s_screen.list || MenuWidget_GetCurrentNode() != s_screen.list) return 0;
     if (s_tick - s_note_tick < 150) snprintf(line, sizeof line, "%s", s_note);
-    else if ((s_tick / 150) % 3 == 1) snprintf(line, sizeof line, "L1 R1: Group   Left Right: Turn");
-    else if ((s_tick / 150) % 3 == 2) snprintf(line, sizeof line, "X: Wear   Square: Pause   Circle: Back");
-    else snprintf(line, sizeof line, "%s   %d outfits   X: Wear", s_group[s_category], s_members);
-    pe_text_from_ascii(s_text, sizeof s_text, line);
-    n = strlen(line);
+    else if ((s_tick / 150) % 3 == 1) snprintf(line, sizeof line, "%s", pe_l10n_ui("L1 R1: Group   Left Right: Turn"));
+    else if ((s_tick / 150) % 3 == 2) snprintf(line, sizeof line, "%s", pe_l10n_ui("X: Wear   Square: Pause   Circle: Back"));
+    else snprintf(line, sizeof line, pe_l10n_ui("%s   %d outfits   X: Wear"), pe_l10n_ui(s_group[s_category]), s_members);
+    pe_tr_ascii(s_text, sizeof s_text, line);
+    n = 0;
+    while (n < sizeof s_text - 1 && s_text[n] != 0xFF) ++n;
     while (n && Draw_MeasureTextWidth(s_text) > 278) s_text[--n] = 0xFF;
     *(u8 **)ctx = s_text;
     return 0;
@@ -240,3 +241,8 @@ void pe_wardrobe_menu_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_on_help_text, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+#if PE_NATIVE_STATE_CPU_COMPONENTS
+#include "pe_checkpoint_collection.h"
+int pe_wardrobe_menu_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){(void)in;(void)out;if(s_screen.panel||s_screen.list)return 0;for(unsigned i=0;i<PE_SCREEN_EXTRA;i++)if(s_screen.extra[i])return 0;if(apply){memset(&s_screen,0,sizeof s_screen);memset(s_text,0,sizeof s_text);s_note[0]=0;}return 1;}
+#endif
