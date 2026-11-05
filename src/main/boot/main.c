@@ -2105,8 +2105,8 @@ static void Host_ProcessSettingsPointer(
         return;
     }
     if (state->page == HOST_PAGE_CONTROLS && hitRow == HOST_SPEED_BINDING + 1 &&
-        x < (float)(OVERLAY_PAD + OVERLAY_SPEED_STEP_W)) {
-        int action = x < (float)(OVERLAY_PAD + OVERLAY_SPEED_STEP_CENTRE) ? -1 : 1;
+        x < OverlayLabelX() + (float)OVERLAY_SPEED_STEP_W) {
+        int action = x < OverlayLabelX() + (float)OVERLAY_SPEED_STEP_CENTRE ? -1 : 1;
         Host_ApplySettingsAction(state, action, 0, game);
         return;
     }
