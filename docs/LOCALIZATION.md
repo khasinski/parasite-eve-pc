@@ -16,13 +16,20 @@ the [Parasite Eve Localization Mod Plan](https://claude.ai/artifact/2NpmecRhhgMB
 | Translator template, test language, pack compiler (`pelang.py`) | Done |
 | `pe_lang` mod: F1 > Language, item names and descriptions | Done |
 | System messages, misc table, room dialogue | Done: `PE_HOOK_TEXT_LOOKUP` from every table, `PE_HOOK_TEXT_PAGE` |
-| Spanish pilot | Latin American Spanish: 1,349 entries across eleven modules for menus, items and mod interfaces; draft, needs Spanish-speaker review |
+| French | Bundled desktop pack; inventory labels fit the original menu geometry. Dialogue layout review remains incomplete |
+| Spanish pilot | Bundled pilot; untranslated keys keep the original text. Needs Spanish-speaker review |
 | Mod-owned text (`pe_tr`) | Explicit-key fragments plus optional UTF-8 interface translation, checked printf templates, Catalog/shops/inventory/collection integration |
 | Text drawn into images and text compiled into the port | Not keyed yet |
 | Accented letters (Latin Extended: French, German, Spanish, Italian, Portuguese, Polish, Czech, Turkish) | Done |
 | Japanese semantic proofreading | Pending human review; extraction/alignment does not establish translation accuracy |
 | Cyrillic | Russian, Ukrainian and Belarusian alphabets supported; modular authored glyphs and per-pack activation |
 | Chinese, Japanese, Korean | Optional external-font compilation, v2 glyph dictionaries and a native cache; see CJK scope and limits below |
+
+French uses abbreviated inventory labels where the original menu reserves space for ammunition
+counts, and `J.` for the save slot's day label. Labels baked into images, such as **Level** and
+**Time** on the save screen, still use the original English graphics. Compiler warnings about
+unresolved dialogue boxes remain review items; successful compilation does not prove their
+in-game layout.
 
 A pack can use the US font's glyphs (A-Z, a-z, 0-9, space and `+ - % & ! ? " ' . : , /`) and the
 Latin Extended set below and the Russian/Ukrainian/Belarusian Cyrillic alphabets. The compiler
