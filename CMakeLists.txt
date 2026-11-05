@@ -645,6 +645,11 @@ if(BUILD_TESTING)
     set_tests_properties(original-game-hd-backgrounds PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180 LABELS "game-assets;gpu;hd-assets")
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME original-game-m273-reported-crash COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/m273_crash_replay.py
+            $<TARGET_FILE:parasite-eve-pc> ${CMAKE_BINARY_DIR}/m273-crash-evidence)
+        set_tests_properties(original-game-m273-reported-crash PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;gpu;mods")
         if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT CMAKE_CROSSCOMPILING)
             add_test(NAME vsync-display-selection COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/vsync_display_selection.py
