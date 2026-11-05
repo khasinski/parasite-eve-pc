@@ -1,0 +1,61 @@
+name: Translation editor
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - localization/editor/**
+      - localization/petext/**
+      - localization/pelang.py
+      - localization/extract_text.py
+      - .github/workflows/translation-editor.yml
+  pull_request:
+    paths:
+      - localization/editor/**
+      - localization/petext/**
+      - localization/pelang.py
+      - localization/extract_text.py
+      - .github/workflows/translation-editor.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: windows-x64
+          - runner: macos-15
+            target: macos-arm64
+          - runner: macos-15-intel
+            target: macos-x64
+          - runner: ubuntu-22.04
+            target: linux-x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: localization/editor/requirements-build.txt
+      - run: python -m pip install -r localization/editor/requirements-build.txt
+      - name: Install virtual display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth
+      - name: Build and launch packaged demo
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python localization/editor/build.py --out editor-dist
+      - name: Build and launch packaged demo
+        if: runner.os != 'Linux'
+        run: python localization/editor/build.py --out editor-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: translation-editor-${{ matrix.target }}
+          path: editor-dist/pe-translation-editor-${{ matrix.target }}.*
+          if-no-files-found: error
