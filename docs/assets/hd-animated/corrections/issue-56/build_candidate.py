@@ -128,6 +128,11 @@ for r,t in tasks:
  # the independent integrity proof and material for final WebP packaging.
  ref=np.array(Image.open(BASE/record['reference_file']).convert('RGBA'));assert ref.shape==material.shape
  combined=np.concatenate((material,ref),axis=0);Image.fromarray(combined).save(target,optimize=True)
+ # The runtime tries WebP before PNG. A hardlinked baseline WebP beside
+ # this override would silently win, even though the manifest names PNG.
+ # Remove only the candidate link; the baseline file stays untouched.
+ previous=OUT/record['file']
+ if previous!=target and previous.exists():previous.unlink()
  record.update(file=target.name,atlas_sha256=hashlib.sha256(target.read_bytes()).hexdigest(),pixel_sha256=hashlib.sha256(combined.tobytes()).hexdigest())
  proof.append(dict(room=t['room'],group=t['group'],entry=t['entry'],key=key,rgb_changed=int(changed.sum()),coverage_changed=int(np.sum(material[:,:,3]!=before[:,:,3])),reference_byte_identical=True,unselected_material_exact=True,corrections=[x[2] for x in patches.get((t['room'],t['group']),[]) if x[3] is None or t['entry'] in x[3]]))
 manifest['image_format']='mixed-png-webp';manifest['development_candidate']='issue-56';manifest['issue_56_keys']=[r['key'] for r in proof]

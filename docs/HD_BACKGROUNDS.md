@@ -133,8 +133,8 @@ a window. `PE_CONFIG_HOME` selects an isolated profile for headless checks;
 `PE_HD_SERVER=http://127.0.0.1:PORT` is a localhost-only test override.
 
 Downloads report `User-Agent: ParasiteEve/VERSION`, `X-PE-Version`, `X-PE-Build`,
-`X-PE-Platform` and an ephemeral per-download ID. The server counts started and
-completed transfers; update checks and HEAD requests do not count. It stores
+`X-PE-Platform` and an ephemeral per-download ID. The server counts download
+requests before handing the ZIP transfer to nginx; update checks and HEAD requests do not count. It stores
 coarse client metadata and keyed daily visitor hashes, not raw IP addresses.
 Server source/deployment lives separately in `~/Projects/pe-mod-server`.
 
@@ -162,6 +162,27 @@ primitives keep native coverage and ABR blending. Existing packs remain compatib
 The matte can only refine pixels inside live native coverage: RGB palette
 matching cannot distinguish transparent zero from opaque black, so an HD alpha
 value must never resurrect a native-transparent pixel or a packet's rectangle.
+
+`ctest -R '^original-gpu-hd-(coverage|reference)$' runs the actual hidden GPU
+shader tests with synthetic atlases. They check native-transparent holes,
+palette mismatch fallback, authored partial alpha, PNG/WebP equivalence and
+unchanged native VRAM and semitransparent draws. Windows CI includes both cases.
+
+Softening a foreground matte also requires valid artwork underneath it. In
+M097 and M239 the native backdrop contains transparent-zero holes beneath the
+foreground counter/desk, including the inner boundary band. Eroding the matte
+alone exposes the cleared black frame through those holes; it does not reveal
+a reconstructed floor. An inward-blurred alpha experiment reproduced that
+failure with byte-identical native VRAM and unchanged material RGB and was
+rejected. Further edge refinement needs a coherent presentation backdrop
+beneath the refined silhouette, with original actor occlusion and native
+readbacks preserved. Alpha-only blur is not a complete fix for these rooms.
+
+For development candidates, the runtime tries WebP, then PNG, then BMP for each
+atlas key. A PNG named by a candidate manifest does not override a same-key
+WebP beside it. Remove the candidate's old format link when replacing an atlas;
+keep the baseline pack intact. Otherwise offline previews and live captures can
+silently use different images.
 
 `hd-poc/pack.py --coverage-aa` traces each complete native entry before cutting
 16px tiles, simplifies long stair-step contours within half a native pixel,
