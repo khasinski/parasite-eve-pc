@@ -178,6 +178,22 @@ rejected. Further edge refinement needs a coherent presentation backdrop
 beneath the refined silhouette, with original actor occlusion and native
 readbacks preserved. Alpha-only blur is not a complete fix for these rooms.
 
+Experimental `<geometry-key>-under.bin` sidecars reuse the PEW1 tile layout
+for optional reconstructed backdrop artwork. Unlike `-wide.bin`, these tiles
+also draw in 4:3. They are linked behind the original room ordering table and
+use the room's original tint/fade. Their atlas command uses cell bit 22 instead
+of the widescreen extension's bit 23. They render only with HD enabled above
+1x, never into native VRAM; the software path ignores them. The installer accepts
+these files as checksummed manifest extras. Existing packs without them retain
+their current appearance. This is a mechanism for a reviewed coherent underlay,
+not an automatic reconstruction of the missing floor. M097/M239 artwork and
+native scene review remain unfinished; no new production pack has been published.
+
+The extension GPU regression covers both aspects, 1x/2x, HD off/on, absent
+atlases and original draws in front. The real-disc widescreen test additionally
+loads a synthetic diagnostic underlay through the actual room-sidecar path and
+compares original game state, VRAM and PCM at both checkpoints.
+
 For development candidates, the runtime tries WebP, then PNG, then BMP for each
 atlas key. A PNG named by a candidate manifest does not override a same-key
 WebP beside it. Remove the candidate's old format link when replacing an atlas;

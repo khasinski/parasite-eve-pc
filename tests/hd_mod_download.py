@@ -5,11 +5,12 @@ KEY='0123456789abcdef'
 def pack(version,kind='good'):
  payload=b'background material'*(16384 if kind=='slow' else 1);ref=b'lossless reference'
  filename='../escape.webp' if kind=='traversal' else KEY+'.webp'
- manifest=dict(version=version,atlases=[dict(file=filename,atlas_sha256=hashlib.sha256(payload).hexdigest(),reference_file=KEY+'.ref.png',reference_sha256=hashlib.sha256(ref).hexdigest())])
+ underlay=b'PEW1\0\0\0\0'
+ manifest=dict(version=version,atlases=[dict(file=filename,atlas_sha256=hashlib.sha256(payload).hexdigest(),reference_file=KEY+'.ref.png',reference_sha256=hashlib.sha256(ref).hexdigest())],extras=[dict(file=KEY+'-under.bin',sha256=hashlib.sha256(underlay).hexdigest())])
  data=io.BytesIO()
  with zipfile.ZipFile(data,'w',compression=zipfile.ZIP_STORED) as z:
   def write(name,data):z.writestr(zipfile.ZipInfo(name,(2026,1,1,0,0,0)),data)
-  write('manifest.json',json.dumps(manifest));write(filename,b'corrupt' if kind=='corrupt' else payload);write(KEY+'.ref.png',ref)
+  write('manifest.json',json.dumps(manifest));write(filename,b'corrupt' if kind=='corrupt' else payload);write(KEY+'.ref.png',ref);write(KEY+'-under.bin',underlay)
  return data.getvalue()
 class Handler(http.server.BaseHTTPRequestHandler):
  def log_message(self,*a):pass
@@ -70,6 +71,9 @@ class Installer(unittest.TestCase):
     self.assertIn('X-PE-Version',server.client_headers);self.assertIn('X-PE-Build',server.client_headers);self.assertIn('ParasiteEve/',server.client_headers['User-Agent'])
     self.assertEqual(server.downloads,1);result=run();self.assertEqual(result.returncode,0,result.stdout);self.assertEqual(server.downloads,1);self.assertEqual(pointer.read_bytes(),old)
     self.assertEqual(run('--verify-backgrounds').returncode,0)
+    under=installed/(KEY+'-under.bin');self.assertEqual(under.read_bytes(),b'PEW1\0\0\0\0')
+    under.write_bytes(b'bad underlay');self.assertNotEqual(run('--verify-backgrounds').returncode,0)
+    under.write_bytes(b'PEW1\0\0\0\0');self.assertEqual(run('--verify-backgrounds').returncode,0)
     for mode in ('hash','corrupt','traversal','truncated','format','slow'):
      server.mode=mode;result=run(extra={'PE_HD_TEST_CANCEL_AT':'1'} if mode=='slow' else None)
      self.assertNotEqual(result.returncode,0,(mode,result.stdout,result.stderr));self.assertEqual(pointer.read_bytes(),old,mode);self.assertEqual((installed/(KEY+'.webp')).read_bytes(),b'background material')

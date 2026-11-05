@@ -98,5 +98,6 @@ void Render_CentreWidescreenOverlay(int slot, RenderNativeTag *ordering, int top
  * and before Render_CommitWidescreenPicture, which hands the position on. */
 void Render_LinkFieldSubpixel(int slot, RenderNativeTag *ordering);
 void Render_LinkHdWidescreenBackdrop(int slot, RenderNativeTag *ordering);
+void Render_LinkHdUnderlayBackdrop(int slot, RenderNativeTag *ordering);
 
 #endif
