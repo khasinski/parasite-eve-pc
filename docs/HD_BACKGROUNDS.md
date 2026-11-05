@@ -219,6 +219,18 @@ reconstruct exactly the active entries recorded in a screenshot report. These
 previews omit actors, live scripts, mirrors and camera movement; they complement
 hidden-GPU tests rather than proving those gameplay paths.
 
+### Encoding corrected materials
+
+The issue-56 `encode_webp.py` accepts `--source`, `--out` and `--lossless`.
+It encodes PNG materials in a mixed candidate while preserving native references
+and other assets, including title images. Lossless mode verifies every decoded
+RGBA byte; both modes require exact alpha and reference hashes. The output must
+be a fresh directory and an encoding audit is written beside it. For example:
+
+```sh
+python encode_webp.py --source CANDIDATE --out NEW_WEBP_DIRECTORY --lossless
+```
+
 ### Reproducing the M097/M239 edge candidate
 
 `docs/assets/hd-animated/corrections/issue-56/build_underlays.py` builds a fresh
