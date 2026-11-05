@@ -1,6 +1,6 @@
 {
-  "status": "Static M097/M239 candidate locally validated; full issue56 and cross-platform review incomplete; not published",
-  "method": "PEM1 opt-in authored static coverage, bounded long-edge silhouette refinement and coherent locally colour-matched floor underlay, including narrow inter-layer gaps.",
+  "status": "Static M092/M097/M239 candidates locally validated; additional animated edges and full scene-state review remain incomplete; not published",
+  "method": "Explicit static coverage with bounded long-edge refinement. M092 samples nearby original HD backdrop pixels; M097/M239 use registered, locally colour-matched generated hidden floors.",
   "native_validation": [
     {
       "room": "M097",
@@ -35,6 +35,23 @@
       "frame_after_sha256": "0395827fb7a78cb096a1033356d00803ce0b19c7ec34bdc486b506166fb50ff7",
       "native_vram_sha256": "72d169d8ee3b0455358cb3de5b0ac0408b480be4f01a453e0658841c909c4fc1",
       "native_pcm_sha256": "0a3495773da6b16ff44784ce9c6e193da7533f58b926cf705478f2b843b902ca"
+    },
+    {
+      "room": "M092",
+      "checkpoints": 58,
+      "native_state_equal": true,
+      "native_vram_equal": true,
+      "native_pcm_equal": true,
+      "changed_bbox": [
+        1148,
+        4,
+        1280,
+        812
+      ],
+      "one_x_rgb_exact": true,
+      "animated_entries_6_through_11_unchanged": true,
+      "frame_before_sha256": "6fd621927077d4df0ba984d659c31f4f808691e128ddca339e5d092f6882a998",
+      "frame_after_sha256": "94ece701baf0e23db8b6479da586fe8d5a92697509638394453f7221f215ef61"
     }
   ],
   "authoring": [
@@ -105,6 +122,22 @@
       "original_foreground_rgb_exact": true,
       "expanded_pixels": 609,
       "native_reference_exact": true
+    },
+    {
+      "room": "M092",
+      "geometry": "2c48651307e4dc15",
+      "foreground": "8b59ba8c289913e5",
+      "underlay": "8e93d1132f17cd7b",
+      "cells": 15,
+      "pixels": 751,
+      "matte": "static-authored-long-edges",
+      "method": "nearest original HD background in a two-native-pixel band",
+      "source_background": "build/open-issues/hd-contours/underlays-lossless-webp/0b446aad81700629.webp",
+      "source_background_sha256": "e7279e64bf544c923d89ee1461b25934c2fd27890478fc3ec5f51e574113f532",
+      "max_sampling_distance": 8.0,
+      "original_foreground_rgb_exact": true,
+      "expanded_pixels": 392,
+      "native_reference_exact": true
     }
   ],
   "backup": {
@@ -120,7 +153,7 @@
   ],
   "limitations": [
     "Additional affected rooms and animated foregrounds remain to review; no automatic opt-in for animated/palette-hidden geometry",
-    "New static coverage shader still needs D3D12/Vulkan validation before pack release",
+    "Static coverage shader passed Metal and Windows D3D12 CI; Vulkan runtime validation remains",
     "Full camera/lighting-state review and public replacement pack remain pending"
   ],
   "gpu_validation": {
@@ -149,5 +182,30 @@
     "one_x_rgb": "byte-identical",
     "native_state_vram_pcm": "identical at 124 checkpoints at each resolution",
     "publication": "not published"
+  },
+  "m092_integration": {
+    "default_rooms": [
+      "M092",
+      "M097",
+      "M239"
+    ],
+    "legacy_reproduction_args": [
+      "--rooms",
+      "M097,M239"
+    ],
+    "legacy_files_byte_identical": 8154,
+    "m092_only_args": [
+      "--rooms",
+      "M092"
+    ],
+    "selected_baseline_room_must_be_unmarked": true,
+    "full_lossless_candidate_bytes": 326803794,
+    "manifest_hashes_verified": 8157,
+    "full_candidate_vs_sequential": "8157 asset payloads byte-identical; manifest array order only differs",
+    "negative_checks": [
+      "marked room rejected",
+      "unknown room rejected before output creation"
+    ],
+    "scope": "Right static door edge; independently animated door/jamb edge is unchanged. Not a general animated-matte fix."
   }
 }
