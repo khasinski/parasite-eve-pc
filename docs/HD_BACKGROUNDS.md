@@ -238,3 +238,10 @@ strips and explicit static-matte metadata form the candidate.
 `underlay-review.json` records native captures, rejected methods and remaining
 review. The generated masters are archived separately from Git. This recipe
 requires the renderer support in PRs #79 and #80 and does not publish a pack.
+
+Development atlas overrides must account for format priority: the runtime tries
+WebP, then PNG, then BMP for each key. A corrected PNG does not override a
+same-key WebP. The issue-56 candidate builder removes only the old candidate
+link when replacing an atlas, preserving the baseline. It accepts
+`--assets-root`, `--baseline` and `--out` for separate checkouts, refuses existing
+outputs and writes its audit beside the new output directory.
