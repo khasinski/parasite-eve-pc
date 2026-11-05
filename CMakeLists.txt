@@ -645,6 +645,13 @@ if(BUILD_TESTING)
     set_tests_properties(original-game-hd-backgrounds PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180 LABELS "game-assets;gpu;hd-assets")
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT CMAKE_CROSSCOMPILING)
+            add_test(NAME vsync-display-selection COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/vsync_display_selection.py
+                ${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/src/platform/sdl3_common.h
+                ${CMAKE_C_COMPILER})
+            set_tests_properties(vsync-display-selection PROPERTIES TIMEOUT 30)
+        endif()
         add_test(NAME lighting-editor-assets COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/lighting-editor/test_assets.py)
         set_tests_properties(lighting-editor-assets PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77 LABELS "tools")
