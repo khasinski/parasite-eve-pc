@@ -39,7 +39,9 @@ movie and completed a 25,000-VBlank native-input replay into the opening field
 scene (scene `0xa8000148`, dialogue page 13). The game wrote its framebuffer, VRAM,
 audio and state diagnostics. Starting through the launcher's Play button also
 rendered the opening movie. These checks do not establish full-game compatibility
-or audio correctness on physical devices.
+or audio correctness on physical devices. The APK also downloaded and installed
+the production v0.1 HD pack through HTTPS using curl/MbedTLS with certificate
+verification enabled, then passed `--verify-backgrounds` on the installed pack.
 
 Debug APKs accept the native diagnostic argument array through the `arguments`
 intent extra on GameActivity. Release APKs ignore that extra. Headless debug runs
