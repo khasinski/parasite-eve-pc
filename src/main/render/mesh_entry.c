@@ -48,24 +48,27 @@ static int Render_HdCommand(const u_long *words, int available, void *unused) {
  * PEW1 is little endian, with no native pointers or host structure padding. */
 #define HD_WIDE_GROUPS 256
 #define HD_WIDE_CELLS 4096
-static struct {
+typedef struct {
     unsigned count;
     uint64_t key;
     int left, right;
     short *xy;
     RenderTilePacket *packets[2];
-} hd_wide[HD_WIDE_GROUPS];
+} HdBackdropGroup;
+static HdBackdropGroup hd_wide[HD_WIDE_GROUPS],hd_under[HD_WIDE_GROUPS];
 
 static void Render_ResetHdWidescreen(void) {
     hd_wide_trace_status=0;
     /* Queued ordering tables may still point at these two packet buffers. */
     for (unsigned i=0;i<HD_WIDE_GROUPS;++i)
-        if(hd_wide[i].count){DrawSync(0);break;}
+        if(hd_wide[i].count || hd_under[i].count){DrawSync(0);break;}
     for (unsigned i=0;i<HD_WIDE_GROUPS;++i) {
         free(hd_wide[i].xy);
         free(hd_wide[i].packets[0]);free(hd_wide[i].packets[1]);
+        free(hd_under[i].xy);
+        free(hd_under[i].packets[0]);free(hd_under[i].packets[1]);
     }
-    memset(hd_wide,0,sizeof(hd_wide));
+    memset(hd_wide,0,sizeof(hd_wide));memset(hd_under,0,sizeof(hd_under));
 }
 
 static int Render_ReadHdWide(SDL_IOStream *file, unsigned bytes, uint64_t *value) {
@@ -77,10 +80,10 @@ static int Render_ReadHdWide(SDL_IOStream *file, unsigned bytes, uint64_t *value
     return 1;
 }
 
-static void Render_LoadHdWidescreen(void) {
+static void Render_LoadHdBackdrop(HdBackdropGroup *tiles,const char *suffix) {
     hd_wide_trace_status=1;
     char filename[4096];
-    int size=snprintf(filename,sizeof(filename),"%s/%016" PRIx64 "-wide.bin",hd_background_path,hd_geometry_key);
+    int size=snprintf(filename,sizeof(filename),"%s/%016" PRIx64 "-%s.bin",hd_background_path,hd_geometry_key,suffix);
     if(size<0 || (size_t)size>=sizeof(filename))return;
     SDL_IOStream *file=SDL_IOFromFile(filename,"rb");if(!file)return;
     hd_wide_trace_status=2;
@@ -93,7 +96,7 @@ static void Render_LoadHdWidescreen(void) {
     for(unsigned i=0;valid && i<groups;++i) {
         uint64_t group,count,key,left,right,top,bottom;
         valid=Render_ReadHdWide(file,4,&group) && group<HD_WIDE_GROUPS &&
-            !hd_wide[group].count && Render_ReadHdWide(file,4,&count) && count>0 && count<=HD_WIDE_CELLS-total &&
+            !tiles[group].count && Render_ReadHdWide(file,4,&count) && count>0 && count<=HD_WIDE_CELLS-total &&
             Render_ReadHdWide(file,8,&key) && key && Render_ReadHdWide(file,4,&left) &&
             Render_ReadHdWide(file,4,&right) && Render_ReadHdWide(file,4,&top) && Render_ReadHdWide(file,4,&bottom);
         if(!valid)break;
@@ -101,16 +104,16 @@ static void Render_LoadHdWidescreen(void) {
         int y0=(int32_t)(uint32_t)top,y1=(int32_t)(uint32_t)bottom;
         if(l < -2048 || r>4096 || l>=r || y0 < -2048 || y1>4096 || y0>=y1){valid=0;break;}
         total+=(unsigned)count;
-        hd_wide[group].xy=malloc((size_t)count*2*sizeof(short));
-        hd_wide[group].packets[0]=calloc((size_t)count,sizeof(RenderTilePacket));
-        hd_wide[group].packets[1]=calloc((size_t)count,sizeof(RenderTilePacket));
-        if(!hd_wide[group].xy || !hd_wide[group].packets[0] || !hd_wide[group].packets[1]){valid=0;break;}
+        tiles[group].xy=malloc((size_t)count*2*sizeof(short));
+        tiles[group].packets[0]=calloc((size_t)count,sizeof(RenderTilePacket));
+        tiles[group].packets[1]=calloc((size_t)count,sizeof(RenderTilePacket));
+        if(!tiles[group].xy || !tiles[group].packets[0] || !tiles[group].packets[1]){valid=0;break;}
         for(unsigned n=0;valid && n<count*2;++n) {
             valid=Render_ReadHdWide(file,2,&value);
-            hd_wide[group].xy[n]=(int16_t)(uint16_t)value;
+            tiles[group].xy[n]=(int16_t)(uint16_t)value;
         }
         for(unsigned n=0;valid && n<count;++n) {
-            int x=hd_wide[group].xy[n*2],y=hd_wide[group].xy[n*2+1];
+            int x=tiles[group].xy[n*2],y=tiles[group].xy[n*2+1];
             /* Bounds describe the visible span, not complete-cell extents.
              * Official side art overlaps the right edge; presenter crops it. */
             if(x<l || x>=r || y<y0 || y>=y1)valid=0;
@@ -123,14 +126,22 @@ static void Render_LoadHdWidescreen(void) {
         }
         if(!loaded){valid=0;break;}
         for(unsigned n=0;n<count;++n)
-            Psyz_GpuRegisterInterpolationBackgroundPair(&hd_wide[group].packets[0][n].r,&hd_wide[group].packets[1][n].r);
-        hd_wide[group].count=(unsigned)count;hd_wide[group].key=key;
-        hd_wide[group].left=l;hd_wide[group].right=r;
+            Psyz_GpuRegisterInterpolationBackgroundPair(&tiles[group].packets[0][n].r,&tiles[group].packets[1][n].r);
+        tiles[group].count=(unsigned)count;tiles[group].key=key;
+        tiles[group].left=l;tiles[group].right=r;
     }
     unsigned char trailing;if(valid && SDL_ReadIO(file,&trailing,1)!=0)valid=0;
     SDL_CloseIO(file);
-    if(!valid){Render_ResetHdWidescreen();hd_wide_trace_status=2;Psyz_GpuResetSpriteAtlases();fprintf(stderr,"Ignoring incomplete HD widescreen geometry %016" PRIx64 "\n",hd_geometry_key);}
+    if(!valid){
+        Render_ResetHdWidescreen();hd_wide_trace_status=2;Psyz_GpuResetSpriteAtlases();
+        fprintf(stderr,"Ignoring incomplete HD %s geometry %016" PRIx64 "\n",suffix,hd_geometry_key);
+    }
     else hd_wide_trace_status=3;
+}
+
+static void Render_LoadHdWidescreen(void) {
+    Render_LoadHdBackdrop(hd_under,"under");
+    Render_LoadHdBackdrop(hd_wide,"wide");
 }
 
 void Render_TraceWidescreenMetadata(int buffer_y,unsigned tiles,int left,int right,int available,int hd_left,int hd_right) {
@@ -152,10 +163,10 @@ int Render_GetHdWidescreenPicture(int *left,int *right) {
     return 1;
 }
 
-void Render_LinkHdWidescreenBackdrop(int slot,RenderNativeTag *ordering) {
-    int left,right;
-    if(slot<0 || slot>1 || !Render_GetHdWidescreenPicture(&left,&right))return;
+static void Render_LinkHdBackdrop(int slot,RenderNativeTag *ordering,HdBackdropGroup *tiles,unsigned extension) {
+    if(slot<0 || slot>1 || !hd_geometry_key || !g_GeomState || !Psyz_GpuGetSpriteAtlasesEnabled())return;
     unsigned group=g_GeomScroll.state.position.groupSelect;
+    if(!tiles[group].count)return;
     const GeomEntry *entries=(const void *)((const u8 *)g_GeomState+g_GeomState->entry_offset);
     const RenderTilePacket *color=NULL;
     /* Original fades/tints update these packets, not the source artwork. */
@@ -164,19 +175,28 @@ void Render_LinkHdWidescreenBackdrop(int slot,RenderNativeTag *ordering) {
             color=(const RenderTilePacket *)entries[n].u30.prim+slot*entries[n].prim_count;break;
         }
     }
-    for(unsigned i=0;i<hd_wide[group].count;++i) {
-        Psyz_GpuEnsureInterpolationBackgroundPair(&hd_wide[group].packets[0][i].r,&hd_wide[group].packets[1][i].r);
-        RenderTilePacket *sprite=&hd_wide[group].packets[slot][i];
-        int x=hd_wide[group].xy[i*2]+(short)g_GeomState->out_disp_x;
-        int y=hd_wide[group].xy[i*2+1]+(short)g_GeomState->out_disp_y;
+    for(unsigned i=0;i<tiles[group].count;++i) {
+        Psyz_GpuEnsureInterpolationBackgroundPair(&tiles[group].packets[0][i].r,&tiles[group].packets[1][i].r);
+        RenderTilePacket *sprite=&tiles[group].packets[slot][i];
+        int x=tiles[group].xy[i*2]+(short)g_GeomState->out_disp_x;
+        int y=tiles[group].xy[i*2+1]+(short)g_GeomState->out_disp_y;
         if(x+16 < -112 || x>432 || y+16<0 || y>240)continue;
-        sprite->length=7;sprite->hd_command=0xF8800000u|i;
-        sprite->hd_key_low=(u32)hd_wide[group].key;sprite->hd_key_high=(u32)(hd_wide[group].key>>32);
+        sprite->length=7;sprite->hd_command=0xF8000000u|extension|i;
+        sprite->hd_key_low=(u32)tiles[group].key;sprite->hd_key_high=(u32)(tiles[group].key>>32);
         sprite->packed_marker=0x005A4D50u;sprite->code=0x7c;
         sprite->r=color?color->r:128;sprite->g=color?color->g:128;sprite->b=color?color->b:128;
         sprite->x=(u16)x;sprite->y=(u16)y;
         sprite->address=ordering[4095].address;ordering[4095].address=(uintptr_t)sprite;
     }
+}
+
+void Render_LinkHdWidescreenBackdrop(int slot,RenderNativeTag *ordering) {
+    int left,right;
+    if(Render_GetHdWidescreenPicture(&left,&right))Render_LinkHdBackdrop(slot,ordering,hd_wide,0x800000u);
+}
+
+void Render_LinkHdUnderlayBackdrop(int slot,RenderNativeTag *ordering) {
+    Render_LinkHdBackdrop(slot,ordering,hd_under,0x400000u);
 }
 
 /* Hash immutable descriptors before scripts animate the native entries. The

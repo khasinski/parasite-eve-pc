@@ -896,7 +896,9 @@ if(BUILD_TESTING)
             --filter=gpu::authored_hd_coverage_is_display_only_and_opt_in)
         add_test(NAME original-gpu-hd-reference COMMAND test-psyz-interpolation
             --filter=gpu::queued_hd_sprite_preserves_native_vram_coverage_and_palette_fallback)
-        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference PROPERTIES
+        add_test(NAME original-gpu-hd-extension COMMAND test-psyz-interpolation
+            --filter=gpu::widescreen_hd_extension_is_display_only)
+        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference original-gpu-hd-extension PROPERTIES
             TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             SKIP_REGULAR_EXPRESSION "requires SDL GPU"
