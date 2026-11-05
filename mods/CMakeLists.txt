@@ -1,8 +1,23 @@
 # Mod host and mods, built only with -DPE_MODS=ON. See mods/README.md.
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
-# pe_hello is the example mod; add it to the list to build it. pe_lang (language packs) is
-# opt-in too.
-set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_collection pe_stacks pe_warp pe_quicksave pe_cheats CACHE STRING "Mods built into the game (folder names)")
+# pe_hello is the example mod; add it to the list to build it. Language packs
+# are available in standard builds, but the original text remains the default.
+set(pe_default_mods pe_qol pe_rebalance pe_economy pe_collection pe_stacks pe_warp pe_quicksave pe_cheats)
+if(NOT PE_PS5_GAME)
+    list(APPEND pe_default_mods pe_lang)
+endif()
+set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
+
+option(PE_BUNDLE_LANGUAGE_PACKS "Compile submitted language packs beside the desktop game" ON)
+if(PE_BUNDLE_LANGUAGE_PACKS AND NOT PE_PS5_GAME AND "pe_lang" IN_LIST PE_MOD_LIST)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_custom_target(pe-language-packs
+        COMMAND "${Python3_EXECUTABLE}" -I "${PROJECT_SOURCE_DIR}/localization/check_translations.py"
+            --out "$<TARGET_FILE_DIR:parasite-eve-pc>/lang"
+        COMMENT "Validate and compile bundled language packs"
+        VERBATIM)
+    add_dependencies(parasite-eve-pc pe-language-packs)
+endif()
 
 set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs
