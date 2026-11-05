@@ -68,7 +68,13 @@
 #include <sys/uio.h>
 #include <ucontext.h>
 #include <unwind.h>
+/* Android has no Unix dialog helpers or posix_spawnp before API 28. Keep
+ * native crash reports; the Android frontend owns reporting their paths. */
+#if defined(__ANDROID__)
+#define CRASH_DIALOG 0
+#else
 #define CRASH_DIALOG 1
+#endif
 #endif
 
 #if CRASH_DIALOG

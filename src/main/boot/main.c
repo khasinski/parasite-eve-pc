@@ -18,6 +18,9 @@ static int host_open_assists;
 #include <stdlib.h>
 #include <string.h>
 #include <SDL3/SDL.h>
+#ifdef __ANDROID__
+#include <unistd.h>
+#endif
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 static void Host_StateUiRegister(void);
 static bool Host_StateChord(const SDL_Event *event);
@@ -3862,7 +3865,7 @@ static void Host_DescribeSaveData(char *out, size_t size) {
 /* Select portable storage before any preferences, cards, mods or installer
  * paths are initialized. An explicit PE_CONFIG_HOME remains authoritative. */
 static int Host_ConfigurePortable(int *argc, char **argv) {
-#ifndef PE_PS5
+#if !defined(PE_PS5) && !defined(__ANDROID__)
     int requested = 0, count = 1;
     for (int i = 1; i < *argc; ++i) {
         if (!strcmp(argv[i], "--portable")) requested = 1;
@@ -4014,6 +4017,19 @@ int main(int argc, char **argv) {
         }
     }
 
+#ifdef __ANDROID__
+    /* An APK has no terminal to collect the existing headless JSON stream.
+     * Keep it in app-private storage for autonomous diagnostic runs. */
+    if (!interactive) {
+        const char *directory = SDL_GetAndroidInternalStoragePath();
+        char log_path[4096];
+        int length = directory ? snprintf(log_path, sizeof(log_path), "%s/diagnostics.log", directory) : -1;
+        if (length < 0 || (size_t)length >= sizeof(log_path) || !freopen(log_path, "w", stdout))
+            return EXIT_FAILURE;
+        setvbuf(stdout, NULL, _IONBF, 0);
+        if (dup2(fileno(stdout), STDERR_FILENO) < 0) return EXIT_FAILURE;
+    }
+#endif
     CrashReport_Install(interactive, Host_DescribeCrash);
     CrashReport_SetSaveData(Host_DescribeSaveData);
     g_BootSceneStarted = Host_TakeRoomSnapshot;
