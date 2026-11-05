@@ -606,6 +606,11 @@ if(BUILD_TESTING)
                 ${CMAKE_C_COMPILER})
             set_tests_properties(vsync-display-selection PROPERTIES TIMEOUT 30)
         endif()
+        add_test(NAME original-game-m273-reported-crash COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/m273_crash_replay.py
+            $<TARGET_FILE:parasite-eve-pc> ${CMAKE_BINARY_DIR}/m273-crash-evidence)
+        set_tests_properties(original-game-m273-reported-crash PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;gpu;mods")
         add_test(NAME lighting-editor-assets COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/lighting-editor/test_assets.py)
         set_tests_properties(lighting-editor-assets PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77 LABELS "tools")
@@ -770,6 +775,9 @@ if(BUILD_TESTING)
     set_tests_properties(original-m273-attack-timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;fieldfx")
     add_test(NAME original-m273-liberty-load COMMAND test-original-actor-animation --m273-load)
+    add_test(NAME original-m273-action-poses COMMAND test-original-actor-animation --m273-action-poses)
+    set_tests_properties(original-m273-action-poses PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;battle")
     set_tests_properties(original-m273-liberty-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;render")
     add_test(NAME original-m245-trail-burst-load COMMAND test-original-actor-animation --m245-load)

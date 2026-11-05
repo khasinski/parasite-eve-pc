@@ -380,7 +380,7 @@
         g_PlayerEntity=NULL;g_FieldFxOwner=NULL;g_FieldFxTaskContext=NULL;g_FieldFxActiveTaskSlot=NULL;
         puts("Original Museum spark modules: all ten rooms, complete hashes/scripts/palette, descriptors, reloads and native controllers passed");return 0;
     }
-    if(argc==2 && (!strcmp(argv[1],"--m273-load") || !strcmp(argv[1],"--m273-attack-timing"))){
+    if(argc==2 && (!strcmp(argv[1],"--m273-load") || !strcmp(argv[1],"--m273-attack-timing") || !strcmp(argv[1],"--m273-action-poses"))){
         const char *path=getenv("PE_TEST_DISC");if(!path || !*path)return getenv("PE_REQUIRE_GAME_ASSETS")?1:77;
         PeDisc disc={0};PeDiscFile exe,archive;SceneRoomSectorRange range;u8 module[0xc000];
         if(!SDL_Init(SDL_INIT_EVENTS) || !pe_disc_open(&disc,path))return fprintf(stderr,"M273 load audit failed at %d\n",__LINE__),1;
@@ -422,6 +422,34 @@
                 if(g_RoomM273Trig[angle].word!=(s32)sine)return fprintf(stderr,"M273 load audit failed at %d\n",__LINE__),1;
             }
         }
+        /* Issue #58: exercise the actual disc-backed Eve model banks, not
+         * just a synthetic null animation. Every missing pose must preserve
+         * the entity; every authored pose must still select its own data. */
+        unsigned authored=0,missing=0,missing_stop=0;
+        for(unsigned row=0;row<10;++row) {
+            int populated=0;
+            for(unsigned pose=0;pose<48;++pose)populated|=g_GameState.bank_rows[row][pose]!=NULL;
+            if(!populated)continue;
+            for(unsigned pose=0;pose<48;++pose)for(unsigned setter=0;setter<2;++setter) {
+                BattleEntity entity={0};entity.modelIndex=row;entity.actionMode=0xffff;
+                entity.animFrame=0x12340000;entity.animPrev.fixed=0x23450000;
+                entity.actionData=g_GameState.bank_rows[row][0];
+                BattleEntity before=entity;
+                if(setter)Entity_SetAction(&entity,pose);else Entity_SetActionMode(&entity,pose);
+                RenderAnimationDataHeader *animation=g_GameState.bank_rows[row][pose];
+                if(animation) {
+                    if(entity.actionMode!=pose || entity.actionData!=animation || entity.animLastFrame!=(u16)(animation->frame_count-1))
+                        return fprintf(stderr,"M273 authored animation row%u pose%u setter%u failed\n",row,pose,setter),1;
+                    ++authored;
+                } else {
+                    if(memcmp(&entity,&before,sizeof(entity)))
+                        return fprintf(stderr,"M273 absent animation row%u pose%u setter%u changed entity\n",row,pose,setter),1;
+                    ++missing;if(pose==2)++missing_stop;
+                }
+            }
+        }
+        if(!authored || !missing_stop)return fprintf(stderr,"M273 model pose coverage missing: %u authored, %u absent Stop\n",authored,missing_stop),1;
+        printf("M273 actual model poses: %u authored, %u missing and %u absent Stop setter cases passed\n",authored,missing,missing_stop);
         /* Invoke through the actual PM method types: the parameters are
          * native addresses, so ASan/function also checks the dispatch ABI. */
         FieldActor boss={0},player={0};FieldActor *saved_player=g_PlayerEntity;
