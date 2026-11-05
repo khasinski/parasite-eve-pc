@@ -45,6 +45,40 @@
     if(argc==2 && !strcmp(argv[1],"--save-safety"))return native_save_safety();
     if(argc==2 && !strcmp(argv[1],"--all-room-loads"))return original_all_room_loads();
     if(argc==2 && !strcmp(argv[1],"--widescreen-rooms"))return original_widescreen_rooms();
+    if(argc==2 && !strcmp(argv[1],"--actor-distance")){
+        static const s32 values[]={INT32_MIN,INT32_MIN+1,-65536,-1,0,1,65536,INT32_MAX};
+        FieldActor source={0},target={0};
+        FieldActor *old_current=g_CurrentEntity,*old_player=g_PlayerEntity,*old_head=g_FieldActorListHead;
+        g_CurrentEntity=&source;g_PlayerEntity=&target;g_FieldActorListHead=&target;
+        target.type_id=7;target.sub_id=3;
+        unsigned cases=0;
+        for(unsigned i=0;i<8;++i)for(unsigned j=0;j<8;++j)for(unsigned axis=0;axis<3;++axis){
+            source.pos_x=values[i];source.pos_y=values[j];source.pos_z=values[(i+j)%8];
+            target.pos_x=values[j];target.pos_y=values[(i+j+axis)%8];target.pos_z=values[(i+axis)%8];
+            const s32 from[]={source.pos_x,source.pos_y,source.pos_z};
+            const s32 to[]={target.pos_x,target.pos_y,target.pos_z};
+            u32 expected=0;
+            for(unsigned k=0;k<3;++k){
+                u32 delta=(u32)from[k]-(u32)to[k];
+                expected+=(delta&UINT32_C(0x80000000))?0u-delta:delta;
+            }
+            for(int lookup=0;lookup<2;++lookup){
+                s32 key=lookup?7:0,sub=3,out=123; s32 *args[]={&key,&sub,&out};
+                if(Entity_GetDistanceComponents(args)!=1 || (u32)out!=expected)return 1;
+                ++cases;
+            }
+        }
+        g_PlayerEntity=NULL;
+        s32 key=0,sub=0,out=0; s32 *args[]={&key,&sub,&out};
+        if(Entity_GetDistanceComponents(args)!=1 || out!=-1)return 1;
+        key=99;out=0;
+        if(Entity_GetDistanceComponents(args)!=1 || out!=-1)return 1;
+        target.flags=0x10;key=7;sub=3;out=0;
+        if(Entity_GetDistanceComponents(args)!=1 || out!=-1)return 1;
+        g_CurrentEntity=old_current;g_PlayerEntity=old_player;g_FieldActorListHead=old_head;
+        printf("Actor distance: %u wrapping coordinate cases and absent/disabled actor lookups passed\n",cases);
+        return 0;
+    }
     if(argc==2 && !strcmp(argv[1],"--anim-event-completion")){
         RenderAnimationDataHeader animation={0};animation.frame_count=8;
         void *old_animation=g_GameState.bank_rows[0][2];
