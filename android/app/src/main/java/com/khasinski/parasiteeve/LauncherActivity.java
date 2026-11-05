@@ -26,9 +26,12 @@ public class LauncherActivity extends Activity {
     private Button importButton;
     private Button playButton;
     private boolean importing;
+    private int requiredDisc;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        requiredDisc = getIntent().getIntExtra("requiredDisc", 0);
+        if (requiredDisc < 1 || requiredDisc > 2) requiredDisc = 0;
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         int padding = (int)(24 * getResources().getDisplayMetrics().density);
@@ -51,7 +54,7 @@ public class LauncherActivity extends Activity {
         });
         layout.addView(importButton);
         playButton = new Button(this);
-        playButton.setText("Play");
+        playButton.setText(requiredDisc == 0 ? "Play" : "Choose image");
         playButton.setOnClickListener(v -> chooseDisc());
         layout.addView(playButton);
         setContentView(layout);
@@ -69,7 +72,9 @@ public class LauncherActivity extends Activity {
     private void refresh() {
         if (importing) return;
         int count = cues().length;
-        status.setText(count == 0
+        status.setText(requiredDisc != 0
+            ? "Parasite Eve (USA) Disc " + requiredDisc + " required. Import its CUE/BIN folder, then choose its CUE image. Your game is waiting."
+            : count == 0
             ? "Select a folder containing your CUE and BIN files. You can import the other disc later. A controller is currently required."
             : count + " CUE image(s) imported. A controller is currently required.");
         playButton.setEnabled(count != 0);
@@ -81,11 +86,16 @@ public class LauncherActivity extends Activity {
         if (files.length == 1) { launch(files[0]); return; }
         String[] names = new String[files.length];
         for (int i = 0; i < files.length; ++i) names[i] = files[i].getName();
-        new AlertDialog.Builder(this).setTitle("Start with disc")
+        new AlertDialog.Builder(this).setTitle(requiredDisc == 0 ? "Start with disc" : "Choose Disc " + requiredDisc)
             .setItems(names, (dialog, which) -> launch(files[which])).show();
     }
 
     private void launch(File cue) {
+        if (requiredDisc != 0) {
+            setResult(RESULT_OK, new Intent().putExtra("disc", cue.getName()));
+            finish();
+            return;
+        }
         Intent intent = new Intent(this, GameActivity.class);
         intent.putExtra("disc", cue.getName());
         startActivity(intent);

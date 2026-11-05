@@ -8,6 +8,39 @@ import java.util.Arrays;
 
 /** Android loader for the original game modules compiled into libmain.so. */
 public class GameActivity extends SDLActivity {
+    @Override protected void main() {
+        super.main();
+        // Retire before SDL clears mSDLThread: a picker closing at exactly
+        // this point can recreate the Surface and start SDL_main a second time.
+        nativeCleanupMainThread();
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
+    private static final int SELECT_DISC = 4101;
+    private volatile String selectedDisc;
+    // Called from the original native disc-request path, on SDL's game thread.
+    public void requestDiscImage(int identity) {
+        selectedDisc = null;
+        runOnUiThread(() -> {
+            if (isFinishing()) { selectedDisc = ""; return; }
+            try {
+                android.content.Intent request = new android.content.Intent(this, LauncherActivity.class);
+                request.putExtra("requiredDisc", identity);
+                startActivityForResult(request, SELECT_DISC);
+            } catch (RuntimeException error) { selectedDisc = ""; }
+        });
+    }
+    public byte[] pollDiscImage() {
+        String path = selectedDisc;
+        return path == null ? null : path.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+    @Override protected void onActivityResult(int request, int result, android.content.Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != SELECT_DISC) return;
+        String disc = result == RESULT_OK && data != null ? data.getStringExtra("disc") : null;
+        File image = disc != null && new File(disc).getName().equals(disc)
+            ? new File(new File(getFilesDir(), "discs"), disc) : null;
+        selectedDisc = image != null && image.isFile() ? image.getAbsolutePath() : "";
+    }
     @Override protected void onCreate(android.os.Bundle state) {
         super.onCreate(state);
         if (android.os.Build.VERSION.SDK_INT >= 33)
