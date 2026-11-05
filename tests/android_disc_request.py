@@ -15,6 +15,7 @@ p.add_argument('--serial', required=True)
 p.add_argument('--adb', default='adb')
 p.add_argument('--disc1', default='disc1.cue')
 p.add_argument('--disc2')
+p.add_argument('--import-folder', help='Optional Download subfolder to import Disc 2 through SAF')
 a = p.parse_args()
 pkg = 'com.khasinski.parasiteeve'
 
@@ -46,6 +47,27 @@ def request(identity, filename, expected):
     if filename is None:
         adb('shell', 'input', 'keyevent', '4')
     else:
+        if filename == a.disc2 and a.import_folder:
+            present = subprocess.run([a.adb,'-s',a.serial,'shell','run-as',pkg,
+                'test','-f','files/discs/'+filename]).returncode == 0
+            if not present:
+                click('Import disc images')
+                current = nodes()
+                if not any(n.get('text') == a.import_folder for n in current):
+                    roots = [n.get('text') for n in current
+                             if n.get('resource-id','').endswith('/breadcrumb_text')]
+                    if roots: click(roots[0])
+                    click('Download')
+                    click(a.import_folder)
+                click('Use this folder')
+                click('Allow')
+                deadline = time.monotonic()+180
+                while time.monotonic()<deadline:
+                    current = nodes()
+                    assert not any(n.get('text') == 'Import failed' for n in current)
+                    if any(n.get('text','').casefold() == 'choose image' and
+                           n.get('enabled') == 'true' for n in current): break
+                else: raise AssertionError('Real disc import did not complete')
         click('Choose image')
         # With one imported CUE the launcher returns it directly. With two or
         # more, choose it explicitly from the native Android dialog.
@@ -65,6 +87,7 @@ def request(identity, filename, expected):
               if line.startswith('{"event":"android_disc_selection"')]
     assert events == [dict(event='android_disc_selection',requested=identity,
                            selected=expected[0],identity=expected[1])], events
+    print(json.dumps(events[0]), flush=True)
 
 
 try:
