@@ -26,10 +26,10 @@ The launcher offers a starting image and supplies the other imported CUE to the
 native disc reader. Use one image per game disc; extra variants are not supported.
 Uninstalling the app deletes its imported images, settings and saves.
 
-A controller is currently required. Touch controls, Android settings/disc-missing
-prompts, save import/export, crash report export and device compatibility testing
+A controller is currently required. Touch controls, Android settings integration,
+save import/export, crash report export and device compatibility testing
 remain unfinished. The desktop file dialog is not an Android file picker.
-Automatic two-disc swap still needs an end-to-end test.
+Automatic two-disc swap still needs an end-to-end campaign test.
 Do not distribute this APK as a finished Android port.
 
 The native game runs in the app's private `:game` process. Its original `exit()`
@@ -75,3 +75,23 @@ checks the native VBlank count and confirms that the launcher's PID survives.
 It also exercises Android Back during an interactive session and a command that
 returns normally from `SDL_main`. System/keyboard Back returns to the launcher;
 controller buttons retain their native SDL mappings.
+
+## Missing disc requests
+
+The original native request pauses the game clock/audio and opens the same
+folder importer with the required disc's name. Selecting a CUE returns its local
+private-storage path through JNI; the original image validator checks its actual
+identity. Selecting the wrong disc cannot replace the mounted image. Cancelling
+returns to the existing native retry/quit prompt.
+
+The debug APK provides `--test-select-disc 1|2` to exercise this JNI picker and
+validator without playing through a disc boundary. It is not a release option.
+With imported images, run:
+
+```sh
+python3 tests/android_disc_request.py --serial emulator-5566 --adb "$ANDROID_HOME/platform-tools/adb" --disc1 disc1.cue --disc2 disc2.cue
+```
+
+This checks both identities, wrong-disc rejection and cancellation. Omit
+`--disc2` to exercise the Disc 1 success and missing/wrong Disc 2 cases with a
+single imported image. A full in-game Disc 2 transition remains unverified.

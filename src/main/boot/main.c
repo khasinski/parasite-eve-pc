@@ -20,6 +20,7 @@ static int host_open_assists;
 #include <SDL3/SDL.h>
 #ifdef __ANDROID__
 #include <unistd.h>
+#include <jni.h>
 #endif
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 static void Host_StateUiRegister(void);
@@ -1646,6 +1647,43 @@ static void Host_NativeApplicationShutdown(void){
 #endif
 
 static int Host_SelectImage(unsigned identity, char *path, size_t size) {
+#ifdef __ANDROID__
+    /* A CUE needs access to its sibling BIN, not an isolated content:// URI.
+     * Reuse the app's private folder importer while the existing caller keeps
+     * the original game clock and audio paused. Return a normal local path. */
+    JNIEnv *env = SDL_GetAndroidJNIEnv();
+    jobject activity = SDL_GetAndroidActivity();
+    if (!env || !activity) return -1;
+    jclass type = (*env)->GetObjectClass(env, activity);
+    jmethodID request = type ? (*env)->GetMethodID(env, type, "requestDiscImage", "(I)V") : NULL;
+    jmethodID poll = request ? (*env)->GetMethodID(env, type, "pollDiscImage", "()[B") : NULL;
+    int result = -1;
+    if (!poll || (*env)->ExceptionCheck(env)) goto android_done;
+    (*env)->CallVoidMethod(env, activity, request, (jint)identity);
+    while (!(*env)->ExceptionCheck(env)) {
+        jbyteArray selected = (*env)->CallObjectMethod(env, activity, poll);
+        if ((*env)->ExceptionCheck(env)) break;
+        if (selected) {
+            jsize length = (*env)->GetArrayLength(env, selected);
+            if (length == 0) result = 0;
+            else if ((size_t)length < size) {
+                (*env)->GetByteArrayRegion(env, selected, 0, length, (jbyte *)path);
+                if (!(*env)->ExceptionCheck(env)) { path[length] = 0; result = 1; }
+            }
+            (*env)->DeleteLocalRef(env, selected);
+            break;
+        }
+        /* Keep an initialized Android window's pause/resume handshake alive;
+         * a diagnostic request can also precede SDL events initialization. */
+        if (SDL_WasInit(SDL_INIT_EVENTS)) SDL_PumpEvents();
+        SDL_Delay(10);
+    }
+android_done:
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (type) (*env)->DeleteLocalRef(env, type);
+    (*env)->DeleteLocalRef(env, activity);
+    return result;
+#else
 #ifdef PE_PS5
     (void)identity; (void)path; (void)size;
     fprintf(stderr, "Disc image missing; configure both disc paths before startup.\n");
@@ -1688,6 +1726,7 @@ static int Host_SelectImage(unsigned identity, char *path, size_t size) {
     SDL_free(dialog.paths[0]);
     SDL_free(dialog.paths[1]);
     return result;
+#endif
 }
 
 static int Host_InstallImage(unsigned identity, const char *path) {
@@ -4012,6 +4051,9 @@ int main(int argc, char **argv) {
         interactive = 0;
     }
     for (int i = 1; i < argc; ++i) {
+#if defined(__ANDROID__) && !defined(NDEBUG)
+        if (!strcmp(argv[i], "--test-select-disc")) interactive = 0;
+#endif
         if (!strcmp(argv[i], "--headless") || !strcmp(argv[i], "--headless-gpu") || !strcmp(argv[i], "--help") || !strcmp(argv[i], "--download-backgrounds") || !strcmp(argv[i], "--verify-backgrounds")) {
             interactive = 0;
         }
@@ -4052,6 +4094,24 @@ int main(int argc, char **argv) {
 #endif
 #endif
     if(argc==2 && (!strcmp(argv[1],"--download-backgrounds") || !strcmp(argv[1],"--verify-backgrounds")))return Host_HdCli(!strcmp(argv[1],"--verify-backgrounds"));
+#if defined(__ANDROID__) && !defined(NDEBUG)
+    /* Exercise the same JNI picker and original image validator without
+     * requiring a campaign playthrough. Debug APK only, no game-state writes. */
+    if (argc == 3 && !strcmp(argv[1], "--test-select-disc")) {
+        unsigned identity = (unsigned)atoi(argv[2]), found = 0;
+        if (identity != 1 && identity != 2) return EXIT_FAILURE;
+        if (!SDL_Init(SDL_INIT_VIDEO)) return EXIT_FAILURE;
+        char path[4096]; PeDisc image = {0};
+        int selected = Host_SelectImage(identity, path, sizeof(path));
+        if (selected > 0 && (!Host_OpenDisc(&image, path) ||
+            Asset_ValidatePeImage(&image, &found) || found != identity)) selected = -1;
+        printf("{\"event\":\"android_disc_selection\",\"requested\":%u,\"selected\":%d,\"identity\":%u}\n",
+               identity, selected, found);
+        pe_disc_close(&image);
+        SDL_Quit();
+        return selected == 1 ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+#endif
     unsigned internal_resolution = host_options.scale;
     int resolution_argument = 0;
     int headless_argument = 0;
