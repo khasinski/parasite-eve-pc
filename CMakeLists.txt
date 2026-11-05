@@ -759,6 +759,9 @@ if(BUILD_TESTING)
     set_tests_properties(original-m273-attack-timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;fieldfx")
     add_test(NAME original-m273-liberty-load COMMAND test-original-actor-animation --m273-load)
+    add_test(NAME original-m273-action-poses COMMAND test-original-actor-animation --m273-action-poses)
+    set_tests_properties(original-m273-action-poses PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;battle")
     set_tests_properties(original-m273-liberty-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;render")
     add_test(NAME original-m245-trail-burst-load COMMAND test-original-actor-animation --m245-load)
