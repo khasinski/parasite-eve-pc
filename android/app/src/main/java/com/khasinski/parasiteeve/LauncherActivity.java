@@ -17,6 +17,8 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Locale;
+import java.lang.ref.WeakReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Copies user-selected disc images into private storage; never requests broad storage access. */
 public class LauncherActivity extends Activity {
@@ -25,7 +27,36 @@ public class LauncherActivity extends Activity {
     private ProgressBar progress;
     private Button importButton;
     private Button playButton;
-    private boolean importing;
+    private static final AtomicBoolean importing = new AtomicBoolean();
+    private static WeakReference<LauncherActivity> current = new WeakReference<>(null);
+    private static volatile String importStatus = "Importing images… Keep the app open.";
+    private static volatile String importError;
+
+    @Override protected void onResume() {
+        super.onResume();
+        current = new WeakReference<>(this);
+        if (status != null) { refresh(); showImportError(); }
+    }
+
+    private void showImportError() {
+        if (importing.get() || importError == null) return;
+        String message = importError;
+        importError = null;
+        new AlertDialog.Builder(this).setTitle("Import failed")
+            .setMessage(message).setPositiveButton("OK", null).show();
+    }
+
+    private void notifyImport(String error) {
+        // Keep a failure until a live launcher can report it, even if all
+        // launcher windows were closed before the background copy completed.
+        if (error != null) importError = error;
+        runOnUiThread(() -> {
+            LauncherActivity activity = current.get();
+            if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+            activity.refresh();
+            activity.showImportError();
+        });
+    }
     private int requiredDisc;
 
     @Override public void onCreate(Bundle state) {
@@ -70,8 +101,14 @@ public class LauncherActivity extends Activity {
     }
 
     private void refresh() {
-        if (importing) return;
+        boolean busy = importing.get();
+        importButton.setEnabled(!busy);
+        progress.setVisibility(busy ? android.view.View.VISIBLE : android.view.View.GONE);
+        setRequestedOrientation(busy ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+                                    : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         int count = cues().length;
+        playButton.setEnabled(!busy && count != 0);
+        if (busy) { status.setText(importStatus); return; }
         status.setText(requiredDisc != 0
             ? "Parasite Eve (USA) Disc " + requiredDisc + " required. Import its CUE/BIN folder, then choose its CUE image. Your game is waiting."
             : count == 0
@@ -105,13 +142,12 @@ public class LauncherActivity extends Activity {
         super.onActivityResult(request, result, data);
         if (request != PICK_FOLDER || result != RESULT_OK || data == null || data.getData() == null) return;
         Uri tree = data.getData();
-        importing = true;
-        importButton.setEnabled(false);
-        playButton.setEnabled(false);
-        progress.setVisibility(android.view.View.VISIBLE);
-        status.setText("Importing images… Keep the app open.");
-        // Keep the Activity alive through rotation while the import owns its UI.
-        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED);
+        // A picker can return after another launcher was opened. Serialize the
+        // entire transaction, including staging cleanup and BIN/CUE publication.
+        if (!importing.compareAndSet(false, true)) { refresh(); return; }
+        importError = null;
+        importStatus = "Importing images… Keep the app open.";
+        refresh();
         new Thread(() -> {
             String error = null;
             File staging = new File(getFilesDir(), "disc-import");
@@ -134,7 +170,8 @@ public class LauncherActivity extends Activity {
                             throw new java.io.IOException("An image named " + name + " is already imported. Existing images were kept.");
                         Uri source = DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0));
                         File target = new File(staging, name);
-                        runOnUiThread(() -> status.setText("Importing " + name + "…"));
+                        importStatus = "Importing " + name + "…";
+                        notifyImport(null);
                         try (InputStream input = getContentResolver().openInputStream(source);
                              FileOutputStream output = new FileOutputStream(target)) {
                             if (input == null) throw new java.io.IOException("Cannot open " + name);
@@ -171,16 +208,10 @@ public class LauncherActivity extends Activity {
                 if (leftovers != null) for (File file : leftovers) file.delete();
                 staging.delete();
             }
-            final String message = error;
-            runOnUiThread(() -> {
-                importing = false;
-                importButton.setEnabled(true);
-                progress.setVisibility(android.view.View.GONE);
-                setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
-                refresh();
-                if (message != null) new AlertDialog.Builder(this).setTitle("Import failed")
-                    .setMessage(message).setPositiveButton("OK", null).show();
-            });
+            importing.set(false);
+            // The original Activity may have been closed with Back. Notify the
+            // live launcher rather than showing a dialog on a destroyed window.
+            notifyImport(error);
         }, "disc-import").start();
     }
 }
