@@ -132,9 +132,15 @@ version/directory is in `mods/upscale/active.json` beside those preferences.
 a window. `PE_CONFIG_HOME` selects an isolated profile for headless checks;
 `PE_HD_SERVER=http://127.0.0.1:PORT` is a localhost-only test override.
 
+The game advertises `X-PE-HD-Features: underlay-v1,static-matte-v1` when requesting
+the catalog and archive. The server keeps versioned catalogs so older games
+without these capabilities continue receiving a compatible pack. The client
+rejects unknown or malformed `required_features` before downloading the ZIP,
+retaining its active pack. Feature compatibility is independent of development
+build version strings. ZIP delivery remains a static nginx transfer.
+
 Downloads report `User-Agent: ParasiteEve/VERSION`, `X-PE-Version`, `X-PE-Build`,
-`X-PE-Platform` and an ephemeral per-download ID. The server counts started and
-completed transfers; update checks and HEAD requests do not count. It stores
+`X-PE-Platform` and an ephemeral per-download ID. The server counts download starts before nginx sends the ZIP; update checks and HEAD requests do not count. It stores
 coarse client metadata and keyed daily visitor hashes, not raw IP addresses.
 Server source/deployment lives separately in `~/Projects/pe-mod-server`.
 
