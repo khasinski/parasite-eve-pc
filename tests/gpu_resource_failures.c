@@ -126,7 +126,19 @@ int main(int argc,char **argv) {
         }
         Psyz_VideoSetAntialiasing(0);
         Psyz_VideoSetInternalResolution(4);
-        assert(internal_res==4 && scaled_vram_render!=old_render);
+        /* A retired SDL wrapper address may be reused by the allocator.
+         * Prove the retry with the actual output scale and preserved pixels. */
+        assert(internal_res==4 && scaled_vram_render && scaled_blend_sample);
+        PS1_RECT mark={2,2,2,2};Draw_ClearImage(&mark,0,255,0);
+        int rw=0,rh=0;
+        unsigned char *rendered=Psyz_VideoAllocRenderedFrame(&rw,&rh);
+        assert(rendered && rw==display_size.x*4 && rh==display_size.y*4);
+        assert(rendered[0]>200 && rendered[1]==0 && rendered[2]==0);
+        const unsigned char *inside=rendered+((2*4+2)*rw+2*4+2)*3;
+        const unsigned char *outside=rendered+((5*4+2)*rw+5*4+2)*3;
+        assert(inside[0]==0 && inside[1]>200 && inside[2]==0);
+        assert(outside[0]>200 && outside[1]==0 && outside[2]==0);
+        free(rendered);
         puts("Failed first/second target allocations retain working pixels, AA and scale; retry succeeds");
     }else if(!strcmp(argv[1],"--swapchain-resize")){
         /* Claim the existing hidden window; no test may show it. */
