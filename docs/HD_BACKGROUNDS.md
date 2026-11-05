@@ -202,3 +202,23 @@ The offline compositor accepts WebP and RGBA coverage and `--capture-json` to
 reconstruct exactly the active entries recorded in a screenshot report. These
 previews omit actors, live scripts, mirrors and camera movement; they complement
 hidden-GPU tests rather than proving those gameplay paths.
+
+### Reproducing the M097/M239 edge candidate
+
+`docs/assets/hd-animated/corrections/issue-56/build_underlays.py` builds a fresh
+review directory from a baseline pack and the locally archived artwork:
+
+```sh
+python build_underlays.py --assets PATH --baseline PACK --out NEW_DIRECTORY
+```
+
+It requires OpenCV, NumPy and Pillow. It rejects existing output paths and
+foreground entries with animation controls. The baseline is never overwritten;
+changed files are detached before writing. Source/reference planes and existing
+covered foreground RGB stay intact. Long-edge masks, narrow reconstructed floor
+strips and explicit static-matte metadata form the candidate.
+
+`underlay-generation.json` records source/output hashes and generation prompts;
+`underlay-review.json` records native captures, rejected methods and remaining
+review. The generated masters are archived separately from Git. This recipe
+requires the renderer support in PRs #79 and #80 and does not publish a pack.
