@@ -1,5 +1,5 @@
 """Exercise the production CLI/ESC installer against controlled localhost releases."""
-import hashlib,http.server,json,os,pathlib,subprocess,sys,tempfile,threading,time,unittest,zipfile,io
+import hashlib,http.server,json,os,pathlib,subprocess,sys,tempfile,threading,time,unittest,zipfile,io,shutil
 BINARY=pathlib.Path(sys.argv.pop(1)).resolve() if len(sys.argv)>1 else None
 KEY='0123456789abcdef'
 def pack(version,kind='good'):
@@ -30,6 +30,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
    else:self.wfile.write(blob)
   except (BrokenPipeError,ConnectionResetError):pass
 class Installer(unittest.TestCase):
+ def test_portable_install_is_independent_of_working_directory(self):
+  self.assertTrue(BINARY and BINARY.exists())
+  with tempfile.TemporaryDirectory() as directory:
+   root=pathlib.Path(directory);launch=root/'unrelated-cwd';launch.mkdir()
+   server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler);server.mode='good';server.downloads=0
+   threading.Thread(target=server.serve_forever,daemon=True).start()
+   try:
+    for mode in ('flag','marker','override')+(('bundle',) if sys.platform=='darwin' else ()):
+     install=root/mode;install.mkdir();binary_dir=install/'Parasite Eve.app/Contents/MacOS' if mode=='bundle' else install;binary_dir.mkdir(parents=True,exist_ok=True)
+     exe=binary_dir/BINARY.name;shutil.copy2(BINARY,exe)
+     for dll in BINARY.parent.glob('*.dll'):shutil.copy2(dll,binary_dir/dll.name)
+     if mode!='flag':(install/'portable.txt').touch()
+     env=dict(os.environ,SDL_AUDIO_DRIVER='dummy',PE_HD_SERVER=f'http://127.0.0.1:{server.server_port}',LD_LIBRARY_PATH=str(BINARY.parent),DYLD_LIBRARY_PATH=str(BINARY.parent));env.pop('PE_CONFIG_HOME',None)
+     expected=install/'userdata'
+     if mode=='override':expected=root/'explicit-home';env['PE_CONFIG_HOME']=str(expected)
+     args=[str(exe)]+(['--portable'] if mode=='flag' else [])+['--download-backgrounds']
+     result=subprocess.run(args,cwd=launch,env=env,capture_output=True,text=True,timeout=30)
+     self.assertEqual(result.returncode,0,(mode,result.stdout,result.stderr))
+     pointer=expected/'mods/upscale/active.json';self.assertTrue(pointer.is_file(),mode)
+     self.assertTrue(pathlib.Path(json.loads(pointer.read_text())['directory']).is_relative_to(expected),mode)
+     if mode=='override':self.assertFalse((install/'userdata').exists())
+    self.assertFalse((launch/'userdata').exists())
+   finally:server.shutdown();server.server_close()
+
  def test_atomic_download_update_and_failures(self):
   self.assertTrue(BINARY and BINARY.exists())
   with tempfile.TemporaryDirectory() as temporary:

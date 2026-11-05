@@ -3859,6 +3859,47 @@ static void Host_DescribeSaveData(char *out, size_t size) {
 #endif
 }
 
+/* Select portable storage before any preferences, cards, mods or installer
+ * paths are initialized. An explicit PE_CONFIG_HOME remains authoritative. */
+static int Host_ConfigurePortable(int *argc, char **argv) {
+#ifndef PE_PS5
+    int requested = 0, count = 1;
+    for (int i = 1; i < *argc; ++i) {
+        if (!strcmp(argv[i], "--portable")) requested = 1;
+        else argv[count++] = argv[i];
+    }
+    *argc = count; argv[count] = NULL;
+    const char *base = SDL_GetBasePath();
+    if (!base) return !requested;
+    char directory[4096], marker[4096], data[4096];
+    int n = snprintf(directory, sizeof(directory), "%s", base);
+    if (n < 0 || (size_t)n >= sizeof(directory)) return 0;
+#ifdef __APPLE__
+    /* User data must be beside the signed .app, never inside its bundle. */
+    char *bundle = strstr(directory, ".app/Contents/");
+    if (bundle) {
+        while (bundle > directory && bundle[-1] != '/') --bundle;
+        *bundle = '\0';
+    }
+#endif
+    n = snprintf(marker, sizeof(marker), "%sportable.txt", directory);
+    if (n < 0 || (size_t)n >= sizeof(marker)) return 0;
+    SDL_PathInfo info;
+    requested |= SDL_GetPathInfo(marker, &info) && info.type == SDL_PATHTYPE_FILE;
+    const char *override = SDL_getenv("PE_CONFIG_HOME");
+    if (!requested || (override && *override)) return 1;
+    n = snprintf(data, sizeof(data), "%suserdata", directory);
+    if (n < 0 || (size_t)n >= sizeof(data) || !SDL_CreateDirectory(data) ||
+        !SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "PE_CONFIG_HOME", data, true)) {
+        fprintf(stderr, "Cannot prepare portable storage beside the application: %s\n", SDL_GetError());
+        return 0;
+    }
+#else
+    (void)argc; (void)argv;
+#endif
+    return 1;
+}
+
 static void Host_PrintHelp(const char *program_name) {
     printf(
         "Usage: %s [--disc <USA Disc 1 CUE/BIN>] [--disc2 <USA Disc 2 CUE/BIN>] [--choose-discs] "
@@ -3870,6 +3911,7 @@ static void Host_PrintHelp(const char *program_name) {
         program_name
     );
     printf("--download-backgrounds / --verify-backgrounds manage the optional HD pack without opening a window.\n");
+    printf("--portable or portable.txt beside the application keeps settings, cards and mods in its userdata directory. PE_CONFIG_HOME overrides this location.\n");
     printf("Without --disc, opens a native multi-select CUE/BIN dialog. --choose-discs selects new images. ESC opens desktop settings.\n");
     printf("--headless uses native-resolution software rendering; --headless-gpu keeps the actual GPU window hidden and supports internal scaling.\n");
     printf("--dump-frame writes the rendered display as RGB888 PPM at each control/terminal boundary.\n");
@@ -3946,6 +3988,7 @@ static int Host_ParseHealthEventArg(const char *cursor, int argc) {
 }
 
 int main(int argc, char **argv) {
+    if (!Host_ConfigurePortable(&argc, argv)) return EXIT_FAILURE;
 #ifdef PE_PS5
     if (!Host_InitPaths()) return EXIT_FAILURE;
 #endif
