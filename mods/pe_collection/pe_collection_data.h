@@ -17,7 +17,7 @@ typedef struct { const char *name; uint16_t price; uint8_t kind, area; const cha
 
 #define PE_CREATURES 75
 static const PeCreature g_pe_creatures[PE_CREATURES] = {
-    { "Actress", 0, 1, 2, 3, "Day 1", 40, 9, 0, 28, "nothing", "nothing" },
+    { "Eve (stage)", 0, 1, 2, 3, "Day 1", 40, 9, 0, 28, "nothing", "nothing" },
     { "Rat", 0, 0, 2, 3, "Day 1", 17, 4, 5, 2, "Revive 90%, Medicine 1 10%", "Medicine 2 80%, nothing 20%" },
     { "Parrot", 0, 0, 2, 3, "Day 1", 10, 4, 14, 17, "Medicine 1 90%, nothing 10%", "Ammo 6 80%, nothing 20%" },
     { "Eve", 0, 1, 2, 3, "Day 1", 92, 5, 0, 31, "nothing", "Pe 1 80%, Pe 3 20%" },
@@ -97,8 +97,11 @@ static const PeCreature g_pe_creatures[PE_CREATURES] = {
 /* Model-aware keys regenerated from original USA actor-script setups for #61.
  * The 370 actor keys project to exactly the previous 331 (map,id,creature) keys;
  * no creature/profile index or imported progress changes. */
-#define PE_CREATURE_KEYS 370
+#define PE_CREATURE_KEYS 371
 static const PeCreatureKey g_pe_creature_keys[PE_CREATURE_KEYS] = {
+    /* Stage Eve uses the old Actress entry's rank/kind. Verified in M002's
+     * native battle; its dispatched setup is absent from the static extract. */
+    { 2, 0x0201, 2, 0 },
     { 5, 0x0201, 2, 0 },
     { 12, 0x0002, 5, 1 },
     { 13, 0x0002, 2, 1 },
