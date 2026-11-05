@@ -159,9 +159,9 @@ non-opaque alpha explicitly opts into a refined coverage matte for opaque HD
 presentation at internal resolutions above 1x. Its native reference plane still
 owns palette matching, PS1 STP, native VRAM/readback and gameplay. Semitransparent
 primitives keep native coverage and ABR blending. Existing packs remain compatible.
-The matte can only refine pixels inside live native coverage: RGB palette
+The default matte can only refine pixels inside live native coverage: RGB palette
 matching cannot distinguish transparent zero from opaque black, so an HD alpha
-value must never resurrect a native-transparent pixel or a packet's rectangle.
+value must not resurrect a native-transparent pixel or a packet's rectangle.
 
 `ctest -R '^original-gpu-hd-(coverage|reference)$' runs hidden GPU tests
 with synthetic atlases. They check native-transparent holes, palette fallback,
@@ -183,6 +183,22 @@ The extension GPU regression covers both aspects, 1x/2x, HD off/on, absent
 atlases and original draws in front. The real-disc widescreen test additionally
 loads a synthetic diagnostic underlay through the actual room-sidecar path and
 compares original game state, VRAM and PCM at both checkpoints.
+
+A reviewed **static** atlas with non-opaque alpha may opt into an HD silhouette
+using a same-key `-matte.bin` sidecar containing exactly four bytes, `PEM1`.
+This mode can extend beyond native-transparent pixels in the scaled opaque
+presentation, so the atlas must have a coherent background or an appropriate
+underlay beneath its edges. The pack author must verify that the layer has no
+animation or palette-controlled visibility. Never mark animated or script-hidden
+layers this way. Missing, invalid or overlong metadata keeps strict native
+coverage; existing unmarked packs keep their current appearance.
+
+Static mattes do not affect native VRAM, 1x output or PS1 semitransparent draws.
+Palette mismatch still falls back to native color. PNG and WebP use the same
+metadata contract. The installer treats matte markers as checksummed extras;
+corrupt markers invalidate verification and cannot replace a working pack.
+GPU tests cover valid/invalid markers, PNG/WebP parity, native VRAM, palette
+fallback, semitransparency and the legacy transparent-pixel guard.
 
 `hd-poc/pack.py --coverage-aa` traces each complete native entry before cutting
 16px tiles, simplifies long stair-step contours within half a native pixel,
