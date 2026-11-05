@@ -105,6 +105,7 @@ public class LauncherActivity extends Activity {
         new Thread(() -> {
             String error = null;
             File staging = new File(getFilesDir(), "disc-import");
+            ArrayList<File> installed = new ArrayList<>();
             try {
                 if (!staging.exists() && !staging.mkdirs()) throw new java.io.IOException("Cannot create import directory");
                 ArrayList<File> copied = new ArrayList<>();
@@ -141,11 +142,19 @@ public class LauncherActivity extends Activity {
                 File discs = new File(getFilesDir(), "discs");
                 if (!discs.exists() && !discs.mkdirs()) throw new java.io.IOException("Cannot create disc directory");
                 // Complete every copy before installing images; existing images are never overwritten.
+                // Publish BINs before CUEs so an interrupted installation cannot
+                // expose a new CUE before its newly imported data files exist.
+                copied.sort((a, b) -> Boolean.compare(
+                    a.getName().toLowerCase(Locale.ROOT).endsWith(".cue"),
+                    b.getName().toLowerCase(Locale.ROOT).endsWith(".cue")));
                 for (File file : copied) {
-                    if (!file.renameTo(new File(discs, file.getName())))
+                    File destination = new File(discs, file.getName());
+                    if (!file.renameTo(destination))
                         throw new java.io.IOException("Cannot install " + file.getName());
+                    installed.add(destination);
                 }
             } catch (Exception failure) {
+                for (File file : installed) file.delete();
                 error = failure.getMessage();
             } finally {
                 File[] leftovers = staging.listFiles();
