@@ -1,0 +1,119 @@
+{
+  "status": "WIP; not a finished issue56 fix; not published",
+  "method": "Generated hidden floor, registration, actual-pack local boundary colour transfer, inward long-edge masks. Foreground RGB and native reference unchanged.",
+  "native_validation": [
+    {
+      "room": "M097",
+      "checkpoints": 66,
+      "native_state_equal": true,
+      "native_vram_equal": true,
+      "native_pcm_equal": true,
+      "changed_bbox": [
+        0,
+        496,
+        464,
+        780
+      ],
+      "frame_before_sha256": "2437be5f05d181a3395efd0a7cfbcb122df28f4e479a93eb0259fc37363bb5d4",
+      "frame_after_sha256": "9da5b4329af2922ad4b420d383878a57df1176495fefe04f561cfdbf537e025c",
+      "native_vram_sha256": "4d45e6184a1a2713b11f3ef8cfe4062c9bfdf57f3c357709a26b6dc0fe0b23b7",
+      "native_pcm_sha256": "f18418dff506f584edf11c958a45e7578dd0bf9d6270de9300bf46c2580eb85e"
+    },
+    {
+      "room": "M239",
+      "checkpoints": 58,
+      "native_state_equal": true,
+      "native_vram_equal": true,
+      "native_pcm_equal": true,
+      "changed_bbox": [
+        280,
+        416,
+        1276,
+        896
+      ],
+      "frame_before_sha256": "2c282693c59232b9f5a8f826e6f21a6342176bf5c386204993e41575cb607342",
+      "frame_after_sha256": "05433e4da69e87f356fd92e16dc848651970b853910d681456f4c354fda8d561",
+      "native_vram_sha256": "72d169d8ee3b0455358cb3de5b0ac0408b480be4f01a453e0658841c909c4fc1",
+      "native_pcm_sha256": "0a3495773da6b16ff44784ce9c6e193da7533f58b926cf705478f2b843b902ca"
+    }
+  ],
+  "authoring": [
+    {
+      "room": "M097",
+      "geometry": "b1c7435335ee7113",
+      "foreground": "08a0ceae7206ffc3",
+      "underlay": "5e822db5fa1883c4",
+      "cells": 28,
+      "pixels": 3608,
+      "registration": [
+        [
+          1.0000847523326566,
+          -0.00012976805773031878,
+          -0.0048151782724506756
+        ],
+        [
+          0.00012976805773031878,
+          1.0000847523326566,
+          0.15489815194781886
+        ]
+      ],
+      "inliers": 1042,
+      "residual_p95": 2.349578380584717,
+      "gain": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "generated_master": "corrections/issue-56/M097-floor-underlay-v1.png",
+      "generated_sha256": "512f8f06f666e5f349743ad071525998bbe9ce431253a52ccda6ba33668ece5b",
+      "matte": "long-edges",
+      "local_boundary_colour_transfer": true,
+      "foreground_rgb_exact": true,
+      "native_reference_exact": true
+    },
+    {
+      "room": "M239",
+      "geometry": "60de4207704ba290",
+      "foreground": "c5da59732e08d390",
+      "underlay": "281bebebdaa0871a",
+      "cells": 55,
+      "pixels": 9504,
+      "registration": [
+        [
+          1.0003600834385293,
+          -0.00013253006909611845,
+          -0.6129170757246211
+        ],
+        [
+          0.00013253006909611845,
+          1.0003600834385293,
+          1.2024434334929417
+        ]
+      ],
+      "inliers": 402,
+      "residual_p95": 2.3658735752105713,
+      "gain": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "generated_master": "corrections/issue-56/M239-floor-underlay-v1.png",
+      "generated_sha256": "c5736a9358ded6fff5ca5ba336c93801ab34af647567ee82eb5d9b2969d96b7f",
+      "matte": "long-edges",
+      "local_boundary_colour_transfer": true,
+      "foreground_rgb_exact": true,
+      "native_reference_exact": true
+    }
+  ],
+  "limitations": [
+    "M239 long silhouette still shows native-coverage stair steps at close zoom",
+    "M097 retains some source/material dark ticks; must review all affected contours",
+    "Uniform full-contour erosion rejected because it damaged thin microscope parts",
+    "Next step requires coordinated authored HD coverage and backdrop, preserving strict legacy coverage by default"
+  ],
+  "backup": {
+    "host": "fenrir",
+    "directory": "~/Backups/parasite-eve-hd-issue56-underlays-20261105",
+    "master_sha256_verified": true
+  }
+}

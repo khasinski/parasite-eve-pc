@@ -194,6 +194,17 @@ atlases and original draws in front. The real-disc widescreen test additionally
 loads a synthetic diagnostic underlay through the actual room-sidecar path and
 compares original game state, VRAM and PCM at both checkpoints.
 
+The local underlay authoring experiment is reproducible with
+`docs/assets/hd-animated/corrections/issue-56/build_underlays.py --assets PATH --baseline PATH --out NEW_PATH`
+(OpenCV, NumPy and Pillow). Generated master hashes and exact built-in imagegen
+prompts are in `underlay-generation.json`; `underlay-review.json` records the
+native M097/M239 captures and remaining defects. Foreground RGB and reference
+planes remain exact. Only hidden floor strips are added. A uniform contour
+erosion damaged microscope details and was rejected; the current development
+candidate changes long edge runs only and matches floor/contact-shadow colours
+locally. M239's native-coverage clipping still leaves visible stairs: this is
+not a reviewed replacement pack and the issue remains open.
+
 For development candidates, the runtime tries WebP, then PNG, then BMP for each
 atlas key. A PNG named by a candidate manifest does not override a same-key
 WebP beside it. Remove the candidate's old format link when replacing an atlas;
