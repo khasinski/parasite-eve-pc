@@ -32,6 +32,11 @@ remain unfinished. The desktop file dialog is not an Android file picker.
 Automatic two-disc swap still needs an end-to-end test.
 Do not distribute this APK as a finished Android port.
 
+The native game runs in the app's private `:game` process. Its original `exit()`
+and diagnostic frame-limit exits therefore leave the launcher alive. A normally
+returning native command retires that process after SDL cleanup as well, so the
+next session starts with fresh C globals and a fresh native audio/video clock.
+
 ## Verification so far
 
 A headless API 35 ARM64 emulator loaded a real Disc 1 CUE/BIN, decoded the opening
@@ -58,3 +63,15 @@ python3 tests/android_launcher.py --serial emulator-5566 --adb "$ANDROID_HOME/pl
 It exercises the system folder picker, verifies exact imported bytes, checks CUE
 discovery and confirms that a repeated import rejects duplicates without changing
 the first copy.
+
+After importing a disc, verify repeated native sessions with:
+
+```sh
+python3 tests/android_lifecycle.py --serial emulator-5566 --adb "$ANDROID_HOME/platform-tools/adb" --disc disc1.cue
+```
+
+This starts three short hidden GPU sessions, compares their framebuffer hashes,
+checks the native VBlank count and confirms that the launcher's PID survives.
+It also exercises Android Back during an interactive session and a command that
+returns normally from `SDL_main`. System/keyboard Back returns to the launcher;
+controller buttons retain their native SDL mappings.
