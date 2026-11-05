@@ -881,6 +881,15 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             SKIP_REGULAR_EXPRESSION "requires SDL GPU"
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-hd-coverage COMMAND test-psyz-interpolation
+            --filter=gpu::authored_hd_coverage_is_display_only_and_opt_in)
+        add_test(NAME original-gpu-hd-reference COMMAND test-psyz-interpolation
+            --filter=gpu::queued_hd_sprite_preserves_native_vram_coverage_and_palette_fallback)
+        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference PROPERTIES
+            TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            SKIP_REGULAR_EXPRESSION "requires SDL GPU"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_executable(test-gpu-resource-failures tests/gpu_resource_failures.c)
         target_link_libraries(test-gpu-resource-failures PRIVATE psyz)
         foreach(mode upload readback reset resize swapchain-resize)
