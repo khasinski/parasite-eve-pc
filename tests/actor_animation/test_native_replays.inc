@@ -452,10 +452,20 @@ static int original_native_bootstrap(const char *executable,int field_control)
         if(input>=5){
 #include "actor_animation/native_replay_schedules.inc"
         /* Move only backstage interaction press/release pairs by three
-         * VBlanks. Movement, battles, contacts and original script execution
-         * remain untouched. The same inventory, phone save and VRAM checks
+         * VBlanks (or a bounded diagnostic offset). Movement, battles,
+         * contacts and original script execution remain untouched. The same inventory, phone save and VRAM checks
          * below must still pass: no looser expectations for this variant. */
         char shifted[4096][32];unsigned shifted_count=0;
+        int interaction_offset=3;
+        if(field_control==14){
+            const char *offset=getenv("PE_TEST_CARNEGIE_PRESS_OFFSET");
+            if(offset){
+                char *end;long parsed=strtol(offset,&end,10);
+                if(!*offset || *end || parsed < -3 || parsed > 7)return 1;
+                interaction_offset=(int)parsed;
+            }
+            printf("Carnegie idle interaction offset: %+d VBlanks\n",interaction_offset);
+        }
         if(field_control==14)for(unsigned i=8;i+3<at;i+=2){
             unsigned tick,mask,release,released_mask,previous_tick,previous_mask;
             if(strcmp(args[i],"--pad-at") || strcmp(args[i+2],"--pad-at") ||
@@ -463,9 +473,9 @@ static int original_native_bootstrap(const char *executable,int field_control)
                sscanf(args[i+3],"%u:%u",&release,&released_mask)!=2 ||
                i<10 || sscanf(args[i-1],"%u:%u",&previous_tick,&previous_mask)!=2 ||
                previous_mask || tick<159000 || mask!=16384 || released_mask || release!=tick+4)continue;
-            snprintf(shifted[shifted_count],sizeof(shifted[0]),"%u:%u",tick+3,mask);
+            snprintf(shifted[shifted_count],sizeof(shifted[0]),"%u:%u",(unsigned)((int)tick+interaction_offset),mask);
             args[i+1]=shifted[shifted_count++];
-            snprintf(shifted[shifted_count],sizeof(shifted[0]),"%u:0",release+3);
+            snprintf(shifted[shifted_count],sizeof(shifted[0]),"%u:0",(unsigned)((int)release+interaction_offset));
             args[i+3]=shifted[shifted_count++];
         }
         if(field_control==14 && !shifted_count)return 1;
