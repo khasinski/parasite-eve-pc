@@ -65,6 +65,20 @@ It exercises the system folder picker, verifies exact imported bytes, checks CUE
 discovery and confirms that a repeated import rejects duplicates without changing
 the first copy.
 
+To test closing the missing-disc importer during a transaction, leave at least
+512 MiB free on a dedicated emulator and run:
+
+```sh
+python3 tests/android_import_lifecycle.py --serial emulator-5566 --adb "$ANDROID_HOME/platform-tools/adb"
+```
+
+This copies a synthetic BIN without a CUE, observes an unfinished copy, closes
+its Activity with Back and opens the launcher again. The expected import error
+must reach the live launcher, the process must survive, and retry controls must
+be enabled. The test removes its own uniquely named fixture. Import transactions
+are serialized across launcher Activities; a replacement launcher displays the
+current import's state instead of starting another writer in the staging folder.
+
 After importing a disc, verify repeated native sessions with:
 
 ```sh

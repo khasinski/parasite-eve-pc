@@ -29,7 +29,10 @@ French uses abbreviated inventory labels where the original menu reserves space 
 counts, and `J.` for the save slot's day label. Labels baked into images, such as **Level** and
 **Time** on the save screen, still use the original English graphics. Compiler warnings about
 unresolved dialogue boxes remain review items; successful compilation does not prove their
-in-game layout.
+in-game layout. The 15 Trading Card name-consistency notices were reviewed:
+14 Wayne card labels use contextual names such as `Carte "GSP"`, and the prize
+machine uses `Carte`. These intentionally omit the inventory label's `Standard`;
+the warnings remain visible rather than weakening the general consistency check.
 
 A pack can use the US font's glyphs (A-Z, a-z, 0-9, space and `+ - % & ! ? " ' . : , /`) and the
 Latin Extended set below and the Russian/Ukrainian/Belarusian Cyrillic alphabets. The compiler
