@@ -426,7 +426,7 @@ static int original_native_bootstrap(const char *executable,int field_control)
     }
     SDL_free(cwd);executable=resolved[0];disc=resolved[1];
     const char *base=SDL_GetBasePath();if(!base)return 1;
-    unsigned first=field_control>=2?(unsigned)field_control+10:field_control?6:0;
+    unsigned first=field_control==14?20:field_control>=2?(unsigned)field_control+10:field_control?6:0;
     unsigned end=field_control>=2?first+1:field_control?12:6;
     for(unsigned input=first;input<end;++input){
         char directory[2048],capture[2080];
@@ -451,6 +451,24 @@ static int original_native_bootstrap(const char *executable,int field_control)
         }
         if(input>=5){
 #include "actor_animation/native_replay_schedules.inc"
+        /* Move only backstage interaction press/release pairs by three
+         * VBlanks. Movement, battles, contacts and original script execution
+         * remain untouched. The same inventory, phone save and VRAM checks
+         * below must still pass: no looser expectations for this variant. */
+        char shifted[4096][32];unsigned shifted_count=0;
+        if(field_control==14)for(unsigned i=8;i+3<at;i+=2){
+            unsigned tick,mask,release,released_mask,previous_tick,previous_mask;
+            if(strcmp(args[i],"--pad-at") || strcmp(args[i+2],"--pad-at") ||
+               sscanf(args[i+1],"%u:%u",&tick,&mask)!=2 ||
+               sscanf(args[i+3],"%u:%u",&release,&released_mask)!=2 ||
+               i<10 || sscanf(args[i-1],"%u:%u",&previous_tick,&previous_mask)!=2 ||
+               previous_mask || tick<159000 || mask!=16384 || released_mask || release!=tick+4)continue;
+            snprintf(shifted[shifted_count],sizeof(shifted[0]),"%u:%u",tick+3,mask);
+            args[i+1]=shifted[shifted_count++];
+            snprintf(shifted[shifted_count],sizeof(shifted[0]),"%u:0",release+3);
+            args[i+3]=shifted[shifted_count++];
+        }
+        if(field_control==14 && !shifted_count)return 1;
         SDL_PropertiesID props=SDL_CreateProperties();
         SDL_SetPointerProperty(props,SDL_PROP_PROCESS_CREATE_ARGS_POINTER,(void *)args);
         SDL_SetStringProperty(props,SDL_PROP_PROCESS_CREATE_WORKING_DIRECTORY_STRING,directory);
