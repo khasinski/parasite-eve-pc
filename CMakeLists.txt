@@ -606,6 +606,11 @@ if(BUILD_TESTING)
                 ${CMAKE_C_COMPILER})
             set_tests_properties(vsync-display-selection PROPERTIES TIMEOUT 30)
         endif()
+        add_test(NAME original-game-m273-reported-crash COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/m273_crash_replay.py
+            $<TARGET_FILE:parasite-eve-pc> ${CMAKE_BINARY_DIR}/m273-crash-evidence)
+        set_tests_properties(original-game-m273-reported-crash PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;gpu;mods")
         add_test(NAME lighting-editor-assets COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/lighting-editor/test_assets.py)
         set_tests_properties(lighting-editor-assets PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77 LABELS "tools")
