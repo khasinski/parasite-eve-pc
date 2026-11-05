@@ -1,0 +1,13 @@
+key,translation,notes
+dlg/M001/008,男子：我们来得正好！,Opening-scene pilot; not a full translation
+dlg/M001/009,男子：怎么了？想来看歌剧的人可是你呀。,Opening-scene pilot; not a full translation
+dlg/M001/010,{name}：……我也不知道……只是……你说得对，我会尽量开心一点。,Opening-scene pilot; not a full translation
+dlg/M001/011,姓名：{name} Brea{br}年龄：25岁{br}职业：纽约警察,Opening-scene pilot; not a full translation
+dlg/M001/012,姓名：{name} Brea{br}年龄：25岁{br}职业：纽约警察,Opening-scene pilot; not a full translation
+dlg/M001/013,男子：你不觉得和我出来很开心吗？{wait}我还特意请我父亲帮我们订了今晚最好的座位！{wait}放轻松吧！今晚一定会很愉快的！,Opening-scene pilot; not a full translation
+dlg/M001/014,男子：快走吧，我们该进去了。,Opening-scene pilot; not a full translation
+dlg/M001/015,门卫：请各位入座。演出马上开始。,Opening-scene pilot; not a full translation
+dlg/M001/016,门卫：祝您观演愉快。,Opening-scene pilot; not a full translation
+dlg/M001/017,男子：我们去座位吧。第一幕已经开始了。,Opening-scene pilot; not a full translation
+dlg/M001/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Opening-scene pilot; not a full translation
+dlg/M001/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Opening-scene pilot; not a full translation
