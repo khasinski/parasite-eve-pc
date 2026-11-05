@@ -8,6 +8,32 @@ import java.util.Arrays;
 
 /** Android loader for the original game modules compiled into libmain.so. */
 public class GameActivity extends SDLActivity {
+    @Override protected void onCreate(android.os.Bundle state) {
+        super.onCreate(state);
+        if (android.os.Build.VERSION.SDK_INT >= 33)
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::finish);
+    }
+    @Override public void onBackPressed() { finish(); }
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        // SDL consumes keyboard Back as a key event before Activity navigation.
+        // Leave controller input with SDL; system/keyboard Back closes the game.
+        if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK &&
+            !event.isFromSource(android.view.InputDevice.SOURCE_GAMEPAD)) {
+            if (event.getAction() == android.view.KeyEvent.ACTION_UP) finish();
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
+    @Override protected void onDestroy() {
+        // Diagnostic commands may return normally instead of the game's exit().
+        // Once SDL_main has completed and SDL has cleaned up, retire this private
+        // game process too. Never reuse original C globals for a second session.
+        Thread gameThread = mSDLThread;
+        super.onDestroy();
+        if (isFinishing() && (gameThread == null || !gameThread.isAlive()))
+            android.os.Process.killProcess(android.os.Process.myPid());
+    }
     @Override protected String[] getLibraries() { return new String[] { "main" }; }
     @Override protected String[] getArguments() {
         nativeSetenv("PE_CONFIG_HOME", getFilesDir().getAbsolutePath());
