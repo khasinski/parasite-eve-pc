@@ -159,12 +159,28 @@ non-opaque alpha explicitly opts into a refined coverage matte for opaque HD
 presentation at internal resolutions above 1x. Its native reference plane still
 owns palette matching, PS1 STP, native VRAM/readback and gameplay. Semitransparent
 primitives keep native coverage and ABR blending. Existing packs remain compatible.
-The matte can only refine pixels inside live native coverage: RGB palette
+Without the static-coverage opt-in below, the matte can only refine pixels inside live native coverage: RGB palette
 matching cannot distinguish transparent zero from opaque black, so an HD alpha
 value must never resurrect a native-transparent pixel or a packet's rectangle.
 
+A reviewed **static** foreground can opt into its authored silhouette with a
+same-key `<atlas-key>-matte.bin` containing exactly four bytes, `PEM1`. The
+installer treats it as a checksummed manifest extra. The loader requires
+non-opaque material alpha; absent, invalid or overlong markers retain the strict
+rule above. This mode can cross native-transparent silhouette pixels in opaque
+scaled draws, so the author must supply a complete HD mask with zero alpha
+outside the intended object and a coherent backdrop beneath any inward cuts.
+Do not add this marker to an animated/palette-hidden object. The M097/M239
+experiment applies it only to their unique, controller-free entry-0 atlases.
+The authoring tool limits expansion to 1.5 native pixels and existing tile
+footprints; new edge RGB inherits nearby original foreground colour. Original
+covered foreground RGB and reference planes remain exact. Native VRAM, 1x,
+semitransparent primitives and palette mismatch fallback retain original rules.
+The typed GPU environment identity distinguishes this mode from legacy masks.
+
 `ctest -R '^original-gpu-hd-(coverage|reference)$' runs the actual hidden GPU
-shader tests with synthetic atlases. They check native-transparent holes,
+shader tests with synthetic atlases. They check strict native-transparent holes,
+explicit static-coverage opt-in, invalid/overlong metadata, HD-off fallback,
 palette mismatch fallback, authored partial alpha, PNG/WebP equivalence and
 unchanged native VRAM and semitransparent draws. Windows CI includes both cases.
 
@@ -198,12 +214,15 @@ The local underlay authoring experiment is reproducible with
 `docs/assets/hd-animated/corrections/issue-56/build_underlays.py --assets PATH --baseline PATH --out NEW_PATH`
 (OpenCV, NumPy and Pillow). Generated master hashes and exact built-in imagegen
 prompts are in `underlay-generation.json`; `underlay-review.json` records the
-native M097/M239 captures and remaining defects. Foreground RGB and reference
-planes remain exact. Only hidden floor strips are added. A uniform contour
-erosion damaged microscope details and was rejected; the current development
-candidate changes long edge runs only and matches floor/contact-shadow colours
-locally. M239's native-coverage clipping still leaves visible stairs: this is
-not a reviewed replacement pack and the issue remains open.
+native M097/M239 captures and remaining defects. Original covered foreground RGB and reference
+planes remain exact; newly covered edge texels inherit foreground colour. Hidden
+floor strips also fill narrow inter-layer gaps. Uniform contour erosion damaged
+microscope details and was rejected. The current development candidate uses
+explicit static coverage for long edges and matches floor/contact-shadow colours
+locally. Native M097/M239 comparisons preserve state, VRAM and PCM; the 1x image
+also stays byte-identical. Wider scene/animation review and cross-platform shader
+validation remain required before publishing a replacement pack. The issue stays
+open until every reported room and artwork correction is verified.
 
 For development candidates, the runtime tries WebP, then PNG, then BMP for each
 atlas key. A PNG named by a candidate manifest does not override a same-key

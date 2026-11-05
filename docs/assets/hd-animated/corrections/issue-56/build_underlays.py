@@ -10,7 +10,8 @@ p.add_argument('--assets',type=Path,required=True)
 p.add_argument('--baseline',type=Path,required=True)
 p.add_argument('--out',type=Path,required=True)
 a=p.parse_args()
-if a.out.exists():raise FileExistsError(a.out)
+audit_path=a.out.parent/(a.out.name+'-audit.json')
+if a.out.exists() or audit_path.exists():raise FileExistsError(a.out)
 a.out.mkdir(parents=True)
 for source in a.baseline.iterdir():
  if source.is_file():os.link(source,a.out/source.name)
@@ -21,6 +22,7 @@ audit=[]
 sha=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
 for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4207704ba290')]:
  t=next(t for t in tasks if t['room']==room and t['group']==0 and t['entry']==0)
+ if t.get('control') is not None or t.get('controls'):raise ValueError('Static HD coverage cannot be used for animated foregrounds')
  back=next(t for t in tasks if t['room']==room and t['group']==0 and t['entry']==base_entry)
  w,h=t['size'];refs=np.load(a.assets/'refs'/t['ref'])
  def coverage(task):
@@ -30,9 +32,9 @@ for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4
   return mask
  fg=coverage(t);bg=coverage(back)
  native=np.repeat(np.repeat(fg,4,0),4,1)*255
- # Straighten only long silhouette runs. Thin microscope parts, corners,
- # small holes and curved details retain their original coverage.
- alpha=native.copy();yy,xx=np.mgrid[:h*4,:w*4].astype(np.float32)
+ # Straighten long silhouette runs. Do not erode thin microscope parts;
+ # the broad M097 counter also receives a conservative quarter-pixel AA band.
+ alpha=cv2.GaussianBlur(native,(0,0),1.0) if room=='M097' else native.copy();yy,xx=np.mgrid[:h*4,:w*4].astype(np.float32)
  points=np.stack(((xx+0.5)/4,(yy+0.5)/4),axis=-1)
  contours,_=cv2.findContours(fg,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
  for contour in contours:
@@ -48,10 +50,19 @@ for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4
    if plus==minus:continue
    normal*=1 if plus>minus else -1
    relative=points-start;along=relative@tangent;distance=relative@normal
-   region=(along>2)&(along<length-2)&(np.abs(distance)<3)&(native>0)
-   fitted=np.uint8(np.rint(np.clip((distance-0.25)*4+0.5,0,1)*255))
-   alpha[region]=np.minimum(alpha[region],fitted[region])
- support=(native>0)&(alpha<255)&(np.repeat(np.repeat(bg,4,0),4,1)==0)
+   region=(along>2)&(along<length-2)&(np.abs(distance)<3)
+   fitted=np.uint8(np.rint(np.clip((distance+0.25)*4+0.5,0,1)*255))
+   alpha[region]=fitted[region]
+ queued=np.zeros_like(native)
+ for x,y in t['tiles']:queued[y*4:y*4+64,x*4:x*4+64]=1
+ alpha[queued==0]=0
+ expansion=(native==0)&(alpha>0)
+ distance=cv2.distanceTransform((native==0).astype(np.uint8),cv2.DIST_L2,5)
+ if np.any(expansion) and float(distance[expansion].max())>6:raise ValueError('Authored coverage expands beyond 1.5 native pixels')
+ # Original layers can leave a one-pixel inter-layer gap outside the
+ # foreground's own mask. Fill only this narrow static boundary neighbourhood.
+ vicinity=cv2.dilate((native>0).astype(np.uint8),cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(9,9)))!=0
+ support=vicinity&(alpha<255)&(np.repeat(np.repeat(bg,4,0),4,1)==0)
  master=a.assets/'corrections/issue-56'/f'{room}-floor-underlay-v1.png'
  original=np.array(Image.open(a.assets/'composites'/f'{room}-g00-cbase-p00-hd.png').convert('RGB'))
  generated=np.array(Image.open(master).convert('RGB').resize((w*4,h*4),Image.Resampling.LANCZOS))
@@ -86,22 +97,36 @@ for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4
  index=np.maximum(labels-1,0)
  visible=background[valid][index].astype(np.int16)
  prior=generated[valid][index].astype(np.int16)
- generated=np.uint8(np.clip(generated.astype(np.int16)+visible-prior,0,255))
+ void=np.all(generated==0,axis=2)
+ generated=np.uint8(np.clip(generated.astype(np.int16)+visible-prior,0,255));generated[void]=0
  r=records[t['key']]
  material=np.array(Image.open(a.baseline/r['file']).convert('RGBA'))
  # WebP material is one plane; a combined PNG contains both.
  reference=np.array(Image.open(a.baseline/r['reference_file']).convert('RGBA'))
  material=material[:reference.shape[0]].copy();before_rgb=material[:,:,:3].copy();columns=material.shape[1]//68
+ foreground=np.zeros((h*4,w*4,3),np.uint8)
+ for i,(x,y) in enumerate(t['tiles']):
+  ax=i%columns*68+2;ay=i//columns*68+2
+  foreground[y*4:y*4+64,x*4:x*4+64]=material[ay:ay+64,ax:ax+64,:3]
+ _,labels=cv2.distanceTransformWithLabels((native==0).astype(np.uint8),cv2.DIST_L2,5,labelType=cv2.DIST_LABEL_PIXEL)
+ nearest=foreground[native!=0][np.maximum(labels-1,0)]
+ allowed=np.zeros(material.shape[:2],bool)
  for i,(x,y) in enumerate(t['tiles']):
   ax=i%columns*68;ay=i//columns*68
   tile=material[ay+2:ay+66,ax+2:ax+66].copy();tile[:,:,3]=alpha[y*4:y*4+64,x*4:x*4+64]
-  material[ay:ay+68,ax:ax+68,3]=np.pad(tile[:,:,3],((2,2),(2,2)),mode='edge')
- assert np.array_equal(before_rgb,material[:,:,:3])
+  extra=expansion[y*4:y*4+64,x*4:x*4+64]
+  tile[extra,:3]=nearest[y*4:y*4+64,x*4:x*4+64][extra]
+  padded=np.pad(tile,((2,2),(2,2),(0,0)),mode='edge');allowed[ay:ay+68,ax:ax+68]=np.pad(extra,2,mode='edge')
+  cell=material[ay:ay+68,ax:ax+68];cell[:,:,3]=padded[:,:,3]
+  cell[:,:,:3]=np.where(allowed[ay:ay+68,ax:ax+68,None],padded[:,:,:3],cell[:,:,:3])
+ assert not np.any(np.any(before_rgb!=material[:,:,:3],axis=2)&~allowed)
  combined=np.concatenate((material,reference),axis=0)
  path=a.out/(t['key']+'.png');path.unlink(missing_ok=True);Image.fromarray(combined).save(path)
  old=a.out/r['file']
  if old!=path:old.unlink(missing_ok=True)
  r.update(file=path.name,atlas_sha256=sha(path),pixel_sha256=hashlib.sha256(combined.tobytes()).hexdigest())
+ marker=a.out/(t['key']+'-matte.bin');marker.unlink(missing_ok=True);marker.write_bytes(b'PEM1')
+ manifest.setdefault('extras',[]).append(dict(file=marker.name,sha256=sha(marker)))
  cells=[(x,y) for y in range(0,h,16) for x in range(0,w,16) if np.any(support[y*4:y*4+64,x*4:x*4+64])]
  assert cells
  key=hashlib.sha256((room+sha(master)+'underlay-v1').encode()).hexdigest()[:16];assert key not in records
@@ -112,14 +137,15 @@ for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4
   tile[:,:,3]=support[y*4:y*4+64,x*4:x*4+64]*255
   ax=i%cols*68;ay=i//cols*68;under[ay:ay+68,ax:ax+68]=np.pad(tile,((2,2),(2,2),(0,0)),mode='edge')
  ref=np.zeros_like(under);image=a.out/(key+'.png');refpath=a.out/(key+'.ref.png')
+ image.unlink(missing_ok=True);refpath.unlink(missing_ok=True)
  Image.fromarray(np.concatenate((under,ref),axis=0)).save(image);Image.fromarray(ref).save(refpath)
  manifest['atlases'].append(dict(key=key,file=image.name,atlas_sha256=sha(image),reference_file=refpath.name,reference_sha256=sha(refpath),room=room,group=0,presentation='underlay'))
  descriptor=struct.pack('<4sI',b'PEW1',1)+struct.pack('<IIQiiii',0,len(cells),int(key,16),0,w,0,h)
  descriptor+=b''.join(struct.pack('<hh',x,y) for x,y in cells)
- path=a.out/(geometry+'-under.bin');path.write_bytes(descriptor)
+ path=a.out/(geometry+'-under.bin');path.unlink(missing_ok=True);path.write_bytes(descriptor)
  manifest.setdefault('extras',[]).append(dict(file=path.name,sha256=sha(path)))
- audit.append(dict(room=room,geometry=geometry,foreground=t['key'],underlay=key,cells=len(cells),pixels=int(support.sum()),registration=matrix.tolist(),inliers=int(inliers.sum()),residual_p95=float(np.percentile(residual,95)),gain=gain.tolist(),generated_master=str(master),generated_sha256=sha(master),matte="long-edges",local_boundary_colour_transfer=True,foreground_rgb_exact=True,native_reference_exact=True))
+ audit.append(dict(room=room,geometry=geometry,foreground=t['key'],underlay=key,cells=len(cells),pixels=int(support.sum()),registration=matrix.tolist(),inliers=int(inliers.sum()),residual_p95=float(np.percentile(residual,95)),gain=gain.tolist(),generated_master=str(master),generated_sha256=sha(master),matte="static-authored-long-edges",local_boundary_colour_transfer=True,original_foreground_rgb_exact=True,expanded_pixels=int(expansion.sum()),native_reference_exact=True))
 manifest['development_candidate']='issue-56-underlays-v1';manifest['image_format']='mixed-png-webp'
 (a.out/'manifest.json').unlink();(a.out/'manifest.json').write_text(json.dumps(manifest,separators=(',',':')))
-(a.out.parent/(a.out.name+'-audit.json')).write_text(json.dumps(audit,indent=2))
+audit_path.write_text(json.dumps(audit,indent=2))
 print(json.dumps(audit,indent=2))

@@ -6,11 +6,11 @@ def pack(version,kind='good'):
  payload=b'background material'*(16384 if kind=='slow' else 1);ref=b'lossless reference'
  filename='../escape.webp' if kind=='traversal' else KEY+'.webp'
  underlay=b'PEW1\0\0\0\0'
- manifest=dict(version=version,atlases=[dict(file=filename,atlas_sha256=hashlib.sha256(payload).hexdigest(),reference_file=KEY+'.ref.png',reference_sha256=hashlib.sha256(ref).hexdigest())],extras=[dict(file=KEY+'-under.bin',sha256=hashlib.sha256(underlay).hexdigest())])
+ manifest=dict(version=version,atlases=[dict(file=filename,atlas_sha256=hashlib.sha256(payload).hexdigest(),reference_file=KEY+'.ref.png',reference_sha256=hashlib.sha256(ref).hexdigest())],extras=[dict(file=KEY+'-under.bin',sha256=hashlib.sha256(underlay).hexdigest()),dict(file=KEY+'-matte.bin',sha256=hashlib.sha256(b'PEM1').hexdigest())])
  data=io.BytesIO()
  with zipfile.ZipFile(data,'w',compression=zipfile.ZIP_STORED) as z:
   def write(name,data):z.writestr(zipfile.ZipInfo(name,(2026,1,1,0,0,0)),data)
-  write('manifest.json',json.dumps(manifest));write(filename,b'corrupt' if kind=='corrupt' else payload);write(KEY+'.ref.png',ref);write(KEY+'-under.bin',underlay)
+  write('manifest.json',json.dumps(manifest));write(filename,b'corrupt' if kind=='corrupt' else payload);write(KEY+'.ref.png',ref);write(KEY+'-under.bin',underlay);write(KEY+'-matte.bin',b'PEM1')
  return data.getvalue()
 class Handler(http.server.BaseHTTPRequestHandler):
  def log_message(self,*a):pass
@@ -74,6 +74,9 @@ class Installer(unittest.TestCase):
     under=installed/(KEY+'-under.bin');self.assertEqual(under.read_bytes(),b'PEW1\0\0\0\0')
     under.write_bytes(b'bad underlay');self.assertNotEqual(run('--verify-backgrounds').returncode,0)
     under.write_bytes(b'PEW1\0\0\0\0');self.assertEqual(run('--verify-backgrounds').returncode,0)
+    marker=installed/(KEY+'-matte.bin');self.assertEqual(marker.read_bytes(),b'PEM1')
+    marker.write_bytes(b'bad!');self.assertNotEqual(run('--verify-backgrounds').returncode,0)
+    marker.write_bytes(b'PEM1');self.assertEqual(run('--verify-backgrounds').returncode,0)
     for mode in ('hash','corrupt','traversal','truncated','format','slow'):
      server.mode=mode;result=run(extra={'PE_HD_TEST_CANCEL_AT':'1'} if mode=='slow' else None)
      self.assertNotEqual(result.returncode,0,(mode,result.stdout,result.stderr));self.assertEqual(pointer.read_bytes(),old,mode);self.assertEqual((installed/(KEY+'.webp')).read_bytes(),b'background material')
