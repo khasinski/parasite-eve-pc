@@ -1160,7 +1160,7 @@ static void PaintSpeedLabel(const Painter *p, float mid, float baseline,
         LookArrow(p->surface, centre - reach, mid, 9.0f * s, -1, factor > 2 ? arrow : end);
         LookArrow(p->surface, centre + reach, mid, 9.0f * s, 1, factor < PSYZ_SPEED_MAX ? arrow : end);
         DrawText(p->surface, centre, baseline, 17.0f * s, text, label, ALIGN_CENTRE);
-        DrawText(p->surface, x + (float)OVERLAY_SPEED_STEP_W * s, baseline, 17.0f * s, "speed", label, ALIGN_LEFT);
+        DrawText(p->surface, x + (float)OVERLAY_SPEED_STEP_W * s, baseline, 17.0f * s, "Fast forward", label, ALIGN_LEFT);
         (void)chevron;
         (void)limit;
         return;
