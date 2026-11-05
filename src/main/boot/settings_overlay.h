@@ -1141,7 +1141,7 @@ static void PaintValueRow(const Painter *p, const char *labelText,
              ALIGN_CENTRE);
 }
 
-/* "< 3x > speed": the arrows step the hold's speed; a dim arrow is the limit. */
+/* "< 3x > Fast forward": the arrows step the speed; a dim arrow is the limit. */
 static void PaintSpeedLabel(const Painter *p, float mid, float baseline,
                             int selected, Color label) {
     const float s = p->s;
@@ -1171,7 +1171,7 @@ static void PaintSpeedLabel(const Painter *p, float mid, float baseline,
                 factor < PSYZ_SPEED_MAX ? chevron : limit);
     DrawText(p->surface, centre, baseline, 17.0f * s, text, label, ALIGN_CENTRE);
     DrawText(p->surface, (float)(OVERLAY_PAD + OVERLAY_SPEED_STEP_W) * s,
-             baseline, 17.0f * s, "speed", label, ALIGN_LEFT);
+             baseline, 17.0f * s, "Fast forward", label, ALIGN_LEFT);
 }
 
 static void PaintSettingRow(const Painter *p, const OverlaySetting *setting,
@@ -1276,7 +1276,7 @@ static void PaintRows(const Painter *p) {
                     snprintf(value, sizeof(value), "%u%%", host_options.analog_run_threshold);
                     PaintValueRow(p, "Field run threshold", value, mid, baseline, selected, 0, label);
                 } else if (row == HOST_SPEED_MODE_ROW) {
-                    PaintValueRow(p, "Speed button", host_options.speed_toggle ? "Toggle" : "Hold",
+                    PaintValueRow(p, "Fast-forward button", host_options.speed_toggle ? "Toggle" : "Hold",
                                   mid, baseline, selected, 0, label);
                 } else {
                     int idx = row - 1;
@@ -1452,6 +1452,11 @@ static const char *OverlayRowHelp(const HostOverlayState *state) {
             return "Left-stick deflection needed to run in the field. Lower values start running sooner.";
         }
         if (state->row == HOST_SPEED_BINDING + 1) {
+            int unbound = state->bind_device == HOST_BIND_CONTROLLER
+                ? host_options.buttons[HOST_SPEED_BINDING] == HOST_UNBOUND_BUTTON
+                : host_options.keys[HOST_SPEED_BINDING] == HOST_UNBOUND_KEY;
+            if (unbound)
+                return "No fast-forward button assigned. Enter/South: choose a binding. Left/Right: 2x-4x.";
             return host_options.speed_toggle
                        ? "Press to speed up, again for normal. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds."
                        : "Hold to speed up. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds.";
