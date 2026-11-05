@@ -41,10 +41,13 @@ jobs:
           sudo apt-get update && sudo apt-get install -y
           libgl1-mesa-dev libwayland-dev libx11-dev libxcb-render0-dev libxcb-shape0-dev
           libxcb-xfixes0-dev libxcursor-dev libxi-dev libxkbcommon-dev libxrandr-dev
+      # Run from the package folder: Cargo finds its .cargo/config.toml from the working directory.
       - name: Test
-        run: cargo test --locked --manifest-path localization/editor/Cargo.toml
+        working-directory: localization/editor
+        run: cargo test --locked
       - name: Build and check packaged demo
-        run: cargo run --locked --release --manifest-path localization/editor/Cargo.toml --bin package -- --out editor-dist
+        working-directory: localization/editor
+        run: cargo run --locked --release --bin package -- --out ../../editor-dist
       - uses: actions/upload-artifact@v4
         with:
           name: translation-editor-${{ matrix.target }}
