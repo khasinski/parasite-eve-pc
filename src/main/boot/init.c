@@ -492,11 +492,13 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
             }
             const EnemyCombatant *enemy = (const EnemyCombatant *)actor->state;
             printf(
-                "%s{\"type\":%u,\"sub\":%u,\"mode\":%u,\"hp\":%d,\"hp_limit\":%d,\"defense\":%u,"
+                "%s{\"type\":%u,\"sub\":%u,\"model_bank\":%u,\"identity\":%u,\"mode\":%u,\"hp\":%d,\"hp_limit\":%d,\"defense\":%u,"
                 "\"core_flags\":%u,\"state_flags\":%u,\"status_flags\":%u,\"atb\":%u,\"atb_step\":%u}",
                 combatant_index++ ? "," : "",
                 actor->type_id,
                 actor->sub_id,
+                (unsigned)((const BattleEntity *)actor)->modelIndex,
+                (unsigned)(u16)enemy->field04.fieldId04,
                 actor->mode,
                 enemy->hp,
                 enemy->maxHp,
