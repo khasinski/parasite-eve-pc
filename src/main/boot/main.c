@@ -282,8 +282,8 @@ static int HdPath(char *out,size_t n,const char *a,const char *b){int k=snprintf
 static int HdHex(const char *s){if(!s||strlen(s)!=64)return 0;for(unsigned i=0;i<64;++i)if(!strchr("0123456789abcdef",s[i]))return 0;return 1;}
 static int HdName(const char *s){
     if(!s)return 0;if(!strcmp(s,"manifest.json")||!strcmp(s,"title.webp")||!strcmp(s,"title.png"))return 1;
-    size_t n=strlen(s);if(n<20||n>25)return 0;for(unsigned i=0;i<16;++i)if(!strchr("0123456789abcdef",s[i]))return 0;
-    return !strcmp(s+16,".webp")||!strcmp(s+16,".png")||!strcmp(s+16,".ref.png")||!strcmp(s+16,"-wide.bin");
+    size_t n=strlen(s);if(n<20||n>26)return 0;for(unsigned i=0;i<16;++i)if(!strchr("0123456789abcdef",s[i]))return 0;
+    return !strcmp(s+16,".webp")||!strcmp(s+16,".png")||!strcmp(s+16,".ref.png")||!strcmp(s+16,"-wide.bin")||!strcmp(s+16,"-under.bin");
 }
 static const char *HdString(const cJSON *j,const char *key){const cJSON *v=cJSON_GetObjectItemCaseSensitive(j,key);return cJSON_IsString(v)?v->valuestring:NULL;}
 static cJSON *HdJsonFile(const char *path,size_t limit){size_t n=0;char *data=SDL_LoadFile(path,&n);if(!data)return NULL;cJSON *j=n<=limit?cJSON_ParseWithLength(data,n):NULL;SDL_free(data);return j;}
