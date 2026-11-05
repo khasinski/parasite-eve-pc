@@ -60,7 +60,7 @@ jobs:
           python3 - <<'PYTEST'
           import xml.etree.ElementTree as E
           r = E.parse('build/linux-source-only.xml')
-          assert len(r.findall('.//testcase')) == 26
+          assert len(r.findall('.//testcase')) == 27
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           r = E.parse('build/mod-features.xml')
           assert len(r.findall('.//testcase')) == 15
@@ -175,7 +175,7 @@ jobs:
           [xml]$report = Get-Content build/windows-source-only.xml
           $cases = $report.SelectNodes('//testcase')
           $incomplete = $report.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error')
-          if ($cases.Count -ne 26 -or $incomplete.Count -ne 0) { throw 'Expected 26 executed source-only cases without failures or skips' }
+          if ($cases.Count -ne 27 -or $incomplete.Count -ne 0) { throw 'Expected 27 executed source-only cases without failures or skips' }
           [xml]$features = Get-Content build/mod-features.xml
           if ($features.SelectNodes('//testcase').Count -ne 15 -or $features.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error').Count -ne 0) { throw 'Expected all 15 mod feature regressions without failures or skips' }
       - name: Build and test Windows save editor
