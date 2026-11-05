@@ -39,6 +39,10 @@ enum { PE_PRIORITY_EARLY = -100, PE_PRIORITY_NORMAL = 0, PE_PRIORITY_LATE = 100 
 /* Registration while dispatching is refused (-1). Same-event recursion and nesting beyond eight
  * dispatches are refused (-1); distinct nested events remain supported. Save requests cannot nest. */
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id);
+/* The same, for the rare handler that goes on while another mod runs alone (pe_mod_run_alone), if
+ * its own mod is otherwise on. Everything else of that mod stays off, so such a handler must not
+ * lean on the rest of it. */
+int pe_hook_add_beside(int id, PeHookFn fn, void *user, int priority, const char *mod_id);
 
 int pe_event_id(const char *name);
 int pe_event_emit(int id, void *ctx);
@@ -58,6 +62,9 @@ int pe_mod_active(const char *mod_id);
  * in Manage mods, until a start without the request). For a mod whose play must not mix with other
  * mods' (the randomizer). The first request wins; -1 outside an init or after another mod's. */
 int pe_mod_run_alone(void);
+/* The same in a running session: every other mod stops now (its shutdown runs) until the next
+ * start. For a save that must be played alone (PeSaveRecord.wants_alone). 1 if it took effect. */
+int pe_mod_stand_alone(const char *mod_id);
 int pe_mod_interactive(void);
 /* Refresh requested-vs-started mod notes; never starts/stops a mod. */
 void pe_mod_manage_refresh(void);

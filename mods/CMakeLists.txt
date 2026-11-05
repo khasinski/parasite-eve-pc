@@ -103,6 +103,15 @@ if(BUILD_TESTING)
     target_compile_options(test-mod-econ-store PRIVATE $<IF:$<BOOL:${MSVC}>,/UNDEBUG,-UNDEBUG>)
     target_link_libraries(test-mod-econ-store PRIVATE psyz)
     add_test(NAME mod-econ-store COMMAND test-mod-econ-store)
+
+    add_executable(test-mod-alone-save ${PROJECT_SOURCE_DIR}/tests/pe_mod_alone_save_test.c host/pe_mod_host.c host/pe_save.c host/pe_save_query.c host/pe_registry.c
+        host/pe_legacy_guard.c host/pe_api_native.c host/pe_game_facts.c host/pe_content_api.c host/pe_economy_policy.c
+        host/pe_recovery_snapshot.c host/pe_extension_store.c host/pe_inventory_api.c host/pe_shop_api.c host/pe_profile_transactions.c)
+    target_include_directories(test-mod-alone-save PRIVATE ${PROJECT_SOURCE_DIR}/include host
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(test-mod-alone-save PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(test-mod-alone-save PRIVATE psyz)
+    add_test(NAME mod-alone-save COMMAND test-mod-alone-save)
 endif()
 
 if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)

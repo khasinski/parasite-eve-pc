@@ -3,9 +3,10 @@
  * with (a save record), so loading always gives the same layout; F1 changes only reach the next New
  * Game. Battle drops, Wayne's Junk trades and the Chrysler Building stay vanilla.
  *
- * Randomized play is the original game plus this mod only: with "Randomize new games" on when the
- * game starts, the randomizer runs alone (pe_mod_run_alone) and no other mod starts. Turning it on
- * or off reaches the next start, like Manage mods.
+ * Randomized play is the original game plus this mod only (and Always run): with "Randomize new
+ * games" on when the game starts, the randomizer runs alone (pe_mod_run_alone) and no other mod
+ * starts. Turning it on or off reaches the next start, like Manage mods. A randomized save loaded
+ * with it off stops the other mods there and then (pe_mod_stand_alone), until the next start.
  *
  * How items move: when a room has loaded (PE_HOOK_SCENE_START, before its first frame; the room data
  * is in g_GameState.loaded_scene_assets in the disc's layout), the item operands of its spots are
@@ -672,9 +673,10 @@ static int pe_rand_save_read(void *ctx, void *user) {
         pe_mod_log(MOD_ID, "save from logic %u / table %u, this build %u / %u: items stay vanilla",
                    (unsigned)s_run.logic, (unsigned)s_run.table, PE_RAND_LOGIC_VERSION, PE_RAND_TABLE_VERSION);
     } else if (s_run.on && !s_alone) {
-        /* its layout stays (a moved key must stay where the run put it), but other mods are running */
-        pe_toast("This save is randomized: turn Randomize new games on and restart, so no other mod runs");
-        pe_mod_log(MOD_ID, "randomized save (seed %06u) loaded while other mods run", (unsigned)s_run.seed);
+        /* the host has stopped the other mods already (pe_rand_wants_alone) */
+        s_alone = 1;
+        pe_toast("This save is randomized: other mods are off until the game restarts");
+        pe_mod_log(MOD_ID, "randomized save (seed %06u) loaded: other mods stopped", (unsigned)s_run.seed);
     }
     if (s_run.on && pe_rand_supported() && s_foes_run.on && s_foes_run.version != PE_RAND_FOES_VERSION) {
         pe_toast("Randomizer: this save's enemies are from another version; enemies stay vanilla");
@@ -698,8 +700,13 @@ static void pe_rand_release(void *data) {
     pe_mod_log(MOD_ID, "randomized save (seed %06u) loaded with the mod off: items stay vanilla", (unsigned)run->seed);
     pe_toast("This save is randomized: turn the Randomizer mod back on to keep its items");
 }
+/* A layout this build plays is played with no other mod, whatever the toggle said at start. */
+static int pe_rand_wants_alone(const void *data) {
+    (void)data;
+    return s_run.on && pe_rand_supported();
+}
 static const PeSaveRecord s_record = {"pe_randomizer.run", 1, &s_run, sizeof s_run, pe_rand_check_record, NULL, NULL,
-                                      pe_rand_release};
+                                      pe_rand_release, pe_rand_wants_alone};
 /* Enemies from an unknown version are kept as they are, only not used; with the mod off they are vanilla anyway. */
 static int pe_rand_check_foes(void *data) {
     const PeRandFoesRun *run = data;
@@ -727,7 +734,7 @@ static int pe_rand_init(void) {
     pe_menu_begin("Randomizer");
     pe_menu_top_page("Randomizer", "Shuffle items from a seed. Set before New Game.", 50);
     pe_menu_register_toggle(0, "Randomize new games", "New Game shuffles items with this seed. Applies the next time the game "
-                            "starts; while on, no other mod runs. A game keeps the seed it began with.", &s_enabled, NULL);
+                            "starts; while on, no other mod runs (only Always run). A game keeps the seed it began with.", &s_enabled, NULL);
     /* the saved value is in s_enabled now: a randomized session is this mod and the original game only */
     s_alone = s_enabled && pe_mod_run_alone() == 0;
     pe_menu_register_digits(0, "Seed", "Six digits: the same seed gives the same items. Enter types a seed, "
