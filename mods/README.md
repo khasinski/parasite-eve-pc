@@ -412,9 +412,14 @@ without touching these files.
   resolves to: mods' resolvers first (newest first), then the mapped (room, identity) table.
   5 kills or Scan show weaknesses, 15 kills the loot (bosses: defeat shows weaknesses, loot is Junk
   only); each tier can be bought. Announces "bestiary.unlock".
+  Scripted bosses can end their fight at the original million-HP offset rather
+  than HP zero. Their defeat is deferred until Aya leaves battle alive, with
+  phase refills cancelling the pending defeat and attached parts deduplicated.
+  Completed hits are observed before scripts can release their actor. The stage
+  boss is displayed as **Eve (stage)**; its legacy `pe1/actress` profile key stays valid.
   The native PE pack resolves `(room, rank/kind, model bank slot)` through its resolver:
-  rank/kind alone is shared by different species in the same room. Its 370 actor keys retain
-  all 331 previous room/identity/species associations and all 75 stable profile keys. HP,
+  rank/kind alone is shared by different species in the same room. Its 371 actor keys retain
+  all 331 previous room/identity/species associations, add the stage Eve encounter and retain all 75 stable profile keys. HP,
   defense and other mutable combat stats are not used as species identifiers. If EX/progression
   changes rank, a unique room/model association still resolves the same species. A unique
   legacy mapping remains available when the actor is detached; ambiguous identities never

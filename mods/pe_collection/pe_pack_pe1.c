@@ -54,6 +54,9 @@ static void pe_make_keys(void) {
         int repeat = 1;
         pe_slug(base, sizeof base, g_pe_creatures[i].ex ? "ex_" : "", g_pe_creatures[i].name);
         snprintf(s_creature_key[i], PE_KEY_MAX, "%s", base);
+        /* The 40-HP stage boss was mislabeled Actress in the draft. Correct
+         * its visible name without invalidating existing collection profiles. */
+        if (i == 0) snprintf(s_creature_key[i], PE_KEY_MAX, "pe1/actress");
         for (j = 0; j < i; ++j)
             if (strcmp(s_creature_key[j], s_creature_key[i]) == 0) {
                 snprintf(s_creature_key[i], PE_KEY_MAX, "%s_%d", base, ++repeat);

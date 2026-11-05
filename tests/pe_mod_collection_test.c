@@ -25,9 +25,10 @@ static uint32_t s_junk = 1000;
 int pe_game_loaded(void) { return 1; }
 int pe_free_field(void) { return !(g_GameStateFlags & 0x2006u) && !(g_GameStateFlagsWord & 0xB600u); }   /* as host/pe_game.c */
 int pe_save_loaded(void) { return 1; }
-int pe_in_battle(void) { return 0; }
+int pe_in_battle(void) { return (g_GameStateFlags & 2) != 0; }
 int pe_room_number(void) { return s_room; }
-BattleEntity *pe_player(void) { return NULL; }
+static BattleEntity *s_player;
+BattleEntity *pe_player(void) { return s_player; }
 
 static PeHookFn s_hook[PE_HOOK_COUNT];
 int pe_hook_add(int i, PeHookFn f, void *u, int p, const char *m) { (void)u; (void)p; (void)m; if (i >= 0 && i < PE_HOOK_COUNT) s_hook[i] = f; return 0; }
@@ -69,7 +70,9 @@ int pe_menu_register_dynamic_choice(const char *s, const char *l, const char *d,
     (void)s; (void)d; (void)i; (void)m; s_dyn[s_ndyn].label = l; s_dyn[s_ndyn].count = c; s_dyn[s_ndyn++].name = n; return 0;
 }
 int pe_menu_register_info(const char *s, const char *l, const char *d, PeMenuText t) { (void)s; (void)l; (void)d; (void)t; return 0; }
-int pe_menu_register_tick(PeMenuPerFrame f) { (void)f; return 0; }
+static PeMenuPerFrame s_ticks[16];
+static unsigned s_nticks;
+int pe_menu_register_tick(PeMenuPerFrame f) { assert(s_nticks<16);s_ticks[s_nticks++]=f;return 0; }
 int pe_menu_register_live_int(const char *s, const char *l, const char *d, int lo, int hi, int st, PeMenuGet g, PeMenuSet t) {
     (void)s; (void)l; (void)d; (void)lo; (void)hi; (void)st; (void)g; (void)t; return 0;
 }
@@ -164,6 +167,79 @@ static void native_species_regressions(const PeBestiaryApi *b) {
     for (int i = 0; i < PE_CREATURES; ++i) assert(b->kills(handles[i]) == before[i]);
     s_rnd_native = 0; g_FieldActorListHead = NULL;
     printf("Native Bestiary: %d model-aware kill/Scan mappings; shared species isolated; randomizer precedence retained\n", PE_CREATURE_KEYS);
+}
+
+static void collection_frame(void) { for(unsigned i=0;i<s_nticks;++i)s_ticks[i](); }
+
+static void mixed_species_regression(const PeBestiaryApi *b) {
+    BattleEntity actors[3]={{0}};
+    int rat=b->find("pe1/rat"),parrot=b->find("pe1/parrot");
+    unsigned rats=b->kills(rat),parrots=b->kills(parrot);
+    s_room=14;g_GameStateFlags|=2;
+    memset(g_BattleEnemySlots,0,sizeof(g_BattleEnemySlots));
+    for(unsigned i=0;i<3;++i) {
+        BattleEnemySlot *slot=&g_BattleEnemySlots[i];slot->active=1;
+        slot->combatant.hpAlive=10;slot->combatant.field04.fieldId04=2;
+        slot->combatant.lowAndEntityId.bytes.entityId=i+1;
+        actors[i].core=&slot->combatant;actors[i].modelIndex=i<2?6:7;
+        actors[i].next=i<2?&actors[i+1]:NULL;
+    }
+    g_FieldActorListHead=(struct FieldActor *)actors;
+    s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+    for(unsigned i=0;i<3;++i)g_BattleEnemySlots[i].combatant.hpAlive=0;
+    s_hook[PE_HOOK_ENEMY_HIT_END](&actors[2],NULL);
+    s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+    assert(b->kills(rat)==rats+2 && b->kills(parrot)==parrots+1);
+    g_GameStateFlags&=~2u;g_FieldActorListHead=NULL;
+    memset(g_BattleEnemySlots,0,sizeof(g_BattleEnemySlots));collection_frame();
+    puts("Bestiary mixed encounter: two rats and one parrot sharing rank/kind receive exactly their own kills");
+}
+
+static void scripted_boss_regressions(const PeBestiaryApi *b) {
+    BattleEntity player={0},actor[2]={{0}};
+    Combatant aya={0};player.core=&aya;s_player=&player;
+    const int eve=b->find("pe1/eve"),actress=b->find("pe1/actress");
+    for(unsigned scenario=0;scenario<6;++scenario) {
+        int target=scenario?eve:actress,unrelated=scenario?actress:eve;
+        unsigned before=b->kills(target),other=b->kills(unrelated),parts=scenario==3?1:2;
+        memset(g_BattleEnemySlots,0,sizeof(g_BattleEnemySlots));
+        memset(actor,0,sizeof(actor));aya.curHP=45;
+        g_GameStateFlags|=2;s_room=scenario?23:2;
+        for(unsigned i=0;i<parts;++i) {
+            BattleEnemySlot *slot=&g_BattleEnemySlots[i];slot->active=1;
+            slot->combatant.hpAlive=slot->combatant.hpAliveCap=1000092;
+            slot->combatant.field04.fieldId04=scenario?0x0204:0x0201;
+            slot->combatant.lowAndEntityId.bytes.entityId=i+1;
+            actor[i].core=&slot->combatant;actor[i].modelIndex=2;
+        }
+        actor[0].next=parts>1?&actor[1]:NULL;g_FieldActorListHead=(struct FieldActor *)&actor[0];
+        s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+        for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].combatant.hpAlive=999999;
+        s_hook[PE_HOOK_ENEMY_HIT_END](&actor[0],NULL);
+        collection_frame();assert(b->kills(target)==before); /* not a victory yet */
+        if(scenario==2 || scenario==3) {
+            int next_hp=scenario==2?1000300:300;
+            for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].combatant.hpAlive=g_BattleEnemySlots[i].combatant.hpAliveCap=next_hp;
+            s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+            collection_frame();assert(b->kills(target)==before);
+            for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].combatant.hpAlive=scenario==2?999999:0;
+            s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+            if(scenario==3)assert(b->kills(target)==before+1);
+        }
+        if(scenario==4)aya.curHP=0; /* losing must never grant a boss defeat */
+        if(scenario==5) {
+            for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].combatant.hpAlive=g_BattleEnemySlots[i].combatant.hpAliveCap=1000300;
+            s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL); /* phase started, then interrupted */
+        }
+        for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].active=0;
+        g_FieldActorListHead=NULL;s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+        g_GameStateFlags&=~2u;collection_frame();collection_frame();
+        assert(b->kills(target)==before+(scenario>=4?0:1));
+        assert(b->kills(unrelated)==other);
+    }
+    s_player=NULL;memset(g_BattleEnemySlots,0,sizeof(g_BattleEnemySlots));
+    assert(!strcmp(b->info(actress)->name,"Eve (stage)"));
+    puts("Bestiary scripted Eve: both encounters, detached actors, hitbox deduplication, HP refills, losses and interrupted phases passed");
 }
 
 static int find_shop(const PeWardrobeApi *shop, const char *part) {
@@ -384,6 +460,8 @@ int main(void) {
         remove(path);
     }
     native_species_regressions(b);
+    mixed_species_regression(b);
+    scripted_boss_regressions(b);
     puts("Collection checks passed: PE pack keys, import creatures and costumes, resolvers, replace, events, profile, recomp import.");
     return 0;
 }
