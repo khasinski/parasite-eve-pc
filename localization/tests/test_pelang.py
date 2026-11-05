@@ -5,6 +5,7 @@
 """
 import csv
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -42,10 +43,10 @@ class PelangTest(unittest.TestCase):
         pelang.write_csv(path, rows)
         return path
 
-    def build(self, translations: dict) -> tuple[int, Path]:
+    def build(self, translations: dict, extra=()) -> tuple[int, Path]:
         out = self.dir / "t.pelang"
         code = pelang.main(["build", str(self.csv_with(translations)), "--strings", str(self.strings),
-                            "--lang", "xx", "--name", "Test", "-o", str(out)])
+                            "--lang", "xx", "--name", "Test", "-o", str(out), *extra])
         return code, out
 
     def test_the_manifest_builds_the_same_pack_without_any_game_text(self):
@@ -146,6 +147,25 @@ class PelangTest(unittest.TestCase):
         self.assertEqual(code, 0)
         _, _, entries = pelang.read_pack(out)
         self.assertEqual(entries[pelang.fnv1a("dlg/M001/003")], gt.encode("Salut.") + b"\xf9")
+
+    def test_chinese_font_pack_keeps_choices_and_punctuation(self):
+        font = os.getenv("PE_TEST_CJK_FONT")
+        if not font:
+            self.skipTest("Set PE_TEST_CJK_FONT to test actual Chinese font rasterization")
+        translations = {
+            "item/000": "弹药",
+            "dlg/M001/002": "要丢弃物品吗？{br}{choice 2}    是{br}    否",
+            "dlg/M001/003": "你好……再见！",
+        }
+        code, out = self.build(translations, ["--cjk-font", font])
+        self.assertEqual(code, 0)
+        _, _, entries = pelang.read_pack(out)
+        raw = entries[pelang.fnv1a("dlg/M001/003")]
+        self.assertIn(b"\xf1\xc5", raw)
+        self.assertTrue(raw.endswith(b"\xf9"))
+        choices = entries[pelang.fnv1a("dlg/M001/002")]
+        self.assertIn(b"\xfb\x09\x02", choices)
+        self.assertEqual(int.from_bytes(out.read_bytes()[4:8], "little"), 2)
 
     def test_build_refuses_missing_glyphs_and_changed_choices(self):
         code, _ = self.build({"item/000": "日本語"})              # CJK: not in the game font yet
