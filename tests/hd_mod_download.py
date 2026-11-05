@@ -18,7 +18,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
   mode=self.server.mode;version='0.1' if mode in ('good','hash') else '0.2'
   blob=pack(version,'slow' if mode=='slow' else mode if mode in ('corrupt','traversal') else 'good')
   if self.path.endswith('/latest'):
+   self.server.catalog_headers=dict(self.headers)
    m=dict(version=version,url=f'http://127.0.0.1:{self.server.server_port}/upscale-v{version}.zip',sha256='0'*64 if mode=='hash' else hashlib.sha256(blob).hexdigest(),size=len(blob),format='unsupported' if mode=='format' else 'webp-reference-png')
+   if mode=='features':m['required_features']=['future-feature-v1']
+   elif mode=='feature-type':m['required_features']='invalid'
+   else:m['required_features']=['underlay-v1','static-matte-v1']
    blob=json.dumps(m).encode()
   else:
    self.server.downloads+=1
@@ -69,6 +73,7 @@ class Installer(unittest.TestCase):
    try:
     result=run();self.assertEqual(result.returncode,0,result.stdout+result.stderr);self.assertTrue(pointer.is_file(),f'Installer wrote to the wrong Unicode path: {result.stdout} / {result.stderr}; files: {list(root.rglob(chr(42)))}');old=pointer.read_bytes();installed=pathlib.Path(json.loads(old)['directory']);self.assertEqual((installed/(KEY+'.webp')).read_bytes(),b'background material')
     self.assertIn('X-PE-Version',server.client_headers);self.assertIn('X-PE-Build',server.client_headers);self.assertIn('ParasiteEve/',server.client_headers['User-Agent'])
+    for headers in (server.catalog_headers,server.client_headers):self.assertEqual(headers.get('X-PE-HD-Features'),'underlay-v1,static-matte-v1')
     self.assertEqual(server.downloads,1);result=run();self.assertEqual(result.returncode,0,result.stdout);self.assertEqual(server.downloads,1);self.assertEqual(pointer.read_bytes(),old)
     self.assertEqual(run('--verify-backgrounds').returncode,0)
     under=installed/(KEY+'-under.bin');self.assertEqual(under.read_bytes(),b'PEW1\0\0\0\0')
@@ -77,9 +82,10 @@ class Installer(unittest.TestCase):
     marker=installed/(KEY+'-matte.bin');self.assertEqual(marker.read_bytes(),b'PEM1')
     marker.write_bytes(b'bad!');self.assertNotEqual(run('--verify-backgrounds').returncode,0)
     marker.write_bytes(b'PEM1');self.assertEqual(run('--verify-backgrounds').returncode,0)
-    for mode in ('hash','corrupt','traversal','truncated','format','slow'):
-     server.mode=mode;result=run(extra={'PE_HD_TEST_CANCEL_AT':'1'} if mode=='slow' else None)
+    for mode in ('hash','corrupt','traversal','truncated','format','slow','features','feature-type'):
+     before=server.downloads;server.mode=mode;result=run(extra={'PE_HD_TEST_CANCEL_AT':'1'} if mode=='slow' else None)
      self.assertNotEqual(result.returncode,0,(mode,result.stdout,result.stderr));self.assertEqual(pointer.read_bytes(),old,mode);self.assertEqual((installed/(KEY+'.webp')).read_bytes(),b'background material')
+     if mode in ('features','feature-type'):self.assertEqual(server.downloads,before,mode)
      self.assertFalse(list((config/'mods/upscale').glob('*.partial*')),mode)
     self.assertFalse(list(root.rglob('escape.webp')))
     (installed/(KEY+'.webp')).write_bytes(b'damaged on disk');self.assertNotEqual(run('--verify-backgrounds').returncode,0)
