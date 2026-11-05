@@ -29,7 +29,7 @@ Uninstalling the app deletes its imported images, settings and saves.
 A controller is currently required. Touch controls, Android settings/disc-missing
 prompts, save import/export, crash report export and device compatibility testing
 remain unfinished. The desktop file dialog is not an Android file picker.
-The folder import and automatic two-disc swap still need end-to-end tests.
+Automatic two-disc swap still needs an end-to-end test.
 Do not distribute this APK as a finished Android port.
 
 ## Verification so far
@@ -45,3 +45,14 @@ Debug APKs accept the native diagnostic argument array through the `arguments`
 intent extra on GameActivity. Release APKs ignore that extra. Headless debug runs
 use the offline audio clock and write `diagnostics.log` into app-private storage;
 retrieve it with `adb exec-out run-as com.khasinski.parasiteeve cat files/diagnostics.log`.
+
+Run the SAF regression on a dedicated English-language emulator with an installed
+debug APK (it uses synthetic images and stops the app when finished):
+
+```sh
+python3 tests/android_launcher.py --serial emulator-5566 --adb "$ANDROID_HOME/platform-tools/adb"
+```
+
+It exercises the system folder picker, verifies exact imported bytes, checks CUE
+discovery and confirms that a repeated import rejects duplicates without changing
+the first copy.
