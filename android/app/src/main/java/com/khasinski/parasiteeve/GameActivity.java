@@ -69,11 +69,20 @@ public class GameActivity extends SDLActivity {
     }
     @Override protected String[] getLibraries() { return new String[] { "main" }; }
     @Override protected String[] getArguments() {
-        nativeSetenv("PE_CONFIG_HOME", getFilesDir().getAbsolutePath());
-        nativeSetenv("HOME", getFilesDir().getAbsolutePath());
         // Diagnostic CLI admission is confined to development APKs. Other
         // apps must not be able to choose dump destinations in player storage.
         boolean development = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        File profile = getFilesDir();
+        String testProfile = development ? getIntent().getStringExtra("testProfile") : null;
+        if (testProfile != null) {
+            if (!testProfile.matches("[A-Za-z0-9_-]+"))
+                throw new IllegalArgumentException("Invalid diagnostic profile name");
+            profile = new File(new File(getFilesDir(), "diagnostics"), testProfile);
+            if (!profile.isDirectory() && !profile.mkdirs())
+                throw new IllegalStateException("Cannot create diagnostic profile");
+        }
+        nativeSetenv("PE_CONFIG_HOME", profile.getAbsolutePath());
+        nativeSetenv("HOME", profile.getAbsolutePath());
         String[] arguments = development ? getIntent().getStringArrayExtra("arguments") : null;
         if (arguments != null) {
             for (String argument : arguments) {

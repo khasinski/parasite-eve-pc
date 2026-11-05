@@ -29,7 +29,8 @@ Uninstalling the app deletes its imported images, settings and saves.
 A controller is currently required. Touch controls, Android settings integration,
 save import/export, crash report export and device compatibility testing
 remain unfinished. The desktop file dialog is not an Android file picker.
-Automatic two-disc swap still needs an end-to-end campaign test.
+Native save-load requests across missing discs have been tested in both directions.
+Continuous campaign and physical-device testing remain unfinished.
 Do not distribute this APK as a finished Android port.
 
 The native game runs in the app's private `:game` process. Its original `exit()`
@@ -94,4 +95,20 @@ python3 tests/android_disc_request.py --serial emulator-5566 --adb "$ANDROID_HOM
 
 This checks both identities, wrong-disc rejection and cancellation. Omit
 `--disc2` to exercise the Disc 1 success and missing/wrong Disc 2 cases with a
-single imported image. A full in-game Disc 2 transition remains unverified.
+single imported image. `--import-folder NAME` additionally imports the second
+image from `Download/NAME` through the system picker when it is not installed.
+
+For a real game transition, provide an original native 8192-byte save belonging
+to the other disc:
+
+```sh
+python3 tests/android_disc_transition.py --serial emulator-5566 --adb "$ANDROID_HOME/platform-tools/adb" --save /path/to/save --start-disc disc1.cue --supply-disc disc2.cue --required-identity 2 --out build/android-transition
+```
+
+The debug-only `--test-android-disc-dialogs` admits the real disc request callback
+in a finite headless GPU run. `testProfile` selects a fresh app-private diagnostic
+directory, so the test stages its card without replacing the player's cards.
+The original Continue/card/scene-loading code must request the absent image,
+resume after the Android picker and reach the scene token stored in the save.
+The tested routes load M273 starting with Disc 1 and M020 starting with Disc 2.
+Neither diagnostic option is accepted by release APKs.

@@ -4115,9 +4115,18 @@ int main(int argc, char **argv) {
     unsigned internal_resolution = host_options.scale;
     int resolution_argument = 0;
     int headless_argument = 0;
+#if defined(__ANDROID__) && !defined(NDEBUG)
+    int android_test_disc_dialogs = 0;
+#endif
     unsigned effect_arguments = 0;
 
     for (int arg = 1; arg < argc; ++arg) {
+#if defined(__ANDROID__) && !defined(NDEBUG)
+        if (!strcmp(argv[arg], "--test-android-disc-dialogs")) {
+            android_test_disc_dialogs = 1;
+            continue;
+        }
+#endif
         if (!strcmp(argv[arg], "--help")) {
             Host_PrintHelp(argv[0]);
             return EXIT_SUCCESS;
@@ -4425,6 +4434,16 @@ images_ready:;
             if(n>0&&(size_t)n<sizeof(host_options.user_file))Host_HdInit();
         }
     }
+#if defined(__ANDROID__) && !defined(NDEBUG)
+    if (android_test_disc_dialogs) {
+        /* Opt-in emulator testing: keep native game execution accelerated and
+         * its GPU hidden, but exercise the real missing-disc/card frontend. */
+        if (interactive || !g_BootHostVBlankLimit || !Host_InstallCardPaths(SDL_GetBasePath()))
+            goto shutdown;
+        host_images = images;
+        g_CdImageRequest = Host_RequestImage;
+    }
+#endif
     if (interactive) {
         host_images = images;
         g_CdImageRequest = Host_RequestImage;
