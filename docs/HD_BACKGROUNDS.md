@@ -159,6 +159,9 @@ non-opaque alpha explicitly opts into a refined coverage matte for opaque HD
 presentation at internal resolutions above 1x. Its native reference plane still
 owns palette matching, PS1 STP, native VRAM/readback and gameplay. Semitransparent
 primitives keep native coverage and ABR blending. Existing packs remain compatible.
+The matte can only refine pixels inside live native coverage: RGB palette
+matching cannot distinguish transparent zero from opaque black, so an HD alpha
+value must never resurrect a native-transparent pixel or a packet's rectangle.
 
 `hd-poc/pack.py --coverage-aa` traces each complete native entry before cutting
 16px tiles, simplifies long stair-step contours within half a native pixel,
