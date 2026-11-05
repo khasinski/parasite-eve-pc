@@ -31,3 +31,5 @@ Choose **Share or export** and pick the result you need:
 - **Save an editable copy** creates a complete project someone else can open and edit.
 
 The download includes all three sample files. The demo font covers the 21 custom glyphs in the sample. Choose a CJK TTF, OTF, or TTC in **Project settings** for other characters. See FONT-LICENSE.txt and FONT-SOURCE.md for the demo font's license and source.
+
+Portions of this software are copyright © 2024 The FreeType Project (www.freetype.org). All rights reserved.

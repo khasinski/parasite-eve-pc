@@ -184,3 +184,9 @@ OR OTHER DEALINGS IN THE SOFTWARE.
 Except as contained in this notice, the name of a copyright holder shall not
 be used in advertising or otherwise to promote the sale, use or other dealings
 in this Software without prior written authorization of the copyright holder.
+
+## FreeType
+
+The translation editor (`localization/editor`) compiles in FreeType 2.13.2 through the `freetype-sys` crate to rasterize translators' CJK fonts, under the FreeType License (FTL).
+Portions of this software are copyright (c) 2024 The FreeType Project (www.freetype.org).
+All rights reserved.

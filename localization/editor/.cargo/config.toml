@@ -1,0 +1,3 @@
+# A local mingw-LLVM build otherwise needs libunwind.dll beside the executable.
+[target.x86_64-pc-windows-gnullvm]
+rustflags = ["-C", "target-feature=+crt-static"]

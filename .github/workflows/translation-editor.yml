@@ -5,16 +5,10 @@ on:
   push:
     paths:
       - localization/editor/**
-      - localization/petext/**
-      - localization/pelang.py
-      - localization/extract_text.py
       - .github/workflows/translation-editor.yml
   pull_request:
     paths:
       - localization/editor/**
-      - localization/petext/**
-      - localization/pelang.py
-      - localization/extract_text.py
       - .github/workflows/translation-editor.yml
 
 permissions:
@@ -24,7 +18,7 @@ jobs:
   package:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -39,21 +33,18 @@ jobs:
             target: linux-x64
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: localization/editor/requirements-build.txt
-      - run: python -m pip install -r localization/editor/requirements-build.txt
-      - name: Install virtual display
+      - name: Update Rust
+        run: rustup update stable && rustup default stable
+      - name: Install window system packages
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb xauth
-      - name: Build and launch packaged demo
-        if: runner.os == 'Linux'
-        run: xvfb-run -a python localization/editor/build.py --out editor-dist
-      - name: Build and launch packaged demo
-        if: runner.os != 'Linux'
-        run: python localization/editor/build.py --out editor-dist
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libgl1-mesa-dev libwayland-dev libx11-dev libxcb-render0-dev libxcb-shape0-dev
+          libxcb-xfixes0-dev libxcursor-dev libxi-dev libxkbcommon-dev libxrandr-dev
+      - name: Test
+        run: cargo test --locked --manifest-path localization/editor/Cargo.toml
+      - name: Build and check packaged demo
+        run: cargo run --locked --release --manifest-path localization/editor/Cargo.toml --bin package -- --out editor-dist
       - uses: actions/upload-artifact@v4
         with:
           name: translation-editor-${{ matrix.target }}
