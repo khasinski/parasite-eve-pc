@@ -1,0 +1,55 @@
+name: Translation editor
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - localization/editor/**
+      - .github/workflows/translation-editor.yml
+  pull_request:
+    paths:
+      - localization/editor/**
+      - .github/workflows/translation-editor.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: windows-x64
+          - runner: macos-15
+            target: macos-arm64
+          - runner: macos-15-intel
+            target: macos-x64
+          - runner: ubuntu-22.04
+            target: linux-x64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update Rust
+        run: rustup update stable && rustup default stable
+      - name: Install window system packages
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          libgl1-mesa-dev libwayland-dev libx11-dev libxcb-render0-dev libxcb-shape0-dev
+          libxcb-xfixes0-dev libxcursor-dev libxi-dev libxkbcommon-dev libxrandr-dev
+      # Run from the package folder: Cargo finds its .cargo/config.toml from the working directory.
+      - name: Test
+        working-directory: localization/editor
+        run: cargo test --locked
+      - name: Build and check packaged demo
+        working-directory: localization/editor
+        run: cargo run --locked --release --bin package -- --out ../../editor-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: translation-editor-${{ matrix.target }}
+          path: editor-dist/pe-translation-editor-${{ matrix.target }}.*
+          if-no-files-found: error

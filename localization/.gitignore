@@ -2,3 +2,4 @@
 out/
 *.pelang
 __pycache__/
+editor/target/
