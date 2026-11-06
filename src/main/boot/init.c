@@ -263,6 +263,20 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
     for (unsigned i = 0; i < 4; ++i) {
         printf("%s{\"state\":%u,\"page\":%d}", i ? "," : "", g_TextboxEntries[i].state, g_TextboxEntries[i].page_id);
     }
+    /* Optional layout observations leave the default replay protocol intact. */
+    const char *layout = getenv("PE_TEST_TEXTBOX_LAYOUT");
+    if (layout && !strcmp(layout, "1")) {
+        printf("],\"dialogue_layout\":[");
+        for (unsigned i = 0; i < 4; ++i) {
+            const TextboxEntry *entry = &g_TextboxEntries[i];
+            printf("%s{\"style\":%u,\"background\":%u,\"flags\":%u,\"rect\":",
+                   i ? "," : "", entry->style, entry->background, (u32)entry->control.flags);
+            if (entry->state && entry->style && entry->style != 3)
+                printf("[%u,%u,%u,%u]", entry->x, entry->y, entry->width, entry->height);
+            else printf("null");
+            putchar('}');
+        }
+    }
     printf("],\"actors\":[");
 
     unsigned actor_index = 0;
