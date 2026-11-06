@@ -229,6 +229,12 @@ public class GameActivity extends SDLActivity {
         nativeSetenv("HOME", profile.getAbsolutePath());
         String[] arguments = development ? getIntent().getStringArrayExtra("arguments") : null;
         if (arguments != null) {
+            String server = getIntent().getStringExtra("testHdServer");
+            if (server != null) {
+                if (testProfile == null || !server.matches("https?://127\\.0\\.0\\.1:[0-9]{1,5}"))
+                    throw new IllegalArgumentException("HD test server requires an isolated profile and loopback URL");
+                nativeSetenv("PE_HD_SERVER", server);
+            }
             for (String argument : arguments) {
                 if (argument.equals("--headless") || argument.equals("--headless-gpu")) {
                     nativeSetenv("PSYZ_AUDIO_CLOCK", "video");

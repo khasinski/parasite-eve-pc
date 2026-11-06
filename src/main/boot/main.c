@@ -427,7 +427,9 @@ static int HdRequest(const char *url,HdTransfer *transfer,const char *download_i
     curl_easy_setopt(curl,CURLOPT_URL,url);curl_easy_setopt(curl,CURLOPT_USERAGENT,ua);curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,"https,http");
     curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT,10L);curl_easy_setopt(curl,CURLOPT_TIMEOUT,7200L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_LIMIT,1024L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_TIME,60L);curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
     curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,HdWrite);curl_easy_setopt(curl,CURLOPT_WRITEDATA,transfer);curl_easy_setopt(curl,CURLOPT_XFERINFOFUNCTION,HdProgress);curl_easy_setopt(curl,CURLOPT_XFERINFODATA,transfer);curl_easy_setopt(curl,CURLOPT_NOPROGRESS,0L);curl_easy_setopt(curl,CURLOPT_FAILONERROR,1L);
-    CURLcode result=curl_easy_perform(curl);long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);curl_slist_free_all(headers);curl_easy_cleanup(curl);return result==CURLE_OK&&status==200;
+    CURLcode result=curl_easy_perform(curl);long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);curl_slist_free_all(headers);curl_easy_cleanup(curl);
+    if(result!=CURLE_OK||status!=200)fprintf(stderr,"Background request failed: %s (curl %d, HTTP %ld)\n",curl_easy_strerror(result),(int)result,status);
+    return result==CURLE_OK&&status==200;
 }
 static int HdWorker(void *unused){
     (void)unused;char archive[4096]={0},staging[4096]={0},final[4096],actual[65],url[512],id[80];cJSON *catalog=NULL;host_hd.success=0;host_hd.result_activate=0;
@@ -435,6 +437,9 @@ static int HdWorker(void *unused){
     if(host_hd.verify_only){host_hd.success=HdVerify(host_hd.active);SDL_strlcpy(host_hd.result_message,host_hd.success?"Installed pack verified.":"Verification failed. Download a fresh copy.",sizeof(host_hd.result_message));goto end;}
     const char *base=SDL_getenv("PE_HD_SERVER");if(!base||!*base)base="https://pe.polanka.ovh";
     unsigned local_port=0;char trailing;int local=sscanf(base,"http://127.0.0.1:%u%c",&local_port,&trailing)==1&&local_port>0&&local_port<=65535;
+#if defined(__ANDROID__) && !defined(NDEBUG)
+    if(!local)local=sscanf(base,"https://127.0.0.1:%u%c",&local_port,&trailing)==1&&local_port>0&&local_port<=65535;
+#endif
     if(strcmp(base,"https://pe.polanka.ovh")&&!local){SDL_strlcpy(host_hd.result_message,"Invalid mod server override.",sizeof(host_hd.result_message));goto end;}
     snprintf(id,sizeof(id),"pe-%016llx-%08x",(unsigned long long)SDL_GetPerformanceCounter(),(unsigned)SDL_rand(0x7fffffff));
     snprintf(url,sizeof(url),"%s/api/mods/upscale/latest",base);HdTransfer transfer={0};
