@@ -88,11 +88,17 @@ static unsigned last_vsync_count, pad_count, kernel_count, callback_count;
 static void (*g_PsyzVsyncCb)(void);
 static Uint64 SDL_GetTicksNS(void) { return clock_us*1000; }
 static void Sdl3Common_ApplyPendingTimingReset(void) {}
-static bool periodic_stalls;
+static bool periodic_stalls, exercise_submit_clock;
+static void reset_submit(void);
+static void SubmitFrame(void);
 static Uint64 pending_present_work_us;
 static void PlatformBackend_Present(void) {
     frame_presented=true;
     clock_us+=pending_present_work_us;pending_present_work_us=0;
+    if(exercise_submit_clock) {
+        clock_us+=(gpu_stats.total_frames%2)?4000:1000;
+        reset_submit();SubmitFrame();
+    }
 }
 static void PollEvents(void) {}
 static void Sdl3Audio_VBlank(bool pal) { (void)pal; }
@@ -287,6 +293,13 @@ int main(void) {
     clock_run(60,PSYZ_VSYNC_AUTO,5400);
     check_submit_state();
     check_submit_spacing();
+    exercise_submit_clock=true;periodic_stalls=false;
+    /* The isolated spacing case resets virtual time; rebase its next wait. */
+    last_vsync_count=WallVblankCount()+vblank_clock_offset;
+    clock_run(60,PSYZ_VSYNC_AUTO,5400);
+    clock_run(59.94,PSYZ_VSYNC_AUTO,5400);
+    clock_run(120,PSYZ_VSYNC_ON,5400);
+    clock_run(144,PSYZ_VSYNC_AUTO,5400);
     puts("VSync queue pacing: early driver return, refresh changes, late frames, fast-forward, minimized and limitless passed");
 }
 '''
