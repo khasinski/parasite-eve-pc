@@ -2722,7 +2722,7 @@ static int original_icon_packets(PeDisc *disc,PeDiscFile *executable)
     return valid;
 }
 
-/* Compare actual headless GPU output at every original logo VSync. */
+/* Compare native framebuffer pixels and display mode at every logo VSync. */
 static u16 title_expected_pixels[320*480],title_actual_pixels[320*480];
 static const u8 *title_logo_pixels,*title_logo_palette;
 static unsigned title_logo_frame,title_logo_failures;
@@ -2732,6 +2732,14 @@ static void title_logo_observe(void)
     if(frame>=480) {++title_logo_failures;return;}
     unsigned shade=frame<32?frame*4:frame<392?128:frame<424?(424-frame)*4:0;
     unsigned page=frame&1;
+    DISPENV displayed;
+    GetDispEnv(&displayed);
+    if(displayed.isrgb24 || displayed.disp.w!=320 || displayed.disp.h!=240) {
+        if(!title_logo_failures)
+            fprintf(stderr,"Logo frame %u has display mode RGB24=%u size=%dx%d\n",
+                    frame,displayed.isrgb24,displayed.disp.w,displayed.disp.h);
+        ++title_logo_failures;
+    }
     for(unsigned y=0;y<64;++y) for(unsigned x=0;x<256;++x) {
         unsigned packed=title_logo_pixels[y*128+x/2];
         unsigned index=(packed>>((x&1)*4))&15;
@@ -2922,7 +2930,7 @@ static int original_title_screen(PeDisc *disc)
     CdRom_BindImage(NULL,NULL);g_GameState.flags=flags;g_PeImageBaseLba=base;
     g_PeImageMountFlags=modes;g_GameState.scene_audio=audio;
     if(valid) puts("Original title screen: all 480 logo frames match full framebuffer pixels, both RGB24 backgrounds and 1048 input/node/fade/render frames match USA MIPS headlessly");
-    else fprintf(stderr,"Original title screen failed: %u frames, %u pixel mismatches\n",title_logo_frame,title_logo_failures);
+    else fprintf(stderr,"Original title screen failed: %u frames, %u pixel/display mismatches\n",title_logo_frame,title_logo_failures);
     return valid;
 }
 
