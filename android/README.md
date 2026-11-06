@@ -32,11 +32,27 @@ hides the touch gamepad; disconnecting it restores touch. The Settings button
 opens the existing native settings menu. Touch input is cleared on pause, focus
 loss and controller changes.
 
-Save import/export, crash report export, complete Android settings integration
+Save import/export and complete Android settings integration
 and device compatibility testing remain unfinished. The desktop file dialog is not an Android file picker.
 Native save-load requests across missing discs have been tested in both directions.
 Continuous campaign and physical-device testing remain unfinished.
 Do not distribute this APK as a finished Android port.
+
+Use **Export diagnostic report** in the launcher to save a ZIP through Android's
+system file picker. It includes the game log, current native log, up to five
+recent crash reports and basic app/device version information. Disc images,
+settings and memory cards are excluded. Export runs in the background and keeps
+the original logs. Reports larger than 64 MiB fail with an explicit error.
+
+Test export and cancellation on a dedicated headless emulator:
+
+```sh
+python3 tests/android_launcher.py --report-only --serial emulator-5566 --adb "$ANDROID_HOME/platform-tools/adb"
+```
+
+This creates seven uniquely named synthetic reports, exports through the real
+document picker, checks ZIP integrity and exact bytes for the newest five,
+verifies the file whitelist and source preservation, then removes its fixtures.
 
 The native game runs in the app's private `:game` process. Its original `exit()`
 and diagnostic frame-limit exits therefore leave the launcher alive. A normally

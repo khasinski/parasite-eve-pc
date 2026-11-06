@@ -12,22 +12,30 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Locale;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /** Copies user-selected disc images into private storage; never requests broad storage access. */
 public class LauncherActivity extends Activity {
     private static final int PICK_FOLDER = 1;
+    private static final int EXPORT_REPORT = 2;
     private TextView status;
     private ProgressBar progress;
     private Button importButton;
     private Button playButton;
+    private Button reportButton;
     private static final AtomicBoolean importing = new AtomicBoolean();
+    private static final AtomicBoolean reporting = new AtomicBoolean();
+    private static volatile String reportResult;
     private static WeakReference<LauncherActivity> current = new WeakReference<>(null);
     private static volatile String importStatus = "Importing images… Keep the app open.";
     private static volatile String importError;
@@ -35,7 +43,15 @@ public class LauncherActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         current = new WeakReference<>(this);
-        if (status != null) { refresh(); showImportError(); }
+        if (status != null) { refresh(); showImportError(); showReportResult(); }
+    }
+
+    private void showReportResult() {
+        if (reporting.get() || reportResult == null) return;
+        String message = reportResult;
+        reportResult = null;
+        new AlertDialog.Builder(this).setTitle("Diagnostic report")
+            .setMessage(message).setPositiveButton("OK", null).show();
     }
 
     private void showImportError() {
@@ -88,6 +104,19 @@ public class LauncherActivity extends Activity {
         playButton.setText(requiredDisc == 0 ? "Play" : "Choose image");
         playButton.setOnClickListener(v -> chooseDisc());
         layout.addView(playButton);
+        if (requiredDisc == 0) {
+            reportButton = new Button(this);
+            reportButton.setText("Export diagnostic report");
+            reportButton.setOnClickListener(v -> {
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("application/zip");
+                intent.putExtra(Intent.EXTRA_TITLE, "parasite-eve-report.zip");
+                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                startActivityForResult(intent, EXPORT_REPORT);
+            });
+            layout.addView(reportButton);
+        }
         setContentView(layout);
         refresh();
     }
@@ -101,14 +130,15 @@ public class LauncherActivity extends Activity {
     }
 
     private void refresh() {
-        boolean busy = importing.get();
+        boolean busy = importing.get() || reporting.get();
         importButton.setEnabled(!busy);
+        if (reportButton != null) reportButton.setEnabled(!busy);
         progress.setVisibility(busy ? android.view.View.VISIBLE : android.view.View.GONE);
         setRequestedOrientation(busy ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
                                     : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         int count = cues().length;
         playButton.setEnabled(!busy && count != 0);
-        if (busy) { status.setText(importStatus); return; }
+        if (busy) { status.setText(reporting.get() ? "Exporting diagnostic report…" : importStatus); return; }
         status.setText(requiredDisc != 0
             ? "Parasite Eve (USA) Disc " + requiredDisc + " required. Import its CUE/BIN folder, then choose its CUE image. Your game is waiting."
             : count == 0
@@ -138,13 +168,84 @@ public class LauncherActivity extends Activity {
         startActivity(intent);
     }
 
+    private void exportReport(Uri destination) {
+        if (importing.get() || !reporting.compareAndSet(false, true)) { refresh(); return; }
+        reportResult = null;
+        refresh();
+        new Thread(() -> {
+            String result;
+            try {
+                File root = getFilesDir();
+                File logs = new File(root, ".local/state/parasite-eve/logs");
+                ArrayList<File> files = new ArrayList<>();
+                File diagnostic = new File(root, "diagnostics.log");
+                if (diagnostic.isFile() && diagnostic.length() != 0) files.add(diagnostic);
+                File currentLog = new File(logs, "parasite-eve-log.txt");
+                if (currentLog.isFile() && currentLog.length() != 0) files.add(currentLog);
+                File[] crashes = logs.listFiles(f -> f.isFile() && f.length() != 0
+                    && f.getName().startsWith("crash-") && f.getName().endsWith(".txt"));
+                if (crashes != null) {
+                    Arrays.sort(crashes, (left, right) -> {
+                        int order = Long.compare(right.lastModified(), left.lastModified());
+                        return order != 0 ? order : left.getName().compareTo(right.getName());
+                    });
+                    for (int i = 0; i < Math.min(5, crashes.length); ++i) files.add(crashes[i]);
+                }
+                if (files.isEmpty()) throw new java.io.IOException("No game logs are available yet. Start the game first.");
+                try (OutputStream stream = getContentResolver().openOutputStream(destination, "wt")) {
+                    if (stream == null) throw new java.io.IOException("Cannot open the selected destination.");
+                    try (ZipOutputStream zip = new ZipOutputStream(stream)) {
+                        zip.putNextEntry(new ZipEntry("system.txt"));
+                        String info = "Parasite Eve " + getPackageManager().getPackageInfo(getPackageName(), 0).versionName
+                            + "\nAndroid API " + android.os.Build.VERSION.SDK_INT
+                            + "\nDevice " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL + "\n";
+                        zip.write(info.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        zip.closeEntry();
+                        byte[] buffer = new byte[65536];
+                        long total = 0;
+                        for (File file : files) {
+                            zip.putNextEntry(new ZipEntry(file.equals(diagnostic)
+                                ? "diagnostics.log" : "logs/" + file.getName()));
+                            try (InputStream input = new FileInputStream(file)) {
+                                int size;
+                                while ((size = input.read(buffer)) != -1) {
+                                    total += size;
+                                    if (total > 64L * 1024 * 1024)
+                                        throw new java.io.IOException("The logs exceed the 64 MiB report limit. The exported file is incomplete.");
+                                    zip.write(buffer, 0, size);
+                                }
+                            }
+                            zip.closeEntry();
+                        }
+                    }
+                }
+                result = "Report saved. It contains game logs and up to five recent crash reports. Disc images and saves are not included.";
+            } catch (Exception error) {
+                result = "Export failed: " + error.getMessage();
+            }
+            reportResult = result;
+            reporting.set(false);
+            runOnUiThread(() -> {
+                LauncherActivity activity = current.get();
+                if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+                activity.refresh();
+                activity.showReportResult();
+            });
+        }, "pe-report-export").start();
+    }
+
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == EXPORT_REPORT) {
+            if (result == RESULT_OK && data != null && data.getData() != null)
+                exportReport(data.getData());
+            return;
+        }
         if (request != PICK_FOLDER || result != RESULT_OK || data == null || data.getData() == null) return;
         Uri tree = data.getData();
         // A picker can return after another launcher was opened. Serialize the
         // entire transaction, including staging cleanup and BIN/CUE publication.
-        if (!importing.compareAndSet(false, true)) { refresh(); return; }
+        if (reporting.get() || !importing.compareAndSet(false, true)) { refresh(); return; }
         importError = null;
         importStatus = "Importing images… Keep the app open.";
         refresh();
