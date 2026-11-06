@@ -1165,6 +1165,12 @@ void Save_StartWriteSlot(int port, int arg_slot) {
     path = g_MemCardFilePath;
     if (Save_BuildCardFile(path) < 0) {
         state->sequence = sequence;
+        /* Serialization refused before I/O began. Use the existing failure
+         * flow so the progress widget cannot keep waiting for a write. */
+        MemCard_AbortActiveOperation(state);
+        Menu_CreateTwoLineDialog(0x3D, 0x3F);
+        state->pendingError = 0;
+        state->managerState = 12;
         return;
     }
 
