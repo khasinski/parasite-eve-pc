@@ -6,11 +6,11 @@ def pack(version,kind='good'):
  payload=b'background material'*(16384 if kind=='slow' else 1);ref=b'lossless reference'
  filename='../escape.webp' if kind=='traversal' else KEY+'.webp'
  underlay=b'PEW1\0\0\0\0'
- manifest=dict(version=version,atlases=[dict(file=filename,atlas_sha256=hashlib.sha256(payload).hexdigest(),reference_file=KEY+'.ref.png',reference_sha256=hashlib.sha256(ref).hexdigest())],extras=[dict(file=KEY+'-under.bin',sha256=hashlib.sha256(underlay).hexdigest()),dict(file=KEY+'-matte.bin',sha256=hashlib.sha256(b'PEM1').hexdigest())])
+ manifest=dict(version=version,atlases=[dict(file=filename,atlas_sha256=hashlib.sha256(payload).hexdigest(),reference_file=KEY+'.ref.png',reference_sha256=hashlib.sha256(ref).hexdigest())],extras=[dict(file=KEY+'-under.bin',sha256=hashlib.sha256(underlay).hexdigest()),dict(file=KEY+'-matte.bin',sha256=hashlib.sha256(b'PEM2\x01').hexdigest())])
  data=io.BytesIO()
  with zipfile.ZipFile(data,'w',compression=zipfile.ZIP_STORED) as z:
   def write(name,data):z.writestr(zipfile.ZipInfo(name,(2026,1,1,0,0,0)),data)
-  write('manifest.json',json.dumps(manifest));write(filename,b'corrupt' if kind=='corrupt' else payload);write(KEY+'.ref.png',ref);write(KEY+'-under.bin',underlay);write(KEY+'-matte.bin',b'PEM1')
+  write('manifest.json',json.dumps(manifest));write(filename,b'corrupt' if kind=='corrupt' else payload);write(KEY+'.ref.png',ref);write(KEY+'-under.bin',underlay);write(KEY+'-matte.bin',b'PEM2\x01')
  return data.getvalue()
 class Handler(http.server.BaseHTTPRequestHandler):
  def log_message(self,*a):pass
@@ -22,7 +22,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
    m=dict(version=version,url=f'http://127.0.0.1:{self.server.server_port}/upscale-v{version}.zip',sha256='0'*64 if mode=='hash' else hashlib.sha256(blob).hexdigest(),size=len(blob),format='unsupported' if mode=='format' else 'webp-reference-png')
    if mode=='features':m['required_features']=['future-feature-v1']
    elif mode=='feature-type':m['required_features']='invalid'
-   else:m['required_features']=['underlay-v1','static-matte-v1']
+   else:m['required_features']=['underlay-v1','static-matte-v1','selective-matte-v1']
    blob=json.dumps(m).encode()
   else:
    self.server.downloads+=1
@@ -73,15 +73,15 @@ class Installer(unittest.TestCase):
    try:
     result=run();self.assertEqual(result.returncode,0,result.stdout+result.stderr);self.assertTrue(pointer.is_file(),f'Installer wrote to the wrong Unicode path: {result.stdout} / {result.stderr}; files: {list(root.rglob(chr(42)))}');old=pointer.read_bytes();installed=pathlib.Path(json.loads(old)['directory']);self.assertEqual((installed/(KEY+'.webp')).read_bytes(),b'background material')
     self.assertIn('X-PE-Version',server.client_headers);self.assertIn('X-PE-Build',server.client_headers);self.assertIn('ParasiteEve/',server.client_headers['User-Agent'])
-    for headers in (server.catalog_headers,server.client_headers):self.assertEqual(headers.get('X-PE-HD-Features'),'underlay-v1,static-matte-v1')
+    for headers in (server.catalog_headers,server.client_headers):self.assertEqual(headers.get('X-PE-HD-Features'),'underlay-v1,static-matte-v1,selective-matte-v1')
     self.assertEqual(server.downloads,1);result=run();self.assertEqual(result.returncode,0,result.stdout);self.assertEqual(server.downloads,1);self.assertEqual(pointer.read_bytes(),old)
     self.assertEqual(run('--verify-backgrounds').returncode,0)
     under=installed/(KEY+'-under.bin');self.assertEqual(under.read_bytes(),b'PEW1\0\0\0\0')
     under.write_bytes(b'bad underlay');self.assertNotEqual(run('--verify-backgrounds').returncode,0)
     under.write_bytes(b'PEW1\0\0\0\0');self.assertEqual(run('--verify-backgrounds').returncode,0)
-    marker=installed/(KEY+'-matte.bin');self.assertEqual(marker.read_bytes(),b'PEM1')
+    marker=installed/(KEY+'-matte.bin');self.assertEqual(marker.read_bytes(),b'PEM2\x01')
     marker.write_bytes(b'bad!');self.assertNotEqual(run('--verify-backgrounds').returncode,0)
-    marker.write_bytes(b'PEM1');self.assertEqual(run('--verify-backgrounds').returncode,0)
+    marker.write_bytes(b'PEM2\x01');self.assertEqual(run('--verify-backgrounds').returncode,0)
     for mode in ('hash','corrupt','traversal','truncated','format','slow','features','feature-type'):
      before=server.downloads;server.mode=mode;result=run(extra={'PE_HD_TEST_CANCEL_AT':'1'} if mode=='slow' else None)
      self.assertNotEqual(result.returncode,0,(mode,result.stdout,result.stderr));self.assertEqual(pointer.read_bytes(),old,mode);self.assertEqual((installed/(KEY+'.webp')).read_bytes(),b'background material')

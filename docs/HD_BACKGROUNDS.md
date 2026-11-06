@@ -132,7 +132,7 @@ version/directory is in `mods/upscale/active.json` beside those preferences.
 a window. `PE_CONFIG_HOME` selects an isolated profile for headless checks;
 `PE_HD_SERVER=http://127.0.0.1:PORT` is a localhost-only test override.
 
-The game advertises `X-PE-HD-Features: underlay-v1,static-matte-v1` when requesting
+The game advertises `X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1` when requesting
 the catalog and archive. The server keeps versioned catalogs so older games
 without these capabilities continue receiving a compatible pack. The client
 rejects unknown or malformed `required_features` before downloading the ZIP,
@@ -198,6 +198,17 @@ underlay beneath its edges. The pack author must verify that the layer has no
 animation or palette-controlled visibility. Never mark animated or script-hidden
 layers this way. Missing, invalid or overlong metadata keeps strict native
 coverage; existing unmarked packs keep their current appearance.
+
+For a local correction, `PEM2` followed by a cell-selection bitmap opts in only
+the reviewed static cells. The bitmap has exactly `ceil(columns * rows / 8)`
+bytes; bit 0 selects material cell 0, with row-order numbering. Reference-plane
+cells are not counted. Empty, truncated, extended or out-of-range masks fall
+back as a whole. Unselected cells keep their own alpha policy, including legacy
+feathering for fully opaque material. Packs using this format must require
+`selective-matte-v1`; older games then continue receiving a compatible catalog.
+Both formats require review of the backdrop in every relevant animation pose.
+Fractional-alpha pixels retain their authored straight RGB; colour extrusion
+for filtering touches only fully transparent material pixels.
 
 Static mattes do not affect native VRAM, 1x output or PS1 semitransparent draws.
 Palette mismatch still falls back to native color. PNG and WebP use the same

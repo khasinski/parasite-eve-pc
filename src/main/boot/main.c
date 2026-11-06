@@ -340,7 +340,7 @@ static int HdProgress(void *opaque,curl_off_t total,curl_off_t now,curl_off_t up
 static int HdRequest(const char *url,HdTransfer *transfer,const char *download_id){
     CURL *curl=curl_easy_init();if(!curl)return 0;char ua[160],version[100],platform[100],id[128],build[100];snprintf(ua,sizeof(ua),"ParasiteEve/%s (%s; WebP; build %s)",PE_VERSION,SDL_GetPlatform(),PE_BUILD_ID);snprintf(version,sizeof(version),"X-PE-Version: %s",PE_VERSION);snprintf(platform,sizeof(platform),"X-PE-Platform: %s",SDL_GetPlatform());snprintf(id,sizeof(id),"X-PE-Download-ID: %s",download_id);
     snprintf(build,sizeof(build),"X-PE-Build: %s",PE_BUILD_ID);
-    struct curl_slist *headers=NULL;headers=curl_slist_append(headers,version);headers=curl_slist_append(headers,platform);headers=curl_slist_append(headers,id);headers=curl_slist_append(headers,build);headers=curl_slist_append(headers,"X-PE-HD-Features: underlay-v1,static-matte-v1");
+    struct curl_slist *headers=NULL;headers=curl_slist_append(headers,version);headers=curl_slist_append(headers,platform);headers=curl_slist_append(headers,id);headers=curl_slist_append(headers,build);headers=curl_slist_append(headers,"X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1");
     curl_easy_setopt(curl,CURLOPT_URL,url);curl_easy_setopt(curl,CURLOPT_USERAGENT,ua);curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,"https,http");
     curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT,10L);curl_easy_setopt(curl,CURLOPT_TIMEOUT,7200L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_LIMIT,1024L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_TIME,60L);curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
     curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,HdWrite);curl_easy_setopt(curl,CURLOPT_WRITEDATA,transfer);curl_easy_setopt(curl,CURLOPT_XFERINFOFUNCTION,HdProgress);curl_easy_setopt(curl,CURLOPT_XFERINFODATA,transfer);curl_easy_setopt(curl,CURLOPT_NOPROGRESS,0L);curl_easy_setopt(curl,CURLOPT_FAILONERROR,1L);
@@ -360,7 +360,7 @@ static int HdWorker(void *unused){
     const cJSON *features=cJSON_GetObjectItemCaseSensitive(catalog,"required_features");
     if(features&&!cJSON_IsArray(features)){SDL_strlcpy(host_hd.result_message,"Invalid background pack requirements. Previous pack kept.",sizeof(host_hd.result_message));goto end;}
     const cJSON *feature=NULL;cJSON_ArrayForEach(feature,features){
-        if(!cJSON_IsString(feature)||(strcmp(feature->valuestring,"underlay-v1")&&strcmp(feature->valuestring,"static-matte-v1"))){
+        if(!cJSON_IsString(feature)||(strcmp(feature->valuestring,"underlay-v1")&&strcmp(feature->valuestring,"static-matte-v1")&&strcmp(feature->valuestring,"selective-matte-v1"))){
             SDL_strlcpy(host_hd.result_message,"This pack needs a newer game build. Previous pack kept.",sizeof(host_hd.result_message));goto end;
         }
     }
