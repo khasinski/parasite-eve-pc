@@ -30,7 +30,7 @@ tar = "0.4"
 tempfile = "3"
 time = { version = "0.3", features = ["local-offset"] }
 unicode-normalization = "0.1"
-zip = { version = "2", default-features = false, features = ["deflate", "time"] }
+zip = { version = "9", default-features = false, features = ["deflate", "time"] }
 
 [profile.release]
 opt-level = 3
