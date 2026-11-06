@@ -9,8 +9,23 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import struct
 import sys
 import tempfile
+
+
+def synthetic_underlay(geometry):
+    """A solid diagnostic backdrop, with no reconstructed game artwork."""
+    key = 0xa55156a55156a551
+    cells = [(x, y) for y in range(0, 240, 16) for x in range(0, 320, 16)]
+    width = 16*68
+    half = ((len(cells)+15)//16)*68
+    pixels = b'\0'*(width*half*3)+bytes((137, 11, 241))*(width*half)
+    header = struct.pack('<2sIHHI', b'BM', 54+len(pixels), 0, 0, 54)
+    header += struct.pack('<IiiHHIIiiII', 40, width, half*2, 1, 24, 0, len(pixels), 0, 0, 0, 0)
+    descriptor = struct.pack('<4sI', b'PEW1', 1)+struct.pack('<IIQiiii', 0, len(cells), key, 0, 320, 0, 240)
+    descriptor += b''.join(struct.pack('<hh', x, y) for x, y in cells)
+    return {f'{key:016x}.bmp': header+pixels, geometry+'-under.bin': descriptor}
 
 
 def main(executable):
@@ -42,11 +57,26 @@ def main(executable):
     geometry=next(r['geometry_key'] for r in manifest['widescreen'] if r['room']=='M002' and r['group']==0)
     (broken/(geometry+'-wide.bin')).write_bytes(b'PEW1\x01\x00\x00\x00')
 
+    # A diagnostic solid underlay tests the actual room-sidecar path without
+    # shipping reconstructed artwork. It must never affect native state/VRAM.
+    under=output/'underlay-pack';under.mkdir()
+    for source in baseline.iterdir():
+        try: os.link(source,under/source.name)
+        except OSError: shutil.copyfile(source,under/source.name)
+    for name, payload in synthetic_underlay(geometry).items():
+        (under/name).write_bytes(payload)
+
+    broken_under=output/'incomplete-underlay-pack';broken_under.mkdir()
+    for source in baseline.iterdir():
+        try: os.link(source,broken_under/source.name)
+        except OSError: shutil.copyfile(source,broken_under/source.name)
+    (broken_under/(geometry+'-under.bin')).write_bytes(b'PEW1\x01\x00\x00\x00')
+
     def run(case):
         wide, extended = case
         directory=output/f'{wide}-{extended}';directory.mkdir()
         env=dict(os.environ,SDL_AUDIODRIVER='dummy',PSYZ_AUDIO_CLOCK='video',
-                 PE_CONFIG_HOME=str(directory/'config'),PE_HD_BACKGROUNDS=str((baseline,pack,broken)[extended]))
+                 PE_CONFIG_HOME=str(directory/'config'),PE_HD_BACKGROUNDS=str((baseline,pack,broken,under,broken_under)[extended]))
         args=[str(Path(executable).resolve()),'--disc',str(Path(disc).resolve()),'--headless-gpu',
               '--internal-resolution','4','--widescreen',str(wide),'--frame-limit','25100',
               '--control-at','25000','--dump-frame',str(directory/'frame.ppm'),
@@ -76,8 +106,11 @@ def main(executable):
         return case,(states,frames)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results=dict(pool.map(run,[(0,0),(0,1),(1,0),(1,1),(1,2)]))
+        results=dict(pool.map(run,[(0,0),(0,1),(1,0),(1,1),(1,2),(0,3),(1,3),(0,4)]))
     for wide in (0,1):
+        native,backdrop=results[wide,0],results[wide,3]
+        assert native[0]==backdrop[0],f'Underlay changed game state, native VRAM or PCM: {output}'
+        assert native[1]!=backdrop[1],f'Underlay sidecar had no presentation effect in aspect {wide}: {output}'
         a,b=results[wide,0],results[wide,1]
         assert a[0]==b[0],f'HD side tiles changed game state, native VRAM or PCM: {output}'
         for original,enhanced in zip(a[1],b[1]):
@@ -94,9 +127,10 @@ def main(executable):
                     lit+=max(pixels[at:at+3])>12
             assert lit>(height-80)*margin//2,f'Side material is absent/stale: {output}'
     assert results[1,0]==results[1,2],f'Incomplete sidecar did not fall back exactly: {output}'
+    assert results[0,0]==results[0,4],f'Incomplete underlay did not fall back exactly: {output}'
     (output/'proof.json').write_text(json.dumps(dict(passed=True,checkpoints=2,
-        exact_4_3=True,native_vram_pcm_and_state_equal=True,visible_side_material=True,incomplete_sidecar_exact_fallback=True),indent=2)+'\n')
-    print(f'HD widescreen: 4:3 exact; state/VRAM/PCM exact; persistent side artwork: {output}')
+        exact_4_3=True,native_vram_pcm_and_state_equal=True,visible_side_material=True,visible_underlay_both_aspects=True,incomplete_sidecar_exact_fallback=True),indent=2)+'\n')
+    print(f'HD widescreen: legacy 4:3 exact; underlays visible in both aspects; state/VRAM/PCM exact: {output}')
     return 0
 
 

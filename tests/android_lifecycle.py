@@ -19,6 +19,8 @@ p.add_argument('--serial', required=True)
 p.add_argument('--adb', default='adb')
 p.add_argument('--disc', default='disc1.cue', help='Imported CUE basename')
 p.add_argument('--tls-only', action='store_true', help='Check TLS rejection and preservation of an installed fixture')
+p.add_argument('--hd-render', type=Path, help='Check native HD underlays in both aspects; save evidence in a new directory')
+p.add_argument('--hd-pack', type=Path, help='Reviewed HD material pack required by --hd-render')
 p.add_argument('--native-replay', nargs=argparse.REMAINDER,
                help='Run remaining native test executable arguments on Android')
 a = p.parse_args()
@@ -156,12 +158,13 @@ def download_tls():
         adb('shell', 'run-as', pkg, 'rm', '-rf', relative, check=False)
 
 
-def native_replay(options):
+def native_replay(options, profile_files=None, max_seconds=None):
     """Adapter for the existing C replay harness; preserve its assertions."""
     # Accept only finite, prerecorded headless tests. Do not expose arbitrary
     # native commands or interactive control through this batch adapter.
-    values = {'--disc', '--frame-limit', '--dump-vram', '--dump-frame',
-              '--pad-at', '--internal-resolution'}
+    values = {'--disc', '--frame-limit', '--dump-vram', '--dump-frame', '--dump-audio',
+              '--pad-at', '--internal-resolution', '--widescreen'}
+    names = {'--dump-vram': 'frame.vram', '--dump-frame': 'frame.ppm', '--dump-audio': 'audio.pcm'}
     flags = {'--headless', '--headless-gpu'}
     profile = 'native-replay-'+uuid.uuid4().hex
     relative = 'files/diagnostics/'+profile
@@ -191,11 +194,11 @@ def native_replay(options):
             if limit is not None or not value.isdecimal() or not 0 < int(value) <= 1000000:
                 raise ValueError('Expected one finite frame limit, at most 1000000')
             limit = int(value)
-        elif option in ('--dump-vram', '--dump-frame'):
+        elif option in names:
             if option in outputs:
                 raise ValueError('Duplicate output: '+option)
             outputs[option] = Path(value)
-            value = absolute+('/frame.vram' if option == '--dump-vram' else '/frame.ppm')
+            value = absolute+'/'+names[option]
         if ',' in value or '\n' in value:
             raise ValueError('Intent array values cannot contain commas or newlines')
         remote += [option, value]
@@ -206,13 +209,31 @@ def native_replay(options):
     remote += ['--headless-gpu', '--test-android-disc-dialogs']
     try:
         adb('shell', 'run-as', pkg, 'test', '-f', shlex.quote('files/discs/'+a.disc))
+        if profile_files is not None:
+            import io
+            import tarfile
+            data = io.BytesIO()
+            with tarfile.open(fileobj=data, mode='w') as archive:
+                for name, payload in profile_files(absolute).items():
+                    assert not name.startswith('/') and '..' not in Path(name).parts
+                    entry = tarfile.TarInfo(name)
+                    entry.size = len(payload)
+                    entry.mode = 0o644
+                    archive.addfile(entry, io.BytesIO(payload))
+            adb('shell', 'run-as', pkg, 'mkdir', '-p', relative)
+            subprocess.run([a.adb, '-s', a.serial, 'shell', '-T', 'run-as', pkg,
+                            'tar', '-xf', '-', '-C', relative], input=data.getvalue(),
+                           check=True, capture_output=True, timeout=120)
         adb('shell', 'am', 'start', '-S', '-W', '-f', '0x10008000',
             '-n', pkg+'/.LauncherActivity')
         launcher = pid(pkg)
         assert launcher, 'Launcher did not start'
-        adb('shell', 'am', 'start', '-W', '-n', pkg+'/.GameActivity',
-            '--es', 'testProfile', profile, '--esa', 'arguments', shlex.quote(','.join(remote)))
-        deadline = time.monotonic()+max(60, limit/100)
+        start = ['shell', 'am', 'start', '-W', '-n', pkg+'/.GameActivity',
+                 '--es', 'testProfile', profile, '--esa', 'arguments', shlex.quote(','.join(remote))]
+        if profile_files is not None:
+            start += ['--ez', 'testHdBackgrounds', 'true']
+        adb(*start)
+        deadline = time.monotonic()+(max_seconds if max_seconds is not None else max(60, limit/100))
         while pid(pkg+':game'):
             assert pid(pkg) == launcher, 'Native replay killed the launcher'
             if time.monotonic() >= deadline:
@@ -224,12 +245,14 @@ def native_replay(options):
                   if line.startswith('{"event":"frame_limit"')]
         assert len(states) == 1 and states[0]['vblanks'] == limit, 'Replay did not reach its frame limit'
         for option, destination in outputs.items():
-            name = 'frame.vram' if option == '--dump-vram' else 'frame.ppm'
+            name = names[option]
             payload = adb('exec-out', 'run-as', pkg, 'cat', relative+'/'+name)
             if option == '--dump-vram':
                 assert len(payload) == 1024*512*2, 'Incomplete native VRAM'
-            else:
+            elif option == '--dump-frame':
                 assert payload.startswith(b'P6\n'), 'Missing native framebuffer'
+            else:
+                assert payload and len(payload) % 4 == 0, 'Incomplete stereo PCM'
             destination.write_bytes(payload)
         # The desktop C harness checks the original phone-created save here.
         card = relative+'/memory-cards/bu00/BASLUS-006620000000A'
@@ -248,9 +271,81 @@ def native_replay(options):
             directory.mkdir(exist_ok=True)
             (directory/'BASLUS-006620000000A').write_bytes(result.stdout)
         print(log, end='')
+        return states[0]
     finally:
         adb('shell', 'am', 'force-stop', pkg, check=False)
         adb('shell', 'run-as', pkg, 'rm', '-rf', relative, check=False)
+
+
+def hd_render(output):
+    """Original fresh-game route; only the display-only backdrop differs."""
+    from hd_widescreen import synthetic_underlay
+    output = output.resolve()
+    output.mkdir()  # Preserve earlier evidence rather than overwrite it.
+    pack = a.hd_pack.resolve()
+    assert json.loads((pack/'manifest.json').read_text()).get('atlases'), 'HD material pack has no atlases'
+    # A native opaque fallback hides a correctly drawn underlay completely.
+    # Use the same reviewed material masks as the desktop integration test;
+    # compare identical materials with/without the synthetic backdrop.
+    materials = {'mods/upscale/fixture/'+source.name: source.read_bytes()
+                 for source in pack.iterdir() if source.is_file()
+                 and not source.name.endswith(('-wide.bin', '-under.bin'))}
+    geometry = '6a8f3dab535c7a8e'  # US Disc 1, first theatre exterior (M002).
+    timeline = [(10000, 8), (10010, 0), (11000, 16), (11010, 0), (11500, 16384), (11510, 0)]
+    for tick in (17000, 17600, 18200, 18800, 19400, 20000, 20600, 21200, 21800):
+        timeline.extend(((tick, 16384), (tick+10, 0)))
+    for tick, mask in ((23000, 8), (23600, 8), (24200, 16384), (24800, 16384)):
+        timeline.extend(((tick, mask), (tick+10, 0)))
+    hashes = {}
+    differences = {}
+    for wide in (0, 1):
+        states = []
+        for under in (False, True):
+            directory = output/f'{wide}-{int(under)}'
+            directory.mkdir()
+            def fixture(_absolute):
+                # Headless replays deliberately ignore saved graphics options.
+                # The debug-only intent opts into this fixed profile-local path.
+                files = dict(materials)
+                if under:
+                    files.update({'mods/upscale/fixture/'+k: v for k, v in synthetic_underlay(geometry).items()})
+                return files
+            options = ['--disc', a.disc, '--headless-gpu', '--frame-limit', '25000',
+                       '--internal-resolution', '4', '--widescreen', str(wide),
+                       '--dump-frame', str(directory/'frame.ppm'),
+                       '--dump-vram', str(directory/'vram.bin'), '--dump-audio', str(directory/'audio.pcm')]
+            for tick, mask in timeline:
+                options += ['--pad-at', f'{tick}:{mask}']
+            # Software Vulkan at 4x can be slower than the ordinary 1x replay.
+            state = native_replay(options, fixture, max_seconds=900)
+            assert state['scene'] == 0xa8000148 and state['display']['rgb24'] == 0
+            (directory/'state.json').write_text(json.dumps(state, indent=2)+'\n')
+            states.append(state)
+            hashes[wide, under] = {name: hashlib.sha256((directory/name).read_bytes()).hexdigest()
+                                   for name in ('frame.ppm', 'vram.bin', 'audio.pcm')}
+        assert states[0] == states[1], 'Underlay changed native game state'
+        for name in ('vram.bin', 'audio.pcm'):
+            assert hashes[wide, False][name] == hashes[wide, True][name], 'Underlay changed '+name
+        assert hashes[wide, False]['frame.ppm'] != hashes[wide, True]['frame.ppm'], 'Underlay was not rendered'
+        left = (output/f'{wide}-0/frame.ppm').read_bytes().split(b'\n', 3)
+        right = (output/f'{wide}-1/frame.ppm').read_bytes().split(b'\n', 3)
+        assert left[:3] == right[:3] and len(left[3]) == len(right[3])
+        differences[wide] = sum(left[3][i:i+3] != right[3][i:i+3] for i in range(0, len(left[3]), 3))
+        assert differences[wide] > 128, 'Underlay changed too few display pixels'
+    proof = {'native_state_vram_pcm_equal': True, 'visible_underlay_both_aspects': True,
+             'changed_pixels': differences, 'hashes': {f'{w}-{int(u)}': h for (w, u), h in hashes.items()}}
+    (output/'proof.json').write_text(json.dumps(proof, indent=2)+'\n')
+    print('PASS: Android HD underlays visible in 4:3 and 16:9; native state, VRAM and PCM unchanged')
+
+
+if a.hd_render is not None:
+    if a.tls_only or a.native_replay is not None: p.error('--hd-render runs separately')
+    if a.hd_pack is None: p.error('--hd-render requires --hd-pack with reviewed material masks')
+    hd_render(a.hd_render)
+    sys.exit(0)
+
+if a.hd_pack is not None:
+    p.error('--hd-pack requires --hd-render')
 
 
 if a.tls_only:

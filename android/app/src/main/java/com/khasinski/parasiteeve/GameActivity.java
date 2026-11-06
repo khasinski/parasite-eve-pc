@@ -229,6 +229,13 @@ public class GameActivity extends SDLActivity {
         nativeSetenv("HOME", profile.getAbsolutePath());
         String[] arguments = development ? getIntent().getStringArrayExtra("arguments") : null;
         if (arguments != null) {
+            if (getIntent().getBooleanExtra("testHdBackgrounds", false)) {
+                boolean headless = Arrays.asList(arguments).contains("--headless")
+                        || Arrays.asList(arguments).contains("--headless-gpu");
+                if (testProfile == null || !headless || !Arrays.asList(arguments).contains("--frame-limit"))
+                    throw new IllegalArgumentException("HD fixture requires a finite headless diagnostic profile");
+                nativeSetenv("PE_HD_BACKGROUNDS", new File(profile, "mods/upscale/fixture").getAbsolutePath());
+            }
             String server = getIntent().getStringExtra("testHdServer");
             if (server != null) {
                 if (testProfile == null || !server.matches("https?://127\\.0\\.0\\.1:[0-9]{1,5}"))
