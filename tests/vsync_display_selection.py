@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Compile the actual PsyZ VSync policy against controlled monitor identities.
+"""Compile actual PsyZ VSync policy and clocks against controlled displays.
 
 SDL's dummy driver cannot emulate two independently refreshed displays or an
 early-returning swapchain. Control display queries and time; execute the actual
-policy and frame-wait bodies without opening any windows.
+policy, frame-wait and SDK VSync bodies without opening any windows.
+Long runs retain the 59.94 Hz clock across display changes and late presents.
 """
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 
-source = Path(sys.argv[1]).read_text()
-def production_function(signature):
+source_path = Path(sys.argv[1])
+source = source_path.read_text()
+def production_function(signature, source=source):
     start = source.index(signature)
     brace = source.index('{', start)
     end, depth = brace + 1, 1
@@ -23,6 +25,11 @@ def production_function(signature):
 policy = production_function('static void ConfigureVSync(double target_fps)')
 wait = production_function('static void WaitForNextFrame(void)')
 elapsed = production_function('static double GetElapsedMicroseconds(Uint64 start, Uint64 end)')
+clock = production_function('static Uint32 WallVblankCount(void)')
+present = production_function('int Psyz_VideoVSync(int mode)')
+skip = production_function('static bool SkipPresent(void)')
+api = (source_path.parent.parent/'psyz/libapi.c').read_text()
+vsync = production_function('int VSync(int mode)', api)
 stubs = r'''
 #include <assert.h>
 #include <stdbool.h>
@@ -50,8 +57,10 @@ static bool PlatformBackend_SetDriverVsync(bool enabled) {
     requested_vsync=enabled;return enabled && driver_accepts;
 }
 typedef uint64_t Uint64;
+typedef uint32_t Uint32;
 static Uint64 clock_us, perf_frequency=1000000, last_frame_time, finish_time;
 static double drift_compensation, driver_frame_time_us, seed_drift;
+static double target_frame_rate=59.94;
 static double target_frame_time_us=1000000.0/59.94;
 static unsigned game_speed=1;
 static bool frame_presented;
@@ -62,6 +71,29 @@ static struct {
 } gpu_stats;
 static Uint64 SDL_GetPerformanceCounter(void) { return ++clock_us; }
 static void SDL_DelayNS(Uint64 ns) { clock_us+=ns/1000; }
+'''
+clock_stubs = r'''
+static Uint32 last_vsync_us, vblank_clock_offset, host_clock_pause_count;
+static unsigned host_clock_pause_depth;
+static Uint32 limitless_vblank_base;
+static Uint64 limitless_frame_base, last_present_time;
+static bool present_skip, is_pal;
+static unsigned last_vsync_count, pad_count, kernel_count, callback_count;
+static void (*g_PsyzVsyncCb)(void);
+static Uint64 SDL_GetTicksNS(void) { return clock_us*1000; }
+static void Sdl3Common_ApplyPendingTimingReset(void) {}
+static bool periodic_stalls;
+static Uint64 pending_present_work_us;
+static void PlatformBackend_Present(void) {
+    frame_presented=true;
+    clock_us+=pending_present_work_us;pending_present_work_us=0;
+}
+static void PollEvents(void) {}
+static void Sdl3Audio_VBlank(bool pal) { (void)pal; }
+static void Psyz_KernelPoll(void) {}
+static void ReadPadsOnVsync(void) { ++pad_count; }
+static void Psyz_KernelVBlank(void) { ++kernel_count; }
+static void counted_callback(void) { ++callback_count; }
 '''
 cases = r'''
 static void pace(double refresh, unsigned speed, bool presented, int mode,
@@ -76,6 +108,39 @@ static void pace(double refresh, unsigned speed, bool presented, int mode,
            refresh,speed,presented,mode,work_us,interval);
     assert(interval>=expected_us-2 && interval<expected_us+10);
     assert(target_frame_time_us==1000000.0/59.94);
+}
+
+static void clock_run(double refresh, int mode, unsigned frames) {
+    modes[2].refresh_rate=refresh;vsync_mode=mode;game_speed=1;
+    ConfigureVSync(59.94);
+    Uint32 start=WallVblankCount();
+    unsigned start_callbacks=callback_count;
+    Uint64 start_us=clock_us;
+    unsigned long long start_presents=gpu_stats.total_frames;
+    for(unsigned i=0;i<frames;++i) {
+        unsigned periodic_origin=last_vsync_count;
+        unsigned queries=(unsigned)VSync(-1);
+        (void)VSync(1);
+        assert(last_vsync_count==periodic_origin);
+        assert((unsigned)VSync(-1)==queries);
+        /* A late frame must not become the origin for every later wait. */
+        if(periodic_stalls && i%100==0)
+            pending_present_work_us=(Uint64)(target_frame_time_us*2.2);
+        VSync(2);
+    }
+    unsigned blanks=WallVblankCount()-start;
+    assert(callback_count-start_callbacks==blanks);
+    assert(pad_count==callback_count && kernel_count==callback_count);
+    assert(target_frame_rate==59.94);
+    printf("long-run blanks=%u expected=%u stalled=%d\n",
+           blanks,frames*2,periodic_stalls);
+    fflush(stdout);
+    assert(blanks>=frames*2 && blanks<=frames*2+2);
+    double elapsed=(double)(clock_us-start_us);
+    double nominal=frames*2*1000000.0/59.94;
+    assert(fabs(elapsed-nominal)<2*1000000.0/59.94);
+    printf("clock refresh=%.5f mode=%d calls=%u blanks=%u presents=%llu elapsed_us=%.0f nominal_us=%.0f\n",
+           refresh,mode,frames,blanks,gpu_stats.total_frames-start_presents,elapsed,nominal);
 }
 
 int main(void) {
@@ -122,12 +187,22 @@ int main(void) {
     seed_drift=-1000;
     pace(60,1,true,PSYZ_VSYNC_OFF,4000,1000000.0/59.94-1000);
     seed_drift=0;
+    /* Three virtual minutes per display, then live display changes without
+     * resetting the original VSync(n) schedule or callback counters. */
+    clock_us=last_frame_time=finish_time=0;last_vsync_count=0;
+    drift_compensation=0;g_PsyzVsyncCb=counted_callback;
+    clock_run(60,PSYZ_VSYNC_AUTO,5400);
+    clock_run(59.94,PSYZ_VSYNC_AUTO,5400);
+    clock_run(120,PSYZ_VSYNC_ON,5400);
+    clock_run(144,PSYZ_VSYNC_AUTO,5400);
+    periodic_stalls=true;
+    clock_run(60,PSYZ_VSYNC_AUTO,5400);
     puts("VSync queue pacing: early driver return, refresh changes, late frames, fast-forward, minimized and limitless passed");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='pe-vsync-displays-') as tmp:
     path = Path(tmp)
-    (path/'policy.c').write_text(stubs+elapsed+policy+wait+cases)
+    (path/'policy.c').write_text(stubs+elapsed+policy+wait+clock_stubs+clock+skip+present+vsync+cases)
     binary = path/'policy-test'
     if sys.platform == 'win32':
         binary = binary.with_suffix('.exe')
