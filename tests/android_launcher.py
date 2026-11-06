@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Headless Android SAF import regression; requires an installed debug APK.
+"""Headless Android SAF import/export regressions; requires an installed debug APK.
 
 Uses only a tiny synthetic CUE/BIN fixture, never a copyrighted disc. Leaves the
 app stopped and removes only its uniquely named test files on completion.
@@ -17,6 +17,7 @@ import zipfile
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
 parser.add_argument('--adb', default='adb')
+parser.add_argument('--saves-only', action='store_true', help='Test save ZIP export through the system picker')
 parser.add_argument('--report-only', action='store_true', help='Test diagnostic ZIP export through the system picker')
 args = parser.parse_args()
 pkg = 'com.khasinski.parasiteeve'
@@ -122,6 +123,70 @@ def report_test():
         adb('shell', 'am', 'force-stop', pkg)
         adb('shell', 'run-as', pkg, 'rm', '-f', *(logs+name for name in fixtures+[ignored]))
         adb('shell', 'rm', '-f', output)
+
+
+def saves_test():
+    token = 'pe-save-test-'+uuid.uuid4().hex
+    output = '/sdcard/Download/'+token+'.zip'
+    cards = 'files/memory-cards/'
+    paths = ['bu00/BASLUS-006620000000A', 'bu10/BASLUS-006620000001B', 'bu00/'+token+'.bin']
+    data = bytes((i * 37 + 11) & 255 for i in range(8192))
+    owned = []
+    try:
+        adb('shell', 'am', 'force-stop', pkg)
+        for path in paths:
+            exists = subprocess.run([args.adb, '-s', args.serial, 'shell', 'run-as', pkg,
+                                     'test', '-e', cards+path]).returncode == 0
+            if exists:
+                raise RuntimeError('Refusing to replace existing save fixture: '+path)
+            adb('shell', 'run-as', pkg, 'mkdir', '-p', cards+path.split('/')[0])
+            subprocess.run([args.adb, '-s', args.serial, 'shell', '-T',
+                            'run-as '+pkg+' sh -c "cat > '+cards+path+'"'],
+                           input=data, check=True, timeout=30)
+            owned.append(path)
+        adb('shell', 'am', 'start', '-S', '-W', '-f', '0x10008000', '-n', pkg+'/.LauncherActivity')
+        click('Export saves')
+        assert any(n.get('class') == 'android.widget.EditText' for n in nodes())
+        for _ in range(3):
+            adb('shell', 'input', 'keyevent', '4')
+            if any(n.get('text','').casefold() == 'export saves' and n.get('enabled') == 'true' for n in nodes()):
+                break
+        else:
+            raise AssertionError('Cancel did not restore save export')
+        click('Export saves')
+        current = nodes()
+        crumbs = [n.get('text') for n in current if n.get('resource-id','').endswith('/breadcrumb_text')]
+        if not crumbs or crumbs[-1] != 'Downloads':
+            click('Show roots')
+            click('Downloads')
+        field = next(n for n in nodes() if n.get('class') == 'android.widget.EditText')
+        click(field.get('text'))
+        adb('shell', 'input', 'keyevent', '123')
+        adb('shell', 'input', 'keyevent', *(['67'] * (len(field.get('text'))+1)))
+        adb('shell', 'input', 'text', token+'.zip')
+        click('Save')
+        assert any('Saves exported.' in n.get('text','') for n in nodes()), 'Export did not succeed'
+        click('OK')
+        with zipfile.ZipFile(io.BytesIO(adb('exec-out', 'cat', output))) as archive:
+            assert archive.testzip() is None
+            assert set(paths[:2]) <= set(archive.namelist())
+            assert all(re.fullmatch(r'bu[01]0/BASLUS-00662000000[01][A-O]', n)
+                       for n in archive.namelist()), archive.namelist()
+            for path in paths[:2]:
+                assert archive.read(path) == data
+        for path in owned:
+            assert adb('exec-out', 'run-as', pkg, 'cat', cards+path) == data
+        print('PASS: SAF save export, both cards, exact 8192-byte payloads, ZIP CRC, cancellation, whitelist and source preservation')
+    finally:
+        adb('shell', 'am', 'force-stop', pkg)
+        for path in owned:
+            adb('shell', 'run-as', pkg, 'rm', '-f', cards+path)
+        adb('shell', 'rm', '-f', output)
+
+
+if args.saves_only:
+    saves_test()
+    sys.exit(0)
 
 
 if args.report_only:

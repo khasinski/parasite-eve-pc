@@ -32,11 +32,27 @@ hides the touch gamepad; disconnecting it restores touch. The Settings button
 opens the existing native settings menu. Touch input is cleared on pause, focus
 loss and controller changes.
 
-Save import/export and complete Android settings integration
+Save import and complete Android settings integration
 and device compatibility testing remain unfinished. The desktop file dialog is not an Android file picker.
 Native save-load requests across missing discs have been tested in both directions.
 Continuous campaign and physical-device testing remain unfinished.
 Do not distribute this APK as a finished Android port.
+
+Use **Export saves** in the launcher to back up both memory cards through the
+system file picker. The ZIP contains the original 8192-byte PsyZ save files in
+`bu00/` and `bu10/` directories. Their bytes are unchanged and can be opened in
+the desktop save editor or copied into the desktop port's `memory-cards` folder.
+This exports individual saves, not a combined MCR card image. Disc images,
+settings and diagnostic logs are excluded; source saves are kept.
+
+On a dedicated headless emulator, verify real picker export, both cards, exact
+bytes, ZIP integrity, cancellation and source preservation with:
+
+```sh
+python3 tests/android_launcher.py --saves-only --serial emulator-5566 --adb "$ANDROID_HOME/platform-tools/adb"
+```
+
+The test refuses to overwrite existing saves with its fixture names.
 
 Use **Export diagnostic report** in the launcher to save a ZIP through Android's
 system file picker. It includes the game log, current native log, up to five
