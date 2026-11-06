@@ -157,7 +157,7 @@ def download_tls():
         adb('shell', 'run-as', pkg, 'rm', '-rf', relative, check=False)
 
 
-def native_replay(options, profile_files=None):
+def native_replay(options, profile_files=None, max_seconds=None):
     """Adapter for the existing C replay harness; preserve its assertions."""
     # Accept only finite, prerecorded headless tests. Do not expose arbitrary
     # native commands or interactive control through this batch adapter.
@@ -229,7 +229,7 @@ def native_replay(options, profile_files=None):
         assert launcher, 'Launcher did not start'
         adb('shell', 'am', 'start', '-W', '-n', pkg+'/.GameActivity',
             '--es', 'testProfile', profile, '--esa', 'arguments', shlex.quote(','.join(remote)))
-        deadline = time.monotonic()+max(60, limit/100)
+        deadline = time.monotonic()+(max_seconds if max_seconds is not None else max(60, limit/100))
         while pid(pkg+':game'):
             assert pid(pkg) == launcher, 'Native replay killed the launcher'
             if time.monotonic() >= deadline:
@@ -307,7 +307,8 @@ def hd_render(output):
                        '--dump-vram', str(directory/'vram.bin'), '--dump-audio', str(directory/'audio.pcm')]
             for tick, mask in timeline:
                 options += ['--pad-at', f'{tick}:{mask}']
-            state = native_replay(options, fixture)
+            # Software Vulkan at 4x can be slower than the ordinary 1x replay.
+            state = native_replay(options, fixture, max_seconds=900)
             assert state['scene'] == 0xa8000148 and state['display']['rgb24'] == 0
             (directory/'state.json').write_text(json.dumps(state, indent=2)+'\n')
             states.append(state)
