@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: |
           (cd localization/editor && cargo run --locked --bin test_roundtrip -- ../../editor-native-demo)
-          clang -std=c11 -Wall -Wextra -Werror -Imods/pe_lang tests/pe_mod_lang_test.c mods/pe_lang/pe_lang_pack.c -o editor-pack-test.exe
+          clang -std=c11 -Wall -Wextra -Werror -D_CRT_SECURE_NO_WARNINGS -Imods/pe_lang tests/pe_mod_lang_test.c mods/pe_lang/pe_lang_pack.c -o editor-pack-test.exe
           ./editor-pack-test.exe
           ./editor-pack-test.exe --editor-demo editor-native-demo/opera-demo.pelang
       - name: Build and check packaged demo
