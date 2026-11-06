@@ -5,14 +5,19 @@ Uses only a tiny synthetic CUE/BIN fixture, never a copyrighted disc. Leaves the
 app stopped and removes only its uniquely named test files on completion.
 """
 import argparse
+import io
 import re
 import subprocess
+import sys
 import time
+import uuid
 import xml.etree.ElementTree as ET
+import zipfile
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
 parser.add_argument('--adb', default='adb')
+parser.add_argument('--report-only', action='store_true', help='Test diagnostic ZIP export through the system picker')
 args = parser.parse_args()
 pkg = 'com.khasinski.parasiteeve'
 folder = 'pe-saf-regression'
@@ -32,7 +37,7 @@ def click(text):
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
         for node in nodes():
-            if node.get('text', '').casefold() == text.casefold() and (node.get('enabled') == 'true' or node.get('resource-id', '').endswith('/breadcrumb_text')):
+            if text.casefold() in (node.get('text', '').casefold(), node.get('content-desc', '').casefold()) and (node.get('enabled') == 'true' or node.get('resource-id', '').endswith('/breadcrumb_text')):
                 x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
                 adb('shell', 'input', 'tap', str((x1+x2)//2), str((y1+y2)//2))
                 return
@@ -56,6 +61,72 @@ def pick():
         click(folder)
     click('Use this folder')
     click('Allow')
+
+
+def report_test():
+    token = 'pe-report-test-'+uuid.uuid4().hex
+    logs = 'files/.local/state/parasite-eve/logs/'
+    fixtures = [f'crash-{token}-{i}.txt' for i in range(7)]
+    ignored = token+'.bin'
+    output = '/sdcard/Download/'+token+'.zip'
+    try:
+        adb('shell', 'am', 'force-stop', pkg)
+        adb('shell', 'run-as', pkg, 'mkdir', '-p', logs)
+        for i, name in enumerate(fixtures+[ignored]):
+            subprocess.run([args.adb, '-s', args.serial, 'shell', '-T',
+                            'run-as '+pkg+' sh -c "cat > '+logs+name+'"'],
+                           input=f'diagnostic fixture {i}\n'.encode(), check=True, timeout=30)
+            # Future timestamps keep the seven owned reports ahead of older
+            # emulator reports without modifying any existing game file.
+            adb('shell', 'run-as', pkg, 'touch', '-t', f'20300101000{i}.00', logs+name)
+        adb('shell', 'am', 'start', '-S', '-W', '-f', '0x10008000', '-n', pkg+'/.LauncherActivity')
+        launcher = adb('shell', 'pidof', pkg).strip()
+        click('Export diagnostic report')
+        assert any(n.get('class') == 'android.widget.EditText' for n in nodes()), 'System save picker did not open'
+        for _ in range(3):
+            adb('shell', 'input', 'keyevent', '4')
+            if any(n.get('text','').casefold() == 'export diagnostic report'
+                   and n.get('enabled') == 'true' for n in nodes()):
+                break
+        else:
+            raise AssertionError('Cancel did not restore launcher')
+        click('Export diagnostic report')
+        current = nodes()
+        crumbs = [n.get('text') for n in current if n.get('resource-id','').endswith('/breadcrumb_text')]
+        if not crumbs or crumbs[-1] != 'Downloads':
+            click('Show roots')
+            click('Downloads')
+        current = nodes()
+        field = next(n for n in current if n.get('class') == 'android.widget.EditText')
+        click(field.get('text'))
+        adb('shell', 'input', 'keyevent', '123')
+        adb('shell', 'input', 'keyevent', *(['67'] * (len(field.get('text'))+1)))
+        adb('shell', 'input', 'text', token+'.zip')
+        click('Save')
+        click('OK')
+        assert adb('shell', 'pidof', pkg).strip() == launcher, 'Export restarted the launcher'
+        payload = adb('exec-out', 'cat', output)
+        with zipfile.ZipFile(io.BytesIO(payload)) as report:
+            assert report.testzip() is None
+            names = report.namelist()
+            expected = {'logs/'+name for name in fixtures[2:]}
+            assert set(name for name in names if name.startswith('logs/crash-')) == expected, names
+            for i in range(2,7):
+                assert report.read('logs/'+fixtures[i]) == f'diagnostic fixture {i}\n'.encode()
+            assert set(names) <= expected | {'system.txt', 'diagnostics.log', 'logs/parasite-eve-log.txt'}, names
+            assert b'Android API' in report.read('system.txt')
+        for i, name in enumerate(fixtures+[ignored]):
+            assert adb('exec-out', 'run-as', pkg, 'cat', logs+name) == f'diagnostic fixture {i}\n'.encode()
+        print('PASS: real document-picker ZIP export, cancellation, five newest reports, exact bytes, whitelist and source preservation')
+    finally:
+        adb('shell', 'am', 'force-stop', pkg)
+        adb('shell', 'run-as', pkg, 'rm', '-f', *(logs+name for name in fixtures+[ignored]))
+        adb('shell', 'rm', '-f', output)
+
+
+if args.report_only:
+    report_test()
+    sys.exit(0)
 
 
 cue = ('FILE "' + basename + '.bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n').encode()
