@@ -48,9 +48,20 @@ def screens(raw: bytes, name_width: int = NAME_WIDTH):
 
 
 def box_limit(source: dict):
-    """(width, lines) to wrap a page to: the narrowest of the boxes scripts open it in, else of
-    the boxes its bank opens when that set is complete; None when no box is known."""
-    boxes = source.get('boxes') or (source.get('boxes_possible') if source.get('boxes_complete') else None) or []
+    """Wrap to boxes proven for this page, or a complete bank with uniform bounds.
+
+    Different bank boxes are alternatives, not evidence this particular page
+    uses their smallest rectangle. Keep unproven pages as authored and warn.
+    """
+    boxes = source.get('boxes') or []
+    if not boxes:
+        if not source.get('boxes_complete'):
+            return None
+        possible = source.get('boxes_possible') or []
+        limits = [bounds(box) for box in possible]
+        if not limits or None in limits or len(set(limits)) != 1:
+            return None
+        return limits[0]
     limits = [b for b in map(bounds, boxes) if b]
     if not limits:
         return None

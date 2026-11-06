@@ -250,6 +250,51 @@ class PelangTest(unittest.TestCase):
         source["boxes_possible"] = []
         self.assertIn("unknown", pelang.check_row("dlg/M001/003", "Hi", source, {})[2][0])
 
+    def test_unbound_page_is_not_repaginated_for_an_unrelated_bank_box(self):
+        # A bank also has a one-line status box; this page may use its normal
+        # dialogue box. Do not turn four ordinary lines into four button waits.
+        text = "Wayne: La cle de la reserve...{br} Si tu la retrouves,{br} prends ce qu'il te faut.{br} Tu peux te servir."
+        source = {"text": "Wayne: Storage key.", "boxes": [],
+                  "boxes_possible": ["default", "styled 150,160,134,22"],
+                  "boxes_complete": True}
+        raw, errors, warnings = pelang.check_row("dlg/M044/040", text, source, {})
+        self.assertFalse(errors)
+        self.assertEqual(raw, gt.encode(text, extended=True))
+        self.assertNotIn(b"\xf8", raw)
+        self.assertTrue(any("no script ties" in w for w in warnings))
+        self.assertFalse(any("wrapped" in w for w in warnings))
+
+    def test_unbound_page_can_wrap_when_all_proven_bank_boxes_have_one_size(self):
+        text = " ".join(["word"] * 40)
+        source = {"text": "Hi", "boxes": [], "boxes_possible": ["default"],
+                  "boxes_complete": True}
+        raw, errors, warnings = pelang.check_row("dlg/M001/003", text, source, {})
+        self.assertFalse(errors)
+        self.assertIn(b"\xf7", raw)
+        self.assertTrue(any("wrapped" in w for w in warnings))
+        # An unknown rectangle or an incomplete scan cannot prove a wrap size.
+        for possible, complete in ((["default", "styled (rectangle computed)"], True),
+                                   (["default"], False)):
+            source.update(boxes_possible=possible, boxes_complete=complete)
+            raw, errors, _ = pelang.check_row("dlg/M001/003", text, source, {})
+            self.assertFalse(errors)
+            self.assertEqual(raw, gt.encode(text, extended=True))
+
+    def test_french_alarm_comment_has_explicit_breaks_for_all_known_bank_boxes(self):
+        root = Path(__file__).resolve().parent.parent
+        with (root / "translations/fr.csv").open(encoding="utf-8", newline="") as f:
+            text = next(r["translation"] for r in csv.DictReader(f)
+                        if r["key"] == "dlg/M192/058")
+        strings, _, _ = pelang.srcman.load(root / "data/manifest.json")
+        source = strings["dlg/M192/058"]
+        raw, errors, _ = pelang.check_row("dlg/M192/058", text, source, {})
+        self.assertFalse(errors)
+        self.assertEqual(raw, gt.encode(text, extended=True))
+        self.assertEqual(raw.count(b"\xfa"), 1)
+        self.assertEqual(len(layout.screens(raw)), 1)
+        for box in source["boxes_possible"]:
+            self.assertTrue(layout.fits(layout.screens(raw), box), box)
+
     def test_overflowing_pages_are_wrapped_at_spaces(self):
         source = {"text": "Bye.", "raw": gt.encode("Hi{br} there").hex(" "), "boxes": ["default"]}
         long = " ".join(["word"] * 30)                                   # one 30-word line
