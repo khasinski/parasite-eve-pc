@@ -24,6 +24,7 @@ def production_function(signature, source=source):
 
 policy = production_function('static void ConfigureVSync(double target_fps)')
 wait = production_function('static void WaitForNextFrame(void)')
+present_pace = production_function('static void PaceDriverPresent(void)')
 elapsed = production_function('static double GetElapsedMicroseconds(Uint64 start, Uint64 end)')
 clock = production_function('static Uint32 WallVblankCount(void)')
 present = production_function('int Psyz_VideoVSync(int mode)')
@@ -33,6 +34,7 @@ vsync = production_function('int VSync(int mode)', api)
 gpu = source_path.with_name('sdl3_gpu.c').read_text()
 submit = production_function('static bool SubmitCmd(void) {', gpu)
 submit_frame = production_function('static void SubmitFrame(void) {', gpu)
+submit_wait = production_function('static bool SubmitCmdAndWait(void) {', gpu)
 stubs = r'''
 #include <assert.h>
 #include <stdbool.h>
@@ -63,6 +65,8 @@ typedef uint64_t Uint64;
 typedef uint32_t Uint32;
 static Uint64 clock_us, perf_frequency=1000000, last_frame_time, finish_time;
 static double drift_compensation, driver_frame_time_us, seed_drift;
+static Uint64 last_driver_submit;
+static bool driver_submit_valid, driver_present_pending;
 static double target_frame_rate=59.94;
 static double target_frame_time_us=1000000.0/59.94;
 static unsigned game_speed=1;
@@ -85,11 +89,17 @@ static unsigned last_vsync_count, pad_count, kernel_count, callback_count;
 static void (*g_PsyzVsyncCb)(void);
 static Uint64 SDL_GetTicksNS(void) { return clock_us*1000; }
 static void Sdl3Common_ApplyPendingTimingReset(void) {}
-static bool periodic_stalls;
+static bool periodic_stalls, exercise_submit_clock;
+static void reset_submit(void);
+static void SubmitFrame(void);
 static Uint64 pending_present_work_us;
 static void PlatformBackend_Present(void) {
     frame_presented=true;
     clock_us+=pending_present_work_us;pending_present_work_us=0;
+    if(exercise_submit_clock) {
+        clock_us+=(gpu_stats.total_frames%2)?4000:1000;
+        reset_submit();SubmitFrame();
+    }
 }
 static void PollEvents(void) {}
 static void Sdl3Audio_VBlank(bool pal) { (void)pal; }
@@ -102,20 +112,21 @@ submit_stubs = r'''
 typedef struct { int id; } SDL_GPUCommandBuffer;
 typedef struct { int id; } SDL_GPUFence;
 static SDL_GPUCommandBuffer command, *pending_cmd, *quarantined_cmd;
-static SDL_GPUFence fence, *frame_fences[2];
+static SDL_GPUFence fence, *frame_fences[2], *quarantined_fence;
 #define MAX_FRAMES_IN_FLIGHT 2
 static unsigned frame_fence_idx, submit_calls, commit_count, released_fences;
 static bool gpu_failed, swapchain_ok, present_commit_pending;
 static bool submit_ok, wait_ok, fence_ok;
+static Uint64 actual_submit;
 static void *device;
 static bool GpuFail(const char *stage, bool uncertain) {
     (void)stage;assert(uncertain);gpu_failed=true;return false;
 }
 static bool SDL_SubmitGPUCommandBuffer(SDL_GPUCommandBuffer *cmd) {
-    assert(cmd==&command);++submit_calls;return submit_ok;
+    assert(cmd==&command);++submit_calls;actual_submit=clock_us;return submit_ok;
 }
 static SDL_GPUFence *SDL_SubmitGPUCommandBufferAndAcquireFence(SDL_GPUCommandBuffer *cmd) {
-    assert(cmd==&command);++submit_calls;return fence_ok?&fence:NULL;
+    assert(cmd==&command);++submit_calls;actual_submit=clock_us;return fence_ok?&fence:NULL;
 }
 static bool SDL_WaitForGPUFences(void *dev, bool all, SDL_GPUFence **f, int count) {
     (void)dev;assert(all && count==1 && *f==&fence);return wait_ok;
@@ -128,21 +139,57 @@ static void RecordPresentedCommit(void) {
 }
 static void reset_submit(void) {
     pending_cmd=&command;quarantined_cmd=NULL;gpu_failed=false;
-    swapchain_ok=frame_presented=present_commit_pending=true;
+    swapchain_ok=frame_presented=present_commit_pending=driver_present_pending=true;
     frame_fence_idx=submit_calls=commit_count=released_fences=0;
     frame_fences[0]=frame_fences[1]=NULL;submit_ok=wait_ok=fence_ok=true;
 }
 '''
 submit_cases = r'''
+static void check_submit_spacing(void) {
+    modes[2].refresh_rate=60;vsync_mode=PSYZ_VSYNC_AUTO;game_speed=1;
+    ConfigureVSync(59.94);clock_us=last_frame_time=finish_time=1000000;
+    Uint64 previous=0;
+    double minimum=1e9;
+    for(unsigned i=0;i<30;++i) {
+        clock_us+=(i%2)?4000:1000;
+        reset_submit();SubmitFrame();
+        assert(!driver_present_pending);
+        if(i) {
+            double delta=(double)(actual_submit-previous);
+            if(delta<minimum)minimum=delta;
+            assert(delta>=driver_frame_time_us);
+        }
+        previous=actual_submit;WaitForNextFrame();
+    }
+    /* The synchronous fence path can also contain an acquired window. */
+    ConfigureVSync(59.94);reset_submit();assert(SubmitCmdAndWait());
+    previous=actual_submit;clock_us+=1000;
+    reset_submit();assert(SubmitCmdAndWait());
+    assert((double)(actual_submit-previous)>=driver_frame_time_us);
+    assert(!driver_present_pending && released_fences==1);
+    Uint64 last=last_driver_submit,start=clock_us;
+    reset_submit();driver_present_pending=false;
+    swapchain_ok=frame_presented=false;SubmitFrame();
+    assert(clock_us==start && last_driver_submit==last);
+    game_speed=2;start=clock_us;reset_submit();SubmitFrame();
+    assert(clock_us==start && !driver_submit_valid);
+    game_speed=1;ConfigureVSync(59.94);
+    assert(!driver_submit_valid);
+    start=clock_us;reset_submit();SubmitFrame();
+    assert(clock_us==start+1); /* first submit only records its timestamp */
+    vsync_mode=PSYZ_VSYNC_LIMITLESS;start=clock_us;
+    reset_submit();SubmitFrame();assert(clock_us==start && !driver_submit_valid);
+    printf("GPU submissions: alternating CPU work minimum %.0f us; offscreen, fast-forward, reset and limitless passed\n",minimum);
+}
 static void check_submit_state(void) {
     reset_submit();SubmitFrame();
     assert(submit_calls==1 && commit_count==1 && !pending_cmd && !gpu_failed && frame_presented && !present_commit_pending);
     reset_submit();submit_ok=false;SubmitFrame();
     assert(submit_calls==1 && !commit_count && !pending_cmd && quarantined_cmd==&command && gpu_failed && !present_commit_pending);
     assert(!frame_presented && "A failed GPU submit must not count as a presented frame");
-    reset_submit();swapchain_ok=frame_presented=present_commit_pending=false;SubmitFrame();
+    reset_submit();swapchain_ok=frame_presented=present_commit_pending=driver_present_pending=false;SubmitFrame();
     assert(submit_calls==1 && !commit_count && !gpu_failed && frame_fences[0]==&fence && frame_fence_idx==1 && !frame_presented);
-    reset_submit();swapchain_ok=frame_presented=present_commit_pending=false;
+    reset_submit();swapchain_ok=frame_presented=present_commit_pending=driver_present_pending=false;
     frame_fences[0]=&fence;wait_ok=false;SubmitFrame();
     assert(!submit_calls && !released_fences && gpu_failed && pending_cmd==&command && frame_fences[0]==&fence);
     reset_submit();gpu_failed=true;SubmitFrame();assert(!submit_calls && pending_cmd==&command);
@@ -252,13 +299,21 @@ int main(void) {
     periodic_stalls=true;
     clock_run(60,PSYZ_VSYNC_AUTO,5400);
     check_submit_state();
+    check_submit_spacing();
+    exercise_submit_clock=true;periodic_stalls=false;
+    /* The isolated spacing case resets virtual time; rebase its next wait. */
+    last_vsync_count=WallVblankCount()+vblank_clock_offset;
+    clock_run(60,PSYZ_VSYNC_AUTO,5400);
+    clock_run(59.94,PSYZ_VSYNC_AUTO,5400);
+    clock_run(120,PSYZ_VSYNC_ON,5400);
+    clock_run(144,PSYZ_VSYNC_AUTO,5400);
     puts("VSync queue pacing: early driver return, refresh changes, late frames, fast-forward, minimized and limitless passed");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='pe-vsync-displays-') as tmp:
     path = Path(tmp)
-    (path/'policy.c').write_text(stubs+elapsed+policy+wait+clock_stubs+clock+skip+present+vsync+
-                               submit_stubs+submit+submit_frame+submit_cases+cases)
+    (path/'policy.c').write_text(stubs+elapsed+policy+present_pace+wait+clock_stubs+clock+skip+present+vsync+
+                               submit_stubs+submit+submit_frame+submit_wait+submit_cases+cases)
     binary = path/'policy-test'
     if sys.platform == 'win32':
         binary = binary.with_suffix('.exe')
