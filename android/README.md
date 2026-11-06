@@ -152,3 +152,40 @@ The original Continue/card/scene-loading code must request the absent image,
 resume after the Android picker and reach the scene token stored in the save.
 The tested routes load M273 starting with Disc 1 and M020 starting with Disc 2.
 Neither diagnostic option is accepted by release APKs.
+
+## Original native replay tests
+
+The desktop C replay harness can also drive the installed debug APK. Its input
+schedule, state assertions, exact VRAM comparison and phone-save checks remain
+the same. The adapter uses a fresh Android diagnostic profile and copies its
+outputs into the harness's temporary directory; it never stages the player's
+cards. Use a dedicated headless emulator with `disc1.cue` already imported.
+
+Create a local executable adapter, for example `build/android-native-replay`:
+
+```sh
+#!/bin/sh
+exec python3 "$PE_ANDROID_REPLAY_DRIVER" --adb "${ANDROID_ADB:-adb}" \
+  --serial "$ANDROID_SERIAL" --disc disc1.cue --native-replay "$@"
+```
+
+Then run a built native test harness from the repository root:
+
+```sh
+chmod +x build/android-native-replay
+export PE_ANDROID_REPLAY_DRIVER="$PWD/tests/android_lifecycle.py"
+export ANDROID_SERIAL=emulator-5566
+export PE_TEST_DISC="/path/to/Parasite Eve (Disc 1).cue"
+build/test-original-actor-animation --native-m022 "$PWD/build/android-native-replay"
+```
+
+`PE_TEST_DISC` is required by the C harness; Android reads the imported image
+instead. The adapter accepts only finite prerecorded headless runs. It waits for
+the native process to retire, transfers diagnostics and generated outputs, then
+removes its private profile. A failed run exits unsuccessfully; the desktop
+assertions are never replaced with Android-specific expected values.
+
+This route has completed all 200,826 VBlanks through Carnegie Hall on an API 35
+ARM64 emulator: the actual phone-created 8192-byte save and final 1 MiB VRAM
+matched desktop byte for byte (FNV-1a `ddbea58f2544300e` and
+`77627bc3feb8cb34`). This is not a full Android campaign or physical-device test.
