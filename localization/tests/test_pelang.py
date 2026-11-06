@@ -414,6 +414,35 @@ class ItalianImportTest(unittest.TestCase):
             self.assertEqual(existing.read_bytes(), b"keep csv")
 
 
+class GameSourceValidationTest(unittest.TestCase):
+    def test_invalid_boot_config_is_a_closed_source_error(self):
+        import io
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from petext.disc import Game
+        for config in (b"", b"BOOT = missing", b"BOOT = cdrom:\\UNKNOWN.EXE;1"):
+            with self.subTest(config=config):
+                image = io.BytesIO(b"original image")
+                disc = SimpleNamespace(f=image, root_files=lambda: {"PE.IMG": (1, 1)},
+                    file=lambda name: config if name == "SYSTEM.CNF" else b"not a PS-X EXE")
+                with patch("petext.disc.Disc", return_value=disc):
+                    with self.assertRaises(ValueError):
+                        Game("invalid.bin")
+                self.assertTrue(image.closed)
+
+    def test_directory_failure_closes_source(self):
+        import io
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        from petext.disc import Game
+        image = io.BytesIO(b"original image")
+        disc = SimpleNamespace(f=image, root_files=Mock(side_effect=ValueError("not a CD-ROM image")))
+        with patch("petext.disc.Disc", return_value=disc):
+            with self.assertRaisesRegex(ValueError, "not a CD-ROM image"):
+                Game("invalid.bin")
+        self.assertTrue(image.closed)
+
+
 class SpanishImportTest(unittest.TestCase):
     game = ItalianImportTest.game
     catalog = ItalianImportTest.catalog

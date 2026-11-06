@@ -160,25 +160,32 @@ class Game:
 
     def __init__(self, disc_path, *, patch=None):
         self.disc = Disc(disc_path, patch=patch)
-        files = self.disc.root_files()
-        self.pe_img = files["PE.IMG"]
-        config = self.disc.file("SYSTEM.CNF").decode("ascii", "replace")
-        boot = config.split("cdrom:", 1)[1] if "cdrom:" in config else config.split("CDROM:", 1)[1]
-        exe_name = boot.split(";")[0].strip().lstrip("\\").split("\\")[-1].upper()
-        self.exe_name = exe_name
-        exe = self.disc.file(exe_name)
-        if exe[:8] != b"PS-X EXE":
-            raise ValueError("the boot file is not a PS-X EXE")
-        if exe_name not in EXECUTABLES:
-            raise ValueError(f"unknown boot executable {exe_name}")
-        self.region, room_table, sector_table = EXECUTABLES[exe_name]
-        base = struct.unpack_from("<I", exe, 24)[0]
-        at = lambda addr: 0x800 + addr - base
-        self.rooms = []
-        for i in range(ROOM_COUNT):
-            start, counts = struct.unpack_from("<II", exe, at(room_table) + i * 8)
-            self.rooms.append((start, counts & 0xFF, (counts >> 8) & 0xFFF, counts >> 20))
-        self.sectors = list(struct.unpack_from("<81H", exe, at(sector_table)))
+        try:
+            files = self.disc.root_files()
+            self.pe_img = files["PE.IMG"]
+            config = self.disc.file("SYSTEM.CNF").decode("ascii", "replace")
+            boot_at = config.lower().find("cdrom:")
+            if boot_at < 0:
+                raise ValueError("SYSTEM.CNF has no CD-ROM boot executable")
+            boot = config[boot_at + len("cdrom:"):]
+            exe_name = boot.split(";")[0].strip().lstrip("\\").split("\\")[-1].upper()
+            self.exe_name = exe_name
+            exe = self.disc.file(exe_name)
+            if exe[:8] != b"PS-X EXE":
+                raise ValueError("the boot file is not a PS-X EXE")
+            if exe_name not in EXECUTABLES:
+                raise ValueError(f"unknown boot executable {exe_name}")
+            self.region, room_table, sector_table = EXECUTABLES[exe_name]
+            base = struct.unpack_from("<I", exe, 24)[0]
+            at = lambda addr: 0x800 + addr - base
+            self.rooms = []
+            for i in range(ROOM_COUNT):
+                start, counts = struct.unpack_from("<II", exe, at(room_table) + i * 8)
+                self.rooms.append((start, counts & 0xFF, (counts >> 8) & 0xFFF, counts >> 20))
+            self.sectors = list(struct.unpack_from("<81H", exe, at(sector_table)))
+        except Exception:
+            self.disc.f.close()
+            raise
 
     def pe(self, sector: int, count: int) -> bytes:
         return self.disc.read(self.pe_img[0] + sector, count * SECTOR)
