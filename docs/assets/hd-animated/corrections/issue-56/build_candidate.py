@@ -86,6 +86,20 @@ for room in ['M046','M103']:
 board=rectify(scene('M042'),[(26.5,152),(79,127.7),(86.8,170),(38.4,196.5)],(1024,768))
 q=[(34,172),(67,182),(57,234),(16,223)];canvas=scene('M099')
 add('M099',0,project(board,q,(canvas.shape[1],canvas.shape[0])),[q],'Fallen board reuses intact M042 writing and grid',exclude=[[(0,209),(22,218),(22,250),(0,250)]])
+# The static window rails retained nearest-native dark steps in the motion
+# assembly. Recover these narrow bands from the existing full-context master;
+# neither animated door controller participates in this correction.
+r,v=views[('M099',0)];w,h=v['canvas_size']
+anchor=next(x for x in json.loads((r/'anchor-views.json').read_text()) if x['room']=='M099' and x['group']==0)
+alignment=next(x for x in json.loads((r/'anchor-alignment.json').read_text())['anchors'] if x['id']==anchor['id'])
+if alignment['status']!='global affine registered':raise ValueError('M099 window correction needs the reviewed registered anchor')
+window_master=np.array(Image.open(r/'registered-anchors'/(anchor['id']+'.png')).convert('RGB').resize((w*4,h*4),Image.Resampling.LANCZOS))
+restored=np.array(Image.open(r/'source-sr-full'/(anchor['id']+'.png')).convert('RGB'))
+if restored.shape!=window_master.shape:raise ValueError('M099 registered anchor and source restoration dimensions differ')
+illumination=np.clip((cv2.GaussianBlur(restored.astype(np.float32),(0,0),16)+8)/(cv2.GaussianBlur(window_master.astype(np.float32),(0,0),16)+8),.4,2.5)
+window_master=np.uint8(np.clip(np.rint(window_master*illumination),0,255))
+add('M099',0,window_master,[[(0,135),(180,58),(180,75),(0,152)]],
+    'Static window rail from the existing full-context master',entries=[19])
 for room,poly in [('M094',[(0,40),(110,40),(126,97),(0,117)]),('M097',[(55,365),(110,353),(312,410),(298,449),(77,399),(65,419),(36,410)])]:
  r,v=views[(room,0)];w,h=v['canvas_size'];x,y,_,_=v['active_bbox']
  canvas=Image.new('RGB',(w*4,h*4));canvas.paste(Image.open(r/'generated'/v['base_input']).convert('RGB').resize((v['active_size'][0]*4,v['active_size'][1]*4),Image.Resampling.LANCZOS),(x*4,y*4))
