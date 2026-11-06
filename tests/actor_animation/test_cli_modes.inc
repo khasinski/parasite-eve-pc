@@ -1357,6 +1357,7 @@
     if(argc==3 && !strcmp(argv[1],"--native-m028"))return original_native_bootstrap(argv[2],12);
     if(argc==3 && !strcmp(argv[1],"--native-m023"))return original_native_bootstrap(argv[2],11);
     if(argc==3 && !strcmp(argv[1],"--native-m022"))return original_native_bootstrap(argv[2],10);
+    if(argc==3 && !strcmp(argv[1],"--native-carnegie-diary-range"))return original_native_bootstrap(argv[2],15);
     if(argc==3 && !strcmp(argv[1],"--native-carnegie-interaction-timing"))return original_native_bootstrap(argv[2],14);
     if(argc==3 && !strcmp(argv[1],"--native-m017"))return original_native_bootstrap(argv[2],9);
     if(argc==3 && !strcmp(argv[1],"--native-m020-items"))return original_native_bootstrap(argv[2],8);
