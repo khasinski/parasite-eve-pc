@@ -150,13 +150,19 @@ jobs:
         run: |
           git submodule update --init third_party/psyz
           git -C third_party/psyz submodule update --init external/SDL
-      - name: Build the native Windows game and test executables
+      - name: Configure Windows and verify crash reporting
         run: |
           cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DPE_MODS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          cmake --build build --target test-psyz-interpolation --parallel 2
-          SDL_GPU_DRIVER=direct3d12 ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-native-attributes$'
           cmake --build build --target test-crash-report --parallel 2
           ctest --test-dir build --output-on-failure --no-tests=error -R '^host-crash-report$'
+      - name: Check native polygon gradients on D3D12
+        env:
+          SDL_GPU_DRIVER: direct3d12
+        run: |
+          cmake --build build --target test-psyz-interpolation --parallel 2
+          ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-native-attributes$'
+      - name: Build the native Windows game and test executables
+        run: |
           cmake --build build --parallel 2
       - name: Require a self-contained Windows executable
         run: |
@@ -261,6 +267,15 @@ jobs:
                   process.wait(timeout=5)
                   (out / 'process.json').write_text(json.dumps({'pid': process.pid, 'exit': process.returncode, 'scope': 'Synthetic settings diagnostics only; does not override the failed CTest result.'}, indent=2))
           PY
+      - name: Preserve native polygon mismatch pixels
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-native-attribute-pixels
+          path: |
+            third_party/psyz/psyz/tests/expected/ps1-attributes-*.actual.png
+            third_party/psyz/psyz/tests/expected/ps1-attributes-*.actual.bin
+          if-no-files-found: ignore
       - name: Preserve source-only diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
