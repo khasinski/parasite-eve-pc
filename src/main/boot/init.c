@@ -12,6 +12,7 @@
 #include <psyz/video.h>
 #include <psyz/gpu.h>
 #include "pe1/field_actor.h"
+#include "pe1/script_node.h"
 #include "pe1/geom_state.h"
 #include "pe1/render_object.h"
 #include "pe1/render_buffers.h"
@@ -289,7 +290,27 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
         for (unsigned i = 0; i < sizeof(actor->pad_0AC) / sizeof(actor->pad_0AC[0]); ++i) {
             printf("%s%u", i ? "," : "", actor->pad_0AC[i]);
         }
-        printf("]}");
+        printf(
+            "],\"contact\":{\"scale\":%u,\"allocated\":%s,\"script\":%s,"
+            "\"body\":[%d,%d,%d,%d],\"cylinder\":[%d,%d,%d,%d],\"tasks\":[",
+            (unsigned)actor->move_speed,
+            actor->model_state.allocation_active ? "true" : "false",
+            actor->script_cursor_1a0 ? "true" : "false",
+            actor->render_object.hit_body.value0, actor->render_object.hit_body.value1,
+            actor->render_object.hit_body.value2, actor->render_object.hit_body.radius,
+            actor->render_object.hit_cylinder.value0, actor->render_object.hit_cylinder.value1,
+            actor->render_object.hit_cylinder.value2, actor->render_object.hit_cylinder.radius
+        );
+        ScriptNode *contact = actor->script_node_lists[1];
+        unsigned contacts = 0;
+        /* Bound diagnostics even if the list being investigated is damaged. */
+        while (contact && contacts < 32) {
+            printf("%s{\"trigger\":%u,\"flags\":%u}", contacts ? "," : "",
+                (unsigned)contact->trigger_value, (unsigned)contact->flags);
+            contact = contact->next;
+            ++contacts;
+        }
+        printf("],\"truncated\":%s}}", contact ? "true" : "false");
     }
 
     printf("],\"menu\":");
