@@ -459,15 +459,58 @@ def _italian_dialogue_rows(original, translated, catalog):
             if reason:
                 fallback.append({"key": key, "reason": reason})
                 continue
-            text = gt.decode(value)
-            for code, char in ITALIAN_ACCENTS.items():
-                text = text.replace(f"{{g{code:02X}}}", char)
-            # Fail rather than exporting untranslated font indices from another font.
-            if re.search(r"\{g[0-9A-F]{2}\}", text):
-                raise ValueError(f"{key}: unsupported translation glyph")
+            text = _italian_text(value, key)
             rows.append({"key": key, "translation": text,
                          "notes": "Local SadNES cITy v0.90 import; Mickey, _Ombra_, Chop"})
     return rows, fallback
+
+
+def _italian_text(raw, key):
+    text = gt.decode(raw)
+    for code, char in ITALIAN_ACCENTS.items():
+        text = text.replace(f"{{g{code:02X}}}", char)
+    if re.search(r"\{g[0-9A-F]{2}\}", text):
+        raise ValueError(f"{key}: unsupported translation glyph")
+    return text
+
+
+def _italian_menu_rows(original, translated, manifest):
+    from extract_text import table_entries
+    before = dict(table_entries(original.resident_pack()))
+    after = dict(table_entries(translated.resident_pack()))
+    expected = {key for key in manifest["entries"] if key.split("/")[0] in ("sys", "item", "desc", "misc")}
+    if before.keys() != after.keys() or not expected <= before.keys():
+        raise ValueError("Resident text table indices do not match the US catalog")
+    rows, fallback, adaptations = [], [], []
+    for key in sorted(expected):
+        raw, value = before[key], after[key]
+        if srcman.english_hash(gt.decode(raw)) != manifest["entries"][key]["english_hash"]:
+            raise ValueError(f"{key}: resident source text does not match the US catalog")
+        if value == raw:
+            continue
+        if key in ("sys/115", "sys/116", "sys/117"):
+            fallback.append({"key": key, "reason": "native rename glyph grid; not a translated label"})
+            continue
+        try:
+            same_controls = validation.structure(raw) == validation.structure(value)
+        except ValueError:
+            same_controls = False
+        if not same_controls:
+            fallback.append({"key": key, "reason": "original resident control sequence differs"})
+            continue
+        text = original_text = _italian_text(value, key)
+        if key in ("sys/071", "sys/072"):
+            text = text.replace("nello ", "", 1)
+        elif key in ("item/044", "item/045", "item/046", "item/047"):
+            text = text.replace("Evasione", "Evas.", 1)
+        elif key in ("item/096", "item/146"):
+            text = text.replace("Arma di ", "Arma ", 1)
+        if text != original_text:
+            adaptations.append({"key": key, "before": original_text, "after": text,
+                                "reason": "reviewed original menu width / ammo-count boundary"})
+        rows.append({"key": key, "translation": text,
+                     "notes": "Local SadNES cITy v0.90 menu import; Mickey, _Ombra_, Chop"})
+    return rows, fallback, adaptations
 
 
 def cmd_import_italian(a):
@@ -487,9 +530,14 @@ def cmd_import_italian(a):
             raise ValueError("CSV or report already exists; choose new output paths")
         catalog = json.loads((ROOT / "editor/catalog.json").read_text(encoding="utf-8"))
         rows, fallback = _italian_dialogue_rows(original, translated, catalog)
-        report = {"patch_sha256": ITALIAN_PATCH_SHA256, "translated_dialogue_rows": len(rows),
+        dialogue_count = len(rows)
+        manifest = json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))
+        menu_rows, menu_fallback, adaptations = _italian_menu_rows(original, translated, manifest)
+        rows.extend(menu_rows); fallback.extend(menu_fallback)
+        report = {"patch_sha256": ITALIAN_PATCH_SHA256, "translated_dialogue_rows": dialogue_count,
+                  "translated_menu_rows": len(menu_rows), "layout_adaptations": adaptations,
                   "fallback_original": fallback, "source_images_modified": False,
-                  "scope": "Dialogue only. Compile with pelang build and review all layout warnings.",
+                  "scope": "Dialogue and resident labels. Native rename grids remain original. Review all compiler layout warnings.",
                   "credits": "SadNES cITy: Mickey, _Ombra_, Chop",
                   "source": "https://www.sadnescity.it/traduzioni/pe/pe.php"}
         with a.out.open("x", encoding="utf-8", newline="") as output:
@@ -500,7 +548,7 @@ def cmd_import_italian(a):
             created.append(a.report)
             json.dump(report, output, ensure_ascii=False, indent=2)
             output.write("\n")
-        print(f"Imported {len(rows)} dialogue rows; {len(fallback)} pages retain original text. Review {a.report}.")
+        print(f"Imported {len(rows)} text rows; {len(fallback)} entries retain original text. Review {a.report}.")
         return 0
     except (OSError, ValueError, EOFError, KeyError, struct.error) as error:
         for path in created:
@@ -563,7 +611,7 @@ def main(argv=None) -> int:
     c.add_argument("out", type=Path, nargs="?", default=ROOT.parent / "mods/pe_lang/pe_lang_cyrillic_data.h")
     u = sub.add_parser("interface-header", help="regenerate the mod interface Unicode bridge")
     u.add_argument("out", type=Path, nargs="?", default=ROOT.parent / "mods/pe_lang/pe_lang_text_data.h")
-    it = sub.add_parser("import-italian", help="locally import dialogue from the user's SadNES cITy v0.90 PPF")
+    it = sub.add_parser("import-italian", help="locally import text from the user's SadNES cITy v0.90 PPF")
     it.add_argument("disc", type=Path, help="unmodified USA Disc 1 or Disc 2 CUE/BIN")
     it.add_argument("patch", type=Path, help="itpch_pe_v090.ppf extracted from the author's archive")
     it.add_argument("-o", "--out", type=Path, required=True, help="new translation CSV")

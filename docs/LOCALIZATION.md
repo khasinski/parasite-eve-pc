@@ -466,7 +466,7 @@ contracts and Unicode-header generation live in `petext/interfaces.py`. Native/F
 in at presentation boundaries; settings paths, save IDs and collection keys are not translated.
 New tests, test shims, packs and visual evidence stay in the local debug repository.
 
-## Local Italian dialogue import
+## Local Italian text import
 
 Download the original [SadNES cITy Italian patch](https://www.sadnescity.it/traduzioni/pe/pe.php)
 and extract `itpch_pe_v090.ppf`. The importer reads that patch and an unmodified USA Disc 1 or
@@ -484,7 +484,10 @@ translated pages are missing or their control commands differ. Original page IDs
 hashes must match the US catalog; an unknown patch, region or glyph fails the import.
 The six accented letters are mapped from the patch's original font into the port's Latin font.
 
-This imports dialogue only. Menus remain unchanged, and compiler layout warnings need in-game
-review. Install the resulting pack in `lang/` and select Italiano with Language packs enabled.
+This imports dialogue and the resident menu labels, names and descriptions. Native rename
+glyph grids remain original. Eight reviewed label abbreviations preserve the original inventory
+name/ammo-count boundaries and combined memory-card notice width; the report records each change.
+Compiler layout warnings still need in-game review. Install the resulting pack in `lang/` and
+select Italiano with Language packs enabled.
 Credits: Mickey, _Ombra_ and Chop, SadNES cITy. The repository does not include their patch or
 translated text; each user supplies the original patch for this local conversion.
