@@ -100,6 +100,19 @@ illumination=np.clip((cv2.GaussianBlur(restored.astype(np.float32),(0,0),16)+8)/
 window_master=np.uint8(np.clip(np.rint(window_master*illumination),0,255))
 add('M099',0,window_master,[[(0,135),(180,58),(180,75),(0,152)]],
     'Static window rail from the existing full-context master',entries=[19])
+# Recover the static upper wall trim from the aligned room anchor.
+# The alternate camera and both door controllers are deliberately excluded.
+r,v=views[('M103',0)];w,h=v['canvas_size'];aw,ah=v['active_size'];x0,y0,_,_=v['active_bbox']
+anchor=next(x for x in json.loads((r/'anchor-views.json').read_text()) if x['room']=='M103' and x['group']==0)
+alignment=next(x for x in json.loads((r/'anchor-alignment.json').read_text())['anchors'] if x['id']==anchor['id'])
+if alignment['status']!='global affine registered':raise ValueError('M103 shelf correction needs the reviewed registered anchor')
+master=np.array(Image.open(r/'registered-anchors'/(anchor['id']+'.png')).convert('RGB').resize((aw*4,ah*4),Image.Resampling.LANCZOS))
+restored=np.array(Image.open(r/'source-sr-full'/(anchor['id']+'.png')).convert('RGB'))
+if restored.shape!=master.shape:raise ValueError('M103 registered anchor and source restoration dimensions differ')
+illumination=np.clip((cv2.GaussianBlur(restored.astype(np.float32),(0,0),16)+8)/(cv2.GaussianBlur(master.astype(np.float32),(0,0),16)+8),.4,2.5)
+canvas=np.zeros((h*4,w*4,3),np.uint8);canvas[y0*4:y0*4+ah*4,x0*4:x0*4+aw*4]=np.uint8(np.clip(np.rint(master*illumination),0,255))
+add('M103',0,canvas,[[(212,4),(320,54),(320,71),(209,17)]],
+    'Static upper wall trim from the registered full-context anchor',entries=[18])
 for room,poly in [('M094',[(0,40),(110,40),(126,97),(0,117)]),('M097',[(55,365),(110,353),(312,410),(298,449),(77,399),(65,419),(36,410)])]:
  r,v=views[(room,0)];w,h=v['canvas_size'];x,y,_,_=v['active_bbox']
  canvas=Image.new('RGB',(w*4,h*4));canvas.paste(Image.open(r/'generated'/v['base_input']).convert('RGB').resize((v['active_size'][0]*4,v['active_size'][1]*4),Image.Resampling.LANCZOS),(x*4,y*4))
