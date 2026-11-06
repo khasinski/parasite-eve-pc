@@ -153,6 +153,8 @@ jobs:
       - name: Build the native Windows game and test executables
         run: |
           cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DPE_MODS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build --target test-psyz-interpolation --parallel 2
+          SDL_GPU_DRIVER=direct3d12 ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-native-attributes$'
           cmake --build build --target test-crash-report --parallel 2
           ctest --test-dir build --output-on-failure --no-tests=error -R '^host-crash-report$'
           cmake --build build --parallel 2
@@ -168,7 +170,7 @@ jobs:
       - name: Stress D3D12 descriptor batches without a visible window
         env:
           SDL_GPU_DRIVER: direct3d12
-        run: ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(descriptor-batches|frame-interpolation|hd-(coverage|reference|extension)|resource-(upload|readback|reset|resize|swapchain-resize))$'
+        run: ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(native-attributes|descriptor-batches|frame-interpolation|hd-(coverage|reference|extension)|resource-(upload|readback|reset|resize|swapchain-resize))$'
       - name: Require all selected source-only cases to execute
         shell: pwsh
         run: |
