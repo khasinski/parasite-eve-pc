@@ -8,12 +8,17 @@ if(NOT PE_PS5_GAME)
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 
-option(PE_BUNDLE_LANGUAGE_PACKS "Compile submitted language packs beside the desktop game" ON)
+option(PE_BUNDLE_LANGUAGE_PACKS "Bundle submitted language packs with the desktop game" ON)
 if(PE_BUNDLE_LANGUAGE_PACKS AND NOT PE_PS5_GAME AND "pe_lang" IN_LIST PE_MOD_LIST)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    if(APPLE AND PE_MACOS_BUNDLE)
+        set(pe_language_pack_dir "$<TARGET_BUNDLE_CONTENT_DIR:parasite-eve-pc>/Resources/lang")
+    else()
+        set(pe_language_pack_dir "$<TARGET_FILE_DIR:parasite-eve-pc>/lang")
+    endif()
     add_custom_target(pe-language-packs
         COMMAND "${Python3_EXECUTABLE}" -I "${PROJECT_SOURCE_DIR}/localization/check_translations.py"
-            --out "$<TARGET_FILE_DIR:parasite-eve-pc>/lang"
+            --out "${pe_language_pack_dir}"
         COMMENT "Validate and compile bundled language packs"
         VERBATIM)
     add_dependencies(parasite-eve-pc pe-language-packs)

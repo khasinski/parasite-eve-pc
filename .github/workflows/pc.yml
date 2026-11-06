@@ -30,6 +30,26 @@ jobs:
           cmake -S . -B build -DBUILD_TESTING=ON -DPE_MODS=ON
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure --no-tests=error
+      - name: Verify language packs in the macOS application bundle
+        run: |
+          cmake -S . -B build -DPE_MACOS_BUNDLE=ON
+          cmake --build build --target parasite-eve-pc --parallel
+          python3 - <<'PYBUNDLE'
+          import plistlib, sys
+          from pathlib import Path
+          sys.path.insert(0, 'localization')
+          from pelang import read_pack
+          contents = Path('build/Parasite Eve.app/Contents')
+          info = plistlib.loads((contents / 'Info.plist').read_bytes())
+          assert (contents / 'MacOS' / info['CFBundleExecutable']).is_file()
+          packs = list(Path('build/lang').glob('*.pelang'))
+          assert any(pack.name == 'fr.pelang' for pack in packs)
+          for standalone in packs:
+              bundled = contents / 'Resources/lang' / standalone.name
+              assert bundled.read_bytes() == standalone.read_bytes(), standalone.name
+              language, name, entries = read_pack(bundled)
+              assert language == standalone.stem and name and entries, standalone.name
+          PYBUNDLE
 
   linux-x86_64:
     runs-on: ubuntu-24.04
