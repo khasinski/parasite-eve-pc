@@ -7,6 +7,7 @@ android {
         applicationId 'com.khasinski.parasiteeve'
         minSdk 26
         targetSdk 35
+        testInstrumentationRunner 'com.khasinski.parasiteeve.TouchControlsTest'
         versionCode 1
         versionName '0.10-android-development'
         externalNativeBuild {

@@ -22,6 +22,85 @@ static int host_open_assists;
 #include <unistd.h>
 #include <jni.h>
 #endif
+#ifdef __ANDROID__
+/* Android touch is a normal SDL gamepad: bindings and field analog thresholds
+ * are shared with hardware controllers. Java only publishes atomic input. */
+static SDL_AtomicInt android_touch_buttons, android_touch_x, android_touch_y;
+static SDL_AtomicInt android_touch_triggers, android_touch_ready, android_physical_pads;
+static SDL_Joystick *android_touch_joystick;
+static SDL_JoystickID android_touch_id;
+
+JNIEXPORT void JNICALL Java_com_khasinski_parasiteeve_GameActivity_nativeTouchState(
+        JNIEnv *env, jclass type, jint buttons, jint x, jint y, jint triggers) {
+    (void)env; (void)type;
+    SDL_SetAtomicInt(&android_touch_buttons, buttons & 0x7FFF);
+    SDL_SetAtomicInt(&android_touch_x, SDL_clamp(x, -32768, 32767));
+    SDL_SetAtomicInt(&android_touch_y, SDL_clamp(y, -32768, 32767));
+    SDL_SetAtomicInt(&android_touch_triggers, triggers & 3);
+}
+JNIEXPORT jint JNICALL Java_com_khasinski_parasiteeve_GameActivity_nativeTouchStatus(
+        JNIEnv *env, jclass type) {
+    (void)env; (void)type;
+    return !SDL_GetAtomicInt(&android_touch_ready) ? 0 : SDL_GetAtomicInt(&android_physical_pads) ? 2 : 1;
+}
+static void SDLCALL Host_AndroidTouchUpdate(void *unused) {
+    (void)unused;
+    if (!android_touch_joystick) return;
+    const int active = !SDL_GetAtomicInt(&android_physical_pads);
+    const unsigned buttons = active ? (unsigned)SDL_GetAtomicInt(&android_touch_buttons) : 0;
+    for (unsigned i = 0; i < 15; ++i)
+        SDL_SetJoystickVirtualButton(android_touch_joystick, (int)i, (buttons & (1u << i)) != 0);
+    SDL_SetJoystickVirtualAxis(android_touch_joystick, 0, active ? SDL_GetAtomicInt(&android_touch_x) : 0);
+    SDL_SetJoystickVirtualAxis(android_touch_joystick, 1, active ? SDL_GetAtomicInt(&android_touch_y) : 0);
+    const unsigned triggers = active ? (unsigned)SDL_GetAtomicInt(&android_touch_triggers) : 0;
+    SDL_SetJoystickVirtualAxis(android_touch_joystick, 4, (triggers & 1) ? 32767 : -32768);
+    SDL_SetJoystickVirtualAxis(android_touch_joystick, 5, (triggers & 2) ? 32767 : -32768);
+}
+static void Host_AndroidTouchCensus(void) {
+    int count = 0, physical = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&count);
+    for (int i = 0; ids && i < count; ++i) physical += ids[i] != android_touch_id;
+    SDL_free(ids);
+    SDL_SetAtomicInt(&android_physical_pads, physical);
+}
+static bool SDLCALL Host_AndroidTouchWatch(void *unused, SDL_Event *event) {
+    (void)unused;
+    if ((event->type == SDL_EVENT_GAMEPAD_ADDED || event->type == SDL_EVENT_GAMEPAD_REMOVED) &&
+            event->gdevice.which != android_touch_id) {
+        Host_AndroidTouchCensus();
+        SDL_SetAtomicInt(&android_touch_buttons, 0);
+        SDL_SetAtomicInt(&android_touch_x, 0); SDL_SetAtomicInt(&android_touch_y, 0);
+        SDL_SetAtomicInt(&android_touch_triggers, 0);
+    }
+    return true;
+}
+static void SDLCALL Host_AndroidTouchCleanup(void *unused) {
+    (void)unused;
+    SDL_SetAtomicInt(&android_touch_ready, 0);
+    android_touch_joystick = NULL;
+}
+static bool Host_AndroidTouchInit(void) {
+    if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) return false;
+    SDL_VirtualJoystickDesc description;
+    SDL_INIT_INTERFACE(&description);
+    description.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    description.vendor_id = 0xFFFF; description.product_id = 0x5045;
+    description.naxes = 6; description.nbuttons = 15;
+    description.button_mask = 0x7FFF; description.axis_mask = 0x3F;
+    description.name = "Parasite Eve Touch";
+    description.Update = Host_AndroidTouchUpdate;
+    description.Cleanup = Host_AndroidTouchCleanup;
+    android_touch_id = SDL_AttachVirtualJoystick(&description);
+    if (!android_touch_id) return false;
+    android_touch_joystick = SDL_OpenJoystick(android_touch_id);
+    if (!android_touch_joystick) { SDL_DetachVirtualJoystick(android_touch_id); return false; }
+    Host_AndroidTouchUpdate(NULL); /* Triggers start at their released extrema. */
+    Host_AndroidTouchCensus();
+    SDL_AddEventWatch(Host_AndroidTouchWatch, NULL);
+    SDL_SetAtomicInt(&android_touch_ready, 1);
+    return true;
+}
+#endif
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 static void Host_StateUiRegister(void);
 static bool Host_StateChord(const SDL_Event *event);
@@ -4455,6 +4534,10 @@ images_ready:;
         Host_SaveOptions();
     }
 
+#ifdef __ANDROID__
+    if (interactive && !Host_AndroidTouchInit())
+        SDL_Log("Android touch controller unavailable: %s", SDL_GetError());
+#endif
     g_BootHostActive = 1;
     PE_HOOK(PE_HOOK_INIT, (&(PeHookInit){interactive, host_options.user_file}));
 #if PE_NATIVE_STATE_CPU_COMPONENTS
