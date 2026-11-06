@@ -340,5 +340,75 @@ class PelangTest(unittest.TestCase):
                              f"{name} is stale: run `python -I localization/pelang.py latin-header`")
 
 
+class DiscOverlayTest(unittest.TestCase):
+    """User-supplied translation patches never modify the source image."""
+    def setUp(self):
+        import struct
+        from petext.disc import RAW_SECTOR, SYNC
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.image = self.root / "płyta test.bin"
+        raw = bytearray(RAW_SECTOR * 18)
+        for sector in range(18):
+            at = sector * RAW_SECTOR
+            raw[at:at + 12] = SYNC
+            raw[at + 15] = 2
+            raw[at + 24:at + 24 + 2048] = bytes((sector + x) % 251 for x in range(2048))
+        self.original = bytes(raw)
+        self.image.write_bytes(raw)
+        self.patch = self.root / "translation.ppf"
+        self.header = b"PPF30\x02" + bytes(54)
+        self.record = lambda offset, data: struct.pack("<QB", offset, len(data)) + data
+
+    def test_overlay_clips_at_sector_data_boundaries_and_preserves_image(self):
+        from petext.disc import Disc, RAW_SECTOR
+        cue = self.root / "płyta.cue"
+        cue.write_text('FILE "płyta test.bin" BINARY\n  TRACK 01 MODE2/2352\n')
+        description = b"Translation credits"
+        self.patch.write_bytes(self.header + self.record(22, b"abcde")
+            + self.record(24 + 2046, b"WXYZ") + self.record(RAW_SECTOR + 32, b"IT")
+            + b"@BEGIN_FILE_ID.DIZ" + description + b"@END_FILE_ID.DIZ"
+            + len(description).to_bytes(2, "little"))
+        plain, patched = Disc(cue), Disc(cue, patch=self.patch)
+        try:
+            first = bytearray(plain.sector(0))
+            first[:3], first[-2:] = b"cde", b"WX"
+            second = bytearray(plain.sector(1)); second[8:10] = b"IT"
+            self.assertEqual(patched.read(0, 4096), bytes(first + second))
+            self.assertEqual(patched.sector(0), first)  # nonsequential reread
+            self.assertEqual(patched.sector(16), plain.sector(16))
+            self.assertEqual(patched.f.mode, "rb")
+        finally:
+            plain.f.close(); patched.f.close()
+        self.assertEqual(self.image.read_bytes(), self.original)
+
+    def test_rejects_entire_malformed_overlay_before_reading(self):
+        import struct
+        from petext.disc import Disc
+        cases = [b"", self.header[:59], b"bad" + self.header[3:],
+            self.header[:57] + b"\x01" + self.header[58:],
+            self.header + b"short", self.header + struct.pack("<QB", 24, 0),
+            self.header + struct.pack("<QB", 24, 3) + b"a",
+            self.header + self.record(25, b"ab") + self.record(26, b"c"),
+            self.header + self.record(30, b"a") + self.record(20, b"b"),
+            self.header + self.record(len(self.original), b"x"),
+            self.header + b"@BEGIN_FILE_ID.DIZtruncated"]
+        for data in cases:
+            with self.subTest(data=data[:75]):
+                self.patch.write_bytes(data)
+                with self.assertRaises(ValueError):
+                    Disc(self.image, patch=self.patch)
+        self.assertEqual(self.image.read_bytes(), self.original)
+
+    def test_bin_patch_rejects_cooked_iso(self):
+        from petext.disc import Disc
+        cooked = self.root / "disc.iso"
+        cooked.write_bytes(bytes(2048 * 18))
+        self.patch.write_bytes(self.header + self.record(24, b"IT"))
+        with self.assertRaisesRegex(ValueError, "raw 2352"):
+            Disc(cooked, patch=self.patch)
+
+
 if __name__ == "__main__":
     unittest.main()
