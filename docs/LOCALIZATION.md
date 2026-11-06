@@ -491,3 +491,35 @@ Compiler layout warnings still need in-game review. Install the resulting pack i
 select Italiano with Language packs enabled.
 Credits: Mickey, _Ombra_ and Chop, SadNES cITy. The repository does not include their patch or
 translated text; each user supplies the original patch for this local conversion.
+
+## Local Spanish text import (partial)
+
+Download the **Chicago (02-02-2025)** patch from the
+[translation author's page](https://parasiteevetranslationproject.blogspot.com/2025/01/nuevos-parches-disponibles-con-sorpresa.html).
+Apply it to a separate copy of your USA Disc 1 or Disc 2 using the author's patcher, keeping
+your original image. The importer accepts that exact translated image, checks its size and
+SHA-256, and reads both images without modifying either. The DS font variant is not supported.
+
+```sh
+python3 -I localization/pelang.py import-spanish "Original Disc 1.cue" "Spanish Disc 1.bin" \
+  -o spanish-local.csv --report spanish-local-report.json
+python3 -I localization/pelang.py build spanish-local.csv \
+  --strings localization/data/manifest.json --submission --lang es --name Español -o es.pelang
+```
+
+Either disc produces the same text pack. Use new CSV and report paths. Install `es.pelang`
+in `lang/` and select Español with Language packs enabled. Continue playing from the unmodified
+images: the patched executable and scripts are never used by the port.
+
+This is a **partial import**, not a complete Spanish release: 2427 text rows are imported;
+161 entries are reported as not imported, including a patch-only page. Changed waits, names,
+choices and other control commands remain explicit fallbacks to the original text. The compiler
+also reports 299 warnings requiring layout/content review; compilation alone does not verify them.
+Unknown custom symbols and native rename grids remain original.
+
+The importer maps Chicago's accents and yellow speaker letters into the original port font,
+keeps original speaker colours, and removes the patch-only opening credits and repeated line.
+Credits are retained in the report. Two reviewed memory-card label abbreviations fit the original
+menu fields and are recorded in that report. No patch, disc data or imported translation is
+included in the repository. Translation: Green_goblin and TheMarkusBoy; ROM hacking: CUE, Ombra,
+Chop and Phoenix.

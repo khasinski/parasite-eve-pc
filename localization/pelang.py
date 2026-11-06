@@ -426,7 +426,7 @@ def _dialogue_pages(game, number):
     raise ValueError(f"Missing English dialogue bank in M{number:03}")
 
 
-def _italian_dialogue_rows(original, translated, catalog):
+def _translated_dialogue_rows(original, translated, catalog, language="it"):
     disc = {"SLUS_006.62": "1", "SLUS_006.68": "2"}.get(original.exe_name)
     if disc is None or translated.exe_name != original.exe_name:
         raise ValueError("Choose an unmodified Parasite Eve USA Disc 1 or Disc 2 image")
@@ -438,8 +438,11 @@ def _italian_dialogue_rows(original, translated, catalog):
         expected = {int(key[len(prefix):]) for key in catalog["entries"] if key.startswith(prefix)}
         if set(before) != expected:
             raise ValueError(f'{bank["key"]}: source page IDs do not match the US catalog')
-        if set(after) - expected:
+        extra = set(after) - expected
+        if extra and language != "es":
             raise ValueError(f'{bank["key"]}: patch has unexpected dialogue page IDs')
+        for page in sorted(extra):
+            fallback.append({"key": f"{prefix}{page:03}", "reason": "patch-only page; not imported"})
         for page, (raw, _) in sorted(before.items()):
             key = f"{prefix}{page:03}"
             if srcman.english_hash(gt.decode(raw)) != catalog["entries"][key]["english_hash"]:
@@ -449,6 +452,8 @@ def _italian_dialogue_rows(original, translated, catalog):
                 reason = "missing translated page"
             else:
                 value = after[page][0]
+                if language == "es":
+                    value = _spanish_dialogue(value, raw, key)
                 if value == raw:
                     continue
                 try:
@@ -459,9 +464,16 @@ def _italian_dialogue_rows(original, translated, catalog):
             if reason:
                 fallback.append({"key": key, "reason": reason})
                 continue
-            text = _italian_text(value, key)
+            try:
+                text = (_spanish_text if language == "es" else _italian_text)(value, key)
+            except ValueError:
+                if language != "es":
+                    raise
+                fallback.append({"key": key, "reason": "unsupported custom translation glyph"})
+                continue
             rows.append({"key": key, "translation": text,
-                         "notes": "Local SadNES cITy v0.90 import; Mickey, _Ombra_, Chop"})
+                         "notes": "Local Green_goblin Chicago (02-02-2025) import; original speaker colours"
+                         if language == "es" else "Local SadNES cITy v0.90 import; Mickey, _Ombra_, Chop"})
     return rows, fallback
 
 
@@ -474,7 +486,41 @@ def _italian_text(raw, key):
     return text
 
 
-def _italian_menu_rows(original, translated, manifest):
+SPANISH_IMAGES = {
+    "SLUS_006.62": (495531120, "8dcf72a9d53320ae2422a356c59db1961721d94ea1baa41e15d37c30c9bb6062"),
+    "SLUS_006.68": (646877616, "d2840fe2ea715b006c518d3f7eb5bdae1698226f9be45ebc0c28d4fda5ed8bdb"),
+}
+SPANISH_GLYPHS = dict(enumerate("ÁÉÍÓÚáéíóú¿¡ñÑüÜ", 0x4D))
+SPANISH_GLYPHS.update(enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ", 0x5D))
+SPANISH_GLYPHS.update(enumerate("abcdefghijklmnopqrstuvwxyz", 0x77))
+SPANISH_GLYPHS.update(enumerate(":áéíóúñ", 0x91))
+
+
+def _spanish_text(raw, key):
+    # Chicago replaces the apostrophe cell with a closing double quote and
+    # uses separate yellow speaker glyphs. The port keeps its original font.
+    text = gt.decode(raw).replace("'", '"')
+    for code, char in SPANISH_GLYPHS.items():
+        text = text.replace(f"{{g{code:02X}}}", char)
+    if re.search(r"\{g[0-9A-F]{2}\}", text):
+        raise ValueError(f"{key}: unsupported translation glyph")
+    return text
+
+
+def _spanish_dialogue(raw, original, key):
+    if key == "dlg/M001/009":
+        # This exact patch adds credits and repeats page 8 before page 9.
+        # Retain the speaker prefix and page 9's complete actual dialogue.
+        parts = raw.split(b"\xf8", 2)
+        if len(parts) != 3:
+            raise ValueError("Spanish opening page does not match the Chicago profile")
+        raw = parts[1].split(b"\x0f", 1)[0] + b"\x0f" + parts[2].lstrip(b"\x0f")
+    if b"\xfb\x04" not in original and b"\xfb\x05" not in original:
+        raw = re.sub(b"\xfb\x04(\xfa[\x4a\x0f]*)\xfb\x05", lambda m: m[1], raw)
+    return raw
+
+
+def _translated_menu_rows(original, translated, manifest, language="it"):
     from extract_text import table_entries
     before = dict(table_entries(original.resident_pack()))
     after = dict(table_entries(translated.resident_pack()))
@@ -498,8 +544,17 @@ def _italian_menu_rows(original, translated, manifest):
         if not same_controls:
             fallback.append({"key": key, "reason": "original resident control sequence differs"})
             continue
-        text = original_text = _italian_text(value, key)
-        if key in ("sys/071", "sys/072"):
+        try:
+            text = original_text = (_spanish_text if language == "es" else _italian_text)(value, key)
+        except ValueError:
+            if language != "es":
+                raise
+            fallback.append({"key": key, "reason": "unsupported custom translation glyph"})
+            continue
+        if language == "es":
+            text = {"sys/078": "No hay tarjeta de memoria insertada",
+                    "sys/086": "Borra los datos en el gestor de tarjetas"}.get(key, text)
+        elif key in ("sys/071", "sys/072"):
             text = text.replace("nello ", "", 1)
         elif key in ("item/044", "item/045", "item/046", "item/047"):
             text = text.replace("Evasione", "Evas.", 1)
@@ -507,9 +562,11 @@ def _italian_menu_rows(original, translated, manifest):
             text = text.replace("Arma di ", "Arma ", 1)
         if text != original_text:
             adaptations.append({"key": key, "before": original_text, "after": text,
-                                "reason": "reviewed original menu width / ammo-count boundary"})
+                                "reason": "reviewed original memory-card field width" if language == "es"
+                                else "reviewed original menu width / ammo-count boundary"})
         rows.append({"key": key, "translation": text,
-                     "notes": "Local SadNES cITy v0.90 menu import; Mickey, _Ombra_, Chop"})
+                     "notes": "Local Green_goblin Chicago (02-02-2025) menu import"
+                     if language == "es" else "Local SadNES cITy v0.90 menu import; Mickey, _Ombra_, Chop"})
     return rows, fallback, adaptations
 
 
@@ -529,10 +586,10 @@ def cmd_import_italian(a):
         if a.out.exists() or a.report.exists():
             raise ValueError("CSV or report already exists; choose new output paths")
         catalog = json.loads((ROOT / "editor/catalog.json").read_text(encoding="utf-8"))
-        rows, fallback = _italian_dialogue_rows(original, translated, catalog)
+        rows, fallback = _translated_dialogue_rows(original, translated, catalog)
         dialogue_count = len(rows)
         manifest = json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))
-        menu_rows, menu_fallback, adaptations = _italian_menu_rows(original, translated, manifest)
+        menu_rows, menu_fallback, adaptations = _translated_menu_rows(original, translated, manifest)
         rows.extend(menu_rows); fallback.extend(menu_fallback)
         report = {"patch_sha256": ITALIAN_PATCH_SHA256, "translated_dialogue_rows": dialogue_count,
                   "translated_menu_rows": len(menu_rows), "layout_adaptations": adaptations,
@@ -554,6 +611,66 @@ def cmd_import_italian(a):
         for path in created:
             path.unlink(missing_ok=True)
         print(f"Italian import failed: {error}", file=sys.stderr)
+        return 1
+    finally:
+        for game in (original, translated):
+            if game is not None:
+                game.disc.f.close()
+
+
+def cmd_import_spanish(a):
+    from petext.disc import Game
+    original = translated = None
+    created = []
+    try:
+        original = Game(a.disc)
+        translated = Game(a.translated_disc)
+        profile = SPANISH_IMAGES.get(original.exe_name)
+        if profile is None or translated.exe_name != original.exe_name:
+            raise ValueError("Choose matching original and Chicago-translated USA discs")
+        image = translated.disc.f
+        if image.seek(0, 2) != profile[0]:
+            raise ValueError("Translated image size does not match Chicago (02-02-2025)")
+        image.seek(0)
+        digest = hashlib.sha256()
+        while block := image.read(8 * 1024 * 1024):
+            digest.update(block)
+        if digest.hexdigest() != profile[1]:
+            raise ValueError("Translated image hash does not match Chicago (02-02-2025)")
+        protected = {a.disc.resolve(), a.translated_disc.resolve(),
+                     Path(original.disc.f.name).resolve(), Path(image.name).resolve()}
+        if a.out.resolve() in protected or a.report.resolve() in protected or a.out.resolve() == a.report.resolve():
+            raise ValueError("CSV and report must be separate from both images")
+        if a.out.exists() or a.report.exists():
+            raise ValueError("CSV or report already exists; choose new output paths")
+        catalog = json.loads((ROOT / "editor/catalog.json").read_text(encoding="utf-8"))
+        rows, fallback = _translated_dialogue_rows(original, translated, catalog, "es")
+        dialogue_count = len(rows)
+        manifest = json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))
+        menu_rows, menu_fallback, adaptations = _translated_menu_rows(original, translated, manifest, "es")
+        rows.extend(menu_rows); fallback.extend(menu_fallback)
+        report = {"translated_image_sha256": profile[1], "translated_dialogue_rows": dialogue_count,
+                  "translated_menu_rows": len(menu_rows), "layout_adaptations": adaptations,
+                  "fallback_original": fallback, "source_images_modified": False,
+                  "scope": "Partial local text import. Review fallbacks and all compiler layout warnings. "
+                           "Original font and speaker colours; patch-only credits and repeated opening line omitted. "
+                           "Native rename grids and unsupported custom symbols stay original.",
+                  "credits": "Green_goblin, TheMarkusBoy; ROM hacking: CUE, Ombra, Chop, Phoenix",
+                  "source": "https://parasiteevetranslationproject.blogspot.com/2025/01/nuevos-parches-disponibles-con-sorpresa.html"}
+        with a.out.open("x", encoding="utf-8", newline="") as output:
+            created.append(a.out)
+            writer = csv.DictWriter(output, fieldnames=SUBMISSION_COLUMNS)
+            writer.writeheader(); writer.writerows(rows)
+        with a.report.open("x", encoding="utf-8") as output:
+            created.append(a.report)
+            json.dump(report, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+        print(f"Imported {len(rows)} text rows; {len(fallback)} entries not imported. Review {a.report}.")
+        return 0
+    except (OSError, ValueError, EOFError, KeyError, struct.error) as error:
+        for path in created:
+            path.unlink(missing_ok=True)
+        print(f"Spanish import failed: {error}", file=sys.stderr)
         return 1
     finally:
         for game in (original, translated):
@@ -616,12 +733,18 @@ def main(argv=None) -> int:
     it.add_argument("patch", type=Path, help="itpch_pe_v090.ppf extracted from the author's archive")
     it.add_argument("-o", "--out", type=Path, required=True, help="new translation CSV")
     it.add_argument("--report", type=Path, required=True, help="new JSON report of original-text fallbacks")
+    es = sub.add_parser("import-spanish", help="locally import text from the Chicago (02-02-2025) translation")
+    es.add_argument("disc", type=Path, help="unmodified USA Disc 1 or Disc 2 CUE/BIN")
+    es.add_argument("translated_disc", type=Path, help="separate copy patched with the author's Chicago XDELTA")
+    es.add_argument("-o", "--out", type=Path, required=True, help="new translation CSV")
+    es.add_argument("--report", type=Path, required=True, help="new JSON report of original-text fallbacks")
     a = ap.parse_args(argv)
     if a.cmd == "interface-header":
         from petext import interfaces
         interfaces.write_header(a.out)
         return 0
-    return {"import-italian": cmd_import_italian, "template": cmd_template, "pseudo": cmd_pseudo, "build": cmd_build,
+    return {"import-italian": cmd_import_italian, "import-spanish": cmd_import_spanish,
+            "template": cmd_template, "pseudo": cmd_pseudo, "build": cmd_build,
             "export": cmd_export, "manifest": cmd_manifest,
             "latin-header": cmd_latin_header, "cyrillic-header": cmd_cyrillic_header}[a.cmd](a)
 
