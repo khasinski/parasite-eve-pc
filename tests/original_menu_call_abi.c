@@ -89,7 +89,8 @@ static void pointer_identity(void) {
  * glyph provider are synthetic. Compare actual packet bytes and cursor state. */
 u8 *g_DrawPacketCursor,*g_DrawPacketArenaBase;
 u32 g_DrawPrimColor,g_DrawColorShaded,*g_DrawOrderingTableEntry;
-int g_DrawTextDimmed,g_TextCursorStackBottom[28];
+int g_DrawTextDimmed;
+extern int g_TextCursorStackBottom[28];
 static u8 *format_text;
 static int extended_provider;
 static unsigned glyph_draws;
