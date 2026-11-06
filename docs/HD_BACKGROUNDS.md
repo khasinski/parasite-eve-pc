@@ -132,9 +132,15 @@ version/directory is in `mods/upscale/active.json` beside those preferences.
 a window. `PE_CONFIG_HOME` selects an isolated profile for headless checks;
 `PE_HD_SERVER=http://127.0.0.1:PORT` is a localhost-only test override.
 
+The game advertises `X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1` when requesting
+the catalog and archive. The server keeps versioned catalogs so older games
+without these capabilities continue receiving a compatible pack. The client
+rejects unknown or malformed `required_features` before downloading the ZIP,
+retaining its active pack. Feature compatibility is independent of development
+build version strings. ZIP delivery remains a static nginx transfer.
+
 Downloads report `User-Agent: ParasiteEve/VERSION`, `X-PE-Version`, `X-PE-Build`,
-`X-PE-Platform` and an ephemeral per-download ID. The server counts started and
-completed transfers; update checks and HEAD requests do not count. It stores
+`X-PE-Platform` and an ephemeral per-download ID. The server counts download starts before nginx sends the ZIP; update checks and HEAD requests do not count. It stores
 coarse client metadata and keyed daily visitor hashes, not raw IP addresses.
 Server source/deployment lives separately in `~/Projects/pe-mod-server`.
 
@@ -159,6 +165,62 @@ non-opaque alpha explicitly opts into a refined coverage matte for opaque HD
 presentation at internal resolutions above 1x. Its native reference plane still
 owns palette matching, PS1 STP, native VRAM/readback and gameplay. Semitransparent
 primitives keep native coverage and ABR blending. Existing packs remain compatible.
+The default matte can only refine pixels inside live native coverage: RGB palette
+matching cannot distinguish transparent zero from opaque black, so an HD alpha
+value must not resurrect a native-transparent pixel or a packet's rectangle.
+
+`ctest -R '^original-gpu-hd-(coverage|reference)$' runs hidden GPU tests
+with synthetic atlases. They check native-transparent holes, palette fallback,
+authored partial alpha, PNG/WebP equivalence, native VRAM and semitransparent
+draws. Windows CI runs both tests with D3D12.
+
+Experimental `<geometry-key>-under.bin` sidecars reuse the PEW1 tile layout
+for optional reconstructed backdrop artwork. Unlike `-wide.bin`, these tiles
+also draw in 4:3. They are linked behind the original room ordering table and
+use the room's original tint/fade. Their atlas command uses cell bit 22 instead
+of the widescreen extension's bit 23. They render only with HD enabled above
+1x, never into native VRAM; the software path ignores them. The installer accepts
+these files as checksummed manifest extras. Existing packs without them retain
+their current appearance. This is a mechanism for a reviewed coherent underlay,
+not an automatic reconstruction of the missing floor. M097/M239 artwork and
+native scene review remain unfinished; no new production pack has been published.
+
+The extension GPU regression covers both aspects, 1x/2x, HD off/on, absent
+atlases and original draws in front. The real-disc widescreen test additionally
+loads a synthetic diagnostic underlay through the actual room-sidecar path and
+compares original game state, VRAM and PCM at both checkpoints.
+
+A reviewed **static** atlas with non-opaque alpha may opt into an HD silhouette
+using a same-key `-matte.bin` sidecar containing exactly four bytes, `PEM1`.
+This mode can extend beyond native-transparent pixels in the scaled opaque
+presentation, so the atlas must have a coherent background or an appropriate
+underlay beneath its edges. The pack author must verify that the layer has no
+animation or palette-controlled visibility. Never mark animated or script-hidden
+layers this way. Missing, invalid or overlong metadata keeps strict native
+coverage; existing unmarked packs keep their current appearance.
+
+For a local correction, `PEM2` followed by a cell-selection bitmap opts in only
+the reviewed static cells. The bitmap has exactly `ceil(columns * rows / 8)`
+bytes; bit 0 selects material cell 0, with row-order numbering. Reference-plane
+cells are not counted. Empty, truncated, extended or out-of-range masks fall
+back as a whole. Unselected cells keep their own alpha policy, including legacy
+feathering for fully opaque material. Packs using this format must require
+`selective-matte-v1`; older games then continue receiving a compatible catalog.
+Both formats require review of the backdrop in every relevant animation pose.
+Fractional-alpha pixels retain their authored straight RGB; colour extrusion
+for filtering touches only fully transparent material pixels.
+
+Static mattes do not affect native VRAM, 1x output or PS1 semitransparent draws.
+Palette mismatch still falls back to native color. PNG and WebP use the same
+metadata contract. The installer treats matte markers as checksummed extras;
+corrupt markers invalidate verification and cannot replace a working pack.
+GPU tests cover valid/invalid markers, PNG/WebP parity, native VRAM, palette
+fallback, semitransparency and the legacy transparent-pixel guard.
+
+With a debug APK and an imported US Disc 1 on a headless Android emulator,
+`python3 tests/android_lifecycle.py --serial emulator-5566 --hd-render /new/evidence/directory`
+checks a synthetic underlay in 4:3 and 16:9. It compares native state, full VRAM
+and PCM against an empty pack, and retains the rendered frames and hashes.
 
 `hd-poc/pack.py --coverage-aa` traces each complete native entry before cutting
 16px tiles, simplifies long stair-step contours within half a native pixel,
