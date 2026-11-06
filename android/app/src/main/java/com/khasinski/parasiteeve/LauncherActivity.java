@@ -24,15 +24,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-/** Copies user-selected disc images into private storage; never requests broad storage access. */
+/** Imports disc images and exports backups through Android document pickers. */
 public class LauncherActivity extends Activity {
     private static final int PICK_FOLDER = 1;
     private static final int EXPORT_REPORT = 2;
+    private static final int EXPORT_SAVES = 3;
     private TextView status;
     private ProgressBar progress;
     private Button importButton;
     private Button playButton;
     private Button reportButton;
+    private Button savesButton;
+    private static volatile boolean exportingSaves;
     private static final AtomicBoolean importing = new AtomicBoolean();
     private static final AtomicBoolean reporting = new AtomicBoolean();
     private static volatile String reportResult;
@@ -50,7 +53,7 @@ public class LauncherActivity extends Activity {
         if (reporting.get() || reportResult == null) return;
         String message = reportResult;
         reportResult = null;
-        new AlertDialog.Builder(this).setTitle("Diagnostic report")
+        new AlertDialog.Builder(this).setTitle(exportingSaves ? "Export saves" : "Diagnostic report")
             .setMessage(message).setPositiveButton("OK", null).show();
     }
 
@@ -116,6 +119,17 @@ public class LauncherActivity extends Activity {
                 startActivityForResult(intent, EXPORT_REPORT);
             });
             layout.addView(reportButton);
+            savesButton = new Button(this);
+            savesButton.setText("Export saves");
+            savesButton.setOnClickListener(v -> {
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("application/zip");
+                intent.putExtra(Intent.EXTRA_TITLE, "parasite-eve-saves.zip");
+                intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                startActivityForResult(intent, EXPORT_SAVES);
+            });
+            layout.addView(savesButton);
         }
         setContentView(layout);
         refresh();
@@ -133,12 +147,13 @@ public class LauncherActivity extends Activity {
         boolean busy = importing.get() || reporting.get();
         importButton.setEnabled(!busy);
         if (reportButton != null) reportButton.setEnabled(!busy);
+        if (savesButton != null) savesButton.setEnabled(!busy);
         progress.setVisibility(busy ? android.view.View.VISIBLE : android.view.View.GONE);
         setRequestedOrientation(busy ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
                                     : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         int count = cues().length;
         playButton.setEnabled(!busy && count != 0);
-        if (busy) { status.setText(reporting.get() ? "Exporting diagnostic report…" : importStatus); return; }
+        if (busy) { status.setText(reporting.get() ? (exportingSaves ? "Exporting saves…" : "Exporting diagnostic report…") : importStatus); return; }
         status.setText(requiredDisc != 0
             ? "Parasite Eve (USA) Disc " + requiredDisc + " required. Import its CUE/BIN folder, then choose its CUE image. Your game is waiting."
             : count == 0
@@ -168,8 +183,65 @@ public class LauncherActivity extends Activity {
         startActivity(intent);
     }
 
+    private void exportSaves(Uri destination) {
+        if (importing.get() || !reporting.compareAndSet(false, true)) { refresh(); return; }
+        exportingSaves = true;
+        reportResult = null;
+        refresh();
+        new Thread(() -> {
+            String result;
+            try {
+                File root = new File(getFilesDir(), "memory-cards").getCanonicalFile();
+                ArrayList<File> files = new ArrayList<>();
+                for (String slot : new String[]{"bu00", "bu10"}) {
+                    File directory = new File(root, slot);
+                    if (!directory.getCanonicalFile().equals(directory))
+                        throw new java.io.IOException("Memory card directory is a link.");
+                    File[] saves = directory.listFiles(f -> f.isFile()
+                        && f.getName().matches("BASLUS-00662000000[01][A-O]"));
+                    if (saves == null) continue;
+                    Arrays.sort(saves);
+                    for (File save : saves) {
+                        if (save.length() != 8192 || !save.getCanonicalFile().equals(save))
+                            throw new java.io.IOException("Invalid save: " + save.getName());
+                        files.add(save);
+                    }
+                }
+                if (files.isEmpty()) throw new java.io.IOException("No saved games are available yet.");
+                try (OutputStream stream = getContentResolver().openOutputStream(destination, "wt")) {
+                    if (stream == null) throw new java.io.IOException("Cannot open the selected destination.");
+                    try (ZipOutputStream zip = new ZipOutputStream(stream)) {
+                        for (File save : files) {
+                            byte[] bytes;
+                            try (InputStream input = new FileInputStream(save)) {
+                                bytes = new byte[8192];
+                                int count = 0, size;
+                                while (count < bytes.length && (size = input.read(bytes, count, bytes.length - count)) != -1)
+                                    count += size;
+                                if (count != bytes.length || input.read() != -1)
+                                    throw new java.io.IOException("Save changed during export. Try again after closing the game.");
+                            }
+                            zip.putNextEntry(new ZipEntry(save.getParentFile().getName() + "/" + save.getName()));
+                            zip.write(bytes);
+                            zip.closeEntry();
+                        }
+                    }
+                }
+                result = "Saves exported. The ZIP contains the original save files from both memory cards. Keep it as a backup or extract it for the desktop port or save editor.";
+            } catch (Exception error) { result = "Export failed: " + error.getMessage(); }
+            reportResult = result;
+            reporting.set(false);
+            runOnUiThread(() -> {
+                LauncherActivity activity = current.get();
+                if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+                activity.refresh(); activity.showReportResult();
+            });
+        }, "pe-save-export").start();
+    }
+
     private void exportReport(Uri destination) {
         if (importing.get() || !reporting.compareAndSet(false, true)) { refresh(); return; }
+        exportingSaves = false;
         reportResult = null;
         refresh();
         new Thread(() -> {
@@ -236,6 +308,11 @@ public class LauncherActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == EXPORT_SAVES) {
+            if (result == RESULT_OK && data != null && data.getData() != null)
+                exportSaves(data.getData());
+            return;
+        }
         if (request == EXPORT_REPORT) {
             if (result == RESULT_OK && data != null && data.getData() != null)
                 exportReport(data.getData());
