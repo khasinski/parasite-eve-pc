@@ -340,6 +340,80 @@ class PelangTest(unittest.TestCase):
                              f"{name} is stale: run `python -I localization/pelang.py latin-header`")
 
 
+class ItalianImportTest(unittest.TestCase):
+    def game(self, pages):
+        import struct
+        from types import SimpleNamespace
+        body = b"".join(bytes([0xFE, page]) + raw + b"\xFF" for page, raw in sorted(pages.items()))
+        data = bytearray(80 + len(body))
+        struct.pack_into("<I", data, 4, 16)
+        struct.pack_into("<I", data, 48, (1 << 22) | 64)
+        struct.pack_into("<I", data, 68, (1 << 24) | 80)
+        data[80:] = body
+        return SimpleNamespace(exe_name="SLUS_006.62", room=lambda number: SimpleNamespace(data=bytes(data)))
+
+    def catalog(self, pages):
+        from petext.manifest import english_hash
+        return {"banks": [{"key": "M001", "locations": {"1": 1, "2": 1}}],
+                "entries": {f"dlg/M001/{page:03}": {"english_hash": english_hash(gt.decode(raw))}
+                            for page, raw in pages.items()}}
+
+    def test_accents_unchanged_rows_and_original_control_fallback(self):
+        original = {0: gt.encode("Hello"), 1: gt.encode("Same"),
+                    2: gt.encode("Missing"), 3: gt.encode("Wait{wait}")}
+        translated = {0: bytes(range(0x4D, 0x53)), 1: original[1], 3: gt.encode("Aspetta")}
+        rows, fallback = pelang._italian_dialogue_rows(self.game(original), self.game(translated), self.catalog(original))
+        self.assertEqual([(r["key"], r["translation"]) for r in rows], [("dlg/M001/000", "àèéìòù")])
+        self.assertEqual([r["key"] for r in fallback], ["dlg/M001/002", "dlg/M001/003"])
+
+    def test_rejects_mismatched_source_pages_text_region_and_unknown_glyph(self):
+        original = {0: gt.encode("Hello")}; catalog = self.catalog(original)
+        for before, after, region in [({}, original, "SLUS_006.62"),
+                ({0: gt.encode("Changed")}, original, "SLUS_006.62"),
+                (original, {0: b"\x53"}, "SLUS_006.62"),
+                (original, {0: gt.encode("Ciao"), 1: b"A"}, "SLUS_006.62"),
+                (original, original, "SLPS_012.30")]:
+            with self.subTest(before=before, after=after, region=region):
+                game = self.game(before); game.exe_name = region
+                with self.assertRaises(ValueError):
+                    pelang._italian_dialogue_rows(game, self.game(after), catalog)
+
+    def test_unknown_patch_leaves_existing_outputs_untouched(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); source = root / "disc.bin"; source.write_bytes(b"source")
+            wrong = root / "wrong.ppf"; wrong.write_bytes(b"not the known patch")
+            output = root / "it.csv"; output.write_bytes(b"keep csv")
+            report = root / "report.json"; report.write_bytes(b"keep report")
+            with patch("petext.disc.Game") as game:
+                result = pelang.main(["import-italian", str(source), str(wrong), "-o", str(output), "--report", str(report)])
+                game.assert_not_called()
+            self.assertEqual(result, 1)
+            self.assertEqual(source.read_bytes(), b"source")
+            self.assertEqual(output.read_bytes(), b"keep csv")
+            self.assertEqual(report.read_bytes(), b"keep report")
+
+    def test_output_cannot_replace_image_patch_or_existing_file(self):
+        import hashlib
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); source = root / "disc.bin"; source.write_bytes(b"source")
+            ppf = root / "translation.ppf"; ppf.write_bytes(bytes(6465866))
+            digest = hashlib.sha256(ppf.read_bytes()).hexdigest()
+            existing = root / "existing.csv"; existing.write_bytes(b"keep csv")
+            for target in [source, ppf, existing]:
+                game = SimpleNamespace(disc=SimpleNamespace(f=SimpleNamespace(name=str(source), close=Mock())))
+                with patch.object(pelang, "ITALIAN_PATCH_SHA256", digest), patch("petext.disc.Game", return_value=game):
+                    result = pelang.main(["import-italian", str(source), str(ppf), "-o", str(target),
+                                          "--report", str(root / "report.json")])
+                self.assertEqual(result, 1)
+                self.assertFalse((root / "report.json").exists())
+            self.assertEqual(source.read_bytes(), b"source")
+            self.assertEqual(hashlib.sha256(ppf.read_bytes()).hexdigest(), digest)
+            self.assertEqual(existing.read_bytes(), b"keep csv")
+
+
 class DiscOverlayTest(unittest.TestCase):
     """User-supplied translation patches never modify the source image."""
     def setUp(self):

@@ -465,3 +465,26 @@ v1/v2 pack formats and the explicit `translations` v1 API remain compatible. Sha
 contracts and Unicode-header generation live in `petext/interfaces.py`. Native/F1 renderers opt
 in at presentation boundaries; settings paths, save IDs and collection keys are not translated.
 New tests, test shims, packs and visual evidence stay in the local debug repository.
+
+## Local Italian dialogue import
+
+Download the original [SadNES cITy Italian patch](https://www.sadnescity.it/traduzioni/pe/pe.php)
+and extract `itpch_pe_v090.ppf`. The importer reads that patch and an unmodified USA Disc 1 or
+Disc 2 image locally; it does not run the bundled patcher or modify the image.
+
+```sh
+python3 -I localization/pelang.py import-italian "Disc 1.cue" itpch_pe_v090.ppf \
+  -o italian-local.csv --report italian-local-report.json
+python3 -I localization/pelang.py build italian-local.csv \
+  --strings localization/data/manifest.json --submission --lang it --name Italiano -o it.pelang
+```
+
+Use new CSV and report paths. The report lists pages that retain the original text because
+translated pages are missing or their control commands differ. Original page IDs and text
+hashes must match the US catalog; an unknown patch, region or glyph fails the import.
+The six accented letters are mapped from the patch's original font into the port's Latin font.
+
+This imports dialogue only. Menus remain unchanged, and compiler layout warnings need in-game
+review. Install the resulting pack in `lang/` and select Italiano with Language packs enabled.
+Credits: Mickey, _Ombra_ and Chop, SadNES cITy. The repository does not include their patch or
+translated text; each user supplies the original patch for this local conversion.
