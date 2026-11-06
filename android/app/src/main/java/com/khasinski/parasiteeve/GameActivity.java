@@ -39,23 +39,32 @@ public class GameActivity extends SDLActivity {
         void layoutControls() {
             float density=getResources().getDisplayMetrics().density;
             unit=Math.max(40*density,Math.min(64*density,Math.min(getWidth(),getHeight())*.16f));
-            float left=unit*.2f,right=getWidth()-unit*.2f,bottom=getHeight()-unit*.2f;
+            float safeLeft=0,safeTop=0,safeRight=0,safeBottom=0;
             android.view.WindowInsets insets=getRootWindowInsets();
-            if(insets!=null && android.os.Build.VERSION.SDK_INT>=28 && insets.getDisplayCutout()!=null){
-                android.view.DisplayCutout cutout=insets.getDisplayCutout();
-                left+=cutout.getSafeInsetLeft();right-=cutout.getSafeInsetRight();bottom-=cutout.getSafeInsetBottom();
+            if(insets!=null){
+                safeLeft=insets.getSystemWindowInsetLeft();safeTop=insets.getSystemWindowInsetTop();
+                safeRight=insets.getSystemWindowInsetRight();safeBottom=insets.getSystemWindowInsetBottom();
+                if(android.os.Build.VERSION.SDK_INT>=28 && insets.getDisplayCutout()!=null){
+                    android.view.DisplayCutout cutout=insets.getDisplayCutout();
+                    safeLeft=Math.max(safeLeft,cutout.getSafeInsetLeft());
+                    safeTop=Math.max(safeTop,cutout.getSafeInsetTop());
+                    safeRight=Math.max(safeRight,cutout.getSafeInsetRight());
+                    safeBottom=Math.max(safeBottom,cutout.getSafeInsetBottom());
+                }
             }
+            float left=safeLeft+unit*.2f,right=getWidth()-safeRight-unit*.2f;
+            float top=safeTop+unit*.2f,bottom=getHeight()-safeBottom-unit*.2f;
             radius=unit;cx=left+radius;cy=bottom-radius;
             float fx=right-unit,fy=bottom-unit,r=unit*.42f,step=unit*.7f;
             float[] xs={fx,fx+step,fx,fx-step},ys={fy-step,fy,fy+step,fy};
             for(int i=0;i<4;i++)buttons[i].set(xs[i]-r,ys[i]-r,xs[i]+r,ys[i]+r);
-            buttons[4].set(left,unit*.2f,left+unit*1.15f,unit*.85f);
-            buttons[5].set(left+unit*1.3f,unit*.2f,left+unit*2.45f,unit*.85f);
-            buttons[6].set(right-unit*2.45f,unit*.2f,right-unit*1.3f,unit*.85f);
-            buttons[7].set(right-unit*1.15f,unit*.2f,right,unit*.85f);
-            buttons[8].set(getWidth()/2f-unit*1.45f,bottom-unit*.6f,getWidth()/2f-unit*.15f,bottom);
-            buttons[9].set(getWidth()/2f+unit*.15f,bottom-unit*.6f,getWidth()/2f+unit*1.45f,bottom);
-            settings.set(getWidth()/2f-unit*.8f,unit*.2f,getWidth()/2f+unit*.8f,unit*.85f);
+            buttons[4].set(left,top,left+unit*1.15f,top+unit*.65f);
+            buttons[5].set(left+unit*1.3f,top,left+unit*2.45f,top+unit*.65f);
+            buttons[6].set(right-unit*2.45f,top,right-unit*1.3f,top+unit*.65f);
+            buttons[7].set(right-unit*1.15f,top,right,top+unit*.65f);
+            buttons[8].set(left,top+unit*1.8f,left+unit*1.6f,top+unit*2.45f);
+            buttons[9].set(right-unit*1.6f,top+unit*.9f,right,top+unit*1.55f);
+            settings.set(left,top+unit*.9f,left+unit*1.6f,top+unit*1.55f);
         }
         boolean stickArea(float x,float y){float dx=x-cx,dy=y-cy;return dx*dx+dy*dy<radius*radius*1.25f;}
         boolean controlArea(float x,float y){

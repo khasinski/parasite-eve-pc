@@ -45,6 +45,18 @@ public final class TouchControlsTest extends Instrumentation {
     }
     private void checks() throws Exception {
         RectF[] buttons = (RectF[])field("buttons");
+        RectF settings = (RectF)field("settings");
+        android.view.WindowInsets insets = controls.getRootWindowInsets();
+        int top = insets == null ? 0 : insets.getSystemWindowInsetTop();
+        int bottom = controls.getHeight() - (insets == null ? 0 : insets.getSystemWindowInsetBottom());
+        for (RectF button : buttons) {
+            require(button.top >= top && button.bottom <= bottom,
+                "A touch button overlaps a system bar");
+            require(button.left >= 0 && button.right <= controls.getWidth(),
+                "A touch button lies outside the screen");
+            require(!RectF.intersects(button, settings), "Settings overlaps a game button");
+        }
+        require(settings.top >= top && settings.bottom <= bottom, "Settings overlaps a system bar");
         float cx = (Float)field("cx"), cy = (Float)field("cy"), r = (Float)field("radius");
         float bx = buttons[2].centerX(), by = buttons[2].centerY();
         // Distinct, nonconsecutive pointer IDs exercise independent ownership.
