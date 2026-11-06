@@ -167,6 +167,61 @@ static int original_card_file_services(const u8 *image);
 
 static int native_save_hook_safety(void);
 
+/* A serialization refusal must leave the busy widget through the existing
+ * failure dialog, before either port starts or replaces any card file. */
+static int native_refused_save_dialog(void) {
+    AyaBattleState aya=g_AyaBattleState;
+    MemCardPortState ports[2];memcpy(ports,g_MemCardPortStates,sizeof ports);
+    int loaded=g_MemCardLoadSucceeded,style=g_SaveTitleStyleFlag;
+    int scene=g_SceneDispatchToken,selected=g_SaveSelectedSlot,valid=1;
+    g_ResidentDataPack.directory.saveIcon=0x1000;
+    g_ResidentDataPack.directory.locationNames=0x1400;
+    g_SaveTitleStyleFlag=1;g_SceneDispatchToken=0xa8006248;
+    for(unsigned port=0;port<2;++port)for(unsigned occupied=0;occupied<2;++occupied)
+    for(unsigned fault=0;fault<3;++fault) {
+        memset(g_MemCardPortStates,0,sizeof ports);
+        for(unsigned p=0;p<2;++p)g_MemCardPortStates[p].fileDescriptor=-1;
+        MemCardPortState *state=&g_MemCardPortStates[port];
+        state->present=1;state->sequence=7;state->managerState=15;g_SaveSelectedSlot=port;
+        state->slots[0].state=occupied?MEMCARD_SLOT_OCCUPIED:0;
+        state->slots[0].metadataReady=1;
+        MemCardSaveSlot slot=state->slots[0];
+        memset(&g_AyaBattleState,0,sizeof g_AyaBattleState);
+        if(fault==0)g_AyaBattleState.action=(void *)(uintptr_t)1;
+        if(fault==1)g_AyaBattleState.attributes=(void *)(uintptr_t)1;
+        g_MemCardLoadSucceeded=0;g_McOpPending=1;g_MemCardActiveState=state;
+        MenuWidget_InitPool();Menu_CreateMemCardProgressWidget(0x45);
+        Save_StartWriteSlot(port,0);
+        if(fault==2) {
+            if(state->sequence!=7+!occupied || state->managerState!=1 ||
+               state->pendingError!=1 || state->transferSize!=0x2000 ||
+               state->nextState!=(occupied?11:4) || g_MemCardActiveState!=state ||
+               !MenuWidget_FindByModeAndSelectedBase(1,0x27))valid=0;
+            MemCard_AbortActiveOperation(state);
+            continue;
+        }
+        if(state->sequence!=7 || state->managerState!=12 || state->pendingError ||
+           g_McOpPending || g_MemCardActiveState || state->fileDescriptor!=-1 ||
+           memcmp(&slot,&state->slots[0],sizeof slot) ||
+           MenuWidget_FindByModeAndSelectedBase(1,0x27) ||
+           !MenuWidget_FindByModeAndSelectedBase(1,0x28)) {
+            fprintf(stderr,"Refused save left busy state: port=%u occupied=%u fault=%u manager=%d pending=%d\n",
+                port,occupied,fault,state->managerState,g_McOpPending);valid=0;
+        }
+        MenuWidgetNode *dialog=MenuWidget_FindByModeAndSelectedBase(1,0x28);
+        if(dialog) {
+            if(dialog->update(dialog,0x10040)!=1 ||
+               MenuWidget_FindByModeAndSelectedBase(1,0x28) ||
+               MenuWidget_FindByModeAndSelectedBase(1,0x27))valid=0;
+        }
+    }
+    MenuWidget_InitPool();g_MenuDeferredCallback=NULL;
+    memcpy(g_MemCardPortStates,ports,sizeof ports);g_AyaBattleState=aya;
+    g_MemCardLoadSucceeded=loaded;g_SaveTitleStyleFlag=style;g_SceneDispatchToken=scene;g_SaveSelectedSlot=selected;
+    if(valid)puts("Save refusal: both ports, empty/occupied slots, both invalid links leave progress for failure dialog without starting I/O; confirmation dismisses errors and valid saves still start");
+    return valid;
+}
+
 static int native_save_safety(void) {
     /* Minimal synthetic text data lets the real save-manager dialogs run
      * without shipping or requiring any retail assets in desktop CI. */
@@ -261,7 +316,7 @@ static int native_save_safety(void) {
         }
     }
     printf("Native inventory sort: %u cold-start/mode-switch cases, all modes, invalid kinds, item preservation and idempotence checked\n", sort_cases);
-    if (!native_task_relocation_safety() || !native_save_hook_safety()) valid = 0;
+    if (!native_task_relocation_safety() || !native_save_hook_safety() || !native_refused_save_dialog()) valid = 0;
     g_ResidentDataPack = saved;
     return valid ? 0 : 1;
 }
