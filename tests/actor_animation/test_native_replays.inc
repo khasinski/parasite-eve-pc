@@ -426,7 +426,7 @@ static int original_native_bootstrap(const char *executable,int field_control)
     }
     SDL_free(cwd);executable=resolved[0];disc=resolved[1];
     const char *base=SDL_GetBasePath();if(!base)return 1;
-    unsigned first=field_control==14?20:field_control>=2?(unsigned)field_control+10:field_control?6:0;
+    unsigned first=field_control>=14?20:field_control>=2?(unsigned)field_control+10:field_control?6:0;
     unsigned end=field_control>=2?first+1:field_control?12:6;
     for(unsigned input=first;input<end;++input){
         char directory[2048],capture[2080];
@@ -434,7 +434,7 @@ static int original_native_bootstrap(const char *executable,int field_control)
             (unsigned long long)SDL_GetPerformanceCounter(),input);
         if(n<0 || (size_t)n>=sizeof(directory) || !SDL_CreateDirectory(directory))return 1;
         snprintf(capture,sizeof(capture),"%s/frame.vram",directory);
-        const char *limit=input==23?"261381":input==22?"246050":input==21?"222996":input==20?"200826":input==19?"154203":input==18?"131932":input==17?"112000":input==16?"104000":input==15?"95751":input==14?"82000":input==13?"64554":input==12?"60634":input==11?"58000":input==10?"52000":input==9?"42000":input==8?"35500":input>=6?"33500":input==5?"30000":input==4?"24000":input>=2?"14000":input?"13000":"8000";
+        const char *limit=field_control==15?"191600":input==23?"261381":input==22?"246050":input==21?"222996":input==20?"200826":input==19?"154203":input==18?"131932":input==17?"112000":input==16?"104000":input==15?"95751":input==14?"82000":input==13?"64554":input==12?"60634":input==11?"58000":input==10?"52000":input==9?"42000":input==8?"35500":input>=6?"33500":input==5?"30000":input==4?"24000":input>=2?"14000":input?"13000":"8000";
         const char *args[8192]={executable,"--disc",disc,"--headless","--frame-limit",limit,"--dump-vram",capture};
         const char *events[]={"10000:8","10010:0","11000:0x10","11010:0","11500:0x4000","11510:0"};
         unsigned at=8;
@@ -479,6 +479,34 @@ static int original_native_bootstrap(const char *executable,int field_control)
             args[i+3]=shifted[shifted_count++];
         }
         if(field_control==14 && !shifted_count)return 1;
+        /* Probe the original diary at adjacent positions, then stop at its
+         * first page. Different approaches need not follow the same later
+         * door route. The full baseline replay below remains unchanged. */
+        char diary_nudge[32];
+        int diary_shift=0,diary_away=0;
+        if(field_control==15) {
+            const char *side=getenv("PE_TEST_CARNEGIE_DIARY_SIDE");
+            unsigned mask=0,changed=0;
+            if(side && !strcmp(side,"left"))mask=128;
+            else if(side && !strcmp(side,"right"))mask=32;
+            else if(side && !strcmp(side,"away"))diary_away=1;
+            else if(side && strcmp(side,"center"))return 1;
+            diary_shift=mask==128?-20:mask==32?20:0;
+            snprintf(diary_nudge,sizeof(diary_nudge),"191017:%u",mask);
+            unsigned kept=8;
+            for(unsigned i=8;i+1<at;i+=2) {
+                unsigned tick,value;
+                if(strcmp(args[i],"--pad-at") || sscanf(args[i+1],"%u:%u",&tick,&value)!=2)return 1;
+                if(tick>191048)continue;
+                args[kept++]=args[i];
+                args[kept++]=tick==191017 ? diary_nudge :
+                    tick==191025 && diary_away ? "191025:0" : args[i+1];
+                if(tick==191017)++changed;
+            }
+            if(changed!=1)return 1;
+            at=kept;args[at]=NULL;
+            printf("Carnegie diary approach: %s\n",side?side:"center");
+        }
         SDL_PropertiesID props=SDL_CreateProperties();
         SDL_SetPointerProperty(props,SDL_PROP_PROCESS_CREATE_ARGS_POINTER,(void *)args);
         SDL_SetStringProperty(props,SDL_PROP_PROCESS_CREATE_WORKING_DIRECTORY_STRING,directory);
@@ -488,6 +516,28 @@ static int original_native_bootstrap(const char *executable,int field_control)
         if(!child)return 1;
         int status=-1;size_t bytes=0;char *output=SDL_ReadProcess(child,&bytes,&status);
         SDL_DestroyProcess(child);
+        if(field_control==15) {
+            const char *last=output?strstr(output,"{\"event\":\"frame_limit\""):NULL;
+            int valid=last && status==0 && strstr(last,"\"vblanks\":191600") &&
+                strstr(last,"\"scene\":2818577480") &&
+                strstr(last,diary_away ? "\"dialogue\":[{\"state\":0,\"page\":-1}" :
+                    "\"dialogue\":[{\"state\":2,\"page\":99}") &&
+                strstr(last,"\"slots\":[256,257,258,512,6,200,0");
+            const char *player=last?strstr(last,"\"player\":true"):NULL;
+            const char *position=player?strstr(player,"\"position\":["):NULL;
+            int x=0,y=0,z=0;
+            if(!position || sscanf(position,"\"position\":[%d,%d,%d]",&x,&y,&z)!=3 ||
+                x!=-11904979+diary_shift*65536 || y!=-262144 ||
+                z!=(diary_away?14254966:14582646))valid=0;
+            if(output && (strstr(output,"runtime error:") || strstr(output,"Sanitizer:")))valid=0;
+            if(!valid)fprintf(stderr,"Diary range replay failed: status=%d output=%s\n",status,output?output:"(none)");
+            SDL_free(output);
+            remove(capture);
+            if(!valid)return 1;
+            puts(diary_away ? "Original diary: wrong facing does not activate the diary" :
+                "Original diary: unmodified script opens page99 at the tested approach position");
+            continue;
+        }
         int valid=output && status==0 && strstr(output,"\"event\":\"frame_limit\"") &&
             strstr(output,input==23?"\"vblanks\":261381":input==22?"\"vblanks\":246050":input==21?"\"vblanks\":222996":input==20?"\"vblanks\":200826":input==19?"\"vblanks\":154203":input==18?"\"vblanks\":131932":input==17?"\"vblanks\":112000":input==16?"\"vblanks\":104000":input==15?"\"vblanks\":95751":input==14?"\"vblanks\":82000":input==13?"\"vblanks\":64554":input==12?"\"vblanks\":60634":input==11?"\"vblanks\":58000":input==10?"\"vblanks\":52000":input==9?"\"vblanks\":42000":input==8?"\"vblanks\":35500":input>=6?"\"vblanks\":33500":input==5?"\"vblanks\":30000":input==4?"\"vblanks\":24000":input>=2?"\"vblanks\":14000":input?"\"vblanks\":13000":"\"vblanks\":8000");
         /* UBSan may report a recoverable failure while the child exits 0.
