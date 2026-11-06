@@ -382,10 +382,11 @@ static int original_native_tutorial(const char *executable)
         }
         line=*end?end+1:NULL;
     }
-    /* The graphics diagnostics object was added after the original capture.
-     * Removing only that object reproduces the old 8d2f71e7d6a00792 hash;
-     * game state, VRAM, rendered image and PCM remain unchanged. */
-    int valid=wrote && output && status==0 && checkpoints==123 && state_hash==UINT64_C(0x522b9a0de95abb9c);
+    /* Contact diagnostics add 236 actor objects across these 123 checkpoints.
+     * Removing only those objects reproduces the previous 522b9a0de95abb9c
+     * hash. Keep hashing the complete current state; the independent VRAM,
+     * rendered image and PCM captures below remain unchanged. */
+    int valid=wrote && output && status==0 && checkpoints==123 && state_hash==UINT64_C(0x792b163ce4bf2bc2);
     char log_path[2080];snprintf(log_path,sizeof(log_path),"%s/game.log",directory);
     FILE *log=fopen(log_path,"wb");
     if(!log)valid=0;
