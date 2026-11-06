@@ -29,12 +29,14 @@ public class LauncherActivity extends Activity {
     private static final int PICK_FOLDER = 1;
     private static final int EXPORT_REPORT = 2;
     private static final int EXPORT_SAVES = 3;
+    private static final int IMPORT_SAVES = 4;
     private TextView status;
     private ProgressBar progress;
     private Button importButton;
     private Button playButton;
     private Button reportButton;
     private Button savesButton;
+    private Button importSavesButton;
     private static volatile boolean exportingSaves;
     private static final AtomicBoolean importing = new AtomicBoolean();
     private static final AtomicBoolean reporting = new AtomicBoolean();
@@ -130,6 +132,16 @@ public class LauncherActivity extends Activity {
                 startActivityForResult(intent, EXPORT_SAVES);
             });
             layout.addView(savesButton);
+            importSavesButton = new Button(this);
+            importSavesButton.setText("Import saves");
+            importSavesButton.setOnClickListener(v -> {
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivityForResult(intent, IMPORT_SAVES);
+            });
+            layout.addView(importSavesButton);
         }
         setContentView(layout);
         refresh();
@@ -148,6 +160,7 @@ public class LauncherActivity extends Activity {
         importButton.setEnabled(!busy);
         if (reportButton != null) reportButton.setEnabled(!busy);
         if (savesButton != null) savesButton.setEnabled(!busy);
+        if (importSavesButton != null) importSavesButton.setEnabled(!busy);
         progress.setVisibility(busy ? android.view.View.VISIBLE : android.view.View.GONE);
         setRequestedOrientation(busy ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
                                     : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
@@ -181,6 +194,135 @@ public class LauncherActivity extends Activity {
         Intent intent = new Intent(this, GameActivity.class);
         intent.putExtra("disc", cue.getName());
         startActivity(intent);
+    }
+
+    /* Check the original Save_CalcCrc16 representation without editing bytes.
+     * All 8192 bytes participate, with the four-byte CRC word treated as zero. */
+    private static void validateSave(byte[] bytes, String name) throws java.io.IOException {
+        if (bytes.length != 8192 || bytes[0] != 'S' || bytes[1] != 'C')
+            throw new java.io.IOException("Not an 8192-byte Parasite Eve save: " + name);
+        int crc = 0xFFFF;
+        for (int i = 0; i < bytes.length; ++i) {
+            crc ^= (i >= 0x1C8C && i < 0x1C90 ? 0 : bytes[i] & 255) << 8;
+            for (int bit = 0; bit < 8; ++bit)
+                crc = (crc << 1) ^ ((crc & 0x8000) != 0 ? 0x1021 : 0);
+        }
+        int stored = (bytes[0x1C8C] & 255) | ((bytes[0x1C8D] & 255) << 8);
+        if (stored != (~crc & 0xFFFF) || bytes[0x1C8E] != 0 || bytes[0x1C8F] != 0)
+            throw new java.io.IOException("Save checksum is invalid: " + name);
+    }
+
+    private void importSaves(Uri source) {
+        if (reporting.get() || !importing.compareAndSet(false, true)) { refresh(); return; }
+        importError = null;
+        importStatus = "Importing saves… Keep the app open.";
+        refresh();
+        new Thread(() -> {
+            String error = null;
+            File archive = null;
+            ArrayList<File> staged = new ArrayList<>(), targets = new ArrayList<>(), installed = new ArrayList<>();
+            try {
+                String name = null;
+                try (Cursor cursor = getContentResolver().query(source,
+                        new String[]{android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                    if (cursor != null && cursor.moveToFirst()) name = cursor.getString(0);
+                }
+                archive = File.createTempFile("pe-save-import-", ".tmp", getCacheDir());
+                try (InputStream input = getContentResolver().openInputStream(source);
+                     OutputStream output = new FileOutputStream(archive)) {
+                    if (input == null) throw new java.io.IOException("Cannot open the selected file.");
+                    byte[] buffer = new byte[65536];
+                    int count, total = 0;
+                    while ((count = input.read(buffer)) != -1) {
+                        total += count;
+                        if (total > 8 * 1024 * 1024)
+                            throw new java.io.IOException("Save archives must be smaller than 8 MiB.");
+                        output.write(buffer, 0, count);
+                    }
+                }
+                java.util.LinkedHashMap<String, byte[]> saves = new java.util.LinkedHashMap<>();
+                if (archive.length() == 8192 && name != null && name.matches("BASLUS-00662000000[01][A-O]")) {
+                    saves.put("bu00/" + name, java.nio.file.Files.readAllBytes(archive.toPath()));
+                } else {
+                    try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(archive)) {
+                        java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
+                        int count = 0;
+                        while (entries.hasMoreElements()) {
+                            ZipEntry entry = entries.nextElement();
+                            if (++count > 64) throw new java.io.IOException("Too many archive entries.");
+                            if (entry.isDirectory() && entry.getName().matches("bu[01]0/")) continue;
+                            String path = entry.getName();
+                            if (!path.matches("bu[01]0/BASLUS-00662000000[01][A-O]") || entry.getSize() != 8192
+                                    || saves.containsKey(path))
+                                throw new java.io.IOException("Invalid or duplicate save entry: " + path);
+                            byte[] bytes = new byte[8192];
+                            try (InputStream input = zip.getInputStream(entry)) {
+                                int read = 0, size;
+                                while (read < bytes.length && (size = input.read(bytes, read, bytes.length - read)) != -1)
+                                    read += size;
+                                if (read != bytes.length || input.read() != -1)
+                                    throw new java.io.IOException("Incomplete save entry: " + path);
+                            }
+                            java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+                            crc.update(bytes);
+                            if (crc.getValue() != entry.getCrc())
+                                throw new java.io.IOException("Archive checksum is invalid: " + path);
+                            saves.put(path, bytes);
+                        }
+                    }
+                }
+                if (saves.isEmpty()) throw new java.io.IOException("No saves found. Select a save ZIP or an original BASLUS-00662 save file.");
+                File root = new File(getFilesDir(), "memory-cards");
+                if (!root.isDirectory() && !root.mkdirs()) throw new java.io.IOException("Cannot create memory cards.");
+                root = root.getCanonicalFile();
+                for (java.util.Map.Entry<String, byte[]> save : saves.entrySet()) {
+                    validateSave(save.getValue(), save.getKey());
+                    File target = new File(root, save.getKey());
+                    if (!target.getCanonicalFile().equals(target))
+                        throw new java.io.IOException("Save path is a link: " + save.getKey());
+                    if (target.exists())
+                        throw new java.io.IOException("Save already exists: " + save.getKey() + ". Existing saves were kept.");
+                    File temporary = File.createTempFile("pe-save-", ".tmp", root);
+                    staged.add(temporary); targets.add(target);
+                    try (FileOutputStream output = new FileOutputStream(temporary)) {
+                        output.write(save.getValue()); output.getFD().sync();
+                    }
+                }
+                /* Android SELinux disallows hard links in app storage. Use
+                 * exclusive creation: even a late collision must never truncate
+                 * an existing save. All payloads were validated before this. */
+                for (int i = 0; i < staged.size(); ++i) {
+                    File target = targets.get(i);
+                    if (!target.getParentFile().isDirectory() && !target.getParentFile().mkdirs())
+                        throw new java.io.IOException("Cannot create card directory.");
+                    try (java.nio.channels.FileChannel output = java.nio.channels.FileChannel.open(target.toPath(),
+                            java.nio.file.StandardOpenOption.CREATE_NEW, java.nio.file.StandardOpenOption.WRITE)) {
+                        installed.add(target);
+                        byte[] bytes = java.nio.file.Files.readAllBytes(staged.get(i).toPath());
+                        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(bytes);
+                        while (buffer.hasRemaining()) output.write(buffer);
+                        output.force(true);
+                    }
+                }
+                importStatus = saves.size() + " save(s) imported.";
+            } catch (Exception failure) {
+                error = failure.getMessage() != null ? failure.getMessage() : failure.toString();
+                for (File file : installed) file.delete();
+            } finally {
+                for (File file : staged) file.delete();
+                if (archive != null) archive.delete();
+            }
+            final String success = importStatus;
+            importing.set(false);
+            final String message = error;
+            notifyImport(message);
+            if (message == null) runOnUiThread(() -> {
+                LauncherActivity activity = current.get();
+                if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+                new AlertDialog.Builder(activity).setTitle("Import saves").setMessage(success)
+                    .setPositiveButton("OK", null).show();
+            });
+        }, "pe-save-import").start();
     }
 
     private void exportSaves(Uri destination) {
@@ -308,6 +450,11 @@ public class LauncherActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == IMPORT_SAVES) {
+            if (result == RESULT_OK && data != null && data.getData() != null)
+                importSaves(data.getData());
+            return;
+        }
         if (request == EXPORT_SAVES) {
             if (result == RESULT_OK && data != null && data.getData() != null)
                 exportSaves(data.getData());
