@@ -114,6 +114,8 @@
  * the line keeps the swaps the mod's own New Game put in (this seed's foe plan) instead of forcing its ai=. Every
  * actor of the room the plan moves (pe_rand_foes_generate here, same seed) must have been given a script, and
  * no other; the line's ai= list (the moved actors that fight there) is checked as above.
+ * A line where a script divides by an N var holding 0 (the game has no guard; the loop here answers 0) ends in
+ * div0=<e6+0x6814:N0x2: actor, step, var>; on a line with moved foes that is a failure.
  * tools/battlestats.py checks the lines. */
 #include <stdint.h>
 #include <stdio.h>
@@ -185,6 +187,7 @@ static u8 *ran;                  /* one per word of the block: step started ther
 static u8 *anim_left;            /* one per word of the block: frames an animwait op 48 has waited */
 static u32 gave[64], got[64]; static unsigned gave_count;   /* GiveItems run: offset and item */
 static u32 asked[64], asked_item[64], answer[64]; static unsigned asked_count;   /* CountItems run */
+static int div0_n = -1, div0_actor; static u32 div0_at;   /* the first script divide by an N var holding 0 */
 static int keys_all, press, animwait, battle, spin, trace, gate;   /* trace: PE_RUN_TRACE set, each step to stderr */
 static int menu = -1;            /* menu=N: op 67's answer, or -1 (skipped) */
 static int bag_full, swap = -1;  /* bag=full: GiveItem runs for real; swap=N: op 169's answer, or -1 */
@@ -339,7 +342,9 @@ static void run_queue(void) {
                 FieldActor *a = actor_by_type(*args[0], *args[1]);
                 result = a && a->state ? g_ScriptQueueOpcodeHandlers[op](args) : 1;
             } else if (op == 9 && count == 4 && (*args[0] == 16 || *args[0] == 21 || *args[0] == 22) && *args[3] == 0) {
-                /* x / 0, x % 0: fields skipped ops fill in the game (battle stats, op 89; op 14) read 0 here */
+                /* x / 0, x % 0: fields skipped ops fill in the game (battle stats, op 89; op 14) read 0 here.
+                 * Not an N var (a fight's foe count): no skipped op fills those, the game would divide by zero. */
+                if (args[3] >= g_ScriptNodeActiveFlags && args[3] < g_ScriptNodeActiveFlags + 64 && div0_n < 0) { div0_n = (int)values[3]; div0_actor = entity->type_id; div0_at = (u32)at; }
                 *args[1] = 0; result = 1;
             } else if (is_real[op] || battle_op) {
                 result = g_ScriptQueueOpcodeHandlers[op](args);
@@ -848,7 +853,7 @@ static void do_run(const Run *r, FILE *out) {
         for (int i = 0; i < bag_slots; ++i) if (!g_InvItemPtr[i]) g_InvItemPtr[i] = 0x06;
     }
     gate = r->gate; asked_count = 0;
-    win = r->win; fighting = -1; won = 0; awaited = -1; set6_at = -1; state_read = 0;
+    win = r->win; fighting = -1; won = 0; awaited = -1; set6_at = -1; state_read = 0; div0_n = -1;
     stats = r->stats; combat_count = 0;
     if (stats) {
         memcpy(g_DrawPrimGeneratorWords, random_start, sizeof(random_start));
@@ -983,6 +988,10 @@ static void do_run(const Run *r, FILE *out) {
     for (int i = 0; i < r->at; ++i)
         if (r->at_actor[i] >= 0) fprintf(out, "%s@%d,%d", i ? ";" : "\tat=", r->at_actor[i], r->at_angle[i]);
         else fprintf(out, "%s%d,%d,%d", i ? ";" : "\tat=", r->at_x[i], r->at_z[i], r->at_angle[i]);
+    if (div0_n >= 0) {
+        fprintf(out, "\tdiv0=e%d+%#x:N%#x", div0_actor, (unsigned)div0_at, (unsigned)div0_n);
+        if (r->nai || r->foes) FAIL("M%03u: actor %d divides by N%#x, which is 0 (+%X)", r->room, div0_actor, (unsigned)div0_n, (unsigned)div0_at);
+    }
     if (r->nai) {
         fputs("\tai=", out);
         for (unsigned i = 0; i < r->nai; ++i) fprintf(out, "%s%u<M%03u:%u", i ? "," : "", r->ai_to[i], r->ai_room[i], r->ai_from[i]);

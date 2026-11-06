@@ -15,7 +15,8 @@ zones), at the centre; a spawner with none gets every zone of the room. Then:
    Rooms won by neither are left out (listed: their fight isn't reachable headless that way).
 2. The seeds' lines in the won rooms, with the same stops, plus the plain lines again (battlestats.py compares
    the unmoved slots with them): <out>-runs.txt, run into <out>.txt, checked by battlestats.py.
-A plan line fails when a swap isn't taken, a moved actor runs none of its script, or no battle is won.
+A plan line fails when a swap isn't taken, a moved actor runs none of its script, a script divides by an N var
+holding 0 (the fight's foe count; the game has no guard), or no battle is won.
 --known file: swaps (M005<M418:3, one per line, # the reason) whose failing lines are listed as KNOWN, not
 problems. --lines: only write <out>-runs.txt (no plan run). Exit 1 on a failure, 77 when an input is missing."""
 import os, re, subprocess, sys
@@ -187,6 +188,7 @@ def main():
     for name, ai in lines.items():
         kv = got.get(name)
         why = ("no output (a swap not taken)" if kv is None else
+               f"divides by zero ({kv['div0']})" if kv.get("div0") else
                "no battle won" if not kv.get("won") else
                "a moved actor ran none of its script" if any(a.endswith(":0") for a in kv.get("aisteps", "").split(",")) else "")
         won += not why

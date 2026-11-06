@@ -14,13 +14,18 @@
  * are read, walked as the rooms ctest does (blocks keep data between their routines): a block whose walk leaves
  * the room's code is left alone.
  *
- * N vars (g_ScriptNodeActiveFlags, zeroed at each room load) are shared by all of a room's scripts. The ones
- * the source shares with its spawner (the fight routine's flags, sums and foe count) become the ones E's own
- * actor shares with this room's spawner, k-th for k-th in the order each block first uses them: spawners run
- * the same routine on different vars (M012 N0x0/4/1/2, Chrysler M391 N0x3/7/4/5; a Plant there waited on
- * N0x3 in M012 and its fight never went on). If the two lists differ in length, those both spawners use stay.
+ * N vars (g_ScriptNodeActiveFlags, zeroed at each room load) are shared by all of a room's scripts. Spawners run
+ * the same fight routine on different vars (M012 N0x0/4/1/2, Chrysler M391 N0x3/7/4/5; a Plant there waited on
+ * N0x3 in M012 and its fight never went on): each foe's setup adds its level, its value and 1 to three of them,
+ * and a spawner with the fight's opening takes the mean level and value (N / count: no guard, a count left at 0
+ * would divide by zero) for Aya's opening AT gauge. Between two such spawners the vars the source shares with
+ * its spawner go by what they are for, read off each spawner (pe_roles): level, value, count and the flags to
+ * the slot's, and the ones the spawner only zeroes for its foes (their working vars) to E's own, in the order
+ * each block first uses them, as far as E's go. The added level and value become E's own too, so the slot's
+ * fight opens as it does at home, whatever the group. Any other pair (M013's scripted Rat has no opening): the
+ * shared vars go k-th for k-th if the two lists are as long, else those both spawners use stay.
  * The source's others that a script of this room uses move to ones nothing here uses (mode 4 operands in the
- * copy), but N0xa (the stat scale every enemy copies from V0x50).
+ * copy), but N0xa (the stat scale every enemy copies from V0x50). Those aren't zeroed between two fights of a room.
  *
  * The script slots (PM commands, effect programs) the source room installs and this room doesn't are
  * installed too, from the source room's records as its own load does it (each slot number has one handler in
@@ -191,6 +196,90 @@ static unsigned pe_fight_vars(const uint8_t *tasks, uint32_t bytes, int t, int s
     return n;
 }
 
+/* What a spawner's vars are for: its opening (op 206 on Aya's AT gauge, field 6) subtracts `level` from Aya's level,
+ * shifts `value` up by 16 and divides both by `count`; `flags` is the var it tests bits of. `used`: the N vars it
+ * uses; `other`: those it does more with than setting them to 0. */
+typedef struct PeRoles { int opening, level, value, count, flags; uint64_t used, other; } PeRoles;
+static void pe_roles_step(uint32_t *step, uint32_t at, void *user) {
+    PeRoles *r = user;
+    const uint32_t op = step[0] & 0x1FFF, count = (step[0] >> 13) & 15;
+    (void)at;
+    for (unsigned k = 0; k < count; ++k)
+        if (pe_mode(step, k) == 4 && step[2 + k] < PE_RAND_N_VARS) {
+            r->used |= 1ull << step[2 + k];
+            if (!(op == 10 && count == 2 && k == 0 && pe_mode(step, 1) == 0 && step[3] == 0)) r->other |= 1ull << step[2 + k];
+        }
+    if (op == 206 && count >= 3 && !pe_mode(step, 0) && !pe_mode(step, 1) && !pe_mode(step, 2) && !step[2] && !step[3] && step[4] == 6)
+        r->opening = 1;
+    if (op != 9 || count != 4 || pe_mode(step, 0) || pe_mode(step, 1) != 3) return;
+    const unsigned a = pe_mode(step, 2), b = pe_mode(step, 3);
+    if (step[2] == 1 && a == 1 && b == 4) r->level = (int)step[5];
+    else if (step[2] == 0x11 && a == 4 && b == 0 && step[5] == 0x10) r->value = (int)step[4];
+    else if (step[2] == 0x10 && a == 4 && b == 4) r->count = (int)step[5];
+    else if (step[2] == 3 && a == 4 && b == 0) r->flags = (int)step[4];
+}
+static void pe_roles(const uint8_t *tasks, uint32_t bytes, int spawner, PeRoles *r) {
+    uint32_t start;
+    *r = (PeRoles){0, -1, -1, -1, -1, 0, 0};
+    if (spawner >= 0 && pe_entry(tasks, bytes, (unsigned)spawner, &start)) pe_walk(tasks, start, pe_word(tasks, 0), pe_roles_step, r);
+    r->opening = r->opening && r->level >= 0 && r->level < PE_RAND_N_VARS && r->value >= 0 && r->value < PE_RAND_N_VARS &&
+                 r->count >= 0 && r->count < PE_RAND_N_VARS && r->flags < PE_RAND_N_VARS;
+}
+
+/* n_to for the foe's shared vars (fight_from; E's: fight_to) between two spawners with the opening; the vars it maps. */
+static uint64_t pe_map_roles(const PeRoles *from, const PeRoles *to, const uint8_t *fight_from, unsigned fights,
+                             const uint8_t *fight_to, unsigned own_fights, uint8_t *n_to) {
+    const int was[4] = {from->level, from->value, from->count, from->flags}, now[4] = {to->level, to->value, to->count, to->flags};
+    const uint64_t from_zeroed = from->used & ~from->other, to_zeroed = to->used & ~to->other;
+    uint64_t was_roles = 0, now_roles = 0, mapped = 0;
+    unsigned k = 0;
+    for (unsigned r = 0; r < 4; ++r) {
+        if (was[r] >= 0) was_roles |= 1ull << was[r];
+        if (now[r] >= 0) now_roles |= 1ull << now[r];
+    }
+    for (unsigned i = 0; i < fights; ++i)
+        for (unsigned r = 0; r < 4; ++r)
+            if (was[r] == fight_from[i] && now[r] >= 0) { n_to[was[r]] = (uint8_t)now[r]; mapped |= 1ull << was[r]; }
+    for (unsigned i = 0; i < fights; ++i) {
+        const unsigned v = fight_from[i];
+        if ((was_roles >> v & 1) || !(from_zeroed >> v & 1)) continue;
+        while (k < own_fights && ((now_roles >> fight_to[k] & 1) || !(to_zeroed >> fight_to[k] & 1))) ++k;
+        if (k == own_fights) break;
+        n_to[v] = fight_to[k++];
+        mapped |= 1ull << v;
+    }
+    return mapped;
+}
+
+/* A foe's setup adding a number to N var `n`: op 9 T = N + k, then op 10 N = T. Reads k, or with `set` writes it. */
+typedef struct PeAdd { unsigned n, found, set; uint32_t k, code_end; } PeAdd;
+static void pe_add_step(uint32_t *step, uint32_t at, void *user) {
+    PeAdd *a = user;
+    const uint32_t bytes = 8 + 4 * ((step[0] >> 13) & 15);
+    if ((step[0] & 0x1FFF) != 9 || bytes != 24 || pe_mode(step, 0) || step[2] || pe_mode(step, 1) != 3 ||
+        pe_mode(step, 2) != 4 || step[4] != a->n || pe_mode(step, 3) || at + bytes + 16 > a->code_end) return;
+    const uint32_t *next = step + bytes / 4;
+    if ((next[0] & 0x1FFF) != 10 || ((next[0] >> 13) & 15) != 2 || pe_mode(next, 0) != 4 || next[2] != a->n ||
+        pe_mode(next, 1) != 3 || next[3] != step[3]) return;
+    if (a->set) step[5] = a->k;
+    else if (!a->found) a->k = step[5];
+    ++a->found;
+}
+
+/* The copy adds E's own number (its block adds it to own_n) where it adds to var n; 0 if either adds none. */
+static int pe_add_own(uint8_t *copy, uint32_t copy_end, unsigned n, const uint8_t *mine, uint32_t own_at, uint32_t own_end,
+                      unsigned own_n, uint32_t *was, uint32_t *now) {
+    PeAdd own = {own_n, 0, 0, 0, own_end}, theirs = {n, 0, 0, 0, copy_end};
+    pe_walk(mine, own_at, own_end, pe_add_step, &own);
+    pe_walk(copy, 0, copy_end, pe_add_step, &theirs);
+    if (!own.found || !theirs.found) return 0;
+    *was = theirs.k;
+    *now = theirs.k = own.k;
+    theirs.set = 1;
+    pe_walk(copy, 0, copy_end, pe_add_step, &theirs);
+    return 1;
+}
+
 typedef struct PePatch {
     unsigned self, to_self; int spawner, to_spawner; unsigned done;
     uint8_t n_to[PE_RAND_N_VARS]; unsigned n_done;
@@ -309,16 +398,31 @@ int pe_rand_ai_apply(int room) {
         if (!copy) { pe_disc_room_free(&src); continue; }
         memcpy(copy, theirs + start, task_bytes);
         PePatch patch = {map->from_entity, map->entity, spawner, to_spawner, 0, {0}, 0};
-        /* N vars: the fight routine's (shared with the spawner) become E's own actor's, k-th for k-th (else the
-         * ones both spawners use stay); the source's others that this room's scripts use (not E's own block,
-         * which no longer runs) move to ones no script here uses. N0xa stays: every enemy sets it to the stat
-         * scale V0x50 (pe_rand_battle.c reads it). */
+        /* N vars: the fight routine's (shared with the spawner) as the file's top says; the source's others that
+         * this room's scripts use (not E's own block, which no longer runs) move to ones no script here uses.
+         * N0xa stays: every enemy sets it to the stat scale V0x50 (pe_rand_battle.c reads it). */
         uint8_t fight_from[PE_RAND_N_VARS], fight_to[PE_RAND_N_VARS];
         const unsigned fights = pe_fight_vars(theirs, from_bytes, map->from_entity, spawner, fight_from);
         const unsigned own_fights = pe_fight_vars(mine, bytes, map->entity, to_spawner, fight_to);
         uint64_t room_n = s_n_copies, keep = 1ull << 10;
+        PeRoles from_roles, to_roles;
+        uint32_t own_block, level_was = 0, level_now = 0, value_was = 0, value_now = 0;
+        int level_own = 0, value_own = 0;
+        pe_roles(theirs, from_bytes, spawner, &from_roles);
+        pe_roles(mine, bytes, to_spawner, &to_roles);
         for (unsigned i = 0; i < PE_RAND_N_VARS; ++i) patch.n_to[i] = (uint8_t)i;
-        if (fights && fights == own_fights)
+        if (from_roles.opening && to_roles.opening) {
+            const uint32_t copy_end = pe_word(theirs, 0) - start, own_end = pe_word(mine, 0);
+            keep |= pe_map_roles(&from_roles, &to_roles, fight_from, fights, fight_to, own_fights, patch.n_to);
+            if (pe_entry(mine, bytes, map->entity, &own_block)) {
+                level_own = pe_add_own(copy, copy_end, (unsigned)from_roles.level, mine, own_block, own_end,
+                                       (unsigned)to_roles.level, &level_was, &level_now);
+                value_own = pe_add_own(copy, copy_end, (unsigned)from_roles.value, mine, own_block, own_end,
+                                       (unsigned)to_roles.value, &value_was, &value_now);
+            }
+            if (!level_own || !value_own)
+                pe_log("rand_ai", "map=%d e%u: M%03u e%u or this slot adds no level or value", room, map->entity, map->from_room, map->from_entity);
+        } else if (fights && fights == own_fights)
             for (unsigned i = 0; i < fights; ++i) { patch.n_to[fight_from[i]] = fight_to[i]; keep |= 1ull << fight_from[i]; }
         else {
             keep |= pe_n_used(mine, bytes, to_spawner) & pe_n_used(theirs, from_bytes, spawner);
@@ -395,6 +499,9 @@ int pe_rand_ai_apply(int room) {
                to_spawner, slots, (unsigned)moved, patch.n_done);
         for (unsigned i = 0; i < PE_RAND_N_VARS; ++i)
             if (patch.n_to[i] != i) pe_log("rand_ai", "map=%d e%u N%#x > N%#x", room, map->entity, i, patch.n_to[i]);
+        if (level_own && value_own)
+            pe_log("rand_ai", "map=%d e%u adds level %u, value %u (the slot's; was %u, %u)", room, map->entity, level_now,
+                   value_now, level_was, value_was);
         pe_disc_room_free(&src);
         ++done;
     }
