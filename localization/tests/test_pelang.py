@@ -414,6 +414,55 @@ class ItalianImportTest(unittest.TestCase):
             self.assertEqual(existing.read_bytes(), b"keep csv")
 
 
+class ItalianMenuImportTest(unittest.TestCase):
+    def run_import(self, before, after, manifest=None):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from petext.manifest import english_hash
+        manifest = manifest if manifest is not None else {"entries": {
+            k: {"english_hash": english_hash(gt.decode(v))} for k, v in before.items()}}
+        # The existing disc table decoder is independent of these import rules.
+        with patch("extract_text.table_entries", side_effect=lambda data: data.items()):
+            return pelang._italian_menu_rows(SimpleNamespace(resident_pack=lambda: before),
+                                            SimpleNamespace(resident_pack=lambda: after), manifest)
+
+    def test_native_rename_grids_stay_original_and_width_fits_are_reported(self):
+        text = {"sys/071": "Memory Card nello Slot 1", "sys/072": "Memory Card nello Slot 2",
+                "item/096": "Arma di Maeda", "item/146": "Arma di Maeda"}
+        text.update({f"item/{n:03}": f"Evasione CR +{n-43}" for n in range(44,48)})
+        before = {k: gt.encode("Original") for k in text}
+        after = {k: gt.encode(v) for k,v in text.items()}
+        for n in (115,116,117):
+            before[f"sys/{n}"] = b"\x56"; after[f"sys/{n}"] = b"\x57"
+        rows, fallback, fits = self.run_import(before, after)
+        translated = {r["key"]:r["translation"] for r in rows}
+        self.assertEqual(translated["sys/071"], "Memory Card Slot 1")
+        self.assertEqual(translated["sys/072"], "Memory Card Slot 2")
+        self.assertEqual(translated["item/044"], "Evas. CR +1")
+        self.assertEqual(translated["item/047"], "Evas. CR +4")
+        self.assertEqual(translated["item/096"], "Arma Maeda")
+        self.assertEqual(translated["item/146"], "Arma Maeda")
+        self.assertEqual(len(fits), 8)
+        self.assertEqual([r["key"] for r in fallback], ["sys/115","sys/116","sys/117"])
+
+    def test_changed_controls_and_unindexed_slots_are_not_exported(self):
+        before = {"sys/000":gt.encode("Wait{wait}"), "misc/200":gt.encode("Unused")}
+        after = {"sys/000":gt.encode("Attendi"), "misc/200":gt.encode("Unused changed")}
+        from petext.manifest import english_hash
+        manifest = {"entries":{"sys/000":{"english_hash":english_hash(gt.decode(before["sys/000"]))}}}
+        rows, fallback, fits = self.run_import(before, after, manifest)
+        self.assertEqual(rows, []); self.assertEqual(fits, [])
+        self.assertEqual([r["key"] for r in fallback], ["sys/000"])
+
+    def test_wrong_table_indices_source_hash_and_unknown_glyph_fail(self):
+        before = {"sys/000":gt.encode("Source")}
+        for after, manifest in [({},None),
+                ({"sys/000":b"\x53"},None),
+                ({"sys/000":gt.encode("Ciao")},{"entries":{"sys/000":{"english_hash":"wrong"}}})]:
+            with self.subTest(after=after, manifest=manifest):
+                with self.assertRaises(ValueError):self.run_import(before, after, manifest)
+
+
 class DiscOverlayTest(unittest.TestCase):
     """User-supplied translation patches never modify the source image."""
     def setUp(self):
