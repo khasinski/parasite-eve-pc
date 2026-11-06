@@ -227,8 +227,11 @@ def native_replay(options, profile_files=None, max_seconds=None):
             '-n', pkg+'/.LauncherActivity')
         launcher = pid(pkg)
         assert launcher, 'Launcher did not start'
-        adb('shell', 'am', 'start', '-W', '-n', pkg+'/.GameActivity',
-            '--es', 'testProfile', profile, '--esa', 'arguments', shlex.quote(','.join(remote)))
+        start = ['shell', 'am', 'start', '-W', '-n', pkg+'/.GameActivity',
+                 '--es', 'testProfile', profile, '--esa', 'arguments', shlex.quote(','.join(remote))]
+        if profile_files is not None:
+            start += ['--ez', 'testHdBackgrounds', 'true']
+        adb(*start)
         deadline = time.monotonic()+(max_seconds if max_seconds is not None else max(60, limit/100))
         while pid(pkg+':game'):
             assert pid(pkg) == launcher, 'Native replay killed the launcher'
@@ -291,11 +294,10 @@ def hd_render(output):
         for under in (False, True):
             directory = output/f'{wide}-{int(under)}'
             directory.mkdir()
-            def fixture(absolute):
-                pack = absolute+'/mods/upscale/fixture'
-                files = {'parasite-eve.toml': b'[mods]\nhd_backgrounds = true\n',
-                         'mods/upscale/active.json': json.dumps(
-                             {'directory': pack, 'version': '0.1', 'sha256': '0'*64}).encode()}
+            def fixture(_absolute):
+                # Headless replays deliberately ignore saved graphics options.
+                # The debug-only intent opts into this fixed profile-local path.
+                files = {}
                 # An empty baseline pack still needs a directory for discovery.
                 files['mods/upscale/fixture/manifest.json'] = b'{}'
                 if under:
