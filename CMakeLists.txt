@@ -525,7 +525,7 @@ if(BUILD_TESTING)
         ${PSYZ_DIR}/psyz/tests/test_main.c
         ${PSYZ_DIR}/psyz/tests/test_libcd.c
         ${PSYZ_DIR}/ztest/ztest.c)
-    target_compile_definitions(test-psyz-cd-media PRIVATE __psyz)
+    target_compile_definitions(test-psyz-cd-media PRIVATE __psyz PSYZ_TEST_CD_IO=1 _FILE_OFFSET_BITS=64)
     target_include_directories(test-psyz-cd-media PRIVATE ${PSYZ_DIR}/ztest)
     target_link_libraries(test-psyz-cd-media PRIVATE psyz)
     add_test(NAME original-game-cd-media COMMAND test-psyz-cd-media --output=plain)
