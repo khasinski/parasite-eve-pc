@@ -362,7 +362,7 @@ class ItalianImportTest(unittest.TestCase):
         original = {0: gt.encode("Hello"), 1: gt.encode("Same"),
                     2: gt.encode("Missing"), 3: gt.encode("Wait{wait}")}
         translated = {0: bytes(range(0x4D, 0x53)), 1: original[1], 3: gt.encode("Aspetta")}
-        rows, fallback = pelang._italian_dialogue_rows(self.game(original), self.game(translated), self.catalog(original))
+        rows, fallback = pelang._translated_dialogue_rows(self.game(original), self.game(translated), self.catalog(original))
         self.assertEqual([(r["key"], r["translation"]) for r in rows], [("dlg/M001/000", "àèéìòù")])
         self.assertEqual([r["key"] for r in fallback], ["dlg/M001/002", "dlg/M001/003"])
 
@@ -376,7 +376,7 @@ class ItalianImportTest(unittest.TestCase):
             with self.subTest(before=before, after=after, region=region):
                 game = self.game(before); game.exe_name = region
                 with self.assertRaises(ValueError):
-                    pelang._italian_dialogue_rows(game, self.game(after), catalog)
+                    pelang._translated_dialogue_rows(game, self.game(after), catalog)
 
     def test_unknown_patch_leaves_existing_outputs_untouched(self):
         from unittest.mock import patch
@@ -414,8 +414,91 @@ class ItalianImportTest(unittest.TestCase):
             self.assertEqual(existing.read_bytes(), b"keep csv")
 
 
+class SpanishImportTest(unittest.TestCase):
+    game = ItalianImportTest.game
+    catalog = ItalianImportTest.catalog
+
+    def test_chicago_accents_yellow_speakers_and_quotes_reencode(self):
+        self.assertEqual(pelang._spanish_text(bytes(range(0x4D, 0x5D)), "test"), "ÁÉÍÓÚáéíóú¿¡ñÑüÜ")
+        speaker = bytes([0x64, 0x85, 0x83, 0x78, 0x88, 0x7B, 0x91])
+        self.assertEqual(pelang._spanish_text(speaker, "test"), "Hombre:")
+        text = pelang._spanish_text(bytes([0x2D, 0x30, 0x2E, 0x53]), "test")
+        self.assertEqual(text, '"a"é')
+        self.assertEqual(gt.encode(text, extended=True)[-1], latin.CODE_OF["é"])
+        with self.assertRaises(ValueError):
+            pelang._spanish_text(b"\x98", "test")
+
+    def test_opening_credits_and_duplicate_line_do_not_add_gameplay_commands(self):
+        raw = gt.encode("Credits {sym 1}{wait}Hombre: Repeated{wait} What is wrong?")
+        original = gt.encode("Man: What is wrong?")
+        normalized = pelang._spanish_dialogue(raw, original, "dlg/M001/009")
+        self.assertEqual(gt.decode(normalized), "Hombre: What is wrong?")
+        validation.check(normalized, validation.structure(original))
+        with self.assertRaises(ValueError):
+            pelang._spanish_dialogue(b"broken", original, "dlg/M001/009")
+        self.assertEqual(pelang._spanish_dialogue(raw, original, "dlg/M001/008"), raw)
+
+    def test_name_colour_normalization_preserves_other_highlighting(self):
+        original = gt.encode("{name}: Hello")
+        raw = gt.encode("{red}{name}:{/red} Hola")
+        self.assertEqual(pelang._spanish_dialogue(raw, original, "test"), gt.encode("{name}: Hola"))
+        highlighted = gt.encode("{red}{name}: Hello{/red}")
+        self.assertEqual(pelang._spanish_dialogue(raw, highlighted, "test"), raw)
+        inline = gt.encode("{red}Hello {name}{/red}")
+        self.assertEqual(pelang._spanish_dialogue(inline, original, "test"), inline)
+
+    def test_foreign_pages_unknown_symbols_and_changed_controls_are_reported(self):
+        original = {0: gt.encode("Hello"), 1: gt.encode("Wait{wait}"), 2: gt.encode("Symbol")}
+        translated = {0: b"\x53", 1: gt.encode("Wait"), 2: b"\x98", 3: gt.encode("Extra")}
+        rows, fallback = pelang._translated_dialogue_rows(
+            self.game(original), self.game(translated), self.catalog(original), "es")
+        self.assertEqual([(r["key"], r["translation"]) for r in rows], [("dlg/M001/000", "é")])
+        self.assertEqual({r["key"] for r in fallback}, {"dlg/M001/001", "dlg/M001/002", "dlg/M001/003"})
+        self.assertEqual(len({r["reason"] for r in fallback}), 3)
+
+    def test_profile_hash_outputs_and_failed_report_cleanup(self):
+        import hashlib
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); source = root / "original.bin"; translated = root / "translated.bin"
+            source.write_bytes(b"source"); translated.write_bytes(b"translated")
+            expected = (10, hashlib.sha256(b"translated").hexdigest())
+            for mode in ("hash", "existing", "same", "cleanup", "success"):
+                with self.subTest(mode=mode):
+                    output = root / (mode + ".csv"); report = root / (mode + ".json")
+                    if mode == "existing": output.write_bytes(b"keep")
+                    if mode == "same": output = source
+                    games = []
+                    def game(path):
+                        obj = SimpleNamespace(exe_name="SLUS_006.62", disc=SimpleNamespace(f=open(path, "rb")))
+                        games.append(obj); return obj
+                    path_open = Path.open
+                    def create(path, *args, **kwargs):
+                        if path == report and mode == "cleanup": raise OSError("injected report failure")
+                        return path_open(path, *args, **kwargs)
+                    profile = (10, "0" * 64) if mode == "hash" else expected
+                    with patch("petext.disc.Game", side_effect=game), \
+                         patch.object(pelang, "SPANISH_IMAGES", {"SLUS_006.62": profile}), \
+                         patch.object(pelang, "_translated_dialogue_rows", return_value=([{
+                             "key": "dlg/M001/000", "translation": "Hola", "notes": "test"}], [])), \
+                         patch.object(pelang, "_translated_menu_rows", return_value=([], [], [])), \
+                         patch.object(Path, "open", create):
+                        result = pelang.main(["import-spanish", str(source), str(translated), "-o", str(output),
+                                              "--report", str(report)])
+                    self.assertEqual(result, 0 if mode == "success" else 1)
+                    self.assertTrue(all(g.disc.f.closed for g in games))
+                    self.assertEqual(source.read_bytes(), b"source")
+                    self.assertEqual(translated.read_bytes(), b"translated")
+                    if mode == "success":
+                        self.assertEqual(json.loads(report.read_text())["translated_dialogue_rows"], 1)
+                    elif mode == "existing": self.assertEqual(output.read_bytes(), b"keep")
+                    elif mode != "same": self.assertFalse(output.exists())
+                    if mode != "success": self.assertFalse(report.exists())
+
+
 class ItalianMenuImportTest(unittest.TestCase):
-    def run_import(self, before, after, manifest=None):
+    def run_import(self, before, after, manifest=None, language="it"):
         from types import SimpleNamespace
         from unittest.mock import patch
         from petext.manifest import english_hash
@@ -423,8 +506,25 @@ class ItalianMenuImportTest(unittest.TestCase):
             k: {"english_hash": english_hash(gt.decode(v))} for k, v in before.items()}}
         # The existing disc table decoder is independent of these import rules.
         with patch("extract_text.table_entries", side_effect=lambda data: data.items()):
-            return pelang._italian_menu_rows(SimpleNamespace(resident_pack=lambda: before),
-                                            SimpleNamespace(resident_pack=lambda: after), manifest)
+            return pelang._translated_menu_rows(SimpleNamespace(resident_pack=lambda: before),
+                                            SimpleNamespace(resident_pack=lambda: after), manifest, language)
+
+    def test_spanish_width_adaptations_do_not_apply_italian_rewrites(self):
+        text = {"sys/071": "Memory Card nello Slot 1",
+                "sys/078": "No hay ninguna tarjeta de memoria insertada",
+                "sys/086": "Borra los datos desde el gestor de tarjetas de memoria"}
+        before = {k: gt.encode("Original") for k in text}
+        after = {k: gt.encode(v) for k, v in text.items()}
+        before["sys/115"] = gt.encode("Rename"); after["sys/115"] = b"\x53"
+        before["sys/087"] = gt.encode("Symbol"); after["sys/087"] = b"\x98"
+        rows, fallback, fits = self.run_import(before, after, language="es")
+        translated = {r["key"]: r["translation"] for r in rows}
+        self.assertEqual(translated["sys/071"], text["sys/071"])
+        self.assertEqual(translated["sys/078"], "No hay tarjeta de memoria insertada")
+        self.assertEqual(translated["sys/086"], "Borra los datos en el gestor de tarjetas")
+        self.assertEqual({r["key"] for r in fallback}, {"sys/087", "sys/115"})
+        self.assertEqual([r["key"] for r in fits], ["sys/078", "sys/086"])
+        self.assertTrue(all(r["reason"] == "reviewed original memory-card field width" for r in fits))
 
     def test_native_rename_grids_stay_original_and_width_fits_are_reported(self):
         text = {"sys/071": "Memory Card nello Slot 1", "sys/072": "Memory Card nello Slot 2",
