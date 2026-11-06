@@ -1,4 +1,4 @@
-"""Build a separate, review-only M097/M239 underlay candidate; no baseline writes."""
+"""Build a separate, review-only M092/M097/M239 underlay candidate; no baseline writes."""
 import argparse, hashlib, json, os, struct
 from pathlib import Path
 import cv2
@@ -9,7 +9,10 @@ p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--assets',type=Path,required=True)
 p.add_argument('--baseline',type=Path,required=True)
 p.add_argument('--out',type=Path,required=True)
+p.add_argument('--rooms',default='M092,M097,M239',help='Comma-separated subset (default: M092,M097,M239); select unmarked rooms')
 a=p.parse_args()
+selected=set(a.rooms.split(','))
+if not selected or not selected<={'M092','M097','M239'}:p.error('Expected --rooms M092,M097,M239 or a subset')
 audit_path=a.out.parent/(a.out.name+'-audit.json')
 if a.out.exists() or audit_path.exists():raise FileExistsError(a.out)
 a.out.mkdir(parents=True)
@@ -20,9 +23,11 @@ tasks=json.loads((a.assets/'tasks.json').read_text())['tasks']
 records={r['key']:r for r in manifest['atlases']}
 audit=[]
 sha=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
-for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4207704ba290')]:
+for room,base_entry,geometry in [('M092',12,'2c48651307e4dc15'),('M097',16,'b1c7435335ee7113'),('M239',6,'60de4207704ba290')]:
+ if room not in selected:continue
  t=next(t for t in tasks if t['room']==room and t['group']==0 and t['entry']==0)
  if t.get('control') is not None or t.get('controls'):raise ValueError('Static HD coverage cannot be used for animated foregrounds')
+ if any(r['file']==t['key']+'-matte.bin' for r in manifest.get('extras',[])):raise ValueError(room+': baseline already has a static matte; select an unmarked room')
  back=next(t for t in tasks if t['room']==room and t['group']==0 and t['entry']==base_entry)
  w,h=t['size'];refs=np.load(a.assets/'refs'/t['ref'])
  def coverage(task):
@@ -63,29 +68,6 @@ for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4
  # foreground's own mask. Fill only this narrow static boundary neighbourhood.
  vicinity=cv2.dilate((native>0).astype(np.uint8),cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(9,9)))!=0
  support=vicinity&(alpha<255)&(np.repeat(np.repeat(bg,4,0),4,1)==0)
- master=a.assets/'corrections/issue-56'/f'{room}-floor-underlay-v1.png'
- original=np.array(Image.open(a.assets/'composites'/f'{room}-g00-cbase-p00-hd.png').convert('RGB'))
- generated=np.array(Image.open(master).convert('RGB').resize((w*4,h*4),Image.Resampling.LANCZOS))
- # Align only untouched room features. The removed foreground is excluded.
- match_mask=cv2.resize((1-cv2.dilate(fg,np.ones((7,7),np.uint8)))*255,(w*2,h*2),interpolation=cv2.INTER_NEAREST)
- sift=cv2.SIFT_create(nfeatures=6000)
- kp1,d1=sift.detectAndCompute(cv2.cvtColor(cv2.resize(generated,(w*2,h*2)),cv2.COLOR_RGB2GRAY),match_mask)
- kp2,d2=sift.detectAndCompute(cv2.cvtColor(cv2.resize(original,(w*2,h*2)),cv2.COLOR_RGB2GRAY),match_mask)
- matches=[m for m,n in cv2.BFMatcher().knnMatch(d1,d2,k=2) if m.distance<0.7*n.distance]
- src=np.float32([kp1[m.queryIdx].pt for m in matches])*2
- dst=np.float32([kp2[m.trainIdx].pt for m in matches])*2
- matrix,inliers=cv2.estimateAffinePartial2D(src,dst,method=cv2.RANSAC,ransacReprojThreshold=3)
- if matrix is None or int(inliers.sum())<40:raise ValueError(f'{room}: insufficient registration')
- scale=float(np.hypot(matrix[0,0],matrix[0,1]));assert 0.95<scale<1.05
- residual=np.linalg.norm(cv2.transform(src[None],matrix)[0]-dst,axis=1)[inliers[:,0]!=0]
- generated=cv2.warpAffine(generated,matrix,(w*4,h*4),flags=cv2.INTER_LANCZOS4)
- adjacent=(cv2.dilate(fg,np.ones((7,7),np.uint8))!=0)&(fg==0)&(bg!=0)
- adjacent=np.repeat(np.repeat(adjacent,4,0),4,1)
- gain=np.median((original[adjacent].astype(float)+8)/(generated[adjacent].astype(float)+8),axis=0)
- gain=np.clip(gain,0.8,1.2);generated=np.uint8(np.clip(np.rint(generated*gain),0,255))
- # Preserve the *actual pack's* floor/shadow continuity at the old cutout.
- # Transfer its local boundary colour into the generated hidden floor; a
- # global image gain cannot preserve the baked contact shadow at this edge.
  base_record=records[back['key']]
  base_material=np.array(Image.open(a.baseline/base_record['file']).convert('RGB'))
  background=np.zeros((h*4,w*4,3),np.uint8);base_columns=base_material.shape[1]//68
@@ -93,12 +75,47 @@ for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4
   ax=i%base_columns*68+2;ay=i//base_columns*68+2
   background[y*4:y*4+64,x*4:x*4+64]=base_material[ay:ay+64,ax:ax+64]
  valid=np.repeat(np.repeat(bg!=0,4,0),4,1)
- _,labels=cv2.distanceTransformWithLabels((~valid).astype(np.uint8),cv2.DIST_L2,5,labelType=cv2.DIST_LABEL_PIXEL)
+ sample_distance,labels=cv2.distanceTransformWithLabels((~valid).astype(np.uint8),cv2.DIST_L2,5,labelType=cv2.DIST_LABEL_PIXEL)
  index=np.maximum(labels-1,0)
  visible=background[valid][index].astype(np.int16)
- prior=generated[valid][index].astype(np.int16)
- void=np.all(generated==0,axis=2)
- generated=np.uint8(np.clip(generated.astype(np.int16)+visible-prior,0,255));generated[void]=0
+ if room=='M092':
+  # Reconstruct only the narrow cutout boundary from actual adjacent HD pixels.
+  # Do not extend into voids or alter the independently animated door layers.
+  safe=sample_distance<=8
+  alpha[~safe]=native[~safe]
+  expansion=(native==0)&(alpha>0)
+  support=(alpha<255)&((native!=0)|(alpha>0))&~valid&safe
+  generated=visible.astype(np.uint8)
+  master=a.baseline/base_record['file']
+  details=dict(method='nearest original HD background in a two-native-pixel band',source_background=str(master),source_background_sha256=sha(master),max_sampling_distance=float(sample_distance[support].max()))
+ else:
+  master=a.assets/'corrections/issue-56'/f'{room}-floor-underlay-v1.png'
+  original=np.array(Image.open(a.assets/'composites'/f'{room}-g00-cbase-p00-hd.png').convert('RGB'))
+  generated=np.array(Image.open(master).convert('RGB').resize((w*4,h*4),Image.Resampling.LANCZOS))
+  # Align only untouched room features. The removed foreground is excluded.
+  match_mask=cv2.resize((1-cv2.dilate(fg,np.ones((7,7),np.uint8)))*255,(w*2,h*2),interpolation=cv2.INTER_NEAREST)
+  sift=cv2.SIFT_create(nfeatures=6000)
+  kp1,d1=sift.detectAndCompute(cv2.cvtColor(cv2.resize(generated,(w*2,h*2)),cv2.COLOR_RGB2GRAY),match_mask)
+  kp2,d2=sift.detectAndCompute(cv2.cvtColor(cv2.resize(original,(w*2,h*2)),cv2.COLOR_RGB2GRAY),match_mask)
+  matches=[m for m,n in cv2.BFMatcher().knnMatch(d1,d2,k=2) if m.distance<0.7*n.distance]
+  src=np.float32([kp1[m.queryIdx].pt for m in matches])*2
+  dst=np.float32([kp2[m.trainIdx].pt for m in matches])*2
+  matrix,inliers=cv2.estimateAffinePartial2D(src,dst,method=cv2.RANSAC,ransacReprojThreshold=3)
+  if matrix is None or int(inliers.sum())<40:raise ValueError(f'{room}: insufficient registration')
+  scale=float(np.hypot(matrix[0,0],matrix[0,1]));assert 0.95<scale<1.05
+  residual=np.linalg.norm(cv2.transform(src[None],matrix)[0]-dst,axis=1)[inliers[:,0]!=0]
+  generated=cv2.warpAffine(generated,matrix,(w*4,h*4),flags=cv2.INTER_LANCZOS4)
+  adjacent=(cv2.dilate(fg,np.ones((7,7),np.uint8))!=0)&(fg==0)&(bg!=0)
+  adjacent=np.repeat(np.repeat(adjacent,4,0),4,1)
+  gain=np.median((original[adjacent].astype(float)+8)/(generated[adjacent].astype(float)+8),axis=0)
+  gain=np.clip(gain,0.8,1.2);generated=np.uint8(np.clip(np.rint(generated*gain),0,255))
+  # Preserve the *actual pack's* floor/shadow continuity at the old cutout.
+  # Transfer its local boundary colour into the generated hidden floor; a
+  # global image gain cannot preserve the baked contact shadow at this edge.
+  prior=generated[valid][index].astype(np.int16)
+  void=np.all(generated==0,axis=2)
+  generated=np.uint8(np.clip(generated.astype(np.int16)+visible-prior,0,255));generated[void]=0
+  details=dict(registration=matrix.tolist(),inliers=int(inliers.sum()),residual_p95=float(np.percentile(residual,95)),gain=gain.tolist(),generated_master=str(master),generated_sha256=sha(master),local_boundary_colour_transfer=True)
  r=records[t['key']]
  material=np.array(Image.open(a.baseline/r['file']).convert('RGBA'))
  # WebP material is one plane; a combined PNG contains both.
@@ -129,7 +146,7 @@ for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4
  manifest.setdefault('extras',[]).append(dict(file=marker.name,sha256=sha(marker)))
  cells=[(x,y) for y in range(0,h,16) for x in range(0,w,16) if np.any(support[y*4:y*4+64,x*4:x*4+64])]
  assert cells
- key=hashlib.sha256((room+sha(master)+'underlay-v1').encode()).hexdigest()[:16];assert key not in records
+ key=(hashlib.sha256(room.encode()+generated.tobytes()+support.tobytes()).hexdigest() if room=='M092' else hashlib.sha256((room+sha(master)+'underlay-v1').encode()).hexdigest())[:16];assert key not in records
  cols=min(16,len(cells));rows=(len(cells)+cols-1)//cols
  under=np.zeros((rows*68,cols*68,4),np.uint8)
  for i,(x,y) in enumerate(cells):
@@ -144,8 +161,8 @@ for room,base_entry,geometry in [('M097',16,'b1c7435335ee7113'),('M239',6,'60de4
  descriptor+=b''.join(struct.pack('<hh',x,y) for x,y in cells)
  path=a.out/(geometry+'-under.bin');path.unlink(missing_ok=True);path.write_bytes(descriptor)
  manifest.setdefault('extras',[]).append(dict(file=path.name,sha256=sha(path)))
- audit.append(dict(room=room,geometry=geometry,foreground=t['key'],underlay=key,cells=len(cells),pixels=int(support.sum()),registration=matrix.tolist(),inliers=int(inliers.sum()),residual_p95=float(np.percentile(residual,95)),gain=gain.tolist(),generated_master=str(master),generated_sha256=sha(master),matte="static-authored-long-edges",local_boundary_colour_transfer=True,original_foreground_rgb_exact=True,expanded_pixels=int(expansion.sum()),native_reference_exact=True))
-manifest['development_candidate']='issue-56-underlays-v1';manifest['image_format']='mixed-png-webp'
+ audit.append(dict(room=room,geometry=geometry,foreground=t['key'],underlay=key,cells=len(cells),pixels=int(support.sum()),matte="static-authored-long-edges",**details,original_foreground_rgb_exact=True,expanded_pixels=int(expansion.sum()),native_reference_exact=True))
+manifest['development_candidate']='issue-56-underlays-v2' if 'M092' in selected else 'issue-56-underlays-v1';manifest['image_format']='mixed-png-webp'
 (a.out/'manifest.json').unlink();(a.out/'manifest.json').write_text(json.dumps(manifest,separators=(',',':')))
 audit_path.write_text(json.dumps(audit,indent=2))
 print(json.dumps(audit,indent=2))
