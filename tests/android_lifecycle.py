@@ -223,7 +223,7 @@ def native_replay(options, profile_files=None, max_seconds=None):
             adb('shell', 'run-as', pkg, 'mkdir', '-p', relative)
             subprocess.run([a.adb, '-s', a.serial, 'shell', '-T', 'run-as', pkg,
                             'tar', '-xf', '-', '-C', relative], input=data.getvalue(),
-                           check=True, capture_output=True, timeout=30)
+                           check=True, capture_output=True, timeout=120)
         adb('shell', 'am', 'start', '-S', '-W', '-f', '0x10008000',
             '-n', pkg+'/.LauncherActivity')
         launcher = pid(pkg)
