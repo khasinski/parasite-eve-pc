@@ -17,6 +17,7 @@ import zipfile
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
 parser.add_argument('--adb', default='adb')
+parser.add_argument('--save-import-only', action='store_true', help='Test save import and validation through the system picker')
 parser.add_argument('--saves-only', action='store_true', help='Test save ZIP export through the system picker')
 parser.add_argument('--report-only', action='store_true', help='Test diagnostic ZIP export through the system picker')
 args = parser.parse_args()
@@ -123,6 +124,91 @@ def report_test():
         adb('shell', 'am', 'force-stop', pkg)
         adb('shell', 'run-as', pkg, 'rm', '-f', *(logs+name for name in fixtures+[ignored]))
         adb('shell', 'rm', '-f', output)
+
+
+def save_import_test():
+    import binascii
+    raw = bytearray((i * 37 + 11) & 255 for i in range(8192))
+    raw[:2] = b'SC'
+    raw[0x1C8C:0x1C90] = b'\0' * 4
+    raw[0x1C8C:0x1C90] = ((~binascii.crc_hqx(raw, 0xFFFF)) & 0xFFFF).to_bytes(4, 'little')
+    raw = bytes(raw)
+    paths = ['bu00/BASLUS-006620000000A', 'bu10/BASLUS-006620000001B', 'bu00/BASLUS-006620000000C']
+    remote = '/sdcard/Download/pe-import-saves-'+uuid.uuid4().hex+'.zip'
+    raw_source = '/sdcard/Download/'+paths[2].split('/')[-1]
+    owned, sources = [], [remote]
+
+    def exists(path):
+        return subprocess.run([args.adb, '-s', args.serial, 'shell', 'run-as', pkg,
+                               'test', '-e', 'files/memory-cards/'+path]).returncode == 0
+
+    def bundle(payloads):
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+            for name, data in payloads:
+                archive.writestr(name, data)
+        return output.getvalue()
+
+    def select(data, expected, source=remote):
+        subprocess.run([args.adb, '-s', args.serial, 'shell', '-T', 'cat > '+source],
+                       input=data, check=True, timeout=30)
+        click('Import saves')
+        if not any(n.get('text') == source.split('/')[-1] for n in nodes()):
+            click('Show roots')
+            click('Downloads')
+        click(source.split('/')[-1])
+        text = '\n'.join(n.get('text', '') for n in nodes())
+        assert expected in text, text
+        click('OK')
+
+    try:
+        for path in paths:
+            assert not exists(path), 'Refusing to replace existing save fixture: '+path
+        owned.extend(paths)
+        adb('shell', 'am', 'start', '-S', '-W', '-f', '0x10008000', '-n', pkg+'/.LauncherActivity')
+        click('Import saves')
+        assert any(n.get('package', '').endswith('.documentsui') for n in nodes()), 'System picker did not open'
+        for _ in range(4):
+            adb('shell', 'input', 'keyevent', '4')
+            if any(n.get('text', '').casefold() == 'import saves' and n.get('enabled') == 'true' for n in nodes()):
+                break
+        else:
+            raise AssertionError('Cancel did not restore save import')
+        damaged = bytearray(raw)
+        damaged[0x123] ^= 1
+        select(bundle([(paths[0], raw), (paths[1], damaged)]), 'Save checksum is invalid')
+        assert not any(exists(path) for path in paths), 'Partial import after checksum failure'
+        print('PASS: invalid game checksum in second entry publishes no saves', flush=True)
+        select(bundle([('../'+paths[0], raw)]), 'Import failed')
+        print('PASS: traversal rejected', flush=True)
+        select(bundle([(paths[0], raw)])[:-12], 'Import failed')
+        print('PASS: truncated ZIP rejected', flush=True)
+        select(bundle([(path, raw) for path in paths[:2]]), '2 save(s) imported')
+        for path in paths[:2]:
+            assert adb('exec-out', 'run-as', pkg, 'cat', 'files/memory-cards/'+path) == raw
+        print('PASS: real SAF import both cards, exact save bytes', flush=True)
+        select(bundle([(paths[2], raw), (paths[0], raw)]), 'Save already exists')
+        assert not exists(paths[2]), 'Partial import before a collision'
+        for path in paths[:2]:
+            assert adb('exec-out', 'run-as', pkg, 'cat', 'files/memory-cards/'+path) == raw
+        print('PASS: collision rejects whole selection and preserves both cards', flush=True)
+        source_exists = subprocess.run([args.adb, '-s', args.serial, 'shell', 'test', '-e', raw_source]).returncode == 0
+        assert not source_exists, 'Refusing to replace existing raw source fixture'
+        sources.append(raw_source)
+        select(raw, '1 save(s) imported', raw_source)
+        assert adb('exec-out', 'run-as', pkg, 'cat', 'files/memory-cards/'+paths[2]) == raw
+        assert adb('exec-out', 'cat', raw_source) == raw
+        print('PASS: raw save to card1, source preserved, cancellation', flush=True)
+    finally:
+        adb('shell', 'am', 'force-stop', pkg)
+        for path in owned:
+            adb('shell', 'run-as', pkg, 'rm', '-f', 'files/memory-cards/'+path)
+        adb('shell', 'rm', '-f', *sources)
+
+
+if args.save_import_only:
+    save_import_test()
+    sys.exit(0)
 
 
 def saves_test():

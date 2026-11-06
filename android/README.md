@@ -32,7 +32,7 @@ hides the touch gamepad; disconnecting it restores touch. The Settings button
 opens the existing native settings menu. Touch input is cleared on pause, focus
 loss and controller changes.
 
-Save import and complete Android settings integration
+Complete Android settings integration
 and device compatibility testing remain unfinished. The desktop file dialog is not an Android file picker.
 Native save-load requests across missing discs have been tested in both directions.
 Continuous campaign and physical-device testing remain unfinished.
@@ -53,6 +53,20 @@ python3 tests/android_launcher.py --saves-only --serial emulator-5566 --adb "$AN
 ```
 
 The test refuses to overwrite existing saves with its fixture names.
+
+Use **Import saves** to select a ZIP exported by this port or an original
+8192-byte `BASLUS-00662000000[01][A-O]` save file. ZIPs retain both card directories;
+a single file goes to card 1. Existing filenames are never replaced. Import
+checks the archive, every save's original game checksum and all destinations
+before creating save files. A rejected selection leaves existing saves intact.
+Use the save editor to extract saves from MCR/MCD/MCS card images first.
+
+Verify import, invalid checksums, truncated archives, path rejection,
+collisions, raw saves and cancellation on a dedicated emulator:
+
+```sh
+python3 tests/android_launcher.py --save-import-only --serial emulator-5566 --adb "$ANDROID_HOME/platform-tools/adb"
+```
 
 Use **Export diagnostic report** in the launcher to save a ZIP through Android's
 system file picker. It includes the game log, current native log, up to five
