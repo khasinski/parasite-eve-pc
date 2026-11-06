@@ -20,6 +20,7 @@ p.add_argument('--adb', default='adb')
 p.add_argument('--disc', default='disc1.cue', help='Imported CUE basename')
 p.add_argument('--tls-only', action='store_true', help='Check TLS rejection and preservation of an installed fixture')
 p.add_argument('--hd-render', type=Path, help='Check native HD underlays in both aspects; save evidence in a new directory')
+p.add_argument('--hd-pack', type=Path, help='Reviewed HD material pack required by --hd-render')
 p.add_argument('--native-replay', nargs=argparse.REMAINDER,
                help='Run remaining native test executable arguments on Android')
 a = p.parse_args()
@@ -281,6 +282,14 @@ def hd_render(output):
     from hd_widescreen import synthetic_underlay
     output = output.resolve()
     output.mkdir()  # Preserve earlier evidence rather than overwrite it.
+    pack = a.hd_pack.resolve()
+    assert json.loads((pack/'manifest.json').read_text()).get('atlases'), 'HD material pack has no atlases'
+    # A native opaque fallback hides a correctly drawn underlay completely.
+    # Use the same reviewed material masks as the desktop integration test;
+    # compare identical materials with/without the synthetic backdrop.
+    materials = {'mods/upscale/fixture/'+source.name: source.read_bytes()
+                 for source in pack.iterdir() if source.is_file()
+                 and not source.name.endswith(('-wide.bin', '-under.bin'))}
     geometry = '6a8f3dab535c7a8e'  # US Disc 1, first theatre exterior (M002).
     timeline = [(10000, 8), (10010, 0), (11000, 16), (11010, 0), (11500, 16384), (11510, 0)]
     for tick in (17000, 17600, 18200, 18800, 19400, 20000, 20600, 21200, 21800):
@@ -297,9 +306,7 @@ def hd_render(output):
             def fixture(_absolute):
                 # Headless replays deliberately ignore saved graphics options.
                 # The debug-only intent opts into this fixed profile-local path.
-                files = {}
-                # An empty baseline pack still needs a directory for discovery.
-                files['mods/upscale/fixture/manifest.json'] = b'{}'
+                files = dict(materials)
                 if under:
                     files.update({'mods/upscale/fixture/'+k: v for k, v in synthetic_underlay(geometry).items()})
                 return files
@@ -333,8 +340,12 @@ def hd_render(output):
 
 if a.hd_render is not None:
     if a.tls_only or a.native_replay is not None: p.error('--hd-render runs separately')
+    if a.hd_pack is None: p.error('--hd-render requires --hd-pack with reviewed material masks')
     hd_render(a.hd_render)
     sys.exit(0)
+
+if a.hd_pack is not None:
+    p.error('--hd-pack requires --hd-render')
 
 
 if a.tls_only:

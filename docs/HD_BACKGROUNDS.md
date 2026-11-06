@@ -218,9 +218,10 @@ GPU tests cover valid/invalid markers, PNG/WebP parity, native VRAM, palette
 fallback, semitransparency and the legacy transparent-pixel guard.
 
 With a debug APK and an imported US Disc 1 on a headless Android emulator,
-`python3 tests/android_lifecycle.py --serial emulator-5566 --hd-render /new/evidence/directory`
-checks a synthetic underlay in 4:3 and 16:9. It compares native state, full VRAM
-and PCM against an empty pack, and retains the rendered frames and hashes.
+`python3 tests/android_lifecycle.py --serial emulator-5566 --hd-render /new/evidence/directory --hd-pack /path/to/reviewed/pack`
+checks a synthetic underlay in 4:3 and 16:9, using the reviewed HD material masks
+that expose it. It compares identical materials with and without the underlay:
+native state, full VRAM and PCM must match. Rendered frames and hashes are retained.
 
 `hd-poc/pack.py --coverage-aa` traces each complete native entry before cutting
 16px tiles, simplifies long stair-step contours within half a native pixel,
