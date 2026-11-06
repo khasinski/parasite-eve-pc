@@ -18,6 +18,89 @@ static int host_open_assists;
 #include <stdlib.h>
 #include <string.h>
 #include <SDL3/SDL.h>
+#ifdef __ANDROID__
+#include <unistd.h>
+#include <jni.h>
+#endif
+#ifdef __ANDROID__
+/* Android touch is a normal SDL gamepad: bindings and field analog thresholds
+ * are shared with hardware controllers. Java only publishes atomic input. */
+static SDL_AtomicInt android_touch_buttons, android_touch_x, android_touch_y;
+static SDL_AtomicInt android_touch_triggers, android_touch_ready, android_physical_pads;
+static SDL_Joystick *android_touch_joystick;
+static SDL_JoystickID android_touch_id;
+
+JNIEXPORT void JNICALL Java_com_khasinski_parasiteeve_GameActivity_nativeTouchState(
+        JNIEnv *env, jclass type, jint buttons, jint x, jint y, jint triggers) {
+    (void)env; (void)type;
+    SDL_SetAtomicInt(&android_touch_buttons, buttons & 0x7FFF);
+    SDL_SetAtomicInt(&android_touch_x, SDL_clamp(x, -32768, 32767));
+    SDL_SetAtomicInt(&android_touch_y, SDL_clamp(y, -32768, 32767));
+    SDL_SetAtomicInt(&android_touch_triggers, triggers & 3);
+}
+JNIEXPORT jint JNICALL Java_com_khasinski_parasiteeve_GameActivity_nativeTouchStatus(
+        JNIEnv *env, jclass type) {
+    (void)env; (void)type;
+    return !SDL_GetAtomicInt(&android_touch_ready) ? 0 : SDL_GetAtomicInt(&android_physical_pads) ? 2 : 1;
+}
+static void SDLCALL Host_AndroidTouchUpdate(void *unused) {
+    (void)unused;
+    if (!android_touch_joystick) return;
+    const int active = !SDL_GetAtomicInt(&android_physical_pads);
+    const unsigned buttons = active ? (unsigned)SDL_GetAtomicInt(&android_touch_buttons) : 0;
+    for (unsigned i = 0; i < 15; ++i)
+        SDL_SetJoystickVirtualButton(android_touch_joystick, (int)i, (buttons & (1u << i)) != 0);
+    SDL_SetJoystickVirtualAxis(android_touch_joystick, 0, active ? SDL_GetAtomicInt(&android_touch_x) : 0);
+    SDL_SetJoystickVirtualAxis(android_touch_joystick, 1, active ? SDL_GetAtomicInt(&android_touch_y) : 0);
+    const unsigned triggers = active ? (unsigned)SDL_GetAtomicInt(&android_touch_triggers) : 0;
+    SDL_SetJoystickVirtualAxis(android_touch_joystick, 4, (triggers & 1) ? 32767 : -32768);
+    SDL_SetJoystickVirtualAxis(android_touch_joystick, 5, (triggers & 2) ? 32767 : -32768);
+}
+static void Host_AndroidTouchCensus(void) {
+    int count = 0, physical = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&count);
+    for (int i = 0; ids && i < count; ++i) physical += ids[i] != android_touch_id;
+    SDL_free(ids);
+    SDL_SetAtomicInt(&android_physical_pads, physical);
+}
+static bool SDLCALL Host_AndroidTouchWatch(void *unused, SDL_Event *event) {
+    (void)unused;
+    if ((event->type == SDL_EVENT_GAMEPAD_ADDED || event->type == SDL_EVENT_GAMEPAD_REMOVED) &&
+            event->gdevice.which != android_touch_id) {
+        Host_AndroidTouchCensus();
+        SDL_SetAtomicInt(&android_touch_buttons, 0);
+        SDL_SetAtomicInt(&android_touch_x, 0); SDL_SetAtomicInt(&android_touch_y, 0);
+        SDL_SetAtomicInt(&android_touch_triggers, 0);
+    }
+    return true;
+}
+static void SDLCALL Host_AndroidTouchCleanup(void *unused) {
+    (void)unused;
+    SDL_SetAtomicInt(&android_touch_ready, 0);
+    android_touch_joystick = NULL;
+}
+static bool Host_AndroidTouchInit(void) {
+    if (!SDL_InitSubSystem(SDL_INIT_GAMEPAD)) return false;
+    SDL_VirtualJoystickDesc description;
+    SDL_INIT_INTERFACE(&description);
+    description.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    description.vendor_id = 0xFFFF; description.product_id = 0x5045;
+    description.naxes = 6; description.nbuttons = 15;
+    description.button_mask = 0x7FFF; description.axis_mask = 0x3F;
+    description.name = "Parasite Eve Touch";
+    description.Update = Host_AndroidTouchUpdate;
+    description.Cleanup = Host_AndroidTouchCleanup;
+    android_touch_id = SDL_AttachVirtualJoystick(&description);
+    if (!android_touch_id) return false;
+    android_touch_joystick = SDL_OpenJoystick(android_touch_id);
+    if (!android_touch_joystick) { SDL_DetachVirtualJoystick(android_touch_id); return false; }
+    Host_AndroidTouchUpdate(NULL); /* Triggers start at their released extrema. */
+    Host_AndroidTouchCensus();
+    SDL_AddEventWatch(Host_AndroidTouchWatch, NULL);
+    SDL_SetAtomicInt(&android_touch_ready, 1);
+    return true;
+}
+#endif
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 static void Host_StateUiRegister(void);
 static bool Host_StateChord(const SDL_Event *event);
@@ -218,7 +301,12 @@ typedef enum HostSettingsPage {
 
 typedef enum HostBindDevice {
     HOST_BIND_KEYBOARD = 0,
-    HOST_BIND_CONTROLLER = 1
+    HOST_BIND_CONTROLLER = 1,
+#ifdef __ANDROID__
+    HOST_BIND_DEFAULT = HOST_BIND_CONTROLLER
+#else
+    HOST_BIND_DEFAULT = HOST_BIND_KEYBOARD
+#endif
 } HostBindDevice;
 
 #if PE_DESKTOP_MOD_DOWNLOADS
@@ -344,7 +432,9 @@ static int HdRequest(const char *url,HdTransfer *transfer,const char *download_i
     curl_easy_setopt(curl,CURLOPT_URL,url);curl_easy_setopt(curl,CURLOPT_USERAGENT,ua);curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,"https,http");
     curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT,10L);curl_easy_setopt(curl,CURLOPT_TIMEOUT,7200L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_LIMIT,1024L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_TIME,60L);curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
     curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,HdWrite);curl_easy_setopt(curl,CURLOPT_WRITEDATA,transfer);curl_easy_setopt(curl,CURLOPT_XFERINFOFUNCTION,HdProgress);curl_easy_setopt(curl,CURLOPT_XFERINFODATA,transfer);curl_easy_setopt(curl,CURLOPT_NOPROGRESS,0L);curl_easy_setopt(curl,CURLOPT_FAILONERROR,1L);
-    CURLcode result=curl_easy_perform(curl);long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);curl_slist_free_all(headers);curl_easy_cleanup(curl);return result==CURLE_OK&&status==200;
+    CURLcode result=curl_easy_perform(curl);long status=0;curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,&status);curl_slist_free_all(headers);curl_easy_cleanup(curl);
+    if(result!=CURLE_OK||status!=200)fprintf(stderr,"Background request failed: %s (curl %d, HTTP %ld)\n",curl_easy_strerror(result),(int)result,status);
+    return result==CURLE_OK&&status==200;
 }
 static int HdWorker(void *unused){
     (void)unused;char archive[4096]={0},staging[4096]={0},final[4096],actual[65],url[512],id[80];cJSON *catalog=NULL;host_hd.success=0;host_hd.result_activate=0;
@@ -352,6 +442,9 @@ static int HdWorker(void *unused){
     if(host_hd.verify_only){host_hd.success=HdVerify(host_hd.active);SDL_strlcpy(host_hd.result_message,host_hd.success?"Installed pack verified.":"Verification failed. Download a fresh copy.",sizeof(host_hd.result_message));goto end;}
     const char *base=SDL_getenv("PE_HD_SERVER");if(!base||!*base)base="https://pe.polanka.ovh";
     unsigned local_port=0;char trailing;int local=sscanf(base,"http://127.0.0.1:%u%c",&local_port,&trailing)==1&&local_port>0&&local_port<=65535;
+#if defined(__ANDROID__) && !defined(NDEBUG)
+    if(!local)local=sscanf(base,"https://127.0.0.1:%u%c",&local_port,&trailing)==1&&local_port>0&&local_port<=65535;
+#endif
     if(strcmp(base,"https://pe.polanka.ovh")&&!local){SDL_strlcpy(host_hd.result_message,"Invalid mod server override.",sizeof(host_hd.result_message));goto end;}
     snprintf(id,sizeof(id),"pe-%016llx-%08x",(unsigned long long)SDL_GetPerformanceCounter(),(unsigned)SDL_rand(0x7fffffff));
     snprintf(url,sizeof(url),"%s/api/mods/upscale/latest",base);HdTransfer transfer={0};
@@ -1650,6 +1743,43 @@ static void Host_NativeApplicationShutdown(void){
 #endif
 
 static int Host_SelectImage(unsigned identity, char *path, size_t size) {
+#ifdef __ANDROID__
+    /* A CUE needs access to its sibling BIN, not an isolated content:// URI.
+     * Reuse the app's private folder importer while the existing caller keeps
+     * the original game clock and audio paused. Return a normal local path. */
+    JNIEnv *env = SDL_GetAndroidJNIEnv();
+    jobject activity = SDL_GetAndroidActivity();
+    if (!env || !activity) return -1;
+    jclass type = (*env)->GetObjectClass(env, activity);
+    jmethodID request = type ? (*env)->GetMethodID(env, type, "requestDiscImage", "(I)V") : NULL;
+    jmethodID poll = request ? (*env)->GetMethodID(env, type, "pollDiscImage", "()[B") : NULL;
+    int result = -1;
+    if (!poll || (*env)->ExceptionCheck(env)) goto android_done;
+    (*env)->CallVoidMethod(env, activity, request, (jint)identity);
+    while (!(*env)->ExceptionCheck(env)) {
+        jbyteArray selected = (*env)->CallObjectMethod(env, activity, poll);
+        if ((*env)->ExceptionCheck(env)) break;
+        if (selected) {
+            jsize length = (*env)->GetArrayLength(env, selected);
+            if (length == 0) result = 0;
+            else if ((size_t)length < size) {
+                (*env)->GetByteArrayRegion(env, selected, 0, length, (jbyte *)path);
+                if (!(*env)->ExceptionCheck(env)) { path[length] = 0; result = 1; }
+            }
+            (*env)->DeleteLocalRef(env, selected);
+            break;
+        }
+        /* Keep an initialized Android window's pause/resume handshake alive;
+         * a diagnostic request can also precede SDL events initialization. */
+        if (SDL_WasInit(SDL_INIT_EVENTS)) SDL_PumpEvents();
+        SDL_Delay(10);
+    }
+android_done:
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    if (type) (*env)->DeleteLocalRef(env, type);
+    (*env)->DeleteLocalRef(env, activity);
+    return result;
+#else
 #ifdef PE_PS5
     (void)identity; (void)path; (void)size;
     fprintf(stderr, "Disc image missing; configure both disc paths before startup.\n");
@@ -1692,6 +1822,7 @@ static int Host_SelectImage(unsigned identity, char *path, size_t size) {
     SDL_free(dialog.paths[0]);
     SDL_free(dialog.paths[1]);
     return result;
+#endif
 }
 
 static int Host_InstallImage(unsigned identity, const char *path) {
@@ -1880,7 +2011,7 @@ static void Host_SwitchSettingsPage(HostOverlayState *state, int nextPage) {
         if(state->row>=Host_SettingsTotalRowCount(normalized))state->row=0;
         Host_EnsureControlsRowVisible(state);
 #else
-        state->page = normalized;state->row = 0;state->scroll = 0;state->bind_device=HOST_BIND_KEYBOARD;
+        state->page = normalized;state->row = 0;state->scroll = 0;state->bind_device=HOST_BIND_DEFAULT;
 #endif
         state->capturing_binding = 0;
         state->status = NULL;
@@ -2807,7 +2938,7 @@ static void Host_Settings(SDL_Window *game) {
         .page = HOST_PAGE_GRAPHICS,
 #endif
         .row = 0,
-        .bind_device = HOST_BIND_KEYBOARD,
+        .bind_device = HOST_BIND_DEFAULT,
         .capturing_binding = 0,
         .quit = 0,
         .dirty = 1,
@@ -3869,7 +4000,7 @@ static void Host_DescribeSaveData(char *out, size_t size) {
 /* Select portable storage before any preferences, cards, mods or installer
  * paths are initialized. An explicit PE_CONFIG_HOME remains authoritative. */
 static int Host_ConfigurePortable(int *argc, char **argv) {
-#ifndef PE_PS5
+#if !defined(PE_PS5) && !defined(__ANDROID__)
     int requested = 0, count = 1;
     for (int i = 1; i < *argc; ++i) {
         if (!strcmp(argv[i], "--portable")) requested = 1;
@@ -4016,11 +4147,27 @@ int main(int argc, char **argv) {
         interactive = 0;
     }
     for (int i = 1; i < argc; ++i) {
+#if defined(__ANDROID__) && !defined(NDEBUG)
+        if (!strcmp(argv[i], "--test-select-disc")) interactive = 0;
+#endif
         if (!strcmp(argv[i], "--headless") || !strcmp(argv[i], "--headless-gpu") || !strcmp(argv[i], "--help") || !strcmp(argv[i], "--download-backgrounds") || !strcmp(argv[i], "--verify-backgrounds")) {
             interactive = 0;
         }
     }
 
+#ifdef __ANDROID__
+    /* An APK has no terminal to collect the existing headless JSON stream.
+     * Keep it in app-private storage for autonomous diagnostic runs. */
+    if (!interactive) {
+        const char *directory = SDL_GetAndroidInternalStoragePath();
+        char log_path[4096];
+        int length = directory ? snprintf(log_path, sizeof(log_path), "%s/diagnostics.log", directory) : -1;
+        if (length < 0 || (size_t)length >= sizeof(log_path) || !freopen(log_path, "w", stdout))
+            return EXIT_FAILURE;
+        setvbuf(stdout, NULL, _IONBF, 0);
+        if (dup2(fileno(stdout), STDERR_FILENO) < 0) return EXIT_FAILURE;
+    }
+#endif
     CrashReport_Install(interactive, Host_DescribeCrash);
     CrashReport_SetSaveData(Host_DescribeSaveData);
     g_BootSceneStarted = Host_TakeRoomSnapshot;
@@ -4043,12 +4190,39 @@ int main(int argc, char **argv) {
 #endif
 #endif
     if(argc==2 && (!strcmp(argv[1],"--download-backgrounds") || !strcmp(argv[1],"--verify-backgrounds")))return Host_HdCli(!strcmp(argv[1],"--verify-backgrounds"));
+#if defined(__ANDROID__) && !defined(NDEBUG)
+    /* Exercise the same JNI picker and original image validator without
+     * requiring a campaign playthrough. Debug APK only, no game-state writes. */
+    if (argc == 3 && !strcmp(argv[1], "--test-select-disc")) {
+        unsigned identity = (unsigned)atoi(argv[2]), found = 0;
+        if (identity != 1 && identity != 2) return EXIT_FAILURE;
+        if (!SDL_Init(SDL_INIT_VIDEO)) return EXIT_FAILURE;
+        char path[4096]; PeDisc image = {0};
+        int selected = Host_SelectImage(identity, path, sizeof(path));
+        if (selected > 0 && (!Host_OpenDisc(&image, path) ||
+            Asset_ValidatePeImage(&image, &found) || found != identity)) selected = -1;
+        printf("{\"event\":\"android_disc_selection\",\"requested\":%u,\"selected\":%d,\"identity\":%u}\n",
+               identity, selected, found);
+        pe_disc_close(&image);
+        SDL_Quit();
+        return selected == 1 ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+#endif
     unsigned internal_resolution = host_options.scale;
     int resolution_argument = 0;
     int headless_argument = 0;
+#if defined(__ANDROID__) && !defined(NDEBUG)
+    int android_test_disc_dialogs = 0;
+#endif
     unsigned effect_arguments = 0;
 
     for (int arg = 1; arg < argc; ++arg) {
+#if defined(__ANDROID__) && !defined(NDEBUG)
+        if (!strcmp(argv[arg], "--test-android-disc-dialogs")) {
+            android_test_disc_dialogs = 1;
+            continue;
+        }
+#endif
         if (!strcmp(argv[arg], "--help")) {
             Host_PrintHelp(argv[0]);
             return EXIT_SUCCESS;
@@ -4356,6 +4530,16 @@ images_ready:;
             if(n>0&&(size_t)n<sizeof(host_options.user_file))Host_HdInit();
         }
     }
+#if defined(__ANDROID__) && !defined(NDEBUG)
+    if (android_test_disc_dialogs) {
+        /* Opt-in emulator testing: keep native game execution accelerated and
+         * its GPU hidden, but exercise the real missing-disc/card frontend. */
+        if (interactive || !g_BootHostVBlankLimit || !Host_InstallCardPaths(SDL_GetBasePath()))
+            goto shutdown;
+        host_images = images;
+        g_CdImageRequest = Host_RequestImage;
+    }
+#endif
     if (interactive) {
         host_images = images;
         g_CdImageRequest = Host_RequestImage;
@@ -4367,6 +4551,10 @@ images_ready:;
         Host_SaveOptions();
     }
 
+#ifdef __ANDROID__
+    if (interactive && !Host_AndroidTouchInit())
+        SDL_Log("Android touch controller unavailable: %s", SDL_GetError());
+#endif
     g_BootHostActive = 1;
     PE_HOOK(PE_HOOK_INIT, (&(PeHookInit){interactive, host_options.user_file}));
 #if PE_NATIVE_STATE_CPU_COMPONENTS

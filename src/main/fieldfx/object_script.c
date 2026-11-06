@@ -80,7 +80,7 @@ int FieldFx_Register(FieldFxObject *obj, FieldFxHandler *handlers)
       }
       else
       {
-        printf(g_FieldFxServiceThreadMissingMsg);
+        printf("%s", g_FieldFxServiceThreadMissingMsg);
       }
     }
   }
@@ -129,7 +129,7 @@ int FieldFx_UpdateSlots(FieldFxObject *obj, FieldFxHandler *handlers) {
             if (handler != (void *)-1) {
                 handler(obj, entry.slot, g_FieldFxScriptData + entry.slot->data_offset);
             } else {
-                printf(g_FieldFxUpdateThreadMissingMsg);
+                printf("%s", g_FieldFxUpdateThreadMissingMsg);
             }
             g_FieldFxSlotTable[i].counter += 1;
         }

@@ -113,7 +113,7 @@ void FieldFx_SetSpriteColorMode(int mode) {
         g_FieldFxSpriteColorMode = 1;
         break;
     default:
-        printf(g_FieldSpriteWrongColorModeMsg);
+        printf("%s", g_FieldSpriteWrongColorModeMsg);
         break;
     }
 

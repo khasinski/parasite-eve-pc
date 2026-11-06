@@ -1,0 +1,33 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.khasinski.parasiteeve'
+    compileSdk 35
+    ndkVersion '28.2.13676358'
+    defaultConfig {
+        applicationId 'com.khasinski.parasiteeve'
+        minSdk 26
+        targetSdk 35
+        testInstrumentationRunner 'com.khasinski.parasiteeve.TouchControlsTest'
+        versionCode 1
+        versionName '0.10-android-development'
+        externalNativeBuild {
+            cmake {
+                targets 'parasite-eve-pc'
+                arguments '-DANDROID_STL=c++_static', '-DPE_MODS=ON',
+                    '-DBUILD_TESTING=OFF', '-DPE_BUNDLE_LANGUAGE_PACKS=OFF',
+                    '-DPE_DESKTOP_MOD_DOWNLOADS=ON', '-DSDL_SHARED=OFF',
+                    '-DSDL_STATIC=ON', '-DSDL_TEST_LIBRARY=OFF',
+                    '-DSDL_TESTS=OFF', '-DSDL_EXAMPLES=OFF'
+                abiFilters 'arm64-v8a'
+            }
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    sourceSets.main.java.srcDirs = ['src/main/java',
+        '../../third_party/psyz/external/SDL/android-project/app/src/main/java']
+    externalNativeBuild.cmake.path '../../CMakeLists.txt'
+    buildTypes.release.minifyEnabled false
+}
