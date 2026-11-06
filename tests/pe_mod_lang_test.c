@@ -41,7 +41,23 @@ static unsigned char *copy_of(const unsigned char *p, size_t size) {
     unsigned char *c = malloc(size); memcpy(c, p, size); return c;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    /* Exercise the Rust editor's real output with the game's independent C reader.
+     * The editor round-trip demo contains two translated pages and their bank map. */
+    if (argc == 3 && !strcmp(argv[1], "--editor-demo")) {
+        PeLangPack demo = {0};
+        assert(!pe_lang_pack_load(&demo, argv[2]));
+        assert(demo.count == 3 && demo.cjk_count == 21);
+        assert(!strcmp(demo.lang, "zh-TW"));
+        const unsigned char *first = pe_lang_pack_find(&demo, "dlg/M001/009");
+        assert(first && first[0] == 0xF1);
+        assert(pe_lang_pack_find(&demo, "dlg/M001/014"));
+        assert(!pe_lang_pack_find(&demo, "dlg/M001/010"));
+        pe_lang_pack_free(&demo);
+        puts("Passed Rust editor demo compatibility with the original C pack reader.");
+        return 0;
+    }
+    assert(argc == 1);
     /* The same FNV-1a 32 as pelang.py (localization/tests/test_pelang.py checks these too). */
     assert(pe_lang_hash("") == 0x811C9DC5u && pe_lang_hash("a") == 0xE40C292Cu);
 
