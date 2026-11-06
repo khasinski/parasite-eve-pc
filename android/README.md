@@ -26,9 +26,14 @@ The launcher offers a starting image and supplies the other imported CUE to the
 native disc reader. Use one image per game disc; extra variants are not supported.
 Uninstalling the app deletes its imported images, settings and saves.
 
-A controller is currently required. Touch controls, Android settings integration,
-save import/export, crash report export and device compatibility testing
-remain unfinished. The desktop file dialog is not an Android file picker.
+The on-screen analog stick and PS1 buttons use the same native bindings and
+field walk/run threshold as hardware controllers. Connecting a physical controller
+hides the touch gamepad; disconnecting it restores touch. The Settings button
+opens the existing native settings menu. Touch input is cleared on pause, focus
+loss and controller changes.
+
+Save import/export, crash report export, complete Android settings integration
+and device compatibility testing remain unfinished. The desktop file dialog is not an Android file picker.
 Native save-load requests across missing discs have been tested in both directions.
 Continuous campaign and physical-device testing remain unfinished.
 Do not distribute this APK as a finished Android port.
@@ -48,6 +53,11 @@ rendered the opening movie. These checks do not establish full-game compatibilit
 or audio correctness on physical devices. The APK also downloaded and installed
 the production v0.1 HD pack through HTTPS using curl/MbedTLS with certificate
 verification enabled, then passed `--verify-backgrounds` on the installed pack.
+
+The touch prototype was also tested with a uinput controller hotplugged after
+native startup: Start and D-pad navigation reached the original title menu, and
+touch returned after hardware removal. Debug and Release APK builds pass.
+Multi-touch/focus-loss automation and physical-device testing remain outstanding.
 
 Debug APKs accept the native diagnostic argument array through the `arguments`
 intent extra on GameActivity. Release APKs ignore that extra. Headless debug runs

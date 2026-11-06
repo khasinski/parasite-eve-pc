@@ -8,6 +8,117 @@ import java.util.Arrays;
 
 /** Android loader for the original game modules compiled into libmain.so. */
 public class GameActivity extends SDLActivity {
+    private TouchControls touchControls;
+    private static native void nativeTouchState(int buttons, int x, int y, int triggers);
+    private static native int nativeTouchStatus();
+
+    /** Native SDL virtual controller, with independent pointer ownership for the stick. */
+    private final class TouchControls extends android.view.View implements Runnable {
+        final android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        final android.util.SparseArray<android.graphics.PointF> fingers = new android.util.SparseArray<>();
+        final java.util.HashSet<Integer> settingsFingers = new java.util.HashSet<>();
+        final android.graphics.RectF[] buttons = new android.graphics.RectF[10];
+        final String[] labels = {"△", "○", "×", "□", "L1", "L2", "R1", "R2", "SELECT", "START"};
+        // SDL gamepad north/east/south/west, shoulders, triggers, back/start.
+        final int[] bits = {3, 1, 0, 2, 9, -1, 10, -2, 4, 6};
+        final android.graphics.RectF settings = new android.graphics.RectF();
+        int stick = -1, status, held, triggers;
+        float cx, cy, radius, unit, axisX, axisY;
+        TouchControls() { super(GameActivity.this); setFocusable(false); for(int i=0;i<buttons.length;i++)buttons[i]=new android.graphics.RectF(); }
+        void clear() {
+            fingers.clear(); settingsFingers.clear(); stick=-1; held=triggers=0; axisX=axisY=0;
+            nativeTouchState(0,0,0,0); invalidate();
+        }
+        @Override protected void onAttachedToWindow() { super.onAttachedToWindow(); post(this); }
+        @Override protected void onDetachedFromWindow() { removeCallbacks(this); clear(); super.onDetachedFromWindow(); }
+        @Override public void run() {
+            int next=nativeTouchStatus();
+            if(next!=status){status=next;clear();}
+            invalidate(); postDelayed(this,250);
+        }
+        void layoutControls() {
+            float density=getResources().getDisplayMetrics().density;
+            unit=Math.max(40*density,Math.min(64*density,Math.min(getWidth(),getHeight())*.16f));
+            float left=unit*.2f,right=getWidth()-unit*.2f,bottom=getHeight()-unit*.2f;
+            android.view.WindowInsets insets=getRootWindowInsets();
+            if(insets!=null && android.os.Build.VERSION.SDK_INT>=28 && insets.getDisplayCutout()!=null){
+                android.view.DisplayCutout cutout=insets.getDisplayCutout();
+                left+=cutout.getSafeInsetLeft();right-=cutout.getSafeInsetRight();bottom-=cutout.getSafeInsetBottom();
+            }
+            radius=unit;cx=left+radius;cy=bottom-radius;
+            float fx=right-unit,fy=bottom-unit,r=unit*.42f,step=unit*.7f;
+            float[] xs={fx,fx+step,fx,fx-step},ys={fy-step,fy,fy+step,fy};
+            for(int i=0;i<4;i++)buttons[i].set(xs[i]-r,ys[i]-r,xs[i]+r,ys[i]+r);
+            buttons[4].set(left,unit*.2f,left+unit*1.15f,unit*.85f);
+            buttons[5].set(left+unit*1.3f,unit*.2f,left+unit*2.45f,unit*.85f);
+            buttons[6].set(right-unit*2.45f,unit*.2f,right-unit*1.3f,unit*.85f);
+            buttons[7].set(right-unit*1.15f,unit*.2f,right,unit*.85f);
+            buttons[8].set(getWidth()/2f-unit*1.45f,bottom-unit*.6f,getWidth()/2f-unit*.15f,bottom);
+            buttons[9].set(getWidth()/2f+unit*.15f,bottom-unit*.6f,getWidth()/2f+unit*1.45f,bottom);
+            settings.set(getWidth()/2f-unit*.8f,unit*.2f,getWidth()/2f+unit*.8f,unit*.85f);
+        }
+        boolean stickArea(float x,float y){float dx=x-cx,dy=y-cy;return dx*dx+dy*dy<radius*radius*1.25f;}
+        boolean controlArea(float x,float y){
+            if(status==0)return false;
+            if(settings.contains(x,y))return true;
+            if(status!=1)return false;
+            if(stickArea(x,y))return true;
+            for(android.graphics.RectF b:buttons)if(b.contains(x,y))return true;
+            return false;
+        }
+        void publish() {
+            held=triggers=0;axisX=axisY=0;
+            for(int n=0;n<fingers.size();n++){
+                int id=fingers.keyAt(n);android.graphics.PointF point=fingers.valueAt(n);
+                if(id==stick){
+                    axisX=(point.x-cx)/radius;axisY=(point.y-cy)/radius;
+                    float length=(float)Math.hypot(axisX,axisY);
+                    if(length>1){axisX/=length;axisY/=length;}
+                } else for(int i=0;i<buttons.length;i++)if(buttons[i].contains(point.x,point.y)){
+                    if(bits[i]>=0)held|=1<<bits[i];else triggers|=1<<(-bits[i]-1);
+                }
+            }
+            if(status!=1){held=triggers=0;axisX=axisY=0;}
+            nativeTouchState(held,Math.round(axisX*32767),Math.round(axisY*32767),triggers);invalidate();
+        }
+        @Override public boolean onTouchEvent(android.view.MotionEvent event){
+            layoutControls();int action=event.getActionMasked(),at=event.getActionIndex();
+            if(action==android.view.MotionEvent.ACTION_CANCEL){clear();return true;}
+            if(action==android.view.MotionEvent.ACTION_DOWN && !controlArea(event.getX(),event.getY()))return false;
+            if(action==android.view.MotionEvent.ACTION_DOWN || action==android.view.MotionEvent.ACTION_POINTER_DOWN){
+                int id=event.getPointerId(at);float x=event.getX(at),y=event.getY(at);
+                if(controlArea(x,y)){fingers.put(id,new android.graphics.PointF(x,y));if(settings.contains(x,y))settingsFingers.add(id);if(status==1 && stick<0 && stickArea(x,y))stick=id;}
+            }
+            for(int i=0;i<event.getPointerCount();i++){
+                android.graphics.PointF p=fingers.get(event.getPointerId(i));
+                if(p!=null){p.x=event.getX(i);p.y=event.getY(i);}
+            }
+            if(action==android.view.MotionEvent.ACTION_UP || action==android.view.MotionEvent.ACTION_POINTER_UP){
+                int id=event.getPointerId(at);android.graphics.PointF p=fingers.get(id);
+                if(settingsFingers.remove(id) && p!=null && settings.contains(p.x,p.y)){
+                    SDLActivity.onNativeKeyDown(android.view.KeyEvent.KEYCODE_ESCAPE);
+                    SDLActivity.onNativeKeyUp(android.view.KeyEvent.KEYCODE_ESCAPE);
+                }
+                fingers.remove(id);if(id==stick)stick=-1;
+            }
+            publish();return true;
+        }
+        void button(android.graphics.Canvas canvas,android.graphics.RectF box,String label,boolean active){
+            paint.setColor(active?0xB0608090:0x50303038);canvas.drawRoundRect(box,unit*.16f,unit*.16f,paint);
+            paint.setColor(0xC0FFFFFF);paint.setTextAlign(android.graphics.Paint.Align.CENTER);paint.setTextSize(unit*.25f);
+            canvas.drawText(label,box.centerX(),box.centerY()-(paint.ascent()+paint.descent())/2,paint);
+        }
+        @Override protected void onDraw(android.graphics.Canvas canvas){
+            layoutControls();if(status==0)return;
+            button(canvas,settings,"Settings",false);
+            if(status!=1)return;
+            paint.setColor(0x40303038);canvas.drawCircle(cx,cy,radius,paint);
+            paint.setColor(0x90708090);canvas.drawCircle(cx+axisX*radius*.7f,cy+axisY*radius*.7f,radius*.34f,paint);
+            for(int i=0;i<buttons.length;i++)button(canvas,buttons[i],labels[i],bits[i]>=0?(held&(1<<bits[i]))!=0:(triggers&(1<<(-bits[i]-1)))!=0);
+        }
+    }
+    @Override protected void onPause(){if(touchControls!=null)touchControls.clear();super.onPause();}
+    @Override public void onWindowFocusChanged(boolean focused){if(!focused && touchControls!=null)touchControls.clear();super.onWindowFocusChanged(focused);}
     @Override protected void main() {
         super.main();
         // Retire before SDL clears mSDLThread: a picker closing at exactly
@@ -43,6 +154,11 @@ public class GameActivity extends SDLActivity {
     }
     @Override protected void onCreate(android.os.Bundle state) {
         super.onCreate(state);
+        if(mLayout!=null){
+            touchControls=new TouchControls();
+            mLayout.addView(touchControls,new android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+        }
         if (android.os.Build.VERSION.SDK_INT >= 33)
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
                 android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::finish);
@@ -68,6 +184,23 @@ public class GameActivity extends SDLActivity {
             android.os.Process.killProcess(android.os.Process.myPid());
     }
     @Override protected String[] getLibraries() { return new String[] { "main" }; }
+    private void configureControllerDevices() {
+        // SDL treats Android DPAD keyboards as joysticks. Keep them in its
+        // keyboard path without reserving controller port 1 ahead of touch.
+        java.util.HashSet<String> controllers=new java.util.HashSet<>(), keyboards=new java.util.HashSet<>();
+        for(int id:android.view.InputDevice.getDeviceIds()){
+            android.view.InputDevice device=android.view.InputDevice.getDevice(id);
+            if(device==null)continue;
+            int sources=device.getSources();
+            String pair=String.format(java.util.Locale.ROOT,"0x%04x/0x%04x",device.getVendorId(),device.getProductId());
+            boolean controller=(sources&android.view.InputDevice.SOURCE_GAMEPAD)==android.view.InputDevice.SOURCE_GAMEPAD ||
+                (sources&android.view.InputDevice.SOURCE_JOYSTICK)==android.view.InputDevice.SOURCE_JOYSTICK;
+            if(controller)controllers.add(pair);
+            else if((sources&android.view.InputDevice.SOURCE_DPAD)==android.view.InputDevice.SOURCE_DPAD)keyboards.add(pair);
+        }
+        keyboards.removeAll(controllers); // Do not hide a composite hardware controller.
+        if(!keyboards.isEmpty())nativeSetenv("SDL_GAMECONTROLLER_IGNORE_DEVICES",String.join(",",keyboards));
+    }
     @Override protected String[] getArguments() {
         // Diagnostic CLI admission is confined to development APKs. Other
         // apps must not be able to choose dump destinations in player storage.
@@ -81,6 +214,8 @@ public class GameActivity extends SDLActivity {
             if (!profile.isDirectory() && !profile.mkdirs())
                 throw new IllegalStateException("Cannot create diagnostic profile");
         }
+        configureControllerDevices();
+        nativeSetenv("SDL_ORIENTATIONS", "LandscapeLeft LandscapeRight");
         nativeSetenv("PE_CONFIG_HOME", profile.getAbsolutePath());
         nativeSetenv("HOME", profile.getAbsolutePath());
         String[] arguments = development ? getIntent().getStringArrayExtra("arguments") : null;
