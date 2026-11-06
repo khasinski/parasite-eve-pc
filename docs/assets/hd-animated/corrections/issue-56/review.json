@@ -74,5 +74,53 @@
     "kill_and_scan_regression_passed": true,
     "old_resolver_fails_regression": true,
     "randomizer_precedence_preserved": true
+  },
+  "m099_window_rail_supplement": {
+    "status": "reviewed local candidate; not published; remaining window/door/bookshelf boundaries still need review",
+    "entry": 19,
+    "key": "e5897e02f84be620",
+    "polygon_native": [
+      [
+        0,
+        135
+      ],
+      [
+        180,
+        58
+      ],
+      [
+        180,
+        75
+      ],
+      [
+        0,
+        152
+      ]
+    ],
+    "method": "Registered existing OpenAI full-context anchor, original per-view low-frequency source illumination, one-native-pixel inward patch feather. No new inference.",
+    "registered_anchor_sha256": "839d0cf2c68caa9710d4005f457804861a568ef0ca4e83ba4feb7904a0d092a8",
+    "source_restoration_sha256": "10f94e00e3b315ee4c12dc1132540b291f20ae7694e9f1590cb4740d19a62769",
+    "alignment_file_sha256": "2dc5f269c7d02996dc868d68fade1288fec57da2a057897e01e791f581c16b93",
+    "lossless_baseline": "candidate-format-fixed from build_candidate.py before this supplement",
+    "changed_files": [
+      "e5897e02f84be620.png",
+      "manifest.json"
+    ],
+    "alpha_and_reference_exact": true,
+    "animated_door_atlases_exact": true,
+    "native_checkpoints": 58,
+    "native_state_vram_pcm_exact": true,
+    "hd_changed_bbox": [
+      0,
+      232,
+      181,
+      378
+    ],
+    "runtime_proof": "build/open-issues/hd-contours/live-m099-window-rail-v2/proof.json",
+    "image_comparison": "build/open-issues/hd-contours/live-m099-window-rail-v2/window-rail-detail.png",
+    "qualification": "Diagnostic room transfer at one camera group/story stage; not a full campaign or all animated poses. Raw unregistered master trial was rejected because its patch did not align.",
+    "native_1x_rgb_byte_identical": true,
+    "native_1x_checkpoints": 58,
+    "native_1x_proof": "build/open-issues/hd-contours/live-m099-window-rail-v2-native/proof.json"
   }
 }
