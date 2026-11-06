@@ -75,6 +75,14 @@ Errors stop the build (a missing glyph, a changed tag, menu text past its room);
 you to look at (rewrapped pages, glossary differences, a row left in English). Put `de.pelang` in
 `lang/` beside the game, start with All mods on, and pick it under F1 > Language.
 
+For layout review, set `PE_TEST_TEXTBOX_LAYOUT=1` when running the native game
+with `--headless` and `--control-at` or `--frame-limit`. Its JSON snapshots add
+`dialogue_layout`, in the same four-slot order as `dialogue`, with the original
+style, background, control flags and stored rectangle. Inactive entries and
+styles 0/3 have a null rectangle because those modes do not use it. These are
+runtime observations, not a guarantee that a translated page fits. Without the
+environment variable, the existing replay output is unchanged.
+
 ## 4. Submit
 
 ```
