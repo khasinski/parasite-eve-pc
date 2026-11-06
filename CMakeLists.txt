@@ -521,6 +521,17 @@ if(BUILD_TESTING)
     set_tests_properties(original-game-gte-pgxp-ownership PROPERTIES TIMEOUT 60
         FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy")
+    add_executable(test-psyz-cd-media
+        ${PSYZ_DIR}/psyz/tests/test_main.c
+        ${PSYZ_DIR}/psyz/tests/test_libcd.c
+        ${PSYZ_DIR}/ztest/ztest.c)
+    target_compile_definitions(test-psyz-cd-media PRIVATE __psyz)
+    target_include_directories(test-psyz-cd-media PRIVATE ${PSYZ_DIR}/ztest)
+    target_link_libraries(test-psyz-cd-media PRIVATE psyz)
+    add_test(NAME original-game-cd-media COMMAND test-psyz-cd-media --output=plain)
+    set_tests_properties(original-game-cd-media PROPERTIES TIMEOUT 60
+        FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy")
     pe_add_common_unit_test(test-original-animation original-game-animation tests/original_animation.c)
     pe_add_common_unit_test(test-original-transforms original-game-transforms tests/original_transforms.c)
     pe_add_common_unit_test(test-original-projection original-game-projection tests/original_projection.c)
