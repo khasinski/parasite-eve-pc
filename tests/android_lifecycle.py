@@ -18,6 +18,7 @@ p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--serial', required=True)
 p.add_argument('--adb', default='adb')
 p.add_argument('--disc', default='disc1.cue', help='Imported CUE basename')
+p.add_argument('--tls-only', action='store_true', help='Check TLS rejection and preservation of an installed fixture')
 p.add_argument('--native-replay', nargs=argparse.REMAINDER,
                help='Run remaining native test executable arguments on Android')
 a = p.parse_args()
@@ -45,6 +46,114 @@ def await_exit(launcher):
             return
         time.sleep(.1)
     raise AssertionError('Native game process did not retire')
+
+
+def download_tls():
+    import http.server
+    import io
+    import ssl
+    import tempfile
+    import threading
+    import zipfile
+
+    class Server(http.server.ThreadingHTTPServer):
+        daemon_threads = True
+        def get_request(self):
+            connection, address = super().get_request()
+            self.connections += 1
+            if self.context:
+                connection.settimeout(10)
+                try:
+                    connection = self.context.wrap_socket(connection, server_side=True)
+                except ssl.SSLError as error:
+                    self.tls_errors.append(str(error)); connection.close(); raise
+            return connection, address
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args): pass
+        def do_GET(self):
+            self.server.requests.append(self.path)
+            payload = self.server.catalog if self.path.endswith('/latest') else archive
+            self.send_response(200); self.send_header('Content-Length', str(len(payload))); self.end_headers()
+            self.wfile.write(payload)
+
+    profile = 'download-tls-'+uuid.uuid4().hex
+    relative = 'files/diagnostics/'+profile
+    servers = []
+    forwarded = []
+    try:
+        with tempfile.TemporaryDirectory(prefix='pe-android-tls-') as folder:
+            root = Path(folder)
+            # Installer-only fixture: these bytes are not a rendered texture pack.
+            key = '0123456789abcdef'
+            payloads = {key+'.webp': b'test atlas', key+'.ref.png': b'test reference'}
+            manifest = {'version': '0.1', 'atlases': [{'file': key+'.webp',
+                'atlas_sha256': hashlib.sha256(payloads[key+'.webp']).hexdigest(),
+                'reference_file': key+'.ref.png',
+                'reference_sha256': hashlib.sha256(payloads[key+'.ref.png']).hexdigest()}]}
+            payloads['manifest.json'] = json.dumps(manifest).encode()
+            data = io.BytesIO()
+            with zipfile.ZipFile(data, 'w') as zipped:
+                for name, payload in payloads.items(): zipped.writestr(name, payload)
+            archive = data.getvalue()
+            config = root/'openssl.cnf'
+            config.write_text('[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n'
+                              '[dn]\nCN=Parasite Eve test only\n[ext]\nsubjectAltName=IP:127.0.0.1\n')
+            subprocess.run(['openssl', 'req', '-new', '-newkey', 'rsa:2048', '-nodes', '-x509',
+                            '-sha256', '-days', '1', '-config', str(config), '-keyout', str(root/'key.pem'),
+                            '-out', str(root/'cert.pem')], check=True, capture_output=True, timeout=30)
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(root/'cert.pem', root/'key.pem')
+            for tls in (None, context):
+                server = Server(('127.0.0.1', 0), Handler)
+                server.context = tls; server.connections = 0; server.requests = []; server.tls_errors = []
+                base = ('https' if tls else 'http')+'://127.0.0.1:'+str(server.server_port)
+                server.catalog = json.dumps({'version': '0.1', 'url': base+'/upscale-v0.1.zip',
+                    'sha256': hashlib.sha256(archive).hexdigest(), 'size': len(archive),
+                    'format': 'webp-reference-png'}).encode()
+                servers.append(server)
+                threading.Thread(target=server.serve_forever, daemon=True).start()
+                forward = 'tcp:'+str(server.server_port)
+                assert not any(forward in line.split()[1:] for line in
+                               adb('reverse', '--list').decode().splitlines()), 'ADB reverse mapping already exists'
+                adb('reverse', forward, forward); forwarded.append(forward)
+            adb('shell', 'am', 'start', '-S', '-W', '-f', '0x10008000', '-n', pkg+'/.LauncherActivity')
+            launcher = pid(pkg); assert launcher, 'Launcher did not start'
+            def run(command, server):
+                base = ('https' if server.context else 'http')+'://127.0.0.1:'+str(server.server_port)
+                adb('shell', 'am', 'start', '-W', '-n', pkg+'/.GameActivity', '--es', 'testProfile', profile,
+                    '--es', 'testHdServer', base, '--esa', 'arguments', command)
+                await_exit(launcher)
+                return adb('exec-out', 'run-as', pkg, 'cat', 'files/diagnostics.log').decode()
+            first = run('--download-backgrounds', servers[0])
+            assert 'Installed.' in first, first
+            assert any(path.endswith('.zip') for path in servers[0].requests), 'Fixture was not downloaded'
+            pointer_path = relative+'/mods/upscale/active.json'
+            before = adb('exec-out', 'run-as', pkg, 'cat', pointer_path)
+            pointer = json.loads(before)
+            snapshot = {name: adb('exec-out', 'run-as', pkg, 'cat',
+                        shlex.quote(pointer['directory']+'/'+name)) for name in payloads}
+            assert snapshot == payloads, 'Installed fixture bytes differ'
+            failed = run('--download-backgrounds', servers[1])
+            print(json.dumps({'tls_connections': servers[1].connections,
+                              'tls_handshake_errors': servers[1].tls_errors,
+                              'tls_http_requests': servers[1].requests,
+                              'native_result': failed}), flush=True)
+            assert 'curl 60' in failed, 'Expected actual native certificate-verification failure: '+failed
+            assert servers[1].connections > 0 and servers[1].tls_errors, 'No TLS handshake was observed'
+            assert not servers[1].requests, 'Untrusted HTTPS endpoint received an HTTP request'
+            assert before == adb('exec-out', 'run-as', pkg, 'cat', pointer_path), 'Active pointer changed'
+            for name, expected in snapshot.items():
+                assert expected == adb('exec-out', 'run-as', pkg, 'cat',
+                                       shlex.quote(pointer['directory']+'/'+name)), name
+            verified = run('--verify-backgrounds', servers[0])
+            assert 'verified' in verified.lower(), verified
+            print('PASS: native Android TLS rejects an untrusted certificate; previous pointer and every pack byte preserved')
+    finally:
+        adb('shell', 'am', 'force-stop', pkg, check=False)
+        for forward in forwarded: adb('reverse', '--remove', forward, check=False)
+        for server in servers: server.shutdown(); server.server_close()
+        adb('shell', 'run-as', pkg, 'rm', '-rf', relative, check=False)
 
 
 def native_replay(options):
@@ -143,6 +252,11 @@ def native_replay(options):
         adb('shell', 'am', 'force-stop', pkg, check=False)
         adb('shell', 'run-as', pkg, 'rm', '-rf', relative, check=False)
 
+
+if a.tls_only:
+    if a.native_replay is not None: p.error('--tls-only cannot run a native replay')
+    download_tls()
+    sys.exit(0)
 
 if a.native_replay is not None:
     native_replay(a.native_replay)

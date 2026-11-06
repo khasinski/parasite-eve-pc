@@ -38,6 +38,27 @@ Native save-load requests across missing discs have been tested in both directio
 Continuous campaign and physical-device testing remain unfinished.
 Do not distribute this APK as a finished Android port.
 
+The native downloader also has an autonomous TLS regression. On the dedicated headless
+emulator, install the debug APK and run:
+
+```sh
+python3 tests/android_lifecycle.py --tls-only --serial emulator-5566 --adb "$ANDROID_HOME/platform-tools/adb"
+```
+
+This installs a tiny synthetic installer fixture in a unique diagnostic profile, then tries
+an HTTPS update using an untrusted self-signed certificate with the correct loopback hostname.
+It requires native libcurl certificate error 60, an observed TLS handshake, zero HTTP requests
+to the untrusted endpoint, and byte-identical preservation of the active pointer and every
+installed file. The original pack must still verify afterward. Profiles, temporary certificates
+and the test's individual ADB reverse mappings are removed on completion or failure; player
+cards and installed packs are never used. It requires host Python and OpenSSL.
+
+The `testHdServer` intent extra works only with diagnostic arguments and an isolated profile
+in a debug APK, and accepts only loopback HTTP/HTTPS URLs. Release APKs ignore diagnostic
+arguments and this extra. Certificate and hostname verification remain enabled. This regression
+does not cover expired certificates, a trusted certificate for the wrong hostname, rendered
+texture validity, physical devices or continuous gameplay.
+
 Use **Export saves** in the launcher to back up both memory cards through the
 system file picker. The ZIP contains the original 8192-byte PsyZ save files in
 `bu00/` and `bu10/` directories. Their bytes are unchanged and can be opened in
