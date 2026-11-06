@@ -57,7 +57,23 @@ verification enabled, then passed `--verify-backgrounds` on the installed pack.
 The touch prototype was also tested with a uinput controller hotplugged after
 native startup: Start and D-pad navigation reached the original title menu, and
 touch returned after hardware removal. Debug and Release APK builds pass.
-Multi-touch/focus-loss automation and physical-device testing remain outstanding.
+An instrumentation test also checks simultaneous stick/button touches, independent
+pointer release, cancellation, focus loss, Activity pause and simultaneous L2/R2
+against the actual Android View and JNI implementation. Physical-device testing
+remains outstanding.
+
+On a dedicated emulator with `disc1.cue` imported and no controller attached:
+
+```sh
+./android/gradlew -p android :app:assembleDebug :app:assembleDebugAndroidTest
+adb -s emulator-5566 install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb -s emulator-5566 install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s emulator-5566 shell am force-stop com.khasinski.parasiteeve
+adb -s emulator-5566 shell am instrument -w com.khasinski.parasiteeve.test/com.khasinski.parasiteeve.TouchControlsTest
+```
+
+The test uses its own diagnostic profile and runs in the private game process.
+Its runner is packaged only in the separate test APK, never in the game APK.
 
 Debug APKs accept the native diagnostic argument array through the `arguments`
 intent extra on GameActivity. Release APKs ignore that extra. Headless debug runs
