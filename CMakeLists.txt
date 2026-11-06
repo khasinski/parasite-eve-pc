@@ -933,7 +933,9 @@ if(BUILD_TESTING)
             SKIP_REGULAR_EXPRESSION "requires SDL GPU"
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-hd-coverage COMMAND test-psyz-interpolation
-            --filter=gpu::authored_hd_coverage_is_display_only_and_opt_in)
+            --filter=gpu::authored*,gpu::selective*)
+        set_tests_properties(original-gpu-hd-coverage PROPERTIES
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped")
         add_test(NAME original-gpu-hd-reference COMMAND test-psyz-interpolation
             --filter=gpu::queued_hd_sprite_preserves_native_vram_coverage_and_palette_fallback)
         add_test(NAME original-gpu-hd-extension COMMAND test-psyz-interpolation
