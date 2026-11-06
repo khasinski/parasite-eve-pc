@@ -34,6 +34,7 @@ vsync = production_function('int VSync(int mode)', api)
 gpu = source_path.with_name('sdl3_gpu.c').read_text()
 submit = production_function('static bool SubmitCmd(void) {', gpu)
 submit_frame = production_function('static void SubmitFrame(void) {', gpu)
+submit_wait = production_function('static bool SubmitCmdAndWait(void) {', gpu)
 stubs = r'''
 #include <assert.h>
 #include <stdbool.h>
@@ -111,7 +112,7 @@ submit_stubs = r'''
 typedef struct { int id; } SDL_GPUCommandBuffer;
 typedef struct { int id; } SDL_GPUFence;
 static SDL_GPUCommandBuffer command, *pending_cmd, *quarantined_cmd;
-static SDL_GPUFence fence, *frame_fences[2];
+static SDL_GPUFence fence, *frame_fences[2], *quarantined_fence;
 #define MAX_FRAMES_IN_FLIGHT 2
 static unsigned frame_fence_idx, submit_calls, commit_count, released_fences;
 static bool gpu_failed, swapchain_ok, present_commit_pending;
@@ -160,6 +161,12 @@ static void check_submit_spacing(void) {
         }
         previous=actual_submit;WaitForNextFrame();
     }
+    /* The synchronous fence path can also contain an acquired window. */
+    ConfigureVSync(59.94);reset_submit();assert(SubmitCmdAndWait());
+    previous=actual_submit;clock_us+=1000;
+    reset_submit();assert(SubmitCmdAndWait());
+    assert((double)(actual_submit-previous)>=driver_frame_time_us);
+    assert(!driver_present_pending && released_fences==1);
     Uint64 last=last_driver_submit,start=clock_us;
     reset_submit();driver_present_pending=false;
     swapchain_ok=frame_presented=false;SubmitFrame();
@@ -306,7 +313,7 @@ int main(void) {
 with tempfile.TemporaryDirectory(prefix='pe-vsync-displays-') as tmp:
     path = Path(tmp)
     (path/'policy.c').write_text(stubs+elapsed+policy+present_pace+wait+clock_stubs+clock+skip+present+vsync+
-                               submit_stubs+submit+submit_frame+submit_cases+cases)
+                               submit_stubs+submit+submit_frame+submit_wait+submit_cases+cases)
     binary = path/'policy-test'
     if sys.platform == 'win32':
         binary = binary.with_suffix('.exe')
