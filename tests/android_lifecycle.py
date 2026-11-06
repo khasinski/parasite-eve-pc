@@ -124,9 +124,17 @@ def native_replay(options):
             destination.write_bytes(payload)
         # The desktop C harness checks the original phone-created save here.
         card = relative+'/memory-cards/bu00/BASLUS-006620000000A'
-        result = subprocess.run([a.adb, '-s', a.serial, 'exec-out', 'run-as',
-                                 pkg, 'cat', card], capture_output=True, timeout=30)
-        if result.returncode == 0:
+        # exec-out uses the raw protocol: a remote cat error may still return
+        # success locally. Check existence through shell's exit-status protocol.
+        exists = subprocess.run([a.adb, '-s', a.serial, 'shell', 'run-as', pkg,
+                                 'test', '-f', card], capture_output=True, timeout=30)
+        if exists.returncode not in (0, 1):
+            raise RuntimeError('Could not inspect the replay card: '+exists.stderr.decode())
+        result = (subprocess.run([a.adb, '-s', a.serial, 'exec-out', 'run-as',
+                                  pkg, 'cat', card], check=True, capture_output=True, timeout=30)
+                  if exists.returncode == 0 else None)
+        if result is not None:
+            assert len(result.stdout) == 8192, 'Incomplete native phone save'
             directory = Path('bu00')
             directory.mkdir(exist_ok=True)
             (directory/'BASLUS-006620000000A').write_bytes(result.stdout)
