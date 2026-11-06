@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import re
 import struct
@@ -406,6 +407,112 @@ def read_pack(path: Path) -> tuple[str, str, dict[int, bytes]]:
     return lang.rstrip(b"\0").decode(), name.rstrip(b"\0").decode(), out
 
 
+# The user supplies this original patch; translated content is never bundled.
+ITALIAN_PATCH_SHA256 = "1c1f414eb88adf080063c673f094e625aaca1ee40f26c3b628c931c7aae16d5d"
+ITALIAN_ACCENTS = {0x4D: "à", 0x4E: "è", 0x4F: "é", 0x50: "ì", 0x51: "ò", 0x52: "ù"}
+
+
+def _dialogue_pages(game, number):
+    room = game.room(number)
+    if room is None:
+        raise ValueError(f"Missing dialogue room M{number:03}")
+    data = room.data
+    word = lambda at: struct.unpack_from("<I", data, at)[0]
+    table = word(word(4) + 0x20)
+    for index in range(table >> 22):
+        slot = word((table & 0x3FFFFF) + index * 8 + 4)
+        if slot >> 24 == 1:
+            return gt.pages(data[slot & 0xFFFFFF:])[0]
+    raise ValueError(f"Missing English dialogue bank in M{number:03}")
+
+
+def _italian_dialogue_rows(original, translated, catalog):
+    disc = {"SLUS_006.62": "1", "SLUS_006.68": "2"}.get(original.exe_name)
+    if disc is None or translated.exe_name != original.exe_name:
+        raise ValueError("Choose an unmodified Parasite Eve USA Disc 1 or Disc 2 image")
+    rows, fallback = [], []
+    for bank in catalog["banks"]:
+        number = bank["locations"][disc]
+        before, after = _dialogue_pages(original, number), _dialogue_pages(translated, number)
+        prefix = f'dlg/{bank["key"]}/'
+        expected = {int(key[len(prefix):]) for key in catalog["entries"] if key.startswith(prefix)}
+        if set(before) != expected:
+            raise ValueError(f'{bank["key"]}: source page IDs do not match the US catalog')
+        if set(after) - expected:
+            raise ValueError(f'{bank["key"]}: patch has unexpected dialogue page IDs')
+        for page, (raw, _) in sorted(before.items()):
+            key = f"{prefix}{page:03}"
+            if srcman.english_hash(gt.decode(raw)) != catalog["entries"][key]["english_hash"]:
+                raise ValueError(f"{key}: source text does not match the US catalog")
+            reason = None
+            if page not in after:
+                reason = "missing translated page"
+            else:
+                value = after[page][0]
+                if value == raw:
+                    continue
+                try:
+                    if validation.structure(raw) != validation.structure(value):
+                        reason = "original control sequence differs"
+                except ValueError:
+                    reason = "unsupported original or translated control sequence"
+            if reason:
+                fallback.append({"key": key, "reason": reason})
+                continue
+            text = gt.decode(value)
+            for code, char in ITALIAN_ACCENTS.items():
+                text = text.replace(f"{{g{code:02X}}}", char)
+            # Fail rather than exporting untranslated font indices from another font.
+            if re.search(r"\{g[0-9A-F]{2}\}", text):
+                raise ValueError(f"{key}: unsupported translation glyph")
+            rows.append({"key": key, "translation": text,
+                         "notes": "Local SadNES cITy v0.90 import; Mickey, _Ombra_, Chop"})
+    return rows, fallback
+
+
+def cmd_import_italian(a):
+    from petext.disc import Game
+    original = translated = None
+    created = []
+    try:
+        # Fixed profile: reject a different patch before opening the disc.
+        if a.patch.stat().st_size != 6465866 or hashlib.sha256(a.patch.read_bytes()).hexdigest() != ITALIAN_PATCH_SHA256:
+            raise ValueError("Expected the original SadNES cITy Italian v0.90 PPF patch")
+        original = Game(a.disc)
+        translated = Game(a.disc, patch=a.patch)
+        protected = {a.disc.resolve(), a.patch.resolve(), Path(original.disc.f.name).resolve()}
+        if a.out.resolve() in protected or a.report.resolve() in protected or a.out.resolve() == a.report.resolve():
+            raise ValueError("CSV and report must be separate from the disc and patch")
+        if a.out.exists() or a.report.exists():
+            raise ValueError("CSV or report already exists; choose new output paths")
+        catalog = json.loads((ROOT / "editor/catalog.json").read_text(encoding="utf-8"))
+        rows, fallback = _italian_dialogue_rows(original, translated, catalog)
+        report = {"patch_sha256": ITALIAN_PATCH_SHA256, "translated_dialogue_rows": len(rows),
+                  "fallback_original": fallback, "source_images_modified": False,
+                  "scope": "Dialogue only. Compile with pelang build and review all layout warnings.",
+                  "credits": "SadNES cITy: Mickey, _Ombra_, Chop",
+                  "source": "https://www.sadnescity.it/traduzioni/pe/pe.php"}
+        with a.out.open("x", encoding="utf-8", newline="") as output:
+            created.append(a.out)
+            writer = csv.DictWriter(output, fieldnames=SUBMISSION_COLUMNS)
+            writer.writeheader(); writer.writerows(rows)
+        with a.report.open("x", encoding="utf-8") as output:
+            created.append(a.report)
+            json.dump(report, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+        print(f"Imported {len(rows)} dialogue rows; {len(fallback)} pages retain original text. Review {a.report}.")
+        return 0
+    except (OSError, ValueError, EOFError, KeyError, struct.error) as error:
+        for path in created:
+            path.unlink(missing_ok=True)
+        print(f"Italian import failed: {error}", file=sys.stderr)
+        return 1
+    finally:
+        for game in (original, translated):
+            if game is not None:
+                game.disc.f.close()
+
+
 def main(argv=None) -> int:
     # Messages quote the translator's text; a console that can't show a character gets an escape
     # (Б) instead of stopping the build.
@@ -456,12 +563,17 @@ def main(argv=None) -> int:
     c.add_argument("out", type=Path, nargs="?", default=ROOT.parent / "mods/pe_lang/pe_lang_cyrillic_data.h")
     u = sub.add_parser("interface-header", help="regenerate the mod interface Unicode bridge")
     u.add_argument("out", type=Path, nargs="?", default=ROOT.parent / "mods/pe_lang/pe_lang_text_data.h")
+    it = sub.add_parser("import-italian", help="locally import dialogue from the user's SadNES cITy v0.90 PPF")
+    it.add_argument("disc", type=Path, help="unmodified USA Disc 1 or Disc 2 CUE/BIN")
+    it.add_argument("patch", type=Path, help="itpch_pe_v090.ppf extracted from the author's archive")
+    it.add_argument("-o", "--out", type=Path, required=True, help="new translation CSV")
+    it.add_argument("--report", type=Path, required=True, help="new JSON report of original-text fallbacks")
     a = ap.parse_args(argv)
     if a.cmd == "interface-header":
         from petext import interfaces
         interfaces.write_header(a.out)
         return 0
-    return {"template": cmd_template, "pseudo": cmd_pseudo, "build": cmd_build,
+    return {"import-italian": cmd_import_italian, "template": cmd_template, "pseudo": cmd_pseudo, "build": cmd_build,
             "export": cmd_export, "manifest": cmd_manifest,
             "latin-header": cmd_latin_header, "cyrillic-header": cmd_cyrillic_header}[a.cmd](a)
 
