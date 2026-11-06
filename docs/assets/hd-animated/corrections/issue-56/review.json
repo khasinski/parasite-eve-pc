@@ -122,5 +122,52 @@
     "native_1x_rgb_byte_identical": true,
     "native_1x_checkpoints": 58,
     "native_1x_proof": "build/open-issues/hd-contours/live-m099-window-rail-v2-native/proof.json"
+  },
+  "m103_upper_wall_trim_supplement": {
+    "status": "local reviewed candidate; unpublished; lower bookshelf contours still need work",
+    "entry": 18,
+    "key": "141758031e12e98f",
+    "group": 0,
+    "polygon_native": [
+      [
+        212,
+        4
+      ],
+      [
+        320,
+        54
+      ],
+      [
+        320,
+        71
+      ],
+      [
+        209,
+        17
+      ]
+    ],
+    "method": "Existing registered full-context anchor with original low-frequency illumination, active320x240 inserted into320x256 without stretching; one-native-pixel inward patch feather",
+    "registered_anchor_sha256": "f959b498d504dcecdf93152ae6c50da4d78c49b6fbffb99f3a4aed2800ae1ffa",
+    "source_restoration_sha256": "054017bc1651d0a8c9697eaa7716180b386d5664b111dfbb26754c771f1da1de",
+    "changed_files": [
+      "141758031e12e98f.png",
+      "manifest.json"
+    ],
+    "alpha_and_reference_planes_exact": true,
+    "other_camera_and_animated_entries_exact": true,
+    "native_state_vram_pcm_exact": true,
+    "native_1x_rgb_exact": true,
+    "checkpoints_per_resolution": 66,
+    "hd_changed_bbox": [
+      836,
+      0,
+      1280,
+      220
+    ],
+    "proofs": [
+      "build/open-issues/hd-contours/live-m103-wall-trim-v2-4x/proof.json",
+      "build/open-issues/hd-contours/live-m103-wall-trim-v2-1x/proof.json"
+    ],
+    "qualification": "One diagnostic room transfer/camera/story stage; not a full campaign. The initial lower bookshelf-band experiment was removed because its material junction was less certain. No new inference."
   }
 }
