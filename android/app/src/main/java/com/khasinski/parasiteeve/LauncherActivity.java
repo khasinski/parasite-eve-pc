@@ -143,7 +143,10 @@ public class LauncherActivity extends Activity {
             });
             layout.addView(importSavesButton);
         }
-        setContentView(layout);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(layout);
+        setContentView(scroll);
         refresh();
     }
 
@@ -170,8 +173,8 @@ public class LauncherActivity extends Activity {
         status.setText(requiredDisc != 0
             ? "Parasite Eve (USA) Disc " + requiredDisc + " required. Import its CUE/BIN folder, then choose its CUE image. Your game is waiting."
             : count == 0
-            ? "Select a folder containing your CUE and BIN files. You can import the other disc later. A controller is currently required."
-            : count + " CUE image(s) imported. A controller is currently required.");
+            ? "Select a folder containing your CUE and BIN files. You can import the other disc later. Touch controls and controllers are supported."
+            : count + " CUE image(s) imported. Touch controls and controllers are supported.");
         playButton.setEnabled(count != 0);
     }
 
