@@ -101,6 +101,7 @@ jobs:
           cp build/lang/*.pelang "$stage/lang/"
           cp docs/CODE_ORGANIZATION.md "$stage/docs/"
           cp mods/README.md "$stage/mods/"
+          cp -r mods/fonts "$stage/mods/"
           cp docs/images/gameplay.png "$stage/docs/images/"
           python3 - <<'PYLICENSE'
           from pathlib import Path
@@ -232,6 +233,7 @@ jobs:
           Copy-Item docs/images/gameplay.png "$game/docs/images/"
           Copy-Item docs/CODE_ORGANIZATION.md "$game/docs/"
           Copy-Item mods/README.md "$game/mods/"
+          Copy-Item -Recurse mods/fonts "$game/mods/"
           Get-ChildItem third_party/psyz -Recurse -File | Where-Object { $_.Name -match '^(LICENSE|COPYING|NOTICE|COPYRIGHT)' -and $_.FullName -notmatch '[\\/]\.git[\\/]' } | ForEach-Object {
             $relative = [IO.Path]::GetRelativePath((Get-Location).Path, $_.FullName)
             $target = Join-Path "$game/licenses" $relative

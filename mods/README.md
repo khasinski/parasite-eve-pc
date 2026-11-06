@@ -55,6 +55,7 @@ mods/
   pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
   pe_lang/             language packs: the game's text from a .pelang pack, F1 > Language (not built
                        by default; docs/LOCALIZATION.md, tools in localization/)
+  pe_fonts/            fonts from pictures in mods/fonts/, coloured speaker names (not built by default)
   pe_hello/            example mod (not built by default)
 ```
 
@@ -88,6 +89,22 @@ what a save holds, not Aya's place in the room or a fight in progress.
 
 F1 > Cheats: God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers.
 All off until chosen; while they are off the mod writes nothing.
+
+## Fonts (pe_fonts)
+
+Not built by default: add `pe_fonts` to `PE_MOD_LIST`. F1 > Fonts picks the font, or Game font.
+Every `.png` in `mods/fonts/` beside the game, or in the user folder beside `pe_mods.ini`, is a
+choice: a new font is a dropped-in file, with no code to add. `mods/fonts/README.txt` has the
+picture format. The file name is saved, so adding fonts never changes the one in use.
+
+- `pe_fonts_sheet.c`: picture to letters and widths. The page goes to VRAM with the letters in it
+  (PE_HOOK_TIM_UPLOAD); the widths go into `g_TextboxGlyphSpacing` and the menu glyph metrics, the
+  game's own tables, so pe_lang builds its accents and widths on the font in use.
+- `pe_fonts_names.c`: **Coloured speaker names** (on by default) rewrites a page as a box opens
+  (PE_HOOK_TEXT_PAGE) to put a tint around `Name:` at the start of a page, line or section. Yellow
+  is the game's new control code `FB F0`, undone by `FB 05`; Aya's name is the game's own red,
+  `FB 04`. A tint works on any white font, so a font carries no coloured copies. A pack's
+  translated names stay white.
 
 ## A mod
 

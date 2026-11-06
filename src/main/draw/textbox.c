@@ -17,6 +17,7 @@
 int g_ScriptCollisionFlag;
 u8 *g_TextboxMessageSource;
 unsigned char g_TextboxKernGlyph0F;
+const unsigned char g_TextboxSpeakerColor[3] = {0x84, 0x84, 0x22};
 TextboxRect g_TextboxPendingRect;
 TextboxEntry g_TextboxEntries[4];
 u8 g_TextboxDrawnThisFrame;
@@ -539,6 +540,12 @@ void Menu_DrawTextboxEntries(void) {
                         g_TextboxGlyphColorR = 0xFF;
                         g_TextboxGlyphColorB = 0;
                         g_TextboxGlyphColorG = 0;
+                        stream += 1;
+                        break;
+                    case TEXTBOX_CONTROL_SPEAKER_COLOR:
+                        g_TextboxGlyphColorR = g_TextboxSpeakerColor[0];
+                        g_TextboxGlyphColorG = g_TextboxSpeakerColor[1];
+                        g_TextboxGlyphColorB = g_TextboxSpeakerColor[2];
                         stream += 1;
                         break;
                     case 5:

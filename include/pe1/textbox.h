@@ -58,6 +58,9 @@ extern TextboxGlyphSpacing g_TextboxGlyphSpacing[78];
  * longer one to draw glyphs past code 77 (codes from g_TextboxGlyphCount on stop the box). */
 extern const TextboxGlyphSpacing *g_TextboxGlyphWidths;
 extern unsigned g_TextboxGlyphCount;
+/* FB F0 in a page: tint a speaker's name until FB 05 (pe_fonts adds it, no game text has it). */
+#define TEXTBOX_CONTROL_SPEAKER_COLOR 0xF0
+extern const unsigned char g_TextboxSpeakerColor[3];
 enum { TEXTBOX_GLYPH_PACKET_CAPACITY = 0x2400 / 28 };
 
 /* The dialogue choice cursor, one texture-page + sprite packet per frame

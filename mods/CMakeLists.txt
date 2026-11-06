@@ -1,7 +1,8 @@
 # Mod host and mods, built only with -DPE_MODS=ON. See mods/README.md.
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it. Language packs
-# are available in standard builds, but the original text remains the default.
+# are available in standard builds, but the original text remains the default. pe_fonts (font
+# pictures, coloured speaker names) is opt-in.
 set(pe_default_mods pe_qol pe_rebalance pe_economy pe_collection pe_stacks pe_warp pe_quicksave pe_cheats)
 if(NOT PE_PS5_GAME)
     list(APPEND pe_default_mods pe_lang)
@@ -207,6 +208,15 @@ endif()
 
 # The language pack reader is plain data code, so its test runs whichever mods are built.
 if(BUILD_TESTING)
+    add_executable(test-mod-fonts ${PROJECT_SOURCE_DIR}/tests/pe_mod_fonts_test.c
+        pe_fonts/pe_fonts_sheet.c pe_fonts/pe_fonts_names.c)
+    target_include_directories(test-mod-fonts PRIVATE pe_fonts)
+    if(MSVC)
+        target_compile_options(test-mod-fonts PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-mod-fonts PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME mod-fonts COMMAND test-mod-fonts)
     add_executable(test-mod-lang-pack ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_test.c pe_lang/pe_lang_pack.c)
     target_include_directories(test-mod-lang-pack PRIVATE pe_lang)
     if(MSVC)
