@@ -301,7 +301,12 @@ typedef enum HostSettingsPage {
 
 typedef enum HostBindDevice {
     HOST_BIND_KEYBOARD = 0,
-    HOST_BIND_CONTROLLER = 1
+    HOST_BIND_CONTROLLER = 1,
+#ifdef __ANDROID__
+    HOST_BIND_DEFAULT = HOST_BIND_CONTROLLER
+#else
+    HOST_BIND_DEFAULT = HOST_BIND_KEYBOARD
+#endif
 } HostBindDevice;
 
 #if PE_DESKTOP_MOD_DOWNLOADS
@@ -1999,7 +2004,7 @@ static void Host_SwitchSettingsPage(HostOverlayState *state, int nextPage) {
         if(state->row>=Host_SettingsTotalRowCount(normalized))state->row=0;
         Host_EnsureControlsRowVisible(state);
 #else
-        state->page = normalized;state->row = 0;state->scroll = 0;state->bind_device=HOST_BIND_KEYBOARD;
+        state->page = normalized;state->row = 0;state->scroll = 0;state->bind_device=HOST_BIND_DEFAULT;
 #endif
         state->capturing_binding = 0;
         state->status = NULL;
@@ -2926,7 +2931,7 @@ static void Host_Settings(SDL_Window *game) {
         .page = HOST_PAGE_GRAPHICS,
 #endif
         .row = 0,
-        .bind_device = HOST_BIND_KEYBOARD,
+        .bind_device = HOST_BIND_DEFAULT,
         .capturing_binding = 0,
         .quit = 0,
         .dirty = 1,
