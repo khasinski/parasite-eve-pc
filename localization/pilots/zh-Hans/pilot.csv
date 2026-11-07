@@ -484,3 +484,35 @@ dlg/M041/137,丹尼尔：去你的，贝克！我儿子有危险！,Daniel and B
 dlg/M041/138,贝克：丹尼尔……,Daniel and Ben / Central Park departure preview; original script commands preserved
 dlg/M041/139,贝克：{name}。,Daniel and Ben / Central Park departure preview; original script commands preserved
 dlg/M041/140,贝克：照看好他……！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/141,贝克：把一些东西留在这里，{br}拿上这张装备改装许可证。{wait}你留下的东西，我会替你{br}存放在武器科。,NYPD workshop and evacuation preview
+dlg/M041/142,{name}：是，长官！,NYPD workshop and evacuation preview
+dlg/M041/143,韦恩：你什么时候才肯让我{br}改装枪啊……？{wait}我被分配到这里，可不是为了{br}整天看仓库的啊……,NYPD workshop and evacuation preview
+dlg/M041/144,托雷斯：只要你还把枪当玩具，{br}就别想碰它们！,NYPD workshop and evacuation preview
+dlg/M041/145,韦恩：喂，我知道自己能造出{br}比你的更强的枪！,NYPD workshop and evacuation preview
+dlg/M041/146,托雷斯：枪不是越强越好，笨蛋！{wait}最重要的是安全！,NYPD workshop and evacuation preview
+dlg/M041/147,韦恩：行了，老头子！,NYPD workshop and evacuation preview
+dlg/M041/148,托雷斯：抱歉，{name}……{br}让你见笑了……{wait}不过，你也一样。{br}用枪再小心也不为过！,NYPD workshop and evacuation preview
+dlg/M041/149,韦恩：真是的，我明明能做得{br}更好……！{wait}我轻轻松松就能把那把枪{br}改成大炮！,NYPD workshop and evacuation preview
+dlg/M041/150,贝克：这次的伤亡严重得多。{wait}我们不能再让市民的生命{br}受到威胁了。,NYPD workshop and evacuation preview
+dlg/M041/151,贝克：上级命令我们疏散{br}曼哈顿的所有市民。{wait}幸好，大多数人都出城{br}过圣诞节去了。,NYPD workshop and evacuation preview
+dlg/M041/152,华纳：长官，那我们怎么办？,NYPD workshop and evacuation preview
+dlg/M041/153,贝克：我们留下来，{br}协助制服伊芙。,NYPD workshop and evacuation preview
+dlg/M041/154,尼克斯：不该交给军队处理吗？,NYPD workshop and evacuation preview
+dlg/M041/155,贝克：保护这座城市{br}本来就是我们的职责！,NYPD workshop and evacuation preview
+dlg/M041/156,丹尼尔：有{name}{br}的消息吗？,NYPD workshop and evacuation preview
+dlg/M041/157,丹尼尔：该死，她到底在哪儿！,NYPD workshop and evacuation preview
+dlg/M041/158,贝克：丹尼尔，我需要你{br}协助疏散市民。,NYPD workshop and evacuation preview
+dlg/M041/159,丹尼尔：现在只有她{br}能对付那东西！{wait}我要去找她！,NYPD workshop and evacuation preview
+dlg/M041/160,尼克斯：长官，我们不该拦住他吗？,NYPD workshop and evacuation preview
+dlg/M041/161,贝克：他已经失去了洛琳……{br}他会找到{name}的。{br}你们两个去协助疏散。,NYPD workshop and evacuation preview
+dlg/M041/162,本：爸爸！,NYPD workshop and evacuation preview
+dlg/M041/163,丹尼尔：本，对不起……{br}我得去找{name}。,NYPD workshop and evacuation preview
+dlg/M041/164,本：她去哪儿了？,NYPD workshop and evacuation preview
+dlg/M041/165,丹尼尔：我不知道，但只有她{br}能对付伤害你妈妈的那个东西。,NYPD workshop and evacuation preview
+dlg/M041/166,丹尼尔：凯茜，{br}帮我照顾这孩子，好吗？,NYPD workshop and evacuation preview
+dlg/M041/167,凯茜：我会的，别担心。,NYPD workshop and evacuation preview
+dlg/M041/168,本：爸爸……！,NYPD workshop and evacuation preview
+dlg/M041/169,凯茜：来吧，小家伙。你喜欢狗吗？{br}我带你认识全城最棒的警犬。,NYPD workshop and evacuation preview
+dlg/M041/170,凯茜：这是希瓦。,NYPD workshop and evacuation preview
+dlg/M041/171,本：嘿嘿……喂，好痒啊！,NYPD workshop and evacuation preview
+dlg/M041/172,警察：嘿，看来她很喜欢你！,NYPD workshop and evacuation preview
