@@ -51,6 +51,7 @@
 #define PE_ROWS_PER_BANK 48
 #define PE_ROOM_SLOT0    24          /* room animation rows: bank_rows[0][24..47] */
 #define PE_ROOM_SLOTS    24
+#define PE_BANK_LONG_DRESS 11
 #define PE_GUN_AYA       0x12        /* Aya's right hand, second finger segment */
 #define PE_IDLE_MODE     0x15
 #define PE_LIBERATE      0x20000u
@@ -248,6 +249,9 @@ static void pe_point_bundle(u8 *blob) {
     g_GameState.bank_slots[0] = SceneAsset_ResolveOffset(blob, root->source.offsetAndId & 0xFFFFFFu);
     for (i = 0; i < dir->bankRowEntries >> 22; ++i) {
         const unsigned id = rec[i].source.bytes.id;
+        /* The Day 1 long dress keeps its scene rows (28-34) in room slots: pe_room_rows swaps them
+         * for their copies; the skin's jacket row 28 would replace the scene's animation. */
+        if (id >= PE_ROOM_SLOT0 && g_SceneAreaType == PE_BANK_LONG_DRESS) continue;
         if (id < 10 * PE_ROWS_PER_BANK)
             g_GameState.bank_rows[id / PE_ROWS_PER_BANK][id % PE_ROWS_PER_BANK] =
                 SceneAsset_ResolveOffset(blob, rec[i].source.offsetAndId & 0xFFFFFFu);
@@ -295,7 +299,7 @@ static u32 pe_row_length(const u8 *p, u32 size) {
 static u32 pe_fingerprint(const u8 *p) {
     const u32 n = p ? pe_row_length(p, 0x10000u) : 0;
     u32 h = 0x811C9DC5u, i;
-    if (n < 372u) return 0;
+    if (n < 300u) return 0;     /* the shortest: one frame on the 23-part long dress */
     for (i = 0; i < n; ++i) h = (h ^ p[i]) * 0x01000193u;
     return h;
 }
