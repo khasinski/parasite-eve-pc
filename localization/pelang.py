@@ -438,7 +438,7 @@ def _dialogue_pages(game, number, *, italian_separators=False):
     raise ValueError(f"Missing English dialogue bank in M{number:03}")
 
 
-def _translated_dialogue_rows(original, translated, catalog, language="it"):
+def _translated_dialogue_rows(original, translated, catalog, language="it", *, dialogue_adaptations=None):
     disc = {"SLUS_006.62": "1", "SLUS_006.68": "2"}.get(original.exe_name)
     if disc is None or translated.exe_name != original.exe_name:
         raise ValueError("Choose an unmodified Parasite Eve USA Disc 1 or Disc 2 image")
@@ -467,6 +467,8 @@ def _translated_dialogue_rows(original, translated, catalog, language="it"):
                 value = after[page][0]
                 if language == "es":
                     value = _spanish_dialogue(value, raw, key)
+                elif language == "it":
+                    value = _italian_dialogue(value, key)
                 if value == raw:
                     continue
                 try:
@@ -487,7 +489,26 @@ def _translated_dialogue_rows(original, translated, catalog, language="it"):
             rows.append({"key": key, "translation": text,
                          "notes": "Local Green_goblin Chicago (02-02-2025) import; original speaker colours"
                          if language == "es" else "Local SadNES cITy v0.90 import; Mickey, _Ombra_, Chop"})
+            if language == "it" and value != after[page][0] and dialogue_adaptations is not None:
+                dialogue_adaptations.append({"key": key,
+                    "reason": "Omit translation-added name reference; retain original control sequence"})
     return rows, fallback
+
+
+def _italian_dialogue(raw, key):
+    # These exact v0.90 pages address the player by name where the original
+    # has no name command. Omit that added address, preserving punctuation;
+    # every other original control still passes the strict validator above.
+    profiles = {
+        "dlg/M035/045": "63e4c1b9f648bd1c3826599f2f6246e829e78072ff50f19c054159671fa4dde0",
+        "dlg/M041/200": "6f36cda284e7e3ac913197b5ba5e89f529c9cd5195b4c706b1388a5298e54bf2",
+        "dlg/M191/133": "e9045dedabdc10f1f78215c673d4f2c5b8d72dcec829fb1833e68cb3683fb202",
+    }
+    expected = profiles.get(key)
+    if expected and expected == hashlib.sha256(raw).hexdigest():
+        address = ", {name}" if key == "dlg/M035/045" else " {name}"
+        return raw.replace(gt.encode(address), b"", 1)
+    return raw
 
 
 def _italian_text(raw, key):
@@ -599,13 +620,16 @@ def cmd_import_italian(a):
         if a.out.exists() or a.report.exists():
             raise ValueError("CSV or report already exists; choose new output paths")
         catalog = json.loads((ROOT / "editor/catalog.json").read_text(encoding="utf-8"))
-        rows, fallback = _translated_dialogue_rows(original, translated, catalog)
+        dialogue_adaptations = []
+        rows, fallback = _translated_dialogue_rows(original, translated, catalog,
+                                                   dialogue_adaptations=dialogue_adaptations)
         dialogue_count = len(rows)
         manifest = json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))
         menu_rows, menu_fallback, adaptations = _translated_menu_rows(original, translated, manifest)
         rows.extend(menu_rows); fallback.extend(menu_fallback)
         report = {"patch_sha256": ITALIAN_PATCH_SHA256, "translated_dialogue_rows": dialogue_count,
                   "translated_menu_rows": len(menu_rows), "layout_adaptations": adaptations,
+                  "dialogue_control_adaptations": dialogue_adaptations,
                   "fallback_original": fallback, "source_images_modified": False,
                   "scope": "Dialogue and resident labels. Native rename grids remain original. Review all compiler layout warnings.",
                   "credits": "SadNES cITy: Mickey, _Ombra_, Chop",

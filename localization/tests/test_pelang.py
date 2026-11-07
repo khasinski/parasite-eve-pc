@@ -489,6 +489,30 @@ class ItalianImportTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "repeats a dialogue page ID"):
             pelang._dialogue_pages(game, 1, italian_separators=True)
 
+    def test_unrecognized_italian_name_variants_remain_control_fallbacks(self):
+        for bank, page in [("M035", 45), ("M041", 200), ("M191", 133)]:
+            with self.subTest(bank=bank):
+                original = {page: gt.encode("Daniel: Hello!")}
+                translated = {page: gt.encode("Daniel: Ciao {name}!")}
+                catalog = self.catalog(original)
+                catalog["banks"][0]["key"] = bank
+                catalog["entries"] = {f"dlg/{bank}/{page:03}": next(iter(catalog["entries"].values()))}
+                changes = []
+                rows, fallback = pelang._translated_dialogue_rows(self.game(original), self.game(translated),
+                    catalog, dialogue_adaptations=changes)
+                self.assertEqual(rows, [])
+                self.assertEqual(changes, [])
+                self.assertEqual(fallback, [{"key": f"dlg/{bank}/{page:03}",
+                                            "reason": "original control sequence differs"}])
+
+    def test_italian_original_name_command_is_retained(self):
+        original = {0: gt.encode("Hello {name}!")}
+        translated = {0: gt.encode("Ciao {name}!")}
+        rows, fallback = pelang._translated_dialogue_rows(self.game(original), self.game(translated),
+                                                         self.catalog(original))
+        self.assertEqual(fallback, [])
+        self.assertEqual(rows[0]["translation"], "Ciao {name}!")
+
     def test_accents_unchanged_rows_and_original_control_fallback(self):
         original = {0: gt.encode("Hello"), 1: gt.encode("Same"),
                     2: gt.encode("Missing"), 3: gt.encode("Wait{wait}")}

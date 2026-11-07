@@ -486,6 +486,10 @@ The six accented letters are mapped from the patch's original font into the port
 The v0.90 M026 bank has an extra newline between page records. The importer
 accepts that separator for this verified Italian profile, recovering the following
 18 pages; original banks and other profiles retain strict contiguous parsing.
+Three exact v0.90 pages also add name references absent from the original. The
+importer omits those added addresses and lists them in
+`dialogue_control_adaptations`; existing name commands, waits and choices still
+pass the original strict control checks. Other text variants are not rewritten.
 
 This imports dialogue and the resident menu labels, names and descriptions. Native rename
 glyph grids remain original. Eight reviewed label abbreviations preserve the original inventory
