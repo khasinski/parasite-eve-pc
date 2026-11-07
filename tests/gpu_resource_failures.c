@@ -57,10 +57,58 @@ static bool test_swapchain_params(
 #undef SDL_WaitForGPUFences
 #undef SDL_SubmitGPUCommandBufferAndAcquireFence
 #undef SDL_SetGPUSwapchainParameters
+/* Exercise the production waiter with a real, permanently hidden swapchain.
+ * Long scheduler stalls are allowed; early submission bursts are not. */
+static int test_present_pacing(void) {
+    assert(SDL_GetWindowFlags(sdl3_window)&SDL_WINDOW_HIDDEN);
+    assert(SubmitCmdAndWait());
+    if(!SDL_ClaimWindowForGPUDevice(device,sdl3_window)){
+        puts("Hidden swapchain unavailable; submission pacing not measured");return 77;
+    }
+    swapchain_ok=true;
+    vsync_mode=PSYZ_VSYNC_AUTO;ConfigureVSync(VSYNC_NTSC);
+    if(!use_driver_vsync){vsync_mode=PSYZ_VSYNC_ON;ConfigureVSync(VSYNC_NTSC);}
+    assert(use_driver_vsync);
+    const SDL_DisplayMode *mode=SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(sdl3_window));
+    const double refresh=mode && mode->refresh_rate>0?mode->refresh_rate:60.0;
+    const double interval_us=1000000.0/refresh;
+    last_frame_time=SDL_GetPerformanceCounter();
+    double minimum=1e20,maximum=0,sum=0;unsigned samples=0;
+    for(unsigned i=0;i<120;++i){
+        SDL_PumpEvents();SDL_DelayNS(2000000);
+        SDL_GPUCommandBuffer *cmd=SDL_AcquireGPUCommandBuffer(device);assert(cmd);
+        SDL_GPUTexture *target=NULL;
+        assert(SDL_WaitAndAcquireGPUSwapchainTexture(cmd,sdl3_window,&target,NULL,NULL));
+        if(!target){
+            SDL_CancelGPUCommandBuffer(cmd);
+            puts("Hidden swapchain occluded; submission pacing not measured");return 77;
+        }
+        SDL_GPUColorTargetInfo info={.texture=target,.clear_color={0,0,0,1},
+            .load_op=SDL_GPU_LOADOP_CLEAR,.store_op=SDL_GPU_STOREOP_STORE};
+        SDL_GPURenderPass *pass=SDL_BeginGPURenderPass(cmd,&info,1,NULL);assert(pass);
+        SDL_EndGPURenderPass(pass);assert(SDL_SubmitGPUCommandBuffer(cmd));
+        frame_presented=true;finish_time=SDL_GetPerformanceCounter();WaitForNextFrame();
+        assert(SDL_GetWindowFlags(sdl3_window)&SDL_WINDOW_HIDDEN);
+        assert(target_frame_rate==VSYNC_NTSC && target_frame_time_us==1000000.0/VSYNC_NTSC);
+        if(i>=20){
+            const double elapsed=gpu_stats.last_frame_time_us;
+            if(elapsed<minimum)minimum=elapsed;if(elapsed>maximum)maximum=elapsed;
+            sum+=elapsed;++samples;
+        }
+    }
+    printf("Hidden %s queue at %.3f Hz: %u samples, min %.3f / mean %.3f / max %.3f us (deadline %.3f us)\n",
+        SDL_GetGPUDeviceDriver(device),refresh,samples,minimum,sum/samples,maximum,interval_us);
+    assert(samples && minimum>=interval_us-1.0);
+    return 0;
+}
+
 int main(int argc,char **argv) {
     assert(argc==2);
     if(!InitPlatform())return 77;
     Draw_ResetBuffer();
+    if(!strcmp(argv[1],"--pacing")){
+        int result=test_present_pacing();QuitPlatform();return result;
+    }
     if(!strcmp(argv[1],"--upload")){
         for(unsigned acquire=0;acquire<2;++acquire){
             assert(SubmitCmdAndWait());
@@ -126,7 +174,19 @@ int main(int argc,char **argv) {
         }
         Psyz_VideoSetAntialiasing(0);
         Psyz_VideoSetInternalResolution(4);
-        assert(internal_res==4 && scaled_vram_render!=old_render);
+        /* A retired SDL wrapper address may be reused by the allocator.
+         * Prove the retry with the actual output scale and preserved pixels. */
+        assert(internal_res==4 && scaled_vram_render && scaled_blend_sample);
+        PS1_RECT mark={2,2,2,2};Draw_ClearImage(&mark,0,255,0);
+        int rw=0,rh=0;
+        unsigned char *rendered=Psyz_VideoAllocRenderedFrame(&rw,&rh);
+        assert(rendered && rw==display_size.x*4 && rh==display_size.y*4);
+        assert(rendered[0]>200 && rendered[1]==0 && rendered[2]==0);
+        const unsigned char *inside=rendered+((2*4+2)*rw+2*4+2)*3;
+        const unsigned char *outside=rendered+((5*4+2)*rw+5*4+2)*3;
+        assert(inside[0]==0 && inside[1]>200 && inside[2]==0);
+        assert(outside[0]>200 && outside[1]==0 && outside[2]==0);
+        free(rendered);
         puts("Failed first/second target allocations retain working pixels, AA and scale; retry succeeds");
     }else if(!strcmp(argv[1],"--swapchain-resize")){
         /* Claim the existing hidden window; no test may show it. */

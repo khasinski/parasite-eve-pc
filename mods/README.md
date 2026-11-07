@@ -57,8 +57,6 @@ mods/
   pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
   pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
   pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
-  pe_lang/             language packs: the game's text from a .pelang pack, F1 > Language (not built
-                       by default; docs/LOCALIZATION.md, tools in localization/)
   pe_hello/            example mod (not built by default)
 ```
 
@@ -433,6 +431,18 @@ In pe_collection/:
   resolves to: mods' resolvers first (newest first), then the mapped (room, identity) table.
   5 kills or Scan show weaknesses, 15 kills the loot (bosses: defeat shows weaknesses, loot is Junk
   only); each tier can be bought. Announces "bestiary.unlock".
+  Scripted bosses can end their fight at the original million-HP offset rather
+  than HP zero. Their defeat is deferred until Aya leaves battle alive, with
+  phase refills cancelling the pending defeat and attached parts deduplicated.
+  Completed hits are observed before scripts can release their actor. The stage
+  boss is displayed as **Eve (stage)**; its legacy `pe1/actress` profile key stays valid.
+  The native PE pack resolves `(room, rank/kind, model bank slot)` through its resolver:
+  rank/kind alone is shared by different species in the same room. Its 371 actor keys retain
+  all 331 previous room/identity/species associations, add the stage Eve encounter and retain all 75 stable profile keys. HP,
+  defense and other mutable combat stats are not used as species identifiers. If EX/progression
+  changes rank, a unique room/model association still resolves the same species. A unique
+  legacy mapping remains available when the actor is detached; ambiguous identities never
+  guess the last registered species. Later import/randomizer resolvers still take precedence.
 - `pe_bestiary_menu.c`: a Bestiary row in Aya's main menu (icon: the B of the BP icon) once a creature is
   met: the area's creatures (L1 / R1 change area; unmet ones "???"), the model turning with its idle
   animation in a game panel (host pe_model_stage; Left / Right turn it, Triangle full screen, Square
@@ -458,6 +468,13 @@ In pe_wardrobe/:
   may carry a room pack (rooms.bin alone: pe_skins/outfit_evening, outfit_tshirt, made by the
   bridge's build_outfit_rooms.py): rooms install Aya's animations for the outfit the story has her
   in (29, 31 or 23 parts), so the evening dress worn on a jacket day gets them retargeted to its own.
+  When rebuilding packs for Day 1 long-dress scenes, the generator must accept the shortest
+  23-part row (300 bytes, not the jacket-only minimum of 372). In the bridge generator, check
+  `FP_BYTES` and invalidate `tools/pe_assets/skins/room_rows.pkl` before rebuilding; changing the
+  threshold alone keeps the old cached set. The generator must also collect the bank 11 bundle
+  rows 28–34 (image entry 19), not only rows installed by room archives: none of those seven
+  fingerprints occurs in the room-only scan of either US disc. Updated `rooms.bin` copies are required as well as
+  the loader fix: updating the game executable does not repair existing skin assets.
 - `pe_wardrobe_menu.c`: a Wardrobe row in Aya's main menu (icon: the Equip Armor icon, twice) once a
   costume is owned. Uses the Bestiary's six-row list, right-hand model preview and three-row details
   panel (outfit name, wear status/action, and preview control; no cast/category detail row). L1/R1 filter owned outfits by registered group; Left/Right rotate, Triangle opens/closes

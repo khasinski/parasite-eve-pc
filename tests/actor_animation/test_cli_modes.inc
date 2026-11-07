@@ -1,3 +1,8 @@
+    if(argc==2 && !strcmp(argv[1],"--movie-early-exit")){
+        const char *path=getenv("PE_TEST_DISC");if(!path || !*path)return getenv("PE_REQUIRE_GAME_ASSETS")?1:77;
+        PeDisc disc={0};if(!pe_disc_open(&disc,path))return 1;
+        int valid=original_movie_early_exit(&disc);g_CdImage=NULL;pe_disc_close(&disc);return valid?0:1;
+    }
     if(argc==2 && !strcmp(argv[1],"--m273-landing-cycle"))return original_m273_landing_cycle()?0:1;
     if(argc==2 && !strcmp(argv[1],"--callback-allocation-failure"))return original_callback_allocation_failure()?0:1;
     if(argc==2 && !strcmp(argv[1],"--m273-effect-pointers")){
@@ -45,6 +50,40 @@
     if(argc==2 && !strcmp(argv[1],"--save-safety"))return native_save_safety();
     if(argc==2 && !strcmp(argv[1],"--all-room-loads"))return original_all_room_loads();
     if(argc==2 && !strcmp(argv[1],"--widescreen-rooms"))return original_widescreen_rooms();
+    if(argc==2 && !strcmp(argv[1],"--actor-distance")){
+        static const s32 values[]={INT32_MIN,INT32_MIN+1,-65536,-1,0,1,65536,INT32_MAX};
+        FieldActor source={0},target={0};
+        FieldActor *old_current=g_CurrentEntity,*old_player=g_PlayerEntity,*old_head=g_FieldActorListHead;
+        g_CurrentEntity=&source;g_PlayerEntity=&target;g_FieldActorListHead=&target;
+        target.type_id=7;target.sub_id=3;
+        unsigned cases=0;
+        for(unsigned i=0;i<8;++i)for(unsigned j=0;j<8;++j)for(unsigned axis=0;axis<3;++axis){
+            source.pos_x=values[i];source.pos_y=values[j];source.pos_z=values[(i+j)%8];
+            target.pos_x=values[j];target.pos_y=values[(i+j+axis)%8];target.pos_z=values[(i+axis)%8];
+            const s32 from[]={source.pos_x,source.pos_y,source.pos_z};
+            const s32 to[]={target.pos_x,target.pos_y,target.pos_z};
+            u32 expected=0;
+            for(unsigned k=0;k<3;++k){
+                u32 delta=(u32)from[k]-(u32)to[k];
+                expected+=(delta&UINT32_C(0x80000000))?0u-delta:delta;
+            }
+            for(int lookup=0;lookup<2;++lookup){
+                s32 key=lookup?7:0,sub=3,out=123; s32 *args[]={&key,&sub,&out};
+                if(Entity_GetDistanceComponents(args)!=1 || (u32)out!=expected)return 1;
+                ++cases;
+            }
+        }
+        g_PlayerEntity=NULL;
+        s32 key=0,sub=0,out=0; s32 *args[]={&key,&sub,&out};
+        if(Entity_GetDistanceComponents(args)!=1 || out!=-1)return 1;
+        key=99;out=0;
+        if(Entity_GetDistanceComponents(args)!=1 || out!=-1)return 1;
+        target.flags=0x10;key=7;sub=3;out=0;
+        if(Entity_GetDistanceComponents(args)!=1 || out!=-1)return 1;
+        g_CurrentEntity=old_current;g_PlayerEntity=old_player;g_FieldActorListHead=old_head;
+        printf("Actor distance: %u wrapping coordinate cases and absent/disabled actor lookups passed\n",cases);
+        return 0;
+    }
     if(argc==2 && !strcmp(argv[1],"--anim-event-completion")){
         RenderAnimationDataHeader animation={0};animation.frame_count=8;
         void *old_animation=g_GameState.bank_rows[0][2];
@@ -380,7 +419,7 @@
         g_PlayerEntity=NULL;g_FieldFxOwner=NULL;g_FieldFxTaskContext=NULL;g_FieldFxActiveTaskSlot=NULL;
         puts("Original Museum spark modules: all ten rooms, complete hashes/scripts/palette, descriptors, reloads and native controllers passed");return 0;
     }
-    if(argc==2 && (!strcmp(argv[1],"--m273-load") || !strcmp(argv[1],"--m273-attack-timing"))){
+    if(argc==2 && (!strcmp(argv[1],"--m273-load") || !strcmp(argv[1],"--m273-attack-timing") || !strcmp(argv[1],"--m273-action-poses"))){
         const char *path=getenv("PE_TEST_DISC");if(!path || !*path)return getenv("PE_REQUIRE_GAME_ASSETS")?1:77;
         PeDisc disc={0};PeDiscFile exe,archive;SceneRoomSectorRange range;u8 module[0xc000];
         if(!SDL_Init(SDL_INIT_EVENTS) || !pe_disc_open(&disc,path))return fprintf(stderr,"M273 load audit failed at %d\n",__LINE__),1;
@@ -422,6 +461,34 @@
                 if(g_RoomM273Trig[angle].word!=(s32)sine)return fprintf(stderr,"M273 load audit failed at %d\n",__LINE__),1;
             }
         }
+        /* Issue #58: exercise the actual disc-backed Eve model banks, not
+         * just a synthetic null animation. Every missing pose must preserve
+         * the entity; every authored pose must still select its own data. */
+        unsigned authored=0,missing=0,missing_stop=0;
+        for(unsigned row=0;row<10;++row) {
+            int populated=0;
+            for(unsigned pose=0;pose<48;++pose)populated|=g_GameState.bank_rows[row][pose]!=NULL;
+            if(!populated)continue;
+            for(unsigned pose=0;pose<48;++pose)for(unsigned setter=0;setter<2;++setter) {
+                BattleEntity entity={0};entity.modelIndex=row;entity.actionMode=0xffff;
+                entity.animFrame=0x12340000;entity.animPrev.fixed=0x23450000;
+                entity.actionData=g_GameState.bank_rows[row][0];
+                BattleEntity before=entity;
+                if(setter)Entity_SetAction(&entity,pose);else Entity_SetActionMode(&entity,pose);
+                RenderAnimationDataHeader *animation=g_GameState.bank_rows[row][pose];
+                if(animation) {
+                    if(entity.actionMode!=pose || entity.actionData!=animation || entity.animLastFrame!=(u16)(animation->frame_count-1))
+                        return fprintf(stderr,"M273 authored animation row%u pose%u setter%u failed\n",row,pose,setter),1;
+                    ++authored;
+                } else {
+                    if(memcmp(&entity,&before,sizeof(entity)))
+                        return fprintf(stderr,"M273 absent animation row%u pose%u setter%u changed entity\n",row,pose,setter),1;
+                    ++missing;if(pose==2)++missing_stop;
+                }
+            }
+        }
+        if(!authored || !missing_stop)return fprintf(stderr,"M273 model pose coverage missing: %u authored, %u absent Stop\n",authored,missing_stop),1;
+        printf("M273 actual model poses: %u authored, %u missing and %u absent Stop setter cases passed\n",authored,missing,missing_stop);
         /* Invoke through the actual PM method types: the parameters are
          * native addresses, so ASan/function also checks the dispatch ABI. */
         FieldActor boss={0},player={0};FieldActor *saved_player=g_PlayerEntity;
@@ -1295,6 +1362,8 @@
     if(argc==3 && !strcmp(argv[1],"--native-m028"))return original_native_bootstrap(argv[2],12);
     if(argc==3 && !strcmp(argv[1],"--native-m023"))return original_native_bootstrap(argv[2],11);
     if(argc==3 && !strcmp(argv[1],"--native-m022"))return original_native_bootstrap(argv[2],10);
+    if(argc==3 && !strcmp(argv[1],"--native-carnegie-diary-range"))return original_native_bootstrap(argv[2],15);
+    if(argc==3 && !strcmp(argv[1],"--native-carnegie-interaction-timing"))return original_native_bootstrap(argv[2],14);
     if(argc==3 && !strcmp(argv[1],"--native-m017"))return original_native_bootstrap(argv[2],9);
     if(argc==3 && !strcmp(argv[1],"--native-m020-items"))return original_native_bootstrap(argv[2],8);
     if(argc==3 && !strcmp(argv[1],"--native-rat"))return original_native_bootstrap(argv[2],7);

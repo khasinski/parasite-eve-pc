@@ -12,12 +12,14 @@
 #include <string.h>
 
 #include "pe_collection.h"
+#include "pe_game.h"
 #include "pe_collection_data.h"
 
 #define PE_KEY_MAX 48
 
 static char s_creature_key[PE_CREATURES][PE_KEY_MAX];
 static PeCreatureInfo s_info[PE_CREATURES];
+static int s_handle[PE_CREATURES];
 
 static void pe_slug(char *out, size_t size, const char *prefix, const char *name) {
     size_t n = (size_t)snprintf(out, size, "pe1/%s", prefix);
@@ -43,6 +45,9 @@ static void pe_make_keys(void) {
         int repeat = 1;
         pe_slug(base, sizeof base, g_pe_creatures[i].ex ? "ex_" : "", g_pe_creatures[i].name);
         snprintf(s_creature_key[i], PE_KEY_MAX, "%s", base);
+        /* The 40-HP stage boss was mislabeled Actress in the draft. Correct
+         * its visible name without invalidating existing collection profiles. */
+        if (i == 0) snprintf(s_creature_key[i], PE_KEY_MAX, "pe1/actress");
         for (j = 0; j < i; ++j)
             if (strcmp(s_creature_key[j], s_creature_key[i]) == 0) {
                 snprintf(s_creature_key[i], PE_KEY_MAX, "%s_%d", base, ++repeat);
@@ -56,6 +61,31 @@ const char *pe_pack_pe1_creature_key(int index) {
     return index >= 0 && index < PE_CREATURES ? s_creature_key[index] : NULL;
 }
 
+/* Rank/kind is shared by unrelated enemies, including the warehouse rat and
+ * spider and museum lizard/armadillo. Resolve the original bank slot of the
+ * actual combatant, not mutable HP/defense (mods and EX scaling change those).
+ * Later randomizer resolvers still take precedence through the public API. */
+static int pe_enemy_creature(int room, unsigned identity, const EnemyCombatant *enemy) {
+    const BattleEntity *entity;
+    int i;
+    if (!enemy) return -1;
+    for (entity = (const BattleEntity *)g_FieldActorListHead; entity; entity = entity->next) {
+        if (entity->core != enemy) continue;
+        int candidate = -1, ambiguous = 0;
+        for (i = 0; i < PE_CREATURE_KEYS; ++i) {
+            const PeCreatureKey *k = &g_pe_creature_keys[i];
+            if (k->map != room || k->actor != entity->modelIndex) continue;
+            if (k->id == identity) return s_handle[k->creature];
+            if (candidate < 0) candidate = s_handle[k->creature];
+            else if (candidate != s_handle[k->creature]) ambiguous = 1;
+        }
+        /* EX/progression and mods may scale rank without changing the model.
+         * A unique room/model association still identifies the species. */
+        return ambiguous ? -1 : candidate;
+    }
+    return -1;
+}
+
 void pe_pack_pe1_register(void) {
     const PeBestiaryApi *b = &g_pe_bestiary_api;
     int handle[PE_CREATURES], i;
@@ -64,12 +94,20 @@ void pe_pack_pe1_register(void) {
         const PeCreature *c = &g_pe_creatures[i];
         s_info[i] = (PeCreatureInfo){ s_creature_key[i], c->name, c->section, c->boss, c->ex, c->hp, c->defense,
                                       c->weak, c->strong, c->drop, c->steal, c->price_weak, c->price_loot };
-        handle[i] = b->add(&s_info[i]);
+        s_handle[i] = handle[i] = b->add(&s_info[i]);
     }
     for (i = 0; i < PE_CREATURE_KEYS; ++i) {
         const PeCreatureKey *k = &g_pe_creature_keys[i];
-        if (k->creature < PE_CREATURES && handle[k->creature] >= 0) b->map(k->map, k->id, handle[k->creature]);
+        int j, ambiguous = 0;
+        for (j = 0; j < PE_CREATURE_KEYS; ++j)
+            if (g_pe_creature_keys[j].map == k->map && g_pe_creature_keys[j].id == k->id &&
+                g_pe_creature_keys[j].creature != k->creature) { ambiguous = 1; break; }
+        /* A detached actor may use a unique legacy mapping. Never guess an
+         * ambiguous species by letting the last registration win. */
+        if (!ambiguous && k->creature < PE_CREATURES && handle[k->creature] >= 0)
+            b->map(k->map, k->id, handle[k->creature]);
     }
+    b->add_resolver(pe_enemy_creature);
     {
         int form[PE_CREATURES] = {0};             /* model forms, main body first (generated order) */
         for (i = 0; i < PE_CREATURE_MODELS; ++i) {

@@ -175,6 +175,9 @@ void MenuCard_ShowLogoFade(void) {
         second->disp.isrgb24 = 0;
         first->disp.isrgb24 = 0;
     }
+    /* The first logo draw is RGB555, including opaque-black STP pixels.
+     * Leave RGB24 before exposing that page at its first VSync. */
+    PutDispEnv(&g_MemcardScreenBuffers[g_MemcardScreenPage == 0]->disp);
     SetDispMask(1);
     widescreen = Psyz_VideoGetWidescreen();
     stalePages = 0;

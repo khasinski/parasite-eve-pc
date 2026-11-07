@@ -282,8 +282,8 @@ static int HdPath(char *out,size_t n,const char *a,const char *b){int k=snprintf
 static int HdHex(const char *s){if(!s||strlen(s)!=64)return 0;for(unsigned i=0;i<64;++i)if(!strchr("0123456789abcdef",s[i]))return 0;return 1;}
 static int HdName(const char *s){
     if(!s)return 0;if(!strcmp(s,"manifest.json")||!strcmp(s,"title.webp")||!strcmp(s,"title.png"))return 1;
-    size_t n=strlen(s);if(n<20||n>25)return 0;for(unsigned i=0;i<16;++i)if(!strchr("0123456789abcdef",s[i]))return 0;
-    return !strcmp(s+16,".webp")||!strcmp(s+16,".png")||!strcmp(s+16,".ref.png")||!strcmp(s+16,"-wide.bin");
+    size_t n=strlen(s);if(n<20||n>26)return 0;for(unsigned i=0;i<16;++i)if(!strchr("0123456789abcdef",s[i]))return 0;
+    return !strcmp(s+16,".webp")||!strcmp(s+16,".png")||!strcmp(s+16,".ref.png")||!strcmp(s+16,"-wide.bin")||!strcmp(s+16,"-under.bin")||!strcmp(s+16,"-matte.bin");
 }
 static const char *HdString(const cJSON *j,const char *key){const cJSON *v=cJSON_GetObjectItemCaseSensitive(j,key);return cJSON_IsString(v)?v->valuestring:NULL;}
 static cJSON *HdJsonFile(const char *path,size_t limit){size_t n=0;char *data=SDL_LoadFile(path,&n);if(!data)return NULL;cJSON *j=n<=limit?cJSON_ParseWithLength(data,n):NULL;SDL_free(data);return j;}
@@ -340,7 +340,7 @@ static int HdProgress(void *opaque,curl_off_t total,curl_off_t now,curl_off_t up
 static int HdRequest(const char *url,HdTransfer *transfer,const char *download_id){
     CURL *curl=curl_easy_init();if(!curl)return 0;char ua[160],version[100],platform[100],id[128],build[100];snprintf(ua,sizeof(ua),"ParasiteEve/%s (%s; WebP; build %s)",PE_VERSION,SDL_GetPlatform(),PE_BUILD_ID);snprintf(version,sizeof(version),"X-PE-Version: %s",PE_VERSION);snprintf(platform,sizeof(platform),"X-PE-Platform: %s",SDL_GetPlatform());snprintf(id,sizeof(id),"X-PE-Download-ID: %s",download_id);
     snprintf(build,sizeof(build),"X-PE-Build: %s",PE_BUILD_ID);
-    struct curl_slist *headers=NULL;headers=curl_slist_append(headers,version);headers=curl_slist_append(headers,platform);headers=curl_slist_append(headers,id);headers=curl_slist_append(headers,build);
+    struct curl_slist *headers=NULL;headers=curl_slist_append(headers,version);headers=curl_slist_append(headers,platform);headers=curl_slist_append(headers,id);headers=curl_slist_append(headers,build);headers=curl_slist_append(headers,"X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1");
     curl_easy_setopt(curl,CURLOPT_URL,url);curl_easy_setopt(curl,CURLOPT_USERAGENT,ua);curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,"https,http");
     curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT,10L);curl_easy_setopt(curl,CURLOPT_TIMEOUT,7200L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_LIMIT,1024L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_TIME,60L);curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
     curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,HdWrite);curl_easy_setopt(curl,CURLOPT_WRITEDATA,transfer);curl_easy_setopt(curl,CURLOPT_XFERINFOFUNCTION,HdProgress);curl_easy_setopt(curl,CURLOPT_XFERINFODATA,transfer);curl_easy_setopt(curl,CURLOPT_NOPROGRESS,0L);curl_easy_setopt(curl,CURLOPT_FAILONERROR,1L);
@@ -357,6 +357,13 @@ static int HdWorker(void *unused){
     snprintf(url,sizeof(url),"%s/api/mods/upscale/latest",base);HdTransfer transfer={0};
     if(!HdRequest(url,&transfer,id)||!(catalog=cJSON_ParseWithLength(transfer.data,transfer.used))){SDL_strlcpy(host_hd.result_message,"Could not fetch the mod catalog. Previous pack kept.",sizeof(host_hd.result_message));goto end;}
     const char *format=HdString(catalog,"format");if(!format||strcmp(format,"webp-reference-png")){SDL_strlcpy(host_hd.result_message,"This pack needs a newer game build.",sizeof(host_hd.result_message));goto end;}
+    const cJSON *features=cJSON_GetObjectItemCaseSensitive(catalog,"required_features");
+    if(features&&!cJSON_IsArray(features)){SDL_strlcpy(host_hd.result_message,"Invalid background pack requirements. Previous pack kept.",sizeof(host_hd.result_message));goto end;}
+    const cJSON *feature=NULL;cJSON_ArrayForEach(feature,features){
+        if(!cJSON_IsString(feature)||(strcmp(feature->valuestring,"underlay-v1")&&strcmp(feature->valuestring,"static-matte-v1")&&strcmp(feature->valuestring,"selective-matte-v1"))){
+            SDL_strlcpy(host_hd.result_message,"This pack needs a newer game build. Previous pack kept.",sizeof(host_hd.result_message));goto end;
+        }
+    }
     const char *version=HdString(catalog,"version"),*sha=HdString(catalog,"sha256"),*remote=HdString(catalog,"url");const cJSON *size=cJSON_GetObjectItemCaseSensitive(catalog,"size");
     if(!version||strlen(version)>20||!strchr(version,'.')||!HdHex(sha)||!remote||!cJSON_IsNumber(size)||size->valuedouble<1||size->valuedouble>2147483648.0)goto end;
     for(const char *p=version;*p;++p)if(!isdigit((unsigned char)*p)&&*p!='.')goto end;
@@ -2105,8 +2112,8 @@ static void Host_ProcessSettingsPointer(
         return;
     }
     if (state->page == HOST_PAGE_CONTROLS && hitRow == HOST_SPEED_BINDING + 1 &&
-        x < (float)(OVERLAY_PAD + OVERLAY_SPEED_STEP_W)) {
-        int action = x < (float)(OVERLAY_PAD + OVERLAY_SPEED_STEP_CENTRE) ? -1 : 1;
+        x < OverlayLabelX() + (float)OVERLAY_SPEED_STEP_W) {
+        int action = x < OverlayLabelX() + (float)OVERLAY_SPEED_STEP_CENTRE ? -1 : 1;
         Host_ApplySettingsAction(state, action, 0, game);
         return;
     }
@@ -3889,6 +3896,47 @@ static void Host_DescribeSaveData(char *out, size_t size) {
 #endif
 }
 
+/* Select portable storage before any preferences, cards, mods or installer
+ * paths are initialized. An explicit PE_CONFIG_HOME remains authoritative. */
+static int Host_ConfigurePortable(int *argc, char **argv) {
+#ifndef PE_PS5
+    int requested = 0, count = 1;
+    for (int i = 1; i < *argc; ++i) {
+        if (!strcmp(argv[i], "--portable")) requested = 1;
+        else argv[count++] = argv[i];
+    }
+    *argc = count; argv[count] = NULL;
+    const char *base = SDL_GetBasePath();
+    if (!base) return !requested;
+    char directory[4096], marker[4096], data[4096];
+    int n = snprintf(directory, sizeof(directory), "%s", base);
+    if (n < 0 || (size_t)n >= sizeof(directory)) return 0;
+#ifdef __APPLE__
+    /* User data must be beside the signed .app, never inside its bundle. */
+    char *bundle = strstr(directory, ".app/Contents/");
+    if (bundle) {
+        while (bundle > directory && bundle[-1] != '/') --bundle;
+        *bundle = '\0';
+    }
+#endif
+    n = snprintf(marker, sizeof(marker), "%sportable.txt", directory);
+    if (n < 0 || (size_t)n >= sizeof(marker)) return 0;
+    SDL_PathInfo info;
+    requested |= SDL_GetPathInfo(marker, &info) && info.type == SDL_PATHTYPE_FILE;
+    const char *override = SDL_getenv("PE_CONFIG_HOME");
+    if (!requested || (override && *override)) return 1;
+    n = snprintf(data, sizeof(data), "%suserdata", directory);
+    if (n < 0 || (size_t)n >= sizeof(data) || !SDL_CreateDirectory(data) ||
+        !SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "PE_CONFIG_HOME", data, true)) {
+        fprintf(stderr, "Cannot prepare portable storage beside the application: %s\n", SDL_GetError());
+        return 0;
+    }
+#else
+    (void)argc; (void)argv;
+#endif
+    return 1;
+}
+
 static void Host_PrintHelp(const char *program_name) {
     printf(
         "Usage: %s [--disc <USA Disc 1 CUE/BIN>] [--disc2 <USA Disc 2 CUE/BIN>] [--choose-discs] "
@@ -3900,6 +3948,7 @@ static void Host_PrintHelp(const char *program_name) {
         program_name
     );
     printf("--download-backgrounds / --verify-backgrounds manage the optional HD pack without opening a window.\n");
+    printf("--portable or portable.txt beside the application keeps settings, cards and mods in its userdata directory. PE_CONFIG_HOME overrides this location.\n");
     printf("Without --disc, opens a native multi-select CUE/BIN dialog. --choose-discs selects new images. ESC opens desktop settings.\n");
     printf("--headless uses native-resolution software rendering; --headless-gpu keeps the actual GPU window hidden and supports internal scaling.\n");
     printf("--dump-frame writes the rendered display as RGB888 PPM at each control/terminal boundary.\n");
@@ -3976,6 +4025,7 @@ static int Host_ParseHealthEventArg(const char *cursor, int argc) {
 }
 
 int main(int argc, char **argv) {
+    if (!Host_ConfigurePortable(&argc, argv)) return EXIT_FAILURE;
 #ifdef PE_PS5
     if (!Host_InitPaths()) return EXIT_FAILURE;
 #endif

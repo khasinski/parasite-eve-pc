@@ -1,8 +1,12 @@
 # Mod host and mods, built only with -DPE_MODS=ON. See mods/README.md.
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
-# pe_hello is the example mod; add it to the list to build it. pe_lang (language packs) is
-# opt-in too.
+# pe_hello is the example mod; add it to the list to build it.
 set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats CACHE STRING "Mods built into the game (folder names)")
+# Existing build directories may still cache the now-parked language mod.
+if("pe_lang" IN_LIST PE_MOD_LIST)
+    list(REMOVE_ITEM PE_MOD_LIST pe_lang)
+    set(PE_MOD_LIST "${PE_MOD_LIST}" CACHE STRING "Mods built into the game (folder names)" FORCE)
+endif()
 
 set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs
@@ -68,7 +72,7 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
         pe_qol/pe_move.c)
     target_include_directories(pe-mod-frequency PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_qol
         "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
-    target_compile_definitions(pe-mod-frequency PRIVATE __psyz PE_MODS=1)
+    target_compile_definitions(pe-mod-frequency PRIVATE __psyz PE_MODS=1 PE_NATIVE_STATE_CPU_COMPONENTS=1)
     target_link_libraries(pe-mod-frequency PRIVATE psyz)
     add_test(NAME pe-mod-frequency COMMAND pe-mod-frequency)
 endif()
@@ -109,7 +113,7 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
         pe_qol/pe_inventory_menu.c)
     foreach(target test-mod-inventory test-mod-inventory-menu)
         target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_qol)
-        target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1 PE_INTERFACE_TEXT_FALLBACK=1)
+        target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1)
         target_link_libraries(${target} PRIVATE psyz)
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
@@ -167,7 +171,7 @@ if(BUILD_TESTING AND "pe_rebalance" IN_LIST PE_MOD_LIST)
         ${PROJECT_SOURCE_DIR}/src/main/item/actions.c)
     foreach(target test-mod-atb test-mod-combine test-mod-pe)
         target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_rebalance)
-        target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1 PE_INTERFACE_TEXT_FALLBACK=1)
+        target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1)
         target_link_libraries(${target} PRIVATE psyz)
     endforeach()
     if(MINGW)
@@ -188,8 +192,7 @@ endif()
 function(pe_feature_test name)
     add_executable(test-mod-${name} ${ARGN})
     target_include_directories(test-mod-${name} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_economy pe_catalog pe_shops pe_collection pe_wardrobe)
-    # These isolated fixtures have no service host; full interface checks stay in pe-native-debug.
-    target_compile_definitions(test-mod-${name} PRIVATE __psyz PE_MODS=1 PE_INTERFACE_TEXT_FALLBACK=1)
+    target_compile_definitions(test-mod-${name} PRIVATE __psyz PE_MODS=1)
     target_link_libraries(test-mod-${name} PRIVATE psyz)
     if(MSVC)
         target_compile_options(test-mod-${name} PRIVATE /UNDEBUG)
@@ -236,36 +239,6 @@ if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST)
     set_tests_properties(mod-model PROPERTIES ENVIRONMENT "PE_MODEL_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
     pe_feature_test(present ${PROJECT_SOURCE_DIR}/tests/pe_mod_present_test.c host/pe_present.c)
     pe_feature_test(stage ${PROJECT_SOURCE_DIR}/tests/pe_mod_stage_test.c host/pe_model_stage.c)
-endif()
-
-# The language pack reader is plain data code, so its test runs whichever mods are built.
-if(BUILD_TESTING)
-    add_executable(test-mod-lang-pack ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_test.c pe_lang/pe_lang_pack.c)
-    target_include_directories(test-mod-lang-pack PRIVATE pe_lang)
-    if(MSVC)
-        target_compile_options(test-mod-lang-pack PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(test-mod-lang-pack PRIVATE -UNDEBUG)
-    endif()
-    add_test(NAME mod-lang-pack COMMAND test-mod-lang-pack)
-    add_executable(test-mod-lang-font ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_font_test.c pe_lang/pe_lang_font.c)
-    target_include_directories(test-mod-lang-font PRIVATE pe_lang ${PROJECT_SOURCE_DIR}/tests)
-    if(MSVC)
-        target_compile_options(test-mod-lang-font PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(test-mod-lang-font PRIVATE -UNDEBUG)
-    endif()
-    add_test(NAME mod-lang-font COMMAND test-mod-lang-font)
-    add_executable(test-mod-lang-selection ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_selection_test.c
-        pe_lang/pe_lang_selection.c)
-    target_include_directories(test-mod-lang-selection PRIVATE pe_lang)
-    target_link_libraries(test-mod-lang-selection PRIVATE SDL3::SDL3)
-    if(MSVC)
-        target_compile_options(test-mod-lang-selection PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(test-mod-lang-selection PRIVATE -UNDEBUG)
-    endif()
-    add_test(NAME mod-lang-selection COMMAND test-mod-lang-selection)
 endif()
 
 # Rust save-editor interoperability uses the actual C serializer, including the

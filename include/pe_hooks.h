@@ -58,7 +58,7 @@ typedef enum PeHookId {
                           * the text it draws may be replaced */
     PE_HOOK_TIM_UPLOAD,  /* TimFile *: Asset_LoadTimImage, before the image goes to VRAM (fonts,
                           * backgrounds, area glyph pages); its pixels may be changed in place */
-    PE_HOOK_TEXT_GLYPH,  /* PeHookTextGlyph: optional multi-byte glyph; nonzero handles it */
+    PE_HOOK_RESERVED_1, /* Preserve hook IDs used by existing mods. */
     PE_HOOK_ITEM_REMOVE, /* PeHookItemRemove: Inv_RemoveActiveListItem entry; replaceable (result = id) */
     PE_HOOK_INVENTORY_REBUILD, /* NULL: Inv_RebuildSelectableMask entry, before the masks are rebuilt */
     PE_HOOK_STORAGE_TRANSFER, /* PeHookStorageTransfer: Inv_RebuildWithSlotLimit, bag <-> storage
@@ -110,20 +110,10 @@ typedef struct PeHookScriptRandom {
     const unsigned int *next;
 } PeHookScriptRandom;
 
-/* Caller owns packet allocation, ordering, color and palette. Measurement never uploads.
- * A provider returns nonzero only for a complete token it owns, setting bytes/advance/UV. */
-typedef struct PeHookTextGlyph {
-    const unsigned char *text;
-    unsigned bytes, advance;
-    int draw;
-    unsigned char u, v;
-} PeHookTextGlyph;
-
 typedef struct PeHookTextLookup {
     unsigned table, index; /* table 4 = system messages, 8 = item names, 12 = item descriptions,
                             * 16 = the rest (Text_LookupTable4 / 8 / C / 10) */
     void **text;
-    int persistent; /* nonzero: editable name copied into a save; use stable byte glyphs only */
 } PeHookTextLookup;
 
 /* The box's text starts after the page's FE <id> and runs to its FF or F9. A replacement must

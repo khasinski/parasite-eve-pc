@@ -10,7 +10,6 @@
 #include "pe_game.h"
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
-#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_panacea.h"
@@ -212,7 +211,7 @@ static int pe_menu_step(MenuWidgetNode *panel, unsigned int flags) {
     Inv_RebuildSelectableMask();
     into = result == ITEM_ITEM25 ? "Panacea" : result == ITEM_MEDICINE_4 ? "Medicine 4" :
            result == ITEM_MEDICINE_3 ? "Medicine 3" : "Medicine 2";
-    snprintf(msg, sizeof msg, pe_l10n_ui("Combined into %s"), into);
+    snprintf(msg, sizeof msg, "Combined into %s", into);
     pe_toast(msg);
     MenuWidget_DestroyNode(panel);
     Menu_PlayConfirmSound();
@@ -226,7 +225,7 @@ static int pe_on_item_actions(void *ctx, void *user) {
     (void)user;
     if (!pe_combine_available() || a->context != 0 || a->list_id != 0) return 0;
     if ((partner = pe_partner(a->slot, &result)) < 0) return 0;
-    pe_tr_ascii(s_label, sizeof s_label, "Combine");
+    if (!s_label[0]) pe_text_from_ascii(s_label, sizeof s_label, "Combine");
     s_menu_slot = a->slot;
     s_menu_partner = partner;
     s_menu_result = result;
@@ -239,9 +238,9 @@ static int pe_on_item_actions(void *ctx, void *user) {
 
 static void pe_ingredients(char *out, unsigned size) {
     int a, b;
-    snprintf(out, size, "%s", pe_game_loaded() && pe_pair(&a, &b) ? pe_l10n_ui("Ready") : pe_l10n_ui("Missing ingredients"));
+    snprintf(out, size, "%s", pe_game_loaded() && pe_pair(&a, &b) ? "Ready" : "Missing ingredients");
 }
-static void pe_last_result(char *out, unsigned size) { snprintf(out, size, "%s", s_result[0] ? s_result : pe_l10n_ui("Choose a recipe")); }
+static void pe_last_result(char *out, unsigned size) { snprintf(out, size, "%s", s_result[0] ? s_result : "Choose a recipe"); }
 static void pe_disarm_tick(void) { s_armed = -1; }
 
 void pe_combine_register(const char *mod_id) {

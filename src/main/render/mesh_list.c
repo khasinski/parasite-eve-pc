@@ -275,6 +275,7 @@ void Render_LinkFieldSubpixel(int slot, RenderNativeTag *ordering) {
     int i;
 
     s_FieldShift[slot].active = 0;
+    Render_LinkHdUnderlayBackdrop(slot,ordering);
     if (!Psyz_VideoGetWidescreen()) return;
     if (s_WidescreenCover[slot].tiles) Render_LinkHdWidescreenBackdrop(slot,ordering);
     if (!Render_GetCameraSubpixel(&dx, &dy, &camera_x)) return;

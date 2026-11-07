@@ -8,7 +8,6 @@
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
-#include "pe_translate.h"
 #include "pe_model_stage.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_draw_list.h"
@@ -55,9 +54,9 @@ static int pe_current(void) {
 /* Six names of at most 16 glyphs plus 72 info glyphs stay below 10 KB of native
  * text packets, reserving over 6 KB of the 16 KB menu arena for the stock chrome. */
 static void pe_print(const char *line, int width, unsigned cap) {
-    const char *translated = pe_l10n_ui(line);
+    const char *translated = line;
     size_t n = 0;
-    pe_tr_ascii(s_text, cap + 1, translated);
+    pe_text_from_ascii(s_text, cap + 1, translated);
     while (n < sizeof s_text - 1 && s_text[n] != 0xFF) ++n;
     if (strlen(translated) > cap || Draw_MeasureTextWidth(s_text) > width) {
         while (n && (s_text[n] = 0xFF, Draw_MeasureTextWidth(s_text) > width)) --n;
@@ -160,7 +159,7 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
     if (buttons & PE_MENU_CROSS) {
         if (index < 0 || (index > 0 && !c) || pe_wardrobe_worn() == c) { Menu_PlayErrorSound(); return 1; }
         pe_wardrobe_wear_later(c);
-        snprintf(s_note, sizeof s_note, pe_l10n_ui("%s when you close the menu"), c ? pe_l10n_ui("Wearing it") : pe_l10n_ui("Back to her own clothes"));
+        snprintf(s_note, sizeof s_note, "%s when you close the menu", c ? "Wearing it" : "Back to her own clothes");
         s_note_tick = s_tick;
         Menu_PlayConfirmSound(); return 1;
     }
@@ -182,10 +181,10 @@ static int pe_on_help_text(void *ctx, void *user) {
     (void)user;
     if (!s_screen.list || MenuWidget_GetCurrentNode() != s_screen.list) return 0;
     if (s_tick - s_note_tick < 150) snprintf(line, sizeof line, "%s", s_note);
-    else if ((s_tick / 150) % 3 == 1) snprintf(line, sizeof line, "%s", pe_l10n_ui("L1 R1: Group   Left Right: Turn"));
-    else if ((s_tick / 150) % 3 == 2) snprintf(line, sizeof line, "%s", pe_l10n_ui("X: Wear   Square: Pause   Circle: Back"));
-    else snprintf(line, sizeof line, pe_l10n_ui("%s   %d outfits   X: Wear"), pe_l10n_ui(s_group[s_category]), s_members);
-    pe_tr_ascii(s_text, sizeof s_text, line);
+    else if ((s_tick / 150) % 3 == 1) snprintf(line, sizeof line, "%s", "L1 R1: Group   Left Right: Turn");
+    else if ((s_tick / 150) % 3 == 2) snprintf(line, sizeof line, "%s", "X: Wear   Square: Pause   Circle: Back");
+    else snprintf(line, sizeof line, "%s   %d outfits   X: Wear", s_group[s_category], s_members);
+    pe_text_from_ascii(s_text, sizeof s_text, line);
     n = 0;
     while (n < sizeof s_text - 1 && s_text[n] != 0xFF) ++n;
     while (n && Draw_MeasureTextWidth(s_text) > 278) s_text[--n] = 0xFF;

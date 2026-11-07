@@ -16,7 +16,6 @@
 #include "pe_collection.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
-#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 
@@ -116,7 +115,7 @@ static void pe_unlock_why(int h, unsigned bits, const char *why) {
     unsigned committed=pe_profile_creature(c->key,NULL),earned=(committed|bits|PE_BESTIARY_MET)&7u;
     if(earned!=committed)pe_profile_set_creature(c->key,earned,pe_kills(h));
     if(now==old)return;
-    snprintf(msg, sizeof msg, "Bestiary: %s%s%s%s", pe_l10n_ui(c->name), gained & PE_BESTIARY_WEAK ? " - weaknesses" : "",
+    snprintf(msg, sizeof msg, "Bestiary: %s%s%s%s", c->name, gained & PE_BESTIARY_WEAK ? " - weaknesses" : "",
              gained & PE_BESTIARY_LOOT ? " - loot" : "", gained == PE_BESTIARY_MET ? " - new entry" : "");
     pe_toast(msg);
     pe_log("bestiary", "creature=%s bits=0x%02X why=%s", c->key, now, why);
@@ -165,6 +164,9 @@ const PeBestiaryApi g_pe_bestiary_api = {
 };
 
 /* ---- kills and Scan ---- */
+/* tracking>=2 defers a scripted boss's defeat until the battle actually ends.
+ * It holds creature handle+2, so actor teardown cannot lose identity.
+ * The existing checkpoint record layout stays unchanged. */
 static struct { int tracking; uint8_t entity_id; uint16_t identity; int32_t hp; } s_slot[PE_ENEMY_SLOTS];
 
 static int pe_on_battle(void *ctx, void *user) {
@@ -178,7 +180,10 @@ static int pe_on_battle(void *ctx, void *user) {
         const uint8_t eid = core->lowAndEntityId.bytes.entityId;
         const int32_t hp = core->hpAlive;
         const uint16_t id = (uint16_t)core->field04.fieldId04;
-        if (!g_BattleEnemySlots[s].active) { s_slot[s].tracking = 0; continue; }
+        if (!g_BattleEnemySlots[s].active) {
+            if (s_slot[s].tracking < 2) s_slot[s].tracking = 0;
+            continue;
+        }
         if (!s_slot[s].tracking || s_slot[s].entity_id != eid) {
             s_slot[s].tracking = 1;
             s_slot[s].entity_id = eid;
@@ -186,9 +191,27 @@ static int pe_on_battle(void *ctx, void *user) {
             s_slot[s].identity = id;
             continue;
         }
+        if (s_slot[s].tracking >= 2) {
+            /* A scripted HP refill starts another boss phase. Its first
+             * threshold must not count as defeating the whole encounter. */
+            if (hp > s_slot[s].hp || core->hpAliveCap < 1000000) {
+                s_slot[s].tracking = 1;
+            }
+            s_slot[s].hp = hp;
+            continue;
+        }
         if (s_slot[s].hp > 0 && hp <= 0 && room > 0) {
             const int h = pe_resolve(room, s_slot[s].identity ? s_slot[s].identity : id, core);
             if (h >= 0) pe_kill(h);
+        } else if (s_slot[s].hp > 1000000 && hp <= 1000000 && room > 0) {
+            /* Original boss scripts offset HP by a million and end their
+             * fight themselves. The observer must not wait for HP zero. */
+            const int h = pe_resolve(room, s_slot[s].identity ? s_slot[s].identity : id, core);
+            if (pe_valid(h) && s_creature[h]->boss) {
+                s_slot[s].tracking = h + 2;
+                s_slot[s].hp = hp;
+                continue;
+            }
         }
         s_slot[s].hp = hp;
         if (id) s_slot[s].identity = id;
@@ -207,7 +230,24 @@ static int pe_on_spell(void *ctx, void *user) {
     return 0;
 }
 
-static void pe_field_tick(void) { if (!pe_in_battle()) memset(s_slot, 0, sizeof s_slot); }   /* each battle starts fresh */
+static void pe_field_tick(void) {
+    if (!pe_in_battle()) {
+        const BattleEntity *player = pe_player();
+        const Combatant *aya = player ? player->core : NULL;
+        if (pe_game_loaded() && aya && (s16)aya->curHP > 0) {
+            for (int s = 0; s < PE_ENEMY_SLOTS; ++s) {
+                const int h = s_slot[s].tracking - 2;
+                if (s_slot[s].tracking < 2 || !pe_valid(h)) continue;
+                /* Several attached hitboxes can resolve to the same boss. */
+                int seen = 0;
+                for (int j = 0; j < s; ++j)
+                    if (s_slot[j].tracking == s_slot[s].tracking) seen = 1;
+                if (!seen) pe_kill(h);
+            }
+        }
+        memset(s_slot, 0, sizeof s_slot);
+    }
+}
 
 /* ---- F1 pages ---- */
 static const char *s_sections[PE_MAX_SECTIONS + 1];
@@ -253,12 +293,12 @@ static const char *pe_name(unsigned i) {
     const PeCreatureInfo *c;
     unsigned s;
     pe_filter();
-    if (!s_count) return pe_l10n_ui("None");
+    if (!s_count) return "None";
     if (i >= (unsigned)s_count) i = 0;
     c = s_creature[s_list[i]];
     s = pe_state(s_list[i]);
     if (!(s & PE_BESTIARY_MET)) snprintf(s_name, sizeof s_name, "???  (%u/%d)", i + 1, s_count);
-    else snprintf(s_name, sizeof s_name, "%s%s%s  (%u/%d)", c->ex ? "EX " : "", pe_l10n_ui(c->name),
+    else snprintf(s_name, sizeof s_name, "%s%s%s  (%u/%d)", c->ex ? "EX " : "", c->name,
                   (s & PE_BESTIARY_WEAK) && (s & PE_BESTIARY_LOOT) ? " *" : c->boss ? " (boss)" : "", i + 1, s_count);
     return s_name;
 }
@@ -288,21 +328,21 @@ static void pe_elements_row(char *out, unsigned size) {
     if (!c) { snprintf(out, size, "-"); return; }
     if (pe_state(h) & PE_BESTIARY_WEAK)
         snprintf(out, size, "Weak: %s  Strong: %s", pe_elems(c->weak, weak, sizeof weak), pe_elems(c->strong, strong, sizeof strong));
-    else snprintf(out, size, "Scan, %s or %u Junk", c->boss ? pe_l10n_ui("defeat") : pe_l10n_ui("5 kills"), c->price_weak);
+    else snprintf(out, size, "Scan, %s or %u Junk", c->boss ? "defeat" : "5 kills", c->price_weak);
 }
 
 static void pe_drop_row(char *out, unsigned size) {
     const int h = pe_current();
     const PeCreatureInfo *c = pe_info(h);
     if (!c) snprintf(out, size, "-");
-    else if (pe_state(h) & PE_BESTIARY_LOOT) snprintf(out, size, "%s", c->drop ? c->drop : pe_l10n_ui("nothing"));
+    else if (pe_state(h) & PE_BESTIARY_LOOT) snprintf(out, size, "%s", c->drop ? c->drop : "nothing");
     else snprintf(out, size, "%s%u Junk", c->boss ? "" : "15 kills or ", c->price_loot);
 }
 
 static void pe_steal_row(char *out, unsigned size) {
     const int h = pe_current();
     const PeCreatureInfo *c = pe_info(h);
-    snprintf(out, size, "%s", c && (pe_state(h) & PE_BESTIARY_LOOT) ? (c->steal ? c->steal : pe_l10n_ui("nothing")) : "-");
+    snprintf(out, size, "%s", c && (pe_state(h) & PE_BESTIARY_LOOT) ? (c->steal ? c->steal : "nothing") : "-");
 }
 
 /* Buying: the next locked tier, weaknesses then loot, of a met creature. */
@@ -332,7 +372,7 @@ int pe_bestiary_buy(int h) {
         pe_col_say("Information available; save the game to keep this purchase");return 1;
     }
     if (!pe_col_spend(price)) {
-        snprintf(msg, sizeof msg, pe_l10n_ui("Need %u Junk (have %u)"), price, pe_col_junk());
+        snprintf(msg, sizeof msg, "Need %u Junk (have %u)", price, pe_col_junk());
         pe_col_say(msg);
         return 0;
     }
@@ -353,7 +393,7 @@ static void pe_buy_label(char *out, unsigned size) {
     unsigned bit = 0;
     const unsigned price = h >= 0 ? pe_bestiary_next_price(h, &bit) : 0;
     if (!bit) snprintf(out, size, "Complete");
-    else snprintf(out, size, "%s for %u Junk (have %u)", bit == PE_BESTIARY_WEAK ? "Weaknesses" : pe_l10n_ui("Loot"), price, pe_col_junk());
+    else snprintf(out, size, "%s for %u Junk (have %u)", bit == PE_BESTIARY_WEAK ? "Weaknesses" : "Loot", price, pe_col_junk());
 }
 
 static void pe_progress(char *out, unsigned size) {
@@ -404,14 +444,14 @@ static int pe_test(void) { return pe_valid(s_test) ? s_test : -1; }
 static unsigned pe_test_count(void) { return s_creatures ? (unsigned)s_creatures : 1u; }
 static const char *pe_test_name(unsigned i) {
     const PeCreatureInfo *c = pe_info((int)i);
-    if (!c) return pe_l10n_ui("None");
-    snprintf(s_test_name, sizeof s_test_name, "%s%s  (%u/%d)", c->ex ? "EX " : "", pe_l10n_ui(c->name), i + 1, s_creatures);
+    if (!c) return "None";
+    snprintf(s_test_name, sizeof s_test_name, "%s%s  (%u/%d)", c->ex ? "EX " : "", c->name, i + 1, s_creatures);
     return s_test_name;
 }
 
 static void pe_tiers(char *out, unsigned size, unsigned bits) {
     snprintf(out, size, "%s%s%s%s", bits & PE_BESTIARY_MET ? "met " : "", bits & PE_BESTIARY_WEAK ? "weak " : "",
-             bits & PE_BESTIARY_LOOT ? pe_l10n_ui("loot") : "", bits ? "" : pe_l10n_ui("none"));
+             bits & PE_BESTIARY_LOOT ? "loot" : "", bits ? "" : "none");
 }
 
 static void pe_test_state(char *out, unsigned size) {
@@ -505,6 +545,9 @@ void pe_bestiary_register(const char *mod_id) {
     pe_menu_register_info(PE_PAGE_BESTIARY, "Result", "What the last action did.", pe_result);
     pe_menu_register_tick(pe_field_tick);
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_battle, NULL, PE_PRIORITY_LATE, mod_id);
+    /* A script can release its actor before the next battle update. Observe
+     * completed damage while the original model and stat identity still exist. */
+    pe_hook_add(PE_HOOK_ENEMY_HIT_END, pe_on_battle, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_SPELL, pe_on_spell, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
 
@@ -513,6 +556,6 @@ void pe_bestiary_register(const char *mod_id) {
 int pe_bestiary_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){
 if(s_checkpoint_epoch==UINT32_MAX)return 0;if(apply&&(!in||!pe_bestiary_checkpoint_walk(in,0,0)))return 0;
 PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_creatures,0,PE_MAX_CREATURES,1);PE_CK_S(w,s_maps,0,PE_MAX_MAPPINGS,1);PE_CK_S(w,s_resolvers,0,PE_MAX_RESOLVERS,1);PE_CK_S(w,s_event,-1,INT_MAX,1);
-for(unsigned i=0;i<PE_ENEMY_SLOTS;i++){PE_CK_S(w,s_slot[i].tracking,0,1,0);PE_CK_U(w,s_slot[i].entity_id,0,255,0);PE_CK_U(w,s_slot[i].identity,0,65535,0);PE_CK_S(w,s_slot[i].hp,INT_MIN,INT_MAX,0);}return w.ok&&w.at==132;
+for(unsigned i=0;i<PE_ENEMY_SLOTS;i++){PE_CK_S(w,s_slot[i].tracking,0,PE_MAX_CREATURES+1,0);PE_CK_U(w,s_slot[i].entity_id,0,255,0);PE_CK_U(w,s_slot[i].identity,0,65535,0);PE_CK_S(w,s_slot[i].hp,INT_MIN,INT_MAX,0);}return w.ok&&w.at==132;
 }
 #endif

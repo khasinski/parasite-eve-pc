@@ -148,6 +148,8 @@ s32 Entity_GetDistanceComponents(s32 *args[]) {
         }
     }
 
+    /* Coordinate differences and Manhattan sums wrap as MIPS words.
+     * Keep the original signed comparisons after each wrapped operation. */
     {
         FieldActor *state;
         s32 node_x;
@@ -157,9 +159,9 @@ s32 Entity_GetDistanceComponents(s32 *args[]) {
         node_x = node->pos_x;
         out = args[2];
         var_v0 = sourceX;
-        var_v0 = var_v0 - node_x;
+        var_v0 = (s32)((u32)var_v0 - (u32)node_x);
         if (var_v0 < 0) {
-            var_v0 = node_x - sourceX;
+            var_v0 = (s32)((u32)node_x - (u32)sourceX);
         }
         *out = var_v0;
     }
@@ -171,11 +173,11 @@ s32 Entity_GetDistanceComponents(s32 *args[]) {
         temp_a3_2 = state->pos_y;
         temp_v0_2 = node->pos_y;
         temp_a2 = *out;
-        temp_v1_2 = temp_a3_2 - temp_v0_2;
+        temp_v1_2 = (s32)((u32)temp_a3_2 - (u32)temp_v0_2);
         if (temp_v1_2 >= 0) {
-            var_v0_2 = temp_a2 + temp_v1_2;
+            var_v0_2 = (s32)((u32)temp_a2 + (u32)temp_v1_2);
         } else {
-            var_v0_2 = temp_a2 + (temp_v0_2 - temp_a3_2);
+            var_v0_2 = (s32)((u32)temp_a2 + ((u32)temp_v0_2 - (u32)temp_a3_2));
         }
         *out = var_v0_2;
     }
@@ -187,11 +189,11 @@ s32 Entity_GetDistanceComponents(s32 *args[]) {
         temp_a2_2 = state->pos_z;
         temp_v0_3 = node->pos_z;
         temp_a1 = *out;
-        temp_v1_3 = temp_a2_2 - temp_v0_3;
+        temp_v1_3 = (s32)((u32)temp_a2_2 - (u32)temp_v0_3);
         if (temp_v1_3 >= 0) {
-            var_v0_3 = temp_a1 + temp_v1_3;
+            var_v0_3 = (s32)((u32)temp_a1 + (u32)temp_v1_3);
         } else {
-            var_v0_3 = temp_a1 + (temp_v0_3 - temp_a2_2);
+            var_v0_3 = (s32)((u32)temp_a1 + ((u32)temp_v0_3 - (u32)temp_a2_2));
         }
         *out = var_v0_3;
     }

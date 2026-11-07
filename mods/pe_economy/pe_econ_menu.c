@@ -7,7 +7,6 @@
 
 #include "pe_econ_store.h"
 #include "pe_game.h"
-#include "pe_localize.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
@@ -45,7 +44,7 @@ static void draft_sync(void) {
 static int on_save_changed(void *ctx, void *user) {
     (void)ctx; (void)user;
     draft_sync();
-    if (pe_econ_store_active() && !pe_loot_enabled()) pe_toast(pe_l10n_ui("Junk economy is off, so this playstyle's rewards are paused."));
+    if (pe_econ_store_active() && !pe_loot_enabled()) pe_toast("Junk economy is off, so this playstyle's rewards are paused.");
     return 0;
 }
 
@@ -143,7 +142,7 @@ static void current_text(char *out, unsigned size) {
     else if (status == PE_ECON_STORE_DAMAGED) snprintf(out, size, "Enhanced (damaged)");
     else if (status == PE_ECON_STORE_UNSUPPORTED) snprintf(out, size, "Enhanced (locked)");
     else if (pe_econ_store_active() && !pe_loot_enabled())
-        snprintf(out, size, pe_l10n_ui("%s (paused)"), pe_l10n_ui(pick_name((unsigned)pick_of(&pe_econ_store_state()->config))));
+        snprintf(out, size, "%s (paused)", pick_name((unsigned)pick_of(&pe_econ_store_state()->config)));
     else snprintf(out, size, "%s", pick_name((unsigned)pick_of(&pe_econ_store_state()->config)));
 }
 static void summary_text(char *out, unsigned size) {
@@ -159,7 +158,7 @@ static void summary_text(char *out, unsigned size) {
         out[0] = 0;
         for (unsigned i = 0; i < 3; ++i) {
             if (words[i] && used < size) {
-                const int n = snprintf(out + used, size - used, "%s%s", used ? " " : "", pe_l10n_ui(words[i]));
+                const int n = snprintf(out + used, size - used, "%s%s", used ? " " : "", words[i]);
                 if (n > 0) used += (unsigned)n;
             }
         }
@@ -178,14 +177,14 @@ static void redeem_text(char *out, unsigned size) {
     PeEconPreview p;
     if (!pe_game_loaded()) { snprintf(out, size, "-"); return; }
     preview_now(&p);
-    if (p.redeem_super + p.redeem_duper) snprintf(out, size, pe_l10n_ui("%u for %u Junk"), (unsigned)(p.redeem_super + p.redeem_duper), (unsigned)p.redeem_junk);
+    if (p.redeem_super + p.redeem_duper) snprintf(out, size, "%u for %u Junk", (unsigned)(p.redeem_super + p.redeem_duper), (unsigned)p.redeem_junk);
     else snprintf(out, size, "None");
 }
 static void price_text(char *out, unsigned size) {
     PeEconPreview p;
     if (!pe_game_loaded()) { snprintf(out, size, "-"); return; }
     preview_now(&p);
-    if (p.price_from != p.price_to) snprintf(out, size, pe_l10n_ui("%u%% to %u%%"), (unsigned)p.price_from, (unsigned)p.price_to);
+    if (p.price_from != p.price_to) snprintf(out, size, "%u%% to %u%%", (unsigned)p.price_from, (unsigned)p.price_to);
     else snprintf(out, size, "%u%%", (unsigned)p.price_to);
 }
 static void carried_text(char *out, unsigned size) {
@@ -199,22 +198,22 @@ static void apply_now(void) {
     PeEconConfig target;
     PeEconPreview p;
     PeEconResult r;
-    if (!pe_game_loaded()) { pe_toast(pe_l10n_ui("Load a game first")); return; }
-    if (pe_econ_store_status() == PE_ECON_STORE_DAMAGED) { pe_toast(pe_l10n_ui(pe_econ_reason(PE_ECON_BAD_STATE))); return; }
-    if (pe_econ_store_status() == PE_ECON_STORE_UNSUPPORTED) { pe_toast(pe_l10n_ui(pe_econ_reason(PE_ECON_STORE_REFUSED))); return; }
+    if (!pe_game_loaded()) { pe_toast("Load a game first"); return; }
+    if (pe_econ_store_status() == PE_ECON_STORE_DAMAGED) { pe_toast(pe_econ_reason(PE_ECON_BAD_STATE)); return; }
+    if (pe_econ_store_status() == PE_ECON_STORE_UNSUPPORTED) { pe_toast(pe_econ_reason(PE_ECON_STORE_REFUSED)); return; }
     target_of(&target);
     preview_now(&p);
-    if (p.result != PE_ECON_OK) { pe_toast(pe_l10n_ui(pe_econ_reason(p.result))); return; }
-    if (p.transition == PE_ECON_NO_CHANGE) { pe_toast(pe_l10n_ui("Already in use")); return; }
-    if (!pe_loot_enabled()) { pe_toast(pe_l10n_ui("Turn Junk economy on first")); return; }   /* a paused save doesn't change */
+    if (p.result != PE_ECON_OK) { pe_toast(pe_econ_reason(p.result)); return; }
+    if (p.transition == PE_ECON_NO_CHANGE) { pe_toast("Already in use"); return; }
+    if (!pe_loot_enabled()) { pe_toast("Turn Junk economy on first"); return; }   /* a paused save doesn't change */
     r = pe_econ_store_apply(&target);
-    if (r != PE_ECON_OK) { pe_toast(pe_l10n_ui(pe_econ_reason(r))); return; }
+    if (r != PE_ECON_OK) { pe_toast(pe_econ_reason(r)); return; }
     pe_mod_log(MOD_ID, "applied %s", pick_name((unsigned)pick_of(&target)));
     draft_sync();
     if (target.engine == PE_ECON_CONFIGURABLE && !pe_mod_active("pe_rewards") &&
         (target.flags & (PE_ECON_F_INCOME | PE_ECON_F_BONUS_ITEM | PE_ECON_F_SUPER_DROP | PE_ECON_F_DUPER_DROP)))
-        pe_toast(pe_l10n_ui("Applied. Battle rewards need the rewards mod, which is off."));
-    else pe_toast(pe_l10n_ui("Economy settings applied. Save your game to keep them."));
+        pe_toast("Applied. Battle rewards need the rewards mod, which is off.");
+    else pe_toast("Economy settings applied. Save your game to keep them.");
 }
 
 static const char *const s_off_on[] = {"Off", "On"};

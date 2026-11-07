@@ -382,10 +382,11 @@ static int original_native_tutorial(const char *executable)
         }
         line=*end?end+1:NULL;
     }
-    /* The graphics diagnostics object was added after the original capture.
-     * Removing only that object reproduces the old 8d2f71e7d6a00792 hash;
-     * game state, VRAM, rendered image and PCM remain unchanged. */
-    int valid=wrote && output && status==0 && checkpoints==123 && state_hash==UINT64_C(0x522b9a0de95abb9c);
+    /* Contact diagnostics add 236 actor objects across these 123 checkpoints.
+     * Removing only those objects reproduces the previous 522b9a0de95abb9c
+     * hash. Keep hashing the complete current state; the independent VRAM,
+     * rendered image and PCM captures below remain unchanged. */
+    int valid=wrote && output && status==0 && checkpoints==123 && state_hash==UINT64_C(0x792b163ce4bf2bc2);
     char log_path[2080];snprintf(log_path,sizeof(log_path),"%s/game.log",directory);
     FILE *log=fopen(log_path,"wb");
     if(!log)valid=0;
@@ -426,7 +427,7 @@ static int original_native_bootstrap(const char *executable,int field_control)
     }
     SDL_free(cwd);executable=resolved[0];disc=resolved[1];
     const char *base=SDL_GetBasePath();if(!base)return 1;
-    unsigned first=field_control>=2?(unsigned)field_control+10:field_control?6:0;
+    unsigned first=field_control>=14?20:field_control>=2?(unsigned)field_control+10:field_control?6:0;
     unsigned end=field_control>=2?first+1:field_control?12:6;
     for(unsigned input=first;input<end;++input){
         char directory[2048],capture[2080];
@@ -434,7 +435,7 @@ static int original_native_bootstrap(const char *executable,int field_control)
             (unsigned long long)SDL_GetPerformanceCounter(),input);
         if(n<0 || (size_t)n>=sizeof(directory) || !SDL_CreateDirectory(directory))return 1;
         snprintf(capture,sizeof(capture),"%s/frame.vram",directory);
-        const char *limit=input==23?"261381":input==22?"246050":input==21?"222996":input==20?"200826":input==19?"154203":input==18?"131932":input==17?"112000":input==16?"104000":input==15?"95751":input==14?"82000":input==13?"64554":input==12?"60634":input==11?"58000":input==10?"52000":input==9?"42000":input==8?"35500":input>=6?"33500":input==5?"30000":input==4?"24000":input>=2?"14000":input?"13000":"8000";
+        const char *limit=field_control==15?"191600":input==23?"261381":input==22?"246050":input==21?"222996":input==20?"200826":input==19?"154203":input==18?"131932":input==17?"112000":input==16?"104000":input==15?"95751":input==14?"82000":input==13?"64554":input==12?"60634":input==11?"58000":input==10?"52000":input==9?"42000":input==8?"35500":input>=6?"33500":input==5?"30000":input==4?"24000":input>=2?"14000":input?"13000":"8000";
         const char *args[8192]={executable,"--disc",disc,"--headless","--frame-limit",limit,"--dump-vram",capture};
         const char *events[]={"10000:8","10010:0","11000:0x10","11010:0","11500:0x4000","11510:0"};
         unsigned at=8;
@@ -451,6 +452,62 @@ static int original_native_bootstrap(const char *executable,int field_control)
         }
         if(input>=5){
 #include "actor_animation/native_replay_schedules.inc"
+        /* Move only backstage interaction press/release pairs by three
+         * VBlanks (or a bounded diagnostic offset). Movement, battles,
+         * contacts and original script execution remain untouched. The same inventory, phone save and VRAM checks
+         * below must still pass: no looser expectations for this variant. */
+        char shifted[4096][32];unsigned shifted_count=0;
+        int interaction_offset=3;
+        if(field_control==14){
+            const char *offset=getenv("PE_TEST_CARNEGIE_PRESS_OFFSET");
+            if(offset){
+                char *end;long parsed=strtol(offset,&end,10);
+                if(!*offset || *end || parsed < -3 || parsed > 7)return 1;
+                interaction_offset=(int)parsed;
+            }
+            printf("Carnegie idle interaction offset: %+d VBlanks\n",interaction_offset);
+        }
+        if(field_control==14)for(unsigned i=8;i+3<at;i+=2){
+            unsigned tick,mask,release,released_mask,previous_tick,previous_mask;
+            if(strcmp(args[i],"--pad-at") || strcmp(args[i+2],"--pad-at") ||
+               sscanf(args[i+1],"%u:%u",&tick,&mask)!=2 ||
+               sscanf(args[i+3],"%u:%u",&release,&released_mask)!=2 ||
+               i<10 || sscanf(args[i-1],"%u:%u",&previous_tick,&previous_mask)!=2 ||
+               previous_mask || tick<159000 || mask!=16384 || released_mask || release!=tick+4)continue;
+            snprintf(shifted[shifted_count],sizeof(shifted[0]),"%u:%u",(unsigned)((int)tick+interaction_offset),mask);
+            args[i+1]=shifted[shifted_count++];
+            snprintf(shifted[shifted_count],sizeof(shifted[0]),"%u:0",(unsigned)((int)release+interaction_offset));
+            args[i+3]=shifted[shifted_count++];
+        }
+        if(field_control==14 && !shifted_count)return 1;
+        /* Probe the original diary at adjacent positions, then stop at its
+         * first page. Different approaches need not follow the same later
+         * door route. The full baseline replay below remains unchanged. */
+        char diary_nudge[32];
+        int diary_shift=0,diary_away=0;
+        if(field_control==15) {
+            const char *side=getenv("PE_TEST_CARNEGIE_DIARY_SIDE");
+            unsigned mask=0,changed=0;
+            if(side && !strcmp(side,"left"))mask=128;
+            else if(side && !strcmp(side,"right"))mask=32;
+            else if(side && !strcmp(side,"away"))diary_away=1;
+            else if(side && strcmp(side,"center"))return 1;
+            diary_shift=mask==128?-20:mask==32?20:0;
+            snprintf(diary_nudge,sizeof(diary_nudge),"191017:%u",mask);
+            unsigned kept=8;
+            for(unsigned i=8;i+1<at;i+=2) {
+                unsigned tick,value;
+                if(strcmp(args[i],"--pad-at") || sscanf(args[i+1],"%u:%u",&tick,&value)!=2)return 1;
+                if(tick>191048)continue;
+                args[kept++]=args[i];
+                args[kept++]=tick==191017 ? diary_nudge :
+                    tick==191025 && diary_away ? "191025:0" : args[i+1];
+                if(tick==191017)++changed;
+            }
+            if(changed!=1)return 1;
+            at=kept;args[at]=NULL;
+            printf("Carnegie diary approach: %s\n",side?side:"center");
+        }
         SDL_PropertiesID props=SDL_CreateProperties();
         SDL_SetPointerProperty(props,SDL_PROP_PROCESS_CREATE_ARGS_POINTER,(void *)args);
         SDL_SetStringProperty(props,SDL_PROP_PROCESS_CREATE_WORKING_DIRECTORY_STRING,directory);
@@ -460,6 +517,28 @@ static int original_native_bootstrap(const char *executable,int field_control)
         if(!child)return 1;
         int status=-1;size_t bytes=0;char *output=SDL_ReadProcess(child,&bytes,&status);
         SDL_DestroyProcess(child);
+        if(field_control==15) {
+            const char *last=output?strstr(output,"{\"event\":\"frame_limit\""):NULL;
+            int valid=last && status==0 && strstr(last,"\"vblanks\":191600") &&
+                strstr(last,"\"scene\":2818577480") &&
+                strstr(last,diary_away ? "\"dialogue\":[{\"state\":0,\"page\":-1}" :
+                    "\"dialogue\":[{\"state\":2,\"page\":99}") &&
+                strstr(last,"\"slots\":[256,257,258,512,6,200,0");
+            const char *player=last?strstr(last,"\"player\":true"):NULL;
+            const char *position=player?strstr(player,"\"position\":["):NULL;
+            int x=0,y=0,z=0;
+            if(!position || sscanf(position,"\"position\":[%d,%d,%d]",&x,&y,&z)!=3 ||
+                x!=-11904979+diary_shift*65536 || y!=-262144 ||
+                z!=(diary_away?14254966:14582646))valid=0;
+            if(output && (strstr(output,"runtime error:") || strstr(output,"Sanitizer:")))valid=0;
+            if(!valid)fprintf(stderr,"Diary range replay failed: status=%d output=%s\n",status,output?output:"(none)");
+            SDL_free(output);
+            remove(capture);
+            if(!valid)return 1;
+            puts(diary_away ? "Original diary: wrong facing does not activate the diary" :
+                "Original diary: unmodified script opens page99 at the tested approach position");
+            continue;
+        }
         int valid=output && status==0 && strstr(output,"\"event\":\"frame_limit\"") &&
             strstr(output,input==23?"\"vblanks\":261381":input==22?"\"vblanks\":246050":input==21?"\"vblanks\":222996":input==20?"\"vblanks\":200826":input==19?"\"vblanks\":154203":input==18?"\"vblanks\":131932":input==17?"\"vblanks\":112000":input==16?"\"vblanks\":104000":input==15?"\"vblanks\":95751":input==14?"\"vblanks\":82000":input==13?"\"vblanks\":64554":input==12?"\"vblanks\":60634":input==11?"\"vblanks\":58000":input==10?"\"vblanks\":52000":input==9?"\"vblanks\":42000":input==8?"\"vblanks\":35500":input>=6?"\"vblanks\":33500":input==5?"\"vblanks\":30000":input==4?"\"vblanks\":24000":input>=2?"\"vblanks\":14000":input?"\"vblanks\":13000":"\"vblanks\":8000");
         /* UBSan may report a recoverable failure while the child exits 0.
@@ -629,6 +708,7 @@ static int original_native_bootstrap(const char *executable,int field_control)
            !strstr(output,"\"combat\":{\"mode\":7,\"live_enemies\":1,\"player_hp\":61,\"player_max_hp\":67}") ||
            !strstr(output,"\"inventory\":{\"capacity\":14,\"slots\":[256,257,258,512,0,200,201,0")))valid=0;
         FILE *file=fopen(capture,"rb");uint64_t hash=UINT64_C(14695981039346656037);
+        uint64_t melissa_hash=UINT64_C(14695981039346656037),texture_hash=melissa_hash;
         if(file){
             u8 block[4096];size_t total=0,n;
             while((n=fread(block,1,sizeof(block),file))!=0){total+=n;
@@ -651,9 +731,28 @@ static int original_native_bootstrap(const char *executable,int field_control)
                         }
                     }
                 }
-                for(size_t i=0;i<n;++i)hash=(hash^block[i])*UINT64_C(1099511628211);}
+                for(size_t i=0;i<n;++i){
+                    hash=(hash^block[i])*UINT64_C(1099511628211);
+                    if(input==12){
+                        /* Independent original NTSC-U PS1 reference, frame58415:
+                         * actor2 mode2/frame58, same camera/player position.
+                         * Visible model (141,132,23,55), RGB555 without STP;
+                         * all right640 VRAM words include textures/palettes.
+                         * Reference display y224 corresponds to port display y0. */
+                        size_t offset=total-n+i,row=offset/2048,x=offset%2048;
+                        if(x>=384*2)texture_hash=(texture_hash^block[i])*UINT64_C(1099511628211);
+                        if(row>=132 && row<187 && x>=141*2 && x<164*2)
+                            melissa_hash=(melissa_hash^(block[i] & (x&1?0x7f:0xff)))*UINT64_C(1099511628211);
+                    }
+                }}
             if(total!=1024*512*2 || ferror(file))valid=0;
-            fclose(file);remove(capture);
+            fclose(file);
+            if(input==12 && (melissa_hash!=UINT64_C(0xe4058ca232d8661e) ||
+                            texture_hash!=UINT64_C(0x0a6329bbb5d1fa56))){
+                fprintf(stderr,"PS1 Melissa model/texture reference mismatch: %016llx/%016llx (%s)\n",
+                    (unsigned long long)melissa_hash,(unsigned long long)texture_hash,capture);
+                valid=0; /* Preserve the full VRAM evidence for this mismatch. */
+            }else remove(capture);
         }else valid=0;
         /* Raster hashes through input18 were renewed after the PS1 attribute
          * precision fix. All original state assertions passed in both builds;
@@ -678,7 +777,11 @@ static int original_native_bootstrap(const char *executable,int field_control)
         if(input==16 && hash!=UINT64_C(0x75f57637532bf9c1))valid=0;
         if(input==19 && hash!=UINT64_C(0xee31b8302c6660a8))valid=0;
         if(input==20 && hash!=UINT64_C(0x77627bc3feb8cb34))valid=0;
-        if(input==21 && hash!=UINT64_C(0xec3df138587c4889))valid=0;
+        /* The current movie-skip recording produces this full-VRAM reference
+         * in released PC 0.10, current main and Android, with software/GPU
+         * rendering and both SDK revisions. This is PC parity, not a new PS1
+         * reference; all original gameplay assertions above remain required. */
+        if(input==21 && hash!=UINT64_C(0xa3c436b7311cd819))valid=0;
         if(input==22 && hash!=UINT64_C(0xd3d2869131c3ae7))valid=0;
         if(input==23 && hash!=UINT64_C(0x73f4fae453f9c832))valid=0;
         if(!valid){fprintf(stderr,"Native bootstrap failed: input=%u status=%d hash=%016llx output=%s\n",
