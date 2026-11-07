@@ -7,6 +7,7 @@ framebuffer and native process retirement, including a normally returning CLI.
 import argparse
 import hashlib
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -21,9 +22,13 @@ p.add_argument('--disc', default='disc1.cue', help='Imported CUE basename')
 p.add_argument('--tls-only', action='store_true', help='Check TLS rejection and preservation of an installed fixture')
 p.add_argument('--hd-render', type=Path, help='Check native HD underlays in both aspects; save evidence in a new directory')
 p.add_argument('--hd-pack', type=Path, help='Reviewed HD material pack required by --hd-render')
+p.add_argument('--compare-desktop', type=Path,
+               help='Compare a 1x native replay with a same-revision desktop executable; requires --dump-audio')
 p.add_argument('--native-replay', nargs=argparse.REMAINDER,
                help='Run remaining native test executable arguments on Android')
 a = p.parse_args()
+if a.compare_desktop and (not a.native_replay or a.tls_only or a.hd_render or a.hd_pack):
+    p.error('--compare-desktop requires only --native-replay')
 if '/' in a.disc or '\\' in a.disc or not a.disc.lower().endswith('.cue'):
     p.error('--disc must be an imported CUE basename')
 pkg = 'com.khasinski.parasiteeve'
@@ -158,6 +163,68 @@ def download_tls():
         adb('shell', 'run-as', pkg, 'rm', '-rf', relative, check=False)
 
 
+def compare_desktop(options, android_state, outputs, limit):
+    """Compare actual replay outputs; retain both sides on any mismatch."""
+    import tempfile
+    reference = Path(tempfile.mkdtemp(prefix='desktop-reference-',
+                                     dir=outputs['--dump-audio'].resolve().parent))
+    (reference/'android-state.json').write_text(json.dumps(android_state, indent=2)+'\n')
+    command = [str(a.compare_desktop.resolve())]
+    destinations = {}
+    index = 0
+    while index < len(options):
+        option = options[index]
+        index += 1
+        if option in ('--headless', '--headless-gpu'):
+            command.append('--headless-gpu')
+            continue
+        value = options[index]
+        index += 1
+        if option == '--disc':
+            value = str(Path(value).resolve(strict=True))
+        if option in outputs:
+            value = str(reference/option[2:])
+            destinations[option] = Path(value)
+        command.extend((option, value))
+    environment = dict(os.environ, PE_CONFIG_HOME=str(reference/'profile'),
+                       PSYZ_AUDIO_CLOCK='video', SDL_AUDIO_DRIVER='dummy',
+                       SDL_AUDIODRIVER='dummy')
+    environment.pop('PE_HD_BACKGROUNDS', None)
+    (reference/'command.json').write_text(json.dumps(command, indent=2)+'\n')
+    with (reference/'game.log').open('wb') as log:
+        result = subprocess.run(command, cwd=reference, env=environment, stdout=log,
+                                stderr=subprocess.STDOUT, timeout=max(120, limit/100))
+    assert result.returncode == 0, 'Desktop replay failed; evidence: '+str(reference)
+    log = (reference/'game.log').read_text()
+    assert 'runtime error:' not in log and 'Sanitizer:' not in log, str(reference)
+    states = [json.loads(line) for line in log.splitlines()
+              if line.startswith('{"event":"frame_limit"')]
+    assert len(states) == 1, 'Missing/duplicate desktop final state: '+str(reference)
+    different = sorted(key for key in android_state.keys() | states[0].keys()
+                       if key not in android_state or key not in states[0]
+                       or android_state[key] != states[0][key])
+    assert not different, 'Android/desktop state differs at '+str(different)+'; evidence: '+str(reference)
+    proof = {'vblanks': limit, 'complete_state_equal': True, 'outputs': {}}
+    def digest(path):
+        value = hashlib.sha256()
+        with path.open('rb') as source:
+            for block in iter(lambda: source.read(1024*1024), b''):
+                value.update(block)
+        return {'bytes': path.stat().st_size, 'sha256': value.hexdigest()}
+    for option in ('--dump-audio', '--dump-vram', '--dump-frame'):
+        if option not in outputs:
+            continue
+        actual, expected = digest(outputs[option]), digest(destinations[option])
+        assert actual == expected, 'Android/desktop '+option+' differs: '+str((actual, expected))+'; evidence: '+str(reference)
+        proof['outputs'][option] = actual
+    (reference/'proof.json').write_text(json.dumps(proof, indent=2)+'\n')
+    # The Android capture remains at the requested destination. Matching large
+    # desktop dumps can be removed; keep the command, log and comparison proof.
+    for destination in destinations.values():
+        destination.unlink()
+    print('PASS: Android/desktop complete state and PCM match exactly; evidence: '+str(reference))
+
+
 def native_replay(options, profile_files=None, max_seconds=None):
     """Adapter for the existing C replay harness; preserve its assertions."""
     # Accept only finite, prerecorded headless tests. Do not expose arbitrary
@@ -204,6 +271,12 @@ def native_replay(options, profile_files=None, max_seconds=None):
         remote += [option, value]
     if not mounted or not hidden or limit is None or not outputs:
         raise ValueError('Replay requires --disc, --headless, --frame-limit and a dump output')
+    if a.compare_desktop:
+        if '--dump-audio' not in outputs:
+            raise ValueError('--compare-desktop requires --dump-audio')
+        if '--internal-resolution' in options and options[options.index('--internal-resolution')+1] != '1':
+            raise ValueError('--compare-desktop requires original 1x rendering')
+        a.compare_desktop = a.compare_desktop.resolve(strict=True)
     if Path('bu00').exists():
         raise ValueError('Run in a fresh test directory: bu00 already exists')
     remote += ['--headless-gpu', '--test-android-disc-dialogs']
@@ -270,6 +343,8 @@ def native_replay(options, profile_files=None, max_seconds=None):
             directory = Path('bu00')
             directory.mkdir(exist_ok=True)
             (directory/'BASLUS-006620000000A').write_bytes(result.stdout)
+        if a.compare_desktop:
+            compare_desktop(options, states[0], outputs, limit)
         print(log, end='')
         return states[0]
     finally:
