@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "../mods/pe_collection/pe_skin_loader.c"
 Pe1GameState g_GameState;
+FieldActor *g_PlayerEntity;
 static void put32(u8 *p,u32 v) { memcpy(p,&v,4); }
 int main(void) {
     u8 data[512]={0};PeBlob b={.data=data,.size=sizeof data};
@@ -41,16 +42,24 @@ int main(void) {
     assert(g_GameState.bank_slots[0]==bundle+160);
     assert(g_GameState.bank_rows[0][2]==bundle+200);
     assert(g_GameState.bank_rows[0][28]==row);
-    RenderObjectHeader model={0};model.part_count=29;
+    RenderObjectHeader model={0};model.part_count=23;
     g_GameState.bank_slots[0]=&model;
     pe_room_rows(&skin);
+    assert(g_GameState.bank_rows[0][28]==row && !s_replaced[28]);
+    model.part_count=29;pe_room_rows(&skin);
     assert(g_GameState.bank_rows[0][28]==data+128);
     assert(s_replaced[28]==row);
+    FieldActor player={0};g_PlayerEntity=&player;player.action_data=row;
+    pe_running_row(&skin);
+    assert(player.action_data==data+128);
+    /* A different frame count must not replace an animation already running. */
+    player.action_data=row;data[130]=1;
+    pe_running_row(&skin);assert(player.action_data==row);data[130]=0;
     s_skin[0]=skin;s_skin[0].ok=1;s_skins=1;
     pe_restore_rows();
     assert(g_GameState.bank_rows[0][28]==row && !s_replaced[28]);
     g_SceneAreaType=10;pe_point_bundle(bundle);
     assert(g_GameState.bank_rows[0][28]==bundle+220);
-    puts("Skin containers: directory, animation bounds and truncated rows passed");
+    puts("Skin containers: bounds, long dress scene rows and restoration passed");
     return 0;
 }
