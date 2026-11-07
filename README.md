@@ -46,7 +46,7 @@ Settings are saved in `pe_mods.ini`. See [the mod guide](mods/README.md) for wri
 
 Open **F1 → PE Enhancements** to configure them.
 
-- **Movement** (`pe_qol`): Always Run and configurable walk, run, combat and battle-entry speeds
+- **Movement** (`pe_qol`): optional Repeat interact while holding the action button, Always Run and configurable walk, run, combat and battle-entry speeds
   (walking and running default to 1.75×).
 - **Encounters** (`pe_qol`): no random battles, or Normal, 2×, 4× or Every Check frequency. Story
   and room rules still apply; this changes how often fights happen, not their size.
