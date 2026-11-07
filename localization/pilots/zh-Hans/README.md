@@ -5,8 +5,9 @@ It includes 181 dialogue pages in the Carnegie/shared-scene bank
 (M001) and 104 resident menu, inventory and memory-card labels. Another 67 shared
 prompts cover matching save, inventory and event-skip questions in 15 other
 banks. A further 35 pages cover the NYPD weapon-storage visit and services.
-An additional 62 pages cover the Day 2 briefing and press conference:
-449 entries total.
+An additional 62 pages cover the Day 2 briefing and press conference.
+Another 36 pages cover Daniel and Ben and the departure for Central Park:
+485 entries total.
 The bank also contains later flashbacks and epilogue dialogue. Other story banks,
 most item names/descriptions and text baked into graphics remain original.
 Numeric/debug pages are intentionally unchanged.
@@ -69,3 +70,6 @@ other station story conversations or establish full NYPD gameplay coverage.
 The briefing expansion covers M041 pages 8–23 and 78–123, including the
 press conference and the call from the Japanese scientist. Remaining station
 conversations still fall back to the original language.
+
+The family/departure expansion covers M041 pages 59–77 and 124–140.
+Later station conversations still fall back to the original language.

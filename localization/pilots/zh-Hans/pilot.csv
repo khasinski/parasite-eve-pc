@@ -448,3 +448,39 @@ dlg/M041/120,尼克斯：对了，我刚读到，博物馆有位研究员提出�
 dlg/M041/121,丹尼尔：长官，我带{name}{br}去找这位研究员谈谈。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/122,贝克：去吧。最好赶在媒体之前到。他也许还能解释刚才那通电话。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/123,贝克：还等什么？快去！,NYPD briefing and press-conference preview; original script commands preserved
+dlg/M041/059,{name}：你好。迷路了吗？,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/060,男孩：……啊……,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/061,丹尼尔：本！？,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/062,本：爸爸！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/063,{name}：原来他就是本。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/064,丹尼尔：本，这是{name}。{br}你来这里干什么？,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/065,本：给你……,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/066,丹尼尔：票？哦……对了。演唱会……{wait}对不起，儿子，爸爸今天很忙。我保证以后会补偿……,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/067,本：……好啦！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/068,丹尼尔：本！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/069,丹尼尔：看来每个孩子都需要妈妈……,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/070,{name}：才不是！我母亲去世后，{br}也是父亲把我养大的。{wait}我永远都感激他。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/071,丹尼尔：是啊，可他的妈妈还活着……,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/072,{name}：哦……,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/073,凯茜：你见过丹尼尔的儿子本了？丹尼尔去年和妻子离婚了。{wait}那时你还没调来这里。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/074,凯茜：他总说，每个男孩子都需要爸爸……{wait}所以他和前妻洛琳争夺了本的抚养权。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/075,凯茜：他是争赢了，可他是警察，恐怕也没多少时间陪孩子。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/076,凯茜：对了，贝克队长在找你。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/077,{name}：长官。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/124,尼克斯：那位研究员也许是条有用的线索。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/125,丹尼尔：是，长官。{br}{name}，走吧！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/126,丹尼尔：我去把车开过来。到门口找我。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/127,华纳：线粒体，是吗……？{br}那和昨晚的案子有什么关系？,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/128,贝克：梅丽莎原定今天举行个人演唱会。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/129,贝克：昨晚的事件之后，她就失踪了，演唱会也取消了。{wait}可人们仍然在往舞台那里聚集。绝不能再发生一场屠杀！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/130,贝克：演唱会地点是中央公园的露天剧场。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/131,丹尼尔：中央公园！？,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/132,{name}：怎么了，丹尼尔？,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/133,丹尼尔：本和洛琳……他们就在那场演唱会上！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/134,{name}：什么！？,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/135,丹尼尔：{name}，快走！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/136,贝克：丹尼尔！我们还没谈完！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/137,丹尼尔：去你的，贝克！我儿子有危险！,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/138,贝克：丹尼尔……,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/139,贝克：{name}。,Daniel and Ben / Central Park departure preview; original script commands preserved
+dlg/M041/140,贝克：照看好他……！,Daniel and Ben / Central Park departure preview; original script commands preserved
