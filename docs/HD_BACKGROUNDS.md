@@ -248,6 +248,11 @@ be a fresh directory and an encoding audit is written beside it. For example:
 python encode_webp.py --source CANDIDATE --out NEW_WEBP_DIRECTORY --lossless
 ```
 
+Pass `--version 0.2-rc1` when staging a separately versioned candidate. Without
+this option the source version is retained. Encoding recomputes payload and
+total directory bytes, including the final manifest; it never edits the source
+manifest or overwrites an existing output directory.
+
 ### Reproducing the M097/M239 edge candidate
 
 `docs/assets/hd-animated/corrections/issue-56/build_underlays.py` builds a fresh
