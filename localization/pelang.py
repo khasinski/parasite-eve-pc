@@ -491,21 +491,27 @@ def _translated_dialogue_rows(original, translated, catalog, language="it", *, d
                          if language == "es" else "Local SadNES cITy v0.90 import; Mickey, _Ombra_, Chop"})
             if language == "it" and value != after[page][0] and dialogue_adaptations is not None:
                 dialogue_adaptations.append({"key": key,
-                    "reason": "Omit translation-added name reference; retain original control sequence"})
+                    "reason": "Join translation-added pause; retain original control sequence"
+                    if key == "dlg/M271/014" else
+                    "Omit translation-added name reference; retain original control sequence"})
     return rows, fallback
 
 
 def _italian_dialogue(raw, key):
-    # These exact v0.90 pages address the player by name where the original
-    # has no name command. Omit that added address, preserving punctuation;
-    # every other original control still passes the strict validator above.
+    # Only exact reviewed v0.90 additions are omitted. Names, waits and choices
+    # must still pass the original strict validator after this adaptation.
     profiles = {
         "dlg/M035/045": "63e4c1b9f648bd1c3826599f2f6246e829e78072ff50f19c054159671fa4dde0",
         "dlg/M041/200": "6f36cda284e7e3ac913197b5ba5e89f529c9cd5195b4c706b1388a5298e54bf2",
         "dlg/M191/133": "e9045dedabdc10f1f78215c673d4f2c5b8d72dcec829fb1833e68cb3683fb202",
+        "dlg/M271/014": "f4fbba92653ed987b253f7f103384fef778acb17a3565c2373547db9e62ff3f6",
     }
     expected = profiles.get(key)
     if expected and expected == hashlib.sha256(raw).hexdigest():
+        if key == "dlg/M271/014":
+            # The following word already starts with a space. Preserve every
+            # word and let the existing wrapper fit the original single page.
+            return raw.replace(b"\xf8", b"", 1)
         address = ", {name}" if key == "dlg/M035/045" else " {name}"
         return raw.replace(gt.encode(address), b"", 1)
     return raw

@@ -513,6 +513,27 @@ class ItalianImportTest(unittest.TestCase):
         self.assertEqual(fallback, [])
         self.assertEqual(rows[0]["translation"], "Ciao {name}!")
 
+    def test_unrecognized_italian_wait_remains_a_control_fallback(self):
+        original = {14: gt.encode("Continue.")}
+        translated = {14: gt.encode("Prima{wait} seconda.")}
+        catalog = self.catalog(original)
+        catalog["banks"][0]["key"] = "M271"
+        catalog["entries"] = {"dlg/M271/014": next(iter(catalog["entries"].values()))}
+        changes = []
+        rows, fallback = pelang._translated_dialogue_rows(self.game(original), self.game(translated),
+            catalog, dialogue_adaptations=changes)
+        self.assertEqual(rows, [])
+        self.assertEqual(changes, [])
+        self.assertEqual(fallback, [{"key": "dlg/M271/014", "reason": "original control sequence differs"}])
+
+    def test_italian_original_wait_command_is_retained(self):
+        original = {0: gt.encode("First{wait} second.")}
+        translated = {0: gt.encode("Prima{wait} seconda.")}
+        rows, fallback = pelang._translated_dialogue_rows(self.game(original), self.game(translated),
+                                                         self.catalog(original))
+        self.assertEqual(fallback, [])
+        self.assertEqual(rows[0]["translation"], "Prima{wait} seconda.")
+
     def test_accents_unchanged_rows_and_original_control_fallback(self):
         original = {0: gt.encode("Hello"), 1: gt.encode("Same"),
                     2: gt.encode("Missing"), 3: gt.encode("Wait{wait}")}
