@@ -708,6 +708,7 @@ static int original_native_bootstrap(const char *executable,int field_control)
            !strstr(output,"\"combat\":{\"mode\":7,\"live_enemies\":1,\"player_hp\":61,\"player_max_hp\":67}") ||
            !strstr(output,"\"inventory\":{\"capacity\":14,\"slots\":[256,257,258,512,0,200,201,0")))valid=0;
         FILE *file=fopen(capture,"rb");uint64_t hash=UINT64_C(14695981039346656037);
+        uint64_t melissa_hash=UINT64_C(14695981039346656037),texture_hash=melissa_hash;
         if(file){
             u8 block[4096];size_t total=0,n;
             while((n=fread(block,1,sizeof(block),file))!=0){total+=n;
@@ -730,9 +731,28 @@ static int original_native_bootstrap(const char *executable,int field_control)
                         }
                     }
                 }
-                for(size_t i=0;i<n;++i)hash=(hash^block[i])*UINT64_C(1099511628211);}
+                for(size_t i=0;i<n;++i){
+                    hash=(hash^block[i])*UINT64_C(1099511628211);
+                    if(input==12){
+                        /* Independent original NTSC-U PS1 reference, frame58415:
+                         * actor2 mode2/frame58, same camera/player position.
+                         * Visible model (141,132,23,55), RGB555 without STP;
+                         * all right640 VRAM words include textures/palettes.
+                         * Reference display y224 corresponds to port display y0. */
+                        size_t offset=total-n+i,row=offset/2048,x=offset%2048;
+                        if(x>=384*2)texture_hash=(texture_hash^block[i])*UINT64_C(1099511628211);
+                        if(row>=132 && row<187 && x>=141*2 && x<164*2)
+                            melissa_hash=(melissa_hash^(block[i] & (x&1?0x7f:0xff)))*UINT64_C(1099511628211);
+                    }
+                }}
             if(total!=1024*512*2 || ferror(file))valid=0;
-            fclose(file);remove(capture);
+            fclose(file);
+            if(input==12 && (melissa_hash!=UINT64_C(0xe4058ca232d8661e) ||
+                            texture_hash!=UINT64_C(0x0a6329bbb5d1fa56))){
+                fprintf(stderr,"PS1 Melissa model/texture reference mismatch: %016llx/%016llx (%s)\n",
+                    (unsigned long long)melissa_hash,(unsigned long long)texture_hash,capture);
+                valid=0; /* Preserve the full VRAM evidence for this mismatch. */
+            }else remove(capture);
         }else valid=0;
         /* Raster hashes through input18 were renewed after the PS1 attribute
          * precision fix. All original state assertions passed in both builds;
