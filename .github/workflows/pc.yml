@@ -30,6 +30,26 @@ jobs:
           cmake -S . -B build -DBUILD_TESTING=ON -DPE_MODS=ON
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure --no-tests=error
+      - name: Verify language packs in the macOS application bundle
+        run: |
+          cmake -S . -B build -DPE_MACOS_BUNDLE=ON
+          cmake --build build --target parasite-eve-pc --parallel
+          python3 - <<'PYBUNDLE'
+          import plistlib, sys
+          from pathlib import Path
+          sys.path.insert(0, 'localization')
+          from pelang import read_pack
+          contents = Path('build/Parasite Eve.app/Contents')
+          info = plistlib.loads((contents / 'Info.plist').read_bytes())
+          assert (contents / 'MacOS' / info['CFBundleExecutable']).is_file()
+          packs = list(Path('build/lang').glob('*.pelang'))
+          assert any(pack.name == 'fr.pelang' for pack in packs)
+          for standalone in packs:
+              bundled = contents / 'Resources/lang' / standalone.name
+              assert bundled.read_bytes() == standalone.read_bytes(), standalone.name
+              language, name, entries = read_pack(bundled)
+              assert language == standalone.stem and name and entries, standalone.name
+          PYBUNDLE
 
   linux-x86_64:
     runs-on: ubuntu-24.04
@@ -61,7 +81,7 @@ jobs:
           ./build/parasite-eve-pc --help
           ctest --test-dir build --output-on-failure --no-tests=error --output-junit linux-source-only.xml -R '^(original-game-(actor-distance|akao-layout|math|gte|gte-pgxp-ownership|cd-media|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|vsync-display-selection|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
           ctest --test-dir build --output-on-failure --no-tests=error -R "^(original-m273-landing-cycle|original-callback-allocation-failure|original-m273-effect-pointers|original-menu-call-abi|original-game-pulled-sprite|host-crash-report|mod-crash-save-tail|mod-preserve-save-tail|mod-save-records|mod-save-registration-bounds|mod-rebalance-(vanilla|saved-vanilla|scoped|poison)|mod-atb|mod-combine|mod-panacea-off|mod-pe-(vanilla|saved-vanilla|cost|actor)|mod-inventory|mod-inventory-menu)$"
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage)$"
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage|lang-pack|lang-font|lang-selection)$"
           python3 - <<'PYTEST'
           import xml.etree.ElementTree as E
           r = E.parse('build/linux-source-only.xml')
@@ -82,6 +102,8 @@ jobs:
           stage=package/Parasite-Eve-linux-x86_64
           mkdir -p "$stage/docs/images" "$stage/licenses" "$stage/mods"
           cp build/parasite-eve-pc README.md CHANGELOG.md LICENSE.md THIRD_PARTY_NOTICES.md "$stage/"
+          mkdir -p "$stage/lang"
+          cp build/lang/*.pelang "$stage/lang/"
           cp docs/CODE_ORGANIZATION.md "$stage/docs/"
           cp mods/README.md "$stage/mods/"
           cp docs/images/gameplay.png "$stage/docs/images/"
@@ -175,7 +197,7 @@ jobs:
           ./build/parasite-eve-pc.exe --help
           ctest --test-dir build --output-on-failure --no-tests=error --output-junit windows-source-only.xml -R '^(original-game-(actor-distance|akao-layout|math|gte|gte-pgxp-ownership|cd-media|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|vsync-display-selection|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
           ctest --test-dir build --output-on-failure --no-tests=error -R "^(original-m273-landing-cycle|original-callback-allocation-failure|original-m273-effect-pointers|original-menu-call-abi|original-game-pulled-sprite|host-crash-report|mod-crash-save-tail|mod-preserve-save-tail|mod-save-records|mod-save-registration-bounds|mod-rebalance-(vanilla|saved-vanilla|scoped|poison)|mod-atb|mod-combine|mod-panacea-off|mod-pe-(vanilla|saved-vanilla|cost|actor)|mod-inventory|mod-inventory-menu)$"
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage)$"
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage|lang-pack|lang-font|lang-selection)$"
       - name: Stress D3D12 descriptor batches without a visible window
         env:
           SDL_GPU_DRIVER: direct3d12
@@ -210,6 +232,8 @@ jobs:
           $editor = 'package/Parasite-Eve-Save-Editor-0.10-windows-x86_64'
           New-Item -ItemType Directory -Force "$game/docs/images", "$game/mods", "$game/licenses", $editor | Out-Null
           Copy-Item build/parasite-eve-pc.exe, README.md, CHANGELOG.md, LICENSE.md, THIRD_PARTY_NOTICES.md $game
+          New-Item -ItemType Directory -Force "$game/lang" | Out-Null
+          Copy-Item build/lang/*.pelang "$game/lang/"
           Copy-Item docs/images/gameplay.png "$game/docs/images/"
           Copy-Item docs/CODE_ORGANIZATION.md "$game/docs/"
           Copy-Item mods/README.md "$game/mods/"

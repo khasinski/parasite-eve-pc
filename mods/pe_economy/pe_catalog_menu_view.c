@@ -6,6 +6,7 @@
 #include "pe_catalog.h"
 #include "pe_economy.h"
 #include "pe_gametext.h"
+#include "pe_translate.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_draw_list.h"
 #include "pe1/text.h"
@@ -26,7 +27,7 @@ void pe_catalog_view_layout(MenuWidgetNode *n, int visible, int width) {
 void pe_catalog_view_text(const char *text, int offset, int width) {
     unsigned char glyphs[128];
     int x = g_TextCursorX, y = g_TextCursorY;
-    pe_text_from_ascii(glyphs, sizeof glyphs, text);
+    pe_tr_ascii(glyphs, sizeof glyphs, text);
     size_t n = 0;
     while (glyphs[n] != 0xFF) ++n;
     if (width <= 0) return;
@@ -44,17 +45,17 @@ void pe_catalog_view_text(const char *text, int offset, int width) {
 
 const char *pe_catalog_view_problem(int code) {
     switch (code) {
-    case PE_CAT_NO_GAME: return "Load a game first";
-    case PE_CAT_NO_ITEM: return "Equip it first";
-    case PE_CAT_NO_SLOTS: return "This item has no mod slots";
-    case PE_CAT_LOCKED: return "Effect not unlocked";
-    case PE_CAT_ALREADY: return "Already in this slot";
-    case PE_CAT_BAG: return "Bag effects are protected";
-    case PE_CAT_JUNK: return "Not enough Junk";
-    case PE_CAT_TOOL: return "Needs a Tool or Tool Kit";
-    case PE_CAT_EMPTY: return "This slot is empty";
-    case PE_CAT_OFF: return "Junk economy is off";
-    default: return "Cannot do that now";
+    case PE_CAT_NO_GAME: return pe_l10n_ui("Load a game first");
+    case PE_CAT_NO_ITEM: return pe_l10n_ui("Equip it first");
+    case PE_CAT_NO_SLOTS: return pe_l10n_ui("This item has no mod slots");
+    case PE_CAT_LOCKED: return pe_l10n_ui("Effect not unlocked");
+    case PE_CAT_ALREADY: return pe_l10n_ui("Already in this slot");
+    case PE_CAT_BAG: return pe_l10n_ui("Bag effects are protected");
+    case PE_CAT_JUNK: return pe_l10n_ui("Not enough Junk");
+    case PE_CAT_TOOL: return pe_l10n_ui("Needs a Tool or Tool Kit");
+    case PE_CAT_EMPTY: return pe_l10n_ui("This slot is empty");
+    case PE_CAT_OFF: return pe_l10n_ui("Junk economy is off");
+    default: return pe_l10n_ui("Cannot do that now");
     }
 }
 
