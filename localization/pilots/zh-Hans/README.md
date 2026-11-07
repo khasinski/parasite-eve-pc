@@ -8,7 +8,8 @@ banks. A further 35 pages cover the NYPD weapon-storage visit and services.
 An additional 62 pages cover the Day 2 briefing and press conference.
 Another 36 pages cover Daniel and Ben and the departure for Central Park:
 Another 32 pages cover the workshop argument and Manhattan evacuation:
-517 entries total.
+A further 18 pages cover Maeda and the museum investigation:
+535 entries total.
 The bank also contains later flashbacks and epilogue dialogue. Other story banks,
 most item names/descriptions and text baked into graphics remain original.
 Numeric/debug pages are intentionally unchanged.
@@ -77,3 +78,6 @@ Later station conversations still fall back to the original language.
 
 The workshop/evacuation expansion covers M041 pages 141–172, including
 Ben meeting Sheeva. Later station conversations remain in the original language.
+
+The Maeda/investigation expansion covers M041 pages 173–190. Later station
+conversations and most other story banks remain in the original language.
