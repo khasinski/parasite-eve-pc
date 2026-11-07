@@ -31,6 +31,7 @@
 #include "pe1/boot.h"
 #include "pe1/field_actor.h"
 #include "pe1/pad_state.h"
+#include "pe1/game_state.h"
 
 #define PE_RUN_MAP_DPAD     0x00F0u   /* up/right/down/left, internal pad bits */
 #define PE_PAD_CROSS        0x2000u
@@ -50,6 +51,8 @@ static const int32_t s_entry_factor[] = { 0x10000, 0x18000, 0x20000, 0x30000, 0x
 static int s_always_run = 1;
 static int s_run_choice = 3, s_walk_choice = 3;   /* 1.75x field movement by default */
 static int s_combat_choice = 0, s_entry_choice = 0;
+static int s_repeat_interact;
+static unsigned s_interact_ticks;
 
 static int32_t pe_speed(int choice) { return s_speed_factor[choice >= 0 && choice < PE_SPEED_CHOICES ? choice : 0]; }
 
@@ -152,8 +155,27 @@ static int pe_on_actor_step(void *ctx, void *user) {
     return 0;
 }
 
+/* Original contact scripts test the cooked action edge (field bit8).
+ * Repeating only that edge preserves held buttons, movement and remapping. */
+static int pe_on_interact_frame(void *ctx, void *user) {
+    (void)ctx; (void)user;
+    const unsigned action = 0x100u;
+    if (!s_repeat_interact || !pe_game_loaded() || !pe_free_field() ||
+        pe_in_battle() || (g_FieldMoveLock & 1) || !(g_FieldPadBits & action)) {
+        s_interact_ticks = 0;
+        return 0;
+    }
+    if (g_FieldPadPressed & action) s_interact_ticks = 0;
+    else if (++s_interact_ticks == 8) {
+        g_FieldPadPressed |= action;
+        s_interact_ticks = 0;
+    }
+    return 0;
+}
+
 void pe_move_register(const char *mod_id) {
     pe_menu_register_toggle(PE_PAGE_MOVEMENT, "Always run", "Hold the run button to walk (d-pad and stick).", &s_always_run, NULL);
+    pe_menu_register_toggle(PE_PAGE_MOVEMENT, "Repeat interact", "Keep trying interactions while holding the action button.", &s_repeat_interact, NULL);
     pe_menu_register_choice(PE_PAGE_MOVEMENT, "Run speed", "How fast Aya runs in the field.", &s_run_choice, s_speed_names, PE_SPEED_CHOICES);
     pe_menu_register_choice(PE_PAGE_MOVEMENT, "Walk speed", "How fast Aya walks in the field.", &s_walk_choice, s_speed_names, PE_SPEED_CHOICES);
     pe_menu_register_choice(PE_PAGE_MOVEMENT, "Combat speed", "How fast Aya moves during battle.", &s_combat_choice, s_speed_names, PE_SPEED_CHOICES);
@@ -163,6 +185,7 @@ void pe_move_register(const char *mod_id) {
         s_always_run, s_speed_names[s_run_choice], s_speed_names[s_walk_choice],
         s_speed_names[s_combat_choice], s_entry_names[s_entry_choice]);
 
+    pe_hook_add(PE_HOOK_FRAME, pe_on_interact_frame, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PAD_READ, pe_on_pad_read, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_PAD_MAP, pe_on_pad_map, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_ACTOR_STEP, pe_on_actor_step, NULL, PE_PRIORITY_NORMAL, mod_id);
@@ -172,5 +195,19 @@ void pe_move_register(const char *mod_id) {
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 #include "pe_checkpoint_wire.h"
 #include "pe_checkpoint_qol.h"
-int pe_move_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||0)return 0;if(apply&&(!in||!pe_move_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_always_run,0,1,1);PE_CK_U(w,s_run_choice,0,7,1);PE_CK_U(w,s_walk_choice,0,7,1);PE_CK_U(w,s_combat_choice,0,7,1);PE_CK_U(w,s_entry_choice,0,4,1);return w.ok&&w.at==20u;}
+/* Preserve the 20-byte owner layout. Legacy first words 0/1 mean repeat off;
+ * added bits own the repeat setting and phase. Older readers reject them. */
+int pe_move_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply) {
+    if ((!in && !out) || (apply && (!in || !pe_move_checkpoint_walk(in,0,0)))) return 0;
+    if ((unsigned)s_always_run>1 || (unsigned)s_repeat_interact>1 || s_interact_ticks>7) return 0;
+    PeCheckpointWire w={in,out,0,apply,1};
+    uint32_t flags=(unsigned)s_always_run | ((unsigned)s_repeat_interact<<1);
+    uint32_t packed=pe_checkpoint_u32(&w,flags | (s_interact_ticks<<2),0,31,0);
+    if ((packed & 3u)!=flags) w.ok=0; /* settings must match, as before */
+    if (apply && w.ok) s_interact_ticks=packed>>2;
+    PE_CK_U(w,s_run_choice,0,7,1);PE_CK_U(w,s_walk_choice,0,7,1);
+    PE_CK_U(w,s_combat_choice,0,7,1);PE_CK_U(w,s_entry_choice,0,4,1);
+    return w.ok && w.at==20u;
+}
+
 #endif
