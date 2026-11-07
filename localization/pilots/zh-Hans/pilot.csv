@@ -388,15 +388,15 @@ dlg/M041/057,韦恩：把废料交给我吧。其实能拆出不少好零件。,
 dlg/M041/058,韦恩：你说什么呢？你现在根本没带废料呀！,NYPD weapon storage preview; original choices and commands preserved
 dlg/M041/008,      -第2天-{br}{br}       融合,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/009,丹尼尔：喂，你没事吧？你该好好休息。,NYPD briefing and press-conference preview; original script commands preserved
-dlg/M041/010,{name}：我也想，可只有我知道昨晚发生了什么。,NYPD briefing and press-conference preview; original script commands preserved
+dlg/M041/010,{name}：我也想，{br}可只有我知道昨晚发生了什么。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/011,丹尼尔：我查到一些梅丽莎的情况。她没有亲人……{wait}也没什么知心朋友。她经常生病，总在服用某种药。{wait}剧院的人说，她居然能站上舞台，他们都觉得不可思议。{wait}事发后，她的公寓立刻就烧毁了，所以查不到她服用什么药。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/012,尼克斯：所谓的人体自燃，到底是怎么回事？,NYPD briefing and press-conference preview; original script commands preserved
-dlg/M041/013,{name}：严格说来不是自燃。是有人让他们烧起来的。,NYPD briefing and press-conference preview; original script commands preserved
+dlg/M041/013,{name}：严格说来不是自燃。{br}是有人让他们烧起来的。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/014,华纳：别开玩笑了！你是说，什么超能力之类的？,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/015,{name}：目前只能这样形容。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/016,华纳：超能力？这种说法我可不信。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/017,尼克斯：可如果你说的是真的，我们该怎么对付这种东西？,NYPD briefing and press-conference preview; original script commands preserved
-dlg/M041/018,丹尼尔：我相信她。毕竟到目前为止，{name}是唯一的目击者。{wait}不过，要对付那种嫌犯，你最好向贝克要把好一点的配枪。,NYPD briefing and press-conference preview; original script commands preserved
+dlg/M041/018,丹尼尔：我相信她。{br}毕竟到目前为止，{name}是{br}唯一的目击者。{wait}不过，要对付那种嫌犯，你最好向贝克要把好一点的配枪。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/019,丹尼尔：我相信你的话，{name}。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/020,贝克：你的报告我看了……还是难以置信，但死了那么多人是事实。{wait}我们会全力侦破这件案子。你一定要备好装备。{wait}下楼去武器科，把这张许可证交给托雷斯。他会帮你的。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/021,贝克：你也知道，改装装备需要这张许可证。{wait}把它交给楼下武器科的托雷斯，整理好你的装备。,NYPD briefing and press-conference preview; original script commands preserved
@@ -427,7 +427,7 @@ dlg/M041/099,贝克：{name}！,NYPD briefing and press-conference preview; orig
 dlg/M041/100,记者：你的……线粒体？{wait}这是谁说的？,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/101,{name}：梅丽莎……不，她说自己叫伊芙。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/102,记者：可根据报道，梅丽莎 皮尔斯已经死于火灾！,NYPD briefing and press-conference preview; original script commands preserved
-dlg/M041/103,{name}：梅丽莎确实死了。她的身体被那个……伊芙占据了。,NYPD briefing and press-conference preview; original script commands preserved
+dlg/M041/103,{name}：梅丽莎确实死了。{br}她的身体被那个……伊芙占据了。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/104,记者：这个伊芙是什么！？某种外星人吗！？,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/105,贝克：各位，请冷静！她很疲惫，我们也还在调查……{br},NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/106,贝克：今天的记者会到此结束！,NYPD briefing and press-conference preview; original script commands preserved
@@ -443,8 +443,8 @@ dlg/M041/115,{name}：难道是……线粒体？,NYPD briefing and press-confer
 dlg/M041/116,尼克斯：你是说，细胞里利用氧气产生能量的那个东西？,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/117,丹尼尔：好像上学时听说过……,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/118,{name}：伊芙也说过……,NYPD briefing and press-conference preview; original script commands preserved
-dlg/M041/119,{name}：她说，线粒体获得自由的时刻到了……,NYPD briefing and press-conference preview; original script commands preserved
+dlg/M041/119,{name}：她说，{br}线粒体获得自由的时刻到了……,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/120,尼克斯：对了，我刚读到，博物馆有位研究员提出了一个关于线粒体的新理论。,NYPD briefing and press-conference preview; original script commands preserved
-dlg/M041/121,丹尼尔：长官，我带{name}去找这位研究员谈谈。,NYPD briefing and press-conference preview; original script commands preserved
+dlg/M041/121,丹尼尔：长官，我带{name}{br}去找这位研究员谈谈。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/122,贝克：去吧。最好赶在媒体之前到。他也许还能解释刚才那通电话。,NYPD briefing and press-conference preview; original script commands preserved
 dlg/M041/123,贝克：还等什么？快去！,NYPD briefing and press-conference preview; original script commands preserved
