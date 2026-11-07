@@ -351,3 +351,38 @@ dlg/M260/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,S
 dlg/M271/001,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
 dlg/M275/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
 dlg/M290/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M041/024,凯茜：武器科？{wait}你昨晚没撞到头吧？就在楼下呀！,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/025,韦恩：嘿，美女！,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/026,{name}：少来这套，韦恩。托雷斯在哪儿？,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/027,韦恩：那个秃头？谁知道呢。想要点什么？霰弹枪？火箭筒？,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/028,韦恩！,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/029,韦恩：是、是，长官！,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/030,托雷斯：就是因为有你这种笨蛋，这个国家的枪才会没完没了！{wait}滚回武器库去！你还远远没资格在这里摆弄枪！,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/031,韦恩：好啦，好啦……真是的……,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/032,{name}：托雷斯，我需要一些装备……,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/033,托雷斯：为了昨晚的案子？听说闹得很严重。{wait}可只要警察依赖枪，罪犯也一样会依赖枪。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/034,这是个恶性循环。我真不想把武器交给你这样的年轻警察……{wait}不过，听说这次的对手不是普通罪犯。总不能让你空着手去。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/035,托雷斯：喂，你已经拿不了更多装备了。{wait}韦恩！把她的一些东西拿去保管。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/036,韦恩：是，是……,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/037,托雷斯：你有意见吗，警官！？,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/038,韦恩：没、没有，长官！,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/039,韦恩：想把什么东西存在这里吗？,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/040,韦恩：嘿，别介意，{br}你可拿不了这么多东西……,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/041,托雷斯：拿着……这是我能批准给你的威力最大的枪。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/042,韦恩：嘘！别告诉托雷斯，你可以用“工具”来改装枪！{wait}可以转移装备的参数和附加效果，调整你的装备。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/043,韦恩：我可以教你几招厉害的改装技巧！,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/044,韦恩：明白了吗？相信我，火力再强也不嫌多。{wait}当然，没子弹就开不了枪，所以一定要随身带着警棍。{wait}以防万一嘛。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/045,韦恩：把暂时用不到的东西交给我保管吧？,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/046,托雷斯：你带装备改装许可证了吗？,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/047,托雷斯：贝克队长已经通知我了。再让我看一下你的改装许可证。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/048,要在这里改装枪吗？{br}{choice 2}    是{br}    否,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/049,托雷斯：哪一把枪？,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/050,托雷斯：好……在这里等一下。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/051,托雷斯：没有许可证，我不能给你改装装备。谁都不能例外。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/052,托雷斯：改好了。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/053,托雷斯：不过，要记住：“警察拿枪是为了保护他人。别反过来被枪支配！”,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/054,托雷斯：需要改装装备的话，带着改装许可证再来。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/055,韦恩：想把什么东西存在这里吗？,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/056,{choice 4}    寄存装备{br}    寄存物品{br}    交出废料{br}    取消,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/057,韦恩：把废料交给我吧。其实能拆出不少好零件。,NYPD weapon storage preview; original choices and commands preserved
+dlg/M041/058,韦恩：你说什么呢？你现在根本没带废料呀！,NYPD weapon storage preview; original choices and commands preserved

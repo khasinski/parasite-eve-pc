@@ -4,7 +4,8 @@ This is a playable translation preview, not a complete Chinese translation.
 It includes 181 dialogue pages in the Carnegie/shared-scene bank
 (M001) and 104 resident menu, inventory and memory-card labels. Another 67 shared
 prompts cover matching save, inventory and event-skip questions in 15 other
-banks: 352 entries total.
+banks. A further 35 pages cover the NYPD weapon-storage visit and services:
+387 entries total.
 The bank also contains later flashbacks and epilogue dialogue. Other story banks,
 most item names/descriptions and text baked into graphics remain original.
 Numeric/debug pages are intentionally unchanged.
@@ -59,3 +60,7 @@ unbound room layout. Two NYPD tests (109 snapshots each) invoke the original dro
 commands after loading the real bank and check Yes=0/No=1, not complete item
 or phone interactions. Only the dialogue area changes; with mods off, all 109 states and
 framebuffers and the complete final VRAM match the no-preview control.
+
+The NYPD preview covers M041 pages 24–58: the first weapon-storage visit,
+modification permits, storage choices and junk hand-in. It does not translate the
+other station story conversations or establish full NYPD gameplay coverage.
