@@ -1,8 +1,9 @@
 # Simplified Chinese rendering pilot
 
 This is a small, playable opening-scene pilot, not a complete Chinese translation.
-It includes opening dialogue and the original two-choice save/item prompts.
-Untranslated pages retain the disc's original text.
+It includes 12 opening-dialogue/save/item prompts and 104 resident menu,
+inventory and memory-card labels (116 entries total). Most story pages, item
+names/descriptions and text baked into graphics still retain the original text.
 
 Build it using a licensed Chinese font you supply, for example Noto Sans CJK SC:
 
@@ -25,6 +26,13 @@ wraps Chinese between characters while keeping closing punctuation with the
 preceding text. Missing font coverage is an error, never silently a tofu glyph.
 The same pipeline accepts traditional Chinese with an appropriate font and text.
 
+The localization CI artifact includes `zh-Hans.pelang` and the font license. It
+uses a pinned, checksum-verified Noto Sans CJK SC font; this preview is still not
+selected or bundled by the standard game build.
+
 The pilot was compiled and rendered by the actual game with a hidden GPU window.
+The menu expansion was checked at 95 native replay snapshots: complete game states
+matched the opening-only pilot, with 29 frames changing visually. This is menu
+coverage, not a full-campaign or translation proofreading claim.
 Automated compiler tests also cover Chinese choices and punctuation using Noto
 CJK on CI. Its limited translation coverage is independent of renderer support.

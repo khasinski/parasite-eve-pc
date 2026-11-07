@@ -28,6 +28,18 @@ jobs:
         env:
           PE_TEST_CJK_FONT: /usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc
         run: python -I -m unittest discover -s localization/tests
+      - name: Compile Simplified Chinese preview
+        run: |
+          mkdir -p out/ci
+          curl --fail --location --retry 2 --output "$RUNNER_TEMP/NotoSansCJKsc-Regular.otf" \
+            https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf
+          echo "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b  $RUNNER_TEMP/NotoSansCJKsc-Regular.otf" | sha256sum --check
+          curl --fail --location --retry 2 --output out/ci/zh-Hans-font-LICENSE.txt \
+            https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/LICENSE
+          echo "Noto Sans CJK SC: © 2014-2021 Adobe (http://www.adobe.com/)." >> out/ci/zh-Hans-font-LICENSE.txt
+          python -I localization/pelang.py build localization/pilots/zh-Hans/pilot.csv \
+            --submission --strings localization/data/manifest.json --lang zh-Hans --name 'Chinese (preview)' \
+            --cjk-font "$RUNNER_TEMP/NotoSansCJKsc-Regular.otf" -o out/ci/zh-Hans.pelang
       - name: Check and build the languages
         id: build
         run: |
