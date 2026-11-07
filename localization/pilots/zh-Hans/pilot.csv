@@ -534,3 +534,38 @@ dlg/M041/187,丹尼尔：整天坐着处理文件？{br}开什么玩笑！,NYPD 
 dlg/M041/188,前田：那、那我们怎么办？,NYPD Maeda and museum investigation preview
 dlg/M041/189,{name}：有什么情况{br}就通知我们！,NYPD Maeda and museum investigation preview
 dlg/M041/190,前田：啊，是的，好的，我明白了……,NYPD Maeda and museum investigation preview
+dlg/M041/003,物品栏已满。{wait}要交换物品吗？{br}{choice 2}    是{br}    否,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/004,{br}物品栏已满。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/191,      -第5天-{br}{br}      进化,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/192,埃迪：偏偏在圣诞节{br}碰上这种案子，唉。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/193, 门锁着。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/194, 打开了锁。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/195,警察：{name}，{br}你最好也穿上防弹背心。{br}再小心也不为过……,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/196,警察：嘿嘿嘿……终于归我了！,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/197, 仅限授权人员进入{br}{br}    武器科,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/198,尼克斯：喂，会议室{br}要开紧急会议。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/199,凯茜：到处都乱成一团。{br}不知道发生了什么……,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/200,丹尼尔：来吧，各位，{br}我们要开始开会了。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/201,韦恩：你带来的好东西{br}可真不少……{wait}喂，要是看到枪械收藏卡，{br}就带到这里来。{br}我可喜欢那些了……,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/202,托雷斯：收藏卡？{br}倒是很适合你这种傻小子。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/203,韦恩：死老头子……！,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/204,托雷斯：行了，别聊了……{br}回去干活！{wait}{name}，{br}你不是正在办案吗？{wait}快去，把那些混蛋抓回来。{br}但愿用不着开枪……,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/205,贝克：晚点再来。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/206,警察：抱歉，只有授权人员{br}才能进去。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/207,警察：女士，这是规定。抱歉。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/208,凯茜：在中央公园？{br}真希望别再发生昨晚那种事……,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/209,埃迪：喂，{name}，{br}案子有什么新进展吗？{wait}希望你早点抓到那个混蛋……{br}我可不想在街上碰见他！,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/210,埃迪：偏偏赶在圣诞节……！{br}这座城市到底怎么了？{wait}唉，我得离开这里……{br}去安静的乡下开个牧场……,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/211,警察：我就喜欢看着它们……{br}每次下班后，我都会来这里放松。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/212,警察：真希望能给她{br}准备一顿丰盛的圣诞晚餐……,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/213,警察：这家伙过完今年{br}就要退休了……{br}他也确实该好好歇歇了。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/214, “让你的警犬重焕活力！”{br}  RUPTA{br}  优质警犬粮,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/215,本：嘿嘿……希瓦，{br}好痒啊！,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/216,{name}：希瓦，{br}你要好好照顾本哦。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/217,凯茜：听说队长救了本的命。{wait}他刚当警察时，希瓦就是他的搭档。{br}要对她开枪，一定很难受吧……,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/218,凯茜：我能带这孩子看看狗吗？,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/219,警察：当然，我来打开围栏。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/220,警察：嘿，有人来看你了。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/221,警察甲：我们正在整个曼哈顿{br}搜寻伊芙。,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/222,警察乙：她杀了我的伙计们。{br}我一定要抓到她……！,NYPD ambient dialogue and fixed prompts preview
+dlg/M041/223,警察丙：唉，早知道就该{br}去老爸的店里帮忙，{br}不该当警察……！,NYPD ambient dialogue and fixed prompts preview

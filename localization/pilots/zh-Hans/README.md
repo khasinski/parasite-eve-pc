@@ -9,7 +9,8 @@ An additional 62 pages cover the Day 2 briefing and press conference.
 Another 36 pages cover Daniel and Ben and the departure for Central Park:
 Another 32 pages cover the workshop argument and Manhattan evacuation:
 A further 18 pages cover Maeda and the museum investigation:
-535 entries total.
+Another 35 entries cover station conversations and fixed inventory prompts:
+570 entries total.
 The bank also contains later flashbacks and epilogue dialogue. Other story banks,
 most item names/descriptions and text baked into graphics remain original.
 Numeric/debug pages are intentionally unchanged.
@@ -66,18 +67,19 @@ or phone interactions. Only the dialogue area changes; with mods off, all 109 st
 framebuffers and the complete final VRAM match the no-preview control.
 
 The NYPD preview covers M041 pages 24–58: the first weapon-storage visit,
-modification permits, storage choices and junk hand-in. It does not translate the
-other station story conversations or establish full NYPD gameplay coverage.
+modification permits, storage choices and junk hand-in. This is translation coverage, not full NYPD gameplay coverage.
 
 The briefing expansion covers M041 pages 8–23 and 78–123, including the
-press conference and the call from the Japanese scientist. Remaining station
-conversations still fall back to the original language.
+press conference and the call from the Japanese scientist.
 
 The family/departure expansion covers M041 pages 59–77 and 124–140.
-Later station conversations still fall back to the original language.
 
 The workshop/evacuation expansion covers M041 pages 141–172, including
-Ben meeting Sheeva. Later station conversations remain in the original language.
+Ben meeting Sheeva.
 
-The Maeda/investigation expansion covers M041 pages 173–190. Later station
-conversations and most other story banks remain in the original language.
+The Maeda/investigation expansion covers M041 pages 173–190.
+
+The station/ambient expansion covers M041 pages 3–4 and 191–223. M041 now
+contains 221 translated pages; the empty page, two unverified dynamic item-name
+templates and the numeric/debug page remain unchanged. Other story banks still
+fall back to their original text.
