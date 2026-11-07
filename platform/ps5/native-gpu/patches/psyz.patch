@@ -121,7 +121,7 @@
  void Psyz_GpuSetSpriteAtlasesEnabled(int enabled);
  int Psyz_GpuGetSpriteAtlasesEnabled(void);
  /* Selects one cell for the next GP0 primitive only. Use a queued user command
-@@ -139,8 +155,43 @@
+@@ -139,8 +155,50 @@
   */
  void Psyz_GpuDisplayCommand(unsigned int word);
  
@@ -159,11 +159,18 @@
 +int Psyz_GpuLoadFontContext(unsigned context,const unsigned char *rgba,unsigned bytes);
 +void Psyz_GpuSelectFontGlyph(unsigned context,unsigned code,unsigned crop,unsigned width);
 +
++/* Original presentation-only procedural material, one following owned FT4. */
++int Psyz_GpuParticleMaterialAvailable(void);
++void Psyz_GpuSelectParticleMaterial(unsigned kind,unsigned age);
++int Psyz_GpuParticleMaterialIdle(void);
++int Psyz_GpuParticleMaterialTint(unsigned kind,unsigned page,unsigned clut,unsigned u,unsigned v,unsigned width,unsigned height,unsigned out[3]);
++
  #ifdef __cplusplus
  }
  #endif
  
  #endif
++
 +
 --- a/psyz/include/psyz/overlay_sdl3_gpu.h
 +++ b/psyz/include/psyz/overlay_sdl3_gpu.h
@@ -14039,7 +14046,7 @@
  /* Optional room-local atlas cache: bounded storage, no native VRAM changes. */
  typedef struct SpriteAtlas {
      uint64_t key;
-@@ -121,6 +402,11 @@
+@@ -121,6 +402,16 @@
  static bool next_sprite_extension;
  static bool sprite_atlases_enabled=true;
  static SDL_GPUSampler *sprite_atlas_sampler;
@@ -14048,10 +14055,15 @@
 +static int dialogue_next_glyph=-1,dialogue_next_context=-1;
 +static unsigned dialogue_next_crop,dialogue_next_width;
 +static int dialogue_font_batch=-1;
++/* Derived one-primitive material tag. No texture/heap/model ownership. */
++static unsigned particle_next_material,particle_next_age;
++int Psyz_GpuParticleMaterialAvailable(void){return device&&!UseSoftwareBackend()&&!gpu_failed&&scaled_vram_render&&internal_res>1;}
++void Psyz_GpuSelectParticleMaterial(unsigned kind,unsigned age){particle_next_material=kind>=1&&kind<=3&&age<=255?kind:4;particle_next_age=age;}
++int Psyz_GpuParticleMaterialIdle(void){return particle_next_material==0;}
  
  
  static Posi display_area = {0, 0};
-@@ -155,11 +441,73 @@
+@@ -155,11 +446,73 @@
      int camera_x;
  } ws_picture[2] = {{-1, 0, 0, 0, false, false, 0.0f, 0.0f, 0},
                     {-1, 0, 0, 0, false, false, 0.0f, 0.0f, 0}};
@@ -14125,7 +14137,7 @@
  /* The drawing area is inside the display's VRAM columns and the first two
   * display heights of rows, where double buffers are stacked. */
  static bool DisplayBufferDraw(void) {
-@@ -169,6 +517,10 @@
+@@ -169,6 +522,10 @@
             draw_area_start.y >= 0 && draw_area_end.y < 2 * display_size.y;
  }
  
@@ -14136,7 +14148,7 @@
  static bool WidescreenDraw(void) { return widescreen && DisplayBufferDraw(); }
  
  /* Half the 16:9 view's width in whole game pixels, for the screen's pixel
-@@ -273,22 +625,44 @@
+@@ -273,22 +630,44 @@
  }
  
  static SDL_GPUCommandBuffer* AcquireCmd(void) {
@@ -14187,7 +14199,7 @@
  
  int Psyz_GpuGetSpriteAtlasesEnabled(void) {return sprite_atlases_enabled;}
  
-@@ -299,13 +673,17 @@
+@@ -299,13 +678,17 @@
      }
  }
  
@@ -14207,7 +14219,7 @@
      sprite_atlas_count=0;
      sprite_atlas_cells=0;
      sprite_atlas_bytes=0;
-@@ -331,8 +709,11 @@
+@@ -331,8 +714,11 @@
      SDL_free(data);return surface;
  }
  
@@ -14220,7 +14232,7 @@
      for (unsigned i=0;i<sprite_atlas_count;++i)
          if (sprite_atlases[i].key==key) return 1;
      const char *extension=SDL_strrchr(filename,'.');
-@@ -365,11 +746,17 @@
+@@ -365,11 +751,17 @@
      SDL_GPUTextureCreateInfo info={.type=SDL_GPU_TEXTURETYPE_2D,.format=SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
          .usage=SDL_GPU_TEXTUREUSAGE_SAMPLER,.width=HD_ATLAS_WIDTH,.height=HD_ATLAS_HEIGHT,.layer_count_or_depth=1,.num_levels=1};
      if (!sprite_atlas_texture) sprite_atlas_texture=SDL_CreateGPUTexture(device,&info);
@@ -14240,7 +14252,7 @@
          if (mapped) SDL_UnmapGPUTransferBuffer(device,upload);
          if (upload) SDL_ReleaseGPUTransferBuffer(device,upload);
          SDL_DestroySurface(rgba); return -1;
-@@ -382,6 +769,39 @@
+@@ -382,6 +774,39 @@
          u8 *target=(u8 *)mapped+(size_t)(cell*2+reference)*68*68*4;
          for (unsigned row=0;row<68;++row)
              memcpy(target+(size_t)row*68*4,(u8 *)rgba->pixels+(size_t)(sy+row)*rgba->pitch+sx*4,68*4);
@@ -14280,7 +14292,7 @@
      }
      SDL_UnmapGPUTransferBuffer(device,upload);SDL_DestroySurface(rgba);
      SDL_GPUCommandBuffer *cmd=AcquireCmd();
-@@ -398,13 +818,6 @@
+@@ -398,13 +823,6 @@
      }
      SDL_EndGPUCopyPass(copy);
      SDL_ReleaseGPUTransferBuffer(device,upload);
@@ -14294,7 +14306,7 @@
      sprite_atlases[sprite_atlas_count++]=(SpriteAtlas){key,columns,rows,sprite_atlas_cells};
      sprite_atlas_cells+=cells;
      sprite_atlas_bytes+=bytes;
-@@ -412,10 +825,13 @@
+@@ -412,10 +830,13 @@
      return 1;
  }
  
@@ -14310,7 +14322,7 @@
      for (unsigned i=0;i<sprite_atlas_count;++i) {
          SpriteAtlas *atlas=&sprite_atlases[i];
          if (atlas->key==key && cell<atlas->columns*atlas->rows) {
-@@ -453,20 +869,26 @@
+@@ -453,20 +874,26 @@
  static SDL_GPUFence* frame_fences[MAX_FRAMES_IN_FLIGHT];
  static unsigned frame_fence_idx = 0;
  static void SubmitFrame(void) {
@@ -14340,7 +14352,7 @@
      frame_fence_idx = (frame_fence_idx + 1) % MAX_FRAMES_IN_FLIGHT;
  }
  static void ReleaseFrameFences(void) {
-@@ -479,17 +901,21 @@
+@@ -479,17 +906,21 @@
  }
  
  static bool SubmitCmdAndWait(void) {
@@ -14368,7 +14380,7 @@
  }
  
  static SDL_GPUShader* CreateShader(
-@@ -513,7 +939,9 @@
+@@ -513,7 +944,9 @@
          .num_uniform_buffers = num_uniform_buffers,
      };
      SDL_GPUShader* shader = SDL_CreateGPUShader(device, &info);
@@ -14378,7 +14390,7 @@
          ERRORF("SDL_CreateGPUShader: %s", SDL_GetError());
      }
      return shader;
-@@ -787,10 +1215,74 @@
+@@ -787,10 +1220,74 @@
      for (int i = 0; i < BLEND_COUNT; i++) {
          shaders_ok = shaders_ok && pipe_tri[i];
      }
@@ -14454,7 +14466,7 @@
      if (is_platform_initialized) {
          return is_platform_init_successful;
      }
-@@ -798,10 +1290,49 @@
+@@ -798,10 +1295,49 @@
  
      const char* headless = SDL_getenv("PSYZ_HEADLESS");
      headless_renderer = headless && strcmp(headless, "1") == 0;
@@ -14505,7 +14517,7 @@
          SoftwareRasterizer_Reset();
          vsync_mode = PSYZ_VSYNC_LIMITLESS;
          Sdl3Common_TimingInit();
-@@ -814,15 +1345,8 @@
+@@ -814,15 +1350,8 @@
          return false;
      }
  
@@ -14523,7 +14535,7 @@
      if (!device) {
          ERRORF("SDL_CreateGPUDevice: %s", SDL_GetError());
          return false;
-@@ -859,6 +1383,11 @@
+@@ -859,6 +1388,11 @@
      swapchain_ok = !hidden_gpu_renderer &&
                     SDL_ClaimWindowForGPUDevice(device, sdl3_window);
      if (!swapchain_ok && !hidden_gpu_renderer) {
@@ -14535,7 +14547,7 @@
          WARNF("no swapchain, presentation disabled: %s", SDL_GetError());
      }
  
-@@ -881,9 +1410,34 @@
+@@ -881,9 +1415,34 @@
  static bool UseSoftwareBackend(void) {
      if (!is_platform_initialized)
          InitPlatform();
@@ -14570,7 +14582,7 @@
  static bool PlatformBackend_SetDriverVsync(bool enable) {
      if (!device || !swapchain_ok) {
          return false;
-@@ -911,6 +1465,7 @@
+@@ -911,6 +1470,7 @@
  
  static SDL_Rect vram_dirty = {0, 0, 0, 0};
  static void MarkVramDirty(SDL_Rect r) {
@@ -14578,7 +14590,7 @@
      if (r.w <= 0 || r.h <= 0) {
          return;
      }
-@@ -921,6 +1476,7 @@
+@@ -921,6 +1481,7 @@
      if (x1 <= x0 || y1 <= y0) {
          return;
      }
@@ -14586,7 +14598,7 @@
      if (vram_dirty.w <= 0 || vram_dirty.h <= 0) {
          vram_dirty = (SDL_Rect){x0, y0, x1 - x0, y1 - y0};
          return;
-@@ -937,20 +1493,22 @@
+@@ -937,20 +1498,22 @@
  
  // mirror a native VRAM region into the scaled render target
  static void SyncNativeVramToScaled(int x, int y, int w, int h) {
@@ -14612,7 +14624,7 @@
                          .x = (Uint32)(x * internal_res),
                          .y = (Uint32)(y * internal_res),
                          .w = (Uint32)(w * internal_res),
-@@ -959,17 +1517,40 @@
+@@ -959,17 +1522,40 @@
          .filter = SDL_GPU_FILTER_NEAREST,
      };
      SDL_BlitGPUTexture(cmd, &blit);
@@ -14661,7 +14673,7 @@
      const SDL_GPUTextureCreateInfo info = {
          .type = SDL_GPU_TEXTURETYPE_2D,
          .format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-@@ -980,20 +1561,23 @@
+@@ -980,20 +1566,23 @@
          .layer_count_or_depth = 1,
          .num_levels = 1,
      };
@@ -14695,7 +14707,7 @@
      return true;
  }
  
-@@ -1016,25 +1600,43 @@
+@@ -1016,25 +1605,43 @@
  static void ApplyPendingInternalRes(void) {
      unsigned n =
          AdjustInternalRes(set_internal_res * (set_antialiasing ? 2u : 1u));
@@ -14748,7 +14760,7 @@
              // upscale the whole native VRAM into the freshly created scaled
              // target
              SDL_GPUCommandBuffer* cmd = ReserveDrawDescriptors(1);
-@@ -1053,20 +1655,39 @@
+@@ -1053,20 +1660,39 @@
              }
          }
      } else if (!want_scaled && scaled_vram_render) {
@@ -14789,7 +14801,7 @@
      UpdateScissor();
      INFOF("internal resolution set to %dx (%dx%d), geometry_correction=%d", n,
            VRAM_W * n, VRAM_H * n, (int)geometry_correction);
-@@ -1084,6 +1705,17 @@
+@@ -1084,6 +1710,17 @@
  static unsigned title_texture_width, title_texture_height;
  static bool title_present_active;
  
@@ -14807,7 +14819,7 @@
  int Psyz_VideoSetRgb24Backdrop(const char *filename, const unsigned char *reference,
                               int width, int height, int top, int bottom) {
      if (filename && reference && (width<=0 || width>1024 || height<=0 || top<0 || bottom<0 ||
-@@ -1096,7 +1728,7 @@
+@@ -1096,7 +1733,7 @@
      if (title_output) SDL_DestroySurface(title_output);
      title_image=title_base=title_output=NULL;
      free(title_reference);title_reference=NULL;title_path[0]=0;title_hash=0;
@@ -14816,7 +14828,7 @@
      if (width<=0 || width>1024 || height<=0 || top<0 || bottom<0 ||
          height>512 || top>512-height || bottom>512-height-top || strlen(filename)>=sizeof(title_path)) return -1;
      SDL_Surface *source=LoadHdImage(filename);
-@@ -1114,9 +1746,10 @@
+@@ -1114,9 +1751,10 @@
  }
  
  static SDL_Surface *BuildTitleDisplay(const u8 *rgb) {
@@ -14829,7 +14841,7 @@
      if (!title_output || title_output->w!=(int)w || title_output->h!=(int)h) {
          if (title_base) SDL_DestroySurface(title_base);
          if (title_output) SDL_DestroySurface(title_output);
-@@ -1128,14 +1761,20 @@
+@@ -1128,14 +1766,20 @@
              title_base=title_output=NULL;return NULL;
          }
          SDL_Rect source={0,0,title_image->w,title_image->h};
@@ -14852,7 +14864,7 @@
      int margin=((int)w-title_width*(int)n)/2;
      for (int y=0;y<title_height;++y) for (int x=0;x<title_width;++x) {
          size_t at=((size_t)y*title_width+x)*3;
-@@ -1150,16 +1789,23 @@
+@@ -1150,16 +1794,23 @@
  }
  
  static SDL_GPUTexture *UploadTitleDisplay(SDL_Surface *surface) {
@@ -14879,7 +14891,7 @@
      }
      if (!title_texture || !title_transfer) return NULL;
      if (title_uploaded==title_generation) return title_texture;
-@@ -1246,8 +1892,8 @@
+@@ -1246,8 +1897,8 @@
              .num_levels = 1,
          };
          presentation_display = SDL_CreateGPUTexture(device, &info);
@@ -14890,7 +14902,7 @@
      }
      if (!presentation_display)
          return src;
-@@ -1276,8 +1922,8 @@
+@@ -1276,8 +1927,8 @@
                  .num_levels = 1,
              };
              antialias_display = SDL_CreateGPUTexture(device, &info);
@@ -14901,7 +14913,7 @@
          }
          if (antialias_display) {
              const SDL_GPUBlitInfo resolve = {
-@@ -1367,8 +2013,159 @@
+@@ -1367,8 +2018,159 @@
              SDL_clamp((Uint32)SDL_lroundf((y1 - y0) * (float)ky), 1u, ph - py)};
  }
  
@@ -15061,7 +15073,7 @@
          finish_time = SDL_GetPerformanceCounter();
          return;
      }
-@@ -1381,7 +2178,15 @@
+@@ -1381,7 +2183,15 @@
      }
  
      ApplyPendingInternalRes();
@@ -15077,7 +15089,7 @@
      SDL_GPUTexture* rgb24 =
          disp_on && display_rgb24 && !debug_show_vram && !present_skip
              ? PrepareRgb24Display()
-@@ -1400,9 +2205,11 @@
+@@ -1400,9 +2210,11 @@
              sc_h = ws_capture_height;
          } else if (!SDL_WaitAndAcquireGPUSwapchainTexture(
                         cmd, sdl3_window, &swapchain, &sc_w, &sc_h)) {
@@ -15090,7 +15102,7 @@
              if (!disp_on) {
                  const SDL_GPUColorTargetInfo blank_target = {
                      .texture = swapchain,
-@@ -1414,11 +2221,14 @@
+@@ -1414,11 +2226,14 @@
                      SDL_BeginGPURenderPass(cmd, &blank_target, 1, NULL);
                  SDL_EndGPURenderPass(blank_pass);
              } else {
@@ -15107,7 +15119,7 @@
                      .w = (Uint32)display_size.x * n,
                      .h = (Uint32)display_size.y * n,
                  };
-@@ -1429,6 +2239,9 @@
+@@ -1429,6 +2244,9 @@
                  float game_aspect =
                      GetCurrentGameAspectRatio(display_size.x, display_size.y);
                  if (rgb24 && title_present_active && widescreen) game_aspect=16.0f/9.0f;
@@ -15117,7 +15129,7 @@
                  if (debug_show_vram) {
                      src.x = 0;
                      src.y = 0;
-@@ -1443,6 +2256,12 @@
+@@ -1443,6 +2261,12 @@
                  WndSize win = {(int)sc_w, (int)sc_h};
                  SDL_Rect dst = FitGameToWindow(game_aspect, win);
                  bool ws_view = false;
@@ -15130,7 +15142,7 @@
  
                  /* Widescreen: the buffer holds 4/3 of the screen's width,
                   * around the screen's centre plus the view's shift (see
-@@ -1451,17 +2270,19 @@
+@@ -1451,17 +2275,19 @@
                   * the picture the swapchain clear leaves black; a room
                   * narrower than the window shows 4:3, with even bars. */
                  if (widescreen && !rgb24 && !debug_show_vram &&
@@ -15153,7 +15165,7 @@
                      const float pivot = WidescreenPivot(shift);
                      /* the room is shown where it belongs: the rest of its
                       * shift past the step drawn (WidescreenFieldStep) */
-@@ -1469,19 +2290,22 @@
+@@ -1469,19 +2295,22 @@
                      if (picture >= 0 && ws_picture[picture].field) {
                          float qx, qy;
                          WidescreenFieldStep(picture, (float)n, &qx, &qy);
@@ -15181,7 +15193,7 @@
                      }
                      const float view_l = centre + (float)shift - half;
                      const float view_r = centre + (float)shift + half;
-@@ -1521,9 +2345,43 @@
+@@ -1521,9 +2350,43 @@
                       * show the room up to half a pixel up or down */
                      const float sy = rest_y * (float)n;
                      ws_view = true;
@@ -15226,7 +15238,7 @@
  
                  const SDL_GPUBlitInfo blit = {
                      .source = src,
-@@ -1537,7 +2395,11 @@
+@@ -1537,7 +2400,11 @@
                          },
                      // clear the swapchain to black first so the horizontal or
                      // vertical bars around the game output are black
@@ -15239,7 +15251,7 @@
                      .clear_color = {0.0f, 0.0f, 0.0f, 1.0f},
                      // the widescreen stretch is 4/3 per game pixel: nearest
                      // would make every third column wider, so the view is
-@@ -1546,6 +2408,9 @@
+@@ -1546,6 +2413,9 @@
                                        : SDL_GPU_FILTER_NEAREST,
                  };
                  SDL_BlitGPUTexture(cmd, &blit);
@@ -15249,7 +15261,7 @@
              }
              if (!ws_capture_active && overlay_frame_cb) {
                  overlay_frame_cb();
-@@ -1561,28 +2426,74 @@
+@@ -1561,28 +2431,74 @@
                  overlay_render_cb(cmd, pass);
                  SDL_EndGPURenderPass(pass);
              }
@@ -15332,7 +15344,7 @@
          if (sprite_atlas_texture) SDL_ReleaseGPUTexture(device,sprite_atlas_texture);
          sprite_atlas_texture=NULL;sprite_atlas_cells=0;
          sprite_atlas_count=0;sprite_atlas_bytes=0;next_sprite_atlas=NULL;
-@@ -1607,23 +2518,13 @@
+@@ -1607,23 +2523,13 @@
          if (title_texture) SDL_ReleaseGPUTexture(device,title_texture);
          if (title_transfer) SDL_ReleaseGPUTransferBuffer(device,title_transfer);
          title_texture=NULL;title_transfer=NULL;title_uploaded=title_generation=0;
@@ -15359,7 +15371,7 @@
          if (vram_render) {
              SDL_ReleaseGPUTexture(device, vram_render);
              vram_render = NULL;
-@@ -1686,16 +2587,22 @@
+@@ -1686,16 +2592,22 @@
          sdl3_window = NULL;
          is_window_visible = false;
      }
@@ -15382,7 +15394,7 @@
      antialiasing = set_antialiasing = model_filtering = set_model_filtering =
          false;
      Psyz_PgxpSetActive(0);
-@@ -1817,13 +2724,13 @@
+@@ -1817,13 +2729,13 @@
          }
      }
      if (UseSoftwareBackend() || display_rgb24 ||
@@ -15398,7 +15410,7 @@
          display_area.y < 0 || display_size.x <= 0 || display_size.y <= 0 ||
          display_area.x > VRAM_W - display_size.x ||
          display_area.y > VRAM_H - display_size.y)
-@@ -1877,16 +2784,23 @@
+@@ -1877,16 +2789,23 @@
          return NULL;
      }
      SDL_GPUBlitRegion visible = {
@@ -15425,7 +15437,7 @@
      SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
      if (!copy) {
          free(pixels);
-@@ -1905,7 +2819,8 @@
+@@ -1905,7 +2824,8 @@
      SDL_EndGPUCopyPass(copy);
      if (!SubmitCmdAndWait()) {
          free(pixels);
@@ -15435,7 +15447,7 @@
          return NULL;
      }
      const u8* rgba = SDL_MapGPUTransferBuffer(device, transfer, false);
-@@ -1948,6 +2863,10 @@
+@@ -1948,6 +2868,10 @@
  }
  
  int Psyz_VideoSetInternalResolution(unsigned multiplier) {
@@ -15446,7 +15458,7 @@
      if (multiplier < 1) {
          return -1;
      }
-@@ -1968,17 +2887,28 @@
+@@ -1968,17 +2892,28 @@
  }
  
  int Psyz_VideoSetGeometryCorrection(int enabled) {
@@ -15476,7 +15488,7 @@
      set_antialiasing = enabled != 0;
      if (sdl3_window && is_platform_init_successful)
          ApplyPendingInternalRes();
-@@ -1986,20 +2916,70 @@
+@@ -1986,20 +2921,70 @@
  }
  int Psyz_VideoGetAntialiasing(void) { return set_antialiasing; }
  int Psyz_VideoSetModelFiltering(int enabled) {
@@ -15549,7 +15561,7 @@
          ws_picture[0].y = ws_picture[1].y = -1;
          ws_centred = false;
      }
-@@ -2044,7 +3024,8 @@
+@@ -2044,7 +3029,8 @@
      /* The view slides towards the side that has picture at a room's end, so
       * the end of the picture lines up with the view's edge, but never so far
       * that the game's own screen leaves the view. A picture narrower than
@@ -15559,7 +15571,7 @@
       * Drawing into the buffer squeezes around the shifted point from here
       * on, so the buffer holds the shifted view. */
      Draw_FlushBuffer();
-@@ -2060,10 +3041,11 @@
+@@ -2060,10 +3046,11 @@
      bool ends_move = false;
      dx = SDL_clamp(dx, -2.0f, 2.0f);
      dy = SDL_clamp(dy, -2.0f, 2.0f);
@@ -15575,7 +15587,7 @@
          /* whole pixels, rounded towards the picture so no sliver of black shows
           */
          if (centre - half < (float)left) {
-@@ -2091,6 +3073,21 @@
+@@ -2091,6 +3078,21 @@
      ws_picture[slot].ex = field ? dx - (exact_shift - shift) : 0.0f;
      ws_picture[slot].ey = field ? dy : 0.0f;
      ws_picture[slot].camera_x = camera_x;
@@ -15597,7 +15609,7 @@
  }
  
  static void ApplyDisplayPendingChanges() {
-@@ -2135,8 +3132,14 @@
+@@ -2135,8 +3137,14 @@
  }
  
  void Draw_DisplayEnable(unsigned int on) {
@@ -15613,7 +15625,7 @@
      disp_on = on;
      if (on) {
          ApplyDisplayPendingChanges();
-@@ -2144,6 +3147,12 @@
+@@ -2144,6 +3152,12 @@
  }
  
  void Draw_DisplayArea(unsigned int x, unsigned int y) {
@@ -15626,7 +15638,7 @@
      /* A buffer's picture span lasts until the display leaves it: the next
       * frame drawn there sets a new one, or draws without one (all shown). */
      if ((int)y != display_area.y) {
-@@ -2162,6 +3171,10 @@
+@@ -2162,6 +3176,10 @@
  }
  
  void Draw_DisplayHorizontalRange(unsigned int start, unsigned int end) {
@@ -15637,7 +15649,7 @@
      if (UseSoftwareBackend())
          return;
      set_disp_horiz = (int)(end - start) / 10;
-@@ -2169,6 +3182,12 @@
+@@ -2169,6 +3187,12 @@
  }
  
  void Draw_DisplayVerticalRange(unsigned int start, int unsigned end) {
@@ -15650,7 +15662,7 @@
      set_disp_vert = (int)(end - start);
      display_size.y = set_disp_vert * (display_double_height ? 2 : 1);
      if (UseSoftwareBackend())
-@@ -2177,6 +3196,11 @@
+@@ -2177,6 +3201,11 @@
  }
  
  void Draw_SetDisplayMode(DisplayMode* mode) {
@@ -15662,7 +15674,7 @@
      display_rgb24 = mode->rgb24;
      // TODO the interlace flag is ignored
      if (mode->reversed) {
-@@ -2264,11 +3288,36 @@
+@@ -2264,11 +3293,48 @@
          }
      }
  }
@@ -15676,6 +15688,18 @@
  int Draw_PushPrim(u_long* packets, int max_len) {
 -    if (UseSoftwareBackend())
 -        return software_rasterizer.push_prim(packets, max_len);
++    unsigned particle_material=particle_next_material,particle_age=particle_next_age;particle_next_material=particle_next_age=0;
++    /* Material identity survives backend availability changes. Never let an
++     * unrenderable derived opaque quad fall through to ordinary PS1 drawing. */
++    if(particle_material){
++        if(max_len<9)return max_len;
++        unsigned code0=(unsigned)packets[0]>>24;
++        unsigned uv0=(unsigned)packets[2],uv1=(unsigned)packets[4],uv2=(unsigned)packets[6],uv3=(unsigned)packets[8];
++        unsigned abr=(uv1>>21)&3u;
++        int rect=(uv0&255u)==(uv2&255u)&&(uv1&255u)==(uv3&255u)&&((uv0>>8)&255u)==((uv1>>8)&255u)&&((uv2>>8)&255u)==((uv3>>8)&255u)&&(uv1&255u)>(uv0&255u)&&((uv2>>8)&255u)>((uv0>>8)&255u);
++        if(code0!=0x2cu)return max_len;
++        if(particle_material>3||particle_age>255||!Psyz_GpuParticleMaterialAvailable()||!rect||(abr!=1u&&abr!=3u))return 9;
++    }
 +    int dialogue_glyph=dialogue_next_glyph,font_context=dialogue_next_context;unsigned font_crop=dialogue_next_crop,font_width=dialogue_next_width;dialogue_next_glyph=dialogue_next_context=-1;
 +    if (UseSoftwareBackend()) {
 +        #ifdef PE_PS5
@@ -15701,7 +15725,7 @@
      bool isPoly = !(code & 0x40);
      bool isLine = (code & 0x40) && !(code & 0x20);
      bool isTile = (code & 0x40) && (code & 0x20);
-@@ -2288,7 +3337,14 @@
+@@ -2288,7 +3354,14 @@
      // This also covers Gouraud's fifth-slot colour read-ahead.
      Draw_EnsureBufferWillNotOverflow(6, 6);
      v = vertex_cur;
@@ -15717,7 +15741,7 @@
      if (isShadeTex) {
          v->r = (unsigned char)(*packets >> 0);
          v->g = (unsigned char)(*packets >> 8);
-@@ -2365,6 +3421,17 @@
+@@ -2365,6 +3438,17 @@
                          max_w = w;
                      }
                  }
@@ -15735,7 +15759,7 @@
                  if (!pgxp_valid) {
                      for (int i = 0; i < nVertices; ++i) {
                          vertex_cur[i].pgxp_pos[2] = -1.0f;
-@@ -2376,8 +3443,52 @@
+@@ -2376,8 +3460,59 @@
                  }
              }
  
@@ -15787,10 +15811,17 @@
 +                    dialogue_font_batch=font_context;
 +                }
 +            }
++            if(particle_material){
++                if(nVertices!=4||code!=0x2c||dialogue_glyph>=0)return 9;
++                int valid=vertex_cur[1].u>vertex_cur[0].u&&vertex_cur[2].v>vertex_cur[0].v;
++                for(int i=0;i<4;i++)if(vertex_cur[i].u!=vertex_cur[(i&1)?1:0].u||vertex_cur[i].v!=vertex_cur[(i&2)?2:0].v)valid=0;
++                if(!valid)return 9;
++                for(int i=0;i<4;i++){vertex_cur[i].hd_uv[0]=(i&1)?1.0f:0.0f;vertex_cur[i].hd_uv[1]=(i&2)?1.0f:0.0f;vertex_cur[i].hd_uv[2]=(particle_material==1?6.0f:particle_material==2?7.0f:8.0f)+(float)particle_age/512.0f;}
++            }
              if (nVertices == 4) {
                  Vertex second[3] = {vertex_cur[1], vertex_cur[3],
                                      vertex_cur[2]};
-@@ -2497,7 +3608,10 @@
+@@ -2497,7 +3632,10 @@
                      lt |= TPAGE_DITHER;
                  }
                  for (int k = 0; k < 4; k++) {
@@ -15802,7 +15833,7 @@
                      SET_TC(&q[k], lt, -1);
                  }
                  index_cur[0] = base + 0;
-@@ -2603,6 +3717,16 @@
+@@ -2603,6 +3741,16 @@
                  vertex_cur[i].hd_uv[2]=atlas_extension?(widescreen&&sprite_atlases_enabled?2:3):(sprite_atlases_enabled?1:0);
              }
          }
@@ -15819,7 +15850,7 @@
          SET_TC_ALL(vertex_cur, tpage, clut);
          Draw_EnqueueBuffer(4, 6);
      }
-@@ -2613,6 +3737,7 @@
+@@ -2613,6 +3761,7 @@
  void Draw_SetAreaStart(int x, int y) {
      if (UseSoftwareBackend()) {
          software_rasterizer.area_start(x, y);
@@ -15827,7 +15858,7 @@
          return;
      }
      draw_area_start.x = x;
-@@ -2621,6 +3746,7 @@
+@@ -2621,6 +3770,7 @@
  void Draw_SetAreaEnd(int x, int y) {
      if (UseSoftwareBackend()) {
          software_rasterizer.area_end(x, y);
@@ -15835,7 +15866,7 @@
          return;
      }
      draw_area_end.x = x;
-@@ -2758,6 +3884,7 @@
+@@ -2758,6 +3908,7 @@
      SDL_UploadToGPUTexture(copy, &src, &dst, false);
      SDL_EndGPUCopyPass(copy);
      MarkVramDirty((SDL_Rect){rect->x, rect->y, rect->w, rect->h});
@@ -15843,7 +15874,7 @@
      SyncNativeVramToScaled(rect->x, rect->y, rect->w, rect->h);
  }
  
-@@ -2792,6 +3919,16 @@
+@@ -2792,6 +3943,16 @@
      free(rgba);
  }
  
@@ -15860,15 +15891,16 @@
  void Draw_MoveImage(PS1_RECT* rect, unsigned int x, unsigned int y) {
      if (UseSoftwareBackend()) {
          software_rasterizer.move_image(rect, x, y);
-@@ -2862,6 +3999,7 @@
+@@ -2862,6 +4023,8 @@
  }
  
  void Draw_ResetBuffer(void) {
++    particle_next_material=particle_next_age=0;
 +    dialogue_font_batch=-1;
      if (UseSoftwareBackend()) {
          software_rasterizer.reset_buffer();
          return;
-@@ -2883,6 +4021,9 @@
+@@ -2883,6 +4046,9 @@
      }
      SDL_GPUCommandBuffer* cmd = AcquireCmd();
      if (!cmd) {
@@ -15878,7 +15910,7 @@
          Draw_ResetBuffer();
          return;
      }
-@@ -2890,6 +4031,9 @@
+@@ -2890,6 +4056,9 @@
      u8* map = SDL_MapGPUTransferBuffer(device, vtx_transfer, true);
      if (!map) {
          ERRORF("SDL_MapGPUTransferBuffer: %s", SDL_GetError());
@@ -15888,7 +15920,7 @@
          Draw_ResetBuffer();
          return;
      }
-@@ -2946,21 +4090,39 @@
+@@ -2946,21 +4115,39 @@
      /* Native VRAM is independently rasterized: gameplay readback and texture
       * feedback must not depend on high-resolution sample positions. */
      for (unsigned target_index = 0;
@@ -15934,7 +15966,7 @@
              /* Three sampled textures, up to two draws (color and mask). Reserve
               * both heaps' worst-case sampler use before any destination copy.
               */
-@@ -2975,19 +4137,22 @@
+@@ -2975,19 +4162,22 @@
                  int x1 = clip.x * (int)target_scale;
                  int y1 = clip.y * (int)target_scale;
                  for (int i = start; i < end; ++i) {
@@ -15961,7 +15993,7 @@
                          target_scale;
                      float y = (draw_offset.y + vy + bias) * target_scale;
                      x0 = SDL_min(x0, (int)SDL_floorf(x) - 1);
-@@ -3007,7 +4172,7 @@
+@@ -3007,7 +4197,7 @@
                  }
                  SDL_GPUCopyPass* blend_copy = SDL_BeginGPUCopyPass(cmd);
                  SDL_GPUTextureLocation from = {
@@ -15970,7 +16002,7 @@
                      .x = (Uint32)x0,
                      .y = (Uint32)y0};
                  SDL_GPUTextureLocation to = from;
-@@ -3018,7 +4183,7 @@
+@@ -3018,7 +4208,7 @@
                  SDL_EndGPUCopyPass(blend_copy);
              }
              const SDL_GPUColorTargetInfo target = {
@@ -15979,7 +16011,7 @@
                  .load_op = SDL_GPU_LOADOP_LOAD,
                  .store_op = SDL_GPU_STOREOP_STORE,
              };
-@@ -3049,8 +4214,8 @@
+@@ -3049,8 +4239,8 @@
              const SDL_GPUTextureSamplerBinding sampler_binding[3] = {
                  {.texture=vram_sample,.sampler=vram_sampler},
                  {.texture=destination_sample,.sampler=vram_sampler},
@@ -15990,7 +16022,7 @@
              SDL_BindGPUFragmentSamplers(pass,0,sampler_binding,3);
              /* The viewport maps shader x to offset * (1 - grid) + x * grid;
               * the shader squeezes around the centre in its own space, so
-@@ -3059,10 +4224,14 @@
+@@ -3059,10 +4249,14 @@
              const float offset_ubo[8] = {
                  (float)draw_offset.x,
                  (float)draw_offset.y,
@@ -16007,7 +16039,7 @@
                  sub_x,
                  sub_y};
              SDL_PushGPUVertexUniformData(
-@@ -3071,6 +4240,7 @@
+@@ -3071,6 +4265,7 @@
                  semi ? 2u : 0u, target_scale,
                  draw_grid_source_width == draw_grid_target_width,
                  (target_index && model_filtering ? 1u : 0u) |
@@ -16015,7 +16047,7 @@
                      (dither_mode == PSYZ_DITHER_OFF ? 2u : 0u)};
              SDL_PushGPUFragmentUniformData(
                  cmd, 0, color_pass, sizeof(color_pass));
-@@ -3087,6 +4257,7 @@
+@@ -3087,6 +4282,7 @@
                      1, target_scale,
                      draw_grid_source_width == draw_grid_target_width,
                      (target_index && model_filtering ? 1u : 0u) |
@@ -16023,7 +16055,7 @@
                          (dither_mode == PSYZ_DITHER_OFF ? 2u : 0u)};
                  SDL_PushGPUFragmentUniformData(
                      cmd, 0, mask_pass, sizeof(mask_pass));
-@@ -3099,5 +4270,229 @@
+@@ -3099,5 +4295,240 @@
          }
      }
      MarkVramDirty(scissor_rect);
@@ -16048,7 +16080,7 @@
 +    if(gpu_failed||n_vertices||!SubmitCmdAndWait()||!SDL_WaitForGPUIdle(device))return 0;
 +    pe_state_gpu_thread=SDL_GetCurrentThreadID();pe_state_gpu_owned=1;return 1;
 +}
-+static int pe_state_gpu_valid(void){return pe_state_gpu_owned&&pe_state_gpu_thread==SDL_GetCurrentThreadID()&&!gpu_failed&&device&&vram_render;}
++static int pe_state_gpu_valid(void){return Psyz_GpuParticleMaterialIdle()&&pe_state_gpu_owned&&pe_state_gpu_thread==SDL_GetCurrentThreadID()&&!gpu_failed&&device&&vram_render;}
 +int Psyz_StateGpuCapture(unsigned char *out,size_t bytes){
 +    if(!out||bytes!=PSYZ_STATE_NATIVE_VRAM_BYTES||!pe_state_gpu_valid())return 0;
 +    return DownloadVramRegionAsRGBA8888(0,0,VRAM_W,VRAM_H,out)&&!gpu_failed;
@@ -16094,7 +16126,7 @@
 +    if(internal_res!=AdjustInternalRes(set_internal_res*(set_antialiasing?2u:1u)))bits|=2048u;
 +    if(sprite_filtering!=set_sprite_filtering)bits|=4096u;if(antialiasing!=set_antialiasing)bits|=8192u;
 +    if(model_filtering!=set_model_filtering)bits|=16384u;if(geometry_correction!=set_geometry_correction)bits|=32768u;
-+    if(effect_geometry_correction!=set_effect_geometry_correction)bits|=65536u;if(!Psyz_GpuDialogueStateIdle())bits|=131072u;return bits;
++    if(effect_geometry_correction!=set_effect_geometry_correction)bits|=65536u;if(!Psyz_GpuDialogueStateIdle()||!Psyz_GpuParticleMaterialIdle())bits|=131072u;return bits;
 +}
 +static int StateGpuControlSafe(void){return Psyz_StateGpuControlBlockers()==0;}
 +extern int PeShadow_GetStyle(void); /* exact readonly optional shadow preference */
@@ -16241,8 +16273,7 @@
 +/* Source-indexed additive tint only, weighted by the actual known texels.
 + * Normalize hue, then caller preserves original packet RGB/fade intensity.
 + * No GPU readback, palette edit, allocation or retained derived state. */
-+int Psyz_GpuAuthoredFlareTint(unsigned page,unsigned clut,unsigned u,unsigned v,unsigned width,unsigned height,unsigned out[3]){
-+ if(!out||!ParticleLuminousSource(page,clut,u,v,width,height,1,64,1))return 0;
++static int ParticleSourceTint(unsigned page,unsigned clut,unsigned u,unsigned v,unsigned width,unsigned height,unsigned out[3]){
 + unsigned kind=(page>>7)&3,shift=kind?1:2,entries=kind?256:16,px=(page&15)*64,py=((page>>4)&1)*256,cx=(clut&63)*16,cy=clut>>6;uint64_t sum[3]={0,0,0};
 + for(unsigned y=0;y<height;y++)for(unsigned x=0;x<width;x++){
 +  unsigned tx=px+((u+x)>>shift),ty=py+v+y,index=(duck_words[ty*1024+tx]>>(((u+x)&((1u<<shift)-1))*(kind?8:4)))&(entries-1),color=duck_words[cy*1024+cx+index];
@@ -16250,6 +16281,18 @@
 + }
 + uint64_t maximum=sum[0]>sum[1]?sum[0]:sum[1];if(sum[2]>maximum)maximum=sum[2];if(!maximum)return 0;
 + for(unsigned j=0;j<3;j++)out[j]=(unsigned)((sum[j]*255u+maximum/2)/maximum);return 1;
++}
++
++int Psyz_GpuAuthoredFlareTint(unsigned page,unsigned clut,unsigned u,unsigned v,unsigned width,unsigned height,unsigned out[3]){
++ return out&&ParticleLuminousSource(page,clut,u,v,width,height,1,64,1)?ParticleSourceTint(page,clut,u,v,width,height,out):0;
++}
++
++/* Both source families must be luminous indexed originals; never shadow ABR2. */
++int Psyz_GpuParticleMaterialTint(unsigned kind,unsigned page,unsigned clut,unsigned u,unsigned v,unsigned width,unsigned height,unsigned out[3]){
++ if(kind==1||kind==3)return Psyz_GpuAuthoredFlareTint(page,clut,u,v,width,height,out);
++ unsigned abr=(page>>5)&3u;
++ if(kind!=2||!out||(abr!=1&&abr!=3)||!ParticleLuminousSource(page,clut,u,v,width,height,abr,64,1))return 0;
++ return ParticleSourceTint(page,clut,u,v,width,height,out);
 +}
 +
 +#endif
@@ -16739,8 +16782,68 @@
      grid_source = grid_target = 1;
 --- a/psyz/src/platform/shaders/psx.frag.glsl
 +++ b/psyz/src/platform/shaders/psx.frag.glsl
-@@ -84,7 +84,16 @@
+@@ -82,9 +82,76 @@
+ }
+ 
  void main() {
++    // Project-authored, presentation-only particle bodies. These selectors are
++    // disjoint from HD backgrounds (2/3), glyphs (4), and character atlas (5).
++    // Original PS1 targets and mask writes retain the original packets only.
++    bool orbMaterial=hdUV.z>=6.0 && hdUV.z<6.5;
++    bool flameMaterial=hdUV.z>=7.0 && hdUV.z<7.5;
++    bool crossMaterial=hdUV.z>=8.0 && hdUV.z<8.5;
++    if(orbMaterial || flameMaterial || crossMaterial){
++        if(passMode.y<=1u || passMode.x==1u)discard;
++        vec2 uv=clamp(hdUV.xy,vec2(0.0),vec2(1.0));
++        float age=fract(hdUV.z)*512.0;
++        vec3 tint=clamp(floor(vertexColor.rgb*127.5+0.5)/128.0,0.0,1.0);
++        vec3 body;float alpha;
++        if(orbMaterial){
++            vec2 q=uv*2.0-1.0;float radius=length(q);
++            float edge=max(fwidth(radius),0.012);
++            float coverage=1.0-smoothstep(0.88-edge,0.98+edge,radius);
++            float nz=sqrt(max(0.0,1.0-dot(q,q)));
++            vec3 normal=vec3(q,nz);
++            float shade=0.22+0.65*max(0.0,dot(normal,normalize(vec3(-0.4,-0.55,0.8))));
++            float highlight=pow(max(0.0,dot(normal,normalize(vec3(-0.35,-0.45,1.0)))),24.0);
++            float rim=pow(1.0-nz,3.0)*(0.65+0.15*sin(age*0.21));
++            body=tint*(shade+rim*0.6)+vec3(highlight*0.65);
++            alpha=coverage*0.82;
++        }else if(flameMaterial){
++            // Deterministic lobes use authored age, not the game RNG or clock.
++            float y=1.0-uv.y;float wave=sin(y*9.0-age*0.28)*0.10*y;
++            float x=(uv.x-0.5-wave)*2.0;
++            float width=mix(0.72,0.03,pow(y,0.8));
++            float lobes=0.07*sin(y*21.0-age*0.43)+0.04*sin(y*37.0+age*0.17);
++            float distance=abs(x)-width-lobes*y;
++            float edge=max(fwidth(distance),0.015);
++            float coverage=(1.0-smoothstep(-edge,edge,distance))*smoothstep(0.0,0.08,y)*(1.0-smoothstep(0.90,1.0,y));
++            float core=pow(max(0.0,1.0-abs(x)/max(width,0.03)),2.0)*(1.0-y);
++            body=tint*(0.6+core*0.7)+vec3(core*0.32);
++            alpha=coverage*0.70;
++        }
++        else{
++            // Preserve the authored crossed-flare identity and quad rotation.
++            // Narrow rays and a luminous core use only the original source age.
++            vec2 q=uv*2.0-1.0;float radius=length(q);
++            float width=0.045+0.008*sin(age*0.45);
++            float ax=min(abs(q.x),abs(q.y));
++            float diagonal=min(abs(q.x-q.y),abs(q.x+q.y))*0.7071;
++            float ray=1.0-smoothstep(width,width+max(fwidth(ax),0.018),ax);
++            float secondary=1.0-smoothstep(width*0.45,width+0.02,diagonal);
++            float reach=1.0-smoothstep(0.1,1.0,radius);
++            float core=exp(-dot(q,q)*45.0);
++            float energy=clamp(ray*reach+secondary*reach*0.30+core,0.0,1.0);
++            body=tint*(0.70+core*0.60)+vec3(core*0.20);
++            alpha=energy*0.58;
++        }
++        // Authored source fade must also remove body coverage and highlights.
++        alpha*=max(tint.r,max(tint.g,tint.b));
++        if(alpha<=0.001)discard;
++        // Existing BLEND_ADD is premultiplied ONE / ONE_MINUS_SRC_ALPHA.
++        FragColor=vec4(clamp(body,0.0,1.0)*alpha,alpha);return;
++    }
++
      // Outpainted room margins are presentation-only. They must never reach
      // the native target, even if camera motion moves a margin into its bounds.
 -    if (hdUV.z>1.5) {
@@ -16757,7 +16860,7 @@
          if (hdUV.z>2.5 || passMode.y<=1u) discard;
          vec3 tint=min(floor(vertexColor.rgb*127.5+0.5),vec3(255.0))/128.0;
          vec4 material=texture(texHD,hdUV.xy);
-@@ -94,7 +103,10 @@
+@@ -94,7 +161,10 @@
      }
      vec4 texColor=textureMode==0u ? vec4(1,1,1,2) :
          fetchModelTexel(ivec2(resolveTexel()));
@@ -16769,7 +16872,7 @@
          vec2 pos=rawUV-vec2(0.5);
          ivec2 lo=ivec2(uvBounds.xy),hi=ivec2(uvBounds.zw);
          ivec2 origin=ivec2(floor(pos));vec2 weight=fract(pos);
-@@ -141,7 +153,7 @@
+@@ -141,7 +211,7 @@
      bool enhancedPixel=false;
      // Presentation only. The original texel still owns coverage, STP and
      // palette changes. Unmatched reference colours fall back pixel by pixel.
@@ -16778,7 +16881,7 @@
          ivec2 size=textureSize(texHD,0);
          ivec2 reference=ivec2(hdUV.xy*vec2(size))+ivec2(0,size.y/2);
          vec3 basis=texelFetch(texHD,reference,0).rgb;
-@@ -151,6 +163,13 @@
+@@ -151,6 +221,13 @@
              modColor=clamp(enhanced*tint,0.0,1.0);
              enhancedPixel=true;
          }

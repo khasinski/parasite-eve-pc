@@ -3,7 +3,7 @@ static PeStateFailure failure;
 void PeState_ClearFailure(void){failure=(PeStateFailure){0};}
 PeStateFailure PeState_LastFailure(void){return failure;}
 static void failed(uint32_t id,uint32_t stage){if(stage>=9&&stage<=11){if(!failure.rollbackStage){failure.rollbackModule=id;failure.rollbackStage=stage;}}else if(!failure.stage){failure.module=id;failure.stage=stage;}}
-const char*PeState_FailureStageText(uint32_t stage){static const char*const labels[]={"none","capture","capture-constructor-preflight","target-validate","rollback-capture","target-constructor-preflight","target-construct","post-construction-validate","target-restore","rollback-construct","rollback-validate","rollback-restore","barrier-begin","barrier-changed","buffer-bounds","rollback-constructor-preflight"};return stage<sizeof labels/sizeof*labels?labels[stage]:"unknown";}
+const char*PeState_FailureStageText(uint32_t stage){static const char*const labels[]={"none","capture","capture-constructor-preflight","target-validate","rollback-capture","target-constructor-preflight","target-construct","post-construction-validate","target-restore","rollback-construct","rollback-validate","rollback-restore","barrier-begin","barrier-changed","buffer-bounds","rollback-constructor-preflight","capture-package-validate","target-package-validate","rollback-package-validate"};return stage<sizeof labels/sizeof*labels?labels[stage]:"unknown";}
 const char*PeState_FailureOwnerText(uint32_t id){static const char*const names[]={"none","original-save","rng","scene","scripts","actor-render-graph","battle","scheduler","audio","gpu-and-texture-owners","events","disc","mods","host","gte","asset-identity","akao","persistent-inventory","game-globals","pm-and-mod-private-state","geometry"};return id<sizeof names/sizeof*names?names[id]:"unknown";}
 #include <string.h>
 static uint32_t rd(const unsigned char *p){
@@ -177,6 +177,7 @@ int PeState_CapturePartial(const PeStateRegistry *r,const PeStateBarrier *barrie
             off+=16+n;
         }
         if(!result&&!barrier->unchanged(barrier->context,epoch)){failed(0,13);result=PE_STATE_BUSY;}
+        if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule*m=&r->modules[i];if(m->validatePackage&&!m->validatePackage(m->context,r,chunks,r->count)){failed(m->id,16);result=PE_STATE_INCOMPATIBLE;break;}}
         if(!result)result=PeState_Encode(out,cap,used,PE_STATE_PARTIAL,epoch,identity,chunks,r->count);
         barrier->end(barrier->context);
         if(result)*used=0;
@@ -222,7 +223,7 @@ int PeState_RestorePairedComponents(const PeStateRegistry *r,const PeStateRegist
     for(unsigned i=0;i<r->count;i++) {
         const PeStateModule *module=&r->modules[i];int found=0;
         const PeStateModule *previous=&current->modules[i];
-        if(previous->id!=module->id||previous->schema!=module->schema||previous->maximumBytes!=module->maximumBytes||previous->capture!=module->capture||previous->restore!=module->restore||previous->prepare!=module->prepare||previous->validate!=module->validate||!previous->validate)return PE_STATE_INCOMPATIBLE;
+        if(previous->id!=module->id||previous->schema!=module->schema||previous->maximumBytes!=module->maximumBytes||previous->capture!=module->capture||previous->restore!=module->restore||previous->prepare!=module->prepare||previous->validate!=module->validate||previous->validatePackage!=module->validatePackage||!previous->validate)return PE_STATE_INCOMPATIBLE;
         if(!idvalid(module->id)||!module->schema||!module->capture||!module->validate||!module->restore||!module->maximumBytes||module->maximumBytes>PE_STATE_MAX_BYTES)return PE_STATE_INCOMPLETE;
         for(unsigned j=0;j<i;j++)if(r->modules[j].id==module->id)return PE_STATE_INVALID;
         offset=100;
@@ -248,6 +249,18 @@ int PeState_RestorePairedComponents(const PeStateRegistry *r,const PeStateRegist
         used+=rollbackBytes[i];
     }
     if(!result&&!barrier->unchanged(barrier->context,epoch)){failed(0,13);result=PE_STATE_BUSY;}
+    if(!result){
+        PeStateChunk targetChunks[16],currentChunks[16];
+        for(unsigned i=0;i<r->count;i++){
+            targetChunks[i]=(PeStateChunk){r->modules[i].id,r->modules[i].schema,payload[i],lengths[i]};
+            currentChunks[i]=(PeStateChunk){current->modules[i].id,current->modules[i].schema,rollback[i],rollbackBytes[i]};
+        }
+        for(unsigned i=0;i<r->count;i++){
+            const PeStateModule*m=&r->modules[i],*p=&current->modules[i];
+            if(m->validatePackage&&!m->validatePackage(m->context,r,targetChunks,r->count)){failed(m->id,17);result=PE_STATE_INCOMPATIBLE;break;}
+            if(p->validatePackage&&!p->validatePackage(p->context,current,currentChunks,current->count)){failed(p->id,18);result=PE_STATE_INCOMPATIBLE;break;}
+        }
+    }
     int graphTouched=0;
     if(!result&&current!=r)for(unsigned i=0;i<current->count;i++){const PeStateModule *module=&current->modules[i];if(module->prepare&&module->prepare(module->context,rollback[i],rollbackBytes[i],-1)!=1){failed(module->id,15);result=PE_STATE_INCOMPATIBLE;break;}}
     if(!result)for(unsigned i=0;i<r->count;i++){const PeStateModule *module=&r->modules[i];if(module->prepare&&module->prepare(module->context,payload[i],lengths[i],-1)!=1){failed(module->id,5);result=PE_STATE_INCOMPATIBLE;break;}}

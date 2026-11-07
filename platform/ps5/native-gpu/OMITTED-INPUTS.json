@@ -373,5 +373,8 @@
   ],
   "privatePackIndexPublished": false,
   "assetsPublished": false,
-  "privateCharacterIndexPublished": false
+  "privateCharacterIndexPublished": false,
+  "newPointSpriteTailWordsDistributed": 0,
+  "originalExecutableFingerprintOrExtractionProofIncluded": false,
+  "requiredOwnerDataGeneratedInPackage": false
 }

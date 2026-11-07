@@ -1,0 +1,18 @@
+{
+  "publicPackageFilesScanned": 128,
+  "missingHashSizeOpcodeAndZeroWaitRejected": 5,
+  "missingInputBuildRecipeFailsBeforeSdkWork": true,
+  "localAuthorizedInputGeneratesMatching54Words": true,
+  "sameInputIdempotent": true,
+  "publicTailSequencesAbsent": true,
+  "publicOriginalExecutableFingerprintAbsent": true,
+  "generatedDataOnlyOutsidePackage": true,
+  "fullSdkRun": false,
+  "gameExecuted": false,
+  "gitExecuted": false,
+  "licenseOrAuthenticityCleared": false,
+  "scope": "Local host input-boundary checks only, no game or SDK build",
+  "originalInputOrFingerprintDistributed": false,
+  "privateProofDataOutsidePublicationTree": true,
+  "generatedHeaderAndGeneratorRecipeBothCoveredByFutureActualCohort": true
+}

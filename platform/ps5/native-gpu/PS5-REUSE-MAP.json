@@ -1,0 +1,25 @@
+{
+  "scope": "PS5 contribution only; no separate PC implementation/build",
+  "basis": {
+    "selectedBuild": "game-test-theater-material-owned-20261102-a1",
+    "selectedPrivateEboot": "50b8c2403c4bcf552409fcd11cba4f58acee380afe4920b5b1174dee5b72fb19",
+    "privateSourceCohort": "1f64de225c3855c5b3a7e3250961f7360e189781d6a548413c92ee6065b3c64b"
+  },
+  "reusableMechanisms": [
+    "Typed preflight before checkpoint writes and rollback ownership",
+    "Queued source-bank font reference publication",
+    "Exact enum persistence and remembered presentation choices",
+    "Source-derived bounded particle admission",
+    "Static bitmap display publication as movie retirement witness",
+    "Atomic packed marker-plus-primitive admission and explicit fail-closed material discard",
+    "Exact built-in notification handler identity plus idle ownership"
+  ],
+  "ps5Integration": [
+    "Native GPU/shader and presentation pipeline",
+    "Public SDK opaque stdio and platform root/logger/cache routing",
+    "Native six-tab settings renderer and deep registry bridge",
+    "PS5 Game Test launch role and source build recipe",
+    "Source-derived P117/P115/P109 analytic fragment materials, guarded native path"
+  ],
+  "qualification": "Reusable mechanisms remain in their existing guarded source locations; no ordinary PC feature enablement or runtime qualification claimed"
+}

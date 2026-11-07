@@ -593,6 +593,13 @@ static int decode_mode(PeBattleNumeric *ctx,const unsigned char *input,size_t by
     return c.ok&&c.at==bytes;
 }
 static int decode(PeBattleNumeric*ctx,const unsigned char*input,size_t bytes,BattleDecoded*d){return decode_mode(ctx,input,bytes,d,ctx&&ctx->targetMode);}
+/* Decode the authoritative captured player action, never the current/menu action.
+ * The six saved-tail words are the exact original BattleAction24-byte root. */
+int PeBattleNumeric_PlayerAction(PeBattleNumeric*ctx,const unsigned char*input,size_t bytes,int*action){
+    BattleDecoded d;if(!action||!ctx||ctx->playerActionRole!=1||!decode(ctx,input,bytes,&d))return 0;
+    _Static_assert(offsetof(BattleAction,actionCode)==6,"original action source offset");
+    *action=(int)(int16_t)(d.tail[1]>>16);return 1;
+}
 int PeBattleNumeric_PreflightTarget(PeBattleNumeric*ctx,const unsigned char*input,size_t bytes,uint32_t mask,const uint32_t coreRoles[14]){BattleDecoded d;if(!coreRoles||(mask&~0x3fffu)||!decode_mode(ctx,input,bytes,&d,1))return 0;uint32_t cores=0;for(unsigned i=0;i<14;i++)if(mask&(1u<<i)){unsigned role=coreRoles[i];if(role>8||(role>=2&&(cores&(1u<<role))))return 0;cores|=1u<<role;}for(unsigned i=0;i<7;i++)if(ctx->active[i]&&!(cores&(1u<<(i+2))))return 0;if(d.activeCore>=2&&(!(cores&(1u<<d.activeCore))||!ctx->active[d.activeCore-2]))return 0;for(unsigned i=0;i<45;i++)if(d.queueActor[i]&&!(mask&(1u<<(d.queueActor[i]-1))))return 0;return 1;}
 int PeBattleNumeric_SetTargetGraph(PeBattleNumeric*ctx,uint32_t mask,const uint32_t coreRoles[14]){if(!target_bound(ctx)||!coreRoles||!mask||(mask&~0x3fffu))return 0;uint32_t seen=0;for(unsigned i=0;i<14;i++){unsigned role=coreRoles[i];if(role>8||(!(mask&(1u<<i))&&role)||(role>=2&&(seen&(1u<<role))))return 0;if(mask&(1u<<i))seen|=1u<<role;}for(unsigned i=0;i<7;i++)if(ctx->active[i]&&!(seen&(1u<<(i+2))))return 0;ctx->targetMode=1;ctx->targetMask=mask;memcpy(ctx->targetCores,coreRoles,sizeof ctx->targetCores);return 1;}
 static int constructed_graph(const PeBattleNumeric*ctx){uint32_t mask=0;unsigned count=0;for(FieldActor*a=g_FieldActorListHead;a;a=a->next){unsigned id=actor_id((const BattleEntity*)(const void*)a);if(!id||id>14||count++>=14||(mask&(1u<<(id-1)))||core_id((const Combatant*)a->state)!=ctx->targetCores[id-1])return 0;mask|=1u<<(id-1);}return mask==ctx->targetMask;}

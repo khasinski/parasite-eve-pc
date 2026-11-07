@@ -1,6 +1,11 @@
 {
-  "schema": 1,
-  "originalBases": [
+  "selectedBuild": "game-test-point7-owned-20261102-a1",
+  "selectedPrivateEboot": "58058fe6287667b980c1a19cc4542157119a183552ed09e99e147b34d29b9520",
+  "privateSourceCohort": "97b40f82c23218e69f2cff9900377a57b0d0be759afc3d361d31df500f2998e9",
+  "sourceRecords": 213,
+  "sdlMirrors": 40,
+  "auxiliaryInputs": 80,
+  "originalArchivePins": [
     {
       "name": "game",
       "revision": "8c52cdde5d60ee52f00913517ffb593e9521bf2d",
@@ -20,27 +25,14 @@
       "archiveSha256": "7b36fe7f802450aa0c98af2e151159c6c8d0e28ea8b0e4356187a21c2d3680a1"
     }
   ],
-  "selectivePublicUpstream": {
-    "game": "b7c7274d8d97167ab0f5a856f161f93c98325bee",
-    "psyz": "deb979278b3a1bee4c0a4123587fb530afa4dfcf",
-    "wholePinClaim": false
-  },
-  "selectedNativeBuild": "resident-ailments-movie-retry-owned-20261101-a1",
-  "selectedNativeEbootSha256": "C7A47DFC44D773EB3E485538A4A5C211BF678908F5C1E3945F1068C300A5A394",
-  "selectedSourceCohort": "70C1649FF7505FB607DDBE9B2524C3DB910C4F4A0F9821F8AA2A58AEE02F04D4",
-  "sourceRecords": 207,
-  "SDLSourceMirrors": 40,
-  "sourceOnly": true,
-  "privatePackIndexIncluded": false,
-  "publicAdapterDifferences": [
-    "Private native pack index absent/caller-generated; explicit no-pack failure guard",
-    "Source-cohort identity regenerated for actual public-prepared sources/dependencies",
-    "Generated shader headers reproduced from selected original GLSL/pinned compiler; no binary outputs supplied"
+  "publicDifferences": [
+    "No private factory TOML or native asset index",
+    "Private seed fingerprint replaced by caller-supplied optional macro; default fail-closed",
+    "Public unsupported/link adapters retained",
+    "Generated public cohort deferred until actual build",
+    "Both PointSprite data initializers replaced by required local generated include; newly restored32 words absent, no original EXE fingerprint/offset/extraction proof"
   ],
-  "publicFullBuildRun": false,
-  "targetRun": false,
-  "licenses": "Existing project default copyright retained; MIT only explicit marked files; dependency notices unchanged",
-  "supportStateInputs": 71,
-  "privateCharacterIndexIncluded": false,
-  "gitExecuted": false
+  "gitExecuted": false,
+  "targetExecuted": false,
+  "omittedOriginalDataLicenseCleared": false
 }
