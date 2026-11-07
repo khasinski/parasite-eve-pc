@@ -2,7 +2,9 @@
 
 This is a playable translation preview, not a complete Chinese translation.
 It includes 181 dialogue pages in the Carnegie/shared-scene bank
-(M001) and 104 resident menu, inventory and memory-card labels: 285 entries total.
+(M001) and 104 resident menu, inventory and memory-card labels. Another 67 shared
+prompts cover matching save, inventory and event-skip questions in 15 other
+banks: 352 entries total.
 The bank also contains later flashbacks and epilogue dialogue. Other story banks,
 most item names/descriptions and text baked into graphics remain original.
 Numeric/debug pages are intentionally unchanged.
@@ -46,3 +48,12 @@ preview and with mods off: complete final states, all 591,022,180 PCM bytes and
 the original phone-created save match. With mods off, the original complete VRAM
 hash also remains unchanged. Stage and diary text were checked in the rendered
 scene. These checks do not establish later flashback/epilogue or full-game coverage.
+
+Shared prompts are matched by their exact original text, not their page number
+(the save question is page 003 in M161 and page 182 in M035). Their controls are
+unchanged, and no translated screen has more lines or a wider longest line than
+its original. Unknown-layout warnings are retained; this is not proof of every
+unbound room layout. The 109-snapshot NYPD test invokes the original dialogue
+command after loading the real bank and checks Yes=0/No=1, not a complete phone
+interaction. Only the dialogue area changes; with mods off, all 109 states and
+framebuffers and the complete final VRAM match the no-preview control.

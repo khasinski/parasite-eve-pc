@@ -284,3 +284,70 @@ dlg/M001/178,观众：演出开始以后就不该站起来了！,Carnegie/shared
 dlg/M001/179,丹尼尔：抱歉……,Carnegie/shared-scene dialogue draft; original control tokens preserved
 dlg/M001/180,本：你们几个，快点啦！,Carnegie/shared-scene dialogue draft; original control tokens preserved
 dlg/M001/204,{name}：有电话！我得把这里的情况通知警局……,Carnegie/shared-scene dialogue draft; original control tokens preserved
+dlg/M026/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M041/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M044/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M057/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M090/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M125/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M161/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M166/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M191/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M192/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M260/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M275/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M290/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M026/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
+dlg/M090/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
+dlg/M191/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
+dlg/M192/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
+dlg/M260/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
+dlg/M275/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
+dlg/M290/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
+dlg/M026/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M057/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M090/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M125/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M161/006,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M166/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M191/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M192/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M260/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M275/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M290/004,物品栏已满。,Shared prompt; exact source match with dlg/M001/004
+dlg/M026/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M057/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M090/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M125/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M161/007,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M166/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M191/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M192/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M260/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M275/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M290/005,要把物品放进宝箱吗？,Shared prompt; exact source match with dlg/M001/005
+dlg/M026/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M035/182,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M041/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M044/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M057/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M090/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M125/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M161/003,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M166/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M191/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M192/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M260/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M275/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M290/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/006
+dlg/M035/001,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M041/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M044/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M057/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M166/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M191/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M192/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M260/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M271/001,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M275/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
+dlg/M290/007,要观看这段剧情吗？{br}{choice 2}    观看{br}    跳过,Shared prompt; exact source match with dlg/M001/007
