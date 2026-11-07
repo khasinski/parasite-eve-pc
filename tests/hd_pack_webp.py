@@ -45,7 +45,7 @@ class WebpPack(unittest.TestCase):
   manifest.update(distribution_bytes=1,image_bytes=2);manifest_path.write_text(json.dumps(manifest))
   original={p.name:p.read_bytes() for p in self.dest.iterdir() if p.is_file()}
   encoder=Path(__file__).resolve().parents[1]/'docs/assets/hd-animated/corrections/issue-56/encode_webp.py'
-  for name,args,version in [('versioned',['--version','0.2-rc1'],'0.2-rc1'),('retained',[],'0.1')]:
+  for name,args,version in [('versioned',['--version','0.2'],'0.2'),('retained',[],'0.1')]:
    with self.subTest(name=name):
     output=self.root/name
     subprocess.run([sys.executable,str(encoder),'--source',str(self.dest),'--out',str(output),*args],check=True,capture_output=True,text=True)
@@ -62,4 +62,12 @@ class WebpPack(unittest.TestCase):
   self.assertNotEqual(result.returncode,0)
   self.assertIn('--version must not be empty',result.stderr)
   self.assertFalse(self.dest.exists())
+ def test_candidate_version_matches_downloader_format(self):
+  encoder=Path(__file__).resolve().parents[1]/'docs/assets/hd-animated/corrections/issue-56/encode_webp.py'
+  for version in ['0.2-rc1','2','0..2','0.2/escape','0.2 '+'.','1.'+'0'*19]:
+   with self.subTest(version=version):
+    result=subprocess.run([sys.executable,str(encoder),'--source',str(self.source),'--out',str(self.dest),'--version',version],capture_output=True,text=True)
+    self.assertNotEqual(result.returncode,0)
+    self.assertIn('dotted numeric version',result.stderr)
+    self.assertFalse(self.dest.exists())
 if __name__=='__main__':unittest.main()

@@ -1,5 +1,5 @@
 from pathlib import Path
-import argparse,json,os,hashlib,subprocess,concurrent.futures
+import argparse,json,os,hashlib,subprocess,concurrent.futures,re
 from PIL import Image
 r=Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description='Encode corrected materials without changing native references')
@@ -9,6 +9,8 @@ parser.add_argument('--lossless',action='store_true')
 parser.add_argument('--version',help='Set the output pack version without modifying the source')
 a=parser.parse_args();source=a.source;dest=a.out
 if a.version is not None and not a.version.strip():parser.error('--version must not be empty')
+if a.version is not None and (len(a.version)>20 or not re.fullmatch(r'[0-9]+(?:\.[0-9]+)+',a.version)):
+ parser.error('--version must be a dotted numeric version of at most 20 characters')
 report=dest.parent/(dest.name+'-encoding.json')
 if report.exists():raise FileExistsError(report)
 if dest.exists():raise FileExistsError(dest)
