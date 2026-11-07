@@ -481,9 +481,9 @@ endfunction()
 if(BUILD_TESTING)
     add_executable(test-menu-call-abi tests/original_menu_call_abi.c
         src/main/menu/lists.c src/main/menu/widget.c src/main/item/swap.c
-        src/main/psyq/libds/dssys_3.c)
+        src/main/draw/text.c src/main/psyq/libds/dssys_3.c)
     target_include_directories(test-menu-call-abi PRIVATE include)
-    target_compile_definitions(test-menu-call-abi PRIVATE __psyz)
+    target_compile_definitions(test-menu-call-abi PRIVATE __psyz PE_MODS)
     target_link_libraries(test-menu-call-abi PRIVATE psyz)
     if(MSVC)
         target_compile_options(test-menu-call-abi PRIVATE /UNDEBUG)

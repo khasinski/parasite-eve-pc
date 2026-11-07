@@ -87,6 +87,20 @@ void *Text_LookupTable4(unsigned int index) {
     return Text_NoteLookup(resident, text);
 }
 
+/* Saves keep the edited name as bytes. Providers must avoid pack-local glyph IDs here;
+ * ordinary inventory lookups still receive the translated display name. */
+void *Text_LookupEditableName(unsigned int kind, unsigned int index) {
+    if (kind != 4 && kind != 8) return NULL;
+    ResidentDataPack *pack = &g_ResidentDataPack;
+    TextTableDirectory *directory = (TextTableDirectory *)&pack->bytes[pack->directory.text];
+    unsigned slot = kind == 4 ? 0 : 1;
+    TextOffsetTable *table = (TextOffsetTable *)&directory->bytes[directory->header.tableOffsets[slot]];
+    if (index >= table->header.count) return NULL;
+    void *resident = &table->bytes[table->header.offsets[index]], *text = resident;
+    PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){kind, index, &text, 1}));
+    return Text_NoteLookup(resident, text);
+}
+
 void *Text_LookupTable8(unsigned int index) {
     ResidentDataPack *pack = &g_ResidentDataPack;
     TextTableDirectory *directory;
