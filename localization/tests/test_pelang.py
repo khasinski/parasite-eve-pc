@@ -49,6 +49,43 @@ class PelangTest(unittest.TestCase):
                             "--lang", "xx", "--name", "Test", "-o", str(out), *extra])
         return code, out
 
+    def test_shipped_french_dialogue_fits_long_names_in_known_boxes(self):
+        root = Path(pelang.__file__).resolve().parent
+        csv_path = root / "translations/fr.csv"
+        manifest = root / "data/manifest.json"
+        out = self.dir / "french-preview.pelang"
+        self.assertEqual(pelang.main([
+            "build", str(csv_path), "--submission", "--strings", str(manifest),
+            "--mod-strings", str(root / "data/mod_strings.json"),
+            "--lang", "fr", "--name", "French", "--max-messages", "0", "-o", str(out),
+        ]), 0)
+        _, _, entries = pelang.read_pack(out)
+        sources = pelang.srcman.load(manifest)[0]
+        name_width = layout.name_width(gt.encode("WWWWWWWW"))
+        checked = 0
+        for row in pelang.read_csv(csv_path):
+            key = row["key"]
+            if not key.startswith("dlg/") or not row.get("translation"):
+                continue
+            raw = entries[pelang.fnv1a(key)]
+            if raw.endswith(b"\xf9"):
+                raw = raw[:-1]
+            if b"\xfa" not in list(validation.commands(raw)):
+                continue
+            limit = layout.box_limit(sources[key])
+            # These unbound pages were also reported by the default-box audit.
+            # Testing that box does not establish every possible styled layout.
+            if limit is None and key in ("dlg/M044/053", "dlg/M057/023"):
+                limit = layout.bounds("default")
+            if limit is None:
+                continue
+            checked += 1
+            with self.subTest(key=key):
+                for screen in layout.screens(raw, name_width):
+                    self.assertLessEqual(max(screen), limit[0])
+                    self.assertLessEqual(len(screen), limit[1])
+        self.assertGreater(checked, 500)
+
     def test_the_manifest_builds_the_same_pack_without_any_game_text(self):
         manifest = self.dir / "manifest.json"
         self.assertEqual(pelang.main(["manifest", str(self.strings), "-o", str(manifest)]), 0)
