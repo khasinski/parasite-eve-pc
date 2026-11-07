@@ -490,6 +490,9 @@ Three exact v0.90 pages also add name references absent from the original. The
 importer omits those added addresses and lists them in
 `dialogue_control_adaptations`; existing name commands, waits and choices still
 pass the original strict control checks. Other text variants are not rewritten.
+The exact M271/014 patch-only pause is also omitted without changing its words;
+the native default box fits the rewrapped four-line text. Original pauses remain
+required, and the adaptation is included in the import report.
 
 This imports dialogue and the resident menu labels, names and descriptions. Native rename
 glyph grids remain original. Eight reviewed label abbreviations preserve the original inventory
