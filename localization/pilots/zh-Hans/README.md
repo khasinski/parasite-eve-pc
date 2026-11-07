@@ -10,7 +10,8 @@ Another 36 pages cover Daniel and Ben and the departure for Central Park:
 Another 32 pages cover the workshop argument and Manhattan evacuation:
 A further 18 pages cover Maeda and the museum investigation:
 Another 35 entries cover station conversations and fixed inventory prompts:
-570 entries total.
+Another 17 pages cover the sewer gate, emergency-phone choices and Eve dialogue:
+587 entries total.
 The bank also contains later flashbacks and epilogue dialogue. Other story banks,
 most item names/descriptions and text baked into graphics remain original.
 Numeric/debug pages are intentionally unchanged.

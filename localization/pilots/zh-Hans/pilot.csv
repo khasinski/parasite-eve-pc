@@ -569,3 +569,20 @@ dlg/M041/220,警察：嘿，有人来看你了。,NYPD ambient dialogue and fixe
 dlg/M041/221,警察甲：我们正在整个曼哈顿{br}搜寻伊芙。,NYPD ambient dialogue and fixed prompts preview
 dlg/M041/222,警察乙：她杀了我的伙计们。{br}我一定要抓到她……！,NYPD ambient dialogue and fixed prompts preview
 dlg/M041/223,警察丙：唉，早知道就该{br}去老爸的店里帮忙，{br}不该当警察……！,NYPD ambient dialogue and fixed prompts preview
+dlg/M026/009,{name}：伊芙……在那边？{br}……可是为什么？你是怎么知道的……？,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/010,{name}：？！你是我在剧院{br}见过的那个小女孩……！{br}你迷路了吗……？！,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/011,{name}：……等等！小女孩……！{br}别……走……！,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/012,{name}：……！伊芙到底是怎么{br}到另一边去的？！{wait}这道门明明锁得死死的！！{fb07 2D},Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/013,{name}：……这里有开关和紧急电话……{wait}{choice 3}    按下开关。{br}    使用电话。{br}    取消,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/014,{name}：伊芙！！{fb07 24},Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/015,{name}：{br}站住，别动！,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/016,{name}：……我的身体……{br}又开始……发烫了！！！,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/017,伊芙：哈哈哈……{name}{br}已经准备好一个人来对付我了。{wait}就算你带着别人来，{br}他们也只会被烧死，不是吗？！,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/018,伊芙：除了你……所有人都……{br}你是……,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/019,{name}：告诉我，伊芙……！为什么……？,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/020,{name}：为什么是我？{br}为什么只有我……？,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/021,伊芙：你会明白的。迟早都会……,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/022,伊芙：就算你不明白……也别担心，{br}你的线粒体会……{wait}……它们一直都知道……,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/023,伊芙：我会给你一点时间……{br}让你思考，也让你进化……,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/024,伊芙：总有一天……{br}你会……觉醒……,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+dlg/M026/025,{name}：……{wait}“我”会觉醒……？{br}告诉我你到底想做什么，伊芙！！,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
