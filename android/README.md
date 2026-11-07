@@ -256,3 +256,31 @@ This route has completed all 200,826 VBlanks through Carnegie Hall on an API 35
 ARM64 emulator: the actual phone-created 8192-byte save and final 1 MiB VRAM
 matched desktop byte for byte (FNV-1a `ddbea58f2544300e` and
 `77627bc3feb8cb34`). This is not a full Android campaign or physical-device test.
+
+To compare replay audio against the desktop build, build the desktop executable
+from the **same commit and PsyZ revision** as the installed APK. Add
+`--compare-desktop` before `--native-replay`, and request `--dump-audio`. For
+example, the adapter above can use:
+
+```sh
+exec python3 "$PE_ANDROID_REPLAY_DRIVER" --adb "${ANDROID_ADB:-adb}" \
+  --serial "$ANDROID_SERIAL" --disc disc1.cue \
+  --compare-desktop "$PE_ANDROID_REFERENCE_EXE" \
+  --native-replay "$@" --dump-audio "$PWD/audio.pcm"
+```
+
+Set `PE_ANDROID_REFERENCE_EXE` to the absolute desktop executable path. The
+original `PE_TEST_DISC` must also exist on the desktop. This comparison requires
+1x rendering and checks the complete final game-state diagnostic, exact stereo
+PCM bytes, native VRAM and RGB framebuffer dumps when requested. Both runs use isolated profiles and
+the offline audio clock. The test preserves both captures on mismatch; successful
+comparisons keep the Android capture plus a small `desktop-reference-*` directory
+with the desktop command, state/log and hashes. Matching desktop dumps are removed.
+On the headless API 35 ARM64 emulator, matching desktop/APK revisions produced
+identical complete final states, PCM, native VRAM and RGB framebuffers at
+60,634 and 82,000 VBlanks. The latter includes the first battle (241,323,192
+PCM bytes). A controlled one-bit PCM change and a changed VBlank count are
+rejected by the comparator.
+
+This tests native audio generation and game-clock agreement, not Android's
+physical speaker, latency or background/pause behaviour.
