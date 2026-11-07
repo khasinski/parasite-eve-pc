@@ -180,7 +180,7 @@ jobs:
           SDL_GPU_DRIVER: direct3d12
         run: |
           cmake --build build --target test-psyz-interpolation --parallel 2
-          ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-native-attributes$'
+          ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-native-(attributes|coverage)$'
       - name: Build the native Windows game and test executables
         run: |
           cmake --build build --parallel 2
@@ -197,7 +197,7 @@ jobs:
         env:
           SDL_GPU_DRIVER: direct3d12
         run: |
-          ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(native-attributes|descriptor-batches|frame-interpolation|hd-(coverage|reference|extension)|resource-(upload|readback|reset|resize|swapchain-resize))$'
+          ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(native-(attributes|coverage)|descriptor-batches|frame-interpolation|hd-(coverage|reference|extension)|resource-(upload|readback|reset|resize|swapchain-resize))$'
           ctest --test-dir build --no-tests=error -V -R '^original-gpu-resource-pacing$'
       - name: Require all selected source-only cases to execute
         shell: pwsh

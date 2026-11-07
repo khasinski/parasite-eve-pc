@@ -929,6 +929,11 @@ if(BUILD_TESTING)
         set_tests_properties(original-gpu-native-attributes PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-native-coverage COMMAND test-psyz-interpolation --filter=gpu::native_polygon*)
+        set_tests_properties(original-gpu-native-coverage PROPERTIES TIMEOUT 30 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-frame-interpolation COMMAND test-psyz-interpolation --filter=gpu::interpolated*)
         set_tests_properties(original-gpu-frame-interpolation PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
