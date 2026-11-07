@@ -9,7 +9,7 @@ dlg/M001/014,男子：快走吧，我们该进去了。,Opening-scene pilot; not
 dlg/M001/015,门卫：请各位入座。演出马上开始。,Opening-scene pilot; not a full translation
 dlg/M001/016,门卫：祝您观演愉快。,Opening-scene pilot; not a full translation
 dlg/M001/017,男子：我们去座位吧。第一幕已经开始了。,Opening-scene pilot; not a full translation
-dlg/M001/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Opening-scene pilot; not a full translation
+dlg/M001/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Opening-scene pilot; not a full translation
 dlg/M001/006,要保存当前进度吗？{br}{choice 2}    是{br}    否,Opening-scene pilot; not a full translation
 sys/000,使用,Native menu draft; full story remains untranslated
 sys/001,移动,Native menu draft; full story remains untranslated
@@ -284,19 +284,19 @@ dlg/M001/178,观众：演出开始以后就不该站起来了！,Carnegie/shared
 dlg/M001/179,丹尼尔：抱歉……,Carnegie/shared-scene dialogue draft; original control tokens preserved
 dlg/M001/180,本：你们几个，快点啦！,Carnegie/shared-scene dialogue draft; original control tokens preserved
 dlg/M001/204,{name}：有电话！我得把这里的情况通知警局……,Carnegie/shared-scene dialogue draft; original control tokens preserved
-dlg/M026/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M041/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M044/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M057/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M090/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M125/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M161/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M166/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M191/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M192/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M260/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M275/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
-dlg/M290/002,要丢弃物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M026/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M041/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M044/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M057/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M090/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M125/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M161/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M166/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M191/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M192/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M260/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M275/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
+dlg/M290/002,要把物品放在这里吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/002
 dlg/M026/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
 dlg/M090/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
 dlg/M191/003,物品栏已满。{wait}要替换一件物品吗？{br}{choice 2}    是{br}    否,Shared prompt; exact source match with dlg/M001/003
