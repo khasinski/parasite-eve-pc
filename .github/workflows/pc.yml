@@ -31,8 +31,17 @@ jobs:
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure --no-tests=error
 
-  linux-x86_64:
-    runs-on: ubuntu-24.04
+  linux:
+    name: linux-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
       PSYZ_HEADLESS: '1'
@@ -54,7 +63,7 @@ jobs:
         run: |
           git submodule update --init third_party/psyz
           git -C third_party/psyz submodule update --init external/SDL
-      - name: Build and verify Linux x86-64
+      - name: Build and verify Linux ${{ matrix.arch }}
         run: |
           cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DPE_MODS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build --parallel 4
@@ -77,9 +86,9 @@ jobs:
         run: |
           cargo test --manifest-path save-editor/Cargo.toml --locked
           cargo build --manifest-path save-editor/Cargo.toml --locked --release
-      - name: Package Linux x86-64
+      - name: Package Linux ${{ matrix.arch }}
         run: |
-          stage=package/Parasite-Eve-linux-x86_64
+          stage=package/Parasite-Eve-linux-${{ matrix.arch }}
           mkdir -p "$stage/docs/images" "$stage/licenses" "$stage/mods"
           cp build/parasite-eve-pc README.md CHANGELOG.md LICENSE.md THIRD_PARTY_NOTICES.md "$stage/"
           cp docs/CODE_ORGANIZATION.md "$stage/docs/"
@@ -88,7 +97,7 @@ jobs:
           python3 - <<'PYLICENSE'
           from pathlib import Path
           import shutil
-          dest = Path('package/Parasite-Eve-linux-x86_64/licenses')
+          dest = Path('package/Parasite-Eve-linux-${{ matrix.arch }}/licenses')
           for path in Path('third_party/psyz').rglob('*'):
               if path.is_file() and path.name.lower().startswith(('license', 'copying', 'notice', 'copyright')) and '.git' not in path.parts:
                   target = dest / path
@@ -97,16 +106,16 @@ jobs:
           PYLICENSE
           ldd build/parasite-eve-pc > "$stage/runtime-dependencies.txt"
           git rev-parse HEAD > "$stage/source-commit.txt"
-          tar -czf Parasite-Eve-0.10-linux-x86_64.tar.gz -C package Parasite-Eve-linux-x86_64
-          sha256sum Parasite-Eve-0.10-linux-x86_64.tar.gz > linux-x86_64-sha256.txt
-          editor=package/Parasite-Eve-Save-Editor-0.10-linux-x86_64
+          tar -czf Parasite-Eve-0.11-linux-${{ matrix.arch }}.tar.gz -C package Parasite-Eve-linux-${{ matrix.arch }}
+          sha256sum Parasite-Eve-0.11-linux-${{ matrix.arch }}.tar.gz > linux-${{ matrix.arch }}-sha256.txt
+          editor=package/Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}
           mkdir -p "$editor/licenses"
           cp save-editor/target/release/pe-save-editor LICENSE.md "$editor/"
           python3 - <<'PYEDITORLICENSE'
           from pathlib import Path
           import os, shutil
           registry = Path(os.environ.get('CARGO_HOME', str(Path.home() / '.cargo'))) / 'registry/src'
-          dest = Path('package/Parasite-Eve-Save-Editor-0.10-linux-x86_64/licenses')
+          dest = Path('package/Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}/licenses')
           for index in registry.iterdir():
               for crate in index.iterdir():
                   for path in crate.rglob('*'):
@@ -115,14 +124,14 @@ jobs:
                           target.parent.mkdir(parents=True, exist_ok=True)
                           shutil.copy2(path, target)
           PYEDITORLICENSE
-          tar -czf Parasite-Eve-Save-Editor-0.10-linux-x86_64.tar.gz -C package Parasite-Eve-Save-Editor-0.10-linux-x86_64
+          tar -czf Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}.tar.gz -C package Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: linux-x86_64-package
+          name: linux-${{ matrix.arch }}-package
           path: |
-            Parasite-Eve-0.10-linux-x86_64.tar.gz
-            Parasite-Eve-Save-Editor-0.10-linux-x86_64.tar.gz
-            linux-x86_64-sha256.txt
+            Parasite-Eve-0.11-linux-${{ matrix.arch }}.tar.gz
+            Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}.tar.gz
+            linux-${{ matrix.arch }}-sha256.txt
             build/linux-source-only.xml
 
   windows-source-only:
@@ -206,8 +215,8 @@ jobs:
       - name: Package Windows game and save editor
         shell: pwsh
         run: |
-          $game = 'package/Parasite-Eve-0.10-windows-x86_64'
-          $editor = 'package/Parasite-Eve-Save-Editor-0.10-windows-x86_64'
+          $game = 'package/Parasite-Eve-0.11-windows-x86_64'
+          $editor = 'package/Parasite-Eve-Save-Editor-0.11-windows-x86_64'
           New-Item -ItemType Directory -Force "$game/docs/images", "$game/mods", "$game/licenses", $editor | Out-Null
           Copy-Item build/parasite-eve-pc.exe, README.md, CHANGELOG.md, LICENSE.md, THIRD_PARTY_NOTICES.md $game
           Copy-Item docs/images/gameplay.png "$game/docs/images/"
@@ -229,14 +238,14 @@ jobs:
             Copy-Item $_.FullName $target
           }
           'Open pe-save-editor.exe to edit a backup of your save. Optional: select your North American disc image for item data. The game must be closed while replacing saves.' | Set-Content "$editor/Read me.txt"
-          Compress-Archive -Path $game -DestinationPath Parasite-Eve-0.10-windows-x86_64-experimental.zip
-          Compress-Archive -Path $editor -DestinationPath Parasite-Eve-Save-Editor-0.10-windows-x86_64.zip
+          Compress-Archive -Path $game -DestinationPath Parasite-Eve-0.11-windows-x86_64-experimental.zip
+          Compress-Archive -Path $editor -DestinationPath Parasite-Eve-Save-Editor-0.11-windows-x86_64.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-release-packages
           path: |
-            Parasite-Eve-0.10-windows-x86_64-experimental.zip
-            Parasite-Eve-Save-Editor-0.10-windows-x86_64.zip
+            Parasite-Eve-0.11-windows-x86_64-experimental.zip
+            Parasite-Eve-Save-Editor-0.11-windows-x86_64.zip
       - name: Diagnose native Windows crash handler failures
         if: failure()
         run: |
