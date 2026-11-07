@@ -27,7 +27,7 @@ sys/012,物品,Native menu draft; full story remains untranslated
 sys/014,选择武器,Native menu draft; full story remains untranslated
 sys/015,选择弹药箱,Native menu draft; full story remains untranslated
 sys/016,被偷走了,Native menu draft; full story remains untranslated
-sys/017,偷到了,Native menu draft; full story remains untranslated
+sys/017,已偷得,Native menu draft; full story remains untranslated
 sys/018,物品过多,Native menu draft; full story remains untranslated
 sys/019,没有携带物品！,Native menu draft; full story remains untranslated
 sys/020,卡槽1,Native menu draft; full story remains untranslated
@@ -586,3 +586,51 @@ dlg/M026/022,伊芙：就算你不明白……也别担心，{br}你的线粒体
 dlg/M026/023,伊芙：我会给你一点时间……{br}让你思考，也让你进化……,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
 dlg/M026/024,伊芙：总有一天……{br}你会……觉醒……,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
 dlg/M026/025,{name}：……{wait}“我”会觉醒……？{br}告诉我你到底想做什么，伊芙！！,Sewer gate and Eve dialogue; original controls and three-way phone/switch choice retained
+item/000,弹药 +6,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/001,弹药 +15,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/002,弹药 +30,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/003,DNA子弹,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/004,火箭弹,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/005,回复药1,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/006,回复药2,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/007,回复药3,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/008,回复药4,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/009,全回复,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/012,解毒剂,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/013,治盲剂,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/014,镇静剂,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/015,解僵剂,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/016,万能药,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/017,复活药,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/018,防御 +1,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/019,废料,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/020,收藏卡,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/021,工具,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/022,超工具,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/025,弹药箱,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/026,火箭箱,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+item/027,前田箱,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/000,子弹,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/001,子弹,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/002,子弹,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/003,前田的子弹,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/004,供火箭发射器使用,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/005,回复45点HP,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/006,回复90点HP,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/007,回复180点HP,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/008,回复400点HP,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/009,回复全部HP,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/012,解除并预防中毒,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/013,解除并预防失明,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/014,解除并预防混乱,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/015,解除并预防僵硬,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/016,解除所有异常状态,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/017,死亡时恢复生命,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/018,防御力增加1点,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/019,损坏的物品,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/020,普通收藏卡,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/021,转移装备的参数或效果,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/022,转移装备的参数或效果,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/025,子弹箱,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/026,火箭弹箱,Common consumable/ammunition/tool names and descriptions; original item effects and values retained
+desc/027,前田的子弹箱,Common consumable/ammunition/tool names and descriptions; original item effects and values retained

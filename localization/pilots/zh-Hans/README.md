@@ -11,10 +11,17 @@ Another 32 pages cover the workshop argument and Manhattan evacuation:
 A further 18 pages cover Maeda and the museum investigation:
 Another 35 entries cover station conversations and fixed inventory prompts:
 Another 17 pages cover the sewer gate, emergency-phone choices and Eve dialogue:
-587 entries total.
+Another 48 entries cover common ammunition, healing/status items, tools and their descriptions:
+635 entries total.
 The bank also contains later flashbacks and epilogue dialogue. Other story banks,
-most item names/descriptions and text baked into graphics remain original.
+other item names/descriptions and text baked into graphics remain original.
 Numeric/debug pages are intentionally unchanged.
+
+The common-item expansion was checked in 24 original item panels and 96 native
+stolen-item popup variants. All 221 state snapshots and PCM audio matched the
+previous preview. These are isolated renderer/menu checks, not a combat-playthrough
+claim. Four short labels respect the original 32-byte popup buffer; descriptions
+retain the full item meaning.
 
 Build it using a licensed Chinese font you supply, for example Noto Sans CJK SC:
 
