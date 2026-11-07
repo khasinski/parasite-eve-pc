@@ -276,6 +276,16 @@ PCM bytes, native VRAM and RGB framebuffer dumps when requested. Both runs use i
 the offline audio clock. The test preserves both captures on mismatch; successful
 comparisons keep the Android capture plus a small `desktop-reference-*` directory
 with the desktop command, state/log and hashes. Matching desktop dumps are removed.
+
+To start a replay from an existing game, add `--save /absolute/path/to/save`
+before `--native-replay`. Supply an original 8192-byte native save, not a full
+memory-card image. The adapter copies it to slot A of an isolated card on both
+platforms; the source file and the player's installed cards are untouched.
+Use prerecorded controller input to choose Continue and load that slot normally.
+With `--compare-desktop`, the final card bytes must also match, and the proof
+records both the input and final save hashes. Run each replay in a fresh directory
+because it preserves the resulting card in `bu00` for inspection.
+
 On the headless API 35 ARM64 emulator, matching desktop/APK revisions produced
 identical complete final states, PCM, native VRAM and RGB framebuffers at
 60,634 and 82,000 VBlanks. The latter includes the first battle (241,323,192

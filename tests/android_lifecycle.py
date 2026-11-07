@@ -24,11 +24,23 @@ p.add_argument('--hd-render', type=Path, help='Check native HD underlays in both
 p.add_argument('--hd-pack', type=Path, help='Reviewed HD material pack required by --hd-render')
 p.add_argument('--compare-desktop', type=Path,
                help='Compare a 1x native replay with a same-revision desktop executable; requires --dump-audio')
+p.add_argument('--save', type=Path,
+               help='Copy an original 8192-byte save into the isolated replay card on both platforms')
 p.add_argument('--native-replay', nargs=argparse.REMAINDER,
                help='Run remaining native test executable arguments on Android')
 a = p.parse_args()
 if a.compare_desktop and (not a.native_replay or a.tls_only or a.hd_render or a.hd_pack):
     p.error('--compare-desktop requires only --native-replay')
+save_bytes = None
+if a.save:
+    if not a.native_replay or a.tls_only or a.hd_render or a.hd_pack:
+        p.error('--save requires only --native-replay')
+    try:
+        save_bytes = a.save.read_bytes()
+    except OSError as error:
+        p.error(str(error))
+    if len(save_bytes) != 8192:
+        p.error('--save requires an original 8192-byte native save')
 if '/' in a.disc or '\\' in a.disc or not a.disc.lower().endswith('.cue'):
     p.error('--disc must be an imported CUE basename')
 pkg = 'com.khasinski.parasiteeve'
@@ -169,6 +181,9 @@ def compare_desktop(options, android_state, outputs, limit):
     reference = Path(tempfile.mkdtemp(prefix='desktop-reference-',
                                      dir=outputs['--dump-audio'].resolve().parent))
     (reference/'android-state.json').write_text(json.dumps(android_state, indent=2)+'\n')
+    if save_bytes is not None:
+        (reference/'bu00').mkdir()
+        (reference/'bu00/BASLUS-006620000000A').write_bytes(save_bytes)
     command = [str(a.compare_desktop.resolve())]
     destinations = {}
     index = 0
@@ -217,6 +232,13 @@ def compare_desktop(options, android_state, outputs, limit):
         actual, expected = digest(outputs[option]), digest(destinations[option])
         assert actual == expected, 'Android/desktop '+option+' differs: '+str((actual, expected))+'; evidence: '+str(reference)
         proof['outputs'][option] = actual
+    if save_bytes is not None:
+        android_card = Path('bu00/BASLUS-006620000000A').read_bytes()
+        desktop_card = (reference/'bu00/BASLUS-006620000000A').read_bytes()
+        assert len(desktop_card) == 8192 and android_card == desktop_card, \
+            'Android/desktop save differs; evidence: '+str(reference)
+        proof['save_sha256'] = hashlib.sha256(desktop_card).hexdigest()
+        proof['input_save_sha256'] = hashlib.sha256(save_bytes).hexdigest()
     (reference/'proof.json').write_text(json.dumps(proof, indent=2)+'\n')
     # The Android capture remains at the requested destination. Matching large
     # desktop dumps can be removed; keep the command, log and comparison proof.
@@ -282,12 +304,15 @@ def native_replay(options, profile_files=None, max_seconds=None):
     remote += ['--headless-gpu', '--test-android-disc-dialogs']
     try:
         adb('shell', 'run-as', pkg, 'test', '-f', shlex.quote('files/discs/'+a.disc))
-        if profile_files is not None:
+        if profile_files is not None or save_bytes is not None:
             import io
             import tarfile
             data = io.BytesIO()
+            fixture = dict(profile_files(absolute)) if profile_files is not None else {}
+            if save_bytes is not None:
+                fixture['memory-cards/bu00/BASLUS-006620000000A'] = save_bytes
             with tarfile.open(fileobj=data, mode='w') as archive:
-                for name, payload in profile_files(absolute).items():
+                for name, payload in fixture.items():
                     assert not name.startswith('/') and '..' not in Path(name).parts
                     entry = tarfile.TarInfo(name)
                     entry.size = len(payload)
