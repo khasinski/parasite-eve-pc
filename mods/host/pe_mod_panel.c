@@ -19,7 +19,6 @@
 #include <psyz/video.h>
 
 #include "pe_mod_host.h"
-#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "ui/pe_ui.h"
 #include "ui/pe_utf8.h"
@@ -193,7 +192,7 @@ static const char *pe_help_text(void) {
     const PeMenuPageInfo *info;
     const char *description;
     int off;
-    if (!e) return pe_l10n_ui("Nothing here yet.");
+    if (!e) return "Nothing here yet.";
     if (e->row >= 0) {
         description = pe_menu_row(e->row)->description;
         off = !pe_menu_row_active(pe_menu_row(e->row));
@@ -203,7 +202,6 @@ static const char *pe_help_text(void) {
         off = !pe_page_active(e->page);
     }
     if (!off) return description;
-    description = pe_l10n_ui(description);
     snprintf(text, sizeof text, "%s%s", PE_OFF_NOTE, description);   /* browse and set up, nothing runs */
     return text;
 }
@@ -219,7 +217,7 @@ static const char *pe_key_hints(void) {
     if (e && e->row < 0) action = "Enter open";
     else if (e && pe_menu_row(e->row)->kind == PE_ROW_ACTION) action = "Enter run";
     else if (e && pe_menu_row_adjustable(pe_menu_row(e->row))) action = "Left/Right change";
-    snprintf(hints, sizeof hints, pe_l10n_ui("Up/Down select   %s%s%s   F1 close"), action, *action ? "   " : "", back);
+    snprintf(hints, sizeof hints, "Up/Down select   %s%s%s   F1 close", action, *action ? "   " : "", back);
     return hints;
 }
 
@@ -414,14 +412,14 @@ static void pe_paint(int w, int h) {
         char page[160] = "";
         float em = 28 * s, track = 5 * s, room = (PANEL_W - 2 * PANEL_PAD) * s;
         if (sub) {
-            pe_upper(page, sizeof page, pe_l10n_ui(strrchr(s_panel.path, '/') + 1));
+            pe_upper(page, sizeof page, strrchr(s_panel.path, '/') + 1);
             room -= pe_spaced_width(page, 14 * s, 3 * s) + 32 * s;
         }
         if (!s_panel.path[0]) snprintf(text, sizeof text, "MODS");
         else {
             char top[96];
             snprintf(top, sizeof top, "%.*s", (int)strcspn(s_panel.path, "/"), s_panel.path);
-            pe_upper(text, sizeof text, pe_l10n_ui(top));
+            pe_upper(text, sizeof text, top);
         }
         while (em > 16 * s && pe_spaced_width(text, em, track) > room) { em -= 1 * s; track = em * 5 / 28; }
         pe_spaced(PANEL_PAD * s, 66 * s, em, track, text, pe_look_text, PE_ALIGN_LEFT);
