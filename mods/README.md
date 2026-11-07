@@ -451,7 +451,9 @@ without touching these files.
   When rebuilding packs for Day 1 long-dress scenes, the generator must accept the shortest
   23-part row (300 bytes, not the jacket-only minimum of 372). In the bridge generator, check
   `FP_BYTES` and invalidate `tools/pe_assets/skins/room_rows.pkl` before rebuilding; changing the
-  threshold alone keeps the old cached set. Updated `rooms.bin` copies are required as well as
+  threshold alone keeps the old cached set. The generator must also collect the bank 11 bundle
+  rows 28–34 (image entry 19), not only rows installed by room archives: none of those seven
+  fingerprints occurs in the room-only scan of either US disc. Updated `rooms.bin` copies are required as well as
   the loader fix: updating the game executable does not repair existing skin assets.
 - `pe_wardrobe_menu.c`: a Wardrobe row in Aya's main menu (icon: the Equip Armor icon, twice) once a
   costume is owned. Uses the Bestiary's six-row list, right-hand model preview and three-row details
