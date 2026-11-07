@@ -167,6 +167,33 @@ class PelangTest(unittest.TestCase):
         self.assertIn(b"\xfb\x09\x02", choices)
         self.assertEqual(int.from_bytes(out.read_bytes()[4:8], "little"), 2)
 
+    def test_shipped_chinese_preview_fits_eight_character_player_names(self):
+        font = os.getenv("PE_TEST_CJK_FONT")
+        if not font:
+            self.skipTest("Set PE_TEST_CJK_FONT to check the shipped Chinese preview")
+        root = Path(pelang.__file__).resolve().parent
+        csv_path = root / "pilots/zh-Hans/pilot.csv"
+        out = self.dir / "chinese-preview.pelang"
+        self.assertEqual(pelang.main([
+            "build", str(csv_path), "--submission", "--strings", str(root / "data/manifest.json"),
+            "--lang", "zh-Hans", "--name", "Chinese preview", "--cjk-font", font,
+            "--max-messages", "0", "-o", str(out),
+        ]), 0)
+        _, _, entries = pelang.read_pack(out)
+        name_width = layout.name_width(gt.encode("WWWWWWWW"))
+        self.assertEqual(name_width, 88)
+        for row in pelang.read_csv(csv_path):
+            if not row["key"].startswith("dlg/") or not row.get("translation"):
+                continue
+            raw = entries[pelang.fnv1a(row["key"])]
+            if raw.endswith(b"\xf9"):
+                raw = raw[:-1]
+            with self.subTest(key=row["key"]):
+                # Default dialogue starts at x=20 and has 296 pixels for text.
+                # Font dictionary indices must not hide a long substituted name.
+                for screen in layout.screens(raw, name_width):
+                    self.assertLessEqual(max(screen), 296)
+
     def test_build_refuses_missing_glyphs_and_changed_choices(self):
         code, _ = self.build({"item/000": "日本語"})              # CJK: not in the game font yet
         self.assertEqual(code, 1)
