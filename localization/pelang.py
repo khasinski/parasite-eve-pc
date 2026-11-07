@@ -412,7 +412,7 @@ ITALIAN_PATCH_SHA256 = "1c1f414eb88adf080063c673f094e625aaca1ee40f26c3b628c931c7
 ITALIAN_ACCENTS = {0x4D: "à", 0x4E: "è", 0x4F: "é", 0x50: "ì", 0x51: "ò", 0x52: "ù"}
 
 
-def _dialogue_pages(game, number):
+def _dialogue_pages(game, number, *, italian_separators=False):
     room = game.room(number)
     if room is None:
         raise ValueError(f"Missing dialogue room M{number:03}")
@@ -422,7 +422,19 @@ def _dialogue_pages(game, number):
     for index in range(table >> 22):
         slot = word((table & 0x3FFFFF) + index * 8 + 4)
         if slot >> 24 == 1:
-            return gt.pages(data[slot & 0xFFFFFF:])[0]
+            bank = data[slot & 0xFFFFFF:]
+            pages, used = gt.pages(bank)
+            # The verified Italian v0.90 M026 bank has an extra newline after
+            # a page terminator. It is outside the page, not a script command.
+            while italian_separators and bank[used:used + 2] == b"\xf7\xfe":
+                following, count = gt.pages(bank[used + 1:])
+                if not count:
+                    break
+                if pages.keys() & following.keys():
+                    raise ValueError("Italian bank repeats a dialogue page ID")
+                pages.update(following)
+                used += count + 1
+            return pages
     raise ValueError(f"Missing English dialogue bank in M{number:03}")
 
 
@@ -433,7 +445,8 @@ def _translated_dialogue_rows(original, translated, catalog, language="it"):
     rows, fallback = [], []
     for bank in catalog["banks"]:
         number = bank["locations"][disc]
-        before, after = _dialogue_pages(original, number), _dialogue_pages(translated, number)
+        before = _dialogue_pages(original, number)
+        after = _dialogue_pages(translated, number, italian_separators=language == "it")
         prefix = f'dlg/{bank["key"]}/'
         expected = {int(key[len(prefix):]) for key in catalog["entries"] if key.startswith(prefix)}
         if set(before) != expected:

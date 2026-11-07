@@ -483,6 +483,9 @@ Use new CSV and report paths. The report lists pages that retain the original te
 translated pages are missing or their control commands differ. Original page IDs and text
 hashes must match the US catalog; an unknown patch, region or glyph fails the import.
 The six accented letters are mapped from the patch's original font into the port's Latin font.
+The v0.90 M026 bank has an extra newline between page records. The importer
+accepts that separator for this verified Italian profile, recovering the following
+18 pages; original banks and other profiles retain strict contiguous parsing.
 
 This imports dialogue and the resident menu labels, names and descriptions. Native rename
 glyph grids remain original. Eight reviewed label abbreviations preserve the original inventory

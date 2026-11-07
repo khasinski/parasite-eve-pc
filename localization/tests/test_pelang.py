@@ -467,6 +467,28 @@ class ItalianImportTest(unittest.TestCase):
                 "entries": {f"dlg/M001/{page:03}": {"english_hash": english_hash(gt.decode(raw))}
                             for page, raw in pages.items()}}
 
+    def test_italian_interpage_newline_preserves_following_pages(self):
+        original = {0: gt.encode("First"), 1: gt.encode("Second{wait}")}
+        translated = {0: gt.encode("Primo"), 1: gt.encode("Secondo{wait}")}
+        game = self.game(translated)
+        room = game.room(1)
+        split = 80 + 2 + len(translated[0]) + 1
+        room.data = room.data[:split] + b"\xf7" + room.data[split:]
+        game.room = lambda number: room
+        # Original/other profiles keep the strict contiguous-bank parser.
+        self.assertEqual(set(pelang._dialogue_pages(game, 1)), {0})
+        rows, fallback = pelang._translated_dialogue_rows(self.game(original), game, self.catalog(original))
+        self.assertEqual([r["translation"] for r in rows], ["Primo", "Secondo{wait}"])
+        self.assertEqual(fallback, [])
+
+    def test_italian_separator_rejects_duplicate_page_ids(self):
+        game = self.game({0: gt.encode("Primo")})
+        room = game.room(1)
+        room.data += b"\xf7\xfe\x00" + gt.encode("Duplicate") + b"\xff"
+        game.room = lambda number: room
+        with self.assertRaisesRegex(ValueError, "repeats a dialogue page ID"):
+            pelang._dialogue_pages(game, 1, italian_separators=True)
+
     def test_accents_unchanged_rows_and_original_control_fallback(self):
         original = {0: gt.encode("Hello"), 1: gt.encode("Same"),
                     2: gt.encode("Missing"), 3: gt.encode("Wait{wait}")}
