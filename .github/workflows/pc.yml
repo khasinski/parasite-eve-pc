@@ -65,6 +65,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build pkg-config libcurl4-openssl-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libdecor-0-dev libvulkan-dev libxtst-dev libxinerama-dev wayland-protocols libdrm-dev libgbm-dev libgles2-mesa-dev
+          sudo apt-get install -y python3-pil webp
+      - name: Verify HD pack authoring
+        run: |
+          /usr/bin/python3 tests/hd_pack_png.py
+          /usr/bin/python3 tests/hd_pack_webp.py
       - name: Fetch PsyZ and SDL
         run: |
           git submodule update --init third_party/psyz
