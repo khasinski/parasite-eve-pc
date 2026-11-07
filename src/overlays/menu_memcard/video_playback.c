@@ -150,7 +150,11 @@ s32 MenuCard_PlayVideo(s32 index) {
             s16 *remainingPtr=&g_SeqElapsed;
             do {
                 s32 left = *remainingPtr;
-                if (left<=0) break;
+                if (left <= 0) {
+                    DecDCToutCallback(0);
+                    MenuCard_ResetDisplayState();
+                    break;
+                }
                 Field_HandleStateTransition();
                 if (!(s8)MenuCard_StepVideo()) {
                     MenuCard_ResetDisplayState();

@@ -1,3 +1,8 @@
+    if(argc==2 && !strcmp(argv[1],"--movie-early-exit")){
+        const char *path=getenv("PE_TEST_DISC");if(!path || !*path)return getenv("PE_REQUIRE_GAME_ASSETS")?1:77;
+        PeDisc disc={0};if(!pe_disc_open(&disc,path))return 1;
+        int valid=original_movie_early_exit(&disc);g_CdImage=NULL;pe_disc_close(&disc);return valid?0:1;
+    }
     if(argc==2 && !strcmp(argv[1],"--m273-landing-cycle"))return original_m273_landing_cycle()?0:1;
     if(argc==2 && !strcmp(argv[1],"--callback-allocation-failure"))return original_callback_allocation_failure()?0:1;
     if(argc==2 && !strcmp(argv[1],"--m273-effect-pointers")){

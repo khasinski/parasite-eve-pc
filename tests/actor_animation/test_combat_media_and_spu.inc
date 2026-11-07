@@ -2041,6 +2041,53 @@ static int original_movie_uploads(PeDisc *disc)
     return valid;
 }
 
+/* Interrupt only the elapsed counter after an actual decoded frame. This
+ * exercises PlayVideo's early return while its MDEC/audio/display are live. */
+static int movie_early_exit_value, movie_early_exit_injected, movie_early_exit_reading;
+static void movie_early_exit_tick(void)
+{
+    if (!movie_early_exit_injected && g_DrawEnabled.bits && g_SeqElapsed >= 2) {
+        short pcm[128];
+        movie_early_exit_reading = Psyz_CdPullSamples(pcm, 64) > 0;
+        g_SeqElapsed = movie_early_exit_value;
+        movie_early_exit_injected = 1;
+    }
+}
+static int original_movie_early_exit(PeDisc *disc)
+{
+    g_CdImage = disc;
+    ResetGraph(0);
+    for (int scenario = 0; scenario < 4; ++scenario) {
+        DISPENV displays[2]; DRAWENV draws[2];
+        memcpy(displays, g_RenderDispEnvArray, sizeof(displays));
+        memcpy(draws, g_RenderDrawEnvArray, sizeof(draws));
+        g_DrawEnabled.bits = 0; g_FieldPadBits = 0;
+        g_GameStateFlagsWord = 0x400;
+        movie_early_exit_value = (scenario & 1) ? -1 : 0;
+        movie_early_exit_injected = movie_early_exit_reading = 0;
+        VSyncCallbacks(0, movie_early_exit_tick);
+        int result = MenuCard_PlayVideo(scenario / 2);
+        VSyncCallbacks(0, NULL);
+        Pe1MdecCallback callback = DecDCToutCallback(NULL);
+        short pcm[128];
+        int stopped = Psyz_CdPullSamples(pcm, 64) == 0;
+        if (!movie_early_exit_injected || (scenario >= 2 && !movie_early_exit_reading) || result || callback || !stopped ||
+            g_DrawEnabled.bits || g_GameStateFlagsWord != 0x400 ||
+            g_MenuCardScreenVideoDecodeBuffer0 || g_MenuCardScreenVideoDecodeBuffer1 ||
+            g_MenuCardScreenVideoSliceBuffer0 || g_MenuCardScreenVideoSliceBuffer1 ||
+            g_MenuCardScreenVideoVlcTable || g_MenuCardScreenVideoStreamRing ||
+            memcmp(displays, g_RenderDispEnvArray, sizeof(displays)) ||
+            memcmp(draws, g_RenderDrawEnvArray, sizeof(draws))) {
+            fprintf(stderr, "Movie early exit %d: injected=%d result=%d active=%u callback=%d stopped=%d\n",
+                    movie_early_exit_value, movie_early_exit_injected, result,
+                    g_DrawEnabled.bits, callback != NULL, stopped);
+            return 0;
+        }
+    }
+    puts("Movie early exits at zero/negative elapsed count restore display, clear all six buffers and decoder callback, and stop CD audio");
+    return 1;
+}
+
 static int original_video_stream_errors(void)
 {
     static u8 image[2352*2];
