@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe1/text_render.h"
 #include "pe1/draw_state.h"
 #include "pe1/game_state.h"
 #include "pe1/inventory.h"
@@ -1017,7 +1018,10 @@ int Menu_StepNameEntry(MenuWidgetNode *parent, unsigned int flags)
             index = page->cursor_y + 0x73;
         text = Text_LookupTable4(index);
         g_MenuItemIconGlyphTable = text;
-        Save_AppendMetadataChar(text[MenuWidget_GridCellIndex(node)]);
+        {
+            const u8 *letter = PeText_NthLetter(text, (unsigned)MenuWidget_GridCellIndex(node));
+            if (letter) Save_AppendMetadataLetter(letter, PeText_LetterBytes(letter));
+        }
         Menu_PlayConfirmSound();
     } else if (flags & 0x40) {
         if (Save_DeleteMetadataChar())

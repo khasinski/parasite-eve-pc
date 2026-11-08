@@ -310,6 +310,7 @@ add_library(parasite-eve-original OBJECT
     src/main/draw/prim_color.c
     src/main/draw/frame.c
     src/main/draw/text.c
+    src/main/draw/text_render.c
     src/main/draw/textbox.c
     src/overlays/menu_memcard/list_screen.c
     src/overlays/menu_memcard/video_playback.c
@@ -479,9 +480,14 @@ function(pe_add_common_unit_test target_name test_name source_file)
 endfunction()
 
 if(BUILD_TESTING)
+    add_executable(test-text-render tests/text_render_test.c src/main/draw/text_render.c)
+    target_include_directories(test-text-render PRIVATE include)
+    target_compile_definitions(test-text-render PRIVATE __psyz PE_MODS)
+    target_link_libraries(test-text-render PRIVATE psyz)
+    add_test(NAME text-render COMMAND test-text-render)
     add_executable(test-menu-call-abi tests/original_menu_call_abi.c
         src/main/menu/lists.c src/main/menu/widget.c src/main/item/swap.c
-        src/main/draw/text.c src/main/psyq/libds/dssys_3.c)
+        src/main/draw/text.c src/main/draw/text_render.c src/main/psyq/libds/dssys_3.c)
     target_include_directories(test-menu-call-abi PRIVATE include)
     target_compile_definitions(test-menu-call-abi PRIVATE __psyz PE_MODS)
     target_link_libraries(test-menu-call-abi PRIVATE psyz)
