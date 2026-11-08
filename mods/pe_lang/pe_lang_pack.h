@@ -12,6 +12,8 @@
 
 #define PE_LANG_PACK_VERSION 1u /* original format; readers additionally accept CJK v2 and letter table v3 */
 #define PE_LANG_LETTER_SIZE 80u /* one record of a pack's letter table, see pe_lang_letter_compose */
+#define PE_LANG_STRETCH_MAX 96u /* letters in one F1 C6 stretch (PE_TEXT_ITEM_LETTERS) */
+#define PE_LANG_NAME_LETTERS 999u /* two-byte name letters, FB 01 .. FE F9 */
 
 typedef struct PeLangPack {
     unsigned char *data;    /* the whole file, owned by the pack */
@@ -19,6 +21,9 @@ typedef struct PeLangPack {
     unsigned count;
     unsigned entries_at, cjk_offset, cjk_count;
     unsigned letters_offset, letter_count; /* the pack's own letters, by rising code */
+    unsigned stretches_offset, stretch_count; /* v4: the text renderer's stretches */
+    unsigned widths_offset;  /* v4: one width per dictionary letter, or 0 (all 12) */
+    unsigned names_offset, name_count; /* v4: the name letters' Unicode, letter 1 first */
     unsigned *unicode; /* 241 codes when it has any (owned), else NULL: the fixed codes hold */
     char lang[16], name[32];
     char **utf8; /* optional decoded plain interface labels, owned; never serialized */
@@ -37,6 +42,15 @@ static inline const unsigned char *pe_lang_pack_letter(const PeLangPack *pack, u
     return pack->data + pack->letters_offset + index * PE_LANG_LETTER_SIZE;
 }
 int pe_lang_pack_has_letter(const PeLangPack *pack, unsigned code);
+
+/* Stretch `id` (F1 C6 hi lo, hi * 240 + lo): its Unicode letters in reading order, *count of them;
+ * NULL when the pack has no such stretch. */
+const uint32_t *pe_lang_pack_stretch(const PeLangPack *pack, unsigned id, unsigned *count);
+/* The Unicode letter of a two-byte name letter, `paged` = (page byte - FA) << 8 | byte, where
+ * letter n (from 1) is page byte FB + (n / 250), byte n % 250; 0 when the pack has none. */
+unsigned pe_lang_pack_name_letter(const PeLangPack *pack, unsigned paged);
+/* How far the pen moves after dictionary letter `index` (12 for packs without widths). */
+unsigned pe_lang_pack_glyph_width(const PeLangPack *pack, unsigned index);
 
 /* Take `data` (malloc'd, `size` bytes) as a pack after checking every offset in it. Returns 0 and
  * owns the data, or -1 and frees it: a damaged pack is never half used. */

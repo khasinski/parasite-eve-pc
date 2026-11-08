@@ -157,9 +157,16 @@ class Packs(unittest.TestCase):
         atlas.letters = table_for("ă")
         atlas.codes.update(atlas.letters.codes)
         source = {"text": "Aya", "english_hash": ""}
-        raw, errors, _ = pelang.check_row("sys/030", "ă", source, {}, atlas=atlas)
+        # one-byte packs (--bytes-only) still refuse it: another pack reads that code as another letter
+        raw, errors, _ = pelang.check_row("sys/030", "ă", source, {}, atlas=atlas, name_letters=False)
         self.assertIsNone(raw)
         self.assertIn("saved player name", errors[0])
+        # with name letters it is allowed, and the saved name gets a two-byte name letter instead
+        from petext import names
+        raw, errors, _ = pelang.check_row("sys/030", "ă", source, {}, atlas=atlas)
+        self.assertEqual(errors, [])
+        out, letters_in_names, errors = names.convert_entries({"sys/030": raw}, atlas)
+        self.assertEqual((out["sys/030"], letters_in_names.letters, errors), (b"\xfb\x01", ["ă"], []))
 
 
 if __name__ == "__main__":

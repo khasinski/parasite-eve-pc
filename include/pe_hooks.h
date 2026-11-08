@@ -67,6 +67,9 @@ typedef enum PeHookId {
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
     PE_HOOK_DISC_READ, /* PeHookDiscRead: PE.IMG sectors just read, before the game looks at them;
                         * their bytes may be changed in place (a translation's pictures) */
+    PE_HOOK_TEXT_STRETCH, /* PeHookTextStretch: the Unicode letters of an F1 C6 stretch; nonzero
+                           * gives them (pe1/text_render.h) */
+    PE_HOOK_TEXT_LETTER,  /* PeHookTextLetter: how a Unicode letter draws; nonzero handles it */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -134,6 +137,28 @@ typedef struct PeHookDiscRead {
     unsigned count;      /* sectors read, 2048 bytes each */
     unsigned char *data; /* where they were read to */
 } PeHookDiscRead;
+
+/* The text renderer asks for a stretch's letters. The provider keeps them alive until the active
+ * language changes. */
+typedef struct PeHookTextStretch {
+    unsigned id;              /* F1 C6 hi lo: hi * 240 + lo */
+    const unsigned *letters;  /* provider: Unicode, in reading order */
+    unsigned count;
+} PeHookTextStretch;
+
+/* The text renderer asks how a Unicode letter draws, before the game's own English set. A provider
+ * either names a one-byte game code that draws it, or puts it in a 12 x 12 cell of the font page
+ * (only when draw is nonzero: measuring never uploads) and gives that cell and the advance. */
+typedef struct PeHookTextLetter {
+    unsigned style;           /* PeTextStyle */
+    unsigned letter;          /* Unicode; 0 when `paged` names the letter instead */
+    unsigned paged;           /* a two-byte name letter (FB-FE then a byte): (page byte - FA) << 8
+                               * | byte; the provider gives its Unicode letter's drawing, else 0 */
+    int draw;
+    int code;                 /* provider: the game code (0x00-0xF0) that draws it, or -1 */
+    unsigned char u, v;       /* provider, when code is -1: the cell on font page 0 */
+    unsigned advance;         /* provider, when code is -1 */
+} PeHookTextLetter;
 
 typedef struct PeHookRewards {
     int exp;

@@ -1,5 +1,6 @@
 #include "common.h"
 #include "pe_hooks.h"
+#include "pe1/text_render.h"
 #include "pe1/mod_text.h"
 #include "pe1/draw_state.h"
 #include "pe1/boot_disc_check.h"
@@ -24,7 +25,7 @@ TextboxGlyphPacket g_TextboxChoiceCursor[2];
 RenderModeTilePacket g_TextboxFogTilePackets[2];
 u8 g_DialogueChoiceCursor;
 u8 g_PlayerMovementEnabled;
-TextboxNameGlyphs g_TextboxNameGlyphs = {{0x10, 0x48, 0x30, 0, 0, 0, 0, 0, 0}, 3};
+TextboxNameGlyphs g_TextboxNameGlyphs = {{0x10, 0x48, 0x30}, 3};
 
 /* Native paged packets retain the original mode+primitive command order. */
 void Draw_InitDrawModeSprtPacket(void *raw, int tpage) {
@@ -230,28 +231,38 @@ u8 g_TextboxGlyphColorR;
 u8 g_TextboxGlyphColorG;
 u8 g_TextboxGlyphColorB;
 
-/* 0 keeps the native byte path, -1 means the packet pool is full. */
-static int Textbox_ExtendedGlyph(const u8 *text, TextboxGlyphPacket **next,
+/* The renderer's letters as dialogue sprites at the cursor, in the box's colour, then the cursor
+ * moves on by the item's advance. -1 when the packet pool is full (the box stops drawing). */
+static int Textbox_EmitTextItem(const PeTextItem *item, TextboxGlyphPacket **next,
                                 TextboxGlyphPacket *limit, TextboxPoint *cursor,
                                 RenderNativeTag *ordering) {
-    if (!Pe_ExtendedGlyph(text, NULL)) return 0;
-    PeHookTextGlyph g = {0}; g.text = text; g.draw = 1;
-    if (!PE_HOOK(PE_HOOK_TEXT_GLYPH, &g)) return 0;
-    if (*next >= limit) return -1;
-    TextboxGlyphPacket *p = (*next)++;
-    SetDrawTPage(p, 0, 1, g_TextboxFontPages[0].tpage);
-    SetSprt(&p->sprite);
-    if (MargePrim(p, &p->sprite) != 0) exit(-1);
-    p->sprite.x = cursor->x; p->sprite.y = cursor->y;
-    p->sprite.u = g.u; p->sprite.v = g.v;
-    p->sprite.width = p->sprite.height = 12;
-    p->sprite.color.bytes.r = g_TextboxGlyphColorR;
-    p->sprite.color.bytes.g = g_TextboxGlyphColorG;
-    p->sprite.color.bytes.b = g_TextboxGlyphColorB;
-    p->sprite.clut = g_TextboxFontPages[0].clut;
-    AddPrim(ordering, p);
-    cursor->x += g.advance;
-    return (int)g.bytes;
+    unsigned i;
+    for (i = 0; i < item->count; ++i) {
+        const PeTextLetter *l = &item->letter[i];
+        const TextboxFontPage *page = &g_TextboxFontPages[l->page];
+        TextboxGlyphPacket *p;
+        if (*next >= limit) return -1;
+        p = (*next)++;
+        SetDrawTPage(p, 0, 1, page->tpage);
+        SetSprt(&p->sprite);
+        if (MargePrim(p, &p->sprite) != 0) exit(-1);
+        p->sprite.x = (s16)(cursor->x + l->x);
+        p->sprite.y = (s16)(cursor->y + l->y);
+        p->sprite.u = l->u;
+        p->sprite.v = l->v;
+        p->sprite.width = l->w;
+        p->sprite.height = l->h;
+        p->sprite.color.bytes.r = g_TextboxGlyphColorR;
+        p->sprite.color.bytes.g = g_TextboxGlyphColorG;
+        p->sprite.color.bytes.b = g_TextboxGlyphColorB;
+        p->sprite.clut = page->clut;
+        AddPrim(ordering, p);
+#ifdef PE_PS5_GPU_NATIVE
+        if (l->code != PE_TEXT_NO_CODE && l->page == 0) PeDialogue_Tag(ordering, p, l->code);
+#endif
+    }
+    cursor->x = (u16)(cursor->x + item->advance);
+    return 0;
 }
 
 void Menu_DrawTextboxEntries(void) {
@@ -404,15 +415,17 @@ void Menu_DrawTextboxEntries(void) {
             for (;;) {
                 font = &g_TextboxFontPages[0];
                 temp_v1_3 = *stream;
-                switch (temp_v1_3) {
-                case 0xF1: {
-                    int consumed = Textbox_ExtendedGlyph(stream, &nextPacket, packetLimit, &cursor, orderingTable);
-                    if (consumed < 0) return;
-                    if (!consumed) goto native_single_glyph;
-                    currentPacket = nextPacket;
-                    stream += consumed;
-                    break;
+                {   /* every letter is the renderer's; the switch below only sees the box's commands */
+                    PeTextItem item;
+                    if (PeText_Read(PE_TEXT_DIALOGUE, stream, ~0u, 1, &item)) {
+                        if (item.stop) return;
+                        if (Textbox_EmitTextItem(&item, &nextPacket, packetLimit, &cursor, orderingTable) < 0) return;
+                        currentPacket = nextPacket;
+                        stream += item.bytes;
+                        continue;
+                    }
                 }
+                switch (temp_v1_3) {
                 case 0xF7:
                     stream += 1;
                     cursor.x = baseX;
@@ -439,102 +452,27 @@ void Menu_DrawTextboxEntries(void) {
                     }
                     stopDrawing = 1;
                     break;
-                case 0xFA:
-                    nameIndex = 0;
-                    if (g_TextboxNameGlyphs.count > 0) {
-                        auxiliaryPacket = nextPacket;
-                        do {
-                            u32 fontRow;
-                            u16 nameU, nameV;
-                            if ((unsigned)nameIndex >= sizeof(g_TextboxNameGlyphs.glyphs)) return;
-                            if (g_TextboxNameGlyphs.count - nameIndex >= 4 &&
-                                sizeof(g_TextboxNameGlyphs.glyphs) - (unsigned)nameIndex >= 4) {
-                                int consumed = Textbox_ExtendedGlyph(g_TextboxNameGlyphs.glyphs+nameIndex,
-                                    &nextPacket, packetLimit, &cursor, orderingTable);
-                                if (consumed < 0) return;
-                                if (consumed) {
-                                    currentPacket = auxiliaryPacket = nextPacket;
-                                    nameIndex += consumed; nextNameIndex = nameIndex;
-                                    continue;
-                                }
-                            }
-                            nameGlyph = g_TextboxNameGlyphs.glyphs[(s8)nameIndex];
-                            if (nameGlyph >= g_TextboxGlyphCount) return;
-
-                            fontRow = nameGlyph / 21;
-                            nameU = ((nameGlyph - (fontRow * 0x15)) & 0xFF) * 0xC;
-                            nameV = (fontRow & 0xFF) * 0xC;
-                            uv.x = nameU;
-                            uv.y = nameV;
-                            cursor.x -= g_TextboxGlyphWidths[nameGlyph].left;
-                            if (nextPacket >= packetLimit) return;
-                            SetDrawTPage(nextPacket, 0, 1, font->tpage);
-                            SetSprt(&nextPacket->sprite);
-                            if (MargePrim(nextPacket, &nextPacket->sprite) != 0) {
-                                exit(-1);
-                            }
-
-                            auxiliaryPacket->sprite.x = cursor.x;
-                            auxiliaryPacket->sprite.y = cursor.y;
-                            auxiliaryPacket->sprite.u = (s8)uv.x;
-                            auxiliaryPacket->sprite.v = (s8)uv.y;
-                            currentPacket++;
-                            auxiliaryPacket->sprite.color.bytes.r = g_TextboxGlyphColorR;
-                            auxiliaryPacket->sprite.color.bytes.g = g_TextboxGlyphColorG;
-                            nextPacket++;
-                            auxiliaryPacket->sprite.width = 12;
-                            auxiliaryPacket->sprite.height = 12;
-                            auxiliaryPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
-                            auxiliaryPacket->sprite.clut = font->clut;
-
-                            temp_a1_2 = auxiliaryPacket;
-                            auxiliaryPacket++;
-                            AddPrim(orderingTable, temp_a1_2);
-#ifdef PE_PS5_GPU_NATIVE
-                            PeDialogue_Tag(orderingTable,(TextboxGlyphPacket*)temp_a1_2,nameGlyph);
-#endif
-                            nextNameIndex = nameIndex + 1;
-                            nameIndex = nextNameIndex;
-                            cursor.x += g_TextboxGlyphWidths[nameGlyph].right;
-                        } while ((s8)nextNameIndex < g_TextboxNameGlyphs.count);
+                case 0xFA: {
+                    int at = 0;
+                    while (at < g_TextboxNameGlyphs.count) {
+                        PeTextItem name;
+                        unsigned left = (unsigned)(g_TextboxNameGlyphs.count - at);
+                        if ((unsigned)at >= sizeof(g_TextboxNameGlyphs.glyphs)) return;
+                        if (left > sizeof(g_TextboxNameGlyphs.glyphs) - (unsigned)at)
+                            left = sizeof(g_TextboxNameGlyphs.glyphs) - (unsigned)at;
+                        PeText_Read(PE_TEXT_DIALOGUE_NAME, g_TextboxNameGlyphs.glyphs + at, left, 1, &name);
+                        if (name.stop) return;
+                        if (Textbox_EmitTextItem(&name, &nextPacket, packetLimit, &cursor, orderingTable) < 0) return;
+                        at += (int)name.bytes;
                     }
+                    currentPacket = nextPacket;
                     stream += 1;
                     break;
+                }
                 case 0xFB:
                     stream += 1;
                     temp_a0_3 = *stream;
                     switch (temp_a0_3) {
-                    case 0:
-                    case 1:
-                    case 2:
-                    case 3:
-                        uv.x = (*stream * 0xC) + 0x40;
-                        uv.y = g_TextboxFontPages[2].textureY;
-                        if (nextPacket >= packetLimit) return;
-                        SetDrawTPage(nextPacket, 0, 1, g_TextboxFontPages[2].tpage);
-                        SetSprt(&nextPacket->sprite);
-                        if (MargePrim(nextPacket, &nextPacket->sprite) != 0) {
-                            exit(-1);
-                        }
-                        nextPacket++;
-                        currentPacket->sprite.x = cursor.x;
-                        linkOrdering = orderingTable;
-                        currentPacket->sprite.y = cursor.y;
-                        currentPacket->sprite.u = (s8)uv.x;
-                        currentPacket->sprite.v = (s8)uv.y;
-                        currentPacket->sprite.color.bytes.r = g_TextboxGlyphColorR;
-                        currentPacket->sprite.width = 0xC;
-                        currentPacket->sprite.color.bytes.g = g_TextboxGlyphColorG;
-                        linkPacket = currentPacket;
-                        currentPacket->sprite.height = 0xC;
-                        currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
-                        currentPacket->sprite.clut = g_TextboxFontPages[2].clut;
-                        stream++;
-                        AddPrim(linkOrdering, (unsigned int *)linkPacket);
-                        currentPacket++;
-                        var_v0_3 = cursor.x + glyphAdvance;
-                        cursor.x = var_v0_3;
-                        break;
                     case 4:
                         g_TextboxGlyphColorR = 0xFF;
                         g_TextboxGlyphColorB = 0;
@@ -603,39 +541,14 @@ void Menu_DrawTextboxEntries(void) {
                         break;
                     case 8:
                         if (number >= numberStart + 5 || number->count > 5) return;
-                        temp_v0_4 = number->count;
-                        digitIndex = temp_v0_4;
-                        if (temp_v0_4 > 0) {
-                            auxiliaryPacket = nextPacket;
-                            for (; digitIndex > 0; digitIndex--) {
-                                uv.x = number->digits[digitIndex - 1] * 0xC;
-                                uv.y = 0;
-                                if (nextPacket >= packetLimit) return;
-                                SetDrawTPage(nextPacket, 0, 1, font->tpage);
-                                SetSprt(&nextPacket->sprite);
-                                if (MargePrim(nextPacket, &nextPacket->sprite) !=
-                                    0) {
-                                    exit(-1);
-                                }
-
-                                auxiliaryPacket->sprite.x = cursor.x;
-                                auxiliaryPacket->sprite.y = cursor.y;
-                                auxiliaryPacket->sprite.u = (s8)uv.x;
-                                auxiliaryPacket->sprite.v = (s8)uv.y;
-                                currentPacket++;
-                                auxiliaryPacket->sprite.color.bytes.r = g_TextboxGlyphColorR;
-                                nextPacket++;
-                                auxiliaryPacket->sprite.color.bytes.g = g_TextboxGlyphColorG;
-                                auxiliaryPacket->sprite.width = 12;
-                                auxiliaryPacket->sprite.height = 12;
-                                auxiliaryPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
-                                temp_a1_3 = auxiliaryPacket;
-                                auxiliaryPacket->sprite.clut = font->clut;
-                                auxiliaryPacket++;
-                                AddPrim(orderingTable, temp_a1_3);
-                                cursor.x += glyphAdvance;
-                            }
+                        for (digitIndex = number->count; digitIndex > 0; digitIndex--) {
+                            PeTextItem digit;
+                            digit.count = 1;
+                            PeText_DialogueDigit(number->digits[digitIndex - 1], &digit.letter[0]);
+                            digit.advance = glyphAdvance;
+                            if (Textbox_EmitTextItem(&digit, &nextPacket, packetLimit, &cursor, orderingTable) < 0) return;
                         }
+                        currentPacket = nextPacket;
                         stream += 1;
                         number++;
                         break;
@@ -673,143 +586,10 @@ void Menu_DrawTextboxEntries(void) {
                                 &g_TextboxChoiceCursor[selectionFrame]);
                         break;
                     }
-                    default:
-                        uv.x = ((temp_a0_3 + 0xED) % 21) * 0xC;
-                        temp_v1_10 = ((*stream + 0xED) / 21) * 0xC;
-                        uv.y = temp_v1_10;
-                        if ((temp_v1_10 & 0xFFFF) >= 0xF1U) {
-                            uv.y = temp_v1_10 - 0xFC;
-                            font = &g_TextboxFontPages[1];
-                        }
-                        if (nextPacket >= packetLimit) return;
-                        SetDrawTPage(nextPacket, 0, 1, font->tpage);
-                        SetSprt(&nextPacket->sprite);
-                        if (MargePrim(nextPacket, &nextPacket->sprite) != 0) {
-                            exit(-1);
-                        }
-                        nextPacket++;
-                        currentPacket->sprite.x = cursor.x;
-                        linkOrdering = orderingTable;
-                        currentPacket->sprite.y = cursor.y;
-                        currentPacket->sprite.u = (s8)uv.x;
-                        currentPacket->sprite.v = (s8)uv.y;
-                        currentPacket->sprite.color.bytes.r = g_TextboxGlyphColorR;
-                        currentPacket->sprite.width = 0xC;
-                        currentPacket->sprite.color.bytes.g = g_TextboxGlyphColorG;
-                        linkPacket = currentPacket;
-                        currentPacket->sprite.height = 0xC;
-                        currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
-                        currentPacket->sprite.clut = font->clut;
-                        stream++;
-                        AddPrim(linkOrdering, (unsigned int *)linkPacket);
-                        currentPacket++;
-                        var_v0_3 = cursor.x + glyphAdvance;
-                        cursor.x = var_v0_3;
-                        break;
                     }
                     break;
-                case 0xFC:
-                    stream++;
-                    uv.x = ((*stream + 0x34) % 21) * 0xC;
-                    uv.y = ((*stream + 0x34) / 21) * 0xC;
-                    if (nextPacket >= packetLimit) return;
-                    SetDrawTPage(nextPacket, 0, 1, g_TextboxFontPages[1].tpage);
-                    SetSprt(&nextPacket->sprite);
-                    if (MargePrim(nextPacket, &nextPacket->sprite) != 0) {
-                        exit(-1);
-                    }
-                    nextPacket++;
-                    currentPacket->sprite.x = cursor.x;
-                    linkOrdering = orderingTable;
-                    currentPacket->sprite.y = cursor.y;
-                    currentPacket->sprite.u = (s8)uv.x;
-                    currentPacket->sprite.v = (s8)uv.y;
-                    currentPacket->sprite.color.bytes.r = g_TextboxGlyphColorR;
-                    currentPacket->sprite.width = 0xC;
-                    currentPacket->sprite.color.bytes.g = g_TextboxGlyphColorG;
-                    linkPacket = currentPacket;
-                    currentPacket->sprite.height = 0xC;
-                    currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
-                    currentPacket->sprite.clut = g_TextboxFontPages[1].clut;
-                    stream++;
-                    AddPrim(linkOrdering, (unsigned int *)linkPacket);
-                    currentPacket++;
-                    var_v0_3 = cursor.x + glyphAdvance;
-                    cursor.x = var_v0_3;
-                    break;
-                case 0xFD:
-                    stream++;
-                    uv.x = ((*stream + 0x134) % 21) * 0xC;
-                    uv.y = ((*stream + 0x134) / 21) * 0xC;
-                    if (nextPacket >= packetLimit) return;
-                    SetDrawTPage(nextPacket, 0, 1, g_TextboxFontPages[1].tpage);
-                    SetSprt(&nextPacket->sprite);
-                    if (MargePrim(nextPacket, &nextPacket->sprite) != 0) {
-                        exit(-1);
-                    }
-                    nextPacket++;
-                    currentPacket->sprite.x = cursor.x;
-                    linkOrdering = orderingTable;
-                    currentPacket->sprite.y = cursor.y;
-                    currentPacket->sprite.u = (s8)uv.x;
-                    currentPacket->sprite.v = (s8)uv.y;
-                    currentPacket->sprite.color.bytes.r = g_TextboxGlyphColorR;
-                    currentPacket->sprite.width = 0xC;
-                    currentPacket->sprite.color.bytes.g = g_TextboxGlyphColorG;
-                    linkPacket = currentPacket;
-                    currentPacket->sprite.height = 0xC;
-                    currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
-                    currentPacket->sprite.clut = g_TextboxFontPages[1].clut;
-                    stream++;
-                    AddPrim(linkOrdering, (unsigned int *)linkPacket);
-                    currentPacket++;
-                    var_v0_3 = cursor.x + glyphAdvance;
-                    cursor.x = var_v0_3;
-                    break;
-                case 0xF:
-                    if (g_TextboxKernGlyph0F == 1) {
-                        cursor.x -= 7;
-                    }
-                    /* fallthrough */
                 default:
-                native_single_glyph:
-                    temp_a0_5 = *stream;
-
-                    uv.x = (u8)((unsigned int)temp_a0_5 % 21) * 12;
-                    temp_v0_7 = *stream;
-
-                    workingValue = (u8)((unsigned int)temp_v0_7 / 21);
-                    uv.y = workingValue * 12;
-                    if (*stream >= g_TextboxGlyphCount) return;
-                    cursor.x -= g_TextboxGlyphWidths[*stream].left;
-                    if (nextPacket >= packetLimit) return;
-                    SetDrawTPage(nextPacket, 0, 1, font->tpage);
-                    SetSprt(&nextPacket->sprite);
-                    if (MargePrim(nextPacket, &nextPacket->sprite) != 0) {
-                        exit(-1);
-                    }
-
-                    currentPacket->sprite.x = cursor.x;
-                    currentPacket->sprite.y = cursor.y;
-                    currentPacket->sprite.u = (s8)uv.x;
-                    currentPacket->sprite.v = (s8)uv.y;
-                    currentPacket->sprite.color.bytes.r = g_TextboxGlyphColorR;
-                    currentPacket->sprite.width = 12;
-                    currentPacket->sprite.color.bytes.g = g_TextboxGlyphColorG;
-                    currentPacket->sprite.height = 12;
-                    nextPacket++;
-                    currentPacket->sprite.color.bytes.b = g_TextboxGlyphColorB;
-                    currentPacket->sprite.clut = font->clut;
-
-                    AddPrim(orderingTable, (unsigned int *)currentPacket);
-#ifdef PE_PS5_GPU_NATIVE
-                    PeDialogue_Tag(orderingTable,currentPacket,*stream);
-#endif
-                    currentPacket++;
-                    temp_v1_11 = g_TextboxGlyphWidths[*stream].right;
-                    stream += 1;
-                    var_v0_3 = cursor.x + temp_v1_11;
-                    cursor.x = var_v0_3;
+                    stream++; /* letters are read above; nothing else reaches here */
                     break;
                 }
                 if (stopDrawing != 0)

@@ -310,6 +310,7 @@ add_library(parasite-eve-original OBJECT
     src/main/draw/prim_color.c
     src/main/draw/frame.c
     src/main/draw/text.c
+    src/main/draw/text_render.c
     src/main/draw/textbox.c
     src/overlays/menu_memcard/list_screen.c
     src/overlays/menu_memcard/video_playback.c
@@ -485,9 +486,14 @@ function(pe_add_common_unit_test target_name test_name source_file)
 endfunction()
 
 if(BUILD_TESTING)
+    add_executable(test-text-render tests/text_render_test.c src/main/draw/text_render.c)
+    target_include_directories(test-text-render PRIVATE include)
+    target_compile_definitions(test-text-render PRIVATE __psyz PE_MODS)
+    target_link_libraries(test-text-render PRIVATE psyz)
+    add_test(NAME text-render COMMAND test-text-render)
     add_executable(test-menu-call-abi tests/original_menu_call_abi.c
         src/main/menu/lists.c src/main/menu/widget.c src/main/item/swap.c
-        src/main/draw/text.c src/main/psyq/libds/dssys_3.c)
+        src/main/draw/text.c src/main/draw/text_render.c src/main/psyq/libds/dssys_3.c)
     target_include_directories(test-menu-call-abi PRIVATE include)
     target_compile_definitions(test-menu-call-abi PRIVATE __psyz PE_MODS)
     target_link_libraries(test-menu-call-abi PRIVATE psyz)
@@ -653,6 +659,15 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/tests/frame_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-frame-interpolation PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 420 LABELS "game-assets;gpu")
+        if(PE_MODS AND "pe_lang" IN_LIST PE_MOD_LIST)
+            # The text renderer with language packs made from the disc: stretches, name letters,
+            # a saved name read back, and English as the game drew it before the renderer.
+            add_test(NAME original-game-text-renderer COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-evidence)
+            set_tests_properties(original-game-text-renderer PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods")
+        endif()
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77

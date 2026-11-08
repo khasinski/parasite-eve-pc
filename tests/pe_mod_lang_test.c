@@ -61,6 +61,26 @@ static unsigned char *copy_of(const unsigned char *p, size_t size) {
     unsigned char *c = malloc(size); memcpy(c, p, size); return c;
 }
 
+/* The same pack as version 4, with one stretch holding `letters` (no CJK dictionary, no table). */
+static unsigned char *with_stretch(const unsigned char *v1, size_t size, const uint32_t *letters,
+                                   unsigned count, size_t *out) {
+    size_t at = size + 48, pad = (4 - at % 4) % 4, total = at + pad + 8 + count * 4u + 8;
+    unsigned char *p = calloc(1, total);
+    memcpy(p, v1, 64);
+    memcpy(p + 112, v1 + 64, size - 64);
+    wr32(p + 4, 4); wr32(p + 12, (uint32_t)(v1[12] | v1[13] << 8) + 48);
+    wr32(p + 64, (uint32_t)at); wr32(p + 68, 0); wr32(p + 72, 76); wr32(p + 76, 0);
+    wr32(p + 80, (uint32_t)at); wr32(p + 84, 0);
+    wr32(p + 88, (uint32_t)(at + pad)); wr32(p + 92, 1); wr32(p + 96, count); wr32(p + 100, 0);
+    wr32(p + at + pad, 0); wr32(p + at + pad + 4, count);
+    for (unsigned k = 0; k < count; ++k) wr32(p + at + pad + 8 + 4 * k, letters[k]);
+    /* two name letters: FB 01 is U+3042, FB 02 is 'A' */
+    wr32(p + 104, (uint32_t)(total - 8)); wr32(p + 108, 2);
+    wr32(p + total - 8, 0x3042); wr32(p + total - 4, 'A');
+    *out = total;
+    return p;
+}
+
 int main(int argc, char **argv) {
     /* Exercise the Rust editor's real output with the game's independent C reader.
      * The editor round-trip demo contains two translated pages and their bank map. */
@@ -204,9 +224,64 @@ int main(int argc, char **argv) {
     size_t n;
     unsigned char *data = make_pack(valid, 1, &n);
     assert(!pe_lang_pack_parse(&pack, data, n)); /* FF is a legal delay operand, not a terminator. */
+    {   /* version 4: the text renderer's stretches */
+        Entry one[] = {{"sys/001", "\xF1\xC6\x7F\x7F\xF7\x10"}};
+        const uint32_t hello[] = {'H', 0xE9, 0x4E2D};
+        size_t v1n, v4n;
+        unsigned char *v1p = make_pack(one, 1, &v1n), *v4p;
+        v1p[64 + 8 + 2] = v1p[64 + 8 + 3] = 0;                   /* stretch 0 (not in a C string) */
+        v4p = with_stretch(v1p, v1n, hello, 3, &v4n);
+        unsigned count = 0;
+        PeLangPack v4;
+        assert(!pe_lang_pack_parse(&v4, copy_of(v4p, v4n), v4n));
+        const uint32_t *got = pe_lang_pack_stretch(&v4, 0, &count);
+        assert(got && count == 3 && got[0] == 'H' && got[1] == 0xE9 && got[2] == 0x4E2D);
+        assert(!pe_lang_pack_stretch(&v4, 1, &count));
+        assert(pe_lang_pack_glyph_width(&v4, 0) == 12);
+        assert(pe_lang_pack_uses_glyphs(&v4, 0x4D, 0xF0));          /* é is a one-byte letter */
+        assert(pe_lang_pack_name_letter(&v4, 0x101) == 0x3042 && pe_lang_pack_name_letter(&v4, 0x102) == 'A');
+        assert(!pe_lang_pack_name_letter(&v4, 0x103) && !pe_lang_pack_name_letter(&v4, 0x100));
+        assert(!pe_lang_pack_name_letter(&v4, 0x001) && !pe_lang_pack_name_letter(&v4, 0x1FA));
+        pe_lang_pack_free(&v4);
+        /* refused: a token past the stretches, a bad letter, a stretch too long, a bad index */
+        unsigned char *bad = copy_of(v4p, v4n); bad[112 + 8 + 3] = 1;
+        assert(pe_lang_pack_parse(&v4, bad, v4n));
+        bad = copy_of(v4p, v4n); wr32(bad + v4n - 12, 0xD800);
+        assert(pe_lang_pack_parse(&v4, bad, v4n));
+        bad = copy_of(v4p, v4n); wr32(bad + v4n - 8 - 12 - 4, 97); wr32(bad + 96, 97);
+        assert(pe_lang_pack_parse(&v4, bad, v4n));
+        bad = copy_of(v4p, v4n); wr32(bad + 92, 2);
+        assert(pe_lang_pack_parse(&v4, bad, v4n));
+        bad = copy_of(v4p, v4n); wr32(bad + 88, (uint32_t)(v4n - 21));
+        assert(pe_lang_pack_parse(&v4, bad, v4n));
+        bad = copy_of(v4p, v4n); wr32(bad + v4n - 4, 0x110000);       /* a bad name letter */
+        assert(pe_lang_pack_parse(&v4, bad, v4n));
+        bad = copy_of(v4p, v4n); wr32(bad + 108, 3);                  /* past the end */
+        assert(pe_lang_pack_parse(&v4, bad, v4n));
+        free(v1p); free(v4p);
+        /* name entries hold two-byte name letters (the pack above has two); other text may not */
+        const char *names_ok[] = {"\x10\xFB\x02", "\xFB\x01\xFB\x02\x30"};
+        const char *names_bad[] = {"\x10\xFB\x03", "\xFB\xFA", "\xFF\x10", "\x10\xF7"};
+        for (unsigned k = 0; k < 6; ++k) {
+            const char *text = k < 2 ? names_ok[k] : names_bad[k - 2];
+            Entry two[] = {{"sys/001", "\xF1\xC6\x7F\x7F"}, {"sys/030", text}};
+            v1p = make_pack(two, 2, &v1n);
+            for (size_t at = 64 + 16; at + 3 < v1n; ++at)               /* stretch 0, as above */
+                if (!memcmp(v1p + at, "\xF1\xC6\x7F\x7F", 4)) { v1p[at + 2] = v1p[at + 3] = 0; break; }
+            v4p = with_stretch(v1p, v1n, hello, 3, &v4n);
+            assert(!pe_lang_pack_parse(&v4, v4p, v4n) == (k < 2));
+            if (k < 2) pe_lang_pack_free(&v4);
+            free(v1p);
+        }
+        Entry other[] = {{"sys/001", "\x10\xFE\x01"}};               /* not a name entry */
+        v1p = make_pack(other, 1, &v1n);
+        v4p = with_stretch(v1p, v1n, hello, 3, &v4n);
+        assert(pe_lang_pack_parse(&v4, v4p, v4n));
+        free(v1p);
+    }
     pe_lang_pack_free(&pack);
     free(good);
     puts("Passed language pack checks: lookups by key, table and bank page, bank measure and CRC, "
-         "file load, damaged packs refused whole.");
+         "file load, version 4 stretches, damaged packs refused whole.");
     return 0;
 }

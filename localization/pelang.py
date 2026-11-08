@@ -53,7 +53,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 from petext import battle, gametext as gt, latin, validation, layout, menu  # noqa: E402
-from petext import modtext, cjk, letters as lettertable
+from petext import modtext, cjk, letters as lettertable, stretch, names as namelib
 from petext import manifest as srcman  # noqa: E402
 from petext import wrap as wrapping  # noqa: E402
 
@@ -293,7 +293,7 @@ def cmd_pseudo(a) -> int:
 
 def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], name_px: int = layout.NAME_WIDTH,
               metrics: bytes | None = None, layouts: dict | None = None, wrap: bool = True, atlas=None,
-              from_patch: bool = False):
+              from_patch: bool = False, name_letters: bool = True):
     """(glyph bytes or None, errors, warnings) for one translated row. name_px: how wide {name}
     draws, from the pack's sys/030 (Aya's default name); metrics: the menus' glyph widths
     (menu_glyphs.json), without which menu text is only compared with the English. wrap: a
@@ -314,20 +314,21 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
     for command in validation.commands(raw):
         if command[0] == 0xF1 and (not atlas or cjk.index(command) >= len(atlas.chars)):
             return None, ["CJK token has no glyph in this pack's dictionary"], []
-    if key in ("sys/115", "sys/116", "sys/117") and b"\xf1\xc5" in raw:
+    # with name letters (petext/names.py) any letter can go in a name; without, only one-byte ones
+    if not name_letters and key in ("sys/115", "sys/116", "sys/117") and b"\xf1\xc5" in raw:
         return None, ["CJK cannot be used in the one-byte rename grids"], []
     table = set(atlas.letters.by_code) if atlas and atlas.letters else set()
-    if key in ("sys/115", "sys/116", "sys/117") and table & set(raw):
+    if not name_letters and key in ("sys/115", "sys/116", "sys/117") and table & set(raw):
         return None, ["a letter from the pack's own table cannot go in a rename grid: what the player picks is saved"], []
     if source.get("mod_label"):
         if any(c[0] > 0xF1 for c in validation.commands(raw)):
             return None, ["mod labels cannot contain line breaks, waits or commands"], []
         return raw, modtext.check(raw, source, metrics), []
-    if key == "sys/030" and b"\xf1\xc5" in raw:
+    if not name_letters and key == "sys/030" and b"\xf1\xc5" in raw:
         return None, ["CJK player names cannot be stored safely in the legacy save name field; keep the original name"], []
-    if key == "sys/030" and table & set(raw):
+    if not name_letters and key == "sys/030" and table & set(raw):
         return None, ["a letter from the pack's own table cannot go in the saved player name; keep the original name"], []
-    if key == "sys/030" and len(raw) > 8:
+    if not name_letters and key == "sys/030" and len(raw) > 8:
         return None, ["default player name exceeds the save format's 8-byte field"], []
     note = None
     limit = layout.box_limit(source) if wrap and key.startswith("dlg/") else None
@@ -401,7 +402,8 @@ def cmd_build(a) -> int:
             errors.append(f"{key}: no such key in {a.strings}")
             continue
         raw, errs, warns = check_row(key, text, strings[key], widest_name, name_px, metrics, layouts,
-                                     wrap=not a.no_wrap, atlas=atlas, from_patch=a.from_patch)
+                                     wrap=not a.no_wrap, atlas=atlas, from_patch=a.from_patch,
+                                     name_letters=not a.bytes_only)
         src = strings[key]
         same = text == src["text"] if "text" in src else srcman.english_hash(text) == src.get("english_hash")
         if same and any(ch.isalpha() for ch in text):
@@ -465,15 +467,26 @@ def cmd_build(a) -> int:
           f"{len(warnings)} warning(s), {len(errors)} error(s)")
     if errors:
         return 1
-    write_pack(a.out, a.lang, a.name, entries, atlas)
+    stretches = name_letters = None
+    if not a.bytes_only:
+        entries, name_letters, name_errors = namelib.convert_entries(entries, atlas)
+        if name_errors:
+            for e in name_errors[: a.max_messages]:
+                print(f"error: {e}")
+            return 1
+        entries, stretches = stretch.convert_entries(entries, atlas)
+    write_pack(a.out, a.lang, a.name, entries, atlas, stretches, name_letters)
     print(f"wrote {a.out}")
     return 0
 
 
-HEADER_SIZES = {1: 64, 2: 80, 3: 88}
+HEADER_SIZES = {1: 64, 2: 80, 3: 88, 4: 112}
 
 
-def write_pack(path: Path, lang: str, name: str, entries: dict[str, bytes], atlas=None) -> None:
+def write_pack(path: Path, lang: str, name: str, entries: dict[str, bytes], atlas=None,
+               stretches=None, name_letters=None) -> None:
+    """Version 1 (text), 2 (+ the CJK dictionary), 3 (+ the letter table) or, with stretches,
+    4 (+ the text renderer's stretches and the name letters; mods/pe_lang/pe_lang_pack.c)."""
     lang_b, name_b = lang.encode("utf-8"), name.encode("utf-8")
     if not lang_b or not name_b or b"\0" in lang_b + name_b or len(lang_b) > 15 or len(name_b) > 31:
         raise SystemExit("--lang and --name must be nonempty, without NUL; at most 15 and 31 bytes")
@@ -485,15 +498,25 @@ def write_pack(path: Path, lang: str, name: str, entries: dict[str, bytes], atla
     extra = b''
     records = bytes(atlas.records) if atlas else b''
     letters = atlas.letters.records() if atlas and atlas.letters else b''
-    version = 3 if letters else 2 if records else 1
+    version = 4 if stretches is not None else 3 if letters else 2 if records else 1
     header_size = HEADER_SIZES[version]
+    tail = b''
     if version > 1:
         dictionary = header_size+len(table)+len(text)
         extra = struct.pack('<IIII',dictionary,len(atlas.chars) if records else 0,cjk.RECORD,0)
     if version > 2:
         extra += struct.pack('<II',dictionary+len(records),len(letters)//lettertable.RECORD)
+    if version > 3:
+        end = dictionary + len(records) + len(letters)
+        pad = -end % 4
+        section, pool = stretches.section()
+        tail = bytes(pad) + section
+        extra += struct.pack('<IIII', end + pad, len(stretches.runs), pool, 0)
+        names = name_letters.section() if name_letters else b''
+        extra += struct.pack('<II', end + pad + len(section), len(names) // 4)
+        tail += names
     head = HEADER.pack(MAGIC, version, len(order), header_size + len(table), lang_b, name_b)
-    Path(path).write_bytes(head + extra + table + text + records + letters)
+    Path(path).write_bytes(head + extra + table + text + records + letters + tail)
 
 
 BUNDLE_TEXT = "text.bin"          # the pack inside a zipped .pelang (pe_lang_bundle.h)
@@ -518,17 +541,40 @@ def pack_bytes(path: Path) -> bytes:
 
 def read_pack(path: Path) -> tuple[str, str, dict[int, bytes]]:
     """(lang, name, hash -> glyph bytes) of a pack, plain or zipped: the reader the tests check the
-    writer with."""
+    writer with. A version 4 pack's stretches come back as the one-byte (or F1 C5) letters they
+    stand for, so the text compares with what build measured."""
     data = pack_bytes(path)
     magic, version, count, text_at, lang, name = HEADER.unpack_from(data, 0)
     if magic != MAGIC or version not in HEADER_SIZES:
-        raise ValueError("not a version 1/2/3 .pelang pack")
+        raise ValueError("not a version 1-4 .pelang pack")
     out = {}
     for i in range(count):
         h, off = ENTRY.unpack_from(data, HEADER_SIZES[version] + i * ENTRY.size)
         start = text_at + off
         out[h] = data[start:data.index(b"\xff", start)]
+    if version == 4:
+        out = {h: _expand_stretches(data, raw) for h, raw in out.items()}
     return lang.rstrip(b"\0").decode(), name.rstrip(b"\0").decode(), out
+
+
+def _expand_stretches(data: bytes, raw: bytes) -> bytes:
+    dictionary, glyphs = struct.unpack_from("<II", data, 64)
+    letters_at, letters = struct.unpack_from("<II", data, 80)
+    at, runs = struct.unpack_from("<II", data, 88)
+    back = {ch: bytes([code]) for code, ch in gt.CHARS.items()}
+    back.update({ch: bytes([code]) for ch, code in gt._latin_codes().items()})
+    for k in range(letters):
+        r = data[letters_at + k * lettertable.RECORD:]
+        back[chr(struct.unpack_from("<I", r)[0])] = bytes([r[4]])
+    for k in range(glyphs):
+        back[chr(struct.unpack_from("<I", data, dictionary + k * cjk.RECORD)[0])] = cjk.token(k)
+    starts = struct.unpack_from(f"<{runs + 1}I", data, at)
+    pool = at + (runs + 1) * 4
+    table = stretch.Stretches()
+    for k in range(runs):
+        table.runs.append("".join(chr(c) for c in struct.unpack_from(
+            f"<{starts[k + 1] - starts[k]}I", data, pool + starts[k] * 4)))
+    return stretch.expand(raw, table, back)
 
 
 # The user supplies this original patch; translated content is never bundled.
@@ -1031,6 +1077,9 @@ def main(argv=None) -> int:
     b.add_argument("--max-messages", type=int, default=50)
     b.add_argument("--allow-overflow", action="store_true",
                    help="emit known layout overflows as warnings for deliberate in-game testing; controls stay strict")
+    b.add_argument("--bytes-only", action="store_true",
+                   help="write each letter as its own byte (a version 1-3 pack) instead of the text "
+                        "renderer's stretches")
     b.add_argument("--no-wrap", action="store_true",
                    help="don't rewrap dialogue pages that overflow their box (by default they get line breaks at "
                         "spaces and, if still too tall, more screens)")

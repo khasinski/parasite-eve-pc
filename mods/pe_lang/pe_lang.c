@@ -39,6 +39,10 @@
 #include "pe1/psyq_tim.h"
 #include "pe1/resident_tables.h"
 #include "pe1/textbox.h"
+#include "pe1/text_render.h"
+#include "pe1/menu_inventory.h"
+#include "pe1/save.h"
+#include "pe1/save_blob.h"
 #include "pe_hooks.h"
 #include "pe_lang_font.h"
 #include "pe_lang_cyrillic.h"
@@ -49,6 +53,10 @@
 #include "pe_services.h"
 #include "pe_lang_selection.h"
 #include "pe_lang_text.h"
+#include "pe_lang_text_data.h"
+#include "pe_lang_names.h"
+#include "pe_save.h"
+#include "pe_game.h"
 #include "pe_translate.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -278,6 +286,108 @@ static int on_text_glyph(void *ctx, void *user) {
     g->u = (unsigned char)(cell%21*12); g->v = (unsigned char)(cell/21*12);
     return 1;
 }
+/* What the log says about the text drawn with the pack in use, once each (the disc tests read
+ * these): stretches and name letters in use, and each letter the pack lacks, which shows '?'. */
+#define MISSING_LOGGED 32u
+static const PeLangPack *s_text_logged;
+static int s_stretch_logged, s_name_letter_logged;
+static unsigned s_missing[MISSING_LOGGED], s_missing_count;
+static void text_log_follow(const PeLangPack *pack) {
+    if (s_text_logged == pack) return;
+    s_text_logged = pack;
+    s_stretch_logged = s_name_letter_logged = 0;
+    s_missing_count = 0;
+}
+/* Each missing thing once: a letter (Unicode), a name letter (paged) or a stretch. */
+static int missing_once(const PeLangPack *pack, unsigned key) {
+    text_log_follow(pack);
+    for (unsigned i = 0; i < s_missing_count; ++i)
+        if (s_missing[i] == key) return 0;
+    if (s_missing_count == MISSING_LOGGED) return 0;
+    s_missing[s_missing_count++] = key;
+    return 1;
+}
+static int letter_missing(const PeLangPack *pack, unsigned letter, unsigned paged) {
+    if (!missing_once(pack, paged ? paged | 0x80000000u : letter)) return 0;
+    if (paged) pe_mod_log(MOD_ID, "text: %s has no name letter %02X %02X; it shows '?'", s_labels[pack - s_packs],
+                          0xFAu + (paged >> 8), paged & 0xFFu);
+    else pe_mod_log(MOD_ID, "text: %s has no letter U+%04X; it shows '?'", s_labels[pack - s_packs], letter);
+    return 0;
+}
+
+/* The text renderer (pe1/text_render.h): a stretch's letters, and how a letter draws. The
+ * renderer asks only for letters the game's English set lacks or a pack overrides. */
+static int on_text_stretch(void *ctx, void *user) {
+    PeHookTextStretch *s = ctx;
+    unsigned count = 0;
+    const PeLangPack *pack = active_pack();
+    const uint32_t *letters = pe_lang_pack_stretch(pack, s->id, &count);
+    (void)user;
+    if (!letters) {
+        if (pack && missing_once(pack, s->id | 0x40000000u))
+            pe_mod_log(MOD_ID, "text: %s has no stretch %u", s_labels[pack - s_packs], s->id);
+        return 0;
+    }
+    text_log_follow(pack);
+    if (!s_stretch_logged) {
+        s_stretch_logged = 1;
+        pe_mod_log(MOD_ID, "text: %s's stretches in use (first: %u, %u letters)", s_labels[pack - s_packs], s->id, count);
+    }
+    s->letters = (const unsigned *)letters;
+    s->count = count;
+    return 1;
+}
+static int dictionary_index(const PeLangPack *pack, unsigned letter) {
+    unsigned lo = 0, hi = pack->cjk_count;
+    while (lo < hi) {
+        unsigned mid = lo + (hi - lo) / 2, at = pack->cjk_offset + mid * 76;
+        unsigned cp = pack->data[at] | pack->data[at+1] << 8 | pack->data[at+2] << 16 | (unsigned)pack->data[at+3] << 24;
+        if (cp == letter) return (int)mid;
+        if (cp < letter) lo = mid + 1; else hi = mid;
+    }
+    return -1;
+}
+static int on_text_letter(void *ctx, void *user) {
+    PeHookTextLetter *l = ctx;
+    const PeLangPack *pack = active_pack();
+    const unsigned *codes;
+    unsigned cell = 0x2C;
+    int index;
+    (void)user;
+    if (!pack) return 0;
+    if (l->paged) {                              /* a two-byte name letter: its Unicode letter */
+        int code;
+        l->letter = pe_lang_pack_name_letter(pack, l->paged);
+        if (!l->letter) return letter_missing(pack, 0, l->paged);
+        text_log_follow(pack);
+        if (l->draw && !s_name_letter_logged) {
+            s_name_letter_logged = 1;
+            pe_mod_log(MOD_ID, "text: name letters in use (first drawn: %02X %02X, U+%04X)", 0xFAu + (l->paged >> 8),
+                       l->paged & 0xFFu, l->letter);
+        }
+        code = PeText_GameCode(l->letter);
+        if (code >= 0) { l->code = code; return 1; }
+    }
+    /* a one-byte letter on the page: the pack's table, or the Latin Extended and Cyrillic set */
+    codes = pack->unicode ? pack->unicode : kPeTextUnicode;
+    for (unsigned code = 0x4D; code < 0xF1; ++code)
+        if (codes[code] == l->letter && s_font_added) { l->code = (int)code; return 1; }
+    index = dictionary_index(pack, l->letter);
+    if (index < 0) return PeText_GameCode(l->letter) < 0 ? letter_missing(pack, l->letter, 0) : 0;
+    l->code = -1;
+    l->advance = pe_lang_pack_glyph_width(pack, (unsigned)index);
+    if (l->draw && (!s_font_saved || !pe_cjk_resolve(&s_cjk, (unsigned)index, &cell, cjk_sync, cjk_upload, NULL))) {
+        if (!s_cjk_warned) {
+            pe_mod_log(MOD_ID, "letter cache unavailable/full (%u cells); showing ?", s_cjk.count);
+            s_cjk_warned = 1;
+        }
+        cell = 0x2C;
+    }
+    l->u = (unsigned char)(cell % 21 * 12);
+    l->v = (unsigned char)(cell / 21 * 12);
+    return 1;
+}
+
 /* The pack's pictures, as the sectors holding them are read. */
 static const PeLangPack *s_pictures_logged;
 static int on_disc_read(void *ctx, void *user) {
@@ -294,8 +404,113 @@ static int on_disc_read(void *ctx, void *user) {
     return 0;
 }
 
+
+/* ---- Names in the pack's letters, kept with the save (pe_lang_names.h) ----
+ * The three name windows: Aya's name (metadata window 1), then the weapon's and armor's being
+ * renamed. Each keeps room for its end byte: 13, 16 and 16 bytes. Metadata window 0 is never read
+ * or written: the USA game leaves it unused and keeps the play time right after its 8 bytes. */
+#define NAME_WINDOWS 3
+static unsigned char *name_window(unsigned w) {
+    return w == 0 ? g_SaveRuntimeState.windows.metadata[1].text : g_SaveRuntimeState.cursorMetadata[w - 1].text;
+}
+static const unsigned kNameRoom[NAME_WINDOWS] = {12, 15, 15};
+static const char *const kNameWindow[NAME_WINDOWS] = {"Aya's name", "the weapon's name", "the armor's name"};
+/* Each name in Unicode while the game runs; the save holds the window's bytes as they are. */
+typedef struct KeptNames {
+    uint8_t count[NAME_WINDOWS];             /* 0: nothing kept, the window's bytes are the name */
+    uint32_t letters[NAME_WINDOWS][PE_LANG_NAME_MAX];
+} KeptNames;
+static KeptNames s_kept_names;
+static int s_names_pending;
+
+/* The window's name in Unicode, from `pack`'s letters, unless the window still holds what was put
+ * there from the kept letters (a pack that lacks some shows '?', which must not replace them). */
+static void names_capture(const PeLangPack *pack) {
+    for (unsigned w = 0; w < NAME_WINDOWS; ++w) {
+        unsigned char *window = name_window(w), expected[16];
+        uint32_t letters[PE_LANG_NAME_MAX];
+        int n;
+        if (s_kept_names.count[w]) {
+            pe_lang_name_encode(pack, s_kept_names.letters[w], s_kept_names.count[w], expected, kNameRoom[w]);
+            if (pe_lang_name_same(window, expected, kNameRoom[w])) continue;
+        }
+        n = pe_lang_name_decode(pack, window, kNameRoom[w], letters);
+        if (n < 0) continue;                 /* not a name the pack can read: left alone */
+        s_kept_names.count[w] = (uint8_t)n;
+        memcpy(s_kept_names.letters[w], letters, sizeof letters);
+    }
+}
+/* The kept names into the windows, in `pack`'s letters. */
+static void names_put(const PeLangPack *pack) {
+    int changed = 0;
+    for (unsigned w = 0; w < NAME_WINDOWS; ++w) {
+        if (!s_kept_names.count[w]) continue;
+        pe_lang_name_encode(pack, s_kept_names.letters[w], s_kept_names.count[w], name_window(w), kNameRoom[w]);
+        changed = 1;
+        pe_mod_log(MOD_ID, "names: %s put in %s's letters (%u letters)", kNameWindow[w],
+                   pack ? pack->name : "the game's own text", s_kept_names.count[w]);
+    }
+    if (changed) Menu_CopyPromptCodes((u8 *)Save_GetActiveMetadataBuffer());   /* the dialogue's {name} */
+}
+/* Saving: the save's copy keeps the window's bytes, the pack in use's letters. Where that pack
+ * lacks some of a name's letters (the window shows '?'), the copy gets the letters of a pack that
+ * has them all, so the name comes back whole after a load. */
+static int on_names_write(void *ctx, void *user) {
+    unsigned char *block = ctx;
+    const PeLangPack *pack = active_pack();
+    (void)user;
+    names_capture(pack);
+    for (unsigned w = 0; w < NAME_WINDOWS; ++w) {
+        unsigned char *copy = block + 0x100 + (name_window(w) - (unsigned char *)&g_SaveRuntimeState);
+        int i = pe_lang_name_save_pack(s_packs, s_pack_count, pack, s_kept_names.letters[w], s_kept_names.count[w],
+                                       kNameRoom[w]);
+        if (i < 0) continue;                 /* the window's bytes as they are */
+        pe_lang_name_encode(&s_packs[i], s_kept_names.letters[w], s_kept_names.count[w], copy, kNameRoom[w]);
+        pe_mod_log(MOD_ID, "names: %s saved in %s's letters (%s lacks some)", kNameWindow[w], s_labels[i],
+                   pack ? pack->name : "the game's own text");
+    }
+    return 0;
+}
+static int on_names_read(void *ctx, void *user) {
+    (void)ctx; (void)user;
+    s_names_pending = 1;                     /* once the game has the save's windows */
+    return 0;
+}
+static int on_names_new_game(void *ctx, void *user) {
+    (void)ctx; (void)user;
+    memset(&s_kept_names, 0, sizeof s_kept_names);
+    return 0;
+}
+/* After a load: a name with two-byte letters is read with the pack that knows them all (the one
+ * in use first), then shown in the pack in use's letters. */
+static void names_frame(void) {
+    const PeLangPack *pack = active_pack();
+    int changed = 0;
+    if (!s_names_pending) return;
+    s_names_pending = 0;
+    memset(&s_kept_names, 0, sizeof s_kept_names);
+    for (unsigned w = 0; w < NAME_WINDOWS; ++w) {
+        uint32_t letters[PE_LANG_NAME_MAX];
+        unsigned count = 0;
+        int found;
+        if (!pe_lang_name_paged(name_window(w), kNameRoom[w])) continue;
+        found = pe_lang_name_find_pack(s_packs, s_pack_count, pack ? (int)(pack - s_packs) : -1, name_window(w),
+                                       kNameRoom[w], letters, &count);
+        if (found < 0) {
+            pe_mod_log(MOD_ID, "names: %s has name letters no loaded pack knows; left as saved", kNameWindow[w]);
+            continue;
+        }
+        s_kept_names.count[w] = (uint8_t)count;
+        memcpy(s_kept_names.letters[w], letters, sizeof letters);
+        pe_mod_log(MOD_ID, "names: %s read with %s's letters (%u letters)", kNameWindow[w], s_labels[found], count);
+        if (&s_packs[found] != pack) changed = 1;
+    }
+    if (changed) names_put(pack);
+}
+
 static int on_cjk_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
+    names_frame();
     pe_cjk_frame(&s_cjk);
     return 0;
 }
@@ -364,7 +579,9 @@ static int language_set(int choice) {
         memcpy(id.lang, s_packs[choice - 1].lang, sizeof id.lang);
         memcpy(id.name, s_packs[choice - 1].name, sizeof id.name);
     }
+    if (pe_save_loaded()) names_capture(active_pack());   /* names in Unicode, then the new pack's letters */
     s_choice = choice;
+    if (pe_save_loaded()) names_put(active_pack());
     s_bank = NULL;                                   /* measure the room's bank again for the new pack */
     font_follow_choice();
     pe_mod_log(MOD_ID, "language: %s", choice ? s_labels[choice - 1] : "the game's own text");
@@ -529,6 +746,11 @@ static int lang_init(void) {
     pe_hook_add(PE_HOOK_SCENE_START, on_scene_start, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_TIM_UPLOAD, on_tim_upload, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_TEXT_GLYPH, on_text_glyph, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_TEXT_STRETCH, on_text_stretch, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_SAVE_WRITE, on_names_write, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_SAVE_READ, on_names_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_NEW_GAME, on_names_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_TEXT_LETTER, on_text_letter, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_FRAME_DRAWN, on_cjk_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_DISC_READ, on_disc_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);
 
@@ -560,6 +782,9 @@ static void lang_shutdown(void) {
     s_font_saved = 0;
     s_font_pack = NULL;
     s_pictures_logged = NULL;
+    s_text_logged = NULL;
+    memset(&s_kept_names, 0, sizeof s_kept_names);
+    s_names_pending = 0;
     pe_cjk_reset(&s_cjk, NULL, NULL);
 }
 

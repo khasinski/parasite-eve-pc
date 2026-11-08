@@ -32,7 +32,15 @@ const char *pe_lang_text_utf8(PeLangPack *pack,const char *key) {
     const unsigned *codes=pack->unicode?pack->unicode:kPeTextUnicode;
     char text[4097];unsigned n=0;
     while (*raw!=0xFF) {
-        unsigned cp,id;
+        unsigned cp,id,stretch_count=0;
+        const uint32_t *stretch=raw[0]==0xF1 && raw[1]==0xC6 && raw[2]<240 && raw[3]<240 ?
+            pe_lang_pack_stretch(pack,raw[2]*240u+raw[3],&stretch_count) : NULL;
+        if (stretch) {                 /* the text renderer's stretch: its letters, in order */
+            if (n+4u*stretch_count>=sizeof text) return NULL;
+            for (unsigned k=0;k<stretch_count;++k) n+=emit(text+n,stretch[k]);
+            raw+=4;
+            continue;
+        }
         if (Pe_ExtendedGlyph(raw,&id) && id<pack->cjk_count) {
             cp=rd32(pack->data+pack->cjk_offset+id*76);raw+=4;
         } else if (*raw<241 && codes[*raw]) cp=codes[*raw++];
