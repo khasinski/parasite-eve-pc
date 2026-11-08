@@ -43,6 +43,7 @@ int pe_hook_dispatch(int id, void *ctx) {
         if (l->paged) return 0;
         if (l->letter == 0xE9) { l->code = 0x4D; return 1; }          /* a table letter */
         if (l->letter == 0x4E2D) { l->u = 36; l->v = 132; l->advance = 11; return 1; }
+        if (l->letter == 0x100) { l->u = 26; l->v = 132; l->w = 7; l->advance = 8; return 1; }  /* cut */
         return 0;
     }
     if (id == PE_HOOK_TEXT_GLYPH) {
@@ -246,7 +247,14 @@ static void test_stretch(void) {
         pen += h.advance;
     }
     assert(item.letter[5].u == 36 && item.letter[5].v == 132 && item.letter[5].x == pen);
-    assert(item.advance == pen + 11);
+    assert(item.letter[5].w == 12 && item.advance == pen + 11);
+    /* a provider's cell cut to its inked columns, as a menu cuts the game's own letters */
+    {
+        PeTextLetter cut;
+        assert(PeText_ResolveLetter(PE_TEXT_MENU, 0x100, 1, &cut));
+        assert(cut.u == 26 && cut.v == 132 && cut.w == 7 && cut.h == 12 && cut.x == 0 && cut.y == 1);
+        assert(cut.advance == 8 && cut.code == PE_TEXT_NO_CODE);
+    }
     /* menus measure a stretch by its letters */
     g_TextRenderMode = 0;
     assert(PeText_Read(PE_TEXT_MENU, text, ~0u, 0, &item) == 4);

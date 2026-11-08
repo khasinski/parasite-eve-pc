@@ -139,7 +139,9 @@ typedef struct PeHookTextStretch {
 
 /* The text renderer asks how a Unicode letter draws, before the game's own English set. A provider
  * either names a one-byte game code that draws it, or puts it in a 12 x 12 cell of the font page
- * (only when draw is nonzero: measuring never uploads) and gives that cell and the advance. */
+ * (only when draw is nonzero: measuring never uploads) and gives that cell and the advance. In
+ * menus it may cut the cell as the game cuts its own letters: u from the first inked column, w
+ * columns wide. */
 typedef struct PeHookTextLetter {
     unsigned style;           /* PeTextStyle */
     unsigned letter;          /* Unicode; 0 when `paged` names the letter instead */
@@ -149,6 +151,7 @@ typedef struct PeHookTextLetter {
     int code;                 /* provider: the game code (0x00-0xF0) that draws it, or -1 */
     unsigned char u, v;       /* provider, when code is -1: the cell on font page 0 */
     unsigned advance;         /* provider, when code is -1 */
+    unsigned char w;          /* provider, when code is -1: columns drawn from u (0: all 12) */
 } PeHookTextLetter;
 
 typedef struct PeHookRewards {

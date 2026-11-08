@@ -93,12 +93,14 @@ static void MenuNative(int glyph, PeTextLetter *l) {
     l->code = (u16)glyph;
 }
 
-/* A cell the pack put on font page 0 (an F1 C5 letter or a resolved stretch letter). */
-static void PackCell(PeTextStyle style, PeTextLetter *l, unsigned u, unsigned v, unsigned advance) {
+/* A cell the pack put on font page 0 (an F1 C5 letter or a resolved stretch letter), `w` columns
+ * of it (0: all 12). */
+static void PackCell(PeTextStyle style, PeTextLetter *l, unsigned u, unsigned v, unsigned w, unsigned advance) {
     l->x = 0;
     l->y = style == PE_TEXT_MENU ? 1 : 0;
     l->u = (u8)u; l->v = (u8)v;
-    l->w = l->h = 12;
+    l->w = (u8)(w ? w : 12);
+    l->h = 12;
     l->page = 0;
     l->nibble = 0;
     l->advance = (s16)advance;
@@ -154,7 +156,7 @@ int PeText_ResolveLetter(PeTextStyle style, u32 letter, int draw, PeTextLetter *
     ask.code = -1;
     if (PE_HOOK(PE_HOOK_TEXT_LETTER, &ask)) {
         if (ask.code < 0) {
-            PackCell(style, out, ask.u, ask.v, ask.advance);
+            PackCell(style, out, ask.u, ask.v, ask.w, ask.advance);
             return 1;
         }
         if (NativeLetter(style, (unsigned)ask.code, out)) return 1;
@@ -173,7 +175,7 @@ static int PagedLetter(PeTextStyle style, unsigned paged, int draw, PeTextLetter
     ask.code = -1;
     if (!PE_HOOK(PE_HOOK_TEXT_LETTER, &ask)) return 0;
     if (ask.code < 0) {
-        PackCell(style, out, ask.u, ask.v, ask.advance);
+        PackCell(style, out, ask.u, ask.v, ask.w, ask.advance);
         return 1;
     }
     return NativeLetter(style, (unsigned)ask.code, out);
@@ -235,7 +237,7 @@ static int PackLetter(PeTextStyle style, const u8 *text, int draw, PeTextItem *i
     g.text = text;
     g.draw = draw;
     if (!PE_HOOK(PE_HOOK_TEXT_GLYPH, &g)) return 0;
-    PackCell(style, &item->letter[0], g.u, g.v, g.advance);
+    PackCell(style, &item->letter[0], g.u, g.v, 0, g.advance);
     One(item, g.bytes ? g.bytes : 4, (int)g.advance);
     return 1;
 }
