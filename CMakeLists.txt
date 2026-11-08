@@ -60,6 +60,19 @@ if(PE_SMALL_MEMORY)
         PSYZ_NO_PGXP=1)
 endif()
 
+# Sega Dreamcast (KallistiOS CMake toolchain): no SDL, no desktop host.
+# The game modules compile against SDL's headers only; platform/dreamcast
+# supplies the entry point and the few SDL calls they make.
+if(CMAKE_SYSTEM_NAME STREQUAL "dreamcast")
+    set(PE_DREAMCAST TRUE)
+    if(NOT PE_SMALL_MEMORY)
+        message(FATAL_ERROR "The Dreamcast build needs -DPE_SMALL_MEMORY=ON")
+    endif()
+    add_library(SDL3::SDL3 INTERFACE IMPORTED)
+    set_target_properties(SDL3::SDL3 PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz/external/SDL/include")
+endif()
+
 # PsyZ belongs to the original game build, independently of the abandoned frontend.
 if(NOT PE_PS5_GAME)
     set(PSYZ_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz)
@@ -118,6 +131,9 @@ if(PE_PS5_GAME AND PE_DESKTOP_MOD_DOWNLOADS)
     message(FATAL_ERROR "Desktop HD downloads are unsupported on PS5")
 endif()
 add_library(pe_download_deps INTERFACE)
+if(PE_DREAMCAST)
+    set(PE_DESKTOP_MOD_DOWNLOADS OFF CACHE BOOL "" FORCE)
+else()
 # Screenshots are written as PNG (miniz) with JSON metadata (cJSON) in every
 # desktop build, so both are needed even without the HD pack downloader.
 include(FetchContent)
@@ -134,6 +150,7 @@ add_library(pe_download_zip STATIC ${pe_zip_SOURCE_DIR}/miniz.c ${pe_zip_SOURCE_
 target_include_directories(pe_download_zip PUBLIC ${pe_zip_SOURCE_DIR} ${pe_zip_BINARY_DIR})
 target_compile_definitions(pe_download_zip PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
 target_link_libraries(pe_download_deps INTERFACE pe_download_json pe_download_zip)
+endif()
 if(PE_DESKTOP_MOD_DOWNLOADS)
     target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=1)
 # Desktop mod downloads use native TLS through libcurl.
@@ -168,9 +185,15 @@ else()
 endif()
 
 # The executable starts the original game and compiles its modules in place.
+if(PE_DREAMCAST)
+    add_executable(parasite-eve-pc platform/dreamcast/dc_main.c platform/dreamcast/dc_sdl.c)
+    target_link_libraries(parasite-eve-pc PRIVATE psyz SDL3::SDL3)
+    set_target_properties(parasite-eve-pc PROPERTIES OUTPUT_NAME parasite-eve SUFFIX ".elf")
+else()
 add_executable(parasite-eve-pc src/main/boot/main.c src/main/boot/crash_report.c src/main/boot/crash_report_posix.c)
-target_include_directories(parasite-eve-pc PRIVATE include)
 target_link_libraries(parasite-eve-pc PRIVATE psyz pe_download_deps ${CMAKE_DL_LIBS})
+endif()
+target_include_directories(parasite-eve-pc PRIVATE include)
 set(PE_BUILD_ID "0.11-source")
 execute_process(COMMAND git rev-parse --short=12 HEAD
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
