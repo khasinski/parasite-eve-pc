@@ -47,12 +47,20 @@ static struct {
     char target[4096], temporary[4160], previous[4096];
 } card_writes[2];
 
-static void MemCard_CancelWrite(MemCardPortState *state) {
+/* The native file's half of a write. The save itself goes on: its staged companion stays. */
+static void MemCard_ResetWrite(MemCardPortState *state) {
     unsigned port = (unsigned)(state - g_MemCardPortStates);
     if (port >= 2) return;
     if (card_writes[port].io) SDL_CloseIO(card_writes[port].io);
     if (card_writes[port].owns_temporary) SDL_RemovePath(card_writes[port].temporary);
     memset(&card_writes[port], 0, sizeof(card_writes[port]));
+}
+
+static void MemCard_CancelWrite(MemCardPortState *state) {
+#ifdef PE_MODS
+    pe_mod_save_cancelled();
+#endif
+    MemCard_ResetWrite(state);
 }
 
 static int MemCard_BeginWrite(MemCardPortState *state) {
@@ -80,10 +88,18 @@ static int MemCard_CommitWrite(MemCardPortState *state) {
     int ok = SDL_FlushIO(io);
     if (!SDL_CloseIO(io)) ok = 0;
     card_writes[port].io = NULL;
-    if (!ok || !SDL_RenamePath(card_writes[port].temporary, card_writes[port].target)) {
+#ifdef PE_MODS
+    int published=ok&&pe_mod_save_publish(card_writes[port].temporary,card_writes[port].target);
+#else
+    int published=ok&&SDL_RenamePath(card_writes[port].temporary,card_writes[port].target);
+#endif
+    if (!published) {
         MemCard_CancelWrite(state);
         return 0;
     }
+    #ifdef PE_MODS
+    pe_mod_save_committed(card_writes[port].target);
+    #endif
     /* Clear-data/normal saves use different names for the same card slot.
      * Retire the previous name only after the new image is safely published. */
     if (*card_writes[port].previous &&
@@ -112,7 +128,7 @@ int g_MemCardEventF000Spec0004Flag, g_MemCardEventF000Spec8000Flag, g_MemCardEve
     g_SaveIoCursor += sizeof(type)
 
 int Save_SerializeTail(void) {
-    PE_HOOK(PE_HOOK_SAVE_WRITE, g_MemCardFileBuffer);
+    if (PE_HOOK(PE_HOOK_SAVE_WRITE, g_MemCardFileBuffer) < 0) return -1;
     return Save_SerializeTailData();
 }
 
@@ -620,6 +636,11 @@ const MemCardSaveSupportData g_MemCardSaveSupportData __attribute__((used)) = {
 };
 
 int Save_BuildCardFile(char *path) {
+#ifdef PE_MODS
+    char mapped_save_path[4096];
+    Psyz_AdjustPath(mapped_save_path,path,sizeof mapped_save_path);
+    if(pe_mod_save_path(mapped_save_path)<0)return -1;
+#endif
     u8 *resolved;
     MemCardFileHeader *file;
     u32 crc;
@@ -1101,7 +1122,7 @@ void MemCard_UpdateSaveState(int port) {
             MemCard_AbortActiveOperation(state);
             break;
         }
-        MemCard_CancelWrite(state);
+        MemCard_ResetWrite(state);   /* overwriting a slot: the save goes on, keep its companion */
         MemCard_FormatSlotFileName(state, state->selectedSlot);
         Psyz_AdjustPath(card_writes[port].previous, g_MemCardFilePath,
                         sizeof(card_writes[port].previous));
@@ -1159,7 +1180,12 @@ void Save_StartWriteSlot(int port, int arg_slot) {
     formattedSlot = (u8)slot;
     sprintf(path, g_MemCardFilenameFormatPtr,
                     state > g_MemCardPortStates,
+#ifdef PE_MODS
+                    /* The name this save will publish under (case 4), so its companion matches. */
+                    g_SaveTitleStyleFlag + 0x30,
+#else
                     state->slots[formattedSlot].titleStyleFlag + 0x30,
+#endif
                     formattedSlot + firstSlotLetter);
     /* Recompute the path address after formatting it. */
     path = g_MemCardFilePath;
@@ -1242,6 +1268,13 @@ void Save_LoadCardFileIntoRuntime(void) {
     }
     if ((~crc & 0xFFFF) == expected_crc &&
         Inv_ValidateSavedInventory((const SaveRuntimeState *)&g_MemCardSaveStateBuffer)) {
+#ifdef PE_MODS
+        char mapped_load_path[4096];
+        Psyz_AdjustPath(mapped_load_path,g_MemCardFilePath,sizeof mapped_load_path);
+        if(pe_mod_load_admit(mapped_load_path,g_MemCardFileBuffer)<0){
+            Menu_DestroyMemCardProgressWidget();Menu_CreateTwoLineDialog(0x55,0x56);return;
+        }
+#endif
         g_SaveIoCursor = g_MemCardFileBuffer + 0x100 + 0x12E4;
         if (Save_DeserializeTail() == 0) {
             memcpy(&g_SaveRuntimeState, &g_MemCardSaveStateBuffer, sizeof(g_SaveRuntimeState));

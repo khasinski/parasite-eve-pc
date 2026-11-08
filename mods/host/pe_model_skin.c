@@ -6,10 +6,22 @@
 #include "pe_disc_assets.h"
 #include "pe_mod_host.h"
 
+static PeSkinReader s_reader;   /* "@" folders: a character pack's (pe_wardrobe) */
+
+void pe_model_skin_set_reader(PeSkinReader read) { s_reader = read; }
+
 static int pe_read(const char *folder, const char *name, uint8_t **data, uint32_t *size) {
     char rel[240], path[1200];
     FILE *f;
     long n;
+    if (folder[0] == '@') {
+        unsigned got = 0;
+        *data = NULL;
+        *size = 0;
+        if (!s_reader || !s_reader(folder, name, data, &got, 0x400000) || got < 8) { free(*data); *data = NULL; return 0; }
+        *size = got;
+        return 1;
+    }
     if (snprintf(rel, sizeof rel, "pe_skins/%s/%s", folder, name) >= (int)sizeof rel ||
         pe_mod_path(path, sizeof path, rel) != 0 || !(f = fopen(path, "rb"))) return 0;
     if (fseek(f, 0, SEEK_END) || (n = ftell(f)) < 8 || n > 0x400000 || fseek(f, 0, SEEK_SET)) { fclose(f); return 0; }

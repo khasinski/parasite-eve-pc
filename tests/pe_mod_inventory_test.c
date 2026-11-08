@@ -9,6 +9,10 @@
 #include "pe1/inventory_sort.h"
 #include "pe1/inventory_state.h"
 #include "pe1/battle_cmd.h"
+#include "pe_extension_store.h"
+/* pe_stacks keeps its counts in the host's companion store, which isn't in this fixture. */
+int pe_extension_register(const PeExtensionSection *d) { (void)d; return 0; }
+PeRegResult pe_extension_enable(const PeExtensionSection *d) { (void)d; return PE_REG_OK; }
 
 SaveRuntimeState g_SaveRuntimeState;
 GameStateBlock g_GameStateBlock;

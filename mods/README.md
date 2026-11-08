@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_collection;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -47,8 +47,12 @@ mods/
     ui/                  drawing (pe_ui_raster), the overlay quad (pe_ui_gpu), toasts
   pe_qol/              quality of life: movement, encounters, key item pocket, bag sort, Key Items menu
   pe_rebalance/        mod effects, Parasite Energy balance, half-bar turns / Quick powers, Combine
-  pe_economy/          Junk and loot, Mod Catalog / Dismantle / Rebuild, Requisition, Wayne and Warner
-  pe_collection/       Bestiary and Wardrobe registries, skins, Wardrobe menu (packs register here)
+  pe_economy/          the Junk wallet (counter, Difficulty, prices), Costume unlock rules, Smoke Grenades
+  pe_shops/            Requisition, Wayne's menu and Workshop, Warner, craft refunds (needs pe_economy)
+  pe_catalog/          Mod Catalog / Dismantle / Rebuild (its record keeps the name pe_economy.catalog)
+  pe_rewards/          battle rewards: extra Junk, rare drops and pity (needs pe_economy)
+  pe_collection/       Bestiary registry and menu (creature packs register here)
+  pe_wardrobe/         Wardrobe registry, skins, Wardrobe menu (costume packs register here)
   pe_stacks/           stacked consumables (up to 99 per bag or storage slot), from the Pathogen Eve port
   pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
   pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
@@ -64,7 +68,7 @@ stack), ITEM_REMOVE (use / give / discard takes one copy), ITEM_COUNT and INV_CM
 (story checks see every copy), STORAGE_TRANSFER (a bag stack goes into storage whole; storage
 gives one copy), INVENTORY_REBUILD (duplicates fold into one slot), SLOT_DRAWN (the count in the
 rounds column). Only base items of kinds 10 and 12..15 stack; Junk stays out while pe_economy's
-Junk economy is on. Saved as the `pe_stacks.counts` record (204 bytes, up to 100 stacks). With the
+Junk economy is on. Saved in the companion file as the `pe_stacks/counts` section (204 bytes, up to 100 stacks); an older `pe_stacks.counts` record moves there on load. With the
 mod or the option off, extra copies go back into free slots as plain items.
 
 ## Warp (pe_warp)
@@ -119,13 +123,23 @@ moved, disabled or updated without touching the others. Add the folder name to `
 
 ## Talking to other mods
 
-- **Services**: `pe_service_publish("junk", 1, &api)` / `pe_service_get("junk", 1)`. A service is
+- **Services**: `pe_service_publish("junk", 1, &api, MOD_ID)` / `pe_service_get("junk", 1)`. A service is
   a versioned struct of functions; a mod that finds none carries on without it.
 - **Events**: `pe_event_id("name")` and `pe_event_emit(id, ctx)` for announcements.
 
 Service definitions live in `host/pe_services.h`, never in a mod's folder: `junk` v1 and
-`catalog` v1 (pe_economy), `keys` v1 (pe_qol), `wardrobe`, `bestiary` and `costumes` v1
-(pe_collection). Events: `play.log` (every pe_log row), `bestiary.unlock`, `wardrobe.worn`.
+`catalog` and `rebuild` v1 (pe_catalog), `keys` v1 (pe_qol), `bestiary` v1 (pe_collection), `wardrobe` and
+`costumes` v1 (pe_wardrobe).
+
+The shared registry (host/pe_registry.h; bridge findings D6 §11) is for mods' definitions that
+other mods build on: custom content, equipment effects, Catalog entries and shop offers. During
+its init a mod declares batches (`pe_reg_batch`) and submits entries (`pe_reg_submit`) under its
+own namespace, "<mod id>/<name>"; it gets a receipt, not a definition. Once every mod has started
+the host seals the registry: limits, keys declared twice (every claimant fails, nothing wins),
+references and batch requirements, to a fixed point, the same whatever order mods start in. Then
+`pe_reg_find`, `pe_reg_count` / `pe_reg_key` (canonical order) and `pe_reg_batch_result` (with the
+reason) answer; nothing new is accepted until the next start. No mod uses it yet.
+`tests/pe_mod_registry_test.c` runs the D6 §11.6 examples. Events: `play.log` (every pe_log row), `bestiary.unlock`, `wardrobe.worn`.
 A mod that registers into another mod's service at init lists that mod in its `requires`.
 
 ## The Mods panel
@@ -193,9 +207,9 @@ Records today:
 
 | Record | Holds | Owner |
 |---|---|---|
-| `pe_economy.loot` | Junk, rare pity, difficulty | pe_economy/pe_loot.c |
-| `pe_economy.catalog` | Mod Catalog unlocks, Rebuild list | pe_economy/pe_catalog.c |
-| `pe_economy.shop` | Requisition | pe_economy/pe_requisition.c |
+| `pe_economy.loot` | Junk, rare pity, difficulty (the rewards' fields through the `wallet` service, D10) | pe_economy/pe_loot.c |
+| `pe_economy.catalog` | Mod Catalog unlocks, Rebuild list (the name from before the split) | pe_catalog/pe_catalog.c |
+| `pe_economy.shop` | Requisition (the name from before the split) | pe_shops/pe_requisition.c |
 | `pe_qol.keys` | key item pocket | pe_qol/pe_key_items.c |
 | `pe_qol.sort` | bag sort | pe_qol/pe_bag_sort.c |
 
@@ -387,23 +401,30 @@ Tool-price, rescue/storage, confirmation, guard and save-layout checks.
 ## Wayne's Workshop
 
 pe_economy/pe_wayne_menu.c rewrites Wayne's own choice box (PE_HOOK_TEXTBOXES, before the
-boxes draw): Mod Permit Card and Workshop above Cancel, Junk and his count on Discard junk.
-Workshop opens Requisition, Rebuild (5 a page, Left/Right pages, dimmed rows can't be bought
-now) and a Wardrobe row while a mod publishes the `wardrobe` v1 service. Mod Permit Card adds
-one mod slot after a Yes / No. Circle goes back. While his box is the counter the shop allows
-buying though the field is busy (pe_shop_at_counter). Messages use pe_gametext.h.
+boxes draw): Workshop above Cancel, Junk and his count on Discard junk.
+Workshop opens a menu screen of its own (pe_shops/pe_workshop_screen.c), his box waiting below
+the screen: Requisition, Rebuild (the rebuilt item's stats as the equip screens show them), a
+Wardrobe row while a mod publishes the `wardrobe` v1 service (outfits beside their model), and
+Mod Permit Card (pe_permit.c: the bag's guns and armor; one permit adds one mod slot). Lists
+scroll; gray rows can't be had now and say why; every purchase asks Yes / No. Circle goes back.
+While his box is the counter the shop allows buying though the field is busy
+(pe_shop_at_counter). Messages use pe_gametext.h.
 
 host/pe_equip_sync.c (a host feature, so it works whichever mods are loaded) reruns the game's
 equipment rebuild in free field whenever the equipped gun or armor record changes, so Catalog,
 Tool, Rebuild and editor changes reach the next battle.
 
-## Collection (pe_collection)
+## Collection (pe_collection) and Wardrobe (pe_wardrobe)
 
-F1 > PE Enhancements > Collection. Cosmetic and information only; Junk comes from the economy's
-`junk` service. The Collection is a registry: its creatures and costumes come from packs, and
-Parasite Eve's own are just the first pack (`pe_pack_pe1.c`). Other mods (an import from another
-game, a randomizer) add theirs through the `bestiary` and `costumes` services (host/pe_services.h)
-without touching these files.
+F1 > PE Enhancements > Collection and Wardrobe. Cosmetic and information only; Junk comes from the
+economy's `junk` service. Two mods since November 2026 (bridge findings D8 §12, D9): the
+Collection is the Bestiary, the Wardrobe the costumes; neither needs the other. Each is a
+registry: its creatures or costumes come from packs, and Parasite Eve's own are just the first
+pack (`pe_collection/pe_pack_pe1.c`, `pe_wardrobe/pe_pack_pe1_costumes.c`). Other mods (an import
+from another game, a randomizer) add theirs through the `bestiary` and `costumes` services
+(host/pe_services.h) without touching these files.
+
+In pe_collection/:
 
 - `pe_bestiary.c`: the creature registry. A kill (enemy HP above 0 to 0 or less, watched on
   PE_HOOK_BATTLE_UPDATE) or Scan (PE_HOOK_SPELL power 7) is credited to the creature the enemy
@@ -430,6 +451,7 @@ without touching these files.
   Yes / No (host `pe_confirm`). NEW: tiers not looked at yet (profile `seen`) list in the game's
   yellow. Debug > Collection: Junk, Give 1000 Junk, Test creature (its tiers, kills, NEW), Unlock
   next tier, Add a kill, Reset creature, Mark creature NEW, Clear / Make all NEW.
+In pe_wardrobe/:
 - `pe_wardrobe.c`: the costume registry. A costume is one of the game's player bundles (bank 10 /
   12 / 13, rewritten at the start of Aya's model load, PE_HOOK_PLAYER_BANK), a skin folder
   (`bundle`, loaded by pe_skin_loader.c), or a provider's own model (its load(1) / load(0) at that
@@ -458,7 +480,8 @@ without touching these files.
   panel (outfit name, wear status/action, and preview control; no cast/category detail row). L1/R1 filter owned outfits by registered group; Left/Right rotate, Triangle opens/closes
   full view, Square (default keyboard V) pauses. Previews start facing the viewer. Both Wardrobe
   and Bestiary use `pe_screen_preview_input` to pass Left/Right through the native list to rotation. Cross wears the selected outfit when the menu closes; Circle returns.
-  There are no purchases, prices or unlock actions here. Missing/unowned outfits stay out of the list.
+  There are no purchases, prices or unlock actions here. Missing outfits stay out of the list, and
+  so do unowned ones while unlock rules apply (below).
   Names are fitted to the native font and capped to leave room for the title and side rail in the
   16 KB menu drawing buffer. Groups remember their scroll position while the screen is open.
   Preview loading is separate from equipment: `host/pe_model_skin.c` reads standalone skin blobs
@@ -469,15 +492,53 @@ without touching these files.
   names, the drawing budget, owned-only choices and cleanup; the model fixture covers player idle,
   skin source caching and missing files. Set `PE_MODEL_SKIN_ROOT` to the preference directory when
   running `tests/run_pe_model_test.ps1` to also decode installed Harlequin, Baker and Maya assets.
-- `pe_profile.c`: unlocks by key in pe_collection.ini beside the preferences, kept across every
-  game; records of packs that aren't loaded are kept untouched. The recomp's pe_collection.dat is
-  imported once.
-- `pe_pack_pe1.c`: the 75 creatures (pe_collection_data.h, generated by the bridge), the outfits
-  and the 38 character skins (each hidden while its pe_skins folder is missing).
-- `pe_collection.c`: the mod, Junk, messages; Debug > Collection resets the profile.
+- Unlock rules: a mod publishing `costume_rules` v1 (pe_economy's F1 > Economy > Costume unlock
+  rules, on by default) restricts wearing to owned or free costumes, bought with Junk. With the
+  rule off, or no such mod running, every installed costume can be worn and nothing is bought or
+  written as owned. What Aya wears follows a rule change at the next room load only; a costume the
+  rule locks comes off there with its key kept (bridge findings D8 §12).
+- `pe_packs.c`: character packs (bridge findings D8 §3, format v1) dropped in
+  `<preferences>/packs/` as a plain zip or the same layout unzipped: `pack.json` (`format` 1, `id`
+  of a-z / 0-9 / -, at most 31, `kind` "assets"), `LICENSE`, and `characters/<folder>/` with
+  `character.json` (`name`, `group`, `tier`: extra, outfit, supporting, main or special) and the
+  skin loader's files. Read at start-up only. Keys are `<pack id>/<folder>` (at most 63 bytes,
+  never renamed); the bundle `@<pack id>/<folder>` sends the skin loader to the pack. Refused, with
+  the reason on F1 > Collection > Wardrobe > Packs: an id installed twice (every copy), a bad or
+  reserved id (`pe1`, `local`), no LICENSE, another format or kind (recipe packs need the
+  builder), and zips with unsafe or duplicate names, encryption, links, files over 4 MiB, over
+  64 MiB unpacked or suspicious compression. A character missing a file, or not shaped like Aya
+  (host `pe_model_check_skin`, the bridge's check_skins_struct.py: at least 29 parts, draw commands
+  visiting each part once in order, every animation row one channel set per part, meta.bin's gun
+  part a part), is refused alone. Tiers price 25 / 50 / 100 / 250 / 400 Junk while unlock rules
+  apply. Previews in Aya's Wardrobe menu read the pack through `pe_model_skin_set_reader`, set by
+  the Wardrobe (the host never calls it by name). Recipe packs (Parasite Eve's own characters,
+  shared as instructions) are listed as needing a build: the bridge's
+  tools/pe_assets/pe_pack_build.py builds them from the player's disc into an assets pack here.
+  Not yet: default-appearance replacement. `tests/pe_mod_packs_test.c` writes real zips and folders; the model fixture covers
+  the preview reader and the shape check's refusals.
+- `pe_wardrobe_profile.c`: costumes owned and the one worn, by key, in pe_wardrobe.ini beside the
+  preferences, kept across every game; records of packs that aren't loaded are kept untouched. The
+  first time the file is missing, it imports the costume lines of pe_collection.ini (or, with none,
+  the recomp's pe_collection.dat) and records the source on an `imported` line. The Collection
+  drops its copies once it sees that line, so a lost pe_wardrobe.ini can't bring back costumes
+  cleared since.
+- `pe_pack_pe1_costumes.c`: the outfits and the 38 character skins (pe_wardrobe_data.h, generated
+  by the bridge; each hidden while its pe_skins folder is missing).
+- `pe_wardrobe_mod.c`: the mod, Junk, messages; Debug > Collection > Reset wardrobe resets its
+  profile. A player who had turned the Collection off in Manage mods starts with the Wardrobe off
+  too (host `pe_menu_alias_setting`).
+
+Back in pe_collection/:
+- `pe_profile.c`: Bestiary unlocks by key in pe_collection.ini beside the preferences, kept across
+  every game; records of packs that aren't loaded are kept untouched. The recomp's
+  pe_collection.dat is imported once. Costume lines from before the split are carried until the
+  Wardrobe has imported them; Reset collection never clears them.
+- `pe_pack_pe1.c`: the 75 creatures (pe_collection_data.h, generated by the bridge).
+- `pe_collection.c`: the mod, Junk, messages; Debug > Collection resets the Bestiary.
 
 Writing a pack (another mod):
-1. List "pe_collection" in your PeMod `requires`, so the services exist at your init.
+1. List "pe_collection" (creatures) and / or "pe_wardrobe" (costumes) in your PeMod `requires`,
+   so the services exist at your init.
 2. `const PeBestiaryApi *b = pe_service_get("bestiary", 1);` then `b->add(&info)` for each creature
    (static `PeCreatureInfo`, a key under your own prefix: "re2/zombie") and `b->map(room, identity,
    handle)` for where it appears, or `b->add_resolver(fn)` to decide per enemy (a randomizer that
@@ -493,13 +554,19 @@ Writing a pack (another mod):
 4. Keys are saved in players' profiles: never rename one once released.
 `tests/run_pe_collection_test.ps1` drives the registries the way such a pack would.
 
-## Mod Catalog files
+## Mod Catalog files (mods/pe_catalog)
+
+Its own mod since November 2026, "PE Enhancements: Mod Catalog". It reaches the Junk wallet only
+through the `junk` service (`pe_catalog_wallet.c`): without the economy mod running, paid actions
+are refused, never free. It publishes `catalog` (unlocks) and `rebuild` (the Rebuild list, for
+Wayne's Workshop). A player who had the economy off starts with it off too.
+
 
 - `pe_catalog.c`: effects, prices, install / remove rules, unlocks, the PECT save block, the
   `catalog` service.
 - `pe_dismantle.c`: Dismantle, Rebuild and Tool salvage.
 - `pe_catalog_pages.c`: the F1 pages. `pe_catalog_menu.c`: the Catalog in Aya's own menu.
-- `pe_catalog.h`: their private interface; other files use the `pe_cat_*` calls in pe_economy.h.
+- `pe_catalog.h`: their private interface; the mod's other files use the `pe_cat_*` calls in pe_catalog_mod.h.
 - `pe_discard_dismantle.c`: Discard on a gun or armor in Aya's menu or Wayne's storage reads
   Dismantle and confirms with what it pays (PE_HOOK_ITEM_ACTIONS); the equipped gear and the last
   Club keep the plain Discard. F1 > Economy > Discard dismantles.
@@ -510,7 +577,7 @@ pe_economy/pe_field_wayne.c: wherever Warner stands guard (map 374) he offers St
 Store item and the Workshop. His retail talk task (checked word for word, read-only) plays
 untouched; when it ends, the field is locked again the way his script does it (field event 0xFE)
 and our menu opens in a dialogue box of its own near the screen centre (PE_HOOK_TEXTBOXES, ahead
-of pe_wayne_menu.c, which adds Mod Permit Card and Workshop). Closing it unlocks the field (0xFF);
+of pe_wayne_menu.c, which adds Workshop). Closing it unlocks the field (0xFF);
 a storage choice then opens the game's storage screen. Nothing in his script is patched. F1 >
 Economy > Warner helps out.
 
@@ -534,3 +601,7 @@ and kill counts and discards old enemy HP tracking. Both save immediately;
 costume ownership, the worn outfit, Junk and unloaded packs' records remain
 unchanged. The actions live in pe_bestiary.c and use the existing profile
 API. Collection checks cover persistence, repeat use and post-reset kills.
+
+## Extension APIs
+
+The native-compatible v1 services, ownership rules, next-save purchase behavior and supported limits are documented in [the extension API guide](host/EXTENSION_APIS.md). For the whole mod API, start with [the API reference](../docs/MOD_API.md). The existing gameplay defaults are unchanged.

@@ -10,11 +10,8 @@ typedef struct { uint16_t map, id; uint8_t actor, creature; } PeCreatureKey;
 /* A creature's model forms, main body first: the room (map) and bank slot (actor) of an appearance,
  * read from the player's own disc at run time (locations only; no game data here). */
 typedef struct { uint8_t creature; uint16_t map; uint8_t actor; } PeCreatureModel;
-typedef struct { const char *name; uint16_t price; uint8_t kind, area; const char *folder; } PeSkin;
-/* weak / strong bits: 1 heat, 2 frost, 4 cyanide, 8 acid, 16 tranq. Skin kind 0 = Aya outfit (area),
- * 1 = character bundle in pe_skins/<folder>/ (built from the user's disc by tools/pe_assets/build_skin.py;
- * shown as "soon" and not sold while its files are missing). */
-
+/* weak / strong bits: 1 heat, 2 frost, 4 cyanide, 8 acid, 16 tranq. Costumes are in
+ * mods/pe_wardrobe/pe_wardrobe_data.h. */
 #define PE_CREATURES 75
 static const PeCreature g_pe_creatures[PE_CREATURES] = {
     { "Eve (stage)", 0, 1, 2, 3, "Day 1", 40, 9, 0, 28, "nothing", "nothing" },
@@ -577,51 +574,4 @@ static const PeCreatureModel g_pe_creature_models[PE_CREATURE_MODELS] = {
     { 72, 419, 6 },
     { 73, 419, 5 },
     { 74, 421, 4 },
-};
-
-#define PE_SKINS 43
-static const PeSkin g_pe_skins[PE_SKINS] = {
-    { "Aya", 0, 0, 12, "" },
-    { "Aya: evening dress", 50, 0, 10, "" },
-    { "Aya: T-shirt", 50, 0, 13, "" },
-    { "Aya: long dress", 50, 0, 11, "" },
-    { "Aya: transformed", 400, 0, 14, "" },
-    { "Melissa", 400, 1, 0, "melissa" },
-    { "Eve", 400, 1, 0, "eve" },
-    { "Daniel", 250, 1, 0, "daniel" },
-    { "Maeda", 250, 1, 0, "maeda" },
-    { "Maya", 250, 1, 0, "maya" },
-    { "Chief Baker", 100, 1, 0, "baker" },
-    { "Daniel (gun drawn)", 100, 1, 0, "daniel_gun" },
-    { "Maeda (backpack)", 100, 1, 0, "maeda_pack" },
-    { "Aya's date", 25, 1, 0, "date" },
-    { "Wayne", 100, 1, 0, "wayne" },
-    { "Cathy", 100, 1, 0, "cathy" },
-    { "Torres", 100, 1, 0, "torres" },
-    { "Eddie", 100, 1, 0, "eddie" },
-    { "Warner", 100, 1, 0, "warner" },
-    { "Nix", 100, 1, 0, "nix" },
-    { "Opera actress", 25, 1, 0, "opera_actress" },
-    { "Opera (doublet)", 25, 1, 0, "opera_doublet" },
-    { "Opera king", 25, 1, 0, "opera_king" },
-    { "Opera knight", 25, 1, 0, "opera_knight" },
-    { "Harlequin", 25, 1, 0, "harlequin" },
-    { "Usher", 25, 1, 0, "usher" },
-    { "Crew", 25, 1, 0, "crew" },
-    { "Scientist", 100, 1, 0, "scientist" },
-    { "Klamp", 250, 1, 0, "klamp" },
-    { "Ben", 100, 1, 0, "ben" },
-    { "Nurse", 25, 1, 0, "nurse" },
-    { "Guard (jumpsuit)", 25, 1, 0, "guard" },
-    { "Soldier", 25, 1, 0, "soldier" },
-    { "Cameraman", 25, 1, 0, "cameraman" },
-    { "Admiral", 100, 1, 0, "admiral" },
-    { "Captain", 100, 1, 0, "captain" },
-    { "Policewoman (vest)", 25, 1, 0, "policewoman" },
-    { "Police officer (light uniform)", 25, 1, 0, "police_light" },
-    { "Police officer (cap)", 25, 1, 0, "police_cap" },
-    { "Klamp (lab coat)", 100, 1, 0, "klamp_coat" },
-    { "Nix (gun drawn)", 100, 1, 0, "nix_gun" },
-    { "Eddie (gun drawn)", 100, 1, 0, "eddie_gun" },
-    { "Charred body", 25, 1, 0, "charred" },
 };

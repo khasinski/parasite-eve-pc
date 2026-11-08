@@ -71,10 +71,12 @@ Open **F1 → PE Enhancements** to configure them.
 - **Requisition and Wayne's Workshop** (`pe_economy`): buy medicine, ammo, Smoke Grenades,
   Revive and Tools with Junk, from F1 or Wayne's own menu (also Mod Permit Cards); Warner offers
   storage and the Workshop where he stands guard on Day 4. Smoke Grenades escape ordinary battles.
-- **Bestiary and Wardrobe** (`pe_collection`): 75 creatures revealed by kills, Scan or Junk;
-  Aya's outfits and character skins to unlock and wear. Skins are built from your own disc with
-  the decomp bridge tools and stay hidden until present. Unlocks are kept across games in
-  `pe_collection.ini`; other mods can register their own creatures and costumes.
+- **Bestiary** (`pe_collection`): 75 creatures revealed by kills, Scan or Junk, kept across games
+  in `pe_collection.ini`.
+- **Wardrobe** (`pe_wardrobe`): Aya's outfits and character skins to unlock and wear. Skins are
+  built from your own disc with the decomp bridge tools and stay hidden until present. Unlocks are
+  kept across games in `pe_wardrobe.ini` (imported once from `pe_collection.ini`). Other mods can
+  register their own creatures and costumes.
 - **Quick save** (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to
   the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Files
   are kept beside the preferences as `quicksave_<slot>.mcd`; loading restarts the saved room the
@@ -110,7 +112,7 @@ cmake --build build-mods --parallel
 ./build-mods/parasite-eve-pc
 ```
 
-`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_collection;pe_stacks;pe_warp;pe_quicksave;pe_cheats`).
+`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats`).
 
 ### PS5 payload & native GPU options
 

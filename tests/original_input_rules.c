@@ -92,7 +92,7 @@ int main(int argc,char **argv) {
 #include <stdio.h>
 #include <string.h>
 #include "../mods/host/pe_mod_host.h"
-static int save_fault, save_errors;
+static int save_fault, save_errors, mod_data_available = 1;
 static const char *mod_test_directory;
 static SDL_IOStream *ModTestOpen(const char *path, const char *mode) {
     if (save_fault == 1) { SDL_SetError("injected open failure"); return NULL; }
@@ -131,6 +131,7 @@ void pe_mod_log(const char *id, const char *format, ...) {
 }
 void pe_toast(const char *text) { (void)text; }
 int pe_mod_active(const char *id) { (void)id; return 1; }
+int pe_mod_data_available(const char *id) { return !id || mod_data_available; }
 const char *pe_mod_current(void) { return NULL; }
 void pe_mod_call_begin(const char *mod_id, const char *what, const char *detail) {
     (void)mod_id; (void)what; (void)detail;
@@ -148,6 +149,15 @@ int main(int argc, char **argv) {
     pe_menu_load_settings();
     static int enabled = 1;
     assert(!pe_menu_register_toggle(NULL, "Test option", "", &enabled, NULL));
+    /* Menu availability includes save/extension admission, even when the mod
+     * itself is running. Keep this host dependency in the standalone fixture. */
+    PeMenuRow owned = {0}; owned.mod_id = "test_mod";
+    assert(pe_menu_row_active(&owned));
+    mod_data_available = 0;
+    assert(!pe_menu_row_active(&owned));
+    owned.mod_id = NULL;
+    assert(pe_menu_row_active(&owned));
+    mod_data_available = 1;
     for (save_fault = 1; save_fault <= 5; ++save_fault) {
         int before = save_errors;
         pe_menu_save_settings();

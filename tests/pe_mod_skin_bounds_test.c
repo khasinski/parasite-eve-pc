@@ -1,7 +1,7 @@
 /* Bad optional packs must be rejected before their offsets reach the game. */
 #include <assert.h>
 #include <stdio.h>
-#include "../mods/pe_collection/pe_skin_loader.c"
+#include "../mods/pe_wardrobe/pe_skin_loader.c"
 Pe1GameState g_GameState;
 FieldActor *g_PlayerEntity;
 static void put32(u8 *p,u32 v) { memcpy(p,&v,4); }
