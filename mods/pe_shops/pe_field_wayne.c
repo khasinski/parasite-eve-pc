@@ -19,7 +19,14 @@
  *     equipment or Store item, the storage screen opens the way his script opcode would
  *     (Script_BeginSceneTransition: Render_BeginSceneLoad, Menu_OpenEquipScreen, menu flags).
  *     Talk to him again for more.
+ *   - once his lines have been heard, later talks skip them: as soon as his talk has locked the
+ *     field, his task is moved on to its own ending (0x33C: idle pose, unlock, done), any box of
+ *     his already open is closed, and our menu opens straight away.
  * Nothing in his script or the story changes.
+ *
+ * Standing next to him, the game starts a fresh contact task every frame; it checks the pad and
+ * the field state (0x154 .. 0x258) and ends unless Cross was pressed. Only a task past those
+ * checks is his talk, so the menu no longer waits for the player to walk away.
  */
 #include <string.h>
 
@@ -40,6 +47,12 @@ void Menu_OpenEquipScreen(int mode);
 
 #define PE_WARNER_MODEL   0x04
 #define PE_CONTACT_OFF    0x154   /* his contact task, from the script base */
+#define PE_TALK_OFF       0x258   /* past the pad and field checks: his talk proper */
+#define PE_LOCKED_OFF     0x274   /* past his field lock (event 0xFE at 0x260) */
+#define PE_ENDING_OFF     0x33C   /* his ending: idle pose, flag 0x20 off, unlock, node free */
+#define PE_LINE_PAGE_1    30      /* the room message pages his two lines use */
+#define PE_LINE_PAGE_2    31
+#define PE_NODE_FREE      0x10
 #define PE_TEXTBOX_SHOWN  2
 #define PE_STORE_EQUIPMENT 0
 #define PE_STORE_ITEMS    1
@@ -77,6 +90,9 @@ static u8 *s_last_message;        /* the box message seen last frame */
 static TextboxEntry *s_menu_box;  /* the box showing our menu */
 static int s_pending = -1;        /* storage screen to open: PE_STORE_*, or -1 */
 static int s_pending_wait;        /* frames left before it opens */
+static int s_heard;               /* his lines were heard once this session: later talks skip them */
+static int s_swallow;             /* quiet frames left in which a new talk is the Cross that closed our menu */
+#define PE_SWALLOW_FRAMES 10
 
 /* Is `e` Warner, with his retail contact task? */
 static int pe_is_warner(BattleEntity *e) {
@@ -93,18 +109,36 @@ static BattleEntity *pe_find_warner(void) {
     return NULL;
 }
 
-/* Is his contact task running now (a script node inside it)? */
-static int pe_talk_running(void) {
-    const u8 *from = s_warner->scriptBase + PE_CONTACT_OFF, *to = from + PE_TASK_BYTES;
+/* His talk's node, if he is talking now: a live node of his past the contact checks. The
+ * contact task the game starts each frame while Aya stands next to him (still at the checks,
+ * or ending at once) is not a talk. */
+static ScriptNode *pe_talk_node(void) {
+    const u8 *from = s_warner->scriptBase + PE_TALK_OFF;
+    const u8 *to = s_warner->scriptBase + PE_CONTACT_OFF + PE_TASK_BYTES;
     int list, guard;
     for (list = 0; list < 3; ++list) {
-        const ScriptNode *n = s_warner->scriptNodeLists[list];
+        ScriptNode *n = s_warner->scriptNodeLists[list];
         for (guard = 0; n && guard < 16; ++guard, n = n->next) {
             const u8 *at = (const u8 *)n->current.script;
-            if (at >= from && at < to) return 1;
+            if (!(n->flags & PE_NODE_FREE) && at >= from && at < to) return n;
         }
     }
-    return 0;
+    return NULL;
+}
+
+static int pe_talk_running(void) { return pe_talk_node() != NULL; }
+
+/* His lines were heard before: once his talk has locked the field, close any line of his
+ * that is up and send his task to its own ending. Returns 1 if it did. */
+static int pe_skip_lines(ScriptNode *n) {
+    const u8 *at = (const u8 *)n->current.script;
+    if (at < s_warner->scriptBase + PE_LOCKED_OFF || at >= s_warner->scriptBase + PE_ENDING_OFF) return 0;
+    if (Draw_GetTextboxPageState(PE_LINE_PAGE_1)) Draw_CloseTextboxPage(PE_LINE_PAGE_1);
+    if (Draw_GetTextboxPageState(PE_LINE_PAGE_2)) Draw_CloseTextboxPage(PE_LINE_PAGE_2);
+    n->current.script = (unsigned int *)(s_warner->scriptBase + PE_ENDING_OFF);
+    n->active = 1;                                      /* runs next pass, not after a wait */
+    pe_log("field_wayne", "lines skipped (heard before)");
+    return 1;
 }
 
 static void pe_write_text(void) {
@@ -143,7 +177,7 @@ static void pe_talk_tick(void) {
     for (i = 0; i < 4; ++i) {
         TextboxEntry *e = &g_TextboxEntries[i];
         char said[256];
-        if (e->state == 0 || !e->message || e->message == s_last_message) continue;
+        if (e->state == 0 || !e->message || e->message == s_last_message || e->message == s_text) continue;
         s_last_message = e->message;
         pe_log("field_wayne", "line %d: %s", ++s_boxes_this_talk, pe_text_to_ascii(said, sizeof said, e->message));
         return;
@@ -195,6 +229,7 @@ static int pe_on_textboxes(void *ctx, void *user) {
             s_pending_wait = PE_STORAGE_DELAY;
         }
         s_menu_box = NULL;
+        s_swallow = PE_SWALLOW_FRAMES;
         if (s_warner) pe_field_event(PE_FIELD_UNLOCK);
     }
     if (!s_enabled || !pe_shopw_enabled()) {             /* an open menu still unlocks as it closes */
@@ -207,12 +242,25 @@ static int pe_on_textboxes(void *ctx, void *user) {
         if (!(s_warner = pe_find_warner())) return 0;
         pe_mod_log("pe_economy", "Warner found in room %d: storage and Workshop offered", pe_room_number());
     }
-    if (pe_talk_running()) {
-        pe_talk_tick();
-    } else if (s_boxes_this_talk) {                     /* his talk just ended: our menu */
-        s_boxes_this_talk = 0;
-        s_last_message = NULL;
-        if (!s_menu_box) pe_open_menu();
+    {
+        ScriptNode *talk = pe_talk_node();
+        if (talk && (s_menu_box || s_swallow > 0) && !s_boxes_this_talk) {
+            /* The Cross that picked a row in our menu started a talk: end it quietly, no menu. */
+            if (pe_skip_lines(talk)) pe_log("field_wayne", "talk from the menu's Cross ended");
+        } else if (talk) {
+            if (s_heard && pe_skip_lines(talk)) {
+                if (!s_boxes_this_talk) s_boxes_this_talk = 1;   /* the menu follows his ending */
+            } else {
+                pe_talk_tick();
+            }
+        } else if (s_boxes_this_talk) {                 /* his talk just ended: our menu */
+            if (s_boxes_this_talk >= 2) s_heard = 1;    /* both lines seen once: skip them from now on */
+            s_boxes_this_talk = 0;
+            s_last_message = NULL;
+            if (!s_menu_box) pe_open_menu();
+        } else if (s_swallow > 0) {
+            --s_swallow;                                /* counts only frames with no talk */
+        }
     }
     return 0;
 }
