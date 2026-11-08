@@ -116,6 +116,13 @@ answering No to the save, asks nothing. Nothing in the game's scripts is patched
   box; a longer line runs on into another box. Debug > Check calls measures every call.
 - Per save: record `pe_phone.heard` v1 (48 bytes): the last five calls and up to 16 one-time
   calls heard, as 16-bit key hashes. New Game resets it; F1 > Forget heard calls clears it.
+- Aya stays on the phone (pe_phone_hold.c): when the save is written, the phone's task already
+  waits (opcode 48) for her put-down animation (0x26 from frame 0x3C, receiver at her ear). While
+  the question and the call are up her animation step is 0 (PE_HOOK_ACTOR_STEP, a local value), so
+  she holds the receiver, the task waits and the phone's own field lock holds the field. On
+  `*click*` (or No) she is let go: the game's own put-down and hang-up sound play, then its unlock.
+  A phone that lets her go before the save ends (the sewer's emergency phone) has its own pose
+  replayed for the call (animation 30 to frame 14, opcodes 46/78/47 as its script does), then idle.
 - Sounds: the phone's own. Every save phone's script plays four sounds from its area's bank,
   from a base id A (Akao command 0x15F): A and A+1 after Yes (pick up, dial tone), A+3 and A+2
   after the save (put it down). A call plays the pick-up and the tone twice ("ring... ring...") on
@@ -140,6 +147,7 @@ Files (one job each; they talk only through `pe_phone.h`):
 | `pe_phone_flow.c` | after the save: "Stay on the line?", then the call page by page |
 | `pe_phone_box.c` | the game side: our dialogue box, field lock, taking the pad, the font |
 | `pe_phone_sound.c` | the phone's own sounds: pick up and ring, put down |
+| `pe_phone_hold.c` | keeping Aya at the phone, receiver at her ear, until the call ends |
 | `pe_calls_pe1.c` | Parasite Eve's own calls (a pack) |
 | `pe_phone_text.c`, `pe_phone_record.c`, `pe_phone_pick.c` | the pure core (`pe_phone_core.h`): pages and wrapping, the heard record, picking |
 

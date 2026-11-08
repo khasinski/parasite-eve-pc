@@ -12,6 +12,7 @@
  *   pe_phone_flow.c     after the save: the question, then the call, page by page
  *   pe_phone_box.c      the game side of showing it: our dialogue box, field lock, pad, font
  *   pe_phone_sound.c    the phone's own sounds: pick up and dial, put down
+ *   pe_phone_hold.c     keeping Aya at the phone (receiver at her ear) until the call ends
  *   pe_calls_pe1.c      Parasite Eve's own calls: a pack like any other
  *
  * and the pure core (pe_phone_core.h: text and pages, the record, picking), which tests link alone. */
@@ -79,9 +80,20 @@ void pe_phone_pad_give(int cursor);                    /* after the field logic;
 enum { PE_PHONE_SOUND_DIAL = 0, PE_PHONE_SOUND_HANG_UP = 1 };
 int pe_phone_sounds_on(void);                          /* setting (pe_phone_mod.c) */
 int pe_phone_sound_base(int room);                     /* the room's phone sound base id; 0: not a save phone's room */
-void pe_phone_sound_play(int cue, int room);           /* pick up + dial, or put down */
+void pe_phone_sound_play(int cue, int room, int on_phone);   /* pick up + dial, or put down;
+                                                        on_phone: she never put it down (no pick-up,
+                                                        and the game plays its own put-down) */
 void pe_phone_sound_tick(void);                        /* every frame: steps and stops */
 void pe_phone_sound_stop(void);
+
+/* ---- keeping Aya on the phone (pe_phone_hold.c) ---- */
+void pe_phone_hold_register(const char *mod_id);
+int pe_phone_hold_begin(void);                         /* at the save: hold Aya at her ear if the phone waits */
+int pe_phone_hold_active(void);
+void pe_phone_hold_release(void);                      /* she puts the phone down, the game's own way */
+int pe_phone_hold_pose(int room);                      /* not held: the phone's own pose for the call */
+void pe_phone_hold_tick(void);                         /* every frame: puts a pose on once the lock settled */
+void pe_phone_hold_forget(void);                       /* room load / loaded save: nothing to undo */
 
 /* ---- the game's own calls (pe_calls_pe1.c) ---- */
 void pe_calls_pe1_register(const PePhoneCallsApi *api);

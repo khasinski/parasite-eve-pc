@@ -44,12 +44,14 @@ static void pe_to_idle(void) {
 static void pe_reset(const char *why) {
     if (pe_busy()) pe_mod_log(PE_PHONE_MOD_ID, "call ended: %s", why);
     pe_phone_sound_stop();
+    pe_phone_hold_forget();
     pe_phone_box_forget();
     pe_to_idle();
 }
 
 static void pe_end(const char *how) {
     pe_phone_box_close();
+    pe_phone_hold_release();                              /* No, or a box gone: she hangs up now */
     pe_phone_unlock();
     if (s_state == ST_CALL && s_call) {
         pe_phone_calls_played(s_call);
@@ -62,9 +64,12 @@ static void pe_end(const char *how) {
 static int pe_show_page(int index) {
     const PePhonePage *p = &s_script.pages[index];
     s_page = index;
-    if (index == 0) pe_phone_sound_play(PE_PHONE_SOUND_DIAL, s_spot.room);
-    else if (index == s_script.click) pe_phone_sound_play(PE_PHONE_SOUND_HANG_UP, s_spot.room);
-    else pe_phone_sound_stop();                           /* picked up: no more ringing */
+    if (index == 0) pe_phone_sound_play(PE_PHONE_SOUND_DIAL, s_spot.room, pe_phone_hold_active());
+    else if (index == s_script.click) {                   /* she puts the phone down */
+        const int held = pe_phone_hold_active();
+        pe_phone_hold_release();
+        pe_phone_sound_play(PE_PHONE_SOUND_HANG_UP, s_spot.room, held);
+    } else pe_phone_sound_stop();                         /* picked up: no more ringing */
     return pe_phone_box_show(p->text, p->style, p->lines, p->width);
 }
 
@@ -100,9 +105,12 @@ static void pe_start_call(void) {
 static void pe_begin(void) {
     const int mode = s_force >= 0 ? s_force : pe_phone_mode();
     pe_phone_spot_clear();
-    if (mode == PE_PHONE_OFF || !pe_player()) { pe_to_idle(); return; }
+    if (mode == PE_PHONE_OFF || !pe_player()) { pe_phone_hold_release(); pe_to_idle(); return; }
     pe_phone_spot_quiet(1);
-    pe_phone_lock();
+    if (!pe_phone_hold_active()) {                        /* held: the phone's own lock holds Aya */
+        pe_phone_lock();
+        (void)pe_phone_hold_pose(s_spot.room);            /* a phone that let her go: its pose again */
+    }
     if (mode == PE_PHONE_ALWAYS) { pe_start_call(); return; }
     if (!pe_show_question()) { pe_end("no box free"); return; }
     s_state = ST_ASK;
@@ -157,6 +165,7 @@ static int pe_on_textboxes(void *ctx, void *user) {
     token = g_SceneDispatchToken;
     if (token != s_token) { s_token = token; pe_reset("room changed"); }
     pe_phone_sound_tick();
+    if (pe_busy()) pe_phone_hold_tick();
     if (!s_checked && pe_phone_font_ready() && !pe_busy()) {
         s_checked = 1;
         (void)pe_phone_flow_check_calls();
@@ -166,8 +175,13 @@ static int pe_on_textboxes(void *ctx, void *user) {
     case ST_CALL: pe_step_call(); break;
     default: {
         const int settled = pe_settled();
+        /* Held at the phone, the field stays the phone's (locked): ready once the save screen and
+         * its boxes are gone. Otherwise once she has hung up and the field is free. */
+        const int ready = pe_phone_hold_active()
+            ? !(g_GameState.flags & 0x9000) && !pe_phone_box_any() && pe_player() != NULL
+            : settled;
         pe_phone_spot_tick(settled);
-        if (pe_phone_spot_ready(&s_spot) && settled) { if (++s_wait >= PE_ASK_FREE) pe_begin(); }
+        if (pe_phone_spot_ready(&s_spot) && ready) { if (++s_wait >= PE_ASK_FREE) pe_begin(); }
         else s_wait = 0;
         break;
     }

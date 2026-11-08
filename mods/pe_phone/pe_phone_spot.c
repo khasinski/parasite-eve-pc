@@ -67,6 +67,7 @@ static int pe_on_committed(void *ctx, void *user) {
     (void)user;
     if (s_state != SPOT_ASKED) return 0;
     pe_log("phone", "room=%d saved=1", s_spot.room);
+    if (pe_phone_mode() != PE_PHONE_OFF) (void)pe_phone_hold_begin();   /* keep her at the phone */
     s_state = SPOT_SAVED;
     return 0;
 }

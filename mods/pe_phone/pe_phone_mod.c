@@ -48,6 +48,7 @@ static int pe_phone_init(void) {
     pe_calls_pe1_register(pe_phone_calls());
     pe_phone_spot_register(PE_PHONE_MOD_ID);
     pe_phone_flow_register(PE_PHONE_MOD_ID);
+    pe_phone_hold_register(PE_PHONE_MOD_ID);
 
     pe_menu_begin(PE_PHONE_PAGE);
     pe_menu_top_page(PE_PHONE_PAGE, "After saving at a phone, Aya can stay on the line for a short call.", 50);

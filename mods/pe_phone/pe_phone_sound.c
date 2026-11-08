@@ -77,12 +77,13 @@ void pe_phone_sound_stop(void) {
     s_count = s_at = 0;
 }
 
-void pe_phone_sound_play(int cue, int room) {
+void pe_phone_sound_play(int cue, int room, int on_phone) {
     pe_phone_sound_stop();
     if (!pe_phone_sounds_on() || !(s_base = pe_phone_sound_base(room)) || !g_PlayerEntity) return;
+    if (cue != PE_PHONE_SOUND_DIAL && on_phone) return;   /* the phone's own put-down plays */
     if (cue == PE_PHONE_SOUND_DIAL) { s_steps = k_dial; s_count = (int)(sizeof k_dial / sizeof k_dial[0]); }
     else { s_steps = k_hang_up; s_count = (int)(sizeof k_hang_up / sizeof k_hang_up[0]); }
-    s_at = 0;
+    s_at = cue == PE_PHONE_SOUND_DIAL && on_phone ? 1 : 0;   /* still holding it: no pick-up */
     pe_start_step();
 }
 
