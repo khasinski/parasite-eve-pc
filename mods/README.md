@@ -120,8 +120,11 @@ answering No to the save, asks nothing. Nothing in the game's scripts is patched
   from a base id A (Akao command 0x15F): A and A+1 after Yes (pick up, dial tone), A+3 and A+2
   after the save (put it down). A call plays the pick-up and the tone twice ("ring... ring...") on
   its ring page, stopped when the other side picks up, and the put-down pair on `*click*`. The ids
-  come from a table of the 22 phone rooms (pe-native-debug `tools/phone_rooms.py`); elsewhere no
+  come from a table of the 23 phone rooms (pe-native-debug `tools/phone_rooms.py`); elsewhere no
   sound. F1 > Phone sounds turns them off.
+- Only save phones: the same question also comes when a new day starts (M351, M352), in the debug
+  room (M360) and as the story save (M271); those get no call. The sewer's emergency phone (M032)
+  saves nothing, so it has no call either.
 - Settings: Phone calls (Ask after saving / Always call / Off), Call tone (Mixed / Serious only /
   Funny only), Phone sounds. Debug: Ask now, Call now (no save needed), Check calls.
 

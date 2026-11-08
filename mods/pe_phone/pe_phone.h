@@ -78,7 +78,7 @@ void pe_phone_pad_give(int cursor);                    /* after the field logic;
 /* ---- the phone's own sounds (pe_phone_sound.c) ---- */
 enum { PE_PHONE_SOUND_DIAL = 0, PE_PHONE_SOUND_HANG_UP = 1 };
 int pe_phone_sounds_on(void);                          /* setting (pe_phone_mod.c) */
-int pe_phone_sound_base(int room);                     /* the room's phone sound base id, 0 if not a phone room */
+int pe_phone_sound_base(int room);                     /* the room's phone sound base id; 0: not a save phone's room */
 void pe_phone_sound_play(int cue, int room);           /* pick up + dial, or put down */
 void pe_phone_sound_tick(void);                        /* every frame: steps and stops */
 void pe_phone_sound_stop(void);

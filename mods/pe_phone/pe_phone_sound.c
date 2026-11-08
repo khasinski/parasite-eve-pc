@@ -8,7 +8,9 @@
  *   after the save screen:                        A+3 for 35 frames, then A+2 for 20 (put it down)
  * A call plays the same pairs with the same timing, at Aya's position. The ids belong to each
  * area's bank, so they come from a table of the phone rooms, read from both US discs' room scripts
- * (pe-native-debug tools/phone_rooms.py). A room not in it plays nothing. */
+ * (pe-native-debug tools/phone_rooms.py). The table is also the list of save phones: every other
+ * "Will you save your progress?" is not a phone (a new day's save, the story save, the debug room)
+ * and gets no call (pe_phone_spot.c). */
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_phone.h"
@@ -31,7 +33,7 @@ static const struct { short room; short base; } k_phones[] = {
     {176, 0x9FA},
     {184, 0xA0D},
     {195, 0x8CC},
-    {196, 0xA85}, {237, 0xA85}, {340, 0xA85},
+    {196, 0xA85}, {237, 0xA85}, {238, 0xA85}, {340, 0xA85},   /* M238 plays A+1, A+2 another way (0x12C) */
     {266, 0xA6B},
     {276, 0xA4C},
 };
