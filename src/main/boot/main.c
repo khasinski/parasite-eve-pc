@@ -221,6 +221,9 @@ typedef enum HostBindDevice {
     HOST_BIND_CONTROLLER = 1
 } HostBindDevice;
 
+#include <cJSON.h>
+#include <miniz.h>
+
 #if PE_DESKTOP_MOD_DOWNLOADS
 /* Versioned desktop background packs. Only a fully verified staging directory
  * can replace the active pointer; failed/cancelled downloads keep the old pack. */
@@ -249,8 +252,6 @@ typedef unsigned long long u_int64;
 /* WinSock's IPv4 member alias also collides with the PS1 kernel's TCB. */
 #undef s_addr
 #endif
-#include <cJSON.h>
-#include <miniz.h>
 #ifndef PE_VERSION
 #define PE_VERSION "development"
 #endif
@@ -3093,6 +3094,7 @@ static int Host_CrashRoom(void) {
     return room;
 }
 
+#if PE_DESKTOP_MOD_DOWNLOADS
 static size_t Host_DiscardCurlWrite(char *ptr, size_t size, size_t nmemb, void *userdata) {
     (void)ptr;
     (void)userdata;
@@ -3164,6 +3166,21 @@ static int Host_UploadScreenshotFiles(
     curl_easy_cleanup(curl);
     return res == CURLE_OK && status >= 200 && status < 300;
 }
+#else
+/* Without libcurl the screenshot is only saved locally. */
+static int Host_UploadScreenshotFiles(
+    const char *url,
+    const char *png_path,
+    const char *json_path,
+    const char *summary_message
+) {
+    (void)url;
+    (void)png_path;
+    (void)json_path;
+    (void)summary_message;
+    return 0;
+}
+#endif
 
 static char host_last_screenshot_png[4096];
 static char host_last_screenshot_json[4096];

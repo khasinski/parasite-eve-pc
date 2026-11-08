@@ -104,9 +104,8 @@ if(PE_PS5_GAME AND PE_DESKTOP_MOD_DOWNLOADS)
     message(FATAL_ERROR "Desktop HD downloads are unsupported on PS5")
 endif()
 add_library(pe_download_deps INTERFACE)
-if(PE_DESKTOP_MOD_DOWNLOADS)
-    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=1)
-# Desktop mod downloads use native TLS through libcurl and a bounded ZIP reader.
+# Screenshots are written as PNG (miniz) with JSON metadata (cJSON) in every
+# desktop build, so both are needed even without the HD pack downloader.
 include(FetchContent)
 FetchContent_Declare(pe_json URL https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.19.tar.gz
     URL_HASH SHA256=7fa616e3046edfa7a28a32d5f9eacfd23f92900fe1f8ccd988c1662f30454562 SOURCE_SUBDIR pe-unused)
@@ -121,6 +120,9 @@ add_library(pe_download_zip STATIC ${pe_zip_SOURCE_DIR}/miniz.c ${pe_zip_SOURCE_
 target_include_directories(pe_download_zip PUBLIC ${pe_zip_SOURCE_DIR} ${pe_zip_BINARY_DIR})
 target_compile_definitions(pe_download_zip PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
 target_link_libraries(pe_download_deps INTERFACE pe_download_json pe_download_zip)
+if(PE_DESKTOP_MOD_DOWNLOADS)
+    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=1)
+# Desktop mod downloads use native TLS through libcurl.
 if(APPLE)
     target_link_libraries(pe_download_deps INTERFACE "-lcurl")
 elseif(WIN32)
