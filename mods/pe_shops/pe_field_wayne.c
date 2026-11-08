@@ -19,9 +19,12 @@
  *     equipment or Store item, the storage screen opens the way his script opcode would
  *     (Script_BeginSceneTransition: Render_BeginSceneLoad, Menu_OpenEquipScreen, menu flags).
  *     Talk to him again for more.
+ *   - his talk's field lock is taken over rather than unlocked and locked again: at the end of
+ *     his last line his task skips its unlock (we do its pose reset), and our menu keeps Aya
+ *     held until it closes (see pe_take_over);
  *   - once his lines have been heard, later talks skip them: as soon as his talk has locked the
- *     field, his task is moved on to its own ending (0x33C: idle pose, unlock, done), any box of
- *     his already open is closed, and our menu opens straight away.
+ *     field, any box of his already open is closed, his task is taken over the same way, and
+ *     our menu opens straight away.
  * Nothing in his script or the story changes.
  *
  * Standing next to him, the game starts a fresh contact task every frame; it checks the pad and
@@ -36,6 +39,8 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe1/entity_animation.h"
+#include "pe1/field_actor.h"
 #include "pe1/field_sfx.h"
 #include "pe1/scene_dispatch.h"
 #include "pe1/scene_transition.h"
@@ -50,6 +55,9 @@ void Menu_OpenEquipScreen(int mode);
 #define PE_TALK_OFF       0x258   /* past the pad and field checks: his talk proper */
 #define PE_LOCKED_OFF     0x274   /* past his field lock (event 0xFE at 0x260) */
 #define PE_ENDING_OFF     0x33C   /* his ending: idle pose, flag 0x20 off, unlock, node free */
+#define PE_LINE2_WAIT_OFF 0x328   /* waiting for his second line's box to close */
+#define PE_FREE_OFF       0x364   /* his last op: node free */
+#define PE_FROZEN         0x7FFF  /* node countdown that keeps his task waiting for us */
 #define PE_LINE_PAGE_1    30      /* the room message pages his two lines use */
 #define PE_LINE_PAGE_2    31
 #define PE_NODE_FREE      0x10
@@ -94,6 +102,10 @@ static int s_heard;               /* his lines were heard once this session: lat
 static u8 s_menu_cursor;          /* our menu's row, kept in case a line of his resets the cursor */
 static int s_swallow;           /* quiet frames left in which a new talk is the Cross that closed our menu */
 #define PE_SWALLOW_FRAMES 10
+static int s_held;                /* field locks of his we took over and still owe an unlock for */
+static ScriptNode *s_frozen;      /* his task, held at his last line until it closes */
+
+static void pe_field_event(int value);
 
 /* Is `e` Warner, with his retail contact task? */
 static int pe_is_warner(BattleEntity *e) {
@@ -129,17 +141,37 @@ static ScriptNode *pe_talk_node(void) {
 
 static int pe_talk_running(void) { return pe_talk_node() != NULL; }
 
-/* His lines were heard before: once his talk has locked the field, close any line of his
- * that is up and send his task to its own ending. Returns 1 if it did. */
-static int pe_skip_lines(ScriptNode *n) {
+/* Once his talk has locked the field: close any line of his that is up, do his ending's
+ * pose reset (0x33C: idle action mode, flags 0x100/0x20 off) and send his task straight to
+ * its last op (node free), leaving out his unlock. We now hold his lock (s_held) and release
+ * it ourselves. A lock and an unlock queued in the same frame start in reverse order (newest
+ * node first), so an unlock from him next to a lock from us would leave Aya free to walk.
+ * Returns 1 if it took the talk over. */
+static int pe_take_over(ScriptNode *n) {
     const u8 *at = (const u8 *)n->current.script;
+    FieldActor *a = (FieldActor *)s_warner;
     if (at < s_warner->scriptBase + PE_LOCKED_OFF || at >= s_warner->scriptBase + PE_ENDING_OFF) return 0;
     if (Draw_GetTextboxPageState(PE_LINE_PAGE_1)) Draw_CloseTextboxPage(PE_LINE_PAGE_1);
     if (Draw_GetTextboxPageState(PE_LINE_PAGE_2)) Draw_CloseTextboxPage(PE_LINE_PAGE_2);
-    n->current.script = (unsigned int *)(s_warner->scriptBase + PE_ENDING_OFF);
+    Entity_SetActionMode(s_warner, 0);
+    a->flags &= ~0x120u;
+    n->current.script = (unsigned int *)(s_warner->scriptBase + PE_FREE_OFF);
     n->active = 1;                                      /* runs next pass, not after a wait */
-    pe_log("field_wayne", "lines skipped (heard before)");
+    if (n == s_frozen) s_frozen = NULL;
+    ++s_held;
     return 1;
+}
+
+/* Send the unlocks for every lock of his we hold. */
+static void pe_release(void) {
+    if (!s_warner) { s_held = 0; return; }
+    while (s_held > 0) { pe_field_event(PE_FIELD_UNLOCK); --s_held; }
+}
+
+/* Let a task we were holding at his last line carry on by itself (his own unlock ends it). */
+static void pe_unfreeze(void) {
+    if (s_frozen && !(s_frozen->flags & PE_NODE_FREE)) s_frozen->active = 1;
+    s_frozen = NULL;
 }
 
 static void pe_write_text(void) {
@@ -209,7 +241,10 @@ static void pe_open_menu(void) {
         g_MenuEquipSlotIndex = -1;
         s_menu_cursor = 0;
         s_menu_box = e;
-        pe_field_event(PE_FIELD_LOCK);
+        if (s_held == 0) {                              /* else his lock, taken over, holds Aya */
+            pe_field_event(PE_FIELD_LOCK);
+            s_held = 1;
+        }
         pe_log("field_wayne", "menu shown");
         return;
     }
@@ -222,7 +257,7 @@ static int pe_on_textboxes(void *ctx, void *user) {
     (void)user;
     if (!pe_game_loaded()) return 0;
     token = g_SceneDispatchToken;
-    if (token != s_token) { s_token = token; pe_forget(); s_pending = -1; }
+    if (token != s_token) { s_token = token; pe_forget(); s_pending = -1; s_held = 0; s_frozen = NULL; }
 
     /* Our menu box closed: the dialogue box left the chosen row in g_MenuEquipSlotIndex. */
     if (s_menu_box && (s_menu_box->state != PE_TEXTBOX_SHOWN || s_menu_box->page_id != PE_BOX_PAGE)) {
@@ -232,7 +267,7 @@ static int pe_on_textboxes(void *ctx, void *user) {
         }
         s_menu_box = NULL;
         s_swallow = PE_SWALLOW_FRAMES;
-        if (s_warner) pe_field_event(PE_FIELD_UNLOCK);
+        if (s_warner) pe_release();
     }
     /* The Cross that picks a row can also start his talk this frame, before the boxes draw;
      * his first line opening resets the shared choice cursor to the top row (Store
@@ -246,10 +281,10 @@ static int pe_on_textboxes(void *ctx, void *user) {
         }
     }
     if (!s_enabled || !pe_shopw_enabled()) {             /* an open menu still unlocks as it closes */
-        if (!s_menu_box) pe_forget();
+        if (!s_menu_box) { pe_unfreeze(); pe_release(); pe_forget(); }
         return 0;
     }
-    if (s_warner && !pe_is_warner(s_warner)) pe_forget();   /* a room reload brings a fresh actor */
+    if (s_warner && !pe_is_warner(s_warner)) { s_frozen = NULL; s_held = 0; pe_forget(); }   /* a room reload brings a fresh actor */
     if (!s_warner) {
         /* Found by his retail talk script (checked word for word), in whatever room he stands. */
         if (!(s_warner = pe_find_warner())) return 0;
@@ -258,21 +293,32 @@ static int pe_on_textboxes(void *ctx, void *user) {
     {
         ScriptNode *talk = pe_talk_node();
         if (talk && (s_menu_box || s_swallow > 0) && !s_boxes_this_talk) {
-            /* The Cross that picked a row in our menu started a talk: end it quietly, no menu. */
-            if (pe_skip_lines(talk)) pe_log("field_wayne", "talk from the menu's Cross ended");
+            /* The Cross that picked a row in our menu started a talk: end it quietly, no menu
+             * (its lock is released with the menu's, or below if the menu is already gone). */
+            if (pe_take_over(talk)) pe_log("field_wayne", "talk from the menu's Cross ended");
+        } else if (talk && s_heard) {
+            if (pe_take_over(talk)) {
+                pe_log("field_wayne", "lines skipped (heard before)");
+                if (!s_boxes_this_talk) s_boxes_this_talk = 1;   /* the menu follows */
+            }
         } else if (talk) {
-            if (s_heard && pe_skip_lines(talk)) {
-                if (!s_boxes_this_talk) s_boxes_this_talk = 1;   /* the menu follows his ending */
-            } else {
-                pe_talk_tick();
+            pe_talk_tick();
+            if ((const u8 *)talk->current.script == s_warner->scriptBase + PE_LINE2_WAIT_OFF) {
+                if (Draw_GetTextboxPageState(PE_LINE_PAGE_2)) {
+                    talk->active = PE_FROZEN;           /* wait for his last line ourselves */
+                    s_frozen = talk;
+                }
+                else
+                    pe_take_over(talk);                 /* it closed: his lock carries on into our menu */
             }
         } else if (s_boxes_this_talk) {                 /* his talk just ended: our menu */
             if (s_boxes_this_talk >= 2) s_heard = 1;    /* both lines seen once: skip them from now on */
             s_boxes_this_talk = 0;
             s_last_message = NULL;
             if (!s_menu_box) pe_open_menu();
-        } else if (s_swallow > 0) {
-            --s_swallow;                                /* counts only frames with no talk */
+        } else {
+            if (s_swallow > 0) --s_swallow;             /* counts only frames with no talk */
+            if (!s_menu_box) pe_release();              /* a lock taken over with no menu to hold it */
         }
     }
     return 0;
@@ -302,7 +348,7 @@ void pe_field_wayne_register(const char *mod_id) {
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 #include "pe_checkpoint_wire.h"
 #include "pe_checkpoint_economy.h"
-int pe_field_wayne_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(s_menu_box||s_pending>=0||s_boxes_this_talk||s_last_message))return 0;if(apply&&(!in||!pe_field_wayne_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
+int pe_field_wayne_checkpoint_walk(const unsigned char *in,unsigned char *out,int apply){if((!in&&!out)||(s_menu_box||s_pending>=0||s_boxes_this_talk||s_last_message||s_held||s_frozen))return 0;if(apply&&(!in||!pe_field_wayne_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};
 PE_CK_U(w,s_enabled,0,1,1);
 
 if(apply&&w.ok){s_token=-1;s_warner=NULL;s_boxes_this_talk=0;s_last_message=NULL;s_menu_box=NULL;s_pending=-1;s_pending_wait=0;s_text_ready=0;memset(s_text,0,sizeof s_text);}return w.ok&&w.at==4u;}
