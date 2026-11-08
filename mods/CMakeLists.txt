@@ -64,6 +64,12 @@ target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 target_compile_definitions(pe-mods PRIVATE __psyz)
 target_link_libraries(pe-mods PRIVATE psyz)
+if(TARGET pe_download_zip AND "pe_lang" IN_LIST PE_MOD_LIST)
+    # Zipped .pelang files (pe_lang/pe_lang_bundle.c). Each program with these objects links it
+    # through PE_COMMON_GAME_LIBS.
+    target_link_libraries(pe-mods PRIVATE pe_download_zip)
+    target_compile_definitions(pe-mods PRIVATE PE_LANG_ZIP=1)
+endif()
 
 if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     add_executable(pe-mod-frequency
@@ -215,6 +221,19 @@ if(BUILD_TESTING)
         target_compile_options(test-mod-lang-pack PRIVATE -UNDEBUG)
     endif()
     add_test(NAME mod-lang-pack COMMAND test-mod-lang-pack)
+    add_executable(test-mod-lang-bundle ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_bundle_test.c
+        pe_lang/pe_lang_bundle.c pe_lang/pe_lang_pack.c pe_lang/pe_lang_pictures.c)
+    target_include_directories(test-mod-lang-bundle PRIVATE pe_lang)
+    if(TARGET pe_download_zip)
+        target_link_libraries(test-mod-lang-bundle PRIVATE pe_download_zip)
+        target_compile_definitions(test-mod-lang-bundle PRIVATE PE_LANG_ZIP=1)
+    endif()
+    if(MSVC)
+        target_compile_options(test-mod-lang-bundle PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-mod-lang-bundle PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME mod-lang-bundle COMMAND test-mod-lang-bundle)
     add_executable(test-mod-lang-font ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_font_test.c pe_lang/pe_lang_font.c pe_lang/pe_lang_cjk.c)
     target_include_directories(test-mod-lang-font PRIVATE pe_lang ${PROJECT_SOURCE_DIR}/tests)
     if(MSVC)

@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pelang  # noqa: E402
-from petext import gametext as gt, latin, layout, validation  # noqa: E402
+from petext import gametext as gt, latin, layout, letters, validation  # noqa: E402
 
 STRINGS = [
     {"key": "item/000", "text": "Ammo +6", "lines_px": [44], "boxes": [], "rooms": [], "unused": False},
@@ -178,6 +178,36 @@ class PelangTest(unittest.TestCase):
         self.assertEqual(entries[pelang.fnv1a("item/000")], gt.encode("Balles +6"))
         self.assertEqual(entries[pelang.fnv1a("bank/1a2b3c4d")], b"M001")   # the bank names itself
         self.assertEqual(len(entries), 3)
+
+    def test_bundle_zips_the_pack_for_players(self):
+        import zipfile
+        code, out = self.build({"item/000": "Balles +6"})
+        self.assertEqual(code, 0)
+        readme = self.dir / "credits.txt"
+        readme.write_text("Traduit par quelqu'un.", encoding="utf-8")
+        player = self.dir / "French.pelang"
+        self.assertEqual(pelang.main(["bundle", str(out), "-o", str(player), "--readme", str(readme)]), 0)
+        with zipfile.ZipFile(player) as z:
+            self.assertEqual(sorted(z.namelist()), ["readme.txt", "text.bin"])
+            self.assertEqual(z.read("text.bin"), out.read_bytes())   # the pack itself, unchanged
+        self.assertEqual(pelang.read_pack(player), pelang.read_pack(out))
+        first = player.read_bytes()
+        self.assertEqual(pelang.main(["bundle", str(out), "-o", str(player), "--readme", str(readme)]), 0)
+        self.assertEqual(player.read_bytes(), first)                 # the same pack, the same file
+        # A zipped file can be zipped again: the pack inside is what goes in.
+        again = self.dir / "again.pelang"
+        self.assertEqual(pelang.main(["bundle", str(player), "-o", str(again)]), 0)
+        with zipfile.ZipFile(again) as z:
+            self.assertEqual(z.namelist(), ["text.bin"])
+            self.assertEqual(z.read("text.bin"), out.read_bytes())
+        # Not a pack: refused, and nothing written.
+        junk = self.dir / "junk.pelang"
+        junk.write_bytes(b"not a pack")
+        self.assertEqual(pelang.main(["bundle", str(junk), "-o", str(self.dir / "no.pelang")]), 1)
+        self.assertFalse((self.dir / "no.pelang").exists())
+        with zipfile.ZipFile(junk, "w") as z:
+            z.writestr("readme.txt", "no pack here")
+        self.assertEqual(pelang.main(["bundle", str(junk), "-o", str(self.dir / "no.pelang")]), 1)
 
     def test_dialogue_keeps_its_page_end(self):
         code, out = self.build({"dlg/M001/003": "Salut."})
@@ -420,6 +450,15 @@ class PelangTest(unittest.TestCase):
         self.assertEqual(pelang.main(args), 1)
         self.assertFalse(out.exists())
 
+    def test_a_patch_line_that_wont_fit_keeps_the_games_text(self):
+        path = self.csv_with({"dlg/M001/003": "W" * 100})
+        out = self.dir / "patch.pelang"
+        args = ["build", str(path), "--strings", str(self.strings), "--lang", "xx", "--name", "Test",
+                "-o", str(out), "--no-wrap"]
+        self.assertEqual(pelang.main(args), 1)
+        self.assertEqual(pelang.main(args + ["--from-patch"]), 0)
+        self.assertNotIn(pelang.fnv1a("dlg/M001/003"), pelang.read_pack(out)[2])
+
     def test_pseudo_leaves_unsupported_source_rows_as_fallback(self):
         rows = STRINGS + [{"key": "sys/116", "text": "Hello{xF3}", "boxes": [], "lines_px": [30]}]
         self.strings.write_text(json.dumps(rows), encoding="utf-8")
@@ -442,7 +481,8 @@ class PelangTest(unittest.TestCase):
         # mods/pe_lang/pe_lang_latin.h and tests/pe_lang_font_vectors.h come from petext/latin.py.
         repo = Path(__file__).resolve().parents[2]
         for name, write in (("mods/pe_lang/pe_lang_latin.h", latin.write_c_header),
-                            ("tests/pe_lang_font_vectors.h", latin.write_test_vectors)):
+                            ("tests/pe_lang_font_vectors.h", latin.write_test_vectors),
+                            ("tests/pe_lang_letter_vectors.h", letters.write_test_vectors)):
             fresh = self.dir / Path(name).name
             write(str(fresh))
             self.assertEqual((repo / name).read_bytes().replace(b"\r\n", b"\n"), fresh.read_bytes(),

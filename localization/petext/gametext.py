@@ -35,6 +35,10 @@ LINE_HEIGHT = 12
 
 FB_TAGS = {4: "{red}", 5: "{/red}", 6: "{pause}", 8: "{num}"}
 
+# The pack being built: its own letters by code (petext/letters.py), measured before any fixed
+# letter that code would otherwise be.
+PACK_LETTERS: dict = {}
+
 
 def decode(b: bytes) -> str:
     out, i = [], 0
@@ -129,6 +133,8 @@ def _latin_codes() -> dict[str, int]:
 def _latin_advance(code: int) -> int | None:
     from . import latin
     from . import cyrillic
+    if code in PACK_LETTERS:
+        return PACK_LETTERS[code].advance()
     if code in cyrillic.BY_CODE:
         return cyrillic.BY_CODE[code].advance
     g = latin.BY_CODE.get(code)
@@ -157,6 +163,8 @@ def lines(b: bytes) -> list[int]:
             w += WIDE; i += 3
         elif c in (0xFC, 0xFD):
             w += WIDE; i += 1
+        elif c in PACK_LETTERS:
+            w += PACK_LETTERS[c].advance()
         elif c < len(BOX_ADVANCE):
             w += BOX_ADVANCE[c]
         elif c < 0xF1:

@@ -45,6 +45,9 @@ int pe_menu_register_live_int(const char *sub, const char *label, const char *de
 int pe_menu_register_live_choice(const char *sub, const char *label, const char *description,
                                  const char *const *names, unsigned count, PeMenuGet get,
                                  PeMenuSet set);
+/* A live choice registered with `names` now has `count` entries (the array itself may have
+ * grown in place): a mod adding to its list while the game runs. Returns -1 if no row has it. */
+int pe_menu_live_choice_resize(const char *const *names, unsigned count);
 /* A choice whose list depends on other rows; *index resets to 0 when the
  * list length changes. name_fn returns strings that outlive the call. */
 int pe_menu_register_dynamic_choice(const char *sub, const char *label, const char *description,

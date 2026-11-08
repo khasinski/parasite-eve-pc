@@ -3,6 +3,7 @@
   python -I pelang.py template out/text/strings.json -o fr.csv [--merge old-fr.csv]
   python -I pelang.py pseudo   out/text/strings.json -o qps.csv
   python -I pelang.py build    fr.csv --strings out/text/strings.json --lang fr --name "French" -o fr.pelang
+  python -I pelang.py bundle   fr.pelang -o "French.pelang" [--readme credits.txt] [--pictures cd1.bin ...]
 
 `strings.json` comes from extract_text.py, run on the translator's own discs (add --ja for the
 Japanese column). A template row is: key, the English and Japanese text (for reference: they come
@@ -25,9 +26,17 @@ Pack format (little-endian), read by mods/pe_lang/pe_lang_pack.c:
           (FNV-1a 32 of the key's UTF-8, e.g. "item/054"; the build refuses a collision)
   text    each entry's glyph bytes followed by FF (a dialogue page that ends in F9 keeps it
           before the FF)
+Keys: sys/, item/, desc/, misc/ (the resident tables), dlg/MNNN/PPP (room dialogue) and
+battle/NNN (the battle messages in the boot program, petext/battle.py).
 Besides the translations, a pack holds one "bank/<crc32>" entry per message bank: the bank's key
 ("M001", ASCII), so pe_lang can tell which bank a room has loaded (the CRC32 of the bytes its
 pages span, as banks.json lists them) and find that bank's dlg/ keys.
+
+Translation files: what a player downloads and opens with F1 > Language > Add a translation is a
+.pelang too, either the pack above or a zip holding it as `text.bin` (written by `bundle`, read by
+mods/pe_lang/pe_lang_bundle.c), with the patch's pictures as `pictures.bin` when it has any
+(`import-patch --pictures`, petext/pictures.py). readme.txt is kept for the player to read, and
+parts the game doesn't know are left alone.
 """
 from __future__ import annotations
 
@@ -38,12 +47,13 @@ import json
 import re
 import struct
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from petext import gametext as gt, latin, validation, layout, menu  # noqa: E402
-from petext import modtext, cjk
+from petext import battle, gametext as gt, latin, validation, layout, menu  # noqa: E402
+from petext import modtext, cjk, letters as lettertable
 from petext import manifest as srcman  # noqa: E402
 from petext import wrap as wrapping  # noqa: E402
 
@@ -103,6 +113,8 @@ def template_rows(strings: dict[str, dict]) -> list[dict]:
             box = "; ".join(r.get("boxes") or [])
         elif r.get("mod_label"):
             box = f"mod label: {r['max_glyphs']} glyphs, {r['width']} px, single line"
+        elif battle.is_battle(key):
+            box = f"battle message: one line, {battle.WIDTH} px"
         else:
             box = menu_limits(key, layouts)
         # The pages before and after in the same bank: a page's scene, for whoever translates it.
@@ -203,6 +215,62 @@ def pseudo(text: str) -> str:
     return f"!{body}{'+' * max(1, plain * 3 // 10)}!" if plain else body
 
 
+def sample_text(text: str, words: list[str], at: int, short: bool, joined: bool) -> tuple[str, int]:
+    """`text` with each English word swapped for the next of `words`; tags stay where they are.
+    `short`: a menu entry, so a word takes no more letters than the English did. `joined`: Chinese,
+    Japanese and Korean, which go without spaces."""
+    parts = re.split(r"(\{[^}]*\})", text)
+
+    def swap(m: re.Match) -> str:
+        nonlocal at
+        word = words[at % len(words)]
+        at += 1
+        return word[:len(m.group())] if short else word
+    for i in range(0, len(parts), 2):
+        parts[i] = re.sub(r"[A-Za-z][A-Za-z']*", swap, parts[i])
+        if joined:
+            parts[i] = parts[i].replace(" ", "")
+    return "".join(parts), at
+
+
+def cmd_sample(a) -> int:
+    """A test language: the game's own tags and page breaks with no game text left, and the words of
+    one or more languages in place of the English. For checking letters in the game, not for reading."""
+    from petext import alphabets
+    picked = [alphabets.BY_CODE[code] for code in a.languages]
+    words = [word for lang in picked for word in alphabets.sample_words(lang)]
+    joined = any(lang.code in alphabets.CJK for lang in picked)
+    rows, at, kept = [], 0, 0
+    for key, r in sorted(load_strings(a.strings).items()):
+        if key in ("sys/030", "sys/115", "sys/116", "sys/117") or not re.search(r"[A-Za-z]", r["text"]):
+            continue
+        try:
+            validation.check(gt.encode(r["text"], extended=True), r["text"])
+        except ValueError:
+            kept += 1
+            continue
+        text, at = sample_text(r["text"], words, at, not key.startswith("dlg/"), joined)
+        rows.append({"key": key, "translation": text, "notes": ""})
+    with a.out.open("w", encoding="utf-8", newline="") as output:
+        writer = csv.DictWriter(output, fieldnames=SUBMISSION_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"wrote {len(rows)} rows to {a.out}; {kept} stay in English: their controls are unusual")
+    return 0
+
+
+def cmd_languages(a) -> int:
+    """Which languages the pack tool can write today, from the list in petext/alphabets.py."""
+    from petext import alphabets
+    for lang in alphabets.LANGUAGES:
+        gone = alphabets.missing(lang)
+        state = "ready" if not gone else f"missing {len(gone)} letters: {gone[:40]}"
+        if lang.code in alphabets.NEEDS_LAYOUT:
+            state = "needs new text layout"
+        print(f"{lang.code:8} {lang.name:24} {state}")
+    return 0
+
+
 def cmd_pseudo(a) -> int:
     rows = template_rows(modtext.load(getattr(a, "mod_strings", None), load_strings(a.strings)))
     skipped = 0
@@ -224,7 +292,8 @@ def cmd_pseudo(a) -> int:
 
 
 def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], name_px: int = layout.NAME_WIDTH,
-              metrics: bytes | None = None, layouts: dict | None = None, wrap: bool = True, atlas=None):
+              metrics: bytes | None = None, layouts: dict | None = None, wrap: bool = True, atlas=None,
+              from_patch: bool = False):
     """(glyph bytes or None, errors, warnings) for one translated row. name_px: how wide {name}
     draws, from the pack's sys/030 (Aya's default name); metrics: the menus' glyph widths
     (menu_glyphs.json), without which menu text is only compared with the English. wrap: a
@@ -235,10 +304,11 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
     except (ValueError, TypeError, OverflowError) as e:
         msg = "invalid text/tag: " + str(e)
         if "no glyph" in msg:
-            msg += " (the font has A-Z, a-z, digits, basic punctuation, Latin Extended, Russian/Ukrainian/Belarusian Cyrillic, and CJK with --cjk-font)"
+            msg += " (the font has A-Z, a-z, digits, basic punctuation, Latin Extended, Russian/Ukrainian/Belarusian Cyrillic, the letters of petext/letters.py, and CJK with --cjk-font)"
         return None, [msg], warnings
     try:
-        validation.check(raw, srcman.source_structure(source))
+        strict = not from_patch or battle.is_battle(key)       # the HP line's numbers stay
+        (validation.check if strict else validation.check_patch)(raw, srcman.source_structure(source))
     except ValueError as e:
         return None, [str(e)], warnings
     for command in validation.commands(raw):
@@ -246,12 +316,17 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
             return None, ["CJK token has no glyph in this pack's dictionary"], []
     if key in ("sys/115", "sys/116", "sys/117") and b"\xf1\xc5" in raw:
         return None, ["CJK cannot be used in the one-byte rename grids"], []
+    table = set(atlas.letters.by_code) if atlas and atlas.letters else set()
+    if key in ("sys/115", "sys/116", "sys/117") and table & set(raw):
+        return None, ["a letter from the pack's own table cannot go in a rename grid: what the player picks is saved"], []
     if source.get("mod_label"):
         if any(c[0] > 0xF1 for c in validation.commands(raw)):
             return None, ["mod labels cannot contain line breaks, waits or commands"], []
         return raw, modtext.check(raw, source, metrics), []
     if key == "sys/030" and b"\xf1\xc5" in raw:
         return None, ["CJK player names cannot be stored safely in the legacy save name field; keep the original name"], []
+    if key == "sys/030" and table & set(raw):
+        return None, ["a letter from the pack's own table cannot go in the saved player name; keep the original name"], []
     if key == "sys/030" and len(raw) > 8:
         return None, ["default player name exceeds the save format's 8-byte field"], []
     note = None
@@ -283,7 +358,7 @@ def cmd_build(a) -> int:
               "menu text is compared with the English only", file=sys.stderr)
     widest_name: dict[str, int] = {}
     for key, r in strings.items():
-        if not key.startswith("dlg/"):
+        if not key.startswith(("dlg/", "battle/")):
             t = key.split("/")[0]
             px = r["menu_px"] if metrics is not None and "menu_px" in r else max(r.get("lines_px") or [0])
             widest_name[t] = max(widest_name.get(t, 0), px)
@@ -296,11 +371,17 @@ def cmd_build(a) -> int:
         if leaked:
             errors.append(f"{a.csv}: has source text in its {', '.join(leaked)} column(s); submit the file "
                           "`pelang.py export` writes (key, translation, notes)")
+    gt.PACK_LETTERS.clear()
+    texts = [r.get('translation','') for r in rows]
     try:
-        atlas = cjk.Atlas([r.get('translation','') for r in rows], getattr(a,'cjk_font',None))
+        table = lettertable.Letters(texts, dictionary=bool(getattr(a,'cjk_font',None)))
+        atlas = cjk.Atlas(texts, getattr(a,'cjk_font',None), skip=table.codes)
     except (ValueError, OSError, struct.error) as e:
         print(f'error: CJK font: {e}')
         return 1
+    atlas.codes.update(table.codes)
+    atlas.letters = table
+    gt.PACK_LETTERS.update(table.by_code)
     name_px = layout.NAME_WIDTH
     for r in rows:
         if r.get("key") == "sys/030" and r.get("translation"):
@@ -320,7 +401,7 @@ def cmd_build(a) -> int:
             errors.append(f"{key}: no such key in {a.strings}")
             continue
         raw, errs, warns = check_row(key, text, strings[key], widest_name, name_px, metrics, layouts,
-                                     wrap=not a.no_wrap, atlas=atlas)
+                                     wrap=not a.no_wrap, atlas=atlas, from_patch=a.from_patch)
         src = strings[key]
         same = text == src["text"] if "text" in src else srcman.english_hash(text) == src.get("english_hash")
         if same and any(ch.isalpha() for ch in text):
@@ -330,6 +411,11 @@ def cmd_build(a) -> int:
             if raw is not None:
                 warns += errs
                 errs = []
+        elif a.from_patch and raw is not None and errs:
+            # A patch was sized for its own letters. One line too wide for these keeps the game's
+            # text; it shouldn't cost the player the whole language.
+            warns += [f"keeps the game's text: {e}" for e in errs]
+            errs, raw = [], None
         errors += [f"{key}: {e}" for e in errs]
         warnings += [f"{key}: {w}" for w in warns]
         if raw is not None and not errs:
@@ -337,9 +423,19 @@ def cmd_build(a) -> int:
     if metrics is not None:
         # Text the game joins (an item's name and a suffix in one buffer): the pack's longest of each.
         resident = {k: bytes.fromhex(r["raw"]) if r.get("raw") else (r["length"], r.get("menu_px", 0))
-                    for k, r in strings.items() if not k.startswith("dlg/") and (r.get("raw") or "length" in r)}
-        resident.update({k: v for k, v in entries.items() if not k.startswith("dlg/")})
-        joined = menu.check_combined(resident, metrics, layouts)
+                    for k, r in strings.items() if not k.startswith(("dlg/", "battle/")) and (r.get("raw") or "length" in r)}
+        resident.update({k: v for k, v in entries.items() if not k.startswith(("dlg/", "battle/"))})
+        over: set[str] = set()
+        joined = menu.check_combined(resident, metrics, layouts, over)
+        while a.from_patch and joined and over & entries.keys():
+            # As with a single line: the longest parts go back to the game's text until it fits.
+            warnings += [f"joined text keeps the game's text: {e}" for e in joined]
+            for key in over & entries.keys():
+                del entries[key]
+                resident[key] = bytes.fromhex(strings[key]["raw"]) if strings[key].get("raw") else (
+                    strings[key]["length"], strings[key].get("menu_px", 0))
+            over.clear()
+            joined = menu.check_combined(resident, metrics, layouts, over)
         (warnings if a.allow_overflow else errors).extend(f"joined text: {e}" for e in joined)
     glossary = {}
     if a.glossary:
@@ -374,6 +470,9 @@ def cmd_build(a) -> int:
     return 0
 
 
+HEADER_SIZES = {1: 64, 2: 80, 3: 88}
+
+
 def write_pack(path: Path, lang: str, name: str, entries: dict[str, bytes], atlas=None) -> None:
     lang_b, name_b = lang.encode("utf-8"), name.encode("utf-8")
     if not lang_b or not name_b or b"\0" in lang_b + name_b or len(lang_b) > 15 or len(name_b) > 31:
@@ -385,23 +484,48 @@ def write_pack(path: Path, lang: str, name: str, entries: dict[str, bytes], atla
         text += entries[key] + b"\xff"
     extra = b''
     records = bytes(atlas.records) if atlas else b''
-    version = 2 if records else 1
-    header_size = 80 if records else 64
-    if records:
-        extra = struct.pack('<IIII',header_size+len(table)+len(text),len(atlas.chars),cjk.RECORD,0)
+    letters = atlas.letters.records() if atlas and atlas.letters else b''
+    version = 3 if letters else 2 if records else 1
+    header_size = HEADER_SIZES[version]
+    if version > 1:
+        dictionary = header_size+len(table)+len(text)
+        extra = struct.pack('<IIII',dictionary,len(atlas.chars) if records else 0,cjk.RECORD,0)
+    if version > 2:
+        extra += struct.pack('<II',dictionary+len(records),len(letters)//lettertable.RECORD)
     head = HEADER.pack(MAGIC, version, len(order), header_size + len(table), lang_b, name_b)
-    Path(path).write_bytes(head + extra + table + text + records)
+    Path(path).write_bytes(head + extra + table + text + records + letters)
+
+
+BUNDLE_TEXT = "text.bin"          # the pack inside a zipped .pelang (pe_lang_bundle.h)
+BUNDLE_MAX = 256 << 20             # largest .pelang the game opens
+PACK_MAX = 64 << 20                # largest pack the game reads
+
+
+def pack_bytes(path: Path) -> bytes:
+    """The compiled pack in a .pelang file: the file itself, or its zip's text.bin."""
+    data = Path(path).read_bytes()
+    if not data.startswith(b"PK\x03\x04"):
+        return data
+    with zipfile.ZipFile(Path(path)) as z:
+        try:
+            info = z.getinfo(BUNDLE_TEXT)
+        except KeyError:
+            raise ValueError(f"the zip has no {BUNDLE_TEXT}") from None
+        if info.file_size > PACK_MAX:
+            raise ValueError(f"{BUNDLE_TEXT} is larger than the game reads")
+        return z.read(info)
 
 
 def read_pack(path: Path) -> tuple[str, str, dict[int, bytes]]:
-    """(lang, name, hash -> glyph bytes) of a pack: the reader the tests check the writer with."""
-    data = Path(path).read_bytes()
+    """(lang, name, hash -> glyph bytes) of a pack, plain or zipped: the reader the tests check the
+    writer with."""
+    data = pack_bytes(path)
     magic, version, count, text_at, lang, name = HEADER.unpack_from(data, 0)
-    if magic != MAGIC or version not in (1,2):
-        raise ValueError("not a version 1/2 .pelang pack")
+    if magic != MAGIC or version not in HEADER_SIZES:
+        raise ValueError("not a version 1/2/3 .pelang pack")
     out = {}
     for i in range(count):
-        h, off = ENTRY.unpack_from(data, (80 if version == 2 else 64) + i * ENTRY.size)
+        h, off = ENTRY.unpack_from(data, HEADER_SIZES[version] + i * ENTRY.size)
         start = text_at + off
         out[h] = data[start:data.index(b"\xff", start)]
     return lang.rstrip(b"\0").decode(), name.rstrip(b"\0").decode(), out
@@ -412,7 +536,7 @@ ITALIAN_PATCH_SHA256 = "1c1f414eb88adf080063c673f094e625aaca1ee40f26c3b628c931c7
 ITALIAN_ACCENTS = {0x4D: "à", 0x4E: "è", 0x4F: "é", 0x50: "ì", 0x51: "ò", 0x52: "ù"}
 
 
-def _dialogue_pages(game, number, *, italian_separators=False):
+def _dialogue_pages(game, number, read=None, *, italian_separators=False):
     room = game.room(number)
     if room is None:
         raise ValueError(f"Missing dialogue room M{number:03}")
@@ -423,6 +547,8 @@ def _dialogue_pages(game, number, *, italian_separators=False):
         slot = word((table & 0x3FFFFF) + index * 8 + 4)
         if slot >> 24 == 1:
             bank = data[slot & 0xFFFFFF:]
+            if read is not None:
+                return read(bank)
             pages, used = gt.pages(bank)
             # The verified Italian v0.90 M026 bank has an extra newline after
             # a page terminator. It is outside the page, not a script command.
@@ -721,6 +847,152 @@ def cmd_import_spanish(a):
                 game.disc.f.close()
 
 
+def cmd_import_patch(a):
+    """Any fan patch: see petext/patchimport.py."""
+    import tempfile
+    from extract_text import bank_slots, table_entries
+    from petext import patchfile, patchimport
+    from petext.disc import Game
+    if a.out.exists() or a.report.exists() or (a.font and a.font.exists()) or (a.pictures and a.pictures.exists()):
+        print("Output files already exist; choose new paths", file=sys.stderr)
+        return 1
+    overrides = {}
+    for item in a.letters:
+        code, _, char = item.partition("=")
+        overrides[int(code, 16)] = char
+    games = []
+    try:
+        with tempfile.TemporaryDirectory(dir=a.out.parent.resolve()) as folder:
+            original = Game(a.disc)
+            games.append(original)
+            image = a.patch
+            if a.patch.suffix.lower() not in (".bin", ".iso", ".img", ".cue"):
+                image = Path(folder) / "patched.bin"
+                print(f"{patchfile.apply_patch(a.patch, original.disc.f.name, image)} patch applied to a temporary copy")
+            translated = Game(image)
+            games.append(translated)
+            disc = {"SLUS_006.62": "1", "SLUS_006.68": "2"}.get(original.exe_name)
+            if disc is None or translated.exe_name != original.exe_name:
+                raise ValueError("Choose an unmodified USA disc and its own patch")
+            letters, how, unknown = patchimport.letter_map(translated)
+            letters.update({k: v for k, v in overrides.items() if v})
+            unknown = [code for code in unknown if code not in overrides]
+            catalog = json.loads((ROOT / "editor/catalog.json").read_text(encoding="utf-8"))
+            rows, left, end_changed = [], [], 0
+            for bank in catalog["banks"]:
+                number, prefix = bank["locations"][disc], f'dlg/{bank["key"]}/'
+                before, after = _dialogue_pages(original, number), _dialogue_pages(translated, number, patchimport.patched_pages)
+                left += [{"key": f"{prefix}{page:03}", "reason": "page only in the patch"} for page in sorted(set(after) - set(before))]
+                for page, (raw, end) in sorted(before.items()):
+                    key = f"{prefix}{page:03}"
+                    if page not in after:
+                        left.append({"key": key, "reason": "page missing from the patch"})
+                        continue
+                    end_changed += after[page][1] != end
+                    text, why = patchimport.compare_page(raw, after[page][0], letters)
+                    if why:
+                        left.append({"key": key, "reason": why})
+                    elif text is not None:
+                        rows.append({"key": key, "translation": text, "notes": "patch import"})
+            manifest = json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))
+            before, after = dict(table_entries(original.resident_pack())), dict(table_entries(translated.resident_pack()))
+            for key in sorted(k for k in manifest["entries"] if k.split("/")[0] in ("sys", "item", "desc", "misc")):
+                if key in patchimport.RENAME_GRIDS:
+                    continue
+                text, why = patchimport.compare_page(before[key], after[key], letters)
+                if why:
+                    left.append({"key": key, "reason": why})
+                elif text is not None:
+                    rows.append({"key": key, "translation": text, "notes": "patch import"})
+            # The battle messages in the boot program (petext/battle.py).
+            exe_before, exe_after = original.disc.file(original.exe_name), translated.disc.file(translated.exe_name)
+            english, (lines, why) = battle.english(exe_before), battle.patched(exe_before, exe_after)
+            if why:
+                left += [{"key": key, "reason": f"battle messages: {why}"} for key in battle.LINES]
+            for key, raw in lines.items():
+                text, why = patchimport.compare_page(english[key], raw, letters)
+                if why:
+                    left.append({"key": key, "reason": why})
+                elif text is not None:
+                    rows.append({"key": key, "translation": text, "notes": "patch import"})
+            report = {"translated_rows": len(rows), "kept_english": left, "letters_found": {f"{k:02X}": v for k, v in how.items()},
+                      "symbols_without_a_letter": [f"{code:02X}" for code in unknown],
+                      "pages_with_a_different_end": end_changed,
+                      "rooms_with_edited_scripts": patchimport.script_changes(original, translated, lambda d: min(bank_slots(d).values(), default=len(d))),
+                      "rooms_with_edited_pictures": patchimport.picture_changes(original, translated),
+                      "boot_program_bytes_changed": patchimport.exe_changes(original, translated)}
+            if a.pictures:
+                from petext import pictures
+                pieces, found = pictures.diff(original, translated)
+                report["pictures"] = {"pieces": len(pieces), **found}
+            with a.out.open("x", encoding="utf-8", newline="") as output:
+                writer = csv.DictWriter(output, fieldnames=SUBMISSION_COLUMNS)
+                writer.writeheader()
+                writer.writerows(rows)
+            with a.report.open("x", encoding="utf-8") as output:
+                json.dump(report, output, ensure_ascii=False, indent=2)
+                output.write("\n")
+            if a.font:
+                a.font.write_bytes(patchimport.font_picture(translated))
+            if a.pictures:
+                with a.pictures.open("xb") as output:
+                    output.write(pictures.write(pieces))
+                print(f"{len(pieces)} picture pieces from {len(found['pictures_taken'])} pictures written to {a.pictures}")
+            print(f"{len(rows)} rows imported; {len(left)} keep the English; symbols without a letter: "
+                  f"{report['symbols_without_a_letter'] or 'none'}; rooms with edited scripts: "
+                  f"{len(report['rooms_with_edited_scripts'])}. Review {a.report}.")
+            for game in games:
+                game.disc.f.close()
+            games.clear()
+        return 0
+    except (OSError, ValueError, EOFError, KeyError, struct.error) as error:
+        print(f"Patch import failed: {error}", file=sys.stderr)
+        return 1
+    finally:
+        for game in games:
+            game.disc.f.close()
+
+
+def cmd_bundle(a) -> int:
+    """A translation file for players: the pack zipped as text.bin, with an optional readme."""
+    try:
+        pack = pack_bytes(a.pack)
+        lang, name, entries = read_pack(a.pack)
+    except (OSError, ValueError, struct.error, zipfile.BadZipFile) as err:
+        print(f"error: {a.pack} is not a .pelang pack: {err}", file=sys.stderr)
+        return 1
+    if len(pack) > PACK_MAX:
+        print(f"error: {a.pack} is larger than the game reads", file=sys.stderr)
+        return 1
+    readme = a.readme.read_bytes() if a.readme else None
+    from petext import pictures
+    pieces = []
+    try:
+        for path in a.pictures or []:
+            pieces += pictures.read(path.read_bytes())       # Disc 1 and Disc 2 share one file
+        picture_bytes = pictures.write(pieces) if pieces else None
+    except (OSError, ValueError, struct.error) as err:
+        print(f"error: pictures: {err}", file=sys.stderr)
+        return 1
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = a.out.with_name(a.out.name + ".tmp")
+    # Fixed dates, so the same pack always makes the same file.
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zipfile.ZipInfo(BUNDLE_TEXT, (1980, 1, 1, 0, 0, 0)), pack, zipfile.ZIP_DEFLATED)
+        if picture_bytes is not None:
+            z.writestr(zipfile.ZipInfo("pictures.bin", (1980, 1, 1, 0, 0, 0)), picture_bytes, zipfile.ZIP_DEFLATED)
+        if readme is not None:
+            z.writestr(zipfile.ZipInfo("readme.txt", (1980, 1, 1, 0, 0, 0)), readme, zipfile.ZIP_DEFLATED)
+    if tmp.stat().st_size > BUNDLE_MAX:
+        tmp.unlink()
+        print(f"error: {a.out} would be larger than the game opens", file=sys.stderr)
+        return 1
+    tmp.replace(a.out)
+    extra = f", {len(pictures.read(picture_bytes))} picture pieces" if picture_bytes else ""
+    print(f"{a.out}: {name} ({lang}), {len(entries)} entries{extra}, {a.out.stat().st_size} bytes")
+    return 0
+
+
 def main(argv=None) -> int:
     # Messages quote the translator's text; a console that can't show a character gets an escape
     # (Б) instead of stopping the build.
@@ -736,10 +1008,17 @@ def main(argv=None) -> int:
     p = sub.add_parser("pseudo", help="a test language: every entry, marked and ~30%% longer")
     p.add_argument("strings", type=Path)
     p.add_argument("-o", "--out", type=Path, required=True)
+    sa = sub.add_parser("sample", help="a test language: the game's tags, and the words of the languages you name")
+    sa.add_argument("strings", type=Path, help="strings.json from extract_text.py")
+    sa.add_argument("languages", nargs="+", help="language codes from petext/alphabets.py: `pelang.py languages` lists them")
+    sa.add_argument("-o", "--out", type=Path, required=True)
+    sub.add_parser("languages", help="which languages the pack tool can write today")
     b = sub.add_parser("build", help="check a translated CSV and write a .pelang pack")
     b.add_argument("csv", type=Path)
     b.add_argument("--strings", type=Path, required=True,
                    help="strings.json from extract_text.py, or the committed data/manifest.json (no discs needed)")
+    b.add_argument("--from-patch", action="store_true",
+                   help="the CSV came from import-patch: waits, names and timing may differ from the English")
     b.add_argument("--submission", action="store_true",
                    help="the file is a submission: refuse source text (english/japanese/context columns)")
     b.add_argument("--glossary", type=Path, help="CSV of english,translation terms to keep consistent "
@@ -755,6 +1034,12 @@ def main(argv=None) -> int:
     b.add_argument("--no-wrap", action="store_true",
                    help="don't rewrap dialogue pages that overflow their box (by default they get line breaks at "
                         "spaces and, if still too tall, more screens)")
+    bu = sub.add_parser("bundle", help="a translation file for players: the pack in a .pelang zip")
+    bu.add_argument("pack", type=Path, help="a .pelang pack from build")
+    bu.add_argument("-o", "--out", type=Path, required=True, help="the .pelang file to write")
+    bu.add_argument("--readme", type=Path, help="a text file shown to players: credits, version, notes")
+    bu.add_argument("--pictures", type=Path, action="append",
+                    help="pictures.bin from import-patch --pictures; repeat for each disc")
     e = sub.add_parser("export", help="the file to submit: key, translation, notes (no source text)")
     e.add_argument("csv", type=Path)
     e.add_argument("-o", "--out", type=Path, required=True)
@@ -781,13 +1066,23 @@ def main(argv=None) -> int:
     es.add_argument("translated_disc", type=Path, help="separate copy patched with the author's Chicago XDELTA")
     es.add_argument("-o", "--out", type=Path, required=True, help="new translation CSV")
     es.add_argument("--report", type=Path, required=True, help="new JSON report of original-text fallbacks")
+    ip = sub.add_parser("import-patch", help="turn any fan patch (PPF, xdelta or a patched image) into a translation file")
+    ip.add_argument("disc", type=Path, help="unmodified USA Disc 1 or Disc 2 CUE/BIN")
+    ip.add_argument("patch", type=Path, help="the patch, or a patched copy of the disc")
+    ip.add_argument("-o", "--out", type=Path, required=True, help="new translation CSV")
+    ip.add_argument("--report", type=Path, required=True, help="new JSON report: what kept the English and why")
+    ip.add_argument("--font", type=Path, help="also write the patch's letters as a picture font (.png)")
+    ip.add_argument("--pictures", type=Path, help="also write the patch's pictures with words (pictures.bin, for bundle)")
+    ip.add_argument("--letters", nargs="*", default=[], metavar="HEX=CHAR",
+                    help="name a code the import couldn't identify, e.g. 5A=Ñ")
     a = ap.parse_args(argv)
     if a.cmd == "interface-header":
         from petext import interfaces
         interfaces.write_header(a.out)
         return 0
-    return {"import-italian": cmd_import_italian, "import-spanish": cmd_import_spanish,
-            "template": cmd_template, "pseudo": cmd_pseudo, "build": cmd_build,
+    return {"import-italian": cmd_import_italian, "import-spanish": cmd_import_spanish, "import-patch": cmd_import_patch,
+            "template": cmd_template, "pseudo": cmd_pseudo, "sample": cmd_sample, "languages": cmd_languages,
+            "build": cmd_build, "bundle": cmd_bundle,
             "export": cmd_export, "manifest": cmd_manifest,
             "latin-header": cmd_latin_header, "cyrillic-header": cmd_cyrillic_header}[a.cmd](a)
 
@@ -802,6 +1097,7 @@ def cmd_cyrillic_header(a) -> int:
 def cmd_latin_header(a) -> int:
     latin.write_c_header(str(a.out))
     latin.write_test_vectors(str(a.vectors))
+    lettertable.write_test_vectors(str(a.vectors.with_name("pe_lang_letter_vectors.h")))
     print(f"wrote {a.out}: {len(latin.GLYPHS)} glyphs, codes 0x{latin.FIRST_CODE:02X}-0x{latin.GLYPHS[-1].code:02X}; "
           f"test vectors {a.vectors}")
     return 0

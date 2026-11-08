@@ -29,12 +29,13 @@ const char *pe_lang_text_utf8(PeLangPack *pack,const char *key) {
     if (!pack->utf8) pack->utf8=calloc(pack->count,sizeof *pack->utf8);
     if (!pack->utf8) return NULL;
     if (pack->utf8[at]) return pack->utf8[at];
+    const unsigned *codes=pack->unicode?pack->unicode:kPeTextUnicode;
     char text[4097];unsigned n=0;
     while (*raw!=0xFF) {
         unsigned cp,id;
         if (Pe_ExtendedGlyph(raw,&id) && id<pack->cjk_count) {
             cp=rd32(pack->data+pack->cjk_offset+id*76);raw+=4;
-        } else if (*raw<241 && kPeTextUnicode[*raw]) cp=kPeTextUnicode[*raw++];
+        } else if (*raw<241 && codes[*raw]) cp=codes[*raw++];
         else return NULL; /* a label cannot inject native text commands */
         if (n+4>=sizeof text) return NULL;
         n+=emit(text+n,cp);
@@ -45,11 +46,12 @@ const char *pe_lang_text_utf8(PeLangPack *pack,const char *key) {
     return pack->utf8[at];
 }
 unsigned pe_lang_text_encode(const PeLangPack *pack,unsigned char *out,unsigned size,const char *text) {
+    const unsigned *codes=pack&&pack->unicode?pack->unicode:kPeTextUnicode;
     unsigned n=0;
     if (!size) return 0;
     while (*text && n+1<size) {
         unsigned cp=pe_utf8_next(&text),code=241;
-        for (unsigned i=0;i<241;++i) if (kPeTextUnicode[i]==cp) {code=i;break;}
+        for (unsigned i=0;i<241;++i) if (codes[i]==cp) {code=i;break;}
         if (code<241) out[n++]=(unsigned char)code;
         else {
             unsigned lo=0,hi=pack?pack->cjk_count:0;

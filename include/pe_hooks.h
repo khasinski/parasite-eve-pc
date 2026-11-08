@@ -33,7 +33,7 @@ typedef enum PeHookId {
     PE_HOOK_ACTOR_STEP,  /* PeHookActorStep: local scripted speed or animation increment */
     PE_HOOK_ITEM_USE,    /* int *: Battle_ApplyDamage item id before its effects */
     PE_HOOK_TEXT_LOOKUP, /* PeHookTextLookup: a resident text table lookup's result (system messages,
-                          * item names and descriptions, the rest); may be replaced */
+                          * item names and descriptions, the rest), or a battle message; may be replaced */
     PE_HOOK_INVENTORY_SORTED, /* NULL: Aya's native bag sort completed */
     PE_HOOK_INVENTORY_HEADER, /* MenuWidgetNode *: after Aya's Quantity header is drawn */
     PE_HOOK_EQUIP_EFFECT, /* PeHookEquipEffect: effect icon draw; nonzero replaces sprite */
@@ -65,6 +65,8 @@ typedef enum PeHookId {
                                * move; replaceable */
     PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
+    PE_HOOK_DISC_READ, /* PeHookDiscRead: PE.IMG sectors just read, before the game looks at them;
+                        * their bytes may be changed in place (a translation's pictures) */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -113,7 +115,8 @@ typedef struct PeHookTextGlyph {
 
 typedef struct PeHookTextLookup {
     unsigned table, index; /* table 4 = system messages, 8 = item names, 12 = item descriptions,
-                            * 16 = the rest (Text_LookupTable4 / 8 / C / 10) */
+                            * 16 = the rest (Text_LookupTable4 / 8 / C / 10), 20 = a battle message
+                            * from the boot program, index BATTLE_TEXT_* (Text_LookupBattleMessage) */
     void **text;
     int persistent; /* nonzero: editable name copied into a save; use stable byte glyphs only */
 } PeHookTextLookup;
@@ -125,6 +128,12 @@ typedef struct PeHookTextPage {
     unsigned page;             /* the page the script opened */
     unsigned char **message;   /* the text the box will draw */
 } PeHookTextPage;
+
+typedef struct PeHookDiscRead {
+    unsigned sector;     /* the first sector read, counted from the start of PE.IMG */
+    unsigned count;      /* sectors read, 2048 bytes each */
+    unsigned char *data; /* where they were read to */
+} PeHookDiscRead;
 
 typedef struct PeHookRewards {
     int exp;

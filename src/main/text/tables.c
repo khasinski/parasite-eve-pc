@@ -155,6 +155,17 @@ void *Text_LookupTable10(unsigned int index) {
     return Text_NoteLookup(resident, text);
 }
 
+/* The battle messages below (the Scan panel's and running away's) are in the boot program, not
+ * the resident tables, so they reach a pack as table 20. The textbox draws straight from the
+ * pointer, with no copy, so a replacement only has to outlive the box, as the others do. */
+u8 *Text_LookupBattleMessage(unsigned int index, u8 *texts, unsigned int stride) {
+    void *text = texts + (unsigned int)g_SaveMetadataWindowIndex * stride;
+    if (g_SaveMetadataWindowIndex != 0) {
+        PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){20, index, &text}));
+    }
+    return text;
+}
+
 /* Text-table-3 entry naming the location of map `map`. */
 void *Text_LookupMapLocationText(int map) {
     TextTableDirectory *directory;

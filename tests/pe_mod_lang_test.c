@@ -37,6 +37,26 @@ static unsigned char *make_pack(Entry *entries, unsigned n, size_t *size) {
     return p;
 }
 
+static void wr_record(unsigned char *r, uint32_t cp, unsigned code, unsigned advance, unsigned base) {
+    memset(r, 0, 80);
+    wr32(r, cp); r[4] = (unsigned char)code; r[5] = (unsigned char)advance; r[6] = (unsigned char)base;
+}
+
+/* The same pack as version 3, with `letters` records after its text. */
+static unsigned char *with_letters(const unsigned char *v1, size_t size, const unsigned char *letters,
+                                   unsigned count, size_t *out) {
+    size_t total = size + 24 + count * 80u;
+    unsigned char *p = calloc(1, total);
+    memcpy(p, v1, 64);
+    memcpy(p + 88, v1 + 64, size - 64);
+    memcpy(p + 24 + size, letters, count * 80u);
+    wr32(p + 4, 3); wr32(p + 12, (uint32_t)(v1[12] | v1[13] << 8) + 24);
+    wr32(p + 64, (uint32_t)size + 24); wr32(p + 68, 0); wr32(p + 72, 76); wr32(p + 76, 0);
+    wr32(p + 80, (uint32_t)size + 24); wr32(p + 84, count);
+    *out = total;
+    return p;
+}
+
 static unsigned char *copy_of(const unsigned char *p, size_t size) {
     unsigned char *c = malloc(size); memcpy(c, p, size); return c;
 }
@@ -73,6 +93,65 @@ int main(int argc, char **argv) {
     Entry entries[] = {{"item/054", "\x12\x37\x48"}, {"desc/000", "\x11\x30"}, {"dlg/M001/002", "\x13"},
                        {"sys/001", "\x14"}, {"misc/130", "\x15"}, {bank_key, "M001"}};
     size_t size;
+    {
+        /* A pack's own letters: one drawn, one on the game's letter; fixed codes stay as they were. */
+        Entry small[] = {{"sys/001", "\x60\xE0\x10"}};
+        size_t small_size, v3_size;
+        unsigned char *v1 = make_pack(small, 1, &small_size), letters[160];
+        PeLangPack pack;
+        wr_record(letters, 0x3B1, 0x60, 8, 0xFF); letters[8] = 0x21;
+        wr_record(letters + 80, 0x103, 0xE0, 0, 0x30); letters[88] = 1; letters[90] = 3;
+        assert(!pe_lang_pack_parse(&pack, with_letters(v1, small_size, letters, 2, &v3_size), v3_size));
+        assert(pack.letter_count == 2 && pack.unicode && pack.count == 1);
+        assert(pack.unicode[0x60] == 0x3B1 && pack.unicode[0xE0] == 0x103 && pack.unicode[0x10] == 'A');
+        assert(pe_lang_pack_has_letter(&pack, 0xE0) && !pe_lang_pack_has_letter(&pack, 0x61));
+        assert(pe_lang_pack_letter(&pack, 1)[4] == 0xE0);
+        assert(!memcmp(pe_lang_pack_find(&pack, "sys/001"), "\x60\xE0\x10\xFF", 4));
+        pe_lang_pack_free(&pack);
+
+        /* Each of these is refused whole. */
+        struct { unsigned at, value; } damage[] = {
+            {4, 0x20},            /* a code among the game's own letters */
+            {4, 0xF0},            /* past the codes a letter may take */
+            {8, 3},               /* a pixel that is no colour */
+            {7, 1},               /* ops on a drawn letter */
+            {5, 0},               /* a drawn letter with no width */
+            {80 + 6, 0x4D},       /* a base letter that isn't the game's */
+            {80 + 7, 8},          /* an unknown step */
+            {80 + 8, 9},          /* more points than a mark holds */
+            {80 + 9, 2},          /* rows that are neither fixed nor above */
+            {80 + 10, 4},         /* an unknown anchor */
+            {80 + 4, 0x60},       /* a code twice */
+        };
+        for (unsigned i = 0; i < sizeof damage / sizeof *damage; ++i) {
+            unsigned char bad[160];
+            memcpy(bad, letters, sizeof bad);
+            bad[damage[i].at] = (unsigned char)damage[i].value;
+            assert(pe_lang_pack_parse(&pack, with_letters(v1, small_size, bad, 2, &v3_size), v3_size));
+        }
+        unsigned char *cut = with_letters(v1, small_size, letters, 2, &v3_size);
+        assert(pe_lang_pack_parse(&pack, cut, v3_size - 1));                 /* a record cut short */
+        cut = with_letters(v1, small_size, letters, 2, &v3_size);
+        wr32(cut + 84, 3);
+        assert(pe_lang_pack_parse(&pack, cut, v3_size));                     /* the count disagrees */
+        cut = with_letters(v1, small_size, letters, 2, &v3_size);
+        wr32(cut + 4, 4);
+        assert(pe_lang_pack_parse(&pack, cut, v3_size));                     /* a version to come */
+        free(v1);
+    }
+    {
+        /* Battle messages (Text_LookupBattleMessage): table 20, "battle/NNN" by BATTLE_TEXT_*. */
+        Entry battle[] = {{"battle/002", "\x22\x30"}, {"battle/010", "\x18\x3c"}, {"misc/003", "\x15"}};
+        size_t battle_size;
+        unsigned char *data = make_pack(battle, 3, &battle_size);
+        PeLangPack pack;
+        assert(!pe_lang_pack_parse(&pack, data, battle_size));
+        assert(!memcmp(pe_lang_pack_table(&pack, 20, 2), "\x22\x30\xFF", 3));
+        assert(pe_lang_pack_table(&pack, 20, 10)[0] == 0x18);
+        assert(!pe_lang_pack_table(&pack, 20, 3) && !pe_lang_pack_table(&pack, 16, 2));
+        assert(pe_lang_pack_table(&pack, 16, 3)[0] == 0x15 && !pe_lang_pack_table(&pack, 24, 2));
+        pe_lang_pack_free(&pack);
+    }
     unsigned char *good = make_pack(entries, 6, &size);
     PeLangPack pack;
     assert(!pe_lang_pack_parse(&pack, copy_of(good, size), size));

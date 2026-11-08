@@ -19,11 +19,29 @@ the [Parasite Eve Localization Mod Plan](https://claude.ai/artifact/2NpmecRhhgMB
 | French | Bundled desktop pack; inventory labels fit the original menu geometry. Dialogue layout review remains incomplete |
 | Spanish pilot | Bundled pilot; untranslated keys keep the original text. Needs Spanish-speaker review |
 | Mod-owned text (`pe_tr`) | Explicit-key fragments plus optional UTF-8 interface translation, checked printf templates, Catalog/shops/inventory/collection integration |
-| Text drawn into images and text compiled into the port | Not keyed yet |
+| Battle messages compiled into the port (Scan, running away) | Keyed as `battle/NNN` (table 20), imported from fan patches; not yet played |
+| Text drawn into images | Not keyed |
 | Accented letters (Latin Extended: French, German, Spanish, Italian, Portuguese, Polish, Czech, Turkish) | Done |
 | Japanese semantic proofreading | Pending human review; extraction/alignment does not establish translation accuracy |
 | Cyrillic | Russian, Ukrainian and Belarusian alphabets supported; modular authored glyphs and per-pack activation |
 | Chinese, Japanese, Korean | Optional external-font compilation, v2 glyph dictionaries and a native cache; see CJK scope and limits below |
+| Slovak, Romanian, Croatian, Serbian, Icelandic, Lithuanian, Latvian, Vietnamese, Greek, Macedonian, Kazakh | A letter table in the pack, one byte a letter; see Letter tables below. Not yet played |
+
+`python -I localization/pelang.py languages` lists every language the project means to support
+(`petext/alphabets.py`) and which letters each still lacks. Arabic, Persian, Urdu, Hebrew, Hindi,
+Bengali and Thai need new text layout as well as letters.
+
+To see a language's letters in the game before anyone has translated it, make a test language: the
+game's own tags and page breaks with that language's words in place of the text.
+
+```sh
+python -I localization/pelang.py sample localization/out/text/strings.json pl -o out/pl-test.csv
+python -I localization/pelang.py build out/pl-test.csv --strings localization/out/text/strings.json \
+  --lang pl --name "Test Polish" --allow-overflow -o out/pl-test.pelang
+```
+
+Name several codes to mix languages in one pack. It stays on your machine like any pack built from
+`strings.json`.
 
 French uses abbreviated inventory labels where the original menu reserves space for ammunition
 counts, and `J.` for the save slot's day label. Labels baked into images, such as **Level** and
@@ -82,7 +100,8 @@ python -I pelang.py build fr.csv --strings out/text/strings.json --lang fr --nam
    the boxes it shows in, `banks.json` (each message bank's CRC32), `menu_glyphs.json` (the menus'
    glyph widths), plus the item reports. Keys: `sys/NNN`, `item/NNN`, `desc/NNN`, `misc/NNN`
    for the resident text tables, `dlg/MNNN/PPP` for room dialogue (the message bank first used by
-   room MNNN, page PPP). The 148 table slots that hold filler the game never shows are left out.
+   room MNNN, page PPP), `battle/NNN` for the battle messages (below). The 148 table slots that
+   hold filler the game never shows are left out.
 2. **Template.** `pelang.py template` writes the translator CSV: key, English, Japanese (for
    reference), translation, box, widest line, rooms, notes. `--merge old.csv` carries the
    translations of an earlier template over, by key, and notes rows whose English changed.
@@ -125,7 +144,8 @@ python -I pelang.py build fr.csv --strings out/text/strings.json --lang fr --nam
      - the item message: 31 bytes, an item's name and `sys/016`/`017` together (more and the game
        shows nothing);
      - the rename grids (`sys/115`–`117`): the same number of cells as the English;
-     - the default name `sys/030`: 8 letters.
+     - the default name `sys/030`: 8 letters;
+     - battle messages (`battle/NNN`): one line, 300 px (they draw from x 20 to the screen edge).
 
      Byte limits, the screen edge and clipped text are errors; the other widths are warnings.
      The help line, item list, Parasite Energy list, config labels and location names were
@@ -155,6 +175,46 @@ is missing, Game text is used and the identity is retained until a new selection
 Old numeric `Language/Language` preferences are intentionally ignored: select your language once
 after upgrading, because the old index cannot establish which pack was intended.
 
+## Translation files
+
+What a player downloads is a `.pelang` file. It is one of two things, told apart by its first
+bytes, so both keep the one ending:
+
+- **A pack**, exactly as `build` writes it (below).
+- **A zip** holding that pack as `text.bin`, written by `bundle`, and its pictures with words in
+  them as `pictures.bin` when it has any. Other parts are left alone. `readme.txt` is for the
+  player: credits, version, notes.
+
+```
+python -I localization/pelang.py import-patch disc1.cue cd1.ppf -o es1.csv --report es1.json --pictures es1.bin
+python -I localization/pelang.py bundle fr.pelang -o "French.pelang" --readme credits.txt --pictures es1.bin --pictures es2.bin
+```
+
+**Pictures.** A fan patch's pictures with words (signs in rooms, main menu words, menu headings)
+come across as pieces of PE.IMG sectors (`localization/petext/pictures.py` describes the format).
+Each piece holds the patch's bytes and the CRC-32 of the English bytes it replaces. While the
+language is in use, `pe_lang` puts a piece in as the game reads that sector from the disc
+(`PE_HOOK_DISC_READ`, in `CdRom_ReadSectorsFromLba`), and only where the bytes it finds there have
+that CRC. So a piece never lands on another disc version, and Disc 1 and Disc 2 pieces share one
+file. Picture data means each room's first two runs (both picture bundles), entries 9 and 76,
+and every TIM in the other entries except the letters page at VRAM 320,0, which a translation
+file's letters already replace. Everything else a patch changes goes in the import report under
+`pictures.changes_left_out`, never into the file. A picture already on screen keeps its look until
+the game reads it again: the title screen's words follow the language picked at start.
+
+`bundle` writes the same file each time for the same pack. The game opens zips of up to 256 MB,
+with a pack of up to 64 MB inside. It refuses a zip that is damaged (its checksum is tested), has
+no `text.bin` at its top level (names match exactly), or holds an encrypted pack.
+
+**F1 > Language > Add a translation** opens a file window for `.pelang` files. The chosen file
+is checked first, then copied as-is into `lang/` in the user folder, so it's still there at the
+next start, and switched to. A file whose language code and name match a pack already in the list
+replaces it, which is how an update installs. A file that can't be read is not copied, and the
+toast says why. If the copy fails, the pack is used for that session only. The row isn't on PS5,
+which has no file window. Zipped files need the zip reader that desktop builds have
+(`PE_DESKTOP_MOD_DOWNLOADS`). Without it, plain packs still load and zips are skipped with a log
+line.
+
 ## How the text is swapped
 
 The mod never changes the game's data. At the moment the game takes a piece of text, a hook hands
@@ -165,6 +225,23 @@ through.
 - **Text tables.** `Text_LookupTable4` / `8` / `C` / `10` and the map location names send
   `PE_HOOK_TEXT_LOOKUP` with the table (4, 8, 12, 16) and index; keys `sys/`, `item/`, `desc/`,
   `misc/`.
+- **Battle messages.** A few lines live in the boot program, not the text tables, and are
+  compiled into the port (`src/main/text/tables.c`): the Scan panel's HP line and the enemy's
+  weaknesses, and the two lines when running away fails or isn't allowed.
+  `Text_LookupBattleMessage` sends `PE_HOOK_TEXT_LOOKUP` with table 20 and a `BATTLE_TEXT_*`
+  index when the English one is shown; keys `battle/000`-`010`, numbered in the order they sit in
+  the boot program (`localization/petext/battle.py`):
+
+  | Key | What it is |
+  |---|---|
+  | `battle/000` | Scan: HP not known yet |
+  | `battle/001` | Scan: HP and its maximum (two `{num}`, which a translation must keep) |
+  | `battle/002`-`008` | Scan: weak to poison, acid, sleep (tranquilizer), heat, cold; items easily stolen; easily confused |
+  | `battle/009` | Running away failed |
+  | `battle/010` | Running away isn't allowed in this fight |
+
+  The textbox draws straight from the pointer it gets, so nothing is copied into a fixed buffer:
+  the only limit is the one line from x 20 to the screen edge.
 - **Dialogue.** When a box finds its page in the room's message bank (`textbox.c`), it sends
   `PE_HOOK_TEXT_PAGE` with the bank and the page. Banks are shared by an area's rooms and keyed by
   the first room that uses one, so the pack names each bank by the CRC32 of its English bytes
@@ -215,6 +292,10 @@ reference.
   compiler's checks, and the pack round trip.
 - `ctest -R mod-lang-pack`: the C reader's lookups by key, table and bank page, the bank measure
   and CRC, and damaged packs refused whole.
+- `ctest -R mod-lang-bundle`: plain and zipped `.pelang` files, pictures put in only where the
+  English bytes are, and damaged zips or pictures refused. `test-mod-lang-bundle file.pelang ...`
+  opens any files and says what each holds; `--apply file.pelang in out` runs the picture swap
+  over saved sectors.
 - `ctest -R mod-lang-font`: the C composer against `latin.py` on synthetic letters, page fill
   (only empty cells change), widths.
 - In game: pe-native-debug's `scenarios/lang_items.py` loads a save with a pack and without, and
@@ -328,6 +409,55 @@ All new fixtures, vectors, previews and smoke packs stay in local `pe-native-deb
 - Native game rebuild succeeded. Captured Cyrillic inventory, save-phone choice and Wayne menu
   frames were visually reviewed. The test pack is not a Russian translation release.
 
+
+## Letter tables
+
+The single-byte codes 0x4D-0xEF are all spoken for by the Latin Extended and Cyrillic sets, but no
+one language uses them all. `petext/letters.py` holds a catalog of further letters, and a pack can
+give the codes its own text doesn't use to the ones it needs. Nothing to do when building: `build`
+reads the translation and makes the table.
+
+Letters stay one byte each, which matters. The game's text fields are fixed: 31 bytes for an item
+message, 63 for a dialog line. The four bytes of a CJK token would leave seven letters of Greek in
+the first and fifteen in the second. It also means widths go in the game's own tables, so wrapping,
+and menus treat these letters like any others.
+
+A letter comes one of three ways. No game art goes in a pack, so a letter built on the game's own is
+a recipe, carried out on the player's font page when it is uploaded:
+
+- **base**: the game's letter as it is. A Greek capital Alpha is the game's A, but it stays a real
+  letter;
+- **marks**: the game's letter plus up to three marks, each a list of points in the record;
+- **art**: drawn in `letters.py`, or built there on a drawn letter (a Greek alpha with an accent).
+
+A pack with a table is **v3**. Its header is 88 bytes: the v2 fields, with a glyph count that may be
+0, and two more u32 at offsets 80 and 84, the table's offset and its letter count (at most 163). The
+table comes last and fills the rest of the file. Packs with no table are unchanged. Each record is
+80 bytes, by strictly rising code:
+
+| Bytes | |
+|---|---|
+| 0-3 | Unicode character |
+| 4 | Code, 0x4D-0xEF |
+| 5 | Art: the advance, 1-15. Otherwise what's added to the base letter's advance and menu width, 0-8 |
+| 6 | The base letter's code, below 0x4D, or FF for art |
+| 7 | Steps on the base letter: 1 drop its dot, 2 turn it upside down, 4 room for a mark above an ascender. 0 for art |
+| 8-79 | Art: 72 bytes of pixels, as in a CJK record, shadow included. Otherwise three `PeLatinMark`, 19 bytes each: point count (0 for none, at most 8), fixed rows, anchor, eight (dx, row) |
+
+**What a code means now belongs to the pack**, so a table's code must not outlive it. The default
+player name and the rename grids can't use a table's letters, and `build` refuses them, because what
+the player picks there is saved. A weapon or armor rename default with one keeps the game's name in
+that editor (`persistent` in `PE_HOOK_TEXT_LOOKUP`), as for CJK. One limit: the bytes of a name saved
+while a pack was in use are read with whatever pack is in use later, so accented letters in a saved
+name can change if the next pack gave those codes away.
+
+`pe_lang` writes table letters after the Latin and Cyrillic ones, so a letter takes over its code's
+cell. Interface text uses the same table (`pe_lang_text_encode`).
+
+`python localization/preview_letters.py DISC.cue` draws every letter from the game font on your disc,
+with a line of each language, for choosing shapes. It needs Pillow, so run it without `-I`. To add a
+letter, add it to `letters.py` and run `pelang.py latin-header`, which also regenerates
+`tests/pe_lang_letter_vectors.h`: the C composer has to match Python pixel for pixel.
 
 ## CJK (Chinese, Japanese and Korean)
 
@@ -465,6 +595,41 @@ v1/v2 pack formats and the explicit `translations` v1 API remain compatible. Sha
 contracts and Unicode-header generation live in `petext/interfaces.py`. Native/F1 renderers opt
 in at presentation boundaries; settings paths, save IDs and collection keys are not translated.
 New tests, test shims, packs and visual evidence stay in the local debug repository.
+
+## Importing any fan patch
+
+The port plays the original game data, so a patch for the disc can't be played as it is.
+`import-patch` compares your disc with the patched one and writes the text as a translation file,
+and the patch's letters as a picture font. It reads PPF (1, 2, 3) and xdelta files itself, or a
+patched copy of the disc. It never runs a patcher, and it leaves your disc image alone.
+
+```sh
+python3 -I localization/pelang.py import-patch "Disc 1.cue" patch.xdelta \
+  -o local.csv --report local-report.json --font "My Font.png"
+python3 -I localization/pelang.py build local.csv --strings localization/data/manifest.json \
+  --from-patch --submission --lang es --name "Español (parche)" -o es-patch.pelang
+```
+
+Put the `.pelang` in `lang/` and the picture in `mods/fonts/`, then choose them under F1 > Language
+and F1 > Fonts. Either disc gives the same text. Nothing here goes into the repository.
+
+- **Letters** are worked out from the patch's font, so a new patch needs no code: a copy of a
+  letter (coloured speaker sets), or a base letter plus a mark. The report lists what was found.
+  Name anything it couldn't with `--letters 5A=Ñ`; pages using an unnamed symbol keep the English.
+- **Controls**: `--from-patch` lets waits, names and timing differ from the English, because a
+  translator moves them and the patch played that way. Choices must match, since scripts act on them.
+- **Space**: a patch's own font is often narrower than the game's. Pages are rewrapped to fit the
+  game's widths, and a menu line that can't fit stops the build: shorten it in the CSV.
+- **Battle messages** come from the patched boot program (`petext/battle.py`). A patch may move
+  them and point the code at the new place, or keep the Japanese beside its own lines, so the
+  importer takes the lines in that part of the boot program in order, leaves out any that is
+  still one of the original Japanese ones, and expects one per key. If the count is off, all of
+  them keep the English and the report says why. The HP line keeps its numbers even with
+  `--from-patch`.
+- **Not carried over**, all listed in the report: edited room scripts (`rooms_with_edited_scripts`
+  should be empty; if not, those rooms won't match the patch), pictures with text in them
+  (`rooms_with_edited_pictures`), custom symbols, and the rename grids. Mod labels stay in English
+  because no disc patch has them.
 
 ## Local Italian text import
 

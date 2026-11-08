@@ -3,11 +3,13 @@
  * All bitmaps are synthetic; no game art or third-party font is required. */
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pe_lang_font.h"
 #include "pe_lang_cjk.h"
 #include "pe_lang_font_vectors.h"
+#include "pe_lang_letter_vectors.h"
 
 /* latin.synthetic_cell, the stand-in game letter (no game art in tests). */
 static void synthetic_cell(unsigned code, unsigned char *out) {
@@ -157,8 +159,72 @@ static void check_cjk_cache(void) {
     printf("Passed CJK cache checks: %u dictionary glyphs, 30 full frames, 191-cell boundary, pinned overflow, failed upload/retry, pack reset, reserved native pixels.\n",CJK_TEST_GLYPHS);
 }
 
+static void from_hex(const char *hex, unsigned char *out, unsigned size) {
+    for (unsigned i = 0; i < size; ++i) {
+        unsigned value = 0;
+        assert(sscanf(hex + i * 2, "%2x", &value) == 1);
+        out[i] = (unsigned char)value;
+    }
+}
+
+/* A pack's letters: the same pixels as letters.py, whatever a code held before. */
+static void check_letters(void) {
+    const unsigned count = sizeof kLetterVectors / sizeof *kLetterVectors;
+    unsigned char record[80], base[144], out[144];
+    assert(count > 200);
+    for (unsigned k = 0; k < count; ++k) {
+        from_hex(kLetterVectors[k][0], record, sizeof record);
+        if (record[6] != 0xFF) synthetic_cell(record[6], base);
+        pe_lang_letter_compose(record, base, out);
+        for (unsigned i = 0; i < 144; ++i) {
+            if (out[i] != kLetterVectors[k][1][i] - '0') {
+                fprintf(stderr, "letter %u differs from letters.py at pixel %u (%u, %u): %u vs %c\n", k, i, i % 12,
+                        i / 12, out[i], kLetterVectors[k][1][i]);
+                exit(1);
+            }
+        }
+    }
+
+    /* On a page: over a cell that already has a letter, leaving the rest of the page alone. */
+    static unsigned char page[128 * 256], before[128 * 256];
+    unsigned char cell[144], two[160], expect[144];
+    for (unsigned code = 0; code < 77; ++code) {
+        synthetic_cell(code, cell);
+        put(page, code, cell);
+    }
+    synthetic_cell(3, cell);
+    put(page, 0xBC, cell);
+    memcpy(before, page, sizeof page);
+    from_hex(kLetterVectors[0][0], two, 80);
+    from_hex(kLetterVectors[count - 1][0], two + 80, 80);
+    two[4] = 0xBC, two[84] = 0xBD;
+    assert(pe_lang_letters_fill(two, 2, page, 128, 256) == 2);
+    get(page, 0xBC, cell);
+    if (two[6] != 0xFF) synthetic_cell(two[6], base);
+    pe_lang_letter_compose(two, base, expect);
+    assert(!memcmp(cell, expect, 144));
+    for (unsigned code = 0; code < 441; ++code) {
+        unsigned char a[144], b[144];
+        if (code == 0xBC || code == 0xBD) continue;
+        get(page, code, a);
+        get(before, code, b);
+        assert(!memcmp(a, b, 144));
+    }
+
+    /* A letter on the game's own adds to that letter's widths; a drawn one has its own. */
+    unsigned char advance[78] = {0}, metrics[78] = {0}, r[80] = {0};
+    advance[0x34] = 7, metrics[0x34] = 0x72;
+    r[6] = 0x34, r[5] = 1;
+    assert(pe_lang_letter_advance(r, advance) == 8 && pe_lang_letter_metric(r, metrics) == 0x82);
+    metrics[0x34] = 0xF2;
+    assert(pe_lang_letter_metric(r, metrics) == 0xF2);
+    r[6] = 0xFF, r[5] = 9;
+    assert(pe_lang_letter_advance(r, advance) == 9 && pe_lang_letter_metric(r, metrics) == 0x90);
+}
+
 int main(void) {
     check_cjk_cache();
+    check_letters();
     assert(sizeof kLatinVectors / sizeof *kLatinVectors == PE_LATIN_COUNT);
     for (unsigned k = 0; k < PE_LATIN_COUNT; ++k) {
         const PeLatinGlyph *g = &kPeLatinGlyphs[k];

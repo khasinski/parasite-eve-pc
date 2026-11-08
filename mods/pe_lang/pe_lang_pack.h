@@ -8,15 +8,21 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PE_LANG_PACK_VERSION 1u /* original format; readers additionally accept CJK v2 */
+#include "pe_lang_pictures.h"
+
+#define PE_LANG_PACK_VERSION 1u /* original format; readers additionally accept CJK v2 and letter table v3 */
+#define PE_LANG_LETTER_SIZE 80u /* one record of a pack's letter table, see pe_lang_letter_compose */
 
 typedef struct PeLangPack {
     unsigned char *data;    /* the whole file, owned by the pack */
     size_t size;
     unsigned count;
     unsigned entries_at, cjk_offset, cjk_count;
+    unsigned letters_offset, letter_count; /* the pack's own letters, by rising code */
+    unsigned *unicode; /* 241 codes when it has any (owned), else NULL: the fixed codes hold */
     char lang[16], name[32];
     char **utf8; /* optional decoded plain interface labels, owned; never serialized */
+    PeLangPictures pictures; /* a zipped file's pictures.bin (pe_lang_bundle.c), owned; else empty */
 } PeLangPack;
 
 /* FNV-1a 32 of the key's bytes, as pelang.py hashes it. */
@@ -24,6 +30,13 @@ uint32_t pe_lang_hash(const char *key);
 /* Whether a validated pack draws a plain glyph in this inclusive range. Command operands
  * and extra-page glyph operands do not select a single-byte font cell. */
 int pe_lang_pack_uses_glyphs(const PeLangPack *pack, unsigned first, unsigned last);
+
+/* The record of letter `index` of the pack's table, and whether a code is one of those letters.
+ * A code in the table means something only in this pack, so it must never reach a save. */
+static inline const unsigned char *pe_lang_pack_letter(const PeLangPack *pack, unsigned index) {
+    return pack->data + pack->letters_offset + index * PE_LANG_LETTER_SIZE;
+}
+int pe_lang_pack_has_letter(const PeLangPack *pack, unsigned code);
 
 /* Take `data` (malloc'd, `size` bytes) as a pack after checking every offset in it. Returns 0 and
  * owns the data, or -1 and frees it: a damaged pack is never half used. */
@@ -36,7 +49,8 @@ const unsigned char *pe_lang_pack_find(const PeLangPack *pack, const char *key);
 
 /* The translation for a resident text table lookup (PE_HOOK_TEXT_LOOKUP): table 4 is system
  * messages ("sys/NNN"), 8 item names ("item/NNN"), 12 item descriptions ("desc/NNN"), 16 the
- * rest ("misc/NNN"); NULL for anything else. */
+ * rest ("misc/NNN"), 20 the battle messages in the boot program ("battle/NNN"); NULL for anything
+ * else. */
 const unsigned char *pe_lang_pack_table(const PeLangPack *pack, unsigned table, unsigned index);
 
 /* A room's message bank, as extract_text.py measures it: pages FE <id> text FF|F9, one after

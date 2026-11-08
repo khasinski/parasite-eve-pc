@@ -4,7 +4,7 @@ No automatic reflow: moving waits or choice rows could change game interaction.
 Unknown layouts remain explicit warnings rather than invented fit guarantees.
 """
 import re
-from . import gametext as gt, menu
+from . import battle, gametext as gt, menu
 from .validation import commands
 
 # textbox.c: default origin (20,174), fog bottom 224, line pitch 12.
@@ -26,6 +26,8 @@ def advance(c: bytes, name_width: int = NAME_WIDTH) -> int:
         return gt.WIDE if c[1] <= 3 else NUMBER_WIDTH if c[1] == 8 else 0
     if op in (0xF1, 0xFC, 0xFD):
         return gt.WIDE
+    if op in gt.PACK_LETTERS:
+        return gt.PACK_LETTERS[op].advance()
     if op < 0xF1:
         return gt.BOX_ADVANCE[op] if op < len(gt.BOX_ADVANCE) else (gt._latin_advance(op) or gt.WIDE)
     return 0
@@ -131,6 +133,13 @@ def check(key: str, raw: bytes, source: dict, widest_table: dict, name_px: int =
     errors, warnings = [], []
     pages = screens(raw, name_px)
     widest = max(max(p) for p in pages)
+    if battle.is_battle(key):
+        # One line of the dialogue font from x 20 (petext/battle.py); the bar has no second line.
+        if len(pages) > 1 or len(pages[0]) > 1:
+            errors.append('a battle message is one line: no line breaks or waits')
+        elif widest > battle.WIDTH:
+            errors.append(f'{widest} px; a battle message fits {battle.WIDTH} px before the screen edge')
+        return errors, warnings
     if not key.startswith('dlg/'):
         if metrics is not None:                  # measured as the menus draw it
             errors, warnings, covered = menu.check(key, raw, source, metrics, layouts or menu.load_layouts())

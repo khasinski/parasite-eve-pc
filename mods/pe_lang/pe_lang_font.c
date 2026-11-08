@@ -44,6 +44,36 @@ static void squash(unsigned char *s) {
     memset(s, 0, CELL);
 }
 
+/* A mark on a letter whose ink, before any marks, is `ink`. */
+static void place_mark(unsigned char *s, const unsigned char *ink, const PeLatinMark *mark, int capital) {
+    int x0, x1, y0, y1, anchor, top = capital ? 0 : 1;
+    ink_box(ink, &x0, &x1, &y0, &y1);
+    anchor = (x0 + x1) / 2;
+    if (mark->anchor == 1) anchor = x0;
+    else if (mark->anchor == 2) anchor = x1;
+    else if (mark->anchor == 3) {
+        int best = -1;
+        for (int x = 0; x < CELL; ++x) {
+            int n = 0;
+            for (int y = 0; y < CELL; ++y) n += ink[y * CELL + x];
+            if (n > best) best = n, anchor = x;
+        }
+    }
+    for (unsigned k = 0; k < mark->count; ++k) {
+        int x = anchor + mark->pts[k].dx, y = mark->fixed_rows ? mark->pts[k].row : top + mark->pts[k].row;
+        if (x >= 0 && x < CELL && y >= 0 && y < CELL) s[y * CELL + x] = 1;
+    }
+}
+
+static void rotate(unsigned char *s) {
+    unsigned char turned[CELL_PX] = {0};
+    int x0, x1, y0, y1;
+    ink_box(s, &x0, &x1, &y0, &y1);
+    for (int i = 0; i < CELL_PX; ++i)
+        if (s[i]) turned[(y0 + y1 - i / CELL) * CELL + (x0 + x1 - i % CELL)] = 1;
+    memcpy(s, turned, CELL_PX);
+}
+
 static int is_capital(unsigned char code) { return code >= 0x10 && code <= 0x29; }   /* A-Z */
 
 void pe_lang_font_compose(const PeLatinGlyph *g, const unsigned char *base, unsigned char *out) {
@@ -59,13 +89,7 @@ void pe_lang_font_compose(const PeLatinGlyph *g, const unsigned char *base, unsi
     }
     for (int i = 0; i < CELL_PX; ++i) s[i] = base[i] == 1;
     if (g->ops & PE_LATIN_OP_DOTLESS) memset(s, 0, 3 * CELL);
-    if (g->ops & PE_LATIN_OP_ROTATE) {
-        unsigned char turned[CELL_PX] = {0};
-        ink_box(s, &x0, &x1, &y0, &y1);
-        for (int i = 0; i < CELL_PX; ++i)
-            if (s[i]) turned[(y0 + y1 - i / CELL) * CELL + (x0 + x1 - i % CELL)] = 1;
-        memcpy(s, turned, CELL_PX);
-    }
+    if (g->ops & PE_LATIN_OP_ROTATE) rotate(s);
     int capital = is_capital(g->base);
     const PeLatinMark *mark = &kPeLatinMarks[g->mark];
     if (g->mark != PE_MARK_NONE && g->mark != PE_MARK_SLASH && !mark->fixed_rows && capital) squash(s);
@@ -74,21 +98,7 @@ void pe_lang_font_compose(const PeLatinGlyph *g, const unsigned char *base, unsi
         int span = y1 - y0 > 0 ? y1 - y0 : 1;
         for (int k = 0; k <= y1 - y0; ++k) s[(y1 - k) * CELL + x0 + (2 * k * (x1 - x0) + span) / (2 * span)] = 1;
     } else if (x1 >= 0 && g->mark != PE_MARK_NONE) {
-        int anchor = (x0 + x1) / 2, top = capital ? 0 : 1;
-        if (mark->anchor == 1) anchor = x0;
-        else if (mark->anchor == 2) anchor = x1;
-        else if (mark->anchor == 3) {
-            int best = -1;
-            for (int x = 0; x < CELL; ++x) {
-                int n = 0;
-                for (int y = 0; y < CELL; ++y) n += s[y * CELL + x];
-                if (n > best) best = n, anchor = x;
-            }
-        }
-        for (unsigned k = 0; k < mark->count; ++k) {
-            int x = anchor + mark->pts[k].dx, y = mark->fixed_rows ? mark->pts[k].row : top + mark->pts[k].row;
-            if (x >= 0 && x < CELL && y >= 0 && y < CELL) s[y * CELL + x] = 1;
-        }
+        place_mark(s, s, mark, capital);
     }
     add_shadow(s, out);
 }
@@ -125,6 +135,61 @@ int pe_lang_font_fill(unsigned char *pixels, unsigned stride, unsigned height) {
         ++written;
     }
     return written;
+}
+
+#define LETTER_MARKS 3
+#define LETTER_MARK_BYTES 19
+_Static_assert(sizeof(PeLatinMark) == LETTER_MARK_BYTES, "letter records hold PeLatinMark as it is");
+
+void pe_lang_letter_compose(const unsigned char *r, const unsigned char *base, unsigned char *out) {
+    unsigned char s[CELL_PX] = {0}, ink[CELL_PX];
+    PeLatinMark marks[LETTER_MARKS];
+    const unsigned ops = r[7];
+    const int capital = is_capital(r[6]) || (ops & PE_LETTER_OP_TALL);
+    int above = 0, x0, x1, y0, y1;
+    if (r[6] == 0xFF) {
+        for (int i = 0; i < CELL_PX; ++i) out[i] = (unsigned char)(r[8 + i / 2] >> ((i & 1) * 4) & 15);
+        return;
+    }
+    memcpy(marks, r + 8, sizeof marks);
+    for (int i = 0; i < CELL_PX; ++i) s[i] = base[i] == 1;
+    if (ops & PE_LATIN_OP_DOTLESS) memset(s, 0, 3 * CELL);
+    if (ops & PE_LATIN_OP_ROTATE) rotate(s);
+    for (unsigned k = 0; k < LETTER_MARKS; ++k) above |= marks[k].count && !marks[k].fixed_rows;
+    if (capital && above) squash(s);
+    memcpy(ink, s, CELL_PX);
+    ink_box(ink, &x0, &x1, &y0, &y1);
+    if (x1 >= 0)
+        for (unsigned k = 0; k < LETTER_MARKS; ++k)
+            if (marks[k].count) place_mark(s, ink, &marks[k], capital);
+    add_shadow(s, out);
+}
+
+int pe_lang_letters_fill(const unsigned char *records, unsigned count, unsigned char *pixels,
+                         unsigned stride, unsigned height) {
+    int written = 0;
+    for (unsigned k = 0; k < count; ++k) {
+        const unsigned char *r = records + k * 80u;
+        unsigned char base[CELL_PX], out[CELL_PX];
+        unsigned cx = r[4] % PE_FONT_COLUMNS * CELL, cy = r[4] / PE_FONT_COLUMNS * CELL;
+        if (cy + CELL > height || stride * 2 < cx + CELL) continue;
+        if (r[6] != 0xFF) read_cell(pixels, stride, r[6], base);
+        pe_lang_letter_compose(r, base, out);
+        for (unsigned i = 0; i < CELL_PX; ++i) px_set(pixels, stride, cx + i % CELL, cy + i / CELL, out[i]);
+        ++written;
+    }
+    return written;
+}
+
+unsigned pe_lang_letter_advance(const unsigned char *r, const unsigned char *base_advance) {
+    return r[6] == 0xFF ? r[5] : (unsigned)base_advance[r[6]] + r[5];
+}
+
+unsigned char pe_lang_letter_metric(const unsigned char *r, const unsigned char *base_metrics) {
+    unsigned width;
+    if (r[6] == 0xFF) return (unsigned char)(r[5] << 4);
+    width = (base_metrics[r[6]] >> 4) + (unsigned)r[5];
+    return (unsigned char)((width > 15 ? 15 : width) << 4 | (base_metrics[r[6]] & 15));
 }
 
 unsigned pe_lang_font_advance(const PeLatinGlyph *g, const unsigned char *base_advance) {
