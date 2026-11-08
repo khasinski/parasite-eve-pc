@@ -30,6 +30,26 @@ void *Text_LookupEditableName(unsigned int table, unsigned int index);
 /* Whether `text` is what a PE_HOOK_TEXT_LOOKUP handler returned for the last text lookup. */
 int Text_IsLookupReplacement(const void *text);
 extern int g_SaveMetadataWindowIndex;
+/* Battle messages the boot program holds itself (tables.c), numbered in the order they sit
+ * there: a language pack's "battle/NNN" (localization/petext/battle.py). */
+enum {
+    BATTLE_TEXT_HP_UNKNOWN,     /* Scan: HP not known yet */
+    BATTLE_TEXT_HP,             /* Scan: HP and its maximum, two FB 08 numbers */
+    BATTLE_TEXT_POISON,         /* Scan: the enemy's weaknesses ... */
+    BATTLE_TEXT_ACID,
+    BATTLE_TEXT_TRANQUILIZER,
+    BATTLE_TEXT_HEAT,
+    BATTLE_TEXT_COLD,
+    BATTLE_TEXT_STEAL,
+    BATTLE_TEXT_CONFUSION,
+    BATTLE_TEXT_ESCAPE_FAILED,  /* running away failed */
+    BATTLE_TEXT_ESCAPE_BLOCKED, /* running away isn't allowed here */
+    BATTLE_TEXT_COUNT
+};
+/* The line of `texts` for the message window (g_SaveMetadataWindowIndex: 0 Japanese, 1 English,
+ * `stride` bytes apart; 0 for a line with one version). The English one goes through
+ * PE_HOOK_TEXT_LOOKUP as table 20, so a language pack may give its own line instead. */
+u8 *Text_LookupBattleMessage(unsigned int index, u8 *texts, unsigned int stride);
 void Text_CopyFFTerminatedBytes(u8 *dst, u8 *src);
 void Text_AppendFFTerminatedBytes(u8 *dst, u8 *src);
 int Draw_MeasureTextWidth(u8 *text);

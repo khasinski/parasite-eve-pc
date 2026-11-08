@@ -445,6 +445,7 @@ static const char *pe_hook_name(int id) {
         [PE_HOOK_SLOT_DRAWN] = "slot drawn",
         [PE_HOOK_TEXT_STRETCH] = "text stretch",
         [PE_HOOK_TEXT_LETTER] = "text letter",
+        [PE_HOOK_DISC_READ] = "disc read",
     };
     if (id >= 0 && id < PE_HOOK_COUNT) return names[id] ? names[id] : "?";
     return id - PE_HOOK_COUNT < s_event_count ? s_events[id - PE_HOOK_COUNT] : "?";

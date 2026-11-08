@@ -353,6 +353,7 @@ void pe_lang_pack_free(PeLangPack *pack) {
     free(pack->utf8);
     free(pack->unicode);
     free(pack->data);
+    free(pack->pictures.data);
     memset(pack, 0, sizeof *pack);
 }
 
@@ -372,7 +373,7 @@ const unsigned char *pe_lang_pack_find(const PeLangPack *pack, const char *key) 
 
 const unsigned char *pe_lang_pack_table(const PeLangPack *pack, unsigned table, unsigned index) {
     char key[32];
-    const char *prefix = table == 4 ? "sys" : table == 8 ? "item" : table == 12 ? "desc" : table == 16 ? "misc" : NULL;
+    const char *prefix = table == 4 ? "sys" : table == 8 ? "item" : table == 12 ? "desc" : table == 16 ? "misc" : table == 20 ? "battle" : NULL;
     if (!prefix || index > 999) return NULL;
     snprintf(key, sizeof key, "%s/%03u", prefix, index);
     return pe_lang_pack_find(pack, key);

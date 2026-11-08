@@ -228,6 +228,19 @@ int main(int argc, char **argv) {
         pe_lang_pack_free(&v4);
         free(v1p);
     }
+    {
+        /* Battle messages (Text_LookupBattleMessage): table 20, "battle/NNN" by BATTLE_TEXT_*. */
+        Entry battle[] = {{"battle/002", "\x22\x30"}, {"battle/010", "\x18\x3c"}, {"misc/003", "\x15"}};
+        size_t battle_size;
+        unsigned char *data = make_pack(battle, 3, &battle_size);
+        PeLangPack pack;
+        assert(!pe_lang_pack_parse(&pack, data, battle_size));
+        assert(!memcmp(pe_lang_pack_table(&pack, 20, 2), "\x22\x30\xFF", 3));
+        assert(pe_lang_pack_table(&pack, 20, 10)[0] == 0x18);
+        assert(!pe_lang_pack_table(&pack, 20, 3) && !pe_lang_pack_table(&pack, 16, 2));
+        assert(pe_lang_pack_table(&pack, 16, 3)[0] == 0x15 && !pe_lang_pack_table(&pack, 24, 2));
+        pe_lang_pack_free(&pack);
+    }
     unsigned char *good = make_pack(entries, 6, &size);
     PeLangPack pack;
     assert(!pe_lang_pack_parse(&pack, copy_of(good, size), size));

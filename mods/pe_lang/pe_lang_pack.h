@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "pe_lang_pictures.h"
+
 #define PE_LANG_PACK_VERSION 1u /* original format; readers additionally accept CJK v2 and letter table v3 */
 #define PE_LANG_LETTER_SIZE 80u /* one record of a pack's letter table, see pe_lang_letter_compose */
 #define PE_LANG_STRETCH_MAX 96u /* letters in one F1 C6 stretch (PE_TEXT_ITEM_LETTERS) */
@@ -33,6 +35,7 @@ typedef struct PeLangPack {
     unsigned *unicode; /* 241 codes when it has any (owned), else NULL: the fixed codes hold */
     char lang[16], name[32];
     char **utf8; /* optional decoded plain interface labels, owned; never serialized */
+    PeLangPictures pictures; /* a zipped file's pictures.bin (pe_lang_bundle.c), owned; else empty */
 } PeLangPack;
 
 /* FNV-1a 32 of the key's bytes, as pelang.py hashes it. */
@@ -89,7 +92,8 @@ const unsigned char *pe_lang_pack_find(const PeLangPack *pack, const char *key);
 
 /* The translation for a resident text table lookup (PE_HOOK_TEXT_LOOKUP): table 4 is system
  * messages ("sys/NNN"), 8 item names ("item/NNN"), 12 item descriptions ("desc/NNN"), 16 the
- * rest ("misc/NNN"); NULL for anything else. */
+ * rest ("misc/NNN"), 20 the battle messages in the boot program ("battle/NNN"); NULL for anything
+ * else. */
 const unsigned char *pe_lang_pack_table(const PeLangPack *pack, unsigned table, unsigned index);
 
 /* A room's message bank, as extract_text.py measures it: pages FE <id> text FF|F9, one after

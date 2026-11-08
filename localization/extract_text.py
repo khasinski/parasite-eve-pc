@@ -21,6 +21,8 @@ Keys:
                                           and descriptions, the rest); NNN is the table index
   dlg/MNNN/PPP   room dialogue: the message bank first used by room MNNN (banks are shared by
                  rooms of an area), page PPP
+  battle/NNN     the battle messages the boot program holds itself (the Scan panel's lines,
+                 running away), in the order they sit there (petext/battle.py)
 Boxes: "default" is the standard dialogue box (style 0, x 20, y 174); "styled x,y,w,h" is a box
 whose rectangle the script set with opcode 208 before opening it with 209.
 """
@@ -39,7 +41,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from petext import gametext as gt, jatext as ja, menu  # noqa: E402
+from petext import battle, gametext as gt, jatext as ja, menu  # noqa: E402
 from petext.disc import Game  # noqa: E402
 from petext.script import MODE_IMMEDIATE, Instr, opcodes, task_block, walk  # noqa: E402
 
@@ -299,6 +301,8 @@ def main():
                 key = f"item/{pack[rec + 4] - 1:03d}"
                 if pack[rec + 4] and key in entries:
                     entries[key]["item_kind"] = pack[rec + 6]
+            for key, raw in battle.english(g.disc.file(g.exe_name)).items():
+                entries[key] = {"key": key, "raw": raw, "end": 0xFF, "rooms": [], "boxes": []}
         for m in range(1, 451):
             room = g.room(m)
             if not room:
@@ -378,7 +382,7 @@ def main():
     for e in entries.values():
         e["text"] = gt.decode(e["raw"])
         e["lines_px"] = gt.lines(e["raw"])
-        if not e["key"].startswith("dlg/"):
+        if not e["key"].startswith(("dlg/", "battle/")):        # battle lines draw as dialogue
             e["menu_px"] = menu.width(e["raw"], metrics)
         if gt.encode(e["text"]) != e["raw"]:
             bad.append(e["key"])

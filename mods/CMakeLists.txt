@@ -222,7 +222,7 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME mod-lang-pack COMMAND test-mod-lang-pack)
     add_executable(test-mod-lang-bundle ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_bundle_test.c
-        pe_lang/pe_lang_bundle.c pe_lang/pe_lang_pack.c)
+        pe_lang/pe_lang_bundle.c pe_lang/pe_lang_pack.c pe_lang/pe_lang_pictures.c)
     target_include_directories(test-mod-lang-bundle PRIVATE pe_lang)
     if(TARGET pe_download_zip)
         target_link_libraries(test-mod-lang-bundle PRIVATE pe_download_zip)
@@ -235,7 +235,7 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME mod-lang-bundle COMMAND test-mod-lang-bundle)
     add_executable(test-mod-lang-names ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_names_test.c
-        pe_lang/pe_lang_names.c pe_lang/pe_lang_pack.c)
+        pe_lang/pe_lang_names.c pe_lang/pe_lang_pack.c pe_lang/pe_lang_pictures.c)
     target_include_directories(test-mod-lang-names PRIVATE pe_lang)
     add_test(NAME mod-lang-names COMMAND test-mod-lang-names)
     add_executable(test-mod-lang-font ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_font_test.c pe_lang/pe_lang_font.c pe_lang/pe_lang_cjk.c

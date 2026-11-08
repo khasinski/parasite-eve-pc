@@ -11,6 +11,7 @@
 #include "pe1/render_object.h"
 #include "pe1/save.h"
 #include "pe1/scene_transition.h"
+#include "pe1/text.h"
 
 /* Actors affected by the current action, in original encounter order. */
 BattleEntity *g_BattleActionActors[7];
@@ -100,9 +101,9 @@ int Battle_RollEscapeChance(void) {
         int attempts;
         g_BattleSaveOverlayActive = 1;
         if (result == -1)
-            g_CurItemEffectData = g_EscapeBlockedTexts + Save_GetMetadataWindowIndex() * 14;
+            g_CurItemEffectData = Text_LookupBattleMessage(BATTLE_TEXT_ESCAPE_BLOCKED, g_EscapeBlockedTexts, 14);
         else
-            g_CurItemEffectData = g_EscapeFailedTexts + Save_GetMetadataWindowIndex() * 17;
+            g_CurItemEffectData = Text_LookupBattleMessage(BATTLE_TEXT_ESCAPE_FAILED, g_EscapeFailedTexts, 17);
         player = g_ActiveActor;
         attempts = ((unsigned int)player->stateFlags >> 25) & 7;
         if (attempts < 5)

@@ -34,6 +34,79 @@ static void expect_item(const PeLangPack *pack) {
     assert(!strcmp(pack->lang, "es") && !strcmp(pack->name, "Spanish"));
 }
 
+/* A pictures.bin with these pieces (already in order), as petext/pictures.py writes it. */
+typedef struct Piece { uint32_t sector; unsigned offset; const char *english, *new_bytes; } Piece;
+static unsigned char *make_pictures(const Piece *pieces, unsigned n, size_t *size) {
+    size_t bytes = 0, table = 16 + 16u * n;
+    for (unsigned i = 0; i < n; ++i) bytes += strlen(pieces[i].new_bytes);
+    unsigned char *p = calloc(1, table + bytes);
+    memcpy(p, "PEPX", 4); wr32(p + 4, 1); wr32(p + 8, n); wr32(p + 12, (uint32_t)table);
+    size_t at = 0;
+    for (unsigned i = 0; i < n; ++i) {
+        unsigned char *r = p + 16 + 16 * i;
+        size_t len = strlen(pieces[i].new_bytes);
+        assert(len == strlen(pieces[i].english));
+        wr32(r, pieces[i].sector);
+        r[4] = (unsigned char)pieces[i].offset; r[5] = (unsigned char)(pieces[i].offset >> 8);
+        r[6] = (unsigned char)len; r[7] = (unsigned char)(len >> 8);
+        wr32(r + 8, pe_lang_crc32((const unsigned char *)pieces[i].english, len));
+        wr32(r + 12, (uint32_t)at);
+        memcpy(p + table + at, pieces[i].new_bytes, len);
+        at += len;
+    }
+    *size = table + bytes;
+    return p;
+}
+
+static unsigned char *copy_of(const unsigned char *p, size_t size) {
+    unsigned char *c = malloc(size); memcpy(c, p, size); return c;
+}
+
+static void test_pictures(void) {
+    /* Sector 10 has a sign at 100; sector 12 has two versions of one place (Disc 1 and Disc 2). */
+    static const Piece pieces[] = {{10, 100, "EXIT", "SALI"}, {12, 2040, "Level!!!", "Nivel!!!"},
+                                   {12, 2040, "Time....", "Tiempo.."}};
+    size_t size;
+    unsigned char *bin = make_pictures(pieces, 3, &size);
+    PeLangPictures pictures;
+    assert(!pe_lang_pictures_parse(&pictures, copy_of(bin, size), size) && pictures.count == 3);
+
+    /* A read of sectors 9-12: the sign goes in; the place in 12 takes the piece whose English is there. */
+    unsigned char *disc = calloc(4, 2048);
+    memcpy(disc + 1 * 2048 + 100, "EXIT", 4);
+    memcpy(disc + 3 * 2048 + 2040, "Time....", 8);
+    assert(pe_lang_pictures_apply(&pictures, 9, 4, disc) == 2);
+    assert(!memcmp(disc + 2048 + 100, "SALI", 4) && !memcmp(disc + 3 * 2048 + 2040, "Tiempo..", 8));
+    /* Read again: already swapped, so nothing matches and nothing changes. */
+    assert(pe_lang_pictures_apply(&pictures, 9, 4, disc) == 0);
+    /* Other bytes there (another disc version): left alone. */
+    memcpy(disc + 2048 + 100, "EXIT", 4); disc[2048 + 101] = 'Y';
+    assert(pe_lang_pictures_apply(&pictures, 10, 1, disc + 2048) == 0 && !memcmp(disc + 2048 + 100, "EYIT", 4));
+    /* Reads that don't reach the pieces. */
+    assert(pe_lang_pictures_apply(&pictures, 13, 2, disc) == 0 && pe_lang_pictures_apply(&pictures, 11, 1, disc) == 0);
+    free(disc);
+    pe_lang_pictures_free(&pictures);
+
+    /* Each of these is refused whole. */
+    struct { unsigned at; unsigned char value; } damage[] = {
+        {0, 'X'},            /* not PEPX */
+        {4, 2},              /* a newer version */
+        {8, 4},              /* more pieces than there are */
+        {12, 0},             /* bytes said to start inside the pieces */
+        {16 + 6, 0},         /* a piece with no length */
+        {16 + 5, 8},         /* a piece past its sector (offset 2148) */
+        {16 + 12, 200},      /* a piece's bytes past the end */
+        {16 + 16, 13},       /* out of order: sector 13 before 12 */
+    };
+    for (unsigned i = 0; i < sizeof damage / sizeof *damage; ++i) {
+        unsigned char *bad = copy_of(bin, size);
+        bad[damage[i].at] = damage[i].value;
+        assert(pe_lang_pictures_parse(&pictures, bad, size) && !pictures.data && !pictures.count);
+    }
+    assert(pe_lang_pictures_parse(&pictures, copy_of(bin, 15), 15));
+    free(bin);
+}
+
 #if PE_LANG_ZIP
 /* A zip with the named parts; returns the bytes (mz_free them) and their size. */
 typedef struct Part { const char *name; const void *data; size_t size; } Part;
@@ -62,14 +135,33 @@ static size_t data_at(const unsigned char *zip, size_t size, const char *name) {
 
 int main(int argc, char **argv) {
     size_t size;
+    /* --apply file.pelang in out: in holds {u32 sector, 2048 bytes} records read from a disc;
+     * out gets them after the file's pictures are put in, as the game does on a read. */
+    if (argc == 5 && !strcmp(argv[1], "--apply")) {
+        PeLangPack pack;
+        unsigned char record[4 + 2048];
+        unsigned applied = 0;
+        FILE *in = fopen(argv[3], "rb"), *out = fopen(argv[4], "wb");
+        assert(in && out && pe_lang_bundle_load(&pack, argv[2]) == PE_LANG_OPEN_OK);
+        while (fread(record, 1, sizeof record, in) == sizeof record) {
+            uint32_t sector = record[0] | record[1] << 8 | record[2] << 16 | (uint32_t)record[3] << 24;
+            applied += pe_lang_pictures_apply(&pack.pictures, sector, 1, record + 4);
+            assert(fwrite(record, 1, sizeof record, out) == sizeof record);
+        }
+        fclose(in);
+        fclose(out);
+        printf("%u of %u pieces applied\n", applied, pack.pictures.count);
+        pe_lang_pack_free(&pack);
+        return 0;
+    }
     /* Files written by `pelang.py bundle` (or anyone): open each and say what it holds. */
     if (argc > 1) {
         int failed = 0;
         for (int i = 1; i < argc; ++i) {
             PeLangPack pack;
             PeLangOpen result = pe_lang_bundle_load(&pack, argv[i]);
-            if (result == PE_LANG_OPEN_OK) printf("%s: %s (%s), %u entries\n", argv[i], pack.name, pack.lang,
-                                                  pack.count);
+            if (result == PE_LANG_OPEN_OK) printf("%s: %s (%s), %u entries, %u picture pieces\n", argv[i], pack.name,
+                                                  pack.lang, pack.count, pack.pictures.count);
             else printf("%s: refused, %s\n", argv[i], pe_lang_bundle_error(result));
             failed |= result != PE_LANG_OPEN_OK;
             pe_lang_pack_free(&pack);
@@ -78,6 +170,8 @@ int main(int argc, char **argv) {
     }
     unsigned char *pack_bytes = make_pack(&size);
     PeLangPack pack;
+
+    test_pictures();
 
     /* A plain pack opens as before, and the bytes are only borrowed. */
     assert(pe_lang_bundle_parse(&pack, pack_bytes, size) == PE_LANG_OPEN_OK);
@@ -126,6 +220,24 @@ int main(int argc, char **argv) {
         void *zip = make_zip(wrong, 2, &zip_size);
         assert(pe_lang_bundle_parse(&pack, zip, zip_size) == PE_LANG_OPEN_BAD_ZIP);
         mz_free(zip);
+    }
+    {
+        /* Pictures come with the text; a file with damaged pictures is refused whole. */
+        static const Piece one[] = {{10, 100, "EXIT", "SALI"}};
+        size_t pictures_size, zip_size;
+        unsigned char *pictures_bin = make_pictures(one, 1, &pictures_size);
+        Part parts[] = {{PE_LANG_BUNDLE_TEXT, pack_bytes, size}, {PE_LANG_BUNDLE_PICTURES, pictures_bin, pictures_size}};
+        void *zip = make_zip(parts, 2, &zip_size);
+        assert(pe_lang_bundle_parse(&pack, zip, zip_size) == PE_LANG_OPEN_OK);
+        expect_item(&pack);
+        assert(pack.pictures.count == 1);
+        pe_lang_pack_free(&pack);
+        mz_free(zip);
+        pictures_bin[4] = 9;
+        zip = make_zip(parts, 2, &zip_size);
+        assert(pe_lang_bundle_parse(&pack, zip, zip_size) == PE_LANG_OPEN_BAD_PICTURES && !pack.data);
+        mz_free(zip);
+        free(pictures_bin);
     }
     {
         /* A zip whose pack is not a pack. */

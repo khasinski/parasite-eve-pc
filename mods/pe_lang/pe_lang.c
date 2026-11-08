@@ -4,8 +4,9 @@
  * F1 > Language picks one, or the game's own text. Anything a pack doesn't translate keeps the
  * game's text, so a half-finished pack is still playable.
  *
- * The resident text tables (system messages, item names and descriptions, the rest) come through
- * PE_HOOK_TEXT_LOOKUP. Room dialogue comes through PE_HOOK_TEXT_PAGE: the pack names each English
+ * The resident text tables (system messages, item names and descriptions, the rest) and the
+ * battle messages the boot program holds (the Scan panel's lines, running away: "battle/NNN")
+ * come through PE_HOOK_TEXT_LOOKUP. Room dialogue comes through PE_HOOK_TEXT_PAGE: the pack names each English
  * message bank by its CRC32 ("bank/<crc32>"), so the bank a box reads from is measured once per
  * room and its pages looked up as dlg/<bank>/<page>. A bank the pack doesn't know (another disc
  * version, a modded room) keeps the game's text.
@@ -22,7 +23,12 @@
  * A pack can also have a letter table (localization/petext/letters.py): the codes its text doesn't
  * use, given to letters it needs. Those letters go on the page after the rest, widths and all, so
  * they are one byte each and everything downstream treats them as any other letter. Such a code
- * means something only in that pack, which is why none may reach a save. */
+ * means something only in that pack, which is why none may reach a save.
+ *
+ * A zipped .pelang can also carry pictures with words in them (pe_lang_pictures.h): pieces of
+ * PE.IMG put in as the game reads those sectors (PE_HOOK_DISC_READ), where the English bytes are
+ * there. A picture already on screen keeps its look until the game reads it again (the next
+ * room, menu or screen that loads it). */
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -79,6 +85,12 @@ static int on_text_lookup(void *ctx, void *user) {
     PeHookTextLookup *lookup = ctx;
     const unsigned char *text = pe_lang_pack_table(active_pack(), lookup->table, lookup->index);
     (void)user;
+    if (lookup->table == 20) {
+        /* A battle message: once per message shown, so the log says which ones a pack gave. */
+        static unsigned logged;
+        if (active_pack() && logged < 200 && ++logged)
+            pe_mod_log(MOD_ID, "battle/%03u: %s", lookup->index, text ? "the pack's line" : "the game's English");
+    }
     if (text && lookup->persistent) {
         /* IDs in the CJK dictionary belong to this pack, not to the save format.
          * Rename defaults must remain readable after switching/removing a pack. */
@@ -491,6 +503,22 @@ static int on_text_letter(void *ctx, void *user) {
     return 1;
 }
 
+/* The pack's pictures, as the sectors holding them are read. */
+static const PeLangPack *s_pictures_logged;
+static int on_disc_read(void *ctx, void *user) {
+    PeHookDiscRead *read = ctx;
+    const PeLangPack *pack = active_pack();
+    (void)user;
+    if (!pack || !pack->pictures.count) return 0;
+    unsigned applied = pe_lang_pictures_apply(&pack->pictures, read->sector, read->count, read->data);
+    if (applied && s_pictures_logged != pack) {
+        pe_mod_log(MOD_ID, "%s: its pictures are in use (%u pieces in the first read, sectors %u-%u)",
+                   s_labels[pack - s_packs], applied, read->sector, read->sector + read->count - 1);
+        s_pictures_logged = pack;
+    }
+    return 0;
+}
+
 
 /* ---- Names in the pack's letters, kept with the save (pe_lang_names.h) ----
  * The three name windows: Aya's name (metadata window 1), then the weapon's and armor's being
@@ -624,7 +652,8 @@ static int add_pack(PeLangPack *loaded, const char *path) {
     s_packs[slot] = *loaded;
     snprintf(s_labels[slot], sizeof s_labels[0], "%s (%s)", loaded->name, loaded->lang);
     s_names[slot + 1] = s_labels[slot];
-    pe_mod_log(MOD_ID, "%s: %s, %u entries", path, s_labels[slot], loaded->count);
+    pe_mod_log(MOD_ID, "%s: %s, %u entries, %u picture pieces", path, s_labels[slot], loaded->count,
+               loaded->pictures.count);
     if (!existing) ++s_pack_count;
     return (int)slot;
 }
@@ -839,6 +868,7 @@ static int lang_init(void) {
     pe_hook_add(PE_HOOK_TEXT_LETTER, on_text_letter, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_TEXT_SCRIPT, on_text_script, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_FRAME_DRAWN, on_cjk_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_DISC_READ, on_disc_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);
 
     pe_menu_begin("Language");
     pe_menu_top_page("Language", "Play with the game's text from a language pack.", 0);
@@ -867,6 +897,7 @@ static void lang_shutdown(void) {
     }
     s_font_saved = 0;
     s_font_pack = NULL;
+    s_pictures_logged = NULL;
     s_text_logged = NULL;
     memset(&s_kept_names, 0, sizeof s_kept_names);
     s_names_pending = 0;

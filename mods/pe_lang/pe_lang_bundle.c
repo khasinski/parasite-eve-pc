@@ -53,6 +53,14 @@ static PeLangOpen parse_zip(PeLangPack *pack, const unsigned char *bytes, size_t
     if (!mz_zip_reader_init_mem(&zip, bytes, size, 0)) return PE_LANG_OPEN_BAD_ZIP;
     if ((data = zip_part(&zip, PE_LANG_BUNDLE_TEXT, PE_LANG_PACK_MAX, &part_size, &found)))
         result = pe_lang_pack_parse(pack, data, part_size) ? PE_LANG_OPEN_BAD_PACK : PE_LANG_OPEN_OK;
+    if (result == PE_LANG_OPEN_OK) {
+        /* Pictures are optional, but a file whose pictures are damaged is refused whole. */
+        data = zip_part(&zip, PE_LANG_BUNDLE_PICTURES, PE_LANG_PICTURES_MAX, &part_size, &found);
+        if (found && (!data || pe_lang_pictures_parse(&pack->pictures, data, part_size))) {
+            pe_lang_pack_free(pack);
+            result = PE_LANG_OPEN_BAD_PICTURES;
+        }
+    }
     mz_zip_reader_end(&zip);
     return result;
 }
@@ -91,6 +99,7 @@ const char *pe_lang_bundle_error(PeLangOpen result) {
     case PE_LANG_OPEN_NO_ZIP: return "this build can't open zipped translations";
     case PE_LANG_OPEN_BAD_ZIP: return "the zip is damaged or has no " PE_LANG_BUNDLE_TEXT;
     case PE_LANG_OPEN_BAD_PACK: return "its text is damaged or in a newer format";
+    case PE_LANG_OPEN_BAD_PICTURES: return "its pictures are damaged or in a newer format";
     }
     return "unknown error";
 }

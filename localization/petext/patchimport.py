@@ -6,7 +6,8 @@ original disc with the patched one and keeps what the player would read:
   letters   each code past the English font is identified from its art in the patch's own font:
             a copy of a letter (the coloured speaker sets), or an accented letter (the English
             base letter plus the mark that fits best). Nothing about a patch is hard-coded.
-  text      every page and menu entry that differs, in the tagged text pelang.py builds from.
+  text      every page and menu entry that differs, in the tagged text pelang.py builds from,
+            and the battle messages in the boot program (petext/battle.py).
 
 Waits, names and timing may differ from the English: a translator moves them freely, and a
 patch that leaves the room scripts alone played that way on the real game. Choices can't change,
