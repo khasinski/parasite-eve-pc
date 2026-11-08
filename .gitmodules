@@ -1,3 +1,4 @@
 [submodule "third_party/psyz"]
 	path = third_party/psyz
-	url = https://github.com/khasinski/parasite-eve-psyz.git
+	url = https://github.com/andruxaster/parasite-eve-psyz.git
+	branch = dc-small-memory

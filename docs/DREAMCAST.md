@@ -42,10 +42,14 @@ Without the option every size keeps its desktop value.
 | Room TIM workspace (`D_8010BD00`) | 8 MB | 2 MB |
 | PsyZ PGXP address/screen caches | 8192 / 4096 sets | 1024 / 512 |
 
-The PsyZ sizes need [`patches/psyz/0001-overridable-pgxp-caches.patch`](../patches/psyz/0001-overridable-pgxp-caches.patch)
-applied to `third_party/psyz` (`git -C third_party/psyz apply ../../patches/psyz/0001-overridable-pgxp-caches.patch`);
-without it the compiler warns about the redefined macros and keeps the
-desktop sizes.
+## PsyZ fork
+
+`third_party/psyz` points to
+[andruxaster/parasite-eve-psyz](https://github.com/andruxaster/parasite-eve-psyz),
+branch `dc-small-memory`, a fork of khasinski/parasite-eve-psyz taken at the
+commit this game release pins. Dreamcast changes to PsyZ (the PGXP cache
+sizes now, the KallistiOS backend later) go there. After pulling a change
+to the submodule, run `git submodule sync && git submodule update --init third_party/psyz`.
 
 ## Measurements (8 November 2026, release 0.11)
 
