@@ -94,8 +94,8 @@ the CD work area can be made smaller.
 
 ## SH-4 build (KallistiOS)
 
-The game links for the Dreamcast against a stub PsyZ backend
-(`third_party/psyz/psyz/src/dreamcast/`, draws nothing, silent audio) and
+The game links for the Dreamcast against the PsyZ Dreamcast backend
+(`third_party/psyz/psyz/src/dreamcast/`: PowerVR renderer, silent audio) and
 the host in [`platform/dreamcast/`](../platform/dreamcast/README.md):
 
 ```sh
@@ -134,6 +134,11 @@ By part, from the link map (rounded; padding counted twice):
 |---|---|---|---|
 | Game | 0.91 MB | 0.07 MB | 8.78 MB |
 | PsyZ core + stub backend | 0.17 MB | 0.01 MB | 1.77 MB |
+
+With the PVR renderer in place of the stub: 1.20 MB text, 0.08 MB data,
+10.55 MB bss, **11.83 MB** in all. Textures live in the PVR's own 8 MB
+(about 30 decoded 256x256 pages beside the framebuffers and a 1 MB vertex
+buffer), so main RAM grows only by the renderer's code and tables.
 | KallistiOS | 0.33 MB | 0.01 MB | 0.04 MB |
 | newlib, libgcc | 0.11 MB | — | — |
 
@@ -152,7 +157,7 @@ and the backend's VRAM copy partly into the PVR's 8 MB.
 1. Record peaks with both discs: several rooms, a battle, a movie, the
    memory card screen (desktop `PE_MEMORY_REPORT=1`, or the Dreamcast build
    over dc-tool).
-2. Boot the ELF in an emulator or on hardware: it should mount the discs
-   and run the game logic with a black screen.
-3. Write the PVR renderer in `dc_gpu.c`, starting from PsyZ's PSP backend,
-   then AICA audio.
+2. Boot the ELF in an emulator or on hardware with the discs and fix what
+   the PVR renderer gets wrong with the game's real frames.
+3. AICA audio, then speed (store-queue vertex submission, twiddled or
+   paletted textures).

@@ -6,8 +6,8 @@ mounts the two USA disc images and runs the original scene dispatch loop.
 files, environment, ticks); SDL itself is not built. `dc_libc.c` adds the
 stdio locks newlib declares but does not build.
 
-The PsyZ side lives in `third_party/psyz/psyz/src/dreamcast/`. It is a
-stub backend: the game runs its logic, but nothing is drawn or heard yet.
+The PsyZ side lives in `third_party/psyz/psyz/src/dreamcast/`: a PowerVR
+renderer (see its README for what is and isn't emulated) and silent audio.
 
 ## Build
 

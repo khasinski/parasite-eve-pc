@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     int token;
     Pe1GameState *state;
 
-    printf("Parasite Eve for Dreamcast (stub renderer, silent audio)\n");
+    printf("Parasite Eve for Dreamcast (PVR renderer, silent audio)\n");
     if (!MountImages()) {
         fprintf(stderr, "No disc image found; see platform/dreamcast/README.md\n");
         return EXIT_FAILURE;
