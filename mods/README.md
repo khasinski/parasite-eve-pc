@@ -123,8 +123,10 @@ answering No to the save, asks nothing. Nothing in the game's scripts is patched
   come from a table of the 23 phone rooms (pe-native-debug `tools/phone_rooms.py`); elsewhere no
   sound. F1 > Phone sounds turns them off.
 - Only save phones: the same question also comes when a new day starts (M351, M352), in the debug
-  room (M360) and as the story save (M271); those get no call. The sewer's emergency phone (M032)
-  saves nothing, so it has no call either.
+  room (M360) and as the story save (M271); those get no call. The Day 1 sewer's emergency phone
+  (M032) saves through "Use the phone" with no question of its own: that choice is spotted instead
+  (`pe_phone_use_option`), and its set call `pe1/sewer_emergency` plays first there. Its call has
+  no sounds (the sewer's bank has no phone sounds).
 - Settings: Phone calls (Ask after saving / Always call / Off), Call tone (Mixed / Serious only /
   Funny only), Phone sounds. Debug: Ask now, Call now (no save needed), Check calls.
 

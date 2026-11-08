@@ -132,6 +132,25 @@ int pe_phone_script_problems(const PePhoneScript *s, const PePhoneCall *call, in
     return wide || ran > 0;
 }
 
+int pe_phone_use_option(const uint8_t *m) {
+    char ascii[400];
+    int i, choice = -1, option = 0;
+    if (!m) return -1;
+    for (i = 0; i < 380 && m[i] != G_END && m[i] != PE_GLYPH_END_PAGE; ++i)
+        if (m[i] == G_CODE && m[i + 1] == G_CHOICE) { choice = i + 3; break; }
+    if (choice < 0) return -1;
+    for (i = choice; i < 380 && m[i] != G_END && m[i] != PE_GLYPH_END_PAGE; ++option) {   /* option by option */
+        uint8_t line[64];
+        int n = 0;
+        while (i < 380 && m[i] != G_NEWLINE && m[i] != G_END && m[i] != PE_GLYPH_END_PAGE && n < 62) line[n++] = m[i++];
+        line[n] = G_END;
+        pe_text_to_ascii(ascii, sizeof ascii, line);
+        if (strstr(ascii, "Use the phone")) return option;
+        if (m[i] == G_NEWLINE) ++i;
+    }
+    return -1;
+}
+
 int pe_phone_save_question(const uint8_t *m) {
     char ascii[400];
     int i, choice2 = 0;

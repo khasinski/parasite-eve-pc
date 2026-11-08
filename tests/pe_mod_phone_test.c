@@ -85,6 +85,20 @@ static void test_save_question(void) {
     m[n] = 0xFF;
     assert(pe_phone_save_question(m) == 0);                                           /* no choice */
     assert(pe_phone_save_question(NULL) == 0);
+
+    n = pe_phone_encode(m, 100, "{name}: ...There's a switch...");                   /* the sewer's emergency phone */
+    m[n++] = 0xF8; m[n++] = 0xFB; m[n++] = 0x09; m[n++] = 3;
+    n += pe_phone_encode(m + n, 30, "    Press the switch.");
+    m[n++] = 0xF7;
+    n += pe_phone_encode(m + n, 30, "    Use the phone.");
+    m[n++] = 0xF7;
+    n += pe_phone_encode(m + n, 30, "    Cancel");
+    m[n] = 0xFF;
+    assert(pe_phone_use_option(m) == 1);
+    assert(pe_phone_save_question(m) == 0);
+    n = pe_phone_encode(m, 100, "Use the phone.");                                    /* no choice */
+    m[n] = 0xFF;
+    assert(pe_phone_use_option(m) == -1);
 }
 
 /* ---- the record ---- */
@@ -163,9 +177,19 @@ static int fake_add(const PePhoneCall *c) { s_pack[s_pack_count++] = c; return 0
 static void test_pe1_pack(void) {
     static const PePhoneCallsApi api = {fake_add, NULL, NULL, NULL, NULL};
     static PePhoneScript s;
+    PePhoneRecord r;
+    PePhoneContext sewer = {32, 0x68, 1, 3}, park = {87, 0xF8, 2, 3}, carnegie = {1, 0x40, 1, 3};
     int i, k, funny = 0;
     pe_calls_pe1_register(&api);
-    assert(s_pack_count == 21);
+    assert(s_pack_count == 23);
+    memset(&r, 0, sizeof r);
+    assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, 0)->key, "pe1/sewer_emergency"));
+    for (i = 0; i < 64; ++i) {                                                        /* never elsewhere */
+        assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &park, &r, (uint32_t)i * 7919u)->key, "pe1/sewer", 9));
+        assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &carnegie, &r, (uint32_t)i * 7919u)->key, "pe1/sewer", 9));
+    }
+    pe_phone_record_played(&r, pe_phone_pick(s_pack, s_pack_count, &sewer, &r, 0));
+    assert(strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, 0)->key, "pe1/sewer_emergency"));   /* once */
     for (i = 0; i < s_pack_count; ++i) {
         const PePhoneCall *c = s_pack[i];
         assert(!strncmp(c->key, "pe1/", 4) && pe_phone_text_ok(c->caller));
@@ -176,7 +200,7 @@ static void test_pe1_pack(void) {
         assert(s.count >= c->line_count + 2 && s.click == s.count - 1);
         funny += c->tone == PE_CALL_FUNNY;
     }
-    assert(funny == 9);
+    assert(funny == 10);
 }
 
 int main(void) {

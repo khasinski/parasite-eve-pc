@@ -55,6 +55,9 @@ int pe_phone_script_problems(const PePhoneScript *script, const PePhoneCall *cal
 /* A dialogue page's text: 1 the phone's save question ("Will you save your progress?" with a
  * choice of two), 2 the story save (the same, starting with Aya's name), 0 anything else. */
 int pe_phone_save_question(const uint8_t *message);
+/* A choice offering "Use the phone" (the Day 1 sewer's emergency phone, whose "Use the phone" opens
+ * the save screen without the usual question): that option's index, else -1. */
+int pe_phone_use_option(const uint8_t *message);
 
 /* ---- the heard record (pe_phone_record.c) ---- */
 

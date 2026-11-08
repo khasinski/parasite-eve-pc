@@ -6,7 +6,9 @@
  * (script variable 74): "phone room=<n> story=0x<v> day=<d>" in pe_play.log, the room list phase 2
  * needs. Only the save phones' rooms get a call (pe_phone_sound.c's table): the same question also
  * comes when a new day starts (M351, M352), in the debug room, and as the story save near the end
- * (which starts with Aya's name); those are only logged. The phone then
+ * (which starts with Aya's name); those are only logged. The Day 1 sewer's emergency phone asks
+ * no question: its "Press the switch / Use the phone / Cancel" choice is spotted instead (only
+ * "Use the phone" saves, so the other answers end as a question with no save). The phone then
  * opens the save screen; when a card save is published the host announces "save.committed" (quick
  * saves and room checkpoints never commit). A question with no save after it (No, or backing out of
  * the save screen) is forgotten once the field has been settled a while, and on a room change. */
@@ -43,12 +45,13 @@ static int pe_on_page(void *ctx, void *user) {
     (void)user;
     if (s_quiet || !pe_game_loaded() || !page || !page->message || !*page->message) return 0;
     kind = pe_phone_save_question(*page->message);
+    if (!kind && pe_phone_use_option(*page->message) >= 0) kind = 3;   /* the sewer's emergency phone */
     if (!kind) return 0;
     s_seen = pe_here();
     {
-        const int phone = kind == 1 && pe_phone_sound_base(s_seen.room) != 0;
+        const int phone = kind == 3 || (kind == 1 && pe_phone_sound_base(s_seen.room) != 0);
         pe_log("phone", "room=%d story=0x%X day=%d page=%u%s", s_seen.room, s_seen.story, pe_phone_story_day(s_seen.story),
-               page->page, kind == 2 ? " story_save=1" : phone ? "" : " not_phone=1");
+               page->page, kind == 2 ? " story_save=1" : kind == 3 ? " use_phone=1" : phone ? "" : " not_phone=1");
         if (!phone) return 0;                          /* a new day's save, the debug room: no call */
     }
     if (s_state == SPOT_IDLE) {

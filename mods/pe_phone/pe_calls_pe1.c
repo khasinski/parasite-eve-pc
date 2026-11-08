@@ -1,6 +1,7 @@
 /* Parasite Eve's own calls: a pack, registered through the "phonecalls" service like any other.
  *
- * Phase 1: a random pool, by tone and story day (the save screen's Day). Spoiler-safe: nothing
+ * Mostly a random pool, by tone and story day (the save screen's Day); the sewer's emergency phone
+ * has a set call (priority, once) and one of its own in the pool there. Spoiler-safe: nothing
  * past the call's day, no Eve by name, nothing on mitochondria, and the people the game treats
  * seriously (Aya's mother, Maya, Melissa, Ben) stay out of every call. Aya is "{name}", the name
  * the player typed. Lines are wrapped to the boxes when they play; "Check calls" (F1 > Phone
@@ -41,6 +42,24 @@ static const PePhoneLine k_wrong_number[] = {
     A("...Sort of."),
     C("Is the show any good?"),
     A("The ending was a real scorcher."),
+};
+
+/* ---- Day 1: the sewer's emergency phone (M032) ---- */
+
+static const short k_sewer[] = {32};
+static const PePhoneLine k_sewer_emergency[] = {
+    C("Emergency line. What's the situation?"),
+    A("Officer Brea, NYPD. I'm in the sewers under Carnegie Hall."),
+    C("...The sewers? Ma'am, how did you get down there?"),
+    A("I followed someone. Send a unit to the gate by the Hall."),
+    C("Every unit is tied up at the Hall. Hold your position."),
+    A("That's not really an option."),
+};
+static const PePhoneLine k_sewer_static[] = {
+    C("...Hello? You're breaking up."),
+    A("I'm underground. Can you hear me?"),
+    C("...kssh... repeat... kssh..."),
+    A("Never mind."),
 };
 
 /* ---- any day ---- */
@@ -161,7 +180,9 @@ static const PePhoneCall k_calls[] = {
     {"pe1/daniel_cordon",  "Daniel",           PE_CALL_SERIOUS, LINES(k_daniel_cordon),    2, 1, 1, 1, 0, 0, NULL, 0, 0, NULL},
     {"pe1/pizza",          "Tony's Pizza",     PE_CALL_FUNNY,   LINES(k_pizza),            1, 0, 1, 1, 0, 0, NULL, 0, 0, NULL},
     {"pe1/wrong_number",   "???",              PE_CALL_FUNNY,   LINES(k_wrong_number),     1, 0, 1, 1, 0, 0, NULL, 0, 0, NULL},
-    {"pe1/daniel_checkin", "Daniel",           PE_CALL_SERIOUS, LINES(k_daniel_checkin),   1, 0, 1, 5, 0, 0, NULL, 0, 0, NULL},
+    {"pe1/sewer_emergency","Emergency Line",   PE_CALL_SERIOUS, LINES(k_sewer_emergency),  1, 1, 1, 1, 0, 0, k_sewer, 1, 10, NULL},
+    {"pe1/sewer_static",   "Emergency Line",   PE_CALL_FUNNY,   LINES(k_sewer_static),     2, 0, 1, 1, 0, 0, k_sewer, 1, 0, NULL},
+    {"pe1/daniel_checkin", "Daniel",          PE_CALL_SERIOUS, LINES(k_daniel_checkin),   1, 0, 1, 5, 0, 0, NULL, 0, 0, NULL},
     {"pe1/precinct_quiet", "Desk Sergeant",    PE_CALL_SERIOUS, LINES(k_precinct_quiet),   1, 0, 0, 0, 0, 0, NULL, 0, 0, NULL},
     {"pe1/time_line",      "Time Line",        PE_CALL_FUNNY,   LINES(k_time_line),        1, 0, 0, 0, 0, 0, NULL, 0, 0, NULL},
     {"pe1/landlord",       "Landlord",         PE_CALL_FUNNY,   LINES(k_landlord),         1, 0, 0, 0, 0, 0, NULL, 0, 0, NULL},
