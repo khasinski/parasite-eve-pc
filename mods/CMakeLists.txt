@@ -1,7 +1,7 @@
 # Mod host and mods, built only with -DPE_MODS=ON. See mods/README.md.
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it.
-set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats CACHE STRING "Mods built into the game (folder names)")
+set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats pe_phone CACHE STRING "Mods built into the game (folder names)")
 # Existing build directories may still cache the now-parked language mod.
 if("pe_lang" IN_LIST PE_MOD_LIST)
     list(REMOVE_ITEM PE_MOD_LIST pe_lang)
