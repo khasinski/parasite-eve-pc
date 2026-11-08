@@ -14,6 +14,8 @@
 #include <string.h>
 #include "pe1/akao.h"
 #include "pe1/asset_tim.h"
+#include "pe1/boot_services.h"
+#include "pe1/memory_budget.h"
 #include "pe1/boot_disc_check.h"
 #include "pe1/cdrom.h"
 #include "pe1/entity_animation.h"
@@ -1053,6 +1055,17 @@ int Scene_LoadRoom(unsigned int roomId)
         if ((u64)base + g_RoomSectorTable[map].start + g_RoomSectorTable[map].scratchSectors +
             g_RoomSectorTable[map].textureSectors + g_RoomSectorTable[map].roomSectors >
             UINT64_C(0x100000000)) return -1;
+        PeMemory_SetRoom(map + 1);
+        PeMemory_Note(PE_MEM_ROOM_SCRATCH_READ, (size_t)g_RoomSectorTable[map].scratchSectors * 2048u, 0);
+        PeMemory_Note(PE_MEM_ROOM_ASSET_READ, (size_t)g_RoomSectorTable[map].roomSectors * 2048u, 0);
+        PeMemory_Note(PE_MEM_ROOM_TEXTURE_READ, (size_t)g_RoomSectorTable[map].textureSectors * 2048u,
+                      BOOT_TEXTURE_WORKSPACE_BYTES);
+        if ((size_t)g_RoomSectorTable[map].textureSectors * 2048u > BOOT_TEXTURE_WORKSPACE_BYTES) {
+            fprintf(stderr, "Scene_LoadRoom: M%03d textures need %u bytes, workspace has %u\n",
+                    map + 1, (unsigned)g_RoomSectorTable[map].textureSectors * 2048u,
+                    (unsigned)BOOT_TEXTURE_WORKSPACE_BYTES);
+            return -1;
+        }
 #if PE_NATIVE_STATE_CPU_COMPONENTS
         /* Invalidate BEFORE buffers can be overwritten; stale regions must not be read. */
         PeStateAssets_Invalidate();

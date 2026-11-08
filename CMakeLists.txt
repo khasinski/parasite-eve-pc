@@ -46,6 +46,19 @@ if(PE_MODS)
     add_compile_definitions(PE_MODS=1)
 endif()
 
+# Small-memory budget for consoles with little RAM: shrinks the desktop
+# safety margins on the largest native buffers (see include/pe1/memory_budget.h)
+# and the PGXP caches in PsyZ. Run with PE_MEMORY_REPORT=1 to log peaks.
+option(PE_SMALL_MEMORY "Use small native buffer budgets" OFF)
+if(PE_SMALL_MEMORY)
+    add_compile_definitions(
+        PE_RENDER_TRANSFORM_STACK_DEPTH=256
+        PE_PGXP_BONE_CACHE_SETS=128
+        PE_BOOT_TEXTURE_WORKSPACE_BYTES=0x200000
+        PGXP_ADDR_SETS=1024u
+        PGXP_SXY_SETS=512u)
+endif()
+
 # PsyZ belongs to the original game build, independently of the abandoned frontend.
 if(NOT PE_PS5_GAME)
     set(PSYZ_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz)
@@ -312,6 +325,7 @@ add_library(parasite-eve-original OBJECT
     src/main/render/frame_update.c
     src/main/entity/frame_update.c
     src/main/boot/init.c
+    src/main/boot/memory_report.c
     src/main/boot/frame_loop.c
     src/main/draw/pipeline.c
     src/main/draw/gpu_regs.c

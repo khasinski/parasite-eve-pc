@@ -8,6 +8,7 @@
 #include "pe1/entity_frame_update.h"
 #include "pe1/field_actor.h"
 #include "pe1/gte.h"
+#include "pe1/memory_budget.h"
 #include "pe1/render_buffers.h"
 #include "pe1/render_lighting.h"
 #include "pe1/render_matrix_copy.h"
@@ -2016,8 +2017,9 @@ int Render_InitRoomPrimState(void *objectArg)
 }
 
 /* The serialized command-byte count is u16; this ordinary memory buffer
- * replaces the shared PS1 scratchpad stack for every possible valid depth. */
-static RenderMatrix g_RenderTransformStack[65536];
+ * replaces the shared PS1 scratchpad stack. The default depth covers every
+ * possible input; smaller budgets are checked on each push. */
+static RenderMatrix g_RenderTransformStack[PE_RENDER_TRANSFORM_STACK_DEPTH];
 
 typedef struct {
     const RenderMatrix *addr;
@@ -2025,10 +2027,10 @@ typedef struct {
     PgxpBoneMatrix mat;
 } PgxpBoneCacheEntry;
 
-#define PGXP_BONE_CACHE_SETS 1024u
+#define PGXP_BONE_CACHE_SETS ((unsigned)PE_PGXP_BONE_CACHE_SETS) /* power of two */
 #define PGXP_BONE_CACHE_WAYS 4u
 static PgxpBoneCacheEntry g_PgxpBoneCache[PGXP_BONE_CACHE_SETS][PGXP_BONE_CACHE_WAYS];
-static PgxpBoneMatrix g_PgxpTransformStack[65536];
+static PgxpBoneMatrix g_PgxpTransformStack[PE_RENDER_TRANSFORM_STACK_DEPTH];
 
 static void Pgxp_InitFromRenderMatrix(const RenderMatrix *src, PgxpBoneMatrix *dst) {
     int r, c;
@@ -2242,6 +2244,12 @@ void Render_TransformVertices(RenderObjectEntity *actor) {
         const RenderMatrix *source;
 
         if (command == -1) {
+            size_t depth = (size_t)(stack - g_RenderTransformStack) + 1;
+            PeMemory_Note(PE_MEM_TRANSFORM_STACK_DEPTH, depth, PE_RENDER_TRANSFORM_STACK_DEPTH);
+            if (depth > PE_RENDER_TRANSFORM_STACK_DEPTH) {
+                /* Stop this actor's skeleton instead of writing past the stack. */
+                return;
+            }
             gte_ReadMatrix(stack);
             stack++;
             *f_stack++ = f_cur;

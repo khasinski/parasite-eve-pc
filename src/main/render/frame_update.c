@@ -173,9 +173,15 @@ int Render_PrepareFrame(void) {
     for (unsigned i = 0; i < g_GeomState->entry_count06; ++i) {
         size_t bytes = (size_t)entries[i].prim_count * 2 *
             (sizeof(RenderTilePacket) + sizeof(RenderTexturePagePacket));
-        if (bytes > remaining) return -2;
+        if (bytes > remaining) {
+            PeMemory_Note(PE_MEM_MESH_PACKET_BYTES,
+                          BOOT_TEXTURE_WORKSPACE_BYTES - remaining + bytes, BOOT_TEXTURE_WORKSPACE_BYTES);
+            return -2;
+        }
         remaining -= bytes;
     }
+    PeMemory_Note(PE_MEM_MESH_PACKET_BYTES, BOOT_TEXTURE_WORKSPACE_BYTES - remaining,
+                  BOOT_TEXTURE_WORKSPACE_BYTES);
     struct {
         short vector[4];
         void *result;

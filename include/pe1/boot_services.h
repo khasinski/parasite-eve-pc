@@ -2,6 +2,7 @@
 #define PE1_BOOT_SERVICES_H
 
 #include "common.h"
+#include "pe1/memory_budget.h"
 
 /* Soft-reset and start-up services (asset/game_state.c). */
 extern int g_SceneDispatchToken;
@@ -23,7 +24,7 @@ extern u8 g_BootWorkArea[];
 /* Room TIM transfers have a 12-bit sector count; the same workspace later
  * holds both native mesh-packet buffers. */
 enum {
-    BOOT_TEXTURE_WORKSPACE_BYTES = 0x800000,
+    BOOT_TEXTURE_WORKSPACE_BYTES = PE_BOOT_TEXTURE_WORKSPACE_BYTES,
     /* The original backdrop arena precedes the OT. Native model packets
      * carry wider links; keep their two buffers out of the ordering table. */
     BOOT_SCENE_OBJECT_WORK_BYTES = 0x1C98 * (sizeof(uintptr_t) / sizeof(u32))
