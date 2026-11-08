@@ -364,3 +364,122 @@ int PeText_MeasureMenu(const u8 *text) {
     }
     return width;
 }
+
+/* ---- Credits roll ---- */
+
+/* USA alphabet widths: columns 0/1 for regular upper/lowercase and column 2 for style 2; odd
+ * style 3 uses the authored zero column. A lowercase letter reads its own row (letter - 'a') at
+ * column style | 1: the game's lowercase table sat 0x80 bytes before this one, at the same rows.
+ * (boot_display.h declares it; the credits disc test checks it against the disc's copy.) */
+const u8 g_BootDisplayUppercaseWidths[26][4]={
+    {9,6,10,0},
+    {7,6,8,0},
+    {8,6,10,0},
+    {9,7,10,0},
+    {7,6,8,0},
+    {7,5,8,0},
+    {9,6,10,0},
+    {10,7,11,0},
+    {5,4,7,0},
+    {7,5,7,0},
+    {9,6,10,0},
+    {8,4,9,0},
+    {10,10,12,0},
+    {9,7,11,0},
+    {9,6,11,0},
+    {7,7,8,0},
+    {10,6,12,0},
+    {8,5,10,0},
+    {6,5,8,0},
+    {9,4,10,0},
+    {9,7,10,0},
+    {9,6,10,0},
+    {11,9,13,0},
+    {9,7,10,0},
+    {8,6,10,0},
+    {7,5,8,0},
+};
+
+/* Punctuation sits in consecutive cells after the letters, '~' first; anything else takes the
+ * cell before them, as the game's fallthrough switch gave it. */
+static int CreditPunctuation(u8 c) {
+    static const char order[] = "~!@#&()-',./?:";
+    unsigned i;
+    for (i = 0; i < sizeof order - 1; ++i)
+        if ((u8)order[i] == c) return (int)i;
+    return -1;
+}
+
+unsigned PeText_CreditCell(unsigned style, u8 c) {
+    int index;
+    if ((u16)style) {
+        if ((u8)(c - 'a') < 26) index = c - 32;
+        else if ((u8)(c - 'A') < 26) index = c - 65;
+        else if ((u8)(c - '0') < 10) index = c + 58;
+        else index = CreditPunctuation(c) + 26;
+    } else {
+        if ((u8)(c - 'A') < 26) index = c - 25;
+        else if ((u8)(c - 'a') < 26) index = c - 31;
+        else if ((u8)(c - '0') < 10) index = c + 58;
+        else index = CreditPunctuation(c) + 92;
+    }
+    return (u8)index;
+}
+
+unsigned PeText_CreditWidth(unsigned style, u8 c) {
+    style = (u16)style;
+    if (style > 3) return 0;
+    if (style == 2) {
+        u8 upper = (u8)(c - 'a') < 26 ? (u8)(c - 32) : c;
+        if ((u8)(upper - 'A') < 26) return g_BootDisplayUppercaseWidths[upper - 'A'][2];
+        switch (upper) {
+        case '!': case '\'': case '.': case ':': return 3;
+        case '#': return 7;
+        case '&': return 11;
+        case '(': case ')': case ',': case '-': case '/': return 4;
+        case '?': return 6;
+        case '@': return 9;
+        default: return 8;                      /* '~' and the rest */
+        }
+    }
+    if ((u8)(c - 'A') < 26) return g_BootDisplayUppercaseWidths[c - 'A'][style];
+    if ((u8)(c - 'a') < 26) return g_BootDisplayUppercaseWidths[c - 'a'][style | 1];
+    switch (c) {
+    case '!': case '.': case ':': return 2;
+    case '\'': case ',': return 3;
+    case '(': case ')': case '-': case '/': case '?': return 4;
+    case '&': case '@': return 9;
+    default: return 6;                          /* '~' and the rest */
+    }
+}
+
+int PeText_ReadCredit(PeTextCreditPen *pen, const u8 *text, PeTextLetter *out) {
+    unsigned c = *text, cell, width;
+    const u8 *scan;
+    switch (c) {
+    case '\\':                                  /* centre what follows */
+        width = 0;
+        for (scan = text + 1; *scan; ++scan) width += PeText_CreditWidth(pen->style, *scan);
+        pen->x = (320u - width) >> 1;
+        return 0;
+    case '\t':
+        pen->x += PeText_CreditWidth(pen->style, ' ') * 14;
+        return 0;
+    case ' ':
+        pen->x += PeText_CreditWidth(pen->style, ' ');
+        return 0;
+    }
+    cell = PeText_CreditCell(pen->style, (u8)c);
+    width = PeText_CreditWidth(pen->style, (u8)c);
+    out->x = (s16)pen->x;
+    out->y = 0;
+    out->u = (u8)((cell & 15) << 4);
+    out->v = (u8)(cell & 0xF0);
+    out->w = out->h = 16;
+    out->page = PE_TEXT_PAGE_CREDITS;
+    out->nibble = 0;
+    out->advance = (s16)width;
+    out->code = (u16)c;
+    pen->x += width;
+    return 1;
+}

@@ -298,6 +298,176 @@ static void test_name_letters(void) {
     assert(!PeText_NthLetter(grid, 4) && PeText_LetterBytes(grid + 1) == 2 && PeText_LetterBytes(grid + 4) == 2);
 }
 
+/* ---- the credits roll: the old text_screen.c code, copied as the reference ---- */
+static unsigned short s_old_style;
+
+#define OLD_PUNCTUATION_INDEX(base) { \
+    index = -1; \
+    switch (saved) { \
+    case ':': ++index; \
+    case '?': ++index; \
+    case '/': ++index; \
+    case '.': ++index; \
+    case ',': ++index; \
+    case '\'': ++index; \
+    case '-': ++index; \
+    case ')': ++index; \
+    case '(': ++index; \
+    case '&': ++index; \
+    case '#': ++index; \
+    case '@': ++index; \
+    case '!': ++index; \
+    case '~': ++index; \
+    default: index += (base); \
+    } \
+}
+static int old_credit_index(unsigned char character) {
+    unsigned short style = s_old_style;
+    unsigned char saved = character;
+    int index;
+    if (style) {
+        if ((unsigned char)(character - 'a') < 26) index = saved - 32;
+        else if ((unsigned char)(character - 'A') < 26) index = saved - 65;
+        else if ((unsigned char)(character - '0') < 10) index = saved + 58;
+        else OLD_PUNCTUATION_INDEX(26);
+    } else {
+        if ((unsigned char)(character - 'A') < 26) index = saved - 25;
+        else if ((unsigned char)(character - 'a') < 26) index = saved - 31;
+        else if ((unsigned char)(character - '0') < 10) index = saved + 58;
+        else OLD_PUNCTUATION_INDEX(92);
+    }
+    return (unsigned char)index;
+}
+#undef OLD_PUNCTUATION_INDEX
+
+static unsigned short old_credit_width(unsigned char character) {
+    unsigned short style = s_old_style;
+    unsigned char saved;
+    int width;
+    if (style > 3) return 0;
+    if (style == 2) {
+        saved = character;
+        if ((unsigned char)(character - 'a') < 26) saved = character - 32;
+        if ((unsigned char)(saved - 'A') < 26) width = g_BootDisplayUppercaseWidths[saved - 'A'][2];
+        else switch (saved) {
+        case '!': case '\'': case '.': case ':': width = 3; break;
+        case '#': width = 7; break;
+        case '&': width = 11; break;
+        case '(': case ')': case ',': case '-': case '/': width = 4; break;
+        case '?': width = 6; break;
+        case '@': width = 9; break;
+        case '~': width = 8; break;
+        default: width = 8; break;
+        }
+    } else {
+        if ((unsigned char)(character - 'A') < 26) width = g_BootDisplayUppercaseWidths[character - 'A'][style];
+        else if ((unsigned char)(character - 'a') < 26) width = g_BootDisplayUppercaseWidths[character - 'a'][style | 1];
+        else switch (character) {
+        case '!': case '.': case ':': width = 2; break;
+        case '\'': case ',': width = 3; break;
+        case '(': case ')': case '-': case '/': case '?': width = 4; break;
+        case '&': case '@': width = 9; break;
+        case '~': width = 6; break;
+        default: width = 6; break;
+        }
+    }
+    return (unsigned short)width;
+}
+
+typedef struct CreditDrawn { short x; unsigned char c; } CreditDrawn;
+
+/* One line as BootDisplay_DrawTextBlock drew it: each letter's column and byte. */
+static unsigned old_credit_line(const unsigned char *line, CreditDrawn *out) {
+    unsigned x = 24, width, n = 0;
+    const unsigned char *scan;
+    for (; *line; ++line) {
+        switch (*line) {
+        case ' ':
+            break;
+        case '\\':
+            width = 0;
+            if (line[1]) {
+                scan = line + 1;
+                do { width += old_credit_width(*scan++); } while (*scan);
+            }
+            x = (320 - width) >> 1;
+            continue;
+        case '\t':
+            x += old_credit_width(' ') * 14;
+            continue;
+        default:
+            out[n].x = (short)x; out[n].c = *line; ++n;
+            break;
+        }
+        x += old_credit_width(*line);
+    }
+    return n;
+}
+
+static unsigned new_credit_line(unsigned style, const unsigned char *line, PeTextLetter *out) {
+    PeTextCreditPen pen;
+    unsigned n = 0;
+    pen.x = PE_TEXT_CREDIT_LEFT;
+    for (; *line; ++line) {
+        pen.style = style;
+        if (PeText_ReadCredit(&pen, line, &out[n])) ++n;
+    }
+    return n;
+}
+
+/* Every byte in every style the game can hold gives the old cell and width; lines (the real
+ * roll's shapes, odd bytes, a line too wide to centre) place every letter where the old code did,
+ * with the cell the drawers cut. */
+static void test_credits(void) {
+    static const unsigned short styles[] = {0, 1, 2, 3, 4, 5, 7, 255, 256, 257, 0x8000, 65535};
+    static const char *lines[] = {
+        "PRODUCER", "\tHironobu Sakaguchi", "\\BASED ON A NOVEL BY", "\t'Parasite Eve'",
+        "\t(Kadokawa Horror Bunko)", "", " ", "\\", "\\ ", "a\\b", "\t\tTwo tabs", "A B  C",
+        "~!@#&()-',./?:", "0123456789", "MIXED case & Numbers 42!", "\\x\ty z",
+        "\\WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+    };
+    unsigned char all[256], odd[64];
+    unsigned s, c, i;
+    for (s = 0; s < sizeof styles / sizeof *styles; ++s) {
+        s_old_style = styles[s];
+        for (c = 0; c < 256; ++c) {
+            assert(PeText_CreditCell(styles[s], (unsigned char)c) == (unsigned)old_credit_index((unsigned char)c));
+            assert(PeText_CreditWidth(styles[s], (unsigned char)c) == old_credit_width((unsigned char)c));
+        }
+    }
+    for (c = 1; c < 256; ++c) all[c - 1] = (unsigned char)c;
+    all[255] = 0;
+    for (s = 0; s < 4; ++s) {
+        CreditDrawn want[256];
+        PeTextLetter got[256];
+        unsigned n, k;
+        s_old_style = styles[s];
+        for (i = 0; i < sizeof lines / sizeof *lines + 1 + 32; ++i) {
+            const unsigned char *line;
+            if (i < sizeof lines / sizeof *lines) line = (const unsigned char *)lines[i];
+            else if (i == sizeof lines / sizeof *lines) line = all;
+            else {                               /* random bytes, some spaces, tabs and '\' */
+                for (k = 0; k + 1 < sizeof odd; ++k) {
+                    unsigned r = next_random() % 8;
+                    odd[k] = (unsigned char)(r == 0 ? ' ' : r == 1 ? '\t' : r == 2 ? '\\' : 1 + next_random() % 255);
+                }
+                odd[next_random() % (sizeof odd - 1)] = 0;
+                odd[sizeof odd - 1] = 0;
+                line = odd;
+            }
+            n = old_credit_line(line, want);
+            assert(new_credit_line(styles[s], line, got) == n);
+            for (k = 0; k < n; ++k) {
+                unsigned cell = (unsigned)old_credit_index(want[k].c);
+                assert(got[k].x == want[k].x && got[k].code == want[k].c && got[k].y == 0);
+                assert(got[k].u == ((cell & 15) << 4) && got[k].v == (cell & 0xF0));
+                assert(got[k].w == 16 && got[k].h == 16 && got[k].page == PE_TEXT_PAGE_CREDITS);
+                assert(got[k].advance == old_credit_width(want[k].c));
+            }
+        }
+    }
+}
+
 int main(void) {
     unsigned i;
     for (i = 0; i < sizeof s_metrics; ++i) s_metrics[i] = (unsigned char)next_random();
@@ -312,6 +482,7 @@ int main(void) {
     test_menu_digits();
     test_stretch();
     test_name_letters();
-    puts("text renderer: every letter code matches the old drawing code; stretches place right");
+    test_credits();
+    puts("text renderer: every letter code matches the old drawing code, credits roll included; stretches place right");
     return 0;
 }

@@ -88,4 +88,29 @@ unsigned PeText_LetterBytes(const u8 *text);
 /* The `n`th letter of `text` (counting from 0), or NULL past its end. */
 const u8 *PeText_NthLetter(const u8 *text, unsigned n);
 
+/* ---- Credits roll ----
+ * The staff roll (boot display) has its own 16 x 16 letter art and widths, in four width styles
+ * (g_BootDisplayFontStyle; any other style measures 0). Its lines are plain ASCII from the disc,
+ * ending in 0: '\' centres the rest of the line on the 320 px screen, a tab moves 14 spaces on, a
+ * space moves one on without drawing. The renderer places every letter; the boot display's two
+ * drawers (sprites, or letters brightened into the picture) only put them on screen. */
+enum { PE_TEXT_PAGE_CREDITS = 13 };            /* the credits art: 16 cells a row, 16 px each */
+#define PE_TEXT_CREDIT_LEFT 24                 /* where each credits line starts */
+
+typedef struct PeTextCreditPen {
+    unsigned style;    /* g_BootDisplayFontStyle */
+    u32 x;             /* the screen column the next letter goes at */
+} PeTextCreditPen;
+
+/* The credits widths (boot_display.h names it too; the credits disc test checks it). */
+extern const u8 g_BootDisplayUppercaseWidths[26][4];
+
+/* The credits art cell for a letter: low nibble the column, high nibble the row. */
+unsigned PeText_CreditCell(unsigned style, u8 letter);
+/* How far the pen moves after a credits letter. */
+unsigned PeText_CreditWidth(unsigned style, u8 letter);
+/* Reads the byte at `text` (not the line's 0) and moves the pen. Returns 1 and fills `out` (x is
+ * the screen column, code the letter) when the byte draws a letter, 0 for a space, '\' or tab. */
+int PeText_ReadCredit(PeTextCreditPen *pen, const u8 *text, PeTextLetter *out);
+
 #endif
