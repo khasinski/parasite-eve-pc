@@ -215,7 +215,12 @@ if(BUILD_TESTING)
         target_compile_options(test-mod-lang-pack PRIVATE -UNDEBUG)
     endif()
     add_test(NAME mod-lang-pack COMMAND test-mod-lang-pack)
-    add_executable(test-mod-lang-font ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_font_test.c pe_lang/pe_lang_font.c pe_lang/pe_lang_cjk.c)
+    add_executable(test-mod-lang-names ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_names_test.c
+        pe_lang/pe_lang_names.c pe_lang/pe_lang_pack.c)
+    target_include_directories(test-mod-lang-names PRIVATE pe_lang)
+    add_test(NAME mod-lang-names COMMAND test-mod-lang-names)
+    add_executable(test-mod-lang-font ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_font_test.c pe_lang/pe_lang_font.c pe_lang/pe_lang_cjk.c
+        pe_lang/pe_lang_pack.c)
     target_include_directories(test-mod-lang-font PRIVATE pe_lang ${PROJECT_SOURCE_DIR}/tests)
     if(MSVC)
         target_compile_options(test-mod-lang-font PRIVATE /UNDEBUG)
@@ -223,6 +228,13 @@ if(BUILD_TESTING)
         target_compile_options(test-mod-lang-font PRIVATE -UNDEBUG)
     endif()
     add_test(NAME mod-lang-font COMMAND test-mod-lang-font)
+    # More letters than the 163 one-byte codes: pelang.py builds the pack, the game's reader and
+    # letter cache take it
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME mod-lang-many-letters COMMAND "${Python3_EXECUTABLE}" -I
+            "${PROJECT_SOURCE_DIR}/localization/tests/many_letters_pack.py" --check-with $<TARGET_FILE:test-mod-lang-font>)
+    endif()
     add_executable(test-mod-lang-selection ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_selection_test.c
         pe_lang/pe_lang_selection.c)
     target_include_directories(test-mod-lang-selection PRIVATE pe_lang)

@@ -24,6 +24,23 @@ the [Parasite Eve Localization Mod Plan](https://claude.ai/artifact/2NpmecRhhgMB
 | Japanese semantic proofreading | Pending human review; extraction/alignment does not establish translation accuracy |
 | Cyrillic | Russian, Ukrainian and Belarusian alphabets supported; modular authored glyphs and per-pack activation |
 | Chinese, Japanese, Korean | Optional external-font compilation, v2 glyph dictionaries and a native cache; see CJK scope and limits below |
+| Slovak, Romanian, Croatian, Serbian, Icelandic, Lithuanian, Latvian, Vietnamese, Greek, Macedonian, Kazakh | A letter table in the pack, one byte a letter; see Letter tables below. Not yet played |
+
+`python -I localization/pelang.py languages` lists every language the project means to support
+(`petext/alphabets.py`) and which letters each still lacks. Arabic, Persian, Urdu, Hebrew, Hindi,
+Bengali and Thai need new text layout as well as letters.
+
+To see a language's letters in the game before anyone has translated it, make a test language: the
+game's own tags and page breaks with that language's words in place of the text.
+
+```sh
+python -I localization/pelang.py sample localization/out/text/strings.json pl -o out/pl-test.csv
+python -I localization/pelang.py build out/pl-test.csv --strings localization/out/text/strings.json \
+  --lang pl --name "Test Polish" --allow-overflow -o out/pl-test.pelang
+```
+
+Name several codes to mix languages in one pack. It stays on your machine like any pack built from
+`strings.json`.
 
 French uses abbreviated inventory labels where the original menu reserves space for ammunition
 counts, and `J.` for the save slot's day label. Labels baked into images, such as **Level** and
@@ -328,6 +345,66 @@ All new fixtures, vectors, previews and smoke packs stay in local `pe-native-deb
 - Native game rebuild succeeded. Captured Cyrillic inventory, save-phone choice and Wayne menu
   frames were visually reviewed. The test pack is not a Russian translation release.
 
+
+## Letter tables
+
+The single-byte codes 0x4D-0xEF are all spoken for by the Latin Extended and Cyrillic sets, but no
+one language uses them all. `petext/letters.py` holds a catalog of further letters, and a pack can
+give the codes its own text doesn't use to the ones it needs. Nothing to do when building: `build`
+reads the translation and makes the table.
+
+Letters stay one byte each, which matters. The game's text fields are fixed: 31 bytes for an item
+message, 63 for a dialog line. The four bytes of a CJK token would leave seven letters of Greek in
+the first and fifteen in the second. It also means widths go in the game's own tables, so wrapping,
+and menus treat these letters like any others.
+
+A letter comes one of three ways. No game art goes in a pack, so a letter built on the game's own is
+a recipe, carried out on the player's font page when it is uploaded:
+
+- **base**: the game's letter as it is. A Greek capital Alpha is the game's A, but it stays a real
+  letter;
+- **marks**: the game's letter plus up to three marks, each a list of points in the record;
+- **art**: drawn in `letters.py`, or built there on a drawn letter (a Greek alpha with an accent).
+
+A pack with a table is **v3**. Its header is 88 bytes: the v2 fields, with a glyph count that may be
+0, and two more u32 at offsets 80 and 84, the table's offset and its letter count (at most 163). The
+table comes last and fills the rest of the file. Packs with no table are unchanged. Each record is
+80 bytes, by strictly rising code:
+
+| Bytes | |
+|---|---|
+| 0-3 | Unicode character |
+| 4 | Code, 0x4D-0xEF; 0 for a letter with no code (v4, see below) |
+| 5 | Art: the advance, 1-15. Otherwise what's added to the base letter's advance and menu width, 0-8 |
+| 6 | The base letter's code, below 0x4D, or FF for art |
+| 7 | Steps on the base letter: 1 drop its dot, 2 turn it upside down, 4 room for a mark above an ascender. 0 for art |
+| 8-79 | Art: 72 bytes of pixels, as in a CJK record, shadow included. Otherwise three `PeLatinMark`, 19 bytes each: point count (0 for none, at most 8), fixed rows, anchor, eight (dx, row) |
+
+**What a code means now belongs to the pack**, so a table's code must not outlive it. The default
+player name and the rename grids can't use a table's letters, and `build` refuses them, because what
+the player picks there is saved. A weapon or armor rename default with one keeps the game's name in
+that editor (`persistent` in `PE_HOOK_TEXT_LOOKUP`), as for CJK. One limit: the bytes of a name saved
+while a pack was in use are read with whatever pack is in use later, so accented letters in a saved
+name can change if the next pack gave those codes away.
+
+`pe_lang` writes table letters after the Latin and Cyrillic ones, so a letter takes over its code's
+cell. Interface text uses the same table (`pe_lang_text_encode`).
+
+**More letters than codes (v4).** When a pack's text needs more catalog letters than it has free
+codes, `build` gives the codes to the letters used most, and first to those in text that keeps one
+byte a letter (item names, `mod/` text; with `--bytes-only` also names and grids). The rest go after
+the coded records with code 0, by strictly rising Unicode, and the header's count at 84 covers both
+(at most 163 coded, 57,600 without). A letter with no code reaches the screen only in the text
+renderer's stretches and in name letters: `pe_lang` makes it from its record, on the game's own font
+page, into a free cell of the letter cache (cells 250-440, shared with the CJK dictionary) when it
+is first drawn, with its own advance in dialogue and menus. While building, such a letter is written
+as `F1 C7 hi lo`; no pack holds that token. `build` refuses one in text that keeps one byte a letter,
+and `--bytes-only` keeps the old limit of 163.
+
+`python localization/preview_letters.py DISC.cue` draws every letter from the game font on your disc,
+with a line of each language, for choosing shapes. It needs Pillow, so run it without `-I`. To add a
+letter, add it to `letters.py` and run `pelang.py latin-header`, which also regenerates
+`tests/pe_lang_letter_vectors.h`: the C composer has to match Python pixel for pixel.
 
 ## CJK (Chinese, Japanese and Korean)
 

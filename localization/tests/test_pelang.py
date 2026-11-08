@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pelang  # noqa: E402
-from petext import gametext as gt, latin, layout, validation  # noqa: E402
+from petext import gametext as gt, latin, layout, letters, validation  # noqa: E402
 
 STRINGS = [
     {"key": "item/000", "text": "Ammo +6", "lines_px": [44], "boxes": [], "rooms": [], "unused": False},
@@ -202,7 +202,7 @@ class PelangTest(unittest.TestCase):
         self.assertTrue(raw.endswith(b"\xf9"))
         choices = entries[pelang.fnv1a("dlg/M001/002")]
         self.assertIn(b"\xfb\x09\x02", choices)
-        self.assertEqual(int.from_bytes(out.read_bytes()[4:8], "little"), 2)
+        self.assertEqual(int.from_bytes(out.read_bytes()[4:8], "little"), 4)  # stretches: version 4
 
     def test_shipped_chinese_preview_fits_eight_character_player_names(self):
         font = os.getenv("PE_TEST_CJK_FONT")
@@ -442,7 +442,8 @@ class PelangTest(unittest.TestCase):
         # mods/pe_lang/pe_lang_latin.h and tests/pe_lang_font_vectors.h come from petext/latin.py.
         repo = Path(__file__).resolve().parents[2]
         for name, write in (("mods/pe_lang/pe_lang_latin.h", latin.write_c_header),
-                            ("tests/pe_lang_font_vectors.h", latin.write_test_vectors)):
+                            ("tests/pe_lang_font_vectors.h", latin.write_test_vectors),
+                            ("tests/pe_lang_letter_vectors.h", letters.write_test_vectors)):
             fresh = self.dir / Path(name).name
             write(str(fresh))
             self.assertEqual((repo / name).read_bytes().replace(b"\r\n", b"\n"), fresh.read_bytes(),

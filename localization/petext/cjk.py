@@ -62,8 +62,9 @@ def _coverage(path, wanted):
     return found
 
 class Atlas:
-    def __init__(self,texts,fonts):
-        self.chars=sorted({ch for text in texts for ch in text if supported(ord(ch))},key=ord)
+    def __init__(self,texts,fonts,skip=()):
+        self.chars=sorted({ch for text in texts for ch in text if supported(ord(ch)) and ch not in skip},key=ord)
+        self.letters=None   # the pack's letter table, petext/letters.py
         self.codes={ch:token(i) for i,ch in enumerate(self.chars)}
         self.characters={token(i):ch for i,ch in enumerate(self.chars)}
         self.records=bytearray()

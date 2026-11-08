@@ -1,7 +1,11 @@
-/* Reading .pelang packs: v1 header 64 bytes, v2 header 80 bytes plus a CJK bitmap dictionary.
- * Both have a key table sorted by hash, then the text.
+/* Reading .pelang packs: v1 header 64 bytes, v2 header 80 bytes plus a CJK bitmap dictionary, v3
+ * header 88 bytes plus a table of the pack's own letters after any dictionary, v4 header 112 bytes
+ * plus the text renderer's stretches (F1 C6), the dictionary letters' widths and the name letters
+ * (two-byte letters in names, pe1/text_render.h).
+ * All have a key table sorted by hash, then the text.
  * Every offset is checked once at load, so lookups can trust the table. */
 #include "pe_lang_pack.h"
+#include "pe_lang_text_data.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +13,8 @@
 
 #define HEADER_SIZE 64u
 #define ENTRY_SIZE 8u
+#define MAX_LETTERS 163u                /* codes 0x4D-0xEF */
+#define MARK_SIZE 19u                   /* PeLatinMark */
 
 static uint32_t rd32(const unsigned char *p) {
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
@@ -33,7 +39,74 @@ int pe_lang_pack_uses_glyphs(const PeLangPack *pack, unsigned first, unsigned la
             else if (c == 0xFC || c == 0xFD) ++p;
         }
     }
+    /* and the letters of its stretches that are one-byte codes */
+    if (pack->stretch_count) {
+        const unsigned *codes = pack->unicode ? pack->unicode : kPeTextUnicode;
+        const unsigned char *index = pack->data + pack->stretches_offset;
+        const unsigned char *letters = index + (pack->stretch_count + 1u) * 4u;
+        uint32_t total = rd32(index + pack->stretch_count * 4u);
+        for (uint32_t k = 0; k < total; ++k) {
+            uint32_t cp = rd32(letters + k * 4u);
+            for (unsigned c = first; c <= last; ++c) if (codes[c] == cp) return 1;
+        }
+    }
     return 0;
+}
+
+const uint32_t *pe_lang_pack_stretch(const PeLangPack *pack, unsigned id, unsigned *count) {
+    if (!pack || !pack->data || id >= pack->stretch_count) return NULL;
+    const unsigned char *index = pack->data + pack->stretches_offset;
+    uint32_t start = rd32(index + id * 4), end = rd32(index + id * 4 + 4);
+    *count = end - start;
+    /* 4-byte aligned (checked at load); the hosts are little-endian like the file */
+    return (const uint32_t *)(const void *)(index + (pack->stretch_count + 1u + start) * 4u);
+}
+
+unsigned pe_lang_pack_name_letter(const PeLangPack *pack, unsigned paged) {
+    unsigned page = paged >> 8, byte = paged & 0xFF, id;
+    if (!pack || page < 1 || page > 4 || byte >= 0xFA || paged == 0x100) return 0;
+    id = (page - 1) * 250u + byte;               /* name letter 1 is FB 01 */
+    return id && id <= pack->name_count ? rd32(pack->data + pack->names_offset + (id - 1) * 4) : 0;
+}
+
+unsigned pe_lang_pack_glyph_width(const PeLangPack *pack, unsigned index) {
+    return pack && pack->widths_offset && index < pack->cjk_count ? pack->data[pack->widths_offset + index] : 12u;
+}
+
+int pe_lang_pack_extra_index(const PeLangPack *pack, unsigned letter) {
+    unsigned lo = 0, hi = pack ? pack->extra_count : 0;
+    while (lo < hi) {
+        unsigned mid = lo + (hi - lo) / 2, cp = rd32(pe_lang_pack_extra(pack, mid));
+        if (cp == letter) return (int)mid;
+        if (cp < letter) lo = mid + 1; else hi = mid;
+    }
+    return -1;
+}
+
+int pe_lang_pack_has_letter(const PeLangPack *pack, unsigned code) {
+    if (!pack) return 0;
+    for (unsigned k = 0; k < pack->letter_count; ++k)
+        if (pe_lang_pack_letter(pack, k)[4] == code) return 1;
+    return 0;
+}
+
+/* One letter record: u32 character, code (0: none, `extra`), advance, base code (FF: drawn here),
+ * ops, then the drawn pixels, or three marks for a letter built on the game's own. */
+static int valid_letter(const unsigned char *r, int extra) {
+    const uint32_t cp = rd32(r);
+    if (!cp || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return 0;
+    if (extra ? r[4] != 0 : r[4] < 0x4D || r[4] > 0xEF) return 0;
+    if (r[6] == 0xFF) {
+        if (!r[5] || r[5] > 15 || r[7]) return 0;
+        for (unsigned j = 8; j < PE_LANG_LETTER_SIZE; ++j) if ((r[j] & 15) > 2 || (r[j] >> 4) > 2) return 0;
+        return 1;
+    }
+    if (r[6] >= 0x4D || r[5] > 8 || r[7] > 7) return 0;
+    for (unsigned k = 0; k < 3; ++k) {
+        const unsigned char *mark = r + 8 + k * MARK_SIZE;
+        if (mark[0] > 8 || mark[1] > 1 || mark[2] > 3) return 0;
+    }
+    return 1;
 }
 
 static void copy_field(char *out, const unsigned char *in, size_t size) {
@@ -43,7 +116,7 @@ static void copy_field(char *out, const unsigned char *in, size_t size) {
 
 /* Validate complete commands, with FF at the exact entry end. F9 may only
  * precede that FF (the compiler preserves the original dialogue page end). */
-static int valid_text(const unsigned char *p, size_t n, unsigned glyphs) {
+static int valid_text(const unsigned char *p, size_t n, unsigned glyphs, unsigned stretches) {
     size_t i = 0;
     while (i < n) {
         unsigned c = p[i++];
@@ -51,8 +124,8 @@ static int valid_text(const unsigned char *p, size_t n, unsigned glyphs) {
         if (c == 0xF9) return i + 1 == n && p[i] == 0xFF;
         if (c < 0xF1 || c == 0xF7 || c == 0xF8 || c == 0xFA) continue;
         if (c == 0xF1) {
-            if (n-i < 3 || p[i] != 0xC5 || p[i+1] >= 240 || p[i+2] >= 240 ||
-                p[i+1]*240u+p[i+2] >= glyphs) return 0;
+            if (n-i < 3 || (p[i] != 0xC5 && p[i] != 0xC6) || p[i+1] >= 240 || p[i+2] >= 240 ||
+                p[i+1]*240u+p[i+2] >= (p[i] == 0xC5 ? glyphs : stretches)) return 0;
             i += 3;
         } else if (c == 0xFB) {
             if (i >= n || p[i] > 9) return 0;
@@ -68,19 +141,90 @@ static int valid_text(const unsigned char *p, size_t n, unsigned glyphs) {
     return 0;
 }
 
+/* A name entry (the default name, the name entry grids): letters only, one byte each or a v4
+ * pack's two-byte name letters (FB-FE then a byte below FA, from name letter 1 to `names`). */
+static int is_name_key(uint32_t hash) {
+    return hash == pe_lang_hash("sys/030") || hash == pe_lang_hash("sys/115") ||
+           hash == pe_lang_hash("sys/116") || hash == pe_lang_hash("sys/117");
+}
+static int valid_name(const unsigned char *p, size_t n, unsigned names) {
+    size_t i = 0;
+    while (i < n) {
+        unsigned c = p[i++];
+        if (c == 0xFF) return i == n;
+        if (c < 0xF1) continue;
+        if (c < 0xFB || c > 0xFE || i >= n || p[i] >= 0xFA) return 0;
+        unsigned id = (c - 0xFBu) * 250u + p[i++];
+        if (!id || id > names) return 0;
+    }
+    return 0;
+}
+
 int pe_lang_pack_parse(PeLangPack *pack, unsigned char *data, size_t size) {
     memset(pack, 0, sizeof *pack);
-    if (!data || size < HEADER_SIZE || memcmp(data, "PELG", 4) || (rd32(data + 4) != 1 && rd32(data + 4) != 2))
+    if (!data || size < HEADER_SIZE || memcmp(data, "PELG", 4) || rd32(data + 4) < 1 || rd32(data + 4) > 4)
         goto bad;
     if (size > UINT32_MAX || !data[16] || !data[32] ||
         !memchr(data + 16, 0, 16) || !memchr(data + 32, 0, 32)) goto bad;
-    unsigned header = rd32(data+4) == 2 ? 80 : 64;
+    const uint32_t version = rd32(data+4);
+    unsigned header = version == 4 ? 112 : version == 3 ? 88 : version == 2 ? 80 : 64;
     if (size < header) goto bad;
-    uint32_t glyphs = 0, text_end = (uint32_t)size;
-    if (header == 80) {
+    uint32_t glyphs = 0, text_end = (uint32_t)size, letters = 0, letters_at = (uint32_t)size, coded = 0;
+    uint32_t sections_end = (uint32_t)size;     /* where the letter table must end */
+    uint32_t stretches = 0, stretches_at = 0, pool = 0, widths_at = 0, names = 0, names_at = 0;
+    if (version >= 2) {
         text_end = rd32(data+64); glyphs = rd32(data+68);
-        if (!glyphs || glyphs > 57600 || rd32(data+72) != 76 || rd32(data+76) ||
-            text_end > size || size-text_end != (size_t)glyphs*76) goto bad;
+        if (version == 4) {
+            /* stretches: count+1 rising u32 starts into a pool of u32 Unicode letters, then the
+             * dictionary letters' widths (one byte each) when widths_at is set */
+            stretches_at = rd32(data+88); stretches = rd32(data+92); pool = rd32(data+96);
+            widths_at = rd32(data+100);
+            /* then the name letters: u32 Unicode each, name letter 1 first (4-byte aligned) */
+            names_at = rd32(data+104); names = rd32(data+108);
+            if (stretches > 57600 || stretches_at > size || stretches_at % 4 || pool > (size >> 2)) goto bad;
+            size_t after = (size_t)stretches_at + ((size_t)stretches + 1) * 4 + (size_t)pool * 4;
+            size_t widths_end = after + (widths_at ? glyphs : 0);
+            if (names > PE_LANG_NAME_LETTERS || after > size || (widths_at && widths_at != after) ||
+                widths_end > size || names_at < widths_end || names_at - widths_end > 3 || names_at % 4 ||
+                size - names_at != (size_t)names * 4) goto bad;
+            for (unsigned k = 0; k < names; ++k) {
+                uint32_t cp = rd32(data + names_at + k * 4);
+                if (!cp || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) goto bad;
+            }
+            const unsigned char *index = data + stretches_at, *letters_in = index + (stretches + 1) * 4;
+            if (rd32(index) || rd32(index + stretches * 4) != pool) goto bad;
+            for (unsigned k = 0; k < stretches; ++k) {
+                uint32_t start = rd32(index + k * 4), end = rd32(index + k * 4 + 4);
+                if (end < start || end - start > PE_LANG_STRETCH_MAX) goto bad;
+            }
+            for (unsigned k = 0; k < pool; ++k) {
+                uint32_t cp = rd32(letters_in + k * 4);
+                if (!cp || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) goto bad;
+            }
+            for (unsigned k = 0; widths_at && k < glyphs; ++k)
+                if (!data[widths_at + k] || data[widths_at + k] > 12) goto bad;
+            sections_end = stretches_at;
+        }
+        if (version >= 3) {
+            letters_at = rd32(data+80); letters = rd32(data+84);
+            /* v4 pads the letter table's end to the stretches' 4-byte start */
+            size_t table_end = (size_t)letters_at + (size_t)letters*PE_LANG_LETTER_SIZE;
+            if ((version == 3 && !letters) || letters > MAX_LETTERS + (version == 4 ? PE_LANG_EXTRA_MAX : 0u) ||
+                letters_at > sections_end ||
+                table_end > sections_end || sections_end - table_end > (version == 4 ? 3u : 0u)) goto bad;
+            /* the coded letters by rising code, then (v4) those with no code by rising Unicode */
+            for (unsigned k = 0; k < letters; ++k) {
+                const unsigned char *r = data+letters_at+k*PE_LANG_LETTER_SIZE;
+                const int extra = version == 4 && !r[4];
+                if (!extra) ++coded;
+                if (!valid_letter(r, extra) || (extra ? k > coded && rd32(r) <= rd32(r - PE_LANG_LETTER_SIZE)
+                                                      : (k != coded - 1 || (k && r[4] <= r[4-(int)PE_LANG_LETTER_SIZE]))))
+                    goto bad;
+            }
+            if (coded > MAX_LETTERS) goto bad;
+        }
+        if ((version == 2 && !glyphs) || glyphs > 57600 || rd32(data+72) != 76 || rd32(data+76) ||
+            text_end > letters_at || letters_at-text_end != (size_t)glyphs*76) goto bad;
         uint32_t previous = 0;
         for (unsigned k=0; k<glyphs; ++k) {
             const unsigned char *g = data+text_end+k*76;
@@ -99,7 +243,9 @@ int pe_lang_pack_parse(PeLangPack *pack, unsigned char *data, size_t size) {
         if (i && rd32(e) <= rd32(e - ENTRY_SIZE)) goto bad;     /* sorted, no duplicate hashes */
         uint32_t end = i + 1 < count ? rd32(e + ENTRY_SIZE + 4) : (uint32_t)(text_end - text);
         if ((!i && at) || at >= end || end > text_end - text ||
-            !valid_text(data + text + at, end - at, glyphs)) goto bad;
+            !(names && is_name_key(rd32(e)) ? valid_name(data + text + at, end - at, names)
+                                            : valid_text(data + text + at, end - at, glyphs, stretches)))
+            goto bad;
     }
     pack->data = data;
     pack->size = size;
@@ -107,6 +253,24 @@ int pe_lang_pack_parse(PeLangPack *pack, unsigned char *data, size_t size) {
     pack->entries_at = header;
     pack->cjk_count = glyphs;
     pack->cjk_offset = text_end;
+    pack->letters_offset = letters_at;
+    pack->letter_count = coded;
+    pack->extra_offset = letters_at + coded * PE_LANG_LETTER_SIZE;
+    pack->extra_count = letters - coded;
+    pack->stretch_count = stretches;
+    pack->stretches_offset = stretches_at;
+    pack->widths_offset = widths_at;
+    pack->names_offset = names_at;
+    pack->name_count = names;
+    if (coded) {
+        pack->unicode = malloc(sizeof kPeTextUnicode);
+        if (!pack->unicode) goto bad;
+        memcpy(pack->unicode, kPeTextUnicode, sizeof kPeTextUnicode);
+        for (unsigned k = 0; k < coded; ++k) {
+            const unsigned char *r = data+letters_at+k*PE_LANG_LETTER_SIZE;
+            pack->unicode[r[4]] = rd32(r);
+        }
+    }
     copy_field(pack->lang, data + 16, sizeof pack->lang);
     copy_field(pack->name, data + 32, sizeof pack->name);
     return 0;
@@ -135,6 +299,7 @@ int pe_lang_pack_load(PeLangPack *pack, const char *path) {
 void pe_lang_pack_free(PeLangPack *pack) {
     if (pack->utf8) for (unsigned i=0;i<pack->count;++i) free(pack->utf8[i]);
     free(pack->utf8);
+    free(pack->unicode);
     free(pack->data);
     memset(pack, 0, sizeof *pack);
 }

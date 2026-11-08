@@ -1,8 +1,9 @@
 #include "pe_lang_cjk.h"
+#include "pe_lang_font.h"
 #include <string.h>
 void pe_cjk_reset(PeCjkCache *c,const PeLangPack *pack,const unsigned char *original) {
-    memset(c,0,sizeof *c); c->pack=pack; c->need_sync=1;
-    if (!pack || !pack->cjk_count || !original) return;
+    memset(c,0,sizeof *c); c->pack=pack; c->original=original; c->need_sync=1;
+    if (!pack || !(pack->cjk_count || pack->extra_count) || !original) return;
     /* Menu glyph bytes below FA, including the rename grid's F0..F6, must stay
      * untouched even though those cells are blank in the USA font. */
     for (unsigned cell=250;cell<441;++cell) {
@@ -18,7 +19,7 @@ void pe_cjk_frame(PeCjkCache *c) {
     c->need_sync=1;
 }
 int pe_cjk_resolve(PeCjkCache *c,unsigned id,unsigned *cell,PeCjkSync sync,PeCjkUpload upload,void *user) {
-    if (!c->pack || id>=c->pack->cjk_count) return 0;
+    if (!c->pack || id>=c->pack->cjk_count+c->pack->extra_count) return 0;
     for (unsigned i=0;i<c->count;++i)
         if (c->slots[i].valid && c->slots[i].id==id) {
             c->slots[i].pinned=1; *cell=c->slots[i].cell; return 1;
@@ -28,7 +29,13 @@ int pe_cjk_resolve(PeCjkCache *c,unsigned id,unsigned *cell,PeCjkSync sync,PeCjk
         PeCjkSlot *s=&c->slots[k];
         if (s->pinned) continue;
         if (c->need_sync) { sync(user); c->need_sync=0; }
-        if (upload(s->cell,c->pack->data+c->pack->cjk_offset+id*76+4,user)) return 0;
+        unsigned char made[72];
+        const unsigned char *pixels=c->pack->data+c->pack->cjk_offset+id*76+4;
+        if (id>=c->pack->cjk_count) {
+            pe_lang_letter_cell(pe_lang_pack_extra(c->pack,id-c->pack->cjk_count),c->original,128,made);
+            pixels=made;
+        }
+        if (upload(s->cell,pixels,user)) return 0;
         s->id=id; s->valid=1; s->pinned=1; c->hand=(k+1)%c->count; *cell=s->cell; return 1;
     }
     c->overflow=1;
