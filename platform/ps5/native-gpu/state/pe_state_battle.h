@@ -8,5 +8,6 @@ int PeBattleNumeric_PreflightTarget(PeBattleNumeric*,const unsigned char*,size_t
 int PeBattleNumeric_SetTargetGraph(PeBattleNumeric*,uint32_t,const uint32_t coreRoles[14]);
 int PeBattleNumeric_IsCurrent(const PeBattleNumeric*);
 int PeBattleNumeric_Bind(PeBattleNumeric *);
+int PeBattleNumeric_PlayerAction(PeBattleNumeric*,const unsigned char*,size_t,int*);
 int PeState_RegisterBattleNumeric(PeStateRegistry *,PeBattleNumeric *);
 #endif

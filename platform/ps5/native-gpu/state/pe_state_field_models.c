@@ -6,7 +6,7 @@ static uint32_t model_get(const unsigned char*p){return(uint32_t)p[0]|(uint32_t)
 static uint16_t model_half(const unsigned char*p){return(uint16_t)(p[0]|p[1]<<8);}
 static void model_put(unsigned char*p,uint32_t v){for(unsigned j=0;j<4;j++)p[j]=(unsigned char)(v>>(j*8));}
 static void model_sethalf(unsigned char*p,uint16_t v){p[0]=(unsigned char)v;p[1]=(unsigned char)(v>>8);}
-typedef struct ModelShape{uint32_t triangles,quads,colours,colourOffset,faceEnd,extent;uint16_t counts[4];}ModelShape;
+typedef PeFieldModelShape ModelShape;
 static int model_shape(const unsigned char*p,size_t available,ModelShape*s){if(!p||!s||available<16)return 0;memset(s,0,sizeof*s);for(unsigned j=0;j<4;j++)s->counts[j]=model_half(p+j*2);s->triangles=(uint32_t)s->counts[0]+s->counts[1];s->quads=(uint32_t)s->counts[2]+s->counts[3];s->colours=model_half(p+10);s->colourOffset=model_half(p+8);if(s->triangles+s->quads>256||s->colours>256)return 0;s->faceEnd=16+s->triangles*12+s->quads*16;if(s->faceEnd>available||s->colourOffset%4||s->colourOffset<s->faceEnd||(size_t)s->colourOffset+s->colours*4>available)return 0;s->extent=s->colourOffset+s->colours*4;if(s->extent<s->faceEnd)s->extent=s->faceEnd;
  for(unsigned kind=0;kind<2;kind++){unsigned count=kind?s->quads:s->triangles,width=kind?4:3,stride=kind?16:12,base=16+(kind?s->triangles*12:0),flat=kind?s->counts[2]:s->counts[0];for(unsigned j=0;j<count;j++)for(unsigned v=0;v<width;v++){unsigned offset=model_half(p+base+j*stride+v*2);if(offset%2||offset<s->faceEnd||offset>available||8u>available-offset)return 0;if(offset<s->colourOffset+s->colours*4&&offset+8>s->colourOffset)return 0;if(offset+8>s->extent)s->extent=offset+8;if(j>=flat||v==0){unsigned colour=model_half(p+offset+6);if(colour%4||colour<s->colourOffset||colour-s->colourOffset>=s->colours*4)return 0;}}}return s->extent<=available;
 }
@@ -58,3 +58,7 @@ int PeFieldModels_Ready(unsigned program,int current){ModelBinding b[3];uint32_t
 
 
 void *PeFieldModels_KeyPointer(uint32_t key){ModelBinding b[3];uint32_t room;uint64_t epoch;if(!model_bindings(b,&room,&epoch))return 0;for(unsigned j=0;j<3;j++)if(b[j].key==key)return b[j].data;return 0;}
+
+int PeFieldModel_Describe(const void*p,size_t n,PeFieldModelShape*s){return model_shape(p,n,s);}
+int PeFieldModel_MutableByte(const PeFieldModelShape*s,size_t offset){return s&&offset<s->extent&&model_mutable(s,offset);}
+int PeFieldModels_SourceDisjoint(const void*p,size_t n){if(!p||!n||n>UINT32_MAX||(uintptr_t)p>UINTPTR_MAX-n||!PeStateBankSource_Disjoint(p,n))return 0;PeScriptAsset asset;if(!PeStateAssets_Get(&asset)||model_overlap((uintptr_t)p,n,(uintptr_t)asset.data,asset.bytes))return 0;ModelBinding b={(unsigned char*)p,n,0,(uint32_t)n,0};for(unsigned j=0;j<10;j++){if(!model_alias_source(&b,g_GameState.bank_slots[j],0))return 0;for(unsigned r=0;r<48;r++)if(!model_alias_source(&b,g_GameState.bank_rows[j][r],1))return 0;}uint32_t mask=0;unsigned count=0;for(FieldActor*a=g_FieldActorListHead;a;a=a->next){unsigned id;for(id=0;id<14;id++)if(a==&g_EntityPool[id])break;if(id==14||count++>=14||(mask&(1u<<id)))return 0;mask|=1u<<id;if(!model_alias_source(&b,a->model_state.model_header,0)||!model_alias_source(&b,a->render_object.header,0))return 0;}return 1;}

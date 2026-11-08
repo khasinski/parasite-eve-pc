@@ -183,6 +183,9 @@ FILE *__wrap_fopen(const char *path, const char *mode) {
 int __real_main(int, char **);
 int __wrap_main(int argc, char **argv) {
     log_fd = pe_session_fd();
+#ifdef PE_NATIVE_APP_TITLE
+    stage("application=%s\n", PE_NATIVE_APP_TITLE);
+#endif
     const char *path = pe_session_path();
     stage("\n=== PE startup debug: entered main argc=%d session=%s ===\n", argc, path);
     if (log_fd >= 0) {
@@ -273,3 +276,23 @@ VOID_WRAP(Boot_InitGameState)
 VOID_WRAP(Boot_InitSubsystems)
 INT_WRAP(Asset_OpenPeImage)
 INT_WRAP(Scene_LoadSceneData)
+
+/* Bound the SDL post-fopen seam without dereferencing FILE internals here. */
+int __real_fileno(FILE *);
+int __wrap_fileno(FILE *stream) {
+    static atomic_uint calls;
+    unsigned sequence=atomic_fetch_add_explicit(&calls,1,memory_order_relaxed);
+    if(sequence<16) stage("stdio fileno begin sequence=%u null=%d\n",sequence,stream==NULL);
+    int result=__real_fileno(stream),error=errno;
+    if(sequence<16) stage("stdio fileno end sequence=%u fd=%d errno=%d\n",sequence,result,error);
+    errno=error;return result;
+}
+int __real_fstat(int,struct stat *);
+int __wrap_fstat(int fd,struct stat *value) {
+    static atomic_uint calls;
+    unsigned sequence=atomic_fetch_add_explicit(&calls,1,memory_order_relaxed);
+    if(sequence<16) stage("stdio fstat begin sequence=%u fd=%d struct_bytes=%u\n",sequence,fd,(unsigned)sizeof(*value));
+    int result=__real_fstat(fd,value),error=errno;
+    if(sequence<16) stage("stdio fstat end sequence=%u result=%d errno=%d\n",sequence,result,error);
+    errno=error;return result;
+}

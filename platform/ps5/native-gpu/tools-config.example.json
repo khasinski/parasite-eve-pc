@@ -1,5 +1,9 @@
 {
   "cmake": "<CMAKE_EXECUTABLE>",
   "ninja": "<NINJA_EXECUTABLE>",
-  "webpSource": "<WEBP_SOURCE>"
+  "webpSource": "<WEBP_SOURCE>",
+  "pointSpriteOwnerData": {
+    "file": "<LOCAL_AUTHORIZED_216_BYTE_POINTSPRITE_INPUT_OUTSIDE_REPOSITORY>",
+    "sha256": "<CALLER_PINNED_SHA256_NOT_DISTRIBUTED>"
+  }
 }

@@ -9,4 +9,6 @@ void PeStateBankSource_Invalidate(unsigned);
 int PeStateBankSource_Commit(unsigned,const void*,size_t);
 /* Source-ID+offset+available byte count, not a process address in serialized data. */
 int PeStateBankSource_Locate(const void*,size_t,unsigned*,uint32_t*,size_t*,uint64_t*);
+/* Prove no current source bank, including retained target-cohort sources, aliases this span. */
+int PeStateBankSource_Disjoint(const void*,size_t);
 #endif

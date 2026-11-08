@@ -79,3 +79,38 @@ target_include_directories(parasite-eve-pc PRIVATE "@ROOT@/game-src/src/main/boo
 
 # Native prepared character subset validation, no download or asset writes.
 target_sources(parasite-eve-pc PRIVATE "@ROOT@/game-src/src/main/boot/installer/pe_character_pack.c")
+
+# Game Test never enters automatic first-run installation.
+if(PE_NATIVE_APP_ROLE STREQUAL "INSTALLER_TEST")
+  target_compile_definitions(parasite-eve-pc PRIVATE PE_NATIVE_INSTALLER_TEST=1 PE_NATIVE_APP_TITLE="Parasite Eve - Installer Test")
+elseif(PE_NATIVE_APP_ROLE STREQUAL "GAME_TEST")
+  target_compile_definitions(parasite-eve-pc PRIVATE PE_NATIVE_GAME_TEST=1 PE_NATIVE_APP_TITLE="Parasite Eve - Game Test")
+else()
+  message(FATAL_ERROR "Select GAME_TEST or INSTALLER_TEST launch policy")
+endif()
+
+if(PE_NATIVE_APP_ROLE STREQUAL "INSTALLER_TEST")
+ target_compile_definitions(pe-startup-log PRIVATE PE_NATIVE_APP_TITLE="Parasite Eve - Installer Test")
+else()
+ target_compile_definitions(pe-startup-log PRIVATE PE_NATIVE_APP_TITLE="Parasite Eve - Game Test")
+endif()
+
+target_link_libraries(parasite-eve-pc PRIVATE --wrap=fileno --wrap=fstat)
+
+# Homebrew app and sibling assets on local/USB storage; exact active identity, no marker.
+target_sources(pe-startup-log PRIVATE "${CMAKE_CURRENT_LIST_DIR}/pe-portable-root.c")
+foreach(pe_portable_target parasite-eve-pc pe-startup-log pe-mods)
+ if(TARGET ${pe_portable_target})
+  target_compile_definitions(${pe_portable_target} PRIVATE PE_NATIVE_PORTABLE=1 PE_NATIVE_SHARE_LAYOUT=1)
+  target_include_directories(${pe_portable_target} PRIVATE "${CMAKE_CURRENT_LIST_DIR}")
+ endif()
+endforeach()
+
+set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/pe-portable-root.c" "${CMAKE_CURRENT_LIST_DIR}/application-startup-log.c" APPEND PROPERTY COMPILE_OPTIONS -ffreestanding -fno-builtin)
+
+# Native FILE is opaque; preserve actual descriptor/error APIs for flushes.
+target_sources(pe-ps5-sdl-core PRIVATE "${CMAKE_CURRENT_LIST_DIR}/SDL-native-iostream.c")
+target_include_directories(pe-ps5-sdl-core PRIVATE "${PE_PS5_SDL3_SOURCE}/src/io")
+
+# Optional authentic owner-selected testkit; output is exclusive user slotO only.
+target_sources(parasite-eve-pc PRIVATE "${CMAKE_CURRENT_LIST_DIR}/pe-portable-testkit.c")

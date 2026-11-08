@@ -22,7 +22,11 @@ typedef int (*PeStateRestore)(void *,const unsigned char *,size_t);
  * Return1 success,0 clean rejection,-1 failure after possible mutation.
  * Rollback preparation must not require current topology. */
 typedef int (*PeStatePrepare)(void *,const unsigned char *,size_t,int mode);
-typedef struct PeStateModule {uint32_t id,schema;size_t maximumBytes;PeStateCapture capture;void *context;PeStateValidate validate;PeStateRestore restore;PeStatePrepare prepare;} PeStateModule;
+struct PeStateRegistry;
+/* Pure cross-owner validation of complete bounded chunk arrays. No writes or
+ * retained payload pointers. Automatically follows its owning module. */
+typedef int (*PeStatePackageValidate)(void *,const struct PeStateRegistry *,const PeStateChunk *,unsigned);
+typedef struct PeStateModule {uint32_t id,schema;size_t maximumBytes;PeStateCapture capture;void *context;PeStateValidate validate;PeStateRestore restore;PeStatePrepare prepare;PeStatePackageValidate validatePackage;} PeStateModule;
 typedef struct PeStateRegistry {PeStateModule modules[PE_STATE_MAX_CHUNKS];unsigned count;} PeStateRegistry;
 typedef struct PeStateBarrier {void *context;int (*begin)(void *,uint64_t *);int (*unchanged)(void *,uint64_t);void (*end)(void *);} PeStateBarrier;
 /* Bounded diagnostic witness only: never used to authorize or change restoration. */
