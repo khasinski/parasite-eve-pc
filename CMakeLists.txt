@@ -441,6 +441,12 @@ if(PE_MODS)
     add_subdirectory(mods)
     list(APPEND PE_COMMON_GAME_OBJECTS $<TARGET_OBJECTS:pe-mods>)
 endif()
+# What the shared game objects need beyond psyz: zipped .pelang files are read with the mod
+# downloads' zip reader (mods/pe_lang/pe_lang_bundle.c).
+set(PE_COMMON_GAME_LIBS)
+if(PE_MODS AND TARGET pe_download_zip AND "pe_lang" IN_LIST PE_MOD_LIST)
+    list(APPEND PE_COMMON_GAME_LIBS pe_download_zip)
+endif()
 
 target_sources(parasite-eve-pc PRIVATE ${PE_COMMON_GAME_OBJECTS})
 
@@ -475,7 +481,7 @@ endforeach()
 function(pe_add_common_unit_test target_name test_name source_file)
     add_executable(${target_name} ${source_file} ${ARGN} ${PE_COMMON_GAME_OBJECTS})
     target_include_directories(${target_name} PRIVATE include)
-    target_link_libraries(${target_name} PRIVATE psyz)
+    target_link_libraries(${target_name} PRIVATE psyz ${PE_COMMON_GAME_LIBS})
     add_test(NAME ${test_name} COMMAND ${target_name})
 endfunction()
 
@@ -599,7 +605,7 @@ if(BUILD_TESTING)
         ${PE_COMMON_GAME_OBJECTS}
         $<TARGET_OBJECTS:parasite-eve-original-actor-animation>)
     target_include_directories(test-original-actor-animation PRIVATE include tests)
-    target_link_libraries(test-original-actor-animation PRIVATE psyz)
+    target_link_libraries(test-original-actor-animation PRIVATE psyz ${PE_COMMON_GAME_LIBS})
     add_test(NAME original-game-movie-early-exit COMMAND test-original-actor-animation --movie-early-exit)
     set_tests_properties(original-game-movie-early-exit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30 LABELS "game-assets;audio")
     add_test(NAME original-game-movie-audio-lock-order COMMAND test-original-actor-animation --movie-audio-lock-order)

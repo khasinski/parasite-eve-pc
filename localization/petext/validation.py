@@ -52,3 +52,12 @@ def check(raw: bytes, source):
     if actual != expected:
         raise ValueError('control commands must match the source in count, order and operands '
                          '(including waits, choices, names, numbers and pauses)')
+
+
+def check_patch(raw: bytes, source):
+    """A page from a fan patch: the room scripts act on choices, so those stay; waits, names and
+    timing are the translator's, and the patch played that way on the real game."""
+    want = source if isinstance(source, list) else structure(gt.encode(source, extended=True))
+    actual = [c for c in commands(raw) if c[:2] == b"\xfb\x09"]
+    if actual != [c for c in want if c[:2] == b"\xfb\x09"]:
+        raise ValueError('choices must match the source in count, order and options')

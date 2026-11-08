@@ -203,6 +203,20 @@ int pe_menu_register_live_choice(const char *sub, const char *label, const char 
     return 0;
 }
 
+int pe_menu_live_choice_resize(const char *const *names, unsigned count) {
+    int found = -1;
+    if (!names || !count) return -1;
+    for (int i = 0; i < s_row_count; i++) {
+        PeMenuRow *row = pe_menu_row(i);
+        if (row && row->kind == PE_ROW_LIVE_CHOICE && row->names == names) {
+            row->count = count;
+            row->maximum = (int)count - 1;
+            found = 0;
+        }
+    }
+    return found;
+}
+
 int pe_menu_register_dynamic_choice(const char *sub, const char *label, const char *description,
                                     int *index, unsigned max_count, PeMenuChoiceCount count_fn,
                                     PeMenuChoiceName name_fn) {

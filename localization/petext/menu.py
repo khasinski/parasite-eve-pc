@@ -163,10 +163,11 @@ def check(key: str, raw: bytes, source: dict, metrics: bytes, layouts: dict):
     return errors, warnings, bool(found)
 
 
-def check_combined(texts: dict[str, bytes], metrics: bytes, layouts: dict):
+def check_combined(texts: dict[str, bytes], metrics: bytes, layouts: dict, over: set | None = None):
     """Pack-wide limits on text the game joins: the widest/longest of each part together.
     texts: every resident key's bytes as the pack would have it (translation or English), or for
-    an English entry known only from the source manifest, its (length, menu px)."""
+    an English entry known only from the source manifest, its (length, menu px). `over` collects
+    the keys of the longest parts of whatever doesn't fit."""
     def n_bytes(v):
         return v[0] if isinstance(v, tuple) else len(v)
 
@@ -175,7 +176,7 @@ def check_combined(texts: dict[str, bytes], metrics: bytes, layouts: dict):
 
     errors = []
     for c in layouts.get("combined", []):
-        worst_px, worst_len, names = 0, 0, []
+        worst_px, worst_len, names, worst = 0, 0, [], set()
         for alt in c["_parts"]:
             keys = [k for k in texts if any(m(k) for m in alt)]
             if not keys:
@@ -185,8 +186,11 @@ def check_combined(texts: dict[str, bytes], metrics: bytes, layouts: dict):
             worst_len += n_bytes(texts[by_len])
             worst_px += n_px(texts[by_px])
             names.append(by_len if by_len == by_px else f"{by_len}/{by_px}")
+            worst |= {by_len, by_px}
         else:
             where = f"{c['id']} ({c['source']})"
+            if over is not None and (("bytes" in c and worst_len + 1 > c["bytes"]) or ("edge" in c and worst_px > c["edge"])):
+                over |= worst
             if "bytes" in c and worst_len + 1 > c["bytes"]:
                 errors.append(f"{' + '.join(names)}: {worst_len + 1} bytes with the end; {where} holds {c['bytes']}")
             if "edge" in c and worst_px > c["edge"]:

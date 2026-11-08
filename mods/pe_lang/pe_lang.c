@@ -43,6 +43,7 @@
 #include "pe_lang_cjk.h"
 #include "pe1/mod_text.h"
 #include "pe_lang_pack.h"
+#include "pe_lang_bundle.h"
 #include "pe_services.h"
 #include "pe_lang_selection.h"
 #include "pe_lang_text.h"
@@ -54,8 +55,15 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 
+#if !defined(PE_PS5) && !defined(PE_PS5_PLUGINS)
+#include <psyz/overlay_sdl3.h>
+#define PE_LANG_PICKER 1
+#else
+#define PE_LANG_PICKER 0
+#endif
+
 #define MOD_ID "pe_lang"
-#define MAX_PACKS 16
+#define MAX_PACKS 64
 
 static PeLangPack s_packs[MAX_PACKS];
 static unsigned s_pack_count;
@@ -599,8 +607,8 @@ static int by_name(const void *a, const void *b) {
 }
 
 /* Put a loaded pack in the list: a pack with the same identity (language code and name) is
- * replaced, so a user-folder copy wins over the one beside the game. Returns its slot, or -1 (the
- * pack freed) when the list is full. */
+ * replaced, so a user-folder copy wins over the one beside the game and a picked update wins over
+ * the old one. Returns its slot, or -1 (the pack freed) when the list is full. */
 static int add_pack(PeLangPack *loaded, const char *path) {
     PeLangSelection id;
     memcpy(id.lang, loaded->lang, sizeof id.lang);
@@ -621,7 +629,7 @@ static int add_pack(PeLangPack *loaded, const char *path) {
     return (int)slot;
 }
 
-/* Load the packs in `dir` (ending in a separator), in file-name order. */
+/* Load the .pelang files in `dir` (ending in a separator), in file-name order. */
 static void load_dir(const char *dir) {
     int count = 0;
     char **files = SDL_GlobDirectory(dir, "*.pelang", 0, &count);
@@ -630,9 +638,10 @@ static void load_dir(const char *dir) {
     for (int i = 0; i < count; ++i) {
         char path[4096];
         PeLangPack loaded;
+        PeLangOpen result;
         snprintf(path, sizeof path, "%s%s", dir, files[i]);
-        if (pe_lang_pack_load(&loaded, path)) {
-            pe_mod_log(MOD_ID, "skipped %s: invalid/unsafe pack or unsupported format (supported: v1-v4)", path);
+        if ((result = pe_lang_bundle_load(&loaded, path)) != PE_LANG_OPEN_OK) {
+            pe_mod_log(MOD_ID, "skipped %s: %s", path, pe_lang_bundle_error(result));
             continue;
         }
         add_pack(&loaded, path);
@@ -668,6 +677,117 @@ static int language_set(int choice) {
     }
     return 1;
 }
+
+#if PE_LANG_PICKER
+/* ---- F1 > Language > Add a translation: a file picker for .pelang files ----
+ * The file is checked first, then copied into lang/ in the user folder (so it is there at the next
+ * start) and switched to. The panel is modal and the game paused, so the picker is waited on here,
+ * as the disc picker is at start. */
+typedef struct Picked {
+    SDL_AtomicInt done;
+    char path[4096];
+    int failed;
+} Picked;
+
+static void SDLCALL on_picked(void *user, const char *const *files, int filter) {
+    Picked *picked = user;
+    (void)filter;
+    if (!files || (files[0] && strlen(files[0]) >= sizeof picked->path)) picked->failed = 1;
+    else if (files[0]) snprintf(picked->path, sizeof picked->path, "%s", files[0]);
+    SDL_SetAtomicInt(&picked->done, 1);
+}
+
+static const char *file_name(const char *path) {
+    const char *name = path;
+    for (const char *p = path; *p; ++p)
+        if (*p == '/' || *p == '\\') name = p + 1;
+    return name;
+}
+
+static int same_file(const char *a, const char *b) {
+#ifdef _WIN32
+    for (; *a && *b; ++a, ++b) {
+        char x = *a == '\\' ? '/' : (char)SDL_tolower((unsigned char)*a);
+        char y = *b == '\\' ? '/' : (char)SDL_tolower((unsigned char)*b);
+        if (x != y) return 0;
+    }
+    return !*a && !*b;
+#else
+    return !strcmp(a, b);
+#endif
+}
+
+static void add_translation(const char *path) {
+    char dir[4096], dest[4096], toast[160];
+    const char *name = file_name(path);
+    size_t len = strlen(name);
+    PeLangPack loaded;
+    PeLangOpen result = pe_lang_bundle_load(&loaded, path);
+    if (result != PE_LANG_OPEN_OK) {
+        pe_mod_log(MOD_ID, "could not add %s: %s", path, pe_lang_bundle_error(result));
+        snprintf(toast, sizeof toast, "Not added: %s.", pe_lang_bundle_error(result));
+        pe_toast(toast);
+        return;
+    }
+    /* Copied under its own name, given the .pelang ending if it lacks it, so the folder scan finds it. */
+    int has_ending = len >= 7 && !SDL_strcasecmp(name + len - 7, ".pelang");
+    int copied = !pe_mod_path(dir, sizeof dir, "lang/") && SDL_CreateDirectory(dir);
+    if (copied) {
+        int n = snprintf(dest, sizeof dest, "%s%s%s", dir, name, has_ending ? "" : ".pelang");
+        copied = n > 0 && (size_t)n < sizeof dest;
+    }
+    if (copied && !same_file(path, dest)) copied = SDL_CopyFile(path, dest);
+    if (copied) pe_mod_log(MOD_ID, "added %s as %s", path, dest);
+    else pe_mod_log(MOD_ID, "could not copy %s into the user folder: %s", path, SDL_GetError());
+
+    /* The pack in use may be the one replaced: point the letters away from it first, and
+     * language_set below puts them back from the new copy. */
+    PeLangSelection id;
+    memcpy(id.lang, loaded.lang, sizeof id.lang);
+    memcpy(id.name, loaded.name, sizeof id.name);
+    int existing = pe_lang_selection_find(&id, s_packs, s_pack_count);
+    if (existing && existing == s_choice) language_set(0);
+
+    int slot = add_pack(&loaded, copied ? dest : path);
+    if (slot < 0) {
+        pe_toast("Not added: the language list is full.");
+        return;
+    }
+    pe_menu_live_choice_resize(s_names, s_pack_count + 1);
+    language_set(slot + 1);
+    if (copied) snprintf(toast, sizeof toast, "Added %s.", s_labels[slot]);
+    else snprintf(toast, sizeof toast, "Using %s for now: it could not be copied.", s_labels[slot]);
+    pe_toast(toast);
+}
+
+static void pick_translation(void) {
+    static const SDL_DialogFileFilter filters[] = {{"Parasite Eve translation (*.pelang)", "pelang"}};
+    Picked picked;
+    memset(&picked, 0, sizeof picked);
+    SDL_PropertiesID props = SDL_CreateProperties();
+    if (!props) return;
+    SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_FILTERS_POINTER, (void *)filters);
+    SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, 1);
+    SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, false);
+    SDL_SetStringProperty(props, SDL_PROP_FILE_DIALOG_TITLE_STRING, "Add a translation");
+    SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_WINDOW_POINTER, Psyz_GetWindow_SDL3());
+    SDL_ShowFileDialogWithProperties(SDL_FILEDIALOG_OPENFILE, on_picked, &picked, props);
+    while (!SDL_GetAtomicInt(&picked.done)) {
+        SDL_PumpEvents();
+        SDL_Delay(10);
+    }
+    SDL_DestroyProperties(props);
+    /* Keys pressed in the picker must not reach the panel. */
+    SDL_FlushEvents(SDL_EVENT_KEY_DOWN, SDL_EVENT_TEXT_INPUT);
+    SDL_ResetKeyboard();
+    if (picked.failed) {
+        pe_mod_log(MOD_ID, "file picker failed: %s", SDL_GetError());
+        pe_toast("The file picker could not open.");
+    } else if (picked.path[0]) {
+        add_translation(picked.path);
+    }
+}
+#endif
 
 /* The host hides this service while pe_lang or All mods is off. Resolve the active pack
  * per lookup, so F1 changes and missing packs immediately use each caller's fallback. */
@@ -726,6 +846,11 @@ static int lang_init(void) {
                             "A pack from lang/ beside the game or in the user folder; Game text turns it off.",
                             s_names, s_pack_count + 1, language_get, language_set);
     pe_menu_register_info(0, "In use", "Untranslated text stays as the game has it.", active_text);
+#if PE_LANG_PICKER
+    pe_menu_register_action(0, "Add a translation",
+                            "Pick a .pelang file: it is checked, copied to lang/ in the user folder and used.",
+                            pick_translation);
+#endif
     pe_menu_begin(0);
     return 0;
 }

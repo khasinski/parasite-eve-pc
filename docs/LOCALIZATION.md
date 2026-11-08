@@ -173,6 +173,32 @@ is missing, Game text is used and the identity is retained until a new selection
 Old numeric `Language/Language` preferences are intentionally ignored: select your language once
 after upgrading, because the old index cannot establish which pack was intended.
 
+## Translation files
+
+What a player downloads is a `.pelang` file. It is one of two things, told apart by its first
+bytes, so both keep the one ending:
+
+- **A pack**, exactly as `build` writes it (below).
+- **A zip** holding that pack as `text.bin`, written by `bundle`. Other parts are left alone.
+  `readme.txt` is for the player: credits, version, notes.
+
+```
+python -I localization/pelang.py bundle fr.pelang -o "French.pelang" --readme credits.txt
+```
+
+`bundle` writes the same file each time for the same pack. The game opens zips of up to 256 MB,
+with a pack of up to 64 MB inside. It refuses a zip that is damaged (its checksum is tested), has
+no `text.bin` at its top level (names match exactly), or holds an encrypted pack.
+
+**F1 > Language > Add a translation** opens a file window for `.pelang` files. The chosen file
+is checked first, then copied as-is into `lang/` in the user folder, so it's still there at the
+next start, and switched to. A file whose language code and name match a pack already in the list
+replaces it, which is how an update installs. A file that can't be read is not copied, and the
+toast says why. If the copy fails, the pack is used for that session only. The row isn't on PS5,
+which has no file window. Zipped files need the zip reader that desktop builds have
+(`PE_DESKTOP_MOD_DOWNLOADS`). Without it, plain packs still load and zips are skipped with a log
+line.
+
 ## How the text is swapped
 
 The mod never changes the game's data. At the moment the game takes a piece of text, a hook hands
@@ -233,6 +259,8 @@ reference.
   compiler's checks, and the pack round trip.
 - `ctest -R mod-lang-pack`: the C reader's lookups by key, table and bank page, the bank measure
   and CRC, and damaged packs refused whole.
+- `ctest -R mod-lang-bundle`: plain and zipped `.pelang` files, and damaged zips refused.
+  `test-mod-lang-bundle file.pelang ...` opens any files and says what each holds.
 - `ctest -R mod-lang-font`: the C composer against `latin.py` on synthetic letters, page fill
   (only empty cells change), widths.
 - In game: pe-native-debug's `scenarios/lang_items.py` loads a save with a pack and without, and
@@ -607,6 +635,35 @@ v1/v2 pack formats and the explicit `translations` v1 API remain compatible. Sha
 contracts and Unicode-header generation live in `petext/interfaces.py`. Native/F1 renderers opt
 in at presentation boundaries; settings paths, save IDs and collection keys are not translated.
 New tests, test shims, packs and visual evidence stay in the local debug repository.
+
+## Importing any fan patch
+
+The port plays the original game data, so a patch for the disc can't be played as it is.
+`import-patch` compares your disc with the patched one and writes the text as a translation file,
+and the patch's letters as a picture font. It reads PPF (1, 2, 3) and xdelta files itself, or a
+patched copy of the disc. It never runs a patcher, and it leaves your disc image alone.
+
+```sh
+python3 -I localization/pelang.py import-patch "Disc 1.cue" patch.xdelta \
+  -o local.csv --report local-report.json --font "My Font.png"
+python3 -I localization/pelang.py build local.csv --strings localization/data/manifest.json \
+  --from-patch --submission --lang es --name "Español (parche)" -o es-patch.pelang
+```
+
+Put the `.pelang` in `lang/` and the picture in `mods/fonts/`, then choose them under F1 > Language
+and F1 > Fonts. Either disc gives the same text. Nothing here goes into the repository.
+
+- **Letters** are worked out from the patch's font, so a new patch needs no code: a copy of a
+  letter (coloured speaker sets), or a base letter plus a mark. The report lists what was found.
+  Name anything it couldn't with `--letters 5A=Ñ`; pages using an unnamed symbol keep the English.
+- **Controls**: `--from-patch` lets waits, names and timing differ from the English, because a
+  translator moves them and the patch played that way. Choices must match, since scripts act on them.
+- **Space**: a patch's own font is often narrower than the game's. Pages are rewrapped to fit the
+  game's widths, and a menu line that can't fit stops the build: shorten it in the CSV.
+- **Not carried over**, all listed in the report: edited room scripts (`rooms_with_edited_scripts`
+  should be empty; if not, those rooms won't match the patch), pictures with text in them
+  (`rooms_with_edited_pictures`), custom symbols, and the rename grids. Mod labels stay in English
+  because no disc patch has them.
 
 ## Local Italian text import
 
