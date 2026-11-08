@@ -6,6 +6,10 @@
 
 #include "pe_phone.h"
 
+#ifndef PE_PHONE_CALLS_FILE   /* CMake passes the absolute path; by hand, run from the checkout */
+#define PE_PHONE_CALLS_FILE "mods/pe_phone/calls/pe1.txt"
+#endif
+
 #define NAME_W 27   /* "Aya" */
 
 static int adv(uint8_t g) {
@@ -168,19 +172,86 @@ static void test_pick(void) {
     assert(pe_phone_pick(all, 5, &x, &r, 0) == NULL);
 }
 
-/* ---- the game's own pack ---- */
+/* ---- call files ---- */
 
-static const PePhoneCall *s_pack[64];
+static PePhoneStore s_store;
+static int s_problems, s_problem_line;
+static char s_problem[256];
+
+static void on_problem(void *user, const char *file, int line, const char *what) {
+    (void)user;
+    (void)file;
+    if (!s_problems++) { s_problem_line = line; snprintf(s_problem, sizeof s_problem, "%s", what); }
+    printf("  (expected) %s line %d: %s\n", file, line, what);
+}
+
+static int parse(const char *text) {
+    s_problems = 0;
+    s_problem[0] = 0;
+    return pe_phone_parse_calls(&s_store, "test.txt", text, (unsigned)strlen(text), on_problem, NULL);
+}
+
+static void test_call_file(void) {
+    const PePhoneCall *c;
+    pe_phone_store_clear(&s_store);
+    assert(parse("# a note\n\n[mine/a]\ncaller = Bob\ntone = funny\nday = 2-4\nrooms = 32, 87\n"
+                 "priority = 5\nonce = yes\nweight = 3\nafter = pe1/pizza\nstory = 0x80-0xE8\n"
+                 "them: Hi, {name}!\naya: Hello.\r\n") == 1 && s_problems == 0);
+    c = &s_store.calls[0];
+    assert(!strcmp(c->key, "mine/a") && !strcmp(c->caller, "Bob") && c->tone == PE_CALL_FUNNY);
+    assert(c->day_from == 2 && c->day_to == 4 && c->room_count == 2 && c->rooms[0] == 32 && c->rooms[1] == 87);
+    assert(c->priority == 5 && c->once && c->weight == 3 && !strcmp(c->after, "pe1/pizza"));
+    assert(c->story_from == 0x80 && c->story_to == 0xE8 && c->line_count == 2);
+    assert(c->lines[0].speaker == PE_CALL_CALLER && !strcmp(c->lines[0].text, "Hi, {name}!"));
+    assert(c->lines[1].speaker == PE_CALL_AYA && !strcmp(c->lines[1].text, "Hello."));
+
+    /* defaults: serious, any day, any room, weight 1 */
+    assert(parse("[mine/b]\ncaller = X\nthem: Hi.\n") == 1);
+    c = &s_store.calls[1];
+    assert(c->tone == PE_CALL_SERIOUS && !c->day_from && !c->rooms && c->weight == 1 && !c->once);
+
+    /* mistakes: reported with the line, the call left out, the next one still loads */
+    assert(parse("[mine/bad]\ncaller = X\nthem: semi; colon\n\n[mine/c]\ncaller = Y\naya: Fine.\n") == 1);
+    assert(s_problems == 2 && s_problem_line == 3 && strstr(s_problem, "semi; colon"));
+    assert(!strcmp(s_store.calls[s_store.call_count - 1].key, "mine/c"));
+    assert(parse("[mine/d]\ncaller = X\ntone = loud\nthem: Hi.\n") == 0 && s_problem_line == 3);
+    assert(parse("[mine/e]\nthem: Hi.\n") == 0 && strstr(s_problem, "no caller"));
+    assert(parse("[mine/f]\ncaller = X\n") == 0 && strstr(s_problem, "no lines"));
+    assert(parse("[mine/a]\ncaller = X\nthem: Hi.\n") == 0 && strstr(s_problem, "already used"));
+    assert(parse("[no slash]\ncaller = X\nthem: Hi.\n") == 0);
+    assert(parse("them: Hi.\n") == 0 && strstr(s_problem, "outside any call"));
+    assert(parse("[mine/g]\ncaller = X\nday = 9\nthem: Hi.\n") == 0);
+    assert(parse("[mine/h]\ncaller = X\nshout: Hi.\n") == 0);
+    assert(parse("[mine/i]\ncaller = X\ncolour = red\nthem: Hi.\n") == 1 && strstr(s_problem, "unknown setting"));   /* kept */
+}
+
+/* ---- the game's own pack (calls/pe1.txt) ---- */
+
+static const PePhoneCall *s_pack[PE_PHONE_STORE_CALLS];
 static int s_pack_count;
-static int fake_add(const PePhoneCall *c) { s_pack[s_pack_count++] = c; return 0; }
+
+static void load_pe1(void) {
+    static char text[256 * 1024];
+    FILE *f = fopen(PE_PHONE_CALLS_FILE, "rb");
+    size_t n;
+    int i;
+    assert(f);
+    n = fread(text, 1, sizeof text, f);
+    fclose(f);
+    pe_phone_store_clear(&s_store);
+    s_problems = 0;
+    assert(pe_phone_parse_calls(&s_store, "pe1.txt", text, (unsigned)n, on_problem, NULL) == s_store.call_count);
+    assert(s_problems == 0);
+    for (i = 0; i < s_store.call_count; ++i) s_pack[i] = &s_store.calls[i];
+    s_pack_count = s_store.call_count;
+}
 
 static void test_pe1_pack(void) {
-    static const PePhoneCallsApi api = {fake_add, NULL, NULL, NULL, NULL};
     static PePhoneScript s;
     PePhoneRecord r;
     PePhoneContext sewer = {32, 0x68, 1, 3}, park = {87, 0xF8, 2, 3}, carnegie = {1, 0x40, 1, 3};
     int i, k, funny = 0;
-    pe_calls_pe1_register(&api);
+    load_pe1();
     assert(s_pack_count == 23);
     memset(&r, 0, sizeof r);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, 0)->key, "pe1/sewer_emergency"));
@@ -204,11 +275,13 @@ static void test_pe1_pack(void) {
 }
 
 int main(void) {
+    setvbuf(stdout, NULL, _IONBF, 0);
     test_text_ok();
     test_script();
     test_save_question();
     test_record();
     test_pick();
+    test_call_file();
     test_pe1_pack();
     puts("pe_phone: all checks passed");
     return 0;

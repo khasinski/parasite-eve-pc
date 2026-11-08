@@ -13,9 +13,11 @@
  *   pe_phone_box.c      the game side of showing it: our dialogue box, field lock, pad, font
  *   pe_phone_sound.c    the phone's own sounds: pick up and dial, put down
  *   pe_phone_hold.c     keeping Aya at the phone (receiver at her ear) until the call ends
- *   pe_calls_pe1.c      Parasite Eve's own calls: a pack like any other
+ *   pe_phone_packs.c    call files: the built-in calls/pe1.txt and the pe_calls folder's *.txt
+ *   calls/pe1.txt       Parasite Eve's own calls, as text anyone can read and change
  *
- * and the pure core (pe_phone_core.h: text and pages, the record, picking), which tests link alone. */
+ * and the pure core (pe_phone_core.h: reading call files, text and pages, the record, picking),
+ * which tests link alone. */
 
 #include "pe_phone_core.h"
 
@@ -57,7 +59,9 @@ void pe_phone_spot_status(char *out, unsigned size);   /* the last phone seen, f
 
 /* ---- the flow (pe_phone_flow.c) ---- */
 void pe_phone_flow_register(const char *mod_id);
-void pe_phone_flow_debug(int mode);                    /* PE_PHONE_ASK or PE_PHONE_ALWAYS at the next settled frame */
+/* PE_PHONE_ASK or PE_PHONE_ALWAYS at the next settled frame; key: that call (NULL: picked as usual) */
+void pe_phone_flow_debug(int mode, const char *key);
+int pe_phone_flow_busy(void);                          /* the question or a call is up */
 int pe_phone_flow_check_calls(void);                   /* every call laid out with the game's font; problems logged */
 
 /* ---- the game side (pe_phone_box.c) ---- */
@@ -95,7 +99,11 @@ int pe_phone_hold_pose(int room);                      /* not held: the phone's 
 void pe_phone_hold_tick(void);                         /* every frame: puts a pose on once the lock settled */
 void pe_phone_hold_forget(void);                       /* room load / loaded save: nothing to undo */
 
-/* ---- the game's own calls (pe_calls_pe1.c) ---- */
-void pe_calls_pe1_register(const PePhoneCallsApi *api);
+/* ---- call files (pe_phone_packs.c; the format: calls/pe1.txt) ---- */
+int pe_phone_packs_load(void);                         /* (re)read the built-in and pe_calls' .txt files; problems */
+int pe_phone_packs_problems(void);
+int pe_phone_packs_open_folder(void);                  /* the pe_calls folder in the system's file browser */
+int pe_phone_calls_add_loaded(const PePhoneCall *call);   /* pe_phone_service.c: a call from a file */
+void pe_phone_calls_drop_loaded(void);                 /* forget every call from a file (before a reload) */
 
 #endif

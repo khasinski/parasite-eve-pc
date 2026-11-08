@@ -24,6 +24,7 @@ static int s_state = ST_IDLE;
 static int s_token = -1;
 static int s_wait;
 static int s_force;                    /* debug: PE_PHONE_ASK or PE_PHONE_ALWAYS whatever the setting, or -1 */
+static char s_force_key[64];           /* debug: play this call ("" picks as usual) */
 static PePhoneSpot s_spot;
 static const PePhoneCall *s_call;
 static int s_page, s_hung_up, s_checked;
@@ -37,6 +38,7 @@ static void pe_to_idle(void) {
     s_state = ST_IDLE;
     s_wait = 0;
     s_force = -1;
+    s_force_key[0] = 0;
     s_call = NULL;
     pe_phone_spot_quiet(0);
 }
@@ -92,7 +94,7 @@ static void pe_start_call(void) {
     x.story = s_spot.story;
     x.day = pe_phone_story_day(s_spot.story);
     x.tone_mask = pe_phone_tone_mask();
-    s_call = pe_phone_calls()->pick(&x);
+    s_call = s_force_key[0] ? pe_phone_calls()->find(s_force_key) : pe_phone_calls()->pick(&x);
     pe_phone_script_build(&s_script, s_call, pe_phone_font_advance);
     s_hung_up = 0;
     if (!pe_show_page(0)) { pe_end("no box free"); return; }
@@ -215,13 +217,16 @@ int pe_phone_flow_check_calls(void) {
     return bad;
 }
 
-void pe_phone_flow_debug(int mode) {
+void pe_phone_flow_debug(int mode, const char *key) {
     if (!pe_game_loaded()) { pe_toast("Phone: only in a game"); return; }
     if (pe_busy()) return;
     pe_phone_spot_inject();
     s_force = mode;
+    snprintf(s_force_key, sizeof s_force_key, "%s", key ? key : "");
     s_wait = 0;
 }
+
+int pe_phone_flow_busy(void) { return pe_busy(); }
 
 void pe_phone_flow_register(const char *mod_id) {
     s_force = -1;

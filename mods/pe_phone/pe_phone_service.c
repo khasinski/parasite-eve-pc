@@ -12,6 +12,7 @@
 
 static PePhoneRecord s_rec;
 static const PePhoneCall *s_calls[PE_PHONE_MAX_CALLS];
+static unsigned char s_loaded[PE_PHONE_MAX_CALLS];   /* from a call file (reloadable), not a mod's own */
 static int s_count;
 static uint32_t s_rng;
 
@@ -52,8 +53,22 @@ static int api_add(const PePhoneCall *call) {
             pe_mod_log(who, "phone call %s refused: line %d has characters the game can't show", call->key, i + 1);
             return -1;
         }
+    s_loaded[s_count] = 0;
     s_calls[s_count++] = call;
     return 0;
+}
+
+int pe_phone_calls_add_loaded(const PePhoneCall *call) {
+    if (api_add(call) < 0) return -1;
+    s_loaded[s_count - 1] = 1;
+    return 0;
+}
+
+void pe_phone_calls_drop_loaded(void) {
+    int i, n = 0;
+    for (i = 0; i < s_count; ++i)
+        if (!s_loaded[i]) { s_calls[n] = s_calls[i]; s_loaded[n] = 0; ++n; }
+    s_count = n;
 }
 
 static const PePhoneCall *api_find(const char *key) {

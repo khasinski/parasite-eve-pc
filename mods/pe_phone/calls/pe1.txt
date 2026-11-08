@@ -1,0 +1,284 @@
+# Phone Calls: Parasite Eve's own calls
+#
+# After Aya saves at a phone, the game asks "Stay on the line?". On Yes, one of these calls plays,
+# one dialogue box per line. This file is plain text: change any line, add calls, save, then
+# F1 > Phone Calls > Reload calls (or restart the game). Mistakes are listed in pe_mods.log with
+# the file and line; a call with a mistake is left out, the rest still load.
+#
+# Where this file lives: in the game, a copy is in the "pe_calls" folder beside your preferences
+# (F1 > Phone Calls > Open calls folder). Edit that copy. Any other .txt file you put in that
+# folder is loaded too, so your own calls can live in a file of their own (mycalls.txt). Delete
+# pe1.txt there to go back to the calls built into the game.
+#
+# ---- How a call is written ----
+#
+#   [pe1/pizza]                    the call's key, in square brackets: pack/name.
+#                                  Saves remember calls by key, so don't rename one once it's played.
+#                                  Use your own pack name for your calls: [mine/landlord2]
+#   caller = Tony's Pizza          the name shown for the other side
+#   tone = funny                   serious or funny (F1 > Call tone picks which can come up)
+#   day = 1                        story day it can play on: 1 to 6, a range 2-5, or any
+#   them: Tony's Pizza, how can I help?      a line the caller says
+#   aya: Can you deliver to Carnegie Hall?   a line Aya says (shown with the name the player gave her)
+#
+# Optional settings (the default is in brackets):
+#
+#   weight = 2                     how often it comes up next to the others [1]
+#   once = yes                     at most once per playthrough [no]
+#   rooms = 32 75                  only at these phones (room numbers, see below) [any phone]
+#   priority = 10                  above 0: plays first at its phones until heard, before any random call [0]
+#   after = pe1/other              only once that call has been heard [-]
+#   story = 0x80-0xE8              finer than day: the story value range (script variable 74) [any]
+#
+# Text: letters, digits, spaces and . , : ! ? ' - + * % / only (the game's font has nothing
+# else). {name} is Aya's name as the player typed it. Write a line as long as you like: it wraps
+# to the box, three lines a box, and runs on into another box if it has to.
+# F1 > Phone Calls > Writing calls: Try call picks any call by its key and Play it now plays it
+# (no save needed); Check calls measures every call with the game's font.
+#
+# Phone rooms: 20, 42, 59, 64, 75, 87, 97, 99, 112, 126, 138, 154, 163, 176, 184, 195, 196, 237,
+# 238, 266, 276, 325, 340, and 32 (the Day 1 sewer's emergency phone). The room of the last phone
+# you used is shown at F1 > Phone Calls > Last phone.
+#
+# Keep it spoiler-safe: nothing from after the call's day.
+
+
+# ======== Day 1: Carnegie Hall, Christmas Eve ========
+
+[pe1/nypd_desk]
+caller = NYPD Desk
+tone = funny
+day = 1
+weight = 2
+once = yes
+them: 17th Precinct, Sergeant Hall speaking.
+aya: It's Brea. I'm at Carnegie Hall. Send everyone you've got.
+them: Brea, it's Christmas Eve. Everyone I've got is one guy.
+aya: Then send him.
+them: He's eating.
+
+[pe1/daniel_cordon]
+caller = Daniel
+tone = serious
+day = 1
+weight = 2
+once = yes
+them: Aya? We've got the whole block taped off out here.
+aya: Keep everyone out. Whatever this is, it isn't over.
+them: Then get out of there.
+aya: Not yet.
+
+[pe1/pizza]
+caller = Tony's Pizza
+tone = funny
+day = 1
+them: Tony's Pizza, how can I help?
+aya: Can you deliver to Carnegie Hall?
+them: Sure thing. Any special instructions?
+aya: Don't come inside. Ever.
+
+[pe1/wrong_number]
+caller = ???
+tone = funny
+day = 1
+them: Hello? Is this the opera?
+aya: ...Sort of.
+them: Is the show any good?
+aya: The ending was a real scorcher.
+
+
+# ======== Day 1: the sewer's emergency phone (room 32) ========
+
+[pe1/sewer_emergency]
+caller = Emergency Line
+tone = serious
+day = 1
+rooms = 32
+priority = 10
+once = yes
+them: Emergency line. What's the situation?
+aya: Officer Brea, NYPD. I'm in the sewers under Carnegie Hall.
+them: ...The sewers? Ma'am, how did you get down there?
+aya: I followed someone. Send a unit to the gate by the Hall.
+them: Every unit is tied up at the Hall. Hold your position.
+aya: That's not really an option.
+
+[pe1/sewer_static]
+caller = Emergency Line
+tone = funny
+day = 1
+rooms = 32
+weight = 2
+them: ...Hello? You're breaking up.
+aya: I'm underground. Can you hear me?
+them: ...kssh... repeat... kssh...
+aya: Never mind.
+
+
+# ======== Any day ========
+
+[pe1/daniel_checkin]
+caller = Daniel
+tone = serious
+day = 1-5
+them: Aya? Where are you?
+aya: Still inside. I'm fine.
+them: You don't sound fine.
+aya: I'll call you when I'm out.
+
+[pe1/precinct_quiet]
+caller = Desk Sergeant
+tone = serious
+day = any
+them: 17th Precinct.
+aya: Brea. Just checking in.
+them: Copy that, Brea. Stay safe out there.
+
+[pe1/time_line]
+caller = Time Line
+tone = funny
+day = any
+them: At the tone, the time will be... late.
+them: Temperature: rising.
+aya: Thanks. I noticed.
+
+[pe1/landlord]
+caller = Landlord
+tone = funny
+day = any
+them: Miss Brea, your rent is late.
+aya: I'm a little busy saving New York.
+them: New York doesn't pay my rent.
+
+[pe1/salesman]
+caller = Salesman
+tone = funny
+day = any
+them: Ma'am, have you given any thought to fire insurance?
+aya: More than you would believe.
+them: Wonderful! Can I put you down for-
+aya: No.
+
+
+# ======== Day 1 and 2: Christmas ========
+
+[pe1/radio]
+caller = Radio DJ
+tone = funny
+day = 1-2
+them: Congratulations, you're caller nine!
+aya: I'm what?
+them: Name that Christmas song and win a turkey!
+aya: I'm a little busy right now.
+them: Ooh, sorry, that's not it. Merry Christmas!
+
+
+# ======== Day 2 on: the precinct, Wayne, the Chief ========
+
+[pe1/wayne_stock]
+caller = Wayne
+tone = serious
+day = 2-6
+them: Precinct armory. Wayne here.
+aya: It's Aya. Anything new?
+them: Bring me junk and I'll make you something nice.
+
+[pe1/wayne_junk]
+caller = Wayne
+tone = serious
+day = 2-6
+them: Got any more junk for me?
+aya: A bag full. Most of it used to be guns.
+them: Perfect. Bring it on by.
+
+[pe1/dispatch]
+caller = Dispatch
+tone = serious
+day = 2-4
+them: Dispatch. Go ahead.
+aya: Brea, checking in. Anything new?
+them: Calls from all over Manhattan. Animals acting strange.
+aya: Strange how?
+them: The kind nobody wants to write up.
+
+[pe1/baker_status]
+caller = Chief Baker
+tone = serious
+day = 2-5
+them: Brea. Tell me you have good news.
+aya: I'm still standing, sir.
+them: In this city right now, that counts.
+
+[pe1/baker_press]
+caller = Chief Baker
+tone = serious
+day = 2
+weight = 2
+once = yes
+them: The press is camped outside my office, Brea.
+aya: Tell them nothing, sir.
+them: That's all I've been able to tell them.
+
+[pe1/coroner]
+caller = Medical Examiner
+tone = serious
+day = 2
+weight = 2
+once = yes
+them: Medical Examiner's office.
+aya: Did the Carnegie Hall reports come in?
+them: They did. I've never seen anything like them.
+aya: Neither had I. Until last night.
+
+[pe1/hold]
+caller = Switchboard
+tone = funny
+day = 2-5
+them: NYPD switchboard. Please hold.
+aya: ...Hello?
+them: Your call is important to us.
+aya: I'll call back.
+
+[pe1/library]
+caller = Library
+tone = funny
+day = 2-5
+them: Public Library, reference desk.
+aya: Do you have anything on people bursting into flames?
+them: ...Fiction or nonfiction?
+aya: I was hoping you'd tell me.
+
+
+# ======== Day 3 on ========
+
+[pe1/maeda_samples]
+caller = Maeda
+tone = serious
+day = 3-5
+them: Ah, Aya! I was hoping you would call.
+aya: Dr. Maeda. Any news on the samples?
+them: The cells are remarkable. If you find more, bring them to me.
+aya: I'm not carrying anything home for you.
+them: Not even a small one?
+
+[pe1/daniel_coffee]
+caller = Daniel
+tone = serious
+day = 3-5
+them: You eat anything today?
+aya: Does coffee count?
+them: Not three days running, it doesn't.
+
+
+# ======== Day 4 on ========
+
+[pe1/daniel_alone]
+caller = Daniel
+tone = serious
+day = 4-5
+weight = 2
+once = yes
+them: Aya. Whatever happens next, don't do it alone.
+aya: I won't.
+them: I mean it.
+aya: So do I.

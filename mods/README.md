@@ -104,9 +104,28 @@ answering No to the save, asks nothing. Nothing in the game's scripts is patched
 - A real save: the host's `save.committed` event (`PE_EVENT_SAVE_COMMITTED`, from
   `pe_mod_save_committed` once the card file is published). Quick saves and room checkpoints
   never commit, so they never ask.
-- Calls are packs: the `phonecalls` v1 service (host/pe_services.h): `add`, `find`, `pick`,
-  `heard`, `reset`; events `phone.call_start` / `phone.call_end` (ctx: the call). The game's own
-  21 calls are `pe_calls_pe1.c`. A call has a key, caller, tone (serious / funny), lines, weight,
+- **Calls are text files anyone can read and change.** The game's own are
+  `pe_phone/calls/pe1.txt` (its top explains the format), built into the game by CMake. The
+  first start writes a copy to `pe_calls/pe1.txt` beside the preferences; that copy, when present,
+  replaces the built-in calls (delete it to go back), and every other `.txt` in `pe_calls` adds
+  its calls. A call looks like:
+
+  ```
+  [mine/pizza2]            key: pack/name (saves remember it: don't rename)
+  caller = Tony's Pizza
+  tone = funny             serious or funny
+  day = 1                  1 to 6, 2-5, or any
+  rooms = 87               optional: only at these phones
+  priority = 10            optional: plays first there until heard
+  them: Tony's again. You hungry?
+  aya: Not anymore.
+  ```
+
+  Mistakes go to `pe_mods.log` with the file and line; a call with a mistake is left out, the
+  rest load. F1 > Phone Calls > Writing calls: Open calls folder, Reload calls (no restart), Try
+  call (pick any call by key), Play it now / Ask now (no save needed), Check calls (the game's font).
+- Mods can still add calls in code: the `phonecalls` v1 service (host/pe_services.h): `add`,
+  `find`, `pick`, `heard`, `reset`; events `phone.call_start` / `phone.call_end` (ctx: the call). A call has a key, caller, tone (serious / funny), lines, weight,
   `once`, story days (the save screen's Day) or a variable 74 range, phone rooms, priority and
   `after` (rooms, priority and `after` are for phase 2's set calls).
 - Picking: a set call (priority > 0) not heard yet first; else weighted random among the calls
@@ -135,7 +154,7 @@ answering No to the save, asks nothing. Nothing in the game's scripts is patched
   (`pe_phone_use_option`), and its set call `pe1/sewer_emergency` plays first there. Its call has
   no sounds (the sewer's bank has no phone sounds).
 - Settings: Phone calls (Ask after saving / Always call / Off), Call tone (Mixed / Serious only /
-  Funny only), Phone sounds. Debug: Ask now, Call now (no save needed), Check calls.
+  Funny only), Phone sounds.
 
 Files (one job each; they talk only through `pe_phone.h`):
 
@@ -148,10 +167,11 @@ Files (one job each; they talk only through `pe_phone.h`):
 | `pe_phone_box.c` | the game side: our dialogue box, field lock, taking the pad, the font |
 | `pe_phone_sound.c` | the phone's own sounds: pick up and ring, put down |
 | `pe_phone_hold.c` | keeping Aya at the phone, receiver at her ear, until the call ends |
-| `pe_calls_pe1.c` | Parasite Eve's own calls (a pack) |
-| `pe_phone_text.c`, `pe_phone_record.c`, `pe_phone_pick.c` | the pure core (`pe_phone_core.h`): pages and wrapping, the heard record, picking |
+| `calls/pe1.txt` | Parasite Eve's own calls, as text |
+| `pe_phone_packs.c` | call files: the built-in pe1.txt and the `pe_calls` folder, reload, open folder |
+| `pe_phone_file.c`, `pe_phone_text.c`, `pe_phone_record.c`, `pe_phone_pick.c` | the pure core (`pe_phone_core.h`): reading call files, pages and wrapping, the heard record, picking |
 
-`tests/pe_mod_phone_test.c` (CTest `mod-phone`) checks the pure core and the pack without the game;
+`tests/pe_mod_phone_test.c` (CTest `mod-phone`) checks the pure core and `calls/pe1.txt` without the game;
 pe-native-debug's `scenarios/phone_calls.py` checks the game side through real phone saves.
 
 ## Cheats (pe_cheats)

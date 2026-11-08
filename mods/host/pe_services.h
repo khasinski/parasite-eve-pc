@@ -254,7 +254,8 @@ typedef struct PeProfileTransactionsApi {
  * ASCII in the game's glyphs (letters, digits, space and . , : ! ? ' - + * % /); "{name}" is the
  * name the player gave Aya. Aya's lines are drawn "{name}: text", the caller's "caller: text".
  * Packs register at their init (list "pe_phone" in requires); the game's own calls are a pack too
- * (pe_phone/pe_calls_pe1.c). Keys are saved in the player's save ("pe1/pizza"): never rename one.
+ * (pe_phone/calls/pe1.txt, read as text; players add .txt files in their pe_calls folder). Keys are
+ * saved in the player's save ("pe1/pizza"): never rename one.
  * Events: "phone.call_start" and "phone.call_end", ctx the PePhoneCall. */
 enum { PE_CALL_AYA = 0, PE_CALL_CALLER = 1 };
 enum { PE_CALL_SERIOUS = 0, PE_CALL_FUNNY = 1 };

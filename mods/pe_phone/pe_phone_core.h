@@ -80,6 +80,31 @@ int pe_phone_record_once(const PePhoneRecord *record, const char *key);     /* a
 int pe_phone_record_heard(const PePhoneRecord *record, const char *key);    /* either */
 void pe_phone_record_played(PePhoneRecord *record, const PePhoneCall *call);
 
+/* ---- call files (pe_phone_file.c) ---- */
+
+/* Calls written as text (mods/pe_phone/calls/pe1.txt explains the format). Parsed calls live in a
+ * PePhoneStore until it is cleared; a call with a mistake is left out and reported. */
+#define PE_PHONE_STORE_CALLS 256
+#define PE_PHONE_STORE_LINES 3072
+#define PE_PHONE_STORE_ROOMS 512
+#define PE_PHONE_STORE_TEXT  (128 * 1024)
+
+typedef struct PePhoneStore {
+    PePhoneCall calls[PE_PHONE_STORE_CALLS];
+    PePhoneLine lines[PE_PHONE_STORE_LINES];
+    short rooms[PE_PHONE_STORE_ROOMS];
+    char text[PE_PHONE_STORE_TEXT];
+    int call_count, line_count, room_count, text_used;
+} PePhoneStore;
+
+/* A mistake: the file's name, its line (1-based) and what is wrong. */
+typedef void (*PePhoneProblem)(void *user, const char *file, int line, const char *what);
+
+void pe_phone_store_clear(PePhoneStore *store);
+/* Parses `size` bytes of `src` (named `file` in problems) into the store. Returns the calls added. */
+int pe_phone_parse_calls(PePhoneStore *store, const char *file, const char *src, unsigned size,
+                         PePhoneProblem problem, void *user);
+
 /* ---- picking (pe_phone_pick.c) ---- */
 
 /* Does `call` fit here: tone, story day and range, phone room, `after` heard, a once call not heard. */
