@@ -232,7 +232,7 @@ class PelangTest(unittest.TestCase):
         self.assertTrue(raw.endswith(b"\xf9"))
         choices = entries[pelang.fnv1a("dlg/M001/002")]
         self.assertIn(b"\xfb\x09\x02", choices)
-        self.assertEqual(int.from_bytes(out.read_bytes()[4:8], "little"), 2)
+        self.assertEqual(int.from_bytes(out.read_bytes()[4:8], "little"), 4)  # stretches: version 4
 
     def test_shipped_chinese_preview_fits_eight_character_player_names(self):
         font = os.getenv("PE_TEST_CJK_FONT")

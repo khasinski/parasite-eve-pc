@@ -121,7 +121,10 @@ int main(int argc, char **argv) {
         PeLangPack pack;
         wr_record(letters, 0x3B1, 0x60, 8, 0xFF); letters[8] = 0x21;
         wr_record(letters + 80, 0x103, 0xE0, 0, 0x30); letters[88] = 1; letters[90] = 3;
-        assert(!pe_lang_pack_parse(&pack, with_letters(v1, small_size, letters, 2, &v3_size), v3_size));
+        /* (built first: C leaves the order of a call's arguments open, so v3_size must be set
+         * before the call that reads it) */
+        unsigned char *v3 = with_letters(v1, small_size, letters, 2, &v3_size);
+        assert(!pe_lang_pack_parse(&pack, v3, v3_size));
         assert(pack.letter_count == 2 && pack.unicode && pack.count == 1);
         assert(pack.unicode[0x60] == 0x3B1 && pack.unicode[0xE0] == 0x103 && pack.unicode[0x10] == 'A');
         assert(pe_lang_pack_has_letter(&pack, 0xE0) && !pe_lang_pack_has_letter(&pack, 0x61));
@@ -147,7 +150,8 @@ int main(int argc, char **argv) {
             unsigned char bad[160];
             memcpy(bad, letters, sizeof bad);
             bad[damage[i].at] = (unsigned char)damage[i].value;
-            assert(pe_lang_pack_parse(&pack, with_letters(v1, small_size, bad, 2, &v3_size), v3_size));
+            unsigned char *damaged = with_letters(v1, small_size, bad, 2, &v3_size);
+            assert(pe_lang_pack_parse(&pack, damaged, v3_size));
         }
         unsigned char *cut = with_letters(v1, small_size, letters, 2, &v3_size);
         assert(pe_lang_pack_parse(&pack, cut, v3_size - 1));                 /* a record cut short */
