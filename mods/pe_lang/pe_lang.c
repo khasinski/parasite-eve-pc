@@ -77,6 +77,23 @@ static int on_text_lookup(void *ctx, void *user) {
         for (const unsigned char *p = text; *p != 0xFF; ++p)
             if (Pe_ExtendedGlyph(p, NULL) || pe_lang_pack_has_letter(active_pack(), *p)) return 0;
     }
+    if (lookup->table == 4 && lookup->index >= 0x73 && lookup->index <= 0x75 && active_pack()) {
+        /* A name entry grid: its cells on codes a pack draws as its own letters stay empty, as in
+         * English, so none of those codes shows or reaches a save (pe_lang_grid_blank). */
+        static unsigned char grids[3][512];
+        static const PeLangPack *logged;
+        unsigned char *grid = grids[lookup->index - 0x73];
+        const unsigned char *from = text ? text : *lookup->text;
+        int blanked = from ? pe_lang_grid_blank(from, grid, sizeof grids[0]) : -1;
+        if (blanked > 0) {
+            text = grid;
+            if (logged != active_pack()) {
+                logged = active_pack();
+                pe_mod_log(MOD_ID, "names: %s: %d name entry grid cells kept empty, as in English (sys/%03u)",
+                           s_labels[active_pack() - s_packs], blanked, lookup->index);
+            }
+        }
+    }
     if (text) *lookup->text = (void *)text;
     return 0;
 }
@@ -329,26 +346,25 @@ static int dictionary_index(const PeLangPack *pack, unsigned letter) {
     }
     return -1;
 }
-/* How far the pen moves after the table's letter with no code `k`, as petext/letters.py measures
- * it: the dialogue box's advance, or in menus the cell's first column, drawn width and a pixel. */
-static unsigned extra_advance(const PeLangPack *pack, unsigned k, unsigned style) {
-    const unsigned char *r = pe_lang_pack_extra(pack, k);
-    if (style == PE_TEXT_MENU) {
-        unsigned m;
-        if (!g_ResidentDataPack.directory.glyphMetrics) return 12;
-        m = pe_lang_letter_metric(r, &g_ResidentDataPack.bytes[g_ResidentDataPack.directory.glyphMetrics]);
-        return (m & 15) + (m >> 4) + 1;
-    }
+/* How far the pen moves after the table's letter with no code `k` in the dialogue box, as
+ * petext/letters.py measures it. */
+static unsigned extra_advance(const PeLangPack *pack, unsigned k) {
     unsigned char advance[78];
     for (unsigned i = 0; i < 78; ++i) advance[i] = g_TextboxGlyphSpacing[i].right;
-    return pe_lang_letter_advance(r, advance);
+    return pe_lang_letter_advance(pe_lang_pack_extra(pack, k), advance);
+}
+/* Its menus' metrics byte (drawn width << 4 | first column), 0 before the game loads its own. */
+static unsigned extra_metric(const PeLangPack *pack, unsigned k) {
+    if (!g_ResidentDataPack.directory.glyphMetrics) return 0;
+    return pe_lang_letter_metric(pe_lang_pack_extra(pack, k),
+                                 &g_ResidentDataPack.bytes[g_ResidentDataPack.directory.glyphMetrics]);
 }
 
 static int on_text_letter(void *ctx, void *user) {
     PeHookTextLetter *l = ctx;
     const PeLangPack *pack = active_pack();
     const unsigned *codes;
-    unsigned cell = 0x2C;
+    unsigned cell = 0x2C, metric = 0;
     int index;
     (void)user;
     if (!pack) return 0;
@@ -369,10 +385,17 @@ static int on_text_letter(void *ctx, void *user) {
     codes = pack->unicode ? pack->unicode : kPeTextUnicode;
     for (unsigned code = 0x4D; code < 0xF1; ++code)
         if (codes[code] == l->letter && s_font_added) { l->code = (int)code; return 1; }
-    /* a table letter with no code, made in the letter cache like a dictionary letter */
+    /* a table letter with no code, made in the letter cache like a dictionary letter; menus cut it
+     * as they cut the game's own letters: from its first inked column, its drawn width and a pixel */
     index = pe_lang_pack_extra_index(pack, l->letter);
     if (index >= 0) {
-        l->advance = extra_advance(pack, (unsigned)index, l->style);
+        if (l->style == PE_TEXT_MENU) {
+            metric = extra_metric(pack, (unsigned)index);
+            if ((metric & 15) >= 12 || !(metric >> 4)) metric = 0;
+            l->advance = metric ? (metric >> 4) + 1 : 12;
+        } else {
+            l->advance = extra_advance(pack, (unsigned)index);
+        }
         text_log_follow(pack);
         if (l->draw && !(s_uncoded_logged & 1u << l->style)) {
             s_uncoded_logged |= 1u << l->style;
@@ -393,9 +416,15 @@ static int on_text_letter(void *ctx, void *user) {
             s_cjk_warned = 1;
         }
         cell = 0x2C;
+        metric = 0;
     }
     l->u = (unsigned char)(cell % 21 * 12);
     l->v = (unsigned char)(cell / 21 * 12);
+    if (metric) {                                /* the cut, kept inside the cell */
+        unsigned first = metric & 15, width = metric >> 4;
+        l->u = (unsigned char)(l->u + first);
+        l->w = (unsigned char)(width < 12 - first ? width : 12 - first);
+    }
     return 1;
 }
 

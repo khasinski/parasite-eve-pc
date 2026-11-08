@@ -279,6 +279,13 @@ def cmd_pseudo(a) -> int:
     return 0
 
 
+def empty_grid_cells(text: str) -> str:
+    """A rename grid's {gXX} cells on codes 4D-EF as spaces. English draws them empty, but a pack
+    puts its own letters on those codes, which a pick would save (pe_lang_grid_blank does the same
+    to the grid the game shows)."""
+    return re.sub(r"\{g([0-9A-Fa-f]{2})\}", lambda m: " " if 0x4D <= int(m[1], 16) < 0xF0 else m[0], text)
+
+
 def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], name_px: int = layout.NAME_WIDTH,
               metrics: bytes | None = None, layouts: dict | None = None, wrap: bool = True, atlas=None,
               name_letters: bool = True):
@@ -287,6 +294,8 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
     (menu_glyphs.json), without which menu text is only compared with the English. wrap: a
     dialogue page that overflows its box gets line breaks and screens (petext/wrap.py)."""
     errors, warnings = [], []
+    if key in namelib.GRIDS:
+        text = empty_grid_cells(text)
     try:
         raw = gt.encode(text, extended=True, cjk_codes=atlas.codes if atlas else None)
     except (ValueError, TypeError, OverflowError) as e:

@@ -103,3 +103,17 @@ int pe_lang_name_save_pack(const PeLangPack *packs, unsigned count, const PeLang
         if (pe_lang_name_fits(&packs[i], letters, letter_count, room)) return (int)i;
     return -1;
 }
+
+int pe_lang_grid_blank(const unsigned char *grid, unsigned char *out, unsigned room) {
+    unsigned end = 0, at = 0;
+    int blanked = 0;
+    while (end < room && grid[end] != 0xFF) ++end;
+    if (end == room) return -1;
+    memcpy(out, grid, end + 1);
+    while (at < end) {
+        if (is_page(out[at]) && at + 1 < end) { at += 2; continue; }
+        if (out[at] >= ENGLISH_CODES && out[at] < 0xF0) { out[at] = 0x0F; ++blanked; }
+        ++at;
+    }
+    return blanked;
+}

@@ -117,6 +117,17 @@ class Measure(unittest.TestCase):
         gt.PACK_LETTERS.update(table.by_code)
         self.assertEqual(menu.width(table.codes["ă"] + b"\xff", metrics), 8)
 
+    def test_menus_measure_a_letter_with_no_code_as_a_coded_one(self):
+        metrics = bytes([7 << 4 | 2] * 512)             # every cell 7 wide from its column 2
+        table = table_for("ă")
+        gt.PACK_LETTERS.update(table.by_code)
+        gt.PACK_EXTRA[letters.extra_token(0)] = letters.CATALOG["ă"]
+        try:
+            self.assertEqual(menu.width(letters.extra_token(0) + b"\xff", metrics), 8)
+            self.assertEqual(menu.width(table.codes["ă"] + b"\xff", metrics), 8)
+        finally:
+            gt.PACK_EXTRA.clear()
+
 
 class Packs(unittest.TestCase):
     def setUp(self):

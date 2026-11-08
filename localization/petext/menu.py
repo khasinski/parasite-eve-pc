@@ -36,9 +36,9 @@ def width(raw: bytes, metrics: bytes) -> int:
     i = 0
     while i < len(raw):
         c = raw[i]
-        if raw[i:i+4] in gt.PACK_EXTRA:      # drawn from a cache cell: the cell from its left edge
+        if raw[i:i+4] in gt.PACK_EXTRA:      # a cache cell, cut as a coded letter: drawn width + 1
             m = gt.PACK_EXTRA[raw[i:i+4]].metric(metrics)
-            w += (m & 15) + (m >> 4) + 1
+            w += (m >> 4) + 1 if m >> 4 and (m & 15) < 12 else 12
             page = 0
             i += 4
             continue

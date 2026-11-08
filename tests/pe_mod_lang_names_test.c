@@ -77,6 +77,19 @@ int main(void) {
     const uint32_t nobody[] = {0x5D0};                                         /* no pack has it */
     assert(pe_lang_name_save_pack(packs, 3, &packs[2], nobody, 1, 12) == -1);
     assert(pe_lang_name_save_pack(packs, 3, &packs[2], greek, 0, 12) == -1);
-    puts("Passed name checks: pack letters both ways, plain English, window room kept, saved name's pack found.");
+    /* a name entry grid: cells on codes 4D-EF made empty; English letters, name letters (whose
+     * second byte may be one of those codes) and control codes stay */
+    {
+        const unsigned char grid[] = {0x10, 0x4D, 0x0F, 0xFB, 0x4D, 0xEF, 0xF0, 0xF3, 0x4C, 0xFE, 0xA0, 0x80, 0xFF};
+        const unsigned char empty[] = {0x10, 0x0F, 0x0F, 0xFB, 0x4D, 0x0F, 0xF0, 0xF3, 0x4C, 0xFE, 0xA0, 0x0F, 0xFF};
+        unsigned char out[sizeof grid + 1];
+        memset(out, 0xAA, sizeof out);
+        assert(pe_lang_grid_blank(grid, out, sizeof grid) == 3);
+        assert(!memcmp(out, empty, sizeof empty) && out[sizeof grid] == 0xAA);
+        assert(pe_lang_grid_blank(grid, out, sizeof grid - 1) == -1);              /* no FF within room */
+        assert(pe_lang_grid_blank(plain, out, 12) == 0 && pe_lang_name_same(out, plain, 12));
+    }
+    puts("Passed name checks: pack letters both ways, plain English, window room kept, saved name's pack found, "
+         "grid cells no pack shares kept empty.");
     return 0;
 }

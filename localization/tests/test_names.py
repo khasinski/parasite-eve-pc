@@ -38,6 +38,20 @@ class NamesTest(unittest.TestCase):
         _, _, errors = names.convert_entries({"sys/030": gt.encode("éééé", extended=True) + gt.encode("Ayam")})  # 12
         self.assertEqual(errors, [])
 
+    def test_grid_cells_english_draws_empty_stay_empty(self):
+        # sys/117's {g4D} (between ',' and '?') is an empty cell in English; a pack draws its own
+        # letter on that code, so the cell is a space, not that letter ('à' as a name letter)
+        english = ",{g4D} ?{g0D}"
+        source = {"text": english, "english_hash": ""}
+        self.assertEqual(pelang.empty_grid_cells("é{g4D}{gEF}{g4C}{gF0}{xF3}"), "é  {g4C}{gF0}{xF3}")
+        raw, errors, _ = pelang.check_row("sys/117", "é" + english, source, {})
+        self.assertEqual(errors, [])
+        self.assertEqual(raw, gt.encode("é,  ?", extended=True) + b"\x0d")
+        out, table, errors = names.convert_entries({"sys/117": raw})
+        self.assertEqual((out["sys/117"], table.letters, errors), (b"\xfb\x01" + gt.encode(",  ?") + b"\x0d", ["é"], []))
+        # other text keeps its tags
+        self.assertEqual(pelang.check_row("sys/030", "A{g4D}", {"text": "Aya", "english_hash": ""}, {})[0][1], 0x4D)
+
     def test_pack_holds_name_letters(self):
         entries, table, _ = names.convert_entries({"sys/030": gt.encode("Ayé", extended=True)})
         entries, runs = stretch.convert_entries(entries)

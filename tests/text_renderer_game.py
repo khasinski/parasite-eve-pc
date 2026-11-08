@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,save,menus,many]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,save,menus,many,menu-letters]]
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -26,12 +26,17 @@ Checks, each from pe_mods.log and frame dumps:
   menus      Greek, against the same steps with every mod off: the game's own name entry (it opens
              after the profile box) draws the pack's grid letters (sys/117) and Aya's name in its
              name letters; Cross on the first cell adds the pack's first grid letter, two-byte, to
-             the name; after it, the status panel (Triangle in the field) shows the name in the
-             pack's letters, and the save of that moment holds it.
+             the name; the grid's {g4D} cell stays empty as in English (no pack letter there); after
+             it, the status panel (Triangle in the field) shows the name in the pack's letters, and
+             the save of that moment holds it.
   many       A pack with all of petext/letters.py's catalog, more letters than the 163 one-byte
              codes: the first box holds only letters with no code, which the mod makes in the
              letter cache. They draw (logged, no '?') and look and space exactly as the same box in
              a pack small enough for every letter to have a code.
+  menu-letters  The same two packs in a menu: the name entry's title (sys/039, a stretch) holds
+             letters with no code in the big pack. They draw in the menu's style (logged, no '?')
+             and look and space exactly as the small pack's title, where every letter has a code.
+             Neither pack translates the grid; the English grid's {g4D} cell stays empty with both.
 """
 import binascii
 import csv
@@ -81,6 +86,12 @@ GRID = (72, 76, 250, 226)       # the name entry's letter grid
 NAME_ENTRY = (126, 42, 172, 60)  # the name being entered, above the grid
 STATUS_NAME = (66, 38, 112, 54)  # Aya's name in the status panel
 STATUS_LEVEL = (68, 60, 100, 76)  # the status panel's "Level" picture, beside the name
+TITLE = (8, 14, 200, 34)        # the name entry's title, "Enter Name" (sys/039)
+EMPTY_CELL = (134, 198, 152, 215)  # sys/117's {g4D} cell, between ',' and '?': English draws it empty
+# The boxes after the first one up to the free field stay English in the test packs, so they have
+# as many pages as the English run's and MENU_STEPS's presses fit both; the sample's words for a
+# box change whenever the extracted keys do. dlg/M001/010 still shows {name} in name letters.
+ENGLISH_BOXES = tuple(f'dlg/M001/{n:03d}' for n in range(10, 20))
 
 MODS = ('Cheats', 'PE Enhancements: collection', 'PE Enhancements: economy', 'Hello (example)',
         'PE Enhancements: quality of life', 'Quick save', 'PE Enhancements: rebalance',
@@ -126,7 +137,7 @@ def make_packs(localization, discs, out):
         subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'sample', '-o', str(sample),
                         str(strings), code], check=True, stdout=subprocess.DEVNULL)
         with sample.open(encoding='utf-8') as f:
-            rows = [r for r in csv.DictReader(f) if r['key'] not in ('sys/030', 'sys/117')]
+            rows = [r for r in csv.DictReader(f) if r['key'] not in ('sys/030', 'sys/117') + ENGLISH_BOXES]
         rows.append({'key': 'sys/117', 'translation': grid(entries['sys/117'], letters), 'notes': 'test grid'})
         rows.append({'key': 'sys/030', 'translation': default, 'notes': 'test name'})
         with sample.open('w', encoding='utf-8', newline='') as f:
@@ -158,24 +169,26 @@ def grid(english, letters):
 
 
 def make_many_packs(localization, out):
-    """Two packs with the same first box (dlg/M001/009), whose letters come from letters.py's catalog:
-    'many' holds the whole catalog (243 letters, 80 past the 163 one-byte codes). The box's letters
-    are each used once, every other letter in later boxes many times, so build gives the codes to
-    those and none to the box's. 'few' holds only the box's letters, so all of them have codes."""
+    """Two packs with the same first box (dlg/M001/009) and name entry title (sys/039), whose letters
+    come from letters.py's catalog: 'many' holds the whole catalog (243 letters, 80 past the 163
+    one-byte codes). The box's and the title's letters are each used once, every other letter in
+    later boxes many times, so build gives the codes to those and none to the box's or the title's.
+    'few' holds only the box and the title, so all of their letters have codes."""
     from petext import letters
     catalog = ''.join(ch for ch in letters.CATALOG if ch.isalpha())
     rare, common = catalog[::3][:80], ''.join(ch for ch in catalog if ch not in catalog[::3][:80])
     check(len(rare) + 163 <= len(catalog), f'the catalog has only {len(catalog)} letters')
     words = [rare[i:i + 5] for i in range(0, 60, 5)]
     box = '{br}'.join(' '.join(words[i:i + 4]) for i in range(0, 12, 4))
+    title = f'{rare[60:65]} {rare[65:70]}'
     strings = out / 'text' / 'strings.json'
     keys = [e['key'] for e in json.loads(strings.read_text(encoding='utf-8'))
             if e['key'].startswith('dlg/') and not e['key'].startswith('dlg/M001/') and '{' not in e['text']]
-    later = [rare[60:]] + [(common * 3)[i:i + 20] for i in range(0, 3 * len(common), 20)]
+    later = [rare[70:]] + [(common * 3)[i:i + 20] for i in range(0, 3 * len(common), 20)]
     check(len(keys) >= len(later), 'too few dialogue entries on the disc')
     made = {}
-    for which, rows in (('many', [('dlg/M001/009', box)] + list(zip(keys, later))),
-                        ('few', [('dlg/M001/009', box)])):
+    shared = [('dlg/M001/009', box), ('sys/039', title)]
+    for which, rows in (('many', shared + list(zip(keys, later))), ('few', shared)):
         table = out / f'{which}.csv'
         with table.open('w', encoding='utf-8', newline='') as f:
             w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
@@ -186,7 +199,7 @@ def make_many_packs(localization, out):
                         '--strings', str(strings), '--lang', 'xx', '--name', f'Letters {which}', '-o', str(pack),
                         str(table)], check=True, stdout=subprocess.DEVNULL)
         made[which] = ('xx', f'Letters {which}', None, pack)
-    return made, ''.join(words)
+    return made, ''.join(words), title.replace(' ', '')
 
 
 def letter_codes(pack):
@@ -393,7 +406,7 @@ def continue_until(text, limit):
     return drive
 
 
-def main(game, work=None, parts='english,packs,name,save,menus,many'):
+def main(game, work=None, parts='english,packs,name,save,menus,many,menu-letters'):
     disc = os.getenv('PE_TEST_DISC')
     if not disc:
         print('PE_TEST_DISC is not set: skipped')
@@ -500,6 +513,9 @@ def main(game, work=None, parts='english,packs,name,save,menus,many'):
               f'the name entry shows the English name: {work}')
         check(crop(work, 'typed', NAME_ENTRY) != crop(work, 'grid', NAME_ENTRY),
               f'Cross on the grid added no letter to the name: {work}')
+        check(lit(english, 'grid', EMPTY_CELL) == 0, f'the English grid\'s {{g4D}} cell is not empty: {english}')
+        check(crop(work, 'grid', EMPTY_CELL) == crop(english, 'grid', EMPTY_CELL),
+              f'the Greek grid\'s {{g4D}} cell is not empty as in English: {work}')
         print("PASS name entry: the pack's grid letters and Aya's name in its name letters drew")
 
         for label, frame_of in (('English', english), ('Greek', work)):
@@ -513,19 +529,25 @@ def main(game, work=None, parts='english,packs,name,save,menus,many'):
         card = card_from_report(crash_report(work))
         name, window = saved_name(card, greek)
         from petext import alphabets
-        want = greek[2] + alphabets.BY_CODE['el'].letters[0]   # the grid's first cell, as grid() fills it
-        check(name == want, f'the name after the name entry reads "{name}" ({window.hex(" ")}), not "{want}": {work}')
+        # the default name, then the grid's first cell (as grid() fills it) once for each Cross that
+        # reached the grid: one or two, as in the English run, by when the name entry opens
+        first_cell = alphabets.BY_CODE['el'].letters[0]
+        added = name[len(greek[2]):]
+        check(name.startswith(greek[2]) and added and added == first_cell * len(added),
+              f'the name after the name entry reads "{name}" ({window.hex(" ")}), not "{greek[2]}" and '
+              f'"{first_cell}"s: {work}')
         print(f'PASS status: the panel shows Aya\'s name in the pack\'s letters; the save holds "{name}" '
               f'({window.hex(" ")})')
 
     # More letters than the 163 codes: the first box's letters have none and come from the cache.
-    if 'many' in parts:
-        made, box_letters = make_many_packs(localization, out / 'packs')
+    if 'many' in parts or 'menu-letters' in parts:
+        made, box_letters, title_letters = make_many_packs(localization, out / 'packs')
         codes = letter_codes(made['many'][3])
-        check(len(codes) > 163 and all(codes.get(ch) == 0 for ch in box_letters),
-              f'the box\'s letters are not all without a code in {made["many"][3]} ({len(codes)} letters)')
-        check(all(letter_codes(made['few'][3]).get(ch) for ch in box_letters),
-              f'the small pack lacks codes for the box\'s letters: {made["few"][3]}')
+        check(len(codes) > 163 and all(codes.get(ch) == 0 for ch in box_letters + title_letters),
+              f'the box\'s and title\'s letters are not all without a code in {made["many"][3]} ({len(codes)} letters)')
+        check(all(letter_codes(made['few'][3]).get(ch) for ch in box_letters + title_letters),
+              f'the small pack lacks codes for the box\'s or title\'s letters: {made["few"][3]}')
+    if 'many' in parts:
         boxes = {}
         for which, pack in made.items():
             boxes[which] = run_fixed(game, discs, out / f'letters-{which}', first, pack=pack, pad=NEW_GAME)
@@ -542,6 +564,31 @@ def main(game, work=None, parts='english,packs,name,save,menus,many'):
               f'letters without a code look or space unlike coded ones: {boxes["many"]} vs {boxes["few"]}')
         print(f'PASS many letters: {len(codes)} letters; the box\'s {len(box_letters)}, none with a code, drew from '
               'the letter cache the same as coded ones')
+
+    # The same in a menu: the name entry's title, whose letters have no code in the big pack.
+    if 'menu-letters' in parts:
+        grid_at = next(tick for tick, label, _ in MENU_STEPS if label == 'grid')
+        steps = [step for step in MENU_STEPS if step[0] < grid_at] + [(grid_at, 'grid', None)]
+        titles = {}
+        for which, pack in made.items():
+            titles[which] = run_fixed(game, discs, out / f'menu-letters-{which}', steps, pack=pack, pad=NEW_GAME)
+            log = mods_log(titles[which])
+            missing = [line for line in log.splitlines() if 'text: ' in line and "shows '?'" in line
+                       or 'cache unavailable' in line or 'no stretch' in line]
+            check(not missing, f'menu {which}: letters fell back to "?": {missing[:5]}: {titles[which]}')
+            check(lit(titles[which], 'grid', TITLE) > 30, f'menu {which}: no name entry title drawn: {titles[which]}')
+        uncoded = "'s letters with no code in use in menus"
+        check(f"text: {made['many'][1]} (xx){uncoded}" in mods_log(titles['many']),
+              f'no letter without a code drew in a menu: {titles["many"]}')
+        check(uncoded not in mods_log(titles['few']), f'the small pack drew a letter without a code: {titles["few"]}')
+        check(crop(titles['many'], 'grid', TITLE) == crop(titles['few'], 'grid', TITLE),
+              f'menu letters without a code look or space unlike coded ones: {titles["many"]} vs {titles["few"]}')
+        # neither pack translates the grid: the English one's {g4D} cell stays empty with both
+        for which, work in titles.items():
+            check(lit(work, 'grid', EMPTY_CELL) == 0 and 'name entry grid cells kept empty' in mods_log(work),
+                  f'menu {which}: the English grid\'s {{g4D}} cell shows a pack letter: {work}')
+        print(f'PASS menu letters: the name entry title\'s {len(title_letters)} letters, none with a code, drew '
+              'the same as coded ones')
     return 0
 
 

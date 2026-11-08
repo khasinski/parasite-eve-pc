@@ -660,7 +660,7 @@ if(BUILD_TESTING)
                 ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
                 ${CMAKE_BINARY_DIR}/text-renderer-evidence)
             set_tests_properties(original-game-text-renderer PROPERTIES SKIP_RETURN_CODE 77
-                TIMEOUT 600 LABELS "game-assets;mods")
+                TIMEOUT 900 LABELS "game-assets;mods")
         endif()
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)

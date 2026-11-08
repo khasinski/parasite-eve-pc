@@ -387,6 +387,12 @@ that editor (`persistent` in `PE_HOOK_TEXT_LOOKUP`), as for CJK. One limit: the 
 while a pack was in use are read with whatever pack is in use later, so accented letters in a saved
 name can change if the next pack gave those codes away.
 
+The English rename grids also hold raw codes from 0x4D up, which English draws as empty cells
+(`sys/117`'s `{g4D}`, between the comma and the question mark). With a pack in use such a cell would
+show the pack's letter on that code and save it, so `pe_lang` hands the game the grid, the pack's or
+the English one, with those cells as spaces (`pe_lang_grid_blank`), and `build` makes such a tag
+kept in a translated grid a space (`empty_grid_cells`), not the letter the code stands for.
+
 `pe_lang` writes table letters after the Latin and Cyrillic ones, so a letter takes over its code's
 cell. Interface text uses the same table (`pe_lang_text_encode`).
 
@@ -397,7 +403,8 @@ the coded records with code 0, by strictly rising Unicode, and the header's coun
 (at most 163 coded, 57,600 without). A letter with no code reaches the screen only in the text
 renderer's stretches and in name letters: `pe_lang` makes it from its record, on the game's own font
 page, into a free cell of the letter cache (cells 250-440, shared with the CJK dictionary) when it
-is first drawn, with its own advance in dialogue and menus. While building, such a letter is written
+is first drawn, with its own advance in dialogue; menus cut the cell as they cut the game's own
+letters, from the first inked column, as wide as drawn (the `w` of `PE_HOOK_TEXT_LETTER`). While building, such a letter is written
 as `F1 C7 hi lo`; no pack holds that token. `build` refuses one in text that keeps one byte a letter,
 and `--bytes-only` keeps the old limit of 163.
 

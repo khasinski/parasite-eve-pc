@@ -49,4 +49,11 @@ int pe_lang_name_save_pack(const PeLangPack *packs, unsigned count, const PeLang
 /* Whether a name's bytes (to FF) are the same. */
 int pe_lang_name_same(const unsigned char *a, const unsigned char *b, unsigned room);
 
+/* A name entry grid (sys/115-117) while a pack is in use: `grid` (to FF, at most `room` bytes with
+ * the FF) into out, each cell holding one of the codes 4D-EF made a space (0F). English draws those
+ * cells empty, but a pack draws its own letters on them, and a pick would save a code that reads
+ * as another letter with another pack. Two-byte name letters and control codes stay. Returns the
+ * cells made empty, -1 when there is no FF within room (out is then unchanged). */
+int pe_lang_grid_blank(const unsigned char *grid, unsigned char *out, unsigned room);
+
 #endif
