@@ -65,7 +65,7 @@ instructions. Floating point remains in the widescreen camera
 [andruxaster/parasite-eve-psyz](https://github.com/andruxaster/parasite-eve-psyz),
 branch `dc-small-memory`, a fork of khasinski/parasite-eve-psyz taken at the
 commit this game release pins. Dreamcast changes to PsyZ (overridable PGXP
-cache sizes and `PSYZ_NO_PGXP` now, the KallistiOS backend later) go there. After pulling a change
+cache sizes, `PSYZ_NO_PGXP` and the KallistiOS backend) go there. After pulling a change
 to the submodule, run `git submodule sync && git submodule update --init third_party/psyz`.
 
 ## Measurements (8 November 2026, release 0.11)
@@ -84,17 +84,75 @@ Largest game buffers left in the small build: `D_80120D08` (2 MB, the scene
 arena), `D_8010BD00` (2 MB, room textures and mesh packets), the CD/movie
 work area `g_BootDisplayWorkArea` (1 MB), a diagnostic VRAM copy in
 `init.c` (1 MB, not needed on Dreamcast), the memory card screens (0.5 MB),
-the movie buffers (0.34 MB) and several 256 KB tables.
+the movie buffers (0.34 MB) and several 256 KB tables. The VRAM copy is now
+allocated only when a capture is requested.
 
 Estimate for the Dreamcast: game and PsyZ core about 11.3 MB, plus a native
 backend with its 1 MB VRAM copy and KallistiOS, about 12.3 MB of 16 MB.
 Peaks recorded with real discs will show whether the texture workspace and
 the CD work area can be made smaller.
 
+## SH-4 build (KallistiOS)
+
+The game links for the Dreamcast against a stub PsyZ backend
+(`third_party/psyz/psyz/src/dreamcast/`, draws nothing, silent audio) and
+the host in [`platform/dreamcast/`](../platform/dreamcast/README.md):
+
+```sh
+source /opt/toolchains/dc/kos/environ.sh
+cmake -S . -B build-dc -G Ninja -DCMAKE_TOOLCHAIN_FILE=$KOS_CMAKE_TOOLCHAIN \
+  -DCMAKE_BUILD_TYPE=Release -DPE_SMALL_MEMORY=ON
+cmake --build build-dc
+```
+
+Port notes:
+
+- sh-elf GCC makes `int32_t` a `long`. The game declares the same symbols
+  with `int`, `s32` and `int32_t` in different headers, which agree on every
+  desktop target; the Dreamcast build redefines GCC's `__INT32_TYPE__` family
+  as `int` (same size and ABI) instead of touching hundreds of declarations.
+- newlib declares but does not build `flockfile`/`funlockfile`;
+  `platform/dreamcast/dc_libc.c` wraps newlib's per-`FILE` lock.
+- `_GNU_SOURCE` is defined because newlib hides POSIX declarations under
+  `-std=c11` when a file sets `_POSIX_C_SOURCE` after its first include.
+- No frame pointers: they only serve the desktop crash reporter.
+
+Every game, PsyZ core and PsyQ decomp source compiled for the SH-4 with no
+source change beyond the above.
+
+### Measured (GCC 15.2, `-O3`, KallistiOS master, 8 November 2026)
+
+`sh-elf-size build-dc/parasite-eve.elf`:
+
+| text | data | bss | total |
+|---|---|---|---|
+| 1.18 MB | 0.08 MB | 10.54 MB | **11.80 MB** |
+
+By part, from the link map (rounded; padding counted twice):
+
+| Part | Code + rodata | Data | bss |
+|---|---|---|---|
+| Game | 0.91 MB | 0.07 MB | 8.78 MB |
+| PsyZ core + stub backend | 0.17 MB | 0.01 MB | 1.77 MB |
+| KallistiOS | 0.33 MB | 0.01 MB | 0.04 MB |
+| newlib, libgcc | 0.11 MB | — | — |
+
+The ELF loads at `0x8c010000`, so about **4.1 MB** remain for the heap and
+thread stacks. Biggest static buffers: the two 2 MB arenas in `init.c`
+(`D_8010BD00` room textures, `D_80120D08` scene arena), the CD/movie work
+area (1 MB), the backend's VRAM copy (1 MB), the SPU state with its 512 KB
+sound RAM (0.53 MB), the memory card screens (0.5 MB) and the movie buffers
+(0.34 MB).
+
+The SPU's 512 KB copy can move to the AICA's own 2 MB once audio is real,
+and the backend's VRAM copy partly into the PVR's 8 MB.
+
 ## Next steps
 
 1. Record peaks with both discs: several rooms, a battle, a movie, the
-   memory card screen.
-2. Build the game and PsyZ core with `sh-elf-gcc` against a stub backend to
-   get real SH-4 code sizes.
-3. Write the PsyZ backend for KallistiOS, starting from PsyZ's PSP backend.
+   memory card screen (desktop `PE_MEMORY_REPORT=1`, or the Dreamcast build
+   over dc-tool).
+2. Boot the ELF in an emulator or on hardware: it should mount the discs
+   and run the game logic with a black screen.
+3. Write the PVR renderer in `dc_gpu.c`, starting from PsyZ's PSP backend,
+   then AICA audio.

@@ -3,7 +3,8 @@
 `dc_main.c` replaces the desktop `src/main/boot/main.c` on KallistiOS: it
 mounts the two USA disc images and runs the original scene dispatch loop.
 `dc_sdl.c` provides the handful of SDL3 calls the game modules make (save
-files, environment, ticks); SDL itself is not built.
+files, environment, ticks); SDL itself is not built. `dc_libc.c` adds the
+stdio locks newlib declares but does not build.
 
 The PsyZ side lives in `third_party/psyz/psyz/src/dreamcast/`. It is a
 stub backend: the game runs its logic, but nothing is drawn or heard yet.

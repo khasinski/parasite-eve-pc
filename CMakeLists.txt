@@ -68,9 +68,21 @@ if(CMAKE_SYSTEM_NAME STREQUAL "dreamcast")
     if(NOT PE_SMALL_MEMORY)
         message(FATAL_ERROR "The Dreamcast build needs -DPE_SMALL_MEMORY=ON")
     endif()
+    # sh-elf GCC makes int32_t a long; the game and PsyZ mix int, s32 and
+    # int32_t in declarations of the same symbols, as they are on every
+    # desktop target. Same size and ABI, so make int32_t an int here too.
+    add_compile_options(
+        -U__INT32_TYPE__ "-D__INT32_TYPE__=int"
+        -U__UINT32_TYPE__ "-D__UINT32_TYPE__=unsigned int"
+        -U__INT_LEAST32_TYPE__ "-D__INT_LEAST32_TYPE__=int"
+        -U__UINT_LEAST32_TYPE__ "-D__UINT_LEAST32_TYPE__=unsigned int")
+    # newlib hides POSIX calls (flockfile...) under -std=c11 unless asked;
+    # glibc is lenient when a file sets _POSIX_C_SOURCE after other headers.
+    add_compile_definitions(_GNU_SOURCE)
+    set(PE_SDL3_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz/external/SDL/include")
+    include_directories(SYSTEM "${PE_SDL3_HEADERS}")
     add_library(SDL3::SDL3 INTERFACE IMPORTED)
-    set_target_properties(SDL3::SDL3 PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz/external/SDL/include")
+    set_target_properties(SDL3::SDL3 PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${PE_SDL3_HEADERS}")
 endif()
 
 # PsyZ belongs to the original game build, independently of the abandoned frontend.
@@ -89,8 +101,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options("$<$<COMPILE_LANGUAGE:C>:-fno-strict-aliasing>"
         "$<$<COMPILE_LANGUAGE:C>:-ffunction-sections>"
         "$<$<COMPILE_LANGUAGE:C>:-fdata-sections>")
-    # POSIX walks frame chains; Windows uses its native unwind metadata.
-    if(NOT WIN32)
+    # POSIX walks frame chains for crash reports; Windows uses its native
+    # unwind metadata, and the Dreamcast has no crash reporter.
+    if(NOT WIN32 AND NOT PE_DREAMCAST)
         add_compile_options("$<$<COMPILE_LANGUAGE:C>:-fno-omit-frame-pointer>")
     endif()
 elseif(MSVC)
@@ -186,7 +199,8 @@ endif()
 
 # The executable starts the original game and compiles its modules in place.
 if(PE_DREAMCAST)
-    add_executable(parasite-eve-pc platform/dreamcast/dc_main.c platform/dreamcast/dc_sdl.c)
+    add_executable(parasite-eve-pc platform/dreamcast/dc_main.c platform/dreamcast/dc_sdl.c
+        platform/dreamcast/dc_libc.c)
     target_link_libraries(parasite-eve-pc PRIVATE psyz SDL3::SDL3)
     set_target_properties(parasite-eve-pc PROPERTIES OUTPUT_NAME parasite-eve SUFFIX ".elf")
 else()

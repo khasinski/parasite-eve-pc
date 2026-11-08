@@ -187,7 +187,14 @@ static void Boot_WriteHostCaptures(void) {
         _Exit(2);
     }
     if (g_BootHostVramPath) {
-        static _Alignas(8) u16 vram[1024 * 512];
+        /* 1 MB, so only allocated when a capture is requested */
+        const size_t vram_bytes = 1024 * 512 * sizeof(u16);
+        u16 *vram = malloc(vram_bytes);
+        if (!vram) {
+            fprintf(stderr, "Cannot allocate VRAM capture\n");
+            fflush(stderr);
+            _Exit(2);
+        }
         RECT all = {0, 0, 1024, 512};
         StoreImage(&all, vram);
         DrawSync(0);
@@ -197,7 +204,8 @@ static void Boot_WriteHostCaptures(void) {
             fflush(stderr);
             _Exit(2);
         }
-        int written = fwrite(vram, 1, sizeof(vram), out) == sizeof(vram);
+        int written = fwrite(vram, 1, vram_bytes, out) == vram_bytes;
+        free(vram);
         if (fclose(out) != 0 || !written) {
             fprintf(stderr, "Cannot finish VRAM capture\n");
             fflush(stderr);
