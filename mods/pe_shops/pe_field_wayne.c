@@ -91,7 +91,8 @@ static TextboxEntry *s_menu_box;  /* the box showing our menu */
 static int s_pending = -1;        /* storage screen to open: PE_STORE_*, or -1 */
 static int s_pending_wait;        /* frames left before it opens */
 static int s_heard;               /* his lines were heard once this session: later talks skip them */
-static int s_swallow;             /* quiet frames left in which a new talk is the Cross that closed our menu */
+static u8 s_menu_cursor;          /* our menu's row, kept in case a line of his resets the cursor */
+static int s_swallow;           /* quiet frames left in which a new talk is the Cross that closed our menu */
 #define PE_SWALLOW_FRAMES 10
 
 /* Is `e` Warner, with his retail contact task? */
@@ -206,6 +207,7 @@ static void pe_open_menu(void) {
         e->state = PE_TEXTBOX_SHOWN;
         g_DialogueChoiceCursor = 0;
         g_MenuEquipSlotIndex = -1;
+        s_menu_cursor = 0;
         s_menu_box = e;
         pe_field_event(PE_FIELD_LOCK);
         pe_log("field_wayne", "menu shown");
@@ -231,6 +233,17 @@ static int pe_on_textboxes(void *ctx, void *user) {
         s_menu_box = NULL;
         s_swallow = PE_SWALLOW_FRAMES;
         if (s_warner) pe_field_event(PE_FIELD_UNLOCK);
+    }
+    /* The Cross that picks a row can also start his talk this frame, before the boxes draw;
+     * his first line opening resets the shared choice cursor to the top row (Store
+     * equipment). Put our row back so the Cross picks what the player chose. */
+    if (s_menu_box) {
+        if (Draw_GetTextboxPageState(PE_LINE_PAGE_1) || Draw_GetTextboxPageState(PE_LINE_PAGE_2)) {
+            g_DialogueChoiceCursor = s_menu_cursor;
+            g_MenuEquipSlotIndex = -1;
+        } else {
+            s_menu_cursor = g_DialogueChoiceCursor;
+        }
     }
     if (!s_enabled || !pe_shopw_enabled()) {             /* an open menu still unlocks as it closes */
         if (!s_menu_box) pe_forget();
