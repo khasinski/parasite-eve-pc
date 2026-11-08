@@ -93,6 +93,7 @@ u32 g_BootHostVBlankCount;
 u32 g_BootHostControlAt;
 u32 g_BootHostCrashAt;
 int g_BootHostCrashAbort;
+u32 g_BootHostSaveAt;
 void (*g_BootHostHdOptions)(int, const char *);
 void (*g_BootHostGraphicsOptions)(int, int, int);
 const char *g_BootHostVramPath;

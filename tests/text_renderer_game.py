@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,save,menus,many,menu-letters]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters]]
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -19,10 +19,15 @@ Checks, each from pe_mods.log and frame dumps:
              back to '?', and the box differs from the English one.
   name       Greek: the next box starts with Aya's default name in the pack's two-byte name
              letters; they draw (not '?') and the name differs from English "Aya".
-  save       Greek: the game's save of that moment (the crash report's room snapshot, which is
-             what a memory card save holds) keeps the name in the pack's name letters; loading it
-             with Continue, with the Greek pack, reads it back with that pack's letters; with no
-             pack chosen, the mod finds the Greek pack by its letters.
+  save       Greek, after the name entry (the same run as menus): a real save to memory card 1,
+             slot 1 through the game's own save writer (--test-save-after: what the save menu does
+             once a slot is picked, every mod's save step and the checksum) keeps Aya's name in the
+             pack's name letters. A fresh run loads it with Continue: with the Greek pack the name
+             reads back with its letters, a save made then holds the same name bytes, and the
+             status panel draws the name pixel for pixel as the first run did. With no pack chosen
+             (the Greek one beside it) the mod finds the Greek pack by the name's letters and shows
+             the name in the game's own letters; with no pack at all (English) the load works, the
+             name is left as saved and the panel still shows one ('?' for each Greek letter).
   menus      Greek, against the same steps with every mod off: the game's own name entry (it opens
              after the profile box) draws the pack's grid letters (sys/117) and Aya's name in its
              name letters; Cross on the first cell adds the pack's first grid letter, two-byte, to
@@ -92,6 +97,8 @@ EMPTY_CELL = (134, 198, 152, 215)  # sys/117's {g4D} cell, between ',' and '?': 
 # as many pages as the English run's and MENU_STEPS's presses fit both; the sample's words for a
 # box change whenever the extracted keys do. dlg/M001/010 still shows {name} in name letters.
 ENGLISH_BOXES = tuple(f'dlg/M001/{n:03d}' for n in range(10, 20))
+# The real save: Aya is free in front of Carnegie Hall after box7 and before Triangle (field).
+SAVE_AT = 31300
 
 MODS = ('Cheats', 'PE Enhancements: collection', 'PE Enhancements: economy', 'Hello (example)',
         'PE Enhancements: quality of life', 'Quick save', 'PE Enhancements: rebalance',
@@ -223,7 +230,7 @@ def name_letters(pack):
 # ---- The game ----
 
 def run(game, discs, work, pack=None, present=(), mods=True, pad=(), start=None, driver=None, frame_limit=None,
-        crash_after=None, card=None):
+        crash_after=None, card=None, save_after=None):
     """One headless run in its own folder, with `pack` chosen and the `present` packs beside it. From vblank `start` the game pauses at each control point;
     driver(vblank, work) keeps frames (keep()) and returns the next command, or None to quit."""
     work.mkdir(parents=True)
@@ -247,6 +254,8 @@ def run(game, discs, work, pack=None, present=(), mods=True, pad=(), start=None,
         args += ['--control-at', str(start)]
     if crash_after:
         args += ['--test-crash-after', str(crash_after)]
+    if save_after:
+        args += ['--test-save-after', str(save_after)]
     for tick, mask in pad:
         args += ['--pad-at', f'{tick}:{mask}']
     env = dict(os.environ, SDL_AUDIODRIVER='dummy', SDL_AUDIO_DRIVER='dummy', PSYZ_AUDIO_CLOCK='video',
@@ -386,27 +395,44 @@ def saved_name(card, pack):
 CONTINUE = [(10000, START), (10010, 0), (11000, UP), (11010, 0), (11500, DOWN), (11510, 0), (11600, CROSS),
             (11610, 0)]
 CONTINUE_AT = 12500
+# Continue from card 1, slot 1 at fixed moments (as m273_crash_replay.py), then the field: the
+# loaded save starts in front of Carnegie Hall by vblank 15900. A save at LOADED_SAVE_AT holds the
+# loaded name; Triangle opens the status panel.
+LOADED_SAVE_AT = 16100
 
 
-def continue_until(text, limit):
-    """A driver for Continue from card 1, slot 1 (as m273_crash_replay.py), then waiting until
-    pe_mods.log has `text`."""
-    steps = ['advance 1000 0', 'advance 10 16384', 'advance 10 0', 'advance 1000 0', 'advance 10 16384',
-             'advance 10 0', 'advance 1000 0', 'advance 10 4096', 'advance 120 0', 'advance 10 16384',
-             'advance 10 0']
-
-    def drive(vblank, work):
-        if text in mods_log(work):
-            keep(work, 'loaded')
-            drive.found = vblank
-            return None
-        check(vblank < limit, f'"{text}" not logged by vblank {limit}: {work}')
-        return steps.pop(0) if steps else 'advance 300 0'
-    drive.found = None
-    return drive
+def loaded_steps():
+    steps, tick = [], CONTINUE_AT
+    for n, command in enumerate(['advance 1000 0', 'advance 10 16384', 'advance 10 0', 'advance 1000 0',
+                                 'advance 10 16384', 'advance 10 0', 'advance 1000 0', 'advance 10 4096',
+                                 'advance 120 0', 'advance 10 16384', 'advance 10 0']):
+        steps.append((tick, f'continue{n}', command))
+        tick += int(command.split()[1])
+    return steps + [(tick, 'loaded', None), (16300, 'field', 'advance 10 4096'), (16310, 'pressed', None),
+                    (16610, 'status', None)]
 
 
-def main(game, work=None, parts='english,packs,name,save,menus,many,menu-letters'):
+def letters_only(work, label, box):
+    """The box's bright pixels (letters) as they are and every other pixel black: the status panel
+    is see-through, so the scene behind it differs between runs while the letters must not."""
+    pixels = crop(work, label, box)
+    return bytes(b for i in range(0, len(pixels), 3)
+                 for b in (pixels[i:i + 3] if min(pixels[i:i + 3]) > 200 else b'\0\0\0'))
+
+
+def card_file(work):
+    """Card 1, slot 1 as the game wrote it, checked like the card load checks it."""
+    log = (work / 'game.log').read_text(encoding='utf-8', errors='replace')
+    check('Test save: wrote' in log, f'the game did not save: {work}')
+    card = (work / 'bu00' / 'BASLUS-006620000000A').read_bytes()
+    stored = struct.unpack_from('<I', card, 0x1c8c)[0]
+    check(len(card) == 8192 and card[:2] == b'SC'
+          and stored == binascii.crc_hqx(card[:0x1c8c] + bytes(4) + card[0x1c90:], 0xffff) ^ 0xffff,
+          f'the saved card file is not a whole save with its checksum: {work}')
+    return card
+
+
+def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters'):
     disc = os.getenv('PE_TEST_DISC')
     if not disc:
         print('PE_TEST_DISC is not set: skipped')
@@ -464,43 +490,17 @@ def main(game, work=None, parts='english,packs,name,save,menus,many,menu-letters
         check(lit(work, 'name', BOX) > 100, f'no dialogue with the name drawn: {work}')
         print(f"PASS name: Aya's Greek default name drew in the pack's name letters (vblank {named.found})")
 
-    # Save and load: the save keeps the name in the pack's letters; Continue reads it back.
-    if 'save' in parts:
-        saved = run(game, discs, out / 'save-greek', pack=greek, pad=NEW_GAME, frame_limit=NAME_BOX + 1000,
-                    crash_after=NAME_BOX)
-        card = card_from_report(crash_report(saved))
-        name, window = saved_name(card, greek)
-        check(name == greek[2] and any(0xFB <= b <= 0xFE for b in window),
-              f'saved name {window.hex(" ")} reads "{name}", not "{greek[2]}" in name letters: {saved}')
-        print(f'PASS save: the save keeps "{name}" in the pack\'s name letters ({window.hex(" ")})')
-
-        read = f"names: Aya's name read with {greek[1]} ({greek[0]})'s letters ({len(greek[2])} letters)"
-        loaded = continue_until(read, 20000)
-        work = run(game, discs, out / 'load-greek', pack=greek, pad=CONTINUE, start=CONTINUE_AT, driver=loaded,
-                   frame_limit=21000, card=card)
-        check(loaded.found, f'not read back: {work}')
-        check("names: Aya's name put in" not in mods_log(work), f'the name was rewritten for its own pack: {work}')
-        print(f'PASS load: Continue with the Greek pack reads the name with its letters (vblank {loaded.found})')
-
-        # No pack chosen (the Greek one is there): the mod finds it by the name's letters and shows
-        # the name in the game's own letters, '?' for the Greek ones.
-        found = continue_until(read, 20000)
-        work = run(game, discs, out / 'load-no-pack', present=[greek], pad=CONTINUE, start=CONTINUE_AT,
-                   driver=found, frame_limit=21000, card=card)
-        check(found.found, f'the Greek pack was not found by the name\'s letters: {work}')
-        check("names: Aya's name put in the game's own text's letters" in mods_log(work),
-              f'the name was not put in the game\'s own letters: {work}')
-        print('PASS load: with no pack chosen, the Greek pack is found by the name\'s letters')
-
     # The name entry and the status panel, against the same steps with every mod off.
-    if 'menus' in parts:
-        status = MENU_STEPS[-1][0]
-        english = run_fixed(game, discs, out / 'menus-english', MENU_STEPS, mods=False, pad=NEW_GAME)
+    status = MENU_STEPS[-1][0]
+    if 'menus' in parts or 'save' in parts:
         work = out / 'menus-greek'
         driver = fixed(MENU_STEPS[:-1] + [(status, 'status', 'advance 300 0')])
         run(game, discs, work, pack=greek, pad=NEW_GAME, start=FIRST_BOX, driver=driver, frame_limit=status + 400,
-            crash_after=status + 100)
+            crash_after=status + 100, save_after=SAVE_AT)
         check(not driver.steps, f'the run stopped before vblank {driver.steps[0][0] if driver.steps else 0}: {work}')
+        menus_greek = work
+    if 'menus' in parts:
+        english = run_fixed(game, discs, out / 'menus-english', MENU_STEPS, mods=False, pad=NEW_GAME)
         log = mods_log(work)
         missing = [line for line in log.splitlines()
                    if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line)]
@@ -538,6 +538,59 @@ def main(game, work=None, parts='english,packs,name,save,menus,many,menu-letters
               f'"{first_cell}"s: {work}')
         print(f'PASS status: the panel shows Aya\'s name in the pack\'s letters; the save holds "{name}" '
               f'({window.hex(" ")})')
+
+    # A real save after the name entry, loaded back by a fresh run with Continue.
+    if 'save' in parts:
+        saved = menus_greek
+        log = (saved / 'game.log').read_text(encoding='utf-8', errors='replace')
+        at = re.search(r'Test save: wrote .* at VBlank (\d+)', log)
+        check(at and int(at[1]) < next(tick for tick, label, _ in MENU_STEPS if label == 'field'),
+              f'the save was not made in the field before Triangle: {saved}')
+        card = card_file(saved)
+        name, window = saved_name(card, greek)
+        check(name.startswith(greek[2]) and len(name) > len(greek[2]) and any(0xFB <= b <= 0xFE for b in window),
+              f'the saved name {window.hex(" ")} reads "{name}", not the name entry\'s Greek name in name letters: {saved}')
+        print(f'PASS save: the game\'s save writer kept "{name}" in the pack\'s name letters ({window.hex(" ")}, '
+              f'vblank {at[1]})')
+
+        steps = loaded_steps()
+        loads = {}
+        for which, kw in (('greek', {'pack': greek}), ('no-pack', {'present': [greek]}), ('english', {})):
+            loads[which] = run_fixed(game, discs, out / f'load-{which}', steps, pad=CONTINUE, card=card,
+                                     save_after=LOADED_SAVE_AT, **kw)
+            check(lit(loads[which], 'status', STATUS_NAME) > 20
+                  and crop(loads[which], 'status', STATUS_LEVEL) != crop(loads[which], 'field', STATUS_LEVEL),
+                  f'{which}: no status panel after loading the save: {loads[which]}')
+        work = loads['greek']
+        read = f"names: Aya's name read with {greek[1]} ({greek[0]})'s letters ({len(name)} letters)"
+        check(read in mods_log(work), f'the name was not read back with the Greek pack\'s letters: {work}')
+        check("names: Aya's name put in" not in mods_log(work), f'the name was rewritten for its own pack: {work}')
+        again = card_file(work)
+        check(again[0x110:0x11D] == card[0x110:0x11D],
+              f'a save after loading holds {again[0x110:0x11D].hex(" ")}, not {window.hex(" ")}: {work}')
+        check(letters_only(work, 'status', STATUS_NAME) == letters_only(saved, 'status', STATUS_NAME),
+              f'the status panel draws the loaded name unlike before the save: {work} vs {saved}')
+        print('PASS load: Continue with the Greek pack reads the name back; saved again it is the same bytes, and '
+              'the status panel draws it pixel for pixel as before')
+
+        work = loads['no-pack']
+        check(read in mods_log(work), f'with no pack chosen the Greek pack was not found by the name\'s letters: {work}')
+        check("names: Aya's name put in the game's own text's letters" in mods_log(work),
+              f'the name was not put in the game\'s own letters: {work}')
+        check(letters_only(work, 'status', STATUS_NAME) != letters_only(saved, 'status', STATUS_NAME),
+              f'with no pack chosen the panel still draws the Greek letters: {work}')
+        print('PASS load: with no pack chosen, the Greek pack is found by the name\'s letters and the name shown in '
+              'the game\'s own letters')
+
+        work = loads['english']
+        check("names: Aya's name has name letters no loaded pack knows; left as saved" in mods_log(work),
+              f'with no pack the name was not left as saved: {work}')
+        check(card_file(work)[0x110:0x11D] == card[0x110:0x11D],
+              f'with no pack a save after loading changed the name bytes: {work}')
+        check("text: no pack chosen has no name letter FB " in mods_log(work),
+              f'with no pack the name letters were not shown as "?": {work}')
+        print('PASS load: with no pack (English) the save loads, the name is left as saved and the panel shows it '
+              'with "?" for each Greek letter')
 
     # More letters than the 163 codes: the first box's letters have none and come from the cache.
     if 'many' in parts or 'menu-letters' in parts:

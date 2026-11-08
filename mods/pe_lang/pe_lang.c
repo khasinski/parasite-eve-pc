@@ -308,10 +308,20 @@ static int missing_once(const PeLangPack *pack, unsigned key) {
 }
 static int letter_missing(const PeLangPack *pack, unsigned letter, unsigned paged) {
     if (!missing_once(pack, paged ? paged | 0x80000000u : letter)) return 0;
-    if (paged) pe_mod_log(MOD_ID, "text: %s has no name letter %02X %02X; it shows '?'", s_labels[pack - s_packs],
-                          0xFAu + (paged >> 8), paged & 0xFFu);
+    if (paged) pe_mod_log(MOD_ID, "text: %s has no name letter %02X %02X; it shows '?'",
+                          pack ? s_labels[pack - s_packs] : "no pack chosen", 0xFAu + (paged >> 8), paged & 0xFFu);
     else pe_mod_log(MOD_ID, "text: %s has no letter U+%04X; it shows '?'", s_labels[pack - s_packs], letter);
     return 0;
+}
+/* A name letter no pack in use names (a name saved with another pack, or with no pack chosen):
+ * '?', in menus as in dialogue, where the game's cell for that code is blank and the name would
+ * vanish. Only page FB (name letters 1-249): the game's own menu text has no FB letters, but it
+ * does draw other pages' codes (FD 04), which keep the game's cell. */
+static int name_letter_missing(PeHookTextLetter *l, const PeLangPack *pack) {
+    letter_missing(pack, 0, l->paged);
+    if (l->paged >> 8 != 1 || !(l->paged & 0xFFu)) return 0;
+    l->code = 0x2C;
+    return 1;
 }
 
 /* The text renderer (pe1/text_render.h): a stretch's letters, and how a letter draws. The
@@ -367,11 +377,11 @@ static int on_text_letter(void *ctx, void *user) {
     unsigned cell = 0x2C, metric = 0;
     int index;
     (void)user;
-    if (!pack) return 0;
+    if (!pack) return l->paged ? name_letter_missing(l, NULL) : 0;
     if (l->paged) {                              /* a two-byte name letter: its Unicode letter */
         int code;
         l->letter = pe_lang_pack_name_letter(pack, l->paged);
-        if (!l->letter) return letter_missing(pack, 0, l->paged);
+        if (!l->letter) return name_letter_missing(l, pack);
         text_log_follow(pack);
         if (l->draw && !s_name_letter_logged) {
             s_name_letter_logged = 1;
