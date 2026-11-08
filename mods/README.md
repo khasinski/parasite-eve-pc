@@ -119,6 +119,21 @@ answering No to the save, asks nothing. Nothing in the game's scripts is patched
 - Settings: Phone calls (Ask after saving / Always call / Off), Call tone (Mixed / Serious only /
   Funny only). Debug: Ask now, Call now (no save needed), Check calls.
 
+Files (one job each; they talk only through `pe_phone.h`):
+
+| File | Job |
+|---|---|
+| `pe_phone_mod.c` | the mod: descriptor, F1 rows, settings |
+| `pe_phone_service.c` | the `phonecalls` registry and this save's `pe_phone.heard` record |
+| `pe_phone_spot.c` | spotting a phone save: the question page, then `save.committed` |
+| `pe_phone_flow.c` | after the save: "Stay on the line?", then the call page by page |
+| `pe_phone_box.c` | the game side: our dialogue box, field lock, taking the pad, the font |
+| `pe_calls_pe1.c` | Parasite Eve's own calls (a pack) |
+| `pe_phone_text.c`, `pe_phone_record.c`, `pe_phone_pick.c` | the pure core (`pe_phone_core.h`): pages and wrapping, the heard record, picking |
+
+`tests/pe_mod_phone_test.c` (CTest `mod-phone`) checks the pure core and the pack without the game;
+pe-native-debug's `scenarios/phone_calls.py` checks the game side through real phone saves.
+
 ## Cheats (pe_cheats)
 
 F1 > Cheats: God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers.
