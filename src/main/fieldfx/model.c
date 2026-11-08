@@ -224,6 +224,7 @@ void FieldFx_ModelDraw(FieldTexturedModel *model, GteMatrix *placement)
     SetTransMatrix(&sp->matrix);
     SetRotMatrix(&sp->matrix);
     Psyz_GteSetPgxpEffectMode(1);
+#if PE_PGXP
     {
         const GteMatrix *view_mat = (const GteMatrix *)g_GeomScroll.words.viewMatrix;
         double pgxp_rot[3][3];
@@ -244,6 +245,7 @@ void FieldFx_ModelDraw(FieldTexturedModel *model, GteMatrix *placement)
         }
         Psyz_GteSetPgxpMatrix(pgxp_rot, pgxp_trans);
     }
+#endif
     header = &model->header;
     tri = header->tris;
     ft3 = (FieldModelFt3Packet *)(D_800B0E38.packets[g_ActiveDrawSlot] + g_DrawPacketOffset);

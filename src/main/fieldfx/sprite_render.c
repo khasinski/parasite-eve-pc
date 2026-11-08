@@ -333,7 +333,7 @@ void FieldFx_DrawBillboard(FieldBillboard *board)
     g_FieldFxBillboardScratch->depth = RotTransPers(&board->position, &g_FieldFxBillboardScratch->screen.word,
                                      &g_FieldFxBillboardScratch->p, &g_FieldFxBillboardScratch->flag);
     float f_cx = 0.0f, f_cy = 0.0f, f_cw = 1.0f;
-    int has_pgxp = Psyz_GteGetLastPgxpVertex(&f_cx, &f_cy, &f_cw);
+    int has_pgxp = PE_PGXP && Psyz_GteGetLastPgxpVertex(&f_cx, &f_cy, &f_cw);
     g_FieldFxBillboardScratch->centerX = g_FieldFxBillboardScratch->screen.word;
     g_FieldFxBillboardScratch->centerY = g_FieldFxBillboardScratch->screen.xy.y;
     distance = g_GeomScroll.state.position.projectionDistance[0];
@@ -971,7 +971,7 @@ static void FieldFx_EmitScriptSpriteQuad(void)
     gte_ldv0(&s_ScriptSpriteDraw.position);gte_rtps();
     u32 screen;gte_stsxy2(&screen);
     float f_cx = 0.0f, f_cy = 0.0f, f_cw = 1.0f;
-    int has_pgxp = Psyz_GteGetLastPgxpVertex(&f_cx, &f_cy, &f_cw);
+    int has_pgxp = PE_PGXP && Psyz_GteGetLastPgxpVertex(&f_cx, &f_cy, &f_cw);
     Psyz_GteSetPgxpEffectMode(0);
     u32 depth = Psyz_GteDataRead(19);
     s32 projection = *g_GeomScroll.state.position.projectionDistance;

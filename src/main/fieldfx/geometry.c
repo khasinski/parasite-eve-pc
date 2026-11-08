@@ -940,6 +940,7 @@ void FieldFx_DrawStarFan(GteShortVector *position, int width, int height, int se
             s16 *xy2 = &packet->x2;
             gte_stsxy3(xy0, xy1, xy2);
         }
+#if PE_PGXP
         {
             const double kTwoPi = 6.28318530717958647692;
             double a0 = kTwoPi * (double)i / (double)segments;
@@ -954,6 +955,7 @@ void FieldFx_DrawStarFan(GteShortVector *position, int width, int height, int se
             Psyz_GteProjectFloatVertex(cos(a0) * r0, sin(a0) * r0, 0.0, &packet->x1, sxy1);
             Psyz_GteProjectFloatVertex(cos(a1) * r1, sin(a1) * r1, 0.0, &packet->x2, sxy2);
         }
+#endif
         gte_cop2_hazard_slot();
         gte_cop2_hazard_slot();
         gte_avsz3_command();
@@ -1134,6 +1136,7 @@ void FieldFx_DrawRingBand(GteShortVector *position, int inner, int outer, int se
             return;
         }
         gte_stsxy2(&packet->x3);
+#if PE_PGXP
         {
             const double kTwoPi = 6.28318530717958647692;
             double a0 = kTwoPi * (double)i / (double)segments;
@@ -1152,6 +1155,7 @@ void FieldFx_DrawRingBand(GteShortVector *position, int inner, int outer, int se
             Psyz_GteProjectFloatVertex(ca0 * r_in, sa0 * r_in, 0.0, &packet->x2, sxy2);
             Psyz_GteProjectFloatVertex(ca1 * r_in, sa1 * r_in, 0.0, &packet->x3, sxy3);
         }
+#endif
         TILE_OT_ENTRY(ot, table, D_800B0E38.ordering[g_ActiveDrawSlot], depth);
         entry = ot.tag;
         if (mode != 0xFF) {
@@ -1796,7 +1800,7 @@ void FieldFx_DrawGlowLine(GteShortVector *from, GteShortVector *to, u8 *color0,
     }
     gte_stsxy2(&line->x0);
     float fx0 = 0.0f, fy0 = 0.0f, fw0 = 1.0f;
-    int has_p0 = Psyz_GteGetLastPgxpVertex(&fx0, &fy0, &fw0);
+    int has_p0 = PE_PGXP && Psyz_GteGetLastPgxpVertex(&fx0, &fy0, &fw0);
     line->tag.length = 4;
     line->code = 0x50;
     gte_ldv0(to);
@@ -1818,7 +1822,7 @@ void FieldFx_DrawGlowLine(GteShortVector *from, GteShortVector *to, u8 *color0,
     }
     gte_stsxy2(&line->x1);
     float fx1 = 0.0f, fy1 = 0.0f, fw1 = 1.0f;
-    int has_p1 = Psyz_GteGetLastPgxpVertex(&fx1, &fy1, &fw1);
+    int has_p1 = PE_PGXP && Psyz_GteGetLastPgxpVertex(&fx1, &fy1, &fw1);
     depth[0] = (int)(depth[0] + depth[1]) / 2 - (u16)g_FieldFxSpriteParams.depth;
     if (depth[0] < 0x1000) {
         TILE_OT_ENTRY(ot, table, D_800B0E38.ordering[g_ActiveDrawSlot], depth[0]);
@@ -2198,7 +2202,7 @@ void FieldFx_DrawPulledSprite(GteShortVector *position, int scale_x, int scale_y
         float fx = 0.0f, fy = 0.0f, fw = 1.0f;
         int has_pgxp;
         gte_stsxy2(&screen);
-        has_pgxp = Psyz_GteGetLastPgxpVertex(&fx, &fy, &fw);
+        has_pgxp = PE_PGXP && Psyz_GteGetLastPgxpVertex(&fx, &fy, &fw);
         pull *= 2;
         LoadAverageShort12(&screen, &center, 0x1000 - pull, pull, &screen);
         packet->x0 = packet->x2 = screen.x - width;

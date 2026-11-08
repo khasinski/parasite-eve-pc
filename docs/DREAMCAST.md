@@ -37,18 +37,35 @@ Without the option every size keeps its desktop value.
 
 | Buffer | Desktop | Small |
 |---|---|---|
-| Matrix stack (`g_RenderTransformStack`, `g_PgxpTransformStack`) | 65536 entries | 256 |
-| PGXP bone cache | 1024 sets | 128 |
+| Matrix stack (`g_RenderTransformStack`) | 65536 entries | 256 |
 | Room TIM workspace (`D_8010BD00`) | 8 MB | 2 MB |
-| PsyZ PGXP address/screen caches | 8192 / 4096 sets | 1024 / 512 |
+
+The option also compiles out two desktop presentation features
+([`include/pe1/port_features.h`](../include/pe1/port_features.h)):
+
+- **PGXP** (`PE_PGXP=0`, and `PSYZ_NO_PGXP` in PsyZ): the double-precision
+  bone and model matrices, their caches and the subpixel vertex paths in the
+  game, and the PGXP work inside PsyZ's GTE commands. Dynamic actor lighting
+  reads the same matrices and goes too. The PsyZ PGXP calls stay valid and
+  behave as with PGXP switched off.
+- **Frame interpolation** (`PE_FRAME_INTERPOLATION=0`): the game no longer
+  registers packet pairs or drives the 60 Hz presentation, so a backend does
+  not need to implement it.
+
+The desktop menu still shows these settings; in a small build they have no
+effect. After this, `object.c`, `fieldfx/model.c`, `fieldfx/geometry.c`,
+`fieldfx/sprite_render.c` and PsyZ's `libgte.c` contain no floating-point
+instructions. Floating point remains in the widescreen camera
+(`render/camera.c`, `render/mesh_list.c`), host timing (`boot/init.c`, PsyZ
+`libcd.c`, `kernel.c`) and one battle routine (`battle/enemy_movement.c`).
 
 ## PsyZ fork
 
 `third_party/psyz` points to
 [andruxaster/parasite-eve-psyz](https://github.com/andruxaster/parasite-eve-psyz),
 branch `dc-small-memory`, a fork of khasinski/parasite-eve-psyz taken at the
-commit this game release pins. Dreamcast changes to PsyZ (the PGXP cache
-sizes now, the KallistiOS backend later) go there. After pulling a change
+commit this game release pins. Dreamcast changes to PsyZ (overridable PGXP
+cache sizes and `PSYZ_NO_PGXP` now, the KallistiOS backend later) go there. After pulling a change
 to the submodule, run `git submodule sync && git submodule update --init third_party/psyz`.
 
 ## Measurements (8 November 2026, release 0.11)
@@ -58,8 +75,8 @@ files before `--gc-sections`:
 
 | Part | x86-64 | 32-bit | 32-bit small |
 |---|---|---|---|
-| Game | 0.89 / 0.11 / 24.25 | 0.95 / 0.07 / 23.88 | 0.95 / 0.07 / 9.46 |
-| PsyZ core (GTE, SPU, MDEC...) | 0.18 / 0.01 / 3.48 | 0.20 / 0.01 / 2.90 | 0.20 / 0.01 / 0.99 |
+| Game | 0.89 / 0.11 / 24.25 | 0.95 / 0.07 / 23.88 | 0.93 / 0.07 / 9.38 |
+| PsyZ core (GTE, SPU, MDEC...) | 0.18 / 0.01 / 3.48 | 0.20 / 0.01 / 2.90 | 0.19 / 0.01 / 0.72 |
 | PsyZ SDL3 backend (replaced on Dreamcast) | 0.12 / 0.06 / 7.41 | 0.14 / 0.06 / 6.78 | 0.14 / 0.06 / 6.78 |
 | Desktop shell, SDL3, webp, cJSON, miniz (not used on Dreamcast) | ~2.1 / 0.5 / 2.1 | same | same |
 
@@ -69,8 +86,8 @@ work area `g_BootDisplayWorkArea` (1 MB), a diagnostic VRAM copy in
 `init.c` (1 MB, not needed on Dreamcast), the memory card screens (0.5 MB),
 the movie buffers (0.34 MB) and several 256 KB tables.
 
-Estimate for the Dreamcast: game and PsyZ core about 11.5 MB, plus a native
-backend with its 1 MB VRAM copy and KallistiOS, about 12.5 MB of 16 MB.
+Estimate for the Dreamcast: game and PsyZ core about 11.3 MB, plus a native
+backend with its 1 MB VRAM copy and KallistiOS, about 12.3 MB of 16 MB.
 Peaks recorded with real discs will show whether the texture workspace and
 the CD work area can be made smaller.
 
@@ -78,6 +95,6 @@ the CD work area can be made smaller.
 
 1. Record peaks with both discs: several rooms, a battle, a movie, the
    memory card screen.
-2. Remove the PGXP and frame interpolation paths from small builds (the SH-4
-   is slow with `double`, and the Dreamcast GPU corrects perspective itself).
+2. Build the game and PsyZ core with `sh-elf-gcc` against a stub backend to
+   get real SH-4 code sizes.
 3. Write the PsyZ backend for KallistiOS, starting from PsyZ's PSP backend.

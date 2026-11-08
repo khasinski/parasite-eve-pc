@@ -3,6 +3,7 @@
  * draws (G0833/G0835). */
 
 #include "common.h"
+#include "pe1/port_features.h"
 #include "pe1/game_state.h"
 #include "pe1/geom_state.h"
 #include "pe1/gte.h"
@@ -331,7 +332,7 @@ int Render_DrawSpriteEntry(GeomEntry *input)
     entry = input;
     sprite = entry->u30.prim;
     count = entry->prim_count;
-    for(int pair=0;pair<count;++pair)Psyz_GpuEnsureInterpolationBackgroundPair(&sprite[pair].r,&sprite[count+pair].r);
+    for(int pair=0;pair<count;++pair)PE_INTERP_CALL(Psyz_GpuEnsureInterpolationBackgroundPair(&sprite[pair].r,&sprite[count+pair].r));
     ordering.pointer = D_800B0E38.ordering[active];
     if (active != 0) {
         sprite += count;

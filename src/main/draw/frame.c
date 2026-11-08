@@ -1,4 +1,5 @@
 #include <psyz/gpu.h>
+#include "pe1/port_features.h"
 #include "pe1/geom_state.h"
 #ifdef PE_PS5_GPU_NATIVE
 #include "pe1/particle_augment.h"
@@ -52,7 +53,7 @@ void Draw_RenderFrame(void) {
     Menu_DrawSaveBg();
     PE_HOOK(PE_HOOK_FRAME_DRAWN, NULL);
 
-    Psyz_GpuPrepareInterpolatedPresent(-1);
+    PE_INTERP_CALL(Psyz_GpuPrepareInterpolatedPresent(-1));
     displayFlags = g_GameState.flags & 0x200;
     if (displayFlags) {
         VSync(4);
@@ -60,8 +61,8 @@ void Draw_RenderFrame(void) {
             SetDispMask(1);
         }
     } else {
-        Psyz_GpuPrepareInterpolatedPresent(Draw_CheckDrawStatus()==0 ?
-            g_RenderDrawEnvArray[1-g_ActiveDrawSlot].clip.y : -1);
+        PE_INTERP_CALL(Psyz_GpuPrepareInterpolatedPresent(Draw_CheckDrawStatus()==0 ?
+            g_RenderDrawEnvArray[1-g_ActiveDrawSlot].clip.y : -1));
         VSync(2);
     }
 
@@ -98,8 +99,8 @@ draw_buffer:
         FieldFx_FlushParticleAugment();
         FieldFx_ApplyParticleLights();
 #endif
-        Psyz_GpuBeginInterpolationFrame();
-        Psyz_GpuSetInterpolationCamera(g_GeomScroll.state.position.x,g_GeomScroll.state.position.y);
+        PE_INTERP_CALL(Psyz_GpuBeginInterpolationFrame());
+        PE_INTERP_CALL(Psyz_GpuSetInterpolationCamera(g_GeomScroll.state.position.x,g_GeomScroll.state.position.y));
         DrawOTagEnv(orderingTable + 4095, &g_RenderDrawEnvArray[drawSlot]);
 #ifdef PE_PS5_GPU_NATIVE
         /* Native addque2 executes GPU_Enqueue synchronously and copies the

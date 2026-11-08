@@ -2,6 +2,7 @@
 #define PE1_RENDER_OBJECT_H
 
 #include "common.h"
+#include "pe1/port_features.h"
 #include "pe1/render_packets.h"
 #include "pe1/field_color.h"
 #include "pe1/field_sprite_draw.h"
@@ -664,10 +665,23 @@ extern GteShortVector g_SkinAnchor;
 #define g_SkinAnchorY (g_SkinAnchor.y)
 void Render_CopyFrameData(RenderObjectEntity *dst, RenderObjectEntity *src, s32 frame);
 void Render_CopyFrameDataDouble(RenderObjectEntity *dst, RenderObjectEntity *src, s32 frame);
+#if PE_PGXP
 void Pgxp_StoreBoneRotYXZ(const RenderMatrix *matrix, s16 rx, s16 ry, s16 rz);
 void Pgxp_StoreModelMatrix(const RenderMatrix *matrix, s16 rx, s16 ry, s16 rz, s16 scale);
 /* Preserve available world-position fractions only in the visual PGXP cache. */
 void Pgxp_StoreModelPosition16(const RenderMatrix *matrix, s32 x, s32 y, s32 z);
+#else
+/* PGXP compiled out: there is no high-precision companion to update. */
+static inline void Pgxp_StoreBoneRotYXZ(const RenderMatrix *matrix, s16 rx, s16 ry, s16 rz) {
+    (void)matrix; (void)rx; (void)ry; (void)rz;
+}
+static inline void Pgxp_StoreModelMatrix(const RenderMatrix *matrix, s16 rx, s16 ry, s16 rz, s16 scale) {
+    (void)matrix; (void)rx; (void)ry; (void)rz; (void)scale;
+}
+static inline void Pgxp_StoreModelPosition16(const RenderMatrix *matrix, s32 x, s32 y, s32 z) {
+    (void)matrix; (void)x; (void)y; (void)z;
+}
+#endif
 int Render_Update(void);
 void Render_Noop(void);
 

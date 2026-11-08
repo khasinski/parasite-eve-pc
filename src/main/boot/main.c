@@ -1,3 +1,4 @@
+#include "pe1/port_features.h"
 #ifdef PE_PS5_GPU_NATIVE
 #include "pe1/particle_augment.h"
 #include "pe1/dialogue_alpha.h"
@@ -1502,12 +1503,12 @@ static void Host_ApplyOptions(SDL_Window *window) {
 #endif
     Psyz_VideoSetAspectMode(host_options.widescreen ? PSYZ_ASPECT_DISPLAY : (PsyzAspectMode)host_options.aspect);
     Psyz_VideoSetDitheringMode((PsyzDitherMode)host_options.dither);
-    Psyz_GpuSetFrameInterpolation(host_options.frame_interpolation);
-    Psyz_VideoSetGeometryCorrection(host_options.geometry_correction != 0);
+    Psyz_GpuSetFrameInterpolation(PE_FRAME_INTERPOLATION && host_options.frame_interpolation);
+    Psyz_VideoSetGeometryCorrection(PE_PGXP && host_options.geometry_correction != 0);
     Psyz_VideoSetAntialiasing(host_options.antialiasing != 0);
     Psyz_VideoSetModelFiltering(host_options.model_filtering != 0);
-    Psyz_VideoSetDynamicLighting(host_options.dynamic_lighting != 0);
-    Psyz_VideoSetEffectGeometryCorrection(host_options.effect_geometry_correction != 0);
+    Psyz_VideoSetDynamicLighting(PE_PGXP && host_options.dynamic_lighting != 0);
+    Psyz_VideoSetEffectGeometryCorrection(PE_PGXP && host_options.effect_geometry_correction != 0);
     /* An allocation failure keeps the last working renderer configuration.
      * Before window creation the getters do not yet reflect pending options. */
     if (window) {
@@ -4402,13 +4403,13 @@ images_ready:;
     if (!interactive) {
         if (internal_resolution > 1 || (effect_arguments & 1u) ||
             host_options.antialiasing || host_options.model_filtering)
-            Psyz_VideoSetGeometryCorrection(host_options.geometry_correction != 0);
-        Psyz_GpuSetFrameInterpolation(host_options.frame_interpolation);
+            Psyz_VideoSetGeometryCorrection(PE_PGXP && host_options.geometry_correction != 0);
+        Psyz_GpuSetFrameInterpolation(PE_FRAME_INTERPOLATION && host_options.frame_interpolation);
         Psyz_VideoSetAntialiasing(host_options.antialiasing);
         Psyz_VideoSetModelFiltering(host_options.model_filtering);
         Psyz_VideoSetWidescreen(host_options.widescreen);
-        Psyz_VideoSetDynamicLighting(host_options.dynamic_lighting != 0);
-        Psyz_VideoSetEffectGeometryCorrection(host_options.effect_geometry_correction != 0);
+        Psyz_VideoSetDynamicLighting(PE_PGXP && host_options.dynamic_lighting != 0);
+        Psyz_VideoSetEffectGeometryCorrection(PE_PGXP && host_options.effect_geometry_correction != 0);
     }
     /* Widescreen reads background texels to find where a room's picture
      * ends (mesh_list.c); kept on so switching it on mid-game works. */

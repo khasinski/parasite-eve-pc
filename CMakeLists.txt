@@ -48,15 +48,16 @@ endif()
 
 # Small-memory budget for consoles with little RAM: shrinks the desktop
 # safety margins on the largest native buffers (see include/pe1/memory_budget.h)
-# and the PGXP caches in PsyZ. Run with PE_MEMORY_REPORT=1 to log peaks.
+# and compiles out PGXP and frame interpolation in the game and in PsyZ
+# (see include/pe1/port_features.h). Run with PE_MEMORY_REPORT=1 to log peaks.
 option(PE_SMALL_MEMORY "Use small native buffer budgets" OFF)
 if(PE_SMALL_MEMORY)
     add_compile_definitions(
         PE_RENDER_TRANSFORM_STACK_DEPTH=256
-        PE_PGXP_BONE_CACHE_SETS=128
         PE_BOOT_TEXTURE_WORKSPACE_BYTES=0x200000
-        PGXP_ADDR_SETS=1024u
-        PGXP_SXY_SETS=512u)
+        PE_PGXP=0
+        PE_FRAME_INTERPOLATION=0
+        PSYZ_NO_PGXP=1)
 endif()
 
 # PsyZ belongs to the original game build, independently of the abandoned frontend.

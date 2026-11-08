@@ -1,5 +1,6 @@
 #include "pe1/geom_state.h"
 #include "common.h"
+#include "pe1/port_features.h"
 u16 GetClut(int x, int y);
 u16 GetTPage(int tp, int abr, int x, int y);
 #include "pe1/render_prim.h"
@@ -126,7 +127,7 @@ static void Render_LoadHdBackdrop(HdBackdropGroup *tiles,const char *suffix) {
         }
         if(!loaded){valid=0;break;}
         for(unsigned n=0;n<count;++n)
-            Psyz_GpuRegisterInterpolationBackgroundPair(&tiles[group].packets[0][n].r,&tiles[group].packets[1][n].r);
+            PE_INTERP_CALL(Psyz_GpuRegisterInterpolationBackgroundPair(&tiles[group].packets[0][n].r,&tiles[group].packets[1][n].r));
         tiles[group].count=(unsigned)count;tiles[group].key=key;
         tiles[group].left=l;tiles[group].right=r;
     }
@@ -176,7 +177,7 @@ static void Render_LinkHdBackdrop(int slot,RenderNativeTag *ordering,HdBackdropG
         }
     }
     for(unsigned i=0;i<tiles[group].count;++i) {
-        Psyz_GpuEnsureInterpolationBackgroundPair(&tiles[group].packets[0][i].r,&tiles[group].packets[1][i].r);
+        PE_INTERP_CALL(Psyz_GpuEnsureInterpolationBackgroundPair(&tiles[group].packets[0][i].r,&tiles[group].packets[1][i].r));
         RenderTilePacket *sprite=&tiles[group].packets[slot][i];
         int x=tiles[group].xy[i*2]+(short)g_GeomState->out_disp_x;
         int y=tiles[group].xy[i*2+1]+(short)g_GeomState->out_disp_y;
@@ -202,7 +203,7 @@ void Render_LinkHdUnderlayBackdrop(int slot,RenderNativeTag *ordering) {
 /* Hash immutable descriptors before scripts animate the native entries. The
  * exporter hashes the same little-endian fields, independent of host pointers. */
 void Render_PrepareHdBackgrounds(void) {
-    Psyz_GpuResetInterpolation();
+    PE_INTERP_CALL(Psyz_GpuResetInterpolation());
     const uint64_t previous_key=hd_geometry_key;
     Render_ResetHdWidescreen();
     const char *pack=Render_HdPackDirectory();
@@ -326,7 +327,7 @@ int Render_LoadMeshEntry(GeomEntry *entry, RenderTilePacket *buffer, void **end)
         if (!loaded) atlas_key=0;
     }
     for(unsigned i=0;i<count;++i)
-        Psyz_GpuRegisterInterpolationBackgroundPair(&buffer[i].r,&buffer[count+i].r);
+        PE_INTERP_CALL(Psyz_GpuRegisterInterpolationBackgroundPair(&buffer[i].r,&buffer[count+i].r));
     entry->u30.prim = buffer;
     /* The page pointer and disp_x are stored through pointers to the fields.
      * GCC 2.7 lets a load of a fixed scalar pass a structure field store, but

@@ -24,9 +24,23 @@ typedef struct {
     double trans[3];
 } PgxpBoneMatrix;
 
+#if PE_PGXP
 static void Pgxp_StoreBoneMatrix(const RenderMatrix *addr, const PgxpBoneMatrix *mat);
 static void Pgxp_LoadBoneMatrix(const RenderMatrix *addr, PgxpBoneMatrix *out);
 static void Pgxp_CopyBoneMatrix(const RenderMatrix *dst, const RenderMatrix *src);
+#else
+/* PGXP compiled out: the companion matrices are never read, so these
+ * helpers do nothing and the double-precision work around them folds away. */
+static inline void Pgxp_StoreBoneMatrix(const RenderMatrix *addr, const PgxpBoneMatrix *mat) {
+    (void)addr; (void)mat;
+}
+static inline void Pgxp_LoadBoneMatrix(const RenderMatrix *addr, PgxpBoneMatrix *out) {
+    (void)addr; (void)out;
+}
+static inline void Pgxp_CopyBoneMatrix(const RenderMatrix *dst, const RenderMatrix *src) {
+    (void)dst; (void)src;
+}
+#endif
 static void Render_RegisterInterpolationPackets(RenderObjectEntity *object,int reset);
 
 /* Original USA resident model-rendering data. The historical "identity"
@@ -498,7 +512,7 @@ void Render_DrawObjectAlt(RenderObjectEntity *entity, s16 limit, u8 red, u8 gree
 
     if (!entity->header || !entity->draw_count)
         return;
-    if(Psyz_GpuGetFrameInterpolation())Render_RegisterInterpolationPackets(entity,0);
+    if(PE_INTERP_ACTIVE())Render_RegisterInterpolationPackets(entity,0);
     matrix = entity->matrices;
     for (i = 0; i < entity->header->part_count; i++, matrix++) {
         RenderObjectPart *part;
@@ -577,7 +591,7 @@ void Render_DrawObjectVariant(RenderObjectEntity *input, s16 limit, s32 *project
     projected = &projectedStorage;
     if (!entity->header || !entity->draw_count)
         return;
-    if(Psyz_GpuGetFrameInterpolation())Render_RegisterInterpolationPackets(entity,0);
+    if(PE_INTERP_ACTIVE())Render_RegisterInterpolationPackets(entity,0);
     matrix = (s32 *)entity->matrices;
     i = 0;
     if (changed < entity->header->part_count) {
@@ -1189,7 +1203,7 @@ int Render_SetupEntityPrims(RenderObjectEntity *obj, RenderObjectHeader *model,
     cursor.commands += bytes;
 
     if (setup) {
-        Render_RegisterInterpolationPackets(obj,1);
+        PE_INTERP_CALL(Render_RegisterInterpolationPackets(obj,1));
         RenderPrimCursor out;
 
         src = cursor;
@@ -1781,10 +1795,11 @@ void Render_DrawObject(RenderObjectEntity *entity, union RenderLightingMatrix *v
 
     if (!entity->header || !entity->draw_count)
         return;
-    if(Psyz_GpuGetFrameInterpolation())Render_RegisterInterpolationPackets(entity,0);
+    if(PE_INTERP_ACTIVE())Render_RegisterInterpolationPackets(entity,0);
     *baseColour = g_RenderFadeColour;
     matrix = entity->matrices;
-    dynamic_light = Psyz_VideoGetDynamicLighting() && (view == &g_RenderLightingState);
+    /* Dynamic lighting reads the PGXP bone matrices. */
+    dynamic_light = PE_PGXP && Psyz_VideoGetDynamicLighting() && (view == &g_RenderLightingState);
     if (dynamic_light) {
         double pos_int = (double)ClampLight(entity->shade + entity->lightPositiveY);
         double neg_int = (double)ClampLight(entity->shade + entity->lightNegativeY);
@@ -2021,6 +2036,7 @@ int Render_InitRoomPrimState(void *objectArg)
  * possible input; smaller budgets are checked on each push. */
 static RenderMatrix g_RenderTransformStack[PE_RENDER_TRANSFORM_STACK_DEPTH];
 
+#if PE_PGXP
 typedef struct {
     const RenderMatrix *addr;
     RenderMatrix int_copy;
@@ -2171,6 +2187,14 @@ static void Pgxp_ComposeBoneMatrix(const PgxpBoneMatrix *parent,
     }
     *out = next;
 }
+#else
+static inline void Pgxp_ComposeBoneMatrix(const PgxpBoneMatrix *parent,
+                                          const PgxpBoneMatrix *source,
+                                          double tx, double ty, double tz,
+                                          PgxpBoneMatrix *out) {
+    (void)parent; (void)source; (void)tx; (void)ty; (void)tz; (void)out;
+}
+#endif
 
 void Render_TransformVertices(RenderObjectEntity *actor) {
     /* An actor without an animation bank can reach opcode155 before any
@@ -2182,7 +2206,9 @@ void Render_TransformVertices(RenderObjectEntity *actor) {
     s32 *originY = &origin[1];
     s32 *originZ = &origin[2];
     RenderMatrix *stack = g_RenderTransformStack;
+#if PE_PGXP
     PgxpBoneMatrix *f_stack = g_PgxpTransformStack;
+#endif
     PgxpBoneMatrix f_cur;
     s8 *commands;
     RenderMatrix *out;
@@ -2252,12 +2278,16 @@ void Render_TransformVertices(RenderObjectEntity *actor) {
             }
             gte_ReadMatrix(stack);
             stack++;
+#if PE_PGXP
             *f_stack++ = f_cur;
+#endif
             continue;
         }
         if (command == -2) {
             stack--;
+#if PE_PGXP
             f_cur = *--f_stack;
+#endif
             gte_ldrotmatrix(stack);
             gte_ldtransmatrix(stack);
             continue;
@@ -2381,10 +2411,12 @@ void Render_TransformMorphVertices(RenderObjectEntity *entity, u32 *view) {
             RenderVec3s *vertices = &entity->vertices[part->vertex_start];
             u32 *screen = &g_RenderClutLookupTable[part->vertex_start];
             u32 *depth = &g_RenderVertexWorkWords[part->vertex_start];
+            int j;
+#if PE_PGXP
             PgxpBoneMatrix f_bone;
             double eye_rot[3][3];
             double eye_trans[3];
-            int r, c, j;
+            int r, c;
 
             Pgxp_LoadBoneMatrix(part_mat, &f_bone);
             for (r = 0; r < 3; ++r) {
@@ -2401,6 +2433,9 @@ void Render_TransformMorphVertices(RenderObjectEntity *entity, u32 *view) {
                 }
             }
             Psyz_GteSetPgxpMatrix(eye_rot, eye_trans);
+#else
+            (void)part_mat;
+#endif
 
             for (j = 0; j < part->vertex_count; ) {
                 gte_ldv3c(vertices);

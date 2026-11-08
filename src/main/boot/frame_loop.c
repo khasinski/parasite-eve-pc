@@ -7,6 +7,7 @@
 #include "pe1/planar_shadow.h"
 #endif
 #include "common.h"
+#include "pe1/port_features.h"
 #include <psyz/gpu.h>
 #include "pe1/akao_send.h"
 #include "pe1/battle_runtime.h"
@@ -56,7 +57,7 @@ void Akao_Cmd_F1(void);
 int Asset_UnloadTableEntries(void);
 
 void Boot_FlushSceneFast(void) {
-    Psyz_GpuResetInterpolation();
+    PE_INTERP_CALL(Psyz_GpuResetInterpolation());
     RECT rect;
     u32 status;
     u32 first_status;
@@ -69,7 +70,7 @@ void Boot_FlushSceneFast(void) {
         ClearImage(&rect, 0, 0, 1);
     }
     DrawSync(0);
-    Psyz_GpuClearInterpolationPackets();
+    PE_INTERP_CALL(Psyz_GpuClearInterpolationPackets());
     Akao_Cmd_F1();
     Render_Noop();
     Asset_UnloadTableEntries();
@@ -133,7 +134,7 @@ int Boot_RunFrame(void)
         state = &g_GameState;
         fade = (RenderTintTargetView *)&g_ScreenTint.targetR;
         PE_HOOK(PE_HOOK_SCENE_START, NULL);
-        Psyz_GpuResetInterpolation();
+        PE_INTERP_CALL(Psyz_GpuResetInterpolation());
 #if PE_NATIVE_STATE_CPU_COMPONENTS
         PeStateBoundary_SceneChanged();
 #endif
@@ -242,7 +243,7 @@ loop_end_check:
         ClearImage(&clear_rect, 0, 0, 1);
     }
     DrawSync(0);
-    Psyz_GpuClearInterpolationPackets();
+    PE_INTERP_CALL(Psyz_GpuClearInterpolationPackets());
     Akao_Cmd_F1();
     Render_Noop();
     Asset_UnloadTableEntries();
