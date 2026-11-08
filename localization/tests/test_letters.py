@@ -171,3 +171,73 @@ class Packs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ManyLetters(unittest.TestCase):
+    """More letters than the 163 one-byte codes (tests/many_letters_pack.py)."""
+
+    def setUp(self):
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import many_letters_pack
+        self.m = many_letters_pack
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        gt.PACK_LETTERS.clear()
+        gt.PACK_EXTRA.clear()
+
+    def records(self, data):
+        at, n = struct.unpack_from("<II", data, 80)
+        return [data[at + k * letters.RECORD:at + (k + 1) * letters.RECORD] for k in range(n)]
+
+    def test_every_catalog_letter_in_one_pack(self):
+        code, path = self.m.build(self.dir)
+        self.assertEqual(code, 0)
+        data = path.read_bytes()
+        self.assertEqual(struct.unpack_from("<I", data, 4)[0], 4)
+        recs = self.records(data)
+        coded = [r for r in recs if r[4]]
+        extra = [r for r in recs if not r[4]]
+        self.assertEqual(len(recs), len(self.m.catalog_text()))
+        self.assertTrue(0 < len(coded) <= 163 and len(extra) == len(recs) - len(coded))
+        self.assertEqual(recs[:len(coded)], coded)                       # coded first, by code
+        self.assertEqual([r[4] for r in coded], sorted(r[4] for r in coded))
+        cps = [struct.unpack_from("<I", r)[0] for r in extra]
+        self.assertEqual(cps, sorted(cps))                               # then by Unicode
+        # the item name's letters have codes: the item name stays one byte a letter
+        coded_letters = {chr(struct.unpack_from("<I", r)[0]) for r in coded}
+        self.assertTrue(set(self.m.ITEM_LETTERS) <= coded_letters)
+        # no stand-in token reaches the pack, and every letter with no code is in a stretch
+        self.assertNotIn(letters.EXTRA_TOKEN, data)
+        at, runs, pool = struct.unpack_from("<III", data, 88)
+        stretch_letters = set(struct.unpack_from(f"<{pool}I", data, at + (runs + 1) * 4))
+        self.assertTrue(set(cps) <= stretch_letters)
+        # read back, the text measures as build measured it
+        _, _, entries = pelang.read_pack(path)
+        self.assertTrue(any(letters.EXTRA_TOKEN in raw for raw in entries.values()))
+
+    def test_most_used_letters_get_the_codes(self):
+        text = self.m.catalog_text()
+        busy = text[-1]                                  # last by Unicode: would get no code by order
+        table = letters.Letters([text, busy * 50], extra=True)
+        self.assertIn(busy, {l.char for l in table.by_code.values()})
+        self.assertNotIn(busy, {l.char for l in table.extra})
+        self.assertEqual(len(table.by_code) + len(table.extra), len(text))
+
+    def test_a_lone_letter_with_no_code_is_a_stretch(self):
+        text = self.m.catalog_text()
+        table = letters.Letters([text], extra=True)
+        lone = table.extra[0].char
+        code, path = self.m.build(self.dir, text=text + " " + lone)
+        self.assertEqual(code, 0)
+        self.assertNotIn(letters.EXTRA_TOKEN, path.read_bytes())
+
+    def test_one_byte_builds_still_stop_at_163(self):
+        code, _ = self.m.build(self.dir, extra=["--bytes-only"])
+        self.assertEqual(code, 1)
+
+    def test_item_names_past_the_codes_are_refused(self):
+        with self.assertRaisesRegex(ValueError, "item names"):
+            letters.Letters([self.m.catalog_text()], byte_texts=[self.m.catalog_text()], extra=True)

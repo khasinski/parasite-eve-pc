@@ -438,7 +438,7 @@ table comes last and fills the rest of the file. Packs with no table are unchang
 | Bytes | |
 |---|---|
 | 0-3 | Unicode character |
-| 4 | Code, 0x4D-0xEF |
+| 4 | Code, 0x4D-0xEF; 0 for a letter with no code (v4, see below) |
 | 5 | Art: the advance, 1-15. Otherwise what's added to the base letter's advance and menu width, 0-8 |
 | 6 | The base letter's code, below 0x4D, or FF for art |
 | 7 | Steps on the base letter: 1 drop its dot, 2 turn it upside down, 4 room for a mark above an ascender. 0 for art |
@@ -453,6 +453,17 @@ name can change if the next pack gave those codes away.
 
 `pe_lang` writes table letters after the Latin and Cyrillic ones, so a letter takes over its code's
 cell. Interface text uses the same table (`pe_lang_text_encode`).
+
+**More letters than codes (v4).** When a pack's text needs more catalog letters than it has free
+codes, `build` gives the codes to the letters used most, and first to those in text that keeps one
+byte a letter (item names, `mod/` text; with `--bytes-only` also names and grids). The rest go after
+the coded records with code 0, by strictly rising Unicode, and the header's count at 84 covers both
+(at most 163 coded, 57,600 without). A letter with no code reaches the screen only in the text
+renderer's stretches and in name letters: `pe_lang` makes it from its record, on the game's own font
+page, into a free cell of the letter cache (cells 250-440, shared with the CJK dictionary) when it
+is first drawn, with its own advance in dialogue and menus. While building, such a letter is written
+as `F1 C7 hi lo`; no pack holds that token. `build` refuses one in text that keeps one byte a letter,
+and `--bytes-only` keeps the old limit of 163.
 
 `python localization/preview_letters.py DISC.cue` draws every letter from the game font on your disc,
 with a line of each language, for choosing shapes. It needs Pillow, so run it without `-I`. To add a

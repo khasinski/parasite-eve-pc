@@ -36,6 +36,12 @@ def width(raw: bytes, metrics: bytes) -> int:
     i = 0
     while i < len(raw):
         c = raw[i]
+        if raw[i:i+4] in gt.PACK_EXTRA:      # drawn from a cache cell: the cell from its left edge
+            m = gt.PACK_EXTRA[raw[i:i+4]].metric(metrics)
+            w += (m & 15) + (m >> 4) + 1
+            page = 0
+            i += 4
+            continue
         if raw[i:i+2] == b'\xf1\xc5':
             w += 12
             page = 0
@@ -110,7 +116,7 @@ def check(key: str, raw: bytes, source: dict, metrics: bytes, layouts: dict):
         where = f"{c['id']} ({c['source']})"
         if c.get("same_length") and len(raw) != english_len:
             errors.append(f"{len(raw)} bytes; {where} reads exactly {english_len} glyph cells")
-        if c.get("glyphs_only") and (b"\xf1\xc5" in raw or any(b >= 0xFA for b in raw)):
+        if c.get("glyphs_only") and (b"\xf1\xc5" in raw or b"\xf1\xc7" in raw or any(b >= 0xFA for b in raw)):
             errors.append(f"a page code (FA..FF) in {where}, which takes each byte as one cell's glyph")
         if "max_glyphs" in c and len(raw) > c["max_glyphs"]:
             warnings.append(f"{len(raw)} glyphs; {where} keeps the first {c['max_glyphs']}")

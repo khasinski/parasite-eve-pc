@@ -38,6 +38,7 @@ FB_TAGS = {4: "{red}", 5: "{/red}", 6: "{pause}", 8: "{num}"}
 # The pack being built: its own letters by code (petext/letters.py), measured before any fixed
 # letter that code would otherwise be.
 PACK_LETTERS: dict = {}
+PACK_EXTRA: dict = {}        # F1 C7 hi lo -> a letter with no code (petext/letters.py)
 
 
 def decode(b: bytes) -> str:
@@ -159,6 +160,8 @@ def lines(b: bytes) -> list[int]:
             elif sub == 8:
                 w += WIDE * 5      # TextboxNumber has up to five rendered digits
             i += 1 + (1 if sub in (7, 9) else 0)
+        elif c == 0xF1 and b[i:i+4] in PACK_EXTRA:
+            w += PACK_EXTRA[b[i:i+4]].advance(); i += 3
         elif c == 0xF1 and b[i:i+2] == b"\xf1\xc5":
             w += WIDE; i += 3
         elif c in (0xFC, 0xFD):

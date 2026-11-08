@@ -8,6 +8,7 @@
 
 #include "pe_lang_font.h"
 #include "pe_lang_cjk.h"
+#include "pe_lang_pack.h"
 #include "pe_lang_font_vectors.h"
 #include "pe_lang_letter_vectors.h"
 
@@ -222,7 +223,94 @@ static void check_letters(void) {
     assert(pe_lang_letter_advance(r, advance) == 9 && pe_lang_letter_metric(r, metrics) == 0x90);
 }
 
-int main(void) {
+/* --many-letters PACK N: a pack pelang.py built with N letters past the fixed codes, more than the
+ * 163 one-byte codes (localization/tests/many_letters_pack.py). The reader takes it, the ones with
+ * no code are found by Unicode, and the letter cache makes each one as letters.py does. */
+static unsigned rd32le(const unsigned char *p) { return p[0] | p[1] << 8 | p[2] << 16 | (unsigned)p[3] << 24; }
+static unsigned char *read_file(const char *path, size_t *size) {
+    FILE *f = fopen(path, "rb");
+    unsigned char *data;
+    assert(f && !fseek(f, 0, SEEK_END));
+    *size = (size_t)ftell(f);
+    data = malloc(*size);
+    assert(data && !fseek(f, 0, SEEK_SET) && fread(data, 1, *size, f) == *size);
+    fclose(f);
+    return data;
+}
+static int refused(const unsigned char *data, size_t size, unsigned at, unsigned value, unsigned bytes) {
+    PeLangPack pack = {0};
+    unsigned char *copy = malloc(size);
+    assert(copy);
+    memcpy(copy, data, size);
+    for (unsigned i = 0; i < bytes; ++i) copy[at + i] = (unsigned char)(value >> 8 * i);
+    return pe_lang_pack_parse(&pack, copy, size) != 0;
+}
+static int check_many_letters(const char *path, unsigned want) {
+    static CjkIo io;
+    PeLangPack pack = {0};
+    PeCjkCache cache;
+    size_t size;
+    unsigned char *data = read_file(path, &size), base[144], expect[144], got[144];
+    unsigned char *keep = malloc(size);
+    assert(keep);
+    memcpy(keep, data, size);
+    if (pe_lang_pack_parse(&pack, data, size)) {
+        fprintf(stderr, "the game's reader refused %s\n", path);
+        return 1;
+    }
+    printf("%u letters: %u with one-byte codes, %u without\n", want, pack.letter_count, pack.extra_count);
+    assert(pack.letter_count + pack.extra_count == want && pack.letter_count <= 163 && pack.extra_count);
+    /* the one-byte letters keep their codes; past them the reader keeps no code */
+    for (unsigned k = 0; k < pack.letter_count; ++k)
+        assert(pack.unicode[pe_lang_pack_letter(&pack, k)[4]] == rd32le(pe_lang_pack_letter(&pack, k)));
+    assert(pe_lang_pack_extra_index(&pack, 'A') < 0 && pe_lang_pack_extra_index(&pack, 0x10FFFF) < 0);
+    /* the game's letters (stand-ins) on the page; the cache cells above them empty */
+    for (unsigned code = 0; code < 0x4D; ++code) {
+        synthetic_cell(code, base);
+        put(io.original, code, base);
+    }
+    memcpy(io.page, io.original, sizeof io.page);
+    for (unsigned cell = 250; cell < 441; ++cell)
+        for (unsigned row = 0; row < 12; ++row) memset(io.writable + (cell / 21 * 12 + row) * 128 + cell % 21 * 6, 1, 6);
+    pe_cjk_reset(&cache, &pack, io.original);
+    assert(cache.count == 191);
+    for (unsigned k = 0; k < pack.extra_count; ++k) {
+        const unsigned char *r = pe_lang_pack_extra(&pack, k);
+        unsigned cell;
+        assert(pe_lang_pack_extra_index(&pack, rd32le(r)) == (int)k);
+        if (r[6] != 0xFF) synthetic_cell(r[6], base);
+        pe_lang_letter_compose(r, base, expect);
+        if (k % 150 == 0) pe_cjk_frame(&cache);            /* a new frame now and then: cells move on */
+        assert(pe_cjk_resolve(&cache, pack.cjk_count + k, &cell, cache_sync, cache_upload, &io));
+        get(io.page, cell, got);
+        if (memcmp(got, expect, 144)) {
+            fprintf(stderr, "letter U+%04X differs from letters.py in the cache\n", rd32le(r));
+            return 1;
+        }
+    }
+    cache_native_pixels(&io);
+    {
+        unsigned none;
+        assert(!pe_cjk_resolve(&cache, pack.cjk_count + pack.extra_count, &none, cache_sync, cache_upload, &io));
+    }
+    /* refused: a letter with no code before a coded one, two out of Unicode order, a code past them */
+    {
+        const unsigned at = rd32le(keep + 80), coded = pack.letter_count;
+        const unsigned first = at + coded * 80, last = first + (pack.extra_count - 1) * 80;
+        assert(refused(keep, size, at + 4, 0, 1));                        /* no code before coded letters */
+        assert(refused(keep, size, first + 4, 0xEF, 1));                  /* a code after the uncoded */
+        assert(refused(keep, size, last, rd32le(keep + first), 4));       /* out of Unicode order */
+        assert(!refused(keep, size, 0, keep[0], 1));                      /* and unchanged, taken */
+    }
+    free(keep);
+    pe_lang_pack_free(&pack);
+    puts("Passed: more letters than the one-byte codes, read and made in the letter cache.");
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 4 && !strcmp(argv[1], "--many-letters")) return check_many_letters(argv[2], (unsigned)atoi(argv[3]));
+    assert(argc == 1);
     check_cjk_cache();
     check_letters();
     assert(sizeof kLatinVectors / sizeof *kLatinVectors == PE_LATIN_COUNT);

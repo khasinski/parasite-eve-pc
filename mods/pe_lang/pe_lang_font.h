@@ -37,6 +37,10 @@ void pe_lang_letter_compose(const unsigned char *record, const unsigned char *ba
 int pe_lang_letters_fill(const unsigned char *records, unsigned count, unsigned char *pixels,
                          unsigned stride, unsigned height);
 
+/* A letter record made into a letter cache cell (72 bytes, packed like a CJK record), its base
+ * letter read from the game's own font page `page` (4-bit, `stride` bytes a row). */
+void pe_lang_letter_cell(const unsigned char *record, const unsigned char *page, unsigned stride, unsigned char *out);
+
 unsigned pe_lang_letter_advance(const unsigned char *record, const unsigned char *base_advance);
 unsigned char pe_lang_letter_metric(const unsigned char *record, const unsigned char *base_metrics);
 

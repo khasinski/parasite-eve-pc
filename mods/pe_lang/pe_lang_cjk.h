@@ -5,6 +5,7 @@
 typedef struct PeCjkSlot { unsigned id; unsigned short cell; unsigned char valid, pinned; } PeCjkSlot;
 typedef struct PeCjkCache {
     const PeLangPack *pack;
+    const unsigned char *original; /* the game's font page: letters with no code start from it */
     PeCjkSlot slots[PE_CJK_CACHE_SIZE];
     unsigned count, hand;
     int need_sync, overflow;
@@ -13,7 +14,8 @@ typedef void (*PeCjkSync)(void *);
 typedef int (*PeCjkUpload)(unsigned cell, const unsigned char *pixels, void *);
 void pe_cjk_reset(PeCjkCache *,const PeLangPack *,const unsigned char *original);
 void pe_cjk_frame(PeCjkCache *);
-/* Returns 1 for an uploaded/hit glyph, 0 if all eligible cells are pinned or upload fails.
+/* `id` is a dictionary letter, or past them (cjk_count + k) the table's letter with no code k.
+ * Returns 1 for an uploaded/hit glyph, 0 if all eligible cells are pinned or upload fails.
  * Never evict a cell referenced by a packet in the frame being built. */
 int pe_cjk_resolve(PeCjkCache *,unsigned id,unsigned *cell,PeCjkSync,PeCjkUpload,void *);
 #endif

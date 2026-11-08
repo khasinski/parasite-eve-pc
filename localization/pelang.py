@@ -312,6 +312,13 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
     except ValueError as e:
         return None, [str(e)], warnings
     for command in validation.commands(raw):
+        if command[:2] == lettertable.EXTRA_TOKEN:
+            if command not in gt.PACK_EXTRA:
+                return None, ["a letter with no code that this pack doesn't hold"], []
+            if stretch.stays_bytes(key) and not (name_letters and key in namelib.KEYS):
+                return None, [f"{gt.PACK_EXTRA[command].char!r} has no one-byte code in this pack, and "
+                              f"{key} keeps one byte per letter"], []
+            continue
         if command[0] == 0xF1 and (not atlas or cjk.index(command) >= len(atlas.chars)):
             return None, ["CJK token has no glyph in this pack's dictionary"], []
     # with name letters (petext/names.py) any letter can go in a name; without, only one-byte ones
@@ -373,9 +380,13 @@ def cmd_build(a) -> int:
             errors.append(f"{a.csv}: has source text in its {', '.join(leaked)} column(s); submit the file "
                           "`pelang.py export` writes (key, translation, notes)")
     gt.PACK_LETTERS.clear()
+    gt.PACK_EXTRA.clear()
     texts = [r.get('translation','') for r in rows]
     try:
-        table = lettertable.Letters(texts, dictionary=bool(getattr(a,'cjk_font',None)))
+        byte_texts = [r.get('translation','') for r in rows
+                      if stretch.stays_bytes(r.get('key','')) and (a.bytes_only or not r.get('key','') in namelib.KEYS)]
+        table = lettertable.Letters(texts, dictionary=bool(getattr(a,'cjk_font',None)),
+                                    byte_texts=byte_texts, extra=not a.bytes_only)
         atlas = cjk.Atlas(texts, getattr(a,'cjk_font',None), skip=table.codes)
     except (ValueError, OSError, struct.error) as e:
         print(f'error: CJK font: {e}')
@@ -383,6 +394,7 @@ def cmd_build(a) -> int:
     atlas.codes.update(table.codes)
     atlas.letters = table
     gt.PACK_LETTERS.update(table.by_code)
+    gt.PACK_EXTRA.update(table.by_token)
     name_px = layout.NAME_WIDTH
     for r in rows:
         if r.get("key") == "sys/030" and r.get("translation"):
@@ -563,9 +575,14 @@ def _expand_stretches(data: bytes, raw: bytes) -> bytes:
     at, runs = struct.unpack_from("<II", data, 88)
     back = {ch: bytes([code]) for code, ch in gt.CHARS.items()}
     back.update({ch: bytes([code]) for ch, code in gt._latin_codes().items()})
+    extra = 0
     for k in range(letters):
         r = data[letters_at + k * lettertable.RECORD:]
-        back[chr(struct.unpack_from("<I", r)[0])] = bytes([r[4]])
+        if r[4]:
+            back[chr(struct.unpack_from("<I", r)[0])] = bytes([r[4]])
+        else:                                      # no code: as build wrote it before the stretches
+            back[chr(struct.unpack_from("<I", r)[0])] = lettertable.extra_token(extra)
+            extra += 1
     for k in range(glyphs):
         back[chr(struct.unpack_from("<I", data, dictionary + k * cjk.RECORD)[0])] = cjk.token(k)
     starts = struct.unpack_from(f"<{runs + 1}I", data, at)

@@ -17,6 +17,7 @@ from __future__ import annotations
 from . import gametext as gt
 
 TOKEN = b"\xf1\xc6"
+EXTRA = b"\xf1\xc7"          # a letter with no code (petext/letters.py): only ever in a stretch
 MAX_STRETCHES = 240 * 240
 MAX_LETTERS = 96            # PE_TEXT_ITEM_LETTERS, PE_LANG_STRETCH_MAX
 
@@ -91,7 +92,8 @@ class Stretches:
             text = "".join(run)
             while text:
                 piece, text = text[:MAX_LETTERS], text[MAX_LETTERS:]
-                out.extend(run_bytes if len(run) == 1 else self.token(piece))
+                lone = len(run) == 1 and not run_bytes.startswith(EXTRA)
+                out.extend(run_bytes if lone else self.token(piece))
             run.clear()
             run_bytes.clear()
 

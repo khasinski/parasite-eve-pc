@@ -181,6 +181,13 @@ int pe_lang_letters_fill(const unsigned char *records, unsigned count, unsigned 
     return written;
 }
 
+void pe_lang_letter_cell(const unsigned char *r, const unsigned char *page, unsigned stride, unsigned char *out) {
+    unsigned char base[CELL_PX] = {0}, px[CELL_PX];
+    if (r[6] != 0xFF) read_cell(page, stride, r[6], base);
+    pe_lang_letter_compose(r, base, px);
+    for (unsigned i = 0; i < CELL_PX / 2; ++i) out[i] = (unsigned char)(px[2 * i] | px[2 * i + 1] << 4);
+}
+
 unsigned pe_lang_letter_advance(const unsigned char *r, const unsigned char *base_advance) {
     return r[6] == 0xFF ? r[5] : (unsigned)base_advance[r[6]] + r[5];
 }

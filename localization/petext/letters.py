@@ -379,14 +379,31 @@ def write_test_vectors(path: str) -> None:
         f.write("\n".join(lines))
 
 
+EXTRA_TOKEN = b"\xf1\xc7"     # an extra letter's form until it goes in a stretch; never in a pack
+MAX_EXTRA = 240 * 240
+
+
+def extra_token(index: int) -> bytes:
+    return EXTRA_TOKEN + bytes(divmod(index, 240))
+
+
 class Letters:
     """One pack's table: the catalog's letters its text uses, on codes its text doesn't.
+
+    The 163 codes go to the letters used most, and first to those in text that keeps one byte per
+    letter (`byte_texts`: item names and the like, petext/stretch.py). With `extra`, the letters
+    left over have no code: they are kept after the coded ones (code 0, rising Unicode) and reach
+    the screen only in stretches and name letters, which pe_lang draws into the letter cache. Until
+    the stretches are made they are written as F1 C7 hi lo (extra_token), which no pack holds.
 
     With `dictionary`, signs the dictionary can hold (curly quotes, dashes) stay there, as the
     full-width signs Chinese, Japanese and Korean text expects."""
 
-    def __init__(self, texts, dictionary: bool = False):
-        fixed, wanted, taken = gt._latin_codes(), set(), set()
+    def __init__(self, texts, dictionary: bool = False, byte_texts=(), extra: bool = False):
+        fixed, used, taken = gt._latin_codes(), {}, set()
+        in_bytes = set()
+        for text in byte_texts:
+            in_bytes.update(ch for ch in gt._TAG.sub("", text) if ch in CATALOG)
         for text in texts:
             for m in gt._TAG.finditer(text):
                 if m.group(1)[0] == "g" and len(m.group(1)) == 3:
@@ -397,17 +414,29 @@ class Letters:
                 if ch in fixed:
                     taken.add(fixed[ch])
                 elif ch in CATALOG and not (dictionary and cjk.supported(ord(ch))):
-                    wanted.add(ch)
+                    used[ch] = used.get(ch, 0) + 1
         free = [code for code in range(LAST_CODE, FIRST_CODE - 1, -1) if code not in taken]
-        order = sorted(wanted, key=ord)
+        # byte-only text first, then the most used, then by letter so a build is repeatable
+        order = sorted(used, key=lambda ch: (ch not in in_bytes, -used[ch], ord(ch)))
         if len(order) > len(free):
-            raise ValueError(f"{len(order)} letters past the fixed codes need a table, and only "
-                             f"{len(free)} codes are free in this pack")
-        self.by_code = {code: CATALOG[ch] for code, ch in zip(free, order)}
+            short = [ch for ch in order if ch in in_bytes][len(free):]
+            if not extra or short:
+                where = " used in item names and other one-byte text" if extra else ""
+                raise ValueError(f"{len(short) if extra else len(order)} letters{where} past the fixed "
+                                 f"codes need a table, and only {len(free)} codes are free in this pack")
+        coded, rest = order[:len(free)], sorted(order[len(free):], key=ord)
+        if len(rest) > MAX_EXTRA:
+            raise ValueError(f"more than {MAX_EXTRA} letters without a code")
+        self.by_code = {code: CATALOG[ch] for code, ch in zip(free, sorted(coded, key=ord))}
         self.codes = {letter.char: bytes([code]) for code, letter in self.by_code.items()}
+        self.extra = [CATALOG[ch] for ch in rest]
+        self.extra_codes = {letter.char: extra_token(k) for k, letter in enumerate(self.extra)}
+        self.codes.update(self.extra_codes)
+        self.by_token = {extra_token(k): letter for k, letter in enumerate(self.extra)}
 
     def __bool__(self) -> bool:
-        return bool(self.by_code)
+        return bool(self.by_code or self.extra)
 
     def records(self) -> bytes:
-        return b"".join(self.by_code[code].record(code) for code in sorted(self.by_code))
+        return (b"".join(self.by_code[code].record(code) for code in sorted(self.by_code)) +
+                b"".join(letter.record(0) for letter in self.extra))

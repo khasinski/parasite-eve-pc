@@ -347,6 +347,21 @@ static int dictionary_index(const PeLangPack *pack, unsigned letter) {
     }
     return -1;
 }
+/* How far the pen moves after the table's letter with no code `k`, as petext/letters.py measures
+ * it: the dialogue box's advance, or in menus the cell's first column, drawn width and a pixel. */
+static unsigned extra_advance(const PeLangPack *pack, unsigned k, unsigned style) {
+    const unsigned char *r = pe_lang_pack_extra(pack, k);
+    if (style == PE_TEXT_MENU) {
+        unsigned m;
+        if (!g_ResidentDataPack.directory.glyphMetrics) return 12;
+        m = pe_lang_letter_metric(r, &g_ResidentDataPack.bytes[g_ResidentDataPack.directory.glyphMetrics]);
+        return (m & 15) + (m >> 4) + 1;
+    }
+    unsigned char advance[78];
+    for (unsigned i = 0; i < 78; ++i) advance[i] = g_TextboxGlyphSpacing[i].right;
+    return pe_lang_letter_advance(r, advance);
+}
+
 static int on_text_letter(void *ctx, void *user) {
     PeHookTextLetter *l = ctx;
     const PeLangPack *pack = active_pack();
@@ -372,10 +387,17 @@ static int on_text_letter(void *ctx, void *user) {
     codes = pack->unicode ? pack->unicode : kPeTextUnicode;
     for (unsigned code = 0x4D; code < 0xF1; ++code)
         if (codes[code] == l->letter && s_font_added) { l->code = (int)code; return 1; }
-    index = dictionary_index(pack, l->letter);
-    if (index < 0) return PeText_GameCode(l->letter) < 0 ? letter_missing(pack, l->letter, 0) : 0;
+    /* a table letter with no code, made in the letter cache like a dictionary letter */
+    index = pe_lang_pack_extra_index(pack, l->letter);
+    if (index >= 0) {
+        l->advance = extra_advance(pack, (unsigned)index, l->style);
+        index += (int)pack->cjk_count;
+    } else {
+        index = dictionary_index(pack, l->letter);
+        if (index < 0) return PeText_GameCode(l->letter) < 0 ? letter_missing(pack, l->letter, 0) : 0;
+        l->advance = pe_lang_pack_glyph_width(pack, (unsigned)index);
+    }
     l->code = -1;
-    l->advance = pe_lang_pack_glyph_width(pack, (unsigned)index);
     if (l->draw && (!s_font_saved || !pe_cjk_resolve(&s_cjk, (unsigned)index, &cell, cjk_sync, cjk_upload, NULL))) {
         if (!s_cjk_warned) {
             pe_mod_log(MOD_ID, "letter cache unavailable/full (%u cells); showing ?", s_cjk.count);
