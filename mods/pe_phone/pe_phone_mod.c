@@ -13,7 +13,10 @@ static int s_tone = PE_TONE_MIXED;
 static const char *const k_modes[] = {"Ask after saving", "Always call", "Off"};
 static const char *const k_tones[] = {"Mixed", "Serious only", "Funny only"};
 
+static int s_sounds = 1;
+
 int pe_phone_mode(void) { return s_mode; }
+int pe_phone_sounds_on(void) { return s_sounds; }
 
 int pe_phone_tone_mask(void) {
     if (s_tone == PE_TONE_SERIOUS) return 1 << PE_CALL_SERIOUS;
@@ -53,6 +56,8 @@ static int pe_phone_init(void) {
                             &s_mode, k_modes, 3);
     pe_menu_register_choice(0, "Call tone", "Which calls can come up: the sensible ones, the silly ones, or both.",
                             &s_tone, k_tones, 3);
+    pe_menu_register_toggle(0, "Phone sounds", "The phone's own sounds: picking up and dialling, then putting it down.",
+                            &s_sounds, NULL);
     pe_menu_register_action(0, "Forget heard calls",
                             "This save forgets the calls it heard: one-time calls can come back.", pe_forget);
     pe_menu_register_info(0, "Last phone", "The last save phone seen: room, story value and day.", pe_info_last);

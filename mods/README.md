@@ -116,8 +116,14 @@ answering No to the save, asks nothing. Nothing in the game's scripts is patched
   box; a longer line runs on into another box. Debug > Check calls measures every call.
 - Per save: record `pe_phone.heard` v1 (48 bytes): the last five calls and up to 16 one-time
   calls heard, as 16-bit key hashes. New Game resets it; F1 > Forget heard calls clears it.
+- Sounds: the phone's own. Every save phone's script plays four sounds from its area's bank,
+  from a base id A (Akao command 0x15F): A and A+1 after Yes (pick up, dial tone), A+3 and A+2
+  after the save (put it down). A call plays the pick-up and the tone twice ("ring... ring...") on
+  its ring page, stopped when the other side picks up, and the put-down pair on `*click*`. The ids
+  come from a table of the 22 phone rooms (pe-native-debug `tools/phone_rooms.py`); elsewhere no
+  sound. F1 > Phone sounds turns them off.
 - Settings: Phone calls (Ask after saving / Always call / Off), Call tone (Mixed / Serious only /
-  Funny only). Debug: Ask now, Call now (no save needed), Check calls.
+  Funny only), Phone sounds. Debug: Ask now, Call now (no save needed), Check calls.
 
 Files (one job each; they talk only through `pe_phone.h`):
 
@@ -128,6 +134,7 @@ Files (one job each; they talk only through `pe_phone.h`):
 | `pe_phone_spot.c` | spotting a phone save: the question page, then `save.committed` |
 | `pe_phone_flow.c` | after the save: "Stay on the line?", then the call page by page |
 | `pe_phone_box.c` | the game side: our dialogue box, field lock, taking the pad, the font |
+| `pe_phone_sound.c` | the phone's own sounds: pick up and ring, put down |
 | `pe_calls_pe1.c` | Parasite Eve's own calls (a pack) |
 | `pe_phone_text.c`, `pe_phone_record.c`, `pe_phone_pick.c` | the pure core (`pe_phone_core.h`): pages and wrapping, the heard record, picking |
 

@@ -5,7 +5,8 @@
  * first, so one Cross goes straight back to the game; Circle is No too. Yes (or the "Always call"
  * setting) plays a call: the service picks it, the pure core lays it out as pages with the game's
  * font, and the box module shows them one at a time. Cross goes on, Circle hangs up (straight to
- * "*click*"). The field stays locked and the pad ours until the last box closes. */
+ * "*click*"). The ring page plays the phone's own pick-up and dial sounds, "*click*" its put-down
+ * sounds (pe_phone_sound.c). The field stays locked and the pad ours until the last box closes. */
 #include <string.h>
 
 #include "pe_game.h"
@@ -42,6 +43,7 @@ static void pe_to_idle(void) {
 
 static void pe_reset(const char *why) {
     if (pe_busy()) pe_mod_log(PE_PHONE_MOD_ID, "call ended: %s", why);
+    pe_phone_sound_stop();
     pe_phone_box_forget();
     pe_to_idle();
 }
@@ -60,6 +62,9 @@ static void pe_end(const char *how) {
 static int pe_show_page(int index) {
     const PePhonePage *p = &s_script.pages[index];
     s_page = index;
+    if (index == 0) pe_phone_sound_play(PE_PHONE_SOUND_DIAL, s_spot.room);
+    else if (index == s_script.click) pe_phone_sound_play(PE_PHONE_SOUND_HANG_UP, s_spot.room);
+    else pe_phone_sound_stop();                           /* picked up: no more ringing */
     return pe_phone_box_show(p->text, p->style, p->lines, p->width);
 }
 
@@ -151,6 +156,7 @@ static int pe_on_textboxes(void *ctx, void *user) {
     if (!pe_game_loaded()) return 0;
     token = g_SceneDispatchToken;
     if (token != s_token) { s_token = token; pe_reset("room changed"); }
+    pe_phone_sound_tick();
     if (!s_checked && pe_phone_font_ready() && !pe_busy()) {
         s_checked = 1;
         (void)pe_phone_flow_check_calls();
