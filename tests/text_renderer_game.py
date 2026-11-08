@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,save]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,save,menus,many]]
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -23,8 +23,18 @@ Checks, each from pe_mods.log and frame dumps:
              what a memory card save holds) keeps the name in the pack's name letters; loading it
              with Continue, with the Greek pack, reads it back with that pack's letters; with no
              pack chosen, the mod finds the Greek pack by its letters.
+  menus      Greek, against the same steps with every mod off: the game's own name entry (it opens
+             after the profile box) draws the pack's grid letters (sys/117) and Aya's name in its
+             name letters; Cross on the first cell adds the pack's first grid letter, two-byte, to
+             the name; after it, the status panel (Triangle in the field) shows the name in the
+             pack's letters, and the save of that moment holds it.
+  many       A pack with all of petext/letters.py's catalog, more letters than the 163 one-byte
+             codes: the first box holds only letters with no code, which the mod makes in the
+             letter cache. They draw (logged, no '?') and look and space exactly as the same box in
+             a pack small enough for every letter to have a code.
 """
 import binascii
+import csv
 import hashlib
 import importlib.util
 import json
@@ -46,6 +56,31 @@ BOX = (10, 160, 310, 230)  # the dialogue box's text, in the 320 x 240 frame
 # before the text renderer (commit 166c2fcdd, every mod off): English must not change.
 ENGLISH = {'first': 'f07dba18b7e3ff663533ff8dafb2a3d3946be8eeabc3c48c477cfdf34a32eca2',
            'name': '8b352c89ac52c02cbc56424794ea7817f2a556fd0b423af33d07381102dc9677'}
+
+
+def presses(events):
+    """fixed() steps for (vblank, button, label): the frame kept as label, then the button held for
+    10 vblanks (none: wait for the next event)."""
+    steps = []
+    for tick, mask, label in events:
+        steps.append((tick, label, f'advance 10 {mask}' if mask else None))
+        if mask:
+            steps.append((tick + 10, f'{label}-held', None))
+    return steps
+
+
+# A New Game to the name entry and on to the field's menu. After the first box (dlg/M001/009) and
+# "Psycho..." (M001/010) comes the profile box (M001/011); Cross there opens the game's own name
+# entry for Aya. Start twice ends it (cursor to END, then done). Five more boxes, then Aya is free
+# in front of Carnegie Hall and Triangle opens the menu, whose status panel shows her name.
+MENU_STEPS = presses([(FIRST_BOX, CROSS, 'first'), (20630, CROSS, 'box2'), (22140, CROSS, 'profile'),
+                      (22450, CROSS, 'grid'), (22760, START, 'typed'), (23070, START, 'end')]
+                     + [(23380 + k, CROSS, f'box{3 + n}') for n, k in enumerate((0, 1510, 3020, 4530, 6660))]
+                     + [(31550, TRIANGLE, 'field'), (31860, 0, 'status')])
+GRID = (72, 76, 250, 226)       # the name entry's letter grid
+NAME_ENTRY = (126, 42, 172, 60)  # the name being entered, above the grid
+STATUS_NAME = (66, 38, 112, 54)  # Aya's name in the status panel
+STATUS_LEVEL = (68, 60, 100, 76)  # the status panel's "Level" picture, beside the name
 
 MODS = ('Cheats', 'PE Enhancements: collection', 'PE Enhancements: economy', 'Hello (example)',
         'PE Enhancements: quality of life', 'Quick save', 'PE Enhancements: rebalance',
@@ -90,7 +125,6 @@ def make_packs(localization, discs, out):
         sample = out / f'{code}.csv'
         subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'sample', '-o', str(sample),
                         str(strings), code], check=True, stdout=subprocess.DEVNULL)
-        import csv
         with sample.open(encoding='utf-8') as f:
             rows = [r for r in csv.DictReader(f) if r['key'] not in ('sys/030', 'sys/117')]
         rows.append({'key': 'sys/117', 'translation': grid(entries['sys/117'], letters), 'notes': 'test grid'})
@@ -121,6 +155,47 @@ def grid(english, letters):
         else:
             out.append(ch)
     return ''.join(out)
+
+
+def make_many_packs(localization, out):
+    """Two packs with the same first box (dlg/M001/009), whose letters come from letters.py's catalog:
+    'many' holds the whole catalog (243 letters, 80 past the 163 one-byte codes). The box's letters
+    are each used once, every other letter in later boxes many times, so build gives the codes to
+    those and none to the box's. 'few' holds only the box's letters, so all of them have codes."""
+    from petext import letters
+    catalog = ''.join(ch for ch in letters.CATALOG if ch.isalpha())
+    rare, common = catalog[::3][:80], ''.join(ch for ch in catalog if ch not in catalog[::3][:80])
+    check(len(rare) + 163 <= len(catalog), f'the catalog has only {len(catalog)} letters')
+    words = [rare[i:i + 5] for i in range(0, 60, 5)]
+    box = '{br}'.join(' '.join(words[i:i + 4]) for i in range(0, 12, 4))
+    strings = out / 'text' / 'strings.json'
+    keys = [e['key'] for e in json.loads(strings.read_text(encoding='utf-8'))
+            if e['key'].startswith('dlg/') and not e['key'].startswith('dlg/M001/') and '{' not in e['text']]
+    later = [rare[60:]] + [(common * 3)[i:i + 20] for i in range(0, 3 * len(common), 20)]
+    check(len(keys) >= len(later), 'too few dialogue entries on the disc')
+    made = {}
+    for which, rows in (('many', [('dlg/M001/009', box)] + list(zip(keys, later))),
+                        ('few', [('dlg/M001/009', box)])):
+        table = out / f'{which}.csv'
+        with table.open('w', encoding='utf-8', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
+            w.writeheader()
+            w.writerows({'key': k, 'translation': t, 'notes': ''} for k, t in rows)
+        pack = out / f'letters-{which}.pelang'
+        subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--allow-overflow',
+                        '--strings', str(strings), '--lang', 'xx', '--name', f'Letters {which}', '-o', str(pack),
+                        str(table)], check=True, stdout=subprocess.DEVNULL)
+        made[which] = ('xx', f'Letters {which}', None, pack)
+    return made, ''.join(words)
+
+
+def letter_codes(pack):
+    """A v4 pack's table letters: Unicode letter -> its one-byte code, 0 for none (pe_lang_pack.c)."""
+    from petext import letters as lettertable
+    data = pack.read_bytes()
+    at, count = struct.unpack_from('<II', data, 80)
+    return {chr(struct.unpack_from('<I', data, at + k * lettertable.RECORD)[0]): data[at + k * lettertable.RECORD + 4]
+            for k in range(count)}
 
 
 def name_letters(pack):
@@ -190,7 +265,7 @@ def keep(work, label):
 
 def fixed(control):
     """A driver for (vblank, label, command) steps: the frame kept as label, then command (or a
-    plain advance to the next step's vblank); quits after the last."""
+    plain advance to the next step's vblank); after the last step, its command or quit."""
     steps = list(control)
 
     def drive(vblank, work):
@@ -198,7 +273,7 @@ def fixed(control):
         tick, label, command = steps.pop(0)
         check(vblank == tick, f'control at {vblank}, expected {tick}: {work}')
         keep(work, label)
-        return (command or f'advance {steps[0][0] - tick} 0') if steps else None
+        return (command or f'advance {steps[0][0] - tick} 0') if steps else command
     drive.steps = steps
     return drive
 
@@ -318,7 +393,7 @@ def continue_until(text, limit):
     return drive
 
 
-def main(game, work=None, parts='english,packs,name,save'):
+def main(game, work=None, parts='english,packs,name,save,menus,many'):
     disc = os.getenv('PE_TEST_DISC')
     if not disc:
         print('PE_TEST_DISC is not set: skipped')
@@ -403,6 +478,70 @@ def main(game, work=None, parts='english,packs,name,save'):
         check("names: Aya's name put in the game's own text's letters" in mods_log(work),
               f'the name was not put in the game\'s own letters: {work}')
         print('PASS load: with no pack chosen, the Greek pack is found by the name\'s letters')
+
+    # The name entry and the status panel, against the same steps with every mod off.
+    if 'menus' in parts:
+        status = MENU_STEPS[-1][0]
+        english = run_fixed(game, discs, out / 'menus-english', MENU_STEPS, mods=False, pad=NEW_GAME)
+        work = out / 'menus-greek'
+        driver = fixed(MENU_STEPS[:-1] + [(status, 'status', 'advance 300 0')])
+        run(game, discs, work, pack=greek, pad=NEW_GAME, start=FIRST_BOX, driver=driver, frame_limit=status + 400,
+            crash_after=status + 100)
+        check(not driver.steps, f'the run stopped before vblank {driver.steps[0][0] if driver.steps else 0}: {work}')
+        log = mods_log(work)
+        missing = [line for line in log.splitlines()
+                   if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line)]
+        check(not missing, f'menus: letters fell back to "?": {missing[:5]}: {work}')
+        check(lit(english, 'grid', GRID) > 500, f'no English name entry grid at vblank 22450: {english}')
+        check(lit(work, 'grid', GRID) > lit(english, 'grid', GRID) // 2, f'the Greek name entry grid is not drawn: {work}')
+        check(crop(work, 'grid', GRID) != crop(english, 'grid', GRID), f'the name entry grid is still English: {work}')
+        check(lit(work, 'grid', NAME_ENTRY) > 20, f'no name above the Greek grid: {work}')
+        check(crop(work, 'grid', NAME_ENTRY) != crop(english, 'grid', NAME_ENTRY),
+              f'the name entry shows the English name: {work}')
+        check(crop(work, 'typed', NAME_ENTRY) != crop(work, 'grid', NAME_ENTRY),
+              f'Cross on the grid added no letter to the name: {work}')
+        print("PASS name entry: the pack's grid letters and Aya's name in its name letters drew")
+
+        for label, frame_of in (('English', english), ('Greek', work)):
+            check(lit(frame_of, 'status', STATUS_NAME) > 20
+                  and crop(frame_of, 'status', STATUS_LEVEL) != crop(frame_of, 'field', STATUS_LEVEL),
+                  f'the {label} status panel is not open at vblank {status}: {frame_of}')
+        check(crop(work, 'status', STATUS_LEVEL) == crop(english, 'status', STATUS_LEVEL),
+              f'the Greek and English frames at {status} are not the same panel: {work}')
+        check(crop(work, 'status', STATUS_NAME) != crop(english, 'status', STATUS_NAME),
+              f'the status panel shows the English name: {work}')
+        card = card_from_report(crash_report(work))
+        name, window = saved_name(card, greek)
+        from petext import alphabets
+        want = greek[2] + alphabets.BY_CODE['el'].letters[0]   # the grid's first cell, as grid() fills it
+        check(name == want, f'the name after the name entry reads "{name}" ({window.hex(" ")}), not "{want}": {work}')
+        print(f'PASS status: the panel shows Aya\'s name in the pack\'s letters; the save holds "{name}" '
+              f'({window.hex(" ")})')
+
+    # More letters than the 163 codes: the first box's letters have none and come from the cache.
+    if 'many' in parts:
+        made, box_letters = make_many_packs(localization, out / 'packs')
+        codes = letter_codes(made['many'][3])
+        check(len(codes) > 163 and all(codes.get(ch) == 0 for ch in box_letters),
+              f'the box\'s letters are not all without a code in {made["many"][3]} ({len(codes)} letters)')
+        check(all(letter_codes(made['few'][3]).get(ch) for ch in box_letters),
+              f'the small pack lacks codes for the box\'s letters: {made["few"][3]}')
+        boxes = {}
+        for which, pack in made.items():
+            boxes[which] = run_fixed(game, discs, out / f'letters-{which}', first, pack=pack, pad=NEW_GAME)
+            log = mods_log(boxes[which])
+            missing = [line for line in log.splitlines() if 'text: ' in line and "shows '?'" in line
+                       or 'cache unavailable' in line or 'no stretch' in line]
+            check(not missing, f'{which}: letters fell back to "?": {missing[:5]}: {boxes[which]}')
+            check(lit(boxes[which], 'first', BOX) > 200, f'{which}: no dialogue drawn: {boxes[which]}')
+        uncoded = "'s letters with no code in use in dialogue"
+        check(f"text: {made['many'][1]} (xx){uncoded}" in mods_log(boxes['many']),
+              f'no letter without a code drew: {boxes["many"]}')
+        check(uncoded not in mods_log(boxes['few']), f'the small pack drew a letter without a code: {boxes["few"]}')
+        check(crop(boxes['many'], 'first', BOX) == crop(boxes['few'], 'first', BOX),
+              f'letters without a code look or space unlike coded ones: {boxes["many"]} vs {boxes["few"]}')
+        print(f'PASS many letters: {len(codes)} letters; the box\'s {len(box_letters)}, none with a code, drew from '
+              'the letter cache the same as coded ones')
     return 0
 
 

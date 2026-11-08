@@ -271,11 +271,13 @@ static int on_text_glyph(void *ctx, void *user) {
 #define MISSING_LOGGED 32u
 static const PeLangPack *s_text_logged;
 static int s_stretch_logged, s_name_letter_logged;
+static unsigned s_uncoded_logged;           /* a bit per PeTextStyle */
 static unsigned s_missing[MISSING_LOGGED], s_missing_count;
 static void text_log_follow(const PeLangPack *pack) {
     if (s_text_logged == pack) return;
     s_text_logged = pack;
     s_stretch_logged = s_name_letter_logged = 0;
+    s_uncoded_logged = 0;
     s_missing_count = 0;
 }
 /* Each missing thing once: a letter (Unicode), a name letter (paged) or a stretch. */
@@ -371,6 +373,13 @@ static int on_text_letter(void *ctx, void *user) {
     index = pe_lang_pack_extra_index(pack, l->letter);
     if (index >= 0) {
         l->advance = extra_advance(pack, (unsigned)index, l->style);
+        text_log_follow(pack);
+        if (l->draw && !(s_uncoded_logged & 1u << l->style)) {
+            s_uncoded_logged |= 1u << l->style;
+            pe_mod_log(MOD_ID, "text: %s's letters with no code in use in %s (first drawn: U+%04X, advance %u)",
+                       s_labels[pack - s_packs], l->style == PE_TEXT_MENU ? "menus" : "dialogue", l->letter,
+                       l->advance);
+        }
         index += (int)pack->cjk_count;
     } else {
         index = dictionary_index(pack, l->letter);
