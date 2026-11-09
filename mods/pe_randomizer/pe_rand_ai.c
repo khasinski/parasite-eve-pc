@@ -26,6 +26,10 @@
  * shared vars go k-th for k-th if the two lists are as long, else those both spawners use stay.
  * The source's others that a script of this room uses move to ones nothing here uses (mode 4 operands in the
  * copy), but N0xa (the stat scale every enemy copies from V0x50). Those aren't zeroed between two fights of a room.
+ * The working vars E's own don't cover (a rich foe in a plain slot: up to 12, mostly bit words the foe sets and
+ * tests, ops 40-42, such as "one of us is attacking") are zeroed by the source's spawner right before it spawns
+ * its foes; here nothing would, and a second fight in the room would start with the last one's bits. So while no
+ * actor of type E is alive (each frame, field or battle), they are kept at 0: the first one spawns on zeros.
  *
  * The script slots (PM commands, effect programs) the source room installs and this room doesn't are
  * installed too, from the source room's records as its own load does it (each slot number has one handler in
@@ -39,6 +43,8 @@
 #include "pe_disc_assets.h"
 #include "pe1/game_state.h"
 #include "pe1/scene_room.h"
+#include "pe1/field_actor.h"
+#include "pe1/script_node.h"
 #include "pe_randomizer.h"
 
 #define MOD_ID "pe_randomizer"
@@ -57,6 +63,8 @@ static struct { unsigned slot; const void *was, *now; } s_slot[PE_RAND_AI_SLOTS]
 static unsigned s_slot_count;
 /* The N vars the copies given at this load use (after their moves). */
 static uint64_t s_n_copies;
+static uint64_t s_stale[PE_RAND_TYPES];   /* E's copy's working vars kept at 0 while no E is alive */
+static uint8_t s_stale_alive[PE_RAND_TYPES];
 
 static uint32_t pe_word(const uint8_t *p, uint32_t at) { uint32_t v; memcpy(&v, p + at, 4); return v; }
 
@@ -228,7 +236,7 @@ static void pe_roles(const uint8_t *tasks, uint32_t bytes, int spawner, PeRoles 
 
 /* n_to for the foe's shared vars (fight_from; E's: fight_to) between two spawners with the opening; the vars it maps. */
 static uint64_t pe_map_roles(const PeRoles *from, const PeRoles *to, const uint8_t *fight_from, unsigned fights,
-                             const uint8_t *fight_to, unsigned own_fights, uint8_t *n_to) {
+                             const uint8_t *fight_to, unsigned own_fights, uint8_t *n_to, uint64_t *left) {
     const int was[4] = {from->level, from->value, from->count, from->flags}, now[4] = {to->level, to->value, to->count, to->flags};
     const uint64_t from_zeroed = from->used & ~from->other, to_zeroed = to->used & ~to->other;
     uint64_t was_roles = 0, now_roles = 0, mapped = 0;
@@ -244,7 +252,7 @@ static uint64_t pe_map_roles(const PeRoles *from, const PeRoles *to, const uint8
         const unsigned v = fight_from[i];
         if ((was_roles >> v & 1) || !(from_zeroed >> v & 1)) continue;
         while (k < own_fights && ((now_roles >> fight_to[k] & 1) || !(to_zeroed >> fight_to[k] & 1))) ++k;
-        if (k == own_fights) break;
+        if (k == own_fights) { *left |= 1ull << v; continue; }
         n_to[v] = fight_to[k++];
         mapped |= 1ull << v;
     }
@@ -358,7 +366,7 @@ void pe_rand_ai_clear(void) { s_map_count = 0; }
 /* A new load: the copies go (the last room's actors are gone), and each slot installed for them that this
  * room doesn't install is set back. */
 static void pe_rand_ai_release(const uint8_t *assets) {
-    for (unsigned i = 0; i < PE_RAND_TYPES; ++i) { free(s_copy[i]); s_copy[i] = NULL; }
+    for (unsigned i = 0; i < PE_RAND_TYPES; ++i) { free(s_copy[i]); s_copy[i] = NULL; s_stale[i] = 0; s_stale_alive[i] = 0; }
     s_copy_count = 0;
     s_n_copies = 0;
     for (unsigned i = s_slot_count; i-- > 0;)
@@ -404,7 +412,7 @@ int pe_rand_ai_apply(int room) {
         uint8_t fight_from[PE_RAND_N_VARS], fight_to[PE_RAND_N_VARS];
         const unsigned fights = pe_fight_vars(theirs, from_bytes, map->from_entity, spawner, fight_from);
         const unsigned own_fights = pe_fight_vars(mine, bytes, map->entity, to_spawner, fight_to);
-        uint64_t room_n = s_n_copies, keep = 1ull << 10;
+        uint64_t room_n = s_n_copies, keep = 1ull << 10, left = 0;
         PeRoles from_roles, to_roles;
         uint32_t own_block, level_was = 0, level_now = 0, value_was = 0, value_now = 0;
         int level_own = 0, value_own = 0;
@@ -413,7 +421,7 @@ int pe_rand_ai_apply(int room) {
         for (unsigned i = 0; i < PE_RAND_N_VARS; ++i) patch.n_to[i] = (uint8_t)i;
         if (from_roles.opening && to_roles.opening) {
             const uint32_t copy_end = pe_word(theirs, 0) - start, own_end = pe_word(mine, 0);
-            keep |= pe_map_roles(&from_roles, &to_roles, fight_from, fights, fight_to, own_fights, patch.n_to);
+            keep |= pe_map_roles(&from_roles, &to_roles, fight_from, fights, fight_to, own_fights, patch.n_to, &left);
             if (pe_entry(mine, bytes, map->entity, &own_block)) {
                 level_own = pe_add_own(copy, copy_end, (unsigned)from_roles.level, mine, own_block, own_end,
                                        (unsigned)to_roles.level, &level_was, &level_now);
@@ -443,6 +451,10 @@ int pe_rand_ai_apply(int room) {
             ++moved;
         }
         pe_walk(copy, 0, pe_word(theirs, 0) - start, pe_patch_step, &patch);
+        /* the working vars left over, where they landed: only those no other script here uses */
+        uint64_t stale = 0;
+        for (unsigned i = 0; i < PE_RAND_N_VARS; ++i)
+            if ((left >> i & 1) && !(room_n >> patch.n_to[i] & 1) && patch.n_to[i] != 10) stale |= 1ull << patch.n_to[i];
         for (unsigned i = 0; i < PE_RAND_N_VARS; ++i)
             if (their_n & (1ull << i)) s_n_copies |= 1ull << patch.n_to[i];
         /* the source room's slots this room lacks */
@@ -493,6 +505,10 @@ int pe_rand_ai_apply(int room) {
             pe_log("rand_ai", "map=%d e%u spawned by e%d's op 8 with sub id %#x (its lead; was %#x)", room, map->entity,
                    to_spawner, lead.lead, lead_set);
         tasks->offsets[map->entity] = s_copy[map->entity] = copy;
+        s_stale[map->entity] = stale;
+        if (stale)
+            pe_log("rand_ai", "map=%d e%u: %u working vars zeroed while no e%u is alive (%#llx)", room, map->entity,
+                   (unsigned)__builtin_popcountll(stale), map->entity, (unsigned long long)stale);
         ++s_copy_count;
         pe_log("rand_ai", "map=%d e%u script of M%03u e%u, %u numbers patched (spawner e%d > e%d), %u slots installed, "
                "%u N vars moved (%u operands)", room, map->entity, map->from_room, map->from_entity, patch.done, spawner,
@@ -508,6 +524,29 @@ int pe_rand_ai_apply(int room) {
     return (int)done;
 }
 
+uint64_t pe_rand_ai_stale(unsigned entity) { return entity < PE_RAND_TYPES ? s_stale[entity] : 0; }
+
+/* Each frame: a moved type's left-over working vars back to 0 while none of its actors is alive. */
+static int pe_rand_ai_frame(void *ctx, void *user) {
+    (void)ctx;
+    (void)user;
+    if (!s_copy_count) return 0;
+    unsigned alive = 0;
+    for (FieldActor *a = g_FieldActorListHead; a; a = a->next)
+        if (a->type_id < PE_RAND_TYPES && !(a->flags & 0x10)) alive |= 1u << a->type_id;   /* 0x10: dead */
+    for (unsigned e = 0; e < PE_RAND_TYPES; ++e) {
+        if (!s_stale[e]) continue;
+        if (alive >> e & 1) { s_stale_alive[e] = 1; continue; }
+        unsigned was = 0;
+        for (unsigned i = 0; i < PE_RAND_N_VARS; ++i)
+            if ((s_stale[e] >> i & 1) && g_ScriptNodeActiveFlags[i]) { g_ScriptNodeActiveFlags[i] = 0; ++was; }
+        if (was && s_stale_alive[e])
+            pe_log("rand_ai", "map=%d e%u: none alive, %u working vars back to 0", pe_room_number(), e, was);
+        s_stale_alive[e] = 0;
+    }
+    return 0;
+}
+
 static int pe_rand_ai_rows(void *ctx, void *user) {
     (void)ctx;
     (void)user;
@@ -517,4 +556,6 @@ static int pe_rand_ai_rows(void *ctx, void *user) {
 
 void pe_rand_ai_register(void) {
     pe_hook_add(PE_HOOK_PLAYER_ROWS, pe_rand_ai_rows, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_FRAME, pe_rand_ai_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_rand_ai_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
 }

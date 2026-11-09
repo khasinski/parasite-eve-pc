@@ -1004,6 +1004,22 @@ static void do_run(const Run *r, FILE *out) {
         if (r->win && !won) FAIL("M%03u: ai= line won no battle", r->room);
         checks_done += r->nai;
     }
+    if (r->nai || r->foes) {
+        /* After the line, the moved types with left-over working vars die (the fight's `win` leaves them
+         * standing; flag 0x10, as Battle_UpdateEnemy marks the dead): at the mod's next frame hook those vars
+         * are 0 again, as their home spawner zeroes them before its next spawn. stale= how many the fight set. */
+        unsigned stale = 0;
+        for (FieldActor *a = g_FieldActorListHead; a; a = a->next)
+            if (a->type_id < 32 && pe_rand_ai_stale(a->type_id)) a->flags |= 0x10;
+        for (unsigned e = 0; e < 32; ++e)
+            for (unsigned v = 0; v < 64; ++v) stale += (pe_rand_ai_stale(e) >> v & 1) && g_ScriptNodeActiveFlags[v];
+        PE_HOOK(PE_HOOK_FRAME, NULL);
+        for (unsigned e = 0; e < 32; ++e)
+            for (unsigned v = 0; v < 64; ++v)
+                if ((pe_rand_ai_stale(e) >> v & 1) && g_ScriptNodeActiveFlags[v])
+                    FAIL("M%03u: e%u is gone but its working var N%#x is %#x", r->room, e, v, (unsigned)g_ScriptNodeActiveFlags[v]);
+        if (stale) fprintf(out, "\tstale=%u", stale);
+    }
     if (press) fputs("\tpress=1", out);
     if (animwait) fputs("\tanimwait=1", out);
     if (r->has_menu) fprintf(out, "\tmenu=%d", r->menu);
