@@ -249,10 +249,14 @@ def cmd_sample(a) -> int:
 
 def cmd_languages(a) -> int:
     """Which languages the pack tool can write today, from the list in petext/alphabets.py."""
-    from petext import alphabets
+    from petext import alphabets, letters
     for lang in alphabets.LANGUAGES:
         gone = alphabets.missing(lang)
         state = "ready" if not gone else f"missing {len(gone)} letters: {gone[:40]}"
+        unseen = "".join(c for c in dict.fromkeys(alphabets.full_alphabet(lang))
+                         if c in letters.CATALOG and letters.CATALOG[c].art == letters.PLACEHOLDER)
+        if unseen and not gone:
+            state = f"ready, but {len(unseen)} letters show ? until drawn: {unseen[:40]}"
         if lang.code in alphabets.NEEDS_LAYOUT:
             state = "needs new text layout"
         print(f"{lang.code:8} {lang.name:24} {state}")

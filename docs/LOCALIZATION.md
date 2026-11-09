@@ -24,8 +24,8 @@ the [Parasite Eve Localization Mod Plan](https://claude.ai/artifact/2NpmecRhhgMB
 | Japanese semantic proofreading | Pending human review; extraction/alignment does not establish translation accuracy |
 | Cyrillic | Russian, Ukrainian and Belarusian alphabets supported; modular authored glyphs and per-pack activation |
 | Chinese, Japanese, Korean | Optional external-font compilation, v2 glyph dictionaries and a native cache; see CJK scope and limits below |
-| Slovak, Romanian, Croatian, Serbian, Icelandic, Lithuanian, Latvian, Vietnamese, Greek, Macedonian, Kazakh | A letter table in the pack, one byte a letter; see Letter tables below. Not yet played |
-| Hebrew, Arabic | Right to left, Arabic joined; see Right-to-left text below. Sample packs only |
+| Slovak, Romanian, Croatian, Serbian, Icelandic, Lithuanian, Latvian, Vietnamese, Greek, Macedonian, Kazakh | A letter table in the pack, one byte a letter; see Letter tables below. Not yet played. Greek letters, Icelandic ð þ and a few Serbian, Macedonian and Kazakh letters show `?` until someone draws them (see Letters still to draw) |
+| Hebrew, Arabic | Right to left, Arabic joined; see Right-to-left text below. Sample packs only; the letters show `?` until someone draws them |
 
 `python -I localization/pelang.py languages` lists every language the project means to support
 (`petext/alphabets.py`) and which letters each still lacks. Persian and Urdu still lack letters;
@@ -365,7 +365,18 @@ a recipe, carried out on the player's font page when it is uploaded:
 - **base**: the game's letter as it is. A Greek capital Alpha is the game's A, but it stays a real
   letter;
 - **marks**: the game's letter plus up to three marks, each a list of points in the record;
-- **art**: drawn in `letters.py`, or built there on a drawn letter (a Greek alpha with an accent).
+- **art**: drawn in `letters.py`, or built there on a drawn letter.
+
+### Letters still to draw
+
+Letters drawn from nothing for this game came out hard to read, so they are placeholders for now:
+each draws as a question mark (`PLACEHOLDER_LETTERS` in `letters.py`, and every Arabic shape). They
+are Greek (Γ Δ Θ Λ Ξ Π Σ Φ Ψ Ω, the small letters the game has no look-alike for, and those with
+accents), Icelandic ð þ Þ, Serbian and Macedonian Ђ Ћ Љ Њ Џ, Kazakh Ә ү ұ, Hebrew and Arabic.
+Everything else already works on them: the pack, name letters, right-to-left order and Arabic
+joining. To give one its real picture, for example from a fan translation's own letters, add it to
+`ART` and take it out of `PLACEHOLDER_LETTERS`; an Arabic shape needs a joining stroke on row 7 at
+each edge it joins.
 
 A pack with a table is **v3**. Its header is 88 bytes: the v2 fields, with a glyph count that may be
 0, and two more u32 at offsets 80 and 84, the table's offset and its letter count (at most 163). The
@@ -440,9 +451,8 @@ Write the translation in plain reading order with the base letters (not presenta
 and measures lines with the letters joined (`petext/rtl.py`, which follows the renderer's rules;
 `tests/text_render_rtl_cases.txt` holds cases both must pass).
 
-The letters are drawn for this game: Hebrew in `petext/letters.py`, Arabic in `petext/arabic.py`
-(shared bodies plus dots; every joining shape has its joining stroke on row 7 at the edge it
-joins). Hebrew names save with the shared name numbers; Arabic letters didn't fit below the per-pack
+The Hebrew and Arabic letters are placeholders for now and draw as question marks (see Letters
+still to draw); the order and the joining are the real thing. Hebrew names save with the shared name numbers; Arabic letters didn't fit below the per-pack
 numbers, so an Arabic pack numbers them as its own letters, as Chinese does.
 
 Test languages: `pelang.py sample -o he.csv strings.json he` (or `ar`), then `build --lang he`.

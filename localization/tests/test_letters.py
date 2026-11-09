@@ -70,9 +70,9 @@ class Records(unittest.TestCase):
         self.assertEqual(record[8], len(letters.MARKS["breve"].points))
 
     def test_a_drawn_letter_carries_its_pixels(self):
-        record = letters.CATALOG["α"].record(0x80)
+        record = letters.CATALOG["—"].record(0x80)
         self.assertEqual(record[6], letters.NO_BASE)
-        self.assertEqual(record[5], letters.CATALOG["α"].advance())
+        self.assertEqual(record[5], letters.CATALOG["—"].advance())
         self.assertTrue(any(record[8:]))
         self.assertTrue(all(b & 15 <= 2 and b >> 4 <= 2 for b in record[8:]))
 
@@ -86,6 +86,13 @@ class Records(unittest.TestCase):
         for letter in letters.CATALOG.values():
             base = latin.synthetic_cell(gt.CODE_OF[letter.base]) if letter.base else None
             self.assertIn(1, letter.compose(base), letter.char)
+
+    def test_letters_no_one_has_drawn_yet_are_question_marks(self):
+        for ch in "ΓαΩάאשЉұþبﺑﻻ":
+            self.assertEqual(letters.CATALOG[ch].art, letters.PLACEHOLDER, ch)
+        self.assertFalse(set(letters.PLACEHOLDER_LETTERS) & set(letters.ART))
+        record = letters.CATALOG["א"].record(0x80)
+        self.assertEqual(record[8:], letters.CATALOG["Γ"].record(0x80)[8:])
 
     def test_every_drawn_letter_stays_in_its_cell(self):
         for ch, (top, pattern) in letters.ART.items():

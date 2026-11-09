@@ -16,8 +16,8 @@ A letter comes one of three ways:
          no game art may go in a pack. A pack carries the recipe, marks and all, so a new mark needs
          no new build of the game
   art    drawn here, like cyrillic.py. Only these strokes are authored; the shadow is generated
-A letter on top of drawn art, such as a Greek alpha with an accent, is put together here and packed
-as art. See "Letter tables" in docs/LOCALIZATION.md for the record format.
+Letters no one has drawn well yet (Greek, Hebrew, Arabic and a few others) are placeholders: a
+question mark, packed as art, until a translation brings their real pictures (PLACEHOLDER below). See "Letter tables" in docs/LOCALIZATION.md for the record format.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ import struct
 import unicodedata
 from dataclasses import dataclass, field
 
-from . import arabic, cjk, cyrillic, gametext as gt, latin
+from . import cjk, cyrillic, gametext as gt, latin
 
 FIRST_CODE, LAST_CODE = 0x4D, 0xEF
 CELL = 12
@@ -76,84 +76,6 @@ MARKS.update({
 # Authored strokes: (first row, rows top down), each pattern from column 1. # is a stroke. Capitals
 # stand on rows 1-8, lowercase on rows 3-8, tails go down to row 10.
 ART: dict[str, tuple[int, str]] = {
-    # Icelandic.
-    "ð": (1, ".#.#./..#../.#.#./...#./.####/#...#/#...#/.###."),
-    "þ": (1, "#..../#..../####./#...#/#...#/#...#/#...#/####./#..../#...."),
-    "Þ": (1, "#..../#..../####./#...#/#...#/####./#..../#...."),
-    # Greek.
-    "Γ": (1, "#####/#..../#..../#..../#..../#..../#..../#...."),
-    "Δ": (1, "...#.../...#.../..#.#../..#.#../.#...#./.#...#./#.....#/#######"),
-    "Θ": (1, ".####./#....#/#....#/#.##.#/#....#/#....#/#....#/.####."),
-    "Λ": (1, "...#.../...#.../..#.#../..#.#../.#...#./.#...#./#.....#/#.....#"),
-    "Ξ": (1, "######/....../....../.####./....../....../....../######"),
-    "Π": (1, "######/#....#/#....#/#....#/#....#/#....#/#....#/#....#"),
-    "Σ": (1, "######/#...../.#..../..#.../..#.../.#..../#...../######"),
-    "Φ": (1, "...#.../.#####./#..#..#/#..#..#/#..#..#/.#####./...#.../...#..."),
-    "Ψ": (1, "#..#..#/#..#..#/#..#..#/#..#..#/.#####./...#.../...#.../...#..."),
-    "Ω": (1, ".####./#....#/#....#/#....#/#....#/.#..#./.#..#./##..##"),
-    "α": (3, ".##.#/#..##/#...#/#...#/#..##/.##.#"),
-    "β": (1, ".###./#...#/#...#/####./#...#/#...#/#...#/####./#..../#...."),
-    "γ": (3, "#...#/#...#/.#.#./.#.#./..#../..#../..#../..#.."),
-    "δ": (1, ".###./.#.../..#../.###./#...#/#...#/#...#/.###."),
-    "ε": (3, ".###./#..../.##../#..../#..../.###."),
-    "ζ": (1, "#####/...#./..#../.#.../#..../#..../#..../.###./....#/...#."),
-    "η": (3, "#.##./##..#/#...#/#...#/#...#/#...#/....#/....#"),
-    "θ": (1, ".##./#..#/#..#/####/#..#/#..#/#..#/.##."),
-    "κ": (3, "#..#/#.#./##../#.#./#..#/#..#"),
-    "λ": (1, "#..../.#.../.#.../..#../..#../.#.#./.#.#./#...#"),
-    "μ": (3, "#...#/#...#/#...#/#...#/#..##/###.#/#..../#...."),
-    "ξ": (1, "#####/.#.../#..../.###./#..../#..../.###./....#/...#."),
-    "π": (3, "######/.#..#./.#..#./.#..#./.#..#./.#..#."),
-    "ρ": (3, ".###./#...#/#...#/#...#/#...#/####./#..../#...."),
-    "σ": (3, ".#####/#...#./#...#./#...#./#...#./.###.."),
-    "ς": (3, ".####/#..../#..../.##../...#./...#./.##.."),
-    "τ": (3, "#####/..#../..#../..#../..#../...##"),
-    "φ": (3, ".#.##./#.#..#/#.#..#/#.#..#/#.#..#/.####./..#.../..#..."),
-    "χ": (3, "#....#/.#..#./.#..#./..##../.#..#./.#..#./#....#"),
-    "ψ": (1, "..#../..#../#.#.#/#.#.#/#.#.#/#.#.#/.###./..#../..#../..#.."),
-    "ω": (3, ".#...#./#.....#/#..#..#/#..#..#/#..#..#/.##.##."),
-    # Serbian, Macedonian, Kazakh.
-    "Ђ": (1, "######./..#..../..#..../..####./..#...#/..#...#/..#...#/..#..#."),
-    "ђ": (1, ".#..../####../.#..../.####./.#...#/.#...#/.#...#/.#..#."),
-    "Ћ": (1, "######./..#..../..#..../..####./..#...#/..#...#/..#...#/..#...#"),
-    "ћ": (1, ".#..../####../.#..../.####./.#...#/.#...#/.#...#/.#...#"),
-    "Љ": (1, "..###.../..#.#.../..#.#.../..#.###./..#.#..#/..#.#..#/.#..#..#/#...###."),
-    "љ": (3, "..##..../.#.#..../.#.###./.#.#..#/.#.#..#/#..###."),
-    "Њ": (1, "#...#.../#...#.../#...#.../######../#...#..#/#...#..#/#...#..#/#...###."),
-    "њ": (3, "#...#.../#...#.../######../#...#..#/#...#..#/#...###."),
-    "Џ": (1, "#....#/#....#/#....#/#....#/#....#/#....#/#....#/######/..#.../..#..."),
-    "џ": (3, "#...#/#...#/#...#/#...#/#...#/#####/..#../..#.."),
-    "Ә": (1, ".####./#....#/.....#/.....#/######/#....#/#....#/.####."),
-    "ү": (3, "#...#/#...#/.#.#./.#.#./..#../..#../..#../..#.."),
-    # Hebrew: letters stand on rows 2-8 (no capitals), lamed rises from row 0, the end-of-word
-    # forms and qof go down to row 10. Drawn for this game; the line order is the renderer's.
-    "א": (2, "#...#/#...#/.#..#/..#../.#.#./#...#/#...#"),   # alef
-    "ב": (2, "####./...#./...#./...#./...#./...#./#####"),   # bet
-    "ג": (2, "###./..#./..#./..#./.##./#.#./#..#"),          # gimel
-    "ד": (2, "#####/...#./...#./...#./...#./...#./...#."),   # dalet
-    "ה": (2, "#####/....#/....#/#...#/#...#/#...#/#...#"),   # he
-    "ו": (2, "##/.#/.#/.#/.#/.#/.#"),                        # vav
-    "ז": (2, "###/.#./.#./.#./.#./.#./.#."),                 # zayin
-    "ח": (2, "#####/#...#/#...#/#...#/#...#/#...#/#...#"),   # het
-    "ט": (2, "#..##/#.#.#/#...#/#...#/#...#/#...#/.###."),   # tet
-    "י": (2, "##/.#/.#"),                                    # yod
-    "ך": (2, "####/...#/...#/...#/...#/...#/...#/...#/...#"),  # final kaf
-    "כ": (2, "####/...#/...#/...#/...#/...#/####"),          # kaf
-    "ל": (0, "#..../#..../#####/....#/....#/...#./..#../..#../..#.."),  # lamed
-    "ם": (2, "#####/#...#/#...#/#...#/#...#/#...#/#####"),   # final mem
-    "מ": (2, "#.##./.#..#/#...#/#...#/#...#/#...#/#.###"),   # mem
-    "ן": (2, "##/.#/.#/.#/.#/.#/.#/.#/.#"),                  # final nun
-    "נ": (2, "##./..#/..#/..#/..#/..#/###"),                 # nun
-    "ס": (2, "#####/#...#/#...#/#...#/#...#/#...#/.###."),   # samekh
-    "ע": (2, "#...#/#...#/.#..#/..#.#/...##/...#./###.."),   # ayin
-    "ף": (2, "#####/#...#/##..#/....#/....#/....#/....#/....#/....#"),  # final pe
-    "פ": (2, "#####/#...#/##..#/....#/....#/....#/#####"),   # pe
-    "ץ": (2, "#...#/#...#/#..#./#.#../##.../#..../#..../#..../#...."),  # final tsadi
-    "צ": (2, "#...#/#...#/.#.#./..#../...#./....#/#####"),   # tsadi
-    "ק": (2, "#####/....#/....#/#...#/#..#./#.#../#..../#..../#...."),  # qof
-    "ר": (2, "####./....#/....#/....#/....#/....#/....#"),   # resh
-    "ש": (2, "#.#.#/#.#.#/#.#.#/#.#.#/#..##/#...#/#####"),   # shin
-    "ת": (2, "#####/.#..#/.#..#/.#..#/.#..#/.#..#/##..#"),   # tav
     # Signs every language needs.
     "(": (1, "..#/.#./#../#../#../#../#../#../.#./..#"),
     ")": (1, "#../.#./..#/..#/..#/..#/..#/..#/.#./#.."),
@@ -169,6 +91,32 @@ ART: dict[str, tuple[int, str]] = {
     "·": (5, "#"),
 }
 
+
+# Letters with no picture yet. Each draws as a question mark until a translation brings real ones
+# (a fan patch's own letter art, or a translator's drawing): letters drawn here from nothing came out
+# hard to read, and a reader is better served by a plain question mark than by a wrong-looking
+# letter. Everything else already works on them (the pack, name letters, right-to-left order,
+# Arabic joining), so a real picture is the only thing left to add: put it in ART and take the
+# letter out of here.
+PLACEHOLDER = (1, ".###./#...#/....#/...#./..#../..#../...../..#..")
+PLACEHOLDER_LETTERS = "".join((
+    "ðþÞ",                                                      # Icelandic
+    "ΓΔΘΛΞΠΣΦΨΩαβγδεζηθκλμξπρςστφχψωΏάέήώ",                     # Greek
+    "ЂђЋћЉљЊњЏџӘүұ",                                             # Serbian, Macedonian, Kazakh
+    "אבגדהוזחטיךכלםמןנסעףפץצקרשת",                               # Hebrew
+))
+
+
+def _arabic_letters() -> str:
+    """Every Arabic shape the renderer picks (alone, end, start, middle; lam-alef; the tatweel)
+    and each base letter, all placeholders for now."""
+    from . import rtl
+    out = []
+    for letter in rtl.FORMS:
+        out.append(chr(letter))
+        out += [chr(form) for form in rtl.forms_of(letter)]
+    out.append(chr(rtl.TATWEEL))
+    return "".join(dict.fromkeys(out))
 
 def _strokes(top: int, pattern: str) -> list[int]:
     lines = pattern.split("/")
@@ -295,8 +243,10 @@ def _catalog() -> dict[str, Letter]:
         add(lower, base, *marks, ops=ops)
         add(lower.upper(), base.upper(), *marks)
 
-    for ch, art in {**ART, **arabic.ART}.items():
+    for ch, art in ART.items():
         out[ch] = Letter(ch, art=art)
+    for ch in PLACEHOLDER_LETTERS + _arabic_letters():
+        out[ch] = Letter(ch, art=PLACEHOLDER)
     out["Ð"] = Letter("Ð", "D", "", ("bar_capital",))
 
     # Latin: Slovak, Romanian, Croatian, Lithuanian, Latvian.
@@ -362,13 +312,8 @@ def _catalog() -> dict[str, Letter]:
     add("ι", "i", ops=OP_DOTLESS)
     for ch, base in zip("ΆΈΉΊΌΎ", "AEHIOY"):
         add(ch, base, "tonos")
-    add("Ώ", "", "tonos", drawn="Ω")
     add("Ϊ", "I", "diaeresis")
     add("Ϋ", "Y", "diaeresis")
-    add("ά", "", "acute", drawn="α")
-    add("έ", "", "acute", drawn="ε")
-    add("ή", "", "acute", drawn="η")
-    add("ώ", "", "acute", drawn="ω")
     add("ό", "o", "acute")
     add("ύ", "u", "acute")
     add("ί", "i", "acute", ops=OP_DOTLESS)
@@ -394,7 +339,6 @@ def _catalog() -> dict[str, Letter]:
     add("Ө", "O", "bar_across")
     add("ө", "o", "bar_across_small")
     add("Ұ", "Y", "bar_y")
-    add("ұ", "", "bar_y", drawn="ү")
 
     add(";", ",", "dots_above_comma")
     return out

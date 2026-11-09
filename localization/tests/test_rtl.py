@@ -56,19 +56,19 @@ class Join(unittest.TestCase):
 
 
 class ArabicLetters(unittest.TestCase):
-    def test_every_shape_is_drawn_and_joins_at_its_edges(self):
-        from petext import arabic, letters
+    def test_every_shape_is_a_placeholder_until_a_translation_draws_it(self):
+        from petext import letters
         for letter in rtl.FORMS:
             for form in rtl.forms_of(letter):
                 self.assertIn(chr(form), letters.CATALOG, hex(form))
-                self.assertEqual(arabic.check(chr(form)), [], hex(form))
+                self.assertEqual(letters.CATALOG[chr(form)].art, letters.PLACEHOLDER, hex(form))
             self.assertIn(chr(letter), letters.CATALOG, hex(letter))
 
     def test_cut_is_strokes_and_shadow(self):
         from petext import letters
-        first, width = letters.CATALOG["\ufe91"].cut()            # beh, start: "..#/..#/###" from column 1
-        self.assertEqual((first, width), (1, 4))
-        self.assertEqual(letters.CATALOG["\ufe91"].joined_advance(), 5)
+        first, width = letters.CATALOG["ﺑ"].cut()            # the question mark, 5 wide from column 1
+        self.assertEqual((first, width), (1, 6))
+        self.assertEqual(letters.CATALOG["ﺑ"].joined_advance(), 7)
 
 
 class ArabicPack(unittest.TestCase):
