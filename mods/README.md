@@ -95,7 +95,10 @@ plays a short call in dialogue boxes: `*dial... ring... ring...*`, the call (Aya
 `{name}: ...` in the game's dialogue band, the caller's in a window higher up), then `*click*`.
 Cross goes on, Circle hangs up. Aya is held by the field lock (field event 0xFE / 0xFF, as a
 talking actor's script sends) until the last box closes. Backing out of the save screen, or
-answering No to the save, asks nothing. Nothing in the game's scripts is patched.
+answering No to the save, asks too while F1 > Ask without saving too is on (the default; off: only
+a real save asks). The question then comes once Aya has put the phone down (only a real save
+leaves her put-down waiting to be held; holding her earlier would stall a Yes before its save
+screen). Nothing in the game's scripts is patched.
 
 - Spotting: the save question page ("Will you save your progress?" with two choices) is
   recognised at PE_HOOK_TEXT_PAGE ahead of every page handler; each sighting logs
@@ -153,8 +156,8 @@ answering No to the save, asks nothing. Nothing in the game's scripts is patched
   (M032) saves through "Use the phone" with no question of its own: that choice is spotted instead
   (`pe_phone_use_option`), and its set call `pe1/sewer_emergency` plays first there. Its call has
   no sounds (the sewer's bank has no phone sounds).
-- Settings: Phone calls (Ask after saving / Always call / Off), Call tone (Mixed / Serious only /
-  Funny only), Phone sounds.
+- Settings: Phone calls (Ask after saving / Always call / Off), Ask without saving too (on),
+  Call tone (Mixed / Serious only / Funny only), Phone sounds.
 
 Files (one job each; they talk only through `pe_phone.h`):
 

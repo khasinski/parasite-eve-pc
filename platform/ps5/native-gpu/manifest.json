@@ -4307,7 +4307,7 @@
     },
     {
       "path": "mods/pe_phone/pe_phone.h",
-      "sha256": "f82fa33853a6acc52a69e094e81c7b589b8cfa8126272d7df23192600626ad23"
+      "sha256": "38e7b8c276d4b45ee23528d8707ce0852702a8b93332cd28d20905c815c727d6"
     },
     {
       "path": "mods/pe_phone/pe_phone_box.c",
@@ -4331,7 +4331,7 @@
     },
     {
       "path": "mods/pe_phone/pe_phone_mod.c",
-      "sha256": "ffebaa7cc8ff9f01d6892a34d62bbaca05d66e0c0d18473f3fd363a15d33fc35"
+      "sha256": "47f46640fe9a36e4be17e2154ac575561b097281fba995e8004ce4b20e7c67ea"
     },
     {
       "path": "mods/pe_phone/pe_phone_packs.c",
@@ -4355,7 +4355,7 @@
     },
     {
       "path": "mods/pe_phone/pe_phone_spot.c",
-      "sha256": "af9cd731b27a8c78f308f37a0e64cb9b5c36738c6d0986465269ec879f4c3ecc"
+      "sha256": "7d392cde3c8579ec769c353145e77bfc64d0667548f912f34e811c677d66880b"
     },
     {
       "path": "mods/pe_phone/pe_phone_text.c",

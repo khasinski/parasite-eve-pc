@@ -13,12 +13,14 @@
 static int s_mode = PE_PHONE_ASK;
 static int s_tone = PE_TONE_MIXED;
 static int s_sounds = 1;
+static int s_unsaved = 1;                 /* ask after a phone use with no save too (No, or backing out) */
 static int s_preview;                     /* 0: a call picked as usual; n: call n-1 */
 static const char *const k_modes[] = {"Ask after saving", "Always call", "Off"};
 static const char *const k_tones[] = {"Mixed", "Serious only", "Funny only"};
 
 int pe_phone_mode(void) { return s_mode; }
 int pe_phone_sounds_on(void) { return s_sounds; }
+int pe_phone_unsaved_on(void) { return s_unsaved; }
 
 int pe_phone_tone_mask(void) {
     if (s_tone == PE_TONE_SERIOUS) return 1 << PE_CALL_SERIOUS;
@@ -87,6 +89,9 @@ static int pe_phone_init(void) {
     pe_menu_register_choice(0, "Phone calls",
                             "Ask after saving: \"Stay on the line?\" (No first). Always call: no question. Off: nothing.",
                             &s_mode, k_modes, 3);
+    pe_menu_register_toggle(0, "Ask without saving too",
+                            "Also ask after using a phone without saving (No to saving, or backing out of the save screen).",
+                            &s_unsaved, NULL);
     pe_menu_register_choice(0, "Call tone", "Which calls can come up: the sensible ones, the silly ones, or both.",
                             &s_tone, k_tones, 3);
     pe_menu_register_toggle(0, "Phone sounds", "The phone's own sounds: picking up and dialling, then putting it down.",

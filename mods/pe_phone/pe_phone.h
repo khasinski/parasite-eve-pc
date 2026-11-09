@@ -33,6 +33,7 @@
 enum { PE_PHONE_ASK = 0, PE_PHONE_ALWAYS = 1, PE_PHONE_OFF = 2 };
 enum { PE_TONE_MIXED = 0, PE_TONE_SERIOUS = 1, PE_TONE_FUNNY = 2 };
 int pe_phone_mode(void);
+int pe_phone_unsaved_on(void);                         /* setting: ask after a phone use with no save too */
 int pe_phone_tone_mask(void);
 
 /* ---- the registry and the record (pe_phone_service.c) ---- */

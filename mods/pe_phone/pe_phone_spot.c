@@ -11,21 +11,34 @@
  * "Use the phone" saves, so the other answers end as a question with no save). The phone then
  * opens the save screen; when a card save is published the host announces "save.committed" (quick
  * saves and room checkpoints never commit). A question with no save after it (No, or backing out of
- * the save screen) is forgotten once the field has been settled a while, and on a room change. */
+ * the save screen) is forgotten once the field has been settled a while, and on a room change.
+ *
+ * "Ask without saving too" (F1, on by default): a save question with no save after it counts as
+ * well. The phone's script holds the field from the question through the save, so a free field for
+ * a few frames with no commit means No or a backed-out save screen; the flow then asks as usual.
+ * (Counting frames from the question's box closing instead was wrong: a Yes waits on an animation
+ * for well over 10 frames before the save screen opens.) With no save Aya has already put the phone
+ * down when the question shows, and the ring page's pick-up sound plays: found headless 2026-11-09,
+ * neither No nor backing out leaves the phone's task waiting on her put-down as a save does, and
+ * holding her any earlier stalls a Yes. Only real save phones' questions: the sewer's "Press the
+ * switch" or "Cancel" is not a phone call. */
 #include <stdio.h>
 
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_phone.h"
+#include "pe1/game_state.h"
 #include "pe1/scene_dispatch.h"
 #include "pe1/script_queue.h"
 
 #define PE_STORY_VAR    74
 #define PE_FORGET_FREE  30   /* settled frames after a question with no save */
+#define PE_NO_SAVE_GAP  10   /* settled frames after a question with no save, before asking anyway */
 
 enum { SPOT_IDLE, SPOT_ASKED, SPOT_SAVED };
 
 static int s_state = SPOT_IDLE;
+static int s_kind;                     /* 1 a save phone's question, 3 the sewer's emergency phone */
 static int s_quiet;                    /* our call is up: the phone's pages aren't a new phone */
 static int s_free;
 static int s_token = -1;
@@ -57,6 +70,7 @@ static int pe_on_page(void *ctx, void *user) {
     if (s_state == SPOT_IDLE) {
         s_spot = s_seen;
         s_state = SPOT_ASKED;
+        s_kind = kind;
         s_free = 0;
     }
     return 0;
@@ -84,6 +98,12 @@ void pe_phone_spot_tick(int settled) {
     if (token != s_token) { s_token = token; pe_phone_spot_clear(); return; }
     if (s_state != SPOT_ASKED) return;
     if (!settled) { s_free = 0; return; }
+    if (s_kind == 1 && pe_phone_unsaved_on() && pe_phone_mode() != PE_PHONE_OFF) {
+        if (++s_free < PE_NO_SAVE_GAP) return;
+        pe_log("phone", "room=%d saved=0 ask=1", s_spot.room);
+        s_state = SPOT_SAVED;
+        return;
+    }
     if (++s_free >= PE_FORGET_FREE) {
         pe_log("phone", "room=%d saved=0", s_spot.room);
         pe_phone_spot_clear();
