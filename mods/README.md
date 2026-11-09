@@ -97,12 +97,12 @@ All off until chosen; while they are off the mod writes nothing.
 
 Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): add `pe_challenges`
 to build it. Files: `pe_challenges.h` maps them, one feature per file (run and rows, bundles, tab
-rules, damage rules, assisted detection, run log, summary rows), challenges described in one table
+rules, damage rules, Hardcore, assisted detection, run log, summary rows), challenges described in one table
 in `pe_ch_run.c`.
 
 F1 > Challenges: No Parasite Energy, No items in battle, No escape, Glass cannon (Aya takes x2 from
-hits and contact, deals x1.5) and Tough crowd (enemies take /1.5 or /2 damage, as if they had that
-much more HP; EXP, drops and scripted boss endings are untouched). Bundles (Purist, Nightmare) only
+hits and contact, deals x1.5), Tough crowd (enemies take /1.5 or /2 damage, as if they had that
+much more HP; EXP, drops and scripted boss endings are untouched) and Hardcore (below). Bundles (Purist, Nightmare) only
 turn challenges on; Clear all is press-twice. All off until chosen; while they are off the mod writes
 nothing.
 
@@ -119,6 +119,13 @@ nothing.
   damage on an enemy, scaled after Rebalance and before the Bestiary's kill check.
 - **Run summary:** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
   Knockouts survive the reload after a game over in `pe_challenges.ini` beside the preferences.
+- **Hardcore (permadeath):** chosen at the title for a New Game only, and its run locks every
+  challenge on (more can be added, none lowered; Clear all refuses). The game's own game over (phase
+  3 with no Preraise and no Revive, `Battle_StepPostBattle`) marks the run dead in
+  `pe_challenges.ini`. Loading any save of a dead run (card slot, quick save, copy) shows a message
+  and goes back to the title through the game's own `Boot_Shutdown` on the first frame a soft reset
+  is allowed; nothing is deleted. The load isn't refused up front because the load admission code
+  lives in host files the PS5 port pins. Nightmare doesn't include Hardcore.
 
 ## A mod
 

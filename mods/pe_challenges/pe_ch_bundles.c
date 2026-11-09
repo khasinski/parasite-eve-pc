@@ -22,12 +22,17 @@ static void pe_bundle_purist(void) {
     pe_bundle(CH_BIT(CH_NO_PE) | CH_BIT(CH_NO_ITEMS) | CH_BIT(CH_NO_ESCAPE), 0, "Purist");
 }
 
+/* Every challenge but Hardcore, which is chosen on its own at the title. */
 static void pe_bundle_nightmare(void) {
-    pe_bundle(CH_ALL, 2, "Nightmare");
+    pe_bundle(CH_ALL & ~CH_HARDCORE_BIT, 2, "Nightmare");
 }
 
 static void pe_clear_all(void) {
     const uint64_t now = SDL_GetTicks();
+    if (pe_ch_hardcore_locked()) {
+        pe_toast("Locked: Hardcore run (challenges can't be cleared)");
+        return;
+    }
     if (!s_clear_armed_ms || now - s_clear_armed_ms > CH_CONFIRM_MS) {
         s_clear_armed_ms = now ? now : 1;
         pe_toast(pe_ch_underway() && g_ch_run.active ? "Clear all: press again (the run will be marked assisted)"
@@ -45,8 +50,9 @@ int pe_ch_bundles_register(void) {
     failed |= pe_menu_register_action(CH_PAGE_BUNDLES, "Purist",
         "Turns on No Parasite Energy, No items and No escape.", pe_bundle_purist);
     failed |= pe_menu_register_action(CH_PAGE_BUNDLES, "Nightmare",
-        "Turns on every challenge, Tough crowd at 2x HP.", pe_bundle_nightmare);
+        "Turns on every challenge but Hardcore, Tough crowd at 2x HP.", pe_bundle_nightmare);
     failed |= pe_menu_register_action(CH_PAGE_BUNDLES, "Clear all",
-        "Press twice. Every challenge off; mid-run the run is marked assisted.", pe_clear_all);
+        "Press twice. Every challenge off; mid-run the run is marked assisted. Not in a Hardcore run.",
+        pe_clear_all);
     return failed ? -1 : 0;
 }

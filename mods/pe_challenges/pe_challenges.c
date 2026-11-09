@@ -19,6 +19,7 @@ static int challenges_init(void) {
     if (pe_ch_run_register(MOD_ID) != 0) { pe_menu_begin(0); return -1; }
     pe_ch_tabs_register(MOD_ID);
     pe_ch_damage_register(MOD_ID);
+    pe_ch_hardcore_register(MOD_ID);
     pe_ch_assist_register(MOD_ID);
     pe_ch_runlog_register(MOD_ID);
     failed |= pe_ch_summary_register();

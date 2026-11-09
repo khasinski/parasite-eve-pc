@@ -10,10 +10,11 @@
 #include "pe_mod_menu.h"
 
 static void pe_info_status(char *out, unsigned size) {
+    const char *hardcore = (g_ch_run.active & CH_HARDCORE_BIT) ? ", Hardcore (locked)" : "";
     if (!pe_save_loaded()) snprintf(out, size, "No game loaded");
     else if (!g_ch_run.ever) snprintf(out, size, "No challenges");
-    else if (pe_ch_assisted()) snprintf(out, size, "Assisted");
-    else snprintf(out, size, "Clean");
+    else if (pe_ch_assisted()) snprintf(out, size, "Assisted%s", hardcore);
+    else snprintf(out, size, "Clean%s", hardcore);
 }
 
 static void pe_info_active(char *out, unsigned size) {

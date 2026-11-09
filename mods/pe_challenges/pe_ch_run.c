@@ -44,6 +44,9 @@ static const PeChallengeInfo kChallenges[CH_COUNT] = {
     [CH_TOUGH]     = {"Tough crowd", "Tough crowd",
                       "Enemies take less damage, as if they had 1.5x or 2x HP. EXP and drops unchanged.",
                       kToughLevels, 3},
+    [CH_HARDCORE]  = {"Hardcore", "Hardcore",
+                      "Permadeath: a game over ends the run for good. New Game only; locks every challenge on.",
+                      NULL, 0},
 };
 
 /* The rows: 0 off, else on (a level for a level row). */
@@ -107,12 +110,33 @@ static uint32_t pe_new_run_id(void) {
 
 /* ---- rows <-> run ------------------------------------------------------------------------- */
 
+/* Hardcore: it starts only with a New Game, and in its run nothing can be lowered. Rows that ask
+ * otherwise go back to what the run has. */
+static void pe_hardcore_locks(void) {
+    const unsigned want = pe_ch_rows_mask();
+    int refused = 0;
+    if ((want & CH_HARDCORE_BIT) && !(g_ch_run.active & CH_HARDCORE_BIT)) {
+        s_on[CH_HARDCORE] = 0;
+        pe_toast("Hardcore starts with a New Game: pick it at the title");
+        return;
+    }
+    if (!(g_ch_run.active & CH_HARDCORE_BIT)) return;
+    for (int i = 0; i < CH_COUNT; ++i)
+        if ((g_ch_run.active & CH_BIT(i)) && !s_on[i]) { s_on[i] = 1; refused = 1; }
+    if (s_on[CH_TOUGH] < g_ch_run.tough) { s_on[CH_TOUGH] = g_ch_run.tough; refused = 1; }
+    if (refused) pe_toast("Locked: Hardcore run (challenges can be added, never lowered)");
+}
+
+int pe_ch_hardcore_locked(void) { return (g_ch_run.active & CH_HARDCORE_BIT) != 0; }
+
 /* The rows changed (F1 or a bundle): the run follows. */
 static void pe_sync(void) {
-    const unsigned want = pe_ch_rows_mask();
-    const int tough = s_on[CH_TOUGH];
-    unsigned dropped = 0;
+    unsigned want, dropped = 0;
+    int tough;
     if (!pe_game_loaded()) return;   /* the title (even after a game): the rows are the next pick */
+    pe_hardcore_locks();
+    want = pe_ch_rows_mask();
+    tough = s_on[CH_TOUGH];
     if (want == g_ch_run.active && tough == g_ch_run.tough) return;
     if (pe_ch_underway()) {
         dropped = g_ch_run.active & ~want;
