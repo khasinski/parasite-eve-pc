@@ -25,7 +25,7 @@ import struct
 import unicodedata
 from dataclasses import dataclass, field
 
-from . import cjk, cyrillic, gametext as gt, latin
+from . import arabic, cjk, cyrillic, gametext as gt, latin
 
 FIRST_CODE, LAST_CODE = 0x4D, 0xEF
 CELL = 12
@@ -249,6 +249,17 @@ class Letter:
             return gt.ADVANCE[gt.CODE_OF[self.base]] + self.extra
         return latin._ink(self.compose())[1] + 2
 
+    def cut(self) -> tuple[int, int]:
+        """(first stroke column, width with the shadow): how pe_lang cuts a joining letter
+        (pe_lang_letter_cut), in dialogue and menus alike."""
+        x0, x1, _, _ = latin._ink(self.compose())
+        return x0, min(x1 - x0 + 2, CELL - x0)
+
+    def joined_advance(self) -> int:
+        """How far a joining letter moves the pen (one pixel past its cut); the renderer moves it
+        two less where it joins the letter on its left (petext/rtl.py width)."""
+        return self.cut()[1] + 1
+
     def metric(self, metrics: bytes) -> int:
         """The menus' metrics byte: drawn width << 4 | first column."""
         if self.base:
@@ -284,7 +295,7 @@ def _catalog() -> dict[str, Letter]:
         add(lower, base, *marks, ops=ops)
         add(lower.upper(), base.upper(), *marks)
 
-    for ch, art in ART.items():
+    for ch, art in {**ART, **arabic.ART}.items():
         out[ch] = Letter(ch, art=art)
     out["Ð"] = Letter("Ð", "D", "", ("bar_capital",))
 
@@ -426,9 +437,14 @@ class Letters:
     the stretches are made they are written as F1 C7 hi lo (extra_token), which no pack holds.
 
     With `dictionary`, signs the dictionary can hold (curly quotes, dashes) stay there, as the
-    full-width signs Chinese, Japanese and Korean text expects."""
+    full-width signs Chinese, Japanese and Korean text expects.
 
-    def __init__(self, texts, dictionary: bool = False, byte_texts=(), extra: bool = False):
+    `shapes` are letters the pack holds although its text doesn't use them: the joined shapes of
+    its Arabic letters, which the renderer picks as it draws (petext/rtl.py). Those, and joined
+    shapes the text does use, never take a code: pe_lang cuts them so joined letters touch, which it
+    does for letters with no code."""
+
+    def __init__(self, texts, dictionary: bool = False, byte_texts=(), extra: bool = False, shapes=()):
         fixed, used, taken = gt._latin_codes(), {}, set()
         in_bytes = set()
         for text in byte_texts:
@@ -444,6 +460,10 @@ class Letters:
                     taken.add(fixed[ch])
                 elif ch in CATALOG and not (dictionary and cjk.supported(ord(ch))):
                     used[ch] = used.get(ch, 0) + 1
+        from .rtl import is_joining
+        joined = {ch for ch in shapes if ch in CATALOG} | {ch for ch in used if is_joining(ord(ch))}
+        for ch in joined:
+            used.pop(ch, None)
         free = [code for code in range(LAST_CODE, FIRST_CODE - 1, -1) if code not in taken]
         # byte-only text first, then the most used, then by letter so a build is repeatable
         order = sorted(used, key=lambda ch: (ch not in in_bytes, -used[ch], ord(ch)))
@@ -453,7 +473,7 @@ class Letters:
                 where = " used in item names and other one-byte text" if extra else ""
                 raise ValueError(f"{len(short) if extra else len(order)} letters{where} past the fixed "
                                  f"codes need a table, and only {len(free)} codes are free in this pack")
-        coded, rest = order[:len(free)], sorted(order[len(free):], key=ord)
+        coded, rest = order[:len(free)], sorted(set(order[len(free):]) | joined, key=ord)
         if len(rest) > MAX_EXTRA:
             raise ValueError(f"more than {MAX_EXTRA} letters without a code")
         self.by_code = {code: CATALOG[ch] for code, ch in zip(free, sorted(coded, key=ord))}

@@ -19,8 +19,10 @@ LINE = 20                                   # letters a dialogue line
 
 
 def catalog_text() -> str:
-    # letters only: the catalog's signs (dashes, quotes) are fine too, but keep the lines words
-    return "".join(ch for ch in letters.CATALOG if ch.isalpha())
+    # letters only: the catalog's signs (dashes, quotes) are fine too, but keep the lines words. Not
+    # Arabic joined shapes: the renderer picks those itself, and they never take a code.
+    from petext import rtl
+    return "".join(ch for ch in letters.CATALOG if ch.isalpha() and not rtl.is_joining(ord(ch)))
 
 
 # Item names keep one byte a letter, so their letters need codes: the catalog's last two, which by

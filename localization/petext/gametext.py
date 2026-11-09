@@ -126,6 +126,17 @@ def encode(text: str, extended: bool = False, cjk_codes=None) -> bytes:
     return bytes(out)
 
 
+def letter_of(c: bytes) -> str | None:
+    """The Unicode letter one command (validation.commands) draws in the pack being built, or None."""
+    if c[:2] == b"\xf1\xc7" and c[:4] in PACK_EXTRA:
+        return PACK_EXTRA[c[:4]].char
+    if len(c) == 1 and c[0] in PACK_LETTERS:
+        return PACK_LETTERS[c[0]].char
+    if len(c) == 1 and c[0] in CHARS:
+        return CHARS[c[0]]
+    return None
+
+
 def _latin_codes() -> dict[str, int]:
     from . import latin
     from . import cyrillic

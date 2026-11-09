@@ -384,7 +384,8 @@ def cmd_build(a) -> int:
         byte_texts = [r.get('translation','') for r in rows
                       if stretch.stays_bytes(r.get('key','')) and (a.bytes_only or not r.get('key','') in namelib.KEYS)]
         table = lettertable.Letters(texts, dictionary=bool(getattr(a,'cjk_font',None)),
-                                    byte_texts=byte_texts, extra=not a.bytes_only)
+                                    byte_texts=byte_texts, extra=not a.bytes_only,
+                                    shapes=rtl.shapes_for(texts) if gt.RTL else ())
         atlas = cjk.Atlas(texts, getattr(a,'cjk_font',None), skip=table.codes)
     except (ValueError, OSError, struct.error) as e:
         print(f'error: CJK font: {e}')

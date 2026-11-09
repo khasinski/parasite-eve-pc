@@ -73,6 +73,24 @@ def forms_of(c: int) -> list[int]:
     return out
 
 
+def shapes_for(texts) -> set[str]:
+    """Every joined shape the Arabic letters in `texts` can take on screen."""
+    out = set()
+    for text in texts:
+        for ch in text:
+            c = ord(ch)
+            if c in FORMS:
+                out.update(chr(f) for f in forms_of(c))
+            elif c == TATWEEL:
+                out.add(ch)
+    return out
+
+
+def is_arabic(c: int) -> bool:
+    """A letter that joins or is left out when lines are joined: Arabic letters, their marks."""
+    return c in FORMS or c == TATWEEL or is_mark(c) or is_joining(c)
+
+
 def join(letters: str) -> tuple[str, list[bool]]:
     """(the letters joined, whether each touches the next): PeText_Join."""
     cps = [ord(c) for c in letters]
@@ -81,7 +99,11 @@ def join(letters: str) -> tuple[str, list[bool]]:
     nxt = [False] * len(cps)
     for i, c in enumerate(cps):
         t = types[i]
-        if not keep[i] or t == "U":
+        if not keep[i]:
+            continue
+        if t == "U":
+            if c in FORMS:                   # hamza: its one shape
+                cps[i] = FORMS[c][0]
             continue
         p = i - 1
         while p >= 0 and not keep[p]:

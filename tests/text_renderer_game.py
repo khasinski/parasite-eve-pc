@@ -49,6 +49,12 @@ Checks, each from pe_mods.log and frame dumps:
              moved to end at the box's right side (x 300). The name entry's title, the grid and
              Aya's Hebrew name above it draw pixel for pixel as the left-to-right pack's: menus keep
              their places, only the order inside changes. The status panel shows the name.
+             Arabic: a pack with the code "ar" whose first box holds four words (joined letters,
+             letters that join only the one before them, lam-alef twice, hamza) and whose name
+             entry title is one word. The frames light exactly the pixels petext/rtl.py and the
+             pack's letter pictures say they should: each letter in its joined shape, the gaps
+             between joined letters closed, right to left, each box line ending at x 300. The
+             scene behind the box comes from a pack whose first box is a lone '.'.
 """
 import binascii
 import csv
@@ -125,6 +131,9 @@ HEBREW_TITLE = 'הכנס שם'
 HEBREW_NAME = 'איה'
 RIGHT_EDGE = 300               # a right-to-left line in the default box ends here (Textbox_RightEdge)
 LINE_TOP = 174                 # the default box's first line (textbox.c: cursor.y 0xAE), 12 px each
+ARABIC_BOX = ['نيويورك', 'مستشفيات',
+              'الاعلانات', 'أصدقاء']
+ARABIC_TITLE = 'الاسم'
 CHINESE_GRID = ('的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对'
                 '可里后小么心多天而能好都然没日于起还发成事只作当想看文无开手十用主行方又如前所本见经头面公同三'
                 '已老从动两长知民样现分将外但身些与高意进把法此实回二理美点月明其种声全工己话儿者向情部正名定女')
@@ -197,8 +206,8 @@ def make_many_packs(localization, out):
     one-byte codes). The box's and the title's letters are each used once, every other letter in
     later boxes many times, so build gives the codes to those and none to the box's or the title's.
     'few' holds only the box and the title, so all of their letters have codes."""
-    from petext import letters
-    catalog = ''.join(ch for ch in letters.CATALOG if ch.isalpha())
+    from petext import letters, rtl
+    catalog = ''.join(ch for ch in letters.CATALOG if ch.isalpha() and not rtl.is_joining(ord(ch)))
     rare, common = catalog[::3][:80], ''.join(ch for ch in catalog if ch not in catalog[::3][:80])
     check(len(rare) + 163 <= len(catalog), f'the catalog has only {len(catalog)} letters')
     words = [rare[i:i + 5] for i in range(0, 60, 5)]
@@ -248,6 +257,50 @@ def make_rtl_packs(localization, out, visual):
                        stdout=subprocess.DEVNULL)
         made[code] = (code, name, line(HEBREW_NAME), pack)
     return made
+
+
+def make_arabic_packs(localization, out):
+    """The Arabic pack ('ar') and a pack whose first box is a lone '.' at its left (the scene)."""
+    strings = out / 'text' / 'strings.json'
+    made = {}
+    for code, name, rows in (('ar', 'Arabic', [('dlg/M001/009', '{br}'.join(ARABIC_BOX)), ('sys/039', ARABIC_TITLE)]),
+                             ('xx', 'Scene', [('dlg/M001/009', '.')])):
+        table = out / f'arabic-{code}.csv'
+        with table.open('w', encoding='utf-8', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
+            w.writeheader()
+            w.writerows({'key': k, 'translation': t, 'notes': ''} for k, t in rows)
+        pack = out / f'arabic-{code}.pelang'
+        subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--strings', str(strings),
+                        '--lang', code, '--name', name, '-o', str(pack), str(table)], check=True,
+                       stdout=subprocess.DEVNULL)
+        made[code] = (code, name, None, pack)
+    return made
+
+
+def joined_line(text):
+    """(width, {(x, row): 1 stroke or 2 shadow}) of an Arabic word as the renderer draws it, from
+    its left edge and the cell's top: petext/rtl.py's shapes and order, each letter cut to its strokes
+    and shadow (pe_lang), one pixel apart, or touching where they join. The leftmost letter is drawn
+    last, over the shadow of the one on its right."""
+    from petext import letters, rtl
+    joined, nxt = rtl.join(text)
+    order, _ = rtl.order(joined)
+    placed, pen = [], 0
+    for k, i in enumerate(order):
+        letter = letters.CATALOG[joined[i]]
+        first, w = letter.cut()
+        advance = w + 1
+        if k + 1 < len(order) and order[k + 1] + 1 == i and nxt[order[k + 1]]:
+            advance = w - 1
+        placed.append((pen, first, w, letter.compose()))
+        pen += advance
+    pixels = {}
+    for at, first, w, cell in reversed(placed):
+        for p, v in enumerate(cell):
+            if v and first <= p % 12 < first + w:
+                pixels[(at + p % 12 - first, p // 12)] = v
+    return pen, pixels
 
 
 def turned(a, b):
@@ -783,6 +836,48 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
                          f'{menus["he"]} vs {menus["xx"]}')
         print("PASS rtl menus: the name entry title and the grid drew as in drawing order, in the places the game gives "
               "them; Aya's Hebrew name grows to the left as letters are typed, above the grid and in the status panel")
+
+        # Arabic: the frames light exactly the pixels the joined words should.
+        arabic = make_arabic_packs(localization, out / 'packs')
+        boxes = {code: run_fixed(game, discs, out / f'arabic-box-{code}', first, pack=pack, pad=NEW_GAME)
+                 for code, pack in arabic.items()}
+        log = mods_log(boxes['ar'])
+        missing = [line for line in log.splitlines() if 'text: ' in line and "shows '?'" in line
+                   or 'cache unavailable' in line or 'no stretch' in line]
+        check(not missing, f'arabic: letters fell back to "?": {missing[:5]}: {boxes["ar"]}')
+        check('reads right to left (ar)' in log, f'the Arabic pack is not read right to left: {boxes["ar"]}')
+        ar, scene = bright(boxes['ar'], 'first', BOX), bright(boxes['xx'], 'first', BOX)
+        for n, word in enumerate(ARABIC_BOX):
+            width_px, pixels = joined_line(word)
+            left, top = RIGHT_EDGE - width_px - BOX[0], LINE_TOP - BOX[1] + n * 12
+            wrong = []
+            for y in range(top, top + 12):
+                for x in range(16, len(ar[0])):        # right of the scene pack's '.'
+                    want = pixels.get((x - left, y - top)) == 1
+                    if not scene[y][x] and ar[y][x] != want:
+                        wrong.append((x + BOX[0], y + BOX[1]))
+                    elif want and not ar[y][x]:
+                        wrong.append((x + BOX[0], y + BOX[1]))
+            check(not wrong, f'arabic: box line {n + 1} does not light the joined word\'s pixels '
+                             f'(first differences at {wrong[:4]}): {boxes["ar"]}')
+        print(f'PASS rtl arabic dialogue: {len(ARABIC_BOX)} words drew joined, right to left, ending at the box\'s '
+              'right side, pixel for pixel as the letter pictures and the joining rules say')
+
+        steps = [step for step in MENU_STEPS if step[0] <= next(t for t, label, _ in MENU_STEPS if label == 'grid')]
+        steps[-1] = (steps[-1][0], 'grid', None)
+        work = run_fixed(game, discs, out / 'arabic-menus', steps, pack=arabic['ar'], pad=NEW_GAME)
+        title = bright(work, 'grid', TITLE)
+        width_px, pixels = joined_line(ARABIC_TITLE)
+        lit_px = {(x, y) for y, row in enumerate(title) for x, v in enumerate(row) if v}
+        want = {xy for xy, v in pixels.items() if v == 1}
+        found = None
+        if lit_px and want:
+            dx = min(x for x, _ in lit_px) - min(x for x, _ in want)
+            dy = min(y for _, y in lit_px) - min(y for _, y in want)
+            found = (dx, dy) if {(x + dx, y + dy) for x, y in want} == lit_px else None
+        check(found, f'arabic: the name entry title does not light the joined word\'s pixels: {work}')
+        print(f'PASS rtl arabic menus: the name entry title drew joined, right to left, pixel for pixel '
+              f'(at x {found[0] + TITLE[0]})')
     return 0
 
 

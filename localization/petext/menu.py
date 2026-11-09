@@ -30,11 +30,40 @@ def latin_metric(code: int, metrics: bytes) -> int | None:
     return min(latin.advance(g, None), 15) << 4
 
 
+def _arabic_at(raw: bytes, i: int, page: int):
+    """(letter, bytes) when a right-to-left pack's Arabic letter starts at raw[i], else None."""
+    if not gt.RTL:
+        return None
+    from . import rtl
+    if raw[i:i + 4] in gt.PACK_EXTRA:
+        ch = gt.PACK_EXTRA[raw[i:i + 4]].char
+        return (ch, 4) if rtl.is_arabic(ord(ch)) else None
+    if not page and raw[i] in gt.PACK_LETTERS and rtl.is_arabic(ord(gt.PACK_LETTERS[raw[i]].char)):
+        return gt.PACK_LETTERS[raw[i]].char, 1
+    return None
+
+
 def width(raw: bytes, metrics: bytes) -> int:
-    """Draw_MeasureTextWidth, with the Latin Extended codes as pe_lang sets them."""
+    """Draw_MeasureTextWidth, with the Latin Extended codes as pe_lang sets them. A right-to-left
+    pack's Arabic letters measure joined, as the renderer draws them (petext/rtl.py)."""
+    from . import letters, rtl
     w, page = 0, 0
     i = 0
+    run = []
+
+    def joined():
+        out = rtl.width("".join(run), lambda ch: letters.CATALOG[ch].joined_advance(),
+                        lambda ch: letters.CATALOG[ch].cut()[1]) if run else 0
+        run.clear()
+        return out
+
     while i < len(raw):
+        arabic = _arabic_at(raw, i, page)
+        if arabic:
+            run.append(arabic[0])
+            i += arabic[1]
+            continue
+        w += joined()
         c = raw[i]
         if raw[i:i+4] in gt.PACK_EXTRA:      # a cache cell, cut as a coded letter: drawn width + 1
             m = gt.PACK_EXTRA[raw[i:i+4]].metric(metrics)
@@ -66,7 +95,7 @@ def width(raw: bytes, metrics: bytes) -> int:
         if glyph in gt.PACK_LETTERS:
             m = gt.PACK_LETTERS[glyph].metric(metrics)
         w += ((metrics[glyph % 0x1B9] if m is None else m) >> 4) + extra
-    return w
+    return w + joined()
 
 
 def load_metrics(strings_path) -> bytes | None:

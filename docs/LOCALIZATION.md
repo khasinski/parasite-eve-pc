@@ -25,10 +25,11 @@ the [Parasite Eve Localization Mod Plan](https://claude.ai/artifact/2NpmecRhhgMB
 | Cyrillic | Russian, Ukrainian and Belarusian alphabets supported; modular authored glyphs and per-pack activation |
 | Chinese, Japanese, Korean | Optional external-font compilation, v2 glyph dictionaries and a native cache; see CJK scope and limits below |
 | Slovak, Romanian, Croatian, Serbian, Icelandic, Lithuanian, Latvian, Vietnamese, Greek, Macedonian, Kazakh | A letter table in the pack, one byte a letter; see Letter tables below. Not yet played |
+| Hebrew, Arabic | Right to left, Arabic joined; see Right-to-left text below. Sample packs only |
 
 `python -I localization/pelang.py languages` lists every language the project means to support
-(`petext/alphabets.py`) and which letters each still lacks. Arabic, Persian, Urdu, Hebrew, Hindi,
-Bengali and Thai need new text layout as well as letters.
+(`petext/alphabets.py`) and which letters each still lacks. Persian and Urdu still lack letters;
+Hindi, Bengali and Thai need new text layout as well as letters.
 
 To see a language's letters in the game before anyone has translated it, make a test language: the
 game's own tags and page breaks with that language's words in place of the text.
@@ -412,6 +413,40 @@ and `--bytes-only` keeps the old limit of 163.
 with a line of each language, for choosing shapes. It needs Pillow, so run it without `-I`. To add a
 letter, add it to `letters.py` and run `pelang.py latin-header`, which also regenerates
 `tests/pe_lang_letter_vectors.h`: the C composer has to match Python pixel for pixel.
+
+## Right-to-left text
+
+A pack whose language code reads right to left (`he`, `ar`, `fa`, `ur`, `yi`, `ps`, `sd`, `ug`,
+`ckb`, `dv`, or any code with the script subtag `Arab`, `Hebr` or `Thaa`) is drawn a line at a time
+by the game's text renderer (`PeText_LineFinish` in `src/main/draw/text_render.c`). The pack format
+doesn't change: `pe_lang` reads the direction from the code given to `build --lang`.
+
+- Hebrew and Arabic run right to left. English words and names (Aya, Carnegie Hall), numbers with
+  their signs and separators (1997, 12:30, 50%), and the box's number command keep left to right
+  inside the line; spaces and punctuation between take the direction around them; brackets turn
+  round. The rules are the Unicode bidirectional algorithm, simplified for one line of
+  right-to-left text.
+- Arabic letters take their joined shapes (alone, start, middle, end; the Unicode presentation
+  forms) and lam then alef becomes one letter, in the game as it draws, so a name typed on the name
+  entry screen joins too. Joined letters touch: `pe_lang` cuts them to their strokes and shadow and
+  the renderer closes the gap between those that join.
+- Dialogue lines end at the box's right side (x 300 in the default box, mirroring its 20 px left
+  margin), so `build` wraps right-to-left dialogue to 280 px. Menus keep their places: text starts
+  where the game puts it, only the order inside changes.
+- Vowel marks (Hebrew points, Arabic harakat) are left out, as everyday text writes them.
+
+Write the translation in plain reading order with the base letters (not presentation forms).
+`build` puts every joined shape of the pack's Arabic letters in the pack as letters with no code,
+and measures lines with the letters joined (`petext/rtl.py`, which follows the renderer's rules;
+`tests/text_render_rtl_cases.txt` holds cases both must pass).
+
+The letters are drawn for this game: Hebrew in `petext/letters.py`, Arabic in `petext/arabic.py`
+(shared bodies plus dots; every joining shape has its joining stroke on row 7 at the edge it
+joins). Hebrew names save with the shared name numbers; Arabic letters didn't fit below the per-pack
+numbers, so an Arabic pack numbers them as its own letters, as Chinese does.
+
+Test languages: `pelang.py sample -o he.csv strings.json he` (or `ar`), then `build --lang he`.
+The disc test `original-game-text-renderer`, part `rtl`, checks both on screen.
 
 ## CJK (Chinese, Japanese and Korean)
 

@@ -11,7 +11,7 @@ from petext import alphabets, cjk, gametext as gt, letters, validation  # noqa: 
 # Everything else in the list waits for its letters (Hebrew reads right to left: petext/rtl.py).
 READY = """en id ms sw tl es pt fr de it nl sv nb da fi pl tr cs hu ca sq et sl
            sk ro hr sr-Latn is lt lv vi sr-Cyrl mk kk el
-           ru uk be bg zh-Hans zh-Hant ja ko he""".split()
+           ru uk be bg zh-Hans zh-Hant ja ko he ar""".split()
 
 
 class Languages(unittest.TestCase):

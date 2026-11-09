@@ -11,7 +11,7 @@ Runs after control validation: the waits it adds are the compiler's, not the tra
 """
 from __future__ import annotations
 
-from .layout import NAME_WIDTH, advance
+from .layout import NAME_WIDTH, measure
 from .validation import commands
 
 SPACE, BREAK, WAIT = 0x0F, 0xF7, 0xF8
@@ -47,14 +47,14 @@ def _wrap_line(line: list[bytes], width: int, name_px: int, indent: bool, charac
     if word:
         words.append(word)
     for w in words:
-        w_px = sum(advance(c, name_px) for c in w)
+        w_px = measure(w, name_px)
         if cur and cur_w + w_px > width:
             out.append(cur)
             body = w
             while body and body[0][0] == SPACE:   # the break replaces the spaces before the word
                 body = body[1:]
             cur = ([bytes([SPACE])] if indent else []) + body
-            cur_w = sum(advance(c, name_px) for c in cur)
+            cur_w = measure(cur, name_px)
         else:
             cur += w
             cur_w += w_px

@@ -38,18 +38,46 @@ def advance(c: bytes, name_width: int = NAME_WIDTH) -> int:
     return 0
 
 
+def measure(cmds, name_width: int = NAME_WIDTH, menu_advance=None) -> int:
+    """How wide commands draw on one line. A right-to-left pack's Arabic letters are joined first
+    (petext/rtl.py), as the renderer draws them: their joined shapes, the gaps between them closed.
+    `menu_advance` measures the other commands in a menu's style instead of the dialogue box's."""
+    plain = menu_advance or (lambda c: advance(c, name_width))
+    if not gt.RTL:
+        return sum(plain(c) for c in cmds)
+    from . import letters, rtl
+    total, run = 0, []
+
+    def flush():
+        nonlocal total
+        if run:
+            total += rtl.width("".join(run), lambda ch: letters.CATALOG[ch].joined_advance(),
+                               lambda ch: letters.CATALOG[ch].cut()[1])
+            run.clear()
+
+    for c in cmds:
+        ch = gt.letter_of(c)
+        if ch and rtl.is_arabic(ord(ch)):
+            run.append(ch)
+            continue
+        flush()
+        total += plain(c)
+    flush()
+    return total
+
+
 def screens(raw: bytes, name_width: int = NAME_WIDTH):
-    pages, lines, width = [], [], 0
+    pages, lines, line = [], [], []
     for c in commands(raw):
         if c[0] in (0xF7, 0xF8):
-            lines.append(width)
-            width = 0
+            lines.append(measure(line, name_width))
+            line = []
             if c[0] == 0xF8:
                 pages.append(lines)
                 lines = []
         else:
-            width += advance(c, name_width)
-    lines.append(width)
+            line.append(c)
+    lines.append(measure(line, name_width))
     pages.append(lines)
     return pages
 
