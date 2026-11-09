@@ -41,5 +41,7 @@ Aya Brea	Aya Brea
 ١٢٣ كتاب	ﺏﺎﺘﻛ ١٢٣
 # lam with hamza alef, after a joining letter
 بلأ	ﻸﺑ
+# hamza takes its one shape; letters after one that joins only backwards start again
+أصدقاء	ﺀﺎﻗﺪﺻﺃ
 # tatweel joins and keeps its shape
 بـب	ﺐـﺑ

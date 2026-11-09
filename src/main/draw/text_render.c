@@ -528,7 +528,12 @@ static void JoinLetters(u32 *letters, unsigned n, u8 *keep, u8 *joins_next) {
         int p = (int)i - 1, t = type[i], before, after;
         unsigned q = i + 1;
         const ArabicForms *f;
-        if (!keep[i] || t == 'U') continue;
+        if (!keep[i]) continue;
+        if (t == 'U') {                         /* hamza: its one shape */
+            f = FormsOf(letters[i]);
+            if (f) letters[i] = f->alone;
+            continue;
+        }
         while (p >= 0 && !keep[p]) --p;
         while (q < n && !keep[q]) ++q;
         before = p >= 0 && (type[p] == 'D' || type[p] == 'C');
