@@ -19,10 +19,10 @@
 #   [pe1/pizza]                    the call's key, in square brackets: pack/name.
 #                                  Saves remember calls by key, so don't rename one once it's played.
 #                                  Use your own pack name for your calls: [mine/landlord2]
-#   caller = Tony's Pizza          the name shown for the other side
+#   caller = John's of Times Square        the name shown for the other side
 #   tone = funny                   serious or funny (F1 > Call tone picks which can come up)
 #   day = 1                        story day it can play on: 1 to 6, a range 2-5, or any
-#   them: Tony's Pizza, how can I help?      a line the caller says
+#   them: John's on Forty-Fourth.           a line the caller says
 #   aya: Can you deliver to Carnegie Hall?   a line Aya says (shown with the name the player gave her)
 #
 # Optional settings (the default is in brackets):
@@ -100,13 +100,13 @@ them: Then why are you still in there?
 aya: Because she is.
 
 [pe1/pizza]
-caller = Tony's Pizza
+caller = John's of Times Square
 tone = funny
 day = 1
-them: Tony's Pizza, how can I help?
-aya: Can you deliver to Carnegie Hall?
-them: Sure thing. Any special instructions?
-aya: Don't come inside. Ever.
+them: John's on Forty-Fourth. Kitchen's closed for the night.
+aya: Any chance you've got a pie left for Carnegie Hall?
+them: Is the show still going?
+aya: No. The fire department could use a slice, though.
 
 [pe1/wrong_number]
 caller = ???
