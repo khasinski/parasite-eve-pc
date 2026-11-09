@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "2fc08d9dd61f0037ffc77b2d716c3791283917f98a91fed1542d70fced3660ac"
+      "sha256": "a74bac4bb136862d39e0eb5779c366eac2f331e0f05d02e2dc9cf2f27aa17a6e"
     },
     {
       "path": "mods/host/pe_api_native.c",
@@ -3919,11 +3919,11 @@
     },
     {
       "path": "mods/host/pe_extension_store.c",
-      "sha256": "3d1c538d9f8a634272e123939d277104f6cf6e6ab535606742a4984c1f7c8e36"
+      "sha256": "52cb032048cfa41d80bde6a7d4a9ead67ccd7bfd1f2c8b027ae606e33ae2e221"
     },
     {
       "path": "mods/host/pe_extension_store.h",
-      "sha256": "0d5853ce93443aa18a294c9822137c4e3c34f49e9a138e9ecefb7e0c727b0b55"
+      "sha256": "c4f1e91bc020f2cfea028920ce780f103ae076d665c9e478cadd1cce6a1da59f"
     },
     {
       "path": "mods/host/pe_file_io.h",
@@ -3987,11 +3987,11 @@
     },
     {
       "path": "mods/host/pe_mod_host.c",
-      "sha256": "c01b7b394ca75a5f55f5c1d1cd64a8395f11ba997743464043931eab122079af"
+      "sha256": "86305158e9595f0682212b6ac51cf8a165f3d4c7a26ad31f91c9bab6e8700f56"
     },
     {
       "path": "mods/host/pe_mod_host.h",
-      "sha256": "c940f01d565d70601110e32cd3964fde51a8ee6cae783f1f4f7308460da4d102"
+      "sha256": "529f41510db58192fa56f64bc40307a7467a5485daa11ef563be70fe19c16dd0"
     },
     {
       "path": "mods/host/pe_mod_menu.c",
@@ -4111,7 +4111,7 @@
     },
     {
       "path": "mods/host/pe_services.h",
-      "sha256": "bdef8511309b1c607df98aeef22de281cd7634e3d8230c13b6f3ab621f93359d"
+      "sha256": "a87b51e77ac46feb5325e9c38bd6ea63b039236fe49ecd9f310378cce90444bf"
     },
     {
       "path": "mods/host/pe_shop_api.c",
@@ -4300,6 +4300,66 @@
     {
       "path": "mods/pe_hello/pe_hello.c",
       "sha256": "f22efda77813208cfc72cd69c39efc9f45ce665334db630131e7368e7bc3a2fb"
+    },
+    {
+      "path": "mods/pe_phone/calls/pe1.txt",
+      "sha256": "2d1605c9051c47cc463a3b02172e7953f4af27e4efedd20f2ddae7e64923cf8f"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone.h",
+      "sha256": "f82fa33853a6acc52a69e094e81c7b589b8cfa8126272d7df23192600626ad23"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_box.c",
+      "sha256": "8a53121622075a9c063a106229849a401cfad0da081664286793a6d4faf12aef"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_core.h",
+      "sha256": "e99af5ac90943f248e7999da3343f1fcc668babd95b5592fdc10f0e218150f52"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_file.c",
+      "sha256": "80d163bb295d301efee0edb8e8be5d33e50df9dbb0ac98434de289ac399b4a9a"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_flow.c",
+      "sha256": "b5e0308c24ea9729975570eca36798aefd316c306b4c2ad01d83df9c845c47f1"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_hold.c",
+      "sha256": "a2e31e882fe19a3358097802a1921cd1eb8a9888ddb8935c8076efd6077fadca"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_mod.c",
+      "sha256": "ffebaa7cc8ff9f01d6892a34d62bbaca05d66e0c0d18473f3fd363a15d33fc35"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_packs.c",
+      "sha256": "1677238d117a8fd87ced4e444e65fca004c3d611370271d14d5d2c7823220556"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_pick.c",
+      "sha256": "5df9ed1281dbfb58b522389e042ed7528744c20d7af24470ef602da8984b90e1"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_record.c",
+      "sha256": "fedcc9dc67442dea0665613667e7653e25a39cdce688aa401c06c8e6fa5bf20a"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_service.c",
+      "sha256": "2d217001cfcd9baeacfffbce51b7462ba660933434f7fd8e1f2065e125216cdc"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_sound.c",
+      "sha256": "1766bc1c4a8b3170225bdfbb6e7f712fe531603a904c16399da213b38fd7c3cf"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_spot.c",
+      "sha256": "af9cd731b27a8c78f308f37a0e64cb9b5c36738c6d0986465269ec879f4c3ecc"
+    },
+    {
+      "path": "mods/pe_phone/pe_phone_text.c",
+      "sha256": "bd3d62642743cb11a6ae2d09d53554f01d21f74d6011ad259615e2d07236886a"
     },
     {
       "path": "mods/pe_qol/pe_bag_sort.c",
