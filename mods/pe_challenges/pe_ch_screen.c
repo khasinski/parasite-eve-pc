@@ -10,6 +10,9 @@
  *   Run history   every challenge run in the history (pe_ch_history.c), newest first: when, how it
  *                 ended (cleared in the game's yellow, fallen dim), how many challenges. Info: the
  *                 selected run's challenges and numbers.
+ *   Records       every challenge with its record (pe_ch_records.c): cleared clean in the game's
+ *                 yellow, cleared only with assists in white, not cleared dim. Info: clean and
+ *                 assisted clears, the hardest level, the fastest time, Hardcore, the first clear.
  *   L1 / R1 switch pages, Circle or Cross goes back.
  *
  * The row shows with a game loaded once this run has had a challenge or the history has a run.
@@ -38,7 +41,8 @@
 #define CH_HELP_TICKS  150         /* each title-bar page */
 #define CH_ROW_ORDER   35          /* after Key Items 20, Bestiary 25, Wardrobe 30 */
 
-enum { CH_PAGE_THIS_RUN, CH_PAGE_HISTORY, CH_PAGES };
+enum { CH_PAGE_THIS_RUN, CH_PAGE_HISTORY, CH_PAGE_RECORDS, CH_PAGES };
+static const char *const kPageNames[CH_PAGES] = {"This run", "Run history", "Records"};
 
 static PeScreen s_screen;
 static MenuWidgetNode *s_info;
@@ -76,7 +80,9 @@ static void pe_build_this_run(void) {
 }
 
 static int pe_page_rows(void) {
-    return s_page == CH_PAGE_THIS_RUN ? s_row_count : pe_ch_history_count();
+    if (s_page == CH_PAGE_THIS_RUN) return s_row_count;
+    if (s_page == CH_PAGE_RECORDS) return (int)g_ch_def_count;
+    return pe_ch_history_count();
 }
 
 /* ---- This run ----------------------------------------------------------------------------- */
@@ -171,15 +177,65 @@ static void pe_history_info(int row) {
     Draw_SetColor(CH_COLOR_TEXT);
 }
 
+/* ---- Records ------------------------------------------------------------------------------ */
+
+static void pe_records_row(int row) {
+    const PeChallengeDef *d = row < (int)g_ch_def_count ? g_ch_defs[row] : NULL;
+    const PeChRecord *r = d ? pe_ch_record(d->id) : NULL;
+    char line[80];
+    if (!d || !r) return;
+    if (r->clean || r->assisted) {
+        snprintf(line, sizeof line, "%s  cleared %u%s", d->short_name, (unsigned)(r->clean + r->assisted),
+                 r->hardcore ? "  Hardcore" : "");
+        if (r->clean) Draw_SetColor(CH_COLOR_GOLD);
+    } else {
+        snprintf(line, sizeof line, "%s  not cleared yet", d->short_name);
+        Draw_SetTextDimmed(1);
+    }
+    pe_print(line);
+    Draw_SetTextDimmed(0);
+    Draw_SetColor(CH_COLOR_TEXT);
+}
+
+static void pe_records_info(int row) {
+    const int at = pe_current_row();
+    const PeChallengeDef *d = at < (int)g_ch_def_count ? g_ch_defs[at] : NULL;
+    const PeChRecord *r = d ? pe_ch_record(d->id) : NULL;
+    char line[96], t[16], name[48], date[16];
+    if (!d || !r) return;
+    line[0] = 0;
+    if (!r->clean && !r->assisted) {
+        if (row == 0) snprintf(line, sizeof line, "Beat the game with it on, never lowered, to clear it");
+    } else if (row == 0) {
+        snprintf(line, sizeof line, "Clean clears %u   With assists %u", (unsigned)r->clean, (unsigned)r->assisted);
+        if (r->clean) Draw_SetColor(CH_COLOR_GOLD);
+    } else if (row == 1) {
+        pe_challenge_name(name, sizeof name, d, (int)r->best_level);
+        pe_time(t, sizeof t, r->fastest);
+        snprintf(line, sizeof line, "Hardest %s   Fastest %s", d->levels ? name : "-", r->fastest ? t : "-");
+    } else if (row == 2) {
+        snprintf(line, sizeof line, "%s", r->hardcore ? "Cleared in a Hardcore run" : "Not yet cleared in a Hardcore run");
+        if (!r->hardcore) Draw_SetTextDimmed(1);
+    } else if (row == 3) {
+        pe_date(date, sizeof date, r->first);
+        snprintf(line, sizeof line, "First cleared %s", date);
+    }
+    pe_print(line);
+    Draw_SetTextDimmed(0);
+    Draw_SetColor(CH_COLOR_TEXT);
+}
+
 /* ---- widgets ------------------------------------------------------------------------------ */
 
 static void pe_list_row(int row) {
     if (s_page == CH_PAGE_THIS_RUN) pe_this_run_row(row);
+    else if (s_page == CH_PAGE_RECORDS) pe_records_row(row);
     else pe_history_row(row);
 }
 
 static void pe_info_row(int row) {
     if (s_page == CH_PAGE_THIS_RUN) pe_this_run_info(row);
+    else if (s_page == CH_PAGE_RECORDS) pe_records_info(row);
     else pe_history_info(row);
 }
 
@@ -222,11 +278,14 @@ static int pe_on_help_text(void *ctx, void *user) {
     if (!s_screen.list || MenuWidget_GetCurrentNode() != s_screen.list) return 0;
     ++s_tick;
     if ((s_tick / CH_HELP_TICKS) % 2) {
-        snprintf(line, sizeof line, "L1 R1: %s   O: Back", s_page == CH_PAGE_THIS_RUN ? "Run history" : "This run");
+        snprintf(line, sizeof line, "%s   L1 R1: %s   O: Back", kPageNames[s_page],
+                 kPageNames[(s_page + 1) % CH_PAGES]);
     } else if (s_page == CH_PAGE_THIS_RUN) {
         const int row = pe_current_row();
         const PeChallengeDef *d = row < s_row_count ? pe_ch_def(s_rows[row]) : NULL;
         snprintf(line, sizeof line, "%s", d ? d->description : "Challenges are chosen in F1 > Challenges");
+    } else if (s_page == CH_PAGE_RECORDS) {
+        snprintf(line, sizeof line, "Records   %d of %u challenges cleared", pe_ch_records_cleared(), g_ch_def_count);
     } else {
         snprintf(line, sizeof line, "Run history   %d run%s", pe_ch_history_count(), pe_ch_history_count() == 1 ? "" : "s");
     }
@@ -245,7 +304,7 @@ static void pe_open(MenuWidgetNode *main_list) {
 }
 
 static int pe_row_shown(void) {
-    return pe_game_loaded() && (g_ch_run.ever || pe_ch_history_count() > 0);
+    return pe_game_loaded() && (g_ch_run.ever || pe_ch_history_count() > 0 || pe_ch_records_cleared() > 0);
 }
 
 /* The row's icon: Revive's inventory icon (item 0x12), the game's own art for life and death. */

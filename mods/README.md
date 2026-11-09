@@ -173,7 +173,8 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   opens a read-only screen from the game's own widgets, laid out like the Bestiary's. **This run**:
   the run's challenges with levels (lowered ones dim, a run-locking one in the game's yellow), and
   Clean / Assisted, battles won, knockouts, time. **Run history** (L1 / R1): every challenge run,
-  newest first, cleared in yellow, fallen dim, with its challenges and numbers. The title bar gives
+  newest first, cleared in yellow, fallen dim, with its challenges and numbers. **Records**: every
+  challenge's record (below). The title bar gives
   the highlighted challenge's description, then the controls. Challenges are still chosen in F1.
 - **Run history** (`pe_ch_history.c`): `pe_challenges.ini` beside the preferences, one line per run
   (`<id> ko= st=playing|cleared|fallen on= ever= drop= fl= b= t= lv= at=`; the older
@@ -191,6 +192,14 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   challenges, or "Fallen Hardcore run: it can't be played"; when saving, that the slot holds a
   Hardcore run. Each slot's file is read once (the game's `Psyz_AdjustPath` name) and its
   `pe_challenges.run` record peeked read-only (`pe_save_peek`), again only when the slot changes.
+- **Records** (`pe_ch_records.c`): a challenge is completed when a run is cleared (the Clear Data
+  save after the credits) with it on at the end and never lowered. Per challenge: clean and
+  assisted clears, the hardest level cleared, the fastest time, whether it was cleared in a
+  Hardcore run, the first clear's date. Kept per user in `pe_challenges_records.ini` (one line per
+  challenge id). It is fed by listening to `challenges.run_cleared`, like any other mod could be;
+  the first time the file is missing, cleared runs already in the history are counted once. Shown
+  on the Records page of Aya's Challenges screen (cleared clean in yellow, not cleared dim) and as
+  "Challenges cleared N of M" in F1.
 - **Run summary (F1):** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
 - **Hardcore (permadeath):** chosen at the title for a New Game only, and its run locks every
   challenge on (more can be added, none lowered; Clear all refuses). The game's own game over (phase

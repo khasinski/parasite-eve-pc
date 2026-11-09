@@ -15,6 +15,7 @@
  *     pe_ch_runlog.c       battles won, play time, knockout detection
  *     pe_ch_history.c      the per-run file beside the preferences: run history, knockouts, dead runs
  *     pe_ch_milestones.c   a real save refreshes the run's history; a Clear Data save marks it cleared
+ *     pe_ch_records.c      per-challenge records (clears, best level, fastest), from run_cleared
  *     pe_ch_summary.c      the Run, Warnings and Run summary info rows (F1)
  *     pe_ch_bundles.c      Bundles page: Purist, Nightmare, Clear all
  *     pe_ch_events.c       events other mods can listen to (changed, assisted, cleared, ended)
@@ -168,6 +169,18 @@ void pe_ch_history_knockout(void);     /* +1 for this run, written at once */
 unsigned pe_ch_knockouts(void);
 int pe_ch_run_is_dead(uint32_t run_id);           /* a Hardcore run that ended in a game over */
 static inline int pe_ch_entry_level(const PeChRunEntry *e, int id) { return (int)((e->levels >> (2 * id)) & 3u); }
+
+/* pe_ch_records.c: per challenge, kept across games; fed by "challenges.run_cleared". */
+typedef struct PeChRecord {
+    uint32_t clean, assisted;   /* clears, by whether the run was assisted */
+    uint32_t best_level;        /* hardest level cleared (1 for an on / off challenge) */
+    uint32_t fastest;           /* shortest time with challenges, seconds */
+    uint32_t hardcore;          /* ever cleared in a Hardcore run */
+    int64_t first;              /* first clear, Unix seconds */
+} PeChRecord;
+void pe_ch_records_register(const char *mod_id);
+const PeChRecord *pe_ch_record(int id);
+int pe_ch_records_cleared(void);   /* challenges with at least one clear */
 
 /* pe_ch_milestones.c */
 void pe_ch_milestones_register(const char *mod_id);

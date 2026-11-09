@@ -51,6 +51,7 @@ static int challenges_init(void) {
     pe_ch_assist_register(MOD_ID);
     pe_ch_runlog_register(MOD_ID);
     pe_ch_milestones_register(MOD_ID);
+    pe_ch_records_register(MOD_ID);
     pe_ch_notice_register(MOD_ID);
     pe_ch_screen_register(MOD_ID);
     pe_ch_card_marks_register(MOD_ID);

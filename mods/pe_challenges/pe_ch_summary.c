@@ -20,6 +20,9 @@ const char *pe_ch_status_text(void) {
 }
 
 static void pe_info_status(char *out, unsigned size) { snprintf(out, size, "%s", pe_ch_status_text()); }
+static void pe_info_cleared(char *out, unsigned size) {
+    snprintf(out, size, "%d of %u", pe_ch_records_cleared(), g_ch_def_count);
+}
 
 /* The challenges on now; a level row shows its level ("Tough crowd 2x HP"). */
 static void pe_info_active(char *out, unsigned size) {
@@ -90,6 +93,9 @@ int pe_ch_summary_register(void) {
     int failed = 0;
     failed |= pe_menu_register_info(0, "Run", "Clean, or Assisted once a challenge was lowered or a cheat used.",
         pe_info_status);
+    failed |= pe_menu_register_info(0, "Challenges cleared",
+        "Challenges beaten the game with, on to the end and never lowered (Aya's menu > Challenges > Records).",
+        pe_info_cleared);
     failed |= pe_menu_register_info(0, "Warnings", "Other mods that can work around a challenge (never blocked).",
         pe_info_warnings);
 
