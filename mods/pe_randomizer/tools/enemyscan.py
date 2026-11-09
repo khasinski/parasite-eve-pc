@@ -65,8 +65,10 @@ def collection(path):
         blocks[name] = m.group(1)
     creatures = [(n, int(b)) for n, b in re.findall(r'\{ "([^"]*)", \d+, (\d+),', blocks["g_pe_creatures"])]
     keys, models = {}, {}
-    for mp, i, c in re.findall(r"\{ (\d+), (0x[0-9A-Fa-f]+), (\d+) \}", blocks["g_pe_creature_keys"]):
-        keys.setdefault((int(mp), int(i, 16)), []).append(int(c))
+    # { map, id, creature } or, with the model bank slot, { map, id, actor, creature }
+    for mp, i, c in re.findall(r"\{ (\d+), (0x[0-9A-Fa-f]+), (?:\d+, )?(\d+) \}", blocks["g_pe_creature_keys"]):
+        found = keys.setdefault((int(mp), int(i, 16)), [])
+        if int(c) not in found: found.append(int(c))
     for c, mp, a in re.findall(r"\{ (\d+), (\d+), (\d+) \}", blocks["g_pe_creature_models"]):
         models.setdefault((int(c), int(mp)), []).append(int(a))
     return creatures, keys, models
@@ -349,11 +351,16 @@ def write(rows, f):
               f"{who}\t{r['kind'] + (', story-gated' if r['story'] else '')}\t{r['group']}\t{r['model']}\t{r['fight']}\t{r['after']}\t{r['pm']}\t{r['stats']}", file=f)
 
 
+# Keys the bestiary has that no room script sets: M002's Stage Eve gets hers when the battle is set up
+# (pe_collection_data.h says so), so the census can't see her.
+UNSCRIPTED_KEYS = {(2, 0x0201)}
+
+
 def check(rows, collection_data):
     creatures, keys, _ = collection_data
     bad, found = [], {(r["room"], i) for r in rows for i in r["ids"]}
     for (m, cid), cs in sorted(keys.items()):
-        if (m, cid) not in found:
+        if (m, cid) not in found and (m, cid) not in UNSCRIPTED_KEYS:
             bad.append(f"key M{m:03d} {cid:#06x} ({', '.join(creatures[c][0] for c in cs)}) set by no enemy actor")
     for r in rows:
         if r["creatures"] or r.get("parent") or r["group"] == "never placed" or (r["room"], r["entity"]) in UNMAPPED: continue
