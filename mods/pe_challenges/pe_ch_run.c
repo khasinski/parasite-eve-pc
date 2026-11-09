@@ -192,6 +192,26 @@ static int pe_on_new_game(void *ctx, void *user) {
     return 0;
 }
 
+/* A challenge's F1 row: on the top page when featured, else on its category's page. Rows are saved
+ * by page and label, so a pick saved where the row used to be (the top page before categories, or
+ * its category page) carries over to where it is now. */
+static int pe_register_row(const PeChallengeDef *d) {
+    const char *category = g_ch_categories[d->category >= 0 && d->category < CH_CATEGORIES ? d->category : 0].name;
+    const char *sub = (d->flags & CH_DEF_FEATURED) ? NULL : category;
+    char key[128], legacy[128];
+    if (sub) {
+        snprintf(key, sizeof key, "%s/%s/%s", CH_PAGE, sub, d->label);
+        snprintf(legacy, sizeof legacy, "%s/%s", CH_PAGE, d->label);
+    } else {
+        snprintf(key, sizeof key, "%s/%s", CH_PAGE, d->label);
+        snprintf(legacy, sizeof legacy, "%s/%s/%s", CH_PAGE, category, d->label);
+    }
+    pe_menu_alias_setting(key, legacy);
+    return d->levels
+        ? pe_menu_register_choice(sub, d->label, d->description, &s_on[d->id], d->levels, d->level_count)
+        : pe_menu_register_toggle(sub, d->label, d->description, &s_on[d->id], NULL);
+}
+
 int pe_ch_run_register(const char *mod_id) {
     int failed = 0;
     for (int id = 0; id < CH_COUNT; ++id)
@@ -201,20 +221,17 @@ int pe_ch_run_register(const char *mod_id) {
     failed |= pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_tick, NULL, PE_PRIORITY_NORMAL, mod_id);
     failed |= pe_hook_add(PE_HOOK_SAVE_READ, pe_on_save_read, NULL, PE_PRIORITY_EARLY, mod_id);
     failed |= pe_hook_add(PE_HOOK_NEW_GAME, pe_on_new_game, NULL, PE_PRIORITY_EARLY, mod_id);
-    /* One F1 sub-page per category, in category order; each challenge on its category's page. */
-    for (int c = 0; c < CH_CATEGORIES; ++c)
-        pe_menu_page(g_ch_categories[c].name, g_ch_categories[c].description, 10 * (c + 1));
-    for (unsigned i = 0; i < g_ch_def_count; ++i) {
-        const PeChallengeDef *d = g_ch_defs[i];
-        const char *sub = g_ch_categories[d->category >= 0 && d->category < CH_CATEGORIES ? d->category : 0].name;
-        char key[128], legacy[128];
-        /* Rows are saved by page and label: carry each pick over from before the categories. */
-        snprintf(key, sizeof key, "%s/%s/%s", CH_PAGE, sub, d->label);
-        snprintf(legacy, sizeof legacy, "%s/%s", CH_PAGE, d->label);
-        pe_menu_alias_setting(key, legacy);
-        failed |= d->levels
-            ? pe_menu_register_choice(sub, d->label, d->description, &s_on[d->id], d->levels, d->level_count)
-            : pe_menu_register_toggle(sub, d->label, d->description, &s_on[d->id], NULL);
+    /* Featured challenges first, on the Challenges top page (sub 0): used the most, one press away. */
+    for (unsigned i = 0; i < g_ch_def_count; ++i)
+        if (g_ch_defs[i]->flags & CH_DEF_FEATURED) failed |= pe_register_row(g_ch_defs[i]);
+    /* Then one F1 sub-page per category that still has a challenge on it, in category order. */
+    for (int c = 0; c < CH_CATEGORIES; ++c) {
+        int rows = 0;
+        for (unsigned i = 0; i < g_ch_def_count; ++i)
+            rows += g_ch_defs[i]->category == c && !(g_ch_defs[i]->flags & CH_DEF_FEATURED);
+        if (rows) pe_menu_page(g_ch_categories[c].name, g_ch_categories[c].description, 10 * (c + 1));
     }
+    for (unsigned i = 0; i < g_ch_def_count; ++i)
+        if (!(g_ch_defs[i]->flags & CH_DEF_FEATURED)) failed |= pe_register_row(g_ch_defs[i]);
     return failed ? -1 : 0;
 }

@@ -99,8 +99,9 @@ Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): 
 to build it.
 
 F1 > Challenges, all off until chosen (while every one is off the mod writes nothing). The top
-page is an overview (Run, On now, Cleared, Warnings); each challenge sits on its category's
-sub-page, then Presets, This run and Debug:
+page starts with Hardcore (featured: `CH_DEF_FEATURED` puts a challenge's row there), then an
+overview (Run, On now, Cleared, Warnings); every other challenge sits on its category's
+sub-page (a category left with no rows gets no page), then Presets, This run and Debug:
 
 | Category | Challenge | Rule | File |
 |---|---|---|---|

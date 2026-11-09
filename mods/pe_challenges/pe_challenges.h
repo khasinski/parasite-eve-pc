@@ -79,6 +79,7 @@ extern const PeChallengeCategory g_ch_categories[CH_CATEGORIES];
 /* PeChallengeDef.flags */
 #define CH_DEF_NEW_GAME_ONLY 0x1u  /* can only be picked at the title, for a New Game */
 #define CH_DEF_LOCKS_RUN     0x2u  /* its run can't lower any challenge */
+#define CH_DEF_FEATURED      0x4u  /* its F1 row is on the Challenges top page, not its category page */
 
 typedef struct PeChallengeDef {
     int id;                        /* CH_* */
