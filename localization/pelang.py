@@ -525,15 +525,16 @@ def cmd_build(a) -> int:
 
 def names_to_keep(given: Path | None, out: Path) -> tuple[dict[str, int], Path | None]:
     """The name letter numbers a build keeps (petext/names.py), and where from: the pack given, else
-    the pack the build writes over, if it reads as one. Raises OSError when the given one can't be read."""
+    the pack the build writes over, if it reads as one; plain or a zipped .pelang (bundle). Raises
+    OSError when the given one can't be read."""
     source = given or (out if out.is_file() else None)
     if not source:
         return {}, None
     try:
-        return namelib.read_numbers(Path(source).read_bytes()), source
-    except OSError:
+        return namelib.read_numbers(pack_bytes(source)), source
+    except (OSError, ValueError, zipfile.BadZipFile) as e:
         if given:
-            raise
+            raise OSError(str(e)) from e
         return {}, None
 
 
@@ -1112,7 +1113,7 @@ def main(argv=None) -> int:
                    help="write each letter as its own byte (a version 1-3 pack) instead of the text "
                         "renderer's stretches")
     b.add_argument("--keep-names-from", type=Path,
-                   help="the previous version of this pack (a .pelang from build): name letters outside the shared list "
+                   help="the previous version of this pack (a .pelang: from build, or the translation file): name letters outside the shared list "
                         "keep its numbers, so names in players' saves read the same (default: the file "
                         "-o writes over, when there is one)")
     b.add_argument("--patch-letters", type=Path,

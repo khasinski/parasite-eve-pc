@@ -134,6 +134,14 @@ class NamesTest(unittest.TestCase):
             self.assertEqual(pelang.names_to_keep(None, other), ({}, other))
             with self.assertRaises(OSError):
                 pelang.names_to_keep(Path(d) / "missing.pelang", new)
+            # the translation file players get (a zipped .pelang) works as the old version too
+            bundle = Path(d) / "bundle.pelang"
+            self.assertEqual(pelang.main(["bundle", str(old), "-o", str(bundle)]), 0)
+            self.assertEqual(pelang.names_to_keep(bundle, new), ({"中": 999, "字": 998}, bundle))
+            broken = Path(d) / "broken.pelang"
+            broken.write_bytes(b"PK\x03\x04 not a zip")
+            with self.assertRaises(OSError):
+                pelang.names_to_keep(broken, new)
 
 
 if __name__ == "__main__":
