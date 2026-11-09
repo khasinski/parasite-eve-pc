@@ -109,7 +109,7 @@ sub-page (a category left with no rows gets no page), then Presets, This run and
 | Restrictions | No items in battle | no Item battle tab | pe_ch_menu_rules.c |
 | Restrictions | No escape | no Escape battle tab | pe_ch_menu_rules.c |
 | Restrictions | Locked loadout | no gun / armor battle tabs | pe_ch_menu_rules.c |
-| Restrictions | Club only (Club 2x / Club 1.5x) | weapon hits with a Club (items 0x3F-0x43) deal x2 / x1.5; with a gun, no damage; PE untouched | pe_ch_club_only.c |
+| Restrictions | Club only (Club 2x / Club 1.5x) | weapon hits with a Club (items 0x3F-0x43) deal x2 / x1.5; with a gun, no damage, except Maeda's gun (0x61, 0x93: the last fight needs it), which keeps normal damage; PE untouched | pe_ch_club_only.c |
 | Enemies | Tough crowd (1.5x / 2x HP) | enemies take /1.5 or /2 damage; HP, EXP, drops untouched | pe_ch_damage.c |
 | Enemies | Fast enemies (1.5x / 2x) | enemies' turn gauges gain 50% / 100% more than the game added each frame (pauses, Slow, menus unchanged) | pe_ch_fast_enemies.c |
 | Aya | Glass cannon | Aya takes x2 from hits and contact, deals x1.5 | pe_ch_damage.c |
