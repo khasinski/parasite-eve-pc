@@ -42,6 +42,7 @@ int pvr_init(const pvr_init_params_t *params);
 void pvr_set_bg_color(float r, float g, float b);
 size_t pvr_mem_available(void);
 pvr_ptr_t pvr_mem_malloc(size_t size);
+void pvr_txr_load(const void *src, pvr_ptr_t dst, size_t count);
 void pvr_poly_cxt_txr(pvr_poly_cxt_t *dst, pvr_list_t list, int fmt, int w, int h, pvr_ptr_t txr, int filter);
 void pvr_poly_cxt_col(pvr_poly_cxt_t *dst, pvr_list_t list);
 void pvr_poly_compile(pvr_poly_hdr_t *dst, const pvr_poly_cxt_t *src);

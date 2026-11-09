@@ -65,6 +65,7 @@ static unsigned heap_peak_vb;
  * buffer (calibrated on Flycast: 4553 KB free with a 1 MB vertex buffer). */
 #define PVR_TEXTURE_BYTES ((8192u - 1591u) * 1024u - 2u * vertex_buf_size)
 size_t pvr_mem_available(void) { return PVR_TEXTURE_BYTES - pvr_bytes; }
+void pvr_txr_load(const void *src, pvr_ptr_t dst, size_t count) { memcpy(dst, src, count); }
 pvr_ptr_t pvr_mem_malloc(size_t n) {
     if (n > pvr_mem_available()) return NULL;
     pvr_bytes += n; return calloc(1, n);
