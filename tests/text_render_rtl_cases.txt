@@ -13,6 +13,12 @@
 50% הנחה	החנה 50%
 # brackets turn round
 (שלום)	(םולש)
+# brackets round an English name stay a pair, with a year after them
+אין בריחה (Melissa) 1997!	!1997 (Melissa) החירב ןיא
+# brackets round English after English stay English
+Aya (Melissa) שלום	םולש Aya (Melissa)
+# brackets with Hebrew inside read right to left
+Aya (Brea שלום)	(םולש Brea) Aya
 # English alone stays as it is
 Aya Brea	Aya Brea
 # a time stays together

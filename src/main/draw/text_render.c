@@ -633,6 +633,72 @@ u32 PeText_Mirror(u32 c) {
 /* A neutral's neighbour as N1 sees it: numbers count as right to left. */
 static int StrongOf(int cls) { return cls == B_L ? B_L : B_R; }
 
+/* The brackets that pair up (Unicode's Bidi_Paired_Bracket, the ones game text uses): the
+ * closing one for an opening one, else 0. */
+static u32 BracketCloses(u32 c) {
+    switch (c) {
+    case '(': return ')';
+    case '[': return ']';
+    case '{': return '}';
+    default: return 0;
+    }
+}
+
+/* N0: a pair of brackets takes one direction from what is inside it, so both ends draw on the
+ * same side of it. Right to left when anything inside is (numbers count); else English when
+ * English is inside and the last strong letter before the opening bracket is English too;
+ * else right to left. Nothing strong inside: left to N1. Pairs go in order of their opening
+ * bracket, and a pair already set counts as strong for the pairs after it. */
+static void PairBrackets(const u32 *letters, unsigned n, u8 *cls) {
+    enum { DEPTH = 63 };                        /* as Unicode's BD16 */
+    u16 open[DEPTH], pair_open[PE_TEXT_LINE_LETTERS], pair_close[PE_TEXT_LINE_LETTERS];
+    unsigned depth = 0, pairs = 0, i, k;
+    for (i = 0; i < n; ++i) {
+        u32 c = letters[i];
+        if (cls[i] != B_ON) continue;
+        if (BracketCloses(c)) {
+            if (depth == DEPTH) break;
+            open[depth++] = (u16)i;
+            continue;
+        }
+        for (k = depth; k > 0; --k)
+            if (BracketCloses(letters[open[k - 1]]) == c) break;
+        if (!k) continue;                       /* a closing bracket with no opening one */
+        /* keep the pairs sorted by their opening bracket */
+        {
+            unsigned at = pairs;
+            while (at > 0 && pair_open[at - 1] > open[k - 1]) {
+                pair_open[at] = pair_open[at - 1];
+                pair_close[at] = pair_close[at - 1];
+                --at;
+            }
+            pair_open[at] = open[k - 1];
+            pair_close[at] = (u16)i;
+            ++pairs;
+        }
+        depth = k - 1;
+    }
+    for (k = 0; k < pairs; ++k) {
+        unsigned a = pair_open[k], b = pair_close[k];
+        int inside_r = 0, inside_l = 0, dir;
+        for (i = a + 1; i < b; ++i) {
+            if (cls[i] == B_L) inside_l = 1;
+            else if (cls[i] == B_R || cls[i] == B_EN || cls[i] == B_AN) inside_r = 1;
+        }
+        if (inside_r) dir = B_R;
+        else if (inside_l) {
+            int before = B_R;
+            for (i = a; i > 0; --i)
+                if (cls[i - 1] == B_L || cls[i - 1] == B_R || cls[i - 1] == B_EN || cls[i - 1] == B_AN) {
+                    before = StrongOf(cls[i - 1]);
+                    break;
+                }
+            dir = before;
+        } else continue;
+        cls[a] = cls[b] = (u8)dir;
+    }
+}
+
 void PeText_Order(const u32 *letters, unsigned n, unsigned *order, u8 *mirrored) {
     u8 cls[PE_TEXT_LINE_LETTERS], level[PE_TEXT_LINE_LETTERS];
     unsigned i, j;
@@ -670,6 +736,7 @@ void PeText_Order(const u32 *letters, unsigned n, unsigned *order, u8 *mirrored)
         if (cls[i] == B_L || cls[i] == B_R) last = cls[i];
         else if (cls[i] == B_EN && last == B_L) cls[i] = B_L;
     }
+    PairBrackets(letters, n, cls);
     /* N1, N2: neutrals take the direction on both sides when it is the same, else right to left */
     for (i = 0; i < n; i = j) {
         int before, after, dir;
