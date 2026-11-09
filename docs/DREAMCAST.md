@@ -182,6 +182,17 @@ frames as the PVR would show them, with scripted input. It found three
 renderer bugs before any hardware run: 24-bit movies, the display's
 vertical position, and subtractive blending (shadows).
 
+## Movies on the SH-4 (9 November 2026)
+
+With `PE_MOVIE_PROFILE=1` (set in the Dreamcast build) both movie players
+print where each frame's time goes. In Flycast the first build spent about
+120 ms per frame in the MDEC (IDCT and colour conversion), so movies ran
+at 6-8 frames per second instead of 15; reading sectors took 2 ms and VLC
+4.5 ms. The pace is the game's own `VSync(4)`, not drive speed: the movie
+players read sectors directly. PsyZ's MDEC now takes under 5 million SH-4
+instructions per frame instead of about 20 million (about 30 ms), still
+exact to the bit; see `third_party/psyz/psyz/src/dreamcast/README.md`.
+
 ## Next steps
 
 1. Boot the ELF on hardware or in Flycast with the discs (`/pc/pe1.cue`,
