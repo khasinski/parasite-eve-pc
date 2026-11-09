@@ -10,7 +10,7 @@
  *              game's own reset combo checks), a message, then the title by the game's own
  *              Boot_Shutdown. Nothing is deleted. The load itself can't be refused from a mod: the
  *              load-admission code is in host files the PS5 port pins.
- *   Locks      New Game only, and nothing lowered in its run: pe_ch_run.c (pe_hardcore_locks).
+ *   Locks      New Game only, and nothing lowered in its run: its definition's flags (pe_ch_run.c).
  */
 #include "pe_challenges.h"
 #include "pe_game.h"
@@ -57,7 +57,7 @@ static int pe_hardcore_frame(void *ctx, void *user) {
 static int pe_hardcore_save_read(void *ctx, void *user) {
     (void)ctx; (void)user;
     s_marked = 0;
-    s_kick = (g_ch_run.active & CH_HARDCORE_BIT) && pe_ch_run_is_dead(g_ch_run.run_id);
+    s_kick = pe_ch_on(CH_HARDCORE) && pe_ch_run_is_dead(g_ch_run.run_id);
     return 0;
 }
 
@@ -68,9 +68,15 @@ static int pe_hardcore_new_game(void *ctx, void *user) {
     return 0;
 }
 
-void pe_ch_hardcore_register(const char *mod_id) {
+static void pe_hardcore_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_hardcore_battle, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FRAME, pe_hardcore_frame, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_hardcore_save_read, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_hardcore_new_game, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+const PeChallengeDef g_ch_hardcore = {
+    CH_HARDCORE, "Hardcore", "Hardcore",
+    "Permadeath: a game over ends the run for good. New Game only; locks every challenge on.",
+    NULL, 0, 0, CH_DEF_NEW_GAME_ONLY | CH_DEF_LOCKS_RUN, pe_hardcore_register
+};

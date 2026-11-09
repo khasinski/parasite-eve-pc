@@ -10,19 +10,27 @@
 #include "pe_mod_menu.h"
 
 static void pe_info_status(char *out, unsigned size) {
-    const char *hardcore = (g_ch_run.active & CH_HARDCORE_BIT) ? ", Hardcore (locked)" : "";
+    const char *hardcore = pe_ch_on(CH_HARDCORE) ? ", Hardcore (locked)" : pe_ch_run_locked() ? ", locked" : "";
     if (!pe_save_loaded()) snprintf(out, size, "No game loaded");
     else if (!g_ch_run.ever) snprintf(out, size, "No challenges");
     else if (pe_ch_assisted()) snprintf(out, size, "Assisted%s", hardcore);
     else snprintf(out, size, "Clean%s", hardcore);
 }
 
+/* The challenges on now; a level row shows its level ("Tough crowd 2x HP"). */
 static void pe_info_active(char *out, unsigned size) {
-    pe_ch_names(g_ch_run.active, out, size);
-    if (g_ch_run.active & CH_BIT(CH_TOUGH)) {
-        const size_t n = strlen(out);
-        if (n + 8 < size) snprintf(out + n, size - n, " %s", g_ch_run.tough >= 2 ? "2x" : "1.5x");
+    size_t used = 0;
+    out[0] = 0;
+    for (unsigned i = 0; i < g_ch_def_count && used + 1 < size; ++i) {
+        const PeChallengeDef *d = g_ch_defs[i];
+        const int level = pe_ch_level(d->id);
+        if (!level) continue;
+        used += (size_t)snprintf(out + used, size - used, "%s%s", used ? ", " : "", d->short_name);
+        if (used < size && d->levels && level < (int)d->level_count)
+            used += (size_t)snprintf(out + used, size - used, " %s", d->levels[level]);
+        if (used >= size) used = size - 1;
     }
+    if (!out[0]) snprintf(out, size, "None");
 }
 
 static void pe_info_ever(char *out, unsigned size) { pe_ch_names(g_ch_run.ever, out, size); }
@@ -47,6 +55,7 @@ typedef struct PeChallengeWarning {
 static const PeChallengeWarning kWarnings[] = {
     {CH_NO_ITEMS, "pe_shops", "shops still sell items"},
     {CH_NO_ESCAPE, "pe_economy", "Smoke Grenades still escape"},
+    {CH_NO_EXP, "pe_rewards", "battle Junk scales with EXP, so less Junk"},
     {-1, NULL, "a cheat is on (run assisted)"},
 };
 

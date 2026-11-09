@@ -1,4 +1,4 @@
-/* Challenges: Glass cannon and Tough crowd.
+/* Challenges: Glass cannon and Tough crowd (they share the damage-dealt scale).
  *
  *   Damage Aya takes   Glass cannon doubles her HP loss from hits and contact (PE_HOOK_HP_LOSS
  *                      sources 1 and 2; never more than she has left). Poison and the percentage
@@ -9,6 +9,8 @@
  *                      enemies had that much more HP). Enemy HP itself is never changed, so EXP, drops
  *                      and the scripted boss endings stay the game's own. At least 1 damage lands.
  */
+#include <stddef.h>
+
 #include "pe_challenges.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
@@ -35,8 +37,8 @@ static int pe_damage_taken(void *ctx, void *user) {
 /* The scale of the damage Aya deals, as num / den. */
 static void pe_dealt_scale(int *num, int *den) {
     int n = 2, d = 2;
-    if (pe_ch_on(CH_GLASS)) n = 3;                               /* x1.5 */
-    if (pe_ch_on(CH_TOUGH)) d = g_ch_run.tough >= 2 ? 4 : 3;     /* /2 or /1.5 */
+    if (pe_ch_on(CH_GLASS)) n = 3;                                /* x1.5 */
+    if (pe_ch_on(CH_TOUGH)) d = pe_ch_level(CH_TOUGH) >= 2 ? 4 : 3;   /* /2 or /1.5 */
     *num = n;
     *den = d;
 }
@@ -77,10 +79,28 @@ static int pe_damage_forget(void *ctx, void *user) {
     return 0;
 }
 
-void pe_ch_damage_register(const char *mod_id) {
+/* Both challenges share these hooks; the one registered first adds them. */
+static void pe_damage_register(const char *mod_id) {
+    static int done;
+    if (done) return;
+    done = 1;
     pe_hook_add(PE_HOOK_HP_LOSS, pe_damage_taken, NULL, CH_PRIORITY_BEFORE_LATE, mod_id);
     pe_hook_add(PE_HOOK_ENEMY_HIT, pe_damage_hit, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_ENEMY_HIT_END, pe_damage_hit_end, NULL, CH_PRIORITY_BEFORE_LATE, mod_id);
     pe_hook_add(PE_HOOK_SCENE_START, pe_damage_forget, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_damage_forget, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
+
+static const char *const kToughLevels[] = {"Off", "1.5x HP", "2x HP"};
+
+const PeChallengeDef g_ch_glass = {
+    CH_GLASS, "Glass cannon", "Glass cannon",
+    "Aya takes double damage from hits and contact, and deals 1.5x.",
+    NULL, 0, 0, 0, pe_damage_register
+};
+
+const PeChallengeDef g_ch_tough = {
+    CH_TOUGH, "Tough crowd", "Tough crowd",
+    "Enemies take less damage, as if they had 1.5x or 2x HP. EXP and drops unchanged.",
+    kToughLevels, 3, 0, 0, pe_damage_register
+};

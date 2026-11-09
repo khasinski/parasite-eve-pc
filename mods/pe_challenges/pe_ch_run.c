@@ -1,10 +1,15 @@
-/* Challenges: the challenge table, the F1 rows and the run.
+/* Challenges: the F1 rows and the run.
  *
- * Which challenges are on is saved with the game (record "pe_challenges.run"), so loading a save
- * brings back its own set and the rows show it. At the title the rows are the player's pick for the
- * next New Game (kept in pe_mods.ini like every row). Challenges can be turned on or off at any
- * time; one turned off (or Tough crowd lowered) after the run's first minute or first won battle
- * marks the run "assisted". Nothing is ever blocked.
+ * Rows come from the challenge definitions (g_ch_defs). Which challenges are on, at what level, is
+ * saved with the game (record "pe_challenges.run"), so loading a save brings back its own set and
+ * the rows show it. At the title the rows are the player's pick for the next New Game (kept in
+ * pe_mods.ini like every row).
+ *
+ *   Any time        a challenge can be turned on or raised. Turned off or lowered after the run's
+ *                   first minute or first won battle, the run is marked "assisted".
+ *   New Game only   (CH_DEF_NEW_GAME_ONLY) turned on in a loaded game, the row goes back off.
+ *   Locks the run   (CH_DEF_LOCKS_RUN) while one is on, rows can't go below the run's levels.
+ * Nothing is ever blocked otherwise.
  */
 #include <stdio.h>
 #include <string.h>
@@ -20,53 +25,30 @@
 
 PeChallengeRun g_ch_run;
 
-/* ---- the table ---------------------------------------------------------------------------- */
-
-typedef struct PeChallengeInfo {
-    const char *label;          /* the F1 row */
-    const char *short_name;     /* lists in the summary and toasts */
-    const char *description;
-    const char *const *levels;  /* NULL: an on / off row; else a choice, index 0 = off */
-    unsigned level_count;
-} PeChallengeInfo;
-
-static const char *const kToughLevels[] = {"Off", "1.5x HP", "2x HP"};
-
-static const PeChallengeInfo kChallenges[CH_COUNT] = {
-    [CH_NO_PE]     = {"No Parasite Energy", "No PE",
-                      "No PE tab in battle, and every power is dimmed in the field too.", NULL, 0},
-    [CH_NO_ITEMS]  = {"No items in battle", "No items",
-                      "No Item tab in battle. Items still work in the field.", NULL, 0},
-    [CH_NO_ESCAPE] = {"No escape", "No escape",
-                      "No Escape tab in battle: every fight must be won.", NULL, 0},
-    [CH_GLASS]     = {"Glass cannon", "Glass cannon",
-                      "Aya takes double damage from hits and contact, and deals 1.5x.", NULL, 0},
-    [CH_TOUGH]     = {"Tough crowd", "Tough crowd",
-                      "Enemies take less damage, as if they had 1.5x or 2x HP. EXP and drops unchanged.",
-                      kToughLevels, 3},
-    [CH_HARDCORE]  = {"Hardcore", "Hardcore",
-                      "Permadeath: a game over ends the run for good. New Game only; locks every challenge on.",
-                      NULL, 0},
-};
-
-/* The rows: 0 off, else on (a level for a level row). */
+/* The rows, by id: 0 off, else the level (1 for an on / off row). */
 static int s_on[CH_COUNT];
+
+static int pe_max_level(const PeChallengeDef *d) {
+    return d && d->levels && d->level_count > 1 ? (int)d->level_count - 1 : 1;
+}
 
 /* ---- the save record ---------------------------------------------------------------------- */
 
 static int pe_run_check(void *data) {
     PeChallengeRun *r = data;
-    if (r->active & ~CH_ALL || r->ever & ~CH_ALL || r->dropped & ~CH_ALL || r->tough > 2 || r->tough_max > 2)
-        return 1;
-    if (!(r->active & CH_BIT(CH_TOUGH))) r->tough = 0;
-    else if (!r->tough) r->active &= ~CH_BIT(CH_TOUGH);
-    if (r->tough_max < r->tough) r->tough_max = r->tough;
+    if (r->active & ~CH_ALL || r->ever & ~CH_ALL || r->dropped & ~CH_ALL) return 1;
+    for (int id = 0; id < (int)sizeof r->level; ++id) {
+        const PeChallengeDef *d = id < CH_COUNT ? pe_ch_def(id) : NULL;
+        if (!d || !(r->active & CH_BIT(id))) { r->level[id] = 0; continue; }
+        if (r->level[id] < 1) r->level[id] = 1;
+        if (r->level[id] > pe_max_level(d)) r->level[id] = (uint8_t)pe_max_level(d);
+    }
     r->ever |= r->active;
     return 0;
 }
 
 static const PeSaveRecord s_record = {
-    "pe_challenges.run", 1, &g_ch_run, sizeof g_ch_run, pe_run_check, NULL, NULL, NULL
+    "pe_challenges.run", 2, &g_ch_run, sizeof g_ch_run, pe_run_check, NULL, NULL, NULL
 };
 
 /* ---- helpers for the other files ---------------------------------------------------------- */
@@ -78,10 +60,15 @@ unsigned pe_ch_rows_mask(void) {
     return m;
 }
 
-void pe_ch_rows_turn_on(unsigned mask, int tough) {
-    for (int i = 0; i < CH_COUNT; ++i)
-        if ((mask & CH_BIT(i)) && !s_on[i]) s_on[i] = 1;
-    if (tough > s_on[CH_TOUGH]) s_on[CH_TOUGH] = tough;
+void pe_ch_rows_turn_on(unsigned mask, int level) {
+    for (int id = 0; id < CH_COUNT; ++id) {
+        const PeChallengeDef *d = pe_ch_def(id);
+        int want;
+        if (!(mask & CH_BIT(id)) || !d) continue;
+        want = level < 1 ? 1 : level;
+        if (want > pe_max_level(d)) want = pe_max_level(d);
+        if (s_on[id] < want) s_on[id] = want;
+    }
 }
 
 void pe_ch_rows_clear(void) { memset(s_on, 0, sizeof s_on); }
@@ -90,13 +77,20 @@ int pe_ch_underway(void) {
     return g_ch_run.run_id && (g_ch_run.battles > 0 || g_ch_run.seconds >= CH_GRACE_SECONDS);
 }
 
+int pe_ch_run_locked(void) {
+    for (unsigned i = 0; i < g_ch_def_count; ++i)
+        if ((g_ch_defs[i]->flags & CH_DEF_LOCKS_RUN) && pe_ch_on(g_ch_defs[i]->id)) return 1;
+    return 0;
+}
+
 void pe_ch_names(unsigned mask, char *out, unsigned size) {
     size_t used = 0;
     if (!size) return;
     out[0] = 0;
-    for (int i = 0; i < CH_COUNT && used + 1 < size; ++i) {
-        if (!(mask & CH_BIT(i))) continue;
-        used += (size_t)snprintf(out + used, size - used, "%s%s", used ? ", " : "", kChallenges[i].short_name);
+    for (unsigned i = 0; i < g_ch_def_count && used + 1 < size; ++i) {
+        const PeChallengeDef *d = g_ch_defs[i];
+        if (!(mask & CH_BIT(d->id))) continue;
+        used += (size_t)snprintf(out + used, size - used, "%s%s", used ? ", " : "", d->short_name);
         if (used >= size) used = size - 1;
     }
     if (!out[0]) snprintf(out, size, "None");
@@ -110,41 +104,44 @@ static uint32_t pe_new_run_id(void) {
 
 /* ---- rows <-> run ------------------------------------------------------------------------- */
 
-/* Hardcore: it starts only with a New Game, and in its run nothing can be lowered. Rows that ask
- * otherwise go back to what the run has. */
-static void pe_hardcore_locks(void) {
-    const unsigned want = pe_ch_rows_mask();
+/* New Game only and run locks: rows that ask otherwise go back to what the run has. */
+static void pe_apply_run_rules(void) {
+    const PeChallengeDef *late = NULL;
     int refused = 0;
-    if ((want & CH_HARDCORE_BIT) && !(g_ch_run.active & CH_HARDCORE_BIT)) {
-        s_on[CH_HARDCORE] = 0;
-        pe_toast("Hardcore starts with a New Game: pick it at the title");
-        return;
+    for (unsigned i = 0; i < g_ch_def_count; ++i) {
+        const PeChallengeDef *d = g_ch_defs[i];
+        if ((d->flags & CH_DEF_NEW_GAME_ONLY) && s_on[d->id] && !pe_ch_on(d->id)) {
+            s_on[d->id] = 0;
+            late = d;
+        }
     }
-    if (!(g_ch_run.active & CH_HARDCORE_BIT)) return;
-    for (int i = 0; i < CH_COUNT; ++i)
-        if ((g_ch_run.active & CH_BIT(i)) && !s_on[i]) { s_on[i] = 1; refused = 1; }
-    if (s_on[CH_TOUGH] < g_ch_run.tough) { s_on[CH_TOUGH] = g_ch_run.tough; refused = 1; }
-    if (refused) pe_toast("Locked: Hardcore run (challenges can be added, never lowered)");
+    if (late) {
+        char msg[128];
+        snprintf(msg, sizeof msg, "%s starts with a New Game: pick it at the title", late->label);
+        pe_toast(msg);
+    }
+    if (!pe_ch_run_locked()) return;
+    for (int id = 0; id < CH_COUNT; ++id)
+        if (s_on[id] < pe_ch_level(id)) { s_on[id] = pe_ch_level(id); refused = 1; }
+    if (refused) pe_toast("Locked run: challenges can be added, never lowered");
 }
-
-int pe_ch_hardcore_locked(void) { return (g_ch_run.active & CH_HARDCORE_BIT) != 0; }
 
 /* The rows changed (F1 or a bundle): the run follows. */
 static void pe_sync(void) {
     unsigned want, dropped = 0;
-    int tough;
+    int changed = 0;
     if (!pe_game_loaded()) return;   /* the title (even after a game): the rows are the next pick */
-    pe_hardcore_locks();
+    pe_apply_run_rules();
     want = pe_ch_rows_mask();
-    tough = s_on[CH_TOUGH];
-    if (want == g_ch_run.active && tough == g_ch_run.tough) return;
-    if (pe_ch_underway()) {
-        dropped = g_ch_run.active & ~want;
-        if (tough && tough < g_ch_run.tough) dropped |= CH_BIT(CH_TOUGH);
+    for (int id = 0; id < CH_COUNT; ++id) {
+        if (s_on[id] == pe_ch_level(id)) continue;
+        changed = 1;
+        if (s_on[id] < pe_ch_level(id) && pe_ch_underway()) dropped |= CH_BIT(id);
     }
+    if (!changed) return;
     if (want && !g_ch_run.run_id) g_ch_run.run_id = pe_new_run_id();
     if (dropped & ~g_ch_run.dropped) {
-        char names[96], msg[160];
+        char names[128], msg[192];
         pe_ch_names(dropped, names, sizeof names);
         snprintf(msg, sizeof msg, "Challenge lowered (%s): run marked assisted", names);
         pe_toast(msg);
@@ -152,10 +149,9 @@ static void pe_sync(void) {
     g_ch_run.dropped |= dropped;
     g_ch_run.active = want;
     g_ch_run.ever |= want;
-    g_ch_run.tough = (uint8_t)tough;
-    if (g_ch_run.tough_max < tough) g_ch_run.tough_max = (uint8_t)tough;
-    pe_log("challenge_set", "run=%08x active=%x tough=%d dropped=%x", (unsigned)g_ch_run.run_id,
-           (unsigned)want, tough, (unsigned)g_ch_run.dropped);
+    for (int id = 0; id < CH_COUNT; ++id) g_ch_run.level[id] = (uint8_t)s_on[id];
+    pe_log("challenge_set", "run=%08x active=%x dropped=%x", (unsigned)g_ch_run.run_id, (unsigned)want,
+           (unsigned)g_ch_run.dropped);
 }
 
 static int pe_on_tick(void *ctx, void *user) {
@@ -167,13 +163,12 @@ static int pe_on_tick(void *ctx, void *user) {
 /* The records are back before any mod's SAVE_READ: the rows show the loaded run. */
 static int pe_on_save_read(void *ctx, void *user) {
     (void)ctx; (void)user;
-    for (int i = 0; i < CH_COUNT; ++i) s_on[i] = (int)((g_ch_run.active >> i) & 1u);
-    s_on[CH_TOUGH] = g_ch_run.tough;
+    for (int id = 0; id < CH_COUNT; ++id) s_on[id] = pe_ch_level(id);
     pe_ch_assist_reset();
     return 0;
 }
 
-/* The host reset the record: the rows picked before are the new run's. */
+/* The host reset the record: the rows picked at the title are the new run's. */
 static int pe_on_new_game(void *ctx, void *user) {
     const unsigned want = pe_ch_rows_mask();
     (void)ctx; (void)user;
@@ -182,24 +177,25 @@ static int pe_on_new_game(void *ctx, void *user) {
     if (!want) return 0;
     g_ch_run.run_id = pe_new_run_id();
     g_ch_run.active = g_ch_run.ever = want;
-    g_ch_run.tough = g_ch_run.tough_max = (uint8_t)s_on[CH_TOUGH];
-    pe_log("challenge_new_run", "run=%08x active=%x tough=%d", (unsigned)g_ch_run.run_id, (unsigned)want,
-           s_on[CH_TOUGH]);
+    for (int id = 0; id < CH_COUNT; ++id) g_ch_run.level[id] = (uint8_t)s_on[id];
+    pe_log("challenge_new_run", "run=%08x active=%x", (unsigned)g_ch_run.run_id, (unsigned)want);
     return 0;
 }
 
 int pe_ch_run_register(const char *mod_id) {
     int failed = 0;
+    for (int id = 0; id < CH_COUNT; ++id)
+        if (!pe_ch_def(id)) { pe_mod_log(mod_id, "challenge id %d has no definition", id); return -1; }
     if (pe_save_register(&s_record) != 0) return -1;
     failed |= pe_hook_add(PE_HOOK_FRAME, pe_on_tick, NULL, PE_PRIORITY_NORMAL, mod_id);
     failed |= pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_tick, NULL, PE_PRIORITY_NORMAL, mod_id);
     failed |= pe_hook_add(PE_HOOK_SAVE_READ, pe_on_save_read, NULL, PE_PRIORITY_EARLY, mod_id);
     failed |= pe_hook_add(PE_HOOK_NEW_GAME, pe_on_new_game, NULL, PE_PRIORITY_EARLY, mod_id);
-    for (int i = 0; i < CH_COUNT; ++i) {
-        const PeChallengeInfo *c = &kChallenges[i];
-        failed |= c->levels
-            ? pe_menu_register_choice(0, c->label, c->description, &s_on[i], c->levels, c->level_count)
-            : pe_menu_register_toggle(0, c->label, c->description, &s_on[i], NULL);
+    for (unsigned i = 0; i < g_ch_def_count; ++i) {
+        const PeChallengeDef *d = g_ch_defs[i];
+        failed |= d->levels
+            ? pe_menu_register_choice(0, d->label, d->description, &s_on[d->id], d->levels, d->level_count)
+            : pe_menu_register_toggle(0, d->label, d->description, &s_on[d->id], NULL);
     }
     return failed ? -1 : 0;
 }

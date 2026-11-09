@@ -11,9 +11,10 @@
 
 static uint64_t s_clear_armed_ms;   /* Clear all's first press */
 
-static void pe_bundle(unsigned mask, int tough, const char *name) {
+/* level: for level rows in mask (on / off rows just turn on). */
+static void pe_bundle(unsigned mask, int level, const char *name) {
     char msg[96];
-    pe_ch_rows_turn_on(mask, tough);
+    pe_ch_rows_turn_on(mask, level);
     snprintf(msg, sizeof msg, "%s challenges on", name);
     pe_toast(msg);
 }
@@ -22,15 +23,16 @@ static void pe_bundle_purist(void) {
     pe_bundle(CH_BIT(CH_NO_PE) | CH_BIT(CH_NO_ITEMS) | CH_BIT(CH_NO_ESCAPE), 0, "Purist");
 }
 
-/* Every challenge but Hardcore, which is chosen on its own at the title. */
+/* Hard, but still a normal run: Hardcore, One-hit KO and No EXP are picked on their own. */
 static void pe_bundle_nightmare(void) {
-    pe_bundle(CH_ALL & ~CH_HARDCORE_BIT, 2, "Nightmare");
+    pe_bundle(CH_BIT(CH_NO_PE) | CH_BIT(CH_NO_ITEMS) | CH_BIT(CH_NO_ESCAPE) | CH_BIT(CH_LOCKED_LOADOUT) |
+              CH_BIT(CH_GLASS) | CH_BIT(CH_TOUGH), 2, "Nightmare");
 }
 
 static void pe_clear_all(void) {
     const uint64_t now = SDL_GetTicks();
-    if (pe_ch_hardcore_locked()) {
-        pe_toast("Locked: Hardcore run (challenges can't be cleared)");
+    if (pe_ch_run_locked()) {
+        pe_toast("Locked run: challenges can't be cleared");
         return;
     }
     if (!s_clear_armed_ms || now - s_clear_armed_ms > CH_CONFIRM_MS) {
@@ -50,9 +52,9 @@ int pe_ch_bundles_register(void) {
     failed |= pe_menu_register_action(CH_PAGE_BUNDLES, "Purist",
         "Turns on No Parasite Energy, No items and No escape.", pe_bundle_purist);
     failed |= pe_menu_register_action(CH_PAGE_BUNDLES, "Nightmare",
-        "Turns on every challenge but Hardcore, Tough crowd at 2x HP.", pe_bundle_nightmare);
+        "Purist plus Locked loadout, Glass cannon and Tough crowd at 2x HP.", pe_bundle_nightmare);
     failed |= pe_menu_register_action(CH_PAGE_BUNDLES, "Clear all",
-        "Press twice. Every challenge off; mid-run the run is marked assisted. Not in a Hardcore run.",
+        "Press twice. Every challenge off; mid-run the run is marked assisted. Not in a locked run.",
         pe_clear_all);
     return failed ? -1 : 0;
 }
