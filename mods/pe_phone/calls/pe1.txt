@@ -344,10 +344,10 @@ rooms = 42
 priority = 10
 once = yes
 them: Crime lab.
-aya: Brea. Anything on the samples from Carnegie Hall?
-them: The ash is ash. The tissue we took off the stage is another story.
-aya: How so?
-them: We put it in the fridge last night. This morning it was on a different shelf.
+aya: Brea. Have you got anything from Carnegie Hall?
+them: We can tell you where the fire reached. We can't tell you where it started.
+aya: Nothing near the stage?
+them: Nothing that explains how it spread through the audience.
 
 # ---- Day 2: the museum ----
 
@@ -358,11 +358,11 @@ day = 2
 rooms = 195
 priority = 10
 once = yes
-them: Records. You wanted the background on a Dr. Klamp?
-aya: Anything at all.
-them: No arrests, no tickets, no complaints. Pays his rent early.
-aya: That's it?
-them: The museum renewed his lab permit three times this year. Most people need one.
+them: Records.
+aya: Brea. What do we know about the lab at the museum?
+them: It's listed in the directory. Second floor, under Research.
+aya: What kind of research?
+them: That's all it says. The rest of the page is about the exhibits.
 
 # ---- Day 2: Central Park ----
 # With Warner's supplies on (Economy > Warner helps out, Junk economy on), Wayne calls first.
@@ -487,10 +487,10 @@ rooms = 126 138 154 325
 priority = 11
 once = yes
 after = pe1/hospital_records
-them: {name}? You are all right? I can feel the heat from out here.
-aya: I'm fine. Are you still ringing that bell?
-them: Every few minutes. The street is very quiet. The bell is louder than I like.
-aya: Keep ringing it.
+them: {name}? Are you all right? It's still hot out here.
+aya: I'm fine. I still have the bell.
+them: Good. I wish I had something more useful to give you.
+aya: Just stay where I can find you.
 
 [pe1/hospital_pharmacy]
 caller = Pharmacy
