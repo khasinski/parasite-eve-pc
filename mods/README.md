@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example, `pe_challenges` for Challenges).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -57,6 +57,8 @@ mods/
   pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
   pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
   pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
+  pe_challenges/       optional harder rules per run (No PE, No items, No escape, Glass cannon,
+                       Tough crowd), bundles, assisted marker, run summary
   pe_hello/            example mod (not built by default)
 ```
 
@@ -90,6 +92,33 @@ what a save holds, not Aya's place in the room or a fight in progress.
 
 F1 > Cheats: God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers.
 All off until chosen; while they are off the mod writes nothing.
+
+## Challenges (pe_challenges)
+
+Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): add `pe_challenges`
+to build it. Files: `pe_challenges.h` maps them, one feature per file (run and rows, bundles, tab
+rules, damage rules, assisted detection, run log, summary rows), challenges described in one table
+in `pe_ch_run.c`.
+
+F1 > Challenges: No Parasite Energy, No items in battle, No escape, Glass cannon (Aya takes x2 from
+hits and contact, deals x1.5) and Tough crowd (enemies take /1.5 or /2 damage, as if they had that
+much more HP; EXP, drops and scripted boss endings are untouched). Bundles (Purist, Nightmare) only
+turn challenges on; Clear all is press-twice. All off until chosen; while they are off the mod writes
+nothing.
+
+- **Per run:** the set is saved with the game (record `pe_challenges.run`, 32 bytes), so a loaded
+  save shows its own set. At the title the rows are the pick for the next New Game.
+- **Assisted, never blocked:** a challenge turned off or lowered after the run's first minute or
+  first won battle, or a `pe_cheats` / `pe_assists` row switched on (or Win this battle) while a
+  challenge is on, marks the run Assisted. Other mods that work around a challenge (shops under No
+  items, Smoke Grenades under No escape) get a line on the Warnings row.
+- **Tabs:** the battle tabs are `g_MenuItemContextFlag` bits 0, 1 and 4, which the game saves; the
+  rule clears them only in battle (after Half-bar ATB's own tab handling) and puts the game's bits
+  back on the first frame after. No PE also dims every power through PE_HOOK_POWER_AVAILABLE.
+- **Damage:** PE_HOOK_HP_LOSS sources 1-2 for Aya; PE_HOOK_ENEMY_HIT / ENEMY_HIT_END give each hit's
+  damage on an enemy, scaled after Rebalance and before the Bestiary's kill check.
+- **Run summary:** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
+  Knockouts survive the reload after a game over in `pe_challenges.ini` beside the preferences.
 
 ## A mod
 
@@ -212,6 +241,7 @@ Records today:
 | `pe_economy.shop` | Requisition (the name from before the split) | pe_shops/pe_requisition.c |
 | `pe_qol.keys` | key item pocket | pe_qol/pe_key_items.c |
 | `pe_qol.sort` | bag sort | pe_qol/pe_bag_sort.c |
+| `pe_challenges.run` | challenges on / used / lowered, assisted, battles won, time | pe_challenges/pe_ch_run.c |
 
 Saves from earlier builds kept these as fixed blocks (`PELT` +0x000, `PECT` +0x040, `PESH` +0x1C0, `PKEY` +0x200, `SORT`
 +0x260 from 0x1C90).
