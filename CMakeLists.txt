@@ -78,7 +78,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "dreamcast")
         -U__UINT_LEAST32_TYPE__ "-D__UINT_LEAST32_TYPE__=unsigned int")
     # newlib hides POSIX calls (flockfile...) under -std=c11 unless asked;
     # glibc is lenient when a file sets _POSIX_C_SOURCE after other headers.
-    add_compile_definitions(_GNU_SOURCE PE_MOVIE_PROFILE=1 PSYZ_GTE_SUBPIXEL=1)
+    add_compile_definitions(_GNU_SOURCE PE_MOVIE_PROFILE=1)
     set(PE_SDL3_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz/external/SDL/include")
     include_directories(SYSTEM "${PE_SDL3_HEADERS}")
     add_library(SDL3::SDL3 INTERFACE IMPORTED)
