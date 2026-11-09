@@ -30,7 +30,6 @@
 
 #define CH_PORTS          2
 #define CH_SLOTS          15
-#define CH_CARD_READY     15          /* MemCardPortState.managerState once the card is listed */
 #define CH_LIST_CARD1     0x25        /* the slot list's selected_base: 0x25 + port */
 #define CH_CARD_BYTES     0x2000
 #define CH_RED_WINDOW     0x14148Cu   /* the game's colour order (B G R): dark red */
@@ -70,11 +69,15 @@ static void pe_check_slot(int port, int index, const MemCardSaveSlot *slot, PeSl
     m->key_flag = slot->titleStyleFlag;
     snprintf(card_name, sizeof card_name, "bu%d0:BASLUS-00662000000%c%c", port, slot->titleStyleFlag + '0', index + 'A');
     Psyz_AdjustPath(path, card_name, (int)sizeof path);
-    if (!(f = fopen(path, "rb"))) return;
-    if (fread(s_card, 1, sizeof s_card, f) != sizeof s_card) { fclose(f); return; }
+    if (!(f = fopen(path, "rb"))) { pe_log("challenge_card", "card=%d slot=%d unreadable path=%s", port + 1, index + 1, path); return; }
+    if (fread(s_card, 1, sizeof s_card, f) != sizeof s_card) {
+        fclose(f);
+        pe_log("challenge_card", "card=%d slot=%d short file", port + 1, index + 1);
+        return;
+    }
     fclose(f);
     memset(&run, 0, sizeof run);
-    if (pe_save_peek(s_card, "pe_challenges.run", &version, &run, sizeof run, &size) != 1) return;
+    if (pe_save_peek(s_card, "pe_challenges.run", &version, &run, sizeof run, &size) != 1) return;   /* no record: not a challenge save */
     if (version != 2 || size != sizeof run || !(run.active & CH_BIT(CH_HARDCORE))) return;
     m->run_id = run.run_id;
     m->active = run.active;
@@ -83,14 +86,12 @@ static void pe_check_slot(int port, int index, const MemCardSaveSlot *slot, PeSl
            m->mark == CH_MARK_FALLEN ? "fallen" : "hardcore");
 }
 
-/* Every listed slot: check new or changed ones, and keep marked ones in their window colour. */
+/* Every listed slot: check new or changed ones, and keep marked ones in their window colour. A slot
+ * counts once the game has listed it and read its preview (its own state and metadataReady): the
+ * card manager's state keeps moving (3, 8, 10, 12 ...) while it lists a card, so it isn't used. */
 static void pe_refresh(void) {
     for (int port = 0; port < CH_PORTS; ++port) {
         MemCardPortState *card = &g_MemCardPortStates[port];
-        if (card->managerState != CH_CARD_READY) {
-            memset(s_marks[port], 0, sizeof s_marks[port]);
-            continue;
-        }
         for (int i = 0; i < CH_SLOTS; ++i) {
             MemCardSaveSlot *slot = &card->slots[i];
             PeSlotMark *m = &s_marks[port][i];
@@ -121,7 +122,7 @@ static int pe_marks_help(void *ctx, void *user) {
     (void)user;
     if (!node || (node->selected_base != CH_LIST_CARD1 && node->selected_base != CH_LIST_CARD1 + 1)) return 0;
     port = node->selected_base - CH_LIST_CARD1;
-    index = MenuWidget_GridCellIndex(node);
+    index = MenuWidget_GridCellIndex(MenuWidget_FindByModeAndSelectedBase(2, node->selected_base));   /* as the game's title bar */
     if (index < 0 || index >= CH_SLOTS) return 0;
     pe_refresh();
     m = &s_marks[port][index];
