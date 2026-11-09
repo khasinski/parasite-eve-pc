@@ -100,8 +100,9 @@ int main(int argc, char **argv) {
 
     g_BootHostActive = 1;
     (void)PE_HOOK(PE_HOOK_INIT, (&(PeHookInit){0, ""}));
-    /* mesh_list.c reads background texels from the VRAM copy */
-    Psyz_GpuSetVramCopy(1);
+    /* No PsyZ VRAM copy: mesh_list.c reads it only for widescreen, which
+     * the Dreamcast build does not have, and keeping it costs 3 MB and a
+     * second fill of every cleared area. */
     Boot_InitSystem();
 
     for (;;) {

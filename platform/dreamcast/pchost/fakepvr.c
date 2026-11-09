@@ -168,6 +168,7 @@ static void Tri(const pvr_vertex_t *a, const pvr_vertex_t *b, const pvr_vertex_t
 typedef struct { pvr_poly_hdr_t hdr; int first, count; } Strip;
 static Strip *rec_strips; static int rec_nstrips, rec_cap_strips;
 static pvr_vertex_t *rec_verts; static int rec_nverts, rec_cap_verts;
+pvr_vertex_t fake_dr_vertex;
 int pvr_prim(const void *data, size_t size) {
     const pvr_poly_hdr_t *h = data;
     if (size == sizeof(pvr_poly_hdr_t) && h->magic == 0x48445221) { cur = *h; headers++; return 0; }

@@ -208,6 +208,18 @@ texture decoding down too much). PsyZ can also keep the GTE's subpixel fraction 
 vertices (`PSYZ_GTE_SUBPIXEL`, see the PsyZ Dreamcast README); it is off in
 the Dreamcast build for now, models draw as on the PS1.
 
+## Speed (9 November 2026)
+
+The dressing room with the burnt bodies (about 5200 vertices a frame) ran at
+17 fps: its background is about 450 16x16 tiles, each with its own CLUT,
+and they no longer fitted the texture cache. A 16x16 slot pool fixed that
+(29.6 fps). For headroom: polygon headers stay compiled per texture slot,
+vertices go straight into a store queue (direct rendering), a clear of an
+area already holding the colour is skipped, and PsyZ's own VRAM copy
+(`Psyz_GpuSetVramCopy`, 3 MB of heap, only for widescreen) is not kept. A
+sampling profiler logs the busiest code every 300 frames (`prof:` lines,
+see the PsyZ Dreamcast README).
+
 ## Memory cards (9 November 2026)
 
 Saves go to VMUs: card 1 is the VMU in controller port A, card 2 the one in

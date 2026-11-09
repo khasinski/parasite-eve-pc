@@ -52,3 +52,7 @@ int pvr_list_begin(pvr_list_t list);
 int pvr_list_finish(void);
 int pvr_scene_finish(void);
 int pvr_prim(const void *data, size_t size);
+/* Direct rendering: a vertex written to the target goes in on commit. */
+extern pvr_vertex_t fake_dr_vertex;
+#define pvr_dr_target(...) ((void *)&fake_dr_vertex)
+#define pvr_dr_commit(addr) pvr_prim((addr), sizeof(pvr_vertex_t))
