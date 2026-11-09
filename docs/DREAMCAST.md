@@ -208,6 +208,12 @@ texture decoding down too much). PsyZ can also keep the GTE's subpixel fraction 
 vertices (`PSYZ_GTE_SUBPIXEL`, see the PsyZ Dreamcast README); it is off in
 the Dreamcast build for now, models draw as on the PS1.
 
+## Memory cards (9 November 2026)
+
+Saves go to VMUs: card 1 is the VMU in controller port A, card 2 the one in
+port B (`dc_card.c`, see the PsyZ Dreamcast README). Each save is one VMU
+file of 19 blocks with the save's icon and title.
+
 ## Next steps
 
 1. Boot the ELF on hardware or in Flycast with the discs (`/cd/PE1.BIN`

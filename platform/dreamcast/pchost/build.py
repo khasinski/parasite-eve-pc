@@ -22,7 +22,8 @@ os.makedirs(os.path.join(out, 'obj'), exist_ok=True)
 db = json.loads(subprocess.run(['ninja', '-C', build, '-t', 'compdb'], check=True,
                                capture_output=True, text=True).stdout)
 replace = {'dc_os.c': os.path.join(here, 'host_os.c'), 'dc_input.c': os.path.join(here, 'host_input.c'),
-           'dc_audio.c': os.path.join(here, 'host_audio.c'), 'dc_aica.c': os.path.join(here, 'host_aica.c')}
+           'dc_audio.c': os.path.join(here, 'host_audio.c'), 'dc_aica.c': os.path.join(here, 'host_aica.c'),
+           'dc_card.c': os.path.join(here, 'host_card.c')}
 # DCHOST_SPU_REFERENCE=1: the portable software SPU makes the sound instead
 reference = bool(os.environ.get('DCHOST_SPU_REFERENCE'))
 if reference:
