@@ -15,12 +15,14 @@
  *     pe_ch_runlog.c       battles won, play time, the per-run file (knockouts, dead runs)
  *     pe_ch_summary.c      the Run, Warnings and Run summary info rows
  *     pe_ch_bundles.c      Bundles page: Purist, Nightmare, Clear all
+ *     pe_ch_events.c       events other mods can listen to (changed, assisted, run ended)
  *   challenges
  *     pe_ch_menu_rules.c   No items in battle, No escape, Locked loadout (battle tabs only)
  *     pe_ch_no_pe.c        No Parasite Energy
  *     pe_ch_damage.c       Glass cannon, Tough crowd
  *     pe_ch_one_hit.c      One-hit KO
  *     pe_ch_no_exp.c       No EXP
+ *     pe_ch_blood_price.c  Blood price (PE powers also cost HP)
  *     pe_ch_hardcore.c     Hardcore (permadeath)
  *
  * A new challenge: an id below (append only), a PeChallengeDef in its own file, and a line in
@@ -40,6 +42,7 @@ enum {
     CH_LOCKED_LOADOUT = 6,
     CH_ONE_HIT = 7,
     CH_NO_EXP = 8,
+    CH_BLOOD_PRICE = 9,
     CH_COUNT
 };
 #define CH_BIT(c) (1u << (c))
@@ -118,6 +121,15 @@ void pe_ch_assist_reset(void);                     /* a load or a new game: tell
 const char *pe_ch_cheat_row_on(void);              /* a switched-on cheat / assist row's label, or NULL */
 int pe_ch_row_on(const char *mod_id, const char *label);   /* another mod's row is on (saved or live) */
 
+/* pe_ch_events.c: announcements to other mods (payloads documented there and in the README). */
+#define CH_EVENT_CHANGED   "challenges.changed"    /* const uint32_t *: active mask */
+#define CH_EVENT_ASSISTED  "challenges.assisted"   /* const char *: what marked the run */
+#define CH_EVENT_RUN_ENDED "challenges.run_ended"  /* const uint32_t *: the Hardcore run id */
+void pe_ch_events_register(void);
+void pe_ch_emit_changed(void);
+void pe_ch_emit_assisted(const char *what);
+void pe_ch_emit_run_ended(uint32_t run_id);
+
 /* pe_ch_runlog.c */
 void pe_ch_runlog_register(const char *mod_id);
 unsigned pe_ch_knockouts(void);
@@ -130,6 +142,6 @@ int pe_ch_bundles_register(void);
 
 /* The challenges (each defined in its own file). */
 extern const PeChallengeDef g_ch_no_pe, g_ch_no_items, g_ch_no_escape, g_ch_locked_loadout,
-    g_ch_glass, g_ch_tough, g_ch_one_hit, g_ch_no_exp, g_ch_hardcore;
+    g_ch_glass, g_ch_tough, g_ch_one_hit, g_ch_no_exp, g_ch_blood_price, g_ch_hardcore;
 
 #endif

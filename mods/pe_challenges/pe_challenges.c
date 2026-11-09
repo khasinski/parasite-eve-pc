@@ -22,6 +22,7 @@ const PeChallengeDef *const g_ch_defs[] = {
     &g_ch_tough,
     &g_ch_one_hit,
     &g_ch_no_exp,
+    &g_ch_blood_price,
     &g_ch_hardcore,
 };
 const unsigned g_ch_def_count = sizeof g_ch_defs / sizeof g_ch_defs[0];
@@ -38,7 +39,9 @@ static int challenges_init(void) {
     pe_menu_begin(CH_PAGE);
     pe_menu_top_page(CH_PAGE, "Optional rules for a harder run. Saved with each game.", 45);
 
-    /* The run first: its rows lead the page and every rule reads its state. */
+    /* Event names first (anything may announce), then the run: its rows lead the page and every
+     * rule reads its state. */
+    pe_ch_events_register();
     if (pe_ch_run_register(MOD_ID) != 0) { pe_menu_begin(0); return -1; }
     for (unsigned i = 0; i < g_ch_def_count; ++i)
         if (g_ch_defs[i]->register_rules) g_ch_defs[i]->register_rules(MOD_ID);

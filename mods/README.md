@@ -110,6 +110,7 @@ F1 > Challenges, all off until chosen (while every one is off the mod writes not
 | Tough crowd (1.5x / 2x HP) | enemies take /1.5 or /2 damage; HP, EXP, drops untouched | pe_ch_damage.c |
 | One-hit KO | any hit, contact or HP-reduction attack takes all of Aya's HP | pe_ch_one_hit.c |
 | No EXP | the battle's EXP total is zeroed just before it is paid | pe_ch_no_exp.c |
+| Blood price (1 / 2 HP per PE) | each power also costs HP (its real PE cost), once per cast, never the last HP | pe_ch_blood_price.c |
 | Hardcore | permadeath; New Game only; locks the run | pe_ch_hardcore.c |
 
 Bundles: Purist (No PE, No items, No escape), Nightmare (Purist plus Locked loadout, Glass cannon,
@@ -144,8 +145,21 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
     first frame, so neither a quick load nor closing the game saves the run.
   - Warnings (`kWarnings` in pe_ch_summary.c, one line each, a mod or one of its rows): shops
     under No items, Smoke Grenades under No escape, battle Junk under No EXP, No random battles.
-- **Not yet:** Blood price (PE costs HP: Battle_ApplySpellEffect runs per target, so a cast needs
-  deduplicating), Fast enemies, Scarcity, no bonus-point spending.
+- **Events for other mods** (`pe_ch_events.c`; listen with `pe_hook_add(pe_event_id("..."), ...)`,
+  no header of this mod needed):
+
+  | Event | ctx | When |
+  |---|---|---|
+  | `challenges.changed` | `const uint32_t *` active mask, bit = challenge id | after a load, a New Game, every change |
+  | `challenges.assisted` | `const char *` what did it ("Warp", "God mode", "lowered: No PE") | once per run |
+  | `challenges.run_ended` | `const uint32_t *` run id | a Hardcore run's game over |
+
+  Challenge ids (append only): 0 No PE, 1 No items, 2 No escape, 3 Glass cannon, 4 Tough crowd,
+  5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price.
+  A `challenges` service (is a challenge on, its level, report an assist) belongs in
+  `host/pe_services.h`, which the PS5 port pins by checksum, so it waits for upstream. Until then
+  cheat mods are detected through their rows and the `play.log` `cheat_*` convention.
+- **Not yet:** Fast enemies, Scarcity, no bonus-point spending.
 - **Run summary:** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
   Knockouts survive the reload after a game over in `pe_challenges.ini` beside the preferences.
 - **Hardcore (permadeath):** chosen at the title for a New Game only, and its run locks every

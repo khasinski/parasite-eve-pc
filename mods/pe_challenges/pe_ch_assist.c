@@ -62,10 +62,12 @@ const char *pe_ch_cheat_row_on(void) {
 }
 
 static void pe_mark(const char *what) {
+    const int first = !pe_ch_assisted();
     if (!g_ch_run.active) return;
     if (!(g_ch_run.flags & CH_FLAG_CHEATS))
         pe_log("challenge_assisted", "run=%08x by=%s", (unsigned)g_ch_run.run_id, what);
     g_ch_run.flags |= CH_FLAG_CHEATS;
+    if (first) pe_ch_emit_assisted(what);
     if (!s_told) {
         char msg[128];
         snprintf(msg, sizeof msg, "%s with challenges on: run marked assisted", what);

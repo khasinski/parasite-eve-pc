@@ -41,6 +41,7 @@ static int pe_hardcore_battle(void *ctx, void *user) {
     pe_log("challenge_hardcore_dead", "run=%08x battles=%u seconds=%u", (unsigned)g_ch_run.run_id,
            (unsigned)g_ch_run.battles, (unsigned)g_ch_run.seconds);
     pe_toast("Hardcore: the run has ended");
+    pe_ch_emit_run_ended(g_ch_run.run_id);
     return 0;
 }
 

@@ -142,9 +142,15 @@ static void pe_sync(void) {
     if (want && !g_ch_run.run_id) g_ch_run.run_id = pe_new_run_id();
     if (dropped & ~g_ch_run.dropped) {
         char names[128], msg[192];
+        const int first = !pe_ch_assisted();
         pe_ch_names(dropped, names, sizeof names);
         snprintf(msg, sizeof msg, "Challenge lowered (%s): run marked assisted", names);
         pe_toast(msg);
+        g_ch_run.dropped |= dropped;
+        if (first) {
+            snprintf(msg, sizeof msg, "lowered: %s", names);
+            pe_ch_emit_assisted(msg);
+        }
     }
     g_ch_run.dropped |= dropped;
     g_ch_run.active = want;
@@ -152,6 +158,7 @@ static void pe_sync(void) {
     for (int id = 0; id < CH_COUNT; ++id) g_ch_run.level[id] = (uint8_t)s_on[id];
     pe_log("challenge_set", "run=%08x active=%x dropped=%x", (unsigned)g_ch_run.run_id, (unsigned)want,
            (unsigned)g_ch_run.dropped);
+    pe_ch_emit_changed();
 }
 
 static int pe_on_tick(void *ctx, void *user) {
@@ -165,6 +172,7 @@ static int pe_on_save_read(void *ctx, void *user) {
     (void)ctx; (void)user;
     for (int id = 0; id < CH_COUNT; ++id) s_on[id] = pe_ch_level(id);
     pe_ch_assist_reset();
+    pe_ch_emit_changed();
     return 0;
 }
 
@@ -174,11 +182,13 @@ static int pe_on_new_game(void *ctx, void *user) {
     (void)ctx; (void)user;
     memset(&g_ch_run, 0, sizeof g_ch_run);
     pe_ch_assist_reset();
-    if (!want) return 0;
-    g_ch_run.run_id = pe_new_run_id();
-    g_ch_run.active = g_ch_run.ever = want;
-    for (int id = 0; id < CH_COUNT; ++id) g_ch_run.level[id] = (uint8_t)s_on[id];
-    pe_log("challenge_new_run", "run=%08x active=%x", (unsigned)g_ch_run.run_id, (unsigned)want);
+    if (want) {
+        g_ch_run.run_id = pe_new_run_id();
+        g_ch_run.active = g_ch_run.ever = want;
+        for (int id = 0; id < CH_COUNT; ++id) g_ch_run.level[id] = (uint8_t)s_on[id];
+        pe_log("challenge_new_run", "run=%08x active=%x", (unsigned)g_ch_run.run_id, (unsigned)want);
+    }
+    pe_ch_emit_changed();
     return 0;
 }
 
