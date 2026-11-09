@@ -38,6 +38,7 @@ static int DialogueNative(unsigned code, int kerning, PeTextLetter *l) {
     l->w = l->h = 12;
     l->page = 0;
     l->nibble = 0;
+    l->dw = 0;
     l->advance = (s16)(-kern - g_TextboxGlyphWidths[code].left + g_TextboxGlyphWidths[code].right);
     l->code = (u16)code;
     return 1;
@@ -50,6 +51,7 @@ static void DialogueFixed(PeTextLetter *l, unsigned page, unsigned u, unsigned v
     l->w = l->h = 12;
     l->page = (u8)page;
     l->nibble = 0;
+    l->dw = 0;
     l->advance = 12;
     l->code = (u16)code;
 }
@@ -72,6 +74,7 @@ static void MenuNative(int glyph, PeTextLetter *l) {
         l->u = 0x77; l->v = 0; l->w = l->h = 0;
         l->page = PE_TEXT_PAGE_SPRITE;
         l->nibble = 0;
+    l->dw = 0;
         l->advance = 12;
         l->code = PE_TEXT_NO_CODE;
         return;
@@ -89,6 +92,7 @@ static void MenuNative(int glyph, PeTextLetter *l) {
     l->h = 12;
     l->page = 0;
     l->nibble = (u8)(metrics & 15);
+    l->dw = 0;
     l->advance = (s16)(width + spacing);
     l->code = (u16)glyph;
 }
@@ -103,6 +107,7 @@ static void PackCell(PeTextStyle style, PeTextLetter *l, unsigned u, unsigned v,
     l->h = 12;
     l->page = 0;
     l->nibble = 0;
+    l->dw = 0;
     l->advance = (s16)advance;
     l->code = PE_TEXT_NO_CODE;
 }
@@ -121,6 +126,7 @@ void PeText_MenuDigit(int digit, PeTextLetter *out) {
     out->h = 7;
     out->page = PE_TEXT_PAGE_DIGITS;
     out->nibble = 0;
+    out->dw = 0;
     out->advance = 0;                           /* the number printers move the pen themselves */
     out->code = PE_TEXT_NO_CODE;
 }
@@ -206,12 +212,65 @@ static void One(PeTextItem *item, unsigned bytes, int width) {
     item->width = width;
 }
 
+/* Takes up to `need` pixels from `cap` (one count per letter), spread evenly along the line:
+ * a pixel from each letter that has one to give, as many rounds as it takes. Returns what is left. */
+static int Take(int *cap, int *cut, unsigned count, int need) {
+    while (need > 0) {
+        unsigned i, m = 0, j = 0;
+        int take;
+        for (i = 0; i < count; ++i) m += cap[i] > 0;
+        if (!m) break;
+        take = need < (int)m ? need : (int)m;
+        for (i = 0; i < count; ++i) {
+            if (cap[i] <= 0) continue;
+            if ((int)(((j + 1) * (unsigned)take) / m) > (int)((j * (unsigned)take) / m)) { --cap[i]; ++cut[i]; }
+            ++j;
+        }
+        need -= take;
+    }
+    return need;
+}
+
+/* A narrowed menu line (PE_TEXT_NARROW_FIRST): `pen` px of letters made (pen * narrow + 128) >> 8
+ * wide. The room comes from the blank first, so letters keep their shape: spaces down to 4 px,
+ * then the gaps between letters, then spaces down to 2 px; only what is still missing comes off
+ * the letters themselves (drawn narrower). Returns the new width. */
+static int Squeeze(PeTextItem *item, const u8 *space, int pen, int narrow) {
+    int cap[PE_TEXT_ITEM_LETTERS], cut[PE_TEXT_ITEM_LETTERS] = {0}, art[PE_TEXT_ITEM_LETTERS] = {0};
+    int start[PE_TEXT_ITEM_LETTERS];
+    int need = pen - ((pen * narrow + 128) >> 8), at = 0;
+    unsigned i, n = item->count;
+    for (i = 0; i < n; ++i) { start[i] = at; at += item->letter[i].advance; }
+    for (i = 0; i < n; ++i) cap[i] = space[i] && item->letter[i].advance > 4 ? item->letter[i].advance - 4 : 0;
+    need = Take(cap, cut, n, need);
+    for (i = 0; i < n; ++i) {
+        const PeTextLetter *l = &item->letter[i];
+        int gap = l->advance - (l->x - start[i]) - l->w;
+        cap[i] = !space[i] && gap > 0 ? gap : 0;
+    }
+    need = Take(cap, cut, n, need);
+    for (i = 0; i < n; ++i)
+        cap[i] = space[i] && item->letter[i].advance - cut[i] > 2 ? item->letter[i].advance - cut[i] - 2 : 0;
+    need = Take(cap, cut, n, need);
+    for (i = 0; i < n; ++i) cap[i] = !space[i] && item->letter[i].w > 1 ? item->letter[i].w - 1 : 0;
+    Take(cap, art, n, need);
+    at = 0;
+    for (i = 0; i < n; ++i) {
+        PeTextLetter *l = &item->letter[i];
+        l->x = (s16)(at + (l->x - start[i]));
+        if (art[i]) l->dw = (u8)(l->w - art[i]);
+        at += l->advance - cut[i] - art[i];
+    }
+    return at;
+}
+
 /* An F1 C6 stretch: its letters laid out and resolved, placed one after another. */
 static int Stretch(PeTextStyle style, unsigned id, int draw, PeTextItem *item) {
     PeHookTextStretch ask = {0};
     u32 letters[PE_TEXT_ITEM_LETTERS];
     unsigned count, i;
-    int pen = 0;
+    int pen = 0, narrow = 256;
+    u8 space[PE_TEXT_ITEM_LETTERS];
     ask.id = id;
     if (!PE_HOOK(PE_HOOK_TEXT_STRETCH, &ask) || !ask.letters) return 0;
     count = ask.count < PE_TEXT_ITEM_LETTERS ? ask.count : PE_TEXT_ITEM_LETTERS;
@@ -220,11 +279,17 @@ static int Stretch(PeTextStyle style, unsigned id, int draw, PeTextItem *item) {
     item->count = 0;
     for (i = 0; i < count; ++i) {
         PeTextLetter *l = &item->letter[item->count];
+        if (letters[i] >= PE_TEXT_NARROW_FIRST && letters[i] <= PE_TEXT_NARROW_LAST) {
+            if (style == PE_TEXT_MENU) narrow = (int)(letters[i] - PE_TEXT_NARROW_FIRST) + 128;
+            continue;
+        }
         if (!PeText_ResolveLetter(style, letters[i], draw, l)) continue;
+        space[item->count] = letters[i] == ' ';
         l->x = (s16)(l->x + pen);
         pen += l->advance;
         ++item->count;
     }
+    if (narrow != 256) pen = Squeeze(item, space, pen, narrow);
     item->bytes = 4;
     item->advance = pen;
     item->width = pen;
@@ -480,6 +545,7 @@ int PeText_ReadCredit(PeTextCreditPen *pen, const u8 *text, PeTextLetter *out) {
     out->w = out->h = 16;
     out->page = PE_TEXT_PAGE_CREDITS;
     out->nibble = 0;
+    out->dw = 0;
     out->advance = (s16)width;
     out->code = (u16)c;
     pen->x += width;

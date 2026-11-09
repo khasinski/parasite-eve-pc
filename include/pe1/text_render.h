@@ -32,10 +32,12 @@ typedef struct PeTextLetter {
     u8 u, v, w, h;     /* source in its page; drawn w x h */
     u8 page;
     u8 nibble;         /* menu: the cell's first column (Draw_LookupGlyphMetrics low nibble) */
+    u8 dw;             /* menu: drawn this wide when the line is narrowed (0: w, as cut) */
     s16 advance;       /* how far the pen moves after it */
     u16 code;          /* the game's code for it (PS5 tagging), or PE_TEXT_NO_CODE */
 } PeTextLetter;
 #define PE_TEXT_NO_CODE 0xFFFFu
+#define PE_TEXT_DRAWN_W(l) ((l)->dw ? (l)->dw : (l)->w)
 
 /* Most letters one item gives (a stretch). The pack tool keeps stretches within it. */
 #define PE_TEXT_ITEM_LETTERS 96
@@ -64,6 +66,13 @@ void PeText_MenuDigit(int digit, PeTextLetter *out);
 
 /* ---- Stretches: the seams later work plugs into ---- */
 #define PE_TEXT_NO_LETTER 0xFFFFFFFFu
+
+/* A stretch may start with a narrowing mark, U+10FE80 + k (k 0-127): the line is made
+ * (width * (128 + k) + 128) >> 8 px wide, so a line the pack tool found too wide for its room fits.
+ * The room comes from spaces and the gaps between letters first; letters are drawn narrower only
+ * for what is still missing. Menus only (their letters are quads); a dialogue box ignores it. */
+#define PE_TEXT_NARROW_FIRST 0x10FE80u
+#define PE_TEXT_NARROW_LAST 0x10FEFFu
 
 /* Puts a stretch's letters (Unicode, in reading order) in drawing order, in place; returns the
  * count. Left to right today. Right-to-left order and joined letters go here. */

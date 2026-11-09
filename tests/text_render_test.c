@@ -26,12 +26,25 @@ int g_DrawDigitFontBaseTexU, g_DrawDigitFontBaseTexV;
 
 /* ---- a stand-in language pack ---- */
 static const unsigned s_stretch[] = {'H', 'i', ' ', 0xE9, '!', 0x4E2D};
+/* a menu line, then the same line narrowed to 240/256 and to 128/256 (PE_TEXT_NARROW_FIRST) */
+static const unsigned s_line[] = {'H', 'i', ' ', 'm', 'a', ' ', 'H', 'i', ' ', 'm', 'a'};
+static unsigned s_marked[1 + sizeof s_line / sizeof *s_line];
 static int s_hooks = 1;
 int pe_host_init(const PeHookInit *init) { (void)init; return 0; }
 int pe_hook_dispatch(int id, void *ctx) {
     if (!s_hooks) return 0;
     if (id == PE_HOOK_TEXT_STRETCH) {
         PeHookTextStretch *s = ctx;
+        if (s->id == 6 * 240) {
+            s->letters = s_line;
+            s->count = sizeof s_line / sizeof *s_line;
+            return 1;
+        }
+        if (s->id == 6 * 240 + 1) {
+            s->letters = s_marked;
+            s->count = sizeof s_marked / sizeof *s_marked;
+            return 1;
+        }
         if (s->id != 5 * 240 + 7) return 0;
         s->letters = s_stretch;
         s->count = sizeof s_stretch / sizeof *s_stretch;
@@ -283,6 +296,43 @@ static void test_stretch(void) {
     s_hooks = 1;
 }
 
+/* A narrowed menu line: exactly the width the pack tool measured, the room taken from spaces and
+ * gaps before any letter is drawn narrower; dialogue boxes ignore the mark. */
+static void test_narrow(void) {
+    unsigned char plain[] = {0xF1, 0xC6, 6, 0, 0xFF}, marked[] = {0xF1, 0xC6, 6, 1, 0xFF};
+    PeTextItem a, b;
+    int k;
+    for (unsigned i = 0; i < sizeof s_line / sizeof *s_line; ++i) s_marked[i + 1] = s_line[i];
+    /* 240/256: spaces alone give the room, every letter keeps its cell and width */
+    s_marked[0] = PE_TEXT_NARROW_FIRST + 112;
+    g_TextRenderMode = 0;
+    PeText_Read(PE_TEXT_MENU, plain, ~0u, 1, &a);
+    PeText_Read(PE_TEXT_MENU, marked, ~0u, 1, &b);
+    assert(a.count == b.count && b.count == sizeof s_line / sizeof *s_line);
+    assert(b.width == (a.width * 240 + 128) >> 8 && b.advance == b.width && b.width < a.width);
+    assert(PeText_MeasureMenu(marked) == b.width);
+    for (unsigned i = 0; i < b.count; ++i) {
+        assert(b.letter[i].dw == 0 && b.letter[i].w == a.letter[i].w && b.letter[i].u == a.letter[i].u);
+        assert(i == 0 || b.letter[i].x > b.letter[i - 1].x);
+        if (s_line[i] != ' ' && i + 1 < b.count && s_line[i + 1] != ' ')   /* gaps inside words stay */
+            assert(b.letter[i + 1].x - b.letter[i].x == a.letter[i + 1].x - a.letter[i].x);
+    }
+    /* 128/256: more than all the blank, so letters are drawn narrower too, still exactly to width */
+    s_marked[0] = PE_TEXT_NARROW_FIRST;
+    PeText_Read(PE_TEXT_MENU, marked, ~0u, 1, &b);
+    assert(b.width == (a.width * 128 + 128) >> 8);
+    for (unsigned i = 0, narrower = 0; i < b.count; ++i) {
+        assert(PE_TEXT_DRAWN_W(&b.letter[i]) >= 1 && PE_TEXT_DRAWN_W(&b.letter[i]) <= b.letter[i].w);
+        narrower += b.letter[i].dw != 0;
+        if (i + 1 == b.count) assert(narrower > 0);
+    }
+    /* a dialogue box draws the letters as they are */
+    PeText_Read(PE_TEXT_DIALOGUE, plain, ~0u, 1, &a);
+    PeText_Read(PE_TEXT_DIALOGUE, marked, ~0u, 1, &b);
+    assert(a.count == b.count && a.advance == b.advance);
+    for (k = 0; k < (int)a.count; ++k) assert(a.letter[k].x == b.letter[k].x && b.letter[k].dw == 0);
+}
+
 /* Two-byte name letters: the pack's in menus and dialogue names, '?' in a dialogue name when no
  * pack knows it, and the grid's cells counted by letters. */
 static void test_name_letters(void) {
@@ -489,8 +539,9 @@ int main(void) {
     s_hooks = 1;
     test_menu_digits();
     test_stretch();
+    test_narrow();
     test_name_letters();
     test_credits();
-    puts("text renderer: every letter code matches the old drawing code, credits roll included; stretches place right");
+    puts("text renderer: every letter code matches the old drawing code, credits roll included; stretches place right, narrowed lines fit");
     return 0;
 }

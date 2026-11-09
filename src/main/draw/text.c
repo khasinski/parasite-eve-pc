@@ -418,7 +418,7 @@ static void Draw_EmitTextItem(const PeTextItem *item) {
         prim->tag.length = 9;
         prim->color.bytes.code = 0x2C;
         prim->x0 = prim->x2 = g_TextCursorX + l->x;
-        prim->x1 = prim->x3 = prim->x0 + l->w;
+        prim->x1 = prim->x3 = prim->x0 + PE_TEXT_DRAWN_W(l);
         prim->y0 = prim->y1 = g_TextCursorY + l->y;
         prim->y2 = prim->y3 = prim->y0 + l->h;
         prim->u0 = prim->u2 = l->u;
