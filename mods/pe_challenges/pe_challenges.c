@@ -48,6 +48,9 @@ static int challenges_init(void) {
     pe_ch_tabs_register(MOD_ID);
     pe_ch_assist_register(MOD_ID);
     pe_ch_runlog_register(MOD_ID);
+    pe_ch_milestones_register(MOD_ID);
+    pe_ch_notice_register(MOD_ID);
+    pe_ch_screen_register(MOD_ID);
     failed |= pe_ch_summary_register();
     failed |= pe_ch_bundles_register();
 
@@ -55,4 +58,4 @@ static int challenges_init(void) {
     return failed ? -1 : 0;
 }
 
-const PeMod pe_mod_pe_challenges = {MOD_ID, "Challenges", "0.2", NULL, challenges_init, NULL};
+const PeMod pe_mod_pe_challenges = {MOD_ID, "Challenges", "0.3", NULL, challenges_init, NULL};

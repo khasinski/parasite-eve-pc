@@ -9,13 +9,17 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 
-static void pe_info_status(char *out, unsigned size) {
+/* One wording for the run's status, here and on the Challenges screen. */
+const char *pe_ch_status_text(void) {
+    static char text[48];
     const char *hardcore = pe_ch_on(CH_HARDCORE) ? ", Hardcore (locked)" : pe_ch_run_locked() ? ", locked" : "";
-    if (!pe_save_loaded()) snprintf(out, size, "No game loaded");
-    else if (!g_ch_run.ever) snprintf(out, size, "No challenges");
-    else if (pe_ch_assisted()) snprintf(out, size, "Assisted%s", hardcore);
-    else snprintf(out, size, "Clean%s", hardcore);
+    if (!pe_save_loaded()) snprintf(text, sizeof text, "No game loaded");
+    else if (!g_ch_run.ever) snprintf(text, sizeof text, "No challenges");
+    else snprintf(text, sizeof text, "%s%s", pe_ch_assisted() ? "Assisted" : "Clean", hardcore);
+    return text;
 }
+
+static void pe_info_status(char *out, unsigned size) { snprintf(out, size, "%s", pe_ch_status_text()); }
 
 /* The challenges on now; a level row shows its level ("Tough crowd 2x HP"). */
 static void pe_info_active(char *out, unsigned size) {

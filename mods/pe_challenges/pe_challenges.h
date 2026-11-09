@@ -12,10 +12,15 @@
  *     pe_ch_run.c          the F1 rows, the run's save record, rows <-> run, New Game only / locks
  *     pe_ch_tabs.c         removes the battle tabs the challenges that are on ask for
  *     pe_ch_assist.c       cheats, assists and cheat_* log rows mark the run assisted; other mods' rows
- *     pe_ch_runlog.c       battles won, play time, the per-run file (knockouts, dead runs)
- *     pe_ch_summary.c      the Run, Warnings and Run summary info rows
+ *     pe_ch_runlog.c       battles won, play time, knockout detection
+ *     pe_ch_history.c      the per-run file beside the preferences: run history, knockouts, dead runs
+ *     pe_ch_milestones.c   a real save refreshes the run's history; a Clear Data save marks it cleared
+ *     pe_ch_summary.c      the Run, Warnings and Run summary info rows (F1)
  *     pe_ch_bundles.c      Bundles page: Purist, Nightmare, Clear all
- *     pe_ch_events.c       events other mods can listen to (changed, assisted, run ended)
+ *     pe_ch_events.c       events other mods can listen to (changed, assisted, cleared, ended)
+ *   screens (the game's own widgets and windows)
+ *     pe_ch_screen.c       the Challenges row in Aya's menu: this run, run history
+ *     pe_ch_notice.c       a field notice in the game's dialogue window, one option to close it
  *   challenges
  *     pe_ch_menu_rules.c   No items in battle, No escape, Locked loadout (battle tabs only)
  *     pe_ch_no_pe.c        No Parasite Energy
@@ -125,20 +130,47 @@ int pe_ch_row_on(const char *mod_id, const char *label);   /* another mod's row 
 #define CH_EVENT_CHANGED   "challenges.changed"    /* const uint32_t *: active mask */
 #define CH_EVENT_ASSISTED  "challenges.assisted"   /* const char *: what marked the run */
 #define CH_EVENT_RUN_ENDED "challenges.run_ended"  /* const uint32_t *: the Hardcore run id */
+#define CH_EVENT_CLEARED   "challenges.run_cleared" /* const uint32_t *: the run id */
 void pe_ch_events_register(void);
 void pe_ch_emit_changed(void);
 void pe_ch_emit_assisted(const char *what);
 void pe_ch_emit_run_ended(uint32_t run_id);
+void pe_ch_emit_cleared(uint32_t run_id);
 
 /* pe_ch_runlog.c */
 void pe_ch_runlog_register(const char *mod_id);
+
+/* pe_ch_history.c: one entry per run that had a challenge, newest last in the file. */
+enum { CH_RUN_PLAYING = 0, CH_RUN_CLEARED = 1, CH_RUN_FALLEN = 2 };
+typedef struct PeChRunEntry {
+    uint32_t id, knockouts, state;     /* CH_RUN_* */
+    uint32_t active, ever, dropped, flags, battles, seconds;
+    uint32_t levels;                   /* 2 bits per challenge id */
+    int64_t at;                        /* last update, Unix seconds (0: unknown, an older file) */
+} PeChRunEntry;
+int pe_ch_history_count(void);
+const PeChRunEntry *pe_ch_history_newest(int index);   /* 0 = newest */
+const PeChRunEntry *pe_ch_history_find(uint32_t run_id);
+void pe_ch_history_note(int state);    /* this run's numbers now; a state never goes back to playing */
+void pe_ch_history_knockout(void);     /* +1 for this run, written at once */
 unsigned pe_ch_knockouts(void);
 int pe_ch_run_is_dead(uint32_t run_id);           /* a Hardcore run that ended in a game over */
-void pe_ch_run_mark_dead(uint32_t run_id);        /* written to the file at once */
+static inline int pe_ch_entry_level(const PeChRunEntry *e, int id) { return (int)((e->levels >> (2 * id)) & 3u); }
 
-/* pe_ch_summary.c, pe_ch_bundles.c */
+/* pe_ch_milestones.c */
+void pe_ch_milestones_register(const char *mod_id);
+
+/* pe_ch_notice.c: a message in the game's dialogue window over the field, then `closed`. One at a
+ * time; returns 0 if one is already up. The box opens on the first frame the field allows it. */
+int pe_ch_notice_show(const char *line1, const char *line2, const char *option, void (*closed)(void));
+int pe_ch_notice_busy(void);
+void pe_ch_notice_register(const char *mod_id);
+
+/* pe_ch_summary.c, pe_ch_bundles.c, pe_ch_screen.c */
 int pe_ch_summary_register(void);
 int pe_ch_bundles_register(void);
+void pe_ch_screen_register(const char *mod_id);
+const char *pe_ch_status_text(void);   /* "Clean", "Assisted", "Clean, Hardcore" ... (shared by F1 and the screen) */
 
 /* The challenges (each defined in its own file). */
 extern const PeChallengeDef g_ch_no_pe, g_ch_no_items, g_ch_no_escape, g_ch_locked_loadout,

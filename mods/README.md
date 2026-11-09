@@ -118,8 +118,8 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
 
 - **Modular:** each challenge is a `PeChallengeDef` in the file of its rule: rows (label, levels),
   the battle tabs it removes, flags (`CH_DEF_NEW_GAME_ONLY`, `CH_DEF_LOCKS_RUN`) and its hooks. The
-  core (`pe_ch_run.c` rows and record, `pe_ch_tabs.c`, assisted detection, run log, summary,
-  bundles) only reads the definitions. A new challenge = an id (append only: ids are save bits), a
+  core (`pe_ch_run.c` rows and record, `pe_ch_tabs.c`, assisted detection, run log, history,
+  milestones, summary, bundles, the screen and the notice box) only reads the definitions. A new challenge = an id (append only: ids are save bits), a
   definition in its own file, a line in `g_ch_defs` (`pe_challenges.c`). `pe_challenges.h` maps it all.
 - **Per run:** the set and levels are saved with the game (record `pe_challenges.run` v2, 48 bytes),
   so a loaded save shows its own set. At the title the rows are the pick for the next New Game.
@@ -153,6 +153,7 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   | `challenges.changed` | `const uint32_t *` active mask, bit = challenge id | after a load, a New Game, every change |
   | `challenges.assisted` | `const char *` what did it ("Warp", "God mode", "lowered: No PE") | once per run |
   | `challenges.run_ended` | `const uint32_t *` run id | a Hardcore run's game over |
+  | `challenges.run_cleared` | `const uint32_t *` run id | a challenge run's Clear Data save, once |
 
   Challenge ids (append only): 0 No PE, 1 No items, 2 No escape, 3 Glass cannon, 4 Tough crowd,
   5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price.
@@ -160,15 +161,31 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   `host/pe_services.h`, which the PS5 port pins by checksum, so it waits for upstream. Until then
   cheat mods are detected through their rows and the `play.log` `cheat_*` convention.
 - **Not yet:** Fast enemies, Scarcity, no bonus-point spending.
-- **Run summary:** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
-  Knockouts survive the reload after a game over in `pe_challenges.ini` beside the preferences.
+- **Challenges in Aya's menu** (`pe_ch_screen.c`): a Challenges row (order 35, after the Wardrobe)
+  opens a read-only screen from the game's own widgets, laid out like the Bestiary's. **This run**:
+  the run's challenges with levels (lowered ones dim, a run-locking one in the game's yellow), and
+  Clean / Assisted, battles won, knockouts, time. **Run history** (L1 / R1): every challenge run,
+  newest first, cleared in yellow, fallen dim, with its challenges and numbers. The title bar gives
+  the highlighted challenge's description, then the controls. Challenges are still chosen in F1.
+- **Run history** (`pe_ch_history.c`): `pe_challenges.ini` beside the preferences, one line per run
+  (`<id> ko= st=playing|cleared|fallen on= ever= drop= fl= b= t= lv= at=`; the older
+  `<id> <knockouts> [dead]` lines still read). It is per user, like `pe_collection.ini`: knockouts
+  and deaths survive the reload that follows them, and nothing goes into the card, so the save
+  editor, save states and companion files are unchanged. Every real save (card menu or quick save:
+  the block is `g_MemCardFileBuffer`; the crash reporter's room snapshot is skipped) refreshes the
+  run's line; the save after the credits (Clear Data: `g_SaveTitleStyleFlag` with the card menu's
+  clear prompt) marks it cleared (`pe_ch_milestones.c`). 128 runs; playing runs are dropped first,
+  fallen ones last.
+- **Run summary (F1):** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
 - **Hardcore (permadeath):** chosen at the title for a New Game only, and its run locks every
   challenge on (more can be added, none lowered; Clear all refuses). The game's own game over (phase
-  3 with no Preraise and no Revive, `Battle_StepPostBattle`) marks the run dead in
-  `pe_challenges.ini`. Loading any save of a dead run (card slot, quick save, copy) shows a message
-  and goes back to the title through the game's own `Boot_Shutdown` on the first frame a soft reset
-  is allowed; nothing is deleted. The load isn't refused up front because the load admission code
-  lives in host files the PS5 port pins.
+  3 with no Preraise and no Revive, `Battle_StepPostBattle`) marks the run fallen in the history.
+  Loading any save of a fallen run (card slot, quick save, copy) opens the game's own dialogue
+  window ("This Hardcore run has ended. It fell after N battles, time." / Return to title;
+  `pe_ch_notice.c`), then the title through the game's own `Boot_Shutdown` on the first frame a soft
+  reset is allowed. Saves are never deleted or moved. The load isn't refused up front because the
+  load admission code lives in host files the PS5 port pins; a separate Hardcore card would need the
+  pinned save flow too.
 
 ## A mod
 

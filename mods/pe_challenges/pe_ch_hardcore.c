@@ -7,10 +7,12 @@
  *              first frame, so the run is written to the per-run file as dead right then, before the
  *              game-over animation: closing the game during it doesn't save the run. Quick load
  *              (pe_quicksave) only works in free field, so it can't step in either.
+ *              The run's line in the history (pe_ch_history.c) becomes "fallen" with its last numbers.
  *   Its saves  every save of the run carries its run id (card slots, quick saves, copies). Loading
- *              one of a dead run: on the first frame the game allows a soft reset (the condition the
- *              game's own reset combo checks), a message, then the title by the game's own
- *              Boot_Shutdown. Nothing is deleted. The load itself can't be refused from a mod: the
+ *              one of a dead run: the game's own dialogue window says so (pe_ch_notice.c, with how
+ *              far it got), and when it closes, the title by the game's own Boot_Shutdown on the first
+ *              frame a soft reset is allowed (the condition the game's reset combo checks). Nothing is
+ *              ever deleted or moved. The load itself can't be refused from a mod: the
  *              load-admission code is in host files the PS5 port pins.
  *   Locks      New Game only, and nothing lowered in its run: its definition's flags (pe_ch_run.c).
  */
@@ -26,8 +28,11 @@
 
 int Inv_CountByValue(int);
 
+#include <stdio.h>
+
 static int s_marked;   /* this battle's game over is already written */
-static int s_kick;     /* a dead run's save was loaded: back to the title */
+static int s_kick;     /* a dead run's save was loaded: tell, then back to the title */
+static int s_reset;    /* the notice closed: soft reset on the first frame allowed */
 
 static int pe_hardcore_battle(void *ctx, void *user) {
     const Combatant *aya;
@@ -37,7 +42,7 @@ static int pe_hardcore_battle(void *ctx, void *user) {
     if (!aya || (s16)aya->curHP > 0 || (aya->stateFlags & PE_STATE_PRERAISE) || Inv_CountByValue(PE_ITEM_REVIVE) != 0)
         return 0;
     s_marked = 1;
-    pe_ch_run_mark_dead(g_ch_run.run_id);
+    pe_ch_history_note(CH_RUN_FALLEN);              /* written at once: the run's last numbers */
     pe_log("challenge_hardcore_dead", "run=%08x battles=%u seconds=%u", (unsigned)g_ch_run.run_id,
            (unsigned)g_ch_run.battles, (unsigned)g_ch_run.seconds);
     pe_toast("Hardcore: the run has ended");
@@ -45,20 +50,34 @@ static int pe_hardcore_battle(void *ctx, void *user) {
     return 0;
 }
 
+static void pe_notice_closed(void) { s_reset = 1; }
+
+/* A dead run's save: the game's own window says so, then the title. */
+static void pe_tell(void) {
+    const PeChRunEntry *e = pe_ch_history_find(g_ch_run.run_id);
+    const unsigned battles = e ? e->battles : g_ch_run.battles, s = e ? e->seconds : g_ch_run.seconds;
+    char line[64];
+    snprintf(line, sizeof line, "It fell after %u battles, %u:%02u:%02u.", battles, s / 3600, s / 60 % 60, s % 60);
+    pe_log("challenge_hardcore_refused", "run=%08x", (unsigned)g_ch_run.run_id);
+    if (!pe_ch_notice_show("This Hardcore run has ended.", line, "Return to title", pe_notice_closed)) {
+        pe_toast("This Hardcore run has ended: back to the title");
+        s_reset = 1;
+    }
+}
+
 static int pe_hardcore_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
     if (!pe_in_battle()) s_marked = 0;
-    if (!s_kick || !pe_game_loaded() || pe_in_battle() || (g_GameStateFlagsWord & PE_SOFT_RESET_BLOCK)) return 0;
-    s_kick = 0;
-    pe_log("challenge_hardcore_refused", "run=%08x", (unsigned)g_ch_run.run_id);
-    pe_toast("This Hardcore run has ended: back to the title");
-    Boot_Shutdown();
+    if (!pe_game_loaded() || pe_in_battle()) return 0;
+    if (s_kick) { s_kick = 0; pe_tell(); }
+    if (s_reset && !(g_GameStateFlagsWord & PE_SOFT_RESET_BLOCK)) { s_reset = 0; Boot_Shutdown(); }
     return 0;
 }
 
 static int pe_hardcore_save_read(void *ctx, void *user) {
     (void)ctx; (void)user;
     s_marked = 0;
+    s_reset = 0;
     s_kick = pe_ch_on(CH_HARDCORE) && pe_ch_run_is_dead(g_ch_run.run_id);
     return 0;
 }
@@ -67,6 +86,7 @@ static int pe_hardcore_new_game(void *ctx, void *user) {
     (void)ctx; (void)user;
     s_marked = 0;
     s_kick = 0;
+    s_reset = 0;
     return 0;
 }
 
