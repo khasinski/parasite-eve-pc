@@ -220,3 +220,16 @@ int pvr_scene_finish(void) {
     return 0;
 }
 
+
+/* BIOS font: each character a filled box, enough to see the layout */
+#include <dc/biosfont.h>
+void bfont_draw_str_ex(void *b, uint32_t width, uint32_t fg, uint32_t bg,
+                       uint8_t bpp, bool opaque, const char *str) {
+    (void)bg; (void)bpp; (void)opaque;
+    uint16_t *p = b;
+    for (int i = 0; str[i]; i++) {
+        if (str[i] == ' ') continue;
+        for (int y = 4; y < 20; y++)
+            for (int x = 2; x < 10; x++) p[y * width + i * 12 + x] = (uint16_t)fg;
+    }
+}

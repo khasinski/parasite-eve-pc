@@ -16,6 +16,11 @@
  *   /pc/pe1.cue, /pc/pe2.cue
  *   /sd/pe1.bin, /sd/pe2.bin      on an SD card adapter
  *   /sd/pe1.cue, /sd/pe2.cue
+ *
+ * The two images do not fit on one CD-R, so the burnt set is two discs:
+ * 1ST_READ.BIN with PE1.BIN, and 1ST_READ.BIN with PE2.BIN. When the game
+ * needs the disc that is not in the drive it asks through
+ * g_CdImageRequest, and RequestDisc shows a prompt until that disc is in.
  */
 #include "pe1/port_features.h"
 #include "common.h"
@@ -55,6 +60,10 @@ static const char *const disc_paths[][2] = {
 };
 
 static PeDisc images[2];
+static int mounted_set = -1; /* row of disc_paths the images came from */
+
+/* DcGpu_ShowMessage in PsyZ's Dreamcast renderer */
+void DcGpu_ShowMessage(const char *const *lines, int count);
 
 static int MountImages(void) {
     for (unsigned set = 0; set < sizeof(disc_paths) / sizeof(disc_paths[0]); ++set) {
@@ -77,12 +86,70 @@ static int MountImages(void) {
             mounted_any = 1;
         }
         if (mounted_any) {
+            mounted_set = (int)set;
             CdRom_BindImage(g_CdImageVolumes[0] ? g_CdImageVolumes[0] : g_CdImageVolumes[1], NULL);
             return 1;
         }
     }
     CdRom_BindImage(NULL, NULL);
     return 0;
+}
+
+/* Mounts disc `identity` from the drive if it is in: either name, BIN or CUE. */
+static int MountFromDrive(unsigned identity) {
+    for (unsigned set = 0; set < 2; ++set) {
+        for (unsigned slot = 0; slot < 2; ++slot) {
+            PeDisc *disc = &images[identity - 1];
+            unsigned found = 0;
+            if (!pe_disc_open(disc, disc_paths[set][slot])) {
+                continue;
+            }
+            if (Asset_ValidatePeImage(disc, &found) == 0 && found == identity) {
+                g_CdImageVolumes[identity - 1] = disc;
+                printf("Disc %u: %s\n", identity, disc_paths[set][slot]);
+                return 1;
+            }
+            pe_disc_close(disc);
+        }
+    }
+    return 0;
+}
+
+/* g_CdImageRequest: the game needs disc `identity`, which is not mounted.
+ * With the images on the burnt discs, ask for that disc and wait for it;
+ * over dc-tool or SD both images are mounted from the start, or never. */
+static int RequestDisc(unsigned identity) {
+    if (identity < 1 || identity > 2 || mounted_set < 0 || mounted_set > 1) {
+        return 0;
+    }
+    /* the disc in the drive is going away: nothing may read its image */
+    CdRom_BindImage(NULL, NULL);
+    for (unsigned i = 0; i < 2; ++i) {
+        if (g_CdImageVolumes[i]) {
+            pe_disc_close(g_CdImageVolumes[i]);
+            g_CdImageVolumes[i] = NULL;
+        }
+    }
+    printf("Waiting for disc %u\n", identity);
+    char title[48];
+    snprintf(title, sizeof(title), "Please insert Disc %u", identity);
+    const char *lines[] = {title, "", "Open the lid, change the disc",
+                           "and close the lid."};
+    for (unsigned frame = 1;; ++frame) {
+        DcGpu_ShowMessage(lines, 4);
+        vid_waitvbl();
+        if (frame % 30) {
+            continue;
+        }
+        int status = 0, type = 0;
+        if (cdrom_get_status(&status, &type) < 0 || status == CD_STATUS_OPEN ||
+            status == CD_STATUS_NO_DISC || status == CD_STATUS_BUSY) {
+            continue;
+        }
+        if (MountFromDrive(identity)) {
+            return 1;
+        }
+    }
 }
 
 int main(int argc, char **argv) {
@@ -103,6 +170,7 @@ int main(int argc, char **argv) {
     /* No PsyZ VRAM copy: mesh_list.c reads it only for widescreen, which
      * the Dreamcast build does not have, and keeping it costs 3 MB and a
      * second fill of every cleared area. */
+    g_CdImageRequest = RequestDisc;
     Boot_InitSystem();
 
     for (;;) {

@@ -38,4 +38,12 @@ opens wins:
 | SD card adapter | `/sd/pe1.bin` | `/sd/pe2.bin` |
 | | `/sd/pe1.cue` | `/sd/pe2.cue` |
 
+The two images (about 495 and 647 MB) do not fit on one CD-R, so burn two
+discs: `1ST_READ.BIN` with `PE1.BIN`, and `1ST_READ.BIN` with `PE2.BIN`.
+Boot disc 1. When the game needs the other disc, a prompt asks for it:
+open the lid, change the disc and close it; the game goes on once the
+right disc is read (a wrong one is ignored). Booting disc 2 asks for disc 1
+for the title screen the same way. Over dc-tool or SD both images are
+mounted from the start, so there is no prompt.
+
 Disc images are never part of this repository.
