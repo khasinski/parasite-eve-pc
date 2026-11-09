@@ -382,31 +382,17 @@ them: He'll hold anything you can't carry, too. Just find him and ask.
 aya: Thanks, Wayne. Tell Torres thanks too.
 them: Tell him yourself. He'll pretend he didn't hear you.
 
-[pe1/park_daniel]
-caller = Daniel
-tone = serious
-day = 2
-rooms = 59 64 75 87
-priority = 12
-once = yes
-them: {name}! Any sign of Ben?
-aya: Not yet. The paths are empty. Where were they sitting?
-them: Up front, by the stage. Lorraine always wants the front.
-aya: I'll find them, Daniel.
-them: I'm right here at the wall. I can't even touch it.
-
 [pe1/park_wall]
-caller = Daniel
+caller = Cathy
 tone = serious
 day = 2
 rooms = 59 64 75 87
 priority = 11
 once = yes
-after = pe1/park_daniel
-them: Baker's got half the precinct out here. Nobody gets past that wall.
-aya: Then it's just me in here.
-them: That's what I'm afraid of.
-aya: Keep the line open. I'll call from the next phone.
+them: {name}? It's Cathy. Daniel radioed in from the gate.
+aya: Can anyone get through?
+them: Nobody from this side. I'll ask them to keep a car at the gate for you.
+aya: Tell them to stay back from the wall.
 
 [pe1/park_zoo]
 caller = Zoo Hotline
@@ -423,17 +409,17 @@ aya: Too late. They're feeding themselves.
 # ---- Day 3: the morning after ----
 
 [pe1/street_dispatch]
-caller = Dispatch
+caller = Warner
 tone = serious
 day = 3
 rooms = 97
 priority = 11
 once = yes
-them: Dispatch.
-aya: Brea. There's nobody on the street out here.
-them: The order came down overnight. Everybody south of the park, onto the bridges.
+them: Warner here.
+aya: There's nobody on the street out here.
+them: Evacuation order came down last night. Baker sent us to help get people across the bridges.
 aya: Who's staying?
-them: Us.
+them: We are. Baker made that clear.
 
 [pe1/street_hotel]
 caller = Hotel Desk
