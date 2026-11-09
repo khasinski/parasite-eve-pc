@@ -63,10 +63,10 @@ tone = serious
 day = 1
 weight = 2
 once = yes
-them: Aya? We've got the whole block taped off out here.
-aya: Keep everyone out. Whatever this is, it isn't over.
-them: Then get out of there.
-aya: Not yet.
+them: Aya, I've got two firefighters trying to get past the tape.
+aya: Hold them back. People started burning before anything else did.
+them: Then why are you still in there?
+aya: Because she is.
 
 [pe1/pizza]
 caller = Tony's Pizza
@@ -81,10 +81,10 @@ aya: Don't come inside. Ever.
 caller = ???
 tone = funny
 day = 1
-them: Hello? Is this the opera?
-aya: ...Sort of.
-them: Is the show any good?
-aya: The ending was a real scorcher.
+them: Carnegie Hall? I'm calling about my tickets.
+aya: The show's canceled.
+them: Can I move them to tomorrow?
+aya: Sir, there isn't a stage.
 
 
 # ======== Day 1: the sewer's emergency phone (room 32) ========
@@ -109,10 +109,10 @@ tone = funny
 day = 1
 rooms = 32
 weight = 2
-them: ...Hello? You're breaking up.
-aya: I'm underground. Can you hear me?
-them: ...kssh... repeat... kssh...
-aya: Never mind.
+them: Emergency line. Can you get to a window?
+aya: I'm in the sewer.
+them: ...kssh... Is that a no?
+aya: Put me down for a no.
 
 
 # ======== Any day ========
@@ -196,10 +196,10 @@ caller = Dispatch
 tone = serious
 day = 2-4
 them: Dispatch. Go ahead.
-aya: Brea, checking in. Anything new?
-them: Calls from all over Manhattan. Animals acting strange.
-aya: Strange how?
-them: The kind nobody wants to write up.
+aya: Brea. What are you hearing out there?
+them: Three calls about animals at the door. Same detail in every one.
+aya: Which detail?
+them: They all thought it was a person knocking.
 
 [pe1/baker_status]
 caller = Chief Baker
@@ -215,9 +215,9 @@ tone = serious
 day = 2
 weight = 2
 once = yes
-them: The press is camped outside my office, Brea.
-aya: Tell them nothing, sir.
-them: That's all I've been able to tell them.
+them: The press wants to know if it was arson. What can I tell them?
+aya: I watched people catch fire. I never saw anyone light a match.
+them: All right. I'll tell them we're still taking statements.
 
 [pe1/coroner]
 caller = Medical Examiner
@@ -226,18 +226,18 @@ day = 2
 weight = 2
 once = yes
 them: Medical Examiner's office.
-aya: Did the Carnegie Hall reports come in?
-them: They did. I've never seen anything like them.
-aya: Neither had I. Until last night.
+aya: Did you find anything in the lungs?
+them: Hardly any smoke. Most of them died before there was much to breathe.
+aya: The first man caught fire before I saw any smoke.
 
 [pe1/hold]
 caller = Switchboard
 tone = funny
 day = 2-5
-them: NYPD switchboard. Please hold.
-aya: ...Hello?
-them: Your call is important to us.
-aya: I'll call back.
+them: NYPD switchboard. If this is an emergency, press one.
+aya: It's a rotary phone.
+them: To speak to an operator, press zero.
+aya: I'll go find a person.
 
 [pe1/library]
 caller = Library
@@ -255,11 +255,11 @@ aya: I was hoping you'd tell me.
 caller = Maeda
 tone = serious
 day = 3-5
-them: Ah, Aya! I was hoping you would call.
-aya: Dr. Maeda. Any news on the samples?
-them: The cells are remarkable. If you find more, bring them to me.
-aya: I'm not carrying anything home for you.
-them: Not even a small one?
+them: Aya. Did you ever feel heat before you saw the fire?
+aya: Why are you asking?
+them: I put a drop of the sample on a cold slide. The glass is warm now.
+aya: What did you put under it?
+them: Nothing. It's sitting on the table.
 
 [pe1/daniel_coffee]
 caller = Daniel
@@ -308,11 +308,11 @@ priority = 1
 once = yes
 them: Thank you for calling Umbrella. How can we help you feel better today?
 aya: Can a drug make your own cells turn on you?
-them: For side effects, I'll transfer you to Product Safety.
+them: Let me transfer you to Product Safety.
 aya: What if it happens to everyone in the room?
-them: Product Safety. How many units did you purchase?
-aya: None. I need to know how it spreads.
-them: One moment. I'll transfer you to Sales.
+them: Product Safety. How many doses were administered?
+aya: One. That's what I'm trying to tell you.
+them: For a group rate, let me transfer you to Sales.
 
 [pe1/raccoon_annette]
 caller = Annette Birkin
@@ -323,10 +323,10 @@ once = yes
 them: Who gave you this number?
 aya: Dr. Maeda. He wanted a second opinion from your husband.
 them: My husband doesn't take calls.
-aya: The cells in our sample changed while he was looking at them.
-them: How long did it take?
-aya: Seconds. Have you seen that before?
-them: Tell Maeda to destroy the sample. And this number.
+aya: The cells on his slide changed in seconds.
+them: Was he wearing gloves?
+aya: He was just looking through the scope.
+them: That wasn't what I asked.
 
 [pe1/raccoon_chris]
 caller = Chris Redfield
@@ -335,11 +335,11 @@ day = 4
 priority = 1
 once = yes
 them: S.T.A.R.S. office. Redfield. If it's the cat again, try tuna.
-aya: NYPD. You sound busy.
-them: Holiday duty. Same cat, same tree, three calls today. How's New York?
-aya: The last thing I chased up a tree came down on its own.
+aya: NYPD. How long has it been up there?
+them: Since lunch. First action we've had all day. How's New York?
+aya: I chased something up a tree. Then it chased me down.
 them: See, that's the kind of call I signed up for.
-aya: You can have the next one.
+aya: I'll trade you. How much tuna have you got?
 
 [pe1/raccoon_kendo]
 caller = Robert Kendo
@@ -361,10 +361,10 @@ tone = serious
 day = 6
 priority = 1
 once = yes
-them: Officer Brea? Albert Wesker. I was told I could reach you here.
-aya: Who told you that?
-them: I heard you were in the hall when the others caught fire. May I ask what you felt?
-aya: You read the papers.
-them: The papers didn't mention your blood work.
-aya: Neither did I.
+them: Officer Brea? Albert Wesker. Thank you for taking my call.
+aya: How did you know where I'd be?
+them: I understand you walked out of Carnegie Hall without a burn. Did you feel the heat?
+aya: I gave my statement.
+them: Yes. I was more interested in your blood work.
+aya: Where did you see that?
 them: We'll be in touch.
