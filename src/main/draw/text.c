@@ -393,12 +393,10 @@ static inline RenderTexturedQuad *AllocBarQuad(void)
     return prim;
 }
 
-/* The renderer's letters as menu quads at the cursor: colour and dimming stay the menu's, then the
- * cursor moves on by the item's advance. A full packet arena stops the item where it is. */
-static void Draw_EmitTextItem(const PeTextItem *item) {
-    unsigned i;
-    for (i = 0; i < item->count; ++i) {
-        const PeTextLetter *l = &item->letter[i];
+/* One of the renderer's letters as a menu quad at the cursor: colour and dimming stay the menu's.
+ * 0 when the packet arena is full. */
+static int Draw_EmitLetter(const PeTextLetter *l) {
+    {
         RenderTexturedQuad *prim;
         u8 *old = g_DrawPacketCursor, *next = old + sizeof(RenderTexturedQuad);
         if (l->page == PE_TEXT_PAGE_SPRITE) {
@@ -406,11 +404,11 @@ static void Draw_EmitTextItem(const PeTextItem *item) {
             g_TextCursorX = x + l->x;
             Draw_AllocSprite(l->u);
             g_TextCursorX = x;
-            continue;
+            return 1;
         }
         if (next >= g_DrawPacketArenaBase + 0x4000) {
             Inv_BoundsCheckAssertStub(1);
-            return;
+            return 0;
         }
         g_DrawPacketCursor = next;
         prim = (RenderTexturedQuad *)old;
@@ -437,6 +435,15 @@ static void Draw_EmitTextItem(const PeTextItem *item) {
 #endif
         }
     }
+    return 1;
+}
+
+/* The renderer's letters as menu quads at the cursor, then the cursor moves on by the item's
+ * advance. A full packet arena stops the item where it is. */
+static void Draw_EmitTextItem(const PeTextItem *item) {
+    unsigned i;
+    for (i = 0; i < item->count; ++i)
+        if (!Draw_EmitLetter(&item->letter[i])) return;
     if (item->count == 1 && item->letter[0].code != PE_TEXT_NO_CODE && item->letter[0].page == 0)
         g_DrawGlyphAdvance = item->letter[0].advance - item->letter[0].w;
     AdvanceCursor(item->advance);
@@ -462,10 +469,37 @@ inline int Draw_MeasureTextWidth(u8 *text) {
     return PeText_MeasureMenu(text);
 }
 
+/* A pack that reads right to left: the line read whole, laid out by the renderer and drawn from
+ * the cursor, so it takes the place the game gives it and only the order inside changes. */
+static PeTextLine s_DrawLine;
+
+static void Draw_EmitLine(PeTextLine *line) {
+    unsigned i;
+    PeText_LineFinish(line, 1);
+    for (i = 0; i < line->count; ++i)
+        if (!Draw_EmitLetter(&line->letter[i])) break;
+    AdvanceCursor(line->width);
+}
+
+/* Draws the text to FF, a whole line at a time when the pack reads right to left. */
+static void Draw_TextToEnd(u8 *text) {
+    if (PeText_RightToLeft()) {
+        PeTextItem item;
+        PeText_LineStart(&s_DrawLine);
+        while (*text != 255) {
+            unsigned bytes = PeText_LineRead(&s_DrawLine, PE_TEXT_MENU, text, ~0u, 0, &item);
+            text += bytes ? bytes : 1;
+        }
+        Draw_EmitLine(&s_DrawLine);
+        return;
+    }
+    while (*text != 255) text += Draw_TextItem(text);
+}
+
 void Draw_PrintRawText(u8 *text) {
     if (text) {
         PushCursor();
-        while (*text != 255) text += Draw_TextItem(text);
+        Draw_TextToEnd(text);
         PopCursor();
     }
 }
@@ -474,7 +508,7 @@ void Draw_PrintRawText(u8 *text) {
 static inline void PrintTextHere(u8 *text) {
     if (text) {
         SaveCursor(g_TextCursorX, g_TextCursorY);
-        while (*text != 255) text += Draw_TextItem(text);
+        Draw_TextToEnd(text);
         PopCursor();
     }
 }
@@ -498,12 +532,13 @@ void Draw_PrintTextById(unsigned int textId) {
 
     if (text) {
         PushCursor();
-        while (*text != 255) text += Draw_TextItem(text);
+        Draw_TextToEnd(text);
         PopCursor();
     }
 }
 
 void Draw_PrintTextWrapped(u8 *text, int width) {
+    int rtl = PeText_RightToLeft();
     while (*text != 0xFF) {
         int used;
         DrawTextCursorPair *stack = (DrawTextCursorPair *)g_TextCursorStackPtr;
@@ -514,15 +549,26 @@ void Draw_PrintTextWrapped(u8 *text, int width) {
             stack->y = y;
         } else Inv_BoundsCheckAssertStub(2);
         used = 0;
+        if (rtl) PeText_LineStart(&s_DrawLine);
         while (used < width) {
             PeTextItem item;
             unsigned bytes;
             if (*text == 0xFF) break;
+            if (rtl) {                          /* the row's width as measured, then read into the line */
+                int mode = g_TextRenderMode;
+                PeText_Read(PE_TEXT_MENU, text, ~0u, 0, &item);
+                g_TextRenderMode = mode;
+                used += item.width;
+                bytes = PeText_LineRead(&s_DrawLine, PE_TEXT_MENU, text, ~0u, 0, &item);
+                text += bytes ? bytes : 1;
+                continue;
+            }
             bytes = PeText_Read(PE_TEXT_MENU, text, ~0u, 1, &item);
             if (item.count) Draw_EmitTextItem(&item);
             text += bytes ? bytes : 1;
             used += item.width;
         }
+        if (rtl) Draw_EmitLine(&s_DrawLine);
         {
             DrawTextCursorPair *restore = (DrawTextCursorPair *)g_TextCursorStackPtr;
             if ((DrawTextCursorPair *)g_TextCursorStackBottom < restore) {
@@ -763,7 +809,7 @@ static inline void PrintSign(u8 *text)
 {
     if (text) {
         PushCursor();
-        while (*text != 255) text += Draw_TextItem(text);
+        Draw_TextToEnd(text);
         PopCursor();
     }
 }

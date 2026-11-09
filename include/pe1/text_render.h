@@ -35,6 +35,7 @@ typedef struct PeTextLetter {
     u8 dw;             /* menu: drawn this wide when the line is narrowed (0: w, as cut) */
     s16 advance;       /* how far the pen moves after it */
     u16 code;          /* the game's code for it (PS5 tagging), or PE_TEXT_NO_CODE */
+    u32 letter;        /* the Unicode letter it shows when known (right-to-left order), else 0 */
 } PeTextLetter;
 #define PE_TEXT_NO_CODE 0xFFFFu
 #define PE_TEXT_DRAWN_W(l) ((l)->dw ? (l)->dw : (l)->w)
@@ -75,8 +76,61 @@ void PeText_MenuDigit(int digit, PeTextLetter *out);
 #define PE_TEXT_NARROW_LAST 0x10FEFFu
 
 /* Puts a stretch's letters (Unicode, in reading order) in drawing order, in place; returns the
- * count. Left to right today. Right-to-left order and joined letters go here. */
+ * count. Left to right: a pack that reads right to left draws whole lines instead (below), since
+ * one line may be several stretches, a name and numbers. */
 unsigned PeText_Layout(u32 *letters, unsigned count);
+
+/* ---- Right-to-left lines ----
+ * When the pack in use reads right to left (PE_HOOK_TEXT_SCRIPT), the dialogue box and the menus
+ * read a whole line into a PeTextLine, in reading order, and draw it once it is laid out:
+ *  - Arabic letters take their joined shapes (alone, start, middle, end; the Unicode presentation
+ *    forms, U+FE70-FEFF, which the pack draws), and lam then alef becomes one letter. Letters that
+ *    join touch: the gap between them is closed, so a pack draws joining letters cut to their
+ *    columns. Vowel marks (Hebrew points, Arabic harakat) are left out.
+ *  - Letters go in drawing order by the Unicode bidirectional rules, simplified for one line of
+ *    right-to-left text: Hebrew and Arabic run right to left; English words and names, and numbers
+ *    (with their signs, separators, %, and the box's number command) keep left to right; spaces and
+ *    punctuation between take the direction of what is on both sides, else right to left; brackets
+ *    turn round in right-to-left text. Button icons and game symbols count as punctuation.
+ * English and left-to-right packs never come here, so they draw exactly as before. */
+#define PE_TEXT_LINE_LETTERS 160
+
+typedef struct PeTextLine {
+    unsigned count;
+    int width;                              /* PeText_LineFinish: the laid-out line's width */
+    int narrow;                             /* a menu line's narrowing, 256 = none */
+    PeTextLetter letter[PE_TEXT_LINE_LETTERS]; /* finished: drawing order, x from the left edge */
+    u32 tag[PE_TEXT_LINE_LETTERS];          /* the caller's, per letter (the dialogue colour) */
+    /* reading order, until finished */
+    u32 uni[PE_TEXT_LINE_LETTERS];          /* the letter; 0 for an icon or symbol */
+    u8 style[PE_TEXT_LINE_LETTERS];
+    u8 again[PE_TEXT_LINE_LETTERS];         /* resolved by its Unicode letter when finished */
+} PeTextLine;
+
+/* Nonzero when the pack in use reads right to left. */
+int PeText_RightToLeft(void);
+void PeText_LineStart(PeTextLine *line);
+/* Reads one item at `text` as PeText_Read does, its letters going into the line with `tag`.
+ * Returns the bytes taken; 0 for the caller's command; item->stop as PeText_Read. */
+unsigned PeText_LineRead(PeTextLine *line, PeTextStyle style, const u8 *text, unsigned avail, u32 tag,
+                         PeTextItem *item);
+/* Adds a letter the caller placed itself (a number's digit, an icon); its `letter` says how it
+ * orders ('0'-'9' keep together left to right, 0 is punctuation). */
+void PeText_LineAdd(PeTextLine *line, PeTextStyle style, const PeTextLetter *l, u32 tag);
+/* Joins, orders and places the line's letters (draw 0: measuring, nothing uploaded); returns the
+ * width. Afterwards letter[] and tag[] are in drawing order. */
+int PeText_LineFinish(PeTextLine *line, int draw);
+
+/* The joining step alone, on letters in reading order, in place: each Arabic letter becomes its
+ * joined shape, lam then alef one letter, vowel marks are dropped. Returns the new count;
+ * joins_next (may be NULL) says which letters touch the one after. localization/petext/rtl.py
+ * follows the same rules, so the pack tool measures lines as they are drawn. */
+unsigned PeText_Join(u32 *letters, unsigned count, u8 *joins_next);
+/* The bidirectional step alone: `order` gets the reading-order index of each letter in drawing
+ * order, left to right; `mirrored` (may be NULL) is set for letters drawn turned round. */
+void PeText_Order(const u32 *letters, unsigned count, unsigned *order, u8 *mirrored);
+/* A bracket's turned-round partner, or the letter itself. */
+u32 PeText_Mirror(u32 letter);
 
 /* One Unicode letter as the style draws it: the game's own letter when it has one, else the
  * language pack's (PE_HOOK_TEXT_LETTER), else '?'. Returns 0 only when not even '?' can be drawn. */

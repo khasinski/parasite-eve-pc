@@ -231,38 +231,71 @@ u8 g_TextboxGlyphColorR;
 u8 g_TextboxGlyphColorG;
 u8 g_TextboxGlyphColorB;
 
+/* One of the renderer's letters as a dialogue sprite, its rectangle at (x, y) from the letter's
+ * offsets, in colour `rgb` (0xRRGGBB). -1 when the packet pool is full (the box stops drawing). */
+static int Textbox_EmitLetter(const PeTextLetter *l, int x, int y, u32 rgb, TextboxGlyphPacket **next,
+                              TextboxGlyphPacket *limit, RenderNativeTag *ordering) {
+    const TextboxFontPage *page = &g_TextboxFontPages[l->page];
+    TextboxGlyphPacket *p;
+    if (*next >= limit) return -1;
+    p = (*next)++;
+    SetDrawTPage(p, 0, 1, page->tpage);
+    SetSprt(&p->sprite);
+    if (MargePrim(p, &p->sprite) != 0) exit(-1);
+    p->sprite.x = (s16)(x + l->x);
+    p->sprite.y = (s16)(y + l->y);
+    p->sprite.u = l->u;
+    p->sprite.v = l->v;
+    p->sprite.width = l->w;
+    p->sprite.height = l->h;
+    p->sprite.color.bytes.r = (u8)(rgb >> 16);
+    p->sprite.color.bytes.g = (u8)(rgb >> 8);
+    p->sprite.color.bytes.b = (u8)rgb;
+    p->sprite.clut = page->clut;
+    AddPrim(ordering, p);
+#ifdef PE_PS5_GPU_NATIVE
+    if (l->code != PE_TEXT_NO_CODE && l->page == 0) PeDialogue_Tag(ordering, p, l->code);
+#endif
+    return 0;
+}
+
+#define TEXTBOX_COLOUR() \
+    ((u32)g_TextboxGlyphColorR << 16 | (u32)g_TextboxGlyphColorG << 8 | (u32)g_TextboxGlyphColorB)
+
 /* The renderer's letters as dialogue sprites at the cursor, in the box's colour, then the cursor
  * moves on by the item's advance. -1 when the packet pool is full (the box stops drawing). */
 static int Textbox_EmitTextItem(const PeTextItem *item, TextboxGlyphPacket **next,
                                 TextboxGlyphPacket *limit, TextboxPoint *cursor,
                                 RenderNativeTag *ordering) {
     unsigned i;
-    for (i = 0; i < item->count; ++i) {
-        const PeTextLetter *l = &item->letter[i];
-        const TextboxFontPage *page = &g_TextboxFontPages[l->page];
-        TextboxGlyphPacket *p;
-        if (*next >= limit) return -1;
-        p = (*next)++;
-        SetDrawTPage(p, 0, 1, page->tpage);
-        SetSprt(&p->sprite);
-        if (MargePrim(p, &p->sprite) != 0) exit(-1);
-        p->sprite.x = (s16)(cursor->x + l->x);
-        p->sprite.y = (s16)(cursor->y + l->y);
-        p->sprite.u = l->u;
-        p->sprite.v = l->v;
-        p->sprite.width = l->w;
-        p->sprite.height = l->h;
-        p->sprite.color.bytes.r = g_TextboxGlyphColorR;
-        p->sprite.color.bytes.g = g_TextboxGlyphColorG;
-        p->sprite.color.bytes.b = g_TextboxGlyphColorB;
-        p->sprite.clut = page->clut;
-        AddPrim(ordering, p);
-#ifdef PE_PS5_GPU_NATIVE
-        if (l->code != PE_TEXT_NO_CODE && l->page == 0) PeDialogue_Tag(ordering, p, l->code);
-#endif
-    }
+    for (i = 0; i < item->count; ++i)
+        if (Textbox_EmitLetter(&item->letter[i], cursor->x, cursor->y, TEXTBOX_COLOUR(), next, limit, ordering) < 0)
+            return -1;
     cursor->x = (u16)(cursor->x + item->advance);
     return 0;
+}
+
+/* A pack that reads right to left: the box reads each line whole (letters keep the colour they
+ * were read in) and draws it laid out, ending at the box's right side. The line starts again. */
+static PeTextLine s_TextboxLine;
+
+static int Textbox_EmitLine(int right, int y, TextboxGlyphPacket **next, TextboxGlyphPacket *limit,
+                            RenderNativeTag *ordering) {
+    PeTextLine *line = &s_TextboxLine;
+    int left = right - PeText_LineFinish(line, 1);
+    unsigned i;
+    for (i = 0; i < line->count; ++i)
+        if (Textbox_EmitLetter(&line->letter[i], left, y, line->tag[i], next, limit, ordering) < 0) break;
+    PeText_LineStart(line);
+    return i < line->count ? -1 : 0;
+}
+
+/* Where a right-to-left line ends: the default box's text mirrors its 20 px left margin; a styled
+ * box's ends at its rectangle's right side. */
+static int Textbox_RightEdge(const TextboxEntry *textbox, int baseX) {
+    int right = textbox->x + textbox->width;
+    if (textbox->style == 0 || textbox->style == 3) return 320 - 0x14;
+    return right > baseX + 12 && right <= 320 ? right : 320 - 0x14;
 }
 
 void Menu_DrawTextboxEntries(void) {
@@ -320,6 +353,7 @@ void Menu_DrawTextboxEntries(void) {
     TextboxGlyphPacket *nextPacket;
     TextboxGlyphPacket *packetLimit;
     TextboxNumber *numberStart;
+    int rtl, right;
 
     g_TextboxDrawnThisFrame = 0;
     PE_HOOK(PE_HOOK_TEXTBOXES, NULL);
@@ -406,6 +440,9 @@ void Menu_DrawTextboxEntries(void) {
                 }
             }
             numberStart = textbox->numbers;
+            rtl = PeText_RightToLeft();
+            right = Textbox_RightEdge(textbox, baseX);
+            PeText_LineStart(&s_TextboxLine);
 
             stream = textbox->message;
             number = numberStart;
@@ -417,7 +454,18 @@ void Menu_DrawTextboxEntries(void) {
                 temp_v1_3 = *stream;
                 {   /* every letter is the renderer's; the switch below only sees the box's commands */
                     PeTextItem item;
-                    if (PeText_Read(PE_TEXT_DIALOGUE, stream, ~0u, 1, &item)) {
+                    if (rtl) {
+                        unsigned bytes = PeText_LineRead(&s_TextboxLine, PE_TEXT_DIALOGUE, stream, ~0u,
+                                                         TEXTBOX_COLOUR(), &item);
+                        if (bytes) {
+                            if (item.stop) {
+                                Textbox_EmitLine(right, cursor.y, &nextPacket, packetLimit, orderingTable);
+                                return;
+                            }
+                            stream += bytes;
+                            continue;
+                        }
+                    } else if (PeText_Read(PE_TEXT_DIALOGUE, stream, ~0u, 1, &item)) {
                         if (item.stop) return;
                         if (Textbox_EmitTextItem(&item, &nextPacket, packetLimit, &cursor, orderingTable) < 0) return;
                         currentPacket = nextPacket;
@@ -428,6 +476,7 @@ void Menu_DrawTextboxEntries(void) {
                 switch (temp_v1_3) {
                 case 0xF7:
                     stream += 1;
+                    if (rtl && Textbox_EmitLine(right, cursor.y, &nextPacket, packetLimit, orderingTable) < 0) return;
                     cursor.x = baseX;
                     cursor.y += lineHeight;
                     break;
@@ -460,6 +509,16 @@ void Menu_DrawTextboxEntries(void) {
                         if ((unsigned)at >= sizeof(g_TextboxNameGlyphs.glyphs)) return;
                         if (left > sizeof(g_TextboxNameGlyphs.glyphs) - (unsigned)at)
                             left = sizeof(g_TextboxNameGlyphs.glyphs) - (unsigned)at;
+                        if (rtl) {
+                            PeText_LineRead(&s_TextboxLine, PE_TEXT_DIALOGUE_NAME, g_TextboxNameGlyphs.glyphs + at,
+                                            left, TEXTBOX_COLOUR(), &name);
+                            if (name.stop) {
+                                Textbox_EmitLine(right, cursor.y, &nextPacket, packetLimit, orderingTable);
+                                return;
+                            }
+                            at += name.bytes ? (int)name.bytes : 1;
+                            continue;
+                        }
                         PeText_Read(PE_TEXT_DIALOGUE_NAME, g_TextboxNameGlyphs.glyphs + at, left, 1, &name);
                         if (name.stop) return;
                         if (Textbox_EmitTextItem(&name, &nextPacket, packetLimit, &cursor, orderingTable) < 0) return;
@@ -546,6 +605,11 @@ void Menu_DrawTextboxEntries(void) {
                             digit.count = 1;
                             PeText_DialogueDigit(number->digits[digitIndex - 1], &digit.letter[0]);
                             digit.advance = glyphAdvance;
+                            if (rtl) {
+                                digit.letter[0].advance = (s16)glyphAdvance;
+                                PeText_LineAdd(&s_TextboxLine, PE_TEXT_DIALOGUE, &digit.letter[0], TEXTBOX_COLOUR());
+                                continue;
+                            }
                             if (Textbox_EmitTextItem(&digit, &nextPacket, packetLimit, &cursor, orderingTable) < 0) return;
                         }
                         currentPacket = nextPacket;
@@ -595,6 +659,7 @@ void Menu_DrawTextboxEntries(void) {
                 if (stopDrawing != 0)
                     break;
             }
+            if (rtl && Textbox_EmitLine(right, cursor.y, &nextPacket, packetLimit, orderingTable) < 0) return;
             glyphWidth = 12;
             if (textbox->state == 1) {
                 textbox->state = 2U;

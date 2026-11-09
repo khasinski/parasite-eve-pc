@@ -30,11 +30,30 @@ static const unsigned s_stretch[] = {'H', 'i', ' ', 0xE9, '!', 0x4E2D};
 static const unsigned s_line[] = {'H', 'i', ' ', 'm', 'a', ' ', 'H', 'i', ' ', 'm', 'a'};
 static unsigned s_marked[1 + sizeof s_line / sizeof *s_line];
 static int s_hooks = 1;
+/* a right-to-left pack: its stretch 7 * 240 holds s_rtl; Hebrew, Arabic and brackets are pack cells
+ * 6 wide that move the pen 7 */
+static int s_rtl_on;
+static unsigned s_rtl[PE_TEXT_LINE_LETTERS];
+static unsigned s_rtl_count;
+static int rtl_pack_letter(unsigned c) {
+    return c >= 0x80 || c == '(' || c == ')' || c == '[' || c == ']';
+}
 int pe_host_init(const PeHookInit *init) { (void)init; return 0; }
 int pe_hook_dispatch(int id, void *ctx) {
     if (!s_hooks) return 0;
+    if (id == PE_HOOK_TEXT_SCRIPT) {
+        PeHookTextScript *t = ctx;
+        t->rtl = s_rtl_on;
+        t->letter = t->code == 0x4E ? 0x05D2u : 0;                      /* a table code: gimel */
+        return 1;
+    }
     if (id == PE_HOOK_TEXT_STRETCH) {
         PeHookTextStretch *s = ctx;
+        if (s->id == 7 * 240) {
+            s->letters = s_rtl;
+            s->count = s_rtl_count;
+            return 1;
+        }
         if (s->id == 6 * 240) {
             s->letters = s_line;
             s->count = sizeof s_line / sizeof *s_line;
@@ -53,7 +72,16 @@ int pe_hook_dispatch(int id, void *ctx) {
     if (id == PE_HOOK_TEXT_LETTER) {
         PeHookTextLetter *l = ctx;
         if (l->paged == 0x101) { l->code = 0x11; return 1; }           /* name letter 1 is a B */
+        if (l->paged == 0x104 || l->paged == 0x105) {                  /* alef, bet */
+            l->letter = l->paged == 0x104 ? 0x05D0u : 0x05D1u;
+            l->u = 60; l->v = 132; l->w = 6; l->advance = 7;
+            return 1;
+        }
         if (l->paged) return 0;
+        if (s_rtl_on && rtl_pack_letter(l->letter)) {
+            l->u = (unsigned char)(l->letter & 0xF0); l->v = 120; l->w = 6; l->advance = 7;
+            return 1;
+        }
         if (l->letter == 0xE9) { l->code = 0x4D; return 1; }          /* a table letter */
         if (l->letter == 0x4E2D) { l->u = 36; l->v = 132; l->advance = 11; return 1; }
         if (l->letter == 0x100) { l->u = 26; l->v = 132; l->w = 7; l->advance = 8; return 1; }  /* cut */
@@ -526,8 +554,152 @@ static void test_credits(void) {
     }
 }
 
-int main(void) {
+/* ---- right-to-left lines ---- */
+
+static unsigned utf8(const char **p) {
+    const unsigned char *s = (const unsigned char *)*p;
+    unsigned c = *s++, extra = c >= 0xF0 ? 3 : c >= 0xE0 ? 2 : c >= 0xC0 ? 1 : 0;
+    c &= extra ? 0x3Fu >> extra : 0x7Fu;
+    while (extra--) c = c << 6 | (*s++ & 0x3Fu);
+    *p = (const char *)s;
+    return c;
+}
+
+static unsigned decode(const char *from, const char *to, unsigned *out) {
+    unsigned n = 0;
+    while (from < to) out[n++] = utf8(&from);
+    return n;
+}
+
+static const unsigned char s_rtl_text[] = {0xF1, 0xC6, 7, 0, 0xFF};
+
+/* One stretch holding `letters` read as a line of `style`. */
+static int rtl_line(PeTextStyle style, const unsigned *letters, unsigned count, PeTextLine *line) {
+    PeTextItem item;
+    memcpy(s_rtl, letters, count * sizeof *letters);
+    s_rtl_count = count;
+    PeText_LineStart(line);
+    assert(PeText_LineRead(line, style, s_rtl_text, ~0u, 0, &item) == 4);
+    return PeText_LineFinish(line, 1);
+}
+
+/* Every case in text_render_rtl_cases.txt, in dialogue boxes and menus. */
+static unsigned test_rtl_cases(const char *path) {
+    static char text[16384];
+    FILE *f = fopen(path, "rb");
+    size_t size;
+    unsigned cases = 0;
+    char *line, *end;
+    assert(f);
+    size = fread(text, 1, sizeof text - 1, f);
+    fclose(f);
+    text[size] = 0;
+    for (line = text; *line; line = end + (*end != 0)) {
+        unsigned logical[PE_TEXT_LINE_LETTERS], visual[PE_TEXT_LINE_LETTERS], n, v, i;
+        char *tab;
+        int style;
+        for (end = line; *end && *end != '\n'; ++end) {}
+        if (*line == '#' || end == line) continue;
+        tab = memchr(line, '\t', (size_t)(end - line));
+        assert(tab);
+        n = decode(line, tab, logical);
+        v = decode(tab + 1, end, visual);
+        for (style = PE_TEXT_DIALOGUE; style <= PE_TEXT_MENU; ++style) {
+            static PeTextLine out;
+            rtl_line((PeTextStyle)style, logical, n, &out);
+            if (out.count != v) {
+                fprintf(stderr, "rtl case %u: %u letters drawn, %u expected\n", cases + 1, out.count, v);
+                assert(0);
+            }
+            for (i = 0; i < v; ++i) {
+                if (out.letter[i].letter == visual[i]) continue;
+                fprintf(stderr, "rtl case %u, letter %u: U+%04X drawn, U+%04X expected\n", cases + 1, i,
+                        out.letter[i].letter, visual[i]);
+                assert(0);
+            }
+        }
+        ++cases;
+    }
+    return cases;
+}
+
+static void test_rtl_lines(void) {
+    static PeTextLine line;
+    PeTextItem item;
+    PeTextLetter l;
     unsigned i;
+    s_rtl_on = 1;
+    g_TextboxKernGlyph0F = 0;
+    assert(PeText_RightToLeft());
+    /* two joining letters touch: the left one moves the pen by its width less the shadow column */
+    {
+        static const unsigned beh[] = {0x0628, 0x0628};
+        assert(rtl_line(PE_TEXT_MENU, beh, 2, &line) == 12);
+        assert(line.letter[0].letter == 0xFE90 && line.letter[1].letter == 0xFE91);
+        assert(line.letter[0].x == 0 && line.letter[1].x == 5);
+        assert(line.letter[0].y == 1 && line.letter[0].w == 6);
+    }
+    /* letters that don't join keep their gap */
+    {
+        static const unsigned dal[] = {0x062F, 0x062F};
+        assert(rtl_line(PE_TEXT_DIALOGUE, dal, 2, &line) == 14);
+        assert(line.letter[1].x == 7);
+    }
+    /* a dialogue line: a stretch, a button icon and the box's number (digits it places itself) */
+    {
+        static const unsigned shalom[] = {0x05E9, 0x05DC, 0x05D5, 0x05DD, ' '};
+        static const unsigned char icon[] = {0xFB, 0x01};
+        memcpy(s_rtl, shalom, sizeof shalom);
+        s_rtl_count = 5;
+        PeText_LineStart(&line);
+        assert(PeText_LineRead(&line, PE_TEXT_DIALOGUE, s_rtl_text, ~0u, 1, &item) == 4);
+        assert(PeText_LineRead(&line, PE_TEXT_DIALOGUE, icon, 2, 2, &item) == 2);
+        for (i = 1; i <= 2; ++i) {
+            PeText_DialogueDigit(i, &l);
+            l.advance = 12;
+            PeText_LineAdd(&line, PE_TEXT_DIALOGUE, &l, 3);
+        }
+        assert(PeText_LineFinish(&line, 1) == 4 * 7 + 12 * 3 + s_widths[0x0F].right - s_widths[0x0F].left);
+        assert(line.count == 8);
+        assert(line.letter[0].letter == '1' && line.letter[1].letter == '2' && line.letter[0].x == 0);
+        assert(line.letter[1].x == 12 && line.letter[2].letter == 0 && line.letter[2].page == 2);
+        assert(line.letter[2].x == 24);
+        assert(line.tag[0] == 3 && line.tag[2] == 2 && line.tag[4] == 1);
+        assert(line.letter[3].letter == ' ' && line.letter[7].letter == 0x05E9);
+    }
+    /* a name of two-byte letters and a pack's one-byte code, by their Unicode letters */
+    {
+        static const unsigned char name[] = {0xFB, 0x04, 0xFB, 0x05};
+        static const unsigned char menu[] = {0x4E, 0x23, 0xFF};      /* gimel, then 'T' */
+        PeText_LineStart(&line);
+        assert(PeText_LineRead(&line, PE_TEXT_DIALOGUE_NAME, name, 4, 0, &item) == 2);
+        assert(PeText_LineRead(&line, PE_TEXT_DIALOGUE_NAME, name + 2, 2, 0, &item) == 2);
+        PeText_LineFinish(&line, 1);
+        assert(line.count == 2 && line.letter[0].letter == 0x05D1 && line.letter[1].letter == 0x05D0);
+        g_TextRenderMode = 0;
+        PeText_LineStart(&line);
+        for (i = 0; menu[i] != 0xFF; i += PeText_LineRead(&line, PE_TEXT_MENU, menu + i, ~0u, 0, &item)) {}
+        PeText_LineFinish(&line, 1);
+        assert(line.count == 2 && line.letter[0].letter == 'T' && line.letter[1].letter == 0x05D2);
+        assert(line.letter[1].code == 0x4E);              /* drawn as the game draws the code */
+        assert(PeText_MeasureMenu(menu) == line.width);
+    }
+    /* a narrowed menu line still fits */
+    {
+        unsigned letters[1 + 20];
+        int full;
+        for (i = 1; i <= 20; ++i) letters[i] = i % 5 ? 0x05D0 + i : ' ';
+        full = rtl_line(PE_TEXT_MENU, letters + 1, 20, &line);
+        letters[0] = PE_TEXT_NARROW_FIRST + 64;             /* 192 / 256 */
+        assert(rtl_line(PE_TEXT_MENU, letters, 21, &line) <= (full * 192 + 128) >> 8);
+        assert(line.count == 20);
+    }
+    s_rtl_on = 0;
+    assert(!PeText_RightToLeft());
+}
+
+int main(int argc, char **argv) {
+    unsigned i, cases;
     for (i = 0; i < sizeof s_metrics; ++i) s_metrics[i] = (unsigned char)next_random();
     for (i = 0; i < 241; ++i) {
         s_widths[i].left = (unsigned char)(next_random() % 4);
@@ -542,6 +714,11 @@ int main(void) {
     test_narrow();
     test_name_letters();
     test_credits();
+    test_rtl_lines();
+    s_rtl_on = 1;
+    cases = test_rtl_cases(argc > 1 ? argv[1] : "tests/text_render_rtl_cases.txt");
+    s_rtl_on = 0;
     puts("text renderer: every letter code matches the old drawing code, credits roll included; stretches place right, narrowed lines fit");
+    printf("text renderer: %u right-to-left cases ordered and joined as written, in dialogue and menus\n", cases);
     return 0;
 }

@@ -1,0 +1,45 @@
+# Right-to-left lines (PeText_LineFinish, localization/petext/rtl.py): each case is a
+# comment line saying what it checks, then the letters in reading order, a tab, and
+# the letters as drawn, left to right (Arabic in its joined presentation forms).
+# Hebrew runs right to left
+שלום	םולש
+# an English name keeps left to right; the end mark follows the sentence
+שלום Aya!	!Aya םולש
+# a number keeps left to right
+קומה 12	12 המוק
+# a year, a comma and a full stop
+בשנת 1997, בניו יורק.	.קרוי וינב ,1997 תנשב
+# a percent sign goes with its number
+50% הנחה	החנה 50%
+# brackets turn round
+(שלום)	(םולש)
+# English alone stays as it is
+Aya Brea	Aya Brea
+# a time stays together
+12:30	12:30
+# English words inside a Hebrew sentence
+ברוכה הבאה ל-Carnegie Hall	Carnegie Hall-ל האבה הכורב
+# Hebrew vowel points are left out
+שָׁלוֹם	םולש
+# Arabic joins: lam-alef is one letter and joins only the letter before it
+سلام	ﻡﻼﺳ
+# start, middle and end shapes
+بيت	ﺖﻴﺑ
+# letters that join only the letter before them
+دار	ﺭﺍﺩ
+# a name and a number after Arabic
+محمد 2	2 ﺪﻤﺤﻣ
+# lam-alef alone
+لا	ﻻ
+# alef maksura at the end
+على	ﻰﻠﻋ
+# an English name after Arabic
+مرحبا Aya	Aya ﺎﺒﺣﺮﻣ
+# Arabic vowel marks are left out
+كَتَبَ	ﺐﺘﻛ
+# Arabic-Indic digits keep left to right
+١٢٣ كتاب	ﺏﺎﺘﻛ ١٢٣
+# lam with hamza alef, after a joining letter
+بلأ	ﻸﺑ
+# tatweel joins and keeps its shape
+بـب	ﺐـﺑ

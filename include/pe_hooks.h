@@ -68,6 +68,8 @@ typedef enum PeHookId {
     PE_HOOK_TEXT_STRETCH, /* PeHookTextStretch: the Unicode letters of an F1 C6 stretch; nonzero
                            * gives them (pe1/text_render.h) */
     PE_HOOK_TEXT_LETTER,  /* PeHookTextLetter: how a Unicode letter draws; nonzero handles it */
+    PE_HOOK_TEXT_SCRIPT,  /* PeHookTextScript: whether the pack in use reads right to left, and
+                           * which Unicode letter a one-byte code draws (pe1/text_render.h) */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -148,11 +150,19 @@ typedef struct PeHookTextLetter {
     unsigned paged;           /* a two-byte name letter (FB-FE then a byte): (page byte - FA) << 8
                                * | byte; the provider gives its Unicode letter's drawing, else 0 */
     int draw;
-    int code;                 /* provider: the game code (0x00-0xF0) that draws it, or -1 */
+    int code;                 /* provider: the game code (0x00-0xF0) that draws it, or -1. For a
+                               * `paged` letter it also sets `letter` to the Unicode letter */
     unsigned char u, v;       /* provider, when code is -1: the cell on font page 0 */
     unsigned advance;         /* provider, when code is -1 */
     unsigned char w;          /* provider, when code is -1: columns drawn from u (0: all 12) */
 } PeHookTextLetter;
+
+/* Asked once per line drawn and for each one-byte letter in a right-to-left line. */
+typedef struct PeHookTextScript {
+    unsigned code;            /* a one-byte game code (0x4D-0xF0), or ~0u to ask only `rtl` */
+    int rtl;                  /* provider: nonzero when the pack in use reads right to left */
+    unsigned letter;          /* provider: the Unicode letter `code` draws in that pack, else 0 */
+} PeHookTextScript;
 
 typedef struct PeHookRewards {
     int exp;
