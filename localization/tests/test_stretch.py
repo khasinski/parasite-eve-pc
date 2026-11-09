@@ -72,6 +72,16 @@ class StretchTest(unittest.TestCase):
         self.assertTrue(all(len(r) <= stretch.MAX_LETTERS for r in runs))
         self.assertEqual(stretch.expand(out, table, back), long)
 
+    def test_a_line_break_is_a_stretch_of_its_own(self):
+        table, letters = stretch.Stretches(), stretch.letter_map()
+        raw = gt.encode("Hello there") + stretch.LINE_BREAK + gt.encode("and you")
+        out = table.convert(raw, letters)
+        self.assertEqual(len(out), 12)                                  # three stretches
+        self.assertEqual(table.runs, ["Hello there", chr(stretch.LINE_BREAK_LETTER), "and you"])
+        back = {ch: bytes([code]) for code, ch in gt.CHARS.items()}
+        self.assertEqual(stretch.expand(out, table, back), raw)
+        self.assertEqual(stretch.LINE_BREAK_LETTER, 0x10FE7F)           # PE_TEXT_LINE_BREAK
+
     def test_version_4_pack_layout(self):
         entries = {"sys/001": gt.encode("Hello"), "sys/030": gt.encode("Aya")}
         conv, table = stretch.convert_entries(entries)

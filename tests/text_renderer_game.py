@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,drawn]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn]]
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -55,6 +55,10 @@ Checks, each from pe_mods.log and frame dumps:
              pack's letter pictures say they should: each letter in its joined shape, the gaps
              between joined letters closed, right to left, each box line ending at x 300. The
              scene behind the box comes from a pack whose first box is a lone '.'.
+  split      A pack built as a fan patch's is (--from-patch) whose message box line (sys/086) is too
+             wide for the screen: the build puts it on two lines, not narrower. A save made from the
+             first box, one byte changed so its checksum fails, is opened with Continue: the box
+             saying so (sys/085, sys/086) shows one more line of text than English's, at full size.
   drawn      A pack that draws letters its own way, as a fan patch's own letters come in (pelang.py
              build --patch-letters): every letter of the first box and of the name entry's title gets
              a test picture and widths unlike the game's, including the game's '0' (code 0), the
@@ -609,6 +613,34 @@ def loaded_steps():
                     (16610, 'status', None)]
 
 
+# Continue to the save list and open card 1, slot 1 (the title's Continue, as the earlier
+# squeeze pictures did it): the list at LIST_AT, the box about the save at OPENED_AT.
+OPEN_SAVE = [(10000, START), (10010, 0), (11500, CROSS), (11510, 0)]
+LIST_AT, OPENED_AT = 12170, 12480
+OPEN_STEPS = [(11850, 'slots', 'advance 10 16384'), (11860, 'pressed', 'advance 310 0'),
+              (LIST_AT, 'list', 'advance 10 16384'), (LIST_AT + 10, 'pressed2', 'advance 300 0'),
+              (OPENED_AT, 'opened', None)]
+MESSAGE_BOX = (40, 100, 290, 182)  # inside the box about the save: under the slot's row, above "Unused File"
+# A test line too wide for one line of a message box (more than 300 px), and the box's title.
+SPLIT_TEXT = {'sys/085': 'Save unreadable', 'sys/086': 'Erase this broken save from the memory card manager screen'}
+
+
+def text_rows(work, label, box):
+    """The top of each row of text in the box: bands of bright pixels 5 or more rows tall (a
+    button's 2-pixel edge is not text)."""
+    width, _, rgb = frame(work, label)
+    x0, y0, x1, y1 = box
+    bands = []
+    for y in range(y0, y1):
+        row = rgb[(y * width + x0) * 3:(y * width + x1) * 3]
+        if any(min(row[i:i + 3]) > 200 for i in range(0, len(row), 3)):
+            if bands and bands[-1][1] == y - 1:
+                bands[-1][1] = y
+            else:
+                bands.append([y, y])
+    return [top for top, bottom in bands if bottom - top >= 4]
+
+
 def letters_only(work, label, box):
     """The box's bright pixels (letters) as they are and every other pixel black: the status panel
     is see-through, so the scene behind it differs between runs while the letters must not."""
@@ -629,7 +661,7 @@ def card_file(work):
     return card
 
 
-def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters,rtl,drawn'):
+def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters,rtl,split,drawn'):
     disc = os.getenv('PE_TEST_DISC')
     if not disc:
         print('PE_TEST_DISC is not set: skipped')
@@ -954,6 +986,42 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         print(f'PASS rtl arabic menus: the name entry title drew joined, right to left, pixel for pixel '
               f'(at x {found[0] + TITLE[0]})')
 
+    # A message box line too wide for the screen goes on two lines at full size.
+    if 'split' in parts:
+        strings = out / 'packs' / 'text' / 'strings.json'
+        sample = out / 'packs' / 'split.csv'
+        with sample.open('w', encoding='utf-8', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
+            w.writeheader()
+            w.writerows({'key': k, 'translation': v, 'notes': 'test line'} for k, v in SPLIT_TEXT.items())
+        path = out / 'packs' / 'renderer-split.pelang'
+        built = subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--from-patch',
+                                '--strings', str(strings), '--lang', 'xx', '--name', 'Renderer split', '-o', str(path),
+                                str(sample)], check=True, capture_output=True, text=True, encoding='utf-8').stdout
+        check('sys/086: split onto two lines to fit' in built and 'sys/086: drawn at' not in built,
+              f'the build did not put sys/086 on two lines: {built[-2000:]}')
+        made = run(game, discs, out / 'split-card', pad=NEW_GAME, frame_limit=FIRST_BOX + 200,
+                   crash_after=FIRST_BOX + 100)
+        broken = bytearray(card_from_report(crash_report(made)))
+        broken[0x900] ^= 0x5A                       # in the saved game: the checksum no longer matches
+        split = ('xx', 'Renderer split', '', path)
+        boxes = {}
+        for which, kw in (('english', {}), ('split', {'pack': split})):
+            boxes[which] = run_fixed(game, discs, out / f'split-{which}', OPEN_STEPS, pad=OPEN_SAVE,
+                                     card=bytes(broken), **kw)
+            check(lit(boxes[which], 'opened', MESSAGE_BOX) > 200, f'{which}: no box about the save: {boxes[which]}')
+        work = boxes['split']
+        missing = [line for line in mods_log(work).splitlines() if 'text: ' in line and "shows '?'" in line]
+        check(not missing, f'split: letters fell back to "?": {missing[:5]}: {work}')
+        english, split_rows = (text_rows(boxes[which], 'opened', MESSAGE_BOX) for which in ('english', 'split'))
+        check(len(english) == 3, f'the English box has text rows at {english}, not its two lines and the button: '
+              f'{boxes["english"]}')
+        # the same title and first line, one more line 14 px under it, and the button 14 px lower
+        check(len(split_rows) == 4 and split_rows[:2] == english[:2] and split_rows[2] == english[1] + 14
+              and split_rows[3] == english[2] + 14,
+              f'the box\'s text rows are at {split_rows}, not English\'s {english} with a line more: {work}')
+        print(f'PASS split: the too-wide message box line is on two lines at full size (text rows at {split_rows}, '
+              f'English {english})')
     # A pack that draws letters its own way (a fan patch's look).
     if 'drawn' in parts:
         made = make_drawn_packs(localization, out / 'packs')

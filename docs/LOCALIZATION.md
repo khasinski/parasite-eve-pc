@@ -659,7 +659,11 @@ and F1 > Fonts. Either disc gives the same text. Nothing here goes into the repo
 - **Controls**: `--from-patch` lets waits, names and timing differ from the English, because a
   translator moves them and the patch played that way. Choices must match, since scripts act on them.
 - **Space**: a patch's own font is often narrower than the game's. Pages are rewrapped to fit the
-  game's widths. A menu line too wide for its place is drawn narrower to fit (the report says
+  game's widths. A message box line too wide for the screen goes on two lines instead, split at
+  the space that leaves the longer half shortest (a stretch holding only U+10FE7F,
+  `PE_TEXT_LINE_BREAK`, marks the break; the box grows by a line). The card slot line and "is not
+  formatted" go on two lines when both slot lines are translated. Any other menu line too wide
+  for its place, or a line with no space to split at, is drawn narrower to fit (the report says
   how much): the room comes from its spaces and the gaps between letters first, and letters are
   drawn narrower only for what is still missing. Text the game joins (a card slot and "is not
   formatted") is narrowed together. A line that would need less than 75% keeps the game's text.

@@ -23,6 +23,10 @@ EXTRA = b"\xf1\xc7"          # a letter with no code (petext/letters.py): only e
 # letter, U+10FE80 + k (PE_TEXT_NARROW_FIRST, include/pe1/text_render.h), so it costs no bytes.
 NARROW = b"\xf1\xc8\x00"
 NARROW_FIRST = 0x10FE80
+# A line break (petext/menu.py split): in the tool's bytes F1 C8 01 00 where a message box starts a
+# new line; in the pack a stretch holding only U+10FE7F (PE_TEXT_LINE_BREAK), so it costs 4 bytes.
+LINE_BREAK = b"\xf1\xc8\x01\x00"
+LINE_BREAK_LETTER = 0x10FE7F
 MAX_STRETCHES = 240 * 240
 MAX_LETTERS = 96            # PE_TEXT_ITEM_LETTERS, PE_LANG_STRETCH_MAX
 
@@ -105,6 +109,11 @@ class Stretches:
             run_bytes.clear()
 
         while i < len(raw):
+            if raw[i:i + 4] == LINE_BREAK:
+                flush()
+                out.extend(self.token(chr(LINE_BREAK_LETTER)))
+                i += 4
+                continue
             if raw[i:i + 3] == NARROW and i + 4 <= len(raw):
                 flush()
                 mark = chr(NARROW_FIRST + raw[i + 3])
@@ -150,6 +159,11 @@ def expand(raw: bytes, stretches: Stretches, back: dict[str, bytes]) -> bytes:
     """`raw` with its stretches as the bytes they stand for (back: letter -> byte form)."""
     out, i, mark = bytearray(), 0, None
     while i < len(raw):
+        if raw[i:i + 2] == TOKEN and i + 4 <= len(raw) and \
+                stretches.runs[raw[i + 2] * 240 + raw[i + 3]] == chr(LINE_BREAK_LETTER):
+            out += LINE_BREAK
+            i += 4
+            continue
         if raw[i:i + 2] == TOKEN and i + 4 <= len(raw):
             for ch in stretches.runs[raw[i + 2] * 240 + raw[i + 3]]:
                 if ord(ch) >= NARROW_FIRST:

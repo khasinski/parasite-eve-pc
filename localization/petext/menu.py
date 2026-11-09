@@ -71,8 +71,12 @@ def narrow(raw: bytes, n: int) -> bytes:
 
 def width(raw: bytes, metrics: bytes) -> int:
     """Draw_MeasureTextWidth, with the Latin Extended codes as pe_lang sets them. A right-to-left
-    pack's Arabic letters measure joined, as the renderer draws them (petext/rtl.py)."""
+    pack's Arabic letters measure joined, as the renderer draws them (petext/rtl.py). A line split
+    with a line break (split) is as wide as its widest line."""
     from . import letters, rtl
+    from .stretch import LINE_BREAK
+    if LINE_BREAK in raw:
+        return max(width(part, metrics) for part in raw.split(LINE_BREAK))
     raw, n = strip_narrow(raw)
     if n != 256:
         return narrowed(width(raw, metrics), n)
@@ -204,9 +208,10 @@ def check_combined(texts: dict[str, bytes], metrics: bytes, layouts: dict, over:
     def n_px(v):
         return v[1] if isinstance(v, tuple) else width(v, metrics)
 
+    from .stretch import LINE_BREAK
     errors = []
     for c in layouts.get("combined", []):
-        worst_px, worst_len, names, worst = 0, 0, [], set()
+        worst_px, worst_len, names, worst, line_px = 0, 0, [], set(), 0
         for alt in c["_parts"]:
             keys = [k for k in texts if any(m(k) for m in alt)]
             if not keys:
@@ -214,7 +219,10 @@ def check_combined(texts: dict[str, bytes], metrics: bytes, layouts: dict, over:
             by_len = max(keys, key=lambda k: n_bytes(texts[k]))
             by_px = max(keys, key=lambda k: n_px(texts[k]))
             worst_len += n_bytes(texts[by_len])
-            worst_px += n_px(texts[by_px])
+            line_px += n_px(texts[by_px])
+            worst_px = max(worst_px, line_px)
+            if c.get("line_break") and all(isinstance(texts[k], bytes) and texts[k].endswith(LINE_BREAK) for k in keys):
+                line_px = 0                  # each of them ends its line: the next part starts anew
             names.append(by_len if by_len == by_px else f"{by_len}/{by_px}")
             worst |= {by_len, by_px}
         else:
@@ -233,6 +241,56 @@ def room(key: str, layouts: dict) -> int | None:
     rooms = [c["edge"] if "edge" in c else c["width"] for c in contexts_of(key, layouts)
              if "edge" in c or c.get("width_is_hard")]
     return min(rooms) if rooms else None
+
+
+def splits(key: str, layouts: dict) -> bool:
+    """Whether every place that draws `key` takes a line break as a new line (its "line_break")."""
+    found = contexts_of(key, layouts)
+    return bool(found) and all(c.get("line_break") for c in found)
+
+
+def _parts(raw: bytes):
+    """Offsets of each letter or command in a menu line (tool bytes)."""
+    i = 0
+    while i < len(raw):
+        yield i
+        i += 4 if raw[i] == 0xF1 else 2 if 0xFA <= raw[i] < 0xFF else 1
+
+
+def split(raw: bytes, metrics: bytes, space: int) -> bytes | None:
+    """`raw` on two lines (a line break at the space that leaves the wider line narrowest), each
+    within `space` px, or None when no space does that."""
+    from .stretch import LINE_BREAK
+    raw = strip_narrow(raw)[0]
+    if LINE_BREAK in raw:
+        return None
+    best = None
+    for i in _parts(raw):
+        if raw[i] != gt.CODE_OF[" "]:
+            continue
+        w = max(width(raw[:i], metrics), width(raw[i + 1:], metrics))
+        if w <= space and (best is None or w < best[0]):
+            best = (w, i)
+    return None if best is None else raw[:best[1]] + LINE_BREAK + raw[best[1] + 1:]
+
+
+def split_joined(texts: dict, translated, metrics: bytes, layouts: dict) -> dict[str, bytes]:
+    """For joined text past its room whose layout takes line breaks ("line_break"): every
+    translated key of each part but the last ends with a line break, so the next part starts a new
+    line. {key: new bytes} when that makes it fit, else {}."""
+    from .stretch import LINE_BREAK
+    out = {}
+    for c in layouts.get("combined", []):
+        if not c.get("line_break") or not check_combined(texts, metrics, {"combined": [c]}):
+            continue
+        keys = [k for alt in c["_parts"][:-1] for k in texts if any(m(k) for m in alt)]
+        if not keys or any(k not in translated or not isinstance(texts[k], bytes) or
+                           texts[k].endswith(LINE_BREAK) or not splits(k, layouts) for k in keys):
+            continue
+        trial = dict(texts, **{k: texts[k] + LINE_BREAK for k in keys})
+        if not check_combined(trial, metrics, {"combined": [c]}):
+            out.update({k: trial[k] for k in keys})
+    return out
 
 
 def fit(px: int, space: int) -> int | None:

@@ -119,17 +119,59 @@ class MenuTest(unittest.TestCase):
         self.assertEqual(self.build({"desc/000": "W" * 40}, "--from-patch"), 0)   # 440 px: 70%
         self.assertIsNone(self.built("desc/000"))
 
-    def test_joined_patch_text_is_drawn_narrower_together(self):
+    def memory_card_rows(self):
         rows = STRINGS + [row("sys/071", "Memory Card in Slot 1"), row("sys/072", "Memory Card in Slot 2"),
-                          row("sys/073", " is not formatted")]
+                          row("sys/073", " is not formatted"), row("sys/086", "Delete it from the card manager")]
         self.strings.write_text(json.dumps(rows), encoding="utf-8")
-        text = {"sys/071": "W" * 20, "sys/072": "Memory", "sys/073": "W" * 9}    # 220 + 99 px > 300
+
+    def test_joined_patch_text_is_drawn_narrower_together(self):
+        self.memory_card_rows()
+        # sys/072 stays English, so the message box can't take sys/073 on a line of its own
+        text = {"sys/071": "W" * 20, "sys/073": "W" * 9}                     # 220 + 99 px > 300
         self.assertEqual(self.build(text, "--from-patch"), 0)
         a, b = self.built("sys/071"), self.built("sys/073")
         self.assertIsNotNone(a)
         self.assertIsNotNone(b)
         self.assertLessEqual(menu.width(a, METRICS) + menu.width(b, METRICS), 300)
         self.assertEqual(menu.strip_narrow(a)[0], gt.encode("W" * 20))
+        self.assertNotIn(stretch.LINE_BREAK, a)
+
+    def test_joined_patch_text_goes_on_two_lines_in_a_message_box(self):
+        self.memory_card_rows()
+        text = {"sys/071": "W" * 20, "sys/072": "Memory", "sys/073": "W" * 9}    # 220 + 99 px > 300
+        self.assertEqual(self.build(text, "--from-patch"), 0)
+        a, b, c = self.built("sys/071"), self.built("sys/072"), self.built("sys/073")
+        self.assertEqual(a, gt.encode("W" * 20) + stretch.LINE_BREAK)        # full size, then a new line
+        self.assertEqual(b, gt.encode("Memory") + stretch.LINE_BREAK)
+        self.assertEqual(c, gt.encode("W" * 9))
+        self.assertEqual(menu.width(a, METRICS), 220)                         # the break is no width
+
+    def test_a_patch_message_box_line_too_wide_goes_on_two_lines(self):
+        self.memory_card_rows()
+        text = "WWWWW WWWWW WWWWW WWWWW WWWWW WW"                               # 330 px on one line
+        self.assertEqual(self.build({"sys/086": text}, "--from-patch"), 0)
+        raw = self.built("sys/086")
+        self.assertEqual(raw, gt.encode("WWWWW WWWWW WWWWW") + stretch.LINE_BREAK + gt.encode("WWWWW WWWWW WW"))
+        self.assertFalse(raw.startswith(stretch.NARROW))                       # letters keep their size
+        self.assertLessEqual(menu.width(raw, METRICS), 300)
+
+    def test_a_message_box_line_with_no_space_to_split_is_drawn_narrower(self):
+        self.memory_card_rows()
+        self.assertEqual(self.build({"sys/086": "W" * 28}, "--from-patch"), 0)  # 308 px, one word
+        raw = self.built("sys/086")
+        self.assertTrue(raw.startswith(stretch.NARROW))
+        self.assertNotIn(stretch.LINE_BREAK, raw)
+
+    def test_split_takes_the_space_that_leaves_the_wider_line_narrowest(self):
+        line = gt.encode("WW W WWWW WW")                                       # 20 6 40 20, spaces 6
+        two = menu.split(line, METRICS, 300)
+        self.assertEqual(two, gt.encode("WW W") + stretch.LINE_BREAK + gt.encode("WWWW WW"))
+        self.assertEqual(menu.width(two, METRICS), menu.width(gt.encode("WWWW WW"), METRICS))
+        self.assertIsNone(menu.split(gt.encode("WWWW WWWW"), METRICS, 30))   # no half fits 30 px
+        self.assertIsNone(menu.split(gt.encode("WWWWWW"), METRICS, 300))     # no space at all
+        self.assertTrue(menu.splits("sys/086", self.layouts))                 # a message box line
+        self.assertFalse(menu.splits("desc/000", self.layouts))               # the help line: one line
+        self.assertFalse(menu.splits("sys/073", self.layouts))                # a confirm label too
 
     def test_template_says_where_menu_text_goes(self):
         rows = {r["key"]: r for r in pelang.template_rows(pelang.load_strings(self.strings))}

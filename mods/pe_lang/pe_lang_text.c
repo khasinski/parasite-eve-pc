@@ -39,7 +39,7 @@ const char *pe_lang_text_utf8(PeLangPack *pack,const char *key) {
         if (stretch) {                 /* the text renderer's stretch: its letters, in order */
             if (n+4u*stretch_count>=sizeof text) return NULL;
             for (unsigned k=0;k<stretch_count;++k)
-                if (stretch[k]<PE_TEXT_NARROW_FIRST || stretch[k]>PE_TEXT_NARROW_LAST) n+=emit(text+n,stretch[k]);
+                if ((stretch[k]<PE_TEXT_NARROW_FIRST || stretch[k]>PE_TEXT_NARROW_LAST) && stretch[k]!=PE_TEXT_LINE_BREAK) n+=emit(text+n,stretch[k]);
             raw+=4;
             continue;
         }

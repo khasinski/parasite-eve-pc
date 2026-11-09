@@ -360,17 +360,25 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
 
 
 def narrow_to_fit(key, raw, errs, source, metrics, layouts, stretches=True):
-    """(`raw` narrowed to fit its menu room, n / 256), or None when only width is wrong and no
-    narrowing down to menu.NARROW_FLOOR makes it fit (or the line can't be narrowed at all)."""
+    """(`raw` made to fit its menu room, how), or None when only width is wrong and nothing makes it
+    fit. A message box line goes on two lines at full size (menu.split) when every place that draws
+    it takes a line break; otherwise, or when even two lines are too wide, it is narrowed, down to
+    menu.NARROW_FLOOR (or the line can't be narrowed at all)."""
     if (metrics is None or not stretches or stretch.stays_bytes(key) or key.startswith(("dlg/", "battle/"))
             or not all(" px; " in e for e in errs)):
         return None
     space = menu.room(key, layouts)
-    n = menu.fit(menu.width(raw, metrics), space) if space is not None else None
+    if space is None:
+        return None
+    if menu.splits(key, layouts):
+        two = menu.split(raw, metrics, space)
+        if two is not None and not menu.check(key, two, source, metrics, layouts)[0]:
+            return two, "split onto two lines"
+    n = menu.fit(menu.width(raw, metrics), space)
     if n is None:
         return None
     raw = menu.narrow(raw, n)
-    return (raw, n) if not menu.check(key, raw, source, metrics, layouts)[0] else None
+    return (raw, f"drawn at {n * 100 // 256}% width") if not menu.check(key, raw, source, metrics, layouts)[0] else None
 
 
 def cmd_build(a) -> int:
@@ -468,8 +476,8 @@ def cmd_build(a) -> int:
             # text, which shouldn't cost the player the whole language.
             fitted = narrow_to_fit(key, raw, errs, src, metrics, layouts, not a.bytes_only)
             if fitted:
-                raw, n = fitted
-                warns.append(f"drawn at {n * 100 // 256}% width to fit: {errs[0]}")
+                raw, how = fitted
+                warns.append(f"{how} to fit: {errs[0]}")
                 errs = []
             else:
                 warns += [f"keeps the game's text: {e}" for e in errs]
@@ -486,8 +494,16 @@ def cmd_build(a) -> int:
         over: set[str] = set()
         joined = menu.check_combined(resident, metrics, layouts, over)
         while a.from_patch and joined and over & entries.keys():
-            # As with a single line: the longest parts are drawn narrower, or past that go back
-            # to the game's text, until it fits.
+            # As with a single line: a message box takes the next part on a new line, else the
+            # longest parts are drawn narrower, or past that go back to the game's text, until it fits.
+            two = {} if a.bytes_only else menu.split_joined(resident, entries.keys(), metrics, layouts)
+            if two:
+                warnings += [f"joined text split onto two lines to fit: {e}" for e in joined]
+                entries.update(two)
+                resident.update(two)
+                over.clear()
+                joined = menu.check_combined(resident, metrics, layouts, over)
+                continue
             parts = sorted(over & entries.keys())
             if not a.bytes_only and not any(stretch.stays_bytes(k) for k in parts):
                 for n in range(255, menu.NARROW_FLOOR - 1, -1):
