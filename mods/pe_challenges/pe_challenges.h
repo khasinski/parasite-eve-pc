@@ -25,7 +25,8 @@
  *   challenges
  *     pe_ch_menu_rules.c   No items in battle, No escape, Locked loadout (battle tabs only)
  *     pe_ch_no_pe.c        No Parasite Energy
- *     pe_ch_damage.c       Glass cannon, Tough crowd
+ *     pe_ch_damage.c       the shared dealt-damage modifiers; Glass cannon, Tough crowd
+ *     pe_ch_club_only.c    Club only (Club hits 2x / 1.5x, guns do no damage)
  *     pe_ch_one_hit.c      One-hit KO
  *     pe_ch_no_exp.c       No EXP
  *     pe_ch_blood_price.c  Blood price (PE powers also cost HP)
@@ -51,6 +52,7 @@ enum {
     CH_NO_EXP = 8,
     CH_BLOOD_PRICE = 9,
     CH_FAST_ENEMIES = 10,
+    CH_CLUB_ONLY = 11,
     CH_COUNT
 };
 #define CH_BIT(c) (1u << (c))
@@ -123,6 +125,13 @@ void pe_ch_names(unsigned mask, char *out, unsigned size);   /* "No PE, Glass ca
 /* pe_ch_tabs.c */
 void pe_ch_tabs_register(const char *mod_id);
 
+/* pe_ch_damage.c: a challenge that changes the damage Aya deals multiplies this hit's *num / *den
+ * (nothing when it doesn't apply). Read at the hit's start: g_ActiveActor is the attacker. A num
+ * of 0 means no damage at all. Registering also adds the shared damage hooks (once). */
+struct BattleEntity;
+typedef void (*PeChDealtModifier)(const struct BattleEntity *target, int *num, int *den);
+void pe_ch_damage_modifier(PeChDealtModifier fn, const char *mod_id);
+
 /* pe_ch_assist.c */
 void pe_ch_assist_register(const char *mod_id);
 void pe_ch_assist_reset(void);                     /* a load or a new game: tell again next time */
@@ -178,6 +187,7 @@ const char *pe_ch_status_text(void);   /* "Clean", "Assisted", "Clean, Hardcore"
 
 /* The challenges (each defined in its own file). */
 extern const PeChallengeDef g_ch_no_pe, g_ch_no_items, g_ch_no_escape, g_ch_locked_loadout,
-    g_ch_glass, g_ch_tough, g_ch_one_hit, g_ch_no_exp, g_ch_blood_price, g_ch_fast_enemies, g_ch_hardcore;
+    g_ch_glass, g_ch_tough, g_ch_one_hit, g_ch_no_exp, g_ch_blood_price, g_ch_fast_enemies, g_ch_club_only,
+    g_ch_hardcore;
 
 #endif

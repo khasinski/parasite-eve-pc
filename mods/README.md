@@ -106,6 +106,7 @@ F1 > Challenges, all off until chosen (while every one is off the mod writes not
 | No items in battle | no Item battle tab | pe_ch_menu_rules.c |
 | No escape | no Escape battle tab | pe_ch_menu_rules.c |
 | Locked loadout | no gun / armor battle tabs | pe_ch_menu_rules.c |
+| Club only (Club 2x / Club 1.5x) | weapon hits with a Club (items 0x3F-0x43) deal x2 / x1.5; with a gun, no damage; PE untouched | pe_ch_club_only.c |
 | Glass cannon | Aya takes x2 from hits and contact, deals x1.5 | pe_ch_damage.c |
 | Tough crowd (1.5x / 2x HP) | enemies take /1.5 or /2 damage; HP, EXP, drops untouched | pe_ch_damage.c |
 | One-hit KO | any hit, contact or HP-reduction attack takes all of Aya's HP | pe_ch_one_hit.c |
@@ -133,7 +134,10 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   first frame after. If every tab would go, Weapon stays (an empty battle menu is untested).
 - **Damage:** PE_HOOK_HP_LOSS for Aya (Glass cannon sources 1-2, then One-hit KO sources 1, 2, 4);
   PE_HOOK_ENEMY_HIT / ENEMY_HIT_END give each hit's damage on an enemy, scaled after Rebalance and
-  before the Bestiary's kill check. No EXP warns that battle Junk (pe_rewards) scales with EXP.
+  before the Bestiary's kill check. Challenges that change dealt damage register a modifier
+  (`pe_ch_damage_modifier`) that multiplies the hit's num / den; a num of 0 means no damage.
+  Club only can't block equipping a gun (the game has no equip-refusal hook), so gun hits do
+  nothing and a message says so; the Weapon tab stays for switching to the Club in battle. No EXP warns that battle Junk (pe_rewards) scales with EXP.
 - **Other mods** (checked against every mod in the default list; nothing in them changed):
   - Half-bar ATB edits the same tab word: the tabs code runs after it and follows its writes.
   - Rebalance mod effects adjust each hit at the same hooks: the scaling runs after them, so it
@@ -157,7 +161,7 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   | `challenges.run_cleared` | `const uint32_t *` run id | a challenge run's Clear Data save, once |
 
   Challenge ids (append only): 0 No PE, 1 No items, 2 No escape, 3 Glass cannon, 4 Tough crowd,
-  5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price, 10 Fast enemies.
+  5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price, 10 Fast enemies, 11 Club only.
   A `challenges` service (is a challenge on, its level, report an assist) belongs in
   `host/pe_services.h`, which the PS5 port pins by checksum, so it waits for upstream. Until then
   cheat mods are detected through their rows and the `play.log` `cheat_*` convention.

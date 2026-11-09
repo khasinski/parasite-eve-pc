@@ -18,6 +18,7 @@ const PeChallengeDef *const g_ch_defs[] = {
     &g_ch_no_items,
     &g_ch_no_escape,
     &g_ch_locked_loadout,
+    &g_ch_club_only,
     &g_ch_glass,
     &g_ch_tough,
     &g_ch_fast_enemies,
