@@ -38,7 +38,8 @@ FB_TAGS = {4: "{red}", 5: "{/red}", 6: "{pause}", 8: "{num}"}
 # The pack being built: its own letters by code (petext/letters.py), measured before any fixed
 # letter that code would otherwise be.
 PACK_LETTERS: dict = {}
-PACK_EXTRA: dict = {}        # F1 C7 hi lo -> a letter with no code (petext/letters.py)
+PACK_EXTRA: dict = {}
+RTL = False                  # the pack being built reads right to left (petext/rtl.py)        # F1 C7 hi lo -> a letter with no code (petext/letters.py)
 
 
 def decode(b: bytes) -> str:

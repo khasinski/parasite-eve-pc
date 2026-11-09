@@ -297,7 +297,32 @@ int main(int argc, char **argv) {
     }
     pe_lang_pack_free(&pack);
     free(good);
+    /* right to left from the language code (petext/rtl.py is_rtl agrees) */
+    {
+        static const char *const rtl[] = {"he", "ar", "fa", "ur", "yi", "ar-EG", "ks-Arab", "he_IL", "AR", "ckb"};
+        static const char *const ltr[] = {"en", "ru", "ku-Latn", "zh-Hans", "az", "el", "", "hebr", "xx"};
+        for (unsigned i = 0; i < sizeof rtl / sizeof *rtl; ++i) assert(pe_lang_code_rtl(rtl[i]));
+        for (unsigned i = 0; i < sizeof ltr / sizeof *ltr; ++i) assert(!pe_lang_code_rtl(ltr[i]));
+        assert(!pe_lang_code_rtl(NULL));
+    }
+    /* a drawn letter's cut: first stroke column, width with the shadow; none for a built letter */
+    {
+        unsigned char r[PE_LANG_LETTER_SIZE] = {0};
+        unsigned first = 99, width = 99;
+        r[6] = 0xFF;
+        assert(!pe_lang_letter_cut(r, &first, &width));            /* no strokes */
+        for (unsigned x = 2; x <= 6; ++x) {                         /* a stroke on row 7, columns 2-6 */
+            unsigned i = 7 * 12 + x;
+            r[8 + i / 2] |= (unsigned char)(1u << (i & 1 ? 4 : 0));
+        }
+        { unsigned i = 8 * 12 + 7; r[8 + i / 2] |= (unsigned char)(2u << (i & 1 ? 4 : 0)); }  /* its shadow */
+        assert(pe_lang_letter_cut(r, &first, &width) && first == 2 && width == 6);
+        r[6] = 0x11;
+        assert(!pe_lang_letter_cut(r, &first, &width));
+        assert(PE_LANG_JOINING(0xFE91u) && PE_LANG_JOINING(0x0640u) && PE_LANG_JOINING(0xFB56u));
+        assert(!PE_LANG_JOINING(0x0628u) && !PE_LANG_JOINING(0x05D0u) && !PE_LANG_JOINING(0xFEFFu));
+    }
     puts("Passed language pack checks: lookups by key, table and bank page, bank measure and CRC, "
-         "file load, version 4 stretches, damaged packs refused whole.");
+         "file load, version 4 stretches, damaged packs refused whole, right-to-left codes, letter cuts.");
     return 0;
 }

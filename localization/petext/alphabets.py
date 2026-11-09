@@ -84,7 +84,7 @@ LANGUAGES = [
 
 BY_CODE = {lang.code: lang for lang in LANGUAGES}
 CJK = {"zh-Hans", "zh-Hant", "ja", "ko"}            # letters kept in the pack's own dictionary
-NEEDS_LAYOUT = {"ar", "fa", "ur", "he", "hi", "bn", "th"}   # letters alone won't do: see docs/LOCALIZATION.md
+NEEDS_LAYOUT = {"ar", "fa", "ur", "hi", "bn", "th"}   # letters alone won't do: see docs/LOCALIZATION.md
 
 
 SIGNS = ["(…;)", "—–", "„“”", "‘’‚·"]     # no language needs them all; a test pack shows them

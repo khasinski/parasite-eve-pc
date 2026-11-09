@@ -377,6 +377,8 @@ def cmd_build(a) -> int:
                           "`pelang.py export` writes (key, translation, notes)")
     gt.PACK_LETTERS.clear()
     gt.PACK_EXTRA.clear()
+    from petext import rtl
+    gt.RTL = rtl.is_rtl(a.lang)             # lines end at the box's right side
     texts = [r.get('translation','') for r in rows]
     try:
         byte_texts = [r.get('translation','') for r in rows

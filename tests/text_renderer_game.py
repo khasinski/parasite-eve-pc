@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl]]
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -42,6 +42,13 @@ Checks, each from pe_mods.log and frame dumps:
              letters with no code in the big pack. They draw in the menu's style (logged, no '?')
              and look and space exactly as the small pack's title, where every letter has a code.
              Neither pack translates the grid; the English grid's {g4D} cell stays empty with both.
+  rtl        Right to left, Hebrew: a pack with the language code "he" against a left-to-right pack
+             ("xx") holding the same text already in drawing order (petext/rtl.py, which the
+             renderer's own test holds to the same cases). The first box's lines (Hebrew words, an
+             English name, a year, brackets) draw the same letters in the same places, each line
+             moved to end at the box's right side (x 300). The name entry's title, the grid and
+             Aya's Hebrew name above it draw pixel for pixel as the left-to-right pack's: menus keep
+             their places, only the order inside changes. The status panel shows the name.
 """
 import binascii
 import csv
@@ -105,10 +112,19 @@ MODS = ('Cheats', 'PE Enhancements: collection', 'PE Enhancements: economy', 'He
         'PE Enhancements: stacked items', 'Warp')
 PACKS = [  # code, pack name, default name (sys/030), CJK font
     ('el', 'Renderer Greek', 'Άγια', None),
+    ('he', 'Renderer Hebrew', 'איה', None),
     ('vi', 'Renderer Vietnamese', 'Ấyà', None),
     ('ru', 'Renderer Russian', 'Айя', None),
     ('zh-Hans', 'Renderer Chinese', '阿雅', 'C:/Windows/Fonts/msyh.ttc'),
 ]
+# Part rtl: the first box's lines, the name entry's title (sys/039) and Aya's name, in Hebrew.
+HEBREW_BOX = ['שלום Aya, בשנת 1997!',
+              '(ניו יורק) ברוכה הבאה',
+              'דג סקרן שט בים.']
+HEBREW_TITLE = 'הכנס שם'
+HEBREW_NAME = 'איה'
+RIGHT_EDGE = 300               # a right-to-left line in the default box ends here (Textbox_RightEdge)
+LINE_TOP = 174                 # the default box's first line (textbox.c: cursor.y 0xAE), 12 px each
 CHINESE_GRID = ('的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对'
                 '可里后小么心多天而能好都然没日于起还发成事只作当想看文无开手十用主行方又如前所本见经头面公同三'
                 '已老从动两长知民样现分将外但身些与高意进把法此实回二理美点月明其种声全工己话儿者向情部正名定女')
@@ -207,6 +223,59 @@ def make_many_packs(localization, out):
                         str(table)], check=True, stdout=subprocess.DEVNULL)
         made[which] = ('xx', f'Letters {which}', None, pack)
     return made, ''.join(words), title.replace(' ', '')
+
+
+def make_rtl_packs(localization, out, visual):
+    """The Hebrew pack ('he', right to left) and its mirror ('xx', left to right) with the same text
+    in drawing order (`visual`, petext/rtl.py): the first box, the name entry's title, Aya's name and a
+    grid of Hebrew letters. The boxes after the first stay English, as in make_packs."""
+    strings = out / 'text' / 'strings.json'
+    entries = {e['key']: e['text'] for e in json.loads(strings.read_text(encoding='utf-8'))}
+    from petext import alphabets
+    hebrew = alphabets.BY_CODE['he'].letters
+    made = {}
+    for code, name, line in (('he', 'Right to left', lambda t: t), ('xx', 'Mirror', visual)):
+        rows = [('dlg/M001/009', '{br}'.join(line(t) for t in HEBREW_BOX)), ('sys/039', line(HEBREW_TITLE)),
+                ('sys/030', line(HEBREW_NAME)), ('sys/117', grid(entries['sys/117'], hebrew))]
+        table = out / f'rtl-{code}.csv'
+        with table.open('w', encoding='utf-8', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
+            w.writeheader()
+            w.writerows({'key': k, 'translation': t, 'notes': ''} for k, t in rows)
+        pack = out / f'rtl-{code}.pelang'
+        subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--strings', str(strings),
+                        '--lang', code, '--name', name, '-o', str(pack), str(table)], check=True,
+                       stdout=subprocess.DEVNULL)
+        made[code] = (code, name, line(HEBREW_NAME), pack)
+    return made
+
+
+def turned(a, b):
+    """How many columns of b's line (bright masks of the same box) moved from its right end to the
+    left make a, counting the gap after b's last letter (0 to 3 px); 0 when they don't."""
+    lit_cols = [x for x in range(len(a[0])) if any(row[x] for row in a)]
+    other = [x for x in range(len(b[0])) if any(row[x] for row in b)]
+    if not lit_cols or lit_cols[0] != other[0] or lit_cols[-1] != other[-1]:
+        return 0
+    x0, length = lit_cols[0], lit_cols[-1] - lit_cols[0] + 1
+    for gap in range(4):
+        period = length + gap
+        for moved in range(1, period):
+            def at(row, x):
+                k = (x - moved) % period
+                return row[x0 + k] if k < length else 0
+            if all(ra[x0 + x] == at(rb, x) for ra, rb in zip(a, b) for x in range(length)):
+                return moved
+    return 0
+
+
+def bright(work, label, box):
+    """The box's bright pixels (letters) as rows of 0/1."""
+    x0, _, x1, _ = box
+    pixels = crop(work, label, box)
+    w = x1 - x0
+    return [[1 if min(pixels[(y * w + x) * 3:(y * w + x) * 3 + 3]) > 200 else 0 for x in range(w)]
+            for y in range(len(pixels) // (3 * w))]      # the frame may end above the box's bottom
 
 
 def letter_codes(pack):
@@ -432,7 +501,7 @@ def card_file(work):
     return card
 
 
-def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters'):
+def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters,rtl'):
     disc = os.getenv('PE_TEST_DISC')
     if not disc:
         print('PE_TEST_DISC is not set: skipped')
@@ -651,6 +720,69 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
                   f'menu {which}: the English grid\'s {{g4D}} cell shows a pack letter: {work}')
         print(f'PASS menu letters: the name entry title\'s {len(title_letters)} letters, none with a code, drew '
               'the same as coded ones')
+
+    # Right to left: Hebrew against the same text in drawing order, drawn left to right.
+    if 'rtl' in parts:
+        from petext import rtl
+        made = make_rtl_packs(localization, out / 'packs', rtl.visual)
+        boxes = {code: run_fixed(game, discs, out / f'rtl-box-{code}', first, pack=pack, pad=NEW_GAME)
+                 for code, pack in made.items()}
+        for code, work in boxes.items():
+            log = mods_log(work)
+            missing = [line for line in log.splitlines() if 'text: ' in line and "shows '?'" in line
+                       or 'cache unavailable' in line or 'no stretch' in line]
+            check(not missing, f'rtl {code}: letters fell back to "?": {missing[:5]}: {work}')
+        check('reads right to left (he)' in mods_log(boxes['he']), f'the Hebrew pack is not read right to left: {boxes["he"]}')
+        check('reads right to left' not in mods_log(boxes['xx']), f'the mirror pack is read right to left: {boxes["xx"]}')
+        width = BOX[2] - BOX[0]
+        he, xx = bright(boxes['he'], 'first', BOX), bright(boxes['xx'], 'first', BOX)
+        # the scene behind the see-through box is the same in both runs: a pixel bright in both at
+        # one place is taken for the scene (or letters of both lines on one spot) and not compared
+        scene = [[a & b for a, b in zip(r1, r2)] for r1, r2 in zip(he, xx)]
+        for n in range(len(HEBREW_BOX)):
+            top = LINE_TOP - BOX[1] + n * 12
+            rows = range(top, top + 12)
+            cols = lambda mask: [x for x in range(width) if any(mask[y][x] and not scene[y][x] for y in rows)]
+            l_he, l_xx = cols(he), cols(xx)
+            check(l_he and l_xx, f'rtl: line {n + 1} is not drawn: {boxes["he"]} {boxes["xx"]}')
+            shift = l_he[-1] - l_xx[-1]
+            check(l_xx[0] + BOX[0] <= 24, f'rtl: the mirror\'s line {n + 1} starts at x {l_xx[0] + BOX[0]}: {boxes["xx"]}')
+            check(RIGHT_EDGE - 8 <= l_he[-1] + BOX[0] <= RIGHT_EDGE,
+                  f'rtl: line {n + 1} ends at x {l_he[-1] + BOX[0]}, not at the box\'s right side: {boxes["he"]}')
+            wrong = [(x + BOX[0], y + BOX[1]) for y in rows for x in range(width)
+                     if 0 <= x + shift < width and not scene[y][x] and not scene[y][x + shift]
+                     and he[y][x + shift] != xx[y][x]]
+            check(not wrong,
+                  f'rtl: line {n + 1} does not draw the drawing-order letters moved {shift} px right '
+                  f'(first differences at {wrong[:4]}): {boxes["he"]}')
+        print(f'PASS rtl dialogue: {len(HEBREW_BOX)} Hebrew lines (with English, a year and brackets) drew right to left, '
+              'letter for letter as in drawing order, ending at the box\'s right side')
+
+        menus = {code: run_fixed(game, discs, out / f'rtl-menus-{code}', MENU_STEPS, pack=pack, pad=NEW_GAME)
+                 for code, pack in made.items()}
+        for code, work in menus.items():
+            log = mods_log(work)
+            missing = [line for line in log.splitlines() if 'text: ' in line and "shows '?'" in line
+                       or 'cache unavailable' in line or 'no stretch' in line]
+            check(not missing, f'rtl menus {code}: letters fell back to "?": {missing[:5]}: {work}')
+            check(lit(work, 'grid', TITLE) > 30 and lit(work, 'grid', NAME_ENTRY) > 20,
+                  f'rtl menus {code}: no name entry title or name: {work}')
+            check(lit(work, 'status', STATUS_NAME) > 20
+                  and crop(work, 'status', STATUS_LEVEL) != crop(work, 'field', STATUS_LEVEL),
+                  f'rtl menus {code}: the status panel is not open: {work}')
+        for label, box, what in (('grid', TITLE, 'the name entry title'), ('grid', GRID, 'the grid')):
+            check(crop(menus['he'], label, box) == crop(menus['xx'], label, box),
+                  f'rtl: {what} differs from the drawing-order pack\'s: {menus["he"]} vs {menus["xx"]}')
+        # Aya's name: the default name, then the grid letters the Cross presses added, at its end in
+        # reading order. Right to left those come first from the left; in the mirror they follow on the
+        # right. Both start where the game puts the name, so one is the other turned round by the
+        # typed letters' width.
+        for label, box, where in (('grid', NAME_ENTRY, 'above the grid'), ('status', STATUS_NAME, 'in the status panel')):
+            typed = turned(bright(menus['he'], label, box), bright(menus['xx'], label, box))
+            check(typed, f"rtl: Aya's name {where} is not the drawing-order name with the typed letters on the left: "
+                         f'{menus["he"]} vs {menus["xx"]}')
+        print("PASS rtl menus: the name entry title and the grid drew as in drawing order, in the places the game gives "
+              "them; Aya's Hebrew name grows to the left as letters are typed, above the grid and in the status panel")
     return 0
 
 

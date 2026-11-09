@@ -90,6 +90,46 @@ int pe_lang_pack_has_letter(const PeLangPack *pack, unsigned code) {
     return 0;
 }
 
+int pe_lang_code_rtl(const char *lang) {
+    static const char *const rtl[] = {"he", "iw", "yi", "ar", "fa", "ur", "ps", "sd", "ug", "ckb", "dv"};
+    char primary[8];
+    unsigned n = 0, i;
+    const char *tag;
+    if (!lang) return 0;
+    for (tag = lang; *tag && *tag != '-' && *tag != '_'; ++tag)
+        if (n < sizeof primary - 1) primary[n++] = (char)(*tag | 0x20);
+    primary[n] = 0;
+    /* a four-letter script subtag decides */
+    while (*tag) {
+        const char *sub = ++tag;
+        while (*tag && *tag != '-' && *tag != '_') ++tag;
+        if (tag - sub == 4) {
+            char s[4];
+            for (i = 0; i < 4; ++i) s[i] = (char)(sub[i] | 0x20);
+            return !memcmp(s, "arab", 4) || !memcmp(s, "hebr", 4) || !memcmp(s, "thaa", 4);
+        }
+    }
+    for (i = 0; i < sizeof rtl / sizeof *rtl; ++i)
+        if (!strcmp(primary, rtl[i])) return 1;
+    return 0;
+}
+
+int pe_lang_letter_cut(const unsigned char *r, unsigned *first, unsigned *width) {
+    int x0 = 12, x1 = -1;
+    if (r[6] != 0xFF) return 0;
+    for (unsigned i = 0; i < 144; ++i) {
+        unsigned pixel = r[8 + i / 2] >> (i & 1 ? 4 : 0) & 15;
+        int x = (int)(i % 12);
+        if (pixel != 1) continue;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+    }
+    if (x1 < 0) return 0;
+    *first = (unsigned)x0;
+    *width = (unsigned)(x1 - x0 + 2 <= 12 - x0 ? x1 - x0 + 2 : 12 - x0);
+    return 1;
+}
+
 /* One letter record: u32 character, code (0: none, `extra`), advance, base code (FF: drawn here),
  * ops, then the drawn pixels, or three marks for a letter built on the game's own. */
 static int valid_letter(const unsigned char *r, int extra) {

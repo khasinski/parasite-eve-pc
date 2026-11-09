@@ -8,10 +8,10 @@ sys.path.insert(0, str(ROOT))
 import pelang  # noqa: E402
 from petext import alphabets, cjk, gametext as gt, letters, validation  # noqa: E402
 
-# Everything else in the list waits for new text layout.
+# Everything else in the list waits for its letters (Hebrew reads right to left: petext/rtl.py).
 READY = """en id ms sw tl es pt fr de it nl sv nb da fi pl tr cs hu ca sq et sl
            sk ro hr sr-Latn is lt lv vi sr-Cyrl mk kk el
-           ru uk be bg zh-Hans zh-Hant ja ko""".split()
+           ru uk be bg zh-Hans zh-Hant ja ko he""".split()
 
 
 class Languages(unittest.TestCase):

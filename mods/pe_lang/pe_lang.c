@@ -371,6 +371,23 @@ static unsigned extra_metric(const PeLangPack *pack, unsigned k) {
                                  &g_ResidentDataPack.bytes[g_ResidentDataPack.directory.glyphMetrics]);
 }
 
+/* Whether the pack in use reads right to left (from its language code), and which Unicode letter
+ * its one-byte codes draw, for the renderer's right-to-left lines. */
+static const PeLangPack *s_rtl_logged;
+static int on_text_script(void *ctx, void *user) {
+    PeHookTextScript *t = ctx;
+    const PeLangPack *pack = active_pack();
+    (void)user;
+    if (!pack) return 0;
+    t->rtl = pe_lang_code_rtl(pack->lang);
+    if (t->rtl && s_rtl_logged != pack) {
+        s_rtl_logged = pack;
+        pe_mod_log(MOD_ID, "text: %s reads right to left (%s)", s_labels[pack - s_packs], pack->lang);
+    }
+    if (t->code < 0xF1) t->letter = (pack->unicode ? pack->unicode : kPeTextUnicode)[t->code];
+    return 1;
+}
+
 static int on_text_letter(void *ctx, void *user) {
     PeHookTextLetter *l = ctx;
     const PeLangPack *pack = active_pack();
@@ -400,7 +417,11 @@ static int on_text_letter(void *ctx, void *user) {
      * as they cut the game's own letters: from its first inked column, its drawn width and a pixel */
     index = pe_lang_pack_extra_index(pack, l->letter);
     if (index >= 0) {
-        if (l->style == PE_TEXT_MENU) {
+        unsigned first, width;
+        if (PE_LANG_JOINING(l->letter) && pe_lang_letter_cut(pe_lang_pack_extra(pack, (unsigned)index), &first, &width)) {
+            metric = width << 4 | first;            /* joined letters touch: cut to the strokes */
+            l->advance = width + 1;
+        } else if (l->style == PE_TEXT_MENU) {
             metric = extra_metric(pack, (unsigned)index);
             if ((metric & 15) >= 12 || !(metric >> 4)) metric = 0;
             l->advance = metric ? (metric >> 4) + 1 : 12;
@@ -673,6 +694,7 @@ static int lang_init(void) {
     pe_hook_add(PE_HOOK_SAVE_READ, on_names_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_NEW_GAME, on_names_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_TEXT_LETTER, on_text_letter, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_TEXT_SCRIPT, on_text_script, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_FRAME_DRAWN, on_cjk_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
 
     pe_menu_begin("Language");

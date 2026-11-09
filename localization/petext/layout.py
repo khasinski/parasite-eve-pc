@@ -9,6 +9,9 @@ from .validation import commands
 
 # textbox.c: default origin (20,174), fog bottom 224, line pitch 12.
 DEFAULT_WIDTH = 297
+# A right-to-left pack's lines end at x 300, mirroring the 20 px left margin (textbox.c
+# Textbox_RightEdge), so the default box holds 280 px of them.
+DEFAULT_WIDTH_RTL = 280
 DEFAULT_LINES = 4
 # {name} draws TextboxNameGlyphs: sys/030 ("Aya") at a new game (Save_InitMetadataState), or the
 # name the player gave her, at most 8 glyphs (Menu_CopyPromptCodes). The English is laid out for
@@ -77,7 +80,7 @@ def bounds(box: str, screen: bool = False):
     clipped (textbox.c; the rectangle only sizes style 1's gradient), so its rectangle is what
     looks right and the screen edge (screen=True) is where text is lost."""
     if box == 'default':
-        return DEFAULT_WIDTH, DEFAULT_LINES
+        return DEFAULT_WIDTH_RTL if gt.RTL else DEFAULT_WIDTH, DEFAULT_LINES
     m = re.fullmatch(r'(?:styled )?(-?\d+),(-?\d+),(\d+),(\d+)', box)
     if not m:
         return None

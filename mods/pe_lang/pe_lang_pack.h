@@ -47,6 +47,17 @@ static inline const unsigned char *pe_lang_pack_letter(const PeLangPack *pack, u
     return pack->data + pack->letters_offset + index * PE_LANG_LETTER_SIZE;
 }
 int pe_lang_pack_has_letter(const PeLangPack *pack, unsigned code);
+/* Whether the pack's text reads right to left, from its language code: Hebrew, Yiddish, Arabic,
+ * Persian, Urdu, Pashto, Sindhi, Uyghur, Central Kurdish, Dhivehi, or any code with the script
+ * subtag Arab, Hebr or Thaa (ks-Arab); another script subtag (ku-Latn) reads left to right. */
+int pe_lang_code_rtl(const char *lang);
+/* Arabic letters drawn joined (the presentation forms, U+FB50-FDFF and U+FE70-FEFC, and the
+ * tatweel): the renderer closes the gap between those that join, so they are cut to their
+ * strokes and shadow in both dialogue and menus, and move the pen one pixel more. */
+#define PE_LANG_JOINING(c) (((c) >= 0xFB50u && (c) <= 0xFDFFu) || ((c) >= 0xFE70u && (c) <= 0xFEFCu) || (c) == 0x0640u)
+/* A drawn letter record's cut: its first stroke column and its width with the shadow. 0 for a
+ * letter built on the game's own (no pixels in the pack) or with no strokes. */
+int pe_lang_letter_cut(const unsigned char *record, unsigned *first, unsigned *width);
 /* The record of the table's letter with no code `index`, and the index of Unicode `letter` among
  * them (-1 when it isn't one). */
 static inline const unsigned char *pe_lang_pack_extra(const PeLangPack *pack, unsigned index) {
