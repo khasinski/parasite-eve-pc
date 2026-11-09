@@ -231,6 +231,14 @@ int main(void) {
     assert(g_WayneStorageItems[0]==99);
     memset(card,0,sizeof card);old_sort.rank=0x12345678;old_block(card,0x1EF0,&old_sort,sizeof old_sort,0x54524F53u,0x736F7274u);
     pe_hook_dispatch(PE_HOOK_SAVE_READ,card);assert(!get_sort());
+    /* A New Game saved before Sort was ever used holds the record's reset value (Manual, no
+     * tables). Loading it must accept that value: a rejected record is kept and the host then
+     * skips every pe_qol hook (Always run, speeds, the key pocket) for the session. */
+    reset();memset(card,0,sizeof card);pe_hook_dispatch(PE_HOOK_SAVE_WRITE,card);
+    assert((saved=record(card,"pe_qol.sort",&size))&&size==24&&!pe_inventory_word(saved)&&!pe_inventory_word(saved+4));
+    pe_hook_dispatch(PE_HOOK_SAVE_READ,card);
+    assert(pe_save_owner_available("pe_qol")&&!get_sort());
+    g_GameStateFlags=0;assert(set_sort(1));assert(get_sort()); /* Auto later still picks the game's tables */
     reset();key=0xD1;assert(!pe_hook_dispatch(PE_HOOK_ITEM_COUNT,args));
     /* Issue #49: Tool & Super Tool transfers consume 1 copy off a stack instead of wiping the stack. */
     reset();
