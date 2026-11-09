@@ -121,23 +121,36 @@ static void Tri(const pvr_vertex_t *a, const pvr_vertex_t *b, const pvr_vertex_t
         for (int k = 0; k < 4; k++) col[k] = x->gen.shading ? w0 * ca[k] + w1 * cb[k] + w2 * cc[k] : cc[k];
         float sa = col[0], s[3] = {col[1], col[2], col[3]};
         if (x->txr.enable) {
-            float u = w0 * a->u + w1 * b->u + w2 * c->u, v = w0 * a->v + w1 * b->v + w2 * c->v;
+            /* z is 1/w: interpolate u/w, v/w and 1/w, as the PVR does */
+            float iz = w0 * a->z + w1 * b->z + w2 * c->z;
+            float u = (w0 * a->u * a->z + w1 * b->u * b->z + w2 * c->u * c->z) / iz;
+            float v = (w0 * a->v * a->z + w1 * b->v * b->z + w2 * c->v * c->z) / iz;
             int tw = x->txr.width, th = x->txr.height;
-            int tu = (int)floorf(u * tw), tv = (int)floorf(v * th);
-            if (x->txr.uv_clamp == PVR_UVCLAMP_UV) {
-                tu = tu < 0 ? 0 : tu >= tw ? tw - 1 : tu;
-                tv = tv < 0 ? 0 : tv >= th ? th - 1 : tv;
+            float tex[4] = {0, 0, 0, 0}; /* a r g b */
+            float fu = u * tw, fv = v * th;
+            int bilinear = x->txr.filter == PVR_FILTER_BILINEAR;
+            if (bilinear) { fu -= 0.5f; fv -= 0.5f; }
+            int bu = (int)floorf(fu), bv = (int)floorf(fv);
+            float ax = bilinear ? fu - bu : 0, ay = bilinear ? fv - bv : 0;
+            for (int k = 0; k < (bilinear ? 4 : 1); k++) {
+                int tu = bu + (k & 1), tv = bv + (k >> 1);
+                float wt = (k & 1 ? ax : 1 - ax) * (k >> 1 ? ay : 1 - ay);
+                if (x->txr.uv_clamp == PVR_UVCLAMP_UV) {
+                    tu = tu < 0 ? 0 : tu >= tw ? tw - 1 : tu;
+                    tv = tv < 0 ? 0 : tv >= th ? th - 1 : tv;
+                }
+                tu &= tw - 1; tv &= th - 1;
+                uint16_t t = ((uint16_t *)x->txr.base)[tv * tw + tu];
+                if (x->txr.format & PVR_TXRFMT_RGB565) {
+                    tex[0] += wt; tex[1] += wt * ((t >> 11) & 31) / 31.f;
+                    tex[2] += wt * ((t >> 5) & 63) / 63.f; tex[3] += wt * (t & 31) / 31.f;
+                } else {
+                    tex[0] += wt * ((t >> 15) & 1); tex[1] += wt * ((t >> 10) & 31) / 31.f;
+                    tex[2] += wt * ((t >> 5) & 31) / 31.f; tex[3] += wt * (t & 31) / 31.f;
+                }
             }
-            tu &= tw - 1; tv &= th - 1;
-            uint16_t t = ((uint16_t *)x->txr.base)[tv * tw + tu];
-            float ta, tr, tg, tb;
-            if (x->txr.format & PVR_TXRFMT_RGB565) {
-                ta = 1; tr = ((t >> 11) & 31) / 31.f; tg = ((t >> 5) & 63) / 63.f; tb = (t & 31) / 31.f;
-            } else {
-                ta = (t >> 15) & 1; tr = ((t >> 10) & 31) / 31.f; tg = ((t >> 5) & 31) / 31.f; tb = (t & 31) / 31.f;
-            }
-            s[0] *= tr; s[1] *= tg; s[2] *= tb;
-            if (!x->txr.alpha) sa *= ta;
+            s[0] *= tex[1]; s[1] *= tex[2]; s[2] *= tex[3];
+            if (!x->txr.alpha) sa *= tex[0];
         }
         float *d = fb[py][px];
         float out[3];

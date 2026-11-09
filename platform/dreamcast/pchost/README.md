@@ -7,7 +7,7 @@ swapped:
 
 | Dreamcast | Harness |
 | --- | --- |
-| PowerVR (`dc/pvr.h`) | `fakepvr.c`: software rasteriser with the same blend factors and texture formats; saves chosen frames as PPM |
+| PowerVR (`dc/pvr.h`) | `fakepvr.c`: software rasteriser with the same blend factors, texture formats, bilinear filtering and perspective-correct texturing (z = 1/w); saves chosen frames as PPM |
 | KOS threads (`dc_os.c`) | `host_os.c`: pthreads |
 | Maple controller (`dc_input.c`) | `host_input.c`: released pad; buttons come from the game's own input schedule |
 | vblank, timers | virtual clock: one frame per `vid_waitvbl()`, as fast as the host runs; kernel time (root counters, so the music sequencer) follows it |

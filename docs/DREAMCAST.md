@@ -201,6 +201,13 @@ Dreamcast README): PS1 ADPCM is decoded to PCM in sound RAM, envelopes run
 on the CPU and set channel levels every 5 ms, CD/XA audio goes out on a KOS
 sound stream. The SPU RAM copy stays in main RAM (the game reads it back).
 
+## Picture (9 November 2026)
+
+Polygons and movies are filtered bilinearly (sprites and text stay sharp),
+and projected vertices keep the GTE's subpixel fraction and depth, so models
+no longer snap to whole pixels and their textures are perspective-correct
+(see the PsyZ Dreamcast README).
+
 ## Next steps
 
 1. Boot the ELF on hardware or in Flycast with the discs (`/pc/pe1.cue`,
