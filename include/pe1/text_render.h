@@ -75,6 +75,14 @@ void PeText_MenuDigit(int digit, PeTextLetter *out);
 #define PE_TEXT_NARROW_FIRST 0x10FE80u
 #define PE_TEXT_NARROW_LAST 0x10FEFFu
 
+/* A stretch whose only letter is U+10FE7F marks where a message box (Menu_CreateTwoLineDialog,
+ * Menu_CreateNotificationDialog) starts a new line, so a line too wide for the screen goes on two
+ * at full size; the box grows a line taller. Anywhere else it draws nothing. */
+#define PE_TEXT_LINE_BREAK 0x10FE7Fu
+
+/* 4 when `text` is a line break stretch (above), else 0. */
+unsigned PeText_LineBreakAt(const u8 *text, unsigned avail);
+
 /* Puts a stretch's letters (Unicode, in reading order) in drawing order, in place; returns the
  * count. Left to right: a pack that reads right to left draws whole lines instead (below), since
  * one line may be several stretches, a name and numbers. */

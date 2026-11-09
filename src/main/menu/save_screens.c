@@ -34,6 +34,41 @@ extern int g_MenuActiveItemList;
 extern MenuConfirmCallback g_MenuConfirmCallback;
 extern void (*g_MenuDeferredCallback)(void);
 u8 g_MenuTwoLineDialogText[2][64];
+
+/* A message box line a language pack split (PE_TEXT_LINE_BREAK: too wide for the screen at full
+ * size) is drawn on two, and the box grows a line taller. [0] and [1]: the rest of the notification
+ * box's line and of its second copy's (mode 0x3D); [2] and [3]: the rest of each line of the
+ * two-line box. English has no break, so its boxes are as they were. */
+static u8 s_MenuDialogNextLine[4][64];
+
+int Menu_LineBreakOffset(const u8 *text, int size) {
+    int i;
+    for (i = 0; i < size && text[i] != 0xFF; i += text[i] == 0xF1 ? 4 : text[i] >= 0xFA ? 2 : 1) {
+        if (PeText_LineBreakAt(text + i, (unsigned)(size - i))) {
+            return i + 4 < size && text[i + 4] != 0xFF ? i : -1;
+        }
+    }
+    return -1;
+}
+
+/* Ends `line` at its line break and copies what follows to `next`. 1 when that left a second line;
+ * a break with nothing after it is dropped. */
+static int Menu_SplitDialogLine(u8 *line, u8 *next) {
+    int i, cut = Menu_LineBreakOffset(line, 64);
+    next[0] = 0xFF;
+    if (cut < 0) {
+        for (i = 0; i < 60 && line[i] != 0xFF; i += line[i] == 0xF1 ? 4 : line[i] >= 0xFA ? 2 : 1) {
+            if (PeText_LineBreakAt(line + i, (unsigned)(64 - i))) {
+                line[i] = 0xFF;
+                break;
+            }
+        }
+        return 0;
+    }
+    Text_CopyFFTerminatedBytes(next, line + cut + 4);
+    line[cut] = 0xFF;
+    return 1;
+}
 extern int g_MenuEquipMode;
 extern unsigned char *g_MenuItemIconGlyphTable;
 extern int g_MenuItemPrimListHandles[2];
@@ -370,7 +405,17 @@ void Menu_CreateNotificationDialog(int message, int suffix) {
     if (suffix) {
         Text_AppendFFTerminatedBytes(text, Text_LookupTable4(suffix));
     }
-    width = Draw_MeasureTextWidth(text) < 100 ? 100 : Draw_MeasureTextWidth(text);
+    if (Menu_SplitDialogLine(text, s_MenuDialogNextLine[alternate])) {
+        parent->visible_rows += 0xE;
+        child->y += 0xE;
+    }
+    width = Draw_MeasureTextWidth(text);
+    if (width < Draw_MeasureTextWidth(s_MenuDialogNextLine[alternate])) {
+        width = Draw_MeasureTextWidth(s_MenuDialogNextLine[alternate]);
+    }
+    if (width < 100) {
+        width = 100;
+    }
     parent->grid_width = width + 20;
     parent->x = (300 - width) >> 1;
     child->x = parent->grid_width - 68;
@@ -385,12 +430,15 @@ void Menu_CloseNotificationDialogs(void) {
 void Menu_DrawNotificationText(MenuWidgetNode *node) {
     u8 *text;
 
+    int alternate = node->selected_base == 0x3D;
+
     Draw_OffsetCursor(0, 0xA);
-    text = g_MenuTwoLineDialogText[0];
-    if (node->selected_base == 0x3D) {
-        text += 0x40;
-    }
+    text = g_MenuTwoLineDialogText[alternate];
     Draw_PrintCenteredText(text);
+    if (s_MenuDialogNextLine[alternate][0] != 0xFF) {
+        Draw_OffsetCursor(0, 0xE);
+        Draw_PrintCenteredText(s_MenuDialogNextLine[alternate]);
+    }
 }
 
 void Menu_CreateTwoLineDialog(int line0_id, int line1_id) {
@@ -399,7 +447,7 @@ void Menu_CreateTwoLineDialog(int line0_id, int line1_id) {
     u8 *line0;
     u8 *line1;
     u8 *text;
-    int width;
+    int width, extra;
     parent = MenuWidget_CreateSimpleNode(0x28, MenuWidget_GetCurrentNode(), 0, 1);
     child = MenuWidget_CreateNode(0x28, parent, parent);
 
@@ -418,13 +466,18 @@ void Menu_CreateTwoLineDialog(int line0_id, int line1_id) {
     line1 = line0 + 0x40;
     Text_CopyFFTerminatedBytes(line1, text);
 
+    extra = (Menu_SplitDialogLine(line0, s_MenuDialogNextLine[2]) +
+             Menu_SplitDialogLine(line1, s_MenuDialogNextLine[3])) * 0xE;
+
     width = MAX(100, MAX(Draw_MeasureTextWidth(g_MenuTwoLineDialogText[0]),
                          Draw_MeasureTextWidth(g_MenuTwoLineDialogText[1])));
+    width = MAX(width, MAX(Draw_MeasureTextWidth(s_MenuDialogNextLine[2]),
+                           Draw_MeasureTextWidth(s_MenuDialogNextLine[3])));
     parent->grid_width = width + 0x14;
     parent->x = (0x12C - width) >> 1;
-    parent->visible_rows += 0xE;
+    parent->visible_rows += 0xE + extra;
     child->x = parent->grid_width - 0x44;
-    child->y += 0xE;
+    child->y += 0xE + extra;
 
     MenuInput_InitQueue();
 }
@@ -432,8 +485,16 @@ void Menu_CreateTwoLineDialog(int line0_id, int line1_id) {
 void Menu_DrawTwoLineDialogText(MenuWidgetNode *unused) {
     Draw_OffsetCursor(0, 0xA);
     Draw_PrintCenteredText(g_MenuTwoLineDialogText[0]);
+    if (s_MenuDialogNextLine[2][0] != 0xFF) {
+        Draw_OffsetCursor(0, 0xE);
+        Draw_PrintCenteredText(s_MenuDialogNextLine[2]);
+    }
     Draw_OffsetCursor(0, 0xE);
     Draw_PrintCenteredText(g_MenuTwoLineDialogText[1]);
+    if (s_MenuDialogNextLine[3][0] != 0xFF) {
+        Draw_OffsetCursor(0, 0xE);
+        Draw_PrintCenteredText(s_MenuDialogNextLine[3]);
+    }
 }
 
 void Menu_SetDeferredCallback(void (*callback)(void)) {
@@ -794,6 +855,7 @@ void Menu_StepItemGrid2(void) {
     int mode;
     int width;
     int height;
+    int cut = -1;
 
     if (g_McDialogMode != 0) {
         if (MenuWidget_FindByModeAndSelectedBase(1, 0x2A) != 0) {
@@ -837,16 +899,23 @@ void Menu_StepItemGrid2(void) {
             /* Recompute the buffer address at each measurement. */
             (text_buf = &g_MenuItemLabelBuffer[0x40]);
             width = Draw_MeasureTextWidth(text_buf);
+            cut = Menu_LineBreakOffset(text_buf, 64);
+            if (cut >= 0) {
+                /* a language pack's line break: the card's name on one line, the notice under it */
+                text_buf[cut] = 0xFF;
+                width = Draw_MeasureTextWidth(text_buf);
+                text_buf[cut] = 0xF1;
+                if (width < Draw_MeasureTextWidth(text_buf + cut + 4)) {
+                    width = Draw_MeasureTextWidth(text_buf + cut + 4);
+                }
+            }
             if (width < 0x78) {
                 width = 0x78;
-            } else {
-                (text_buf = &g_MenuItemLabelBuffer[0x40]);
-                width = Draw_MeasureTextWidth(text_buf);
             }
         }
 
         panel->grid_width = width + 0x14;
-        panel->visible_rows = 0x42;
+        panel->visible_rows = cut >= 0 ? 0x42 + 0xE : 0x42;
         panel->x = (0x12C - width) >> 1;
         option_node->x = (panel->grid_width - 0x80) >> 1;
         height = panel->visible_rows;

@@ -29,6 +29,8 @@ static const unsigned s_stretch[] = {'H', 'i', ' ', 0xE9, '!', 0x4E2D};
 /* a menu line, then the same line narrowed to 240/256 and to 128/256 (PE_TEXT_NARROW_FIRST) */
 static const unsigned s_line[] = {'H', 'i', ' ', 'm', 'a', ' ', 'H', 'i', ' ', 'm', 'a'};
 static unsigned s_marked[1 + sizeof s_line / sizeof *s_line];
+static const unsigned s_break[] = {PE_TEXT_LINE_BREAK};
+static const unsigned s_break_and_more[] = {PE_TEXT_LINE_BREAK, 'H'};
 static int s_hooks = 1;
 /* a right-to-left pack: its stretch 7 * 240 holds s_rtl; Hebrew, Arabic and brackets are pack cells
  * 6 wide that move the pen 7 */
@@ -62,6 +64,16 @@ int pe_hook_dispatch(int id, void *ctx) {
         if (s->id == 6 * 240 + 1) {
             s->letters = s_marked;
             s->count = sizeof s_marked / sizeof *s_marked;
+            return 1;
+        }
+        if (s->id == 6 * 240 + 2) {
+            s->letters = s_break;
+            s->count = 1;
+            return 1;
+        }
+        if (s->id == 6 * 240 + 3) {
+            s->letters = s_break_and_more;
+            s->count = 2;
             return 1;
         }
         if (s->id != 5 * 240 + 7) return 0;
@@ -554,6 +566,31 @@ static void test_credits(void) {
     }
 }
 
+/* A line break (PE_TEXT_LINE_BREAK): a stretch holding only it is where a message box starts a new
+ * line; it draws nothing and measures 0, so a line holding one measures as the two parts together. */
+static void test_line_break(void) {
+    unsigned char brk[] = {0xF1, 0xC6, 6, 2, 0xFF}, plain[] = {0xF1, 0xC6, 6, 0, 0xFF};
+    unsigned char line[] = {0xF1, 0xC6, 6, 0, 0xF1, 0xC6, 6, 2, 0xF1, 0xC6, 6, 0, 0xFF};
+    unsigned char more[] = {0xF1, 0xC6, 6, 3, 0xFF}, other[] = {0xF1, 0xC5, 6, 2, 0xFF};
+    PeTextItem item;
+    g_TextRenderMode = 0;
+    assert(PeText_Read(PE_TEXT_MENU, brk, ~0u, 1, &item) == 4);
+    assert(item.count == 0 && item.width == 0 && item.advance == 0);
+    assert(PeText_MeasureMenu(brk) == 0);
+    assert(PeText_MeasureMenu(line) == 2 * PeText_MeasureMenu(plain));
+    assert(PeText_LineBreakAt(brk, ~0u) == 4);
+    assert(PeText_LineBreakAt(line + 4, ~0u) == 4);
+    assert(PeText_LineBreakAt(line, ~0u) == 0);      /* an ordinary stretch */
+    assert(PeText_LineBreakAt(more, ~0u) == 0);      /* the mark with letters after it isn't one */
+    assert(PeText_LineBreakAt(other, ~0u) == 0);     /* nor is another token */
+    assert(PeText_LineBreakAt(brk, 3) == 0);         /* nor 3 bytes of one */
+    PeText_Read(PE_TEXT_MENU, more, ~0u, 1, &item);  /* in a stretch, the mark alone is skipped */
+    assert(item.count == 1);
+    s_hooks = 0;
+    assert(PeText_LineBreakAt(brk, ~0u) == 0);       /* no pack, no stretch */
+    s_hooks = 1;
+}
+
 /* ---- right-to-left lines ---- */
 
 static unsigned utf8(const char **p) {
@@ -694,6 +731,13 @@ static void test_rtl_lines(void) {
         assert(rtl_line(PE_TEXT_MENU, letters, 21, &line) <= (full * 192 + 128) >> 8);
         assert(line.count == 20);
     }
+    /* a line break in a right-to-left stretch is no letter */
+    {
+        static const unsigned two[] = {0x05D0, 0x05D1}, split[] = {0x05D0, PE_TEXT_LINE_BREAK, 0x05D1};
+        int width = rtl_line(PE_TEXT_MENU, two, 2, &line);
+        assert(rtl_line(PE_TEXT_MENU, split, 3, &line) == width);
+        assert(line.count == 2);
+    }
     s_rtl_on = 0;
     assert(!PeText_RightToLeft());
 }
@@ -712,6 +756,7 @@ int main(int argc, char **argv) {
     test_menu_digits();
     test_stretch();
     test_narrow();
+    test_line_break();
     test_name_letters();
     test_credits();
     test_rtl_lines();

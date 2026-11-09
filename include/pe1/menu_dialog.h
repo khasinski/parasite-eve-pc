@@ -13,6 +13,10 @@ void Menu_SetDeferredCallback(void (*callback)(void));
 /* Opens the info panel announcing a newly learned parasite spell. */
 void Menu_CreateParasiteSpellInfoPanel(int spell);
 
+/* Where a box line a language pack split (PE_TEXT_LINE_BREAK) ends: the offset of its line break,
+ * or -1 when it has none with text after it (at most `size` bytes are read). */
+int Menu_LineBreakOffset(const u8 *text, int size);
+
 /* Two adjacent 64-byte, 0xFF-terminated notification text buffers. */
 extern u8 g_MenuTwoLineDialogText[2][64];
 

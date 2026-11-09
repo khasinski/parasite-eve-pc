@@ -298,6 +298,7 @@ static int Stretch(PeTextStyle style, unsigned id, int draw, PeTextItem *item) {
             if (style == PE_TEXT_MENU) narrow = (int)(letters[i] - PE_TEXT_NARROW_FIRST) + 128;
             continue;
         }
+        if (letters[i] == PE_TEXT_LINE_BREAK) continue;
         if (!PeText_ResolveLetter(style, letters[i], draw, l)) continue;
         space[item->count] = letters[i] == ' ';
         l->x = (s16)(l->x + pen);
@@ -309,6 +310,15 @@ static int Stretch(PeTextStyle style, unsigned id, int draw, PeTextItem *item) {
     item->advance = pen;
     item->width = pen;
     return 1;
+}
+
+unsigned PeText_LineBreakAt(const u8 *text, unsigned avail) {
+    PeHookTextStretch ask = {0};
+    unsigned id = StretchId(text, avail);
+    if (id == ~0u) return 0;
+    ask.id = id;
+    if (!PE_HOOK(PE_HOOK_TEXT_STRETCH, &ask) || !ask.letters || ask.count != 1) return 0;
+    return ask.letters[0] == PE_TEXT_LINE_BREAK ? 4 : 0;
 }
 
 /* An F1 C5 letter, through PE_HOOK_TEXT_GLYPH as before. */
@@ -754,6 +764,7 @@ unsigned PeText_LineRead(PeTextLine *line, PeTextStyle style, const u8 *text, un
                     if (style == PE_TEXT_MENU) line->narrow = (int)(c - PE_TEXT_NARROW_FIRST) + 128;
                     continue;
                 }
+                if (c == PE_TEXT_LINE_BREAK) continue;
                 LinePush(line, style, NULL, c, tag, 1);
             }
             if (style == PE_TEXT_MENU) g_TextRenderMode = 0;
