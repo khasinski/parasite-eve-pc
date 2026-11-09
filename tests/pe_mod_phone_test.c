@@ -250,6 +250,33 @@ static void test_call_file(void) {
     assert(parse("[mine/n2]\ncaller = X\nneeds = no;way\nthem: Hi.\n") == 0 && strstr(s_problem, "condition name"));
 }
 
+/* The player's copy of pe1.txt: kept up to date while unedited, never overwritten once edited. */
+static void test_copy(void) {
+    static const char v1[] = "[pe1/a]\ncaller = A\nthem: One.\n";
+    static const char v2[] = "[pe1/a]\ncaller = A\nthem: One.\n\n[pe1/b]\ncaller = B\nthem: Two.\n";
+    char file[512], stamp[256];
+    int n;
+    const unsigned s1 = (unsigned)strlen(v1), s2 = (unsigned)strlen(v2);
+    /* written by the game from v1 */
+    n = pe_phone_copy_stamp(stamp, (int)sizeof stamp, v1, s1);
+    assert(n > 20 && stamp[n - 1] == '\n' && !strncmp(stamp, "# pe1 copy ", 11));
+    snprintf(file, sizeof file, "%s%s", stamp, v1);
+    assert(pe_phone_copy_state(file, (unsigned)strlen(file), v1, s1) == PE_COPY_CURRENT);
+    assert(pe_phone_copy_state(file, (unsigned)strlen(file), v2, s2) == PE_COPY_UPDATE);        /* a newer game */
+    /* the player changes a line */
+    snprintf(file, sizeof file, "%s%s", stamp, "[pe1/a]\ncaller = A\nthem: Mine now.\n");
+    assert(pe_phone_copy_state(file, (unsigned)strlen(file), v1, s1) == PE_COPY_EDITED);
+    assert(pe_phone_copy_state(file, (unsigned)strlen(file), v2, s2) == PE_COPY_EDITED_NEWER);
+    /* no stamp (a copy from before stamps): the same calls are adopted, anything else is the player's */
+    assert(pe_phone_copy_state(v2, s2, v2, s2) == PE_COPY_UPDATE);
+    assert(pe_phone_copy_state(v1, s1, v2, s2) == PE_COPY_EDITED_NEWER);
+    assert(pe_phone_copy_state("", 0, v2, s2) == PE_COPY_EDITED_NEWER);
+    /* the stamp is a comment: the copy reads as the same calls */
+    snprintf(file, sizeof file, "%s%s", stamp, v1);
+    pe_phone_store_clear(&s_store);
+    assert(pe_phone_parse_calls(&s_store, "pe1.txt", file, (unsigned)strlen(file), on_problem, NULL) == 1);
+}
+
 /* ---- the game's own pack (calls/pe1.txt) ---- */
 
 static const PePhoneCall *s_pack[PE_PHONE_STORE_CALLS];
@@ -356,6 +383,7 @@ int main(void) {
     test_save_question();
     test_record();
     test_needs();
+    test_copy();
     test_pick();
     test_call_file();
     test_pe1_pack();

@@ -197,6 +197,42 @@ static void pe_say(PeParse *p, int line, int speaker, char *text) {
     ++p->call->line_count;
 }
 
+/* ---- the player's copy of pe1.txt ---- */
+
+#define PE_STAMP "# pe1 copy "
+
+static uint32_t pe_fnv(const char *s, unsigned n) {
+    uint32_t h = 2166136261u;
+    unsigned i;
+    for (i = 0; i < n; ++i) { h ^= (uint8_t)s[i]; h *= 16777619u; }
+    return h;
+}
+
+int pe_phone_copy_stamp(char *out, int cap, const char *builtin, unsigned builtin_size) {
+    return snprintf(out, (size_t)cap, PE_STAMP "%08x: the game keeps this file up to date while you leave it "
+                    "as it is. Once you change it, it's yours: newer calls go to pe1.txt.new.\n",
+                    (unsigned)pe_fnv(builtin, builtin_size));
+}
+
+int pe_phone_copy_state(const char *copy, unsigned size, const char *builtin, unsigned builtin_size) {
+    const unsigned stamp_len = (unsigned)strlen(PE_STAMP);
+    const uint32_t now = pe_fnv(builtin, builtin_size);
+    unsigned body = 0;
+    char hex[9];
+    uint32_t was;
+    if (size < stamp_len + 8 || memcmp(copy, PE_STAMP, stamp_len)) {        /* no stamp */
+        return size == builtin_size && !memcmp(copy, builtin, size) ? PE_COPY_UPDATE : PE_COPY_EDITED_NEWER;
+    }
+    memcpy(hex, copy + stamp_len, 8);
+    hex[8] = 0;
+    was = (uint32_t)strtoul(hex, NULL, 16);
+    while (body < size && copy[body] != '\n') ++body;
+    if (body < size) ++body;                                               /* past the stamp line */
+    if (pe_fnv(copy + body, size - body) == was)                           /* unedited */
+        return was == now ? PE_COPY_CURRENT : PE_COPY_UPDATE;
+    return was == now ? PE_COPY_EDITED : PE_COPY_EDITED_NEWER;
+}
+
 void pe_phone_store_clear(PePhoneStore *store) {
     store->call_count = store->line_count = store->room_count = store->text_used = 0;
 }

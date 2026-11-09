@@ -111,7 +111,11 @@ screen). Nothing in the game's scripts is patched.
   `pe_phone/calls/pe1.txt` (its top explains the format), built into the game by CMake. The
   first start writes a copy to `pe_calls/pe1.txt` beside the preferences; that copy, when present,
   replaces the built-in calls (delete it to go back), and every other `.txt` in `pe_calls` adds
-  its calls. A call looks like:
+  its calls. The copy's first line is a stamp (the hash of the calls it was written from): while
+  the rest still matches it, nobody edited the file and a newer game rewrites it with its calls;
+  an edited copy is never overwritten, and the game's calls go beside it as `pe1.txt.new` (not
+  loaded). A copy without a stamp (older builds) is adopted when it equals the built-in calls,
+  otherwise treated as edited. A call looks like:
 
   ```
   [mine/pizza2]            key: pack/name (saves remember it: don't rename)

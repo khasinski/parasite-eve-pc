@@ -3,7 +3,9 @@
  * The game's own calls are mods/pe_phone/calls/pe1.txt, built into the game (CMake turns it into
  * g_pe_calls_pe1_txt). At start the "pe_calls" folder beside the preferences is read:
  *   - the first time it doesn't exist, it is made with a copy of pe1.txt, to edit;
- *   - pe1.txt there replaces the built-in calls (delete it to go back to them);
+ *   - pe1.txt there replaces the built-in calls (delete it to go back to them). Its first line is a
+ *     stamp: while the player hasn't changed the file, a newer game rewrites it with its calls; an
+ *     edited one is kept, with the game's calls beside it in pe1.txt.new (pe_phone_copy_state);
  *   - every other *.txt there adds its calls (a key used twice is a mistake).
  * Files are read in name order. Mistakes go to pe_mods.log with the file and line; a call with a
  * mistake is left out, the rest load. F1 > Phone Calls > Reload calls reads them again. */
@@ -40,12 +42,41 @@ static int pe_ends_txt(const char *s) {
     return n > 4 && SDL_strcasecmp(s + n - 4, ".txt") == 0;
 }
 
-static void pe_write_builtin(const char *path) {
+/* The game's calls with the stamp line first (pe_phone_copy_state). */
+static int pe_write_builtin(const char *path) {
+    char stamp[256];
+    const int n = pe_phone_copy_stamp(stamp, (int)sizeof stamp, (const char *)g_pe_calls_pe1_txt, g_pe_calls_pe1_txt_size);
     FILE *f = fopen(path, "wb");
-    if (!f) return;
-    fwrite(g_pe_calls_pe1_txt, 1, g_pe_calls_pe1_txt_size, f);
-    fclose(f);
-    pe_mod_log(PE_PHONE_MOD_ID, "wrote %s: the game's calls, to edit", path);
+    int ok;
+    if (!f) { pe_mod_log(PE_PHONE_MOD_ID, "can't write %s", path); return 0; }
+    ok = fwrite(stamp, 1, (size_t)n, f) == (size_t)n &&
+         fwrite(g_pe_calls_pe1_txt, 1, g_pe_calls_pe1_txt_size, f) == g_pe_calls_pe1_txt_size;
+    ok = fclose(f) == 0 && ok;
+    return ok;
+}
+
+/* The player's pe1.txt: brought up to date while nobody has edited it; an edited one is kept and
+ * the game's current calls are put beside it as pe1.txt.new (not read: it isn't a .txt). */
+static void pe_check_copy(void) {
+    char path[1300], newer[1310];
+    size_t size = 0;
+    char *data;
+    int state;
+    snprintf(path, sizeof path, "%s/%s", s_dir, PE_BUILTIN);
+    if (!(data = SDL_LoadFile(path, &size))) return;             /* none: the built-in calls play */
+    state = pe_phone_copy_state(data, (unsigned)size, (const char *)g_pe_calls_pe1_txt, g_pe_calls_pe1_txt_size);
+    SDL_free(data);
+    if (state == PE_COPY_UPDATE) {
+        if (pe_write_builtin(path)) pe_mod_log(PE_PHONE_MOD_ID, "%s: unchanged by you, updated to the game's calls", PE_BUILTIN);
+    } else if (state == PE_COPY_EDITED_NEWER) {
+        snprintf(newer, sizeof newer, "%s.new", path);
+        data = SDL_LoadFile(newer, &size);
+        if (!data || pe_phone_copy_state(data, (unsigned)size, (const char *)g_pe_calls_pe1_txt, g_pe_calls_pe1_txt_size) != PE_COPY_CURRENT)
+            (void)pe_write_builtin(newer);
+        SDL_free(data);
+        pe_mod_log(PE_PHONE_MOD_ID, "%s: changed by you, so it's kept. The game's current calls are in %s.new: "
+                   "copy over any you want, or rename it to %s to go back to the game's", PE_BUILTIN, PE_BUILTIN, PE_BUILTIN);
+    }
 }
 
 static void pe_read_file(const char *path, const char *name) {
@@ -73,8 +104,10 @@ int pe_phone_packs_load(void) {
         if (!SDL_GetPathInfo(s_dir, &info)) {                       /* first time: a copy to edit */
             if (SDL_CreateDirectory(s_dir)) {
                 snprintf(path, sizeof path, "%s/%s", s_dir, PE_BUILTIN);
-                pe_write_builtin(path);
+                if (pe_write_builtin(path)) pe_mod_log(PE_PHONE_MOD_ID, "wrote %s: the game's calls, to edit", path);
             }
+        } else {
+            pe_check_copy();
         }
         list = SDL_GlobDirectory(s_dir, "*", 0, &count);
     } else {

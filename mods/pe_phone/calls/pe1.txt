@@ -10,6 +10,10 @@
 # folder is loaded too, so your own calls can live in a file of their own (mycalls.txt). Delete
 # pe1.txt there to go back to the calls built into the game.
 #
+# Updates: the copy starts with a line "# pe1 copy ...". While you leave the copy as it is, a newer
+# game replaces it with its own calls. Once you change it, it's yours and is never overwritten; a
+# newer game puts its calls beside it in pe1.txt.new (not loaded) to copy from.
+#
 # ---- How a call is written ----
 #
 #   [pe1/pizza]                    the call's key, in square brackets: pack/name.

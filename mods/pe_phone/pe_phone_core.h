@@ -100,6 +100,19 @@ typedef struct PePhoneStore {
 /* A mistake: the file's name, its line (1-based) and what is wrong. */
 typedef void (*PePhoneProblem)(void *user, const char *file, int line, const char *what);
 
+/* The player's copy of pe1.txt (in pe_calls). The game writes it with a stamp line first,
+ * "# pe1 copy XXXXXXXX ...", the built-in calls' hash: the bytes after that line still hashing to
+ * it means nobody edited the file, so the game may bring it up to date. */
+enum {
+    PE_COPY_CURRENT,        /* unedited and up to date: nothing to do */
+    PE_COPY_UPDATE,         /* unedited (or the same calls without a stamp): write the built-in again */
+    PE_COPY_EDITED,         /* edited, made from the current calls: keep it */
+    PE_COPY_EDITED_NEWER    /* edited (or no stamp), and the game's calls may be newer: keep it, offer pe1.txt.new */
+};
+int pe_phone_copy_state(const char *copy, unsigned size, const char *builtin, unsigned builtin_size);
+/* The stamp line for `builtin`, with its newline; returns its length. */
+int pe_phone_copy_stamp(char *out, int cap, const char *builtin, unsigned builtin_size);
+
 void pe_phone_store_clear(PePhoneStore *store);
 /* Parses `size` bytes of `src` (named `file` in problems) into the store. Returns the calls added. */
 int pe_phone_parse_calls(PePhoneStore *store, const char *file, const char *src, unsigned size,
