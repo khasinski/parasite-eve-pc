@@ -9,6 +9,8 @@
  *   Title bar   with a Hardcore slot highlighted, the menu's title bar (PE_HOOK_HELP_TEXT, screens
  *               37 / 38: card 1 / 2) says so: its challenges, or that it fell and can't be played;
  *               when saving, that the slot holds a Hardcore run.
+ *   Preview    F1 > Challenges > Debug > Preview fallen saves shows live Hardcore saves as fallen
+ *               (grey, fallen title bar) for this session, to see the look without losing a run.
  *   Which saves each occupied slot's file (bu<port>0:BASLUS-00662000000<flag><slot>, mapped by the
  *               game's own Psyz_AdjustPath) is read once and its "pe_challenges.run" record peeked
  *               (pe_save_peek: read-only, no mod code runs). It is read again when the slot's preview
@@ -23,6 +25,7 @@
 #include "pe_challenges.h"
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
+#include "pe_mod_menu.h"
 #include "pe_save.h"
 #include "pe1/memcard.h"
 #include "pe1/menu_context_help.h"
@@ -33,7 +36,8 @@
 #define CH_LIST_CARD1     0x25        /* the slot list's selected_base: 0x25 + port */
 #define CH_CARD_BYTES     0x2000
 #define CH_RED_WINDOW     0x14148Cu   /* the game's colour order (B G R): dark red */
-#define CH_FALLEN_WINDOW  0x303030u   /* grey */
+#define CH_FALLEN_WINDOW  0x404040u   /* grey, about as bright as the red */
+#define CH_PAGE_DEBUG     "Debug"
 
 enum { CH_MARK_NONE, CH_MARK_HARDCORE, CH_MARK_FALLEN };
 
@@ -48,6 +52,15 @@ typedef struct PeSlotMark {
 static PeSlotMark s_marks[CH_PORTS][CH_SLOTS];
 static u8 s_text[96];
 static uint8_t s_card[CH_CARD_BYTES];
+static int s_preview_fallen;   /* F1 > Challenges > Debug: show Hardcore saves as fallen (this session only) */
+static const char *const kOffOn[] = {"Off", "On"};
+
+/* The mark as shown: the preview turns a live Hardcore save grey, nothing else. */
+static int pe_shown(const PeSlotMark *m) {
+    return m->mark == CH_MARK_HARDCORE && s_preview_fallen ? CH_MARK_FALLEN : m->mark;
+}
+static int pe_preview_get(void) { return s_preview_fallen; }
+static int pe_preview_set(int v) { s_preview_fallen = v != 0; return 1; }
 
 static int pe_preview_changed(const PeSlotMark *m, const MemCardSaveSlot *slot) {
     return !m->checked || m->key_play != slot->playTimeMinutes || m->key_game != slot->gameTimeMinutes ||
@@ -97,8 +110,8 @@ static void pe_refresh(void) {
             PeSlotMark *m = &s_marks[port][i];
             if (slot->state != MEMCARD_SLOT_OCCUPIED || !slot->metadataReady) { m->checked = 0; continue; }
             if (pe_preview_changed(m, slot)) pe_check_slot(port, i, slot, m);
-            if (m->mark == CH_MARK_HARDCORE) slot->blendColor = (s32)CH_RED_WINDOW;
-            else if (m->mark == CH_MARK_FALLEN) slot->blendColor = (s32)CH_FALLEN_WINDOW;
+            if (pe_shown(m) == CH_MARK_HARDCORE) slot->blendColor = (s32)CH_RED_WINDOW;
+            else if (pe_shown(m) == CH_MARK_FALLEN) slot->blendColor = (s32)CH_FALLEN_WINDOW;
         }
     }
 }
@@ -128,7 +141,7 @@ static int pe_marks_help(void *ctx, void *user) {
     m = &s_marks[port][index];
     if (m->mark == CH_MARK_NONE) return 0;
     pe_ch_names(m->active & ~CH_BIT(CH_HARDCORE), names, sizeof names);
-    if (m->mark == CH_MARK_FALLEN)
+    if (pe_shown(m) == CH_MARK_FALLEN)
         snprintf(line, sizeof line, g_McDialogMode ? "Fallen Hardcore run: free to save over"
                                                    : "Fallen Hardcore run: it can't be played");
     else if (g_McDialogMode)
@@ -143,4 +156,9 @@ static int pe_marks_help(void *ctx, void *user) {
 void pe_ch_card_marks_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_LIST_ROWS, pe_marks_rows, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_marks_help, NULL, PE_PRIORITY_LATE, mod_id);
+    /* A live row: not saved, so it is off again at the next start. Shows only; nothing is marked. */
+    pe_menu_page(CH_PAGE_DEBUG, "Test tools. Nothing here changes a run or a save.", 90);
+    pe_menu_register_live_choice(CH_PAGE_DEBUG, "Preview fallen saves",
+        "Show Hardcore saves as fallen in the save / load lists (this session only).",
+        kOffOn, 2, pe_preview_get, pe_preview_set);
 }
