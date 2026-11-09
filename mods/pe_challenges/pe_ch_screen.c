@@ -248,7 +248,9 @@ static int pe_row_shown(void) {
     return pe_game_loaded() && (g_ch_run.ever || pe_ch_history_count() > 0);
 }
 
-static const PeMainMenuRow s_row = { "Challenges", 0, pe_row_shown, pe_open, NULL };
+/* The row's icon: Revive's inventory icon (item 0x12), the game's own art for life and death. */
+#define CH_ROW_ICON_ITEM 0x12
+static const PeMainMenuRow s_row = { "Challenges", CH_ROW_ICON_ITEM, pe_row_shown, pe_open, NULL };
 
 void pe_ch_screen_register(const char *mod_id) {
     pe_main_menu_add(&s_row, CH_ROW_ORDER);

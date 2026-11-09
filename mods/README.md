@@ -110,6 +110,7 @@ F1 > Challenges, all off until chosen (while every one is off the mod writes not
 | Tough crowd (1.5x / 2x HP) | enemies take /1.5 or /2 damage; HP, EXP, drops untouched | pe_ch_damage.c |
 | One-hit KO | any hit, contact or HP-reduction attack takes all of Aya's HP | pe_ch_one_hit.c |
 | No EXP | the battle's EXP total is zeroed just before it is paid | pe_ch_no_exp.c |
+| Fast enemies (1.5x / 2x) | enemies' turn gauges gain 50% / 100% more than the game added each frame (pauses, Slow, menus unchanged) | pe_ch_fast_enemies.c |
 | Blood price (1 / 2 HP per PE) | each power also costs HP (its real PE cost), once per cast, never the last HP | pe_ch_blood_price.c |
 | Hardcore | permadeath; New Game only; locks the run | pe_ch_hardcore.c |
 
@@ -156,11 +157,14 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   | `challenges.run_cleared` | `const uint32_t *` run id | a challenge run's Clear Data save, once |
 
   Challenge ids (append only): 0 No PE, 1 No items, 2 No escape, 3 Glass cannon, 4 Tough crowd,
-  5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price.
+  5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price, 10 Fast enemies.
   A `challenges` service (is a challenge on, its level, report an assist) belongs in
   `host/pe_services.h`, which the PS5 port pins by checksum, so it waits for upstream. Until then
   cheat mods are detected through their rows and the `play.log` `cheat_*` convention.
-- **Not yet:** Fast enemies, Scarcity, no bonus-point spending.
+- **Debug** (F1 > Challenges > Debug, nothing saved or changed): Preview the Hardcore notice (the
+  fallen-run window in the field, closing to nothing) and Preview fallen saves (Hardcore saves grey
+  in the save / load lists for the session).
+- **Not yet:** Scarcity, no bonus-point spending.
 - **Challenges in Aya's menu** (`pe_ch_screen.c`): a Challenges row (order 35, after the Wardrobe)
   opens a read-only screen from the game's own widgets, laid out like the Bestiary's. **This run**:
   the run's challenges with levels (lowered ones dim, a run-locking one in the game's yellow), and

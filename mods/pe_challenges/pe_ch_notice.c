@@ -17,6 +17,7 @@
 #include "pe_game.h"
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
+#include "pe_mod_menu.h"
 #include "pe1/textbox.h"
 #include "pe1/textbox_open.h"
 
@@ -116,8 +117,20 @@ static int pe_notice_reset(void *ctx, void *user) {
     return 0;
 }
 
+/* F1 > Challenges > Debug: the Hardcore notice as it looks, closing to nothing (no title, no run
+ * change). It opens once F1 is closed, on the first free field frame. */
+static void pe_notice_preview(void) {
+    if (!pe_game_loaded()) { pe_toast("Load a game first"); return; }
+    if (!pe_ch_notice_show("This Hardcore run has ended.", "It fell after 12 battles, 1:02:03.", "Close (preview)", NULL))
+        pe_toast("A notice is already waiting");
+    else
+        pe_toast("Close F1: the notice opens in the field");
+}
+
 void pe_ch_notice_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_TEXTBOXES, pe_notice_textboxes, NULL, PE_PRIORITY_EARLY, mod_id);
     pe_hook_add(PE_HOOK_FRAME, pe_notice_frame, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_NEW_GAME, pe_notice_reset, NULL, PE_PRIORITY_NORMAL, mod_id);
+    pe_menu_register_action("Debug", "Preview the Hardcore notice",
+        "Shows the fallen-run message in the field, closing to nothing. No run or save changes.", pe_notice_preview);
 }
