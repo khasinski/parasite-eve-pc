@@ -226,12 +226,18 @@ Saves go to VMUs: card 1 is the VMU in controller port A, card 2 the one in
 port B (`dc_card.c`, see the PsyZ Dreamcast README). Each save is one VMU
 file of 19 blocks with the save's icon and title.
 
+## Disc swap and release build (9 November 2026)
+
+The images do not fit on one CD-R: disc 1 carries `1ST_READ.BIN` and
+`PE1.BIN`, disc 2 `1ST_READ.BIN` and `PE2.BIN`. When the game needs the
+other disc, `g_CdImageRequest` shows a prompt (BIOS font) until that disc's
+image opens from the drive. `-DPE_DC_RELEASE=ON` builds a silent binary: no
+KOS banner, no logs, no profiler.
+
 ## Next steps
 
-1. Boot the ELF on hardware or in Flycast with the discs (`/cd/PE1.BIN`
-   and `/cd/PE2.BIN` on the burnt disc, no CUE needed; see
-   `platform/dreamcast/README.md`) and check speed.
-2. Measure battles, later rooms and the memory card screen; then size the
-   two 2 MB arenas.
-3. Reverb on the AICA DSP; speed (store-queue vertex submission, twiddled
-   or paletted textures).
+1. Test on hardware; play on past disc 1's opening (later rooms, battles,
+   disc 2) and look at speed with the profiler.
+2. Reverb on the AICA DSP.
+3. Speed of movies (still 12-15 fps) and of the GTE emulation, the largest
+   CPU cost left in heavy rooms.
