@@ -24,13 +24,6 @@ typedef struct BattleEvasionOutcome {
 
 PE1_STATIC_ASSERT(sizeof(BattleEvasionOutcome) == 2, battle_evasion_outcome_size);
 
-/* Record view of the outcome's reaction byte (g_EvasionReaction). Hit resolution
- * reads it back through this view after storing the target's core flags, so
- * the read stays ordered after those stores as in retail. */
-typedef struct BattleEvasionReaction {
-    s8 value;
-} BattleEvasionReaction;
-
 typedef struct BattleEnemySlot {
     s32 active;
     EnemyCombatant combatant;
@@ -136,13 +129,9 @@ PE1_STATIC_ASSERT(sizeof(BattleEnemySlot) == PE1_OFFSETOF(BattleEnemySlot, comba
 /* Aya action sequencer state and its render/scene dependencies. */
 extern u8 g_AyaActionStep;
 extern s8 g_AyaAttackStep;
-/* The BattleEvasionOutcome Battle_CheckEvasion fills for the current hit.
- * g_EvasionReaction names its second byte for units whose assembler
- * (ASPSX 2.56) only addresses whole small-data symbols through $gp; the
- * status byte is the record's first field and is read through the record.
- * Battle_StepAyaAction writes the record itself. */
+/* The BattleEvasionOutcome Battle_CheckEvasion fills for the current hit
+ * (status and reaction); Battle_StepAyaAction writes the record itself. */
 extern BattleEvasionOutcome g_EvasionOutcome;
-extern s8 g_EvasionReaction;
 extern s16 g_AyaActionTimer;
 /* Aya's world position (16.16) saved before an action moves her. */
 typedef struct BattleSavedPosition {

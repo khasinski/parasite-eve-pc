@@ -18,6 +18,7 @@
 - Added an optional **Cheats** mod (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod writes nothing to the game state.
 - Added a **Hold / Toggle** mode for the speed-up button in **Escape → Controls**.
 - Fixed the **Combine** item action and `F1` recipe shortcut when item stacking (`pe_stacks`) is enabled so stacked ingredients in a single slot can be combined and results merge onto existing stacks.
+- Fixed critical hits and long-range grazes never happening on PC: every gun hit landed as a normal hit with base damage, which also left the rebalance mod's **Critical** effect with nothing to do.
 - Fixed Tool and Super Tool parameter transfers, Mod Catalog installs, Wayne's Mod Permits and Requisition purchases consuming or miscounting entire stacks when item stacking (`pe_stacks`) is enabled.
 - Integrated open-source PS5 payload build support (`-DPE_PS5_GAME=ON`), native GPU presentation/upscaling options (`-DPE_PS5_GPU_NATIVE=ON`), state snapshots (`src/main/state/`), particle mesh augmentation and `pe_assists` mod support (contributed by @GUMMIBRI in #42).
 
