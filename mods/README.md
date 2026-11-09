@@ -113,6 +113,7 @@ sub-page (a category left with no rows gets no page), then Presets, This run and
 | Enemies | Tough crowd (1.5x / 2x HP) | enemies take /1.5 or /2 damage; HP, EXP, drops untouched | pe_ch_damage.c |
 | Enemies | Fast enemies (1.5x / 2x) | enemies' turn gauges gain 50% / 100% more than the game added each frame (pauses, Slow, menus unchanged) | pe_ch_fast_enemies.c |
 | Aya | Glass cannon | Aya takes x2 from hits and contact, deals x1.5 | pe_ch_damage.c |
+| Aya | Half health (1/2 / 1/4 HP) | current HP capped at half or a quarter of max, field and battle; max HP itself never changed | pe_ch_half_health.c |
 | Aya | One-hit KO | any hit, contact or HP-reduction attack takes all of Aya's HP | pe_ch_one_hit.c |
 | Aya | Blood price (1 / 2 HP per PE) | each power also costs HP (its real PE cost), once per cast, never the last HP | pe_ch_blood_price.c |
 | Aya | No EXP | the battle's EXP total is zeroed just before it is paid | pe_ch_no_exp.c |
@@ -169,7 +170,7 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   | `challenges.run_cleared` | `const uint32_t *` run id | a challenge run's Clear Data save, once |
 
   Challenge ids (append only): 0 No PE, 1 No items, 2 No escape, 3 Glass cannon, 4 Tough crowd,
-  5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price, 10 Fast enemies, 11 Club only.
+  5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price, 10 Fast enemies, 11 Club only, 12 Half health.
   A `challenges` service (is a challenge on, its level, report an assist) belongs in
   `host/pe_services.h`, which the PS5 port pins by checksum, so it waits for upstream. Until then
   cheat mods are detected through their rows and the `play.log` `cheat_*` convention.

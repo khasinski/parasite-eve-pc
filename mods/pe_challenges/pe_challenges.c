@@ -30,6 +30,7 @@ const PeChallengeDef *const g_ch_defs[] = {
     &g_ch_tough,
     &g_ch_fast_enemies,
     &g_ch_glass,
+    &g_ch_half_health,
     &g_ch_one_hit,
     &g_ch_blood_price,
     &g_ch_no_exp,

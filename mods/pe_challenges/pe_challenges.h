@@ -29,6 +29,7 @@
  *     pe_ch_damage.c       the shared dealt-damage modifiers; Glass cannon, Tough crowd
  *     pe_ch_club_only.c    Club only (Club hits 2x / 1.5x, guns do no damage)
  *     pe_ch_one_hit.c      One-hit KO
+ *     pe_ch_half_health.c  Half health (HP capped at 1/2 or 1/4 of max)
  *     pe_ch_no_exp.c       No EXP
  *     pe_ch_blood_price.c  Blood price (PE powers also cost HP)
  *     pe_ch_fast_enemies.c Fast enemies (turn gauges fill 1.5x / 2x)
@@ -54,6 +55,7 @@ enum {
     CH_BLOOD_PRICE = 9,
     CH_FAST_ENEMIES = 10,
     CH_CLUB_ONLY = 11,
+    CH_HALF_HEALTH = 12,
     CH_COUNT
 };
 #define CH_BIT(c) (1u << (c))
@@ -216,6 +218,6 @@ const char *pe_ch_status_text(void);   /* "Clean", "Assisted", "Clean, Hardcore"
 /* The challenges (each defined in its own file). */
 extern const PeChallengeDef g_ch_no_pe, g_ch_no_items, g_ch_no_escape, g_ch_locked_loadout,
     g_ch_glass, g_ch_tough, g_ch_one_hit, g_ch_no_exp, g_ch_blood_price, g_ch_fast_enemies, g_ch_club_only,
-    g_ch_hardcore;
+    g_ch_half_health, g_ch_hardcore;
 
 #endif
