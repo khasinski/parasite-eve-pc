@@ -24,7 +24,7 @@
     {
       "component": "game",
       "path": "patches/game.patch",
-      "sha256": "4ec4c3a65916b309ccf2d21488cc536dc05f239a03d6e104b54ceb02ba10ef07"
+      "sha256": "90a0cb2ffa1a1daf55833f7037f61eb229e808e3581b218f68ad41dc60d83e05"
     },
     {
       "component": "psyz",
@@ -50,9 +50,9 @@
       "component": "game",
       "path": "cmake/ps5/game.cmake",
       "added": true,
-      "size": 2986,
+      "size": 3070,
       "before": null,
-      "after": "7d0b8929ef5239c8e66c4b7cfed2397e665fa99710bde0ad4f15b9b281984333"
+      "after": "4bfa44bb1a5a7c0c1353382b0ba174d91027ed95105542787984ba4bc826e37a"
     },
     {
       "component": "game",
@@ -754,9 +754,9 @@
       "component": "game",
       "path": "src/main/boot/state_ui.h",
       "added": true,
-      "size": 22511,
+      "size": 22607,
       "before": null,
-      "after": "f3d37b23c6eccf91c90d689d5977ec3e883ea7e9c16315748d2a1381b5565b14"
+      "after": "9fa230408632d806e77468888022eab8731fc32c5235e51c20677cc3d581de34"
     },
     {
       "component": "game",
@@ -2084,8 +2084,8 @@
     },
     {
       "path": "state/pe_state.c",
-      "sha256": "9737ac9923a51cdfcb58e3f9d1c4c0783b4806b7eec2a5f0d07f03e251dfe9f0",
-      "bytes": 15028
+      "sha256": "59646a88e689d4978f5f57c14cdbe532113d5d1bf489969b9be511778f5135fb",
+      "bytes": 15026
     },
     {
       "path": "state/pe_state.h",
@@ -2154,8 +2154,8 @@
     },
     {
       "path": "state/pe_state_checkpoint.c",
-      "sha256": "4974dd96b10aa4ef61185a77e0051da53cc4aa68df4f5fad000638d9a0db3c9b",
-      "bytes": 10333
+      "sha256": "c9b46c7857de09832877bcf91ba89a0a0c67649f493cf118c06f517c2f4c3f24",
+      "bytes": 10331
     },
     {
       "path": "state/pe_state_checkpoint.h",
@@ -2164,18 +2164,18 @@
     },
     {
       "path": "state/pe_state_field_models.c",
-      "sha256": "6b4803c0a3f27c0ce89b26227a5ef63f7d7f150980aac08b9d519aaca6f11680",
-      "bytes": 12144
+      "sha256": "c542a0b25692ec6b42b4840c9e0f62d1cb7edf27abd05e545b52493be9345fdf",
+      "bytes": 12135
     },
     {
       "path": "state/pe_state_field_models.h",
-      "sha256": "35e81a38ba005870fc6b7bb2ce5fef2f785fa631a4dc0058ebf4fdaa5db5ceb6",
-      "bytes": 768
+      "sha256": "f864243cce6d6534809c89ad891ffb3582a2ddb3867b68a4423151f010ba0443",
+      "bytes": 763
     },
     {
       "path": "state/pe_state_files.c",
-      "sha256": "127251e85537ecf81853f81b0fb1de5bcd2c5ee3f04d88bd8a0590bef322a0d2",
-      "bytes": 4525
+      "sha256": "8cbd3cc8b5c5a7503dacb8ccd54e99af857a8f92e2c67576cea8edafa6d0a99f",
+      "bytes": 4864
     },
     {
       "path": "state/pe_state_files.h",
@@ -2199,13 +2199,13 @@
     },
     {
       "path": "state/pe_state_graph_archive.c",
-      "sha256": "924d9b7cb6d3529c6e98c6e54d22e1b88ceac0084c105bd77e63b0c4fbeefe74",
-      "bytes": 3404
+      "sha256": "c0ae90f95827ba78b0b4db6a5a0b797d2d4e55f91cedb754a8338d9a0d04704d",
+      "bytes": 3403
     },
     {
       "path": "state/pe_state_graph_archive.h",
-      "sha256": "f2667a77a2195c15bfd2b626dc55c9bccb3e5cd05ba52de03e027e82273a71ce",
-      "bytes": 1042
+      "sha256": "3f1555cd175789d2872f38ad20ab5260cb69c7943529db8110588fd10098b473",
+      "bytes": 1041
     },
     {
       "path": "state/pe_state_gte.c",
@@ -2284,18 +2284,18 @@
     },
     {
       "path": "state/pe_state_session.c",
-      "sha256": "4be13d6ce06269f54234120fc19df6f6c25d88aa3ec444db830bc4ee2600786e",
-      "bytes": 12274
+      "sha256": "fa122c3a92e83f3efd1cc306214041274b72fa7b9c63b9f0f5cb7dd053f4eff0",
+      "bytes": 15066
     },
     {
       "path": "state/pe_state_session.h",
-      "sha256": "17545bc978d9d65860aaff0a07da7b885354d4073ad38408b8d5da1a8fbfa10f",
-      "bytes": 2357
+      "sha256": "ce810e0e71bb38f52f69922877e577ed13e1bbf79a9055c41e5dbb46c8472182",
+      "bytes": 2374
     },
     {
       "path": "state/pe_state_theater.c",
-      "sha256": "f394741c8e7bf88d1a13a2d91b7a14e382cbe606b9343a7ca92b6be6fc08153c",
-      "bytes": 3879
+      "sha256": "b26959c9d187a67684137f760a672a56dcf2e6d482d208fd3884e8c5b11461fb",
+      "bytes": 3877
     },
     {
       "path": "state/pe_state_theater.h",
@@ -2304,23 +2304,23 @@
     },
     {
       "path": "state/pe_state_theater_tasks.c",
-      "sha256": "7444d29536acf97cbe3e43cb5704df75850eb8b116402f2fd45b20916360d7c6",
-      "bytes": 30241
+      "sha256": "9e8a3820bac2ab3e02483b2d70bf2e0a5b8d5576246a726d45ab1e732a89a1e3",
+      "bytes": 30226
     },
     {
       "path": "state/pe_state_theater_tasks.h",
-      "sha256": "51222dba68df723e96d749c893976ec7e116b4fa3652d809615ffba27493d741",
-      "bytes": 1158
+      "sha256": "96a18a0191b931611d37829b8141459e78fdd104d3dada605aa6e5330f26bdb5",
+      "bytes": 1155
     },
     {
       "path": "state/pe_state_transition.c",
-      "sha256": "8e32a08ba199699c7a42a045bd42128e79896d90a6045e956119410ff53b207f",
-      "bytes": 4009
+      "sha256": "abeb2ba6f7540fcebc4ab9083267979751c4d229e42714267c7175cf2a7ece25",
+      "bytes": 4008
     },
     {
       "path": "state/pe_state_transition.h",
-      "sha256": "40feda2cfc7613da5376529f12a5df2f70e8d0dfff3366fb1c3aaac20da5095d",
-      "bytes": 968
+      "sha256": "fedcaad487b436a90d30c7ccfecd5b64634c70b8635aef96e7d8e78debded5d4",
+      "bytes": 967
     },
     {
       "path": "state/pe_state_world.c",
@@ -2349,8 +2349,13 @@
     },
     {
       "path": "state/state-transition.cmake",
-      "sha256": "94f13b1a1eb7a5508644f71c9897f8af4d85762566bdca800c405f35f6a1b6f1",
-      "bytes": 540
+      "sha256": "fc9ae0677ea5dff15311edf58e1f6f04b0b374bcc78aab368a870356240b00b7",
+      "bytes": 534
+    },
+    {
+      "path": "state/pe_state_portable.h",
+      "sha256": "737dc51ec2e5a3628cfff569105d852bbfb5ef175cdcb8b33c5c56461288d748",
+      "bytes": 1883
     }
   ],
   "shaderHeaderTemplates": {
@@ -2370,5 +2375,2139 @@
       "prefix": "// Generated from clear.frag.glsl by pinned glslang; see SHADER-PROVENANCE.json.\nunsigned char clear_frag_spv[] = {\n",
       "suffix": "\n};\nunsigned int clear_frag_spv_len = {{BYTES}};\n"
     }
-  }
+  },
+  "compatibilitySources": [
+    {
+      "path": "cmake/ps5/game.cmake",
+      "sha256": "4bfa44bb1a5a7c0c1353382b0ba174d91027ed95105542787984ba4bc826e37a"
+    },
+    {
+      "path": "include/common.h",
+      "sha256": "57c863b24de479ba464d9c6c9ef48ae7c02426c82202a1a6423f72f07af80863"
+    },
+    {
+      "path": "include/gte_macros.inc",
+      "sha256": "80614ffcdda065072d2ef6cde330d5782202240edef7faca5ac598fbfa125066"
+    },
+    {
+      "path": "include/pe1/Menu_MemCardProgress_externs.h",
+      "sha256": "0c2651d3b759ee77e62a315b135a0d01d27b52d0c0775854671d8b46dfa71862"
+    },
+    {
+      "path": "include/pe1/actor_model.h",
+      "sha256": "675d2efe27375577402ffefdcb2d1aad6b29e478d2df56e6ebb6e804ab62a240"
+    },
+    {
+      "path": "include/pe1/akao.h",
+      "sha256": "005f9bbabd1c67fe29ffd64b1384ebafc43ba0caf63836da4e4a1d476002b8d7"
+    },
+    {
+      "path": "include/pe1/akao/bgm.h",
+      "sha256": "ab1cd4d791f0391e1ce54f7c46fb0ee52531d0521c2bf42b4257a2d168035af3"
+    },
+    {
+      "path": "include/pe1/akao/commands.h",
+      "sha256": "41833d72b034a09e8bc4796ee37e6bc518b52548b2fb4284b82ec4dae207257a"
+    },
+    {
+      "path": "include/pe1/akao/file_header.h",
+      "sha256": "c6199e656af81fa46d663148298f4ea0581ee0bce25a110dea42c8105214cd2f"
+    },
+    {
+      "path": "include/pe1/akao/globals.h",
+      "sha256": "dd5ab9b4e03a3404204daa0e1d047dd8686bc930d6c7453bda6c0967188be9be"
+    },
+    {
+      "path": "include/pe1/akao/init_state.h",
+      "sha256": "3a4650b462a0cd05db72796ae84f34f488ed500b6e8ecb23d47230dd0cd99200"
+    },
+    {
+      "path": "include/pe1/akao/note_step.h",
+      "sha256": "a6495641d3861df24d1cbbadd886ca5722bfb5e8bae8c5ae958ef28a6739f11c"
+    },
+    {
+      "path": "include/pe1/akao/pan3d.h",
+      "sha256": "4443cd97e831bd7b0e57230921049a5047a366e7a1d6570642976799c7f47647"
+    },
+    {
+      "path": "include/pe1/akao/pos.h",
+      "sha256": "6bf6c5c59dd09fbefbbb4f4d2677e9e4cdd2447392cd7a7232e947cc98e38649"
+    },
+    {
+      "path": "include/pe1/akao/queue.h",
+      "sha256": "1c3fd2f95be93975aedc72bd7c565aa4351fdc080dfdebafbba94fcec848ac40"
+    },
+    {
+      "path": "include/pe1/akao/seq_param.h",
+      "sha256": "93d4e61d9be6ece48a3d164c16ebcbedc9517fa215e2c25ff35e78c4bc87c048"
+    },
+    {
+      "path": "include/pe1/akao/spu_common.h",
+      "sha256": "d3b9399fa4e1204c9742bba5585af7b6cc5f5766bfaebd03382b8fd80f37e6d0"
+    },
+    {
+      "path": "include/pe1/akao/spu_registers.h",
+      "sha256": "300c087f8833e6cefe78b5cf7f97e050d68f0a195021153d045457ab18c26109"
+    },
+    {
+      "path": "include/pe1/akao/spu_voice.h",
+      "sha256": "3d6ac4ac9e5baddda1dc363ecb2e82711227a51742a0688c54edac9f047b37f5"
+    },
+    {
+      "path": "include/pe1/akao/stream.h",
+      "sha256": "f217c5b928cef367451b6987f687aac97a7af3ec678c833bcf8f330a4826a9d0"
+    },
+    {
+      "path": "include/pe1/akao/tick.h",
+      "sha256": "3269188fa3f989c3b6ea5a4894c244ede10dd43c9e7ccc5a65f68d002d52c324"
+    },
+    {
+      "path": "include/pe1/akao/track.h",
+      "sha256": "8e78da1a66340e560b2ee655e88471ddd565e40ce08ba40c0d226239521a4378"
+    },
+    {
+      "path": "include/pe1/akao/voice_masks.h",
+      "sha256": "15d5e7a7b34d8505f2af1f933777126517fc110a1b8332203803159d1ba91230"
+    },
+    {
+      "path": "include/pe1/akao/voice_state.h",
+      "sha256": "65fc7bc65a8b6cf2ff182958f7521a0ec781b4d49f8b7072bf93f954e906c604"
+    },
+    {
+      "path": "include/pe1/akao_counters.h",
+      "sha256": "c46457942932f986ccc547bb575e284c4b33da38630856b58ca9be61ef6a0fad"
+    },
+    {
+      "path": "include/pe1/akao_script.h",
+      "sha256": "8e4bbee8ee3a6b71bb8020d57411737e87c03ec8eae415aaaf0a9e78a3bcc2da"
+    },
+    {
+      "path": "include/pe1/akao_send.h",
+      "sha256": "b0bac6baa26cef121d32689f0158b91d37b7a4013ec93a412339a0c93aed0812"
+    },
+    {
+      "path": "include/pe1/asset_find.h",
+      "sha256": "ca60cd12ec975cd5d36324b05506242094ea5900600a087f373a26cc10f634d4"
+    },
+    {
+      "path": "include/pe1/asset_key_record.h",
+      "sha256": "de77c0f4e1eb42cdce0b56e1a2e654f507fedaab98c5de0277eef549eb1d6010"
+    },
+    {
+      "path": "include/pe1/asset_table.h",
+      "sha256": "39aeb297ba813fcc081c0e71edbb0a4255d033639c63fb9957beb32fe42c63ca"
+    },
+    {
+      "path": "include/pe1/asset_tim.h",
+      "sha256": "ad4df181450feaa6648048ab1ceed8e4044fea72b03f1db3693b34544bdb9fb1"
+    },
+    {
+      "path": "include/pe1/aya.h",
+      "sha256": "a8f837ac08fbecaca5d0c14e5c88c47aea331f8cb127fb43e3903c17d69f88c2"
+    },
+    {
+      "path": "include/pe1/background.h",
+      "sha256": "0ef53abe5218f347563fd9e52e42caf240806b37aebb06ebeb425cd9edeec4ac"
+    },
+    {
+      "path": "include/pe1/battle.h",
+      "sha256": "65a722af081f4e5c18c7f1e104d007fb5f59dc6825ccc80d6de2e50d809342b7"
+    },
+    {
+      "path": "include/pe1/battle_ailment.h",
+      "sha256": "54ac9979c4d3436449dc87b27fd6c98927fa4405f43c352ed75bad57bc1797d9"
+    },
+    {
+      "path": "include/pe1/battle_cmd.h",
+      "sha256": "e107646b2ec00f2575fb1a7290a59b501fb1b1a0af0818a65d9595bf2032be9e"
+    },
+    {
+      "path": "include/pe1/battle_context.h",
+      "sha256": "43865d82cab136cb6f495d5b12bed8bd538542b235065ddf23f5e037e686d3a1"
+    },
+    {
+      "path": "include/pe1/battle_entity_anim.h",
+      "sha256": "40263ed4347b4a4f553435a58d709f36e15f7223d52473072e585b5b516871aa"
+    },
+    {
+      "path": "include/pe1/battle_level_up.h",
+      "sha256": "e89d418385ca160516c926a947221b0ed3cea2d0e5abbd8324de3e8a71e448d6"
+    },
+    {
+      "path": "include/pe1/battle_main.h",
+      "sha256": "1a83f538608e1459b6161adcfcae9e5f223cb214f11251be6a9d5895b3a9fd18"
+    },
+    {
+      "path": "include/pe1/battle_modifiers.h",
+      "sha256": "e6767005f58da18eaa4a204993c0c7e1cc93483dea722f6047f909e679814119"
+    },
+    {
+      "path": "include/pe1/battle_palette.h",
+      "sha256": "29c319f588dcb4ee20b3a5e3cd68e5c5b05abe36a4105477cd0d96bac731e860"
+    },
+    {
+      "path": "include/pe1/battle_reset_stats.h",
+      "sha256": "99cc4f54d87d1b3581d1daabaf97593b49319a791ae423883f0e8949f1716ad2"
+    },
+    {
+      "path": "include/pe1/battle_runtime.h",
+      "sha256": "5ef531dec4cda8a27903a7bcf4c8f170563dc7dc3aa2cf83c5dfc6af174ef8bd"
+    },
+    {
+      "path": "include/pe1/battle_saved_state.h",
+      "sha256": "c6e730eec56e5ab3f6a0d0ae72d7cf1ea95f811a18c4385e3154b9298f6bc8ec"
+    },
+    {
+      "path": "include/pe1/battle_setup.h",
+      "sha256": "0be98eee0fb9dfa5afe8fcb7e9f7557a392916734e77b6cff252c264e0714fdd"
+    },
+    {
+      "path": "include/pe1/battle_start.h",
+      "sha256": "2cccf1eb0eeae64d7e5a8ec83008c8ced90022eccb2d34cb4fc567ae1a23efe8"
+    },
+    {
+      "path": "include/pe1/battle_status.h",
+      "sha256": "663dff04901779bd2a12d8eddbf167f2a3ce893976192b37cd9b75f736df42c8"
+    },
+    {
+      "path": "include/pe1/battle_turn.h",
+      "sha256": "cd4d134e914941843079c56be8dc37d1f140d55a3ecd933df0b236be429cda83"
+    },
+    {
+      "path": "include/pe1/battle_update.h",
+      "sha256": "21f4e4b08c885e80225880966f38aad95f8324c3bfb97cc368417bad03852d1e"
+    },
+    {
+      "path": "include/pe1/bios_firstfile.h",
+      "sha256": "26285d86554ead5a56081ffd9fe0f499151f4000c72f89bd605379cee13c1412"
+    },
+    {
+      "path": "include/pe1/boot.h",
+      "sha256": "bd1759a37937c826c8eecf403d44cc70852256c9928b3c0efe1616ea5d5fa569"
+    },
+    {
+      "path": "include/pe1/boot_disc_check.h",
+      "sha256": "34ccf6f05b6996fafe779abcd8c1830f2a2f502d59414b244344f77f74a1bf73"
+    },
+    {
+      "path": "include/pe1/boot_display.h",
+      "sha256": "05cfa489cf591f1210f777d914d93d4e6b5cd59d6fe50578c84cfc21cc7a28e6"
+    },
+    {
+      "path": "include/pe1/boot_services.h",
+      "sha256": "2c7317bd8cb0dc5f37d3cc888c299b9ea8ff7d94c6dc55f4e4cb98a6a362c002"
+    },
+    {
+      "path": "include/pe1/bounds_check.h",
+      "sha256": "77a80a3afdc027e57b62445177d8b0c7cbeeb11d72ebca2b394c33fc04fd95a2"
+    },
+    {
+      "path": "include/pe1/card_obj.h",
+      "sha256": "bc3538dc31f8fe8faa93b80189b300c66e0f9c821df3173bf673ab2ce20ab0c9"
+    },
+    {
+      "path": "include/pe1/cdrom.h",
+      "sha256": "f1f17f2ef835db70c6b818e53a018bf1056e7a133c4baa63bec23b0545a3ee8a"
+    },
+    {
+      "path": "include/pe1/cdrom_buffers.h",
+      "sha256": "65a85ee28b3c0c8a7416f082b3e4fd45db803de999263ca86de7a9ce38be3410"
+    },
+    {
+      "path": "include/pe1/collision_database.h",
+      "sha256": "dc8a792abe93822deba1354c70706d65442b4ad8832e90a26c7ed3972d5e98f0"
+    },
+    {
+      "path": "include/pe1/crash_report.h",
+      "sha256": "06384a966b01588b1887a387658e85b2da3daa63847ace51cbb15d9fc93d28af"
+    },
+    {
+      "path": "include/pe1/dialogue_alpha.h",
+      "sha256": "a651140ca0366a7fd618bd136017bf2f1d94b6d20aedcf2be773900be36a5467"
+    },
+    {
+      "path": "include/pe1/display_env.h",
+      "sha256": "285407dec420d82b81924dfa5becfae00aeb05089a98d72b257c46476233edac"
+    },
+    {
+      "path": "include/pe1/draw_area.h",
+      "sha256": "8df435bbc839ffb7dd890b364cb89fd7e3b3fc28aebb7f03edf7ec12789fa6b4"
+    },
+    {
+      "path": "include/pe1/draw_buffers.h",
+      "sha256": "9c5725d2fed60609a1f05df44f229e37fdc5f5d4fc1dcfcc079f75b8a50e5242"
+    },
+    {
+      "path": "include/pe1/draw_level_bar.h",
+      "sha256": "34f52b9833379b1ed682be807f5e34703341d99b36fe0e4b68a490d099a96ef2"
+    },
+    {
+      "path": "include/pe1/draw_state.h",
+      "sha256": "06701ae6c1aff4b0248598d0f9871e1fd630d112a28735aa3c000805f8ae2b9b"
+    },
+    {
+      "path": "include/pe1/draw_wipe_rect.h",
+      "sha256": "ab021bd2bfae2761525ce55275dd55bd663245f89b68fa4091e8d549994279b4"
+    },
+    {
+      "path": "include/pe1/entity_allocation.h",
+      "sha256": "eade1c7d1954c21d6a35d5ff5baf86a9196fc14388a3b3e72d308cbd18b434e9"
+    },
+    {
+      "path": "include/pe1/entity_animation.h",
+      "sha256": "9e8970208f9eecb139e3b1c5d0c2c39a863cee9069e9b672dcd494b19969a61f"
+    },
+    {
+      "path": "include/pe1/entity_floor.h",
+      "sha256": "a24c9b0441d98065b024ff139e9408d5fbe5db6b569e47210b576644fcde90db"
+    },
+    {
+      "path": "include/pe1/entity_frame_update.h",
+      "sha256": "d466c6cc5a6c688f50cc3162663b8725be24220161eff814fe79dad4c3a89d3d"
+    },
+    {
+      "path": "include/pe1/field_actor.h",
+      "sha256": "27cc84f81a0f4d5e499e6e2c1e397b01ca2ca08aa205dcbde5bdb31bad1c3b61"
+    },
+    {
+      "path": "include/pe1/field_actor_script_state.h",
+      "sha256": "a16c7a32e93d36a80777cdc1468ad15c357e571776e0accda6cc099f7a52c1dc"
+    },
+    {
+      "path": "include/pe1/field_bg_load.h",
+      "sha256": "5c3623de3063c855b209f496d8a6cddd76f177cc8dbc9e84391f8e1ff6ed9af0"
+    },
+    {
+      "path": "include/pe1/field_billboard.h",
+      "sha256": "77ed5653ea1c7865af4038b20a966afed905589e4917f5b93d0f28b979a7f5f3"
+    },
+    {
+      "path": "include/pe1/field_collision.h",
+      "sha256": "0f5074d9191e28a8a6c8592fbf7c08ead2770cbd455fed724370396412d05d35"
+    },
+    {
+      "path": "include/pe1/field_color.h",
+      "sha256": "745e3fbc93364f014530ff9e4a2b6016c1595ccf4eecc2f1aaf9aa99a8d764a3"
+    },
+    {
+      "path": "include/pe1/field_effect_modules.h",
+      "sha256": "7f3d14ce3cefebeb3f65c2c524088ea913b63394b0d0f05a4c2e715df53d15f3"
+    },
+    {
+      "path": "include/pe1/field_effect_pool.h",
+      "sha256": "91412ac73f5a0f09c6f0c4003bae4dbb8d5b3bfdd267623906a74602a07dddb5"
+    },
+    {
+      "path": "include/pe1/field_fade_particle.h",
+      "sha256": "e437afb5a6d8010d7016e09ba4816c26fd450b2987052c76adbe5ba6b3361d81"
+    },
+    {
+      "path": "include/pe1/field_flash_burst.h",
+      "sha256": "8153aa0af50c3afb7b99b6ec7c480f6a9964669d016fd0aeded266cbd0ec9418"
+    },
+    {
+      "path": "include/pe1/field_glow_fountain.h",
+      "sha256": "4befaf025754fef371d4138f6084bbf341b9fd3a649ce2b8b993d144228b813e"
+    },
+    {
+      "path": "include/pe1/field_glow_layers.h",
+      "sha256": "67a48963caa9ae2d37cce9988461aa607098007de8aaa602e6baff14ca6c7bc2"
+    },
+    {
+      "path": "include/pe1/field_glow_line.h",
+      "sha256": "174bced26814b332c5a30183f598796a16816e6967ebd27d5cb949f888e3571f"
+    },
+    {
+      "path": "include/pe1/field_glow_sprite.h",
+      "sha256": "f8ef5aa288c06ee16f9ef027ad001b61bb71b0336f20888ec6785e483e82c77e"
+    },
+    {
+      "path": "include/pe1/field_history_trail.h",
+      "sha256": "d7840f35bdd95e3fcd21b548550889f2acec9ef6305510b97817ada8cf6fee09"
+    },
+    {
+      "path": "include/pe1/field_model_draw.h",
+      "sha256": "ecd6cce98f4857135944df1cbf6560f65ca186b55d794ed5986dc3d9d87412c5"
+    },
+    {
+      "path": "include/pe1/field_movement.h",
+      "sha256": "313e6e0a5a27aacbca3d2672e84b9117adbb45c15325022fe90a5e90200d8a4e"
+    },
+    {
+      "path": "include/pe1/field_orbit_point.h",
+      "sha256": "cee6fb07050b4cb20e9fbb3436d082c584279cddc5a908bec17c63ea53323c0c"
+    },
+    {
+      "path": "include/pe1/field_oriented_sprite.h",
+      "sha256": "b6f79baea334166abb125f1f4a3cc6df8876aaa3dbeeaa69659a8ebfe76c6a62"
+    },
+    {
+      "path": "include/pe1/field_owner_actor.h",
+      "sha256": "867f7c24e7a5a1274dab14d113f336614eb36c669292e91a1ce230074b164a90"
+    },
+    {
+      "path": "include/pe1/field_pad.h",
+      "sha256": "f11d7a43620d4d2c0dc67632dbf07c916f4b83ec7eb447018971f2d36c0e42b8"
+    },
+    {
+      "path": "include/pe1/field_particle_chain.h",
+      "sha256": "e701578d6c5325e2ee4471ab0b56f323abc4348289696aebf1d0eaf9fbc962bb"
+    },
+    {
+      "path": "include/pe1/field_pulled_sprite.h",
+      "sha256": "5b3327dea704d246e0bb6b62f3625f966f1e762c147aa6352a66c3d01a789cb1"
+    },
+    {
+      "path": "include/pe1/field_ring_band.h",
+      "sha256": "d67a5f4a07fe1cf58822ca3f0f0097dbdc52f2af10b24745982b1dbb8204b364"
+    },
+    {
+      "path": "include/pe1/field_ring_geometry.h",
+      "sha256": "21fb276207dc4adda09fe38c28944c3167adde891c5cda3815357199501467ea"
+    },
+    {
+      "path": "include/pe1/field_rotated_quad.h",
+      "sha256": "2d898df7cbf1cc21c0c1d52d9cd1c5e11cf4f41b5fa22b21f81ead7092e5b721"
+    },
+    {
+      "path": "include/pe1/field_rotated_triangle.h",
+      "sha256": "2e655476a7ad11683154a43b5df7f9a099d6a3c470939583dcad18955b171a03"
+    },
+    {
+      "path": "include/pe1/field_script_context.h",
+      "sha256": "abd2d27ecde16b79e4c395a4c974d80f7c341edf648e0c700465db8d35bfb82f"
+    },
+    {
+      "path": "include/pe1/field_sfx.h",
+      "sha256": "0bf53f7a7414fdb0c75cd60cbd0b6a14e4bc76b2967e9ca7b44b598cf0b015d9"
+    },
+    {
+      "path": "include/pe1/field_shaded_quad.h",
+      "sha256": "00392ff34f8e7f53dae3caa57547c7278f303b939d480e7b91190f572b599fdc"
+    },
+    {
+      "path": "include/pe1/field_shaded_ring.h",
+      "sha256": "fb6c23d3b386f3e7b8f66ef9474ca6094296200e0649ea6babadcbb5ce22d04f"
+    },
+    {
+      "path": "include/pe1/field_shape_quads.h",
+      "sha256": "4ba805be73a045c4c8c7ebdf55c827e3b0c88bc487c396ad203d32dcf2200368"
+    },
+    {
+      "path": "include/pe1/field_spin_glow.h",
+      "sha256": "3688997ece38403f7e41c4a308a3f76f088d53ff412e403d66210ca93bafb337"
+    },
+    {
+      "path": "include/pe1/field_sprite_draw.h",
+      "sha256": "347ee02e6da1e9b5f7aa95570072cfd23bc973dfb637b5447929a087fa945650"
+    },
+    {
+      "path": "include/pe1/field_sprite_params.h",
+      "sha256": "895e343e5fb9c497da7ae9110716b7ff88ae9adc674de7e28800c8ee9ebe9945"
+    },
+    {
+      "path": "include/pe1/field_sprite_state.h",
+      "sha256": "baac9bc5f9b8566cc1be8fefea0cdecb44186aae1c4b98323cf6b8ba554718ca"
+    },
+    {
+      "path": "include/pe1/field_star_fan.h",
+      "sha256": "592cc9c2bf9fb8326df8ccc7e3448fd9ce9cd3f3a9f49669feb23c6119fba99b"
+    },
+    {
+      "path": "include/pe1/field_texture_tables.h",
+      "sha256": "423f9dd7d3088bcf4955a2db33af006ea72c259e13a377f0ab867dc4756f4a20"
+    },
+    {
+      "path": "include/pe1/field_textured_chain_node.h",
+      "sha256": "15347ae99e79ca1361c6b34d9aef478c0ca64768dbab7239eadb29fa029737af"
+    },
+    {
+      "path": "include/pe1/field_textured_model.h",
+      "sha256": "0bdb3067e9e1080b5cf4f17e9cf2fa4eae01ed0dd0ff97cd9e4bfeaa59253eec"
+    },
+    {
+      "path": "include/pe1/field_textured_ribbon.h",
+      "sha256": "46cd39bd2eb9f5cdacfc31976840a84f43fd397c987392ee1d6b9c80b53575a5"
+    },
+    {
+      "path": "include/pe1/field_textured_strip.h",
+      "sha256": "90c7c472fc71eee225fc623a29fb276035acf2ed8f58b8934392446f819ff340"
+    },
+    {
+      "path": "include/pe1/field_tile.h",
+      "sha256": "9c4e0fc9100a3b81817eca38c51eaad8df868d65e448c5cba09a2d735e31964e"
+    },
+    {
+      "path": "include/pe1/field_transform_point.h",
+      "sha256": "47a5204ee1b67a3c144a25be7be19ddd5a552917016d765103df15e2a681513b"
+    },
+    {
+      "path": "include/pe1/field_tri_test.h",
+      "sha256": "31b09dd4171ae4f32c071c22252ce46d277f25b681bf38828f8f96ff99b9ce24"
+    },
+    {
+      "path": "include/pe1/field_vector_math.h",
+      "sha256": "0d0a5a9690b199874d2670e15e01ab47064564728b6bb1cdba985cdd6370324e"
+    },
+    {
+      "path": "include/pe1/fieldfx_callback_list.h",
+      "sha256": "61fb0aadb477d5240c8b43398e9251abecc3a0eecf93c299e5340a51ae0e7c9d"
+    },
+    {
+      "path": "include/pe1/fieldfx_calls.h",
+      "sha256": "640734f74bdac73f374e35d86d23ebf3c33214ea8fafde260489d8b623415aed"
+    },
+    {
+      "path": "include/pe1/fieldfx_particle.h",
+      "sha256": "b58a6b324c0d00ba929db54b77400730f1a6e87df08817f1f03f8bd424041f8a"
+    },
+    {
+      "path": "include/pe1/fieldfx_scratch.h",
+      "sha256": "111feebf601570b30f127a698aa6e8406ee2b2429c560f02cfe5acb2036523a9"
+    },
+    {
+      "path": "include/pe1/fieldfx_slot.h",
+      "sha256": "0f8ec014d741888365f7ed91eaae4cd663b4ac5768c4839e669fa3468d93792e"
+    },
+    {
+      "path": "include/pe1/fieldfx_state.h",
+      "sha256": "f022d96d3bf33a8eb1e53fed8c85a8a2696d7c9edbbf3e60db307e29f1353489"
+    },
+    {
+      "path": "include/pe1/fieldfx_task.h",
+      "sha256": "68d573efed13e040970cb4f2f93448625ee8f3084bfda170db816e060719f05e"
+    },
+    {
+      "path": "include/pe1/fieldfx_task_api.h",
+      "sha256": "c08cc6e70932f9c34851d7cf61c63cbc7fbe82ae2ce9618bb8c1fd12b99a6fc8"
+    },
+    {
+      "path": "include/pe1/fieldfx_task_pool.h",
+      "sha256": "89b29719034861a7173137907e275d2136fb73fc9314ffd50bb22fa1fe721f85"
+    },
+    {
+      "path": "include/pe1/fixed_point.h",
+      "sha256": "6b18632b19979555c35d64aafdec151028935523c1d925b91f23f8879b9ad909"
+    },
+    {
+      "path": "include/pe1/floor_clip.h",
+      "sha256": "fa656599970ffd9fad7af18e22444e46bd11fdde5a000c7ba497bf46221fecc8"
+    },
+    {
+      "path": "include/pe1/floor_edge_point.h",
+      "sha256": "fa2e491ce6ae9fd08359718f5843356ba84ced3e047006fac991344679719e79"
+    },
+    {
+      "path": "include/pe1/floor_polygon.h",
+      "sha256": "de65eb58a5d80b867837307d0034c5b53aed5fe1ba5dd5f071ba26c723967c9f"
+    },
+    {
+      "path": "include/pe1/fmv.h",
+      "sha256": "6576e2e34c7b5ca424d520a5923945cefa3f2a1acf0cce89dff7594aa6d973eb"
+    },
+    {
+      "path": "include/pe1/font.h",
+      "sha256": "ce513dfea1d4264b2efacdf68b0ce9069fe838094f77e45322e559016826213a"
+    },
+    {
+      "path": "include/pe1/fx_view_snapshot.h",
+      "sha256": "c1faa84f2bc387aaa441ce10df10386bffe8b3363009a21033fc6c90e2df0376"
+    },
+    {
+      "path": "include/pe1/game_asm.h",
+      "sha256": "f7875c095ab7c80325cc15dedd3f946ccfe7c3c6dad7fc0841104903c86d3281"
+    },
+    {
+      "path": "include/pe1/game_state.h",
+      "sha256": "886d4ea7287eb43cfb35b889bc01bca89af93d65f742591f96fbf929d1c68cdd"
+    },
+    {
+      "path": "include/pe1/game_state_types.h",
+      "sha256": "f7b4e7c6d99781d0b14421fc82a533bbc9df8c255d31bdf47fb484bde3c64667"
+    },
+    {
+      "path": "include/pe1/game_timers.h",
+      "sha256": "89c2b7e9950ce16d15bdb6642851fee2fbc9ba9c844aebd623352cf441bb1115"
+    },
+    {
+      "path": "include/pe1/geom_state.h",
+      "sha256": "9e1aa2f40764a6dee80cc603abd33e1c65b9d4b2bef7bf115506b1ebf8d34f2d"
+    },
+    {
+      "path": "include/pe1/global_slot.h",
+      "sha256": "4200168f34cc2c6a935fe50f8d8949acf69b68c190ab58f52a36dde4e4a6b663"
+    },
+    {
+      "path": "include/pe1/gpu_callbacks.h",
+      "sha256": "01aad7cdb562e9202dcd9177b57ced178c5292b825aa67ecec08131169257821"
+    },
+    {
+      "path": "include/pe1/gpu_command_builders.h",
+      "sha256": "bfefddd687f79975e73d60f7a9e82dd77e3fa9eff43e96334d40924f0fec6d4b"
+    },
+    {
+      "path": "include/pe1/gpu_dma_register_window.h",
+      "sha256": "f5d18f60e5ee5d1887bb38d64133153fd45f52107fd2a6206c63c9561a4c6800"
+    },
+    {
+      "path": "include/pe1/gpu_dma_state.h",
+      "sha256": "903320f74d364ba47db80f93504be3c32cca46569c5c2629250e79f6ad14c06e"
+    },
+    {
+      "path": "include/pe1/gpu_dma_timeout_state.h",
+      "sha256": "7d9251f62d69688c588285424f5d6b3dbfb1c42f20fa82c7d94d192ec6c2d119"
+    },
+    {
+      "path": "include/pe1/gpu_image.h",
+      "sha256": "da77d580808db8e5c0ac9b79b9fe6b476d3ba2ad6e2419328a8df62a3b20367f"
+    },
+    {
+      "path": "include/pe1/gpu_queue.h",
+      "sha256": "2875f81e5e93afe05c8bada94ef7524cc18319f28821754de99aa69c375dde2b"
+    },
+    {
+      "path": "include/pe1/gpu_state.h",
+      "sha256": "0f2f5b1f3c666c16a4b000ddf296708f285517c18dc911e5f5fd41d7109525d0"
+    },
+    {
+      "path": "include/pe1/gte.h",
+      "sha256": "fa473fadef57b0531650c637c57904dabab30a024d8c320505e3ddeb0f096f95"
+    },
+    {
+      "path": "include/pe1/gte_short_vector.h",
+      "sha256": "51fee05a5813da02edc4a5166e84d7fed7fa1e27b1d4abfd9942ce7c2b713567"
+    },
+    {
+      "path": "include/pe1/gte_sine_table.h",
+      "sha256": "b0b51d5b9d4de1fa572d5487eda88bbde1e7b2698cf18004e40e6045d755c589"
+    },
+    {
+      "path": "include/pe1/gte_types.h",
+      "sha256": "d0126c61bf829a778c4017c4d97f1aa17c0d2ee9b6c09f153352854115d88193"
+    },
+    {
+      "path": "include/pe1/hp_loss_hook.h",
+      "sha256": "f782027894c40a851d996b2570b4e2a89528d724af243ae9358d283a59487c5c"
+    },
+    {
+      "path": "include/pe1/inventory.h",
+      "sha256": "00970136b95d0be56b163267162b76172f2e5ce8c3a4c2a08b202a9c28ef1590"
+    },
+    {
+      "path": "include/pe1/inventory_queries.h",
+      "sha256": "4fe492c8968a54001e34bfa3785a0da6acf97a1301a9ba0a0c4b97b776f91fa5"
+    },
+    {
+      "path": "include/pe1/inventory_runtime_types.h",
+      "sha256": "f482094b5a66bed46e6a1e834b66147ff387007206fd27791b8ddd36276c7c40"
+    },
+    {
+      "path": "include/pe1/inventory_slots.h",
+      "sha256": "02099523c43e5bfdeb65a27e9517d8704e5c25cb3822a572ff5647d26f4af2df"
+    },
+    {
+      "path": "include/pe1/inventory_sort.h",
+      "sha256": "b94b444812e8bec9a706b00e3bbc784c92216c18eac526c3be1d451422b185f7"
+    },
+    {
+      "path": "include/pe1/inventory_state.h",
+      "sha256": "c8a91009f8db4d95ff556a91fa3ef573258b241914d7383429e2d0ef0eeff27c"
+    },
+    {
+      "path": "include/pe1/item_ids.h",
+      "sha256": "4cf2a68ae7086e82f19b4228a98c75a80d6c98133837bdc6d0a22109687a887c"
+    },
+    {
+      "path": "include/pe1/map_selection.h",
+      "sha256": "0d0cf53779ed2eb015132810e06d27a70bc8303c78a003146fea0c533f80ca25"
+    },
+    {
+      "path": "include/pe1/math64.h",
+      "sha256": "50add292f24c22f29cba3f2bbfa6ddaa0e8ea18d043fe554c62f35d375e25a6d"
+    },
+    {
+      "path": "include/pe1/memcard.h",
+      "sha256": "674c553ee8a86ac092ec894bda6016a63c8443be9bfd9cb7f0d4bb20000e5633"
+    },
+    {
+      "path": "include/pe1/memcard_save_state.h",
+      "sha256": "28b042d312d9e678e2102b64fb989217f2f2940de5a88f19e7680bdc00851b4a"
+    },
+    {
+      "path": "include/pe1/memcard_state.h",
+      "sha256": "161a07bd4cea63c47479a34a0fe4f18d4fa62693fac36d7c43de13bc278ac1c5"
+    },
+    {
+      "path": "include/pe1/menu_background.h",
+      "sha256": "41b8d3f57396a8115c47288ed4d6d88771242edca77da4a5a2217fa0a9974722"
+    },
+    {
+      "path": "include/pe1/menu_bonus_stats.h",
+      "sha256": "3dc8d40ad9cd06db7223f8f6ad55f010352aa3a9e0f0df554be731e16072a0de"
+    },
+    {
+      "path": "include/pe1/menu_confirm_callback.h",
+      "sha256": "c50be96ab5058ccb3c46f5f44f0758ff1a39d0d33be0bbdf528a65903a0e8b34"
+    },
+    {
+      "path": "include/pe1/menu_context_help.h",
+      "sha256": "2e8b75704b3a8cd3a9afbcb95a9b0bc7567732dd025f5257a57d8d2be8c426f5"
+    },
+    {
+      "path": "include/pe1/menu_dialog.h",
+      "sha256": "2fc04ba31c92fa1d222339d349c3146a0e7418c5002bc53fecfced7ac70d6fcf"
+    },
+    {
+      "path": "include/pe1/menu_draw_list.h",
+      "sha256": "a515372d1c97f192af302628516ddff571f2992960957447914576bf726a4608"
+    },
+    {
+      "path": "include/pe1/menu_equipment.h",
+      "sha256": "7ca00af6601d62db2fa9913007305a65855e64d6e482c4f0fe26eeea42df3b52"
+    },
+    {
+      "path": "include/pe1/menu_flags.h",
+      "sha256": "dca809c58c27563676463df075b43c6c8f2b11377064c712afbd216358989af9"
+    },
+    {
+      "path": "include/pe1/menu_inventory.h",
+      "sha256": "be7c7b440daa793c07111829a601d05165756edd59b048a5899eea4826ffb02a"
+    },
+    {
+      "path": "include/pe1/menu_inventory_root.h",
+      "sha256": "99a0a0e40f448bc9ae4300a2dcd043307a8efb8f013c49205a001d7d7739d26d"
+    },
+    {
+      "path": "include/pe1/menu_item_list_input.h",
+      "sha256": "87958a62a676bb131d89b0fd3610fea5c2c49f0dcf7f43f42dc11fec33c648fb"
+    },
+    {
+      "path": "include/pe1/menu_item_record.h",
+      "sha256": "b47f85bea4262356d5fc000b08780e304e6df3138649eea816b2ed1a9ae46099"
+    },
+    {
+      "path": "include/pe1/menu_item_rows.h",
+      "sha256": "2713317dcf9c693d3ca200b362419082d92709df1d58d3d962b6e6bac4eb34f1"
+    },
+    {
+      "path": "include/pe1/menu_memcard_display.h",
+      "sha256": "10324320d3269b8c891eb5599c65a49e6a4ca3d535b6d3e60290cdd0f0125ac9"
+    },
+    {
+      "path": "include/pe1/menu_notification_dialog.h",
+      "sha256": "d6681d10b3270b10e9deba88577e7dbec977e305f17c5a0d43ec0054dfab4841"
+    },
+    {
+      "path": "include/pe1/menu_queue.h",
+      "sha256": "55a1303d703267c50b467b3ef711b4ba5ef9808864695ecc984551dcc2ec5597"
+    },
+    {
+      "path": "include/pe1/menu_scroll_cursor.h",
+      "sha256": "ca9d48fbc7791af3446056acb0ada87ad75482cfc14abee1e84712cd632128ef"
+    },
+    {
+      "path": "include/pe1/menu_sound.h",
+      "sha256": "f62291d86b4980ba871f48051e7a3fb565609dbe4d484d602dbc463acc7c8b1c"
+    },
+    {
+      "path": "include/pe1/menu_state.h",
+      "sha256": "fcc2d30da921b52bf087eab0263f5401beeaf7d343b6eeffd9000218a92b4c42"
+    },
+    {
+      "path": "include/pe1/menu_widget.h",
+      "sha256": "fc6b1310b30a412752a21de3e100f05e30c83532f96849c3b6173d82c25837fc"
+    },
+    {
+      "path": "include/pe1/model_fill_lighting.h",
+      "sha256": "b8fd83f0ef662d47252813b860a6711d9ec3050b8dfb6e8651944a1c06cb620f"
+    },
+    {
+      "path": "include/pe1/pad_internal.h",
+      "sha256": "2d5a2313760406705144306e7c48cd072081946d6e491cae13a52ab5c902d38a"
+    },
+    {
+      "path": "include/pe1/pad_state.h",
+      "sha256": "adee483bc13d2ee0e6ed098b822fe39385eb8a281cb0af37a6fc2bed0685e44e"
+    },
+    {
+      "path": "include/pe1/particle_augment.h",
+      "sha256": "df29acedfaca125d6affc4a312eff066fb2f02d87d8b7e48d816b431a84463fd"
+    },
+    {
+      "path": "include/pe1/pe_charset.h",
+      "sha256": "dc6f94e3bae223c200ad6cd03e2e94896d54192688134588c8c2cae30a85d8f4"
+    },
+    {
+      "path": "include/pe1/pe_image.h",
+      "sha256": "a53abba015d5ca0f58415d581c1438a7c72793ca3cde894344c44fc91b9856fd"
+    },
+    {
+      "path": "include/pe1/planar_shadow.h",
+      "sha256": "62eacb32ef596eab506aa46788801729a5229285ef1dc4dc2af60bb0f515248d"
+    },
+    {
+      "path": "include/pe1/player_entity.h",
+      "sha256": "b88142b0788a5d2ae8ff5349e710a9f24a13f21272e200090ebe6a5f8b97698e"
+    },
+    {
+      "path": "include/pe1/pm.h",
+      "sha256": "1e3cf1e8fa3c7521050efde1afef541b962bc7ec78d7ef6a6c0ad60771c79dad"
+    },
+    {
+      "path": "include/pe1/pm_types.h",
+      "sha256": "22966b329c8954fb7232c1d922a01fbba79e8881833c6378e1ac79dc90877823"
+    },
+    {
+      "path": "include/pe1/projection_slot.h",
+      "sha256": "0686058f1cb7fe25e0b7c2e0dfd2a1da9af47c36848af374fe2451a348d756f1"
+    },
+    {
+      "path": "include/pe1/psyq_api_internal.h",
+      "sha256": "e765078fbd05136ec2246be62feb54d5d9e9cf3f2d784cf297eef7328aeca414"
+    },
+    {
+      "path": "include/pe1/psyq_asm.h",
+      "sha256": "7f58a6835cd36f91143aa99ed1afa15df1b67452be2fb6e50899180c16ea2d83"
+    },
+    {
+      "path": "include/pe1/psyq_bios.h",
+      "sha256": "0037c5e9a061a73c7321e8960b71ebd34c053a074b83d1698a70233cf400a218"
+    },
+    {
+      "path": "include/pe1/psyq_callbacks.h",
+      "sha256": "450be1f7947f159423b9cf3abbb108174585415d9a49d04ae59c8aaaa8e060a6"
+    },
+    {
+      "path": "include/pe1/psyq_card.h",
+      "sha256": "9f7c321e460a42069f7c06f1fbe67e721cefcc44e92df219536a4201445c0d83"
+    },
+    {
+      "path": "include/pe1/psyq_cd.h",
+      "sha256": "3a75a77e81f59b7de6f3362734bd04095fff76a60ce3a20b5500f553e5d03555"
+    },
+    {
+      "path": "include/pe1/psyq_cd_audio.h",
+      "sha256": "5ea77c6b0af9c2c194ca72d73b913057f7653c35dd8097cea7d8db110d2ad552"
+    },
+    {
+      "path": "include/pe1/psyq_ds.h",
+      "sha256": "f4c2fcb98c4c82e46556747a90e1340b82e08c195939bff8c801e632ca4caec9"
+    },
+    {
+      "path": "include/pe1/psyq_ds_queue.h",
+      "sha256": "1672c245eeb9738064d0fdac7fc185f8192ce90596c3796067bec83dd147fad3"
+    },
+    {
+      "path": "include/pe1/psyq_gpu.h",
+      "sha256": "48ef738497812866727629cbc08e959554512c47e0ce03b9409c7b4e6e3a0f9d"
+    },
+    {
+      "path": "include/pe1/psyq_libc.h",
+      "sha256": "4db42abfa9333a96c82e953086bd25e56e9f544c1aed87e4b0db9d78bbb0753e"
+    },
+    {
+      "path": "include/pe1/psyq_nop.h",
+      "sha256": "0b53e53611b08673836b42c326f9620124e7b48b7c6109f26a9bd4478e0e07f0"
+    },
+    {
+      "path": "include/pe1/psyq_pad_main.h",
+      "sha256": "8c387c3c272aca4d11fc31282e80fdeeef1827836cf0a5658479f231e53958be"
+    },
+    {
+      "path": "include/pe1/psyq_press.h",
+      "sha256": "9a79e7e585485e0c5de261d5901a08323970bca5d039a88ac38209bc3923b4eb"
+    },
+    {
+      "path": "include/pe1/psyq_spu_api.h",
+      "sha256": "201f05b90be345f7ef7d612041b7d5ba8d16692aab07e9eafea6ad5c328f715f"
+    },
+    {
+      "path": "include/pe1/psyq_spu_internal.h",
+      "sha256": "fa1c173cb137852e8308c3788bd5de3d3fce2a8b22851b6c2d02a0437f4d2809"
+    },
+    {
+      "path": "include/pe1/psyq_spu_reverb.h",
+      "sha256": "174c0063dc013372afb4104b5d1bad09f9feb04c9ba2df7b68f3742883826810"
+    },
+    {
+      "path": "include/pe1/psyq_stdarg.h",
+      "sha256": "61d472f3c4c9be645a8e54de6896ff6b42f90d9c629a241ebda8d67bae47ce19"
+    },
+    {
+      "path": "include/pe1/psyq_tim.h",
+      "sha256": "ca4cdad533a0efff49dc61070868323e41defbfb80449575447e87a2a9be2eff"
+    },
+    {
+      "path": "include/pe1/psyq_types.h",
+      "sha256": "78ace140bc5d3b4c11f50f1676b27c70525b83ee56e5e6b678393978b73abe55"
+    },
+    {
+      "path": "include/pe1/random.h",
+      "sha256": "6c5391d11f8b7a21b43afd329be23d8301eb599ee8b38e94067017c485914565"
+    },
+    {
+      "path": "include/pe1/reloc_block.h",
+      "sha256": "ed13b86ed5f35e38e6521b75d0f56d8656a738a5ce13e4bf157cde49a61291b8"
+    },
+    {
+      "path": "include/pe1/render_anim_position.h",
+      "sha256": "f3bea7b3e27bdeb02e9fc73f121e2bff966789ef8e3a402f94770334eaf2a7c1"
+    },
+    {
+      "path": "include/pe1/render_animation_frame.h",
+      "sha256": "d1e874721ea4b0c6bbf723f74a52c53b8201786fcb3f01d19c0dcb4336630720"
+    },
+    {
+      "path": "include/pe1/render_buffers.h",
+      "sha256": "05f10382648b4e3bed33a65a198bcfe00521636eea983749f163f7b83fe83ce1"
+    },
+    {
+      "path": "include/pe1/render_camera.h",
+      "sha256": "a9e64741b2a883d6544a94984a118d42a95278a566b43e8cbbf6abbb0d5fef9a"
+    },
+    {
+      "path": "include/pe1/render_lighting.h",
+      "sha256": "0d7d288d3475139d09f1b02d4560423e9dc78d46cc67dc6aa4d3ad543ff8df69"
+    },
+    {
+      "path": "include/pe1/render_matrix_copy.h",
+      "sha256": "cda50f7688d03a8a679d3f02d5972207400549bd5ba11887959afd95043422c9"
+    },
+    {
+      "path": "include/pe1/render_matrix_slot.h",
+      "sha256": "966eda2b7b393745ad52047ab05623c3993a03dff1604b6461fbbb7ca4631968"
+    },
+    {
+      "path": "include/pe1/render_object.h",
+      "sha256": "ddf3f42327b79869cbf5b225a05c3cd71a1ec2955a6d3577032551dbbc9f2b58"
+    },
+    {
+      "path": "include/pe1/render_packets.h",
+      "sha256": "d339e56881192b51efe46273af949aa345dc7d562759627196414cfe4da5ef02"
+    },
+    {
+      "path": "include/pe1/render_prim.h",
+      "sha256": "3d00ce746e6ce3ac83d7ff2af098e16cb7372995c232251781780684afb2728f"
+    },
+    {
+      "path": "include/pe1/render_setup.h",
+      "sha256": "eb4007b53d2ce3695b272d4b619570b923668ad08bc0ca953991359457d5cd8a"
+    },
+    {
+      "path": "include/pe1/render_shadow.h",
+      "sha256": "2d57328f74ce769dc5e7600ca1a5e14fe506fac34d54ff5e5dafd17bff2890b7"
+    },
+    {
+      "path": "include/pe1/render_tint.h",
+      "sha256": "31879679427569f62550143da57c72892320f63b058c7cf4e045df3f028f9543"
+    },
+    {
+      "path": "include/pe1/resident_tables.h",
+      "sha256": "311c177eb70596a70afd07deff0951647d0f0a7e9c50aa102cae97ef22fb1faf"
+    },
+    {
+      "path": "include/pe1/room_beam_pair.h",
+      "sha256": "d670555d94289e1287959953ae0059563b47568bf505ac46b63a3ccf887ff7e2"
+    },
+    {
+      "path": "include/pe1/room_bounce_glint.h",
+      "sha256": "36fb393ceac3f84e0a0834792c976386602f7aaee16ddd8daa0a964f792b36b6"
+    },
+    {
+      "path": "include/pe1/room_debris_triplet.h",
+      "sha256": "eedd0c40898aaf3ceba9a0f147a7bc2f55833981541d7eb16491eb41e581db34"
+    },
+    {
+      "path": "include/pe1/room_drift_pulse.h",
+      "sha256": "0e6cd9aaf45a9919e3e71ee1b1a7b6f6477b3f2a04e6cde1308f0aeabc8f8019"
+    },
+    {
+      "path": "include/pe1/room_drop_field.h",
+      "sha256": "dae1ae27c5ee14ea18c8ff2c6d3086dd1e20d11805339d77cee60884a8f76e0d"
+    },
+    {
+      "path": "include/pe1/room_drop_field_class.h",
+      "sha256": "10bc230e7c81edc9dd9e0a6d7e8b17cf59c02fcc7aca316e99698b44858ff451"
+    },
+    {
+      "path": "include/pe1/room_effect_sequence.h",
+      "sha256": "cc2c7b96e9dd7911546e6891dee82d19816712ae043348aaacca80fc116c6112"
+    },
+    {
+      "path": "include/pe1/room_effect_state.h",
+      "sha256": "93907233b9a4a4798c4d536342c04b51731a78a93171dacd536c552e80e49fb8"
+    },
+    {
+      "path": "include/pe1/room_ember_burst.h",
+      "sha256": "be0d302bdd558b277072c4377328ef939d07bbba6ba71a964ea5a9cae7df4593"
+    },
+    {
+      "path": "include/pe1/room_ember_spiral.h",
+      "sha256": "08261feb3d1a12dc8a7d09695645810e56ea80bb72d35c66b37c32a9bd60ae65"
+    },
+    {
+      "path": "include/pe1/room_falling_burst.h",
+      "sha256": "b483e485ff1a4c940c02f9655c41b1681301dfb336b621390e1610aa99c2d734"
+    },
+    {
+      "path": "include/pe1/room_flare.h",
+      "sha256": "9688829751305dbd0ff00690a36f5f70148070ccb29be11abc414bb2905f073e"
+    },
+    {
+      "path": "include/pe1/room_floor.h",
+      "sha256": "8b8619e0001e20a28b563a19f749647394958f15257dc74944cf44db29baf130"
+    },
+    {
+      "path": "include/pe1/room_floor_walker.h",
+      "sha256": "cd198bbf0abaee0b97996d0cf21ac567ebad51ee28da612b6eb208274a4d3b58"
+    },
+    {
+      "path": "include/pe1/room_four_sprite.h",
+      "sha256": "dd4569ad13c3f8d60074522a77587c35fd5ca314256c56d1f4c1b719825266be"
+    },
+    {
+      "path": "include/pe1/room_fx.h",
+      "sha256": "4969f0f5124a7c264f1e2db5ee0226c10e6ccc27ad40503a4874166947a7eb41"
+    },
+    {
+      "path": "include/pe1/room_fx_model.h",
+      "sha256": "4b89d5b46c1f8298538a3b67f109d74d7497ec5010d835484c2a55f8fdab47a5"
+    },
+    {
+      "path": "include/pe1/room_glint_ribbon.h",
+      "sha256": "1fc10d1c59e8ab6d1f965a9d11d32a7e2d45b314e2fa3ac2cc21e082ce8577ac"
+    },
+    {
+      "path": "include/pe1/room_glow_orb.h",
+      "sha256": "842705d29bb77cd6fda987cb1a71ef2d238e064ad66a8064033875ca8d946ecc"
+    },
+    {
+      "path": "include/pe1/room_grab_attack.h",
+      "sha256": "ed0a9c05ba0636f39c9a717ea7baaa03fef4d0b7ead4b4e07da37ab76f0fb256"
+    },
+    {
+      "path": "include/pe1/room_ground_eruption.h",
+      "sha256": "ced9673ede92f4d69f72467935e27a0c102e7ba1c6622f924b052088b110fb82"
+    },
+    {
+      "path": "include/pe1/room_ground_sweep.h",
+      "sha256": "6865cc6208b40e7b260fa37f479a79993bf968f57e044ee49b53c65920a1a552"
+    },
+    {
+      "path": "include/pe1/room_homing_flash.h",
+      "sha256": "5df702d436e8a600aed2aa49fa3232a1f4b7cea12feb28f8a327a79bb34183c9"
+    },
+    {
+      "path": "include/pe1/room_homing_model.h",
+      "sha256": "4d37b405446969ac3494d698ed121e2d29d516871dd4ebf61ba9b06e6923b0ba"
+    },
+    {
+      "path": "include/pe1/room_interface.h",
+      "sha256": "488f7b655046cd80e8c1f31141f0a3eb88e71585405ca68241fcc245ccf93d0b"
+    },
+    {
+      "path": "include/pe1/room_liberty_choice.h",
+      "sha256": "dc82b28abb45716bf83e22721be0fafb221ed734da482620c9cd0d827caa9910"
+    },
+    {
+      "path": "include/pe1/room_line_burst.h",
+      "sha256": "5ba05d94c3b5a13f0f543ad2a8de02c440ae711bc47b33945a279f526f650b7b"
+    },
+    {
+      "path": "include/pe1/room_m005.h",
+      "sha256": "f5dc82185eb4315f7a7ece11676bdaeda28c4b3c6c92901e498469d21944727b"
+    },
+    {
+      "path": "include/pe1/room_m005_beacon.h",
+      "sha256": "1f9787729f76ac0409cd3206151d20f520e416d606d60cc9c30358329599143d"
+    },
+    {
+      "path": "include/pe1/room_m005_drifting_sprite.h",
+      "sha256": "7caa385c8c39364309c603118396ca14594e3440f4cf1fc81959b57875ab32de"
+    },
+    {
+      "path": "include/pe1/room_m023_beacon.h",
+      "sha256": "ee647daf40be20b4075dea3dd1f0ed3758a65f8bd4b97b570eefa4c1f981b0f6"
+    },
+    {
+      "path": "include/pe1/room_m023_effects.h",
+      "sha256": "335f88a6eb0e9743e417bafa86be2695dc85fe0c883e2407f6776f1dbaee777c"
+    },
+    {
+      "path": "include/pe1/room_m086_seeker.h",
+      "sha256": "56eb173a26a64b735c29371c0d360c7804cce836e7a25b30e75122d0db868c56"
+    },
+    {
+      "path": "include/pe1/room_m089_model_pulse.h",
+      "sha256": "f8e14beeed5618d3f95f3a0d75b944bc6f94c9dec4eb058d4786d163a96069e0"
+    },
+    {
+      "path": "include/pe1/room_m089_spin_model.h",
+      "sha256": "4e558a267a1ed1a34d635a332628aa4a05ccfae8ef356feeac2f329b51bc890d"
+    },
+    {
+      "path": "include/pe1/room_m089_trail.h",
+      "sha256": "120cd95f153da9552fcbaa50f14a971456c5e8842cc7665aadc4faf8f48c2f21"
+    },
+    {
+      "path": "include/pe1/room_m123.h",
+      "sha256": "90ebb8eb797d7abb018e720fbed6b8ccc7ec00883eb10fe9b878dc548f8711b5"
+    },
+    {
+      "path": "include/pe1/room_m123_beacon.h",
+      "sha256": "801f63d01570838097a5f332678a0fdddcd0767bf0f8fe2b29055682043071fa"
+    },
+    {
+      "path": "include/pe1/room_m123_burst_particle.h",
+      "sha256": "89f42ff34dca16b075d437629f7a092c331d25b700af6acc43784e86f0f762ce"
+    },
+    {
+      "path": "include/pe1/room_m123_glow_burst.h",
+      "sha256": "9e65c184e6169bc183fa68712d5f6d46bab473f41ea8ae901a6909c795501bf4"
+    },
+    {
+      "path": "include/pe1/room_m123_joint_triangle.h",
+      "sha256": "7d59b48f76b662fb2c6cfb228fdfc950c7bc8156f3469ff10040d0499b823b51"
+    },
+    {
+      "path": "include/pe1/room_m256.h",
+      "sha256": "6c8e5fee6525ac587d7f9a266562c58ad3a5ad86cde5e8f46581b568dea7eeeb"
+    },
+    {
+      "path": "include/pe1/room_m256_drop.h",
+      "sha256": "d8d5745d0943480acdab614378591add7ceb2d9dd0172c5c2eaeecd92621ac69"
+    },
+    {
+      "path": "include/pe1/room_m256_effects.h",
+      "sha256": "0178a14bd154df5c8e882e6b29ee6984c3f7301431d8ab66282494461e874936"
+    },
+    {
+      "path": "include/pe1/room_m256_swing.h",
+      "sha256": "b3776bc45a6f66b924055be4c1648dfb6b8a2a9b92acc3144998c0f3661a5d8a"
+    },
+    {
+      "path": "include/pe1/room_m256_trail.h",
+      "sha256": "d6ccb25760c9027cfdd0efc8a3924eb071de7551621966bb2fec733a8e8603f2"
+    },
+    {
+      "path": "include/pe1/room_m349_effects.h",
+      "sha256": "bb77e35dfa0430e51510fd471b823944aa0154539cfd9df48a4e7ed16927b7b4"
+    },
+    {
+      "path": "include/pe1/room_m350_drop.h",
+      "sha256": "f83295f80101f1a1463af228962045ded2856d0388e8ae0d619d77ec6f017e6b"
+    },
+    {
+      "path": "include/pe1/room_m350_effects.h",
+      "sha256": "4ac5cf0aed58fd09955f8fd5f2075f6ee8a3c36ac01abcb67fcef9e3a229371f"
+    },
+    {
+      "path": "include/pe1/room_m350_sweep_trap.h",
+      "sha256": "22901b6345060dc588dc965aadda699364ee8b88f5cf53e394b93bbfa39af155"
+    },
+    {
+      "path": "include/pe1/room_m404.h",
+      "sha256": "8c76b89ac9ef7d32bd33fe6ebf52d601c2fe6f420311b233112b49b0fac35fcc"
+    },
+    {
+      "path": "include/pe1/room_m404_drop.h",
+      "sha256": "766bf1b471d68ca6a6e3919ca4171c5f69b081fb3ae1a12a752e2c7441dc184c"
+    },
+    {
+      "path": "include/pe1/room_m404_effects.h",
+      "sha256": "45e9ac5c7fe382a833dfd7551c5a150364e776e9eceea54f09e3a2e6dd7c2ae1"
+    },
+    {
+      "path": "include/pe1/room_model_pulse.h",
+      "sha256": "ee5ffa6822e70ba8af3d6e0c6759efb94d307d85d09c14656e52378d5d5643fb"
+    },
+    {
+      "path": "include/pe1/room_model_pulse_particle.h",
+      "sha256": "8edd634e75b1ac1f1306ef498f0710efd378486c170bcfb1fd31dfb3ebcda6ef"
+    },
+    {
+      "path": "include/pe1/room_module.h",
+      "sha256": "8a97b6773b43afad22c1507ceacf666f6960f5be1080de8c519307151ea0230b"
+    },
+    {
+      "path": "include/pe1/room_motion_init.h",
+      "sha256": "36e5d148c3265bfb0cc5da90a20bfce7a7d3176f169685ce506ba359cc6a02f3"
+    },
+    {
+      "path": "include/pe1/room_motion_trigger.h",
+      "sha256": "6e5fb7ae1a8a1d26024d1f1f822a80f9c7ce639f2955250f49c6f8a3bc3e028d"
+    },
+    {
+      "path": "include/pe1/room_object.h",
+      "sha256": "f8b92b889dbefa09abd22e4428ae1670f91d9aabcb66ad6a22ba977a8fb6ed64"
+    },
+    {
+      "path": "include/pe1/room_orbit_set.h",
+      "sha256": "ee452fbf66246c9a891135916f6ccd97c2480de3cc40d58270c05385b9211bcb"
+    },
+    {
+      "path": "include/pe1/room_orbit_spin_burst.h",
+      "sha256": "ed99f9365480e502128b548e6098b1edb1242f6417eba47fd156a07155dd35a5"
+    },
+    {
+      "path": "include/pe1/room_orbit_trail.h",
+      "sha256": "b20f1d13ea7d7986b3fb3996d6ee61b929277ae7f79299b4addaa6391fb3d74b"
+    },
+    {
+      "path": "include/pe1/room_orbiting_pair.h",
+      "sha256": "537b5b3f60d5a8c31164b4f25f892579cad7b755f785e8ad2f284e619570c615"
+    },
+    {
+      "path": "include/pe1/room_paired_glow.h",
+      "sha256": "4cac4978620f17a3355265c7383b1747e536854bd7d798f7637400a536388d1d"
+    },
+    {
+      "path": "include/pe1/room_particle_state.h",
+      "sha256": "16b6a41996dfb2d79f3c016dbebc6607d401e774c49fdea0174a2bee4be038ee"
+    },
+    {
+      "path": "include/pe1/room_rearm_timer.h",
+      "sha256": "efd15de8cdd9ddce78e0a017f51b45e88c266cb260146ebb22461f2c54915465"
+    },
+    {
+      "path": "include/pe1/room_ring_pair.h",
+      "sha256": "d7dd297ba6447e86b0307794e4515e59b248ce91c095fec07435655b759b7450"
+    },
+    {
+      "path": "include/pe1/room_rising_spray.h",
+      "sha256": "c8f8c7a6e13f7e4cc8482b646acfd2917ecff38db4d43ce9474f608ff1d302fc"
+    },
+    {
+      "path": "include/pe1/room_script_record.h",
+      "sha256": "f2d80f568d2ba938ebffc531ec3021b71831fbffd59e4ec6ee4bbb6df466458d"
+    },
+    {
+      "path": "include/pe1/room_shake_burst.h",
+      "sha256": "2e6cabedd988dbc6ee4693ff1813930cb0762ef487842e27c89b4df779657ebb"
+    },
+    {
+      "path": "include/pe1/room_sound_burst.h",
+      "sha256": "3b50d288fccdb4a6cc9d5a1975592e26110d80b6b551ecbbcc1fe83e1ca95c55"
+    },
+    {
+      "path": "include/pe1/room_sound_slot.h",
+      "sha256": "1814ec9cf5bb8c63d0a6ce942092290a5d724d58d2a9671223a1d666699169e5"
+    },
+    {
+      "path": "include/pe1/room_spark.h",
+      "sha256": "e08f5483ab6732a8131e5bc8c7dcad303c2438f037809a91a78ec1215ba43e9b"
+    },
+    {
+      "path": "include/pe1/room_spark_attacks.h",
+      "sha256": "d5be7b0f87e91bf374bc31cc292f2515babfb7e19bedaf3cc477e2d8a127890e"
+    },
+    {
+      "path": "include/pe1/room_spark_barrage.h",
+      "sha256": "e7e099ddf1ecf1592fcd038a2e1c7b00d1c71e05900a5c36c667dfc036533c9a"
+    },
+    {
+      "path": "include/pe1/room_spark_ring_burst.h",
+      "sha256": "817b90604d84d3b4b1b4c57c2939a7cc96d9662258375118087e2871b5200786"
+    },
+    {
+      "path": "include/pe1/room_staged_motion.h",
+      "sha256": "0d01fcc01a86ff4fc29c3a7efe05c76b007bc431ec98b5dcb02b03fd497f6e8a"
+    },
+    {
+      "path": "include/pe1/room_swirl_rise.h",
+      "sha256": "0bd00ae848ab4e01a1023ec678f8a6d4bdb0178bed39f620a063bc0e71dc7f62"
+    },
+    {
+      "path": "include/pe1/room_three_particle_class.h",
+      "sha256": "239e938299ba5ddb2495cd9f3acd02e94a16886107a4d1e3fbf76630042bf8d8"
+    },
+    {
+      "path": "include/pe1/room_trail_burst.h",
+      "sha256": "3be489ffa2bdaab0262f516282fb0d86ebee182730166e356e6cbe206aafd619"
+    },
+    {
+      "path": "include/pe1/room_twelve_effect.h",
+      "sha256": "01cb15b581d4184ccd84f8db70e5a56fdc3abcbeb6b0d660e7b88165f12e8f3c"
+    },
+    {
+      "path": "include/pe1/room_twin_ribbon.h",
+      "sha256": "dc2f92146496de387dbd37f7be73b10d2905265548608cddd70e98ca5182e731"
+    },
+    {
+      "path": "include/pe1/room_window.h",
+      "sha256": "268494b01b9210b6f095a27df232b7a8d39cc92bfbd3b6b2e05a96e63b1275c0"
+    },
+    {
+      "path": "include/pe1/s32_vector3.h",
+      "sha256": "98d6be143eeafd6769f729d2ba304cab49be587716504d6070d8daaa22401ae9"
+    },
+    {
+      "path": "include/pe1/save.h",
+      "sha256": "98bcadf496445be7c4f4e3d7fb0287bb242feba24034f99947c791d0f1e3a7b8"
+    },
+    {
+      "path": "include/pe1/save_blob.h",
+      "sha256": "aafb06ffee939935afeb4db4d52e9c6e0324c9ad0aed7886ceb38125adae6b3c"
+    },
+    {
+      "path": "include/pe1/save_slot_metadata.h",
+      "sha256": "e00406534e5b74bb5f7bb5ce8b03838ae11d17096bfb4c37d333c9b850232e11"
+    },
+    {
+      "path": "include/pe1/save_tail_state.h",
+      "sha256": "f38f189f403800c2460f324893b14c455b1ec2ae7b8bd1d5463aaef626f14c35"
+    },
+    {
+      "path": "include/pe1/scene_archive.h",
+      "sha256": "5d0665a8d462ea1231da81756dc51d5a27ee8768946275ba1cb91a7722ca8c97"
+    },
+    {
+      "path": "include/pe1/scene_assets.h",
+      "sha256": "2a68fd7849bd66e9e2eb64f3e8a9201e8580227525ed1283fb50cd1aa4add968"
+    },
+    {
+      "path": "include/pe1/scene_dispatch.h",
+      "sha256": "d5a61981d05625c6abab4ecae3a54577f419047a2d989826bb1452ac43a28afe"
+    },
+    {
+      "path": "include/pe1/scene_e08_glow_sprites.h",
+      "sha256": "2c93203e2b2fd0b614b9fafb0116e1495136dce1a4d4dcd4e707bc7e3b47f0f0"
+    },
+    {
+      "path": "include/pe1/scene_e08_layered_sprite.h",
+      "sha256": "cb1ba66580429d460b857a62e9347e12a38a7c9f2803033ca420b0fb2600dc30"
+    },
+    {
+      "path": "include/pe1/scene_e08_orbit_particles.h",
+      "sha256": "cbf97013c72b398c85bd078d72cb32a93c9b1883b855d10bf3188bb8c75429af"
+    },
+    {
+      "path": "include/pe1/scene_e08_ring_effect.h",
+      "sha256": "3ba6eec6eec172252df63ee708dfcaaa650201f3f175642d5e63f2e40034203f"
+    },
+    {
+      "path": "include/pe1/scene_e18_effects.h",
+      "sha256": "028b0b8deef247fc1595fb3f854ed954f2f147f0b8f254373b80d18e13c0a5b9"
+    },
+    {
+      "path": "include/pe1/scene_e18_pulse.h",
+      "sha256": "0295bc0b3790907129efe1f49f7d4554d2c6a35baaa1b65c510df20b32e7d45d"
+    },
+    {
+      "path": "include/pe1/scene_e19_2_ember.h",
+      "sha256": "08d79dab65a20b7768af8310a4d212ca4a774fb29fedeada1338713525b07ffd"
+    },
+    {
+      "path": "include/pe1/scene_e19_2_homing_burst.h",
+      "sha256": "486877919b93b8c419cfa7577d4521fa9664151669d7d41c76dc6cbae26c1e45"
+    },
+    {
+      "path": "include/pe1/scene_e19_2_spin_ray.h",
+      "sha256": "1fc68238f1568a2f1c1c65fb7cf014f75e9bb4e17cdf56481acf91da0caca9a1"
+    },
+    {
+      "path": "include/pe1/scene_e19_2_twin_glow.h",
+      "sha256": "ed220fd443654beae5d25e9dfcfca2f3316cb3f7dca016f4700aab795cd0a8b0"
+    },
+    {
+      "path": "include/pe1/scene_e19_blast.h",
+      "sha256": "379e313db6425c3e9d1a3e8600c6f8d11338105c12c5b721d0f8fa8c68beeb8b"
+    },
+    {
+      "path": "include/pe1/scene_e19_selection.h",
+      "sha256": "729f84823b65172086451d52e2d987953cbd31c9861fa9775e56aa6f8a95b7af"
+    },
+    {
+      "path": "include/pe1/scene_e20_flare.h",
+      "sha256": "9eae812767c0b669fd62812e586bdda164d7d3da2a63bb383048b75c86dc2e28"
+    },
+    {
+      "path": "include/pe1/scene_e20_flare_draw.h",
+      "sha256": "d3e2646cdb1adfcfd6ba712acc85499b4039f172549a7680e2474896b74a6edd"
+    },
+    {
+      "path": "include/pe1/scene_e20_hover_orb.h",
+      "sha256": "5249359202bb62ae026cb30d17728f95d20288ecccd4acaf93257ae35b86f29b"
+    },
+    {
+      "path": "include/pe1/scene_e22_ember_burst.h",
+      "sha256": "e0b0e868d94e4dae68276cc8790743a472e05cf488004251f66198fcd13fbf23"
+    },
+    {
+      "path": "include/pe1/scene_e22_quake_blast.h",
+      "sha256": "e2e3bda31493a40ca69690a98880085f4a6ffb7e347bafa13183f6083e16f6cf"
+    },
+    {
+      "path": "include/pe1/scene_e22_ring_burst.h",
+      "sha256": "b63c38737baf250bed0968d52f5c4f25fa4fa4cb47c13a89c659b10c6439cc51"
+    },
+    {
+      "path": "include/pe1/scene_flags.h",
+      "sha256": "e7edc039dafeb8ce3d173255e4e0a99f5291eb1b4b2b29eab6538fdb74a5cc87"
+    },
+    {
+      "path": "include/pe1/scene_fx.h",
+      "sha256": "30fe45c16fc015ecdc5fa0dc8286a70ef2b3ed54f424d551908225383522c3d8"
+    },
+    {
+      "path": "include/pe1/scene_glow_model.h",
+      "sha256": "2b8b5ba7512ae423cb408cca63996f13211f48edd262e692991584f5939d78a4"
+    },
+    {
+      "path": "include/pe1/scene_grab_head.h",
+      "sha256": "35ed6661fba82f8151045e354741b82bbab1916d0f72d82a8d697404e26fa57f"
+    },
+    {
+      "path": "include/pe1/scene_grab_trigger.h",
+      "sha256": "e9e8a0ebc035f6a082a5ac5999d9c105b2ecc00203918a04ed6d2ac605675727"
+    },
+    {
+      "path": "include/pe1/scene_particle_slot_draw.h",
+      "sha256": "ea9dbf49c4ec0a4ef8b5c40e9ab7cf0efa6b5ccb0508fc8408bd1a8d7ba68f03"
+    },
+    {
+      "path": "include/pe1/scene_player_orb.h",
+      "sha256": "f542a3af390f174e719954fe470876ffeeee4d8cf3c0ebe5bd61a6074d37cff5"
+    },
+    {
+      "path": "include/pe1/scene_ring_sprites.h",
+      "sha256": "9fabc68a1e7b80e7c4dd5bfa27afb483a42c7e5e24309c374640553013394abf"
+    },
+    {
+      "path": "include/pe1/scene_room.h",
+      "sha256": "6ed7d9324266516668feead8c130c2e9144bf19e9d7beb0b457102c750c4bacd"
+    },
+    {
+      "path": "include/pe1/scene_room_load.h",
+      "sha256": "42b817f0d8ed9599e885d8670928dd8c55d987926891354234e36491c8775d36"
+    },
+    {
+      "path": "include/pe1/scene_transition.h",
+      "sha256": "7c71d2fd06857627b75cc3d9bd85027fb858eec4014dcb8f545a96689e74cae2"
+    },
+    {
+      "path": "include/pe1/script_anim.h",
+      "sha256": "07910a68f2b52c00fd94ab5e20fc3fb6cf173737f0533c783a8c4947b859e6fd"
+    },
+    {
+      "path": "include/pe1/script_expression.h",
+      "sha256": "0db8c0f7ce16381f6849354407e3cd58ce5b45f11e42bdcfd99e8e3a15928fe1"
+    },
+    {
+      "path": "include/pe1/script_node.h",
+      "sha256": "8ee5b05651d3f89d787f22bf9d4edbae4a2b82f695efdb7d3291be4a88f6e8ca"
+    },
+    {
+      "path": "include/pe1/script_queue.h",
+      "sha256": "d6cdbf9a4cd16ad8e9006c1aafa676d4c2c678b632d8f2f0379a89ef3133f4d9"
+    },
+    {
+      "path": "include/pe1/script_state.h",
+      "sha256": "53b7bfd88b612ef8a5078f16cf9e782490562766fb9217484b53fffed0af8313"
+    },
+    {
+      "path": "include/pe1/signed_rect.h",
+      "sha256": "0d55d24b7325376deb7ced0198526942f6284e500fcdfcd89faa3b68e53d7cb4"
+    },
+    {
+      "path": "include/pe1/stat_modifiers.h",
+      "sha256": "bc0e81c1816aa470535f039b38adcdb3cdc0cc91a98740c05f6637da395909f2"
+    },
+    {
+      "path": "include/pe1/text.h",
+      "sha256": "e2537bd65c834ed59a82b365ef245990424cfdc198a9c2b7085cb21a19c15d2b"
+    },
+    {
+      "path": "include/pe1/textbox.h",
+      "sha256": "a9d8ef01a4a9d7c0b49fa33d71127db4fd5609bf8424388486ef6f9ad2004569"
+    },
+    {
+      "path": "include/pe1/textbox_open.h",
+      "sha256": "24dbbb486115c36fc45c3afea7bee856c1d3f6c7ab3518e07a3ff2f2adc2b002"
+    },
+    {
+      "path": "include/pe1/vector_types.h",
+      "sha256": "c39bae4fb322d764c21ee00a593130cc7ba09ba17a06e8df7e22b5cac9c7a270"
+    },
+    {
+      "path": "include/pe1/weapon_list_output.h",
+      "sha256": "be7d237f55d755ee6957851be829b814d524d261420ebe3e51a2ccae83616973"
+    },
+    {
+      "path": "include/pe_actor_texture_pages.h",
+      "sha256": "87dc592224ded42c5d485623741f2e40dda818c250517903de7b4ebc48c99bdd"
+    },
+    {
+      "path": "include/pe_hooks.h",
+      "sha256": "dedb979456123ce22825815ed9546f22efa46cd93fe49496fdc6c917db014e55"
+    },
+    {
+      "path": "include/pe_model_texture_pages.h",
+      "sha256": "fbbe4eddd6e33e1b3ee1b3e517dfc56faf5617a9bf763d3e25642df66140298c"
+    },
+    {
+      "path": "mods/CMakeLists.txt",
+      "sha256": "2fc08d9dd61f0037ffc77b2d716c3791283917f98a91fed1542d70fced3660ac"
+    },
+    {
+      "path": "mods/host/pe_api_native.c",
+      "sha256": "3f891a936af44cec98137be7138e51db2a7b18457950a0a1850528a0a77a73c2"
+    },
+    {
+      "path": "mods/host/pe_api_native.h",
+      "sha256": "9e8e8ec7b3153724f1a01874b005a36a9c3eee7355e3eccce8726e0379440657"
+    },
+    {
+      "path": "mods/host/pe_api_native_game.c",
+      "sha256": "ff1b9cec3a6f202905aedfd9c4bc6efe162aa0634623a873f0a38cb80e4afce0"
+    },
+    {
+      "path": "mods/host/pe_checkpoint_collection.h",
+      "sha256": "3941617260d761c9b455b4ba7f28dcdaff6c835cd2e31a2898c0c52a6df402a8"
+    },
+    {
+      "path": "mods/host/pe_checkpoint_economy.h",
+      "sha256": "a1b28370c5f40027367309b2868ea593f7091e684f32329d5455d2040b38ddd5"
+    },
+    {
+      "path": "mods/host/pe_checkpoint_game.c",
+      "sha256": "4d827a98d4cade3af8fbe8894a42958d83d3bd7730c3d5c461e70d7743d2af4a"
+    },
+    {
+      "path": "mods/host/pe_checkpoint_game.h",
+      "sha256": "dcdfbd835fe278e4e2c129ae4296558a57a259eb25febf137968cf39bce97767"
+    },
+    {
+      "path": "mods/host/pe_checkpoint_qol.h",
+      "sha256": "292e0df7284663735aeb00ae487591d36024941ae250493999a8c3c85ccdb86e"
+    },
+    {
+      "path": "mods/host/pe_checkpoint_rebalance.h",
+      "sha256": "9baf5015517fc4ebd32ddeb52a9fc7b69ae735b869511545185ba2829ee1ca5d"
+    },
+    {
+      "path": "mods/host/pe_checkpoint_wire.h",
+      "sha256": "012650382e2127c511a46fbdab4cab9b90fd5d48338c53ae1faf0ba8254850cf"
+    },
+    {
+      "path": "mods/host/pe_content_api.c",
+      "sha256": "e1ce15a0ab4c6382971b04e590068a778ba1ebeb7159ae0d504a561d120e282a"
+    },
+    {
+      "path": "mods/host/pe_content_api.h",
+      "sha256": "c241b0c551c927bb34f9101e9eb0eea47887d6a7c8700ffaff1be6940e5d4156"
+    },
+    {
+      "path": "mods/host/pe_disc_assets.c",
+      "sha256": "e516b726a3a635a4f5bbca485be5f82e2602a0d6459b9a1b43d1d0d6141a3740"
+    },
+    {
+      "path": "mods/host/pe_disc_assets.h",
+      "sha256": "539261f2894a87d6e299d7953787af50e3c0f32d54c621c7f6ecc55affa88613"
+    },
+    {
+      "path": "mods/host/pe_economy_policy.c",
+      "sha256": "08df8227f85a782dd8a992502ada5984e3a2c4fca614d39eb92fd414168033e0"
+    },
+    {
+      "path": "mods/host/pe_economy_policy.h",
+      "sha256": "fe8601bd4b471cc62036a3eb66200d6196a814b3a7b82f5a6ac8b0cb9a4baa9a"
+    },
+    {
+      "path": "mods/host/pe_equip_sync.c",
+      "sha256": "c90d9d47023f388b1a4d930561c028daa66d842a9d36369ec2830a1839eabe41"
+    },
+    {
+      "path": "mods/host/pe_extension_store.c",
+      "sha256": "3d1c538d9f8a634272e123939d277104f6cf6e6ab535606742a4984c1f7c8e36"
+    },
+    {
+      "path": "mods/host/pe_extension_store.h",
+      "sha256": "0d5853ce93443aa18a294c9822137c4e3c34f49e9a138e9ecefb7e0c727b0b55"
+    },
+    {
+      "path": "mods/host/pe_file_io.h",
+      "sha256": "85e3275374b4d7cdac6d35dd7bdb83a0ee53b32ffa9f7000fa2e4878bce88a58"
+    },
+    {
+      "path": "mods/host/pe_game.c",
+      "sha256": "5ff9a3860e7fc737d619bd3a855328f16f26b4b14a6b7ff32e9f9c6575ec1620"
+    },
+    {
+      "path": "mods/host/pe_game.h",
+      "sha256": "d045e273620f7d6cb518bd4b6ad90bf76f1ad2d8b56f46c6c594513be6518354"
+    },
+    {
+      "path": "mods/host/pe_game_facts.c",
+      "sha256": "c91bedfc8a61b7c7c7ba9ee54aade95700f16322ab01071fcce2d9275f677ec2"
+    },
+    {
+      "path": "mods/host/pe_gametext.h",
+      "sha256": "35bff53e70b5196557124c5d0ea7264e46d776330cd393a7141234dc66c4f096"
+    },
+    {
+      "path": "mods/host/pe_image.h",
+      "sha256": "5ba819d0ec9f133620b5e3520c1fecd553c39c3321649a62b1388b1e3556509d"
+    },
+    {
+      "path": "mods/host/pe_inventory_api.c",
+      "sha256": "b9bf22de58066710847baf9565c3970c40bbdd38052486e72fb784a3a60665df"
+    },
+    {
+      "path": "mods/host/pe_inventory_api.h",
+      "sha256": "70d9a94459d7d43cd57c8a0a9fecb09dce4d8ab322bc7bc9eb1154cc794dba49"
+    },
+    {
+      "path": "mods/host/pe_inventory_internal.h",
+      "sha256": "44e116e049c9faf3a3ef1cdb6b437260fb4acc60e35590838b90e54278caa52b"
+    },
+    {
+      "path": "mods/host/pe_inventory_service.h",
+      "sha256": "f632420d18a77c6da5db2ea020014113304e6b63e404a2bcbe0280859bf9fe85"
+    },
+    {
+      "path": "mods/host/pe_item_table.h",
+      "sha256": "00d0852f1ecc190a824c4c68ca2d243379882525a8ae6998c3f13b3d7693a2b7"
+    },
+    {
+      "path": "mods/host/pe_legacy_guard.c",
+      "sha256": "c819a7426db46649a7398d0b1be3c6aad5ab10a6201dbd05c614a4aa26737bbd"
+    },
+    {
+      "path": "mods/host/pe_legacy_guard.h",
+      "sha256": "077caa6805e81364bb887802e62b9b3c37ea8e134bffb58f014d01c75079d83d"
+    },
+    {
+      "path": "mods/host/pe_main_menu.c",
+      "sha256": "fb3822a53edc36e009a44dae10646766ca04c09f1c720458cebb762d9e6acb73"
+    },
+    {
+      "path": "mods/host/pe_main_menu.h",
+      "sha256": "6ffdb12895db4fe0dd27140980a90f26ecead9de8ae4680afef01f333b50c2b6"
+    },
+    {
+      "path": "mods/host/pe_mod_host.c",
+      "sha256": "c01b7b394ca75a5f55f5c1d1cd64a8395f11ba997743464043931eab122079af"
+    },
+    {
+      "path": "mods/host/pe_mod_host.h",
+      "sha256": "c940f01d565d70601110e32cd3964fde51a8ee6cae783f1f4f7308460da4d102"
+    },
+    {
+      "path": "mods/host/pe_mod_menu.c",
+      "sha256": "7e564217ad20c2460bf3d9f23722fc9e6b1ff7f842f26e0a2b925f814185a80f"
+    },
+    {
+      "path": "mods/host/pe_mod_menu.h",
+      "sha256": "aa47c8cd54f7cc4b4706b00d1e684e0400c1c1e937e068bc2ab169f80dd79fb1"
+    },
+    {
+      "path": "mods/host/pe_mod_panel.c",
+      "sha256": "73c5e1414f0ee8676a85398e035a44af05f309524a0a8eb9c2f6ffb552b3d1e8"
+    },
+    {
+      "path": "mods/host/pe_model.c",
+      "sha256": "54c34591a83c5b9cf24327d08798d23c27147ff4b56fe776fe45ed207b2ec839"
+    },
+    {
+      "path": "mods/host/pe_model.h",
+      "sha256": "2b5bb2934e5a9402f8b6d88956bd42831ec370f66a4ff6aa20974ec68808868a"
+    },
+    {
+      "path": "mods/host/pe_model_skin.c",
+      "sha256": "756d75f0968c8f8e000a65fcc05c8499c107871205197629cadeb6fff281b344"
+    },
+    {
+      "path": "mods/host/pe_model_stage.c",
+      "sha256": "ca829c101c210b2e042666fc444b1241337fd4476004e3f11791f579326a53c0"
+    },
+    {
+      "path": "mods/host/pe_model_stage.h",
+      "sha256": "bf596750799b85f9c6dce8702611275c792d34da68c369ba61e473ae9be2052c"
+    },
+    {
+      "path": "mods/host/pe_model_view.c",
+      "sha256": "842792bc130b1b39bd9aa27d50c92575d6d4dae85521244ffcf937e4c5a6b853"
+    },
+    {
+      "path": "mods/host/pe_model_view.h",
+      "sha256": "26997e15337ed46c15a051acfa349d0951a5b7153e7ca9eab9f31dc8a8abd699"
+    },
+    {
+      "path": "mods/host/pe_pages.c",
+      "sha256": "89e4a06b7d7405d4876a566e94eb215eb567324f5ca86056aa9dcbf2e44a990d"
+    },
+    {
+      "path": "mods/host/pe_pages.h",
+      "sha256": "582be5a9fe1f51b069b621bdd5f0552a60b0015f36f9ba0933c0d1f6fe854469"
+    },
+    {
+      "path": "mods/host/pe_present.c",
+      "sha256": "308c22b1a700c94f4225c4b7b93be3f93508295ca0d4314ef200c90ff77bed84"
+    },
+    {
+      "path": "mods/host/pe_present.h",
+      "sha256": "20997dc76e4441485c84578a1c5c74c66d7c0a670876e2ceb865151107dea90a"
+    },
+    {
+      "path": "mods/host/pe_profile_transactions.c",
+      "sha256": "7f55ad443529bedd75b150c0b30c1723a851765f9031953d0472fc6656093217"
+    },
+    {
+      "path": "mods/host/pe_profile_transactions.h",
+      "sha256": "f20120f772b25ca8a9554fbd3a6b0b4098326d1506879f7a28731c9df88f727c"
+    },
+    {
+      "path": "mods/host/pe_recovery_snapshot.c",
+      "sha256": "8c14a477437f88067dd3d9724239ef57541a116791714948d313d3a8d7d79cec"
+    },
+    {
+      "path": "mods/host/pe_recovery_snapshot.h",
+      "sha256": "0ef4f43402d985b9d8f61eea751e50f98e8aef7a0337c0b8470871b5238dd301"
+    },
+    {
+      "path": "mods/host/pe_registry.c",
+      "sha256": "53012e90676dd30123638a08af2146410df8c817ae57392fe5671ba4a3c7473a"
+    },
+    {
+      "path": "mods/host/pe_registry.h",
+      "sha256": "ba8ce473bab67059e3744a13a37286dab637d499ba0a48a2d49cb8bf52bd143b"
+    },
+    {
+      "path": "mods/host/pe_save.c",
+      "sha256": "1c7506a1e885a58da068da760f1c853bac92bdc2ad25ae28c45d60976104d31f"
+    },
+    {
+      "path": "mods/host/pe_save.h",
+      "sha256": "7c9fe2d9646fec279b8d9461db010d7f8c51674c693cbe58193fecbed7647aa2"
+    },
+    {
+      "path": "mods/host/pe_save_admission.h",
+      "sha256": "419ecde2363c66f35b89cbcc078778a2544a9575d30e6983031cfcac635a655b"
+    },
+    {
+      "path": "mods/host/pe_save_dispatch.h",
+      "sha256": "9d60f62c6b2580f2a30c76cdef0107f9fec376b4d856de93c1465e3e046860d8"
+    },
+    {
+      "path": "mods/host/pe_save_emission.h",
+      "sha256": "e94e0d712d1c454fdb27f8d1edcfda1c24eb5a313dba8d24587e6cb14cb2b95c"
+    },
+    {
+      "path": "mods/host/pe_save_plan.h",
+      "sha256": "f62103d328df903e7ca0bb665f06db20afe00ba07bf2c9291d8695ba8f3a80a7"
+    },
+    {
+      "path": "mods/host/pe_save_query.c",
+      "sha256": "8ef206b0dc718f56426fe0d4870c1caa8d8b5762394a7f2013b29e7c3b9e866e"
+    },
+    {
+      "path": "mods/host/pe_save_query.h",
+      "sha256": "5e96988011ffa83a0fb5e95ea259fe9dbeca8f6475a3ae08a79d685312e7e311"
+    },
+    {
+      "path": "mods/host/pe_save_recovery.h",
+      "sha256": "c8a83ff66180f3daa02b24f22b1c29756a08084072c2ca322c2ff886149faa4f"
+    },
+    {
+      "path": "mods/host/pe_services.h",
+      "sha256": "bdef8511309b1c607df98aeef22de281cd7634e3d8230c13b6f3ab621f93359d"
+    },
+    {
+      "path": "mods/host/pe_shop_api.c",
+      "sha256": "0cbb2013fea8a932749d38dbbfb9264f2f526d68abf562098250bcf8336a55ea"
+    },
+    {
+      "path": "mods/host/pe_shop_api.h",
+      "sha256": "39e9ab2ebf9426e1f9829bee2c389def8f3ecc004c8a67ecad05803e7518d27f"
+    },
+    {
+      "path": "mods/host/ui/pe_toast.c",
+      "sha256": "ad06e560ba0881c47896007b296be029a820ec101ccaab89c707bc499a498199"
+    },
+    {
+      "path": "mods/host/ui/pe_ui.h",
+      "sha256": "f9daa1948b384590c2dcf84925f53b351a7ab57d0591e088f8b4482f31775f06"
+    },
+    {
+      "path": "mods/host/ui/pe_ui_gpu.c",
+      "sha256": "afa093f7cdce9930e6a698592161a1318b8da6d3fb64ec4b6d2914fdc3b57bb3"
+    },
+    {
+      "path": "mods/host/ui/pe_ui_ps5_cpu.c",
+      "sha256": "d2e140312c664ae43ec82912d2d529f256ee23084c1fb6ff7d6c48a2399da94f"
+    },
+    {
+      "path": "mods/host/ui/pe_ui_raster.c",
+      "sha256": "8c9cb235107cb3b2040dbe21ddf827bc6879791e45fc0cf96dccee26575162b1"
+    },
+    {
+      "path": "mods/host/ui/pe_utf8.h",
+      "sha256": "d01df096695c7b426672cc349aa02b84c3ce1ff812a62e02110daeeb5c6c8c39"
+    },
+    {
+      "path": "mods/pe_assists/pe_assists.c",
+      "sha256": "8a152d0defdd26aec3cf196a99c6be3cae7e19140e911e1dd931b610e2dd37c4"
+    },
+    {
+      "path": "mods/pe_catalog/pe_armor_effect_display.c",
+      "sha256": "19998e43a0d44898df318ddccb50c216d0ea654960bb6a02cd61bebcf1bc8d71"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog.c",
+      "sha256": "db4937d7ea3030ea0984609f00c8a81d3717dda083a09945d6dce71f51a71b26"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog.h",
+      "sha256": "60052653fce91018b899577557b64b190381130254db7ff5ed9f96f3f47253e3"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_effect_icons.c",
+      "sha256": "b2a213ce360cd768a68bdbd6cf8556581fad0d1631ab5602f656b39bed10f0ee"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_effect_icons.h",
+      "sha256": "637ad0abed85617c8523f8f7abfce0fe1a24045cfd1289fe81f3d64cc4f0a8a4"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_menu.c",
+      "sha256": "64c40a7550fbe83e0ec6a7e40341b4f4bca0218825f0525ed567646323e37dde"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_menu_state.c",
+      "sha256": "87c2058b0f175c89e315c9b7180b5bc539aa24d7435951f22c68d43f232149d5"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_menu_state.h",
+      "sha256": "2550417283f58e56ea96d0445d4f5c4e4dc565dc611982963dbe825d68b1209c"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_menu_view.c",
+      "sha256": "240402f97c565412dcaa7dc2804a281ecb1406a919cb53ee5d4ced61b9e77643"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_menu_view.h",
+      "sha256": "99a821a621c1de9ec8dbb9d16a0fa5d963661aa58bfef46e1dd9914378502924"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_mod.c",
+      "sha256": "8d3d34b504970f630fc23b2fc1ef717816da7328c9160d1ae419f3a289937ccb"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_mod.h",
+      "sha256": "e550062df631de9afb18b08cd817d6c5170eb6d6ce4d269eccfa1884ef84806f"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_pages.c",
+      "sha256": "a23637da78f438d56ecf927073b8dd8c43b6c446fdcc8427b55745e4d9f17d53"
+    },
+    {
+      "path": "mods/pe_catalog/pe_catalog_wallet.c",
+      "sha256": "6e9fefcb907f8c5a575abf976588c9f8beec591e93332f55789cd528ebc83466"
+    },
+    {
+      "path": "mods/pe_catalog/pe_discard_dismantle.c",
+      "sha256": "31a9b591c0c6d049e668f7a8f44271e9867afef8e5e52ca61c0de9a1559370ac"
+    },
+    {
+      "path": "mods/pe_catalog/pe_dismantle.c",
+      "sha256": "c8fb37d9cfc61e5d7ea847cc0e31f2ffe9d6313a1e11b5f9ebdf4914bf05db41"
+    },
+    {
+      "path": "mods/pe_cheats/pe_cheats.c",
+      "sha256": "5884951f9bbdb5f04d1b210385636508252bb6fbffbf4e9868f56dff0e5d9dd9"
+    },
+    {
+      "path": "mods/pe_collection/pe_bestiary.c",
+      "sha256": "239f2b3c1e0467f56bd672ef8edd3d53d80bc72235b85c7eb9d727b202a8453d"
+    },
+    {
+      "path": "mods/pe_collection/pe_bestiary_menu.c",
+      "sha256": "d031b9c121292229a9dc22d73f6aad44d365e4d1b70778a5551fd0a6c071624f"
+    },
+    {
+      "path": "mods/pe_collection/pe_collection.c",
+      "sha256": "11457802a63a8dbb081ce619caf4d26a352e27ec0853b86473531d17234a6ccf"
+    },
+    {
+      "path": "mods/pe_collection/pe_collection.h",
+      "sha256": "6a49746b1da232f4b07499f57dbcc112ce95fbcc4b28192c2735d1ef0517a3b0"
+    },
+    {
+      "path": "mods/pe_collection/pe_collection_data.h",
+      "sha256": "5e63ff6232413be2c7c574da443efa67787aea89ff682ba1aa28526c468821f2"
+    },
+    {
+      "path": "mods/pe_collection/pe_pack_pe1.c",
+      "sha256": "018991d8ebb3210a65486222415734e52e5aef0e42db8843e847ffa761e828f6"
+    },
+    {
+      "path": "mods/pe_collection/pe_profile.c",
+      "sha256": "a791ec3344699ea220e7bab37dcc11f0174aee12b5247c5d6a3456c50eacd389"
+    },
+    {
+      "path": "mods/pe_economy/pe_costume_rules.c",
+      "sha256": "975bf4052e31802f3949fbc69d32aa4db0161d7966aee5a28a7ed400f9099e3e"
+    },
+    {
+      "path": "mods/pe_economy/pe_econ_config.c",
+      "sha256": "05c601d4d3e2e04f671c7e783af157ab984ed6f644f715738b851f10292b7ed4"
+    },
+    {
+      "path": "mods/pe_economy/pe_econ_config.h",
+      "sha256": "aa8ab5cd33176e73fe3065f15116eab4db36b0bb461951ca3cb2100b61c6001b"
+    },
+    {
+      "path": "mods/pe_economy/pe_econ_engine.c",
+      "sha256": "06868ff33134c6a29f768a3a5e9746e432f4188c1ff38d65300ca7c33b7f20fc"
+    },
+    {
+      "path": "mods/pe_economy/pe_econ_engine.h",
+      "sha256": "33d8829e4f25a6868248fb7ecd5c8fdddf89c91316be36c9f51d0d27a2c8f416"
+    },
+    {
+      "path": "mods/pe_economy/pe_econ_menu.c",
+      "sha256": "c6507479678944467cb53cc3d5c83656a0a93dce00a956c673db22de365c79d7"
+    },
+    {
+      "path": "mods/pe_economy/pe_econ_store.c",
+      "sha256": "4c81a63fa45508b956425c53136f22e92e7ef9cf9d1d8f9174911a8fae859253"
+    },
+    {
+      "path": "mods/pe_economy/pe_econ_store.h",
+      "sha256": "4eb633295eca283cad5f37e8447d48875435b16b69efe36f54d955605d629ec2"
+    },
+    {
+      "path": "mods/pe_economy/pe_economy.c",
+      "sha256": "6590583f099f1c58c990ade8086beb386e10a4fc47eb1ebee23b48ff79cdaf8a"
+    },
+    {
+      "path": "mods/pe_economy/pe_economy.h",
+      "sha256": "85f86655fa5e660672c3fda3038f05fd929d9ca3cd13bce823bd787ddffaab53"
+    },
+    {
+      "path": "mods/pe_economy/pe_junk_counter.c",
+      "sha256": "1844b9cce7fb816d19b8b0e86f4eb50f349fb13379e7dd37b789b8aaa84f8593"
+    },
+    {
+      "path": "mods/pe_economy/pe_loot.c",
+      "sha256": "972aa85a4b66b2b49016682b775f5a20a08421591e53f8a2c2f1e2f07e1471f7"
+    },
+    {
+      "path": "mods/pe_economy/pe_smoke.c",
+      "sha256": "aeebf3892360c3832f6ff388cab368d234a58040460fb93cefc2c9fb429323da"
+    },
+    {
+      "path": "mods/pe_hello/pe_hello.c",
+      "sha256": "f22efda77813208cfc72cd69c39efc9f45ce665334db630131e7368e7bc3a2fb"
+    },
+    {
+      "path": "mods/pe_qol/pe_bag_sort.c",
+      "sha256": "768ae981bb2ec83a5d6f52c071484fa45210fbe0c7345b5c1c601efc1589ac18"
+    },
+    {
+      "path": "mods/pe_qol/pe_battle_frequency.c",
+      "sha256": "5d4896f45ff8c8cd8ef27ea91da3786cd9d56f908b165e5a3c644344cf83d555"
+    },
+    {
+      "path": "mods/pe_qol/pe_encounters.c",
+      "sha256": "6c5837d94794ff7df5aaa3d4d989bf75968f0a5a3d1654961f757262a6542800"
+    },
+    {
+      "path": "mods/pe_qol/pe_inventory.h",
+      "sha256": "751cb98094bce586b20a2b2f217e889a01e4b6763fcc8422d7fe867768f76840"
+    },
+    {
+      "path": "mods/pe_qol/pe_inventory_menu.c",
+      "sha256": "996526ec29e7f84eec5692446d21bdc7fdde9a366cb83186e4319faa18de97c1"
+    },
+    {
+      "path": "mods/pe_qol/pe_key_items.c",
+      "sha256": "8bd71ad4c37cae50d17174c3a37ad872dc9139a7a6731c6ffa592796c50fe140"
+    },
+    {
+      "path": "mods/pe_qol/pe_key_menu.c",
+      "sha256": "e7427e136fa4f70c7a51ec07e489a56dd47292d0bd94918c47a455566e56d162"
+    },
+    {
+      "path": "mods/pe_qol/pe_move.c",
+      "sha256": "be619d85c7fe868ce29b4cb91e9dca3aa0dcc2f6e70054a45de147b09f11726b"
+    },
+    {
+      "path": "mods/pe_qol/pe_qol.c",
+      "sha256": "eeb922f3c8a28898dc542aa9409f175352c0019df263644f8daa87e194e9ec59"
+    },
+    {
+      "path": "mods/pe_quicksave/pe_quicksave.c",
+      "sha256": "6a6adf4d025fb565c277568e280c4874e08a51661b8ecc55eacadb7efcaff4d5"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_atb_items.c",
+      "sha256": "897acbd77f167dac8a7052f6eb45e467c7bdc5164dab028932f79098976ce7af"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_atb_items.h",
+      "sha256": "71ecb94bc8f5ba062afc5f444d8261f3e5370c2d170e4fe3e112a3b0731b2712"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_combine.c",
+      "sha256": "6d5e77d5768bbeab99ab51e842b3861311ac31f0f759ca2f999ecd6e482cec28"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_mod_effects.c",
+      "sha256": "e7153251e1bede95ed810c63073e7cda25f3e77cb3eabfb9e92a2c8e1ed1035e"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_mod_effects.h",
+      "sha256": "c50e4b20b98baa4f9e81633b72b1ca8d5ee5bfb39881241fd04b59854237f274"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_panacea.c",
+      "sha256": "840edd55e77427dfbea44ed3c3dea22051181c3e963e411b87d296598553c168"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_panacea.h",
+      "sha256": "7146fa4d935c806647400108b96f02a5634589c8a061f39a1cf3118f6f808d69"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_pe_balance.c",
+      "sha256": "eadeff2276a51b915d3be40910d9d78cfeb12ec1fd706b0de0fd3e391923586d"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_rebalance.c",
+      "sha256": "e20d3e413153cdee299ab67f6a96c1ab72275c81ccb90936dbe63c3c5b45d8ec"
+    },
+    {
+      "path": "mods/pe_rebalance/pe_weapon_power.c",
+      "sha256": "e654ffbffb9e2b835eba5969fe0c2528cdb0621a3f280eb4adb566dce9e97f94"
+    },
+    {
+      "path": "mods/pe_rewards/pe_rewards.c",
+      "sha256": "41a27927473ca0a500adbc9e743822f512e568897a0419ec3bbeb7b25bcdac20"
+    },
+    {
+      "path": "mods/pe_shops/pe_field_wayne.c",
+      "sha256": "d79c53ba11241059d4d136e15aba81e852778b0821e693880733aae43d08ef69"
+    },
+    {
+      "path": "mods/pe_shops/pe_permit.c",
+      "sha256": "097d27a74bda95b16f8c2c927d2cb8fb1e256905acf470d3de78ec8d48ceaf15"
+    },
+    {
+      "path": "mods/pe_shops/pe_requisition.c",
+      "sha256": "5c97cc60dc2c7c1d4789ebe79db167570837ba94b6361b35ee086979382600e3"
+    },
+    {
+      "path": "mods/pe_shops/pe_requisition.h",
+      "sha256": "13099a713e3600a6346db7276aedc4efcb2d6247625614cc634c0978f994818f"
+    },
+    {
+      "path": "mods/pe_shops/pe_requisition_menu.c",
+      "sha256": "042a63247f64f2548486eae4418fe623ce02f0bf34b759e8c0b9ddd9257ae6af"
+    },
+    {
+      "path": "mods/pe_shops/pe_shops.h",
+      "sha256": "9085ed4ac2fb61b14be369ba4b76766515a8f8301e05b45959d77ce0f6297026"
+    },
+    {
+      "path": "mods/pe_shops/pe_shops_mod.c",
+      "sha256": "ad52504593b0a975c6b0357bac492f6bd8c5664e60f9b6fca7a5f4819e121a8f"
+    },
+    {
+      "path": "mods/pe_shops/pe_shops_wallet.c",
+      "sha256": "acba2806cf6c63a4f0f8c86c1c2bcd604644748976f92a97c460a15db76eebdd"
+    },
+    {
+      "path": "mods/pe_shops/pe_wayne_menu.c",
+      "sha256": "b2e539042a805e88a4e6120708cb15b72677b37e6ee7dd6b5f747f41b02e04bf"
+    },
+    {
+      "path": "mods/pe_shops/pe_wayne_refund.c",
+      "sha256": "f59c7cebc5fdbaff59c5748f7fdec2b40a0c5ac074967af4de806098f0865332"
+    },
+    {
+      "path": "mods/pe_shops/pe_workshop_model.c",
+      "sha256": "a86d67af23cc423e413c6d3822bbf83e808fb4c9e779fe58246d5091b2aa85ee"
+    },
+    {
+      "path": "mods/pe_shops/pe_workshop_model.h",
+      "sha256": "e6c0c11436efb6905b69c501655b1f14ef87c09c62eae25acaab36edf215e3ed"
+    },
+    {
+      "path": "mods/pe_shops/pe_workshop_screen.c",
+      "sha256": "9574d54f10828b88caf2bcbcf4253bd897920e2568b32f4975879fdf29aa88b7"
+    },
+    {
+      "path": "mods/pe_stacks/pe_stacks.c",
+      "sha256": "e2445ae0d84a1c742378da1d7ffc6aef3c5c0a533729d14756d354041ab8a1c7"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_pack_pe1_costumes.c",
+      "sha256": "119866c2b71a13ca2c4f6b1b11f5a140d3c428a64c69fbe588661204143b10e2"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_packs.c",
+      "sha256": "c0f8c76c0030336fc8c6b274871a701e08b7159ec2ce889657aa760329b872b6"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_profile_io.h",
+      "sha256": "7126b1ecc12cb926ca51684acda8750c883f05ef1c3f28b7d09b03758aedc4de"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_skin_loader.c",
+      "sha256": "2c4e21abab8812c55e452db7fd1b6da9ddbf2d11c8ee888ed7350ef2c5d22313"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_wardrobe.c",
+      "sha256": "76ef661aa8804f86d22d2a885c34cff64a4cce6f1c81954ac03ab1c23a87a056"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_wardrobe.h",
+      "sha256": "37695588b34a508dfb8958de2b7693b7ffa2c2cf4b4769c14b7edef571c97d91"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_wardrobe_data.h",
+      "sha256": "87082ca488bfb69289e763f10c12b904d5202c53d7eef885d5217e583049709f"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_wardrobe_menu.c",
+      "sha256": "aa8f5ee84cf65eb71aa42e06ec3198a20ae146b9324b46aa303de7838eba66ce"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_wardrobe_mod.c",
+      "sha256": "934a7d95d8614e35d4fd91c86b39ccedd1ac697b5dabc15586e00114cb6ece99"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_wardrobe_profile.c",
+      "sha256": "fec82f7002a788fbcd289feb06e05c2b032ea973d7827b307ecde6e430a0b56c"
+    },
+    {
+      "path": "mods/pe_warp/pe_warp.c",
+      "sha256": "713b53a975484f5d55abbf83d20624dabb94a2fe9d13e974c6287b22fcb937ed"
+    },
+    {
+      "path": "src/main/boot/state_ui.h",
+      "sha256": "9fa230408632d806e77468888022eab8731fc32c5235e51c20677cc3d581de34"
+    },
+    {
+      "path": "src/main/item/actions.c",
+      "sha256": "8289cefe0c7260b97b02cde40d4cec647dfb36bf331efd0113e47e318739b9f2"
+    },
+    {
+      "path": "src/main/item/active_list.c",
+      "sha256": "2df63573a9484ac89d263e61a6254c7bccde1a05133f42952e34fa914c948797"
+    },
+    {
+      "path": "src/main/item/armor_capacity.c",
+      "sha256": "01d6103ad7bf1e43dae7bae4742aec127ee2b9bdc3cf6aac73acbdc6ee56ad1a"
+    },
+    {
+      "path": "src/main/item/swap.c",
+      "sha256": "265afb1dfcaf08a7fe4ea75e7d914ba0ba3dfe8860eaaee7a01efaa1172f59e0"
+    },
+    {
+      "path": "src/main/memcard/save_flow.c",
+      "sha256": "4f01de2f43c24ef061562ba2598cb604db5782ae25b10c4c7267735cbaae2ca7"
+    }
+  ]
 }

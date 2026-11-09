@@ -156,10 +156,10 @@ void Save_LoadMetadataWindowText(void) {
 
     dst = g_SaveMetadataCursor;
     if (g_SaveMetadataSourceRecord != 0) {
-        lookup = Text_LookupEditableName(8, g_SaveMetadataSourceRecord->itemId - 1);
+        lookup = Text_LookupTable8(g_SaveMetadataSourceRecord->itemId - 1);
         out = dst;
     } else {
-        lookup = Text_LookupEditableName(4, 0x1E);
+        lookup = Text_LookupTable4(0x1E);
         out = dst;
     }
 
@@ -541,7 +541,10 @@ static inline void SelectAya(void) {
 }
 
 /* Remove the selected record, preserving armor-capacity bookkeeping. */
-static inline void RemoveItem(int index) {
+static inline int RemoveItem(int index) {
+#ifdef PE_MODS
+    if (PE_HOOK(PE_HOOK_EQUIPMENT_GUARD,(&(PeHookEquipmentGuard){.kind=0,.value=g_InvItemPtr[index]}))) return 0;
+#endif
     int required, id;
     if (g_InvItemPtr == g_AyaInventoryItems && g_InventoryRuntime.tracked[2] == index)
         Inv_GetActiveSlotCount(&required);
@@ -554,6 +557,7 @@ static inline void RemoveItem(int index) {
         Inv_CompactActiveListSlots();
         Inv_SetActiveList(3, 0);
     }
+    return 1;
 }
 
 static inline int FindKind(int kind, int excluded) {
@@ -580,7 +584,7 @@ void Inv_MergeStorageToSlot(void) {
         if (id - 256U < 128U &&
             g_InventoryRuntime.equipment[(short)id - 256].itemId == 0x61) break;
     }
-    if (i < g_InvSlotLimit) RemoveItem(i);
+    if (i < g_InvSlotLimit && !RemoveItem(i)) return;
     Inv_AddItem(0x93);
     g_InventoryRuntime.tracked[0] = FindKind(7, -1);
     g_MenuBattleEquipMode = 0;
@@ -728,9 +732,9 @@ static inline void InitName(u8 *buffer, int length, ItemDataRecord *item) {
         *p = 255;
     dest = g_SaveMetadataCursor;
     if (g_SaveMetadataSourceRecord)
-        source = Text_LookupEditableName(8, g_SaveMetadataSourceRecord->itemId - 1);
+        source = Text_LookupTable8(g_SaveMetadataSourceRecord->itemId - 1);
     else
-        source = Text_LookupEditableName(4, 30);
+        source = Text_LookupTable4(30);
     CopyName(dest, source);
 }
 

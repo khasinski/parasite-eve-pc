@@ -55,7 +55,7 @@ enum {
 #ifdef PE_PS5_GPU_NATIVE
     OVERLAY_FOOTER_H = 94,
 #else
-    OVERLAY_FOOTER_H = 74,
+    OVERLAY_FOOTER_H = 100,
 #endif
 #ifdef PE_PS5_GPU_NATIVE
     OVERLAY_VALUE_W = 320,
@@ -87,7 +87,11 @@ enum {
     SCREENSHOT_OSK_COLS = 10,
     SCREENSHOT_OSK_ROW_H = 38,
     SCREENSHOT_OSK_H = 164,
+#ifdef PE_PS5_GPU_NATIVE
     SCREENSHOT_FOOTER_H = 68
+#else
+    SCREENSHOT_FOOTER_H = 94
+#endif
 };
 
 typedef struct OverlaySurface {
@@ -447,7 +451,13 @@ static int Host_SettingsTotalRowCount(int page) {
 
 enum {
     OVERLAY_CONTROLS_ITEM_COUNT = HOST_BINDING_COUNT + 2,
+#ifdef PE_PS5_GPU_NATIVE
     OVERLAY_CONTROLS_VISIBLE_BINDINGS = OVERLAY_VISIBLE_CONTROLS - 1,
+#else
+    /* The window is as tall as the longest page: bindings fill it instead of leaving a gap. */
+    OVERLAY_CONTROLS_VISIBLE_BINDINGS =
+        (COUNT_OF(kGraphics) > OVERLAY_VISIBLE_CONTROLS ? COUNT_OF(kGraphics) : OVERLAY_VISIBLE_CONTROLS) - 1,
+#endif
     OVERLAY_CONTROLS_MAX_SCROLL = OVERLAY_CONTROLS_ITEM_COUNT - OVERLAY_CONTROLS_VISIBLE_BINDINGS
 };
 
@@ -818,6 +828,127 @@ static OverlayRect OverlayRowRect(const HostOverlayState *state, int row) {
     };
 }
 
+/* ---- the refined look: deep navy window, silver double frame, red ----
+ * The PC menu wears it; the PS5 native menu keeps its own Original/Modern menu styles. */
+
+#ifdef PE_PS5_GPU_NATIVE
+#define OVERLAY_REFINED_LOOK 0
+#else
+#define OVERLAY_REFINED_LOOK 1
+#endif
+
+static const Color kLookRed = {0.90f, 0.14f, 0.15f, 1.0f};
+static const Color kLookSteel = {0.42f, 0.58f, 0.80f, 1.0f};
+static const Color kLookSilver = {0.80f, 0.86f, 0.95f, 1.0f};
+static const Color kLookText = {0.92f, 0.94f, 0.98f, 1.0f};
+static const Color kLookDim = {0.55f, 0.62f, 0.74f, 1.0f};
+
+/* Where row labels start: right of the red cursor in the refined look. */
+static float OverlayLabelX(void) { return (float)(OVERLAY_PAD + (OVERLAY_REFINED_LOOK ? 16 : 0)); }
+
+static int LookThick(float s) { return (int)(2.0f * s) > 1 ? (int)(2.0f * s) : 2; }
+
+/* Whole pixels, so stacked strips meet without seams. */
+static void LookRect(OverlaySurface *s, int x, int y, int w, int h, Color c) {
+    int ix, iy;
+    for (iy = y; iy < y + h; iy++)
+        for (ix = x; ix < x + w; ix++) BlendPixel(s, ix, iy, c, 1.0f);
+}
+
+static Color LookMix(Color a, Color b, float t) {
+    Color c = {a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t};
+    return c;
+}
+
+static void LookVGradient(OverlaySurface *s, int x, int y, int w, int h, Color top, Color bottom) {
+    int i;
+    for (i = 0; i < h; i++) LookRect(s, x, y + i, w, 1, LookMix(top, bottom, h > 1 ? (float)i / (float)(h - 1) : 0.0f));
+}
+
+static void LookHGradient(OverlaySurface *s, int x, int y, int w, int h, Color left, Color right) {
+    int i;
+    for (i = 0; i < w; i++) LookRect(s, x + i, y, 1, h, LookMix(left, right, w > 1 ? (float)i / (float)(w - 1) : 0.0f));
+}
+
+static void LookFrame(OverlaySurface *s, int x, int y, int w, int h, Color c) {
+    LookRect(s, x, y, w, 1, c);
+    LookRect(s, x, y + h - 1, w, 1, c);
+    LookRect(s, x, y + 1, 1, h - 2, c);
+    LookRect(s, x + w - 1, y + 1, 1, h - 2, c);
+}
+
+/* Bright L-shaped brackets on a box's four corners. */
+static void LookCorners(OverlaySurface *s, int x, int y, int w, int h, int len, int t, Color c) {
+    LookRect(s, x, y, len, t, c);                   LookRect(s, x, y, t, len, c);
+    LookRect(s, x + w - len, y, len, t, c);         LookRect(s, x + w - t, y, t, len, c);
+    LookRect(s, x, y + h - t, len, t, c);           LookRect(s, x, y + h - len, t, len, c);
+    LookRect(s, x + w - len, y + h - t, len, t, c); LookRect(s, x + w - t, y + h - len, t, len, c);
+}
+
+/* A solid triangle `size` tall, its point at (x, y): dir 1 points right, -1 left. */
+static void LookArrow(OverlaySurface *s, float x, float y, float size, int dir, Color c) {
+    const int half = (int)(size * 0.5f + 0.5f), px = (int)(x + 0.5f), py = (int)(y + 0.5f);
+    int i;
+    for (i = 0; i < half; i++) {
+        const int col = dir > 0 ? px - 1 - i : px + i;
+        LookRect(s, col, py - i - 1, 1, 2 * i + 2, c);
+    }
+}
+
+/* Letter-spaced text (`track` pixels between letters). */
+static float SpacedWidth(const char *text, float em, float track) {
+    const size_t n = strlen(text);
+    return TextWidth(text, em) + (n > 1 ? (float)(n - 1) * track : 0.0f);
+}
+
+static void DrawSpaced(OverlaySurface *s, float x, float baseline, float em, float track, const char *text, Color c,
+                       TextAlign align) {
+    char one[2] = {0, 0};
+    if (align != ALIGN_LEFT) x -= SpacedWidth(text, em, track) * (align == ALIGN_CENTRE ? 0.5f : 1.0f);
+    for (; *text; text++) {
+        one[0] = *text;
+        DrawText(s, x, baseline, em, one, c, ALIGN_LEFT);
+        x += TextWidth(one, em) + track;
+    }
+}
+
+static void UpperCopy(char *out, size_t size, const char *in) {
+    size_t i;
+    for (i = 0; in[i] && i + 1 < size; i++) out[i] = (char)(in[i] >= 'a' && in[i] <= 'z' ? in[i] - 32 : in[i]);
+    out[i] = '\0';
+}
+
+/* Word-wrap `text` into up to `lines` lines of at most `width` pixels; the last line takes the rest. */
+static void DrawWrapped(OverlaySurface *s, float x, float baseline, float step, float width, float em, int lines,
+                        const char *text, Color c) {
+    char line[320];
+    int n;
+    for (n = 0; n < lines && text && *text; n++) {
+        size_t fit = 0, i = 0;
+        if (n < lines - 1)
+            for (;;) {
+                size_t next = i;
+                while (text[next] && text[next] != ' ') next++;
+                if (next >= sizeof line) break;
+                memcpy(line, text, next);
+                line[next] = '\0';
+                if (fit && TextWidth(line, em) > width) break;
+                fit = next;
+                if (!text[next]) break;
+                i = next + 1;
+            }
+        else
+            fit = strlen(text);
+        if (fit >= sizeof line) fit = sizeof line - 1;
+        if (!fit) fit = strlen(text) < sizeof line - 1 ? strlen(text) : sizeof line - 1;
+        memcpy(line, text, fit);
+        line[fit] = '\0';
+        DrawText(s, x, baseline + step * (float)n, em, line, c, ALIGN_LEFT);
+        text += fit;
+        while (*text == ' ') text++;
+    }
+}
+
 /* ---- the panel (rage-racer-pc Painter) ---- */
 
 typedef struct Painter {
@@ -826,8 +957,74 @@ typedef struct Painter {
     float s; /* design units to pixels */
 } Painter;
 
+/* "PARASITE EVE" in red over the title in big spaced capitals; a red rule fading out at ruleY. */
+static void LookTitle(const Painter *p, float panelW, float ruleY, const char *title, const char *corner) {
+    const float s = p->s;
+    const int x = (int)((float)OVERLAY_PAD * s), w = (int)((panelW - 2.0f * OVERLAY_PAD) * s);
+
+    DrawSpaced(p->surface, (float)OVERLAY_PAD * s, 26.0f * s, 11.0f * s, 4.0f * s, "PARASITE EVE", kLookRed, ALIGN_LEFT);
+    DrawSpaced(p->surface, (panelW - (float)OVERLAY_PAD) * s, 26.0f * s, 11.0f * s, 3.0f * s, corner,
+               WithAlpha(kLookDim, 0.85f), ALIGN_RIGHT);
+    DrawSpaced(p->surface, (float)OVERLAY_PAD * s, 55.0f * s, 24.0f * s, 5.0f * s, title, kLookText, ALIGN_LEFT);
+    LookHGradient(p->surface, x, (int)(ruleY * s), w, LookThick(s), kLookRed, WithAlpha(kLookRed, 0.0f));
+    LookRect(p->surface, x, (int)((ruleY + 6.0f) * s), w, 1, WithAlpha(kLookSilver, 0.08f));
+}
+
+/* The selected row: a steel band fading right, hairlines, the red cursor. Others: a faint rule above. */
+static void LookRowBand(const Painter *p, float panelW, float top, float mid, int selected, int first) {
+    const float s = p->s;
+    const int bx = (int)((float)(OVERLAY_PAD / 2) * s), by = (int)(top + 4.0f * s);
+    const int bw = (int)((panelW - (float)OVERLAY_PAD) * s), bh = (int)((float)(OVERLAY_ROW_H - 8) * s);
+
+    if (selected) {
+        LookHGradient(p->surface, bx, by, bw, bh, WithAlpha(kLookSteel, 0.34f), WithAlpha(kLookSteel, 0.0f));
+        LookHGradient(p->surface, bx, by, bw, 1, WithAlpha(kLookSilver, 0.55f), WithAlpha(kLookSilver, 0.0f));
+        LookHGradient(p->surface, bx, by + bh - 1, bw, 1, WithAlpha(kLookSilver, 0.40f), WithAlpha(kLookSilver, 0.0f));
+        LookArrow(p->surface, (float)(OVERLAY_PAD + 10) * s, mid, 12.0f * s, 1, kLookRed);
+    } else if (!first) {
+        LookHGradient(p->surface, (int)((float)(OVERLAY_PAD + 16) * s), (int)top,
+                      (int)((panelW - 2.0f * OVERLAY_PAD - 16.0f) * s), 1, WithAlpha(kLookSilver, 0.07f),
+                      WithAlpha(kLookSilver, 0.0f));
+    }
+}
+
+/* A scroll bar: a hairline track, a red thumb. */
+static void LookScrollBar(const Painter *p, float x, float trackTop, float trackH, float thumbTop, float thumbH) {
+    const float s = p->s;
+    LookRect(p->surface, (int)(x + 1.0f * s), (int)trackTop, 1, (int)trackH, WithAlpha(kLookSilver, 0.15f));
+    LookRect(p->surface, (int)x, (int)thumbTop, (int)(3.0f * s), (int)thumbH, kLookRed);
+}
+
+/* The help box, as the game frames its own: the description, then the keys in small capitals. */
+static void LookHelpBox(const Painter *p, float panelW, float boxTop, float boxH, const char *help, const char *keys) {
+    const float s = p->s;
+    const int bx = (int)((float)(OVERLAY_PAD / 2) * s), by = (int)(boxTop * s);
+    const int bw = (int)((panelW - (float)OVERLAY_PAD) * s), bh = (int)(boxH * s);
+    char upper[160];
+
+    LookVGradient(p->surface, bx, by, bw, bh, (Color){0.02f, 0.03f, 0.06f, 0.85f}, (Color){0.0f, 0.0f, 0.0f, 0.85f});
+    LookFrame(p->surface, bx, by, bw, bh, WithAlpha(kLookSilver, 0.30f));
+    LookCorners(p->surface, bx, by, bw, bh, (int)(10.0f * s), 1, WithAlpha(kLookSilver, 0.85f));
+    DrawWrapped(p->surface, (float)OVERLAY_PAD * s, (boxTop + 23.0f) * s, 19.0f * s, (panelW - 2.0f * OVERLAY_PAD) * s,
+                14.0f * s, 2, help, kLookText);
+    UpperCopy(upper, sizeof upper, keys);
+    DrawSpaced(p->surface, (float)OVERLAY_PAD * s, (boxTop + boxH - 12.0f) * s, 10.0f * s, 1.6f * s, upper,
+               WithAlpha(kLookDim, 0.85f), ALIGN_LEFT);
+}
+
 static void PaintFrame(const Painter *p, float width, float height) {
     const float s = p->s;
+
+    if (OVERLAY_REFINED_LOOK) {   /* navy to black, faint scanlines, a silver double frame with bright corners */
+        const int w = (int)ceilf(width), h = (int)ceilf(height), inset = (int)(5.0f * s);
+        int i;
+        LookVGradient(p->surface, 0, 0, w, h, (Color){0.055f, 0.075f, 0.140f, 0.97f}, (Color){0.010f, 0.014f, 0.032f, 0.97f});
+        for (i = 0; i < h; i += 3) LookRect(p->surface, 1, i, w - 2, 1, WithAlpha(kLookSilver, 0.022f));
+        LookFrame(p->surface, 0, 0, w, h, WithAlpha(kLookSilver, 0.50f));
+        LookFrame(p->surface, inset, inset, w - 2 * inset, h - 2 * inset, WithAlpha(kLookSilver, 0.13f));
+        LookCorners(p->surface, 0, 0, w, h, (int)(22.0f * s), LookThick(s), WithAlpha(kLookSilver, 0.95f));
+        return;
+    }
 
     FillRoundRect(p->surface, 0.0f, 0.0f, width, height, 16.0f * s, kBorder);
     FillRoundRect(p->surface, 1.0f, 1.0f, width - 2.0f, height - 2.0f,
@@ -838,6 +1035,25 @@ static void PaintHeader(const Painter *p) {
     const float s = p->s;
     int page;
 
+    if (OVERLAY_REFINED_LOOK) {
+        LookTitle(p, (float)OVERLAY_PANEL_W, (float)(OVERLAY_HEADER_H - 20), "SETTINGS", "GAME PAUSED");
+        for (page = 0; page < OVERLAY_PAGE_COUNT; page++) {
+            OverlayRect tab = OverlayTabRect(page);
+            int current = page == p->state->page;
+            char name[32];
+
+            UpperCopy(name, sizeof name, OverlayPageName(page));
+            if (current) {   /* a steel glow over a red bar under the page you are on */
+                const int tx = (int)((tab.x + 3.0f) * s), tw = (int)((tab.w - 6.0f) * s);
+                const int ty = (int)(tab.y * s), th = (int)(tab.h * s);
+                LookVGradient(p->surface, tx, ty, tw, th, WithAlpha(kLookSteel, 0.0f), WithAlpha(kLookSteel, 0.30f));
+                LookRect(p->surface, tx, ty + th - LookThick(s), tw, LookThick(s), kLookRed);
+            }
+            DrawSpaced(p->surface, (tab.x + tab.w * 0.5f) * s, (tab.y + tab.h * 0.5f + 5.0f) * s, 12.0f * s, 2.0f * s,
+                       name, current ? kLookText : WithAlpha(kLookDim, 0.9f), ALIGN_CENTRE);
+        }
+        return;
+    }
 #ifdef PE_PS5_GPU_NATIVE
     if(host_options.menu_style)DrawText(p->surface,OVERLAY_PAD*s,14*s,11*s,"PARASITE EVE",kAccent,ALIGN_LEFT);
     DrawText(p->surface,OVERLAY_PAD*s,(host_options.menu_style?44:40)*s,(host_options.menu_style?28:26)*s,Host_RegistryTitle(p->state->page),kText,ALIGN_LEFT);
@@ -880,6 +1096,32 @@ static void PaintValueRow(const Painter *p, const char *labelText,
     float reach = ((float)OVERLAY_VALUE_W * 0.5f - 14.0f) * s;
     Color chevron = selected ? kAccent : WithAlpha(kMuted, 0.75f);
 
+    if (OVERLAY_REFINED_LOOK) {   /* the label, a framed field for the value, red arrows on the selected row */
+        const float arrows = ((float)OVERLAY_VALUE_W * 0.5f - 20.0f) * s;
+        const int fx = (int)(centre - ((float)OVERLAY_VALUE_W * 0.5f - 6.0f) * s);
+        const int fy = (int)(mid - (float)(OVERLAY_ROW_H - 16) * 0.5f * s);
+        const int fw = (int)((float)(OVERLAY_VALUE_W - 12) * s), fh = (int)((float)(OVERLAY_ROW_H - 16) * s);
+
+        DrawText(p->surface, OverlayLabelX() * s, baseline, 17.0f * s, labelText, label, ALIGN_LEFT);
+        LookRect(p->surface, fx, fy, fw, fh, (Color){0.0f, 0.0f, 0.0f, selected ? 0.45f : 0.25f});
+        LookFrame(p->surface, fx, fy, fw, fh, WithAlpha(kLookSilver, selected ? 0.38f : 0.12f));
+        if (selected) {
+            LookArrow(p->surface, centre - arrows, mid, 10.0f * s, -1, kLookRed);
+            LookArrow(p->surface, centre + arrows, mid, 10.0f * s, 1, kLookRed);
+        }
+        if (strcmp(valueText, "On") == 0 || strcmp(valueText, "Off") == 0) {
+            const int on = valueText[1] == 'n';
+            DrawSpaced(p->surface, centre, baseline - 1.0f * s, 14.0f * s, 3.0f * s, on ? "ON" : "OFF",
+                       on ? WithAlpha(kLookRed, selected ? 1.0f : 0.85f) : WithAlpha(kLookDim, 0.9f), ALIGN_CENTRE);
+        } else {
+            DrawText(p->surface, centre, baseline, 17.0f * s, valueText,
+                     highlightValue ? kLookRed : WithAlpha(kLookText, selected ? 1.0f : 0.85f), ALIGN_CENTRE);
+        }
+        (void)reach;
+        (void)chevron;
+        return;
+    }
+
     float rowEm=17.0f*s;
 #ifdef PE_PS5_GPU_NATIVE
     rowEm=(host_options.menu_text_size?19.0f:17.0f)*s;
@@ -899,7 +1141,7 @@ static void PaintValueRow(const Painter *p, const char *labelText,
              ALIGN_CENTRE);
 }
 
-/* "< 3x > speed": the arrows step the hold's speed; a dim arrow is the limit. */
+/* "< 3x > Fast forward": the arrows step the speed; a dim arrow is the limit. */
 static void PaintSpeedLabel(const Painter *p, float mid, float baseline,
                             int selected, Color label) {
     const float s = p->s;
@@ -911,13 +1153,25 @@ static void PaintSpeedLabel(const Painter *p, float mid, float baseline,
     char text[8];
 
     snprintf(text, sizeof(text), "%ux", factor);
+    if (OVERLAY_REFINED_LOOK) {
+        const float x = OverlayLabelX() * s;
+        const Color arrow = selected ? kLookRed : WithAlpha(kLookDim, 0.75f), end = WithAlpha(kLookDim, 0.3f);
+        centre = x + (float)OVERLAY_SPEED_STEP_CENTRE * s;
+        LookArrow(p->surface, centre - reach, mid, 9.0f * s, -1, factor > 2 ? arrow : end);
+        LookArrow(p->surface, centre + reach, mid, 9.0f * s, 1, factor < PSYZ_SPEED_MAX ? arrow : end);
+        DrawText(p->surface, centre, baseline, 17.0f * s, text, label, ALIGN_CENTRE);
+        DrawText(p->surface, x + (float)OVERLAY_SPEED_STEP_W * s, baseline, 17.0f * s, "Fast forward", label, ALIGN_LEFT);
+        (void)chevron;
+        (void)limit;
+        return;
+    }
     DrawChevron(p->surface, centre - reach, mid, 5.0f * s, -1, 2.0f * s,
                 factor > 2 ? chevron : limit);
     DrawChevron(p->surface, centre + reach, mid, 5.0f * s, 1, 2.0f * s,
                 factor < PSYZ_SPEED_MAX ? chevron : limit);
     DrawText(p->surface, centre, baseline, 17.0f * s, text, label, ALIGN_CENTRE);
     DrawText(p->surface, (float)(OVERLAY_PAD + OVERLAY_SPEED_STEP_W) * s,
-             baseline, 17.0f * s, "speed", label, ALIGN_LEFT);
+             baseline, 17.0f * s, "Fast forward", label, ALIGN_LEFT);
 }
 
 static void PaintSettingRow(const Painter *p, const OverlaySetting *setting,
@@ -982,9 +1236,12 @@ static void PaintRows(const Painter *p) {
         float mid = top + (float)OVERLAY_ROW_H * 0.5f * s;
         float baseline = mid + 6.0f * s;
         int selected = row == p->state->row;
-        Color label = selected ? kText : WithAlpha(kText, 0.82f);
+        Color label = OVERLAY_REFINED_LOOK ? WithAlpha(kLookText, selected ? 1.0f : 0.78f)
+                                        : (selected ? kText : WithAlpha(kText, 0.82f));
 
-        if (selected) {
+        if (OVERLAY_REFINED_LOOK) {
+            LookRowBand(p, (float)OVERLAY_PANEL_W, top, mid, selected, slot == 0 || slot == visibleSettings);
+        } else if (selected) {
             FillRoundRect(p->surface, (float)(OVERLAY_PAD / 2) * s,
                           top + 3.0f * s, (float)(OVERLAY_PANEL_W - OVERLAY_PAD) * s,
                           (float)(OVERLAY_ROW_H - 6) * s, 9.0f * s,
@@ -1019,7 +1276,7 @@ static void PaintRows(const Painter *p) {
                     snprintf(value, sizeof(value), "%u%%", host_options.analog_run_threshold);
                     PaintValueRow(p, "Field run threshold", value, mid, baseline, selected, 0, label);
                 } else if (row == HOST_SPEED_MODE_ROW) {
-                    PaintValueRow(p, "Speed button", host_options.speed_toggle ? "Toggle" : "Hold",
+                    PaintValueRow(p, "Fast-forward button", host_options.speed_toggle ? "Toggle" : "Hold",
                                   mid, baseline, selected, 0, label);
                 } else {
                     int idx = row - 1;
@@ -1059,8 +1316,11 @@ static void PaintRows(const Painter *p) {
 #endif
                 if(row==0)PaintValueRow(p,names[row],Host_HdValue(row),mid,baseline,selected,0,label);
                 else {
-                    DrawText(p->surface,OVERLAY_PAD*s,baseline,17*s,names[row],label,ALIGN_LEFT);
-                    DrawText(p->surface,OverlayValueCentre()*s,baseline,17*s,Host_HdValue(row),selected?kAccent:kText,ALIGN_CENTRE);
+                    DrawText(p->surface,OverlayLabelX()*s,baseline,17*s,names[row],label,ALIGN_LEFT);
+                    if (OVERLAY_REFINED_LOOK)
+                        DrawText(p->surface,OverlayValueCentre()*s,baseline,17*s,Host_HdValue(row),selected?kLookRed:WithAlpha(kLookText,0.85f),ALIGN_CENTRE);
+                    else
+                        DrawText(p->surface,OverlayValueCentre()*s,baseline,17*s,Host_HdValue(row),selected?kAccent:kText,ALIGN_CENTRE);
                 }
             } else if (page == OVERLAY_PAGE_DISCS) {
                 char discLabel[32];
@@ -1075,13 +1335,17 @@ static void PaintRows(const Painter *p) {
             int quit = row == pureCount + 1;
 #endif
 
-            DrawText(p->surface, (float)OVERLAY_PAD * s, baseline, 17.0f * s,
+            DrawText(p->surface, OverlayLabelX() * s, baseline, 17.0f * s,
 #ifdef PE_PS5_GPU_NATIVE
                      quit ? "Quit game" : row==pureCount+1 ? "Back" : "Resume game",quit?kDanger:label,
 #else
-                     quit ? "Quit game" : "Resume game", quit ? kDanger : label,
+                     quit ? "Quit game" : "Resume game", quit ? WithAlpha(kLookRed, selected ? 1.0f : 0.85f) : label,
 #endif
                      ALIGN_LEFT);
+            if (OVERLAY_REFINED_LOOK && selected) {
+                DrawSpaced(p->surface, OverlayValueCentre() * s, baseline - 1.0f * s, 12.0f * s, 2.5f * s,
+                           "PRESS ENTER", kLookRed, ALIGN_CENTRE);
+            }
         }
     }
 
@@ -1093,24 +1357,28 @@ static void PaintRows(const Painter *p) {
         float x=OVERLAY_PAD*s,y=(OVERLAY_HEADER_H+Host_SettingsPureRowCount(OVERLAY_PAGE_MODS)*OVERLAY_ROW_H)*s,w=(OVERLAY_PANEL_W-2*OVERLAY_PAD)*s;
         if(Host_HdBusy()) {
             char text[80];snprintf(text,sizeof(text),"Downloading / verifying: %d%%",Host_HdPercent());
-            DrawText(p->surface,x,y,15*s,text,kText,ALIGN_LEFT);
-            FillRoundRect(p->surface,x,y+18*s,w,10*s,5*s,WithAlpha(kText,.12f));
-            FillRoundRect(p->surface,x,y+18*s,w*Host_HdPercent()/100.f,10*s,5*s,kAccent);
+            DrawText(p->surface,x,y,15*s,text,kLookText,ALIGN_LEFT);
+            LookRect(p->surface,(int)x,(int)(y+18*s),(int)w,(int)(10*s),(Color){0,0,0,.45f});
+            LookFrame(p->surface,(int)x,(int)(y+18*s),(int)w,(int)(10*s),WithAlpha(kLookSilver,.30f));
+            LookHGradient(p->surface,(int)x+1,(int)(y+19*s),(int)(w*Host_HdPercent()/100.f)-2,(int)(8*s),WithAlpha(kLookRed,.7f),kLookRed);
         } else {
 #if defined(PE_PS5_GPU_NATIVE)
             char text[96];snprintf(text,sizeof(text),"Local pack: %s",Host_GpuHdPackPresent(Host_GpuHdDirectory())?"found (atlas checks on use)":"not found");
 #else
             char text[96];snprintf(text,sizeof(text),"Installed version: %s",*host_hd.version?host_hd.version:host_hd.development?"local preview":"none");
 #endif
-            DrawText(p->surface,x,y,15*s,text,kMuted,ALIGN_LEFT);
+            DrawText(p->surface,x,y,15*s,text,kLookDim,ALIGN_LEFT);
         }
     }
     if(page!=OVERLAY_PAGE_CONTROLS && pureCount>visibleSettings){
         float trackTop=(OVERLAY_HEADER_H+4)*s,trackH=(visibleSettings*OVERLAY_ROW_H-8)*s;
         float thumbH=trackH*(float)visibleSettings/(float)pureCount;
         float top=trackTop+(trackH-thumbH)*(float)p->state->scroll/(float)(pureCount-visibleSettings);
+        if (OVERLAY_REFINED_LOOK) LookScrollBar(p,(OVERLAY_PANEL_W-13)*s,trackTop,trackH,top,thumbH);
+        else {
         FillRoundRect(p->surface,(OVERLAY_PANEL_W-12)*s,trackTop,4*s,trackH,2*s,WithAlpha(kText,.10f));
         FillRoundRect(p->surface,(OVERLAY_PANEL_W-12)*s,top,4*s,thumbH,2*s,WithAlpha(kAccent,.65f));
+        }
     }
     if (page == OVERLAY_PAGE_CONTROLS) {
         int scroll = Host_ClampControlsScroll(p->state->scroll);
@@ -1121,10 +1389,14 @@ static void PaintRows(const Painter *p) {
                                  (float)OVERLAY_CONTROLS_ITEM_COUNT);
         float thumbTop = trackTop + (trackH - thumbH) *
                          ((float)scroll / (float)OVERLAY_CONTROLS_MAX_SCROLL);
-        FillRoundRect(p->surface, trackX, trackTop, 4.0f * s, trackH, 2.0f * s,
-                      WithAlpha(kText, 0.10f));
-        FillRoundRect(p->surface, trackX, thumbTop, 4.0f * s, thumbH, 2.0f * s,
-                      WithAlpha(kAccent, 0.65f));
+        if (OVERLAY_REFINED_LOOK) {
+            LookScrollBar(p, trackX - 1.0f * s, trackTop, trackH, thumbTop, thumbH);
+        } else {
+            FillRoundRect(p->surface, trackX, trackTop, 4.0f * s, trackH, 2.0f * s,
+                          WithAlpha(kText, 0.10f));
+            FillRoundRect(p->surface, trackX, thumbTop, 4.0f * s, thumbH, 2.0f * s,
+                          WithAlpha(kAccent, 0.65f));
+        }
     }
 }
 
@@ -1180,6 +1452,11 @@ static const char *OverlayRowHelp(const HostOverlayState *state) {
             return "Left-stick deflection needed to run in the field. Lower values start running sooner.";
         }
         if (state->row == HOST_SPEED_BINDING + 1) {
+            int unbound = state->bind_device == HOST_BIND_CONTROLLER
+                ? host_options.buttons[HOST_SPEED_BINDING] == HOST_UNBOUND_BUTTON
+                : host_options.keys[HOST_SPEED_BINDING] == HOST_UNBOUND_KEY;
+            if (unbound)
+                return "No fast-forward button assigned. Enter/South: choose a binding. Left/Right: 2x-4x.";
             return host_options.speed_toggle
                        ? "Press to speed up, again for normal. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds."
                        : "Hold to speed up. Left/Right: 2x-4x. Enter/South binds; Del/West unbinds.";
@@ -1220,6 +1497,13 @@ static void PaintFooter(const Painter *p, int visibleRowCount) {
     float footerTop = (float)(OverlayDesignHeight(visibleRowCount) - OVERLAY_FOOTER_H) * s;
     const char *help = OverlayRowHelp(p->state);
 
+    if (OVERLAY_REFINED_LOOK) {
+        LookHelpBox(p, (float)OVERLAY_PANEL_W, footerTop / s + 8.0f, (float)(OVERLAY_FOOTER_H - 20), help,
+                    p->state->page == OVERLAY_PAGE_MODS
+                        ? "Enter / click activate   PgUp/PgDn page   Esc resume"
+                        : "Up/Down select   Left/Right change   PgUp/PgDn page   Esc resume");
+        return;
+    }
     FillRoundRect(p->surface, (float)OVERLAY_PAD * s, footerTop,
                   (float)(OVERLAY_PANEL_W - 2 * OVERLAY_PAD) * s, 1.0f, 0.0f,
                   WithAlpha(kText, 0.10f));
@@ -1272,6 +1556,28 @@ static void OverlayPaintPrompt(OverlaySurface *surface, const HostOverlayState *
 
     memset(surface->pixels, 0, (size_t)surface->w * (size_t)surface->h * 4u);
     PaintFrame(&painter, (float)PROMPT_PANEL_W * s, (float)OverlayPromptDesignHeight() * s);
+    if (OVERLAY_REFINED_LOOK) {
+        LookTitle(&painter, (float)PROMPT_PANEL_W, 66.0f, "SKIP CUTSCENE", "MOVIE PAUSED");
+        DrawText(surface, (float)OVERLAY_PAD * s, 96.0f * s, 16.0f * s, "Do you want to skip the cutscene?",
+                 WithAlpha(kLookText, 0.82f), ALIGN_LEFT);
+        for (row = 0; row < PROMPT_ROWS; row++) {
+            OverlayRect rect = OverlayPromptRowRect(row);
+            float top = rect.y * s;
+            float mid = top + (float)OVERLAY_ROW_H * 0.5f * s;
+            int selected = row == state->row;
+
+            LookRowBand(&painter, (float)PROMPT_PANEL_W, top, mid, selected, row == 0);
+            DrawText(surface, OverlayLabelX() * s, mid + 6.0f * s, 17.0f * s, kAnswers[row],
+                     WithAlpha(kLookText, selected ? 1.0f : 0.78f), ALIGN_LEFT);
+        }
+        LookRect(surface, (int)((float)OVERLAY_PAD * s), (int)(footerTop + 4.0f * s),
+                 (int)((float)(PROMPT_PANEL_W - 2 * OVERLAY_PAD) * s), 1, WithAlpha(kLookSilver, 0.10f));
+        DrawSpaced(surface, (float)OVERLAY_PAD * s, footerTop + 36.0f * s, 10.0f * s, 1.6f * s,
+                   "UP/DOWN SELECT   ENTER CONFIRM   ESC KEEP WATCHING", WithAlpha(kLookDim, 0.85f), ALIGN_LEFT);
+        solid = surface->pixels + (size_t)(surface->h - 1) * (size_t)surface->w * 4u;
+        solid[3] = 255;
+        return;
+    }
     DrawText(surface, (float)OVERLAY_PAD * s, 40.0f * s, 26.0f * s, "Skip cutscene",
              kText, ALIGN_LEFT);
     DrawText(surface, (float)(PROMPT_PANEL_W - OVERLAY_PAD) * s, 38.0f * s, 14.0f * s,
@@ -1346,6 +1652,11 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
 
     memset(surface->pixels, 0, (size_t)surface->w * (size_t)surface->h * 4u);
     PaintFrame(&painter, (float)SCREENSHOT_PANEL_W * s, (float)designH * s);
+    if (OVERLAY_REFINED_LOOK) {
+        LookTitle(&painter, (float)SCREENSHOT_PANEL_W, 66.0f, "SAVE SCREENSHOT", "GAME PAUSED");
+        DrawText(surface, (float)OVERLAY_PAD * s, 96.0f * s, 15.0f * s,
+                 state->bg_summary[0] ? state->bg_summary : "Background ID: none", kLookSteel, ALIGN_LEFT);
+    } else {
     DrawText(surface, (float)OVERLAY_PAD * s, 40.0f * s, 26.0f * s, "Save screenshot",
              kText, ALIGN_LEFT);
     DrawText(surface, (float)(SCREENSHOT_PANEL_W - OVERLAY_PAD) * s, 38.0f * s, 14.0f * s,
@@ -1356,6 +1667,7 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
     FillRoundRect(surface, (float)OVERLAY_PAD * s, (float)(SCREENSHOT_HEADER_H - 12) * s,
                   (float)(SCREENSHOT_PANEL_W - 2 * OVERLAY_PAD) * s, 1.0f, 0.0f,
                   WithAlpha(kText, 0.10f));
+    }
 
     for (row = 0; row < SCREENSHOT_ROWS; row++) {
         OverlayRect rect = OverlayScreenshotRowRect(state, row);
@@ -1363,9 +1675,15 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
         float mid = top + (float)OVERLAY_ROW_H * 0.5f * s;
         float baseline = mid + 6.0f * s;
         int selected = !state->osk_open && row == state->row;
-        Color label = selected ? kText : WithAlpha(kText, 0.82f);
+        Color label = OVERLAY_REFINED_LOOK ? WithAlpha(kLookText, selected ? 1.0f : 0.78f)
+                                        : (selected ? kText : WithAlpha(kText, 0.82f));
+        const float labelX = OverlayLabelX() * s;
 
-        if (selected || (state->osk_open && row == SCREENSHOT_ROW_NOTE)) {
+        if (OVERLAY_REFINED_LOOK) {
+            LookRowBand(&painter, (float)SCREENSHOT_PANEL_W, top, mid,
+                        selected || (state->osk_open && row == SCREENSHOT_ROW_NOTE),
+                        row == 0 || row == SCREENSHOT_ROW_SAVE);
+        } else if (selected || (state->osk_open && row == SCREENSHOT_ROW_NOTE)) {
             FillRoundRect(surface, rect.x * s, top + 3.0f * s, rect.w * s,
                           (float)(OVERLAY_ROW_H - 6) * s, 9.0f * s,
                           WithAlpha(kAccent, 0.16f));
@@ -1378,16 +1696,17 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
                           selected, 0, label);
         } else if (row == SCREENSHOT_ROW_NOTE) {
             char displayNote[140];
-            DrawText(surface, (float)OVERLAY_PAD * s, baseline, 17.0f * s, "Note", label,
+            DrawText(surface, labelX, baseline, 17.0f * s, "Note", label,
                      ALIGN_LEFT);
             if (state->note[0] != '\0' || state->osk_open || selected) {
                 snprintf(displayNote, sizeof(displayNote), "%s%s", state->note,
                          (selected || state->osk_open) ? "|" : "");
-                DrawText(surface, (float)(OVERLAY_PAD + 90) * s, baseline, 16.0f * s,
-                         displayNote, kText, ALIGN_LEFT);
+                DrawText(surface, labelX + 90.0f * s, baseline, 16.0f * s,
+                         displayNote, OVERLAY_REFINED_LOOK ? kLookText : kText, ALIGN_LEFT);
             } else {
-                DrawText(surface, (float)(OVERLAY_PAD + 90) * s, baseline, 15.0f * s,
-                         "Type or press Enter / South for keyboard...", kMuted, ALIGN_LEFT);
+                DrawText(surface, labelX + 90.0f * s, baseline, 15.0f * s,
+                         "Type or press Enter / South for keyboard...", OVERLAY_REFINED_LOOK ? kLookDim : kMuted,
+                         ALIGN_LEFT);
             }
         } else if (row == SCREENSHOT_ROW_UPLOAD) {
             const char *val = !uploadUrl ? "Not configured"
@@ -1397,11 +1716,11 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
             const char *saveLabel = (uploadUrl && host_options.screenshot_auto_upload)
                                         ? "Save & upload screenshot"
                                         : "Save screenshot";
-            DrawText(surface, (float)OVERLAY_PAD * s, baseline, 17.0f * s, saveLabel,
-                     selected ? kAccent : label, ALIGN_LEFT);
+            DrawText(surface, labelX, baseline, 17.0f * s, saveLabel,
+                     selected ? (OVERLAY_REFINED_LOOK ? kLookText : kAccent) : label, ALIGN_LEFT);
         } else if (row == SCREENSHOT_ROW_CANCEL) {
-            DrawText(surface, (float)OVERLAY_PAD * s, baseline, 17.0f * s, "Cancel",
-                     selected ? kDanger : label, ALIGN_LEFT);
+            DrawText(surface, labelX, baseline, 17.0f * s, "Cancel",
+                     selected ? (OVERLAY_REFINED_LOOK ? kLookRed : kDanger) : label, ALIGN_LEFT);
         }
     }
 
@@ -1410,6 +1729,14 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
             for (int c = 0; c < SCREENSHOT_OSK_COLS; c++) {
                 OverlayRect cell = OverlayScreenshotOskKeyRect(r, c);
                 int active = (r == state->osk_row && c == state->osk_col);
+                if (OVERLAY_REFINED_LOOK) {   /* framed keys; the one under the cursor glows red */
+                    const int kx = (int)(cell.x * s), ky = (int)(cell.y * s), kw = (int)(cell.w * s), kh = (int)(cell.h * s);
+                    LookRect(surface, kx, ky, kw, kh, active ? WithAlpha(kLookRed, 0.30f) : (Color){0.0f, 0.0f, 0.0f, 0.35f});
+                    LookFrame(surface, kx, ky, kw, kh, active ? kLookRed : WithAlpha(kLookSilver, 0.18f));
+                    DrawText(surface, (cell.x + cell.w * 0.5f) * s, (cell.y + cell.h * 0.5f + 5.0f) * s, 14.0f * s,
+                             kScreenshotOskKeys[r][c], active ? kLookText : kLookDim, ALIGN_CENTRE);
+                    continue;
+                }
                 FillRoundRect(surface, cell.x * s, cell.y * s, cell.w * s, cell.h * s,
                               6.0f * s,
                               active ? WithAlpha(kAccent, 0.35f) : WithAlpha(kText, 0.08f));
@@ -1420,19 +1747,24 @@ static void OverlayPaintScreenshot(OverlaySurface *surface, const HostOverlaySta
         }
     }
 
-    FillRoundRect(surface, (float)OVERLAY_PAD * s, footerTop,
-                  (float)(SCREENSHOT_PANEL_W - 2 * OVERLAY_PAD) * s, 1.0f, 0.0f,
-                  WithAlpha(kText, 0.10f));
     const char *help = (state->status && state->status[0])
                            ? state->status
                        : state->osk_open
                            ? "D-pad select key   South/Enter type   West Bksp   North Space   Start Done"
                            : "Type note or press South/Enter on Note for controller keyboard. Start saves.";
+    if (OVERLAY_REFINED_LOOK) {
+        LookHelpBox(&painter, (float)SCREENSHOT_PANEL_W, footerTop / s + 6.0f, (float)(SCREENSHOT_FOOTER_H - 16), help,
+                    "Up/Down select   Left/Right change   Start/Enter save   Esc/East cancel");
+    } else {
+    FillRoundRect(surface, (float)OVERLAY_PAD * s, footerTop,
+                  (float)(SCREENSHOT_PANEL_W - 2 * OVERLAY_PAD) * s, 1.0f, 0.0f,
+                  WithAlpha(kText, 0.10f));
     DrawText(surface, (float)OVERLAY_PAD * s, footerTop + 26.0f * s, 14.0f * s, help, kMuted,
              ALIGN_LEFT);
     DrawText(surface, (float)OVERLAY_PAD * s, footerTop + 50.0f * s, 13.0f * s,
              "Up/Down select   Left/Right change   Start/Enter save   Esc/East cancel",
              WithAlpha(kMuted, 0.7f), ALIGN_LEFT);
+    }
     solid = surface->pixels + (size_t)(surface->h - 1) * (size_t)surface->w * 4u;
     solid[3] = 255;
 }

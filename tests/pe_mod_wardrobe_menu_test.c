@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../mods/host/pe_main_menu.c"
-#include "../mods/pe_collection/pe_wardrobe_menu.c"
+#include "../mods/pe_wardrobe/pe_wardrobe_menu.c"
 static size_t frame_bytes, max_frame_bytes;
 _Alignas(RenderTexturedQuad) static unsigned char packet_arena[0x4000];
 static RenderNativeTag ordering;

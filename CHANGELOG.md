@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11
+
+- Improved model rendering, polygon edges, texture gradients and frame pacing across graphics backends.
+- Fixed distorted Wardrobe skins during Aya’s long-dress scenes.
+- Fixed several crashes involving missing animation poses and targets that have already disappeared.
+- Fixed save errors leaving the save screen waiting, and cleaned up interrupted movie playback.
+- Corrected Bestiary species and boss records.
+- Added portable storage, clearer fast-forward controls, a refined Mods menu and optional held-button interaction retries.
+- Improved HD background layer edges and pack compatibility checks. Background pack 0.2 provides reviewed artwork corrections.
+- Parked experimental language packs and translation tools for further development.
+
 ## 0.10
 
 - Added an optional **Screenshot** binding in **Escape → Controls** for keyboard and controller, opening an in-game modal with issue tags, a note field (with an on-screen controller keyboard), PNG + JSON metadata export (including exact background and widescreen IDs) and optional automatic webhook upload.

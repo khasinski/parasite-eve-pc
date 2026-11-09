@@ -17,7 +17,7 @@ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET
     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum supported macOS version")
 endif()
 option(PE_PS5_GAME "Build the native game with the public PS5 SDK" OFF)
-project(parasite-eve-pc VERSION 0.10.0 LANGUAGES C)
+project(parasite-eve-pc VERSION 0.11.0 LANGUAGES C)
 if(PE_PS5_GAME)
     include(cmake/ps5/game.cmake)
 endif()
@@ -155,7 +155,14 @@ endif()
 add_executable(parasite-eve-pc src/main/boot/main.c src/main/boot/crash_report.c src/main/boot/crash_report_posix.c)
 target_include_directories(parasite-eve-pc PRIVATE include)
 target_link_libraries(parasite-eve-pc PRIVATE psyz pe_download_deps ${CMAKE_DL_LIBS})
-set(PE_BUILD_ID "8c52cdd-field-hd-integration-20261030")
+set(PE_BUILD_ID "0.11-source")
+execute_process(COMMAND git rev-parse --short=12 HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    OUTPUT_VARIABLE PE_GIT_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET RESULT_VARIABLE PE_GIT_RESULT)
+if(PE_GIT_RESULT EQUAL 0)
+    set(PE_BUILD_ID "${PE_GIT_REVISION}")
+endif()
 target_compile_definitions(parasite-eve-pc PRIVATE __psyz PE_VERSION="${PROJECT_VERSION}" PE_BUILD_ID="${PE_BUILD_ID}")
 if(APPLE AND PE_MACOS_BUNDLE)
     set_target_properties(parasite-eve-pc PROPERTIES
@@ -509,6 +516,29 @@ if(BUILD_TESTING)
 
     pe_add_common_unit_test(test-original-math original-game-math tests/original_math.c)
     pe_add_common_unit_test(test-original-gte original-game-gte tests/original_gte.c)
+    add_executable(test-psyz-gte-ownership
+        ${PSYZ_DIR}/psyz/tests/test_main.c
+        ${PSYZ_DIR}/psyz/tests/test_libgte.c
+        ${PSYZ_DIR}/ztest/ztest.c)
+    target_compile_definitions(test-psyz-gte-ownership PRIVATE __psyz)
+    target_include_directories(test-psyz-gte-ownership PRIVATE ${PSYZ_DIR}/ztest)
+    target_link_libraries(test-psyz-gte-ownership PRIVATE psyz)
+    add_test(NAME original-game-gte-pgxp-ownership COMMAND test-psyz-gte-ownership
+        --filter=gte_pgxp_store::* --output=plain)
+    set_tests_properties(original-game-gte-pgxp-ownership PROPERTIES TIMEOUT 60
+        FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy")
+    add_executable(test-psyz-cd-media
+        ${PSYZ_DIR}/psyz/tests/test_main.c
+        ${PSYZ_DIR}/psyz/tests/test_libcd.c
+        ${PSYZ_DIR}/ztest/ztest.c)
+    target_compile_definitions(test-psyz-cd-media PRIVATE __psyz PSYZ_TEST_CD_IO=1 _FILE_OFFSET_BITS=64)
+    target_include_directories(test-psyz-cd-media PRIVATE ${PSYZ_DIR}/ztest)
+    target_link_libraries(test-psyz-cd-media PRIVATE psyz)
+    add_test(NAME original-game-cd-media COMMAND test-psyz-cd-media --output=plain)
+    set_tests_properties(original-game-cd-media PROPERTIES TIMEOUT 60
+        FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy")
     pe_add_common_unit_test(test-original-animation original-game-animation tests/original_animation.c)
     pe_add_common_unit_test(test-original-transforms original-game-transforms tests/original_transforms.c)
     pe_add_common_unit_test(test-original-projection original-game-projection tests/original_projection.c)
@@ -571,10 +601,13 @@ if(BUILD_TESTING)
         $<TARGET_OBJECTS:parasite-eve-original-actor-animation>)
     target_include_directories(test-original-actor-animation PRIVATE include tests)
     target_link_libraries(test-original-actor-animation PRIVATE psyz)
+    add_test(NAME original-game-movie-early-exit COMMAND test-original-actor-animation --movie-early-exit)
+    set_tests_properties(original-game-movie-early-exit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30 LABELS "game-assets;audio")
     add_test(NAME original-game-movie-audio-lock-order COMMAND test-original-actor-animation --movie-audio-lock-order)
     set_tests_properties(original-game-movie-audio-lock-order PROPERTIES TIMEOUT 20 LABELS "audio")
     add_test(NAME original-game-save-safety COMMAND test-original-actor-animation --save-safety)
     add_test(NAME original-game-actor-animation COMMAND test-original-actor-animation)
+    add_test(NAME original-game-actor-distance COMMAND test-original-actor-animation --actor-distance)
     add_test(NAME original-game-animation-event-completion COMMAND test-original-actor-animation --anim-event-completion)
     add_test(NAME original-game-glint COMMAND test-original-actor-animation --glint)
     add_test(NAME original-game-fx-camera COMMAND test-original-actor-animation --fx-camera)
@@ -599,6 +632,18 @@ if(BUILD_TESTING)
     set_tests_properties(original-game-hd-backgrounds PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180 LABELS "game-assets;gpu;hd-assets")
     find_package(Python3 QUIET COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT CMAKE_CROSSCOMPILING)
+            add_test(NAME vsync-display-selection COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/vsync_display_selection.py
+                ${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/src/platform/sdl3_common.h
+                ${CMAKE_C_COMPILER})
+            set_tests_properties(vsync-display-selection PROPERTIES TIMEOUT 30)
+        endif()
+        add_test(NAME original-game-m273-reported-crash COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/m273_crash_replay.py
+            $<TARGET_FILE:parasite-eve-pc> ${CMAKE_BINARY_DIR}/m273-crash-evidence)
+        set_tests_properties(original-game-m273-reported-crash PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;gpu;mods")
         add_test(NAME lighting-editor-assets COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/lighting-editor/test_assets.py)
         set_tests_properties(lighting-editor-assets PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77 LABELS "tools")
@@ -706,6 +751,21 @@ if(BUILD_TESTING)
     set_tests_properties(original-game-m023-melissa PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets;gpu;audio")
     add_test(NAME original-game-m022-keys COMMAND test-original-actor-animation --native-m022 $<TARGET_FILE:parasite-eve-pc>)
     set_tests_properties(original-game-m022-keys PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 480 LABELS "game-assets;gpu;audio")
+    add_test(NAME original-game-carnegie-interaction-timing COMMAND test-original-actor-animation --native-carnegie-interaction-timing $<TARGET_FILE:parasite-eve-pc>)
+    set_tests_properties(original-game-carnegie-interaction-timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 480 LABELS "game-assets;gpu;audio")
+    foreach(variant IN ITEMS early late)
+        if(variant STREQUAL "early")
+            set(offset -3)
+        else()
+            set(offset 7)
+        endif()
+        add_test(NAME original-game-carnegie-interaction-timing-${variant} COMMAND test-original-actor-animation --native-carnegie-interaction-timing $<TARGET_FILE:parasite-eve-pc>)
+        set_tests_properties(original-game-carnegie-interaction-timing-${variant} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 480 LABELS "game-assets;gpu;audio" ENVIRONMENT "PE_TEST_CARNEGIE_PRESS_OFFSET=${offset}")
+    endforeach()
+    foreach(side IN ITEMS left center right away)
+        add_test(NAME original-game-carnegie-diary-${side} COMMAND test-original-actor-animation --native-carnegie-diary-range $<TARGET_FILE:parasite-eve-pc>)
+        set_tests_properties(original-game-carnegie-diary-${side} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 480 LABELS "game-assets;gpu;audio" ENVIRONMENT "PE_TEST_CARNEGIE_DIARY_SIDE=${side}")
+    endforeach()
     add_dependencies(test-original-actor-animation parasite-eve-pc)
     add_test(NAME original-game-fx-frames COMMAND test-original-actor-animation --fx-frames)
     set_tests_properties(original-game-fx-frames PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 120 LABELS "game-assets;gpu")
@@ -752,6 +812,9 @@ if(BUILD_TESTING)
     set_tests_properties(original-m273-attack-timing PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;fieldfx")
     add_test(NAME original-m273-liberty-load COMMAND test-original-actor-animation --m273-load)
+    add_test(NAME original-m273-action-poses COMMAND test-original-actor-animation --m273-action-poses)
+    set_tests_properties(original-m273-action-poses PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;battle")
     set_tests_properties(original-m273-liberty-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "game-assets;render")
     add_test(NAME original-m245-trail-burst-load COMMAND test-original-actor-animation --m245-load)
@@ -869,14 +932,36 @@ if(BUILD_TESTING)
         target_include_directories(test-psyz-interpolation PRIVATE third_party/psyz/ztest)
         target_compile_definitions(test-psyz-interpolation PRIVATE __psyz PSYZ_TEST_SDL_GPU=1)
         target_link_libraries(test-psyz-interpolation PRIVATE psyz)
+        add_test(NAME original-gpu-native-attributes COMMAND test-psyz-interpolation --filter=gpu::ps1_polygon_attribute_gradients)
+        set_tests_properties(original-gpu-native-attributes PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-native-coverage COMMAND test-psyz-interpolation --filter=gpu::native_polygon*)
+        set_tests_properties(original-gpu-native-coverage PROPERTIES TIMEOUT 30 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-frame-interpolation COMMAND test-psyz-interpolation --filter=gpu::interpolated*)
         set_tests_properties(original-gpu-frame-interpolation PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             SKIP_REGULAR_EXPRESSION "requires SDL GPU"
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-hd-coverage COMMAND test-psyz-interpolation
+            --filter=gpu::authored*,gpu::selective*)
+        set_tests_properties(original-gpu-hd-coverage PROPERTIES
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped")
+        add_test(NAME original-gpu-hd-reference COMMAND test-psyz-interpolation
+            --filter=gpu::queued_hd_sprite_preserves_native_vram_coverage_and_palette_fallback)
+        add_test(NAME original-gpu-hd-extension COMMAND test-psyz-interpolation
+            --filter=gpu::widescreen_hd_extension_is_display_only)
+        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference original-gpu-hd-extension PROPERTIES
+            TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            SKIP_REGULAR_EXPRESSION "requires SDL GPU"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIODRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_executable(test-gpu-resource-failures tests/gpu_resource_failures.c)
         target_link_libraries(test-gpu-resource-failures PRIVATE psyz)
-        foreach(mode upload readback reset resize swapchain-resize)
+        foreach(mode upload readback reset resize swapchain-resize pacing)
             add_test(NAME original-gpu-resource-${mode} COMMAND test-gpu-resource-failures --${mode})
             set_tests_properties(original-gpu-resource-${mode} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
                 LABELS "gpu" ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy")
@@ -973,6 +1058,19 @@ if(BUILD_TESTING)
             endif()
         endforeach()
     endif()
+endif()
+
+# Every program built from the mods' objects also needs what they link (the Wardrobe's character
+# packs read zips and pack.json): object libraries don't pass their link libraries on.
+if(PE_MODS)
+    get_property(pe_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(pe_target IN LISTS pe_targets)
+        get_target_property(pe_type ${pe_target} TYPE)
+        get_target_property(pe_sources ${pe_target} SOURCES)
+        if(pe_type STREQUAL "EXECUTABLE" AND pe_sources AND "${pe_sources}" MATCHES "TARGET_OBJECTS:pe-mods")
+            target_link_libraries(${pe_target} PRIVATE pe_download_json pe_download_zip)
+        endif()
+    endforeach()
 endif()
 
 if(PE_PS5_GAME)

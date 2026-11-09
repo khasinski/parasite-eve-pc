@@ -5,13 +5,16 @@
  * place so no mod includes another mod's headers. A service is a versioned table of functions;
  * a mod that doesn't find one carries on without it.
  *
- *   "junk"      v1  pe_economy     the Junk counter
- *   "catalog"   v1  pe_economy     armor effects unlocked in the Mod Catalog
- *   "keys"      v1  pe_qol         the key item pocket
- *   "stacks"    v1  pe_stacks      stack counts and stack-aware add/take for bag and crate
- *   "wardrobe"  v1  pe_collection  costumes that can be worn now (for shops such as Wayne's)
+ *   "junk"      v1  pe_economy  the Junk counter
+ *   "catalog"   v1  pe_catalog   armor effects unlocked in the Mod Catalog
+ *   "keys"      v1  pe_qol      the key item pocket
+ *   "stacks"    v1  pe_stacks   stack counts and stack-aware add/take for bag and crate
+ *   "wardrobe"  v1  pe_wardrobe    costumes that can be worn now (for shops such as Wayne's)
  *   "bestiary"  v1  pe_collection  register creatures, map enemies to them, unlock entries
- *   "costumes"  v1  pe_collection  register costumes (the game's outfits or a mod's own models)
+ *   "costumes"  v1  pe_wardrobe    register costumes (the game's outfits or a mod's own models)
+ *   "costume_rules" v1 pe_economy  whether costumes must be unlocked before they are worn
+ *   "wallet"    v1  pe_economy  battle rewards' fields in the Junk record (bridge findings D10)
+ *   "rebuild"   v1  pe_catalog  dismantled gear to buy back (Wayne's Workshop)
  *
  * Providers (an import pack, a randomizer) register at their init, so they list "pe_collection"
  * in their PeMod requires. Keys are stable names saved in the player's profile ("pe1/rat",
@@ -39,10 +42,53 @@ typedef struct PeJunkApi {
     int (*handin_blocked)(void);       /* a hand-in needs one free bag slot */
 } PeJunkApi;
 
+/* `wallet` v1: for the battle rewards only (bridge findings D10). The Junk wallet owns the
+ * "pe_economy.loot" save record whole; the rewards' fields in it are copied in and out here, so
+ * the wallet stays its only writer and keeps them as loaded while the rewards are off. None of
+ * these spend, grant or save; the save host saves the record when the game saves. */
+typedef struct PeRewardState {
+    uint16_t hits[7];                   /* per enemy slot, this battle (the no-hit bonus) */
+    uint16_t rare_dry, rare_carry;      /* pity progress; a rare that didn't fit the list */
+    uint32_t rng;
+    uint16_t charm_left;
+    uint8_t econ_since, permit_since;   /* rares since an economy mod / a Mod Permit */
+} PeRewardState;
+
+struct PeEconState;
+struct PeEconProgress;
+typedef struct PeWalletApi {
+    uint32_t struct_size;               /* sizeof(PeWalletApi) */
+    void (*get_rewards)(PeRewardState *out);
+    void (*put_rewards)(const PeRewardState *in);
+    int (*preset)(void);                /* Difficulty: 0 Relaxed, 1 Normal, 2 Grind */
+    /* Extra Junk for the battle being won, added before the items-found list is built: the wallet
+     * shows it with vanilla Junk and steals as one "Junk xN" entry. */
+    void (*battle_junk)(uint32_t n);
+    /* The opt-in Economy path. policy: the applied state while it is active, else NULL, and then
+     * nothing below may be used. room: Junk the wallet can still take whole this battle. */
+    const struct PeEconState *(*policy)(void);
+    void (*policy_commit)(const struct PeEconProgress *progress);
+    uint32_t (*room)(void);
+} PeWalletApi;
+
 typedef struct PeCatalogApi {
     int (*armor_unlocked)(int effect);
     int (*unlock_armor)(int effect);   /* 1 if it was new */
 } PeCatalogApi;
+
+/* `rebuild` v1: the Mod Catalog's Rebuild list, newest first, for shop fronts (Wayne's Workshop).
+ * rebuild() buys entry i back (Junk through the wallet); msg says what happened. */
+struct ItemDataRecord;
+typedef struct PeRebuildApi {
+    int (*count)(void);
+    uint8_t (*item)(int i);
+    unsigned (*bought_slots)(int i);      /* slots added with Mod Permits before dismantling */
+    uint32_t (*price)(int i);
+    int (*rebuild)(int i, char *msg, size_t size);   /* 1 if rebuilt */
+    /* Added to v1 (NULL from builds before): the record rebuild(i) would make (stats, bonuses,
+     * slot count, empty slots), for a stats view; 0 if there is no entry i. Changes nothing. */
+    int (*preview)(int i, struct ItemDataRecord *out);
+} PeRebuildApi;
 
 typedef struct PeKeysApi {
     int (*take)(uint16_t item);        /* pocket a key; 1 means handled */
@@ -58,13 +104,26 @@ typedef struct PeStacksApi {
 } PeStacksApi;
 
 /* state: 0 for sale, 1 owned, 2 worn. Wayne's Workshop shows a Wardrobe row while published. */
+struct PeModelSource;   /* below */
 typedef struct PeWardrobeApi {
     int (*count)(void);
     const char *(*name)(int k);
     unsigned (*price)(int k);
     int (*state)(int k);
     int (*pick)(int k, char *msg, size_t size);   /* buy or wear; msg says what happened */
+    /* Added to v1 (NULL from builds before: no previews): outfit k's model for a model stage; 0
+     * when it has none to show while browsing (one only its provider's own loader can make). */
+    int (*preview)(int k, struct PeModelSource *src);
 } PeWardrobeApi;
+
+/* `costume_rules` v1: a mod's rule that costumes must be owned (or free) before they are worn
+ * (bridge findings D8 §12, D6 §15.5). The Wardrobe asks; it never calls the provider's code
+ * otherwise, and the provider never edits the Wardrobe's profile. With no provider running, or
+ * active() 0 (the player turned the rule off), every installed costume can be worn, without
+ * becoming owned. active() is read only: it never grants, spends or saves. */
+typedef struct PeCostumeRulesApi {
+    int (*active)(void);
+} PeCostumeRulesApi;
 
 /* ---- Bestiary ----
  * A creature's entry has three tiers: basics (met: first kill or any purchase), weaknesses (Scan,
@@ -159,5 +218,34 @@ typedef struct PeBestiaryEvent {
     unsigned gained;          /* PE_BESTIARY_* bits new with this unlock */
     const char *why;          /* "kill", "scan", "junk", or a mod's own */
 } PeBestiaryEvent;
+
+/* Optional core guard for legacy mod frontends. A host without custom identities permits its
+ * existing behavior. Native engine paths use PE_HOOK_EQUIPMENT_GUARD through their normal hook
+ * boundary, so standalone native units never link against the extension implementation. */
+typedef struct PeEquipmentGuardApi {
+    uint32_t struct_size;
+    int (*record_editable)(const struct ItemDataRecord *record);
+} PeEquipmentGuardApi;
+
+/* Host-owned next-save transactions. Provider adapters own their profile format. Their admit
+ * and owned callbacks are pure; promote is idempotent and writes atomically. Promote runs only
+ * after the native card commits, or while replaying receipts from a validated loaded card.
+ * Pending unlocks are visible now, but must never be copied into independently saved profile
+ * progress (e.g. an earned Bestiary kill must merge only committed/earned bits).
+ */
+typedef struct PeProfileTransactionAdapter {
+    uint32_t struct_size;
+    const char *key;
+    unsigned supported_bits;
+    int (*admit)(const char *key,unsigned bits);
+    unsigned (*owned)(const char *key);
+    int (*promote)(const char *key,unsigned bits);
+} PeProfileTransactionAdapter;
+typedef struct PeProfileTransactionsApi {
+    uint32_t struct_size;
+    int (*add)(const PeProfileTransactionAdapter *adapter); /* init, owning namespace */
+    unsigned (*pending)(const char *adapter,const char *key);
+    int (*buy)(const char *adapter,const char *key,unsigned bits,uint32_t junk_price);
+} PeProfileTransactionsApi;
 
 #endif

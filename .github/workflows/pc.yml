@@ -31,8 +31,17 @@ jobs:
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure --no-tests=error
 
-  linux-x86_64:
-    runs-on: ubuntu-24.04
+  linux:
+    name: linux-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
       PSYZ_HEADLESS: '1'
@@ -45,25 +54,30 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build pkg-config libcurl4-openssl-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libdecor-0-dev libvulkan-dev libxtst-dev libxinerama-dev wayland-protocols libdrm-dev libgbm-dev libgles2-mesa-dev
+          sudo apt-get install -y python3-pil webp
+      - name: Verify HD pack authoring
+        run: |
+          /usr/bin/python3 tests/hd_pack_png.py
+          /usr/bin/python3 tests/hd_pack_webp.py
       - name: Fetch PsyZ and SDL
         run: |
           git submodule update --init third_party/psyz
           git -C third_party/psyz submodule update --init external/SDL
-      - name: Build and verify Linux x86-64
+      - name: Build and verify Linux ${{ matrix.arch }}
         run: |
           cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DPE_MODS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build --parallel 4
           ./build/parasite-eve-pc --help
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit linux-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit linux-source-only.xml -R '^(original-game-(actor-distance|akao-layout|math|gte|gte-pgxp-ownership|cd-media|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|vsync-display-selection|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
           ctest --test-dir build --output-on-failure --no-tests=error -R "^(original-m273-landing-cycle|original-callback-allocation-failure|original-m273-effect-pointers|original-menu-call-abi|original-game-pulled-sprite|host-crash-report|mod-crash-save-tail|mod-preserve-save-tail|mod-save-records|mod-save-registration-bounds|mod-rebalance-(vanilla|saved-vanilla|scoped|poison)|mod-atb|mod-combine|mod-panacea-off|mod-pe-(vanilla|saved-vanilla|cost|actor)|mod-inventory|mod-inventory-menu)$"
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage|lang-pack|lang-font|lang-selection)$"
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage)$"
           python3 - <<'PYTEST'
           import xml.etree.ElementTree as E
           r = E.parse('build/linux-source-only.xml')
-          assert len(r.findall('.//testcase')) == 26
+          assert len(r.findall('.//testcase')) == 30
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           r = E.parse('build/mod-features.xml')
-          assert len(r.findall('.//testcase')) == 15
+          assert len(r.findall('.//testcase')) == 12
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           PYTEST
       - name: Verify and build save editor
@@ -72,9 +86,9 @@ jobs:
         run: |
           cargo test --manifest-path save-editor/Cargo.toml --locked
           cargo build --manifest-path save-editor/Cargo.toml --locked --release
-      - name: Package Linux x86-64
+      - name: Package Linux ${{ matrix.arch }}
         run: |
-          stage=package/Parasite-Eve-linux-x86_64
+          stage=package/Parasite-Eve-linux-${{ matrix.arch }}
           mkdir -p "$stage/docs/images" "$stage/licenses" "$stage/mods"
           cp build/parasite-eve-pc README.md CHANGELOG.md LICENSE.md THIRD_PARTY_NOTICES.md "$stage/"
           cp docs/CODE_ORGANIZATION.md "$stage/docs/"
@@ -83,7 +97,7 @@ jobs:
           python3 - <<'PYLICENSE'
           from pathlib import Path
           import shutil
-          dest = Path('package/Parasite-Eve-linux-x86_64/licenses')
+          dest = Path('package/Parasite-Eve-linux-${{ matrix.arch }}/licenses')
           for path in Path('third_party/psyz').rglob('*'):
               if path.is_file() and path.name.lower().startswith(('license', 'copying', 'notice', 'copyright')) and '.git' not in path.parts:
                   target = dest / path
@@ -92,16 +106,16 @@ jobs:
           PYLICENSE
           ldd build/parasite-eve-pc > "$stage/runtime-dependencies.txt"
           git rev-parse HEAD > "$stage/source-commit.txt"
-          tar -czf Parasite-Eve-0.10-linux-x86_64.tar.gz -C package Parasite-Eve-linux-x86_64
-          sha256sum Parasite-Eve-0.10-linux-x86_64.tar.gz > linux-x86_64-sha256.txt
-          editor=package/Parasite-Eve-Save-Editor-0.10-linux-x86_64
+          tar -czf Parasite-Eve-0.11-linux-${{ matrix.arch }}.tar.gz -C package Parasite-Eve-linux-${{ matrix.arch }}
+          sha256sum Parasite-Eve-0.11-linux-${{ matrix.arch }}.tar.gz > linux-${{ matrix.arch }}-sha256.txt
+          editor=package/Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}
           mkdir -p "$editor/licenses"
           cp save-editor/target/release/pe-save-editor LICENSE.md "$editor/"
           python3 - <<'PYEDITORLICENSE'
           from pathlib import Path
           import os, shutil
           registry = Path(os.environ.get('CARGO_HOME', str(Path.home() / '.cargo'))) / 'registry/src'
-          dest = Path('package/Parasite-Eve-Save-Editor-0.10-linux-x86_64/licenses')
+          dest = Path('package/Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}/licenses')
           for index in registry.iterdir():
               for crate in index.iterdir():
                   for path in crate.rglob('*'):
@@ -110,14 +124,14 @@ jobs:
                           target.parent.mkdir(parents=True, exist_ok=True)
                           shutil.copy2(path, target)
           PYEDITORLICENSE
-          tar -czf Parasite-Eve-Save-Editor-0.10-linux-x86_64.tar.gz -C package Parasite-Eve-Save-Editor-0.10-linux-x86_64
+          tar -czf Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}.tar.gz -C package Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: linux-x86_64-package
+          name: linux-${{ matrix.arch }}-package
           path: |
-            Parasite-Eve-0.10-linux-x86_64.tar.gz
-            Parasite-Eve-Save-Editor-0.10-linux-x86_64.tar.gz
-            linux-x86_64-sha256.txt
+            Parasite-Eve-0.11-linux-${{ matrix.arch }}.tar.gz
+            Parasite-Eve-Save-Editor-0.11-linux-${{ matrix.arch }}.tar.gz
+            linux-${{ matrix.arch }}-sha256.txt
             build/linux-source-only.xml
 
   windows-source-only:
@@ -148,11 +162,19 @@ jobs:
         run: |
           git submodule update --init third_party/psyz
           git -C third_party/psyz submodule update --init external/SDL
-      - name: Build the native Windows game and test executables
+      - name: Configure Windows and verify crash reporting
         run: |
           cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DPE_MODS=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build --target test-crash-report --parallel 2
           ctest --test-dir build --output-on-failure --no-tests=error -R '^host-crash-report$'
+      - name: Check native polygon gradients on D3D12
+        env:
+          SDL_GPU_DRIVER: direct3d12
+        run: |
+          cmake --build build --target test-psyz-interpolation --parallel 2
+          ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-native-(attributes|coverage)$'
+      - name: Build the native Windows game and test executables
+        run: |
           cmake --build build --parallel 2
       - name: Require a self-contained Windows executable
         run: |
@@ -160,22 +182,24 @@ jobs:
       - name: Run source-only Windows runtime checks (no retail images)
         run: |
           ./build/parasite-eve-pc.exe --help
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit windows-source-only.xml -R '^(original-game-(akao-layout|math|gte|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit windows-source-only.xml -R '^(original-game-(actor-distance|akao-layout|math|gte|gte-pgxp-ownership|cd-media|animation|transforms|projection|hierarchy|input-rules|pools|nodes|queue|expression|contact|movement|movie-audio-lock-order|spu-(mix-headroom|pitch-modulation|noise|live-adsr|register-serialization|hardware-reference))|host-settings|vsync-display-selection|hd-mod-download-safety|original-game-save-safety|mod-settings-save-safety|pe-mod-frequency)$'
           ctest --test-dir build --output-on-failure --no-tests=error -R "^(original-m273-landing-cycle|original-callback-allocation-failure|original-m273-effect-pointers|original-menu-call-abi|original-game-pulled-sprite|host-crash-report|mod-crash-save-tail|mod-preserve-save-tail|mod-save-records|mod-save-registration-bounds|mod-rebalance-(vanilla|saved-vanilla|scoped|poison)|mod-atb|mod-combine|mod-panacea-off|mod-pe-(vanilla|saved-vanilla|cost|actor)|mod-inventory|mod-inventory-menu)$"
-          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage|lang-pack|lang-font|lang-selection)$"
+          ctest --test-dir build --output-on-failure --no-tests=error --output-junit mod-features.xml -R "^mod-(loot|junk-counter|armor-effect-display|catalog-rules|catalog-menu|requisition|smoke|skin-bounds|collection|model|present|stage)$"
       - name: Stress D3D12 descriptor batches without a visible window
         env:
           SDL_GPU_DRIVER: direct3d12
-        run: ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(descriptor-batches|frame-interpolation|resource-(upload|readback|reset|resize|swapchain-resize))$'
+        run: |
+          ctest --test-dir build --output-on-failure --no-tests=error -R '^original-gpu-(native-(attributes|coverage)|descriptor-batches|frame-interpolation|hd-(coverage|reference|extension)|resource-(upload|readback|reset|resize|swapchain-resize))$'
+          ctest --test-dir build --no-tests=error -V -R '^original-gpu-resource-pacing$'
       - name: Require all selected source-only cases to execute
         shell: pwsh
         run: |
           [xml]$report = Get-Content build/windows-source-only.xml
           $cases = $report.SelectNodes('//testcase')
           $incomplete = $report.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error')
-          if ($cases.Count -ne 26 -or $incomplete.Count -ne 0) { throw 'Expected 26 executed source-only cases without failures or skips' }
+          if ($cases.Count -ne 30 -or $incomplete.Count -ne 0) { throw 'Expected 30 executed source-only cases without failures or skips' }
           [xml]$features = Get-Content build/mod-features.xml
-          if ($features.SelectNodes('//testcase').Count -ne 15 -or $features.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error').Count -ne 0) { throw 'Expected all 15 mod feature regressions without failures or skips' }
+          if ($features.SelectNodes('//testcase').Count -ne 12 -or $features.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error').Count -ne 0) { throw 'Expected all 12 mod feature regressions without failures or skips' }
       - name: Build and test Windows save editor
         shell: pwsh
         env:
@@ -191,8 +215,8 @@ jobs:
       - name: Package Windows game and save editor
         shell: pwsh
         run: |
-          $game = 'package/Parasite-Eve-0.10-windows-x86_64'
-          $editor = 'package/Parasite-Eve-Save-Editor-0.10-windows-x86_64'
+          $game = 'package/Parasite-Eve-0.11-windows-x86_64'
+          $editor = 'package/Parasite-Eve-Save-Editor-0.11-windows-x86_64'
           New-Item -ItemType Directory -Force "$game/docs/images", "$game/mods", "$game/licenses", $editor | Out-Null
           Copy-Item build/parasite-eve-pc.exe, README.md, CHANGELOG.md, LICENSE.md, THIRD_PARTY_NOTICES.md $game
           Copy-Item docs/images/gameplay.png "$game/docs/images/"
@@ -214,14 +238,14 @@ jobs:
             Copy-Item $_.FullName $target
           }
           'Open pe-save-editor.exe to edit a backup of your save. Optional: select your North American disc image for item data. The game must be closed while replacing saves.' | Set-Content "$editor/Read me.txt"
-          Compress-Archive -Path $game -DestinationPath Parasite-Eve-0.10-windows-x86_64-experimental.zip
-          Compress-Archive -Path $editor -DestinationPath Parasite-Eve-Save-Editor-0.10-windows-x86_64.zip
+          Compress-Archive -Path $game -DestinationPath Parasite-Eve-0.11-windows-x86_64-experimental.zip
+          Compress-Archive -Path $editor -DestinationPath Parasite-Eve-Save-Editor-0.11-windows-x86_64.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-release-packages
           path: |
-            Parasite-Eve-0.10-windows-x86_64-experimental.zip
-            Parasite-Eve-Save-Editor-0.10-windows-x86_64.zip
+            Parasite-Eve-0.11-windows-x86_64-experimental.zip
+            Parasite-Eve-Save-Editor-0.11-windows-x86_64.zip
       - name: Diagnose native Windows crash handler failures
         if: failure()
         run: |
@@ -255,6 +279,15 @@ jobs:
                   process.wait(timeout=5)
                   (out / 'process.json').write_text(json.dumps({'pid': process.pid, 'exit': process.returncode, 'scope': 'Synthetic settings diagnostics only; does not override the failed CTest result.'}, indent=2))
           PY
+      - name: Preserve native polygon mismatch pixels
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-native-attribute-pixels
+          path: |
+            third_party/psyz/psyz/tests/expected/ps1-attributes-*.actual.png
+            third_party/psyz/psyz/tests/expected/ps1-attributes-*.actual.bin
+          if-no-files-found: ignore
       - name: Preserve source-only diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

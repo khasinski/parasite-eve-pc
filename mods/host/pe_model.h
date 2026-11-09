@@ -47,7 +47,22 @@ int pe_model_decode(const struct PeRoomBlobs *room, int slot, PeModel *out);
 int pe_model_decode_player(const struct PeRoomBlobs *room, PeModel *out);
 /* Internal source loader, isolated in pe_model_skin.c; never equips or uploads to game VRAM. */
 int pe_model_skin_load(const PeModelSource *src, PeModel *out);
+/* A skin folder starting "@" (a Wardrobe character pack's, "@<pack id>/<folder>") is read through
+ * `read`, set by the mod that owns such folders (pe_wardrobe); the host never calls a mod's code
+ * by name. NULL: such folders have no preview. *data is malloc'd. */
+typedef int (*PeSkinReader)(const char *folder, const char *name, unsigned char **data, unsigned *size, unsigned max);
+void pe_model_skin_set_reader(PeSkinReader read);
 void pe_model_free(PeModel *m);
+
+/* A player skin's files, as the skin loader reads them (rooms and meta optional: NULL). */
+typedef struct PeSkinFiles {
+    const uint8_t *model, *texture, *day[8], *rooms, *meta;
+    uint32_t model_size, texture_size, day_size[8], rooms_size, meta_size;
+} PeSkinFiles;
+/* Is it shaped like Aya, as the bridge's check_skins_struct.py checks: at least 29 parts, draw
+ * commands visiting each part once in order, every animation row (bundle, day1-8, rooms.bin) one
+ * channel set per part, and meta.bin's gun part one of them. 1 if so, else 0 and the reason. */
+int pe_model_check_skin(const PeSkinFiles *files, char *why, size_t size);
 
 /* The idle animation: its frame count (at least 1), and one frame's root translation and per-part
  * angles (4096 = a full turn), as the game decodes them. */

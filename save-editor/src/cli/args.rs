@@ -85,6 +85,9 @@ pub enum Command {
 
 #[derive(Args, Debug)]
 pub struct EditArgs {
+    /// Set stack copies: bag:1:20, storage:1:20 or vault:1:20 (slot numbers start at 1)
+    #[arg(long)]
+    pub stack_quantity: Vec<String>,
     /// Path to `bu00` directory, raw slot file, or `.srm`/`.mcr`/`.mcd`/`.gme`/`.mcs` file
     pub path: PathBuf,
 

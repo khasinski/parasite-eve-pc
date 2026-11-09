@@ -282,8 +282,8 @@ static int HdPath(char *out,size_t n,const char *a,const char *b){int k=snprintf
 static int HdHex(const char *s){if(!s||strlen(s)!=64)return 0;for(unsigned i=0;i<64;++i)if(!strchr("0123456789abcdef",s[i]))return 0;return 1;}
 static int HdName(const char *s){
     if(!s)return 0;if(!strcmp(s,"manifest.json")||!strcmp(s,"title.webp")||!strcmp(s,"title.png"))return 1;
-    size_t n=strlen(s);if(n<20||n>25)return 0;for(unsigned i=0;i<16;++i)if(!strchr("0123456789abcdef",s[i]))return 0;
-    return !strcmp(s+16,".webp")||!strcmp(s+16,".png")||!strcmp(s+16,".ref.png")||!strcmp(s+16,"-wide.bin");
+    size_t n=strlen(s);if(n<20||n>26)return 0;for(unsigned i=0;i<16;++i)if(!strchr("0123456789abcdef",s[i]))return 0;
+    return !strcmp(s+16,".webp")||!strcmp(s+16,".png")||!strcmp(s+16,".ref.png")||!strcmp(s+16,"-wide.bin")||!strcmp(s+16,"-under.bin")||!strcmp(s+16,"-matte.bin");
 }
 static const char *HdString(const cJSON *j,const char *key){const cJSON *v=cJSON_GetObjectItemCaseSensitive(j,key);return cJSON_IsString(v)?v->valuestring:NULL;}
 static cJSON *HdJsonFile(const char *path,size_t limit){size_t n=0;char *data=SDL_LoadFile(path,&n);if(!data)return NULL;cJSON *j=n<=limit?cJSON_ParseWithLength(data,n):NULL;SDL_free(data);return j;}
@@ -340,7 +340,7 @@ static int HdProgress(void *opaque,curl_off_t total,curl_off_t now,curl_off_t up
 static int HdRequest(const char *url,HdTransfer *transfer,const char *download_id){
     CURL *curl=curl_easy_init();if(!curl)return 0;char ua[160],version[100],platform[100],id[128],build[100];snprintf(ua,sizeof(ua),"ParasiteEve/%s (%s; WebP; build %s)",PE_VERSION,SDL_GetPlatform(),PE_BUILD_ID);snprintf(version,sizeof(version),"X-PE-Version: %s",PE_VERSION);snprintf(platform,sizeof(platform),"X-PE-Platform: %s",SDL_GetPlatform());snprintf(id,sizeof(id),"X-PE-Download-ID: %s",download_id);
     snprintf(build,sizeof(build),"X-PE-Build: %s",PE_BUILD_ID);
-    struct curl_slist *headers=NULL;headers=curl_slist_append(headers,version);headers=curl_slist_append(headers,platform);headers=curl_slist_append(headers,id);headers=curl_slist_append(headers,build);
+    struct curl_slist *headers=NULL;headers=curl_slist_append(headers,version);headers=curl_slist_append(headers,platform);headers=curl_slist_append(headers,id);headers=curl_slist_append(headers,build);headers=curl_slist_append(headers,"X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1");
     curl_easy_setopt(curl,CURLOPT_URL,url);curl_easy_setopt(curl,CURLOPT_USERAGENT,ua);curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);curl_easy_setopt(curl,CURLOPT_PROTOCOLS_STR,"https,http");
     curl_easy_setopt(curl,CURLOPT_SSL_VERIFYPEER,1L);curl_easy_setopt(curl,CURLOPT_SSL_VERIFYHOST,2L);curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT,10L);curl_easy_setopt(curl,CURLOPT_TIMEOUT,7200L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_LIMIT,1024L);curl_easy_setopt(curl,CURLOPT_LOW_SPEED_TIME,60L);curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
     curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,HdWrite);curl_easy_setopt(curl,CURLOPT_WRITEDATA,transfer);curl_easy_setopt(curl,CURLOPT_XFERINFOFUNCTION,HdProgress);curl_easy_setopt(curl,CURLOPT_XFERINFODATA,transfer);curl_easy_setopt(curl,CURLOPT_NOPROGRESS,0L);curl_easy_setopt(curl,CURLOPT_FAILONERROR,1L);
@@ -357,6 +357,13 @@ static int HdWorker(void *unused){
     snprintf(url,sizeof(url),"%s/api/mods/upscale/latest",base);HdTransfer transfer={0};
     if(!HdRequest(url,&transfer,id)||!(catalog=cJSON_ParseWithLength(transfer.data,transfer.used))){SDL_strlcpy(host_hd.result_message,"Could not fetch the mod catalog. Previous pack kept.",sizeof(host_hd.result_message));goto end;}
     const char *format=HdString(catalog,"format");if(!format||strcmp(format,"webp-reference-png")){SDL_strlcpy(host_hd.result_message,"This pack needs a newer game build.",sizeof(host_hd.result_message));goto end;}
+    const cJSON *features=cJSON_GetObjectItemCaseSensitive(catalog,"required_features");
+    if(features&&!cJSON_IsArray(features)){SDL_strlcpy(host_hd.result_message,"Invalid background pack requirements. Previous pack kept.",sizeof(host_hd.result_message));goto end;}
+    const cJSON *feature=NULL;cJSON_ArrayForEach(feature,features){
+        if(!cJSON_IsString(feature)||(strcmp(feature->valuestring,"underlay-v1")&&strcmp(feature->valuestring,"static-matte-v1")&&strcmp(feature->valuestring,"selective-matte-v1"))){
+            SDL_strlcpy(host_hd.result_message,"This pack needs a newer game build. Previous pack kept.",sizeof(host_hd.result_message));goto end;
+        }
+    }
     const char *version=HdString(catalog,"version"),*sha=HdString(catalog,"sha256"),*remote=HdString(catalog,"url");const cJSON *size=cJSON_GetObjectItemCaseSensitive(catalog,"size");
     if(!version||strlen(version)>20||!strchr(version,'.')||!HdHex(sha)||!remote||!cJSON_IsNumber(size)||size->valuedouble<1||size->valuedouble>2147483648.0)goto end;
     for(const char *p=version;*p;++p)if(!isdigit((unsigned char)*p)&&*p!='.')goto end;
@@ -2105,8 +2112,8 @@ static void Host_ProcessSettingsPointer(
         return;
     }
     if (state->page == HOST_PAGE_CONTROLS && hitRow == HOST_SPEED_BINDING + 1 &&
-        x < (float)(OVERLAY_PAD + OVERLAY_SPEED_STEP_W)) {
-        int action = x < (float)(OVERLAY_PAD + OVERLAY_SPEED_STEP_CENTRE) ? -1 : 1;
+        x < OverlayLabelX() + (float)OVERLAY_SPEED_STEP_W) {
+        int action = x < OverlayLabelX() + (float)OVERLAY_SPEED_STEP_CENTRE ? -1 : 1;
         Host_ApplySettingsAction(state, action, 0, game);
         return;
     }
@@ -3762,9 +3769,10 @@ static void Host_DescribeCrash(char *out, size_t size) {
 /* Crash report room snapshot: what a save made at the start of the current
  * room would hold, file offsets 0x100 up to the checksum at 0x1C8C (Aya,
  * items, key items, equipment, storage, then script variables, day and Aya's
- * battle record), and with mods the save's free tail from 0x1C90 (each mod's
- * per-save data, filled by the mods' save write handlers into a blank card
- * block; its layout depends on the mods loaded). Taken whole each time a room
+ * battle record), and with mods the save's free tail from 0x1C90 and the
+ * companion file's sections (each mod's per-save data, packed from memory with
+ * no mod code running, one checksum over all of it; PE Restore publishes the
+ * companion with the rebuilt save). Taken whole each time a room
  * starts outside a battle, on the game thread, so a save can be rebuilt from
  * any report and the crash handler only copies it out. Two copies: a crash
  * while one is being taken reports the other, never a part of one.
@@ -3775,8 +3783,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
 typedef struct HostRoomSnapshot {
     u8 data[0x12E4 + 0x8A8];
 #ifdef PE_MODS
-    u8 card[0x2000];
-    int have_mod_tail;
+    PeModRecoverySnapshot recovery;
 #endif
     int room, story_day, links_fixed;
     u32 vblank;
@@ -3784,6 +3791,9 @@ typedef struct HostRoomSnapshot {
 
 static HostRoomSnapshot host_room_snapshots[2];
 static SDL_AtomicInt host_room_snapshot = {-1}; /* the complete copy, -1: none yet */
+#ifdef PE_MODS
+static unsigned host_room_snapshots_skipped; /* rooms since then whose mods' data couldn't be taken */
+#endif
 
 static void Host_TakeRoomSnapshot(void) {
     static SaveRuntimeState header;
@@ -3811,8 +3821,21 @@ static void Host_TakeRoomSnapshot(void) {
     g_AyaBattleState.attributes = attributes;
     if (!have_tail) return;
 #ifdef PE_MODS
-    memset(snapshot->card, 0, sizeof(snapshot->card));
-    snapshot->have_mod_tail = pe_mod_snapshot_save_tail(snapshot->card) == 0;
+    /* Never publish new native bytes with absent or stale companion state: while a complete
+     * snapshot exists, it stays when this room's mods' data can't be taken (mod code running, a
+     * purchase in flight, mods' data over capacity). With none to keep, the native bytes are still
+     * published, marked as having no mods' data (version 0), so a report can always rebuild the game's own save. */
+    if (pe_mod_snapshot_recovery(snapshot->data, sizeof(snapshot->data), &snapshot->recovery) < 0) {
+        const int current = SDL_GetAtomicInt(&host_room_snapshot);
+        if (current >= 0 && host_room_snapshots[current].recovery.version) {
+            ++host_room_snapshots_skipped;
+            return;
+        }
+        snapshot->recovery.version = 0;
+        snapshot->recovery.companion_size = 0;
+    } else {
+        host_room_snapshots_skipped = 0;
+    }
 #endif
     snapshot->room = Host_CrashRoom();
     snapshot->story_day = g_GameState.current_story_day;
@@ -3850,13 +3873,68 @@ static void Host_DescribeSaveData(char *out, size_t size) {
     Host_CrashHex(out, size, &used, snapshot->data, sizeof(snapshot->data), 0x100u);
 #ifdef PE_MODS
     Host_CrashAppend(out, size, &used, "\r\n== Save tail (save file bytes from 0x1C90) ==\r\n");
-    if (snapshot->have_mod_tail) {
-        Host_CrashHex(out, size, &used, snapshot->card + 0x1C90, sizeof(snapshot->card) - 0x1C90, 0x1C90u);
-    } else {
+    if (!snapshot->recovery.version) {
         Host_CrashAppend(out, size, &used,
-                         "Not available: mod code was running when the room started, so the mods' save data was not taken.\r\n");
+                         "Not available: the mods' save data could not be taken when the room started.\r\n");
+        return;
+    }
+    Host_CrashHex(out, size, &used, snapshot->recovery.card + 0x1C90, 0x2000 - 0x1C90, 0x1C90u);
+    Host_CrashAppend(out, size, &used,
+                     "\r\n== Mod recovery snapshot v1 ==\r\n"
+                     "Native bytes: %u\r\nTail bytes: %u\r\nCompanion bytes: %u\r\nSnapshot CRC32: %08X\r\n",
+                     (unsigned)sizeof(snapshot->data), 0x2000u - 0x1C90u, snapshot->recovery.companion_size,
+                     snapshot->recovery.checksum);
+    if (host_room_snapshots_skipped) {
+        Host_CrashAppend(out, size, &used,
+                         "Note: this is the last complete snapshot; the mods' data of %u newer room(s) could not be taken.\r\n",
+                         host_room_snapshots_skipped);
+    }
+    if (snapshot->recovery.companion_size) {
+        Host_CrashAppend(out, size, &used, "\r\n== Mod companion (PEEX v1, snapshot bytes from 0x0000) ==\r\n");
+        Host_CrashHex(out, size, &used, snapshot->recovery.companion, snapshot->recovery.companion_size, 0);
     }
 #endif
+}
+
+/* Select portable storage before any preferences, cards, mods or installer
+ * paths are initialized. An explicit PE_CONFIG_HOME remains authoritative. */
+static int Host_ConfigurePortable(int *argc, char **argv) {
+#ifndef PE_PS5
+    int requested = 0, count = 1;
+    for (int i = 1; i < *argc; ++i) {
+        if (!strcmp(argv[i], "--portable")) requested = 1;
+        else argv[count++] = argv[i];
+    }
+    *argc = count; argv[count] = NULL;
+    const char *base = SDL_GetBasePath();
+    if (!base) return !requested;
+    char directory[4096], marker[4096], data[4096];
+    int n = snprintf(directory, sizeof(directory), "%s", base);
+    if (n < 0 || (size_t)n >= sizeof(directory)) return 0;
+#ifdef __APPLE__
+    /* User data must be beside the signed .app, never inside its bundle. */
+    char *bundle = strstr(directory, ".app/Contents/");
+    if (bundle) {
+        while (bundle > directory && bundle[-1] != '/') --bundle;
+        *bundle = '\0';
+    }
+#endif
+    n = snprintf(marker, sizeof(marker), "%sportable.txt", directory);
+    if (n < 0 || (size_t)n >= sizeof(marker)) return 0;
+    SDL_PathInfo info;
+    requested |= SDL_GetPathInfo(marker, &info) && info.type == SDL_PATHTYPE_FILE;
+    const char *override = SDL_getenv("PE_CONFIG_HOME");
+    if (!requested || (override && *override)) return 1;
+    n = snprintf(data, sizeof(data), "%suserdata", directory);
+    if (n < 0 || (size_t)n >= sizeof(data) || !SDL_CreateDirectory(data) ||
+        !SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "PE_CONFIG_HOME", data, true)) {
+        fprintf(stderr, "Cannot prepare portable storage beside the application: %s\n", SDL_GetError());
+        return 0;
+    }
+#else
+    (void)argc; (void)argv;
+#endif
+    return 1;
 }
 
 static void Host_PrintHelp(const char *program_name) {
@@ -3870,6 +3948,7 @@ static void Host_PrintHelp(const char *program_name) {
         program_name
     );
     printf("--download-backgrounds / --verify-backgrounds manage the optional HD pack without opening a window.\n");
+    printf("--portable or portable.txt beside the application keeps settings, cards and mods in its userdata directory. PE_CONFIG_HOME overrides this location.\n");
     printf("Without --disc, opens a native multi-select CUE/BIN dialog. --choose-discs selects new images. ESC opens desktop settings.\n");
     printf("--headless uses native-resolution software rendering; --headless-gpu keeps the actual GPU window hidden and supports internal scaling.\n");
     printf("--dump-frame writes the rendered display as RGB888 PPM at each control/terminal boundary.\n");
@@ -3946,6 +4025,7 @@ static int Host_ParseHealthEventArg(const char *cursor, int argc) {
 }
 
 int main(int argc, char **argv) {
+    if (!Host_ConfigurePortable(&argc, argv)) return EXIT_FAILURE;
 #ifdef PE_PS5
     if (!Host_InitPaths()) return EXIT_FAILURE;
 #endif
@@ -4318,6 +4398,9 @@ images_ready:;
     }
 
     g_BootHostActive = 1;
+#ifdef PE_MODS
+    pe_mod_bind_native();
+#endif
     PE_HOOK(PE_HOOK_INIT, (&(PeHookInit){interactive, host_options.user_file}));
 #if PE_NATIVE_STATE_CPU_COMPONENTS
     Host_StateUiRegister();

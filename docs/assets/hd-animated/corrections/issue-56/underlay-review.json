@@ -1,0 +1,211 @@
+{
+  "status": "Static M092/M097/M239 candidates locally validated; additional animated edges and full scene-state review remain incomplete; not published",
+  "method": "Explicit static coverage with bounded long-edge refinement. M092 samples nearby original HD backdrop pixels; M097/M239 use registered, locally colour-matched generated hidden floors.",
+  "native_validation": [
+    {
+      "room": "M097",
+      "checkpoints": 66,
+      "native_state_equal": true,
+      "native_vram_equal": true,
+      "native_pcm_equal": true,
+      "changed_bbox": [
+        0,
+        496,
+        470,
+        782
+      ],
+      "frame_before_sha256": "2437be5f05d181a3395efd0a7cfbcb122df28f4e479a93eb0259fc37363bb5d4",
+      "frame_after_sha256": "f297e3b684e662d1d5e7347da8f9d48ff140a20d88a5c4e7f8a43c5df6500a03",
+      "native_vram_sha256": "4d45e6184a1a2713b11f3ef8cfe4062c9bfdf57f3c357709a26b6dc0fe0b23b7",
+      "native_pcm_sha256": "f18418dff506f584edf11c958a45e7578dd0bf9d6270de9300bf46c2580eb85e"
+    },
+    {
+      "room": "M239",
+      "checkpoints": 58,
+      "native_state_equal": true,
+      "native_vram_equal": true,
+      "native_pcm_equal": true,
+      "changed_bbox": [
+        277,
+        413,
+        1280,
+        896
+      ],
+      "frame_before_sha256": "2c282693c59232b9f5a8f826e6f21a6342176bf5c386204993e41575cb607342",
+      "frame_after_sha256": "0395827fb7a78cb096a1033356d00803ce0b19c7ec34bdc486b506166fb50ff7",
+      "native_vram_sha256": "72d169d8ee3b0455358cb3de5b0ac0408b480be4f01a453e0658841c909c4fc1",
+      "native_pcm_sha256": "0a3495773da6b16ff44784ce9c6e193da7533f58b926cf705478f2b843b902ca"
+    },
+    {
+      "room": "M092",
+      "checkpoints": 58,
+      "native_state_equal": true,
+      "native_vram_equal": true,
+      "native_pcm_equal": true,
+      "changed_bbox": [
+        1148,
+        4,
+        1280,
+        812
+      ],
+      "one_x_rgb_exact": true,
+      "animated_entries_6_through_11_unchanged": true,
+      "frame_before_sha256": "6fd621927077d4df0ba984d659c31f4f808691e128ddca339e5d092f6882a998",
+      "frame_after_sha256": "94ece701baf0e23db8b6479da586fe8d5a92697509638394453f7221f215ef61"
+    }
+  ],
+  "authoring": [
+    {
+      "room": "M097",
+      "geometry": "b1c7435335ee7113",
+      "foreground": "08a0ceae7206ffc3",
+      "underlay": "5e822db5fa1883c4",
+      "cells": 44,
+      "pixels": 5449,
+      "registration": [
+        [
+          1.0000847523326566,
+          -0.00012976805773031878,
+          -0.0048151782724506756
+        ],
+        [
+          0.00012976805773031878,
+          1.0000847523326566,
+          0.15489815194781886
+        ]
+      ],
+      "inliers": 1042,
+      "residual_p95": 2.349578380584717,
+      "gain": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "generated_master": "corrections/issue-56/M097-floor-underlay-v1.png",
+      "generated_sha256": "512f8f06f666e5f349743ad071525998bbe9ce431253a52ccda6ba33668ece5b",
+      "matte": "static-authored-long-edges",
+      "local_boundary_colour_transfer": true,
+      "original_foreground_rgb_exact": true,
+      "expanded_pixels": 4186,
+      "native_reference_exact": true
+    },
+    {
+      "room": "M239",
+      "geometry": "60de4207704ba290",
+      "foreground": "c5da59732e08d390",
+      "underlay": "281bebebdaa0871a",
+      "cells": 66,
+      "pixels": 8414,
+      "registration": [
+        [
+          1.0003600834385293,
+          -0.00013253006909611845,
+          -0.6129170757246211
+        ],
+        [
+          0.00013253006909611845,
+          1.0003600834385293,
+          1.2024434334929417
+        ]
+      ],
+      "inliers": 402,
+      "residual_p95": 2.3658735752105713,
+      "gain": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "generated_master": "corrections/issue-56/M239-floor-underlay-v1.png",
+      "generated_sha256": "c5736a9358ded6fff5ca5ba336c93801ab34af647567ee82eb5d9b2969d96b7f",
+      "matte": "static-authored-long-edges",
+      "local_boundary_colour_transfer": true,
+      "original_foreground_rgb_exact": true,
+      "expanded_pixels": 609,
+      "native_reference_exact": true
+    },
+    {
+      "room": "M092",
+      "geometry": "2c48651307e4dc15",
+      "foreground": "8b59ba8c289913e5",
+      "underlay": "8e93d1132f17cd7b",
+      "cells": 15,
+      "pixels": 751,
+      "matte": "static-authored-long-edges",
+      "method": "nearest original HD background in a two-native-pixel band",
+      "source_background": "build/open-issues/hd-contours/underlays-lossless-webp/0b446aad81700629.webp",
+      "source_background_sha256": "e7279e64bf544c923d89ee1461b25934c2fd27890478fc3ec5f51e574113f532",
+      "max_sampling_distance": 8.0,
+      "original_foreground_rgb_exact": true,
+      "expanded_pixels": 392,
+      "native_reference_exact": true
+    }
+  ],
+  "backup": {
+    "host": "fenrir",
+    "directory": "~/Backups/parasite-eve-hd-issue56-underlays-20261105",
+    "master_sha256_verified": true
+  },
+  "previous_limitations": [
+    "M239 long silhouette still shows native-coverage stair steps at close zoom",
+    "M097 retains some source/material dark ticks; must review all affected contours",
+    "Uniform full-contour erosion rejected because it damaged thin microscope parts",
+    "Next step requires coordinated authored HD coverage and backdrop, preserving strict legacy coverage by default"
+  ],
+  "limitations": [
+    "Additional affected rooms and animated foregrounds remain to review; no automatic opt-in for animated/palette-hidden geometry",
+    "Static coverage shader passed Metal and Windows D3D12 CI; Vulkan runtime validation remains",
+    "Full camera/lighting-state review and public replacement pack remain pending"
+  ],
+  "gpu_validation": {
+    "local": "Metal",
+    "coverage_cases": 15,
+    "ctest_passed": [
+      "original-gpu-hd-coverage",
+      "original-gpu-hd-reference",
+      "original-gpu-hd-extension",
+      "original-gpu-frame-interpolation"
+    ],
+    "installer_cases": 2,
+    "atlas_identity_legacy_layouts": 513,
+    "spv_msl_dxil_regenerated": true
+  },
+  "split_validation": {
+    "date": "2026-11-05",
+    "renderer_prs": [
+      79,
+      80
+    ],
+    "files_reproduced_byte_identically": 8154,
+    "baseline_manifest_hashes_verified": 8145,
+    "live_4x_proof": "build/open-issues/hd-contours/live-static-split-4x/proof.json",
+    "live_1x_proof": "build/open-issues/hd-contours/live-static-split-1x/proof.json",
+    "one_x_rgb": "byte-identical",
+    "native_state_vram_pcm": "identical at 124 checkpoints at each resolution",
+    "publication": "not published"
+  },
+  "m092_integration": {
+    "default_rooms": [
+      "M092",
+      "M097",
+      "M239"
+    ],
+    "legacy_reproduction_args": [
+      "--rooms",
+      "M097,M239"
+    ],
+    "legacy_files_byte_identical": 8154,
+    "m092_only_args": [
+      "--rooms",
+      "M092"
+    ],
+    "selected_baseline_room_must_be_unmarked": true,
+    "full_lossless_candidate_bytes": 326803794,
+    "manifest_hashes_verified": 8157,
+    "full_candidate_vs_sequential": "8157 asset payloads byte-identical; manifest array order only differs",
+    "negative_checks": [
+      "marked room rejected",
+      "unknown room rejected before output creation"
+    ],
+    "scope": "Right static door edge; independently animated door/jamb edge is unchanged. Not a general animated-matte fix."
+  }
+}

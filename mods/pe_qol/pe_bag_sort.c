@@ -12,7 +12,7 @@
 #include "pe1/inventory_state.h"
 
 enum { PE_SORT_TAIL = 0x1C90 + 0x260 };
-static struct {
+static struct PeSortPersistent {
     uint32_t mode, rank_ptr, type_ptr, weapon_stat, armor_stat, row_hidden;
 } s_sort;
 _Static_assert(sizeof s_sort == 24, "the SORT block of older saves holds 24 bytes of this state");
@@ -104,24 +104,31 @@ static int pe_sort_save(void *ctx, void *user) {
     pe_inventory_save(ctx, PE_SORT_TAIL, &s_sort, sizeof s_sort, 0x54524F53u, 0x736F7274u);   /* the window */
     return 0;
 }
-static void pe_sort_reset(void *data) { (void)data; memset(&s_sort, 0, sizeof s_sort); s_seen = s_sorting = 0; }
+static void pe_sort_reset(void *data) {
+    struct PeSortPersistent *candidate = data; (void)data; memset(&(*candidate), 0, sizeof (*candidate)); if(data == &s_sort) s_seen = s_sorting = 0; }
 static int pe_sort_check(void *data) {
+    struct PeSortPersistent *candidate = data;
     (void)data;
-    s_seen = s_sorting = 0;
-    s_sort.row_hidden = 0;
-    return s_sort.mode > 1 || s_sort.weapon_stat > 2 || s_sort.armor_stat > 2 ||
-           !pe_rank(s_sort.rank_ptr) || !pe_type(s_sort.type_ptr);
+    if(data == &s_sort) s_seen = s_sorting = 0;
+    (*candidate).row_hidden = 0;
+    return (*candidate).mode > 1 || (*candidate).weapon_stat > 2 || (*candidate).armor_stat > 2 ||
+           !pe_rank((*candidate).rank_ptr) || !pe_type((*candidate).type_ptr);
 }
 /* Saves from before: the "SORT" block. */
 static int pe_sort_upgrade(void *data, const uint8_t *old, unsigned size, unsigned version) {
+    struct PeSortPersistent *candidate = data;
     (void)data;
-    if (version != 0 || size < 16 + sizeof s_sort) return 1;
-    return !pe_inventory_load(old, 0, &s_sort, sizeof s_sort, 0x54524F53u, 0x736F7274u);
+    if (version != 0 || size < 16 + sizeof (*candidate)) return 1;
+    return !pe_inventory_load(old, 0, &(*candidate), sizeof (*candidate), 0x54524F53u, 0x736F7274u);
 }
 static const PeSaveRecord s_sort_record = {
     "pe_qol.sort", 1, &s_sort, sizeof s_sort, pe_sort_check, pe_sort_upgrade, pe_sort_reset,
 };
+static int pe_persistent_loaded(void *ctx,void *user) {
+    (void)ctx;(void)user;s_seen = s_sorting = 0;return 0;
+}
 void pe_bag_sort_register(const char *mod_id) {
+    pe_hook_add(PE_HOOK_SAVE_READ, pe_persistent_loaded, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_menu_register_live_choice(PE_PAGE_INVENTORY, "Bag sort", "Auto remembers the game's Sort. Moving items manually switches it off.",
         s_modes, 2, pe_sort_mode, pe_set_sort_mode);
     pe_menu_register_tick(pe_sort_tick);

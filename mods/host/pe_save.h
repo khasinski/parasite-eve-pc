@@ -80,11 +80,21 @@ typedef struct PeSaveRecord {
 /* In the mod's init (it owns the record). The record must stay valid while the game runs.
  * -1: no room left in the tail, a duplicate name or id, or bad fields (logged). */
 int pe_save_register(const PeSaveRecord *record);
+const PeSaveRecord *pe_save_host_stack_record(void);
+void pe_save_refill_legacy_stacks(short *lists[3], const unsigned sizes[3]);
+
+/* Read-only extraction for outer admission. 1 found, 0 absent, -1 unreadable; no callbacks. */
+int pe_save_peek(const uint8_t *block,const char *name,unsigned *version,void *out,unsigned capacity,unsigned *size);
 
 /* Host internals: the mod host calls these. */
 void pe_save_install(void);
+int pe_save_owner_available(const char *);
+int pe_save_prepare_load(const uint8_t *block);
 void pe_save_on_read(const uint8_t *block);     /* PE_HOOK_SAVE_READ, before any mod */
-void pe_save_on_write(uint8_t *block);          /* PE_HOOK_SAVE_WRITE, after every mod */
+/* Legacy void wrapper: no output is published on refusal. New disk-writing callers use
+ * pe_save_try_write (pe_save_admission.h) and MUST abort on a negative result. Native hook
+ * dispatch checks admission before/after callbacks and propagates its refusal. */
+void pe_save_on_write(uint8_t *block);
 void pe_save_new_game(void);
 /* Crash report: the records as a save made now would hold them, into block's tail. Reads memory
  * only (no mod code, no allocation, no locks); the carried state is not changed. */

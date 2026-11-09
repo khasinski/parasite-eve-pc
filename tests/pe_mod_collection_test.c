@@ -1,21 +1,27 @@
-/* Collection fixture: the production registry, profile and PE pack (each its own translation
- * unit), reached only the way another mod would (services, hooks, F1 rows), with the host and
- * game isolated. */
+/* Collection and Wardrobe fixture: both mods' production registries, profiles and PE packs (each
+ * its own translation unit), reached only the way another mod would (services, hooks, F1 rows),
+ * with the host and game isolated. The two are separate mods since November 2026; the Wardrobe's
+ * profile is imported once from the Collection's (pe_wardrobe_profile.c). */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "pe_collection.h"
+#include "pe_collection_data.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_model.h"
+#include "pe_wardrobe.h"
 #include "pe1/game_state.h"
 
 extern const PeMod pe_mod_pe_collection;
+extern const PeMod pe_mod_pe_wardrobe;
 
 Pe1GameState g_GameState;
 GameStateBlock g_GameStateBlock;
 BattleEnemySlot g_BattleEnemySlots[7];
+struct FieldActor *g_FieldActorListHead;
 static int s_room = 374;
 static char s_dir[512];
 static uint32_t s_junk = 1000;
@@ -23,26 +29,31 @@ static uint32_t s_junk = 1000;
 int pe_game_loaded(void) { return 1; }
 int pe_free_field(void) { return !(g_GameStateFlags & 0x2006u) && !(g_GameStateFlagsWord & 0xB600u); }   /* as host/pe_game.c */
 int pe_save_loaded(void) { return 1; }
-int pe_in_battle(void) { return 0; }
+int pe_in_battle(void) { return (g_GameStateFlags & 2) != 0; }
 int pe_room_number(void) { return s_room; }
-BattleEntity *pe_player(void) { return NULL; }
+static BattleEntity *s_player;
+BattleEntity *pe_player(void) { return s_player; }
 
 static PeHookFn s_hook[PE_HOOK_COUNT];
 int pe_hook_add(int i, PeHookFn f, void *u, int p, const char *m) { (void)u; (void)p; (void)m; if (i >= 0 && i < PE_HOOK_COUNT) s_hook[i] = f; return 0; }
 static int s_events, s_unlock_events;
 int pe_event_id(const char *name) { return strcmp(name, "bestiary.unlock") == 0 ? 100 : 101 + s_events++; }
 int pe_event_emit(int id, void *ctx) { (void)ctx; if (id == 100) ++s_unlock_events; return 0; }
-static struct { const char *name; const void *api; } s_svc[8];
+static struct { const char *name; const void *api; } s_svc[16];
 static int s_nsvc;
 int pe_service_publish(const char *name, int v, const void *api, const char *m) { (void)v; (void)m; s_svc[s_nsvc].name = name; s_svc[s_nsvc++].api = api; return 0; }
 static int junk_enabled(void) { return 1; }
 static uint32_t junk_count(void) { return s_junk; }
 static int junk_spend(uint32_t n) { if (n > s_junk) return 0; s_junk -= n; return 1; }
 static const PeJunkApi s_junk_api = { junk_enabled, junk_count, junk_spend };
+static int s_rules = 1, s_rules_published = 1;      /* pe_economy's Costume unlock rules, on by default */
+static int rules_active(void) { return s_rules; }
+static const PeCostumeRulesApi s_rules_api = { rules_active };
 const void *pe_service_get(const char *name, int v) {
     int i;
     (void)v;
     if (strcmp(name, "junk") == 0) return &s_junk_api;
+    if (strcmp(name, "costume_rules") == 0) return s_rules_published ? &s_rules_api : NULL;
     for (i = 0; i < s_nsvc; ++i) if (strcmp(s_svc[i].name, name) == 0) return s_svc[i].api;
     return NULL;
 }
@@ -52,8 +63,11 @@ void pe_log(const char *t, const char *f, ...) { (void)t; (void)f; }
 void pe_toast(const char *t) { (void)t; }
 int pe_menu_register_toggle(const char *s, const char *l, const char *d, int *f, PeMenuPerFrame p) { (void)s; (void)l; (void)d; (void)f; (void)p; return 0; }
 static PeMenuAction unlock_costumes, lock_costumes, unlock_bestiary, reset_bestiary;
+static PeMenuAction reset_wardrobe, reset_collection;
 int pe_menu_register_action(const char *s, const char *l, const char *d, PeMenuAction a) {
     (void)s; (void)d;
+    if (!strcmp(l, "Reset wardrobe")) reset_wardrobe = a;
+    if (!strcmp(l, "Reset collection")) reset_collection = a;
     if (!strcmp(l, "Unlock all Bestiary")) unlock_bestiary = a;
     if (!strcmp(l, "Reset Bestiary")) reset_bestiary = a;
     if (!strcmp(l, "Unlock all costumes")) unlock_costumes = a;
@@ -67,7 +81,9 @@ int pe_menu_register_dynamic_choice(const char *s, const char *l, const char *d,
     (void)s; (void)d; (void)i; (void)m; s_dyn[s_ndyn].label = l; s_dyn[s_ndyn].count = c; s_dyn[s_ndyn++].name = n; return 0;
 }
 int pe_menu_register_info(const char *s, const char *l, const char *d, PeMenuText t) { (void)s; (void)l; (void)d; (void)t; return 0; }
-int pe_menu_register_tick(PeMenuPerFrame f) { (void)f; return 0; }
+static PeMenuPerFrame s_ticks[16];
+static unsigned s_nticks;
+int pe_menu_register_tick(PeMenuPerFrame f) { assert(s_nticks<16);s_ticks[s_nticks++]=f;return 0; }
 int pe_menu_register_live_int(const char *s, const char *l, const char *d, int lo, int hi, int st, PeMenuGet g, PeMenuSet t) {
     (void)s; (void)l; (void)d; (void)lo; (void)hi; (void)st; (void)g; (void)t; return 0;
 }
@@ -76,6 +92,11 @@ void pe_bestiary_menu_register(const char *m) { (void)m; }   /* the Bestiary scr
 void pe_skin_register(const char *m) { (void)m; }            /* the loader: game buffers, VRAM */
 int pe_skin_available(const char *folder) { return strcmp(folder, "test_skin") == 0; }
 int pe_skin_instant(void) { return 0; }
+void pe_packs_scan(void) {}                                   /* character packs: their own test */
+void pe_packs_register(void) {}
+void pe_packs_page_register(void) {}
+void pe_model_skin_set_reader(PeSkinReader read) { (void)read; }
+int pe_pack_read(const char *r, const char *n, unsigned char **d, unsigned *s, unsigned m) { (void)r; (void)n; (void)m; *d = NULL; *s = 0; return 0; }
 
 /* The last entry of an F1 filter row (Area, Group). */
 static const char *last_filter(const char *label) {
@@ -90,8 +111,8 @@ static const PeCreatureInfo s_zombie = { "re2/zombie", "Zombie", "Resident Evil 
 static struct PeModel *zombie_model(void *user) { (void)user; return NULL; }   /* an import's own decoder */
 static const PeCreatureInfo s_zombie_rnd = { "re2/zombie", "Zombie", "Resident Evil 2", 0, 0, 60, 10, 2, 0, "Medicine 1 100%", "nothing", 5, 10 };
 static const PeCreatureInfo s_impostor = { "re2/licker", "Licker", "Resident Evil 2", 0, 0, 60, 10, 0, 0, "", "", 5, 10 };
-static int s_rnd_handle = -1;
-static int shuffle(int room, unsigned identity, const struct EnemyCombatant *e) { (void)e; return room == 374 && identity == 0x99 ? s_rnd_handle : -1; }
+static int s_rnd_handle = -1, s_rnd_native;
+static int shuffle(int room, unsigned identity, const struct EnemyCombatant *e) { (void)e; return (room == 374 && identity == 0x99) || (s_rnd_native && room == 263 && identity == 0x1A) ? s_rnd_handle : -1; }
 static int s_loads[2];
 static void claire_load(int wearing) { ++s_loads[wearing ? 1 : 0]; }
 static const PeCostume s_claire = { "re2/claire", "Claire (RE2)", "Resident Evil", 25, -1, NULL, claire_load };
@@ -113,6 +134,148 @@ static void kill_once(int slot, unsigned identity) {
     s_hook[PE_HOOK_BATTLE_UPDATE](NULL, NULL);
 }
 
+/* Does `file` (beside the preferences) hold a line starting `start`? */
+static int has_line(const char *file, const char *start) {
+    char path[600], line[256];
+    FILE *f;
+    int yes = 0;
+    pe_mod_path(path, sizeof path, file);
+    if (!(f = fopen(path, "r"))) return 0;
+    while (!yes && fgets(line, sizeof line, f)) yes = strncmp(line, start, strlen(start)) == 0;
+    fclose(f);
+    return yes;
+}
+
+static void remove_file(const char *file) {
+    char path[600];
+    pe_mod_path(path, sizeof path, file);
+    remove(path);
+}
+
+/* Exercise the production service/hook path for every extracted native actor
+ * key. Deliberately use identical HP/defense: identity must survive scaling and
+ * combat-stat changes, including multiple species sharing rank/kind. */
+static void native_species_regressions(const PeBestiaryApi *b) {
+    BattleEntity actor = {0};
+    unsigned before[PE_CREATURES];
+    int handles[PE_CREATURES];
+    for (int i = 0; i < PE_CREATURES; ++i) {
+        handles[i] = b->find(pe_pack_pe1_creature_key(i));
+        assert(handles[i] >= 0);
+    }
+    actor.core = &g_BattleEnemySlots[0].combatant;
+    g_FieldActorListHead = (struct FieldActor *)&actor;
+    for (int n = 0; n < PE_CREATURE_KEYS; ++n) {
+        const PeCreatureKey *k = &g_pe_creature_keys[n];
+        s_room = k->map; actor.modelIndex = k->actor;
+        for (int i = 0; i < PE_CREATURES; ++i) before[i] = b->kills(handles[i]);
+        kill_once(0, k->id);
+        for (int i = 0; i < PE_CREATURES; ++i)
+            assert(b->kills(handles[i]) == before[i] + (unsigned)(i == k->creature));
+        /* EX/progression can change rank; the room/model still identifies
+         * this species even when the original rank/kind is no longer present. */
+        kill_once(0, k->id ^ 0x0080u);
+        for (int i = 0; i < PE_CREATURES; ++i)
+            assert(b->kills(handles[i]) == before[i] + 2u * (unsigned)(i == k->creature));
+        /* Scan must resolve the same actor without granting another species
+         * weaknesses. Existing progress is restored through public profile IO. */
+        for (int i = 0; i < PE_CREATURES; ++i)
+            pe_profile_set_creature(pe_pack_pe1_creature_key(i), 0, b->kills(handles[i]));
+        PeHookSpell scan = {0}; scan.spell = 7; scan.target = &actor;
+        s_hook[PE_HOOK_SPELL](&scan, NULL);
+        for (int i = 0; i < PE_CREATURES; ++i)
+            assert(((b->state(handles[i]) & PE_BESTIARY_WEAK) != 0) == (i == k->creature));
+    }
+    /* Without an actor, a shared rank/kind cannot identify the species. Do
+     * not turn a missing model into the last registered creature's kill. */
+    g_FieldActorListHead = NULL; s_room = 263;
+    for (int i = 0; i < PE_CREATURES; ++i) before[i] = b->kills(handles[i]);
+    kill_once(0, 0x001A);
+    for (int i = 0; i < PE_CREATURES; ++i) assert(b->kills(handles[i]) == before[i]);
+    /* A later randomizer resolver must still override a real native model. */
+    g_FieldActorListHead = (struct FieldActor *)&actor; actor.modelIndex = 7;
+    s_rnd_native = 1;
+    unsigned imported = b->kills(s_rnd_handle);
+    kill_once(0, 0x001A);
+    assert(b->kills(s_rnd_handle) == imported + 1);
+    for (int i = 0; i < PE_CREATURES; ++i) assert(b->kills(handles[i]) == before[i]);
+    s_rnd_native = 0; g_FieldActorListHead = NULL;
+    printf("Native Bestiary: %d model-aware kill/Scan mappings; shared species isolated; randomizer precedence retained\n", PE_CREATURE_KEYS);
+}
+
+static void collection_frame(void) { for(unsigned i=0;i<s_nticks;++i)s_ticks[i](); }
+
+static void mixed_species_regression(const PeBestiaryApi *b) {
+    BattleEntity actors[3]={{0}};
+    int rat=b->find("pe1/rat"),parrot=b->find("pe1/parrot");
+    unsigned rats=b->kills(rat),parrots=b->kills(parrot);
+    s_room=14;g_GameStateFlags|=2;
+    memset(g_BattleEnemySlots,0,sizeof(g_BattleEnemySlots));
+    for(unsigned i=0;i<3;++i) {
+        BattleEnemySlot *slot=&g_BattleEnemySlots[i];slot->active=1;
+        slot->combatant.hpAlive=10;slot->combatant.field04.fieldId04=2;
+        slot->combatant.lowAndEntityId.bytes.entityId=i+1;
+        actors[i].core=&slot->combatant;actors[i].modelIndex=i<2?6:7;
+        actors[i].next=i<2?&actors[i+1]:NULL;
+    }
+    g_FieldActorListHead=(struct FieldActor *)actors;
+    s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+    for(unsigned i=0;i<3;++i)g_BattleEnemySlots[i].combatant.hpAlive=0;
+    s_hook[PE_HOOK_ENEMY_HIT_END](&actors[2],NULL);
+    s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+    assert(b->kills(rat)==rats+2 && b->kills(parrot)==parrots+1);
+    g_GameStateFlags&=~2u;g_FieldActorListHead=NULL;
+    memset(g_BattleEnemySlots,0,sizeof(g_BattleEnemySlots));collection_frame();
+    puts("Bestiary mixed encounter: two rats and one parrot sharing rank/kind receive exactly their own kills");
+}
+
+static void scripted_boss_regressions(const PeBestiaryApi *b) {
+    BattleEntity player={0},actor[2]={{0}};
+    Combatant aya={0};player.core=&aya;s_player=&player;
+    const int eve=b->find("pe1/eve"),actress=b->find("pe1/actress");
+    for(unsigned scenario=0;scenario<6;++scenario) {
+        int target=scenario?eve:actress,unrelated=scenario?actress:eve;
+        unsigned before=b->kills(target),other=b->kills(unrelated),parts=scenario==3?1:2;
+        memset(g_BattleEnemySlots,0,sizeof(g_BattleEnemySlots));
+        memset(actor,0,sizeof(actor));aya.curHP=45;
+        g_GameStateFlags|=2;s_room=scenario?23:2;
+        for(unsigned i=0;i<parts;++i) {
+            BattleEnemySlot *slot=&g_BattleEnemySlots[i];slot->active=1;
+            slot->combatant.hpAlive=slot->combatant.hpAliveCap=1000092;
+            slot->combatant.field04.fieldId04=scenario?0x0204:0x0201;
+            slot->combatant.lowAndEntityId.bytes.entityId=i+1;
+            actor[i].core=&slot->combatant;actor[i].modelIndex=2;
+        }
+        actor[0].next=parts>1?&actor[1]:NULL;g_FieldActorListHead=(struct FieldActor *)&actor[0];
+        s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+        for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].combatant.hpAlive=999999;
+        s_hook[PE_HOOK_ENEMY_HIT_END](&actor[0],NULL);
+        collection_frame();assert(b->kills(target)==before); /* not a victory yet */
+        if(scenario==2 || scenario==3) {
+            int next_hp=scenario==2?1000300:300;
+            for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].combatant.hpAlive=g_BattleEnemySlots[i].combatant.hpAliveCap=next_hp;
+            s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+            collection_frame();assert(b->kills(target)==before);
+            for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].combatant.hpAlive=scenario==2?999999:0;
+            s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+            if(scenario==3)assert(b->kills(target)==before+1);
+        }
+        if(scenario==4)aya.curHP=0; /* losing must never grant a boss defeat */
+        if(scenario==5) {
+            for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].combatant.hpAlive=g_BattleEnemySlots[i].combatant.hpAliveCap=1000300;
+            s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL); /* phase started, then interrupted */
+        }
+        for(unsigned i=0;i<parts;++i)g_BattleEnemySlots[i].active=0;
+        g_FieldActorListHead=NULL;s_hook[PE_HOOK_BATTLE_UPDATE](NULL,NULL);
+        g_GameStateFlags&=~2u;collection_frame();collection_frame();
+        assert(b->kills(target)==before+(scenario>=4?0:1));
+        assert(b->kills(unrelated)==other);
+    }
+    s_player=NULL;memset(g_BattleEnemySlots,0,sizeof(g_BattleEnemySlots));
+    assert(!strcmp(b->info(actress)->name,"Eve (stage)"));
+    puts("Bestiary scripted Eve: both encounters, detached actors, hitbox deduplication, HP refills, losses and interrupted phases passed");
+}
+
 static int find_shop(const PeWardrobeApi *shop, const char *part) {
     int i;
     for (i = 0; i < shop->count(); ++i) if (strstr(shop->name(i), part)) return i;
@@ -124,6 +287,7 @@ int main(void) {
     const PeCostumesApi *w;
     const PeWardrobeApi *shop;
     char msg[96], path[600];
+    const char *const ward = "pe_wardrobe.ini";
     unsigned kills;
     int zombie, rat, i, j;
     FILE *f;
@@ -131,11 +295,21 @@ int main(void) {
     snprintf(s_dir, sizeof s_dir, "%s", getenv("PE_TEST_DIR") ? getenv("PE_TEST_DIR") : ".");
     pe_mod_path(path, sizeof path, "pe_collection.ini");
     remove(path);
-    f = fopen(path, "w");                            /* records of a pack that isn't loaded */
+    remove_file(ward);
+    f = fopen(path, "w");      /* a profile from before the split; records of a pack that isn't loaded */
     fprintf(f, "creature ff7/cactuar 7 3\ncostume ff7/cloud\nworn ff7/cloud\n");
     fclose(f);
 
     assert(pe_mod_pe_collection.init() == 0);
+    assert(pe_mod_pe_wardrobe.init() == 0);
+    /* The Wardrobe's first start imported the Collection's costume lines and said so; the
+     * Collection drops them at its next save, and never rewrites them. */
+    assert(has_line(ward, "imported pe_collection.ini") && has_line(ward, "costume ff7/cloud") && has_line(ward, "worn ff7/cloud"));
+    assert(pe_ward_profile_owned("ff7/cloud") && strcmp(pe_ward_profile_worn(), "ff7/cloud") == 0);
+    assert(has_line("pe_collection.ini", "costume ff7/cloud"));
+    pe_profile_save();
+    assert(!has_line("pe_collection.ini", "costume") && !has_line("pe_collection.ini", "worn"));
+    assert(pe_profile_creature("ff7/cactuar", &kills) == 7 && kills == 3);
     b = pe_service_get("bestiary", 1);
     w = pe_service_get("costumes", 1);
     shop = pe_service_get("wardrobe", 1);
@@ -219,13 +393,15 @@ int main(void) {
     s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);
     assert(g_GameState.requested_entity_bank == 13 && (g_GameState.flags & 0x200000u));
 
-    /* The profile keeps the records of packs that aren't loaded, and reads back. */
+    /* The profiles keep the records of packs that aren't loaded, and read back. */
     pe_profile_save();
     pe_profile_load();
+    pe_ward_profile_save();
+    pe_ward_profile_load();
     assert(pe_profile_creature("ff7/cactuar", &kills) == 7 && kills == 3);
-    assert(pe_profile_owned("ff7/cloud") && pe_profile_owned("re2/claire"));
+    assert(pe_ward_profile_owned("ff7/cloud") && pe_ward_profile_owned("re2/claire"));
     assert(pe_profile_creature("re2/zombie", &kills) == 3 && kills == 6);
-    assert(strcmp(pe_profile_worn(), w->worn()->key) == 0);
+    assert(strcmp(pe_ward_profile_worn(), w->worn()->key) == 0);
     remove(path);
 
     /* Testing buttons affect registered costume ownership only, persist it,
@@ -233,29 +409,31 @@ int main(void) {
     assert(unlock_costumes && lock_costumes);
     uint32_t junk_before = s_junk;
     unlock_costumes();
-    assert(pe_profile_owned("re2/claire") && pe_profile_owned("x/skin") && pe_profile_owned("x/nofiles"));
+    assert(pe_ward_profile_owned("re2/claire") && pe_ward_profile_owned("x/skin") && pe_ward_profile_owned("x/nofiles"));
     assert(find_shop(shop, "No files") < 0 && s_junk == junk_before);
     int owned_before = pe_wardrobe_owned_count();
     unlock_costumes();
     assert(pe_wardrobe_owned_count() == owned_before && s_junk == junk_before);
-    pe_profile_load();
-    assert(pe_profile_owned("x/skin") && pe_profile_owned("x/nofiles"));
+    pe_ward_profile_load();
+    assert(pe_ward_profile_owned("x/skin") && pe_ward_profile_owned("x/nofiles"));
+    f = fopen(path, "r");                            /* costume buttons never write the Collection's file */
+    assert(!f);
     assert(pe_profile_creature("re2/zombie", &kills) == 3 && kills == 6);
     lock_costumes();
-    assert(!*pe_profile_worn() && !w->worn());
-    assert(!pe_profile_owned("re2/claire") && !pe_profile_owned("x/skin") && !pe_profile_owned("x/nofiles"));
-    assert(pe_profile_owned("ff7/cloud")); /* unloaded pack is preserved */
+    assert(!*pe_ward_profile_worn() && !w->worn());
+    assert(!pe_ward_profile_owned("re2/claire") && !pe_ward_profile_owned("x/skin") && !pe_ward_profile_owned("x/nofiles"));
+    assert(pe_ward_profile_owned("ff7/cloud")); /* unloaded pack is preserved */
     assert(pe_profile_creature("re2/zombie", &kills) == 3 && kills == 6 && s_junk == junk_before);
-    pe_profile_load();
-    assert(!pe_profile_owned("re2/claire") && !*pe_profile_worn());
+    pe_ward_profile_load();
+    assert(!pe_ward_profile_owned("re2/claire") && !*pe_ward_profile_worn());
     lock_costumes(); /* idempotent */
-    assert(s_junk == junk_before && pe_profile_owned("ff7/cloud"));
+    assert(s_junk == junk_before && pe_ward_profile_owned("ff7/cloud"));
     remove(path);
     /* Bestiary testing actions persist discovery independently of costumes,
      * keep true kills on unlock, and clear stale battle tracking on reset. */
     assert(unlock_bestiary && reset_bestiary);
-    pe_profile_own("re2/claire");
-    pe_profile_set_worn("re2/claire");
+    pe_ward_profile_own("re2/claire");
+    pe_ward_profile_set_worn("re2/claire");
     unsigned kills_before = b->kills(zombie);
     junk_before = s_junk;
     unlock_bestiary();
@@ -265,7 +443,7 @@ int main(void) {
     assert(s_unlock_events == events_before);
     pe_profile_load();
     assert(b->state(zombie) == 7 && b->kills(zombie) == kills_before);
-    assert(pe_profile_owned("re2/claire") && !strcmp(pe_profile_worn(), "re2/claire"));
+    assert(pe_ward_profile_owned("re2/claire") && !strcmp(pe_ward_profile_worn(), "re2/claire"));
     g_BattleEnemySlots[0].active = 1;
     g_BattleEnemySlots[0].combatant.lowAndEntityId.bytes.entityId = 1;
     g_BattleEnemySlots[0].combatant.field04.fieldId04 = 0x99;
@@ -279,7 +457,7 @@ int main(void) {
     reset_bestiary();
     pe_profile_load();
     assert(b->state(zombie) == 0 && b->kills(zombie) == 0);
-    assert(pe_profile_owned("re2/claire") && !strcmp(pe_profile_worn(), "re2/claire"));
+    assert(pe_ward_profile_owned("re2/claire") && !strcmp(pe_ward_profile_worn(), "re2/claire"));
     assert(pe_profile_creature("ff7/cactuar", &kills) == 7 && kills == 3 && s_junk == junk_before);
     kill_once(0, 0x99);
     assert(b->state(zombie) == 1 && b->kills(zombie) == 1);
@@ -324,12 +502,106 @@ int main(void) {
         f = fopen(old, "wb");
         fwrite(&v1, 1, sizeof v1, f);
         fclose(f);
+        remove_file(ward);
         pe_profile_load();
+        pe_ward_profile_load();
         assert(pe_profile_creature(pe_pack_pe1_creature_key(1), &kills) == 3 && kills == 6);
-        assert(pe_profile_owned(pe_pack_pe1_costume_key(2)) && strcmp(pe_profile_worn(), pe_pack_pe1_costume_key(2)) == 0);
+        assert(has_line(ward, "imported pe_collection.dat"));
+        assert(pe_ward_profile_owned(pe_pack_pe1_costume_key(2)) && strcmp(pe_ward_profile_worn(), pe_pack_pe1_costume_key(2)) == 0);
         remove(old);
         remove(path);
+        remove_file(ward);
     }
-    puts("Collection checks passed: PE pack keys, import creatures and costumes, resolvers, replace, events, profile, recomp import.");
+    /* Unlock rules (D8 §12): off, every installed costume can be worn without being bought or
+     * owned; what Aya wears follows a rule change only at a room load, keeping the key asked for. */
+    {
+        const uint32_t junk = s_junk = 1000;
+        int claire_k;
+        pe_ward_profile_clear();
+        g_GameState.entity_texture_phase = 0;
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);          /* a room load under the rule */
+        assert((claire_k = find_shop(shop, "Claire")) >= 0 && shop->state(claire_k) == 0);
+        s_rules = 0;
+        assert(shop->state(claire_k) == 1 && pe_wardrobe_owned_count() > 0);
+        assert(shop->pick(claire_k, msg, sizeof msg) && s_junk == junk && !pe_ward_profile_owned("re2/claire"));
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);          /* worn from the next room */
+        assert(w->worn() == &s_claire);
+        s_rules = 1;                                      /* the rule back on: no charge, no grant */
+        assert(w->worn() == &s_claire && shop->state(claire_k) == 2);   /* not mid-room */
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);
+        assert(w->worn() == NULL && strcmp(pe_ward_profile_worn(), "re2/claire") == 0);
+        assert(s_junk == junk && !pe_ward_profile_owned("re2/claire") && shop->state(claire_k) == 0);
+        s_rules_published = 0;                            /* no Economy: unrestricted again */
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);
+        assert(w->worn() == &s_claire && !pe_ward_profile_owned("re2/claire"));
+        s_rules_published = 1;
+        assert(shop->pick(claire_k, msg, sizeof msg) && s_junk == junk - 25 && pe_ward_profile_owned("re2/claire"));
+        pe_ward_profile_clear();
+        s_hook[PE_HOOK_PLAYER_BANK](NULL, NULL);
+    }
+
+    /* Split ownership: each mod's reset clears only its own records. Before the Wardrobe has
+     * imported a profile, the Collection carries its costume lines untouched, reset included. */
+    assert(reset_wardrobe && reset_collection);
+    remove_file(ward);
+    f = fopen(path, "w");
+    fprintf(f, "creature ff7/cactuar 7 3\ncostume ff7/cloud\nworn ff7/cloud\n");
+    fclose(f);
+    pe_profile_load();
+    reset_collection();
+    assert(pe_profile_creature("ff7/cactuar", &kills) == 0);
+    assert(has_line("pe_collection.ini", "costume ff7/cloud") && has_line("pe_collection.ini", "worn ff7/cloud"));
+    pe_ward_profile_load();                           /* now the Wardrobe imports them */
+    assert(pe_ward_profile_owned("ff7/cloud") && has_line(ward, "imported pe_collection.ini"));
+    reset_wardrobe();
+    assert(!pe_ward_profile_owned("ff7/cloud") && !*pe_ward_profile_worn() && has_line(ward, "imported"));
+    pe_profile_set_creature("ff7/cactuar", 7, 3);
+    pe_profile_save();                                /* the Collection lets its copies go */
+    assert(!has_line("pe_collection.ini", "costume"));
+    /* A lost pe_wardrobe.ini can't bring back costumes cleared since: nothing is left to import. */
+    remove_file(ward);
+    pe_ward_profile_load();
+    assert(!pe_ward_profile_owned("ff7/cloud") && has_line(ward, "imported none"));
+    assert(pe_profile_creature("ff7/cactuar", &kills) == 7 && kills == 3);
+    /* Both profiles start "format 1"; one from a newer format is read but never rewritten. */
+    assert(has_line(ward, "format 1") && has_line("pe_collection.ini", "format 1"));
+    f = fopen(path, "w");
+    fprintf(f, "format 2\ncreature ff7/cactuar 7 3\nnewthing x\n");
+    fclose(f);
+    pe_profile_load();
+    assert(pe_profile_creature("ff7/cactuar", &kills) == 7);
+    pe_profile_set_creature("ff7/cactuar", 1, 0);
+    pe_profile_save();
+    assert(has_line("pe_collection.ini", "format 2") && has_line("pe_collection.ini", "newthing x"));
+    remove_file(ward);
+    pe_ward_profile_load();
+    {
+        char wpath[600];
+        pe_mod_path(wpath, sizeof wpath, ward);
+        f = fopen(wpath, "w");
+        fprintf(f, "format 2\ncostume ff7/cloud\nnewthing y\n");
+        fclose(f);
+    }
+    pe_ward_profile_load();
+    assert(pe_ward_profile_owned("ff7/cloud"));
+    pe_ward_profile_forget("ff7/cloud");
+    pe_ward_profile_save();
+    assert(has_line(ward, "format 2") && has_line(ward, "newthing y") && has_line(ward, "costume ff7/cloud"));
+    remove(path);
+    remove_file(ward);
+    pe_profile_load();
+
+    /* A fresh profile says so. */
+    remove(path);
+    remove_file(ward);
+    pe_ward_profile_load();
+    assert(has_line(ward, "imported none") && pe_ward_profile_owned("ff7/cloud") == 0);
+    remove(path);
+    remove_file(ward);
+
+    native_species_regressions(b);
+    mixed_species_regression(b);
+    scripted_boss_regressions(b);
+    puts("Collection checks passed: PE pack keys, import creatures and costumes, resolvers, replace, events, profiles, Wardrobe split import, recomp import.");
     return 0;
 }

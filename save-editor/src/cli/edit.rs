@@ -106,6 +106,24 @@ pub(super) fn cmd_edit(args: EditArgs) -> Result<()> {
         );
     }
 
+    for spec in &args.stack_quantity {
+        let fields: Vec<_> = spec.split(':').collect();
+        anyhow::ensure!(
+            fields.len() == 3,
+            "Use --stack-quantity bag:1:20 (or storage/vault)"
+        );
+        let list = match fields[0] {
+            "bag" => 0,
+            "storage" => 1,
+            "vault" => 2,
+            _ => bail!("Unknown inventory list"),
+        };
+        let index = fields[1]
+            .parse::<usize>()?
+            .checked_sub(1)
+            .context("Stack slot starts at 1")?;
+        save.set_stack_quantity(list, index, fields[2].parse()?)?;
+    }
     if args.sort_bag {
         save.sort_aya_bag();
     }

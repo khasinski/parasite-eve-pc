@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include "pe_inventory.h"
 #include "pe_mod_host.h"
-#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe_save.h"
@@ -17,7 +16,7 @@
 #include "pe1/text.h"
 
 enum { PE_KEY_MAX = 32, PE_KEY_TAIL = 0x1C90 + 0x200 };
-static struct { uint16_t count, pad, ids[PE_KEY_MAX]; } s_keys;
+static struct PeKeysPersistent { uint16_t count, pad, ids[PE_KEY_MAX]; } s_keys;
 _Static_assert(sizeof s_keys == 68, "the PKEY block of older saves holds 68 bytes of this state");
 static int s_enabled = 1, s_selected;
 static char s_name[64];
@@ -117,22 +116,25 @@ static int pe_key_save(void *ctx, void *user) {
     pe_inventory_save(ctx, PE_KEY_TAIL, &s_keys, sizeof s_keys, 0x59454B50u, 0x6B657973u);
     return 0;
 }
-static void pe_key_reset(void *data) { (void)data; memset(&s_keys, 0, sizeof s_keys); s_selected = 0; }
+static void pe_key_reset(void *data) {
+    struct PeKeysPersistent *candidate = data; (void)data; memset(&(*candidate), 0, sizeof (*candidate)); if(data == &s_keys) s_selected = 0; }
 static int pe_key_check(void *data) {
+    struct PeKeysPersistent *candidate = data;
     (void)data;
-    s_selected = 0;
-    if (s_keys.count > PE_KEY_MAX) return 1;
-    for (int i = 0; i < s_keys.count; ++i) {
-        if (!pe_is_key(s_keys.ids[i])) return 1;
-        for (int j = 0; j < i; ++j) if (s_keys.ids[i] == s_keys.ids[j]) return 1;
+    if(data == &s_keys) s_selected = 0;
+    if ((*candidate).count > PE_KEY_MAX) return 1;
+    for (int i = 0; i < (*candidate).count; ++i) {
+        if (!pe_is_key((*candidate).ids[i])) return 1;
+        for (int j = 0; j < i; ++j) if ((*candidate).ids[i] == (*candidate).ids[j]) return 1;
     }
     return 0;
 }
 /* Saves from before: the "PKEY" block. */
 static int pe_key_upgrade(void *data, const uint8_t *old, unsigned size, unsigned version) {
+    struct PeKeysPersistent *candidate = data;
     (void)data;
-    if (version != 0 || size < 16 + sizeof s_keys) return 1;
-    return !pe_inventory_load(old, 0, &s_keys, sizeof s_keys, 0x59454B50u, 0x6B657973u);
+    if (version != 0 || size < 16 + sizeof (*candidate)) return 1;
+    return !pe_inventory_load(old, 0, &(*candidate), sizeof (*candidate), 0x59454B50u, 0x6B657973u);
 }
 /* The mod is off this session (host/pe_save.h): nothing would let story checks see pocketed keys, so
  * they go back into the bag the moment the save loads. Keys that don't fit stay in the record. */
@@ -142,14 +144,14 @@ static void pe_key_release(void *data) {
     if (!s_keys.count) return;
     left = pe_keys_return(pe_inventory_limit());
     pe_mod_log("pe_qol", "mod off: pocketed keys returned to the bag, %d left (bag full)", left);
-    if (left) pe_toast(pe_l10n_ui("Key items didn't fit in the bag: turn quality of life back on to use them"));
+    if (left) pe_toast("Key items didn't fit in the bag: turn quality of life back on to use them");
 }
 static const PeSaveRecord s_key_record = {
     "pe_qol.keys", 1, &s_keys, sizeof s_keys, pe_key_check, pe_key_upgrade, pe_key_reset, pe_key_release,
 };
 static unsigned pe_key_rows(void) { return s_keys.count ? s_keys.count : 1; }
 static const char *pe_key_name(unsigned i) {
-    if (i >= s_keys.count) return pe_l10n_ui("Pocket empty");
+    if (i >= s_keys.count) return "Pocket empty";
     const u8 *text = Text_LookupTable8(s_keys.ids[i] - 1);
     unsigned n = 0;
     while (text && *text != 0xFF && n + 1 < sizeof s_name) {
@@ -165,7 +167,11 @@ int pe_keys_count(void) { return s_keys.count; }
 uint16_t pe_keys_item(int i) { return i >= 0 && i < s_keys.count ? s_keys.ids[i] : 0; }
 
 static void pe_key_total(char *out, unsigned size) { snprintf(out, size, "%u", s_keys.count); }
+static int pe_persistent_loaded(void *ctx,void *user) {
+    (void)ctx;(void)user;s_selected = 0;return 0;
+}
 void pe_key_items_register(const char *mod_id) {
+    pe_hook_add(PE_HOOK_SAVE_READ, pe_persistent_loaded, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_menu_register_toggle(PE_PAGE_INVENTORY, "Key item pocket", "Keys leave the bag. Off returns them as space allows.", &s_enabled, pe_key_tick);
     pe_menu_register_dynamic_choice(PE_PAGE_KEYS, "Key", "Story checks can use these even with a full bag.", &s_selected, PE_KEY_MAX, pe_key_rows, pe_key_name);
     pe_menu_register_info(PE_PAGE_KEYS, "Pocketed keys", "Unique key and story items stored outside the bag.", pe_key_total);

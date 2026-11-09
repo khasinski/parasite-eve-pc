@@ -5,20 +5,15 @@
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_save.h"
+#include "pe_save_plan.h"
+#include "pe_save_dispatch.h"
+#include "pe_save_emission.h"
 
-#define PE_SAVE_MAX_RECORDS 32
-#define PE_SAVE_MAX_ENTRIES 64      /* records in one tail: 8 header bytes each, so 108 at most */
 #define PE_SAVE_MAGIC "PEMC"
 #define PE_SAVE_FORMAT 1
 /* The writer marker's revision of how this host writes saves; raise it when that changes, so later
  * builds can tell which saves they may treat differently. 1: format 1, the old blocks' window kept. */
 #define PE_SAVE_WRITER 1
-
-typedef struct {
-    uint32_t id;
-    uint16_t version, size;
-    const uint8_t *bytes;
-} PeSaveEntry;
 
 /* A parsed tail: who wrote it (0, 0 for no container) and what damage cost. */
 typedef struct {
@@ -37,15 +32,19 @@ static struct {
     const char *mod_id;
     uint32_t id;
     int kept, released, release_due;
+    PeSaveRecordLoad load;
+    int conditional, emitting, initialized;
 } s_reg[PE_SAVE_MAX_RECORDS];
 static int s_reg_count;
 static unsigned s_reg_bytes = PE_SAVE_HEADER_SIZE;
+static int s_write_dispatch, s_lifecycle_dispatch;
 
 /* Carried: the records of the save loaded or last written, pointing into s_tail. foreign = the
  * loaded tail is a container format newer than this build: s_tail is written back as it is. */
 static uint8_t s_tail[PE_SAVE_TAIL_SIZE], s_lin[PE_SAVE_ROOM];
 static PeSaveEntry s_car[PE_SAVE_MAX_ENTRIES];
 static int s_car_count, s_foreign;
+static PeSaveSource s_loaded_source, s_carried_source;
 static PeSaveInfo s_car_info;   /* the loaded or last written tail's writer and damage */
 
 /* Saves from before: each mod's fixed block, read as a version 0 record holding the block. */
@@ -59,7 +58,10 @@ static const struct { const char *name; unsigned at, size; char magic[5]; } s_le
 #define PE_LEGACY_COUNT ((int)(sizeof s_legacy / sizeof s_legacy[0]))
 
 /* Saved from memory: its mod runs, or it is off and its record was released. */
-static int pe_save_live(int i) { return pe_mod_active(s_reg[i].mod_id) || s_reg[i].released; }
+static int pe_save_live(int i) {
+    return (!s_reg[i].conditional || s_reg[i].emitting) &&
+           (pe_mod_active(s_reg[i].mod_id) || s_reg[i].released);
+}
 
 static uint32_t pe_fnv(const char *name) {
     uint32_t h = 0x811C9DC5u;
@@ -202,9 +204,80 @@ static void pe_window(uint8_t *win, const uint8_t *live) {
         uint32_t id = pe_fnv(s_legacy[i].name);
         if (!pe_in_window(i)) continue;
         for (j = 0; j < s_reg_count && s_reg[j].id != id; ++j) {}
-        if (j < s_reg_count && pe_save_live(j))
+        if (j < s_reg_count && !s_reg[j].kept && pe_save_live(j))
             memcpy(win + s_legacy[i].at - PE_SAVE_WINDOW_AT, live + s_legacy[i].at, s_legacy[i].size);
     }
+}
+
+/* One plan for normal admission, serialization and snapshots. No owner code runs here. */
+static void pe_record_plan(int enable, PeSavePlan *out) {
+    PeSaveEntry live[PE_SAVE_MAX_RECORDS];
+    unsigned n = 0;
+    int i;
+    for (i = 0; i < s_reg_count; ++i) {
+        if (s_reg[i].kept || (i != enable && !pe_save_live(i))) continue;
+        const PeSaveRecord *r = s_reg[i].record;
+        live[n++] = (PeSaveEntry){s_reg[i].id, (uint16_t)r->version,
+                                 (uint16_t)r->size, r->data};
+    }
+    pe_save_plan_build(live, n, s_car, (unsigned)s_car_count, out);
+}
+
+static void pe_current_plan(PeSavePlan *out) { pe_record_plan(-1, out); }
+
+int pe_save_enable_record(const PeSaveRecord *record) {
+    PeSavePlan plan;
+    int i;
+    if (!record) return PE_SAVE_EMISSION_BAD_ARGUMENT;
+    if (s_write_dispatch || s_lifecycle_dispatch) return PE_SAVE_EMISSION_BUSY;
+    for (i = 0; i < s_reg_count && s_reg[i].record != record; ++i) {}
+    if (i == s_reg_count) return PE_SAVE_EMISSION_BAD_ARGUMENT;
+    if (!s_reg[i].conditional) return PE_SAVE_EMISSION_NOT_CONDITIONAL;
+    if (!pe_mod_active(s_reg[i].mod_id)) return PE_SAVE_EMISSION_INACTIVE;
+    if (!s_reg[i].initialized || s_foreign || s_reg[i].kept || s_reg[i].load == PE_SAVE_RECORD_REJECTED ||
+        s_reg[i].load == PE_SAVE_RECORD_UNAVAILABLE ||
+        s_loaded_source == PE_SAVE_SOURCE_NOT_READ ||
+        s_loaded_source == PE_SAVE_SOURCE_RECOVERED ||
+        s_loaded_source == PE_SAVE_SOURCE_CORRUPT ||
+        s_loaded_source == PE_SAVE_SOURCE_OPAQUE)
+        return PE_SAVE_EMISSION_SOURCE_UNAVAILABLE;
+    pe_record_plan(i, &plan);
+    if (plan.required_bytes > PE_SAVE_ROOM || plan.required_count > PE_SAVE_MAX_ENTRIES)
+        return PE_SAVE_EMISSION_CAPACITY;
+    s_reg[i].emitting = 1;
+    return PE_SAVE_EMISSION_OK;
+}
+
+int pe_save_retire_record(const PeSaveRecord *record) {
+    int i, j;
+    if (!record) return PE_SAVE_EMISSION_BAD_ARGUMENT;
+    if (s_write_dispatch || s_lifecycle_dispatch) return PE_SAVE_EMISSION_BUSY;
+    for (i = 0; i < s_reg_count && s_reg[i].record != record; ++i) {}
+    if (i == s_reg_count) return PE_SAVE_EMISSION_BAD_ARGUMENT;
+    if (!s_reg[i].conditional) return PE_SAVE_EMISSION_NOT_CONDITIONAL;
+    if (!pe_mod_active(s_reg[i].mod_id)) return PE_SAVE_EMISSION_INACTIVE;
+    s_reg[i].emitting = 0;
+    for (j = 0; j < s_car_count; ++j)
+        if (s_car[j].id == s_reg[i].id) {
+            memmove(&s_car[j], &s_car[j + 1], sizeof(s_car[0]) * (size_t)(s_car_count - j - 1));
+            --s_car_count;
+            break;
+        }
+    return PE_SAVE_EMISSION_OK;
+}
+
+static int pe_admit_write(void) {
+    PeSavePlan plan;
+    /* This host cannot rewrite a foreign format: it preserves the complete tail verbatim,
+     * just as before. Active mods' new progress is not serialized in that mode. */
+    if (s_foreign) return PE_SAVE_WRITE_OK;
+    pe_current_plan(&plan);
+    return plan.required_bytes > PE_SAVE_ROOM || plan.required_count > PE_SAVE_MAX_ENTRIES
+        ? PE_SAVE_WRITE_CAPACITY : PE_SAVE_WRITE_OK;
+}
+
+int pe_save_check_write(void) {
+    return s_write_dispatch || s_lifecycle_dispatch ? PE_SAVE_WRITE_BUSY : pe_admit_write();
 }
 
 /* The records a save made now holds, into out (a whole tail): running mods' state first, then
@@ -212,42 +285,21 @@ static void pe_window(uint8_t *win, const uint8_t *live) {
  * the window (live: the save's own tail, whose window the old blocks' owners wrote; NULL: the
  * carried window). Reads memory only, so the crash report can use it. Returns the record count. */
 static int pe_pack(uint8_t *out, const uint8_t *live, int *dropped) {
-    PeSaveEntry list[PE_SAVE_MAX_ENTRIES];
+    PeSavePlan plan;
     uint8_t lin[PE_SAVE_ROOM], win[PE_SAVE_WINDOW_SIZE];
-    unsigned total = PE_SAVE_HEADER_SIZE, at;
-    int n = 0, i, j;
+    unsigned total, at;
+    int n, i;
     *dropped = 0;
     pe_window(win, live);            /* first: live may be out itself */
-    if (s_foreign) {                 /* a newer build's container: back as it was, nothing added */
+    if (s_foreign) {
         memcpy(out, s_tail, PE_SAVE_TAIL_SIZE);
         memcpy(out + PE_SAVE_WINDOW_AT, win, sizeof win);
         return 0;
     }
-    for (i = 0; i < s_reg_count; ++i) {
-        if (s_reg[i].kept || !pe_save_live(i)) continue;
-        list[n].id = s_reg[i].id;
-        list[n].version = (uint16_t)s_reg[i].record->version;
-        list[n].size = (uint16_t)s_reg[i].record->size;
-        list[n].bytes = (const uint8_t *)s_reg[i].record->data;
-        total += PE_SAVE_RECORD_HEADER_SIZE + list[n].size;
-        ++n;
-    }
-    for (i = 0; i < s_car_count; ++i) {
-        for (j = 0; j < n && list[j].id != s_car[i].id; ++j) {}
-        if (j < n) continue;
-        if (n == PE_SAVE_MAX_ENTRIES || total + PE_SAVE_RECORD_HEADER_SIZE + s_car[i].size > PE_SAVE_ROOM) {
-            ++*dropped;
-            continue;
-        }
-        list[n++] = s_car[i];
-        total += PE_SAVE_RECORD_HEADER_SIZE + s_car[i].size;
-    }
-    for (i = 1; i < n; ++i)   /* by id: the same state always gives the same bytes */
-        for (j = i; j > 0 && list[j - 1].id > list[j].id; --j) {
-            PeSaveEntry t = list[j];
-            list[j] = list[j - 1];
-            list[j - 1] = t;
-        }
+    pe_current_plan(&plan);
+    n = (int)plan.count;
+    total = plan.bytes;
+    *dropped = (int)plan.dropped;
     /* No participating records: retain the original tail byte for byte,
      * including data from writers this host does not understand. */
     if (!n) {
@@ -263,18 +315,29 @@ static int pe_pack(uint8_t *out, const uint8_t *live, int *dropped) {
     pe_put16(lin + 16, PE_MOD_API_VERSION);   /* the writer marker */
     pe_put16(lin + 18, PE_SAVE_WRITER);
     for (i = 0, at = PE_SAVE_HEADER_SIZE; i < n; ++i) {
-        pe_put32(lin + at, list[i].id);
-        pe_put16(lin + at + 4, list[i].version);
-        pe_put16(lin + at + 6, list[i].size);
-        memcpy(lin + at + PE_SAVE_RECORD_HEADER_SIZE, list[i].bytes, list[i].size);
-        pe_put32(lin + at + 8, pe_record_crc(lin + at, list[i].bytes, list[i].size));
-        at += PE_SAVE_RECORD_HEADER_SIZE + list[i].size;
+        pe_put32(lin + at, plan.entries[i].id);
+        pe_put16(lin + at + 4, plan.entries[i].version);
+        pe_put16(lin + at + 6, plan.entries[i].size);
+        memcpy(lin + at + PE_SAVE_RECORD_HEADER_SIZE, plan.entries[i].bytes, plan.entries[i].size);
+        pe_put32(lin + at + 8, pe_record_crc(lin + at, plan.entries[i].bytes, plan.entries[i].size));
+        at += PE_SAVE_RECORD_HEADER_SIZE + plan.entries[i].size;
     }
     pe_put32(lin + 8, pe_crc32(lin, total));
     memset(out, 0, PE_SAVE_TAIL_SIZE);
     pe_scatter(lin, out);
     memcpy(out + PE_SAVE_WINDOW_AT, win, sizeof win);
     return n;
+}
+
+static PeSaveSource pe_source(int parsed, const PeSaveInfo *info) {
+    unsigned i;
+    if (parsed == -2) return PE_SAVE_SOURCE_NEWER;
+    if (parsed < 0) return PE_SAVE_SOURCE_CORRUPT;
+    if (!memcmp(s_tail, PE_SAVE_MAGIC, 4))
+        return info->damaged ? PE_SAVE_SOURCE_RECOVERED : PE_SAVE_SOURCE_SUPPORTED;
+    if (parsed) return PE_SAVE_SOURCE_LEGACY;
+    for (i = 0; i < sizeof s_tail; ++i) if (s_tail[i]) return PE_SAVE_SOURCE_OPAQUE;
+    return PE_SAVE_SOURCE_EMPTY;
 }
 
 static void pe_carry(const uint8_t *tail, int loading) {
@@ -285,6 +348,8 @@ static void pe_carry(const uint8_t *tail, int loading) {
     s_car_count = n < 0 ? 0 : n;
     s_foreign = n == -2;
     s_car_info = info;
+    s_carried_source = pe_source(n, &info);
+    if (loading) s_loaded_source = s_carried_source;
     if (loading && n >= 0 && info.api)
         pe_mod_log(NULL, "save: mods' data written by mod API %u, save writer %u; %d record(s)", info.api, info.writer, n);
     if (n >= 0 && info.damaged)
@@ -309,47 +374,110 @@ static int pe_call_check(int i) {
     return r->check ? r->check(r->data) : 0;
 }
 
+static union { max_align_t align; unsigned char bytes[PE_SAVE_ROOM]; } s_prepared[PE_SAVE_MAX_RECORDS];
+static PeSaveRecordLoad s_prepared_load[PE_SAVE_MAX_RECORDS];
+static uint32_t s_prepared_hash;static int s_prepared_valid;
+int pe_save_prepare_load(const uint8_t *block) {
+    uint8_t linear[PE_SAVE_ROOM];PeSaveEntry entries[PE_SAVE_MAX_ENTRIES];PeSaveInfo info;
+    s_prepared_valid=0;
+    if(!block)return -1;
+    int count=pe_parse(block+PE_SAVE_TAIL_OFFSET,linear,entries,&info);
+    if(count<0||info.damaged)return -1;
+    ++s_lifecycle_dispatch;
+    for(int i=0;i<s_reg_count;i++) {
+        const PeSaveRecord *r=s_reg[i].record;const PeSaveEntry *e=NULL;
+        for(int j=0;j<count;j++)if(entries[j].id==s_reg[i].id)e=&entries[j];
+        unsigned char *candidate=s_prepared[i].bytes;memcpy(candidate,r->data,r->size);
+        s_prepared_load[i]=PE_SAVE_RECORD_MISSING;
+        if(!pe_mod_active(s_reg[i].mod_id)&&!r->release)continue;
+        if(!e){if(r->reset)r->reset(candidate);else memset(candidate,0,r->size);continue;}
+        int ok=0;
+        if(e->version==r->version&&e->size==r->size){memcpy(candidate,e->bytes,r->size);ok=1;s_prepared_load[i]=PE_SAVE_RECORD_LOADED;}
+        else if(e->version<r->version&&r->upgrade){ok=!r->upgrade(candidate,e->bytes,e->size,e->version);s_prepared_load[i]=PE_SAVE_RECORD_UPGRADED;}
+        if(ok&&r->check)ok=!r->check(candidate);
+        if(!ok){s_prepared_load[i]=e->version>r->version?PE_SAVE_RECORD_NEWER:PE_SAVE_RECORD_REJECTED;memset(candidate,0,r->size);}
+    }
+    --s_lifecycle_dispatch;
+    s_prepared_hash=pe_crc32(block,8192);s_prepared_valid=1;return 0;
+}
+
 static void pe_load_one(int i) {
     const PeSaveRecord *r = s_reg[i].record;
     const PeSaveEntry *e = pe_carried(s_reg[i].id);
     const char *mod = s_reg[i].mod_id;
+    if(s_prepared_valid) {
+        s_reg[i].load=s_prepared_load[i];
+        s_reg[i].kept=e&&(s_reg[i].load==PE_SAVE_RECORD_REJECTED||s_reg[i].load==PE_SAVE_RECORD_NEWER);
+        s_reg[i].initialized=!s_reg[i].kept;
+        memcpy(r->data,s_prepared[i].bytes,r->size);return;
+    }
     s_reg[i].kept = 0;
+    s_reg[i].initialized = 1;
+    s_reg[i].load = PE_SAVE_RECORD_MISSING;
     if (!e) {
+        if (s_foreign || s_loaded_source == PE_SAVE_SOURCE_CORRUPT ||
+            s_loaded_source == PE_SAVE_SOURCE_RECOVERED || s_loaded_source == PE_SAVE_SOURCE_OPAQUE)
+            s_reg[i].load = PE_SAVE_RECORD_UNAVAILABLE;
         pe_reset(i);
     } else if (e->version == r->version && e->size == r->size) {
+        s_reg[i].load = PE_SAVE_RECORD_LOADED;
         memcpy(r->data, e->bytes, r->size);
         if (pe_call_check(i)) {
+            s_reg[i].load = PE_SAVE_RECORD_REJECTED;
             pe_mod_log(mod, "save: %s didn't pass its checks, reset", r->name);
             pe_reset(i);
         }
     } else if (e->version < r->version && r->upgrade) {
         if (r->upgrade(r->data, e->bytes, e->size, e->version) || pe_call_check(i)) {
+            s_reg[i].load = PE_SAVE_RECORD_REJECTED;
             pe_mod_log(mod, "save: %s v%u couldn't be read, reset", r->name, (unsigned)e->version);
             pe_reset(i);
         } else {
+            s_reg[i].load = PE_SAVE_RECORD_UPGRADED;
             pe_mod_log(mod, "save: %s upgraded from v%u", r->name, (unsigned)e->version);
         }
     } else if (e->version > r->version) {
+        s_reg[i].load = PE_SAVE_RECORD_NEWER;
         pe_mod_log(mod, "save: %s is v%u, newer than this build's v%u: kept as is, mod starts from defaults",
                    r->name, (unsigned)e->version, r->version);
         pe_reset(i);
         s_reg[i].kept = 1;
     } else {
+        s_reg[i].load = PE_SAVE_RECORD_REJECTED;
         pe_mod_log(mod, "save: %s v%u (%u bytes) doesn't match v%u (%u bytes), reset", r->name,
                    (unsigned)e->version, (unsigned)e->size, r->version, r->size);
         pe_reset(i);
     }
+    /* Rejected data is not missing data. Keep the original valid-CRC payload
+     * for ordinary records too; a later save must not replace it with defaults. */
+    if (e && s_reg[i].load == PE_SAVE_RECORD_REJECTED) s_reg[i].kept = 1;
+    if (s_reg[i].conditional && (s_reg[i].load == PE_SAVE_RECORD_REJECTED ||
+        s_reg[i].load == PE_SAVE_RECORD_NEWER || s_reg[i].load == PE_SAVE_RECORD_UNAVAILABLE)) {
+        s_reg[i].initialized = 0;
+        if (e) s_reg[i].kept = 1; /* preserve valid-CRC rejected/newer optional bytes */
+    }
+
 }
 
-int pe_save_register(const PeSaveRecord *r) {
+static int pe_register_record(const PeSaveRecord *r, int conditional) {
     const char *mod = pe_mod_current();
     uint32_t id;
     int i;
+    if (s_write_dispatch || s_lifecycle_dispatch) {
+        pe_mod_log(mod, "save: registration during save/load lifecycle refused");
+        return -1;
+    }
     if (!r || !r->name || !*r->name || !r->data || !r->size || r->size > PE_SAVE_ROOM - PE_SAVE_HEADER_SIZE - PE_SAVE_RECORD_HEADER_SIZE || r->version < 1 || r->version > 0xFFFF) {
         pe_mod_log(mod, "save: bad record, not registered");
         return -1;
     }
     id = pe_fnv(r->name);
+    if (conditional)
+        for (i = 0; i < PE_LEGACY_COUNT; ++i)
+            if (pe_in_window(i) && pe_fnv(s_legacy[i].name) == id) {
+                pe_mod_log(mod, "save: legacy-window record %s cannot be conditional", r->name);
+                return -1;
+            }
     for (i = 0; i < s_reg_count; ++i)
         if (s_reg[i].id == id) {
             pe_mod_log(mod, "save: %s clashes with %s (%s), not registered", r->name, s_reg[i].record->name,
@@ -357,7 +485,7 @@ int pe_save_register(const PeSaveRecord *r) {
             return -1;
         }
     if (s_reg_count == PE_SAVE_MAX_RECORDS ||
-        s_reg_bytes + PE_SAVE_RECORD_HEADER_SIZE + r->size > PE_SAVE_ROOM) {
+        (!conditional && s_reg_bytes + PE_SAVE_RECORD_HEADER_SIZE + r->size > PE_SAVE_ROOM)) {
         pe_mod_log(mod, "save: no room for %s (%u bytes; %u of %u in use), not registered", r->name, r->size,
                    s_reg_bytes, (unsigned)PE_SAVE_ROOM);
         return -1;
@@ -366,14 +494,29 @@ int pe_save_register(const PeSaveRecord *r) {
     s_reg[s_reg_count].mod_id = mod;
     s_reg[s_reg_count].id = id;
     s_reg[s_reg_count].kept = s_reg[s_reg_count].released = 0;
+    s_reg[s_reg_count].conditional = conditional;
+    s_reg[s_reg_count].emitting = !conditional;
     ++s_reg_count;
-    s_reg_bytes += PE_SAVE_RECORD_HEADER_SIZE + r->size;
+    if (!conditional) s_reg_bytes += PE_SAVE_RECORD_HEADER_SIZE + r->size;
     return 0;
 }
 
+int pe_save_register(const PeSaveRecord *record) { return pe_register_record(record, 0); }
+int pe_save_register_conditional(const PeSaveRecord *record) { return pe_register_record(record, 1); }
+
 void pe_save_on_read(const uint8_t *block) {
     int i;
+    if(s_prepared_valid&&s_prepared_hash!=pe_crc32(block,8192))s_prepared_valid=0;
+    ++s_lifecycle_dispatch;
     pe_carry(block + PE_SAVE_TAIL_OFFSET, 1);
+    for (i = 0; i < s_reg_count; ++i) {
+        s_reg[i].load = PE_SAVE_RECORD_NOT_READ;
+        if (s_reg[i].conditional) {
+            s_reg[i].emitting = pe_carried(s_reg[i].id) != NULL;
+            s_reg[i].initialized = 0;
+            s_reg[i].kept = 0;
+        }
+    }
     for (i = 0; i < s_reg_count; ++i)
         if (pe_mod_active(s_reg[i].mod_id)) {
             s_reg[i].released = s_reg[i].release_due = 0;
@@ -382,6 +525,8 @@ void pe_save_on_read(const uint8_t *block) {
             pe_load_one(i);
             s_reg[i].released = s_reg[i].release_due = !s_reg[i].kept && pe_carried(s_reg[i].id) != NULL;
         }
+    s_prepared_valid=0;
+    --s_lifecycle_dispatch;
 }
 
 static int pe_on_frame(void *ctx, void *user) {
@@ -391,31 +536,145 @@ static int pe_on_frame(void *ctx, void *user) {
         if (s_reg[i].release_due && pe_free_field()) {
             s_reg[i].release_due = 0;
             pe_mod_log(s_reg[i].mod_id, "save: %s released (the mod is off)", s_reg[i].record->name);
+            ++s_lifecycle_dispatch;
             s_reg[i].record->release(s_reg[i].record->data);
+            --s_lifecycle_dispatch;
         }
     return 0;
 }
 
+static int pe_commit_tail(uint8_t *block) {
+    uint8_t staged[PE_SAVE_TAIL_SIZE];
+    int dropped, result;
+    if (!block) return PE_SAVE_WRITE_BAD_ARGUMENT;
+    result = pe_admit_write();
+    if (result < 0) return result;
+    pe_pack(staged, block + PE_SAVE_TAIL_OFFSET, &dropped);
+    /* Defense in depth: never publish a partial plan, even if selection changes later. */
+    if (dropped) return PE_SAVE_WRITE_CAPACITY;
+    memcpy(block + PE_SAVE_TAIL_OFFSET, staged, sizeof staged);
+    if (!s_foreign) pe_carry(staged, 0);
+    return PE_SAVE_WRITE_OK;
+}
+
+int pe_save_try_write(uint8_t *block) {
+    if (s_write_dispatch || s_lifecycle_dispatch) return PE_SAVE_WRITE_BUSY;
+    return pe_commit_tail(block);
+}
+
+int pe_save_begin_write(void) {
+    int result = pe_save_check_write();
+    if (result == PE_SAVE_WRITE_OK) s_write_dispatch = 1;
+    return result;
+}
+
+int pe_save_finish_write(uint8_t *block) {
+    int result;
+    if (!s_write_dispatch) return PE_SAVE_WRITE_BUSY;
+    result = pe_commit_tail(block); /* recheck after all save hooks */
+    s_write_dispatch = 0;
+    return result;
+}
+
+void pe_save_report_refusal(int result) {
+    pe_mod_log(NULL, "save refused (%d): no partial mod tail was published", result);
+    /* A rejected nested attempt must not claim the outer save failed. */
+    if (result == PE_SAVE_WRITE_BUSY) return;
+    if (result == PE_SAVE_WRITE_CAPACITY)
+        pe_toast("Save not written: mod data won't fit. Your previous save is unchanged.");
+    else
+        pe_toast("Save not written: save preparation failed. Your previous save is unchanged.");
+}
+
+/* Legacy entry point for existing source consumers. Native save dispatch uses the checked
+ * begin/finish path and propagates refusal; new callers must use pe_save_try_write. */
 void pe_save_on_write(uint8_t *block) {
-    int dropped;
-    pe_pack(block + PE_SAVE_TAIL_OFFSET, block + PE_SAVE_TAIL_OFFSET, &dropped);
-    if (dropped) {
-        pe_mod_log(NULL, "save: no room for %d record(s) of mods not running; left out of this save", dropped);
-        pe_toast("Mod data of a mod that is off didn't fit in this save");
-    }
-    if (!s_foreign) pe_carry(block + PE_SAVE_TAIL_OFFSET, 0);   /* foreign: s_tail already holds it */
+    int result = pe_save_try_write(block);
+    if (result < 0) pe_save_report_refusal(result);
 }
 
 void pe_save_new_game(void) {
+    s_prepared_valid=0;
     int i;
+    ++s_lifecycle_dispatch;
     memset(s_tail, 0, sizeof s_tail);
     s_car_count = 0;
     s_foreign = 0;
+    s_loaded_source = s_carried_source = PE_SAVE_SOURCE_NEW_GAME;
     memset(&s_car_info, 0, sizeof s_car_info);
     for (i = 0; i < s_reg_count; ++i) {
         s_reg[i].kept = s_reg[i].released = s_reg[i].release_due = 0;
-        if (pe_mod_active(s_reg[i].mod_id)) pe_reset(i);
+        s_reg[i].load = PE_SAVE_RECORD_NOT_READ;
+        s_reg[i].emitting = !s_reg[i].conditional;
+        s_reg[i].initialized = 0;
+        if (pe_mod_active(s_reg[i].mod_id)) {
+            pe_reset(i);
+            s_reg[i].initialized = 1;
+        }
     }
+    --s_lifecycle_dispatch;
+}
+
+/* ---- read-only query snapshots; never validate, reset or pack records ---- */
+int pe_save_query_status(PeSaveStatus *out) {
+    if (!out) return -1;
+    *out = (PeSaveStatus){s_loaded_source, s_carried_source, s_car_info.api, s_car_info.writer,
+                          (unsigned)s_car_count, (unsigned)s_car_info.lost};
+    return 0;
+}
+
+int pe_save_query_record(const char *name, PeSaveRecordStatus *out) {
+    PeSaveRecordStatus result;
+    const PeSaveEntry *e;
+    int i;
+    if (!name || !*name || !out) return -1;
+    memset(&result, 0, sizeof result);
+    result.id = pe_fnv(name);
+    e = pe_carried(result.id);
+    result.load = e ? PE_SAVE_RECORD_UNCHECKED : PE_SAVE_RECORD_MISSING;
+    if (!e && (s_loaded_source == PE_SAVE_SOURCE_NOT_READ || s_loaded_source == PE_SAVE_SOURCE_NEW_GAME))
+        result.load = PE_SAVE_RECORD_NOT_READ;
+    if (!e && (s_foreign || s_loaded_source == PE_SAVE_SOURCE_CORRUPT ||
+        s_loaded_source == PE_SAVE_SOURCE_RECOVERED || s_loaded_source == PE_SAVE_SOURCE_OPAQUE))
+        result.load = PE_SAVE_RECORD_UNAVAILABLE;
+    if (e) {
+        result.flags |= PE_SAVE_RECORD_CARRIED;
+        result.carried_version = e->version;
+        result.carried_size = e->size;
+    }
+    for (i = 0; i < s_reg_count; ++i) {
+        if (s_reg[i].id != result.id) continue;
+        if (strcmp(s_reg[i].record->name, name)) return -1;
+        result.flags |= PE_SAVE_RECORD_REGISTERED;
+        result.registered_version = s_reg[i].record->version;
+        result.registered_size = s_reg[i].record->size;
+        if (s_reg[i].load != PE_SAVE_RECORD_NOT_READ) result.load = s_reg[i].load;
+        if (s_reg[i].conditional) result.flags |= PE_SAVE_RECORD_CONDITIONAL;
+        if (s_reg[i].emitting) result.flags |= PE_SAVE_RECORD_EMISSION_ENABLED;
+        if (pe_save_live(i)) result.flags |= PE_SAVE_RECORD_LIVE;
+        if (s_reg[i].kept) result.flags |= PE_SAVE_RECORD_KEPT;
+        if (s_reg[i].release_due) result.flags |= PE_SAVE_RECORD_RELEASE_PENDING;
+        break;
+    }
+    *out = result;
+    return 0;
+}
+
+void pe_save_capacity_input(PeSaveCapacityInput *out) {
+    unsigned i;
+    pe_save_query_status(&out->status);
+    out->registered_count = (unsigned)s_reg_count;
+    out->carried_count = (unsigned)s_car_count;
+    for (i = 0; i < out->registered_count; ++i) {
+        const PeSaveRecord *r = s_reg[i].record;
+        out->registered[i].name = r->name;
+        out->registered[i].entry = (PeSaveEntry){s_reg[i].id, (uint16_t)r->version,
+                                                (uint16_t)r->size, r->data};
+        out->registered[i].live = pe_save_live((int)i);
+        out->registered[i].kept = s_reg[i].kept;
+        out->registered[i].conditional = s_reg[i].conditional;
+    }
+    memcpy(out->carried, s_car, sizeof(PeSaveEntry) * out->carried_count);
 }
 
 /* ---- crash report ---- */
@@ -424,11 +683,26 @@ static PeSaveEntry s_crash_list[PE_SAVE_MAX_ENTRIES];
 static int s_crash_count = -1, s_crash_dropped;
 static PeSaveInfo s_crash_info;
 
-void pe_save_crash_tail(uint8_t *block) {
+int pe_save_try_crash_tail(uint8_t *block) {
+    int result;
+    if (!block) return PE_SAVE_WRITE_BAD_ARGUMENT;
+    result = pe_save_check_write();
+    if (result < 0) {
+        s_crash_count = -3;
+        s_crash_dropped = result == PE_SAVE_WRITE_CAPACITY;
+        return result;
+    }
     pe_pack(s_crash_tail, NULL, &s_crash_dropped);
+    if (s_crash_dropped) {
+        s_crash_count = -3;
+        return PE_SAVE_WRITE_CAPACITY;
+    }
     memcpy(block + PE_SAVE_TAIL_OFFSET, s_crash_tail, sizeof s_crash_tail);
     s_crash_count = pe_parse(s_crash_tail, s_crash_lin, s_crash_list, &s_crash_info);
+    return PE_SAVE_WRITE_OK;
 }
+
+void pe_save_crash_tail(uint8_t *block) { (void)pe_save_try_crash_tail(block); }
 
 void pe_save_crash_describe(char *out, size_t size, size_t *used) {
     int i, j;
@@ -439,6 +713,11 @@ void pe_save_crash_describe(char *out, size_t size, size_t *used) {
             if (w_ > 0) *used += (size_t)w_ < size - *used ? (size_t)w_ : size - *used - 1; \
         }                                                                        \
     } while (0)
+    if (s_crash_count == -3) {
+        PE_OUT("Not taken: save admission refused%s; no partial mod tail was published.\r\n",
+               s_crash_dropped ? " (mod data does not fit)" : "");
+        return;
+    }
     if (s_crash_count == -2) {
         PE_OUT("format %u from a newer build, kept as it is (mods run from their defaults).\r\n",
                (unsigned)s_crash_tail[4]);
@@ -479,12 +758,47 @@ void pe_save_install(void) {
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, -1000, "host");
 }
 
+int pe_save_peek(const uint8_t *block,const char *name,unsigned *version,void *out,unsigned capacity,unsigned *size){
+    uint8_t lin[PE_SAVE_ROOM];PeSaveEntry entries[PE_SAVE_MAX_ENTRIES];PeSaveInfo info;
+    if(!block||!name||!out)return -1;
+    int n=pe_parse(block+PE_SAVE_TAIL_OFFSET,lin,entries,&info);
+    if(n<0||info.damaged)return -1;
+    uint32_t id=pe_fnv(name);
+    for(int i=0;i<n;++i)if(entries[i].id==id){
+        if(entries[i].size>capacity)return -1;
+        memcpy(out,entries[i].bytes,entries[i].size);
+        if(version)*version=entries[i].version;if(size)*size=entries[i].size;return 1;
+    }return 0;
+}
+
+void pe_save_abort_write(void){s_write_dispatch=0;}
+
+#include "pe_save_recovery.h"
+
+int pe_save_recovery_patch(uint8_t*block,const char*name,unsigned version,const void*bytes,unsigned size){
+    uint8_t lin[PE_SAVE_ROOM];PeSaveEntry entries[PE_SAVE_MAX_ENTRIES];PeSaveInfo info;
+    if(!block||!name||!bytes)return -1;
+    const uint8_t*tail=block+PE_SAVE_TAIL_OFFSET;
+    int n=pe_parse(tail,lin,entries,&info);
+    if(n<0||info.damaged||memcmp(lin,PE_SAVE_MAGIC,4)||lin[4]!=1||lin[5])return -1;
+    uint32_t id=pe_fnv(name);
+    for(int i=0;i<n;++i)if(entries[i].id==id){
+        if(entries[i].version!=version||entries[i].size!=size)return -1;
+        unsigned at=(unsigned)(entries[i].bytes-lin)-PE_SAVE_RECORD_HEADER_SIZE;
+        memcpy(lin+at+PE_SAVE_RECORD_HEADER_SIZE,bytes,size);
+        pe_put32(lin+at+8,pe_record_crc(lin+at,lin+at+PE_SAVE_RECORD_HEADER_SIZE,size));
+        pe_put32(lin+8,0);pe_put32(lin+8,pe_crc32(lin,pe_get16(lin+6)));
+        uint8_t result[PE_SAVE_TAIL_SIZE];memcpy(result,tail,sizeof result);
+        pe_scatter(lin,result);memcpy(block+PE_SAVE_TAIL_OFFSET,result,sizeof result);return 0;
+    }return -1;
+}
+
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 /* No deferred release callback or live mod-save payload may escape the barrier.
  * Only-assists has no save records; inactive carried metadata is left unchanged. */
 #include "pe_checkpoint_wire.h"
 #define PE_MOD_SAVE_STATE_BYTES 1536u
-static int pe_save_checkpoint_owned(int i){const PeSaveRecord *r=s_reg[i].record;if(r->version!=1)return 0;
+static int pe_save_checkpoint_owned(int i){const PeSaveRecord *r=s_reg[i].record;if(r->version!=1||!s_reg[i].mod_id)return 0;
 #if PE_NATIVE_STATE_QOL
  if(!strcmp(s_reg[i].mod_id,"pe_qol")&&((!strcmp(r->name,"pe_qol.keys")&&r->size==68)||(!strcmp(r->name,"pe_qol.sort")&&r->size==24)))return 1;
 #endif
@@ -493,7 +807,7 @@ static int pe_save_checkpoint_owned(int i){const PeSaveRecord *r=s_reg[i].record
 #endif
  return 0;
 }
-int pe_save_state_idle(void){for(int i=0;i<s_reg_count;i++)if(s_reg[i].release_due||((pe_mod_active(s_reg[i].mod_id)||s_reg[i].released)&&!pe_save_checkpoint_owned(i)))return 0;return 1;}
+int pe_save_state_idle(void){for(int i=0;i<s_reg_count;i++)if(s_reg[i].release_due||(pe_save_live(i)&&!pe_save_checkpoint_owned(i)))return 0;return 1;}
 int pe_save_checkpoint_walk(const unsigned char *in,unsigned char *out,size_t bytes,int apply){
  if(bytes!=PE_MOD_SAVE_STATE_BYTES||(!in&&!out)||!pe_save_state_idle()||s_reg_count<0||s_reg_count>PE_SAVE_MAX_RECORDS)return 0;
  if(apply&&(!in||!pe_save_checkpoint_walk(in,0,bytes,0)))return 0;
@@ -512,3 +826,40 @@ int pe_save_checkpoint_walk(const unsigned char *in,unsigned char *out,size_t by
  return at+sizeof s_tail==bytes;
 }
 #endif
+
+/* Legacy stacks are a host record even when the provider is not linked. */
+static unsigned char s_host_stacks[204];
+static int stack_check(void *p) {
+    const unsigned char *b=p;unsigned total=b[0]+b[1]+b[2],k=0;
+    if(total>100||b[3])return -1;
+    for(unsigned l=0;l<3;l++){unsigned char seen[256]={0};
+        for(unsigned j=0;j<b[l];j++,k++){
+            unsigned id=b[4+2*k],q=b[5+2*k];
+            if(!id||!q||q>98||seen[id])return -1;seen[id]=1;
+        }}return 0;
+}
+static const PeSaveRecord s_host_stack_record={"pe_stacks.counts",1,s_host_stacks,204,stack_check,NULL,NULL,NULL};
+const PeSaveRecord *pe_save_host_stack_record(void) {
+    for(int i=0;i<s_reg_count;i++)if(s_reg[i].record==&s_host_stack_record)return &s_host_stack_record;
+    const char *owner=pe_mod_current();
+    if(pe_save_register_conditional(&s_host_stack_record))return NULL;
+    /* This internal record belongs to the host, not the calling provider. */
+    s_reg[s_reg_count-1].mod_id=NULL;(void)owner;
+    return &s_host_stack_record;
+}
+void pe_save_refill_legacy_stacks(short *lists[3],const unsigned sizes[3]) {
+    int at=-1;for(int i=0;i<s_reg_count;i++)if(s_reg[i].record==&s_host_stack_record)at=i;
+    if(at<0||s_reg[at].kept||!s_reg[at].emitting||stack_check(s_host_stacks))return;
+    unsigned char packed[204]={0};unsigned k=0,out=0;
+    for(unsigned l=0;l<3;l++)for(unsigned j=0;j<s_host_stacks[l];j++,k++) {
+        unsigned id=s_host_stacks[4+k*2],q=s_host_stacks[5+k*2];
+        for(unsigned i=0;i<sizes[l]&&q;i++)if(!lists[l][i]){lists[l][i]=(short)id;--q;}
+        if(q){packed[l]++;packed[4+out*2]=id;packed[5+out*2]=q;out++;}
+    }memcpy(s_host_stacks,packed,204);
+}
+
+int pe_save_owner_available(const char *owner) {
+    if(!owner)return 1;
+    for(int i=0;i<s_reg_count;i++)if(s_reg[i].mod_id&&!strcmp(owner,s_reg[i].mod_id)&&s_reg[i].kept)return 0;
+    return 1;
+}

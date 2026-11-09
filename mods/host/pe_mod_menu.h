@@ -50,6 +50,10 @@ int pe_menu_register_live_choice(const char *sub, const char *label, const char 
 int pe_menu_register_dynamic_choice(const char *sub, const char *label, const char *description,
                                     int *index, unsigned max_count, PeMenuChoiceCount count_fn,
                                     PeMenuChoiceName name_fn);
+/* A live choice whose list can grow after registration; get() and set() keep the index. */
+int pe_menu_register_live_dynamic_choice(const char *sub, const char *label, const char *description,
+                                         unsigned max_count, PeMenuChoiceCount count_fn,
+                                         PeMenuChoiceName name_fn, PeMenuGet get, PeMenuSet set);
 int pe_menu_register_tick(PeMenuPerFrame fn);
 /* A read-only line: text() fills the value shown on the right (Junk, prices, results). */
 typedef void (*PeMenuText)(char *out, unsigned size);

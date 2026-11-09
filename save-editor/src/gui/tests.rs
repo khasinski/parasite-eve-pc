@@ -77,3 +77,45 @@ fn all_screens_render_without_mutating_saved_mod_data() {
         }
     }
 }
+
+#[test]
+fn companion_screens_render_without_changing_stacks_or_provider_data() {
+    for tab in [
+        EditorTab::InventoryAndLoadout,
+        EditorTab::WayneVault,
+        EditorTab::ModSaveData,
+        EditorTab::ArmoryRecords,
+    ] {
+        let ctx = egui::Context::default();
+        let mut app = loaded_app();
+        app.active_tab = tab;
+        app.container.as_mut().unwrap().slots[0] = Some(crate::companion_tests::fixture());
+        let before =
+            serde_json::to_string(app.container.as_ref().unwrap().slots[0].as_ref().unwrap())
+                .unwrap();
+        for (width, height) in [(1024.0, 680.0), (1340.0, 860.0)] {
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(width, height),
+                    )),
+                    ..Default::default()
+                },
+                |ctx| {
+                    app.show_application_bar(ctx);
+                    app.show_status_bar(ctx);
+                    app.show_slot_browser(ctx);
+                    app.show_workspace_header(ctx);
+                    app.show_active_tab(ctx);
+                },
+            );
+            assert!(!output.shapes.is_empty());
+        }
+        assert_eq!(
+            before,
+            serde_json::to_string(app.container.as_ref().unwrap().slots[0].as_ref().unwrap())
+                .unwrap()
+        );
+    }
+}

@@ -1,7 +1,7 @@
 /* The Mods panel: F1 opens a paused list of every mod's rows (pe_mod_menu.h).
  *
  * Navigation: each page lists its own rows first, then links to its sub-pages (in the order
- * pe_menu_page gives them). The header shows where you are ("PE Enhancements / Economy"); the
+ * pe_menu_page gives them). The header shows the mod big and the page you are on small; the
  * footer the selected row's description and the keys that apply to it. The panel reopens on the
  * page and row it was closed on and every page remembers its row. The top is always the list of
  * mods (each mod's top page, then Manage mods), even with one mod installed.
@@ -19,16 +19,16 @@
 #include <psyz/video.h>
 
 #include "pe_mod_host.h"
-#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "ui/pe_ui.h"
+#include "ui/pe_utf8.h"
 
 void pe_toast_block(int blocked);
 void pe_toast_install(void);
 
 /* ---- layout, in design units scaled with the window ---- */
 enum {
-    PANEL_W = 700, PANEL_PAD = 30, HEADER_H = 100, ROW_H = 42, VISIBLE_ROWS = 12, FOOTER_H = 74,
+    PANEL_W = 700, PANEL_PAD = 30, HEADER_H = 100, ROW_H = 42, VISIBLE_ROWS = 12, FOOTER_H = 100,
     VALUE_W = 300, REFERENCE_H = 820, MAX_ENTRIES = 256, MAX_REMEMBERED = 48,
 };
 
@@ -158,6 +158,7 @@ static int pe_visible_rows(void) {
     return n > 0 ? n : 1;
 }
 
+/* Every page wears the refined look (pe_paint): a dark window, a framed help box. */
 static int pe_design_h(void) { return HEADER_H + pe_visible_rows() * ROW_H + FOOTER_H; }
 
 static float pe_layout_scale(int win_w, int win_h) {
@@ -195,7 +196,7 @@ static const char *pe_help_text(void) {
     const PeMenuPageInfo *info;
     const char *description;
     int off;
-    if (!e) return pe_l10n_ui("Nothing here yet.");
+    if (!e) return "Nothing here yet.";
     if (e->row >= 0) {
         description = pe_menu_row(e->row)->description;
         off = !pe_menu_row_active(pe_menu_row(e->row));
@@ -205,7 +206,6 @@ static const char *pe_help_text(void) {
         off = !pe_page_active(e->page);
     }
     if (!off) return description;
-    description = pe_l10n_ui(description);
     snprintf(text, sizeof text, "%s%s", PE_OFF_NOTE, description);   /* browse and set up, nothing runs */
     return text;
 }
@@ -225,31 +225,20 @@ static const char *pe_key_hints(void) {
     }
     else if (e && pe_menu_row(e->row)->kind == PE_ROW_ACTION) action = "Enter run";
     else if (e && pe_menu_row_adjustable(pe_menu_row(e->row))) action = "Left/Right change";
-    snprintf(hints, sizeof hints, pe_l10n_ui("Up/Down select   %s%s%s   F1 close"), action, *action ? "   " : "", back);
+    snprintf(hints, sizeof hints, "Up/Down select   %s%s%s   F1 close", action, *action ? "   " : "", back);
     return hints;
 }
 
-/* "PE Enhancements / Economy / Mod Catalog" */
-static void pe_breadcrumb(char *out, size_t size) {
-    size_t o = 0;
-    const char *p;
-    if (!s_panel.path[0]) { snprintf(out, size, "%s", pe_l10n_ui("All mods")); return; }
-    for (p = s_panel.path; *p && o + 4 < size;) {
-        char segment[96];
-        size_t n = strcspn(p, "/");
-        if (n >= sizeof segment) break;
-        memcpy(segment, p, n); segment[n] = 0;
-        const char *label = pe_l10n_ui(segment);
-        size_t bytes = strlen(label);
-        if (bytes >= size-o) break;
-        memcpy(out+o,label,bytes); o += bytes; p += n;
-        if (*p == '/') {
-            if (o + 4 >= size) break;
-            out[o++]=' '; out[o++]='/'; out[o++]=' '; ++p;
-        }
-    }
-    out[o] = '\0';
-    if (!pe_page_active(s_panel.path) && o + 7 < size) snprintf(out + o, size - o, "  (off)");
+/* ---- the refined look: deep navy window, silver double frame, red ---- */
+static const PeColor pe_look_red = {0.90f, 0.14f, 0.15f, 1.0f};
+static const PeColor pe_look_steel = {0.42f, 0.58f, 0.80f, 1.0f};
+static const PeColor pe_look_silver = {0.80f, 0.86f, 0.95f, 1.0f};
+static const PeColor pe_look_text = {0.92f, 0.94f, 0.98f, 1.0f};
+static const PeColor pe_look_dim = {0.55f, 0.62f, 0.74f, 1.0f};
+
+/* Whole pixels, so stacked strips meet without seams. */
+static void pe_px_rect(int x, int y, int w, int h, PeColor c) {
+    if (w > 0 && h > 0) pe_ui_fill_round_rect(&s_surface, (float)x, (float)y, (float)w, (float)h, 0, c);
 }
 
 /* Two sheets, the back one peeking out top-right: a copy icon `h` tall whose left edge is x, centred on y. */
@@ -293,47 +282,165 @@ static void pe_paint_digits(int index, const PeMenuRow *row, float cx, float mid
         pe_ui_draw_text(&s_surface, x + 24 * s, base - 1 * s, 12 * s, s_flash.text, on, PE_ALIGN_LEFT);
 }
 
-static void pe_paint_row(const Entry *e, int slot, int selected) {
+static PeColor pe_mix(PeColor a, PeColor b, float t) {
+    PeColor c = {a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t};
+    return c;
+}
+
+static void pe_vgradient(int x, int y, int w, int h, PeColor top, PeColor bottom) {
+    int i;
+    for (i = 0; i < h; ++i) pe_px_rect(x, y + i, w, 1, pe_mix(top, bottom, h > 1 ? (float)i / (float)(h - 1) : 0));
+}
+
+static void pe_hgradient(int x, int y, int w, int h, PeColor left, PeColor right) {
+    int i;
+    for (i = 0; i < w; ++i) pe_px_rect(x + i, y, 1, h, pe_mix(left, right, w > 1 ? (float)i / (float)(w - 1) : 0));
+}
+
+static void pe_frame(int x, int y, int w, int h, PeColor c) {
+    pe_px_rect(x, y, w, 1, c);
+    pe_px_rect(x, y + h - 1, w, 1, c);
+    pe_px_rect(x, y + 1, 1, h - 2, c);
+    pe_px_rect(x + w - 1, y + 1, 1, h - 2, c);
+}
+
+/* Bright L-shaped brackets on a box's four corners. */
+static void pe_corners(int x, int y, int w, int h, int len, int t, PeColor c) {
+    pe_px_rect(x, y, len, t, c);                 pe_px_rect(x, y, t, len, c);
+    pe_px_rect(x + w - len, y, len, t, c);       pe_px_rect(x + w - t, y, t, len, c);
+    pe_px_rect(x, y + h - t, len, t, c);         pe_px_rect(x, y + h - len, t, len, c);
+    pe_px_rect(x + w - len, y + h - t, len, t, c); pe_px_rect(x + w - t, y + h - len, t, len, c);
+}
+
+/* A solid triangle `size` tall, its point at (x, y): dir 1 points right, -1 left. */
+static void pe_arrow(float x, float y, float size, int dir, PeColor c) {
+    const int half = (int)(size * 0.5f + 0.5f), px = (int)(x + 0.5f), py = (int)(y + 0.5f);
+    int i;
+    for (i = 0; i < half; ++i) {
+        const int col = dir > 0 ? px - 1 - i : px + i;      /* i columns back from the point, i + 1 high each way */
+        pe_px_rect(col, py - i - 1, 1, 2 * i + 2, c);
+    }
+}
+
+/* Letter-spaced text (`track` pixels between letters). Returns its width. */
+static float pe_spaced_width(const char *text, float em, float track) {
+    const char *p = text;
+    int letters = 0;
+    while (*p) { pe_utf8_next(&p); ++letters; }
+    return pe_ui_text_width(text, em) + (letters > 1 ? (float)(letters - 1) * track : 0);
+}
+
+static void pe_spaced(float x, float baseline, float em, float track, const char *text, PeColor c, PeAlign align) {
+    char one[8];
+    if (align != PE_ALIGN_LEFT) x -= pe_spaced_width(text, em, track) * (align == PE_ALIGN_CENTRE ? 0.5f : 1.0f);
+    while (*text) {
+        const char *next = text;
+        size_t n;
+        pe_utf8_next(&next);
+        n = (size_t)(next - text);
+        memcpy(one, text, n);
+        one[n] = '\0';
+        pe_ui_draw_text(&s_surface, x, baseline, em, one, c, PE_ALIGN_LEFT);
+        x += pe_ui_text_width(one, em) + track;
+        text = next;
+    }
+}
+
+static void pe_upper(char *out, size_t size, const char *in) {
+    size_t i;
+    for (i = 0; in[i] && i + 1 < size; ++i) out[i] = (char)(in[i] >= 'a' && in[i] <= 'z' ? in[i] - 32 : in[i]);
+    out[i] = '\0';
+}
+
+/* Word-wrap `text` into up to `lines` lines of at most `width` pixels at `em`; the last line takes the rest. */
+static void pe_wrapped(float x, float baseline, float step, float width, float em, int lines, const char *text, PeColor c) {
+    char line[320];
+    int n;
+    for (n = 0; n < lines && *text; ++n) {
+        size_t fit = 0, i = 0;
+        if (n < lines - 1)
+            for (;;) {
+                size_t next = i;
+                while (text[next] && text[next] != ' ') ++next;
+                if (next >= sizeof line) break;
+                memcpy(line, text, next);
+                line[next] = '\0';
+                if (fit && pe_ui_text_width(line, em) > width) break;
+                fit = next;
+                if (!text[next]) break;
+                i = next + 1;
+            }
+        else
+            fit = strlen(text);
+        if (fit >= sizeof line) fit = sizeof line - 1;
+        if (!fit) fit = strlen(text) < sizeof line - 1 ? strlen(text) : sizeof line - 1;
+        memcpy(line, text, fit);
+        line[fit] = '\0';
+        pe_ui_draw_text(&s_surface, x, baseline + step * (float)n, em, line, c, PE_ALIGN_LEFT);
+        text += fit;
+        while (*text == ' ') ++text;
+    }
+}
+
+static void pe_paint_row_pe(const Entry *e, int slot, int selected) {
     const float s = s_scale, top = (HEADER_H + slot * ROW_H) * s, mid = top + ROW_H * 0.5f * s, base = mid + 6 * s;
-    const float value_x = (PANEL_W - PANEL_PAD - VALUE_W * 0.5f) * s;
-    /* An inactive mod's rows and pages read dimmer: browsable, not running. */
+    const float label_x = (PANEL_PAD + 16) * s, value_x = (PANEL_W - PANEL_PAD - VALUE_W * 0.5f) * s;
     const int off = e->row >= 0 ? !pe_menu_row_active(pe_menu_row(e->row)) : !pe_page_active(e->page);
-    const PeColor label = pe_ui_alpha(pe_ui_text, (selected ? 1.0f : 0.82f) * (off ? 0.55f : 1.0f));
+    const PeColor label = pe_ui_alpha(pe_look_text, (selected ? 1.0f : 0.78f) * (off ? 0.55f : 1.0f));
+    const int band_x = (int)(PANEL_PAD * 0.5f * s), band_y = (int)(top + 4 * s), band_w = (int)((PANEL_W - PANEL_PAD) * s),
+              band_h = (int)((ROW_H - 8) * s);
     char value[96];
-    if (selected) {
-        pe_ui_fill_round_rect(&s_surface, PANEL_PAD / 2 * s, top + 3 * s, (PANEL_W - PANEL_PAD) * s, (ROW_H - 6) * s, 9 * s,
-                              pe_ui_alpha(pe_ui_accent, 0.16f));
-        pe_ui_fill_round_rect(&s_surface, PANEL_PAD / 2 * s + 4 * s, mid - 10 * s, 3 * s, 20 * s, 1.5f * s, pe_ui_accent);
+    if (selected) {                                     /* a steel band fading right, hairlines, the red cursor */
+        pe_hgradient(band_x, band_y, band_w, band_h, pe_ui_alpha(pe_look_steel, 0.34f), pe_ui_alpha(pe_look_steel, 0.0f));
+        pe_hgradient(band_x, band_y, band_w, 1, pe_ui_alpha(pe_look_silver, 0.55f), pe_ui_alpha(pe_look_silver, 0.0f));
+        pe_hgradient(band_x, band_y + band_h - 1, band_w, 1, pe_ui_alpha(pe_look_silver, 0.40f),
+                     pe_ui_alpha(pe_look_silver, 0.0f));
+        pe_arrow(label_x - 6 * s, mid, 12 * s, 1, pe_look_red);
+    } else if (slot > 0) {                              /* a faint rule between rows */
+        pe_hgradient((int)(label_x), (int)top, (int)((PANEL_W - 2 * PANEL_PAD - 16) * s), 1,
+                     pe_ui_alpha(pe_look_silver, 0.07f), pe_ui_alpha(pe_look_silver, 0.0f));
     }
     if (e->row < 0) {                                   /* link */
-        pe_ui_draw_text(&s_surface, PANEL_PAD * s, base, 17 * s, e->page + e->name_at, label, PE_ALIGN_LEFT);
-        pe_ui_draw_text(&s_surface, (PANEL_W - PANEL_PAD) * s, base, 17 * s, ">", selected ? pe_ui_accent : pe_ui_muted,
-                        PE_ALIGN_RIGHT);
+        pe_ui_draw_text(&s_surface, label_x, base, 17 * s, e->page + e->name_at, label, PE_ALIGN_LEFT);
+        pe_arrow((PANEL_W - PANEL_PAD) * s, mid, 10 * s, 1, selected ? pe_look_red : pe_ui_alpha(pe_look_dim, 0.7f));
         return;
     }
     {
         PeMenuRow *row = pe_menu_row(e->row);
-        pe_ui_draw_text(&s_surface, PANEL_PAD * s, base, 17 * s, row->label, label, PE_ALIGN_LEFT);
+        pe_ui_draw_text(&s_surface, label_x, base, 17 * s, row->label, label, PE_ALIGN_LEFT);
         if (row->kind == PE_ROW_ACTION) {
-            if (selected) pe_ui_draw_text(&s_surface, value_x, base, 15 * s, off ? "Off" : "Press Enter", off ? pe_ui_muted : pe_ui_accent,
-                                          PE_ALIGN_CENTRE);
+            if (selected) pe_spaced(value_x, base - 1 * s, 12 * s, 2.5f * s, off ? "OFF" : "PRESS ENTER",
+                                    off ? pe_look_dim : pe_look_red, PE_ALIGN_CENTRE);
             return;
         }
         if (row->kind == PE_ROW_DIGITS) {
-            pe_paint_digits(e->row, row, value_x, mid, base, selected, pe_ui_accent, pe_ui_text, pe_ui_border);
+            pe_paint_digits(e->row, row, value_x, mid, base, selected, pe_look_red, pe_look_text, pe_look_silver);
             return;
         }
         pe_menu_row_value_text(row, value, sizeof value);
         if (row->kind == PE_ROW_INFO) {
-            pe_ui_draw_text(&s_surface, value_x, base, 16 * s, value, pe_ui_muted, PE_ALIGN_CENTRE);
+            pe_ui_draw_text(&s_surface, value_x, base, 16 * s, value, pe_ui_alpha(pe_look_dim, 0.95f), PE_ALIGN_CENTRE);
             return;
         }
-        pe_ui_draw_text(&s_surface, value_x, base, 17 * s, value, selected ? pe_ui_accent : pe_ui_alpha(pe_ui_text, 0.9f),
-                        PE_ALIGN_CENTRE);
+        {                                               /* a framed field for values that change */
+            const int fx = (int)(value_x - (VALUE_W * 0.5f - 6) * s), fy = (int)(top + 8 * s),
+                      fw = (int)((VALUE_W - 12) * s), fh = (int)((ROW_H - 16) * s);
+            pe_px_rect(fx, fy, fw, fh, pe_ui_alpha((PeColor){0, 0, 0, 1}, selected ? 0.45f : 0.25f));
+            pe_frame(fx, fy, fw, fh, pe_ui_alpha(pe_look_silver, selected ? 0.38f : 0.12f));
+        }
+        if (strcmp(value, "On") == 0 || strcmp(value, "Off") == 0) {
+            const int on = value[1] == 'n';
+            pe_spaced(value_x, base - 1 * s, 14 * s, 3 * s, on ? "ON" : "OFF",
+                      on ? (selected ? pe_look_red : pe_ui_alpha(pe_look_red, 0.85f)) : pe_ui_alpha(pe_look_dim, 0.9f),
+                      PE_ALIGN_CENTRE);
+        } else {
+            pe_ui_draw_text(&s_surface, value_x, base, 17 * s, value, selected ? pe_look_text : pe_ui_alpha(pe_look_text, 0.85f),
+                            PE_ALIGN_CENTRE);
+        }
         if (selected) {
-            const float reach = (VALUE_W * 0.5f - 14) * s;
-            pe_ui_draw_text(&s_surface, value_x - reach, base, 17 * s, "<", pe_ui_accent, PE_ALIGN_CENTRE);
-            pe_ui_draw_text(&s_surface, value_x + reach, base, 17 * s, ">", pe_ui_accent, PE_ALIGN_CENTRE);
+            const float reach = (VALUE_W * 0.5f - 22) * s;
+            pe_arrow(value_x - reach, mid, 10 * s, -1, pe_look_red);
+            pe_arrow(value_x + reach, mid, 10 * s, 1, pe_look_red);
         }
     }
 }
@@ -342,32 +449,68 @@ static void pe_paint(int w, int h) {
     const float s = s_scale;
     const int visible = pe_visible_rows();
     const float footer = (float)(HEADER_H + visible * ROW_H);
-    char crumb[160];
+    const char *sub = strchr(s_panel.path, '/');
+    char text[160];
     int i;
-    pe_ui_fill_round_rect(&s_surface, 0, 0, (float)w, (float)h, 16 * s, pe_ui_border);
-    pe_ui_fill_round_rect(&s_surface, 1, 1, (float)w - 2, (float)h - 2, 15 * s, pe_ui_panel);
-    pe_ui_draw_text(&s_surface, PANEL_PAD * s, 42 * s, 26 * s, "Mods", pe_ui_text, PE_ALIGN_LEFT);
-    pe_ui_draw_text(&s_surface, (PANEL_W - PANEL_PAD) * s, 40 * s, 14 * s, "GAME PAUSED", pe_ui_muted, PE_ALIGN_RIGHT);
-    pe_breadcrumb(crumb, sizeof crumb);
-    pe_ui_draw_text(&s_surface, PANEL_PAD * s, 76 * s, 15 * s, crumb, pe_ui_accent, PE_ALIGN_LEFT);
-    pe_ui_fill_round_rect(&s_surface, PANEL_PAD * s, (HEADER_H - 8) * s, (PANEL_W - 2 * PANEL_PAD) * s, 1, 0,
-                          pe_ui_alpha(pe_ui_text, 0.10f));
+    /* The window: navy to black, faint scanlines, a silver double frame with bright corners. */
+    pe_vgradient(0, 0, w, h, (PeColor){0.055f, 0.075f, 0.140f, 0.97f}, (PeColor){0.010f, 0.014f, 0.032f, 0.97f});
+    for (i = 0; i < h; i += 3) pe_px_rect(1, i, w - 2, 1, pe_ui_alpha(pe_look_silver, 0.022f));
+    pe_frame(0, 0, w, h, pe_ui_alpha(pe_look_silver, 0.50f));
+    pe_frame((int)(5 * s), (int)(5 * s), w - 2 * (int)(5 * s), h - 2 * (int)(5 * s), pe_ui_alpha(pe_look_silver, 0.13f));
+    pe_corners(0, 0, w, h, (int)(22 * s), (int)(2 * s) > 1 ? (int)(2 * s) : 2, pe_ui_alpha(pe_look_silver, 0.95f));
+    /* Header: the game's name in red, the page in big spaced capitals, a red rule fading out. */
+    pe_spaced(PANEL_PAD * s, 32 * s, 11 * s, 4 * s, "PARASITE EVE", pe_look_red, PE_ALIGN_LEFT);
+    pe_spaced((PANEL_W - PANEL_PAD) * s, 32 * s, 11 * s, 3 * s, "GAME PAUSED", pe_ui_alpha(pe_look_dim, 0.85f), PE_ALIGN_RIGHT);
+    {   /* the mod's name (its top page) big on the left, the page you're on small on the right */
+        char page[160] = "";
+        float em = 28 * s, track = 5 * s, room = (PANEL_W - 2 * PANEL_PAD) * s;
+        if (sub) {
+            pe_upper(page, sizeof page, strrchr(s_panel.path, '/') + 1);
+            room -= pe_spaced_width(page, 14 * s, 3 * s) + 32 * s;
+        }
+        if (!s_panel.path[0]) snprintf(text, sizeof text, "MODS");
+        else {
+            char top[96];
+            snprintf(top, sizeof top, "%.*s", (int)strcspn(s_panel.path, "/"), s_panel.path);
+            pe_upper(text, sizeof text, top);
+        }
+        while (em > 16 * s && pe_spaced_width(text, em, track) > room) { em -= 1 * s; track = em * 5 / 28; }
+        pe_spaced(PANEL_PAD * s, 66 * s, em, track, text, pe_look_text, PE_ALIGN_LEFT);
+        if (sub) {
+            pe_spaced((PANEL_W - PANEL_PAD) * s, 66 * s, 14 * s, 3 * s, page, pe_look_steel, PE_ALIGN_RIGHT);
+            pe_arrow((PANEL_W - PANEL_PAD) * s - pe_spaced_width(page, 14 * s, 3 * s) - 10 * s, 61 * s, 9 * s, -1,
+                     pe_ui_alpha(pe_look_steel, 0.8f));
+        }
+    }
+    if (s_panel.path[0] && !pe_page_active(s_panel.path))
+        pe_spaced((PANEL_W - PANEL_PAD) * s, sub ? 46 * s : 66 * s, 11 * s, 3 * s, "MOD OFF", pe_look_dim, PE_ALIGN_RIGHT);
+    pe_hgradient((int)(PANEL_PAD * s), (int)(80 * s), (int)((PANEL_W - 2 * PANEL_PAD) * s), (int)(2 * s) > 1 ? (int)(2 * s) : 2,
+                 pe_look_red, pe_ui_alpha(pe_look_red, 0.0f));
+    pe_px_rect((int)(PANEL_PAD * s), (int)(86 * s), (int)((PANEL_W - 2 * PANEL_PAD) * s), 1, pe_ui_alpha(pe_look_silver, 0.08f));
     if (!s_panel.count)
-        pe_ui_draw_text(&s_surface, PANEL_PAD * s, (HEADER_H + ROW_H * 0.5f + 6) * s, 16 * s, "Nothing here yet.",
-                        pe_ui_muted, PE_ALIGN_LEFT);
+        pe_ui_draw_text(&s_surface, (PANEL_PAD + 16) * s, (HEADER_H + ROW_H * 0.5f + 6) * s, 16 * s, "Nothing here yet.",
+                        pe_look_dim, PE_ALIGN_LEFT);
     for (i = 0; i < visible && s_panel.scroll + i < s_panel.count; ++i)
-        pe_paint_row(&s_panel.entries[s_panel.scroll + i], i, s_panel.scroll + i == s_panel.cursor);
-    if (s_panel.count > visible) {                      /* scroll bar */
+        pe_paint_row_pe(&s_panel.entries[s_panel.scroll + i], i, s_panel.scroll + i == s_panel.cursor);
+    if (s_panel.count > visible) {                      /* scroll bar: a hairline track, a red thumb */
         const float track_top = (HEADER_H + 4) * s, track_h = (visible * ROW_H - 8) * s;
         const float thumb_h = track_h * (float)visible / (float)s_panel.count;
         const float thumb_top = track_top + (track_h - thumb_h) * (float)s_panel.scroll / (float)(s_panel.count - visible);
-        pe_ui_fill_round_rect(&s_surface, (PANEL_W - 12) * s, track_top, 4 * s, track_h, 2 * s, pe_ui_alpha(pe_ui_text, 0.10f));
-        pe_ui_fill_round_rect(&s_surface, (PANEL_W - 12) * s, thumb_top, 4 * s, thumb_h, 2 * s, pe_ui_alpha(pe_ui_accent, 0.65f));
+        pe_px_rect((int)((PANEL_W - 14) * s), (int)track_top, 1, (int)track_h, pe_ui_alpha(pe_look_silver, 0.15f));
+        pe_px_rect((int)((PANEL_W - 15) * s), (int)thumb_top, (int)(3 * s), (int)thumb_h, pe_look_red);
     }
-    pe_ui_fill_round_rect(&s_surface, PANEL_PAD * s, footer * s, (PANEL_W - 2 * PANEL_PAD) * s, 1, 0, pe_ui_alpha(pe_ui_text, 0.10f));
-    pe_ui_draw_text(&s_surface, PANEL_PAD * s, (footer + 30) * s, 15 * s, pe_help_text(), pe_ui_text, PE_ALIGN_LEFT);
-    pe_ui_draw_text(&s_surface, PANEL_PAD * s, (footer + 56) * s, 13 * s, pe_key_hints(), pe_ui_alpha(pe_ui_muted, 0.8f),
-                    PE_ALIGN_LEFT);
+    /* The help box, as the game frames its own: the description, then the keys. */
+    {
+        const int bx = (int)(PANEL_PAD * 0.5f * s), by = (int)((footer + 8) * s), bw = (int)((PANEL_W - PANEL_PAD) * s),
+                  bh = (int)((FOOTER_H - 20) * s);
+        pe_vgradient(bx, by, bw, bh, (PeColor){0.02f, 0.03f, 0.06f, 0.85f}, (PeColor){0.0f, 0.0f, 0.0f, 0.85f});
+        pe_frame(bx, by, bw, bh, pe_ui_alpha(pe_look_silver, 0.30f));
+        pe_corners(bx, by, bw, bh, (int)(10 * s), 1, pe_ui_alpha(pe_look_silver, 0.85f));
+        pe_wrapped(PANEL_PAD * s, (footer + 31) * s, 19 * s, (PANEL_W - 2 * PANEL_PAD) * s, 14 * s, 2, pe_help_text(),
+                   pe_look_text);
+        pe_upper(text, sizeof text, pe_key_hints());
+        pe_spaced(PANEL_PAD * s, (footer + 72) * s, 10 * s, 1.6f * s, text, pe_ui_alpha(pe_look_dim, 0.85f), PE_ALIGN_LEFT);
+    }
 }
 
 static void pe_refresh(void) {

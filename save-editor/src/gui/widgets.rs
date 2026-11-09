@@ -167,3 +167,44 @@ pub(super) fn slot_value_icon_and_title(
         TEXT_MUTED,
     )
 }
+
+pub(super) fn render_stack_controls(
+    ui: &mut egui::Ui,
+    save: &mut PeSaveSlot,
+    list: usize,
+    index: usize,
+) {
+    match save.stack_quantity(list, index) {
+        Ok(0) => {}
+        Ok(mut quantity) => {
+            ui.horizontal(|ui| {
+                ui.label(format!("Copies in this slot: {}", quantity));
+                if matches!(crate::stacks::read(save), Ok(Some(_))) {
+                    let before = quantity;
+                    ui.add(egui::DragValue::new(&mut quantity).range(1..=99));
+                    if quantity != before {
+                        if let Err(e) = save.set_stack_quantity(list, index, quantity) {
+                            ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
+                        }
+                    }
+                }
+            });
+            if list == 0
+                && save
+                    .item_list(0)
+                    .get(index)
+                    .is_some_and(|&v| (1..256).contains(&v))
+                && ui
+                    .button("Move whole stack to Wayne's item storage")
+                    .clicked()
+            {
+                if let Err(e) = save.move_inventory_slot(0, index, 1) {
+                    ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
+                }
+            }
+        }
+        Err(e) => {
+            ui.colored_label(egui::Color32::LIGHT_RED, e.to_string());
+        }
+    }
+}

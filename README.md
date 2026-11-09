@@ -24,9 +24,11 @@ Keep each CUE file next to its BIN file.
 The game shows download progress and checks the files before installing. Use **2x or higher** in Graphics; the artwork applies immediately.
 You can also [download the pack manually](https://pe.polanka.ovh/).
 
-**Enter** is START and skips movies; in a story movie, START pauses it and asks whether to skip. View or change all bindings in **Escape → Controls**. A **speed** button can be bound there too: the game runs at 2x while it is held, or 3x or 4x with the arrows either side of the number (Left/Right on that row). **Speed button: Toggle** makes each press switch the speed-up on or off instead. It is unbound until you choose a key or button, and keeps your VSync setting.
+**Enter** is START and skips movies; in a story movie, START pauses it and asks whether to skip. View or change all bindings in **Escape → Controls**. Choose **Fast forward** there to assign a key or controller button: the game runs at 2x while it is held, or 3x or 4x with the arrows either side of the number (Left/Right on that row). **Fast-forward button: Toggle** makes each press switch the speed-up on or off instead. It is unbound until you choose a key or button, and keeps your VSync setting.
 The left stick provides analog movement. **Escape → Controls → Field run threshold** sets how far to push it before Aya runs (85% by default).
 Settings and selected disc paths are saved automatically. Memory cards are kept in `memory-cards` beside your user preferences. Older `bu00`/`bu10` cards from the launch or executable folder are imported once, keeping the original files.
+
+For portable storage, create an empty `portable.txt` beside the executable (beside the `.app` on macOS), or launch with `--portable`. Settings, memory cards, mods and downloaded backgrounds then use the `userdata` folder there. Keep the application in a writable folder. An explicit `PE_CONFIG_HOME` takes precedence. Existing user saves remain in their original location; copy your preferences folder into `userdata` to move them.
 **Escape → Graphics** includes geometry correction, antialiasing, model texture filtering and an optional **Widescreen** aspect ratio. Widescreen shows more of the original background where available; narrow scenes and movies stay in 4:3.
 
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.
@@ -44,7 +46,7 @@ Settings are saved in `pe_mods.ini`. See [the mod guide](mods/README.md) for wri
 
 Open **F1 → PE Enhancements** to configure them.
 
-- **Movement** (`pe_qol`): Always Run and configurable walk, run, combat and battle-entry speeds
+- **Movement** (`pe_qol`): optional Repeat interact while holding the action button, Always Run and configurable walk, run, combat and battle-entry speeds
   (walking and running default to 1.75×).
 - **Encounters** (`pe_qol`): no random battles, or Normal, 2×, 4× or Every Check frequency. Story
   and room rules still apply; this changes how often fights happen, not their size.
@@ -69,10 +71,12 @@ Open **F1 → PE Enhancements** to configure them.
 - **Requisition and Wayne's Workshop** (`pe_economy`): buy medicine, ammo, Smoke Grenades,
   Revive and Tools with Junk, from F1 or Wayne's own menu (also Mod Permit Cards); Warner offers
   storage and the Workshop where he stands guard on Day 4. Smoke Grenades escape ordinary battles.
-- **Bestiary and Wardrobe** (`pe_collection`): 75 creatures revealed by kills, Scan or Junk;
-  Aya's outfits and character skins to unlock and wear. Skins are built from your own disc with
-  the decomp bridge tools and stay hidden until present. Unlocks are kept across games in
-  `pe_collection.ini`; other mods can register their own creatures and costumes.
+- **Bestiary** (`pe_collection`): 75 creatures revealed by kills, Scan or Junk, kept across games
+  in `pe_collection.ini`.
+- **Wardrobe** (`pe_wardrobe`): Aya's outfits and character skins to unlock and wear. Skins are
+  built from your own disc with the decomp bridge tools and stay hidden until present. Unlocks are
+  kept across games in `pe_wardrobe.ini` (imported once from `pe_collection.ini`). Other mods can
+  register their own creatures and costumes.
 - **Quick save** (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to
   the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Files
   are kept beside the preferences as `quicksave_<slot>.mcd`; loading restarts the saved room the
@@ -112,7 +116,7 @@ cmake --build build-mods --parallel
 ./build-mods/parasite-eve-pc
 ```
 
-`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_collection;pe_stacks;pe_warp;pe_quicksave;pe_cheats`).
+`PE_MOD_LIST` picks the mods by folder name (default: `pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats`).
 
 ### PS5 payload & native GPU options
 
