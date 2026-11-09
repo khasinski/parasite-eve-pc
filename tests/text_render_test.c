@@ -633,14 +633,16 @@ static unsigned test_rtl_cases(const char *path) {
     text[size] = 0;
     for (line = text; *line; line = end + (*end != 0)) {
         unsigned logical[PE_TEXT_LINE_LETTERS], visual[PE_TEXT_LINE_LETTERS], n, v, i;
-        char *tab;
+        char *tab, *stop;
         int style;
         for (end = line; *end && *end != '\n'; ++end) {}
-        if (*line == '#' || end == line) continue;
-        tab = memchr(line, '\t', (size_t)(end - line));
+        stop = end; /* a Windows checkout ends lines with \r\n */
+        if (stop > line && stop[-1] == '\r') --stop;
+        if (*line == '#' || stop == line) continue;
+        tab = memchr(line, '\t', (size_t)(stop - line));
         assert(tab);
         n = decode(line, tab, logical);
-        v = decode(tab + 1, end, visual);
+        v = decode(tab + 1, stop, visual);
         for (style = PE_TEXT_DIALOGUE; style <= PE_TEXT_MENU; ++style) {
             static PeTextLine out;
             rtl_line((PeTextStyle)style, logical, n, &out);
