@@ -667,6 +667,12 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/text-renderer-evidence)
             set_tests_properties(original-game-text-renderer PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 900 LABELS "game-assets;mods")
+            # A right-to-left battle line on screen: the recorded route into the first battle, then Escape.
+            add_test(NAME original-game-text-renderer-battle COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-battle-evidence battle)
+            set_tests_properties(original-game-text-renderer-battle PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods")
         endif()
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)

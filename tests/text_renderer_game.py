@@ -1,6 +1,8 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle]]
+
+(battle is left out by default: it runs as its own test, original-game-text-renderer-battle.)
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -66,6 +68,12 @@ Checks, each from pe_mods.log and frame dumps:
              the space still pulled back as the English box pulls it, and 'é', which the pack
              doesn't draw, made from its drawn 'e'; the title lights exactly the pixels the menus
              cut from the pictures by their metrics.
+  battle     Right to left in a battle: the recorded route into the first battle (Melissa), then Escape
+             from the battle menu; she can't be run from, so battle/010 shows on the bottom bar. Three
+             packs translate only that line, run side by side: Hebrew ("he", with an English name, a
+             year and brackets) draws the same letters as its drawing-order mirror ("xx"), moved to end
+             at x 300 (the mirror starts at x 20, as English does, and is not English's line); Arabic
+             ("ar") lights exactly the pixels of the joined word, ending at x 300.
 """
 import binascii
 import csv
@@ -145,6 +153,41 @@ LINE_TOP = 174                 # the default box's first line (textbox.c: cursor
 ARABIC_BOX = ['نيويورك', 'مستشفيات',
               'الاعلانات', 'أصدقاء']
 ARABIC_TITLE = 'الاسم'
+# Part battle: the recorded route into the first battle (Melissa on the stage), as the actor animation
+# test's input 13 (tests/actor_animation/native_replay_schedules.inc): New Game, Cross through the
+# boxes and the name entry, the walk to the stage. Then, with Aya's time bar full, Triangle opens the
+# battle menu, Down three times reaches "Escape from Battle", Cross: Melissa can't be run from, so the
+# game shows battle/010 ("Can't escape!") along the bottom bar, from x 20.
+def _battle_route():
+    events = list(NEW_GAME)
+    press = lambda tick, mask: events.extend([(tick, mask), (tick + 10, 0)])
+    for tick in range(17000, 22000, 600):
+        press(tick, CROSS)
+    press(23000, START)
+    press(23600, START)
+    for tick in range(24200, 32200, 600):
+        press(tick, CROSS)
+    events.append((33000, UP))
+    for tick in range(35000, 36201, 600):
+        events.extend([(tick, UP | CROSS), (tick + 10, UP)])
+    events.append((39000, 0))
+    for tick in range(52000, 57000, 600):
+        press(tick, CROSS)
+    events.extend([(58000, UP), (58200, UP), (59769, 32), (59869, 32), (59994, UP), (60634, 128), (60734, 192)])
+    for tick in range(61334, 64554, 510):
+        press(tick, CROSS)
+    return events
+
+
+BATTLE_ROUTE = _battle_route()
+BATTLE_STEPS = presses([(65600, TRIANGLE, 'battle'), (65700, DOWN, 'items'), (65760, DOWN, 'weapon'),
+                        (65820, DOWN, 'armor'), (65880, CROSS, 'escape'), (66000, 0, 'line')])
+BATTLE_BAR = (0, 190, 320, 220)  # the bottom bar holding the battle line
+# The English battle line's letters (bright() of BATTLE_BAR at 'line', SHA-256 of its 0/1 bytes):
+# a pack's line must not be this.
+ENGLISH_BATTLE = '1c93a2616df09c244885b4192196b2ebac6887789b4e32951f23b61149a34ff7'
+BATTLE_HEBREW = 'אין בריחה (Melissa) 1997!'
+BATTLE_ARABIC = 'الهروب'
 CHINESE_GRID = ('的一是不了人我在有他这中大来上国个到说们为子和你地出道也时年得就那要下以生会自着去之过家学对'
                 '可里后小么心多天而能好都然没日于起还发成事只作当想看文无开手十用主行方又如前所本见经头面公同三'
                 '已老从动两长知民样现分将外但身些与高意进把法此实回二理美点月明其种声全工己话儿者向情部正名定女')
@@ -282,6 +325,26 @@ def make_arabic_packs(localization, out):
             w.writeheader()
             w.writerows({'key': k, 'translation': t, 'notes': ''} for k, t in rows)
         pack = out / f'arabic-{code}.pelang'
+        subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--strings', str(strings),
+                        '--lang', code, '--name', name, '-o', str(pack), str(table)], check=True,
+                       stdout=subprocess.DEVNULL)
+        made[code] = (code, name, None, pack)
+    return made
+
+
+def make_battle_packs(localization, out, visual):
+    """Hebrew ('he'), its drawing-order mirror ('xx') and Arabic ('ar'), each translating only the
+    battle line battle/010, so the route into the battle is the English one."""
+    strings = out / 'text' / 'strings.json'
+    made = {}
+    for code, name, line in (('he', 'Battle Hebrew', BATTLE_HEBREW), ('xx', 'Battle mirror', visual(BATTLE_HEBREW)),
+                             ('ar', 'Battle Arabic', BATTLE_ARABIC)):
+        table = out / f'battle-{code}.csv'
+        with table.open('w', encoding='utf-8', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
+            w.writeheader()
+            w.writerow({'key': 'battle/010', 'translation': line, 'notes': ''})
+        pack = out / f'battle-{code}.pelang'
         subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--strings', str(strings),
                         '--lang', code, '--name', name, '-o', str(pack), str(table)], check=True,
                        stdout=subprocess.DEVNULL)
@@ -1022,6 +1085,50 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
               f'the box\'s text rows are at {split_rows}, not English\'s {english} with a line more: {work}')
         print(f'PASS split: the too-wide message box line is on two lines at full size (text rows at {split_rows}, '
               f'English {english})')
+
+    # A battle line in right-to-left packs, on the battle's bottom bar.
+    if 'battle' in parts:
+        from concurrent.futures import ThreadPoolExecutor
+        from petext import rtl
+        made = make_battle_packs(localization, out / 'packs', rtl.visual)
+        with ThreadPoolExecutor(len(made)) as pool:   # each run has its own folder; the game counts vblanks, not time
+            runs = {code: pool.submit(run_fixed, game, discs, out / f'battle-{code}', BATTLE_STEPS, pack=pack,
+                                      pad=BATTLE_ROUTE) for code, pack in made.items()}
+            works = {code: run.result() for code, run in runs.items()}
+        masks = {}
+        for code, work in works.items():
+            log = mods_log(work)
+            missing = [line for line in log.splitlines() if 'text: ' in line and "shows '?'" in line
+                       or 'cache unavailable' in line or 'no stretch' in line]
+            check(not missing, f'battle {code}: letters fell back to "?": {missing[:5]}: {work}')
+            check(('reads right to left' in log) == (code != 'xx'),
+                  f'battle {code}: read {"left to right" if code != "xx" else "right to left"}: {work}')
+            masks[code] = bright(work, 'line', BATTLE_BAR)
+            check(any(map(any, masks[code])), f'battle {code}: no battle line on the bottom bar (has the route into '
+                                              f'the battle changed?): {work}')
+        flat = lambda mask: hashlib.sha256(bytes(v for row in mask for v in row)).hexdigest()
+        check(flat(masks['xx']) != ENGLISH_BATTLE, f'battle: the pack\'s line is not shown, English is: {works["xx"]}')
+        cols = lambda mask: [x for x in range(BATTLE_BAR[2] - BATTLE_BAR[0]) if any(row[x] for row in mask)]
+        l_he, l_xx = cols(masks['he']), cols(masks['xx'])
+        check(l_xx[0] + BATTLE_BAR[0] <= 24, f'battle: the mirror\'s line starts at x {l_xx[0] + BATTLE_BAR[0]}: {works["xx"]}')
+        check(RIGHT_EDGE - 8 <= l_he[-1] + BATTLE_BAR[0] <= RIGHT_EDGE,
+              f'battle: the Hebrew line ends at x {l_he[-1] + BATTLE_BAR[0]}, not at the right side: {works["he"]}')
+        shift, width = l_he[-1] - l_xx[-1], len(masks['he'][0])
+        wrong = [(x + BATTLE_BAR[0], y + BATTLE_BAR[1]) for y, row in enumerate(masks['xx']) for x in range(width)
+                 if (masks['he'][y][x + shift] if 0 <= x + shift < width else 0) != row[x]]
+        check(not wrong, f'battle: the Hebrew line is not the drawing-order letters moved {shift} px right '
+                         f'(first differences at {wrong[:4]}): {works["he"]}')
+        print(f'PASS rtl battle: a Hebrew battle line (with English, a year and brackets) drew right to left, letter '
+              f'for letter as in drawing order, ending at x {l_he[-1] + BATTLE_BAR[0]}')
+        width_px, pixels = joined_line(BATTLE_ARABIC)
+        lit_px = {(x, y) for y, row in enumerate(masks['ar']) for x, v in enumerate(row) if v}
+        want = {xy for xy, v in pixels.items() if v == 1}
+        left = RIGHT_EDGE - width_px - BATTLE_BAR[0]
+        top = min(y for _, y in lit_px) - min(y for _, y in want)
+        check({(x + left, y + top) for x, y in want} == lit_px,
+              f'battle: the Arabic line does not light the joined word\'s pixels ending at x {RIGHT_EDGE}: {works["ar"]}')
+        print(f'PASS rtl arabic battle: the Arabic battle line drew joined, right to left, pixel for pixel, ending at '
+              f'x {RIGHT_EDGE}')
     # A pack that draws letters its own way (a fan patch's look).
     if 'drawn' in parts:
         made = make_drawn_packs(localization, out / 'packs')

@@ -533,7 +533,8 @@ still to draw); the order and the joining are the real thing. Hebrew names save 
 numbers, so an Arabic pack numbers them as its own letters, as Chinese does.
 
 Test languages: `pelang.py sample -o he.csv strings.json he` (or `ar`), then `build --lang he`.
-The disc test `original-game-text-renderer`, part `rtl`, checks both on screen.
+The disc test `original-game-text-renderer`, part `rtl`, checks both on screen;
+`original-game-text-renderer-battle` checks a battle line (Escape in the first battle).
 
 ## CJK (Chinese, Japanese and Korean)
 
