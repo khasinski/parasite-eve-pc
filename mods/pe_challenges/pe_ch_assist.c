@@ -1,8 +1,12 @@
-/* Challenges: cheats and playtest assists mark the run assisted.
+/* Challenges: cheats and playtest assists mark the run assisted, and other mods' rows are read for
+ * the Warnings row.
  *
- * No coupling to those mods: a switched-on toggle or choice row registered by pe_cheats or
- * pe_assists (whichever are in the build and running), checked twice a second while a challenge is
- * on, or the play log's "cheat_win" row (Win this battle). The first time per load, a toast says so.
+ * No coupling to those mods, only to what every mod shares:
+ *   - a switched-on toggle or choice row registered by pe_cheats or pe_assists (whichever are in
+ *     the build and running), checked twice a second while a challenge is on;
+ *   - any play log row whose tag starts "cheat_" (Win this battle: cheat_win, Warp: cheat_warp),
+ *     the convention cheat-like actions log under.
+ * The first time per load, a toast says so.
  */
 #include <stdio.h>
 #include <string.h>
@@ -21,6 +25,28 @@ void pe_ch_assist_reset(void) { s_told = 0; s_scan_wait = 0; }
 static int pe_is_cheat_mod(const char *id) {
     for (size_t i = 0; i < sizeof kCheatMods / sizeof kCheatMods[0]; ++i)
         if (id && strcmp(id, kCheatMods[i]) == 0) return 1;
+    return 0;
+}
+
+/* A row's value, for saved and live rows alike (0 for actions and info rows). */
+static int pe_row_value(const PeMenuRow *row) {
+    switch (row->kind) {
+    case PE_ROW_TOGGLE: case PE_ROW_CHOICE: case PE_ROW_INT: case PE_ROW_DYNAMIC_CHOICE:
+        return row->value ? *row->value : 0;
+    case PE_ROW_LIVE_INT: case PE_ROW_LIVE_CHOICE:
+        return row->get ? row->get() : 0;
+    default:
+        return 0;
+    }
+}
+
+int pe_ch_row_on(const char *mod_id, const char *label) {
+    for (int i = 0; i < pe_menu_row_count(); ++i) {
+        const PeMenuRow *row = pe_menu_row(i);
+        if (!row || !row->mod_id || !row->label) continue;
+        if (strcmp(row->mod_id, mod_id) != 0 || strcmp(row->label, label) != 0) continue;
+        return pe_menu_row_active(row) && pe_row_value(row) != 0;
+    }
     return 0;
 }
 
@@ -57,10 +83,19 @@ static int pe_assist_scan(void *ctx, void *user) {
     return 0;
 }
 
+static const struct { const char *tag, *name; } kCheatLogNames[] = {
+    {"cheat_win", "Win this battle"},
+    {"cheat_warp", "Warp"},
+};
+
 static int pe_assist_log_line(void *ctx, void *user) {
     const PeLogLine *line = ctx;
+    const char *name = "A cheat";
     (void)user;
-    if (line && line->tag && strcmp(line->tag, "cheat_win") == 0) pe_mark("Win this battle");
+    if (!line || !line->tag || strncmp(line->tag, "cheat_", 6) != 0) return 0;
+    for (size_t i = 0; i < sizeof kCheatLogNames / sizeof kCheatLogNames[0]; ++i)
+        if (strcmp(line->tag, kCheatLogNames[i].tag) == 0) name = kCheatLogNames[i].name;
+    pe_mark(name);
     return 0;
 }
 

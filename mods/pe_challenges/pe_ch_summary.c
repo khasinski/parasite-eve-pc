@@ -45,19 +45,28 @@ static void pe_info_time(char *out, unsigned size) {
     snprintf(out, size, "%u:%02u:%02u", s / 3600, s / 60 % 60, s % 60);
 }
 
-/* A warning: the challenge, the mod that works around it, and what it does. */
+/* A warning: the challenge, the mod (and optionally its row) that works around it, and what it
+ * does. Another mod's warning is one line here; nothing in that mod changes. */
 typedef struct PeChallengeWarning {
     int challenge;     /* -1: any challenge */
     const char *mod;   /* NULL: a cheat row is on */
+    const char *row;   /* NULL: the mod running is enough; else that row of it must be on */
     const char *text;
 } PeChallengeWarning;
 
 static const PeChallengeWarning kWarnings[] = {
-    {CH_NO_ITEMS, "pe_shops", "shops still sell items"},
-    {CH_NO_ESCAPE, "pe_economy", "Smoke Grenades still escape"},
-    {CH_NO_EXP, "pe_rewards", "battle Junk scales with EXP, so less Junk"},
-    {-1, NULL, "a cheat is on (run assisted)"},
+    {CH_NO_ITEMS, "pe_shops", NULL, "shops still sell items"},
+    {CH_NO_ESCAPE, "pe_economy", NULL, "Smoke Grenades still escape"},
+    {CH_NO_EXP, "pe_rewards", NULL, "battle Junk scales with EXP, so less Junk"},
+    {-1, "pe_qol", "No random battles", "No random battles is on"},
+    {-1, NULL, NULL, "a cheat is on (run assisted)"},
 };
+
+static int pe_warning_applies(const PeChallengeWarning *w) {
+    if (!w->mod) return pe_ch_cheat_row_on() != NULL;
+    if (!pe_mod_active(w->mod)) return 0;
+    return w->row ? pe_ch_row_on(w->mod, w->row) : 1;
+}
 
 static void pe_info_warnings(char *out, unsigned size) {
     const unsigned want = pe_ch_rows_mask();
@@ -66,8 +75,7 @@ static void pe_info_warnings(char *out, unsigned size) {
     for (size_t i = 0; i < sizeof kWarnings / sizeof kWarnings[0] && used + 1 < size; ++i) {
         const PeChallengeWarning *w = &kWarnings[i];
         const int wanted = w->challenge < 0 ? want != 0 : (want & CH_BIT(w->challenge)) != 0;
-        const int applies = w->mod ? pe_mod_active(w->mod) : pe_ch_cheat_row_on() != NULL;
-        if (!wanted || !applies) continue;
+        if (!wanted || !pe_warning_applies(w)) continue;
         used += (size_t)snprintf(out + used, size - used, "%s%s", used ? "; " : "", w->text);
         if (used >= size) used = size - 1;
     }

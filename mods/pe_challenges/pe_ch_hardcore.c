@@ -3,8 +3,10 @@
  *   Death      the game's own game over, not a knockout. When Aya falls the battle goes to phase 3
  *              (Battle_Update): with Preraise (state flag 0x800) or a Revive (item 0x12) in the bag
  *              she gets up again (Battle_StepVictory); otherwise Battle_StepPostBattle plays the
- *              game over and ends in Boot_Shutdown (the title). Once that path is under way (step 1
- *              on) the run is written to the per-run file as dead, before the title comes up.
+ *              game over and ends in Boot_Shutdown (the title). The branch is decided on the phase's
+ *              first frame, so the run is written to the per-run file as dead right then, before the
+ *              game-over animation: closing the game during it doesn't save the run. Quick load
+ *              (pe_quicksave) only works in free field, so it can't step in either.
  *   Its saves  every save of the run carries its run id (card slots, quick saves, copies). Loading
  *              one of a dead run: on the first frame the game allows a soft reset (the condition the
  *              game's own reset combo checks), a message, then the title by the game's own
@@ -30,8 +32,7 @@ static int s_kick;     /* a dead run's save was loaded: back to the title */
 static int pe_hardcore_battle(void *ctx, void *user) {
     const Combatant *aya;
     (void)ctx; (void)user;
-    if (!pe_ch_on(CH_HARDCORE) || s_marked || g_BattleModeState != PE_PHASE_AYA_DOWN || g_BattleStepIndex < 1)
-        return 0;
+    if (!pe_ch_on(CH_HARDCORE) || s_marked || g_BattleModeState != PE_PHASE_AYA_DOWN) return 0;
     aya = pe_aya_core();
     if (!aya || (s16)aya->curHP > 0 || (aya->stateFlags & PE_STATE_PRERAISE) || Inv_CountByValue(PE_ITEM_REVIVE) != 0)
         return 0;

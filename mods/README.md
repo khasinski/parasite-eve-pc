@@ -132,6 +132,18 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
 - **Damage:** PE_HOOK_HP_LOSS for Aya (Glass cannon sources 1-2, then One-hit KO sources 1, 2, 4);
   PE_HOOK_ENEMY_HIT / ENEMY_HIT_END give each hit's damage on an enemy, scaled after Rebalance and
   before the Bestiary's kill check. No EXP warns that battle Junk (pe_rewards) scales with EXP.
+- **Other mods** (checked against every mod in the default list; nothing in them changed):
+  - Half-bar ATB edits the same tab word: the tabs code runs after it and follows its writes.
+  - Rebalance mod effects adjust each hit at the same hooks: the scaling runs after them, so it
+    scales their final damage. Glass cannon also goes past Rebalance's Attack All crowd cap (x1.5).
+  - No PE has the last word on power availability over PE balance / Quick powers.
+  - The Bestiary's kill check runs after the scaling, so kills still count.
+  - Assisted: pe_cheats / pe_assists rows switched on, and any play log tag starting `cheat_`
+    (Win this battle, Warp).
+  - Hardcore: quick load works only in free field, and the death is written on the game over's
+    first frame, so neither a quick load nor closing the game saves the run.
+  - Warnings (`kWarnings` in pe_ch_summary.c, one line each, a mod or one of its rows): shops
+    under No items, Smoke Grenades under No escape, battle Junk under No EXP, No random battles.
 - **Not yet:** Blood price (PE costs HP: Battle_ApplySpellEffect runs per target, so a cast needs
   deduplicating), Fast enemies, Scarcity, no bonus-point spending.
 - **Run summary:** status, challenges on / used / lowered, cheats, battles won, knockouts and time.

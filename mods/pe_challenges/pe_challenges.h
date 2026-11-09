@@ -11,7 +11,7 @@
  *   core
  *     pe_ch_run.c          the F1 rows, the run's save record, rows <-> run, New Game only / locks
  *     pe_ch_tabs.c         removes the battle tabs the challenges that are on ask for
- *     pe_ch_assist.c       cheats and playtest assists mark the run assisted
+ *     pe_ch_assist.c       cheats, assists and cheat_* log rows mark the run assisted; other mods' rows
  *     pe_ch_runlog.c       battles won, play time, the per-run file (knockouts, dead runs)
  *     pe_ch_summary.c      the Run, Warnings and Run summary info rows
  *     pe_ch_bundles.c      Bundles page: Purist, Nightmare, Clear all
@@ -116,6 +116,7 @@ void pe_ch_tabs_register(const char *mod_id);
 void pe_ch_assist_register(const char *mod_id);
 void pe_ch_assist_reset(void);                     /* a load or a new game: tell again next time */
 const char *pe_ch_cheat_row_on(void);              /* a switched-on cheat / assist row's label, or NULL */
+int pe_ch_row_on(const char *mod_id, const char *label);   /* another mod's row is on (saved or live) */
 
 /* pe_ch_runlog.c */
 void pe_ch_runlog_register(const char *mod_id);
