@@ -179,6 +179,34 @@ def bidi_class(c: int) -> int:
 
 MIRROR = {"(": ")", ")": "(", "[": "]", "]": "[", "{": "}", "}": "{", "<": ">", ">": "<",
           "«": "»", "»": "«", "‹": "›", "›": "‹"}
+BRACKET_CLOSES = {"(": ")", "[": "]", "{": "}"}   # brackets that pair up (Bidi_Paired_Bracket)
+
+
+def pair_brackets(letters: str, cls: list[int]) -> None:
+    """N0: a pair of brackets takes one direction from what is inside it (PairBrackets)."""
+    stack, pairs = [], []
+    for i, ch in enumerate(letters):
+        if cls[i] != ON:
+            continue
+        if ch in BRACKET_CLOSES:
+            if len(stack) == 63:
+                break
+            stack.append(i)
+            continue
+        for k in range(len(stack) - 1, -1, -1):
+            if BRACKET_CLOSES[letters[stack[k]]] == ch:
+                pairs.append((stack[k], i))
+                del stack[k:]
+                break
+    for a, b in sorted(pairs):
+        inside = cls[a + 1:b]
+        if any(c in (R, EN, AN) for c in inside):
+            d = R
+        elif L in inside:
+            d = next((L if c == L else R for c in reversed(cls[:a]) if c in (L, R, EN, AN)), R)
+        else:
+            continue
+        cls[a] = cls[b] = d
 
 
 def order(letters: str) -> tuple[list[int], list[bool]]:
@@ -219,7 +247,8 @@ def order(letters: str) -> tuple[list[int], list[bool]]:
             last = cls[i]
         elif cls[i] == EN and last == L:
             cls[i] = L
-    strong = lambda c: L if c == L else R
+    pair_brackets(letters, cls)
+    strong =lambda c: L if c == L else R
     i = 0
     while i < n:
         if cls[i] not in (ON, WS):
