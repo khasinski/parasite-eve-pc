@@ -194,14 +194,13 @@ aya: No.
 # ======== Day 1 and 2: Christmas ========
 
 [pe1/radio]
-caller = Radio DJ
+caller = 1010 WINS
 tone = funny
 day = 1-2
-them: Congratulations, you're caller nine!
-aya: I'm what?
-them: Name that Christmas song and win a turkey!
-aya: I'm a little busy right now.
-them: Ooh, sorry, that's not it. Merry Christmas!
+them: 1010 WINS traffic desk. How bad is Seventh Avenue?
+aya: Depends. Are you driving a fire truck?
+them: No. Why?
+aya: Last I saw, only fire trucks were getting through.
 
 
 # ======== Day 2 on: the precinct, Wayne, the Chief ========
@@ -271,13 +270,13 @@ them: To speak to an operator, press zero.
 aya: I'll go find a person.
 
 [pe1/library]
-caller = Library
+caller = The Strand
 tone = funny
 day = 2-5
-them: Public Library, reference desk.
-aya: Do you have anything on people bursting into flames?
-them: ...Fiction or nonfiction?
-aya: I was hoping you'd tell me.
+them: Strand Books. Can I help you find something?
+aya: Do you have anything on spontaneous human combustion?
+them: Fiction or nonfiction?
+aya: It was nonfiction when I saw it.
 
 
 # ======== Day 3 on ========
@@ -503,7 +502,7 @@ them: Dispatch.
 aya: Brea, at the warehouse. Where's the backup the officer outside called for?
 them: He called it in an hour ago.
 aya: From where?
-them: A diner on Tenth Avenue. He says the coffee's good.
+them: Westway Diner. Ninth Avenue. He asked if you wanted coffee.
 
 # ---- Day 5: Chinatown ----
 
@@ -537,16 +536,16 @@ them: Uptown. Toward the park side of the city.
 # ---- Day 5: the museum ----
 
 [pe1/museum_guard]
-caller = Museum Guard
+caller = Museum Security
 tone = serious
 day = 5
 rooms = 195 196 237 238 340
 priority = 11
 once = yes
-them: It's the guard from the other day. I locked up like the police told me.
-aya: Good. Stay out of the building.
-them: I am out. Something's been knocking on the doors from the inside.
-aya: Don't answer it.
+them: Museum security. I was in the fossil hall when we cleared the building.
+aya: Did you see anything?
+them: No. I heard something scrape behind me. It stopped every time I stopped walking.
+aya: I'm glad you made it out.
 
 [pe1/museum_daniel]
 caller = Daniel
