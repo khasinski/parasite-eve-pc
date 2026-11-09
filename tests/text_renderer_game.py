@@ -384,7 +384,7 @@ def saved_name(card, pack):
     while at < len(window) and window[at] != 0xFF:
         if 0xFB <= window[at] <= 0xFE and at + 1 < len(window):
             n = (window[at] - 0xFB) * 250 + window[at + 1]
-            name += chr(letters[n - 1]) if 0 < n <= len(letters) else '?'
+            name += chr(letters[n - 1]) if 0 < n <= len(letters) and letters[n - 1] else '?'
             at += 2
         else:
             name += gt.CHARS.get(window[at], '?')
@@ -587,8 +587,17 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
               f'with no pack the name was not left as saved: {work}')
         check(card_file(work)[0x110:0x11D] == card[0x110:0x11D],
               f'with no pack a save after loading changed the name bytes: {work}')
-        check("text: no pack chosen has no name letter FB " in mods_log(work),
-              f'with no pack the name letters were not shown as "?": {work}')
+        # every name letter of the saved name shows '?' (the shared numbers put Greek on page FC)
+        shown = set(re.findall(r"text: no pack chosen has no name letter (F[B-E] [0-9A-F]{2}); it shows '\?'",
+                               mods_log(work)))
+        saved_letters, window, at = set(), card[0x110:0x11D], 0
+        while at < len(window) and window[at] != 0xFF:
+            if 0xFB <= window[at] <= 0xFE and at + 1 < len(window):
+                saved_letters.add(f'{window[at]:02X} {window[at + 1]:02X}')
+                at += 1
+            at += 1
+        check(shown and saved_letters <= shown,
+              f'with no pack the name letters were not shown as "?" ({sorted(saved_letters - shown)}): {work}')
         print('PASS load: with no pack (English) the save loads, the name is left as saved and the panel shows it '
               'with "?" for each Greek letter')
 

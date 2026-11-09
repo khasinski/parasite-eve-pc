@@ -239,6 +239,8 @@ int main(int argc, char **argv) {
         assert(pe_lang_pack_parse(&v4, bad, v4n));
         bad = copy_of(v4p, v4n); wr32(bad + v4n - 12, 0xD800);
         assert(pe_lang_pack_parse(&v4, bad, v4n));
+        bad = copy_of(v4p, v4n); wr32(bad + v4n - 12, 0);              /* a stretch letter is never 0 */
+        assert(pe_lang_pack_parse(&v4, bad, v4n));
         bad = copy_of(v4p, v4n); wr32(bad + v4n - 8 - 12 - 4, 97); wr32(bad + 96, 97);
         assert(pe_lang_pack_parse(&v4, bad, v4n));
         bad = copy_of(v4p, v4n); wr32(bad + 92, 2);
@@ -249,6 +251,23 @@ int main(int argc, char **argv) {
         assert(pe_lang_pack_parse(&v4, bad, v4n));
         bad = copy_of(v4p, v4n); wr32(bad + 108, 3);                  /* past the end */
         assert(pe_lang_pack_parse(&v4, bad, v4n));
+        {   /* name letter numbers are shared by every pack (petext/names.py), so a pack lists 0 for
+             * one it doesn't use; 504 (FD 04) and 754 (FE 04) are the game's own menu codes, never
+             * a name letter */
+            size_t n = v4n - 8 + 754 * 4;
+            unsigned char *big = calloc(1, n);
+            memcpy(big, v4p, v4n - 8); wr32(big + 108, 754);
+            wr32(big + v4n - 8, 0x3042);                               /* letter 1; 2-754 unused */
+            assert(!pe_lang_pack_parse(&v4, copy_of(big, n), n));
+            assert(v4.name_count == 754 && pe_lang_pack_name_letter(&v4, 0x101) == 0x3042);
+            assert(!pe_lang_pack_name_letter(&v4, 0x102) && !pe_lang_pack_name_letter(&v4, 0x304));
+            pe_lang_pack_free(&v4);
+            bad = copy_of(big, n); wr32(bad + v4n - 8 + 503 * 4, 0x3B1); /* a letter on 504 */
+            assert(pe_lang_pack_parse(&v4, bad, n));
+            bad = copy_of(big, n); wr32(bad + n - 4, 0x3B1);            /* a letter on 754 */
+            assert(pe_lang_pack_parse(&v4, bad, n));
+            free(big);
+        }
         free(v1p); free(v4p);
         /* name entries hold two-byte name letters (the pack above has two); other text may not */
         const char *names_ok[] = {"\x10\xFB\x02", "\xFB\x01\xFB\x02\x30"};
@@ -260,6 +279,12 @@ int main(int argc, char **argv) {
             for (size_t at = 64 + 16; at + 3 < v1n; ++at)               /* stretch 0, as above */
                 if (!memcmp(v1p + at, "\xF1\xC6\x7F\x7F", 4)) { v1p[at + 2] = v1p[at + 3] = 0; break; }
             v4p = with_stretch(v1p, v1n, hello, 3, &v4n);
+            if (k < 2) {   /* with letter 1 unused (0), a name using it is refused; one without still reads */
+                unsigned char *hole = copy_of(v4p, v4n);
+                wr32(hole + v4n - 8, 0);
+                assert(!pe_lang_pack_parse(&v4, hole, v4n) == (k == 0));
+                if (k == 0) pe_lang_pack_free(&v4);
+            }
             assert(!pe_lang_pack_parse(&v4, v4p, v4n) == (k < 2));
             if (k < 2) pe_lang_pack_free(&v4);
             free(v1p);

@@ -77,6 +77,26 @@ int main(void) {
     const uint32_t nobody[] = {0x5D0};                                         /* no pack has it */
     assert(pe_lang_name_save_pack(packs, 3, &packs[2], nobody, 1, 12) == -1);
     assert(pe_lang_name_save_pack(packs, 3, &packs[2], greek, 0, 12) == -1);
+    /* shared numbers (petext/names.py): a Greek pack (Ά = 307, α = 346) and a Russian one (ж = 430)
+     * list 0 for numbers they don't use. A name saved with Greek, loaded with Russian chosen: Russian
+     * can't read it, so the Greek pack does, and Russian never puts its own letters on it */
+    {
+        static unsigned char greek_data[430 * 4], russian_data[430 * 4];
+        PeLangPack two[2];
+        memset(two, 0, sizeof two);
+        wr32(greek_data + 306 * 4, 0x386); wr32(greek_data + 345 * 4, 0x3B1);
+        wr32(russian_data + 429 * 4, 0x436);
+        two[0].data = russian_data; two[0].size = sizeof russian_data; two[0].name_count = 430;
+        two[1].data = greek_data; two[1].size = sizeof greek_data; two[1].name_count = 346;
+        const unsigned char saved_greek[] = {0xFC, 307 - 250, 0xFC, 346 - 250, 0xFF};   /* Άα */
+        assert(pe_lang_name_decode(&two[0], saved_greek, 12, back) == -1);
+        assert(pe_lang_name_find_pack(two, 2, 0, saved_greek, 12, back, &count) == 1);
+        assert(count == 2 && back[0] == 0x386 && back[1] == 0x3B1);
+        /* and the Greek pack writes the same bytes back */
+        assert(pe_lang_name_encode(&two[1], back, 2, bytes, 12) == 4 && pe_lang_name_same(bytes, saved_greek, 12));
+        /* the Russian pack lacks them: '?' in its own letters, and the save gets the Greek pack's */
+        assert(pe_lang_name_save_pack(two, 2, &two[0], back, 2, 12) == 1);
+    }
     /* a name entry grid: cells on codes 4D-EF made empty; English letters, name letters (whose
      * second byte may be one of those codes) and control codes stay */
     {

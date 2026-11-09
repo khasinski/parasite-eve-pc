@@ -315,11 +315,12 @@ static int letter_missing(const PeLangPack *pack, unsigned letter, unsigned page
 }
 /* A name letter no pack in use names (a name saved with another pack, or with no pack chosen):
  * '?', in menus as in dialogue, where the game's cell for that code is blank and the name would
- * vanish. Only page FB (name letters 1-249): the game's own menu text has no FB letters, but it
- * does draw other pages' codes (FD 04), which keep the game's cell. */
+ * vanish. Not FB 00 and the reserved numbers (FD 04, FE 04): the game's own menu text draws those,
+ * and they keep the game's cell. */
 static int name_letter_missing(PeHookTextLetter *l, const PeLangPack *pack) {
+    unsigned page = l->paged >> 8, byte = l->paged & 0xFFu, id = (page - 1u) * 250u + byte;
+    if (page < 1 || page > 4 || byte >= 0xFA || !id || PE_LANG_NAME_RESERVED(id)) return 0;
     letter_missing(pack, 0, l->paged);
-    if (l->paged >> 8 != 1 || !(l->paged & 0xFFu)) return 0;
     l->code = 0x2C;
     return 1;
 }

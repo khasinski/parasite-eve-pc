@@ -4,8 +4,10 @@
 /* Names in the pack's letters, kept with the save (pe1/text_render.h, petext/names.py).
  *
  * A name in the game's name windows is the game's own letters, one byte each, and two-byte name
- * letters (FB-FE then a byte) that only the pack that wrote them knows. The save keeps those bytes
- * as they are (the mods' save room is full, so there is no record for a Unicode copy). pe_lang
+ * letters (FB-FE then a byte). A name letter's number means the same letter in every pack that has
+ * it (petext/names.py), so a name reads the same with any of them, and a pack without one of its
+ * letters doesn't read it. The save keeps those bytes as they are (the mods' save room is full, so
+ * there is no record for a Unicode copy). pe_lang
  * holds each name in Unicode while the game runs, so a language change puts it in the new pack's
  * letters; after a load it finds the pack that knows the name's letters, the one in use first.
  * When saving with a pack that lacks some of the name's letters, the save's copy gets the letters

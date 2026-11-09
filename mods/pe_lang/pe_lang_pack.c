@@ -147,7 +147,7 @@ static int is_name_key(uint32_t hash) {
     return hash == pe_lang_hash("sys/030") || hash == pe_lang_hash("sys/115") ||
            hash == pe_lang_hash("sys/116") || hash == pe_lang_hash("sys/117");
 }
-static int valid_name(const unsigned char *p, size_t n, unsigned names) {
+static int valid_name(const unsigned char *p, size_t n, const unsigned char *names_data, unsigned names) {
     size_t i = 0;
     while (i < n) {
         unsigned c = p[i++];
@@ -155,7 +155,7 @@ static int valid_name(const unsigned char *p, size_t n, unsigned names) {
         if (c < 0xF1) continue;
         if (c < 0xFB || c > 0xFE || i >= n || p[i] >= 0xFA) return 0;
         unsigned id = (c - 0xFBu) * 250u + p[i++];
-        if (!id || id > names) return 0;
+        if (!id || id > names || !rd32(names_data + (id - 1) * 4)) return 0;
     }
     return 0;
 }
@@ -179,7 +179,8 @@ int pe_lang_pack_parse(PeLangPack *pack, unsigned char *data, size_t size) {
              * dictionary letters' widths (one byte each) when widths_at is set */
             stretches_at = rd32(data+88); stretches = rd32(data+92); pool = rd32(data+96);
             widths_at = rd32(data+100);
-            /* then the name letters: u32 Unicode each, name letter 1 first (4-byte aligned) */
+            /* then the name letters: u32 Unicode each, name letter 1 first (4-byte aligned), 0 for
+             * a number the pack doesn't use */
             names_at = rd32(data+104); names = rd32(data+108);
             if (stretches > 57600 || stretches_at > size || stretches_at % 4 || pool > (size >> 2)) goto bad;
             size_t after = (size_t)stretches_at + ((size_t)stretches + 1) * 4 + (size_t)pool * 4;
@@ -189,7 +190,8 @@ int pe_lang_pack_parse(PeLangPack *pack, unsigned char *data, size_t size) {
                 size - names_at != (size_t)names * 4) goto bad;
             for (unsigned k = 0; k < names; ++k) {
                 uint32_t cp = rd32(data + names_at + k * 4);
-                if (!cp || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) goto bad;
+                if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF) || (cp && PE_LANG_NAME_RESERVED(k + 1)))
+                    goto bad;
             }
             const unsigned char *index = data + stretches_at, *letters_in = index + (stretches + 1) * 4;
             if (rd32(index) || rd32(index + stretches * 4) != pool) goto bad;
@@ -243,7 +245,7 @@ int pe_lang_pack_parse(PeLangPack *pack, unsigned char *data, size_t size) {
         if (i && rd32(e) <= rd32(e - ENTRY_SIZE)) goto bad;     /* sorted, no duplicate hashes */
         uint32_t end = i + 1 < count ? rd32(e + ENTRY_SIZE + 4) : (uint32_t)(text_end - text);
         if ((!i && at) || at >= end || end > text_end - text ||
-            !(names && is_name_key(rd32(e)) ? valid_name(data + text + at, end - at, names)
+            !(names && is_name_key(rd32(e)) ? valid_name(data + text + at, end - at, data + names_at, names)
                                             : valid_text(data + text + at, end - at, glyphs, stretches)))
             goto bad;
     }

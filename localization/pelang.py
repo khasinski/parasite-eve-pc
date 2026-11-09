@@ -461,7 +461,15 @@ def cmd_build(a) -> int:
         return 1
     stretches = name_letters = None
     if not a.bytes_only:
-        entries, name_letters, name_errors = namelib.convert_entries(entries, atlas)
+        try:
+            keep, keep_from = names_to_keep(a.keep_names_from, a.out)
+        except OSError as e:
+            print(f"error: --keep-names-from {a.keep_names_from}: {e}")
+            return 1
+        entries, name_letters, name_errors = namelib.convert_entries(entries, atlas, keep)
+        if name_letters.kept:
+            print(f"kept the numbers of {name_letters.kept} name letter(s) outside the shared list "
+                  f"from {keep_from}, so names saved with it read the same")
         if name_errors:
             for e in name_errors[: a.max_messages]:
                 print(f"error: {e}")
@@ -470,6 +478,20 @@ def cmd_build(a) -> int:
     write_pack(a.out, a.lang, a.name, entries, atlas, stretches, name_letters)
     print(f"wrote {a.out}")
     return 0
+
+
+def names_to_keep(given: Path | None, out: Path) -> tuple[dict[str, int], Path | None]:
+    """The name letter numbers a build keeps (petext/names.py), and where from: the pack given, else
+    the pack the build writes over, if it reads as one. Raises OSError when the given one can't be read."""
+    source = given or (out if out.is_file() else None)
+    if not source:
+        return {}, None
+    try:
+        return namelib.read_numbers(Path(source).read_bytes()), source
+    except OSError:
+        if given:
+            raise
+        return {}, None
 
 
 HEADER_SIZES = {1: 64, 2: 80, 3: 88, 4: 112}
@@ -907,6 +929,10 @@ def main(argv=None) -> int:
     b.add_argument("--bytes-only", action="store_true",
                    help="write each letter as its own byte (a version 1-3 pack) instead of the text "
                         "renderer's stretches")
+    b.add_argument("--keep-names-from", type=Path,
+                   help="the previous version of this pack (a .pelang from build): name letters outside the shared list "
+                        "keep its numbers, so names in players' saves read the same (default: the file "
+                        "-o writes over, when there is one)")
     b.add_argument("--no-wrap", action="store_true",
                    help="don't rewrap dialogue pages that overflow their box (by default they get line breaks at "
                         "spaces and, if still too tall, more screens)")

@@ -12,6 +12,10 @@
 #define PE_LANG_LETTER_SIZE 80u /* one record of a pack's letter table, see pe_lang_letter_compose */
 #define PE_LANG_STRETCH_MAX 96u /* letters in one F1 C6 stretch (PE_TEXT_ITEM_LETTERS) */
 #define PE_LANG_NAME_LETTERS 999u /* two-byte name letters, FB 01 .. FE F9 */
+/* Name letter numbers mean the same letter in every pack (petext/names.py: a shared list, then
+ * each pack's own numbers from 999 down), so a pack lists 0 for the numbers it doesn't use. Never
+ * a name letter: these two, the codes the game's own menu text draws (FD 04, FE 04). */
+#define PE_LANG_NAME_RESERVED(id) ((id) == 504u || (id) == 754u)
 #define PE_LANG_EXTRA_MAX 57600u  /* v4: table letters with no one-byte code */
 
 typedef struct PeLangPack {

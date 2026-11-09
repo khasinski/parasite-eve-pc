@@ -177,7 +177,7 @@ class Packs(unittest.TestCase):
         raw, errors, _ = pelang.check_row("sys/030", "ă", source, {}, atlas=atlas)
         self.assertEqual(errors, [])
         out, letters_in_names, errors = names.convert_entries({"sys/030": raw}, atlas)
-        self.assertEqual((out["sys/030"], letters_in_names.letters, errors), (b"\xfb\x01", ["ă"], []))
+        self.assertEqual((out["sys/030"], letters_in_names.letters, errors), (b"\xfb\x42", ["ă"], []))
 
 
 if __name__ == "__main__":
