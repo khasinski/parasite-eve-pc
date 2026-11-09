@@ -211,6 +211,9 @@ int pe_phone_flow_check_calls(void) {
             ++bad;
             pe_mod_log(PE_PHONE_MOD_ID, "call %s: %d box(es) too wide, %d line(s) ran on into another box", c->key, wide, ran);
         }
+        if (c->needs && !pe_phone_needs_hold(c->needs, pe_phone_condition_known))   /* not a mistake */
+            pe_mod_log(PE_PHONE_MOD_ID, "call %s needs %s: not every name is offered by a mod running now, "
+                       "so it won't play", c->key, c->needs);
     }
     s_script.count = 0;
     pe_mod_log(PE_PHONE_MOD_ID, "checked %d calls with the game's font: %d need a look", n, bad);

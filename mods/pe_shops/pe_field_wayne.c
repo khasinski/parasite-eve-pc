@@ -324,8 +324,23 @@ static int pe_on_textboxes(void *ctx, void *user) {
     return 0;
 }
 
+/* "warner.supplies" for Phone Calls: a call can say Warner is on his way with supplies (pe1's
+ * park_wayne) only while he really offers them. */
+static int pe_warner_supplies(void) { return s_enabled && pe_shopw_enabled(); }
+
+/* Offered from the first frame, when every mod has started: pe_phone may start after this mod. */
+static void pe_offer_phone_condition(void) {
+    static int s_tried;
+    const PePhoneCallsApi *phone;
+    if (s_tried) return;
+    s_tried = 1;
+    if ((phone = (const PePhoneCallsApi *)pe_service_get("phonecalls", 1)) != NULL)
+        (void)phone->add_condition("warner.supplies", pe_warner_supplies);
+}
+
 /* Every frame: once the field is unlocked again, open the storage screen chosen. */
 static void pe_field_wayne_tick(void) {
+    pe_offer_phone_condition();
     if (!pe_game_loaded() || !s_warner || pe_talk_running() || s_pending < 0) return;
     if (s_pending_wait > 0) { --s_pending_wait; return; }
     if (pe_free_field()) {

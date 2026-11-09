@@ -138,6 +138,28 @@ static void test_record(void) {
 
 /* ---- picking ---- */
 
+static int s_warner_on;   /* the one condition these tests offer, as pe_shops would */
+static int pe_holds(const char *name) { return !strcmp(name, "warner.supplies") && s_warner_on; }
+
+static void test_needs(void) {
+    PePhoneCall needy = CALL("t/needy", PE_CALL_SERIOUS, 1, 0, 0, 0, 9, NULL);
+    PePhoneContext x = {87, 0xF8, 2, 3};
+    PePhoneRecord r;
+    memset(&r, 0, sizeof r);
+    assert(pe_phone_condition_name_ok("warner.supplies") && pe_phone_condition_name_ok("a_b-1"));
+    assert(!pe_phone_condition_name_ok("") && !pe_phone_condition_name_ok("two words") && !pe_phone_condition_name_ok("x;y"));
+    assert(!pe_phone_condition_name_ok("abcdefghijklmnopqrstuvwxyz0123456"));   /* 33: too long */
+    assert(pe_phone_needs_hold(NULL, NULL) && pe_phone_needs_hold("", NULL) && pe_phone_needs_hold("  ", pe_holds));
+    s_warner_on = 0;
+    needy.needs = "warner.supplies";
+    assert(!pe_phone_fits(&needy, &x, &r, pe_holds) && !pe_phone_fits(&needy, &x, &r, NULL));
+    s_warner_on = 1;
+    assert(pe_phone_fits(&needy, &x, &r, pe_holds) && !pe_phone_fits(&needy, &x, &r, NULL));
+    needy.needs = "warner.supplies nobody.offers";                             /* all must hold */
+    assert(!pe_phone_fits(&needy, &x, &r, pe_holds));
+    s_warner_on = 0;
+}
+
 static void test_pick(void) {
     static const PePhoneCall serious_day2 = CALL("t/s2", PE_CALL_SERIOUS, 1, 0, 2, 3, 0, NULL);
     static const PePhoneCall funny_any = CALL("t/fa", PE_CALL_FUNNY, 3, 0, 0, 0, 0, NULL);
@@ -150,26 +172,26 @@ static void test_pick(void) {
     uint32_t roll;
     memset(&r, 0, sizeof r);
 
-    assert(pe_phone_pick(all, 5, &x, &r, 0) == &set_call);                           /* a set call first */
+    assert(pe_phone_pick(all, 5, &x, &r, pe_holds, 0) == &set_call);                           /* a set call first */
     pe_phone_record_played(&r, &set_call);
-    assert(pe_phone_fits(&chained, &x, &r));                                          /* `after` heard */
+    assert(pe_phone_fits(&chained, &x, &r, pe_holds));                                          /* `after` heard */
     x.day = 4;
-    assert(!pe_phone_fits(&serious_day2, &x, &r));
+    assert(!pe_phone_fits(&serious_day2, &x, &r, pe_holds));
     x.day = 2;
     x.tone_mask = 1 << PE_CALL_FUNNY;
     for (roll = 0; roll < 4; ++roll)                                                  /* weights 3 + 1 */
-        assert(pe_phone_pick(all, 5, &x, &r, roll) == (roll < 3 ? &funny_any : &funny_once));
+        assert(pe_phone_pick(all, 5, &x, &r, pe_holds, roll) == (roll < 3 ? &funny_any : &funny_once));
     pe_phone_record_played(&r, &funny_once);
-    assert(!pe_phone_fits(&funny_once, &x, &r));                                      /* once: heard */
-    assert(pe_phone_pick(all, 5, &x, &r, 7) == &funny_any);
+    assert(!pe_phone_fits(&funny_once, &x, &r, pe_holds));                                      /* once: heard */
+    assert(pe_phone_pick(all, 5, &x, &r, pe_holds, 7) == &funny_any);
     pe_phone_record_played(&r, &funny_any);
-    assert(pe_phone_pick(all, 5, &x, &r, 7) == &funny_any);                           /* the only one left */
+    assert(pe_phone_pick(all, 5, &x, &r, pe_holds, 7) == &funny_any);                           /* the only one left */
     x.tone_mask = 1 << PE_CALL_SERIOUS;
-    assert(pe_phone_pick(all, 5, &x, &r, 0) == &serious_day2 || pe_phone_pick(all, 5, &x, &r, 0) == &chained);
+    assert(pe_phone_pick(all, 5, &x, &r, pe_holds, 0) == &serious_day2 || pe_phone_pick(all, 5, &x, &r, pe_holds, 0) == &chained);
     pe_phone_record_played(&r, &serious_day2);
-    assert(pe_phone_pick(all, 5, &x, &r, 0) == &chained);                             /* not the last five */
+    assert(pe_phone_pick(all, 5, &x, &r, pe_holds, 0) == &chained);                             /* not the last five */
     x.tone_mask = 0;
-    assert(pe_phone_pick(all, 5, &x, &r, 0) == NULL);
+    assert(pe_phone_pick(all, 5, &x, &r, pe_holds, 0) == NULL);
 }
 
 /* ---- call files ---- */
@@ -223,6 +245,9 @@ static void test_call_file(void) {
     assert(parse("[mine/g]\ncaller = X\nday = 9\nthem: Hi.\n") == 0);
     assert(parse("[mine/h]\ncaller = X\nshout: Hi.\n") == 0);
     assert(parse("[mine/i]\ncaller = X\ncolour = red\nthem: Hi.\n") == 1 && strstr(s_problem, "unknown setting"));   /* kept */
+    assert(parse("[mine/n]\ncaller = X\nneeds = warner.supplies, other.thing\nthem: Hi.\n") == 1 && s_problems == 0);
+    assert(!strcmp(s_store.calls[s_store.call_count - 1].needs, "warner.supplies  other.thing"));
+    assert(parse("[mine/n2]\ncaller = X\nneeds = no;way\nthem: Hi.\n") == 0 && strstr(s_problem, "condition name"));
 }
 
 /* ---- the game's own pack (calls/pe1.txt) ---- */
@@ -252,15 +277,15 @@ static void test_pe1_pack(void) {
     PePhoneContext sewer = {32, 0x68, 1, 3}, park = {87, 0xF8, 2, 3}, carnegie = {1, 0x40, 1, 3};
     int i, k, funny = 0;
     load_pe1();
-    assert(s_pack_count == 54);
+    assert(s_pack_count == 55);
     memset(&r, 0, sizeof r);
-    assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, 0)->key, "pe1/sewer_emergency"));
+    assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, pe_holds, 0)->key, "pe1/sewer_emergency"));
     for (i = 0; i < 64; ++i) {                                                        /* never elsewhere */
-        assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &park, &r, (uint32_t)i * 7919u)->key, "pe1/sewer", 9));
-        assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &carnegie, &r, (uint32_t)i * 7919u)->key, "pe1/sewer", 9));
+        assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &park, &r, pe_holds, (uint32_t)i * 7919u)->key, "pe1/sewer", 9));
+        assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &carnegie, &r, pe_holds, (uint32_t)i * 7919u)->key, "pe1/sewer", 9));
     }
-    pe_phone_record_played(&r, pe_phone_pick(s_pack, s_pack_count, &sewer, &r, 0));
-    assert(strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, 0)->key, "pe1/sewer_emergency"));   /* once */
+    pe_phone_record_played(&r, pe_phone_pick(s_pack, s_pack_count, &sewer, &r, pe_holds, 0));
+    assert(strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, pe_holds, 0)->key, "pe1/sewer_emergency"));   /* once */
     for (i = 0; i < s_pack_count; ++i) {
         const PePhoneCall *c = s_pack[i];
         assert(!strncmp(c->key, "pe1/", 4) && pe_phone_text_ok(c->caller));
@@ -294,25 +319,34 @@ static void test_set_calls(void) {
     memset(&r, 0, sizeof r);
     for (i = 0; i < 3; ++i) {
         x.room = park_rooms[i];
-        c = pe_phone_pick(s_pack, s_pack_count, &x, &r, 12345u);
+        c = pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 12345u);
         assert(c && !strcmp(c->key, park_order[i]));
         pe_phone_record_played(&r, c);
     }
-    c = pe_phone_pick(s_pack, s_pack_count, &x, &r, 12345u);
+    c = pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 12345u);
     assert(c && strncmp(c->key, "pe1/park_", 9));                 /* the chain is done */
+    /* Warner sent with supplies (pe_shops offers warner.supplies): Wayne calls first, then Daniel */
+    memset(&r, 0, sizeof r);
+    s_warner_on = 1;
+    x.room = 64;
+    c = pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 12345u);
+    assert(c && !strcmp(c->key, "pe1/park_wayne"));
+    pe_phone_record_played(&r, c);
+    assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 12345u)->key, "pe1/park_daniel"));
+    s_warner_on = 0;
     x.tone_mask = 2;                                                /* funny only: the zoo call's turn */
     memset(&r, 0, sizeof r);
-    assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, 1u)->key, "pe1/park_", 9));   /* waits on Daniel */
+    assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 1u)->key, "pe1/park_", 9));   /* waits on Daniel */
     memset(&r, 0, sizeof r);
-    assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &hall, &r, 7u)->key, "pe1/hall_report"));
-    assert(strcmp(pe_phone_pick(s_pack, s_pack_count, &hall2, &r, 7u)->key, "pe1/hall_report"));   /* Day 1 only */
+    assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &hall, &r, pe_holds, 7u)->key, "pe1/hall_report"));
+    assert(strcmp(pe_phone_pick(s_pack, s_pack_count, &hall2, &r, pe_holds, 7u)->key, "pe1/hall_report"));   /* Day 1 only */
     /* a full once list forgets the oldest: still no repeat, the old day's call can't fit any more */
     memset(&r, 0, sizeof r);
-    pe_phone_record_played(&r, pe_phone_pick(s_pack, s_pack_count, &hall, &r, 7u));
+    pe_phone_record_played(&r, pe_phone_pick(s_pack, s_pack_count, &hall, &r, pe_holds, 7u));
     for (i = 0; i < s_pack_count; ++i) if (s_pack[i]->once) pe_phone_record_played(&r, s_pack[i]);
     hall2.room = 20;
     for (i = 0; i < 64; ++i)
-        assert(strcmp(pe_phone_pick(s_pack, s_pack_count, &hall2, &r, (uint32_t)i * 7919u)->key, "pe1/hall_report"));
+        assert(strcmp(pe_phone_pick(s_pack, s_pack_count, &hall2, &r, pe_holds, (uint32_t)i * 7919u)->key, "pe1/hall_report"));
 }
 
 int main(void) {
@@ -321,6 +355,7 @@ int main(void) {
     test_script();
     test_save_question();
     test_record();
+    test_needs();
     test_pick();
     test_call_file();
     test_pe1_pack();

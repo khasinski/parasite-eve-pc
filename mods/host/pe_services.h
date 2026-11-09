@@ -279,6 +279,8 @@ typedef struct PePhoneCall {
     int room_count;
     int priority;                      /* > 0: a set call that beats the random pool when it fits */
     const char *after;                 /* key of a call that must have been heard first, or NULL */
+    const char *needs;                 /* conditions that must all hold, space-separated
+                                          ("warner.supplies"); NULL = none. See add_condition. */
 } PePhoneCall;
 
 typedef struct PePhoneContext {
@@ -294,6 +296,13 @@ typedef struct PePhoneCallsApi {
     const PePhoneCall *(*pick)(const PePhoneContext *context);   /* NULL: nothing fits */
     int (*heard)(const char *key);                  /* heard this playthrough (once calls and the last few) */
     void (*reset)(void);                            /* forget this save's heard calls */
+    /* A yes/no a call's `needs` can name, so a call can depend on another mod's feature without
+     * either mod knowing the other: the mod that owns the feature offers it ("warner.supplies":
+     * pe_shops, Warner helps out with the Junk economy on). Name: letters, digits, . _ -, up to 31.
+     * Asked each time a call is picked; a name nobody offers never holds, so the call stays quiet
+     * when that mod is off or missing. Any time after the service is up (a mod that may start
+     * before pe_phone offers it from its first frame). 0 ok, -1 refused (logged). */
+    int (*add_condition)(const char *name, int (*holds)(void));
 } PePhoneCallsApi;
 
 #endif

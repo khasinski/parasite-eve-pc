@@ -3,7 +3,7 @@
  *
  *   # a note                     (a line starting with #; blank lines are ignored)
  *   [pack/name]                  a new call: its key
- *   setting = value              caller, tone, day, weight, once, rooms, priority, after, story
+ *   setting = value              caller, tone, day, weight, once, rooms, priority, after, story, needs
  *   them: text / aya: text       a line of the call, in order
  *
  * A call is kept only if it has a key, a caller and at least one line, and all of it is valid;
@@ -150,6 +150,19 @@ static void pe_setting(PeParse *p, int line, char *name, char *value) {
         else { pe_report(p, line, "once = %s: yes or no", value); p->bad = 1; }
     } else if (pe_eq(name, "after")) {
         c->after = *value && !pe_eq(value, "-") ? pe_keep(p, value, (int)strlen(value)) : NULL;
+    } else if (pe_eq(name, "needs")) {
+        char names[256], *tok;
+        snprintf(names, sizeof names, "%s", value);
+        c->needs = NULL;
+        if (!*value || pe_eq(value, "-")) return;
+        for (tok = strtok(names, " ,"); tok; tok = strtok(NULL, " ,"))
+            if (!pe_phone_condition_name_ok(tok)) {
+                pe_report(p, line, "needs: %s is not a condition name (letters, digits, . _ -)", tok);
+                p->bad = 1;
+                return;
+            }
+        for (tok = value; *tok; ++tok) if (*tok == ',') *tok = ' ';
+        c->needs = pe_keep(p, value, (int)strlen(value));
     } else if (pe_eq(name, "rooms") || pe_eq(name, "room")) {
         PePhoneStore *st = p->store;
         char *tok;

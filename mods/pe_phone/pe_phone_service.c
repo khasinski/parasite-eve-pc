@@ -1,6 +1,7 @@
 /* The call registry: the "phonecalls" v1 service packs add their calls through, and this save's
  * heard record ("pe_phone.heard" v1, kept by the host). Choosing and the record's rules are the
  * pure core's (pe_phone_pick.c, pe_phone_record.c). */
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -77,14 +78,45 @@ static const PePhoneCall *api_find(const char *key) {
     return NULL;
 }
 
+/* ---- conditions other mods offer for calls' needs ---- */
+
+#define PE_PHONE_MAX_CONDITIONS 32
+
+static struct { char name[PE_PHONE_CONDITION_NAME]; int (*holds)(void); } s_cond[PE_PHONE_MAX_CONDITIONS];
+static int s_cond_count;
+
+static int pe_condition_at(const char *name) {
+    int i;
+    for (i = 0; name && i < s_cond_count; ++i) if (!strcmp(s_cond[i].name, name)) return i;
+    return -1;
+}
+
+int pe_phone_condition_holds(const char *name) {
+    const int i = pe_condition_at(name);
+    return i >= 0 && s_cond[i].holds() != 0;
+}
+
+int pe_phone_condition_known(const char *name) { return pe_condition_at(name) >= 0; }
+
+static int api_add_condition(const char *name, int (*holds)(void)) {
+    const char *who = pe_mod_current() ? pe_mod_current() : PE_PHONE_MOD_ID;
+    if (!pe_phone_condition_name_ok(name) || !holds) { pe_mod_log(who, "phone condition refused: bad name or no function"); return -1; }
+    if (pe_condition_at(name) >= 0) { pe_mod_log(who, "phone condition %s refused: name taken", name); return -1; }
+    if (s_cond_count >= PE_PHONE_MAX_CONDITIONS) { pe_mod_log(who, "phone condition %s refused: full", name); return -1; }
+    snprintf(s_cond[s_cond_count].name, sizeof s_cond[0].name, "%s", name);
+    s_cond[s_cond_count++].holds = holds;
+    pe_mod_log(who, "phone condition %s offered", name);
+    return 0;
+}
+
 static const PePhoneCall *api_pick(const PePhoneContext *x) {
-    return pe_phone_pick(s_calls, s_count, x, &s_rec, pe_rand());
+    return pe_phone_pick(s_calls, s_count, x, &s_rec, pe_phone_condition_holds, pe_rand());
 }
 
 static int api_heard(const char *key) { return pe_phone_record_heard(&s_rec, key); }
 static void api_reset(void) { pe_rec_reset(&s_rec); }
 
-static const PePhoneCallsApi s_api = {api_add, api_find, api_pick, api_heard, api_reset};
+static const PePhoneCallsApi s_api = {api_add, api_find, api_pick, api_heard, api_reset, api_add_condition};
 
 const PePhoneCallsApi *pe_phone_calls(void) { return &s_api; }
 int pe_phone_calls_count(void) { return s_count; }

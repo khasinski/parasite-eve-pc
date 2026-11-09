@@ -4111,7 +4111,7 @@
     },
     {
       "path": "mods/host/pe_services.h",
-      "sha256": "a87b51e77ac46feb5325e9c38bd6ea63b039236fe49ecd9f310378cce90444bf"
+      "sha256": "60bc9634a7e3af7c4d1679c72dabfd4b6d1b3ee66642f9961b7a0883daeb6a76"
     },
     {
       "path": "mods/host/pe_shop_api.c",
@@ -4303,11 +4303,11 @@
     },
     {
       "path": "mods/pe_phone/calls/pe1.txt",
-      "sha256": "e6fb162b0f0c4d27b3f4e1e7e3830acff4f3a9fbccd158e1aee1ac350bbdd8a4"
+      "sha256": "23e8a965f213bfcdf089904d815091b72ed0d925f6bc9672354dbb92f8cc1152"
     },
     {
       "path": "mods/pe_phone/pe_phone.h",
-      "sha256": "38e7b8c276d4b45ee23528d8707ce0852702a8b93332cd28d20905c815c727d6"
+      "sha256": "c6abc97802786ff1b135088df565a6c56b4afa02785f5ac45a444b9c8170b22d"
     },
     {
       "path": "mods/pe_phone/pe_phone_box.c",
@@ -4315,15 +4315,15 @@
     },
     {
       "path": "mods/pe_phone/pe_phone_core.h",
-      "sha256": "e99af5ac90943f248e7999da3343f1fcc668babd95b5592fdc10f0e218150f52"
+      "sha256": "389d0bdbc174ec254ab24f2439959f59bd51196c84331e025c53a1506249a366"
     },
     {
       "path": "mods/pe_phone/pe_phone_file.c",
-      "sha256": "80d163bb295d301efee0edb8e8be5d33e50df9dbb0ac98434de289ac399b4a9a"
+      "sha256": "b69c52c2309c9984c79b28d7afdcbc71c3d0d3d95bb42848221292ccbfadf45c"
     },
     {
       "path": "mods/pe_phone/pe_phone_flow.c",
-      "sha256": "b5e0308c24ea9729975570eca36798aefd316c306b4c2ad01d83df9c845c47f1"
+      "sha256": "4759b7b5a07d248f63f7a0bb73a1aca138febfc238241c186f81159086a2dbc8"
     },
     {
       "path": "mods/pe_phone/pe_phone_hold.c",
@@ -4339,7 +4339,7 @@
     },
     {
       "path": "mods/pe_phone/pe_phone_pick.c",
-      "sha256": "5df9ed1281dbfb58b522389e042ed7528744c20d7af24470ef602da8984b90e1"
+      "sha256": "88f10da756bc98dfe30b170e4809d0a6c9253d4f4902f3216fd1702fe198ae61"
     },
     {
       "path": "mods/pe_phone/pe_phone_record.c",
@@ -4347,7 +4347,7 @@
     },
     {
       "path": "mods/pe_phone/pe_phone_service.c",
-      "sha256": "2d217001cfcd9baeacfffbce51b7462ba660933434f7fd8e1f2065e125216cdc"
+      "sha256": "c1f6ec412b8be2a5b665d8ffaa1295caf2b0bebc661e2a602d69de4453149090"
     },
     {
       "path": "mods/pe_phone/pe_phone_sound.c",
@@ -4447,7 +4447,7 @@
     },
     {
       "path": "mods/pe_shops/pe_field_wayne.c",
-      "sha256": "d79c53ba11241059d4d136e15aba81e852778b0821e693880733aae43d08ef69"
+      "sha256": "1005e03cc3755d8c1da6eade60c08cfa274d88e40511bc2d4a472b9dc9c271e7"
     },
     {
       "path": "mods/pe_shops/pe_permit.c",

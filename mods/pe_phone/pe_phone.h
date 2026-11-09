@@ -41,6 +41,8 @@ void pe_phone_service_register(const char *mod_id);
 const PePhoneCallsApi *pe_phone_calls(void);
 int pe_phone_calls_count(void);
 const PePhoneCall *pe_phone_call_at(int index);
+int pe_phone_condition_holds(const char *name);   /* a condition another mod offered holds now */
+int pe_phone_condition_known(const char *name);   /* some mod offered it */
 void pe_phone_calls_played(const PePhoneCall *call);   /* into this save's heard record */
 unsigned pe_phone_heard_count(void);
 int pe_phone_story_day(unsigned story);                /* the save screen's Day (1..6) for variable 74 */

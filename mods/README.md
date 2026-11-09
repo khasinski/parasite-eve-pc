@@ -128,9 +128,16 @@ screen). Nothing in the game's scripts is patched.
   rest load. F1 > Phone Calls > Writing calls: Open calls folder, Reload calls (no restart), Try
   call (pick any call by key), Play it now / Ask now (no save needed), Check calls (the game's font).
 - Mods can still add calls in code: the `phonecalls` v1 service (host/pe_services.h): `add`,
-  `find`, `pick`, `heard`, `reset`; events `phone.call_start` / `phone.call_end` (ctx: the call). A call has a key, caller, tone (serious / funny), lines, weight,
-  `once`, story days (the save screen's Day) or a variable 74 range, phone rooms, priority and
-  `after` (rooms, priority and `after` are for phase 2's set calls).
+  `find`, `pick`, `heard`, `reset`, `add_condition`; events `phone.call_start` / `phone.call_end`
+  (ctx: the call). A call has a key, caller, tone (serious / funny), lines, weight, `once`, story
+  days (the save screen's Day) or a variable 74 range, phone rooms, priority, `after` and `needs`.
+- Set calls: rooms + priority + a single day, chained with `after`; the header of `calls/pe1.txt`
+  lists every phone's room, place and day. One day each keeps the record at 48 bytes: its once list
+  (16) forgets the oldest, and a forgotten set call can't fit its day again.
+- Conditions: `needs = warner.supplies` plays a call only while another mod's feature is on. The
+  mod that owns the feature offers the name with `add_condition(name, holds)`; a name nobody offers
+  never holds, so neither mod needs the other. Offered now: `warner.supplies` (pe_shops: Warner
+  helps out and the Junk economy on), used by `pe1/park_wayne`, Wayne's call at Central Park.
 - Picking: a set call (priority > 0) not heard yet first; else weighted random among the calls
   that fit, leaving out the last five played.
 - Text: ASCII in the game's glyphs (letters, digits, space, `. , : ! ? ' - + * % /`, `{name}`).

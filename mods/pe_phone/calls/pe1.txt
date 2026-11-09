@@ -29,6 +29,12 @@
 #   priority = 10                  above 0: plays first at its phones until heard, before any random call [0]
 #   after = pe1/other              only once that call has been heard [-]
 #   story = 0x80-0xE8              finer than day: the story value range (script variable 74) [any]
+#   needs = warner.supplies        only while another mod's feature is on; several names must all
+#                                  hold. A name no running mod offers never holds [-]
+#
+# Conditions mods offer for needs:
+#   warner.supplies                Warner carries Wayne's supplies: shops mod, Economy > Warner
+#                                  helps out, and the Junk economy on
 #
 # Text: letters, digits, spaces and . , : ! ? ' - + * % / only (the game's font has nothing
 # else). {name} is Aya's name as the player typed it. Write a line as long as you like: it wraps
@@ -355,6 +361,22 @@ aya: That's it?
 them: The museum renewed his lab permit three times this year. Most people need one.
 
 # ---- Day 2: Central Park ----
+# With Warner's supplies on (Economy > Warner helps out, Junk economy on), Wayne calls first.
+
+[pe1/park_wayne]
+caller = Wayne
+tone = serious
+day = 2
+rooms = 59 64 75 87
+priority = 13
+once = yes
+needs = warner.supplies
+them: {name}! Wayne. Torres had me load Warner up with supplies for you.
+aya: Warner? Where is he?
+them: Headed for the park to meet up with you and Daniel. Ammo, gear, the works.
+them: He'll hold anything you can't carry, too. Just find him and ask.
+aya: Thanks, Wayne. Tell Torres thanks too.
+them: Tell him yourself. He'll pretend he didn't hear you.
 
 [pe1/park_daniel]
 caller = Daniel

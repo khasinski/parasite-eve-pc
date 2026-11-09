@@ -107,12 +107,23 @@ int pe_phone_parse_calls(PePhoneStore *store, const char *file, const char *src,
 
 /* ---- picking (pe_phone_pick.c) ---- */
 
-/* Does `call` fit here: tone, story day and range, phone room, `after` heard, a once call not heard. */
-int pe_phone_fits(const PePhoneCall *call, const PePhoneContext *context, const PePhoneRecord *record);
+/* Whether a named condition holds (the service asks the mod that offered it). */
+typedef int (*PePhoneHolds)(const char *name);
+
+/* A condition's name: letters, digits, . _ -, 1 to PE_PHONE_CONDITION_NAME - 1 characters. */
+#define PE_PHONE_CONDITION_NAME 32
+int pe_phone_condition_name_ok(const char *name);
+/* Every space-separated name in `needs` holds. Empty or NULL needs: 1; NULL holds: 0 unless empty. */
+int pe_phone_needs_hold(const char *needs, PePhoneHolds holds);
+
+/* Does `call` fit here: tone, story day and range, phone room, `after` heard, a once call not heard,
+ * its needs held (`holds` NULL: a call with needs never fits). */
+int pe_phone_fits(const PePhoneCall *call, const PePhoneContext *context, const PePhoneRecord *record,
+                  PePhoneHolds holds);
 /* Among `calls`: the highest-priority set call not heard yet; else a weighted random call from the
  * rest, leaving out the last five played (failing that all but the last one, failing that any).
  * `roll` is a random number. NULL when nothing fits. */
 const PePhoneCall *pe_phone_pick(const PePhoneCall *const *calls, int count, const PePhoneContext *context,
-                                 const PePhoneRecord *record, uint32_t roll);
+                                 const PePhoneRecord *record, PePhoneHolds holds, uint32_t roll);
 
 #endif
