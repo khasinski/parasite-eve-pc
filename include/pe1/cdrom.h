@@ -19,6 +19,12 @@ typedef struct PeDisc {
     uint32_t sector_size;
     uint32_t payload_offset;
     PeDiscFile root;
+    /* Read-ahead window over the image (allocated on first read): sector
+     * reads are small and mostly sequential, and every host read through a
+     * console's CD filesystem costs a drive command. */
+    unsigned char *cache;
+    uint64_t cache_offset;
+    uint32_t cache_length;
     char error[192];
 } PeDisc;
 
