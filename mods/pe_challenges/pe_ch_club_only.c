@@ -69,6 +69,6 @@ static const char *const kClubLevels[] = {"Off", "Club 2x", "Club 1.5x"};
 
 const PeChallengeDef g_ch_club_only = {
     CH_CLUB_ONLY, "Club only", "Club only",
-    "Only the Club hurts enemies, and it hits 2x (or 1.5x) harder. Guns do no damage; PE works.",
-    kClubLevels, 3, 0, 0, pe_club_register
+    "Only the Club hurts enemies, and it hits 2x or 1.5x harder. Guns do no damage, PE still works.",
+    kClubLevels, 3, 0, 0, pe_club_register, CH_CAT_RESTRICTIONS
 };

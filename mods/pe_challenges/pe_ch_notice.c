@@ -121,7 +121,7 @@ static int pe_notice_reset(void *ctx, void *user) {
  * change). It opens once F1 is closed, on the first free field frame. */
 static void pe_notice_preview(void) {
     if (!pe_game_loaded()) { pe_toast("Load a game first"); return; }
-    if (!pe_ch_notice_show("This Hardcore run has ended.", "It fell after 12 battles, 1:02:03.", "Close (preview)", NULL))
+    if (!pe_ch_notice_show("This Hardcore run has ended.", "It fell after 12 battles, 1:02:03.", "Close - preview", NULL))
         pe_toast("A notice is already waiting");
     else
         pe_toast("Close F1: the notice opens in the field");

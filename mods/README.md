@@ -98,24 +98,31 @@ All off until chosen; while they are off the mod writes nothing.
 Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): add `pe_challenges`
 to build it.
 
-F1 > Challenges, all off until chosen (while every one is off the mod writes nothing):
+F1 > Challenges, all off until chosen (while every one is off the mod writes nothing). The top
+page is an overview (Run, On now, Cleared, Warnings); each challenge sits on its category's
+sub-page, then Presets, This run and Debug:
 
-| Challenge | Rule | File |
-|---|---|---|
-| No Parasite Energy | no PE battle tab; every power dimmed, field too | pe_ch_no_pe.c |
-| No items in battle | no Item battle tab | pe_ch_menu_rules.c |
-| No escape | no Escape battle tab | pe_ch_menu_rules.c |
-| Locked loadout | no gun / armor battle tabs | pe_ch_menu_rules.c |
-| Club only (Club 2x / Club 1.5x) | weapon hits with a Club (items 0x3F-0x43) deal x2 / x1.5; with a gun, no damage; PE untouched | pe_ch_club_only.c |
-| Glass cannon | Aya takes x2 from hits and contact, deals x1.5 | pe_ch_damage.c |
-| Tough crowd (1.5x / 2x HP) | enemies take /1.5 or /2 damage; HP, EXP, drops untouched | pe_ch_damage.c |
-| One-hit KO | any hit, contact or HP-reduction attack takes all of Aya's HP | pe_ch_one_hit.c |
-| No EXP | the battle's EXP total is zeroed just before it is paid | pe_ch_no_exp.c |
-| Fast enemies (1.5x / 2x) | enemies' turn gauges gain 50% / 100% more than the game added each frame (pauses, Slow, menus unchanged) | pe_ch_fast_enemies.c |
-| Blood price (1 / 2 HP per PE) | each power also costs HP (its real PE cost), once per cast, never the last HP | pe_ch_blood_price.c |
-| Hardcore | permadeath; New Game only; locks the run | pe_ch_hardcore.c |
+| Category | Challenge | Rule | File |
+|---|---|---|---|
+| Restrictions | No Parasite Energy | no PE battle tab; every power dimmed, field too | pe_ch_no_pe.c |
+| Restrictions | No items in battle | no Item battle tab | pe_ch_menu_rules.c |
+| Restrictions | No escape | no Escape battle tab | pe_ch_menu_rules.c |
+| Restrictions | Locked loadout | no gun / armor battle tabs | pe_ch_menu_rules.c |
+| Restrictions | Club only (Club 2x / Club 1.5x) | weapon hits with a Club (items 0x3F-0x43) deal x2 / x1.5; with a gun, no damage; PE untouched | pe_ch_club_only.c |
+| Enemies | Tough crowd (1.5x / 2x HP) | enemies take /1.5 or /2 damage; HP, EXP, drops untouched | pe_ch_damage.c |
+| Enemies | Fast enemies (1.5x / 2x) | enemies' turn gauges gain 50% / 100% more than the game added each frame (pauses, Slow, menus unchanged) | pe_ch_fast_enemies.c |
+| Aya | Glass cannon | Aya takes x2 from hits and contact, deals x1.5 | pe_ch_damage.c |
+| Aya | One-hit KO | any hit, contact or HP-reduction attack takes all of Aya's HP | pe_ch_one_hit.c |
+| Aya | Blood price (1 / 2 HP per PE) | each power also costs HP (its real PE cost), once per cast, never the last HP | pe_ch_blood_price.c |
+| Aya | No EXP | the battle's EXP total is zeroed just before it is paid | pe_ch_no_exp.c |
+| Run rules | Hardcore | permadeath; New Game only; locks the run | pe_ch_hardcore.c |
 
-Bundles: Purist (No PE, No items, No escape), Nightmare (Purist plus Locked loadout, Glass cannon,
+Each definition names its category (`PeChallengeDef.category`; names and descriptions in
+`g_ch_categories`, pe_challenges.c), so F1 and the Records pages group by it with no list to
+update. Rows moved from the top page to their category page keep their saved picks
+(`pe_menu_alias_setting` from `Challenges/<label>` to `Challenges/<category>/<label>`).
+
+Presets: Purist (No PE, No items, No escape), Nightmare (Purist plus Locked loadout, Glass cannon,
 Tough crowd 2x) only turn challenges on; Clear all is press-twice.
 
 - **Modular:** each challenge is a `PeChallengeDef` in the file of its rule: rows (label, levels),
@@ -173,8 +180,9 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   opens a read-only screen from the game's own widgets, laid out like the Bestiary's. **This run**:
   the run's challenges with levels (lowered ones dim, a run-locking one in the game's yellow), and
   Clean / Assisted, battles won, knockouts, time. **Run history** (L1 / R1): every challenge run,
-  newest first, cleared in yellow, fallen dim, with its challenges and numbers. **Records**: every
-  challenge's record (below). The title bar gives
+  newest first, cleared in yellow, fallen dim, with its challenges and numbers. **Records**: one
+  page per category with each challenge's record (below) and the category's count of clears.
+  Game text uses only what the game's font has (letters, digits, `. , : ! ? ' / + - %`). The title bar gives
   the highlighted challenge's description, then the controls. Challenges are still chosen in F1.
 - **Run history** (`pe_ch_history.c`): `pe_challenges.ini` beside the preferences, one line per run
   (`<id> ko= st=playing|cleared|fallen on= ever= drop= fl= b= t= lv= at=`; the older
@@ -200,7 +208,7 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   the first time the file is missing, cleared runs already in the history are counted once. Shown
   on the Records page of Aya's Challenges screen (cleared clean in yellow, not cleared dim) and as
   "Challenges cleared N of M" in F1.
-- **Run summary (F1):** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
+- **This run (F1):** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
 - **Hardcore (permadeath):** chosen at the title for a New Game only, and its run locks every
   challenge on (more can be added, none lowered; Clear all refuses). The game's own game over (phase
   3 with no Preraise and no Revive, `Battle_StepPostBattle`) marks the run fallen in the history.

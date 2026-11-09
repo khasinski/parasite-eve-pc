@@ -65,5 +65,5 @@ static const char *const kBloodLevels[] = {"Off", "1 HP per PE", "2 HP per PE"};
 const PeChallengeDef g_ch_blood_price = {
     CH_BLOOD_PRICE, "Blood price", "Blood price",
     "Parasite Energy powers also cost Aya HP: their PE cost, once or twice. Never her last HP.",
-    kBloodLevels, 3, 0, 0, pe_blood_price_register
+    kBloodLevels, 3, 0, 0, pe_blood_price_register, CH_CAT_AYA
 };

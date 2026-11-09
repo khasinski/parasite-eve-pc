@@ -157,7 +157,7 @@ void pe_ch_card_marks_register(const char *mod_id) {
     pe_hook_add(PE_HOOK_LIST_ROWS, pe_marks_rows, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_HELP_TEXT, pe_marks_help, NULL, PE_PRIORITY_LATE, mod_id);
     /* A live row: not saved, so it is off again at the next start. Shows only; nothing is marked. */
-    pe_menu_page(CH_PAGE_DEBUG, "Test tools. Nothing here changes a run or a save.", 90);
+    pe_menu_page(CH_PAGE_DEBUG, "Test tools. Nothing here changes a run or a save.", CH_ORDER_DEBUG);
     pe_menu_register_live_choice(CH_PAGE_DEBUG, "Preview fallen saves",
         "Show Hardcore saves as fallen in the save / load lists (this session only).",
         kOffOn, 2, pe_preview_get, pe_preview_set);

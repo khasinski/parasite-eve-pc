@@ -24,5 +24,5 @@ static void pe_no_exp_register(const char *mod_id) {
 const PeChallengeDef g_ch_no_exp = {
     CH_NO_EXP, "No EXP", "No EXP",
     "Battles give no EXP: Aya stays at her level. Items and bonus points as usual.",
-    NULL, 0, 0, 0, pe_no_exp_register
+    NULL, 0, 0, 0, pe_no_exp_register, CH_CAT_AYA
 };

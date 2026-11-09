@@ -89,17 +89,28 @@ static void pe_info_warnings(char *out, unsigned size) {
     if (!out[0]) snprintf(out, size, "None");
 }
 
+/* The top page's "On now": the run's challenges in a game, the pick for the next New Game at the title. */
+static void pe_info_on_now(char *out, unsigned size) {
+    char names[96];
+    if (pe_game_loaded()) { pe_info_active(out, size); return; }
+    pe_ch_names(pe_ch_rows_mask(), names, sizeof names);
+    snprintf(out, size, "Next New Game: %s", names);
+}
+
+/* The top page is an overview; the challenges themselves are on their category pages. */
 int pe_ch_summary_register(void) {
     int failed = 0;
     failed |= pe_menu_register_info(0, "Run", "Clean, or Assisted once a challenge was lowered or a cheat used.",
         pe_info_status);
-    failed |= pe_menu_register_info(0, "Challenges cleared",
+    failed |= pe_menu_register_info(0, "On now", "This run's challenges; at the title, the pick for the next New Game.",
+        pe_info_on_now);
+    failed |= pe_menu_register_info(0, "Cleared",
         "Challenges beaten the game with, on to the end and never lowered (Aya's menu > Challenges > Records).",
         pe_info_cleared);
     failed |= pe_menu_register_info(0, "Warnings", "Other mods that can work around a challenge (never blocked).",
         pe_info_warnings);
 
-    pe_menu_page(CH_PAGE_RUN, "This game's run: challenges, battles won, knockouts and time.", 20);
+    pe_menu_page(CH_PAGE_RUN, "This game's run: challenges, battles won, knockouts and time.", CH_ORDER_RUN);
     failed |= pe_menu_register_info(CH_PAGE_RUN, "Status", "Clean, Assisted, or No challenges.", pe_info_status);
     failed |= pe_menu_register_info(CH_PAGE_RUN, "On now", "The challenges on now.", pe_info_active);
     failed |= pe_menu_register_info(CH_PAGE_RUN, "Used this run", "Every challenge that was on at some point.",

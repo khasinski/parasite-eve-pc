@@ -18,5 +18,5 @@ static void pe_no_pe_register(const char *mod_id) {
 const PeChallengeDef g_ch_no_pe = {
     CH_NO_PE, "No Parasite Energy", "No PE",
     "No PE tab in battle, and every power is dimmed in the field too.",
-    NULL, 0, CH_TAB_PE, 0, pe_no_pe_register
+    NULL, 0, CH_TAB_PE, 0, pe_no_pe_register, CH_CAT_RESTRICTIONS
 };

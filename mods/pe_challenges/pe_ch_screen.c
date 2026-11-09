@@ -10,10 +10,12 @@
  *   Run history   every challenge run in the history (pe_ch_history.c), newest first: when, how it
  *                 ended (cleared in the game's yellow, fallen dim), how many challenges. Info: the
  *                 selected run's challenges and numbers.
- *   Records       every challenge with its record (pe_ch_records.c): cleared clean in the game's
- *                 yellow, cleared only with assists in white, not cleared dim. Info: clean and
- *                 assisted clears, the hardest level, the fastest time, Hardcore, the first clear.
- *   L1 / R1 switch pages, Circle or Cross goes back.
+ *   Records       one page per category (Restrictions, Enemies, Aya, Run rules): its challenges
+ *                 with their records (pe_ch_records.c), cleared clean in the game's yellow, cleared
+ *                 only with assists in white, not cleared dim; the title bar counts the category's
+ *                 clears and all of them. Info: clean and assisted clears, the hardest level, the
+ *                 fastest time, Hardcore, the first clear.
+ *   L1 / R1 switch pages (This run, Run history, Records by category), Circle or Cross goes back.
  *
  * The row shows with a game loaded once this run has had a challenge or the history has a run.
  */
@@ -41,14 +43,41 @@
 #define CH_HELP_TICKS  150         /* each title-bar page */
 #define CH_ROW_ORDER   35          /* after Key Items 20, Bestiary 25, Wardrobe 30 */
 
-enum { CH_PAGE_THIS_RUN, CH_PAGE_HISTORY, CH_PAGE_RECORDS, CH_PAGES };
-static const char *const kPageNames[CH_PAGES] = {"This run", "Run history", "Records"};
+/* Pages: This run, Run history, then one Records page per category. */
+enum { CH_PAGE_THIS_RUN, CH_PAGE_HISTORY, CH_PAGE_RECORDS, CH_PAGES = CH_PAGE_RECORDS + CH_CATEGORIES };
 
 static PeScreen s_screen;
 static MenuWidgetNode *s_info;
 static u8 s_text[96];
 static int s_page, s_cursor[CH_PAGES], s_tick;
 static int s_rows[CH_COUNT], s_row_count;   /* This run: challenge ids in F1 order */
+static int s_rec_rows[CH_COUNT], s_rec_count;   /* a Records page: its category's challenge ids */
+
+static int pe_is_records(int page) { return page >= CH_PAGE_RECORDS && page < CH_PAGES; }
+static int pe_records_category(int page) { return page - CH_PAGE_RECORDS; }
+
+static const char *pe_page_name(int page) {
+    static char name[48];
+    if (page == CH_PAGE_THIS_RUN) return "This run";
+    if (page == CH_PAGE_HISTORY) return "Run history";
+    snprintf(name, sizeof name, "Records: %s", g_ch_categories[pe_records_category(page)].name);
+    return name;
+}
+
+/* A category's challenges, and how many of them are cleared. */
+static int pe_category_rows(int category, int *rows, int *cleared) {
+    int n = 0;
+    *cleared = 0;
+    for (unsigned i = 0; i < g_ch_def_count; ++i) {
+        const PeChallengeDef *d = g_ch_defs[i];
+        const PeChRecord *r;
+        if (d->category != category) continue;
+        if (rows) rows[n] = d->id;
+        ++n;
+        if ((r = pe_ch_record(d->id)) != NULL && (r->clean || r->assisted)) ++*cleared;
+    }
+    return n;
+}
 
 /* ---- helpers ------------------------------------------------------------------------------ */
 
@@ -81,7 +110,7 @@ static void pe_build_this_run(void) {
 
 static int pe_page_rows(void) {
     if (s_page == CH_PAGE_THIS_RUN) return s_row_count;
-    if (s_page == CH_PAGE_RECORDS) return (int)g_ch_def_count;
+    if (pe_is_records(s_page)) return s_rec_count;
     return pe_ch_history_count();
 }
 
@@ -96,7 +125,7 @@ static void pe_this_run_row(int row) {
     pe_challenge_name(line, sizeof line, d, level ? level : 1);
     if (!pe_ch_on(d->id) || (g_ch_run.dropped & CH_BIT(d->id))) {
         Draw_SetTextDimmed(1);
-        strncat(line, (g_ch_run.dropped & CH_BIT(d->id)) ? "  (lowered)" : "  (off)", sizeof line - strlen(line) - 1);
+        strncat(line, (g_ch_run.dropped & CH_BIT(d->id)) ? " - lowered" : " - off", sizeof line - strlen(line) - 1);
     } else if (d->flags & CH_DEF_LOCKS_RUN) {
         Draw_SetColor(CH_COLOR_GOLD);
     }
@@ -139,7 +168,7 @@ static void pe_history_row(int row) {
     pe_date(date, sizeof date, e->at);
     n = pe_count_bits(e->ever);
     snprintf(line, sizeof line, "%s  %-7s  %d challenge%s%s", date, pe_state_name(e->state), n, n == 1 ? "" : "s",
-             e->id == g_ch_run.run_id ? "  (this run)" : "");
+             e->id == g_ch_run.run_id ? " - this run" : "");
     if (e->state == CH_RUN_CLEARED) Draw_SetColor(CH_COLOR_GOLD);
     else if (e->state == CH_RUN_FALLEN) Draw_SetTextDimmed(1);
     pe_print(line);
@@ -180,7 +209,7 @@ static void pe_history_info(int row) {
 /* ---- Records ------------------------------------------------------------------------------ */
 
 static void pe_records_row(int row) {
-    const PeChallengeDef *d = row < (int)g_ch_def_count ? g_ch_defs[row] : NULL;
+    const PeChallengeDef *d = row < s_rec_count ? pe_ch_def(s_rec_rows[row]) : NULL;
     const PeChRecord *r = d ? pe_ch_record(d->id) : NULL;
     char line[80];
     if (!d || !r) return;
@@ -199,7 +228,7 @@ static void pe_records_row(int row) {
 
 static void pe_records_info(int row) {
     const int at = pe_current_row();
-    const PeChallengeDef *d = at < (int)g_ch_def_count ? g_ch_defs[at] : NULL;
+    const PeChallengeDef *d = at < s_rec_count ? pe_ch_def(s_rec_rows[at]) : NULL;
     const PeChRecord *r = d ? pe_ch_record(d->id) : NULL;
     char line[96], t[16], name[48], date[16];
     if (!d || !r) return;
@@ -229,13 +258,13 @@ static void pe_records_info(int row) {
 
 static void pe_list_row(int row) {
     if (s_page == CH_PAGE_THIS_RUN) pe_this_run_row(row);
-    else if (s_page == CH_PAGE_RECORDS) pe_records_row(row);
+    else if (pe_is_records(s_page)) pe_records_row(row);
     else pe_history_row(row);
 }
 
 static void pe_info_row(int row) {
     if (s_page == CH_PAGE_THIS_RUN) pe_this_run_info(row);
-    else if (s_page == CH_PAGE_RECORDS) pe_records_info(row);
+    else if (pe_is_records(s_page)) pe_records_info(row);
     else pe_history_info(row);
 }
 
@@ -247,6 +276,10 @@ static void pe_set_page(int page) {
     if (s_screen.list) s_cursor[s_page] = pe_current_row();
     s_page = (page % CH_PAGES + CH_PAGES) % CH_PAGES;
     if (s_page == CH_PAGE_THIS_RUN) pe_build_this_run();
+    if (pe_is_records(s_page)) {
+        int cleared;
+        s_rec_count = pe_category_rows(pe_records_category(s_page), s_rec_rows, &cleared);
+    }
     rows = pe_page_rows();
     if (s_cursor[s_page] >= rows) s_cursor[s_page] = 0;
     pe_screen_rows(&s_screen, rows ? rows : 1, s_cursor[s_page]);
@@ -278,14 +311,17 @@ static int pe_on_help_text(void *ctx, void *user) {
     if (!s_screen.list || MenuWidget_GetCurrentNode() != s_screen.list) return 0;
     ++s_tick;
     if ((s_tick / CH_HELP_TICKS) % 2) {
-        snprintf(line, sizeof line, "%s   L1 R1: %s   O: Back", kPageNames[s_page],
-                 kPageNames[(s_page + 1) % CH_PAGES]);
+        char next[48];
+        snprintf(next, sizeof next, "%s", pe_page_name((s_page + 1) % CH_PAGES));
+        snprintf(line, sizeof line, "R1: %s   O: Back", next);
     } else if (s_page == CH_PAGE_THIS_RUN) {
         const int row = pe_current_row();
         const PeChallengeDef *d = row < s_row_count ? pe_ch_def(s_rows[row]) : NULL;
         snprintf(line, sizeof line, "%s", d ? d->description : "Challenges are chosen in F1 > Challenges");
-    } else if (s_page == CH_PAGE_RECORDS) {
-        snprintf(line, sizeof line, "Records   %d of %u challenges cleared", pe_ch_records_cleared(), g_ch_def_count);
+    } else if (pe_is_records(s_page)) {
+        int cleared, n = pe_category_rows(pe_records_category(s_page), NULL, &cleared);
+        snprintf(line, sizeof line, "%s   %d of %d cleared   All: %d of %u", pe_page_name(s_page), cleared, n,
+                 pe_ch_records_cleared(), g_ch_def_count);
     } else {
         snprintf(line, sizeof line, "Run history   %d run%s", pe_ch_history_count(), pe_ch_history_count() == 1 ? "" : "s");
     }

@@ -25,5 +25,5 @@ static void pe_one_hit_register(const char *mod_id) {
 const PeChallengeDef g_ch_one_hit = {
     CH_ONE_HIT, "One-hit KO", "One-hit KO",
     "Any hit in battle takes all of Aya's HP. Preraise and Revive still work.",
-    NULL, 0, 0, 0, pe_one_hit_register
+    NULL, 0, 0, 0, pe_one_hit_register, CH_CAT_AYA
 };

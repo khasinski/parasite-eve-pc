@@ -48,7 +48,7 @@ static void pe_clear_all(void) {
 
 int pe_ch_bundles_register(void) {
     int failed = 0;
-    pe_menu_page(CH_PAGE_BUNDLES, "One-press sets of challenges. They only turn challenges on.", 10);
+    pe_menu_page(CH_PAGE_BUNDLES, "One-press sets of challenges. They only turn challenges on.", CH_ORDER_PRESETS);
     failed |= pe_menu_register_action(CH_PAGE_BUNDLES, "Purist",
         "Turns on No Parasite Energy, No items and No escape.", pe_bundle_purist);
     failed |= pe_menu_register_action(CH_PAGE_BUNDLES, "Nightmare",

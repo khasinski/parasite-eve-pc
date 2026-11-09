@@ -12,19 +12,27 @@
 
 #define MOD_ID "pe_challenges"
 
-/* F1 row order. */
+/* The categories, in F1 and Records order. */
+const PeChallengeCategory g_ch_categories[CH_CATEGORIES] = {
+    [CH_CAT_RESTRICTIONS] = {"Restrictions", "What Aya may use in battle: PE, items, escape, gear, guns."},
+    [CH_CAT_ENEMIES]      = {"Enemies", "How hard the enemies are: their HP and how fast they act."},
+    [CH_CAT_AYA]          = {"Aya", "How fragile Aya is and what her powers and battles give her."},
+    [CH_CAT_RUN_RULES]    = {"Run rules", "How the run itself works: Hardcore permadeath."},
+};
+
+/* Row order within each category. */
 const PeChallengeDef *const g_ch_defs[] = {
     &g_ch_no_pe,
     &g_ch_no_items,
     &g_ch_no_escape,
     &g_ch_locked_loadout,
     &g_ch_club_only,
-    &g_ch_glass,
     &g_ch_tough,
     &g_ch_fast_enemies,
+    &g_ch_glass,
     &g_ch_one_hit,
-    &g_ch_no_exp,
     &g_ch_blood_price,
+    &g_ch_no_exp,
     &g_ch_hardcore,
 };
 const unsigned g_ch_def_count = sizeof g_ch_defs / sizeof g_ch_defs[0];

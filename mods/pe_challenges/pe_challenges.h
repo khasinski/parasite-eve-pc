@@ -34,8 +34,8 @@
  *     pe_ch_fast_enemies.c Fast enemies (turn gauges fill 1.5x / 2x)
  *     pe_ch_hardcore.c     Hardcore (permadeath)
  *
- * A new challenge: an id below (append only), a PeChallengeDef in its own file, and a line in
- * g_ch_defs. Nothing else changes.
+ * A new challenge: an id below (append only), a PeChallengeDef in its own file (with its category),
+ * and a line in g_ch_defs. Nothing else changes: F1 and the Records pages group by category.
  */
 
 #include <stdint.h>
@@ -67,6 +67,15 @@ enum {
 #define CH_TAB_ARMOR  0x08u
 #define CH_TAB_ESCAPE 0x10u
 
+/* PeChallengeDef.category: the F1 sub-page and the Records page a challenge is listed on. Names,
+ * descriptions and order in pe_challenges.c (g_ch_categories). */
+enum { CH_CAT_RESTRICTIONS, CH_CAT_ENEMIES, CH_CAT_AYA, CH_CAT_RUN_RULES, CH_CATEGORIES };
+typedef struct PeChallengeCategory {
+    const char *name;          /* the F1 sub-page and the Records page title */
+    const char *description;   /* the sub-page's footer line */
+} PeChallengeCategory;
+extern const PeChallengeCategory g_ch_categories[CH_CATEGORIES];
+
 /* PeChallengeDef.flags */
 #define CH_DEF_NEW_GAME_ONLY 0x1u  /* can only be picked at the title, for a New Game */
 #define CH_DEF_LOCKS_RUN     0x2u  /* its run can't lower any challenge */
@@ -81,6 +90,7 @@ typedef struct PeChallengeDef {
     unsigned battle_tabs;          /* CH_TAB_* removed while it is on (pe_ch_tabs.c) */
     unsigned flags;                /* CH_DEF_* */
     void (*register_rules)(const char *mod_id);   /* its hooks, or NULL */
+    int category;                  /* CH_CAT_* */
 } PeChallengeDef;
 
 extern const PeChallengeDef *const g_ch_defs[];
@@ -90,8 +100,12 @@ const PeChallengeDef *pe_ch_def(int id);
 #define CH_FLAG_CHEATS 0x1u   /* PeChallengeRun.flags: a cheat or assist was used while a challenge was on */
 
 #define CH_PAGE         "Challenges"
-#define CH_PAGE_BUNDLES "Bundles"
-#define CH_PAGE_RUN     "Run summary"
+#define CH_PAGE_BUNDLES "Presets"
+#define CH_PAGE_RUN     "This run"
+/* F1 sub-page order: the categories 10-40, then these. */
+#define CH_ORDER_PRESETS 50
+#define CH_ORDER_RUN     60
+#define CH_ORDER_DEBUG   90
 
 /* The run, saved with the game (record "pe_challenges.run", version 2). */
 typedef struct PeChallengeRun {

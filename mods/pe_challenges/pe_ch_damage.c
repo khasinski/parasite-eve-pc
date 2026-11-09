@@ -124,11 +124,11 @@ static const char *const kToughLevels[] = {"Off", "1.5x HP", "2x HP"};
 const PeChallengeDef g_ch_glass = {
     CH_GLASS, "Glass cannon", "Glass cannon",
     "Aya takes double damage from hits and contact, and deals 1.5x.",
-    NULL, 0, 0, 0, pe_glass_register
+    NULL, 0, 0, 0, pe_glass_register, CH_CAT_AYA
 };
 
 const PeChallengeDef g_ch_tough = {
     CH_TOUGH, "Tough crowd", "Tough crowd",
     "Enemies take less damage, as if they had 1.5x or 2x HP. EXP and drops unchanged.",
-    kToughLevels, 3, 0, 0, pe_tough_register
+    kToughLevels, 3, 0, 0, pe_tough_register, CH_CAT_ENEMIES
 };

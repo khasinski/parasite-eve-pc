@@ -99,6 +99,6 @@ static void pe_hardcore_register(const char *mod_id) {
 
 const PeChallengeDef g_ch_hardcore = {
     CH_HARDCORE, "Hardcore", "Hardcore",
-    "Permadeath: a game over ends the run for good. New Game only; locks every challenge on.",
-    NULL, 0, 0, CH_DEF_NEW_GAME_ONLY | CH_DEF_LOCKS_RUN, pe_hardcore_register
+    "Permadeath: a game over ends the run for good. New Game only, and it locks every challenge on.",
+    NULL, 0, 0, CH_DEF_NEW_GAME_ONLY | CH_DEF_LOCKS_RUN, pe_hardcore_register, CH_CAT_RUN_RULES
 };

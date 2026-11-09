@@ -85,5 +85,5 @@ static const char *const kFastLevels[] = {"Off", "1.5x", "2x"};
 const PeChallengeDef g_ch_fast_enemies = {
     CH_FAST_ENEMIES, "Fast enemies", "Fast enemies",
     "Enemies' turn gauges fill 1.5x or 2x as fast. Slow still slows them.",
-    kFastLevels, 3, 0, 0, pe_fast_register
+    kFastLevels, 3, 0, 0, pe_fast_register, CH_CAT_ENEMIES
 };

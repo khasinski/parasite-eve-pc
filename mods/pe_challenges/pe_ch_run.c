@@ -201,11 +201,20 @@ int pe_ch_run_register(const char *mod_id) {
     failed |= pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_tick, NULL, PE_PRIORITY_NORMAL, mod_id);
     failed |= pe_hook_add(PE_HOOK_SAVE_READ, pe_on_save_read, NULL, PE_PRIORITY_EARLY, mod_id);
     failed |= pe_hook_add(PE_HOOK_NEW_GAME, pe_on_new_game, NULL, PE_PRIORITY_EARLY, mod_id);
+    /* One F1 sub-page per category, in category order; each challenge on its category's page. */
+    for (int c = 0; c < CH_CATEGORIES; ++c)
+        pe_menu_page(g_ch_categories[c].name, g_ch_categories[c].description, 10 * (c + 1));
     for (unsigned i = 0; i < g_ch_def_count; ++i) {
         const PeChallengeDef *d = g_ch_defs[i];
+        const char *sub = g_ch_categories[d->category >= 0 && d->category < CH_CATEGORIES ? d->category : 0].name;
+        char key[128], legacy[128];
+        /* Rows are saved by page and label: carry each pick over from before the categories. */
+        snprintf(key, sizeof key, "%s/%s/%s", CH_PAGE, sub, d->label);
+        snprintf(legacy, sizeof legacy, "%s/%s", CH_PAGE, d->label);
+        pe_menu_alias_setting(key, legacy);
         failed |= d->levels
-            ? pe_menu_register_choice(0, d->label, d->description, &s_on[d->id], d->levels, d->level_count)
-            : pe_menu_register_toggle(0, d->label, d->description, &s_on[d->id], NULL);
+            ? pe_menu_register_choice(sub, d->label, d->description, &s_on[d->id], d->levels, d->level_count)
+            : pe_menu_register_toggle(sub, d->label, d->description, &s_on[d->id], NULL);
     }
     return failed ? -1 : 0;
 }
