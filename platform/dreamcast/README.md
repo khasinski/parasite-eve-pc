@@ -23,6 +23,11 @@ cmake --build build-dc
 sh-elf-size build-dc/parasite-eve.elf
 ```
 
+This build logs to the debug console: GPU statistics and the profiler
+(`prof:` lines) every 300 frames, movie timings, mounted discs. For players,
+add `-DPE_DC_RELEASE=ON` (in its own build directory): no KOS banner, no
+logs, no profiler.
+
 ## Disc images
 
 Raw MODE2/2352 BIN images need no CUE sheet: the image type comes from its

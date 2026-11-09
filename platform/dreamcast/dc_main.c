@@ -44,7 +44,11 @@
 #include "pe1/scene_dispatch.h"
 #include "pe_hooks.h"
 
+#ifdef PE_DC_RELEASE
+KOS_INIT_FLAGS(INIT_DEFAULT | INIT_QUIET); /* no debug console output */
+#else
 KOS_INIT_FLAGS(INIT_DEFAULT);
+#endif
 
 /* same values as main.c */
 #define STATE_FLAG_IMAGE_BUSY 0x00100000U

@@ -78,7 +78,15 @@ if(CMAKE_SYSTEM_NAME STREQUAL "dreamcast")
         -U__UINT_LEAST32_TYPE__ "-D__UINT_LEAST32_TYPE__=unsigned int")
     # newlib hides POSIX calls (flockfile...) under -std=c11 unless asked;
     # glibc is lenient when a file sets _POSIX_C_SOURCE after other headers.
-    add_compile_definitions(_GNU_SOURCE PE_MOVIE_PROFILE=1)
+    add_compile_definitions(_GNU_SOURCE)
+    # PE_DC_RELEASE: a build for players, silent (no KOS banner, no logs,
+    # no profiler); otherwise logs and timings go to the debug console
+    option(PE_DC_RELEASE "Silent Dreamcast build" OFF)
+    if(PE_DC_RELEASE)
+        add_compile_definitions(PE_DC_RELEASE=1 PSYZ_LOG_LEVEL=4)
+    else()
+        add_compile_definitions(PE_MOVIE_PROFILE=1)
+    endif()
     set(PE_SDL3_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/psyz/external/SDL/include")
     include_directories(SYSTEM "${PE_SDL3_HEADERS}")
     add_library(SDL3::SDL3 INTERFACE IMPORTED)
