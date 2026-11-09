@@ -282,3 +282,89 @@ them: Aya. Whatever happens next, don't do it alone.
 aya: I won't.
 them: I mean it.
 aya: So do I.
+
+
+# ======== Raccoon City, December 24-29, 1997 ========
+# One call per story day. The sewer emergency call still takes precedence at its phone.
+
+[pe1/raccoon_irons]
+caller = Chief Irons
+tone = serious
+day = 1
+priority = 1
+once = yes
+them: Raccoon City Police. Chief Irons speaking.
+aya: Brea, NYPD. Dispatch said you had officers in town for the holidays. Can you spare them?
+them: For that little fire at the opera? Surely New York has a fire department.
+aya: We do. They're asking for backup too.
+them: In my city, Officer Brea, we'd have had it contained before the first call.
+aya: I'll tell them you said that.
+
+[pe1/raccoon_umbrella]
+caller = Umbrella Hotline
+tone = funny
+day = 2
+priority = 1
+once = yes
+them: Thank you for calling Umbrella. How can we help you feel better today?
+aya: Can a drug make your own cells turn on you?
+them: For side effects, I'll transfer you to Product Safety.
+aya: What if it happens to everyone in the room?
+them: Product Safety. How many units did you purchase?
+aya: None. I need to know how it spreads.
+them: One moment. I'll transfer you to Sales.
+
+[pe1/raccoon_annette]
+caller = Annette Birkin
+tone = serious
+day = 3
+priority = 1
+once = yes
+them: Who gave you this number?
+aya: Dr. Maeda. He wanted a second opinion from your husband.
+them: My husband doesn't take calls.
+aya: The cells in our sample changed while he was looking at them.
+them: How long did it take?
+aya: Seconds. Have you seen that before?
+them: Tell Maeda to destroy the sample. And this number.
+
+[pe1/raccoon_chris]
+caller = Chris Redfield
+tone = funny
+day = 4
+priority = 1
+once = yes
+them: S.T.A.R.S. office. Redfield. If it's the cat again, try tuna.
+aya: NYPD. You sound busy.
+them: Holiday duty. Same cat, same tree, three calls today. How's New York?
+aya: The last thing I chased up a tree came down on its own.
+them: See, that's the kind of call I signed up for.
+aya: You can have the next one.
+
+[pe1/raccoon_kendo]
+caller = Robert Kendo
+tone = serious
+day = 5
+priority = 1
+once = yes
+them: Kendo Gun Shop. Robert speaking.
+aya: Wayne at the NYPD armory says you might have recoil springs.
+them: Tell Wayne I've got a drawer full. What are you rebuilding?
+aya: Whatever he can get out of a bag of junk.
+them: Then have him send me the slide measurements. I'll ship what fits.
+aya: You do much business with police out here?
+them: Mostly local. It's quiet enough here I can get the order out today.
+
+[pe1/raccoon_wesker]
+caller = Albert Wesker
+tone = serious
+day = 6
+priority = 1
+once = yes
+them: Officer Brea? Albert Wesker. I was told I could reach you here.
+aya: Who told you that?
+them: I heard you were in the hall when the others caught fire. May I ask what you felt?
+aya: You read the papers.
+them: The papers didn't mention your blood work.
+aya: Neither did I.
+them: We'll be in touch.
