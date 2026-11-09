@@ -155,7 +155,9 @@ s32 MenuCard_PlayVideo(s32 index) {
                     MenuCard_ResetDisplayState();
                     break;
                 }
+                PE_MOVIE_BEGIN(input);
                 Field_HandleStateTransition();
+                PE_MOVIE_END(input, PE_MOVIE_INPUT);
                 if (!(s8)MenuCard_StepVideo()) {
                     MenuCard_ResetDisplayState();
                 }
@@ -166,7 +168,10 @@ s32 MenuCard_PlayVideo(s32 index) {
                     MenuCard_ResetDisplayState();
                     if(remaining<1400) {VSync(0);SetDispMask(0);result=1;}
                 }
+                PE_MOVIE_BEGIN(render);
                 Draw_RenderFrame();
+                PE_MOVIE_END(render, PE_MOVIE_RENDER);
+                PeMovieProfile_Frame();
             } while(g_DrawEnabled.bits);
         }
     }
@@ -175,6 +180,32 @@ s32 MenuCard_PlayVideo(s32 index) {
         *flags &= ~0x200;
         return returnValue; }
 }
+
+#if defined(PE_MOVIE_PROFILE) && PE_MOVIE_PROFILE
+#include <stdio.h>
+#include <string.h>
+PeMovieProfile g_PeMovieProfile;
+void PeMovieProfile_Frame(void) {
+    static const char *const names[PE_MOVIE_STAGES] = {
+        "read", "vlc", "mdec", "sync", "input", "render+vsync"};
+    uint64_t now = Psyz_OsNowUs();
+    if (!g_PeMovieProfile.start_us) g_PeMovieProfile.start_us = now;
+    if (++g_PeMovieProfile.frames < 60) return;
+    unsigned frames = g_PeMovieProfile.frames;
+    unsigned wall = (unsigned)((now - g_PeMovieProfile.start_us) / frames);
+    printf("movie: %u frames, %u.%u ms/frame (%u.%u fps):", frames,
+           wall / 1000, wall / 100 % 10, wall ? 10000000u / wall / 10 : 0,
+           wall ? 10000000u / wall % 10 : 0);
+    for (int i = 0; i < PE_MOVIE_STAGES; ++i) {
+        unsigned us = (unsigned)(g_PeMovieProfile.us[i] / frames);
+        printf(" %s %u.%u", names[i], us / 1000, us / 100 % 10);
+    }
+    printf(" ms\n");
+    fflush(stdout);
+    memset(&g_PeMovieProfile, 0, sizeof(g_PeMovieProfile));
+    g_PeMovieProfile.start_us = now;
+}
+#endif
 
 /* Native storage for the original title-screen movie player. */
 VideoEntry *g_MenuCardScreenVideoEntry;

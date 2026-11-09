@@ -1,3 +1,4 @@
+#include "pe1/movie_profile.h"
 #ifndef MENUCARD_STEP_VIDEO_NAME
 #define MENUCARD_STEP_VIDEO_NAME MenuCard_StepVideo
 #define MENUCARD_VIDEO_SET_DISPLAY MenuCard_SetVideoDisplay
@@ -13,10 +14,15 @@
 
 /* Wait for the next decoded frame and start its decode; -1 on a stall. */
 static inline s16 MenuCard_NextVideoFrame(VideoDisplay *dec) {
+    PE_MOVIE_BEGIN(read);
     void *frame = MENUCARD_VIDEO_UPDATE_FRAME(dec);
+    PE_MOVIE_END(read, PE_MOVIE_READ);
     if (!frame) return -1;
     dec->decodeIndex ^= 1;
-    if (DecDCTvlc2(frame, dec->decode[dec->decodeIndex], MENUCARD_VIDEO_PTR4) != 0) return -1;
+    PE_MOVIE_BEGIN(vlc);
+    int vlc_result = DecDCTvlc2(frame, dec->decode[dec->decodeIndex], MENUCARD_VIDEO_PTR4);
+    PE_MOVIE_END(vlc, PE_MOVIE_VLC);
+    if (vlc_result != 0) return -1;
     g_SeqElapsed++;
     return 0;
 }
@@ -49,11 +55,15 @@ s32 MENUCARD_STEP_VIDEO_NAME(void) {
             MENUCARD_VIDEO_SET_DISPLAY(g_ActiveDrawSlot ^ 1, g_MovieWide);
             *flip = 0;
         }
+        PE_MOVIE_BEGIN(mdec);
         DecDCTin(MENUCARD_VIDEO_DISPLAY.decode[MENUCARD_VIDEO_DISPLAY.decodeIndex], MENUCARD_VIDEO_MODE);
         DecDCTout(MENUCARD_VIDEO_DISPLAY.buffers[MENUCARD_VIDEO_DISPLAY.selector],
                       MENUCARD_VIDEO_DISPLAY.rect.w * MENUCARD_VIDEO_DISPLAY.rect.h / 2);
+        PE_MOVIE_END(mdec, PE_MOVIE_MDEC);
         if (MenuCard_NextVideoFrame(&MENUCARD_VIDEO_DISPLAY) == -1) finished = 1;
+        PE_MOVIE_BEGIN(sync);
         MenuCard_SyncVideoUpload(&MENUCARD_VIDEO_DISPLAY);
+        PE_MOVIE_END(sync, PE_MOVIE_SYNC);
         if (MENUCARD_VIDEO_FINISHED == 1) {
             finished = 1;
         }

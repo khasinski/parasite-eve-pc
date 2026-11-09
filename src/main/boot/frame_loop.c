@@ -7,6 +7,7 @@
 #include "pe1/planar_shadow.h"
 #endif
 #include "common.h"
+#include "pe1/movie_profile.h"
 #include "pe1/port_features.h"
 #include <psyz/gpu.h>
 #include "pe1/akao_send.h"
@@ -189,6 +190,7 @@ int Boot_RunFrame(void)
                         Draw_ClearOnFlag();
                         continue;
                     }
+                    PeMovieProfile_Frame();
                 } else if (!(state->flags & 0x200)) {
                     Render_Update();
                     Menu_DrawTextboxEntries();
