@@ -368,3 +368,75 @@ aya: I gave my statement.
 them: Yes. I was more interested in your blood work.
 aya: Where did you see that?
 them: We'll be in touch.
+
+
+# ======== Final Fantasy, December 24-29, 1997 ========
+# One call per story day. Matching Raccoon City calls have first pick when both are eligible.
+
+[pe1/ff_celes]
+caller = Celes
+tone = serious
+day = 1
+priority = 1
+once = yes
+them: Could she see you from the stage?
+aya: She looked right at me.
+them: With the house lights down? I can barely see the first row. Where were you?
+aya: In the back.
+
+[pe1/ff_red_xiii]
+caller = Red XIII
+tone = funny
+day = 2
+priority = 1
+once = yes
+aya: They told me to ask for the animal expert.
+them: They told you to ask for the animal.
+aya: Can you tell me why the tracks stop at the fence?
+them: I could. How long have you been standing under that tree?
+
+[pe1/ff_yuffie]
+caller = Yuffie
+tone = funny
+day = 3
+priority = 1
+once = yes
+aya: How long would it take you to get into a police evidence locker?
+them: Yours? About twelve seconds.
+aya: I haven't told you what kind of lock it is.
+them: You changed it?
+
+[pe1/ff_tifa]
+caller = Tifa
+tone = serious
+day = 4
+priority = 1
+once = yes
+aya: Someone asked if your bar was still open. I told him I'd check.
+them: Did he ask if we were open, or if I was still here?
+aya: If you were still here.
+them: Tell him to knock on the back door. I'll hear it.
+
+[pe1/ff_cloud]
+caller = Cloud
+tone = funny
+day = 5
+priority = 1
+once = yes
+them: You said one scientist and one case.
+aya: That's right. Don't open the case.
+them: Does it open from the inside?
+aya: ...I'll get you a different case.
+them: I'll wait.
+
+[pe1/ff_sephiroth]
+caller = Sephiroth
+tone = serious
+day = 6
+priority = 1
+once = yes
+them: When you walked out of the theater, did you wonder why you were spared?
+aya: I wondered who was still inside.
+them: Of course. What did you wonder when you were alone?
+aya: Who told you I walked out?
+them: You did. Just now.

@@ -252,7 +252,7 @@ static void test_pe1_pack(void) {
     PePhoneContext sewer = {32, 0x68, 1, 3}, park = {87, 0xF8, 2, 3}, carnegie = {1, 0x40, 1, 3};
     int i, k, funny = 0;
     load_pe1();
-    assert(s_pack_count == 29);
+    assert(s_pack_count == 35);
     memset(&r, 0, sizeof r);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, 0)->key, "pe1/sewer_emergency"));
     for (i = 0; i < 64; ++i) {                                                        /* never elsewhere */
@@ -271,7 +271,7 @@ static void test_pe1_pack(void) {
         assert(s.count >= c->line_count + 2 && s.click == s.count - 1);
         funny += c->tone == PE_CALL_FUNNY;
     }
-    assert(funny == 12);
+    assert(funny == 15);
 }
 
 int main(void) {
