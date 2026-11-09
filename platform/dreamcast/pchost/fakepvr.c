@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <malloc.h>
+static size_t vertex_buf_size = 1024 * 1024; /* set by pvr_init */
 #define W 640
 #define H 480
 static float fb[H][W][3];
@@ -25,9 +26,13 @@ int g_fake_capture; /* read by dc_gpu.c built with DCGPU_TRACE */
 static uint64_t vclock_us;
 static unsigned long long total_prims;
 static int scenes;
-/* DCHOST_SAVE="vblank,vblank,..." or DCHOST_EVERY=N: which scenes to write */
+/* DCHOST_SAVE="vblank,vblank,..." or DCHOST_EVERY=N: which scenes to keep,
+ * within DCHOST_FROM..DCHOST_TO when set; DCHOST_NOWRITE keeps them for
+ * tracing (DCGPU_TRACE) without writing files */
 static int WantFrame(unsigned vb) {
     static unsigned last_saved;
+    const char *from = getenv("DCHOST_FROM"), *to = getenv("DCHOST_TO");
+    if ((from && vb < (unsigned)atoi(from)) || (to && vb > (unsigned)atoi(to))) return 0;
     const char *every = getenv("DCHOST_EVERY");
     if (every && atoi(every) > 0 && vb >= last_saved + (unsigned)atoi(every)) { last_saved = vb; return 1; }
     const char *list = getenv("DCHOST_SAVE");
@@ -42,12 +47,20 @@ static int WantFrame(unsigned vb) {
 uint64_t timer_us_gettime64(void) { return ++vclock_us; }
 uint64_t timer_ns_gettime64(void) { return ++vclock_us * 1000u; }
 void vid_waitvbl(void) { vclock_us = (vclock_us / 16683u + 1) * 16683u; }
-int pvr_init(const pvr_init_params_t *p) { (void)p; return 0; }
+int pvr_init(const pvr_init_params_t *p) { vertex_buf_size = (size_t)p->vertex_buf_size; return 0; }
 void pvr_set_bg_color(float r, float g, float b) { bg[0] = r; bg[1] = g; bg[2] = b; }
-size_t pvr_mem_available(void) { return 4u << 20; }
+
 static size_t pvr_bytes, heap_peak;
 static unsigned heap_peak_vb;
-pvr_ptr_t pvr_mem_malloc(size_t n) { pvr_bytes += n; return calloc(1, n); }
+/* Texture memory as KallistiOS leaves it: 8 MB, less 1591 KB for the
+ * 640x480 framebuffers, OPBs and tables, less the double-buffered vertex
+ * buffer (calibrated on Flycast: 4553 KB free with a 1 MB vertex buffer). */
+#define PVR_TEXTURE_BYTES ((8192u - 1591u) * 1024u - 2u * vertex_buf_size)
+size_t pvr_mem_available(void) { return PVR_TEXTURE_BYTES - pvr_bytes; }
+pvr_ptr_t pvr_mem_malloc(size_t n) {
+    if (n > pvr_mem_available()) return NULL;
+    pvr_bytes += n; return calloc(1, n);
+}
 void pvr_poly_cxt_txr(pvr_poly_cxt_t *d, pvr_list_t l, int f, int w, int h, pvr_ptr_t t, int fl) {
     memset(d, 0, sizeof(*d)); d->list_type = l; d->txr.enable = 1; d->txr.format = f;
     d->txr.width = w; d->txr.height = h; d->txr.base = t; d->txr.filter = fl;
@@ -102,7 +115,12 @@ static void Tri(const pvr_vertex_t *a, const pvr_vertex_t *b, const pvr_vertex_t
         if (x->txr.enable) {
             float u = w0 * a->u + w1 * b->u + w2 * c->u, v = w0 * a->v + w1 * b->v + w2 * c->v;
             int tw = x->txr.width, th = x->txr.height;
-            int tu = (int)floorf(u * tw) & (tw - 1), tv = (int)floorf(v * th) & (th - 1);
+            int tu = (int)floorf(u * tw), tv = (int)floorf(v * th);
+            if (x->txr.uv_clamp == PVR_UVCLAMP_UV) {
+                tu = tu < 0 ? 0 : tu >= tw ? tw - 1 : tu;
+                tv = tv < 0 ? 0 : tv >= th ? th - 1 : tv;
+            }
+            tu &= tw - 1; tv &= th - 1;
             uint16_t t = ((uint16_t *)x->txr.base)[tv * tw + tu];
             float ta, tr, tg, tb;
             if (x->txr.format & PVR_TXRFMT_RGB565) {
@@ -122,18 +140,41 @@ static void Tri(const pvr_vertex_t *a, const pvr_vertex_t *b, const pvr_vertex_t
         memcpy(d, out, sizeof out);
     }
 }
+/* Like the PVR, draw nothing until the scene ends: strips are recorded with
+ * their header and rasterised in pvr_scene_finish(), reading textures then.
+ * A texture overwritten after use in the same frame shows up as on hardware. */
+typedef struct { pvr_poly_hdr_t hdr; int first, count; } Strip;
+static Strip *rec_strips; static int rec_nstrips, rec_cap_strips;
+static pvr_vertex_t *rec_verts; static int rec_nverts, rec_cap_verts;
 int pvr_prim(const void *data, size_t size) {
     const pvr_poly_hdr_t *h = data;
     if (size == sizeof(pvr_poly_hdr_t) && h->magic == 0x48445221) { cur = *h; headers++; return 0; }
     const pvr_vertex_t *v = data;
     strip[nstrip++] = *v;
     if (v->flags == PVR_CMD_VERTEX_EOL) {
-        if (capture) for (int i = 2; i < nstrip; i++) Tri(&strip[i - 2], &strip[i - 1], &strip[i]);
-        nstrip = 0; prims++;
+        prims++;
+        if (capture) {
+            if (rec_nstrips == rec_cap_strips) { rec_cap_strips = rec_cap_strips ? rec_cap_strips * 2 : 1024; rec_strips = realloc(rec_strips, rec_cap_strips * sizeof(*rec_strips)); }
+            if (rec_nverts + nstrip > rec_cap_verts) { rec_cap_verts = (rec_cap_verts + nstrip) * 2; rec_verts = realloc(rec_verts, rec_cap_verts * sizeof(*rec_verts)); }
+            rec_strips[rec_nstrips++] = (Strip){cur, rec_nverts, nstrip};
+            memcpy(rec_verts + rec_nverts, strip, nstrip * sizeof(*strip));
+            rec_nverts += nstrip;
+        }
+        nstrip = 0;
     }
     return 0;
 }
+static void RasteriseRecorded(void) {
+    for (int i = 0; i < rec_nstrips; i++) {
+        cur = rec_strips[i].hdr;
+        const pvr_vertex_t *v = rec_verts + rec_strips[i].first;
+        for (int k = 2; k < rec_strips[i].count; k++) Tri(&v[k - 2], &v[k - 1], &v[k]);
+    }
+    rec_nstrips = rec_nverts = 0;
+}
+
 int pvr_scene_finish(void) {
+    RasteriseRecorded();
     scenes++; total_prims += (unsigned)prims;
     {
         struct mallinfo2 mi = mallinfo2();
@@ -144,6 +185,7 @@ int pvr_scene_finish(void) {
         }
     }
     if (!capture) return 0;
+    if (getenv("DCHOST_NOWRITE")) return 0; /* trace only */
     const char *dir = getenv("DCHOST_DIR");
     char name[512]; snprintf(name, sizeof name, "%s/vb%06u.ppm", dir ? dir : ".", (unsigned)(vclock_us / 16683u)); frame++;
     FILE *f = fopen(name, "wb"); fprintf(f, "P6 %d %d 255\n", W, H);
