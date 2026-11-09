@@ -6,10 +6,16 @@
  * initialise the system and run the original scene dispatch loop, the same
  * loop as main.c.
  *
- * Disc images are looked up in this order (first CUE/BIN/ISO that opens):
- *   /cd/PE1.CUE, /cd/PE2.CUE      on the burnt disc (ISO9660 on the GD/CD)
- *   /pc/pe1.cue, /pc/pe2.cue      over dc-tool (dcload-ip / dcload-serial)
- *   /sd/pe1.cue, /sd/pe2.cue      on an SD card adapter
+ * Disc images are looked up in this order (first set where one opens). A
+ * raw MODE2/2352 BIN needs no CUE: the image type is read from the ISO9660
+ * header, and which disc it is from its contents, so the burnt disc can
+ * carry just PE1.BIN and PE2.BIN.
+ *   /cd/PE1.BIN, /cd/PE2.BIN      on the burnt disc
+ *   /cd/PE1.CUE, /cd/PE2.CUE      the same with CUE sheets
+ *   /pc/pe1.bin, /pc/pe2.bin      over dc-tool (dcload-ip / dcload-serial)
+ *   /pc/pe1.cue, /pc/pe2.cue
+ *   /sd/pe1.bin, /sd/pe2.bin      on an SD card adapter
+ *   /sd/pe1.cue, /sd/pe2.cue
  */
 #include "pe1/port_features.h"
 #include "common.h"
@@ -40,8 +46,11 @@ KOS_INIT_FLAGS(INIT_DEFAULT);
 #define STATE_FLAG_READY 0x00000100U
 
 static const char *const disc_paths[][2] = {
+    {"/cd/PE1.BIN", "/cd/PE2.BIN"},
     {"/cd/PE1.CUE", "/cd/PE2.CUE"},
+    {"/pc/pe1.bin", "/pc/pe2.bin"},
     {"/pc/pe1.cue", "/pc/pe2.cue"},
+    {"/sd/pe1.bin", "/sd/pe2.bin"},
     {"/sd/pe1.cue", "/sd/pe2.cue"},
 };
 

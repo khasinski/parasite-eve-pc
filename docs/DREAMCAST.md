@@ -210,8 +210,9 @@ no longer snap to whole pixels and their textures are perspective-correct
 
 ## Next steps
 
-1. Boot the ELF on hardware or in Flycast with the discs (`/pc/pe1.cue`,
-   `/pc/pe2.cue` over dc-tool, or `/cd/PE1.CUE`) and check speed.
+1. Boot the ELF on hardware or in Flycast with the discs (`/cd/PE1.BIN`
+   and `/cd/PE2.BIN` on the burnt disc, no CUE needed; see
+   `platform/dreamcast/README.md`) and check speed.
 2. Measure battles, later rooms and the memory card screen; then size the
    two 2 MB arenas.
 3. Reverb on the AICA DSP; speed (store-queue vertex submission, twiddled
