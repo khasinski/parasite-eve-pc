@@ -10,7 +10,8 @@ swapped:
 | PowerVR (`dc/pvr.h`) | `fakepvr.c`: software rasteriser with the same blend factors and texture formats; saves chosen frames as PPM |
 | KOS threads (`dc_os.c`) | `host_os.c`: pthreads |
 | Maple controller (`dc_input.c`) | `host_input.c`: released pad; buttons come from the game's own input schedule |
-| vblank, timers | virtual clock: one frame per `vid_waitvbl()`, as fast as the host runs |
+| vblank, timers | virtual clock: one frame per `vid_waitvbl()`, as fast as the host runs; kernel time (root counters, so the music sequencer) follows it |
+| AICA, sound stream (`dc_aica.c`, `dc_audio.c`) | `host_aica.c`: software channels; `host_audio.c`: one vblank of sound per vblank |
 
 It is for checking the renderer and memory against real game frames without
 hardware or an emulator. It says nothing about SH-4 speed.
@@ -42,6 +43,14 @@ DCHOST_DIR=frames DCHOST_EVERY=600 PE_MEMORY_REPORT=1 \
   them).
 - At the limit the game prints its diagnostic JSON (scene, display mode,
   dialogue, actors) and exits.
+- `DCHOST_WAV=file.wav` records the sound (`DCHOST_WAV_FROM`/`DCHOST_WAV_TO`
+  bound it in vblanks); `DCHOST_ENVX=file` writes every voice's ENVX and
+  start address per vblank.
+- Built with `DCHOST_SPU_REFERENCE=1` (into another output directory), the
+  portable software SPU makes the sound instead of the AICA path, to compare
+  against; `DCHOST_NO_REVERB=1` mutes its reverb, which the AICA path lacks.
+- `DCHOST_WALL_CLOCK=1` runs kernel time on the host clock (the music then
+  depends on how fast the host is).
 - `PE_MEMORY_REPORT=1` logs the game's buffer peaks (`[mem]`) and the
   heap's (`[heap]`).
 - Built with `DCGPU_TRACE=1`, `dc_gpu.c` can log the primitives of the

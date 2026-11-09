@@ -5,7 +5,17 @@
 #include <time.h>
 #include <errno.h>
 #include "psyz/os.h" /* psyz/src on the include path */
+/* Kernel time follows the virtual vblank clock (fakepvr.c), as on the
+ * Dreamcast it follows the real one, so root counters (the AKAO sequencer)
+ * keep pace with the frames however fast the host runs. DCHOST_WALL_CLOCK=1
+ * uses the host's clock instead. */
+uint64_t timer_us_gettime64(void);
 uint64_t Psyz_OsNowUs(void) {
+    static int wall = -1;
+    if (wall < 0)
+        wall = getenv("DCHOST_WALL_CLOCK") != NULL;
+    if (!wall) /* each read moves it 1 us, as polling loops need */
+        return timer_us_gettime64();
     struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
 }

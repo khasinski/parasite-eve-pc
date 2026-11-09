@@ -21,7 +21,12 @@ out = os.path.abspath(sys.argv[2] if len(sys.argv) > 2 else 'pchost-out')
 os.makedirs(os.path.join(out, 'obj'), exist_ok=True)
 db = json.loads(subprocess.run(['ninja', '-C', build, '-t', 'compdb'], check=True,
                                capture_output=True, text=True).stdout)
-replace = {'dc_os.c': os.path.join(here, 'host_os.c'), 'dc_input.c': os.path.join(here, 'host_input.c')}
+replace = {'dc_os.c': os.path.join(here, 'host_os.c'), 'dc_input.c': os.path.join(here, 'host_input.c'),
+           'dc_audio.c': os.path.join(here, 'host_audio.c'), 'dc_aica.c': os.path.join(here, 'host_aica.c')}
+# DCHOST_SPU_REFERENCE=1: the portable software SPU makes the sound instead
+reference = bool(os.environ.get('DCHOST_SPU_REFERENCE'))
+if reference:
+    replace['dc_spu.c'] = os.path.join(psyz_src, 'psyz', 'psyz_spu.c')
 base_flags = ['gcc', '-m32', '-O2', '-g', '-I' + os.path.join(here, 'fake')]
 jobs, objs = [], []
 for e in db:
@@ -44,6 +49,8 @@ for e in db:
         keep.append('-Dmain=dc_main')
     if name == 'dc_os.c':
         keep.append('-I' + psyz_src)
+    if name == 'dc_audio.c' and reference:
+        keep.append('-DHOST_AUDIO_REFERENCE')
     if name == 'dc_gpu.c' and os.environ.get('DCGPU_TRACE'):
         keep.append('-DDCGPU_TRACE')
     obj = os.path.join(out, 'obj', e['output'].replace('/', '_') + '.o')

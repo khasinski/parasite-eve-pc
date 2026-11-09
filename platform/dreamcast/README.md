@@ -7,7 +7,7 @@ files, environment, ticks); SDL itself is not built. `dc_libc.c` adds the
 stdio locks newlib declares but does not build.
 
 The PsyZ side lives in `third_party/psyz/psyz/src/dreamcast/`: a PowerVR
-renderer (see its README for what is and isn't emulated) and silent audio.
+renderer (see its README for what is and isn't emulated) and AICA sound.
 
 ## Build
 

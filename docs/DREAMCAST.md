@@ -95,7 +95,7 @@ the CD work area can be made smaller.
 ## SH-4 build (KallistiOS)
 
 The game links for the Dreamcast against the PsyZ Dreamcast backend
-(`third_party/psyz/psyz/src/dreamcast/`: PowerVR renderer, silent audio) and
+(`third_party/psyz/psyz/src/dreamcast/`: PowerVR renderer, AICA sound) and
 the host in [`platform/dreamcast/`](../platform/dreamcast/README.md):
 
 ```sh
@@ -193,11 +193,19 @@ players read sectors directly. PsyZ's MDEC now takes under 5 million SH-4
 instructions per frame instead of about 20 million (about 30 ms), still
 exact to the bit; see `third_party/psyz/psyz/src/dreamcast/README.md`.
 
+## Sound (9 November 2026)
+
+PsyZ's software SPU would need 160-600 million SH-4 instructions per second
+of sound, so the voices play on AICA channels (`dc_spu.c`, see the PsyZ
+Dreamcast README): PS1 ADPCM is decoded to PCM in sound RAM, envelopes run
+on the CPU and set channel levels every 5 ms, CD/XA audio goes out on a KOS
+sound stream. The SPU RAM copy stays in main RAM (the game reads it back).
+
 ## Next steps
 
 1. Boot the ELF on hardware or in Flycast with the discs (`/pc/pe1.cue`,
    `/pc/pe2.cue` over dc-tool, or `/cd/PE1.CUE`) and check speed.
 2. Measure battles, later rooms and the memory card screen; then size the
    two 2 MB arenas.
-3. AICA audio, then speed (store-queue vertex submission, twiddled or
-   paletted textures).
+3. Reverb on the AICA DSP; speed (store-queue vertex submission, twiddled
+   or paletted textures).
