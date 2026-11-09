@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pelang  # noqa: E402
-from petext import gametext as gt, latin, menu  # noqa: E402
+from petext import gametext as gt, latin, menu, stretch  # noqa: E402
 
 # Every glyph 6 px wide (0x60); "W" (0x26) 10 px.
 METRICS = bytearray([0x60] * 444)
@@ -43,14 +43,18 @@ class MenuTest(unittest.TestCase):
     def check(self, key, text):
         return menu.check(key, gt.encode(text, extended=True), self.rows[key], METRICS, self.layouts)
 
-    def build(self, translations: dict) -> int:
+    def build(self, translations: dict, *extra: str) -> int:
         path = self.dir / "t.csv"
         rows = pelang.template_rows(pelang.load_strings(self.strings))
         for r in rows:
             r["translation"] = translations.get(r["key"], "")
         pelang.write_csv(path, rows)
         return pelang.main(["build", str(path), "--strings", str(self.strings), "--lang", "xx",
-                            "--name", "Test", "-o", str(self.dir / "t.pelang")])
+                            "--name", "Test", "-o", str(self.dir / "t.pelang"), *extra])
+
+    def built(self, key: str) -> bytes | None:
+        """`key`'s bytes in the last build's pack (stretches expanded), or None."""
+        return pelang.read_pack(self.dir / "t.pelang")[2].get(pelang.fnv1a(key))
 
     def test_width_is_draw_measure_text_width(self):
         self.assertEqual(menu.width(gt.encode("AB"), METRICS), 2 * (6 + 1))
@@ -92,6 +96,40 @@ class MenuTest(unittest.TestCase):
         self.assertEqual(self.build({"item/000": "Munitions +6"}), 0)
         self.assertNotEqual(self.build({"item/000": "A" * 24, "sys/016": " was used up"}), 0)
         self.assertEqual(self.build({"item/000": "A" * 18, "sys/016": " was used"}), 0)   # 18 + 9 + 1
+
+    def test_narrowing_measures_as_the_renderer_makes_it(self):
+        line = gt.encode("W" * 28)                                       # 308 px
+        self.assertEqual(menu.width(menu.narrow(line, 240), METRICS), (308 * 240 + 128) >> 8)
+        self.assertEqual(menu.narrow(menu.narrow(line, 240), 250), menu.narrow(line, 240))  # never wider
+        self.assertEqual(menu.narrow(line, 256), line)
+        self.assertEqual(menu.fit(308, 306), 254)                     # 255 rounds to 307
+        self.assertEqual(menu.fit(400, 306), 196)
+        self.assertIsNone(menu.fit(420, 306))                            # past menu.NARROW_FLOOR
+        self.assertEqual(menu.room("desc/000", self.layouts), 306)
+
+    def test_a_patch_menu_line_too_wide_is_drawn_narrower(self):
+        self.assertEqual(self.build({"desc/000": "W" * 28}), 1)          # a translator shortens it
+        self.assertEqual(self.build({"desc/000": "W" * 28}, "--from-patch"), 0)
+        raw = self.built("desc/000")
+        self.assertTrue(raw.startswith(stretch.NARROW))
+        self.assertEqual(menu.strip_narrow(raw)[0], gt.encode("W" * 28))
+        self.assertLessEqual(menu.width(raw, METRICS), 306)
+
+    def test_a_patch_line_too_wide_even_narrowed_keeps_the_games_text(self):
+        self.assertEqual(self.build({"desc/000": "W" * 40}, "--from-patch"), 0)   # 440 px: 70%
+        self.assertIsNone(self.built("desc/000"))
+
+    def test_joined_patch_text_is_drawn_narrower_together(self):
+        rows = STRINGS + [row("sys/071", "Memory Card in Slot 1"), row("sys/072", "Memory Card in Slot 2"),
+                          row("sys/073", " is not formatted")]
+        self.strings.write_text(json.dumps(rows), encoding="utf-8")
+        text = {"sys/071": "W" * 20, "sys/072": "Memory", "sys/073": "W" * 9}    # 220 + 99 px > 300
+        self.assertEqual(self.build(text, "--from-patch"), 0)
+        a, b = self.built("sys/071"), self.built("sys/073")
+        self.assertIsNotNone(a)
+        self.assertIsNotNone(b)
+        self.assertLessEqual(menu.width(a, METRICS) + menu.width(b, METRICS), 300)
+        self.assertEqual(menu.strip_narrow(a)[0], gt.encode("W" * 20))
 
     def test_template_says_where_menu_text_goes(self):
         rows = {r["key"]: r for r in pelang.template_rows(pelang.load_strings(self.strings))}

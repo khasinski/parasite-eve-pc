@@ -659,7 +659,13 @@ and F1 > Fonts. Either disc gives the same text. Nothing here goes into the repo
 - **Controls**: `--from-patch` lets waits, names and timing differ from the English, because a
   translator moves them and the patch played that way. Choices must match, since scripts act on them.
 - **Space**: a patch's own font is often narrower than the game's. Pages are rewrapped to fit the
-  game's widths, and a menu line that can't fit stops the build: shorten it in the CSV.
+  game's widths. A menu line too wide for its place is drawn narrower to fit (the report says
+  how much): the room comes from its spaces and the gaps between letters first, and letters are
+  drawn narrower only for what is still missing. Text the game joins (a card slot and "is not
+  formatted") is narrowed together. A line that would need less than 75% keeps the game's text.
+  The pack carries this as the stretch's first letter, U+10FE80 + k for (128 + k) / 256 of the
+  width (`PE_TEXT_NARROW_FIRST`); a build without `--from-patch` still stops at a line too wide,
+  so a translator can shorten it instead.
 - **Not carried over**, all listed in the report: edited room scripts (`rooms_with_edited_scripts`
   should be empty; if not, those rooms won't match the patch), pictures with text in them
   (`rooms_with_edited_pictures`), custom symbols, and the rename grids. Mod labels stay in English

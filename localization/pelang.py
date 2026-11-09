@@ -359,6 +359,20 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
     return raw, errors, warnings
 
 
+def narrow_to_fit(key, raw, errs, source, metrics, layouts, stretches=True):
+    """(`raw` narrowed to fit its menu room, n / 256), or None when only width is wrong and no
+    narrowing down to menu.NARROW_FLOOR makes it fit (or the line can't be narrowed at all)."""
+    if (metrics is None or not stretches or stretch.stays_bytes(key) or key.startswith(("dlg/", "battle/"))
+            or not all(" px; " in e for e in errs)):
+        return None
+    space = menu.room(key, layouts)
+    n = menu.fit(menu.width(raw, metrics), space) if space is not None else None
+    if n is None:
+        return None
+    raw = menu.narrow(raw, n)
+    return (raw, n) if not menu.check(key, raw, source, metrics, layouts)[0] else None
+
+
 def cmd_build(a) -> int:
     from_manifest = srcman.is_manifest(a.strings)
     if from_manifest:                       # no discs: the committed source manifest
@@ -449,10 +463,17 @@ def cmd_build(a) -> int:
                 warns += errs
                 errs = []
         elif a.from_patch and raw is not None and errs:
-            # A patch was sized for its own letters. One line too wide for these keeps the game's
-            # text; it shouldn't cost the player the whole language.
-            warns += [f"keeps the game's text: {e}" for e in errs]
-            errs, raw = [], None
+            # A patch was sized for its own letters. A menu line too wide for these is drawn a
+            # little narrower to fit (menu.NARROW_FLOOR at most); anything else keeps the game's
+            # text, which shouldn't cost the player the whole language.
+            fitted = narrow_to_fit(key, raw, errs, src, metrics, layouts, not a.bytes_only)
+            if fitted:
+                raw, n = fitted
+                warns.append(f"drawn at {n * 100 // 256}% width to fit: {errs[0]}")
+                errs = []
+            else:
+                warns += [f"keeps the game's text: {e}" for e in errs]
+                errs, raw = [], None
         errors += [f"{key}: {e}" for e in errs]
         warnings += [f"{key}: {w}" for w in warns]
         if raw is not None and not errs:
@@ -465,7 +486,25 @@ def cmd_build(a) -> int:
         over: set[str] = set()
         joined = menu.check_combined(resident, metrics, layouts, over)
         while a.from_patch and joined and over & entries.keys():
-            # As with a single line: the longest parts go back to the game's text until it fits.
+            # As with a single line: the longest parts are drawn narrower, or past that go back
+            # to the game's text, until it fits.
+            parts = sorted(over & entries.keys())
+            if not a.bytes_only and not any(stretch.stays_bytes(k) for k in parts):
+                for n in range(255, menu.NARROW_FLOOR - 1, -1):
+                    trial = dict(resident, **{k: menu.narrow(entries[k], n) for k in parts})
+                    still: set[str] = set()
+                    menu.check_combined(trial, metrics, layouts, still)
+                    if not still & set(parts):
+                        warnings += [f"joined text drawn at {n * 100 // 256}% width to fit: {e}" for e in joined]
+                        for k in parts:
+                            entries[k] = resident[k] = trial[k]
+                        break
+                else:
+                    n = None
+                if n is not None:
+                    over.clear()
+                    joined = menu.check_combined(resident, metrics, layouts, over)
+                    continue
             warnings += [f"joined text keeps the game's text: {e}" for e in joined]
             for key in over & entries.keys():
                 del entries[key]

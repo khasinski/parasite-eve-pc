@@ -18,6 +18,11 @@ from . import gametext as gt
 
 TOKEN = b"\xf1\xc6"
 EXTRA = b"\xf1\xc7"          # a letter with no code (petext/letters.py): only ever in a stretch
+# Narrowing (petext/menu.py narrow): in the tool's bytes, F1 C8 00 k before a menu line draws the
+# letters after it at (128 + k) / 256 of their width. In the pack it becomes the stretch's first
+# letter, U+10FE80 + k (PE_TEXT_NARROW_FIRST, include/pe1/text_render.h), so it costs no bytes.
+NARROW = b"\xf1\xc8\x00"
+NARROW_FIRST = 0x10FE80
 MAX_STRETCHES = 240 * 240
 MAX_LETTERS = 96            # PE_TEXT_ITEM_LETTERS, PE_LANG_STRETCH_MAX
 
@@ -87,17 +92,24 @@ class Stretches:
         """`raw` with each run of two or more letters as a stretch (a lone letter stays a byte:
         a token would be bigger)."""
         out, i, run, run_bytes = bytearray(), 0, [], bytearray()
+        mark = ""                    # the narrowing letter every later stretch starts with
 
         def flush() -> None:
             text = "".join(run)
+            room = MAX_LETTERS - len(mark)
             while text:
-                piece, text = text[:MAX_LETTERS], text[MAX_LETTERS:]
-                lone = len(run) == 1 and not run_bytes.startswith(EXTRA)
-                out.extend(run_bytes if lone else self.token(piece))
+                piece, text = text[:room], text[room:]
+                lone = len(run) == 1 and not run_bytes.startswith(EXTRA) and not mark
+                out.extend(run_bytes if lone else self.token(mark + piece))
             run.clear()
             run_bytes.clear()
 
         while i < len(raw):
+            if raw[i:i + 3] == NARROW and i + 4 <= len(raw):
+                flush()
+                mark = chr(NARROW_FIRST + raw[i + 3])
+                i += 4
+                continue
             found = _letter_at(raw, i, letters)
             if found:
                 ch, n = found
@@ -136,10 +148,15 @@ def convert_entries(entries: dict[str, bytes], atlas=None) -> tuple[dict[str, by
 
 def expand(raw: bytes, stretches: Stretches, back: dict[str, bytes]) -> bytes:
     """`raw` with its stretches as the bytes they stand for (back: letter -> byte form)."""
-    out, i = bytearray(), 0
+    out, i, mark = bytearray(), 0, None
     while i < len(raw):
         if raw[i:i + 2] == TOKEN and i + 4 <= len(raw):
             for ch in stretches.runs[raw[i + 2] * 240 + raw[i + 3]]:
+                if ord(ch) >= NARROW_FIRST:
+                    if ch != mark:               # once for the line, as build wrote it
+                        out += NARROW + bytes([ord(ch) - NARROW_FIRST])
+                        mark = ch
+                    continue
                 out += back[ch]
             i += 4
             continue

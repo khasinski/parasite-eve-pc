@@ -57,6 +57,21 @@ class StretchTest(unittest.TestCase):
         self.assertEqual(out, {"sys/030": raw, "item/001": raw, "sys/116": raw, "bank/1234": b"M001"})
         self.assertEqual(table.runs, [])
 
+    def test_a_narrowed_line_carries_its_mark_in_every_stretch(self):
+        table, letters = stretch.Stretches(), stretch.letter_map()
+        raw = stretch.NARROW + bytes([112]) + gt.encode("Hello there")
+        out = table.convert(raw, letters)
+        self.assertEqual(len(out), 4)                                   # the mark costs no bytes
+        self.assertEqual(table.runs[0], chr(stretch.NARROW_FIRST + 112) + "Hello there")
+        back = {ch: bytes([code]) for code, ch in gt.CHARS.items()}
+        self.assertEqual(stretch.expand(out, table, back), raw)
+        long = stretch.NARROW + bytes([1]) + gt.encode("ab" * 60)       # split: each piece marked
+        out = table.convert(long, letters)
+        runs = [table.runs[out[i + 2] * 240 + out[i + 3]] for i in range(0, len(out), 4)]
+        self.assertTrue(all(r[0] == chr(stretch.NARROW_FIRST + 1) for r in runs))
+        self.assertTrue(all(len(r) <= stretch.MAX_LETTERS for r in runs))
+        self.assertEqual(stretch.expand(out, table, back), long)
+
     def test_version_4_pack_layout(self):
         entries = {"sys/001": gt.encode("Hello"), "sys/030": gt.encode("Aya")}
         conv, table = stretch.convert_entries(entries)

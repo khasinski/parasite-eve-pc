@@ -43,10 +43,39 @@ def _arabic_at(raw: bytes, i: int, page: int):
     return None
 
 
+# Narrowing: a line too wide for its room is drawn at (128 + k) / 256 of its width (petext/stretch.py
+# NARROW). Below this it would be too cramped to read, and the line keeps the game's text instead.
+NARROW_FLOOR = 192              # 75%
+
+
+def narrowed(px: int, n: int) -> int:
+    """How wide a line `px` wide draws at n / 256 (text_render.c Stretch's rounding)."""
+    return (px * n + 128) >> 8
+
+
+def strip_narrow(raw: bytes) -> tuple[bytes, int]:
+    """(`raw` without its narrowing mark, n / 256 it is drawn at: 256 when not narrowed)."""
+    from .stretch import NARROW
+    if raw.startswith(NARROW) and len(raw) >= 4:
+        return raw[4:], 128 + raw[3]
+    return raw, 256
+
+
+def narrow(raw: bytes, n: int) -> bytes:
+    """`raw` drawn at n / 256 of its width (at most as narrow as it already was)."""
+    from .stretch import NARROW
+    plain, was = strip_narrow(raw)
+    n = min(n, was)
+    return plain if n >= 256 else NARROW + bytes([n - 128]) + plain
+
+
 def width(raw: bytes, metrics: bytes) -> int:
     """Draw_MeasureTextWidth, with the Latin Extended codes as pe_lang sets them. A right-to-left
     pack's Arabic letters measure joined, as the renderer draws them (petext/rtl.py)."""
     from . import letters, rtl
+    raw, n = strip_narrow(raw)
+    if n != 256:
+        return narrowed(width(raw, metrics), n)
     w, page = 0, 0
     i = 0
     run = []
@@ -143,6 +172,7 @@ def check(key: str, raw: bytes, source: dict, metrics: bytes, layouts: dict):
     english_len = english_length(source)
     found = contexts_of(key, layouts)
     px = width(raw, metrics)
+    raw = strip_narrow(raw)[0]
     for c in found:
         where = f"{c['id']} ({c['source']})"
         if c.get("same_length") and len(raw) != english_len:
@@ -169,7 +199,7 @@ def check_combined(texts: dict[str, bytes], metrics: bytes, layouts: dict, over:
     an English entry known only from the source manifest, its (length, menu px). `over` collects
     the keys of the longest parts of whatever doesn't fit."""
     def n_bytes(v):
-        return v[0] if isinstance(v, tuple) else len(v)
+        return v[0] if isinstance(v, tuple) else len(strip_narrow(v)[0])
 
     def n_px(v):
         return v[1] if isinstance(v, tuple) else width(v, metrics)
@@ -196,3 +226,18 @@ def check_combined(texts: dict[str, bytes], metrics: bytes, layouts: dict, over:
             if "edge" in c and worst_px > c["edge"]:
                 errors.append(f"{' + '.join(names)}: {worst_px} px; {where} reaches the screen edge at {c['edge']} px")
     return errors
+
+
+def room(key: str, layouts: dict) -> int | None:
+    """The fewest pixels any place that draws `key` gives it, or None when none is known."""
+    rooms = [c["edge"] if "edge" in c else c["width"] for c in contexts_of(key, layouts)
+             if "edge" in c or c.get("width_is_hard")]
+    return min(rooms) if rooms else None
+
+
+def fit(px: int, space: int) -> int | None:
+    """The widest n / 256 (NARROW_FLOOR..255) that draws a `px` line within `space`, or None."""
+    for n in range(255, NARROW_FLOOR - 1, -1):
+        if narrowed(px, n) <= space:
+            return n
+    return None
