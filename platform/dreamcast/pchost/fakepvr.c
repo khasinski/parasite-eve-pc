@@ -46,7 +46,13 @@ static int WantFrame(unsigned vb) {
 }
 uint64_t timer_us_gettime64(void) { return ++vclock_us; }
 uint64_t timer_ns_gettime64(void) { return ++vclock_us * 1000u; }
-void vid_waitvbl(void) { vclock_us = (vclock_us / 16683u + 1) * 16683u; }
+static void (*vblank_hnd)(uint32_t, void *);
+int vblank_handler_add(void (*hnd)(uint32_t, void *), void *data) { (void)data; vblank_hnd = hnd; return 1; }
+void vid_waitvbl(void) {
+    vclock_us = (vclock_us / 16683u + 1) * 16683u;
+    if (vblank_hnd) vblank_hnd(0, NULL);
+}
+int thd_pass(void) { vid_waitvbl(); return 0; }
 int pvr_init(const pvr_init_params_t *p) { vertex_buf_size = (size_t)p->vertex_buf_size; return 0; }
 void pvr_set_bg_color(float r, float g, float b) { bg[0] = r; bg[1] = g; bg[2] = b; }
 
