@@ -203,8 +203,8 @@ sound stream. The SPU RAM copy stays in main RAM (the game reads it back).
 
 ## Picture (9 November 2026)
 
-Polygons and movies are filtered bilinearly (sprites and text stay sharp).
-PsyZ can also keep the GTE's subpixel fraction and depth of projected
+Textures stay point-sampled as on the PS1 (bilinear filtering slowed
+texture decoding down too much). PsyZ can also keep the GTE's subpixel fraction and depth of projected
 vertices (`PSYZ_GTE_SUBPIXEL`, see the PsyZ Dreamcast README); it is off in
 the Dreamcast build for now, models draw as on the PS1.
 
