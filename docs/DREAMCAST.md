@@ -128,17 +128,18 @@ source change beyond the above.
 |---|---|---|---|
 | 1.18 MB | 0.08 MB | 10.54 MB | **11.80 MB** |
 
-By part, from the link map (rounded; padding counted twice):
+With the PVR renderer the ELF is 1.20 MB text, 0.08 MB data and 10.55 MB
+bss: **11.83 MB**. Textures live in the PVR's own 8 MB (about 30 decoded
+256x256 pages beside the framebuffers, a 512x512 movie frame and a 1 MB
+vertex buffer), so main RAM grows only by the renderer's code.
+
+By part, from the link map of the stub build (rounded; padding counted
+twice):
 
 | Part | Code + rodata | Data | bss |
 |---|---|---|---|
 | Game | 0.91 MB | 0.07 MB | 8.78 MB |
-| PsyZ core + stub backend | 0.17 MB | 0.01 MB | 1.77 MB |
-
-With the PVR renderer in place of the stub: 1.20 MB text, 0.08 MB data,
-10.55 MB bss, **11.83 MB** in all. Textures live in the PVR's own 8 MB
-(about 30 decoded 256x256 pages beside the framebuffers and a 1 MB vertex
-buffer), so main RAM grows only by the renderer's code and tables.
+| PsyZ core + backend | 0.17 MB | 0.01 MB | 1.77 MB |
 | KallistiOS | 0.33 MB | 0.01 MB | 0.04 MB |
 | newlib, libgcc | 0.11 MB | — | — |
 
@@ -152,12 +153,40 @@ sound RAM (0.53 MB), the memory card screens (0.5 MB) and the movie buffers
 The SPU's 512 KB copy can move to the AICA's own 2 MB once audio is real,
 and the backend's VRAM copy partly into the PVR's 8 MB.
 
+### Peaks with the discs (9 November 2026)
+
+Measured with the PC harness below (the Dreamcast build's sources and
+flags on 32-bit x86), from boot through the intro movies, title, name
+entry, the Carnegie Hall street and entrance (M010, M431), the lobby and
+the opera with its fire (M003, M004, M372), to Aya in the auditorium:
+
+| Counter | Peak | Budget |
+|---|---|---|
+| room texture read | 374 KB (M372) | 2 MB |
+| room asset read | 334 KB (M372) | — |
+| mesh packet set | 125 KB (M004) | 2 MB |
+| room scratch read | 66 KB (M010) | — |
+| transform stack depth | 2 | 256 |
+| heap in use | 1.78 MB | — |
+
+So far: 11.83 MB static + 1.8 MB heap ≈ 13.6 MB of 16. Battles, later
+rooms, the memory card screen and disc 2 are not measured yet; the two
+2 MB arenas look far larger than these rooms need, but only a full
+playthrough (or a save at the larger rooms) can say by how much.
+
+## PC harness
+
+[`platform/dreamcast/pchost/`](../platform/dreamcast/pchost/README.md)
+runs the Dreamcast build of the game on a PC with a software PVR and saves
+frames as the PVR would show them, with scripted input. It found three
+renderer bugs before any hardware run: 24-bit movies, the display's
+vertical position, and subtractive blending (shadows).
+
 ## Next steps
 
-1. Record peaks with both discs: several rooms, a battle, a movie, the
-   memory card screen (desktop `PE_MEMORY_REPORT=1`, or the Dreamcast build
-   over dc-tool).
-2. Boot the ELF in an emulator or on hardware with the discs and fix what
-   the PVR renderer gets wrong with the game's real frames.
+1. Boot the ELF on hardware or in Flycast with the discs (`/pc/pe1.cue`,
+   `/pc/pe2.cue` over dc-tool, or `/cd/PE1.CUE`) and check speed.
+2. Measure battles, later rooms and the memory card screen; then size the
+   two 2 MB arenas.
 3. AICA audio, then speed (store-queue vertex submission, twiddled or
    paletted textures).
