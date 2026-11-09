@@ -176,6 +176,13 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   run's line; the save after the credits (Clear Data: `g_SaveTitleStyleFlag` with the card menu's
   clear prompt) marks it cleared (`pe_ch_milestones.c`). 128 runs; playing runs are dropped first,
   fallen ones last.
+- **Hardcore saves in the save / load lists** (`pe_ch_card_marks.c`; the save phone's card screen and
+  the title's Load screen are the same menu): a Hardcore save's slot is drawn in a dark red window,
+  a fallen one in grey (only the menu's copy of the slot's window colour, `slot->blendColor`, is
+  changed; the card never is). With one highlighted, the title bar says "Hardcore run" and its other
+  challenges, or "Fallen Hardcore run: it can't be played"; when saving, that the slot holds a
+  Hardcore run. Each slot's file is read once (the game's `Psyz_AdjustPath` name) and its
+  `pe_challenges.run` record peeked read-only (`pe_save_peek`), again only when the slot changes.
 - **Run summary (F1):** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
 - **Hardcore (permadeath):** chosen at the title for a New Game only, and its run locks every
   challenge on (more can be added, none lowered; Clear all refuses). The game's own game over (phase

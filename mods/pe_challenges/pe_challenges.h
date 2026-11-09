@@ -21,6 +21,7 @@
  *   screens (the game's own widgets and windows)
  *     pe_ch_screen.c       the Challenges row in Aya's menu: this run, run history
  *     pe_ch_notice.c       a field notice in the game's dialogue window, one option to close it
+ *     pe_ch_card_marks.c   Hardcore saves marked in the game's save / load lists (window, title bar)
  *   challenges
  *     pe_ch_menu_rules.c   No items in battle, No escape, Locked loadout (battle tabs only)
  *     pe_ch_no_pe.c        No Parasite Energy
@@ -170,6 +171,7 @@ void pe_ch_notice_register(const char *mod_id);
 int pe_ch_summary_register(void);
 int pe_ch_bundles_register(void);
 void pe_ch_screen_register(const char *mod_id);
+void pe_ch_card_marks_register(const char *mod_id);
 const char *pe_ch_status_text(void);   /* "Clean", "Assisted", "Clean, Hardcore" ... (shared by F1 and the screen) */
 
 /* The challenges (each defined in its own file). */
