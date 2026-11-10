@@ -321,3 +321,19 @@ black details/semitransparency, and a second foreground's missing gutter, with
 baseline preservation and exact native-reference checks. Assets must be rebuilt
 and visually reviewed before publishing a new pack; updating the game alone does
 not replace downloaded artwork.
+
+M097's source-restored colour bands can still contain a baked PS1 staircase even
+when a gap is filled. Its reviewed follow-up uses one registered HD image for
+all eight opaque static layers, the base and their underlay:
+
+```sh
+python build_underlays.py --assets PATH --baseline PACK --out NEW_DIRECTORY --rooms M097 --coherent-static
+```
+
+This mode requires the existing M097 underlay and registered anchor metadata.
+It keeps every native room reference and all animated atlas files. Controller
+coverage plus a three-native-pixel margin retains its existing material in all
+static planes, and is excluded from new underlay coverage. Static foregrounds
+explicitly use their authored HD mattes with palette witnesses instead of being
+clipped to the PS1 staircase. This is a reviewed M097 artwork recipe, not an
+unreviewed global change to every room. The output audit records input hashes.

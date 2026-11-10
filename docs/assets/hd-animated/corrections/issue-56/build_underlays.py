@@ -10,7 +10,9 @@ p.add_argument('--assets',type=Path,required=True)
 p.add_argument('--baseline',type=Path,required=True)
 p.add_argument('--out',type=Path,required=True)
 p.add_argument('--rooms',default='M092,M097,M239',help='Comma-separated subset (default: M092,M097,M239); select unmarked rooms')
+p.add_argument('--coherent-static',action='store_true',help='Reviewed M097 only: use one registered HD material for static layers, base and underlay; preserve controlled regions')
 a=p.parse_args()
+if a.coherent_static and set(a.rooms.split(','))!={'M097'}:p.error('--coherent-static requires --rooms M097')
 selected=set(a.rooms.split(','))
 if not selected or not selected<={'M092','M097','M239'}:p.error('Expected --rooms M092,M097,M239 or a subset')
 audit_path=a.out.parent/(a.out.name+'-audit.json')
@@ -23,6 +25,78 @@ tasks=json.loads((a.assets/'tasks.json').read_text())['tasks']
 records={r['key']:r for r in manifest['atlases']}
 audit=[]
 sha=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
+def coherent_static_room():
+ # A cutout mask cannot repair a different material baked into its underlay.
+ # Reuse one registered image at identical room coordinates, and retain the
+ # original controller neighbourhoods in every plane. This is art-only and
+ # explicitly limited to the reviewed M097; it is not an automatic remaster.
+ root=a.assets;base=a.baseline;out=a.out
+ def extra(path):
+  entry=dict(file=path.name,sha256=sha(path))
+  for old in manifest.setdefault('extras',[]):
+   if old['file']==path.name:old.update(entry);return
+  manifest['extras'].append(entry)
+ ts=[t for t in json.loads((root/'tasks.json').read_text())['tasks'] if t['room']=='M097' and t['group']==0];w,h=ts[0]['size'];selected=[t for t in ts if t['entry'] in [0,1,2,3,4,5,6,11]]
+ if len(selected)!=8 or any(t.get('control') is not None or t.get('controls') or any(m.get('semi',False) for m in t['tile_meta']) for t in selected):raise ValueError('Expected eight opaque static M097 layers')
+ def read(key):
+  p=base/records[key]['file'];image=np.array(Image.open(p).convert('RGBA'));return image[:image.shape[0]//2] if p.suffix.lower()!='.webp' else image
+
+ def unpack(t):
+  mat=read(t['key']);cols=mat.shape[1]//68;world=np.zeros((h*4,w*4,4),np.uint8);native=np.zeros((h,w),np.uint16)
+  for i,((x,y),ref) in enumerate(zip(t['tiles'],np.load(root/'refs'/t['ref']))):
+   ax=i%cols*68+2;ay=i//cols*68+2;world[y*4:y*4+64,x*4:x*4+64]=mat[ay:ay+64,ax:ax+64];native[y:y+16,x:x+16]=ref
+  return world,native
+
+ def save(t,world):
+  mat=read(t['key']).copy();cols=mat.shape[1]//68
+  for i,(x,y) in enumerate(t['tiles']):
+   ax=i%cols*68;ay=i//cols*68;mat[ay:ay+68,ax:ax+68]=np.pad(world[y*4:y*4+64,x*4:x*4+64],((2,2),(2,2),(0,0)),mode='edge')
+  ref=np.array(Image.open(base/(t['key']+'.ref.png')).convert('RGBA'));(out/(t['key']+'.webp')).unlink(missing_ok=True);p=out/(t['key']+'.png');p.unlink(missing_ok=True);Image.fromarray(np.concatenate((mat,ref),axis=0)).save(p)
+  records[t['key']].update(file=p.name,atlas_sha256=sha(p),pixel_sha256=hashlib.sha256(np.concatenate((mat,ref),axis=0).tobytes()).hexdigest(),compressed_bytes=p.stat().st_size+(out/(t['key']+'.ref.png')).stat().st_size)
+
+ anchor=next(v for v in json.loads((root/'anchor-views.json').read_text()) if v['room']=='M097' and v['group']==0);aid=anchor['id'];v=next(v for v in json.loads((root/'views.json').read_text()) if v['room']=='M097' and v['group']==0);aw,ah=v['active_size'];x0,y0,x1,y1=v['active_bbox']
+ alignment=json.loads((root/'anchor-alignment.json').read_text())['anchors'];registration=next(x for x in alignment if x['id']==aid)
+ if registration['status']!='global affine registered':raise ValueError('M097 requires a reviewed registered anchor')
+ ai=np.array(Image.open(root/'registered-anchors'/(aid+'.png')).convert('RGB').resize((aw*4,ah*4),Image.Resampling.LANCZOS));sr=np.array(Image.open(root/'source-sr-full'/(aid+'.png')).convert('RGB'));illum=np.clip((cv2.GaussianBlur(sr.astype(np.float32),(0,0),16)+8)/(cv2.GaussianBlur(ai.astype(np.float32),(0,0),16)+8),.4,2.5);ai=np.uint8(np.clip(np.rint(ai*illum),0,255));canvas=np.zeros((h*4,w*4,3),np.uint8);canvas[y0*4:y1*4,x0*4:x1*4]=ai
+ dynamic=np.zeros((h,w),np.uint8)
+ for t in ts:
+  if t['control'] is None and not t['controls']:continue
+  for (x,y),ref in zip(t['tiles'],np.load(root/'refs'/t['ref'])):dynamic[y:y+16,x:x+16]|=(ref!=0).astype(np.uint8)
+ dynamic=cv2.dilate(dynamic,np.ones((7,7),np.uint8));dynamic=np.repeat(np.repeat(dynamic,4,0),4,1)!=0
+ fg=np.zeros((h*4,w*4),np.uint8)
+ for t in selected:
+  world,native=unpack(t);mask=np.repeat(np.repeat((native!=0).astype(np.uint8),4,0),4,1);fg|=mask;world[~dynamic,:3]=canvas[~dynamic];save(t,world)
+  p=out/(t['key']+'-matte.bin');p.unlink(missing_ok=True);p.write_bytes(b'PEM1');extra(p)
+ back=next(t for t in ts if t['entry']==16);background,bg=unpack(back);background[~dynamic,:3]=canvas[~dynamic];save(back,background)
+ geometry='b1c7435335ee7113';descriptor=(base/(geometry+'-under.bin')).read_bytes();group,count,key,left,right,top,bottom=struct.unpack_from('<IIQiiii',descriptor,8);cells=[struct.unpack_from('<hh',descriptor,40+i*4) for i in range(count)];old=read(f'{key:016x}');cols=old.shape[1]//68;under=np.zeros((h*4,w*4,4),np.uint8)
+ for i,(x,y) in enumerate(cells):
+  ax=i%cols*68+2;ay=i//cols*68+2;under[y*4:y*4+64,x*4:x*4+64]=old[ay:ay+64,ax:ax+64]
+ fill=(cv2.dilate(fg,np.ones((17,17),np.uint8))!=0)&~dynamic;under[fill,:3]=canvas[fill];under[fill,3]=255
+ cells=[(x,y) for y in range(0,h,16) for x in range(0,w,16) if under[y*4:y*4+64,x*4:x*4+64,3].any()];cols=min(16,len(cells));rows=(len(cells)+cols-1)//cols;atlas=np.zeros((rows*68,cols*68,4),np.uint8)
+ for i,(x,y) in enumerate(cells):atlas[i//cols*68:i//cols*68+68,i%cols*68:i%cols*68+68]=np.pad(under[y*4:y*4+64,x*4:x*4+64],((2,2),(2,2),(0,0)),mode='edge')
+ p=out/(f'{key:016x}'+'.png');p.unlink(missing_ok=True);(out/(f'{key:016x}'+'.webp')).unlink(missing_ok=True);Image.fromarray(np.concatenate((atlas,np.zeros_like(atlas)),axis=0)).save(p)
+ p=out/(geometry+'-under.bin');p.unlink();p.write_bytes(struct.pack('<4sI',b'PEW1',1)+struct.pack('<IIQiiii',group,len(cells),key,left,right,top,bottom)+b''.join(struct.pack('<hh',x,y) for x,y in cells))
+
+ refpath=out/(f'{key:016x}'+'.ref.png');refpath.unlink(missing_ok=True);Image.fromarray(np.zeros_like(atlas)).save(refpath)
+ image=out/(f'{key:016x}'+'.png');records[f'{key:016x}'].update(file=image.name,atlas_sha256=sha(image),reference_sha256=sha(refpath),pixel_sha256=hashlib.sha256(np.concatenate((atlas,np.zeros_like(atlas)),axis=0).tobytes()).hexdigest(),compressed_bytes=image.stat().st_size+refpath.stat().st_size)
+ extra(out/(geometry+'-under.bin'))
+ manifest['development_candidate']='M097-coherent-static-v1';manifest['image_format']='mixed-png-webp'
+ path=out/'manifest.json';path.unlink()
+ manifest['image_bytes']=sum(p.stat().st_size for p in out.iterdir() if p.is_file())
+ manifest['distribution_bytes']=manifest['image_bytes']
+ for _ in range(16):
+  data=json.dumps(manifest,separators=(',',':')).encode();total=manifest['image_bytes']+len(data)
+  if total==manifest['distribution_bytes']:break
+  manifest['distribution_bytes']=total
+ else:raise ValueError('Manifest byte count did not converge')
+ path.write_bytes(data)
+ audit_path.write_text(json.dumps(dict(room='M097',method='One registered HD source for all opaque static layers, base and underlay',anchor=aid,registered_sha256=sha(root/'registered-anchors'/(aid+'.png')),lighting_source_sha256=sha(root/'source-sr-full'/(aid+'.png')),source_manifest_sha256=sha(base/'manifest.json'),static_entries=[t['entry'] for t in selected],dynamic_context_protected_hd_pixels=int(dynamic.sum()),native_room_references_unchanged=True),indent=2))
+
+if a.coherent_static:
+ coherent_static_room()
+ print(audit_path)
+ raise SystemExit(0)
+
 for room,base_entry,geometry in [('M092',12,'2c48651307e4dc15'),('M097',16,'b1c7435335ee7113'),('M239',6,'60de4207704ba290')]:
  if room not in selected:continue
  t=next(t for t in tasks if t['room']==room and t['group']==0 and t['entry']==0)
