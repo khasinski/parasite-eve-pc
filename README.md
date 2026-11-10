@@ -13,6 +13,8 @@ Download the game from [GitHub Releases](https://github.com/khasinski/parasite-e
 This is an early alpha; see the release notes for available platforms and known issues.
 See the [changelog](CHANGELOG.md) for changes.
 
+Works with [RecompLauncher](https://recomplauncher.com): it installs and updates the game from these releases and sets it up with your Disc 1 image.
+
 You need your own **North American CUE/BIN images**. Game data is not included.
 Keep each CUE file next to its BIN file.
 
