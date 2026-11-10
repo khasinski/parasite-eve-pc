@@ -82,11 +82,17 @@ class RuleTest(unittest.TestCase):
 
 
 class PackTest(unittest.TestCase):
+    """Measures the pack PACK_ENV names. test_it_box_fit.py runs it for the Italian pack."""
+    PACK_ENV = "PE_TEST_ES_PACK"
+    NOT_THEIR_BOX = NOT_THEIR_BOX
+    DRAWN_AT_LEAST = 50             # letters the pack draws the patch's way (Spanish: 91)
+    MEASURED_AT_LEAST = 1900        # dialogue pages the pack translates (Spanish: 1975)
+
     @classmethod
     def setUpClass(cls):
-        disc, pack = os.environ.get("PE_TEST_DISC"), os.environ.get("PE_TEST_ES_PACK")
+        disc, pack = os.environ.get("PE_TEST_DISC"), os.environ.get(cls.PACK_ENV)
         if not disc or not pack or not Path(disc).is_file() or not Path(pack).is_file():
-            raise unittest.SkipTest("needs PE_TEST_DISC (USA disc 1) and PE_TEST_ES_PACK")
+            raise unittest.SkipTest(f"needs PE_TEST_DISC (USA disc 1) and {cls.PACK_ENV}")
         cls.out = Path(tempfile.mkdtemp())
         subprocess.run([sys.executable, "-I", str(HERE / "extract_text.py"), disc, "--out", str(cls.out)],
                        check=True, capture_output=True)
@@ -99,7 +105,7 @@ class PackTest(unittest.TestCase):
         gt.PACK_DRAWN.clear()
 
     def test_pages_stay_on_screen_where_the_english_does(self):
-        self.assertGreater(len(self.widths), 50, "the pack draws its letters the patch's way")
+        self.assertGreaterEqual(len(self.widths), self.DRAWN_AT_LEAST, "the pack draws its letters the patch's way")
         english_pages = {e["key"]: layout.screens(bytes.fromhex(e["raw"])) for e in self.english
                          if e["key"].startswith("dlg/") and (e["boxes"] or e["boxes_possible"])
                          and pelang.fnv1a(e["key"]) in self.pack}
@@ -120,8 +126,8 @@ class PackTest(unittest.TestCase):
                 past[key.split("/")[1]].append(key)
         print(f"\n{checked} dialogue pages measured; past a box's rectangle (on screen) where the English "
               f"isn't: {sum(map(len, past.values()))} ({', '.join(f'{b} {len(k)}' for b, k in sorted(past.items()))})")
-        self.assertGreater(checked, 1900)
-        self.assertEqual([p for p in lost if p not in NOT_THEIR_BOX], [],
+        self.assertGreaterEqual(checked, self.MEASURED_AT_LEAST)
+        self.assertEqual([p for p in lost if p not in self.NOT_THEIR_BOX], [],
                          "off screen in a box where the English stays on screen")
 
 

@@ -1,9 +1,9 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
-chinese and spanish, original-game-text-renderer-chinese and -spanish.)
+chinese, spanish and italian, original-game-text-renderer-chinese, -spanish and -italian.)
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -114,6 +114,15 @@ Checks, each from pe_mods.log and frame dumps:
              Not checked: later Disc 1 boxes and the status panel (the pack's pages and box endings move
              the route; the first box and the name entry are the fixed moments), and boxes past the first
              page of an entry.
+  italian    The same checks for the Italian pack made from the USA-disc fan patch, at PE_TEST_IT_PACK.
+             The patch redraws only à è é ì ò ù (each with its own width); the pack draws the game's
+             other letters as the game does, so a line is predicted from the pack's six pictures and the
+             game's own letters read from the disc. Its first pages are as many as English's, so a New
+             Game reaches the name entry by English's route (the grid: the game's letters, its {g4D}
+             cell empty). Its pictures are the title screen's; none is on the Disc 2 route, whose frames
+             still equal those of Disc 2 with the pieces written in.
+             localization/tests/test_it_matches_patch.py checks the pack's text against the patched
+             game itself, every row.
 """
 import binascii
 import csv
@@ -128,6 +137,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import typing
 
 SELECT, START, UP, DOWN, TRIANGLE, CROSS = 1, 8, 16, 64, 4096, 16384
 NEW_GAME = [(10000, START), (10010, 0), (11000, UP), (11010, 0), (11500, CROSS), (11510, 0)]
@@ -613,6 +623,28 @@ def disc2_steps():
 
 
 DISC2_BOXES = {f'box{n:03d}': f'dlg/M275/{n:03d}' for n in range(8, 13)}   # "Daniel: ¡{name}!" ...
+# The Italian pack's first pages are as many as English's, so English's route (MENU_STEPS) reaches
+# its name entry.
+ITALIAN_STEPS = MENU_STEPS[:MENU_STEPS.index((22450, 'grid', f'advance 10 {CROSS}'))] + [(22450, 'grid', None)]
+
+
+class FanPack(typing.NamedTuple):
+    """What part spanish and part italian check for one fan patch's pack (see the module notes)."""
+    part: str
+    env: str
+    steps: list                      # a New Game to the name entry, its frame kept as 'grid'
+    drawn_at_least: int              # letters the pack draws with the patch's pictures
+    grid_letters: str                # letters the patch's name grid must offer
+    game_letters: bool               # the patch draws the game's other letters as the game does
+    title_words: tuple | None        # where the title screen's words change (None: somewhere)
+    disc2_picture: str | None        # a frame of the Disc 2 route showing a picture the patch redrew
+
+
+SPANISH = FanPack('spanish', 'PE_TEST_ES_PACK', SPANISH_STEPS, 60, 'ÑñÜüÁÉÍÓÚáéíóú¿¡', False, PRESS_START,
+                  'day-card')
+# The Italian patch redraws only à è é ì ò ù; its pictures are the title screen's and the opening's,
+# none on the Disc 2 route.
+ITALIAN = FanPack('italian', 'PE_TEST_IT_PACK', ITALIAN_STEPS, 6, '', True, None, None)
 
 
 def run_disc2(game, discs, work, pack):
@@ -662,9 +694,10 @@ def pack_box_line(codes, drawn):
 
 def menu_letter(cell, metrics, digit):
     """{(x, row): 1} of one letter as the menus draw it: cut by its metrics byte (width << 4 | first
-    column), a digit half a spacing further right than a letter (see drawn_line)."""
+    column), its first column at the pen, a digit half a spacing further right than a letter (see
+    drawn_line, whose letters start at column 1)."""
     first, width = metrics & 15, metrics >> 4
-    x0 = (2 if digit else 1) // 2 - 1
+    x0 = (2 if digit else 1) // 2 - first
     return {(x0 + p % 12, p // 12) for p, v in enumerate(cell) if v == 1 and first <= p % 12 < first + width}
 
 
@@ -733,12 +766,37 @@ def pieces_written_in(cue, pieces, out):
     return str(sheet), len(writes)
 
 
+def game_letters(cue, localization):
+    """The game's own letters on `cue` as drawn_records() gives a pack's: code -> (dialogue advance,
+    menu metrics byte, 144 values), for the codes below 0x4D."""
+    sys.path.insert(0, str(localization))
+    from petext import font, gametext as gt, patchimport
+    from petext.disc import Game
+    disc = Game(cue)
+    try:
+        pal, width, _, px = font.page(disc, font.PAGE0_ENTRY)
+        metrics = patchimport.menu_metrics(disc)
+        return {code: (gt.ADVANCE[code], metrics[code], list(patchimport._layered(pal, font.cell(px, width, code))))
+                for code in range(0x4D)}
+    finally:
+        disc.disc.f.close()
+
+
 def spanish_patch(game, discs, out, localization):
-    """Part spanish (see the module notes); 77 when PE_TEST_ES_PACK isn't there, and after the Disc 1
-    checks when PE_TEST_DISC2 isn't set or the pack has no pictures (a plain pack)."""
-    path = os.getenv('PE_TEST_ES_PACK')
+    return fan_patch(game, discs, out, localization, SPANISH)
+
+
+def italian_patch(game, discs, out, localization):
+    return fan_patch(game, discs, out, localization, ITALIAN)
+
+
+def fan_patch(game, discs, out, localization, fan):
+    """Part spanish or italian (see the module notes); 77 when the pack (fan.env) isn't there, and
+    after the Disc 1 checks when PE_TEST_DISC2 isn't set or the pack has no pictures (a plain pack)."""
+    part = fan.part
+    path = os.getenv(fan.env)
     if not path or not Path(path).is_file():
-        print('SKIP spanish: PE_TEST_ES_PACK is not set or not a file (the Spanish pack from the fan patch)')
+        print(f'SKIP {part}: {fan.env} is not set or not a file (the {part.title()} pack from the fan patch)')
         return 77
     sys.path.insert(0, str(localization))
     import pelang  # noqa: E402 (the localization folder is on the path only now)
@@ -748,11 +806,13 @@ def spanish_patch(game, discs, out, localization):
     code, name, entries = pelang.read_pack(path)
     label = f'{name} ({code})'
     text = pelang.pack_bytes(path)
-    drawn = drawn_records(text)
-    check(len(drawn) > 60, f'{path}: only {len(drawn)} letters drawn with its own pictures; not a fan patch pack')
+    own = drawn_records(text)
+    check(len(own) >= fan.drawn_at_least, f'{path}: only {len(own)} letters drawn with its own pictures; '
+                                          "not this fan patch's pack")
+    drawn = {**game_letters(discs[0], localization), **own} if fan.game_letters else own
     pack = (code, name, None, path)
     (out / 'packs').mkdir(parents=True, exist_ok=True)
-    plain = out / 'packs' / 'spanish-text.pelang'       # the same pack without its pictures
+    plain = out / 'packs' / f'{part}-text.pelang'       # the same pack without its pictures
     plain.write_bytes(text)
     plain_pack = (code, name, None, plain)
     pieces = []
@@ -770,16 +830,16 @@ def spanish_patch(game, discs, out, localization):
         return log
 
     # Disc 1, New Game: the first box, then the name entry.
-    scene = run_fixed(game, discs, out / 'spanish-scene', [(FIRST_BOX, 'first', None)],
+    scene = run_fixed(game, discs, out / f'{part}-scene', [(FIRST_BOX, 'first', None)],
                       pack=make_chinese_scene(localization, out / 'packs'), pad=NEW_GAME)
-    work = run_fixed(game, discs, out / 'spanish', SPANISH_STEPS, pack=pack, pad=NEW_GAME)
+    work = run_fixed(game, discs, out / part, fan.steps, pack=pack, pad=NEW_GAME)
     log = no_placeholders(work, 'disc 1')
     check(f"text: {label}'s stretches in use" in log, f'no stretch drew with {label}: {work}')
-    own = re.search(rf'text: {re.escape(label)} draws (\d+) letters with its own pictures and widths', log)
-    check(own and int(own[1]) >= 60, f"the pack's own letter pictures are not in use: {work}")
+    in_use = re.search(rf'text: {re.escape(label)} draws (\d+) letters with its own pictures and widths', log)
+    check(in_use and int(in_use[1]) >= fan.drawn_at_least, f"the pack's own letter pictures are not in use: {work}")
     checked = check_pack_box(work, 'first', scene, entries[pelang.fnv1a('dlg/M001/009')], drawn)
     check(checked >= 60, f'only {checked} letters of the first box checked: {work}')
-    print(f'PASS spanish first box: {label} loaded, no "?", and the {checked} letters of the first box '
+    print(f'PASS {part} first box: {label} loaded, no "?", and the {checked} letters of the first box '
           "lit exactly the patch's letter pictures at the patch's widths")
 
     # The name entry's grid (sys/117): every cell the pack's letter, two-byte name letters (Ñ ñ Ü ü
@@ -804,9 +864,9 @@ def spanish_patch(game, discs, out, localization):
             cells.append((raw[i], None))
             i += 1
     check(len(cells) == 99, f'sys/117 has {len(cells)} cells, not 9 rows of {GRID_COLUMNS}')
-    spanish = 'ÑñÜüÁÉÍÓÚáéíóú¿¡'
-    check(all(ch in {letter for _, letter in cells} for ch in spanish),
-          f'the pack\'s grid lacks some of {spanish}: {[letter for _, letter in cells if letter]}')
+    wanted = fan.grid_letters
+    check(all(ch in {letter for _, letter in cells} for ch in wanted),
+          f'the pack\'s grid lacks some of {wanted}: {[letter for _, letter in cells if letter]}')
     want, icon = set(), None
     for k, (cell_code, _) in enumerate(cells):
         row, col = divmod(k, GRID_COLUMNS)
@@ -821,31 +881,32 @@ def spanish_patch(game, discs, out, localization):
                  for x, y in menu_letter(picture, metrics, cell_code <= 9)}
     grid_lit = {(x + GRID_CELLS[0], y + GRID_CELLS[1]) for y, row in enumerate(bright(work, 'grid', GRID_CELLS))
                 for x, v in enumerate(row) if v}
-    check(len(grid_lit) > 1000, f'no name entry grid at vblank {SPANISH_STEPS[-1][0]}: {work}')
+    check(len(grid_lit) > 1000, f'no name entry grid at vblank {fan.steps[-1][0]}: {work}')
     dx = min(x for x, _ in grid_lit) - min(x for x, _ in want)
     dy = min(y for _, y in grid_lit) - min(y for _, y in want)
     want = {(x + dx, y + dy) for x, y in want}
     if icon:                                   # the game's own icon in its cell is not the pack's
         x0, y0 = dx + GRID_PITCH * icon[1], dy + GRID_PITCH * icon[0]
         grid_lit = {(x, y) for x, y in grid_lit if not (x0 - 4 <= x < x0 + 12 and y0 - 4 <= y < y0 + 12)}
-    check(grid_lit == want, f"the name entry grid is not the pack's Spanish grid in its letter pictures "
+    check(grid_lit == want, f"the name entry grid is not the pack's grid in its letter pictures "
                             f'(missing {sorted(want - grid_lit)[:4]}, extra {sorted(grid_lit - want)[:4]}): {work}')
-    print(f"PASS spanish name entry: all {len(cells) - (1 if icon else 0) - sum(c == 0x0F for c, _ in cells)} "
-          f"cells of the Spanish grid ({spanish} among them) lit exactly the pack's letter pictures, cut as the "
+    among = f' ({wanted} among them)' if wanted else ''
+    print(f"PASS {part} name entry: all {len(cells) - (1 if icon else 0) - sum(c == 0x0F for c, _ in cells)} "
+          f"cells of the patch's grid{among} lit exactly the pack's letter pictures, cut as the "
           f'menus cut them, {GRID_PITCH} px apart (at x {dx}, y {dy})')
 
     # The pictures: the title screen with the pack on the player's disc against the game on a copy of
     # the disc with the pack's pieces written in (as the patched disc holds them) and the pack's text
     # alone: the same frame, pixel for pixel; with the text alone on the player's disc, English words.
     if not pieces:
-        skipped.append('pictures (a plain pack has none; PE_TEST_ES_PACK names the zipped player file for them)')
+        skipped.append(f'pictures (a plain pack has none; {fan.env} names the zipped player file for them)')
     else:
         log_pieces = re.compile(rf'{re.escape(label)}, \d+ entries, {len(pieces)} picture pieces')
         try:
             written = [pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')]
             check(written[0][1] == len(pieces), f'only {written[0][1]} of {len(pieces)} pieces land on Disc 1')
             title = [(TITLE_AT, 'title', None)]
-            frames = {which: run_fixed(game, use, out / f'spanish-title-{which}', title, pack=p)
+            frames = {which: run_fixed(game, use, out / f'{part}-title-{which}', title, pack=p)
                       for which, use, p in (('pack', discs[:1], pack), ('written-in', [written[0][0]], plain_pack),
                                             ('text-only', discs[:1], plain_pack))}
             check(log_pieces.search(mods_log(frames['pack'])) and 'its pictures are in use' in mods_log(frames['pack']),
@@ -855,10 +916,11 @@ def spanish_patch(game, discs, out, localization):
             check(frame(frames['pack'], 'title') == frame(frames['written-in'], 'title'),
                   f'the title screen with the pack is not the one of the disc with its pieces written in: '
                   f'{frames["pack"]} vs {frames["written-in"]}')
-            check(crop(frames['pack'], 'title', PRESS_START) != crop(frames['text-only'], 'title', PRESS_START),
+            words = (lambda w: crop(w, 'title', fan.title_words)) if fan.title_words else (lambda w: frame(w, 'title'))
+            check(words(frames['pack']) != words(frames['text-only']),
                   f'the title screen\'s words are still English: {frames["pack"]}')
-            print(f'PASS spanish pictures, disc 1: the {len(pieces)} pieces loaded; the title screen\'s words are the '
-                  'Spanish picture, pixel for pixel as on the disc with the pieces written in')
+            print(f'PASS {part} pictures, disc 1: the {len(pieces)} pieces loaded; the title screen\'s words are the '
+                  "patch's picture, pixel for pixel as on the disc with the pieces written in")
         finally:
             shutil.rmtree(out / 'discs', ignore_errors=True)
 
@@ -875,7 +937,7 @@ def spanish_patch(game, discs, out, localization):
             aya += card[at_:at_ + 1]
             at_ += 1
         route = disc2_steps()
-        work, room = run_disc2(game, discs, out / 'spanish-disc2', pack)
+        work, room = run_disc2(game, discs, out / f'{part}-disc2', pack)
         no_placeholders(work, 'disc 2')
         # the night behind the ship's boxes has no bright pixel on their lines: checked with no scene
         checked = 0
@@ -883,14 +945,14 @@ def spanish_patch(game, discs, out, localization):
             check(lit(work, frame_label, BOX) > 100, f'no box at {frame_label} (has the route changed?): {work}')
             checked += check_pack_box(work, frame_label, None, raw, drawn, aya)
         check(checked >= 100, f'only {checked} letters of the Disc 2 boxes checked: {work}')
-        print(f'PASS spanish disc 2: Continue from a Day 6 save plays on Disc 2 (in room {room} after the boxes); '
+        print(f'PASS {part} disc 2: Continue from a Day 6 save plays on Disc 2 (in room {room} after the boxes); '
               f"no \"?\", and the {checked} letters of {len(boxes)} boxes on the ship lit exactly the patch's letter "
               'pictures at its widths')
         if pieces:
             try:
                 written = pieces_written_in(discs[1], pieces, out / 'discs' / 'disc2')
                 # the real Disc 1 with the copy of Disc 2: the card can only be Spanish if it came from Disc 2
-                frames = {which: run_fixed(game, use, out / f'spanish-disc2-{which}', route, pack=p,
+                frames = {which: run_fixed(game, use, out / f'{part}-disc2-{which}', route, pack=p,
                                            pad=CONTINUE, card=card)
                           for which, use, p in (('written-in', [discs[0], written[0]], plain_pack),
                                                 ('text-only', discs, plain_pack))}
@@ -898,14 +960,18 @@ def spanish_patch(game, discs, out, localization):
                     check(frame(work, frame_label) == frame(frames['written-in'], frame_label),
                           f'{frame_label}: the frame with the pack is not the one of Disc 2 with the pieces written '
                           f'in: {work} vs {frames["written-in"]}')
-                check(frame(work, 'day-card') != frame(frames['text-only'], 'day-card'),
-                      f"the Day 6 title card is still English: {work}")
-                print("PASS spanish pictures, disc 2: the Day 6 title card is the Spanish picture read from Disc 2, "
-                      'pixel for pixel as on Disc 2 with the pieces written in (and so are the boxes\' frames)')
+                if fan.disc2_picture:
+                    check(frame(work, fan.disc2_picture) != frame(frames['text-only'], fan.disc2_picture),
+                          f'{fan.disc2_picture} is still English: {work}')
+                    print(f"PASS {part} pictures, disc 2: {fan.disc2_picture} is the patch's picture read from Disc 2, "
+                          'pixel for pixel as on Disc 2 with the pieces written in (and so are the boxes\' frames)')
+                else:
+                    print(f"PASS {part} pictures, disc 2: the route's frames are pixel for pixel those of Disc 2 with "
+                          "the pieces written in (none of the patch's pictures is on this route)")
             finally:
                 shutil.rmtree(out / 'discs', ignore_errors=True)
     if skipped:
-        print('SKIP spanish: not checked: ' + '; '.join(skipped))
+        print(f'SKIP {part}: not checked: ' + '; '.join(skipped))
         return 77
     return 0
 
@@ -1228,7 +1294,7 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
     if out.exists() and any(out.iterdir()):
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
-    for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch)):
+    for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

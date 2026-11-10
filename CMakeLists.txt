@@ -689,6 +689,14 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/text-renderer-spanish-evidence spanish)
             set_tests_properties(original-game-text-renderer-spanish PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The same for the Italian pack from the USA-disc fan patch: its six accented letters in the
+            # patch's pictures and widths, the rest the game's own, on Disc 1 and Disc 2. PE_TEST_IT_PACK
+            # names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-italian COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-italian-evidence italian)
+            set_tests_properties(original-game-text-renderer-italian PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
         endif()
         # A fan patch made for the Japanese discs read for the USA-disc port: two patches of the
         # test's own on PE_TEST_JA_DISC (Japanese Disc 1); PE_TEST_DISC adds the line-up check.
@@ -725,6 +733,20 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/localization/tests/test_es_both_discs.py)
         set_tests_properties(localization-spanish-both-discs PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 240 LABELS "game-assets;localization")
+        # The Italian pack from the USA-disc fan patch stays on screen wherever the English does.
+        # Needs PE_TEST_DISC and PE_TEST_IT_PACK, else skipped.
+        add_test(NAME localization-italian-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_it_box_fit.py)
+        set_tests_properties(localization-italian-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The Italian pack against the patched game itself: the real patch applied to a copy of each
+        # disc; every row, the six accented letters and every picture piece as the patched PS1 game
+        # has them. Needs PE_TEST_IT_PATCH, PE_TEST_IT_PACK and PE_TEST_DISC (PE_TEST_DISC2 adds
+        # Disc 2), else skipped.
+        add_test(NAME localization-italian-matches-patch COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_it_matches_patch.py)
+        set_tests_properties(localization-italian-matches-patch PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 300 LABELS "game-assets;localization")
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77

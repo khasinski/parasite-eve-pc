@@ -329,6 +329,16 @@ class DialogueWidthsTest(unittest.TestCase):
         self.assertEqual(len(widths), patchimport.BYTE_WIDTHS)
         self.assertIn("one width a letter", how)
 
+    def test_one_width_a_letter_written_with_a_nop(self):
+        # The Italian patch writes the same moves another way: addu s7,zero,a2 for addu s7,a2,zero,
+        # and nop where the Spanish one leaves v0 as it is with addu v0,v0,zero.
+        exe = own_widths(boot_program(), {0x10: 7, 0x4D: 6})
+        struct.pack_into("<I", exe, 0x284E4, 0x0006B821)
+        struct.pack_into("<I", exe, 0x29074, 0)
+        widths, how = patchimport.dialogue_widths(boot_program(), exe)
+        self.assertEqual((widths[0x10], widths[0x4D]), (7, 6))
+        self.assertIn("one width a letter", how)
+
     def test_an_unknown_reading_or_another_program_reads_nothing(self):
         half = own_widths(boot_program(), {})
         struct.pack_into("<I", half, 0x29074, patchimport.WIDTH_READS[0x29074][0])

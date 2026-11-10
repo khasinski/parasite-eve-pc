@@ -717,8 +717,9 @@ and F1 > Fonts. Either disc gives the same text. Nothing here goes into the repo
 - **Letters' look**: with `--patch-letters` the import writes each letter the patch draws its own
   way (the game's letters it redrew, its accented letters) as its picture, its dialogue advance and
   its menu metrics, from the patched font page, the patched boot program's width table (the game's
-  two bytes a letter, or the one byte a letter some patches switch the code to) and the patched
-  menu metrics. `build --patch-letters` puts them in the pack as redrawn letters (see Letter tables)
+  two bytes a letter, or the one byte a letter some patches switch the code to, however the patch
+  writes the moves that switch it: the Spanish and Italian patches write them differently) and the
+  patched menu metrics. `build --patch-letters` puts them in the pack as redrawn letters (see Letter tables)
   and lays the text out with those widths, so lines break where the patch broke them. The file
   holds the patch's art, so like the rest it stays out of the repository.
 - **Symbols of the patch's own** (a wrench for "Tool"): name the code like a letter, e.g.

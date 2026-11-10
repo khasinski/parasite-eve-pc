@@ -313,6 +313,22 @@ WIDTH_READS = {0x284E4: (0x0006B840, 0x00C0B821),   # sll s7,a2,1  -> move s7,a2
 BYTE_WIDTHS = 2 * len(gt.ADVANCE) - 1               # codes the one-byte table has room for
 
 
+def _copy(word: int | None) -> tuple[int, int] | None:
+    """(register written, register copied) for a MIPS word that only copies one register to
+    another (addu/or with zero, sll by 0), the way patches write a move; None for anything else.
+    A copy to the same register, or to zero, changes nothing and reads as (0, 0), as nop does."""
+    if word is None or word >> 26 != 0:
+        return None
+    rs, rt, rd, sa, funct = (word >> 21) & 31, (word >> 16) & 31, (word >> 11) & 31, (word >> 6) & 31, word & 63
+    if funct in (0x21, 0x25) and sa == 0 and 0 in (rs, rt):        # addu / or rd, x, zero (either way round)
+        src = rs or rt
+    elif funct == 0 and sa == 0 and rs == 0:                       # sll rd, rt, 0 (nop is sll zero, zero, 0)
+        src = rt
+    else:
+        return None
+    return (0, 0) if rd in (0, src) else (rd, src)
+
+
 def dialogue_widths(original: bytes, translated: bytes) -> tuple[dict[int, int] | None, str]:
     """(code -> how far the patched dialogue box moves after it, how the patch's table was read).
     None when the boot program isn't the USA one, or reads its widths in a way not known here."""
@@ -324,7 +340,7 @@ def dialogue_widths(original: bytes, translated: bytes) -> tuple[dict[int, int] 
     table = translated[WIDTHS_AT:WIDTHS_AT + len(game)]
     if reads == [w[0] for w in WIDTH_READS.values()]:
         return {c: table[2 * c + 1] - table[2 * c] for c in range(len(gt.ADVANCE))}, "the game's table (a gap and a width a letter)"
-    if reads == [w[1] for w in WIDTH_READS.values()]:
+    if all(r == w[1] or (_copy(r) is not None and _copy(r) == _copy(w[1])) for r, w in zip(reads, WIDTH_READS.values())):
         return {c: table[1 + c] for c in range(BYTE_WIDTHS)}, "one width a letter, the patch's own table"
     return None, "the patch reads its widths in a way not known here"
 
