@@ -709,6 +709,13 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/localization/tests/test_es_box_fit.py)
         set_tests_properties(localization-spanish-box-fit PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 180 LABELS "game-assets;localization")
+        # The Spanish pack on both USA discs: every picture piece lands on them, and Disc 2's
+        # dialogue is Disc 1's (so the box-fit check covers it). Needs PE_TEST_DISC, PE_TEST_DISC2
+        # and PE_TEST_ES_PACK, else skipped.
+        add_test(NAME localization-spanish-both-discs COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_es_both_discs.py)
+        set_tests_properties(localization-spanish-both-discs PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;localization")
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77
