@@ -89,11 +89,28 @@ static int original_hit_on_released_target(void)
         memset(&core, 0, sizeof(core)); target.core = &core;
         g_BattleHitTimer = 0; g_BattleHitPending = 1;
         Battle_ResolveHitOnTimer();
-        if (g_BattleHitPending || (sure_hit ? bits->hitState != 1 : core.panelC_timer != 0x1E)) ok = 0;
+        if (g_BattleHitPending || (sure_hit ? (bits->hitState != 1 || bits->reaction != 2) : core.panelC_timer != 0x1E)) ok = 0;
+    }
+    /* Point blank (distance 0, inside the gun's range): Battle_CheckEvasion rolls
+     * a critical (reaction 3) half the time and a hit (2) otherwise, and the
+     * target's core flags must carry that reaction into the damage formula. */
+    if (ok) {
+        unsigned crits = 0, hits = 0;
+        target.renderObject.target_x = 0; action.range = 1000;
+        active.stateFlags = 0; action.actionCode.actionId = 0;
+        target.core = &core;
+        for (unsigned shot = 0; shot < 400; ++shot) {
+            memset(&core, 0, sizeof(core));
+            g_BattleHitTimer = 0; g_BattleHitPending = 1;
+            Battle_ResolveHitOnTimer();
+            if (bits->hitState != 1) { ok = 0; break; }
+            if (bits->reaction == 3) ++crits; else if (bits->reaction == 2) ++hits;
+        }
+        if (crits < 100 || hits < 100 || crits + hits != 400) ok = 0;
     }
     g_BattleActionQueue[0] = old_slot; g_ActiveActor = old_actor; g_PlayerEntity = old_player;
     g_FieldActorListHead = old_list; g_BattleActionIndex = old_index;
-    if (ok) puts("Original timed hits: released and live targets for single and chained shots passed");
+    if (ok) puts("Original timed hits: released and live targets for single and chained shots, and point-blank critical rolls passed");
     return ok;
 }
 
