@@ -87,7 +87,7 @@ for room,base_entry,geometry in [('M092',12,'2c48651307e4dc15'),('M097',16,'b1c7
   support=(alpha<255)&((native!=0)|(alpha>0))&~valid&safe
   generated=visible.astype(np.uint8)
   master=a.baseline/base_record['file']
-  details=dict(method='nearest original HD background in a two-native-pixel band',source_background=str(master),source_background_sha256=sha(master),max_sampling_distance=float(sample_distance[support].max()))
+  details=dict(method='nearest original HD background in a two-native-pixel band',source_background=str(master),source_background_sha256=sha(master),max_sampling_distance=float(sample_distance[support].max(initial=0)))
  else:
   master=a.assets/'corrections/issue-56'/f'{room}-floor-underlay-v1.png'
   original=np.array(Image.open(a.assets/'composites'/f'{room}-g00-cbase-p00-hd.png').convert('RGB'))
@@ -116,6 +116,47 @@ for room,base_entry,geometry in [('M092',12,'2c48651307e4dc15'),('M097',16,'b1c7
   void=np.all(generated==0,axis=2)
   generated=np.uint8(np.clip(generated.astype(np.int16)+visible-prior,0,255));generated[void]=0
   details=dict(registration=matrix.tolist(),inliers=int(inliers.sum()),residual_p95=float(np.percentile(residual,95)),gain=gain.tolist(),generated_master=str(master),generated_sha256=sha(master),local_boundary_colour_transfer=True)
+ # Other static foregrounds have the same one-native-pixel inter-layer
+ # gaps. Reconstruct a bounded gutter for every opaque static silhouette,
+ # not just the previously reported counter/microscope. Never sample a
+ # transparent/opaque-black placeholder, alter actors or bake a moving layer.
+ static_fg=np.zeros((h,w),np.uint8)
+ for layer in tasks:
+  if layer['room']!=room or layer['group']!=0 or layer['entry']==base_entry:continue
+  if layer.get('control') is not None or layer.get('controls'):continue
+  for i,((x,y),ref) in enumerate(zip(layer['tiles'],np.load(a.assets/'refs'/layer['ref']))):
+   if not layer.get('tile_meta',[{}]*len(layer['tiles']))[i].get('semi',False):
+    static_fg[y:y+16,x:x+16]|=(ref!=0).astype(np.uint8)
+ background_words=np.zeros((h,w),np.uint16)
+ for (x,y),ref in zip(back['tiles'],np.load(a.assets/'refs'/back['ref'])):
+  background_words[y:y+16,x:x+16]=ref
+ edge_valid=np.repeat(np.repeat((background_words!=0)&(background_words!=0x8000),4,0),4,1)
+ extra_support=np.zeros_like(support)
+ if np.any(edge_valid):
+  edge_distance,edge_labels=cv2.distanceTransformWithLabels((~edge_valid).astype(np.uint8),cv2.DIST_L2,5,labelType=cv2.DIST_LABEL_PIXEL)
+  near_static=cv2.dilate(np.repeat(np.repeat(static_fg,4,0),4,1),cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(9,9)))!=0
+  extra_support=near_static&np.repeat(np.repeat(bg==0,4,0),4,1)&(edge_distance<=8)&~support
+  generated[extra_support]=background[edge_valid][np.maximum(edge_labels[extra_support]-1,0)]
+  support|=extra_support
+  # An original opaque-black outline in the base would cover the gutter.
+  # Continue its adjacent HD floor colour only within the same bounded strip.
+  black_edge=near_static&np.repeat(np.repeat(background_words==0x8000,4,0),4,1)&(edge_distance<=8)&(background.max(axis=2)<24)
+  if np.any(black_edge):
+   fixed_background=background.copy()
+   fixed_background[black_edge]=background[edge_valid][np.maximum(edge_labels[black_edge]-1,0)]
+   base_reference=np.array(Image.open(a.baseline/base_record['reference_file']).convert('RGBA'))
+   base_rgba=np.array(Image.open(a.baseline/base_record['file']).convert('RGBA'))[:base_reference.shape[0]].copy()
+   for i,(x,y) in enumerate(back['tiles']):
+    if not np.any(black_edge[y*4:y*4+64,x*4:x*4+64]):continue
+    ax=i%base_columns*68;ay=i//base_columns*68
+    tile=base_rgba[ay+2:ay+66,ax+2:ax+66].copy()
+    tile[:,:,:3]=fixed_background[y*4:y*4+64,x*4:x*4+64]
+    base_rgba[ay:ay+68,ax:ax+68]=np.pad(tile,((2,2),(2,2),(0,0)),mode='edge')
+   path=a.out/(back['key']+'.png');path.unlink(missing_ok=True)
+   combined_base=np.concatenate((base_rgba,base_reference),axis=0);Image.fromarray(combined_base).save(path)
+   old=a.out/base_record['file']
+   if old!=path:old.unlink(missing_ok=True)
+   base_record.update(file=path.name,atlas_sha256=sha(path),pixel_sha256=hashlib.sha256(combined_base.tobytes()).hexdigest())
  r=records[t['key']]
  material=np.array(Image.open(a.baseline/r['file']).convert('RGBA'))
  # WebP material is one plane; a combined PNG contains both.
@@ -161,7 +202,7 @@ for room,base_entry,geometry in [('M092',12,'2c48651307e4dc15'),('M097',16,'b1c7
  descriptor+=b''.join(struct.pack('<hh',x,y) for x,y in cells)
  path=a.out/(geometry+'-under.bin');path.unlink(missing_ok=True);path.write_bytes(descriptor)
  manifest.setdefault('extras',[]).append(dict(file=path.name,sha256=sha(path)))
- audit.append(dict(room=room,geometry=geometry,foreground=t['key'],underlay=key,cells=len(cells),pixels=int(support.sum()),matte="static-authored-long-edges",**details,original_foreground_rgb_exact=True,expanded_pixels=int(expansion.sum()),native_reference_exact=True))
+ audit.append(dict(room=room,geometry=geometry,foreground=t['key'],underlay=key,cells=len(cells),pixels=int(support.sum()),matte="static-authored-long-edges",**details,original_foreground_rgb_exact=True,expanded_pixels=int(expansion.sum()),native_reference_exact=True,static_edge_gutter_pixels=int(extra_support.sum()),static_edge_gutter_max_hd=8))
 manifest['development_candidate']='issue-56-underlays-v2' if 'M092' in selected else 'issue-56-underlays-v1';manifest['image_format']='mixed-png-webp'
 (a.out/'manifest.json').unlink();(a.out/'manifest.json').write_text(json.dumps(manifest,separators=(',',':')))
 audit_path.write_text(json.dumps(audit,indent=2))
