@@ -45,6 +45,7 @@ int Battle_MeleeOnDamage(BattleEntity *target, int damage);
 void Battle_MeleeUpdate(void);
 void Battle_MeleeDraw(void);
 void Battle_MeleeReset(void);
+int Battle_MeleeClubDistance(BattleEntity *target, BattleEntity *player);
 #endif
 
 extern u8 g_BattleActionIndex;

@@ -319,7 +319,13 @@ void Battle_CheckEvasion(BattleEntity *actor, BattleEvasionOutcome *outcome,
 
     action = g_ActiveActor->action;
     if (action->actionCode.actionId == 8) {
+#ifdef PE_MELEE_PROTOTYPE
+        /* Reach is measured to the body (Battle_MeleeClubDistance); the crit bands below keep the
+         * native aim distance, so club crit rates (and the balance sized on them) don't change. */
+        if (Battle_MeleeClubDistance(actor, D_8009D254) * 1000 / range >= 1001) return;
+#else
         if (distance >= 1001) return;
+#endif
         threshold = ((action->turnWord >> 17) & 1) * 20;
         if (distance >= 801) threshold += 5;
         else if (distance >= 501) threshold += 20;
@@ -410,7 +416,11 @@ int Battle_BuildTargetList(void) {
                     if (((entityFlags & 0x2040) != 0x40) && !(entityFlags & 0x4000) &&
                         (candidateCore->hpAlive > 0) && g_BattleTargetIndex < BATTLE_TARGET_CAPACITY) {
                         g_BattleTargetList[g_BattleTargetIndex].actor = candidate;
+#ifdef PE_MELEE_PROTOTYPE
+                        distance = Battle_MeleeClubDistance(candidate, player);   /* = native unless a club */
+#else
                         distance = Battle_CalcDistToPlayer(candidate, player);
+#endif
                         g_BattleTargetList[g_BattleTargetIndex].dist = distance;
                         angle = ratan2(
                             candidate->renderObject.target_x -

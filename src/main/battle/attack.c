@@ -82,7 +82,7 @@ static void Melee_TrackDistance(void)
 
     for (i = MELEE_HISTORY - 1; i > 0; i--)
         meleeTrack.distance[i] = meleeTrack.distance[i - 1];
-    meleeTrack.distance[0] = Battle_CalcDistToPlayer(melee.target, D_8009D254);
+    meleeTrack.distance[0] = Battle_MeleeClubDistance(melee.target, D_8009D254);
     if (meleeTrack.count < MELEE_HISTORY)
         meleeTrack.count++;
 }
@@ -94,7 +94,7 @@ static void Melee_TrackDistance(void)
 static int Melee_PredictInReach(BattleEntity *target, int *predicted)
 {
     int range = AYA_DARKNESS_RANGE;
-    int distance = Battle_CalcDistToPlayer(target, D_8009D254);
+    int distance = Battle_MeleeClubDistance(target, D_8009D254);
     int steps = g_ActiveActor->action->hitTrigger;
 
     if ((g_ActiveActor->stateFlags & AYA_DARKNESS_MASK) != AYA_DARKNESS)
@@ -158,7 +158,7 @@ int Battle_MeleeOnDamage(BattleEntity *target, int damage)
     if (angle > 2048)
         angle = 4096 - angle;
     fprintf(stderr, "club_flank first frame=%d angle=%d damage=%d distance=%d\n", g_BattleFrameCounter, angle,
-            damage, Battle_CalcDistToPlayer(target, D_8009D254));
+            damage, Battle_MeleeClubDistance(target, D_8009D254));
     if (angle < MELEE_SIDE_MIN || angle >= MELEE_SIDE_LIMIT)
         return damage;
 
@@ -238,6 +238,68 @@ static BattleEntity *Melee_FindMutant(void)
     return NULL;
 }
 
+/* Distance on the ground from Aya's position to the nearest surface of `enemy`'s body: its hit
+ * cylinder and every body hit sphere (the ones Scene_UpdateEntityPositions tests for contact),
+ * radii scaled by moveSpeed / 4096. Negative when Aya is inside one. Native club reach is instead
+ * measured to a single aim point (Battle_CalcDistToPlayer), which on a long body can be far from
+ * the part Aya is standing at. Returns a large value when the enemy has no body data. */
+static int Melee_BodyDistance(BattleEntity *enemy, BattleEntity *aya)
+{
+    const RenderObjectEntity *ro = &enemy->renderObject;
+    const RenderAnimationLookupEntry *part;
+    int best = 0x7FFF, i, n;
+
+    for (i = -1, n = ro->header && ro->animation_entries ? ro->header->animation_entry_count : 0; i < n; i++) {
+        int dx, dz, d;
+        part = i < 0 ? &ro->hit_cylinder : &ro->animation_entries[i];
+        if (part->radius <= 0)
+            continue;
+        dx = part->value0 - aya->posX.parts.integer;
+        dz = part->value2 - aya->posZ.parts.integer;
+        d = Math_IntSqrt(dx * dx + dz * dz) - part->radius * enemy->moveSpeed / 4096;
+        if (d < best)
+            best = d;
+    }
+    return best;
+}
+
+/* Club reach measured to the enemy's body instead of its aim point. Native reach is the distance
+ * to the aim point (Battle_CalcDistToPlayer), which sits inside one body sphere, usually at the
+ * front (the amphitheater mutant's is its chest sphere, 276 ahead of its root). From behind a long
+ * body, Aya can touch its back and still be ~650 from that point against a reach of 474: a miss
+ * that looks like a hit. Here the distance is the nearest body surface plus the aim sphere's
+ * radius, or the native distance if smaller. From the front the aim sphere is the nearest part,
+ * so nothing changes there; on every other side the club gets the same reach past contact. It
+ * never exceeds the native distance, so no native hit becomes a miss, and the crit bands, which
+ * read the same per-mille distance, follow it. Applies only while Aya's action is a club swing. */
+int Battle_MeleeClubDistance(BattleEntity *target, BattleEntity *player)
+{
+    const RenderObjectEntity *ro = &target->renderObject;
+    const int aim = Battle_CalcDistToPlayer(target, player);
+    int i, n, aimRadius = -1, best = 0x7FFFFFFF, body;
+
+    if (!g_ActiveActor || !g_ActiveActor->action || g_ActiveActor->action->actionCode.actionId != 8
+        || !ro->header || !ro->animation_entries)
+        return aim;
+    /* The sphere that holds the aim point; with none, keep the native distance. */
+    for (i = 0, n = ro->header->animation_entry_count; i < n; i++) {
+        const RenderAnimationLookupEntry *part = &ro->animation_entries[i];
+        const int r = part->radius * target->moveSpeed / 4096;
+        const int dx = part->value0 - ro->target_x, dz = part->value2 - ro->target_z;
+        const int d = Math_IntSqrt(dx * dx + dz * dz);
+        if (r > 0 && d <= r && d < best) {
+            best = d;
+            aimRadius = r;
+        }
+    }
+    if (aimRadius < 0)
+        return aim;
+    body = Melee_BodyDistance(target, player) + aimRadius;
+    if (body < 0)
+        body = 0;
+    return body < aim ? body : aim;
+}
+
 /* Opt-in per-update trace of the amphitheater mutant's attack (PE_MELEE_TRACE=1): its mode,
  * the attack effect's state (1 = claws live), position, facing, and distance to Aya. */
 static void Melee_TraceEnemy(void)
@@ -252,18 +314,36 @@ static void Melee_TraceEnemy(void)
     if (!enabled || !aya || !g_ActiveActor || (unsigned)g_SceneDispatchToken != amphitheaterScene
         || (enemy = Melee_FindMutant()) == NULL)
         return;
+    {   /* Once a while: the body's shape (root, facing, aim point, hit cylinder and spheres). */
+        static int last = -1000;
+        if (g_BattleFrameCounter - last >= 60 || g_BattleFrameCounter < last) {
+            const RenderObjectEntity *ro = &enemy->renderObject;
+            int i, n = ro->header && ro->animation_entries ? ro->header->animation_entry_count : 0;
+            last = g_BattleFrameCounter;
+            fprintf(stderr, "enemy_body frame=%d root=%d,%d facing=%d aim=%d,%d scale=%d cyl=%d,%d,%d",
+                    g_BattleFrameCounter, enemy->posX.parts.integer, enemy->posZ.parts.integer,
+                    enemy->facingAngle & 0xfff, ro->target_x, ro->target_z, enemy->moveSpeed,
+                    ro->hit_cylinder.value0, ro->hit_cylinder.value2, ro->hit_cylinder.radius);
+            for (i = 0; i < n; i++)
+                fprintf(stderr, " part%d=%d,%d,%d", ro->animation_entries[i].animation_id,
+                        ro->animation_entries[i].value0, ro->animation_entries[i].value2,
+                        ro->animation_entries[i].radius);
+            fprintf(stderr, "\n");
+        }
+    }
     core = enemy->core;
     if (enemy->actionMode == 2 && !(core->effect && core->effect->state == 1))
         return;  /* idle */
     dx = enemy->posX.parts.integer - aya->posX.parts.integer;
     dz = enemy->posZ.parts.integer - aya->posZ.parts.integer;
     fprintf(stderr, "enemy_trace frame=%d mode=%d anim=%d/%d effect=%d pos=%d,%d facing=%d aya=%d,%d dist=%d"
-            " aya_hit=%d aya_mode=%d contact=%d\n",
+            " aya_hit=%d aya_mode=%d contact=%d aim=%d,%d aim_dist=%d body_dist=%d\n",
             g_BattleFrameCounter, enemy->actionMode, (int)(enemy->animFrame >> 16), enemy->animLastFrame,
             core->effect ? core->effect->state : -1, enemy->posX.parts.integer, enemy->posZ.parts.integer,
             enemy->facingAngle & 0xfff, aya->posX.parts.integer, aya->posZ.parts.integer,
             Math_IntSqrt(dx * dx + dz * dz), (g_ActiveActor->stateFlags & 0x4000) != 0, aya->actionMode,
-            (enemy->entityFlags & 0x02000000) != 0);
+            (enemy->entityFlags & 0x02000000) != 0, enemy->renderObject.target_x, enemy->renderObject.target_z,
+            Battle_CalcDistToPlayer(enemy, aya), Melee_BodyDistance(enemy, aya));
 }
 
 void Battle_MeleeUpdate(void)
@@ -530,7 +610,7 @@ int Battle_StepCharacterAction(BattleInitSlot *slot)
                 /* The target will be out of reach at contact: drop the second swing instead of
                  * spending its recovery on a certain miss. */
                 fprintf(stderr, "club_flank cancel frame=%d distance=%d predicted=%d range=%d\n",
-                        g_BattleFrameCounter, Battle_CalcDistToPlayer(turnSlot->actor, D_8009D254),
+                        g_BattleFrameCounter, Battle_MeleeClubDistance(turnSlot->actor, D_8009D254),
                         predicted, g_ActiveActor->action->range);
                 meleeCue.start = g_BattleFrameCounter;
                 meleeCue.until = g_BattleFrameCounter + MELEE_CUE_UPDATES;
@@ -540,7 +620,7 @@ int Battle_StepCharacterAction(BattleInitSlot *slot)
                 g_BattleHitTimer = 0;
                 Battle_FinalizeAttackResult();
                 fprintf(stderr, "club_flank swing frame=%d distance=%d predicted=%d\n", g_BattleFrameCounter,
-                        Battle_CalcDistToPlayer(turnSlot->actor, D_8009D254), predicted);
+                        Battle_MeleeClubDistance(turnSlot->actor, D_8009D254), predicted);
                 break;
             }
         }
@@ -719,12 +799,14 @@ void Battle_ResolveHitOnTimer(void)
     {
         Battle_CheckEvasion(selectedSlot->actor, &g_EvasionOutcome, 0);
 #ifdef PE_MELEE_PROTOTYPE
-        fprintf(stderr, "club_flank resolve frame=%d replay=%d status=%d distance=%d range=%d\n",
+        fprintf(stderr, "club_flank resolve frame=%d replay=%d status=%d distance=%d range=%d aim=%d body=%d angle=%d\n",
                     g_BattleFrameCounter,
                     melee.phase == MELEE_REPLAY && melee.target == selectedSlot->actor,
                     g_EvasionOutcome.status,
-                    Battle_CalcDistToPlayer(selectedSlot->actor, D_8009D254),
-                    g_ActiveActor->action->range);
+                    Battle_MeleeClubDistance(selectedSlot->actor, D_8009D254),
+                    g_ActiveActor->action->range, Battle_CalcDistToPlayer(selectedSlot->actor, D_8009D254),
+                    Melee_BodyDistance(selectedSlot->actor, D_8009D254),
+                    Battle_CalcRelativeAngle(D_8009D254, selectedSlot->actor) & 0xfff);
 #endif
         if (g_EvasionOutcome.status == 1)
         {
