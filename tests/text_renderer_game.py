@@ -83,6 +83,12 @@ Checks, each from pe_mods.log and frame dumps:
              two lines light exactly the stroke pixels of the pack's own letter pictures, 12 pixels
              apart, line under line; bright pixels of the scene behind (a pack whose first box is a
              lone '.') are not counted against it.
+             On Disc 2 (PE_TEST_DISC2; else 77 after Disc 1): the Spanish part's route, Continue from
+             the Day 6 sample save; the game is on Disc 2 after the boxes, no letter falls back to '?',
+             and the five boxes on the ship (dlg/M275/008-012) light exactly the pack's letter
+             pictures, each line up to {name} (Aya's name is in the game's letters). The pack has no
+             pictures (a Japanese-disc patch's don't fit the USA discs), so the day's title card isn't
+             checked.
   spanish    The Spanish pack made from the USA-disc fan patch (pelang.py import-patch / build
              --patch-letters: its letters are the patch's own 12x12 pictures at the patch's widths), at
              PE_TEST_ES_PACK, best the zipped player file with its pictures (skipped, 77, when it isn't
@@ -463,20 +469,48 @@ def pack_letters(data):
 
 
 def dictionary_lines(raw, letters):
-    """A box's lines as the dictionary letters they hold (F1 C5 tokens; F7 starts a line). Anything
-    else on a line ({name}, a game letter) is None: that line's layout isn't checked."""
+    """A box's first page as lines of the dictionary letters they hold (F1 C5 tokens; F7 starts a
+    line, F8 ends the page). Anything else on a line ({name}, a game letter) is None: the line's
+    layout is checked only up to it."""
     lines, at = [[]], 0
     while at < len(raw):
         if raw[at:at + 2] == b'\xf1\xc5':
             lines[-1].append(letters[raw[at + 2] * 240 + raw[at + 3]])
             at += 4
         else:
+            if raw[at] in (0xF8, 0xF9, 0xFF):
+                break
             if raw[at] == 0xF7:
                 lines.append([])
-            elif raw[at] not in (0xF9, 0xFF):
+            else:
                 lines[-1].append(None)
             at += 1
     return lines
+
+
+def check_dictionary_box(work, label, scene, raw, letters):
+    """The default box in `work`'s frame `label` lights exactly the stroke pixels of the pack's
+    dictionary letter pictures, 12 px apart, line under line from (LINE_LEFT, LINE_TOP); each line up
+    to the first thing that isn't one ({name}, a game letter). A bright pixel of the scene behind
+    (`scene`'s frame; None: there is none) is not counted against it. Returns the letters checked."""
+    box = bright(work, label, BOX)
+    behind = bright(scene, label, BOX) if scene else [[0] * len(row) for row in box]
+    left, checked = LINE_LEFT - BOX[0], 0
+    for n, line in enumerate(dictionary_lines(raw, letters)):
+        line = line[:line.index(None)] if None in line else line
+        if not line:
+            continue
+        top = LINE_TOP - BOX[1] + 12 * n
+        want = {(left + 12 * k + p % 12, top + p // 12) for k, cell in enumerate(line)
+                for p, v in enumerate(cell) if v == 1}
+        check(want, f"{label} line {n + 1}: the pack's letters have no strokes")
+        wrong = [(x + BOX[0], y + BOX[1]) for y in range(top, top + 12)
+                 for x in range(left, left + 12 * len(line))
+                 if ((x, y) in want or not behind[y][x]) and box[y][x] != ((x, y) in want)]
+        check(not wrong, f"{label} line {n + 1} does not light the pack's letter pictures "
+                         f'(first differences at {wrong[:4]}): {work}')
+        checked += len(line)
+    return checked
 
 
 def make_chinese_scene(localization, out):
@@ -511,35 +545,41 @@ def chinese_patch(game, discs, out, localization):
     steps = [(FIRST_BOX, 'first', None)]
     work = run_fixed(game, discs, out / 'chinese', steps, pack=pack, pad=NEW_GAME)
     scene = run_fixed(game, discs, out / 'chinese-scene', steps, pack=scene_pack, pad=NEW_GAME)
-    log = mods_log(work)
     label = f'{name} ({code})'
-    check(f'{label}, ' in log, f'{label} not loaded: {work}')
-    check(f"text: {label}'s stretches in use" in log, f'no stretch drew with {label}: {work}')
-    missing = [line for line in log.splitlines()
-               if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line)]
-    check(not missing, f'{label}: letters fell back to "?": {missing[:5]}: {work}')
-    checked = 0
-    for frame_label, key in (('first', 'dlg/M001/009'),):
-        raw = entries.get(pelang.fnv1a(key))
-        check(raw, f'the pack has no {key}: {path}')
-        box, behind = bright(work, frame_label, BOX), bright(scene, frame_label, BOX)
-        left = LINE_LEFT - BOX[0]
-        for n, line in enumerate(dictionary_lines(raw, letters)):
-            if not line or None in line:
-                continue
-            top = LINE_TOP - BOX[1] + 12 * n
-            want = {(left + 12 * k + p % 12, top + p // 12) for k, cell in enumerate(line)
-                    for p, v in enumerate(cell) if v == 1}
-            check(want, f"{key} line {n + 1}: the pack's letters have no strokes")
-            wrong = [(x + BOX[0], y + BOX[1]) for y in range(top, top + 12)
-                     for x in range(left, left + 12 * len(line))
-                     if ((x, y) in want or not behind[y][x]) and box[y][x] != ((x, y) in want)]
-            check(not wrong, f"{key} line {n + 1} does not light the pack's letter pictures "
-                             f'(first differences at {wrong[:4]}): {work}')
-            checked += len(line)
+
+    def no_placeholders(work, what):
+        log = mods_log(work)
+        check(f'{label}, ' in log, f'{what}: {label} not loaded: {work}')
+        check(f"text: {label}'s stretches in use" in log, f'{what}: no stretch drew with {label}: {work}')
+        missing = [line for line in log.splitlines()
+                   if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line or 'cache unavailable' in line)]
+        check(not missing, f'{what}: letters fell back to "?": {missing[:5]}: {work}')
+
+    no_placeholders(work, 'disc 1')
+    raw = entries.get(pelang.fnv1a('dlg/M001/009'))
+    check(raw, f'the pack has no dlg/M001/009: {path}')
+    checked = check_dictionary_box(work, 'first', scene, raw, letters)
     check(checked >= 20, f'only {checked} Chinese letters checked on screen: {work}')
     print(f'PASS chinese: {label} loaded, its stretches drew, no "?", and the {checked} letters of the first box '
           "lit exactly the patch's letter pictures")
+
+    # Disc 2: Continue from the Day 6 save, the boxes on the ship (the pack has no pictures: the day's
+    # title card stays the game's).
+    if len(discs) < 2:
+        print('SKIP chinese: not checked: Disc 2 (PE_TEST_DISC2 is not set)')
+        return 77
+    boxes = {frame_label: entries.get(pelang.fnv1a(key)) for frame_label, key in DISC2_BOXES.items()}
+    check(all(boxes.values()), f'the pack lacks some of {list(DISC2_BOXES.values())}')
+    work, room = run_disc2(game, discs, out / 'chinese-disc2', pack)
+    no_placeholders(work, 'disc 2')
+    checked = 0
+    for frame_label, raw in boxes.items():
+        check(lit(work, frame_label, BOX) > 100, f'no box at {frame_label} (has the route changed?): {work}')
+        checked += check_dictionary_box(work, frame_label, None, raw, letters)
+    check(checked >= 40, f'only {checked} letters of the Disc 2 boxes checked: {work}')
+    print(f'PASS chinese disc 2: Continue from a Day 6 save plays on Disc 2 (in room {room} after the boxes); '
+          f"no \"?\", and the {checked} letters of {len(boxes)} boxes on the ship lit exactly the patch's letter "
+          'pictures')
     return 0
 
 
@@ -573,6 +613,23 @@ def disc2_steps():
 
 
 DISC2_BOXES = {f'box{n:03d}': f'dlg/M275/{n:03d}' for n in range(8, 13)}   # "Daniel: ¡{name}!" ...
+
+
+def run_disc2(game, discs, work, pack):
+    """The Disc 2 route (disc2_steps()) with `pack`: Continue from DISC2_SAVE; checks the game is on
+    Disc 2 after the boxes (its crash report). Returns `work` and the room it is in then."""
+    check(DISC2_SAVE.is_file(), f'no sample save {DISC2_SAVE}')
+    route = disc2_steps()
+    end = route[-1][0]
+    steps = route[:-1] + [(end, 'after', 'advance 200 0')]
+    driver = fixed(steps)
+    run(game, discs, work, pack=pack, pad=CONTINUE, card=DISC2_SAVE.read_bytes(), start=steps[0][0], driver=driver,
+        frame_limit=end + 300, crash_after=end + 100)
+    check(not driver.steps, f'the run stopped before vblank {driver.steps[0][0] if driver.steps else 0}: {work}')
+    where = re.search(r'Game: room (\d+), .*?, disc (\d+),', crash_report(work))
+    check(where and where[2] == '2', f'the game is not on Disc 2 after the boxes ({where[0] if where else "?"}): '
+                                     f'{work}')
+    return work, where[1]
 
 
 def drawn_records(data):
@@ -818,17 +875,7 @@ def spanish_patch(game, discs, out, localization):
             aya += card[at_:at_ + 1]
             at_ += 1
         route = disc2_steps()
-        end = route[-1][0]
-        steps = route[:-1] + [(end, 'after', 'advance 200 0')]
-        work = out / 'spanish-disc2'
-        driver = fixed(steps)
-        run(game, discs, work, pack=pack, pad=CONTINUE, card=card, start=steps[0][0], driver=driver,
-            frame_limit=end + 300, crash_after=end + 100)
-        check(not driver.steps, f'the run stopped before vblank {driver.steps[0][0] if driver.steps else 0}: {work}')
-        report = crash_report(work)
-        where = re.search(r'Game: room (\d+), .*?, disc (\d+),', report)
-        check(where and where[2] == '2', f'the game is not on Disc 2 after the boxes ({where[0] if where else "?"}): '
-                                         f'{work}')
+        work, room = run_disc2(game, discs, out / 'spanish-disc2', pack)
         no_placeholders(work, 'disc 2')
         # the night behind the ship's boxes has no bright pixel on their lines: checked with no scene
         checked = 0
@@ -836,7 +883,7 @@ def spanish_patch(game, discs, out, localization):
             check(lit(work, frame_label, BOX) > 100, f'no box at {frame_label} (has the route changed?): {work}')
             checked += check_pack_box(work, frame_label, None, raw, drawn, aya)
         check(checked >= 100, f'only {checked} letters of the Disc 2 boxes checked: {work}')
-        print(f'PASS spanish disc 2: Continue from a Day 6 save plays on Disc 2 (in room {where[1]} after the boxes); '
+        print(f'PASS spanish disc 2: Continue from a Day 6 save plays on Disc 2 (in room {room} after the boxes); '
               f"no \"?\", and the {checked} letters of {len(boxes)} boxes on the ship lit exactly the patch's letter "
               'pictures at its widths')
         if pieces:
