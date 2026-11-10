@@ -17,9 +17,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "pe1/aya.h"
+#include "pe1/battle_status.h"
 #include "pe1/battle_update.h"
 #include "pe1/draw_state.h"
+#include "pe1/game_state.h"
+#include "pe1/render_packets.h"
+#include "pe1/render_prim.h"
 #include "pe1/scene_dispatch.h"
+#include <psyz/video.h>
+void SetPolyF3(void *);
 #endif
 
 /* State shared by the original battle action functions. */
@@ -311,17 +317,85 @@ static void Melee_PrintCue(u8 *text, int left)
     g_TextCursorY = y;
 }
 
+/* A PlayStation Cross button (the HUD font has no button symbols): a light rim and a mid-gray
+ * face (8-triangle fans, radius 6 and 5, corners rounded to the nearest pixel) and a light-blue
+ * X. Above native resolution the X is two slanted triangle bars, which scale cleanly; at native
+ * 320x240 (where triangle edges come out lumpy at this size) it is two 2-pixel line diagonals,
+ * which stay crisp there but render hairline-thin when scaled up. Same switch as the native
+ * dialogue font (render/dialogue_alpha.c). Checked on screen at 1x and 4x. Packets are
+ * double-buffered per draw slot like the HUD's own; a lower ordering depth draws in front. */
+enum { MELEE_ICON_TRIS = 8 + 8 + 4, MELEE_ICON_LINES = 4, MELEE_ICON_R = 6 };
+static BattleStatusPointerPrim meleeIcon[2][MELEE_ICON_TRIS];
+static RenderLinePacket meleeIconLines[2][MELEE_ICON_LINES];
+
+static void Melee_IconLine(RenderLinePacket *l, int depth, unsigned rgb, int x0, int y0, int x1, int y1)
+{
+    SetLineF2(l);
+    l->r = (u8)(rgb >> 16); l->g = (u8)(rgb >> 8); l->b = (u8)rgb;
+    l->x0 = (s16)x0; l->y0 = (s16)y0; l->x1 = (s16)x1; l->y1 = (s16)y1;
+    AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + depth, l);
+}
+
+static void Melee_IconTri(BattleStatusPointerPrim *t, int depth, unsigned rgb,
+                          int x0, int y0, int x1, int y1, int x2, int y2)
+{
+    SetPolyF3(t);
+    t->r = (u8)(rgb >> 16); t->g = (u8)(rgb >> 8); t->b = (u8)rgb;
+    t->x0 = (s16)x0; t->y0 = (s16)y0; t->x1 = (s16)x1; t->y1 = (s16)y1; t->x2 = (s16)x2; t->y2 = (s16)y2;
+    AddPrim(D_800B0E38.ordering[g_ActiveDrawSlot] + depth, t);
+}
+
+static void Melee_DrawCrossIcon(int cx, int cy)
+{
+    /* Unit octagon, x and y in 1/16 units. */
+    static const s8 ring[8][2] = { {16, 0}, {11, 11}, {0, 16}, {-11, 11}, {-16, 0}, {-11, -11}, {0, -16}, {11, -11} };
+    BattleStatusPointerPrim *t = meleeIcon[g_ActiveDrawSlot & 1];
+    const int a = 3;
+    int i, k, x[2][8], y[2][8];
+
+    for (k = 0; k < 2; k++) {   /* k 0: rim (radius 6), k 1: face (radius 5); round to nearest */
+        const int r = MELEE_ICON_R - k;
+        for (i = 0; i < 8; i++) {
+            x[k][i] = cx + (ring[i][0] * r + (ring[i][0] < 0 ? -8 : 8)) / 16;
+            y[k][i] = cy + (ring[i][1] * r + (ring[i][1] < 0 ? -8 : 8)) / 16;
+        }
+    }
+    for (i = 0; i < 8; i++) {
+        const int j = (i + 1) & 7;
+        Melee_IconTri(t++, 6, 0xC8C8C8, cx, cy, x[0][i], y[0][i], x[0][j], y[0][j]);
+        Melee_IconTri(t++, 5, 0x484850, cx, cy, x[1][i], y[1][i], x[1][j], y[1][j]);
+    }
+    if (Psyz_VideoGetInternalResolution() < 2) {
+        RenderLinePacket *l = meleeIconLines[g_ActiveDrawSlot & 1];
+        Melee_IconLine(l++, 4, 0x78B8FF, cx - a, cy - a, cx + a, cy + a);
+        Melee_IconLine(l++, 4, 0x78B8FF, cx - a + 1, cy - a, cx + a + 1, cy + a);
+        Melee_IconLine(l++, 4, 0x78B8FF, cx + a, cy - a, cx - a, cy + a);
+        Melee_IconLine(l++, 4, 0x78B8FF, cx + a + 1, cy - a, cx - a + 1, cy + a);
+        return;
+    }
+    /* Bar from top-left to bottom-right, then top-right to bottom-left: parallelograms with
+     * horizontal edges 2 pixels long at the top and bottom. */
+    Melee_IconTri(t++, 4, 0x78B8FF, cx - a - 1, cy - a, cx - a + 1, cy - a, cx + a + 1, cy + a);
+    Melee_IconTri(t++, 4, 0x78B8FF, cx - a - 1, cy - a, cx + a + 1, cy + a, cx + a - 1, cy + a);
+    Melee_IconTri(t++, 4, 0x78B8FF, cx + a - 1, cy - a, cx + a + 1, cy - a, cx - a + 1, cy + a);
+    Melee_IconTri(t++, 4, 0x78B8FF, cx + a - 1, cy - a, cx - a + 1, cy + a, cx - a - 1, cy + a);
+}
+
 void Battle_MeleeDraw(void)
 {
     /* Game glyphs: A is 0x10, letters follow in order, 0x0f is a space, 0xff ends. */
     static u8 prompt[] = {0x15, 0x1e, 0x1b, 0x1b, 0x1e, 0x26, 0x0f, 0x24,   /* FOLLOW U */
-                          0x1f, 0x0f, 0x0f, 0x12, 0x21, 0x1e, 0x22, 0x22,   /* P  CROSS */
-                          0xff};
+                          0x1f, 0xff};                                      /* P, then the Cross icon */
     static u8 outOfReach[] = {0x1e, 0x24, 0x23, 0x0f, 0x1e, 0x15, 0x0f,    /* OUT OF  */
                               0x21, 0x14, 0x10, 0x12, 0x17, 0xff};          /* REACH   */
 
     if (melee.phase == MELEE_OFFERED) {
-        Melee_PrintCue(prompt, 102);  /* 16 glyphs, centred */
+        /* The HUD font advances 8 pixels a glyph (measured on screen; Draw_PrintRawText leaves
+         * the cursor where it started). "FOLLOW UP" is 9 glyphs, 72 pixels, then a 6-pixel gap
+         * and the icon: about 92 pixels, centred on the 320-pixel screen. */
+        const int left = (320 - (9 * 8 + 6 + 2 * MELEE_ICON_R)) / 2;
+        Melee_PrintCue(prompt, left);
+        Melee_DrawCrossIcon(left + 9 * 8 + 6 + MELEE_ICON_R, 203);
         return;
     }
     /* A frame counter that went backwards means a new battle: drop a stale cue. */
