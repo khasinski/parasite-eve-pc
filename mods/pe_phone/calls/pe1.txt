@@ -257,7 +257,7 @@ weight = 2
 once = yes
 them: Medical Examiner's office.
 aya: Did you find anything in the lungs?
-them: Hardly any smoke. Most of them died before there was much to breathe.
+them: Hardly any smoke. Most of them died before they could breathe it.
 aya: The first man caught fire before I saw any smoke.
 
 [pe1/hold]
@@ -327,7 +327,7 @@ rooms = 20
 priority = 10
 once = yes
 them: 17th Precinct.
-aya: Officer Brea. I'm inside Carnegie Hall. The audience is dead. They burned in their seats.
+aya: Officer Brea, inside Carnegie Hall. The audience is dead. They burned in their seats.
 them: All of them? Brea, how many people are we talking about?
 aya: I stopped counting. One of the actresses did it. She's still in the building.
 them: Fire department's on the way. Stay where you are.
@@ -344,7 +344,7 @@ priority = 10
 once = yes
 them: Crime lab.
 aya: Brea. Have you got anything from Carnegie Hall?
-them: We can tell you where the fire reached. We can't tell you where it started.
+them: We can tell you where the fire reached. Not where it started.
 aya: Nothing near the stage?
 them: Nothing that explains how it spread through the audience.
 
@@ -401,7 +401,7 @@ rooms = 59 64 75 87
 priority = 10
 once = yes
 after = pe1/park_wall
-them: Thank you for calling the Central Park Zoo. The zoo is closed for the holiday.
+them: You've reached the Central Park Zoo. We're closed for the holiday.
 them: Please do not feed the animals.
 aya: Too late. They're feeding themselves.
 
@@ -416,7 +416,7 @@ priority = 11
 once = yes
 them: Warner here.
 aya: There's nobody on the street out here.
-them: Evacuation order came down last night. Baker sent us to help get people across the bridges.
+them: Evacuation order came down last night. We're moving people over the bridges.
 aya: Who's staying?
 them: We are. Baker made that clear.
 
@@ -430,7 +430,7 @@ once = yes
 after = pe1/street_dispatch
 them: Front desk. Is Dr. Maeda with you? He didn't come back last night.
 aya: He's with me. Is something wrong?
-them: His room is full of notebooks and a jar of something. Housekeeping won't go in.
+them: His room is full of notebooks and a jar of something. Housekeeping refuses.
 aya: Tell housekeeping that's a good instinct.
 
 # ---- Day 3: the precinct after the attack ----
@@ -443,10 +443,10 @@ rooms = 99 112
 priority = 10
 once = yes
 them: Midtown North.
-aya: This is Brea at the 17th. We were hit. We need medics and every unit you can send.
+aya: Brea at the 17th. We were hit. We need medics and every unit you can send.
 them: Hit by who?
 aya: By what. Tell them to come in armed.
-them: Half the precincts in Manhattan called in the same thing this morning.
+them: Half of Manhattan's precincts called in the same thing this morning.
 
 # ---- Day 4: St. Francis Hospital ----
 
@@ -461,7 +461,7 @@ them: City Records.
 aya: I need to know if I was ever a patient at St. Francis Hospital.
 them: Name?
 aya: {name} Brea.
-them: Anything older than ten years is in their basement. Nobody's going down there today.
+them: Old files are in their basement. Nobody's going down there today.
 aya: I might be.
 
 [pe1/hospital_maeda]
@@ -527,9 +527,9 @@ day = 5
 rooms = 176 184
 priority = 10
 once = yes
-them: Reservoir control. Who is this? Our pumps are switching on by themselves.
+them: Reservoir control. Who is this? The pumps started on their own.
 aya: That's me. Police.
-them: Then what's the rest of the flow? Something big is pushing through the lines.
+them: Then what's the rest of the flow? Something big is in the lines.
 aya: Which way is it going?
 them: Uptown. Toward the park side of the city.
 
@@ -542,9 +542,9 @@ day = 5
 rooms = 195 196 237 238 340
 priority = 11
 once = yes
-them: Museum security. I was in the fossil hall when we cleared the building.
+them: Museum security. I was in the fossil hall when we cleared out.
 aya: Did you see anything?
-them: No. I heard something scrape behind me. It stopped every time I stopped walking.
+them: No. Something scraped behind me. It stopped whenever I stopped.
 aya: I'm glad you made it out.
 
 [pe1/museum_daniel]
@@ -597,10 +597,10 @@ day = 1
 priority = 1
 once = yes
 them: Raccoon City Police. Chief Irons speaking.
-aya: Brea, NYPD. Dispatch said you had officers in town for the holidays. Can you spare them?
-them: For that little fire at the opera? Surely New York has a fire department.
+aya: Brea, NYPD. Dispatch said you had officers in town. Can you spare them?
+them: That little fire at the opera? Surely New York has a fire department.
 aya: We do. They're asking for backup too.
-them: In my city, Officer Brea, we'd have had it contained before the first call.
+them: In my city, Officer, we'd have had it out before the first call.
 aya: I'll tell them you said that.
 
 [pe1/raccoon_umbrella]
@@ -609,7 +609,7 @@ tone = funny
 day = 2
 priority = 1
 once = yes
-them: Thank you for calling Umbrella. How can we help you feel better today?
+them: Thank you for calling Umbrella. How can we help you feel better?
 aya: Can a drug make your own cells turn on you?
 them: Let me transfer you to Product Safety.
 aya: What if it happens to everyone in the room?
@@ -654,7 +654,7 @@ them: Kendo Gun Shop. Robert speaking.
 aya: Wayne at the NYPD armory says you might have recoil springs.
 them: Tell Wayne I've got a drawer full. What are you rebuilding?
 aya: Whatever he can get out of a bag of junk.
-them: Then have him send me the slide measurements. I'll ship what fits.
+them: Have him send me the slide measurements. I'll ship what fits.
 aya: You do much business with police out here?
 them: Mostly local. It's quiet enough here I can get the order out today.
 
@@ -666,7 +666,7 @@ priority = 1
 once = yes
 them: Officer Brea? Albert Wesker. Thank you for taking my call.
 aya: How did you know where I'd be?
-them: I understand you walked out of Carnegie Hall without a burn. Did you feel the heat?
+them: I hear you left Carnegie Hall without a burn. Did you feel the heat?
 aya: I gave my statement.
 them: Yes. I was more interested in your blood work.
 aya: Where did you see that?
