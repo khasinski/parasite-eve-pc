@@ -703,6 +703,12 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/localization/tests/test_zh_box_fit.py)
         set_tests_properties(localization-chinese-box-fit PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 180 LABELS "game-assets;localization")
+        # The same for the Spanish pack from the USA-disc fan patch, measured with the patch's own
+        # letter widths the pack carries. Needs PE_TEST_DISC and PE_TEST_ES_PACK, else skipped.
+        add_test(NAME localization-spanish-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_es_box_fit.py)
+        set_tests_properties(localization-spanish-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77
