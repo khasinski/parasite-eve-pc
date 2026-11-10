@@ -361,12 +361,20 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
         return None, ["a letter from the pack's own table cannot go in the saved player name; keep the original name"], []
     if not name_letters and key == "sys/030" and len(raw) > 8:
         return None, ["default player name exceeds the save format's 8-byte field"], []
+    if (from_patch and not key.startswith(("dlg/", "battle/")) and len(source.get("lines_px") or [0]) == 1
+            and any(c == b"\xf7" for c in validation.commands(raw))):
+        # A fan patch's line break in one-line menu text: the patch's own code draws it as a new
+        # line (the German patch's: 12 px lower, at the same left edge). The pack's line break is
+        # that in the port (Draw_TextToEnd), and each line is measured on its own.
+        raw = b"".join(stretch.LINE_BREAK if c == b"\xf7" else c for c in validation.commands(raw))
     note = None
     limit = layout.box_limit(source) if wrap and key.startswith("dlg/") else None
     # A fan patch's own breaks stay wherever its lines stay on screen, as the patched game drew
     # them (past the box's shading, or the default box's 297 px); off screen, the page is wrapped.
     edge = (layout.box_limit(source, screen=True) or limit)[0] if limit and from_patch else limit and limit[0]
-    if limit and any(max(s) > edge or len(s) > limit[1] for s in layout.screens(raw, name_px)):
+    # (a line holding only spaces at a screen's end draws nothing, so it isn't counted for a patch)
+    rows = limit and (layout.drawn_rows(raw) if from_patch else [len(s) for s in layout.screens(raw, name_px)])
+    if limit and any(max(s) > edge or n > limit[1] for s, n in zip(layout.screens(raw, name_px), rows)):
         english = srcman.english_shape(source)
         wrapped, added = wrapping.wrap(raw, limit[0], limit[1], english, name_px, atlas.characters if atlas else None)
         if wrapped != raw:
@@ -570,6 +578,16 @@ def cmd_build(a) -> int:
                 over.clear()
                 joined = menu.check_combined(resident, metrics, layouts, over)
                 continue
+            # A message the game itself leaves empty when its parts don't fit ("too_long": "empty"),
+            # from a USA-disc patch (import-patch's rows): that patched game is this game and shows
+            # it empty too, so the patch's text stays rather than making the suffix English for
+            # every item. (A Japanese-disc patch's game may differ: its rows go back to the English.)
+            rest = {"combined": [c for c in layouts.get("combined", []) if c.get("too_long") != "empty"]}
+            usa_patch = {r.get("key") for r in rows if r.get("notes") == "patch import"}
+            if not menu.check_combined(resident, metrics, rest) and over & entries.keys() <= usa_patch:
+                warnings += [f"joined text the game leaves empty, as the patched game does: {e}" for e in joined]
+                joined = []
+                break
             parts = sorted(over & entries.keys())
             if not a.bytes_only and not any(stretch.stays_bytes(k) for k in parts):
                 for n in range(255, menu.NARROW_FLOOR - 1, -1):
@@ -1082,7 +1100,7 @@ def cmd_import_patch(a):
     """Any fan patch: see petext/patchimport.py."""
     import tempfile
     from extract_text import bank_slots, table_entries
-    from petext import patchfile, patchimport
+    from petext import letterpairs, patchfile, patchimport
     from petext.disc import Game
     if (a.out.exists() or a.report.exists() or (a.font and a.font.exists()) or (a.pictures and a.pictures.exists())
             or (a.patch_letters and a.patch_letters.exists())):
@@ -1107,6 +1125,9 @@ def cmd_import_patch(a):
             if disc is None or translated.exe_name != original.exe_name:
                 raise ValueError("Choose an unmodified USA disc and its own patch")
             letters, how, unknown = patchimport.letter_map(translated)
+            # Codes the dialogue box reads as two letters (petext/letterpairs.py): its pages only.
+            pairs, pairs_read = letterpairs.pairs(original.disc.file(original.exe_name),
+                                                  translated.disc.file(translated.exe_name), translated.resident_pack())
             letters.update({k: v for k, v in overrides.items() if v})
             unknown = [code for code in unknown if code not in overrides]
             catalog = json.loads((ROOT / "editor/catalog.json").read_text(encoding="utf-8"))
@@ -1121,7 +1142,7 @@ def cmd_import_patch(a):
                         left.append({"key": key, "reason": "page missing from the patch"})
                         continue
                     end_changed += after[page][1] != end
-                    text, why = patchimport.compare_page(raw, after[page][0], letters)
+                    text, why = patchimport.compare_page(raw, after[page][0], letters, pairs)
                     if why:
                         left.append({"key": key, "reason": why})
                     elif text is not None:
@@ -1131,8 +1152,10 @@ def cmd_import_patch(a):
             manifest = json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))
             before, after = dict(table_entries(original.resident_pack())), dict(table_entries(translated.resident_pack()))
             for key in sorted(k for k in manifest["entries"] if k.split("/")[0] in ("sys", "item", "desc", "misc")):
-                compare = patchimport.compare_grid if key in patchimport.RENAME_GRIDS else patchimport.compare_page
-                text, why = compare(before[key], after[key], letters)
+                if key in patchimport.RENAME_GRIDS:
+                    text, why = patchimport.compare_grid(before[key], after[key], letters, key)
+                else:
+                    text, why = patchimport.compare_page(before[key], after[key], letters)
                 if why:
                     left.append({"key": key, "reason": why})
                 elif text is not None:
@@ -1143,13 +1166,14 @@ def cmd_import_patch(a):
             if why:
                 left += [{"key": key, "reason": f"battle messages: {why}"} for key in battle.LINES]
             for key, raw in lines.items():
-                text, why = patchimport.compare_page(english[key], raw, letters)
+                text, why = patchimport.compare_page(english[key], raw, letters, pairs)
                 if why:
                     left.append({"key": key, "reason": why})
                 elif text is not None:
                     rows.append({"key": key, "translation": text, "notes": "patch import"})
             report = {"translated_rows": len(rows), "kept_english": left, "letters_found": {f"{k:02X}": v for k, v in how.items()},
                       "symbols_without_a_letter": [f"{code:02X}" for code in unknown],
+                      "letter_pairs": {"read": pairs_read, **{f"{k:02X}": patchimport.to_text(v, letters) for k, v in pairs.items()}},
                       "pages_with_a_different_end": end_changed,
                       "rooms_with_edited_scripts": patchimport.script_changes(original, translated, lambda d: min(bank_slots(d).values(), default=len(d))),
                       "rooms_with_edited_pictures": patchimport.picture_changes(original, translated),
@@ -1182,7 +1206,7 @@ def cmd_import_patch(a):
                 print(f"{len(pieces)} picture pieces from {len(found['pictures_taken'])} pictures written to {a.pictures}")
             print(f"{len(rows)} rows imported; {len(left)} keep the English; symbols without a letter: "
                   f"{report['symbols_without_a_letter'] or 'none'}; rooms with edited scripts: "
-                  f"{len(report['rooms_with_edited_scripts'])}. Review {a.report}.")
+                  f"{len(report['rooms_with_edited_scripts'])}; letter pairs: {pairs_read}. Review {a.report}.")
             for game in games:
                 game.disc.f.close()
             games.clear()

@@ -604,6 +604,7 @@ PRESS_START = (60, 180, 260, 200)
 SPANISH_STEPS = presses([(FIRST_BOX, CROSS, 'first'), (18310, CROSS, 'page2'), (18620, CROSS, 'page3'),
                          (18930, CROSS, 'dark'), (19240, CROSS, 'profile'), (19550, 0, 'grid')])
 GRID_CELLS = (72, 70, 250, 218)   # all nine rows of the name entry's grid, 16 px apart
+HELP_LINE = (8, 16, 260, 50)      # the load screen's help line at the top, left of the clock
 GRID_PITCH, GRID_COLUMNS = 16, 11
 # Disc 2: the save editor's sample save F (save-editor/samples, in the repository; a save holds no
 # disc data), Day 6 on the ship (M275). Its story is past the point where the game changes discs,
@@ -638,6 +639,7 @@ class FanPack(typing.NamedTuple):
     game_letters: bool               # the patch draws the game's other letters as the game does
     title_words: tuple | None        # where the title screen's words change (None: somewhere)
     disc2_picture: str | None        # a frame of the Disc 2 route showing a picture the patch redrew
+    first_box_letters: int = 60      # letters of the first box (dlg/M001/009) at least
 
 
 SPANISH = FanPack('spanish', 'PE_TEST_ES_PACK', SPANISH_STEPS, 60, 'ÑñÜüÁÉÍÓÚáéíóú¿¡', False, PRESS_START,
@@ -645,6 +647,10 @@ SPANISH = FanPack('spanish', 'PE_TEST_ES_PACK', SPANISH_STEPS, 60, 'ÑñÜüÁÉ
 # The Italian patch redraws only à è é ì ò ù; its pictures are the title screen's and the opening's,
 # none on the Disc 2 route.
 ITALIAN = FanPack('italian', 'PE_TEST_IT_PACK', ITALIAN_STEPS, 6, '', True, None, None)
+# The German patch redraws every letter and adds ä ö ü Ä Ö Ü ß and an up arrow; its first pages
+# are as many screens as Italian's, so English's route reaches its name entry. Its first box is
+# shorter ("Mann: Was ist los?").
+GERMAN = FanPack('german', 'PE_TEST_DE_PACK', ITALIAN_STEPS, 80, 'ÄÖÜäöüß↑', False, None, 'day-card', 40)
 
 
 def run_disc2(game, discs, work, pack):
@@ -790,6 +796,10 @@ def italian_patch(game, discs, out, localization):
     return fan_patch(game, discs, out, localization, ITALIAN)
 
 
+def german_patch(game, discs, out, localization):
+    return fan_patch(game, discs, out, localization, GERMAN)
+
+
 def fan_patch(game, discs, out, localization, fan):
     """Part spanish or italian (see the module notes); 77 when the pack (fan.env) isn't there, and
     after the Disc 1 checks when PE_TEST_DISC2 isn't set or the pack has no pictures (a plain pack)."""
@@ -838,7 +848,7 @@ def fan_patch(game, discs, out, localization, fan):
     in_use = re.search(rf'text: {re.escape(label)} draws (\d+) letters with its own pictures and widths', log)
     check(in_use and int(in_use[1]) >= fan.drawn_at_least, f"the pack's own letter pictures are not in use: {work}")
     checked = check_pack_box(work, 'first', scene, entries[pelang.fnv1a('dlg/M001/009')], drawn)
-    check(checked >= 60, f'only {checked} letters of the first box checked: {work}')
+    check(checked >= fan.first_box_letters, f'only {checked} letters of the first box checked: {work}')
     print(f'PASS {part} first box: {label} loaded, no "?", and the {checked} letters of the first box '
           "lit exactly the patch's letter pictures at the patch's widths")
 
@@ -948,6 +958,21 @@ def fan_patch(game, discs, out, localization, fan):
         print(f'PASS {part} disc 2: Continue from a Day 6 save plays on Disc 2 (in room {room} after the boxes); '
               f"no \"?\", and the {checked} letters of {len(boxes)} boxes on the ship lit exactly the patch's letter "
               'pictures at its widths')
+        # A help line the patch writes on two lines (the German patch's sys/080 while the card loads,
+        # frame continue6): two rows of letters 12 px apart from the same left edge, as the patch's own
+        # code draws them on the PS1 (the port: Draw_TextToEnd).
+        from petext.stretch import LINE_BREAK
+        notice = entries.get(pelang.fnv1a('sys/080'))
+        if notice and LINE_BREAK in notice:
+            rows = text_rows(work, 'continue6', HELP_LINE)
+            check(len(rows) == 2 and rows[1] - rows[0] == 12,
+                  f'the two-line help line is not two rows 12 px apart (rows at {rows}): {work}')
+            lit_rows = bright(work, 'continue6', HELP_LINE)
+            lefts = [min(x for y in range(top - HELP_LINE[1], top - HELP_LINE[1] + 9) for x, v in enumerate(lit_rows[y]) if v)
+                     for top in rows]
+            check(lefts[0] == lefts[1], f"the help line's second row starts at x {lefts[1]}, the first at {lefts[0]}: {work}")
+            print(f"PASS {part} help line: sys/080 is two rows 12 px apart from the same left edge (x {HELP_LINE[0] + lefts[0]}), "
+                  'as the patch draws its line break')
         if pieces:
             try:
                 written = pieces_written_in(discs[1], pieces, out / 'discs' / 'disc2')
@@ -1294,7 +1319,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
     if out.exists() and any(out.iterdir()):
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
-    for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch)):
+    for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
+                              ('german', german_patch)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

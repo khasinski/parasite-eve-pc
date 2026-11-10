@@ -359,7 +359,8 @@ class LetterPicturesTest(unittest.TestCase):
         letters = {**gt.CHARS, 0x4D: "é", 0x5D: "A"}
         how = {0x4D: "identified as é", 0x5D: "copy of A"}
         exe = boot_program()
-        games = [SimpleNamespace(exe_name="SLUS_006.62", disc=SimpleNamespace(file=lambda name, e=e: e))
+        games = [SimpleNamespace(exe_name="SLUS_006.62", disc=SimpleNamespace(file=lambda name, e=e: e),
+                                 resident_pack=lambda: b"")
                  for e in (exe, own_widths(exe, {**{c: gt.ADVANCE[c] for c in range(0x4D)}, 0x10: 6, 0x4D: 7}))]
         metrics_o = bytes([0x70] * 444)
         metrics_p = bytearray(metrics_o)
@@ -373,6 +374,101 @@ class LetterPicturesTest(unittest.TestCase):
         self.assertEqual((by["A"]["code"], by["A"]["dialogue"], by["A"]["menu"]), ("10", 6, 0x60))
         self.assertEqual(by["A"]["picture"][3], "  ######+   ")
         self.assertEqual((by["é"]["dialogue"], by["é"]["menu"]), (7, 0x50))
+
+
+class MovedWidthsTest(unittest.TestCase):
+    """The game's gap-and-width table moved to the resident pack, as the German patch does it."""
+    def moved(self, table: bytes) -> tuple[bytearray, bytes]:
+        from petext import letterpairs
+        exe = boot_program()
+        at = 0x800AAD80
+        hi, lo = (at + 0x8000) >> 16, at & 0xFFFF
+        for read, plus in patchimport.TABLE_READS.items():
+            struct.pack_into("<III", exe, read - 8, 0x3C010000 | hi, 0x00370821,
+                             (0x24 << 26) | (1 << 21) | (3 << 16) | ((lo + plus) & 0xFFFF))
+        pack = bytearray(0x3000)
+        pack[at - letterpairs.RESIDENT_AT:at - letterpairs.RESIDENT_AT + len(table)] = table
+        return exe, bytes(pack)
+
+    def test_the_table_is_read_where_the_patch_moved_it(self):
+        table = bytes(v for w in gt.ADVANCE for v in (0, w)) + bytes([0, 9, 1, 8])   # two new letters
+        exe, pack = self.moved(table)
+        widths, how = patchimport.dialogue_widths(boot_program(), exe, pack)
+        self.assertIn("moved to 0x800AAD80", how)
+        self.assertEqual(widths[0x10], gt.ADVANCE[0x10])
+        new = len(gt.ADVANCE)                                         # the first code past the game's table
+        self.assertEqual((widths[new], widths[new + 1]), (9, 7))     # width less its left gap
+        self.assertNotIn(new + 2, widths)                             # past the last letter
+
+    def test_without_the_pack_it_is_not_known(self):
+        exe, _ = self.moved(b"")
+        self.assertIsNone(patchimport.dialogue_widths(boot_program(), exe)[0])
+
+
+class TurnedMarkTest(unittest.TestCase):
+    """¡ and ¿ are found turned over anywhere in their cell, but a letter half moved off the cell's
+    edge doesn't count (the German ü read as ¡)."""
+    def cell(self, points) -> tuple[int, ...]:
+        return tuple(1 if (i % font.CELL, i // font.CELL) in points else 0 for i in range(font.CELL * font.CELL))
+
+    def test_a_turned_mark_and_a_u_with_dots(self):
+        bang = {(x, y) for x in (1, 2) for y in range(2, 8)} | {(1, 9), (2, 9)}
+        question = {(x, 2) for x in range(1, 5)} | {(4, y) for y in range(3, 6)} | {(3, 9)}
+        bases = {"!": self.cell(bang), "?": self.cell(question)}
+        turned = self.cell({(11 - x, 11 - y) for x, y in bang})
+        self.assertEqual(patchimport._turned(turned, bases), "¡")
+        u = ({(x, y) for x in (0, 1, 4, 5) for y in range(4, 9)} | {(x, 9) for x in range(1, 5)}
+             | {(1, 2), (4, 2)})
+        self.assertIsNone(patchimport._turned(self.cell(u), bases))
+
+
+class KanaGridTest(unittest.TestCase):
+    def test_a_kana_grid_keeps_the_english(self):
+        english, dummy = bytes(range(0x56, 0x5B)), gt.encode("DUMMY")
+        self.assertEqual(patchimport.compare_grid(english, dummy, dict(gt.CHARS), "sys/116"),
+                         (None, "a Japanese kana grid, which the USA game never opens"))
+        self.assertEqual(patchimport.compare_grid(english, english, dict(gt.CHARS), "sys/116"), (None, None))
+
+
+class BattleInPlaceTest(unittest.TestCase):
+    """A patch that writes each battle line over the English one in its slot (the German patch),
+    leaving the rest of the old line behind its end."""
+    def exe(self) -> bytearray:
+        from petext import battle
+        exe = bytearray(battle.REGION[1] + 16)
+        for key, (at, size, ja) in battle.LINES.items():
+            if ja is not None:
+                exe[ja:at] = bytes([0x60] * (at - ja - 1)) + b"\xff"        # its Japanese line before it
+            exe[at:at + size] = bytes([gt.CODE_OF["E"]] * (size - 1)) + b"\xff"
+        return exe
+
+    def test_each_line_is_read_in_its_slot(self):
+        from petext import battle
+        original = self.exe()
+        patched = bytearray(original)
+        for k, (at, size, _) in enumerate(battle.LINES.values()):
+            patched[at:at + 3] = bytes([gt.CODE_OF["a"] + k % 20, gt.CODE_OF["b"], 0xFF])   # the old tail stays
+        lines, why = battle.patched(bytes(original), bytes(patched))
+        self.assertIsNone(why)
+        self.assertEqual(lines["battle/002"], bytes([gt.CODE_OF["a"] + 2, gt.CODE_OF["b"]]))
+
+    def test_a_slot_still_english_is_not_taken_in_place(self):
+        from petext import battle
+        original = self.exe()
+        patched = bytearray(original)
+        for k, (at, size, _) in enumerate(list(battle.LINES.values())[1:]):
+            patched[at:at + 3] = bytes([gt.CODE_OF["a"], gt.CODE_OF["b"], 0xFF])
+        self.assertEqual(battle.patched(bytes(original), bytes(patched))[0], {})
+
+
+class TileColourRowsTest(unittest.TestCase):
+    def test_only_colour_rows_count_as_pictures(self):
+        from petext import pictures
+        english = bytes.fromhex("10 10 40 00 e0 01 1c 10 20 10 40 00 e3 81 15 00")
+        rows = bytes.fromhex("10 10 40 00 e1 01 1c 10 20 10 40 00 f1 81 15 00")
+        script = bytes.fromhex("10 10 40 00 e0 01 1c 11 20 10 40 00 e3 81 15 00")
+        self.assertTrue(pictures._palette_rows(english, rows))
+        self.assertFalse(pictures._palette_rows(english, script))
 
 
 if __name__ == "__main__":

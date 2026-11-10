@@ -66,13 +66,26 @@ def patched(original: bytes, translated: bytes) -> tuple[dict[str, bytes], str |
     """({key: the patch's line}, None), or ({}, why) when they can't be lined up.
 
     A patch may move the lines and point the code at them, or keep the Japanese beside its own
-    lines, or drop it: so this doesn't follow offsets. It takes the region's lines in order,
+    lines, or drop it: so this doesn't follow offsets first. It takes the region's lines in order,
     leaves out any that is still one of the original Japanese ones, and expects one per key, in
-    the keys' order (both known patches keep it)."""
+    the keys' order (the Spanish and Italian patches keep it).
+
+    A patch may instead write each line over the English one, in its slot, and leave the rest of
+    the old line (or of the Japanese line after it) behind its end (the German patch): then each
+    key's line is read at its English place. That is taken only when every slot still holds a line
+    end and no slot still holds its English or begins a Japanese line."""
     if len(translated) < REGION[1] or len(original) < REGION[1]:
         return {}, "the boot program is too short"
     japanese = {_line(original, ja, at - ja) for at, _, ja in LINES.values() if ja is not None}
     lines =[p for p in _pieces(translated)[:-1] if p and p not in japanese]
-    if len(lines) != len(LINES):
-        return {}, f"{len(lines)} lines where {len(LINES)} were expected"
-    return dict(zip(LINES, lines)), None
+    if len(lines) == len(LINES):
+        return dict(zip(LINES, lines)), None
+    english_lines = english(original)
+    try:
+        in_place = {key: _line(translated, at, size) for key, (at, size, _) in LINES.items()}
+    except ValueError:
+        in_place = None
+    if in_place and all(line and line not in japanese for line in in_place.values()) and not any(
+            in_place[key] == english_lines[key] for key in LINES):
+        return in_place, None
+    return {}, f"{len(lines)} lines where {len(LINES)} were expected"

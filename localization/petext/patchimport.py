@@ -22,9 +22,13 @@ import re
 import struct
 import zlib
 
-from . import font, gametext as gt, latin, validation
+from . import font, gametext as gt, latin, letterpairs, validation
 
 RENAME_GRIDS = ("sys/115", "sys/116", "sys/117")
+# The two Japanese kana grids: the USA game always opens the Latin one, sys/117
+# (Menu_OpenRenameScreen; g_SaveMetadataWindowIndex is only ever 1), so a patch's change to them is
+# never seen, and sys/116's control bytes can't go in a pack. They keep the English.
+KANA_GRIDS = ("sys/115", "sys/116")
 SPEAKER_COLOUR = re.compile(rb"\xfb\x04(\xfa[\x00-\xef]{0,4})\xfb\x05")
 BRIGHT = 128
 
@@ -130,12 +134,14 @@ def _identify(ink, bases: dict[str, tuple[int, ...]]) -> str | None:
 
 
 def _turned(ink, bases: dict[str, tuple[int, ...]]) -> str | None:
-    """Inverted punctuation: the mark turned over, wherever it sits in its cell."""
+    """Inverted punctuation: the mark turned over, wherever it sits in its cell. The whole mark
+    must stay in the cell: half a ü moved off its edge is one stroke and a dot, like a turned !."""
     flipped = tuple(reversed(ink))
     for char, turned in (("?", "¿"), ("!", "¡")):
         for dx in range(-font.CELL + 1, font.CELL):
             for dy in range(-font.CELL + 1, font.CELL):
-                if sum(a != b for a, b in zip(_shifted(flipped, dx, dy), bases[char])) <= 2:
+                moved = _shifted(flipped, dx, dy)
+                if sum(moved) == sum(flipped) and sum(a != b for a, b in zip(moved, bases[char])) <= 2:
                     return turned
     return None
 
@@ -224,8 +230,15 @@ def choices(raw: bytes) -> list[bytes]:
     return [c for c in validation.commands(raw) if c[:2] == b"\xfb\x09"]
 
 
-def compare_page(raw: bytes, patched: bytes, letters: dict[int, str]) -> tuple[str | None, str | None]:
-    """(translated text, None), or (None, why the page keeps its English)."""
+def compare_page(raw: bytes, patched: bytes, letters: dict[int, str],
+                 pairs: dict[int, bytes] | None = None) -> tuple[str | None, str | None]:
+    """(translated text, None), or (None, why the page keeps its English). `pairs`: codes the
+    dialogue box reads as two letters in this patch (petext/letterpairs.py), for dialogue pages."""
+    if pairs:
+        try:
+            patched = letterpairs.expand(patched, pairs)
+        except ValueError as error:
+            return None, f"a command the port doesn't have: {error}"
     value = clean_page(patched, raw)
     if value == raw:
         return None, None
@@ -243,10 +256,12 @@ def compare_page(raw: bytes, patched: bytes, letters: dict[int, str]) -> tuple[s
 GRID_CELLS = 99                         # the name entry grid's cells (petext/names.py)
 
 
-def compare_grid(raw: bytes, patched: bytes, letters: dict[int, str]) -> tuple[str | None, str | None]:
+def compare_grid(raw: bytes, patched: bytes, letters: dict[int, str], key: str = "sys/117") -> tuple[str | None, str | None]:
     """compare_page for a name entry grid (RENAME_GRIDS): one byte a cell, no commands. A game
     symbol the patch kept from the English grid ({g0D}) stays as it is though the patch's letter map
     doesn't name it, and empty cells past the grid's 99 are dropped (the game reads 99)."""
+    if raw != patched and key in KANA_GRIDS:
+        return None, "a Japanese kana grid, which the USA game never opens"
     while len(patched) > GRID_CELLS and patched[-1] == gt.CODE_OF[" "]:
         patched = patched[:-1]
     if patched == raw:
@@ -311,6 +326,42 @@ WIDTH_READS = {0x284E4: (0x0006B840, 0x00C0B821),   # sll s7,a2,1  -> move s7,a2
                0x28FB8: (0x902316A0, 0x00001821),
                0x29074: (0x00021040, 0x00401021)}   # sll v0,v0,1  -> move v0,v0
 BYTE_WIDTHS = 2 * len(gt.ADVANCE) - 1               # codes the one-byte table has room for
+# The reads themselves (file offset of each lbu; lui at,hi sits 8 bytes before it, addu at,at,index
+# 4 before): left gap, width, left gap, width. A patch with more letters may move the whole table,
+# keeping its gap-and-width layout, to a place with room (the boot program or the resident pack).
+TABLE_READS = {0x28540: 0, 0x28608: 1, 0x28FB8: 0, 0x29080: 1}
+
+
+def _table_read(exe: bytes, at: int) -> int | None:
+    """The address `lui at,hi; addu at,at,x; lbu y,lo(at)` reads before adding x, or None."""
+    if at + 4 > len(exe):
+        return None
+    lui, addu, lbu = (struct.unpack_from("<I", exe, at + d)[0] for d in (-8, -4, 0))
+    if lui >> 16 != 0x3C01 or addu & 0xFFE0FFFF != 0x00200821 or lbu >> 21 != (0x24 << 5 | 1):
+        return None
+    lo = lbu & 0xFFFF
+    return ((lui & 0xFFFF) << 16) + (lo - 0x10000 if lo & 0x8000 else lo)
+
+
+def _moved_table(original: bytes, translated: bytes, pack: bytes | None) -> dict[int, int] | None:
+    """The gap-and-width table read from where the patch moved it, or None."""
+    places = [_table_read(translated, at) for at in TABLE_READS]
+    if None in places or pack is None:
+        return None
+    start = places[0]
+    if [p - start for p in places] != list(TABLE_READS.values()) or start == _table_read(original, 0x28540):
+        return None
+    memory = letterpairs.Memory(translated, pack)
+    widths = {}
+    try:
+        for code in range(0xF1):
+            gap, width = memory.byte(start + 2 * code), memory.byte(start + 2 * code + 1)
+            if code >= len(gt.ADVANCE) and gap == width == 0:
+                break                                       # past the patch's last letter
+            widths[code] = width - gap
+    except letterpairs.Unknown:
+        return None
+    return widths
 
 
 def _copy(word: int | None) -> tuple[int, int] | None:
@@ -329,16 +380,23 @@ def _copy(word: int | None) -> tuple[int, int] | None:
     return (0, 0) if rd in (0, src) else (rd, src)
 
 
-def dialogue_widths(original: bytes, translated: bytes) -> tuple[dict[int, int] | None, str]:
+def dialogue_widths(original: bytes, translated: bytes, pack: bytes | None = None) -> tuple[dict[int, int] | None, str]:
     """(code -> how far the patched dialogue box moves after it, how the patch's table was read).
-    None when the boot program isn't the USA one, or reads its widths in a way not known here."""
+    None when the boot program isn't the USA one, or reads its widths in a way not known here.
+    `pack`: the patched resident pack, where a patch may have moved the table."""
     word = lambda exe, at: struct.unpack_from("<I", exe, at)[0] if at + 4 <= len(exe) else None
     game = bytes(v for w in gt.ADVANCE for v in (0, w))
     if original[WIDTHS_AT:WIDTHS_AT + len(game)] != game or any(word(original, at) != w[0] for at, w in WIDTH_READS.items()):
         return None, "not the USA boot program"
     reads = [word(translated, at) for at in WIDTH_READS]
     table = translated[WIDTHS_AT:WIDTHS_AT + len(game)]
+    index = [at for at in WIDTH_READS if WIDTH_READS[at][0] >> 26 == 0]      # the two sll: code * 2
+    moved = _moved_table(original, translated, pack)
+    if moved is not None and all(word(translated, at) == WIDTH_READS[at][0] for at in index):
+        return moved, f"the game's kind of table (a gap and a width a letter), moved to 0x{_table_read(translated, 0x28540):08X}"
     if reads == [w[0] for w in WIDTH_READS.values()]:
+        if any(_table_read(translated, at) != _table_read(original, at) for at in TABLE_READS):
+            return None, "the patch reads its widths in a way not known here"
         return {c: table[2 * c + 1] - table[2 * c] for c in range(len(gt.ADVANCE))}, "the game's table (a gap and a width a letter)"
     if all(r == w[1] or (_copy(r) is not None and _copy(r) == _copy(w[1])) for r, w in zip(reads, WIDTH_READS.values())):
         return {c: table[1 + c] for c in range(BYTE_WIDTHS)}, "one width a letter, the patch's own table"
@@ -359,7 +417,8 @@ def letter_pictures(original, translated, letters: dict[int, str], how: dict[int
     letters and how the dialogue widths were read."""
     pal_o, width_o, _, px_o = font.page(original, font.PAGE0_ENTRY)
     pal, width, _, px = font.page(translated, font.PAGE0_ENTRY)
-    widths, read = dialogue_widths(original.disc.file(original.exe_name), translated.disc.file(translated.exe_name))
+    widths, read = dialogue_widths(original.disc.file(original.exe_name), translated.disc.file(translated.exe_name),
+                                   translated.resident_pack())
     metrics_o, metrics = menu_metrics(original), menu_metrics(translated)
     out, seen = [], set()
     for code in range(0xF1):

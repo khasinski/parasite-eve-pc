@@ -1,5 +1,5 @@
 {
- "about": "Where the menus draw resident text, and the limits there (petext/menu.py). Widths in px as Draw_MeasureTextWidth counts them. bytes include the FF end. edge: past it the text or its box leaves the screen (error). width: the space the layout gives it (warning until confirmed in game). Keys not named here are compared with the widest English entry of their table.",
+ "about": "Where the menus draw resident text, and the limits there (petext/menu.py). Widths in px as Draw_MeasureTextWidth counts them. bytes include the FF end. edge: past it the text or its box leaves the screen (error). width: the space the layout gives it (warning until confirmed in game). Keys not named here are compared with the widest English entry of their table. too_long \"empty\" (joined text): the game draws nothing when the parts don't fit, so a pack built from a fan patch keeps the patch's text, as the patched game shows the same empty message.",
  "contexts": [
   {"id": "help line", "source": "save_screens.c Menu_DrawContextHelpText: panel mode 0x13 at x 8, 300 px wide; text at +6",
    "keys": ["desc/*", "misc/000-088", "sys/014", "sys/015", "sys/039", "sys/076-081", "sys/087-089", "sys/091", "sys/092"],
@@ -47,7 +47,8 @@
  ],
  "combined": [
   {"id": "item message", "source": "active_list.c Inv_GetItemEffectData: an item name and sys/016 or 017 in 32 bytes, else empty",
-   "parts": ["item/000-234", "sys/016|sys/017"], "bytes": 32},
+   "parts": ["item/000-234", "sys/016|sys/017"], "bytes": 32,
+   "too_long": "empty"},
   {"id": "memory card notice", "source": "save_screens.c: sys/071 or 072 then sys/073 in one 64-byte dialog line",
    "parts": ["sys/071|sys/072", "sys/073"], "bytes": 64, "edge": 300,
    "line_break": "a line break at the end of sys/071 or 072 puts sys/073 on the box's next line"},

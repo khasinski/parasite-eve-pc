@@ -86,6 +86,30 @@ def screens(raw: bytes, name_width: int = NAME_WIDTH):
     return pages
 
 
+def drawn_rows(raw: bytes) -> list[int]:
+    """The lines each screen of a page shows: its last lines that hold only spaces draw nothing
+    (a fan patch's page can end a screen with one, before its wait)."""
+    space, screens_, lines, line = gt.CODE_OF[" "], [], [], []
+    for c in commands(raw):
+        if c[0] in (0xF7, 0xF8):
+            lines.append(line)
+            line = []
+            if c[0] == 0xF8:
+                screens_.append(lines)
+                lines = []
+        else:
+            line.append(c)
+    lines.append(line)
+    screens_.append(lines)
+    out = []
+    for lines in screens_:
+        n = len(lines)
+        while n > 1 and all(c == bytes([space]) for c in lines[n - 1]):
+            n -= 1
+        out.append(n)
+    return out
+
+
 def box_limit(source: dict, screen: bool = False):
     """Wrap to boxes proven for this page, or a complete bank with uniform bounds.
 
@@ -173,8 +197,10 @@ def check(key: str, raw: bytes, source: dict, widest_table: dict, name_px: int =
     """Dialogue pages against their boxes; menu entries against data/menu_layouts.json when the
     menu glyph metrics are known (else, and for keys it doesn't name, against the widest English
     entry of the table in widest_table, measured the same way)."""
+    from .stretch import LINE_BREAK
     errors, warnings = [], []
-    pages = screens(raw, name_px)
+    # a pack's line break in menu text (pelang.check_row) is measured as a line break
+    pages = screens(raw if key.startswith('dlg/') else raw.replace(LINE_BREAK, b'\xf7'), name_px)
     widest = max(max(p) for p in pages)
     if battle.is_battle(key):
         # One line of the dialogue font from x 20 (petext/battle.py); the bar has no second line.
@@ -199,6 +225,7 @@ def check(key: str, raw: bytes, source: dict, widest_table: dict, name_px: int =
     boxes = source.get('boxes') or []
     if not boxes:
         return errors, warnings + unproven(pages, source)
+    shown = drawn_rows(raw)
     for box in boxes:
         limit = bounds(box)
         if limit is None:
@@ -206,7 +233,8 @@ def check(key: str, raw: bytes, source: dict, widest_table: dict, name_px: int =
             continue
         width, count = limit
         edge, rows = bounds(box, screen=True)
-        for n, page in enumerate(pages, 1):
+        for n, (page, lines) in enumerate(zip(pages, shown), 1):
+            page = page[:lines]                  # a screen's last lines of only spaces draw nothing
             if max(page) > edge:
                 errors.append(f'screen {n}: a line is {max(page)} px; dialogue box {box} fits {edge} px'
                               + ('' if box == 'default' else ' before the screen edge'))

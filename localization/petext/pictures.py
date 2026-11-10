@@ -10,7 +10,12 @@ What counts as picture data (everything else a patch changes is reported, never 
 - each room's first two runs, both picture bundles (its third holds models, scripts and text);
 - the whole of entry 9 (the field's background pictures) and entry 76 (effect pictures);
 - every TIM picture found in the other entries, except the letters page at VRAM 320,0, which a
-  translation file's letters already replace.
+  translation file's letters already replace;
+- in a room whose picture bundles the patch changed, the colour row each 16 px tile of a picture
+  draws with, when the patch picked new ones for its redrawn tiles (the German patch): changes in
+  the room's third run before its message banks, taken only when every changed byte is such a
+  row (a 16-bit field whose low 9 bits are a VRAM row of 448-511, the palettes), so no script
+  change can come in with them.
 Text (entries 1 and 2 and the rooms' messages) comes through the pack's text instead. Room
 scripts, the opening credits (entry 71) and the boot program are not pictures.
 
@@ -119,9 +124,49 @@ def _pe_bytes(game, lo: int, hi: int) -> bytes:
     return data[lo - first * SECTOR:hi - first * SECTOR]
 
 
+def _first_bank(data: bytes) -> int:
+    """Where a room's third run has its first message bank (extract_text.bank_slots), or its end."""
+    try:
+        d = struct.unpack_from("<I", data, 4)[0]
+        ts = struct.unpack_from("<I", data, d + 0x20)[0]
+        return min((struct.unpack_from("<I", data, (ts & 0x3FFFFF) + i * 8 + 4)[0] & 0xFFFFFF
+                    for i in range(ts >> 22)), default=len(data))
+    except struct.error:
+        return 0
+
+
+def _palette_rows(a: bytes, b: bytes) -> bool:
+    """Every byte that differs is the low byte of a tile's colour row, 0x1C0-0x1FF (its high byte,
+    with the row's top bit and the flags, the same in both)."""
+    return all(k + 1 < len(a) and a[k + 1] == b[k + 1] and a[k + 1] & 1 and a[k] >= 0xC0 and b[k] >= 0xC0
+               for x, y in _changed(a, b) for k in range(x, y))
+
+
+def tile_palette_spans(original, translated) -> list[tuple[int, int, str]]:
+    """[PE.IMG byte start, end, what] of each room's tile colour rows the patch changed (see the
+    module's note), in rooms whose picture bundles it changed."""
+    spans = []
+    for number, (first, scratch, texture, data) in enumerate(original.rooms, 1):
+        if not data:
+            continue
+        begin = first * SECTOR
+        run = (begin + (scratch + texture) * SECTOR, begin + (scratch + texture + data) * SECTOR)
+        if _pe_bytes(original, begin, run[0]) == _pe_bytes(translated, begin, run[0]):
+            continue
+        a, b = _pe_bytes(original, *run), _pe_bytes(translated, *run)
+        cut = _first_bank(a)
+        if a[:cut] != b[:cut] and _palette_rows(a[:cut], b[:cut]):
+            spans.append((run[0], run[0] + cut, f"M{number:03} tile colour rows"))
+    return spans
+
+
 def diff(original, translated) -> tuple[list[Piece], dict]:
     """The picture pieces a patched disc changes, and what else it changes (by what, in bytes)."""
     pictures, other = picture_spans(original)
+    rows = tile_palette_spans(original, translated)
+    pictures += rows
+    ends = {lo: hi for lo, hi, _ in rows}                   # the rest of that run stays "data"
+    other = [(ends.get(lo, lo), hi, what) for lo, hi, what in other]
     pieces: list[Piece] = []
     taken: dict[str, int] = {}
     for lo, hi, what in pictures:

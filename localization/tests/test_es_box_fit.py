@@ -43,6 +43,13 @@ def pack_widths(data: bytes) -> dict[int, letters.Letter]:
     return out
 
 
+def shown(raw: bytes, *name_px) -> list[list[int]]:
+    """layout.screens without each screen's last lines of only spaces, which draw nothing (a fan
+    patch's page can end a screen with one before its wait): the lines the box really shows, as
+    the build counts them (layout.drawn_rows)."""
+    return [page[:n] for page, n in zip(layout.screens(raw, *name_px), layout.drawn_rows(raw))]
+
+
 BLANK = (0,) * (letters.CELL * letters.CELL)
 
 # Pages that go off screen only in a box they can't be shown in, checked by hand (2026-11-10). Both
@@ -85,6 +92,7 @@ class PackTest(unittest.TestCase):
     """Measures the pack PACK_ENV names. test_it_box_fit.py runs it for the Italian pack."""
     PACK_ENV = "PE_TEST_ES_PACK"
     NOT_THEIR_BOX = NOT_THEIR_BOX
+    AS_ON_THE_PS1 = frozenset()     # off screen in their own box on the patched PS1 game too
     DRAWN_AT_LEAST = 50             # letters the pack draws the patch's way (Spanish: 91)
     MEASURED_AT_LEAST = 1900        # dialogue pages the pack translates (Spanish: 1975)
 
@@ -106,7 +114,7 @@ class PackTest(unittest.TestCase):
 
     def test_pages_stay_on_screen_where_the_english_does(self):
         self.assertGreaterEqual(len(self.widths), self.DRAWN_AT_LEAST, "the pack draws its letters the patch's way")
-        english_pages = {e["key"]: layout.screens(bytes.fromhex(e["raw"])) for e in self.english
+        english_pages = {e["key"]: shown(bytes.fromhex(e["raw"])) for e in self.english
                          if e["key"].startswith("dlg/") and (e["boxes"] or e["boxes_possible"])
                          and pelang.fnv1a(e["key"]) in self.pack}
         gt.PACK_DRAWN.update(self.widths)
@@ -120,14 +128,14 @@ class PackTest(unittest.TestCase):
             if not key.startswith("dlg/") or raw is None or not boxes:
                 continue
             checked += 1
-            off, over = compare(english_pages[key], layout.screens(raw, name_px), boxes)
+            off, over = compare(english_pages[key], shown(raw, name_px), boxes)
             lost += [f"{key} in {box}" for box in off]
             if over:
                 past[key.split("/")[1]].append(key)
         print(f"\n{checked} dialogue pages measured; past a box's rectangle (on screen) where the English "
               f"isn't: {sum(map(len, past.values()))} ({', '.join(f'{b} {len(k)}' for b, k in sorted(past.items()))})")
         self.assertGreaterEqual(checked, self.MEASURED_AT_LEAST)
-        self.assertEqual([p for p in lost if p not in self.NOT_THEIR_BOX], [],
+        self.assertEqual([p for p in lost if p not in self.NOT_THEIR_BOX | self.AS_ON_THE_PS1], [],
                          "off screen in a box where the English stays on screen")
 
 

@@ -481,19 +481,45 @@ static void Draw_EmitLine(PeTextLine *line) {
     AdvanceCursor(line->width);
 }
 
+/* A line break a language pack puts in menu text (PE_TEXT_LINE_BREAK, a fan patch's two-line
+ * item description): the next line starts where the caller saved the cursor, 12 px lower, as the
+ * German patch's own code draws it on the PS1. Every caller saves the cursor first; English and the
+ * other packs have no break here, so they draw as before. */
+static void Draw_NextMenuLine(void) {
+    DrawTextCursorPair *stack = (DrawTextCursorPair *)g_TextCursorStackPtr;
+    if ((DrawTextCursorPair *)g_TextCursorStackBottom < stack)
+        SetCursor(stack[-1].x, stack[-1].y + 12);
+}
+
 /* Draws the text to FF, a whole line at a time when the pack reads right to left. */
 static void Draw_TextToEnd(u8 *text) {
+    unsigned br;
     if (PeText_RightToLeft()) {
         PeTextItem item;
         PeText_LineStart(&s_DrawLine);
         while (*text != 255) {
-            unsigned bytes = PeText_LineRead(&s_DrawLine, PE_TEXT_MENU, text, ~0u, 0, &item);
+            unsigned bytes;
+            if ((br = PeText_LineBreakAt(text, ~0u)) != 0) {
+                Draw_EmitLine(&s_DrawLine);
+                Draw_NextMenuLine();
+                PeText_LineStart(&s_DrawLine);
+                text += br;
+                continue;
+            }
+            bytes = PeText_LineRead(&s_DrawLine, PE_TEXT_MENU, text, ~0u, 0, &item);
             text += bytes ? bytes : 1;
         }
         Draw_EmitLine(&s_DrawLine);
         return;
     }
-    while (*text != 255) text += Draw_TextItem(text);
+    while (*text != 255) {
+        if ((br = PeText_LineBreakAt(text, ~0u)) != 0) {
+            Draw_NextMenuLine();
+            text += br;
+            continue;
+        }
+        text += Draw_TextItem(text);
+    }
 }
 
 void Draw_PrintRawText(u8 *text) {
