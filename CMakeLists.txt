@@ -120,6 +120,10 @@ add_library(pe_download_zip STATIC ${pe_zip_SOURCE_DIR}/miniz.c ${pe_zip_SOURCE_
     ${pe_zip_SOURCE_DIR}/miniz_tinfl.c ${pe_zip_SOURCE_DIR}/miniz_tdef.c)
 target_include_directories(pe_download_zip PUBLIC ${pe_zip_SOURCE_DIR} ${pe_zip_BINARY_DIR})
 target_compile_definitions(pe_download_zip PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
+# -std=c11 hides fseeko/ftello, which miniz needs; GCC 14 and newer reject the implicit declaration.
+if(NOT WIN32)
+    target_compile_definitions(pe_download_zip PRIVATE _POSIX_C_SOURCE=200809L)
+endif()
 target_link_libraries(pe_download_deps INTERFACE pe_download_json pe_download_zip)
 if(APPLE)
     target_link_libraries(pe_download_deps INTERFACE "-lcurl")
