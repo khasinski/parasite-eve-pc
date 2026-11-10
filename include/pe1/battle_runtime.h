@@ -41,6 +41,26 @@ extern u8 g_BattleSaveOverlayActive;
 extern u16 g_ActorEffectFlag100Timer;
 extern u8 g_BattleSlotCancelPending;
 #ifdef PE_MELEE_PROTOTYPE
+typedef enum BattleMeleeFeature {
+    BATTLE_MELEE_FOLLOW_UP,
+    BATTLE_MELEE_FAST_WINDUP,
+    BATTLE_MELEE_BODY_REACH,
+    BATTLE_MELEE_REACH_CANCEL,
+    BATTLE_MELEE_SPARK,
+    BATTLE_MELEE_FEATURE_COUNT
+} BattleMeleeFeature;
+
+#ifdef PE_MODS
+int Battle_MeleeFeatureEnabled(BattleMeleeFeature feature);
+#else
+static inline int Battle_MeleeFeatureEnabled(BattleMeleeFeature feature) {
+    (void)feature;
+    return 1;
+}
+#endif
+
+int Battle_MeleeStepStrike(BattleEntity *aya, BattleEntity *target);
+void Battle_MeleeOnResolve(BattleEntity *target, int status);
 int Battle_MeleeOnDamage(BattleEntity *target, int damage);
 void Battle_MeleeUpdate(void);
 void Battle_MeleeDraw(void);

@@ -60,6 +60,17 @@ mods/
   pe_hello/            example mod (not built by default)
 ```
 
+## Melee Combat (pe_melee)
+
+Build with `-DPE_MODS=ON -DPE_MELEE_PROTOTYPE=ON`, then open F1 > Melee Combat.
+The saved switches control the flank follow-up, faster Club 1 windup, body-based club reach,
+out-of-reach cancellation, and the backhand hit spark. Cancellation and the spark apply only
+when the follow-up is enabled. Body-based reach applies to every club. Follow-ups and faster
+windup are limited to Club 1 against the Day 2 amphitheater mutant.
+
+The mod can be disabled under F1 > Manage mods and restarted. Club 1's +8 damage belongs to
+Rebalance's Progression gun bonuses setting.
+
 ## Stacked items (pe_stacks)
 
 F1 > PE Enhancements > Inventory > Stacked items (on by default). Lists keep plain item ids; the
