@@ -680,6 +680,14 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/text-renderer-chinese-evidence chinese)
             set_tests_properties(original-game-text-renderer-chinese PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 300 LABELS "game-assets;mods;localization")
+            # The Spanish pack from the USA-disc fan patch on screen, on Disc 1 and Disc 2: its letters
+            # (the patch's own pictures and widths), its name grid and its pictures. The pack stays out
+            # of the repository: PE_TEST_ES_PACK names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-spanish COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-spanish-evidence spanish)
+            set_tests_properties(original-game-text-renderer-spanish PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
         endif()
         # A fan patch made for the Japanese discs read for the USA-disc port: two patches of the
         # test's own on PE_TEST_JA_DISC (Japanese Disc 1); PE_TEST_DISC adds the line-up check.

@@ -754,6 +754,12 @@ and F1 > Fonts. Either disc gives the same text. Nothing here goes into the repo
   should be empty; if not, those rooms won't match the patch), pictures with text in them
   (`rooms_with_edited_pictures`), and symbols with no letter named for them. Mod labels stay in English
   because no disc patch has them.
+- **Checked on screen**: CTest `original-game-text-renderer-spanish` plays the Spanish pack
+  (`PE_TEST_ES_PACK`, the zipped player file) on USA Disc 1 and, with `PE_TEST_DISC2`, Disc 2 (a
+  Day 6 sample save from `save-editor/samples` loads there). The first box, the boxes on the ship
+  and the name entry's grid light exactly the pixels of the pack's letter pictures at its widths;
+  the title screen and the Day 6 title card are pixel for pixel the frames of a disc copy with the
+  pack's picture pieces written in. Without the pack it is skipped.
 
 ## Local Italian text import
 
