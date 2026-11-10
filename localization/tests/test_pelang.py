@@ -6,6 +6,7 @@
 import csv
 import json
 import os
+import struct
 import sys
 import tempfile
 import unittest
@@ -419,6 +420,73 @@ class PelangTest(unittest.TestCase):
         self.csv_with({"dlg/M001/003": "Hello{xFB}"})
         self.assertEqual(pelang.main(args), 1)
         self.assertFalse(out.exists())
+
+    def pictures_file(self, drawn: dict) -> Path:
+        """A letter pictures file as import-patch --patch-letters writes it, from
+        letter -> (dialogue advance, menu metrics, the columns its strokes fill)."""
+        def rows(columns):
+            return ["".join("#" if x in columns and 2 <= y <= 9 else " " for x in range(12)) for y in range(12)]
+        path = self.dir / "letters.json"
+        path.write_text(json.dumps({"letters": [
+            {"letter": ch, "code": "00", "dialogue": d, "menu": m, "picture": rows(c)} for ch, (d, m, c) in drawn.items()
+        ]}), encoding="utf-8")
+        return path
+
+    def test_a_patchs_letters_lay_its_text_out_with_its_widths(self):
+        self.addCleanup(gt.PACK_DRAWN.clear)
+        # 30 W are 330 px in the game's letters, past the 297 px box, and 180 px in the patch's
+        path = self.csv_with({"dlg/M001/003": "0" + "W" * 30 + "é"})
+        out = self.dir / "drawn.pelang"
+        args = ["build", str(path), "--strings", str(self.strings), "--lang", "xx", "--name", "Test",
+                "-o", str(out), "--no-wrap"]
+        self.assertEqual(pelang.main(args), 1)
+        pictures = self.pictures_file({"W": (6, 0x50, {1, 2, 3, 4}), "0": (5, 0x40, {1, 2}), "é": (6, 0x50, {2, 3}),
+                                       "ñ": (6, 0x50, {1}), " ": (12, 0x60, set())})
+        self.assertEqual(pelang.main(args + ["--patch-letters", str(pictures)]), 0)
+        data = out.read_bytes()
+        at, count = struct.unpack_from("<II", data, 80)
+        records = [data[at + k * 80:at + (k + 1) * 80] for k in range(count)]
+        codes = [r[4] for r in records]
+        self.assertEqual(codes, sorted(codes))
+        self.assertTrue(all(letters.coded(k, r) for k, r in enumerate(records)))  # '0' first: code 0
+        by = {chr(struct.unpack_from("<I", r)[0]): r for r in records}
+        self.assertEqual(set(by), {"0", "W", "é", " "})       # not ñ: a fixed letter the text doesn't use
+        self.assertEqual(tuple(by["W"][4:8]), (gt.CODE_OF["W"], 6, letters.NO_BASE, 0x50))
+        self.assertEqual(by["W"][8 + 2 * 12:8 + 3 * 12], bytes([0x10, 0x11, 0x01, 0, 0, 0]) * 2)
+        self.assertEqual(by["é"][4], latin.CODE_OF["é"])
+        raw = pelang.read_pack(out)[2][pelang.fnv1a("dlg/M001/003")]
+        self.assertEqual(raw, b"\x00" + bytes([gt.CODE_OF["W"]]) * 30 + bytes([latin.CODE_OF["é"], 0xF9]))
+        bad = self.dir / "bad.json"
+        bad.write_text(json.dumps({"letters": [{"letter": "W", "dialogue": 6, "menu": 0, "picture": ["#"]}]}))
+        self.assertEqual(pelang.main(args + ["--patch-letters", str(bad)]), 1)
+
+    def test_a_patch_symbol_no_catalog_draws_becomes_one_of_the_packs_letters(self):
+        self.addCleanup(gt.PACK_DRAWN.clear)
+        self.addCleanup(gt.PACK_LETTERS.clear)
+        # the wrench a patch draws for "Tool" (import-patch --letters 98=U+1F527): item text keeps
+        # one byte a letter, so it takes a code of the pack's table, with the patch's picture and widths
+        path = self.csv_with({"item/000": "🔧+6"})
+        out = self.dir / "symbol.pelang"
+        args = ["build", str(path), "--strings", str(self.strings), "--lang", "xx", "--name", "Test", "-o", str(out)]
+        self.assertEqual(pelang.main(args), 1)                      # no picture: no letter
+        pictures = self.pictures_file({"🔧": (11, 0xA0, {1, 2, 3, 4, 5, 6, 7, 8})})
+        self.assertEqual(pelang.main(args + ["--patch-letters", str(pictures)]), 0)
+        data = out.read_bytes()
+        at, count = struct.unpack_from("<II", data, 80)
+        self.assertEqual(count, 1)
+        record = data[at:at + 80]
+        self.assertEqual(struct.unpack_from("<I", record)[0], 0x1F527)
+        self.assertTrue(0x4D <= record[4] <= 0xEF)
+        self.assertEqual(tuple(record[5:8]), (11, letters.NO_BASE, 0xA0))
+        raw = pelang.read_pack(out)[2][pelang.fnv1a("item/000")]
+        self.assertEqual(raw, bytes([record[4]]) + gt.encode("+6"))
+
+    def test_a_drawn_space_is_still_pulled_back_in_the_box(self):
+        self.addCleanup(gt.PACK_DRAWN.clear)
+        gt.PACK_DRAWN[0x0F] = letters.Letter(" ", pixels=(0,) * 144, dialogue=12, menu=0x60)
+        self.assertEqual((gt.box_advance(0x0F), gt.base_advance(0x0F)), (5, 12))
+        self.assertEqual(layout.advance(b"\x0f"), 5)
+        self.assertEqual(gt.lines(b"\x0f\x0f"), [10])
 
     def test_pseudo_leaves_unsupported_source_rows_as_fallback(self):
         rows = STRINGS + [{"key": "sys/116", "text": "Hello{xF3}", "boxes": [], "lines_px": [30]}]

@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,drawn]]
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -55,6 +55,13 @@ Checks, each from pe_mods.log and frame dumps:
              pack's letter pictures say they should: each letter in its joined shape, the gaps
              between joined letters closed, right to left, each box line ending at x 300. The
              scene behind the box comes from a pack whose first box is a lone '.'.
+  drawn      A pack that draws letters its own way, as a fan patch's own letters come in (pelang.py
+             build --patch-letters): every letter of the first box and of the name entry's title gets
+             a test picture and widths unlike the game's, including the game's '0' (code 0), the
+             space and 'e'. The box lights exactly the pixels those pictures at those widths say,
+             the space still pulled back as the English box pulls it, and 'é', which the pack
+             doesn't draw, made from its drawn 'e'; the title lights exactly the pixels the menus
+             cut from the pictures by their metrics.
 """
 import binascii
 import csv
@@ -276,6 +283,74 @@ def make_arabic_packs(localization, out):
                        stdout=subprocess.DEVNULL)
         made[code] = (code, name, None, pack)
     return made
+
+
+# Part drawn: the first box (dlg/M001/009) and the name entry's title (sys/039), in letters the pack
+# draws itself with test pictures and widths unlike the game's (DRAWN_WIDTHS: dialogue advance; the
+# menus' metrics are its width less one, first column 1). 'é' isn't drawn: pe_lang makes it from the
+# drawn 'e'.
+DRAWN_BOX = 'Wave 0 wé'
+DRAWN_TITLE = 'Wave0'
+DRAWN_WIDTHS = {'W': 9, 'a': 6, 'v': 5, 'e': 6, '0': 7, 'w': 8, ' ': 10}
+LINE_LEFT = 20                 # where the default box's lines start
+
+
+def drawn_picture(ch):
+    """A test picture: strokes on a pattern of its own in the columns its width leaves, shadow right
+    of and below them as the game's letters have it (0 empty, 1 stroke, 2 shadow)."""
+    w, k = DRAWN_WIDTHS[ch], ord(ch)
+    strokes = {(x, y) for x in range(1, w - 2) for y in range(2, 10) if ch != ' ' and (x * 3 + y + k) % 4}
+    return [1 if (x, y) in strokes else 2 if (x - 1, y - 1) in strokes or (x - 1, y) in strokes else 0
+            for y in range(12) for x in range(12)]
+
+
+def make_drawn_packs(localization, out):
+    """The drawn pack ('xx', its pictures file from drawn_picture) and the scene pack, whose first box
+    is a lone '.' at its left and whose title is English."""
+    strings = out / 'text' / 'strings.json'
+    pictures = out / 'drawn-letters.json'
+    pictures.write_text(json.dumps({'letters': [
+        {'letter': ch, 'code': '00', 'dialogue': w, 'menu': (w - 1) << 4 | 1,
+         'picture': [''.join(' #+'[v] for v in drawn_picture(ch)[y * 12:(y + 1) * 12]) for y in range(12)]}
+        for ch, w in DRAWN_WIDTHS.items()]}, ensure_ascii=False), encoding='utf-8')
+    made = {}
+    for name, rows, extra in (('Drawn', [('dlg/M001/009', DRAWN_BOX), ('sys/039', DRAWN_TITLE)],
+                               ['--patch-letters', str(pictures)]),
+                              ('Scene', [('dlg/M001/009', '.')], [])):
+        table = out / f'drawn-{name.lower()}.csv'
+        with table.open('w', encoding='utf-8', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
+            w.writeheader()
+            w.writerows({'key': k, 'translation': t, 'notes': ''} for k, t in rows)
+        pack = out / f'drawn-{name.lower()}.pelang'
+        subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--strings', str(strings),
+                        '--lang', 'xx', '--name', name, '-o', str(pack), str(table), *extra], check=True,
+                       stdout=subprocess.DEVNULL)
+        made[name.lower()] = ('xx', name, None, pack)
+    return made
+
+
+def drawn_line(text, style):
+    """{(x, row): 1 or 2} of a line of the drawn pack from its pen's start, as the box (style 'box')
+    or a menu ('menu') draws it; later letters are drawn over earlier ones."""
+    from petext import latin
+    pixels, pen = {}, 0
+    for ch in text:
+        if ch in DRAWN_WIDTHS:
+            cell, w = drawn_picture(ch), DRAWN_WIDTHS[ch]
+        else:                                      # é, made by pe_lang from the drawn e
+            g = next(g for g in latin.GLYPHS if g.char == ch)
+            cell, w = latin.compose(g, drawn_picture(g.base)), DRAWN_WIDTHS[g.base]
+        if style == 'box':
+            cols, x0, advance = range(12), 0, w - (7 if ch == ' ' else 0)
+        else:                                      # cut from column 1, metrics width w - 1, half the spacing in
+            spacing = 2 if ch.isdigit() or ch == ' ' else 1
+            cols, x0, advance = range(1, w), spacing // 2 - 1, (w - 1) + spacing
+        for p, v in enumerate(cell):
+            if v and p % 12 in cols:
+                pixels[(pen + x0 + p % 12, p // 12 + (1 if style == 'menu' else 0))] = v
+        pen += advance
+    return pixels, pen
 
 
 def joined_line(text):
@@ -554,7 +629,7 @@ def card_file(work):
     return card
 
 
-def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters,rtl'):
+def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters,rtl,drawn'):
     disc = os.getenv('PE_TEST_DISC')
     if not disc:
         print('PE_TEST_DISC is not set: skipped')
@@ -877,6 +952,45 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
             found = (dx, dy) if {(x + dx, y + dy) for x, y in want} == lit_px else None
         check(found, f'arabic: the name entry title does not light the joined word\'s pixels: {work}')
         print(f'PASS rtl arabic menus: the name entry title drew joined, right to left, pixel for pixel '
+              f'(at x {found[0] + TITLE[0]})')
+
+    # A pack that draws letters its own way (a fan patch's look).
+    if 'drawn' in parts:
+        made = make_drawn_packs(localization, out / 'packs')
+        boxes = {which: run_fixed(game, discs, out / f'drawn-box-{which}', first, pack=pack, pad=NEW_GAME)
+                 for which, pack in made.items()}
+        log = mods_log(boxes['drawn'])
+        missing = [line for line in log.splitlines() if 'text: ' in line and "shows '?'" in line]
+        check(not missing, f'drawn: letters fell back to "?": {missing[:5]}: {boxes["drawn"]}')
+        check(f'text: Drawn (xx) draws {len(DRAWN_WIDTHS)} letters with its own pictures and widths' in log,
+              f"drawn: the pack's own letters are not logged: {boxes['drawn']}")
+        box, scene = bright(boxes['drawn'], 'first', BOX), bright(boxes['scene'], 'first', BOX)
+        pixels, _ = drawn_line(DRAWN_BOX, 'box')
+        left, top = LINE_LEFT - BOX[0], LINE_TOP - BOX[1]
+        wrong = []
+        for y in range(top, top + 12):
+            for x in range(16, len(box[0])):            # right of the scene pack's '.'
+                want = pixels.get((x - left, y - top)) == 1
+                if (want or not scene[y][x]) and box[y][x] != want:
+                    wrong.append((x + BOX[0], y + BOX[1]))
+        check(not wrong, f"drawn: the box line does not light the drawn letters' pixels at their widths "
+                         f'(first differences at {wrong[:4]}): {boxes["drawn"]}')
+        print(f'PASS drawn dialogue: "{DRAWN_BOX}" lit exactly its own pictures at its own widths, the space pulled '
+              "back as English's, é made from the drawn e")
+        steps = [step for step in MENU_STEPS if step[0] <= next(t for t, label, _ in MENU_STEPS if label == 'grid')]
+        steps[-1] = (steps[-1][0], 'grid', None)
+        work = run_fixed(game, discs, out / 'drawn-menus', steps, pack=made['drawn'], pad=NEW_GAME)
+        title = bright(work, 'grid', TITLE)
+        pixels, _ = drawn_line(DRAWN_TITLE, 'menu')
+        lit_px = {(x, y) for y, row in enumerate(title) for x, v in enumerate(row) if v}
+        want = {xy for xy, v in pixels.items() if v == 1}
+        found = None
+        if lit_px and want:
+            dx = min(x for x, _ in lit_px) - min(x for x, _ in want)
+            dy = min(y for _, y in lit_px) - min(y for _, y in want)
+            found = (dx, dy) if {(x + dx, y + dy) for x, y in want} == lit_px else None
+        check(found, f'drawn: the name entry title does not light the drawn letters cut by their metrics: {work}')
+        print(f'PASS drawn menus: the name entry title "{DRAWN_TITLE}" lit exactly its pictures cut by its metrics '
               f'(at x {found[0] + TITLE[0]})')
     return 0
 

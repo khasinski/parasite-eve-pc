@@ -381,24 +381,37 @@ def cmd_build(a) -> int:
                           "`pelang.py export` writes (key, translation, notes)")
     gt.PACK_LETTERS.clear()
     gt.PACK_EXTRA.clear()
+    gt.PACK_DRAWN.clear()
     from petext import rtl
     gt.RTL = rtl.is_rtl(a.lang)             # lines end at the box's right side
     texts = [r.get('translation','') for r in rows]
+    pictures = {}
+    if getattr(a, "patch_letters", None):
+        try:
+            pictures = lettertable.load_pictures(a.patch_letters)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            print(f"error: --patch-letters: {e}")
+            return 1
     try:
         byte_texts = [r.get('translation','') for r in rows
                       if stretch.stays_bytes(r.get('key','')) and (a.bytes_only or not r.get('key','') in namelib.KEYS)]
         table = lettertable.Letters(texts, dictionary=bool(getattr(a,'cjk_font',None)),
                                     byte_texts=byte_texts, extra=not a.bytes_only,
-                                    shapes=rtl.shapes_for(texts) if gt.RTL else ())
+                                    shapes=rtl.shapes_for(texts) if gt.RTL else (),
+                                    own=lettertable.picture_letters(pictures))
         atlas = cjk.Atlas(texts, getattr(a,'cjk_font',None), skip=table.codes)
     except (ValueError, OSError, struct.error) as e:
         print(f'error: CJK font: {e}')
         return 1
+    if pictures:
+        drawn = table.draw(pictures, texts)
+        print(f"{drawn} letters drawn with the patch's pictures and widths")
     atlas.codes.update(table.codes)
     atlas.letters = table
     gt.PACK_LETTERS.update(table.by_code)
     gt.PACK_EXTRA.update(table.by_token)
-    name_px = layout.NAME_WIDTH
+    gt.PACK_DRAWN.update(table.drawn)
+    name_px = layout.name_width(gt.encode("Aya"))
     for r in rows:
         if r.get("key") == "sys/030" and r.get("translation"):
             try:
@@ -567,7 +580,7 @@ def _expand_stretches(data: bytes, raw: bytes) -> bytes:
     extra = 0
     for k in range(letters):
         r = data[letters_at + k * lettertable.RECORD:]
-        if r[4]:
+        if lettertable.coded(k, r):
             back[chr(struct.unpack_from("<I", r)[0])] = bytes([r[4]])
         else:                                      # no code: as build wrote it before the stretches
             back[chr(struct.unpack_from("<I", r)[0])] = lettertable.extra_token(extra)
@@ -940,6 +953,9 @@ def main(argv=None) -> int:
                    help="the previous version of this pack (a .pelang from build): name letters outside the shared list "
                         "keep its numbers, so names in players' saves read the same (default: the file "
                         "-o writes over, when there is one)")
+    b.add_argument("--patch-letters", type=Path,
+                   help="a letter pictures file from import-patch --patch-letters: the pack draws its "
+                        "letters as the patch does, with the patch's widths, and lays its text out with them")
     b.add_argument("--no-wrap", action="store_true",
                    help="don't rewrap dialogue pages that overflow their box (by default they get line breaks at "
                         "spaces and, if still too tall, more screens)")

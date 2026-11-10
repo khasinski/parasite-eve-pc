@@ -61,16 +61,18 @@ static unsigned char *copy_of(const unsigned char *p, size_t size) {
     unsigned char *c = malloc(size); memcpy(c, p, size); return c;
 }
 
-/* The same pack as version 4, with one stretch holding `letters` (no CJK dictionary, no table). */
-static unsigned char *with_stretch(const unsigned char *v1, size_t size, const uint32_t *letters,
-                                   unsigned count, size_t *out) {
-    size_t at = size + 48, pad = (4 - at % 4) % 4, total = at + pad + 8 + count * 4u + 8;
+/* The same pack as version 4, with `records` letter records and one stretch holding `letters` (no
+ * CJK dictionary). */
+static unsigned char *with_stretch_table(const unsigned char *v1, size_t size, const uint32_t *letters,
+                                         unsigned count, const unsigned char *records, unsigned nrec, size_t *out) {
+    size_t text_end = size + 48, at = text_end + nrec * 80u, pad = (4 - at % 4) % 4, total = at + pad + 8 + count * 4u + 8;
     unsigned char *p = calloc(1, total);
     memcpy(p, v1, 64);
     memcpy(p + 112, v1 + 64, size - 64);
+    if (nrec) memcpy(p + text_end, records, nrec * 80u);
     wr32(p + 4, 4); wr32(p + 12, (uint32_t)(v1[12] | v1[13] << 8) + 48);
-    wr32(p + 64, (uint32_t)at); wr32(p + 68, 0); wr32(p + 72, 76); wr32(p + 76, 0);
-    wr32(p + 80, (uint32_t)at); wr32(p + 84, 0);
+    wr32(p + 64, (uint32_t)text_end); wr32(p + 68, 0); wr32(p + 72, 76); wr32(p + 76, 0);
+    wr32(p + 80, (uint32_t)text_end); wr32(p + 84, nrec);
     wr32(p + 88, (uint32_t)(at + pad)); wr32(p + 92, 1); wr32(p + 96, count); wr32(p + 100, 0);
     wr32(p + at + pad, 0); wr32(p + at + pad + 4, count);
     for (unsigned k = 0; k < count; ++k) wr32(p + at + pad + 8 + 4 * k, letters[k]);
@@ -79,6 +81,12 @@ static unsigned char *with_stretch(const unsigned char *v1, size_t size, const u
     wr32(p + total - 8, 0x3042); wr32(p + total - 4, 'A');
     *out = total;
     return p;
+}
+
+/* The same pack as version 4, with one stretch holding `letters` (no CJK dictionary, no table). */
+static unsigned char *with_stretch(const unsigned char *v1, size_t size, const uint32_t *letters,
+                                   unsigned count, size_t *out) {
+    return with_stretch_table(v1, size, letters, count, NULL, 0, out);
 }
 
 int main(int argc, char **argv) {
@@ -137,7 +145,7 @@ int main(int argc, char **argv) {
             {4, 0x20},            /* a code among the game's own letters */
             {4, 0xF0},            /* past the codes a letter may take */
             {8, 3},               /* a pixel that is no colour */
-            {7, 1},               /* ops on a drawn letter */
+            {7, 0x0C},            /* a drawn letter's menu metrics starting past its cell */
             {5, 0},               /* a drawn letter with no width */
             {80 + 6, 0x4D},       /* a base letter that isn't the game's */
             {80 + 7, 8},          /* an unknown step */
@@ -162,6 +170,63 @@ int main(int argc, char **argv) {
         wr32(cut + 4, 4);
         assert(pe_lang_pack_parse(&pack, cut, v3_size));                     /* a version to come */
         free(v1);
+    }
+    {
+        /* A pack's own pictures of letters whose meaning stays (a fan patch's look): the game's '0'
+         * and 'A' and the fixed é, with their widths and menu metrics; and one of its own letters. */
+        Entry small[] = {{"sys/001", "\x10\x53\x60"}};
+        size_t small_size, v3_size;
+        unsigned char *v1 = make_pack(small, 1, &small_size), letters[320];
+        PeLangPack pack;
+        wr_record(letters, '0', 0x00, 6, 0xFF); letters[7] = 0x50; letters[8] = 0x21;
+        wr_record(letters + 80, 'A', 0x10, 7, 0xFF); letters[87] = 0x61; letters[88] = 0x12;
+        wr_record(letters + 160, 0xE9, 0x53, 6, 0xFF); letters[168] = 0x01;
+        wr_record(letters + 240, 0x3B1, 0x60, 8, 0xFF); letters[248] = 0x21;
+        unsigned char *v3 = with_letters(v1, small_size, letters, 4, &v3_size);
+        assert(!pe_lang_pack_parse(&pack, v3, v3_size));
+        assert(pack.letter_count == 4 && pack.unicode[0x00] == '0' && pack.unicode[0x10] == 'A' && pack.unicode[0x53] == 0xE9);
+        assert(pe_lang_letter_redraws(pe_lang_pack_letter(&pack, 0)) && pe_lang_letter_redraws(pe_lang_pack_letter(&pack, 1)));
+        assert(pe_lang_letter_redraws(pe_lang_pack_letter(&pack, 2)) && !pe_lang_letter_redraws(pe_lang_pack_letter(&pack, 3)));
+        /* redrawn letters mean what they meant, so they may go in names and saves */
+        assert(!pe_lang_pack_has_letter(&pack, 0x00) && !pe_lang_pack_has_letter(&pack, 0x10));
+        assert(!pe_lang_pack_has_letter(&pack, 0x53) && pe_lang_pack_has_letter(&pack, 0x60));
+        pe_lang_pack_free(&pack);
+        struct { unsigned at, value; } damage[] = {
+            {80 + 0, 'B'},        /* a game code given another letter */
+            {80 + 6, 0x30},       /* a game code built from marks, not drawn */
+            {160 + 0, 0xEA},      /* a fixed code given another letter below the pack's codes: ok, but... */
+            {0 + 0, 0x3B2},       /* ...a game code below 4D never */
+        };
+        for (unsigned i = 0; i < sizeof damage / sizeof *damage; ++i) {
+            unsigned char bad[320];
+            memcpy(bad, letters, sizeof bad);
+            bad[damage[i].at] = (unsigned char)damage[i].value;
+            if (damage[i].value > 0xFF) wr32(bad + damage[i].at, damage[i].value);
+            unsigned char *damaged = with_letters(v1, small_size, bad, 4, &v3_size);
+            int refused = pe_lang_pack_parse(&pack, damaged, v3_size) != 0;
+            if (!refused) pe_lang_pack_free(&pack);
+            assert(refused == (i != 2));       /* é's code may hold another letter of the pack's */
+        }
+        free(v1);
+    }
+    {
+        /* Version 4: code 0 means no code, but a first record that redraws '0' is the game's code 0. */
+        Entry one[] = {{"sys/001", "\x01\x10"}};
+        const uint32_t none[] = {'H'};
+        unsigned char records[240];
+        size_t v1n, v4n;
+        unsigned char *v1p = make_pack(one, 1, &v1n), *v4p;
+        PeLangPack v4;
+        v1p[64 + 8] = 0x00;                                      /* the '0' (not in a C string) */
+        wr_record(records, '0', 0x00, 6, 0xFF); records[8] = 0x21;
+        wr_record(records + 80, 'A', 0x10, 7, 0xFF); records[88] = 0x12;
+        wr_record(records + 160, 0x3B1, 0x00, 8, 0xFF); records[168] = 0x21;   /* a letter with no code */
+        v4p = with_stretch_table(v1p, v1n, none, 1, records, 3, &v4n);
+        assert(!pe_lang_pack_parse(&v4, v4p, v4n));
+        assert(v4.letter_count == 2 && v4.extra_count == 1 && pe_lang_pack_extra_index(&v4, 0x3B1) == 0);
+        assert(pe_lang_letter_redraws(pe_lang_pack_letter(&v4, 0)) && v4.unicode[0x00] == '0');
+        pe_lang_pack_free(&v4);
+        free(v1p);
     }
     unsigned char *good = make_pack(entries, 6, &size);
     PeLangPack pack;

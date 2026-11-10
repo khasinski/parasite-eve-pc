@@ -23,7 +23,7 @@ typedef struct PeLangPack {
     size_t size;
     unsigned count;
     unsigned entries_at, cjk_offset, cjk_count;
-    unsigned letters_offset, letter_count; /* the pack's own letters, by rising code */
+    unsigned letters_offset, letter_count; /* the pack's own letters and its redrawn ones, by rising code */
     /* v4: then its letters with no code (code byte 0), by rising Unicode: past the 163 codes they
      * reach the screen only in stretches and name letters, through the letter cache */
     unsigned extra_offset, extra_count;
@@ -47,6 +47,10 @@ static inline const unsigned char *pe_lang_pack_letter(const PeLangPack *pack, u
     return pack->data + pack->letters_offset + index * PE_LANG_LETTER_SIZE;
 }
 int pe_lang_pack_has_letter(const PeLangPack *pack, unsigned code);
+/* Whether a coded record is the pack's own picture of the letter its code already means (a game
+ * letter, or a fixed Latin Extended or Cyrillic one: a fan patch's look). Its widths replace the
+ * game's while the pack is in use; what the code means doesn't change. */
+int pe_lang_letter_redraws(const unsigned char *record);
 /* Whether the pack's text reads right to left, from its language code: Hebrew, Yiddish, Arabic,
  * Persian, Urdu, Pashto, Sindhi, Uyghur, Central Kurdish, Dhivehi, or any code with the script
  * subtag Arab, Hebr or Thaa (ks-Arab); another script subtag (ku-Latn) reads left to right. */

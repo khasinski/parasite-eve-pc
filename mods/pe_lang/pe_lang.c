@@ -155,8 +155,17 @@ static void install_widths(void) {
     const unsigned letters = pack ? pack->letter_count : 0;
     unsigned char advance[78], *metrics;
     for (unsigned i = 0; i < 78; ++i) advance[i] = g_TextboxGlyphSpacing[i].right;
+    /* The pack's own pictures of the game's letters bring their widths, with no left gap; letters
+     * built on those take their widths from them. */
+    for (unsigned k = 0; k < letters; ++k) {
+        const unsigned char *r = pe_lang_pack_letter(pack, k);
+        if (r[4] < 78 && pe_lang_letter_redraws(r)) advance[r[4]] = r[5];
+    }
     memset(s_widths, 0, sizeof s_widths);
     memcpy(s_widths, g_TextboxGlyphSpacing, sizeof g_TextboxGlyphSpacing);
+    for (unsigned i = 0; i < 78; ++i) s_widths[i].right = advance[i];
+    for (unsigned k = 0; k < letters; ++k)
+        if (pe_lang_letter_redraws(pe_lang_pack_letter(pack, k))) s_widths[pe_lang_pack_letter(pack, k)[4]].left = 0;
     for (unsigned k = 0; k < PE_LATIN_COUNT; ++k)
         s_widths[kPeLatinGlyphs[k].code].right = (u8)pe_lang_font_advance(&kPeLatinGlyphs[k], advance);
     if (s_font_cyrillic)
@@ -169,6 +178,10 @@ static void install_widths(void) {
     if (!g_ResidentDataPack.directory.glyphMetrics) return;     /* not loaded yet: next scene */
     metrics = &g_ResidentDataPack.bytes[g_ResidentDataPack.directory.glyphMetrics];
     if (!s_metrics_saved) memcpy(s_metrics_original, metrics, sizeof s_metrics_original);
+    for (unsigned k = 0; k < letters; ++k) {                 /* the redrawn game letters first */
+        const unsigned char *r = pe_lang_pack_letter(pack, k);
+        if (r[4] < PE_LATIN_FIRST_CODE) metrics[r[4]] = pe_lang_letter_metric(r, metrics);
+    }
     for (unsigned k = 0; k < PE_LATIN_COUNT; ++k)
         metrics[kPeLatinGlyphs[k].code] = pe_lang_font_metric(&kPeLatinGlyphs[k], metrics);
     if (s_font_cyrillic)
@@ -185,23 +198,33 @@ static void remove_widths(void) {
     g_TextboxGlyphCount = sizeof g_TextboxGlyphSpacing / sizeof *g_TextboxGlyphSpacing;
     if (s_metrics_saved && g_ResidentDataPack.directory.glyphMetrics) {
         unsigned char *metrics = &g_ResidentDataPack.bytes[g_ResidentDataPack.directory.glyphMetrics];
-        memcpy(metrics + PE_LATIN_FIRST_CODE, s_metrics_original + PE_LATIN_FIRST_CODE, FONT_CODES - PE_LATIN_FIRST_CODE);
+        memcpy(metrics, s_metrics_original, FONT_CODES);   /* a pack may redraw the game's letters too */
     }
     s_metrics_saved = 0;
 }
 
 /* Put the glyphs into `pixels` (the page on its way to VRAM, or a copy) when a pack is in use. */
 static void add_glyphs(unsigned char *pixels) {
-    int added = pe_lang_font_fill(pixels, 128, 256);
-    s_font_cyrillic = pe_lang_pack_uses_glyphs(active_pack(), PE_CYRILLIC_FIRST_CODE, PE_CYRILLIC_LAST_CODE);
-    int extra = s_font_cyrillic ? pe_lang_cyrillic_fill(pixels, 128, 256) : 0;
     const PeLangPack *pack = active_pack();
+    const unsigned char *records = pack ? pack->data + pack->letters_offset : NULL;
+    unsigned low = 0, redrawn = 0;
+    /* First the pack's own pictures of the game's letters (they come first, by rising code), so the
+     * accented letters made from the game's letters are made from them. */
+    while (pack && low < pack->letter_count && records[low * PE_LANG_LETTER_SIZE + 4] < PE_LATIN_FIRST_CODE) ++low;
+    int own = low ? pe_lang_letters_fill(records, low, pixels, 128, 256) : 0;
+    int added = pe_lang_font_fill(pixels, 128, 256);
+    s_font_cyrillic = pe_lang_pack_uses_glyphs(pack, PE_CYRILLIC_FIRST_CODE, PE_CYRILLIC_LAST_CODE);
+    int extra = s_font_cyrillic ? pe_lang_cyrillic_fill(pixels, 128, 256) : 0;
     /* After the others: a table's letter takes over its code's cell. */
-    int own = pack && pack->letter_count
-                  ? pe_lang_letters_fill(pack->data + pack->letters_offset, pack->letter_count, pixels, 128, 256) : 0;
-    if (!s_font_added && added + extra + own)
+    own += pack && pack->letter_count > low
+               ? pe_lang_letters_fill(records + low * PE_LANG_LETTER_SIZE, pack->letter_count - low, pixels, 128, 256) : 0;
+    for (unsigned k = 0; pack && k < pack->letter_count; ++k) redrawn += pe_lang_letter_redraws(pe_lang_pack_letter(pack, k));
+    if (!s_font_added && added + extra + own) {
         pe_mod_log(MOD_ID, "added %d Latin Extended, %d Cyrillic and %d of the pack's own letters to the dialogue font",
-                   added, extra, own);
+                   added, extra, own - (int)redrawn);
+        if (redrawn)
+            pe_mod_log(MOD_ID, "text: %s draws %u letters with its own pictures and widths", s_labels[pack - s_packs], redrawn);
+    }
     added += extra + own;
     if (added) {
         s_font_added = 1;

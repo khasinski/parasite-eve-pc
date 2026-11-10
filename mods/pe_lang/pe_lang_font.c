@@ -194,7 +194,7 @@ unsigned pe_lang_letter_advance(const unsigned char *r, const unsigned char *bas
 
 unsigned char pe_lang_letter_metric(const unsigned char *r, const unsigned char *base_metrics) {
     unsigned width;
-    if (r[6] == 0xFF) return (unsigned char)(r[5] << 4);
+    if (r[6] == 0xFF) return r[7] ? r[7] : (unsigned char)(r[5] << 4);   /* a drawn letter's own metrics */
     width = (base_metrics[r[6]] >> 4) + (unsigned)r[5];
     return (unsigned char)((width > 15 ? 15 : width) << 4 | (base_metrics[r[6]] & 15));
 }

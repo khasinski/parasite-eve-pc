@@ -31,6 +31,8 @@ def advance(c: bytes, name_width: int = NAME_WIDTH) -> int:
         return gt.PACK_EXTRA[c[:4]].advance()
     if op in (0xF1, 0xFC, 0xFD):
         return gt.WIDE
+    if op in gt.PACK_DRAWN:
+        return gt.box_advance(op)
     if op in gt.PACK_LETTERS:
         return gt.PACK_LETTERS[op].advance()
     if op < 0xF1:

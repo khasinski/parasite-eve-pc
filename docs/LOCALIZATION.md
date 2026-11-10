@@ -379,17 +379,18 @@ joining. To give one its real picture, for example from a fan translation's own 
 each edge it joins.
 
 A pack with a table is **v3**. Its header is 88 bytes: the v2 fields, with a glyph count that may be
-0, and two more u32 at offsets 80 and 84, the table's offset and its letter count (at most 163). The
+0, and two more u32 at offsets 80 and 84, the table's offset and its letter count (at most 240 with a
+code: 163 of the pack's own and the redrawn game letters below them, see below). The
 table comes last and fills the rest of the file. Packs with no table are unchanged. Each record is
 80 bytes, by strictly rising code:
 
 | Bytes | |
 |---|---|
 | 0-3 | Unicode character |
-| 4 | Code, 0x4D-0xEF; 0 for a letter with no code (v4, see below) |
+| 4 | Code, 0x4D-0xEF; below 0x4D only for art of the game's own letter on that code (a redrawn letter); 0 for a letter with no code (v4, see below), except a first record whose letter is `0`, the game's code 0 |
 | 5 | Art: the advance, 1-15. Otherwise what's added to the base letter's advance and menu width, 0-8 |
 | 6 | The base letter's code, below 0x4D, or FF for art |
-| 7 | Steps on the base letter: 1 drop its dot, 2 turn it upside down, 4 room for a mark above an ascender. 0 for art |
+| 7 | Steps on the base letter: 1 drop its dot, 2 turn it upside down, 4 room for a mark above an ascender. For art: the menus' metrics byte (width << 4 \| first column), or 0 to take the width from the advance |
 | 8-79 | Art: 72 bytes of pixels, as in a CJK record, shadow included. Otherwise three `PeLatinMark`, 19 bytes each: point count (0 for none, at most 8), fixed rows, anchor, eight (dx, row) |
 
 **What a code means now belongs to the pack**, so a table's code must not outlive it. The default
@@ -407,6 +408,18 @@ kept in a translated grid a space (`empty_grid_cells`), not the letter the code 
 
 `pe_lang` writes table letters after the Latin and Cyrillic ones, so a letter takes over its code's
 cell. Interface text uses the same table (`pe_lang_text_encode`).
+
+**Redrawn letters (a fan patch's look).** A record whose letter is the one its code already means
+(a game letter below 0x4D, or a fixed Latin Extended or Cyrillic one) is the pack's own picture of
+that letter, art only: `build --patch-letters` writes them from what `import-patch --patch-letters`
+read in a patch. The code keeps its meaning, so such letters may go in names, grids and saves like
+the game's, and other packs read those bytes as before (`pe_lang_letter_redraws`;
+`pe_lang_pack_has_letter` doesn't count them). While the pack is in use `pe_lang` puts the redrawn
+game letters on the font page first, so the accented letters it makes from them are made from the
+pack's pictures, and gives the dialogue box their advance with no left gap and the menus their
+metrics byte; the game's page, widths and metrics come back with Game text. `build` measures with
+the same widths (`gametext.PACK_DRAWN`), and the space is still pulled back 7 px in the box as the
+English box pulls it.
 
 **More letters than codes (v4).** When a pack's text needs more catalog letters than it has free
 codes, `build` gives the codes to the letters used most, and first to those in text that keeps one

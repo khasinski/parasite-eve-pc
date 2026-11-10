@@ -154,6 +154,11 @@ class Letter:
     ops: int = 0
     extra: int = 0                  # marks wider than the base letter: added to its advance
     art: tuple[int, str] | None = field(default=None)
+    # A picture of the pack's own, shadow and all (a fan patch's look, drawn()): its 144 pixels and
+    # the widths it brings, the dialogue box's advance and the menus' metrics byte.
+    pixels: tuple[int, ...] | None = field(default=None)
+    dialogue: int = 0
+    menu: int = 0
 
     @property
     def from_game(self) -> bool:
@@ -162,6 +167,8 @@ class Letter:
     def compose(self, base_cell: list[int] | None = None) -> list[int]:
         """The letter's 144 pixels (0 empty, 1 stroke, 2 shadow). `base_cell` is the game's letter
         for one that starts from it; pe_lang_letter_compose does the same on the player's disc."""
+        if self.pixels:
+            return list(self.pixels)
         if self.art:
             return latin._shadow(_strokes(*self.art))
         strokes = latin._stroke_only(base_cell) if self.base else _drawn_strokes(self.drawn)
@@ -193,8 +200,10 @@ class Letter:
 
     def advance(self) -> int:
         """The dialogue box's advance, as the mod works it out."""
+        if self.dialogue:
+            return self.dialogue
         if self.base:
-            return gt.ADVANCE[gt.CODE_OF[self.base]] + self.extra
+            return gt.base_advance(gt.CODE_OF[self.base]) + self.extra
         return latin._ink(self.compose())[1] + 2
 
     def cut(self) -> tuple[int, int]:
@@ -210,8 +219,10 @@ class Letter:
 
     def metric(self, metrics: bytes) -> int:
         """The menus' metrics byte: drawn width << 4 | first column."""
+        if self.pixels and self.menu:
+            return self.menu
         if self.base:
-            value = metrics[gt.CODE_OF[self.base]]
+            value = gt.base_metric(gt.CODE_OF[self.base], metrics)
             return min((value >> 4) + self.extra, 15) << 4 | value & 15
         return min(self.advance(), 15) << 4
 
@@ -228,7 +239,8 @@ class Letter:
             return head + bytes([self.extra, gt.CODE_OF[self.base], self.ops]) + bytes(body)
         pixels = self.compose()
         packed = bytes(pixels[i] | pixels[i + 1] << 4 for i in range(0, 144, 2))
-        return head + bytes([self.advance(), NO_BASE, 0]) + packed
+        # a picture of the pack's own keeps its menu metrics in the ops byte (0: from the advance)
+        return head + bytes([self.advance(), NO_BASE, self.menu if self.pixels else 0]) + packed
 
 
 def _catalog() -> dict[str, Letter]:
@@ -388,11 +400,14 @@ class Letters:
     shapes the text does use, never take a code: pe_lang cuts them so joined letters touch, which it
     does for letters with no code."""
 
-    def __init__(self, texts, dictionary: bool = False, byte_texts=(), extra: bool = False, shapes=()):
+    def __init__(self, texts, dictionary: bool = False, byte_texts=(), extra: bool = False, shapes=(), own=None):
+        # `own`: letters the pack brings pictures of that no catalog draws (a fan patch's symbol)
+        known = {**CATALOG, **{ch: letter for ch, letter in (own or {}).items()
+                               if ch not in CATALOG and ch not in gt.CODE_OF and ch not in gt._latin_codes()}}
         fixed, used, taken = gt._latin_codes(), {}, set()
         in_bytes = set()
         for text in byte_texts:
-            in_bytes.update(ch for ch in gt._TAG.sub("", text) if ch in CATALOG)
+            in_bytes.update(ch for ch in gt._TAG.sub("", text) if ch in known)
         for text in texts:
             for m in gt._TAG.finditer(text):
                 if m.group(1)[0] == "g" and len(m.group(1)) == 3:
@@ -402,10 +417,10 @@ class Letters:
                     continue
                 if ch in fixed:
                     taken.add(fixed[ch])
-                elif ch in CATALOG and not (dictionary and cjk.supported(ord(ch))):
+                elif ch in known and not (dictionary and cjk.supported(ord(ch))):
                     used[ch] = used.get(ch, 0) + 1
         from .rtl import is_joining
-        joined = {ch for ch in shapes if ch in CATALOG} | {ch for ch in used if is_joining(ord(ch))}
+        joined = {ch for ch in shapes if ch in known} | {ch for ch in used if is_joining(ord(ch))}
         for ch in joined:
             used.pop(ch, None)
         free = [code for code in range(LAST_CODE, FIRST_CODE - 1, -1) if code not in taken]
@@ -420,16 +435,73 @@ class Letters:
         coded, rest = order[:len(free)], sorted(set(order[len(free):]) | joined, key=ord)
         if len(rest) > MAX_EXTRA:
             raise ValueError(f"more than {MAX_EXTRA} letters without a code")
-        self.by_code = {code: CATALOG[ch] for code, ch in zip(free, sorted(coded, key=ord))}
+        self.by_code = {code: known[ch] for code, ch in zip(free, sorted(coded, key=ord))}
         self.codes = {letter.char: bytes([code]) for code, letter in self.by_code.items()}
-        self.extra = [CATALOG[ch] for ch in rest]
+        self.extra = [known[ch] for ch in rest]
         self.extra_codes = {letter.char: extra_token(k) for k, letter in enumerate(self.extra)}
         self.codes.update(self.extra_codes)
         self.by_token = {extra_token(k): letter for k, letter in enumerate(self.extra)}
+        self.drawn: dict[int, Letter] = {}
+
+    def draw(self, pictures: dict[str, dict], texts) -> int:
+        """Give letters the pack's own pictures and widths (pelang.py build --patch-letters: a fan
+        patch's look, from import-patch). A game letter (codes 00-4C) always takes its picture; a
+        fixed Latin Extended or Cyrillic letter when the text uses it; both keep their code and what
+        it means, so saves, name grids and other packs read them as before, and they go in `drawn`.
+        A letter of the pack's own table takes the picture in its record. Returns how many."""
+        fixed = gt._latin_codes()
+        used = {ch for text in texts for ch in gt._TAG.sub("", text)}
+        count = 0
+        for ch, p in pictures.items():
+            letter = Letter(ch, pixels=tuple(p["pixels"]), dialogue=p["dialogue"], menu=p["menu"])
+            if ch in gt.CODE_OF:
+                self.drawn[gt.CODE_OF[ch]] = letter
+            elif ch in fixed and ch in used:
+                self.drawn[fixed[ch]] = letter
+            elif ch in self.codes and len(self.codes[ch]) == 1:
+                self.by_code[self.codes[ch][0]] = letter
+            elif ch in self.extra_codes:
+                k = self.extra.index(next(x for x in self.extra if x.char == ch))
+                self.extra[k] = letter
+                self.by_token[extra_token(k)] = letter
+            else:
+                continue
+            count += 1
+        return count
 
     def __bool__(self) -> bool:
-        return bool(self.by_code or self.extra)
+        return bool(self.by_code or self.extra or self.drawn)
 
     def records(self) -> bytes:
-        return (b"".join(self.by_code[code].record(code) for code in sorted(self.by_code)) +
+        coded = {**self.by_code, **self.drawn}
+        return (b"".join(coded[code].record(code) for code in sorted(coded)) +
                 b"".join(letter.record(0) for letter in self.extra))
+
+
+def coded(index: int, record: bytes) -> bool:
+    """Whether record `index` of a table has a code. Code 0 means none, except that the first record
+    may redraw the game's '0', whose code is 0 (pe_lang_pack.c reads it the same way)."""
+    return bool(record[4]) or (index == 0 and struct.unpack_from("<I", record)[0] == ord("0"))
+
+
+def picture_letters(pictures: dict[str, dict]) -> dict[str, Letter]:
+    """load_pictures' letters as Letters (for Letters(own=...): a patch's symbol no catalog draws)."""
+    return {ch: Letter(ch, pixels=tuple(p["pixels"]), dialogue=p["dialogue"], menu=p["menu"])
+            for ch, p in pictures.items()}
+
+
+def load_pictures(path) -> dict[str, dict]:
+    """A letter pictures file (import-patch --patch-letters): letter -> its 144 pixels, the dialogue
+    box's advance and the menus' metrics byte. Rows of 12: ' ' empty, '#' stroke, '+' shadow."""
+    import json
+    data = json.loads(open(path, encoding="utf-8").read())
+    out = {}
+    for entry in data["letters"]:
+        ch, rows = entry["letter"], entry["picture"]
+        if len(ch) != 1 or len(rows) != CELL or any(len(r) != CELL or set(r) - set(" #+") for r in rows):
+            raise ValueError(f"{path}: {ch!r}: a picture is {CELL} rows of {CELL} of ' ', '#' and '+'")
+        if not 1 <= entry["dialogue"] <= 15 or not 0 <= entry["menu"] <= 255 or (entry["menu"] & 15) >= CELL:
+            raise ValueError(f"{path}: {ch!r}: a width out of range")
+        out[ch] = {"pixels": [" #+".index(v) for r in rows for v in r],
+                   "dialogue": entry["dialogue"], "menu": entry["menu"]}
+    return out

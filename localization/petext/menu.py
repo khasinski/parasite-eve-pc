@@ -26,7 +26,7 @@ def latin_metric(code: int, metrics: bytes) -> int | None:
     if not g:
         return None
     if g.base:
-        return metrics[gt.CODE_OF[g.base]]
+        return gt.base_metric(gt.CODE_OF[g.base], metrics)
     return min(latin.advance(g, None), 15) << 4
 
 
@@ -94,6 +94,8 @@ def width(raw: bytes, metrics: bytes) -> int:
             m = min(cyrillic.BY_CODE[glyph].advance, 15) << 4
         if glyph in gt.PACK_LETTERS:
             m = gt.PACK_LETTERS[glyph].metric(metrics)
+        if glyph in gt.PACK_DRAWN:
+            m = gt.PACK_DRAWN[glyph].metric(metrics)
         w += ((metrics[glyph % 0x1B9] if m is None else m) >> 4) + extra
     return w + joined()
 

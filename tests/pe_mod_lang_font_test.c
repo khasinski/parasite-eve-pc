@@ -221,6 +221,9 @@ static void check_letters(void) {
     assert(pe_lang_letter_metric(r, metrics) == 0xF2);
     r[6] = 0xFF, r[5] = 9;
     assert(pe_lang_letter_advance(r, advance) == 9 && pe_lang_letter_metric(r, metrics) == 0x90);
+    /* A drawn letter that brings its menu metrics too (a fan patch's look) keeps them. */
+    r[7] = 0x61;
+    assert(pe_lang_letter_advance(r, advance) == 9 && pe_lang_letter_metric(r, metrics) == 0x61);
 }
 
 /* --many-letters PACK N: a pack pelang.py built with N letters past the fixed codes, more than the

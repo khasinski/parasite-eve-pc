@@ -39,7 +39,31 @@ FB_TAGS = {4: "{red}", 5: "{/red}", 6: "{pause}", 8: "{num}"}
 # letter that code would otherwise be.
 PACK_LETTERS: dict = {}
 PACK_EXTRA: dict = {}
-RTL = False                  # the pack being built reads right to left (petext/rtl.py)        # F1 C7 hi lo -> a letter with no code (petext/letters.py)
+# The pack's own pictures of letters whose meaning stays (petext/letters.py Letters.draw: a fan
+# patch's look): code -> letter, measured with the widths the pack brings, as pe_lang installs them.
+PACK_DRAWN: dict = {}
+
+
+def base_advance(code: int) -> int:
+    """A fixed code's dialogue width, the space's before the box pulls it back: the pack's own
+    picture's, else the game's (g_TextboxGlyphSpacing)."""
+    return PACK_DRAWN[code].advance() if code in PACK_DRAWN else ADVANCE[code]
+
+
+def box_advance(code: int) -> int:
+    """How far the English box moves its pen after a code below 78 (BOX_ADVANCE), or a fixed code
+    the pack draws itself."""
+    if code in PACK_DRAWN:
+        return PACK_DRAWN[code].advance() - (ADVANCE[0x0F] - BOX_ADVANCE[0x0F] if code == 0x0F else 0)
+    return BOX_ADVANCE[code]
+
+
+def base_metric(code: int, metrics: bytes) -> int:
+    """A fixed code's menu metrics byte: the pack's own picture's, else the game's."""
+    return PACK_DRAWN[code].metric(metrics) if code in PACK_DRAWN else metrics[code]
+
+
+RTL = False                 # the pack being built reads right to left (petext/rtl.py)        # F1 C7 hi lo -> a letter with no code (petext/letters.py)
 
 
 def decode(b: bytes) -> str:
@@ -146,6 +170,8 @@ def _latin_codes() -> dict[str, int]:
 def _latin_advance(code: int) -> int | None:
     from . import latin
     from . import cyrillic
+    if code in PACK_DRAWN:
+        return PACK_DRAWN[code].advance()
     if code in PACK_LETTERS:
         return PACK_LETTERS[code].advance()
     if code in cyrillic.BY_CODE:
@@ -153,7 +179,7 @@ def _latin_advance(code: int) -> int | None:
     g = latin.BY_CODE.get(code)
     if not g:
         return None
-    return latin.advance(g, ADVANCE[CODE_OF[g.base]] if g.base else None)
+    return latin.advance(g, base_advance(CODE_OF[g.base]) if g.base else None)
 
 
 def lines(b: bytes) -> list[int]:
@@ -164,7 +190,7 @@ def lines(b: bytes) -> list[int]:
         if c in (0xF7, 0xF8):
             widths.append(w); w = 0
         elif c == 0xFA:
-            w += ADVANCE[0x10] + ADVANCE[0x48] + ADVANCE[0x30]  # "Aya", the default name (petext/layout.py)
+            w += base_advance(0x10) + base_advance(0x48) + base_advance(0x30)  # "Aya", the default name (petext/layout.py)
         elif c == 0xFB and i + 1 < len(b):
             sub = b[i + 1]
             if sub <= 3:
@@ -178,6 +204,8 @@ def lines(b: bytes) -> list[int]:
             w += WIDE; i += 3
         elif c in (0xFC, 0xFD):
             w += WIDE; i += 1
+        elif c in PACK_DRAWN:
+            w += box_advance(c)
         elif c in PACK_LETTERS:
             w += PACK_LETTERS[c].advance()
         elif c < len(BOX_ADVANCE):

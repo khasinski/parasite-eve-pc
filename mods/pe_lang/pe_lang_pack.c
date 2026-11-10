@@ -13,7 +13,7 @@
 
 #define HEADER_SIZE 64u
 #define ENTRY_SIZE 8u
-#define MAX_LETTERS 163u                /* codes 0x4D-0xEF */
+#define MAX_LETTERS 240u                /* codes 0x00-0xEF: 0x4D-0xEF the pack's own, below that redrawn */
 #define MARK_SIZE 19u                   /* PeLatinMark */
 
 static uint32_t rd32(const unsigned char *p) {
@@ -85,9 +85,16 @@ int pe_lang_pack_extra_index(const PeLangPack *pack, unsigned letter) {
 
 int pe_lang_pack_has_letter(const PeLangPack *pack, unsigned code) {
     if (!pack) return 0;
-    for (unsigned k = 0; k < pack->letter_count; ++k)
-        if (pe_lang_pack_letter(pack, k)[4] == code) return 1;
+    for (unsigned k = 0; k < pack->letter_count; ++k) {
+        const unsigned char *r = pe_lang_pack_letter(pack, k);
+        /* a redrawn letter keeps what its code means: it is not the pack's own */
+        if (r[4] == code) return code >= 0xF1 || rd32(r) != kPeTextUnicode[code];
+    }
     return 0;
+}
+
+int pe_lang_letter_redraws(const unsigned char *record) {
+    return record[4] < 0xF1 && record[6] == 0xFF && rd32(record) == kPeTextUnicode[record[4]];
 }
 
 int pe_lang_code_rtl(const char *lang) {
@@ -131,13 +138,15 @@ int pe_lang_letter_cut(const unsigned char *r, unsigned *first, unsigned *width)
 }
 
 /* One letter record: u32 character, code (0: none, `extra`), advance, base code (FF: drawn here),
- * ops, then the drawn pixels, or three marks for a letter built on the game's own. */
+ * ops (for a drawn letter: its menu metrics byte, 0 to take them from the advance), then the drawn
+ * pixels, or three marks for a letter built on the game's own. Codes 0x4D-0xEF are the pack's;
+ * below 0x4D only a drawn picture of the game's own letter, so the code keeps its meaning. */
 static int valid_letter(const unsigned char *r, int extra) {
     const uint32_t cp = rd32(r);
     if (!cp || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return 0;
-    if (extra ? r[4] != 0 : r[4] < 0x4D || r[4] > 0xEF) return 0;
+    if (extra ? r[4] != 0 : r[4] > 0xEF || (r[4] < 0x4D && !pe_lang_letter_redraws(r))) return 0;
     if (r[6] == 0xFF) {
-        if (!r[5] || r[5] > 15 || r[7]) return 0;
+        if (!r[5] || r[5] > 15 || (r[7] & 15) >= 12) return 0;
         for (unsigned j = 8; j < PE_LANG_LETTER_SIZE; ++j) if ((r[j] & 15) > 2 || (r[j] >> 4) > 2) return 0;
         return 1;
     }
@@ -257,7 +266,8 @@ int pe_lang_pack_parse(PeLangPack *pack, unsigned char *data, size_t size) {
             /* the coded letters by rising code, then (v4) those with no code by rising Unicode */
             for (unsigned k = 0; k < letters; ++k) {
                 const unsigned char *r = data+letters_at+k*PE_LANG_LETTER_SIZE;
-                const int extra = version == 4 && !r[4];
+                /* code 0 is none, but the first record may redraw the game's '0', whose code is 0 */
+                const int extra = version == 4 && !r[4] && !(k == 0 && rd32(r) == '0');
                 if (!extra) ++coded;
                 if (!valid_letter(r, extra) || (extra ? k > coded && rd32(r) <= rd32(r - PE_LANG_LETTER_SIZE)
                                                       : (k != coded - 1 || (k && r[4] <= r[4-(int)PE_LANG_LETTER_SIZE]))))
