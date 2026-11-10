@@ -451,6 +451,27 @@ class PelangTest(unittest.TestCase):
         self.assertEqual(pelang.main(args), 1)
         self.assertFalse(out.exists())
 
+    def test_a_patchs_line_keeps_its_breaks_while_it_stays_on_screen(self):
+        # The default box's fog is the screen's width: past its 297 px a line is lost only at the
+        # screen edge, 300 px from x 20. A patch's line there stays as written, as the patched
+        # game drew it; the pack tool's own pages, and lines past the edge, are still wrapped.
+        on = "WWWWWWWWW WWWWWWWWW WWWWWWWii"                    # 299 px
+        off = on + "i"                                          # 304 px
+        self.assertEqual([max(map(max, layout.screens(gt.encode(t)))) for t in (on, off)], [299, 304])
+        self.assertEqual(layout.bounds("default", screen=True), (300, layout.DEFAULT_LINES))
+        source = STRINGS[3]
+        raw, errors, warnings = pelang.check_row("dlg/M001/003", on, source, {}, from_patch=True)
+        self.assertEqual((raw, errors), (gt.encode(on), []))
+        self.assertTrue(any("past the 297 px of box default" in w for w in warnings), warnings)
+        raw, errors, warnings = pelang.check_row("dlg/M001/003", on, source, {})
+        self.assertNotEqual(raw, gt.encode(on))
+        self.assertIn("wrapped to fit the box", warnings[0])
+        raw, errors, warnings = pelang.check_row("dlg/M001/003", off, source, {}, from_patch=True)
+        self.assertNotEqual(raw, gt.encode(off))
+        self.assertEqual(errors, [])
+        self.assertIn("wrapped to fit the box", warnings[0])
+        self.assertTrue(all(max(s) <= layout.DEFAULT_WIDTH for s in layout.screens(raw)))
+
     def pictures_file(self, drawn: dict) -> Path:
         """A letter pictures file as import-patch --patch-letters writes it, from
         letter -> (dialogue advance, menu metrics, the columns its strokes fill)."""

@@ -12,6 +12,8 @@ DEFAULT_WIDTH = 297
 # A right-to-left pack's lines end at x 300, mirroring the 20 px left margin (textbox.c
 # Textbox_RightEdge), so the default box holds 280 px of them.
 DEFAULT_WIDTH_RTL = 280
+# The default box's fog is the whole screen wide (textbox.c), so its text is lost only at the edge.
+DEFAULT_SCREEN_WIDTH = 320 - 20
 DEFAULT_LINES = 4
 # {name} draws TextboxNameGlyphs: sys/030 ("Aya") at a new game (Save_InitMetadataState), or the
 # name the player gave her, at most 8 glyphs (Menu_CopyPromptCodes). The English is laid out for
@@ -84,22 +86,24 @@ def screens(raw: bytes, name_width: int = NAME_WIDTH):
     return pages
 
 
-def box_limit(source: dict):
+def box_limit(source: dict, screen: bool = False):
     """Wrap to boxes proven for this page, or a complete bank with uniform bounds.
 
     Different bank boxes are alternatives, not evidence this particular page
     uses their smallest rectangle. Keep unproven pages as authored and warn.
+    screen: the width before the screen edge instead (bounds), for a fan patch's
+    own layout, which the patched game drew past a box wherever it stayed on screen.
     """
     boxes = source.get('boxes') or []
     if not boxes:
         if not source.get('boxes_complete'):
             return None
         possible = source.get('boxes_possible') or []
-        limits = [bounds(box) for box in possible]
+        limits = [bounds(box, screen) for box in possible]
         if not limits or None in limits or len(set(limits)) != 1:
             return None
         return limits[0]
-    limits = [b for b in map(bounds, boxes) if b]
+    limits = [b for b in (bounds(box, screen) for box in boxes) if b]
     if not limits:
         return None
     return min(w for w, _ in limits), min(n for _, n in limits)
@@ -108,8 +112,12 @@ def box_limit(source: dict):
 def bounds(box: str, screen: bool = False):
     """(width px, lines) a box holds. A styled box's text starts at its x with no inset and isn't
     clipped (textbox.c; the rectangle only sizes style 1's gradient), so its rectangle is what
-    looks right and the screen edge (screen=True) is where text is lost."""
+    looks right and the screen edge (screen=True) is where text is lost. The default box's fog
+    spans the whole screen (textbox.c), so past its 297 px a line is lost only at the screen edge,
+    300 px from x 20 (a right-to-left line ends at x 300, so it too has 300 px)."""
     if box == 'default':
+        if screen:
+            return DEFAULT_SCREEN_WIDTH, DEFAULT_LINES
         return DEFAULT_WIDTH_RTL if gt.RTL else DEFAULT_WIDTH, DEFAULT_LINES
     m = re.fullmatch(r'(?:styled )?(-?\d+),(-?\d+),(\d+),(\d+)', box)
     if not m:

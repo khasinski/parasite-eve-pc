@@ -363,7 +363,10 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
         return None, ["default player name exceeds the save format's 8-byte field"], []
     note = None
     limit = layout.box_limit(source) if wrap and key.startswith("dlg/") else None
-    if limit and any(max(s) > limit[0] or len(s) > limit[1] for s in layout.screens(raw, name_px)):
+    # A fan patch's own breaks stay wherever its lines stay on screen, as the patched game drew
+    # them (past the box's shading, or the default box's 297 px); off screen, the page is wrapped.
+    edge = (layout.box_limit(source, screen=True) or limit)[0] if limit and from_patch else limit and limit[0]
+    if limit and any(max(s) > edge or len(s) > limit[1] for s in layout.screens(raw, name_px)):
         english = srcman.english_shape(source)
         wrapped, added = wrapping.wrap(raw, limit[0], limit[1], english, name_px, atlas.characters if atlas else None)
         if wrapped != raw:
