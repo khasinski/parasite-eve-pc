@@ -572,6 +572,26 @@ Rasterization uses a shared em box to retain punctuation alignment; it must stil
 at native resolution by fluent readers. This does not add CJK to the separate F1 overlay font
 or translate text embedded in images. Use an ASCII/Latin display name for the F1 language row.
 
+**A fan patch's own letters instead of a font.** A patch for the Japanese discs draws its
+characters as 12×12 pictures. Once each picture is named (`localization/import_ja_patch.py`,
+then `localization/name_ja_patch_letters.py`, which writes `letters.tsv`), the pack can hold those
+pictures as its dictionary, so it draws the translator's own letters and needs no font:
+
+```sh
+python -I localization/pelang.py build disc1.csv disc2.csv --from-patch \
+  --strings localization/data/manifest.json --lang zh-Hans --name "Chinese (Simplified)" \
+  --cjk-letters letters.tsv --cjk-pictures disc1-pictures.json --cjk-pictures disc2-pictures.json \
+  --leave-out M081 --leave-out M347 -o zh-Hans.pelang
+```
+
+A character drawn by more than one picture takes the most used one (the build lists them); the
+full-width space is drawn empty; Latin letters, digits and signs come from the game's own font.
+Several CSVs (one per disc) may share rows only with the same text. `--leave-out ROOM_OR_KEY`
+keeps the game's text for a room's dialogue or one row (debug rooms' untranslated test lines);
+`--adapt CSV` replaces rows, e.g. a line whose controls the USA game writes differently.
+`localization/tests/test_cjk_pictures.py` (CTest `localization-chinese-pack`) covers this; CTest
+`original-game-text-renderer-chinese` checks such a pack on screen when `PE_TEST_ZH_PACK` names it.
+
 ### Modular implementation
 
 - `localization/petext/cjk.py`: supported ranges, sfnt/TTC Unicode coverage, rasterization and

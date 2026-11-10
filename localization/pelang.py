@@ -418,7 +418,39 @@ def cmd_build(a) -> int:
             widest_name[t] = max(widest_name.get(t, 0), px)
     entries, errors, warnings = {}, [], []
     seen = set()
-    rows = read_csv(a.csv)
+    rows, given = [], {}
+    for path in a.csv:
+        part = read_csv(path)
+        if a.submission:
+            # A submitted file holds translations only: the game's text stays on the translator's machine.
+            leaked = sorted({c for r in part for c in SOURCE_COLUMNS if (r.get(c) or "").strip()})
+            if leaked:
+                errors.append(f"{path}: has source text in its {', '.join(leaked)} column(s); submit the file "
+                              "`pelang.py export` writes (key, translation, notes)")
+        for r in part:
+            # Files for each disc share rows (a room on both discs): the same text once, a different one refused.
+            key, text = r.get("key", ""), r.get("translation", "")
+            if text and key in given and len(a.csv) > 1:
+                if given[key] != text:
+                    errors.append(f"{key}: {path} translates it differently from an earlier file")
+                continue
+            if text:
+                given[key] = text
+            rows.append(r)
+    if a.adapt:
+        # Rows reworked for this game (a control the USA version writes differently): they replace the file's.
+        fixes = {r["key"]: r for r in read_csv(a.adapt) if r.get("key")}
+        count = len(fixes)
+        rows = [fixes.pop(r.get("key", ""), r) for r in rows] + list(fixes.values())
+        print(f"{count} row(s) adapted from {a.adapt}")
+    if a.leave_out:
+        # A room ("M081": its dialogue) or one key, e.g. a debug room's test lines: the game's text stays.
+        drop = set(a.leave_out)
+        out = lambda r: r.get("key", "") in drop or (r.get("key", "").startswith("dlg/")
+                                                     and r["key"].split("/")[1] in drop)
+        left = [r for r in rows if r.get("translation") and out(r)]
+        rows = [r for r in rows if not out(r)]
+        print(f"{len(left)} row(s) left out ({', '.join(sorted(drop))}): they keep the game's text")
     page_ends = {}
     for r in rows:
         text, end = split_page_end(r.get("translation") or "")
@@ -426,12 +458,19 @@ def cmd_build(a) -> int:
             if not r.get("key", "").startswith("dlg/"):
                 errors.append(f"{r.get('key')}: {{end {end}}} is for dialogue pages only")
             r["translation"], page_ends[r.get("key")] = text, end
-    if a.submission:
-        # A submitted file holds translations only: the game's text stays on the translator's machine.
-        leaked = sorted({c for r in rows for c in SOURCE_COLUMNS if (r.get(c) or "").strip()})
-        if leaked:
-            errors.append(f"{a.csv}: has source text in its {', '.join(leaked)} column(s); submit the file "
-                          "`pelang.py export` writes (key, translation, notes)")
+    cjk_pictures = {}
+    if a.cjk_letters or a.cjk_pictures:
+        if not (a.cjk_letters and a.cjk_pictures):
+            print("error: --cjk-letters and --cjk-pictures go together: the letters table names the pictures")
+            return 1
+        try:
+            cjk_pictures, notes = cjk.patch_pictures(a.cjk_letters, a.cjk_pictures)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            print(f"error: --cjk-letters: {e}")
+            return 1
+        print(f"{len(cjk_pictures)} letter pictures named in {a.cjk_letters}")
+        for note in notes:
+            print(f"note: {note}")
     gt.PACK_LETTERS.clear()
     gt.PACK_EXTRA.clear()
     gt.PACK_DRAWN.clear()
@@ -448,11 +487,11 @@ def cmd_build(a) -> int:
     try:
         byte_texts = [r.get('translation','') for r in rows
                       if stretch.stays_bytes(r.get('key','')) and (a.bytes_only or not r.get('key','') in namelib.KEYS)]
-        table = lettertable.Letters(texts, dictionary=bool(getattr(a,'cjk_font',None)),
+        table = lettertable.Letters(texts, dictionary=bool(getattr(a,'cjk_font',None) or cjk_pictures),
                                     byte_texts=byte_texts, extra=not a.bytes_only,
                                     shapes=rtl.shapes_for(texts) if gt.RTL else (),
                                     own=lettertable.picture_letters(pictures))
-        atlas = cjk.Atlas(texts, getattr(a,'cjk_font',None), skip=table.codes)
+        atlas = cjk.Atlas(texts, getattr(a,'cjk_font',None), skip=table.codes, pictures=cjk_pictures)
     except (ValueError, OSError, struct.error) as e:
         print(f'error: CJK font: {e}')
         return 1
@@ -1214,7 +1253,8 @@ def main(argv=None) -> int:
     sa.add_argument("-o", "--out", type=Path, required=True)
     sub.add_parser("languages", help="which languages the pack tool can write today")
     b = sub.add_parser("build", help="check a translated CSV and write a .pelang pack")
-    b.add_argument("csv", type=Path)
+    b.add_argument("csv", type=Path, nargs="+",
+                   help="the translation; several files (one per disc) when they hold the same text for rows they share")
     b.add_argument("--strings", type=Path, required=True,
                    help="strings.json from extract_text.py, or the committed data/manifest.json (no discs needed)")
     b.add_argument("--from-patch", action="store_true",
@@ -1228,6 +1268,17 @@ def main(argv=None) -> int:
     b.add_argument("--name", required=True, help="the name the Language row shows, e.g. French")
     b.add_argument("-o", "--out", type=Path, required=True)
     b.add_argument("--cjk-font", type=Path, action="append", help="external TTF/OTF/TTC face 0; repeat for fallback fonts")
+    b.add_argument("--cjk-letters", type=Path,
+                   help="a fan patch's named letter pictures (letters.tsv from name_ja_patch_letters.py): the "
+                        "pack draws those characters with the patch's own 12x12 pictures, no font needed")
+    b.add_argument("--cjk-pictures", type=Path, action="append",
+                   help="the pictures files (from import_ja_patch.py) the --cjk-letters table names; repeat for each disc")
+    b.add_argument("--adapt", type=Path, metavar="CSV",
+                   help="rows (key, translation, notes) that replace the translation's own, e.g. a patch's line "
+                        "with its controls written as the USA game has them")
+    b.add_argument("--leave-out", action="append", metavar="ROOM_OR_KEY",
+                   help="leave a room's dialogue (M081) or one row (dlg/M026/007) out: it keeps the game's "
+                        "text, e.g. a debug room's test lines; repeat")
     b.add_argument("--max-messages", type=int, default=50)
     b.add_argument("--allow-overflow", action="store_true",
                    help="emit known layout overflows as warnings for deliberate in-game testing; controls stay strict")

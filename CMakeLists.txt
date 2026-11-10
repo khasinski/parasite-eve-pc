@@ -673,7 +673,30 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/text-renderer-battle-evidence battle)
             set_tests_properties(original-game-text-renderer-battle PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 600 LABELS "game-assets;mods")
+            # The Chinese pack made from a fan patch, its letters the patch's own pictures, on screen.
+            # The pack stays out of the repository: PE_TEST_ZH_PACK names it (else skipped).
+            add_test(NAME original-game-text-renderer-chinese COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-chinese-evidence chinese)
+            set_tests_properties(original-game-text-renderer-chinese PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 300 LABELS "game-assets;mods;localization")
         endif()
+        # A fan patch made for the Japanese discs read for the USA-disc port: two patches of the
+        # test's own on PE_TEST_JA_DISC (Japanese Disc 1); PE_TEST_DISC adds the line-up check.
+        add_test(NAME localization-japanese-patch-import COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_ja_patch_import.py)
+        set_tests_properties(localization-japanese-patch-import PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 300 LABELS "game-assets;localization")
+        # Naming a Chinese patch's letter pictures: letters drawn from the PC's Chinese font
+        # (SimSun, or PE_TEST_CJK_FONT), no disc. Not isolated (-I): Pillow may be a user install.
+        add_test(NAME localization-chinese-letter-naming COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_hanzi.py)
+        set_tests_properties(localization-chinese-letter-naming PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 120 LABELS "localization")
+        # A fan patch's letter pictures as a pack's Chinese letters, and the build options its pack uses.
+        add_test(NAME localization-chinese-pack COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_cjk_pictures.py)
+        set_tests_properties(localization-chinese-pack PROPERTIES TIMEOUT 120 LABELS "localization")
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77

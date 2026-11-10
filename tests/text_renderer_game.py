@@ -1,8 +1,9 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese]]
 
-(battle is left out by default: it runs as its own test, original-game-text-renderer-battle.)
+(battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so is
+chinese, original-game-text-renderer-chinese.)
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -74,6 +75,14 @@ Checks, each from pe_mods.log and frame dumps:
              year and brackets) draws the same letters as its drawing-order mirror ("xx"), moved to end
              at x 300 (the mirror starts at x 20, as English does, and is not English's line); Arabic
              ("ar") lights exactly the pixels of the joined word, ending at x 300.
+  chinese    The Chinese pack made from a fan patch (pelang.py build --cjk-letters: its letters are the
+             patch's own 12x12 pictures; plain or bundled as players get it), at PE_TEST_ZH_PACK
+             (skipped, 77, when it isn't there: the
+             patch's text and letters stay out of the repository). A New Game with it reaches the first
+             box: the pack loads, its stretches draw and no letter falls back to '?'. The first box's
+             two lines light exactly the stroke pixels of the pack's own letter pictures, 12 pixels
+             apart, line under line; bright pixels of the scene behind (a pack whose first box is a
+             lone '.') are not counted against it.
 """
 import binascii
 import csv
@@ -420,6 +429,95 @@ def drawn_line(text, style):
     return pixels, pen
 
 
+def pack_letters(data):
+    """A pack's dictionary letters, by index: 144 values each (0 empty, 1 stroke, 2 shadow;
+    petext/cjk.py, pe_lang_pack.c). `data` is the pack itself (a zipped one's text.bin)."""
+    at, count = struct.unpack_from('<II', data, 64)
+    return [[b >> shift & 15 for b in data[at + k * 76 + 4:at + (k + 1) * 76] for shift in (0, 4)]
+            for k in range(count)]
+
+
+def dictionary_lines(raw, letters):
+    """A box's lines as the dictionary letters they hold (F1 C5 tokens; F7 starts a line). Anything
+    else on a line ({name}, a game letter) is None: that line's layout isn't checked."""
+    lines, at = [[]], 0
+    while at < len(raw):
+        if raw[at:at + 2] == b'\xf1\xc5':
+            lines[-1].append(letters[raw[at + 2] * 240 + raw[at + 3]])
+            at += 4
+        else:
+            if raw[at] == 0xF7:
+                lines.append([])
+            elif raw[at] not in (0xF9, 0xFF):
+                lines[-1].append(None)
+            at += 1
+    return lines
+
+
+def make_chinese_scene(localization, out):
+    """A pack whose first box is a lone '.' at its left: the scene behind the box."""
+    table = out / 'chinese-scene.csv'
+    with table.open('w', encoding='utf-8', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
+        w.writeheader()
+        w.writerow({'key': 'dlg/M001/009', 'translation': '.', 'notes': ''})
+    pack = out / 'chinese-scene.pelang'
+    subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--strings',
+                    str(localization / 'data' / 'manifest.json'), '--lang', 'xx', '--name', 'Scene', '-o', str(pack),
+                    str(table)], check=True, stdout=subprocess.DEVNULL)
+    return ('xx', 'Scene', None, pack)
+
+
+def chinese_patch(game, discs, out, localization):
+    """Part chinese (see the module notes); 77 when PE_TEST_ZH_PACK isn't there."""
+    path = os.getenv('PE_TEST_ZH_PACK')
+    if not path or not Path(path).is_file():
+        print('SKIP chinese: PE_TEST_ZH_PACK is not set or not a file (the Chinese pack from the fan patch)')
+        return 77
+    sys.path.insert(0, str(localization))
+    import pelang  # noqa: E402 (the localization folder is on the path only now)
+    path = Path(path).resolve()
+    code, name, entries = pelang.read_pack(path)
+    pack = (code, name, None, path)
+    letters = pack_letters(pelang.pack_bytes(path))     # a plain pack, or the zip players download
+    (out / 'packs').mkdir(parents=True, exist_ok=True)
+    scene_pack = make_chinese_scene(localization, out / 'packs')
+    # The first box only: the next boxes' pages and timing differ from English's with a real translation.
+    steps = [(FIRST_BOX, 'first', None)]
+    work = run_fixed(game, discs, out / 'chinese', steps, pack=pack, pad=NEW_GAME)
+    scene = run_fixed(game, discs, out / 'chinese-scene', steps, pack=scene_pack, pad=NEW_GAME)
+    log = mods_log(work)
+    label = f'{name} ({code})'
+    check(f'{label}, ' in log, f'{label} not loaded: {work}')
+    check(f"text: {label}'s stretches in use" in log, f'no stretch drew with {label}: {work}')
+    missing = [line for line in log.splitlines()
+               if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line)]
+    check(not missing, f'{label}: letters fell back to "?": {missing[:5]}: {work}')
+    checked = 0
+    for frame_label, key in (('first', 'dlg/M001/009'),):
+        raw = entries.get(pelang.fnv1a(key))
+        check(raw, f'the pack has no {key}: {path}')
+        box, behind = bright(work, frame_label, BOX), bright(scene, frame_label, BOX)
+        left = LINE_LEFT - BOX[0]
+        for n, line in enumerate(dictionary_lines(raw, letters)):
+            if not line or None in line:
+                continue
+            top = LINE_TOP - BOX[1] + 12 * n
+            want = {(left + 12 * k + p % 12, top + p // 12) for k, cell in enumerate(line)
+                    for p, v in enumerate(cell) if v == 1}
+            check(want, f"{key} line {n + 1}: the pack's letters have no strokes")
+            wrong = [(x + BOX[0], y + BOX[1]) for y in range(top, top + 12)
+                     for x in range(left, left + 12 * len(line))
+                     if ((x, y) in want or not behind[y][x]) and box[y][x] != ((x, y) in want)]
+            check(not wrong, f"{key} line {n + 1} does not light the pack's letter pictures "
+                             f'(first differences at {wrong[:4]}): {work}')
+            checked += len(line)
+    check(checked >= 20, f'only {checked} Chinese letters checked on screen: {work}')
+    print(f'PASS chinese: {label} loaded, its stretches drew, no "?", and the {checked} letters of the first box '
+          "lit exactly the patch's letter pictures")
+    return 0
+
+
 def joined_line(text):
     """(width, {(x, row): 1 stroke or 2 shadow}) of an Arabic word as the renderer draws it, from
     its left edge and the cell's top: petext/rtl.py's shapes and order, each letter cut to its strokes
@@ -738,6 +836,11 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
     if out.exists() and any(out.iterdir()):
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
+    if 'chinese' in parts:                  # the fan patch's pack: needs none of the test packs below
+        result = chinese_patch(game, discs, out, localization)
+        parts = [p for p in parts if p != 'chinese']
+        if not parts:
+            return result
     packs = make_packs(localization, discs, out / 'packs')
     greek = next((p for p in packs if p[0] == 'el'), None)
     check(greek, 'no Greek pack')
