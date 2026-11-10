@@ -47,7 +47,9 @@ int g_BattleEffectPmSlot;
 #ifdef PE_MELEE_PROTOTYPE
 enum {
     MELEE_IDLE, MELEE_OFFERED, MELEE_ACCEPTED, MELEE_REPLAY, MELEE_SPENT,
-    MELEE_WINDOW = 8,
+    MELEE_WINDOW = 24,         /* 0.8 seconds at 30 battle updates per second */
+    MELEE_BACKHAND_STEP = 0x28000,  /* 2.5 animation frames per update */
+    MELEE_SPARK_UPDATES = 7,
     MELEE_CROSS = 0x200,
     MELEE_SIDE_MIN = 683,  /* 60 degrees on the 4096-step turn */
     MELEE_SIDE_LIMIT = 1366,  /* first step at or above 120 degrees */
@@ -61,7 +63,16 @@ static struct {
     int phase;
     int impactFrame;
     int firstDamage;
+    int strikeMode;
+    int backhand;
+    BattleInitSlot slot;
 } melee;
+
+static struct {
+    int frame;
+    int x;
+    int y;
+} meleeSpark = { -MELEE_SPARK_UPDATES, 0, 0 };
 
 /* The cue outlives the attack, so Battle_MeleeReset leaves it alone. */
 static struct {
@@ -109,6 +120,9 @@ static int Melee_PredictInReach(BattleEntity *target, int *predicted)
 
 void Battle_MeleeReset(void)
 {
+    if (melee.backhand && D_8009D254->actionMode == melee.strikeMode)
+        D_8009D254->entityFlags &= ~0x100;
+    melee.backhand = 0;
     melee.target = NULL;
     melee.phase = MELEE_IDLE;
 }
@@ -166,6 +180,9 @@ int Battle_MeleeOnDamage(BattleEntity *target, int damage)
     melee.phase = MELEE_OFFERED;
     melee.impactFrame = g_BattleFrameCounter;
     melee.firstDamage = damage;
+    melee.strikeMode = g_ActiveActor->followUpAngleActionModes[1];
+    melee.slot = g_BattleActionQueue[0];
+    meleeTrack.count = 0;
     fprintf(stderr, "club_flank offer frame=%d\n", g_BattleFrameCounter);
     return damage;
 }
@@ -346,29 +363,89 @@ static void Melee_TraceEnemy(void)
             Battle_CalcDistToPlayer(enemy, aya), Melee_BodyDistance(enemy, aya));
 }
 
+static int Melee_StartBackhand(void)
+{
+    BattleEntity *aya = D_8009D254;
+    int predicted;
+
+    melee.phase = MELEE_SPENT;
+    if (!Melee_PredictInReach(melee.target, &predicted)) {
+        fprintf(stderr, "club_flank cancel frame=%d distance=%d predicted=%d range=%d\n",
+                g_BattleFrameCounter, Battle_MeleeClubDistance(melee.target, aya),
+                predicted, g_ActiveActor->action->range);
+        meleeCue.start = g_BattleFrameCounter;
+        meleeCue.until = g_BattleFrameCounter + MELEE_CUE_UPDATES;
+        return 0;
+    }
+
+    /* Reverse the existing club strike from its follow-through. Hold the native
+     * animation clock while we step it backward, including for the held club. */
+    Entity_SetActionMode(aya, melee.strikeMode);
+    aya->animFrame = (s32)aya->animLastFrame << 16;
+    aya->entityFlags |= 0x100;
+    melee.backhand = 1;
+    melee.phase = MELEE_REPLAY;
+    g_BattleHitTimer = 0;
+    Battle_FinalizeAttackResult();
+    fprintf(stderr, "club_flank swing frame=%d distance=%d predicted=%d\n",
+            g_BattleFrameCounter, Battle_MeleeClubDistance(melee.target, aya), predicted);
+    return 1;
+}
+
 void Battle_MeleeUpdate(void)
 {
+    BattleEntity *aya = D_8009D254;
+    int originalAttack;
+
     Melee_TraceEnemy();
     Melee_Trace();
     Melee_SpeedWindup();
     if (melee.phase == MELEE_IDLE)
         return;
-    if (!Melee_IsAttack(melee.target) || !g_ActiveActor->curHP) {
-        fprintf(stderr, "club_flank end frame=%d\n", g_BattleFrameCounter);
+
+    originalAttack = Melee_IsAttack(melee.target);
+    if (melee.backhand) {
+        if (!originalAttack || aya->actionMode != melee.strikeMode || !g_ActiveActor->curHP) {
+            g_BattleHitPending = 0;
+            Battle_MeleeReset();
+        } else {
+            int frame = aya->animFrame - MELEE_BACKHAND_STEP;
+            aya->animFrame = frame > 0 ? frame : 0;
+        }
+        return;
+    }
+    if (melee.phase == MELEE_SPENT) {
         Battle_MeleeReset();
         return;
     }
-    if (melee.phase == MELEE_ACCEPTED)
-        Melee_TrackDistance();
-    if (melee.phase != MELEE_OFFERED)
-        return;
-    if ((unsigned)(g_BattleFrameCounter - melee.impactFrame) > MELEE_WINDOW) {
-        melee.phase = MELEE_SPENT;
+    if ((unsigned)(g_BattleFrameCounter - melee.impactFrame) >= MELEE_WINDOW) {
         fprintf(stderr, "club_flank expire frame=%d\n", g_BattleFrameCounter);
-    } else if (g_FieldPadPressed & MELEE_CROSS) {
+        Battle_MeleeReset();
+        return;
+    }
+    if (g_BattleModeState != 0 || !g_ActiveActor->curHP
+        || (g_ActiveActor->stateFlags & 0x194000)
+        || (unsigned)g_SceneDispatchToken != amphitheaterScene
+        || Melee_FindMutant() != melee.target || (melee.target->entityFlags & 0x4000)
+        || (!originalAttack && (g_BattleActionIndex < g_BattleActionQueueCount
+                                || aya->actionMode < 4 || aya->actionMode > 5))) {
+        Battle_MeleeReset();
+        return;
+    }
+
+    Melee_TrackDistance();
+    if (melee.phase == MELEE_OFFERED && (g_FieldPadPressed & MELEE_CROSS)) {
+        g_FieldPadPressed &= ~MELEE_CROSS;
         melee.phase = MELEE_ACCEPTED;
-        meleeTrack.count = 0;
         fprintf(stderr, "club_flank accept frame=%d\n", g_BattleFrameCounter);
+        if (!originalAttack && Melee_StartBackhand()) {
+            /* Recovery already released movement. Requeue only this strike;
+             * bypass targeting and leave the current ATB charge intact. */
+            g_BattleActionQueue[0] = melee.slot;
+            g_BattleActionQueueCount = 1;
+            g_BattleActionIndex = 0;
+            g_ActiveActor->stateFlags &= ~0x200000;
+        }
     }
 }
 
@@ -461,6 +538,29 @@ static void Melee_DrawCrossIcon(int cx, int cy)
     Melee_IconTri(t++, 4, 0x78B8FF, cx + a - 1, cy - a, cx - a + 1, cy + a, cx - a - 1, cy + a);
 }
 
+static void Melee_DrawBackhandSpark(void)
+{
+    static BattleStatusPointerPrim spark[2][4];
+    static const s8 directions[4][2] = {{2, -1}, {-2, 1}, {1, 2}, {-1, -2}};
+    int age = g_BattleFrameCounter - meleeSpark.frame;
+    int i, x = meleeSpark.x, y = meleeSpark.y;
+
+    if (age < 0 || age >= MELEE_SPARK_UPDATES) {
+        meleeSpark.frame = -MELEE_SPARK_UPDATES;
+        return;
+    }
+    for (i = 0; i < 4; i++) {
+        int dx = directions[i][0], dy = directions[i][1];
+        int inner = 1 + age;
+        int outer = inner + (i < 2 ? 10 : 5) - age / 2;
+        unsigned color = age < 2 ? 0xE0FBFF : 0x65C9FF;
+        Melee_IconTri(&spark[g_ActiveDrawSlot & 1][i], 4, color,
+                      x + dx * inner - dy, y + dy * inner + dx,
+                      x + dx * inner + dy, y + dy * inner - dx,
+                      x + dx * outer, y + dy * outer);
+    }
+}
+
 void Battle_MeleeDraw(void)
 {
     /* Game glyphs: A is 0x10, letters follow in order, 0x0f is a space, 0xff ends. */
@@ -469,6 +569,7 @@ void Battle_MeleeDraw(void)
     static u8 outOfReach[] = {0x1e, 0x24, 0x23, 0x0f, 0x1e, 0x15, 0x0f,    /* OUT OF  */
                               0x21, 0x14, 0x10, 0x12, 0x17, 0xff};          /* REACH   */
 
+    Melee_DrawBackhandSpark();
     if (melee.phase == MELEE_OFFERED) {
         /* The HUD font advances 8 pixels a glyph (measured on screen; Draw_PrintRawText leaves
          * the cursor where it started). "FOLLOW UP" is 9 glyphs, 72 pixels, then a 6-pixel gap
@@ -598,32 +699,25 @@ int Battle_StepCharacterAction(BattleInitSlot *slot)
     case 9:
     case 11:
         caseEntity = D_8009D254;
+#ifdef PE_MELEE_PROTOTYPE
+        if (melee.backhand) {
+            if (caseEntity->animFrame != 0 || g_BattleHitPending)
+                break;
+        } else
+#endif
         if (caseEntity->animLastFrame != caseEntity->animPrev.parts.integer)
             break;
 #ifdef PE_MELEE_PROTOTYPE
-        if (melee.phase == MELEE_ACCEPTED && melee.target == turnSlot->actor) {
-            const EnemyCombatant *target = turnSlot->actor->core;
-            int alive = target && target->hpAlive > 0 && !(turnSlot->actor->entityFlags & 0x4000);
-            int predicted;
-            melee.phase = MELEE_SPENT;
-            if (alive && !Melee_PredictInReach(turnSlot->actor, &predicted)) {
-                /* The target will be out of reach at contact: drop the second swing instead of
-                 * spending its recovery on a certain miss. */
-                fprintf(stderr, "club_flank cancel frame=%d distance=%d predicted=%d range=%d\n",
-                        g_BattleFrameCounter, Battle_MeleeClubDistance(turnSlot->actor, D_8009D254),
-                        predicted, g_ActiveActor->action->range);
-                meleeCue.start = g_BattleFrameCounter;
-                meleeCue.until = g_BattleFrameCounter + MELEE_CUE_UPDATES;
-            } else if (alive) {
-                melee.phase = MELEE_REPLAY;
-                Entity_SetActionMode(caseEntity, caseEntity->actionMode);
-                g_BattleHitTimer = 0;
-                Battle_FinalizeAttackResult();
-                fprintf(stderr, "club_flank swing frame=%d distance=%d predicted=%d\n", g_BattleFrameCounter,
-                        Battle_MeleeClubDistance(turnSlot->actor, D_8009D254), predicted);
+        if (melee.target == turnSlot->actor) {
+            /* A hurt reaction may have changed modes at the first contact.
+             * Save the actual strike pose that Aya recovers from. */
+            melee.strikeMode = caseEntity->actionMode;
+            if (melee.phase == MELEE_ACCEPTED && Melee_StartBackhand())
                 break;
-            }
+            fprintf(stderr, "club_flank end frame=%d\n", g_BattleFrameCounter + 1);
         }
+        if (melee.backhand)
+            Battle_MeleeReset();
 #endif
         indexB = g_BattleActionIndex;
         if (g_BattleActionQueue[indexB].command == 0x189) {
@@ -812,6 +906,14 @@ void Battle_ResolveHitOnTimer(void)
         {
             BattleEntity *thief = selectedSlot->actor;
             Asset_Find08Alt(0x46D, 0, thief->renderObject.target_x, thief->renderObject.target_y, thief->renderObject.target_z);
+#ifdef PE_MELEE_PROTOTYPE
+            if (melee.phase == MELEE_REPLAY && melee.target == thief) {
+                meleeSpark.frame = g_BattleFrameCounter;
+                meleeSpark.x = thief->renderObject.projected_target_x;
+                meleeSpark.y = thief->renderObject.projected_target_y;
+                fprintf(stderr, "club_flank spark frame=%d\n", g_BattleFrameCounter);
+            }
+#endif
             /* A released target has nothing left to steal. */
             if ((g_ActiveActor->action->turnWord & 0x6000) && thief->core != NULL)
             {
