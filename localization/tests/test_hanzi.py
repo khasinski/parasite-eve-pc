@@ -79,12 +79,14 @@ class Matching(unittest.TestCase):
                 self.assertEqual((names["p"].char, names["p"].how), (ch, "exact"))
 
     def test_moved_or_smaller_letter_is_still_near(self):
-        # Moved within the cell, or drawn 11 pixels high like a patch's own 12-dot font. Not every
-        # letter manages this (SimSun's 12-pixel 说 is nearer 而 than its own outline): those
-        # are what the reading by hand is for.
+        # Moved within the cell: the same candidates as where it was (each picture is fitted by
+        # its ink box). Drawn 11 pixels high like a patch's own 12-dot font: still near. Whether a
+        # font's own 12-pixel drawing is near its outline depends on the font (SimSun's 12-pixel
+        # 说 is nearer 而, Noto Sans CJK's 国 nearer 同): those are what the reading by hand is for.
         for ch in "国道的":
             with self.subTest(ch=ch):
-                self.assertIn(ch, self.nearest(pixels(ch, whole=True, shift=(1, 0))))
+                self.assertEqual(self.nearest(pixels(ch, whole=True, shift=(1, 0))),
+                                 self.nearest(pixels(ch, whole=True)))
                 self.assertIn(ch, self.nearest(pixels(ch, size=11, whole=True)))
 
     def test_one_pixel_off_is_still_near(self):
