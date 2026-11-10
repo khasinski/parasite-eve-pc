@@ -40,7 +40,7 @@ endif()
 option(BUILD_TESTING "Build original game tests" OFF)
 include(CTest)
 
-option(PE_MELEE_PROTOTYPE "Enable the isolated Club 1 flank prototype" OFF)
+option(PE_MELEE_PROTOTYPE "Isolated melee prototype: Club 1 follow-up swing and faster windup in the Day 2 amphitheater" OFF)
 if(PE_MELEE_PROTOTYPE)
     add_compile_definitions(PE_MELEE_PROTOTYPE=1)
 endif()
