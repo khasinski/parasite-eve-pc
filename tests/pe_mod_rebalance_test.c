@@ -11,6 +11,7 @@
 #include "pe_mod_menu.h"
 #include "pe1/save_blob.h"
 #include "pe1/entity_animation.h"
+#include "pe1/battle_entity_anim.h"
 
 void pe_mod_effects_register(const char *);
 void pe_mod_effects_shutdown(void);
@@ -22,11 +23,22 @@ BattleEnemySlot g_BattleEnemySlots[7];
 u8 g_BattleActionAnimModes[4],g_BattleHitPending;
 s8 g_BattleTargetCount=1;
 const EnemyAnimTable g_BattleActionAnimRows={.rows={[1]={0,0,7,0,0}}};
+/* Kill and reward bookkeeping enemy_movement.c reaches when a hit is lethal. */
+s8 g_BattleLiveEnemyCount=1;
+u32 g_BattleExpReward;
+u16 g_BattlePeBonusReward;
+BattleRewardSlot g_BattleRewardSlots[10];
+void Battle_StartDeathAnim(void){}
+void Anim_SetInterpRate(RenderObjectEntity *o,int rate){(void)o;(void)rate;}
+void Akao_Cmd_21(int a,int b){(void)a;(void)b;}
+void Battle_SlotFree(BattleEntity *e){(void)e;}
+void Render_FadeEntityColor(RenderObjectEntity *o,int r,int g,int b){(void)o;(void)r;(void)g;(void)b;}
+int Asset_Find08w(int id,int mode,s16 x,s16 y,s16 z){(void)id;(void)mode;(void)x;(void)y;(void)z;return 0;}
 static Combatant aya;
 static BattleEntity player,target;
 static BattleAction action;
 static ItemDataRecord gun,base;
-static int battle=1,loaded=1,dispatch=1;
+static int battle=1,loaded=1,dispatch=1,no_record;
 static PeHookFn hooks[PE_HOOK_COUNT];
 static PeMenuPerFrame tick;
 static struct { const char *name; int *value; } rows[32];
@@ -49,7 +61,7 @@ int pe_game_loaded(void){return loaded;}
 int pe_in_battle(void){return battle;}
 BattleEntity *pe_player(void){return &player;}
 Combatant *pe_aya_core(void){return &aya;}
-ItemDataRecord *pe_equipped(int armor){return armor?NULL:&gun;}
+ItemDataRecord *pe_equipped(int armor){return armor||no_record?NULL:&gun;}
 ItemDataRecord *pe_base_item(unsigned id){(void)id;return &base;}
 int pe_rec_has_effect(const ItemDataRecord *r,int effect){
     for(unsigned i=0;r && i<r->tailCount && i<10;++i)if((r->tailData[i]&31)==effect)return 1;return 0;
@@ -120,6 +132,26 @@ static void scoped(void){
     assert(!(e->coreFlags&0x1800u) && target.actionMode==2);
     puts("Rebalance: scoped hit inputs, owned animation restore and Attack All cap at minimum damage");
 }
+/* Club 1 (0x3F) gets the +8 progression bonus, also when its bag slot holds the plain item id
+ * rather than an equipment record (the game equips and fights with both). A club swing is one
+ * shot against full defense: offense/5 18 + attack 10 + 8 - defense 18 = 18; without the bonus 10. */
+static int club_hit(int record,int prog){
+    EnemyCombatant *e;
+    /* A Rules change re-applies its preset on the next tick, so set the toggle after that tick. */
+    setting("Rules",1);tick();setting("Progression gun bonuses",prog);setup();tick();
+    no_record=!record;gun.kind=8;gun.itemId=0x3F;
+    g_AyaSaveState.equipped_weapon_slot=0;g_AyaSaveState.inventory_items[0]=record?0x100:0x3F;
+    aya.stat1E=90;action.powerBonus=10;action.turnWord=1;action.actionCode.bytes.actionIdByte=8;
+    e=target.core;e->defense=18;
+    Battle_StepEnemyMovement(&target);
+    no_record=0;setting("Progression gun bonuses",1);
+    return 1000-e->hpAlive;
+}
+static void club(void){
+    const int a=club_hit(1,1),b=club_hit(0,1),c=club_hit(1,0),d=club_hit(0,0);
+    assert(a==18);assert(b==18);assert(c==10);assert(d==10);
+    puts("Rebalance: Club 1 +8 from an equipment record and from a plain item id; off with the toggle");
+}
 static void poison(void){
     setting("Rules",1);setup();tick();
     EnemyCombatant *e=target.core;e->periodicDamage=10;tick();assert(e->periodicDamage==12);
@@ -133,6 +165,7 @@ int main(int argc,char **argv){
     pe_mod_effects_register("pe_rebalance");assert(tick);
     if(saved_rules==0){assert(*rows[0].value==0);vanilla();return 0;}
     if(argc==2 && !strcmp(argv[1],"--vanilla"))vanilla();
-    else if(argc==2 && !strcmp(argv[1],"--poison"))poison();else scoped();
+    else if(argc==2 && !strcmp(argv[1],"--poison"))poison();
+    else if(argc==2 && !strcmp(argv[1],"--club"))club();else scoped();
     pe_mod_effects_shutdown();return 0;
 }
