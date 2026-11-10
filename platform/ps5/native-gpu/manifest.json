@@ -4303,7 +4303,7 @@
     },
     {
       "path": "mods/pe_qol/pe_bag_sort.c",
-      "sha256": "768ae981bb2ec83a5d6f52c071484fa45210fbe0c7345b5c1c601efc1589ac18"
+      "sha256": "d15f7d70024354c275c139dcbd08c44937e9deab481bfe99441b6472faa5c14d"
     },
     {
       "path": "mods/pe_qol/pe_battle_frequency.c",
