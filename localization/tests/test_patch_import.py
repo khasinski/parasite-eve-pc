@@ -471,5 +471,70 @@ class TileColourRowsTest(unittest.TestCase):
         self.assertFalse(pictures._palette_rows(english, script))
 
 
+class DrawnPairsTest(unittest.TestCase):
+    """Two letters in one code (the French patch): a cell that is exactly the two drawn one after the
+    other at the first one's width, as wide as both; a copy of a letter a space wider than it."""
+    widths = {**{code: gt.ADVANCE[code] for code in gt.CHARS}}
+
+    def letters(self, extra, widths):
+        with mock_patch.object(font, "page", return_value=fake_font(extra)):
+            letters, how, unknown = patchimport.letter_map(SimpleNamespace())
+            left = patchimport.drawn_pairs(SimpleNamespace(), letters, how, unknown, widths)
+        return letters, how, left
+
+    def pair(self, a, b):
+        cell = lambda ch: list(latin.synthetic_cell(gt.CODE_OF[ch]))
+        return patchimport._overlay([(cell(a), 0), (cell(b), gt.ADVANCE[gt.CODE_OF[a]])])
+
+    def test_pairs_and_a_letter_with_a_space(self):
+        l, i, a, space = (gt.CODE_OF[c] for c in "lia ")
+        widths = {**self.widths, 0x67: gt.ADVANCE[l] + gt.ADVANCE[i], 0x68: gt.ADVANCE[l] + gt.ADVANCE[i] + 1,
+                  0x62: gt.ADVANCE[a] + gt.BOX_ADVANCE[space]}
+        letters, how, left = self.letters({0x67: self.pair("l", "i"), 0x68: self.pair("l", "i"),
+                                           0x62: list(latin.synthetic_cell(a))}, widths)
+        self.assertEqual((letters[0x67], letters[0x62]), ("li", "a "))
+        self.assertTrue(how[0x62].startswith("two letters"))
+        self.assertEqual(left, [0x68])                      # a pixel wider than its two letters
+
+    def test_without_the_patchs_widths_nothing_is_read(self):
+        letters, _, left = self.letters({0x67: self.pair("l", "i")}, None)
+        self.assertNotIn(0x67, letters)
+        self.assertEqual(left, [0x67])
+
+    def test_pairs_and_spaces_are_not_letter_pictures(self):
+        how = {0x62: "two letters: 'a ' (the letter and a space)", 0x67: "two letters: 'li'"}
+        metrics = bytearray(0xF1)
+        metrics[gt.CODE_OF["a"]], metrics[0x62], metrics[0x8F] = 0x70, 0xC0, 0x40
+        letters = {**gt.CHARS, 0x62: "a ", 0x67: "li", 0x8F: " "}
+        self.assertEqual(patchimport.menu_space(letters, how, bytes(metrics)), 5)
+        metrics[0x8F] = 0x50
+        self.assertIsNone(patchimport.menu_space(letters, how, bytes(metrics)))
+        self.assertIsNone(patchimport.menu_space(gt.CHARS, {}, bytes(metrics)))
+
+
+class TypedLettersTest(unittest.TestCase):
+    letters = {**gt.CHARS, 0x4D: "é"}
+
+    def test_a_letter_typed_as_the_computer_writes_it(self):
+        raw = bytes([gt.CODE_OF["H"], 0xE9, 0xC3, 0xA9])
+        self.assertEqual(patchimport.typed_letters(raw, self.letters), bytes([gt.CODE_OF["H"], 0x4D, 0x4D]))
+        text, why = patchimport.compare_page(gt.encode("Hey"), raw, self.letters)
+        self.assertEqual((text, why), ("Héé", None))
+
+    def test_a_code_with_a_letter_or_a_letter_the_patch_lacks_stays(self):
+        raw = bytes([0xE2, 0x4D, 0xA6, 0xC3, 0xBC])          # ü: not one of the patch's letters
+        self.assertEqual(patchimport.typed_letters(raw, self.letters), raw)
+
+
+class MovedHeaderTest(unittest.TestCase):
+    def test_pointers_past_the_scripts_that_moved_together(self):
+        from petext import pictures
+        a = struct.pack("<2I", 0x300, 0x200) + bytes(8)
+        self.assertTrue(pictures.moved_header(a, struct.pack("<2I", 0x2C8, 0x1C8) + bytes(8), 0x100))
+        self.assertFalse(pictures.moved_header(a, struct.pack("<2I", 0x2C8, 0x1C0) + bytes(8), 0x100))
+        self.assertFalse(pictures.moved_header(a, struct.pack("<2I", 0x2C8, 0x0C8) + bytes(8), 0x100))
+        self.assertFalse(pictures.moved_header(a, a, 0x100))
+
+
 if __name__ == "__main__":
     unittest.main()

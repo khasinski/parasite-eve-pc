@@ -22,7 +22,7 @@ import re
 import struct
 import zlib
 
-from . import font, gametext as gt, latin, letterpairs, validation
+from . import font, gametext as gt, latin, letterpairs, pictures, validation
 
 RENAME_GRIDS = ("sys/115", "sys/116", "sys/117")
 # The two Japanese kana grids: the USA game always opens the Latin one, sys/117
@@ -186,8 +186,104 @@ def letter_map(game) -> tuple[dict[int, str], dict[int, str], list[int]]:
     return letters, how, unknown
 
 
+def _overlay(cells: list[tuple[list[int], int]]) -> list[int] | None:
+    """Layered cells drawn into one cell, each from its column: as the box draws one letter after
+    another (a stroke covers the letter before's shadow). None when a stroke falls off the cell."""
+    out = [0] * (font.CELL * font.CELL)
+    for cell, dx in cells:
+        for i, v in enumerate(cell):
+            x = i % font.CELL + dx
+            if not v or (x >= font.CELL and v == 2):
+                continue
+            if x >= font.CELL:
+                return None
+            at = i - i % font.CELL + x
+            if v == 1 or not out[at]:
+                out[at] = v
+    return out
+
+
+def drawn_pairs(game, letters: dict[int, str], how: dict[int, str], unknown: list[int],
+                widths: dict[int, int] | None) -> list[int]:
+    """Codes that draw two letters in one cell, to fit more text in the game's space: a cell that is
+    exactly two of the patch's letters as the dialogue box would draw them one after the other, at
+    the first one's width, and as wide as the two together; or a copy of a letter that is a space
+    wider than it (the letter and a space). Each such code becomes its two letters, so the pack
+    draws the same thing with its own letters. Updates `letters` and `how`; returns the codes still
+    without a letter. Needs the patch's one-width-a-code table (`widths`)."""
+    if not widths:
+        return unknown
+    pal, width, _, px = font.page(game, font.PAGE0_ENTRY)
+    space = gt.CODE_OF[" "]
+    gap = widths.get(space, 0) - (gt.ADVANCE[space] - gt.BOX_ADVANCE[space])
+    # One code a letter, game letters and their accented ones before symbols and digits.
+    singles: dict[str, int] = {}
+    for code in sorted(letters, key=lambda c: (not letters[c].isalpha(), c)):
+        if len(letters[code]) == 1 and letters[code].strip() and code in widths and not how.get(code, "").startswith("copy of"):
+            singles.setdefault(letters[code], code)
+    for code in list(letters):
+        base = singles.get(letters[code])
+        if (how.get(code, "").startswith("copy of") and base is not None and code in widths
+                and widths[code] != widths[base] and widths[code] == widths[base] + gap):
+            letters[code] = letters[code] + " "
+            how[code] = f"two letters: {letters[code]!r} (the letter and a space)"
+    cells = {code: _layered(pal, font.cell(px, width, code)) for code in set(singles.values()) | set(unknown)}
+    left = []
+    for code in unknown:
+        found = None
+        if code in widths:
+            for a, first in singles.items():
+                for b, second in singles.items():
+                    if (widths[first] + widths[second] == widths[code]
+                            and _overlay([(cells[first], 0), (cells[second], widths[first])]) == cells[code]):
+                        found = a + b
+                        break
+                if found:
+                    break
+        if found:
+            letters[code] = found
+            how[code] = f"two letters: {found!r}"
+        else:
+            left.append(code)
+    return left
+
+
 def _unknown_marks(raw: bytes, letters: dict[int, str]) -> list[int]:
     return [c[0] for c in validation.commands(raw) if c[0] < 0xF1 and c[0] not in letters]
+
+
+def typed_letters(raw: bytes, letters: dict[int, str]) -> bytes:
+    """A translator's tool can write a letter as the computer writes it (UTF-8, or one Latin-1
+    byte) where the patch's own code for it belongs: on the PS1 those codes draw empty cells. A run
+    of codes with no letter that spells, that way, one letter the patch has becomes the patch's code
+    for it. Codes with a letter, and commands, are left as they are."""
+    code_of: dict[str, int] = {}
+    for code in sorted(letters):
+        if len(letters[code]) == 1:
+            code_of.setdefault(letters[code], code)
+    parts = list(validation.commands(raw))
+    stray = [len(p) == 1 and 0x80 <= p[0] < 0xF1 and p[0] not in letters for p in parts]
+    out, i = [], 0
+    while i < len(parts):
+        found = None
+        if stray[i]:
+            for n in (3, 2, 1):
+                if all(stray[i:i + n]) and i + n <= len(parts):
+                    seq = bytes(p[0] for p in parts[i:i + n])
+                    try:
+                        char = seq.decode("utf-8") if n > 1 else seq.decode("latin-1")
+                    except UnicodeDecodeError:
+                        continue
+                    if len(char) == 1 and char in code_of:
+                        found = (n, code_of[char])
+                        break
+        if found:
+            out.append(bytes([found[1]]))
+            i += found[0]
+        else:
+            out.append(parts[i])
+            i += 1
+    return b"".join(out)
 
 
 def to_text(raw: bytes, letters: dict[int, str]) -> str:
@@ -246,6 +342,9 @@ def compare_page(raw: bytes, patched: bytes, letters: dict[int, str],
         if choices(value) != choices(raw):
             return None, "the patch changes a choice, which the scripts act on"
         unknown = _unknown_marks(value, letters)
+        if unknown:
+            value = typed_letters(value, letters)
+            unknown = _unknown_marks(value, letters)
     except ValueError as error:
         return None, f"a command the port doesn't have: {error}"
     if unknown:
@@ -277,7 +376,8 @@ def compare_grid(raw: bytes, patched: bytes, letters: dict[int, str], key: str =
 
 
 def script_changes(original, translated, bank_start) -> list[str]:
-    """Rooms whose data differs before their first message bank: edited scripts or models."""
+    """Rooms whose data differs before their first message bank: edited scripts or models. Its first
+    two words moving with the banks (pictures.moved_header) is no edit."""
     changed = []
     for number in range(1, 451):
         before, after = original.room(number), translated.room(number)
@@ -286,7 +386,8 @@ def script_changes(original, translated, bank_start) -> list[str]:
                 changed.append(f"M{number:03d}")
             continue
         cut = bank_start(before.data)
-        if before.data[:cut] != after.data[:cut]:
+        if before.data[:cut] != after.data[:cut] and not (pictures.moved_header(before.data, after.data, cut)
+                                                         and before.data[8:cut] == after.data[8:cut]):
             changed.append(f"M{number:03d}")
     return changed
 
@@ -423,7 +524,7 @@ def letter_pictures(original, translated, letters: dict[int, str], how: dict[int
     out, seen = [], set()
     for code in range(0xF1):
         char = letters.get(code)
-        if char is None or char in seen or how.get(code, "").startswith("copy of"):
+        if char is None or char in seen or how.get(code, "").startswith(("copy of", "two letters")):
             continue
         if code < 0x4D and gt.CHARS.get(code) != char:      # the apostrophe drawn as a quote
             continue
@@ -441,7 +542,42 @@ def letter_pictures(original, translated, letters: dict[int, str], how: dict[int
             continue
         rows = ["".join(" #+"[v] for v in cell[y * font.CELL:(y + 1) * font.CELL]) for y in range(font.CELL)]
         out.append({"letter": char, "code": f"{code:02X}", "dialogue": advance, "menu": metrics[code], "picture": rows})
+    space = gt.CODE_OF[" "]
+    narrow = menu_space(letters, how, metrics)
+    if narrow is not None and narrow != _menu_advance(space, metrics):
+        entry = next((e for e in out if e["letter"] == " "), None)
+        if entry is None:
+            cell = _layered(pal, font.cell(px, width, space))
+            entry = {"letter": " ", "code": f"{space:02X}", "dialogue": widths.get(space, gt.ADVANCE[space]) if widths
+                     else gt.ADVANCE[space], "menu": metrics[space],
+                     "picture": ["".join(" #+"[v] for v in cell[y * font.CELL:(y + 1) * font.CELL]) for y in range(font.CELL)]}
+            out.append(entry)
+            out.sort(key=lambda e: int(e["code"], 16))
+        entry["menu"] = (narrow - _menu_advance(space, b"\x00" * len(metrics))) << 4 | metrics[space] & 15
     return out, read
+
+
+def _menu_advance(code: int, metrics: bytes) -> int:
+    """How far the menus move on after a code: its drawn width, and 2 px for digits and the space,
+    1 px for the rest (src/main/draw/text_render.c MenuMeasure)."""
+    return (metrics[code] >> 4) + (2 if code < 10 or code == gt.CODE_OF[" "] else 1)
+
+
+def menu_space(letters: dict[int, str], how: dict[int, str], metrics: bytes) -> int | None:
+    """How wide the patch's menus draw a space, when it draws them with codes of its own (a letter and
+    a space in one code, or a code of its own named a space) that all agree: the pack's space then
+    takes that width in the menus (the dialogue box keeps its own). None when it draws none so."""
+    own = {}
+    for code, char in letters.items():
+        if char and len(char) == 1 and not how.get(code, "").startswith(("copy of", "two letters")):
+            own.setdefault(char, code)
+    found = set()
+    for code, char in letters.items():
+        if how.get(code, "").startswith("two letters") and len(char) == 2 and char[1] == " " and char[0] in own:
+            found.add(_menu_advance(code, metrics) - _menu_advance(own[char[0]], metrics))
+        elif char == " " and code != gt.CODE_OF[" "] and code >= 0x4D:
+            found.add(_menu_advance(code, metrics))
+    return found.pop() if len(found) == 1 else None
 
 
 def exe_changes(original, translated) -> int:

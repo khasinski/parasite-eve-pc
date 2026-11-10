@@ -1,9 +1,9 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
-chinese, spanish and italian, original-game-text-renderer-chinese, -spanish and -italian.)
+chinese, spanish, italian, german and french, original-game-text-renderer-chinese, -spanish, ...)
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -123,6 +123,11 @@ Checks, each from pe_mods.log and frame dumps:
              still equal those of Disc 2 with the pieces written in.
              localization/tests/test_it_matches_patch.py checks the pack's text against the patched
              game itself, every row.
+  german     The same for the German pack (PE_TEST_DE_PACK), and a help line the patch writes on two lines.
+  french     The same for the French pack (PE_TEST_FR_PACK): the patch keeps the game's letters (as the
+             Italian), adds its own, and draws its menus' spaces 5 px wide, which the pack's space is in
+             the menus: on Disc 2, the load screen's help line (sys/080) must light exactly the pack's
+             letters with those spaces. test_fr_matches_patch.py checks the text against the patched game.
 """
 import binascii
 import csv
@@ -640,6 +645,7 @@ class FanPack(typing.NamedTuple):
     title_words: tuple | None        # where the title screen's words change (None: somewhere)
     disc2_picture: str | None        # a frame of the Disc 2 route showing a picture the patch redrew
     first_box_letters: int = 60      # letters of the first box (dlg/M001/009) at least
+    menu_space: bool = False         # the pack draws its space its own width in the menus
 
 
 SPANISH = FanPack('spanish', 'PE_TEST_ES_PACK', SPANISH_STEPS, 60, 'ÑñÜüÁÉÍÓÚáéíóú¿¡', False, PRESS_START,
@@ -651,6 +657,13 @@ ITALIAN = FanPack('italian', 'PE_TEST_IT_PACK', ITALIAN_STEPS, 6, '', True, None
 # are as many screens as Italian's, so English's route reaches its name entry. Its first box is
 # shorter ("Mann: Was ist los?").
 GERMAN = FanPack('german', 'PE_TEST_DE_PACK', ITALIAN_STEPS, 80, 'ÄÖÜäöüß↑', False, None, 'day-card', 40)
+# The French patch keeps the game's letters and adds its own accented ones, ( ) № and …; it writes many
+# letter pairs with one code, which the pack writes out (so as many letters of the first box are
+# checked as English draws). The game counts 17 letters redrawn (the space and 16 accented ones;
+# its ( ) № … are letters of the pack's own table). Its menus' spaces are 5 px: the pack's space is, in the menus (checked on
+# the load screen's help line on the Disc 2 route).
+FRENCH = FanPack('french', 'PE_TEST_FR_PACK', ITALIAN_STEPS, 17, 'çéèêëàâäîïôöùûü', True, None, 'day-card',
+                 menu_space=True)
 
 
 def run_disc2(game, discs, work, pack):
@@ -798,6 +811,23 @@ def italian_patch(game, discs, out, localization):
 
 def german_patch(game, discs, out, localization):
     return fan_patch(game, discs, out, localization, GERMAN)
+
+
+def french_patch(game, discs, out, localization):
+    return fan_patch(game, discs, out, localization, FRENCH)
+
+
+def menu_line(codes, drawn):
+    """{(x, row)} of the stroke pixels of a menu line from its pen's start, as the menus draw it: each
+    letter cut by its metrics (menu_letter), the pen moved by its drawn width and 1 px, 2 px after a
+    digit or the space (text_render.c MenuMeasure)."""
+    pixels, pen = set(), 0
+    for code in codes:
+        _, metrics, picture = drawn[code]
+        narrow = code <= 9 or code == 0x0F
+        pixels |= {(pen + x, y) for x, y in menu_letter(picture, metrics, narrow)}
+        pen += (metrics >> 4) + (2 if narrow else 1)
+    return pixels
 
 
 def fan_patch(game, discs, out, localization, fan):
@@ -973,6 +1003,29 @@ def fan_patch(game, discs, out, localization, fan):
             check(lefts[0] == lefts[1], f"the help line's second row starts at x {lefts[1]}, the first at {lefts[0]}: {work}")
             print(f"PASS {part} help line: sys/080 is two rows 12 px apart from the same left edge (x {HELP_LINE[0] + lefts[0]}), "
                   'as the patch draws its line break')
+        if fan.menu_space:
+            # The help line while the card loads (sys/080, frame continue6), its first row: exactly the
+            # pack's letters cut as the menus cut them, each space the pack's own width (a space the
+            # game's width would move every letter after it).
+            space = drawn.get(0x0F)
+            check(space and (space[1] >> 4) + 2 != (game_letters(discs[0], localization)[0x0F][1] >> 4) + 2,
+                  "the pack doesn't draw its space its own width in the menus")
+            codes = list(notice or b'')
+            check(codes and all(c in drawn for c in codes) and 0x0F in codes,
+                  f"sys/080 is not a line of the pack's letters with a space: {codes}")
+            want = menu_line(codes, drawn)
+            top = min(y for y in range(HELP_LINE[3] - HELP_LINE[1]) if any(bright(work, 'continue6', HELP_LINE)[y]))
+            lit_line = {(x, y) for y, row in enumerate(bright(work, 'continue6', HELP_LINE)) for x, v in enumerate(row)
+                        if v and top <= y < top + 12}
+            want_top = min(y for _, y in want)
+            want = {(x, y) for x, y in want if y < want_top + 12}
+            dx = min(x for x, _ in lit_line) - min(x for x, _ in want)
+            dy = top - want_top
+            want = {(x + dx, y + dy) for x, y in want}
+            check(lit_line == want, f"the help line is not the pack's letters with its own space width "
+                                    f'(missing {sorted(want - lit_line)[:4]}, extra {sorted(lit_line - want)[:4]}): {work}')
+            print(f"PASS {part} menu space: the help line sys/080 ({len(codes)} letters, {codes.count(0x0F)} spaces) is "
+                  f"exactly the pack's letters, each space {(space[1] >> 4) + 2} px as the patch draws its menus")
         if pieces:
             try:
                 written = pieces_written_in(discs[1], pieces, out / 'discs' / 'disc2')
@@ -1320,7 +1373,7 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
-                              ('german', german_patch)):
+                              ('german', german_patch), ('french', french_patch)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

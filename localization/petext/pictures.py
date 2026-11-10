@@ -16,6 +16,8 @@ What counts as picture data (everything else a patch changes is reported, never 
   the room's third run before its message banks, taken only when every changed byte is such a
   row (a 16-bit field whose low 9 bits are a VRAM row of 448-511, the palettes), so no script
   change can come in with them.
+  The run's first two words are left out when they only moved with the message banks
+  (moved_header: a patch whose banks are another size, the French one); the pack keeps the game's.
 Text (entries 1 and 2 and the rooms' messages) comes through the pack's text instead. Room
 scripts, the opening credits (entry 71) and the boot program are not pictures.
 
@@ -155,9 +157,20 @@ def tile_palette_spans(original, translated) -> list[tuple[int, int, str]]:
             continue
         a, b = _pe_bytes(original, *run), _pe_bytes(translated, *run)
         cut = _first_bank(a)
-        if a[:cut] != b[:cut] and _palette_rows(a[:cut], b[:cut]):
-            spans.append((run[0], run[0] + cut, f"M{number:03} tile colour rows"))
+        head = 8 if moved_header(a, b, cut) else 0
+        if a[head:cut] != b[head:cut] and _palette_rows(a[head:cut], b[head:cut]):
+            spans.append((run[0] + head, run[0] + cut, f"M{number:03} tile colour rows"))
     return spans
+
+
+def moved_header(a: bytes, b: bytes, cut: int) -> bool:
+    """Whether a room's first two words (`a` the game's third run, `b` the patch's) both point past
+    its scripts (`cut`, its first message bank) and moved by the same amount: what follows the
+    message banks moved because the patch's banks are another size. No script changes with them."""
+    if len(a) < 8 or len(b) < 8 or a[:8] == b[:8]:
+        return False
+    before, after = struct.unpack_from("<2I", a), struct.unpack_from("<2I", b)
+    return min(before + after) >= cut and before[0] - after[0] == before[1] - after[1]
 
 
 def diff(original, translated) -> tuple[list[Piece], dict]:
@@ -165,8 +178,14 @@ def diff(original, translated) -> tuple[list[Piece], dict]:
     pictures, other = picture_spans(original)
     rows = tile_palette_spans(original, translated)
     pictures += rows
-    ends = {lo: hi for lo, hi, _ in rows}                   # the rest of that run stays "data"
-    other = [(ends.get(lo, lo), hi, what) for lo, hi, what in other]
+    split = []                                              # the rest of that run stays "data"
+    for lo, hi, what in other:
+        for start, end, _ in sorted(r for r in rows if lo <= r[0] < hi):
+            if start > lo:
+                split.append((lo, start, what))
+            lo = end
+        split.append((lo, hi, what))
+    other = split
     pieces: list[Piece] = []
     taken: dict[str, int] = {}
     for lo, hi, what in pictures:

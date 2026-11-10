@@ -1130,6 +1130,10 @@ def cmd_import_patch(a):
                                                   translated.disc.file(translated.exe_name), translated.resident_pack())
             letters.update({k: v for k, v in overrides.items() if v})
             unknown = [code for code in unknown if code not in overrides]
+            # Codes that draw two letters in one cell (patchimport.drawn_pairs).
+            widths, _ = patchimport.dialogue_widths(original.disc.file(original.exe_name),
+                                                    translated.disc.file(translated.exe_name), translated.resident_pack())
+            unknown = patchimport.drawn_pairs(translated, letters, how, unknown, widths)
             catalog = json.loads((ROOT / "editor/catalog.json").read_text(encoding="utf-8"))
             rows, left, end_changed = [], [], 0
             for bank in catalog["banks"]:
