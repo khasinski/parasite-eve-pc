@@ -53,6 +53,13 @@ endif()
 add_subdirectory(${PSYZ_DIR}/psyz ${CMAKE_CURRENT_BINARY_DIR}/psyz)
 target_compile_definitions(psyz PRIVATE __psyz)
 
+# CHD disc images are read with libchdr (BSD-3-Clause, with its bundled lzma, zstd,
+# miniz and dr_flac), vendored in third_party/libchdr. Linking it through psyz gives
+# every target that links the disc reader the library and its headers.
+set(CHDR_WANT_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/libchdr EXCLUDE_FROM_ALL)
+target_link_libraries(psyz PUBLIC chdr-static)
+
 # The original actor/task workspaces are shared by distinct layout views.
 # Preserve those accesses instead of assuming different struct tags cannot alias.
 # Set this after configuring PsyZ: its SDK/SDL targets retain their own options.

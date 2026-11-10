@@ -5,7 +5,7 @@
   "repo": "khasinski/parasite-eve-pc",
   "game": {
     "kind": "iso",
-    "label": "Your Disc 1 .cue file of the North American release. Keep it next to its .bin file. You can add Disc 2 later in the game's settings (Escape)."
+    "label": "Your Disc 1 of the North American release: the .cue file (kept next to its .bin file) or a .chd image. You can add Disc 2 later in the game's settings (Escape)."
   },
   "start": {
     "program": ["parasite-eve-pc.exe", "parasite-eve-pc"],
