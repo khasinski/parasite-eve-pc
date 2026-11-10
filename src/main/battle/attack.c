@@ -320,16 +320,18 @@ void Battle_ResolveHitOnTimer(void)
     actionId = action->actionCode.actionId;
     if (actionId == 8)
     {
+        int replay = 0;
         Battle_CheckEvasion(selectedSlot->actor, &g_EvasionOutcome, 0);
 #ifdef PE_MELEE_PROTOTYPE
-        Battle_MeleeOnResolve(selectedSlot->actor, g_EvasionOutcome.status);
+        replay = Battle_MeleeOnResolve(selectedSlot->actor, g_EvasionOutcome.status);
 #endif
         if (g_EvasionOutcome.status == 1)
         {
             BattleEntity *thief = selectedSlot->actor;
             Asset_Find08Alt(0x46D, 0, thief->renderObject.target_x, thief->renderObject.target_y, thief->renderObject.target_z);
-            /* A released target has nothing left to steal. */
-            if ((g_ActiveActor->action->turnWord & 0x6000) && thief->core != NULL)
+            /* Steal applies to the original attack. A follow-up does not
+             * grant another roll, and a released target has nothing left. */
+            if (!replay && (g_ActiveActor->action->turnWord & 0x6000) && thief->core != NULL)
             {
                 stealMode = (((EnemyCombatant *)selectedSlot->actor->core)->statusFlags2 >> 0xC) & 3;
                 switch (stealMode)

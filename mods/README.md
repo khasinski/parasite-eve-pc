@@ -63,10 +63,10 @@ mods/
 ## Melee Combat (pe_melee)
 
 Build with `-DPE_MODS=ON -DPE_MELEE_PROTOTYPE=ON`, then open F1 > Melee Combat.
-The saved switches control the flank follow-up, faster Club 1 windup, body-based club reach,
-out-of-reach cancellation, and the backhand hit spark. Cancellation and the spark apply only
-when the follow-up is enabled. Body-based reach applies to every club. Follow-ups and faster
-windup are limited to Club 1 against the Day 2 amphitheater mutant.
+The saved switches control the flank follow-up, faster windup, body-based club reach,
+out-of-reach cancellation, and the backhand hit spark. They apply to Clubs 1 through 5 throughout
+the game. The follow-up requires a nonlethal single-target side hit and a target that remains
+attackable. A backhand does not grant a second Steal roll.
 
 The mod can be disabled under F1 > Manage mods and restarted. Club 1's +8 damage belongs to
 Rebalance's Progression gun bonuses setting.

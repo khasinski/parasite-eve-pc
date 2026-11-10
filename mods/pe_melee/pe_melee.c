@@ -14,16 +14,16 @@ static struct {
     int enabled;
 } s_features[BATTLE_MELEE_FEATURE_COUNT] = {
     [BATTLE_MELEE_FOLLOW_UP] = {
-        "Flank follow-up", "Press Cross within 0.8 seconds of a Club 1 side hit to backhand.", 1
+        "Flank follow-up", "Press Cross within 0.8 seconds of an eligible club side hit to backhand.", 1
     },
     [BATTLE_MELEE_FAST_WINDUP] = {
-        "Faster windup", "Speed up Club 1's first swing in the Day 2 amphitheater.", 1
+        "Faster windup", "Speed up club windups throughout the game.", 1
     },
     [BATTLE_MELEE_BODY_REACH] = {
         "Body-based club reach", "Measure all club swings to the enemy's body as well as its aim point.", 1
     },
     [BATTLE_MELEE_REACH_CANCEL] = {
-        "Cancel out-of-reach follow-ups", "Skip the backhand when the mutant is moving out of reach.", 1
+        "Cancel out-of-reach follow-ups", "Skip the backhand when the target is predicted to be out of reach.", 1
     },
     [BATTLE_MELEE_SPARK] = {
         "Backhand hit spark", "Draw a blue-white spark on a successful follow-up hit.", 1

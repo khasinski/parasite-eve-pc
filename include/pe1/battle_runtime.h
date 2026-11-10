@@ -60,11 +60,12 @@ static inline int Battle_MeleeFeatureEnabled(BattleMeleeFeature feature) {
 #endif
 
 int Battle_MeleeStepStrike(BattleEntity *aya, BattleEntity *target);
-void Battle_MeleeOnResolve(BattleEntity *target, int status);
+int Battle_MeleeOnResolve(BattleEntity *target, int status);
 int Battle_MeleeOnDamage(BattleEntity *target, int damage);
 void Battle_MeleeUpdate(void);
 void Battle_MeleeDraw(void);
 void Battle_MeleeReset(void);
+void Battle_MeleeResetEncounter(void);
 int Battle_MeleeClubDistance(BattleEntity *target, BattleEntity *player);
 #endif
 

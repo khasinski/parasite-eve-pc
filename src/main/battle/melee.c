@@ -33,6 +33,7 @@ static const unsigned amphitheaterScene = 0xA80072C8u;
 
 static struct {
     BattleEntity *target;
+    const EnemyCombatant *targetCore;
     int phase;
     int impactFrame;
     int firstDamage;
@@ -93,11 +94,19 @@ static int Melee_PredictInReach(BattleEntity *target, int *predicted)
 
 void Battle_MeleeReset(void)
 {
-    if (melee.backhand && D_8009D254->actionMode == melee.strikeMode)
+    if (melee.backhand && D_8009D254 && D_8009D254->actionMode == melee.strikeMode)
         D_8009D254->entityFlags &= ~0x100;
     melee.backhand = 0;
     melee.target = NULL;
+    melee.targetCore = NULL;
     melee.phase = MELEE_IDLE;
+}
+
+void Battle_MeleeResetEncounter(void)
+{
+    Battle_MeleeReset();
+    meleeCue.start = meleeCue.until = 0;
+    meleeSpark.frame = -MELEE_SPARK_UPDATES;
 }
 
 static int Melee_HasClub(void)
@@ -110,7 +119,7 @@ static int Melee_HasClub(void)
     value = g_InventoryRuntime.slots[slot];
     if (value - 0x100u < 0x80u)
         value = g_InventoryRuntime.equipment[value - 0x100u].itemId;
-    return value == ITEM_CLUB_1;
+    return value >= ITEM_CLUB_1 && value <= ITEM_CLUB_5;
 }
 
 static int Melee_IsAttack(const BattleEntity *target)
@@ -118,8 +127,7 @@ static int Melee_IsAttack(const BattleEntity *target)
     return g_BattleActionQueueCount == 1 && g_BattleActionIndex == 0
         && g_BattleActionQueue[0].actor == target && g_BattleActionQueue[0].command == 1
         && g_ActiveActor->action->actionCode.actionId == 8
-        && !(g_ActiveActor->stateFlags & 0x180000)
-        && !(g_ActiveActor->action->turnWord & 0x6000);
+        && !(g_ActiveActor->stateFlags & 0x180000);
 }
 
 int Battle_MeleeOnDamage(BattleEntity *target, int damage)
@@ -134,8 +142,7 @@ int Battle_MeleeOnDamage(BattleEntity *target, int damage)
         return bonus ? bonus : 1;
     }
     if (!Battle_MeleeFeatureEnabled(BATTLE_MELEE_FOLLOW_UP)
-        || (unsigned)g_SceneDispatchToken != amphitheaterScene
-        || target->modelIndex != 5 || enemy->field04.fieldId04 != 12
+        || (target->entityFlags & 0x4000) || (target->entityFlags & 0x2040) == 0x40
         || melee.phase != MELEE_IDLE || damage >= enemy->hpAlive
         || !Melee_IsAttack(target) || !Melee_HasClub())
         return damage;
@@ -151,6 +158,7 @@ int Battle_MeleeOnDamage(BattleEntity *target, int damage)
         return damage;
 
     melee.target = target;
+    melee.targetCore = enemy;
     melee.phase = MELEE_OFFERED;
     melee.impactFrame = g_BattleFrameCounter;
     melee.firstDamage = damage;
@@ -209,7 +217,7 @@ static void Melee_SpeedWindup(void)
     mode = aya->actionMode;
     if ((mode != 6 && mode != 8 && mode != 10) || g_BattleActionQueueCount == 0)
         return;
-    if ((unsigned)g_SceneDispatchToken != amphitheaterScene || !Melee_HasClub())
+    if (!Melee_HasClub())
         return;
     frame = (int)(aya->animFrame >> 16);
     for (extra = speed - 1; extra > 0 && frame + 1 < aya->animLastFrame; extra--)
@@ -217,7 +225,22 @@ static void Melee_SpeedWindup(void)
     aya->animFrame = (aya->animFrame & 0xFFFF) | ((s32)frame << 16);
 }
 
-/* The amphitheater mutant (model bank 5, identity 12), for the enemy trace. */
+/* A delayed follow-up can outlive the original queue entry. Validate the
+ * exact target against the live actor list before using the saved pointer. */
+static int Melee_TargetAlive(void)
+{
+    const BattleEntity *entity;
+    for (entity = (BattleEntity *)g_FieldActorListHead; entity; entity = entity->next) {
+        if (entity == melee.target) {
+            const EnemyCombatant *enemy = entity->core;
+            return enemy && enemy == melee.targetCore && enemy->hpAlive > 0
+                && !(entity->entityFlags & 0x4000) && (entity->entityFlags & 0x2040) != 0x40;
+        }
+    }
+    return 0;
+}
+
+/* The amphitheater mutant (model bank 5, identity 12), for the enemy trace only. */
 static BattleEntity *Melee_FindMutant(void)
 {
     BattleEntity *entity;
@@ -383,7 +406,15 @@ void Battle_MeleeUpdate(void)
 
     originalAttack = Melee_IsAttack(melee.target);
     if (melee.backhand) {
-        if (!originalAttack || aya->actionMode != melee.strikeMode || !g_ActiveActor->curHP) {
+        if (originalAttack && !Melee_TargetAlive()) {
+            /* The target may disappear or phase out during the replay. End
+             * this single queued strike before the native step uses it. */
+            g_BattleHitPending = 0;
+            g_BattleActionIndex = g_BattleActionQueueCount;
+            Battle_MeleeReset();
+            if (aya->actionMode == melee.strikeMode)
+                Entity_SetActionMode(aya, g_ActiveActor->actionMode12);
+        } else if (!originalAttack || aya->actionMode != melee.strikeMode || !g_ActiveActor->curHP) {
             g_BattleHitPending = 0;
             Battle_MeleeReset();
         } else {
@@ -403,8 +434,7 @@ void Battle_MeleeUpdate(void)
     }
     if (g_BattleModeState != 0 || !g_ActiveActor->curHP
         || (g_ActiveActor->stateFlags & 0x194000)
-        || (unsigned)g_SceneDispatchToken != amphitheaterScene
-        || Melee_FindMutant() != melee.target || (melee.target->entityFlags & 0x4000)
+        || !Melee_TargetAlive()
         || (!originalAttack && (g_BattleActionIndex < g_BattleActionQueueCount
                                 || aya->actionMode < 4 || aya->actionMode > 5))) {
         Battle_MeleeReset();
@@ -594,13 +624,13 @@ int Battle_MeleeStepStrike(BattleEntity *aya, BattleEntity *target)
     return 0;
 }
 
-void Battle_MeleeOnResolve(BattleEntity *target, int status)
+int Battle_MeleeOnResolve(BattleEntity *target, int status)
 {
     int replay = melee.phase == MELEE_REPLAY && melee.target == target;
 
     if (!replay && !Battle_MeleeFeatureEnabled(BATTLE_MELEE_FOLLOW_UP)
         && !Battle_MeleeFeatureEnabled(BATTLE_MELEE_BODY_REACH))
-        return;
+        return 0;
     fprintf(stderr, "club_flank resolve frame=%d replay=%d status=%d distance=%d range=%d aim=%d body=%d angle=%d\n",
                 g_BattleFrameCounter,
                 replay,
@@ -615,4 +645,5 @@ void Battle_MeleeOnResolve(BattleEntity *target, int status)
         meleeSpark.y = target->renderObject.projected_target_y;
         fprintf(stderr, "club_flank spark frame=%d\n", g_BattleFrameCounter);
     }
+    return replay;
 }

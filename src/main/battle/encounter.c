@@ -162,6 +162,9 @@ void Battle_StartEncounter(int mode) {
     u32 initial_flags;
     entity = D_8009D254;
     g_ActiveActor = entity->core;
+#ifdef PE_MELEE_PROTOTYPE
+    Battle_MeleeResetEncounter();
+#endif
     g_BattleFrameCounter = 0;
     g_BattleAttackAnimFrame = 0;
     g_BattleModeState = 0;
