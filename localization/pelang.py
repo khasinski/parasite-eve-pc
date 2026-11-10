@@ -290,6 +290,17 @@ def cmd_pseudo(a) -> int:
     return 0
 
 
+PAGE_END = re.compile(r"\{end (F9|FF)\}$", re.IGNORECASE)
+
+
+def split_page_end(text: str) -> tuple[str, str | None]:
+    """(text, its page end) for a dialogue row ending in {end FF} (the box waits for a button) or
+    {end F9} (it closes by itself), which replaces the end the game's page had; import-patch writes
+    it where a patch changed it. (text, None) for any other row."""
+    m = PAGE_END.search(text)
+    return (text[:m.start()], m[1].upper()) if m else (text, None)
+
+
 def empty_grid_cells(text: str) -> str:
     """A rename grid's {gXX} cells on codes 4D-EF as spaces. English draws them empty, but a pack
     puts its own letters on those codes, which a pick would save (pe_lang_grid_blank does the same
@@ -402,6 +413,13 @@ def cmd_build(a) -> int:
     entries, errors, warnings = {}, [], []
     seen = set()
     rows = read_csv(a.csv)
+    page_ends = {}
+    for r in rows:
+        text, end = split_page_end(r.get("translation") or "")
+        if end:
+            if not r.get("key", "").startswith("dlg/"):
+                errors.append(f"{r.get('key')}: {{end {end}}} is for dialogue pages only")
+            r["translation"], page_ends[r.get("key")] = text, end
     if a.submission:
         # A submitted file holds translations only: the game's text stays on the translator's machine.
         leaked = sorted({c for r in rows for c in SOURCE_COLUMNS if (r.get(c) or "").strip()})
@@ -534,10 +552,11 @@ def cmd_build(a) -> int:
         glossary = {r["english"]: r["translation"] for r in read_csv(a.glossary) if r.get("english") and r.get("translation")}
     texts = {r["key"]: r["translation"] for r in rows if r.get("translation") and r.get("key") in entries}
     warnings += [f"consistency: {w}" for w in consistency(texts, strings, glossary)]
-    # Dialogue pages keep the page end the game had (F9 instead of FF closes some boxes), and the
+    # Dialogue pages keep the page end the game had (F9 instead of FF closes some boxes) unless the
+    # row says its own ({end FF} / {end F9}, split_page_end), and the
     # pack says which bank is which: "bank/<crc32>" holds that bank's key ("M001") in ASCII.
     for key, raw in list(entries.items()):
-        end = strings[key].get("end", "FF")
+        end = page_ends.get(key, strings[key].get("end", "FF"))
         if key.startswith("dlg/") and end != "FF":
             entries[key] = raw + bytes([int(end, 16)])
     for b in banks:
@@ -1017,7 +1036,8 @@ def cmd_import_patch(a):
     from extract_text import bank_slots, table_entries
     from petext import patchfile, patchimport
     from petext.disc import Game
-    if a.out.exists() or a.report.exists() or (a.font and a.font.exists()):
+    if (a.out.exists() or a.report.exists() or (a.font and a.font.exists())
+            or (a.patch_letters and a.patch_letters.exists())):
         print("Output files already exist; choose new paths", file=sys.stderr)
         return 1
     overrides = {}
@@ -1057,13 +1077,14 @@ def cmd_import_patch(a):
                     if why:
                         left.append({"key": key, "reason": why})
                     elif text is not None:
+                        if after[page][1] != end and after[page][1] in (0xF9, 0xFF):
+                            text += f"{{end {after[page][1]:02X}}}"     # the box waits, or closes, as the patch's
                         rows.append({"key": key, "translation": text, "notes": "patch import"})
             manifest = json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))
             before, after = dict(table_entries(original.resident_pack())), dict(table_entries(translated.resident_pack()))
             for key in sorted(k for k in manifest["entries"] if k.split("/")[0] in ("sys", "item", "desc", "misc")):
-                if key in patchimport.RENAME_GRIDS:
-                    continue
-                text, why = patchimport.compare_page(before[key], after[key], letters)
+                compare = patchimport.compare_grid if key in patchimport.RENAME_GRIDS else patchimport.compare_page
+                text, why = compare(before[key], after[key], letters)
                 if why:
                     left.append({"key": key, "reason": why})
                 elif text is not None:
@@ -1083,6 +1104,15 @@ def cmd_import_patch(a):
                 output.write("\n")
             if a.font:
                 a.font.write_bytes(patchimport.font_picture(translated))
+            if a.patch_letters:
+                drawn, read = patchimport.letter_pictures(original, translated, letters, how)
+                note = ("The patch's own letters: their pictures (' ' empty, '#' stroke, '+' shadow), the "
+                        "dialogue box's advance and the menus' metrics byte (width << 4 | first column). "
+                        "For pelang.py build --patch-letters; the patch's art, so it stays out of the repository.")
+                with a.patch_letters.open("x", encoding="utf-8") as output:
+                    json.dump({"note": note, "dialogue_widths": read, "letters": drawn}, output, ensure_ascii=False, indent=1)
+                    output.write("\n")
+                print(f"{len(drawn)} of the patch's letters written to {a.patch_letters} (dialogue widths: {read})")
             print(f"{len(rows)} rows imported; {len(left)} keep the English; symbols without a letter: "
                   f"{report['symbols_without_a_letter'] or 'none'}; rooms with edited scripts: "
                   f"{len(report['rooms_with_edited_scripts'])}. Review {a.report}.")
@@ -1213,6 +1243,8 @@ def main(argv=None) -> int:
     ip.add_argument("-o", "--out", type=Path, required=True, help="new translation CSV")
     ip.add_argument("--report", type=Path, required=True, help="new JSON report: what kept the English and why")
     ip.add_argument("--font", type=Path, help="also write the patch's letters as a picture font (.png)")
+    ip.add_argument("--patch-letters", type=Path,
+                    help="also write the patch's own letters (pictures and widths, JSON) for build --patch-letters")
     ip.add_argument("--letters", nargs="*", default=[], metavar="HEX=CHAR",
                     help="name a code the import couldn't identify, e.g. 5A=Ñ")
     a = ap.parse_args(argv)

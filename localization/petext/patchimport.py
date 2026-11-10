@@ -239,6 +239,27 @@ def compare_page(raw: bytes, patched: bytes, letters: dict[int, str]) -> tuple[s
     return to_text(value, letters), None
 
 
+GRID_CELLS = 99                         # the name entry grid's cells (petext/names.py)
+
+
+def compare_grid(raw: bytes, patched: bytes, letters: dict[int, str]) -> tuple[str | None, str | None]:
+    """compare_page for a name entry grid (RENAME_GRIDS): one byte a cell, no commands. A game
+    symbol the patch kept from the English grid ({g0D}) stays as it is though the patch's letter map
+    doesn't name it, and empty cells past the grid's 99 are dropped (the game reads 99)."""
+    while len(patched) > GRID_CELLS and patched[-1] == gt.CODE_OF[" "]:
+        patched = patched[:-1]
+    if patched == raw:
+        return None, None
+    if len(patched) > GRID_CELLS:
+        return None, f"the patch's grid has {len(patched)} cells; the game's has {GRID_CELLS}"
+    if any(c >= 0xF1 for c in patched):
+        return None, "a command in the name entry grid"
+    unknown = sorted({c for c in patched if c not in letters and not (c < 0x4D and c in raw)})
+    if unknown:
+        return None, "custom symbol " + " ".join(f"{code:02X}" for code in unknown)
+    return to_text(patched, letters), None
+
+
 def script_changes(original, translated, bank_start) -> list[str]:
     """Rooms whose data differs before their first message bank: edited scripts or models."""
     changed = []
@@ -277,6 +298,74 @@ def font_picture(game) -> bytes:
     chunk = lambda kind, data: struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
     head = struct.pack(">IIBBBBB", font.PER_ROW * font.CELL, rows, 8, 6, 0, 0, 0)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", head) + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b"")
+
+
+# The dialogue box's widths in the USA boot program (the same place in SLUS_006.62 and SLUS_006.68):
+# g_TextboxGlyphSpacing (src/main/text/tables.c), 78 x {left gap, width} from 0x81EA0. A patch with
+# letters of its own can make it one width a code from 0x81EA1, with no left gap and room for its new
+# letters, by changing the four instructions that read it (file offset: the game's word, the patch's).
+WIDTHS_AT = 0x81EA0
+WIDTH_READS = {0x284E4: (0x0006B840, 0x00C0B821),   # sll s7,a2,1  -> move s7,a2
+               0x28540: (0x902316A0, 0x00001821),   # lbu v1,left  -> move v1,0
+               0x28FB8: (0x902316A0, 0x00001821),
+               0x29074: (0x00021040, 0x00401021)}   # sll v0,v0,1  -> move v0,v0
+BYTE_WIDTHS = 2 * len(gt.ADVANCE) - 1               # codes the one-byte table has room for
+
+
+def dialogue_widths(original: bytes, translated: bytes) -> tuple[dict[int, int] | None, str]:
+    """(code -> how far the patched dialogue box moves after it, how the patch's table was read).
+    None when the boot program isn't the USA one, or reads its widths in a way not known here."""
+    word = lambda exe, at: struct.unpack_from("<I", exe, at)[0] if at + 4 <= len(exe) else None
+    game = bytes(v for w in gt.ADVANCE for v in (0, w))
+    if original[WIDTHS_AT:WIDTHS_AT + len(game)] != game or any(word(original, at) != w[0] for at, w in WIDTH_READS.items()):
+        return None, "not the USA boot program"
+    reads = [word(translated, at) for at in WIDTH_READS]
+    table = translated[WIDTHS_AT:WIDTHS_AT + len(game)]
+    if reads == [w[0] for w in WIDTH_READS.values()]:
+        return {c: table[2 * c + 1] - table[2 * c] for c in range(len(gt.ADVANCE))}, "the game's table (a gap and a width a letter)"
+    if reads == [w[1] for w in WIDTH_READS.values()]:
+        return {c: table[1 + c] for c in range(BYTE_WIDTHS)}, "one width a letter, the patch's own table"
+    return None, "the patch reads its widths in a way not known here"
+
+
+def menu_metrics(game) -> bytes:
+    """The menus' letter metrics (drawn width << 4 | first column) from the resident pack."""
+    pack = game.resident_pack()
+    at = struct.unpack_from("<i", pack, 0x28)[0]           # ResidentTableDirectory.glyphMetrics
+    return pack[at:at + 444]
+
+
+def letter_pictures(original, translated, letters: dict[int, str], how: dict[int, str]) -> tuple[list[dict], str]:
+    """The patch's own look, for pelang.py build --patch-letters: each letter it draws as its picture
+    (12 rows of ' ' empty, '#' stroke, '+' shadow), the dialogue box's advance and the menus' metrics
+    byte. A game letter the patch left as it was is left out, and so are coloured copies. Returns the
+    letters and how the dialogue widths were read."""
+    pal_o, width_o, _, px_o = font.page(original, font.PAGE0_ENTRY)
+    pal, width, _, px = font.page(translated, font.PAGE0_ENTRY)
+    widths, read = dialogue_widths(original.disc.file(original.exe_name), translated.disc.file(translated.exe_name))
+    metrics_o, metrics = menu_metrics(original), menu_metrics(translated)
+    out, seen = [], set()
+    for code in range(0xF1):
+        char = letters.get(code)
+        if char is None or char in seen or how.get(code, "").startswith("copy of"):
+            continue
+        if code < 0x4D and gt.CHARS.get(code) != char:      # the apostrophe drawn as a quote
+            continue
+        seen.add(char)
+        cell = _layered(pal, font.cell(px, width, code))
+        ink = [v == 1 for v in cell]
+        right = max((i % font.CELL for i, on in enumerate(ink) if on), default=-1)
+        advance = widths.get(code) if widths else None
+        if advance is None:
+            advance = gt.ADVANCE[code] if code < 0x4D else right + 2
+        if code < 0x4D and (cell == _layered(pal_o, font.cell(px_o, width_o, code)) and advance == gt.ADVANCE[code]
+                            and metrics[code] == metrics_o[code]):
+            continue
+        if not 1 <= advance <= 15 or (metrics[code] & 15) >= font.CELL:
+            continue
+        rows = ["".join(" #+"[v] for v in cell[y * font.CELL:(y + 1) * font.CELL]) for y in range(font.CELL)]
+        out.append({"letter": char, "code": f"{code:02X}", "dialogue": advance, "menu": metrics[code], "picture": rows})
+    return out, read
 
 
 def exe_changes(original, translated) -> int:

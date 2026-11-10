@@ -640,14 +640,15 @@ New tests, test shims, packs and visual evidence stay in the local debug reposit
 
 The port plays the original game data, so a patch for the disc can't be played as it is.
 `import-patch` compares your disc with the patched one and writes the text as a translation file,
-and the patch's letters as a picture font. It reads PPF (1, 2, 3) and xdelta files itself, or a
+and the patch's own letters with their widths. It reads PPF (1, 2, 3) and xdelta files itself, or a
 patched copy of the disc. It never runs a patcher, and it leaves your disc image alone.
 
 ```sh
 python3 -I localization/pelang.py import-patch "Disc 1.cue" patch.xdelta \
-  -o local.csv --report local-report.json --font "My Font.png"
+  -o local.csv --report local-report.json --patch-letters local-letters.json
 python3 -I localization/pelang.py build local.csv --strings localization/data/manifest.json \
-  --from-patch --submission --lang es --name "Español (parche)" -o es-patch.pelang
+  --from-patch --submission --patch-letters local-letters.json --lang es --name "Español (parche)" \
+  -o es-patch.pelang
 ```
 
 Put the `.pelang` in `lang/` and the picture in `mods/fonts/`, then choose them under F1 > Language
@@ -656,10 +657,26 @@ and F1 > Fonts. Either disc gives the same text. Nothing here goes into the repo
 - **Letters** are worked out from the patch's font, so a new patch needs no code: a copy of a
   letter (coloured speaker sets), or a base letter plus a mark. The report lists what was found.
   Name anything it couldn't with `--letters 5A=Ñ`; pages using an unnamed symbol keep the English.
+- **Letters' look**: with `--patch-letters` the import writes each letter the patch draws its own
+  way (the game's letters it redrew, its accented letters) as its picture, its dialogue advance and
+  its menu metrics, from the patched font page, the patched boot program's width table (the game's
+  two bytes a letter, or the one byte a letter some patches switch the code to) and the patched
+  menu metrics. `build --patch-letters` puts them in the pack as redrawn letters (see Letter tables)
+  and lays the text out with those widths, so lines break where the patch broke them. The file
+  holds the patch's art, so like the rest it stays out of the repository.
+- **Symbols of the patch's own** (a wrench for "Tool"): name the code like a letter, e.g.
+  `--letters 98=🔧`. With `--patch-letters` the symbol's picture and widths go in the letters file
+  and `build` gives it a code of the pack's table, so the pages using it come in too.
 - **Controls**: `--from-patch` lets waits, names and timing differ from the English, because a
   translator moves them and the patch played that way. Choices must match, since scripts act on them.
-- **Space**: a patch's own font is often narrower than the game's. Pages are rewrapped to fit the
-  game's widths. A message box line too wide for the screen goes on two lines instead, split at
+- **How a box closes**: where the patch changed a dialogue page's end (the game's F9 closes the
+  box by itself, FF waits for a button), the row ends in `{end FF}` or `{end F9}` and `build` uses
+  that end instead of the game's. Any translation file may use it, on dialogue pages only.
+- **Name entry grid**: the patch's grid (sys/115-117) comes in when it changed, letter for letter,
+  as name letters; a game symbol the English grid has too stays, and empty cells past the 99 the
+  game reads are dropped.
+- **Space**: a patch's own font is often narrower than the game's. Without `--patch-letters`
+  pages are rewrapped to fit the game's widths. A message box line too wide for the screen goes on two lines instead, split at
   the space that leaves the longer half shortest (a stretch holding only U+10FE7F,
   `PE_TEXT_LINE_BREAK`, marks the break; the box grows by a line). The card slot line and "is not
   formatted" go on two lines when both slot lines are translated. Any other menu line too wide
@@ -672,7 +689,7 @@ and F1 > Fonts. Either disc gives the same text. Nothing here goes into the repo
   so a translator can shorten it instead.
 - **Not carried over**, all listed in the report: edited room scripts (`rooms_with_edited_scripts`
   should be empty; if not, those rooms won't match the patch), pictures with text in them
-  (`rooms_with_edited_pictures`), custom symbols, and the rename grids. Mod labels stay in English
+  (`rooms_with_edited_pictures`), and symbols with no letter named for them. Mod labels stay in English
   because no disc patch has them.
 
 ## Local Italian text import

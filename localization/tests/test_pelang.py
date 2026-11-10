@@ -511,6 +511,20 @@ class PelangTest(unittest.TestCase):
         raw = pelang.read_pack(out)[2][pelang.fnv1a("item/000")]
         self.assertEqual(raw, bytes([record[4]]) + gt.encode("+6"))
 
+    def test_a_row_can_say_how_its_page_ends(self):
+        # dlg/M001/003 closes by itself in the game (F9); a patch made it wait for a button (FF)
+        code, out = self.build({"dlg/M001/003": "Adiós.{end FF}", "dlg/M001/002":
+                                "¿Dejar?{br}{choice 2}    Sí{br}    No{end F9}"})
+        self.assertEqual(code, 0)
+        entries = pelang.read_pack(out)[2]
+        self.assertFalse(entries[pelang.fnv1a("dlg/M001/003")].endswith(bytes([0xF9])))
+        self.assertTrue(entries[pelang.fnv1a("dlg/M001/002")].endswith(bytes([0xF9])))
+        code, out = self.build({"dlg/M001/003": "Adiós."})
+        self.assertTrue(pelang.read_pack(out)[2][pelang.fnv1a("dlg/M001/003")].endswith(bytes([0xF9])))
+        self.assertEqual(pelang.split_page_end("Hola{end ff}"), ("Hola", "FF"))
+        self.assertEqual(pelang.split_page_end("Hola{end FF} y"), ("Hola{end FF} y", None))
+        self.assertEqual(self.build({"item/000": "Balas +6{end FF}"})[0], 1)
+
     def test_a_drawn_space_is_still_pulled_back_in_the_box(self):
         self.addCleanup(gt.PACK_DRAWN.clear)
         gt.PACK_DRAWN[0x0F] = letters.Letter(" ", pixels=(0,) * 144, dialogue=12, menu=0x60)

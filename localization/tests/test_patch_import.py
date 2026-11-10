@@ -264,12 +264,105 @@ class PageTest(unittest.TestCase):
             validation.check_patch(gt.encode("AB"), source)
 
 
+class GridTest(unittest.TestCase):
+    letters = {**gt.CHARS, 0x5A: "Ñ", 0x56: "ú"}
+
+    def test_the_patchs_grid_comes_in_with_the_games_symbols_it_kept(self):
+        english = gt.encode("ABCDE abcde") + bytes([0x0D]) + gt.encode("&.,") + bytes(84 * [0x0F])
+        spanish = gt.encode("ABCD") + bytes([0x5A]) + gt.encode(" abcd") + bytes([0x56, 0x0D]) + gt.encode("&.,") + bytes(85 * [0x0F])
+        text, why = patchimport.compare_grid(english, spanish, self.letters)
+        self.assertIsNone(why)
+        self.assertEqual(text, "ABCDÑ abcdú{g0D}&.," + " " * 84)        # the 100th cell, empty, dropped
+
+    def test_unchanged_or_only_its_empty_cells_added_is_not_a_row(self):
+        english = gt.encode("ABC") + bytes(96 * [0x0F])
+        self.assertEqual(patchimport.compare_grid(english, english, self.letters), (None, None))
+        self.assertEqual(patchimport.compare_grid(english, english + bytes([0x0F]), self.letters), (None, None))
+
+    def test_a_grid_too_big_or_with_a_symbol_of_its_own_keeps_the_english(self):
+        english = gt.encode("ABC") + bytes(96 * [0x0F])
+        self.assertIn("100 cells", patchimport.compare_grid(english, english + bytes([0x10]), self.letters)[1])
+        self.assertIn("0D", patchimport.compare_grid(english, bytes([0x0D]) + english[1:], self.letters)[1])
+        self.assertIn("98", patchimport.compare_grid(english, bytes([0x98]) + english[1:], self.letters)[1])
+
+
 class FontPictureTest(unittest.TestCase):
     def test_is_a_png_the_size_the_font_folder_wants(self):
         with mock_patch.object(font, "page", return_value=fake_font({})):
             png = patchimport.font_picture(SimpleNamespace())
         self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
         self.assertEqual(struct.unpack(">II", png[16:24]), (252, 48))
+
+
+def boot_program() -> bytearray:
+    """Enough of a USA boot program for the dialogue widths: the table and the code that reads it."""
+    exe = bytearray(patchimport.WIDTHS_AT + 0x200)
+    exe[patchimport.WIDTHS_AT:patchimport.WIDTHS_AT + 2 * len(gt.ADVANCE)] = bytes(v for w in gt.ADVANCE for v in (0, w))
+    for at, (game, _) in patchimport.WIDTH_READS.items():
+        struct.pack_into("<I", exe, at, game)
+    return exe
+
+
+def own_widths(exe: bytearray, widths: dict[int, int]) -> bytearray:
+    """`exe` reading one width a letter, as the Spanish patch makes it, with these widths."""
+    out = bytearray(exe)
+    for at, (_, patched) in patchimport.WIDTH_READS.items():
+        struct.pack_into("<I", out, at, patched)
+    for code, width in widths.items():
+        out[patchimport.WIDTHS_AT + 1 + code] = width
+    return out
+
+
+class DialogueWidthsTest(unittest.TestCase):
+    def test_the_games_own_table(self):
+        exe = boot_program()
+        exe[patchimport.WIDTHS_AT + 2 * 0x10 + 1] = 5          # a patch that only narrows A
+        widths, how = patchimport.dialogue_widths(boot_program(), exe)
+        self.assertEqual(widths[0x10], 5)
+        self.assertEqual(widths[0x11], gt.ADVANCE[0x11])
+        self.assertIn("the game's table", how)
+
+    def test_one_width_a_letter(self):
+        exe = own_widths(boot_program(), {0x00: 6, 0x10: 7, 0x4D: 8, 0x98: 12})
+        widths, how = patchimport.dialogue_widths(boot_program(), exe)
+        self.assertEqual((widths[0x00], widths[0x10], widths[0x4D], widths[0x98]), (6, 7, 8, 12))
+        self.assertEqual(len(widths), patchimport.BYTE_WIDTHS)
+        self.assertIn("one width a letter", how)
+
+    def test_an_unknown_reading_or_another_program_reads_nothing(self):
+        half = own_widths(boot_program(), {})
+        struct.pack_into("<I", half, 0x29074, patchimport.WIDTH_READS[0x29074][0])
+        self.assertIsNone(patchimport.dialogue_widths(boot_program(), half)[0])
+        other = boot_program()
+        other[patchimport.WIDTHS_AT + 1] = 9
+        self.assertIsNone(patchimport.dialogue_widths(other, own_widths(other, {}))[0])
+
+
+class LetterPicturesTest(unittest.TestCase):
+    def test_the_patchs_letters_with_their_widths(self):
+        bold_a = [1 if 2 <= i % 12 <= 7 and 3 <= i // 12 <= 8 else 2 if i % 12 == 8 and 3 <= i // 12 <= 8 else 0
+                  for i in range(144)]
+        g = next(g for g in latin.GLYPHS if g.char == "é")
+        accent = latin.compose(g, list(latin.synthetic_cell(gt.CODE_OF["e"])))
+        yellow_a = [3 if v == 1 else v for v in bold_a]
+        original, patched = fake_font({}), fake_font({0x10: bold_a, 0x4D: accent, 0x5D: yellow_a})
+        letters = {**gt.CHARS, 0x4D: "é", 0x5D: "A"}
+        how = {0x4D: "identified as é", 0x5D: "copy of A"}
+        exe = boot_program()
+        games = [SimpleNamespace(exe_name="SLUS_006.62", disc=SimpleNamespace(file=lambda name, e=e: e))
+                 for e in (exe, own_widths(exe, {**{c: gt.ADVANCE[c] for c in range(0x4D)}, 0x10: 6, 0x4D: 7}))]
+        metrics_o = bytes([0x70] * 444)
+        metrics_p = bytearray(metrics_o)
+        metrics_p[0x10], metrics_p[0x4D] = 0x60, 0x50
+        with mock_patch.object(font, "page", side_effect=[original, patched]), \
+             mock_patch.object(patchimport, "menu_metrics", side_effect=[metrics_o, bytes(metrics_p)]):
+            drawn, how_read = patchimport.letter_pictures(*games, letters, how)
+        self.assertIn("one width a letter", how_read)
+        by = {d["letter"]: d for d in drawn}
+        self.assertEqual(sorted(by), ["A", "é"])       # B and the rest are as the game drew them; no copies
+        self.assertEqual((by["A"]["code"], by["A"]["dialogue"], by["A"]["menu"]), ("10", 6, 0x60))
+        self.assertEqual(by["A"]["picture"][3], "  ######+   ")
+        self.assertEqual((by["é"]["dialogue"], by["é"]["menu"]), (7, 0x50))
 
 
 if __name__ == "__main__":
