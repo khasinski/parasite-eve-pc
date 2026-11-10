@@ -40,6 +40,11 @@ endif()
 option(BUILD_TESTING "Build original game tests" OFF)
 include(CTest)
 
+option(PE_MELEE_PROTOTYPE "Enable the isolated Club 1 flank prototype" OFF)
+if(PE_MELEE_PROTOTYPE)
+    add_compile_definitions(PE_MELEE_PROTOTYPE=1)
+endif()
+
 # Mod host (mods/). Off: the PE_HOOK lines compile to nothing.
 option(PE_MODS "Build with the mod host and the mods in mods/" OFF)
 if(PE_MODS)

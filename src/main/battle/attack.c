@@ -13,6 +13,14 @@
 #include "pe1/item_ids.h"
 #include "pe1/random.h"
 #include "pe_hooks.h"
+#ifdef PE_MELEE_PROTOTYPE
+#include <stdio.h>
+#include <stdlib.h>
+#include "pe1/aya.h"
+#include "pe1/battle_update.h"
+#include "pe1/draw_state.h"
+#include "pe1/scene_dispatch.h"
+#endif
 
 /* State shared by the original battle action functions. */
 u8 g_BattleActionAnimModes[4];
@@ -29,6 +37,301 @@ BattleEvasionOutcome g_EvasionOutcome;
 s16 g_AyaActionTimer;
 BattleSavedRotation g_AyaSavedRotation;
 int g_BattleEffectPmSlot;
+
+#ifdef PE_MELEE_PROTOTYPE
+enum {
+    MELEE_IDLE, MELEE_OFFERED, MELEE_ACCEPTED, MELEE_REPLAY, MELEE_SPENT,
+    MELEE_WINDOW = 8,
+    MELEE_CROSS = 0x200,
+    MELEE_SIDE_MIN = 683,  /* 60 degrees on the 4096-step turn */
+    MELEE_SIDE_LIMIT = 1366,  /* first step at or above 120 degrees */
+    MELEE_CUE_UPDATES = 30,   /* how long "OUT OF REACH" stays up */
+};
+
+static const unsigned amphitheaterScene = 0xA80072C8u;
+
+static struct {
+    BattleEntity *target;
+    int phase;
+    int impactFrame;
+    int firstDamage;
+} melee;
+
+/* The cue outlives the attack, so Battle_MeleeReset leaves it alone. */
+static struct {
+    int start;
+    int until;
+} meleeCue;
+
+/* Target distance over the last few battle updates while the follow-up is pending. */
+enum { MELEE_HISTORY = 3 };
+static struct {
+    int distance[MELEE_HISTORY];
+    int count;
+} meleeTrack;
+
+static void Melee_TrackDistance(void)
+{
+    int i;
+
+    for (i = MELEE_HISTORY - 1; i > 0; i--)
+        meleeTrack.distance[i] = meleeTrack.distance[i - 1];
+    meleeTrack.distance[0] = Battle_CalcDistToPlayer(melee.target, D_8009D254);
+    if (meleeTrack.count < MELEE_HISTORY)
+        meleeTrack.count++;
+}
+
+/* Predict the distance when the replayed swing's hit resolves, hitTrigger updates from now, by
+ * extending the target's recent movement, then apply the reach rule Battle_CheckEvasion uses
+ * for a club swing: past 1000 per mille it misses. The target's aim point moves with its
+ * animation, so the reach at swing start alone lets drifting targets slip out before contact. */
+static int Melee_PredictInReach(BattleEntity *target, int *predicted)
+{
+    int range = AYA_DARKNESS_RANGE;
+    int distance = Battle_CalcDistToPlayer(target, D_8009D254);
+    int steps = g_ActiveActor->action->hitTrigger;
+
+    if ((g_ActiveActor->stateFlags & AYA_DARKNESS_MASK) != AYA_DARKNESS)
+        range = g_ActiveActor->action->range;
+    *predicted = distance;
+    if (meleeTrack.count > 1) {
+        int oldest = meleeTrack.distance[meleeTrack.count - 1];
+        *predicted = distance + (distance - oldest) * steps / (meleeTrack.count - 1);
+    }
+    return range > 0 && *predicted * 1000 / range < 1001;
+}
+
+void Battle_MeleeReset(void)
+{
+    melee.target = NULL;
+    melee.phase = MELEE_IDLE;
+}
+
+static int Melee_HasClub(void)
+{
+    int slot = g_AyaSaveState.equipped_weapon_slot;
+    unsigned value;
+
+    if (slot < 0 || slot >= (int)(sizeof(g_InventoryRuntime.slots) / sizeof(g_InventoryRuntime.slots[0])))
+        return 0;
+    value = g_InventoryRuntime.slots[slot];
+    if (value - 0x100u < 0x80u)
+        value = g_InventoryRuntime.equipment[value - 0x100u].itemId;
+    return value == ITEM_CLUB_1;
+}
+
+static int Melee_IsAttack(const BattleEntity *target)
+{
+    return g_BattleActionQueueCount == 1 && g_BattleActionIndex == 0
+        && g_BattleActionQueue[0].actor == target && g_BattleActionQueue[0].command == 1
+        && g_ActiveActor->action->actionCode.actionId == 8
+        && !(g_ActiveActor->stateFlags & 0x180000)
+        && !(g_ActiveActor->action->turnWord & 0x6000);
+}
+
+int Battle_MeleeOnDamage(BattleEntity *target, int damage)
+{
+    const EnemyCombatant *enemy = target->core;
+    int angle;
+
+    if (melee.phase == MELEE_REPLAY && melee.target == target && Melee_IsAttack(target)) {
+        int bonus = melee.firstDamage / 4;
+        melee.phase = MELEE_SPENT;
+        fprintf(stderr, "club_flank hit frame=%d damage=%d\n", g_BattleFrameCounter, bonus ? bonus : 1);
+        return bonus ? bonus : 1;
+    }
+    if ((unsigned)g_SceneDispatchToken != amphitheaterScene
+        || target->modelIndex != 5 || enemy->field04.fieldId04 != 12
+        || melee.phase != MELEE_IDLE || damage >= enemy->hpAlive
+        || !Melee_IsAttack(target) || !Melee_HasClub())
+        return damage;
+    if (target->posX.fixed == D_8009D254->posX.fixed && target->posZ.fixed == D_8009D254->posZ.fixed)
+        return damage;
+
+    angle = Battle_CalcRelativeAngle(D_8009D254, target) & 0xfff;
+    if (angle > 2048)
+        angle = 4096 - angle;
+    fprintf(stderr, "club_flank first frame=%d angle=%d damage=%d distance=%d\n", g_BattleFrameCounter, angle,
+            damage, Battle_CalcDistToPlayer(target, D_8009D254));
+    if (angle < MELEE_SIDE_MIN || angle >= MELEE_SIDE_LIMIT)
+        return damage;
+
+    melee.target = target;
+    melee.phase = MELEE_OFFERED;
+    melee.impactFrame = g_BattleFrameCounter;
+    melee.firstDamage = damage;
+    fprintf(stderr, "club_flank offer frame=%d\n", g_BattleFrameCounter);
+    return damage;
+}
+
+/* Opt-in per-update trace of Aya's club attack (set PE_MELEE_TRACE=1). */
+static void Melee_Trace(void)
+{
+    static int enabled = -1;
+    BattleEntity *aya = D_8009D254;
+
+    if (enabled < 0)
+        enabled = getenv("PE_MELEE_TRACE") != NULL;
+    if (!enabled || !aya || !g_ActiveActor || !g_ActiveActor->action
+        || g_ActiveActor->action->actionCode.actionId != 8)
+        return;
+    fprintf(stderr, "club_trace frame=%d mode=%d anim=%d last=%d prev=%d modes=%d,%d,%d,%d hit=%d/%d queue=%d/%d"
+            " state=%x atb=%d hp=%d\n",
+            g_BattleFrameCounter, aya->actionMode, (int)(aya->animFrame >> 16), aya->animLastFrame,
+            aya->animPrev.parts.integer, g_BattleActionAnimModes[0], g_BattleActionAnimModes[1],
+            g_BattleActionAnimModes[2], g_BattleActionAnimModes[3], g_BattleHitTimer,
+            g_ActiveActor->action->hitTrigger, g_BattleActionIndex, g_BattleActionQueueCount,
+            g_ActiveActor->stateFlags, g_ActiveActor->hpAlive, g_ActiveActor->curHP);
+}
+
+/* Club 1's windup (action modes 6, 8 and 10, picked by target height) takes 29 updates, so a
+ * swing lands about 34 updates after commit: longer than the amphitheater mutant's 24-update
+ * recovery. Advance the windup animation by MELEE_WINDUP_SPEED frames per update instead of 1.
+ * The last two frames play normally, so the native last-frame check in
+ * Battle_StepCharacterAction still sees the final frame and starts the strike. A hurt flinch
+ * interrupts the windup with its own mode and is left at native speed.
+ * PE_MELEE_WINDUP_SPEED=1 restores native timing for A/B harness runs. */
+enum { MELEE_WINDUP_SPEED = 2 };
+
+static void Melee_SpeedWindup(void)
+{
+    static int speed = 0;
+    BattleEntity *aya = D_8009D254;
+    int mode, frame, extra;
+
+    if (!speed) {
+        const char *value = getenv("PE_MELEE_WINDUP_SPEED");
+        speed = value ? atoi(value) : MELEE_WINDUP_SPEED;
+        if (speed < 1 || speed > 4)
+            speed = MELEE_WINDUP_SPEED;
+    }
+    if (speed == 1 || !aya || !g_ActiveActor || !g_ActiveActor->action || g_ActiveActor->action->actionCode.actionId != 8)
+        return;
+    mode = aya->actionMode;
+    if ((mode != 6 && mode != 8 && mode != 10) || g_BattleActionQueueCount == 0)
+        return;
+    if ((unsigned)g_SceneDispatchToken != amphitheaterScene || !Melee_HasClub())
+        return;
+    frame = (int)(aya->animFrame >> 16);
+    for (extra = speed - 1; extra > 0 && frame + 1 < aya->animLastFrame; extra--)
+        frame++;
+    aya->animFrame = (aya->animFrame & 0xFFFF) | ((s32)frame << 16);
+}
+
+/* The amphitheater mutant (model bank 5, identity 12), for the enemy trace. */
+static BattleEntity *Melee_FindMutant(void)
+{
+    BattleEntity *entity;
+
+    for (entity = (BattleEntity *)g_FieldActorListHead; entity; entity = entity->next) {
+        const EnemyCombatant *enemy = entity->core;
+        if (entity != D_8009D254 && enemy && entity->modelIndex == 5 && enemy->field04.fieldId04 == 12
+            && enemy->hpAlive > 0)
+            return entity;
+    }
+    return NULL;
+}
+
+/* Opt-in per-update trace of the amphitheater mutant's attack (PE_MELEE_TRACE=1): its mode,
+ * the attack effect's state (1 = claws live), position, facing, and distance to Aya. */
+static void Melee_TraceEnemy(void)
+{
+    static int enabled = -1;
+    BattleEntity *enemy, *aya = D_8009D254;
+    const EnemyCombatant *core;
+    int dx, dz;
+
+    if (enabled < 0)
+        enabled = getenv("PE_MELEE_TRACE") != NULL;
+    if (!enabled || !aya || !g_ActiveActor || (unsigned)g_SceneDispatchToken != amphitheaterScene
+        || (enemy = Melee_FindMutant()) == NULL)
+        return;
+    core = enemy->core;
+    if (enemy->actionMode == 2 && !(core->effect && core->effect->state == 1))
+        return;  /* idle */
+    dx = enemy->posX.parts.integer - aya->posX.parts.integer;
+    dz = enemy->posZ.parts.integer - aya->posZ.parts.integer;
+    fprintf(stderr, "enemy_trace frame=%d mode=%d anim=%d/%d effect=%d pos=%d,%d facing=%d aya=%d,%d dist=%d"
+            " aya_hit=%d aya_mode=%d contact=%d\n",
+            g_BattleFrameCounter, enemy->actionMode, (int)(enemy->animFrame >> 16), enemy->animLastFrame,
+            core->effect ? core->effect->state : -1, enemy->posX.parts.integer, enemy->posZ.parts.integer,
+            enemy->facingAngle & 0xfff, aya->posX.parts.integer, aya->posZ.parts.integer,
+            Math_IntSqrt(dx * dx + dz * dz), (g_ActiveActor->stateFlags & 0x4000) != 0, aya->actionMode,
+            (enemy->entityFlags & 0x02000000) != 0);
+}
+
+void Battle_MeleeUpdate(void)
+{
+    Melee_TraceEnemy();
+    Melee_Trace();
+    Melee_SpeedWindup();
+    if (melee.phase == MELEE_IDLE)
+        return;
+    if (!Melee_IsAttack(melee.target) || !g_ActiveActor->curHP) {
+        fprintf(stderr, "club_flank end frame=%d\n", g_BattleFrameCounter);
+        Battle_MeleeReset();
+        return;
+    }
+    if (melee.phase == MELEE_ACCEPTED)
+        Melee_TrackDistance();
+    if (melee.phase != MELEE_OFFERED)
+        return;
+    if ((unsigned)(g_BattleFrameCounter - melee.impactFrame) > MELEE_WINDOW) {
+        melee.phase = MELEE_SPENT;
+        fprintf(stderr, "club_flank expire frame=%d\n", g_BattleFrameCounter);
+    } else if (g_FieldPadPressed & MELEE_CROSS) {
+        melee.phase = MELEE_ACCEPTED;
+        meleeTrack.count = 0;
+        fprintf(stderr, "club_flank accept frame=%d\n", g_BattleFrameCounter);
+    }
+}
+
+static void Melee_PrintCue(u8 *text, int left)
+{
+    int x, y, mode, dim, advance;
+    unsigned color;
+
+    x = g_TextCursorX;
+    y = g_TextCursorY;
+    mode = g_TextRenderMode;
+    dim = g_DrawTextDimmed;
+    color = g_DrawPrimColor;
+    advance = g_DrawGlyphAdvance;
+    g_TextCursorX = left;
+    g_TextCursorY = 200;
+    g_TextRenderMode = 0;
+    g_DrawTextDimmed = 0;
+    g_DrawPrimColor = 0x808080;
+    Draw_PrintRawText(text);
+    g_DrawPrimColor = color;
+    g_DrawGlyphAdvance = advance;
+    g_DrawTextDimmed = dim;
+    g_TextRenderMode = mode;
+    g_TextCursorX = x;
+    g_TextCursorY = y;
+}
+
+void Battle_MeleeDraw(void)
+{
+    /* Game glyphs: A is 0x10, letters follow in order, 0x0f is a space, 0xff ends. */
+    static u8 prompt[] = {0x15, 0x1e, 0x1b, 0x1b, 0x1e, 0x26, 0x0f, 0x24,   /* FOLLOW U */
+                          0x1f, 0x0f, 0x0f, 0x12, 0x21, 0x1e, 0x22, 0x22,   /* P  CROSS */
+                          0xff};
+    static u8 outOfReach[] = {0x1e, 0x24, 0x23, 0x0f, 0x1e, 0x15, 0x0f,    /* OUT OF  */
+                              0x21, 0x14, 0x10, 0x12, 0x17, 0xff};          /* REACH   */
+
+    if (melee.phase == MELEE_OFFERED) {
+        Melee_PrintCue(prompt, 102);  /* 16 glyphs, centred */
+        return;
+    }
+    /* A frame counter that went backwards means a new battle: drop a stale cue. */
+    if (g_BattleFrameCounter < meleeCue.start || g_BattleFrameCounter >= meleeCue.until) {
+        meleeCue.until = meleeCue.start = 0;
+        return;
+    }
+    Melee_PrintCue(outOfReach, 116);  /* 12 glyphs, centred */
+}
+#endif
 
 void Battle_FinalizeAttackResult(void)
 {
@@ -143,6 +446,31 @@ int Battle_StepCharacterAction(BattleInitSlot *slot)
         caseEntity = D_8009D254;
         if (caseEntity->animLastFrame != caseEntity->animPrev.parts.integer)
             break;
+#ifdef PE_MELEE_PROTOTYPE
+        if (melee.phase == MELEE_ACCEPTED && melee.target == turnSlot->actor) {
+            const EnemyCombatant *target = turnSlot->actor->core;
+            int alive = target && target->hpAlive > 0 && !(turnSlot->actor->entityFlags & 0x4000);
+            int predicted;
+            melee.phase = MELEE_SPENT;
+            if (alive && !Melee_PredictInReach(turnSlot->actor, &predicted)) {
+                /* The target will be out of reach at contact: drop the second swing instead of
+                 * spending its recovery on a certain miss. */
+                fprintf(stderr, "club_flank cancel frame=%d distance=%d predicted=%d range=%d\n",
+                        g_BattleFrameCounter, Battle_CalcDistToPlayer(turnSlot->actor, D_8009D254),
+                        predicted, g_ActiveActor->action->range);
+                meleeCue.start = g_BattleFrameCounter;
+                meleeCue.until = g_BattleFrameCounter + MELEE_CUE_UPDATES;
+            } else if (alive) {
+                melee.phase = MELEE_REPLAY;
+                Entity_SetActionMode(caseEntity, caseEntity->actionMode);
+                g_BattleHitTimer = 0;
+                Battle_FinalizeAttackResult();
+                fprintf(stderr, "club_flank swing frame=%d distance=%d predicted=%d\n", g_BattleFrameCounter,
+                        Battle_CalcDistToPlayer(turnSlot->actor, D_8009D254), predicted);
+                break;
+            }
+        }
+#endif
         indexB = g_BattleActionIndex;
         if (g_BattleActionQueue[indexB].command == 0x189) {
             idleActor = g_ActiveActor;
@@ -316,6 +644,14 @@ void Battle_ResolveHitOnTimer(void)
     if (actionId == 8)
     {
         Battle_CheckEvasion(selectedSlot->actor, &g_EvasionOutcome, 0);
+#ifdef PE_MELEE_PROTOTYPE
+        fprintf(stderr, "club_flank resolve frame=%d replay=%d status=%d distance=%d range=%d\n",
+                    g_BattleFrameCounter,
+                    melee.phase == MELEE_REPLAY && melee.target == selectedSlot->actor,
+                    g_EvasionOutcome.status,
+                    Battle_CalcDistToPlayer(selectedSlot->actor, D_8009D254),
+                    g_ActiveActor->action->range);
+#endif
         if (g_EvasionOutcome.status == 1)
         {
             BattleEntity *thief = selectedSlot->actor;

@@ -40,6 +40,13 @@ extern u8 g_BattleActionAnimModes[4];
 extern u8 g_BattleSaveOverlayActive;
 extern u16 g_ActorEffectFlag100Timer;
 extern u8 g_BattleSlotCancelPending;
+#ifdef PE_MELEE_PROTOTYPE
+int Battle_MeleeOnDamage(BattleEntity *target, int damage);
+void Battle_MeleeUpdate(void);
+void Battle_MeleeDraw(void);
+void Battle_MeleeReset(void);
+#endif
+
 extern u8 g_BattleActionIndex;
 extern u8 g_BattleActionQueueCount;
 extern int g_BattleModeState;
