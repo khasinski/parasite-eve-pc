@@ -697,6 +697,12 @@ if(BUILD_TESTING)
         add_test(NAME localization-chinese-pack COMMAND ${Python3_EXECUTABLE} -I
             ${CMAKE_SOURCE_DIR}/localization/tests/test_cjk_pictures.py)
         set_tests_properties(localization-chinese-pack PROPERTIES TIMEOUT 120 LABELS "localization")
+        # The Chinese pack's dialogue stays on screen wherever the English does, also on the pages no
+        # script ties to a box. Needs PE_TEST_DISC (USA disc 1) and PE_TEST_ZH_PACK, else skipped.
+        add_test(NAME localization-chinese-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_zh_box_fit.py)
+        set_tests_properties(localization-chinese-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77
