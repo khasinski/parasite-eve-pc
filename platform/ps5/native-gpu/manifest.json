@@ -3839,7 +3839,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "dedb979456123ce22825815ed9546f22efa46cd93fe49496fdc6c917db014e55"
+      "sha256": "30fb3d231dc0d62614dc69b15ade2b516825c913c9b5082f30aa4e856d039fd2"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -3987,7 +3987,7 @@
     },
     {
       "path": "mods/host/pe_mod_host.c",
-      "sha256": "86305158e9595f0682212b6ac51cf8a165f3d4c7a26ad31f91c9bab6e8700f56"
+      "sha256": "88609801aacf68d743b7142fa1a7a8b4a2e4320758242418071a56cb58e27d42"
     },
     {
       "path": "mods/host/pe_mod_host.h",
@@ -3999,11 +3999,11 @@
     },
     {
       "path": "mods/host/pe_mod_menu.h",
-      "sha256": "aa47c8cd54f7cc4b4706b00d1e684e0400c1c1e937e068bc2ab169f80dd79fb1"
+      "sha256": "e6dc54a52a324a8280cb1ec0520fca43ebe7856041adc6ba426010ea45f4a48f"
     },
     {
       "path": "mods/host/pe_mod_panel.c",
-      "sha256": "73c5e1414f0ee8676a85398e035a44af05f309524a0a8eb9c2f6ffb552b3d1e8"
+      "sha256": "23fed2b415aac08d0bd916fb58aeb3fcf38ef3c051232d929ffccbfb87c8193c"
     },
     {
       "path": "mods/host/pe_model.c",
@@ -4339,7 +4339,7 @@
     },
     {
       "path": "mods/pe_quicksave/pe_quicksave.c",
-      "sha256": "6a6adf4d025fb565c277568e280c4874e08a51661b8ecc55eacadb7efcaff4d5"
+      "sha256": "dbb1567ac6a028f87be05528baccc46cca697c3bc071cc601b686b95d0017d69"
     },
     {
       "path": "mods/pe_rebalance/pe_atb_items.c",
