@@ -8,6 +8,7 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_combat_presets.h"
 #include "pe1/game_state.h"
 #include "pe1/game_timers.h"
 #include "pe1/scene_dispatch.h"
@@ -81,7 +82,20 @@ static int pe_on_random(void *ctx, void *user) {
     return 0;
 }
 
+static void pe_combat_battle_frequency_apply(int preset)
+{
+    (void)preset;
+    s_mode = PE_ENC_NORMAL;
+}
+
+static int pe_combat_battle_frequency_matches(int preset)
+{
+    (void)preset;
+    return s_mode == PE_ENC_NORMAL;
+}
+
 void pe_battle_frequency_register(const char *mod_id) {
+    pe_combat_preset_add(mod_id, pe_combat_battle_frequency_apply, pe_combat_battle_frequency_matches);
     pe_menu_register_choice(PE_PAGE_COMBAT, "Battle frequency",
         "More random encounter checks succeed. No random battles overrides this.",
         &s_mode, s_names, 4);

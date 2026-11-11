@@ -12,6 +12,7 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_combat_presets.h"
 #include "pe_panacea.h"
 #include "pe_services.h"
 #include "pe1/draw_state.h"
@@ -243,7 +244,18 @@ static void pe_ingredients(char *out, unsigned size) {
 static void pe_last_result(char *out, unsigned size) { snprintf(out, size, "%s", s_result[0] ? s_result : "Choose a recipe"); }
 static void pe_disarm_tick(void) { s_armed = -1; }
 
+static void pe_combat_combine_apply(int preset)
+{
+    s_menu_row = preset == PE_COMBAT_ENHANCED;
+}
+
+static int pe_combat_combine_matches(int preset)
+{
+    return s_menu_row == (preset == PE_COMBAT_ENHANCED);
+}
+
 void pe_combine_register(const char *mod_id) {
+    pe_combat_preset_add(mod_id, pe_combat_combine_apply, pe_combat_combine_matches);
     pe_menu_register_toggle(PE_PAGE_COMBINE, "Combine in item menu",
         "A medicine with its partner in Aya's bag gets a Combine action.", &s_menu_row, NULL);
     pe_hook_add(PE_HOOK_INVENTORY_ROW, pe_inventory_row, NULL, PE_PRIORITY_NORMAL, mod_id);

@@ -28,6 +28,7 @@
 #include "pe_mod_effects.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_combat_presets.h"
 #include "pe1/menu_context_help.h"
 #include "pe1/weapon_list_output.h"
 
@@ -171,7 +172,18 @@ static void pe_turn_text(char *out, unsigned size) {
     snprintf(out, size, "%u.%u s%s", tenths / 10u, tenths % 10u, s_clock_samples ? "" : " (not measured yet)");
 }
 
+static void pe_combat_weapon_power_apply(int preset)
+{
+    s_show_power = preset == PE_COMBAT_ENHANCED;
+}
+
+static int pe_combat_weapon_power_matches(int preset)
+{
+    return s_show_power == (preset == PE_COMBAT_ENHANCED);
+}
+
 void pe_weapon_power_register(const char *mod_id) {
+    pe_combat_preset_add(mod_id, pe_combat_weapon_power_apply, pe_combat_weapon_power_matches);
     pe_menu_register_toggle(PE_PAGE_COMBAT, "Weapon power (DPS)", "Shows gun damage per second in the item menu.",
                             &s_show_power, NULL);
     pe_menu_register_info(PE_PAGE_DEBUG, "DPS turn clock", "A turn after an attack at Active Time 1, measured in battle.",

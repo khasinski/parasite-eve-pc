@@ -60,6 +60,19 @@ mods/
   pe_hello/            example mod (not built by default)
 ```
 
+## Combat presets
+
+F1 > PE Enhancements > Combat > Combat preset applies Original or Enhanced to enabled combat
+modules. Original uses native weapon-effect and Parasite Energy rules and disables melee
+changes, the item-menu Combine shortcut and the weapon DPS display. Enhanced applies the
+suite's Rebalanced rules and enables the melee features with the hit spark off. Both use
+normal encounter frequency and enable random battles. Custom keeps individual settings.
+Purchases and item-combination actions are performed explicitly.
+
+Each feature owns its apply/match callbacks. The aggregate preset displays Custom whenever
+enabled features differ from both presets. Individual settings are saved normally, so loading
+an existing configuration preserves it. Manage mods still controls which modules run.
+
 ## Melee Combat (pe_melee)
 
 Build with `-DPE_MODS=ON -DPE_MELEE_PROTOTYPE=ON`, then open F1 > PE Enhancements > Combat > Melee.

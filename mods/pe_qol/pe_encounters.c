@@ -6,6 +6,7 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_combat_presets.h"
 #include "pe1/game_timers.h"
 
 #define PE_SKIP_BATTLES 0x80000000u
@@ -42,7 +43,20 @@ static int pe_encounters_command(void *ctx, void *user) {
     return 0;
 }
 
+static void pe_combat_encounters_apply(int preset)
+{
+    (void)preset;
+    pe_set_skip(0);
+}
+
+static int pe_combat_encounters_matches(int preset)
+{
+    (void)preset;
+    return !pe_get_skip();
+}
+
 void pe_encounters_register(const char *mod_id) {
+    pe_combat_preset_add(mod_id, pe_combat_encounters_apply, pe_combat_encounters_matches);
     pe_menu_register_live_choice(PE_PAGE_COMBAT, "No random battles",
         "Stops random battles. This switch is saved with the game.",
         s_names, 2, pe_get_skip, pe_set_skip);

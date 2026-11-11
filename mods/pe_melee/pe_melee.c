@@ -7,6 +7,7 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_combat_presets.h"
 
 #define MOD_ID "pe_melee"
 
@@ -40,12 +41,29 @@ int Battle_MeleeFeatureEnabled(BattleMeleeFeature feature)
     return s_features[feature].enabled && pe_mod_is_running(MOD_ID);
 }
 
+static void melee_preset_apply(int preset)
+{
+    int i;
+    for (i = 0; i < BATTLE_MELEE_FEATURE_COUNT; i++)
+        s_features[i].enabled = preset == PE_COMBAT_ENHANCED && i != BATTLE_MELEE_SPARK;
+}
+
+static int melee_preset_matches(int preset)
+{
+    int i;
+    for (i = 0; i < BATTLE_MELEE_FEATURE_COUNT; i++)
+        if (s_features[i].enabled != (preset == PE_COMBAT_ENHANCED && i != BATTLE_MELEE_SPARK))
+            return 0;
+    return 1;
+}
+
 static int melee_init(void)
 {
     int i;
     int failed;
     char key[192], legacy[192];
 
+    pe_combat_preset_add(MOD_ID, melee_preset_apply, melee_preset_matches);
     pe_menu_begin(PE_MENU_PAGE);
     failed = pe_menu_page(PE_PAGE_MELEE, "Club positioning, follow-ups, reach and swing speed.", 15) != 0;
     for (i = 0; i < BATTLE_MELEE_FEATURE_COUNT; i++) {

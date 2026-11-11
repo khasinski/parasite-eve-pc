@@ -12,6 +12,7 @@ set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs
     host/pe_mod_menu.c      # Mods panel rows and pe_mods.ini
     host/pe_mod_panel.c     # the F1 panel: navigation and input
+    host/pe_combat_presets.c # combined presets; features retain their own settings
     host/pe_pages.c         # PE Enhancements page layout
     host/pe_game.c          # game access helpers
     host/pe_game_facts.c    # game facts as tables: effect names and groups, power tags
@@ -64,7 +65,7 @@ configure_file(pe_mod_list.c.in ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_list.c @ONLY)
 add_library(pe-mods OBJECT ${pe_mod_sources} ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_list.c)
 target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
-target_compile_definitions(pe-mods PRIVATE __psyz)
+target_compile_definitions(pe-mods PRIVATE __psyz PE_COMBAT_PRESETS=1)
 if(PE_MELEE_PROTOTYPE)
     target_compile_definitions(pe-mods PRIVATE PE_MELEE_PROTOTYPE=1)
 endif()
@@ -230,6 +231,8 @@ if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
 endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
+    pe_feature_test(combat-presets ${PROJECT_SOURCE_DIR}/tests/pe_combat_presets_test.c host/pe_combat_presets.c)
+    target_compile_definitions(test-mod-combat-presets PRIVATE PE_COMBAT_PRESETS=1)
 endif()
 if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
     pe_feature_test(skin-bounds ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_bounds_test.c)
