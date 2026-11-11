@@ -3138,6 +3138,10 @@
       "sha256": "dc6f94e3bae223c200ad6cd03e2e94896d54192688134588c8c2cae30a85d8f4"
     },
     {
+      "path": "include/pe1/pe_cost.h",
+      "sha256": "c705acecf12696bba9c27a79b2dd1d459ee718cd785564097dd8a61400f398ba"
+    },
+    {
       "path": "include/pe1/pe_image.h",
       "sha256": "a53abba015d5ca0f58415d581c1438a7c72793ca3cde894344c44fc91b9856fd"
     },
@@ -3847,7 +3851,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "c2498eaec44330be54a209fd251315acf9659bc9881eb1f062c72ac8bdbe1c93"
+      "sha256": "0785d03867ebbdbc0b1b3df43095d2c8e34ad37662ac6998dc22e24d03ea1699"
     },
     {
       "path": "mods/host/pe_api_native.c",
@@ -4499,7 +4503,7 @@
     },
     {
       "path": "src/main/item/actions.c",
-      "sha256": "8289cefe0c7260b97b02cde40d4cec647dfb36bf331efd0113e47e318739b9f2"
+      "sha256": "c3b18be4e185382ef1f410e825c6628213c7bb3f7401eff7150392302fea5902"
     },
     {
       "path": "src/main/item/active_list.c",
@@ -4520,6 +4524,10 @@
     {
       "path": "tests/pe_combat_presets_test.c",
       "sha256": "200b854e11e7e251eae4119360cf7e183681a8ec053f7425045316d3ee26f742"
+    },
+    {
+      "path": "tests/pe_mod_pe_test.c",
+      "sha256": "c790467c03814cea8fad871aff78af4cde082bb794e879854e79e002cee6a0b2"
     }
   ]
 }

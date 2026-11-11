@@ -177,17 +177,12 @@ if(BUILD_TESTING AND "pe_rebalance" IN_LIST PE_MOD_LIST)
         pe_rebalance/pe_atb_items.c pe_rebalance/pe_pe_balance.c host/pe_game_facts.c)
     add_executable(test-mod-combine ${PROJECT_SOURCE_DIR}/tests/pe_mod_combine_colour_test.c
         pe_rebalance/pe_combine.c pe_rebalance/pe_panacea.c)
-    add_executable(test-mod-pe ${PROJECT_SOURCE_DIR}/tests/pe_mod_pe_test.c pe_rebalance/pe_pe_balance.c
-        ${PROJECT_SOURCE_DIR}/src/main/item/actions.c)
+    add_executable(test-mod-pe ${PROJECT_SOURCE_DIR}/tests/pe_mod_pe_test.c pe_rebalance/pe_pe_balance.c)
     foreach(target test-mod-atb test-mod-combine test-mod-pe)
         target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_rebalance)
         target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1)
         target_link_libraries(${target} PRIVATE psyz)
     endforeach()
-    if(MINGW)
-        # Allow unused original item-module entry points to be discarded in this fixture.
-        target_compile_options(test-mod-pe PRIVATE -fno-asynchronous-unwind-tables)
-    endif()
     add_test(NAME mod-atb COMMAND test-mod-atb)
     add_test(NAME mod-combine COMMAND test-mod-combine)
     add_test(NAME mod-panacea-off COMMAND test-mod-combine --panacea-off)
