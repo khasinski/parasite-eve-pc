@@ -583,6 +583,13 @@ if(BUILD_TESTING)
     target_compile_definitions(test-host-settings PRIVATE PE_HOST_SETTINGS_TEST=1 __psyz)
     target_include_directories(test-host-settings PRIVATE include)
     target_link_libraries(test-host-settings PRIVATE psyz pe_download_deps)
+    # The host links mods whose quick load stops movies and music, so it needs the same
+    # AKAO, actor and disc objects as the game; unreachable ones are stripped as there.
+    target_sources(test-host-settings PRIVATE $<TARGET_OBJECTS:parasite-eve-original-actor-animation>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>
+        $<TARGET_OBJECTS:parasite-eve-original-shadow>
+        $<TARGET_OBJECTS:parasite-eve-original-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-entity-textures>)
     add_test(NAME host-settings COMMAND test-host-settings "${CMAKE_CURRENT_BINARY_DIR}/host-settings-evidence")
     set_tests_properties(host-settings PROPERTIES TIMEOUT 30)
 
