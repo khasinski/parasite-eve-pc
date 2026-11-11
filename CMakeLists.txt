@@ -486,6 +486,14 @@ function(pe_add_common_unit_test target_name test_name source_file)
 endfunction()
 
 if(BUILD_TESTING)
+    add_executable(test-skin-collision tests/pe_skin_collision_test.c)
+    if(MSVC)
+        target_compile_options(test-skin-collision PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-skin-collision PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME wardrobe-skin-collision COMMAND test-skin-collision)
+
     add_executable(test-menu-call-abi tests/original_menu_call_abi.c
         src/main/menu/lists.c src/main/menu/widget.c src/main/item/swap.c
         src/main/psyq/libds/dssys_3.c)

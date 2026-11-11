@@ -460,7 +460,13 @@ In pe_wardrobe/:
   "wardrobe.worn". F1 groups and Bestiary areas come from whatever packs register.
 - `pe_skin_loader.c`: skins in the game's own player formats, from pe_skins/<folder>/ beside the
   preferences (texture.bin, model.bin, day1-8.bin, optional rooms.bin and meta.bin; the bridge's
-  build_skin.py makes them from the player's disc). Kept in host memory: Aya's textures are swapped
+  build_skin.py makes them from the player's disc). Loaded character models use native jacket
+  Aya's movement-cylinder radius (63 for the supported US assets), including character packs.
+  Only the host-owned model copy is normalized: installed assets, appearance, animations and
+  per-part combat hit bounds remain unchanged. This prevents NPC body widths from changing
+  movement clearance, as with Baker getting stuck near the police save-room area. Existing rig
+  defects are separate. Restart to reload any cached models after updating the mod.
+  Kept in host memory: Aya's textures are swapped
   at the game's upload (PE_HOOK_PLAYER_TEXTURES, the game's own kept for changing back), and
   bank_slots[0] and her rows point at the skin before her actor takes them (PE_HOOK_PLAYER_ROWS) and
   every frame; the weapon follows the skin's hand, room animations use retargeted copies. Instant
