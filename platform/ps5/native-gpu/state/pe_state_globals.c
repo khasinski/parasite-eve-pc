@@ -187,7 +187,7 @@ FIELD(g_BattleGaugeCapLatch,1);
 FIELD(g_FieldPadPressed,0);
 FIELD(g_AyaActionStep,1);
 FIELD(g_AyaAttackStep,4);
-FIELD(g_EvasionReaction,4);
+FIELD(g_EvasionOutcome.reaction,4);
 FIELD(g_AyaActionTimer,3);
 FIELD(g_BattleCrossFlashStop,2);
 FIELD(g_BattleHitTimer,1);

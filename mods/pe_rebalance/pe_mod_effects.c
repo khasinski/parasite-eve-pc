@@ -58,7 +58,7 @@ static PeRow s_rows[] = {
     { "Installed RoF volley %", "RoF 5/7/10 mods: whole volley.", 0, 200, 0, 300, 10, &s_rof_volley, 0 },
     { "G3A3 attack bonus", "Added to the G3A3's attack.", 0, 45, 0, 100, 5, &s_g3a3_bonus, 0 },
     { "M203 4 attack bonus", "Added to the M203 4's attack.", 0, 15, 0, 100, 5, &s_m203_4_bonus, 0 },
-    { "Progression gun bonuses", "Weaker guns: +5 to +25 attack.", 0, 1, 0, 1, 1, &s_prog_bonus, 1 },
+    { "Progression gun bonuses", "Weaker guns, Club 1: +5 to +25.", 0, 1, 0, 1, 1, &s_prog_bonus, 1 },
     { "Attack All crowd cap %", "Max HP lost a turn (100 = off).", 100, 75, 25, 100, 5, &s_aa_cap, 0 },
     { "RoF mods: fast volleys", "Installed RoF 5/7/10 fire fast.", 0, 1, 0, 1, 1, &s_fast_volley, 1 },
     { "Acid/Tranq vs resist %", "Chance vs resistant (vanilla 0).", 0, 20, 0, 100, 5, &s_status_resist, 0 },
@@ -113,9 +113,17 @@ static uint32_t pe_rand(void) { s_rng ^= s_rng << 13; s_rng ^= s_rng >> 17; s_rn
 static int pe_roll(int pct) { return (int)(pe_rand() % 100u) < pct; }
 static int pe_on(void) { return s_rules != RULES_VANILLA; }
 
+/* The equipped weapon's item id. A bag slot holds either an equipment record (0x100-0x17F, what
+ * pe_equipped returns) or a plain item id, which the game also equips and fights with (Club 1 can
+ * sit in a slot that way). Only the id is needed here, so read the plain one too. */
 static unsigned pe_gun_id(void) {
     const ItemDataRecord *rec = pe_equipped(0);
-    return rec ? rec->itemId : 0u;
+    const int slot = g_AyaSaveState.equipped_weapon_slot;
+    int value;
+    if (rec) return rec->itemId;
+    if (slot < 0 || slot >= 50) return 0u;
+    value = g_AyaSaveState.inventory_items[slot];
+    return value > 0 && value < 0x100 ? (unsigned)value : 0u;
 }
 
 static void pe_note_hit_quality(BattleEntity *entity, EnemyCombatant *enemy, BattleAction *action) {
@@ -166,6 +174,9 @@ static void pe_status(uint32_t *s2, uint32_t *mask, unsigned shift) {
 /* Shared by battle damage and the Weapon power (DPS) display. These flat attack
  * bonuses follow the Progression gun bonuses toggle and the rules preset. */
 static const uint8_t s_prog_guns[][2] = {
+    { 0x3Fu, 8 },  /* Club 1: base attack 9 needs bonus points to get past defense. In the
+                    * calibrated fight model, +8 keeps a player who splits points between a gun
+                    * and the club level with the starter handguns, still behind Club 2 */
     { 0x52u, 15 }, /* M1911A3 */
     { 0x5Fu, 5 },  /* PPK */
     { 0x69u, 10 }, /* M870 2 (MA10-2) */
