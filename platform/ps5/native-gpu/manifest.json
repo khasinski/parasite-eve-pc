@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "2fc08d9dd61f0037ffc77b2d716c3791283917f98a91fed1542d70fced3660ac"
+      "sha256": "edd54971254bb3beef82be4406dc330d193b1a4e76f05260d6a74e949ca23cb4"
     },
     {
       "path": "mods/host/pe_api_native.c",
@@ -4355,7 +4355,7 @@
     },
     {
       "path": "mods/pe_rebalance/pe_mod_effects.c",
-      "sha256": "e7153251e1bede95ed810c63073e7cda25f3e77cb3eabfb9e92a2c8e1ed1035e"
+      "sha256": "798ff152b88ecca4d383ed9beaf5ae826448606bdad61c95f6fa607065484040"
     },
     {
       "path": "mods/pe_rebalance/pe_mod_effects.h",
