@@ -1,5 +1,5 @@
 /* Item randomizer: New Game shuffles what room chests, pickups and character gifts hand out, from a
- * six-digit seed picked under F1 > Randomizer (always Medium for now). The game keeps the seed it started
+ * six-digit seed picked under F1 > Randomizer (no difficulty to pick: the Hard rules). The game keeps the seed it started
  * with (a save record), so loading always gives the same layout; F1 changes only reach the next New
  * Game. Battle drops, Wayne's Junk trades and the Chrysler Building stay vanilla.
  *
@@ -54,10 +54,11 @@ static PeRandRun s_run, s_layout_for;
 static uint16_t s_layout[PE_RAND_SPOTS];
 static PeRandResult s_result;
 static int s_layout_ready;
-static int s_enabled, s_difficulty = PE_RAND_MEDIUM, s_seed;   /* s_seed: six digits, 0..999999 */
+static int s_enabled, s_difficulty = PE_RAND_HARD, s_seed;   /* s_seed: six digits, 0..999999 */
 static int s_alone;            /* "Randomize new games" was on at start: this session runs no other mod */
 static unsigned char s_room_warned[SCENE_ROOM_COUNT + 1];
-static const char *const s_difficulty_names[] = {"Easy", "Medium", "Hard"};
+/* Named only for a save from a build that still had difficulties. */
+static const char *const s_rules_names[] = {", Easy rules", ", Medium rules", ""};
 /* Enemies of this game: saved as the "pe_randomizer.foes" record (none in an older save: off). */
 typedef struct PeRandFoesRun {
     uint8_t on, version, reserved[2];
@@ -66,9 +67,13 @@ _Static_assert(sizeof(PeRandFoesRun) == 4, "the saved record's layout");
 static PeRandFoesRun s_foes_run;
 static int s_foes_enabled;
 
-/* New games are Medium with enemies off for now: F1 has no rows for these. Saves started with others keep theirs.
- * Only the run test sets them, to keep the rest checked. */
-void pe_rand_test_options(int difficulty, int enemies) { s_difficulty = difficulty; s_foes_enabled = enemies; }
+/* New games use the Hard rules with enemies off for now: F1 has no rows for these, and the player is told of no
+ * difficulty. Saves started on Easy or Medium keep theirs. Only the run test sets them, to keep the rest checked
+ * (difficulty -1: what a player gets). */
+void pe_rand_test_options(int difficulty, int enemies) {
+    if (difficulty >= 0) s_difficulty = difficulty;
+    s_foes_enabled = enemies;
+}
 static uint16_t s_plan[PE_RAND_FOES];
 static unsigned s_plan_moved;
 static int s_plan_given;       /* the switches hold this game's plan (tests force their own swaps otherwise) */
@@ -589,8 +594,8 @@ static void pe_rand_spoiler(void) {
     if (pe_mod_path(path, sizeof path, name) != 0) return;
     snprintf(temp, sizeof temp, "%s.tmp", path);
     if (!(f = fopen(temp, "w"))) { pe_toast("Randomizer: couldn't write the spoiler file"); return; }
-    fprintf(f, "Parasite Eve randomizer, seed %06u, %s%s (logic %u, table %u", (unsigned)s_run.seed,
-            s_difficulty_names[s_run.difficulty], s_foes_run.on ? ", enemies" : "", (unsigned)s_run.logic, (unsigned)s_run.table);
+    fprintf(f, "Parasite Eve randomizer, seed %06u%s%s (logic %u, table %u", (unsigned)s_run.seed,
+            s_rules_names[s_run.difficulty], s_foes_run.on ? ", enemies" : "", (unsigned)s_run.logic, (unsigned)s_run.table);
     if (s_foes_run.on) fprintf(f, ", enemies %u", (unsigned)s_foes_run.version);
     fprintf(f, ")\n");
     if (s_result.keys_locked) fprintf(f, "Key items stay in their places.\n");
@@ -643,7 +648,7 @@ static int pe_rand_new_game(void *ctx, void *user) {
     s_door_moved = -1;
     if (s_enabled && !s_alone) pe_toast("Randomizer: restart the game first; this New Game isn't randomized");
     s_run.on = s_alone && s_enabled && game && game->kind != PE_NEW_GAME_TUTORIAL;
-    s_run.difficulty = (uint8_t)(s_difficulty >= 0 && s_difficulty < PE_RAND_DIFFICULTIES ? s_difficulty : PE_RAND_MEDIUM);
+    s_run.difficulty = (uint8_t)(s_difficulty >= 0 && s_difficulty < PE_RAND_DIFFICULTIES ? s_difficulty : PE_RAND_HARD);
     s_run.logic = PE_RAND_LOGIC_VERSION;
     s_run.table = PE_RAND_TABLE_VERSION;
     s_run.seed = pe_rand_seed();
@@ -657,7 +662,7 @@ static int pe_rand_new_game(void *ctx, void *user) {
     pe_log("rand_newgame", "on=1 seed=%06u difficulty=%u keys_moved=%u", (unsigned)s_run.seed,
            (unsigned)s_run.difficulty, s_result.keys_moved);
     pe_rand_spoiler();
-    snprintf(line, sizeof line, "Randomizer: seed %06u, %s%s", (unsigned)s_run.seed, s_difficulty_names[s_run.difficulty],
+    snprintf(line, sizeof line, "Randomizer: seed %06u%s%s", (unsigned)s_run.seed, s_rules_names[s_run.difficulty],
              s_foes_run.on ? ", enemies" : "");
     pe_toast(line);
     return 0;
@@ -725,7 +730,7 @@ static void pe_rand_run_text(char *out, unsigned size) {
     if (!pe_save_loaded() || !s_run.on) { snprintf(out, size, "Not randomized"); return; }
     if (!pe_rand_supported()) { snprintf(out, size, "Other version: vanilla"); return; }
     pe_rand_ready();
-    snprintf(out, size, "%06u %s, %s%s", (unsigned)s_run.seed, s_difficulty_names[s_run.difficulty],
+    snprintf(out, size, "%06u%s, %s%s", (unsigned)s_run.seed, s_rules_names[s_run.difficulty],
              s_result.keys_locked || s_result.fallback ? "keys vanilla" : "keys moved",
              pe_rand_foes_supported() ? ", enemies" : s_foes_run.on ? ", enemies vanilla" : "");
 }

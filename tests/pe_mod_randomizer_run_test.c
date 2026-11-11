@@ -74,7 +74,7 @@
  * Scene_UpdateEntityPositions links their contact tasks when the hit spheres meet (actors here have no
  * models, so the game's pass never does). Chests and talks run in that task.
  *
- * The randomizer's layout: seed=S,D (D 0-2: Easy, Medium, Hard) patches the loaded room as the mod does at
+ * The randomizer's layout: seed=S,D (D 0-2: Easy, Medium, Hard; players only get Hard's rules) patches the loaded room as the mod does at
  * scene start (every site of the room or none), and the line ends in got=<item given at each gave=>.
  * Every table give that runs must hand out the layout's item. Checks a line may ask for: want=+OFF (the
  * give at that listing offset runs), never=+OFF (it doesn't), flag=V0x2c|0x80 (that bit is set at the
@@ -569,7 +569,8 @@ static int start_gate(const Run *r) {
         if (!strcmp(row->page, "Randomizer") && (!strcmp(row->label, "Randomize enemies") || !strcmp(row->label, "Difficulty")))
             FAIL("F1 still has a %s row", row->label);
     }
-    pe_rand_test_options(r->difficulty, r->foes);
+    /* a Hard line takes what a player's New Game gets: its layout only matches when that is the Hard rules */
+    pe_rand_test_options(r->difficulty == PE_RAND_HARD ? -1 : r->difficulty, r->foes);
     gate_started = 1; gate_seed = r->seed; gate_difficulty = r->difficulty; gate_foes = r->foes;
     return 1;
 }
