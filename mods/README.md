@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example, `pe_challenges` for Challenges).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -57,6 +57,7 @@ mods/
   pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
   pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
   pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
+  pe_phone/            Phone Calls: after saving at a phone, "Stay on the line?" and a short call
   pe_challenges/       optional harder rules per run (one file per challenge, Hardcore permadeath),
                        bundles, assisted marker, run summary (opt-in via PE_MOD_LIST)
   pe_hello/            example mod (not built by default)
@@ -87,6 +88,107 @@ in the free field and kept beside the preferences as quicksave_<slot>.mcd. Loadi
 way Save_LoadCardFileIntoRuntime does, without the card menu's dialogs, then runs the field
 script's room transfer to the saved room: the room starts again as after a loaded save. It holds
 what a save holds, not Aya's place in the room or a fight in progress.
+
+## Phone Calls (pe_phone)
+
+F1 > Phone Calls. After Aya saves at a phone (the game's own question and save screen, unchanged),
+a box asks "Stay on the line?" with No first, so one Cross goes straight back to the game. Yes
+plays a short call in dialogue boxes: `*dial... ring... ring...*`, the call (Aya's lines as
+`{name}: ...` in the game's dialogue band, the caller's in a window higher up), then `*click*`.
+Cross goes on, Circle hangs up. Aya is held by the field lock (field event 0xFE / 0xFF, as a
+talking actor's script sends) until the last box closes. Backing out of the save screen, or
+answering No to the save, asks too while F1 > Ask without saving too is on (the default; off: only
+a real save asks). The question then comes once Aya has put the phone down (only a real save
+leaves her put-down waiting to be held; holding her earlier would stall a Yes before its save
+screen). Nothing in the game's scripts is patched.
+
+- Spotting: the save question page ("Will you save your progress?" with two choices) is
+  recognised at PE_HOOK_TEXT_PAGE ahead of every page handler; each sighting logs
+  `phone room=<map> story=0x<var 74> day=<n>` to pe_play.log (the room list phase 2 needs). The
+  story save near the end, which starts with Aya's name, gets no call.
+- A real save: the host's `save.committed` event (`PE_EVENT_SAVE_COMMITTED`, from
+  `pe_mod_save_committed` once the card file is published). Quick saves and room checkpoints
+  never commit, so they never ask.
+- **Calls are text files anyone can read and change.** The game's own are
+  `pe_phone/calls/pe1.txt` (its top explains the format), built into the game by CMake. The
+  first start writes a copy to `pe_calls/pe1.txt` beside the preferences; that copy, when present,
+  replaces the built-in calls (delete it to go back), and every other `.txt` in `pe_calls` adds
+  its calls. The copy's first line is a stamp (the hash of the calls it was written from): while
+  the rest still matches it, nobody edited the file and a newer game rewrites it with its calls;
+  an edited copy is never overwritten, and the game's calls go beside it as `pe1.txt.new` (not
+  loaded). A copy without a stamp (older builds) is adopted when it equals the built-in calls,
+  otherwise treated as edited. A call looks like:
+
+  ```
+  [mine/pizza2]            key: pack/name (saves remember it: don't rename)
+  caller = Tony's Pizza
+  tone = funny             serious or funny
+  day = 1                  1 to 6, 2-5, or any
+  rooms = 87               optional: only at these phones
+  priority = 10            optional: plays first there until heard
+  them: Tony's again. You hungry?
+  aya: Not anymore.
+  ```
+
+  Mistakes go to `pe_mods.log` with the file and line; a call with a mistake is left out, the
+  rest load. F1 > Phone Calls > Writing calls: Open calls folder, Reload calls (no restart), Try
+  call (pick any call by key), Play it now / Ask now (no save needed), Check calls (the game's font).
+- Mods can still add calls in code: the `phonecalls` v1 service (host/pe_services.h): `add`,
+  `find`, `pick`, `heard`, `reset`, `add_condition`; events `phone.call_start` / `phone.call_end`
+  (ctx: the call). A call has a key, caller, tone (serious / funny), lines, weight, `once`, story
+  days (the save screen's Day) or a variable 74 range, phone rooms, priority, `after` and `needs`.
+- Set calls: rooms + priority + a single day, chained with `after`; the header of `calls/pe1.txt`
+  lists every phone's room, place and day. One day each keeps the record at 48 bytes: its once list
+  (16) forgets the oldest, and a forgotten set call can't fit its day again.
+- Conditions: `needs = warner.supplies` plays a call only while another mod's feature is on. The
+  mod that owns the feature offers the name with `add_condition(name, holds)`; a name nobody offers
+  never holds, so neither mod needs the other. Offered now: `warner.supplies` (pe_shops: Warner
+  helps out and the Junk economy on), used by `pe1/park_wayne`, Wayne's call at Central Park.
+- Picking: a set call (priority > 0) not heard yet first; else weighted random among the calls
+  that fit, leaving out the last five played.
+- Text: ASCII in the game's glyphs (letters, digits, space, `. , : ! ? ' - + * % /`, `{name}`).
+  Lines are wrapped with the game's glyph widths and the player's name, at most three lines a
+  box; a longer line runs on into another box. Debug > Check calls measures every call.
+- Per save: record `pe_phone.heard` v1 (48 bytes): the last five calls and up to 16 one-time
+  calls heard, as 16-bit key hashes. New Game resets it; F1 > Forget heard calls clears it.
+- Aya stays on the phone (pe_phone_hold.c): when the save is written, the phone's task already
+  waits (opcode 48) for her put-down animation (0x26 from frame 0x3C, receiver at her ear). While
+  the question and the call are up her animation step is 0 (PE_HOOK_ACTOR_STEP, a local value), so
+  she holds the receiver, the task waits and the phone's own field lock holds the field. On
+  `*click*` (or No) she is let go: the game's own put-down and hang-up sound play, then its unlock.
+  A phone that lets her go before the save ends (the sewer's emergency phone) has its own pose
+  replayed for the call (animation 30 to frame 14, opcodes 46/78/47 as its script does), then idle.
+- Sounds: the phone's own. Every save phone's script plays four sounds from its area's bank,
+  from a base id A (Akao command 0x15F): A and A+1 after Yes (pick up, dial tone), A+3 and A+2
+  after the save (put it down). A call plays the pick-up and the tone twice ("ring... ring...") on
+  its ring page, stopped when the other side picks up, and the put-down pair on `*click*`. The ids
+  come from a table of the 23 phone rooms (pe-native-debug `tools/phone_rooms.py`); elsewhere no
+  sound. F1 > Phone sounds turns them off.
+- Only save phones: the same question also comes when a new day starts (M351, M352), in the debug
+  room (M360) and as the story save (M271); those get no call. The Day 1 sewer's emergency phone
+  (M032) saves through "Use the phone" with no question of its own: that choice is spotted instead
+  (`pe_phone_use_option`), and its set call `pe1/sewer_emergency` plays first there. Its call has
+  no sounds (the sewer's bank has no phone sounds).
+- Settings: Phone calls (Ask after saving / Always call / Off), Ask without saving too (on),
+  Call tone (Mixed / Serious only / Funny only), Phone sounds.
+
+Files (one job each; they talk only through `pe_phone.h`):
+
+| File | Job |
+|---|---|
+| `pe_phone_mod.c` | the mod: descriptor, F1 rows, settings |
+| `pe_phone_service.c` | the `phonecalls` registry and this save's `pe_phone.heard` record |
+| `pe_phone_spot.c` | spotting a phone save: the question page, then `save.committed` |
+| `pe_phone_flow.c` | after the save: "Stay on the line?", then the call page by page |
+| `pe_phone_box.c` | the game side: our dialogue box, field lock, taking the pad, the font |
+| `pe_phone_sound.c` | the phone's own sounds: pick up and ring, put down |
+| `pe_phone_hold.c` | keeping Aya at the phone, receiver at her ear, until the call ends |
+| `calls/pe1.txt` | Parasite Eve's own calls, as text |
+| `pe_phone_packs.c` | call files: the built-in pe1.txt and the `pe_calls` folder, reload, open folder |
+| `pe_phone_file.c`, `pe_phone_text.c`, `pe_phone_record.c`, `pe_phone_pick.c` | the pure core (`pe_phone_core.h`): reading call files, pages and wrapping, the heard record, picking |
+
+`tests/pe_mod_phone_test.c` (CTest `mod-phone`) checks the pure core and `calls/pe1.txt` without the game;
+pe-native-debug's `scenarios/phone_calls.py` checks the game side through real phone saves.
 
 ## Cheats (pe_cheats)
 
@@ -269,7 +371,7 @@ the host seals the registry: limits, keys declared twice (every claimant fails, 
 references and batch requirements, to a fixed point, the same whatever order mods start in. Then
 `pe_reg_find`, `pe_reg_count` / `pe_reg_key` (canonical order) and `pe_reg_batch_result` (with the
 reason) answer; nothing new is accepted until the next start. No mod uses it yet.
-`tests/pe_mod_registry_test.c` runs the D6 §11.6 examples. Events: `play.log` (every pe_log row), `bestiary.unlock`, `wardrobe.worn`.
+`tests/pe_mod_registry_test.c` runs the D6 §11.6 examples. Events: `play.log` (every pe_log row), `save.committed` (the host: a card save was published), `bestiary.unlock`, `wardrobe.worn`, `phone.call_start` / `phone.call_end`.
 A mod that registers into another mod's service at init lists that mod in its `requires`.
 
 ## The Mods panel
@@ -342,6 +444,7 @@ Records today:
 | `pe_economy.shop` | Requisition (the name from before the split) | pe_shops/pe_requisition.c |
 | `pe_qol.keys` | key item pocket | pe_qol/pe_key_items.c |
 | `pe_qol.sort` | bag sort | pe_qol/pe_bag_sort.c |
+| `pe_phone.heard` | the last five calls and one-time calls heard | pe_phone/pe_phone_calls.c |
 | `pe_challenges.run` | challenges and levels on / used / lowered, assisted, battles won, time | pe_challenges/pe_ch_run.c |
 
 Saves from earlier builds kept these as fixed blocks (`PELT` +0x000, `PECT` +0x040, `PESH` +0x1C0, `PKEY` +0x200, `SORT`

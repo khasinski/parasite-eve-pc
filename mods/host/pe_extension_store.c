@@ -443,11 +443,13 @@ int pe_mod_save_path(const char *path) {
 int pe_mod_load_admit(const char *path, const unsigned char *block) {
     return pe_extension_validate_load(path, block);
 }
+void (*pe_save_committed_listener)(const char *path);
 void pe_mod_save_committed(const char *path) {
     if (path && !strcmp(path, s_path)) {
         pe_extension_committed();
         pe_profile_transactions_committed();
     }
+    if (path && pe_save_committed_listener) pe_save_committed_listener(path);
 }
 void pe_mod_save_cancelled(void) {
     pe_extension_cancel();

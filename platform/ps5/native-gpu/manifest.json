@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "edd54971254bb3beef82be4406dc330d193b1a4e76f05260d6a74e949ca23cb4"
+      "sha256": "d248252c5ca2e17a0a031770d2367366624f3e20476f1030d7d4e1fe081edf76"
     },
     {
       "path": "mods/host/pe_api_native.c",
@@ -3919,11 +3919,11 @@
     },
     {
       "path": "mods/host/pe_extension_store.c",
-      "sha256": "3d1c538d9f8a634272e123939d277104f6cf6e6ab535606742a4984c1f7c8e36"
+      "sha256": "52cb032048cfa41d80bde6a7d4a9ead67ccd7bfd1f2c8b027ae606e33ae2e221"
     },
     {
       "path": "mods/host/pe_extension_store.h",
-      "sha256": "0d5853ce93443aa18a294c9822137c4e3c34f49e9a138e9ecefb7e0c727b0b55"
+      "sha256": "c4f1e91bc020f2cfea028920ce780f103ae076d665c9e478cadd1cce6a1da59f"
     },
     {
       "path": "mods/host/pe_file_io.h",
@@ -3987,11 +3987,11 @@
     },
     {
       "path": "mods/host/pe_mod_host.c",
-      "sha256": "c01b7b394ca75a5f55f5c1d1cd64a8395f11ba997743464043931eab122079af"
+      "sha256": "86305158e9595f0682212b6ac51cf8a165f3d4c7a26ad31f91c9bab6e8700f56"
     },
     {
       "path": "mods/host/pe_mod_host.h",
-      "sha256": "c940f01d565d70601110e32cd3964fde51a8ee6cae783f1f4f7308460da4d102"
+      "sha256": "529f41510db58192fa56f64bc40307a7467a5485daa11ef563be70fe19c16dd0"
     },
     {
       "path": "mods/host/pe_mod_menu.c",
@@ -4111,7 +4111,7 @@
     },
     {
       "path": "mods/host/pe_services.h",
-      "sha256": "bdef8511309b1c607df98aeef22de281cd7634e3d8230c13b6f3ab621f93359d"
+      "sha256": "60bc9634a7e3af7c4d1679c72dabfd4b6d1b3ee66642f9961b7a0883daeb6a76"
     },
     {
       "path": "mods/host/pe_shop_api.c",
@@ -4387,7 +4387,7 @@
     },
     {
       "path": "mods/pe_shops/pe_field_wayne.c",
-      "sha256": "3a3695e4fdeaca7685b048b7cf40641023bbe42f3ec076c8820a37cfde9b616f"
+      "sha256": "7a64794b5644549f3170f45d39e9d00dad870217c3230a7625b07273d4140ef0"
     },
     {
       "path": "mods/pe_shops/pe_permit.c",
