@@ -20,5 +20,15 @@ such objects; see "Title and widescreen artwork" in `docs/HD_BACKGROUNDS.md`.
    from the entry's tiles nearest the seam (extrapolated across the side).
    OUT_PACK starts as a hard-linked copy; the source pack is never written.
 
+4. `hd_matte.py ROOM GROUP SRC_PACK OUT_PACK ENTRY ...` fixes the stairs on the
+   room's own foreground entries. Their native silhouette is stair-stepped and the
+   upscaled art inside the stairs shows the background, so those pixels were pasted
+   over actors. It cuts each entry with GrabCut on the room's HD composite, in a band
+   from 2 native px inside to 1 px outside the outline, writes RGBA atlases with a
+   `PEM1` static-matte marker, and moves the given-up stair pixels into a
+   `-under.bin` underlay behind the room where no other layer covers them (so no
+   black holes open). Only for entries without animation controllers. Review the
+   `matte-ROOM-eE.png` overlays: red is removed, green added.
+
 Requires Python with NumPy, Pillow and OpenCV, and your own Disc 1 image (the
 path is set in `inspect_room.py`, like the other scripts in `widescreen/`).

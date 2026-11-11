@@ -65,7 +65,8 @@ typedef struct {
     int left, right;
     short *xy;
     u16 *depth;     /* depth-sorted layers only */
-    RenderTilePacket *packets[2];
+    u8 *seam;       /* backdrop cells bordering the original picture: -1 left, +1 right, 0 */
+    RenderTilePacket *packets[2];   /* count cells, then a seam copy per cell */
 } HdBackdropGroup;
 static HdBackdropGroup hd_wide[HD_WIDE_GROUPS],hd_under[HD_WIDE_GROUPS],hd_front[HD_FRONT_LAYERS];
 static unsigned hd_front_count;
@@ -78,9 +79,9 @@ static void Render_ResetHdWidescreen(void) {
         if(hd_wide[i].count || hd_under[i].count)queued=1;
     if(queued)DrawSync(0);
     for (unsigned i=0;i<HD_WIDE_GROUPS;++i) {
-        free(hd_wide[i].xy);
+        free(hd_wide[i].xy);free(hd_wide[i].seam);
         free(hd_wide[i].packets[0]);free(hd_wide[i].packets[1]);
-        free(hd_under[i].xy);
+        free(hd_under[i].xy);free(hd_under[i].seam);
         free(hd_under[i].packets[0]);free(hd_under[i].packets[1]);
     }
     for (unsigned i=0;i<HD_FRONT_LAYERS;++i) {
@@ -132,10 +133,11 @@ static void Render_LoadHdBackdrop(HdBackdropGroup *tiles,const char *suffix) {
         total+=(unsigned)count;
         layer->xy=malloc((size_t)count*2*sizeof(short));
         layer->depth=kind ? malloc((size_t)count*sizeof(u16)) : NULL;
-        layer->packets[0]=calloc((size_t)count,sizeof(RenderTilePacket));
-        layer->packets[1]=calloc((size_t)count,sizeof(RenderTilePacket));
+        layer->packets[0]=calloc((size_t)count*2,sizeof(RenderTilePacket));
+        layer->packets[1]=calloc((size_t)count*2,sizeof(RenderTilePacket));
+        layer->seam=kind ? NULL : calloc((size_t)count,1);
         if(kind)++hd_front_count;   /* owned from here, so a failure below still frees it */
-        if(!layer->xy || !layer->packets[0] || !layer->packets[1] || (kind && !layer->depth)){valid=0;break;}
+        if(!layer->xy || !layer->packets[0] || !layer->packets[1] || (kind ? !layer->depth : !layer->seam)){valid=0;break;}
         for(unsigned n=0;valid && n<count*2;++n) {
             valid=Render_ReadHdWide(file,2,&value);
             layer->xy[n]=(int16_t)(uint16_t)value;
@@ -151,13 +153,24 @@ static void Render_LoadHdBackdrop(HdBackdropGroup *tiles,const char *suffix) {
             if(x<l || x>=r || y<y0 || y>=y1)valid=0;
         }
         if(!valid)break;
+        /* Side art that only abuts the original picture leaves its last, partly
+         * covered column over the clear colour: a dark line at the 4:3 edge once
+         * the squeezed view is shown. A backdrop cell with no neighbour towards
+         * the picture is drawn once more, 4 px inside it and behind it, so that
+         * column blends with the side's own material instead. */
+        for(unsigned n=0;!kind && n<count;++n) {
+            int x=layer->xy[n*2],y=layer->xy[n*2+1],inward=x<0 ? 16 : -16,neighbour=0;
+            for(unsigned m=0;m<count && !neighbour;++m)
+                neighbour=layer->xy[m*2]==x+inward && layer->xy[m*2+1]==y;
+            if(!neighbour && (x<0 ? x+16<=8 : x>=320-8))layer->seam[n]=(u8)(x<0 ? 1 : 2);
+        }
         int loaded=0;const char *formats[]={"webp","png","bmp"};
         for(unsigned format=0;format<3 && !loaded;++format) {
             size=snprintf(filename,sizeof(filename),"%s/%016" PRIx64 ".%s",hd_background_path,key,formats[format]);
             if(size>=0 && (size_t)size<sizeof(filename))loaded=Psyz_GpuLoadSpriteAtlas(key,filename)==1;
         }
         if(!loaded){valid=0;break;}
-        for(unsigned n=0;n<count;++n)
+        for(unsigned n=0;n<count*2;++n)
             Psyz_GpuRegisterInterpolationBackgroundPair(&layer->packets[0][n].r,&layer->packets[1][n].r);
         layer->count=(unsigned)count;layer->key=key;layer->group=(unsigned)group;
         layer->left=l;layer->right=r;
@@ -209,10 +222,17 @@ static const RenderTilePacket *Render_HdBackdropColor(int slot,unsigned group) {
  * where Render_DrawSpriteEntry links a native tile of the same depth. */
 static void Render_LinkHdTiles(int slot,RenderNativeTag *ordering,HdBackdropGroup *layer,unsigned extension,
                                const RenderTilePacket *color) {
-    for(unsigned i=0;i<layer->count;++i) {
-        Psyz_GpuEnsureInterpolationBackgroundPair(&layer->packets[0][i].r,&layer->packets[1][i].r);
-        RenderTilePacket *sprite=&layer->packets[slot][i];
-        int x=layer->xy[i*2]+(short)g_GeomState->out_disp_x;
+    for(unsigned j=0;j<layer->count*2;++j) {
+        /* j < count: the cells; then each seam cell's copy (Render_LoadHdBackdrop) */
+        unsigned i=j<layer->count ? j : j-layer->count;
+        int shift=0;
+        if(j>=layer->count) {
+            if(!layer->seam || !layer->seam[i])continue;
+            shift=layer->seam[i]==1 ? 4 : -4;
+        }
+        Psyz_GpuEnsureInterpolationBackgroundPair(&layer->packets[0][j].r,&layer->packets[1][j].r);
+        RenderTilePacket *sprite=&layer->packets[slot][j];
+        int x=layer->xy[i*2]+shift+(short)g_GeomState->out_disp_x;
         int y=layer->xy[i*2+1]+(short)g_GeomState->out_disp_y;
         if(x+16 < -112 || x>432 || y+16<0 || y>240)continue;
         int depth=4095;
