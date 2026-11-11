@@ -1,0 +1,90 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "Parasite Eve",
+  "repo": "khasinski/parasite-eve-pc",
+  "game": {
+    "kind": "iso",
+    "label": "Your Disc 1 .cue file of the North American release. Keep it next to its .bin file. You can add Disc 2 later in the game's settings (Escape)."
+  },
+  "start": {
+    "program": ["parasite-eve-pc.exe", "parasite-eve-pc"],
+    "args": ["--game", "{game}"]
+  },
+  "saves": [
+    "{install}/userdata/memory-cards",
+    "{install}/userdata/quicksave_*.mcd",
+    "{config}/Parasite Eve/memory-cards",
+    "{config}/Parasite Eve/quicksave_*.mcd",
+    "{config}/parasite-eve/memory-cards",
+    "{config}/parasite-eve/quicksave_*.mcd"
+  ],
+  "settings": [
+    {
+      "id": "resolution", "label": "Resolution", "in": "args",
+      "help": "How sharp the 3D is drawn. 1x is the PlayStation's own. The HD background pack needs 2x or higher.",
+      "choices": [
+        { "label": "Game's option", "args": [] },
+        { "label": "1x (original)", "args": ["--internal-resolution", "1"] },
+        { "label": "2x", "args": ["--internal-resolution", "2"] },
+        { "label": "4x", "args": ["--internal-resolution", "4"] },
+        { "label": "6x", "args": ["--internal-resolution", "6"] },
+        { "label": "8x", "args": ["--internal-resolution", "8"] }
+      ]
+    },
+    {
+      "id": "widescreen", "label": "Widescreen", "in": "args",
+      "help": "Shows more of the original background where there is any. Narrow rooms and movies stay 4:3.",
+      "choices": [
+        { "label": "Game's option", "args": [] },
+        { "label": "Off (4:3)", "args": ["--widescreen", "0"] },
+        { "label": "On", "args": ["--widescreen", "1"] }
+      ]
+    },
+    {
+      "id": "frame_interpolation", "label": "Smooth motion", "in": "args",
+      "help": "60 Hz interpolation of models and camera. The game still runs at its original speed.",
+      "choices": [
+        { "label": "Game's option", "args": [] },
+        { "label": "Off", "args": ["--frame-interpolation", "0"] },
+        { "label": "60 Hz", "args": ["--frame-interpolation", "1"] }
+      ]
+    },
+    {
+      "id": "antialiasing", "label": "Anti-aliasing", "in": "args",
+      "help": "Smooths jagged edges.",
+      "choices": [
+        { "label": "Game's option", "args": [] },
+        { "label": "Off", "args": ["--antialiasing", "0"] },
+        { "label": "On", "args": ["--antialiasing", "1"] }
+      ]
+    },
+    {
+      "id": "model_filtering", "label": "Model texture filtering", "in": "args",
+      "help": "Smooths the textures on characters and objects.",
+      "choices": [
+        { "label": "Game's option", "args": [] },
+        { "label": "Off", "args": ["--model-filtering", "0"] },
+        { "label": "On", "args": ["--model-filtering", "1"] }
+      ]
+    },
+    {
+      "id": "geometry_correction", "label": "Geometry correction", "in": "args",
+      "help": "Removes the PlayStation's wobbling polygons.",
+      "choices": [
+        { "label": "Game's option", "args": [] },
+        { "label": "On", "args": ["--geometry-correction", "1"] },
+        { "label": "Off (original)", "args": ["--geometry-correction", "0"] }
+      ]
+    },
+    {
+      "id": "dynamic_lighting", "label": "Dynamic lighting", "in": "args",
+      "help": "Lights models from the room's light sources.",
+      "choices": [
+        { "label": "Game's option", "args": [] },
+        { "label": "Off", "args": ["--dynamic-lighting", "0"] },
+        { "label": "On", "args": ["--dynamic-lighting", "1"] }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 # Parasite Eve
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/bQkCVvrkem)
+[![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/parasite-eve-pc)
 
 A native PC port of Parasite Eve, built from the original game code with
 [our PsyZ fork](https://github.com/khasinski/parasite-eve-psyz).
@@ -12,6 +13,8 @@ A native PC port of Parasite Eve, built from the original game code with
 Download the game from [GitHub Releases](https://github.com/khasinski/parasite-eve-pc/releases).
 This is an early alpha; see the release notes for available platforms and known issues.
 See the [changelog](CHANGELOG.md) for changes.
+
+Works with [RecompLauncher](https://recomplauncher.com): it installs and updates the game from these releases and sets it up with your Disc 1 image.
 
 You need your own **North American CUE/BIN images**. Game data is not included.
 Keep each CUE file next to its BIN file.

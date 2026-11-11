@@ -90,7 +90,7 @@ jobs:
         run: |
           stage=package/Parasite-Eve-linux-${{ matrix.arch }}
           mkdir -p "$stage/docs/images" "$stage/licenses" "$stage/mods"
-          cp build/parasite-eve-pc README.md CHANGELOG.md LICENSE.md THIRD_PARTY_NOTICES.md "$stage/"
+          cp build/parasite-eve-pc README.md CHANGELOG.md LICENSE.md THIRD_PARTY_NOTICES.md recomplauncher.json "$stage/"
           cp docs/CODE_ORGANIZATION.md "$stage/docs/"
           cp mods/README.md "$stage/mods/"
           cp docs/images/gameplay.png "$stage/docs/images/"
@@ -218,7 +218,7 @@ jobs:
           $game = 'package/Parasite-Eve-0.11-windows-x86_64'
           $editor = 'package/Parasite-Eve-Save-Editor-0.11-windows-x86_64'
           New-Item -ItemType Directory -Force "$game/docs/images", "$game/mods", "$game/licenses", $editor | Out-Null
-          Copy-Item build/parasite-eve-pc.exe, README.md, CHANGELOG.md, LICENSE.md, THIRD_PARTY_NOTICES.md $game
+          Copy-Item build/parasite-eve-pc.exe, README.md, CHANGELOG.md, LICENSE.md, THIRD_PARTY_NOTICES.md, recomplauncher.json $game
           Copy-Item docs/images/gameplay.png "$game/docs/images/"
           Copy-Item docs/CODE_ORGANIZATION.md "$game/docs/"
           Copy-Item mods/README.md "$game/mods/"

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added `--game <path>`: Disc 1 for this run, keeping a saved Disc 2.
+- Added a `recomplauncher.json` to every release so RecompLauncher can set the game up and start it.
+
 ## 0.11
 
 - Improved model rendering, polygon edges, texture gradients and frame pacing across graphics backends.
