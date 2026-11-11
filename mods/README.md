@@ -587,7 +587,9 @@ Economy > Warner helps out.
 ## Randomizer (pe_randomizer)
 
 F1 > Randomizer, before New Game: on/off and a six-digit seed (Random seed, or typed in: Enter edits it, C
-copies, Ctrl+V pastes). Items go anywhere and keys move to any chest the player can still reach when the lock asks. There is no difficulty
+copies, Ctrl+V pastes). Items go anywhere, except weapons and armor, which land in a chest of their own story day, the day before or the
+day after (`pe_rand_gear_day_fits`: a Museum gun never turns up in the Theater). Keys move to any chest the player
+can still reach when the lock asks. There is no difficulty
 to pick for now: every new game uses what was the Hard rules. The Easy and Medium code and checks stay, and a save
 started on one keeps it.
 New Game takes them; the game keeps them in the

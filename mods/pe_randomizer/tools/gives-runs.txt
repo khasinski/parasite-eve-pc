@@ -1009,7 +1009,7 @@ M052 0x88 0x33 win keys=all press animwait at=352,-46,0 at=352,-46,0 at=352,-46,
 # popup +1C8C is the same for both). M92F: with V0x0 bit 4 Wayne first asks (message 7) and answer 1 skips
 # the talk to the second give +1810 (its own popup +1944).
 M052 0x88 0x33 win keys=all press animwait at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 bag=full menu=0 want=+1A48 seed=222222,2 id=wayne-m16a1-fullbag
-M052 0x88 0x33 win keys=all press animwait at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 bag=full menu=0 want=+1A48 seed=666666,2 id=wayne-m16a1-fullbag
+M052 0x88 0x33 win keys=all press animwait at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 bag=full menu=0 want=+1A48 seed=555555,2 id=wayne-m16a1-fullbag
 M052 0x88 0x33 win keys=all press animwait at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 at=352,-46,0 bag=full menu=0 want=+1A48 seed=888888,2 id=wayne-m16a1-fullbag
 M108 0x88 0x0 V0x0=0x4 V0x3=0xe000 V0xa=0x1d V0xb=0x20 V0x18=0x80226 V0x22=0x7 V0x2c=0x3b6ffbb8 V0x2d=0x40000 V0x2e=0x2005 V0x2f=0x1000000 win menu=1 want=+1810 seed=111111,0 id=wayne-m92f-asked
 M108 0x88 0x0 V0x0=0x4 V0x3=0xe000 V0xa=0x1d V0xb=0x20 V0x18=0x80226 V0x22=0x7 V0x2c=0x3b6ffbb8 V0x2d=0x40000 V0x2e=0x2005 V0x2f=0x1000000 win menu=1 want=+1810 seed=222222,1 id=wayne-m92f-asked

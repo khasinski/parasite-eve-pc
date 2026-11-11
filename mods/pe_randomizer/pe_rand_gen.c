@@ -2,7 +2,8 @@
  *
  * Keys first, by assumed fill: each key goes to a spot that can be reached while holding every key
  * not placed yet, so whatever order the player finds them in, the next one is reachable. Then the
- * other items are shuffled over the spots left, per story day on Easy. Every try is checked
+ * other items are shuffled over the spots left, per story day on Easy; a weapon or armor only into a
+ * chest within a day of its own (pe_rand_gear_day_fits). Every try is checked
  * (pe_rand_check); a failed try re-rolls from the same seed, so a seed always gives one layout.
  * Only a PRNG of our own with fixed constants, table order and integer maths: the same seed is the
  * same layout on every machine and build of the same logic version.
@@ -148,12 +149,13 @@ static int place_keys(const PeLogic *l, int difficulty, PeRng *rng, int *at) {
 static int fill(const PeRandSpot *spots, unsigned count, int difficulty, int (*gift_safe)(unsigned),
                 PeRng *rng, uint16_t *out, const unsigned char *has_key) {
     uint16_t items[PE_RAND_MAX_SPOTS];
+    uint8_t from_day[PE_RAND_MAX_SPOTS];   /* the story day of the spot items[j] comes from */
     unsigned todo[PE_RAND_MAX_SPOTS];
     for (unsigned b = 1; b <= 7; ++b) {
         unsigned ni = 0, nt = 0;
         for (unsigned i = 0; i < count; ++i) {
             if (bucket(&spots[i], difficulty) != b) continue;
-            if (!(spots[i].flags & PE_RAND_KEY)) items[ni++] = spots[i].vanilla;
+            if (!(spots[i].flags & PE_RAND_KEY)) { from_day[ni] = spots[i].day; items[ni++] = spots[i].vanilla; }
             if (!has_key[i]) todo[nt++] = i;
         }
         if (ni != nt) return 0;
@@ -167,10 +169,23 @@ static int fill(const PeRandSpot *spots, unsigned count, int difficulty, int (*g
             if (!m) return 0;
             unsigned j = fit[rng_below(rng, m)];
             out[todo[t]] = items[j];
-            items[j] = items[--ni];
+            items[j] = items[--ni]; from_day[j] = from_day[ni];
+            todo[t] = PE_RAND_MAX_SPOTS;   /* filled */
+        }
+        /* then the weapons and armor left, in the order they come up, each into a free chest near its own day */
+        for (unsigned j = 0; j < ni;) {
+            unsigned fit[PE_RAND_MAX_SPOTS], m = 0;
+            if (!pe_rand_is_gear(items[j])) { ++j; continue; }
+            for (unsigned t = 0; t < nt; ++t)
+                if (todo[t] != PE_RAND_MAX_SPOTS && pe_rand_gear_day_fits(from_day[j], spots[todo[t]].day)) fit[m++] = t;
+            if (!m) return 0;
+            unsigned t = fit[rng_below(rng, m)];
+            out[todo[t]] = items[j];
+            items[j] = items[--ni]; from_day[j] = from_day[ni];
+            todo[t] = PE_RAND_MAX_SPOTS;
         }
         for (unsigned t = 0; t < nt; ++t) {
-            if (spots[todo[t]].kind != PE_RAND_CHEST) continue;
+            if (todo[t] == PE_RAND_MAX_SPOTS) continue;
             unsigned j = rng_below(rng, ni);
             out[todo[t]] = items[j];
             items[j] = items[--ni];
@@ -224,6 +239,12 @@ const char *pe_rand_check(const PeRandSpot *spots, unsigned count, int difficult
             if (i != l.keys[k] && !key_fits(&l, i, (unsigned)k, difficulty)) return "a key in a spot it can't use";
         } else if (spots[i].kind != PE_RAND_CHEST && layout[i] != spots[i].vanilla && !gift_safe(layout[i])) {
             return "an item a pickup or gift could lose";
+        } else if (pe_rand_is_gear(layout[i]) && layout[i] != spots[i].vanilla) {
+            /* a weapon or armor: a spot of its own within the day rule (one spot per kind in the game's table) */
+            int near = 0;
+            for (unsigned j = 0; j < count && !near; ++j)
+                near = spots[j].vanilla == layout[i] && pe_rand_gear_day_fits(spots[j].day, spots[i].day);
+            if (!near) return "a weapon or armor too far from its own story day";
         }
     }
     for (unsigned k = 0; k < l.nkeys; ++k)

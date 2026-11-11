@@ -10,7 +10,7 @@
 /* Raise PE_RAND_LOGIC_VERSION whenever the same seed would give a different layout (the generator,
  * its rules or PE_RAND_TABLE_VERSION). A save keeps the versions it was made with; a build that
  * doesn't know them leaves that game's items vanilla rather than moving them under the player. */
-#define PE_RAND_LOGIC_VERSION 12
+#define PE_RAND_LOGIC_VERSION 13
 #define PE_RAND_TABLE_VERSION 14
 
 enum { PE_RAND_EASY, PE_RAND_MEDIUM, PE_RAND_HARD, PE_RAND_DIFFICULTIES };
@@ -76,6 +76,17 @@ typedef struct PeRandLock {
     uint8_t var;
     uint32_t bit;
 } PeRandLock;
+
+/* Weapons (0x3F-0x94) and armor (0x95-0xC7): one of these lands in a chest of its own story day, the day before
+ * or the day after, so the strength of what the player finds follows the story (PE_RAND_GEAR_DAYS). A pickup or
+ * gift holding one keeps it or gives it up to a chest, as before. Changing this changes layouts: raise
+ * PE_RAND_LOGIC_VERSION with it. */
+#define PE_RAND_GEAR_DAYS 1
+static inline int pe_rand_is_gear(unsigned item) { return item >= 0x3F && item <= 0xC7; }
+/* A gear item whose own spot is on story day `from` may sit in a chest of story day `to` (0: day unknown, no rule). */
+static inline int pe_rand_gear_day_fits(unsigned from, unsigned to) {
+    return !from || !to || (from > to ? from - to : to - from) <= PE_RAND_GEAR_DAYS;
+}
 
 typedef struct PeRandResult {
     unsigned attempts;    /* tries used, 1 or more */

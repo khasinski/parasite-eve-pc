@@ -24,6 +24,9 @@ static void table_is_sane(void) {
     for (unsigned i = 0; i < PE_RAND_SPOTS; ++i) {
         const PeRandSpot *s = &g_pe_rand_spots[i];
         assert(s->vanilla && s->vanilla <= 0xFF && s->kind <= PE_RAND_GIFT && s->day <= 6);
+        /* one spot per weapon and armor, on a known day: the day rule reads an item's own day off its spot */
+        for (unsigned j = 0; pe_rand_is_gear(s->vanilla) && j < i; ++j) assert(g_pe_rand_spots[j].vanilla != s->vanilla);
+        assert(!pe_rand_is_gear(s->vanilla) || s->day);
         if (s->flags & PE_RAND_KEY) {
             ++keys;
             for (unsigned j = 0; j < i; ++j) assert(g_pe_rand_spots[j].vanilla != s->vanilla);   /* one spot per key */
@@ -104,6 +107,7 @@ static void every_seed_passes(void) {
     static uint16_t a[PE_RAND_SPOTS], b[PE_RAND_SPOTS];
     for (int d = 0; d < PE_RAND_DIFFICULTIES; ++d) {
         unsigned changed = 0, moved = 0, other_room = 0, other_day = 0, day_one = 0;
+        unsigned gear_moved = 0, gear_earlier = 0, gear_later = 0;
         for (uint32_t seed = 0; seed < 2000; ++seed) {
             PeRandResult ra, rb;
             pe_rand_generate(g_pe_rand_spots, PE_RAND_SPOTS, seed, d, test_gift_safe, a, &ra);
@@ -119,6 +123,13 @@ static void every_seed_passes(void) {
             moved += ra.keys_moved;
             for (unsigned i = 0; i < PE_RAND_SPOTS; ++i) {
                 changed += a[i] != g_pe_rand_spots[i].vanilla;
+                /* a weapon or armor: in a chest (or still in its own spot), a story day from its own at most */
+                for (unsigned k = 0; pe_rand_is_gear(a[i]) && k < PE_RAND_SPOTS; ++k)
+                    if (a[i] == g_pe_rand_spots[k].vanilla && i != k) {
+                        int days = (int)g_pe_rand_spots[i].day - (int)g_pe_rand_spots[k].day;
+                        assert(g_pe_rand_spots[i].kind == PE_RAND_CHEST && days >= -PE_RAND_GEAR_DAYS && days <= PE_RAND_GEAR_DAYS);
+                        ++gear_moved; gear_earlier += days < 0; gear_later += days > 0;
+                    }
                 for (unsigned k = 0; k < PE_RAND_SPOTS; ++k)
                     if ((g_pe_rand_spots[k].flags & PE_RAND_KEY) && a[i] == g_pe_rand_spots[k].vanilla && i != k) {
                         assert(g_pe_rand_spots[i].kind == PE_RAND_CHEST && key_may_sit(a[i], i, k, d));
@@ -129,6 +140,9 @@ static void every_seed_passes(void) {
             }
         }
         assert(changed > 2000 * 20);   /* it does shuffle */
+        /* about 40 weapons and armors a seed, nearly all moved; off Easy a good part to the day before or after */
+        assert(gear_moved > 2000 * 30);
+        assert(d == PE_RAND_EASY ? !gear_earlier && !gear_later : gear_earlier > 2000 * 5 && gear_later > 2000 * 5);
         assert(d == PE_RAND_EASY || (PE_RAND_MOVE_KEYS ? moved > 2000 && other_room > 2000 && other_day > 1000 : !moved));
         assert(d == PE_RAND_HARD && PE_RAND_MOVE_KEYS ? day_one > 1000 : !day_one);
     }
@@ -136,9 +150,9 @@ static void every_seed_passes(void) {
 
 static void golden_layouts(void) {
     static const uint32_t golden[PE_RAND_DIFFICULTIES][4] = {
-        {0x95933C9B, 0x018A37DB, 0xC047D003, 0xA29F2E9B},
-        {0x399EE353, 0xAB0EE85B, 0xD4785D5B, 0xC7AA8CA3},
-        {0x08B527B3, 0xF7F1C2A3, 0xA80606A3, 0x0F0F7AEB},
+        {0xB1C1E613, 0xC1090ECB, 0x3D673EE3, 0x93E00D7B},
+        {0x1A459F2B, 0x3D6DBC8B, 0x3B38AC13, 0x0CC21613},
+        {0x4383F5AB, 0x254A9BBB, 0x12AFE2F3, 0xFB17E073},
     };
     static uint16_t out[PE_RAND_SPOTS];
     int print = !golden[0][0];

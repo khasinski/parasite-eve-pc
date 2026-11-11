@@ -1,12 +1,12 @@
 # Key chests on a full bag (Hard layouts that put a key there): the give fails, and either Aya cancels
 # (the chest keeps the key and offers it again) or she leaves bag slot 2's item in the chest (the key is
 # in the bag). Chests whose own item is a medicine (M005), a gun (M028, M139) or armour (M047).
-M005 0x12 0x4 win keys=all press at=@5,3072 want=+2FD8 seed=2,2 bag=full lack=D6 id=bag-m005-cancel
-M005 0x12 0x4 win keys=all press at=@5,3072 want=+2FD8 seed=2,2 bag=full menu=0 swap=2 has=D6 id=bag-m005-swap
-M028 0x68 0x1b win keys=all press at=@6,3072 want=+1D30 seed=5,2 bag=full lack=CD id=bag-m028-cancel
-M028 0x68 0x1b win keys=all press at=@6,3072 want=+1D30 seed=5,2 bag=full menu=0 swap=2 has=CD id=bag-m028-swap
-M047 0x210 0x0 win keys=all press at=@9,3072 want=+487C seed=5,2 bag=full lack=CE id=bag-m047-cancel
-M047 0x210 0x0 win keys=all press at=@9,3072 want=+487C seed=5,2 bag=full menu=0 swap=2 has=CE id=bag-m047-swap
-M139 0xc0 0x0 win keys=all press at=@3,3072 want=+1F60 seed=6,2 bag=full lack=D1 id=bag-m139-cancel
-M139 0xc0 0x0 win keys=all press at=@3,3072 want=+1F60 seed=6,2 bag=full menu=0 swap=2 has=D1 id=bag-m139-swap
-M139 0xc0 0x0 win keys=all press at=@4,3072 want=+26BC seed=6,2 bag=full menu=0 swap=2 has=D2 id=bag-m139b-swap
+M005 0x12 0x4 win keys=all press at=@5,3072 want=+2FD8 seed=2,2 bag=full lack=D0 id=bag-m005-cancel
+M005 0x12 0x4 win keys=all press at=@5,3072 want=+2FD8 seed=2,2 bag=full menu=0 swap=2 has=D0 id=bag-m005-swap
+M028 0x68 0x1b win keys=all press at=@6,3072 want=+1D30 seed=4,2 bag=full lack=CF id=bag-m028-cancel
+M028 0x68 0x1b win keys=all press at=@6,3072 want=+1D30 seed=4,2 bag=full menu=0 swap=2 has=CF id=bag-m028-swap
+M047 0x210 0x0 win keys=all press at=@9,3072 want=+487C seed=1,2 bag=full lack=D7 id=bag-m047-cancel
+M047 0x210 0x0 win keys=all press at=@9,3072 want=+487C seed=1,2 bag=full menu=0 swap=2 has=D7 id=bag-m047-swap
+M139 0xc0 0x0 win keys=all press at=@3,3072 want=+1F60 seed=1,2 bag=full lack=D1 id=bag-m139-cancel
+M139 0xc0 0x0 win keys=all press at=@3,3072 want=+1F60 seed=1,2 bag=full menu=0 swap=2 has=D1 id=bag-m139-swap
+M139 0xc0 0x0 win keys=all press at=@4,3072 want=+26BC seed=1,2 bag=full menu=0 swap=2 has=D2 id=bag-m139b-swap
