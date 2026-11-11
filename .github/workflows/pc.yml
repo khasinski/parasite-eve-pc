@@ -28,7 +28,8 @@ jobs:
       - name: Build the native target
         run: |
           cmake -S . -B build -DBUILD_TESTING=ON -DPE_MODS=ON
-          cmake --build build --parallel
+          # Unbounded make -j runs the runner out of processes (posix_spawn EAGAIN) on large trees.
+          cmake --build build --parallel "$(sysctl -n hw.ncpu)"
           ctest --test-dir build --output-on-failure --no-tests=error
 
   linux:
