@@ -1,6 +1,7 @@
 # Parasite Eve
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/bQkCVvrkem)
+[![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/parasite-eve-pc)
 
 A native PC port of Parasite Eve, built from the original game code with
 [our PsyZ fork](https://github.com/khasinski/parasite-eve-psyz).
