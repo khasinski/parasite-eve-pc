@@ -112,6 +112,12 @@ int pe_hook_dispatch(int i,void *ctx) {(void)i;(void)ctx;return 0;}
 static PeCostume costumes[40];
 static const PeCostume *worn;
 static int wears, provider_loads, shows, hides, story_bank=10;
+static int abilities, mode_changes;
+int pe_styles_enabled(void) { return abilities; }
+int pe_styles_set_enabled(int on) { abilities=on!=0; ++mode_changes; return 1; }
+void pe_styles_describe(const char *key,char *out,unsigned size) {
+    snprintf(out,size,"%s (%s)",pe_style_definition(pe_style_for_costume(key))->name,abilities?"on":"off");
+}
 int pe_wardrobe_owned_count(void) {return 40;}
 const PeCostume *pe_wardrobe_owned(int k) {return k>=0&&k<40?&costumes[k]:NULL;}
 const PeCostume *pe_wardrobe_worn(void) {return worn;}
@@ -152,8 +158,12 @@ int main(void) {
     assert(s_stage.x>=156 && s_stage.w<=128 && s_info->parent->y<224);
     assert(s_members==41 && pe_current()==40 && s_screen.list->scroll_y==35);
     draw_all();assert(!wears && !provider_loads && s_stage.source.kind==PE_MODEL_SKIN);
+    send(PE_SELECT);assert(abilities && mode_changes==1 && worn==&costumes[39]);
+    send(PE_SELECT|PE_REPEAT);assert(abilities && mode_changes==1);
+    send(PE_SELECT);assert(!abilities && mode_changes==2 && !wears);
     assert(!strcmp(s_stage.source.folder,"harlequin"));
     send(PE_TRIANGLE);assert(s_stage.fullscreen);
+    send(PE_SELECT);assert(!abilities && mode_changes==2); /* preview cannot change combat mode */
     send(PE_MENU_CROSS);assert(!s_stage.fullscreen && !wears); /* fullscreen Cross only exits */
     int selected=s_screen.list->cursor_y;
     assert(s_screen.list->update==pe_screen_preview_input);

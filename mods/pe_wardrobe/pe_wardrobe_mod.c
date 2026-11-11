@@ -15,6 +15,7 @@
 #include "pe_model.h"
 #include "pe_pages.h"
 #include "pe_wardrobe.h"
+#include "pe_style.h"
 
 #define MOD_ID "pe_wardrobe"
 
@@ -48,6 +49,7 @@ const char *pe_ward_last_said(void) { return s_said[0] ? s_said : "-"; }
 
 /* ---- the mod ---- */
 static void pe_reset(void) {
+    if (pe_in_battle()) { pe_ward_say("Reset wardrobe outside battle"); return; }
     pe_ward_profile_clear();
     pe_wardrobe_reset();
     pe_ward_profile_save();
@@ -59,6 +61,7 @@ static int wardrobe_init(void) {
     pe_ward_profile_transactions_init();
     pe_service_publish("costumes", 1, &g_pe_costumes_api, MOD_ID);
     pe_wardrobe_register(MOD_ID);
+    pe_styles_register(MOD_ID);
     pe_wardrobe_menu_register(MOD_ID);
     pe_skin_register(MOD_ID);
     pe_pack_pe1_costumes_register();

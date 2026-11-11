@@ -12,6 +12,7 @@ foreach ($path in @('include','mods/host','mods/pe_wardrobe','third_party/psyz/p
     $compileArgs+='-I'; $compileArgs+=Join-Path $root $path
 }
 $compileArgs+=Join-Path $root 'tests/pe_mod_wardrobe_menu_test.c'
+$compileArgs+=Join-Path $root 'mods/pe_wardrobe/pe_style_catalog.c'
 $compileArgs+='-o'; $compileArgs+=$output
 & $compiler @compileArgs
 if ($LASTEXITCODE -ne 0) { throw 'Wardrobe menu test compilation failed.' }

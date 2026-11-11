@@ -18,6 +18,10 @@
 extern const PeMod pe_mod_pe_collection;
 extern const PeMod pe_mod_pe_wardrobe;
 
+/* This fixture isolates ownership/services, not the combat adapter. */
+void pe_styles_register(const char *mod_id) { (void)mod_id; }
+int pe_styles_enabled(void) { return 0; }
+
 Pe1GameState g_GameState;
 GameStateBlock g_GameStateBlock;
 BattleEnemySlot g_BattleEnemySlots[7];
@@ -384,6 +388,14 @@ int main(void) {
     assert(pe_wardrobe_owned_count() == 1 && pe_wardrobe_owned(0) == &s_claire && !pe_wardrobe_owned(1));
     pe_wardrobe_wear_later(&s_claire);
     assert(pe_wardrobe_worn() == &s_claire);
+    g_GameStateFlags |= 2;
+    {
+        uint32_t before_junk=s_junk;
+        assert(!shop->pick(0,msg,sizeof msg));
+        pe_wardrobe_wear_later(NULL);
+        assert(pe_wardrobe_worn()==&s_claire && s_junk==before_junk);
+    }
+    g_GameStateFlags &= ~2u;
     pe_wardrobe_wear_later(NULL);
     assert(pe_wardrobe_worn() == NULL);
 

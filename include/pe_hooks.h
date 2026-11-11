@@ -66,8 +66,43 @@ typedef enum PeHookId {
     PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
     PE_HOOK_EQUIPMENT_GUARD, /* PeHookEquipmentGuard: nonzero refuses BEFORE native mutation */
+    PE_HOOK_AT_CHARGE, /* PeHookAtCharge: eligible native AT increment, after status modifiers */
+    PE_HOOK_PLAYER_ACTION_END, /* Combatant *: previously nonempty native action queue completed */
+    PE_HOOK_PLAYER_ACTION, /* Combatant *: committed action queue, after native AT reset */
+    PE_HOOK_BATTLE_HUD, /* NULL: native battle HUD prepared, before primitive submission */
+    PE_HOOK_ENEMY_DAMAGE, /* PeHookEnemyDamage: final local loss, before enemy HP commit */
+    PE_HOOK_TARGET_PREVIEW, /* PeHookTargetPreview: selected target panel has been prepared */
+    PE_HOOK_PE_RECOVERY, /* PeHookPeRecovery: eligible native passive PE increment only */
+    PE_HOOK_ACTION_MODE, /* PeHookActionMode: valid native actor pose change */
+    PE_HOOK_PLAYER_ACTION_CANCEL, /* Combatant *: pending queue abandoned/canceled */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookPeRecovery {
+    const void *actor;
+    int current, maximum;
+    int *increment; /* 16.16 native PE units; rates/divisors stay native */
+} PeHookPeRecovery;
+typedef struct PeHookActionMode {
+    const void *actor;
+    int mode;
+} PeHookActionMode;
+
+typedef struct PeHookEnemyDamage {
+    const void *source, *target;
+    int *damage;
+    int ordinary; /* excludes PE and native instant-kill status effects */
+} PeHookEnemyDamage;
+typedef struct PeHookTargetPreview {
+    const void *object; /* RenderObjectEntity * of the selected target */
+    int mode, out_of_range;
+    int phase; /* 0 before preparation (restore prior cue), 1 after preparation */
+} PeHookTargetPreview;
+
+typedef struct PeHookAtCharge {
+    const void *actor;
+    int *increment;
+} PeHookAtCharge;
 
 typedef struct PeHookEquipmentGuard {
     int kind; /* 0 native value, 1 record, 2 Tools selections */

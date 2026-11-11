@@ -140,6 +140,7 @@ void Entity_SetActionMode(BattleEntity *arg0, int arg1) {
     if (!table || (unsigned short)mode >= 48 || table[(unsigned short)mode] == NULL)
         return;
     action = table[(unsigned short)mode];
+    PE_HOOK(PE_HOOK_ACTION_MODE, (&(PeHookActionMode){entity, mode}));
     entity->actionMode = mode;
     entity->animFrame = 0;
     entity->animPrev.fixed = 0;

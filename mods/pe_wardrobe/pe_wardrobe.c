@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "pe_wardrobe.h"
+#include "pe_style.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -152,6 +153,7 @@ static int pe_needs_reload(const PeCostume *c) {
 
 static void pe_set_worn(const PeCostume *c, int now) {
     char msg[96];
+    if (pe_in_battle()) { pe_ward_say("Change costumes outside battle"); return; }
     const int reload = pe_needs_reload(c);
     pe_ward_profile_set_worn(c ? c->key : "");
     pe_ward_profile_save();
@@ -232,6 +234,11 @@ static void pe_filter(void) {
 
 static unsigned pe_count(void) { pe_filter(); return s_count ? (unsigned)s_count : 1u; }
 
+const PeCostume *pe_wardrobe_browsed(void) {
+    pe_filter();
+    return s_count ? s_costume[s_list[s_sel]] : NULL;
+}
+
 static const char *pe_state_name(const PeCostume *c) {
     if (pe_worn() == c) return "worn";
     if (pe_ward_profile_owned(c->key) || !c->price) return "owned";
@@ -251,6 +258,7 @@ static const char *pe_name(unsigned n) {
 }
 
 static void pe_accept(void) {
+    if (pe_in_battle()) { pe_ward_say("Change costumes outside battle"); return; }
     const PeCostume *c;
     char msg[96];
     pe_filter();
@@ -299,6 +307,7 @@ static int pe_ward_state(int k) {
 static int pe_ward_pick(int k, char *msg, size_t size) {   /* buy if needed, then wear (from the next room) */
     int own;
     const PeCostume *c = pe_ward_costume(k, &own);
+    if (pe_in_battle()) { snprintf(msg,size,"Change costumes outside battle"); return 0; }
     if (!own && !c) return 0;
     if (c && !pe_buy(c, msg, size)) return 0;
     pe_set_worn(c, 0);
@@ -312,6 +321,7 @@ static int pe_ward_pick(int k, char *msg, size_t size) {   /* buy if needed, the
 static int pe_ward_preview(int k, PeModelSource *src) {
     int own;
     const PeCostume *c = pe_ward_costume(k, &own);
+
     if (!own && !c) return 0;
     if (c && c->bank < 0 && (c->load || !c->bundle || !*c->bundle)) return 0;
     memset(src, 0, sizeof *src);
@@ -346,6 +356,7 @@ const PeCostume *pe_wardrobe_owned(int k) {
 const PeCostume *pe_wardrobe_worn(void) { return pe_worn(); }
 
 void pe_wardrobe_wear_later(const PeCostume *c) {
+    if (pe_in_battle()) { pe_ward_say("Change costumes outside battle"); return; }
     s_reload_after_menu = pe_needs_reload(c);        /* a skin goes in by itself as the menu closes */
     pe_set_worn(c, 0);
 }
@@ -391,6 +402,7 @@ static void pe_unlock_all(void) {
     pe_ward_say(msg);
 }
 static void pe_lock_all(void) {
+    if (pe_in_battle()) { pe_ward_say("Change costume ownership outside battle"); return; }
     int locked = 0;
     if (pe_find(pe_ward_profile_worn()) >= 0) pe_set_worn(NULL, 1);
     for (int i = 0; i < s_costumes; ++i)
@@ -422,5 +434,5 @@ void pe_wardrobe_register(const char *mod_id) {
 
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 #include "pe_checkpoint_collection.h"
-int pe_wardrobe_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){if(s_checkpoint_epoch==UINT32_MAX||s_loaded||s_reload_after_menu)return 0;if(apply&&(!in||!pe_wardrobe_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_costumes,0,PE_MAX_COSTUMES,1);PE_CK_S(w,s_event,-1,INT_MAX,1);PE_CK_S(w,s_room_bank,-1,255,1);return w.ok&&w.at==16;}
+int pe_wardrobe_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){if(pe_styles_enabled()||s_checkpoint_epoch==UINT32_MAX||s_loaded||s_reload_after_menu)return 0;if(apply&&(!in||!pe_wardrobe_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_costumes,0,PE_MAX_COSTUMES,1);PE_CK_S(w,s_event,-1,INT_MAX,1);PE_CK_S(w,s_room_bank,-1,255,1);return w.ok&&w.at==16;}
 #endif

@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "pe_wardrobe.h"
+#include "pe_style.h"
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
@@ -29,6 +30,7 @@
 #define PE_RIGHT 0x2000u
 #define PE_TRIANGLE 0x10u
 #define PE_SQUARE 0x80u
+#define PE_SELECT 0x100u
 #define PE_PRESS 0x20u
 #define PE_REPEAT 0x20000u
 
@@ -123,10 +125,14 @@ static void pe_info_row(int row) {
     int index = pe_current();
     const PeCostume *c = pe_costume(index);
     const char *line = "";
+    char label[48];
     if (index < 0) return;
     if (row == 0) line = c ? c->name : "Aya's own clothes";
     if (row == 1) line = pe_wardrobe_worn() == c ? "Worn" : "X: Wear this outfit";
-    if (row == 2) line = s_preview ? "Triangle: Full view" : "Preview unavailable";
+    if (row == 2) {
+        pe_styles_describe(c ? c->key : NULL, label, sizeof label);
+        line = label;
+    }
     static const unsigned caps[3] = {28, 24, 20};
     pe_print(line, s_info->draw_state - 4, caps[row]);
 }
@@ -155,6 +161,13 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
         pe_stage_fullscreen(&s_stage, 0); Menu_PlayCancelSound(); return 1;
     }
     if (buttons & PE_MENU_CIRCLE) { pe_close(); Menu_PlayCancelSound(); return 1; }
+    if (buttons & PE_SELECT) {
+        if (buttons & PE_REPEAT) return 1;
+        if (s_stage.fullscreen || !pe_styles_set_enabled(!pe_styles_enabled())) { Menu_PlayErrorSound(); return 1; }
+        snprintf(s_note, sizeof s_note, "%s", pe_styles_enabled() ? "Costume abilities on" : "Vanilla combat: abilities off");
+        s_note_tick = s_tick;
+        Menu_PlayConfirmSound(); return 1;
+    }
     if (buttons & PE_PRESS) return 1;
     if (buttons & PE_MENU_CROSS) {
         if (index < 0 || (index > 0 && !c) || pe_wardrobe_worn() == c) { Menu_PlayErrorSound(); return 1; }
@@ -177,12 +190,17 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
 
 static int pe_on_help_text(void *ctx, void *user) {
     char line[160];
+    const PeCostume *c = pe_costume(pe_current());
+    const PeStyleDef *style = pe_style_definition(pe_style_for_costume(c ? c->key : NULL));
     size_t n;
     (void)user;
     if (!s_screen.list || MenuWidget_GetCurrentNode() != s_screen.list) return 0;
     if (s_tick - s_note_tick < 150) snprintf(line, sizeof line, "%s", s_note);
-    else if ((s_tick / 150) % 3 == 1) snprintf(line, sizeof line, "%s", "L1 R1: Group   Left Right: Turn");
-    else if ((s_tick / 150) % 3 == 2) snprintf(line, sizeof line, "%s", "X: Wear   Square: Pause   Circle: Back");
+    else if ((s_tick / 150) % 6 == 1) snprintf(line, sizeof line, "%s", "L1 R1: Group   Left Right: Turn");
+    else if ((s_tick / 150) % 6 == 2) snprintf(line, sizeof line, "%s", style->implemented ? style->benefit : "Style coming later: vanilla combat");
+    else if ((s_tick / 150) % 6 == 3) snprintf(line, sizeof line, "%s", style->implemented ? style->limitation : "This outfit currently has no ability");
+    else if ((s_tick / 150) % 6 == 4) snprintf(line, sizeof line, "%s", "Select: Toggle costume abilities");
+    else if ((s_tick / 150) % 6 == 5) snprintf(line, sizeof line, "%s", "X: Wear   Square: Pause   Circle: Back");
     else snprintf(line, sizeof line, "%s   %d outfits   X: Wear", s_group[s_category], s_members);
     pe_text_from_ascii(s_text, sizeof s_text, line);
     n = 0;
