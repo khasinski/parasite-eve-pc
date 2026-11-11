@@ -116,6 +116,11 @@ void pe_log(const char *tag, const char *fmt, ...) {
 
 int pe_mod_interactive(void) { return s_interactive; }
 
+static int s_save_committed_event = -1;
+static void pe_announce_save_committed(const char *path) {
+    if (s_save_committed_event >= 0) pe_event_emit(s_save_committed_event, (void *)path);
+}
+
 /* ---- what mod code is running, for crash reports ----
  * Each call into a mod (start, shutdown, a hook or event handler, a per-frame tick, an F1 row)
  * is marked here, innermost last: two stores per call. */
@@ -425,6 +430,8 @@ static void pe_host_start(const PeHookInit *init) {
     pe_service_publish("catalog_entries",1,&g_pe_catalog_entries_api,NULL);
     pe_service_publish("economy_shop",1,&g_pe_economy_shop_api,NULL);
     pe_service_publish("economy_policy",1,&g_pe_economy_policy_api,NULL);
+    s_save_committed_event = pe_event_id(PE_EVENT_SAVE_COMMITTED);
+    pe_save_committed_listener = pe_announce_save_committed;
     pe_start_mods();
     if (s_all_on) {                              /* off: nothing but F1 touches the game */
         pe_main_menu_init();

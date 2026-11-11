@@ -55,6 +55,13 @@ endif()
 add_subdirectory(${PSYZ_DIR}/psyz ${CMAKE_CURRENT_BINARY_DIR}/psyz)
 target_compile_definitions(psyz PRIVATE __psyz)
 
+# CHD disc images are read with libchdr (BSD-3-Clause, with its bundled lzma, zstd,
+# miniz and dr_flac), vendored in third_party/libchdr. Linking it through psyz gives
+# every target that links the disc reader the library and its headers.
+set(CHDR_WANT_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/libchdr EXCLUDE_FROM_ALL)
+target_link_libraries(psyz PUBLIC chdr-static)
+
 # The original actor/task workspaces are shared by distinct layout views.
 # Preserve those accesses instead of assuming different struct tags cannot alias.
 # Set this after configuring PsyZ: its SDK/SDL targets retain their own options.
@@ -122,6 +129,10 @@ add_library(pe_download_zip STATIC ${pe_zip_SOURCE_DIR}/miniz.c ${pe_zip_SOURCE_
     ${pe_zip_SOURCE_DIR}/miniz_tinfl.c ${pe_zip_SOURCE_DIR}/miniz_tdef.c)
 target_include_directories(pe_download_zip PUBLIC ${pe_zip_SOURCE_DIR} ${pe_zip_BINARY_DIR})
 target_compile_definitions(pe_download_zip PUBLIC MINIZ_NO_ZLIB_COMPATIBLE_NAMES)
+# -std=c11 hides fseeko/ftello, which miniz needs; GCC 14 and newer reject the implicit declaration.
+if(NOT WIN32)
+    target_compile_definitions(pe_download_zip PRIVATE _POSIX_C_SOURCE=200809L)
+endif()
 target_link_libraries(pe_download_deps INTERFACE pe_download_json pe_download_zip)
 if(APPLE)
     target_link_libraries(pe_download_deps INTERFACE "-lcurl")
@@ -492,6 +503,14 @@ function(pe_add_common_unit_test target_name test_name source_file)
 endfunction()
 
 if(BUILD_TESTING)
+    add_executable(test-skin-collision tests/pe_skin_collision_test.c)
+    if(MSVC)
+        target_compile_options(test-skin-collision PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-skin-collision PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME wardrobe-skin-collision COMMAND test-skin-collision)
+
     add_executable(test-menu-call-abi tests/original_menu_call_abi.c
         src/main/menu/lists.c src/main/menu/widget.c src/main/item/swap.c
         src/main/psyq/libds/dssys_3.c)

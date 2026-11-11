@@ -69,7 +69,7 @@ static int StateIdentity(PeStateIdentity *identity){
         if(disc.sector_size!=2352||total<2352){snprintf(s_state_identity_error,sizeof s_state_identity_error,"Disc %u is not a supported raw BIN image; check System",slot+1);ok=0;pe_disc_close(&disc);break;}
         PeDiscFile first={.sector=0,.size=2352};if(!pe_disc_read_raw(&disc,&first,0,buffer)){snprintf(s_state_identity_error,sizeof s_state_identity_error,"Could not read Disc %u; check its file and USB connection",slot+1);ok=0;pe_disc_close(&disc);break;}
         pe_sha256_update(&sha,buffer,2352);uint64_t done=2352,next=0;
-        while(done<total){size_t want=(size_t)((total-done)>65536?65536:(total-done));if(fread(buffer,1,want,disc.stream)!=want){snprintf(s_state_identity_error,sizeof s_state_identity_error,"Disc %u read stopped before verification finished; check its file and USB connection",slot+1);ok=0;break;}pe_sha256_update(&sha,buffer,want);done+=want;
+        while(done<total){size_t want=(size_t)((total-done)>65536?65536:(total-done));if(!pe_disc_read_image(&disc,disc.track_offset+done,buffer,want)){snprintf(s_state_identity_error,sizeof s_state_identity_error,"Disc %u read stopped before verification finished; check its file and USB connection",slot+1);ok=0;break;}pe_sha256_update(&sha,buffer,want);done+=want;
             if(done>=next){next=done+1024*1024;s_install.done=done;s_install.total=total;snprintf(s_install.status,sizeof s_install.status,"Checking disc %u identity; Circle cancels",slot+1);s_overlayState.dirty=1;InstallFrame();if(s_install.cancel){snprintf(s_state_identity_error,sizeof s_state_identity_error,"Disc verification cancelled; nothing queued");ok=0;break;}}
         }pe_disc_close(&disc);
     }
