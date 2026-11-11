@@ -225,7 +225,10 @@ if(BUILD_TESTING AND "pe_randomizer" IN_LIST PE_MOD_LIST)
     target_include_directories(test-mod-randomizer-rooms PRIVATE ${PROJECT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
     target_compile_definitions(test-mod-randomizer-rooms PRIVATE __psyz PE_MODS=1)
-    target_link_libraries(test-mod-randomizer-rooms PRIVATE psyz pe_download_deps)
+    target_link_libraries(test-mod-randomizer-rooms PRIVATE psyz)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)   # the wardrobe's pack reader, started with the mods
+        target_link_libraries(test-mod-randomizer-rooms PRIVATE pe_download_json pe_download_zip)
+    endif()
     # Second file: the randomizer's spot table against the walk (sites, and the GiveItems it leaves alone).
     # Third: actor models, VRAM words and TIM rectangles (battle rando model swap).
     add_test(NAME mod-randomizer-rooms COMMAND test-mod-randomizer-rooms
@@ -248,7 +251,10 @@ if(BUILD_TESTING AND "pe_randomizer" IN_LIST PE_MOD_LIST)
     target_include_directories(test-mod-randomizer-exits PRIVATE ${PROJECT_SOURCE_DIR}/include
         "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
     target_compile_definitions(test-mod-randomizer-exits PRIVATE __psyz PE_MODS=1)
-    target_link_libraries(test-mod-randomizer-exits PRIVATE psyz pe_download_deps)
+    target_link_libraries(test-mod-randomizer-exits PRIVATE psyz)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)   # the wardrobe's pack reader, started with the mods
+        target_link_libraries(test-mod-randomizer-exits PRIVATE pe_download_json pe_download_zip)
+    endif()
     add_test(NAME mod-randomizer-exits COMMAND test-mod-randomizer-exits
         "${CMAKE_CURRENT_BINARY_DIR}/randomizer-exits.txt")
     # Only the summary line counts as a pass: a run cut short with exit code 0 must fail.
@@ -270,6 +276,9 @@ if(BUILD_TESTING AND "pe_randomizer" IN_LIST PE_MOD_LIST)
         ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
     target_compile_definitions(test-mod-randomizer-models PRIVATE __psyz PE_MODS=1)
     target_link_libraries(test-mod-randomizer-models PRIVATE psyz)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)   # the wardrobe's pack reader, started with the mods
+        target_link_libraries(test-mod-randomizer-models PRIVATE pe_download_json pe_download_zip)
+    endif()
     add_test(NAME mod-randomizer-models COMMAND test-mod-randomizer-models
         "${CMAKE_CURRENT_BINARY_DIR}/randomizer-models-swap.txt")
     set_tests_properties(mod-randomizer-models PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
