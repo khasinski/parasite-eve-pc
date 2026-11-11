@@ -1,0 +1,2 @@
+# mod-randomizer-foepairs (tools/foeruns.py --pairs --known): allowed swaps whose fights fail headless, not fixed yet.
+# One per line: M005<M418:3  # the reason. (none)

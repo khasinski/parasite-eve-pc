@@ -16,7 +16,7 @@
  * kit, and would turn the item a chest keeps for the player into the seed's item. A room whose
  * script isn't byte for byte what the table expects stays vanilla.
  *
- * Enemies (not in F1 for now, on top of the items, same seed): the seed's foe plan
+ * Enemies (F1 > Randomizer > Randomize enemies, on top of the items, same seed): the seed's foe plan
  * (pe_rand_foes_generate) goes into the model and AI switches, which give each moved slot its foe's model,
  * animations and script at every load of its room; the foe's own script sets its stats. Bosses take bosses.
  * The game keeps whether it was started with enemies on (the "pe_randomizer.foes" record). */
@@ -67,12 +67,11 @@ _Static_assert(sizeof(PeRandFoesRun) == 4, "the saved record's layout");
 static PeRandFoesRun s_foes_run;
 static int s_foes_enabled;
 
-/* New games use the Hard rules with enemies off for now: F1 has no rows for these, and the player is told of no
- * difficulty. Saves started on Easy or Medium keep theirs. Only the run test sets them, to keep the rest checked
- * (difficulty -1: what a player gets). */
-void pe_rand_test_options(int difficulty, int enemies) {
+/* New games use the Hard rules for now: F1 has no row for the difficulty, and the player is told of none. Saves
+ * started on Easy or Medium keep theirs. Only the run test sets one, to keep the rest checked (-1: what a player
+ * gets). */
+void pe_rand_test_options(int difficulty) {
     if (difficulty >= 0) s_difficulty = difficulty;
-    s_foes_enabled = enemies;
 }
 static uint16_t s_plan[PE_RAND_FOES];
 static unsigned s_plan_moved;
@@ -745,6 +744,9 @@ static int pe_rand_init(void) {
     pe_menu_register_digits(0, "Seed", "Six digits: the same seed gives the same items. Enter types a seed, "
                             "C copies it to share.", &s_seed, 6);
     pe_menu_register_action(0, "Random seed", "Pick a new seed.", pe_rand_random_seed);
+    pe_menu_register_toggle(0, "Randomize enemies", "New Game also shuffles enemies with the same seed: each takes another "
+                            "enemy's model and moves, from any day, and keeps the strength of the one it replaces. "
+                            "Bosses stay as they are. Off: items only.", &s_foes_enabled, NULL);
     pe_menu_register_info(0, "This game", "The seed this game was started with. F1 changes only reach the next New Game.",
                           pe_rand_run_text);
     pe_menu_begin(0);

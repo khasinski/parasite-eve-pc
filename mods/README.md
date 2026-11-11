@@ -838,20 +838,23 @@ layout and F1 changes only reach the next New Game. A save from another logic or
 its record but plays vanilla, with a message. Every game writes `randomizer-<seed>.txt` (the
 spoiler) beside the preferences: where each key item is now, Hard's ways back, then every changed spot.
 
-Randomize enemies is out of F1 for now: it isn't ready, and new games leave enemies alone. Saves
-already started with it keep their enemies. The code and its checks stay: with it on, the same seed also
+F1 > Randomizer > Randomize enemies (off by default), set before New Game: the same seed also
 shuffles enemies. Each of 259 enemy slots (`pe_rand_foes.h`, written by `tools/enemyai.py --table`)
 takes another enemy's model, animations and script, so its moves and stats too, from any day. Boss
 fights stay vanilla for now (`PE_RAND_MOVE_BOSSES` 0; with 1, bosses only take bosses). M013's scripted
 Rat fight takes a normal enemy too: the room spawns it with the sub id that enemy's script needs to start
-its battle (`pe_rand_ai.c`). Left out: enemies whose own script sets a story flag, multi-part bosses whose parts
+its battle (`pe_rand_ai.c`). An enemy's script carries its own room (floor polygons, the points it hops or
+flies to, the floor's height): in the copy these go from that room's battle floor onto a box inside the
+slot's, so it stays in the room it fights in. Left out: enemies whose own script sets a story flag, multi-part bosses whose parts
 call each other, and swaps whose fights fail headless (`tools/foe-deny.txt`). The plan
 (`pe_rand_foes_generate`) goes into the model and AI switches, which swap at each load of a room. The
 game keeps the choice in the `pe_randomizer.foes` record with `PE_RAND_FOES_VERSION`; a save from
 another version plays its enemies vanilla, with a message. The spoiler gets an Enemies section. Checks:
 the unit test (every seed's plan), `mod-randomizer-models` (10 seeds' plans through the real switches),
-`mod-randomizer-foefights` (seeds 1-3, every reachable fight won headless) and `mod-randomizer-foegame`
-(the F1 option end to end through New Game).
+`mod-randomizer-foefights` (seeds 1-3, every reachable fight won headless), `mod-randomizer-foegame`
+(the F1 option end to end through New Game) and `mod-randomizer-realfights` (the same lines through the
+real battle code, headless: each fight has to be won with no enemy off the room's floor; lines known to
+end otherwise are in `tools/realfights-known.txt`).
 
 Randomized play is the original game plus this mod only, and Always run. The on/off toggle applies at the next start:
 with it on, the randomizer runs alone (`pe_mod_run_alone`) and no other mod starts; with it off,

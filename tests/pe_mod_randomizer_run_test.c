@@ -109,8 +109,8 @@
  * actors spawn. The line then ends in ai=5<M012:5, aisteps=<e5:N: steps actor 5 ran in the given script,
  * outside the room's own task block> and pm=<script slots the hook installed>. It fails when the script wasn't
  * given, the actor ran none of it, or a win line won no battle.
- * foes (gate lines; then every gate line of the file has it): the mod host starts with enemies on (players have
- * no such row: checked at every gate start, then set past it through pe_rand_test_options), and
+ * foes (gate lines; then every gate line of the file has it): the mod host starts with F1's Randomize enemies on
+ * (the row a player sets, read from the ini; every gate start checks the row is there and holds the line's value), and
  * the line keeps the swaps the mod's own New Game put in (this seed's foe plan) instead of forcing its ai=. Every
  * actor of the room the plan moves (pe_rand_foes_generate here, same seed) must have been given a script, and
  * no other; the line's ai= list (the moved actors that fight there) is checked as above.
@@ -556,7 +556,7 @@ struct Run {
 };
 
 /* Gate lines: the mod host, started once for the first gate line's seed, its files in gate_dir. */
-void pe_rand_test_options(int difficulty, int enemies);
+void pe_rand_test_options(int difficulty);
 static char gate_dir[1100];
 static int gate_started, gate_difficulty, gate_foes; static u32 gate_seed;
 static int start_gate(const Run *r) {
@@ -566,17 +566,23 @@ static int start_gate(const Run *r) {
     if (!*gate_dir || !SDL_CreateDirectory(gate_dir)) return 0;
     snprintf(path, sizeof(path), "%s/pe_mods.ini", gate_dir);
     if (!(f = fopen(path, "w"))) return 0;
-    fprintf(f, "Manage mods/All mods=1\nManage mods/Randomizer=1\nRandomizer/Randomize new games=1\nRandomizer/Seed=%u\n", r->seed);
+    fprintf(f, "Manage mods/All mods=1\nManage mods/Randomizer=1\nRandomizer/Randomize new games=1\nRandomizer/Randomize enemies=%d\n"
+            "Randomizer/Seed=%u\n", r->foes, r->seed);
     fclose(f);
     snprintf(path, sizeof(path), "%s/prefs", gate_dir);   /* only its folder is used */
     PE_HOOK(PE_HOOK_INIT, (&(PeHookInit){0, path}));
+    int foes_row = 0;
     for (int i = 0; i < pe_menu_row_count(); ++i) {   /* not the Economy page's own Difficulty */
         const PeMenuRow *row = pe_menu_row(i);
-        if (!strcmp(row->page, "Randomizer") && (!strcmp(row->label, "Randomize enemies") || !strcmp(row->label, "Difficulty")))
-            FAIL("F1 still has a %s row", row->label);
+        if (strcmp(row->page, "Randomizer")) continue;
+        if (!strcmp(row->label, "Difficulty")) FAIL("F1 still has a Difficulty row");
+        if (strcmp(row->label, "Randomize enemies")) continue;
+        foes_row = 1;
+        if (!row->value || !!*row->value != !!r->foes) FAIL("Randomize enemies isn't the line's %d", r->foes);
     }
+    if (!foes_row) FAIL("no Randomize enemies row");
     /* a Hard line takes what a player's New Game gets: its layout only matches when that is the Hard rules */
-    pe_rand_test_options(r->difficulty == PE_RAND_HARD ? -1 : r->difficulty, r->foes);
+    pe_rand_test_options(r->difficulty == PE_RAND_HARD ? -1 : r->difficulty);
     gate_started = 1; gate_seed = r->seed; gate_difficulty = r->difficulty; gate_foes = r->foes;
     return 1;
 }
@@ -654,6 +660,7 @@ static int parse_run(char *line, Run *r) {
         if (!strncmp(tok, "lack=", 5)) { if (r->nlack == 4) return 0; r->lack[r->nlack++] = (u32)strtoul(tok + 5, NULL, 16); continue; }
         if (!strncmp(tok, "menu=", 5)) { r->has_menu = 1; r->menu = atoi(tok + 5); continue; }
         if (!strcmp(tok, "win")) { r->win = 1; continue; }
+        if (!strcmp(tok, "real")) continue;   /* a real-fight line (PE_RUN_REAL): see do_real */
         if (!strcmp(tok, "stats")) { r->stats = 1; continue; }
         if (!strncmp(tok, "force=", 6)) {
             unsigned to, room, from;
@@ -1062,21 +1069,339 @@ static void do_run(const Run *r, FILE *out) {
     fputc('\n', out);
 }
 
+/* ---- Real fights (PE_RUN_REAL set): each runs line plays its room in the game's own frame loop ----
+ * Everything above runs room scripts with models, animation, sound and the battle code left out, so a
+ * fight there is only its script's side. Here the test does what main() does for a new game, minus the
+ * title screen, and then calls Boot_RunFrame on the line's room: models load, the battle starts through
+ * op 85, and Battle_Update, the enemies' AI, hits and deaths are the game's. The test's own frame hook
+ * walks Aya through the line's at= stops until a battle starts, then presses the attack button until it
+ * is over; her HP is topped up every frame so a fight always runs to its end.
+ * A line: M013 0x0 0x0 real gate foes seed=123456,2 [at=x,z ...] [ai=E<Mroom:e ...] [id=...]
+ * One output line per runs line:
+ *   real M013 end=<won|nofight|stuck|dead> start=F over=F frames=N foes=<slot:type:first HP>last HP,...>
+ *        hit=<Aya's biggest single loss> taken=<all she lost> shots=<frames a foe lost HP> id=...
+ * Fails: no battle started, a battle not over after REAL_LIMIT frames (the foes left are named, and
+ * whether they ever lost HP). A frame that never ends is caught by a watchdog thread, which names the
+ * runs line and the game thread's stack (pe_stall_stack.c) and exits 3; a crash exits as it does:
+ * either way the output file's last line names the line before, and argv[3] restarts after it. */
+enum { REAL_LIMIT = 5400, REAL_AFTER = 90, REAL_NOFIGHT = 900 };
+extern int g_SceneDispatchCur;
+int pe_hook_add(int id, int (*fn)(void *ctx, void *user), void *user, int priority, const char *mod_id);
+void pe_stall_stack_init(void); void pe_stall_stack_print(FILE *out);
+static struct {
+    const Run *r; unsigned line;
+    unsigned frame; int start, over, done, mode;
+    int slot_type[7], slot_first[7], slot_last[7], slot_low[7], slot_seen[7], slot_hurt[7];
+    int aya_prev, hit, taken, shots, cut, placed, still, still_x, still_z, moved, rounds;
+    int boxed, box[4], out, out_type, out_sub, out_x, out_z, out_frame;
+} rl;
+enum { REAL_OUT = 1500 };
+/* PE_RUN_REAL_KNOWN: a file of "<line id> <end>" lines (# comments): real lines known to end that way. Such a
+ * line passes with that end and fails with any other, so a fixed one has to leave the file. */
+static struct { char id[48], end[16]; } real_known[64];
+static unsigned real_known_count;
+static void real_known_load(void) {
+    const char *path = getenv("PE_RUN_REAL_KNOWN");
+    FILE *in = path && *path ? fopen(path, "r") : NULL;
+    char line[256];
+    while (in && fgets(line, sizeof(line), in) && real_known_count < 64)
+        if (line[0] != '#' && sscanf(line, "%47s %15s", real_known[real_known_count].id, real_known[real_known_count].end) == 2) ++real_known_count;
+    if (in) fclose(in);
+    else if (path && *path) { fprintf(stderr, "PE_RUN_REAL_KNOWN: %s can't be read\n", path); ++failures; }
+}
+static volatile unsigned real_beat;
+static void real_where(void);
+void Spu_Shutdown(void);
+
+/* A frame that never ends leaves nothing to read: name the line and where the game's thread is, then stop. */
+static int real_watch(void *unused) {
+    (void)unused;
+    unsigned seen = real_beat, still = 0;
+    for (;;) {
+        SDL_Delay(250);
+        if (real_beat != seen) { seen = real_beat; still = 0; continue; }
+        if (++still < 20) continue;
+        fprintf(stderr, "real: STALL runs line %u (M%03u %s) frame %u, battle %s: ", rl.line, rl.r ? rl.r->room : 0, rl.r ? rl.r->id : "",
+                rl.frame, rl.start < 0 ? "not started" : rl.over < 0 ? "on" : "over");
+        pe_stall_stack_print(stderr);
+        fputc('\n', stderr); fflush(stderr); _Exit(3);
+    }
+    return 0;
+}
+
+static int real_in_battle(void) { return (g_GameStateFlags & 2) != 0; }
+static int real_on_floor(int x, int z) {
+    unsigned n = g_CollisionDb ? g_CollisionDb->triangleCount : 0;
+    for (unsigned i = 0; i < n; ++i) if (Geo_PointInTri(tri_at(i), (s16)x, (s16)z)) return 1;
+    return 0;
+}
+
+static int real_pad(void *ctx, void *user) {
+    (void)ctx; (void)user;
+    /* the attack button (Cross): down 2 frames in every 12 while a battle is on */
+    u16 down = rl.r && !rl.done && real_in_battle() && rl.frame % 12 < 2 ? 0x4000 : 0;
+    g_PadPackets[0].header = 0x4000; g_PadPackets[0].buttons = (u16)~down;
+    return 0;
+}
+
+static int real_frame(void *ctx, void *user) {
+    (void)ctx; (void)user;
+    const Run *r = rl.r;
+    ++real_beat;
+    if (!r || rl.done) return 0;
+    unsigned frame = ++rl.frame;
+    FieldActor *aya = g_PlayerEntity;
+    Combatant *me = aya ? (Combatant *)aya->state : NULL;
+    if (rl.start < 0 && real_in_battle()) rl.start = (int)frame;
+    if (rl.start >= 0 && rl.over < 0 && !real_in_battle()) rl.over = (int)frame;
+    if (rl.start < 0 && r->at && frame >= AT_FRAME && aya) {   /* her stops, in turn, then the last one */
+        unsigned stop = (frame - AT_FRAME) / AT_FRAMES;
+        if (stop >= (unsigned)r->at) stop = (unsigned)r->at - 1;
+        if (r->at_actor[stop] < 0) {
+            aya->pos_x = aya->base_x = r->at_x[stop] << 16; aya->pos_z = aya->base_z = r->at_z[stop] << 16;
+            /* the floor triangle under the stop: without it every later step of hers is rolled back (the battle's walk-in never arrives) */
+            Entity_FindFloor((struct BattleEntity *)aya);
+            aya->base_y = aya->pos_y;
+        }
+        aya->rot_y = (short)r->at_angle[stop];
+    }
+    if (rl.start >= 0 && rl.over < 0) {
+        for (int i = 0; i < 7; ++i) {
+            BattleEnemySlot *slot = &g_BattleEnemySlots[i];
+            if (!slot->active) continue;
+            int hp = (int)slot->combatant.hp;
+            if (!rl.slot_seen[i]) { rl.slot_seen[i] = 1; rl.slot_type[i] = slot->combatant.lowAndEntityId.bytes.entityId; rl.slot_first[i] = rl.slot_low[i] = rl.slot_hurt[i] = hp; }
+            else if (hp < rl.slot_last[i]) {
+                ++rl.shots;
+                /* her first hit on a foe is the game's own number; the rest of its HP is cut so her next hit kills it */
+                if (rl.slot_hurt[i] == rl.slot_first[i]) { rl.slot_hurt[i] = hp; if (hp > 1) { slot->combatant.hp = hp = 1; ++rl.cut; } }
+            }
+            if (rl.slot_hurt[i] != rl.slot_first[i] && hp > 1) slot->combatant.hp = hp = 1;   /* a foe that heals: cut again */
+            rl.slot_last[i] = hp;
+            if (hp < rl.slot_low[i]) rl.slot_low[i] = hp;
+        }
+        /* A foe far outside the room's floor (REAL_OUT units past its box) is one a player can't walk to:
+         * a moved foe whose script sends it to places of its own room. The first one is kept for the line. */
+        if (!rl.boxed) {
+            unsigned n = g_CollisionDb ? g_CollisionDb->triangleCount : 0;
+            for (unsigned i = 0; i < n; ++i)
+                for (int c = 0; c < 3; ++c) {
+                    s16 x, z; tri_corner(i, c, &x, &z);
+                    if (!rl.boxed || x < rl.box[0]) rl.box[0] = x;
+                    if (!rl.boxed || x > rl.box[1]) rl.box[1] = x;
+                    if (!rl.boxed || z < rl.box[2]) rl.box[2] = z;
+                    if (!rl.boxed || z > rl.box[3]) rl.box[3] = z;
+                    rl.boxed = 1;
+                }
+        }
+        for (FieldActor *a = g_FieldActorListHead; a && rl.boxed && !rl.out; a = a->next) {
+            if (a == aya || !a->state || (a->flags & 0x10) || ((EnemyCombatant *)a->state)->hp <= 0) continue;
+            int x = a->pos_x >> 16, z = a->pos_z >> 16;
+            if (x < rl.box[0] - REAL_OUT || x > rl.box[1] + REAL_OUT || z < rl.box[2] - REAL_OUT || z > rl.box[3] + REAL_OUT) {
+                rl.out = 1; rl.out_type = a->type_id; rl.out_sub = a->sub_id; rl.out_x = x; rl.out_z = z; rl.out_frame = (int)frame;
+            }
+        }
+        /* The room walks her to her battle spot before it lets the fight go (battle state 7). From the line's stop
+         * that straight walk can run into a wall, where a player would have come in by the door: after a second
+         * without a step she is put on the walk's end. */
+        if (aya && g_BattleModeState == 7 && aya->pos_x == rl.still_x && aya->pos_z == rl.still_z) {
+            if (++rl.still >= 60)
+                for (int i = 0; i < 3 && rl.still; ++i)
+                    for (ScriptNode *n = aya->script_node_lists[i]; n; n = n->next)
+                        if ((n->flags & 0x20) && n->current.script && (n->current.script[0] & 0x1FFF) == 68) {
+                            aya->pos_x = aya->base_x = n->target14; aya->pos_z = aya->base_z = n->target18.coordinate;
+                            Entity_FindFloor((struct BattleEntity *)aya);
+                            aya->base_y = aya->pos_y;
+                            ++rl.placed; rl.still = 0; break;
+                        }
+        } else if (aya) { rl.still = 0; rl.still_x = aya->pos_x; rl.still_z = aya->pos_z; }
+        /* Her turn is ready and the nearest foe is out of her gun's range, where a player would walk up to it:
+         * she is put on the floor at half her range from it (on her side of it if the floor is there, else around it). */
+        if (aya && me && me->action && g_BattleModeState == 0 && me->atb >= 9000 && frame % 30 == 0) {
+            int ax = aya->pos_x >> 16, az = aya->pos_z >> 16, range = me->action->range, fx = 0, fz = 0;
+            long long best = -1;
+            for (FieldActor *a = g_FieldActorListHead; a; a = a->next) {
+                if (a == aya || !a->state || (a->flags & 0x10) || ((EnemyCombatant *)a->state)->hp <= 0) continue;
+                long long dx = (a->pos_x >> 16) - ax, dz = (a->pos_z >> 16) - az, d2 = dx * dx + dz * dz;
+                if (best < 0 || d2 < best) { best = d2; fx = a->pos_x >> 16; fz = a->pos_z >> 16; }
+            }
+            if (best >= 0 && range > 0 && best * 16 > (long long)range * range * 9) {   /* further than 3/4 of her range */
+                int d = 1, want = range / 2;
+                while ((long long)d * d < best) ++d;
+                static const int ring[8][2] = { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { -1, -1 }, { 1, -1 } };
+                for (int k = 0; k < 11; ++k) {
+                    int w = k == 0 ? want : k == 1 ? want / 2 : k == 2 ? want * 3 / 2 : want * (k < 7 ? 1 : 0) + (k >= 7 ? want * 7 / 10 : 0);
+                    int px = k < 3 ? fx + (ax - fx) * w / d : fx + ring[k - 3][0] * w, pz = k < 3 ? fz + (az - fz) * w / d : fz + ring[k - 3][1] * w;
+                    if (!real_on_floor(px, pz)) continue;
+                    aya->pos_x = aya->base_x = px << 16; aya->pos_z = aya->base_z = pz << 16;
+                    Entity_FindFloor((struct BattleEntity *)aya);
+                    aya->base_y = aya->pos_y;
+                    ++rl.moved; break;
+                }
+            }
+        }
+        /* The gun's loaded rounds as the fight found them: a new game's bullets don't last a long fight. */
+        if (me && me->action) {
+            unsigned rounds = me->action->attackWord & 0x3FF;
+            if (!rl.rounds) rl.rounds = (int)rounds;
+            else if (g_BattleModeState == 0 && rounds < (unsigned)rl.rounds) me->action->attackWord = (me->action->attackWord & ~0x3FFu) | (unsigned)rl.rounds;
+        }
+    }
+    if (trace && rl.start >= 0 && rl.over < 0 && (frame % 300 == 0 || (getenv("PE_RUN_DENSE") && frame < (unsigned)rl.start + 240 && frame % 6 == 0))) {
+        fprintf(stderr, "real %u: mode=%d flags=%#x targets=%d overlay=%d pad=%#x aya=%d,%d atb=%u", frame, g_BattleModeState, (unsigned)g_GameStateFlags,
+                g_BattleTargetCount, g_BattleSaveOverlayActive, (unsigned)g_FieldPadBits, aya ? aya->pos_x >> 16 : 0, aya ? aya->pos_z >> 16 : 0, me ? me->atb : 0);
+        for (int i = 0; i < 7; ++i)
+            if (g_BattleEnemySlots[i].active) fprintf(stderr, " s%d:hp%d,chg%u/%u", i, (int)g_BattleEnemySlots[i].combatant.hp,
+                                                      g_BattleEnemySlots[i].combatant.atbCharge, g_BattleEnemySlots[i].combatant.atbChargeLimit);
+        if (aya) fprintf(stderr, " eflags=%#x rot=%d range=%d rounds=%d", (unsigned)aya->flags, aya->rot_y, me && me->action ? me->action->range : -1, me && me->action ? (int)(me->action->attackWord & 0x3FF) : -1);
+        for (int i = 0; i < g_BattleTargetCount && i < 7; ++i) fprintf(stderr, " t%d:dist%d", i, (int)g_BattleTargetList[i].dist);
+        for (FieldActor *a = g_FieldActorListHead; a; a = a->next)
+            if (a != aya && a->state) fprintf(stderr, " e%u#%u@%d,%d,%d:f%#x", a->type_id, a->sub_id, a->pos_x >> 16, a->pos_y >> 16, a->pos_z >> 16, (unsigned)a->flags);
+        fputc('\n', stderr);
+    }
+    if (me) {   /* what she lost this frame, then full again */
+        if (rl.start >= 0 && rl.over < 0 && rl.aya_prev > 0 && me->curHP < rl.aya_prev) {
+            int lost = rl.aya_prev - me->curHP;
+            rl.taken += lost; if (lost > rl.hit) rl.hit = lost;
+        }
+        /* a new game's Aya (45 HP) would die to one late-game hit: she gets HP no hit ends, so hit= is the foe's whole number */
+        if (rl.start >= 0 && rl.over < 0) me->curHP = me->maxHP = 9999;
+        rl.aya_prev = me->curHP;
+    }
+    if ((rl.over >= 0 && frame >= (unsigned)rl.over + REAL_AFTER) || frame >= REAL_LIMIT ||
+        (rl.start < 0 && frame >= REAL_NOFIGHT + (r->at ? AT_FRAME + (unsigned)r->at * AT_FRAMES : 0))) {
+        rl.done = 1;
+        if (rl.over < 0) { rl.mode = g_BattleModeState; real_where(); }
+        g_SceneDispatchToken = (int)0xA9400048;   /* the title's scene: Boot_RunFrame's loop ends */
+        g_GameStateFlags |= 0x2000;
+    }
+    return 0;
+}
+
+static int real_start(PeDisc *disc) {
+    g_BootHostActive = 1;
+    Boot_InitSystem(); CdRom_BindImage(disc, NULL);
+    pe_stall_stack_init();
+    SDL_DetachThread(SDL_CreateThread(real_watch, "real_watch", NULL));
+    return 1;
+}
+
+/* What main() does from a reset to a new game's first scene, without the title screen. */
+static int real_new_game(void) {
+    Boot_SyncShutdown();   /* starts the sound driver and its timer: without it the sound queue fills and Battle_Update waits */
+    if (Asset_OpenPeImage() != 0) return 0;
+    Boot_InitGameState(); Boot_InitSubsystems();
+    if (Scene_LoadSceneData() < 0) return 0;
+    if (Render_InitDisplayLists(1) < 0) return 0;
+    Draw_InitDisplay(PE_NEW_GAME_TITLE);
+    g_GameState.flags |= 3;
+    return 1;
+}
+
+/* A battle that never ends: the step each waiting script stands on (actor type, list, node flags, op, its raw
+ * operand words with their modes), so a stuck line says what the room was waiting for. */
+static void real_where(void) {
+    unsigned shown = 0;
+    for (FieldActor *a = g_FieldActorListHead; a && shown < 24; a = a->next)
+        for (int i = 0; i < 3; ++i)
+            for (ScriptNode *n = a->script_node_lists[i]; n && shown < 24; n = n->next) {
+                const u32 *step = n->current.script;
+                if (!step || (n->flags & 0x50) || !n->active) continue;
+                u32 op = step[0] & 0x1FFF, count = (step[0] >> 13) & 15;
+                fprintf(stderr, "  waits: e%u#%u list %d flags %#x op %u modes %#x:", a->type_id, a->sub_id, i, (unsigned)n->flags, op, step[0] >> 17);
+                for (u32 k = 0; k < count && k < 6; ++k) fprintf(stderr, " %#x", step[2 + k]);
+                fputc('\n', stderr); ++shown;
+            }
+}
+
+static void do_real(const Run *r, FILE *out, unsigned line) {
+    static int hooked;
+    char name[16]; snprintf(name, sizeof(name), "m%04ui", r->room);
+    u32 token = (u32)Text_ParseBase32Id((signed char *)name);
+    if (!r->gate || !r->seeded) { FAIL("M%03u: a real line needs gate and seed= (the real mod)", r->room); return; }
+    ++real_beat;
+    if (!real_new_game()) { FAIL("M%03u: the new game didn't set up", r->room); return; }
+    if (!g_RoomSectorTable[r->room - 1].roomSectors) { FAIL("M%03u is no room on the disc", r->room); return; }
+    ++real_beat;
+    if (!start_gate(r)) { FAIL("M%03u: a real line needs the real lines' one seed= (mod host in %s)", r->room, gate_dir); return; }
+    if (!hooked) {
+        hooked = 1;
+        if (pe_hook_add(PE_HOOK_FRAME, real_frame, NULL, 0, "pe_randomizer") || pe_hook_add(PE_HOOK_PAD_READ, real_pad, NULL, 0, "pe_randomizer")) {
+            FAIL("the test's frame and pad hooks weren't taken"); return;
+        }
+    }
+    PE_HOOK(PE_HOOK_NEW_GAME, (&(PeHookNewGame){PE_NEW_GAME_TITLE}));
+    if (!r->foes) { pe_rand_battle_clear(); pe_rand_ai_clear(); pe_rand_model_clear(); }
+    for (unsigned i = 0; i < r->nai && !r->foes; ++i)
+        if (!pe_rand_ai_force(r->room, r->ai_to[i], r->ai_room[i], r->ai_from[i]) ||
+            !pe_rand_model_force(r->room, r->ai_to[i], r->ai_room[i], r->ai_from[i])) {
+            FAIL("M%03u: ai=%u<M%03u:%u: not taken", r->room, r->ai_to[i], r->ai_room[i], r->ai_from[i]);
+            return;
+        }
+    set_vars(r);
+    memset(&rl, 0, sizeof(rl));
+    rl.r = r; rl.line = line; rl.start = rl.over = -1;
+    g_SceneDispatchToken = (int)token;
+    int status = 0;
+    while (!rl.done && status >= 0 && (u32)g_SceneDispatchToken != 0xA9400048u) {   /* a door mid-line: its room runs too */
+        Scene_LoadFieldBg();
+        g_SceneDispatchCur = g_SceneDispatchToken;
+        status = Boot_RunFrame();
+    }
+    rl.r = NULL;
+    Spu_Shutdown();   /* as the game's own reset does: the next line's Boot_SyncShutdown opens the sound timer's event again */
+    ++runs_done;
+    char end[16]; snprintf(end, sizeof(end), "%s%s", status < 0 ? "load" : rl.start < 0 ? "nofight" : rl.over < 0 ? "stuck" : "won", rl.out ? "+out" : "");
+    char foes[256]; size_t used = 0; foes[0] = 0;
+    for (int i = 0; i < 7 && used + 40 < sizeof(foes); ++i)
+        if (rl.slot_seen[i]) used += (size_t)snprintf(foes + used, sizeof(foes) - used, "%s%d:%d:%d>%d>%d", used ? "," : "", i, rl.slot_type[i], rl.slot_first[i], rl.slot_hurt[i], rl.slot_last[i]);
+    if (out)
+        fprintf(out, "real\tM%03u\tend=%s\tstart=%d\tover=%d\tframes=%u\tfoes=%s\thit=%d\ttaken=%d\tshots=%d\tcut=%d\tplaced=%d\tmoved=%d%s%s\n", r->room, end, rl.start, rl.over,
+                rl.frame, foes, rl.hit, rl.taken, rl.shots, rl.cut, rl.placed, rl.moved, r->id[0] ? "\tid=" : "", r->id);
+    ++checks_done;
+    for (unsigned k = 0; k < real_known_count; ++k)
+        if (r->id[0] && !strcmp(real_known[k].id, r->id)) {
+            if (strcmp(real_known[k].end, end)) FAIL("M%03u %s: ended %s, the known list says %s", r->room, r->id, end, real_known[k].end);
+            else fprintf(stderr, "M%03u %s: ended %s, as the known list says\n", r->room, r->id, end);
+            return;
+        }
+    if (rl.out)
+        FAIL("M%03u %s: e%d#%d left the room's floor at frame %d: at %d,%d, floor %d..%d, %d..%d", r->room, r->id, rl.out_type, rl.out_sub, rl.out_frame,
+             rl.out_x, rl.out_z, rl.box[0], rl.box[1], rl.box[2], rl.box[3]);
+    if (status < 0) FAIL("M%03u %s: the room didn't start (%d)", r->room, r->id, status);
+    else if (rl.start < 0) FAIL("M%03u %s: no battle started in %u frames", r->room, r->id, rl.frame);
+    else if (rl.over < 0) {
+        char left[256]; used = 0; left[0] = 0;
+        for (int i = 0; i < 7 && used + 60 < sizeof(left); ++i)
+            if (rl.slot_seen[i] && g_BattleEnemySlots[i].active && rl.slot_last[i] > 0)
+                used += (size_t)snprintf(left + used, sizeof(left) - used, " slot %d (actor %d) %d of %d HP%s", i, rl.slot_type[i], rl.slot_last[i],
+                                         rl.slot_first[i], rl.slot_low[i] < rl.slot_first[i] ? "" : ", never hurt");
+        FAIL("M%03u %s: the battle wasn't over after %u frames (began at %d), battle state %d:%s", r->room, r->id, rl.frame, rl.start, rl.mode,
+             left[0] ? left : " no foe left with HP");
+    }
+}
+
 int main(int argc, char **argv) {
     /* PE_RUN_DISC2: the rooms from Disc 2's image (PE_TEST_DISC2), as after the disc change */
     const char *path = getenv(getenv("PE_RUN_DISC2") ? "PE_TEST_DISC2" : "PE_TEST_DISC");
     if (!path || !*path) return getenv("PE_REQUIRE_GAME_ASSETS") ? 1 : 77;
+    const int real = getenv("PE_RUN_REAL") != NULL;
     PeDisc disc = {0};
     /* Nothing is drawn, but ResetGraph opens psyz: keep it windowless whichever way the test runs. */
     if (!SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "PSYZ_HEADLESS", "1", true) ||
         !SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SDL_AUDIODRIVER", "dummy", true)) return 1;
+    /* Real fights: the sound driver's clock follows the frames, not wall time (the game's own offline mode). */
+    if (real && !SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "PSYZ_AUDIO_CLOCK", "video", true)) return 1;
     if (!SDL_Init(SDL_INIT_EVENTS) || !pe_disc_open(&disc, path)) return 1;
+    if (real) { if (!real_start(&disc)) return 1; real_known_load(); }
+    else {
     ResetGraph(0); CdRom_BindImage(&disc, NULL);
     if (Asset_OpenPeImage() != 0) return 1;
     Boot_InitGameState(); D_8009CDC8 = 'm';
     /* The resident data and a new game's bag: spawning Aya builds her weapon and armour lists. */
     if (Scene_LoadSceneData() < 0) { fputs("Scene_LoadSceneData failed\n", stderr); return 1; }
     Inv_InitNewGameInventory();
+    }
     for (size_t i = 0; i < sizeof(real_ops) / sizeof(*real_ops); ++i) is_real[real_ops[i]] = 1;
     memcpy(random_start, g_DrawPrimGeneratorWords, sizeof(random_start));
     trace = getenv("PE_RUN_TRACE") != NULL;
@@ -1100,7 +1425,7 @@ int main(int argc, char **argv) {
                 continue;
             }
             if (trace) fprintf(stderr, "line %u\n", n);
-            do_run(&r, out);
+            if (real) do_real(&r, out, n); else do_run(&r, out);
             if (out) fflush(out);   /* one line per run on disk: a crash names the next line */
         }
         fclose(in);

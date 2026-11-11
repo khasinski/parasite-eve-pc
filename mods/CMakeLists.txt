@@ -285,6 +285,7 @@ if(BUILD_TESTING AND "pe_randomizer" IN_LIST PE_MOD_LIST)
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer models:")
     # Room scripts run headless at given story values: which actors a room places, what its start writes.
     add_executable(test-mod-randomizer-run ${PROJECT_SOURCE_DIR}/tests/pe_mod_randomizer_run_test.c
+        ${PROJECT_SOURCE_DIR}/tests/pe_stall_stack.c
         $<TARGET_OBJECTS:parasite-eve-test-disc>
         $<TARGET_OBJECTS:parasite-eve-original-akao>
         $<TARGET_OBJECTS:parasite-eve-original-camera>
@@ -332,6 +333,15 @@ if(BUILD_TESTING AND "pe_randomizer" IN_LIST PE_MOD_LIST)
         "${CMAKE_CURRENT_BINARY_DIR}/randomizer-foegame.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foegame-runs.txt")
     set_tests_properties(mod-randomizer-foegame PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300 LABELS "game-assets"
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Randomizer runs:")
+    # The same lines in the game's own frame loop (PE_RUN_REAL): models load, the battle starts through op 85,
+    # the foes' AI, hits and deaths are the game's, and Aya shoots until the battle is over. Fails a line whose
+    # battle doesn't start or end, or where a foe leaves the room's floor; tools/realfights-known.txt lists the
+    # lines known to end another way. About five minutes.
+    add_test(NAME mod-randomizer-realfights COMMAND test-mod-randomizer-run
+        "${CMAKE_CURRENT_BINARY_DIR}/randomizer-realfights.txt" "${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foegame-runs.txt")
+    set_tests_properties(mod-randomizer-realfights PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1800 LABELS "game-assets"
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;PE_RUN_REAL=1;PE_RUN_REAL_KNOWN=${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/realfights-known.txt"
+        PASS_REGULAR_EXPRESSION "Randomizer runs:")
     # Story windows for the fill (tools/windowruns.py wrote the runs from the story walk): every table give
     # in every walk state of its room, every walked lock with and without its key. Data, no checks;
     # `windowruns.py table` turns the output into windows.txt.
@@ -420,6 +430,18 @@ if(BUILD_TESTING AND "pe_randomizer" IN_LIST PE_MOD_LIST)
             ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_enemies.h
             --known ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foefights-known.txt)
         set_tests_properties(mod-randomizer-foefights PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600 LABELS "game-assets"
+            ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Foe fights: .* 0 problems"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+        # Every swap any seed can plan (tools/foeruns.py --pairs: each slot with each foe pe_rand_foes.h allows it),
+        # fought the same way in the rooms whose own fight is won headless. A few minutes; rerun after a change to
+        # the foe table, the AI swap or the generator's rules. foepairs-fails.txt lists the failing lines.
+        add_test(NAME mod-randomizer-foepairs COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foeruns.py $<TARGET_FILE:test-mod-randomizer-keys>
+            $<TARGET_FILE:test-mod-randomizer-run> 0 enemies.txt randomizer-rooms.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_enemies.h --out foepairs
+            --pairs ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/pe_rand_foes.h
+            --known ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer/tools/foepairs-known.txt)
+        set_tests_properties(mod-randomizer-foepairs PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3600 LABELS "game-assets"
             ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" PASS_REGULAR_EXPRESSION "Foe fights: .* 0 problems"
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
     endif()

@@ -19,7 +19,13 @@ A plan line fails when a swap isn't taken, a moved actor runs none of its script
 holding 0 (the fight's foe count; the game has no guard), no battle is won, or the fight opens on other level and
 value sums or another foe count than the room's own fight (mean=: a Bear and its part count as 2).
 --known file: swaps (M005<M418:3, one per line, # the reason) whose failing lines are listed as KNOWN, not
-problems. --lines: only write <out>-runs.txt (no plan run). Exit 1 on a failure, 77 when an input is missing."""
+problems. --lines: only write <out>-runs.txt (no plan run). Exit 1 on a failure, 77 when an input is missing.
+
+--pairs <pe_rand_foes.h> (ctest mod-randomizer-foepairs; SEED list ignored, give 0): not seeds' plans but every
+swap any seed can plan: each slot with each foe the table allows it (g_pe_rand_foe_ok; boss slots stay as they
+are). Round k gives every slot its k-th allowed foe, so a room's line moves all its slots at once; rounds run
+PAIR_ROUNDS at a time (<out>-runs.txt and <out>.txt hold the last batch; failing lines go to <out>-fails.txt).
+A swap the mod refuses in that company (the room's enemy VRAM is full) is retried alone before it counts."""
 import os, re, subprocess, sys
 
 SEED = "seed=123456,2"   # the gate lines' item seed (the run test takes one per file)
@@ -31,6 +37,27 @@ ENV = dict(os.environ, PSYZ_HEADLESS="1", SDL_AUDIODRIVER="dummy")
 def plan(exe, seed):
     out = subprocess.run([exe, "--plan", str(seed)], capture_output=True, text=True, check=True).stdout
     return [(f[2], int(f[3]), f[5], int(f[6])) for f in (l.split("\t") for l in out.splitlines()) if f[0] == "foe"]
+
+
+PAIR_ROUNDS = 12
+
+
+def pairs(table):
+    """Rounds of (room, entity, foe room, foe entity): round k = each slot's k-th allowed foe (pe_rand_foes.h)."""
+    text = open(table).read()
+    foes = [(f"M{int(r):03d}", int(e), int(b)) for r, e, b in
+            re.findall(r"^\s*\{ (\d+), (\d+), (\d+), [^{}]*\},$", text.split("g_pe_rand_foe_ok")[0], re.M)]
+    rows = [[int(w, 16) for w in re.findall(r"0x[0-9a-f]{8}", r)] for r in
+            re.findall(r"^\s*\{ (0x[0-9a-f]{8}(?:, 0x[0-9a-f]{8})*) \},$", text.split("g_pe_rand_foe_ok")[1], re.M)]
+    if not foes or len(foes) != len(rows): sys.exit(f"foeruns: {table}: {len(foes)} foes, {len(rows)} rows")
+    rounds = []
+    for i, (room, ent, boss) in enumerate(foes):
+        if boss: continue
+        allowed = [b for b in range(len(foes)) if b != i and rows[i][b >> 5] >> (b & 31) & 1]
+        for k, b in enumerate(allowed):
+            if k == len(rounds): rounds.append([])
+            rounds[k].append((room, ent, foes[b][0], foes[b][1]))
+    return rounds
 
 
 def fights(path):
@@ -125,6 +152,9 @@ def main():
     if only_lines: args.remove("--lines")
     if "--out" in args:
         i = args.index("--out"); out_name = args[i + 1]; del args[i:i + 2]
+    pair_table = None
+    if "--pairs" in args:
+        i = args.index("--pairs"); pair_table = args[i + 1]; del args[i:i + 2]
     skip = set()   # --known: swaps (M005<M418:3, one per line, # the reason) whose failing lines are known, not problems
     if "--known" in args:
         i = args.index("--known"); skip = {l.split("#")[0].strip() for l in open(args[i + 1])} - {""}; del args[i:i + 2]
@@ -134,7 +164,11 @@ def main():
         print("foeruns: missing " + ", ".join(p for p in (enemies, rooms, table) if not os.path.exists(p))); sys.exit(77)
     seeds = [int(s) for s in seeds.split(",")]
     fight = fights(enemies)
-    plans = {s: plan(keys, s) for s in seeds}
+    if pair_table:
+        seeds = list(range(len(rounds := pairs(pair_table))))
+        plans = dict(enumerate(rounds))
+        print(f"Pairs: {sum(map(len, rounds))} allowed swaps of {len({r[:2] for q in rounds for r in q})} slots, {len(rounds)} rounds")
+    else: plans = {s: plan(keys, s) for s in seeds}
     picked = {}
     for room, ent, *_ in plans[seeds[0]]:   # one fight per room
         if room in picked: continue
@@ -170,39 +204,69 @@ def main():
 
     # 2. the seeds' plans in those rooms: ai= for each moved slot whose actor took a fight slot in the room's own run
     n, idle, lines = 0, 0, {}
-    with open(f"{out_name}-runs.txt", "w") as f:
-        f.write(f"# foeruns.py: seeds {','.join(map(str, seeds))}, plain lines then each seed's moved rooms\n")
-        for room in stops: f.write(line(room, picked[room][1], stops[room], "", f"plain-{room}"))
-        for s in seeds:
-            swaps = {}
-            for room, ent, src, src_ent in plans[s]:
-                if (src, src_ent) == (room, ent) or room not in stops: continue
-                if ent in slots(plain[room]): swaps.setdefault(room, []).append(f"ai={ent}<{src}:{src_ent}")
-                else: idle += 1
-            for room, ai in swaps.items():
-                lines[f"seed{s}-{room}"] = ai; n += 1
-                f.write(line(room, picked[room][1], stops[room], " " + " ".join(ai), f"seed{s}-{room}"))
+    for s in seeds:
+        swaps = {}
+        for room, ent, src, src_ent in plans[s]:
+            if (src, src_ent) == (room, ent) or room not in stops: continue
+            if ent in slots(plain[room]): swaps.setdefault(room, []).append(f"ai={ent}<{src}:{src_ent}")
+            else: idle += 1
+        for room, ai in swaps.items(): lines[f"seed{s}-{room}"] = ai; n += 1
     print(f"Plan lines: {n} ({sum(map(len, lines.values()))} swaps run; {idle} moved slots not in their room's own fight there)")
+
+    def batch(names, title):
+        """Writes and runs those lines (after the plain ones); the lines' problems, by name."""
+        with open(f"{out_name}-runs.txt", "w") as f:
+            f.write(f"# foeruns.py: {title}, plain lines then each moved room\n")
+            for room in stops: f.write(line(room, picked[room][1], stops[room], "", f"plain-{room}"))
+            for name in names:
+                room = name.split("-")[1]
+                f.write(line(room, picked[room][1], stops[room], " " + " ".join(lines[name]), name))
+        if only_lines: return {}, 0
+        got, why = run(run_exe, f"{out_name}.txt", f"{out_name}-runs.txt"), {}
+        for name in names:
+            kv, own = got.get(name), plain[name.split("-")[1]]
+            w = ("no output (a swap not taken)" if kv is None else
+                 f"divides by zero ({kv['div0']})" if kv.get("div0") else
+                 "no battle won" if not kv.get("won") else
+                 "a moved actor ran none of its script" if any(a.endswith(":0") for a in kv.get("aisteps", "").split(",")) else
+                 "a moved actor took no fight slot" if any(int(a[3:].split("<")[0]) not in slots(kv) for a in lines[name]) else
+                 f"opens on {kv.get('mean', 'no mean')}, the room's own fight on {own.get('mean', 'no mean')}"
+                 if kv.get("mean") != own.get("mean") else "")
+            if w: why[name] = w
+        b = subprocess.run([sys.executable, "-I", os.path.join(os.path.dirname(os.path.abspath(__file__)), "battlestats.py"),
+                            f"{out_name}.txt", table], capture_output=True, text=True)
+        print(b.stdout.strip(), flush=True)
+        return why, b.returncode != 0
+
+    names, why, stats_bad = list(lines), {}, 0
+    if not pair_table:
+        why, stats_bad = batch(names, "seeds " + ",".join(map(str, seeds)))
+    else:
+        for i in range(0, len(seeds), PAIR_ROUNDS):
+            part = [x for x in names if i <= int(x.split("-")[0][4:]) < i + PAIR_ROUNDS]
+            w, b = batch(part, f"allowed swaps, rounds {i}-{i + PAIR_ROUNDS - 1}")
+            why.update(w); stats_bad += b
+            if only_lines: break
+        # a room's slots moved together may not fit the room's enemy VRAM: the failing lines' swaps again, each alone
+        again = {}
+        for name in [x for x in why if len(lines[x]) > 1]:
+            for k, ai in enumerate(lines[name]): again[f"{name.split('-')[0]}x{k}-{name.split('-')[1]}"] = [ai]
+            del why[name]
+        if again and not only_lines:
+            lines.update(again)
+            w, b = batch(list(again), "failing lines' swaps, each alone")
+            why.update(w); stats_bad += b
     if only_lines: return
-    got = run(run_exe, f"{out_name}.txt", f"{out_name}-runs.txt")
-    bad, known, won = [], [], 0
-    for name, ai in lines.items():
-        kv, own = got.get(name), plain[name.split("-")[1]]
-        why = ("no output (a swap not taken)" if kv is None else
-               f"divides by zero ({kv['div0']})" if kv.get("div0") else
-               "no battle won" if not kv.get("won") else
-               "a moved actor ran none of its script" if any(a.endswith(":0") for a in kv.get("aisteps", "").split(",")) else
-               f"opens on {kv.get('mean', 'no mean')}, the room's own fight on {own.get('mean', 'no mean')}"
-               if kv.get("mean") != own.get("mean") else "")
-        won += not why
-        if why: (known if any(name.split("-")[1] + "<" + a.split("<")[1] in skip for a in ai) else bad).append(f"{name} {' '.join(ai)}: {why}")
+    bad, known = [], []
+    for name, w in why.items():
+        ai = lines[name]
+        (known if any(name.split("-")[1] + "<" + a.split("<")[1] in skip for a in ai) else bad).append(f"{name} {' '.join(ai)}: {w}")
     for b in known: print("KNOWN " + b)
     for b in bad: print("FAIL " + b)
-    b = subprocess.run([sys.executable, "-I", os.path.join(os.path.dirname(os.path.abspath(__file__)), "battlestats.py"),
-                        f"{out_name}.txt", table], capture_output=True, text=True)
-    print(b.stdout.strip())
-    problems = len(bad) + (b.returncode != 0)
-    print(f"Foe fights: {n} plan lines, {won} won, {len(known)} known failures, {problems} problems")
+    if pair_table:
+        with open(f"{out_name}-fails.txt", "w") as f: f.write("".join(x + "\n" for x in known + bad))
+    problems = len(bad) + (stats_bad != 0)
+    print(f"Foe fights: {n} plan lines, {n - len(bad) - len(known)} won, {len(known)} known failures, {problems} problems")
     sys.exit(1 if problems else 0)
 
 

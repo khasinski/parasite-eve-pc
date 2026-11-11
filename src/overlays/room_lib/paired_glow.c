@@ -254,6 +254,10 @@ int RoomLib_DrawPairedGlowSprite(void *object, void *unused, void *data) {
     int handleB;
     int textureWord;
 
+    /* A mod can install this effect in a room whose assets lack the model. */
+    if (g_RoomPairedGlowPacket == NULL) {
+        return 0;
+    }
     entity = (RoomEnt *)object;
     workState = state;
     clock = FieldFx_GetScriptContext();

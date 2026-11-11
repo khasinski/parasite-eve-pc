@@ -1,0 +1,9 @@
+# mod-randomizer-realfights: runs lines known not to end "won": <line id> <end>. A line listed here passes with
+# that end and fails with any other, so a fixed one has to leave this file.
+#
+# Test gaps (the room's own foes end the same way): no battle starts headless.
+seed123456-M111 nofight     # the room waits for the pad (op 240)
+seed123456-M434 nofight     # Chrysler random encounters: no roll while she stands
+seed123456-M435 nofight
+seed123456-M436 nofight
+seed123456-M437 nofight

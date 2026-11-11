@@ -32,6 +32,10 @@
  * its foes; here nothing would, and a second fight in the room would start with the last one's bits. So while no
  * actor of type E is alive (each frame, field or battle), they are kept at 0: the first one spawns on zeros.
  *
+ * A script also carries its room's places (floor polygons, the points a foe hops or flies to, the floor's
+ * height): in the copy they go from the source room's battle floor onto this room's (see "Places" below), else
+ * a Frog of the sewers leaps out of a park to the sewer's coordinates and nothing can reach it.
+ *
  * The script slots (PM commands, effect programs) the source room installs and this room doesn't are
  * installed too, from the source room's records as its own load does it (each slot number has one handler in
  * every room); at the next room load, each one that room doesn't install is set back as it was.
@@ -365,6 +369,261 @@ static void pe_op8_step(uint32_t *step, uint32_t at, void *user) {
                (op == 17 && pe_entity_arg(step) == 1 && step[2] == 2500 && step[3] == s->type)) ++s->by17;
 }
 
+/* Places. A foe's script is written for its own room: polygons in its block's data (op 226: x, z, vertex count,
+ * offset: the floor it may stand on, sectors of it, an inner ring), points it goes to (two op 10 `A = constant` in
+ * a row into a pair of A vars some step takes as x and z; constant operands of op 11 selectors 0 and 1, of op 107
+ * commands 17 and 22 and of op 119's quad; a moved point's number again in an op 9 sum) and its floor's height
+ * (the y of op 107 command 17, the target of a hop or a flight, and of op 11). All of it lies on the floor polygon
+ * the room's scripts give its battles (op 227). In a copy, what lies in the source floor's box goes into a box
+ * inside this room's floor, each axis by its own scale, so a polygon stays around its points; the height becomes
+ * this room's (where the slot's spawner puts the foe), or -1 (command 17: the height the actor is at) when the
+ * spawner uses more than one. Polygons and points off the source floor (other rooms' that the scripts carry
+ * along) and points within 16 units of 0,0 (vars set to 0) stay. */
+enum { PE_RAND_POLY_MAX = 64, PE_RAND_PLACE_PAIRS = 16, PE_RAND_PLACES = 48 };
+typedef struct PeBox { int32_t x0, z0, x1, z1; } PeBox;
+
+static int32_t pe_coord(const uint8_t *vertex, unsigned at) { int16_t v; memcpy(&v, vertex + at, 2); return v; }
+
+/* (x, z) inside a polygon of n 8-byte vertices (16.16 x and z: whole units at +2 and +6). */
+static int pe_in_poly(const uint8_t *v, unsigned n, int32_t x, int32_t z) {
+    int in = 0;
+    for (unsigned i = 0, j = n - 1; i < n; j = i++) {
+        const int32_t xi = pe_coord(v, 8 * i + 2), zi = pe_coord(v, 8 * i + 6), xj = pe_coord(v, 8 * j + 2), zj = pe_coord(v, 8 * j + 6);
+        const int64_t a = (int64_t)(x - xi) * (zj - zi), b = (int64_t)(xj - xi) * (z - zi);
+        if ((zi > z) != (zj > z) && (zj > zi ? a < b : a > b)) in = !in;
+    }
+    return in;
+}
+
+static void pe_poly_box(const uint8_t *v, unsigned n, PeBox *b) {
+    *b = (PeBox){pe_coord(v, 2), pe_coord(v, 6), pe_coord(v, 2), pe_coord(v, 6)};
+    for (unsigned i = 1; i < n; ++i) {
+        const int32_t x = pe_coord(v, 8 * i + 2), z = pe_coord(v, 8 * i + 6);
+        if (x < b->x0) b->x0 = x;
+        if (x > b->x1) b->x1 = x;
+        if (z < b->z0) b->z0 = z;
+        if (z > b->z1) b->z1 = z;
+    }
+}
+
+static int pe_box_in_poly(const uint8_t *v, unsigned n, const PeBox *t) {
+    for (int i = 0; i <= 16; ++i) {
+        const int32_t x = t->x0 + (t->x1 - t->x0) * i / 16, z = t->z0 + (t->z1 - t->z0) * i / 16;
+        if (!pe_in_poly(v, n, x, t->z0) || !pe_in_poly(v, n, x, t->z1) || !pe_in_poly(v, n, t->x0, z) || !pe_in_poly(v, n, t->x1, z))
+            return 0;
+    }
+    return 1;
+}
+
+/* The largest box that lies inside the polygon (its sides, 17 points each): centred on one of 9 x 9 places of the
+ * polygon's box, the middle first, each side 1 to 15 sixteenths of that box's and 128 units or more; 0 if none
+ * (a floor can be a bent corridor: no box in its own proportions fits Central Park's M067). */
+static int pe_inner_box(const uint8_t *v, unsigned n, PeBox *out) {
+    PeBox all;
+    int64_t best = 0;
+    pe_poly_box(v, n, &all);
+    const int32_t w = all.x1 - all.x0, d = all.z1 - all.z0;
+    for (int c = 0; c < 82; ++c) {
+        /* 0 is the middle, then the rest in rows */
+        const int col = c ? (c - 1) % 9 : 4, row = c ? (c - 1) / 9 : 4;
+        const int32_t cx = all.x0 + w * (col + 1) / 10, cz = all.z0 + d * (row + 1) / 10;
+        if (!pe_in_poly(v, n, cx, cz)) continue;
+        for (int kx = 15; kx > 0; --kx)
+            for (int kz = 15; kz > 0; --kz) {
+                const PeBox t = {cx - w * kx / 32, cz - d * kz / 32, cx + w * kx / 32, cz + d * kz / 32};
+                const int64_t area = (int64_t)(t.x1 - t.x0) * (t.z1 - t.z0);
+                if (area <= best || t.x1 - t.x0 < 128 || t.z1 - t.z0 < 128) break;
+                if (pe_box_in_poly(v, n, &t)) { best = area; *out = t; break; }
+            }
+    }
+    return best > 0;
+}
+
+/* The floor polygon a room's scripts give its battles (op 227: offset in the actor's block, vertex count): its
+ * vertices in the task block; NULL unless there is one. */
+typedef struct PeFloor { uint32_t base, at, count; unsigned found; } PeFloor;
+static void pe_floor_step(uint32_t *step, uint32_t at, void *user) {
+    PeFloor *f = user;
+    (void)at;
+    if ((step[0] & 0x1FFF) != 227 || ((step[0] >> 13) & 15) < 2 || pe_mode(step, 0) || pe_mode(step, 1) || f->found++) return;
+    f->at = f->base + step[2] * 2;
+    f->count = step[3];
+}
+static const uint8_t *pe_floor(const uint8_t *tasks, uint32_t bytes, unsigned *n) {
+    PeFloor f = {0, 0, 0, 0};
+    for (unsigned e = 0; e < pe_word(tasks, 4); ++e)
+        if (pe_entry(tasks, bytes, e, &f.base)) pe_walk(tasks, f.base, pe_word(tasks, 0), pe_floor_step, &f);
+    if (f.found != 1 || f.count < 3 || f.count > PE_RAND_POLY_MAX || f.at > bytes || 8 * f.count > bytes - f.at) return NULL;
+    *n = f.count;
+    return tasks + f.at;
+}
+
+/* The height a spawner's op 8 steps put type t at (operand 3, 16.16); 0 if none, not a constant or not the same. */
+typedef struct PeHeight { unsigned type, found, differ; int32_t y; } PeHeight;
+static void pe_height_step(uint32_t *step, uint32_t at, void *user) {
+    PeHeight *h = user;
+    (void)at;
+    if ((step[0] & 0x1FFF) != 8 || ((step[0] >> 13) & 15) < 5 || pe_mode(step, 0) || step[2] != h->type) return;
+    if (pe_mode(step, 3) || (h->found && h->y != (int32_t)step[5])) h->differ = 1;
+    h->y = (int32_t)step[5];
+    ++h->found;
+}
+static int pe_height(const uint8_t *tasks, uint32_t bytes, int spawner, unsigned t, int32_t *y) {
+    PeHeight h = {t, 0, 0, 0};
+    uint32_t start;
+    if (spawner < 0 || !pe_entry(tasks, bytes, (unsigned)spawner, &start)) return 0;
+    pe_walk(tasks, start, pe_word(tasks, 0), pe_height_step, &h);
+    *y = h.y;
+    return h.found && !h.differ;
+}
+
+typedef struct PeGeo {
+    PeBox from, to;                 /* the source room's floor's box; the box inside this room's floor */
+    int32_t y_from, y_to;           /* the floor's height there and here */
+    int y_known, y_to_known;
+    uint8_t *copy, *done;           /* done: the vertices moved, by address / 2 */
+    uint32_t bytes;
+    uint16_t pair[PE_RAND_PLACE_PAIRS];   /* A vars a step takes as x and z */
+    int32_t xs[PE_RAND_PLACES], zs[PE_RAND_PLACES];   /* the constant points moved, as they were */
+    unsigned pairs, places;
+    uint32_t *last, last_at, *paired;
+    unsigned polygons, points, heights;
+} PeGeo;
+
+static int32_t pe_geo_axis(int32_t v, int32_t from0, int32_t from1, int32_t to0, int32_t to1) {
+    return (int32_t)(to0 * 65536ll + (v - from0 * 65536ll) * (to1 - to0) / (from1 - from0));
+}
+static int32_t pe_geo_x(const PeGeo *g, int32_t x) { return pe_geo_axis(x, g->from.x0, g->from.x1, g->to.x0, g->to.x1); }
+static int32_t pe_geo_z(const PeGeo *g, int32_t z) { return pe_geo_axis(z, g->from.z0, g->from.z1, g->to.z0, g->to.z1); }
+
+/* A 16.16 point on the source floor: in its box or within an eighth of it (+ 64) around. */
+static int pe_geo_in(const PeGeo *g, int32_t x, int32_t z) {
+    const int32_t mx = (g->from.x1 - g->from.x0) / 8 + 64, mz = (g->from.z1 - g->from.z0) / 8 + 64;
+    x /= 65536;
+    z /= 65536;
+    return x >= g->from.x0 - mx && x <= g->from.x1 + mx && z >= g->from.z0 - mz && z <= g->from.z1 + mz;
+}
+static int pe_geo_small(int32_t x, int32_t z) { return x > -0x100000 && x < 0x100000 && z > -0x100000 && z < 0x100000; }
+
+static void pe_geo_note(PeGeo *g, int32_t x, int32_t z) {
+    if (g->places < PE_RAND_PLACES) { g->xs[g->places] = x; g->zs[g->places++] = z; }
+    ++g->points;
+}
+
+/* A step's point (operands x, y, z; y < 0: none): constants on the source floor move; a constant height that is
+ * the source floor's becomes this room's (`hop`: or -1), unless the point is a constant that stays. */
+static void pe_geo_point(PeGeo *g, uint32_t *step, unsigned x, int y, unsigned z, int hop) {
+    if (z >= ((step[0] >> 13) & 15)) return;
+    if (!pe_mode(step, x) && !pe_mode(step, z)) {
+        const int32_t px = (int32_t)step[2 + x], pz = (int32_t)step[2 + z];
+        if (pe_geo_small(px, pz) || !pe_geo_in(g, px, pz)) return;
+        step[2 + x] = (uint32_t)pe_geo_x(g, px);
+        step[2 + z] = (uint32_t)pe_geo_z(g, pz);
+        pe_geo_note(g, px, pz);
+    }
+    if (y < 0 || pe_mode(step, (unsigned)y) || !g->y_known || (int32_t)step[2 + y] != g->y_from) return;
+    if (g->y_to_known ? g->y_to == g->y_from : !hop) return;
+    step[2 + y] = g->y_to_known ? (uint32_t)g->y_to : 0xFFFFFFFFu;
+    ++g->heights;
+}
+
+static void pe_geo_pair_step(uint32_t *step, uint32_t at, void *user) {
+    PeGeo *g = user;
+    const uint32_t op = step[0] & 0x1FFF, count = (step[0] >> 13) & 15;
+    unsigned x, z;
+    (void)at;
+    if (op == 226 && count >= 2) { x = 0; z = 1; }
+    else if (op == 11 && count >= 4 && !pe_mode(step, 0) && step[2] <= 1) { x = 1; z = 3; }
+    else if (op == 107 && count >= 5 && !pe_mode(step, 1) && step[3] == 17) { x = 2; z = 4; }
+    else if (op == 119 && count >= 10) { x = 8; z = 9; }
+    else return;
+    if (pe_mode(step, x) != 1 || pe_mode(step, z) != 1 || step[2 + x] > 255 || step[2 + z] > 255) return;
+    const uint16_t pair = (uint16_t)(step[2 + x] << 8 | step[2 + z]);
+    for (unsigned i = 0; i < g->pairs; ++i) if (g->pair[i] == pair) return;
+    if (g->pairs < PE_RAND_PLACE_PAIRS) g->pair[g->pairs++] = pair;
+}
+
+static void pe_geo_step(uint32_t *step, uint32_t at, void *user) {
+    PeGeo *g = user;
+    const uint32_t op = step[0] & 0x1FFF, count = (step[0] >> 13) & 15;
+    uint32_t *last = g->last;
+    g->last = NULL;
+    if (op == 226 && count >= 4 && !pe_mode(step, 2) && !pe_mode(step, 3)) {
+        const uint32_t n = step[4], data = step[5] * 2;
+        unsigned on = 0, zero = 0, moved = 0;
+        if (n < 3 || n > PE_RAND_POLY_MAX || step[5] >= 0x40000000u || data > g->bytes || 8 * n > g->bytes - data) return;
+        for (unsigned i = 0; i < n; ++i) {
+            int32_t x, z;
+            memcpy(&x, g->copy + data + 8 * i, 4);
+            memcpy(&z, g->copy + data + 8 * i + 4, 4);
+            if (g->done[(data + 8 * i) / 2]) { ++on; continue; }
+            on += (unsigned)pe_geo_in(g, x, z);
+            zero += (unsigned)pe_geo_small(x, z);
+        }
+        if (on < n || zero == n) return;
+        for (unsigned i = 0; i < n; ++i) {
+            int32_t x, z;
+            if (g->done[(data + 8 * i) / 2]) continue;
+            memcpy(&x, g->copy + data + 8 * i, 4);
+            memcpy(&z, g->copy + data + 8 * i + 4, 4);
+            x = pe_geo_x(g, x);
+            z = pe_geo_z(g, z);
+            memcpy(g->copy + data + 8 * i, &x, 4);
+            memcpy(g->copy + data + 8 * i + 4, &z, 4);
+            g->done[(data + 8 * i) / 2] = 1;
+            ++moved;
+        }
+        g->polygons += moved != 0;
+    } else if (op == 119 && count >= 8) {
+        unsigned on = 0, zero = 0;
+        for (unsigned i = 0; i < 4; ++i) {
+            if (pe_mode(step, 2 * i) || pe_mode(step, 2 * i + 1)) return;
+            on += (unsigned)pe_geo_in(g, (int32_t)step[2 + 2 * i], (int32_t)step[3 + 2 * i]);
+            zero += (unsigned)pe_geo_small((int32_t)step[2 + 2 * i], (int32_t)step[3 + 2 * i]);
+        }
+        if (on < 4 || zero == 4) return;
+        for (unsigned i = 0; i < 4; ++i) {
+            step[2 + 2 * i] = (uint32_t)pe_geo_x(g, (int32_t)step[2 + 2 * i]);
+            step[3 + 2 * i] = (uint32_t)pe_geo_z(g, (int32_t)step[3 + 2 * i]);
+        }
+        ++g->polygons;
+    } else if (op == 11 && count >= 4 && !pe_mode(step, 0) && step[2] <= 1) pe_geo_point(g, step, 1, 2, 3, 0);
+    else if (op == 107 && count >= 5 && !pe_mode(step, 1) && step[3] == 17) pe_geo_point(g, step, 2, 3, 4, 1);
+    else if (op == 107 && count >= 5 && !pe_mode(step, 1) && step[3] == 22) pe_geo_point(g, step, 2, -1, 3, 0);
+    else if (op == 10 && count == 2 && pe_mode(step, 0) == 1 && !pe_mode(step, 1) && step[2] < 256) {
+        if (last && last != g->paired && g->last_at + 16 == at) {
+            const uint16_t pair = (uint16_t)(last[2] << 8 | step[2]);
+            const int32_t x = (int32_t)last[3], z = (int32_t)step[3];
+            unsigned known = 0;
+            for (unsigned i = 0; i < g->pairs; ++i) known |= g->pair[i] == pair;
+            if (known && !pe_geo_small(x, z) && pe_geo_in(g, x, z)) {
+                last[3] = (uint32_t)pe_geo_x(g, x);
+                step[3] = (uint32_t)pe_geo_z(g, z);
+                pe_geo_note(g, x, z);
+                g->paired = step;
+            }
+        }
+        g->last = step;
+        g->last_at = at;
+    }
+}
+
+/* A moved point's x or z again, in a sum or a difference (op 9 selectors 0 and 1): the middle a foe circles. */
+static void pe_geo_sum_step(uint32_t *step, uint32_t at, void *user) {
+    PeGeo *g = user;
+    (void)at;
+    if ((step[0] & 0x1FFF) != 9 || ((step[0] >> 13) & 15) != 4 || pe_mode(step, 0) || step[2] > 1) return;
+    for (unsigned k = 2; k < 4; ++k) {
+        const int32_t v = (int32_t)step[2 + k];
+        int is_x = 0, is_z = 0;
+        if (pe_mode(step, k) || pe_geo_small(v, 0)) continue;
+        for (unsigned i = 0; i < g->places; ++i) { is_x |= g->xs[i] == v; is_z |= g->zs[i] == v; }
+        if (is_x == is_z) continue;
+        step[2 + k] = (uint32_t)(is_x ? pe_geo_x(g, v) : pe_geo_z(g, v));
+        ++g->points;
+    }
+}
+
 /* The slots a room blob's directory installs. */
 static int pe_room_has_slot(const uint8_t *blob, unsigned slot) {
     const SceneRoomDirectory *dir = (const void *)(blob + pe_word(blob, 4));
@@ -471,6 +730,32 @@ int pe_rand_ai_apply(int room) {
             ++moved;
         }
         pe_walk(copy, 0, pe_word(theirs, 0) - start, pe_patch_step, &patch);
+        /* places: the source room's floor onto this room's */
+        PeGeo geo;
+        unsigned from_n = 0, to_n = 0, placed = 0;
+        memset(&geo, 0, sizeof geo);
+        if (map->from_room != room) {
+            const uint8_t *from_floor = pe_floor(theirs, from_bytes, &from_n), *to_floor = pe_floor(mine, bytes, &to_n);
+            if (from_floor) pe_poly_box(from_floor, from_n, &geo.from);
+            geo.done = calloc(task_bytes / 2 + 1, 1);
+            /* the same floor (Chrysler floors share theirs): every point stays, only the height goes by this room */
+            const int same = from_floor && to_floor && from_n == to_n && !memcmp(from_floor, to_floor, 8 * from_n);
+            if (same) geo.to = geo.from;
+            if (from_floor && to_floor && geo.done && geo.from.x1 > geo.from.x0 && geo.from.z1 > geo.from.z0 &&
+                (same || pe_inner_box(to_floor, to_n, &geo.to))) {
+                geo.copy = copy;
+                geo.bytes = task_bytes;
+                geo.y_known = pe_height(theirs, from_bytes, spawner, map->from_entity, &geo.y_from);
+                geo.y_to_known = pe_height(mine, bytes, to_spawner, map->entity, &geo.y_to);
+                pe_walk(copy, 0, pe_word(theirs, 0) - start, pe_geo_pair_step, &geo);
+                pe_walk(copy, 0, pe_word(theirs, 0) - start, pe_geo_step, &geo);
+                pe_walk(copy, 0, pe_word(theirs, 0) - start, pe_geo_sum_step, &geo);
+                placed = 1;
+            } else
+                pe_log("rand_ai", "map=%d e%u: no floor polygon to place M%03u e%u's points on (there %u, here %u vertices)",
+                       room, map->entity, map->from_room, map->from_entity, from_n, to_n);
+            free(geo.done);
+        }
         /* the working vars left over, where they landed: only those no other script here uses */
         uint64_t stale = 0;
         for (unsigned i = 0; i < PE_RAND_N_VARS; ++i)
@@ -540,6 +825,11 @@ int pe_rand_ai_apply(int room) {
                    value_now, level_was, value_was);
         if (count_now != count_was)
             pe_log("rand_ai", "map=%d e%u counts as %u (the slot's foe with its parts; was %u)", room, map->entity, count_now, count_was);
+        if (placed)
+            pe_log("rand_ai", "map=%d e%u places: floor box %d..%d,%d..%d > %d..%d,%d..%d, %u polygons, %u points, %u heights (%d > %d)",
+                   room, map->entity, (int)geo.from.x0, (int)geo.from.x1, (int)geo.from.z0, (int)geo.from.z1, (int)geo.to.x0,
+                   (int)geo.to.x1, (int)geo.to.z0, (int)geo.to.z1, geo.polygons, geo.points, geo.heights,
+                   geo.y_known ? (int)(geo.y_from / 65536) : 0, geo.y_to_known ? (int)(geo.y_to / 65536) : -1);
         pe_disc_room_free(&src);
         ++done;
     }
