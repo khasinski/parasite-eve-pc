@@ -65,9 +65,10 @@ typedef enum PeHookId {
                                * move; replaceable */
     PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
-    PE_HOOK_TITLE_FRAME, /* int *: each title-menu frame; set to 1 after loading a save into the runtime
-                          * (as the card load does) to leave the title the way Continue does */
     PE_HOOK_EQUIPMENT_GUARD, /* PeHookEquipmentGuard: nonzero refuses BEFORE native mutation */
+    PE_HOOK_TITLE_FRAME, /* int *: each title-menu frame; set to 1 after loading a save into the runtime
+                          * (as the card load does) to leave the title the way Continue does; appended,
+                          * previous hook IDs unchanged */
     PE_HOOK_COUNT
 } PeHookId;
 

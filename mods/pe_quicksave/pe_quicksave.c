@@ -70,7 +70,7 @@ static int pe_slot_state(int slot) {
     return pe_checkpoint_slot_state(path, legacy);
 }
 
-static int pe_field_ready(void) {
+static int pe_ready(int load) {
     const unsigned token = (unsigned)g_SceneDispatchToken;
     if (!token || token == PE_TOKEN_BOOT) return -1;
     if (!load && (!pe_game_loaded() || token == PE_TOKEN_NEW_GAME || token == PE_TOKEN_PROLOGUE)) return -1;
@@ -118,19 +118,19 @@ static int pe_load(int slot, int title) {
     if (state == PE_CHECKPOINT_SLOT_EMPTY) {
         snprintf(msg, sizeof msg, "Slot %d is empty", slot);
         pe_toast(msg);
-        return;
+        return 0;
     }
     if (state == PE_CHECKPOINT_SLOT_CURRENT) {
         pe_slot_path(path, sizeof path, slot);
         if (pe_checkpoint_read(path, PE_CHECKPOINT_BINDING, g_MemCardFileBuffer)) {
-            pe_toast("Quick load refused: checkpoint is damaged or incompatible"); return;
+            pe_toast("Quick load refused: checkpoint is damaged or incompatible"); return 0;
         }
     } else {
         pe_legacy_path(path, sizeof path, slot);
         if (pe_checkpoint_read_legacy(path, g_MemCardFileBuffer)) {
             snprintf(msg, sizeof msg, "Slot %d is damaged", slot);
             pe_toast(msg);
-            return;
+            return 0;
         }
     }
     memcpy(&crc, g_MemCardFileBuffer + PE_CARD_CRC, sizeof crc);
@@ -150,13 +150,14 @@ static int pe_load(int slot, int title) {
     }
     /* Native checks first, as a checkpoint's are: admission runs the records' load preparation. */
     if (state == PE_CHECKPOINT_SLOT_LEGACY && pe_mod_load_admit(path, g_MemCardFileBuffer)) {
-        pe_toast("Older quick save can't be loaded: its mod data was refused"); return;
+        pe_toast("Older quick save can't be loaded: its mod data was refused"); return 0;
     }
-    if(pe_checkpoint_commit_portable())return;
+    if(pe_checkpoint_commit_portable())return 0;
     token=g_SceneDispatchToken;
     snprintf(msg, sizeof msg, "Quick loaded slot %d", slot);
     pe_toast(msg);
     pe_log("quickload", "slot=%d token=%08X", slot, (unsigned)token);
+    return 1;
 }
 
 static void pe_keys(void) {
