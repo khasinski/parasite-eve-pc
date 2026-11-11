@@ -106,11 +106,19 @@ static int pe_sort_save(void *ctx, void *user) {
 }
 static void pe_sort_reset(void *data) {
     struct PeSortPersistent *candidate = data; (void)data; memset(&(*candidate), 0, sizeof (*candidate)); if(data == &s_sort) s_seen = s_sorting = 0; }
+/* The reset value (pe_sort_reset: Manual, no tables) is what a New Game saves until the game's
+ * Sort is first used, so it must load: a rejected record is kept and the host then skips every
+ * pe_qol hook for the session. Manual sorting never reads the tables, and switching to Auto picks
+ * the game's current ones (pe_set_sort_mode). Auto still needs valid tables. */
+static int pe_sort_unset(const struct PeSortPersistent *s) {
+    return !s->mode && !s->rank_ptr && !s->type_ptr && !s->weapon_stat && !s->armor_stat;
+}
 static int pe_sort_check(void *data) {
     struct PeSortPersistent *candidate = data;
     (void)data;
     if(data == &s_sort) s_seen = s_sorting = 0;
     (*candidate).row_hidden = 0;
+    if (pe_sort_unset(candidate)) return 0;
     return (*candidate).mode > 1 || (*candidate).weapon_stat > 2 || (*candidate).armor_stat > 2 ||
            !pe_rank((*candidate).rank_ptr) || !pe_type((*candidate).type_ptr);
 }
