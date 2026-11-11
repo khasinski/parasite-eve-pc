@@ -40,6 +40,8 @@ endif()
 option(BUILD_TESTING "Build original game tests" OFF)
 include(CTest)
 
+option(PE_MELEE_PROTOTYPE "Build the experimental Melee Combat features" OFF)
+
 # Mod host (mods/). Off: the PE_HOOK lines compile to nothing.
 option(PE_MODS "Build with the mod host and the mods in mods/" OFF)
 if(PE_MODS)
@@ -442,6 +444,10 @@ add_library(parasite-eve-original OBJECT
     src/overlays/room_lib/timed_spawn.c
     src/overlays/room_lib/homing_projectile_seeds.c
     src/overlays/room_lib/script_args.c)
+if(PE_MELEE_PROTOTYPE)
+    target_sources(parasite-eve-original PRIVATE src/main/battle/melee.c)
+    target_compile_definitions(parasite-eve-original PRIVATE PE_MELEE_PROTOTYPE=1)
+endif()
 pe_configure_object_library(parasite-eve-original)
 target_link_libraries(parasite-eve-original PRIVATE psyz)
 set_property(SOURCE src/main/boot/init.c APPEND PROPERTY INCLUDE_DIRECTORIES

@@ -190,6 +190,9 @@ void Battle_StepEnemyMovement(BattleEntity *entity)
             (*statusFlags) |= 0x01000000;
         }
     }
+#ifdef PE_MELEE_PROTOTYPE
+    damage = Battle_MeleeOnDamage(entity, damage);
+#endif
     enemy->hpAlive -= damage;
     if (!(g_ActiveActor->stateFlags & 0x80000))
     {

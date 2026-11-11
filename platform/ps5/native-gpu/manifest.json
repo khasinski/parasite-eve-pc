@@ -2551,7 +2551,7 @@
     },
     {
       "path": "include/pe1/battle_runtime.h",
-      "sha256": "3bbcc5e1955f973054ccbdd1bd63a624039f133c7a728dd17d1bc6077c69ca20"
+      "sha256": "42805e96bb2a6893e6f49514988f63c826938efce0aee68c0168187cf975e42d"
     },
     {
       "path": "include/pe1/battle_saved_state.h",
@@ -3136,6 +3136,10 @@
     {
       "path": "include/pe1/pe_charset.h",
       "sha256": "dc6f94e3bae223c200ad6cd03e2e94896d54192688134588c8c2cae30a85d8f4"
+    },
+    {
+      "path": "include/pe1/pe_cost.h",
+      "sha256": "c705acecf12696bba9c27a79b2dd1d459ee718cd785564097dd8a61400f398ba"
     },
     {
       "path": "include/pe1/pe_image.h",
@@ -3847,7 +3851,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "d248252c5ca2e17a0a031770d2367366624f3e20476f1030d7d4e1fe081edf76"
+      "sha256": "58b82e4fc68806ed40875be3dec99120722cd23dd22783299996f7db4de884c8"
     },
     {
       "path": "mods/host/pe_api_native.c",
@@ -3888,6 +3892,14 @@
     {
       "path": "mods/host/pe_checkpoint_wire.h",
       "sha256": "012650382e2127c511a46fbdab4cab9b90fd5d48338c53ae1faf0ba8254850cf"
+    },
+    {
+      "path": "mods/host/pe_combat_presets.c",
+      "sha256": "573c5c6050e456d5d47fab6ba9af113921955cc6fe5893633c02a57dd51fcb2f"
+    },
+    {
+      "path": "mods/host/pe_combat_presets.h",
+      "sha256": "84abfac199396fc7d687e992776bd3b65f5c83d36fa600c338eba98e7c309a6a"
     },
     {
       "path": "mods/host/pe_content_api.c",
@@ -4035,11 +4047,11 @@
     },
     {
       "path": "mods/host/pe_pages.c",
-      "sha256": "89e4a06b7d7405d4876a566e94eb215eb567324f5ca86056aa9dcbf2e44a990d"
+      "sha256": "b765d994c198f0aff27d45deccfe5019df4d08995962ab9bd69f9d7bf55d15a3"
     },
     {
       "path": "mods/host/pe_pages.h",
-      "sha256": "582be5a9fe1f51b069b621bdd5f0552a60b0015f36f9ba0933c0d1f6fe854469"
+      "sha256": "13491c5c445d5453d5ede0be8b75307a6963131054f35814c8e5c3ab96e60c50"
     },
     {
       "path": "mods/host/pe_present.c",
@@ -4307,11 +4319,11 @@
     },
     {
       "path": "mods/pe_qol/pe_battle_frequency.c",
-      "sha256": "5d4896f45ff8c8cd8ef27ea91da3786cd9d56f908b165e5a3c644344cf83d555"
+      "sha256": "e1a6a78032d957f4a61bf21983a759f97d8a67804f702d312c5df18c260d9c0f"
     },
     {
       "path": "mods/pe_qol/pe_encounters.c",
-      "sha256": "6c5837d94794ff7df5aaa3d4d989bf75968f0a5a3d1654961f757262a6542800"
+      "sha256": "49c7ac9d3bc5618006dc8ee3b0b84aa79a422ec1b42c5acac8b7950ab5e11916"
     },
     {
       "path": "mods/pe_qol/pe_inventory.h",
@@ -4351,11 +4363,11 @@
     },
     {
       "path": "mods/pe_rebalance/pe_combine.c",
-      "sha256": "6d5e77d5768bbeab99ab51e842b3861311ac31f0f759ca2f999ecd6e482cec28"
+      "sha256": "87fe0a5c986d00ada1e201ad09edf08fd6d744a3c74fad449f0578a17384e49a"
     },
     {
       "path": "mods/pe_rebalance/pe_mod_effects.c",
-      "sha256": "798ff152b88ecca4d383ed9beaf5ae826448606bdad61c95f6fa607065484040"
+      "sha256": "07a9393ccd05460d80bf25e464ab0806d1809a60fa6a66657fae61607fb958c8"
     },
     {
       "path": "mods/pe_rebalance/pe_mod_effects.h",
@@ -4371,7 +4383,7 @@
     },
     {
       "path": "mods/pe_rebalance/pe_pe_balance.c",
-      "sha256": "eadeff2276a51b915d3be40910d9d78cfeb12ec1fd706b0de0fd3e391923586d"
+      "sha256": "0d274fa1e2c798ad9e752778ff5416f11364ca02855331ae65fc5ac7a9497d0b"
     },
     {
       "path": "mods/pe_rebalance/pe_rebalance.c",
@@ -4379,7 +4391,7 @@
     },
     {
       "path": "mods/pe_rebalance/pe_weapon_power.c",
-      "sha256": "e654ffbffb9e2b835eba5969fe0c2528cdb0621a3f280eb4adb566dce9e97f94"
+      "sha256": "e2a95be86596b07a2e7ce52dfb8703963a702125cd976d079c32d3b67e58aa28"
     },
     {
       "path": "mods/pe_rewards/pe_rewards.c",
@@ -4491,7 +4503,7 @@
     },
     {
       "path": "src/main/item/actions.c",
-      "sha256": "8289cefe0c7260b97b02cde40d4cec647dfb36bf331efd0113e47e318739b9f2"
+      "sha256": "c3b18be4e185382ef1f410e825c6628213c7bb3f7401eff7150392302fea5902"
     },
     {
       "path": "src/main/item/active_list.c",
@@ -4508,6 +4520,14 @@
     {
       "path": "src/main/memcard/save_flow.c",
       "sha256": "4f01de2f43c24ef061562ba2598cb604db5782ae25b10c4c7267735cbaae2ca7"
+    },
+    {
+      "path": "tests/pe_combat_presets_test.c",
+      "sha256": "200b854e11e7e251eae4119360cf7e183681a8ec053f7425045316d3ee26f742"
+    },
+    {
+      "path": "tests/pe_mod_pe_test.c",
+      "sha256": "c790467c03814cea8fad871aff78af4cde082bb794e879854e79e002cee6a0b2"
     }
   ]
 }

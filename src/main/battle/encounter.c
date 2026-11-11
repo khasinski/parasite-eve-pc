@@ -162,6 +162,9 @@ void Battle_StartEncounter(int mode) {
     u32 initial_flags;
     entity = D_8009D254;
     g_ActiveActor = entity->core;
+#ifdef PE_MELEE_PROTOTYPE
+    Battle_MeleeResetEncounter();
+#endif
     g_BattleFrameCounter = 0;
     g_BattleAttackAnimFrame = 0;
     g_BattleModeState = 0;
@@ -262,6 +265,9 @@ void Battle_Update(void) {
     active = D_8009D254->core;
     g_BattleStatusPanelSlot = 0;
     g_ActiveActor = active;
+#ifdef PE_MELEE_PROTOTYPE
+    Battle_MeleeUpdate();
+#endif
     g_MenuFrameCommand = Menu_RunFrameWithArg(&g_BattleMenuActionRecord);
     if (g_BattleModeState == 0 && g_BattleEnemyEscapeFlag != 0) {
         if (g_ActiveActor->hpAlive >= 0x2328U) {
@@ -512,6 +518,9 @@ void Battle_Update(void) {
     if (g_BattleEnemyEscapeFlag != 0) {
         Battle_DrawActiveStatus();
     }
+#ifdef PE_MELEE_PROTOTYPE
+    Battle_MeleeDraw();
+#endif
     if (g_MenuFrameCommand != 0) {
         Render_BeginSceneLoad();
     }

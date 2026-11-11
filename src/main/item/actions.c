@@ -6,6 +6,7 @@
 #include "pe1/inventory.h"
 #include "pe1/inventory_slots.h"
 #include "pe1/inventory_state.h"
+#include "pe1/pe_cost.h"
 #include "pe1/menu_dialog.h"
 #include "pe1/menu_inventory.h"
 #include "pe1/menu_state.h"
@@ -929,31 +930,7 @@ void Inv_BuildEquipSlotDisplay(int index) {
 }
 
 int Inv_GetSlotHighlightState(int spell, int available) {
-    int remaining, cost, i;
-    ItemDataRecord *armor;
-    ParasiteSpellEntry *table;
-    if (spell == 6 || spell == 19) {
-        return available;
-    }
-    if (spell == 5) {
-        BattleCmd_GetRemainingAmmo(&remaining);
-        return remaining / 3;
-    }
-    table = Aya_GetParasiteSpellUnlockTable();
-    cost = table[spell].cost;
-    PE_HOOK(PE_HOOK_POWER_COST, (&(PeHookPowerCost){spell, &cost}));
-    armor = LookupTrackedItem(g_InventoryRuntime.tracked[2]);
-    if (armor != 0) {
-        for (i = 0; i < armor->tailCount; i++) {
-            if (armor->tailData[i] == 0x0E) {
-                break;
-            }
-        }
-        if (i < armor->tailCount) {
-            cost = cost * 2 / 3;
-        }
-    }
-    return cost;
+    return Inv_ParasitePowerCost(spell, available);
 }
 
 void Battle_UseItem(s32 arg0) {

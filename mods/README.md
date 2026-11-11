@@ -63,6 +63,34 @@ mods/
   pe_hello/            example mod (not built by default)
 ```
 
+## Combat presets
+
+F1 > PE Enhancements > Combat > Combat preset applies Original or Enhanced to enabled combat
+modules. Original uses native weapon-effect and Parasite Energy rules and disables melee
+changes, the item-menu Combine shortcut and the weapon DPS display. Enhanced applies the
+suite's Rebalanced rules and enables the melee features with the hit spark off. Both use
+normal encounter frequency and enable random battles. Custom keeps individual settings.
+Purchases and item-combination actions are performed explicitly.
+
+Each feature owns its apply/match callbacks. The aggregate preset displays Custom whenever
+enabled features differ from both presets. Individual settings are saved normally, so loading
+an existing configuration preserves it. Manage mods still controls which modules run.
+
+## Melee Combat (pe_melee)
+
+Build with `-DPE_MODS=ON -DPE_MELEE_PROTOTYPE=ON`, then open F1 > PE Enhancements > Combat > Melee.
+The saved switches control the flank follow-up, rear hit bonus, faster windup, body-based club reach,
+out-of-reach cancellation, and the backhand hit spark. They apply to Clubs 1 through 5 throughout
+the game. The follow-up requires a nonlethal single-target side hit and a target that remains
+attackable. Rear hit bonus defaults to on. It adds 25% to the first hit, rounded down, and lets
+rear hits offer the same quick backhand when Flank follow-up is also enabled. The rear damage
+bonus works with Flank follow-up off. The backhand deals a quarter of the boosted first hit
+and can kill the target. A backhand does not grant a second Steal roll.
+
+Existing Melee Combat settings migrate to the submenu, with explicitly saved submenu settings taking precedence.
+The independent Melee Combat mod can be disabled under F1 > Manage mods and restarted. Club 1's +8 damage belongs to
+Rebalance's Progression gun bonuses setting.
+
 ## Stacked items (pe_stacks)
 
 F1 > PE Enhancements > Inventory > Stacked items (on by default). Lists keep plain item ids; the

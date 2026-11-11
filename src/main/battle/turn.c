@@ -165,6 +165,9 @@ extern u8 g_BattleActionQueueCount;
 
 void Battle_SetupEntityTarget(BattleEntity *actor) {
     BattleEntity *target;
+#ifdef PE_MELEE_PROTOTYPE
+    Battle_MeleeReset();
+#endif
     g_BattleHitPending = 0;
     g_BattleRemainingActions = g_ActiveActor->action->turnWord & 15;
     g_BattleActionAnimModes[0] = g_ActiveActor->action->animMode[0];

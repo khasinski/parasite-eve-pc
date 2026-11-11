@@ -23,6 +23,7 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_combat_presets.h"
 #include "pe_atb_items.h"
 #include "pe_panacea.h"
 
@@ -152,7 +153,22 @@ static int pe_power_cost(void *ctx, void *user) {
 }
 
 #define PE_PAGE PE_PAGE_PE_BALANCE
+static void pe_combat_pe_balance_apply(int preset)
+{
+    int rules = preset == PE_COMBAT_ORIGINAL ? RULES_VANILLA : RULES_REBALANCED;
+    pe_apply(rules);
+    s_rules = s_rules_shown = rules;
+    pe_sync_quick();
+}
+
+static int pe_combat_pe_balance_matches(int preset)
+{
+    int rules = preset == PE_COMBAT_ORIGINAL ? RULES_VANILLA : RULES_REBALANCED;
+    return s_rules == rules && pe_matches(rules);
+}
+
 void pe_pe_balance_register(const char *mod_id) {
+    pe_combat_preset_add(mod_id, pe_combat_pe_balance_apply, pe_combat_pe_balance_matches);
     int i;
     pe_apply(RULES_REBALANCED);
     pe_menu_register_choice(PE_PAGE, "Rules", "Vanilla, Rebalanced, or Custom.", &s_rules, s_rules_names, 3);

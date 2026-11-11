@@ -9,6 +9,7 @@
 #include "pe_mod_menu.h"
 #include "pe_atb_items.h"
 #include "pe1/inventory.h"
+#include "pe1/pe_cost.h"
 
 SaveRuntimeState g_SaveRuntimeState;
 Combatant *g_ActiveActor;
@@ -20,8 +21,8 @@ s32 g_InvSlotLimit;
 static ParasiteSpellEntry spells[20];
 void *Aya_GetParasiteSpellUnlockTable(void){return spells;}
 int BattleCmd_GetRemainingAmmo(int *out){if(out)*out=120;return 120;}
-ItemDataRecord *Item_LookupBaseData(unsigned int index){(void)index;return NULL;}
-int Inv_GetSlotHighlightState(int,int);
+static ItemDataRecord base_armor;
+ItemDataRecord *Item_LookupBaseData(unsigned int index){return index==8?&base_armor:NULL;}
 static Combatant aya;
 static BattleEntity player;
 static PeHookFn hooks[PE_HOOK_COUNT];
@@ -70,15 +71,50 @@ static void costs(void){
         assert(aya.exp_or_acc-native==1000*65536-expected);
         int menu_cost=power==3?100:50;PeHookPowerCost query={(int)power,&menu_cost};
         hooks[PE_HOOK_POWER_COST](&query,NULL);assert(menu_cost==cost);
-        /* Exercise the original menu lookup, including its armor discount. */
+        /* Exercise the cost calculation used by the native menu, including its armor discount. */
         s16 bag[1]={0x100};g_InvItemPtr=bag;g_InvSlotLimit=1;
         g_InventoryRuntime.tracked[2]=0;
         ItemDataRecord *armor=&g_InventoryRuntime.equipment[0];
         armor->tailCount=light?1:0;armor->tailData[0]=0x0E;
         spells[power].cost=power==3?100:50;
-        assert(Inv_GetSlotHighlightState((int)power,0)==(light?cost*2/3:cost));
+        assert(Inv_ParasitePowerCost((int)power,0)==(light?cost*2/3:cost));
     }
     puts("PE costs: 124 cases match native charge rounding and menu affordability");
+}
+static void menu_cost_inputs(void){
+    *rules=0;tick();
+    spells[3].cost=101;
+    s16 bag[1]={0x100};g_InvItemPtr=bag;g_InvSlotLimit=1;g_InventoryRuntime.tracked[2]=0;
+    ItemDataRecord *armor=&g_InventoryRuntime.equipment[0];
+    memset(armor,0,sizeof *armor);
+    assert(Inv_ParasitePowerCost(3,0)==101);
+    armor->tailCount=1;armor->tailData[0]=0x0E;
+    assert(Inv_ParasitePowerCost(3,0)==67);
+
+    memset(&base_armor,0,sizeof base_armor);
+    base_armor.tailCount=1;base_armor.tailData[0]=0x0E;bag[0]=9;
+    assert(Inv_ParasitePowerCost(3,0)==67);
+    for(int i=0;i<9;i++){
+        memset(&g_KeyItemRecords[i],0,sizeof g_KeyItemRecords[i]);
+        g_KeyItemRecords[i].tailCount=1;g_KeyItemRecords[i].tailData[0]=0x0E;
+        bag[0]=0x200+i;
+        assert(Inv_ParasitePowerCost(3,0)==67);
+    }
+    const int invalid[]={0,0x180,0x1ff,0x209,-1};
+    for(unsigned i=0;i<sizeof invalid/sizeof invalid[0];i++){
+        bag[0]=(s16)invalid[i];
+        assert(Inv_ParasitePowerCost(3,0)==101);
+    }
+    bag[0]=0x100;
+    g_InventoryRuntime.tracked[2]=-1;
+    assert(Inv_ParasitePowerCost(3,0)==101);
+    g_InventoryRuntime.tracked[2]=1;
+    assert(Inv_ParasitePowerCost(3,0)==101);
+    g_InventoryRuntime.tracked[2]=0;g_InvSlotLimit=0;
+    assert(Inv_ParasitePowerCost(3,0)==101);
+    assert(Inv_ParasitePowerCost(6,37)==37 && Inv_ParasitePowerCost(19,23)==23);
+    assert(Inv_ParasitePowerCost(5,0)==40);
+    puts("PE menu cost: equipment, plain and special items, invalid slots, armor rounding and ammo powers");
 }
 static void other_actor(void){
     Combatant other={0};*rules=1;tick();aya.curHP=17;aya.maxHP=999;aya.exp_or_acc=1000*65536;
@@ -89,5 +125,5 @@ int main(int argc,char **argv){
     if(argc==2 && !strcmp(argv[1],"--saved-vanilla"))saved_rules=0;
     pe_pe_balance_register("pe_rebalance");assert(rules && detox && scan && tick);
     if(saved_rules==0){assert(*rules==0 && !g_pe_half_enabled && !g_pe_panacea);vanilla();return 0;}
-    if(argc==2 && !strcmp(argv[1],"--vanilla"))vanilla();else if(argc==2 && !strcmp(argv[1],"--actor"))other_actor();else costs();return 0;
+    if(argc==2 && !strcmp(argv[1],"--vanilla"))vanilla();else if(argc==2 && !strcmp(argv[1],"--actor"))other_actor();else {costs();menu_cost_inputs();}return 0;
 }
