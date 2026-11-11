@@ -42,6 +42,7 @@ static bool Host_StateChord(const SDL_Event *event);
 #include <psyz/system.h>
 #include <psyz/video.h>
 #include "pe1/boot.h"
+#include "pe1/battle_runtime.h"
 #include "pe1/boot_disc_check.h"
 #include "pe1/boot_display.h"
 #include "pe1/boot_services.h"
@@ -4165,7 +4166,7 @@ static void Host_PrintHelp(const char *program_name) {
         "[--dynamic-lighting 0|1] [--effect-geometry-correction 0|1] "
         "[--headless | --headless-gpu] [--internal-resolution 1..8] [--frame-limit N] [--control-at N] "
         "[--dump-vram PATH] [--dump-frame PATH] [--dump-audio PATH] [--pad-at VBLANK:BUTTON_MASK ...] "
-        "[--test-crash-after N | --test-abort-after N] [--test-save-after N]\n",
+        "[--test-crash-after N | --test-abort-after N] [--test-save-after N] [--test-ignore-hit-reactions]\n",
         program_name
     );
     printf("--download-backgrounds / --verify-backgrounds manage the optional HD pack without opening a window.\n");
@@ -4180,6 +4181,7 @@ static void Host_PrintHelp(const char *program_name) {
     printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
     printf("Headless fixtures only: --diagnostic-hp-at VBLANK:EXPECTED_HP:VALUE (requires --frame-limit; output is marked coverage-only)\n");
     printf("--test-crash-after N / --test-abort-after N crash on purpose at VBlank N to check the crash report (its path is printed).\n");
+    printf("--test-ignore-hit-reactions lands every hit as a plain hit (no criticals or grazes), for route replays recorded that way.\n");
     printf("--test-save-after N saves to memory card 1, slot 1 at the first free field frame from VBlank N, as the save menu does (the file is printed).\n");
 }
 
@@ -4441,6 +4443,8 @@ int main(int argc, char **argv) {
             }
             g_BootHostCrashAt = (u32)tick;
             g_BootHostCrashAbort = abort_crash;
+        } else if (!strcmp(argv[arg], "--test-ignore-hit-reactions")) {
+            g_BattleTestIgnoreHitReactions = 1;
         } else if (!strcmp(argv[arg], "--test-save-after")) {
             char *end = NULL;
             errno = 0;

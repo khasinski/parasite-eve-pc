@@ -2551,7 +2551,7 @@
     },
     {
       "path": "include/pe1/battle_runtime.h",
-      "sha256": "3bbcc5e1955f973054ccbdd1bd63a624039f133c7a728dd17d1bc6077c69ca20"
+      "sha256": "cacdd263f3d4d3572675bd4bd902625e1017024720c59edd0c53169e8f604c82"
     },
     {
       "path": "include/pe1/battle_saved_state.h",
