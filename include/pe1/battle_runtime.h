@@ -54,8 +54,7 @@ typedef enum BattleMeleeFeature {
 int Battle_MeleeFeatureEnabled(BattleMeleeFeature feature);
 #else
 static inline int Battle_MeleeFeatureEnabled(BattleMeleeFeature feature) {
-    (void)feature;
-    return 1;
+    return feature != BATTLE_MELEE_SPARK;
 }
 #endif
 

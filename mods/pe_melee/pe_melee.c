@@ -26,7 +26,7 @@ static struct {
         "Cancel out-of-reach follow-ups", "Skip the backhand when the target is predicted to be out of reach.", 1
     },
     [BATTLE_MELEE_SPARK] = {
-        "Backhand hit spark", "Draw a blue-white spark on a successful follow-up hit.", 1
+        "Backhand hit spark", "Draw a blue-white spark on a successful follow-up hit.", 0
     },
 };
 
