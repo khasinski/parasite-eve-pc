@@ -12,8 +12,11 @@ typedef struct PeDiscFile {
     int directory;
 } PeDiscFile;
 
+struct PeChd;
+
 typedef struct PeDisc {
-    FILE *stream;
+    FILE *stream; /* A CHD image keeps its file here, read through chd. */
+    struct PeChd *chd;
     uint64_t image_size;
     uint64_t track_offset;
     uint32_t sector_size;
@@ -22,9 +25,12 @@ typedef struct PeDisc {
     char error[192];
 } PeDisc;
 
-/* Read-only ISO9660 access to ISO, MODE2/2352 BIN or a single-track CUE.
+/* Read-only ISO9660 access to ISO, MODE2/2352 BIN, a single-track CUE or a CHD
+ * whose first track is MODE2_RAW (found by its header, not its name).
  * CUE FILE paths are relative to the descriptor, INDEX 01 sets sector zero. */
 int pe_disc_open(PeDisc *disc, const char *path);
+/* Bytes of the image as a MODE2/2352 BIN would hold them, from its first byte. */
+int pe_disc_read_image(PeDisc *disc, uint64_t offset, void *data, size_t size);
 void pe_disc_close(PeDisc *disc);
 int pe_disc_find(PeDisc *disc, const char *path, PeDiscFile *file);
 int pe_disc_read(PeDisc *disc, const PeDiscFile *file, uint64_t offset,

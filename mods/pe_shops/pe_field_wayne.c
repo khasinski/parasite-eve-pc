@@ -62,8 +62,10 @@ void Menu_OpenEquipScreen(int mode);
 #define PE_LINE_PAGE_2    31
 #define PE_NODE_FREE      0x10
 #define PE_TEXTBOX_SHOWN  2
-#define PE_STORE_EQUIPMENT 0
-#define PE_STORE_ITEMS    1
+#define PE_ROW_EQUIPMENT  0       /* our menu's rows: Store equipment, Store item, Cancel */
+#define PE_ROW_ITEMS      1
+#define PE_MODE_ITEMS     0       /* Menu_OpenEquipScreen modes: 0 lists items (filter 0xF400), */
+#define PE_MODE_EQUIPMENT 1       /* 1 weapons and armor (0x3803FE, item kinds 1..9) */
 #define PE_FIELD_LOCK     0xFE    /* field events his talk sends at its start and end */
 #define PE_FIELD_UNLOCK   0xFF
 #define PE_BOX_PAGE      0x7F00  /* our box's page id: no room message uses it */
@@ -96,7 +98,7 @@ static int s_token = -1;          /* the room we looked in */
 static int s_boxes_this_talk;     /* dialogue boxes his current talk has opened */
 static u8 *s_last_message;        /* the box message seen last frame */
 static TextboxEntry *s_menu_box;  /* the box showing our menu */
-static int s_pending = -1;        /* storage screen to open: PE_STORE_*, or -1 */
+static int s_pending = -1;        /* storage screen to open: PE_MODE_*, or -1 */
 static int s_pending_wait;        /* frames left before it opens */
 static int s_heard;               /* his lines were heard once this session: later talks skip them */
 static u8 s_menu_cursor;          /* our menu's row, kept in case a line of his resets the cursor */
@@ -261,8 +263,8 @@ static int pe_on_textboxes(void *ctx, void *user) {
 
     /* Our menu box closed: the dialogue box left the chosen row in g_MenuEquipSlotIndex. */
     if (s_menu_box && (s_menu_box->state != PE_TEXTBOX_SHOWN || s_menu_box->page_id != PE_BOX_PAGE)) {
-        if (g_MenuEquipSlotIndex == PE_STORE_EQUIPMENT || g_MenuEquipSlotIndex == PE_STORE_ITEMS) {
-            s_pending = g_MenuEquipSlotIndex;
+        if (g_MenuEquipSlotIndex == PE_ROW_EQUIPMENT || g_MenuEquipSlotIndex == PE_ROW_ITEMS) {
+            s_pending = g_MenuEquipSlotIndex == PE_ROW_EQUIPMENT ? PE_MODE_EQUIPMENT : PE_MODE_ITEMS;
             s_pending_wait = PE_STORAGE_DELAY;
         }
         s_menu_box = NULL;
@@ -324,8 +326,23 @@ static int pe_on_textboxes(void *ctx, void *user) {
     return 0;
 }
 
+/* "warner.supplies" for Phone Calls: a call can say Warner is on his way with supplies (pe1's
+ * park_wayne) only while he really offers them. */
+static int pe_warner_supplies(void) { return s_enabled && pe_shopw_enabled(); }
+
+/* Offered from the first frame, when every mod has started: pe_phone may start after this mod. */
+static void pe_offer_phone_condition(void) {
+    static int s_tried;
+    const PePhoneCallsApi *phone;
+    if (s_tried) return;
+    s_tried = 1;
+    if ((phone = (const PePhoneCallsApi *)pe_service_get("phonecalls", 1)) != NULL)
+        (void)phone->add_condition("warner.supplies", pe_warner_supplies);
+}
+
 /* Every frame: once the field is unlocked again, open the storage screen chosen. */
 static void pe_field_wayne_tick(void) {
+    pe_offer_phone_condition();
     if (!pe_game_loaded() || !s_warner || pe_talk_running() || s_pending < 0) return;
     if (s_pending_wait > 0) { --s_pending_wait; return; }
     if (pe_free_field()) {

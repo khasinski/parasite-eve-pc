@@ -76,6 +76,10 @@ void pe_mod_log(const char *mod_id, const char *fmt, ...);
 void pe_log(const char *tag, const char *fmt, ...);
 #define PE_EVENT_LOG_LINE "play.log"
 typedef struct PeLogLine { const char *tag, *text; } PeLogLine;
+/* A card save was written and published (the game's own save screen; not the quick save or the
+ * room checkpoint, which never commit). ctx: the save's mapped path (const char *). Announced
+ * after the companion file is committed, while the save screen is still open. */
+#define PE_EVENT_SAVE_COMMITTED "save.committed"
 /* A one-line message over the game for a few seconds (interactive runs). */
 void pe_toast(const char *text);
 

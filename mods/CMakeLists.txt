@@ -1,7 +1,7 @@
 # Mod host and mods, built only with -DPE_MODS=ON. See mods/README.md.
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it.
-set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats pe_randomizer CACHE STRING "Mods built into the game (folder names)")
+set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats pe_phone pe_randomizer CACHE STRING "Mods built into the game (folder names)")
 # Existing build directories may still cache the now-parked language mod.
 if("pe_lang" IN_LIST PE_MOD_LIST)
     list(REMOVE_ITEM PE_MOD_LIST pe_lang)
@@ -55,6 +55,19 @@ foreach(mod IN LISTS PE_MOD_LIST)
     string(APPEND pe_mod_refs "    &pe_mod_${mod},\n")
 endforeach()
 configure_file(pe_mod_list.c.in ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_list.c @ONLY)
+
+# Phone Calls: the game's calls are a text file (pe_phone/calls/pe1.txt), built into the game as
+# bytes; players get an editable copy in their pe_calls folder. Editing it reconfigures the build.
+if("pe_phone" IN_LIST PE_MOD_LIST)
+    set(pe_calls_txt ${CMAKE_CURRENT_SOURCE_DIR}/pe_phone/calls/pe1.txt)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${pe_calls_txt})
+    file(READ ${pe_calls_txt} pe_calls_hex HEX)
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," pe_calls_bytes "${pe_calls_hex}")
+    file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/pe_calls_builtin.c CONTENT
+        "/* Generated from mods/pe_phone/calls/pe1.txt: edit that file, not this one. */\nconst unsigned char g_pe_calls_pe1_txt[] = {@pe_calls_bytes@ 0};\nconst unsigned g_pe_calls_pe1_txt_size = sizeof g_pe_calls_pe1_txt - 1;\n"
+        @ONLY)
+    list(APPEND pe_mod_sources ${CMAKE_CURRENT_BINARY_DIR}/pe_calls_builtin.c)
+endif()
 
 add_library(pe-mods OBJECT ${pe_mod_sources} ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_list.c)
 target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host
@@ -165,6 +178,7 @@ if(BUILD_TESTING AND "pe_rebalance" IN_LIST PE_MOD_LIST)
     add_test(NAME mod-rebalance-saved-vanilla COMMAND test-mod-rebalance --saved-vanilla)
     add_test(NAME mod-rebalance-scoped COMMAND test-mod-rebalance --scoped)
     add_test(NAME mod-rebalance-poison COMMAND test-mod-rebalance --poison)
+    add_test(NAME mod-rebalance-club COMMAND test-mod-rebalance --club)
 endif()
 if(BUILD_TESTING)
     add_test(NAME mod-preserve-save-tail COMMAND test-mod-save --opaque)
@@ -406,7 +420,7 @@ endif()
 # than only through the standalone PowerShell helpers.
 function(pe_feature_test name)
     add_executable(test-mod-${name} ${ARGN})
-    target_include_directories(test-mod-${name} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_economy pe_catalog pe_shops pe_collection pe_wardrobe)
+    target_include_directories(test-mod-${name} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_economy pe_catalog pe_shops pe_collection pe_wardrobe pe_phone)
     target_compile_definitions(test-mod-${name} PRIVATE __psyz PE_MODS=1)
     target_link_libraries(test-mod-${name} PRIVATE psyz)
     if(MSVC)
@@ -436,6 +450,13 @@ if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
 endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
+endif()
+if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
+    # The pure core and the game's own pack; the game side is covered by pe-native-debug's
+    # scenarios/phone_calls.py.
+    pe_feature_test(phone ${PROJECT_SOURCE_DIR}/tests/pe_mod_phone_test.c pe_phone/pe_phone_text.c
+        pe_phone/pe_phone_record.c pe_phone/pe_phone_pick.c pe_phone/pe_phone_file.c)
+    target_compile_definitions(test-mod-phone PRIVATE PE_PHONE_CALLS_FILE="${CMAKE_CURRENT_SOURCE_DIR}/pe_phone/calls/pe1.txt")
 endif()
 if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
     pe_feature_test(skin-bounds ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_bounds_test.c)

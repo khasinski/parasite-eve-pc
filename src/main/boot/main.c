@@ -1595,7 +1595,7 @@ static int Host_ChooseDiscs(const char **paths) {
     return -1;
 #endif
     static const SDL_DialogFileFilter filters[] = {
-        {"Parasite Eve - select both Disc 1 and Disc 2 CUE images", "cue;bin"}
+        {"Parasite Eve - select both Disc 1 and Disc 2 CUE or CHD images", "cue;bin;chd"}
     };
     HostDiscDialog dialog = {0};
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
@@ -1656,7 +1656,7 @@ static int Host_SelectImage(unsigned identity, char *path, size_t size) {
     return -1;
 #endif
     static const SDL_DialogFileFilter filters[] = {
-        {"Parasite Eve USA CUE/BIN image", "cue;bin"}
+        {"Parasite Eve USA CUE/BIN or CHD image", "cue;bin;chd"}
     };
     HostDiscDialog dialog = {0};
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
@@ -3939,7 +3939,7 @@ static int Host_ConfigurePortable(int *argc, char **argv) {
 
 static void Host_PrintHelp(const char *program_name) {
     printf(
-        "Usage: %s [--disc <USA Disc 1 CUE/BIN>] [--disc2 <USA Disc 2 CUE/BIN>] [--choose-discs] "
+        "Usage: %s [--game <USA Disc 1 CUE/BIN/CHD>] [--disc <USA Disc 1 CUE/BIN/CHD>] [--disc2 <USA Disc 2 CUE/BIN/CHD>] [--choose-discs] "
         "[--geometry-correction 0|1] [--antialiasing 0|1] [--model-filtering 0|1] [--widescreen 0|1] [--frame-interpolation 0|1] "
         "[--dynamic-lighting 0|1] [--effect-geometry-correction 0|1] "
         "[--headless | --headless-gpu] [--internal-resolution 1..8] [--frame-limit N] [--control-at N] "
@@ -3949,7 +3949,8 @@ static void Host_PrintHelp(const char *program_name) {
     );
     printf("--download-backgrounds / --verify-backgrounds manage the optional HD pack without opening a window.\n");
     printf("--portable or portable.txt beside the application keeps settings, cards and mods in its userdata directory. PE_CONFIG_HOME overrides this location.\n");
-    printf("Without --disc, opens a native multi-select CUE/BIN dialog. --choose-discs selects new images. ESC opens desktop settings.\n");
+    printf("--game works like --disc for Disc 1 but keeps a saved Disc 2, so one launch argument is enough for a two-disc setup.\n");
+    printf("Without --disc, opens a native multi-select CUE/BIN/CHD dialog. --choose-discs selects new images. ESC opens desktop settings.\n");
     printf("--headless uses native-resolution software rendering; --headless-gpu keeps the actual GPU window hidden and supports internal scaling.\n");
     printf("--dump-frame writes the rendered display as RGB888 PPM at each control/terminal boundary.\n");
     printf("--dump-audio writes stereo 44100 Hz signed-16-bit little-endian PCM; requires headless and PSYZ_AUDIO_CLOCK=video.\n");
@@ -4040,6 +4041,7 @@ int main(int argc, char **argv) {
     int result = EXIT_FAILURE;
     int interactive = 1;
     int choose_discs = 0;
+    int game_argument = 0;
 
     const char *environment_headless = SDL_GetEnvironmentVariable(SDL_GetEnvironment(), "PSYZ_HEADLESS");
     if (environment_headless && *environment_headless) {
@@ -4206,6 +4208,13 @@ int main(int argc, char **argv) {
             if (paths[0] || arg+1>=argc || !(paths[0]=SDL_GetEnvironmentVariable(SDL_GetEnvironment(),argv[++arg])) || !*paths[0]) {
                 fprintf(stderr,"Missing image environment variable\n");return EXIT_FAILURE;
             }
+        } else if (!strcmp(argv[arg], "--game")) {
+            /* Disc 1 for this run, like --disc, but a saved Disc 2 is kept. */
+            if (game_argument++ || paths[0] || arg + 1 >= argc) {
+                fprintf(stderr, "Missing or duplicate image argument\n");
+                return EXIT_FAILURE;
+            }
+            paths[0] = argv[++arg];
         } else if (!strcmp(argv[arg], "--disc") || !strcmp(argv[arg], "--disc2")) {
             int slot = !strcmp(argv[arg], "--disc2");
             if (paths[slot] || arg + 1 >= argc) {
@@ -4234,6 +4243,9 @@ int main(int argc, char **argv) {
         if(!resolution_argument)internal_resolution=host_options.scale;}}
 #endif
     if (interactive) {
+        if (game_argument && !paths[1] && *host_options.discs[1]) {
+            paths[1] = host_options.discs[1];
+        }
         if (!paths[0] && !paths[1]) {
             for (unsigned i = 0; i < 2; ++i) {
                 if (*host_options.discs[i]) {
@@ -4249,7 +4261,7 @@ int main(int argc, char **argv) {
         }
     }
     if (!paths[0] && !paths[1]) {
-        fprintf(stderr, "Supply --disc or --disc2 with a USA CUE/BIN image\n");
+        fprintf(stderr, "Supply --disc or --disc2 with a USA CUE/BIN or CHD image\n");
         return EXIT_FAILURE;
     }
 
@@ -4346,7 +4358,7 @@ image_error:
     SDL_ShowSimpleMessageBox(
         SDL_MESSAGEBOX_ERROR,
         "Parasite Eve",
-        "Cannot mount these images. Select the USA Disc 1 and Disc 2 CUE files together. Cancel to quit.",
+        "Cannot mount these images. Select the USA Disc 1 and Disc 2 CUE or CHD files together. Cancel to quit.",
         NULL
     );
     {
