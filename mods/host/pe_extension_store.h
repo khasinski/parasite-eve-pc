@@ -50,4 +50,7 @@ int pe_extension_validate_load(const char *native_path, const unsigned char *blo
 void pe_extension_apply_load(void);
 void pe_extension_committed(void);
 void pe_extension_cancel(void);
+/* Called after a card save is published (pe_mod_save_committed), with its mapped path. Set by the
+ * mod host, which announces it as the PE_EVENT_SAVE_COMMITTED event; NULL in tests without it. */
+extern void (*pe_save_committed_listener)(const char *path);
 #endif
