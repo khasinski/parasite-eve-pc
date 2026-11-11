@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats` (add `pe_hello` for the example, `pe_challenges` for Challenges).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -57,6 +57,8 @@ mods/
   pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
   pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
   pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
+  pe_challenges/       optional harder rules per run (one file per challenge, Hardcore permadeath),
+                       bundles, assisted marker, run summary (opt-in via PE_MOD_LIST)
   pe_hello/            example mod (not built by default)
 ```
 
@@ -90,6 +92,134 @@ what a save holds, not Aya's place in the room or a fight in progress.
 
 F1 > Cheats: God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers.
 All off until chosen; while they are off the mod writes nothing.
+
+## Challenges (pe_challenges)
+
+Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): add `pe_challenges`
+to build it.
+
+F1 > Challenges, all off until chosen (while every one is off the mod writes nothing). The top
+page starts with Hardcore (featured: `CH_DEF_FEATURED` puts a challenge's row there), then an
+overview (Run, On now, Cleared, Warnings); every other challenge sits on its category's
+sub-page (a category left with no rows gets no page), then Presets, This run and Debug:
+
+| Category | Challenge | Rule | File |
+|---|---|---|---|
+| Restrictions | No Parasite Energy | no PE battle tab; every power dimmed, field too | pe_ch_no_pe.c |
+| Restrictions | No items in battle | no Item battle tab | pe_ch_menu_rules.c |
+| Restrictions | No escape | no Escape battle tab | pe_ch_menu_rules.c |
+| Restrictions | Locked loadout | no gun / armor battle tabs | pe_ch_menu_rules.c |
+| Restrictions | Club only (Club 2x / Club 1.5x) | weapon hits with a Club (items 0x3F-0x43) deal x2 / x1.5; with a gun, no damage, except Maeda's gun (0x61, 0x93: the last fight needs it), which keeps normal damage; PE untouched | pe_ch_club_only.c |
+| Enemies | Tough crowd (1.5x / 2x HP) | enemies take /1.5 or /2 damage; HP, EXP, drops untouched | pe_ch_damage.c |
+| Enemies | Fast enemies (1.5x / 2x) | enemies' turn gauges gain 50% / 100% more than the game added each frame (pauses, Slow, menus unchanged) | pe_ch_fast_enemies.c |
+| Aya | Glass cannon | Aya takes x2 from hits and contact, deals x1.5 | pe_ch_damage.c |
+| Aya | Half health (1/2 / 1/4 HP) | current HP capped at half or a quarter of max, field and battle; max HP itself never changed | pe_ch_half_health.c |
+| Aya | One-hit KO | any hit, contact or HP-reduction attack takes all of Aya's HP | pe_ch_one_hit.c |
+| Aya | Blood price (1 / 2 HP per PE) | each power also costs HP (its real PE cost), once per cast, never the last HP | pe_ch_blood_price.c |
+| Aya | No EXP | the battle's EXP total is zeroed just before it is paid | pe_ch_no_exp.c |
+| Run rules | Hardcore | permadeath; New Game only; locks the run | pe_ch_hardcore.c |
+
+Each definition names its category (`PeChallengeDef.category`; names and descriptions in
+`g_ch_categories`, pe_challenges.c), so F1 and the Records pages group by it with no list to
+update. Rows moved from the top page to their category page keep their saved picks
+(`pe_menu_alias_setting` from `Challenges/<label>` to `Challenges/<category>/<label>`).
+
+Presets: Purist (No PE, No items, No escape), Nightmare (Purist plus Locked loadout, Glass cannon,
+Tough crowd 2x) only turn challenges on; Clear all is press-twice.
+
+- **Modular:** each challenge is a `PeChallengeDef` in the file of its rule: rows (label, levels),
+  the battle tabs it removes, flags (`CH_DEF_NEW_GAME_ONLY`, `CH_DEF_LOCKS_RUN`) and its hooks. The
+  core (`pe_ch_run.c` rows and record, `pe_ch_tabs.c`, assisted detection, run log, history,
+  milestones, summary, bundles, the screen and the notice box) only reads the definitions. A new challenge = an id (append only: ids are save bits), a
+  definition in its own file, a line in `g_ch_defs` (`pe_challenges.c`). `pe_challenges.h` maps it all.
+- **Per run:** the set and levels are saved with the game (record `pe_challenges.run` v2, 48 bytes),
+  so a loaded save shows its own set. At the title the rows are the pick for the next New Game.
+- **Assisted, never blocked:** a challenge turned off or lowered after the run's first minute or
+  first won battle, or a `pe_cheats` / `pe_assists` row switched on (or Win this battle) while a
+  challenge is on, marks the run Assisted. Other mods that work around a challenge (shops under No
+  items, Smoke Grenades under No escape) get a line on the Warnings row.
+- **Tabs:** the battle tabs are `g_MenuItemContextFlag` bits 0-4, which the game saves; they are
+  cleared only in battle (after Half-bar ATB's own tab handling) and the game's bits go back on the
+  first frame after. If every tab would go, Weapon stays (an empty battle menu is untested).
+- **Damage:** PE_HOOK_HP_LOSS for Aya (Glass cannon sources 1-2, then One-hit KO sources 1, 2, 4);
+  PE_HOOK_ENEMY_HIT / ENEMY_HIT_END give each hit's damage on an enemy, scaled after Rebalance and
+  before the Bestiary's kill check. Challenges that change dealt damage register a modifier
+  (`pe_ch_damage_modifier`) that multiplies the hit's num / den; a num of 0 means no damage.
+  Club only can't block equipping a gun (the game has no equip-refusal hook), so gun hits do
+  nothing and a message says so; the Weapon tab stays for switching to the Club in battle. No EXP warns that battle Junk (pe_rewards) scales with EXP.
+- **Other mods** (checked against every mod in the default list; nothing in them changed):
+  - Half-bar ATB edits the same tab word: the tabs code runs after it and follows its writes.
+  - Rebalance mod effects adjust each hit at the same hooks: the scaling runs after them, so it
+    scales their final damage. Glass cannon also goes past Rebalance's Attack All crowd cap (x1.5).
+  - No PE has the last word on power availability over PE balance / Quick powers.
+  - The Bestiary's kill check runs after the scaling, so kills still count.
+  - Assisted: pe_cheats / pe_assists rows switched on, and any play log tag starting `cheat_`
+    (Win this battle, Warp).
+  - Hardcore: quick load works only in free field, and the death is written on the game over's
+    first frame, so neither a quick load nor closing the game saves the run.
+  - Warnings (`kWarnings` in pe_ch_summary.c, one line each, a mod or one of its rows): shops
+    under No items, Smoke Grenades under No escape, battle Junk under No EXP, No random battles.
+- **Events for other mods** (`pe_ch_events.c`; listen with `pe_hook_add(pe_event_id("..."), ...)`,
+  no header of this mod needed):
+
+  | Event | ctx | When |
+  |---|---|---|
+  | `challenges.changed` | `const uint32_t *` active mask, bit = challenge id | after a load, a New Game, every change |
+  | `challenges.assisted` | `const char *` what did it ("Warp", "God mode", "lowered: No PE") | once per run |
+  | `challenges.run_ended` | `const uint32_t *` run id | a Hardcore run's game over |
+  | `challenges.run_cleared` | `const uint32_t *` run id | a challenge run's Clear Data save, once |
+
+  Challenge ids (append only): 0 No PE, 1 No items, 2 No escape, 3 Glass cannon, 4 Tough crowd,
+  5 Hardcore, 6 Locked loadout, 7 One-hit KO, 8 No EXP, 9 Blood price, 10 Fast enemies, 11 Club only, 12 Half health.
+  A `challenges` service (is a challenge on, its level, report an assist) belongs in
+  `host/pe_services.h`, which the PS5 port pins by checksum, so it waits for upstream. Until then
+  cheat mods are detected through their rows and the `play.log` `cheat_*` convention.
+- **Debug** (F1 > Challenges > Debug, nothing saved or changed): Preview the Hardcore notice (the
+  fallen-run window in the field, closing to nothing) and Preview fallen saves (Hardcore saves grey
+  in the save / load lists for the session).
+- **Not yet:** Scarcity, no bonus-point spending.
+- **Challenges in Aya's menu** (`pe_ch_screen.c`): a Challenges row (order 35, after the Wardrobe)
+  opens a read-only screen from the game's own widgets, laid out like the Bestiary's. **This run**:
+  the run's challenges with levels (lowered ones dim, a run-locking one in the game's yellow), and
+  Clean / Assisted, battles won, knockouts, time. **Run history** (L1 / R1): every challenge run,
+  newest first, cleared in yellow, fallen dim, with its challenges and numbers. **Records**: one
+  page per category with each challenge's record (below) and the category's count of clears.
+  Game text uses only what the game's font has (letters, digits, `. , : ! ? ' / + - %`). The title bar gives
+  the highlighted challenge's description, then the controls. Challenges are still chosen in F1.
+- **Run history** (`pe_ch_history.c`): `pe_challenges.ini` beside the preferences, one line per run
+  (`<id> ko= st=playing|cleared|fallen on= ever= drop= fl= b= t= lv= at=`; the older
+  `<id> <knockouts> [dead]` lines still read). It is per user, like `pe_collection.ini`: knockouts
+  and deaths survive the reload that follows them, and nothing goes into the card, so the save
+  editor, save states and companion files are unchanged. Every real save (card menu or quick save:
+  the block is `g_MemCardFileBuffer`; the crash reporter's room snapshot is skipped) refreshes the
+  run's line; the save after the credits (Clear Data: `g_SaveTitleStyleFlag` with the card menu's
+  clear prompt) marks it cleared (`pe_ch_milestones.c`). 128 runs; playing runs are dropped first,
+  fallen ones last.
+- **Hardcore saves in the save / load lists** (`pe_ch_card_marks.c`; the save phone's card screen and
+  the title's Load screen are the same menu): a Hardcore save's slot is drawn in a dark red window,
+  a fallen one in grey (only the menu's copy of the slot's window colour, `slot->blendColor`, is
+  changed; the card never is). With one highlighted, the title bar says "Hardcore run" and its other
+  challenges, or "Fallen Hardcore run: it can't be played"; when saving, that the slot holds a
+  Hardcore run. Each slot's file is read once (the game's `Psyz_AdjustPath` name) and its
+  `pe_challenges.run` record peeked read-only (`pe_save_peek`), again only when the slot changes.
+- **Records** (`pe_ch_records.c`): a challenge is completed when a run is cleared (the Clear Data
+  save after the credits) with it on at the end and never lowered. Per challenge: clean and
+  assisted clears, the hardest level cleared, the fastest time, whether it was cleared in a
+  Hardcore run, the first clear's date. Kept per user in `pe_challenges_records.ini` (one line per
+  challenge id). It is fed by listening to `challenges.run_cleared`, like any other mod could be;
+  the first time the file is missing, cleared runs already in the history are counted once. Shown
+  on the Records page of Aya's Challenges screen (cleared clean in yellow, not cleared dim) and as
+  "Challenges cleared N of M" in F1.
+- **This run (F1):** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
+- **Hardcore (permadeath):** chosen at the title for a New Game only, and its run locks every
+  challenge on (more can be added, none lowered; Clear all refuses). The game's own game over (phase
+  3 with no Preraise and no Revive, `Battle_StepPostBattle`) marks the run fallen in the history.
+  Loading any save of a fallen run (card slot, quick save, copy) opens the game's own dialogue
+  window ("This Hardcore run has ended. It fell after N battles, time." / Return to title;
+  `pe_ch_notice.c`), then the title through the game's own `Boot_Shutdown` on the first frame a soft
+  reset is allowed. Saves are never deleted or moved. The load isn't refused up front because the
+  load admission code lives in host files the PS5 port pins; a separate Hardcore card would need the
+  pinned save flow too.
 
 ## A mod
 
@@ -212,6 +342,7 @@ Records today:
 | `pe_economy.shop` | Requisition (the name from before the split) | pe_shops/pe_requisition.c |
 | `pe_qol.keys` | key item pocket | pe_qol/pe_key_items.c |
 | `pe_qol.sort` | bag sort | pe_qol/pe_bag_sort.c |
+| `pe_challenges.run` | challenges and levels on / used / lowered, assisted, battles won, time | pe_challenges/pe_ch_run.c |
 
 Saves from earlier builds kept these as fixed blocks (`PELT` +0x000, `PECT` +0x040, `PESH` +0x1C0, `PKEY` +0x200, `SORT`
 +0x260 from 0x1C90).
