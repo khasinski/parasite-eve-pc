@@ -14,7 +14,7 @@ static struct {
     int enabled;
 } s_features[BATTLE_MELEE_FEATURE_COUNT] = {
     [BATTLE_MELEE_FOLLOW_UP] = {
-        "Flank follow-up", "Press Cross within 0.8 seconds of an eligible club side hit to backhand.", 1
+        "Flank follow-up", "Press Cross within 0.8 seconds of an eligible side or enabled rear hit.", 1
     },
     [BATTLE_MELEE_FAST_WINDUP] = {
         "Faster windup", "Speed up club windups throughout the game.", 1
@@ -27,6 +27,9 @@ static struct {
     },
     [BATTLE_MELEE_SPARK] = {
         "Backhand hit spark", "Draw a blue-white spark on a successful follow-up hit.", 0
+    },
+    [BATTLE_MELEE_REAR_BONUS] = {
+        "Rear hit bonus", "Rear club hits deal 25% extra damage and can offer a flank follow-up.", 1
     },
 };
 

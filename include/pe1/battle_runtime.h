@@ -47,6 +47,7 @@ typedef enum BattleMeleeFeature {
     BATTLE_MELEE_BODY_REACH,
     BATTLE_MELEE_REACH_CANCEL,
     BATTLE_MELEE_SPARK,
+    BATTLE_MELEE_REAR_BONUS,
     BATTLE_MELEE_FEATURE_COUNT
 } BattleMeleeFeature;
 

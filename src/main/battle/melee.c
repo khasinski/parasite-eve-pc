@@ -133,7 +133,8 @@ static int Melee_IsAttack(const BattleEntity *target)
 int Battle_MeleeOnDamage(BattleEntity *target, int damage)
 {
     const EnemyCombatant *enemy = target->core;
-    int angle;
+    int angle, rear;
+    int rearEnabled = Battle_MeleeFeatureEnabled(BATTLE_MELEE_REAR_BONUS);
 
     if (melee.phase == MELEE_REPLAY && melee.target == target && Melee_IsAttack(target)) {
         int bonus = melee.firstDamage / 4;
@@ -141,10 +142,10 @@ int Battle_MeleeOnDamage(BattleEntity *target, int damage)
         fprintf(stderr, "club_flank hit frame=%d damage=%d\n", g_BattleFrameCounter, bonus ? bonus : 1);
         return bonus ? bonus : 1;
     }
-    if (!Battle_MeleeFeatureEnabled(BATTLE_MELEE_FOLLOW_UP)
-        || (target->entityFlags & 0x4000) || (target->entityFlags & 0x2040) == 0x40
-        || melee.phase != MELEE_IDLE || damage >= enemy->hpAlive
-        || !Melee_IsAttack(target) || !Melee_HasClub())
+    if ((!rearEnabled && !Battle_MeleeFeatureEnabled(BATTLE_MELEE_FOLLOW_UP))
+        || !enemy || (target->entityFlags & 0x4000) || (target->entityFlags & 0x2040) == 0x40
+        || g_ActiveActor->action->actionCode.actionId != 8
+        || (g_ActiveActor->stateFlags & 0x180000) || !Melee_HasClub())
         return damage;
     if (target->posX.fixed == D_8009D254->posX.fixed && target->posZ.fixed == D_8009D254->posZ.fixed)
         return damage;
@@ -152,9 +153,18 @@ int Battle_MeleeOnDamage(BattleEntity *target, int damage)
     angle = Battle_CalcRelativeAngle(D_8009D254, target) & 0xfff;
     if (angle > 2048)
         angle = 4096 - angle;
+    rear = angle >= MELEE_SIDE_LIMIT;
+    if (rear && rearEnabled) {
+        int bonus = damage / 4;
+        damage += bonus;
+        fprintf(stderr, "club_flank rear frame=%d angle=%d bonus=%d damage=%d\n",
+                g_BattleFrameCounter, angle, bonus, damage);
+    }
     fprintf(stderr, "club_flank first frame=%d angle=%d damage=%d distance=%d\n", g_BattleFrameCounter, angle,
             damage, Battle_MeleeClubDistance(target, D_8009D254));
-    if (angle < MELEE_SIDE_MIN || angle >= MELEE_SIDE_LIMIT)
+    if (!Battle_MeleeFeatureEnabled(BATTLE_MELEE_FOLLOW_UP)
+        || melee.phase != MELEE_IDLE || damage >= enemy->hpAlive || !Melee_IsAttack(target)
+        || angle < MELEE_SIDE_MIN || (rear && !rearEnabled))
         return damage;
 
     melee.target = target;
