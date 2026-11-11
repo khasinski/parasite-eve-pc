@@ -1415,12 +1415,14 @@ void Inv_SetAyaSlotCount(int count) {
     }
 }
 
+int g_InvOverflowSlotCount;
+
 int Inv_GetAyaSlotLimit(void) {
-    if (g_AyaSaveState.inventory_slot_count + Inv_GetBonusSlotCount() >= 0x33) {
+    if (g_AyaSaveState.inventory_slot_count + Inv_GetBonusSlotCount() + g_InvOverflowSlotCount >= 0x33) {
         return 0x32;
     }
 
-    return g_AyaSaveState.inventory_slot_count + Inv_GetBonusSlotCount();
+    return g_AyaSaveState.inventory_slot_count + Inv_GetBonusSlotCount() + g_InvOverflowSlotCount;
 }
 
 /* Original USA data at 0x800923D8. */

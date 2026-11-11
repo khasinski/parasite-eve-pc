@@ -65,7 +65,7 @@ void pe_menu_alias_setting(const char *key, const char *legacy) {
 }
 
 static int pe_row_saved(const PeMenuRow *row) {
-    return row->kind == PE_ROW_TOGGLE || row->kind == PE_ROW_CHOICE || row->kind == PE_ROW_INT;
+    return row->kind == PE_ROW_TOGGLE || row->kind == PE_ROW_CHOICE || row->kind == PE_ROW_INT || row->kind == PE_ROW_DIGITS;
 }
 
 void pe_menu_save_settings(void) {
@@ -249,6 +249,46 @@ int pe_menu_register_info(const char *sub, const char *label, const char *descri
     return 0;
 }
 
+int pe_menu_register_digits(const char *sub, const char *label, const char *description, int *value, unsigned digits) {
+    PeMenuRow *row;
+    int top = 1;
+    unsigned i;
+    if (!value || digits < 1 || digits > 9 || !(row = pe_row_new(PE_ROW_DIGITS, sub, label, description))) return -1;
+    for (i = 0; i < digits; ++i) top *= 10;
+    row->value = value;
+    row->count = digits;
+    row->maximum = top - 1;
+    pe_row_restore(row);
+    if (*value < 0 || *value > row->maximum) *value = 0;
+    return 0;
+}
+
+int pe_menu_row_copy(PeMenuRow *row) {
+    char text[16];
+    if (row->kind != PE_ROW_DIGITS) return 0;
+    pe_menu_row_value_text(row, text, sizeof text);
+    if (SDL_SetClipboardText(text)) return 1;
+    pe_mod_log(NULL, "copy %s/%s failed: %s", row->page, row->label, SDL_GetError());
+    return 0;
+}
+
+int pe_menu_row_paste(PeMenuRow *row) {
+    char *text;
+    const char *p;
+    int value = 0;
+    unsigned n = 0;
+    if (row->kind != PE_ROW_DIGITS || !(text = SDL_GetClipboardText())) return 0;
+    for (p = text; *p; ++p)
+        if (*p >= '0' && *p <= '9') {
+            if (++n > row->count) break;
+            value = value * 10 + (*p - '0');
+        }
+    SDL_free(text);
+    if (n != row->count) return 0;
+    *row->value = value;
+    return 1;
+}
+
 /* ---- page metadata ---- */
 enum { PE_MAX_PAGES = 64 };
 static PeMenuPageInfo s_pages[PE_MAX_PAGES];
@@ -290,7 +330,7 @@ const PeMenuPageInfo *pe_menu_page_info(const char *path) {
 }
 
 int pe_menu_row_adjustable(const PeMenuRow *row) {
-    return row->kind != PE_ROW_ACTION && row->kind != PE_ROW_INFO;
+    return row->kind != PE_ROW_ACTION && row->kind != PE_ROW_INFO && row->kind != PE_ROW_DIGITS;   /* digits: Enter edits */
 }
 
 static const char *s_tick_mod[PE_MAX_TICKS];   /* each tick's mod: inactive mods' are skipped */
@@ -373,6 +413,9 @@ void pe_menu_row_value_text(PeMenuRow *row, char *out, unsigned size) {
         out[0] = '\0';
         row->text_fn(out, size);
         break;
+    case PE_ROW_DIGITS:
+        snprintf(out, size, "%0*d", (int)row->count, *row->value);
+        break;
     }
     pe_mod_call_end();
 }
@@ -410,6 +453,7 @@ void pe_menu_row_step(PeMenuRow *row, int direction) {
         break;
     case PE_ROW_ACTION:
     case PE_ROW_INFO:
+    case PE_ROW_DIGITS:
         break;
     }
     pe_mod_call_end();

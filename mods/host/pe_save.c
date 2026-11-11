@@ -503,6 +503,16 @@ static int pe_register_record(const PeSaveRecord *r, int conditional) {
 
 int pe_save_register(const PeSaveRecord *record) { return pe_register_record(record, 0); }
 int pe_save_register_conditional(const PeSaveRecord *record) { return pe_register_record(record, 1); }
+const char *pe_save_wants_alone(const uint8_t *block) {
+    int i;
+    pe_carry(block + PE_SAVE_TAIL_OFFSET, 1);
+    for (i = 0; i < s_reg_count; ++i)
+        if (s_reg[i].record->wants_alone && pe_mod_active(s_reg[i].mod_id)) {
+            pe_load_one(i);
+            if (s_reg[i].record->wants_alone(s_reg[i].record->data)) return s_reg[i].mod_id;
+        }
+    return NULL;
+}
 
 void pe_save_on_read(const uint8_t *block) {
     int i;

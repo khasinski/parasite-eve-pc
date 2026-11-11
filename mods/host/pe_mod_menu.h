@@ -58,6 +58,9 @@ int pe_menu_register_tick(PeMenuPerFrame fn);
 /* A read-only line: text() fills the value shown on the right (Junk, prices, results). */
 typedef void (*PeMenuText)(char *out, unsigned size);
 int pe_menu_register_info(const char *sub, const char *label, const char *description, PeMenuText text);
+/* A number of `digits` digits (1-9, shown zero-padded), saved like the others: Enter edits it in
+ * place a digit at a time, C copies it and Ctrl+V pastes one (a seed to share). */
+int pe_menu_register_digits(const char *sub, const char *label, const char *description, int *value, unsigned digits);
 /* Describe sub-page `sub` of the current page: the footer line when its link is selected,
  * and its place among its sibling pages (lower first; pages without one keep their order). */
 int pe_menu_page(const char *sub, const char *description, int order);
@@ -80,7 +83,7 @@ void pe_mod_panel_close(void);
 
 typedef enum PeRowKind {
     PE_ROW_TOGGLE, PE_ROW_ACTION, PE_ROW_CHOICE, PE_ROW_INT,
-    PE_ROW_LIVE_INT, PE_ROW_LIVE_CHOICE, PE_ROW_DYNAMIC_CHOICE, PE_ROW_INFO
+    PE_ROW_LIVE_INT, PE_ROW_LIVE_CHOICE, PE_ROW_DYNAMIC_CHOICE, PE_ROW_INFO, PE_ROW_DIGITS
 } PeRowKind;
 
 typedef struct PeMenuRow {
@@ -118,6 +121,10 @@ PeMenuRow *pe_menu_row(int index);
 void pe_menu_row_value_text(PeMenuRow *row, char *out, unsigned size);
 void pe_menu_row_step(PeMenuRow *row, int direction); /* left/right */
 void pe_menu_row_accept(PeMenuRow *row);              /* Enter */
+/* Digits rows: the value to the clipboard; the clipboard's digits (exactly row->count of them,
+ * other characters ignored) to the value. 1 on success. */
+int pe_menu_row_copy(PeMenuRow *row);
+int pe_menu_row_paste(PeMenuRow *row);
 
 /* Optional native settings owner, installed only while its modal is open. */
 void pe_mod_panel_set_native_close(void (*close_callback)(void));

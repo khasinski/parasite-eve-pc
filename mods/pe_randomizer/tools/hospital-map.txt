@@ -1,0 +1,58 @@
+# Day 3 hospital (St. Francis) map for the key logic: python -I hospital_logic.py hospital-map.txt ../pe_rand_spots.h
+# Every gate below is a door guard from doorscan.py (build-mods/mods/doors.txt) or a story write from --bits
+# (story-writes.txt), checked against the mod-randomizer-rooms step listing. Keys by item id (keyscan.py names).
+#
+# The game shows the second floor twice: M320-M339 while the power is off, M129-M145 once the fuse box is done.
+# Twins (same layout, same chests): M320~M129 M321~M133 M323~M136 M324~M137 M325~M138 M326~M139 M327~M140
+# M328~M141 M329~M142 M330~M143 M332~M145 M339~M130. A spot listed in both versions is one spot.
+#
+# stage N [needs=...]: the stages follow each other one way; entering one cuts off the rooms of the stage before
+#   unless they are listed again.
+# zone NAME rooms... [needs=...]: rooms reachable in that stage once the needs are met. A needs bit is met when the
+#   key is held and its own spot has been reached (as in pe_rand_gen.c); a door that tests only the spot's flag
+#   is written the same way, which is stricter than the game.
+# lock KEY stage=N [early=breaks]: the stage in which the key is used. A key may go to a chest that can be
+#   reached in that stage without the key (so it can't be walked past for good). early=breaks: also not to a
+#   chest that can be reached in an earlier stage.
+# later KEY: used after the hospital; any chest that stays reachable to the end of the last stage.
+# base KEYS: what every spot here needs from earlier days.
+
+base CA
+
+# V0x4a 0x1c8-0x1d6. In from the New York map (d4 at night -> M125, V0x4a 0x1c0 -> M039 first).
+stage 1
+zone A M125 M126 M127 M128 M131
+# M127 -> M128 needs !(V0x42 & 0x4); M131 -> M320 always; nothing in M320-M339 leads back (M320 out: M321, M329).
+
+# V0x4a 0x1d6-0x1e8, power off. No way out but the fuse box.
+stage 2
+zone B0 M320 M321 M322 M323 M324 M325 M326 M339 M134
+# M321 -> M327 tests only V0x41 & 0x1, set by the St. Francis Key's spot in M325 when its give succeeds.
+zone B1 M327 M328 needs=D1
+# M339 -> M329 tests V0x41 & 0x2 (the Blue Magnetic Cardkey's spot in M328) or V0x42 & 0x20 (set in M339 and M329).
+# M320 -> M329 tests V0x42 & 0x20 only.
+zone B2 M329 M330 M332 M144 needs=D1,D2
+
+# V0x4a 0x1e8 on. M144's box takes each fuse only with its spot's bit (V0x41 0x40/0x80/0x100), then M144 -> M142
+# (V0x1 = 0x90) and never back to M329. M129 sets V0x42|0x4 on the way to M132 (closes M127 -> M128).
+stage 3 needs=D1,D2,CE,CF,D0
+zone A3 M125 M126 M127
+# M129 -> M132 tests V0x41 & 0x4000 (box done). M132 (elevator) only goes to M127 while V0x4a < 0x1ee.
+# M126 -> M146 needs V0x4a >= 0x1e8 (set by the box).
+zone C M129 M130 M132 M133 M135 M136 M137 M138 M139 M140 M141 M142 M143 M144 M145 M146 M147
+# M127 -> M148: item(Green Magnetic Cardkey), no story test: a Green Cardkey held earlier opens it early, and M148
+# sets V0x42|0x4 (closes M127 -> M128, the only way into stage 2). Hence early=breaks.
+zone D M148 M149 needs=D3
+# M149 sets V0x4a = 0x1ee; from then M132 offers M127 / M129 / M150.
+zone E M150 M151 M152 M153 M154 needs=D3
+# M154 -> M271 (one way, then M155-M160 -> M035): item(Elevator Key) and V0x4a <= 0x1f6; does not need the key's
+# own spot (the V0x4a < 0x1f6 way covers a skipped spot: not yet played).
+
+lock D1 stage=2
+lock D2 stage=2
+lock CE stage=2
+lock CF stage=2
+lock D0 stage=2
+lock D3 stage=3 early=breaks
+lock DA stage=3
+later CC

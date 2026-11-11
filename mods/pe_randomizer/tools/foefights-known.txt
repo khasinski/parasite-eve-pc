@@ -1,0 +1,2 @@
+# mod-randomizer-foefights (tools/foeruns.py --known): seed-plan swaps whose fights fail headless, not fixed yet.
+# (none: the bee-part failures went into tools/foe-deny.txt, which the foe table leaves out)

@@ -15,6 +15,11 @@
  * One guard: a smaller Bag+ (an armor mod removed) never strands items in slots past the new bag
  * size; the bag stays as large as it was until those slots are emptied.
  *
+ * Overflow slots (g_InvOverflowSlotCount: a mod gave an item on a full bag, 11/10): in free field
+ * the items past the bag move down into its empty slots, and the bag shrinks back to its own size as
+ * soon as nothing is left past it. No slot is gained for good. After a load the count is worked out
+ * again from the slots (it isn't saved).
+ *
  * A host feature (pe_equip_sync_init, pe_game.h): every mod that edits the equipped records needs it.
  */
 #include <string.h>
@@ -23,6 +28,7 @@
 #include "pe_mod_host.h"
 #include "pe1/battle_modifiers.h"
 #include "pe1/battle_saved_state.h"
+#include "pe1/inventory_slots.h"
 #include "pe1/inventory_state.h"
 #include "pe1/weapon_list_output.h"
 
@@ -62,10 +68,31 @@ static void pe_rebuild(void) {
     Inv_BuildArmorList(&g_BattleEquipStateBlock);
 }
 
+/* Items past the bag (overflow) into its empty slots; the overflow is what is still left past it. */
+static void pe_bag_overflow_settle(void) {
+    s16 *bag = g_AyaSaveState.inventory_items;
+    int size = g_AyaSaveState.inventory_slot_count + g_InvBonusSlotCount, top = 50, hole;
+    if (size > 50) size = 50;
+    while (top > size && !bag[top - 1]) --top;
+    for (hole = 0; top > size && hole < size; ++hole) {
+        if (bag[hole]) continue;
+        bag[hole] = bag[top - 1];
+        bag[top - 1] = 0;
+        if (g_AyaSaveState.equipped_weapon_slot == top - 1) g_AyaSaveState.equipped_weapon_slot = (s8)hole;
+        if (g_AyaSaveState.equipped_armor_slot == top - 1) g_AyaSaveState.equipped_armor_slot = (s8)hole;
+        while (top > size && !bag[top - 1]) --top;
+    }
+    if (g_InvOverflowSlotCount == top - size) return;
+    pe_log("bag_overflow", "slots=%d over=%d", size, top - size);
+    g_InvOverflowSlotCount = top - size;
+    if (g_InvItemPtr == bag) g_InvSlotLimit = Inv_GetAyaSlotLimit();
+}
+
 static void pe_equip_sync_tick(void) {
     PeEquipSignature now;
     Combatant *aya = pe_aya_core();
     if (!pe_game_loaded() || !aya || !pe_free_field() || pe_in_battle()) return;
+    pe_bag_overflow_settle();
     /* Only while Aya's battle record points at the caches, as the game sets it up. */
     if (aya->action != (BattleAction *)&g_SavedBattleStateTail || aya->attributes != &g_BattleEquipStateBlock) return;
     pe_signature(&now);
