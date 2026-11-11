@@ -1,9 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.12
 
+- Added **language packs**: put a `.pelang` file in the new `lang` folder beside the game, or pick one with **F1 → Language → Add a translation**. The first start that finds a pack asks which language to use; to change it later, pick another under F1 → Language and restart. A pack can replace the game's text, letters and pictures with words, and works with All mods off. Releases contain no translations: packs made from fan translations (German, French, Spanish, Italian, Simplified Chinese) are shared separately.
+- Widescreen: HD packs can now give the side art depth, so things like cars at the screen edge hide characters walking behind them, as they do in the 4:3 picture.
+- Fixed a thin dark line where the widescreen side art meets the right edge of the 4:3 picture.
+- Fixed critical hits and long-range grazes never happening: every gun hit landed as a normal hit with base damage, which also left the rebalance mod's **Critical** effect with nothing to do.
+- Added a first-launch **setup wizard** (storage, discs, settings and mods), available again from **Escape → Discs**.
+- **Quick save** and **quick load** now work at any moment of a running game, including battles, events and movies, and quick load also works from the title screen.
+- Added optional controller shortcuts for the Settings menu (a two-button combo) and the Mods menu in **Escape → Controls**; both start unbound.
 - Added CHD disc images (Disc 1 and Disc 2) next to CUE/BIN, read with libchdr.
-- Added `--game <path>`: Disc 1 for this run, keeping a saved Disc 2.
+- Added `--game <path>`: Disc 1 for this run, keeping a saved Disc 2. Releases include a `recomplauncher.json` for RecompLauncher.
+- Added an optional **Phone Calls** mod (`pe_phone`): after saving at a phone, "Stay on the line?" plays a short call. Calls are plain text files players can edit or add to.
+- Reworked the economy mods: rewards, Mod Catalog, shops and Wardrobe are separate mods, with Workshop, Requisition, Rebuild and Mod Permit screens from Wayne's menu, opt-in Economy playstyles, and mod data kept in a companion file beside each save (also carried by the save editor).
+- Added the **Challenges** mod (`pe_challenges`) for custom builds: harder per-run rules such as No PE, Glass cannon and Hardcore. It is not in the default mod list.
+- Fixed every **pe_qol** feature (Always run, speeds, key item pocket, repeat interact) silently turning off after loading a save made from a fresh New Game.
+- Fixed Warner opening the item storage for equipment and the reverse.
+- Wardrobe character skins keep Aya's own movement clearance, so wider NPC bodies no longer get stuck in narrow passages.
+- Rebalance: Club 1 gets a +8 attack bonus, and weapons held as plain item ids now receive their bonuses.
+- Fixed builds with GCC 14 and newer, and builds without the desktop download services.
 
 ## 0.11
 
@@ -23,7 +38,6 @@
 - Added an optional **Cheats** mod (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle, and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod writes nothing to the game state.
 - Added a **Hold / Toggle** mode for the speed-up button in **Escape → Controls**.
 - Fixed the **Combine** item action and `F1` recipe shortcut when item stacking (`pe_stacks`) is enabled so stacked ingredients in a single slot can be combined and results merge onto existing stacks.
-- Fixed critical hits and long-range grazes never happening on PC: every gun hit landed as a normal hit with base damage, which also left the rebalance mod's **Critical** effect with nothing to do.
 - Fixed Tool and Super Tool parameter transfers, Mod Catalog installs, Wayne's Mod Permits and Requisition purchases consuming or miscounting entire stacks when item stacking (`pe_stacks`) is enabled.
 - Integrated open-source PS5 payload build support (`-DPE_PS5_GAME=ON`), native GPU presentation/upscaling options (`-DPE_PS5_GPU_NATIVE=ON`), state snapshots (`src/main/state/`), particle mesh augmentation and `pe_assists` mod support (contributed by @GUMMIBRI in #42).
 

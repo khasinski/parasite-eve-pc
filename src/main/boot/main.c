@@ -18,6 +18,9 @@ static int host_open_assists;
 #include <stdlib.h>
 #include <string.h>
 #include <SDL3/SDL.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>   /* _NSGetExecutablePath: the setup wizard's relaunch */
+#endif
 #ifdef _WIN32
 #include <direct.h>
 #elif !defined(PE_PS5)
@@ -4299,6 +4302,14 @@ int main(int argc, char **argv) {
 #ifndef PE_PS5
     int setup_argument = 0;
     for (int i = 1; i < argc; ++i) if (!strcmp(argv[i], "--setup")) setup_argument = 1;
+#ifdef __APPLE__
+    /* In a bundle SDL_GetBasePath() is Contents/Resources, not where the executable is. */
+    {
+        uint32_t size = sizeof(host_executable);
+        if (_NSGetExecutablePath(host_executable, &size) != 0) host_executable[0] = '\0';
+    }
+    if (!*host_executable)
+#endif
     snprintf(host_executable, sizeof(host_executable), "%s%s", SDL_GetBasePath() ? SDL_GetBasePath() : "",
              Welcome_FileName(argv[0]));
     const int first_launch = interactive && Host_FirstLaunch();

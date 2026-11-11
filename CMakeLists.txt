@@ -17,7 +17,7 @@ if(CMAKE_HOST_APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET
     set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum supported macOS version")
 endif()
 option(PE_PS5_GAME "Build the native game with the public PS5 SDK" OFF)
-project(parasite-eve-pc VERSION 0.11.0 LANGUAGES C)
+project(parasite-eve-pc VERSION 0.12.0 LANGUAGES C)
 if(PE_PS5_GAME)
     include(cmake/ps5/game.cmake)
 endif()
@@ -168,7 +168,7 @@ endif()
 add_executable(parasite-eve-pc src/main/boot/main.c src/main/boot/crash_report.c src/main/boot/crash_report_posix.c)
 target_include_directories(parasite-eve-pc PRIVATE include)
 target_link_libraries(parasite-eve-pc PRIVATE psyz pe_download_deps ${CMAKE_DL_LIBS})
-set(PE_BUILD_ID "0.11-source")
+set(PE_BUILD_ID "0.12-source")
 execute_process(COMMAND git rev-parse --short=12 HEAD
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     OUTPUT_VARIABLE PE_GIT_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
