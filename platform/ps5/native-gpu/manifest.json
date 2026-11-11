@@ -2551,7 +2551,7 @@
     },
     {
       "path": "include/pe1/battle_runtime.h",
-      "sha256": "5ef531dec4cda8a27903a7bcf4c8f170563dc7dc3aa2cf83c5dfc6af174ef8bd"
+      "sha256": "3bbcc5e1955f973054ccbdd1bd63a624039f133c7a728dd17d1bc6077c69ca20"
     },
     {
       "path": "include/pe1/battle_saved_state.h",
@@ -4387,7 +4387,7 @@
     },
     {
       "path": "mods/pe_shops/pe_field_wayne.c",
-      "sha256": "d79c53ba11241059d4d136e15aba81e852778b0821e693880733aae43d08ef69"
+      "sha256": "3a3695e4fdeaca7685b048b7cf40641023bbe42f3ec076c8820a37cfde9b616f"
     },
     {
       "path": "mods/pe_shops/pe_permit.c",
