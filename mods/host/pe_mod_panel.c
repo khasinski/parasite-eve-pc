@@ -644,7 +644,32 @@ static int pe_edit_event(const SDL_Event *ev) {
     return 0;
 }
 
+static int s_open_key, s_open_button = -1, s_open_trigger_held;
+void pe_mod_panel_set_open_binding(int key, int button) {
+    s_open_key = key;
+    s_open_button = button;
+    s_open_trigger_held = 0;
+}
+static int pe_open_binding_event(const SDL_Event *ev) {
+    if (ev->type == SDL_EVENT_KEY_DOWN)
+        return s_open_key > SDL_SCANCODE_UNKNOWN && (int)ev->key.scancode == s_open_key && !ev->key.repeat;
+    if (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
+        return s_open_button >= 0 && s_open_button < SDL_GAMEPAD_BUTTON_COUNT && ev->gbutton.button == s_open_button;
+    if (ev->type == SDL_EVENT_GAMEPAD_AXIS_MOTION && s_open_button >= SDL_GAMEPAD_BUTTON_COUNT &&
+        ev->gaxis.axis == (s_open_button == SDL_GAMEPAD_BUTTON_COUNT ? SDL_GAMEPAD_AXIS_LEFT_TRIGGER
+                                                                    : SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)) {
+        const int was = s_open_trigger_held;
+        s_open_trigger_held = ev->gaxis.value > (was ? 8000 : 16000);
+        return s_open_trigger_held && !was;
+    }
+    return 0;
+}
+
 static void pe_panel_event(const SDL_Event *ev) {
+    if (pe_open_binding_event(ev)) {
+        s_panel.open = 0;
+        return;
+    }
     if (ev->type == SDL_EVENT_QUIT || ev->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
         s_panel.open = 0;
         SDL_PushEvent((SDL_Event *)ev);
@@ -831,7 +856,8 @@ static bool pe_filter(const SDL_Event *ev) {
         return true;
     }
     if ((ev->type == SDL_EVENT_KEY_DOWN && ev->key.scancode == SDL_SCANCODE_F1 && !ev->key.repeat) ||
-        (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && ev->gbutton.button == SDL_GAMEPAD_BUTTON_GUIDE)) {
+        (ev->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && ev->gbutton.button == SDL_GAMEPAD_BUTTON_GUIDE) ||
+        pe_open_binding_event(ev)) {
 #ifdef PE_PS5_GPU_NATIVE
         extern int CPE_HostOpenRegistryPage(const char *);CPE_HostOpenRegistryPage(NULL);
 #else
@@ -854,6 +880,14 @@ int pe_mod_panel_open_page(const char *page) {
 #ifdef PE_PS5_PLUGINS
     s_direct_drain = 1; /* release the closing button before original pad polling */
 #endif
+    pe_panel_run();
+    return 1;
+}
+
+void pe_mod_panel_close(void) { s_panel.open = 0; }
+
+int pe_mod_panel_open(void) {
+    if (!pe_ui_gpu_ready() || s_panel.open) return 0;
     pe_panel_run();
     return 1;
 }

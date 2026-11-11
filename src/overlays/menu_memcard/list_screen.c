@@ -2,6 +2,7 @@
 #include "menu_memcard_menu.h"
 #include "menu_memcard_screen.h"
 #include "pe1/boot.h"
+#include "pe_hooks.h"
 #include <psyz/video.h>
 #include <stdio.h>
 
@@ -265,6 +266,7 @@ s32 MenuCard_RunListScreen(void) {
     s32 initialPage;
     s32 waitFrames;
     s32 result;
+    s32 loaded = 0;
     s32 groupsRemaining;
     u32 rgb0;
     u32 rgb1;
@@ -409,6 +411,10 @@ s32 MenuCard_RunListScreen(void) {
                 MemCard_UpdateSavePolling();
                 Field_HandleStateTransition();
                 MenuCard_HandleListInput();
+                PE_HOOK(PE_HOOK_TITLE_FRAME, &loaded);
+                if (loaded) {
+                    break;
+                }
                 MenuCard_RedrawImageNodes();
                 node = (g_MemcardActiveNodeHead);
                 previous = 0;
@@ -491,7 +497,9 @@ s32 MenuCard_RunListScreen(void) {
         Draw_InitBuffers();
         Draw_SelectBuffer();
         Draw_PresentFrame(2);
-        if (g_MemcardScreenTimer >= 0x3E9) {
+        if (loaded) {
+            result = 2; /* a mod loaded a save: on as Continue */
+        } else if (g_MemcardScreenTimer >= 0x3E9) {
             wantedKind = 7;
             selection = (g_MemcardActiveNodeHead);
             while (selection != 0) {
