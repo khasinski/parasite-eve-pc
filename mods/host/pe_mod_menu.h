@@ -54,6 +54,11 @@ int pe_menu_register_dynamic_choice(const char *sub, const char *label, const ch
                                     int *index, unsigned max_count, PeMenuChoiceCount count_fn,
                                     PeMenuChoiceName name_fn);
 int pe_menu_register_tick(PeMenuPerFrame fn);
+/* A question in the Mods panel's look, modal like the panel: `title`, the `count` rows of `names`
+ * (the cursor starts on `initial`) and a line of `help`. Only a row answers it. Returns the row,
+ * or -1 when it can't be shown (headless, no window yet, the panel open) or the game's window
+ * was closed on it. For a choice a mod needs before the game loads anything. */
+int pe_menu_choose(const char *title, const char *help, const char *const *names, unsigned count, int initial);
 /* A read-only line: text() fills the value shown on the right (Junk, prices, results). */
 typedef void (*PeMenuText)(char *out, unsigned size);
 int pe_menu_register_info(const char *sub, const char *label, const char *description, PeMenuText text);

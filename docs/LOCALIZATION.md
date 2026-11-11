@@ -16,8 +16,9 @@ the [Parasite Eve Localization Mod Plan](https://claude.ai/artifact/2NpmecRhhgMB
 | Translator template, test language, pack compiler (`pelang.py`) | Done |
 | `pe_lang` mod: F1 > Language, item names and descriptions | Done |
 | System messages, misc table, room dialogue | Done: `PE_HOOK_TEXT_LOOKUP` from every table, `PE_HOOK_TEXT_PAGE` |
-| French | Bundled desktop pack; inventory labels fit the original menu geometry. Dialogue layout review remains incomplete |
-| Spanish pilot | Bundled pilot; untranslated keys keep the original text. Needs Spanish-speaker review |
+| French | Submitted pack (`localization/`), not shipped; inventory labels fit the original menu geometry. Dialogue layout review remains incomplete |
+| Spanish pilot | Submitted pilot, not shipped; untranslated keys keep the original text. Needs Spanish-speaker review |
+| What a release holds | No translated files. Players put `.pelang` packs in `lang/` themselves (`PE_BUNDLE_LANGUAGE_PACKS`, off by default, compiles the submitted ones beside the game for work on them) |
 | Mod-owned text (`pe_tr`) | Explicit-key fragments plus optional UTF-8 interface translation, checked printf templates, Catalog/shops/inventory/collection integration |
 | Battle messages compiled into the port (Scan, running away) | Keyed as `battle/NNN` (table 20), imported from fan patches; not yet played |
 | Text drawn into images | Not keyed |
@@ -159,8 +160,13 @@ python -I pelang.py build fr.csv --strings out/text/strings.json --lang fr --nam
    - For deliberate overflow/pseudo testing only, `--allow-overflow` turns known layout failures
      into warnings. It never permits malformed or changed controls.
 5. **Play.** Put the `.pelang` in `lang/` beside the game, or in `lang/` in the user folder (beside
-   `pe_mods.ini`). Build the game with `pe_lang` in `PE_MOD_LIST`, turn All mods on, and pick the
-   language under F1 > Language.
+   `pe_mods.ini`), and start the game (built with `pe_lang` in `PE_MOD_LIST`). The first start
+   that finds packs with no language chosen yet asks which one to use, once, in the Mods
+   panel's look and before the game reads anything from the disc (`pe_menu_choose`). With no packs
+   it never asks. The language in use is fixed when the game starts: F1 >
+   Language saves the choice for the next start and says to restart. Language packs don't need
+   All mods: they are the one mod that switch doesn't hold back, and their own row in F1 > Manage
+   mods turns them off.
 
 `pelang.py pseudo` makes a test language from every entry: letters swap case, and each entry is
 marked with `!` and padded about 30%. Build it like any pack (`--lang qps`) to see what text a pack
@@ -172,7 +178,8 @@ Language selection is stored separately in `pe_lang_selection.dat` beside `pe_mo
 the pack's language code and display/edition name. Filenames and list positions are not identity.
 Keep these two header fields stable across pack updates; give different editions distinct names.
 An identical identity in the user folder overrides the copy beside the game. If a selected pack
-is missing, Game text is used and the identity is retained until a new selection is made.
+is missing, English (the game's own text, the first row under F1 > Language) is used and the
+identity is retained until a new selection is made.
 Old numeric `Language/Language` preferences are intentionally ignored: select your language once
 after upgrading, because the old index cannot establish which pack was intended.
 
@@ -208,10 +215,11 @@ with a pack of up to 64 MB inside. It refuses a zip that is damaged (its checksu
 no `text.bin` at its top level (names match exactly), or holds an encrypted pack.
 
 **F1 > Language > Add a translation** opens a file window for `.pelang` files. The chosen file
-is checked first, then copied as-is into `lang/` in the user folder, so it's still there at the
-next start, and switched to. A file whose language code and name match a pack already in the list
-replaces it, which is how an update installs. A file that can't be read is not copied, and the
-toast says why. If the copy fails, the pack is used for that session only. The row isn't on PS5,
+is checked first, then copied as-is into `lang/` in the user folder and saved as the language
+for the next start; the toast says to restart. A file whose language code and name match a pack
+already in the list replaces it, which is how an update installs (the pack in use keeps drawing
+from the copy the game started with). A file that can't be read is not copied, and the toast says
+why. If the copy fails, nothing is added. The row isn't on PS5,
 which has no file window. Zipped files need the zip reader that desktop builds have
 (`PE_DESKTOP_MOD_DOWNLOADS`). Without it, plain packs still load and zips are skipped with a log
 line.
@@ -320,7 +328,7 @@ pe_t_tr(&text, "mod/pe_economy/wayne/workshop", "Workshop", 24);
 NULL. `pe_t_tr` appends a bounded single-line translation, using the original English when the
 provider/entry is missing or an invalid label is supplied. It rejects command bytes, line breaks,
 empty labels and labels exceeding the caller's limit; it never inserts a new choice or treats
-translation text as a format string. The host disables the service when pe_lang or All mods is off.
+translation text as a format string. The host disables the service when pe_lang is off.
 There is no dependency requiring economy mods to install or enable pe_lang.
 
 The key and layout catalogue is `localization/data/mod_strings.json`. Each entry supplies the

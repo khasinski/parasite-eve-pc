@@ -1157,13 +1157,15 @@ def name_letters(pack):
 # ---- The game ----
 
 def run(game, discs, work, pack=None, present=(), mods=True, pad=(), start=None, driver=None, frame_limit=None,
-        crash_after=None, card=None, save_after=None):
+        crash_after=None, card=None, save_after=None, all_mods=None):
     """One headless run in its own folder, with `pack` chosen and the `present` packs beside it. From vblank `start` the game pauses at each control point;
     driver(vblank, work) keeps frames (keep()) and returns the next command, or None to quit."""
     work.mkdir(parents=True)
     config = work / 'config'
     (config / 'lang').mkdir(parents=True)
-    ini = f'Manage mods/All mods={int(mods)}\nManage mods/Language packs={int(mods)}\n'
+    # all_mods: the master switch by itself (False: a new player's game, Language packs' own row on).
+    ini = (f'Manage mods/All mods={int(mods if all_mods is None else all_mods)}\n'
+           f'Manage mods/Language packs={int(mods)}\n')
     (config / 'pe_mods.ini').write_text(ini + ''.join(f'Manage mods/{m}=0\n' for m in MODS))
     if pack:
         code, name, _, path = pack
@@ -1440,6 +1442,20 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         check(lit(work, 'first', BOX) > 200, f'{label}: no dialogue drawn: {work}')
         check(crop(work, 'first', BOX) != crop(off, 'first', BOX), f'{label}: the box is still English: {work}')
         print(f'PASS {label}: stretches drew, no letter shown as "?"')
+
+    # A new player's game: All mods off. A picked language still draws, exactly as with All mods on,
+    # and no other mod starts.
+    if 'packs' in parts:
+        work = run_fixed(game, discs, out / 'pack-el-all-mods-off', first, pack=greek, pad=NEW_GAME, all_mods=False)
+        log = mods_log(work)
+        check('All mods off' in log, f'All mods is not off in this run: {work}')
+        check('pe_lang: started' in log, f'the language mod did not start with All mods off: {work}')
+        started = [line for line in log.splitlines() if ': started ' in line and not line.startswith('pe_lang:')]
+        check(not started, f'another mod started with All mods off: {started}: {work}')
+        check(f'pe_lang: language: {greek[1]} ({greek[0]})' in log, f'the saved language is not the one in use: {work}')
+        check(crop(work, 'first', BOX) == crop(out / 'pack-el', 'first', BOX),
+              f'the Greek box with All mods off is not the one with All mods on: {work}')
+        print('PASS all mods off: a picked language draws as with All mods on, and no other mod starts')
 
     # Greek: Aya's default name in the pack's name letters, in a box a few Cross presses on.
     if 'name' in parts:

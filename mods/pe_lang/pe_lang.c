@@ -1,8 +1,10 @@
 /* Language packs: the game's text from a .pelang pack (docs/LOCALIZATION.md).
  *
  * Packs are read from lang/ beside the game and lang/ in the user folder (beside pe_mods.ini);
- * F1 > Language picks one, or the game's own text. Anything a pack doesn't translate keeps the
- * game's text, so a half-finished pack is still playable.
+ * F1 > Language picks one, or the game's own text, for the next start: the language in use is
+ * fixed when the game starts. The first start with packs and no language chosen asks, in the
+ * Mods panel's look, before the game reads anything from the disc. Anything
+ * a pack doesn't translate keeps the game's text, so a half-finished pack is still playable.
  *
  * The resident text tables (system messages, item names and descriptions, the rest) and the
  * battle messages the boot program holds (the Scan panel's lines, running away: "battle/NNN")
@@ -15,7 +17,7 @@
  * installed only for packs that draw its new cells; Latin codes remain stable. Accented letters
  * (é, ñ, ß, « ...): while a pack is in use they are
  * composed from the game's own letters into the dialogue font's empty cells, codes 0x4D on (as
- * the font goes to VRAM, PE_HOOK_TIM_UPLOAD, or at once when F1 picks a pack); the dialogue box
+ * the font goes to VRAM, PE_HOOK_TIM_UPLOAD); the dialogue box
  * gets their widths through g_TextboxGlyphWidths, and the menus through the resident glyph
  * metrics. The game's text never uses those codes, but its rename grids (sys/115-117) draw
  * them, as blanks: with Game text the page, widths and metrics are put back as the game had them.
@@ -75,7 +77,13 @@ static PeLangPack s_packs[MAX_PACKS];
 static unsigned s_pack_count;
 static char s_labels[MAX_PACKS][64];
 static const char *s_names[MAX_PACKS + 1];
-static int s_choice;                    /* 0: the game's own text, else s_packs[s_choice - 1] */
+/* The language in use is fixed when the game starts: its letters, widths, names and the pictures
+ * read from the disc all belong to it, and a change part way left some of them behind. F1 only
+ * saves the language for the next start. */
+static int s_choice;                    /* in use. 0: the game's own text, else s_packs[s_choice - 1] */
+static int s_next;                      /* saved for the next start: the F1 row */
+static int s_ask;                       /* the first start with packs: the language is still to be asked */
+static void ask_language(void);
 
 static const PeLangPack *active_pack(void) {
     return s_choice > 0 && (unsigned)s_choice <= s_pack_count ? &s_packs[s_choice - 1] : NULL;
@@ -150,13 +158,12 @@ static int s_font_added;                 /* the glyphs are in VRAM and their wid
 /* The page as the game uploaded it. The glyphs go only into a copy, and only while a pack is in
  * use: the empty cells they take are drawn by the game too (the rename grids), so with Game text
  * the font, widths and menu metrics must stay exactly the game's. */
-static unsigned char s_font_original[FONT_BYTES], s_font_work[FONT_BYTES];
+static unsigned char s_font_original[FONT_BYTES];
 static unsigned char s_metrics_original[FONT_CODES];
 static int s_font_saved, s_metrics_saved;
 static PeCjkCache s_cjk;
 static const PeLangPack *s_font_pack;
 static int s_cjk_warned;
-static const RECT kFontRect = {0x140, 0, 64, 256};
 
 /* The US dialogue font page: 4-bit, its image at VRAM 0x140,0 (64 x 256 words), its palette at
  * 0x140,0xFC (src/main/text/tables.c, g_FieldFontTextureState). */
@@ -253,6 +260,7 @@ static void add_glyphs(unsigned char *pixels) {
 }
 
 static int on_tim_upload(void *ctx, void *user) {
+    ask_language();
     unsigned char *pixels = font_pixels(ctx);
     (void)user;
     if (!pixels) return 0;
@@ -264,31 +272,6 @@ static int on_tim_upload(void *ctx, void *user) {
     pe_cjk_reset(&s_cjk, s_font_pack, s_font_original);
     s_cjk_warned = 0;
     return 0;
-}
-
-/* After the choice changes in F1: the page in VRAM and the widths follow it now. */
-static void font_follow_choice(void) {
-    if (!s_font_saved) return;                       /* not uploaded yet: on_tim_upload decides */
-    int want_cyrillic = pe_lang_pack_uses_glyphs(active_pack(), PE_CYRILLIC_FIRST_CODE, PE_CYRILLIC_LAST_CODE);
-    if (active_pack() && (!s_font_added || want_cyrillic != s_font_cyrillic || s_font_pack != active_pack())) {
-        if (s_font_added) remove_widths();
-        s_font_added = 0;
-        memcpy(s_font_work, s_font_original, FONT_BYTES);
-        add_glyphs(s_font_work);
-        DrawSync(0);
-        LoadImage((RECT *)&kFontRect, (u_long *)s_font_work);
-    } else if (!active_pack() && s_font_added) {
-        DrawSync(0);
-        LoadImage((RECT *)&kFontRect, (u_long *)s_font_original);
-        remove_widths();
-        s_font_added = 0;
-        s_font_cyrillic = 0;
-    }
-    if (s_font_pack != active_pack()) {
-        s_font_pack = active_pack();
-        pe_cjk_reset(&s_cjk, s_font_pack, s_font_original);
-        s_cjk_warned = 0;
-    }
 }
 
 /* A new room can load its bank where the last one was: measure again. The resident pack can be
@@ -506,6 +489,7 @@ static int on_text_letter(void *ctx, void *user) {
 /* The pack's pictures, as the sectors holding them are read. */
 static const PeLangPack *s_pictures_logged;
 static int on_disc_read(void *ctx, void *user) {
+    ask_language();
     PeHookDiscRead *read = ctx;
     const PeLangPack *pack = active_pack();
     (void)user;
@@ -678,15 +662,21 @@ static void load_dir(const char *dir) {
     SDL_free(files);
 }
 
-static void active_text(char *out, unsigned size) {
-    const PeLangPack *pack = active_pack();
-    if (pack) snprintf(out, size, "%s, %u entries", pack->name, pack->count);
-    else snprintf(out, size, s_pack_count ? "the game's own text" : "no packs found");
+static const char *choice_name(int choice) {
+    return choice > 0 && (unsigned)choice <= s_pack_count ? s_packs[choice - 1].name : "English";
 }
 
-static int language_get(void) { return s_choice; }
+static void active_text(char *out, unsigned size) {
+    const PeLangPack *pack = active_pack();
+    if (s_next != s_choice)
+        snprintf(out, size, "%s now, %s after a restart", choice_name(s_choice), choice_name(s_next));
+    else if (pack) snprintf(out, size, "%s, %u entries", pack->name, pack->count);
+    else snprintf(out, size, s_pack_count ? "English" : "no packs found");
+}
 
-static int language_set(int choice) {
+/* Save `choice` as the language for the next start; the one in use stays. Returns non-zero when
+ * it is saved. */
+static int save_choice(int choice) {
     char path[4096];
     PeLangSelection id = {0};
     if (choice < 0 || (unsigned)choice > s_pack_count) return 0;
@@ -694,24 +684,46 @@ static int language_set(int choice) {
         memcpy(id.lang, s_packs[choice - 1].lang, sizeof id.lang);
         memcpy(id.name, s_packs[choice - 1].name, sizeof id.name);
     }
-    if (pe_save_loaded()) names_capture(active_pack());   /* names in Unicode, then the new pack's letters */
-    s_choice = choice;
-    if (pe_save_loaded()) names_put(active_pack());
-    s_bank = NULL;                                   /* measure the room's bank again for the new pack */
-    font_follow_choice();
-    pe_mod_log(MOD_ID, "language: %s", choice ? s_labels[choice - 1] : "the game's own text");
     if (pe_mod_path(path, sizeof path, "pe_lang_selection.dat") || pe_lang_selection_save(path, &id)) {
         pe_mod_log(MOD_ID, "could not save language selection");
-        pe_toast("Could not save language. Selection applies for this session.");
+        return 0;
     }
+    s_next = choice;
+    pe_mod_log(MOD_ID, "language for the next start: %s", choice ? s_labels[choice - 1] : "the game's own text");
     return 1;
+}
+
+static int language_get(void) { return s_next; }
+
+static int language_set(int choice) {
+    if (choice < 0 || (unsigned)choice > s_pack_count) return 0;
+    if (!save_choice(choice)) {
+        pe_toast("Could not save the language. Nothing changed.");
+        return 0;
+    }
+    pe_toast(s_next == s_choice ? "The language stays as it is." : "Restart the game to change the language.");
+    return 1;
+}
+
+/* The first start with packs in lang/ and no language chosen yet: ask, once, as soon as the game
+ * is up (its first disc read; the font page's upload comes later), before anything that depends on
+ * the language is loaded. The answer is saved, so the question doesn't come back; F1 > Language
+ * changes it from then on. Unanswered (the window closed on it), it is asked at the next start. */
+static void ask_language(void) {
+    if (!s_ask) return;
+    s_ask = 0;
+    int picked = pe_menu_choose("Language", "Pick the language for the game's text. To change it later: "
+                                "F1 > Language, then restart the game.", s_names, s_pack_count + 1, 0);
+    if (picked < 0 || !save_choice(picked)) return;
+    s_choice = picked;
+    pe_mod_log(MOD_ID, "language: %s (picked at the first start)", s_choice ? s_labels[s_choice - 1] : "the game's own text");
 }
 
 #if PE_LANG_PICKER
 /* ---- F1 > Language > Add a translation: a file picker for .pelang files ----
  * The file is checked first, then copied into lang/ in the user folder (so it is there at the next
- * start) and switched to. The panel is modal and the game paused, so the picker is waited on here,
- * as the disc picker is at start. */
+ * start) and saved as the language for that start. The panel is modal and the game paused, so the
+ * picker is waited on here, as the disc picker is at start. */
 typedef struct Picked {
     SDL_AtomicInt done;
     char path[4096];
@@ -769,23 +781,33 @@ static void add_translation(const char *path) {
     if (copied) pe_mod_log(MOD_ID, "added %s as %s", path, dest);
     else pe_mod_log(MOD_ID, "could not copy %s into the user folder: %s", path, SDL_GetError());
 
-    /* The pack in use may be the one replaced: point the letters away from it first, and
-     * language_set below puts them back from the new copy. */
+    if (!copied) {                                   /* not in lang/: it would be gone at the next start */
+        pe_lang_pack_free(&loaded);
+        pe_toast("Not added: the file could not be copied.");
+        return;
+    }
+    /* A new copy of the pack in use: the game keeps drawing from the one it started with, and
+     * the new file is read at the next start. Any other pack goes in the list now. */
     PeLangSelection id;
     memcpy(id.lang, loaded.lang, sizeof id.lang);
     memcpy(id.name, loaded.name, sizeof id.name);
     int existing = pe_lang_selection_find(&id, s_packs, s_pack_count);
-    if (existing && existing == s_choice) language_set(0);
-
-    int slot = add_pack(&loaded, copied ? dest : path);
+    int slot;
+    if (existing && existing == s_choice) {
+        pe_lang_pack_free(&loaded);
+        slot = existing - 1;
+    } else {
+        slot = add_pack(&loaded, dest);
+    }
     if (slot < 0) {
         pe_toast("Not added: the language list is full.");
         return;
     }
     pe_menu_live_choice_resize(s_names, s_pack_count + 1);
-    language_set(slot + 1);
-    if (copied) snprintf(toast, sizeof toast, "Added %s.", s_labels[slot]);
-    else snprintf(toast, sizeof toast, "Using %s for now: it could not be copied.", s_labels[slot]);
+    if (!save_choice(slot + 1))
+        snprintf(toast, sizeof toast, "Added %s, but the choice could not be saved.", s_labels[slot]);
+    else
+        snprintf(toast, sizeof toast, "Added %s. Restart the game to use it.", s_labels[slot]);
     pe_toast(toast);
 }
 
@@ -819,7 +841,7 @@ static void pick_translation(void) {
 #endif
 
 /* The host hides this service while pe_lang or All mods is off. Resolve the active pack
- * per lookup, so F1 changes and missing packs immediately use each caller's fallback. */
+ * per lookup, so a missing pack uses each caller's fallback. */
 static const unsigned char *mod_text(const char *key) {
     return key && !strncmp(key, "mod/", 4) ? pe_lang_pack_find(active_pack(), key) : NULL;
 }
@@ -852,10 +874,13 @@ static int lang_init(void) {
     if (!pe_mod_path(dir, sizeof dir, "lang/")) load_dir(dir);
 
     PeLangSelection selected;
-    s_choice = 0;
-    if (!pe_mod_path(dir, sizeof dir, "pe_lang_selection.dat") && !pe_lang_selection_load(dir, &selected))
-        s_choice = pe_lang_selection_find(&selected, s_packs, s_pack_count);
-    s_names[0] = "Game text";
+    int saved = !pe_mod_path(dir, sizeof dir, "pe_lang_selection.dat") && !pe_lang_selection_load(dir, &selected);
+    s_choice = s_next = saved ? pe_lang_selection_find(&selected, s_packs, s_pack_count) : 0;
+    /* The game's window isn't up yet: the question waits for the first disc read (ask_language). */
+    s_ask = pe_lang_selection_ask(saved, s_pack_count, pe_mod_interactive() && pe_mod_requested(MOD_ID));
+    pe_mod_log(MOD_ID, "language: %s%s", s_choice ? s_labels[s_choice - 1] : "the game's own text",
+               s_ask ? " (to be asked)" : "");
+    s_names[0] = "English";              /* the game's own text */
     pe_hook_add(PE_HOOK_TEXT_LOOKUP, on_text_lookup, NULL, PE_PRIORITY_EARLY, MOD_ID);
     pe_hook_add(PE_HOOK_TEXT_PAGE, on_text_page, NULL, PE_PRIORITY_EARLY, MOD_ID);
     pe_hook_add(PE_HOOK_SCENE_START, on_scene_start, NULL, PE_PRIORITY_NORMAL, MOD_ID);
@@ -873,12 +898,12 @@ static int lang_init(void) {
     pe_menu_begin("Language");
     pe_menu_top_page("Language", "Play with the game's text from a language pack.", 0);
     pe_menu_register_live_choice(0, "Language",
-                            "A pack from lang/ beside the game or in the user folder; Game text turns it off.",
+                            "The language the game starts in. A change takes effect after a restart.",
                             s_names, s_pack_count + 1, language_get, language_set);
     pe_menu_register_info(0, "In use", "Untranslated text stays as the game has it.", active_text);
 #if PE_LANG_PICKER
     pe_menu_register_action(0, "Add a translation",
-                            "Pick a .pelang file: it is checked, copied to lang/ in the user folder and used.",
+                            "Pick a .pelang file: it is checked and copied to lang/ in the user folder. Restart to use it.",
                             pick_translation);
 #endif
     pe_menu_begin(0);
@@ -888,7 +913,7 @@ static int lang_init(void) {
 static void lang_shutdown(void) {
     for (unsigned i = 0; i < s_pack_count; ++i) pe_lang_pack_free(&s_packs[i]);
     s_pack_count = 0;
-    s_choice = 0;
+    s_choice = s_next = s_ask = 0;
     s_bank = NULL;
     if (s_font_added) {
         remove_widths();

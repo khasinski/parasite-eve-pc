@@ -16,6 +16,8 @@ Two switches, so a modded build is safe to hand out:
 - **Runtime**: F1 > Manage mods > **All mods**, **off by default**. Until a player turns it on and
   restarts, no mod starts and nothing but the F1 panel touches the game. Below it, one toggle per
   mod; a mod turned off doesn't start, nor do the mods that need it. Changes apply at the next start.
+  The one exception is **Language packs**: a language the player picked is no gameplay change, so
+  it runs with All mods off too (its own toggle turns it off).
 
 The upstream test suite (`-DBUILD_TESTING=ON`) gives the same results with `PE_MODS` on and off.
 
