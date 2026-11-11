@@ -1,14 +1,17 @@
 # Mod host and mods, built only with -DPE_MODS=ON. See mods/README.md.
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it. Language packs
-# are available in standard builds, but the original text remains the default.
+# are available in standard builds, but the original text remains the default and no pack ships.
 set(pe_default_mods pe_qol pe_rebalance pe_economy pe_collection pe_stacks pe_warp pe_quicksave pe_cheats)
 if(NOT PE_PS5_GAME)
     list(APPEND pe_default_mods pe_lang)
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 
-option(PE_BUNDLE_LANGUAGE_PACKS "Bundle submitted language packs with the desktop game" ON)
+# Off: a release holds no translated files. Players add .pelang packs themselves (lang/ beside the
+# game, or F1 > Language > Add a translation). ON compiles the languages submitted under
+# localization/ into lang/ beside the game, for work on them.
+option(PE_BUNDLE_LANGUAGE_PACKS "Compile the submitted language packs into lang/ beside the game" OFF)
 if(PE_BUNDLE_LANGUAGE_PACKS AND NOT PE_PS5_GAME AND "pe_lang" IN_LIST PE_MOD_LIST)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     if(APPLE AND PE_MACOS_BUNDLE)
