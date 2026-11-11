@@ -32,6 +32,33 @@ jobs:
           cmake --build build --parallel "$(sysctl -n hw.ncpu)"
           ctest --test-dir build --output-on-failure --no-tests=error
 
+  linux-no-downloads:
+    # PE_DESKTOP_MOD_DOWNLOADS=OFF (the PS5-style host): no libcurl installed, so any curl use outside
+    # the option fails the build. Screenshots and Wardrobe packs still build with cJSON and miniz.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PSYZ_HEADLESS: '1'
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Install Linux build dependencies (no libcurl)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libdecor-0-dev libvulkan-dev libxtst-dev libxinerama-dev wayland-protocols libdrm-dev libgbm-dev libgles2-mesa-dev
+      - name: Fetch PsyZ and SDL
+        run: |
+          git submodule update --init third_party/psyz
+          git -C third_party/psyz submodule update --init external/SDL
+      - name: Build and verify without downloads
+        run: |
+          cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DPE_MODS=ON -DPE_DESKTOP_MOD_DOWNLOADS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build --parallel 4
+          ./build/parasite-eve-pc --help
+          ctest --test-dir build --output-on-failure --no-tests=error -R "^(host-settings|original-game-save-safety|mod-settings-save-safety|mod-save-records|mod-crash-save-tail|mod-preserve-save-tail|mod-inventory|mod-skin-bounds)$"
+
   linux:
     name: linux-${{ matrix.arch }}
     strategy:

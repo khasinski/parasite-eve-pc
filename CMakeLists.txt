@@ -111,9 +111,8 @@ if(PE_PS5_GAME AND PE_DESKTOP_MOD_DOWNLOADS)
     message(FATAL_ERROR "Desktop HD downloads are unsupported on PS5")
 endif()
 add_library(pe_download_deps INTERFACE)
-if(PE_DESKTOP_MOD_DOWNLOADS)
-    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=1)
-# Desktop mod downloads use native TLS through libcurl and a bounded ZIP reader.
+# cJSON and miniz are built in every configuration: screenshots (PNG, JSON metadata) and Wardrobe
+# packs use them. Only libcurl, for HD pack downloads and webhook uploads, follows the option.
 include(FetchContent)
 FetchContent_Declare(pe_json URL https://github.com/DaveGamble/cJSON/archive/refs/tags/v1.7.19.tar.gz
     URL_HASH SHA256=7fa616e3046edfa7a28a32d5f9eacfd23f92900fe1f8ccd988c1662f30454562 SOURCE_SUBDIR pe-unused)
@@ -132,6 +131,9 @@ if(NOT WIN32)
     target_compile_definitions(pe_download_zip PRIVATE _POSIX_C_SOURCE=200809L)
 endif()
 target_link_libraries(pe_download_deps INTERFACE pe_download_json pe_download_zip)
+if(PE_DESKTOP_MOD_DOWNLOADS)
+    target_compile_definitions(pe_download_deps INTERFACE PE_DESKTOP_MOD_DOWNLOADS=1)
+# Desktop mod downloads use native TLS through libcurl.
 if(APPLE)
     target_link_libraries(pe_download_deps INTERFACE "-lcurl")
 elseif(WIN32)
@@ -673,9 +675,11 @@ if(BUILD_TESTING)
         add_test(NAME lighting-editor-assets COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tools/lighting-editor/test_assets.py)
         set_tests_properties(lighting-editor-assets PROPERTIES TIMEOUT 90 SKIP_RETURN_CODE 77 LABELS "tools")
-        add_test(NAME hd-mod-download-safety COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_SOURCE_DIR}/tests/hd_mod_download.py $<TARGET_FILE:parasite-eve-pc>)
-        set_tests_properties(hd-mod-download-safety PROPERTIES TIMEOUT 90 LABELS "downloads")
+        if(PE_DESKTOP_MOD_DOWNLOADS)   # the HD pack downloader itself
+            add_test(NAME hd-mod-download-safety COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/hd_mod_download.py $<TARGET_FILE:parasite-eve-pc>)
+            set_tests_properties(hd-mod-download-safety PROPERTIES TIMEOUT 90 LABELS "downloads")
+        endif()
         add_test(NAME original-game-frame-interpolation COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/frame_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-frame-interpolation PROPERTIES SKIP_RETURN_CODE 77
