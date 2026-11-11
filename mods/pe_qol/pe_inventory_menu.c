@@ -5,6 +5,7 @@
 #include "pe_gametext.h"
 #include "pe_inventory.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe1/field_pad.h"
@@ -119,11 +120,11 @@ static int pe_tip_title(void *ctx, void *user) {
     if (!s_tips || !pe_game_loaded() || pe_in_battle() || !(current = MenuWidget_GetCurrentNode())) return 0;
     if (current->draw == Menu_DrawItemList && !Menu_GetBattleEquipMode() &&
         pe_main_action(MenuWidget_GridCellIndex(current)) == PE_ACTION_ITEMS) {
-        *text = pe_text_from_ascii(s_tip, sizeof s_tip, pe_bag_sort_auto() ? "Items   Square: Sort   Auto sort on" : "Items   Square in the bag: Sort");
+        *text = pe_tr_ascii(s_tip, sizeof s_tip, pe_bag_sort_auto() ? "Items   Square: Sort   Auto sort on" : "Items   Square in the bag: Sort");
     } else if (pe_bag_open(current)) {
         const int slot = MenuWidget_GridCellIndex(current);
         if (slot >= 0 && slot < pe_inventory_limit() && !g_AyaInventoryItems[slot])
-            *text = pe_text_from_ascii(s_tip, sizeof s_tip, pe_bag_sort_auto() ? "Square: Sort   Auto sort is on" : "Square: Sort the bag");
+            *text = pe_tr_ascii(s_tip, sizeof s_tip, pe_bag_sort_auto() ? "Square: Sort   Auto sort is on" : "Square: Sort the bag");
     }
     return 0;
 }
@@ -131,7 +132,7 @@ static int pe_tip_title(void *ctx, void *user) {
 static void pe_tip_once(MenuWidgetNode *current) {
     if (!s_tips || s_tip_shown || !pe_bag_open(current)) return;
     s_tip_shown = 1;
-    pe_toast(pe_bag_sort_auto() ? "Tip: Square sorts the bag. Auto sort is on: new items are sorted for you."
+    pe_toast(pe_bag_sort_auto() ? pe_l10n_ui("Tip: Square sorts the bag. Auto sort is on: new items are sorted for you.")
                                 : "Tip: Square sorts the bag. After a sort, new items are sorted the same way.");
 }
 

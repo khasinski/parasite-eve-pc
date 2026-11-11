@@ -112,6 +112,38 @@ void Save_AppendMetadataChar(unsigned char ch) {
     cursor[-1] = ch;
 }
 
+/* Letter bytes a name window holds before its end byte: the save name 8 bytes (play time follows),
+ * Aya's name 13 (the menu layout follows), a weapon's or armor's 16. */
+static unsigned Save_MetadataRoom(void) {
+    if (g_SaveMetadataCursor == g_SaveRuntimeState.windows.metadata[0].text) return 7;
+    if (g_SaveMetadataCursor == g_SaveRuntimeState.windows.metadata[1].text) return 12;
+    return 15;
+}
+
+/* A grid letter of one or two bytes (pe1/text_render.h): appended whole while the name has fewer
+ * than its letters and its window keeps room for the end byte; when full, it takes the last
+ * letter's place, as Save_AppendMetadataChar does. */
+void Save_AppendMetadataLetter(const unsigned char *letter, unsigned bytes) {
+    unsigned char *cursor = g_SaveMetadataCursor;
+    unsigned room = Save_MetadataRoom(), at;
+    int used = 0;
+    if (bytes < 1 || bytes > 2) return;
+    while (*cursor != 0xFF && cursor < g_SaveMetadataCursor + 16) {
+        used += *cursor < 0xFA;
+        ++cursor;
+    }
+    at = (unsigned)(cursor - g_SaveMetadataCursor);
+    if (used >= g_SaveMetadataWindowLength || at + bytes > room) {
+        if (!Save_DeleteMetadataChar()) return;
+        cursor = g_SaveMetadataCursor;
+        while (*cursor != 0xFF) ++cursor;
+        at = (unsigned)(cursor - g_SaveMetadataCursor);
+        if (at + bytes > room) return;
+    }
+    memcpy(cursor, letter, bytes);
+    cursor[bytes] = 0xFF;
+}
+
 int Save_DeleteMetadataChar(void) {
     unsigned char *cursor = g_SaveMetadataCursor;
     int used = 0;
@@ -156,10 +188,10 @@ void Save_LoadMetadataWindowText(void) {
 
     dst = g_SaveMetadataCursor;
     if (g_SaveMetadataSourceRecord != 0) {
-        lookup = Text_LookupTable8(g_SaveMetadataSourceRecord->itemId - 1);
+        lookup = Text_LookupEditableName(8, g_SaveMetadataSourceRecord->itemId - 1);
         out = dst;
     } else {
-        lookup = Text_LookupTable4(0x1E);
+        lookup = Text_LookupEditableName(4, 0x1E);
         out = dst;
     }
 
@@ -732,9 +764,9 @@ static inline void InitName(u8 *buffer, int length, ItemDataRecord *item) {
         *p = 255;
     dest = g_SaveMetadataCursor;
     if (g_SaveMetadataSourceRecord)
-        source = Text_LookupTable8(g_SaveMetadataSourceRecord->itemId - 1);
+        source = Text_LookupEditableName(8, g_SaveMetadataSourceRecord->itemId - 1);
     else
-        source = Text_LookupTable4(30);
+        source = Text_LookupEditableName(4, 30);
     CopyName(dest, source);
 }
 

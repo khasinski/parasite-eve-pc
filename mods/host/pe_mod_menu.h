@@ -45,6 +45,9 @@ int pe_menu_register_live_int(const char *sub, const char *label, const char *de
 int pe_menu_register_live_choice(const char *sub, const char *label, const char *description,
                                  const char *const *names, unsigned count, PeMenuGet get,
                                  PeMenuSet set);
+/* A live choice registered with `names` now has `count` entries (the array itself may have
+ * grown in place): a mod adding to its list while the game runs. Returns -1 if no row has it. */
+int pe_menu_live_choice_resize(const char *const *names, unsigned count);
 /* A choice whose list depends on other rows; *index resets to 0 when the
  * list length changes. name_fn returns strings that outlive the call. */
 int pe_menu_register_dynamic_choice(const char *sub, const char *label, const char *description,
@@ -55,6 +58,11 @@ int pe_menu_register_live_dynamic_choice(const char *sub, const char *label, con
                                          unsigned max_count, PeMenuChoiceCount count_fn,
                                          PeMenuChoiceName name_fn, PeMenuGet get, PeMenuSet set);
 int pe_menu_register_tick(PeMenuPerFrame fn);
+/* A question in the Mods panel's look, modal like the panel: `title`, the `count` rows of `names`
+ * (the cursor starts on `initial`) and a line of `help`. Only a row answers it. Returns the row,
+ * or -1 when it can't be shown (headless, no window yet, the panel open) or the game's window
+ * was closed on it. For a choice a mod needs before the game loads anything. */
+int pe_menu_choose(const char *title, const char *help, const char *const *names, unsigned count, int initial);
 /* A read-only line: text() fills the value shown on the right (Junk, prices, results). */
 typedef void (*PeMenuText)(char *out, unsigned size);
 int pe_menu_register_info(const char *sub, const char *label, const char *description, PeMenuText text);

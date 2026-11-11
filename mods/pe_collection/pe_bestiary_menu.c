@@ -26,6 +26,7 @@
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_model_stage.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_draw_list.h"
@@ -136,7 +137,7 @@ static void pe_row(int row) {
     if (!c) return;
     if (!pe_met(h)) Draw_SetTextDimmed(1);
     else if (pe_bestiary_new(h)) Draw_SetColor(PE_COLOR_NEW);
-    Draw_PrintRawText(pe_text_from_ascii(s_text, sizeof s_text, pe_met(h) ? c->name : "???"));
+    Draw_PrintRawText(pe_tr_ascii(s_text, sizeof s_text, pe_met(h) ? pe_l10n_ui(c->name) : "???"));
     Draw_SetTextDimmed(0);
     Draw_SetColor(PE_COLOR_TEXT);
 }
@@ -186,9 +187,13 @@ static void pe_elements(char *out, size_t size, unsigned bits) {
     static const char *const names[5] = {"heat", "frost", "cyanide", "acid", "tranq"};
     int i, n = 0;
     out[0] = 0;
-    for (i = 0; i < 5; ++i)
-        if (bits & (1u << i)) n += snprintf(out + n, size - (size_t)n, "%s%s", n ? ", " : "", names[i]);
-    if (!n) snprintf(out, size, "none");
+    for (i = 0; i < 5; ++i) {
+        if (!(bits & (1u << i)) || (size_t)n >= size) continue;
+        int added = snprintf(out+n,size-(size_t)n,"%s%s",n?", ":"",pe_l10n_ui(names[i]));
+        if (added<0 || (size_t)added>=size-(size_t)n) break;
+        n += added;
+    }
+    if (!n) snprintf(out, size, "%s", pe_l10n_ui("none"));
 }
 
 static void pe_info_row(int row) {
@@ -200,23 +205,23 @@ static void pe_info_row(int row) {
     line[0] = 0;
     if (!(state & PE_BESTIARY_MET)) {
         if (row == 0) snprintf(line, sizeof line, "???");
-        if (row == 1) snprintf(line, sizeof line, "%s", c->boss ? "Not met yet" : "Not met yet: defeat one to learn about it");
+        if (row == 1) snprintf(line, sizeof line, "%s", c->boss ? pe_l10n_ui("Not met yet") : pe_l10n_ui("Not met yet: defeat one to learn about it"));
     } else if (row == 0) {
-        snprintf(line, sizeof line, "%s  HP %u  Def %u  Kills %u", c->name, c->hp, c->defense, pe_b()->kills(h));
+        snprintf(line, sizeof line, pe_l10n_ui("%s  HP %u  Def %u  Kills %u"), pe_l10n_ui(c->name), c->hp, c->defense, pe_b()->kills(h));
     } else if (row == 1) {
         if (state & PE_BESTIARY_WEAK) {
             pe_elements(a, sizeof a, c->weak);
             pe_elements(b, sizeof b, c->strong);
-            snprintf(line, sizeof line, "Weak: %s   Strong: %s", a, b);
+            snprintf(line, sizeof line, pe_l10n_ui("Weak: %s   Strong: %s"), a, b);
         } else {
-            snprintf(line, sizeof line, "Weaknesses: Scan, %s or %u Junk", c->boss ? "defeat" : "5 kills", c->price_weak);
+            snprintf(line, sizeof line, pe_l10n_ui("Weaknesses: Scan, %s or %u Junk"), c->boss ? pe_l10n_ui("defeat") : pe_l10n_ui("5 kills"), c->price_weak);
         }
     } else if (row == 2) {
-        if (state & PE_BESTIARY_LOOT) snprintf(line, sizeof line, "Drop: %s", c->drop ? c->drop : "-");
-        else if (c->boss) snprintf(line, sizeof line, "Loot: %u Junk", c->price_loot);
-        else snprintf(line, sizeof line, "Loot: 15 kills or %u Junk", c->price_loot);
+        if (state & PE_BESTIARY_LOOT) snprintf(line, sizeof line, pe_l10n_ui("Drop: %s"), c->drop ? pe_l10n_ui(c->drop) : "-");
+        else if (c->boss) snprintf(line, sizeof line, pe_l10n_ui("Loot: %u Junk"), c->price_loot);
+        else snprintf(line, sizeof line, pe_l10n_ui("Loot: 15 kills or %u Junk"), c->price_loot);
     } else if (row == 3 && (state & PE_BESTIARY_LOOT)) {
-        snprintf(line, sizeof line, "Steal: %s", c->steal ? c->steal : "-");
+        snprintf(line, sizeof line, pe_l10n_ui("Steal: %s"), c->steal ? pe_l10n_ui(c->steal) : "-");
     }
     {
         const unsigned tier = row == 0 ? PE_BESTIARY_MET : row == 1 ? PE_BESTIARY_WEAK : PE_BESTIARY_LOOT;
@@ -224,7 +229,7 @@ static void pe_info_row(int row) {
         else Draw_SetTextDimmed(1);                 /* locked tiers read dimmer */
         if ((state & PE_BESTIARY_MET) && (s_fresh & tier)) Draw_SetColor(PE_COLOR_NEW);
     }
-    Draw_PrintRawText(pe_text_from_ascii(s_text, sizeof s_text, line));
+    Draw_PrintRawText(pe_tr_ascii(s_text, sizeof s_text, line));
     Draw_SetTextDimmed(0);
     Draw_SetColor(PE_COLOR_TEXT);
 }
@@ -262,7 +267,7 @@ static void pe_buy_answer(int yes) {
     (void)pe_bestiary_next_price(h, &bit);
     if (pe_bestiary_buy(h)) {
         if (h == pe_current()) s_fresh |= bit;
-        snprintf(msg, sizeof msg, "Learned its %s   Junk %u", bit == PE_BESTIARY_WEAK ? "weaknesses" : "loot", pe_col_junk());
+        snprintf(msg, sizeof msg, pe_l10n_ui("Learned its %s   Junk %u"), bit == PE_BESTIARY_WEAK ? pe_l10n_ui("weaknesses") : pe_l10n_ui("loot"), pe_col_junk());
         pe_say(msg);
     } else {
         pe_say(pe_col_last_said());
@@ -279,12 +284,12 @@ static void pe_buy(int h) {
     if (!bit) { pe_say("Everything about it is known"); Menu_PlayErrorSound(); return; }
     if (!pe_col_junk_ready(msg, sizeof msg)) { pe_say(msg); Menu_PlayErrorSound(); return; }
     if (pe_col_junk() < price) {
-        snprintf(msg, sizeof msg, "Need %u Junk (have %u)", price, pe_col_junk());
+        snprintf(msg, sizeof msg, pe_l10n_ui("Need %u Junk (have %u)"), price, pe_col_junk());
         pe_say(msg);
         Menu_PlayErrorSound();
         return;
     }
-    snprintf(msg, sizeof msg, "Learn its %s for %u Junk?", bit == PE_BESTIARY_WEAK ? "weaknesses" : "loot", price);
+    snprintf(msg, sizeof msg, pe_l10n_ui("Learn its %s for %u Junk?"), bit == PE_BESTIARY_WEAK ? pe_l10n_ui("weaknesses") : pe_l10n_ui("loot"), price);
     s_buying = h;
     pe_confirm(msg, 1, pe_buy_answer);
     Menu_PlayConfirmSound();
@@ -341,13 +346,13 @@ static int pe_on_help_text(void *ctx, void *user) {
         switch ((s_tick / PE_HELP_TICKS) % 3) {
         case 0:
             for (i = 0; i < s_members; ++i) met += pe_met(s_member[i]);
-            snprintf(line, sizeof line, "%s   %d / %d   Junk %u", s_areas ? s_area_name[s_area] : "", met, s_members, pe_col_junk());
+            snprintf(line, sizeof line, pe_l10n_ui("%s   %d / %d   Junk %u"), s_areas ? pe_l10n_ui(s_area_name[s_area]) : "", met, s_members, pe_col_junk());
             break;
-        case 1: snprintf(line, sizeof line, "L1 R1: Area   Left Right: Turn"); break;
-        default: snprintf(line, sizeof line, "X: Buy   Triangle: View   Square: Pause"); break;
+        case 1: snprintf(line, sizeof line, "%s", pe_l10n_ui("L1 R1: Area   Left Right: Turn")); break;
+        default: snprintf(line, sizeof line, "%s", pe_l10n_ui("X: Buy   Triangle: View   Square: Pause")); break;
         }
     }
-    *text = pe_text_from_ascii(s_text, sizeof s_text, line);
+    *text = pe_tr_ascii(s_text, sizeof s_text, line);
     return 0;
 }
 

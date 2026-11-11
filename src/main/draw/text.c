@@ -1,5 +1,7 @@
 #include "common.h"
 #include "pe1/dialogue_alpha.h"
+#include "pe_hooks.h"
+#include "pe1/mod_text.h"
 #include "pe1/bounds_check.h"
 #include "pe1/draw_area.h"
 #include "pe1/draw_buffers.h"
@@ -9,6 +11,7 @@
 #include "pe1/psyq_gpu.h"
 #include "pe1/render_prim.h"
 #include "pe1/text.h"
+#include "pe1/text_render.h"
 
 /* Shared native state; external variables have one storage definition. */
 int g_DrawGlyphAdvance;
@@ -390,174 +393,139 @@ static inline RenderTexturedQuad *AllocBarQuad(void)
     return prim;
 }
 
-static inline int DecodeGlyph(int input) {
-    int code = input;
-    int glyph;
-    glyph = (u8)code;
-    if (g_TextRenderMode) {
-        int page = g_TextRenderMode << 8;
-        glyph += page;
-        g_TextRenderMode = 0;
-    }
-    if ((u8)code >= 250) {
-        g_TextRenderMode = (u8)code - 250;
-        glyph = -1;
-    }
-    return glyph;
-}
-
-void Draw_AllocTexturedQuad(int code) {
-    int low;
-    int glyph;
-    int raw = code;
-    int current;
-    int metrics;
-    int width;
-    int nibble;
-    int u;
-    int v;
-    int spacing;
-    int column;
-    int row;
-    int arg0;
-    RenderTexturedQuad *prim;
-    u8 *old, *next;
-
-    current = raw & 0xFF;
-    if (g_TextRenderMode != 0) {
-        current += g_TextRenderMode << 8;
-        g_TextRenderMode = 0;
-    }
-
-    low = raw & 0xFF;
-    if ((unsigned int)low >= 0xFA) {
-        g_TextRenderMode = low - 0xFA;
-        current = -1;
-    }
-
-    glyph = current;
-    if (glyph == 0x100) {
-        int x, y;
-        Draw_AllocSprite(0x77);
-        AdvanceCursor(0xC);
-        return;
-    }
-
-    if (glyph < 0) {
-        return;
-    }
-
-    if (glyph >= 0x101) {
-        glyph -= 0x13;
-    }
-
-    glyph %= 0x1B9;
-    row = glyph / 0x15;
-    column = glyph - row * 0x15;
-
-    prim = 0;
-    old = g_DrawPacketCursor;
-    next = old + sizeof(RenderTexturedQuad);
-    if (next < g_DrawPacketArenaBase + 0x4000) {
+/* One of the renderer's letters as a menu quad at the cursor: colour and dimming stay the menu's.
+ * 0 when the packet arena is full. */
+static int Draw_EmitLetter(const PeTextLetter *l) {
+    {
+        RenderTexturedQuad *prim;
+        u8 *old = g_DrawPacketCursor, *next = old + sizeof(RenderTexturedQuad);
+        if (l->page == PE_TEXT_PAGE_SPRITE) {
+            int x = g_TextCursorX;
+            g_TextCursorX = x + l->x;
+            Draw_AllocSprite(l->u);
+            g_TextCursorX = x;
+            return 1;
+        }
+        if (next >= g_DrawPacketArenaBase + 0x4000) {
+            Inv_BoundsCheckAssertStub(1);
+            return 0;
+        }
         g_DrawPacketCursor = next;
         prim = (RenderTexturedQuad *)old;
-    } else {
-        Inv_BoundsCheckAssertStub(1);
-    }
-    if (!prim) return;
-    if (prim != 0) {
-        if (g_DrawTextDimmed != 0) {
-            prim->color.word = g_DrawColorShaded;
-        } else {
-            prim->color.word = g_DrawPrimColor;
-        }
+        prim->color.word = g_DrawTextDimmed != 0 ? g_DrawColorShaded : g_DrawPrimColor;
         prim->tag.length = 9;
         prim->color.bytes.code = 0x2C;
-    }
-
-    metrics = Draw_LookupGlyphMetrics(glyph);
-    nibble = metrics & 0xF;
-    width = (metrics >> 4) & 0xF;
-    spacing = 0;
-    if (glyph < 10 || glyph == 15) {
-        spacing = 1;
-    }
-    u = column * 0xC + nibble;
-    v = row * 0xC;
-    {
-        int uBase;
-        int vBase;
-        int half;
-        int cursorX;
-        int cursorY;
-        arg0 = 0;
-        cursorX = g_TextCursorX;
-        cursorY = g_TextCursorY;
-        spacing++;
-        g_DrawGlyphAdvance = spacing;
-
-        prim->u2 = u;
-        prim->u0 = u;
+        prim->x0 = prim->x2 = g_TextCursorX + l->x;
+        prim->x1 = prim->x3 = prim->x0 + PE_TEXT_DRAWN_W(l);
+        prim->y0 = prim->y1 = g_TextCursorY + l->y;
+        prim->y2 = prim->y3 = prim->y0 + l->h;
+        prim->u0 = prim->u2 = l->u;
+        prim->u1 = prim->u3 = (u8)(l->u + l->w);
+        prim->v0 = prim->v1 = l->v;
+        prim->v2 = prim->v3 = (u8)(l->v + l->h);
         prim->clut = 0x89C;
-        half = spacing >> 1;
-        prim->v1 = v;
-        prim->v0 = v;
-        /* Use the bytes stored in the packet after truncation. */
-        uBase = *(volatile u8 *)&prim->u0;
-        vBase = *(volatile u8 *)&prim->v0;
-        uBase += width;
-        vBase += 0xC;
-        cursorX += half;
-        cursorY++;
-        prim->u3 = uBase;
-        prim->u1 = prim->u3;
-        prim->x0 = cursorX;
-        prim->x2 = prim->x0;
-        prim->y1 = cursorY;
-        prim->y0 = prim->y1;
-        prim->v3 = vBase;
-        prim->v2 = prim->v3;
-        prim->x3 = prim->x0 + width;
-        prim->x1 = prim->x3;
-        prim->y3 = prim->y0 + 0xC;
-        prim->y2 = prim->y3;
-    }
-    prim->tpage = GetTPage(arg0, 0, 0x140, 0);
-    {
-        RenderNativeTag *ot = (RenderNativeTag *)g_DrawOrderingTableEntry;
-
-        prim->tag.address = ot->address;
-        ot->address = (uintptr_t)prim;
+        prim->tpage = GetTPage(0, 0, 0x140, 0);
+        {
+            RenderNativeTag *ot = (RenderNativeTag *)g_DrawOrderingTableEntry;
+            prim->tag.address = ot->address;
+            ot->address = (uintptr_t)prim;
 #ifdef PE_PS5_GPU_NATIVE
-        PeMenuFont_Tag(ot,prim,(unsigned)glyph,(unsigned)nibble,(unsigned)width);
+            if (l->code != PE_TEXT_NO_CODE)
+                PeMenuFont_Tag(ot, prim, (unsigned)l->code, (unsigned)l->nibble, (unsigned)l->w);
 #endif
+        }
     }
-    AdvanceCursor(width + g_DrawGlyphAdvance);
+    return 1;
+}
+
+/* The renderer's letters as menu quads at the cursor, then the cursor moves on by the item's
+ * advance. A full packet arena stops the item where it is. */
+static void Draw_EmitTextItem(const PeTextItem *item) {
+    unsigned i;
+    for (i = 0; i < item->count; ++i)
+        if (!Draw_EmitLetter(&item->letter[i])) return;
+    if (item->count == 1 && item->letter[0].code != PE_TEXT_NO_CODE && item->letter[0].page == 0)
+        g_DrawGlyphAdvance = item->letter[0].advance - item->letter[0].w;
+    AdvanceCursor(item->advance);
+}
+
+/* One menu letter byte (a page byte FA-FE sets the page for the next). */
+void Draw_AllocTexturedQuad(int code) {
+    PeTextItem item;
+    u8 byte = (u8)code;
+    PeText_Read(PE_TEXT_MENU, &byte, 1, 1, &item);
+    if (item.count) Draw_EmitTextItem(&item);
+}
+
+/* One item of menu text (a letter, a page byte, or a pack token); returns the bytes it took. */
+static unsigned Draw_TextItem(const u8 *text) {
+    PeTextItem item;
+    unsigned bytes = PeText_Read(PE_TEXT_MENU, text, ~0u, 1, &item);
+    if (item.count) Draw_EmitTextItem(&item);
+    return bytes ? bytes : 1;
 }
 
 inline int Draw_MeasureTextWidth(u8 *text) {
-    u8 *cursor = text;
-    int width = 0;
+    return PeText_MeasureMenu(text);
+}
 
-    while (*cursor != 255) {
-        int glyph = DecodeGlyph(*cursor++);
-        if (glyph >= 0) {
-            int narrow = 0;
-            if (glyph < 10 || glyph == 15) narrow = 1;
-            g_DrawGlyphAdvance = narrow + 1;
-            if (glyph >= 256) glyph -= 19;
-            width += ((Draw_LookupGlyphMetrics(glyph) >> 4) & 15) + g_DrawGlyphAdvance;
+/* A pack that reads right to left: the line read whole, laid out by the renderer and drawn from
+ * the cursor, so it takes the place the game gives it and only the order inside changes. */
+static PeTextLine s_DrawLine;
+
+static void Draw_EmitLine(PeTextLine *line) {
+    unsigned i;
+    PeText_LineFinish(line, 1);
+    for (i = 0; i < line->count; ++i)
+        if (!Draw_EmitLetter(&line->letter[i])) break;
+    AdvanceCursor(line->width);
+}
+
+/* A line break a language pack puts in menu text (PE_TEXT_LINE_BREAK, a fan patch's two-line
+ * item description): the next line starts where the caller saved the cursor, 12 px lower, as the
+ * German patch's own code draws it on the PS1. Every caller saves the cursor first; English and the
+ * other packs have no break here, so they draw as before. */
+static void Draw_NextMenuLine(void) {
+    DrawTextCursorPair *stack = (DrawTextCursorPair *)g_TextCursorStackPtr;
+    if ((DrawTextCursorPair *)g_TextCursorStackBottom < stack)
+        SetCursor(stack[-1].x, stack[-1].y + 12);
+}
+
+/* Draws the text to FF, a whole line at a time when the pack reads right to left. */
+static void Draw_TextToEnd(u8 *text) {
+    unsigned br;
+    if (PeText_RightToLeft()) {
+        PeTextItem item;
+        PeText_LineStart(&s_DrawLine);
+        while (*text != 255) {
+            unsigned bytes;
+            if ((br = PeText_LineBreakAt(text, ~0u)) != 0) {
+                Draw_EmitLine(&s_DrawLine);
+                Draw_NextMenuLine();
+                PeText_LineStart(&s_DrawLine);
+                text += br;
+                continue;
+            }
+            bytes = PeText_LineRead(&s_DrawLine, PE_TEXT_MENU, text, ~0u, 0, &item);
+            text += bytes ? bytes : 1;
         }
+        Draw_EmitLine(&s_DrawLine);
+        return;
     }
-    return width;
+    while (*text != 255) {
+        if ((br = PeText_LineBreakAt(text, ~0u)) != 0) {
+            Draw_NextMenuLine();
+            text += br;
+            continue;
+        }
+        text += Draw_TextItem(text);
+    }
 }
 
 void Draw_PrintRawText(u8 *text) {
     if (text) {
         PushCursor();
-        while (*text != 255) {
-            Draw_AllocTexturedQuad(*text++);
-        }
+        Draw_TextToEnd(text);
         PopCursor();
     }
 }
@@ -566,9 +534,7 @@ void Draw_PrintRawText(u8 *text) {
 static inline void PrintTextHere(u8 *text) {
     if (text) {
         SaveCursor(g_TextCursorX, g_TextCursorY);
-        while (*text != 255) {
-            Draw_AllocTexturedQuad(*text++);
-        }
+        Draw_TextToEnd(text);
         PopCursor();
     }
 }
@@ -592,14 +558,13 @@ void Draw_PrintTextById(unsigned int textId) {
 
     if (text) {
         PushCursor();
-        while (*text != 255) {
-            Draw_AllocTexturedQuad(*text++);
-        }
+        Draw_TextToEnd(text);
         PopCursor();
     }
 }
 
 void Draw_PrintTextWrapped(u8 *text, int width) {
+    int rtl = PeText_RightToLeft();
     while (*text != 0xFF) {
         int used;
         DrawTextCursorPair *stack = (DrawTextCursorPair *)g_TextCursorStackPtr;
@@ -610,28 +575,26 @@ void Draw_PrintTextWrapped(u8 *text, int width) {
             stack->y = y;
         } else Inv_BoundsCheckAssertStub(2);
         used = 0;
+        if (rtl) PeText_LineStart(&s_DrawLine);
         while (used < width) {
-            int code, glyph, narrow;
+            PeTextItem item;
+            unsigned bytes;
             if (*text == 0xFF) break;
-            Draw_AllocTexturedQuad(*text);
-            code = *text++;
-            glyph = (u8)code;
-            if (g_TextRenderMode) {
-                glyph += g_TextRenderMode << 8;
-                g_TextRenderMode = 0;
+            if (rtl) {                          /* the row's width as measured, then read into the line */
+                int mode = g_TextRenderMode;
+                PeText_Read(PE_TEXT_MENU, text, ~0u, 0, &item);
+                g_TextRenderMode = mode;
+                used += item.width;
+                bytes = PeText_LineRead(&s_DrawLine, PE_TEXT_MENU, text, ~0u, 0, &item);
+                text += bytes ? bytes : 1;
+                continue;
             }
-            if ((u8)code >= 250) {
-                g_TextRenderMode = (u8)code - 250;
-                glyph = -1;
-            }
-            if (glyph >= 0) {
-                narrow = 0;
-                if (glyph < 10 || glyph == 15) narrow = 1;
-                g_DrawGlyphAdvance = narrow + 1;
-                if (glyph >= 256) glyph -= 19;
-                used += ((Draw_LookupGlyphMetrics(glyph) >> 4) & 15) + g_DrawGlyphAdvance;
-            }
+            bytes = PeText_Read(PE_TEXT_MENU, text, ~0u, 1, &item);
+            if (item.count) Draw_EmitTextItem(&item);
+            text += bytes ? bytes : 1;
+            used += item.width;
         }
+        if (rtl) Draw_EmitLine(&s_DrawLine);
         {
             DrawTextCursorPair *restore = (DrawTextCursorPair *)g_TextCursorStackPtr;
             if ((DrawTextCursorPair *)g_TextCursorStackBottom < restore) {
@@ -676,29 +639,18 @@ void Draw_EmitDigitSprite(int digit) {
         quad->color.bytes.code = 0x2C;
     }
     {
-        RenderTexturedQuad *p;
+        RenderTexturedQuad *p = quad;
+        PeTextLetter l;
         u16 x = (u16)g_DrawSpriteX, y = (u16)g_DrawSpriteY;
-        p = quad;
-        p->x0 = p->x2 = x;
-        p->y0 = p->y1 = y;
-        p->x1 = p->x3 = p->x0 + 5;
-        p->y2 = p->y3 = p->y0 + 7;
-        if (digit >= 0) p->u2 = g_DrawDigitFontBaseTexU + (digit % 10) * 5;
-        else p->u2 = 88;
-        {
-            u8 value = p->u2;
-            p->u2 = value;
-            p->u0 = value;
-        }
-        if (digit >= 0) p->v1 = g_DrawDigitFontBaseTexV;
-        else p->v1 = 164;
-        {
-            u8 value = p->v1;
-            p->v0 = value;
-            p->v1 = value;
-            p->u1 = p->u3 = p->u0 + 5;
-            p->v2 = p->v3 = p->v0 + 7;
-        }
+        PeText_MenuDigit(digit, &l);
+        p->x0 = p->x2 = (s16)(x + l.x);
+        p->y0 = p->y1 = (s16)(y + l.y);
+        p->x1 = p->x3 = p->x0 + l.w;
+        p->y2 = p->y3 = p->y0 + l.h;
+        p->u0 = p->u2 = l.u;
+        p->u1 = p->u3 = (u8)(l.u + l.w);
+        p->v0 = p->v1 = l.v;
+        p->v2 = p->v3 = (u8)(l.v + l.h);
         p->clut = g_DrawDigitFontTpageClut;
         p->tpage = 7;
         {
@@ -883,9 +835,7 @@ static inline void PrintSign(u8 *text)
 {
     if (text) {
         PushCursor();
-        while (*text != 255) {
-            Draw_AllocTexturedQuad(*text++);
-        }
+        Draw_TextToEnd(text);
         PopCursor();
     }
 }
