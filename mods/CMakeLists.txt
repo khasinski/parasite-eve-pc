@@ -1,11 +1,30 @@
 # Mod host and mods, built only with -DPE_MODS=ON. See mods/README.md.
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
-# pe_hello is the example mod; add it to the list to build it.
-set(PE_MOD_LIST pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats pe_phone CACHE STRING "Mods built into the game (folder names)")
-# Existing build directories may still cache the now-parked language mod.
-if("pe_lang" IN_LIST PE_MOD_LIST)
-    list(REMOVE_ITEM PE_MOD_LIST pe_lang)
-    set(PE_MOD_LIST "${PE_MOD_LIST}" CACHE STRING "Mods built into the game (folder names)" FORCE)
+# pe_hello is the example mod; add it to the list to build it. Language packs
+# are available in standard builds, but the original text remains the default and no pack ships.
+set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats pe_phone)
+if(NOT PE_PS5_GAME)
+    list(APPEND pe_default_mods pe_lang)
+endif()
+set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
+
+# Off: a release holds no translated files. Players add .pelang packs themselves (lang/ beside the
+# game, or F1 > Language > Add a translation). ON compiles the languages submitted under
+# localization/ into lang/ beside the game, for work on them.
+option(PE_BUNDLE_LANGUAGE_PACKS "Compile the submitted language packs into lang/ beside the game" OFF)
+if(PE_BUNDLE_LANGUAGE_PACKS AND NOT PE_PS5_GAME AND "pe_lang" IN_LIST PE_MOD_LIST)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    if(APPLE AND PE_MACOS_BUNDLE)
+        set(pe_language_pack_dir "$<TARGET_BUNDLE_CONTENT_DIR:parasite-eve-pc>/Resources/lang")
+    else()
+        set(pe_language_pack_dir "$<TARGET_FILE_DIR:parasite-eve-pc>/lang")
+    endif()
+    add_custom_target(pe-language-packs
+        COMMAND "${Python3_EXECUTABLE}" -I "${PROJECT_SOURCE_DIR}/localization/check_translations.py"
+            --out "${pe_language_pack_dir}"
+        COMMENT "Validate and compile bundled language packs"
+        VERBATIM)
+    add_dependencies(parasite-eve-pc pe-language-packs)
 endif()
 
 set(pe_host_sources
@@ -76,6 +95,10 @@ target_compile_definitions(pe-mods PRIVATE __psyz)
 target_link_libraries(pe-mods PRIVATE psyz)
 if(TARGET pe_download_json AND TARGET pe_download_zip)
     target_link_libraries(pe-mods PRIVATE pe_download_json pe_download_zip)
+    if("pe_lang" IN_LIST PE_MOD_LIST)
+        # Zipped .pelang files (pe_lang/pe_lang_bundle.c).
+        target_compile_definitions(pe-mods PRIVATE PE_LANG_ZIP=1)
+    endif()
 endif()
 
 if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
@@ -126,7 +149,7 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
         pe_qol/pe_inventory_menu.c)
     foreach(target test-mod-inventory test-mod-inventory-menu)
         target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_qol)
-        target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1)
+        target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1 PE_INTERFACE_TEXT_FALLBACK=1)
         target_link_libraries(${target} PRIVATE psyz)
         if(MSVC)
             target_compile_options(${target} PRIVATE /UNDEBUG)
@@ -185,7 +208,7 @@ if(BUILD_TESTING AND "pe_rebalance" IN_LIST PE_MOD_LIST)
         ${PROJECT_SOURCE_DIR}/src/main/item/actions.c)
     foreach(target test-mod-atb test-mod-combine test-mod-pe)
         target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_rebalance)
-        target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1)
+        target_compile_definitions(${target} PRIVATE __psyz PE_MODS=1 PE_INTERFACE_TEXT_FALLBACK=1)
         target_link_libraries(${target} PRIVATE psyz)
     endforeach()
     if(MINGW)
@@ -206,7 +229,8 @@ endif()
 function(pe_feature_test name)
     add_executable(test-mod-${name} ${ARGN})
     target_include_directories(test-mod-${name} PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_economy pe_catalog pe_shops pe_collection pe_wardrobe pe_phone)
-    target_compile_definitions(test-mod-${name} PRIVATE __psyz PE_MODS=1)
+    # These isolated fixtures have no service host; full interface checks stay in pe-native-debug.
+    target_compile_definitions(test-mod-${name} PRIVATE __psyz PE_MODS=1 PE_INTERFACE_TEXT_FALLBACK=1)
     target_link_libraries(test-mod-${name} PRIVATE psyz)
     if(MSVC)
         target_compile_options(test-mod-${name} PRIVATE /UNDEBUG)
@@ -260,6 +284,61 @@ if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST)
     set_tests_properties(mod-model PROPERTIES ENVIRONMENT "PE_MODEL_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
     pe_feature_test(present ${PROJECT_SOURCE_DIR}/tests/pe_mod_present_test.c host/pe_present.c)
     pe_feature_test(stage ${PROJECT_SOURCE_DIR}/tests/pe_mod_stage_test.c host/pe_model_stage.c)
+endif()
+
+# The language pack reader is plain data code, so its test runs whichever mods are built.
+if(BUILD_TESTING)
+    add_executable(test-mod-lang-pack ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_test.c pe_lang/pe_lang_pack.c)
+    target_include_directories(test-mod-lang-pack PRIVATE pe_lang)
+    if(MSVC)
+        target_compile_options(test-mod-lang-pack PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-mod-lang-pack PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME mod-lang-pack COMMAND test-mod-lang-pack)
+    add_executable(test-mod-lang-bundle ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_bundle_test.c
+        pe_lang/pe_lang_bundle.c pe_lang/pe_lang_pack.c pe_lang/pe_lang_pictures.c)
+    target_include_directories(test-mod-lang-bundle PRIVATE pe_lang)
+    if(TARGET pe_download_zip)
+        target_link_libraries(test-mod-lang-bundle PRIVATE pe_download_zip)
+        target_compile_definitions(test-mod-lang-bundle PRIVATE PE_LANG_ZIP=1)
+    endif()
+    if(MSVC)
+        target_compile_options(test-mod-lang-bundle PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-mod-lang-bundle PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME mod-lang-bundle COMMAND test-mod-lang-bundle)
+    add_executable(test-mod-lang-names ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_names_test.c
+        pe_lang/pe_lang_names.c pe_lang/pe_lang_pack.c pe_lang/pe_lang_pictures.c)
+    target_include_directories(test-mod-lang-names PRIVATE pe_lang)
+    add_test(NAME mod-lang-names COMMAND test-mod-lang-names)
+    add_executable(test-mod-lang-font ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_font_test.c pe_lang/pe_lang_font.c pe_lang/pe_lang_cjk.c
+        pe_lang/pe_lang_pack.c)
+    target_include_directories(test-mod-lang-font PRIVATE pe_lang ${PROJECT_SOURCE_DIR}/tests)
+    if(MSVC)
+        target_compile_options(test-mod-lang-font PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-mod-lang-font PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME mod-lang-font COMMAND test-mod-lang-font)
+    # More letters than the 163 one-byte codes: pelang.py builds the pack, the game's reader and
+    # letter cache take it
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME mod-lang-many-letters COMMAND "${Python3_EXECUTABLE}" -I
+            "${PROJECT_SOURCE_DIR}/localization/tests/many_letters_pack.py" --check-with $<TARGET_FILE:test-mod-lang-font>)
+    endif()
+    add_executable(test-mod-lang-selection ${PROJECT_SOURCE_DIR}/tests/pe_mod_lang_selection_test.c
+        pe_lang/pe_lang_selection.c)
+    target_include_directories(test-mod-lang-selection PRIVATE pe_lang)
+    target_link_libraries(test-mod-lang-selection PRIVATE SDL3::SDL3)
+    if(MSVC)
+        target_compile_options(test-mod-lang-selection PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(test-mod-lang-selection PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME mod-lang-selection COMMAND test-mod-lang-selection)
 endif()
 
 # Rust save-editor interoperability uses the actual C serializer, including the

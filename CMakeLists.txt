@@ -330,6 +330,7 @@ add_library(parasite-eve-original OBJECT
     src/main/draw/prim_color.c
     src/main/draw/frame.c
     src/main/draw/text.c
+    src/main/draw/text_render.c
     src/main/draw/textbox.c
     src/overlays/menu_memcard/list_screen.c
     src/overlays/menu_memcard/video_playback.c
@@ -460,6 +461,12 @@ if(PE_MODS)
     add_subdirectory(mods)
     list(APPEND PE_COMMON_GAME_OBJECTS $<TARGET_OBJECTS:pe-mods>)
 endif()
+# What the shared game objects need beyond psyz: zipped .pelang files are read with the mod
+# downloads' zip reader (mods/pe_lang/pe_lang_bundle.c).
+set(PE_COMMON_GAME_LIBS)
+if(PE_MODS AND TARGET pe_download_zip AND "pe_lang" IN_LIST PE_MOD_LIST)
+    list(APPEND PE_COMMON_GAME_LIBS pe_download_zip)
+endif()
 
 target_sources(parasite-eve-pc PRIVATE ${PE_COMMON_GAME_OBJECTS})
 
@@ -494,7 +501,7 @@ endforeach()
 function(pe_add_common_unit_test target_name test_name source_file)
     add_executable(${target_name} ${source_file} ${ARGN} ${PE_COMMON_GAME_OBJECTS})
     target_include_directories(${target_name} PRIVATE include)
-    target_link_libraries(${target_name} PRIVATE psyz)
+    target_link_libraries(${target_name} PRIVATE psyz ${PE_COMMON_GAME_LIBS})
     add_test(NAME ${test_name} COMMAND ${target_name})
 endfunction()
 
@@ -507,11 +514,16 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME wardrobe-skin-collision COMMAND test-skin-collision)
 
+    add_executable(test-text-render tests/text_render_test.c src/main/draw/text_render.c)
+    target_include_directories(test-text-render PRIVATE include)
+    target_compile_definitions(test-text-render PRIVATE __psyz PE_MODS)
+    target_link_libraries(test-text-render PRIVATE psyz)
+    add_test(NAME text-render COMMAND test-text-render ${CMAKE_SOURCE_DIR}/tests/text_render_rtl_cases.txt)
     add_executable(test-menu-call-abi tests/original_menu_call_abi.c
         src/main/menu/lists.c src/main/menu/widget.c src/main/item/swap.c
-        src/main/psyq/libds/dssys_3.c)
+        src/main/draw/text.c src/main/draw/text_render.c src/main/psyq/libds/dssys_3.c)
     target_include_directories(test-menu-call-abi PRIVATE include)
-    target_compile_definitions(test-menu-call-abi PRIVATE __psyz)
+    target_compile_definitions(test-menu-call-abi PRIVATE __psyz PE_MODS)
     target_link_libraries(test-menu-call-abi PRIVATE psyz)
     if(MSVC)
         target_compile_options(test-menu-call-abi PRIVATE /UNDEBUG)
@@ -628,7 +640,7 @@ if(BUILD_TESTING)
         ${PE_COMMON_GAME_OBJECTS}
         $<TARGET_OBJECTS:parasite-eve-original-actor-animation>)
     target_include_directories(test-original-actor-animation PRIVATE include tests)
-    target_link_libraries(test-original-actor-animation PRIVATE psyz)
+    target_link_libraries(test-original-actor-animation PRIVATE psyz ${PE_COMMON_GAME_LIBS})
     add_test(NAME original-game-movie-early-exit COMMAND test-original-actor-animation --movie-early-exit)
     set_tests_properties(original-game-movie-early-exit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30 LABELS "game-assets;audio")
     add_test(NAME original-game-movie-audio-lock-order COMMAND test-original-actor-animation --movie-audio-lock-order)
@@ -684,6 +696,151 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/tests/frame_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-frame-interpolation PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 420 LABELS "game-assets;gpu")
+        if(PE_MODS AND "pe_lang" IN_LIST PE_MOD_LIST)
+            # The text renderer with language packs made from the disc: stretches, name letters,
+            # a saved name read back, and English as the game drew it before the renderer.
+            add_test(NAME original-game-text-renderer COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-evidence)
+            set_tests_properties(original-game-text-renderer PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods")
+            # A right-to-left battle line on screen: the recorded route into the first battle, then Escape.
+            add_test(NAME original-game-text-renderer-battle COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-battle-evidence battle)
+            set_tests_properties(original-game-text-renderer-battle PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods")
+            # The Chinese pack made from a fan patch, its letters the patch's own pictures, on screen
+            # on Disc 1 and Disc 2. The pack stays out of the repository: PE_TEST_ZH_PACK names it,
+            # PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-chinese COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-chinese-evidence chinese)
+            set_tests_properties(original-game-text-renderer-chinese PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The Spanish pack from the USA-disc fan patch on screen, on Disc 1 and Disc 2: its letters
+            # (the patch's own pictures and widths), its name grid and its pictures. The pack stays out
+            # of the repository: PE_TEST_ES_PACK names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-spanish COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-spanish-evidence spanish)
+            set_tests_properties(original-game-text-renderer-spanish PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The same for the Italian pack from the USA-disc fan patch: its six accented letters in the
+            # patch's pictures and widths, the rest the game's own, on Disc 1 and Disc 2. PE_TEST_IT_PACK
+            # names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-italian COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-italian-evidence italian)
+            set_tests_properties(original-game-text-renderer-italian PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The same for the German pack from the USA-disc fan patch: every letter in the patch's
+            # pictures and widths, its name grid (ä ö ü Ä Ö Ü ß), its pictures, on Disc 1 and Disc 2.
+            # PE_TEST_DE_PACK names it, PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-german COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-german-evidence german)
+            set_tests_properties(original-game-text-renderer-german PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The same for the French pack from the USA-disc fan patch: its own letters in the patch's
+            # pictures and widths, the game's other letters as the game draws them, its name grid, its
+            # pictures, and the menus' spaces the patch's 5 px. PE_TEST_FR_PACK names it, PE_TEST_DISC2
+            # adds Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-french COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-french-evidence french)
+            set_tests_properties(original-game-text-renderer-french PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 600 LABELS "game-assets;mods;localization")
+        endif()
+        # A fan patch made for the Japanese discs read for the USA-disc port: two patches of the
+        # test's own on PE_TEST_JA_DISC (Japanese Disc 1); PE_TEST_DISC adds the line-up check.
+        add_test(NAME localization-japanese-patch-import COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_ja_patch_import.py)
+        set_tests_properties(localization-japanese-patch-import PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 300 LABELS "game-assets;localization")
+        # Naming a Chinese patch's letter pictures: letters drawn from the PC's Chinese font
+        # (SimSun, or PE_TEST_CJK_FONT), no disc. Not isolated (-I): Pillow may be a user install.
+        add_test(NAME localization-chinese-letter-naming COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_hanzi.py)
+        set_tests_properties(localization-chinese-letter-naming PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 120 LABELS "localization")
+        # A fan patch's letter pictures as a pack's Chinese letters, and the build options its pack uses.
+        add_test(NAME localization-chinese-pack COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_cjk_pictures.py)
+        set_tests_properties(localization-chinese-pack PROPERTIES TIMEOUT 120 LABELS "localization")
+        # The Chinese pack's dialogue stays on screen wherever the English does, also on the pages no
+        # script ties to a box. Needs PE_TEST_DISC (USA disc 1) and PE_TEST_ZH_PACK, else skipped.
+        add_test(NAME localization-chinese-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_zh_box_fit.py)
+        set_tests_properties(localization-chinese-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The Chinese pack's pictures with words (title menu, map names) on the USA discs against the
+        # patched Japanese game itself: the real patch laid over the Japanese disc, each picture the
+        # pack carries byte for byte the patched one, every piece landing, nothing else changed.
+        # Needs PE_TEST_ZH_PACK (the player file), PE_TEST_ZH_PATCH_DIR (the folder with the patch's
+        # SLPS_012.30 and SLPS_012.31), PE_TEST_JA_DISC and PE_TEST_DISC (PE_TEST_JA_DISC2 and
+        # PE_TEST_DISC2 add the second discs), else skipped.
+        add_test(NAME localization-chinese-pictures COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_zh_pictures.py)
+        set_tests_properties(localization-chinese-pictures PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The same for the Spanish pack from the USA-disc fan patch, measured with the patch's own
+        # letter widths the pack carries. Needs PE_TEST_DISC and PE_TEST_ES_PACK, else skipped.
+        add_test(NAME localization-spanish-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_es_box_fit.py)
+        set_tests_properties(localization-spanish-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The Spanish pack on both USA discs: every picture piece lands on them, and Disc 2's
+        # dialogue is Disc 1's (so the box-fit check covers it). Needs PE_TEST_DISC, PE_TEST_DISC2
+        # and PE_TEST_ES_PACK, else skipped.
+        add_test(NAME localization-spanish-both-discs COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_es_both_discs.py)
+        set_tests_properties(localization-spanish-both-discs PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;localization")
+        # The Italian pack from the USA-disc fan patch stays on screen wherever the English does.
+        # Needs PE_TEST_DISC and PE_TEST_IT_PACK, else skipped.
+        add_test(NAME localization-italian-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_it_box_fit.py)
+        set_tests_properties(localization-italian-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The Italian pack against the patched game itself: the real patch applied to a copy of each
+        # disc; every row, the six accented letters and every picture piece as the patched PS1 game
+        # has them. Needs PE_TEST_IT_PATCH, PE_TEST_IT_PACK and PE_TEST_DISC (PE_TEST_DISC2 adds
+        # Disc 2), else skipped.
+        add_test(NAME localization-italian-matches-patch COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_it_matches_patch.py)
+        set_tests_properties(localization-italian-matches-patch PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 300 LABELS "game-assets;localization")
+        # The German pack from the USA-disc fan patch stays on screen wherever the English does.
+        # Needs PE_TEST_DISC and PE_TEST_DE_PACK, else skipped.
+        add_test(NAME localization-german-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_de_box_fit.py)
+        set_tests_properties(localization-german-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The German pack against the patched game itself: the real patch applied to a copy of each
+        # disc; every row (its letter pairs written out), every letter, every picture piece, and
+        # nothing else changed but the text and two script boxes. Needs PE_TEST_DE_PATCH_DIR (the
+        # folder with PE_GER100B_D1/_D2.xdelta), PE_TEST_DE_PACK and PE_TEST_DISC (PE_TEST_DISC2 adds
+        # Disc 2), else skipped.
+        add_test(NAME localization-german-matches-patch COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_de_matches_patch.py)
+        set_tests_properties(localization-german-matches-patch PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
+        # The French pack from the USA-disc fan patch stays on screen wherever the English does.
+        # Needs PE_TEST_DISC and PE_TEST_FR_PACK, else skipped.
+        add_test(NAME localization-french-box-fit COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_fr_box_fit.py)
+        set_tests_properties(localization-french-box-fit PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
+        # The French pack against the patched game itself: the real patch applied to a copy of each
+        # disc; every row (its two-letter codes written out), every letter and pair, every picture
+        # piece, and nothing else changed but the text. Needs PE_TEST_FR_PATCH_DIR (the folder with
+        # PE_CD1.ppf and PE_CD2.ppf), PE_TEST_FR_PACK and PE_TEST_DISC (PE_TEST_DISC2 adds Disc 2),
+        # else skipped.
+        add_test(NAME localization-french-matches-patch COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_fr_matches_patch.py)
+        set_tests_properties(localization-french-matches-patch PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77

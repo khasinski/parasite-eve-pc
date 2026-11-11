@@ -1,0 +1,6 @@
+{
+  "includes": [
+    "mod_strings/wayne.json",
+    "mod_strings/interfaces.json"
+  ]
+}

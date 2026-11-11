@@ -191,3 +191,12 @@ CHD disc images are read with [libchdr](https://github.com/rtissera/libchdr) (BS
 copyright Romain Tisserand), vendored unmodified in `third_party/libchdr`. It builds
 with its bundled LZMA SDK (public domain), Zstandard (BSD-3-Clause), miniz (MIT) and
 dr_flac (public domain / MIT-0).
+## FreeType
+
+The translation editor (`localization/editor`) compiles in FreeType 2.13.2 through the `freetype-sys` crate to rasterize translators' CJK fonts, under the FreeType License (FTL).
+Portions of this software are copyright (c) 2024 The FreeType Project (www.freetype.org).
+All rights reserved.
+
+## zlib
+
+`localization/editor/vendor/zlib` holds the zlib 1.3.2 headers, and the translation editor links zlib through the`libz-sys` crate, under the zlib License. Copyright (C) 1995-2026 Jean-loup Gailly and Mark Adler. The license is in that folder.

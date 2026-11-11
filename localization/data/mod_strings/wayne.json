@@ -1,0 +1,122 @@
+[
+  {
+    "key": "mod/pe_economy/wayne/permit",
+    "text": "Mod Permit Card",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/workshop",
+    "text": "Workshop",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/requisition",
+    "text": "Requisition",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/rebuild",
+    "text": "Rebuild",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/wardrobe",
+    "text": "Wardrobe",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/back",
+    "text": "Back",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/next-page",
+    "text": "Next page",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/junk",
+    "text": "   Junk ",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/worn",
+    "text": "  worn",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/owned",
+    "text": "  owned",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/slots",
+    "text": " slots",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/bag-full",
+    "text": " bag full",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/day-four",
+    "text": " Day 4",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/rebuild-empty",
+    "text": "Rebuild: nothing dismantled",
+    "max_glyphs": 32,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/permit-empty",
+    "text": "Mod Permit: no guns or armor",
+    "max_glyphs": 32,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/permit-count",
+    "text": "Mod Permit   have ",
+    "max_glyphs": 32,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/add-slot",
+    "text": "Add a slot to ",
+    "max_glyphs": 32,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/permit-use",
+    "text": "Uses 1 Mod Permit, you have ",
+    "max_glyphs": 32,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/yes",
+    "text": "Yes",
+    "max_glyphs": 24,
+    "width": 270
+  },
+  {
+    "key": "mod/pe_economy/wayne/no",
+    "text": "No",
+    "max_glyphs": 24,
+    "width": 270
+  }
+]

@@ -28,10 +28,23 @@ void Menu_CloseActionSubmenu(int arg0) {
 void Menu_DrawItemLabel(MenuWidgetNode *arg0) {
     int idx;
 
+    u8 *label;
+    int cut;
+
     idx = arg0->selected_base - 0x29;
     Draw_OffsetCursor(0, 0xA);
     Draw_SetTextDimmed(0);
-    Draw_PrintCenteredText(g_MenuItemLabelBuffer + (idx << 6));
+    label = g_MenuItemLabelBuffer + (idx << 6);
+    cut = Menu_LineBreakOffset(label, 64);
+    if (cut >= 0) { /* a language pack's line break: the rest on the next line */
+        label[cut] = 0xFF;
+        Draw_PrintCenteredText(label);
+        label[cut] = 0xF1;
+        Draw_OffsetCursor(0, 0xE);
+        Draw_PrintCenteredText(label + cut + 4);
+    } else {
+        Draw_PrintCenteredText(label);
+    }
     if (g_MenuItemPrimListHandles[idx] != 0) {
         Draw_OffsetCursor(0, 0xE);
         Draw_FlushPrimList(g_MenuItemPrimListHandles[idx]);
