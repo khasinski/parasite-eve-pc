@@ -45,30 +45,51 @@ static int Render_HdCommand(const u_long *words, int available, void *unused) {
 
 /* Optional presentation-only side tiles. Their commands are explicitly ignored
  * by native VRAM rendering; the original mesh remains the gameplay authority.
- * PEW1 is little endian, with no native pointers or host structure padding. */
+ * PEW1 is little endian, with no native pointers or host structure padding.
+ * Each record: group u32, cells u32, atlas key u64, visible left/right/top/bottom
+ * i32, then cells x,y i16 pairs. One backdrop record per view group, drawn
+ * behind the whole room.
+ * PEW2 adds a u32 layer kind after the bounds. Kind 0 is a PEW1 backdrop. Kind 1
+ * is a depth-sorted layer: after the positions come cells u16 native depths (an
+ * entry's depth plus its tile offset, 1..4095), and each tile is linked where the
+ * original renderer links a tile of that depth. Side continuations of foreground
+ * layers (a car, a canopy) then cover actors exactly as their native part does.
+ * Several layers may share a view group; their art must be transparent outside
+ * the object (alpha below 0.5 draws nothing). */
 #define HD_WIDE_GROUPS 256
 #define HD_WIDE_CELLS 4096
+#define HD_FRONT_LAYERS 64
 typedef struct {
-    unsigned count;
+    unsigned count, group;
     uint64_t key;
     int left, right;
     short *xy;
-    RenderTilePacket *packets[2];
+    u16 *depth;     /* depth-sorted layers only */
+    u8 *seam;       /* backdrop cells bordering the original picture: -1 left, +1 right, 0 */
+    RenderTilePacket *packets[2];   /* count cells, then a seam copy per cell */
 } HdBackdropGroup;
-static HdBackdropGroup hd_wide[HD_WIDE_GROUPS],hd_under[HD_WIDE_GROUPS];
+static HdBackdropGroup hd_wide[HD_WIDE_GROUPS],hd_under[HD_WIDE_GROUPS],hd_front[HD_FRONT_LAYERS];
+static unsigned hd_front_count;
 
 static void Render_ResetHdWidescreen(void) {
     hd_wide_trace_status=0;
     /* Queued ordering tables may still point at these two packet buffers. */
+    int queued=hd_front_count!=0;
     for (unsigned i=0;i<HD_WIDE_GROUPS;++i)
-        if(hd_wide[i].count || hd_under[i].count){DrawSync(0);break;}
+        if(hd_wide[i].count || hd_under[i].count)queued=1;
+    if(queued)DrawSync(0);
     for (unsigned i=0;i<HD_WIDE_GROUPS;++i) {
-        free(hd_wide[i].xy);
+        free(hd_wide[i].xy);free(hd_wide[i].seam);
         free(hd_wide[i].packets[0]);free(hd_wide[i].packets[1]);
-        free(hd_under[i].xy);
+        free(hd_under[i].xy);free(hd_under[i].seam);
         free(hd_under[i].packets[0]);free(hd_under[i].packets[1]);
     }
+    for (unsigned i=0;i<HD_FRONT_LAYERS;++i) {
+        free(hd_front[i].xy);free(hd_front[i].depth);
+        free(hd_front[i].packets[0]);free(hd_front[i].packets[1]);
+    }
     memset(hd_wide,0,sizeof(hd_wide));memset(hd_under,0,sizeof(hd_under));
+    memset(hd_front,0,sizeof(hd_front));hd_front_count=0;
 }
 
 static int Render_ReadHdWide(SDL_IOStream *file, unsigned bytes, uint64_t *value) {
@@ -88,47 +109,71 @@ static void Render_LoadHdBackdrop(HdBackdropGroup *tiles,const char *suffix) {
     SDL_IOStream *file=SDL_IOFromFile(filename,"rb");if(!file)return;
     hd_wide_trace_status=2;
     Sint64 wide_bytes=SDL_GetIOSize(file);
-    if(wide_bytes<8 || wide_bytes>8+HD_WIDE_GROUPS*32+HD_WIDE_CELLS*4){SDL_CloseIO(file);return;}
+    if(wide_bytes<8 || wide_bytes>8+(HD_WIDE_GROUPS+HD_FRONT_LAYERS)*36+HD_WIDE_CELLS*6){SDL_CloseIO(file);return;}
     uint64_t magic,groups,value;
     unsigned total=0;
-    int valid=Render_ReadHdWide(file,4,&magic) && magic==0x31574550u &&
-        Render_ReadHdWide(file,4,&groups) && groups<=HD_WIDE_GROUPS;
+    int valid=Render_ReadHdWide(file,4,&magic) && (magic==0x31574550u || magic==0x32574550u) &&
+        Render_ReadHdWide(file,4,&groups) && groups<=HD_WIDE_GROUPS+HD_FRONT_LAYERS;
+    const int layered=magic==0x32574550u;
     for(unsigned i=0;valid && i<groups;++i) {
-        uint64_t group,count,key,left,right,top,bottom;
+        uint64_t group,count,key,left,right,top,bottom,kind=0;
         valid=Render_ReadHdWide(file,4,&group) && group<HD_WIDE_GROUPS &&
-            !tiles[group].count && Render_ReadHdWide(file,4,&count) && count>0 && count<=HD_WIDE_CELLS-total &&
+            Render_ReadHdWide(file,4,&count) && count>0 && count<=HD_WIDE_CELLS-total &&
             Render_ReadHdWide(file,8,&key) && key && Render_ReadHdWide(file,4,&left) &&
-            Render_ReadHdWide(file,4,&right) && Render_ReadHdWide(file,4,&top) && Render_ReadHdWide(file,4,&bottom);
+            Render_ReadHdWide(file,4,&right) && Render_ReadHdWide(file,4,&top) && Render_ReadHdWide(file,4,&bottom) &&
+            (!layered || Render_ReadHdWide(file,4,&kind)) && kind<=1;
         if(!valid)break;
+        /* Depth-sorted layers continue the room's own layers, so only side art has them. */
+        HdBackdropGroup *layer=kind ? (tiles==hd_wide && hd_front_count<HD_FRONT_LAYERS ? &hd_front[hd_front_count] : NULL)
+                                    : (tiles[group].count ? NULL : &tiles[group]);
+        if(!layer){valid=0;break;}
         int l=(int32_t)(uint32_t)left,r=(int32_t)(uint32_t)right;
         int y0=(int32_t)(uint32_t)top,y1=(int32_t)(uint32_t)bottom;
         if(l < -2048 || r>4096 || l>=r || y0 < -2048 || y1>4096 || y0>=y1){valid=0;break;}
         total+=(unsigned)count;
-        tiles[group].xy=malloc((size_t)count*2*sizeof(short));
-        tiles[group].packets[0]=calloc((size_t)count,sizeof(RenderTilePacket));
-        tiles[group].packets[1]=calloc((size_t)count,sizeof(RenderTilePacket));
-        if(!tiles[group].xy || !tiles[group].packets[0] || !tiles[group].packets[1]){valid=0;break;}
+        layer->xy=malloc((size_t)count*2*sizeof(short));
+        layer->depth=kind ? malloc((size_t)count*sizeof(u16)) : NULL;
+        layer->packets[0]=calloc((size_t)count*2,sizeof(RenderTilePacket));
+        layer->packets[1]=calloc((size_t)count*2,sizeof(RenderTilePacket));
+        layer->seam=kind ? NULL : calloc((size_t)count,1);
+        if(kind)++hd_front_count;   /* owned from here, so a failure below still frees it */
+        if(!layer->xy || !layer->packets[0] || !layer->packets[1] || (kind ? !layer->depth : !layer->seam)){valid=0;break;}
         for(unsigned n=0;valid && n<count*2;++n) {
             valid=Render_ReadHdWide(file,2,&value);
-            tiles[group].xy[n]=(int16_t)(uint16_t)value;
+            layer->xy[n]=(int16_t)(uint16_t)value;
+        }
+        for(unsigned n=0;valid && kind && n<count;++n) {
+            valid=Render_ReadHdWide(file,2,&value) && value>=1 && value<=4095;
+            if(valid)layer->depth[n]=(u16)value;
         }
         for(unsigned n=0;valid && n<count;++n) {
-            int x=tiles[group].xy[n*2],y=tiles[group].xy[n*2+1];
+            int x=layer->xy[n*2],y=layer->xy[n*2+1];
             /* Bounds describe the visible span, not complete-cell extents.
              * Official side art overlaps the right edge; presenter crops it. */
             if(x<l || x>=r || y<y0 || y>=y1)valid=0;
         }
         if(!valid)break;
+        /* Side art that only abuts the original picture leaves its last, partly
+         * covered column over the clear colour: a dark line at the 4:3 edge once
+         * the squeezed view is shown. A backdrop cell with no neighbour towards
+         * the picture is drawn once more, 4 px inside it and behind it, so that
+         * column blends with the side's own material instead. */
+        for(unsigned n=0;!kind && n<count;++n) {
+            int x=layer->xy[n*2],y=layer->xy[n*2+1],inward=x<0 ? 16 : -16,neighbour=0;
+            for(unsigned m=0;m<count && !neighbour;++m)
+                neighbour=layer->xy[m*2]==x+inward && layer->xy[m*2+1]==y;
+            if(!neighbour && (x<0 ? x+16<=8 : x>=320-8))layer->seam[n]=(u8)(x<0 ? 1 : 2);
+        }
         int loaded=0;const char *formats[]={"webp","png","bmp"};
         for(unsigned format=0;format<3 && !loaded;++format) {
             size=snprintf(filename,sizeof(filename),"%s/%016" PRIx64 ".%s",hd_background_path,key,formats[format]);
             if(size>=0 && (size_t)size<sizeof(filename))loaded=Psyz_GpuLoadSpriteAtlas(key,filename)==1;
         }
         if(!loaded){valid=0;break;}
-        for(unsigned n=0;n<count;++n)
-            Psyz_GpuRegisterInterpolationBackgroundPair(&tiles[group].packets[0][n].r,&tiles[group].packets[1][n].r);
-        tiles[group].count=(unsigned)count;tiles[group].key=key;
-        tiles[group].left=l;tiles[group].right=r;
+        for(unsigned n=0;n<count*2;++n)
+            Psyz_GpuRegisterInterpolationBackgroundPair(&layer->packets[0][n].r,&layer->packets[1][n].r);
+        layer->count=(unsigned)count;layer->key=key;layer->group=(unsigned)group;
+        layer->left=l;layer->right=r;
     }
     unsigned char trailing;if(valid && SDL_ReadIO(file,&trailing,1)!=0)valid=0;
     SDL_CloseIO(file);
@@ -163,31 +208,57 @@ int Render_GetHdWidescreenPicture(int *left,int *right) {
     return 1;
 }
 
+/* Original fades/tints update the room's own packets, not the source artwork. */
+static const RenderTilePacket *Render_HdBackdropColor(int slot,unsigned group) {
+    const GeomEntry *entries=(const void *)((const u8 *)g_GeomState+g_GeomState->entry_offset);
+    for(unsigned n=0;n<g_GeomState->entry_count06;++n) {
+        if(entries[n].group==group && (entries[n].head.b.flags&2) && entries[n].prim_count && entries[n].u30.prim)
+            return (const RenderTilePacket *)entries[n].u30.prim+slot*entries[n].prim_count;
+    }
+    return NULL;
+}
+
+/* Links one layer's tiles: a backdrop behind everything, a depth-sorted layer
+ * where Render_DrawSpriteEntry links a native tile of the same depth. */
+static void Render_LinkHdTiles(int slot,RenderNativeTag *ordering,HdBackdropGroup *layer,unsigned extension,
+                               const RenderTilePacket *color) {
+    for(unsigned j=0;j<layer->count*2;++j) {
+        /* j < count: the cells; then each seam cell's copy (Render_LoadHdBackdrop) */
+        unsigned i=j<layer->count ? j : j-layer->count;
+        int shift=0;
+        if(j>=layer->count) {
+            if(!layer->seam || !layer->seam[i])continue;
+            shift=layer->seam[i]==1 ? 4 : -4;
+        }
+        Psyz_GpuEnsureInterpolationBackgroundPair(&layer->packets[0][j].r,&layer->packets[1][j].r);
+        RenderTilePacket *sprite=&layer->packets[slot][j];
+        int x=layer->xy[i*2]+shift+(short)g_GeomState->out_disp_x;
+        int y=layer->xy[i*2+1]+(short)g_GeomState->out_disp_y;
+        if(x+16 < -112 || x>432 || y+16<0 || y>240)continue;
+        int depth=4095;
+        if(layer->depth) {
+            depth=(s16)(g_GeomState->field26+layer->depth[i]);
+            if(((depth-8)&0xFFFF)>=0xFF1)continue;   /* the native tile would not be drawn either */
+        }
+        sprite->length=7;sprite->hd_command=0xF8000000u|extension|i;
+        sprite->hd_key_low=(u32)layer->key;sprite->hd_key_high=(u32)(layer->key>>32);
+        sprite->packed_marker=0x005A4D50u;sprite->code=0x7c;
+        sprite->r=color?color->r:128;sprite->g=color?color->g:128;sprite->b=color?color->b:128;
+        sprite->x=(u16)x;sprite->y=(u16)y;
+        sprite->address=ordering[depth].address;ordering[depth].address=(uintptr_t)sprite;
+    }
+}
+
 static void Render_LinkHdBackdrop(int slot,RenderNativeTag *ordering,HdBackdropGroup *tiles,unsigned extension) {
     if(slot<0 || slot>1 || !hd_geometry_key || !g_GeomState || !Psyz_GpuGetSpriteAtlasesEnabled())return;
     unsigned group=g_GeomScroll.state.position.groupSelect;
     if(!tiles[group].count)return;
-    const GeomEntry *entries=(const void *)((const u8 *)g_GeomState+g_GeomState->entry_offset);
-    const RenderTilePacket *color=NULL;
-    /* Original fades/tints update these packets, not the source artwork. */
-    for(unsigned n=0;n<g_GeomState->entry_count06;++n) {
-        if(entries[n].group==group && (entries[n].head.b.flags&2) && entries[n].prim_count && entries[n].u30.prim) {
-            color=(const RenderTilePacket *)entries[n].u30.prim+slot*entries[n].prim_count;break;
-        }
-    }
-    for(unsigned i=0;i<tiles[group].count;++i) {
-        Psyz_GpuEnsureInterpolationBackgroundPair(&tiles[group].packets[0][i].r,&tiles[group].packets[1][i].r);
-        RenderTilePacket *sprite=&tiles[group].packets[slot][i];
-        int x=tiles[group].xy[i*2]+(short)g_GeomState->out_disp_x;
-        int y=tiles[group].xy[i*2+1]+(short)g_GeomState->out_disp_y;
-        if(x+16 < -112 || x>432 || y+16<0 || y>240)continue;
-        sprite->length=7;sprite->hd_command=0xF8000000u|extension|i;
-        sprite->hd_key_low=(u32)tiles[group].key;sprite->hd_key_high=(u32)(tiles[group].key>>32);
-        sprite->packed_marker=0x005A4D50u;sprite->code=0x7c;
-        sprite->r=color?color->r:128;sprite->g=color?color->g:128;sprite->b=color?color->b:128;
-        sprite->x=(u16)x;sprite->y=(u16)y;
-        sprite->address=ordering[4095].address;ordering[4095].address=(uintptr_t)sprite;
-    }
+    const RenderTilePacket *color=Render_HdBackdropColor(slot,group);
+    Render_LinkHdTiles(slot,ordering,&tiles[group],extension,color);
+    if(tiles!=hd_wide)return;
+    for(unsigned n=0;n<hd_front_count;++n)
+        if(hd_front[n].group==group && hd_front[n].count)
+            Render_LinkHdTiles(slot,ordering,&hd_front[n],extension,color);
 }
 
 void Render_LinkHdWidescreenBackdrop(int slot,RenderNativeTag *ordering) {
