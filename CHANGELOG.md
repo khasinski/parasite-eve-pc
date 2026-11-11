@@ -2,6 +2,9 @@
 
 ## 0.12
 
+- Added **language packs**: put a `.pelang` file in the new `lang` folder beside the game, or pick one with **F1 → Language → Add a translation**. The first start that finds a pack asks which language to use; to change it later, pick another under F1 → Language and restart. A pack can replace the game's text, letters and pictures with words, and works with All mods off. Releases contain no translations: packs made from fan translations (German, French, Spanish, Italian, Simplified Chinese) are shared separately.
+- Widescreen: HD packs can now give the side art depth, so things like cars at the screen edge hide characters walking behind them, as they do in the 4:3 picture.
+- Fixed a thin dark line where the widescreen side art meets the right edge of the 4:3 picture.
 - Fixed critical hits and long-range grazes never happening: every gun hit landed as a normal hit with base damage, which also left the rebalance mod's **Critical** effect with nothing to do.
 - Added a first-launch **setup wizard** (storage, discs, settings and mods), available again from **Escape → Discs**.
 - **Quick save** and **quick load** now work at any moment of a running game, including battles, events and movies, and quick load also works from the title screen.
