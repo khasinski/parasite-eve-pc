@@ -207,6 +207,10 @@ static const char *s_inited_ids[PE_MAX_MODS];
 static int s_inited_count;
 static const char *s_current_mod;          /* the mod whose init is running */
 static const char *s_alone_mod;            /* asked to run alone (pe_mod_run_alone) */
+/* Every mod of the build, filled when the mods start. Code a hook can reach reads this, not
+ * g_pe_mods: naming that table links every mod into whatever calls a hook. */
+static const PeMod *s_mods[PE_MAX_MODS];
+static int s_mod_state[PE_MAX_MODS], s_mod_count;
 
 int pe_mod_run_alone(void) {
     if (!s_current_mod || (s_alone_mod && strcmp(s_alone_mod, s_current_mod) != 0)) return -1;
@@ -229,8 +233,8 @@ const char *pe_mod_current(void) { return s_current_mod; }
 int pe_mod_active(const char *mod_id) {
     int i;
     if (!mod_id || !s_started) return 1;
-    for (i = 0; g_pe_mods[i] && i < PE_MAX_MODS; i++)
-        if (strcmp(g_pe_mods[i]->id, mod_id) == 0) return pe_mod_is_running(mod_id);
+    for (i = 0; i < s_mod_count; i++)
+        if (strcmp(s_mods[i]->id, mod_id) == 0) return pe_mod_is_running(mod_id);
     return 1;
 }
 
@@ -285,8 +289,8 @@ static int pe_manage_requested(int i, unsigned visiting) {
     const char *const *req; int j;
     if(!s_all_on || !s_mod_on[i] || (visiting & (1u << i)))return 0;
     visiting |= 1u << i;
-    for(req=g_pe_mods[i]->requires;req && *req;req++) {
-        for(j=0;j<s_manage_count;j++)if(!strcmp(*req,g_pe_mods[j]->id))break;
+    for(req=s_mods[i]->requires;req && *req;req++) {
+        for(j=0;j<s_manage_count;j++)if(!strcmp(*req,s_mods[j]->id))break;
         if(j==s_manage_count || !pe_manage_requested(j,visiting))return 0;
     }
     return 1;
@@ -306,13 +310,13 @@ void pe_mod_manage_refresh(void) {
     snprintf(s_all_note,sizeof(s_all_note),"Master now: %s. Next launch: %s. %s",s_boot_all?"On":"Off",s_all_on?"On":"Off",pending?"Restart game to apply.":"No pending change.");
     for(i=0;i<s_manage_count;i++) {
         int requested=pe_manage_requested(i,0);
-        snprintf(s_mod_note[i],sizeof(s_mod_note[i]),"%s %s. Now: %s. Next launch: %s. %s",g_pe_mods[i]->id,g_pe_mods[i]->version,now[s_boot_state[i]],requested?"enabled":(!s_all_on?"master Off":(!s_mod_on[i]?"Off":"dependency blocked")),pending?"Restart game to apply.":"Startup activation; settings do not hot-start mods.");
+        snprintf(s_mod_note[i],sizeof(s_mod_note[i]),"%s %s. Now: %s. Next launch: %s. %s",s_mods[i]->id,s_mods[i]->version,now[s_boot_state[i]],requested?"enabled":(!s_all_on?"master Off":(!s_mod_on[i]?"Off":"dependency blocked")),pending?"Restart game to apply.":"Startup activation; settings do not hot-start mods.");
     }
 #ifdef PE_PS5_PLUGINS
     if(changed && log_budget) {
         --log_budget;
         SDL_Log("[PS5 mods] master_now=%d master_next_launch=%d restart_required=%d activation=startup-only prefs=pe_mods.ini",s_boot_all,s_all_on,pending);
-        for(i=0;i<s_manage_count;i++)SDL_Log("[PS5 mods] id=%s startup_state=%d requested_toggle=%d next_dependencies_enabled=%d",g_pe_mods[i]->id,s_boot_state[i],s_mod_on[i],pe_manage_requested(i,0));
+        for(i=0;i<s_manage_count;i++)SDL_Log("[PS5 mods] id=%s startup_state=%d requested_toggle=%d next_dependencies_enabled=%d",s_mods[i]->id,s_boot_state[i],s_mod_on[i],pe_manage_requested(i,0));
     }
 #else
     (void)changed;(void)log_budget;
@@ -342,8 +346,6 @@ static void pe_manage_register(int mod_count) {
     pe_menu_begin(0);
 }
 
-static int s_mod_state[PE_MAX_MODS], s_mod_count;
-
 /* Startup state remains immutable; requested values are refreshed while paused. */
 static void pe_manage_notes(int mod_count, const int *state) {
     int i;s_boot_all=s_all_on;
@@ -356,7 +358,7 @@ static void pe_manage_notes(int mod_count, const int *state) {
 static int pe_mod_aside(const char *mod_id) {
     int i;
     for (i = 0; i < s_mod_count; i++)
-        if (strcmp(g_pe_mods[i]->id, mod_id) == 0) return s_mod_state[i] == PE_MOD_ALONE;
+        if (strcmp(s_mods[i]->id, mod_id) == 0) return s_mod_state[i] == PE_MOD_ALONE;
     return 0;
 }
 
@@ -372,13 +374,13 @@ static void pe_handlers_refresh(void) {
 static void pe_alone_apply(void) {
     int i;
     for (i = 0; i < s_mod_count; i++)
-        if (s_mod_state[i] == PE_MOD_RUNNING && strcmp(g_pe_mods[i]->id, s_alone_mod) != 0) {
+        if (s_mod_state[i] == PE_MOD_RUNNING && strcmp(s_mods[i]->id, s_alone_mod) != 0) {
             s_mod_state[i] = PE_MOD_ALONE;
-            pe_mod_log(g_pe_mods[i]->id, "inactive (%s runs alone): pages only", s_alone_mod);
+            pe_mod_log(s_mods[i]->id, "inactive (%s runs alone): pages only", s_alone_mod);
         }
     s_running_count = 0;
     for (i = 0; i < s_mod_count; i++)
-        if (strcmp(g_pe_mods[i]->id, s_alone_mod) == 0) s_running[s_running_count++] = g_pe_mods[i];
+        if (strcmp(s_mods[i]->id, s_alone_mod) == 0) s_running[s_running_count++] = s_mods[i];
 }
 
 /* A running session turns alone: a save asked for it, before any record of that save went back.
@@ -404,7 +406,7 @@ int pe_mod_stand_alone(const char *mod_id) {
 static void pe_start_mods(void) {
     int mod_count = 0, tried[PE_MAX_MODS] = {0}, *state = s_mod_state, progress = 1, i;
 
-    while (g_pe_mods[mod_count] && mod_count < PE_MAX_MODS) mod_count++;
+    while (g_pe_mods[mod_count] && mod_count < PE_MAX_MODS) { s_mods[mod_count] = g_pe_mods[mod_count]; mod_count++; }
     s_mod_count = mod_count;
     pe_manage_register(mod_count);
     if (!s_all_on) pe_mod_log(NULL, "All mods off (Manage mods): pages browsable, the game plays as the original");

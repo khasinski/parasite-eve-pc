@@ -275,6 +275,9 @@ if(BUILD_TESTING AND "pe_randomizer" IN_LIST PE_MOD_LIST)
         ${CMAKE_CURRENT_SOURCE_DIR}/pe_randomizer "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
     target_compile_definitions(test-mod-randomizer-run PRIVATE __psyz PE_MODS=1)
     target_link_libraries(test-mod-randomizer-run PRIVATE psyz)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)   # the wardrobe's pack reader, started with the mods
+        target_link_libraries(test-mod-randomizer-run PRIVATE pe_download_json pe_download_zip)
+    endif()
     # Without a runs file: every room once at V0x4a = 0. mods/pe_randomizer/tools/runlist.py writes a
     # fuller runs file from the story walk; run the test binary on it by hand (into randomizer-run.txt,
     # which this test's own output doesn't overwrite).
