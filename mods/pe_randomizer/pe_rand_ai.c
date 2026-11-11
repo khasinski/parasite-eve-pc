@@ -21,8 +21,9 @@
  * would divide by zero) for Aya's opening AT gauge. Between two such spawners the vars the source shares with
  * its spawner go by what they are for, read off each spawner (pe_roles): level, value, count and the flags to
  * the slot's, and the ones the spawner only zeroes for its foes (their working vars) to E's own, in the order
- * each block first uses them, as far as E's go. The added level and value become E's own too, so the slot's
- * fight opens as it does at home, whatever the group. Any other pair (M013's scripted Rat has no opening): the
+ * each block first uses them, as far as E's go. The added level, value and count become E's own too (the count
+ * with what the parts E spawns at home add: a Bear and its part count as 2), so the slot's fight opens as it does
+ * at home, whatever the group. Any other pair (M013's scripted Rat has no opening): the
  * shared vars go k-th for k-th if the two lists are as long, else those both spawners use stay.
  * The source's others that a script of this room uses move to ones nothing here uses (mode 4 operands in the
  * copy), but N0xa (the stat scale every enemy copies from V0x50). Those aren't zeroed between two fights of a room.
@@ -64,7 +65,7 @@ static unsigned s_slot_count;
 /* The N vars the copies given at this load use (after their moves). */
 static uint64_t s_n_copies;
 static uint64_t s_stale[PE_RAND_TYPES];   /* E's copy's working vars kept at 0 while no E is alive */
-static uint8_t s_stale_alive[PE_RAND_TYPES];
+static uint8_t s_stale_alive[PE_RAND_TYPES], s_stale_groups[PE_RAND_TYPES];
 
 static uint32_t pe_word(const uint8_t *p, uint32_t at) { uint32_t v; memcpy(&v, p + at, 4); return v; }
 
@@ -274,15 +275,32 @@ static void pe_add_step(uint32_t *step, uint32_t at, void *user) {
     ++a->found;
 }
 
-/* The copy adds E's own number (its block adds it to own_n) where it adds to var n; 0 if either adds none. */
-static int pe_add_own(uint8_t *copy, uint32_t copy_end, unsigned n, const uint8_t *mine, uint32_t own_at, uint32_t own_end,
-                      unsigned own_n, uint32_t *was, uint32_t *now) {
+/* What the parts E's own block spawns (op 8, another type with a block here: the Bear's) add to var n. A foe that
+ * takes the slot spawns none of them. */
+typedef struct PeParts { const uint8_t *tasks; uint32_t bytes, code_end; unsigned self, n; int spawner; uint32_t sum; } PeParts;
+static void pe_parts_step(uint32_t *step, uint32_t at, void *user) {
+    PeParts *p = user;
+    uint32_t start;
+    (void)at;
+    if ((step[0] & 0x1FFF) != 8 || pe_entity_arg(step) != 0 || !step[2] || step[2] == p->self || (int)step[2] == p->spawner ||
+        !pe_entry(p->tasks, p->bytes, step[2], &start)) return;
+    PeAdd add = {p->n, 0, 0, 0, p->code_end};
+    pe_walk(p->tasks, start, p->code_end, pe_add_step, &add);
+    if (add.found) p->sum += add.k;
+}
+
+/* The copy adds E's own number (its block adds it to own_n, and so do the parts it spawns) where it adds to var n;
+ * 0 if either adds none. */
+static int pe_add_own(uint8_t *copy, uint32_t copy_end, unsigned n, const uint8_t *mine, uint32_t bytes, uint32_t own_at,
+                      uint32_t own_end, unsigned self, int spawner, unsigned own_n, uint32_t *was, uint32_t *now) {
+    PeParts parts = {mine, bytes, own_end, self, own_n, spawner, 0};
     PeAdd own = {own_n, 0, 0, 0, own_end}, theirs = {n, 0, 0, 0, copy_end};
     pe_walk(mine, own_at, own_end, pe_add_step, &own);
     pe_walk(copy, 0, copy_end, pe_add_step, &theirs);
     if (!own.found || !theirs.found) return 0;
+    pe_walk(mine, own_at, own_end, pe_parts_step, &parts);
     *was = theirs.k;
-    *now = theirs.k = own.k;
+    *now = theirs.k = own.k + parts.sum;
     theirs.set = 1;
     pe_walk(copy, 0, copy_end, pe_add_step, &theirs);
     return 1;
@@ -366,7 +384,7 @@ void pe_rand_ai_clear(void) { s_map_count = 0; }
 /* A new load: the copies go (the last room's actors are gone), and each slot installed for them that this
  * room doesn't install is set back. */
 static void pe_rand_ai_release(const uint8_t *assets) {
-    for (unsigned i = 0; i < PE_RAND_TYPES; ++i) { free(s_copy[i]); s_copy[i] = NULL; s_stale[i] = 0; s_stale_alive[i] = 0; }
+    for (unsigned i = 0; i < PE_RAND_TYPES; ++i) { free(s_copy[i]); s_copy[i] = NULL; s_stale[i] = 0; s_stale_alive[i] = 0; s_stale_groups[i] = 0; }
     s_copy_count = 0;
     s_n_copies = 0;
     for (unsigned i = s_slot_count; i-- > 0;)
@@ -414,7 +432,7 @@ int pe_rand_ai_apply(int room) {
         const unsigned own_fights = pe_fight_vars(mine, bytes, map->entity, to_spawner, fight_to);
         uint64_t room_n = s_n_copies, keep = 1ull << 10, left = 0;
         PeRoles from_roles, to_roles;
-        uint32_t own_block, level_was = 0, level_now = 0, value_was = 0, value_now = 0;
+        uint32_t own_block, level_was = 0, level_now = 0, value_was = 0, value_now = 0, count_was = 0, count_now = 0;
         int level_own = 0, value_own = 0;
         pe_roles(theirs, from_bytes, spawner, &from_roles);
         pe_roles(mine, bytes, to_spawner, &to_roles);
@@ -423,10 +441,12 @@ int pe_rand_ai_apply(int room) {
             const uint32_t copy_end = pe_word(theirs, 0) - start, own_end = pe_word(mine, 0);
             keep |= pe_map_roles(&from_roles, &to_roles, fight_from, fights, fight_to, own_fights, patch.n_to, &left);
             if (pe_entry(mine, bytes, map->entity, &own_block)) {
-                level_own = pe_add_own(copy, copy_end, (unsigned)from_roles.level, mine, own_block, own_end,
-                                       (unsigned)to_roles.level, &level_was, &level_now);
-                value_own = pe_add_own(copy, copy_end, (unsigned)from_roles.value, mine, own_block, own_end,
-                                       (unsigned)to_roles.value, &value_was, &value_now);
+                level_own = pe_add_own(copy, copy_end, (unsigned)from_roles.level, mine, bytes, own_block, own_end, map->entity,
+                                       to_spawner, (unsigned)to_roles.level, &level_was, &level_now);
+                value_own = pe_add_own(copy, copy_end, (unsigned)from_roles.value, mine, bytes, own_block, own_end, map->entity,
+                                       to_spawner, (unsigned)to_roles.value, &value_was, &value_now);
+                pe_add_own(copy, copy_end, (unsigned)from_roles.count, mine, bytes, own_block, own_end, map->entity,
+                           to_spawner, (unsigned)to_roles.count, &count_was, &count_now);
             }
             if (!level_own || !value_own)
                 pe_log("rand_ai", "map=%d e%u: M%03u e%u or this slot adds no level or value", room, map->entity, map->from_room, map->from_entity);
@@ -518,6 +538,8 @@ int pe_rand_ai_apply(int room) {
         if (level_own && value_own)
             pe_log("rand_ai", "map=%d e%u adds level %u, value %u (the slot's; was %u, %u)", room, map->entity, level_now,
                    value_now, level_was, value_was);
+        if (count_now != count_was)
+            pe_log("rand_ai", "map=%d e%u counts as %u (the slot's foe with its parts; was %u)", room, map->entity, count_now, count_was);
         pe_disc_room_free(&src);
         ++done;
     }
@@ -536,7 +558,12 @@ static int pe_rand_ai_frame(void *ctx, void *user) {
         if (a->type_id < PE_RAND_TYPES && !(a->flags & 0x10)) alive |= 1u << a->type_id;   /* 0x10: dead */
     for (unsigned e = 0; e < PE_RAND_TYPES; ++e) {
         if (!s_stale[e]) continue;
-        if (alive >> e & 1) { s_stale_alive[e] = 1; continue; }
+        if (alive >> e & 1) {
+            if (!s_stale_alive[e] && s_stale_groups[e] < 255 && ++s_stale_groups[e] > 1)
+                pe_log("rand_ai", "map=%d e%u: group %u alive, its working vars at 0 again", pe_room_number(), e, s_stale_groups[e]);
+            s_stale_alive[e] = 1;
+            continue;
+        }
         unsigned was = 0;
         for (unsigned i = 0; i < PE_RAND_N_VARS; ++i)
             if ((s_stale[e] >> i & 1) && g_ScriptNodeActiveFlags[i]) { g_ScriptNodeActiveFlags[i] = 0; ++was; }

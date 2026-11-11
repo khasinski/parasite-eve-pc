@@ -116,6 +116,7 @@
  * no other; the line's ai= list (the moved actors that fight there) is checked as above.
  * A line where a script divides by an N var holding 0 (the game has no guard; the loop here answers 0) ends in
  * div0=<e6+0x6814:N0x2: actor, step, var>; on a line with moved foes that is a failure.
+ * mean=<12/2,45/2: each N var a script divides by an N var (a fight's level and value sums over its foe count).
  * tools/battlestats.py checks the lines. */
 #include <stdint.h>
 #include <stdio.h>
@@ -188,6 +189,7 @@ static u8 *anim_left;            /* one per word of the block: frames an animwai
 static u32 gave[64], got[64]; static unsigned gave_count;   /* GiveItems run: offset and item */
 static u32 asked[64], asked_item[64], answer[64]; static unsigned asked_count;   /* CountItems run */
 static int div0_n = -1, div0_actor; static u32 div0_at;   /* the first script divide by an N var holding 0 */
+static u32 mean_sum[4], mean_by[4]; static unsigned means;   /* N var / N var divides: a fight's mean level and value */
 static int keys_all, press, animwait, battle, spin, trace, gate;   /* trace: PE_RUN_TRACE set, each step to stderr */
 static int menu = -1;            /* menu=N: op 67's answer, or -1 (skipped) */
 static int bag_full, swap = -1;  /* bag=full: GiveItem runs for real; swap=N: op 169's answer, or -1 */
@@ -347,6 +349,10 @@ static void run_queue(void) {
                 if (args[3] >= g_ScriptNodeActiveFlags && args[3] < g_ScriptNodeActiveFlags + 64 && div0_n < 0) { div0_n = (int)values[3]; div0_actor = entity->type_id; div0_at = (u32)at; }
                 *args[1] = 0; result = 1;
             } else if (is_real[op] || battle_op) {
+                if (op == 9 && count == 4 && *args[0] == 16 && means < 4 && args[2] >= g_ScriptNodeActiveFlags &&
+                    args[2] < g_ScriptNodeActiveFlags + 64 && args[3] >= g_ScriptNodeActiveFlags && args[3] < g_ScriptNodeActiveFlags + 64) {
+                    mean_sum[means] = *args[2]; mean_by[means++] = *args[3];
+                }
                 result = g_ScriptQueueOpcodeHandlers[op](args);
                 if ((op == 137 || op == 138) && set6_at < 0) set6_at = (int)cur_frame;
             } else if (op == 85 && win) {                                         /* battle: starts */
@@ -854,7 +860,7 @@ static void do_run(const Run *r, FILE *out) {
         for (int i = 0; i < bag_slots; ++i) if (!g_InvItemPtr[i]) g_InvItemPtr[i] = 0x06;
     }
     gate = r->gate; asked_count = 0;
-    win = r->win; fighting = -1; won = 0; awaited = -1; set6_at = -1; state_read = 0; div0_n = -1;
+    win = r->win; fighting = -1; won = 0; awaited = -1; set6_at = -1; state_read = 0; div0_n = -1; means = 0;
     stats = r->stats; combat_count = 0;
     if (stats) {
         memcpy(g_DrawPrimGeneratorWords, random_start, sizeof(random_start));
@@ -993,6 +999,7 @@ static void do_run(const Run *r, FILE *out) {
         fprintf(out, "\tdiv0=e%d+%#x:N%#x", div0_actor, (unsigned)div0_at, (unsigned)div0_n);
         if (r->nai || r->foes) FAIL("M%03u: actor %d divides by N%#x, which is 0 (+%X)", r->room, div0_actor, (unsigned)div0_n, (unsigned)div0_at);
     }
+    for (unsigned i = 0; i < means; ++i) fprintf(out, "%s%u/%u", i ? "," : "\tmean=", (unsigned)mean_sum[i], (unsigned)mean_by[i]);
     if (r->nai) {
         fputs("\tai=", out);
         for (unsigned i = 0; i < r->nai; ++i) fprintf(out, "%s%u<M%03u:%u", i ? "," : "", r->ai_to[i], r->ai_room[i], r->ai_from[i]);

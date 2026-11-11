@@ -16,7 +16,8 @@ zones), at the centre; a spawner with none gets every zone of the room. Then:
 2. The seeds' lines in the won rooms, with the same stops, plus the plain lines again (battlestats.py compares
    the unmoved slots with them): <out>-runs.txt, run into <out>.txt, checked by battlestats.py.
 A plan line fails when a swap isn't taken, a moved actor runs none of its script, a script divides by an N var
-holding 0 (the fight's foe count; the game has no guard), or no battle is won.
+holding 0 (the fight's foe count; the game has no guard), no battle is won, or the fight opens on other level and
+value sums or another foe count than the room's own fight (mean=: a Bear and its part count as 2).
 --known file: swaps (M005<M418:3, one per line, # the reason) whose failing lines are listed as KNOWN, not
 problems. --lines: only write <out>-runs.txt (no plan run). Exit 1 on a failure, 77 when an input is missing."""
 import os, re, subprocess, sys
@@ -186,11 +187,13 @@ def main():
     got = run(run_exe, f"{out_name}.txt", f"{out_name}-runs.txt")
     bad, known, won = [], [], 0
     for name, ai in lines.items():
-        kv = got.get(name)
+        kv, own = got.get(name), plain[name.split("-")[1]]
         why = ("no output (a swap not taken)" if kv is None else
                f"divides by zero ({kv['div0']})" if kv.get("div0") else
                "no battle won" if not kv.get("won") else
-               "a moved actor ran none of its script" if any(a.endswith(":0") for a in kv.get("aisteps", "").split(",")) else "")
+               "a moved actor ran none of its script" if any(a.endswith(":0") for a in kv.get("aisteps", "").split(",")) else
+               f"opens on {kv.get('mean', 'no mean')}, the room's own fight on {own.get('mean', 'no mean')}"
+               if kv.get("mean") != own.get("mean") else "")
         won += not why
         if why: (known if any(name.split("-")[1] + "<" + a.split("<")[1] in skip for a in ai) else bad).append(f"{name} {' '.join(ai)}: {why}")
     for b in known: print("KNOWN " + b)
