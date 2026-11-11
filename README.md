@@ -32,6 +32,10 @@ The left stick provides analog movement. **Escape → Controls → Field run thr
 Settings and selected disc paths are saved automatically. Memory cards are kept in `memory-cards` beside your user preferences. Older `bu00`/`bu10` cards from the launch or executable folder are imported once, keeping the original files.
 
 For portable storage, create an empty `portable.txt` beside the executable (beside the `.app` on macOS), or launch with `--portable`. Settings, memory cards, mods and downloaded backgrounds then use the `userdata` folder there. Keep the application in a writable folder. An explicit `PE_CONFIG_HOME` takes precedence. Existing user saves remain in their original location; copy your preferences folder into `userdata` to move them.
+The game ships with no translations. Put a `.pelang` language pack in the `lang` folder beside the game and start it: the first start that finds packs asks which language to use. To change it later, choose it under **F1 → Language** and restart. Language packs work with **All mods** off. Missing translations use the original text.
+
+Translators can try the [Simplified Chinese rendering pilot](localization/pilots/zh-Hans/README.md). It demonstrates Chinese fonts and dialogue; it is not a complete translation.
+
 **Escape → Graphics** includes geometry correction, antialiasing, model texture filtering and an optional **Widescreen** aspect ratio. Widescreen shows more of the original background where available; narrow scenes and movies stay in 4:3.
 
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.

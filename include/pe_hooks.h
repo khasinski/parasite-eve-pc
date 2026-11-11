@@ -33,7 +33,7 @@ typedef enum PeHookId {
     PE_HOOK_ACTOR_STEP,  /* PeHookActorStep: local scripted speed or animation increment */
     PE_HOOK_ITEM_USE,    /* int *: Battle_ApplyDamage item id before its effects */
     PE_HOOK_TEXT_LOOKUP, /* PeHookTextLookup: a resident text table lookup's result (system messages,
-                          * item names and descriptions, the rest); may be replaced */
+                          * item names and descriptions, the rest), or a battle message; may be replaced */
     PE_HOOK_INVENTORY_SORTED, /* NULL: Aya's native bag sort completed */
     PE_HOOK_INVENTORY_HEADER, /* MenuWidgetNode *: after Aya's Quantity header is drawn */
     PE_HOOK_EQUIP_EFFECT, /* PeHookEquipEffect: effect icon draw; nonzero replaces sprite */
@@ -58,7 +58,7 @@ typedef enum PeHookId {
                           * the text it draws may be replaced */
     PE_HOOK_TIM_UPLOAD,  /* TimFile *: Asset_LoadTimImage, before the image goes to VRAM (fonts,
                           * backgrounds, area glyph pages); its pixels may be changed in place */
-    PE_HOOK_RESERVED_1, /* Preserve hook IDs used by existing mods. */
+    PE_HOOK_TEXT_GLYPH,  /* PeHookTextGlyph: optional multi-byte glyph; nonzero handles it */
     PE_HOOK_ITEM_REMOVE, /* PeHookItemRemove: Inv_RemoveActiveListItem entry; replaceable (result = id) */
     PE_HOOK_INVENTORY_REBUILD, /* NULL: Inv_RebuildSelectableMask entry, before the masks are rebuilt */
     PE_HOOK_STORAGE_TRANSFER, /* PeHookStorageTransfer: Inv_RebuildWithSlotLimit, bag <-> storage
@@ -69,6 +69,13 @@ typedef enum PeHookId {
     PE_HOOK_TITLE_FRAME, /* int *: each title-menu frame; set to 1 after loading a save into the runtime
                           * (as the card load does) to leave the title the way Continue does; appended,
                           * previous hook IDs unchanged */
+    PE_HOOK_TEXT_STRETCH, /* PeHookTextStretch: the Unicode letters of an F1 C6 stretch; nonzero
+                           * gives them (pe1/text_render.h) */
+    PE_HOOK_TEXT_LETTER,  /* PeHookTextLetter: how a Unicode letter draws; nonzero handles it */
+    PE_HOOK_TEXT_SCRIPT,  /* PeHookTextScript: whether the pack in use reads right to left, and
+                           * which Unicode letter a one-byte code draws (pe1/text_render.h) */
+    PE_HOOK_DISC_READ, /* PeHookDiscRead: PE.IMG sectors just read, before the game looks at them;
+                        * their bytes may be changed in place (a translation's pictures) */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -113,10 +120,21 @@ typedef struct PeHookScriptRandom {
     const unsigned int *next;
 } PeHookScriptRandom;
 
+/* Caller owns packet allocation, ordering, color and palette. Measurement never uploads.
+ * A provider returns nonzero only for a complete token it owns, setting bytes/advance/UV. */
+typedef struct PeHookTextGlyph {
+    const unsigned char *text;
+    unsigned bytes, advance;
+    int draw;
+    unsigned char u, v;
+} PeHookTextGlyph;
+
 typedef struct PeHookTextLookup {
     unsigned table, index; /* table 4 = system messages, 8 = item names, 12 = item descriptions,
-                            * 16 = the rest (Text_LookupTable4 / 8 / C / 10) */
+                            * 16 = the rest (Text_LookupTable4 / 8 / C / 10), 20 = a battle message
+                            * from the boot program, index BATTLE_TEXT_* (Text_LookupBattleMessage) */
     void **text;
+    int persistent; /* nonzero: editable name copied into a save; use stable byte glyphs only */
 } PeHookTextLookup;
 
 /* The box's text starts after the page's FE <id> and runs to its FF or F9. A replacement must
@@ -126,6 +144,45 @@ typedef struct PeHookTextPage {
     unsigned page;             /* the page the script opened */
     unsigned char **message;   /* the text the box will draw */
 } PeHookTextPage;
+
+typedef struct PeHookDiscRead {
+    unsigned sector;     /* the first sector read, counted from the start of PE.IMG */
+    unsigned count;      /* sectors read, 2048 bytes each */
+    unsigned char *data; /* where they were read to */
+} PeHookDiscRead;
+
+/* The text renderer asks for a stretch's letters. The provider keeps them alive until the active
+ * language changes. */
+typedef struct PeHookTextStretch {
+    unsigned id;              /* F1 C6 hi lo: hi * 240 + lo */
+    const unsigned *letters;  /* provider: Unicode, in reading order */
+    unsigned count;
+} PeHookTextStretch;
+
+/* The text renderer asks how a Unicode letter draws, before the game's own English set. A provider
+ * either names a one-byte game code that draws it, or puts it in a 12 x 12 cell of the font page
+ * (only when draw is nonzero: measuring never uploads) and gives that cell and the advance. In
+ * menus it may cut the cell as the game cuts its own letters: u from the first inked column, w
+ * columns wide. */
+typedef struct PeHookTextLetter {
+    unsigned style;           /* PeTextStyle */
+    unsigned letter;          /* Unicode; 0 when `paged` names the letter instead */
+    unsigned paged;           /* a two-byte name letter (FB-FE then a byte): (page byte - FA) << 8
+                               * | byte; the provider gives its Unicode letter's drawing, else 0 */
+    int draw;
+    int code;                 /* provider: the game code (0x00-0xF0) that draws it, or -1. For a
+                               * `paged` letter it also sets `letter` to the Unicode letter */
+    unsigned char u, v;       /* provider, when code is -1: the cell on font page 0 */
+    unsigned advance;         /* provider, when code is -1 */
+    unsigned char w;          /* provider, when code is -1: columns drawn from u (0: all 12) */
+} PeHookTextLetter;
+
+/* Asked once per line drawn and for each one-byte letter in a right-to-left line. */
+typedef struct PeHookTextScript {
+    unsigned code;            /* a one-byte game code (0x4D-0xF0), or ~0u to ask only `rtl` */
+    int rtl;                  /* provider: nonzero when the pack in use reads right to left */
+    unsigned letter;          /* provider: the Unicode letter `code` draws in that pack, else 0 */
+} PeHookTextScript;
 
 typedef struct PeHookRewards {
     int exp;

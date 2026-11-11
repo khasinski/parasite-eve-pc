@@ -1,5 +1,6 @@
 #include "pe1/boot_display.h"
 
+#include "pe1/text_render.h"
 #include "text_screen_externs.h"
 
 s32 BootDisplay_RunDisplay(void) {
@@ -79,41 +80,23 @@ cleanup:
 
 s32 BootDisplay_DrawTextBlock(void) {
     const u8 *line;
-    u32 x = 24;
-    u32 width;
-    const u8 *scan;
     u32 rows = 0;
     s32 y = g_BootDisplayTextScrollX >> 8;
     g_BootDisplayTextCursor = g_BootDisplayCreditLines;
     line = *g_BootDisplayTextCursor;
     while (*line != 255) {
         if (y >= -7) {
+            PeTextCreditPen pen;
+            PeTextLetter letter;
             if (y >= 225) break;
+            /* the text renderer places each letter; the drawer only puts it on screen */
+            pen.x = PE_TEXT_CREDIT_LEFT;
             for (; *line; ++line) {
-                switch (*line) {
-                case ' ':
-                    break;
-                case '\\':
-                    width = 0;
-                    if (line[1]) {
-                        scan = line + 1;
-                        do {
-                            width += BootDisplay_GetGlyphWidth(*scan++);
-                        } while (*scan);
-                    }
-                    x = (320 - width) >> 1;
-                    continue;
-                case '\t':
-                    x += BootDisplay_GetGlyphWidth(' ') * 14;
-                    continue;
-                default:
-                    g_BootDisplayCallbacks->glyph((s16)x, (s16)y, *line);
-                    break;
-                }
-                x += BootDisplay_GetGlyphWidth(*line);
+                pen.style = g_BootDisplayFontStyle;
+                if (PeText_ReadCredit(&pen, line, &letter))
+                    g_BootDisplayCallbacks->glyph(letter.x, (s16)y, (u8)letter.code);
             }
             g_BootDisplayFontStyle = 0;
-            x = 24;
             ++rows;
         }
         ++g_BootDisplayTextCursor;
@@ -124,86 +107,14 @@ s32 BootDisplay_DrawTextBlock(void) {
     return rows < 1;
 }
 
-/* Fallthrough follows consecutive punctuation slots in the font atlas. */
-#define PUNCTUATION_INDEX(base) { \
-    index = -1; \
-    switch (saved) { \
-    case ':': ++index; \
-    case '?': ++index; \
-    case '/': ++index; \
-    case '.': ++index; \
-    case ',': ++index; \
-    case '\'': ++index; \
-    case '-': ++index; \
-    case ')': ++index; \
-    case '(': ++index; \
-    case '&': ++index; \
-    case '#': ++index; \
-    case '@': ++index; \
-    case '!': ++index; \
-    case '~': ++index; \
-    default: index += (base); \
-    } \
-}
+/* The drawers (BootDisplay_QueueTintedSprite, BootDisplay_BrightenGlyph) ask the text renderer
+ * which cell of the credits art a letter is; the roll's widths are the renderer's too. */
 s32 BootDisplay_GetGlyphIndex(u8 character) {
-    u16 style = g_BootDisplayFontStyle;
-    u8 saved = character;
-    s32 index;
-    if (style) {
-        if ((u8)(character - 'a') < 26) index = saved - 32;
-        else if ((u8)(character - 'A') < 26) index = saved - 65;
-        else if ((u8)(character - '0') < 10) index = saved + 58;
-        else PUNCTUATION_INDEX(26);
-    } else {
-        if ((u8)(character - 'A') < 26) index = saved - 25;
-        else if ((u8)(character - 'a') < 26) index = saved - 31;
-        else if ((u8)(character - '0') < 10) index = saved + 58;
-        else PUNCTUATION_INDEX(92);
-    }
-    return (u8)index;
+    return (s32)PeText_CreditCell(g_BootDisplayFontStyle, character);
 }
-
-#undef PUNCTUATION_INDEX
-
-/* Four width choices per alphabetic glyph. The lowercase base accounts for
- * the extra 32 ASCII code points; odd styles select lowercase widths. */
 
 u16 BootDisplay_GetGlyphWidth(u8 character) {
-    u16 style = g_BootDisplayFontStyle;
-    u8 saved;
-    s32 width;
-    if(style>3)return 0;
-    if (style == 2) {
-        saved = character;
-        if ((u8)(character - 'a') < 26)
-            saved = character - 32;
-        if ((u8)(saved - 'A') < 26)
-            width = g_BootDisplayUppercaseWidthsStyle2[saved-'A'][2];
-        else switch (saved) {
-        case '!': case '\'': case '.': case ':': width = 3; break;
-        case '#': width = 7; break;
-        case '&': width = 11; break;
-        case '(': case ')': case ',': case '-': case '/': width = 4; break;
-        case '?': width = 6; break;
-        case '@': width = 9; break;
-        case '~': width = 8; break;
-        default: width = 8; break;
-        }
-    } else {
-        if ((u8)(character - 'A') < 26)
-            width = g_BootDisplayUppercaseWidths[character-'A'][style];
-        else if ((u8)(character - 'a') < 26)
-            width = g_BootDisplayLowercaseWidths[character-'a'][style | 1];
-        else switch (character) {
-        case '!': case '.': case ':': width = 2; break;
-        case '\'': case ',': width = 3; break;
-        case '(': case ')': case '-': case '/': case '?': width = 4; break;
-        case '&': case '@': width = 9; break;
-        case '~': width = 6; break;
-        default: width = 6; break;
-        }
-    }
-    return width;
+    return (u16)PeText_CreditWidth(g_BootDisplayFontStyle, character);
 }
 
 /* Native pointers into the loaded credits data; no retail addresses are
@@ -215,34 +126,3 @@ BootDisplayCallbacks *g_BootDisplayCallbacks;
 u16 g_BootDisplayFontStyle;
 s32 g_BootDisplayTextScrollX,g_BootDisplayTextScrollStepX,g_BootDisplayDone;
 u32 g_BootDisplayFrameCounter;
-
-/* USA alphabet widths: columns 0/1 for regular upper/lowercase and
- * column 2 for style 2; odd style 3 uses the authored zero column. */
-const u8 g_BootDisplayUppercaseWidths[26][4]={
-    {9,6,10,0},
-    {7,6,8,0},
-    {8,6,10,0},
-    {9,7,10,0},
-    {7,6,8,0},
-    {7,5,8,0},
-    {9,6,10,0},
-    {10,7,11,0},
-    {5,4,7,0},
-    {7,5,7,0},
-    {9,6,10,0},
-    {8,4,9,0},
-    {10,10,12,0},
-    {9,7,11,0},
-    {9,6,11,0},
-    {7,7,8,0},
-    {10,6,12,0},
-    {8,5,10,0},
-    {6,5,8,0},
-    {9,4,10,0},
-    {9,7,10,0},
-    {9,6,10,0},
-    {11,9,13,0},
-    {9,7,10,0},
-    {8,6,10,0},
-    {7,5,8,0},
-};

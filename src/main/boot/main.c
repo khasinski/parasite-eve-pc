@@ -55,6 +55,7 @@ static bool Host_StateChord(const SDL_Event *event);
 #include "pe1/geom_state.h"
 #include "pe1/pad_state.h"
 #include "pe1/psyq_gpu.h"
+#include "pe1/memcard.h"
 #include "pe1/save.h"
 #include "pe1/save_tail_state.h"
 #include "pe1/scene_dispatch.h"
@@ -4021,6 +4022,48 @@ static void Host_TakeRoomSnapshot(void) {
     SDL_SetAtomicInt(&host_room_snapshot,(int)(snapshot - host_room_snapshots));
 }
 
+/* --test-save-after: the save menu's save to memory card 1, slot 1, without
+ * the menu: Save_BuildHeader, then Save_BuildCardFile (the save data, every
+ * mod's save write handler, the checksum) on the path the menu formats for an
+ * empty card's first slot, written whole to that card file. Only in the free
+ * field (no battle, event, menu or movie), where a phone is used. The game's
+ * own header fields and Aya's record links are put back as for the room
+ * snapshot above. */
+static int Host_TestSave(void) {
+    static SaveRuntimeState header;
+    char path[0x20], target[4096], temporary[4120];
+    if ((g_GameStateFlags & 0x2006u) || (g_GameStateFlagsWord & 0xB600u) ||
+        g_GameState.scene_audio.tracks.movie_active)
+        return 0;
+    BattleStateTail *action = g_AyaBattleState.action;
+    BattleAttributes *attributes = g_AyaBattleState.attributes;
+    const int transfer = D_800A5D50;
+    memcpy(&header, &g_SaveRuntimeState, sizeof(header));
+    Save_BuildHeader();
+    if (action && action != &g_SavedBattleStateTail) g_AyaBattleState.action = &g_SavedBattleStateTail;
+    if (attributes && attributes != &g_BattleEquipStateBlock) g_AyaBattleState.attributes = &g_BattleEquipStateBlock;
+    snprintf(path, sizeof(path), g_MemCardFilenameFormatPtr, 0, '0', 'A');
+    const int built = Save_BuildCardFile(path);
+    g_AyaBattleState.action = action;
+    g_AyaBattleState.attributes = attributes;
+    memcpy(&g_SaveRuntimeState, &header, sizeof(header));
+    D_800A5D50 = transfer;
+    Psyz_AdjustPath(target, path, sizeof(target));
+    snprintf(temporary, sizeof(temporary), "%s.tmp", target);
+    SDL_IOStream *io = built < 0 ? NULL : SDL_IOFromFile(temporary, "wb");
+    int ok = io && SDL_WriteIO(io, g_MemCardFileBuffer, sizeof(g_MemCardFileBuffer)) == sizeof(g_MemCardFileBuffer);
+    if (io && !SDL_CloseIO(io)) ok = 0;
+    if (ok) {
+        SDL_RemovePath(target);
+        ok = SDL_RenamePath(temporary, target);
+    }
+    if (!ok) SDL_RemovePath(temporary);
+    fprintf(stderr, "Test save: %s %s at VBlank %u\n", ok ? "wrote" : built < 0 ? "refused" : "failed to write",
+            target, (unsigned)g_BootHostVBlankCount);
+    fflush(stderr);
+    return 1;
+}
+
 static void Host_CrashHex(char *out, size_t size, size_t *used, const u8 *data, size_t count, unsigned address) {
     for (size_t i = 0; i < count && *used + 1 < size; ++i) {
         const char *end = i % 32 == 31 || i + 1 == count ? "\r\n" : "";
@@ -4122,7 +4165,7 @@ static void Host_PrintHelp(const char *program_name) {
         "[--dynamic-lighting 0|1] [--effect-geometry-correction 0|1] "
         "[--headless | --headless-gpu] [--internal-resolution 1..8] [--frame-limit N] [--control-at N] "
         "[--dump-vram PATH] [--dump-frame PATH] [--dump-audio PATH] [--pad-at VBLANK:BUTTON_MASK ...] "
-        "[--test-crash-after N | --test-abort-after N]\n",
+        "[--test-crash-after N | --test-abort-after N] [--test-save-after N]\n",
         program_name
     );
     printf("--download-backgrounds / --verify-backgrounds manage the optional HD pack without opening a window.\n");
@@ -4137,6 +4180,7 @@ static void Host_PrintHelp(const char *program_name) {
     printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
     printf("Headless fixtures only: --diagnostic-hp-at VBLANK:EXPECTED_HP:VALUE (requires --frame-limit; output is marked coverage-only)\n");
     printf("--test-crash-after N / --test-abort-after N crash on purpose at VBlank N to check the crash report (its path is printed).\n");
+    printf("--test-save-after N saves to memory card 1, slot 1 at the first free field frame from VBlank N, as the save menu does (the file is printed).\n");
 }
 
 static int Host_ParsePadEventArg(const char *spec, int argc) {
@@ -4279,6 +4323,7 @@ int main(int argc, char **argv) {
     CrashReport_Install(interactive, Host_DescribeCrash);
     CrashReport_SetSaveData(Host_DescribeSaveData);
     g_BootSceneStarted = Host_TakeRoomSnapshot;
+    g_BootTestSave = Host_TestSave;
 #ifdef PE_MODS
     CrashReport_SetMods(pe_mod_crash_describe);
 #endif
@@ -4396,6 +4441,15 @@ int main(int argc, char **argv) {
             }
             g_BootHostCrashAt = (u32)tick;
             g_BootHostCrashAbort = abort_crash;
+        } else if (!strcmp(argv[arg], "--test-save-after")) {
+            char *end = NULL;
+            errno = 0;
+            unsigned long tick = arg + 1 < argc ? strtoul(argv[++arg], &end, 10) : 0;
+            if (!tick || tick > INT_MAX || errno || *end || g_BootHostSaveAt) {
+                fprintf(stderr, "Invalid or duplicate test save VBlank\n");
+                return EXIT_FAILURE;
+            }
+            g_BootHostSaveAt = (u32)tick;
         } else if (!strcmp(argv[arg], "--dump-vram")) {
             if (arg + 1 >= argc || g_BootHostVramPath) {
                 fprintf(stderr, "Missing or duplicate capture path\n");

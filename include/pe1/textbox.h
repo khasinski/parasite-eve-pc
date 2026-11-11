@@ -34,8 +34,9 @@ typedef struct TextboxEntry {
     TextboxNumber numbers[5];
 } TextboxEntry;
 
+/* The name a dialogue box inserts (FA): up to 8 letters, two bytes each at most (pe1/text_render.h). */
 typedef struct TextboxNameGlyphs {
-    u8 glyphs[9];
+    u8 glyphs[17];
     s8 count;
 } TextboxNameGlyphs;
 extern TextboxNameGlyphs g_TextboxNameGlyphs;
