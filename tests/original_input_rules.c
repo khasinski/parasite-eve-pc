@@ -1373,7 +1373,12 @@ int main(int argc, char **argv) {
     SDL_DestroySurface(analog_image);OverlaySurfaceRelease(&analog_surface);
 
 
+    /* HD backgrounds, pack, integrity check; modded builds add the "Mods menu" row. */
+#if defined(PE_MODS) && !defined(PE_PS5)
+    assert(Host_SettingsPureRowCount(HOST_PAGE_MODS)==4);
+#else
     assert(Host_SettingsPureRowCount(HOST_PAGE_MODS)==3);
+#endif
     char invalid_hd_value[]="-1";assert(!Host_ParseOptionValue("mods","hd_backgrounds",invalid_hd_value));
     assert(Host_ParseOptionValue("mods","hd_backgrounds","false"));assert(!host_options.hd_backgrounds);
     assert(Host_ParseOptionValue("mods","hd_backgrounds","true"));assert(host_options.hd_backgrounds);

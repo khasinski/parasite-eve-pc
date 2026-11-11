@@ -1381,7 +1381,7 @@ static void Host_InitOptions(int enabled) {
 #endif
     host_options.volume = 100;
     host_options.speed_factor = 2;
-    host_options.speed_toggle = 1;
+    host_options.speed_toggle = 0;
     host_options.analog_run_threshold = 85;
     host_options.screenshot_auto_upload = 1;
     host_options.screenshot_upload_url[0] = '\0';
@@ -1398,16 +1398,12 @@ static void Host_InitOptions(int enabled) {
     host_options.buttons[HOST_SPEED_BINDING] = HOST_UNBOUND_BUTTON;
     host_options.keys[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_KEY;
     host_options.buttons[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_BUTTON;
-    /* Pad defaults: L3 fast-forward, L2+R2 Settings, R3 Mods. Esc and F1 stay on the keyboard. */
-    for (unsigned i = HOST_SETTINGS_BINDING; i <= HOST_MODS_BINDING; ++i) host_options.keys[i] = HOST_UNBOUND_KEY;
-#ifndef PE_PS5
-    host_options.buttons[HOST_SPEED_BINDING] = SDL_GAMEPAD_BUTTON_LEFT_STICK;
-    host_options.buttons[HOST_SETTINGS_BINDING] = SDL_GAMEPAD_BUTTON_COUNT;
-    host_options.buttons[HOST_SETTINGS2_BINDING] = SDL_GAMEPAD_BUTTON_COUNT + 1;
-    host_options.buttons[HOST_MODS_BINDING] = SDL_GAMEPAD_BUTTON_RIGHT_STICK;
-#else
-    for (unsigned i = HOST_SETTINGS_BINDING; i <= HOST_MODS_BINDING; ++i) host_options.buttons[i] = HOST_UNBOUND_BUTTON;
-#endif
+    /* Settings, its held second button and Mods start unbound, like Speed and Screenshot: players
+     * pick pad combos in Escape > Controls. Esc and F1 stay on the keyboard. */
+    for (unsigned i = HOST_SETTINGS_BINDING; i <= HOST_MODS_BINDING; ++i) {
+        host_options.keys[i] = HOST_UNBOUND_KEY;
+        host_options.buttons[i] = HOST_UNBOUND_BUTTON;
+    }
     #ifdef PE_PS5_GPU_NATIVE
     /* Fresh Modern baseline. Saved individual choices load afterward. */
     host_options.scale=8;host_options.antialiasing=1;host_options.dynamic_lighting=1;host_options.effect_geometry_correction=1;host_options.movie_cleanup=2;host_options.fsr1=1;host_options.fsr1_sharpness=0;host_options.model_fill_lighting=2;host_options.model_filtering=1;host_options.hd_backgrounds=1;host_options.hd_models=1;
@@ -2651,11 +2647,14 @@ static void Host_ProcessSettingsEvent(
             state->capturing_binding = 0;
             state->dirty = 1;
             /* Swap duplicates, keeping every original button reachable. An
-             * unbound speed binding has nothing to give back in a swap. Host bindings
-             * may share a game button, so the two groups are checked apart. */
-            int first = target < HOST_GAME_BINDING_COUNT ? 0 : HOST_GAME_BINDING_COUNT;
-            int last = target < HOST_GAME_BINDING_COUNT ? HOST_GAME_BINDING_COUNT : HOST_BINDING_COUNT;
+             * unbound speed binding has nothing to give back in a swap. Only the Settings
+             * combo (two buttons held together) may share game buttons, so it is checked
+             * against the other host bindings alone, and the rest skip its two slots. */
+            const int combo = target == HOST_SETTINGS_BINDING || target == HOST_SETTINGS2_BINDING;
+            const int first = combo ? HOST_GAME_BINDING_COUNT : 0;
+            const int last = HOST_BINDING_COUNT;
             for (int i = first; i < last; ++i) {
+                if (!combo && (i == HOST_SETTINGS_BINDING || i == HOST_SETTINGS2_BINDING)) continue;
                 if (i != target && bindings[i] == binding && bindings[target] == unbound) {
                     static char message[64];
                     snprintf(message, sizeof(message), "Already used by %s.", host_button_names[i]);
@@ -2664,6 +2663,7 @@ static void Host_ProcessSettingsEvent(
                 }
             }
             for (int i = first; i < last; ++i) {
+                if (!combo && (i == HOST_SETTINGS_BINDING || i == HOST_SETTINGS2_BINDING)) continue;
                 if (i != target && bindings[i] == binding) {
                     bindings[i] = bindings[target];
                 }
