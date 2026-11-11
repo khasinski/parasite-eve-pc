@@ -2,8 +2,8 @@
 
 ## Unreleased
 
+- Added CHD disc images (Disc 1 and Disc 2) next to CUE/BIN, read with libchdr.
 - Added `--game <path>`: Disc 1 for this run, keeping a saved Disc 2.
-- Added a `recomplauncher.json` to every release so RecompLauncher can set the game up and start it.
 
 ## 0.11
 

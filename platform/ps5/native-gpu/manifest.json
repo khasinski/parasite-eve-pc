@@ -2607,7 +2607,7 @@
     },
     {
       "path": "include/pe1/cdrom.h",
-      "sha256": "f1f17f2ef835db70c6b818e53a018bf1056e7a133c4baa63bec23b0545a3ee8a"
+      "sha256": "159cfc71b39cdbeec3672c0e17b664c34141877f0ec500c8476fb712130141c5"
     },
     {
       "path": "include/pe1/cdrom_buffers.h",
@@ -4487,7 +4487,7 @@
     },
     {
       "path": "src/main/boot/state_ui.h",
-      "sha256": "9fa230408632d806e77468888022eab8731fc32c5235e51c20677cc3d581de34"
+      "sha256": "5e6c200aad9b627a09ed3cd70b2164a222412d436c3c1686dd13dccd18842f91"
     },
     {
       "path": "src/main/item/actions.c",
