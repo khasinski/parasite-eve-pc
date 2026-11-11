@@ -89,6 +89,15 @@ int pe_hook_add(int id, PeHookFn f, void *u, int priority, const char *m) {
   hooks[id] = f;
   return 0;
 }
+static ParasiteSpellEntry spell_table[20];
+void *Aya_GetParasiteSpellUnlockTable(void) { return spell_table; }
+static int cost_override = -1;
+int pe_hook_dispatch(int id, void *ctx) {
+  /* Stands in for another mod (e.g. Rebalance) changing a PE cost. */
+  if (id == PE_HOOK_POWER_COST && cost_override >= 0)
+    *((PeHookPowerCost *)ctx)->cost = cost_override;
+  return 0;
+}
 static int partial(void) { return half; }
 const void *pe_service_get(const char *name, int version) {
   static const PeBattleActionPolicyApi api = {partial};
@@ -193,6 +202,16 @@ int main(void) {
   assert(aya.hpAlive == 2250);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
   assert(aya.hpAlive == 2250);
+  /* Momentum: battle movement is 25% faster until the next action. */
+  int factor = 0x10000;
+  PeHookPlayerMove move = {&player, &factor, 0, 1};
+  fire(PE_HOOK_PLAYER_MOVE, &move);
+  assert(factor == 0x14000);
+  factor = 0x10000;
+  move.combat = 0; /* field movement is never touched */
+  fire(PE_HOOK_PLAYER_MOVE, &move);
+  assert(factor == 0x10000);
+  move.combat = 1;
   aya.hpAlive = 8500;
   pe_style_kill(&session, 10, 0, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
@@ -202,6 +221,10 @@ int main(void) {
   g_BattleEnemySlots[1].combatant.hpAlive = 0;
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
   assert(aya.hpAlive == 0 && !session.pending_kill);
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  factor = 0x10000;
+  fire(PE_HOOK_PLAYER_MOVE, &move);
+  assert(factor == 0x10000); /* burst ends when the next action begins */
   aya.stateFlags = 0x80000;
   ((EnemyCombatant *)target.core)->hpAlive = 10;
   fire(PE_HOOK_ENEMY_HIT, &target);
@@ -225,7 +248,8 @@ int main(void) {
   aya.hpAlive = 9000;
   assert(!guarded() && loss(100, 1) == 100);
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 17);
+  /* Guard off at a full bar, but the guarded hits above loaded a counter. */
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0xff);
   aya.hpAlive = 0;
   player.actionMode = 0;
   assert(guarded()); /* normal movement, not only the idle pose */
@@ -243,12 +267,61 @@ int main(void) {
     fire(PE_HOOK_AT_CHARGE, &q);
     sum += inc;
   }
-  assert(sum == 9);
+  assert(sum == 10); /* Revision 5: native charge speed */
   int inc = 0;
   PeHookAtCharge q = {&aya, &inc};
   fire(PE_HOOK_AT_CHARGE, &q);
   assert(inc == 0);
   assert(aya.scaledOffense == 0); /* derived stats never rewritten */
+  /* Retaliate: guarded losses (75 + 1) were stored; periodic source 4 and the
+   * unguarded full-bar hit were not. */
+  assert(session.counter_store == 76);
+  PeHookHpLoss lethal_q = {&aya, 10, &(int){40}, 1};
+  fire(PE_HOOK_HP_LOSS, &lethal_q);
+  assert(session.counter_store == 86); /* never more HP than Aya had */
+  session.counter_store = 76;
+  aya.hpAlive = 9000; /* guard off, counter loaded: orange marker */
+  g_BattleAtbMarkers[0].sprite.color.bytes.r = 17;
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0xff);
+  aya.hpAlive = 0;
+  BattleEntity foe = {0};
+  foe.core = &g_BattleEnemySlots[0].combatant;
+  ((EnemyCombatant *)foe.core)->hpAlive = 100;
+  aya.action = &weapon_action;
+  weapon.kind = 1;
+  fire(PE_HOOK_PLAYER_ACTION, &aya); /* a weapon action that misses */
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  assert(session.counter_store == 76); /* kept for a later hit */
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  int counter_dealt = 100;
+  PeHookEnemyDamage counter_hit = {&aya, &foe, &counter_dealt, 1};
+  fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
+  assert(counter_dealt == 150 && session.counter_store == 26); /* +50% cap */
+  counter_dealt = 9;
+  fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
+  assert(counter_dealt == 14 && session.counter_store == 21); /* ceil 4.5 */
+  counter_hit.ordinary = 0;
+  counter_dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
+  assert(counter_dealt == 100); /* PE / instant effects never counter */
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  assert(session.counter_store == 0); /* leftovers lost after a counter */
+  session.counter_store = 30;
+  aya.action = NULL; /* non-weapon actions neither spend nor clear it */
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  counter_hit.ordinary = 1;
+  counter_dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  assert(counter_dealt == 100 && session.counter_store == 30);
+  session.counter_store = 0;
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0x60); /* guarded */
+  aya.hpAlive = 9000;
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 17); /* restored */
+  aya.hpAlive = 0;
   half = 1;
   fire(PE_HOOK_BATTLE_UPDATE, NULL);
   assert(session.style == PE_STYLE_ORIGINAL && !guarded());
@@ -276,7 +349,7 @@ int main(void) {
   assert(!pe_style_point_blank(&session, INT_MIN, INT_MIN, 100));
   PeStyleSession capacity;
   pe_style_begin(&capacity, PE_STYLE_STRIKER);
-  pe_style_action_begin(&capacity, 1);
+  pe_style_action_begin(&capacity, 1, 1);
   pe_style_target(&capacity, 63, 1);
   pe_style_target(&capacity, 64, 1);
   assert(pe_style_gun_damage(&capacity, 63, 100, 1) == 125);
@@ -389,11 +462,11 @@ int main(void) {
   weapon_hit(10, 1);
   weapon_hit(10, 1);
   weapon_hit(10, 1);
-  assert(aya.exp_or_acc == 0 && session.pending_damage);
+  assert(session.pending_damage && !session.weave_charges);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 50);
+  assert(session.weave_charges == 1 && aya.exp_or_acc == 0); /* no PE refund */
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 50);
+  assert(session.weave_charges == 1); /* one charge per queue */
   g_BattlePeLabels[0].sprite.color.bytes.r = 19;
   g_BattlePeLabels[0].sprite.color.bytes.code = 0x65;
   fire(PE_HOOK_BATTLE_HUD, NULL);
@@ -424,60 +497,113 @@ int main(void) {
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(1, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 100); /* clubs qualify */
+  assert(session.weave_charges == 2); /* clubs qualify */
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(1, 1);
   fire(PE_HOOK_PLAYER_ACTION_CANCEL, &aya);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 100);
+  assert(session.weave_charges == 2);
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(1, 1);
   PeHookActionMode interrupted = {&player, 14};
   fire(PE_HOOK_ACTION_MODE, &interrupted);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 100);
+  assert(session.weave_charges == 2);
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(0, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 100);
-  fire(PE_HOOK_PLAYER_ACTION, &aya);
-  weapon_hit(1, 0);
-  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 100); /* PE/instant/script not ordinary */
-  aya.exp_or_acc = 975;
+  assert(session.weave_charges == 2);
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(1, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 1000 && aya.peFullGuardFrames == 240);
-  aya.peFullGuardFrames = 12;
+  assert(session.weave_charges == 3);
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(1, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 1000 && aya.peFullGuardFrames == 12);
+  assert(session.weave_charges == 3); /* capped */
+  for (int i = 0; i < 13; i++)
+    fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 0x60); /* steady at 3 */
+  /* Overchannel: Heal 1 (60 PE) is free and heals 30 + 8. The refund lands
+   * before the native code subtracts the full cost. */
+  spell_table[0].cost = 60;
+  spell_table[7].cost = 50;
+  aya.exp_or_acc = 100 << 16;
+  aya.curHP = 50;
+  PeHookSpell cast = {0, &player};
+  fire(PE_HOOK_SPELL, &cast);
+  assert(aya.exp_or_acc == 160 << 16 && aya.curHP == 58);
+  assert(session.weave_charges == 0);
+  fire(PE_HOOK_SPELL, &cast);
+  assert(aya.exp_or_acc == 160 << 16 && aya.curHP == 58); /* no charges */
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  for (int i = 0; i < 13; i++)
+    fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19);
+  /* One charge on Scan: 34% of its cost after other mods (Rebalance 30). */
+  session.weave_charges = 1;
   aya.exp_or_acc = 0;
+  cost_override = 30;
+  cast.spell = 7;
+  fire(PE_HOOK_SPELL, &cast);
+  assert(aya.exp_or_acc == (30 << 16) * 34 / 100 && aya.curHP == 58);
+  cost_override = -1;
+  /* Two charges on Barrier: 67% of a third of max PE. */
+  session.weave_charges = 2;
+  aya.exp_or_acc = 0;
+  cast.spell = 5;
+  fire(PE_HOOK_SPELL, &cast);
+  assert(aya.exp_or_acc == 333 * 67 / 100);
+  /* Energy Shot, Liberate and attack powers keep charges untouched. */
+  session.weave_charges = 3;
+  aya.exp_or_acc = 0;
+  cast.spell = 6;
+  fire(PE_HOOK_SPELL, &cast);
+  cast.spell = 15;
+  fire(PE_HOOK_SPELL, &cast);
+  cast.spell = 19;
+  fire(PE_HOOK_SPELL, &cast);
+  assert(aya.exp_or_acc == 0 && session.weave_charges == 3);
+  /* Another actor's spell (not Aya acting) is ignored. */
+  Combatant other = {0};
+  g_ActiveActor = &other;
+  cast.spell = 0;
+  fire(PE_HOOK_SPELL, &cast);
+  assert(session.weave_charges == 3);
+  g_ActiveActor = &aya;
+  weapon.kind = 1;
+  weapon_action.actionCode.actionId = 0;
+  session.weave_charges = 0;
   g_BattleEnemySlots[1].active = 0;
   ((EnemyCombatant *)target.core)->hpAlive = 1;
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(2, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.exp_or_acc == 0); /* final kill suppressed */
+  assert(session.weave_charges == 0); /* final kill suppressed */
   PeStyleSession tiny;
   pe_style_begin(&tiny, PE_STYLE_CHANNELER);
-  unsigned pe = 0;
   for (int i = 0; i < 20; i++) {
-    pe_style_action_begin(&tiny, 1);
+    pe_style_action_begin(&tiny, 1, 1);
     pe_style_weapon_damage(&tiny, 10, 9, 1);
-    pe = pe_style_pe_resolve(&tiny, pe, 101, 1);
+    pe_style_weave_resolve(&tiny, 1);
   }
-  assert(pe == 101 && tiny.pe_refund_remainder == 0);
+  int over = 0;
+  assert(tiny.weave_charges == 3 && pe_style_weave_cast(&tiny, &over) == 100 &&
+         over && !tiny.weave_charges);
+  tiny.weave_charges = 1;
+  assert(pe_style_weave_cast(&tiny, &over) == 34 && !over);
+  tiny.weave_charges = 2;
+  assert(pe_style_weave_cast(&tiny, &over) == 67 && !over);
   fire(PE_HOOK_SAVE_READ, NULL);
   assert(!session.active);
   battle = 0;
   requested = 0;
   settings_tick();
   assert(!pe_styles_enabled());
-  puts("Costume styles: registered hooks, attribution, one refund, final kill, "
-       "mode lock, guard boundaries, fractional charge, fallback and cleanup "
-       "passed.");
+  puts("Costume styles: registered hooks, attribution, one refund, momentum, "
+       "final kill, mode lock, guard boundaries, Retaliate counter, "
+       "Spellweave charges and casts, fallback and cleanup passed.");
   return 0;
 }

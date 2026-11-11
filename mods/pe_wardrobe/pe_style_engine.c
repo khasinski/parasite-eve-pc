@@ -9,9 +9,14 @@ void pe_style_begin(PeStyleSession *s, PeStyleId id) {
   s->style = d->implemented ? d->id : PE_STYLE_ORIGINAL;
   s->active = 1;
 }
+static int is(const PeStyleSession *s, PeStyleId id) {
+  return s->active && s->style == id;
+}
+static int saturate(uint64_t v) { return v > INT_MAX ? INT_MAX : (int)v; }
+
+/* ---- Quickstep ---------------------------------------------------------- */
 void pe_style_kill(PeStyleSession *s, int before, int after, int weapon) {
-  if (s->active && s->style == PE_STYLE_QUICKSTEP && weapon && before > 0 &&
-      after <= 0)
+  if (is(s, PE_STYLE_QUICKSTEP) && weapon && before > 0 && after <= 0)
     s->pending_kill = 1;
 }
 unsigned pe_style_resolve(PeStyleSession *s, unsigned gauge, unsigned full,
@@ -20,12 +25,21 @@ unsigned pe_style_resolve(PeStyleSession *s, unsigned gauge, unsigned full,
   uint64_t total;
   s->pending_kill =
       0; /* resolve once, including final kill / duplicate callbacks */
-  if (!s->active || s->style != PE_STYLE_QUICKSTEP || !pending || !continues)
+  if (!is(s, PE_STYLE_QUICKSTEP) || !pending || !continues)
     return gauge;
+  s->move_boost = 1; /* momentum lasts until the next action begins */
   total = (uint64_t)gauge +
           (uint64_t)full * pe_style_definition(s->style)->refund_percent / 100;
   return total > full ? full : (unsigned)total;
 }
+int pe_style_move(const PeStyleSession *s, int factor) {
+  if (!is(s, PE_STYLE_QUICKSTEP) || !s->move_boost || factor <= 0)
+    return factor;
+  return saturate((uint64_t)(unsigned)factor *
+                  pe_style_definition(s->style)->move_percent / 100);
+}
+
+/* ---- Shared AT scaling (native 100% for every current style) ------------ */
 int pe_style_charge(PeStyleSession *s, int increment) {
   uint64_t scaled;
   if (!s->active || increment <= 0)
@@ -34,16 +48,17 @@ int pe_style_charge(PeStyleSession *s, int increment) {
                pe_style_definition(s->style)->charge_percent +
            s->charge_remainder;
   s->charge_remainder = (unsigned)(scaled % 100);
-  return scaled / 100 > INT_MAX ? INT_MAX : (int)(scaled / 100);
+  return saturate(scaled / 100);
 }
+
+/* ---- Bulwark: guard and Retaliate --------------------------------------- */
 int pe_style_guard(const PeStyleSession *s, unsigned gauge, unsigned full,
                    int controllable) {
-  return s->active && s->style == PE_STYLE_BULWARK && gauge < full &&
-         controllable;
+  return is(s, PE_STYLE_BULWARK) && gauge < full && controllable;
 }
 int pe_style_damage(const PeStyleSession *s, int loss, int guarded) {
   uint64_t scaled;
-  if (!guarded || !s->active || s->style != PE_STYLE_BULWARK || loss <= 0)
+  if (!guarded || !is(s, PE_STYLE_BULWARK) || loss <= 0)
     return loss;
   scaled = ((uint64_t)(unsigned)loss *
                 pe_style_definition(s->style)->damage_percent +
@@ -51,13 +66,40 @@ int pe_style_damage(const PeStyleSession *s, int loss, int guarded) {
            100;
   return scaled ? (int)scaled : 1;
 }
+void pe_style_absorb(PeStyleSession *s, int taken, int guarded) {
+  uint64_t total;
+  if (!guarded || !is(s, PE_STYLE_BULWARK) || taken <= 0)
+    return;
+  total = (uint64_t)s->counter_store + (unsigned)taken;
+  s->counter_store = total > INT_MAX ? INT_MAX : (unsigned)total;
+}
+int pe_style_counter(PeStyleSession *s, int damage, int ordinary) {
+  uint64_t cap;
+  unsigned bonus;
+  if (!is(s, PE_STYLE_BULWARK) || !s->weapon_action || !s->action_open ||
+      !ordinary || damage <= 0 || !s->counter_store)
+    return damage;
+  cap = ((uint64_t)(unsigned)damage *
+             pe_style_definition(s->style)->counter_percent +
+         99) /
+        100;
+  bonus = cap < s->counter_store ? (unsigned)cap : s->counter_store;
+  s->counter_store -= bonus;
+  s->counter_spent = 1;
+  return saturate((uint64_t)(unsigned)damage + bonus);
+}
+void pe_style_counter_resolve(PeStyleSession *s) {
+  if (s->counter_spent)
+    s->counter_store = 0; /* one counter per weapon action that landed */
+  s->counter_spent = 0;
+}
 
+/* ---- Striker ------------------------------------------------------------ */
 int pe_style_point_blank(const PeStyleSession *s, int dx, int dz,
                          unsigned radius) {
   uint64_t reach;
   int64_t x = dx, z = dz;
-  if (!s->active || s->style != PE_STYLE_STRIKER || !radius ||
-      radius > 1048576u)
+  if (!is(s, PE_STYLE_STRIKER) || !radius || radius > 1048576u)
     return 0;
   /* Horizontal surface gap: Aya's native footprint, never the costume's size.
    */
@@ -65,13 +107,16 @@ int pe_style_point_blank(const PeStyleSession *s, int dx, int dz,
       (uint64_t)radius + 63u + pe_style_definition(s->style)->point_blank_gap;
   return (uint64_t)(x * x) + (uint64_t)(z * z) <= reach * reach;
 }
-void pe_style_action_begin(PeStyleSession *s, int gun) {
+void pe_style_action_begin(PeStyleSession *s, int gun, int weapon) {
   s->pending_kill = 0;
   s->close_targets = 0;
   s->gun_action = gun != 0;
+  s->weapon_action = weapon != 0 || gun != 0;
   s->action_open = 1;
   s->action_canceled = 0;
   s->pending_damage = 0;
+  s->counter_spent = 0;
+  s->move_boost = 0;
 }
 void pe_style_target(PeStyleSession *s, unsigned index, int close) {
   if (index < PE_STYLE_TARGETS && close)
@@ -80,30 +125,31 @@ void pe_style_target(PeStyleSession *s, unsigned index, int close) {
 int pe_style_gun_damage(const PeStyleSession *s, unsigned index, int damage,
                         int ordinary) {
   uint64_t scaled;
-  if (!s->active || s->style != PE_STYLE_STRIKER || !s->gun_action ||
-      !ordinary || damage <= 0 || index >= PE_STYLE_TARGETS ||
+  if (!is(s, PE_STYLE_STRIKER) || !s->gun_action || !ordinary || damage <= 0 ||
+      index >= PE_STYLE_TARGETS ||
       !(s->close_targets & (UINT64_C(1) << index)))
     return damage;
   scaled = ((uint64_t)(unsigned)damage *
                 pe_style_definition(s->style)->damage_percent +
             50u) /
            100u;
-  return scaled > INT_MAX ? INT_MAX : (int)scaled;
+  return saturate(scaled);
 }
 
+/* ---- Channeler: passive recovery and Spellweave ------------------------- */
 int pe_style_pe_recovery(PeStyleSession *s, int increment) {
-  if (!s->active || s->style != PE_STYLE_CHANNELER || increment <= 0)
+  if (!is(s, PE_STYLE_CHANNELER) || increment <= 0)
     return increment;
   uint64_t scaled = (uint64_t)(unsigned)increment *
                         pe_style_definition(s->style)->pe_recovery_percent +
                     s->pe_remainder;
   s->pe_remainder = (unsigned)(scaled % 100);
-  return scaled / 100 > INT_MAX ? INT_MAX : (int)(scaled / 100);
+  return saturate(scaled / 100);
 }
 void pe_style_weapon_damage(PeStyleSession *s, int before, int after,
                             int ordinary) {
-  if (s->active && s->style == PE_STYLE_CHANNELER && s->action_open &&
-      !s->action_canceled && ordinary && before > 0 && after < before)
+  if (is(s, PE_STYLE_CHANNELER) && s->action_open && !s->action_canceled &&
+      ordinary && before > 0 && after < before)
     s->pending_damage = 1;
 }
 void pe_style_action_cancel(PeStyleSession *s) {
@@ -112,25 +158,32 @@ void pe_style_action_cancel(PeStyleSession *s) {
     s->pending_damage = 0;
   }
 }
-unsigned pe_style_pe_resolve(PeStyleSession *s, unsigned current,
-                             unsigned maximum, int continues) {
+int pe_style_weave_resolve(PeStyleSession *s, int continues) {
   unsigned earned = s->action_open && !s->action_canceled && s->pending_damage;
+  unsigned limit;
   s->pending_damage = 0;
   s->action_open = 0;
-  if (!s->active || s->style != PE_STYLE_CHANNELER || !earned || !continues ||
-      !maximum)
-    return current;
-  if (current >= maximum) {
-    s->pe_refund_remainder = 0;
-    s->pe_remainder = 0;
-    return maximum;
+  if (!is(s, PE_STYLE_CHANNELER) || !earned || !continues)
+    return 0;
+  limit = pe_style_definition(s->style)->weave_charges;
+  if (s->weave_charges >= limit)
+    return 0;
+  s->weave_charges++;
+  return 1;
+}
+unsigned pe_style_weave_cast(PeStyleSession *s, int *overchannel) {
+  unsigned charges = s->weave_charges, limit;
+  if (overchannel)
+    *overchannel = 0;
+  if (!is(s, PE_STYLE_CHANNELER) || !charges)
+    return 0;
+  limit = pe_style_definition(s->style)->weave_charges;
+  s->weave_charges = 0;
+  if (charges >= limit) {
+    if (overchannel)
+      *overchannel = 1;
+    return 100;
   }
-  uint64_t raw =
-      (uint64_t)maximum * pe_style_definition(s->style)->pe_refund_percent +
-      s->pe_refund_remainder;
-  uint64_t total = (uint64_t)current + raw / 100;
-  s->pe_refund_remainder = total >= maximum ? 0 : (unsigned)(raw % 100);
-  if (total >= maximum)
-    s->pe_remainder = 0;
-  return total >= maximum ? maximum : (unsigned)total;
+  /* 1 of 3 = 34%, 2 of 3 = 67%: rounded up so two charges beat two thirds. */
+  return (charges * 100 + limit - 1) / limit;
 }

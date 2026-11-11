@@ -60,6 +60,12 @@ def run_case(args, style, game, flows):
         losses=[tuple(map(int,re.search(r'loss=(\d+)->(\d+)',line).groups())) for line in events if 'bulwark loss=' in line]
         assert losses,result
         assert all(after==max(1,(before*75+50)//100) for before,after in losses),result
+        # Retaliate: guarded losses build the store; any counter respects the +50% per-hit cap.
+        stores=[int(re.search(r'store=(\d+)',line).group(1)) for line in events if 'bulwark loss=' in line]
+        assert stores and stores[0]>0,result
+        counters=[tuple(map(int,re.search(r'damage=(\d+)->(\d+)',line).groups())) for line in events if 'retaliate damage=' in line]
+        assert all(before<after<=before+(before*50+99)//100 for before,after in counters),result
+        result['retaliate_counters']=counters
     else:
         assert any('begin=original enabled=0' in line for line in events),result
         assert not any('refund=' in line or 'loss=' in line for line in events),result
@@ -81,7 +87,8 @@ def main():
         futures=[pool.submit(run_case,args,name,game,flows) for name in ('quickstep','bulwark','vanilla')]
         results=dict(f.result() for f in futures)
     native=results['vanilla']['mean_charge_step']
-    assert abs(results['bulwark']['mean_charge_step']/native-0.9)<0.005,results
+    # Revision 5: Retaliate charges at native speed.
+    assert abs(results['bulwark']['mean_charge_step']/native-1)<0.005,results
     assert abs(results['quickstep']['mean_charge_step']/native-1)<0.005,results
     assert hashlib.sha256(args.card.read_bytes()).hexdigest()==before
     (args.output/'functional-results.json').write_text(json.dumps(results,indent=2),encoding='utf-8')

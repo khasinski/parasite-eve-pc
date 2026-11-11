@@ -75,6 +75,7 @@ static void restore_pe_cue(void) {
 }
 static struct {
   u8 r, g, b;
+  u8 tr, tg, tb; /* the cue color applied this frame */
   int tinted;
 } marker[2];
 
@@ -82,8 +83,8 @@ static void restore_marker(void) {
   unsigned i;
   for (i = 0; i < 2; i++) {
     RenderSpritePacket *p = &g_BattleAtbMarkers[i].sprite;
-    if (marker[i].tinted && p->color.bytes.r == 0x60 &&
-        p->color.bytes.g == 0xe0 && p->color.bytes.b == 0xff) {
+    if (marker[i].tinted && p->color.bytes.r == marker[i].tr &&
+        p->color.bytes.g == marker[i].tg && p->color.bytes.b == marker[i].tb) {
       p->color.bytes.r = marker[i].r;
       p->color.bytes.g = marker[i].g;
       p->color.bytes.b = marker[i].b;
@@ -193,7 +194,11 @@ static int hud(void *ctx, void *user) {
   (void)user;
   restore_marker();
   restore_pe_cue();
-  if (pe_pulse)
+  /* Spellweave: pulse on each new charge, steady at a full Overchannel. */
+  if (pe_pulse ||
+      (session.style == PE_STYLE_CHANNELER &&
+       session.weave_charges >=
+           pe_style_definition(PE_STYLE_CHANNELER)->weave_charges))
     for (unsigned slot = 0; slot < 2; slot++) {
       RenderSpritePacket *p = &g_BattlePeLabels[slot].sprite;
       pe_codes[slot] = p->color.bytes.code;
@@ -202,17 +207,28 @@ static int hud(void *ctx, void *user) {
       tint_rgb(&p->color.bytes.r, &p->color.bytes.g, &p->color.bytes.b,
                &pe_tints[slot]);
     }
-  if (!guarded() && !pulse)
+  /* Cyan: guarded or a Quickstep refund. Orange: a Retaliate counter is
+   * loaded while the guard is off (typically a full bar, ready to act). */
+  u8 r, g, b;
+  if (guarded() || pulse) {
+    r = 0x60, g = 0xe0, b = 0xff;
+  } else if (session.style == PE_STYLE_BULWARK && session.counter_store) {
+    r = 0xff, g = 0x90, b = 0x30;
+  } else {
     return 0;
+  }
   for (i = 0; i < 2; i++) {
     RenderSpritePacket *p = &g_BattleAtbMarkers[i].sprite;
     marker[i].r = p->color.bytes.r;
     marker[i].g = p->color.bytes.g;
     marker[i].b = p->color.bytes.b;
+    marker[i].tr = r;
+    marker[i].tg = g;
+    marker[i].tb = b;
     marker[i].tinted = 1;
-    p->color.bytes.r = 0x60;
-    p->color.bytes.g = 0xe0;
-    p->color.bytes.b = 0xff;
+    p->color.bytes.r = r;
+    p->color.bytes.g = g;
+    p->color.bytes.b = b;
   }
   return 0;
 }
@@ -230,11 +246,17 @@ static int hp_loss(void *ctx, void *user) {
   (void)user;
   ensure_session();
   if (q && q->actor == pe_aya_core() && q->source >= 1 && q->source <= 3) {
+    int guard = guarded();
     before = *q->loss;
-    *q->loss = pe_style_damage(&session, *q->loss, guarded());
+    *q->loss = pe_style_damage(&session, *q->loss, guard);
+    /* Retaliate stores the HP actually lost, never more than Aya had. */
+    int taken = *q->loss;
+    if (q->current_hp >= 0 && taken > q->current_hp)
+      taken = q->current_hp;
+    pe_style_absorb(&session, taken, guard);
     if (*q->loss != before)
-      pe_log("costume_style", "bulwark loss=%d->%d atb=%u", before, *q->loss,
-             pe_aya_core()->hpAlive);
+      pe_log("costume_style", "bulwark loss=%d->%d atb=%u store=%u", before,
+             *q->loss, pe_aya_core()->hpAlive, session.counter_store);
   }
   return 0;
 }
@@ -333,6 +355,14 @@ static int outgoing(void *ctx, void *user) {
   if (q && q->source == pe_aya_core() && q->target == hit_entity &&
       q->ordinary && *q->damage > 0 && normal_weapon())
     hit_ordinary = 1;
+  if (q && session.style == PE_STYLE_BULWARK && q->source == pe_aya_core() &&
+      normal_weapon() && candidate(q->target)) {
+    int before = *q->damage;
+    *q->damage = pe_style_counter(&session, before, q->ordinary);
+    if (*q->damage != before)
+      pe_log("costume_style", "retaliate damage=%d->%d store=%u", before,
+             *q->damage, session.counter_store);
+  }
   if (session.style == PE_STYLE_STRIKER && q && q->source == pe_aya_core())
     pe_log("costume_style",
            "striker admission gun=%d ordinary=%d targets=%u damage=%d",
@@ -388,7 +418,7 @@ static int action_begin(void *ctx, void *user) {
   (void)user;
   ensure_session();
   if (ctx == pe_aya_core()) {
-    pe_style_action_begin(&session, normal_gun());
+    pe_style_action_begin(&session, normal_gun(), normal_weapon());
     action_target_count = 0;
     if (session.style == PE_STYLE_STRIKER && session.gun_action) {
       const BattleEntity *e = (BattleEntity *)g_FieldActorListHead;
@@ -432,19 +462,13 @@ static int action_end(void *ctx, void *user) {
     pulse = 12;
     pe_log("costume_style", "quickstep refund=%u", core->hpAlive - before);
   }
-  if (session.style == PE_STYLE_CHANNELER && core->exp_or_acc >= 0 &&
-      core->maxAtk > 0) {
-    unsigned pe_before = (unsigned)core->exp_or_acc;
-    unsigned after = pe_style_pe_resolve(
-        &session, pe_before, (unsigned)core->maxAtk,
-        pe_in_battle() && (s16)core->curHP > 0 && living_enemies());
-    core->exp_or_acc = (s32)after;
-    if (after > pe_before) {
+  pe_style_counter_resolve(&session);
+  if (session.style == PE_STYLE_CHANNELER) {
+    if (pe_style_weave_resolve(&session, pe_in_battle() &&
+                                             (s16)core->curHP > 0 &&
+                                             living_enemies())) {
       pe_pulse = 12;
-      if (after == (unsigned)core->maxAtk)
-        core->peFullGuardFrames = 240;
-      pe_log("costume_style", "channeler refund=%u max=%u", after - pe_before,
-             (unsigned)core->maxAtk);
+      pe_log("costume_style", "spellweave charges=%u", session.weave_charges);
     }
   } else {
     session.action_open = 0;
@@ -453,6 +477,69 @@ static int action_end(void *ctx, void *user) {
   session.gun_action = 0;
   session.close_targets = 0;
   action_target_count = 0;
+  return 0;
+}
+/* Support powers whose cost Battle_ApplySpellEffect charges after this hook.
+ * Energy Shot, Liberate and the attack powers pay elsewhere and are left
+ * alone: they neither use nor clear Spellweave charges. */
+static int weave_power(unsigned spell) {
+  return spell <= 12u && spell != 6u ? 1 : spell == 18u;
+}
+/* The raw 16.16 PE the native code is about to subtract, after other mods'
+ * cost changes and the PE-saving armor, exactly as Battle_ApplySpellEffect
+ * and the Rebalance refund compute it. */
+static unsigned weave_raw_cost(const Combatant *core, unsigned spell) {
+  if (spell == 5u) /* Barrier: a third of max PE, armor does not apply */
+    return core->maxAtk > 0 ? (unsigned)core->maxAtk / 3u : 0u;
+  const ParasiteSpellEntry *table = Aya_GetParasiteSpellUnlockTable();
+  int cost = table ? table[spell].cost : 0;
+  PeHookPowerCost query = {(int)spell, &cost};
+  pe_hook_dispatch(PE_HOOK_POWER_COST, &query);
+  if (cost <= 0)
+    return 0;
+  uint64_t raw = (uint64_t)(unsigned)cost * 0x10000u;
+  if (core->attributes && (core->attributes->effectFlags & 0x200u))
+    raw = raw * 2u / 3u;
+  return raw > 0x7fffffffu ? 0x7fffffffu : (unsigned)raw;
+}
+static int spell(void *ctx, void *user) {
+  static const int heal[3] = {30, 60, 280};
+  const PeHookSpell *q = ctx;
+  Combatant *core = pe_aya_core();
+  int overchannel;
+  (void)user;
+  if (!q || !core || !pe_in_battle() || g_ActiveActor != core)
+    return 0;
+  ensure_session();
+  if (session.style != PE_STYLE_CHANNELER || !session.weave_charges ||
+      !weave_power(q->spell))
+    return 0;
+  unsigned charges = session.weave_charges;
+  unsigned percent = pe_style_weave_cast(&session, &overchannel);
+  unsigned raw = weave_raw_cost(core, q->spell);
+  /* Refund first; the native code then subtracts its full cost. */
+  unsigned refund = (unsigned)((uint64_t)raw * percent / 100u);
+  core->exp_or_acc = (s32)((u32)core->exp_or_acc + refund);
+  if (overchannel && q->spell <= 2u) /* native clamps HP to max afterwards */
+    core->curHP = (u16)(core->curHP +
+                        (heal[q->spell] *
+                             (int)pe_style_definition(PE_STYLE_CHANNELER)
+                                 ->overchannel_percent +
+                         99) /
+                            100);
+  pe_pulse = 12;
+  pe_log("costume_style",
+         "spellweave cast spell=%u charges=%u refund=%u/%u overchannel=%d",
+         q->spell, charges, refund, raw, overchannel);
+  return 0;
+}
+static int player_move(void *ctx, void *user) {
+  PeHookPlayerMove *q = ctx;
+  (void)user;
+  if (!q || !q->factor || !q->combat || !pe_in_battle() ||
+      q->actor != pe_player() || session.style != PE_STYLE_QUICKSTEP)
+    return 0;
+  *q->factor = pe_style_move(&session, *q->factor);
   return 0;
 }
 static int reset(void *ctx, void *user) {
@@ -493,7 +580,13 @@ static void style_info(char *out, unsigned size) {
   pe_styles_describe(c ? c->key : NULL, out, size);
 }
 static void guard_info(char *out, unsigned size) {
-  snprintf(out, size, "%s", guarded() ? "Protected" : "Not protected");
+  if (session.style == PE_STYLE_CHANNELER) {
+    snprintf(out, size, "Spellweave %u/%u", session.weave_charges,
+             pe_style_definition(PE_STYLE_CHANNELER)->weave_charges);
+    return;
+  }
+  snprintf(out, size, "%s, counter %u",
+           guarded() ? "Protected" : "Not protected", session.counter_store);
 }
 static const PeStyleDef *browsed_style(void) {
   const PeCostume *c = pe_wardrobe_browsed();
@@ -533,13 +626,16 @@ void pe_styles_register(const char *mod_id) {
                         "Ownership rules are unchanged.",
                         preview_tradeoff);
   pe_menu_register_info(PE_PAGE_WARDROBE, "Costume style",
-                        "Quickstep: kills +25% AT. Bulwark: 25% guard, 90% AT. "
-                        "Striker: close guns +25%. Channeler: damaging weapons "
-                        "+5% max PE; half passive PE.",
+                        "Quickstep: kills +25% AT and a speed burst. Bulwark: "
+                        "25% guard; hits taken load a counter. Striker: close "
+                        "guns +25%. Channeler: weapon hits charge the next PE "
+                        "power (3 = free); half passive PE.",
                         style_info);
   pe_menu_register_info(
-      PE_PAGE_WARDROBE, "Bulwark guard",
-      "Below full AT while free to move. Half-bar features must be off.",
+      PE_PAGE_WARDROBE, "Style state",
+      "Bulwark: guard below full AT while free to move, and stored counter "
+      "damage. Channeler: Spellweave charges. Half-bar features must be off "
+      "for Bulwark.",
       guard_info);
   pe_hook_add(PE_HOOK_BATTLE_UPDATE, update, NULL, PE_PRIORITY_EARLY, mod_id);
   pe_hook_add(PE_HOOK_BATTLE_HUD, hud, NULL, PE_PRIORITY_LATE, mod_id);
@@ -558,6 +654,10 @@ void pe_styles_register(const char *mod_id) {
   pe_hook_add(PE_HOOK_PLAYER_ACTION, action_begin, NULL, PE_PRIORITY_NORMAL,
               mod_id);
   pe_hook_add(PE_HOOK_PLAYER_ACTION_END, action_end, NULL, PE_PRIORITY_LATE,
+              mod_id);
+  pe_hook_add(PE_HOOK_SPELL, spell, NULL, PE_PRIORITY_LATE, mod_id);
+  /* LATE: scales whatever battle speed the movement mod chose. */
+  pe_hook_add(PE_HOOK_PLAYER_MOVE, player_move, NULL, PE_PRIORITY_LATE,
               mod_id);
   pe_hook_add(PE_HOOK_SCENE_START, reset, NULL, PE_PRIORITY_NORMAL, mod_id);
   pe_hook_add(PE_HOOK_SAVE_READ, reset, NULL, PE_PRIORITY_NORMAL, mod_id);

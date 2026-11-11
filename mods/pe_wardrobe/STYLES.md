@@ -30,6 +30,42 @@ existing `PeCostume` service layout. Unknown packs and deferred rigs stay Origin
 All four styles now use the same catalog, engine and native adapter. Unknown
 pack mappings and deferred costumes still resolve to Original.
 
+## Revision 5 (current rules)
+
+The design doc's Revision 5 replaces two passive taxes with build-and-release
+mechanics. Where this section conflicts with "Implemented first pass" below,
+this section wins.
+
+- Quickstep momentum: an awarded refund sets `move_boost`; `PE_HOOK_PLAYER_MOVE`
+  (LATE, battle input steps only) scales the factor by 125% until the next
+  `PE_HOOK_PLAYER_ACTION` or encounter end. Animation speed is untouched.
+- Bulwark / Retaliate: `charge_percent` is 100 (native). Guard is unchanged.
+  `pe_style_absorb` stores the guarded loss actually taken (capped at Aya's
+  current HP). During the next ordinary weapon action, `pe_style_counter` adds
+  `min(store, ceil(hit * 50%))` to each ordinary hit on a live candidate in
+  `PE_HOOK_ENEMY_DAMAGE`. At action end the rest of the store is dropped if any
+  bonus landed; a whiffed weapon action and non-weapon actions keep it. AT
+  marker is orange while a counter is loaded and the guard is off.
+- Channeler / Spellweave: the 5% max-PE refund is gone. The same completion
+  rules (`pending_damage`, cancel/interrupt, final kill) now add one charge, up
+  to three. `PE_HOOK_SPELL` (LATE, in battle, Aya acting) spends all charges
+  on support powers 0-5, 7-12 and 18: refund 34% / 67% / 100% of the raw cost
+  the native code is about to subtract (table cost after `PE_HOOK_POWER_COST`
+  and the 2/3 PE armor; Barrier uses max PE / 3). Three charges also add 25%
+  of the native Heal 1-3 amount (30/60/280). Energy Shot (6), Liberate (19)
+  and attack powers (13-17) keep charges untouched. The refund is applied
+  before the native subtraction, as Rebalance's Detox/Scan refund already is.
+  Limits: the menu still shows and checks the full cost; casts are unit-tested
+  only (no scripted native cast yet). PE label pulses per charge and stays cyan
+  at three. Passive recovery is still halved.
+
+Native evidence: `build-styles/live-rev5/functional-results.json` (Quickstep one
+2250 refund; Bulwark native 114 charge steps, 9->7 / 4->3 storing 10; vanilla
+clean) and `build-styles/live-rev5-channeler/functional-results.json` (club and
+gun charges 1,2,3 capped, no refunds, passive halved; vanilla clean). The
+scripted fight landed no counter hit and cast no PE power. Playtest package:
+`build-styles/costume-playtest-rev5/Play.cmd`, starting in Guard.
+
 ## Implemented first pass
 
 Quickstep: direct normal weapon kills refund 25% of a full AT bar once when

@@ -43,7 +43,7 @@ def run_case(args,name,game,flows,card):
             if s.state.flags&2:break
             s.advance(10,flows.DIRECTIONS[(4+3*(step//25))%8]|game.CIRCLE)
         else:raise AssertionError('encounter did not start')
-        samples=[];seen=False;refund_shot=False
+        samples=[];seen=False
         for i in range(1800):
             st=s.state;detail=st.raw.get('battle_detail',{});player=detail.get('player') or {}
             samples.append({'vblank':st.vblanks,'hp':st.hp,'flags':st.flags,'detail':detail})
@@ -51,15 +51,13 @@ def run_case(args,name,game,flows,card):
             if not st.flags&2 or (seen and st.flags&0x80 and not detail.get('enemies')):break
             # First collect native passive recovery; then issue ordinary attacks.
             buttons=game.CROSS if i>=150 and (player.get('atb',0)>=9000 or st.flags&4) and i%4<2 else 0
-            previous_pe=player.get('pe_raw',0)
             s.advance(2,buttons)
-            current=s.state.raw.get('battle_detail',{}).get('player') or {}
-            if on and not refund_shot and current.get('pe_raw',0)-previous_pe>current.get('pe_recovery_step',0)+100:
-                s.advance(4);s.shot('pe-refund-cue');refund_shot=True
         (run/'samples.json').write_text(json.dumps(samples),encoding='utf-8')
         s.shot('trace-end')
     events=[line for line in (run/'pe_play.log').read_text(errors='replace').splitlines() if line.startswith('costume_style ')]
-    refunds=[tuple(map(int,re.search(r'refund=(\d+) max=(\d+)',line).groups())) for line in events if 'channeler refund=' in line]
+    # Revision 5 Spellweave: completed damaging weapon queues add charges; no PE refund.
+    charges=[int(re.search(r'charges=(\d+)$',line).group(1)) for line in events if 'spellweave charges=' in line]
+    refunds=[line for line in events if 'refund=' in line]
     passive=[]
     for a,b in zip(samples,samples[1:]):
         x=a['detail'].get('player') or {};y=b['detail'].get('player') or {}
@@ -70,15 +68,15 @@ def run_case(args,name,game,flows,card):
     assert len(passive)>=10,'insufficient passive recovery samples'
     if on:
         assert any('begin=channeler' in line and 'ready=1' in line for line in events),events
-        assert refunds,'no completed damaging action refund observed'
+        assert charges,'no Spellweave charge from a completed damaging action'
+        assert charges==list(range(1,len(charges)+1)) and max(charges)<=3,charges
+        assert not refunds,refunds
         assert all(abs(delta*2-step)<=1 for delta,step in passive),passive[:10]
-        # Native caps can shorten the last refund; at least one full 5% must land.
-        assert any(abs(refund*100-max_pe*5)<100 for refund,max_pe in refunds),refunds
     else:
-        assert not refunds,events
+        assert not charges and not refunds,events
         assert all(delta==step for delta,step in passive),passive[:10]
     return name,{'run':str(run),'samples':len(samples),'passive_samples':len(passive),'passive_examples':passive[:8],
-        'refunds':refunds,'events':events,'coverage':'bounded functional trace; balance not asserted'}
+        'charges':charges,'events':events,'coverage':'bounded functional trace; casts covered by unit tests; balance not asserted'}
 
 
 def main():
