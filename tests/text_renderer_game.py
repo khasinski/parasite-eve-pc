@@ -86,9 +86,11 @@ Checks, each from pe_mods.log and frame dumps:
              On Disc 2 (PE_TEST_DISC2; else 77 after Disc 1): the Spanish part's route, Continue from
              the Day 6 sample save; the game is on Disc 2 after the boxes, no letter falls back to '?',
              and the five boxes on the ship (dlg/M275/008-012) light exactly the pack's letter
-             pictures, each line up to {name} (Aya's name is in the game's letters). The pack has no
-             pictures (a Japanese-disc patch's don't fit the USA discs), so the day's title card isn't
-             checked.
+             pictures, each line up to {name} (Aya's name is in the game's letters).
+             Its pictures (the zipped player file's: the title menu's words and the map's place names,
+             which the USA discs hold as the Japanese ones do): the title screen's words are the
+             patch's picture, checked as part spanish checks them. The patch redrew no picture on the
+             Disc 2 route, so the day's title card stays the game's.
   spanish    The Spanish pack made from the USA-disc fan patch (pelang.py import-patch / build
              --patch-letters: its letters are the patch's own 12x12 pictures at the patch's widths), at
              PE_TEST_ES_PACK, best the zipped player file with its pictures (skipped, 77, when it isn't
@@ -578,10 +580,26 @@ def chinese_patch(game, discs, out, localization):
     print(f'PASS chinese: {label} loaded, its stretches drew, no "?", and the {checked} letters of the first box '
           "lit exactly the patch's letter pictures")
 
-    # Disc 2: Continue from the Day 6 save, the boxes on the ship (the pack has no pictures: the day's
-    # title card stays the game's).
+    # Its pictures with words (the zipped player file's): the title screen's "Press Start Button" is the
+    # patch's picture.
+    import zipfile
+    from petext import pictures
+    text, pieces, skipped = pelang.pack_bytes(path), [], []
+    if text != path.read_bytes():
+        with zipfile.ZipFile(path) as z:
+            pieces = pictures.read(z.read('pictures.bin')) if 'pictures.bin' in z.namelist() else []
+    if not pieces:
+        skipped.append('pictures (a plain pack has none; PE_TEST_ZH_PACK names the zipped player file for them)')
+    else:
+        plain = out / 'packs' / 'chinese-text.pelang'       # the same pack without its pictures
+        plain.write_bytes(text)
+        check_title_pictures(game, discs, out, 'chinese', label, pack, (code, name, None, plain), pieces, PRESS_START)
+
+    # Disc 2: Continue from the Day 6 save, the boxes on the ship (the patch redrew no picture on this
+    # route: the day's title card stays the game's).
     if len(discs) < 2:
-        print('SKIP chinese: not checked: Disc 2 (PE_TEST_DISC2 is not set)')
+        skipped.append('Disc 2 (PE_TEST_DISC2 is not set)')
+        print('SKIP chinese: not checked: ' + '; '.join(skipped))
         return 77
     boxes = {frame_label: entries.get(pelang.fnv1a(key)) for frame_label, key in DISC2_BOXES.items()}
     check(all(boxes.values()), f'the pack lacks some of {list(DISC2_BOXES.values())}')
@@ -595,6 +613,9 @@ def chinese_patch(game, discs, out, localization):
     print(f'PASS chinese disc 2: Continue from a Day 6 save plays on Disc 2 (in room {room} after the boxes); '
           f"no \"?\", and the {checked} letters of {len(boxes)} boxes on the ship lit exactly the patch's letter "
           'pictures')
+    if skipped:
+        print('SKIP chinese: not checked: ' + '; '.join(skipped))
+        return 77
     return 0
 
 
@@ -785,6 +806,35 @@ def pieces_written_in(cue, pieces, out):
     return str(sheet), len(writes)
 
 
+def check_title_pictures(game, discs, out, part, label, pack, plain_pack, pieces, title_words):
+    """The title screen with the pack on the player's disc against the game on a copy of the disc with
+    the pack's picture pieces written in (as a patched disc holds them) and the pack's text alone
+    (`plain_pack`): the same frame, pixel for pixel; with the text alone on the player's disc, the
+    English words (`title_words`: where they are, or None for anywhere on the frame)."""
+    log_pieces = re.compile(rf'{re.escape(label)}, \d+ entries, {len(pieces)} picture pieces')
+    try:
+        written = [pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')]
+        check(written[0][1] == len(pieces), f'only {written[0][1]} of {len(pieces)} pieces land on Disc 1')
+        title = [(TITLE_AT, 'title', None)]
+        frames = {which: run_fixed(game, use, out / f'{part}-title-{which}', title, pack=p)
+                  for which, use, p in (('pack', discs[:1], pack), ('written-in', [written[0][0]], plain_pack),
+                                        ('text-only', discs[:1], plain_pack))}
+        check(log_pieces.search(mods_log(frames['pack'])) and 'its pictures are in use' in mods_log(frames['pack']),
+              f'the pack\'s {len(pieces)} picture pieces were not loaded and put in: {frames["pack"]}')
+        check(lit(frames['text-only'], 'title', PRESS_START) > 100, f'no title screen at vblank {TITLE_AT}: '
+                                                                      f'{frames["text-only"]}')
+        check(frame(frames['pack'], 'title') == frame(frames['written-in'], 'title'),
+              f'the title screen with the pack is not the one of the disc with its pieces written in: '
+              f'{frames["pack"]} vs {frames["written-in"]}')
+        words = (lambda w: crop(w, 'title', title_words)) if title_words else (lambda w: frame(w, 'title'))
+        check(words(frames['pack']) != words(frames['text-only']),
+              f'the title screen\'s words are still English: {frames["pack"]}')
+        print(f'PASS {part} pictures, disc 1: the {len(pieces)} pieces loaded; the title screen\'s words are the '
+              "patch's picture, pixel for pixel as on the disc with the pieces written in")
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+
+
 def game_letters(cue, localization):
     """The game's own letters on `cue` as drawn_records() gives a pack's: code -> (dialogue advance,
     menu metrics byte, 144 values), for the codes below 0x4D."""
@@ -941,28 +991,7 @@ def fan_patch(game, discs, out, localization, fan):
     if not pieces:
         skipped.append(f'pictures (a plain pack has none; {fan.env} names the zipped player file for them)')
     else:
-        log_pieces = re.compile(rf'{re.escape(label)}, \d+ entries, {len(pieces)} picture pieces')
-        try:
-            written = [pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')]
-            check(written[0][1] == len(pieces), f'only {written[0][1]} of {len(pieces)} pieces land on Disc 1')
-            title = [(TITLE_AT, 'title', None)]
-            frames = {which: run_fixed(game, use, out / f'{part}-title-{which}', title, pack=p)
-                      for which, use, p in (('pack', discs[:1], pack), ('written-in', [written[0][0]], plain_pack),
-                                            ('text-only', discs[:1], plain_pack))}
-            check(log_pieces.search(mods_log(frames['pack'])) and 'its pictures are in use' in mods_log(frames['pack']),
-                  f'the pack\'s {len(pieces)} picture pieces were not loaded and put in: {frames["pack"]}')
-            check(lit(frames['text-only'], 'title', PRESS_START) > 100, f'no title screen at vblank {TITLE_AT}: '
-                                                                          f'{frames["text-only"]}')
-            check(frame(frames['pack'], 'title') == frame(frames['written-in'], 'title'),
-                  f'the title screen with the pack is not the one of the disc with its pieces written in: '
-                  f'{frames["pack"]} vs {frames["written-in"]}')
-            words = (lambda w: crop(w, 'title', fan.title_words)) if fan.title_words else (lambda w: frame(w, 'title'))
-            check(words(frames['pack']) != words(frames['text-only']),
-                  f'the title screen\'s words are still English: {frames["pack"]}')
-            print(f'PASS {part} pictures, disc 1: the {len(pieces)} pieces loaded; the title screen\'s words are the '
-                  "patch's picture, pixel for pixel as on the disc with the pieces written in")
-        finally:
-            shutil.rmtree(out / 'discs', ignore_errors=True)
+        check_title_pictures(game, discs, out, part, label, pack, plain_pack, pieces, fan.title_words)
 
     # Disc 2: Continue from a Day 6 save; the day's title card and the boxes on the ship.
     if len(discs) < 2:

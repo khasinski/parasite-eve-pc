@@ -592,6 +592,18 @@ keeps the game's text for a room's dialogue or one row (debug rooms' untranslate
 `localization/tests/test_cjk_pictures.py` (CTest `localization-chinese-pack`) covers this; CTest
 `original-game-text-renderer-chinese` checks such a pack on screen when `PE_TEST_ZH_PACK` names it.
 
+**Its pictures with words.** The Japanese and the USA discs keep their pictures at different places,
+so a Japanese-disc patch's pictures can't go by place as a USA-disc patch's do. But some pictures
+are English on both releases, byte for byte the same (the title menu's words, the map's place
+names). `import_ja_patch.py --disc-pictures cd1.bin` (with `--us`, once per disc) writes the ones
+the patch redrew as a `pictures.bin` for the USA disc; `bundle --pictures cd1.bin --pictures cd2.bin`
+puts them in the player file. A redrawn picture the USA disc draws differently is left out and
+listed in the report (`disc_pictures`); `--whole-picture ENTRY/N` takes one whole all the same, when
+it is the same kind and size at the same place (a title menu word drawn a little differently). The
+rest is `petext/pictures.py` (`across`), tested in `localization/tests/test_pictures.py`; CTest
+`localization-chinese-pictures` checks the real pack's pictures against the patched Japanese game
+on both USA discs.
+
 ### Modular implementation
 
 - `localization/petext/cjk.py`: supported ranges, sfnt/TTC Unicode coverage, rasterization and

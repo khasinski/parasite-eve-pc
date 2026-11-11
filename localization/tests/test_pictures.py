@@ -118,5 +118,74 @@ class PicturesTest(unittest.TestCase):
         self.assertFalse((folder / "no.pelang").exists())
 
 
+def put_in(game: FakeGame, pieces) -> bytes:
+    """The disc as the game shows it with these pieces: each goes in where its English bytes are."""
+    image = bytearray(game.image)
+    for p in pieces:
+        at = p.sector * SECTOR + p.offset
+        if zlib.crc32(game.image[at:at + len(p.data)]) != p.original_crc:
+            raise AssertionError(f"the piece at sector {p.sector} + {p.offset} does not land")
+        image[at:at + len(p.data)] = p.data
+    return bytes(image)
+
+
+class AcrossTest(unittest.TestCase):
+    """pictures.across: a Japanese-disc patch's pictures for a pack played on the USA discs."""
+
+    WORD, NEW_WORD = tim(0, 0, 16, 4, 0x11, clut=False), tim(0, 0, 16, 4, 0x77, clut=False)
+    JA_NAME, US_NAME, NEW_NAME = (tim(0, 0, 16, 4, v, clut=False) for v in (0x33, 0x44, 0x88))
+
+    @staticmethod
+    def disc(pad: int, word: bytes, name: bytes, letters: int, copies: int = 1) -> FakeGame:
+        entries = [b"\0" * 16] * 81
+        entries[45] = tim(384, 0, 64, 4, letters)                 # an area's letters page (a font entry)
+        entries[70] = bytes(pad) + word + name + word * (copies - 1)
+        entries[72] = bytes(8) + tim(320, 0, 64, 256, letters)    # the letters page
+        entries[76] = bytes([letters]) * 64                       # no TIMs: never looked at
+        return FakeGame(entries, [])
+
+    def setUp(self):
+        self.ja = self.disc(8, self.WORD, self.JA_NAME, 0x11)
+        self.zh = self.disc(8, self.NEW_WORD, self.NEW_NAME, 0x22)
+        self.us = self.disc(2100, self.WORD, self.US_NAME, 0x11)   # the same word, in another sector
+        self.word_at = self.us.sectors[70] * SECTOR + 2100
+        self.name_at = self.word_at + len(self.WORD)
+
+    def test_a_picture_the_other_disc_holds_byte_for_byte_is_taken_where_that_disc_has_it(self):
+        pieces, report = pictures.across(self.ja, self.zh, self.us, font_entries=[45])
+        self.assertEqual(list(report["pictures_taken"]), ["entry 70, picture 0 at VRAM 0,0"])
+        self.assertEqual(list(report["pictures_left_out"]), ["entry 70, picture 1 at VRAM 0,0"])
+        shown = put_in(self.us, pieces)
+        self.assertEqual(shown[self.word_at:self.word_at + len(self.WORD)], self.NEW_WORD)
+        # Everything else is the USA disc's own: its differently drawn picture, both letters pages, entry 76.
+        rest = bytearray(shown)
+        rest[self.word_at:self.word_at + len(self.WORD)] = self.WORD
+        self.assertEqual(bytes(rest), self.us.image)
+
+    def test_a_differently_drawn_picture_goes_in_whole_only_when_named(self):
+        pieces, report = pictures.across(self.ja, self.zh, self.us, font_entries=[45], whole=["70/1"])
+        self.assertEqual(report["pictures_left_out"], {})
+        shown = put_in(self.us, pieces)
+        self.assertEqual(shown[self.name_at:self.name_at + len(self.NEW_NAME)], self.NEW_NAME)
+        with self.assertRaises(ValueError):                        # not a picture the patch redrew
+            pictures.across(self.ja, self.zh, self.us, font_entries=[45], whole=["70/5"])
+        wider = self.disc(2100, self.WORD, tim(0, 0, 32, 4, 0x44, clut=False), 0x11)
+        with self.assertRaises(ValueError):                        # another size there
+            pictures.across(self.ja, self.zh, wider, font_entries=[45], whole=["70/1"])
+
+    def test_every_copy_on_the_other_disc_gets_the_picture(self):
+        us = self.disc(2100, self.WORD, self.US_NAME, 0x11, copies=2)
+        pieces, _ = pictures.across(self.ja, self.zh, us, font_entries=[45])
+        shown = put_in(us, pieces)
+        second = self.name_at + len(self.US_NAME)
+        self.assertEqual(shown[self.word_at:self.word_at + len(self.WORD)], self.NEW_WORD)
+        self.assertEqual(shown[second:second + len(self.WORD)], self.NEW_WORD)
+
+    def test_a_patch_that_redraws_no_picture_gives_none(self):
+        letters_only = self.disc(8, self.WORD, self.JA_NAME, 0x22)
+        self.assertEqual(pictures.across(self.ja, letters_only, self.us, font_entries=[45]),
+                         ([], {"pictures_taken": {}, "pictures_left_out": {}}))
+
+
 if __name__ == "__main__":
     unittest.main()

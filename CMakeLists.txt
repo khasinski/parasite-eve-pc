@@ -737,6 +737,16 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/localization/tests/test_zh_box_fit.py)
         set_tests_properties(localization-chinese-box-fit PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 180 LABELS "game-assets;localization")
+        # The Chinese pack's pictures with words (title menu, map names) on the USA discs against the
+        # patched Japanese game itself: the real patch laid over the Japanese disc, each picture the
+        # pack carries byte for byte the patched one, every piece landing, nothing else changed.
+        # Needs PE_TEST_ZH_PACK (the player file), PE_TEST_ZH_PATCH_DIR (the folder with the patch's
+        # SLPS_012.30 and SLPS_012.31), PE_TEST_JA_DISC and PE_TEST_DISC (PE_TEST_JA_DISC2 and
+        # PE_TEST_DISC2 add the second discs), else skipped.
+        add_test(NAME localization-chinese-pictures COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_zh_pictures.py)
+        set_tests_properties(localization-chinese-pictures PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 180 LABELS "game-assets;localization")
         # The same for the Spanish pack from the USA-disc fan patch, measured with the patch's own
         # letter widths the pack carries. Needs PE_TEST_DISC and PE_TEST_ES_PACK, else skipped.
         add_test(NAME localization-spanish-box-fit COMMAND ${Python3_EXECUTABLE} -I

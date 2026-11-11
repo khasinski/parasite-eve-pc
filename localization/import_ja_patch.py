@@ -12,6 +12,12 @@ scripts open the same pages as the USA ones; leave it out to skip that check.
 
 The draft's letters are pictures ({pic ID}); naming them comes next. Nothing written here goes
 into the repository.
+
+--disc-pictures FILE also writes the pictures with words the patch redrew (title menu, map names)
+as a pictures.bin for the USA disc: only those the USA disc holds byte for byte as the Japanese
+one does, since the two keep them at different places (petext/pictures.py, across). The report's
+"disc_pictures" lists what was taken and what the USA disc draws differently; --whole-picture
+ENTRY/N takes one of those whole.
 """
 from __future__ import annotations
 
@@ -25,6 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 from petext import japatch, patchfile  # noqa: E402
+from petext import pictures as disc_pictures  # noqa: E402
 from petext.disc import Game  # noqa: E402
 from petext.script import opcodes  # noqa: E402
 
@@ -40,9 +47,18 @@ def main(argv=None) -> int:
     ap.add_argument("--pictures", type=Path, required=True, help="new letter pictures file (JSON)")
     ap.add_argument("--report", type=Path, required=True, help="new report (JSON)")
     ap.add_argument("--src", type=Path, default=ROOT.parent, help="the port checkout, for the opcode table")
+    ap.add_argument("--disc-pictures", type=Path,
+                    help="also write the pictures with words the patch redrew, for the USA disc (--us): a new "
+                         "pictures.bin for `pelang.py bundle --pictures`; one run per disc")
+    ap.add_argument("--whole-picture", action="append", default=[], metavar="ENTRY/N",
+                    help="a redrawn picture the USA disc draws differently (the report lists them): take the "
+                         "patch's picture whole all the same; may be repeated")
     a = ap.parse_args(argv)
-    if any(p.exists() for p in (a.out, a.pictures, a.report)):
+    if any(p and p.exists() for p in (a.out, a.pictures, a.report, a.disc_pictures)):
         print("Output files already exist; choose new paths", file=sys.stderr)
+        return 1
+    if a.disc_pictures and not a.us:
+        print("--disc-pictures needs the USA disc (--us)", file=sys.stderr)
         return 1
     images = [p for p in a.patches if p.suffix.lower() in IMAGES]
     if images and len(a.patches) > 1:
@@ -69,6 +85,14 @@ def main(argv=None) -> int:
                 games.append(us)
             rows, pictures, report = japatch.read(original, patched, us, opcodes(a.src))
             report["patches"] = [p.name for p in a.patches]
+            pieces = []
+            if a.disc_pictures:
+                pieces, found = disc_pictures.across(original, patched, us, font_entries=japatch.FONT_ENTRIES,
+                                                     whole=a.whole_picture)
+                report["disc_pictures"] = {"pieces": len(pieces), **found}
+                if pieces:
+                    with a.disc_pictures.open("xb") as f:
+                        f.write(disc_pictures.write(pieces))
             note = ("Draft from a patch for the Japanese discs: each row's letters are pictures ({pic ID}, "
                     "see the pictures file). The patch's text and art: it stays out of the repository.")
             with a.out.open("x", encoding="utf-8") as f:
@@ -89,6 +113,11 @@ def main(argv=None) -> int:
               f"({report['pictures_still_japanese']} still Japanese ones); font pages redrawn: "
               f"{len(report['font_pages_redrawn'])}; rooms with edited scripts: {len(report['rooms_with_edited_scripts'])}. "
               f"Review {a.report}.")
+        if a.disc_pictures:
+            found = report["disc_pictures"]
+            print(f"Pictures with words for the USA disc: {found['pieces']} pieces from {len(found['pictures_taken'])} "
+                  f"pictures" + (f" in {a.disc_pictures}" if pieces else " (no file written)")
+                  + f"; {len(found['pictures_left_out'])} left out (the USA disc draws them differently).")
         return 0
     except (OSError, ValueError, EOFError, KeyError, struct.error) as error:
         print(f"Japanese patch import failed: {error}", file=sys.stderr)

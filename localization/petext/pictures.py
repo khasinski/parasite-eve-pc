@@ -39,6 +39,7 @@ HEADER = struct.Struct("<4sIII")
 PIECE = struct.Struct("<IHHII")
 WHOLE_ENTRIES = {9: "field background pictures", 76: "effect pictures"}
 LETTERS_PAGE = (320, 0, 64, 256)          # the dialogue letters: a translation file's letters replace it
+LETTERS_AT = {(320, 0), (384, 0)}         # where the font entries' letter pages go in VRAM (petext/font.py)
 MAX_BYTES = 64 << 20                      # largest pictures.bin the game reads
 
 
@@ -192,26 +193,86 @@ def diff(original, translated) -> tuple[list[Piece], dict]:
         a, b = _pe_bytes(original, lo, hi), _pe_bytes(translated, lo, hi)
         if a == b:
             continue
-        # One piece per sector the changes touch: first to last changed byte in it.
-        by_sector: dict[int, list[int]] = {}
-        for x, y in _changed(a, b):
-            start = lo + x
-            while start < lo + y:
-                sector = start // SECTOR
-                stop = min(lo + y, (sector + 1) * SECTOR)
-                span = by_sector.setdefault(sector, [start, stop])
-                span[0], span[1] = min(span[0], start), max(span[1], stop)
-                start = stop
-        for sector, (start, stop) in sorted(by_sector.items()):
-            english = a[start - lo:stop - lo]
-            pieces.append(Piece(sector, start - sector * SECTOR, zlib.crc32(english), b[start - lo:stop - lo]))
-            taken[what] = taken.get(what, 0) + stop - start
+        for piece in _sector_pieces(lo, a, b):
+            pieces.append(piece)
+            taken[what] = taken.get(what, 0) + len(piece.data)
     left: dict[str, int] = {}
     for lo, hi, what in other:
         a, b = _pe_bytes(original, lo, hi), _pe_bytes(translated, lo, hi)
         if a != b:
             left[what] = sum(y - x for x, y in _changed(a, b))
     return pieces, {"pictures_taken": taken, "changes_left_out": left}
+
+
+def _sector_pieces(lo: int, english: bytes, new: bytes) -> list[Piece]:
+    """One piece per sector the changes touch, first to last changed byte in it. `english` (the bytes
+    on the player's disc) and `new` (the patch's) both start at PE.IMG byte `lo`."""
+    by_sector: dict[int, list[int]] = {}
+    for x, y in _changed(english, new):
+        start = lo + x
+        while start < lo + y:
+            sector = start // SECTOR
+            stop = min(lo + y, (sector + 1) * SECTOR)
+            span = by_sector.setdefault(sector, [start, stop])
+            span[0], span[1] = min(span[0], start), max(span[1], stop)
+            start = stop
+    return [Piece(sector, start - sector * SECTOR, zlib.crc32(english[start - lo:stop - lo]), new[start - lo:stop - lo])
+            for sector, (start, stop) in sorted(by_sector.items())]
+
+
+def across(original, patched, other, font_entries=(), whole=()) -> tuple[list[Piece], dict]:
+    """Picture pieces for another release's discs from a patch made for `original`'s: a fan patch for
+    the Japanese discs, for a pack played on the USA discs (`other`).
+
+    The two releases keep their data at different places, so nothing is matched by place. A TIM
+    picture the patch redrew in a numbered entry is taken when that entry on the other disc holds
+    the same picture, byte for byte (the title menu's words and the map's place names are English on
+    the Japanese discs too): every copy of it there gets the patch's bytes.
+    A picture the other disc draws differently is left out and reported, unless `whole` names it
+    ("ENTRY/N": the entry's Nth TIM, from 0, on both discs): then the patch's picture goes in whole
+    over the other disc's, which must be a TIM of the same kind and size at the same VRAM place.
+    Not pictures here: the letters pages (LETTERS_PAGE anywhere, and the TIMs at LETTERS_AT in
+    `font_entries`: a pack's letters replace them), and the entries that aren't bundles of TIMs
+    (WHOLE_ENTRIES; on the Japanese discs entry 76 starts with a message bank). Rooms' pictures are
+    not carried across."""
+    pieces: list[Piece] = []
+    taken: dict[str, int] = {}
+    left: dict[str, str] = {}
+    asked = set(whole)
+    s, p, t = original.sectors, patched.sectors, other.sectors
+    for entry in range(min(len(s), len(t)) - 1):
+        if entry in WHOLE_ENTRIES:
+            continue
+        a, b = original.pe(s[entry], s[entry + 1] - s[entry]), patched.pe(p[entry], p[entry + 1] - p[entry])
+        if a == b:
+            continue
+        theirs = None
+        for n, (lo, hi, rect) in enumerate(tims(a)):
+            if a[lo:hi] == b[lo:hi] or rect == LETTERS_PAGE or (entry in font_entries and rect[:2] in LETTERS_AT):
+                continue
+            what = f"entry {entry}, picture {n} at VRAM {rect[0]},{rect[1]}"
+            if theirs is None:
+                theirs = other.pe(t[entry], t[entry + 1] - t[entry])
+                found = list(tims(theirs))
+            base = t[entry] * SECTOR
+            same = [l2 for l2, h2, _ in found if theirs[l2:h2] == a[lo:hi]]
+            name = f"{entry}/{n}"
+            if not same and name in asked:
+                if n >= len(found) or found[n][2] != rect or found[n][1] - found[n][0] != hi - lo \
+                        or theirs[found[n][0] + 4:found[n][0] + 8] != a[lo + 4:lo + 8]:
+                    raise ValueError(f"picture {name} is not the same kind and size on the other disc")
+                same = [found[n][0]]
+            asked.discard(name)
+            if not same:
+                left[what] = "the other disc draws this picture differently"
+                continue
+            for l2 in same:
+                for piece in _sector_pieces(base + l2, theirs[l2:l2 + hi - lo], b[lo:hi]):
+                    pieces.append(piece)
+                    taken[what] = taken.get(what, 0) + len(piece.data)
+    if asked:
+        raise ValueError(f"no picture the patch redrew is {', '.join(sorted(asked))}")
+    return pieces, {"pictures_taken": taken, "pictures_left_out": left}
 
 
 def write(pieces: list[Piece]) -> bytes:
