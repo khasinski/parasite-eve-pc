@@ -1,10 +1,12 @@
 #include <stddef.h>
+#include <stdio.h>
 
 #include "common.h"
 #include "pe1/battle.h"
 #include "pe1/battle_runtime.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_pages.h"
 
 #define MOD_ID "pe_melee"
 
@@ -41,11 +43,16 @@ int Battle_MeleeFeatureEnabled(BattleMeleeFeature feature)
 static int melee_init(void)
 {
     int i;
-    int failed = 0;
+    int failed;
+    char key[192], legacy[192];
 
-    pe_menu_begin("Melee Combat");
+    pe_menu_begin(PE_MENU_PAGE);
+    failed = pe_menu_page(PE_PAGE_MELEE, "Club positioning, follow-ups, reach and swing speed.", 15) != 0;
     for (i = 0; i < BATTLE_MELEE_FEATURE_COUNT; i++) {
-        if (pe_menu_register_toggle(NULL, s_features[i].label, s_features[i].description,
+        snprintf(key, sizeof(key), "%s/%s/%s", PE_MENU_PAGE, PE_PAGE_MELEE, s_features[i].label);
+        snprintf(legacy, sizeof(legacy), "Melee Combat/%s", s_features[i].label);
+        pe_menu_alias_setting(key, legacy);
+        if (pe_menu_register_toggle(PE_PAGE_MELEE, s_features[i].label, s_features[i].description,
                                     &s_features[i].enabled, NULL) != 0)
             failed = 1;
     }

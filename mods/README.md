@@ -62,7 +62,7 @@ mods/
 
 ## Melee Combat (pe_melee)
 
-Build with `-DPE_MODS=ON -DPE_MELEE_PROTOTYPE=ON`, then open F1 > Melee Combat.
+Build with `-DPE_MODS=ON -DPE_MELEE_PROTOTYPE=ON`, then open F1 > PE Enhancements > Combat > Melee.
 The saved switches control the flank follow-up, rear hit bonus, faster windup, body-based club reach,
 out-of-reach cancellation, and the backhand hit spark. They apply to Clubs 1 through 5 throughout
 the game. The follow-up requires a nonlethal single-target side hit and a target that remains
@@ -71,7 +71,8 @@ rear hits offer the same quick backhand when Flank follow-up is also enabled. Th
 bonus works with Flank follow-up off. The backhand deals a quarter of the boosted first hit
 and can kill the target. A backhand does not grant a second Steal roll.
 
-The mod can be disabled under F1 > Manage mods and restarted. Club 1's +8 damage belongs to
+Existing Melee Combat settings migrate to the submenu, with explicitly saved submenu settings taking precedence.
+The independent Melee Combat mod can be disabled under F1 > Manage mods and restarted. Club 1's +8 damage belongs to
 Rebalance's Progression gun bonuses setting.
 
 ## Stacked items (pe_stacks)

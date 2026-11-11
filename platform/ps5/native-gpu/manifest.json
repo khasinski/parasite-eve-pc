@@ -4039,7 +4039,7 @@
     },
     {
       "path": "mods/host/pe_pages.h",
-      "sha256": "582be5a9fe1f51b069b621bdd5f0552a60b0015f36f9ba0933c0d1f6fe854469"
+      "sha256": "13491c5c445d5453d5ede0be8b75307a6963131054f35814c8e5c3ab96e60c50"
     },
     {
       "path": "mods/host/pe_present.c",
