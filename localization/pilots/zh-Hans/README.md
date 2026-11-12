@@ -1,0 +1,93 @@
+# Simplified Chinese translation preview
+
+This is a playable translation preview, not a complete Chinese translation.
+It includes 181 dialogue pages in the Carnegie/shared-scene bank
+(M001) and 104 resident menu, inventory and memory-card labels. Another 67 shared
+prompts cover matching save, inventory and event-skip questions in 15 other
+banks. A further 35 pages cover the NYPD weapon-storage visit and services.
+An additional 62 pages cover the Day 2 briefing and press conference.
+Another 36 pages cover Daniel and Ben and the departure for Central Park:
+Another 32 pages cover the workshop argument and Manhattan evacuation:
+A further 18 pages cover Maeda and the museum investigation:
+Another 35 entries cover station conversations and fixed inventory prompts:
+Another 17 pages cover the sewer gate, emergency-phone choices and Eve dialogue:
+Another 48 entries cover common ammunition, healing/status items, tools and their descriptions:
+635 entries total.
+The bank also contains later flashbacks and epilogue dialogue. Other story banks,
+other item names/descriptions and text baked into graphics remain original.
+Numeric/debug pages are intentionally unchanged.
+
+The common-item expansion was checked in 24 original item panels and 96 native
+stolen-item popup variants. All 221 state snapshots and PCM audio matched the
+previous preview. These are isolated renderer/menu checks, not a combat-playthrough
+claim. Four short labels respect the original 32-byte popup buffer; descriptions
+retain the full item meaning.
+
+Build it using a licensed Chinese font you supply, for example Noto Sans CJK SC:
+
+```sh
+python -I localization/pelang.py build localization/pilots/zh-Hans/pilot.csv \
+  --submission --strings localization/data/manifest.json \
+  --lang zh-Hans --name 'Chinese (preview)' \
+  --cjk-font /path/to/NotoSansCJKsc-Regular.otf -o zh-Hans.pelang
+```
+
+Pillow is needed only when compiling CJK packs. The game has no font-installation
+or Python requirement: the pack contains its own small glyph dictionary. Place
+`zh-Hans.pelang` in `lang` beside the game or in the preferences folder. Enable
+Language packs and select Chinese (preview) under F1 → Language. The mod host must
+be enabled; other gameplay mods can stay disabled.
+
+Chinese characters, full-width punctuation and the ellipsis are supported.
+The compiler preserves choices, variable substitutions and script commands, and
+wraps Chinese between characters while keeping closing punctuation with the
+preceding text. Missing font coverage is an error, never silently a tofu glyph.
+The same pipeline accepts traditional Chinese with an appropriate font and text.
+
+The localization CI artifact includes `zh-Hans.pelang` and the font license. It
+uses a pinned, checksum-verified Noto Sans CJK SC font; this preview is still not
+selected or bundled by the standard game build.
+
+The pilot was compiled and rendered by the actual game with a hidden GPU window.
+The menu expansion was checked at 95 native replay snapshots: complete game states
+matched the opening-only pilot, with 29 frames changing visually. This is menu
+coverage, not a full-campaign or translation proofreading claim.
+Automated compiler tests also cover Chinese choices and punctuation using Noto
+CJK on CI. Its limited translation coverage is independent of renderer support.
+
+The dialogue expansion preserves every original non-linebreak control command,
+including choice order/count, name substitutions and timed opera captions.
+The full 200,826-VBlank Carnegie Hall replay was compared with the menu-only
+preview and with mods off: complete final states, all 591,022,180 PCM bytes and
+the original phone-created save match. With mods off, the original complete VRAM
+hash also remains unchanged. Stage and diary text were checked in the rendered
+scene. These checks do not establish later flashback/epilogue or full-game coverage.
+
+The drop question retains the original location ("here") rather than using only
+a generic discard label. Shared prompts are matched by their exact original text,
+not their page number
+(the save question is page 003 in M161 and page 182 in M035). Their controls are
+unchanged, and no translated screen has more lines or a wider longest line than
+its original. Unknown-layout warnings are retained; this is not proof of every
+unbound room layout. Two NYPD tests (109 snapshots each) invoke the original drop/save dialogue
+commands after loading the real bank and check Yes=0/No=1, not complete item
+or phone interactions. Only the dialogue area changes; with mods off, all 109 states and
+framebuffers and the complete final VRAM match the no-preview control.
+
+The NYPD preview covers M041 pages 24–58: the first weapon-storage visit,
+modification permits, storage choices and junk hand-in. This is translation coverage, not full NYPD gameplay coverage.
+
+The briefing expansion covers M041 pages 8–23 and 78–123, including the
+press conference and the call from the Japanese scientist.
+
+The family/departure expansion covers M041 pages 59–77 and 124–140.
+
+The workshop/evacuation expansion covers M041 pages 141–172, including
+Ben meeting Sheeva.
+
+The Maeda/investigation expansion covers M041 pages 173–190.
+
+The station/ambient expansion covers M041 pages 3–4 and 191–223. M041 now
+contains 221 translated pages; the empty page, two unverified dynamic item-name
+templates and the numeric/debug page remain unchanged. Other story banks still
+fall back to their original text.

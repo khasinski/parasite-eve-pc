@@ -1,6 +1,7 @@
 # Parasite Eve
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/bQkCVvrkem)
+[![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/parasite-eve-pc)
 
 A native PC port of Parasite Eve, built from the original game code with
 [our PsyZ fork](https://github.com/khasinski/parasite-eve-psyz).
@@ -13,8 +14,10 @@ Download the game from [GitHub Releases](https://github.com/khasinski/parasite-e
 This is an early alpha; see the release notes for available platforms and known issues.
 See the [changelog](CHANGELOG.md) for changes.
 
-You need your own **North American CUE/BIN images**. Game data is not included.
-Keep each CUE file next to its BIN file.
+Works with [RecompLauncher](https://recomplauncher.com): it installs and updates the game from these releases and sets it up with your Disc 1 image.
+
+You need your own **North American CUE/BIN or CHD images**. Game data is not included.
+Keep each CUE file next to its BIN file. A CHD is a single file (its first track must be the data track, as `chdman createcd` makes from a CUE/BIN).
 
 1. Launch Parasite Eve and select your disc images. Selecting both discs enables automatic switching.
 2. You can start with either disc. If the other is needed, the game asks for it by name.
@@ -29,6 +32,10 @@ The left stick provides analog movement. **Escape → Controls → Field run thr
 Settings and selected disc paths are saved automatically. Memory cards are kept in `memory-cards` beside your user preferences. Older `bu00`/`bu10` cards from the launch or executable folder are imported once, keeping the original files.
 
 For portable storage, create an empty `portable.txt` beside the executable (beside the `.app` on macOS), or launch with `--portable`. Settings, memory cards, mods and downloaded backgrounds then use the `userdata` folder there. Keep the application in a writable folder. An explicit `PE_CONFIG_HOME` takes precedence. Existing user saves remain in their original location; copy your preferences folder into `userdata` to move them.
+The game ships with no translations. Put a `.pelang` language pack in the `lang` folder beside the game and start it: the first start that finds packs asks which language to use. To change it later, choose it under **F1 → Language** and restart. Language packs work with **All mods** off. Missing translations use the original text.
+
+Translators can try the [Simplified Chinese rendering pilot](localization/pilots/zh-Hans/README.md). It demonstrates Chinese fonts and dialogue; it is not a complete translation.
+
 **Escape → Graphics** includes geometry correction, antialiasing, model texture filtering and an optional **Widescreen** aspect ratio. Widescreen shows more of the original background where available; narrow scenes and movies stay in 4:3.
 
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.

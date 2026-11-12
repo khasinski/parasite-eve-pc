@@ -18,6 +18,20 @@ static int host_open_assists;
 #include <stdlib.h>
 #include <string.h>
 #include <SDL3/SDL.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>   /* _NSGetExecutablePath: the setup wizard's relaunch */
+#endif
+#ifdef _WIN32
+#include <direct.h>
+#elif !defined(PE_PS5)
+#include <unistd.h>
+#endif
+#if defined(PE_MODS) && !defined(PE_PS5_GPU_NATIVE)
+void pe_mod_panel_set_open_binding(int key, int button);
+int pe_mod_panel_open(void);
+#endif
+static int host_setup_pending, host_setup_mode, host_open_mods, host_relaunch_setup;
+static char host_executable[4096];
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 static void Host_StateUiRegister(void);
 static bool Host_StateChord(const SDL_Event *event);
@@ -28,6 +42,7 @@ static bool Host_StateChord(const SDL_Event *event);
 #include <psyz/system.h>
 #include <psyz/video.h>
 #include "pe1/boot.h"
+#include "pe1/battle_runtime.h"
 #include "pe1/boot_disc_check.h"
 #include "pe1/boot_display.h"
 #include "pe1/boot_services.h"
@@ -41,6 +56,7 @@ static bool Host_StateChord(const SDL_Event *event);
 #include "pe1/geom_state.h"
 #include "pe1/pad_state.h"
 #include "pe1/psyq_gpu.h"
+#include "pe1/memcard.h"
 #include "pe1/save.h"
 #include "pe1/save_tail_state.h"
 #include "pe1/scene_dispatch.h"
@@ -89,8 +105,8 @@ static struct {
     int speed_toggle;
     unsigned analog_run_threshold;
     /* 16 pad buttons, then speed hold and screenshot capture (unbound by default) */
-    int keys[18];
-    int buttons[18];
+    int keys[21];
+    int buttons[21];
     int screenshot_auto_upload;
     char screenshot_upload_url[4096];
     char discs[2][4096];
@@ -161,9 +177,13 @@ static int Host_SaveOptions(void);
 static void Host_NativeApplicationShutdown(void);
 #endif
 
-#define HOST_BINDING_COUNT 18
+#define HOST_BINDING_COUNT 21
 #define HOST_SPEED_BINDING 16
 #define HOST_SCREENSHOT_BINDING 17
+#define HOST_SETTINGS_BINDING 18
+#define HOST_SETTINGS2_BINDING 19
+#define HOST_MODS_BINDING 20
+#define HOST_GAME_BINDING_COUNT 16
 #define HOST_ANALOG_RUN_ROW (HOST_BINDING_COUNT + 1)
 #define HOST_SPEED_MODE_ROW (HOST_BINDING_COUNT + 2)
 #define HOST_UNBOUND_KEY SDL_SCANCODE_UNKNOWN
@@ -174,11 +194,16 @@ static const char *const host_button_names[HOST_BINDING_COUNT] = {
     "Triangle", "Circle", "Cross", "Square",
     "Select", "L3", "R3", "Start",
     "Up", "Right", "Down", "Left",
-    "Speed", "Screenshot"
+    "Speed", "Screenshot", "Settings", "Settings2", "Mods"
 };
+static const char *Host_BindingLabel(unsigned index) {
+    return index == HOST_SETTINGS_BINDING ? "Settings menu"
+         : index == HOST_SETTINGS2_BINDING ? "Settings menu, held with"
+         : index == HOST_MODS_BINDING ? "Mods menu" : host_button_names[index];
+}
 
 static int Host_IsOptionalBinding(unsigned index) {
-    return index == HOST_SPEED_BINDING || index == HOST_SCREENSHOT_BINDING;
+    return index >= HOST_GAME_BINDING_COUNT && index < HOST_BINDING_COUNT;
 }
 
 /* speed_factor while the speed binding is held; every start is 1x. */
@@ -221,6 +246,15 @@ typedef enum HostBindDevice {
     HOST_BIND_CONTROLLER = 1
 } HostBindDevice;
 
+#ifndef PE_VERSION
+#define PE_VERSION "development"
+#endif
+#ifndef PE_BUILD_ID
+#define PE_BUILD_ID "development"
+#endif
+/* JSON and PNG/ZIP helpers are built in every configuration (CMake pe_download_deps). */
+#include <cJSON.h>
+#include <miniz.h>
 #if PE_DESKTOP_MOD_DOWNLOADS
 /* Versioned desktop background packs. Only a fully verified staging directory
  * can replace the active pointer; failed/cancelled downloads keep the old pack. */
@@ -248,14 +282,6 @@ typedef unsigned long long u_int64;
 #undef DrawText
 /* WinSock's IPv4 member alias also collides with the PS1 kernel's TCB. */
 #undef s_addr
-#endif
-#include <cJSON.h>
-#include <miniz.h>
-#ifndef PE_VERSION
-#define PE_VERSION "development"
-#endif
-#ifndef PE_BUILD_ID
-#define PE_BUILD_ID "development"
 #endif
 static struct {
     SDL_Thread *thread;
@@ -724,11 +750,12 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
         }
         v = (int)parsed;
     }
-    /* -1 only marks an unbound controller optional binding (Speed or Screenshot). */
-    if (v < 0 && (strcmp(section, "controller") ||
-                  (strcmp(key, host_button_names[HOST_SPEED_BINDING]) &&
-                   strcmp(key, host_button_names[HOST_SCREENSHOT_BINDING])))) {
-        return 0;
+    /* -1 only marks an unbound controller optional binding (Speed onwards). */
+    if (v < 0) {
+        int optional = 0;
+        for (unsigned i = HOST_GAME_BINDING_COUNT; i < HOST_BINDING_COUNT; ++i)
+            if (!strcmp(key, host_button_names[i])) optional = 1;
+        if (strcmp(section, "controller") || !optional) return 0;
     }
 
     #ifdef PE_PS5_GPU_NATIVE
@@ -1377,6 +1404,12 @@ static void Host_InitOptions(int enabled) {
     host_options.buttons[HOST_SPEED_BINDING] = HOST_UNBOUND_BUTTON;
     host_options.keys[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_KEY;
     host_options.buttons[HOST_SCREENSHOT_BINDING] = HOST_UNBOUND_BUTTON;
+    /* Settings, its held second button and Mods start unbound, like Speed and Screenshot: players
+     * pick pad combos in Escape > Controls. Esc and F1 stay on the keyboard. */
+    for (unsigned i = HOST_SETTINGS_BINDING; i <= HOST_MODS_BINDING; ++i) {
+        host_options.keys[i] = HOST_UNBOUND_KEY;
+        host_options.buttons[i] = HOST_UNBOUND_BUTTON;
+    }
     #ifdef PE_PS5_GPU_NATIVE
     /* Fresh Modern baseline. Saved individual choices load afterward. */
     host_options.scale=8;host_options.antialiasing=1;host_options.dynamic_lighting=1;host_options.effect_geometry_correction=1;host_options.movie_cleanup=2;host_options.fsr1=1;host_options.fsr1_sharpness=0;host_options.model_fill_lighting=2;host_options.model_filtering=1;host_options.hd_backgrounds=1;host_options.hd_models=1;
@@ -1494,6 +1527,9 @@ static void Host_ApplyOptions(SDL_Window *window) {
     host_options.fullscreen = 0;
 #endif
     g_FieldAnalogRunThreshold = host_options.analog_run_threshold;
+#if defined(PE_MODS) && !defined(PE_PS5_GPU_NATIVE)
+    pe_mod_panel_set_open_binding(host_options.keys[HOST_MODS_BINDING], host_options.buttons[HOST_MODS_BINDING]);
+#endif
 #if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
     Psyz_VideoSetInternalResolution(1); /* GPU-only resolution stays native. */
 #else
@@ -1595,7 +1631,7 @@ static int Host_ChooseDiscs(const char **paths) {
     return -1;
 #endif
     static const SDL_DialogFileFilter filters[] = {
-        {"Parasite Eve - select both Disc 1 and Disc 2 CUE images", "cue;bin"}
+        {"Parasite Eve - select both Disc 1 and Disc 2 CUE or CHD images", "cue;bin;chd"}
     };
     HostDiscDialog dialog = {0};
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
@@ -1656,7 +1692,7 @@ static int Host_SelectImage(unsigned identity, char *path, size_t size) {
     return -1;
 #endif
     static const SDL_DialogFileFilter filters[] = {
-        {"Parasite Eve USA CUE/BIN image", "cue;bin"}
+        {"Parasite Eve USA CUE/BIN or CHD image", "cue;bin;chd"}
     };
     HostDiscDialog dialog = {0};
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
@@ -1809,33 +1845,10 @@ static int Host_RequestImage(unsigned identity) {
     return Host_AddImage(identity, 1);
 }
 
-static void Host_OverlayRenderFallback(
-    SDL_Renderer *renderer,
-    SDL_Window *window,
-    HostOverlayState *state,
-    SDL_Texture **texture,
-    int *texW,
-    int *texH
-) {
-    int w = 0, h = 0;
-    OverlayLayout layout;
-    SDL_GetWindowSizeInPixels(window, &w, &h);
-    if (w <= 0) {
-        w = 640;
-    }
-    if (h <= 0) {
-        h = 600;
-    }
-    OverlayComputeStateLayout(state, w, h, &layout);
-    s_overlayLayout = layout;
-    if (OverlayFontReady() && OverlaySurfaceResize(&s_overlaySurface, layout.w, layout.h)) {
-        if (state->prompt) {
-            OverlayPaintPrompt(&s_overlaySurface, state, &layout);
-        } else if (state->screenshot) {
-            OverlayPaintScreenshot(&s_overlaySurface, state, &layout);
-        } else {
-            OverlayPaint(&s_overlaySurface, state, &layout);
-        }
+/* Presents s_overlaySurface centred at layout, uploading it first when it was just painted. */
+static void Host_PresentOverlaySurface(SDL_Renderer *renderer, SDL_Window *window, OverlayLayout layout,
+                                       int painted, SDL_Texture **texture, int *texW, int *texH) {
+    if (painted) {
         if (*texture == NULL || *texW != layout.w || *texH != layout.h) {
             if (*texture != NULL) {
                 SDL_DestroyTexture(*texture);
@@ -1868,7 +1881,41 @@ static void Host_OverlayRenderFallback(
     SDL_RenderPresent(renderer);
 #ifdef PE_PS5
     SDL_UpdateWindowSurface(window);
+#else
+    (void)window;
 #endif
+}
+
+static void Host_OverlayRenderFallback(
+    SDL_Renderer *renderer,
+    SDL_Window *window,
+    HostOverlayState *state,
+    SDL_Texture **texture,
+    int *texW,
+    int *texH
+) {
+    int w = 0, h = 0, painted = 0;
+    OverlayLayout layout;
+    SDL_GetWindowSizeInPixels(window, &w, &h);
+    if (w <= 0) {
+        w = 640;
+    }
+    if (h <= 0) {
+        h = 600;
+    }
+    OverlayComputeStateLayout(state, w, h, &layout);
+    s_overlayLayout = layout;
+    if (OverlayFontReady() && OverlaySurfaceResize(&s_overlaySurface, layout.w, layout.h)) {
+        if (state->prompt) {
+            OverlayPaintPrompt(&s_overlaySurface, state, &layout);
+        } else if (state->screenshot) {
+            OverlayPaintScreenshot(&s_overlaySurface, state, &layout);
+        } else {
+            OverlayPaint(&s_overlaySurface, state, &layout);
+        }
+        painted = 1;
+    }
+    Host_PresentOverlaySurface(renderer, window, layout, painted, texture, texW, texH);
 }
 
 static void Host_SwitchSettingsPage(HostOverlayState *state, int nextPage) {
@@ -1976,6 +2023,12 @@ static void Host_ApplySettingsAction(
             state->status=NULL;state->dirty=1;return;
         }
 #endif
+#if defined(PE_MODS) && !defined(PE_PS5)
+        if(state->row==3){
+            if(activate_only){host_open_mods=1;state->open=0;}
+            return;
+        }
+#endif
 #ifdef PE_PS5
         if(activate_only || state->row<=1)Host_HdAction(state->row);
 #else
@@ -1986,6 +2039,14 @@ static void Host_ApplySettingsAction(
         if (!activate_only) {
             return;
         }
+#ifndef PE_PS5
+        if (state->row == 2) {
+            host_relaunch_setup = 1;
+            state->quit = 1;
+            state->open = 0;
+            return;
+        }
+#endif
         if (g_CdImageVolumes[state->row]) {
             state->status = "This image is already available.";
         } else {
@@ -2592,8 +2653,14 @@ static void Host_ProcessSettingsEvent(
             state->capturing_binding = 0;
             state->dirty = 1;
             /* Swap duplicates, keeping every original button reachable. An
-             * unbound speed binding has nothing to give back in a swap. */
-            for (int i = 0; i < HOST_BINDING_COUNT; ++i) {
+             * unbound speed binding has nothing to give back in a swap. Only the Settings
+             * combo (two buttons held together) may share game buttons, so it is checked
+             * against the other host bindings alone, and the rest skip its two slots. */
+            const int combo = target == HOST_SETTINGS_BINDING || target == HOST_SETTINGS2_BINDING;
+            const int first = combo ? HOST_GAME_BINDING_COUNT : 0;
+            const int last = HOST_BINDING_COUNT;
+            for (int i = first; i < last; ++i) {
+                if (!combo && (i == HOST_SETTINGS_BINDING || i == HOST_SETTINGS2_BINDING)) continue;
                 if (i != target && bindings[i] == binding && bindings[target] == unbound) {
                     static char message[64];
                     snprintf(message, sizeof(message), "Already used by %s.", host_button_names[i]);
@@ -2601,7 +2668,8 @@ static void Host_ProcessSettingsEvent(
                     return;
                 }
             }
-            for (int i = 0; i < HOST_BINDING_COUNT; ++i) {
+            for (int i = first; i < last; ++i) {
+                if (!combo && (i == HOST_SETTINGS_BINDING || i == HOST_SETTINGS2_BINDING)) continue;
                 if (i != target && bindings[i] == binding) {
                     bindings[i] = bindings[target];
                 }
@@ -2859,7 +2927,16 @@ static void Host_Settings(SDL_Window *game) {
     s_overlayState.open = 0;
     Host_TraceAspectSelection("menu_resume", 1);
 
-    if (!Host_SaveOptions()) {
+    int saved = Host_SaveOptions();
+#ifndef PE_PS5
+    /* Setup wizard row: a new copy starts at the storage step once this one has saved. */
+    if (host_relaunch_setup && *host_executable) {
+        const char *args[] = {host_executable, "--setup", NULL};
+        SDL_Process *process = SDL_CreateProcess(args, false);
+        if (process) SDL_DestroyProcess(process);
+    }
+#endif
+    if (!saved) {
 #ifdef PE_PS5
         fprintf(stderr, "Could not save preferences; changes apply for this session.\n");
 #else
@@ -2894,6 +2971,9 @@ static void Host_Settings(SDL_Window *game) {
         host_open_assists=0;
         if(!quit)pe_mod_panel_open_page(host_pending_mod_page?host_pending_mod_page:"Playtest assists");host_pending_mod_page=NULL;
     }
+#endif
+#if defined(PE_MODS) && !defined(PE_PS5)
+    if(host_open_mods&&!host_setup_mode){host_open_mods=0;if(!quit)pe_mod_panel_open();}
 #endif
 #if PE_NATIVE_STATE_CPU_COMPONENTS
     if(!quit)CPE_StateUi_AfterModalClosed();
@@ -3093,6 +3173,7 @@ static int Host_CrashRoom(void) {
     return room;
 }
 
+#if PE_DESKTOP_MOD_DOWNLOADS
 static size_t Host_DiscardCurlWrite(char *ptr, size_t size, size_t nmemb, void *userdata) {
     (void)ptr;
     (void)userdata;
@@ -3164,6 +3245,18 @@ static int Host_UploadScreenshotFiles(
     curl_easy_cleanup(curl);
     return res == CURLE_OK && status >= 200 && status < 300;
 }
+#else
+/* Builds without the download services have no curl: webhook uploads report failure. */
+static int Host_UploadScreenshotFiles(
+    const char *url,
+    const char *png_path,
+    const char *json_path,
+    const char *summary_message
+) {
+    (void)url; (void)png_path; (void)json_path; (void)summary_message;
+    return 0;
+}
+#endif
 
 static char host_last_screenshot_png[4096];
 static char host_last_screenshot_json[4096];
@@ -3569,11 +3662,95 @@ static bool Host_ScreenshotTriggerEvent(const SDL_Event *event, SDL_Window *game
     return false;
 }
 
+static int Host_PadBindingHeld(SDL_Gamepad *pad, int binding) {
+    if (!pad || binding < 0) return 0;
+    if (binding == SDL_GAMEPAD_BUTTON_COUNT) return SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 16000;
+    if (binding == SDL_GAMEPAD_BUTTON_COUNT + 1) return SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 16000;
+    return binding < SDL_GAMEPAD_BUTTON_COUNT && SDL_GetGamepadButton(pad, (SDL_GamepadButton)binding);
+}
+
+static struct { SDL_JoystickID id; int held; } host_settings_pads[16];
+static int host_settings_keys_held;
+
+/* Both Settings inputs held (or the one bound) open the menu; the inputs still reach the game. */
+static bool Host_SettingsBindingEvent(const SDL_Event *event, SDL_Window *game) {
+    const int first = host_options.buttons[HOST_SETTINGS_BINDING];
+    const int second = host_options.buttons[HOST_SETTINGS2_BINDING];
+    if (event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_KEY_UP) {
+        const int a = host_options.keys[HOST_SETTINGS_BINDING], b = host_options.keys[HOST_SETTINGS2_BINDING];
+        const bool *keys = SDL_GetKeyboardState(NULL);
+        int held;
+        if (a == HOST_UNBOUND_KEY && b == HOST_UNBOUND_KEY) return false;
+        if ((int)event->key.scancode != a && (int)event->key.scancode != b) return false;
+        held = (a == HOST_UNBOUND_KEY || keys[a]) && (b == HOST_UNBOUND_KEY || keys[b]);
+        if (held && !host_settings_keys_held && event->type == SDL_EVENT_KEY_DOWN) {
+            host_settings_keys_held = 1;
+            Host_Settings(game);
+            return true;
+        }
+        host_settings_keys_held = held;
+        return false;
+    }
+    if (event->type == SDL_EVENT_GAMEPAD_REMOVED) {
+        for (unsigned i = 0; i < 16; ++i)
+            if (host_settings_pads[i].id == event->gdevice.which) host_settings_pads[i].id = host_settings_pads[i].held = 0;
+        return false;
+    }
+    SDL_JoystickID device;
+    if (event->type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || event->type == SDL_EVENT_GAMEPAD_BUTTON_UP) {
+        if (event->gbutton.button != first && event->gbutton.button != second) return false;
+        device = event->gbutton.which;
+    } else if (event->type == SDL_EVENT_GAMEPAD_AXIS_MOTION) {
+        const int trigger = event->gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? SDL_GAMEPAD_BUTTON_COUNT
+                          : event->gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER ? SDL_GAMEPAD_BUTTON_COUNT + 1 : -1;
+        if (trigger < 0 || (trigger != first && trigger != second)) return false;
+        device = event->gaxis.which;
+    } else return false;
+    if (first < 0 && second < 0) return false;
+    SDL_Gamepad *pad = SDL_GetGamepadFromID(device);
+    const int held = (first < 0 || Host_PadBindingHeld(pad, first)) && (second < 0 || Host_PadBindingHeld(pad, second));
+    unsigned slot;
+    for (slot = 0; slot < 16; ++slot) if (host_settings_pads[slot].id == device) break;
+    if (slot == 16)
+        for (slot = 0; slot < 16; ++slot) if (!host_settings_pads[slot].id) break;
+    if (slot == 16) return false;
+    const int was = host_settings_pads[slot].held;
+    host_settings_pads[slot].id = device;
+    host_settings_pads[slot].held = held;
+    if (held && !was) {
+        Host_Settings(game);
+        return true;
+    }
+    return false;
+}
+
+#ifndef PE_PS5
+static void Host_Setup(SDL_Window *game) {
+    host_setup_mode = 1;
+    for (;;) {
+        host_open_mods = 0;
+        Host_Settings(game);
+#ifdef PE_MODS
+        if (host_open_mods && pe_mod_panel_open()) continue;
+#endif
+        break;
+    }
+    host_open_mods = 0;
+    host_setup_mode = 0;
+}
+#endif
+
 static bool Host_SettingsEvent(const SDL_Event *event) {
 #ifdef PE_PS5_GPU_NATIVE
     if(s_install.active)return Host_InstallerEvent(event)!=0;
 #endif
     SDL_Window *game = Psyz_GetWindow_SDL3();
+#ifndef PE_PS5
+    if (host_setup_pending && game && !s_overlayState.open) {
+        host_setup_pending = 0;
+        Host_Setup(game);
+    }
+#endif
 #if PE_NATIVE_STATE_CPU_COMPONENTS
     if(!s_overlayState.prompt&&!s_overlayState.capturing_binding && Host_StateChord(event))return true;
 #endif
@@ -3610,6 +3787,9 @@ static bool Host_SettingsEvent(const SDL_Event *event) {
         if (!event->key.repeat) {
             Host_Settings(game);
         }
+        return true;
+    }
+    if (Host_SettingsBindingEvent(event, game)) {
         return true;
     }
     if (Host_ScreenshotTriggerEvent(event, game)) {
@@ -3843,6 +4023,48 @@ static void Host_TakeRoomSnapshot(void) {
     SDL_SetAtomicInt(&host_room_snapshot,(int)(snapshot - host_room_snapshots));
 }
 
+/* --test-save-after: the save menu's save to memory card 1, slot 1, without
+ * the menu: Save_BuildHeader, then Save_BuildCardFile (the save data, every
+ * mod's save write handler, the checksum) on the path the menu formats for an
+ * empty card's first slot, written whole to that card file. Only in the free
+ * field (no battle, event, menu or movie), where a phone is used. The game's
+ * own header fields and Aya's record links are put back as for the room
+ * snapshot above. */
+static int Host_TestSave(void) {
+    static SaveRuntimeState header;
+    char path[0x20], target[4096], temporary[4120];
+    if ((g_GameStateFlags & 0x2006u) || (g_GameStateFlagsWord & 0xB600u) ||
+        g_GameState.scene_audio.tracks.movie_active)
+        return 0;
+    BattleStateTail *action = g_AyaBattleState.action;
+    BattleAttributes *attributes = g_AyaBattleState.attributes;
+    const int transfer = D_800A5D50;
+    memcpy(&header, &g_SaveRuntimeState, sizeof(header));
+    Save_BuildHeader();
+    if (action && action != &g_SavedBattleStateTail) g_AyaBattleState.action = &g_SavedBattleStateTail;
+    if (attributes && attributes != &g_BattleEquipStateBlock) g_AyaBattleState.attributes = &g_BattleEquipStateBlock;
+    snprintf(path, sizeof(path), g_MemCardFilenameFormatPtr, 0, '0', 'A');
+    const int built = Save_BuildCardFile(path);
+    g_AyaBattleState.action = action;
+    g_AyaBattleState.attributes = attributes;
+    memcpy(&g_SaveRuntimeState, &header, sizeof(header));
+    D_800A5D50 = transfer;
+    Psyz_AdjustPath(target, path, sizeof(target));
+    snprintf(temporary, sizeof(temporary), "%s.tmp", target);
+    SDL_IOStream *io = built < 0 ? NULL : SDL_IOFromFile(temporary, "wb");
+    int ok = io && SDL_WriteIO(io, g_MemCardFileBuffer, sizeof(g_MemCardFileBuffer)) == sizeof(g_MemCardFileBuffer);
+    if (io && !SDL_CloseIO(io)) ok = 0;
+    if (ok) {
+        SDL_RemovePath(target);
+        ok = SDL_RenamePath(temporary, target);
+    }
+    if (!ok) SDL_RemovePath(temporary);
+    fprintf(stderr, "Test save: %s %s at VBlank %u\n", ok ? "wrote" : built < 0 ? "refused" : "failed to write",
+            target, (unsigned)g_BootHostVBlankCount);
+    fflush(stderr);
+    return 1;
+}
+
 static void Host_CrashHex(char *out, size_t size, size_t *used, const u8 *data, size_t count, unsigned address) {
     for (size_t i = 0; i < count && *used + 1 < size; ++i) {
         const char *end = i % 32 == 31 || i + 1 == count ? "\r\n" : "";
@@ -3939,17 +4161,19 @@ static int Host_ConfigurePortable(int *argc, char **argv) {
 
 static void Host_PrintHelp(const char *program_name) {
     printf(
-        "Usage: %s [--disc <USA Disc 1 CUE/BIN>] [--disc2 <USA Disc 2 CUE/BIN>] [--choose-discs] "
+        "Usage: %s [--game <USA Disc 1 CUE/BIN/CHD>] [--disc <USA Disc 1 CUE/BIN/CHD>] [--disc2 <USA Disc 2 CUE/BIN/CHD>] [--choose-discs] "
         "[--geometry-correction 0|1] [--antialiasing 0|1] [--model-filtering 0|1] [--widescreen 0|1] [--frame-interpolation 0|1] "
         "[--dynamic-lighting 0|1] [--effect-geometry-correction 0|1] "
         "[--headless | --headless-gpu] [--internal-resolution 1..8] [--frame-limit N] [--control-at N] "
         "[--dump-vram PATH] [--dump-frame PATH] [--dump-audio PATH] [--pad-at VBLANK:BUTTON_MASK ...] "
-        "[--test-crash-after N | --test-abort-after N]\n",
+        "[--test-crash-after N | --test-abort-after N] [--test-save-after N] [--test-ignore-hit-reactions]\n",
         program_name
     );
     printf("--download-backgrounds / --verify-backgrounds manage the optional HD pack without opening a window.\n");
     printf("--portable or portable.txt beside the application keeps settings, cards and mods in its userdata directory. PE_CONFIG_HOME overrides this location.\n");
-    printf("Without --disc, opens a native multi-select CUE/BIN dialog. --choose-discs selects new images. ESC opens desktop settings.\n");
+    printf("--game works like --disc for Disc 1 but keeps a saved Disc 2, so one launch argument is enough for a two-disc setup.\n");
+    printf("Without --disc, opens a native multi-select CUE/BIN/CHD dialog. --choose-discs selects new images. ESC opens desktop settings.\n");
+    printf("--setup opens the setup wizard (every settings page and the Mods menu) before the game starts, as on the first launch.\n");
     printf("--headless uses native-resolution software rendering; --headless-gpu keeps the actual GPU window hidden and supports internal scaling.\n");
     printf("--dump-frame writes the rendered display as RGB888 PPM at each control/terminal boundary.\n");
     printf("--dump-audio writes stereo 44100 Hz signed-16-bit little-endian PCM; requires headless and PSYZ_AUDIO_CLOCK=video.\n");
@@ -3957,6 +4181,8 @@ static void Host_PrintHelp(const char *program_name) {
     printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
     printf("Headless fixtures only: --diagnostic-hp-at VBLANK:EXPECTED_HP:VALUE (requires --frame-limit; output is marked coverage-only)\n");
     printf("--test-crash-after N / --test-abort-after N crash on purpose at VBlank N to check the crash report (its path is printed).\n");
+    printf("--test-ignore-hit-reactions lands every hit as a plain hit (no criticals or grazes), for route replays recorded that way.\n");
+    printf("--test-save-after N saves to memory card 1, slot 1 at the first free field frame from VBlank N, as the save menu does (the file is printed).\n");
 }
 
 static int Host_ParsePadEventArg(const char *spec, int argc) {
@@ -4024,10 +4250,34 @@ static int Host_ParseHealthEventArg(const char *cursor, int argc) {
     return 1;
 }
 
+#ifndef PE_PS5
+/* Portable mode: a "userdata" folder beside the executable holds the preferences, memory cards,
+ * mod files and HD backgrounds (as PE_CONFIG_HOME would), and the working directory becomes the
+ * executable's folder so relative disc paths in the preferences resolve next to it. */
+static void Host_PortableMode(void) {
+    const char *config = SDL_GetEnvironmentVariable(SDL_GetEnvironment(), "PE_CONFIG_HOME");
+    const char *base = SDL_GetBasePath();
+    char path[4096];
+    SDL_PathInfo info;
+    if ((config && *config) || !base) return;
+    if (snprintf(path, sizeof(path), "%suserdata", base) >= (int)sizeof(path)) return;
+    if (!SDL_GetPathInfo(path, &info) || info.type != SDL_PATHTYPE_DIRECTORY) return;
+    SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "PE_CONFIG_HOME", path, true);
+#ifdef _WIN32
+    _chdir(base);
+#else
+    chdir(base);
+#endif
+}
+#include "welcome.h"
+#endif
+
 int main(int argc, char **argv) {
     if (!Host_ConfigurePortable(&argc, argv)) return EXIT_FAILURE;
 #ifdef PE_PS5
     if (!Host_InitPaths()) return EXIT_FAILURE;
+#else
+    Host_PortableMode();
 #endif
     int mode;
     u32 token;
@@ -4040,6 +4290,7 @@ int main(int argc, char **argv) {
     int result = EXIT_FAILURE;
     int interactive = 1;
     int choose_discs = 0;
+    int game_argument = 0;
 
     const char *environment_headless = SDL_GetEnvironmentVariable(SDL_GetEnvironment(), "PSYZ_HEADLESS");
     if (environment_headless && *environment_headless) {
@@ -4050,10 +4301,31 @@ int main(int argc, char **argv) {
             interactive = 0;
         }
     }
+#ifndef PE_PS5
+    int setup_argument = 0;
+    for (int i = 1; i < argc; ++i) if (!strcmp(argv[i], "--setup")) setup_argument = 1;
+#ifdef __APPLE__
+    /* In a bundle SDL_GetBasePath() is Contents/Resources, not where the executable is. */
+    {
+        uint32_t size = sizeof(host_executable);
+        if (_NSGetExecutablePath(host_executable, &size) != 0) host_executable[0] = '\0';
+    }
+    if (!*host_executable)
+#endif
+    snprintf(host_executable, sizeof(host_executable), "%s%s", SDL_GetBasePath() ? SDL_GetBasePath() : "",
+             Welcome_FileName(argv[0]));
+    const int first_launch = interactive && Host_FirstLaunch();
+    if (interactive && (first_launch || setup_argument)) {
+        /* --setup: the current preferences fill the disc rows before the storage may change. */
+        if (!first_launch) Host_InitOptions(interactive);
+        if (!Host_Welcome(first_launch, first_launch ? NULL : host_options.discs)) return EXIT_SUCCESS;
+    }
+#endif
 
     CrashReport_Install(interactive, Host_DescribeCrash);
     CrashReport_SetSaveData(Host_DescribeSaveData);
     g_BootSceneStarted = Host_TakeRoomSnapshot;
+    g_BootTestSave = Host_TestSave;
 #ifdef PE_MODS
     CrashReport_SetMods(pe_mod_crash_describe);
 #endif
@@ -4085,6 +4357,9 @@ int main(int argc, char **argv) {
         }
         if (!strcmp(argv[arg], "--choose-discs")) {
             choose_discs = 1;
+#ifndef PE_PS5
+        } else if (!strcmp(argv[arg], "--setup")) {
+#endif
         } else if (!strcmp(argv[arg], "--headless") || !strcmp(argv[arg], "--headless-gpu")) {
             if (headless_argument++) {
                 fprintf(stderr, "Duplicate or conflicting headless mode\n");
@@ -4168,6 +4443,17 @@ int main(int argc, char **argv) {
             }
             g_BootHostCrashAt = (u32)tick;
             g_BootHostCrashAbort = abort_crash;
+        } else if (!strcmp(argv[arg], "--test-ignore-hit-reactions")) {
+            g_BattleTestIgnoreHitReactions = 1;
+        } else if (!strcmp(argv[arg], "--test-save-after")) {
+            char *end = NULL;
+            errno = 0;
+            unsigned long tick = arg + 1 < argc ? strtoul(argv[++arg], &end, 10) : 0;
+            if (!tick || tick > INT_MAX || errno || *end || g_BootHostSaveAt) {
+                fprintf(stderr, "Invalid or duplicate test save VBlank\n");
+                return EXIT_FAILURE;
+            }
+            g_BootHostSaveAt = (u32)tick;
         } else if (!strcmp(argv[arg], "--dump-vram")) {
             if (arg + 1 >= argc || g_BootHostVramPath) {
                 fprintf(stderr, "Missing or duplicate capture path\n");
@@ -4206,6 +4492,13 @@ int main(int argc, char **argv) {
             if (paths[0] || arg+1>=argc || !(paths[0]=SDL_GetEnvironmentVariable(SDL_GetEnvironment(),argv[++arg])) || !*paths[0]) {
                 fprintf(stderr,"Missing image environment variable\n");return EXIT_FAILURE;
             }
+        } else if (!strcmp(argv[arg], "--game")) {
+            /* Disc 1 for this run, like --disc, but a saved Disc 2 is kept. */
+            if (game_argument++ || paths[0] || arg + 1 >= argc) {
+                fprintf(stderr, "Missing or duplicate image argument\n");
+                return EXIT_FAILURE;
+            }
+            paths[0] = argv[++arg];
         } else if (!strcmp(argv[arg], "--disc") || !strcmp(argv[arg], "--disc2")) {
             int slot = !strcmp(argv[arg], "--disc2");
             if (paths[slot] || arg + 1 >= argc) {
@@ -4234,6 +4527,13 @@ int main(int argc, char **argv) {
         if(!resolution_argument)internal_resolution=host_options.scale;}}
 #endif
     if (interactive) {
+#ifndef PE_PS5
+        Host_WelcomeApplyDiscs();
+        host_setup_pending = setup_argument || first_launch;
+#endif
+        if (game_argument && !paths[1] && *host_options.discs[1]) {
+            paths[1] = host_options.discs[1];
+        }
         if (!paths[0] && !paths[1]) {
             for (unsigned i = 0; i < 2; ++i) {
                 if (*host_options.discs[i]) {
@@ -4249,7 +4549,7 @@ int main(int argc, char **argv) {
         }
     }
     if (!paths[0] && !paths[1]) {
-        fprintf(stderr, "Supply --disc or --disc2 with a USA CUE/BIN image\n");
+        fprintf(stderr, "Supply --disc or --disc2 with a USA CUE/BIN or CHD image\n");
         return EXIT_FAILURE;
     }
 
@@ -4346,7 +4646,7 @@ image_error:
     SDL_ShowSimpleMessageBox(
         SDL_MESSAGEBOX_ERROR,
         "Parasite Eve",
-        "Cannot mount these images. Select the USA Disc 1 and Disc 2 CUE files together. Cancel to quit.",
+        "Cannot mount these images. Select the USA Disc 1 and Disc 2 CUE or CHD files together. Cancel to quit.",
         NULL
     );
     {

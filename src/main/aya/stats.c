@@ -96,13 +96,20 @@ void Menu_CopyPromptCodes(unsigned char *src) {
     int value;
 
     dst = g_TextboxNameGlyphs.glyphs;
-    end = dst + 8;
+    end = dst + 16;
+    /* whole letters only: a two-byte one (pe1/text_render.h) is never split */
     while (dst < end) {
         value = *src;
         if (value == 0xFF) {
             break;
         }
-        *dst++ = value;
+        if (value >= 0xFB && value <= 0xFE && src[1] != 0xFF) {
+            if (dst + 2 > end) break;
+            *dst++ = (unsigned char)value;
+            src++;
+            value = *src;
+        }
+        *dst++ = (unsigned char)value;
         src++;
     }
 

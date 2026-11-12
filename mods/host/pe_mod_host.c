@@ -115,6 +115,18 @@ void pe_log(const char *tag, const char *fmt, ...) {
 }
 
 int pe_mod_interactive(void) { return s_interactive; }
+static int pe_manage_requested(int i, unsigned visiting);
+static int s_manage_count;
+int pe_mod_requested(const char *mod_id) {
+    for (int i = 0; mod_id && i < s_manage_count; i++)
+        if (!strcmp(g_pe_mods[i]->id, mod_id)) return pe_manage_requested(i, 0);
+    return 0;
+}
+
+static int s_save_committed_event = -1;
+static void pe_announce_save_committed(const char *path) {
+    if (s_save_committed_event >= 0) pe_event_emit(s_save_committed_event, (void *)path);
+}
 
 /* ---- what mod code is running, for crash reports ----
  * Each call into a mod (start, shutdown, a hook or event handler, a per-frame tick, an F1 row)
@@ -261,12 +273,16 @@ static int s_all_on;
 static int s_mod_on[PE_MAX_MODS];
 static char s_mod_note[PE_MAX_MODS][192];
 static char s_all_note[192];
-static int s_manage_count, s_manage_ready, s_boot_all;
+static int s_manage_ready, s_boot_all;
 static int s_boot_mod_on[PE_MAX_MODS], s_boot_state[PE_MAX_MODS];
 enum { PE_MOD_RUNNING, PE_MOD_OFF, PE_MOD_NEEDS, PE_MOD_FAILED, PE_MOD_ALL_OFF };
+/* Language packs are the one mod All mods doesn't hold back: a player who drops a pack in lang/
+ * and picks it gets the game in that language with every gameplay mod still off. Its own Manage
+ * mods row turns it off, and with no language picked it leaves the game's text as it is. */
+static int pe_mod_needs_master(const PeMod *mod) { return strcmp(mod->id, "pe_lang") != 0; }
 static int pe_manage_requested(int i, unsigned visiting) {
     const char *const *req; int j;
-    if(!s_all_on || !s_mod_on[i] || (visiting & (1u << i)))return 0;
+    if((!s_all_on && pe_mod_needs_master(g_pe_mods[i])) || !s_mod_on[i] || (visiting & (1u << i)))return 0;
     visiting |= 1u << i;
     for(req=g_pe_mods[i]->requires;req && *req;req++) {
         for(j=0;j<s_manage_count;j++)if(!strcmp(*req,g_pe_mods[j]->id))break;
@@ -289,7 +305,7 @@ void pe_mod_manage_refresh(void) {
     snprintf(s_all_note,sizeof(s_all_note),"Master now: %s. Next launch: %s. %s",s_boot_all?"On":"Off",s_all_on?"On":"Off",pending?"Restart game to apply.":"No pending change.");
     for(i=0;i<s_manage_count;i++) {
         int requested=pe_manage_requested(i,0);
-        snprintf(s_mod_note[i],sizeof(s_mod_note[i]),"%s %s. Now: %s. Next launch: %s. %s",g_pe_mods[i]->id,g_pe_mods[i]->version,now[s_boot_state[i]],requested?"enabled":(!s_all_on?"master Off":(!s_mod_on[i]?"Off":"dependency blocked")),pending?"Restart game to apply.":"Startup activation; settings do not hot-start mods.");
+        snprintf(s_mod_note[i],sizeof(s_mod_note[i]),"%s %s. Now: %s. Next launch: %s. %s",g_pe_mods[i]->id,g_pe_mods[i]->version,now[s_boot_state[i]],requested?"enabled":(!s_all_on&&pe_mod_needs_master(g_pe_mods[i])?"master Off":(!s_mod_on[i]?"Off":"dependency blocked")),pending?"Restart game to apply.":"Startup activation; settings do not hot-start mods.");
     }
 #ifdef PE_PS5_PLUGINS
     if(changed && log_budget) {
@@ -337,7 +353,7 @@ static void pe_start_mods(void) {
 
     while (g_pe_mods[mod_count] && mod_count < PE_MAX_MODS) mod_count++;
     pe_manage_register(mod_count);
-    if (!s_all_on) pe_mod_log(NULL, "All mods off (Manage mods): pages browsable, the game plays as the original");
+    if (!s_all_on) pe_mod_log(NULL, "All mods off (Manage mods): pages browsable, the game plays as the original (a picked language aside)");
     /* Init every mod once the mods it needs have, in that order; active only if on and every mod
      * it needs is active. */
     while (progress) {
@@ -354,7 +370,7 @@ static void pe_start_mods(void) {
             s_current_mod = NULL;
             if (!ok) { state[i] = PE_MOD_FAILED; pe_mod_log(mod->id, "init failed, mod off"); continue; }
             s_inited_ids[s_inited_count++] = mod->id;
-            if (!s_all_on) state[i] = PE_MOD_ALL_OFF;
+            if (!s_all_on && pe_mod_needs_master(mod)) state[i] = PE_MOD_ALL_OFF;
             else if (!s_mod_on[i]) state[i] = PE_MOD_OFF;
             else if (!pe_requires_met(mod)) state[i] = PE_MOD_NEEDS;
             else {
@@ -425,6 +441,8 @@ static void pe_host_start(const PeHookInit *init) {
     pe_service_publish("catalog_entries",1,&g_pe_catalog_entries_api,NULL);
     pe_service_publish("economy_shop",1,&g_pe_economy_shop_api,NULL);
     pe_service_publish("economy_policy",1,&g_pe_economy_policy_api,NULL);
+    s_save_committed_event = pe_event_id(PE_EVENT_SAVE_COMMITTED);
+    pe_save_committed_listener = pe_announce_save_committed;
     pe_start_mods();
     if (s_all_on) {                              /* off: nothing but F1 touches the game */
         pe_main_menu_init();
@@ -459,6 +477,7 @@ int pe_host_init(const PeHookInit *init) {
 static const char *pe_hook_name(int id) {
     static const char *const names[PE_HOOK_COUNT] = {
         [PE_HOOK_INIT] = "init",
+        [PE_HOOK_TEXT_GLYPH] = "text glyph",
         [PE_HOOK_SCENE_START] = "scene start",
         [PE_HOOK_FRAME] = "frame",
         [PE_HOOK_HELP_TEXT] = "help text",
@@ -477,6 +496,10 @@ static const char *pe_hook_name(int id) {
         [PE_HOOK_INVENTORY_REBUILD] = "inventory rebuild",
         [PE_HOOK_STORAGE_TRANSFER] = "storage transfer",
         [PE_HOOK_SLOT_DRAWN] = "slot drawn",
+        [PE_HOOK_TITLE_FRAME] = "title frame",
+        [PE_HOOK_TEXT_STRETCH] = "text stretch",
+        [PE_HOOK_TEXT_LETTER] = "text letter",
+        [PE_HOOK_DISC_READ] = "disc read",
     };
     if (id >= 0 && id < PE_HOOK_COUNT) return names[id] ? names[id] : "?";
     return id - PE_HOOK_COUNT < s_event_count ? s_events[id - PE_HOOK_COUNT] : "?";
@@ -572,7 +595,7 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread) {
     } while (0)
 
     PE_OUT("Mod API %d, mod host %s, All mods %s\r\n", PE_MOD_API_VERSION, s_started ? "started" : "not started yet",
-           s_all_on ? "on" : "off (mods did not touch the game)");
+           s_all_on ? "on" : s_running_count ? "off (only Language packs ran)" : "off (mods did not touch the game)");
     for (i = 0; g_pe_mods[i] && i < PE_MAX_MODS; i++)
         PE_OUT("  %s: %s\r\n", g_pe_mods[i]->name, s_mod_note[i][0] ? s_mod_note[i] : g_pe_mods[i]->id);
 

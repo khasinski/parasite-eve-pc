@@ -32,6 +32,7 @@
 #include <string.h>
 
 #include "pe_wardrobe.h"
+#include "pe_skin_collision.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -146,6 +147,9 @@ static PeSkin *pe_load(const char *folder) {
     if (k->loaded) return k->ok ? k : NULL;
     k->loaded = 1;
     if (!pe_read(folder, "model.bin", &k->model) || !pe_dir(&k->model)) return pe_load_failed(folder, "model.bin");
+    /* Costumes must not change movement clearance. Applies to loose skins and
+     * character packs without rewriting installed assets or combat hit bounds. */
+    if (!pe_skin_normalize_movement(k->model.data, k->model.size)) return pe_load_failed(folder, "model.bin collision bounds");
     if (!pe_read(folder, "texture.bin", &k->tex) || !pe_dir(&k->tex)) return pe_load_failed(folder, "texture.bin");
     for (d = 1; d <= 8; ++d) {
         snprintf(name, sizeof name, "day%d.bin", d);

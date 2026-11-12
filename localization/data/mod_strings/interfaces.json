@@ -1,0 +1,9 @@
+{
+  "includes": [
+    "interfaces/host.json",
+    "interfaces/economy.json",
+    "interfaces/inventory.json",
+    "interfaces/collection.json",
+    "interfaces/settings.json"
+  ]
+}

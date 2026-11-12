@@ -18,6 +18,7 @@ typedef struct PeBattleActionPolicyApi { int (*partial_actions)(void); } PeBattl
  *   "costume_rules" v1 pe_economy  whether costumes must be unlocked before they are worn
  *   "wallet"    v1  pe_economy  battle rewards' fields in the Junk record (bridge findings D10)
  *   "rebuild"   v1  pe_catalog  dismantled gear to buy back (Wayne's Workshop)
+ *   "phonecalls" v1 pe_phone    calls Aya can make after saving at a phone (call packs)
  *
  * Providers (an import pack, a randomizer) register at their init, so they list "pe_collection"
  * in their PeMod requires. Keys are stable names saved in the player's profile ("pe1/rat",
@@ -250,5 +251,61 @@ typedef struct PeProfileTransactionsApi {
     unsigned (*pending)(const char *adapter,const char *key);
     int (*buy)(const char *adapter,const char *key,unsigned bits,uint32_t junk_price);
 } PeProfileTransactionsApi;
+
+/* ---- "phonecalls" v1 (pe_phone): calls Aya can make from a save phone ----
+ * A call is a list of lines, one dialogue box each (longer lines run on into more boxes). Text is
+ * ASCII in the game's glyphs (letters, digits, space and . , : ! ? ' - + * % /); "{name}" is the
+ * name the player gave Aya. Aya's lines are drawn "{name}: text", the caller's "caller: text".
+ * Packs register at their init (list "pe_phone" in requires); the game's own calls are a pack too
+ * (pe_phone/calls/pe1.txt, read as text; players add .txt files in their pe_calls folder). Keys are
+ * saved in the player's save ("pe1/pizza"): never rename one.
+ * Events: "phone.call_start" and "phone.call_end", ctx the PePhoneCall. */
+enum { PE_CALL_AYA = 0, PE_CALL_CALLER = 1 };
+enum { PE_CALL_SERIOUS = 0, PE_CALL_FUNNY = 1 };
+
+typedef struct PePhoneLine {
+    int speaker;                       /* PE_CALL_AYA or PE_CALL_CALLER */
+    const char *text;
+} PePhoneLine;
+
+typedef struct PePhoneCall {
+    const char *key;                   /* stable id under the pack's prefix: "pe1/nypd_desk" */
+    const char *caller;                /* name shown for the other side: "NYPD Desk" */
+    int tone;                          /* PE_CALL_SERIOUS or PE_CALL_FUNNY */
+    const PePhoneLine *lines;
+    int line_count;
+    int weight;                        /* chance in the random pool; 0 counts as 1 */
+    int once;                          /* at most once per playthrough */
+    int day_from, day_to;              /* story days it may play (the save screen's Day); 0 = any */
+    unsigned story_from, story_to;     /* finer: script variable 74 range; both 0 = any */
+    const short *rooms;                /* phone rooms (map numbers) it may play at; NULL = any */
+    int room_count;
+    int priority;                      /* > 0: a set call that beats the random pool when it fits */
+    const char *after;                 /* key of a call that must have been heard first, or NULL */
+    const char *needs;                 /* conditions that must all hold, space-separated
+                                          ("warner.supplies"); NULL = none. See add_condition. */
+} PePhoneCall;
+
+typedef struct PePhoneContext {
+    int room;                          /* map number of the phone, or -1 */
+    unsigned story;                    /* script variable 74 */
+    int day;                           /* 1..6 */
+    int tone_mask;                     /* bit 1 << PE_CALL_SERIOUS / PE_CALL_FUNNY allowed */
+} PePhoneContext;
+
+typedef struct PePhoneCallsApi {
+    int (*add)(const PePhoneCall *call);            /* at init; the call must stay valid. -1: refused (logged) */
+    const PePhoneCall *(*find)(const char *key);
+    const PePhoneCall *(*pick)(const PePhoneContext *context);   /* NULL: nothing fits */
+    int (*heard)(const char *key);                  /* heard this playthrough (once calls and the last few) */
+    void (*reset)(void);                            /* forget this save's heard calls */
+    /* A yes/no a call's `needs` can name, so a call can depend on another mod's feature without
+     * either mod knowing the other: the mod that owns the feature offers it ("warner.supplies":
+     * pe_shops, Warner helps out with the Junk economy on). Name: letters, digits, . _ -, up to 31.
+     * Asked each time a call is picked; a name nobody offers never holds, so the call stays quiet
+     * when that mod is off or missing. Any time after the service is up (a mod that may start
+     * before pe_phone offers it from its first frame). 0 ok, -1 refused (logged). */
+    int (*add_condition)(const char *name, int (*holds)(void));
+} PePhoneCallsApi;
 
 #endif
