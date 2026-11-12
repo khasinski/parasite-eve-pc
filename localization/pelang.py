@@ -828,33 +828,52 @@ def read_pack(path: Path) -> tuple[str, str, dict[int, bytes]]:
         start = text_at + off
         out[h] = data[start:data.index(b"\xff", start)]
     if version == 4:
-        out = {h: _expand_stretches(data, raw) for h, raw in out.items()}
+        expand = _stretch_expander(data)             # the pack's tables, read once
+        out = {h: expand(raw) for h, raw in out.items()}
     return lang.rstrip(b"\0").decode(), name.rstrip(b"\0").decode(), out
 
 
-def _expand_stretches(data: bytes, raw: bytes) -> bytes:
-    dictionary, glyphs = struct.unpack_from("<II", data, 64)
-    letters_at, letters = struct.unpack_from("<II", data, 80)
-    at, runs = struct.unpack_from("<II", data, 88)
+def fixed_letter_forms() -> dict[str, bytes]:
+    """letter -> its one byte, for the codes that mean the same in every pack."""
     back = {ch: bytes([code]) for code, ch in gt.CHARS.items()}
     back.update({ch: bytes([code]) for ch, code in gt._latin_codes().items()})
-    extra = 0
-    for k in range(letters):
-        r = data[letters_at + k * lettertable.RECORD:]
-        if lettertable.coded(k, r):
-            back[chr(struct.unpack_from("<I", r)[0])] = bytes([r[4]])
-        else:                                      # no code: as build wrote it before the stretches
-            back[chr(struct.unpack_from("<I", r)[0])] = lettertable.extra_token(extra)
-            extra += 1
-    for k in range(glyphs):
-        back[chr(struct.unpack_from("<I", data, dictionary + k * cjk.RECORD)[0])] = cjk.token(k)
+    return back
+
+
+def pack_letter_forms(data: bytes) -> dict[str, bytes]:
+    """letter -> the bytes it has in a compiled pack's text as read_pack gives it: the fixed codes,
+    then the pack's own letter table (a letter with no code as build wrote it before the stretches)
+    and its CJK dictionary. A version 1 pack has only the fixed codes."""
+    version = struct.unpack_from("<I", data, 4)[0]
+    back = fixed_letter_forms()
+    if version > 2:
+        letters_at, letters = struct.unpack_from("<II", data, 80)
+        extra = 0
+        for k in range(letters):
+            r = data[letters_at + k * lettertable.RECORD:]
+            if lettertable.coded(k, r):
+                back[chr(struct.unpack_from("<I", r)[0])] = bytes([r[4]])
+            else:                                      # no code: as build wrote it before the stretches
+                back[chr(struct.unpack_from("<I", r)[0])] = lettertable.extra_token(extra)
+                extra += 1
+    if version > 1:
+        dictionary, glyphs = struct.unpack_from("<II", data, 64)
+        for k in range(glyphs):
+            back[chr(struct.unpack_from("<I", data, dictionary + k * cjk.RECORD)[0])] = cjk.token(k)
+    return back
+
+
+def _stretch_expander(data: bytes):
+    """A function giving a version 4 pack's entry with its stretches as the bytes they stand for."""
+    at, runs = struct.unpack_from("<II", data, 88)
+    back = pack_letter_forms(data)
     starts = struct.unpack_from(f"<{runs + 1}I", data, at)
     pool = at + (runs + 1) * 4
     table = stretch.Stretches()
     for k in range(runs):
         table.runs.append("".join(chr(c) for c in struct.unpack_from(
             f"<{starts[k + 1] - starts[k]}I", data, pool + starts[k] * 4)))
-    return stretch.expand(raw, table, back)
+    return lambda raw: stretch.expand(raw, table, back)
 
 
 # The user supplies this original patch; translated content is never bundled.

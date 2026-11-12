@@ -1,0 +1,86 @@
+name: Translator
+
+# The Parasite Eve Translator download (localization/translator/), for each system: the window's
+# tests from source, then localization/translator/package.py builds the one-file program and checks
+# the built program itself (it starts, a typed line is saved byte for byte as the source tool saves
+# it, and nothing but the tool's own data files is inside). No disc and no game text here.
+# The downloads are kept as build artifacts; a release page gets them only when added by hand.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - localization/translate.py
+      - localization/translator/**
+      - localization/pelang.py
+      - localization/petext/**
+      - localization/data/manifest.json
+      - localization/data/menu_layouts.json
+      - localization/tests/test_translator.py
+      - .github/workflows/translator.yml
+  pull_request:
+    paths:
+      - localization/translate.py
+      - localization/translator/**
+      - localization/pelang.py
+      - localization/petext/**
+      - localization/data/manifest.json
+      - localization/data/menu_layouts.json
+      - localization/tests/test_translator.py
+      - .github/workflows/translator.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            target: windows-x86_64
+          - runner: macos-15
+            target: macos-arm64
+          - runner: macos-15-intel
+            target: macos-x86_64
+          - runner: ubuntu-22.04
+            target: linux-x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+      - name: Install the build tools
+        run: python -m pip install -r localization/translator/requirements-download.txt
+      - name: Install a screen for the window
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xauth libtk8.6
+      # On Linux the window needs a screen: xvfb-run gives it one. Exit 77 (a test skipped) fails
+      # the step on purpose: every one of these tests must run here.
+      - name: Window tests from source
+        shell: bash
+        run: |
+          run=(); [ "$RUNNER_OS" = Linux ] && run=(xvfb-run -a)
+          "${run[@]}" python -I localization/tests/test_translator.py WindowTest DownloadCheckTest
+      - name: Build the download and check the built program
+        shell: bash
+        run: |
+          run=(); [ "$RUNNER_OS" = Linux ] && run=(xvfb-run -a)
+          "${run[@]}" python -I localization/translator/package.py --out translator-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Parasite-Eve-Translator-${{ matrix.target }}
+          path: translator-dist/Parasite-Eve-Translator-${{ matrix.target }}.*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: translator-check-${{ matrix.target }}
+          path: |
+            translator-dist/check/report.json
+            translator-dist/check/window.png
+          if-no-files-found: warn

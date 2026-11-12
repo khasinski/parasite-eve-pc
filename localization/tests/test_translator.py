@@ -1,0 +1,685 @@
+"""The Translator's work with no window (translator/project.py): a .pelang in, rows a person edits,
+a .pelang out that the game loads.
+
+Three sets of tests:
+
+  rules        no disc and no game text: made-up lines against the committed manifest. A new
+               translation saves a file the pack reader reads, and reopens as typed; a line that
+               fails the checks is left out of the pack but never lost; the file's other parts
+               survive; a pack the compiler wouldn't write back as it is can't be saved over; the
+               file is, byte for byte, what `pelang.py build` writes from the same lines; every
+               compiler error lands on a line; the preview's widths are the layout check's.
+  real English needs PE_TEST_DISC (PE_TEST_DISC2 adds Disc 2): the English pack made from the discs
+               reads back as the discs' own text, every row; and a whole translation (every row of
+               the game, in a made-up test language) goes through open, save and reopen.
+  real packs   needs PE_TEST_PLAYER_PACKS (a folder of .pelang translations): each opens with every
+               row it holds, and each either saves back unchanged or refuses to save.
+
+  python -I localization/tests/test_translator.py          (77: something was skipped)
+"""
+import contextlib
+import csv
+import io
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+import zipfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(HERE))
+import pelang  # noqa: E402
+from petext import alphabets, layout  # noqa: E402
+from translator import project as P  # noqa: E402
+
+GAME = P.Game()
+
+
+def plain_dialogue(n: int = 12) -> list[str]:
+    """Dialogue rows a made-up line fits: no controls to keep, drawn in the usual box."""
+    return [k for k in GAME.keys if k.startswith("dlg/") and GAME.rows[k].get("structure") == []
+            and GAME.rows[k].get("boxes") == ["default"]][:n]
+
+
+def name_dialogue() -> str:
+    return next(k for k in GAME.keys if k.startswith("dlg/") and GAME.must_keep(k) == ["{name}"]
+                and GAME.rows[k].get("boxes") == ["default"])
+
+
+def command_line_build(texts: dict, lang: str, name: str, out: Path) -> str:
+    sheet = out.with_suffix(".csv")
+    with open(sheet, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=pelang.SUBMISSION_COLUMNS)
+        w.writeheader()
+        for key in sorted(texts):
+            w.writerow({"key": key, "translation": texts[key], "notes": ""})
+    said = io.StringIO()
+    with contextlib.redirect_stdout(said), contextlib.redirect_stderr(said):
+        code = pelang.main(["build", str(sheet), "--strings", str(P.MANIFEST), "--lang", lang, "--name", name,
+                            "-o", str(out), "--max-messages", "100000"])
+    if code:
+        raise AssertionError(said.getvalue()[-800:])
+    return said.getvalue()
+
+
+class RuleTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def new(self, lang="fr", name="French"):
+        return P.Translation(GAME, lang, name)
+
+    def test_the_manifest_has_every_row_and_no_two_share_a_hash(self):
+        self.assertEqual(len(GAME.keys), len(GAME.by_hash))
+        self.assertEqual(sum(n for _, _, n in GAME.groups()), len(GAME.keys))
+        self.assertEqual([g for g, _, _ in GAME.groups()][:5], ["sys", "item", "desc", "misc", "battle"])
+
+    def test_a_new_translation_saves_a_file_the_pack_reader_reads_and_reopens_as_typed(self):
+        a, b = plain_dialogue(2)
+        t = self.new()
+        t.set_text(a, "Une ligne à moi, écrite pour ce test.")
+        t.set_text(b, "Voilà{br} deux lignes.")
+        t.notes[a] = "to check with Marie"
+        path = self.dir / "fr.pelang"
+        report = t.save(path)
+        self.assertEqual((report.in_pack, report.left_out, report.whole), (2, {}, []))
+        # what the game opens: a zip whose text.bin is a pack with both rows and the banks' names
+        with zipfile.ZipFile(path) as z:
+            self.assertEqual(sorted(z.namelist()), ["text.bin", "translator/work.json"])
+        lang, name, entries = pelang.read_pack(path)
+        self.assertEqual((lang, name), ("fr", "French"))
+        self.assertEqual({h for h in entries if h in GAME.by_hash}, {pelang.fnv1a(a), pelang.fnv1a(b)})
+        self.assertEqual(len(entries), 2 + len(GAME.banks))
+        again = P.Translation.open(path, GAME)
+        self.assertTrue(again.from_work)
+        self.assertEqual(again.locked, {})
+        self.assertEqual((again.lang, again.name, again.texts, again.notes), ("fr", "French", t.texts, t.notes))
+        # and without its work part the pack alone reads back as the same words
+        read = P.read_pack_text(path, GAME)
+        self.assertEqual(read.texts, t.texts)
+        self.assertEqual(read.unknown, 0)
+
+    def test_the_file_is_what_the_command_line_writes_from_the_same_lines(self):
+        rows = plain_dialogue(6)
+        t = self.new("es", "Spanish")
+        for n, key in enumerate(rows):
+            t.set_text(key, f"¿Línea número {n}? ¡Sí, señor, una línea larga para que tenga que partirse "
+                            f"en varias cuando no cabe en la caja del juego!")
+        t.set_text("sys/030", "Ana")
+        t.save(self.dir / "es.pelang")
+        command_line_build(t.texts, "es", "Spanish", self.dir / "cli.pelang")
+        self.assertEqual(pelang.pack_bytes(self.dir / "es.pelang"), (self.dir / "cli.pelang").read_bytes())
+
+    def test_a_line_that_fails_is_left_out_of_the_pack_and_kept_in_the_work(self):
+        good, = plain_dialogue(1)
+        bad = name_dialogue()
+        t = self.new()
+        t.set_text(good, "Une bonne ligne.")
+        t.set_text(bad, "Cette ligne a perdu le nom.")
+        report = t.save(self.dir / "fr.pelang")
+        self.assertEqual(report.in_pack, 1)
+        self.assertEqual(list(report.left_out), [bad])
+        self.assertIn("control commands must match", report.left_out[bad][0])
+        entries = pelang.read_pack(self.dir / "fr.pelang")[2]
+        self.assertIn(pelang.fnv1a(good), entries)
+        self.assertNotIn(pelang.fnv1a(bad), entries)
+        again = P.Translation.open(self.dir / "fr.pelang", GAME)
+        self.assertEqual(again.text(bad), "Cette ligne a perdu le nom.")
+        self.assertEqual(again.locked, {})
+        # fixed, it goes in
+        again.set_text(bad, "{name}: La voilà.")
+        self.assertEqual(again.save().left_out, {})
+        self.assertIn(pelang.fnv1a(bad), pelang.read_pack(self.dir / "fr.pelang")[2])
+
+    def test_the_files_other_parts_and_the_version_before_survive_a_save(self):
+        key, = plain_dialogue(1)
+        t = self.new()
+        t.set_text(key, "Un.")
+        path = self.dir / "fr.pelang"
+        t.save(path)
+        parts = {"pictures.bin": bytes(range(256)) * 9, "readme.txt": "Crédits: moi.\n".encode("utf-8"),
+                 "extras/later.dat": b"\x00\x01kept"}
+        with zipfile.ZipFile(path, "a") as z:
+            for name, data in parts.items():
+                z.writestr(name, data)
+        before = path.read_bytes()
+        again = P.Translation.open(path, GAME)
+        self.assertEqual(again.parts, parts)
+        again.set_text(key, "Deux.")
+        again.save()
+        with zipfile.ZipFile(path) as z:
+            self.assertEqual({n: z.read(n) for n in parts}, parts)
+            self.assertEqual(sorted(z.namelist()), sorted([*parts, "text.bin", "translator/work.json"]))
+        self.assertEqual((self.dir / "fr.pelang.before-last-save").read_bytes(), before)
+        self.assertEqual(P.Translation.open(path, GAME).text(key), "Deux.")
+
+    def test_a_pack_rebuilt_by_other_means_wins_over_a_stale_work_part(self):
+        a, b = plain_dialogue(2)
+        bad = name_dialogue()
+        t = self.new()
+        t.set_text(a, "Ancienne ligne.")
+        t.set_text(bad, "Sans le nom.")
+        path = self.dir / "fr.pelang"
+        t.save(path)
+        command_line_build({a: "Nouvelle ligne.", b: "Une autre."}, "fr", "French", self.dir / "cli.bin")
+        with zipfile.ZipFile(path) as z:
+            work = z.read(P.WORK)
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("text.bin", (self.dir / "cli.bin").read_bytes())
+            z.writestr(P.WORK, work)
+        again = P.Translation.open(path, GAME)
+        self.assertFalse(again.from_work)
+        self.assertEqual(again.text(a), "Nouvelle ligne.")
+        self.assertEqual(again.text(b), "Une autre.")
+        self.assertEqual(again.text(bad), "Sans le nom.", "a row only the work part had is kept")
+
+    def test_a_pack_the_compiler_would_not_write_back_cannot_be_saved_over(self):
+        # A pack made by other means, holding a line the checks refuse: a battle message too wide.
+        key = next(k for k in GAME.keys if k.startswith("battle/") and GAME.rows[k].get("structure") == [])
+        sheet = self.dir / "wide.csv"
+        sheet.write_text("key,translation,notes\n" + f"{key},{'W' * 60},\n", encoding="utf-8")
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said), contextlib.redirect_stderr(said):
+            code = pelang.main(["build", str(sheet), "--strings", str(P.MANIFEST), "--lang", "xx", "--name", "Wide",
+                                "-o", str(self.dir / "wide.pelang"), "--allow-overflow"])
+        self.assertEqual(code, 0, said.getvalue())
+        before = (self.dir / "wide.pelang").read_bytes()
+        t = P.Translation.open(self.dir / "wide.pelang", GAME)
+        self.assertEqual(t.text(key), "W" * 60)
+        self.assertEqual(list(t.locked), [key])
+        with self.assertRaises(P.WouldChange):
+            t.save()
+        with self.assertRaises(P.WouldChange):
+            t.save(self.dir / "copy.pelang")
+        self.assertEqual((self.dir / "wide.pelang").read_bytes(), before)
+        self.assertFalse((self.dir / "copy.pelang").exists())
+
+    def test_a_file_that_is_not_a_pack_is_refused_plainly(self):
+        (self.dir / "x.pelang").write_bytes(b"not a pack at all")
+        with self.assertRaises(P.NotAPack):
+            P.Translation.open(self.dir / "x.pelang", GAME)
+        with zipfile.ZipFile(self.dir / "empty.pelang", "w") as z:
+            z.writestr("readme.txt", "no pack in here")
+        with self.assertRaises(P.NotAPack):
+            P.Translation.open(self.dir / "empty.pelang", GAME)
+        with self.assertRaises(P.NotAPack):
+            P.Translation.open(self.dir / "missing.pelang", GAME)
+
+    def test_every_language_the_tool_offers_reads_back_as_the_same_pack(self):
+        """Each ready language's whole alphabet, typed, saved, read back from the compiled pack
+        alone (no work part) and compiled again: the same pack. So opening a pack made by other
+        means loses no letter."""
+        rows = plain_dialogue(12)
+        checked = []
+        for choice in P.languages():
+            if choice.state == "not yet" or choice.code in alphabets.CJK:
+                continue
+            letters = alphabets.full_alphabet(alphabets.BY_CODE[choice.code])
+            lines = [letters[i:i + 18] for i in range(0, len(letters), 18)]
+            self.assertLessEqual(len(lines), len(rows), choice.code)
+            t = self.new(choice.code, choice.name)
+            for key, line in zip(rows, lines):
+                t.set_text(key, line)
+            path = self.dir / f"{choice.code}.pelang"
+            report = t.save(path)
+            self.assertEqual(report.left_out, {}, choice.code)
+            read = P.read_pack_text(pelang.pack_bytes(path), GAME)
+            self.assertEqual(set(read.texts), set(t.texts), choice.code)
+            self.assertFalse([s for s in read.texts.values() if "{g" in s or "{x" in s], choice.code)
+            back = P.build(GAME, read.texts, choice.code, choice.name)
+            self.assertTrue(back.ok, f"{choice.code}: {back.errors()[:3]}")
+            self.assertEqual(back.pack, pelang.pack_bytes(path), choice.code)
+            checked.append(choice.code)
+        self.assertGreater(len(checked), 35)
+        print(f"\n{len(checked)} languages read back as the same pack: {' '.join(checked)}")
+
+    def test_the_default_name_reads_back_with_its_own_letters(self):
+        t = self.new("pl", "Polish")
+        t.set_text("sys/030", "Łucja")
+        path = self.dir / "pl.pelang"
+        self.assertEqual(t.save(path).left_out, {})
+        self.assertEqual(P.read_pack_text(path, GAME).texts, {"sys/030": "Łucja"})
+
+    def test_a_page_end_that_is_not_the_games_reads_back_as_its_tag(self):
+        key = next(k for k in plain_dialogue(40) if GAME.rows[k].get("end") == "FF")
+        t = self.new()
+        t.set_text(key, "La boîte se ferme seule.{end F9}")
+        path = self.dir / "fr.pelang"
+        self.assertEqual(t.save(path).left_out, {})
+        self.assertEqual(P.read_pack_text(path, GAME).texts[key], "La boîte se ferme seule.{end F9}")
+
+    def test_every_error_the_compiler_prints_lands_on_a_line(self):
+        rows = plain_dialogue(3)
+        item = next(k for k in GAME.keys if k.startswith("item/") and GAME.rows[k].get("item_kind") is not None)
+        texts = {rows[0]: "No such letter: ☃", rows[1]: "{nonsense}", name_dialogue(): "no name",
+                 item: "An item name far too long to be joined with anything at all"}
+        built = P.build(GAME, texts, "fr", "French")
+        self.assertFalse(built.ok)
+        self.assertEqual([m.text for m in built.messages if m.level == "error" and m.key is None], [])
+        self.assertEqual(built.keys_with("error"), set(texts))
+        self.assertTrue(any(e.startswith("joined text") for e in built.errors(item)))
+        # The default name is checked last, once the rest builds; a save finds that too, leaves every
+        # failing row out, and still writes a pack with the row that passes.
+        t = self.new()
+        for key, text in {**texts, "sys/030": "Much too long a name", rows[2]: "Une bonne ligne."}.items():
+            t.set_text(key, text)
+        compiled, left, _ = t.compile()
+        self.assertTrue(compiled.ok)
+        self.assertEqual(set(left), set(texts) | {"sys/030"})
+        self.assertIn("default name must be at most", left["sys/030"][0])
+        self.assertEqual({h for h in P.pelang_entries(compiled.pack) if h in GAME.by_hash}, {pelang.fnv1a(rows[2])})
+        # an unknown key and a refusal about the whole pack are told too, not dropped
+        whole = P.messages_of("error: CJK font: needs a font\nerror: zz/001: no such key\nnote: x\n3 of 9 keys")
+        self.assertEqual([(m.key, m.text) for m in whole], [(None, "CJK font: needs a font"),
+                                                            (None, "zz/001: no such key")])
+
+    def test_one_line_is_checked_and_drawn_as_the_compiler_lays_it_out(self):
+        key, = plain_dialogue(1)
+        short = P.check_row(GAME, key, "Une ligne courte.", "fr")
+        self.assertEqual((short.errors, short.warnings), ([], []))
+        pv = short.preview
+        self.assertTrue(pv.dialogue)
+        self.assertFalse(pv.wrapped)
+        self.assertEqual(len(pv.screens), 1)
+        self.assertEqual("".join(p.text for p in pv.screens[0].lines[0]), "Une ligne courte.")
+        self.assertEqual((pv.boxes[0].name, pv.boxes[0].width, pv.boxes[0].lines), ("default", 297, 4))
+        # the pieces' places add up to the layout check's own width for the line
+        raw = P.pelang_entries(P.build(GAME, {key: "Une ligne courte."}, "fr", "French").pack)[pelang.fnv1a(key)]
+        raw = P.split_page_end(raw)[0]
+        self.assertEqual(pv.screens[0].widths, layout.screens(raw)[0])
+        last = pv.screens[0].lines[0][-1]
+        self.assertEqual(last.x + last.width, pv.screens[0].widths[0])
+
+        long = P.check_row(GAME, key, "mot " * 120, "fr")
+        self.assertEqual(long.errors, [])
+        self.assertTrue(any("wrapped to fit the box" in w for w in long.warnings))
+        self.assertTrue(long.preview.wrapped)
+        self.assertGreater(len(long.preview.screens), 1)
+        for screen in long.preview.screens:
+            self.assertLessEqual(len(screen.lines), 4)
+            self.assertLessEqual(max(screen.widths), 297)
+
+        named = P.check_row(GAME, name_dialogue(), "{name}: Oui.", "fr", default_name="Ana")
+        self.assertEqual(named.errors, [])
+        first = named.preview.screens[0].lines[0][0]
+        self.assertEqual((first.kind, first.text), ("name", "Ana"))
+        self.assertEqual(first.width, named.preview.name_px)
+
+        wrong = P.check_row(GAME, name_dialogue(), "pas de nom", "fr")
+        self.assertTrue(wrong.errors)
+        self.assertIsNone(wrong.preview)
+
+        item = next(k for k in GAME.keys if k.startswith("item/"))
+        menu_row = P.check_row(GAME, item, "Clé", "fr")
+        self.assertEqual(menu_row.errors, [])
+        self.assertFalse(menu_row.preview.dialogue)
+        self.assertGreater(menu_row.preview.menu_px, 0)
+
+        self.assertEqual(P.check_row(GAME, key, "", "fr").preview, None)
+
+    def test_a_line_too_wide_is_an_error_and_is_still_drawn(self):
+        key = next(k for k in GAME.keys if k.startswith("battle/") and GAME.rows[k].get("structure") == [])
+        r = P.check_row(GAME, key, "W" * 60, "fr")
+        self.assertTrue(any("battle message fits" in e for e in r.errors), r.errors)
+        self.assertIsNotNone(r.preview)
+        self.assertGreater(r.preview.screens[0].widths[0], r.preview.boxes[0].width)
+
+    def test_the_languages_offered_are_the_pack_tools_own_list(self):
+        choices = {c.code: c for c in P.languages()}
+        self.assertEqual(list(choices), [l.code for l in alphabets.LANGUAGES])
+        self.assertEqual({c for c, v in choices.items() if v.state == "not yet"}, alphabets.NEEDS_LAYOUT)
+        self.assertEqual(choices["fr"].state, "ready")
+        self.assertEqual(choices["el"].state, "letters missing")
+        self.assertIn("font", choices["ja"].note)
+
+
+class EnglishTest(unittest.TestCase):
+    """With the real discs: the English pack as `pelang.py english` makes it."""
+
+    @classmethod
+    def setUpClass(cls):
+        discs = [os.environ.get("PE_TEST_DISC"), os.environ.get("PE_TEST_DISC2")]
+        if not discs[0] or not Path(discs[0]).is_file():
+            raise unittest.SkipTest("needs PE_TEST_DISC (USA disc 1); PE_TEST_DISC2 adds disc 2")
+        cls.discs = [d for d in discs if d and Path(d).is_file()]
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.dir = Path(cls.tmp.name)
+        subprocess.run([sys.executable, "-I", str(HERE / "extract_text.py"), *cls.discs, "--out", str(cls.dir / "text")],
+                       check=True, capture_output=True)
+        cls.strings = {r["key"]: r for r in json.loads((cls.dir / "text" / "strings.json").read_text(encoding="utf-8"))
+                       if not r.get("unused")}
+        cls.pack = cls.dir / "en.pelang"
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said), contextlib.redirect_stderr(said):
+            code = pelang.main(["english", str(cls.dir / "text" / "strings.json"), "-o", str(cls.pack)])
+        if code:
+            raise AssertionError(said.getvalue()[-800:])
+        cls.english, cls.wrong = P.read_english(cls.pack, GAME)
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "tmp"):
+            cls.tmp.cleanup()
+
+    def test_the_english_pack_reads_back_as_the_discs_own_text_every_row(self):
+        self.assertEqual(self.wrong, 0)
+        self.assertGreater(len(self.english), 2800)
+        differ = [k for k, text in self.english.items() if text != self.strings[k]["text"]]
+        self.assertEqual(differ, [])
+        print(f"\n{len(self.english)} rows of the English pack read back as the discs' text ({len(self.discs)} disc(s))")
+
+    def test_the_window_with_the_english_pack_types_into_the_row_asked_for(self):
+        """The English pack loads while the window is up and refills the list: the row being
+        worked on must stay (it once jumped to the first row, and the typing landed there)."""
+        if not window_works():
+            self.skipTest("no screen for a window here")
+        for n, key in enumerate(plain_dialogue(4)[1:]):
+            saved, report = self.dir / f"window{n}.pelang", self.dir / f"window{n}.json"
+            typed = f"Ligne {n}, tapée à l'essai."
+            done = subprocess.run([sys.executable, "-I", str(START), str(saved), "--new", "fr", "Français",
+                                   "--english", str(self.pack), "--select", key, "--type", typed,
+                                   "--settings", str(self.dir / "settings.json"), "--report", str(report)],
+                                  capture_output=True, text=True, timeout=300)
+            said = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual(done.returncode, 0, said)
+            self.assertEqual((said["english_rows"], said["english_error"]), (len(self.english), None))
+            self.assertEqual((said["row"], said["text_in_row"], said["translated"], said["row_state"]),
+                             (key, typed, 1, "ok"))
+            self.assertEqual(P.Translation.open(saved, GAME).texts, {key: typed})
+
+    def test_the_row_being_worked_on_stays_when_the_english_pack_arrives(self):
+        """The same, in that order for sure: a row picked and typed in, then the English pack loads."""
+        if not window_works():
+            self.skipTest("no screen for a window here")
+        import time
+        import tkinter as tk
+        from translator import app as A
+        A.SETTINGS = self.dir / "in-process-settings.json"
+        root = tk.Tk()
+        try:
+            key = plain_dialogue(3)[2]
+            window = A.App(root, None, str(self.dir / "in-process.pelang"), select=key, new=("fr", "Français"))
+            root.update()
+            self.assertEqual(window.key, key)
+            window.edit.insert("end", "Avant l'anglais.")
+            root.update()
+            window.load_english(str(self.pack))
+            until = time.monotonic() + 60
+            while (window.english_busy or not window.english) and time.monotonic() < until:
+                root.update()
+                time.sleep(0.02)
+            root.update()
+            self.assertEqual(len(window.english), len(self.english))
+            self.assertEqual((window.key, window.rows.selection()), (key, (key,)))
+            self.assertEqual(window.edit.get("1.0", "end-1c"), "Avant l'anglais.")
+            window.edit.insert("end", " Après.")
+            root.update()
+            self.assertEqual(window.tr.texts, {key: "Avant l'anglais. Après."})
+        finally:
+            root.destroy()
+
+    def test_a_pack_that_is_not_the_games_english_is_told_apart(self):
+        t = P.Translation(GAME, "fr", "French")
+        for key in plain_dialogue(3):
+            t.set_text(key, "Pas de l'anglais.")
+        t.save(self.dir / "fr.pelang")
+        self.assertEqual(P.read_english(self.dir / "fr.pelang", GAME)[1], 3)
+
+    def test_the_whole_game_goes_through_the_tool(self):
+        """Every row of the game translated into a made-up test language (pelang.py pseudo's:
+        the English with its letters accented and the line about 30% longer), saved, reopened."""
+        t = P.Translation(GAME, "qps", "Test language")
+        for key, text in self.english.items():
+            if GAME.writable(key) and key != "sys/030":
+                t.set_text(key, pelang.pseudo(text))
+        typed = dict(t.texts)
+        self.assertGreater(len(typed), 2800)
+        path = self.dir / "qps.pelang"
+        report = t.save(path)
+        self.assertEqual(report.whole, [])
+        self.assertEqual(report.in_pack + len(report.left_out), len(typed))
+        entries = pelang.read_pack(path)[2]
+        for key in typed:
+            self.assertEqual(pelang.fnv1a(key) in entries, key not in report.left_out, key)
+        # nothing left out without a reason a person can act on, and nothing typed is lost
+        self.assertTrue(all(why and why[0] for why in report.left_out.values()))
+        again = P.Translation.open(path, GAME)
+        self.assertTrue(again.from_work)
+        self.assertEqual(again.texts, typed)
+        self.assertEqual(again.locked, {})
+        # saved again untouched: the same file
+        before = path.read_bytes()
+        again.save()
+        self.assertEqual(path.read_bytes(), before)
+        # and it is the pack the command line writes from the rows that pass
+        command_line_build({k: v for k, v in typed.items() if k not in report.left_out}, "qps", "Test language",
+                           self.dir / "cli.bin")
+        self.assertEqual(pelang.pack_bytes(path), (self.dir / "cli.bin").read_bytes())
+        reasons = {}
+        for why in report.left_out.values():
+            reasons[why[0].split(";")[0][:60]] = reasons.get(why[0].split(";")[0][:60], 0) + 1
+        print(f"\nwhole game in a test language: {report.in_pack} rows in the pack, {len(report.left_out)} left "
+              f"out for being too long for their room; reopened as typed")
+
+    def test_every_dialogue_line_of_the_game_can_be_drawn(self):
+        """The preview of each English dialogue page: its widths are the layout check's."""
+        t = P.Translation.open(self.pack, GAME)
+        entries = pelang.read_pack(self.pack)[2]
+        seen = 0
+        for key in sorted(k for k in self.english if k.startswith(("dlg/M001/", "dlg/M026/", "battle/"))):
+            r = P.check_row(GAME, key, self.english[key], "en")
+            if r.preview is None:
+                self.assertTrue(r.errors, key)
+                continue
+            if not r.preview.wrapped:
+                raw = P.split_page_end(entries[pelang.fnv1a(key)])[0] if key.startswith("dlg/") else entries[pelang.fnv1a(key)]
+                self.assertEqual([s.widths for s in r.preview.screens], layout.screens(raw), key)
+            seen += 1
+        self.assertGreater(seen, 200)
+        self.assertEqual(len(t.locked), 5, "the five English pages that run past their own box")
+        self.assertTrue(all(k.startswith("dlg/M044/") for k in t.locked))
+
+
+class PlayerPackTest(unittest.TestCase):
+    """With real translations (PE_TEST_PLAYER_PACKS: a folder of .pelang files)."""
+
+    def test_each_opens_whole_and_saves_back_unchanged_or_not_at_all(self):
+        folder = os.environ.get("PE_TEST_PLAYER_PACKS")
+        packs = sorted(Path(folder).glob("*.pelang")) if folder and Path(folder).is_dir() else []
+        if not packs:
+            self.skipTest("needs PE_TEST_PLAYER_PACKS (a folder of .pelang translations)")
+        with tempfile.TemporaryDirectory() as tmp:
+            for path in packs:
+                before = path.read_bytes()
+                t = P.Translation.open(path, GAME)
+                entries = pelang.read_pack(path)[2]
+                held = {GAME.by_hash[h] for h in entries if h in GAME.by_hash}
+                self.assertEqual(set(t.texts), held, path.name)
+                self.assertEqual(t.unknown, 0, path.name)
+                self.assertTrue(all(t.texts[k] for k in held), path.name)
+                copy = Path(tmp) / path.name
+                if t.locked:
+                    with self.assertRaises(P.WouldChange):
+                        t.save(copy)
+                    self.assertFalse(copy.exists())
+                    state = f"would change {len(t.locked)} rows: saving refused"
+                else:
+                    t.save(copy)
+                    now = pelang.read_pack(copy)[2]
+                    self.assertEqual({h: r for h, r in now.items() if h in GAME.by_hash},
+                                     {h: r for h, r in entries.items() if h in GAME.by_hash}, path.name)
+                    state = "saves back unchanged"
+                self.assertEqual(path.read_bytes(), before, path.name)
+                print(f"\n{path.name}: {t.name} ({t.lang}), {len(held)} rows read; {state}")
+
+
+START = HERE / "translate.py"
+
+# Runs the window (translate.py, scripted with --report) and then the work a session does outside
+# the scripted path (the language list, reopening the file), with an audit hook that lists every
+# file opened. sys.argv[1] is where the list goes; the rest are translate.py's arguments.
+AUDITED_RUN = r"""
+import os, runpy, sys
+opened = set()
+def hook(event, args):
+    if event == "open" and isinstance(args[0], (str, bytes, os.PathLike)):
+        opened.add(os.path.abspath(os.fsdecode(args[0])))
+sys.addaudithook(hook)
+out, start, args = sys.argv[1], sys.argv[2], sys.argv[3:]
+code = 0
+try:
+    sys.argv = [start] + args
+    try:
+        runpy.run_path(start, run_name="__main__")
+    except SystemExit as e:
+        code = e.code or 0
+    from translator import project as P
+    game = P.Game()
+    P.languages()
+    P.Translation.open(args[0], game)
+finally:
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("\n".join(sorted(opened)))
+sys.exit(code)
+"""
+
+
+def window_works() -> bool:
+    return subprocess.run([sys.executable, "-I", "-c", "import tkinter; tkinter.Tk().destroy()"],
+                          capture_output=True).returncode == 0
+
+
+class DownloadCheckTest(unittest.TestCase):
+    """translator/package.py's search of a built download for game text, on made-up builds with a
+    made-up translation planted in them (no disc, no PyInstaller needed)."""
+
+    def setUp(self):
+        sys.path.insert(0, str(HERE / "translator"))
+        import package
+        self.K = package
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.lines = [f"Une ligne inventée numéro {n}, assez longue pour être cherchée." for n in range(3)]
+        t = P.Translation(GAME, "fr", "Français")
+        for key, line in zip(plain_dialogue(3), self.lines):
+            t.set_text(key, line)
+        self.pack = self.dir / "fr.pelang"
+        t.save(self.pack)
+        self.needles = package.Needles()
+        self.needles.add_pack(self.pack, GAME)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def build_with(self, files: dict) -> Path:
+        built = Path(tempfile.mkdtemp(dir=self.dir))
+        (built / "data").mkdir()
+        for data in P.DATA_FILES:
+            (built / data).write_bytes((HERE / data).read_bytes())
+        for name, blob in files.items():
+            (built / name).write_bytes(blob)
+        return built
+
+    def caught(self, files: dict) -> str:
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as no:
+            self.K.look_inside(self.build_with(files), self.needles)
+        return str(no.exception)
+
+    def test_a_clean_build_passes(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.K.look_inside(self.build_with({"tool.py": b"print('hello')"}), self.needles)
+
+    def test_a_pack_two_zips_deep_is_found(self):
+        inner = io.BytesIO()
+        with zipfile.ZipFile(inner, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("deep/fr.pelang", self.pack.read_bytes())
+        self.assertIn("lib.zip/deep/fr.pelang/text.bin: a language pack", self.caught({"lib.zip": inner.getvalue()}))
+
+    def test_one_line_as_text_is_found(self):
+        blob = b"#" * 5000 + f"s = '{self.lines[1]}'".encode("utf-8") + b"\n"
+        self.assertIn("x.py: fr.pelang (text)", self.caught({"x.py": blob}))
+
+    def test_data_files_other_than_the_tools_are_refused(self):
+        built = {"data/strings.json": b"[]"}
+        self.assertIn("data files inside", self.caught(built))
+
+
+class WindowTest(unittest.TestCase):
+    """The window itself (translator/app.py) started as a program, from source: the scripted run
+    the download's build also uses (--new, --select, --type, --report). No disc, no game text."""
+
+    def setUp(self):
+        if not window_works():
+            self.skipTest("no screen for a window here")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_window(self, *extra, audit: Path | None = None):
+        saved, report = self.dir / "Parasite Eve - Français.pelang", self.dir / "report.json"
+        args = [str(saved), "--new", "fr", "Français", "--settings", str(self.dir / "settings.json"),
+                "--report", str(report), *extra]
+        cmd = [sys.executable, "-I"] + (["-c", AUDITED_RUN, str(audit), str(START)] if audit else [str(START)])
+        done = subprocess.run(cmd + args, capture_output=True, text=True, timeout=300)
+        self.assertTrue(report.is_file(), done.stdout[-800:] + done.stderr[-800:])
+        return done.returncode, json.loads(report.read_text(encoding="utf-8")), saved
+
+    def test_typing_in_the_window_saves_the_file_the_tool_writes_from_the_same_line(self):
+        key = plain_dialogue(1)[0]
+        typed = "Une ligne tapée dans la fenêtre, à l'essai."
+        code, report, saved = self.run_window("--select", key, "--type", typed)
+        self.assertEqual(code, 0, report)
+        self.assertTrue(report["ok"], report)
+        self.assertEqual((report["row"], report["text_in_row"], report["row_state"]), (key, typed, "ok"))
+        self.assertEqual((report["in_pack"], report["left_out"], report["whole"]), (1, {}, []))
+        same = P.Translation(GAME, "fr", "Français")
+        same.set_text(key, typed)
+        same.save(self.dir / "same.pelang")
+        self.assertEqual(saved.read_bytes(), (self.dir / "same.pelang").read_bytes())
+        again = P.Translation.open(saved, GAME)
+        self.assertEqual((again.from_work, again.texts), (True, {key: typed}))
+        # the person's own settings were not used: the run kept to the file it was given
+        self.assertEqual(json.loads((self.dir / "settings.json").read_text(encoding="utf-8"))["last"], str(saved))
+
+    def test_a_line_that_fails_is_reported_and_left_out(self):
+        key = plain_dialogue(1)[0]
+        code, report, saved = self.run_window("--select", key, "--type", "{wait}" * 3 + "x" * 900)
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report["row_state"], "error")
+        self.assertEqual((report["in_pack"], list(report["left_out"])), (0, [key]))
+
+    def test_an_english_pack_that_is_not_there_fails_the_run(self):
+        code, report, _ = self.run_window("--english", str(self.dir / "missing.pelang"))
+        self.assertEqual(code, 1)
+        self.assertFalse(report["ok"])
+        self.assertIn("missing.pelang", report["error"])
+
+    def test_the_tool_reads_no_file_of_the_repo_but_its_code_and_its_data_files(self):
+        """What the download must carry (P.DATA_FILES), and that nothing else is read: no
+        translation, no pilot, no Japanese table, no editor catalog."""
+        audit = self.dir / "opened.txt"
+        code, report, _ = self.run_window("--select", plain_dialogue(1)[0], "--type", "Une ligne.", audit=audit)
+        self.assertEqual(code, 0, report)
+        root = HERE.resolve()
+        read = set()
+        for line in audit.read_text(encoding="utf-8").splitlines():
+            path = Path(line).resolve()
+            if path.is_relative_to(root) and path.suffix not in (".py", ".pyc"):
+                read.add(path.relative_to(root).as_posix())
+        self.assertEqual(read, set(P.DATA_FILES))
+
+
+if __name__ == "__main__":
+    result = unittest.main(exit=False, verbosity=2).result
+    if not result.wasSuccessful():
+        sys.exit(1)
+    sys.exit(77 if result.skipped else 0)

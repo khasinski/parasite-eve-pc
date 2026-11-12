@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -140,6 +140,12 @@ Checks, each from pe_mods.log and frame dumps:
              part's route from the Day 6 sample save, the day's title card and the five boxes on the
              ship, again every frame the game's own. localization/tests/test_en_pack.py checks every row
              of the pack against the disc's bytes.
+  translator  A file saved by the Translator (localization/translator/): the English pack opened as the
+             English, every row typed into a new translation as it is, and saved. The file must hold
+             the English pack's own bytes but for the few pages the compiler rewraps to their box,
+             carry the Translator's work part, and reopen as saved; and with it chosen the game must
+             be the game on the english-pack part's routes, both discs, every frame pixel for pixel.
+             So the game opens what the Translator writes, work part and all.
 """
 import binascii
 import csv
@@ -884,12 +890,12 @@ def same_frames(plain, packed, labels, what):
         if a != b:
             width, rgb_a, rgb_b = a[0], a[2], b[2]
             at = next((i // 3 for i in range(0, min(len(rgb_a), len(rgb_b)), 3) if rgb_a[i:i + 3] != rgb_b[i:i + 3]), 0)
-            raise Failed(f'{what}: frame "{label}" with the English pack is not the game\'s own (first '
+            raise Failed(f'{what}: frame "{label}" with the pack is not the game\'s own (first '
                          f'difference at x {at % width}, y {at // width}): {packed}')
 
 
-def english_pack(game, discs, out, localization):
-    """Part english-pack (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't set."""
+def make_english_pack(discs, out, localization):
+    """(the English pack `pelang.py english` makes from the discs, the rows it holds, the game's rows)."""
     text = out / 'text'
     subprocess.run([sys.executable, '-I', str(localization / 'extract_text.py'), *discs, '--out', str(text)],
                    check=True, stdout=subprocess.DEVNULL)
@@ -899,38 +905,82 @@ def english_pack(game, discs, out, localization):
     check(made.returncode == 0, f'pelang.py english failed: {made.stdout[-600:]}{made.stderr[-600:]}')
     rows = re.search(r'(\d+) of (\d+) rows', made.stdout)
     check(rows and int(rows[1]) >= 2800, f'the English pack holds too few rows: {made.stdout[:300]}')
-    pack = ('en', 'English pack', None, path)
+    return path, rows[1], rows[2]
+
+
+def game_is_its_own(game, discs, out, pack, tag, what):
+    """With `pack` (the game's own text) chosen, every kept frame of the menus part's route, and of
+    the Disc 2 route, is the frame without it. 77 after the Disc 1 checks when PE_TEST_DISC2 isn't set."""
+    name = f'{pack[1]} ({pack[0]})'
 
     def in_use(work, where):
         log = mods_log(work)
-        check('pe_lang: language: English pack (en)' in log, f'{where}: the English pack is not the language in use: {work}')
-        check("text: English pack (en)'s stretches in use" in log, f"{where}: none of the pack's text drew: {work}")
+        check(f'pe_lang: language: {name}' in log, f'{where}: {pack[1]} is not the language in use: {work}')
+        check(f"text: {name}'s stretches in use" in log, f"{where}: none of the pack's text drew: {work}")
         missing = [line for line in log.splitlines()
                    if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line)]
         check(not missing, f'{where}: letters fell back to "?": {missing[:5]}: {work}')
 
-    plain = run_fixed(game, discs, out / 'english-pack-off', MENU_STEPS, pad=NEW_GAME)
-    packed = run_fixed(game, discs, out / 'english-pack-on', MENU_STEPS, pack=pack, pad=NEW_GAME)
+    plain = run_fixed(game, discs, out / f'{tag}-off', MENU_STEPS, pad=NEW_GAME)
+    packed = run_fixed(game, discs, out / f'{tag}-on', MENU_STEPS, pack=pack, pad=NEW_GAME)
     in_use(packed, 'Disc 1')
     check(lit(plain, 'first', BOX) > 200 and lit(plain, 'grid', GRID) > 200 and lit(plain, 'status', STATUS_NAME) > 20,
           f'the route did not reach the first box, the name entry and the status panel: {plain}')
     labels = [label for _, label, _ in MENU_STEPS]
     same_frames(plain, packed, labels, 'Disc 1')
-    print(f'PASS english pack, Disc 1: {rows[1]} of {rows[2]} rows, each byte for byte the game\'s; a New Game through '
-          f'the first boxes, the name entry and the status panel is the game\'s own, all {len(labels)} frames '
-          'pixel for pixel')
+    print(f'PASS {what}, Disc 1: a New Game through the first boxes, the name entry and the status panel is the '
+          f'game\'s own, all {len(labels)} frames pixel for pixel')
     if len(discs) < 2:
-        print('SKIP english pack on Disc 2: PE_TEST_DISC2 is not set')
+        print(f'SKIP {what} on Disc 2: PE_TEST_DISC2 is not set')
         return 77
-    plain, _ = run_disc2(game, discs, out / 'english-pack-disc2-off', None)
-    packed, room = run_disc2(game, discs, out / 'english-pack-disc2-on', pack)
+    plain, _ = run_disc2(game, discs, out / f'{tag}-disc2-off', None)
+    packed, room = run_disc2(game, discs, out / f'{tag}-disc2-on', pack)
     in_use(packed, 'Disc 2')
     labels = [label for _, label, _ in disc2_steps()]
     check(all(lit(plain, label, BOX) > 100 for label in DISC2_BOXES), f"the ship's boxes are not on screen: {plain}")
     same_frames(plain, packed, labels, 'Disc 2')
-    print(f'PASS english pack, Disc 2 (room {room}): the day\'s title card and the five boxes on the ship are the '
+    print(f'PASS {what}, Disc 2 (room {room}): the day\'s title card and the five boxes on the ship are the '
           f'game\'s own, all {len(labels)} frames pixel for pixel')
     return 0
+
+
+def english_pack(game, discs, out, localization):
+    """Part english-pack (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't set."""
+    path, held, total = make_english_pack(discs, out, localization)
+    print(f'english pack: {held} of {total} rows, each byte for byte the game\'s')
+    return game_is_its_own(game, discs, out, ('en', 'English pack', None, path), 'english-pack', 'english pack')
+
+
+def translator_file(game, discs, out, localization):
+    """Part translator (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't set."""
+    path, _, _ = make_english_pack(discs, out, localization)
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from translator import project
+    rows = project.Game()
+    english, wrong = project.read_english(path, rows)
+    check(wrong == 0 and len(english) >= 2800, f'the Translator reads {wrong} rows of the English pack wrong')
+    work = project.Translation(rows, 'en', 'Translator file')
+    for key, text in english.items():
+        work.set_text(key, text)
+    saved = out / 'translator.pelang'
+    report = work.save(saved)
+    check(not report.left_out and not report.whole,
+          f'the Translator left rows of the game\'s own text out: {list(report.left_out.items())[:5]} {report.whole}')
+    with zipfile.ZipFile(saved) as z:
+        check(project.WORK in z.namelist() and 'text.bin' in z.namelist(), f'not a Translator file: {z.namelist()}')
+    # It holds the game's own bytes, but for the pages the compiler rewrapped (English that runs past its box).
+    was, now = pelang.read_pack(path)[2], pelang.read_pack(saved)[2]
+    changed = sorted(rows.by_hash[h] for h in was if h in rows.by_hash and now.get(h) != was[h])
+    wrapped = sorted(k for k, said in report.warnings.items() if any('wrapped to fit' in w for w in said))
+    check(set(now) == set(was) and changed == wrapped and len(changed) < 10,
+          f'the Translator\'s file differs from the English pack in {changed[:10]}; rewrapped: {wrapped[:10]}')
+    again = project.Translation.open(saved, rows)
+    check(again.from_work and again.texts == english and not again.locked, 'the file does not reopen as it was saved')
+    print(f'translator file: {report.in_pack} rows saved by the Translator, {len(now) - len(changed)} entries byte for '
+          f'byte the English pack\'s, {len(changed)} pages rewrapped to their box ({", ".join(changed)}); reopens as saved')
+    return game_is_its_own(game, discs, out, ('en', 'Translator file', None, saved), 'translator', 'translator file')
 
 
 def menu_line(codes, drawn):
@@ -1470,7 +1520,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
-                              ('german', german_patch), ('french', french_patch), ('english-pack', english_pack)):
+                              ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
+                              ('translator', translator_file)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

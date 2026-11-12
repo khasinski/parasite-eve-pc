@@ -760,6 +760,14 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/text-renderer-english-pack-evidence english-pack)
             set_tests_properties(original-game-text-renderer-english-pack PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # A file the Translator (localization/translator/) saved, chosen in the game: the game's
+            # own text typed into a new translation and saved, work part and all. The game must open
+            # it and be the game on the english-pack routes. PE_TEST_DISC2 adds Disc 2 (else skipped).
+            add_test(NAME original-game-translator-file COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-file-evidence translator)
+            set_tests_properties(original-game-translator-file PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
         endif()
         # The English pack (pelang.py english) from the real discs: every row it holds is the disc's
         # own bytes, only empty pages and four known rows are left to the game, and one pack serves
@@ -767,6 +775,14 @@ if(BUILD_TESTING)
         add_test(NAME localization-english-pack COMMAND ${Python3_EXECUTABLE} -I
             ${CMAKE_SOURCE_DIR}/localization/tests/test_en_pack.py)
         set_tests_properties(localization-english-pack PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
+        # The Translator's work with no window (localization/translator/project.py): a .pelang in,
+        # rows a person edits, a .pelang out. Its rule tests need nothing; PE_TEST_DISC (and
+        # PE_TEST_DISC2) adds the real English pack, every row; PE_TEST_PLAYER_PACKS (a folder of
+        # .pelang translations) adds real packs. 77 when any of those was skipped.
+        add_test(NAME localization-translator COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_translator.py)
+        set_tests_properties(localization-translator PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 600 LABELS "game-assets;localization")
         # A fan patch made for the Japanese discs read for the USA-disc port: two patches of the
         # test's own on PE_TEST_JA_DISC (Japanese Disc 1); PE_TEST_DISC adds the line-up check.
