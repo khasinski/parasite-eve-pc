@@ -1,4 +1,5 @@
 #include "pe1/akao.h"
+#include "pe1/pe_image.h"
 #include "pe1/asset_find.h"
 #include "pe1/battle.h"
 #include "pe1/battle_cmd.h"
@@ -252,9 +253,13 @@ int Battle_HandleItemMenu(void) {
         Battle_MarkActiveEntities(g_BattleTargetList,g_BattleTargetIndex);
         PLAY_TABLE_SOUND(0x44C)
     } else {
-        if ((g_FieldPadPressed&0x2000) && !MenuWidget_FindByModeAndSelectedBase(1,0) && g_BattleItemMenuState!=2) {
+        /* The Japanese release also cancels from item state 2 (undoing the pending item) and keeps
+         * no cancel-pending flag, so a cancelled turn slot always undoes its queued command. Its
+         * rewind loops (Battle_AdvanceTurnSlot) keep the USA's stop at the queue's start: the
+         * Japanese code reads before the queue there. */
+        if ((g_FieldPadPressed&0x2000) && !MenuWidget_FindByModeAndSelectedBase(1,0) && (PE_JAPAN || g_BattleItemMenuState!=2)) {
             cancelled=1;
-            if (g_BattleRemainingActions==(g_ActiveActor->action->turnWord&15))g_BattleSlotCancelPending=1;
+            if (!PE_JAPAN && g_BattleRemainingActions==(g_ActiveActor->action->turnWord&15))g_BattleSlotCancelPending=1;
             else g_BattleSlotCancelPending=0;
             if (g_BattleItemMenuState==1) MenuWidget_InitPool();
             else if (g_BattleItemMenuState==2) BattleCmd_UndoPending();

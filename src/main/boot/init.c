@@ -1,4 +1,5 @@
 #include <SDL3/SDL.h>
+#include "pe1/pe_image.h"
 #include "pe_hooks.h"
 #include <ctype.h>
 #include <errno.h>
@@ -70,6 +71,8 @@ _Alignas(16) u8 D_8010BD00[BOOT_TEXTURE_WORKSPACE_BYTES];
 _Alignas(16) u8 D_80120D08[0x200000];
 _Alignas(16) u8 g_SceneLoadScratchArea[0x20000];
 static _Alignas(16) u8 g_BootLoadedSceneArea[0x80008];
+/* The mounted release (pe1/pe_image.h): set by Asset_OpenPeImage, USA until a disc mounts. */
+u8 g_GameRegion;
 u8 *g_StrFileDirBuffer = g_BootLoadedSceneArea + 8;
 static _Alignas(16) u8 g_BootDisplayWorkArea[BOOT_DISPLAY_WORK_SIZE];
 u8 *g_CdLoadAreaBase = g_BootDisplayWorkArea;
@@ -1213,11 +1216,17 @@ void Field_HandleStateTransition(void) {
         g_FieldPadLastFrame = old_pad_bits;
         inverted = ~(u16)pad;
         pad_bits = base_bits;
-        if (inverted & 0x2000) {
-            pad_bits = base_bits | 0x4000;
-        }
-        if (inverted & 0x4000) {
-            pad_bits |= 0x2000;
+        if (PE_JAPAN) {
+            /* The Japanese release keeps the pad as it is: Circle confirms, Cross cancels. */
+            pad_bits = rawInverted;
+        } else {
+            /* The USA release swaps Circle and Cross, so Cross confirms. */
+            if (inverted & 0x2000) {
+                pad_bits = base_bits | 0x4000;
+            }
+            if (inverted & 0x4000) {
+                pad_bits |= 0x2000;
+            }
         }
 
         int run_mask = g_FieldRenderFlagTable[0];

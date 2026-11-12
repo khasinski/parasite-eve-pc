@@ -23,6 +23,8 @@ void Render_SetupFogLayer(void *source);
 void ResetGraph(int mode);
 /* Inspect a candidate without changing the active archive, tables or game. */
 int Asset_ValidatePeImage(PeDisc *disc, unsigned *identity);
+/* The same, also giving the release (PE_REGION_*), so Disc 1 and Disc 2 can be matched. */
+int Asset_ValidatePeImageRegion(PeDisc *disc, unsigned *identity, unsigned *region);
 int Asset_OpenPeImage(void);
 int Render_InitDisplayLists(int mode);
 

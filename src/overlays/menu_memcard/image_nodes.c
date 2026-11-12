@@ -98,7 +98,7 @@ void MenuCard_RedrawImageNodes(void) {
 
     if ((width = area.w) > 0 && (height = area.h) > 0) {
         background = (MemcardBackground *)&g_MemcardImageBundle[g_MemcardImageOffsets[0]];
-        source = &background->pixels[((area.y - 20) * 320 + area.x) * 3 / 4];
+        source = &background->pixels[((area.y - (PE_JAPAN ? 19 : 20)) * 320 + area.x) * 3 / 4];
         destination = (u32 *)g_MemcardCurrentScreen->overlayImage;
         words = width * 3 / 4;
         for (row = 0; row < height; row++) {

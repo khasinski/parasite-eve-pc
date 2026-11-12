@@ -53,13 +53,13 @@ static bool s_keys_down[3];
 
 static void pe_slot_path(char *out, size_t size, int slot) {
     char name[32];
-    snprintf(name, sizeof name, "quicksave_%d.pec", slot);
+    snprintf(name, sizeof name, PE_JAPAN ? "quicksave_jp_%d.pec" : "quicksave_%d.pec", slot);   /* own slots per release */
     if (pe_mod_path(out, size, name) != 0) snprintf(out, size, "%s", name);
 }
 
 static void pe_legacy_path(char *out, size_t size, int slot) {
     char name[32];
-    snprintf(name, sizeof name, "quicksave_%d.mcd", slot);
+    snprintf(name, sizeof name, PE_JAPAN ? "quicksave_jp_%d.mcd" : "quicksave_%d.mcd", slot);
     if (pe_mod_path(out, size, name) != 0) snprintf(out, size, "%s", name);
 }
 

@@ -8,6 +8,7 @@
 #include "pe1/battle_modifiers.h"
 #include "pe1/draw_state.h"
 #include "pe1/game_state.h"
+#include "pe1/pe_image.h"
 #include "pe1/game_timers.h"
 #include "pe1/inventory.h"
 #include "pe1/inventory_queries.h"
@@ -101,8 +102,12 @@ void Menu_FullInit(void) {
     BattleCmd_LoadWeaponModifiers();
     Menu_SaveBgInitFade();
     Save_ResetMetadataWindow();
-    g_GameState.flags |= 0x40000000;
-    Menu_SetEquipSlotIndex(1);
+    /* The USA release switches the game to English here: the rooms' English message bank
+     * (flag 0x40000000) and English menus. The Japanese release leaves both at Japanese. */
+    if (!PE_JAPAN) {
+        g_GameState.flags |= 0x40000000;
+        Menu_SetEquipSlotIndex(1);
+    }
 }
 
 int GameTime_GetZero(void)
@@ -466,7 +471,7 @@ void Menu_DrawSlotRow(ItemDataRecord *entry, u8 *text) {
     }
 
     Draw_AllocSprite(entry->iconId - 1);
-    Draw_OffsetCursor(0x12, 0);
+    Draw_OffsetCursor(PE_JAPAN ? 0x10 : 0x12, 0);   /* Japanese layout */
 
     PE_HOOK(PE_HOOK_SLOT_ROW, &text);
     if (text != 0) {
@@ -489,7 +494,7 @@ void Menu_DrawSlotRow(ItemDataRecord *entry, u8 *text) {
         }
     }
 
-    Draw_OffsetCursor(0x56, 0);
+    Draw_OffsetCursor(PE_JAPAN ? 0x58 : 0x56, 0);
 
     type = entry->kind;
     if (type != 0 && (unsigned int)type < 8) {

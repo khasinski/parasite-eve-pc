@@ -1,4 +1,5 @@
 #include "pe1/geom_state.h"
+#include "pe1/pe_image.h"
 #include "pe_hooks.h"
 #include "common.h"
 #include "pe1/aya.h"
@@ -404,7 +405,7 @@ void Menu_DrawSaveSlotEntry(s32 arg0) {
             } else {
                 Draw_PrintRawText(slot->alternateTitle.text);
             }
-            Draw_OffsetCursor(0x58, 0);
+            Draw_OffsetCursor(PE_JAPAN ? 0x54 : 0x58, 0);   /* Japanese layout */
             if (slot->exGameIndex != 0) {
                 Draw_AllocSprite(0x95);
                 Draw_OffsetCursor(0x1A, 2);
@@ -421,7 +422,7 @@ void Menu_DrawSaveSlotEntry(s32 arg0) {
             Draw_PrintTextById(0x5A);
             Draw_OffsetCursor(0x19, 0);
             Draw_PrintNumberWidth2(index + 1);
-            Draw_OffsetCursor(-0xC4, 0xF);
+            Draw_OffsetCursor(PE_JAPAN ? -0xC0 : -0xC4, 0xF);
             Draw_AllocSprite(0x53);
             Draw_OffsetCursor(0x1E, 1);
             Draw_PrintNumberWidth3Unk(slot->levelIndex + 1);

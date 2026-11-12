@@ -710,6 +710,13 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/text-renderer-battle-evidence battle)
             set_tests_properties(original-game-text-renderer-battle PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 600 LABELS "game-assets;mods")
+            # The Japanese release from its own Disc 1 (PE_TEST_JA_DISC): its tables, title, Japanese
+            # text bank and card files, language packs left out, and no mixing with USA discs.
+            add_test(NAME original-game-japanese-release COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/japanese_release.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/japanese-release-evidence)
+            set_tests_properties(original-game-japanese-release PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods")
             # The Chinese pack made from a fan patch, its letters the patch's own pictures, on screen
             # on Disc 1 and Disc 2. The pack stays out of the repository: PE_TEST_ZH_PACK names it,
             # PE_TEST_DISC2 adds Disc 2 (else skipped).

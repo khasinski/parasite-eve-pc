@@ -10,6 +10,7 @@
 #include "pe1/field_bg_load.h"
 #include "pe1/menu_flags.h"
 #include "pe1/mod_text.h"
+#include "pe1/pe_image.h"
 #include "pe1/text_render.h"
 #include "pe1/textbox.h"
 
@@ -43,6 +44,23 @@ static void Cell(PeTextLetter *l, unsigned cell) {
  * then moves on by its right width. */
 static int DialogueNative(unsigned code, int kerning, PeTextLetter *l) {
     int kern = kerning && code == 0x0F && g_TextboxKernGlyph0F == 1 ? 7 : 0;
+    if (PE_JAPAN) {
+        /* The Japanese box draws every one-byte letter (kana and kanji past 4B too): codes 10-4B
+         * with their own spacing, the rest as 12 px cells on a fixed 14 px pitch. */
+        if (code > 0xF6) return 0;
+        const TextboxGlyphSpacing *w = code - 0x10u < 60u ? &g_TextboxGlyphSpacingJapanese[code - 0x10] : NULL;
+        Cell(l, code);
+        l->x = (s16)(-kern - (w ? w->left : 0));
+        l->y = 0;
+        l->w = l->h = 12;
+        l->page = 0;
+        l->nibble = 0;
+        l->dw = 0;
+        l->advance = (s16)(w ? -kern - w->left + w->right : 14 - kern);
+        l->code = (u16)code;
+        l->letter = GameLetter(code);
+        return 1;
+    }
     if (code >= g_TextboxGlyphCount) return 0;
     Cell(l, code);
     l->x = (s16)(-kern - g_TextboxGlyphWidths[code].left);
@@ -65,16 +83,20 @@ static void DialogueFixed(PeTextLetter *l, unsigned page, unsigned u, unsigned v
     l->page = (u8)page;
     l->nibble = 0;
     l->dw = 0;
-    l->advance = 12;
+    l->advance = PE_JAPAN ? 14 : 12;
     l->code = (u16)code;
     l->letter = 0;
 }
 
 static int MenuNarrow(int glyph) { return glyph < 10 || glyph == 15; }
 
+/* The gap a menu letter gets: the USA release narrows digits and the space (1 px, else 2); the
+ * Japanese one gives every letter 2 px and draws them a pixel higher. */
+static int MenuSpacing(int glyph) { return PE_JAPAN ? 2 : MenuNarrow(glyph) + 1; }
+
 /* What the menus' measuring counts for a letter (Draw_MeasureTextWidth's sum). */
 static int MenuMeasure(int glyph) {
-    int spacing = MenuNarrow(glyph) + 1;
+    int spacing = MenuSpacing(glyph);
     if (glyph >= 256) glyph -= 19;
     return ((Draw_LookupGlyphMetrics(glyph) >> 4) & 15) + spacing;
 }
@@ -98,9 +120,9 @@ static void MenuNative(int glyph, PeTextLetter *l) {
     glyph %= 0x1B9;
     metrics = Draw_LookupGlyphMetrics(glyph);
     width = (metrics >> 4) & 15;
-    spacing = MenuNarrow(glyph) + 1;
+    spacing = MenuSpacing(glyph);
     l->x = (s16)(spacing >> 1);
-    l->y = 1;
+    l->y = PE_JAPAN ? 0 : 1;
     l->u = (u8)((glyph % 21) * 12 + (metrics & 15));
     l->v = (u8)((glyph / 21) * 12);
     l->w = (u8)width;
@@ -186,6 +208,15 @@ int PeText_ResolveLetter(PeTextStyle style, u32 letter, int draw, PeTextLetter *
     code = PeText_GameCode(letter);
     if (code >= 0 && NativeLetter(style, (unsigned)code, out)) return 1;
     return NativeLetter(style, 0x2C, out);      /* '?' */
+}
+
+/* A two-byte letter of the Japanese release's font (a name's kana and kanji): page byte FB-FE then
+ * a byte, the cell the menus and FB/FC/FD dialogue letters reach too, a fixed 12 px cell. Cells
+ * past the main page's 441 are on the area's kanji page. */
+static void JapanesePaged(unsigned paged, PeTextLetter *out) {
+    unsigned cell = (paged - 0x13u) % 0x2EDu, page = 0;
+    if (cell >= 441) { cell -= 441; page = 1; }
+    DialogueFixed(out, page, (cell % 21) * 12, (cell / 21) * 12, PE_TEXT_NO_CODE);
 }
 
 /* A two-byte name letter through the provider; 0 when no pack names it. */
@@ -348,7 +379,7 @@ static unsigned ReadDialogue(const u8 *text, unsigned avail, int draw, PeTextIte
         n = text[1];
         if (n <= 3) {                           /* a button icon from page 2 */
             DialogueFixed(&item->letter[0], 2, n * 12 + 0x40, g_TextboxFontPages[2].textureY, PE_TEXT_NO_CODE);
-            One(item, 2, 12);
+            One(item, 2, PE_JAPAN ? 14 : 12);
             return 2;
         }
         if (n <= 9) return 0;                   /* colours, sections, pauses, numbers, choices */
@@ -357,7 +388,7 @@ static unsigned ReadDialogue(const u8 *text, unsigned avail, int draw, PeTextIte
             if ((v & 0xFFFF) >= 0xF1) { v -= 0xFC; page = 1; }
             DialogueFixed(&item->letter[0], page, ((n + 0xED) % 21) * 12, v, PE_TEXT_NO_CODE);
         }
-        One(item, 2, 12);
+        One(item, 2, PE_JAPAN ? 14 : 12);
         return 2;
     case 0xFC: case 0xFD:
         if (avail < 2) return 0;
@@ -365,7 +396,7 @@ static unsigned ReadDialogue(const u8 *text, unsigned avail, int draw, PeTextIte
             unsigned cell = text[1] + (b == 0xFC ? 0x34u : 0x134u);
             DialogueFixed(&item->letter[0], 1, (cell % 21) * 12, (cell / 21) * 12, PE_TEXT_NO_CODE);
         }
-        One(item, 2, 12);
+        One(item, 2, PE_JAPAN ? 14 : 12);
         return 2;
     default:
         item->bytes = 1;
@@ -420,9 +451,11 @@ static unsigned ReadName(const u8 *text, unsigned avail, int draw, PeTextItem *i
             return item->bytes;
     }
     if (avail >= 2 && PE_TEXT_IS_PAGE(text[0]) && text[1] < 0xFA) {
-        /* a two-byte name letter: the pack's, else '?' (never the end of the box) */
+        /* a two-byte name letter: the Japanese font's own, else the pack's, else '?' (never the end
+         * of the box) */
         unsigned paged = (unsigned)(text[0] - 0xFA) << 8 | text[1];
-        if (!PagedLetter(PE_TEXT_DIALOGUE_NAME, paged, draw, &item->letter[0]) &&
+        if (PE_JAPAN) JapanesePaged(paged, &item->letter[0]);
+        else if (!PagedLetter(PE_TEXT_DIALOGUE_NAME, paged, draw, &item->letter[0]) &&
             !DialogueNative(0x2C, 0, &item->letter[0])) { item->stop = 1; return 2; }
         One(item, 2, item->letter[0].advance);
         return 2;
