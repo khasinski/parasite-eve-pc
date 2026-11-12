@@ -663,12 +663,14 @@ class WindowTest(unittest.TestCase):
         self.assertFalse(report["ok"])
         self.assertIn("missing.pelang", report["error"])
 
-    def layout(self, font_scale: float) -> dict:
+    def layout(self, font_scale: float, screen: int | None = None) -> dict:
         import tkinter as tk
         import tkinter.font as tkfont
         from translator import app as A
         A.SETTINGS = self.dir / "layout-settings.json"
         root = tk.Tk()
+        if screen is not None:               # a screen this wide, whatever this computer's is
+            root.winfo_screenwidth = lambda: screen
         try:
             for name in ("TkDefaultFont", "TkTextFont", "TkHeadingFont"):
                 font = tkfont.nametofont(name)
@@ -677,11 +679,18 @@ class WindowTest(unittest.TestCase):
                            new=("fr", "Français"))
             root.update()
             list_font = tkfont.nametofont("TkDefaultFont")
+            rows, picked = window.rows, window.rows.selection()
+            cell = rows.bbox(picked[0], "translation") if picked else ""
             return {"window": root.winfo_width(), "left": window.groups.master.winfo_width(),
-                    "middle": window.rows.master.master.winfo_width(), "right": window.canvas.master.winfo_width(),
-                    "preview": window.canvas.winfo_reqwidth(), "line": window.rows.column("line", "width"),
-                    "translation": window.rows.column("translation", "width"),
-                    "longest": max(list_font.measure(k.split("/", 1)[1]) for k in GAME.keys)}
+                    "middle": rows.master.master.winfo_width(), "middle_needs": rows.master.master.winfo_reqwidth(),
+                    "right": window.canvas.master.winfo_width(),
+                    "preview": window.canvas.winfo_reqwidth(), "line": rows.column("line", "width"),
+                    "translation": rows.column("translation", "width"),
+                    "longest": max(list_font.measure(k.split("/", 1)[1]) for k in GAME.keys),
+                    # what shows: the picked row's Translation cell inside the list, the scroll bar
+                    "cell": cell, "list_width": rows.winfo_width(),
+                    "scroll_bar": window.rows_scroll.winfo_ismapped() and window.rows_scroll.winfo_width() > 4,
+                    "scale": window.scale}
         finally:
             root.destroy()
 
@@ -695,6 +704,27 @@ class WindowTest(unittest.TestCase):
                 self.assertGreaterEqual(size["line"], size["longest"], size)
                 self.assertGreaterEqual(size["middle"], size["window"] - size["left"] - size["right"] - 24, size)
                 self.assertGreaterEqual(size["translation"], 150, size)
+
+    def test_the_list_of_lines_gets_the_room_on_a_1280_screen(self):
+        """GitHub's Linux screen, and many laptops, are 1280 wide: the window opens 1240 wide. The
+        preview, not the list, gives way: the picked row's Translation shows, with its scroll bar."""
+        for scale in (1.0, 1.3):
+            with self.subTest(fonts=f"{scale:.0%}"):
+                size = self.layout(scale, screen=1280)
+                self.assertLessEqual(size["window"], 1240, size)
+                self.assertGreaterEqual(size["middle"], size["middle_needs"], size)
+                self.assertTrue(size["cell"], size)                      # the picked row is in sight
+                x, _, w, _ = size["cell"]
+                self.assertGreaterEqual(w, 80, size)
+                self.assertLessEqual(x + w, size["list_width"], size)
+                self.assertTrue(size["scroll_bar"], size)
+                self.assertLessEqual(size["right"], size["preview"] + 24, size)
+                self.assertGreaterEqual(size["scale"], 1.0, size)
+                self.assertLess(size["scale"], 2, size)                  # it did give way
+
+    def test_the_preview_is_full_size_when_there_is_room(self):
+        size = self.layout(1.0, screen=1920)
+        self.assertEqual(size["scale"], 2, size)
 
     def test_the_tool_reads_no_file_of_the_repo_but_its_code_and_its_data_files(self):
         """What the download must carry (P.DATA_FILES), and that nothing else is read: no

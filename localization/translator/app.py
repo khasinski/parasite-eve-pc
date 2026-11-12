@@ -26,7 +26,8 @@ from tkinter import filedialog, messagebox, ttk
 from . import project as P
 
 SETTINGS = Path.home() / ".pe-translator.json"
-SCALE = 2                                    # the preview: the game's pixels, twice the size
+SCALE = 2                                    # the preview: the game's pixels, twice the size,
+SMALLEST = 1.0                               # or smaller, down to their own size, when the window is narrow
 VIEW = 136                                   # game rows the preview shows: the box and what runs past it
 BOX_AT = 34                                  # where the box's first line sits in it, under the notes
 FILTERS = ("All lines", "Not translated", "Translated", "With problems")
@@ -152,12 +153,13 @@ class App:
         root = self.root
         root.title("Parasite Eve Translator")
         # The size it opens at, made smaller to fit a smaller screen (laptops, a 1280 wide screen).
-        width = min(1360, root.winfo_screenwidth() - 40)
+        window_width = min(1360, root.winfo_screenwidth() - 40)
         height = min(820, root.winfo_screenheight() - 80)
-        root.geometry(f"{width}x{height}")
-        root.minsize(min(1100, width), min(700, height))
+        root.geometry(f"{window_width}x{height}")
+        root.minsize(min(1100, window_width), min(700, height))
         self.font = tkfont.nametofont("TkDefaultFont")
         self.text_font = tkfont.Font(family=self.font.cget("family"), size=11)
+        self.scale = SCALE
         self.game_font = tkfont.Font(family=self.font.cget("family"), size=-11 * SCALE)
 
         bar = ttk.Frame(root, padding=6)
@@ -195,7 +197,7 @@ class App:
         self.filter.bind("<<ComboboxSelected>>", lambda e: self.fill_rows())
         ttk.Label(tools, text="Find").pack(side="left")
         self.find = tk.StringVar()
-        entry = ttk.Entry(tools, textvariable=self.find)
+        entry = ttk.Entry(tools, textvariable=self.find, width=10)     # it grows into the room there is
         entry.pack(side="left", fill="x", expand=True, padx=(4, 0))
         self.find.trace_add("write", lambda *a: self.fill_rows())
         self.everywhere = tk.BooleanVar(value=False)
@@ -215,10 +217,10 @@ class App:
             self.rows.heading(column, text=title, anchor="w")
             self.rows.column(column, width=width, minwidth=width if not stretch else 80, stretch=stretch,
                              anchor="center" if column == "state" else "w")
-        scroll = ttk.Scrollbar(table, orient="vertical", command=self.rows.yview)
+        scroll = self.rows_scroll = ttk.Scrollbar(table, orient="vertical", command=self.rows.yview)
         self.rows.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")     # packed first, so a narrow list never loses it
         self.rows.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
         self.rows.tag_configure("error", foreground="#b00020")
         self.rows.tag_configure("warning", foreground="#8a5a00")
         self.rows.tag_configure("empty", foreground="#707070")
@@ -226,7 +228,7 @@ class App:
         panes.add(middle, weight=3)
 
         right = ttk.Frame(panes, padding=(6, 0, 6, 6))
-        self.where = ttk.Label(right, text="", wraplength=640, justify="left")
+        self.where = ttk.Label(right, text="", wraplength=320 * SCALE, justify="left")
         self.where.pack(anchor="w")
         ttk.Label(right, text="English (the game's own)").pack(anchor="w", pady=(6, 0))
         # The text boxes ask for no width of their own (width=1) and fill the side: a tk.Text asks
@@ -267,8 +269,15 @@ class App:
         self.prev_screen.pack(side="right", padx=(0, 4))
         self.canvas = tk.Canvas(right, width=320 * SCALE, height=VIEW * SCALE, background="#101418",
                                 highlightthickness=1, highlightbackground="#808080")
-        self.canvas.pack(anchor="w", pady=(2, 0))
+        self.canvas.pack(fill="x", pady=(2, 0))
         panes.add(right, weight=0)
+        # The list of lines gets the room it needs first; the preview takes what is left, up to the
+        # game's pixels twice the size (a 1280 wide screen has no room for that beside the list).
+        # It follows the side's width from then on (the window or the divider being dragged).
+        root.update_idletasks()
+        room = window_width - left.winfo_reqwidth() - middle.winfo_reqwidth() - 12 - 2 * 6
+        self.canvas.configure(width=max(int(320 * SMALLEST), min(320 * SCALE, room)))
+        self.canvas.bind("<Configure>", self._preview_resized)
 
         root.bind("<Control-s>", lambda e: self.save())
         root.bind("<Control-Down>", lambda e: self.step(1))
@@ -285,6 +294,9 @@ class App:
     def _closing(self, event) -> None:
         if event.widget is self.root:        # the window itself, not one of its parts
             self.root.after_cancel(self._tick_id)
+            if self.pending is not None:     # a line check still waiting
+                self.root.after_cancel(self.pending)
+                self.pending = None
 
     # ---- the English pack ----
 
@@ -800,8 +812,17 @@ class App:
             self.screen = max(0, min(len(self.preview.screens) - 1, self.screen + by))
             self.draw()
 
+    def _preview_resized(self, event) -> None:
+        seen = event.width - 2 * int(self.canvas.cget("highlightthickness"))
+        scale = max(SMALLEST, min(SCALE, seen / 320))
+        self.where.configure(wraplength=max(200, event.width))
+        if abs(scale - self.scale) >= 0.01:
+            self.scale = scale
+            self.game_font.configure(size=-round(11 * scale))
+        self.draw()                          # the notes wrap to the new width too
+
     def draw(self) -> None:
-        c, pv, s = self.canvas, self.preview, SCALE
+        c, pv, s = self.canvas, self.preview, self.scale
         c.delete("all")
         self.prev_screen.configure(state="disabled")
         self.next_screen.configure(state="disabled")
@@ -821,16 +842,33 @@ class App:
         screen = screens[self.screen]
         box = pv.boxes[0] if pv.boxes else P.Box("default", 20, 174, None, None, None, False)
         top = BOX_AT                         # the screen is shown from just above the box down
+        # The notes are in this computer's font, so they keep their own line heights whatever the
+        # scale; the game's screen starts under them.
+        note = f"Screen {self.screen + 1} of {len(screens)}"
+        if box.width is not None:
+            note += f"   •   box: {box.width} px wide, {box.lines} lines" + ("" if box.known else " (most likely box)")
+        if pv.wrapped:
+            note += "   •   line breaks added by the tool"
+        shown = c.winfo_width() if c.winfo_ismapped() else int(c.cget("width"))
+        wrap = max(100, shown - 16)
+        first = c.create_text(12, 8, anchor="nw", fill="#b8c4d0", font=self.font, text=note, width=wrap)
+        second = c.create_text(12, c.bbox(first)[3] + 2, anchor="nw", fill="#8090a0", font=self.font, width=wrap,
+                               text="Widths and line breaks are the game's. Letter shapes are your computer's.")
+        y0 = max((top - 6) * s, c.bbox(second)[3] + 6)
+
+        def Y(game_y):                       # a game row to a place on the preview
+            return y0 + (game_y - (top - 6)) * s
+
         if box.name == "default":
-            c.create_rectangle(0, (top - 6) * s, 320 * s, (top + 50) * s, fill="#1d2733", outline="")
+            c.create_rectangle(0, Y(top - 6), 320 * s, Y(top + 50), fill="#1d2733", outline="")
         elif box.width is not None and box.lines is not None:
-            c.create_rectangle((box.x - 4) * s, (top - 6) * s, (box.x + box.width) * s,
-                               (top + box.lines * 12 + 2) * s, fill="#1d2733", outline="#5f7890")
+            c.create_rectangle((box.x - 4) * s, Y(top - 6), (box.x + box.width) * s,
+                               Y(top + box.lines * 12 + 2), fill="#1d2733", outline="#5f7890")
         if box.width is not None:
             edge = (box.x + box.width) * s
-            c.create_line(edge, (top - 6) * s, edge, (top + (box.lines or 4) * 12 + 2) * s, fill="#c06060", dash=(3, 3))
+            c.create_line(edge, Y(top - 6), edge, Y(top + (box.lines or 4) * 12 + 2), fill="#c06060", dash=(3, 3))
         for n, (line, width) in enumerate(zip(screen.lines, screen.widths)):
-            y = (top + n * 12) * s
+            y = Y(top + n * 12)
             late = box.lines is not None and n >= box.lines
             wide = box.width is not None and width > box.width
             for piece in line:
@@ -841,19 +879,12 @@ class App:
                     c.create_text(x, y, anchor="nw", text=piece.text, fill="#9fd0ff" if not piece.red else colour,
                                   font=self.game_font)
                 else:
-                    c.create_text(x + piece.width * s // 2, y, anchor="n", text=piece.text, fill=colour,
+                    c.create_text(x + piece.width * s / 2, y, anchor="n", text=piece.text, fill=colour,
                                   font=self.game_font)
             if wide or late:
                 c.create_text(318 * s, y, anchor="ne", fill="#ffb080", font=self.font,
                               text=f"{width} px" if wide else "past the box")
-        note = f"Screen {self.screen + 1} of {len(screens)}"
-        if box.width is not None:
-            note += f"   •   box: {box.width} px wide, {box.lines} lines" + ("" if box.known else " (most likely box)")
-        if pv.wrapped:
-            note += "   •   line breaks added by the tool"
-        c.create_text(6 * s, 4 * s, anchor="nw", fill="#b8c4d0", font=self.font, text=note)
-        c.create_text(6 * s, 14 * s, anchor="nw", fill="#8090a0", font=self.font,
-                      text="Widths and line breaks are the game's. Letter shapes are your computer's.")
+        c.configure(height=round(Y(VIEW)))
         self.prev_screen.configure(state="normal" if self.screen > 0 else "disabled")
         self.next_screen.configure(state="normal" if self.screen + 1 < len(screens) else "disabled")
 
