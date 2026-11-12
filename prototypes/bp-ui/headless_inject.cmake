@@ -1,3 +1,9 @@
+# This explicit BP build follows the complete current upstream suite.
+# Drop stale minimal-preview caches; append BP without duplicating upstream's list.
+unset(PE_MOD_LIST CACHE)
+set(PE_EXTRA_MODS ${PE_EXTRA_MODS} pe_bp)
+list(REMOVE_DUPLICATES PE_EXTRA_MODS)
+set(PE_EXTRA_MODS "${PE_EXTRA_MODS}" CACHE STRING "Additional mods appended to the configured suite" FORCE)
 # Explicit developer-only injection. Production CMake and mod lists stay untouched.
 # Configure the game with -DCMAKE_PROJECT_parasite-eve-pc_INCLUDE=<this file>.
 # The live backend is the pe_bp mod (mods/pe_bp); add it to PE_MOD_LIST for live data.

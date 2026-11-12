@@ -10,7 +10,7 @@ const executable=resolve(exeArg), disc=resolve(discArg), output=resolve(outputAr
 const catalog=JSON.parse(execFileSync(resolve(exporterArg),{encoding:'utf8'}));
 const pages=new Map(catalog.pages.map(p=>[p.id,p])), visited=new Set(), findings=new Set();
 const roots=rootsArg.length?rootsArg:['preview'];
-const manual=process.env.PE_BP_UI_MANUAL_ENTRY==='1', f1Test=process.env.PE_BP_UI_F1_TEST||'';
+const f1Test=process.env.PE_BP_UI_F1_TEST||''; // Normal entry is covered by test_entry_routes.mjs.
 const button={up:16,down:64,left:128,right:32,confirm:16384,back:8192,detailNext:2048,detailPrev:1024,help:32768,menu:4096};
 const results=[];
 mkdirSync(output,{recursive:true});
@@ -18,13 +18,13 @@ for(const root of roots){
  const directory=join(output,root);mkdirSync(directory,{recursive:true});
  mkdirSync(join(directory,'config'),{recursive:true});
  // Enable the host in this private config only. PE_MOD_LIST is empty.
- writeFileSync(join(directory,'config','pe_mods.ini'),`Manage mods/All mods=${manual||f1Test?0:1}\n`);
+ writeFileSync(join(directory,'config','pe_mods.ini'),`Manage mods/All mods=${f1Test?0:1}\n`);
  const timeline=[[10000,8],[10010,0],[11000,16],[11010,0],[11500,16384],[11510,0]];
  for(const tick of [17000,17600,18200,18800,19400,20000,20600,21200,21800])timeline.push([tick,16384],[tick+10,0]);
  for(const [tick,mask] of [[23000,8],[23600,8],[24200,16384],[24800,16384]])timeline.push([tick,mask],[tick+10,0]);
  const args=['--disc',disc,'--headless','--frame-limit','200000','--control-at','25000','--dump-frame',join(directory,'frame.ppm')];
  for(const [tick,mask]of timeline)args.push('--pad-at',`${tick}:${mask}`);
- const child=spawn(executable,args,{cwd:directory,env:{...process.env,PE_CONFIG_HOME:join(directory,'config'),PE_BP_UI_PAGE:manual||f1Test?'':root,SDL_AUDIODRIVER:'dummy',PSYZ_AUDIO_CLOCK:'video'},stdio:['pipe','pipe','pipe'],windowsHide:true});
+ const child=spawn(executable,args,{cwd:directory,env:{...process.env,PE_CONFIG_HOME:join(directory,'config'),PE_BP_UI_PAGE:f1Test?'':root,SDL_AUDIODRIVER:'dummy',PSYZ_AUDIO_CLOCK:'video'},stdio:['pipe','pipe','pipe'],windowsHide:true});
  let ui=null, focus=null, baseline=null, serial=0, log='', stopped=false;
  const queue=[], waiting=[];
  function feed(line){log+=line+'\n';if(line.includes('BP_UI_TEXT_OVERFLOW')||line.includes('BP_UI_OPEN_FAILED')||line.includes('BP_UI_HIGHLIGHT_ERROR')||line.includes('BP_UI_PACKET_PRESSURE'))findings.add(line);
@@ -86,15 +86,12 @@ for(const root of roots){
   let initial=await next();console.log(`${root}: boot checkpoint scene=${initial.state.scene} menu=${JSON.stringify(initial.state.menu)}`);
   // Finish the unmodified opening dialogue before asking for Aya's menu.
   for(let attempt=0;!ui&&attempt<80;attempt++){
-   if(manual&&initial.state.menu){
-    capture('normal-menu-before');await press('up');capture('normal-menu-preview-entry');initial=await press('confirm');break;
-   }
    const speaking=initial.state.dialogue?.some(d=>d.state!==0);
    if(!speaking&&!(initial.state.move_lock&1))initial=await press('menu');
    else {await advance(10,button.confirm);initial=await advance(120);}
    if(attempt%10===9)console.log(`${root}: opening dialogue step ${attempt+1}, lock=${initial.state.move_lock}`);
   }
-  expect(root);assert.match(log,/BP_UI_ACCESS registered/);if(manual||f1Test)assert.match(log,/master=0/);if(f1Test)assert.match(log,/BP_UI_F1_ACTION tested=/);baseline=(await advance(24)).state;
+  expect(root);assert.match(log,/BP_UI_ACCESS registered/);if(f1Test)assert.match(log,/master=0/);if(f1Test)assert.match(log,/BP_UI_F1_ACTION tested=/);baseline=(await advance(24)).state;
   if(process.env.PE_BP_UI_ENTRY_ONLY==='1')capture(root);else await visit(root);const returned=await press('back');assert.equal(ui.open,0);
   assert.equal(returned.state.menu.mode,2);assert.equal(returned.state.menu.selection,0);
   capture(`${root}-returned`);

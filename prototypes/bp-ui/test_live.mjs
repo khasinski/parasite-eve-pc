@@ -1,5 +1,5 @@
 // Live BP transactions in the real game: load the Day 3 save (card 2, save 1), open the BP
-// screens through Aya's menu and check that confirmed purchases and a refund change the game's
+// screens through the classic BP button and check that confirmed purchases change the game's
 // own BP / stat table by exactly the quoted amounts, and that No and refusals change nothing.
 // Usage: node test_live.mjs GAME DISC OUTPUT PROFILE
 import {spawn} from 'node:child_process';
@@ -20,14 +20,15 @@ const config = join(output, 'config');
 await cp(profile, config, {recursive: true, filter: s => !s.includes('memory-cards')});
 const child = spawn(exe, ['--disc', disc, '--disc2', disc.replace('(Disc 1)', '(Disc 2)'), '--headless', '--frame-limit', '60000', '--control-at', '11000',
   '--pad-at', '10000:8', '--pad-at', '10010:0', '--dump-frame', join(output, 'frame.ppm')],
-  {cwd: output, windowsHide: true, env: {...process.env, PE_CONFIG_HOME: config, PE_BP_UI_PAGE: 'aya',
+  {cwd: output, windowsHide: true, env: {...process.env, PE_CONFIG_HOME: config, PE_BP_UI_PAGE: '',
     PE_BP_UI_TEST_JUNK: process.env.PE_BP_UI_TEST_JUNK || '',
     SDL_AUDIODRIVER: 'dummy', PSYZ_AUDIO_CLOCK: 'video'}});
-let log = '', ui = null, queue = [], waiting = [], closed = false, shot = 0;
+let log = '', ui = null, bpRow = -1, queue = [], waiting = [], closed = false, shot = 0;
 const steps = [];
 child.on('exit', () => { closed = true; while (waiting.length) waiting.shift()(null); });
 function feed(line) {
   log += line + '\n';
+  if(line.startsWith('BP_UI_MAIN '))bpRow=+(/bp_row=(-?\d+)/.exec(line)[1]);
   if (line.startsWith('BP_UI_STATE ')) {
     const m = /open=(\d+) page=(\S+) row=(\S+) selected=(\d+) top=(\d+) detail=(\d+) pages=(\d+) pending=(\d+) help=(\d+) notice=(.*)/.exec(line);
     if (m) ui = {open: +m[1], page: m[2], row: m[3], selected: +m[4], pending: +m[8], notice: m[10]};
@@ -62,7 +63,9 @@ try {
   console.log(`slot ${slot}: level ${state.character.level}, BP ${state.character.bonus_points}`);
   for (let i = 0; i < 60 && !(ui && ui.open); ++i) {
     const talking = state.dialogue?.some(d => d.state !== 0);
-    state = talking || (state.move_lock & 1) ? (await advance(10, button.confirm), await advance(120)) : await press('menu');
+    if (!talking && !(state.move_lock & 1) && state.menu?.selection === 0) {
+      assert(bpRow>=0);for(let row=0;row<bpRow;row++)await press('down'); state = await press('confirm');
+    } else state = talking || (state.move_lock & 1) ? (await advance(10, button.confirm), await advance(120)) : await press('menu');
   }
   assert(ui && ui.open && ui.page === 'aya', 'BP screen did not open on the Aya tab');
   assert.match(log, /live=1/, 'pe_bp service not running');
@@ -110,48 +113,13 @@ try {
   const after = await advance(30);
   steps.push({step: 'closed', bp: bp(after)});
 
-  // 6. Reopen through Aya's menu row, go to Reset BP and refund Poison (75 BP, 55 Junk).
-  await press('up'); await snap('menu-row'); await press('confirm');
-  assert(ui.open && ui.page === 'preview', 'BP Upgrades row must open the BP home page');
-  await seek('home.reset'); await press('confirm'); assert.equal(ui.page, 'reset');
-  await press('confirm'); assert.equal(ui.page, 'reset.one');
-  await seek('refund.def.poison'); await snap('refund-poison');
-  const beforeR = await advance(2);
+  // Normal BP reopens upgrades directly; refunds now have their own Wayne entry.
   await press('confirm');
-  if (ui.pending) {
-    e = await yes(); await snap('refund-done');
-    assert.equal(bp(e), bp(beforeR) + 75, 'refund must return exactly 75 BP');
-    assert.match(ui.notice, /Refunded 75 BP for \d+ Junk/);
-  } else {
-    e = await advance(2);
-    assert.match(ui.notice, /Need \d+ more Junk|Junk economy/); assert.equal(bp(e), bp(beforeR));
-  }
-  steps.push({step: 'refund poison', bp: bp(e), notice: ui.notice});
-  await press('confirm'); e = await advance(2);   // now empty: refused, unchanged
-  assert.equal(bp(e), steps.at(-1).bp);
-  steps.push({step: 'refund empty', notice: ui.notice});
-  await press('right'); assert.equal(ui.page, 'reset.mastery'); await snap('refund-mastery');
-  await press('back'); assert.equal(ui.page, 'reset');
+  assert(ui.open && ui.page === 'aya', 'classic BP must reopen the Aya upgrade tab');
+  assert.match(log, /BP_UI_ENTRY source=classic_bp page=aya/);
+  assert(!log.includes('page=preview') && !log.includes('page=reset'), 'upgrades must not expose refund/debug pages');
+  await snap('classic-bp-reopened');await press('back');assert.equal(ui.open,0);
 
-  // 7. Full reset: Active Time steps bought on this screen + Item Capacity's exact steps.
-  await seek('reset.all.open'); await press('confirm'); assert.equal(ui.page, 'reset.all');
-  await seek('refund.all.confirm'); await snap('full-reset');
-  const beforeF = await advance(2);
-  await press('confirm');
-  if (ui.pending) {
-    e = await yes(); await snap('full-reset-done');
-    const m = /Refunded (\d+) BP for (\d+) Junk/.exec(ui.notice);
-    assert(m, `full reset notice: ${ui.notice}`);
-    assert.equal(bp(e), bp(beforeF) + +m[1]);
-    assert.equal(stat(e, 5), stat(start, 5), 'Active Time must return to its value before this session');
-    for (const i of [0, 1, 2, 3, 4]) assert.equal(stat(e, i), stat(beforeF, i), `stat ${i} must not move`);
-    steps.push({step: 'full reset', bp: bp(e), stats: e.character.stat_allocation, notice: ui.notice});
-  } else {
-    e = await advance(2); assert.equal(bp(e), bp(beforeF));
-    assert.deepEqual(e.character.stat_allocation, beforeF.character.stat_allocation);
-    steps.push({step: 'full reset refused', notice: ui.notice});
-  }
-  await press('back'); await press('back'); await press('back');
   await writeFile(join(output, 'proof.json'), JSON.stringify({passed: true, save: 'Day 3, card 2 save 1', steps}, null, 2));
   child.stdin.write('quit\n'); await new Promise(r => child.once('exit', r));
   console.log('PASS: live purchases change BP and Aya stats by the quoted amounts; No changes nothing.');

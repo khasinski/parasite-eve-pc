@@ -168,14 +168,16 @@ static const BpUiRow reset_one_rows[] = {
     ROWV("refund.confusion","Confusion","0",BP_UI_BLOCKED,BP_UI_NONE,NULL,NULL,"No BP to refund",refund_scope,&v_refund_empty),
     ROWV("refund.darkness","Darkness","200",BP_UI_AVAILABLE,BP_UI_ASK,"refund.darkness","Reset Darkness?",NULL,refund_darkness_new,&v_refund_darkness_new),
     ROWV("refund.stiffness","Stiffness","100",BP_UI_AVAILABLE,BP_UI_ASK,"refund.stiffness","Reset Stiffness?",NULL,refund_stiff_new,&v_refund_stiff_new),
-    ROWV("refund.fortitude","Fortitude","0",BP_UI_BLOCKED,BP_UI_NONE,NULL,NULL,"No BP to refund",refund_scope,&v_refund_empty)
+    ROWV("refund.fortitude","Fortitude","0",BP_UI_BLOCKED,BP_UI_NONE,NULL,NULL,"No BP to refund",refund_scope,&v_refund_empty),
+    ROW("refund.all.open","Reset all eligible","Open",BP_UI_AVAILABLE,BP_UI_ROUTE,"reset.all",NULL,NULL,refund_breakdown)
 };
 static const BpUiRow reset_mastery_rows[] = {
     SECTION("refund.powers","PE MASTERY","BP BACK"),
     ROWV("refund.heal","Heal","250",BP_UI_AVAILABLE,BP_UI_ASK,"refund.heal","Reset Heal mastery?",NULL,refund_heal_new,&v_refund_heal_new),
     ROWV("refund.haste","Haste","150",BP_UI_AVAILABLE,BP_UI_ASK,"refund.haste","Reset Haste mastery?",NULL,refund_haste_new,&v_refund_haste_new),
     ROWV("refund.slow","Slow","0",BP_UI_BLOCKED,BP_UI_NONE,NULL,NULL,"No BP to refund",refund_scope,&v_refund_empty),
-    ROWV("refund.scan","Scan","0",BP_UI_BLOCKED,BP_UI_NONE,NULL,NULL,"No BP to refund",refund_scope,&v_refund_empty)
+    ROWV("refund.scan","Scan","0",BP_UI_BLOCKED,BP_UI_NONE,NULL,NULL,"No BP to refund",refund_scope,&v_refund_empty),
+    ROW("refund.all.open","Reset all eligible","Open",BP_UI_AVAILABLE,BP_UI_ROUTE,"reset.all",NULL,NULL,refund_breakdown)
 };
 static const BpUiRow reset_all_rows[] = {
     SECTION("refund.all.heading","REFUND SCOPE","BP BACK"),

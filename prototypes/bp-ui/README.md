@@ -1,5 +1,55 @@
 # BP UI prototype
 
+## Full PE Enhancements suite (r11)
+
+The explicit BP build now uses the current upstream default mod list plus
+pe_bp through PE_EXTRA_MODS. Stale three-module caches are cleared by the
+explicit injection file; upstream defaults stay in mods/CMakeLists.txt. The
+build includes QoL, Rebalance, Economy, Rewards, Catalog, Shops, Collection,
+Wardrobe, Stacks, Warp, Quicksave, Cheats, Phone, Language and BP.
+
+The BP module registers its own F1 page at PE Enhancements > Bonus Points
+through PE_PAGE_BP. It describes the real upgrade/refund entry points and
+owns persistent, advice-only Playstyle guide selection. Independent rule
+presets remain unimplemented and are labelled unavailable on the real page.
+The unfinished preset previews and screen-opening tools live at
+PE Enhancements > Debug > Bonus Points; the old standalone BP UI Preview
+top-level page is removed. No category's balance settings are auto-applied.
+
+The upstream fetch/fast-forward check found origin/main already included
+at cb73f9aeb. The previous missing features came from the minimal build's
+PE_MOD_LIST, not missing source commits.
+
+Native suite tests audit all 15 running modules, existing Movement/Combat/
+Economy/Inventory/Collection rows, 7 BP-owned canonical rows, and 6 debug
+rows. Controller tests derive the classic BP icon's row from the live native
+menu mask rather than assume it is the last item when other mods add rows.
+
+
+## Direct entry points (r10)
+
+Aya's existing BP icon now opens the Aya upgrade tab directly. No extra
+BP Upgrades row is registered. The four upgrade tabs share one screen; the
+live catalog has no combined upgrade/refund home page. Closing restores
+focus to the same classic BP icon. When the live BP module is disabled, the
+classic BP icon retains vanilla behavior.
+
+Wayne > Workshop > Reset BP opens the Aya refund tab directly. The refund
+tabs contain Reset all eligible, which opens the full-reset breakdown and
+returns to the selected refund tab. There is no intermediate combined menu.
+The refund handler is also used by the explicit F1 debug action. F1 sample
+previews and test-only fixture catalogs remain separate from normal entry.
+
+Validation: test_entry_routes.mjs (upgrade/refund/off) loads the Day 3 save,
+checks direct entry, tab boundaries, full-reset Back, focus restoration and
+unchanged character/inventory. Its refund case invokes the shared Wayne
+handler through the F1 test adapter, not physical dialogue navigation.
+Graph checks in tests_live.c prevent upgrade roots reaching refund pages
+and refund roots reaching purchase pages. test_live.mjs now tests purchases
+through the classic BP icon; refund transaction rules remain covered by
+the live backend unit suite.
+
+
 The approved upgrade layout, now connected to live game data (r5). Without the
 pe_bp mod (or with All mods Off) it falls back to the sample catalog below,
 whose confirmations never spend anything. Respec staging remains a layout
@@ -44,7 +94,7 @@ cursor's opaque two-pixel top bevel instead of the old grey fill.
   (irregular early thresholds). Item Capacity replays exactly (10-point
   steps, checked at runtime). Full reset refuses if the smaller bag would
   drop items.
-- Not built: Junk-economy-off daily respec, EX Game carry, F1 rows.
+- Not built: Junk-economy-off daily respec, EX Game carry, independent F1 rules presets.
 - Tests: `tests_live.c` (ctest `bp-live-backend`); `test_live.mjs` drives
   the real game (`node test_live.mjs EXE DISC1 OUT PROFILE [slot]`,
   `PE_BP_UI_TEST_JUNK=n` grants test Junk).
@@ -91,8 +141,8 @@ provider must supply final effective totals and quotes, not renderer formulas.
 
 ## Viewing the compiled game
 
-Run the packaged Launch-UI-Preview.cmd. Aya's menu > BP UI Preview opens the
-native menu. F1 > BP UI Preview provides BP/Workshop opening actions and direct
+Run the packaged Launch-UI-Preview.cmd. Aya's classic BP icon opens the
+upgrade screen directly. F1 > BP UI Preview provides BP/Workshop opening actions and direct
 rules/guide choices. For opening actions, close F1 and open Aya's menu.
 Access works with All mods Off. The launcher uses a private test profile.
 
@@ -128,7 +178,7 @@ The helper removes only its temporary dependency link after building.
 The driver boots the original game and uses its real pad decoder to visit every
 native screen and selectable row, including scrolling, help and confirmations.
 It checks highlight counts and actual background pixels, font widths and unchanged character/inventory
-state. PE_BP_UI_MANUAL_ENTRY=1 tests normal access with All mods Off.
+state. test_entry_routes.mjs tests normal entry and vanilla behavior with All mods Off.
 PE_BP_UI_F1_PRESETS_TEST=1 checks the direct F1 rules/guide choices.
 Rendered PPMs, logs and proof.json are saved; PNG conversion is lossless.
 
@@ -144,8 +194,7 @@ an existing save. Original ZIPs remain unchanged. The packaged profile includes
 Day 3, Day 4, Day 5, Day 2, Day 1 (Alligator), and Day 6 in slots 1-6.
 
 The preview build includes pe_economy and pe_shops to preserve the real Workshop
-route. All mods must be On to see Workshop in Wayne's conversation. The BP UI
-Preview shortcut still works with All mods Off.
+route. All mods must be On to see Workshop in Wayne's conversation. F1 debug previews still work with All mods Off; the classic BP icon uses vanilla behavior.
 
 The r4 private profile starts with All mods On for the real Wayne route; the
 main-menu shortcut was also tested with All mods Off. Native UI regression:

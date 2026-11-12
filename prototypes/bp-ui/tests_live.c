@@ -166,6 +166,22 @@ static size_t row_index(const BpUiPage *p, const char *id) {
     for (size_t i = 0; i < p->row_count; ++i) if (!strcmp(p->rows[i].id, id)) return i;
     CHECK(0); return 0;
 }
+/* Public roots must never lead to the other transaction family. */
+static void route_scope(const BpUiCatalog *c,const char *root,int refund) {
+    unsigned char seen[BP_UI_MAX_PAGES]={0};
+    BpUiController u;CHECK(bp_ui_init(&u,c,root,7));
+    seen[(size_t)(u.page-c->pages)]=1;
+    for(size_t pass=0;pass<c->page_count;++pass)for(size_t p=0;p<c->page_count;++p)if(seen[p]) {
+        const BpUiPage *page=&c->pages[p];CHECK(bp_ui_open(&u,page->id));
+        CHECK(refund ? !strncmp(page->id,"reset",5) : strncmp(page->id,"reset",5)!=0);
+        for(size_t t=0;t<c->tab_count;++t)if(bp_ui_tab_visible(&u,t))
+            for(size_t n=0;n<c->page_count;++n)if(!strcmp(c->pages[n].id,c->tabs[t].page))seen[n]=1;
+        for(size_t r=0;r<page->row_count;++r)if(page->rows[r].action==BP_UI_ROUTE)
+            for(size_t n=0;n<c->page_count;++n)if(!strcmp(c->pages[n].id,page->rows[r].target))seen[n]=1;
+    }
+    CHECK(!bp_ui_open(&u,"preview"));
+}
+
 static void catalog(void) {
     static BpUiController ui;
     char error[128];
@@ -175,6 +191,7 @@ static void catalog(void) {
     c = bp_catalog_build(&game, NULL);
     CHECK(bp_ui_validate(c, error, sizeof error) || (fprintf(stderr, "%s\n", error), 0));
     u = bp_catalog_usage(); CHECK(!u.overflow);
+    route_scope(c,"aya",0);route_scope(c,"reset.one",1);
     CHECK(bp_ui_init(&ui, c, "aya", 7)); bp_ui_set_backend(&ui, &backend);
     {   /* Buy Poison rank 2 through a confirmation; focus stays on the row. */
         size_t at = row_index(ui.page, "def.poison");
@@ -217,6 +234,12 @@ static void catalog(void) {
         CHECK(bp_ui_input(&ui, BP_UI_CONFIRM) == BP_UI_REQUEST_CONFIRM); bp_ui_answer(&ui, 1);
         CHECK(!game.rec.defense[0] && game.bp == 1300 && game.junk == 235 && strstr(ui.notice, "Refunded 300 BP"));
         CHECK(ui.page->rows[at].state == BP_UI_BLOCKED);
+        CHECK(bp_ui_open(&ui,"reset.one"));
+        size_t all_at=row_index(ui.page,"refund.all.open");
+        while(ui.selected<all_at)bp_ui_input(&ui,BP_UI_DOWN);
+        bp_ui_input(&ui,BP_UI_CONFIRM);CHECK(!strcmp(ui.page->id,"reset.all"));
+        bp_ui_input(&ui,BP_UI_CANCEL);CHECK(!strcmp(ui.page->id,"reset.one")&&ui.selected==all_at);
+        CHECK(bp_ui_input(&ui,BP_UI_CANCEL)==BP_UI_EXIT);
         game.economy = 0; c = bp_catalog_build(&game, NULL);
         CHECK(bp_ui_init(&ui, c, "reset", 7) && ui.page->rows[0].state == BP_UI_BLOCKED);
     }

@@ -418,6 +418,11 @@ static void refund_pages(void) {
         gate(r, &q);
     }
 
+    r = row(p, intern("refund.all.open"), "Reset all eligible", "Open");
+    route(r, intern("reset.all"));
+    line(r, "Refund eligible Aya stats, Resistance and PE Mastery together.");
+    line(r, "Weapons and armor are excluded. Preview the full fee before confirming.");
+
     p = page(intern("reset.mastery"), "WORKSHOP / BP REFUND", "Weapon/armor BP excluded", wallet, "refund.mastery", "PE Mastery");
     section(p, intern("refund.powers"), "PE MASTERY", "BP BACK");
     for (int l = 0; l < BP_MASTERY_LINES; ++l) {
@@ -434,6 +439,11 @@ static void refund_pages(void) {
         r->state = BP_UI_BLOCKED; r->reason = "No Mastery to refund";
         line(r, "Mastery lines appear once Aya learns a power.");
     }
+
+    r = row(p, intern("refund.all.open"), "Reset all eligible", "Open");
+    route(r, intern("reset.all"));
+    line(r, "Refund eligible Aya stats, Resistance and PE Mastery together.");
+    line(r, "Weapons and armor are excluded. Preview the full fee before confirming.");
 
     p = page(intern("reset.all"), "RESET ALL ELIGIBLE", "Weapon/armor BP excluded", wallet, NULL, NULL);
     section(p, intern("refund.all.heading"), "SCOPE", "BP BACK");
@@ -465,22 +475,10 @@ static void refund_pages(void) {
     gate(r, &all);
 }
 
-static void home_page(void) {
-    BpUiPage *p = page(intern("preview"), "BONUS POINTS", "Upgrades", bp_wallet(), NULL, NULL);
-    BpUiRow *r = row(p, intern("home.upgrades"), "BP upgrades", NULL);
-    route(r, intern("guns"));
-    line(r, "Spend BP on guns, armor, Aya, Resistance and PE Mastery.");
-    r = row(p, intern("home.reset"), "Reset BP (test)", NULL);
-    route(r, intern("reset"));
-    line(r, "Test shortcut to Wayne's Reset BP service.");
-    line(r, "In play, talk to Wayne > Workshop > Reset BP.");
-}
-
 const BpUiCatalog *bp_catalog_build(const BpSnapshot *s, BpPriceFn price) {
     static const BpSnapshot empty;
     S = s ? s : &empty; P = price;
     npages = nrows = nlines = npreviews = ntext = nvisuals = 0; overflow = 0;
-    home_page();
     gear_list(0);
     gear_list(1);
     aya_page();

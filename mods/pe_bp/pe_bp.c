@@ -192,7 +192,9 @@ void pe_bp_test_set_record(const BpRecord *rec) { s_rec = *rec; }
 const BpRecord *pe_bp_test_record(void) { return &s_rec; }
 #endif
 
+void pe_bp_menu_register(void);
 static int bp_init(void) {
+    pe_bp_menu_register();
     if (pe_extension_register(&s_ranks) < 0 || pe_extension_register(&s_run) < 0)
         pe_mod_log(MOD_ID, "save sections not registered: rank purchases will be refused");
     pe_hook_add(PE_HOOK_SAVE_READ, on_save_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);

@@ -21,7 +21,7 @@ try {
     }
     $configure = @('-S', $projectRoot, '-B', $buildDirectory, '-G', 'Ninja',
         '-DCMAKE_BUILD_TYPE=RelWithDebInfo', "-DCMAKE_C_COMPILER=$Compiler",
-        '-DPE_MODS=ON', '-DPE_MOD_LIST=pe_economy;pe_shops;pe_bp', '-DBUILD_TESTING=OFF',
+        '-DPE_MODS=ON', '-UPE_MOD_LIST', '-DPE_EXTRA_MODS=pe_bp', '-DBUILD_TESTING=OFF',
         "-DCMAKE_PROJECT_parasite-eve-pc_INCLUDE=$PSScriptRoot/headless_inject.cmake")
     if ($DependencyCache) {
         $cacheRoot = (Resolve-Path $DependencyCache).Path
