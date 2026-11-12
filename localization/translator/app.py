@@ -228,7 +228,7 @@ class App:
         panes.add(middle, weight=3)
 
         right = ttk.Frame(panes, padding=(6, 0, 6, 6))
-        self.where = ttk.Label(right, text="", wraplength=320 * SCALE, justify="left")
+        self.where = ttk.Label(right, text="", wraplength=int(320 * SMALLEST), justify="left")
         self.where.pack(anchor="w")
         ttk.Label(right, text="English (the game's own)").pack(anchor="w", pady=(6, 0))
         # The text boxes ask for no width of their own (width=1) and fill the side: a tk.Text asks
@@ -267,16 +267,14 @@ class App:
         self.next_screen.pack(side="right")
         self.prev_screen = ttk.Button(head, text="◀ Screen before", command=lambda: self.turn(-1), state="disabled")
         self.prev_screen.pack(side="right", padx=(0, 4))
-        self.canvas = tk.Canvas(right, width=320 * SCALE, height=VIEW * SCALE, background="#101418",
+        # The preview asks for its smallest size and fills its side; _fit_panes sizes the side.
+        self.canvas = tk.Canvas(right, width=int(320 * SMALLEST), height=VIEW * SCALE, background="#101418",
                                 highlightthickness=1, highlightbackground="#808080")
         self.canvas.pack(fill="x", pady=(2, 0))
         panes.add(right, weight=0)
-        # The list of lines gets the room it needs first; the preview takes what is left, up to the
-        # game's pixels twice the size (a 1280 wide screen has no room for that beside the list).
-        # It follows the side's width from then on (the window or the divider being dragged).
-        root.update_idletasks()
-        room = window_width - left.winfo_reqwidth() - middle.winfo_reqwidth() - 12 - 2 * 6
-        self.canvas.configure(width=max(int(320 * SMALLEST), min(320 * SCALE, room)))
+        self.panes, self.left_side, self.middle_side, self.right_side = panes, left, middle, right
+        self._fit_id = None
+        panes.bind("<Configure>", self._fit_panes_soon)
         self.canvas.bind("<Configure>", self._preview_resized)
 
         root.bind("<Control-s>", lambda e: self.save())
@@ -294,9 +292,10 @@ class App:
     def _closing(self, event) -> None:
         if event.widget is self.root:        # the window itself, not one of its parts
             self.root.after_cancel(self._tick_id)
-            if self.pending is not None:     # a line check still waiting
-                self.root.after_cancel(self.pending)
-                self.pending = None
+            for waiting in ("pending", "_fit_id"):    # a line check, a layout, still waiting
+                if getattr(self, waiting) is not None:
+                    self.root.after_cancel(getattr(self, waiting))
+                    setattr(self, waiting, None)
 
     # ---- the English pack ----
 
@@ -811,6 +810,30 @@ class App:
         if self.preview and self.preview.screens:
             self.screen = max(0, min(len(self.preview.screens) - 1, self.screen + by))
             self.draw()
+
+    def _fit_panes_soon(self, event=None) -> None:
+        if self._fit_id is not None:
+            self.root.after_cancel(self._fit_id)
+        self._fit_id = self.root.after_idle(self._fit_panes)
+
+    def _fit_panes(self) -> None:
+        """Place the divider before the preview: the list of lines gets the room it asks for, the
+        preview the rest, between the game's pixels at their own size and twice it. Done whenever
+        the window changes size, since a divider, once placed, doesn't follow what its sides ask
+        for (on Linux and macOS it is placed at the first layout and stays)."""
+        self._fit_id = None
+        panes, right, canvas = self.panes, self.right_side, self.canvas
+        total = panes.winfo_width()
+        if total <= 1 or not self.right_side.winfo_ismapped():
+            return
+        divider = max(0, right.winfo_x() - panes.sashpos(1)) or 5      # the divider's own width
+        edge = 2 * int(canvas.cget("highlightthickness"))
+        around = right.winfo_width() - canvas.winfo_width()           # the side's padding
+        around = (around if around > 0 else 12) + edge
+        smallest, largest = int(320 * SMALLEST) + around, 320 * SCALE + around
+        room = total - panes.sashpos(0) - divider - self.middle_side.winfo_reqwidth() - divider
+        side = max(smallest, min(largest, room))
+        panes.sashpos(1, max(panes.sashpos(0) + divider, total - side - divider))
 
     def _preview_resized(self, event) -> None:
         seen = event.width - 2 * int(self.canvas.cget("highlightthickness"))

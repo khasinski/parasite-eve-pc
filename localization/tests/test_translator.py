@@ -663,7 +663,7 @@ class WindowTest(unittest.TestCase):
         self.assertFalse(report["ok"])
         self.assertIn("missing.pelang", report["error"])
 
-    def layout(self, font_scale: float, screen: int | None = None) -> dict:
+    def layout(self, font_scale: float, screen: int | None = None, widths: tuple = ()) -> dict:
         import tkinter as tk
         import tkinter.font as tkfont
         from translator import app as A
@@ -678,13 +678,17 @@ class WindowTest(unittest.TestCase):
             window = A.App(root, None, str(self.dir / "layout.pelang"), select=plain_dialogue(1)[0],
                            new=("fr", "Français"))
             root.update()
+            for width in widths:             # the window made narrower or wider once it is up
+                root.minsize(1, 1)
+                root.geometry(f"{width}x{root.winfo_height()}")
+                root.update()
             list_font = tkfont.nametofont("TkDefaultFont")
             rows, picked = window.rows, window.rows.selection()
             cell = rows.bbox(picked[0], "translation") if picked else ""
             return {"window": root.winfo_width(), "left": window.groups.master.winfo_width(),
                     "middle": rows.master.master.winfo_width(), "middle_needs": rows.master.master.winfo_reqwidth(),
                     "right": window.canvas.master.winfo_width(),
-                    "preview": window.canvas.winfo_reqwidth(), "line": rows.column("line", "width"),
+                    "preview": window.canvas.winfo_width(), "line": rows.column("line", "width"),
                     "translation": rows.column("translation", "width"),
                     "longest": max(list_font.measure(k.split("/", 1)[1]) for k in GAME.keys),
                     # what shows: the picked row's Translation cell inside the list, the scroll bar
@@ -725,6 +729,18 @@ class WindowTest(unittest.TestCase):
     def test_the_preview_is_full_size_when_there_is_room(self):
         size = self.layout(1.0, screen=1920)
         self.assertEqual(size["scale"], 2, size)
+
+    def test_the_preview_follows_the_window_being_made_narrower_and_wider(self):
+        """A window can open smaller than asked (GitHub's Windows screen is 1024 wide) or be
+        resized; on Linux and macOS the dividers stay where the first layout put them."""
+        first = self.layout(1.0, screen=1920)
+        narrow = self.layout(1.0, screen=1920, widths=(1100,))
+        self.assertGreaterEqual(narrow["middle"], narrow["middle_needs"], narrow)
+        self.assertLess(narrow["scale"], first["scale"], (first, narrow))
+        self.assertLessEqual(narrow["right"], narrow["preview"] + 24, narrow)
+        again = self.layout(1.0, screen=1920, widths=(1100, first["window"]))
+        same = ("window", "left", "middle", "right", "preview", "scale")
+        self.assertEqual({k: again[k] for k in same}, {k: first[k] for k in same})
 
     def test_the_tool_reads_no_file_of_the_repo_but_its_code_and_its_data_files(self):
         """What the download must carry (P.DATA_FILES), and that nothing else is read: no
