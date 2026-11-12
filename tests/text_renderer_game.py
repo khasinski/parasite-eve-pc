@@ -1,9 +1,10 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
-chinese, spanish, italian, german and french, original-game-text-renderer-chinese, -spanish, ...)
+chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
+-spanish, ...)
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -130,6 +131,15 @@ Checks, each from pe_mods.log and frame dumps:
              Italian), adds its own, and draws its menus' spaces 5 px wide, which the pack's space is in
              the menus: on Disc 2, the load screen's help line (sys/080) must light exactly the pack's
              letters with those spaces. test_fr_matches_patch.py checks the text against the patched game.
+  english-pack  The game's own English as a pack (pelang.py english, made here from the player's discs: the
+             pack a new language starts from). With it chosen the game must be the game: a New Game
+             through the first boxes, the name entry, the boxes up to the free field and the status panel
+             (the menus part's route), every kept frame whole and pixel for pixel the frame of the same
+             route with no pack, while the log says the pack is the language in use and its text drew
+             (no letter falls back to '?'). On Disc 2 (PE_TEST_DISC2; else 77 after Disc 1): the Spanish
+             part's route from the Day 6 sample save, the day's title card and the five boxes on the
+             ship, again every frame the game's own. localization/tests/test_en_pack.py checks every row
+             of the pack against the disc's bytes.
 """
 import binascii
 import csv
@@ -867,6 +877,62 @@ def french_patch(game, discs, out, localization):
     return fan_patch(game, discs, out, localization, FRENCH)
 
 
+def same_frames(plain, packed, labels, what):
+    """Every kept frame of the run with the pack is, whole and pixel for pixel, the run's without."""
+    for label in labels:
+        a, b = frame(plain, label), frame(packed, label)
+        if a != b:
+            width, rgb_a, rgb_b = a[0], a[2], b[2]
+            at = next((i // 3 for i in range(0, min(len(rgb_a), len(rgb_b)), 3) if rgb_a[i:i + 3] != rgb_b[i:i + 3]), 0)
+            raise Failed(f'{what}: frame "{label}" with the English pack is not the game\'s own (first '
+                         f'difference at x {at % width}, y {at // width}): {packed}')
+
+
+def english_pack(game, discs, out, localization):
+    """Part english-pack (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't set."""
+    text = out / 'text'
+    subprocess.run([sys.executable, '-I', str(localization / 'extract_text.py'), *discs, '--out', str(text)],
+                   check=True, stdout=subprocess.DEVNULL)
+    path = out / 'en.pelang'
+    made = subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'english',
+                           str(text / 'strings.json'), '-o', str(path)], capture_output=True, text=True)
+    check(made.returncode == 0, f'pelang.py english failed: {made.stdout[-600:]}{made.stderr[-600:]}')
+    rows = re.search(r'(\d+) of (\d+) rows', made.stdout)
+    check(rows and int(rows[1]) >= 2800, f'the English pack holds too few rows: {made.stdout[:300]}')
+    pack = ('en', 'English pack', None, path)
+
+    def in_use(work, where):
+        log = mods_log(work)
+        check('pe_lang: language: English pack (en)' in log, f'{where}: the English pack is not the language in use: {work}')
+        check("text: English pack (en)'s stretches in use" in log, f"{where}: none of the pack's text drew: {work}")
+        missing = [line for line in log.splitlines()
+                   if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line)]
+        check(not missing, f'{where}: letters fell back to "?": {missing[:5]}: {work}')
+
+    plain = run_fixed(game, discs, out / 'english-pack-off', MENU_STEPS, pad=NEW_GAME)
+    packed = run_fixed(game, discs, out / 'english-pack-on', MENU_STEPS, pack=pack, pad=NEW_GAME)
+    in_use(packed, 'Disc 1')
+    check(lit(plain, 'first', BOX) > 200 and lit(plain, 'grid', GRID) > 200 and lit(plain, 'status', STATUS_NAME) > 20,
+          f'the route did not reach the first box, the name entry and the status panel: {plain}')
+    labels = [label for _, label, _ in MENU_STEPS]
+    same_frames(plain, packed, labels, 'Disc 1')
+    print(f'PASS english pack, Disc 1: {rows[1]} of {rows[2]} rows, each byte for byte the game\'s; a New Game through '
+          f'the first boxes, the name entry and the status panel is the game\'s own, all {len(labels)} frames '
+          'pixel for pixel')
+    if len(discs) < 2:
+        print('SKIP english pack on Disc 2: PE_TEST_DISC2 is not set')
+        return 77
+    plain, _ = run_disc2(game, discs, out / 'english-pack-disc2-off', None)
+    packed, room = run_disc2(game, discs, out / 'english-pack-disc2-on', pack)
+    in_use(packed, 'Disc 2')
+    labels = [label for _, label, _ in disc2_steps()]
+    check(all(lit(plain, label, BOX) > 100 for label in DISC2_BOXES), f"the ship's boxes are not on screen: {plain}")
+    same_frames(plain, packed, labels, 'Disc 2')
+    print(f'PASS english pack, Disc 2 (room {room}): the day\'s title card and the five boxes on the ship are the '
+          f'game\'s own, all {len(labels)} frames pixel for pixel')
+    return 0
+
+
 def menu_line(codes, drawn):
     """{(x, row)} of the stroke pixels of a menu line from its pen's start, as the menus draw it: each
     letter cut by its metrics (menu_letter), the pen moved by its drawn width and 1 px, 2 px after a
@@ -1404,7 +1470,7 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
-                              ('german', german_patch), ('french', french_patch)):
+                              ('german', german_patch), ('french', french_patch), ('english-pack', english_pack)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

@@ -2,6 +2,7 @@
 
   python -I pelang.py template out/text/strings.json -o fr.csv [--merge old-fr.csv]
   python -I pelang.py pseudo   out/text/strings.json -o qps.csv
+  python -I pelang.py english  out/text/strings.json -o en.pelang
   python -I pelang.py build    fr.csv --strings out/text/strings.json --lang fr --name "French" -o fr.pelang
   python -I pelang.py bundle   fr.pelang -o "French.pelang" [--readme credits.txt] [--pictures cd1.bin ...]
 
@@ -292,6 +293,82 @@ def cmd_pseudo(a) -> int:
         print(f"kept {skipped} rows with unsupported source controls as game text")
     write_csv(a.out, rows)
     print(f"wrote {len(rows)} pseudo-translated rows to {a.out}")
+    return 0
+
+
+def game_bytes(key: str, source: dict) -> bytes | None:
+    """What a pack entry holds when it is the game's own text for `key`: the row's bytes as the disc
+    has them, and for a dialogue page that doesn't end in FF, its own page end. None when the source
+    has no text (the committed manifest)."""
+    if not source.get("raw") and "text" not in source:
+        return None
+    raw = bytes.fromhex(source.get("raw") or "")
+    end = source.get("end", "FF")
+    return raw + (bytes([int(end, 16)]) if key.startswith("dlg/") and end != "FF" else b"")
+
+
+def cmd_english(a) -> int:
+    """The game's own English as a pack, from the player's discs: the place a new language starts
+    from, and the check that a pack built from the game's text is the game. Every row goes through
+    `build` as a translation would; a row is kept only when what build wrote for it is byte for byte
+    what the disc has, so with this pack the game shows exactly what it shows without one. The rest
+    (pages with no text, and the few rows build can't write as they are: the name entry's grids, a
+    page that is only controls) are left out: the game shows its own text there."""
+    import contextlib
+    import io
+    import tempfile
+    if srcman.is_manifest(a.strings):
+        print(f"error: {a.strings} is the source manifest: it has no game text. Give strings.json from "
+              "extract_text.py, run on your own discs", file=sys.stderr)
+        return 1
+    strings = load_strings(a.strings)
+    rows, left = [], {}
+    for r in template_rows(strings):
+        if not r["english"]:
+            left[r["key"]] = "no text"
+            continue
+        try:
+            validation.check(gt.encode(r["english"], extended=True), r["english"])
+        except ValueError:
+            left[r["key"]] = "controls the pack tool doesn't write"
+            continue
+        if r["key"] in namelib.GRIDS and empty_grid_cells(r["english"]) != r["english"]:
+            # A pack's name grid has its picture cells emptied; the game's own keeps them.
+            left[r["key"]] = "the pack tool writes it differently"
+            continue
+        rows.append(dict(r, translation=r["english"]))
+    with tempfile.TemporaryDirectory() as tmp:
+        work, pack = Path(tmp) / "english.csv", Path(tmp) / "english.pelang"
+        for attempt in range(2):
+            write_csv(work, rows)
+            said = io.StringIO()
+            with contextlib.redirect_stdout(said), contextlib.redirect_stderr(said):
+                # As the game has it: no rewrapping (a few English pages run past their box).
+                failed = main(["build", str(work), "--strings", str(a.strings), "--lang", a.lang, "--name", a.name,
+                               "-o", str(pack), "--no-wrap", "--max-messages", "100000",
+                               *(["--banks", str(a.banks)] if a.banks else [])])
+            if failed:
+                errors = [line for line in said.getvalue().splitlines() if line.startswith("error")]
+                print("\n".join(errors[:50] or said.getvalue().splitlines()[-50:]), file=sys.stderr)
+                return 1
+            built = read_pack(pack)[2]
+            other = [r for r in rows if built.get(fnv1a(r["key"])) != game_bytes(r["key"], strings[r["key"]])]
+            if not other:
+                break
+            if attempt:
+                print(f"error: {len(other)} rows still differ from the game's bytes: "
+                      f"{', '.join(r['key'] for r in other[:20])}", file=sys.stderr)
+                return 1
+            left.update({r["key"]: "the pack tool writes it differently" for r in other})
+            rows = [r for r in rows if r["key"] not in left]
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_bytes(pack.read_bytes())
+    why: dict[str, list[str]] = {}
+    for key, reason in sorted(left.items()):
+        why.setdefault(reason, []).append(key)
+    print(f"wrote {a.out}: {a.name} ({a.lang}), {len(rows)} of {len(strings)} rows, each byte for byte the game's")
+    for reason, keys in why.items():
+        print(f"left to the game ({reason}): {len(keys)}: {', '.join(keys)}")
     return 0
 
 
@@ -1283,6 +1360,14 @@ def main(argv=None) -> int:
     sa.add_argument("languages", nargs="+", help="language codes from petext/alphabets.py: `pelang.py languages` lists them")
     sa.add_argument("-o", "--out", type=Path, required=True)
     sub.add_parser("languages", help="which languages the pack tool can write today")
+    en = sub.add_parser("english", help="the game's own English as a pack: where a new language starts, "
+                                        "and the proof a pack of the game's text is the game")
+    en.add_argument("strings", type=Path, help="strings.json from extract_text.py (your own discs)")
+    en.add_argument("-o", "--out", type=Path, required=True)
+    en.add_argument("--lang", default="en", help="language code (default: en)")
+    en.add_argument("--name", default="English pack",
+                    help='the name the Language row shows (default: "English pack"; the row "English" is the game itself)')
+    en.add_argument("--banks", type=Path, help="banks.json from extract_text.py (default: beside strings.json)")
     b = sub.add_parser("build", help="check a translated CSV and write a .pelang pack")
     b.add_argument("csv", type=Path, nargs="+",
                    help="the translation; several files (one per disc) when they hold the same text for rows they share")
@@ -1376,7 +1461,7 @@ def main(argv=None) -> int:
         return 0
     return {"import-italian": cmd_import_italian, "import-spanish": cmd_import_spanish, "import-patch": cmd_import_patch,
             "template": cmd_template, "pseudo": cmd_pseudo, "sample": cmd_sample, "languages": cmd_languages,
-            "build": cmd_build, "bundle": cmd_bundle,
+            "build": cmd_build, "bundle": cmd_bundle, "english": cmd_english,
             "export": cmd_export, "manifest": cmd_manifest,
             "latin-header": cmd_latin_header, "cyrillic-header": cmd_cyrillic_header}[a.cmd](a)
 

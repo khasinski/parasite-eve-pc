@@ -751,7 +751,23 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/text-renderer-french-evidence french)
             set_tests_properties(original-game-text-renderer-french PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 600 LABELS "game-assets;mods;localization")
+            # The English pack (the game's own text as a pack, made here from the disc: where a new
+            # language starts) chosen in the game: every frame of a New Game through the name entry
+            # to the status panel, and of the Disc 2 route, is the game's own. PE_TEST_DISC2 adds
+            # Disc 2 (else skipped).
+            add_test(NAME original-game-text-renderer-english-pack COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/text-renderer-english-pack-evidence english-pack)
+            set_tests_properties(original-game-text-renderer-english-pack PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
         endif()
+        # The English pack (pelang.py english) from the real discs: every row it holds is the disc's
+        # own bytes, only empty pages and four known rows are left to the game, and one pack serves
+        # both discs. Needs PE_TEST_DISC; PE_TEST_DISC2 adds Disc 2 (else skipped).
+        add_test(NAME localization-english-pack COMMAND ${Python3_EXECUTABLE} -I
+            ${CMAKE_SOURCE_DIR}/localization/tests/test_en_pack.py)
+        set_tests_properties(localization-english-pack PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 600 LABELS "game-assets;localization")
         # A fan patch made for the Japanese discs read for the USA-disc port: two patches of the
         # test's own on PE_TEST_JA_DISC (Japanese Disc 1); PE_TEST_DISC adds the line-up check.
         add_test(NAME localization-japanese-patch-import COMMAND ${Python3_EXECUTABLE} -I
