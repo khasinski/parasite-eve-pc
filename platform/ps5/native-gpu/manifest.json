@@ -3839,7 +3839,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "b69dcd5a627ef5ceb7387af93b4b4320d071b850d5acb03c5e52715c184137e4"
+      "sha256": "61d35b1e761548287683ead02c9ff8e557d9bd57847c01eab193d2fe20da4ebc"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -4427,15 +4427,15 @@
     },
     {
       "path": "mods/pe_shops/pe_workshop_model.c",
-      "sha256": "a86d67af23cc423e413c6d3822bbf83e808fb4c9e779fe58246d5091b2aa85ee"
+      "sha256": "7267325fc97bdcc74eb643529007f218382214b2257484b297fdea26aafb01d7"
     },
     {
       "path": "mods/pe_shops/pe_workshop_model.h",
-      "sha256": "e6c0c11436efb6905b69c501655b1f14ef87c09c62eae25acaab36edf215e3ed"
+      "sha256": "47544c786b62427ac6dd31bccbced396e82bd1c593020da45db2e8ed8a84fc52"
     },
     {
       "path": "mods/pe_shops/pe_workshop_screen.c",
-      "sha256": "9574d54f10828b88caf2bcbcf4253bd897920e2568b32f4975879fdf29aa88b7"
+      "sha256": "5f79ad08941009343e44bfd6ecb123205b0782d8f70e053c5f3113bd6ac58570"
     },
     {
       "path": "mods/pe_stacks/pe_stacks.c",
