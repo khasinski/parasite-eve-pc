@@ -858,6 +858,10 @@ class WindowTest(unittest.TestCase):
                     # what shows: the picked row's Translation cell inside the list, the scroll bar
                     "cell": cell, "list_width": rows.winfo_width(),
                     "row_in_sight": bool(picked and rows.bbox(picked[0])),
+                    # to tell why when it isn't: the row picked, its place, and what the list shows
+                    "picked": picked, "row_index": rows.index(picked[0]) if picked else None,
+                    "rows_listed": len(rows.get_children()), "yview": rows.yview(),
+                    "top_row": rows.identify_row(40), "viewable": rows.winfo_viewable(),
                     "scroll_bar": window.rows_scroll.winfo_ismapped() and window.rows_scroll.winfo_width() > 4,
                     "scale": window.scale}
         finally:
@@ -925,27 +929,6 @@ class WindowTest(unittest.TestCase):
             same = ("left", "middle", "right", "preview", "scale")
             self.assertEqual({k: again[k] for k in same}, {k: first[k] for k in same})
 
-    def test_a_fan_patch_pack_opened_in_the_window_saves_a_changed_line_and_nothing_else(self):
-        packs = [p for p in player_packs() if "Spanish" in p.name]
-        if not packs:
-            self.skipTest("needs PE_TEST_PLAYER_PACKS with the Spanish pack")
-        copy = self.dir / packs[0].name
-        copy.write_bytes(packs[0].read_bytes())
-        t = P.Translation.open(copy, GAME)
-        strict = P.build(GAME, t.texts, t.lang, t.name, keep_names_from=t.pack,
-                         rules=P.Rules(letters=t.own_letters, cjk=t.own_cjk))
-        key = sorted(k for k in strict.keys_with("error") if k.startswith("dlg/") and k in t.texts)[0]
-        changed = one_word_changed(t.text(key))
-        code, report, saved = self.run_window("--select", key, "--type", changed, opened=copy)
-        self.assertEqual(code, 0, report)
-        self.assertEqual((report["from_patch"], report["locked"], report["row_state"]), (True, 0, "ok"))
-        self.assertEqual((report["left_out"], report["whole"]), ({}, []))
-        was, now = pelang.read_pack(packs[0])[2], pelang.read_pack(saved)[2]
-        self.assertEqual({GAME.by_hash.get(h, h) for h in set(was) | set(now) if was.get(h) != now.get(h)}, {key})
-        self.assertEqual(zip_parts(saved).keys(), zip_parts(packs[0]).keys())
-        self.assertEqual({k: v for k, v in zip_parts(saved).items() if k != pelang.BUNDLE_TEXT},
-                         {k: v for k, v in zip_parts(packs[0]).items() if k != pelang.BUNDLE_TEXT})
-
     def test_the_font_kept_in_the_settings_draws_characters_with_no_picture(self):
         key = plain_dialogue(1)[0]
         typed = "一丁七"           # three Chinese characters of the commonest
@@ -977,6 +960,33 @@ class WindowTest(unittest.TestCase):
             if path.is_relative_to(root) and path.suffix not in (".py", ".pyc"):
                 read.add(path.relative_to(root).as_posix())
         self.assertEqual(read, set(P.DATA_FILES))
+
+
+class PlayerPackWindowTest(unittest.TestCase):
+    """The window with a real player pack (PE_TEST_PLAYER_PACKS). Apart from WindowTest, which
+    GitHub runs and where every test must run: the packs hold game text and never go there."""
+    setUp, tearDown, run_window = WindowTest.setUp, WindowTest.tearDown, WindowTest.run_window
+
+    def test_a_fan_patch_pack_opened_in_the_window_saves_a_changed_line_and_nothing_else(self):
+        packs = [p for p in player_packs() if "Spanish" in p.name]
+        if not packs:
+            self.skipTest("needs PE_TEST_PLAYER_PACKS with the Spanish pack")
+        copy = self.dir / packs[0].name
+        copy.write_bytes(packs[0].read_bytes())
+        t = P.Translation.open(copy, GAME)
+        strict = P.build(GAME, t.texts, t.lang, t.name, keep_names_from=t.pack,
+                         rules=P.Rules(letters=t.own_letters, cjk=t.own_cjk))
+        key = sorted(k for k in strict.keys_with("error") if k.startswith("dlg/") and k in t.texts)[0]
+        changed = one_word_changed(t.text(key))
+        code, report, saved = self.run_window("--select", key, "--type", changed, opened=copy)
+        self.assertEqual(code, 0, report)
+        self.assertEqual((report["from_patch"], report["locked"], report["row_state"]), (True, 0, "ok"))
+        self.assertEqual((report["left_out"], report["whole"]), ({}, []))
+        was, now = pelang.read_pack(packs[0])[2], pelang.read_pack(saved)[2]
+        self.assertEqual({GAME.by_hash.get(h, h) for h in set(was) | set(now) if was.get(h) != now.get(h)}, {key})
+        self.assertEqual(zip_parts(saved).keys(), zip_parts(packs[0]).keys())
+        self.assertEqual({k: v for k, v in zip_parts(saved).items() if k != pelang.BUNDLE_TEXT},
+                         {k: v for k, v in zip_parts(packs[0]).items() if k != pelang.BUNDLE_TEXT})
 
 
 if __name__ == "__main__":
