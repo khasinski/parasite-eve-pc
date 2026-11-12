@@ -768,6 +768,22 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-file-evidence translator)
             set_tests_properties(original-game-translator-file PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # Title screen pictures redrawn in the Translator (saved from the disc as PNGs, redrawn,
+            # loaded back, saved): the title screen with the file chosen is the one of a disc with the
+            # file's pieces written in, on each disc. Needs Pillow; PE_TEST_DISC2 adds Disc 2.
+            add_test(NAME original-game-translator-pictures COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-pictures-evidence translator-pictures)
+            set_tests_properties(original-game-translator-pictures PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # The Translator's "As in the game" preview against the game's own frames: the first box
+            # (English pack, and each player pack given by PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_)
+            # and Disc 2's boxes on the ship, every letter pixel; the first box's room picture.
+            add_test(NAME original-game-translator-look COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-look-evidence translator-look)
+            set_tests_properties(original-game-translator-look PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
         endif()
         # The English pack (pelang.py english) from the real discs: every row it holds is the disc's
         # own bytes, only empty pages and four known rows are left to the game, and one pack serves

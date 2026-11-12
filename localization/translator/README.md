@@ -32,9 +32,31 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
      leave line breaks out and let the tool break the line.
    - Under the box: what the compiler says about the line. An error means the game will show its
      own English for that line until it is fixed.
-   - The preview draws a dialogue line as the game will break it, screen by screen. Widths and
-     line breaks are the game's; the letter shapes are your computer's font.
+   - The preview draws a dialogue line as the game will break it, screen by screen. Two looks:
+     **Computer font** (widths and line breaks are the game's, letter shapes your computer's) and
+     **As in the game**: the game's own letters, pixel for pixel as the game draws them (also a
+     fan patch's own letters and Chinese characters), over the picture of the room that shows the
+     line. That look reads the letters and rooms from your disc (the same disc as for Pictures; it
+     is asked for the first time). Click the picture for the room's other views, or other rooms
+     that show the line. Not drawn that way yet: menus, item names and battle lines, right-to-left
+     languages, and the button icons in a few lines (the preview says so).
 4. **Save** (Ctrl+S). Ctrl+Up and Ctrl+Down move between lines.
+
+## Pictures with words
+
+**Pictures…** opens the pictures that have words in them: for now the title screen's "Press Start
+Button", New Game, Continue, Tutorial, EX Game and the publisher line. They are read from your own
+disc (**Choose disc…**: a Parasite Eve USA disc image, Disc 1 or Disc 2, unchanged; it is
+remembered on your computer). Nothing of the disc is put anywhere but your translation.
+
+1. Pick a picture and **Save as PNG…**.
+2. Redraw it in any paint program. Keep its size. The window says what else to keep: the title
+   menu's words are laid over the screen keeping the lighter colour of each pixel, so black lets the
+   screen show through and any colour works; the publisher line has 16 colours, and each pixel
+   becomes the nearest of them.
+3. **Load PNG…**. "Your picture" shows it as the game will. **Use the game's picture** undoes it.
+4. Save the translation: the picture goes into its `pictures.bin`. Other pictures already in the
+   file (a fan patch's) stay as they are, and can be redrawn the same way.
 
 ## The file
 
@@ -45,7 +67,8 @@ again to go on. It is a zip holding:
 |---|---|
 | `text.bin` | the compiled pack: every line that passes the checks |
 | `translator/work.json` | your lines as you typed them, lines that don't pass yet, and your notes |
-| `pictures.bin`, `readme.txt`, anything else | kept exactly as they were |
+| `pictures.bin` | the redrawn pictures (kept exactly as they were until you load one) |
+| `readme.txt`, anything else | kept exactly as they were |
 
 The game reads `text.bin` and leaves the rest alone. Saving keeps the version before as
 `<name>.pelang.before-last-save`.
@@ -63,14 +86,18 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
 
 ## Not there yet
 
-- Pictures with words, and drawing missing letters.
+- More pictures with words (the map's place names, battle words, day title cards, the tutorial,
+  Game Over), and drawing missing letters.
 
 ## Code
 
 - `project.py`: all the work, no window. It runs `pelang.py build` on your lines, so the file is
   byte for byte what the command line writes from the same lines. `DATA_FILES` lists the only
   files other than code it reads; none holds game text.
-- `app.py`: the window.
+- `app.py`: the window. `gamelook.py`: the "As in the game" preview (the game's dialogue drawing
+  and the language mod's letters, followed from their C code; the room pictures and which room
+  shows each line, from the disc). `picture_window.py`: the Pictures window; `artwork.py`: the pictures'
+  list, PNG out and in, and their pieces in `pictures.bin` (TIM pixels: `petext/tim.py`).
 - `package.py`: builds the download for the system it runs on and checks the built program:
   it starts it, types a line, saves and quits (`--report`), compares the file with what the source
   tool saves, and searches everything inside for game text. Build tools are pinned in
@@ -82,4 +109,6 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   ```
 - Tests: `localization/tests/test_translator.py` (CTest `localization-translator`) and the
   `translator` part of `tests/text_renderer_game.py` (CTest `original-game-translator-file`), which
-  runs the game with a file the Translator saved.
+  runs the game with a file the Translator saved; part `translator-pictures` (CTest
+  `original-game-translator-pictures`) runs the title screen with pictures redrawn in it, both discs; part `translator-look` (CTest
+  `original-game-translator-look`) checks the game look against the game's own frames.

@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -146,6 +146,18 @@ Checks, each from pe_mods.log and frame dumps:
              carry the Translator's work part, and reopen as saved; and with it chosen the game must
              be the game on the english-pack part's routes, both discs, every frame pixel for pixel.
              So the game opens what the Translator writes, work part and all.
+  translator-pictures  Pictures redrawn in the Translator: three title screen pictures saved from
+             the disc as PNGs by the tool, redrawn (two 24-bit ones in new colours, the 16-colour one
+             with its own palette), loaded back through the window's scripted run (--picture) and
+             saved. The file must change those three pictures and no other; and with it chosen, the
+             title screen started from each disc must be, pixel for pixel, the title screen of a copy
+             of that disc with the file's pieces written in, and not the English one.
+  translator-look  The Translator's "As in the game" preview (localization/translator/gamelook.py)
+             against the game's own frames: the first box with the English pack (made from the discs)
+             and with each player pack given (PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_), and the five
+             boxes on the ship on Disc 2: every letter pixel the tool draws is the frame's, and every
+             text pixel of the frame is one the tool draws. The first box's room (M010, found from the
+             room scripts) is the frame's background in its top rows, pixel for pixel.
 """
 import binascii
 import csv
@@ -822,19 +834,22 @@ def pieces_written_in(cue, pieces, out):
     return str(sheet), len(writes)
 
 
-def check_title_pictures(game, discs, out, part, label, pack, plain_pack, pieces, title_words):
+def check_title_pictures(game, discs, out, part, label, pack, plain_pack, pieces, title_words, disc=0):
     """The title screen with the pack on the player's disc against the game on a copy of the disc with
     the pack's picture pieces written in (as a patched disc holds them) and the pack's text alone
     (`plain_pack`): the same frame, pixel for pixel; with the text alone on the player's disc, the
-    English words (`title_words`: where they are, or None for anywhere on the frame)."""
+    English words (`title_words`: where they are, or None for anywhere on the frame). `disc`: which
+    of `discs` the game starts from (0: Disc 1)."""
     log_pieces = re.compile(rf'{re.escape(label)}, \d+ entries, {len(pieces)} picture pieces')
+    number, tag = disc + 1, '' if disc == 0 else f'-disc{disc + 1}'
     try:
-        written = [pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')]
-        check(written[0][1] == len(pieces), f'only {written[0][1]} of {len(pieces)} pieces land on Disc 1')
+        written = [pieces_written_in(discs[disc], pieces, out / 'discs' / f'disc{number}')]
+        check(written[0][1] == len(pieces), f'only {written[0][1]} of {len(pieces)} pieces land on Disc {number}')
         title = [(TITLE_AT, 'title', None)]
-        frames = {which: run_fixed(game, use, out / f'{part}-title-{which}', title, pack=p)
-                  for which, use, p in (('pack', discs[:1], pack), ('written-in', [written[0][0]], plain_pack),
-                                        ('text-only', discs[:1], plain_pack))}
+        mine = discs[disc:disc + 1]
+        frames = {which: run_fixed(game, use, out / f'{part}-title{tag}-{which}', title, pack=p)
+                  for which, use, p in (('pack', mine, pack), ('written-in', [written[0][0]], plain_pack),
+                                        ('text-only', mine, plain_pack))}
         check(log_pieces.search(mods_log(frames['pack'])) and 'its pictures are in use' in mods_log(frames['pack']),
               f'the pack\'s {len(pieces)} picture pieces were not loaded and put in: {frames["pack"]}')
         check(lit(frames['text-only'], 'title', PRESS_START) > 100, f'no title screen at vblank {TITLE_AT}: '
@@ -845,8 +860,8 @@ def check_title_pictures(game, discs, out, part, label, pack, plain_pack, pieces
         words = (lambda w: crop(w, 'title', title_words)) if title_words else (lambda w: frame(w, 'title'))
         check(words(frames['pack']) != words(frames['text-only']),
               f'the title screen\'s words are still English: {frames["pack"]}')
-        print(f'PASS {part} pictures, disc 1: the {len(pieces)} pieces loaded; the title screen\'s words are the '
-              "patch's picture, pixel for pixel as on the disc with the pieces written in")
+        print(f'PASS {part} pictures, disc {number}: the {len(pieces)} pieces loaded; the title screen\'s words '
+              "are the pack's picture, pixel for pixel as on the disc with the pieces written in")
     finally:
         shutil.rmtree(out / 'discs', ignore_errors=True)
 
@@ -981,6 +996,179 @@ def translator_file(game, discs, out, localization):
     print(f'translator file: {report.in_pack} rows saved by the Translator, {len(now) - len(changed)} entries byte for '
           f'byte the English pack\'s, {len(changed)} pages rewrapped to their box ({", ".join(changed)}); reopens as saved')
     return game_is_its_own(game, discs, out, ('en', 'Translator file', None, saved), 'translator', 'translator file')
+
+
+def translator_pictures(game, discs, out, localization):
+    """Part translator-pictures (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2
+    isn't set."""
+    import json
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator pictures: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    # Each picture saved from the disc by the Translator, redrawn as a person would in a paint
+    # program: the 24-bit words on black in new colours, the 16-colour line with its own colours.
+    redraw = {'title/press-start': (255, 220, 40), 'title/new-game': (80, 200, 255), 'title/published-by': None}
+    loads = []
+    for pid, colour in redraw.items():
+        pic = artwork.BY_ID[pid]
+        saved = out / f'{pid.replace("/", "-")}.png'
+        saved.write_bytes(artwork.png(pic, disc.english[pid]))
+        img = Image.open(saved)
+        if colour:
+            img = img.convert('RGB')
+            draw = ImageDraw.Draw(img)
+            draw.rectangle((0, 0, img.width - 1, img.height - 1), fill=(0, 0, 0))
+            for x in range(4, img.width - 4, 6):
+                draw.rectangle((x, 5, x + 2, img.height - 6), fill=colour)
+        else:
+            draw = ImageDraw.Draw(img)                 # a palette picture: drawn with palette number 15
+            draw.rectangle((8, 8, img.width // 2, 20), fill=15)
+        img.save(saved)
+        loads += ['--picture', f'{pid}={saved}']
+    path, report = out / 'translator-pictures.pelang', out / 'translator-pictures-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Pictures test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], *loads], capture_output=True, text=True, timeout=300)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the pictures: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    for pid in redraw:
+        check(artwork.redrawn(disc, artwork.BY_ID[pid], pieces), f'{pid} is not in the saved file')
+    others = [p.id for p in artwork.PICTURES if p.id not in redraw and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-pictures-text.pelang'           # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Pictures test', None, path), ('es', 'Pictures test', None, plain)
+    print(f'translator pictures: the Translator saved {len(redraw)} redrawn pictures as {len(pieces)} pieces')
+    for n in range(len(discs)):
+        check_title_pictures(game, discs, out, 'translator-pictures', 'Pictures test (es)', pack, text_only, pieces,
+                             PRESS_START, disc=n)
+    if len(discs) < 2:
+        print('SKIP translator pictures on Disc 2: PE_TEST_DISC2 is not set')
+        return 77
+    return 0
+
+
+def look_is_the_frame(work, label, look, font, raw, name, gl):
+    """The Translator's game look (translator/gamelook.py) of `raw` against the game's frame: every
+    pixel it draws is the frame's, and every pixel of the frame's text area in the letters' own
+    colours is one it draws (a scene pixel or two of those colours aside). Returns the pixels drawn."""
+    width, height, rgb = frame(work, label)
+    check((width, height) == (gl.W, gl.H), f'{label}: a {width} x {height} frame, not the game screen: {work}')
+    placed = look.screens[0]
+    over = gl.draw(font, placed, rgb)
+    alone = gl.draw(font, placed, bytes(gl.W * gl.H * 3))
+    changed = [(k // 3 % gl.W, k // 3 // gl.W) for k in range(0, len(rgb), 3) if over[k:k + 3] != rgb[k:k + 3]]
+    check(not changed, f"{label}: the game look's letters are not the frame's at {changed[:6]} "
+                       f'({len(changed)} pixels): {work}')
+    inks = {bytes(gl.rgb_of(font.clut[1]))}          # the letters' strokes (their dark shadow is in scenes too)
+    missed = [(x, y) for y in range(160, gl.H) for x in range(gl.W)
+              if rgb[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] in inks
+              and alone[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] == b'\0\0\0']
+    check(len(missed) <= 3, f"{label}: the frame has text the game look doesn't draw at {missed[:6]} "
+                            f'({len(missed)} pixels): {work}')
+    drawn = sum(1 for k in range(0, len(alone), 3) if alone[k:k + 3] != b'\0\0\0')
+    check(drawn > 300, f'{label}: the game look drew only {drawn} pixels: {work}')
+    return drawn
+
+
+def translator_look(game, discs, out, localization):
+    """Part translator-look (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't
+    set, or when none of the player packs is given."""
+    sys.path.insert(0, str(localization))
+    import pelang
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        print('SKIP translator look: needs Pillow (the game look makes its picture with it)')
+        return 77
+    from translator import gamelook as gl
+    disc = gl.DiscLook(discs[0])
+    shown = disc.shown_in()
+    check(shown.get('dlg/M001/009') == [10], f'the first box is not shown in room M010: {shown.get("dlg/M001/009")}')
+    english, _, _ = make_english_pack(discs, out, localization)
+
+    def look_of(path, key, name='Aya'):
+        pack = gl.Pack.read(pelang.pack_bytes(path))
+        font = gl.Font(disc, pack)
+        raw = pack.text(key)
+        check(raw, f'{path.name} has no {key}')
+        return gl.lay_out(font, raw, gl.name_bytes(pack, name)), font, raw
+
+    first = [(FIRST_BOX, 'first', None)]
+    work = run_fixed(game, discs, out / 'look-english', first, pack=('en', 'English pack', None, english), pad=NEW_GAME)
+    look, font, raw = look_of(english, 'dlg/M001/009')
+    drawn = look_is_the_frame(work, 'first', look, font, raw, 'Aya', gl)
+    # The room behind it: the scene's top rows (no one stands there), every pixel the room picture's.
+    _, _, rgb = frame(work, 'first')
+    views = disc.views(10)
+    check(views and views[0][:40 * gl.W * 3] == rgb[:40 * gl.W * 3],
+          f"the top of room M010's picture is not the frame's: {work}")
+    print(f'PASS translator look, English: the first box drawn by the Translator is the game\'s frame, all {drawn} '
+          "pixels of its letters; room M010's picture is the frame's background")
+
+    # "à" (code 4D, a 0 in the game's own width table): the language mod draws it 8 px wide, and the
+    # pack compiler must measure every line as the game draws it.
+    sheet = out / 'a-grave.csv'
+    with sheet.open('w', encoding='utf-8', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
+        w.writeheader()
+        w.writerow({'key': 'dlg/M001/009', 'translation': 'Çà et là: voilà, à à à!{br}àààà, déjà.', 'notes': ''})
+    grave = out / 'a-grave.pelang'
+    made = subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--strings',
+                           str(localization / 'data' / 'manifest.json'), '--lang', 'fr', '--name', 'A grave', '-o',
+                           str(grave), str(sheet)], capture_output=True, text=True)
+    check(made.returncode == 0, f'the "à" pack did not build: {made.stdout[-400:]}{made.stderr[-400:]}')
+    work = run_fixed(game, discs, out / 'look-a-grave', first, pack=('fr', 'A grave', None, grave), pad=NEW_GAME)
+    look, font, raw = look_of(grave, 'dlg/M001/009')
+    drawn = look_is_the_frame(work, 'first', look, font, raw, 'Aya', gl)
+    lines = {}
+    for p in look.screens[0]:
+        lines.setdefault(p.y, []).append(p)
+    ends = [ps[-1].x - ps[-1].letter.x + ps[-1].letter.advance - gl.LINE_X for _, ps in sorted(lines.items())]
+    from petext import gametext as gt
+    measured = gt.lines(pelang.read_pack(grave)[2][pelang.fnv1a('dlg/M001/009')].rstrip(b'\xff\xf9'))
+    check(ends == measured, f'the compiler measures the "à" lines {measured}, the game draws them {ends}')
+    print(f'PASS translator look, "à": the game draws it as the Translator does (all {drawn} pixels), and the '
+          f'compiler measures its lines as drawn ({ends} px)')
+
+    skipped = []
+    for env, label in (('PE_TEST_ES_PACK', 'Spanish'), ('PE_TEST_IT_PACK', 'Italian'), ('PE_TEST_DE_PACK', 'German'),
+                       ('PE_TEST_FR_PACK', 'French'), ('PE_TEST_ZH_PACK', 'Chinese')):
+        path = Path(os.getenv(env) or '')
+        if not path.is_file():
+            skipped.append(f'{label} ({env} is not set)')
+            continue
+        code, name, _ = pelang.read_pack(path)
+        work = run_fixed(game, discs, out / f'look-{code}', first, pack=(code, name, None, path), pad=NEW_GAME)
+        look, font, raw = look_of(path, 'dlg/M001/009')
+        drawn = look_is_the_frame(work, 'first', look, font, raw, 'Aya', gl)
+        print(f'PASS translator look, {label}: the first box with the pack\'s own letters is the game\'s frame, all '
+              f'{drawn} pixels')
+
+    if len(discs) < 2:
+        skipped.append('Disc 2 (PE_TEST_DISC2 is not set)')
+    else:
+        work, room = run_disc2(game, discs, out / 'look-disc2', ('en', 'English pack', None, english))
+        total = 0
+        for label, key in DISC2_BOXES.items():
+            look, font, raw = look_of(english, key)
+            total += look_is_the_frame(work, label, look, font, raw, 'Aya', gl)
+        print(f'PASS translator look, Disc 2 (room {room}): the {len(DISC2_BOXES)} boxes on the ship drawn by the '
+              f'Translator are the game\'s frames, all {total} pixels')
+    if skipped:
+        print('SKIP translator look: not checked: ' + '; '.join(skipped))
+        return 77
+    return 0
 
 
 def menu_line(codes, drawn):
@@ -1521,7 +1709,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
     out.mkdir(parents=True, exist_ok=True)
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
                               ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
-                              ('translator', translator_file)):
+                              ('translator', translator_file), ('translator-pictures', translator_pictures),
+                              ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

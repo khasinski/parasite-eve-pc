@@ -23,7 +23,7 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import project as P
+from . import artwork as A, gamelook as GL, project as P
 
 SETTINGS = Path.home() / ".pe-translator.json"
 SCALE = 2                                    # the preview: the game's pixels, twice the size,
@@ -34,6 +34,7 @@ BOX_AT = 34                                  # where the box's first line sits i
 FILTERS = ("All lines", "Not translated", "Translated", "With problems")
 MARK = {"": "", "ok": "✓", "warning": "!", "error": "✖"}
 PACK_TYPES = [("Parasite Eve language pack", "*.pelang"), ("All files", "*.*")]
+DISC_TYPES = [("Disc image", "*.cue *.bin *.iso *.img"), ("All files", "*.*")]
 
 
 def load_settings() -> dict:
@@ -89,9 +90,11 @@ class App:
     def __init__(self, root: tk.Tk, english: str | None = None, translation: str | None = None,
                  select: str | None = None, type_text: str | None = None,
                  new: tuple[str, str] | None = None, report: str | None = None,
-                 screenshot: str | None = None) -> None:
+                 screenshot: str | None = None, disc: str | None = None,
+                 pictures: list[tuple[str, str]] | None = None) -> None:
         """`new` (language code, name) starts a new translation saved as `translation`, with no
-        dialog. `report`: save once the typing is in, quit, and write what happened to that file
+        dialog. `disc`: the disc the pictures are read from (remembered). `pictures`: (picture id,
+        PNG file) to load into the translation before a scripted save, as Load PNG… does. `report`: save once the typing is in, quit, and write what happened to that file
         (a JSON object) — the check a test or the download's build runs, since a program with no
         console can't print. `screenshot`: with `report`, a PNG of the window just before saving."""
         self.root = root
@@ -120,6 +123,17 @@ class App:
         self.asked = 0                       # the newest check asked for; older answers are dropped
         self.preview: P.Preview | None = None
         self.screen = 0
+        self.picture_disc: A.Disc | None = None
+        self.look_disc: GL.DiscLook | None = None      # the game look's font, rooms and scripts
+        self.shown: dict[str, list[int]] | None = None  # dialogue key -> rooms that open it
+        self.disc_worker = Worker()                     # reading the room scripts takes seconds
+        self.fonts: dict[bytes, GL.Font] = {}
+        self.room_pick = (0, 0)                         # which room and view is behind the text
+        self.look_photo = None
+        self.disc_error: str | None = None
+        self.pictures_window = None
+        self._pictures_by_script = list(pictures or [])
+        self.pictures_loaded: list[dict] = []
         self._select_first, self._type_first = select, type_text
         self._typed_by_script = (select, type_text) if select and type_text else None
         if select in self.game.rows:
@@ -128,6 +142,10 @@ class App:
         root.protocol("WM_DELETE_WINDOW", self.close)
         self._tick_id = root.after(50, self._tick)
         root.bind("<Destroy>", self._closing, add="+")
+        if disc:                             # named: remembered once it is the disc
+            self.use_disc(disc)
+        elif self.settings.get("disc") and Path(self.settings["disc"]).is_file():
+            self.use_disc(self.settings["disc"], remember=False)
         english = english or self.settings.get("english")
         if english and Path(english).is_file():
             self.load_english(english, quiet=True)
@@ -173,6 +191,9 @@ class App:
         # Shown for Chinese, Japanese and Korean: a font file draws the characters the pack has no
         # picture of (a fan patch's own pictures keep their look).
         self.font_button = ttk.Button(bar, text="Font…", command=self.ask_font)
+        # The pictures with words (title screen...): from the translator's disc, as PNGs.
+        self.pictures_button = ttk.Button(bar, text="Pictures…", command=self.open_pictures, state="disabled")
+        self.pictures_button.pack(side="left", padx=(6, 0))
         self.title = ttk.Label(bar, text="Open the English pack to begin.")
         self.title.pack(side="left", padx=12)
         self.progress = ttk.Label(bar, text="")
@@ -275,6 +296,15 @@ class App:
         self.next_screen.pack(side="right")
         self.prev_screen = ttk.Button(head, text="◀ Screen before", command=lambda: self.turn(-1), state="disabled")
         self.prev_screen.pack(side="right", padx=(0, 4))
+        # The switch: the computer's font, or the game's own letters over the room's picture.
+        looks = ttk.Frame(right)
+        looks.pack(fill="x")
+        self.look_mode = tk.StringVar(value="computer")
+        ttk.Radiobutton(looks, text="Computer font", value="computer", variable=self.look_mode,
+                        command=self._look_changed).pack(side="left")
+        self.game_look_button = ttk.Radiobutton(looks, text="As in the game", value="game", variable=self.look_mode,
+                                                command=self._look_changed)
+        self.game_look_button.pack(side="left", padx=(8, 0))
         # The preview asks for its smallest size and fills its side; _fit_panes sizes the side.
         self.canvas = tk.Canvas(right, width=int(320 * SMALLEST), height=VIEW * SCALE, background="#101418",
                                 highlightthickness=1, highlightbackground="#808080")
@@ -284,6 +314,7 @@ class App:
         self._fit_id = None
         panes.bind("<Configure>", self._fit_panes_soon)
         self.canvas.bind("<Configure>", self._preview_resized)
+        self.canvas.bind("<Button-1>", lambda e: self.next_room_picture())
 
         root.bind("<Control-s>", lambda e: self.save())
         root.bind("<Control-Down>", lambda e: self.step(1))
@@ -295,6 +326,7 @@ class App:
 
     def _tick(self) -> None:
         self.worker.poll()
+        self.disc_worker.poll()
         self._tick_id = self.root.after(50, self._tick)
 
     def _closing(self, event) -> None:
@@ -444,6 +476,7 @@ class App:
         self.settings["last"] = str(tr.path)
         save_settings(self.settings)
         self.save_button.configure(state="disabled" if tr.locked else "normal")
+        self.pictures_button.configure(state="normal")
         if tr.needs_font():
             fonts = [f for f in self.settings.get("cjk_fonts") or [] if isinstance(f, str) and Path(f).is_file()]
             if fonts and not tr.cjk_fonts:
@@ -459,6 +492,72 @@ class App:
         self.fill_rows()
         self.show_row()
         self.check_all()
+        if self.pictures_window is not None:
+            self.pictures_window.refresh()
+
+    # ---- pictures ----
+
+    def use_disc(self, path: str, remember: bool = True) -> str | None:
+        """Read the pictures from this disc. Returns why it can't be used, in plain words."""
+        try:
+            self.picture_disc, self.disc_error = A.Disc(path), None
+            self.look_disc = GL.DiscLook(path)
+        except (A.NotTheDisc, GL.NotTheDisc) as e:
+            self.picture_disc, self.look_disc, self.disc_error = None, None, str(e)
+            return str(e)
+        if remember:
+            self.settings["disc"] = str(path)
+            save_settings(self.settings)
+        self.shown, self.fonts = None, {}
+        disc = self.look_disc
+
+        def done(shown, error):
+            if disc is self.look_disc and not error:
+                self.shown = shown
+                self.draw()
+
+        self.disc_worker.ask(disc.shown_in, done)
+        if self.settings.get("look", "game") == "game" and GL.can_draw_here():
+            self.look_mode.set("game")
+        return None
+
+    def open_pictures(self) -> None:
+        if self.pictures_window is not None:
+            self.pictures_window.win.lift()
+            return
+        from .picture_window import PictureWindow
+        self.pictures_window = PictureWindow(self)
+
+    def load_picture(self, pic: A.Picture, png: bytes | None) -> A.Loaded:
+        """A PNG as the translation's picture (None: back to the game's). Saved with the translation."""
+        tr, disc = self.tr, self.picture_disc
+        if tr is None or disc is None or tr.locked:
+            raise ValueError("open a translation you can save and choose your disc first")
+        pieces = A.read_pieces(tr.parts)
+        if png is None:
+            loaded = A.Loaded(disc.english[pic.id], [])
+            new = A.put(disc, pic, pieces, None)
+        else:
+            loaded = A.from_png(pic, disc.english[pic.id], png, A.shown(disc, pic, pieces))
+            new = A.put(disc, pic, pieces, loaded.tim)
+        A.write_pieces(tr.parts, new)
+        self.dirty = True
+        self.count()
+        return loaded
+
+    def _load_scripted_pictures(self) -> str | None:
+        if self._pictures_by_script and self.picture_disc is None:
+            return self.disc_error or "no disc (--disc)"
+        while self._pictures_by_script:
+            pid, path = self._pictures_by_script.pop(0)
+            if pid not in A.BY_ID:
+                return f"no picture {pid}"
+            try:
+                loaded = self.load_picture(A.BY_ID[pid], Path(path).read_bytes())
+            except (OSError, ValueError) as e:
+                return f"picture {pid}: {e}"
+            self.pictures_loaded.append({"id": pid, "notes": loaded.notes})
+        return None
 
     def check_all(self) -> None:
         tr = self.tr
@@ -554,9 +653,14 @@ class App:
         tr, want = self.tr, self._typed_by_script
         # The row's own check has come back too (its mark is set), so the report can say it.
         ready = tr is not None and not self.english_busy and self.pending is None \
-            and (want is None or (tr.text(want[0]) == want[1].replace("\n", "") and want[0] in self.state))
+            and (want is None or (tr.text(want[0]) == want[1].replace("\n", "") and want[0] in self.state)) \
+            and (self.look_disc is None or self.shown is not None)       # the rooms read from the disc
         if not ready:
             self.root.after(100, self._save_when_typed)
+            return
+        failed = self._load_scripted_pictures()
+        if failed:
+            self.finish(f"could not load the pictures: {failed}")
             return
         if self.screenshot:
             self.shot_error = self.take_screenshot(self.screenshot)
@@ -597,7 +701,9 @@ class App:
             out.update(screenshot=self.screenshot, screenshot_error=self.shot_error)
         if tr is not None:
             out.update(lang=tr.lang, name=tr.name, translated=tr.translated(), from_patch=tr.from_patch,
-                       locked=len(tr.locked), fonts=list(tr.cjk_fonts))
+                       locked=len(tr.locked), fonts=list(tr.cjk_fonts), pictures=self.pictures_loaded,
+                       disc_error=self.disc_error, look=self.look_mode.get(),
+                       look_rooms=len(self.shown) if self.shown else 0)
             if self._typed_by_script:
                 out["row"], out["text_in_row"] = self._typed_by_script[0], tr.text(self._typed_by_script[0])
                 out["row_state"] = self.state.get(self._typed_by_script[0], "")
@@ -770,6 +876,7 @@ class App:
         self.loading = False
         self.show_messages(*self.said.get(key, ([], [])), checked=key in self.state)
         self.preview = None
+        self.room_pick = (0, 0)
         self.draw()
         self.check_soon(0)
 
@@ -859,6 +966,98 @@ class App:
 
     # ---- the preview ----
 
+    def _look_changed(self) -> None:
+        if self.look_mode.get() == "game":
+            if not GL.can_draw_here():
+                self.look_mode.set("computer")
+                messagebox.showinfo("As in the game", "This copy of the tool can't draw pictures (Pillow is missing).")
+                return
+            if self.look_disc is None:
+                path = filedialog.askopenfilename(title="Choose your Parasite Eve (USA) disc: the game's letters "
+                                                        "and rooms are read from it", filetypes=DISC_TYPES)
+                error = self.use_disc(path) if path else "no disc chosen"
+                if error:
+                    self.look_mode.set("computer")
+                    if path:
+                        messagebox.showerror("Not the disc", error)
+                    return
+        self.settings["look"] = self.look_mode.get()
+        save_settings(self.settings)
+        self.draw()
+
+    def next_room_picture(self) -> None:
+        """The next view of the room behind the text, then the next room that shows the line."""
+        if self.look_mode.get() == "game":
+            room, view = self.room_pick
+            self.room_pick = (room, view + 1)
+            self.draw()
+
+    def draw_game(self) -> bool:
+        """The page as the game draws it (gamelook.py) over the room's picture. False when it can't
+        be drawn that way: the computer font is drawn instead."""
+        pv, disc, c, s = self.preview, self.look_disc, self.canvas, self.scale
+        if pv is None or not pv.dialogue or disc is None or not pv.pack or not pv.key.startswith("dlg/") \
+                or not GL.can_draw_here():
+            return False
+        pack = GL.Pack.read(pv.pack)
+        if GL.can_draw(pack.lang):
+            return False
+        raw = pack.text(pv.key)
+        if raw is None:
+            return False
+        font = self.fonts.get(pv.pack)
+        if font is None:
+            font = self.fonts[pv.pack] = GL.Font(disc, pack)
+            if len(self.fonts) > 8:
+                self.fonts.pop(next(iter(self.fonts)))
+        box = pv.boxes[0] if pv.boxes else P.Box("default", 20, 174, None, None, None, False)
+        x, y = (GL.LINE_X, GL.LINE_Y) if box.name == "default" else (box.x, box.y)
+        look = GL.lay_out(font, raw, GL.name_bytes(pack, pv.shown_name), x, y,
+                          max(1, P.layout.advance(b"\xfb\x08", pv.name_px) // 12))
+        screens = look.screens
+        self.screen = max(0, min(len(screens) - 1, self.screen))
+        rooms = (self.shown or {}).get(pv.key, [])
+        background, where = None, "no room picture: the line's room isn't known" if self.shown is not None \
+            else "reading the rooms from the disc…"
+        if rooms:
+            room, view = self.room_pick
+            room %= len(rooms)
+            views = disc.views(rooms[room])
+            if view >= len(views):
+                room, view = (room + 1) % len(rooms), 0
+                views = disc.views(rooms[room])
+            self.room_pick = (room, view)
+            if views:
+                background = views[view % len(views)]
+                where = f"room M{rooms[room]:03d}" + (f", view {view + 1} of {len(views)}" if len(views) > 1 else "") \
+                    + ("   •   click the picture for the next" if len(rooms) > 1 or len(views) > 1 else "")
+        rgb = GL.draw(font, screens[self.screen], background)
+        # From a little of the scene above the text down, as much as the preview shows (less at the
+        # bottom of the screen: the game's screen ends there).
+        top = max(0, y - BOX_AT - 40)
+        rows = min(GL.H, top + VIEW) - top
+        from PIL import Image
+        import base64
+        import io
+        picture = Image.frombytes("RGB", (GL.W, GL.H), rgb).crop((0, top, GL.W, top + rows))
+        picture = picture.resize((max(1, round(GL.W * s)), max(1, round(rows * s))), Image.NEAREST)
+        data = io.BytesIO()
+        picture.save(data, "PNG")
+        self.look_photo = tk.PhotoImage(master=c, data=base64.b64encode(data.getvalue()).decode("ascii"), format="png")
+        note = f"Screen {self.screen + 1} of {len(screens)}   •   {where}"
+        shown = c.winfo_width() if c.winfo_ismapped() else int(c.cget("width"))
+        wrap = max(100, shown - 16)
+        first = c.create_text(12, 8, anchor="nw", fill="#b8c4d0", font=self.font, text=note, width=wrap)
+        second = c.create_text(12, c.bbox(first)[3] + 2, anchor="nw", fill="#8090a0", font=self.font, width=wrap,
+                               text="The game's own letters, from your disc." +
+                                    (" Not drawn as the game does: " + "; ".join(look.notes) + "." if look.notes else ""))
+        y0 = c.bbox(second)[3] + 6
+        c.create_image(0, y0, anchor="nw", image=self.look_photo)
+        c.configure(height=round(y0 + rows * s))
+        self.prev_screen.configure(state="normal" if self.screen > 0 else "disabled")
+        self.next_screen.configure(state="normal" if self.screen + 1 < len(screens) else "disabled")
+        return True
+
     def turn(self, by: int) -> None:
         if self.preview and self.preview.screens:
             self.screen = max(0, min(len(self.preview.screens) - 1, self.screen + by))
@@ -904,6 +1103,8 @@ class App:
         c.delete("all")
         self.prev_screen.configure(state="disabled")
         self.next_screen.configure(state="disabled")
+        if self.look_mode.get() == "game" and self.draw_game():
+            return
         if pv is None:
             if self.key and self.said.get(self.key, ([], []))[0]:
                 c.create_text(10 * s, 10 * s, anchor="nw", fill="#d0d0d0", width=300 * s, font=self.font,
@@ -979,14 +1180,22 @@ def main(argv=None) -> int:
     ap.add_argument("--settings", help=argparse.SUPPRESS)
     ap.add_argument("--report", help=argparse.SUPPRESS)
     ap.add_argument("--screenshot", help=argparse.SUPPRESS)
+    ap.add_argument("--disc", help="your Parasite Eve (USA) disc, for the pictures (remembered)")
+    ap.add_argument("--picture", action="append", default=[], metavar="ID=PNG", help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
     if a.new and not a.translation:
         ap.error("--new needs the file to save the new translation as")
+    pictures = []
+    for item in a.picture:
+        pid, sep, path = item.partition("=")
+        if not sep:
+            ap.error("--picture takes ID=PNG")
+        pictures.append((pid, path))
     if a.settings:
         global SETTINGS
         SETTINGS = Path(a.settings)
     root = tk.Tk()
     app = App(root, a.english, a.translation, a.select, a.type, tuple(a.new) if a.new else None, a.report,
-              a.screenshot)
+              a.screenshot, a.disc, pictures)
     root.mainloop()                          # a scripted run closes the window itself (App.finish)
     return app.exit_code

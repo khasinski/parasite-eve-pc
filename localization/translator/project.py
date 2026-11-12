@@ -48,7 +48,8 @@ from petext import letters as lettertable, manifest as srcman, validation  # noq
 MANIFEST = ROOT / "data" / "manifest.json"
 # Every file under localization/ other than code that the Translator reads: the download carries
 # these and nothing else (localization/translator/package.py). None of them holds game text.
-DATA_FILES = ("data/manifest.json", "data/menu_layouts.json")
+DATA_FILES = ("data/manifest.json", "data/menu_layouts.json", "data/script_opcodes.json")
+DISC_DATA_FILES = ("data/script_opcodes.json",)  # read only once a disc is chosen (the game look's rooms)
 WORK = "translator/work.json"
 WORK_FORMAT, WORK_VERSION = "pe-translator-work", 2
 WORK_READS = (1, 2)                          # 2 added "rules"; a version 1 file is a strict one
@@ -515,6 +516,9 @@ class Preview:
     final: str = ""                          # the text as the pack holds it (with the compiler's breaks)
     wrapped: bool = False
     right_to_left: bool = False
+    key: str = ""
+    pack: bytes = b""                        # the pack it was built in: the game look draws from it
+    shown_name: str = "Aya"
 
 
 def boxes_of(game: Game, key: str) -> list[Box]:
@@ -619,7 +623,7 @@ def check_row(game: Game, key: str, text: str, lang: str, name: str = "Preview",
         typed = pelang.split_page_end(text)[0]
         return Preview(True, screens, boxes, name_px, final=final,
                        wrapped=final.replace("{end F9}", "").replace("{end FF}", "") != typed,
-                       right_to_left=rtl.is_rtl(lang))
+                       right_to_left=rtl.is_rtl(lang), key=key, pack=pack, shown_name=shown_name)
 
     with _LOCK:
         strict = build(game, rows, lang, name, rules=rules, then=look)

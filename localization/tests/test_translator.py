@@ -577,6 +577,203 @@ def one_word_changed(text: str) -> str:
     raise ValueError("no word to change")
 
 
+def made_up_tim(bits: int, width: int, height: int, palette=None, pad: int = 0) -> bytes:
+    """A TIM of the test's own: pixels counting up, `pad` extra bytes at each row's end (24-bit)."""
+    import struct
+    flags = {4: 0, 8: 1, 24: 3}[bits] | (8 if palette else 0)
+    out = struct.pack("<II", 0x10, flags)
+    if palette:
+        out += struct.pack("<IHHHH", 12 + len(palette) * 2, 0, 480, len(palette), 1) + struct.pack(f"<{len(palette)}H", *palette)
+    row = {4: width // 2, 8: width, 24: width * 3 + pad}[bits]
+    pixels = bytes((y * 7 + x) % 251 for y in range(height) for x in range(row))
+    return out + struct.pack("<IHHHH", 12 + len(pixels), 0, 0, row // 2, height) + pixels
+
+
+class FakeDisc:
+    """artwork.Disc's parts for one made-up picture at PE.IMG byte 3000 of sectors 1-3: no disc."""
+
+    def __init__(self, tim: bytes) -> None:
+        from translator import artwork as A
+        self.pic = A.Picture("test/one", "Test", "One", 0, 3000 - 2048, len(tim), 0, A.LIGHTEN)
+        self.sectors = [1]
+        data = bytearray(bytes(range(256)) * 24)          # sectors 1-3
+        data[3000 - 2048:3000 - 2048 + len(tim)] = tim
+        self.english = {self.pic.id: tim}
+        self.around = {self.pic.id: (2048, bytes(data))}
+
+    def span(self, pic):
+        return 3000, 3000 + pic.length
+
+
+class PictureRuleTest(unittest.TestCase):
+    """Pictures with no disc: made-up TIMs. A picture read out and written back is the same bytes;
+    a PNG out and back in is the same picture; a picture loaded keeps every other piece."""
+
+    def setUp(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+
+    def test_a_picture_read_out_and_written_back_is_the_same_bytes(self):
+        from petext import tim as T
+        for data in (made_up_tim(24, 10, 4, pad=2), made_up_tim(4, 8, 3, palette=list(range(0, 32 * 16, 32))),
+                     made_up_tim(8, 6, 2, palette=list(range(256)))):
+            t = T.read(data + b"after")
+            self.assertEqual(t.data, data)
+            again = T.with_rgb(t, T.rgb(t)) if t.bits == 24 else T.with_indices(t, T.indices(t))
+            self.assertEqual(again, data)
+        t = T.read(made_up_tim(24, 10, 4, pad=2))
+        new = T.with_rgb(t, bytes(len(T.rgb(t))))
+        self.assertEqual([new[t.pixels_at + y * t.row_bytes + 30:t.pixels_at + (y + 1) * t.row_bytes] for y in range(4)],
+                         [t.data[t.pixels_at + y * t.row_bytes + 30:t.pixels_at + (y + 1) * t.row_bytes] for y in range(4)])
+        self.assertEqual(T.rgb_of(0x7FFF), (255, 255, 255))
+        self.assertEqual(len({T.rgb_of(v) for v in range(32)}), 32)
+
+    def test_a_png_out_and_back_in_is_the_same_picture(self):
+        from PIL import Image
+        from translator import artwork as A
+        pic = A.Picture("t/p", "T", "P", 0, 0, 0, 0, A.SIXTEEN)
+        palette = [0, 0x7FFF, 0x001F, 0x03E0, 0x7C00, 0x7FFF] + [0x4210] * 10      # white twice
+        for data in (made_up_tim(24, 10, 4, pad=2), made_up_tim(4, 8, 3, palette=palette)):
+            png = A.png(pic, data)
+            self.assertEqual(A.from_png(pic, data, png).tim, data)
+            rgb = io.BytesIO()
+            Image.open(io.BytesIO(png)).convert("RGB").save(rgb, "PNG")
+            back = A.from_png(pic, data, rgb.getvalue())
+            self.assertEqual((back.tim, back.notes), (data, []))
+
+    def test_a_png_that_does_not_fit_is_told_plainly_or_fitted(self):
+        from PIL import Image
+        from petext import tim as T
+        from translator import artwork as A
+        pic = A.Picture("t/p", "T", "P", 0, 0, 0, 0, A.SIXTEEN)
+        data = made_up_tim(4, 8, 3, palette=[0, 0x7FFF] + [0x001F] * 14)
+        out = io.BytesIO()
+        Image.new("RGB", (9, 3)).save(out, "PNG")
+        with self.assertRaisesRegex(ValueError, "must stay 8×3"):
+            A.from_png(pic, data, out.getvalue())
+        with self.assertRaisesRegex(ValueError, "not a picture"):
+            A.from_png(pic, data, b"not a png")
+        out = io.BytesIO()
+        Image.new("RGB", (8, 3), (250, 240, 250)).save(out, "PNG")              # near white, not white
+        loaded = A.from_png(pic, data, out.getvalue())
+        self.assertEqual(set(T.indices(T.read(loaded.tim))), {1})
+        self.assertIn("24 pixels were not one of the picture's 16 colours", " ".join(loaded.notes))
+        out = io.BytesIO()
+        Image.new("RGBA", (8, 3), (255, 255, 255, 0)).save(out, "PNG")          # all see-through
+        loaded = A.from_png(pic, data, out.getvalue())
+        self.assertEqual(set(T.indices(T.read(loaded.tim))), {0})
+        self.assertIn("See-through parts were drawn as black.", loaded.notes)
+
+    def test_a_picture_loaded_keeps_every_other_piece(self):
+        import zlib
+        from petext import pictures as pf, tim as T
+        from translator import artwork as A
+        tim = made_up_tim(24, 40, 30)                     # 3,620 bytes: from sector 1 into sector 3
+        disc = FakeDisc(tim)
+        pic, (base, data) = disc.pic, disc.around[disc.pic.id]
+        elsewhere = pf.Piece(9, 0, 1234, b"xy")                                  # another sector
+        other_disc = pf.Piece(2, 10, 0xDEADBEEF, b"zz")                           # lands on no byte here
+        before_pic = pf.Piece(1, 4, zlib.crc32(data[4:8]), b"keep")              # same sector, before it
+        pieces = [elsewhere, other_disc, before_pic]
+        t = T.read(tim)
+        new = T.with_rgb(t, bytes(len(T.rgb(t))))
+        out = A.put(disc, pic, pieces, new)
+        self.assertEqual(A.shown(disc, pic, out), new)
+        self.assertIn(elsewhere, out)
+        self.assertIn(other_disc, out)
+        self.assertEqual(A._lay(base, data, out)[0][4:8], b"keep")            # its bytes still go in
+        self.assertTrue(all(p.offset + len(p.data) <= 2048 for p in out))
+        back = A.put(disc, pic, out, None)
+        self.assertFalse(A.redrawn(disc, pic, back))
+        self.assertEqual(A._lay(base, data, back)[0], A._lay(base, data, pieces)[0])
+        with self.assertRaisesRegex(ValueError, "keep its size"):
+            A.put(disc, pic, pieces, new[:-1])
+        parts = {}
+        A.write_pieces(parts, out)
+        self.assertEqual(sorted(A.read_pieces(parts), key=str), sorted(out, key=str))
+        A.write_pieces(parts, [])
+        self.assertNotIn(P.PICTURES, parts)
+
+
+class FakeLookDisc:
+    """gamelook.DiscLook's font parts with a blank font page: no disc. Widths don't need pictures."""
+
+    def __init__(self):
+        from petext import tim as T
+        tim = T.read(made_up_tim(4, 8, 1, palette=[0, 0x7BDE, 0x0421] + [0] * 13))
+        self.page, self.area_page = [0] * (256 * 256), [0] * (256 * 256)
+        for code in range(0x4D):                 # each game letter a stroke, as every letter has ink
+            x0, y0 = code % 21 * 12, code // 21 * 12
+            for y in range(2, 10):
+                self.page[(y0 + y) * 256 + x0 + 3] = 1
+            for x in range(3, 8):
+                self.page[(y0 + 9) * 256 + x0 + x] = 1
+        self.font = self.area_font = tim
+
+
+class GameLookRuleTest(unittest.TestCase):
+    """The game look's rules with no disc: the room scripts' opcodes are the game's, and letters
+    are placed as the compiler measures them."""
+
+    def test_the_opcode_list_is_the_games(self):
+        from petext.script import opcodes
+        from translator import gamelook as G
+        if not (HERE.parent / "src/main/script/flow_opcodes.c").is_file():
+            self.skipTest("needs the port's source (src/main/script/flow_opcodes.c)")
+        self.assertEqual(set(json.loads(G.OPCODES.read_text(encoding="utf-8"))), opcodes(HERE.parent))
+
+    def test_letters_are_placed_as_the_compiler_measures_the_lines(self):
+        from translator import gamelook as G
+        key = name_dialogue()
+        text = "¡Ñandú, {name}! ¿Qué tal? Ça et lì: œuvre.{br}Žluťoučký kůň úpěl ďábelské ódy."
+        result = P.check_row(GAME, key, text, "es", "Español", default_name="Íñigo")
+        pv = result.preview
+        self.assertEqual(result.errors, [], result.errors)
+        pack = G.Pack.read(pv.pack)
+        look = G.lay_out(G.Font(FakeLookDisc(), pack), pack.text(key), G.name_bytes(pack, pv.shown_name))
+        self.assertEqual(len(look.screens), len(pv.screens))
+        for placed, screen in zip(look.screens, pv.screens):
+            lines = {}
+            for p in placed:
+                lines.setdefault(p.y, []).append(p)
+            ends = [ps[-1].x - ps[-1].letter.x + ps[-1].letter.advance - G.LINE_X for _, ps in sorted(lines.items())]
+            self.assertEqual(ends, [w for w in screen.widths if w], (ends, screen.widths))
+        self.assertEqual(look.notes, [])
+
+    def test_the_compiler_measures_a_grave_as_the_game_draws_it(self):
+        """"à" is code 0x4D, whose entry in the game's own width table is a 0 the game never draws;
+        the language mod puts the letter in with its base letter's width, 8 px (install_widths), and a
+        game run with "à" in the first box draws it so (the game look matches that frame pixel for
+        pixel; with 0 px, 299 pixels differ). The compiler measured it 0 px until 2026-11-12."""
+        from petext import gametext as gt, layout
+        self.assertEqual((gt.box_advance(0x4D), gt.base_advance(0x4D), layout.advance(bytes([0x4D])),
+                          gt.lines(bytes([0x4D, 0x4D, 0xF7, 0x4D]))), (8, 8, 8, [16, 8]))
+
+
+class PictureDiscTest(unittest.TestCase):
+    """The title screen pictures from the real discs (PE_TEST_DISC, PE_TEST_DISC2): each one read
+    out as a PNG and loaded back gives the disc's bytes, and is the same on both discs."""
+
+    def test_every_picture_out_as_png_and_back_is_the_discs_bytes(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        from translator import artwork as A
+        discs = [d for d in (os.environ.get("PE_TEST_DISC"), os.environ.get("PE_TEST_DISC2")) if d and Path(d).is_file()]
+        if not discs:
+            self.skipTest("needs PE_TEST_DISC (and PE_TEST_DISC2)")
+        read = [A.Disc(d) for d in discs]
+        for pic in A.PICTURES:
+            with self.subTest(picture=pic.id):
+                english = read[0].english[pic.id]
+                self.assertTrue(all(d.english[pic.id] == english for d in read))
+                self.assertEqual(A.from_png(pic, english, A.png(pic, english)).tim, english)
+                self.assertEqual(A.put(read[0], pic, [], english), [])           # the game's: no pieces
+
+
 class PlayerPackTest(unittest.TestCase):
     """With real translations (PE_TEST_PLAYER_PACKS: a folder of .pelang files): the five player
     packs, each made from a fan patch with its looser rules and its own letter pictures."""
@@ -978,7 +1175,67 @@ class WindowTest(unittest.TestCase):
             path = Path(line).resolve()
             if path.is_relative_to(root) and path.suffix not in (".py", ".pyc"):
                 read.add(path.relative_to(root).as_posix())
-        self.assertEqual(read, set(P.DATA_FILES))
+        self.assertEqual(read, set(P.DATA_FILES) - set(P.DISC_DATA_FILES))   # no disc in this run
+
+
+class PictureWindowTest(unittest.TestCase):
+    """The Pictures window from source, with no disc (GitHub runs it): it opens, says to choose the
+    disc, offers nothing to load, and a file that is not a disc is refused in plain words."""
+    setUp, tearDown = WindowTest.setUp, WindowTest.tearDown
+
+    def test_the_pictures_window_with_no_disc_asks_for_one(self):
+        import tkinter as tk
+        from translator import app as A
+        A.SETTINGS = self.dir / "settings.json"
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "p.pelang"), new=("fr", "Français"))
+            root.update()
+            self.assertEqual(str(window.pictures_button.cget("state")), "normal")
+            window.open_pictures()
+            root.update()
+            pw = window.pictures_window
+            self.assertIn("Choose your Parasite Eve (USA) disc", pw.disc_label.cget("text"))
+            self.assertEqual([str(b.cget("state")) for b in (pw.save_png, pw.load_png, pw.undo)], ["disabled"] * 3)
+            self.assertEqual(len(pw.list.get_children()), len(__import__("translator.artwork").artwork.PICTURES))
+            (self.dir / "not-a-disc.bin").write_bytes(b"\0" * 100000)
+            error = window.use_disc(str(self.dir / "not-a-disc.bin"))
+            self.assertIn("is not a Parasite Eve disc image", error)
+            self.assertNotIn("disc", json.loads(A.SETTINGS.read_text(encoding="utf-8")) if A.SETTINGS.exists() else {})
+            pw.close()
+            self.assertIsNone(window.pictures_window)
+        finally:
+            root.destroy()
+
+
+class GameLookWindowTest(unittest.TestCase):
+    """The preview's switch from source, with no disc (GitHub runs it): "As in the game" with no disc
+    draws the computer font's preview, as before."""
+    setUp, tearDown = WindowTest.setUp, WindowTest.tearDown
+
+    def test_with_no_disc_the_game_look_falls_back_to_the_computer_font(self):
+        import tkinter as tk
+        from translator import app as A
+        A.SETTINGS = self.dir / "settings.json"
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "g.pelang"), select=plain_dialogue(1)[0], new=("fr", "Français"))
+            window.tr.set_text(plain_dialogue(1)[0], "Une ligne.")
+            window.check_now()
+            for _ in range(100):
+                root.update()
+                if window.preview is not None:
+                    break
+                __import__("time").sleep(0.05)
+            self.assertIsNotNone(window.preview)
+            window.look_mode.set("game")
+            self.assertFalse(window.draw_game())
+            window.draw()
+            texts = [window.canvas.itemcget(i, "text") for i in window.canvas.find_all()
+                     if window.canvas.type(i) == "text"]
+            self.assertTrue(any("Letter shapes are your computer's" in t for t in texts), texts)
+        finally:
+            root.destroy()
 
 
 class PlayerPackWindowTest(unittest.TestCase):
