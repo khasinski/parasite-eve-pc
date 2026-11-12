@@ -28,6 +28,7 @@ from . import project as P
 SETTINGS = Path.home() / ".pe-translator.json"
 SCALE = 2                                    # the preview: the game's pixels, twice the size,
 SMALLEST = 1.0                               # or smaller, down to their own size, when the window is narrow
+SIDE_PAD = 6                                 # the preview's side: its padding left and right
 VIEW = 136                                   # game rows the preview shows: the box and what runs past it
 BOX_AT = 34                                  # where the box's first line sits in it, under the notes
 FILTERS = ("All lines", "Not translated", "Translated", "With problems")
@@ -227,7 +228,7 @@ class App:
         self.rows.bind("<<TreeviewSelect>>", self._row_picked)
         panes.add(middle, weight=3)
 
-        right = ttk.Frame(panes, padding=(6, 0, 6, 6))
+        right = ttk.Frame(panes, padding=(SIDE_PAD, 0, SIDE_PAD, 6))
         self.where = ttk.Label(right, text="", wraplength=int(320 * SMALLEST), justify="left")
         self.where.pack(anchor="w")
         ttk.Label(right, text="English (the game's own)").pack(anchor="w", pady=(6, 0))
@@ -826,10 +827,12 @@ class App:
         total = panes.winfo_width()
         if total <= 1 or not self.right_side.winfo_ismapped():
             return
-        divider = max(0, right.winfo_x() - panes.sashpos(1)) or 5      # the divider's own width
-        edge = 2 * int(canvas.cget("highlightthickness"))
-        around = right.winfo_width() - canvas.winfo_width()           # the side's padding
-        around = (around if around > 0 else 12) + edge
+        # Only fixed sizes here: on macOS the sides' own widths can still be the ones from before
+        # the last layout (once the preview's side measured 650 px of "padding", from a canvas 1 px
+        # wide).
+        divider = right.winfo_x() - panes.sashpos(1)                  # the divider's own width
+        divider = divider if 0 < divider <= 20 else 5
+        around = 2 * SIDE_PAD + 2 * int(canvas.cget("highlightthickness"))
         smallest, largest = int(320 * SMALLEST) + around, 320 * SCALE + around
         room = total - panes.sashpos(0) - divider - self.middle_side.winfo_reqwidth() - divider
         side = max(smallest, min(largest, room))

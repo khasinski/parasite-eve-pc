@@ -708,6 +708,7 @@ class WindowTest(unittest.TestCase):
                 self.assertGreaterEqual(size["line"], size["longest"], size)
                 self.assertGreaterEqual(size["middle"], size["window"] - size["left"] - size["right"] - 24, size)
                 self.assertGreaterEqual(size["translation"], 150, size)
+                self.assert_room_shared(size)
 
     def test_the_list_of_lines_gets_the_room_on_a_1280_screen(self):
         """GitHub's Linux screen, and many laptops, are 1280 wide: the window opens 1240 wide. The
@@ -726,21 +727,37 @@ class WindowTest(unittest.TestCase):
                 self.assertGreaterEqual(size["scale"], 1.0, size)
                 self.assertLess(size["scale"], 2, size)                  # it did give way
 
+    def assert_room_shared(self, size: dict) -> None:
+        """The rule at whatever width the window really got (a screen may hold it to less than
+        asked: GitHub's Windows screen is 1024 wide): the list gets the room it asks for and the
+        preview the rest, from the game's pixels at their own size up to twice it."""
+        self.assertLessEqual(size["right"], size["preview"] + 24, size)       # the side is its preview
+        if size["middle"] < size["middle_needs"] - 4:      # the list short of room: the preview gave all
+            self.assertAlmostEqual(size["scale"], 1.0, places=2, msg=size)
+        elif size["scale"] < 1.995:                        # the preview not full size: the list has
+            self.assertLessEqual(size["middle"], size["middle_needs"] + 4, size)  # no room to spare
+
     def test_the_preview_is_full_size_when_there_is_room(self):
-        size = self.layout(1.0, screen=1920)
-        self.assertEqual(size["scale"], 2, size)
+        for scale in (0.8, 1.0, 1.3):
+            with self.subTest(fonts=f"{scale:.0%}"):
+                size = self.layout(scale, screen=1920)
+                self.assert_room_shared(size)
 
     def test_the_preview_follows_the_window_being_made_narrower_and_wider(self):
-        """A window can open smaller than asked (GitHub's Windows screen is 1024 wide) or be
-        resized; on Linux and macOS the dividers stay where the first layout put them."""
+        """A window can open smaller than asked or be resized; on Linux and macOS the dividers stay
+        where the first layout put them unless the tool moves them."""
         first = self.layout(1.0, screen=1920)
-        narrow = self.layout(1.0, screen=1920, widths=(1100,))
-        self.assertGreaterEqual(narrow["middle"], narrow["middle_needs"], narrow)
-        self.assertLess(narrow["scale"], first["scale"], (first, narrow))
-        self.assertLessEqual(narrow["right"], narrow["preview"] + 24, narrow)
-        again = self.layout(1.0, screen=1920, widths=(1100, first["window"]))
-        same = ("window", "left", "middle", "right", "preview", "scale")
-        self.assertEqual({k: again[k] for k in same}, {k: first[k] for k in same})
+        narrower = first["window"] - 250
+        narrow = self.layout(1.0, screen=1920, widths=(narrower,))
+        again = self.layout(1.0, screen=1920, widths=(narrower, first["window"]))
+        for size in (first, narrow, again):
+            self.assert_room_shared(size)
+        self.assertLessEqual(narrow["window"], narrower + 4, narrow)
+        if first["scale"] > 1.0:
+            self.assertLess(narrow["scale"], first["scale"], (first, narrow))
+        if again["window"] == first["window"]:            # not held back by a small screen
+            same = ("left", "middle", "right", "preview", "scale")
+            self.assertEqual({k: again[k] for k in same}, {k: first[k] for k in same})
 
     def test_the_tool_reads_no_file_of_the_repo_but_its_code_and_its_data_files(self):
         """What the download must carry (P.DATA_FILES), and that nothing else is read: no
