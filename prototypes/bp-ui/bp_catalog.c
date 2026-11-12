@@ -98,6 +98,10 @@ static void ask(BpUiRow *r, const char *target, const char *question) {
 static void gate(BpUiRow *r, const BpQuote *q) {
     switch (q->error) {
     case BP_OK: return;
+    case BP_ERR_INACTIVE:
+        r->state=BP_UI_INACTIVE;r->reason="Inactive - investment retained";
+        if(r->preview){BpUiPreview *v=(BpUiPreview *)r->preview;v->before=NULL;v->after=NULL;v->benefit="Effects paused";v->note="Enable in F1 > Bonus Points";v->cost=v->remaining=NULL;}
+        break;
     case BP_ERR_BP: r->state = BP_UI_UNAFFORDABLE; r->reason = txt("Need %u more BP", q->bp_cost - S->bp); break;
     case BP_ERR_JUNK: r->state = BP_UI_UNAFFORDABLE; r->reason = txt("Need %u more Junk", q->junk_fee - S->junk); break;
     case BP_ERR_MAXED: r->state = BP_UI_MAXED; r->reason = bp_error_text(q->error); break;
@@ -303,6 +307,7 @@ static void aya_page(void) {
         v->note = "No BP cost";
     }
     line(r, "Choose which effects Fortitude charges protect against.");
+    if(!(S->features&BP_FEATURE_FORTITUDE)){BpQuote q=quote(BP_REQ_FORT_MODE,0,0);gate(r,&q);r->action=BP_UI_NONE;}
 }
 
 static void fortitude_page(void) {
@@ -313,6 +318,7 @@ static void fortitude_page(void) {
         r->action = BP_UI_SETTING; r->target = intern("set.fort.%d", m);
         line(r, m ? "Halve HP is ignored; charges wait for HP to 1." : "Charges protect against Halve HP and HP to 1.");
         line(r, "No BP cost. Change any time.");
+        if(!(S->features&BP_FEATURE_FORTITUDE)){BpQuote q=quote(BP_REQ_FORT_MODE,m,0);gate(r,&q);r->action=BP_UI_NONE;}
     }
 }
 
@@ -340,10 +346,10 @@ static void mastery_page(void) {
         v->after = rank < d->ranks ? txt("Rank %d", rank + 1) : NULL;
         v->benefit = rank < d->ranks ? "Next rank totals:" : "All ranks bought";
         v->note = rank < d->ranks ? d->rank_text[rank] : d->rank_text[d->ranks - 1];
-        line(r, "Now: %s.", rank ? d->rank_text[rank - 1] : "no mastery");
+        line(r, S->features&BP_FEATURE_MASTERY ? "Now: %s." : "Stored, inactive: %s.", rank ? d->rank_text[rank - 1] : "no mastery");
         if (rank < d->ranks) line(r, "Next: %s.", d->rank_text[rank]);
         {
-            int now = bp_line_cost(l, rank, S->pe_light, S->max_pe);
+            int now = bp_line_cost(l, S->features&BP_FEATURE_MASTERY ? rank : 0, S->pe_light, S->max_pe);
             int next = rank < d->ranks ? bp_line_cost(l, rank + 1, S->pe_light, S->max_pe) : now;
             if (now >= 0) line(r, "PE cost %d to %d%s.", now, next, S->pe_light ? " (PE Light)" : "");
         }
@@ -494,7 +500,7 @@ const BpUiCatalog *bp_catalog_build(const BpSnapshot *s, BpPriceFn price) {
     tabs[5] = (BpUiTab){intern("refund.mastery"), "PE MASTERY", intern("reset.mastery"), "refund"};
     catalog.pages = pages; catalog.page_count = npages;
     catalog.tabs = tabs; catalog.tab_count = 6;
-    catalog.badge = "LIVE";
+    catalog.badge = "";
     return &catalog;
 }
 

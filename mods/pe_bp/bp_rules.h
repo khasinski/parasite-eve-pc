@@ -4,6 +4,7 @@
  * The design doc (PE_BP_Overhaul_Revised_2026-11-12.md) owns every number here. A quote is
  * computed from a snapshot; the executor re-reads a fresh snapshot and re-quotes before it
  * writes anything, so a stale screen can never commit a stale price. */
+#include "bp_config.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -56,6 +57,7 @@ typedef struct BpAyaStat {
 } BpAyaStat;
 
 typedef struct BpSnapshot {
+    unsigned features;            /* applied profile feature mask; ranks stay save-owned */
     int loaded;                   /* a game is running and the screen may act */
     unsigned bp;
     int economy;                  /* Junk economy on (Wayne's reset available) */
@@ -111,7 +113,7 @@ int bp_effective_resist(int armor_percent, int rank);
 typedef enum {
     BP_OK, BP_ERR_NOT_LOADED, BP_ERR_UNKNOWN, BP_ERR_MAXED, BP_ERR_LOCKED, BP_ERR_BP,
     BP_ERR_JUNK, BP_ERR_OVERFLOW, BP_ERR_EMPTY, BP_ERR_NO_ECONOMY, BP_ERR_BAG,
-    BP_ERR_UNCHANGED, BP_ERR_STORE
+    BP_ERR_UNCHANGED, BP_ERR_STORE, BP_ERR_INACTIVE
 } BpError;
 const char *bp_error_text(BpError e);
 

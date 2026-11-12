@@ -6,9 +6,11 @@
  * bonusStats; Aya's stat-table entries 5-6 only (a purchase step, or the full reset); the
  * pe_bp sections. Earning is untouched. The ranks' battle effects are in pe_bp_battle.c. */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pe_bp_api.h"
+#include "pe_bp_settings.h"
 #include "pe_bp_battle.h"
 #include "pe_extension_store.h"
 #include "pe_game.h"
@@ -42,6 +44,9 @@ static int on_save_read(void *ctx, void *user) {
         s_damaged = 1;
         pe_mod_log(MOD_ID, "save: BP sections refused (out of range); kept unchanged, purchases off");
     }
+#ifdef PE_BP_TEST_HOOKS
+    if(getenv("PE_BP_SETTINGS_TEST")){printf("BP_SETTINGS_LOAD flags=%u bp=%u poison=%u heal=%u resets=%u damaged=%d\n",pe_bp_settings_flags(),(unsigned)g_AyaSaveState.bonus_points,s_rec.defense[0],s_rec.mastery[0],s_rec.full_resets,s_damaged);fflush(stdout);}
+#endif
     return 0;
 }
 static int on_new_game(void *ctx, void *user) {
@@ -86,6 +91,7 @@ static int snapshot(BpSnapshot *s) {
     int lv, limit;
     memset(s, 0, sizeof *s);
     if (!pe_game_loaded() || pe_in_battle()) return 0;
+    s->features = pe_bp_settings_flags();
     s->loaded = !s_damaged;
     s->bp = g_AyaSaveState.bonus_points;
     s->economy = junk && junk->enabled && junk->enabled();

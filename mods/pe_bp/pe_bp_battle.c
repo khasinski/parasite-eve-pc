@@ -14,6 +14,7 @@
 
 #include "pe_bp_battle.h"
 #include "bp_rules.h"
+#include "pe_bp_settings.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe1/battle.h"
@@ -39,8 +40,8 @@ static unsigned roll(void) {   /* xorshift32, percent 0..99 */
     return s_rng % 100u;
 }
 static Combatant *aya(void) { return pe_aya_core(); }
-static int rank_def(int t) { return s_record()->defense[t]; }
-static int rank_line(int l) { return l < 0 ? 0 : s_record()->mastery[l]; }
+static int rank_def(int t) { return pe_bp_settings_flags() & (t==BP_FORTITUDE?BP_FEATURE_FORTITUDE:BP_FEATURE_RESISTANCE) ? s_record()->defense[t] : 0; }
+static int rank_line(int l) { return l < 0 || !(pe_bp_settings_flags() & BP_FEATURE_MASTERY) ? 0 : s_record()->mastery[l]; }
 
 static void restore_shot(void) {
     if (s_shot.set && s_shot.action) s_shot.action->powerBonus = s_shot.orig;

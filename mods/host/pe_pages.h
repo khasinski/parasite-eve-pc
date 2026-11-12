@@ -27,6 +27,7 @@
 #define PE_PAGE_COMBINE         "Combat/Combine items"
 #define PE_PAGE_SMOKE           "Combat/Smoke Grenades"
 #define PE_PAGE_BP             "Bonus Points"
+#define PE_PAGE_BP_ADVANCED    "Bonus Points/Advanced"
 #define PE_PAGE_DEBUG_BP       "Debug/Bonus Points"
 #define PE_PAGE_ECONOMY        "Economy"
 #define PE_PAGE_ECON_STORAGE   "Economy/Junk Storage"

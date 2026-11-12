@@ -14,7 +14,7 @@ target_link_libraries(bp-ui-export PRIVATE bp-ui-model)
 
 # Live backend: pure rules and transactions from the pe_bp mod, and the live catalog.
 set(PE_BP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../mods/pe_bp")
-add_library(bp-live STATIC ${PE_BP_DIR}/bp_rules.c ${PE_BP_DIR}/bp_txn.c bp_catalog.c)
+add_library(bp-live STATIC ${PE_BP_DIR}/bp_config.c ${PE_BP_DIR}/bp_rules.c ${PE_BP_DIR}/bp_txn.c bp_catalog.c)
 target_include_directories(bp-live PUBLIC "${PE_BP_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(bp-live PUBLIC bp-ui-model)
 add_executable(bp-live-tests tests_live.c)
@@ -31,6 +31,15 @@ foreach(target bp-ui-model bp-ui-tests bp-ui-export bp-live bp-live-tests bp-ui-
         target_compile_options(${target} PRIVATE -Wall -Wextra -Werror)
     endif()
 endforeach()
+add_executable(bp-settings-tests tests_settings.c ${PE_BP_DIR}/pe_bp_menu.c)
+target_include_directories(bp-settings-tests BEFORE PRIVATE test-stubs)
+target_link_libraries(bp-settings-tests PRIVATE bp-live)
+if(NOT MSVC)
+ target_compile_options(bp-settings-tests PRIVATE -Wall -Wextra -Werror)
+endif()
+
 enable_testing()
 add_test(NAME bp-ui-contracts COMMAND bp-ui-tests)
 add_test(NAME bp-live-backend COMMAND bp-live-tests)
+
+add_test(NAME bp-settings COMMAND bp-settings-tests)

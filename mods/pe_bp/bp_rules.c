@@ -123,6 +123,7 @@ const char *bp_error_text(BpError e) {
     case BP_ERR_NO_ECONOMY: return "Needs the Junk economy";
     case BP_ERR_BAG: return "Empty the last bag slots first";
     case BP_ERR_UNCHANGED: return "Already set";
+    case BP_ERR_INACTIVE: return "Disabled - investment retained";
     case BP_ERR_STORE: return "BP upgrades can't be saved here";
     }
     return "Unavailable";
@@ -207,6 +208,10 @@ BpQuote bp_quote(const BpSnapshot *s, const BpRequest *r, BpPriceFn price) {
     memset(&q, 0, sizeof q);
     q.bp_after = s ? s->bp : 0; q.junk_after = s ? s->junk : 0;
     if (!s || !s->loaded) { q.error = BP_ERR_NOT_LOADED; return q; }
+    if((r->kind==BP_REQ_DEFENSE && !(s->features&(r->a==BP_FORTITUDE?BP_FEATURE_FORTITUDE:BP_FEATURE_RESISTANCE))) ||
+       (r->kind==BP_REQ_MASTERY && !(s->features&BP_FEATURE_MASTERY)) ||
+       (r->kind==BP_REQ_FORT_MODE && !(s->features&BP_FEATURE_FORTITUDE)) ||
+       ((r->kind==BP_REQ_RESET_DEFENSE||r->kind==BP_REQ_RESET_MASTERY||r->kind==BP_REQ_RESET_ALL) && !(s->features&BP_FEATURE_RESPEC))) {q.error=BP_ERR_INACTIVE;return q;}
     switch (r->kind) {
     case BP_REQ_GEAR: {
         const BpGear *g = find_gear(s, r->a);

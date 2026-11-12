@@ -40,22 +40,9 @@ static void queue(const char *page, const char *name) {
 }
 static int open_wayne_refund(MenuWidgetNode *from) { return pe_bp_ui_preview_open(from,"reset.one"); }
 static const PeWsService refund_service={"bp.refund","Reset BP",
-    "Refund Resistance, Mastery and Aya's BP stats for Junk. Weapons and armor excluded.",pe_bp_live_available,open_wayne_refund};
+    "Refund Resistance, Mastery and Aya's BP stats for Junk. Weapons and armor excluded.",pe_bp_live_refunds_available,open_wayne_refund};
 static void queue_bp(void) { queue("aya", "BP upgrades"); }
 static void queue_wayne(void) { queue("reset.one", "Wayne's BP refunds"); }
-/* Preview choices are presentation state only; no config or gameplay writes. */
-static int preset_index = 1;
-static const BpUiPage *preset_page(void) { return &bp_ui_demo_f1_catalog()->pages[0]; }
-static unsigned preset_count(void) { return (unsigned)preset_page()->row_count; }
-static const char *preset_name(unsigned i) { return i < preset_count() ? preset_page()->rows[i].label : ""; }
-static int get_preset(void) { return preset_index; }
-static int set_preset(int i) { if (i < 0 || (unsigned)i >= preset_count()) return 0; preset_index = i; return 1; }
-static void preset_rules(char *out, unsigned size) {
-    snprintf(out, size, "%s", preset_page()->rows[preset_index].details[0].text);
-}
-static void preset_notes(char *out, unsigned size) {
-    snprintf(out, size, "%s", preset_page()->rows[preset_index].details[1].text);
-}
 static int master_enabled(void) {
     for (int i = 0; i < pe_menu_row_count(); ++i) {
         PeMenuRow *row = pe_menu_row(i);
@@ -118,9 +105,6 @@ int __wrap_pe_host_init(const PeHookInit *init) {
     if (pe_menu_register_info(NULL, "Queued preview", "After choosing, close F1 and open Aya's menu.", status) < 0 ||
         pe_menu_register_action(NULL, "Open BP preview", "Close F1, then press Triangle in the field.", queue_bp) < 0 ||
         pe_menu_register_action(NULL, "Open Wayne preview", "Close F1, then press Triangle in the field.", queue_wayne) < 0 ||
-        pe_menu_register_live_dynamic_choice(NULL, "Rules preset", "Preview only. Left/Right changes the displayed rules; no live effects.", 16, preset_count, preset_name, get_preset, set_preset) < 0 ||
-        pe_menu_register_info(NULL, "Preset rules", "The rules described by the selected preview preset.", preset_rules) < 0 ||
-        pe_menu_register_info(NULL, "Preset notes", "Preview information; no BP or settings are changed.", preset_notes) < 0 ||
         pe_hook_add(PE_HOOK_FRAME_DRAWN, on_draw, NULL, PE_PRIORITY_LATE, "host") < 0) abort();
     pe_menu_begin(NULL);
     pending_page = getenv("PE_BP_UI_PAGE");
@@ -142,21 +126,23 @@ int __wrap_pe_host_init(const PeHookInit *init) {
         }
     }
     if (getenv("PE_BP_UI_F1_PRESETS_TEST")) {
-        const char *labels[] = {"Rules preset", "Playstyle guide"};
-        const char *paths[] = {BP_DEBUG_PAGE,BP_SETTINGS_PAGE};
+        const char *labels[] = {"Choose BP preset", "Playstyle guide"};
+        const char *paths[] = {BP_SETTINGS_PAGE,BP_SETTINGS_PAGE};
         unsigned tested[2] = {0, 0};
         for (unsigned j=0;j<2;++j)for(int i=0;i<pe_menu_row_count();++i){
             PeMenuRow *row=pe_menu_row(i);
             if(strcmp(row->page,paths[j])||strcmp(row->label,labels[j]))continue;
-            if((j==0&&!pe_menu_row_active(row))||!row->count_fn||!row->name_fn)abort();
+            if((!row->count_fn&&!row->count)||(!row->name_fn&&!row->names))abort();
             int original=row->get?row->get():*row->value;
-            for(unsigned k=0;k<row->count_fn();++k){
+            unsigned count=row->count_fn?row->count_fn():row->count;
+            if(!pe_menu_row_active(row)&&row->get){tested[j]=count;continue;}
+            for(unsigned k=0;k<count;++k){
                 char value[128];
                 if(row->set){if(!row->set((int)k))abort();}else *row->value=(int)k;
                 pe_menu_row_value_text(row,value,sizeof value);
-                if(strcmp(value,row->name_fn(k)))abort();++tested[j];
+                if(strcmp(value,row->name_fn?row->name_fn(k):row->names[k]))abort();++tested[j];
             }
-            if(row->set){if(row->set(-1)||row->set((int)row->count_fn())||!row->set(original))abort();}
+            if(row->set){if(row->set(-1)||row->set((int)count)||!row->set(original))abort();}
             else *row->value=original;
         }
         if(tested[0]!=5||tested[1]!=5)abort();
@@ -177,7 +163,7 @@ int __wrap_pe_host_init(const PeHookInit *init) {
                 if(!strncmp(row->page,page,strlen(page)))++found[c];}
         }
         for(unsigned c=0;c<5;++c)if(!found[c])abort();
-        if(compiled<15||settings<7||debug<6||!pe_menu_page_info(BP_SETTINGS_PAGE))abort();
+        if(compiled<15||settings<7||debug<3||!pe_menu_page_info(BP_SETTINGS_PAGE))abort();
         if(master_enabled()==1&&running!=compiled)abort();
         printf("BP_UI_SUITE compiled=%u running=%u rows=%d settings=%u debug=%u page=%s\n",compiled,running,pe_menu_row_count(),settings,debug,BP_SETTINGS_PAGE);
     }

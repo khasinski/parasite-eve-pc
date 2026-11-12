@@ -1,5 +1,38 @@
 # BP UI prototype
 
+## Real BP presets (r13)
+
+F1 > PE Enhancements > Bonus Points starts with Current BP preset, Choose BP
+preset, Changes, Other changes, Inactive investments and Apply BP preset.
+Presets: Vanilla + QoL, Enhanced, Resistance Only, Mastery Only and Custom.
+Advanced edits Resistance, Fortitude, Mastery and paid respec independently
+in the same draft. Guide selection is independent and persists separately.
+
+Apply is synchronous, free-field-only and confirmed by the existing F1
+question renderer with No selected. Back/Escape cancels. Drafts are live
+rows, never persisted. Only confirmed feature flags are bound to the host's
+atomic profile settings writer. Existing profiles default to the previous
+all-enabled behavior; loading a preset page never auto-applies anything.
+
+Feature flags are profile-owned. Ranks and BP investment remain save-owned
+in the unchanged pe_bp/ranks and pe_bp/run encodings. Disabling features
+pauses their battle effects and purchases, retains ranks, and never moves
+BP. Re-enabling restores effects without another charge. An explicit refund
+removes eligible ranks and returns BP once. Equipment bonuses never enter
+this suspension/refund process. Vanilla + QoL keeps vanilla purchases and
+paid respec; the daily free economy-off respec remains unfinished.
+
+Settings tests cover draft isolation, No/unavailable confirmation, busy
+contexts, idempotency, Custom matching, guide independence and repeated
+toggles. Rule tests cover disabled purchases, inactive rank displays, stale
+request refusal and refunds of retained investments. The native lifecycle
+test uses real card files and companion saves across separate processes.
+
+The existing --test-save-after helper now uses the native companion-safe
+publish/commit boundary, as the real save menu does, so native save tests
+can actually verify persistent extension records.
+
+
 ## Full PE Enhancements suite (r11)
 
 The explicit BP build now uses the current upstream default mod list plus

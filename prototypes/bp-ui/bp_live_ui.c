@@ -40,4 +40,5 @@ static int commit(void *user, const char *request, char *notice, size_t size) {
 static const BpUiBackend s_backend = {commit, refresh, NULL};
 
 int pe_bp_live_available(void) { return api() != NULL; }
+int pe_bp_live_refunds_available(void){const PeBpApi *a=api();BpSnapshot s;return a&&a->snapshot(&s)&&s.loaded&&s.economy&&(s.features&BP_FEATURE_RESPEC);}
 void pe_bp_live_install(void) { pe_bp_ui_set_source(build, &s_backend); }

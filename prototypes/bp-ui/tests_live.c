@@ -26,6 +26,7 @@ static const BpGameOps ops = {f_read, NULL, f_store, f_spend, f_bp, f_gear, f_st
 
 static void fresh(void) {
     memset(&game, 0, sizeof game);
+    game.features = BP_FEATURE_ALL;
     game.loaded = 1; game.bp = 1000; game.economy = 1; game.junk = 300; game.level = 10;
     game.learned = 1u | 1u << 7 | 1u << 9;    /* Heal 1, Scan, Haste */
     game.active = (BpAyaStat){.value = 150, .next_value = 160, .level = 13, .next_level = 14, .shown = 14, .next_shown = 15};
@@ -269,6 +270,35 @@ static void catalog(void) {
     }
 }
 
+static void preset_lifecycle(void){
+    CHECK(bp_preset_flags(BP_PRESET_VANILLA_QOL)==BP_FEATURE_RESPEC);
+    for(int i=0;i<BP_PRESET_CUSTOM;i++)CHECK(bp_config_preset(bp_preset_flags(i))==i);
+    CHECK(bp_config_preset(0)==BP_PRESET_CUSTOM&&!bp_config_valid(16));
+    fresh();game.rec.defense[0]=2;game.rec.mastery[0]=1;
+    unsigned bp=game.bp,junk=game.junk;BpRecord original=game.rec;BpGear gear=game.gear[0];
+    uint8_t ranks[BP_RANKS_BYTES],runbytes[BP_RUN_BYTES],r2[BP_RANKS_BYTES],b2[BP_RUN_BYTES];
+    bp_record_encode(&game.rec,ranks,runbytes);
+    for(int i=0;i<30;i++){
+        game.features=bp_preset_flags(i%BP_PRESET_CUSTOM);
+        BpRecord reloaded;CHECK(!bp_record_decode(ranks,runbytes,&reloaded));game.rec=reloaded;
+        CHECK(bp_record_equal(&game.rec,&original)&&game.bp==bp&&game.junk==junk);
+        CHECK(!memcmp(&gear,&game.gear[0],sizeof gear));
+        bp_record_encode(&game.rec,r2,b2);CHECK(!memcmp(ranks,r2,sizeof ranks)&&!memcmp(runbytes,b2,sizeof runbytes));
+    }
+    game.features=BP_FEATURE_RESPEC;BpSnapshot before=game;
+    CHECK(run("buy.def.0").error==BP_ERR_INACTIVE);UNCHANGED(before);
+    CHECK(run("buy.line.0").error==BP_ERR_INACTIVE);UNCHANGED(before);
+    CHECK(run("set.fort.1").error==BP_ERR_INACTIVE);UNCHANGED(before);
+    BpUiController ui;const BpUiCatalog *c=bp_catalog_build(&game,NULL);
+    CHECK(bp_ui_init(&ui,c,"aya",7));size_t at=row_index(ui.page,"def.poison");
+    CHECK(ui.page->rows[at].state==BP_UI_INACTIVE&&!ui.page->rows[at].preview->cost);
+    CHECK(bp_ui_init(&ui,c,"mastery",7));CHECK(ui.page->rows[0].state==BP_UI_INACTIVE);
+    CHECK(run("reset.def.0").error==BP_OK&&game.rec.defense[0]==0); /* inactive investments remain refundable */
+    unsigned returned=game.bp;game.features=BP_FEATURE_ALL;CHECK(game.bp==returned&&game.rec.defense[0]==0&&game.rec.mastery[0]==1);
+    game.features=0;before=game;CHECK(run("reset.all").error==BP_ERR_INACTIVE);UNCHANGED(before);
+    CHECK(run("buy.gear.3.0").error==BP_OK); /* equipment ignores feature toggles */
+}
+
 static void battle_numbers(void) {
     BpFortitudePlan p;
     /* Halve HP, rank 1: one charge, Aya keeps 3/4 instead of 1/2. */
@@ -298,7 +328,7 @@ static void battle_numbers(void) {
 }
 
 int main(void) {
-    fees(); requests(); purchases(); resets(); save_encoding(); battle_numbers(); catalog();
+    fees(); requests(); purchases(); resets(); save_encoding(); battle_numbers(); catalog(); preset_lifecycle();
     puts("PASS: BP rules, atomic transactions, save encoding and live catalog");
     return 0;
 }

@@ -72,7 +72,7 @@ typedef struct BpUiCatalog {
     size_t page_count;
     const BpUiTab *tabs;
     size_t tab_count;
-    const char *badge; /* header badge; NULL shows "PREVIEW" */
+    const char *badge; /* header badge; empty hides it, NULL shows "PREVIEW" */
 } BpUiCatalog;
 /* Optional live backend. Without one, confirmations stay presentation-only no-ops.
  * commit runs the request (it must revalidate and be atomic) and writes the notice;
