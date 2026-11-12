@@ -56,8 +56,12 @@ const void *pe_service_get(const char *name, int v) {
     return !strcmp(name, "wardrobe") && s_wardrobe_on ? (const void *)1 : NULL;
 }
 
+static int extra_on=1,extra_opened;
+static int extra_available(void){return extra_on;}
+static int extra_open(struct MenuWidgetNode *from){(void)from;++extra_opened;return 1;}
+
 int main(void) {
-    int services[PE_WS_SERVICES], n;
+    int services[PE_WS_SERVICE_CAPACITY], n;
     PeWsGoods g;
     char msg[96];
 
@@ -68,6 +72,18 @@ int main(void) {
     s_wardrobe_on = 0;
     n = pe_ws_services(services);
     assert(n == 3 && services[2] == PE_WS_PERMIT);
+
+    /* Added services preserve originals, reject duplicates and recheck availability. */
+    {
+        static const PeWsService extra={"fixture.refund","Reset BP","Refund preview",extra_available,extra_open};
+        assert(pe_ws_register_service(&extra));assert(!pe_ws_register_service(&extra));
+        n=pe_ws_services(services);assert(n==4&&services[2]==PE_WS_PERMIT&&services[3]==PE_WS_SERVICES);
+        assert(!strcmp(pe_ws_service_name(services[3]),"Reset BP"));
+        assert(pe_ws_open_service(services[3],NULL)&&extra_opened==1);
+        extra_on=0;n=pe_ws_services(services);assert(n==3);
+        assert(!pe_ws_open_service(PE_WS_SERVICES,NULL)&&extra_opened==1);
+        assert(!pe_ws_open_service(-1,NULL));
+    }
 
     /* Rows: an item uses the game's name (name NULL); an economy effect its own; gray ones say why. */
     assert(pe_ws_goods(0, &g) && g.id == 0x14 && !g.name && g.price == 15 && !g.blocked && !g.owned);

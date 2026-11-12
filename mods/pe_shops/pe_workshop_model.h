@@ -15,6 +15,17 @@
 enum { PE_WS_REQUISITION, PE_WS_REBUILD, PE_WS_WARDROBE, PE_WS_PERMIT, PE_WS_SERVICES };
 
 /* The Workshop's rows: the services there now, in order. Returns how many. */
+enum { PE_WS_EXTRA_SERVICES = 8, PE_WS_SERVICE_CAPACITY = PE_WS_SERVICES + PE_WS_EXTRA_SERVICES };
+struct MenuWidgetNode;
+typedef struct PeWsService {
+    const char *id, *name, *help;
+    int (*available)(void);
+    int (*open)(struct MenuWidgetNode *from);
+} PeWsService;
+/* Caller-owned definitions outlive the registry. Stable IDs reject duplicates. */
+int pe_ws_register_service(const PeWsService *service);
+int pe_ws_open_service(int service, struct MenuWidgetNode *from);
+/* out has PE_WS_SERVICE_CAPACITY entries. Built-ins keep their original order. */
 int pe_ws_services(int *out);
 const char *pe_ws_service_name(int service);
 const char *pe_ws_service_help(int service);
