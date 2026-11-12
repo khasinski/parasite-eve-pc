@@ -52,6 +52,7 @@ static struct {
 static struct { char path[96]; int cursor; } s_remembered[MAX_REMEMBERED];
 static PeSurface s_surface;
 static float s_scale;
+static int s_origin_x, s_origin_y, s_shown_w, s_shown_h; /* where the window is shown, in pixels */
 static PsyzOverlayEventFilter_SDL3 s_prev_filter;
 
 static int pe_link_index(const char *page) {
@@ -505,13 +506,52 @@ static void pe_show(int *dirty, int design_h, void (*paint)(int w, int h)) {
     if (!pe_ui_surface_begin(&s_surface, w, h)) return;
     paint(w, h);
     pe_ui_surface_finish(&s_surface);
-    pe_ui_gpu_show(&s_surface, (win_w - w) / 2, (win_h - h) / 2, 0.62f);
+    s_origin_x = (win_w - w) / 2;
+    s_origin_y = (win_h - h) / 2;
+    s_shown_w = w;
+    s_shown_h = h;
+    pe_ui_gpu_show(&s_surface, s_origin_x, s_origin_y, 0.62f);
     *dirty = 0;
 }
 
 static void pe_refresh(void) { pe_show(&s_panel.dirty, pe_design_h(), pe_paint); }
 
 /* ---- input ---- */
+
+/* A mouse event's point in design units of the window shown (pe_show); 0 when the event has no
+ * point. */
+static int pe_mouse_point(const SDL_Event *ev, float *x, float *y) {
+    SDL_WindowID id;
+    float wx, wy, density;
+    SDL_Window *window;
+    if (ev->type == SDL_EVENT_MOUSE_MOTION) {
+        id = ev->motion.windowID;
+        wx = ev->motion.x;
+        wy = ev->motion.y;
+    } else if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        id = ev->button.windowID;
+        wx = ev->button.x;
+        wy = ev->button.y;
+    } else {
+        return 0;
+    }
+    window = SDL_GetWindowFromID(id);
+    density = window ? SDL_GetWindowPixelDensity(window) : 1.0f;
+    if (density <= 0.0f) density = 1.0f;
+    if (s_scale <= 0.0f) return 0;
+    *x = (wx * density - (float)s_origin_x) / s_scale;
+    *y = (wy * density - (float)s_origin_y) / s_scale;
+    return 1;
+}
+
+/* The row slot under design point (x, y), or -1; -2 outside the window. */
+static int pe_mouse_slot(float x, float y, int visible) {
+    if (x < 0.0f || y < 0.0f || x >= (float)s_shown_w / s_scale || y >= (float)s_shown_h / s_scale) return -2;
+    if (x < PANEL_PAD * 0.5f || x >= PANEL_W - PANEL_PAD * 0.5f || y < HEADER_H || y >= HEADER_H + visible * ROW_H)
+        return -1;
+    return (int)((y - HEADER_H) / ROW_H);
+}
+
 static void pe_move(int delta) {
     if (!s_panel.count) return;
     s_panel.cursor = (s_panel.cursor + delta + s_panel.count) % s_panel.count;
@@ -578,7 +618,46 @@ static void pe_panel_event(const SDL_Event *ev) {
         SDL_PushEvent((SDL_Event *)ev);
         return;
     }
-    if (ev->type == SDL_EVENT_KEY_DOWN) {
+    if (ev->type == SDL_EVENT_MOUSE_MOTION || ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        /* Pointing selects a row; a click opens a page or takes the row (on a value's field, its
+         * left half steps it down, its right half up); right click goes back; a click outside the
+         * window closes it, as the settings panel does. */
+        float x, y;
+        int slot, at;
+        if (!pe_mouse_point(ev, &x, &y)) return;
+        if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev->button.button == SDL_BUTTON_RIGHT) {
+            pe_back();
+        } else {
+            slot = pe_mouse_slot(x, y, pe_visible_rows());
+            at = slot >= 0 ? s_panel.scroll + slot : -1;
+            if (at >= s_panel.count) at = -1;
+            if (at >= 0 && at != s_panel.cursor) {
+                s_panel.cursor = at;
+                s_panel.dirty = 1;
+            }
+            if (ev->type != SDL_EVENT_MOUSE_BUTTON_DOWN || ev->button.button != SDL_BUTTON_LEFT) {
+                return;              /* pointing only: the row is selected (and repainted) above */
+            } else if (slot == -2) {
+                s_panel.open = 0;
+            } else if (at >= 0) {
+                const Entry *e = &s_panel.entries[at];
+                const PeMenuRow *row = e->row >= 0 ? pe_menu_row(e->row) : NULL;
+                const float value_x = PANEL_W - PANEL_PAD - VALUE_W * 0.5f;
+                if (row && row->kind != PE_ROW_ACTION && row->kind != PE_ROW_INFO &&
+                    x >= value_x - VALUE_W * 0.5f + 6) {
+                    pe_step(x < value_x ? -1 : 1);
+                } else {
+                    pe_accept();
+                }
+            } else {
+                return;
+            }
+        }
+    } else if (ev->type == SDL_EVENT_MOUSE_WHEEL) {
+        float step = ev->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -ev->wheel.y : ev->wheel.y;
+        if (step == 0.0f) return;
+        pe_move(step > 0.0f ? -1 : 1);
+    } else if (ev->type == SDL_EVENT_KEY_DOWN) {
         switch (ev->key.scancode) {
         case SDL_SCANCODE_F1: s_panel.open = 0; break;
         case SDL_SCANCODE_ESCAPE:
@@ -690,7 +769,19 @@ static void pe_choose_event(const SDL_Event *ev) {
         SDL_PushEvent((SDL_Event *)ev);
         return;
     }
-    if (ev->type == SDL_EVENT_KEY_DOWN) {
+    if (ev->type == SDL_EVENT_MOUSE_MOTION || ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        float x, y;                     /* pointing selects a row, a left click takes it */
+        int slot;
+        if (!pe_mouse_point(ev, &x, &y) || (slot = pe_mouse_slot(x, y, visible)) < 0 ||
+            s_choose.scroll + slot >= n)
+            return;
+        s_choose.cursor = s_choose.scroll + slot;
+        accept = ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev->button.button == SDL_BUTTON_LEFT;
+    } else if (ev->type == SDL_EVENT_MOUSE_WHEEL) {
+        float step = ev->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -ev->wheel.y : ev->wheel.y;
+        if (step == 0.0f) return;
+        s_choose.cursor = (s_choose.cursor + (step > 0.0f ? n - 1 : 1)) % n;
+    } else if (ev->type == SDL_EVENT_KEY_DOWN) {
         switch (ev->key.scancode) {
         case SDL_SCANCODE_UP: case SDL_SCANCODE_KP_8: s_choose.cursor = (s_choose.cursor + n - 1) % n; break;
         case SDL_SCANCODE_DOWN: case SDL_SCANCODE_KP_2: s_choose.cursor = (s_choose.cursor + 1) % n; break;

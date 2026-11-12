@@ -670,6 +670,16 @@ static inline void GetPosition(MenuWidgetNode *node, u32 *x, u32 *y)
     }
 }
 
+/* Where a list widget's corner is on the game's screen: its clip area's
+ * corner (Draw_AllocPrimWithMask), for pointing at its cells. */
+void MenuWidget_ScreenPosition(MenuWidgetNode *node, int *x, int *y)
+{
+    u32 ux, uy;
+    GetPosition(node, &ux, &uy);
+    *x = (int)ux;
+    *y = (int)uy;
+}
+
 static inline GpuCmdPacket *AllocArea(u32 x, u32 y, u32 width, u32 height)
 {
     DrawAreaRect rect;
