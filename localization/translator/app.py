@@ -124,7 +124,8 @@ class App:
             self.group = self.game.group(select)
         self._build_window()
         root.protocol("WM_DELETE_WINDOW", self.close)
-        root.after(50, self._tick)
+        self._tick_id = root.after(50, self._tick)
+        root.bind("<Destroy>", self._closing, add="+")
         english = english or self.settings.get("english")
         if english and Path(english).is_file():
             self.load_english(english, quiet=True)
@@ -150,8 +151,11 @@ class App:
     def _build_window(self) -> None:
         root = self.root
         root.title("Parasite Eve Translator")
-        root.geometry("1360x820")
-        root.minsize(1100, 700)
+        # The size it opens at, made smaller to fit a smaller screen (laptops, a 1280 wide screen).
+        width = min(1360, root.winfo_screenwidth() - 40)
+        height = min(820, root.winfo_screenheight() - 80)
+        root.geometry(f"{width}x{height}")
+        root.minsize(min(1100, width), min(700, height))
         self.font = tkfont.nametofont("TkDefaultFont")
         self.text_font = tkfont.Font(family=self.font.cget("family"), size=11)
         self.game_font = tkfont.Font(family=self.font.cget("family"), size=-11 * SCALE)
@@ -201,7 +205,11 @@ class App:
         table.pack(fill="both", expand=True, pady=(4, 0))
         self.rows = ttk.Treeview(table, columns=("state", "line", "english", "translation"), show="headings",
                                  selectmode="browse")
-        for column, title, width, stretch in (("state", "", 26, False), ("line", "Line", 70, False),
+        # The Line column fits the longest line name in the list's own font (macOS and Linux fonts
+        # are wider than Windows', so a fixed width cut "M001/004" to "M001/00" there).
+        list_font = tkfont.Font(root=root, font=str(ttk.Style(root).lookup("Treeview", "font") or "TkDefaultFont"))
+        line_width = max(list_font.measure(key.split("/", 1)[1]) for key in self.game.keys) + 16
+        for column, title, width, stretch in (("state", "", 26, False), ("line", "Line", line_width, False),
                                                ("english", "English", 160, True),
                                                ("translation", "Translation", 160, True)):
             self.rows.heading(column, text=title, anchor="w")
@@ -221,7 +229,10 @@ class App:
         self.where = ttk.Label(right, text="", wraplength=640, justify="left")
         self.where.pack(anchor="w")
         ttk.Label(right, text="English (the game's own)").pack(anchor="w", pady=(6, 0))
-        self.english_box = tk.Text(right, height=5, wrap="word", font=self.text_font, state="disabled",
+        # The text boxes ask for no width of their own (width=1) and fill the side: a tk.Text asks
+        # for 80 letters by default, which pushed this side wider than the preview with the wider
+        # fonts of macOS and Linux and squeezed the list of lines.
+        self.english_box = tk.Text(right, width=1, height=5, wrap="word", font=self.text_font, state="disabled",
                                    background="#f2f2f2", relief="solid", borderwidth=1)
         self.english_box.pack(fill="x")
         row = ttk.Frame(right)
@@ -229,7 +240,7 @@ class App:
         ttk.Label(row, text="Translation").pack(side="left")
         self.tags = ttk.Frame(row)
         self.tags.pack(side="left", padx=(10, 0))
-        self.edit = tk.Text(right, height=6, wrap="word", font=self.text_font, undo=True, relief="solid",
+        self.edit = tk.Text(right, width=1, height=6, wrap="word", font=self.text_font, undo=True, relief="solid",
                             borderwidth=1, state="disabled")
         self.edit.pack(fill="x")
         self.edit.bind("<<Modified>>", self._typed)
@@ -240,7 +251,7 @@ class App:
         self.note_entry = ttk.Entry(note, textvariable=self.note, state="disabled")
         self.note_entry.pack(side="left", fill="x", expand=True, padx=(4, 0))
         self.note.trace_add("write", self._note_typed)
-        self.messages = tk.Text(right, height=5, wrap="word", state="disabled", relief="flat",
+        self.messages = tk.Text(right, width=1, height=5, wrap="word", state="disabled", relief="flat",
                                 background=root.cget("background"), font=self.font)
         self.messages.pack(fill="x", pady=(6, 0))
         self.messages.tag_configure("error", foreground="#b00020")
@@ -269,7 +280,11 @@ class App:
 
     def _tick(self) -> None:
         self.worker.poll()
-        self.root.after(50, self._tick)
+        self._tick_id = self.root.after(50, self._tick)
+
+    def _closing(self, event) -> None:
+        if event.widget is self.root:        # the window itself, not one of its parts
+            self.root.after_cancel(self._tick_id)
 
     # ---- the English pack ----
 

@@ -663,6 +663,39 @@ class WindowTest(unittest.TestCase):
         self.assertFalse(report["ok"])
         self.assertIn("missing.pelang", report["error"])
 
+    def layout(self, font_scale: float) -> dict:
+        import tkinter as tk
+        import tkinter.font as tkfont
+        from translator import app as A
+        A.SETTINGS = self.dir / "layout-settings.json"
+        root = tk.Tk()
+        try:
+            for name in ("TkDefaultFont", "TkTextFont", "TkHeadingFont"):
+                font = tkfont.nametofont(name)
+                font.configure(size=round(abs(font.cget("size")) * font_scale))
+            window = A.App(root, None, str(self.dir / "layout.pelang"), select=plain_dialogue(1)[0],
+                           new=("fr", "Français"))
+            root.update()
+            list_font = tkfont.nametofont("TkDefaultFont")
+            return {"window": root.winfo_width(), "left": window.groups.master.winfo_width(),
+                    "middle": window.rows.master.master.winfo_width(), "right": window.canvas.master.winfo_width(),
+                    "preview": window.canvas.winfo_reqwidth(), "line": window.rows.column("line", "width"),
+                    "translation": window.rows.column("translation", "width"),
+                    "longest": max(list_font.measure(k.split("/", 1)[1]) for k in GAME.keys)}
+        finally:
+            root.destroy()
+
+    def test_the_list_of_lines_gets_the_room_whatever_the_font(self):
+        """macOS and Linux fonts are wider than Windows'. There the text boxes once pushed the right
+        side wider than its preview, squeezing the list, and line names were cut ("M001/00")."""
+        for scale in (1.0, 1.3):
+            with self.subTest(fonts=f"{scale:.0%}"):
+                size = self.layout(scale)
+                self.assertLessEqual(size["right"], size["preview"] + 24, size)
+                self.assertGreaterEqual(size["line"], size["longest"], size)
+                self.assertGreaterEqual(size["middle"], size["window"] - size["left"] - size["right"] - 24, size)
+                self.assertGreaterEqual(size["translation"], 150, size)
+
     def test_the_tool_reads_no_file_of_the_repo_but_its_code_and_its_data_files(self):
         """What the download must carry (P.DATA_FILES), and that nothing else is read: no
         translation, no pilot, no Japanese table, no editor catalog."""
