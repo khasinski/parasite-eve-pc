@@ -13,6 +13,7 @@
 #include "pe1/battle.h"
 #include "pe1/battle_ailment.h"
 #include "pe1/battle_runtime.h"
+#include "pe1/battle_start.h"
 #include "pe1/save_slot_metadata.h"
 
 void pe_bp_test_set_record(const BpRecord *rec);
@@ -204,21 +205,182 @@ static void mastery(Combatant *a, const BpRecord *base) {
     restore_state(&s, a);
 }
 
+/* ---- Slow / Confuse against a real enemy of this battle, forced neutral ---- */
+/* Enemies are the battle's actors other than Aya that carry a combatant (encounter.c walks
+ * g_FieldActorListHead the same way); prefer one whose combatant is an active enemy slot. */
+static BattleEntity *find_enemy(void) {
+    BattleEntity *any = NULL, *aya = pe_player();
+    for (BattleEntity *e = (BattleEntity *)g_FieldActorListHead; e; e = e->next) {
+        if (e == aya || !e->core) continue;
+        for (int s = 0; s < 7; ++s)
+            if (g_BattleEnemySlots[s].active && e->core == (void *)&g_BattleEnemySlots[s].combatant) return e;
+        if (!any) any = e;
+    }
+    return any;
+}
+static int neutral_trials(Combatant *a, BattleEntity *ent, unsigned spell, int n) {
+    EnemyCombatant *en = ent->core;
+    const BattleEntity ent0 = *ent;
+    const EnemyCombatant en0 = *en;
+    const SavePromptBlock scan0 = g_BattleScanPanel;
+    const int shift = spell == 8 ? 8 : 10;
+    int landed = 0;
+    for (int i = 0; i < n; ++i) {
+        *ent = ent0; *en = en0;
+        en->statusFlags2 &= ~(3u << shift);          /* neutral: the 50% case */
+        en->coreFlags &= ~(spell == 8 ? 1u : 0xEu);
+        ent->entityFlags &= ~0x1000u;
+        a->exp_or_acc = a->maxAtk;
+        g_ActiveActor = a;
+        Battle_ApplySpellEffect(spell, ent);
+        landed += spell == 8 ? (int)(en->coreFlags & 1) : (ent->entityFlags & 0x1000) != 0;
+    }
+    *ent = ent0; *en = en0; g_BattleScanPanel = scan0;
+    return landed;
+}
+static void control(Combatant *a, const BpRecord *base) {
+    enum { N = 300 };
+    BattleEntity *ent = find_enemy();
+    Saved s;
+    if (!ent) { report("slow_confuse", 0, "no enemy entity found in this battle"); return; }
+    save_state(&s, a);
+    for (int c = 0; c < 2; ++c) {
+        const unsigned spell = c ? 10 : 8;
+        const int line = c ? 8 : 6;
+        const char *name = c ? "confuse" : "slow";
+        char label[32];
+        int landed;
+        ranks(base, -1, 0, line, 0);
+        landed = neutral_trials(a, ent, spell, N);          /* vanilla 50%: 150 +-4 sd */
+        snprintf(label, sizeof label, "%s_rank0", name);
+        report(label, landed >= 115 && landed <= 185, "landed=%d/%d expected~150 (50%%)", landed, N);
+        ranks(base, -1, 0, line, 3);
+        landed = neutral_trials(a, ent, spell, N);          /* rank 3 80%: 240 +-4 sd */
+        snprintf(label, sizeof label, "%s_rank3", name);
+        report(label, landed >= 212 && landed <= 268, "landed=%d/%d expected~240 (80%%)", landed, N);
+    }
+    restore_state(&s, a);
+}
+
+/* ---- multi-frame cases: Gene Heal over 60 frames, Preraise through the real revive ---- */
+enum { PH_INSTANT, PH_GENE, PH_PRERAISE, PH_DONE };
+static struct {
+    int phase, step, frames, rank, healed, last_hp, pe_before, revived, gene0;
+    Saved saved;
+    BpRecord base;
+} P;
+
+static void gene_start(Combatant *a, int rank) {
+    save_state(&P.saved, a);
+    ranks(&P.base, -1, 0, 9, rank);
+    a->stateFlags |= AYA_GENE_HEAL;
+    a->curHP = a->hpMirror = (u16)((s16)a->maxHP / 2);
+    a->exp_or_acc = a->maxAtk;
+    P.rank = rank; P.frames = 0; P.healed = 0; P.last_hp = (s16)a->curHP;
+}
+static int gene_step(Combatant *a) {   /* 1 when the 60-frame window is over */
+    int hp = (s16)a->curHP;
+    if (hp > P.last_hp) P.healed += hp - P.last_hp;   /* enemy damage frames are ignored */
+    P.last_hp = hp;
+    if (++P.frames < 60) return 0;
+    restore_state(&P.saved, a);
+    return 1;
+}
+static void preraise_start(Combatant *a, int rank) {
+    save_state(&P.saved, a);
+    ranks(&P.base, -1, 0, 10, rank);
+    /* Preraise is on Aya for a few frames first (as after a cast); she falls at frame 5. */
+    a->stateFlags = (a->stateFlags | AYA_PRERAISE) & ~AYA_BARRIER;
+    a->exp_or_acc = a->maxAtk;
+    P.rank = rank; P.frames = 0; P.revived = 0;
+}
+static int preraise_step(Combatant *a) {   /* 1 when this case is reported */
+    int hp = (s16)a->curHP, max = (s16)a->maxHP;
+    char label[32];
+    {   /* trace for diagnosis: every change of HP / Preraise flag / PE */
+        static int last_hp = -9999, last_flag = -1, last_pe = -1;
+        int flag = (a->stateFlags & AYA_PRERAISE) != 0;
+        if (hp != last_hp || flag != last_flag || a->exp_or_acc != last_pe)
+            emit("BP_BATTLE_TRACE rank=%d frame=%d hp=%d preraise=%d pe=%d.%04X\n", P.rank, P.frames, hp, flag,
+                 a->exp_or_acc >> 16, a->exp_or_acc & 0xFFFF);
+        last_hp = hp; last_flag = flag; last_pe = a->exp_or_acc;
+    }
+    if (++P.frames < 5) return 0;
+    if (P.frames == 5) {
+        a->exp_or_acc = a->maxAtk;
+        P.pe_before = a->exp_or_acc;
+        a->curHP = a->hpMirror = 0;
+        return 0;
+    }
+    if (!P.revived && hp > 0) { P.revived = P.frames; return 0; }
+    if (!P.revived && P.frames < 1500) return 0;
+    if (P.revived && P.frames < P.revived + 3) return 0;   /* pe_bp's rider runs the frame after */
+    snprintf(label, sizeof label, "preraise_rank%d", P.rank);
+    if (!P.revived) report(label, 0, "no revive within 1500 frames (hp=%d)", hp);
+    else if (P.rank == 0)
+        report(label, hp == max >> 1 && a->exp_or_acc <= (P.pe_before >> 2) + 0x10000,
+               "hp=%d expected=%d pe=%d expected~%d (a quarter)", hp, max >> 1, a->exp_or_acc >> 16, (P.pe_before >> 2) >> 16);
+    else
+        report(label, hp == max * 3 / 4 && a->exp_or_acc >= (P.pe_before >> 1) - 0x10000,
+               "hp=%d expected=%d pe=%d expected~%d (half)", hp, max * 3 / 4, a->exp_or_acc >> 16, (P.pe_before >> 1) >> 16);
+    restore_state(&P.saved, a);
+    return 1;
+}
+
 static int on_battle(void *ctx, void *user) {
     Combatant *a = pe_aya_core();
-    BpRecord base;
     (void)ctx; (void)user;
     if (s_done || !a || !a->attributes || ++s_frames < 120) return 0;
-    s_done = 1;
-    base = *pe_bp_test_record();
-    emit("BP_BATTLE_START hp=%d/%d pe=%d/%d pe_light=%d\n", (s16)a->curHP, (s16)a->maxHP, a->exp_or_acc >> 16,
-         a->maxAtk >> 16, !!(a->attributes->effectFlags & 0x200));
-    resistance(a, &base);
-    fortitude(a, &base);
-    mastery(a, &base);
-    pe_bp_test_set_record(&base);
-    emit("BP_BATTLE_DONE pass=%d fail=%d\n", s_pass, s_fail);
-    return 0;
+    switch (P.phase) {
+    case PH_INSTANT:
+        P.base = *pe_bp_test_record();
+        emit("BP_BATTLE_START hp=%d/%d pe=%d/%d pe_light=%d\n", (s16)a->curHP, (s16)a->maxHP, a->exp_or_acc >> 16,
+             a->maxAtk >> 16, !!(a->attributes->effectFlags & 0x200));
+        resistance(a, &P.base);
+        fortitude(a, &P.base);
+        mastery(a, &P.base);
+        control(a, &P.base);
+        P.phase = PH_GENE; P.step = 0;
+        gene_start(a, 0);
+        return 0;
+    case PH_GENE:
+        if (!gene_step(a)) return 0;
+        if (P.step == 0) { P.step = 1; P.gene0 = P.healed; gene_start(a, 2); return 0; }
+        {
+            const int vanilla = P.gene0, mastered = P.healed;
+            report("gene_heal_rank0", vanilla >= 25 && vanilla <= 35, "healed=%d in 60 frames expected~30", vanilla);
+            report("gene_heal_rank2", mastered >= 50 && mastered <= 70 && mastered >= vanilla * 17 / 10,
+                   "healed=%d in 60 frames expected~60 (twice rank 0)", mastered);
+        }
+        {   /* Fortitude's charges belong to the whole battle: still spent 120+ frames later. */
+            EnemyCombatant ent;
+            EnemyActionEffect fx;
+            Saved s;
+            int hp0 = (s16)a->maxHP < 100 ? (s16)a->maxHP : 100;
+            save_state(&s, a);
+            memset(&ent, 0, sizeof ent); memset(&fx, 0, sizeof fx);
+            fx.effectType = ENEMY_EFFECT_REDUCE_HP_TO_1; ent.effect = &fx;
+            ranks(&P.base, BP_FORTITUDE, 3, -1, 0);
+            a->stateFlags &= ~(AYA_BARRIER | AYA_PRERAISE);
+            a->curHP = (s16)hp0; g_ActiveActor = a;
+            Battle_ApplyEnemyAttack(&ent);
+            report("fortitude_charges_persist", (s16)a->curHP == 1, "hp=%d expected=1 (charges spent earlier this battle)", (s16)a->curHP);
+            restore_state(&s, a);
+        }
+        P.phase = PH_PRERAISE; P.step = 0;
+        preraise_start(a, 0);
+        return 0;
+    case PH_PRERAISE:
+        if (!preraise_step(a)) return 0;
+        if (P.step == 0) { P.step = 1; preraise_start(a, 3); return 0; }
+        P.phase = PH_DONE;
+        /* fallthrough */
+    default:
+        s_done = 1;
+        pe_bp_test_set_record(&P.base);
+        emit("BP_BATTLE_DONE pass=%d fail=%d\n", s_pass, s_fail);
+        return 0;
+    }
 }
 
 void pe_bp_battle_probe_install(void) {

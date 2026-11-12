@@ -31,7 +31,8 @@ static struct { int active, target_hp; } s_soften;
 static struct { int valid, slowed, confused; } s_pre;
 static struct { BattleAction *action; u16 orig; int set; } s_shot;
 static struct { int hp, flags, pe; } s_last;
-static int s_gene_toggle;
+extern int g_ActiveDrawSlot;
+static int s_preraise_armed;
 
 static unsigned roll(void) {   /* xorshift32, percent 0..99 */
     s_rng ^= s_rng << 13; s_rng ^= s_rng >> 17; s_rng ^= s_rng << 5;
@@ -47,7 +48,14 @@ static void restore_shot(void) {
 }
 
 /* ---- battle bookkeeping ---- */
-static int on_field_frame(void *ctx, void *user) { (void)ctx; (void)user; s_in_battle = 0; restore_shot(); return 0; }
+/* PE_HOOK_FRAME also runs during battles (PE fights in the field), so a battle ends only when
+ * the game is out of battle; otherwise Fortitude's charges and Preraise's memory would reset
+ * every frame. */
+static int on_field_frame(void *ctx, void *user) {
+    (void)ctx; (void)user;
+    if (!pe_in_battle()) { s_in_battle = 0; s_preraise_armed = 0; restore_shot(); }
+    return 0;
+}
 static int on_battle_update(void *ctx, void *user) {
     Combatant *a = aya();
     (void)ctx; (void)user;
@@ -57,18 +65,26 @@ static int on_battle_update(void *ctx, void *user) {
         s_last.hp = a ? (s16)a->curHP : 0; s_last.flags = a ? a->stateFlags : 0; s_last.pe = a ? a->exp_or_acc : 0;
     }
     if (!a) return 0;
-    /* Gene Heal ranks 2-3: a second HP per tick (vanilla heals 1 every other frame). */
-    if ((a->stateFlags & AYA_GENE_HEAL) && rank_line(9) >= 2 && (s16)a->curHP > 0 && (s16)a->curHP < (s16)a->maxHP) {
-        if ((s_gene_toggle ^= 1) != 0) a->curHP += 1;
+    /* Gene Heal ranks 2-3: a second HP per tick. Vanilla heals 1 HP (and its mirror) on frames with
+     * draw slot 1 (combat.c); this heals on the other frames, so the rate doubles. */
+    if ((a->stateFlags & AYA_GENE_HEAL) && rank_line(9) >= 2 && g_ActiveDrawSlot == 0 &&
+        (s16)a->curHP > 0 && (s16)a->curHP < (s16)a->maxHP) {
+        a->curHP += 1;
+        a->hpMirror += 1;
     }
-    /* Preraise ranks 2-3: the revive keeps half the PE (vanilla a quarter), rank 3 also 75% HP. */
-    if (s_last.hp <= 0 && (s_last.flags & AYA_PRERAISE) && rank_line(10) >= 2 &&
-        (s16)a->curHP > 0 && (s16)a->curHP == ((s16)a->maxHP >> 1)) {
+    /* Preraise ranks 2-3: the revive keeps half the PE (vanilla a quarter), rank 3 also 75% HP.
+     * The revive is recognised by what it leaves after a Preraise that was on while Aya was alive
+     * or down: the flag gone, HP at exactly half and PE cut to a quarter of the last frame's. */
+    if (s_preraise_armed && !(a->stateFlags & AYA_PRERAISE) && rank_line(10) >= 2 &&
+        (s16)a->curHP > 0 && (s16)a->curHP == ((s16)a->maxHP >> 1) &&
+        a->exp_or_acc <= (s_last.pe >> 2) + 0x10000) {
         if (a->exp_or_acc < (s_last.pe >> 1)) a->exp_or_acc = s_last.pe >> 1;
-        if (rank_line(10) >= 3) a->curHP = (s16)((s16)a->maxHP * 3 / 4);
+        if (rank_line(10) >= 3) a->curHP = a->hpMirror = (u16)((s16)a->maxHP * 3 / 4);
         pe_toast("Preraise mastery");
         pe_mod_log(MOD_ID, "preraise rider: hp=%d pe=%d", (s16)a->curHP, a->exp_or_acc >> 16);
     }
+    if ((s16)a->curHP > 0) s_preraise_armed = (a->stateFlags & AYA_PRERAISE) != 0;   /* kept while she is down */
+    else if (a->stateFlags & AYA_PRERAISE) s_preraise_armed = 1;
     s_last.hp = (s16)a->curHP; s_last.flags = a->stateFlags; s_last.pe = a->exp_or_acc;
     return 0;
 }
