@@ -50,14 +50,20 @@ again to go on. It is a zip holding:
 The game reads `text.bin` and leaves the rest alone. Saving keeps the version before as
 `<name>.pelang.before-last-save`.
 
-A pack made by other means (a fan patch import) opens for reading. If saving it from here would
-change lines nobody edited, saving is switched off for that file.
+A pack made from a fan patch (the Spanish, Italian, German, French and Chinese player packs)
+keeps the rules it was made with, and the title bar says "a fan patch's rules": a line's pauses
+may differ from the English, and a menu line a little too wide is drawn a little narrower. Lines
+you change or add follow the same rules. The patch's own letter shapes and widths come from the
+pack itself, so saving it untouched gives back the same pack, byte for byte. If even those rules
+would change lines nobody edited, the file opens for reading only and saving is switched off.
+
+Chinese, Japanese and Korean: characters the pack has no picture of are drawn from a font file.
+Pick one with **Font…** at the top; it is remembered on your computer, not put in the file. Once
+saved, those characters' pictures are in the pack, so it opens and builds again without the font.
 
 ## Not there yet
 
 - Pictures with words, and drawing missing letters.
-- Saving packs that were made from a fan patch.
-- Chinese, Japanese and Korean need a font file, which the window does not ask for yet.
 
 ## Code
 

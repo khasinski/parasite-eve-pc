@@ -13,7 +13,14 @@ A translation is one .pelang, a zip:
   pictures.bin          its pictures, when it has any (kept as they are)
   readme.txt            the translator's note to players (kept as it is)
   translator/work.json  the translator's own text as typed (before the compiler's line breaks),
-                        rows that don't pass the checks yet, and notes; the game leaves it alone
+                        rows that don't pass the checks yet, notes, and which rules the pack is
+                        built with; the game leaves it alone
+
+A pack made from a fan patch (the player packs: `import-patch` then `build --from-patch`) keeps
+the rules it was made with (Rules): a line's waits may differ from the English, a menu line a
+little too wide is drawn narrower, and the patch's own letter pictures and widths are kept. All it
+needs for that is in the pack itself: its letter table and CJK dictionary hold those pictures
+(letters_in_pack), so the tool writes such a pack back byte for byte without the import's files.
 """
 from __future__ import annotations
 
@@ -28,22 +35,25 @@ import sys
 import tempfile
 import threading
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 import pelang  # noqa: E402
-from petext import alphabets, battle, gametext as gt, layout, menu, names as namelib, rtl, stretch  # noqa: E402
-from petext import manifest as srcman, validation  # noqa: E402
+from petext import alphabets, battle, cjk, gametext as gt, layout, menu, names as namelib, rtl, stretch  # noqa: E402
+from petext import letters as lettertable, manifest as srcman, validation  # noqa: E402
 
 MANIFEST = ROOT / "data" / "manifest.json"
 # Every file under localization/ other than code that the Translator reads: the download carries
 # these and nothing else (localization/translator/package.py). None of them holds game text.
 DATA_FILES = ("data/manifest.json", "data/menu_layouts.json")
 WORK = "translator/work.json"
-WORK_FORMAT, WORK_VERSION = "pe-translator-work", 1
+WORK_FORMAT, WORK_VERSION = "pe-translator-work", 2
+WORK_READS = (1, 2)                          # 2 added "rules"; a version 1 file is a strict one
+PATCH_IMPORT = "patch import"                # the notes import-patch gives a fan patch's rows
+CJK_LANGS = ("zh", "ja", "ko")               # languages whose letters may need a font file
 PICTURES, README = "pictures.bin", "readme.txt"
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)            # fixed, so the same work always makes the same file
 PAGE_END = 0xF9
@@ -339,15 +349,81 @@ def messages_of(said: str, translated=()) -> list[Message]:
             mine = [k for k in dict.fromkeys(named) if k in translated] or list(dict.fromkeys(named))
             out += [Message(level, k, f"{j[1]}: {j[2]}") for k in mine] or [Message(level, None, rest)]
             continue
-        out.append(Message(level, None, rest))
+        out.append(Message(level, None, in_plain_words(rest)))
     return out
 
 
+# The compiler's words for a missing font speak of its command line; a translator has a button.
+_FONT_WORDS = (
+    (re.compile(r"CJK font: \d+ CJK character\(s\) have no letter picture and no --cjk-font was given: (.+)"),
+     "this pack has no picture of {0} and no font file is chosen: pick one that has them with "
+     "“Font…” at the top"),
+    (re.compile(r"CJK font: CJK text needs --cjk-font.*"),
+     "these characters need a font file: pick one with “Font…” at the top"),
+    (re.compile(r"CJK font: no supplied font contains '(.+?)' U\+[0-9A-F]+"),
+     "the chosen font file has no {0}: pick another with “Font…” at the top"),
+)
+
+
+def in_plain_words(text: str) -> str:
+    for pattern, words in _FONT_WORDS:
+        m = pattern.fullmatch(text.strip())
+        if m:
+            return words.format(*m.groups())
+    return text
+
+
+@dataclass(frozen=True)
+class Rules:
+    """How a pack is built, beyond its rows: what `pelang.py build` is told besides the text.
+    `letters` and `cjk` are the pack's own letter pictures (letters_in_pack), kept as they are."""
+    from_patch: bool = False                 # a fan patch's looser rules (build --from-patch)
+    letters: tuple = ()                      # (letter, 12 picture rows, dialogue advance, menu metric)
+    cjk: tuple = ()                          # (character, 12 picture rows): the CJK dictionary's
+    fonts: tuple = ()                        # font files for CJK characters no picture has
+    patch_rows: frozenset = frozenset()      # rows still as the fan patch had them
+
+
+def _picture_rows(body: bytes) -> tuple[str, ...]:
+    """A record's 72 bytes (two pixels a byte, low half first) as 12 rows of ' ', '#', '+'."""
+    values = []
+    for b in body:
+        values += [b & 15, b >> 4]
+    return tuple("".join(" #+"[v] for v in values[y * 12:(y + 1) * 12]) for y in range(12))
+
+
+def letters_in_pack(data: bytes) -> tuple[tuple, tuple]:
+    """(letters, cjk) for Rules: the letter pictures a compiled pack carries that the compiler
+    wouldn't draw by itself. `letters`: records of its letter table that are pictures of the pack's
+    own (a fan patch's look: `build --patch-letters`), not the catalog's letter for that code.
+    `cjk`: every picture of its CJK dictionary (a patch's own, or drawn from a font when it was
+    built), so the pack builds again with no font file."""
+    version = struct.unpack_from("<I", data, 4)[0]
+    letters, pictures = [], []
+    if version > 2:
+        at, count = struct.unpack_from("<II", data, 80)
+        for k in range(count):
+            r = data[at + k * lettertable.RECORD:at + (k + 1) * lettertable.RECORD]
+            ch, code, advance, base, ops = chr(struct.unpack_from("<I", r)[0]), r[4], r[5], r[6], r[7]
+            if base != lettertable.NO_BASE:
+                continue                     # a catalog letter: a game letter with marks
+            known = lettertable.CATALOG.get(ch)
+            if known is not None and known.record(code) == r:
+                continue                     # the catalog's own picture of it
+            letters.append((ch, _picture_rows(r[8:]), advance, ops))
+    if version > 1:
+        at, count = struct.unpack_from("<II", data, 64)
+        for k in range(count):
+            r = data[at + k * cjk.RECORD:at + (k + 1) * cjk.RECORD]
+            pictures.append((chr(struct.unpack_from("<I", r)[0]), _picture_rows(r[4:])))
+    return tuple(letters), tuple(pictures)
+
+
 def build(game: Game, texts: dict[str, str], lang: str, name: str, *, keep_names_from: bytes | None = None,
-          cjk_fonts=(), allow_overflow: bool = False, then=None) -> Built:
+          rules: Rules = Rules(), allow_overflow: bool = False, then=None) -> Built:
     """Run `pelang.py build` on `texts` (key -> translation; empty ones are left out) against the
-    manifest. `then(pack bytes)` runs right after a build that wrote a pack, while the compiler
-    still holds that pack's letters, and its result is kept as Built.extra."""
+    manifest, with `rules`. `then(pack bytes)` runs right after a build that wrote a pack, while
+    the compiler still holds that pack's letters, and its result is kept as Built.extra."""
     rows = {k: t for k, t in texts.items() if t}
     with _LOCK, tempfile.TemporaryDirectory() as tmp:
         sheet, out = Path(tmp) / "translation.csv", Path(tmp) / "text.bin"
@@ -355,14 +431,33 @@ def build(game: Game, texts: dict[str, str], lang: str, name: str, *, keep_names
             w = csv.DictWriter(f, fieldnames=pelang.SUBMISSION_COLUMNS)
             w.writeheader()
             for key in sorted(rows):
-                w.writerow({"key": key, "translation": rows[key], "notes": ""})
+                w.writerow({"key": key, "translation": rows[key],
+                            "notes": PATCH_IMPORT if key in rules.patch_rows else ""})
         args = ["build", str(sheet), "--strings", str(game.manifest), "--lang", lang, "--name", name,
                 "-o", str(out), "--max-messages", "1000000"]
         if keep_names_from:
             old = Path(tmp) / "previous.bin"
             old.write_bytes(keep_names_from)
             args += ["--keep-names-from", str(old)]
-        for font in cjk_fonts:
+        if rules.from_patch:
+            args.append("--from-patch")
+        if rules.letters:
+            own = Path(tmp) / "letters.json"
+            own.write_text(json.dumps({"letters": [{"letter": ch, "picture": list(pic), "dialogue": adv,
+                                                    "menu": metric} for ch, pic, adv, metric in rules.letters]},
+                                      ensure_ascii=False), encoding="utf-8")
+            args += ["--patch-letters", str(own)]
+        if rules.cjk:
+            names, pictures = Path(tmp) / "cjk-letters.tsv", Path(tmp) / "cjk-pictures.json"
+            with open(names, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f, delimiter="	")
+                w.writerow(["picture", "char", "how"])
+                w.writerows([f"p{k}", ch, "pack"] for k, (ch, _) in enumerate(rules.cjk))
+            pictures.write_text(json.dumps({"pictures": {f"p{k}": {"rows": list(pic)}
+                                                         for k, (_, pic) in enumerate(rules.cjk)}}),
+                                encoding="utf-8")
+            args += ["--cjk-letters", str(names), "--cjk-pictures", str(pictures)]
+        for font in rules.fonts:
             args += ["--cjk-font", str(font)]
         if allow_overflow:
             args.append("--allow-overflow")
@@ -490,7 +585,7 @@ class RowCheck:
 
 
 def check_row(game: Game, key: str, text: str, lang: str, name: str = "Preview", *, default_name: str = "",
-              cjk_fonts=()) -> RowCheck:
+              rules: Rules = Rules()) -> RowCheck:
     """One row checked by the compiler, and how the game will draw it. `default_name` is the
     translation's sys/030 (what {name} shows in a new game); it sets how wide {name} is."""
     if not text:
@@ -527,15 +622,15 @@ def check_row(game: Game, key: str, text: str, lang: str, name: str = "Preview",
                        right_to_left=rtl.is_rtl(lang))
 
     with _LOCK:
-        strict = build(game, rows, lang, name, cjk_fonts=cjk_fonts, then=look)
+        strict = build(game, rows, lang, name, rules=rules, then=look)
         if not strict.ok and len(rows) > 1 and not strict.errors(key):
             rows = {key: text}               # the default name is what's wrong: check this row without it
             shown_name = "Aya"
-            strict = build(game, rows, lang, name, cjk_fonts=cjk_fonts, then=look)
+            strict = build(game, rows, lang, name, rules=rules, then=look)
         preview = strict.extra
         if not strict.ok:
             # Too long for its room: still worth seeing. Controls that are wrong can't be drawn.
-            loose = build(game, rows, lang, name, cjk_fonts=cjk_fonts, allow_overflow=True, then=look)
+            loose = build(game, rows, lang, name, rules=rules, allow_overflow=True, then=look)
             preview = loose.extra
     whole = [m.text for m in strict.messages if m.key is None]
     return RowCheck(strict.errors(key) + (whole if not strict.ok else []), strict.warnings(key), preview)
@@ -563,9 +658,15 @@ class Translation:
         self.parts: dict[str, bytes] = {}    # the file's other parts, kept as they are
         self.pack: bytes | None = None       # the compiled pack of the file it was opened from
         self.path: Path | None = None
-        self.cjk_fonts: list[str] = []
+        self.cjk_fonts: list[str] = []       # font files for CJK characters the pack has no picture of
         self.from_work = False               # opened from its own work part (else read back from the pack)
         self.unknown = 0
+        # The rules it is built with (Rules): a fan patch's looser ones for a pack made from one, the
+        # pack's own letter pictures, and the rows still as the patch had them (key -> that text).
+        self.from_patch = False
+        self.own_letters: tuple = ()
+        self.own_cjk: tuple = ()
+        self.patch_text: dict[str, str] = {}
         # A pack read back from its compiled text (made by other means: a fan patch import, the
         # English pack): the rows a save would not write back as the file has them -> why. While
         # there are any, save refuses, so opening and saving can never quietly change a pack.
@@ -597,19 +698,35 @@ class Translation:
         self = cls(game, read.lang, read.name)
         self.path, self.parts, self.unknown = path, parts, read.unknown
         self.pack = pelang.pack_bytes(path)
+        self.own_letters, self.own_cjk = letters_in_pack(self.pack)
         self.texts = dict(read.texts)
-        if isinstance(work, dict) and work.get("format") == WORK_FORMAT and work.get("version") == WORK_VERSION:
+        patch_rows: list[str] = []
+        if isinstance(work, dict) and work.get("format") == WORK_FORMAT and work.get("version") in WORK_READS:
             rows = work.get("rows") or {}
             self.notes = {k: r["note"] for k, r in rows.items() if k in game.rows and r.get("note")}
             typed = {k: r["text"] for k, r in rows.items() if k in game.rows and r.get("text")}
+            rules = work.get("rules") or {}
+            self.from_patch = rules.get("from_patch") is True
+            patch_rows = [k for k in rules.get("patch_rows") or [] if k in game.rows]
             if work.get("text_sha256") == hashlib.sha256(self.pack).hexdigest():
                 self.texts, self.from_work = typed, True
             else:
                 # The pack was rebuilt by something else since: its text is what the game shows, so
                 # it wins; rows only the work part has (they didn't pass the checks) are kept.
                 self.texts.update({k: t for k, t in typed.items() if k not in self.texts})
+        self.patch_text = {k: self.texts[k] for k in patch_rows if self.texts.get(k)}
         if not self.from_work:
             self.locked = self.untouched_changes()
+            if self.locked and not self.from_patch:
+                # Made by other means, most likely from a fan patch with its looser rules: if those
+                # write every row back as the pack has it, the pack keeps them (and every line edited
+                # or added later follows them too).
+                self.from_patch, self.patch_text = True, dict(read.texts)
+                looser = self.untouched_changes()
+                if len(looser) < len(self.locked) or not looser:
+                    self.locked = looser
+                else:
+                    self.from_patch, self.patch_text = False, {}
         return self
 
     def untouched_changes(self) -> dict[str, str]:
@@ -650,16 +767,34 @@ class Translation:
     def default_name(self) -> str:
         return self.texts.get(namelib.DEFAULT_NAME, "")
 
+    @property
+    def rules(self) -> Rules:
+        """What the pack is built with: see Rules. A row stays the patch's only while its text is."""
+        return Rules(self.from_patch, self.own_letters, self.own_cjk, tuple(self.cjk_fonts),
+                     frozenset(k for k, t in self.patch_text.items() if self.texts.get(k) == t))
+
+    def rules_for(self, key: str, text: str) -> Rules:
+        """The rules for checking `text` as the row `key` (it may not be the row's text yet)."""
+        rules = self.rules
+        rows = rules.patch_rows - {key}
+        if self.patch_text.get(key) == text:
+            rows |= {key}
+        return replace(rules, patch_rows=frozenset(rows))
+
+    def needs_font(self) -> bool:
+        """Whether the language's letters may need a font file (CJK_LANGS)."""
+        return self.lang.split("-")[0].lower() in CJK_LANGS
+
     # -- checking --
 
     def check(self) -> Built:
         """Every translated row through the compiler, as a save would."""
-        return build(self.game, self.texts, self.lang, self.name, keep_names_from=self.pack,
-                     cjk_fonts=self.cjk_fonts)
+        return build(self.game, self.texts, self.lang, self.name, keep_names_from=self.pack, rules=self.rules)
 
     def check_row(self, key: str, text: str | None = None) -> RowCheck:
-        return check_row(self.game, key, self.text(key) if text is None else text, self.lang, self.name,
-                         default_name=self.default_name, cjk_fonts=self.cjk_fonts)
+        text = self.text(key) if text is None else text
+        return check_row(self.game, key, text, self.lang, self.name, default_name=self.default_name,
+                         rules=self.rules_for(key, text))
 
     # -- saving --
 
@@ -679,8 +814,7 @@ class Translation:
             for key in bad:
                 left[key] = built.errors(key)
                 del texts[key]
-            built = build(self.game, texts, self.lang, self.name, keep_names_from=self.pack,
-                          cjk_fonts=self.cjk_fonts)
+            built = build(self.game, texts, self.lang, self.name, keep_names_from=self.pack, rules=self.rules)
         return built, left, first
 
     def save(self, path=None) -> SaveReport:
@@ -710,6 +844,8 @@ class Translation:
                 "rows": {k: {f: v for f, v in (("text", self.texts.get(k, "")), ("note", self.notes.get(k, ""))) if v}
                          for k in sorted(set(self.texts) | set(self.notes))
                          if self.texts.get(k) or self.notes.get(k)}}
+        if self.from_patch:                  # font files stay on this computer: not in the file
+            work["rules"] = {"from_patch": True, "patch_rows": sorted(self.rules.patch_rows)}
         blob = io.BytesIO()
         with zipfile.ZipFile(blob, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr(zipfile.ZipInfo(pelang.BUNDLE_TEXT, ZIP_DATE), pack, zipfile.ZIP_DEFLATED)

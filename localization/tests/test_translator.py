@@ -22,6 +22,7 @@ import csv
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -105,6 +106,46 @@ class RuleTest(unittest.TestCase):
         read = P.read_pack_text(path, GAME)
         self.assertEqual(read.texts, t.texts)
         self.assertEqual(read.unknown, 0)
+
+    def test_a_translation_made_here_keeps_the_strict_rules_and_has_no_letters_of_its_own(self):
+        """Letters the catalog draws (accents, Cyrillic) are not taken for a pack's own pictures, and
+        a pack the strict rules write back as it is stays strict, with or without its work part."""
+        a, b = plain_dialogue(2)
+        t = self.new("ru", "Russian")
+        t.set_text(a, "Ёлка, щука и «объём» — à côté, ça suffit, Œuvre.")
+        t.set_text(b, "Привет{br} мир.")
+        path = self.dir / "ru.pelang"
+        t.save(path)
+        again = P.Translation.open(path, GAME)
+        self.assertEqual((again.own_letters, again.own_cjk, again.from_patch), ((), (), False))
+        with zipfile.ZipFile(path) as z:
+            work = json.loads(z.read(P.WORK))
+        self.assertEqual((work["version"], "rules" in work), (P.WORK_VERSION, False))
+        bare = self.dir / "bare.pelang"
+        bare.write_bytes(pelang.pack_bytes(path))
+        alone = P.Translation.open(bare, GAME)
+        self.assertEqual((alone.from_work, alone.from_patch, alone.locked), (False, False, {}))
+        # (read back from the pack alone, Cyrillic letters the game draws with a Latin one's picture
+        # come back as that Latin letter: the same bytes, so the same pack)
+        alone.save(self.dir / "bare again.pelang")
+        self.assertEqual(pelang.pack_bytes(self.dir / "bare again.pelang"), pelang.pack_bytes(path))
+
+    def test_a_file_saved_with_the_first_work_part_still_opens_as_typed(self):
+        key, = plain_dialogue(1)
+        t = self.new()
+        t.set_text(key, "Une ligne.")
+        path = self.dir / "fr.pelang"
+        t.save(path)
+        with zipfile.ZipFile(path) as z:
+            parts = {i.filename: z.read(i) for i in z.infolist()}
+        work = json.loads(parts[P.WORK])
+        work["version"] = 1
+        parts[P.WORK] = json.dumps(work).encode("utf-8")
+        with zipfile.ZipFile(path, "w") as z:
+            for name, data in parts.items():
+                z.writestr(name, data)
+        again = P.Translation.open(path, GAME)
+        self.assertEqual((again.from_work, again.from_patch, again.texts), (True, False, t.texts))
 
     def test_the_file_is_what_the_command_line_writes_from_the_same_lines(self):
         rows = plain_dialogue(6)
@@ -483,41 +524,158 @@ class EnglishTest(unittest.TestCase):
                 self.assertEqual([s.widths for s in r.preview.screens], layout.screens(raw), key)
             seen += 1
         self.assertGreater(seen, 200)
-        self.assertEqual(len(t.locked), 5, "the five English pages that run past their own box")
-        self.assertTrue(all(k.startswith("dlg/M044/") for k in t.locked))
+        # The game's own pages that run past their box: the strict rules would rewrap five, so the
+        # pack keeps the looser rules (as a fan patch's pack does) and writes back as it is.
+        self.assertEqual((t.from_patch, t.locked), (True, {}))
+        t.from_patch, t.patch_text = False, {}
+        strict = t.untouched_changes()
+        self.assertEqual(len(strict), 5, "the five English pages that run past their own box")
+        self.assertTrue(all(k.startswith("dlg/M044/") for k in strict))
+
+
+def player_packs() -> list[Path]:
+    folder = os.environ.get("PE_TEST_PLAYER_PACKS")
+    return sorted(Path(folder).glob("*.pelang")) if folder and Path(folder).is_dir() else []
+
+
+def zip_parts(path: Path) -> dict[str, bytes]:
+    """A .pelang's parts but the tool's work part (a plain pack: just its text)."""
+    data = path.read_bytes()
+    if not data.startswith(b"PK\x03\x04"):
+        return {pelang.BUNDLE_TEXT: data}
+    with zipfile.ZipFile(path) as z:
+        return {i.filename: z.read(i) for i in z.infolist() if i.filename != P.WORK}
+
+
+def a_font_for(chars: str) -> str | None:
+    """A CJK font file on this computer with all of `chars`, or None (with Pillow, which drawing
+    from a font needs)."""
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        return None
+    from petext import cjk
+    for path in ("C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simsun.ttc",
+                 "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                 "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+                 "/System/Library/Fonts/PingFang.ttc", "/System/Library/Fonts/STHeiti Light.ttc",
+                 "/System/Library/Fonts/Hiragino Sans GB.ttc"):
+        if Path(path).is_file() and {ord(c) for c in chars} <= cjk._coverage(path, {ord(c) for c in chars}):
+            return path
+    return None
+
+
+def one_word_changed(text: str) -> str:
+    """The text with one letter doubled in its first word of four letters or more (any script),
+    outside its tags ({name}, {wait}...)."""
+    pieces = re.split(r"(\{[^}]*\})", text)
+    for n, piece in enumerate(pieces):
+        if not piece.startswith("{"):
+            changed = re.sub(r"(\w)(\w{3,})", lambda m: m.group(1) * 2 + m.group(2), piece, count=1)
+            if changed != piece:
+                return "".join(pieces[:n] + [changed] + pieces[n + 1:])
+    raise ValueError("no word to change")
 
 
 class PlayerPackTest(unittest.TestCase):
-    """With real translations (PE_TEST_PLAYER_PACKS: a folder of .pelang files)."""
+    """With real translations (PE_TEST_PLAYER_PACKS: a folder of .pelang files): the five player
+    packs, each made from a fan patch with its looser rules and its own letter pictures."""
 
-    def test_each_opens_whole_and_saves_back_unchanged_or_not_at_all(self):
-        folder = os.environ.get("PE_TEST_PLAYER_PACKS")
-        packs = sorted(Path(folder).glob("*.pelang")) if folder and Path(folder).is_dir() else []
-        if not packs:
+    def setUp(self):
+        self.packs = player_packs()
+        if not self.packs:
             self.skipTest("needs PE_TEST_PLAYER_PACKS (a folder of .pelang translations)")
-        with tempfile.TemporaryDirectory() as tmp:
-            for path in packs:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_each_opens_whole_and_saves_back_byte_for_byte(self):
+        """Nothing of the fan patch's import is needed: the pack's own rules and letters are enough
+        to write it back exactly, its other parts (pictures, readme) too, and again after reopening."""
+        for path in self.packs:
+            with self.subTest(pack=path.name):
                 before = path.read_bytes()
                 t = P.Translation.open(path, GAME)
                 entries = pelang.read_pack(path)[2]
                 held = {GAME.by_hash[h] for h in entries if h in GAME.by_hash}
-                self.assertEqual(set(t.texts), held, path.name)
-                self.assertEqual(t.unknown, 0, path.name)
-                self.assertTrue(all(t.texts[k] for k in held), path.name)
-                copy = Path(tmp) / path.name
-                if t.locked:
-                    with self.assertRaises(P.WouldChange):
-                        t.save(copy)
-                    self.assertFalse(copy.exists())
-                    state = f"would change {len(t.locked)} rows: saving refused"
-                else:
-                    t.save(copy)
-                    now = pelang.read_pack(copy)[2]
-                    self.assertEqual({h: r for h, r in now.items() if h in GAME.by_hash},
-                                     {h: r for h, r in entries.items() if h in GAME.by_hash}, path.name)
-                    state = "saves back unchanged"
-                self.assertEqual(path.read_bytes(), before, path.name)
-                print(f"\n{path.name}: {t.name} ({t.lang}), {len(held)} rows read; {state}")
+                self.assertEqual(set(t.texts), held)
+                self.assertEqual(t.unknown, 0)
+                self.assertTrue(all(t.texts[k] for k in held))
+                self.assertEqual(t.locked, {})
+                self.assertTrue(t.from_patch)
+                self.assertEqual(t.rules.patch_rows, frozenset(held))
+                copy = self.dir / path.name
+                report = t.save(copy)
+                self.assertEqual(report.left_out, {})
+                self.assertEqual(zip_parts(copy), zip_parts(path))      # text.bin, pictures, readme
+                again = P.Translation.open(copy, GAME)
+                self.assertEqual((again.from_work, again.from_patch, again.locked), (True, True, {}))
+                self.assertEqual(again.texts, t.texts)
+                self.assertEqual(again.rules.patch_rows, frozenset(held))
+                twice = self.dir / ("again " + path.name)
+                again.save(twice)
+                self.assertEqual(zip_parts(twice), zip_parts(path))
+                self.assertEqual(path.read_bytes(), before)
+                print(f"\n{path.name}: {t.name} ({t.lang}), {len(held)} rows, {len(t.own_letters)} letter "
+                      f"pictures of its own, {len(t.own_cjk)} CJK pictures; saves back byte for byte")
+
+    def test_a_line_changed_in_a_fan_pack_keeps_its_rules_and_is_the_only_change(self):
+        """A line the strict rules refuse (its waits differ from the English...) is changed: it
+        passes under the pack's rules, and it is the only row of the pack that changes."""
+        for path in self.packs:
+            with self.subTest(pack=path.name):
+                t = P.Translation.open(path, GAME)
+                strict = P.build(GAME, t.texts, t.lang, t.name, keep_names_from=t.pack,
+                                 rules=P.Rules(letters=t.own_letters, cjk=t.own_cjk))
+                refused = sorted(k for k in strict.keys_with("error") if k.startswith("dlg/") and k in t.texts)
+                key = (refused or sorted(k for k in t.texts if k.startswith("dlg/")))[0]
+                changed = one_word_changed(t.text(key))
+                check = t.check_row(key, changed)
+                self.assertEqual(check.errors, [], key)
+                self.assertNotIn(key, t.rules_for(key, changed).patch_rows)
+                t.set_text(key, changed)
+                copy = self.dir / path.name
+                report = t.save(copy)
+                self.assertEqual(report.left_out, {})
+                was, now = pelang.read_pack(path)[2], pelang.read_pack(copy)[2]
+                differ = {GAME.by_hash.get(h, h) for h in set(was) | set(now) if was.get(h) != now.get(h)}
+                self.assertEqual(differ, {key})
+                again = P.Translation.open(copy, GAME)
+                self.assertEqual((again.text(key), again.from_patch, again.locked), (changed, True, {}))
+                self.assertNotIn(key, again.rules.patch_rows)
+                self.assertEqual(len(again.rules.patch_rows), len(t.texts) - 1)
+                print(f"\n{path.name}: {len(refused)} dialogue lines the strict rules refuse; {key} changed, "
+                      f"the only row that differs")
+
+    def test_a_character_no_picture_has_needs_a_font_and_then_stays_in_the_pack(self):
+        path = next((p for p in self.packs if P.Translation.open(p, GAME).needs_font()), None)
+        if path is None:
+            self.skipTest("no Chinese, Japanese or Korean pack among the player packs")
+        t = P.Translation.open(path, GAME)
+        have = {ch for ch, _ in t.own_cjk}
+        new = next(chr(c) for c in range(0x4E00, 0x9FFF) if chr(c) not in have)
+        font = a_font_for(new)
+        key = sorted(k for k in t.texts if k.startswith("dlg/"))[0]
+        text = t.text(key) + new
+        missing = t.check_row(key, text)
+        self.assertEqual(len(missing.errors), 1, missing.errors)
+        self.assertIn(new, missing.errors[0])
+        self.assertIn("Font", missing.errors[0])             # in plain words: the button to use
+        self.assertNotIn("--cjk-font", missing.errors[0])
+        if font is None:
+            self.skipTest(f"no font file with U+{ord(new):04X} on this computer (or no Pillow)")
+        t.cjk_fonts = [font]
+        self.assertEqual(t.check_row(key, text).errors, [])
+        t.set_text(key, text)
+        copy = self.dir / path.name
+        self.assertEqual(t.save(copy).left_out, {})
+        again = P.Translation.open(copy, GAME)             # no font: the pack has its picture now
+        self.assertEqual(again.locked, {})
+        self.assertIn(new, {ch for ch, _ in again.own_cjk})
+        other = sorted(k for k in again.texts if k.startswith("dlg/"))[1]
+        self.assertEqual(again.check_row(other, again.text(other) + new).errors, [])
 
 
 START = HERE / "translate.py"
@@ -624,10 +782,12 @@ class WindowTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_window(self, *extra, audit: Path | None = None):
-        saved, report = self.dir / "Parasite Eve - Français.pelang", self.dir / "report.json"
-        args = [str(saved), "--new", "fr", "Français", "--settings", str(self.dir / "settings.json"),
-                "--report", str(report), *extra]
+    def run_window(self, *extra, audit: Path | None = None, opened: Path | None = None,
+                   new: tuple[str, str] = ("fr", "Français")):
+        """The scripted window: a new translation (`new`), or the file `opened` opened as it is."""
+        saved, report = opened or self.dir / f"Parasite Eve - {new[1]}.pelang", self.dir / "report.json"
+        start = [] if opened else ["--new", *new]
+        args = [str(saved), *start, "--settings", str(self.dir / "settings.json"), "--report", str(report), *extra]
         cmd = [sys.executable, "-I"] + (["-c", AUDITED_RUN, str(audit), str(START)] if audit else [str(START)])
         done = subprocess.run(cmd + args, capture_output=True, text=True, timeout=300)
         self.assertTrue(report.is_file(), done.stdout[-800:] + done.stderr[-800:])
@@ -677,11 +837,15 @@ class WindowTest(unittest.TestCase):
                 font.configure(size=round(abs(font.cget("size")) * font_scale))
             window = A.App(root, None, str(self.dir / "layout.pelang"), select=plain_dialogue(1)[0],
                            new=("fr", "Français"))
-            root.update()
+            def settle():                    # what a person sees: after every pass the window makes
+                for _ in range(3):
+                    root.update()
+
+            settle()
             for width in widths:             # the window made narrower or wider once it is up
                 root.minsize(1, 1)
                 root.geometry(f"{width}x{root.winfo_height()}")
-                root.update()
+                settle()
             list_font = tkfont.nametofont("TkDefaultFont")
             rows, picked = window.rows, window.rows.selection()
             cell = rows.bbox(picked[0], "translation") if picked else ""
@@ -693,6 +857,7 @@ class WindowTest(unittest.TestCase):
                     "longest": max(list_font.measure(k.split("/", 1)[1]) for k in GAME.keys),
                     # what shows: the picked row's Translation cell inside the list, the scroll bar
                     "cell": cell, "list_width": rows.winfo_width(),
+                    "row_in_sight": bool(picked and rows.bbox(picked[0])),
                     "scroll_bar": window.rows_scroll.winfo_ismapped() and window.rows_scroll.winfo_width() > 4,
                     "scale": window.scale}
         finally:
@@ -732,6 +897,7 @@ class WindowTest(unittest.TestCase):
         asked: GitHub's Windows screen is 1024 wide): the list gets the room it asks for and the
         preview the rest, from the game's pixels at their own size up to twice it."""
         self.assertLessEqual(size["right"], size["preview"] + 24, size)       # the side is its preview
+        self.assertTrue(size["row_in_sight"], size)                          # the line worked on shows
         if size["middle"] < size["middle_needs"] - 4:      # the list short of room: the preview gave all
             self.assertAlmostEqual(size["scale"], 1.0, places=2, msg=size)
         elif size["scale"] < 1.995:                        # the preview not full size: the list has
@@ -758,6 +924,45 @@ class WindowTest(unittest.TestCase):
         if again["window"] == first["window"]:            # not held back by a small screen
             same = ("left", "middle", "right", "preview", "scale")
             self.assertEqual({k: again[k] for k in same}, {k: first[k] for k in same})
+
+    def test_a_fan_patch_pack_opened_in_the_window_saves_a_changed_line_and_nothing_else(self):
+        packs = [p for p in player_packs() if "Spanish" in p.name]
+        if not packs:
+            self.skipTest("needs PE_TEST_PLAYER_PACKS with the Spanish pack")
+        copy = self.dir / packs[0].name
+        copy.write_bytes(packs[0].read_bytes())
+        t = P.Translation.open(copy, GAME)
+        strict = P.build(GAME, t.texts, t.lang, t.name, keep_names_from=t.pack,
+                         rules=P.Rules(letters=t.own_letters, cjk=t.own_cjk))
+        key = sorted(k for k in strict.keys_with("error") if k.startswith("dlg/") and k in t.texts)[0]
+        changed = one_word_changed(t.text(key))
+        code, report, saved = self.run_window("--select", key, "--type", changed, opened=copy)
+        self.assertEqual(code, 0, report)
+        self.assertEqual((report["from_patch"], report["locked"], report["row_state"]), (True, 0, "ok"))
+        self.assertEqual((report["left_out"], report["whole"]), ({}, []))
+        was, now = pelang.read_pack(packs[0])[2], pelang.read_pack(saved)[2]
+        self.assertEqual({GAME.by_hash.get(h, h) for h in set(was) | set(now) if was.get(h) != now.get(h)}, {key})
+        self.assertEqual(zip_parts(saved).keys(), zip_parts(packs[0]).keys())
+        self.assertEqual({k: v for k, v in zip_parts(saved).items() if k != pelang.BUNDLE_TEXT},
+                         {k: v for k, v in zip_parts(packs[0]).items() if k != pelang.BUNDLE_TEXT})
+
+    def test_the_font_kept_in_the_settings_draws_characters_with_no_picture(self):
+        key = plain_dialogue(1)[0]
+        typed = "一丁七"           # three Chinese characters of the commonest
+        font = a_font_for(typed)
+        no_font = self.run_window("--select", key, "--type", typed, new=("zh-Hans", "Chinese"))[1]
+        self.assertEqual((no_font["row_state"], no_font["in_pack"], list(no_font["left_out"])), ("error", 0, [key]))
+        self.assertIn("Font", no_font["left_out"][key][0])
+        if font is None:
+            self.skipTest("no Chinese font file on this computer (or no Pillow)")
+        (self.dir / "settings.json").write_text(json.dumps({"cjk_fonts": [font]}), encoding="utf-8")
+        (self.dir / "Parasite Eve - Chinese.pelang").unlink()
+        code, report, saved = self.run_window("--select", key, "--type", typed, new=("zh-Hans", "Chinese"))
+        self.assertEqual(code, 0, report)
+        self.assertEqual((report["fonts"], report["row_state"], report["in_pack"]), ([font], "ok", 1))
+        again = P.Translation.open(saved, GAME)          # the pack has their pictures: no font needed
+        self.assertEqual((again.text(key), again.locked), (typed, {}))
+        self.assertEqual({ch for ch, _ in again.own_cjk}, set(typed))
 
     def test_the_tool_reads_no_file_of_the_repo_but_its_code_and_its_data_files(self):
         """What the download must carry (P.DATA_FILES), and that nothing else is read: no

@@ -170,6 +170,9 @@ class App:
         ttk.Button(bar, text="Open translation…", command=self.ask_translation).pack(side="left", padx=(6, 0))
         self.save_button = ttk.Button(bar, text="Save", command=self.save, state="disabled")
         self.save_button.pack(side="left", padx=(6, 0))
+        # Shown for Chinese, Japanese and Korean: a font file draws the characters the pack has no
+        # picture of (a fan patch's own pictures keep their look).
+        self.font_button = ttk.Button(bar, text="Font…", command=self.ask_font)
         self.title = ttk.Label(bar, text="Open the English pack to begin.")
         self.title.pack(side="left", padx=12)
         self.progress = ttk.Label(bar, text="")
@@ -226,6 +229,10 @@ class App:
         self.rows.tag_configure("warning", foreground="#8a5a00")
         self.rows.tag_configure("empty", foreground="#707070")
         self.rows.bind("<<TreeviewSelect>>", self._row_picked)
+        # The list changing size (the window, a divider, the first layout) keeps the line being
+        # worked on in sight: on macOS it was left scrolled past it after the dividers moved.
+        self._sight_id = None
+        self.rows.bind("<Configure>", self._picked_in_sight_soon, add="+")
         panes.add(middle, weight=3)
 
         right = ttk.Frame(panes, padding=(SIDE_PAD, 0, SIDE_PAD, 6))
@@ -293,7 +300,7 @@ class App:
     def _closing(self, event) -> None:
         if event.widget is self.root:        # the window itself, not one of its parts
             self.root.after_cancel(self._tick_id)
-            for waiting in ("pending", "_fit_id"):    # a line check, a layout, still waiting
+            for waiting in ("pending", "_fit_id", "_sight_id"):    # a check, a layout, a scroll waiting
                 if getattr(self, waiting) is not None:
                     self.root.after_cancel(getattr(self, waiting))
                     setattr(self, waiting, None)
@@ -304,6 +311,22 @@ class App:
         path = filedialog.askopenfilename(title="Open the English pack", filetypes=PACK_TYPES)
         if path:
             self.load_english(path)
+
+    def ask_font(self) -> None:
+        """A font file for Chinese, Japanese or Korean characters the pack has no picture of. It is
+        remembered on this computer (the settings file), not put in the translation."""
+        path = filedialog.askopenfilename(title="Choose a font file with your language's characters",
+                                          filetypes=[("Font files", "*.ttf *.otf *.ttc"), ("All files", "*.*")])
+        if path and self.tr is not None:
+            self.use_font(path)
+
+    def use_font(self, path: str) -> None:
+        self.tr.cjk_fonts = [path]
+        self.settings["cjk_fonts"] = [path]
+        save_settings(self.settings)
+        self.say(f"Font: {Path(path).name}")
+        self.check_all()
+        self.check_soon(0)
 
     def load_english(self, path: str, quiet: bool = False) -> None:
         self.say("Reading the English pack…")
@@ -409,8 +432,8 @@ class App:
                 messagebox.showinfo(
                     "Open for reading only",
                     f"{Path(path).name} was not made with this tool, and saving it from here would change "
-                    + (f"it: {whole}" if whole else f"{len(tr.locked):,} of its lines that nobody edited "
-                       "(they were written under a fan patch's own rules).")
+                    + (f"it: {whole}" if whole else f"{len(tr.locked):,} of its lines that nobody edited, "
+                       "even with the looser rules packs made from fan patches keep.")
                     + "\n\nYou can read it and search it. Saving is switched off for this file, so it can't be damaged.")
 
         self.worker.ask(lambda: P.Translation.open(path, self.game), done)
@@ -421,8 +444,17 @@ class App:
         self.settings["last"] = str(tr.path)
         save_settings(self.settings)
         self.save_button.configure(state="disabled" if tr.locked else "normal")
+        if tr.needs_font():
+            fonts = [f for f in self.settings.get("cjk_fonts") or [] if isinstance(f, str) and Path(f).is_file()]
+            if fonts and not tr.cjk_fonts:
+                tr.cjk_fonts = fonts
+            self.font_button.pack(side="left", padx=(6, 0), after=self.save_button)
+        else:
+            self.font_button.pack_forget()
+        # A pack made from a fan patch keeps the rules it was made with, for every line (Rules).
         self.title.configure(text=f"{tr.name} ({tr.lang})  —  {tr.path.name}"
-                             + ("  —  reading only" if tr.locked else ""))
+                             + ("  —  reading only" if tr.locked else "")
+                             + ("  —  a fan patch's rules" if tr.from_patch else ""))
         self.fill_groups()
         self.fill_rows()
         self.show_row()
@@ -440,6 +472,10 @@ class App:
                 self.say(f"The check failed: {error}" if error else "")
                 return
             self.take(built)
+            whole = [m.text for m in built.messages if m.level == "error" and m.key is None]
+            if whole:                        # the pack as a whole can't be built (a font missing...)
+                self.say(f"Checked: {whole[0]}")
+                return
             self.say(f"Checked: {len(built.keys_with('error')):,} lines with errors, "
                      f"{len(built.keys_with('warning') - built.keys_with('error')):,} with something to look at.")
 
@@ -560,7 +596,8 @@ class App:
         if self.screenshot:
             out.update(screenshot=self.screenshot, screenshot_error=self.shot_error)
         if tr is not None:
-            out.update(lang=tr.lang, name=tr.name, translated=tr.translated())
+            out.update(lang=tr.lang, name=tr.name, translated=tr.translated(), from_patch=tr.from_patch,
+                       locked=len(tr.locked), fonts=list(tr.cjk_fonts))
             if self._typed_by_script:
                 out["row"], out["text_in_row"] = self._typed_by_script[0], tr.text(self._typed_by_script[0])
                 out["row_state"] = self.state.get(self._typed_by_script[0], "")
@@ -641,14 +678,25 @@ class App:
             self.rows.selection_set(picked if picked in keys else keys[0])
             self.rows.see(picked if picked in keys else keys[0])
 
+    def _picked_in_sight_soon(self, event=None) -> None:
+        if self._sight_id is None:
+            self._sight_id = self.root.after_idle(self._picked_in_sight)
+
+    def _picked_in_sight(self) -> None:
+        self._sight_id = None
+        picked = self.rows.selection()
+        if picked and self.rows.exists(picked[0]):
+            self.rows.see(picked[0])
+
     def _type_into(self, key: str, typed: str) -> None:
-        """The scripted typing (--select, --type), into its own row whatever was shown since."""
+        """The scripted typing (--select, --type), into its own row whatever was shown since: what
+        is typed takes the place of the row's text (a pack opened as it is already has some)."""
         if self.key != key:
             self.rows.selection_set(key)
             self.rows.see(key)
             self.key = key
             self.show_row()
-        self.edit.insert("end", typed)
+        self.edit.replace("1.0", "end-1c", typed)
 
     def row_values(self, key: str) -> tuple:
         text = self.tr.text(key) if self.tr else ""
@@ -768,7 +816,7 @@ class App:
         asked = self.asked
         lang, name = (tr.lang, tr.name) if tr and mine else ("en", "English")
         default = tr.default_name if tr and mine else ""
-        fonts = tr.cjk_fonts if tr else ()
+        rules = tr.rules_for(key, text) if tr and mine else P.Rules()
 
         def done(result, error):
             if asked != self.asked or key != self.key:
@@ -789,7 +837,7 @@ class App:
             self.draw()
 
         self.worker.ask(lambda: P.check_row(self.game, key, text, lang, name, default_name=default,
-                                            cjk_fonts=fonts), done)
+                                            rules=rules), done)
 
     def show_messages(self, errors, warnings, checked: bool) -> None:
         box = self.messages
