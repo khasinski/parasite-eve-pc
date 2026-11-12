@@ -186,6 +186,11 @@ static BpResult execute(const char *request) {
 }
 static const PeBpApi s_api = {sizeof(PeBpApi), snapshot, price, execute};
 static const BpRecord *current_record(void) { return &s_rec; }
+#ifdef PE_BP_TEST_HOOKS
+/* Battle probe only (preview test build): set ranks without a purchase. Never in game builds. */
+void pe_bp_test_set_record(const BpRecord *rec) { s_rec = *rec; }
+const BpRecord *pe_bp_test_record(void) { return &s_rec; }
+#endif
 
 static int bp_init(void) {
     if (pe_extension_register(&s_ranks) < 0 || pe_extension_register(&s_run) < 0)

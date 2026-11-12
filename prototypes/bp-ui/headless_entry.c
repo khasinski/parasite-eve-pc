@@ -96,6 +96,10 @@ int __wrap_pe_host_init(const PeHookInit *init) {
     registered = 1;
     if(!pe_ws_register_service(&refund_service))abort();
     pe_bp_live_install();
+    {   /* Test harness only (PE_BP_TEST_BATTLE=1): see battle_probe.c. */
+        void pe_bp_battle_probe_install(void);
+        pe_bp_battle_probe_install();
+    }
     /* Preview navigation must work in a fresh profile with All mods Off. */
     __wrap_pe_main_menu_init();
     pe_main_menu_add(&preview_row, 10000);

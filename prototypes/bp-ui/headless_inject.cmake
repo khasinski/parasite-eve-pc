@@ -11,10 +11,13 @@ function(bp_ui_headless_attach)
         ${PROJECT_SOURCE_DIR}/prototypes/bp-ui/bp_ui_native.c
         ${PROJECT_SOURCE_DIR}/prototypes/bp-ui/bp_catalog.c
         ${PROJECT_SOURCE_DIR}/prototypes/bp-ui/bp_live_ui.c
+        ${PROJECT_SOURCE_DIR}/prototypes/bp-ui/battle_probe.c
         ${PROJECT_SOURCE_DIR}/prototypes/bp-ui/headless_entry.c)
     target_include_directories(parasite-eve-pc PRIVATE ${PROJECT_SOURCE_DIR}/mods/host ${PROJECT_SOURCE_DIR}/mods/pe_shops
         ${PROJECT_SOURCE_DIR}/mods/pe_bp ${PROJECT_SOURCE_DIR}/prototypes/bp-ui)
     target_compile_definitions(parasite-eve-pc PRIVATE BP_UI_HEADLESS_TEST=1)
+    # Test-only rank setter for the battle probe (battle_probe.c); preview build only.
+    target_compile_definitions(pe-mods PRIVATE PE_BP_TEST_HOOKS=1)
     set_target_properties(parasite-eve-pc PROPERTIES OUTPUT_NAME parasite-eve-ui-preview)
     target_link_options(parasite-eve-pc PRIVATE -Wl,--wrap=pe_main_menu_init -Wl,--wrap=pe_host_init)
 endfunction()

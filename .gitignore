@@ -2,6 +2,7 @@
 build/
 /build-bp-ui-preview/
 /build-bp-ui-headless/
+/build-bp-battle/
 /build-bp-ui-headless-*.log
 .venv/
 .cache/
