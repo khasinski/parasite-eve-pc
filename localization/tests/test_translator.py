@@ -896,6 +896,25 @@ class WindowTest(unittest.TestCase):
                 self.assertGreaterEqual(size["scale"], 1.0, size)
                 self.assertLess(size["scale"], 2, size)                  # it did give way
 
+    def test_the_row_picked_stays_picked_when_the_whole_check_comes_back_first(self):
+        """The list is refilled when the check of every line comes back. If that comes before the
+        list's select event is handled (it did on macOS), the row picked must stay picked."""
+        import tkinter as tk
+        from translator import app as A
+        A.SETTINGS = self.dir / "order-settings.json"
+        key = plain_dialogue(1)[0]
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "order.pelang"), select=key, new=("fr", "Français"))
+            self.assertEqual(window.rows.selection(), (key,))   # picked; its event not handled yet
+            window.fill_rows(keep=True)                          # the whole check's refill, first
+            for _ in range(3):
+                root.update()
+            self.assertEqual((window.rows.selection(), window.key), ((key,), key))
+            self.assertTrue(window.rows.bbox(key))
+        finally:
+            root.destroy()
+
     def assert_room_shared(self, size: dict) -> None:
         """The rule at whatever width the window really got (a screen may hold it to less than
         asked: GitHub's Windows screen is 1024 wide): the list gets the room it asks for and the

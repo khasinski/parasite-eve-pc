@@ -230,7 +230,7 @@ class App:
         self.rows.tag_configure("empty", foreground="#707070")
         self.rows.bind("<<TreeviewSelect>>", self._row_picked)
         # The list changing size (the window, a divider, the first layout) keeps the line being
-        # worked on in sight: on macOS it was left scrolled past it after the dividers moved.
+        # worked on in sight.
         self._sight_id = None
         self.rows.bind("<Configure>", self._picked_in_sight_soon, add="+")
         panes.add(middle, weight=3)
@@ -657,7 +657,11 @@ class App:
         return out
 
     def fill_rows(self, keep: bool = False) -> None:
-        picked = self.key
+        # The row picked in the list, else the editor's. The list's own pick comes first: the editor
+        # takes it only when the list's select event is handled, and a whole check that comes back
+        # before that (it did on macOS) would otherwise refill the list with nothing picked.
+        shown = self.rows.selection()
+        picked = shown[0] if shown else self.key
         self.rows.delete(*self.rows.get_children())
         keys = self.shown_keys()
         for key in keys:
