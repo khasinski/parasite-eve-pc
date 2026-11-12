@@ -777,6 +777,11 @@ class App:
             self.rows.selection_set(picked)
             self.rows.see(picked)
             self.loading = False
+            # On macOS the list's select event comes at once, inside the refill, where it is skipped
+            # (Windows sends it later): the row picked becomes the one worked on here.
+            if picked != self.key:
+                self.key = picked
+                self.show_row()
         elif self._select_first in keys and (self.tr is not None or not self._type_first):
             first, self._select_first = self._select_first, None
             self.rows.selection_set(first)

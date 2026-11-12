@@ -1083,6 +1083,9 @@ class WindowTest(unittest.TestCase):
             with self.subTest(fonts=f"{scale:.0%}"):
                 size = self.layout(scale, screen=1280)
                 self.assertLessEqual(size["window"], 1240, size)
+                if size["window"] < 1200:        # the real screen is smaller still (GitHub's Apple-chip
+                    self.assert_room_shared(size)    # Mac: 1024): the rule at the width it got
+                    continue
                 self.assertGreaterEqual(size["middle"], size["middle_needs"], size)
                 self.assertTrue(size["cell"], size)                      # the picked row is in sight
                 x, _, w, _ = size["cell"]
@@ -1109,6 +1112,28 @@ class WindowTest(unittest.TestCase):
                 root.update()
             self.assertEqual((window.rows.selection(), window.key), ((key,), key))
             self.assertTrue(window.rows.bbox(key))
+        finally:
+            root.destroy()
+
+    def test_the_row_picked_is_worked_on_when_the_select_event_comes_at_once(self):
+        """macOS sends the list's select event at once, inside the refill (Windows sends it later):
+        the row picked must still be the one the editor works on (GitHub's Macs, d012fa89a)."""
+        import tkinter as tk
+        from translator import app as A
+        A.SETTINGS = self.dir / "at-once-settings.json"
+        key = plain_dialogue(1)[0]
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "at-once.pelang"), select=key, new=("fr", "Français"))
+            real = window.rows.selection_set
+
+            def at_once(*items):                 # as on macOS: the event before selection_set returns
+                real(*items)
+                window.rows.event_generate("<<TreeviewSelect>>")
+
+            window.rows.selection_set = at_once
+            window.fill_rows(keep=True)
+            self.assertEqual((window.rows.selection(), window.key), ((key,), key))
         finally:
             root.destroy()
 
