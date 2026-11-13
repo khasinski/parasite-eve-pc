@@ -1385,7 +1385,8 @@ class PictureFitTest(unittest.TestCase):
             window.picture_disc = AllPicturesDisc(self.dir / "made-up.cue")
             window.open_pictures()
             pw = window.pictures_window
-            seen = {}
+            from translator import picture_window as PW
+            seen, tall = {}, {}
             for height in (900, 668, 900):
                 pw.win.geometry(f"1060x{height}")
                 for pic in __import__("translator.artwork").artwork.PICTURES:
@@ -1404,11 +1405,19 @@ class PictureFitTest(unittest.TestCase):
                     if pic.tints:                  # yours in each of the game's tints, one above the other
                         self.assertGreaterEqual(pw.fight_view.winfo_height(), h * len(pic.tints) * pw.zoom, details)
                         self.assertIn("red (Miss)", pw.fight_label.cget("text"))
+                    # The largest zoom that fits the window as it really is: a screen smaller than the
+                    # height asked for (GitHub's Windows and Mac runners) gives a smaller window.
+                    room_w = pw.win.winfo_width() - PW.ROOM_AROUND[0]
+                    room_h = pw.win.winfo_height() - PW.ROOM_AROUND[1]
+                    fits = max(1, min(PW.ZOOM, room_w // w, room_h // (pw.copies(pic) * h)))
+                    self.assertEqual(pw.zoom, fits, details)
                     seen[(height, pic.id)] = pw.zoom
-            self.assertEqual(seen[(900, "map/place-names")], 2, seen)
+                    tall[height] = pw.win.winfo_height() >= height - 20
+            if tall[900]:                          # the window got the 900 it asked for
+                self.assertEqual(seen[(900, "map/place-names")], 2, seen)
+                self.assertEqual(seen[(900, "title/new-game")], 3, seen)
+                self.assertEqual(seen[(900, "battle/words")], 2, seen)
             self.assertEqual(seen[(668, "map/place-names")], 1, seen)
-            self.assertEqual(seen[(900, "title/new-game")], 3, seen)
-            self.assertEqual(seen[(900, "battle/words")], 2, seen)
         finally:
             root.destroy()
 
