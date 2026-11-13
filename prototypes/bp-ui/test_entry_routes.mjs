@@ -4,10 +4,12 @@ import {createInterface} from 'node:readline';
 import {mkdir,writeFile,copyFile,readdir,cp} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import assert from 'node:assert/strict';
+import {sampleCards,loadCard1,SAMPLE} from './test_saves.mjs';
+// Repo sample save B (card 1, save 2: level 14). PROFILE supplies settings only.
 const [exe,disc,out,profile]=process.argv.slice(2,6).map(x=>resolve(x));
 const mode=process.argv[6]||'upgrade';assert(['upgrade','refund','off'].includes(mode));
 await mkdir(out,{recursive:true});
-for(const port of ['bu00','bu10']){await mkdir(join(out,port),{recursive:true});for(const file of await readdir(join(profile,'memory-cards',port)).catch(()=>[]))await copyFile(join(profile,'memory-cards',port,file),join(out,port,file));}
+await sampleCards(out);
 const config=join(out,'config');await cp(profile,config,{recursive:true,filter:s=>!s.includes('memory-cards')});
 await writeFile(join(config,'pe_mods.ini'),'Manage mods/All mods='+(mode==='off'?0:1)+'\nManage mods/BP Overhaul (preview)=1\n');
 const child=spawn(exe,['--disc',disc,'--disc2',disc.replace('(Disc 1)','(Disc 2)'),'--headless','--frame-limit','60000','--control-at','11000','--pad-at','10000:8','--pad-at','10010:0','--dump-frame',join(out,'frame.ppm')],{cwd:out,windowsHide:true,env:{...process.env,PE_CONFIG_HOME:config,PE_BP_UI_PAGE:'',PE_BP_UI_F1_TEST:mode==='refund'?'Open Wayne preview':'',PE_BP_UI_TEST_JUNK:'',PE_BP_UI_SUITE_TEST:'1',PE_BP_UI_F1_PRESETS_TEST:'1',SDL_AUDIODRIVER:'dummy',PSYZ_AUDIO_CLOCK:'video'}});
@@ -21,7 +23,7 @@ async function advance(frames,mask=0){child.stdin.write('advance '+frames+' '+ma
 async function press(key){await advance(8,buttons[key]);return await advance(16);}
 async function shot(label){await copyFile(join(out,'frame.ppm'),join(out,String(++shots).padStart(2,'0')+'-'+label+'.ppm'));}
 try{
- await next();await advance(8,16384);await advance(300);await advance(8,64);await advance(24);await advance(8,16384);await advance(400);await advance(8,16384);await advance(300);await advance(8,16384);let e=await advance(800);assert.equal(e.character.level,14);
+ await next();let e=await loadCard1(advance,SAMPLE.B);assert.equal(e.character.level,14);
  for(let i=0;i<80&&!((ui&&ui.open)||e.menu?.selection===0);i++){const talking=e.dialogue?.some(d=>d.state!==0);e=talking||(e.move_lock&1)?(await advance(10,16384),await advance(120)):await press('menu');}
  baseline=await advance(24);
  if(mode==='refund'){

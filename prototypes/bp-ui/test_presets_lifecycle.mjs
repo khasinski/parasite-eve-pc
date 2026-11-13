@@ -1,6 +1,9 @@
 // Real native card+companion cycle: invest -> QoL-only -> module off -> re-enable.
+// Starts from the repo's sample save F (card 1, save 6: level 34). --test-save-after writes card 1
+// slot 1 (sample A's file in this run's copy); later phases load that save. PROFILE: settings only.
 import {spawn} from 'node:child_process';import {createInterface} from 'node:readline';
 import {mkdir,readFile,writeFile,readdir,cp,copyFile} from 'node:fs/promises';import {resolve,join} from 'node:path';import assert from 'node:assert/strict';
+import {sampleCards,SAMPLES,SAMPLE} from './test_saves.mjs';
 const [exe,disc,output,profile]=process.argv.slice(2).map(x=>resolve(x));await mkdir(output,{recursive:true});
 const phases=[['invest',15,1],['qol',8,1],['disabled',8,0],['restored',15,1]],proof=[];
 let previous=null,expectedBP=0;
@@ -9,7 +12,9 @@ for(const [phase,flags,moduleOn] of phases){
  await cp(profile,config,{recursive:true,filter:s=>!s.includes('memory-cards')});
  let ini=await readFile(join(config,'pe_mods.ini'),'utf8');ini=ini.replace(/^Manage mods\/BP Overhaul \(preview\)=.*\r?\n/gm,'').replace(/^PE Enhancements\/Bonus Points\/Applied feature flags=.*\r?\n/gm,'');
  ini+='\nManage mods/BP Overhaul (preview)='+moduleOn+'\nPE Enhancements/Bonus Points/Applied feature flags='+flags+'\n';await writeFile(join(config,'pe_mods.ini'),ini);
- for(const port of ['bu00','bu10']){await mkdir(join(folder,port),{recursive:true});const src=previous?join(previous,port):join(profile,'memory-cards',port);await cp(src,join(folder,port),{recursive:true});}
+ if(previous)for(const port of ['bu00','bu10']){await mkdir(join(folder,port),{recursive:true});await cp(join(previous,port),join(folder,port),{recursive:true});}
+ else await sampleCards(folder);
+ const slotA=join(folder,'bu00','BASLUS-006620000000A'),slotABefore=await readFile(slotA);
  const args=['--disc',disc,'--disc2',disc.replace('(Disc 1)','(Disc 2)'),'--headless','--frame-limit','65000','--control-at','11000','--pad-at','10000:8','--pad-at','10010:0','--dump-frame',join(folder,'frame.ppm')];if(phase!=='restored')args.push('--test-save-after','30000');
  const child=spawn(exe,args,{cwd:folder,windowsHide:true,env:{...process.env,PE_CONFIG_HOME:config,PE_BP_UI_PAGE:'',PE_BP_UI_F1_TEST:'',PE_BP_SETTINGS_TEST:'1',SDL_AUDIODRIVER:'dummy',PSYZ_AUDIO_CLOCK:'video'}});
  let log='',queue=[],waiting=[],closed=false,ui=null,bpRow=-1;child.on('error',e=>log+=e);child.on('exit',()=>{closed=true;while(waiting.length)waiting.shift()(null)});
@@ -23,8 +28,8 @@ for(const [phase,flags,moduleOn] of phases){
  async function buy(row){await seek(row);await press('confirm');assert.equal(ui.pending,1);await press('left');return await press('confirm');}
  async function openBP(state){for(let i=0;i<100&&!ui?.open;i++){if(state.menu?.selection===0){assert(bpRow>=0);for(let r=0;r<bpRow;r++)await press('down');state=await press('confirm');}else if(state.dialogue?.some(d=>d.state!==0)||(state.move_lock&1)){await advance(10,16384);state=await advance(120);}else state=await press('menu');}assert(ui?.open);return state;}
  try{
-  await next();await advance(8,16384);await advance(300);if(!previous){await advance(8,64);await advance(24);}await advance(8,16384);await advance(400);
-  if(!previous)for(let i=1;i<6;i++){await advance(8,64);await advance(24);}
+  await next();await advance(8,16384);await advance(300);await advance(8,16384);await advance(400);
+  if(!previous)for(let i=1;i<SAMPLE.F;i++){await advance(8,64);await advance(24);}
   await advance(8,16384);await advance(300);await advance(8,16384);let state=await advance(800);assert.equal(state.character.level,34);
   if(phase==='invest'){
    state=await openBP(state);const before=state.character.bonus_points;state=await buy('def.poison');assert.equal(state.character.bonus_points,before-75);
@@ -43,7 +48,7 @@ for(const [phase,flags,moduleOn] of phases){
     if(state.dialogue?.some(d=>d.state!==0)||(state.move_lock&1)){await advance(10,16384);state=await advance(240);}else state=await advance(600);
    }
    assert.match(log,/Test save: wrote/,'native save+companion must publish');
-   assert((await readdir(join(folder,'bu00'))).includes('BASLUS-006620000000A'));
+   assert(!(await readFile(slotA)).equals(slotABefore),'the test save must rewrite card 1 slot 1');
   }
   assert.equal(state.character.bonus_points,expectedBP);proof.push({phase,flags,moduleOn,bp:expectedBP,ranksObserved:phase==='invest'||!!moduleOn});
   await writeFile(join(output,'proof.json'),JSON.stringify({passed:phase==='restored',phases:proof},null,2));

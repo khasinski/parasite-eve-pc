@@ -88,6 +88,17 @@ pe_bp mod (or with All mods Off) it falls back to the sample catalog below,
 whose confirmations never spend anything. Respec staging remains a layout
 example.
 
+## EX Game carryover and repo test saves
+
+- F1 > PE Enhancements > Bonus Points > "EX Game carryover": Off / Keep purchased skills (default)
+  / Convert skills to BP. Unspent BP always carries (the game keeps it). Keep tags ranks as carried
+  (`pe_bp/carry`); their refunds pay into the upgrade-only pool. Convert puts the ranks' BP value in
+  that pool. `bp_ex_carry()` (bp_rules.c) is the rule; `on_new_game` in pe_bp.c applies it.
+- The in-game tests load the repo's sample saves (`save-editor/samples/bu00`) from card 1 through
+  `test_saves.mjs` (slot list there). `test_ex_carry.mjs` fires the game's own EX start command
+  (`PE_BP_TEST_EX=1`); `test_battle.mjs` needs a build with pe_qol for fast encounters.
+- Test scripts must drain the game's stderr: an unread pipe fills and stalls the game.
+
 ## Vanilla look (r7)
 
 `BpUiRow.visual` (`BpUiVisual`, provider-filled numbers) lets gear rows draw

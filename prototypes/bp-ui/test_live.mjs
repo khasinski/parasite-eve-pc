@@ -1,21 +1,18 @@
-// Live BP transactions in the real game: load the Day 3 save (card 2, save 1), open the BP
-// screens through the classic BP button and check that confirmed purchases change the game's
-// own BP / stat table by exactly the quoted amounts, and that No and refusals change nothing.
-// Usage: node test_live.mjs GAME DISC OUTPUT PROFILE
+// Live BP transactions in the real game: load the repo's sample save B (card 1, save 2: level 14,
+// 578 BP), open the BP screens through the classic BP button and check that confirmed purchases
+// change the game's own BP / stat table by exactly the quoted amounts, and that No changes nothing.
+// Usage: node test_live.mjs GAME DISC OUTPUT PROFILE [card-1 slot]   (PROFILE: settings only)
 import {spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
-import {mkdir, writeFile, copyFile, readdir, cp} from 'node:fs/promises';
+import {mkdir, writeFile, copyFile, cp} from 'node:fs/promises';
 import {resolve, join} from 'node:path';
 import assert from 'node:assert/strict';
+import {sampleCards, loadCard1, SAMPLE} from './test_saves.mjs';
 const [exe, disc, output, profile] = process.argv.slice(2, 6).map(x => resolve(x));
-const slot = +(process.argv[6] || 1);   // save slot on card 2
+const slot = +(process.argv[6] || SAMPLE.B);
 const button = {up: 16, down: 64, left: 128, right: 32, confirm: 16384, back: 8192, menu: 4096};
 await mkdir(output, {recursive: true});
-for (const port of ['bu00', 'bu10']) {
-  await mkdir(join(output, port), {recursive: true});
-  for (const file of await readdir(join(profile, 'memory-cards', port)).catch(() => []))
-    await copyFile(join(profile, 'memory-cards', port, file), join(output, port, file));
-}
+await sampleCards(output);
 const config = join(output, 'config');
 await cp(profile, config, {recursive: true, filter: s => !s.includes('memory-cards')});
 const child = spawn(exe, ['--disc', disc, '--disc2', disc.replace('(Disc 1)', '(Disc 2)'), '--headless', '--frame-limit', '60000', '--control-at', '11000',
@@ -53,13 +50,10 @@ async function yes() { await press('left'); return await press('confirm'); }   /
 const bp = e => e.character.bonus_points, stat = (e, i) => e.character.stat_allocation[i];
 try {
   await next();
-  await advance(8, button.confirm); await advance(300);
-  await advance(8, button.down); await advance(24); await advance(8, button.confirm); await advance(400);
-  for (let i = 1; i < slot; ++i) { await advance(8, button.down); await advance(24); }
+  let state = await loadCard1(advance, slot);
   await snap(`slot-${slot}`);
-  await advance(8, button.confirm); await advance(300);
-  let state = await advance(8, button.confirm); state = await advance(800);
   assert(state.character.level > 1, 'the save must load, not start a new game');
+  if (slot === SAMPLE.B) assert(state.character.level === 14 && state.character.bonus_points === 578, 'sample B: level 14, 578 BP');
   console.log(`slot ${slot}: level ${state.character.level}, BP ${state.character.bonus_points}`);
   for (let i = 0; i < 60 && !(ui && ui.open); ++i) {
     const talking = state.dialogue?.some(d => d.state !== 0);
@@ -120,7 +114,7 @@ try {
   assert(!log.includes('page=preview') && !log.includes('page=reset'), 'upgrades must not expose refund/debug pages');
   await snap('classic-bp-reopened');await press('back');assert.equal(ui.open,0);
 
-  await writeFile(join(output, 'proof.json'), JSON.stringify({passed: true, save: 'Day 3, card 2 save 1', steps}, null, 2));
+  await writeFile(join(output, 'proof.json'), JSON.stringify({passed: true, save: `repo sample, card 1 save ${slot}`, steps}, null, 2));
   child.stdin.write('quit\n'); await new Promise(r => child.once('exit', r));
   console.log('PASS: live purchases change BP and Aya stats by the quoted amounts; No changes nothing.');
   console.log(JSON.stringify(steps));
