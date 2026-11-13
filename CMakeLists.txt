@@ -776,6 +776,15 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-pictures-evidence translator-pictures)
             set_tests_properties(original-game-translator-pictures PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # The city map's place names redrawn in the Translator (PNG out, redrawn, loaded back,
+            # saved): the map (Day 5 sample save) with the file chosen is the one of a copy of Disc 1
+            # with the file's pieces written in. Needs Pillow. Disc 1 only: no sample save reaches the
+            # map on Disc 2, whose PE.IMG is the same bytes.
+            add_test(NAME original-game-translator-map COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-map-evidence translator-map)
+            set_tests_properties(original-game-translator-map PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods;localization")
             # The Translator's "As in the game" preview against the game's own frames: the first box
             # (English pack, and each player pack given by PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_)
             # and Disc 2's boxes on the ship, every letter pixel; the first box's room picture.

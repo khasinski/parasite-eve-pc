@@ -666,6 +666,29 @@ class PictureRuleTest(unittest.TestCase):
         self.assertEqual(set(T.indices(T.read(loaded.tim))), {0})
         self.assertIn("See-through parts were drawn as black.", loaded.notes)
 
+    def test_a_picture_whose_colours_a_translation_changed_keeps_them(self):
+        """The German and Chinese packs changed the map's colours, not only its pixels: a PNG loaded
+        over such a picture changes its pixels and keeps the translation's colours (it put the English
+        colours back until 2026-11-13)."""
+        from PIL import Image, ImageDraw
+        from petext import tim as T
+        from translator import artwork as A
+        pic = A.Picture("t/p", "T", "P", 0, 0, 0, 0, A.MAP)
+        english = made_up_tim(4, 8, 3, palette=[0, 0x7FFF, 0x001F] + [0x4210] * 13)
+        theirs = bytearray(english)
+        theirs[24:26] = (0x03E0).to_bytes(2, "little")            # palette number 2: blue -> green
+        theirs = bytes(theirs)
+        self.assertEqual(T.read(theirs).palettes[0][2], 0x03E0)
+        self.assertEqual(A.from_png(pic, english, A.png(pic, theirs), theirs).tim, theirs)    # unchanged
+        img = Image.open(io.BytesIO(A.png(pic, theirs))).convert("RGB")
+        ImageDraw.Draw(img).point((0, 0), fill=T.rgb_of(0x03E0))   # one pixel in their green
+        out = io.BytesIO()
+        img.save(out, "PNG")
+        loaded = A.from_png(pic, english, out.getvalue(), theirs)
+        self.assertEqual(T.read(loaded.tim).palettes, T.read(theirs).palettes)
+        self.assertEqual(T.indices(T.read(loaded.tim))[0], 2)
+        self.assertEqual(loaded.notes, [])
+
     def test_a_picture_loaded_keeps_every_other_piece(self):
         import zlib
         from petext import pictures as pf, tim as T
@@ -753,10 +776,12 @@ class GameLookRuleTest(unittest.TestCase):
 
 
 class PictureDiscTest(unittest.TestCase):
-    """The title screen pictures from the real discs (PE_TEST_DISC, PE_TEST_DISC2): each one read
-    out as a PNG and loaded back gives the disc's bytes, and is the same on both discs."""
+    """The pictures with words (title screen, city map) from the real discs (PE_TEST_DISC,
+    PE_TEST_DISC2): each one read out as a PNG and loaded back gives the disc's bytes, and is the same
+    on both discs. With the player packs (PE_TEST_PLAYER_PACKS) too: each pack's pictures as it shows
+    them, out as a PNG and back, change nothing (their own colours included)."""
 
-    def test_every_picture_out_as_png_and_back_is_the_discs_bytes(self):
+    def discs(self):
         try:
             import PIL  # noqa: F401
         except ImportError:
@@ -765,7 +790,46 @@ class PictureDiscTest(unittest.TestCase):
         discs = [d for d in (os.environ.get("PE_TEST_DISC"), os.environ.get("PE_TEST_DISC2")) if d and Path(d).is_file()]
         if not discs:
             self.skipTest("needs PE_TEST_DISC (and PE_TEST_DISC2)")
-        read = [A.Disc(d) for d in discs]
+        return [A.Disc(d) for d in discs]
+
+    def test_the_map_names_are_the_strips_the_map_draws(self):
+        """Entry 72's second picture: 4-bit, 256x143, three palette rows (143 normal, 144 the place
+        you are at, 145 the band), ten 13-row strips with words in both halves, at the same place on
+        both discs."""
+        from petext import tim as T
+        from translator import artwork as A
+        pic = A.BY_ID["map/place-names"]
+        for disc in self.discs():
+            t = T.read(disc.english[pic.id])
+            self.assertEqual((t.bits, t.size, len(t.palettes)), (4, (256, 143), 3))
+            self.assertEqual(disc.span(pic)[0] // 2048, disc.sectors[72] + 16)
+            numbers = T.indices(t)
+            for row in range(10):
+                for half in (0, 128):
+                    ink = sum(1 for y in range(row * 13, row * 13 + 12) for x in range(half, half + 127)
+                              if numbers[y * 256 + x])
+                    self.assertGreater(ink, 100, (row, half))
+
+    def test_each_player_packs_pictures_out_and_back_change_nothing(self):
+        from translator import artwork as A
+        packs = player_packs()
+        if not packs:
+            self.skipTest("needs PE_TEST_PLAYER_PACKS (a folder of .pelang translations)")
+        disc = self.discs()[0]
+        for path in packs:
+            pieces = A.read_pieces(zip_parts(path))
+            for pic in A.PICTURES:
+                with self.subTest(pack=path.name, picture=pic.id):
+                    shown = A.shown(disc, pic, pieces)
+                    loaded = A.from_png(pic, disc.english[pic.id], A.png(pic, shown), shown)
+                    self.assertEqual((loaded.tim, loaded.notes), (shown, []))
+                    again = A.put(disc, pic, pieces, loaded.tim)
+                    for other in A.PICTURES:
+                        self.assertEqual(A.shown(disc, other, again), A.shown(disc, other, pieces), other.id)
+
+    def test_every_picture_out_as_png_and_back_is_the_discs_bytes(self):
+        from translator import artwork as A
+        read = self.discs()
         for pic in A.PICTURES:
             with self.subTest(picture=pic.id):
                 english = read[0].english[pic.id]
@@ -1229,6 +1293,65 @@ class PictureWindowTest(unittest.TestCase):
             self.assertNotIn("disc", json.loads(A.SETTINGS.read_text(encoding="utf-8")) if A.SETTINGS.exists() else {})
             pw.close()
             self.assertIsNone(window.pictures_window)
+        finally:
+            root.destroy()
+
+
+class AllPicturesDisc:
+    """artwork.Disc's parts with every picture made up at its real size and kind: no disc."""
+    SIZES = {"title/press-start": (24, 144, 24), "title/new-game": (24, 84, 24), "title/continue": (24, 84, 24),
+             "title/tutorial": (24, 84, 24), "title/ex-game": (24, 84, 24), "title/published-by": (4, 256, 64),
+             "map/place-names": (4, 256, 143)}
+
+    def __init__(self, path):
+        from translator import artwork as A
+        self.path = Path(path)
+        self.english, self.around = {}, {}
+        for pic in A.PICTURES:
+            bits, w, h = self.SIZES[pic.id]
+            tim = made_up_tim(bits, w, h, palette=list(range(0, 16 * 2048, 2048)) if bits == 4 else None)
+            self.english[pic.id] = tim
+            self.around[pic.id] = (0, tim + bytes(-len(tim) % 2048))
+
+    def span(self, pic):
+        return 0, len(self.english[pic.id])
+
+
+class PictureFitTest(unittest.TestCase):
+    """The Pictures window from source with a made-up disc (GitHub runs it): the city map's names,
+    the largest picture, fit it with the buttons in sight, at 2x in a 900-high window and still in
+    sight in a window for a 768-high screen; resizing the window changes the zoom."""
+    setUp, tearDown = WindowTest.setUp, WindowTest.tearDown
+
+    def test_the_map_fits_the_pictures_window_with_its_buttons_in_sight(self):
+        import tkinter as tk
+        from translator import app as A
+        A.SETTINGS = self.dir / "settings.json"
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "p.pelang"), new=("fr", "Français"))
+            window.picture_disc = AllPicturesDisc(self.dir / "made-up.cue")
+            window.open_pictures()
+            pw = window.pictures_window
+            seen = {}
+            for height in (900, 668, 900):
+                pw.win.geometry(f"1060x{height}")
+                for pic in __import__("translator.artwork").artwork.PICTURES:
+                    pw.list.selection_set(pic.id)
+                    for _ in range(3):
+                        root.update()
+                    w, h = AllPicturesDisc.SIZES[pic.id][1:]
+                    bottom = pw.message.winfo_rooty() - pw.win.winfo_rooty()
+                    right = pw.your_view.winfo_rootx() - pw.win.winfo_rootx() + pw.your_view.winfo_width()
+                    details = dict(picture=pic.id, height=pw.win.winfo_height(), zoom=pw.zoom, bottom=bottom,
+                                   right=right, width=pw.win.winfo_width())
+                    self.assertEqual(pw.your_view.winfo_height() >= h * pw.zoom, True, details)
+                    self.assertLessEqual(bottom, pw.win.winfo_height(), details)    # the buttons in sight
+                    self.assertLessEqual(right, pw.win.winfo_width(), details)
+                    seen[(height, pic.id)] = pw.zoom
+            self.assertEqual(seen[(900, "map/place-names")], 2, seen)
+            self.assertEqual(seen[(668, "map/place-names")], 1, seen)
+            self.assertEqual(seen[(900, "title/new-game")], 3, seen)
         finally:
             root.destroy()
 

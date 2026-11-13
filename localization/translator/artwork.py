@@ -33,6 +33,11 @@ LIGHTEN = ("The game lays this picture over the title screen keeping the lighter
            "pixel, so black shows the screen behind it and any colour is fine. Keep it {w}×{h}.")
 SIXTEEN = ("This picture has 16 colours. Each pixel of yours becomes the nearest of them, so draw "
            "with the colours of the saved PNG. Keep it {w}×{h}.")
+MAP = ("The city map's place names, one to a row 13 pixels tall. The game draws each name twice at the "
+       "same spot: the left copy is the letters, laid over the map so they glow; the right copy is the same "
+       "letters on a dark band, which darkens the map behind the name. Redraw both copies, inside 127×12 "
+       "pixels per name. 16 colours: draw with the colours of the saved PNG (the place you are at shows the "
+       "same pixels in gold). Leave the bar at the bottom as it is. Keep it {w}×{h}.")
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,12 @@ PICTURES = (
     Picture("title/ex-game", "Title screen", "EX Game", 70, 249284, 6068, 0xE45227B8, LIGHTEN),
     Picture("title/published-by", "Title screen", "Published by Square Electronic Arts L.L.C.", 70, 261420, 8256,
             0xB617A272, SIXTEEN),
+    # The city map, PE.IMG entry 72 (read each time the map opens): TIM 1, ten place names, each a 13-row
+    # strip, drawn by FxCommon_DrawEffectMarkers (src/overlays/fx_common/effects.c) as two 127x12 quads at
+    # one spot: x 0-127 added (palette row 143, or 144 for the current place), x 128-255 subtracted (row
+    # 145). Rows 130-142 (a bar) are not drawn by the map. TIM 0 is the letters page, not a picture.
+    Picture("map/place-names", "City map", "Place names (Subway, Chinatown, Soho … Museum)", 72, 32840, 18432,
+            0xE9B4C181, MAP),
 )
 BY_ID = {p.id: p for p in PICTURES}
 
@@ -200,14 +211,17 @@ class Loaded:
 
 def from_png(pic: Picture, english: bytes, data: bytes, current: bytes | None = None) -> Loaded:
     """A PNG (any paint program's: palette, grey, RGB, with or without see-through) as the picture's
-    TIM. Raises ValueError, in plain words, for one that can't be used."""
+    TIM, on the picture as it is now (`current`, else the English): its colours stay, its pixels
+    become the PNG's. Raises ValueError, in plain words, for one that can't be used."""
     from PIL import Image, UnidentifiedImageError
     try:
         img = Image.open(io.BytesIO(data))
         img.load()
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
         raise ValueError(f"that file is not a picture this tool can read ({e})") from e
-    tim = timlib.read(english)
+    # On the picture as it is now: a translation that changed a picture's colours (the German and Chinese
+    # packs did, on the map) keeps them; only the pixels are the PNG's (put() keeps the length).
+    tim = timlib.read(current or english)
     if img.size != tim.size:
         raise ValueError(f"the picture is {img.width}×{img.height}; it must stay {tim.width}×{tim.height}, "
                          "the size the game draws.")
@@ -234,7 +248,7 @@ def from_png(pic: Picture, english: bytes, data: bytes, current: bytes | None = 
             return Loaded(timlib.with_indices(tim, numbers), notes)
     flat = (rgb or img.convert("RGB")).tobytes()
     pixels = [tuple(flat[k:k + 3]) for k in range(0, len(flat), 3)]
-    before = timlib.indices(timlib.read(current)) if current else timlib.indices(tim)
+    before = timlib.indices(tim)
     nearest: dict[tuple, int] = {}
     numbers, off = [], 0
     for k, colour in enumerate(pixels):

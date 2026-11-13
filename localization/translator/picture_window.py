@@ -13,7 +13,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from . import artwork as A
 
-ZOOM = 3                                     # the game's pixels, three times the size
+ZOOM = 3                                     # the game's pixels up to three times the size
+ROOM_AROUND = (420, 300)                     # the window's room taken by the list, labels, tip and buttons
 DISC_TYPES = [("Disc image", "*.cue *.bin *.iso *.img"), ("All files", "*.*")]
 PNG_TYPES = [("PNG picture", "*.png"), ("All files", "*.*")]
 
@@ -24,7 +25,9 @@ class PictureWindow:
         self.win = tk.Toplevel(app.root)
         self.win.title("Pictures with words — Parasite Eve Translator")
         self.win.transient(app.root)
-        self.win.geometry(f"{min(1060, app.root.winfo_screenwidth() - 60)}x{min(720, app.root.winfo_screenheight() - 100)}")
+        self.size = (min(1060, app.root.winfo_screenwidth() - 60), min(900, app.root.winfo_screenheight() - 100))
+        self.win.geometry(f"{self.size[0]}x{self.size[1]}")
+        self.zoom = ZOOM
         self.win.protocol("WM_DELETE_WINDOW", self.close)
         self.photos: list[tk.PhotoImage] = []         # Tk shows a picture only while Python keeps it
         self.notes: list[str] = []
@@ -47,6 +50,7 @@ class PictureWindow:
         for pic in A.PICTURES:
             self.list.insert("", "end", iid=pic.id, values=("", pic.label))
         self.list.bind("<<TreeviewSelect>>", lambda e: self.show())
+        self.win.bind("<Configure>", self._resized)
         panes.add(left, weight=1)
 
         right = ttk.Frame(panes, padding=(10, 0, 10, 6))
@@ -93,9 +97,24 @@ class PictureWindow:
             self.list.set(pic.id, "mark", mark)
         self.show()
 
+    def zoom_for(self, w: int, h: int) -> int:
+        """The largest zoom (1 to ZOOM) at which the game's and the translation's pictures, one above the
+        other, fit the window beside the list (the map's names are 256×143: 2x in the usual window)."""
+        shown = self.win.winfo_width() > 1             # before it is first drawn, the size it asked for
+        width = (self.win.winfo_width() if shown else self.size[0]) - ROOM_AROUND[0]
+        height = (self.win.winfo_height() if shown else self.size[1]) - ROOM_AROUND[1]
+        return max(1, min(ZOOM, width // w, height // (2 * h)))
+
+    def _resized(self, event) -> None:
+        """The window made larger or smaller: the pictures at the zoom that fits it now."""
+        disc = self.app.picture_disc
+        if event.widget is self.win and disc is not None:
+            if self.zoom_for(*A.timlib.read(disc.english[self.picked().id]).size) != self.zoom:
+                self.show()
+
     def _photo(self, png: bytes) -> tk.PhotoImage:
         photo = tk.PhotoImage(master=self.win, data=base64.b64encode(png).decode("ascii"), format="png")
-        photo = photo.zoom(ZOOM)
+        photo = photo.zoom(self.zoom)
         self.photos.append(photo)
         return photo
 
@@ -109,6 +128,7 @@ class PictureWindow:
             self.your_view.configure(image="", text="")
         else:
             w, h = A.timlib.read(english).size
+            self.zoom = self.zoom_for(w, h)
             self.tip.configure(text=pic.tip.format(w=w, h=h))
             self.english_view.configure(image=self._photo(A.png(pic, english)), text="")
             if tr is not None:

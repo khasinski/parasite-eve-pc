@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -152,6 +152,14 @@ Checks, each from pe_mods.log and frame dumps:
              saved. The file must change those three pictures and no other; and with it chosen, the
              title screen started from each disc must be, pixel for pixel, the title screen of a copy
              of that disc with the file's pieces written in, and not the English one.
+  translator-map  The city map's place names redrawn in the Translator: the picture saved from the disc
+             as a PNG by the tool, three names redrawn in both their copies (the letters, and the letters
+             on the dark band), loaded back through the scripted run (--picture) and saved. The file must
+             change that picture and no other, to exactly the PNG's pixels; and with it chosen, the city
+             map (Continue from the save editor's Day 5 sample save, one Cross at the day's title card)
+             must be, pixel for pixel, the map of a copy of Disc 1 with the file's pieces written in, and
+             not the English one. Disc 1 only: no sample save reaches the map on Disc 2 (the Day 5 save
+             needs Disc 1; PE.IMG, and so the picture, is byte for byte the same on both discs).
   translator-look  The Translator's "As in the game" preview (localization/translator/gamelook.py)
              against the game's own frames: the first box with the English pack (made from the discs)
              and with each player pack given (PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_), and the five
@@ -1058,6 +1066,120 @@ def translator_pictures(game, discs, out, localization):
     return 0
 
 
+# ---- Part translator-map: the city map's place names ----
+
+# The save editor's sample save D (save-editor/samples, in the repository; a save holds no disc data):
+# Day 5. After the load the day's title card waits for Cross; then the city map (scene MAP_SCENE) is
+# on screen from about vblank 16400 and waits for a choice, eight place names showing (Subway and
+# Chrysler BLDG. are not offered that day), N.Y.P.D. #17 in gold as the place Aya is at.
+MAP_SAVE = Path(__file__).resolve().parent.parent / 'save-editor' / 'samples' / 'bu00' / 'BASLUS-006620000000D'
+MAP_SCENE = 0xA8000048
+MAP_AT = 16800
+# Rows of the picture (13 each, from 0) redrawn by part translator-map: Chinatown, N.Y.P.D. #17 (the
+# gold one that day) and Central Park.
+MAP_REDRAWN = (1, 7, 8)
+
+
+def map_steps():
+    steps = loaded_steps()[:-3]                 # Continue from card 1, slot 1, up to the loaded game
+    return steps + presses([(16200, CROSS, 'day-card'), (MAP_AT, 0, 'map')])
+
+
+def scene_at(work, vblank):
+    """The scene the game was in at that control point (its game.log)."""
+    for line in (work / 'game.log').read_text(encoding='utf-8', errors='replace').splitlines():
+        if line.startswith('{"event":"control"'):
+            event = json.loads(line)
+            if event['vblanks'] == vblank:
+                return event['scene']
+    return None
+
+
+def translator_map(game, discs, out, localization):
+    """Part translator-map (see the module notes). Disc 1 only."""
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures, tim as timlib
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator map: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    check(MAP_SAVE.is_file(), f'no sample save {MAP_SAVE}')
+    disc = artwork.Disc(discs[0])
+    pic = artwork.BY_ID['map/place-names']
+    # Saved from the disc by the Translator and redrawn as a person would in a paint program: in each
+    # redrawn name's row, the letters copy (left) and the dark band copy (right) painted over with
+    # the picture's own colours, then kept as an ordinary RGB PNG.
+    saved = out / 'map-place-names.png'
+    saved.write_bytes(artwork.png(pic, disc.english[pic.id]))
+    img = Image.open(saved)
+    check(img.mode == 'P' and img.size == (256, 143), f'the saved map picture is {img.mode} {img.size}')
+    draw = ImageDraw.Draw(img)
+    for row in MAP_REDRAWN:
+        top = row * 13
+        draw.rectangle((0, top, 126, top + 11), fill=0)
+        draw.rectangle((128, top, 254, top + 11), fill=0)
+        for x in range(2, 110, 9):                      # new "letters": bars, and under them the band
+            draw.rectangle((x, top + 2, x + 4, top + 10), fill=15)
+            draw.rectangle((128 + x, top + 1, 128 + x + 7, top + 11), fill=5)
+            draw.rectangle((128 + x, top + 2, 128 + x + 4, top + 10), fill=15)
+    img.convert('RGB').save(saved)
+    expected = artwork.from_png(pic, disc.english[pic.id], saved.read_bytes()).tim
+    path, report = out / 'translator-map.pelang', out / 'translator-map-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Map test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
+                         timeout=300)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the map picture: {said} '
+                                                 f'{ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    shown = artwork.shown(disc, pic, pieces)
+    check(shown == expected, "the saved map picture is not the PNG's pixels")
+    now, was = timlib.indices(timlib.read(shown)), timlib.indices(timlib.read(disc.english[pic.id]))
+    changed = sorted({k // 256 // 13 for k, (a, b) in enumerate(zip(now, was)) if a != b})
+    check(changed == list(MAP_REDRAWN), f'the saved map picture changed rows {changed}, not {list(MAP_REDRAWN)}')
+    others = [p.id for p in artwork.PICTURES if p.id != pic.id and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-map-text.pelang'                # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Map test', None, path), ('es', 'Map test', None, plain)
+    print(f'translator map: the Translator saved the redrawn place names (rows {list(MAP_REDRAWN)}) as '
+          f'{len(pieces)} pieces')
+    log_pieces = re.compile(rf'Map test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        steps = map_steps()
+        frames = {which: run_fixed(game, use, out / f'translator-map-{which}', steps, pack=p, pad=CONTINUE,
+                                   card=MAP_SAVE.read_bytes())
+                  for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                        ('text-only', discs[:1], text_only))}
+        for which, work in frames.items():
+            check(scene_at(work, MAP_AT) == MAP_SCENE, f'{which}: the city map is not on screen at vblank {MAP_AT}: '
+                                                       f'{work}')
+        check(log_pieces.search(mods_log(frames['pack'])) and 'its pictures are in use' in mods_log(frames['pack']),
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {frames['pack']}")
+        check(frame(frames['pack'], 'map') == frame(frames['written-in'], 'map'),
+              f'the city map with the file is not the one of the disc with its pieces written in: '
+              f"{frames['pack']} vs {frames['written-in']}")
+        _, _, mine = frame(frames['pack'], 'map')
+        _, _, english = frame(frames['text-only'], 'map')
+        differ = sum(1 for k in range(0, len(mine), 3) if mine[k:k + 3] != english[k:k + 3])
+        check(differ > 300, f"the city map's place names are still English ({differ} pixels differ): "
+                            f"{frames['pack']}")
+        print(f"PASS translator map, disc 1: the {len(pieces)} pieces loaded; the city map's place names are the "
+              f"file's picture, pixel for pixel as on the disc with the pieces written in ({differ} pixels differ "
+              'from the English map)')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
 def look_is_the_frame(work, label, look, font, raw, name, gl):
     """The Translator's game look (translator/gamelook.py) of `raw` against the game's frame: every
     pixel it draws is the frame's, and every pixel of the frame's text area in the letters' own
@@ -1710,6 +1832,7 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
                               ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
                               ('translator', translator_file), ('translator-pictures', translator_pictures),
+                              ('translator-map', translator_map),
                               ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
