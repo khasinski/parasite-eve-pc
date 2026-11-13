@@ -21,6 +21,11 @@ typedef enum BpUiInput {
 typedef enum BpUiEvent {
     BP_UI_IDLE, BP_UI_CHANGED, BP_UI_REQUEST_CONFIRM, BP_UI_EXIT
 } BpUiEvent;
+/* The menu sound the last input or answer calls for (the game's four menu sounds). The renderer
+ * plays it; NONE where the game's own Yes/No box already plays one. */
+typedef enum BpUiSound {
+    BP_UI_SOUND_NONE, BP_UI_SOUND_MOVE, BP_UI_SOUND_CONFIRM, BP_UI_SOUND_CANCEL, BP_UI_SOUND_ERROR
+} BpUiSound;
 typedef struct BpUiLine {
     const char *text; /* Already formatted totals: the view never calculates balance. */
 } BpUiLine;
@@ -99,6 +104,7 @@ typedef struct BpUiController {
     BpUiMeasure measure;
     char notice[BP_UI_TEXT];
     const BpUiBackend *backend;
+    BpUiSound sound;   /* set by bp_ui_input / bp_ui_answer for the renderer to play */
 } BpUiController;
 typedef struct BpUiFrame {
     const BpUiPage *page;

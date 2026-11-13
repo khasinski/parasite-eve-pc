@@ -132,5 +132,49 @@ static void tabs_and_f1(void){
     BpUiCatalog bad=*c;BpUiTab tabs[6];memcpy(tabs,c->tabs,sizeof tabs);bad.tabs=tabs;tabs[1].id=tabs[0].id;
     CHECK(!bp_ui_validate(&bad,NULL,0));
 }
-int main(void){navigation();confirmations_and_safety();definitions_and_growth();all_fixture_actions();measured_details();tabs_and_f1();refund_tabs();
-    puts("PASS: four tabs, section skipping, equipment return focus, help, measured details, F1-only settings and no-op transactions");return 0;}
+/* Menu sounds, as the game's other menus use them: move, confirm (enter / ask / done), cancel
+ * (any back), error (refused). The game's Yes/No box plays its own, so answers add only errors. */
+static int commit_ok;
+static int fake_commit(void *user,const char *request,char *notice,size_t size){(void)user;(void)request;snprintf(notice,size,"%s",commit_ok?"Done":"Refused");return commit_ok;}
+static void sounds(void){
+    #define SOUND(call,want) do{ (void)(call); CHECK(ui.sound==(want)); }while(0)
+    start("aya");
+    SOUND(bp_ui_input(&ui,BP_UI_UP),BP_UI_SOUND_NONE);              /* already at the top */
+    SOUND(bp_ui_input(&ui,BP_UI_DOWN),BP_UI_SOUND_MOVE);
+    SOUND(bp_ui_input(&ui,BP_UI_HELP),BP_UI_SOUND_MOVE);
+    SOUND(bp_ui_input(&ui,BP_UI_CANCEL),BP_UI_SOUND_CANCEL);         /* closes help */
+    CHECK(bp_ui_input(&ui,BP_UI_CANCEL)==BP_UI_EXIT && ui.sound==BP_UI_SOUND_CANCEL);
+    start("guns");down(1);
+    SOUND(bp_ui_input(&ui,BP_UI_CONFIRM),BP_UI_SOUND_CONFIRM);       /* opens a gun */
+    CHECK(!strcmp(ui.page->id,"gun.m84f"));
+    SOUND(bp_ui_input(&ui,BP_UI_CANCEL),BP_UI_SOUND_CANCEL);         /* back to the list */
+    SOUND(bp_ui_input(&ui,BP_UI_RIGHT),BP_UI_SOUND_MOVE);            /* next tab */
+    start("aya");seek(4);
+    CHECK(bp_ui_input(&ui,BP_UI_CONFIRM)==BP_UI_REQUEST_CONFIRM && ui.sound==BP_UI_SOUND_CONFIRM);
+    SOUND(bp_ui_input(&ui,BP_UI_DOWN),BP_UI_SOUND_NONE);             /* the Yes/No box owns input */
+    SOUND(bp_ui_answer(&ui,1),BP_UI_SOUND_NONE);                     /* the box plays its own */
+    start("mastery");down(3);CHECK(ui.page->rows[ui.selected].state==BP_UI_MAXED);
+    SOUND(bp_ui_input(&ui,BP_UI_CONFIRM),BP_UI_SOUND_ERROR);
+    start("reset.all");seek(4);CHECK(ui.page->rows[4].state==BP_UI_UNAFFORDABLE);
+    SOUND(bp_ui_input(&ui,BP_UI_CONFIRM),BP_UI_SOUND_ERROR);
+    {   /* read-only rows, settings and refused purchases, with a backend */
+        static const BpUiLine detail[]={{"Fixture"}};
+        BpUiRow rows[3]={
+            {.id="info",.label="Info",.value="-",.state=BP_UI_AVAILABLE,.action=BP_UI_NONE,.details=detail,.detail_count=1},
+            {.id="set",.label="Mode",.value="A",.state=BP_UI_AVAILABLE,.action=BP_UI_SETTING,.target="set.fort.1",.details=detail,.detail_count=1},
+            {.id="buy",.label="Rank",.value="0/3",.state=BP_UI_AVAILABLE,.action=BP_UI_ASK,.target="buy.def.0",.question="Buy?",.details=detail,.detail_count=1}};
+        BpUiPage page={.id="fx",.title="Fx",.context="Fixture",.wallet="BP 900",.rows=rows,.row_count=3};
+        BpUiCatalog c={.pages=&page,.page_count=1};
+        BpUiBackend backend={fake_commit,NULL,NULL};
+        CHECK(bp_ui_init(&ui,&c,"fx",7));bp_ui_set_backend(&ui,&backend);
+        SOUND(bp_ui_input(&ui,BP_UI_CONFIRM),BP_UI_SOUND_ERROR);     /* read only */
+        seek(1);commit_ok=1;SOUND(bp_ui_input(&ui,BP_UI_CONFIRM),BP_UI_SOUND_CONFIRM);
+        commit_ok=0;SOUND(bp_ui_input(&ui,BP_UI_CONFIRM),BP_UI_SOUND_ERROR);
+        seek(2);commit_ok=1;bp_ui_input(&ui,BP_UI_CONFIRM);SOUND(bp_ui_answer(&ui,1),BP_UI_SOUND_NONE);
+        commit_ok=0;bp_ui_input(&ui,BP_UI_CONFIRM);SOUND(bp_ui_answer(&ui,1),BP_UI_SOUND_ERROR);
+        bp_ui_input(&ui,BP_UI_CONFIRM);SOUND(bp_ui_answer(&ui,0),BP_UI_SOUND_NONE);   /* No: the box's cancel */
+    }
+    #undef SOUND
+}
+int main(void){navigation();confirmations_and_safety();definitions_and_growth();all_fixture_actions();measured_details();tabs_and_f1();refund_tabs();sounds();
+    puts("PASS: four tabs, section skipping, equipment return focus, help, measured details, F1-only settings, no-op transactions and menu sounds");return 0;}

@@ -414,7 +414,20 @@ static void footer_row(int row) {
     }
 }
 static void draw_footer(MenuWidgetNode *node) { UiPacketScope s=packets_begin(4);draw_readonly(node, footer_row);packets_end(s); }
-static void answer(int yes) { bp_ui_answer(&ui, yes); }
+/* The game's four menu sounds, as the controller chose them. */
+static void play(BpUiSound s) {
+    switch (s) {
+    case BP_UI_SOUND_MOVE: Menu_PlayMoveSound(); break;
+    case BP_UI_SOUND_CONFIRM: Menu_PlayConfirmSound(); break;
+    case BP_UI_SOUND_CANCEL: Menu_PlayCancelSound(); break;
+    case BP_UI_SOUND_ERROR: Menu_PlayErrorSound(); break;
+    default: break;
+    }
+#ifdef BP_UI_HEADLESS_TEST
+    if (s) { printf("BP_UI_SOUND %s\n", s == BP_UI_SOUND_MOVE ? "move" : s == BP_UI_SOUND_CONFIRM ? "confirm" : s == BP_UI_SOUND_CANCEL ? "cancel" : "error"); fflush(stdout); }
+#endif
+}
+static void answer(int yes) { bp_ui_answer(&ui, yes); play(ui.sound); }
 static void sync_list(void) {
     pe_screen_rows(&screen, (int)(ui.page->row_count ? ui.page->row_count : 1), (int)ui.selected);
     screen.list->scroll_y = (int)ui.top;
@@ -424,9 +437,10 @@ static void sync_list(void) {
 static void event(BpUiInput key) {
     BpUiEvent e = bp_ui_input(&ui, key);
     if (e == BP_UI_EXIT) {
-        pe_screen_close(&screen); restore_parent_panels(); opened = 0; Menu_PlayCancelSound();
+        pe_screen_close(&screen); restore_parent_panels(); opened = 0;
     } else if (e == BP_UI_REQUEST_CONFIRM) pe_confirm(ui.pending->question, 0, answer);
-    else if (e == BP_UI_CHANGED) { sync_list(); Menu_PlayMoveSound(); }
+    else if (e == BP_UI_CHANGED) sync_list();
+    play(ui.sound);
 }
 static int input(MenuWidgetNode *node, unsigned int buttons) {
     (void)node;

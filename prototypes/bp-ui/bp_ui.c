@@ -223,18 +223,22 @@ int bp_ui_reload(BpUiController *u, const BpUiCatalog *c) {
     return 1;
 }
 void bp_ui_set_backend(BpUiController *u, const BpUiBackend *b) { if (u) u->backend = b; }
-static void commit_request(BpUiController *u, const char *target) {
+static int commit_request(BpUiController *u, const char *target) {
     char notice[BP_UI_TEXT] = "";
     const BpUiCatalog *next;
-    u->backend->commit(u->backend->user, target, notice, sizeof notice);
+    int ok = u->backend->commit(u->backend->user, target, notice, sizeof notice);
     next = u->backend->refresh ? u->backend->refresh(u->backend->user) : NULL;
     if (next) bp_ui_reload(u, next);
     snprintf(u->notice, sizeof u->notice, "%s", notice);
+    return ok;
 }
+/* Sets the sound for this input, then returns the event. */
+static BpUiEvent sounded(BpUiController *u, BpUiSound sound, BpUiEvent e) { u->sound = sound; return e; }
 BpUiEvent bp_ui_input(BpUiController *u, BpUiInput key) {
     const BpUiRow *r;
     const char *target = NULL;
     size_t old, pages;
+    if (u) u->sound = BP_UI_SOUND_NONE;
     if (!u || !u->page || u->pending) return BP_UI_IDLE;
     r = u->page->row_count ? &u->page->rows[u->selected] : NULL;
     old = u->selected;
@@ -256,45 +260,46 @@ BpUiEvent bp_ui_input(BpUiController *u, BpUiInput key) {
             if (!back || !back->tab_id) break;
             --u->back_count;
         }
-        bp_ui_open(u, target); return BP_UI_CHANGED;
+        bp_ui_open(u, target); return sounded(u, BP_UI_SOUND_MOVE, BP_UI_CHANGED);
     }
     if (old != u->selected) {
-        u->detail_page = 0; u->notice[0] = 0; clamp(u); return BP_UI_CHANGED;
+        u->detail_page = 0; u->notice[0] = 0; clamp(u); return sounded(u, BP_UI_SOUND_MOVE, BP_UI_CHANGED);
     }
-    if (key == BP_UI_HELP) { u->expanded = !u->expanded; u->detail_page = 0; return BP_UI_CHANGED; }
+    if (key == BP_UI_HELP) { u->expanded = !u->expanded; u->detail_page = 0; return sounded(u, BP_UI_SOUND_MOVE, BP_UI_CHANGED); }
     pages = (detail_lines(u, r, NULL) + 2) / 3;
-    if (key == BP_UI_PAGE_PREV && u->detail_page) { u->expanded = 1; --u->detail_page; return BP_UI_CHANGED; }
-    if (key == BP_UI_PAGE_NEXT && u->detail_page + 1 < pages) { u->expanded = 1; ++u->detail_page; return BP_UI_CHANGED; }
+    if (key == BP_UI_PAGE_PREV && u->detail_page) { u->expanded = 1; --u->detail_page; return sounded(u, BP_UI_SOUND_MOVE, BP_UI_CHANGED); }
+    if (key == BP_UI_PAGE_NEXT && u->detail_page + 1 < pages) { u->expanded = 1; ++u->detail_page; return sounded(u, BP_UI_SOUND_MOVE, BP_UI_CHANGED); }
     if (key == BP_UI_CANCEL) {
-        if (u->expanded) { u->expanded = 0; u->detail_page = 0; return BP_UI_CHANGED; }
-        if (!u->back_count) return BP_UI_EXIT;
+        if (u->expanded) { u->expanded = 0; u->detail_page = 0; return sounded(u, BP_UI_SOUND_CANCEL, BP_UI_CHANGED); }
+        if (!u->back_count) return sounded(u, BP_UI_SOUND_CANCEL, BP_UI_EXIT);
         bp_ui_open(u, u->back[--u->back_count].page_id);
-        return BP_UI_CHANGED;
+        return sounded(u, BP_UI_SOUND_CANCEL, BP_UI_CHANGED);
     }
-    if (key != BP_UI_CONFIRM || !bp_ui_row_selectable(r)) return BP_UI_IDLE;
+    if (key != BP_UI_CONFIRM) return BP_UI_IDLE;
+    if (!bp_ui_row_selectable(r)) return sounded(u, BP_UI_SOUND_ERROR, BP_UI_IDLE);
     if (r->state != BP_UI_AVAILABLE) {
         snprintf(u->notice, sizeof u->notice, "%s", r->reason);
-        return BP_UI_CHANGED;
+        return sounded(u, BP_UI_SOUND_ERROR, BP_UI_CHANGED);
     }
     if (r->action == BP_UI_ROUTE) {
         if (u->back_count == BP_UI_HISTORY) {
             snprintf(u->notice, sizeof u->notice, "Navigation limit reached");
-            return BP_UI_CHANGED;
+            return sounded(u, BP_UI_SOUND_ERROR, BP_UI_CHANGED);
         }
         u->back[u->back_count++].page_id = u->page->id;
         bp_ui_open(u, r->target);
-        return BP_UI_CHANGED;
+        return sounded(u, BP_UI_SOUND_CONFIRM, BP_UI_CHANGED);
     }
-    if (r->action == BP_UI_ASK) { u->pending = r; return BP_UI_REQUEST_CONFIRM; }
+    if (r->action == BP_UI_ASK) { u->pending = r; return sounded(u, BP_UI_SOUND_CONFIRM, BP_UI_REQUEST_CONFIRM); }
     if (r->action == BP_UI_SETTING && u->backend && u->backend->commit) {
-        commit_request(u, r->target);
-        return BP_UI_CHANGED;
+        int ok = commit_request(u, r->target);
+        return sounded(u, ok ? BP_UI_SOUND_CONFIRM : BP_UI_SOUND_ERROR, BP_UI_CHANGED);
     }
     if (r->action == BP_UI_STAGE || r->action == BP_UI_SETTING) {
         snprintf(u->notice, sizeof u->notice, "Preview only - unchanged");
-        return BP_UI_CHANGED;
+        return sounded(u, BP_UI_SOUND_CONFIRM, BP_UI_CHANGED);
     }
-    return BP_UI_IDLE;
+    return sounded(u, BP_UI_SOUND_ERROR, BP_UI_IDLE);   /* a read-only row */
 }
 BpUiEvent bp_ui_buttons(BpUiController *u, int direction, int yes, int cancel) {
     int accept_edge, back_edge;
@@ -309,12 +314,14 @@ BpUiEvent bp_ui_buttons(BpUiController *u, int direction, int yes, int cancel) {
         return bp_ui_input(u, (BpUiInput)direction);
     return BP_UI_IDLE;
 }
+/* The game's Yes/No box plays confirm (Yes) or cancel (No) itself; only a refused Yes adds one. */
 void bp_ui_answer(BpUiController *u, int yes) {
+    if (u) u->sound = BP_UI_SOUND_NONE;
     if (!u || !u->pending) return;
     if (u->backend && u->backend->commit) {
         const char *target = u->pending->target;
         u->pending = NULL;
-        if (yes) commit_request(u, target);
+        if (yes) { if (!commit_request(u, target)) u->sound = BP_UI_SOUND_ERROR; }
         else snprintf(u->notice, sizeof u->notice, "Cancelled - unchanged");
         return;
     }
