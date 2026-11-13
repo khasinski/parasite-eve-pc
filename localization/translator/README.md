@@ -53,7 +53,9 @@ Button", New Game, Continue, Tutorial, EX Game and the publisher line, the city 
 names (one picture with all ten), and the battle words (one picture with the words, numbers and
 marks of a fight: Miss, NO TARGET, ENERGY SHOT, SCAN, CONFUSE and the rest), the day title
 cards ("Day 1 RESONANCE" to "Epilogue SYMBIOSIS", one picture each), the Tutorial (its menu
-and its 29 pages of words, one picture per screen), and the Game Over words. They are read from your own
+and its 29 pages of words, one picture per screen), the Game Over words, and the menus' words and
+the menu icons with a word on them (50, one picture each: Bonus Point, Equipment, Next Level, STEAL,
+SORT…). They are read from your own
 disc (**Choose disc…**: a Parasite Eve USA disc image, Disc 1 or Disc 2, unchanged; it is
 remembered on your computer). Nothing of the disc is put anywhere but your translation.
 
@@ -95,6 +97,13 @@ remembered on your computer). Nothing of the disc is put anywhere but your trans
    and the first one, black, is see-through (the screen behind is black; Aya, lying behind the
    words, shows only there). The game draws the words a little darker than the PNG, with the
    PlayStation's fine dot pattern; the window shows your picture that way too.
+   A menu word is one word in its own box (Bonus Point is 64×12, Range 32×12): keep your word
+   inside it, squeezed or shortened if need be. 16 colours, which stay as they are (other words
+   use them too): each pixel becomes the nearest of them, and black is see-through (the menu
+   behind shows there). The menus draw it in exactly these colours, and some of them (the status
+   menu's icons that aren't picked) at half brightness; the window shows your picture both ways.
+   A menu icon with a word (STEAL, SORT, ESC…) is the same: redraw the word, and the picture with it
+   if you like. The plain icons, numbers and marks of that page are not in the list.
 3. **Load PNG…**. "Your picture" shows it as the game will. **Use the game's picture** undoes it.
 4. Save the translation: the picture goes into its `pictures.bin`. Other pictures already in the
    file (a fan patch's) stay as they are, and can be redrawn the same way.
@@ -131,8 +140,7 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
 
 ## Not there yet
 
-- More pictures with words (the menus' other words, on the same page as Game Over), and drawing
-  missing letters.
+- Drawing missing letters.
 
 ## Code
 
@@ -145,7 +153,8 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   list, PNG out and in, and their pieces in `pictures.bin` (TIM pixels: `petext/tim.py`; a day
   card's tiles and colour rows read from its room, as `gamelook.room_views` draws them; a Tutorial
   screen's layers read the same way and drawn in the game's order, by depth, the shadow subtracted;
-  Game Over found through the game's glyph table on its page of words, drawn darker and dithered).
+  Game Over and the menu words found through the game's glyph table on their page of words; Game
+  Over drawn darker and dithered, the menu words in their own colours and at half).
 - `package.py`: builds the download for the system it runs on and checks the built program:
   it starts it, types a line, saves and quits (`--report`), compares the file with what the source
   tool saves, and searches everything inside for game text. Build tools are pinned in
@@ -168,7 +177,9 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   `original-game-translator-tutorial`) goes through the whole Tutorial with all 30 screens redrawn in
   it (Disc 1, the pad route of CTest `original-game-tutorial`); part `translator-game-over` (CTest
   `original-game-translator-game-over`) loses the first fight with Game Over redrawn (Disc 1, part
-  battle's route, Aya's HP set to 1 by the game's own test switch); part `translator-place-title`
+  battle's route, Aya's HP set to 1 by the game's own test switch); part `translator-menu-words`
+  (CTest `original-game-translator-menu-words`) opens the status menu with eight of its words redrawn
+  (Disc 1, part menus' route); part `translator-place-title`
   (CTest `original-game-translator-place-title`) types a place title as words and checks it on the
   city map (Disc 1, part translator-map's route, Central Park chosen); part `translator-look` (CTest
   `original-game-translator-look`) checks the game look against the game's own frames.

@@ -1365,6 +1365,45 @@ class PictureRuleTest(unittest.TestCase):
         self.assertEqual(A.previews(pic), 1)
         self.assertEqual(A.preview_png(pic, data), png_bytes(img))
 
+    def test_a_menu_word_in_the_game_is_its_own_colours_and_at_half(self):
+        """A menu word as the menus draw it (a sprite, no dither): each colour exactly, and at half brightness
+        each 5-bit part halved; colour 0 the black behind. The preview is the two, one above the other; a PNG
+        out and back is the same bytes, as Game Over's."""
+        import dataclasses
+        from PIL import Image
+        from translator import artwork as A
+        _, data = made_up_glyph(8, 3)
+        pic = dataclasses.replace(A.MENU_WORDS[0], size=(8, 3))
+        self.assertTrue(pic.sprite)
+        self.assertEqual(pic.brightness, (128, 64))
+        colours, numbers = A.glyph_colours(pic, data), A.glyph_numbers(pic, data)
+        full, half = A.in_game(pic, data, 128), A.in_game(pic, data, 64)
+        for k, n in enumerate(numbers):
+            c = colours[n]
+            want = [(0, 0, 0), (0, 0, 0)] if n == 0 else [
+                tuple(((c >> s & 31) * 255 + 15) // 31 for s in (0, 5, 10)),
+                tuple(((c >> s & 31) // 2 * 255 + 15) // 31 for s in (0, 5, 10))]
+            self.assertEqual([full.getpixel((k % 8, k // 8)), half.getpixel((k % 8, k // 8))], want, k)
+        self.assertEqual(A.in_game(pic, data).tobytes(), full.tobytes())          # its first: as drawn
+        self.assertEqual(A.previews(pic), 2)
+        both = Image.new("RGB", (8, 6))
+        both.paste(full, (0, 0))
+        both.paste(half, (0, 3))
+        self.assertEqual(A.preview_png(pic, data), png_bytes(both))
+        self.assertEqual(A.from_png(pic, data, A.png(pic, data)).tim, data)
+
+    def test_the_menu_words_are_the_pages_words_each_once(self):
+        """50 menu words and icons with words, each its own glyph and id, after Game Over in the list, each
+        a sprite shown as drawn and at half."""
+        from translator import artwork as A
+        self.assertEqual(len(A.MENU_WORDS), 50)
+        self.assertEqual(len({p.glyph for p in A.MENU_WORDS} | {A.GAME_OVER_WORDS.glyph}), 51)
+        self.assertEqual(len({p.id for p in A.PICTURES}), len(A.PICTURES))
+        self.assertEqual(A.PICTURES[-51:], (A.GAME_OVER_WORDS,) + A.MENU_WORDS)
+        for pic in A.MENU_WORDS:
+            self.assertEqual((pic.entry, pic.page, pic.sprite, pic.brightness), (9, (448, 0), True, (128, 64)), pic.id)
+            self.assertTrue(pic.id.startswith(("menu/", "menu-icon/")), pic.id)
+
     def test_a_picture_loaded_keeps_every_other_piece(self):
         import zlib
         from petext import pictures as pf, tim as T
@@ -1554,6 +1593,66 @@ class PictureDiscTest(unittest.TestCase):
                     model.append((0, 0, 0) if n == 0 else tuple((p * 255 + 15) // 31 for p in parts))
                 drawn = A.in_game(pic, english, brightness).tobytes()
                 self.assertEqual([tuple(drawn[k:k + 3]) for k in range(0, len(drawn), 3)], model, brightness)
+
+    def test_the_menu_words_are_glyphs_of_the_page_each_in_its_own_box(self):
+        """Each menu word on both discs: its glyph of the resident pack's table is the size listed, 4-bit, its
+        colour row on entry 9's page; its bytes are that box's rows of the page and the colour row (read here
+        from the entry on its own); its box overlaps no other glyph's; colour 0 is see-through and no other
+        colour shows as black in its PNG (so black is see-through, as the tip says); every one has ink."""
+        import struct
+        from petext import disc as discs, tim as T
+        from translator import artwork as A
+        for disc in self.discs():
+            game = discs.Game(disc.path)
+            try:
+                resident = game.resident_pack()
+                entry = game.pe(game.sectors[9], game.sectors[10] - game.sectors[9])
+            finally:
+                game.disc.f.close()
+            table = struct.unpack_from("<i", resident, 8)[0]
+            end = struct.unpack_from("<i", resident, 12)[0]
+            glyphs = [struct.unpack_from("<BBHBBBB", resident, table + 8 * k) for k in range((end - table) // 8)]
+            for pic in A.MENU_WORDS:
+                with self.subTest(disc=disc.path.name, picture=pic.id):
+                    u, v, clut, w, h, mode, _ = glyphs[pic.glyph]
+                    self.assertEqual(((w, h), mode), (pic.size, 0))
+                    cx, cy = (clut & 63) * 16, clut >> 6
+                    self.assertTrue(448 <= cx < 512 and cy < 254)
+                    rows = [(20 + (v + r) * 128 + u // 2, w // 2) for r in range(h)]
+                    self.assertEqual(disc.segments[pic.id], rows + [(20 + cy * 128 + (cx - 448) * 2, 32)])
+                    english = disc.english[pic.id]
+                    numbers = [entry[20 + (v + y) * 128 + (u + x) // 2] >> 4 * ((u + x) & 1) & 15
+                               for y in range(h) for x in range(w)]
+                    self.assertEqual(A.glyph_numbers(pic, english), numbers)
+                    colours = struct.unpack_from("<16H", entry, 20 + cy * 128 + (cx - 448) * 2)
+                    self.assertEqual(A.glyph_colours(pic, english), colours)
+                    self.assertFalse([c for c in colours if c and T.rgb_of(c) == (0, 0, 0)])
+                    self.assertGreater(sum(1 for n in numbers if colours[n]), 10)
+                    for k, (u2, v2, _, w2, h2, _, _) in enumerate(glyphs):
+                        if k != pic.glyph and w2 and h2:
+                            self.assertFalse(u < u2 + w2 and u2 < u + w and v < v2 + h2 and v2 < v + h, k)
+
+    def test_a_redrawn_menu_word_keeps_the_rest_of_its_page(self):
+        """With each player pack, loading a redrawn menu word changes only that word's bytes of the page, and
+        the word is then the one loaded; the French, German and Spanish packs' own redrawn words stay."""
+        from translator import artwork as A
+        packs = player_packs()
+        if not packs:
+            self.skipTest("needs PE_TEST_PLAYER_PACKS (a folder of .pelang translations)")
+        disc = self.discs()[0]
+        for path in packs:
+            pieces = A.read_pieces(zip_parts(path))
+            for pic in A.MENU_WORDS:
+                with self.subTest(pack=path.name, picture=pic.id):
+                    base, data = disc.around[pic.id]
+                    mine = set(k for a, n in disc.segments[pic.id] for k in range(a, a + n))
+                    n = pic.size[0] * pic.size[1] // 2
+                    new = bytes(b ^ 0x11 for b in disc.english[pic.id][:n]) + disc.english[pic.id][n:]
+                    before = A._lay(base, data, pieces)[0]
+                    put = A.put(disc, pic, pieces, new)
+                    after = A._lay(base, data, put)[0]
+                    self.assertEqual(A.shown(disc, pic, put), new)
+                    self.assertEqual([k for k in range(len(data)) if before[k] != after[k] and k not in mine], [])
 
     def test_a_redrawn_game_over_keeps_the_rest_of_its_page(self):
         """Game Over shares its page with the menus' other words, which the French, German and Spanish packs
@@ -2258,7 +2357,8 @@ class PictureFitTest(unittest.TestCase):
                     pw.list.selection_set(pic.id)
                     for _ in range(3):
                         root.update()
-                    w, h = (320, 224) if pic.id.startswith(("day/", "tutorial/")) else AllPicturesDisc.SIZES[pic.id][1:]
+                    w, h = ((320, 224) if pic.id.startswith(("day/", "tutorial/")) else
+                            pic.size if isinstance(pic, PW.A.Glyph) else AllPicturesDisc.SIZES[pic.id][1:])
                     bottom = pw.message.winfo_rooty() - pw.win.winfo_rooty()
                     right = pw.your_view.winfo_rootx() - pw.win.winfo_rootx() + pw.your_view.winfo_width()
                     details = dict(picture=pic.id, height=pw.win.winfo_height(), zoom=pw.zoom, bottom=bottom,
@@ -2273,6 +2373,9 @@ class PictureFitTest(unittest.TestCase):
                     if pic.id == "game-over":      # yours as the screen shows it
                         self.assertGreaterEqual(pw.fight_view.winfo_height(), h * pw.zoom, details)
                         self.assertIn("as the game shows it", pw.fight_label.cget("text"))
+                    if getattr(pic, "sprite", False):   # a menu word: as the menus draw it, and at half
+                        self.assertGreaterEqual(pw.fight_view.winfo_height(), 2 * h * pw.zoom, details)
+                        self.assertIn("as the menus draw it", pw.fight_label.cget("text"))
                     # The largest zoom that fits the window as it really is: a screen smaller than the
                     # height asked for (GitHub's Windows and Mac runners) gives a smaller window.
                     room_w = pw.win.winfo_width() - PW.ROOM_AROUND[0]

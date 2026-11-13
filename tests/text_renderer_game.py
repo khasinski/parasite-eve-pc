@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -205,6 +205,16 @@ Checks, each from pe_mods.log and frame dumps:
              pixel, the screen on a copy of Disc 1 with the file's pieces written in, every ink pixel of the
              words the Translator's in-game picture of them, and with the file's text alone the
              Translator's English one. Disc 1 only: PE.IMG, and so the picture, is the same on Disc 2.
+  translator-menu-words  The menus' words redrawn in the Translator: eight of the words the status menu shows
+             (Bonus Point, Offense, Level, Next Level, Equipment, Active Time, and the SYS and SORT icons)
+             saved from Disc 1 as PNGs by the tool, wiped and redrawn as pale bars over a red line (fitted to
+             the nearest of each word's 16 colours), loaded back through the scripted run (--picture) and
+             saved in one file. The file must change those words, to the PNGs' pixels and with their colours
+             as they were, and no other picture; and on the menus part's route, the status menu must be,
+             pixel for pixel, the menu on a copy of Disc 1 with the file's pieces written in, every ink
+             pixel of each word the Translator's picture of it as the menus draw it (the icons at half
+             brightness), see-through pixels as the English menu, and with the file's text alone the
+             Translator's English words. Disc 1 only: PE.IMG, and so the page, is the same on Disc 2.
   translator-look  The Translator's "As in the game" preview (localization/translator/gamelook.py)
              against the game's own frames: the first box with the English pack (made from the discs)
              and with each player pack given (PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_), and the five
@@ -1839,6 +1849,126 @@ def translator_game_over(game, discs, out, localization):
     return 0
 
 
+# ---- Part translator-menu-words: the menus' words ----
+
+# The status menu at MENU_STEPS's 'status' (Triangle in front of Carnegie Hall): where each of these words is
+# drawn, and at which drawing colour (found by matching the English words against that frame: every ink
+# pixel at 128, or at 64 for the icons that aren't picked).
+STATUS_WORDS = {'menu/bonus-point': (170, 36, 128), 'menu/offense': (170, 57, 128), 'menu/level': (70, 57, 128),
+                'menu/next-level': (37, 83, 128), 'menu/equipment': (33, 104, 128),
+                'menu/active-time': (170, 121, 128), 'menu-icon/sys': (10, 82, 64), 'menu-icon/sort': (10, 98, 64)}
+
+
+def translator_menu_words(game, discs, out, localization):
+    """Part translator-menu-words (see the module notes). Disc 1 only (the user's choice: PE.IMG, and so the
+    page, is the same bytes on Disc 2)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator menu words: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    expected, loads = {}, []
+    # Each saved by the Translator and redrawn in a paint program: wiped to black (see-through), then pale bars
+    # in the word's own second colour and a red line under them (fitted to the nearest of its 16 colours).
+    for pid in STATUS_WORDS:
+        pic = artwork.BY_ID[pid]
+        english = disc.english[pid]
+        saved = out / (pid.replace('/', '-') + '.png')
+        saved.write_bytes(artwork.png(pic, english))
+        img = Image.open(saved)
+        check(img.mode == 'P' and img.size == pic.size, f'the saved {pid} is {img.mode} {img.size}')
+        colours = artwork.glyph_colours(pic, english)
+        bright = max(range(1, 16), key=lambda n: sum(artwork.screen_rgb(colours[n])) if colours[n] else -1)
+        pale = tuple(img.getpalette()[bright * 3:bright * 3 + 3])
+        img = img.convert('RGB')
+        w, h = pic.size
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((0, 0, w - 1, h - 1), fill=(0, 0, 0))
+        for x in range(1, w - 3, 6):
+            draw.rectangle((x, 1, x + 2, h - 4), fill=pale)
+        draw.line((0, h - 2, w - 1, h - 2), fill=(230, 20, 20))
+        img.save(saved)
+        expected[pid] = artwork.from_png(pic, english, saved.read_bytes()).tim
+        check(expected[pid] != english and expected[pid][-32:] == english[-32:], f'{pid}: not redrawn, or its colours changed')
+        loads += ['--picture', f'{pid}={saved}']
+    path, report = out / 'translator-menu-words.pelang', out / 'translator-menu-words-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Menu words test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0]] + loads, capture_output=True, text=True, timeout=600)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the menu words: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    for pid, tim in expected.items():
+        check(artwork.shown(disc, artwork.BY_ID[pid], pieces) == tim, f"the saved {pid} is not the PNG's pixels")
+    others = [p.id for p in artwork.PICTURES if p.id not in expected and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-menu-words-text.pelang'          # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Menu words test', None, path), ('es', 'Menu words test', None, plain)
+    print(f'translator menu words: the Translator saved {len(expected)} redrawn menu words as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Menu words test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            runs = {which: pool.submit(run_fixed, game, use, out / f'translator-menu-words-{which}', MENU_STEPS,
+                                       pack=p, pad=NEW_GAME)
+                    for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                          ('text-only', discs[:1], text_only))}
+            works = {which: run.result() for which, run in runs.items()}
+        log = mods_log(works['pack'])
+        check(log_pieces.search(log) and 'its pictures are in use' in log,
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {works['pack']}")
+        frames = {which: frame(works[which], 'status') for which in works}
+        check(frames['pack'] == frames['written-in'],
+              f"the status menu with the file is not the one on the disc with its pieces written in: "
+              f"{works['pack']} vs {works['written-in']}")
+
+        def box(f, x0, y0, w, h):
+            width, _, rgb = f
+            return [tuple(rgb[((y0 + y) * width + x0 + x) * 3:((y0 + y) * width + x0 + x) * 3 + 3])
+                    for y in range(h) for x in range(w)]
+
+        def rgb_list(img):
+            data = img.tobytes()
+            return [tuple(data[k:k + 3]) for k in range(0, len(data), 3)]
+
+        for pid, (x0, y0, b) in STATUS_WORDS.items():
+            pic = artwork.BY_ID[pid]
+            w, h = pic.size
+            english = disc.english[pid]
+            ink = {which: [artwork.glyph_colours(pic, data)[n] != 0 for n in artwork.glyph_numbers(pic, data)]
+                   for which, data in (('mine', expected[pid]), ('english', english))}
+            plain_box, my_box = box(frames['text-only'], x0, y0, w, h), box(frames['pack'], x0, y0, w, h)
+            wrong = sum(1 for p, q, i in zip(plain_box, rgb_list(artwork.in_game(pic, english, b)), ink['english'])
+                        if i and p != q)
+            check(wrong == 0, f"{pid}: with the text alone, {wrong} of the English word's pixels at {x0},{y0} are not "
+                              f"the Translator's English picture at drawing colour {b}: {works['text-only']}")
+            wrong = sum(1 for p, q, i in zip(my_box, rgb_list(artwork.in_game(pic, expected[pid], b)), ink['mine'])
+                        if i and p != q)
+            check(wrong == 0, f"{pid}: {wrong} of the word's pixels on the screen with the file are not the "
+                              f"Translator's picture at drawing colour {b}: {works['pack']}")
+            same = sum(1 for p, q, i, j in zip(my_box, plain_box, ink['mine'], ink['english'])
+                       if not i and not j and p != q)
+            check(same == 0, f'{pid}: {same} see-through pixels show something else than the English menu does')
+            differ = sum(1 for p, q in zip(my_box, plain_box) if p != q)
+            print(f"PASS translator menu words, {pid} at {x0},{y0} (drawing colour {b}): the Translator's picture, "
+                  f"pixel for pixel ({differ} pixels of its box differ from the English menu)")
+        print('PASS translator menu words: the status menu with the file is the one on the disc with its pieces '
+              'written in')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
 def look_is_the_frame(work, label, look, font, raw, name, gl):
     """The Translator's game look (translator/gamelook.py) of `raw` against the game's frame: every
     pixel it draws is the frame's, and every pixel of the frame's text area in the letters' own
@@ -2497,7 +2627,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
                               ('translator-map', translator_map), ('translator-place-title', translator_place_title),
                               ('translator-battle', translator_battle),
                               ('translator-cards', translator_cards), ('translator-tutorial', translator_tutorial),
-                              ('translator-game-over', translator_game_over), ('translator-look', translator_look)):
+                              ('translator-game-over', translator_game_over),
+                              ('translator-menu-words', translator_menu_words), ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

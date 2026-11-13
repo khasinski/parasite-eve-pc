@@ -186,6 +186,11 @@ class Glyph:
     tip: str
     brightness: tuple = (120, 116)    # the drawing colours it is shown with, one frame each
     tints: tuple = ()
+    # A word of the menus: drawn by Draw_AllocSprite (src/main/draw/text.c) as a sprite, 1:1, with no
+    # dither, in its own colours (drawing colour 128) or at half (64: g_DrawColorSelect, a menu choice
+    # that can't be picked). Checked pixel for pixel against the status menu's frames. `brightness`
+    # is then (128, 64): the two copies the preview shows.
+    sprite: bool = False
 
     @property
     def label(self) -> str:
@@ -201,6 +206,17 @@ GAME_OVER_TIP = ("The words shown when Aya falls in a fight and the game is over
                  "see-through: the screen behind the words is black, and Aya, who lies behind them, shows only "
                  "there. The game draws the words a little darker than the PNG, with the PlayStation's fine dot "
                  "pattern (see the preview), in the middle of the screen. Keep the words inside {w}×{h}.")
+MENU_WORD_TIP = ("A word of the game's menus. The game cuts it out of a page of menu words by a box of its own, so keep "
+                 "your word inside {w}×{h}: a longer word must be squeezed or shortened. 16 colours, which stay as they "
+                 "are (other pictures may use them too): each pixel of yours becomes the nearest of them, so draw with the "
+                 "colours of the saved PNG. Black pixels are see-through: the menu behind shows there. The menus draw "
+                 "it in exactly these colours (see the preview).")
+MENU_ICON_TIP = ("A menu icon with a short word on it. Redraw the word and leave the picture as it is, or change it too. "
+                 "The game cuts it out of a page of menu icons by a box of its own: keep it {w}×{h}. 16 colours, which "
+                 "stay as they are (other icons may use them too): each pixel of yours becomes the nearest of them, so "
+                 "draw with the colours of the saved PNG. Black pixels are see-through: the menu behind shows there. The "
+                 "menus draw it in exactly these colours, or at half brightness (the status menu's icons that aren't "
+                 "picked are drawn so): see the preview.")
 
 
 @dataclass
@@ -320,7 +336,69 @@ def _tutorial_screens() -> tuple:
 GAME_OVER_WORDS = Glyph("game-over", "Game Over", "Game Over", 9, 0x8B, (448, 0), (120, 24), (100, 100), 0x19112F64,
                         GAME_OVER_TIP)
 
-PICTURES = PICTURES + _tutorial_screens() + (GAME_OVER_WORDS,)
+# The menus' words and the menu icons with a word on them: the other glyphs of that page that have letters (the
+# plain icons, numbers and marks are left out). (glyph, id, name, size, CRC-32 of its English bytes); same on
+# both discs. No two of these boxes overlap, nor any of them another glyph's.
+_MENU_WORDS = (
+    (0x93, "bonus-point", "Bonus Point", (64, 12), 0xBE4A812C),
+    (0x8D, "offense", "Offense", (72, 12), 0x28CFE4B0),
+    (0x8E, "defense", "Defense", (72, 12), 0xF1D57BF2),
+    (0x8F, "penergy", "PEnergy", (72, 12), 0xB6239418),
+    (0x90, "status-recover", "Status Recover", (72, 12), 0x20AA40F6),
+    (0x91, "active-time", "Active Time", (64, 12), 0x5C666015),
+    (0x92, "item-capacity", "Item Capacity", (64, 12), 0x77710661),
+    (0x94, "equipment", "Equipment", (64, 12), 0xCC86EECE),
+    (0x97, "level", "Level", (64, 12), 0x2C4026EC),
+    (0x98, "next-level", "Next Level", (64, 12), 0x5C69330D),
+    (0x99, "max-hp", "Max H.P.", (64, 12), 0x21050545),
+    (0x7C, "attack-small", "Attack (small)", (32, 12), 0xEEC63CEF),
+    (0x7D, "range-small", "Range (small)", (32, 12), 0xF16660FB),
+    (0x7E, "bullets-small", "Bullets (small)", (32, 12), 0xB7969486),
+    (0x7F, "defense-small", "Defense (small)", (32, 12), 0xDD5F972F),
+    (0x80, "penergy-small", "PEnergy (small)", (32, 12), 0xED9CFF78),
+    (0x81, "critical-small", "Critical (small)", (32, 12), 0x4695CCB3),
+    (0x53, "level-save", "Level (save slots)", (32, 8), 0xF7AA4136),
+    (0x54, "hp-save", "HP (save slots)", (16, 8), 0xBD79B89A),
+    (0x55, "time-save", "Time (save slots)", (24, 8), 0xE6C18E3F),
+    (0x95, "ex", "EX (save slots)", (24, 12), 0xB672340D),
+    (0x96, "round", "Round (save slots)", (32, 8), 0x160278FA),
+    (0x82, "off", "OFF", (16, 8), 0xE99F662F),
+    (0x83, "on", "ON", (16, 8), 0x20CE8A3D),
+    (0x87, "base", "BASE", (20, 7), 0xC202A22A),
+    (0x88, "plus", "PLUS", (20, 7), 0xA26095BA),
+    (0x8A, "pts", "pts.", (16, 8), 0xE5CBDE79),
+)
+_MENU_ICONS = (
+    (0x0C, "plus-1", "PLUS (purple)", (16, 12), 0x02D8EAFB),
+    (0x0D, "plus-2", "PLUS (red)", (16, 12), 0x2A91C717),
+    (0x16, "sp", "SP", (16, 12), 0x27BAF302),
+    (0x31, "1st", "1st", (32, 12), 0x55F53378),
+    (0x3A, "steal", "STEAL", (32, 12), 0x412CED6D),
+    (0x3C, "auto-1", "AUTO (blue)", (32, 12), 0x9CE591C4),
+    (0x3D, "auto-2", "AUTO (green)", (32, 12), 0xC4212391),
+    (0x41, "hp-max", "HP MAX", (32, 12), 0xF9FE3E35),
+    (0x43, "at", "AT", (32, 12), 0x70F2619C),
+    (0x44, "pe", "PE", (32, 12), 0xD20525A1),
+    (0x57, "p-e", "P.E", (16, 16), 0xBBEB759C),
+    (0x5A, "esc", "ESC", (16, 16), 0xDBE0D573),
+    (0x5B, "sys", "SYS", (16, 16), 0x2101F4A2),
+    (0x5C, "sort", "SORT", (16, 16), 0xBFCDCC1B),
+    (0x5E, "b-p", "B.P", (16, 16), 0x71DEF877),
+    (0x60, "all", "ALL", (16, 16), 0xB610E0E4),
+    (0x61, "sel", "SEL.", (16, 16), 0xCBBA7622),
+    (0x62, "end", "END", (16, 16), 0x935FDD48),
+    (0x66, "bs", "BS", (16, 16), 0x77C1900C),
+    (0x67, "def", "DEF", (16, 16), 0xC27FE91A),
+    (0x69, "f", "F", (8, 7), 0xD86FBFD6),
+    (0x72, "def-arrow", "DEF (arrow)", (16, 16), 0xAA11B88C),
+    (0x74, "hp-arrow", "HP (arrow)", (16, 16), 0xC50FAD1D),
+)
+MENU_WORDS = tuple(Glyph(f"menu/{pid}", "Menu word", name, 9, glyph, (448, 0), size, (0, 0), crc, MENU_WORD_TIP,
+                         (128, 64), sprite=True) for glyph, pid, name, size, crc in _MENU_WORDS) + \
+    tuple(Glyph(f"menu-icon/{pid}", "Menu icon", name, 9, glyph, (448, 0), size, (0, 0), crc, MENU_ICON_TIP,
+                (128, 64), sprite=True) for glyph, pid, name, size, crc in _MENU_ICONS)
+
+PICTURES = PICTURES + _tutorial_screens() + (GAME_OVER_WORDS,) + MENU_WORDS
 BY_ID = {p.id: p for p in PICTURES}
 
 
@@ -347,6 +425,8 @@ class Disc:
             self.segments: dict[str, list] = {}                # id -> [(byte in `around`, length)]: its bytes
             self.layout: dict[str, CardLayout] = {}
             rooms: dict[int, tuple[int, bytes]] = {}
+            pages: dict[int, bytes] = {}
+            resident = None
             for pic in PICTURES:
                 if isinstance(pic, (Card, Screen)):
                     room = game.rooms[pic.room - 1]
@@ -368,9 +448,13 @@ class Disc:
                     continue
                 if isinstance(pic, Glyph):
                     first = game.sectors[pic.entry]
-                    data = game.pe(first, game.sectors[pic.entry + 1] - first)
+                    if pic.entry not in pages:           # one read of the page (and the glyph table) for all
+                        pages[pic.entry] = game.pe(first, game.sectors[pic.entry + 1] - first)
+                    if resident is None:
+                        resident = game.resident_pack()
+                    data = pages[pic.entry]
                     try:
-                        segments = _glyph_parts(pic, data, game.resident_pack())
+                        segments = _glyph_parts(pic, data, resident)
                     except (ValueError, struct.error) as e:
                         raise NotTheDisc(f"{self.path.name}: the picture \"{pic.name}\" is not the game's own ({e}). "
                                          "Use an unchanged USA disc, not a patched one.") from e
@@ -718,26 +802,39 @@ def dithered(colour: int, brightness: int, x: int, y: int) -> tuple[int, int, in
 
 
 def in_game(pic: Glyph, data: bytes, brightness: int | None = None):
-    """The glyph as the game's screen shows it once it stands still: darker by the drawing colour, dithered
-    by its place on the screen, over the black screen (colour 0 is see-through)."""
+    """The glyph as the game's screen shows it, over black (colour 0 is see-through). Game Over, once it
+    stands still: darker by the drawing colour, dithered by its place on the screen. A menu word (a
+    sprite): each colour times the drawing colour over 128, no dither."""
     from PIL import Image
     b = pic.brightness[0] if brightness is None else brightness
     colours, w = glyph_colours(pic, data), pic.size[0]
     img = Image.new("RGB", pic.size)
+    if pic.sprite:
+        shown = [screen_rgb(tint_colour(c, (b, b, b))) if c else (0, 0, 0) for c in colours]
+        img.putdata([shown[n] for n in glyph_numbers(pic, data)])
+        return img
     img.putdata([dithered(colours[n], b, pic.at[0] + k % w, pic.at[1] + k // w) if colours[n] else (0, 0, 0)
                  for k, n in enumerate(glyph_numbers(pic, data))])
     return img
 
 
 def previews(pic) -> int:
-    """How many copies the Pictures window shows below the picture: its tints, or one as in the game."""
-    return len(pic.tints) or (1 if isinstance(pic, Glyph) else 0)
+    """How many copies the Pictures window shows below the picture: its tints; for a menu word, as the menus
+    draw it and at half brightness; Game Over, one as the screen shows it."""
+    if isinstance(pic, Glyph):
+        return len(pic.brightness) if pic.sprite else 1
+    return len(pic.tints)
 
 
 def preview_png(pic, data: bytes) -> bytes:
+    out = io.BytesIO()
     if isinstance(pic, Glyph):
-        out = io.BytesIO()
-        in_game(pic, data).save(out, "PNG")
+        from PIL import Image
+        copies = [in_game(pic, data, b) for b in (pic.brightness if pic.sprite else pic.brightness[:1])]
+        img = Image.new("RGB", (pic.size[0], pic.size[1] * len(copies)))
+        for k, copy in enumerate(copies):
+            img.paste(copy, (0, pic.size[1] * k))
+        img.save(out, "PNG")
         return out.getvalue()
     return tinted_png(pic, data)
 
