@@ -50,7 +50,10 @@ void bp_result_text(const BpResult *r, const BpSnapshot *s, char *out, size_t n)
     case BP_REQ_MASTERY:
         snprintf(out, n, "%s rank %d. %u BP left", bp_line_def(q->a)->name, r->quote.rank_after, r->quote.bp_after); break;
     case BP_REQ_RESET_DEFENSE: case BP_REQ_RESET_MASTERY: case BP_REQ_RESET_ALL:
-        snprintf(out, n, "Refunded %u BP for %u Junk", r->quote.bp_refund, r->quote.junk_fee); break;
+        if (r->quote.pool_refund)
+            snprintf(out, n, "Refunded %u BP (%u upgrade-only) for %u Junk", r->quote.bp_refund, r->quote.pool_refund, r->quote.junk_fee);
+        else snprintf(out, n, "Refunded %u BP for %u Junk", r->quote.bp_refund, r->quote.junk_fee);
+        break;
     case BP_REQ_FORT_MODE: snprintf(out, n, "Fortitude setting changed"); break;
     default: snprintf(out, n, "Done"); break;
     }

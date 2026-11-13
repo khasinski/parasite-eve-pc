@@ -34,6 +34,10 @@ typedef struct BpRecord {
     uint16_t active_steps;                /* Active Time steps bought on this screen */
     uint16_t active_points;               /* raw stat value those steps added */
     uint32_t carried_pool;                /* EX Game: refunds of carried ranks, upgrade-only */
+    /* EX Game carryover: how many of each track's / line's ranks came from the last run (the
+     * lowest ranks). Their refund goes to carried_pool, never to normal BP (BP-Q19). */
+    uint8_t carried_defense[BP_DEFENSE_TRACKS];
+    uint8_t carried_mastery[BP_MASTERY_LINES];
 } BpRecord;
 
 typedef struct BpGear {
@@ -133,7 +137,8 @@ typedef struct BpQuote {
     BpError error;
     unsigned bp_cost;          /* BP taken (purchases) */
     unsigned pool_cost;        /* carried-pool BP taken (EX Game) */
-    unsigned bp_refund;        /* BP returned (resets) */
+    unsigned bp_refund;        /* BP returned (resets), pool share included */
+    unsigned pool_refund;      /* the part of bp_refund that goes to the upgrade-only pool */
     unsigned junk_fee_base;    /* fee before the Economy preset */
     unsigned junk_fee;         /* fee after the preset (filled by the caller's pricing) */
     unsigned bp_after, junk_after;
@@ -155,6 +160,21 @@ int bp_record_equal(const BpRecord *a, const BpRecord *b);
 enum { BP_RANKS_BYTES = 20, BP_RUN_BYTES = 12 };
 void bp_record_encode(const BpRecord *r, uint8_t ranks[BP_RANKS_BYTES], uint8_t run[BP_RUN_BYTES]);
 int bp_record_decode(const uint8_t ranks[BP_RANKS_BYTES], const uint8_t run[BP_RUN_BYTES], BpRecord *out);
+/* "pe_bp/carry": the carried rank counts. A save without it carries nothing (all zero).
+ * decode refuses a carried count above the rank it belongs to (0 = ok). */
+enum { BP_CARRY_BYTES = 18 };
+void bp_carry_encode(const BpRecord *r, uint8_t carry[BP_CARRY_BYTES]);
+int bp_carry_decode(const uint8_t carry[BP_CARRY_BYTES], BpRecord *inout);
+
+/* EX Game carryover (F1 > PE Enhancements > Bonus Points). Unspent BP always carries: the game
+ * itself keeps it. Off: ranks reset. Keep: ranks carry (tagged carried). Convert: ranks reset and
+ * their BP value goes to the upgrade-only pool. Run data (full-reset count, Active Time ledger)
+ * always restarts. Returns the record the new run starts with. */
+enum { BP_CARRY_OFF, BP_CARRY_KEEP, BP_CARRY_CONVERT, BP_CARRY_MODES };
+const char *bp_carry_name(int mode);
+BpRecord bp_ex_carry(const BpRecord *last_run, int mode);
+/* BP value of the ranks a record holds (all of them, or only the carried ones). */
+unsigned bp_record_rank_value(const BpRecord *r, int carried_only);
 
 /* The writes a successful quote implies, applied to a copy of the snapshot (the executor
  * performs exactly these on the game). Returns BP_OK or why not. */

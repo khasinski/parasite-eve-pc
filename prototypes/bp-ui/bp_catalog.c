@@ -369,13 +369,14 @@ static void refund_view(BpUiRow *r, const char *name, const BpQuote *q) {
     v->before = txt("Rank %d", q->rank_before);
     v->after = "Rank 0";
     v->benefit = txt("Return %u BP", q->bp_refund);
-    v->note = txt("BP %u to %u", S->bp, S->bp + q->bp_refund);
+    v->note = txt("BP %u to %u", S->bp, S->bp + q->bp_refund - q->pool_refund);
     if (q->error != BP_ERR_EMPTY && q->error != BP_ERR_NO_ECONOMY) {
         v->cost = txt("%u Junk", q->junk_fee);
         v->remaining = q->error == BP_ERR_JUNK ? "Not enough" : txt("%u Junk", q->junk_after);
     }
     line(r, "%s rank %d to 0. Return %u BP.", name, q->rank_before, q->bp_refund);
-    if (q->bp_refund) line(r, "BP %u to %u. Junk %u to %u.", S->bp, S->bp + q->bp_refund, S->junk, S->junk - (q->junk_fee < S->junk ? q->junk_fee : S->junk));
+    if (q->bp_refund) line(r, "BP %u to %u. Junk %u to %u.", S->bp, S->bp + q->bp_refund - q->pool_refund, S->junk, S->junk - (q->junk_fee < S->junk ? q->junk_fee : S->junk));
+    if (q->pool_refund) line(r, "%u BP of it is from carried ranks: upgrade-only BP.", q->pool_refund);
     line(r, "100%% of the BP is returned. Fee: 50 Junk + 5 per 100 BP.");
     line(r, "Weapons and armor are excluded.");
 }
@@ -467,14 +468,15 @@ static void refund_pages(void) {
     {
         BpUiPreview *v = view(r, "RESET ALL ELIGIBLE");
         v->benefit = txt("Return %u BP", all.bp_refund);
-        v->note = txt("BP %u to %u", S->bp, S->bp + all.bp_refund);
+        v->note = txt("BP %u to %u", S->bp, S->bp + all.bp_refund - all.pool_refund);
         if (all.bp_refund && S->economy) {
             v->cost = txt("%u Junk", all.junk_fee);
             v->remaining = all.error == BP_ERR_JUNK ? "Not enough" : txt("%u Junk", all.junk_after);
         }
     }
     line(r, "Aya stats %u, Resistance %u, Mastery %u BP.", all.refund_aya, all.refund_defense, all.refund_mastery);
-    if (all.bp_refund) line(r, "BP %u to %u. Cost %u Junk.", S->bp, S->bp + all.bp_refund, all.junk_fee);
+    if (all.bp_refund) line(r, "BP %u to %u. Cost %u Junk.", S->bp, S->bp + all.bp_refund - all.pool_refund, all.junk_fee);
+    if (all.pool_refund) line(r, "%u BP of it is from carried ranks: upgrade-only BP.", all.pool_refund);
     line(r, "Next full reset base: %u Junk plus the refund fee.", bp_reset_fee_base(1, 0, S->rec.full_resets + 1u));
     if (all.error == BP_ERR_BAG) line(r, "%d items sit in bag slots the reset would remove.", S->bag_items_beyond);
     line(r, "Weapons and armor are excluded.");

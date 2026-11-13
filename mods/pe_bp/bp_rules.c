@@ -197,10 +197,21 @@ static void refund(const BpSnapshot *s, BpQuote *q, int full, BpPriceFn price) {
     q->junk_fee_base = bp_reset_fee_base(full, total, s->rec.full_resets);
     q->junk_fee = price ? price(q->junk_fee_base) : q->junk_fee_base;
     if (full) q->next_full_fee_base = bp_reset_fee_base(1, 0, s->rec.full_resets + 1u);
-    if ((unsigned long)s->bp + total > BP_MAX) { q->error = BP_ERR_OVERFLOW; return; }
+    /* Carried ranks refund into the upgrade-only pool (BP-Q19); the rest into BP. */
+    if ((unsigned long)s->bp + (total - q->pool_refund) > BP_MAX ||
+        (unsigned long)s->rec.carried_pool + q->pool_refund > BP_MAX) { q->error = BP_ERR_OVERFLOW; return; }
     if (q->junk_fee > s->junk) { q->error = BP_ERR_JUNK; return; }
-    q->bp_after = s->bp + total;
+    q->bp_after = s->bp + (total - q->pool_refund);
     q->junk_after = s->junk - q->junk_fee;
+}
+/* Ranks 1..carried were carried from the last run; their share of a refund is upgrade-only. */
+static unsigned carried_track(const BpRecord *r, int t) {
+    int c = r->carried_defense[t] < r->defense[t] ? r->carried_defense[t] : r->defense[t];
+    return bp_track_spent(t, c);
+}
+static unsigned carried_line(const BpRecord *r, int l) {
+    int c = r->carried_mastery[l] < r->mastery[l] ? r->carried_mastery[l] : r->mastery[l];
+    return bp_line_spent(l, c);
 }
 
 BpQuote bp_quote(const BpSnapshot *s, const BpRequest *r, BpPriceFn price) {
@@ -244,16 +255,19 @@ BpQuote bp_quote(const BpSnapshot *s, const BpRequest *r, BpPriceFn price) {
     case BP_REQ_RESET_DEFENSE:
         q.rank_before = s->rec.defense[r->a];
         q.bp_refund = q.refund_defense = bp_track_spent(r->a, q.rank_before);
+        q.pool_refund = carried_track(&s->rec, r->a);
         refund(s, &q, 0, price);
         return q;
     case BP_REQ_RESET_MASTERY:
         q.rank_before = s->rec.mastery[r->a];
         q.bp_refund = q.refund_mastery = bp_line_spent(r->a, q.rank_before);
+        q.pool_refund = carried_line(&s->rec, r->a);
         refund(s, &q, 0, price);
         return q;
     case BP_REQ_RESET_ALL:
         for (int t = 0; t < BP_DEFENSE_TRACKS; ++t) q.refund_defense += bp_track_spent(t, s->rec.defense[t]);
         for (int l = 0; l < BP_MASTERY_LINES; ++l) q.refund_mastery += bp_line_spent(l, s->rec.mastery[l]);
+        q.pool_refund = bp_record_rank_value(&s->rec, 1);
         q.active_steps = s->rec.active_steps;
         q.capacity_steps = s->capacity_reset_ok ? s->capacity_steps : 0;
         q.refund_aya = BP_STEP_PRICE * (q.active_steps + q.capacity_steps);
@@ -274,7 +288,48 @@ int bp_record_equal(const BpRecord *a, const BpRecord *b) {
     return !memcmp(a->defense, b->defense, sizeof a->defense) && a->fortitude_mode == b->fortitude_mode &&
            !memcmp(a->mastery, b->mastery, sizeof a->mastery) && a->full_resets == b->full_resets &&
            a->active_steps == b->active_steps && a->active_points == b->active_points &&
-           a->carried_pool == b->carried_pool;
+           a->carried_pool == b->carried_pool &&
+           !memcmp(a->carried_defense, b->carried_defense, sizeof a->carried_defense) &&
+           !memcmp(a->carried_mastery, b->carried_mastery, sizeof a->carried_mastery);
+}
+void bp_carry_encode(const BpRecord *r, uint8_t carry[BP_CARRY_BYTES]) {
+    memset(carry, 0, BP_CARRY_BYTES);
+    memcpy(carry, r->carried_defense, BP_DEFENSE_TRACKS);
+    memcpy(carry + BP_DEFENSE_TRACKS, r->carried_mastery, BP_MASTERY_LINES);
+}
+int bp_carry_decode(const uint8_t carry[BP_CARRY_BYTES], BpRecord *r) {
+    for (int i = 0; i < BP_DEFENSE_TRACKS; ++i) if (carry[i] > r->defense[i]) return 1;
+    for (int i = 0; i < BP_MASTERY_LINES; ++i) if (carry[BP_DEFENSE_TRACKS + i] > r->mastery[i]) return 1;
+    memcpy(r->carried_defense, carry, BP_DEFENSE_TRACKS);
+    memcpy(r->carried_mastery, carry + BP_DEFENSE_TRACKS, BP_MASTERY_LINES);
+    return 0;
+}
+unsigned bp_record_rank_value(const BpRecord *r, int carried_only) {
+    unsigned n = 0;
+    for (int t = 0; t < BP_DEFENSE_TRACKS; ++t) n += carried_only ? carried_track(r, t) : bp_track_spent(t, r->defense[t]);
+    for (int l = 0; l < BP_MASTERY_LINES; ++l) n += carried_only ? carried_line(r, l) : bp_line_spent(l, r->mastery[l]);
+    return n;
+}
+const char *bp_carry_name(int mode) {
+    static const char *const names[BP_CARRY_MODES] = {"Off", "Keep purchased skills", "Convert skills to BP"};
+    return mode >= 0 && mode < BP_CARRY_MODES ? names[mode] : "Off";
+}
+BpRecord bp_ex_carry(const BpRecord *last, int mode) {
+    BpRecord n;
+    memset(&n, 0, sizeof n);   /* run data always restarts: full resets, Active Time ledger */
+    if (mode == BP_CARRY_KEEP) {
+        memcpy(n.defense, last->defense, sizeof n.defense);
+        memcpy(n.mastery, last->mastery, sizeof n.mastery);
+        memcpy(n.carried_defense, last->defense, sizeof n.carried_defense);   /* every rank is now carried */
+        memcpy(n.carried_mastery, last->mastery, sizeof n.carried_mastery);
+        n.fortitude_mode = last->fortitude_mode;
+        n.carried_pool = last->carried_pool;
+    } else if (mode == BP_CARRY_CONVERT) {
+        unsigned long pool = (unsigned long)last->carried_pool + bp_record_rank_value(last, 0);
+        n.carried_pool = (uint32_t)(pool > BP_MAX ? BP_MAX : pool);
+        n.fortitude_mode = last->fortitude_mode;
+    }
+    return n;
 }
 static void put16(uint8_t *p, unsigned v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
 static void put32(uint8_t *p, uint32_t v) { put16(p, v & 0xFFFFu); put16(p + 2, v >> 16); }
@@ -323,11 +378,13 @@ BpError bp_apply(BpSnapshot *s, const BpRequest *r, const BpQuote *q) {
         break;
     case BP_REQ_DEFENSE: ++s->rec.defense[r->a]; break;
     case BP_REQ_MASTERY: ++s->rec.mastery[r->a]; break;
-    case BP_REQ_RESET_DEFENSE: s->rec.defense[r->a] = 0; break;
-    case BP_REQ_RESET_MASTERY: s->rec.mastery[r->a] = 0; break;
+    case BP_REQ_RESET_DEFENSE: s->rec.defense[r->a] = s->rec.carried_defense[r->a] = 0; break;
+    case BP_REQ_RESET_MASTERY: s->rec.mastery[r->a] = s->rec.carried_mastery[r->a] = 0; break;
     case BP_REQ_RESET_ALL:
         memset(s->rec.defense, 0, sizeof s->rec.defense);
         memset(s->rec.mastery, 0, sizeof s->rec.mastery);
+        memset(s->rec.carried_defense, 0, sizeof s->rec.carried_defense);
+        memset(s->rec.carried_mastery, 0, sizeof s->rec.carried_mastery);
         s->active.value -= s->rec.active_points;
         if (q->capacity_steps) s->capacity.value = s->capacity_base;
         s->rec.active_points = s->rec.active_steps = 0;
@@ -336,7 +393,7 @@ BpError bp_apply(BpSnapshot *s, const BpRequest *r, const BpQuote *q) {
     case BP_REQ_FORT_MODE: s->rec.fortitude_mode = (uint8_t)r->a; break;
     default: return BP_ERR_UNKNOWN;
     }
-    s->rec.carried_pool -= q->pool_cost;
+    s->rec.carried_pool = s->rec.carried_pool - q->pool_cost + q->pool_refund;
     s->bp = q->bp_after;
     s->junk = q->junk_after;
     return BP_OK;

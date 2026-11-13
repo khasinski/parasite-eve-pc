@@ -9,6 +9,17 @@
 #include <string.h>
 
 static int active_flags=BP_FEATURE_ALL,guide_index,ready;
+/* EX Game carryover: independent of the preset (BP-Q15 default: ranks carry). */
+static int carry_mode=BP_CARRY_KEEP;
+static const char *const carry_names[BP_CARRY_MODES]={"Off","Keep purchased skills","Convert skills to BP"};
+int pe_bp_settings_carry_mode(void){return carry_mode>=0&&carry_mode<BP_CARRY_MODES?carry_mode:BP_CARRY_OFF;}
+static void carry_text(char *out,unsigned n){
+    static const char *const what[BP_CARRY_MODES]={
+        "Ranks reset. Unspent BP carries (the game's own rule).",
+        "Ranks carry; refunding them later gives upgrade-only BP.",
+        "Ranks reset; their BP value becomes upgrade-only BP."};
+    snprintf(out,n,"%s",what[pe_bp_settings_carry_mode()]);
+}
 static unsigned draft_flags=BP_FEATURE_ALL,custom_flags=BP_FEATURE_ALL;
 static int custom_selected;
 static const char *const off_on[]={"Off","On"};
@@ -70,6 +81,8 @@ void pe_bp_menu_register(void){
        pe_menu_register_info(PE_PAGE_BP,"Other changes","Fortitude and paid respec before and after Apply.",extras_text)<0 ||
        pe_menu_register_info(PE_PAGE_BP,"Inactive investments","Purchased ranks are retained, never refunded by a preset.",retained_text)<0 ||
        pe_menu_register_action(PE_PAGE_BP,"Apply BP preset","Confirm Yes/No to apply only BP-owned rules. Requires free field.",apply_now)<0 ||
+       pe_menu_register_choice(PE_PAGE_BP,"EX Game carryover","Applies when an EX Game starts; a New Game always starts fresh. Gear follows the game's own rules.",&carry_mode,carry_names,BP_CARRY_MODES)<0 ||
+       pe_menu_register_info(PE_PAGE_BP,"Carryover details","Upgrade-only BP buys Resistance, Fortitude and Mastery, never gear or Aya stats.",carry_text)<0 ||
        pe_menu_register_choice(PE_PAGE_BP,"Playstyle guide","Advice only. Changes no rules or purchases.",&guide_index,guide_names,5)<0 ||
        pe_menu_register_info(PE_PAGE_BP,"Guide details","Suggestions adapt to the enabled BP systems.",guide_text)<0 ||
        pe_menu_register_info(PE_PAGE_BP,"Settings scope","These rules affect the profile; each save retains its own investments.",scope_text)<0 ||

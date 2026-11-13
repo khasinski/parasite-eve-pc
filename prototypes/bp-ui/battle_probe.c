@@ -130,29 +130,47 @@ static int drain_of(Combatant *a, int raw) {   /* what the game subtracts for a 
     return (a->attributes->effectFlags & 0x200) ? raw * 2 / 3 : raw;
 }
 static void cast(Combatant *a, unsigned spell) { g_ActiveActor = a; Battle_ApplySpellEffect(spell, NULL); }
+/* Cast `spell` at a Mastery rank from HP hp0 and full PE: what the game charged and healed. The
+ * rank-0 cast is the baseline: vanilla, or whatever another mod (Rebalance) sets, which Mastery
+ * must scale rather than stack on. */
+typedef struct { int spent, healed; } Cast;
+static Cast cast_at(Combatant *a, const BpRecord *base, int line, int rank, unsigned spell, int hp0) {
+    Cast c;
+    int before;
+    ranks(base, -1, 0, line, rank);
+    a->curHP = (u16)hp0; a->exp_or_acc = a->maxAtk; before = a->exp_or_acc;
+    cast(a, spell);
+    c.spent = before - a->exp_or_acc; c.healed = (s16)a->curHP - hp0;
+    return c;
+}
+/* The charge a cut of `cut`% gives, from the baseline charge (PE Light undone first). */
+static int cut_charge(Combatant *a, int spent0, int cut) {
+    const int light = (a->attributes->effectFlags & 0x200) != 0;
+    const int raw = light ? spent0 * 3 / 2 : spent0;
+    return drain_of(a, (int)((long long)raw * (100 - cut) / 100));
+}
+static int near(int a, int b) { return a - b <= 2 && b - a <= 2; }   /* 16.16 rounding */
 static void mastery(Combatant *a, const BpRecord *base) {
     Saved s;
-    int before, spent, want, hp;
+    int before, spent, want;
+    Cast c0, c;
     save_state(&s, a);
 
-    /* Heal 1: rank 0 vanilla, rank 2 = +15% healing and 15% cheaper. */
-    ranks(base, -1, 0, 0, 0);
-    a->curHP = 10; a->exp_or_acc = a->maxAtk; before = a->exp_or_acc;
-    cast(a, 0); spent = before - a->exp_or_acc; hp = (s16)a->curHP;
-    report("heal_rank0", hp == 40 && spent == drain_of(a, 0x3C0000), "hp=%d expected=40 pe=%d expected=%d", hp, spent >> 16, drain_of(a, 0x3C0000) >> 16);
-    ranks(base, -1, 0, 0, 2);
-    a->curHP = 10; a->exp_or_acc = a->maxAtk; before = a->exp_or_acc;
-    cast(a, 0); spent = before - a->exp_or_acc; hp = (s16)a->curHP;
-    want = drain_of(a, (int)((long long)0x3C0000 * 85 / 100));
-    report("heal_rank2", hp == 44 && spent == want, "hp=%d expected=44 pe=%d.%04X expected=%d.%04X", hp, spent >> 16, spent & 0xFFFF, want >> 16, want & 0xFFFF);
+    /* Heal 1: rank 2 = 15% more healing than rank 0, and 15% cheaper. */
+    c0 = cast_at(a, base, 0, 0, 0, 10);
+    report("heal_rank0", c0.healed >= 30 && c0.spent > 0, "healed=%d pe=%d (baseline; vanilla 30 HP for 60 PE)", c0.healed, c0.spent >> 16);
+    c = cast_at(a, base, 0, 2, 0, 10);
+    want = cut_charge(a, c0.spent, 15);
+    report("heal_rank2", c.healed == c0.healed + c0.healed * 15 / 100 && near(c.spent, want),
+           "healed=%d expected=%d pe=%d.%04X expected=%d.%04X", c.healed, c0.healed + c0.healed * 15 / 100,
+           c.spent >> 16, c.spent & 0xFFFF, want >> 16, want & 0xFFFF);
     restore_state(&s, a);
 
     /* Haste rank 2: timer 450 -> 675, cost unchanged. */
-    ranks(base, -1, 0, 7, 2);
-    a->exp_or_acc = a->maxAtk; before = a->exp_or_acc;
-    cast(a, 9); spent = before - a->exp_or_acc;
-    report("haste_rank2", g_ActorEffectFlag100Timer == 675 && spent == drain_of(a, 0xC80000),
-           "timer=%u expected=675 pe=%d expected=%d", g_ActorEffectFlag100Timer, spent >> 16, drain_of(a, 0xC80000) >> 16);
+    c0 = cast_at(a, base, 7, 0, 9, (s16)a->curHP);
+    c = cast_at(a, base, 7, 2, 9, (s16)a->curHP);
+    report("haste_rank2", g_ActorEffectFlag100Timer == 675 && c.spent == c0.spent,
+           "timer=%u expected=675 pe=%d expected=%d", g_ActorEffectFlag100Timer, c.spent >> 16, c0.spent >> 16);
     restore_state(&s, a);
 
     /* Barrier rank 3: costs 1/6 of max PE instead of 1/3. */
@@ -163,30 +181,31 @@ static void mastery(Combatant *a, const BpRecord *base) {
     report("barrier_rank3", spent == want && (a->stateFlags & AYA_BARRIER), "pe=%d expected=%d (max %d)", spent >> 16, want >> 16, a->maxAtk >> 16);
     restore_state(&s, a);
 
-    /* Detox rank 2: cures, leaves one-use Poison immunity, 25% cheaper. */
+    /* Detox rank 2: cures, leaves one-use Poison immunity, 25% cheaper than rank 0. */
+    c0 = cast_at(a, base, 1, 0, 3, (s16)a->curHP);
+    restore_state(&s, a);
     ranks(base, -1, 0, 1, 2);
     a->stateFlags = (a->stateFlags & ~AYA_POISON_MASK) | AYA_POISON;
     a->exp_or_acc = a->maxAtk; before = a->exp_or_acc;
     cast(a, 3); spent = before - a->exp_or_acc;
-    want = drain_of(a, (int)((long long)0x640000 * 75 / 100));
-    report("detox_rank2", (a->stateFlags & AYA_POISON_MASK) == AYA_POISON_IMMUNE && spent == want,
-           "poison_state=%d expected=%d pe=%d expected=%d", (int)(a->stateFlags & AYA_POISON_MASK), AYA_POISON_IMMUNE, spent >> 16, want >> 16);
+    want = cut_charge(a, c0.spent, 25);
+    report("detox_rank2", (a->stateFlags & AYA_POISON_MASK) == AYA_POISON_IMMUNE && near(spent, want),
+           "poison_state=%d expected=%d pe=%d expected=%d (rank 0: %d)", (int)(a->stateFlags & AYA_POISON_MASK), AYA_POISON_IMMUNE,
+           spent >> 16, want >> 16, c0.spent >> 16);
     restore_state(&s, a);
 
-    /* Medic rank 2: heals 10% of max HP, 15% cheaper. */
-    ranks(base, -1, 0, 2, 2);
-    a->curHP = 10; a->exp_or_acc = a->maxAtk; before = a->exp_or_acc;
-    cast(a, 4); spent = before - a->exp_or_acc; hp = (s16)a->curHP;
-    want = drain_of(a, (int)((long long)0x2580000 * 85 / 100));
-    report("medic_rank2", hp == 10 + (s16)a->maxHP / 10 && spent == want, "hp=%d expected=%d pe=%d expected=%d",
-           hp, 10 + (s16)a->maxHP / 10, spent >> 16, want >> 16);
+    /* Medic rank 2: also heals 10% of max HP, 15% cheaper than rank 0. */
+    c0 = cast_at(a, base, 2, 0, 4, 10);
+    c = cast_at(a, base, 2, 2, 4, 10);
+    want = cut_charge(a, c0.spent, 15);
+    report("medic_rank2", c.healed == c0.healed + (s16)a->maxHP / 10 && near(c.spent, want), "healed=%d expected=%d pe=%d expected=%d",
+           c.healed, c0.healed + (s16)a->maxHP / 10, c.spent >> 16, want >> 16);
     restore_state(&s, a);
 
-    /* Scan: free. */
-    ranks(base, -1, 0, 5, 1);
-    a->exp_or_acc = a->maxAtk; before = a->exp_or_acc;
-    cast(a, 7); spent = before - a->exp_or_acc;
-    report("scan_rank1", spent == 0, "pe=%d expected=0", spent >> 16);
+    /* Scan: free at rank 1, never a PE gain (Rebalance's own Scan cost included). */
+    c0 = cast_at(a, base, 5, 0, 7, (s16)a->curHP);
+    c = cast_at(a, base, 5, 1, 7, (s16)a->curHP);
+    report("scan_rank1", c.spent == 0 && c0.spent > 0, "pe=%d expected=0 (rank 0: %d)", c.spent >> 16, c0.spent >> 16);
     restore_state(&s, a);
 
     /* Energy Shot rank 3 at full PE: the hit's power bonus +30% of the attack term, restored. */
@@ -383,7 +402,45 @@ static int on_battle(void *ctx, void *user) {
     }
 }
 
+/* ---- EX Game carryover probe (PE_BP_TEST_EX=1): in free field, buy Poison 1 and Heal 1 through
+ * the real transaction service, then start an EX Game with the game's own command
+ * (INV_CMD_START_NEW_GAME; the host announces PE_HOOK_NEW_GAME EX at its entry) and report what the
+ * new run starts with. The carryover mode is the F1 setting in pe_mods.ini. ---- */
+#include "pe_bp_api.h"
+#include "pe1/menu_inventory.h"
+static int s_ex_step, s_ex_wait;
+static unsigned s_ex_bp_before;
+static int on_ex_frame(void *ctx, void *user) {
+    const PeBpApi *api = pe_service_get("bp", 1);
+    BpSnapshot s;
+    (void)ctx; (void)user;
+    if (s_ex_step >= 3 || !api) return 0;
+    if (s_ex_step == 0 && !pe_free_field()) return 0;   /* the read-back runs whatever screen follows */
+    if (++s_ex_wait < (s_ex_step ? 5 : 60)) return 0;
+    if (s_ex_step == 0) {
+        BpResult a = api->execute("buy.def.0"), b = api->execute("buy.line.0");
+        if (!api->snapshot(&s)) return 0;
+        emit("BP_EX_BEFORE level=%d bp=%u poison=%u heal=%u buy_poison=%d buy_heal=%d\n", s.level + 1, s.bp,
+             s.rec.defense[0], s.rec.mastery[0], a.error, b.error);
+        s_ex_bp_before = s.bp;
+        s_ex_step = 1;
+        s_ex_wait = 0;
+        Inv_DispatchCommand(INV_CMD_START_NEW_GAME, 0, 0, NULL);
+        return 0;
+    }
+    if (s_ex_step == 1) {
+        s_ex_step = 2;
+        if (!api->snapshot(&s)) { emit("BP_EX_AFTER unreadable\n"); return 0; }
+        emit("BP_EX_AFTER level=%d bp=%u bp_before=%u new_game_count=%u poison=%u heal=%u carried_poison=%u carried_heal=%u pool=%u full_resets=%u\n",
+             s.level + 1, s.bp, s_ex_bp_before, (unsigned)g_AyaSaveState.new_game_count, s.rec.defense[0], s.rec.mastery[0],
+             s.rec.carried_defense[0], s.rec.carried_mastery[0], s.rec.carried_pool, s.rec.full_resets);
+        s_ex_step = 3;
+    }
+    return 0;
+}
+
 void pe_bp_battle_probe_install(void) {
-    const char *on = getenv("PE_BP_TEST_BATTLE");
+    const char *on = getenv("PE_BP_TEST_BATTLE"), *ex = getenv("PE_BP_TEST_EX");
     if (on && on[0] == '1') pe_hook_add(PE_HOOK_BATTLE_UPDATE, on_battle, NULL, PE_PRIORITY_LATE, "host");
+    if (ex && ex[0] == '1') pe_hook_add(PE_HOOK_FRAME, on_ex_frame, NULL, PE_PRIORITY_LATE, "host");
 }

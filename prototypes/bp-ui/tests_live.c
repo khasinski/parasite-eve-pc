@@ -327,8 +327,64 @@ static void battle_numbers(void) {
     CHECK(bp_neutral_chance(3) == 80 && bp_energy_shot_bonus(3, 1) == 30 && bp_energy_shot_bonus(3, 0) == 20);
 }
 
+/* EX Game carryover: three modes, carried ranks refund upgrade-only (BP-Q19), save section. */
+static void ex_carryover(void) {
+    BpRecord last, n;
+    BpResult r;
+    BpSnapshot before;
+    uint8_t carry[BP_CARRY_BYTES];
+    memset(&last, 0, sizeof last);
+    last.defense[0] = 3; last.defense[BP_FORTITUDE] = 2; last.mastery[0] = 2; last.mastery[5] = 1;
+    last.fortitude_mode = BP_FORT_SAVE_FOR_HP1; last.full_resets = 2; last.active_steps = 3; last.active_points = 30;
+    last.carried_pool = 40;
+    CHECK(bp_record_rank_value(&last, 0) == 300 + 250 + 400 + 100 && bp_record_rank_value(&last, 1) == 0);
+
+    n = bp_ex_carry(&last, BP_CARRY_OFF);   /* ranks and mod data reset; BP is the game's own */
+    { BpRecord zero; memset(&zero, 0, sizeof zero); CHECK(bp_record_equal(&n, &zero)); }
+
+    n = bp_ex_carry(&last, BP_CARRY_KEEP);
+    CHECK(n.defense[0] == 3 && n.defense[BP_FORTITUDE] == 2 && n.mastery[0] == 2 && n.mastery[5] == 1);
+    CHECK(n.carried_defense[0] == 3 && n.carried_mastery[0] == 2 && n.carried_mastery[5] == 1);
+    CHECK(n.fortitude_mode == BP_FORT_SAVE_FOR_HP1 && n.carried_pool == 40);
+    CHECK(!n.full_resets && !n.active_steps && !n.active_points);   /* run data restarts */
+    CHECK(bp_record_rank_value(&n, 1) == 1050);
+
+    n = bp_ex_carry(&last, BP_CARRY_CONVERT);   /* never both: ranks gone, value in the pool */
+    CHECK(!n.defense[0] && !n.mastery[0] && !n.carried_defense[0] && n.carried_pool == 40 + 1050);
+    last.carried_pool = BP_MAX - 10;
+    CHECK(bp_ex_carry(&last, BP_CARRY_CONVERT).carried_pool == BP_MAX);   /* capped */
+    last.carried_pool = 40;
+
+    /* Keep, then buy Heal rank 3 with this run's BP: refunding Heal splits 400 pool / 350 BP. */
+    fresh(); game.rec = bp_ex_carry(&last, BP_CARRY_KEEP); game.rec.carried_pool = 0; game.bp = 1000;
+    r = run("buy.line.0"); CHECK(!r.error && game.bp == 650 && game.rec.mastery[0] == 3 && game.rec.carried_mastery[0] == 2);
+    r = run("reset.line.0");
+    CHECK(!r.error && r.quote.bp_refund == 750 && r.quote.pool_refund == 400 && r.quote.junk_fee == 90);
+    CHECK(game.bp == 1000 && game.rec.carried_pool == 400 && !game.rec.mastery[0] && !game.rec.carried_mastery[0]);
+    /* Upgrade-only BP buys a rank but never a gun stat. */
+    game.bp = 0;
+    r = run("buy.def.1"); CHECK(!r.error && game.rec.carried_pool == 325 && game.bp == 0 && r.quote.pool_cost == 75);
+    before = game; r = run("buy.gear.3.0"); CHECK(r.error == BP_ERR_BP); UNCHANGED(before);
+    /* Full reset: every carried rank's share to the pool, the rest to BP. */
+    fresh(); game.rec = bp_ex_carry(&last, BP_CARRY_KEEP); game.junk = 1000; game.capacity_steps = 0;
+    r = run("reset.all");
+    CHECK(!r.error && r.quote.pool_refund == 1050 && game.rec.carried_pool == 40 + 1050 && game.bp == 1000);
+    CHECK(!game.rec.carried_defense[0] && !game.rec.carried_mastery[5]);
+    /* Pool overflow is refused before any Junk is taken. */
+    fresh(); game.rec = bp_ex_carry(&last, BP_CARRY_KEEP); game.rec.carried_pool = BP_MAX - 100;
+    before = game; r = run("reset.def.0"); CHECK(r.error == BP_ERR_OVERFLOW && !spent_junk); UNCHANGED(before);
+
+    /* Save section round trip; a carried count above its rank is refused. */
+    n = bp_ex_carry(&last, BP_CARRY_KEEP);
+    bp_carry_encode(&n, carry);
+    { BpRecord back = n; memset(back.carried_defense, 0, sizeof back.carried_defense); memset(back.carried_mastery, 0, sizeof back.carried_mastery);
+      CHECK(!bp_carry_decode(carry, &back) && bp_record_equal(&back, &n)); }
+    { BpRecord bad = n; bad.defense[0] = 1; CHECK(bp_carry_decode(carry, &bad)); }
+    { BpRecord other = n; other.carried_mastery[0] = 1; CHECK(!bp_record_equal(&other, &n)); }
+}
+
 int main(void) {
-    fees(); requests(); purchases(); resets(); save_encoding(); battle_numbers(); catalog(); preset_lifecycle();
+    fees(); requests(); purchases(); resets(); save_encoding(); battle_numbers(); catalog(); preset_lifecycle(); ex_carryover();
     puts("PASS: BP rules, atomic transactions, save encoding and live catalog");
     return 0;
 }
