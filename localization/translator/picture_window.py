@@ -19,6 +19,24 @@ DISC_TYPES = [("Disc image", "*.cue *.bin *.iso *.img"), ("All files", "*.*")]
 PNG_TYPES = [("PNG picture", "*.png"), ("All files", "*.*")]
 
 
+def _colour_name(tint: tuple[int, int, int]) -> str:
+    on = tuple(t > 0 for t in tint)
+    return {(True, True, True): "as drawn", (True, False, False): "red", (False, True, False): "green",
+            (True, True, False): "yellow", (True, False, True): "pink"}.get(on, "tinted")
+
+
+def _tint_list(tints) -> str:
+    """"as drawn (words and marks); red (Miss); green, yellow, pink (damage numbers)": neighbours drawn
+    for the same thing together."""
+    groups: list[tuple[str, list[str]]] = []
+    for what, tint in tints:
+        if groups and groups[-1][0] == what:
+            groups[-1][1].append(_colour_name(tint))
+        else:
+            groups.append((what, [_colour_name(tint)]))
+    return "; ".join(f"{', '.join(names)} ({what})" for what, names in groups)
+
+
 class PictureWindow:
     def __init__(self, app) -> None:
         self.app = app
@@ -60,6 +78,9 @@ class PictureWindow:
         ttk.Label(right, text="Your picture").pack(anchor="w")
         self.your_view = ttk.Label(right, background="#000000")
         self.your_view.pack(anchor="w", pady=(2, 8))
+        # Only for a picture the game tints as it draws it (the battle words): yours in those colours.
+        self.fight_label = ttk.Label(right, text="", wraplength=560, justify="left")
+        self.fight_view = ttk.Label(right, background="#000000")
         self.tip = ttk.Label(right, text="", wraplength=560, justify="left")
         self.tip.pack(anchor="w")
         buttons = ttk.Frame(right)
@@ -97,19 +118,25 @@ class PictureWindow:
             self.list.set(pic.id, "mark", mark)
         self.show()
 
-    def zoom_for(self, w: int, h: int) -> int:
-        """The largest zoom (1 to ZOOM) at which the game's and the translation's pictures, one above the
-        other, fit the window beside the list (the map's names are 256×143: 2x in the usual window)."""
+    def zoom_for(self, w: int, h: int, copies: int = 2) -> int:
+        """The largest zoom (1 to ZOOM) at which the game's and the translation's pictures (and its tinted
+        copies), one above the other, fit the window beside the list (the map's names are 256×143: 2x in
+        the usual window)."""
         shown = self.win.winfo_width() > 1             # before it is first drawn, the size it asked for
         width = (self.win.winfo_width() if shown else self.size[0]) - ROOM_AROUND[0]
         height = (self.win.winfo_height() if shown else self.size[1]) - ROOM_AROUND[1]
-        return max(1, min(ZOOM, width // w, height // (2 * h)))
+        return max(1, min(ZOOM, width // w, height // (copies * h)))
+
+    @staticmethod
+    def copies(pic: A.Picture) -> int:
+        return 2 + len(pic.tints)
 
     def _resized(self, event) -> None:
         """The window made larger or smaller: the pictures at the zoom that fits it now."""
         disc = self.app.picture_disc
         if event.widget is self.win and disc is not None:
-            if self.zoom_for(*A.timlib.read(disc.english[self.picked().id]).size) != self.zoom:
+            pic = self.picked()
+            if self.zoom_for(*A.timlib.read(disc.english[pic.id]).size, self.copies(pic)) != self.zoom:
                 self.show()
 
     def _photo(self, png: bytes) -> tk.PhotoImage:
@@ -123,17 +150,27 @@ class PictureWindow:
         self.photos = []
         english = disc.english[pic.id] if disc else None
         ready = disc is not None and tr is not None
+        self.fight_label.pack_forget()
+        self.fight_view.pack_forget()
         if english is None:
             self.english_view.configure(image="", text="(no disc)")
             self.your_view.configure(image="", text="")
         else:
             w, h = A.timlib.read(english).size
-            self.zoom = self.zoom_for(w, h)
+            self.zoom = self.zoom_for(w, h, self.copies(pic))
             self.tip.configure(text=pic.tip.format(w=w, h=h))
             self.english_view.configure(image=self._photo(A.png(pic, english)), text="")
+            yours = english
             if tr is not None:
                 yours = A.shown(disc, pic, A.read_pieces(tr.parts))
                 self.your_view.configure(image=self._photo(A.png(pic, yours)), text="")
+            if pic.tints:
+                self.fight_label.configure(text=("Your picture" if tr is not None else "The game's picture")
+                                           + " in a fight, in the colours the game draws it with: "
+                                           + _tint_list(pic.tints))
+                self.fight_label.pack(anchor="w", before=self.tip)
+                self.fight_view.configure(image=self._photo(A.tinted_png(pic, yours)), text="")
+                self.fight_view.pack(anchor="w", pady=(2, 8), before=self.tip)
         locked = tr is None or bool(tr.locked)
         self.save_png.configure(state="normal" if ready else "disabled")
         self.load_png.configure(state="normal" if ready and not locked else "disabled")

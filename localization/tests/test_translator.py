@@ -689,6 +689,34 @@ class PictureRuleTest(unittest.TestCase):
         self.assertEqual(T.indices(T.read(loaded.tim))[0], 2)
         self.assertEqual(loaded.notes, [])
 
+    def test_a_tint_is_the_gpus_colour_times_the_drawing_colour(self):
+        """The battle words' preview: each 5-bit part times the drawing colour over 128 (128 = as it is),
+        at most 31, as the PlayStation draws a tinted sprite; the see-through bit stays."""
+        from translator import artwork as A
+        white, grey, blue_stp = 0x7FFF, 16 | 16 << 5 | 16 << 10, 0x8000 | 20 << 10
+        self.assertEqual(A.tint_colour(white, (128, 128, 128)), white)
+        self.assertEqual(A.tint_colour(white, (128, 0, 0)), 31)
+        self.assertEqual(A.tint_colour(grey, (128, 128, 0)), 16 | 16 << 5)
+        self.assertEqual(A.tint_colour(grey, (64, 255, 128)), 8 | 31 << 5 | 16 << 10)    # half; at most 31
+        self.assertEqual(A.tint_colour(blue_stp, (0, 0, 128)), blue_stp)
+
+    def test_a_tinted_picture_is_one_copy_per_tint(self):
+        from petext import tim as T
+        from translator import artwork as A
+        pic = A.Picture("t/p", "T", "P", 0, 0, 0, 0, A.BATTLE,
+                        tints=(("a", (128, 128, 128)), ("b", (128, 0, 0)), ("c", (0, 128, 0))))
+        grey = [k | k << 5 | k << 10 for k in range(0, 32, 2)]
+        tim = made_up_tim(4, 8, 3, palette=grey)
+        img = A.tinted(pic, tim)
+        self.assertEqual(img.size, (8, 9))
+        self.assertEqual(list(img.crop((0, 0, 8, 3)).getdata()), list(A.image(pic, tim).convert("RGB").getdata()))
+        numbers = T.indices(T.read(tim))
+        for k, n in enumerate(numbers):
+            x, y = k % 8, k // 8
+            r = T.rgb_of(grey[n])[0]
+            self.assertEqual(img.getpixel((x, y + 3)), (r, 0, 0))
+            self.assertEqual(img.getpixel((x, y + 6)), (0, r, 0))
+
     def test_a_picture_loaded_keeps_every_other_piece(self):
         import zlib
         from petext import pictures as pf, tim as T
@@ -776,7 +804,7 @@ class GameLookRuleTest(unittest.TestCase):
 
 
 class PictureDiscTest(unittest.TestCase):
-    """The pictures with words (title screen, city map) from the real discs (PE_TEST_DISC,
+    """The pictures with words (title screen, city map, battle words) from the real discs (PE_TEST_DISC,
     PE_TEST_DISC2): each one read out as a PNG and loaded back gives the disc's bytes, and is the same
     on both discs. With the player packs (PE_TEST_PLAYER_PACKS) too: each pack's pictures as it shows
     them, out as a PNG and back, change nothing (their own colours included)."""
@@ -809,6 +837,29 @@ class PictureDiscTest(unittest.TestCase):
                     ink = sum(1 for y in range(row * 13, row * 13 + 12) for x in range(half, half + 127)
                               if numbers[y * 256 + x])
                     self.assertGreater(ink, 100, (row, half))
+
+    def test_the_battle_words_are_the_picture_the_fight_draws_from(self):
+        """Entry 11: one picture, 4-bit, 256x32, eight palette rows, the first of them the 16 grey steps
+        every word is drawn with (status_hud.c tints them), at the entry's first sector on both discs;
+        the redrawn words' boxes hold ink in the English picture."""
+        from petext import tim as T
+        from translator import artwork as A
+        pic = A.BY_ID["battle/words"]
+        boxes = {"Miss": (80, 0, 24, 8), "NO TARGET": (88, 8, 56, 7), "ENERGY SHOT": (144, 8, 64, 7),
+                 "SLOW": (180, 15, 28, 7), "ALL": (212, 16, 20, 7), "RANDOM": (0, 24, 40, 7),
+                 "SCAN": (40, 24, 40, 7), "CONFUSE": (80, 24, 48, 7), "BULLETS": (88, 15, 36, 5),
+                 "TARGET": (124, 15, 36, 5), "AT": (80, 20, 8, 4), "HP": (88, 20, 8, 4), "PE": (96, 20, 8, 4)}
+        for disc in self.discs():
+            t = T.read(disc.english[pic.id])
+            self.assertEqual((t.bits, t.size, len(t.palettes)), (4, (256, 32), 8))
+            self.assertEqual(disc.span(pic)[0], disc.sectors[11] * 2048)
+            self.assertEqual([T.rgb_of(c)[0] for c in t.palettes[0]],
+                             sorted(T.rgb_of(c)[0] for c in t.palettes[0]))
+            self.assertTrue(all(len(set(T.rgb_of(c))) == 1 for c in t.palettes[0]))
+            numbers = T.indices(t)
+            for word, (x0, y0, w, h) in boxes.items():
+                ink = sum(1 for y in range(y0, y0 + h) for x in range(x0, x0 + w) if numbers[y * 256 + x])
+                self.assertGreater(ink, w * h // 8, word)
 
     def test_each_player_packs_pictures_out_and_back_change_nothing(self):
         from translator import artwork as A
@@ -1301,7 +1352,7 @@ class AllPicturesDisc:
     """artwork.Disc's parts with every picture made up at its real size and kind: no disc."""
     SIZES = {"title/press-start": (24, 144, 24), "title/new-game": (24, 84, 24), "title/continue": (24, 84, 24),
              "title/tutorial": (24, 84, 24), "title/ex-game": (24, 84, 24), "title/published-by": (4, 256, 64),
-             "map/place-names": (4, 256, 143)}
+             "map/place-names": (4, 256, 143), "battle/words": (4, 256, 32)}
 
     def __init__(self, path):
         from translator import artwork as A
@@ -1320,7 +1371,8 @@ class AllPicturesDisc:
 class PictureFitTest(unittest.TestCase):
     """The Pictures window from source with a made-up disc (GitHub runs it): the city map's names,
     the largest picture, fit it with the buttons in sight, at 2x in a 900-high window and still in
-    sight in a window for a 768-high screen; resizing the window changes the zoom."""
+    sight in a window for a 768-high screen; resizing the window changes the zoom. The battle words
+    show their copies in the fight's colours too, and still fit."""
     setUp, tearDown = WindowTest.setUp, WindowTest.tearDown
 
     def test_the_map_fits_the_pictures_window_with_its_buttons_in_sight(self):
@@ -1348,10 +1400,15 @@ class PictureFitTest(unittest.TestCase):
                     self.assertEqual(pw.your_view.winfo_height() >= h * pw.zoom, True, details)
                     self.assertLessEqual(bottom, pw.win.winfo_height(), details)    # the buttons in sight
                     self.assertLessEqual(right, pw.win.winfo_width(), details)
+                    self.assertEqual(bool(pw.fight_view.winfo_ismapped()), bool(pic.tints), details)
+                    if pic.tints:                  # yours in each of the game's tints, one above the other
+                        self.assertGreaterEqual(pw.fight_view.winfo_height(), h * len(pic.tints) * pw.zoom, details)
+                        self.assertIn("red (Miss)", pw.fight_label.cget("text"))
                     seen[(height, pic.id)] = pw.zoom
             self.assertEqual(seen[(900, "map/place-names")], 2, seen)
             self.assertEqual(seen[(668, "map/place-names")], 1, seen)
             self.assertEqual(seen[(900, "title/new-game")], 3, seen)
+            self.assertEqual(seen[(900, "battle/words")], 2, seen)
         finally:
             root.destroy()
 

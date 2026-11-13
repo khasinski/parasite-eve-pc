@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-battle,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -160,6 +160,14 @@ Checks, each from pe_mods.log and frame dumps:
              must be, pixel for pixel, the map of a copy of Disc 1 with the file's pieces written in, and
              not the English one. Disc 1 only: no sample save reaches the map on Disc 2 (the Day 5 save
              needs Disc 1; PE.IMG, and so the picture, is byte for byte the same on both discs).
+  translator-battle  The battle words redrawn in the Translator: the picture (PE.IMG entry 11: the words,
+             numbers and marks of a fight) saved from the disc as a PNG by the tool, every inked pixel's
+             grey step turned over (so every word and number drawn from it changes), loaded back
+             through the scripted run (--picture) and saved. The file must change that picture and no
+             other, to exactly the PNG's pixels; and with it chosen, the first fight (part battle's
+             route to Melissa, Aya's time bar full) must be, pixel for pixel, the fight on a copy of
+             Disc 1 with the file's pieces written in, and not the English one. Disc 1 only: the route
+             starts a New Game, which Disc 1 holds; PE.IMG, and so the picture, is the same on both.
   translator-look  The Translator's "As in the game" preview (localization/translator/gamelook.py)
              against the game's own frames: the first box with the English pack (made from the discs)
              and with each player pack given (PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_), and the five
@@ -1180,6 +1188,85 @@ def translator_map(game, discs, out, localization):
     return 0
 
 
+# ---- Part translator-battle: the battle words ----
+
+FIGHT_AT = 65600                # part battle's route: in the Melissa fight, Aya's time bar full
+
+
+def translator_battle(game, discs, out, localization):
+    """Part translator-battle (see the module notes). Disc 1 only."""
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures, tim as timlib
+    try:
+        from PIL import Image
+    except ImportError:
+        print('SKIP translator battle: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    pic = artwork.BY_ID['battle/words']
+    # Saved from the disc by the Translator and redrawn in a paint program: every inked pixel's grey step
+    # turned over (step n to 16 - n; 0, the see-through black, stays), kept as an ordinary RGB PNG.
+    saved = out / 'battle-words.png'
+    saved.write_bytes(artwork.png(pic, disc.english[pic.id]))
+    img = Image.open(saved)
+    check(img.mode == 'P' and img.size == (256, 32), f'the saved battle words picture is {img.mode} {img.size}')
+    img = img.point(lambda n: 16 - n if 0 < n < 16 else n)
+    img.convert('RGB').save(saved)
+    expected = artwork.from_png(pic, disc.english[pic.id], saved.read_bytes()).tim
+    path, report = out / 'translator-battle.pelang', out / 'translator-battle-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Battle test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
+                         timeout=300)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the battle words: {said} '
+                                                 f'{ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    shown = artwork.shown(disc, pic, pieces)
+    check(shown == expected, "the saved battle words are not the PNG's pixels")
+    now, was = timlib.indices(timlib.read(shown)), timlib.indices(timlib.read(disc.english[pic.id]))
+    check(all(a == (16 - b if b else 0) for a, b in zip(now, was)), 'the saved battle words are not turned over')
+    check(timlib.read(shown).palettes == timlib.read(disc.english[pic.id]).palettes, 'the colours changed')
+    others = [p.id for p in artwork.PICTURES if p.id != pic.id and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-battle-text.pelang'             # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Battle test', None, path), ('es', 'Battle test', None, plain)
+    print(f'translator battle: the Translator saved the redrawn battle words as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Battle test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        steps = presses([(FIGHT_AT, 0, 'fight')])
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            runs = {which: pool.submit(run_fixed, game, use, out / f'translator-battle-{which}', steps, pack=p,
+                                       pad=BATTLE_ROUTE)
+                    for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                          ('text-only', discs[:1], text_only))}
+            frames = {which: run.result() for which, run in runs.items()}
+        check(log_pieces.search(mods_log(frames['pack'])) and 'its pictures are in use' in mods_log(frames['pack']),
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {frames['pack']}")
+        check(frame(frames['pack'], 'fight') == frame(frames['written-in'], 'fight'),
+              f'the fight with the file is not the one on the disc with its pieces written in: '
+              f"{frames['pack']} vs {frames['written-in']}")
+        _, _, mine = frame(frames['pack'], 'fight')
+        _, _, english = frame(frames['text-only'], 'fight')
+        differ = sum(1 for k in range(0, len(mine), 3) if mine[k:k + 3] != english[k:k + 3])
+        check(differ > 100, f'the fight still shows the English battle words ({differ} pixels differ): '
+                            f"{frames['pack']}")
+        print(f"PASS translator battle, disc 1: the {len(pieces)} pieces loaded; the fight draws the file's battle "
+              f'words, pixel for pixel as on the disc with the pieces written in ({differ} pixels differ from the '
+              'English fight)')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
 def look_is_the_frame(work, label, look, font, raw, name, gl):
     """The Translator's game look (translator/gamelook.py) of `raw` against the game's frame: every
     pixel it draws is the frame's, and every pixel of the frame's text area in the letters' own
@@ -1832,7 +1919,7 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
                               ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
                               ('translator', translator_file), ('translator-pictures', translator_pictures),
-                              ('translator-map', translator_map),
+                              ('translator-map', translator_map), ('translator-battle', translator_battle),
                               ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)

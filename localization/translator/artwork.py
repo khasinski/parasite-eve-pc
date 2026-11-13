@@ -38,6 +38,12 @@ MAP = ("The city map's place names, one to a row 13 pixels tall. The game draws 
        "letters on a dark band, which darkens the map behind the name. Redraw both copies, inside 127×12 "
        "pixels per name. 16 colours: draw with the colours of the saved PNG (the place you are at shows the "
        "same pixels in gold). Leave the bar at the bottom as it is. Keep it {w}×{h}.")
+BATTLE = ("The words, numbers and marks shown in a fight. Draw with the greys of the saved PNG: the game tints "
+          "them as it draws them (Miss in red, the damage numbers in white, green, yellow or pink; see the "
+          "preview). Each word is cut out by a box of its own, so keep a translated word inside it: "
+          "Miss 24×8, NO TARGET 56×7, ENERGY SHOT 64×7, SLOW 28×7, ALL 20×7, RANDOM 40×7, SCAN 40×7, "
+          "CONFUSE 48×7, BULLETS and TARGET 36×5, AT, HP and PE 8×4, at the places the English ones have. "
+          "The numbers, the I II III tabs and the other marks need no translating. Keep it {w}×{h}.")
 
 
 @dataclass(frozen=True)
@@ -51,6 +57,9 @@ class Picture:
     crc: int                 # CRC-32 of the English TIM (USA discs)
     tip: str
     palette: int = 0         # the palette row it is drawn with (4/8-bit pictures)
+    # How the game tints it as it draws it (the drawing colour, 128 = as it is), for the preview:
+    # (what is drawn so, (r, g, b)).
+    tints: tuple = ()
 
     @property
     def label(self) -> str:
@@ -73,6 +82,15 @@ PICTURES = (
     # 145). Rows 130-142 (a bar) are not drawn by the map. TIM 0 is the letters page, not a picture.
     Picture("map/place-names", "City map", "Place names (Subway, Chinatown, Soho … Museum)", 72, 32840, 18432,
             0xE9B4C181, MAP),
+    # The battle words, PE.IMG entry 11 (read at each scene change, Scene_LoadFieldBg): one TIM, 4-bit,
+    # 256x32, 8 palette rows. Every word, number and label is drawn with row 0 (the grey steps) and
+    # tinted by the drawing colour (src/main/battle/status_hud.c): Miss red, the damage numbers white,
+    # green, yellow or pink (Battle_DrawStatusPanel), the rest as it is. Rows 1-5 colour only the marks
+    # (the moves left, a value label), not words. The boxes in the tip are the sizes that code draws.
+    Picture("battle/words", "Battle", "Words and numbers (Miss, NO TARGET, ENERGY SHOT … SCAN, CONFUSE)", 11, 0,
+            4384, 0xBA5C60A2, BATTLE,
+            tints=(("words and marks", (128, 128, 128)), ("Miss", (128, 0, 0)), ("damage numbers", (0, 128, 0)),
+                   ("damage numbers", (128, 128, 0)), ("damage numbers", (128, 0, 128)))),
 )
 BY_ID = {p.id: p for p in PICTURES}
 
@@ -200,6 +218,33 @@ def image(pic: Picture, tim_bytes: bytes):
 def png(pic: Picture, tim_bytes: bytes) -> bytes:
     out = io.BytesIO()
     image(pic, tim_bytes).save(out, "PNG")
+    return out.getvalue()
+
+
+def tint_colour(colour: int, tint: tuple[int, int, int]) -> int:
+    """A 15-bit colour drawn with a drawing colour (128 = as it is), as the PlayStation's GPU does: each
+    5-bit part times the drawing colour's over 128, at most 31. The see-through bit stays."""
+    parts = [min(31, ((colour >> shift) & 31) * t >> 7) for shift, t in zip((0, 5, 10), tint)]
+    return (colour & 0x8000) | parts[0] | parts[1] << 5 | parts[2] << 10
+
+
+def tinted(pic: Picture, tim_bytes: bytes):
+    """The picture as the game draws it in a fight: one copy for each of its tints, one above the other."""
+    from PIL import Image
+    tim = timlib.read(tim_bytes)
+    numbers = timlib.indices(tim)
+    out = Image.new("RGB", (tim.width, tim.height * len(pic.tints)))
+    for k, (_, tint) in enumerate(pic.tints):
+        colours = [timlib.rgb_of(tint_colour(c, tint)) for c in tim.palettes[pic.palette]]
+        copy = Image.new("RGB", tim.size)
+        copy.putdata([colours[n] for n in numbers])
+        out.paste(copy, (0, tim.height * k))
+    return out
+
+
+def tinted_png(pic: Picture, tim_bytes: bytes) -> bytes:
+    out = io.BytesIO()
+    tinted(pic, tim_bytes).save(out, "PNG")
     return out.getvalue()
 
 

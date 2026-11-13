@@ -45,8 +45,9 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
 ## Pictures with words
 
 **Pictures…** opens the pictures that have words in them: for now the title screen's "Press Start
-Button", New Game, Continue, Tutorial, EX Game and the publisher line, and the city map's place
-names (one picture with all ten). They are read from your own
+Button", New Game, Continue, Tutorial, EX Game and the publisher line, the city map's place
+names (one picture with all ten), and the battle words (one picture with the words, numbers and
+marks of a fight: Miss, NO TARGET, ENERGY SHOT, SCAN, CONFUSE and the rest). They are read from your own
 disc (**Choose disc…**: a Parasite Eve USA disc image, Disc 1 or Disc 2, unchanged; it is
 remembered on your computer). Nothing of the disc is put anywhere but your translation.
 
@@ -60,6 +61,11 @@ remembered on your computer). Nothing of the disc is put anywhere but your trans
    name, and leave the bar at the bottom alone. The place you are at shows the same pixels in gold.
    A translation that changed a picture's colours (the German and Chinese packs did, on the map)
    keeps them when you load a PNG.
+   The battle words are in greys: draw with the greys of the saved PNG, and the game tints them as
+   it draws them (Miss red, the damage numbers white, green, yellow or pink). The window shows your
+   picture in those colours too. Each word is cut out by a box of its own (the window lists their
+   sizes), so keep a translated word inside the English one's box. The numbers, tabs and marks need
+   no translating, but you may redraw them.
 3. **Load PNG…**. "Your picture" shows it as the game will. **Use the game's picture** undoes it.
 4. Save the translation: the picture goes into its `pictures.bin`. Other pictures already in the
    file (a fan patch's) stay as they are, and can be redrawn the same way.
@@ -92,7 +98,7 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
 
 ## Not there yet
 
-- More pictures with words (battle words, day title cards, the tutorial, Game Over), and drawing
+- More pictures with words (day title cards, the tutorial, Game Over), and drawing
   missing letters.
 
 ## Code
@@ -118,5 +124,7 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   runs the game with a file the Translator saved; part `translator-pictures` (CTest
   `original-game-translator-pictures`) runs the title screen with pictures redrawn in it, both discs;
   part `translator-map` (CTest `original-game-translator-map`) runs the city map with its place
-  names redrawn in it (Disc 1: no sample save reaches the map on Disc 2); part `translator-look` (CTest
+  names redrawn in it (Disc 1: no sample save reaches the map on Disc 2); part `translator-battle` (CTest
+  `original-game-translator-battle`) runs the first fight with the battle words redrawn in it (Disc 1:
+  the route starts a New Game); part `translator-look` (CTest
   `original-game-translator-look`) checks the game look against the game's own frames.
