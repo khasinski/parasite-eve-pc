@@ -1,5 +1,6 @@
 /* Native adapter. Definitions and simulation have no dependency on game state.
  */
+#include "pe1/battle_ailment.h"
 #include "pe1/battle_reset_stats.h"
 #include "pe1/battle_status.h"
 #include "pe1/draw_buffers.h"
@@ -37,6 +38,9 @@ static const CueColor CUE_COUNTER = {0xff, 0x90, 0x30}; /* Bulwark loaded */
 static const CueColor CUE_RUSH = {0xff, 0x50, 0x40}; /* Quickstep burst */
 static const CueColor CUE_SPENT = {0x30, 0x30, 0x30}; /* Quickstep HP pip */
 static const CueColor CUE_CRACK = {0xff, 0x90, 0x30}; /* Channeler cracked */
+/* Striker falloff: between the native in-range red (96,14,14) and the native
+ * out-of-range dark red (32,0a,0a). */
+static const CueColor CUE_FAR = {0x5a, 0x1e, 0x1e};
 enum { CRACK_FLICKER_FRAMES = 4 };
 static unsigned frame_count;
 static TargetTint target_tints[2][4], triangle_tints[2];
@@ -396,9 +400,30 @@ static int point_blank(const BattleEntity *e) {
     return 0;
   unsigned radius =
       (unsigned)(u16)e->renderObject.hit_cylinder.radius * e->moveSpeed / 4096u;
-  return pe_style_point_blank(
+  return pe_striker_point_blank(
       &session, e->renderObject.hit_cylinder.value0 - p->posX.parts.integer,
       e->renderObject.hit_cylinder.value2 - p->posZ.parts.integer, radius);
+}
+/* The gun's native range: what the targeting dome, the out-of-range marker and
+ * native accuracy use, mod-changed weapon stats included. Darkness shrinks it
+ * natively. 0 when unknown, which turns falloff off. */
+static unsigned native_range(void) {
+  Combatant *core = pe_aya_core();
+  if (!core || !core->action)
+    return 0;
+  if ((core->stateFlags & AYA_DARKNESS_MASK) == AYA_DARKNESS)
+    return AYA_DARKNESS_RANGE;
+  return core->action->range > 0 ? (unsigned)core->action->range : 0u;
+}
+/* Striker zone for one recipient, the same call for preview and snapshot. */
+static int striker_zone(const BattleEntity *e) {
+  BattleEntity *p = pe_player();
+  if (!p || !candidate(e))
+    return PE_ST_NATIVE;
+  return pe_striker_zone(&session, point_blank(e),
+                         e->renderObject.target_x - p->posX.parts.integer,
+                         e->renderObject.target_z - p->posZ.parts.integer,
+                         native_range());
 }
 static int outgoing(void *ctx, void *user) {
   PeHookEnemyDamage *q = ctx;
@@ -426,7 +451,7 @@ static int outgoing(void *ctx, void *user) {
     if (action_targets[i].entity == q->target &&
         action_targets[i].core == ((const BattleEntity *)q->target)->core) {
       int before = *q->damage;
-      *q->damage = pe_style_gun_damage(&session, i, before, 1);
+      *q->damage = pe_striker_damage(&session, i, before, 1);
       if (*q->damage != before)
         pe_log("costume_style", "striker damage=%d->%d recipient=%u", before,
                *q->damage, i);
@@ -454,9 +479,17 @@ static int target_preview(void *ctx, void *user) {
       continue;
     CueColor c;
     if (session.style == PE_STYLE_STRIKER) {
-      if (q->out_of_range || !normal_gun() || !point_blank(e))
+      /* Cyan point-blank, native red in the middle, dim red in the falloff
+       * band. Beyond range the native marker is already dark: left alone. */
+      if (q->out_of_range || !normal_gun())
         return 0;
-      c = CUE_CYAN;
+      int zone = striker_zone(e);
+      if (zone == PE_ST_POINT_BLANK)
+        c = CUE_CYAN;
+      else if (zone == PE_ST_FALLOFF)
+        c = CUE_FAR;
+      else
+        return 0;
     } else {
       /* Quickstep HP pip: the marker darkens once this enemy has dropped to
        * half, so its breakpoint refund is used up. */
@@ -496,20 +529,23 @@ static int action_begin(void *ctx, void *user) {
         unsigned i = action_target_count++;
         action_targets[i].entity = e;
         action_targets[i].core = e->core;
-        pe_style_target(&session, i, point_blank(e));
+        pe_striker_target(&session, i, striker_zone(e));
         pe_log("costume_style",
                "striker range recipient=%u dx=%d dz=%d radius=%u scale=%u "
-               "close=%d",
+               "tx=%d tz=%d range=%u zone=%d",
                i,
                e->renderObject.hit_cylinder.value0 -
                    pe_player()->posX.parts.integer,
                e->renderObject.hit_cylinder.value2 -
                    pe_player()->posZ.parts.integer,
                (unsigned)(u16)e->renderObject.hit_cylinder.radius,
-               (unsigned)e->moveSpeed, point_blank(e));
+               (unsigned)e->moveSpeed,
+               e->renderObject.target_x - pe_player()->posX.parts.integer,
+               e->renderObject.target_z - pe_player()->posZ.parts.integer,
+               native_range(), pe_striker_target_zone(&session, i));
       }
-      pe_log("costume_style", "striker snapshot targets=%u close=%llu",
-             action_target_count, (unsigned long long)session.close_targets);
+      pe_log("costume_style", "striker snapshot targets=%u range=%u",
+             action_target_count, native_range());
     }
   }
   return 0;
@@ -542,7 +578,7 @@ static int action_end(void *ctx, void *user) {
     session.pending_damage = 0;
   }
   session.gun_action = 0;
-  session.close_targets = 0;
+  pe_striker_action_begin(&session); /* snapshot ends with the action */
   action_target_count = 0;
   return 0;
 }
@@ -715,8 +751,8 @@ void pe_styles_register(const char *mod_id) {
   pe_menu_register_info(PE_PAGE_WARDROBE, "Costume style",
                         "Quickstep: half-HP breaks and kills +20% AT, 3 s "
                         "speed, +20% damage taken meanwhile. Bulwark: "
-                        "25% guard; hits taken load a counter. Striker: close "
-                        "guns +25%. Channeler: weapon hits charge the next "
+                        "25% guard; hits taken load a counter. Striker: point-"
+                        "blank guns +25%, outer 30% of gun range -20%. Channeler: weapon hits charge the next "
                         "support PE (1 = half, 2 = free); at 2, a hit cracks "
                         "it and a second breaks one.",
                         style_info);

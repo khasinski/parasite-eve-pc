@@ -77,45 +77,16 @@ void pe_style_counter_resolve(PeStyleSession *s) {
   s->counter_spent = 0;
 }
 
-/* ---- Striker ------------------------------------------------------------ */
-int pe_style_point_blank(const PeStyleSession *s, int dx, int dz,
-                         unsigned radius) {
-  uint64_t reach;
-  int64_t x = dx, z = dz;
-  if (!is(s, PE_STYLE_STRIKER) || !radius || radius > 1048576u)
-    return 0;
-  /* Horizontal surface gap: Aya's native footprint, never the costume's size.
-   */
-  reach =
-      (uint64_t)radius + 63u + pe_style_definition(s->style)->point_blank_gap;
-  return (uint64_t)(x * x) + (uint64_t)(z * z) <= reach * reach;
-}
+/* ---- Shared action bookkeeping (Striker rules: pe_style_striker.c) ------ */
 void pe_style_action_begin(PeStyleSession *s, int gun, int weapon) {
   pe_quickstep_action_begin(s);
-  s->close_targets = 0;
+  pe_striker_action_begin(s);
   s->gun_action = gun != 0;
   s->weapon_action = weapon != 0 || gun != 0;
   s->action_open = 1;
   s->action_canceled = 0;
   s->pending_damage = 0;
   s->counter_spent = 0;
-}
-void pe_style_target(PeStyleSession *s, unsigned index, int close) {
-  if (index < PE_STYLE_TARGETS && close)
-    s->close_targets |= UINT64_C(1) << index;
-}
-int pe_style_gun_damage(const PeStyleSession *s, unsigned index, int damage,
-                        int ordinary) {
-  uint64_t scaled;
-  if (!is(s, PE_STYLE_STRIKER) || !s->gun_action || !ordinary || damage <= 0 ||
-      index >= PE_STYLE_TARGETS ||
-      !(s->close_targets & (UINT64_C(1) << index)))
-    return damage;
-  scaled = ((uint64_t)(unsigned)damage *
-                pe_style_definition(s->style)->damage_percent +
-            50u) /
-           100u;
-  return saturate(scaled);
 }
 
 /* ---- Channeler: action bookkeeping (rules in pe_style_channeler.c) ------ */

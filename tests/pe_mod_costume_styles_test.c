@@ -455,20 +455,45 @@ int main(void) {
   assert(session.style == PE_STYLE_ORIGINAL);
   start(&striker);
   assert(session.style == PE_STYLE_STRIKER);
-  assert(pe_style_point_blank(&session, 259, 0, 100));
-  assert(!pe_style_point_blank(&session, 260, 0, 100));
-  assert(pe_style_point_blank(&session, 459, 0,
-                              300)); /* equal surface gap, larger enemy */
-  assert(!pe_style_point_blank(&session, 0, 0, 0));
-  assert(!pe_style_point_blank(&session, INT_MIN, INT_MIN, 100));
+  assert(pe_striker_point_blank(&session, 259, 0, 100));
+  assert(!pe_striker_point_blank(&session, 260, 0, 100));
+  assert(pe_striker_point_blank(&session, 459, 0,
+                                300)); /* equal surface gap, larger enemy */
+  assert(!pe_striker_point_blank(&session, 0, 0, 0));
+  assert(!pe_striker_point_blank(&session, INT_MIN, INT_MIN, 100));
+  /* Zones: falloff from 70% of native range, beyond range included. */
+  assert(pe_striker_zone(&session, 0, 699, 0, 1000) == PE_ST_NATIVE);
+  assert(pe_striker_zone(&session, 0, 700, 0, 1000) == PE_ST_FALLOFF);
+  assert(pe_striker_zone(&session, 0, 420, 560, 1000) == PE_ST_FALLOFF);
+  assert(pe_striker_zone(&session, 0, 1700, 0, 1000) == PE_ST_FALLOFF);
+  assert(pe_striker_zone(&session, 1, 900, 0, 1000) ==
+         PE_ST_POINT_BLANK); /* point-blank wins on short guns */
+  assert(pe_striker_zone(&session, 0, 5000, 0, 0) ==
+         PE_ST_NATIVE); /* unknown range: no falloff, never a guess */
+  assert(pe_striker_zone(&session, 0, INT_MIN, INT_MIN, 1000) ==
+         PE_ST_FALLOFF);
+  assert(pe_striker_percent(&session, PE_ST_POINT_BLANK) == 125 &&
+         pe_striker_percent(&session, PE_ST_FALLOFF) == 80 &&
+         pe_striker_percent(&session, PE_ST_NATIVE) == 100);
   PeStyleSession capacity;
   pe_style_begin(&capacity, PE_STYLE_STRIKER);
   pe_style_action_begin(&capacity, 1, 1);
-  pe_style_target(&capacity, 63, 1);
-  pe_style_target(&capacity, 64, 1);
-  assert(pe_style_gun_damage(&capacity, 63, 100, 1) == 125);
-  assert(pe_style_gun_damage(&capacity, 64, 100, 1) == 100);
-  assert(pe_style_gun_damage(&capacity, 0, 100, 1) == 100);
+  pe_striker_target(&capacity, 63, PE_ST_POINT_BLANK);
+  pe_striker_target(&capacity, 64, PE_ST_POINT_BLANK);
+  pe_striker_target(&capacity, 1, PE_ST_FALLOFF);
+  pe_striker_target(&capacity, 2, 7); /* not a zone: ignored */
+  assert(pe_striker_damage(&capacity, 63, 100, 1) == 125);
+  assert(pe_striker_damage(&capacity, 64, 100, 1) == 100);
+  assert(pe_striker_damage(&capacity, 0, 100, 1) == 100);
+  assert(pe_striker_damage(&capacity, 1, 100, 1) == 80);
+  assert(pe_striker_damage(&capacity, 1, 1, 1) == 1); /* never zero */
+  assert(pe_striker_damage(&capacity, 1, 100, 0) == 100);
+  assert(pe_striker_damage(&capacity, 2, 100, 1) == 100);
+  pe_style_action_begin(&capacity, 0, 1); /* club: no bonus, no falloff */
+  pe_striker_target(&capacity, 1, PE_ST_FALLOFF);
+  assert(pe_striker_damage(&capacity, 1, 100, 1) == 100);
+  pe_style_begin(&capacity, PE_STYLE_QUICKSTEP);
+  assert(pe_striker_zone(&capacity, 1, 0, 0, 1000) == PE_ST_NATIVE);
   BattleEntity far = {0}, unknown = {0};
   target = (BattleEntity){0};
   target.core = &g_BattleEnemySlots[0].combatant;
@@ -565,6 +590,93 @@ int main(void) {
   dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
   assert(dealt == 100);
+  /* Falloff: native targeting distance against the gun's native range. */
+  weapon_action.range = 1000;
+  target.renderObject.hit_cylinder.value0 = 2000; /* not point-blank */
+  target.renderObject.target_x = 700;
+  far.renderObject.hit_cylinder.value0 = 2000;
+  far.renderObject.target_x = 699;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  gun_hit.target = &target;
+  dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
+  assert(dealt == 80);
+  gun_hit.target = &far;
+  dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
+  assert(dealt == 100); /* each recipient judged on its own snapshot */
+  gun_hit.target = &target;
+  target.renderObject.target_x = 0;
+  target.renderObject.hit_cylinder.value0 = 0;
+  dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
+  assert(dealt == 80); /* moving closer after commit changes nothing */
+  /* Preview uses the same zones: cyan, untouched, dim. */
+  g_BattleStatusPointerSprites[0].sprite.color.bytes.r = 17;
+  cue.out_of_range = 0;
+  cue.phase = 1;
+  fire(PE_HOOK_TARGET_PREVIEW, &cue);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0x60);
+  cue.phase = 0;
+  fire(PE_HOOK_TARGET_PREVIEW, &cue);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
+  target.renderObject.hit_cylinder.value0 = 2000;
+  target.renderObject.target_x = 500;
+  cue.phase = 1;
+  fire(PE_HOOK_TARGET_PREVIEW, &cue);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
+  target.renderObject.target_x = 800;
+  fire(PE_HOOK_TARGET_PREVIEW, &cue);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0x5a &&
+         g_BattleStatusPointerTriangles[0].r == 0x5a);
+  cue.phase = 0;
+  fire(PE_HOOK_TARGET_PREVIEW, &cue);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
+  cue.phase = 1;
+  cue.out_of_range = 1; /* native dark marker already says "far" */
+  target.renderObject.target_x = 1500;
+  fire(PE_HOOK_TARGET_PREVIEW, &cue);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
+  cue.out_of_range = 0;
+  /* Beyond native range a hit still lands at falloff. */
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
+  assert(dealt == 80);
+  /* Darkness: the native 200-unit range. */
+  aya.stateFlags |= AYA_DARKNESS;
+  target.renderObject.target_x = 140;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
+  assert(dealt == 80);
+  target.renderObject.target_x = 139;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
+  assert(dealt == 100);
+  aya.stateFlags &= ~(unsigned)AYA_DARKNESS_MASK;
+  /* Unknown range: no falloff. Clubs: none either. */
+  weapon_action.range = 0;
+  target.renderObject.target_x = 5000;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
+  assert(dealt == 100);
+  weapon_action.range = 1000;
+  weapon.kind = 8;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
+  assert(dealt == 100);
+  weapon.kind = 1;
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  dealt = 100;
+  fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
+  assert(dealt == 100); /* snapshot cleared with the action */
+  weapon_action.range = 0;
+  target.renderObject.target_x = 0;
+  far.renderObject.target_x = 0;
   start(&channeler);
   aya.action = &weapon_action;
   weapon.kind = 1;

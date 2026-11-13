@@ -21,6 +21,8 @@ outfit, spends Junk, changes the mode or changes the current encounter snapshot.
 - `pe_style_quickstep.c`: Quickstep's rules only (breakpoints, kill trigger,
   refund, burst, Overextended, HP-pip query). Pure logic; every number and
   switch is `PeQuickstepTuning` in the catalog.
+- `pe_style_channeler.c` and `pe_style_striker.c`: the same split for
+  Channeler (`PeChannelerTuning`) and Striker (`PeStrikerTuning`).
 - `pe_style_runtime.c`: the only native combat adapter: snapshots the successfully
   applied appearance, receives typed hooks, applies engine results and draws cues.
 - Wardrobe registry/skin loader: retains ownership and model-loading responsibility;
@@ -39,7 +41,7 @@ pack mappings and deferred costumes still resolve to Original.
 | --- | --- | --- | --- |
 | Quickstep | yes | unit | no |
 | Channeler | yes | unit | no |
-| Striker (falloff) | no | | |
+| Striker (falloff) | yes | unit | no |
 | Bulwark (Rally, Exposed, Brace) | no | | |
 
 **TODO — one shared playtest package after all four are built.** Not one per
@@ -52,6 +54,39 @@ style. When Striker and Bulwark land, build a single package (extend local
   they see each con coming, could they say how to avoid it, did it feel fair);
 - turns on the `costume_style` log so refunds, Overextended, charges, crack,
   break, counters and Rally can be checked after a session.
+
+## Striker, Revision 6.4 (current; supersedes the Striker notes below)
+
+Source of truth: build spec section 4.2. Rules in `pe_style_striker.c`,
+numbers in `.striker` in `pe_style_catalog.c`.
+
+- Snapshot: when a gun action starts, every live targetable enemy gets one
+  zone, fixed for that action even if it moves. Each recipient (splash,
+  spread, secondary) uses its own zone; unrecorded recipients are native.
+- Point-blank (x1.25): horizontal surface gap from Aya's native 63-unit
+  footprint to the enemy's scaled hit cylinder is at most `point_blank_gap`
+  (96). Same for every gun. Wins over falloff on short-range guns.
+- Falloff (x0.80): the native targeting distance (`target_x/z` to Aya, the
+  value the out-of-range marker and native accuracy use) is at least 70% of
+  the gun's native range. Shots beyond range that still hit natively are in
+  the band too. Range is `action->range`, which the game builds from the
+  weapon's base plus bonus range stat, so mod-changed guns are included.
+  Under Darkness the native 200-unit range is used, as the game does.
+  Range 0 (unknown) turns falloff off rather than guessing.
+- Ordinary gun hits only. Clubs, PE, scripted damage and non-ordinary hits are
+  untouched. A falloff hit never rounds to 0.
+- Cue: target marker cyan at point-blank, native red in the middle, dim red
+  (`CUE_FAR`) in the falloff band. Beyond range the native dark marker is
+  left as is. Preview and the committed snapshot call the same zone function.
+
+**Changing it.** `point_blank_gap`, `point_blank_percent`,
+`falloff_band_percent` (0 turns falloff off) and `falloff_percent` in
+`.striker`. Falloff color: `CUE_FAR` in `pe_style_runtime.c`.
+
+**Not done yet.** The targeting dome is the native wireframe at full range;
+drawing the point-blank ring and the 70% line on it needs a new core render
+hook, so the zones show on the target marker only. The 96 gap and the 30%
+band are uncalibrated (spec section 8). Not playtested.
 
 ## Channeler, Revision 6.4 (current; supersedes the Channeler notes below)
 

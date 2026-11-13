@@ -38,12 +38,16 @@ static const PeStyleDef definitions[PE_STYLE_COUNT] = {
     {.id = PE_STYLE_STRIKER,
      .key = "striker",
      .name = "Striker",
-     .benefit = "Point-blank guns: +25% hit damage",
-     .limitation = "Get close; no club or PE bonus",
+     .benefit = "Point-blank gun hits deal +25% damage",
+     .limitation = "Shots from your gun's outer range deal -20%",
      .implemented = 1,
      .charge_percent = 100,
-     .damage_percent = 125,
-     .point_blank_gap = 96},
+     .damage_percent = 100,
+     /* Build spec 4.2 and 5. Tune here, one value at a time. */
+     .striker = {.point_blank_gap = 96, /* calibrate first (spec 8) */
+                 .point_blank_percent = 125,
+                 .falloff_band_percent = 30, /* 0 turns falloff off */
+                 .falloff_percent = 80}},
     {.id = PE_STYLE_CHANNELER,
      .key = "channeler",
      .name = "Channeler",

@@ -61,18 +61,37 @@ typedef struct {
 } PeChannelerState;
 enum { PE_CH_NONE, PE_CH_CRACK, PE_CH_BREAK }; /* pe_channeler_hit result */
 
+/* ---- Striker (Revision 6.4) ---------------------------------------------
+ * Numbers and switches: PeStrikerTuning (pe_style_catalog.c). Rules:
+ * pe_style_striker.c. */
+enum {
+  PE_STYLE_TARGETS = 64,     /* recipients snapshotted per gun action */
+  PE_ST_AYA_FOOTPRINT = 63   /* Aya's native radius, never the costume's */
+};
+enum { PE_ST_NATIVE, PE_ST_POINT_BLANK, PE_ST_FALLOFF }; /* zones */
+typedef struct {
+  unsigned point_blank_gap;      /* surface gap in world units, every gun */
+  unsigned point_blank_percent;  /* gun hit damage at point-blank */
+  unsigned falloff_band_percent; /* outer % of native gun range; 0 = off */
+  unsigned falloff_percent;      /* gun hit damage in the falloff band */
+} PeStrikerTuning;
+typedef struct {
+  unsigned char zone[PE_STYLE_TARGETS]; /* PE_ST_* per snapshotted recipient */
+} PeStrikerState;
+
 typedef struct {
   PeStyleId id;
   const char *key, *name, *benefit, *limitation;
-  unsigned implemented, charge_percent, damage_percent, point_blank_gap;
+  unsigned implemented, charge_percent, damage_percent;
   unsigned counter_percent; /* Revision 5 Retaliate per-hit cap */
   PeQuickstepTuning quickstep;
+  PeStrikerTuning striker;
   PeChannelerTuning channeler;
 } PeStyleDef;
 typedef struct {
   PeStyleId style;
   unsigned active, charge_remainder;
-  uint64_t close_targets;
+  PeStrikerState st;                     /* Striker */
   unsigned gun_action, weapon_action;
   unsigned action_open, action_canceled, pending_damage;
   unsigned pe_remainder;
@@ -108,13 +127,22 @@ int pe_style_damage(const PeStyleSession *s, int loss, int guarded);
 void pe_style_absorb(PeStyleSession *s, int taken, int guarded);
 int pe_style_counter(PeStyleSession *s, int damage, int ordinary);
 void pe_style_counter_resolve(PeStyleSession *s);
-enum { PE_STYLE_TARGETS = 64 };
-int pe_style_point_blank(const PeStyleSession *s, int dx, int dz,
-                         unsigned radius);
 void pe_style_action_begin(PeStyleSession *s, int gun, int weapon);
-void pe_style_target(PeStyleSession *s, unsigned index, int close);
-int pe_style_gun_damage(const PeStyleSession *s, unsigned index, int damage,
-                        int ordinary);
+/* Striker. Point-blank: horizontal offset to the recipient's hit cylinder
+ * centre and its scaled radius. */
+int pe_striker_point_blank(const PeStyleSession *s, int dx, int dz,
+                           unsigned radius);
+/* Zone for one recipient: close from pe_striker_point_blank, dx/dz the native
+ * targeting offset, range the gun's native range (0 = unknown, no falloff). */
+int pe_striker_zone(const PeStyleSession *s, int close, int dx, int dz,
+                    unsigned range);
+void pe_striker_action_begin(PeStyleSession *s); /* clears the snapshot */
+void pe_striker_target(PeStyleSession *s, unsigned index, int zone);
+int pe_striker_target_zone(const PeStyleSession *s, unsigned index);
+unsigned pe_striker_percent(const PeStyleSession *s, int zone);
+/* An ordinary gun hit on snapshot recipient index. */
+int pe_striker_damage(const PeStyleSession *s, unsigned index, int damage,
+                      int ordinary);
 void pe_style_weapon_damage(PeStyleSession *s, int before, int after,
                             int ordinary);
 void pe_style_action_cancel(PeStyleSession *s);
