@@ -46,12 +46,16 @@ int pe_menu_register_choice(const char *p,const char *l,const char *d,int *v,con
 }
 int pe_menu_register_tick(PeMenuPerFrame fn){tick=fn;return 0;}
 void pe_pe_balance_register(const char *);
+/* The game's own charge after PE_HOOK_SPELL_DONE (attack.c): PE Light takes a third off. */
+static void charge(int drain){aya.exp_or_acc-=(aya.attributes&&(aya.attributes->effectFlags&0x200))?drain*2/3:drain;}
 static void vanilla(void){
     *rules=0;tick();assert(!g_pe_half_enabled && !g_pe_panacea && !g_pe_quick_mask);
     for(unsigned power=0;power<20;++power){
         memset(&aya,0,sizeof aya);aya.curHP=17;aya.maxHP=999;aya.exp_or_acc=1000*65536;
         g_ActiveActor=&aya;Combatant before=aya;PeHookSpell spell={power,&player};
         hooks[PE_HOOK_SPELL](&spell,NULL);assert(!memcmp(&aya,&before,sizeof aya));
+        {int drain=1234;PeHookSpellDone done={power,&player,&aya,17,&drain};hooks[PE_HOOK_SPELL_DONE](&done,NULL);
+         assert(drain==1234&&!memcmp(&aya,&before,sizeof aya));}
         if(hooks[PE_HOOK_POWER_COST]){int cost=123;PeHookPowerCost c={(int)power,&cost};hooks[PE_HOOK_POWER_COST](&c,NULL);assert(cost==123);}
     }
     assert(!toasts);puts("PE Vanilla: every power preserves HP, PE, status and original cost");
@@ -64,10 +68,12 @@ static void costs(void){
         memset(&aya,0,sizeof aya);aya.attributes=&attributes;attributes.effectFlags=light?0x200:0;
         aya.exp_or_acc=1000*65536;g_ActiveActor=&aya;
         PeHookSpell spell={power,&player};hooks[PE_HOOK_SPELL](&spell,NULL);
-        int native=(power==3?100:50)*65536;
-        if(light)native=native*2/3;
+        assert(aya.exp_or_acc==1000*65536);   /* nothing is refunded up front any more */
+        int drain=(power==3?100:50)*65536;PeHookSpellDone done={power,&player,&aya,0,&drain};
+        hooks[PE_HOOK_SPELL_DONE](&done,NULL);assert(drain==cost*65536);
+        charge(drain);
         int expected=cost*65536;if(light)expected=expected*2/3;
-        assert(aya.exp_or_acc-native==1000*65536-expected);
+        assert(aya.exp_or_acc==1000*65536-expected);
         int menu_cost=power==3?100:50;PeHookPowerCost query={(int)power,&menu_cost};
         hooks[PE_HOOK_POWER_COST](&query,NULL);assert(menu_cost==cost);
         /* Exercise the original menu lookup, including its armor discount. */
@@ -83,7 +89,12 @@ static void costs(void){
 static void other_actor(void){
     Combatant other={0};*rules=1;tick();aya.curHP=17;aya.maxHP=999;aya.exp_or_acc=1000*65536;
     g_ActiveActor=&other;Combatant before=aya;
-    for(unsigned power=0;power<=7;++power){PeHookSpell spell={power,&player};hooks[PE_HOOK_SPELL](&spell,NULL);assert(!memcmp(&aya,&before,sizeof aya));}
+    for(unsigned power=0;power<=7;++power){PeHookSpell spell={power,&player};hooks[PE_HOOK_SPELL](&spell,NULL);assert(!memcmp(&aya,&before,sizeof aya));
+        int drain=4321;PeHookSpellDone done={power,&player,&other,0,&drain};hooks[PE_HOOK_SPELL_DONE](&done,NULL);
+        assert(drain==4321&&!memcmp(&aya,&before,sizeof aya));}
+    /* Heals at SPELL_DONE: Rebalanced Heal 1 on Aya (999 max HP) adds 15% - 30 vanilla = 119. */
+    g_ActiveActor=&aya;aya.curHP=47;{int drain=0x3C0000;PeHookSpellDone done={0,&player,&aya,17,&drain};
+     hooks[PE_HOOK_SPELL_DONE](&done,NULL);assert(aya.curHP==47+119&&drain==0x3C0000);}
 }
 int main(int argc,char **argv){
     if(argc==2 && !strcmp(argv[1],"--saved-vanilla"))saved_rules=0;
