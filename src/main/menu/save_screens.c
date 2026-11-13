@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe1/pe_image.h"
 #include "pe1/text_render.h"
 #include "pe1/draw_state.h"
 #include "pe1/game_state.h"
@@ -22,6 +23,8 @@
 #include "pe1/menu_widget.h"
 #include "pe1/save.h"
 #include "pe1/text.h"
+/* The Japanese release's spell panel shape (0x80091E14; the USA panel uses a 0x1C node instead). */
+static u8 g_MenuSpellInfoPanelPointsJapanese[32] = {0x00,0x00,0xD0,0x00,0x00,0x24,0xD0,0x24,0x00,0x46,0xD0,0x46,0xFF,0x00,0x01,0x00,0x02,0x02,0x03,0x02,0x04,0xFF,0x02,0x03,0x04,0x05,0x01,0x03,0x03,0x05,0xFF,0x00};
 
 /* Shared state of the original menu panels and save dialogs. */
 int g_SaveSelectedSlotState;
@@ -100,7 +103,8 @@ void Menu_CreateParasiteSpellInfoPanel(int arg0) {
     if (MenuWidget_FindByModeAndSelectedBase(1, 0x1E) == 0) {
         widget = MenuWidget_CreateSimpleNode(0x1E, 0, 0, 0);
         widget->draw = Menu_DrawParasiteSpellInfoPanel;
-        MenuWidget_CreateSimpleNode(0x1C, 0, 0, 0);
+        if (PE_JAPAN) widget->appearance.gradientPoints = g_MenuSpellInfoPanelPointsJapanese;
+        else MenuWidget_CreateSimpleNode(0x1C, 0, 0, 0);
     }
 
     g_MenuSpellInfoId = arg0;
@@ -112,7 +116,8 @@ void Menu_DrawParasiteSpellInfoPanel(MenuWidgetNode *unused) {
     Draw_OffsetCursor(0, 0x10);
     Draw_PrintCenteredText(Text_LookupTable8(g_MenuSpellInfoId + 0xEB));
     Draw_OffsetCursor(2, 0x14);
-    Draw_PrintRawText(Text_LookupTableC(g_MenuSpellInfoId + 0xEB));
+    if (PE_JAPAN) Draw_PrintTextWrapped(Text_LookupTableC(g_MenuSpellInfoId + 0xEB), 0xAA);
+    else Draw_PrintRawText(Text_LookupTableC(g_MenuSpellInfoId + 0xEB));
 }
 
 void Menu_CreateContextHelpPanel(void) {
@@ -291,7 +296,7 @@ void Menu_DrawContextHelpText(MenuWidgetNode *panel)
             break;
         case 36:
             if (MemCard_PollTransferDelay()) {
-                Draw_OffsetCursor(6, 5);
+                Draw_OffsetCursor(PE_JAPAN ? 4 : 6, 5);
                 Draw_PrintTextById(0x4C);
                 Draw_OffsetCursor(0, 0x10);
                 Draw_PrintTextById(0x4D);
@@ -307,7 +312,7 @@ void Menu_DrawContextHelpText(MenuWidgetNode *panel)
             if (g_McDialogMode) {
                 if (g_MenuMemCardConfirmPending) {
                     Draw_SetTextDimmed(0);
-                    Draw_OffsetCursor(6, 5);
+                    Draw_OffsetCursor(PE_JAPAN ? 4 : 6, 5);
                     Draw_PrintTextById(0x58);
                     Draw_OffsetCursor(0, 0x10);
                     Draw_PrintTextById(0x59);
@@ -320,7 +325,7 @@ void Menu_DrawContextHelpText(MenuWidgetNode *panel)
             break;
         case 39:
             Draw_SetTextDimmed(0);
-            Draw_OffsetCursor(6, 5);
+            Draw_OffsetCursor(PE_JAPAN ? 4 : 6, 5);
             Draw_PrintTextById(0x50);
             Draw_OffsetCursor(0, 0x10);
             Draw_PrintTextById(0x51);
@@ -375,7 +380,7 @@ void Menu_DrawContextHelpText(MenuWidgetNode *panel)
         }
     }
     if (text != 0) {
-        Draw_OffsetCursor(6, 5);
+        Draw_OffsetCursor(PE_JAPAN ? 4 : 6, 5);
         PE_HOOK(PE_HOOK_HELP_TEXT, &text);
         Draw_PrintRawText(text);
         Draw_SetColor(0x808080);
@@ -1039,8 +1044,8 @@ void Menu_DrawSaveMetadataPreview(MenuWidgetNode *unused) {
     lastSlot = remaining - 1;
     if (remaining != 0) {
         do {
-            Draw_EmitWipeBarRect(9, 4, 0);
-            Draw_OffsetCursor(0xB, 0);
+            Draw_EmitWipeBarRect(PE_JAPAN ? 12 : 9, 4, 0);   /* 12 px cells, 14 px pitch in Japanese */
+            Draw_OffsetCursor(PE_JAPAN ? 0xE : 0xB, 0);
             lastSlot -= 1;
         } while (lastSlot != -1);
     }

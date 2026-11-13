@@ -241,24 +241,31 @@ int CdRom_LoadBootAudio(void) {
     if (status < 0) return -1;
     while ((status = CdRom_PollReady()) > 0) {}
     if (status < 0) return -2;
-    /* USA credits contain absolute data addresses, not host pointers. Bind
-     * the complete authored tables after checking every string/image entry. */
-    if(bytes<0x5b34 || !memchr(g_CdLoadAreaBase+4,0,24))return -4;
+    /* The credits contain absolute data addresses, not host pointers. Bind
+     * the complete authored tables after checking every string/image entry.
+     * The Japanese entry is linked 0x540 lower and keeps its tables 0x140 later. */
+    typedef struct { u32 base, lines, first_line, line_end, text_end, images, first_image; } CreditsLayout;
+    static const CreditsLayout kLayouts[2] = {
+        [PE_REGION_USA] = {0x80120d00,0x4f88,0x80120d1c,0x80122fa4,0x22a4,0x4ea4,0x8012e86c},
+        [PE_REGION_JAPAN] = {0x801207c0,0x50c8,0x801207dc,0x80122ba4,0x23e4,0x4fe4,0x8012e46c},
+    };
+    const CreditsLayout layout = kLayouts[PE_JAPAN ? PE_REGION_JAPAN : PE_REGION_USA];
+    if(bytes<(u32)(g_BootDisplayFontTim-g_CdLoadAreaBase)+8 || !memchr(g_CdLoadAreaBase+4,0,24))return -4;
     u32 magic;memcpy(&magic,g_BootDisplayFontTim,4);if(magic!=16)return -4;
     for(unsigned i=0;i<745;++i){
-        u32 address;memcpy(&address,g_CdLoadAreaBase+0x4f88+i*4,4);
-        if(address<0x80120d1c || address>=0x80122fa4)return -4;
-        size_t offset=address-0x80120d00;
+        u32 address;memcpy(&address,g_CdLoadAreaBase+layout.lines+i*4,4);
+        if(address<layout.first_line || address>=layout.line_end)return -4;
+        size_t offset=address-layout.base;
         const u8 *line=g_CdLoadAreaBase+offset;
         if(i==744){if(*line!=255)return -4;}
-        else if(*line==255 || !memchr(line,0,0x22a4-offset))return -4;
+        else if(*line==255 || !memchr(line,0,layout.text_end-offset))return -4;
         lines[i]=line;
     }
     u32 previous=0;
     for(unsigned i=0;i<31;++i){
-        u32 address;memcpy(&address,g_CdLoadAreaBase+0x4ea4+i*4,4);
-        if(address<0x8012e86c || address<previous || (u64)address-0x80120d00+8>bytes)return -4;
-        images[i]=g_CdLoadAreaBase+(address-0x80120d00);previous=address;
+        u32 address;memcpy(&address,g_CdLoadAreaBase+layout.images+i*4,4);
+        if(address<layout.first_image || address<previous || (u64)address-layout.base+8>bytes)return -4;
+        images[i]=g_CdLoadAreaBase+(address-layout.base);previous=address;
     }
     memcpy(g_BootDisplayCreditLines,lines,sizeof(lines));
     memcpy(g_BootDisplayCreditImages,images,sizeof(images));

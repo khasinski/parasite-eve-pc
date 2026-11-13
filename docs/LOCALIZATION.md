@@ -278,6 +278,14 @@ key in ASCII (`M001`).
 
 ## The Japanese source
 
+**The Japanese discs themselves** can also be played (pe1/pe_image.h, `g_GameRegion`): the game reads
+their executable's tables, shows the rooms' Japanese bank with the language index at 0, and draws
+the Japanese font with the Japanese box rule (codes 10-4B with their own spacing, everything else,
+two-byte letters included, as 12 px cells on a 14 px pitch; 14 px lines). Language packs are never
+used with them: `pe_lang` keeps its saved choice but answers none of its hooks, asks nothing, puts
+no letter on the font page (whose cells past 4C hold the kana and kanji) and no picture into the
+disc reads. The extraction tools below read the Japanese discs as before.
+
 `extract_text.py --ja` reads the Japanese release (SLPS-01230 / 01231) and puts each Japanese line
 on the same key as its US line. The Japanese scripts open the same pages in the same order as the
 US ones in 806 of 810 rooms; M195 and the debug room M360 differ, and their pages are flagged

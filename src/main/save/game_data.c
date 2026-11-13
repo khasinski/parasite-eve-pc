@@ -6,6 +6,7 @@
 #include "pe1/battle_cmd.h"
 #include "pe1/draw_state.h"
 #include "pe1/game_state.h"
+#include "pe1/pe_image.h"
 #include "pe1/game_timers.h"
 #include "pe1/inventory_slots.h"
 #include "pe1/inventory_state.h"
@@ -38,8 +39,11 @@ int g_MenuScrollStep;
 
 extern int g_SaveMetadataWindowIndex;
 
+/* The language index: 0 Japanese, 1 English (the USA release always stores 1). It picks the
+ * Japanese or English name and prompt buffers, battle lines, item-message word order and the
+ * name-entry pages (kana first in Japanese). */
 void Save_ResetMetadataWindow(void) {
-    g_SaveMetadataWindowIndex = 1;
+    g_SaveMetadataWindowIndex = PE_JAPAN ? 0 : 1;
 }
 
 void Save_PostInitStub(void) {
@@ -66,7 +70,8 @@ void Save_SelectMetadataWindow(ItemDataRecord *record) {
     }
 
     g_SaveMetadataCursor = window->text;
-    g_SaveMetadataWindowLength = 8;
+    /* Japanese names are at most 6 letters (8 only for the English window). */
+    g_SaveMetadataWindowLength = PE_JAPAN ? (record == 0 && g_SaveMetadataWindowIndex ? 8 : 6) : 8;
 }
 
 void Save_AppendMetadataChar(unsigned char ch) {
@@ -755,7 +760,7 @@ static inline void CopyName(u8 *dest, u8 *source) {
 
 static inline void InitName(u8 *buffer, int length, ItemDataRecord *item) {
     u8 *p, *source, *dest;
-    g_SaveMetadataWindowIndex = 1;
+    g_SaveMetadataWindowIndex = PE_JAPAN ? 0 : 1;
     g_SaveMetadataSourceRecord = item;
     g_SaveMetadataCursor = buffer;
     g_SaveMetadataWindowLength = length;
@@ -772,10 +777,17 @@ static inline void InitName(u8 *buffer, int length, ItemDataRecord *item) {
 
 void Save_InitMetadataState(void) {
     memset(&g_SaveRuntimeState, 0, sizeof(g_SaveRuntimeState));
-    /* Retail initializes the same window twice, including both lookups. */
-    InitName(g_SaveRuntimeState.windows.metadata[1].text, 8, 0);
-    InitName(g_SaveRuntimeState.windows.metadata[1].text, 8, 0);
-    Menu_CopyPromptCodes(Text_LookupTable4(30));
+    /* Retail initializes the same window twice, including both lookups: the English name (8
+     * letters) in the USA release, the Japanese one (window 0, 6 letters) in the Japanese release. */
+    if (PE_JAPAN) {
+        InitName(g_SaveRuntimeState.windows.metadata[0].text, 6, 0);
+        InitName(g_SaveRuntimeState.windows.metadata[0].text, 6, 0);
+    } else {
+        InitName(g_SaveRuntimeState.windows.metadata[1].text, 8, 0);
+        InitName(g_SaveRuntimeState.windows.metadata[1].text, 8, 0);
+        /* The Japanese release keeps the dialogue name buffer's own "Aya" here. */
+        Menu_CopyPromptCodes(Text_LookupTable4(30));
+    }
     Inv_InitNewGameInventory();
     g_InventoryRuntime.specialStorage[0] = 515;
     g_AyaSaveState.blend_color = 0x404040;

@@ -1220,7 +1220,7 @@ static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char 
     HostCardImport *import = userdata;
     char source[8192], target[4096], device[64], temporary[4160], entry[64];
     snprintf(source, sizeof(source), "%s%s", dirname, name);
-    if (strlen(name) != 20 || strncmp(name, "BASLUS-00662", 11)) {
+    if (strlen(name) != 20 || (strncmp(name, "BASLUS-00662", 12) && strncmp(name, "BISLPS-01230", 12))) {
         if (Host_IsCardImage(name)) {
             ++import->rejected;
             fprintf(stderr, "Memory cards: %s is a memory card image, not a PsyZ save; "
@@ -1704,7 +1704,7 @@ static int Host_SelectImage(unsigned identity, char *path, size_t size) {
     }
 
     char title[100];
-    snprintf(title, sizeof(title), "Parasite Eve - select USA Disc %u", identity);
+    snprintf(title, sizeof(title), "Parasite Eve - select Disc %u", identity);
     SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_FILTERS_POINTER, (void *)filters);
     SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, 1);
     SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, false);
@@ -1746,7 +1746,12 @@ static int Host_InstallImage(unsigned identity, const char *path) {
     }
 
     /* Inspection deliberately leaves the bound image and original tables alone. */
-    if (Asset_ValidatePeImage(image, &found) || found != identity) {
+    unsigned region = 0, other_region = 0, other_identity = 0;
+    PeDisc *other = g_CdImageVolumes[2 - identity];
+    if (Asset_ValidatePeImageRegion(image, &found, &region) || found != identity ||
+        /* Disc 1 and Disc 2 must come from the same release (USA or Japanese). */
+        (other && (Asset_ValidatePeImageRegion(other, &other_identity, &other_region) ||
+                   other_region != region))) {
         pe_disc_close(image);
         return 0;
     }
@@ -1782,7 +1787,7 @@ static int Host_AddImage(unsigned identity, int required) {
     snprintf(
         message,
         sizeof(message),
-        "Select the Parasite Eve (USA) Disc %u CUE or BIN image. The current image will remain mounted.",
+        "Select the Parasite Eve Disc %u CUE or BIN image (USA or Japanese, the same release as the other disc). The current image will remain mounted.",
         identity
     );
     if (required) {
@@ -1799,7 +1804,7 @@ static int Host_AddImage(unsigned identity, int required) {
             snprintf(
                 message,
                 sizeof(message),
-                "This is not a valid Parasite Eve (USA) Disc %u image. Please select Disc %u.",
+                "This is not a valid Parasite Eve Disc %u image, or it is from the other release (USA or Japanese) than the other disc. Please select Disc %u.",
                 identity,
                 identity
             );
@@ -1812,7 +1817,7 @@ static int Host_AddImage(unsigned identity, int required) {
         snprintf(
             message,
             sizeof(message),
-            "Parasite Eve (USA) Disc %u is needed to continue. Choose its image, or quit the game. Unsaved progress is lost if you quit.",
+            "Parasite Eve Disc %u is needed to continue. Choose its image, or quit the game. Unsaved progress is lost if you quit.",
             identity
         );
         SDL_MessageBoxButtonData buttons[] = {
@@ -4161,7 +4166,7 @@ static int Host_ConfigurePortable(int *argc, char **argv) {
 
 static void Host_PrintHelp(const char *program_name) {
     printf(
-        "Usage: %s [--game <USA Disc 1 CUE/BIN/CHD>] [--disc <USA Disc 1 CUE/BIN/CHD>] [--disc2 <USA Disc 2 CUE/BIN/CHD>] [--choose-discs] "
+        "Usage: %s [--game <Disc 1 CUE/BIN/CHD>] [--disc <Disc 1 CUE/BIN/CHD>] [--disc2 <Disc 2 CUE/BIN/CHD>] [--choose-discs] "
         "[--geometry-correction 0|1] [--antialiasing 0|1] [--model-filtering 0|1] [--widescreen 0|1] [--frame-interpolation 0|1] "
         "[--dynamic-lighting 0|1] [--effect-geometry-correction 0|1] "
         "[--headless | --headless-gpu] [--internal-resolution 1..8] [--frame-limit N] [--control-at N] "
@@ -4612,6 +4617,7 @@ int main(int argc, char **argv) {
     }
 
 mount_images:
+    unsigned mounted_region = ~0u;
     for (unsigned slot = 0; slot < 2; ++slot) {
         if (!paths[slot]) {
             continue;
@@ -4624,9 +4630,14 @@ mount_images:
         int mounted = Asset_OpenPeImage();
         unsigned identity = g_PeImageMountFlags;
         if (mounted || (identity != 1 && identity != 2) || g_CdImageVolumes[identity - 1]) {
-            fprintf(stderr, "Invalid or duplicate USA disc image (status %d)\n", mounted);
+            fprintf(stderr, "Invalid or duplicate Parasite Eve disc image (status %d)\n", mounted);
             goto image_error;
         }
+        if (mounted_region != ~0u && mounted_region != g_GameRegion) {
+            fprintf(stderr, "Disc 1 and Disc 2 are from different releases (USA and Japanese)\n");
+            goto image_error;
+        }
+        mounted_region = g_GameRegion;
         g_CdImageVolumes[identity - 1] = &images[slot];
     }
     CdRom_BindImage(g_CdImageVolumes[0] ? g_CdImageVolumes[0] : g_CdImageVolumes[1], NULL);
@@ -4646,7 +4657,7 @@ image_error:
     SDL_ShowSimpleMessageBox(
         SDL_MESSAGEBOX_ERROR,
         "Parasite Eve",
-        "Cannot mount these images. Select the USA Disc 1 and Disc 2 CUE or CHD files together. Cancel to quit.",
+        "Cannot mount these images. Select Disc 1 and Disc 2 of the same release (USA or Japanese) together. Cancel to quit.",
         NULL
     );
     {
@@ -4917,7 +4928,7 @@ unsigned CPE_StateHostReasonBits(void){
 #endif
 }
 const char *CPE_StateHostReasonText(unsigned bits){
-    if(bits&32768u)return "Add both USA disc images in System before checkpointing";
+    if(bits&32768u)return "Add both disc images in System before checkpointing";
     if(bits&16384u)return "HD character texture pack: waiting for a valid character texture index";
     if(bits&64u)return "Particle mode has not applied; reselect Extra particle geometry in Advanced";
     if(bits&1u)return "Headless mode cannot capture gameplay";
