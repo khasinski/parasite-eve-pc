@@ -274,7 +274,7 @@ if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
     target_compile_options(test-mod-wardrobe-menu PRIVATE $<IF:$<BOOL:${MSVC}>,/O1,-O1>)
     pe_feature_test(costume-styles ${PROJECT_SOURCE_DIR}/tests/pe_mod_costume_styles_test.c
         pe_wardrobe/pe_style_catalog.c pe_wardrobe/pe_style_engine.c
-        pe_wardrobe/pe_style_quickstep.c)
+        pe_wardrobe/pe_style_quickstep.c pe_wardrobe/pe_style_channeler.c)
     pe_feature_test(packs ${PROJECT_SOURCE_DIR}/tests/pe_mod_packs_test.c pe_wardrobe/pe_packs.c)
     target_link_libraries(test-mod-packs PRIVATE pe_download_json pe_download_zip)
     set_tests_properties(mod-packs PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")

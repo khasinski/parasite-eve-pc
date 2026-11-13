@@ -33,6 +33,64 @@ existing `PeCostume` service layout. Unknown packs and deferred rigs stay Origin
 All four styles now use the same catalog, engine and native adapter. Unknown
 pack mappings and deferred costumes still resolve to Original.
 
+## Revision 6.4 build status (branch `feature/costume-styles-rev6`)
+
+| Style | Built | Tests | Playtested |
+| --- | --- | --- | --- |
+| Quickstep | yes | unit | no |
+| Channeler | yes | unit | no |
+| Striker (falloff) | no | | |
+| Bulwark (Rally, Exposed, Brace) | no | | |
+
+**TODO — one shared playtest package after all four are built.** Not one per
+style. When Striker and Bulwark land, build a single package (extend local
+`tools/New-CostumeStylePlaytest.ps1`) that:
+- holds copied saves only, under `build-styles/` (never committed);
+- starts with Costume + playstyle on, one save per style, each wearing a
+  costume of that style at a spot with a regular fight and a boss nearby;
+- includes the playtest sheet from the build spec section 10 (fun gate: did
+  they see each con coming, could they say how to avoid it, did it feel fair);
+- turns on the `costume_style` log so refunds, Overextended, charges, crack,
+  break, counters and Rally can be checked after a session.
+
+## Channeler, Revision 6.4 (current; supersedes the Channeler notes below)
+
+Source of truth: build spec section 4.4. Rules in `pe_style_channeler.c`,
+numbers in `.channeler` in `pe_style_catalog.c`.
+
+- Charges: a completed weapon action that damaged a living enemy adds one, up
+  to `max_charges` (2). Cancelled, interrupted, zero-damage and
+  encounter-ending actions add none.
+- Spending: the next support power (0-5, 7-12, 18) spends all charges for
+  `discount[charges]` % off (50 / 100). At max charges Heal 1-3 also heal
+  `overchannel_percent` (25%) more. Energy Shot, Liberate and attack powers
+  neither use nor clear charges. The refund is added in `PE_HOOK_SPELL`
+  before the native subtraction, from the cost after other mods and armor.
+- Menu and affordability: `PE_HOOK_POWER_COST` (LATE) shows the discounted
+  cost while charges are held. The game's menu cost, its can-afford check and
+  the queued PE reservation all read that one value, so a charged player can
+  pick what the charges pay for. Our own raw-cost query skips the discount.
+- Backlash: only at max charges. An HP-loss hit (sources 1-3) cracks the
+  weave; a later hit breaks one charge; casting clears the crack. Hits within
+  `backlash_group_frames` (30 = 1 s, refreshed by each hit) of the last one
+  count as the same enemy attack. No PE is ever taken.
+- Passive regen is native (`pe_recovery_percent` 100 leaves the hook
+  untouched).
+- Cues: PE label pulses cyan on each charge and on a cast, glows cyan at full
+  charge, flickers orange once cracked, and drops to no glow after a break.
+
+**Changing it.** `max_charges` (up to 4) with matching `discount[]`;
+`overchannel_percent` 0 turns Overchannel off; `backlash` 0 turns the con
+off; `backlash_group_frames` for how close hits count as one attack;
+`pe_recovery_percent` below 100 brings back slower regen. Crack color and
+flicker speed: `CUE_CRACK` and `CRACK_FLICKER_FRAMES` in `pe_style_runtime.c`.
+
+**Not done yet.** Barrier's menu cost and can-afford check stay native (its
+cost is a third of max PE, not a table cost, so the cost hook never sees
+it); the cast discount still applies. "One enemy attack" is a 1 s window, not
+the enemy's real attack sequence. The PE-menu discount display is unit-tested
+only; check it in game. Not playtested.
+
 ## Quickstep, Revision 6.4 (current; supersedes the Quickstep notes below)
 
 Source of truth: `Parasite Eve Costume Combat Styles Build Spec.md` section 4.1.

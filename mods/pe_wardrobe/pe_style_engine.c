@@ -118,16 +118,7 @@ int pe_style_gun_damage(const PeStyleSession *s, unsigned index, int damage,
   return saturate(scaled);
 }
 
-/* ---- Channeler: passive recovery and Spellweave ------------------------- */
-int pe_style_pe_recovery(PeStyleSession *s, int increment) {
-  if (!is(s, PE_STYLE_CHANNELER) || increment <= 0)
-    return increment;
-  uint64_t scaled = (uint64_t)(unsigned)increment *
-                        pe_style_definition(s->style)->pe_recovery_percent +
-                    s->pe_remainder;
-  s->pe_remainder = (unsigned)(scaled % 100);
-  return saturate(scaled / 100);
-}
+/* ---- Channeler: action bookkeeping (rules in pe_style_channeler.c) ------ */
 void pe_style_weapon_damage(PeStyleSession *s, int before, int after,
                             int ordinary) {
   if (is(s, PE_STYLE_CHANNELER) && s->action_open && !s->action_canceled &&
@@ -139,33 +130,4 @@ void pe_style_action_cancel(PeStyleSession *s) {
     s->action_canceled = 1;
     s->pending_damage = 0;
   }
-}
-int pe_style_weave_resolve(PeStyleSession *s, int continues) {
-  unsigned earned = s->action_open && !s->action_canceled && s->pending_damage;
-  unsigned limit;
-  s->pending_damage = 0;
-  s->action_open = 0;
-  if (!is(s, PE_STYLE_CHANNELER) || !earned || !continues)
-    return 0;
-  limit = pe_style_definition(s->style)->weave_charges;
-  if (s->weave_charges >= limit)
-    return 0;
-  s->weave_charges++;
-  return 1;
-}
-unsigned pe_style_weave_cast(PeStyleSession *s, int *overchannel) {
-  unsigned charges = s->weave_charges, limit;
-  if (overchannel)
-    *overchannel = 0;
-  if (!is(s, PE_STYLE_CHANNELER) || !charges)
-    return 0;
-  limit = pe_style_definition(s->style)->weave_charges;
-  s->weave_charges = 0;
-  if (charges >= limit) {
-    if (overchannel)
-      *overchannel = 1;
-    return 100;
-  }
-  /* 1 of 3 = 34%, 2 of 3 = 67%: rounded up so two charges beat two thirds. */
-  return (charges * 100 + limit - 1) / limit;
 }

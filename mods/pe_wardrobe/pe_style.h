@@ -42,15 +42,32 @@ typedef struct {
   PeQuickstepMark mark[PE_QS_TRACKED];
 } PeQuickstepState;
 
+/* ---- Channeler (Revision 6.4) -------------------------------------------
+ * Numbers and switches: PeChannelerTuning (pe_style_catalog.c). Rules:
+ * pe_style_channeler.c. */
+enum { PE_CH_MAX_CHARGES = 4 };
+typedef struct {
+  unsigned max_charges;                         /* 2 */
+  unsigned discount[PE_CH_MAX_CHARGES + 1];     /* % off by charges held */
+  unsigned overchannel_percent;                 /* extra Heal 1-3 at max */
+  unsigned backlash;                            /* 0 turns the con off */
+  unsigned backlash_group_frames; /* hits this close count as one attack */
+  unsigned pe_recovery_percent;   /* passive PE regen, 100 = native */
+} PeChannelerTuning;
+typedef struct {
+  unsigned charges;
+  unsigned cracked;     /* Backlash warning given at full charge */
+  unsigned group;       /* frames left in the current enemy attack */
+} PeChannelerState;
+enum { PE_CH_NONE, PE_CH_CRACK, PE_CH_BREAK }; /* pe_channeler_hit result */
+
 typedef struct {
   PeStyleId id;
   const char *key, *name, *benefit, *limitation;
-  unsigned implemented, charge_percent, damage_percent, point_blank_gap,
-      pe_recovery_percent;
-  /* Revision 5: Retaliate per-hit cap, Spellweave charge limit and
-   * Overchannel heal bonus. */
-  unsigned counter_percent, weave_charges, overchannel_percent;
+  unsigned implemented, charge_percent, damage_percent, point_blank_gap;
+  unsigned counter_percent; /* Revision 5 Retaliate per-hit cap */
   PeQuickstepTuning quickstep;
+  PeChannelerTuning channeler;
 } PeStyleDef;
 typedef struct {
   PeStyleId style;
@@ -61,7 +78,7 @@ typedef struct {
   unsigned pe_remainder;
   PeQuickstepState qs;                   /* Quickstep */
   unsigned counter_store, counter_spent; /* Retaliate */
-  unsigned weave_charges;              /* Spellweave */
+  PeChannelerState ch;                   /* Channeler */
 } PeStyleSession;
 
 const PeStyleDef *pe_style_definition(PeStyleId id);
@@ -98,15 +115,22 @@ void pe_style_action_begin(PeStyleSession *s, int gun, int weapon);
 void pe_style_target(PeStyleSession *s, unsigned index, int close);
 int pe_style_gun_damage(const PeStyleSession *s, unsigned index, int damage,
                         int ordinary);
-int pe_style_pe_recovery(PeStyleSession *s, int increment);
 void pe_style_weapon_damage(PeStyleSession *s, int before, int after,
                             int ordinary);
 void pe_style_action_cancel(PeStyleSession *s);
-/* Spellweave: 1 when the completed action earned a charge. */
-int pe_style_weave_resolve(PeStyleSession *s, int continues);
+/* Channeler. Passive PE regen scaling (native at 100%). */
+int pe_channeler_recovery(PeStyleSession *s, int increment);
+/* 1 when the completed action earned a charge. */
+int pe_channeler_resolve(PeStyleSession *s, int continues);
+/* % off a support power right now (menu cost, affordability). */
+unsigned pe_channeler_discount(const PeStyleSession *s);
 /* Spends every charge on a support PE power; returns the refunded share of its
- * cost in percent and sets *overchannel at the full charge count. */
-unsigned pe_style_weave_cast(PeStyleSession *s, int *overchannel);
+ * cost in percent and sets *overchannel at max charges. Clears the crack. */
+unsigned pe_channeler_cast(PeStyleSession *s, int *overchannel);
+/* Backlash: an eligible incoming hit. Returns PE_CH_CRACK / _BREAK / _NONE. */
+int pe_channeler_hit(PeStyleSession *s);
+void pe_channeler_tick(PeStyleSession *s); /* every battle frame */
+int pe_channeler_full(const PeStyleSession *s);
 
 /* Wardrobe adapter, intentionally separate from the testable style engine. */
 void pe_styles_register(const char *mod_id);

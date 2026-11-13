@@ -576,11 +576,11 @@ int main(void) {
   weapon_hit(10, 1);
   weapon_hit(10, 1);
   weapon_hit(10, 1);
-  assert(session.pending_damage && !session.weave_charges);
+  assert(session.pending_damage && !session.ch.charges);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.weave_charges == 1 && aya.exp_or_acc == 0); /* no PE refund */
+  assert(session.ch.charges == 1 && aya.exp_or_acc == 0); /* no PE refund */
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.weave_charges == 1); /* one charge per queue */
+  assert(session.ch.charges == 1); /* one charge per queue */
   g_BattlePeLabels[0].sprite.color.bytes.r = 19;
   g_BattlePeLabels[0].sprite.color.bytes.code = 0x65;
   fire(PE_HOOK_BATTLE_HUD, NULL);
@@ -591,6 +591,7 @@ int main(void) {
   fire(PE_HOOK_BATTLE_HUD, NULL);
   assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19);
   assert(g_BattlePeLabels[0].sprite.color.bytes.code == 0x65);
+  /* Passive PE regeneration is native: the hook leaves it untouched. */
   unsigned recovered = 0;
   aya.peRecoveryStep = 777;
   aya.peRecoveryDivisor = 999;
@@ -600,45 +601,98 @@ int main(void) {
     fire(PE_HOOK_PE_RECOVERY, &q);
     recovered += increment;
   }
-  assert(recovered == 5 && aya.peRecoveryStep == 777 &&
+  assert(recovered == 10 && aya.peRecoveryStep == 777 &&
          aya.peRecoveryDivisor == 999);
   int near_cap = 100;
   PeHookPeRecovery rq = {&aya, 999, 1000, &near_cap};
   fire(PE_HOOK_PE_RECOVERY, &rq);
-  assert(near_cap == 1 && session.pe_remainder == 0);
+  assert(near_cap == 100);
+  /* Menu cost and affordability: one charge shows half price. */
+  int menu_cost = 30;
+  PeHookPowerCost menu = {7, &menu_cost};
+  fire(PE_HOOK_POWER_COST, &menu);
+  assert(menu_cost == 15);
+  menu_cost = 45;
+  fire(PE_HOOK_POWER_COST, &menu);
+  assert(menu_cost == 23); /* never shows less than is paid */
   weapon.kind = 8;
   weapon_action.actionCode.actionId = 8;
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(1, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.weave_charges == 2); /* clubs qualify */
+  assert(session.ch.charges == 2); /* clubs qualify */
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(1, 1);
   fire(PE_HOOK_PLAYER_ACTION_CANCEL, &aya);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.weave_charges == 2);
+  assert(session.ch.charges == 2);
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(1, 1);
   PeHookActionMode interrupted = {&player, 14};
   fire(PE_HOOK_ACTION_MODE, &interrupted);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.weave_charges == 2);
+  assert(session.ch.charges == 2);
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(0, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.weave_charges == 2);
+  assert(session.ch.charges == 2);
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(1, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.weave_charges == 3);
-  fire(PE_HOOK_PLAYER_ACTION, &aya);
-  weapon_hit(1, 1);
-  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.weave_charges == 3); /* capped */
+  assert(session.ch.charges == 2); /* capped at 2 */
   for (int i = 0; i < 13; i++)
     fire(PE_HOOK_BATTLE_UPDATE, NULL);
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 0x60); /* steady at 3 */
+  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 0x60); /* steady at 2 */
+  /* Two charges: support powers show free; attack powers, Energy Shot and
+   * Liberate keep their cost. */
+  menu_cost = 60;
+  menu.power = 0;
+  fire(PE_HOOK_POWER_COST, &menu);
+  assert(menu_cost == 0);
+  int attack_cost = 60;
+  PeHookPowerCost attack = {15, &attack_cost};
+  fire(PE_HOOK_POWER_COST, &attack);
+  attack.power = 6;
+  fire(PE_HOOK_POWER_COST, &attack);
+  assert(attack_cost == 60);
+  /* Backlash, warning first: the first hit cracks, nothing is lost. */
+  int pe_before = aya.exp_or_acc;
+  assert(loss(10, 1) == 10);
+  assert(session.ch.charges == 2 && session.ch.cracked);
+  frame_count = 0;
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 0xff &&
+         g_BattlePeLabels[0].sprite.color.bytes.g == 0x90); /* crack tint */
+  frame_count = CRACK_FLICKER_FRAMES;
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19); /* flicker off */
+  /* More hits from the same enemy attack count as that one hit. */
+  loss(10, 2);
+  loss(10, 3);
+  assert(session.ch.charges == 2 && session.ch.cracked);
+  loss(10, 4); /* status ticks are not hits */
+  for (int i = 0; i < 30; i++)
+    fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  loss(10, 1); /* a new attack: breaks one charge */
+  assert(session.ch.charges == 1 && !session.ch.cracked);
+  assert(aya.exp_or_acc == pe_before); /* never any PE */
+  for (int i = 0; i < 30; i++)
+    fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  loss(10, 1);
+  assert(session.ch.charges == 1 && !session.ch.cracked); /* not full */
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19); /* one-charge look */
+  /* Recharge, crack, then cast: Overchannel and the crack clears. */
+  weapon.kind = 1;
+  weapon_action.actionCode.actionId = 0;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  weapon_hit(1, 1);
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  for (int i = 0; i < 30; i++)
+    fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  loss(10, 1);
+  assert(session.ch.charges == 2 && session.ch.cracked);
   /* Overchannel: Heal 1 (60 PE) is free and heals 30 + 8. The refund lands
    * before the native code subtracts the full cost. */
   spell_table[0].cost = 60;
@@ -648,30 +702,33 @@ int main(void) {
   PeHookSpell cast = {0, &player};
   fire(PE_HOOK_SPELL, &cast);
   assert(aya.exp_or_acc == 160 << 16 && aya.curHP == 58);
-  assert(session.weave_charges == 0);
+  assert(session.ch.charges == 0 && !session.ch.cracked);
   fire(PE_HOOK_SPELL, &cast);
   assert(aya.exp_or_acc == 160 << 16 && aya.curHP == 58); /* no charges */
+  menu_cost = 60;
+  fire(PE_HOOK_POWER_COST, &menu);
+  assert(menu_cost == 60); /* full price again */
   fire(PE_HOOK_BATTLE_HUD, NULL);
   for (int i = 0; i < 13; i++)
     fire(PE_HOOK_BATTLE_UPDATE, NULL);
   fire(PE_HOOK_BATTLE_HUD, NULL);
   assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19);
-  /* One charge on Scan: 34% of its cost after other mods (Rebalance 30). */
-  session.weave_charges = 1;
+  /* One charge on Scan: half of its cost after other mods (Rebalance 30). */
+  session.ch.charges = 1;
   aya.exp_or_acc = 0;
   cost_override = 30;
   cast.spell = 7;
   fire(PE_HOOK_SPELL, &cast);
-  assert(aya.exp_or_acc == (30 << 16) * 34 / 100 && aya.curHP == 58);
+  assert(aya.exp_or_acc == (30 << 16) * 50 / 100 && aya.curHP == 58);
   cost_override = -1;
-  /* Two charges on Barrier: 67% of a third of max PE. */
-  session.weave_charges = 2;
+  /* Two charges on Barrier: free (a third of max PE refunded). */
+  session.ch.charges = 2;
   aya.exp_or_acc = 0;
   cast.spell = 5;
   fire(PE_HOOK_SPELL, &cast);
-  assert(aya.exp_or_acc == 333 * 67 / 100);
+  assert(aya.exp_or_acc == 333);
   /* Energy Shot, Liberate and attack powers keep charges untouched. */
-  session.weave_charges = 3;
+  session.ch.charges = 2;
   aya.exp_or_acc = 0;
   cast.spell = 6;
   fire(PE_HOOK_SPELL, &cast);
@@ -679,39 +736,39 @@ int main(void) {
   fire(PE_HOOK_SPELL, &cast);
   cast.spell = 19;
   fire(PE_HOOK_SPELL, &cast);
-  assert(aya.exp_or_acc == 0 && session.weave_charges == 3);
+  assert(aya.exp_or_acc == 0 && session.ch.charges == 2);
   /* Another actor's spell (not Aya acting) is ignored. */
   Combatant other = {0};
   g_ActiveActor = &other;
   cast.spell = 0;
   fire(PE_HOOK_SPELL, &cast);
-  assert(session.weave_charges == 3);
+  assert(session.ch.charges == 2);
   g_ActiveActor = &aya;
-  weapon.kind = 1;
-  weapon_action.actionCode.actionId = 0;
-  session.weave_charges = 0;
+  session.ch.charges = 0;
   g_BattleEnemySlots[1].active = 0;
   ((EnemyCombatant *)target.core)->hpAlive = 1;
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   weapon_hit(2, 1);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.weave_charges == 0); /* final kill suppressed */
+  assert(session.ch.charges == 0); /* final kill suppressed */
   PeStyleSession tiny;
   pe_style_begin(&tiny, PE_STYLE_CHANNELER);
   for (int i = 0; i < 20; i++) {
     pe_style_action_begin(&tiny, 1, 1);
     pe_style_weapon_damage(&tiny, 10, 9, 1);
-    pe_style_weave_resolve(&tiny, 1);
+    pe_channeler_resolve(&tiny, 1);
   }
   int over = 0;
-  assert(tiny.weave_charges == 3 && pe_style_weave_cast(&tiny, &over) == 100 &&
-         over && !tiny.weave_charges);
-  tiny.weave_charges = 1;
-  assert(pe_style_weave_cast(&tiny, &over) == 34 && !over);
-  tiny.weave_charges = 2;
-  assert(pe_style_weave_cast(&tiny, &over) == 67 && !over);
+  assert(tiny.ch.charges == 2 && pe_channeler_cast(&tiny, &over) == 100 &&
+         over && !tiny.ch.charges);
+  tiny.ch.charges = 1;
+  assert(pe_channeler_cast(&tiny, &over) == 50 && !over);
+  session.ch.charges = 2;
   fire(PE_HOOK_SAVE_READ, NULL);
-  assert(!session.active);
+  assert(!session.active && !session.ch.charges && !session.ch.cracked);
+  menu_cost = 60;
+  fire(PE_HOOK_POWER_COST, &menu);
+  assert(menu_cost == 60); /* no discount once the encounter is over */
   battle = 0;
   requested = 0;
   settings_tick();

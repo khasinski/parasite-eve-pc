@@ -47,14 +47,18 @@ static const PeStyleDef definitions[PE_STYLE_COUNT] = {
     {.id = PE_STYLE_CHANNELER,
      .key = "channeler",
      .name = "Channeler",
-     .benefit = "Weapon hits charge next PE power",
-     .limitation = "Passive PE recovery at half speed",
+     .benefit = "Hits charge your next support PE: 1 = half, 2 = free",
+     .limitation = "At full charge, a hit cracks it; a 2nd breaks one",
      .implemented = 1,
      .charge_percent = 100,
      .damage_percent = 100,
-     .pe_recovery_percent = 50,
-     .weave_charges = 3,
-     .overchannel_percent = 25}};
+     /* Build spec 4.4 and 5. Tune here, one value at a time. */
+     .channeler = {.max_charges = 2,
+                   .discount = {0, 50, 100},
+                   .overchannel_percent = 25,
+                   .backlash = 1,
+                   .backlash_group_frames = 30, /* 1 s: one enemy combo */
+                   .pe_recovery_percent = 100}}};
 typedef struct {
   const char *key;
   PeStyleId style;

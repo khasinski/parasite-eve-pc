@@ -36,6 +36,9 @@ static const CueColor CUE_CYAN = {0x60, 0xe0, 0xff}; /* guard, refund, Striker *
 static const CueColor CUE_COUNTER = {0xff, 0x90, 0x30}; /* Bulwark loaded */
 static const CueColor CUE_RUSH = {0xff, 0x50, 0x40}; /* Quickstep burst */
 static const CueColor CUE_SPENT = {0x30, 0x30, 0x30}; /* Quickstep HP pip */
+static const CueColor CUE_CRACK = {0xff, 0x90, 0x30}; /* Channeler cracked */
+enum { CRACK_FLICKER_FRAMES = 4 };
+static unsigned frame_count;
 static TargetTint target_tints[2][4], triangle_tints[2];
 static TargetTint pe_tints[2];
 static u8 pe_codes[2];
@@ -82,8 +85,9 @@ static void restore_target_cue(void) {
 static void restore_pe_cue(void) {
   for (unsigned i = 0; i < 2; i++) {
     RenderSpritePacket *p = &g_BattlePeLabels[i].sprite;
-    if (pe_tints[i].tinted && p->color.bytes.r == 0x60 &&
-        p->color.bytes.g == 0xe0 && p->color.bytes.b == 0xff &&
+    if (pe_tints[i].tinted && p->color.bytes.r == pe_tints[i].tr &&
+        p->color.bytes.g == pe_tints[i].tg &&
+        p->color.bytes.b == pe_tints[i].tb &&
         p->color.bytes.code == (u8)(pe_codes[i] & ~1u))
       p->color.bytes.code = pe_codes[i];
     restore_rgb(&p->color.bytes.r, &p->color.bytes.g, &p->color.bytes.b,
@@ -201,6 +205,8 @@ static int update(void *ctx, void *user) {
   ensure_session();
   pe_quickstep_tick(&session,
                     session.style == PE_STYLE_QUICKSTEP && controllable());
+  pe_channeler_tick(&session);
+  frame_count++;
   if (pulse)
     pulse--;
   if (pe_pulse)
@@ -213,18 +219,26 @@ static int hud(void *ctx, void *user) {
   (void)user;
   restore_marker();
   restore_pe_cue();
-  /* Spellweave: pulse on each new charge, steady at a full Overchannel. */
-  if (pe_pulse ||
-      (session.style == PE_STYLE_CHANNELER &&
-       session.weave_charges >=
-           pe_style_definition(PE_STYLE_CHANNELER)->weave_charges))
+  /* Channeler PE label: cyan pulse on each charge or cast, steady cyan at full
+   * charge, orange flicker once cracked. A break drops it back to the
+   * one-charge look (no glow). */
+  int pe_cue = pe_pulse != 0;
+  CueColor pe_color = CUE_CYAN;
+  if (pe_channeler_full(&session)) {
+    pe_cue = 1;
+    if (session.ch.cracked) {
+      pe_color = CUE_CRACK;
+      pe_cue = (frame_count / CRACK_FLICKER_FRAMES) % 2 == 0;
+    }
+  }
+  if (pe_cue)
     for (unsigned slot = 0; slot < 2; slot++) {
       RenderSpritePacket *p = &g_BattlePeLabels[slot].sprite;
       pe_codes[slot] = p->color.bytes.code;
       /* The native PE label is raw-textured: enable modulation for the cue. */
       p->color.bytes.code &= (u8)~1u;
-      tint_rgb(&p->color.bytes.r, &p->color.bytes.g, &p->color.bytes.b,
-               &pe_tints[slot]);
+      tint_color(&p->color.bytes.r, &p->color.bytes.g, &p->color.bytes.b,
+                 &pe_tints[slot], pe_color);
     }
   /* Cyan: guarded or a Quickstep refund landing. Orange: a Retaliate counter
    * is loaded while the guard is off (typically a full bar, ready to act).
@@ -281,9 +295,17 @@ static int hp_loss(void *ctx, void *user) {
     if (q->current_hp >= 0 && taken > q->current_hp)
       taken = q->current_hp;
     pe_style_absorb(&session, taken, guard);
-    if (*q->loss != before)
+    if (*q->loss != before && session.style == PE_STYLE_BULWARK)
       pe_log("costume_style", "bulwark loss=%d->%d atb=%u store=%u", before,
              *q->loss, pe_aya_core()->hpAlive, session.counter_store);
+    /* Channeler Backlash: a damaging hit at full charge cracks, then breaks. */
+    if (*q->loss > 0) {
+      int backlash = pe_channeler_hit(&session);
+      if (backlash != PE_CH_NONE)
+        pe_log("costume_style", "spellweave %s charges=%u",
+               backlash == PE_CH_CRACK ? "crack" : "break",
+               session.ch.charges);
+    }
   }
   return 0;
 }
@@ -334,8 +356,10 @@ static int recovery(void *ctx, void *user) {
   (void)user;
   ensure_session();
   if (q && q->actor == pe_aya_core() && pe_in_battle() &&
-      session.style == PE_STYLE_CHANNELER) {
-    *q->increment = pe_style_pe_recovery(&session, *q->increment);
+      session.style == PE_STYLE_CHANNELER &&
+      pe_style_definition(PE_STYLE_CHANNELER)->channeler.pe_recovery_percent !=
+          100) { /* 100 = native: leave the game's value untouched */
+    *q->increment = pe_channeler_recovery(&session, *q->increment);
     if (q->current >= 0 && q->maximum >= q->current &&
         *q->increment >= q->maximum - q->current) {
       *q->increment = q->maximum - q->current;
@@ -507,11 +531,11 @@ static int action_end(void *ctx, void *user) {
   }
   pe_style_counter_resolve(&session);
   if (session.style == PE_STYLE_CHANNELER) {
-    if (pe_style_weave_resolve(&session, pe_in_battle() &&
-                                             (s16)core->curHP > 0 &&
-                                             living_enemies())) {
+    if (pe_channeler_resolve(&session, pe_in_battle() &&
+                                           (s16)core->curHP > 0 &&
+                                           living_enemies())) {
       pe_pulse = 12;
-      pe_log("costume_style", "spellweave charges=%u", session.weave_charges);
+      pe_log("costume_style", "spellweave charges=%u", session.ch.charges);
     }
   } else {
     session.action_open = 0;
@@ -528,6 +552,23 @@ static int action_end(void *ctx, void *user) {
 static int weave_power(unsigned spell) {
   return spell <= 12u && spell != 6u ? 1 : spell == 18u;
 }
+static int raw_cost_query;
+/* The PE menu's cost, its can-afford check and the queued reservation all
+ * read Inv_GetSlotHighlightState, which asks PE_HOOK_POWER_COST. Showing the
+ * discounted cost there makes "affordability uses the discounted cost" true
+ * everywhere at once; the cast itself still pays through the refund in
+ * spell(). Barrier (5) is not a table cost, so its menu stays native. */
+static int power_cost(void *ctx, void *user) {
+  PeHookPowerCost *q = ctx;
+  (void)user;
+  if (!q || !q->cost || *q->cost <= 0 || raw_cost_query || !pe_in_battle() ||
+      session.style != PE_STYLE_CHANNELER || q->power < 0 ||
+      !weave_power((unsigned)q->power))
+    return 0;
+  unsigned percent = pe_channeler_discount(&session);
+  *q->cost -= (int)((int64_t)*q->cost * percent / 100);
+  return 0;
+}
 /* The raw 16.16 PE the native code is about to subtract, after other mods'
  * cost changes and the PE-saving armor, exactly as Battle_ApplySpellEffect
  * and the Rebalance refund compute it. */
@@ -537,7 +578,9 @@ static unsigned weave_raw_cost(const Combatant *core, unsigned spell) {
   const ParasiteSpellEntry *table = Aya_GetParasiteSpellUnlockTable();
   int cost = table ? table[spell].cost : 0;
   PeHookPowerCost query = {(int)spell, &cost};
+  raw_cost_query = 1; /* other mods' cost, without our own discount */
   pe_hook_dispatch(PE_HOOK_POWER_COST, &query);
+  raw_cost_query = 0;
   if (cost <= 0)
     return 0;
   uint64_t raw = (uint64_t)(unsigned)cost * 0x10000u;
@@ -554,12 +597,12 @@ static int spell(void *ctx, void *user) {
   if (!q || !core || !pe_in_battle() || g_ActiveActor != core)
     return 0;
   ensure_session();
-  if (session.style != PE_STYLE_CHANNELER || !session.weave_charges ||
+  if (session.style != PE_STYLE_CHANNELER || !session.ch.charges ||
       !weave_power(q->spell))
     return 0;
-  unsigned charges = session.weave_charges;
-  unsigned percent = pe_style_weave_cast(&session, &overchannel);
+  unsigned charges = session.ch.charges;
   unsigned raw = weave_raw_cost(core, q->spell);
+  unsigned percent = pe_channeler_cast(&session, &overchannel);
   /* Refund first; the native code then subtracts its full cost. */
   unsigned refund = (unsigned)((uint64_t)raw * percent / 100u);
   core->exp_or_acc = (s32)((u32)core->exp_or_acc + refund);
@@ -567,7 +610,7 @@ static int spell(void *ctx, void *user) {
     core->curHP = (u16)(core->curHP +
                         (heal[q->spell] *
                              (int)pe_style_definition(PE_STYLE_CHANNELER)
-                                 ->overchannel_percent +
+                                 ->channeler.overchannel_percent +
                          99) /
                             100);
   pe_pulse = 12;
@@ -624,8 +667,9 @@ static void style_info(char *out, unsigned size) {
 }
 static void guard_info(char *out, unsigned size) {
   if (session.style == PE_STYLE_CHANNELER) {
-    snprintf(out, size, "Spellweave %u/%u", session.weave_charges,
-             pe_style_definition(PE_STYLE_CHANNELER)->weave_charges);
+    snprintf(out, size, "Spellweave %u/%u%s", session.ch.charges,
+             pe_style_definition(PE_STYLE_CHANNELER)->channeler.max_charges,
+             session.ch.cracked ? ", cracked" : "");
     return;
   }
   snprintf(out, size, "%s, counter %u",
@@ -672,8 +716,9 @@ void pe_styles_register(const char *mod_id) {
                         "Quickstep: half-HP breaks and kills +20% AT, 3 s "
                         "speed, +20% damage taken meanwhile. Bulwark: "
                         "25% guard; hits taken load a counter. Striker: close "
-                        "guns +25%. Channeler: weapon hits charge the next PE "
-                        "power (3 = free); half passive PE.",
+                        "guns +25%. Channeler: weapon hits charge the next "
+                        "support PE (1 = half, 2 = free); at 2, a hit cracks "
+                        "it and a second breaks one.",
                         style_info);
   pe_menu_register_info(
       PE_PAGE_WARDROBE, "Style state",
@@ -700,6 +745,8 @@ void pe_styles_register(const char *mod_id) {
   pe_hook_add(PE_HOOK_PLAYER_ACTION_END, action_end, NULL, PE_PRIORITY_LATE,
               mod_id);
   pe_hook_add(PE_HOOK_SPELL, spell, NULL, PE_PRIORITY_LATE, mod_id);
+  /* LATE: discounts whatever cost Rebalance or other mods chose. */
+  pe_hook_add(PE_HOOK_POWER_COST, power_cost, NULL, PE_PRIORITY_LATE, mod_id);
   /* LATE: scales whatever battle speed the movement mod chose. */
   pe_hook_add(PE_HOOK_PLAYER_MOVE, player_move, NULL, PE_PRIORITY_LATE,
               mod_id);
