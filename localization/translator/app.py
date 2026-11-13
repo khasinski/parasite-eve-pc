@@ -951,6 +951,9 @@ class App:
         lang, name = (tr.lang, tr.name) if tr and mine else ("en", "English")
         default = tr.default_name if tr and mine else ""
         rules = tr.rules_for(key, text) if tr and mine else P.Rules()
+        # The rows the game shows beside this one, for "As in the game" (the item list's other names and
+        # the item's description): the translator's words, else the game's own.
+        context = {k: (tr.text(k) if tr and mine else "") or self.english.get(k, "") for k in ML.context_keys(key)}
 
         def done(result, error):
             if asked != self.asked or key != self.key:
@@ -971,7 +974,7 @@ class App:
             self.draw()
 
         self.worker.ask(lambda: P.check_row(self.game, key, text, lang, name, default_name=default,
-                                            rules=rules), done)
+                                            rules=rules, context=context), done)
 
     def show_messages(self, errors, warnings, checked: bool) -> None:
         box = self.messages

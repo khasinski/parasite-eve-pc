@@ -41,8 +41,12 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
      that show the line. The help line at the top of the menus (item descriptions and the menus'
      hints) is drawn the same way: the menus' own window and letters, the clock at its right, over a
      room darkened as the menus darken the scene, so you see where a long line runs under the clock.
-     Not drawn that way yet: the other menu places (item names, boxes and choices), battle lines,
-     right-to-left languages, and the button icons in a few lines (the preview says so).
+     An item's name is drawn in the item list: Aya's first items (M84F, N Vest, Club 1, Ammo Crate,
+     Medicine 1) in your words where you have translated them, the item under the cursor (in
+     Medicine 1's place when it isn't one of them), its icon and count box as the game shows them,
+     and its description in the help line above. Not drawn that way yet: the other menu places
+     (boxes and choices), battle lines, right-to-left languages, and the button icons in a few
+     lines (the preview says so).
    - **Dialogue MAP** is the city map: the place title shown when Aya arrives somewhere
      (lines 1-10) and the map's narration (11-14). Type only the words, with `{br}` between lines:
      the tool centres each line and puts a title on the box's third line, as the English has them.
@@ -159,7 +163,8 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   Game Over and the menu words found through the game's glyph table on their page of words; Game
   Over drawn darker and dithered, the menu words in their own colours and at half). `menulook.py`:
   the "As in the game" preview of the menus' lines (their letters, windows and the darkened scene,
-  followed from the C code; the window places from the boot program's own table on the disc).
+  followed from the C code; the window and list places from the boot program's own tables on the
+  disc, the items' icons and kinds from the resident data).
 - `package.py`: builds the download for the system it runs on and checks the built program:
   it starts it, types a line, saves and quits (`--report`), compares the file with what the source
   tool saves, and searches everything inside for game text. Build tools are pinned in

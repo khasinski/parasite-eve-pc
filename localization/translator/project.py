@@ -605,9 +605,11 @@ class RowCheck:
 
 
 def check_row(game: Game, key: str, text: str, lang: str, name: str = "Preview", *, default_name: str = "",
-              rules: Rules = Rules()) -> RowCheck:
+              rules: Rules = Rules(), context: dict[str, str] | None = None) -> RowCheck:
     """One row checked by the compiler, and how the game will draw it. `default_name` is the
-    translation's sys/030 (what {name} shows in a new game); it sets how wide {name} is."""
+    translation's sys/030 (what {name} shows in a new game); it sets how wide {name} is. `context`:
+    other rows the game shows beside this one (key -> text, menulook.context_keys), put in the
+    preview's pack only; what is said about the row is the same with or without them."""
     if not text:
         return RowCheck([], [], None)
     rows = {key: text}
@@ -655,6 +657,11 @@ def check_row(game: Game, key: str, text: str, lang: str, name: str = "Preview",
             # Too long for its room: still worth seeing. Controls that are wrong can't be drawn.
             loose = build(game, rows, lang, name, rules=rules, allow_overflow=True, then=look)
             preview = loose.extra
+        extra = {k: t for k, t in (context or {}).items() if t and k not in rows}
+        if extra and preview is not None:
+            beside = build(game, {**rows, **extra}, lang, name, rules=rules, allow_overflow=True, then=look)
+            if beside.extra is not None:
+                preview = beside.extra
     whole = [m.text for m in strict.messages if m.key is None]
     return RowCheck(strict.errors(key) + (whole if not strict.ok else []), strict.warnings(key), preview)
 

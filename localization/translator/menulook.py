@@ -37,8 +37,11 @@ MENU_PAGE_ENTRY = 9                  # the menus' page: raw image at VRAM 448,0,
 MENU_COLOURS_ROW = 34                # Draw_EmitLetter's clut 0x89C = VRAM 448,34
 GLYPHS, METRICS = 0x08, 0x28         # the resident pack's directory: glyph table, menu metrics
 SIMPLE_TABLE, SIMPLE_COUNT = 0x80092478, 0x41      # g_MenuWidgetSimpleDescriptors in the boot program
+GRID_TABLE = 0x80092888                             # g_MenuWidgetGridDescriptors, as many
+ITEMS = 0x0C                         # the resident pack's directory: item records (0x20 bytes) up to 0x10
 WINDOW_COLOUR = 0x404040             # the default window colour (Draw_BlendColor(0x404040), game_data.c)
 TEXT_COLOUR, HINT_COLOUR = (0x80, 0x80, 0x80), (0x40, 0x80, 0x40)
+DIM_COLOUR = (0x40, 0x40, 0x40)      # g_DrawColorShaded: dimmed letters (g_DrawTextDimmed) and sprites (g_DrawColorSelect)
 SPRITE_PAGE = 0x100                  # a menu byte after FB: a sprite of the letter set (MenuNative)
 NARROW_FIRST, NARROW_LAST, LINE_BREAK = 0x10FE80, 0x10FEFF, 0x10FE7F
 MENU_ROOM = 10                       # the room drawn behind the menus (the first dialogue's, M010)
@@ -84,6 +87,11 @@ class MenuDisc:
         base = struct.unpack_from("<I", exe, 24)[0]
         self.windows = [struct.unpack_from("<4i", exe, 0x800 + SIMPLE_TABLE - base + 16 * k)
                         for k in range(SIMPLE_COUNT)]
+        # g_MenuWidgetGridDescriptors: x, y, gridWidth, visibleRows, yLimit, cell width, row height, flags
+        self.grids = [struct.unpack_from("<8i", exe, 0x800 + GRID_TABLE - base + 32 * k)
+                      for k in range(SIMPLE_COUNT)]
+        items, end = struct.unpack_from("<ii", resident, ITEMS)
+        self.items = [bytes(resident[at:at + 32]) for at in range(items, end - 31, 32)]
 
     def word(self, x: int, y: int) -> int:
         """Video memory halfword (x, y) of the menus' page."""
@@ -350,17 +358,18 @@ def _triangle(p) -> list[tuple[int, int]]:
             for x in range(min(x0, x1, x2) - 1, max(x0, x1, x2) + 1) if _inside(p, x, y)]
 
 
-def bevel(x: int, y: int, w: int, h: int, colour: int = WINDOW_COLOUR) -> list[tuple[list, tuple, int]]:
+def bevel(x: int, y: int, w: int, h: int, colour: int = WINDOW_COLOUR, mode: int = 0) -> list[tuple[list, tuple, int]]:
     """A window's bars (Draw_AllocColorGradient over a rectangle, g_WipeRectEdgeList): [(pixels, rgb,
-    sign)], sign +1 added to what is under, -1 taken off it, in drawing order."""
+    sign)], sign +1 added to what is under, -1 taken off it, in drawing order. `mode` picks the colour
+    of g_DrawBlendColorPair (1: the list cursor's bars while it blinks, Draw_AllocColorTriGradient)."""
     corners = [(x, y), (x + w, y), (x, y + h), (x + w, y + h)]
     pair = [colour & 0xFFFFFF, _halves(colour)]
     out = []
     for edges, width, sign in (([(0, 1), (0, 2)], 2, 1), ([(1, 3), (2, 3)], -2, -1)):
-        for i, j in edges:                                   # Draw_AllocColorRect, mode 0
+        for i, j in edges:                                   # Draw_AllocColorRect
             a, b = list(corners[i]), list(corners[j])
             fa, fb, mag = list(a), list(b), abs(width)
-            c = pair[0]
+            c = pair[mode]
             if a[1] == b[1]:
                 fa[0] += mag
                 fb[0] -= mag
@@ -395,6 +404,7 @@ class Screen:
 
     def __init__(self, background: bytes | None, dim: bool = True) -> None:
         self.v = bytearray(W * H * 3)
+        self.inked: set[tuple[int, int]] = set()     # pixels a texel was put on (nothing shows through)
         if background:
             for k in range(W * H * 3):
                 v = _v5(background[k])
@@ -412,6 +422,7 @@ class Screen:
         """A texel (a 15-bit colour, 0 = see-through) modulated by the quad's colour (x * c >> 7)."""
         if not colour or not (0 <= x < W and 0 <= y < H):
             return
+        self.inked.add((x, y))
         at = (y * W + x) * 3
         for k, shift in enumerate((0, 5, 10)):
             self.v[at + k] = min(31, (((colour >> shift) & 31) * tint[k]) >> 7)
@@ -432,22 +443,32 @@ def draw_text(screen: Screen, mf: MenuFont, text: Text) -> None:
                 screen.put(p.x + i, p.y + j, colours[index] if index < len(colours) else 0, p.colour)
 
 
-def draw_sprite(screen: Screen, menu: MenuDisc, glyph: int, x: int, y: int) -> None:
+def draw_sprite(screen: Screen, menu: MenuDisc, glyph: int, x: int, y: int, tint=TEXT_COLOUR) -> None:
     """Draw_AllocSprite: a glyph of the glyph table, 1:1 (4-bit glyphs on the menus' page)."""
     u, v, clut, w, h, mode = menu.glyphs[glyph]
     colours = menu.colours(clut)
     for j in range(h):
         for i in range(w):
-            screen.put(x + i, y + j, colours[menu.index(u + i, v + j)])
+            screen.put(x + i, y + j, colours[menu.index(u + i, v + j)], tint)
 
 
-def draw_digit(screen: Screen, menu: MenuDisc, digit: int, x: int, y: int) -> None:
-    """Draw_EmitDigitSprite with Draw_PrintTimeValue's small digits (clut 0x3A1C, u 0xCC, v 0xA4)."""
-    colours = menu.colours(0x3A1C)
-    u = 0xCC + (digit % 10) * 5
+DIGITS_SMALL = (0x3A1C, 0xCC)        # Draw_SetFontVariant(1): the clock's digits (clut, first u)
+DIGITS_PLAIN = (0x395D, 0x84)        # Draw_SetFontVariant(0)
+
+
+def draw_digit(screen: Screen, menu: MenuDisc, digit: int, x: int, y: int, font=DIGITS_SMALL,
+               tint=TEXT_COLOUR) -> None:
+    """Draw_EmitDigitSprite (PeText_MenuDigit): a 5 x 7 digit at v 0xA4, or for -1 the blank at 88,164."""
+    colours = menu.colours(font[0])
+    u, v = (font[1] + (digit % 10) * 5, 0xA4) if digit >= 0 else (88, 164)
     for j in range(7):
         for i in range(5):
-            screen.put(x + i, y + j, colours[menu.index(u + i, 0xA4 + j)])
+            screen.put(x + i, y + j, colours[menu.index(u + i, v + j)], tint)
+
+
+def tile_add(x: int, y: int, w: int, h: int) -> list[tuple[int, int]]:
+    """The pixels of a flat tile (Draw_AllocColorTri: added to what is under it, tpage 0x20)."""
+    return [(i, j) for j in range(y, y + h) for i in range(x, x + w)]
 
 
 def draw_clock(screen: Screen, menu: MenuDisc, x: int, y: int, seconds: int = 0) -> list[tuple[int, int, int, int]]:
@@ -484,6 +505,7 @@ class Look:
     digits: list = field(default_factory=list)   # the clock's digit boxes (the time differs from the game's)
     text: Text | None = None
     top: int = 0                                 # the first row worth showing
+    inked: set = field(default_factory=set)      # pixels drawn over (nothing of the scene shows)
 
 
 def context_of(key: str) -> str | None:
@@ -522,24 +544,161 @@ def _in_range(key: str, pattern: str) -> bool:
     return int(first) <= n <= int(last)
 
 
-def help_line(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0) -> Look:
-    """The help line at the top of the menus (descriptions, hints), as Menu_DrawContextHelpText draws it."""
+def draw_help(screen: Screen, mf: MenuFont, raw: bytes | None, key: str, seconds: int = 0):
+    """Window 0x13 with its clock and the line (none when raw is None): (the line, the clock's digit boxes)."""
     menu = mf.menu
     x, y, w, h = menu.windows[HELP_WINDOW]
-    screen = Screen(background)
     for pixels, rgb, sign in bevel(x, y, w, h):
         screen.blend(pixels, rgb, sign)
     digits = draw_clock(screen, menu, x + w - 0x27, y + 1, seconds)
-    text = lay_out(mf, raw, x + 6, y + 5, HINT_COLOUR if key in HINT_KEYS else TEXT_COLOUR)
-    draw_text(screen, mf, text)
+    text = None
+    if raw is not None:
+        text = lay_out(mf, raw, x + 6, y + 5, HINT_COLOUR if key in HINT_KEYS else TEXT_COLOUR)
+        draw_text(screen, mf, text)
+    return text, digits
+
+
+def help_line(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0) -> Look:
+    """The help line at the top of the menus (descriptions, hints), as Menu_DrawContextHelpText draws it."""
+    screen = Screen(background)
+    text, digits = draw_help(screen, mf, raw, key, seconds)
     return Look(screen.rgb(), "the help line at the top of the menus", sorted(text.notes), digits, text)
 
 
-DRAWN = {"help line": help_line}
+# The item list (Menu_DrawSelectableEquipSlotList, inventory.c): window 0x01 holding grid 0x01, two
+# columns of 124 x 16 cells; each cell as Menu_DrawSlotRow (active_list.c) draws it: the item's icon,
+# its name 18 px on, and for guns and crates a count box 86 px after the name starts (a sprite, then
+# the rounds 5 px lower in three digits). An equipped item's cell gets a blue tile behind it
+# (Draw_DropShadow, 0x7F2000 added), a gun with every round loaded a mark over its icon (sprite 0x69).
+# The cursor's cell gets the window's bars and a tile added whose grey pulses (Draw_AllocColorTriGradient).
+ITEM_WINDOW = ITEM_GRID = 0x01
+ITEM_SLOTS = 10                      # Aya's slots at the start (Inv_GetAyaSlotLimit): the window shows 5 rows
+# Aya's items at the start of the game, slot by slot, as the game's own item screen shows them on the
+# first visit to the menus (a new game, in front of Carnegie Hall): item record, equipped.
+START_ITEMS = ((67, True), (149, True), (62, False), (25, False), (5, False))
+START_ROUNDS = {25: 6}               # rounds that are not the item record's: the Ammo Crate holds 6
+CURSOR_SLOT = 4                      # where the item being translated goes when it isn't one of them
+EQUIPPED_TILE = 0x7F2000
+FULL_MARK, COUNT_X, NAME_X = 0x69, 0x12 + 0x56, 0x12
+PULSE = 0x20                         # the cursor tile's grey at the middle of its pulse (0..0x40)
+# On this screen the game draws the icons, count boxes and digits in the dimmed colour (g_DrawColorSelect
+# is set: measured on its frames, every sprite of the list at half), and a name dimmed unless the item
+# can be used now (Menu_DrawSelectableEquipSlotRow, Inv_RebuildSelectableMask): flag bit 0, and not a
+# Medicine (item ids 6-10) while HP is full, as it is at the start.
+
+
+def usable(rec: bytes) -> bool:
+    """Whether the start list draws this item's name undimmed (Inv_RebuildSelectableMask, outside
+    battle; Aya has a weapon and armour, so the consumables that need one keep their bit)."""
+    return bool(rec[5] & 1) and not 6 <= rec[4] <= 10
+
+
+def item_key(k: int) -> str:
+    return f"item/{k:03d}"
+
+
+def count_sprite(kind: int) -> int | None:
+    """The count box's sprite for an item kind (Menu_DrawSlotRow), None when it shows no count: guns
+    (kinds 1-7; the code's early return for kind 4 can never be taken) and kinds 0x13 on."""
+    if 0 < kind < 8:
+        return kind + 0x1A if kind > 4 else 0x1F
+    return None if kind < 0x13 else kind + 0xC
+
+
+def item_cells(menu: MenuDisc):
+    """(window x, y, w, h, the first cell's x, y, cell width, row height) for the start list."""
+    x, y, w, h = menu.windows[ITEM_WINDOW]
+    gx, gy, columns, rows, _, cell_w, row_h, _ = menu.grids[ITEM_GRID]
+    shown = min(rows, (ITEM_SLOTS + columns - 1) // columns)       # Draw_SetPrimCallback
+    h += row_h * (shown - rows)
+    return x, y, w, h, x + gx + 2, y + gy + 2, cell_w, row_h, columns
+
+
+def item_list(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
+              pulse: int | None = PULSE, blink: int = 0, dim: bool = True) -> Look:
+    """The item list with Aya's first items and this item in the cursor's cell; the help line above it
+    with the item's description. Names and the description are the pack's (the translator's words, or
+    the English the Translator puts beside them); a name the pack doesn't hold is left out."""
+    menu, pack = mf.menu, mf.pack
+    k = int(key.split("/")[1])
+    slots = list(START_ITEMS)
+    cursor = next((s for s, (i, _) in enumerate(slots) if i == k), None)
+    if cursor is None:
+        slots[CURSOR_SLOT] = (k, False)
+        cursor = CURSOR_SLOT
+    screen = Screen(background, dim)
+    notes = set()
+    description = pack.text(f"desc/{k:03d}")
+    _, digits = draw_help(screen, mf, description, f"desc/{k:03d}", seconds)
+    if description is None:
+        notes.add("its description is not in the file")
+    wx, wy, ww, wh, x0, y0, cell_w, row_h, columns = item_cells(menu)
+    for pixels, rgb, sign in bevel(wx, wy, ww, wh):
+        screen.blend(pixels, rgb, sign)
+    # Drawn as the GPU takes the list: the last thing the game puts in is drawn first. The cursor goes in
+    # after the cells (MenuWidget_DrawList), each cell's blue tile after the cell.
+    cx, cy = x0 - 2 + cell_w * (cursor % columns), y0 - 2 + row_h * (cursor // columns)
+    if pulse is not None:
+        screen.blend(tile_add(cx, cy, cell_w, row_h), (pulse, pulse, pulse), 1)
+    for pixels, rgb, sign in bevel(cx, cy, cell_w, row_h, mode=blink):
+        screen.blend(pixels, rgb, sign)
+    text = None
+    for s in reversed(range(len(slots))):
+        i, equipped = slots[s]
+        rec = menu.items[i]
+        x, y = x0 + cell_w * (s % columns), y0 + row_h * (s // columns)
+        if equipped:
+            c = EQUIPPED_TILE
+            screen.blend(tile_add(x, y, cell_w - 4, row_h - 4), (c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF), 1)
+        kind, rounds = rec[6], START_ROUNDS.get(i, struct.unpack_from("<H", rec, 0x0A)[0])
+        sprite = count_sprite(kind)
+        if sprite is not None:
+            pen = x + COUNT_X
+            for n, digit in reversed(list(enumerate(_three(rounds)))):
+                draw_digit(screen, menu, digit, pen + 5 * n, y + 5, DIGITS_PLAIN, DIM_COLOUR)
+            draw_sprite(screen, menu, sprite, pen, y, DIM_COLOUR)
+        name = raw if i == k else pack.text(item_key(i))
+        if name is not None:
+            laid = lay_out(mf, name, x + NAME_X, y, TEXT_COLOUR if usable(rec) else DIM_COLOUR)
+            draw_text(screen, mf, laid)
+            if i == k:
+                text = laid
+                notes |= laid.notes
+        elif i != k:
+            notes.add("a name the file doesn't hold is left out")
+        draw_sprite(screen, menu, rec[0] - 1, x, y, DIM_COLOUR)
+        if 0 < kind < 8:
+            capacity = rec[9] + struct.unpack_from("<h", rec, 0x12)[0]
+            if rounds == capacity if capacity < 1000 else rounds == 999:
+                draw_sprite(screen, menu, FULL_MARK, x, y, DIM_COLOUR)
+    where = "the item list: Aya's first items, this one under the cursor"
+    return Look(screen.rgb(), where, sorted(notes), digits, text, top=0, inked=screen.inked)
+
+
+def _three(value: int) -> list[int]:
+    """Draw_PrintNumberWidth3Unk's digits: three places, blanks (-1) before the first that isn't 0."""
+    out, place = [], 100
+    for n in range(3):
+        q = value // place
+        out.append(-1 if n < 2 and q == 0 else q % 10)
+        place //= 10
+    return out
+
+
+DRAWN = {"help line": help_line, "item list": item_list}
 
 
 def can_draw(key: str) -> bool:
     return context_of(key) in DRAWN
+
+
+def context_keys(key: str) -> list[str]:
+    """The other rows the game look of `key` shows: for an item's name, the other first items' names
+    and the item's description (the help line above the list)."""
+    if context_of(key) != "item list":
+        return []
+    k = int(key.split("/")[1])
+    return [item_key(i) for i, _ in START_ITEMS if i != k] + [f"desc/{k:03d}"]
 
 
 def look(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0) -> Look | None:

@@ -212,6 +212,12 @@ Checks, each from pe_mods.log and frame dumps:
              darkened scene, its letters, the clock's frame; the clock's digits show the play time, so they
              are left out) must be, pixel for pixel, the Translator's drawing of that line over the field
              frame from before the menu opened; and the same with the game's own text and the English pack.
+             The same file names Aya's five first items in Spanish: on the frames with the cursor on M84F,
+             Club 1 and Medicine 1, the item list's window (its cells: icons, names, count boxes, the blue
+             tiles of the equipped items, the cursor's bars and pulsing tile) must be, pixel for pixel, the
+             Translator's item list. The menus freeze the room while the list is up, so the scene behind
+             one frame's list is another frame's less what the Translator adds there (that frame's cursor
+             cell left out); the cursor's grey follows the frame counter and is read from the frame.
              Disc 1 only.
   translator-menu-words  The menus' words redrawn in the Translator: eight of the words the status menu shows
              (Bonus Point, Offense, Level, Next Level, Equipment, Active Time, and the SYS and SORT icons)
@@ -1991,6 +1997,10 @@ MENU_LOOK_STEPS = presses([(FIRST_BOX, CROSS, 'first'), (20630, CROSS, 'box2'), 
 MENU_LOOK_LINES = {'status': 'Use Item', 'handgun': 'Handgun', 'melee': 'Melee Weapon', 'medicine': 'Restores 45 HP'}
 MENU_LOOK_WORDS = {'Use Item': 'Usar un objeto', 'Handgun': 'Pistola corta', 'Melee Weapon': 'Arma de mano (más)',
                    'Restores 45 HP': 'Recupera 45 PV de Aya'}
+# Aya's first items (translator/menulook.py START_ITEMS), and which of them the cursor is on in each frame.
+MENU_LOOK_ITEMS = {'M84F': 'M84F corta', 'N Vest': 'Chaleco N', 'Club 1': 'Porra 1', 'Ammo Crate': 'Caja balas',
+                   'Medicine 1': 'Medicina 1'}
+MENU_LOOK_CURSOR = {'handgun': 'M84F', 'melee': 'Club 1', 'medicine': 'Medicine 1'}
 
 
 def translator_menu_look(game, discs, out, localization):
@@ -2008,12 +2018,19 @@ def translator_menu_look(game, discs, out, localization):
     english, _, _ = make_english_pack(discs, out, localization)
     the_game = tp.Game()
     texts, _ = tp.read_english(english, the_game)
-    keys = {line: sorted(k for k, t in texts.items() if t == line and ml.can_draw(k)) for line in MENU_LOOK_WORDS}
+    keys = {line: sorted(k for k, t in texts.items() if t == line and ml.context_of(k) == 'help line')
+            for line in MENU_LOOK_WORDS}
     check(all(keys.values()), f'no help line holds {[w for w, k in keys.items() if not k]}')
+    item_keys = {line: sorted(k for k, t in texts.items() if t == line and ml.context_of(k) == 'item list')
+                 for line in MENU_LOOK_ITEMS}
+    check(sorted(int(k[0][5:]) for k in item_keys.values() if len(k) == 1) == sorted(i for i, _ in ml.START_ITEMS),
+          f"the first items' names are not one row each: {item_keys}")
     tr = tp.Translation(the_game, 'es', 'Menu look test')
     for line, words in MENU_LOOK_WORDS.items():
         for key in keys[line]:
             tr.set_text(key, words)
+    for line, words in MENU_LOOK_ITEMS.items():
+        tr.set_text(item_keys[line][0], words)
     path = out / 'translator-menu-look.pelang'
     saved = tr.save(path)
     check(not saved.left_out and not saved.whole, f'the Translator left lines out: {saved.left_out} {saved.whole}')
@@ -2021,6 +2038,8 @@ def translator_menu_look(game, discs, out, localization):
     held = tp.read_pack_text(mine.data, the_game).texts
     for line, words in MENU_LOOK_WORDS.items():
         check(all(held.get(k) == words for k in keys[line]), f'the saved file does not hold "{words}" for {keys[line]}')
+    for line, words in MENU_LOOK_ITEMS.items():
+        check(held.get(item_keys[line][0]) == words, f'the saved file does not hold "{words}" for {item_keys[line]}')
     with zipfile.ZipFile(english) if zipfile.is_zipfile(english) else open(english, 'rb') as f:
         english_pack = gl.Pack.read(f.read(pelang.BUNDLE_TEXT) if isinstance(f, zipfile.ZipFile) else f.read())
     look_disc, menu_disc = gl.DiscLook(discs[0]), ml.MenuDisc(discs[0])
@@ -2058,7 +2077,61 @@ def translator_menu_look(game, discs, out, localization):
             print(f'PASS translator menu look, {which} {label} ("{words}", {key}): the help window, its edges, '
                   f"letters and clock frame are the Translator's, pixel for pixel ({len(look.text.placed)} letters, "
                   f'{look.text.width} px)')
+    for which, use in (('english', english_pack), ('pack', mine)):
+        mf = ml.MenuFont(gl.Font(look_disc, use), menu_disc)
+        for label, line in MENU_LOOK_CURSOR.items():
+            wrong, pulse = item_list_is_the_frame(works[which], label, mf, use, item_keys, ml, gl)
+            check(not wrong, f"{which} {label}: the item list is not the Translator's at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {works[which]}')
+            words = MENU_LOOK_ITEMS[line] if which == 'pack' else line
+            print(f'PASS translator menu look, {which} {label} (cursor on "{words}"): the item list window, its '
+                  f"icons, names, count boxes, blue tiles and cursor are the Translator's, pixel for pixel "
+                  f"(the cursor's grey {pulse:#x})")
     return 0
+
+
+def item_list_is_the_frame(work, label, mf, use, item_keys, ml, gl):
+    """translator-menu-look: the Translator's item list (menulook.item_list, the cursor on this frame's
+    item) against the frame, inside the list window: (the pixels that differ, the cursor's grey)."""
+    def v5(c):
+        return (c * 31 + 127) // 255
+
+    def slot_of(key):
+        return [i for i, _ in ml.START_ITEMS].index(int(key[5:]))
+
+    key = item_keys[MENU_LOOK_CURSOR[label]][0]
+    other = next(o for o in MENU_LOOK_CURSOR if o != label)
+    okey = item_keys[MENU_LOOK_CURSOR[other]][0]
+    _, _, here = frame(work, label)
+    _, _, there = frame(work, other)
+    # What the Translator adds to the scene in the other frame (its cursor's tile left out), drawn over a
+    # flat 8 so nothing reaches 0 or 31 on the way; the scene there is that frame less it.
+    grey = bytes([(8 * 255 + 15) // 31]) * (gl.W * gl.H * 3)
+    added = ml.item_list(mf, use.text(okey), okey, grey, pulse=None, dim=False)
+    wx, wy, ww, wh, x0, y0, cell_w, row_h, columns = ml.item_cells(mf.menu)
+    scene = bytearray(there)
+    for y in range(wy, wy + wh):
+        for x in range(wx, wx + ww):
+            if (x, y) in added.inked:
+                continue                     # drawn over: no scene shows there, in either frame
+            for k in range((y * gl.W + x) * 3, (y * gl.W + x) * 3 + 3):
+                v = v5(there[k]) - (v5(added.rgb[k]) - 8)
+                check(0 <= v <= 31, f'{label}: no scene gives the frame {other} at {x},{y}')
+                scene[k] = (v * 255 + 15) // 31
+    slot, oslot = slot_of(key), slot_of(okey)
+    cx, cy = x0 - 2 + cell_w * (slot % columns), y0 - 2 + row_h * (slot // columns)
+    ox, oy = x0 - 2 + cell_w * (oslot % columns), y0 - 2 + row_h * (oslot // columns)
+    # The cursor's grey: read where only the scene and the tile meet (inside the cell, nothing drawn on it).
+    plain = ml.item_list(mf, use.text(key), key, bytes(scene), pulse=0, dim=False)
+    px, py = next((x, y) for y in range(cy + 3, cy + row_h - 3) for x in range(cx + 3, cx + cell_w - 3)
+                  if (x, y) not in plain.inked)
+    k = (py * gl.W + px) * 3
+    pulse = max(0, v5(here[k]) - v5(plain.rgb[k])) * 8
+    look = ml.item_list(mf, use.text(key), key, bytes(scene), pulse=pulse, dim=False)
+    wrong = [(x, y) for y in range(wy, wy + wh) for x in range(wx, wx + ww)
+             if not (ox <= x < ox + cell_w and oy <= y < oy + row_h)
+             and look.rgb[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] != here[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3]]
+    return wrong, pulse
 
 
 def look_is_the_frame(work, label, look, font, raw, name, gl):

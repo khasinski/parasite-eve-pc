@@ -116,8 +116,8 @@ def width(raw: bytes, metrics: bytes) -> int:
             page = c - 250
             continue
         glyph, page = c + (page << 8), 0
-        if glyph == 0x100:                       # page 1 code 0: a 12 px sprite
-            w += 12
+        if glyph == 0x100:                       # page 1 code 0: a 12 px sprite (a button picture),
+            w += (metrics[0xED] >> 4) + 1        # measured as code 0x100 - 19 like the other page 1 codes
             continue
         extra = 2 if glyph < 10 or glyph == 15 else 1
         if glyph >= 256:

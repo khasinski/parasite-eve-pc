@@ -34,7 +34,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
 import pelang  # noqa: E402
-from petext import alphabets, citymap, gametext as gt, layout, pictures as picturebin  # noqa: E402
+from petext import alphabets, citymap, gametext as gt, layout, menu, pictures as picturebin  # noqa: E402
 from translator import project as P  # noqa: E402
 
 GAME = P.Game()
@@ -426,17 +426,56 @@ class EnglishTest(unittest.TestCase):
             self.assertEqual(md.colours((M.MENU_COLOURS_ROW << 6) | 28)[:4], [0, 0x7FFF, 0x0421, 0x7FFF])
         pack = G.Pack.read(pelang.pack_bytes(self.pack))
         mf = M.MenuFont(G.Font(G.DiscLook(self.discs[0]), pack), menus[0])
-        keys = [k for k in GAME.rows if M.can_draw(k) and pack.text(k) is not None]
+        keys = [k for k in GAME.rows if M.context_of(k) == "help line" and pack.text(k) is not None]
         self.assertGreater(len(keys), 350)
         # A button picture in a menu line (FB 00) moves the pen 12 px, but the menus measure it as glyph 0xED
-        # plus a pixel (MenuMeasure: 13 px on the USA discs); the compiler counts 12 (petext/menu.py width),
-        # so its widths are a pixel short for each one. misc/068 is the only such help line.
+        # plus a pixel (MenuMeasure: 13 px on the USA discs), and so do the compiler (petext/menu.py width)
+        # and the manifest. misc/068 is the only such help line.
         sprites = {k: pack.text(k).count(b"\xfb\x00") for k in keys}
         self.assertEqual({k: n for k, n in sprites.items() if n}, {"misc/068": 1})
-        wrong = {k: (M.lay_out(mf, pack.text(k), 0, 0).width, GAME.rows[k].get("menu_px") + sprites[k]) for k in keys}
-        wrong = {k: v for k, v in wrong.items() if v[0] != v[1]}
+        self.assertEqual(menu.width(b"\xfb\x00\xff", GAME.metrics), 13)
+        wrong = {k: (M.lay_out(mf, pack.text(k), 0, 0).width, GAME.rows[k].get("menu_px"),
+                     menu.width(bytes.fromhex(self.strings[k]["raw"]), GAME.metrics)) for k in keys}
+        wrong = {k: v for k, v in wrong.items() if not v[0] == v[1] == v[2]}
         self.assertEqual(wrong, {})
         print(f"\n{len(keys)} English help lines laid out by the menu look at the manifest's widths")
+
+    def test_the_item_list_draws_every_item_name_with_aya_s_first_items(self):
+        """The item list's window, grid and Aya's first items as the discs have them (the same on both),
+        and every English item name drawn in the cursor's cell at the manifest's width, with its icon, its
+        count box when it has one, and nothing left out."""
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        from translator import gamelook as G, menulook as M
+        menus = [M.MenuDisc(d) for d in self.discs]
+        for md in menus:
+            self.assertEqual((md.grids, md.items), (menus[0].grids, menus[0].items))
+            self.assertEqual(md.windows[M.ITEM_WINDOW], (28, 32, 252, 132))
+            self.assertEqual(md.grids[M.ITEM_GRID][:8], (2, 2, 2, 8, 50, 124, 16, 0))
+            self.assertEqual(M.item_cells(md), (28, 32, 252, 84, 32, 36, 124, 16, 2))
+            self.assertEqual(len(md.items), 255)
+            self.assertTrue(all(md.items[i][4] == i + 1 and md.items[i][0] for i in range(235)))
+            # M84F, N Vest, Club 1, Ammo Crate, Medicine 1: their icons, kinds and what the list shows of them
+            first = [md.items[i] for i, _ in M.START_ITEMS]
+            self.assertEqual([r[6] for r in first], [1, 9, 8, 0x13, 10])
+            self.assertEqual([M.count_sprite(r[6]) for r in first], [0x1F, None, None, 0x1F, None])
+            self.assertEqual([M.usable(r) for r in first], [False] * 5)
+        pack = G.Pack.read(pelang.pack_bytes(self.pack))
+        mf = M.MenuFont(G.Font(G.DiscLook(self.discs[0]), pack), menus[0])
+        keys = [k for k in GAME.rows if M.context_of(k) == "item list" and pack.text(k)]
+        self.assertEqual(len(keys), 235)
+        wrong, notes = {}, {}
+        for k in keys:
+            look = M.item_list(mf, pack.text(k), k, None)
+            if look.text.width != GAME.rows[k]["menu_px"]:
+                wrong[k] = (look.text.width, GAME.rows[k]["menu_px"])
+            if look.notes:
+                notes[k] = look.notes
+        self.assertEqual(wrong, {})
+        self.assertEqual(notes, {})
+        print(f"\n{len(keys)} English item names drawn in the item list at the manifest's widths")
 
     def test_the_english_pack_reads_back_as_the_discs_own_text_every_row(self):
         self.assertEqual(self.wrong, 0)
@@ -465,6 +504,49 @@ class EnglishTest(unittest.TestCase):
             self.assertEqual((said["row"], said["text_in_row"], said["translated"], said["row_state"]),
                              (key, typed, 1, "ok"))
             self.assertEqual(P.Translation.open(saved, GAME).texts, {key: typed})
+
+    def test_the_window_shows_an_item_name_in_the_item_list_beside_the_other_names(self):
+        """"As in the game" for an item's name: the item list, with the translator's words for the
+        first items they have translated and the game's English for the others."""
+        if not window_works():
+            self.skipTest("no screen for a window here")
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        import time
+        import tkinter as tk
+        from translator import app as A, gamelook as G
+        A.SETTINGS = self.dir / "item-list-settings.json"
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "item-list.pelang"), select="item/200", new=("es", "Español"))
+            window.load_english(str(self.pack))
+            until = time.monotonic() + 60
+            while (window.english_busy or not window.english) and time.monotonic() < until:
+                root.update()
+                time.sleep(0.02)
+            self.assertIsNone(window.use_disc(self.discs[0], remember=False))
+            window.tr.set_text("item/067", "Pistola M84F")
+            window.tr.set_text("item/200", "Llave del ensayo")
+            window.preview = None
+            window.check_now()
+            until = time.monotonic() + 60
+            while window.preview is None and time.monotonic() < until:
+                root.update()
+                time.sleep(0.02)
+            pack = G.Pack.read(window.preview.pack)
+            alone = lambda key, text, lang: G.Pack.read(P.check_row(GAME, key, text, lang, "x").preview.pack).text(key)
+            self.assertEqual(pack.text("item/067"), alone("item/067", "Pistola M84F", "es"))
+            for key in ("item/149", "item/062", "item/025", "item/005", "desc/200"):
+                self.assertEqual(pack.text(key), alone(key, self.english[key], "es"), key)
+            window.look_mode.set("game")
+            self.assertTrue(window.draw_game())
+            texts = [window.canvas.itemcget(i, "text") for i in window.canvas.find_all()
+                     if window.canvas.type(i) == "text"]
+            self.assertTrue(any("the item list" in t for t in texts), texts)
+        finally:
+            root.destroy()
 
     def test_the_row_being_worked_on_stays_when_the_english_pack_arrives(self):
         """The same, in that order for sure: a row picked and typed in, then the English pack loads."""
@@ -1546,9 +1628,43 @@ class MenuLookRuleTest(unittest.TestCase):
         for key in ("desc/005", "misc/040", "misc/088", "sys/014", "sys/092"):
             self.assertEqual(M.context_of(key), "help line", key)
             self.assertTrue(M.can_draw(key), key)
-        for key in ("item/000", "sys/008", "misc/089", "dlg/M001/009", "battle/000"):
+        for key in ("sys/008", "misc/089", "dlg/M001/009", "battle/000", "item/235"):
             self.assertFalse(M.can_draw(key), key)
-        self.assertEqual(M.context_of("item/000"), "item list")
+        for key in ("item/000", "item/067", "item/234"):
+            self.assertEqual(M.context_of(key), "item list")
+            self.assertTrue(M.can_draw(key), key)
+
+    def test_the_item_list_rules(self):
+        """Menu_DrawSlotRow's count box (guns, kinds 1-7, and kinds 0x13 on), its three places with blanks
+        before the first digit, which names are drawn undimmed (Inv_RebuildSelectableMask with full HP),
+        and the rows shown beside an item's name (the other first items, its description)."""
+        from translator import menulook as M
+        self.assertEqual([M.count_sprite(k) for k in range(0, 9)], [None, 0x1F, 0x1F, 0x1F, 0x1F, 0x1F, 0x20, 0x21, None])
+        self.assertEqual([M.count_sprite(k) for k in (0x0A, 0x12, 0x13, 0x14, 0x15)], [None, None, 0x1F, 0x20, 0x21])
+        self.assertEqual([M._three(n) for n in (0, 6, 15, 100, 105, 999)],
+                         [[-1, -1, 0], [-1, -1, 6], [-1, 1, 5], [1, 0, 0], [1, 0, 5], [9, 9, 9]])
+        record = lambda item_id, flags: bytes([1, 0, 0, 0, item_id, flags]) + bytes(26)
+        self.assertEqual([M.usable(record(i, f)) for i, f in ((1, 3), (6, 3), (10, 3), (11, 3), (12, 0), (68, 0))],
+                         [True, False, False, True, False, False])
+        self.assertEqual(M.context_keys("item/005"), ["item/067", "item/149", "item/062", "item/025", "desc/005"])
+        self.assertEqual(M.context_keys("item/200"),
+                         ["item/067", "item/149", "item/062", "item/025", "item/005", "desc/200"])
+        self.assertEqual(M.context_keys("desc/005"), [])
+
+    def test_an_item_name_is_previewed_beside_the_other_names_but_checked_alone(self):
+        """check_row's context goes in the preview's pack only: the row's messages are the same, and the
+        pack holds the other names and the description for the item list to draw."""
+        from translator import gamelook as G, menulook as M
+        context = {"item/067": "Pistola M84F", "item/149": "Chaleco N", "item/062": "Porra 1", "item/025": "",
+                   "item/005": "Medicina 1", "desc/200": "Abre la sala de ensayo"}
+        alone = P.check_row(GAME, "item/200", "Llave del ensayo", "es", "Español")
+        beside = P.check_row(GAME, "item/200", "Llave del ensayo", "es", "Español", context=context)
+        self.assertEqual((alone.errors, alone.warnings), (beside.errors, beside.warnings))
+        pack = G.Pack.read(beside.preview.pack)
+        self.assertEqual(G.Pack.read(alone.preview.pack).text("item/067"), None)
+        for key, text in context.items():
+            self.assertEqual(pack.text(key) is not None, bool(text), key)
+        self.assertEqual(beside.preview.menu_px, alone.preview.menu_px)
 
     def test_letters_are_placed_as_the_compiler_measures_menu_lines(self):
         """The width the menu look lays a line out to is the compiler's (petext/menu.py width), for the
