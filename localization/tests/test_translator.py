@@ -577,6 +577,12 @@ def one_word_changed(text: str) -> str:
     raise ValueError("no word to change")
 
 
+def png_bytes(img) -> bytes:
+    out = io.BytesIO()
+    img.save(out, "PNG")
+    return out.getvalue()
+
+
 def made_up_tim(bits: int, width: int, height: int, palette=None, pad: int = 0) -> bytes:
     """A TIM of the test's own: pixels counting up, `pad` extra bytes at each row's end (24-bit)."""
     import struct
@@ -587,6 +593,30 @@ def made_up_tim(bits: int, width: int, height: int, palette=None, pad: int = 0) 
     row = {4: width // 2, 8: width, 24: width * 3 + pad}[bits]
     pixels = bytes((y * 7 + x) % 251 for y in range(height) for x in range(row))
     return out + struct.pack("<IHHHH", 12 + len(pixels), 0, 0, row // 2, height) + pixels
+
+
+def made_up_card(grey_rows: int = 28):
+    """A card's bytes and layout of the test's own: 28 colour rows (480-507), the first `grey_rows` of
+    them 256 greys from dark (colour 0, see-through, first) and the rest with white and pure red too;
+    300 tiles on the 20 x 15 grid, all on row 480, pixel numbers counting up."""
+    import struct
+    from translator import artwork as A
+    rows = bytearray(256 * 32 * 2)
+    for r in range(32):
+        for i in range(256):
+            grey = i * 31 // 255
+            colour = grey | grey << 5 | grey << 10
+            if r >= grey_rows and i == 254:
+                colour = 0x7FFF
+            if r >= grey_rows and i == 255:
+                colour = 31
+            struct.pack_into("<H", rows, (r * 256 + i) * 2, colour)
+    tiles, layout = bytearray(), A.CardLayout([], tuple(range(480, 508)))
+    for k in range(300):
+        x, y = k % 20 * 16, k // 20 * 16
+        layout.tiles.append((x, y))
+        tiles += struct.pack("<H", 0x8000 | 480) + bytes((k + i) % 200 + 20 for i in range(256))
+    return bytes(rows) + bytes(tiles), layout
 
 
 class FakeDisc:
@@ -689,6 +719,65 @@ class PictureRuleTest(unittest.TestCase):
         self.assertEqual(T.indices(T.read(loaded.tim))[0], 2)
         self.assertEqual(loaded.notes, [])
 
+    def test_a_card_out_as_png_and_back_is_the_same_bytes(self):
+        """A card's PNG is what the screen shows, the view's rows 4-227; loaded back unchanged it is the
+        same bytes, and a pixel changed back to what it was changes nothing either."""
+        from translator import artwork as A
+        card, layout = made_up_card()
+        pic = A.Card("t/c", "T", "C", 1, 0, 0, A.CARD)
+        img = A.image(pic, card, layout)
+        self.assertEqual(img.size, (320, 224))
+        # Tile 0's row 4 (its fifth) is the screen's first row; tile (0, 224)'s row 3 its last.
+        self.assertEqual(img.getpixel((0, 0)), A.screen_rgb(card[16384 + 2 + 4 * 16] * 31 // 255 * 0x421))
+        last = 280 * 258 + 16384 + 2 + 3 * 16
+        self.assertEqual(img.getpixel((0, 223)), A.screen_rgb(card[last] * 31 // 255 * 0x421))
+        self.assertEqual(A.from_png(pic, card, A.png(pic, card, layout), None, layout), A.Loaded(card, []))
+
+    def test_a_card_square_painted_in_a_colour_it_lacks_takes_a_row_that_has_it(self):
+        """White and red painted into one square whose row has neither: that square takes a row with
+        both and its pixels are exactly the PNG's; every other square, the squares off the screen and
+        the rows above the screen keep their bytes."""
+        import struct
+        from PIL import Image, ImageDraw
+        from translator import artwork as A
+        card, layout = made_up_card(grey_rows=27)               # row 507 alone has white and red
+        pic = A.Card("t/c", "T", "C", 1, 0, 0, A.CARD)
+        img = A.image(pic, card, layout)
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((32, 12, 47, 27), fill=(255, 255, 255))   # the square at view (32, 16): screen y 12
+        draw.line((32, 20, 47, 20), fill=(255, 0, 0))
+        loaded = A.from_png(pic, card, png_bytes(img), None, layout)
+        self.assertEqual(A.image(pic, loaded.tim, layout).tobytes(), img.tobytes())
+        k = 22                                                    # 20 tiles a row: (32, 16) is tile 22
+        at = 16384 + k * 258
+        self.assertEqual(struct.unpack_from("<H", loaded.tim, at)[0], 0x8000 | 507)
+        self.assertEqual(loaded.tim[:at] + loaded.tim[at + 258:], card[:at] + card[at + 258:])
+        self.assertEqual(loaded.notes, ["1 of the card's squares changed; 1 took another set of colours."])
+
+    def test_a_card_square_whose_row_still_fits_keeps_it(self):
+        """A grey drawn into a square, a colour its own row has: the square keeps its row (a tie goes to
+        its own), and only the pixels drawn change their numbers."""
+        import struct
+        from PIL import ImageDraw
+        from translator import artwork as A
+        card, layout = made_up_card()
+        pic = A.Card("t/c", "T", "C", 1, 0, 0, A.CARD)
+        img = A.image(pic, card, layout)
+        ImageDraw.Draw(img).point((100, 100), fill=A.screen_rgb(0x4210))
+        loaded = A.from_png(pic, card, png_bytes(img), None, layout)
+        self.assertEqual(A.image(pic, loaded.tim, layout).tobytes(), img.tobytes())
+        changed = [i for i, (a, b) in enumerate(zip(card, loaded.tim)) if a != b]
+        self.assertEqual(len(changed), 1, changed)
+        self.assertEqual(struct.unpack_from("<H", loaded.tim, 16384 + (6 * 20 + 6) * 258)[0], 0x8000 | 480)
+
+    def test_a_card_png_of_another_size_is_refused(self):
+        from PIL import Image
+        from translator import artwork as A
+        card, layout = made_up_card()
+        pic = A.Card("t/c", "T", "C", 1, 0, 0, A.CARD)
+        with self.assertRaisesRegex(ValueError, "320×224"):
+            A.from_png(pic, card, png_bytes(Image.new("RGB", (320, 240))), None, layout)
+
     def test_a_tint_is_the_gpus_colour_times_the_drawing_colour(self):
         """The battle words' preview: each 5-bit part times the drawing colour over 128 (128 = as it is),
         at most 31, as the PlayStation draws a tinted sprite; the see-through bit stays."""
@@ -709,7 +798,7 @@ class PictureRuleTest(unittest.TestCase):
         tim = made_up_tim(4, 8, 3, palette=grey)
         img = A.tinted(pic, tim)
         self.assertEqual(img.size, (8, 9))
-        self.assertEqual(list(img.crop((0, 0, 8, 3)).getdata()), list(A.image(pic, tim).convert("RGB").getdata()))
+        self.assertEqual(img.crop((0, 0, 8, 3)).tobytes(), A.image(pic, tim).convert("RGB").tobytes())
         numbers = T.indices(T.read(tim))
         for k, n in enumerate(numbers):
             x, y = k % 8, k // 8
@@ -804,7 +893,7 @@ class GameLookRuleTest(unittest.TestCase):
 
 
 class PictureDiscTest(unittest.TestCase):
-    """The pictures with words (title screen, city map, battle words) from the real discs (PE_TEST_DISC,
+    """The pictures with words (title screen, city map, battle words, day cards) from the real discs (PE_TEST_DISC,
     PE_TEST_DISC2): each one read out as a PNG and loaded back gives the disc's bytes, and is the same
     on both discs. With the player packs (PE_TEST_PLAYER_PACKS) too: each pack's pictures as it shows
     them, out as a PNG and back, change nothing (their own colours included)."""
@@ -861,6 +950,26 @@ class PictureDiscTest(unittest.TestCase):
                 ink = sum(1 for y in range(y0, y0 + h) for x in range(x0, x0 + w) if numbers[y * 256 + x])
                 self.assertGreater(ink, w * h // 8, word)
 
+    def test_the_day_cards_are_their_rooms_views_as_the_screen_shows_them(self):
+        """Each day card is its room's view (gamelook.room_views, which the game's frames of Days 2-4
+        equal) from its row 4 down: 300 tiles, none shared, on the room's 28 colour rows, the same bytes
+        on both discs (the CRCs)."""
+        from petext import disc as D
+        from translator import artwork as A, gamelook as G
+        for disc in self.discs():
+            game = D.Game(disc.path)
+            try:
+                for pic in A.PICTURES:
+                    if not isinstance(pic, A.Card):
+                        continue
+                    layout = disc.layout[pic.id]
+                    self.assertEqual((len(layout.tiles), layout.rows), (300, tuple(range(480, 508))))
+                    view = G.room_views(game, pic.room)[pic.view]           # rows 0-223
+                    mine = A.image(pic, disc.english[pic.id], layout).tobytes()
+                    self.assertEqual(mine[:220 * 320 * 3], view[4 * 320 * 3:], pic.id)
+            finally:
+                game.disc.f.close()
+
     def test_each_player_packs_pictures_out_and_back_change_nothing(self):
         from translator import artwork as A
         packs = player_packs()
@@ -871,8 +980,8 @@ class PictureDiscTest(unittest.TestCase):
             pieces = A.read_pieces(zip_parts(path))
             for pic in A.PICTURES:
                 with self.subTest(pack=path.name, picture=pic.id):
-                    shown = A.shown(disc, pic, pieces)
-                    loaded = A.from_png(pic, disc.english[pic.id], A.png(pic, shown), shown)
+                    shown, layout = A.shown(disc, pic, pieces), disc.layout.get(pic.id)
+                    loaded = A.from_png(pic, disc.english[pic.id], A.png(pic, shown, layout), shown, layout)
                     self.assertEqual((loaded.tim, loaded.notes), (shown, []))
                     again = A.put(disc, pic, pieces, loaded.tim)
                     for other in A.PICTURES:
@@ -885,7 +994,8 @@ class PictureDiscTest(unittest.TestCase):
             with self.subTest(picture=pic.id):
                 english = read[0].english[pic.id]
                 self.assertTrue(all(d.english[pic.id] == english for d in read))
-                self.assertEqual(A.from_png(pic, english, A.png(pic, english)).tim, english)
+                layout = read[0].layout.get(pic.id)
+                self.assertEqual(A.from_png(pic, english, A.png(pic, english, layout), None, layout).tim, english)
                 self.assertEqual(A.put(read[0], pic, [], english), [])           # the game's: no pieces
 
 
@@ -1357,8 +1467,13 @@ class AllPicturesDisc:
     def __init__(self, path):
         from translator import artwork as A
         self.path = Path(path)
-        self.english, self.around = {}, {}
+        self.english, self.around, self.layout, self.segments = {}, {}, {}, {}
         for pic in A.PICTURES:
+            if isinstance(pic, A.Card):
+                card, self.layout[pic.id] = made_up_card()
+                self.english[pic.id], self.around[pic.id] = card, (0, card + bytes(-len(card) % 2048))
+                self.segments[pic.id] = [(0, len(card))]
+                continue
             bits, w, h = self.SIZES[pic.id]
             tim = made_up_tim(bits, w, h, palette=list(range(0, 16 * 2048, 2048)) if bits == 4 else None)
             self.english[pic.id] = tim
@@ -1393,7 +1508,7 @@ class PictureFitTest(unittest.TestCase):
                     pw.list.selection_set(pic.id)
                     for _ in range(3):
                         root.update()
-                    w, h = AllPicturesDisc.SIZES[pic.id][1:]
+                    w, h = (320, 224) if pic.id.startswith("day/") else AllPicturesDisc.SIZES[pic.id][1:]
                     bottom = pw.message.winfo_rooty() - pw.win.winfo_rooty()
                     right = pw.your_view.winfo_rootx() - pw.win.winfo_rootx() + pw.your_view.winfo_width()
                     details = dict(picture=pic.id, height=pw.win.winfo_height(), zoom=pw.zoom, bottom=bottom,

@@ -794,6 +794,14 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-battle-evidence translator-battle)
             set_tests_properties(original-game-translator-battle PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # The day title cards redrawn in the Translator: Days 2-5 (Disc 1) and Day 6 (Disc 2, with
+            # PE_TEST_DISC2), each Continued from its sample save, are on the screen the Translator's
+            # pictures, pixel for pixel, and the cards on copies of the discs with the pieces written in.
+            add_test(NAME original-game-translator-cards COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-cards-evidence translator-cards)
+            set_tests_properties(original-game-translator-cards PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 2400 LABELS "game-assets;mods;localization")
             # The Translator's "As in the game" preview against the game's own frames: the first box
             # (English pack, and each player pack given by PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_)
             # and Disc 2's boxes on the ship, every letter pixel; the first box's room picture.

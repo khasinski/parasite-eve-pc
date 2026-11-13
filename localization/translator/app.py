@@ -538,7 +538,8 @@ class App:
             loaded = A.Loaded(disc.english[pic.id], [])
             new = A.put(disc, pic, pieces, None)
         else:
-            loaded = A.from_png(pic, disc.english[pic.id], png, A.shown(disc, pic, pieces))
+            loaded = A.from_png(pic, disc.english[pic.id], png, A.shown(disc, pic, pieces),
+                                getattr(disc, "layout", {}).get(pic.id))
             new = A.put(disc, pic, pieces, loaded.tim)
         A.write_pieces(tr.parts, new)
         self.dirty = True

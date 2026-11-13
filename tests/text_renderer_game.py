@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-battle,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-battle,translator-cards,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -168,6 +168,15 @@ Checks, each from pe_mods.log and frame dumps:
              route to Melissa, Aya's time bar full) must be, pixel for pixel, the fight on a copy of
              Disc 1 with the file's pieces written in, and not the English one. Disc 1 only: the route
              starts a New Game, which Disc 1 holds; PE.IMG, and so the picture, is the same on both.
+  translator-cards  The day title cards redrawn in the Translator: Days 2-5 (Disc 1) and Day 6 (Disc 2) saved
+             from the disc as PNGs by the tool, each with a new dark band of white and red "letters" over
+             its word (colours the squares there don't have, so they take other colour sets), loaded
+             back through the scripted run (--picture) and saved in one file. The file must change
+             those cards and no other picture, each to the PNG's pixels exactly; and Continuing each
+             day's sample save (A-D on Disc 1, F on Disc 2), the day's card on the screen must be, pixel
+             for pixel, the Translator's picture of it, the card on a copy of the disc with the file's
+             pieces written in, and with the file's text alone the Translator's picture of the
+             English card.
   translator-look  The Translator's "As in the game" preview (localization/translator/gamelook.py)
              against the game's own frames: the first box with the English pack (made from the discs)
              and with each player pack given (PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_), and the five
@@ -1267,6 +1276,113 @@ def translator_battle(game, discs, out, localization):
     return 0
 
 
+# ---- Part translator-cards: the day title cards ----
+
+SAMPLES = Path(__file__).resolve().parent.parent / 'save-editor' / 'samples' / 'bu00'
+# Card, sample save (save-editor/samples: a save holds no disc data), disc (0: Disc 1): Continue shows
+# the day's card from before CARD_AT until Cross.
+CARDS = (('day/2', 'A', 0), ('day/3', 'B', 0), ('day/4', 'C', 0), ('day/5', 'D', 0), ('day/6', 'F', 1))
+CARD_AT = 16190
+
+
+def translator_cards(game, discs, out, localization):
+    """Part translator-cards (see the module notes). Day 6 needs Disc 2."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator cards: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    cards = [c for c in CARDS if c[2] < len(discs)]
+    if len(cards) < len(CARDS):
+        print('translator cards: no PE_TEST_DISC2, Day 6 (Disc 2) left out')
+    disc = artwork.Disc(discs[0])
+    args, expected = [], {}
+    for pid, _, _ in cards:
+        pic, layout = artwork.BY_ID[pid], disc.layout[pid]
+        # Saved by the Translator and redrawn in a paint program: over the word at the bottom left, a
+        # dark band with white bars and a red line (colours the squares there don't have), saved as RGB.
+        saved = out / f"card-{pid.replace('/', '-')}.png"
+        saved.write_bytes(artwork.png(pic, disc.english[pid], layout))
+        img = Image.open(saved)
+        check(img.size == (320, 224), f'the saved card {pid} is {img.size}')
+        img = img.convert('RGB')
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((36, 158, 196, 186), fill=(8, 8, 16))
+        for x in range(42, 190, 10):
+            draw.rectangle((x, 163, x + 5, 180), fill=(255, 255, 255))
+        draw.line((40, 183, 192, 183), fill=(230, 20, 20), width=2)
+        img.save(saved)
+        expected[pid] = artwork.from_png(pic, disc.english[pid], saved.read_bytes(), None, layout)
+        check(any('took another set of colours' in n for n in expected[pid].notes),
+              f'no square of {pid} took another colour set: {expected[pid].notes}')
+        args += ['--picture', f'{pid}={saved}']
+    path, report = out / 'translator-cards.pelang', out / 'translator-cards-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Cards test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], *args], capture_output=True, text=True, timeout=600)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the cards: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    for pid, _, _ in cards:
+        check(artwork.shown(disc, artwork.BY_ID[pid], pieces) == expected[pid].tim,
+              f"the saved card {pid} is not the PNG's pixels")
+    redrawn = {pid for pid, _, _ in cards}
+    others = [p.id for p in artwork.PICTURES if p.id not in redrawn and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-cards-text.pelang'              # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Cards test', None, path), ('es', 'Cards test', None, plain)
+    print(f'translator cards: the Translator saved {len(cards)} redrawn day cards as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Cards test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    steps = loaded_steps()[:-3] + presses([(CARD_AT, 0, 'card')])
+    try:
+        written = {}
+        for k in sorted({c[2] for c in cards}):
+            written[k], landed = pieces_written_in(discs[k], pieces, out / 'discs' / f'disc{k + 1}')
+            check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc {k + 1}')
+        jobs = {}
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for pid, save, k in cards:
+                card = (SAMPLES / f'BASLUS-006620000000{save}').read_bytes()
+                copy = list(discs[:k + 1])
+                copy[k] = written[k]
+                for which, use, p in (('pack', discs[:k + 1], pack), ('written-in', copy, text_only),
+                                      ('text-only', discs[:k + 1], text_only)):
+                    jobs[(pid, which)] = pool.submit(run_fixed, game, use, out / f"cards-{pid.replace('/', '-')}-{which}",
+                                                     steps, pack=p, pad=CONTINUE, card=card)
+            works = {key: job.result() for key, job in jobs.items()}
+        for pid, save, k in cards:
+            pic, layout = artwork.BY_ID[pid], disc.layout[pid]
+            frames = {which: frame(works[(pid, which)], 'card') for which in ('pack', 'written-in', 'text-only')}
+            mine = artwork.image(pic, expected[pid].tim, layout).tobytes()
+            english = artwork.image(pic, disc.english[pid], layout).tobytes()
+            log = mods_log(works[(pid, 'pack')])
+            check(log_pieces.search(log) and 'its pictures are in use' in log,
+                  f"{pid}: the file's {len(pieces)} picture pieces were not loaded and put in: {works[(pid, 'pack')]}")
+            check(frames['text-only'][2] == english,
+                  f"{pid}: with the text alone the screen is not the Translator's picture of the English card: "
+                  f"{works[(pid, 'text-only')]}")
+            check(frames['pack'] == frames['written-in'],
+                  f'{pid}: the card with the file is not the one on the disc with its pieces written in: '
+                  f"{works[(pid, 'pack')]} vs {works[(pid, 'written-in')]}")
+            check(frames['pack'][2] == mine, f"{pid}: the card with the file is not the Translator's picture of it: "
+                                             f"{works[(pid, 'pack')]}")
+            differ = sum(1 for i in range(0, len(mine), 3) if mine[i:i + 3] != english[i:i + 3])
+            print(f"PASS translator cards, {pid} (save {save}, Disc {k + 1}): the card on the screen is the "
+                  f"Translator's picture of it, pixel for pixel, and the one on the disc with the pieces written in "
+                  f"({differ} pixels differ from the English card)")
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
 def look_is_the_frame(work, label, look, font, raw, name, gl):
     """The Translator's game look (translator/gamelook.py) of `raw` against the game's frame: every
     pixel it draws is the frame's, and every pixel of the frame's text area in the letters' own
@@ -1920,6 +2036,7 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
                               ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
                               ('translator', translator_file), ('translator-pictures', translator_pictures),
                               ('translator-map', translator_map), ('translator-battle', translator_battle),
+                              ('translator-cards', translator_cards),
                               ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)

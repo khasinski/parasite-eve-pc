@@ -127,6 +127,10 @@ class PictureWindow:
         height = (self.win.winfo_height() if shown else self.size[1]) - ROOM_AROUND[1]
         return max(1, min(ZOOM, width // w, height // (copies * h)))
 
+    def layout(self, pic):
+        """Where a card's tiles are (read from the disc); None for a picture that is one TIM."""
+        return getattr(self.app.picture_disc, "layout", {}).get(pic.id)
+
     @staticmethod
     def copies(pic: A.Picture) -> int:
         return 2 + len(pic.tints)
@@ -136,7 +140,7 @@ class PictureWindow:
         disc = self.app.picture_disc
         if event.widget is self.win and disc is not None:
             pic = self.picked()
-            if self.zoom_for(*A.timlib.read(disc.english[pic.id]).size, self.copies(pic)) != self.zoom:
+            if self.zoom_for(*A.size(pic, disc.english[pic.id]), self.copies(pic)) != self.zoom:
                 self.show()
 
     def _photo(self, png: bytes) -> tk.PhotoImage:
@@ -156,14 +160,15 @@ class PictureWindow:
             self.english_view.configure(image="", text="(no disc)")
             self.your_view.configure(image="", text="")
         else:
-            w, h = A.timlib.read(english).size
+            w, h = A.size(pic, english)
+            layout = self.layout(pic)
             self.zoom = self.zoom_for(w, h, self.copies(pic))
             self.tip.configure(text=pic.tip.format(w=w, h=h))
-            self.english_view.configure(image=self._photo(A.png(pic, english)), text="")
+            self.english_view.configure(image=self._photo(A.png(pic, english, layout)), text="")
             yours = english
             if tr is not None:
                 yours = A.shown(disc, pic, A.read_pieces(tr.parts))
-                self.your_view.configure(image=self._photo(A.png(pic, yours)), text="")
+                self.your_view.configure(image=self._photo(A.png(pic, yours, layout)), text="")
             if pic.tints:
                 self.fight_label.configure(text=("Your picture" if tr is not None else "The game's picture")
                                            + " in a fight, in the colours the game draws it with: "
@@ -197,7 +202,7 @@ class PictureWindow:
         if not path:
             return
         try:
-            Path(path).write_bytes(A.png(pic, A.shown(disc, pic, A.read_pieces(tr.parts))))
+            Path(path).write_bytes(A.png(pic, A.shown(disc, pic, A.read_pieces(tr.parts)), self.layout(pic)))
         except OSError as e:
             messagebox.showerror("Could not save the picture", str(e), parent=self.win)
             return

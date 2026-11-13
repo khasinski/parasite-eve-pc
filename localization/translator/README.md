@@ -47,7 +47,8 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
 **Pictures…** opens the pictures that have words in them: for now the title screen's "Press Start
 Button", New Game, Continue, Tutorial, EX Game and the publisher line, the city map's place
 names (one picture with all ten), and the battle words (one picture with the words, numbers and
-marks of a fight: Miss, NO TARGET, ENERGY SHOT, SCAN, CONFUSE and the rest). They are read from your own
+marks of a fight: Miss, NO TARGET, ENERGY SHOT, SCAN, CONFUSE and the rest), and the day title
+cards ("Day 1 RESONANCE" to "Epilogue SYMBIOSIS", one picture each). They are read from your own
 disc (**Choose disc…**: a Parasite Eve USA disc image, Disc 1 or Disc 2, unchanged; it is
 remembered on your computer). Nothing of the disc is put anywhere but your translation.
 
@@ -66,6 +67,12 @@ remembered on your computer). Nothing of the disc is put anywhere but your trans
    picture in those colours too. Each word is cut out by a box of its own (the window lists their
    sizes), so keep a translated word inside the English one's box. The numbers, tabs and marks need
    no translating, but you may redraw them.
+   A day title card is the whole screen as the game shows it, 320×224. Redraw its words; the rest
+   may stay. The card is made of 16×16 squares, and each square can use only one of the card's
+   sets of 256 colours: for each square you change, the tool picks the set that fits your drawing
+   best, and each pixel becomes its nearest colour in that set. Day 1's card may never be shown in
+   the US game (it did not appear on a New Game or when continuing a Day 1 save, and its English
+   picture still has the Japanese word 共鳴), but you can redraw it like the others.
 3. **Load PNG…**. "Your picture" shows it as the game will. **Use the game's picture** undoes it.
 4. Save the translation: the picture goes into its `pictures.bin`. Other pictures already in the
    file (a fan patch's) stay as they are, and can be redrawn the same way.
@@ -98,7 +105,7 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
 
 ## Not there yet
 
-- More pictures with words (day title cards, the tutorial, Game Over), and drawing
+- More pictures with words (the tutorial, Game Over), and drawing
   missing letters.
 
 ## Code
@@ -109,7 +116,8 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
 - `app.py`: the window. `gamelook.py`: the "As in the game" preview (the game's dialogue drawing
   and the language mod's letters, followed from their C code; the room pictures and which room
   shows each line, from the disc). `picture_window.py`: the Pictures window; `artwork.py`: the pictures'
-  list, PNG out and in, and their pieces in `pictures.bin` (TIM pixels: `petext/tim.py`).
+  list, PNG out and in, and their pieces in `pictures.bin` (TIM pixels: `petext/tim.py`; a day
+  card's tiles and colour rows read from its room, as `gamelook.room_views` draws them).
 - `package.py`: builds the download for the system it runs on and checks the built program:
   it starts it, types a line, saves and quits (`--report`), compares the file with what the source
   tool saves, and searches everything inside for game text. Build tools are pinned in
@@ -126,5 +134,7 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   part `translator-map` (CTest `original-game-translator-map`) runs the city map with its place
   names redrawn in it (Disc 1: no sample save reaches the map on Disc 2); part `translator-battle` (CTest
   `original-game-translator-battle`) runs the first fight with the battle words redrawn in it (Disc 1:
-  the route starts a New Game); part `translator-look` (CTest
+  the route starts a New Game); part `translator-cards` (CTest `original-game-translator-cards`)
+  continues the sample saves of Days 2-5 (Disc 1) and Day 6 (Disc 2) with day cards redrawn in them
+  (no route reaches the Epilogue's card or Day 1's); part `translator-look` (CTest
   `original-game-translator-look`) checks the game look against the game's own frames.
