@@ -39,6 +39,17 @@ BpResult bp_execute(const BpGameOps *ops, const char *id) {
     return res;
 }
 
+BpResult bp_preview(const BpGameOps *ops, const char *id) {
+    BpResult res;
+    BpSnapshot s;
+    memset(&res, 0, sizeof res);
+    if (!ops || !ops->read || !bp_request_parse(id, &res.request)) { res.error = BP_ERR_UNKNOWN; return res; }
+    if (!ops->read(&s, ops->user)) { res.error = BP_ERR_NOT_LOADED; return res; }
+    res.quote = bp_quote(&s, &res.request, ops->price);
+    res.error = res.quote.error;
+    return res;
+}
+
 void bp_result_text(const BpResult *r, const BpSnapshot *s, char *out, size_t n) {
     const BpRequest *q = &r->request;
     if (r->error) { snprintf(out, n, "%s - nothing changed", bp_error_text(r->error)); return; }

@@ -14,17 +14,23 @@ target_link_libraries(bp-ui-export PRIVATE bp-ui-model)
 
 # Live backend: pure rules and transactions from the pe_bp mod, and the live catalog.
 set(PE_BP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../mods/pe_bp")
-add_library(bp-live STATIC ${PE_BP_DIR}/bp_config.c ${PE_BP_DIR}/bp_rules.c ${PE_BP_DIR}/bp_txn.c bp_catalog.c)
+add_library(bp-live STATIC ${PE_BP_DIR}/bp_config.c ${PE_BP_DIR}/bp_defs.c ${PE_BP_DIR}/bp_record.c
+    ${PE_BP_DIR}/bp_quote.c ${PE_BP_DIR}/bp_txn.c bp_catalog.c)
 target_include_directories(bp-live PUBLIC "${PE_BP_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(bp-live PUBLIC bp-ui-model)
 add_executable(bp-live-tests tests_live.c)
 target_link_libraries(bp-live-tests PRIVATE bp-live)
+# The public "bp" service (host/pe_services.h) over a fake game.
+add_executable(bp-api-tests tests_api.c ${PE_BP_DIR}/bp_api.c)
+target_include_directories(bp-api-tests PRIVATE ../../mods/host)
+target_compile_definitions(bp-api-tests PRIVATE PE_BP_UNIT_TESTS=1)
+target_link_libraries(bp-api-tests PRIVATE bp-live)
 
 # Compile real native adapter without linking it into any game executable.
 add_library(bp-ui-native-check OBJECT bp_ui_native.c)
 target_include_directories(bp-ui-native-check PRIVATE . ../../include ../../mods/host)
 
-foreach(target bp-ui-model bp-ui-tests bp-ui-export bp-live bp-live-tests bp-ui-native-check)
+foreach(target bp-ui-model bp-ui-tests bp-ui-export bp-live bp-live-tests bp-api-tests bp-ui-native-check)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX)
     else()
@@ -41,5 +47,6 @@ endif()
 enable_testing()
 add_test(NAME bp-ui-contracts COMMAND bp-ui-tests)
 add_test(NAME bp-live-backend COMMAND bp-live-tests)
+add_test(NAME bp-public-api COMMAND bp-api-tests)
 
 add_test(NAME bp-settings COMMAND bp-settings-tests)

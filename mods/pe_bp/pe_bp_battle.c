@@ -1,4 +1,6 @@
-/* BP overhaul battle effects: Resistance, Fortitude and PE Mastery (numbers in bp_rules.c).
+/* BP overhaul battle effects: Resistance, Fortitude and PE Mastery (numbers in bp_defs.c).
+ * Ranks act only while their feature is in effect: F1's rules minus any mod's pause (bp_api.c).
+ * Each effect that acts is announced as "bp.effect".
  *
  *   Resistance  PE_HOOK_ENEMY_EFFECT stage 1: after the armor's roll failed, a second roll at
  *               10% per rank ("Resisted Poison"). Own RNG: the game's rand() stream is untouched.
@@ -13,8 +15,7 @@
 #include <time.h>
 
 #include "pe_bp_battle.h"
-#include "bp_rules.h"
-#include "pe_bp_settings.h"
+#include "pe_bp_internal.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe1/battle.h"
@@ -40,8 +41,9 @@ static unsigned roll(void) {   /* xorshift32, percent 0..99 */
     return s_rng % 100u;
 }
 static Combatant *aya(void) { return pe_aya_core(); }
-static int rank_def(int t) { return pe_bp_settings_flags() & (t==BP_FORTITUDE?BP_FEATURE_FORTITUDE:BP_FEATURE_RESISTANCE) ? s_record()->defense[t] : 0; }
-static int rank_line(int l) { return l < 0 || !(pe_bp_settings_flags() & BP_FEATURE_MASTERY) ? 0 : s_record()->mastery[l]; }
+/* Ranks in effect: F1's rules minus any mod's pause (bp_api_features). */
+static int rank_def(int t) { return bp_api_features() & bp_track_feature(t) ? s_record()->defense[t] : 0; }
+static int rank_line(int l) { return l < 0 || !(bp_api_features() & BP_FEATURE_MASTERY) ? 0 : s_record()->mastery[l]; }
 
 static void restore_shot(void) {
     if (s_shot.set && s_shot.action) s_shot.action->powerBonus = s_shot.orig;
@@ -82,6 +84,7 @@ static int on_battle_update(void *ctx, void *user) {
         if (a->exp_or_acc < (s_last.pe >> 1)) a->exp_or_acc = s_last.pe >> 1;
         if (rank_line(10) >= 3) a->curHP = a->hpMirror = (u16)((s16)a->maxHP * 3 / 4);
         pe_toast("Preraise mastery");
+        bp_api_effect(PE_BP_MASTERY, 10, rank_line(10), "preraise");
         pe_mod_log(MOD_ID, "preraise rider: hp=%d pe=%d", (s16)a->curHP, a->exp_or_acc >> 16);
     }
     if ((s16)a->curHP > 0) s_preraise_armed = (a->stateFlags & AYA_PRERAISE) != 0;   /* kept while she is down */
@@ -113,6 +116,7 @@ static int on_enemy_effect(void *ctx, void *user) {
             snprintf(msg, sizeof msg, "Resisted %s", bp_defense_def(t)->name);
             pe_toast(msg);
             pe_mod_log(MOD_ID, "resist: %s rank %d", bp_defense_def(t)->name, rank);
+            bp_api_effect(PE_BP_DEFENSE, t, rank, "resisted");
         }
         return 0;
     }
@@ -128,6 +132,7 @@ static int on_enemy_effect(void *ctx, void *user) {
         pe_toast("Fortitude!");
         pe_mod_log(MOD_ID, "fortitude: effect=%d hp=%d -> %d (vanilla %d)%s charges_used=%d", e->effect, hp,
                    p.result_hp, p.vanilla_hp, p.negate ? " negated" : "", s_charges_used);
+        bp_api_effect(PE_BP_DEFENSE, BP_FORTITUDE, rank_def(BP_FORTITUDE), "fortitude");
     }
     return 0;
 }
@@ -190,6 +195,7 @@ static int on_spell_done(void *ctx, void *user) {
             s->target->entityFlags |= ENEMY_CONFUSED;
         }
         pe_mod_log(MOD_ID, "%s mastery second roll landed (rank %d)", slow ? "slow" : "confuse", rank);
+        bp_api_effect(PE_BP_MASTERY, line, rank, "second_roll");
         break;
     }
     case 7:     /* Haste: longer timer (it counts down) */

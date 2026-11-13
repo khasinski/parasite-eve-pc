@@ -1,5 +1,5 @@
 /* BP-owned profile settings. Draft edits never touch save investments or another mod. */
-#include "pe_bp_api.h"
+#include "pe_bp_screens.h"
 #include "pe_bp_settings.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -40,9 +40,9 @@ static void current_text(char *out,unsigned n){snprintf(out,n,"%s%s",bp_preset_n
 static void changes_text(char *out,unsigned n){snprintf(out,n,"Resistance %s > %s; Mastery %s > %s",active_flags&1?"On":"Off",draft_flags&1?"On":"Off",active_flags&4?"On":"Off",draft_flags&4?"On":"Off");}
 static void extras_text(char *out,unsigned n){snprintf(out,n,"Fortitude %s > %s; Respec %s > %s",active_flags&2?"On":"Off",draft_flags&2?"On":"Off",active_flags&8?"On":"Off",draft_flags&8?"On":"Off");}
 static void retained_text(char *out,unsigned n){
-    const PeBpApi *api=pe_service_get("bp",1);BpSnapshot s;unsigned retained=0;
+    const PeBpScreensApi *api=pe_service_get("bp_screens",1);BpSnapshot s;unsigned retained=0;
     if(api&&api->snapshot(&s)){
-        for(int i=0;i<BP_DEFENSE_TRACKS;++i)if(!(draft_flags&(i==BP_FORTITUDE?BP_FEATURE_FORTITUDE:BP_FEATURE_RESISTANCE)))retained+=bp_track_spent(i,s.rec.defense[i]);
+        for(int i=0;i<BP_DEFENSE_TRACKS;++i)if(!(draft_flags&bp_track_feature(i)))retained+=bp_track_spent(i,s.rec.defense[i]);
         if(!(draft_flags&BP_FEATURE_MASTERY))for(int i=0;i<BP_MASTERY_LINES;++i)retained+=bp_line_spent(i,s.rec.mastery[i]);
     }
     snprintf(out,n,"%u BP retained; no refund",retained);

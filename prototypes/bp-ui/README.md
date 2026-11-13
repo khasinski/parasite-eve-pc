@@ -93,11 +93,24 @@ example.
 - F1 > PE Enhancements > Bonus Points > "EX Game carryover": Off / Keep purchased skills (default)
   / Convert skills to BP. Unspent BP always carries (the game keeps it). Keep tags ranks as carried
   (`pe_bp/carry`); their refunds pay into the upgrade-only pool. Convert puts the ranks' BP value in
-  that pool. `bp_ex_carry()` (bp_rules.c) is the rule; `on_new_game` in pe_bp.c applies it.
+  that pool. `bp_ex_carry()` (bp_record.c) is the rule; `on_new_game` in bp_store.c applies it.
 - The in-game tests load the repo's sample saves (`save-editor/samples/bu00`) from card 1 through
   `test_saves.mjs` (slot list there). `test_ex_carry.mjs` fires the game's own EX start command
   (`PE_BP_TEST_EX=1`); `test_battle.mjs` needs a build with pe_qol for fast encounters.
 - Test scripts must drain the game's stderr: an unread pipe fills and stalls the game.
+
+## Public `bp` service and module split
+
+- `mods/pe_bp` is split by job (table in `mods/pe_bp/README.md`): pure rules in `bp_defs.c`,
+  `bp_record.c`, `bp_quote.c`, `bp_txn.c`; the service in `bp_api.c`; the game side in
+  `bp_store.c` (sections, load, New Game, EX carry) and `bp_game.c` (snapshot, writes).
+- Other mods use the public `bp` v1 service, declared in `mods/host/pe_services.h`: status, ranks
+  and ranks in effect, keys/names/prices, quote, execute, upgrade-only grants, per-mod pauses,
+  and the `bp.changed` / `bp.effect` events. These screens use `bp_screens` v1
+  (`pe_bp_screens.h`, the full snapshot); both commit through `bp_api_execute`, so screen
+  purchases are announced too.
+- Tests: `tests_api.c` (ctest `bp-public-api`, fake game) and `test_api.mjs` (`PE_BP_TEST_API=1`,
+  sample B: the service as another mod sees it in the real game).
 
 ## Vanilla look (r7)
 
@@ -115,11 +128,12 @@ cursor's opaque two-pixel top bevel instead of the old grey fill.
 ## Live backend (r5, 2026-11-12)
 
 - `mods/pe_bp/` is a real mod (preview build only; production mod list is
-  unchanged). `bp_rules.c`: prices, quotes, fees, save encoding (pure).
-  `bp_txn.c`: executor - fresh snapshot, re-quote, then refusable steps
-  (store enable, Junk spend) before infallible writes; any refusal changes
-  nothing. `pe_bp.c`: snapshot of the game, the writes, two companion
-  sections `pe_bp/ranks` and `pe_bp/run`, and the `bp` v1 service.
+  unchanged). Pure rules (now `bp_defs.c`, `bp_record.c`, `bp_quote.c`):
+  prices, quotes, fees, save encoding. `bp_txn.c`: executor - fresh snapshot,
+  re-quote, then refusable steps (store enable, Junk spend) before infallible
+  writes; any refusal changes nothing. Game side (now `bp_game.c`,
+  `bp_store.c`): snapshot, the writes, companion sections `pe_bp/ranks`,
+  `pe_bp/run` and `pe_bp/carry`; services `bp` (public) and `bp_screens`.
 - `bp_catalog.c` builds this UI's catalog from a snapshot + quotes (pure; IDs
   interned so focus survives rebuilds). `bp_live_ui.c` wires it to the
   service; `bp_ui_answer`/settings commit through `BpUiBackend`, then the

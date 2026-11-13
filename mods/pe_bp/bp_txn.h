@@ -27,6 +27,8 @@ typedef struct BpResult {
 } BpResult;
 
 BpResult bp_execute(const BpGameOps *ops, const char *request_id);
+/* The same read and quote as bp_execute, without committing anything. */
+BpResult bp_preview(const BpGameOps *ops, const char *request_id);
 /* Human-readable outcome for the UI notice. */
 void bp_result_text(const BpResult *r, const BpSnapshot *after, char *out, size_t size);
 #endif

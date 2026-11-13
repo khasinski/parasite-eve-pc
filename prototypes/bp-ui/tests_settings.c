@@ -1,5 +1,5 @@
 #include "pe_bp_settings.h"
-#include "pe_bp_api.h"
+#include "pe_bp_screens.h"
 #include "pe_mod_menu.h"
 #include <assert.h>
 #include <stdio.h>
@@ -16,7 +16,7 @@ int pe_mod_data_available(const char *m){(void)m;return module_on;}
 void pe_mod_log(const char *m,const char *f,...){(void)m;(void)f;}
 void pe_toast(const char *s){(void)s;}
 static int snap(BpSnapshot *s){*s=game;return 1;}
-static const PeBpApi api={sizeof(PeBpApi),snap,NULL,NULL};
+static const PeBpScreensApi api={sizeof(PeBpScreensApi),snap,NULL,NULL};
 const void *pe_service_get(const char *n,int v){(void)n;(void)v;return &api;}
 static struct Row *add(const char *label){assert(nrows<32);struct Row *r=&rows[nrows++];memset(r,0,sizeof *r);r->label=label;return r;}
 int pe_menu_register_info(const char *p,const char *l,const char *d,PeMenuText f){(void)p;(void)d;add(l)->text=f;return 0;}

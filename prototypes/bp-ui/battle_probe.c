@@ -406,12 +406,13 @@ static int on_battle(void *ctx, void *user) {
  * the real transaction service, then start an EX Game with the game's own command
  * (INV_CMD_START_NEW_GAME; the host announces PE_HOOK_NEW_GAME EX at its entry) and report what the
  * new run starts with. The carryover mode is the F1 setting in pe_mods.ini. ---- */
-#include "pe_bp_api.h"
+#include "pe_bp_screens.h"
+#include "pe_services.h"
 #include "pe1/menu_inventory.h"
 static int s_ex_step, s_ex_wait;
 static unsigned s_ex_bp_before;
 static int on_ex_frame(void *ctx, void *user) {
-    const PeBpApi *api = pe_service_get("bp", 1);
+    const PeBpScreensApi *api = pe_service_get("bp_screens", 1);
     BpSnapshot s;
     (void)ctx; (void)user;
     if (s_ex_step >= 3 || !api) return 0;
@@ -439,8 +440,93 @@ static int on_ex_frame(void *ctx, void *user) {
     return 0;
 }
 
+/* ---- public "bp" service probe (PE_BP_TEST_API=1): in free field, a client mod's view. Uses only
+ * host/pe_services.h and the host's events, as another mod would: quote, execute, the
+ * "bp.changed" event, an upgrade-only grant spent on a Mastery rank, a pause and its lifting, and
+ * a screen purchase announced with no mod id. ---- */
+static int s_api_step, s_api_wait, s_api_events;
+static char s_api_why[48], s_api_by[32];
+static PeBpChanged s_api_last;
+static int on_bp_changed(void *ctx, void *user) {
+    const PeBpChanged *e = ctx;
+    (void)user;
+    ++s_api_events;
+    s_api_last = *e;
+    snprintf(s_api_why, sizeof s_api_why, "%s", e->why ? e->why : "");
+    snprintf(s_api_by, sizeof s_api_by, "%s", e->by ? e->by : "");
+    return 0;
+}
+static int on_api_frame(void *ctx, void *user) {
+    const PeBpApi *bp = pe_service_get("bp", 1);
+    const PeBpScreensApi *screens = pe_service_get("bp_screens", 1);
+    PeBpStatus st, st2;
+    PeBpQuote q;
+    int ev;
+    (void)ctx; (void)user;
+    if (s_api_step || !pe_free_field() || ++s_api_wait < 60) return 0;
+    s_api_step = 1;
+    if (!bp || bp->struct_size < sizeof *bp || !screens) { report("api_published", 0, "bp=%p screens=%p", (void *)bp, (void *)screens); emit("BP_API_DONE pass=%d fail=%d\n", s_pass, s_fail); return 0; }
+    memset(&st, 0, sizeof st); st.struct_size = sizeof st;
+    report("api_status", bp->status(&st) == 1 && st.loaded && st.bp == g_AyaSaveState.bonus_points && st.features == 15,
+           "loaded=%d bp=%u game=%u features=%u pool=%u", st.loaded, (unsigned)st.bp, (unsigned)g_AyaSaveState.bonus_points,
+           (unsigned)st.features, (unsigned)st.upgrade_pool);
+    report("api_table", !strcmp(bp->key(PE_BP_DEFENSE, 0), "poison") && bp->price(PE_BP_DEFENSE, 0, 1) == 75 &&
+           bp->max_rank(PE_BP_MASTERY, 5) == 1 && bp->rank(PE_BP_DEFENSE, 0) == 0, "poison price=%u", (unsigned)bp->price(PE_BP_DEFENSE, 0, 1));
+
+    memset(&q, 0, sizeof q); q.struct_size = sizeof q;
+    ev = s_api_events;
+    report("api_quote_changes_nothing", bp->quote("buy.def.0", &q) == PE_BP_OK && q.bp_cost == 75 &&
+           g_AyaSaveState.bonus_points == st.bp && bp->rank(PE_BP_DEFENSE, 0) == 0 && s_api_events == ev,
+           "err=%d cost=%u bp=%u events=%d", (int)q.error, (unsigned)q.bp_cost, (unsigned)g_AyaSaveState.bonus_points, s_api_events - ev);
+
+    report("api_execute", bp->execute("buy.def.0", "api_probe", &q) == PE_BP_OK && bp->rank(PE_BP_DEFENSE, 0) == 1 &&
+           g_AyaSaveState.bonus_points == st.bp - 75, "rank=%d bp=%u", bp->rank(PE_BP_DEFENSE, 0), (unsigned)g_AyaSaveState.bonus_points);
+    report("api_changed_event", s_api_events == ev + 1 && !strcmp(s_api_why, "buy.def.0") && !strcmp(s_api_by, "api_probe") &&
+           s_api_last.bp_before == st.bp && s_api_last.bp_after == st.bp - 75, "events=%d why=%s by=%s", s_api_events - ev, s_api_why, s_api_by);
+
+    ev = s_api_events;
+    report("api_grant_pool", bp->grant_pool(100, "api_probe") == PE_BP_OK && s_api_events == ev + 1 && !strcmp(s_api_why, "grant") &&
+           s_api_last.pool_after == st.upgrade_pool + 100, "pool=%u", (unsigned)s_api_last.pool_after);
+    /* Heal 1 costs 150: 100 from the pool, 50 BP. */
+    memset(&q, 0, sizeof q); q.struct_size = sizeof q;
+    {
+        unsigned bp_before = g_AyaSaveState.bonus_points;
+        int err = bp->execute("buy.line.0", "api_probe", &q);
+        report("api_pool_spent", err == PE_BP_OK && q.pool_cost == 100 && q.bp_cost == 50 && g_AyaSaveState.bonus_points == bp_before - 50 &&
+               bp->rank(PE_BP_MASTERY, 0) == 1, "err=%d pool_cost=%u bp_cost=%u", err, (unsigned)q.pool_cost, (unsigned)q.bp_cost);
+    }
+
+    report("api_pause", bp->pause("api_probe", PE_BP_FEATURE_RESISTANCE) == 0 && bp->rank(PE_BP_DEFENSE, 0) == 1 &&
+           bp->active_rank(PE_BP_DEFENSE, 0) == 0 && bp->quote("buy.def.0", &q) == PE_BP_ERR_INACTIVE &&
+           bp->active_rank(PE_BP_MASTERY, 0) == 1, "active=%d quote=%d", bp->active_rank(PE_BP_DEFENSE, 0), (int)q.error);
+    memset(&st2, 0, sizeof st2); st2.struct_size = sizeof st2;
+    bp->status(&st2);
+    report("api_pause_status", st2.paused == PE_BP_FEATURE_RESISTANCE && !(st2.features & PE_BP_FEATURE_RESISTANCE), "paused=%u features=%u",
+           (unsigned)st2.paused, (unsigned)st2.features);
+    {   /* the screens see the pause too */
+        BpSnapshot s;
+        int seen = screens->snapshot(&s) && !(s.features & BP_FEATURE_RESISTANCE);
+        bp->pause("api_probe", 0);
+        report("api_unpause", seen && bp->active_rank(PE_BP_DEFENSE, 0) == 1 && bp->quote("buy.def.0", &q) == PE_BP_OK,
+               "screens_saw_pause=%d active=%d", seen, bp->active_rank(PE_BP_DEFENSE, 0));
+    }
+
+    ev = s_api_events;
+    {
+        BpResult r = screens->execute("buy.def.1");
+        report("api_screens_announce", r.error == BP_OK && s_api_events == ev + 1 && !strcmp(s_api_why, "buy.def.1") && !s_api_by[0],
+               "err=%d events=%d by=%s", r.error, s_api_events - ev, s_api_by);
+    }
+    emit("BP_API_DONE pass=%d fail=%d\n", s_pass, s_fail);
+    return 0;
+}
+
 void pe_bp_battle_probe_install(void) {
-    const char *on = getenv("PE_BP_TEST_BATTLE"), *ex = getenv("PE_BP_TEST_EX");
+    const char *on = getenv("PE_BP_TEST_BATTLE"), *ex = getenv("PE_BP_TEST_EX"), *api = getenv("PE_BP_TEST_API");
     if (on && on[0] == '1') pe_hook_add(PE_HOOK_BATTLE_UPDATE, on_battle, NULL, PE_PRIORITY_LATE, "host");
     if (ex && ex[0] == '1') pe_hook_add(PE_HOOK_FRAME, on_ex_frame, NULL, PE_PRIORITY_LATE, "host");
+    if (api && api[0] == '1') {
+        pe_hook_add(pe_event_id("bp.changed"), on_bp_changed, NULL, PE_PRIORITY_NORMAL, "host");
+        pe_hook_add(PE_HOOK_FRAME, on_api_frame, NULL, PE_PRIORITY_LATE, "host");
+    }
 }
