@@ -838,6 +838,14 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-menu-words-evidence translator-menu-words)
             set_tests_properties(original-game-translator-menu-words PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # The Translator's "As in the game" preview of the menus' help line against the game's own
+            # frames: a file the Translator saved (four help lines in Spanish) and the game's own text, on
+            # the menus' route into the item list, the help window pixel for pixel. Needs Pillow. Disc 1.
+            add_test(NAME original-game-translator-menu-look COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-menu-look-evidence translator-menu-look)
+            set_tests_properties(original-game-translator-menu-look PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
             # The Translator's "As in the game" preview against the game's own frames: the first box
             # (English pack, and each player pack given by PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_)
             # and Disc 2's boxes on the ship, every letter pixel; the first box's room picture.

@@ -410,6 +410,34 @@ class EnglishTest(unittest.TestCase):
         if hasattr(cls, "tmp"):
             cls.tmp.cleanup()
 
+    def test_the_menu_look_reads_the_menus_from_the_discs_and_measures_every_help_line_as_the_game(self):
+        """The window table, menu metrics and the menus' letter colours as each disc has them (the same on
+        both), and every English help line laid out to the width the manifest has from the discs."""
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        from translator import gamelook as G, menulook as M
+        menus = [M.MenuDisc(d) for d in self.discs]
+        for md in menus:
+            self.assertEqual(md.windows, menus[0].windows)
+            self.assertEqual(md.windows[M.HELP_WINDOW], (8, 12, 300, 20))
+            self.assertEqual(md.metrics[:0x100], GAME.metrics[:0x100])
+            self.assertEqual(md.colours((M.MENU_COLOURS_ROW << 6) | 28)[:4], [0, 0x7FFF, 0x0421, 0x7FFF])
+        pack = G.Pack.read(pelang.pack_bytes(self.pack))
+        mf = M.MenuFont(G.Font(G.DiscLook(self.discs[0]), pack), menus[0])
+        keys = [k for k in GAME.rows if M.can_draw(k) and pack.text(k) is not None]
+        self.assertGreater(len(keys), 350)
+        # A button picture in a menu line (FB 00) moves the pen 12 px, but the menus measure it as glyph 0xED
+        # plus a pixel (MenuMeasure: 13 px on the USA discs); the compiler counts 12 (petext/menu.py width),
+        # so its widths are a pixel short for each one. misc/068 is the only such help line.
+        sprites = {k: pack.text(k).count(b"\xfb\x00") for k in keys}
+        self.assertEqual({k: n for k, n in sprites.items() if n}, {"misc/068": 1})
+        wrong = {k: (M.lay_out(mf, pack.text(k), 0, 0).width, GAME.rows[k].get("menu_px") + sprites[k]) for k in keys}
+        wrong = {k: v for k, v in wrong.items() if v[0] != v[1]}
+        self.assertEqual(wrong, {})
+        print(f"\n{len(keys)} English help lines laid out by the menu look at the manifest's widths")
+
     def test_the_english_pack_reads_back_as_the_discs_own_text_every_row(self):
         self.assertEqual(self.wrong, 0)
         self.assertGreater(len(self.english), 2800)
@@ -1488,6 +1516,86 @@ class GameLookRuleTest(unittest.TestCase):
         from petext import gametext as gt, layout
         self.assertEqual((gt.box_advance(0x4D), gt.base_advance(0x4D), layout.advance(bytes([0x4D])),
                           gt.lines(bytes([0x4D, 0x4D, 0xF7, 0x4D]))), (8, 8, 8, [16, 8]))
+
+
+class FakeMenuDisc:
+    """menulook.MenuDisc with no disc: the manifest's menu metrics, the help window where the boot
+    program has it, a blank page and the menus' letter colours."""
+
+    def __init__(self):
+        from translator import menulook as M
+        self.metrics = GAME.metrics
+        self.windows = [(0, 0, 0, 0)] * M.SIMPLE_COUNT
+        self.windows[M.HELP_WINDOW] = (8, 12, 300, 20)
+        self.page = bytes(64 * 254 * 2)
+        self.glyphs = [(0, 0, 0, 0, 0, 0)] * 0x100
+
+    def colours(self, clut):
+        return [0, 0x7FFF, 0x0421, 0x7FFF] + [0x0421] * 12
+
+    def index(self, u, v):
+        return 0
+
+
+class MenuLookRuleTest(unittest.TestCase):
+    """The menus' look with no disc: which lines it draws, letters placed as the compiler measures
+    menu lines, and the window's edges."""
+
+    def test_the_help_lines_are_drawn_in_the_help_line(self):
+        from translator import menulook as M
+        for key in ("desc/005", "misc/040", "misc/088", "sys/014", "sys/092"):
+            self.assertEqual(M.context_of(key), "help line", key)
+            self.assertTrue(M.can_draw(key), key)
+        for key in ("item/000", "sys/008", "misc/089", "dlg/M001/009", "battle/000"):
+            self.assertFalse(M.can_draw(key), key)
+        self.assertEqual(M.context_of("item/000"), "item list")
+
+    def test_letters_are_placed_as_the_compiler_measures_menu_lines(self):
+        """The width the menu look lays a line out to is the compiler's (petext/menu.py width), for the
+        game's letters, Latin Extended ones, letters with no code, digits and the space (each a pixel
+        wider)."""
+        from translator import gamelook as G, menulook as M
+        for key, text in (("desc/005", "Cura 45: ¡ñandú, œuvre, ð þ!"), ("misc/040", "Usar un objeto 0123"),
+                          ("item/001", "Pistola 9 mm")):
+            result = P.check_row(GAME, key, text, "es", "Español")
+            pv = result.preview
+            self.assertEqual(result.errors, [], (key, result.errors))
+            pack = G.Pack.read(pv.pack)
+            mf = M.MenuFont(G.Font(FakeLookDisc(), pack), FakeMenuDisc())
+            laid = M.lay_out(mf, pack.text(key), 0, 0)
+            self.assertEqual(laid.width, pv.menu_px, (key, laid.width, pv.menu_px))
+            self.assertTrue(laid.placed)
+            ends = max(p.x + p.letter.drawn for p in laid.placed)
+            self.assertLessEqual(ends, pv.menu_px + 1, key)
+
+    def test_a_windows_edges_are_two_pixels_with_mitred_corners(self):
+        """Draw_AllocColorRect's bars as the game's frames show them (the help window, measured): the top
+        bar rows y and y+1, the second a pixel in at each end; the left bar from the second row down; the
+        added bars at the window colour (side ones at half), the bottom and right ones taken off."""
+        from translator import menulook as M
+        bars = M.bevel(8, 12, 300, 20)
+        (top, rgb_top, s_top), (left, rgb_left, s_left), (right, _, s_right), (bottom, _, s_bottom) = bars
+        self.assertEqual((s_top, s_left, s_right, s_bottom), (1, 1, -1, -1))
+        self.assertEqual((rgb_top, rgb_left), ((0x40, 0x40, 0x40), (0x20, 0x20, 0x20)))
+        rows = {}
+        for x, y in top:
+            rows.setdefault(y, []).append(x)
+        self.assertEqual({y: (min(xs), max(xs), len(xs)) for y, xs in rows.items()},
+                         {12: (8, 307, 300), 13: (9, 306, 298)})
+        self.assertEqual({x for x, _ in left}, {8, 9})
+        self.assertNotIn((8, 12), left)
+        self.assertIn((8, 13), left)
+        self.assertTrue(all(30 <= y <= 31 for _, y in bottom) and all(306 <= x <= 307 for x, _ in right))
+
+    def test_the_scene_is_darkened_and_the_bars_drawn_into_it(self):
+        from translator import menulook as M
+        grey = bytes([132, 132, 132]) * (M.W * M.H)          # 5-bit 16 everywhere
+        screen = M.Screen(grey)
+        self.assertEqual(screen.v[0], 8)
+        for pixels, rgb, sign in M.bevel(8, 12, 300, 20):
+            screen.blend(pixels, rgb, sign)
+        at = lambda x, y: screen.v[(y * M.W + x) * 3]
+        self.assertEqual((at(100, 12), at(8, 20), at(100, 31), at(307, 20), at(100, 20)), (16, 12, 0, 4, 8))
 
 
 class PictureDiscTest(unittest.TestCase):

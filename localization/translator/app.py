@@ -23,7 +23,7 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import artwork as A, gamelook as GL, project as P
+from . import artwork as A, gamelook as GL, menulook as ML, project as P
 
 SETTINGS = Path.home() / ".pe-translator.json"
 SCALE = 2                                    # the preview: the game's pixels, twice the size,
@@ -128,6 +128,7 @@ class App:
         self.shown: dict[str, list[int]] | None = None  # dialogue key -> rooms that open it
         self.disc_worker = Worker()                     # reading the room scripts takes seconds
         self.fonts: dict[bytes, GL.Font] = {}
+        self.menu_disc: ML.MenuDisc | None = None       # the menus' look: their page, metrics, windows
         self.room_pick = (0, 0)                         # which room and view is behind the text
         self.look_photo = None
         self.disc_error: str | None = None
@@ -506,8 +507,9 @@ class App:
         try:
             self.picture_disc, self.disc_error = A.Disc(path), None
             self.look_disc = GL.DiscLook(path)
+            self.menu_disc = ML.MenuDisc(path)
         except (A.NotTheDisc, GL.NotTheDisc) as e:
-            self.picture_disc, self.look_disc, self.disc_error = None, None, str(e)
+            self.picture_disc, self.look_disc, self.menu_disc, self.disc_error = None, None, None, str(e)
             return str(e)
         if remember:
             self.settings["disc"] = str(path)
@@ -1017,8 +1019,10 @@ class App:
         """The page as the game draws it (gamelook.py) over the room's picture. False when it can't
         be drawn that way: the computer font is drawn instead."""
         pv, disc, c, s = self.preview, self.look_disc, self.canvas, self.scale
-        if pv is None or not pv.dialogue or disc is None or not pv.pack or not pv.key.startswith("dlg/") \
-                or not GL.can_draw_here():
+        if pv is None or disc is None or not pv.pack or not GL.can_draw_here():
+            return False
+        menu = not pv.dialogue and self.menu_disc is not None and ML.can_draw(pv.key)
+        if not menu and (not pv.dialogue or not pv.key.startswith("dlg/")):
             return False
         pack = GL.Pack.read(pv.pack)
         if GL.can_draw(pack.lang):
@@ -1031,6 +1035,8 @@ class App:
             font = self.fonts[pv.pack] = GL.Font(disc, pack)
             if len(self.fonts) > 8:
                 self.fonts.pop(next(iter(self.fonts)))
+        if menu:
+            return self.draw_menu_game(font, raw)
         box = pv.boxes[0] if pv.boxes else P.Box("default", 20, 174, None, None, None, False)
         x, y = (GL.LINE_X, GL.LINE_Y) if box.name == "default" else (box.x, box.y)
         look = GL.lay_out(font, raw, GL.name_bytes(pack, pv.shown_name), x, y,
@@ -1056,6 +1062,34 @@ class App:
         # From a little of the scene above the text down, as much as the preview shows (less at the
         # bottom of the screen: the game's screen ends there).
         top = max(0, y - BOX_AT - 40)
+        self.show_game_picture(rgb, top, f"Screen {self.screen + 1} of {len(screens)}   •   {where}",
+                               "The game's own letters, from your disc." +
+                               (" Not drawn as the game does: " + "; ".join(look.notes) + "." if look.notes else ""))
+        self.prev_screen.configure(state="normal" if self.screen > 0 else "disabled")
+        self.next_screen.configure(state="normal" if self.screen + 1 < len(screens) else "disabled")
+        return True
+
+    def draw_menu_game(self, font: GL.Font, raw: bytes) -> bool:
+        """A menu line as the menus draw it (menulook.py): its window over a room picture darkened as
+        the menus darken the scene."""
+        pv, disc = self.preview, self.look_disc
+        mf = ML.MenuFont(font, self.menu_disc)
+        views = disc.views(ML.MENU_ROOM)
+        view = self.room_pick[1] % len(views) if views else 0
+        look = ML.look(mf, raw, pv.key, views[view] if views else None)
+        if look is None:
+            return False
+        top = max(0, min(GL.H - VIEW, look.top))
+        self.show_game_picture(look.rgb, top, f"{look.where}   •   {pv.menu_px} px as the menus measure it"
+                               + ("   •   click the picture for another view" if len(views) > 1 else ""),
+                               "The game's own letters and window, from your disc; behind them a room, darkened "
+                               "as the menus darken the scene." +
+                               (" Not drawn as the game does: " + "; ".join(look.notes) + "." if look.notes else ""))
+        return True
+
+    def show_game_picture(self, rgb: bytes, top: int, note: str, about: str) -> None:
+        """The game's screen from row `top` down, as much as the preview shows, under two notes."""
+        c, s = self.canvas, self.scale
         rows = min(GL.H, top + VIEW) - top
         from PIL import Image
         import base64
@@ -1065,19 +1099,14 @@ class App:
         data = io.BytesIO()
         picture.save(data, "PNG")
         self.look_photo = tk.PhotoImage(master=c, data=base64.b64encode(data.getvalue()).decode("ascii"), format="png")
-        note = f"Screen {self.screen + 1} of {len(screens)}   •   {where}"
         shown = c.winfo_width() if c.winfo_ismapped() else int(c.cget("width"))
         wrap = max(100, shown - 16)
         first = c.create_text(12, 8, anchor="nw", fill="#b8c4d0", font=self.font, text=note, width=wrap)
         second = c.create_text(12, c.bbox(first)[3] + 2, anchor="nw", fill="#8090a0", font=self.font, width=wrap,
-                               text="The game's own letters, from your disc." +
-                                    (" Not drawn as the game does: " + "; ".join(look.notes) + "." if look.notes else ""))
+                               text=about)
         y0 = c.bbox(second)[3] + 6
         c.create_image(0, y0, anchor="nw", image=self.look_photo)
         c.configure(height=round(y0 + rows * s))
-        self.prev_screen.configure(state="normal" if self.screen > 0 else "disabled")
-        self.next_screen.configure(state="normal" if self.screen + 1 < len(screens) else "disabled")
-        return True
 
     def turn(self, by: int) -> None:
         if self.preview and self.preview.screens:

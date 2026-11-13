@@ -38,8 +38,11 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
      fan patch's own letters and Chinese characters), over the picture of the room that shows the
      line. That look reads the letters and rooms from your disc (the same disc as for Pictures; it
      is asked for the first time). Click the picture for the room's other views, or other rooms
-     that show the line. Not drawn that way yet: menus, item names and battle lines, right-to-left
-     languages, and the button icons in a few lines (the preview says so).
+     that show the line. The help line at the top of the menus (item descriptions and the menus'
+     hints) is drawn the same way: the menus' own window and letters, the clock at its right, over a
+     room darkened as the menus darken the scene, so you see where a long line runs under the clock.
+     Not drawn that way yet: the other menu places (item names, boxes and choices), battle lines,
+     right-to-left languages, and the button icons in a few lines (the preview says so).
    - **Dialogue MAP** is the city map: the place title shown when Aya arrives somewhere
      (lines 1-10) and the map's narration (11-14). Type only the words, with `{br}` between lines:
      the tool centres each line and puts a title on the box's third line, as the English has them.
@@ -154,7 +157,9 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   card's tiles and colour rows read from its room, as `gamelook.room_views` draws them; a Tutorial
   screen's layers read the same way and drawn in the game's order, by depth, the shadow subtracted;
   Game Over and the menu words found through the game's glyph table on their page of words; Game
-  Over drawn darker and dithered, the menu words in their own colours and at half).
+  Over drawn darker and dithered, the menu words in their own colours and at half). `menulook.py`:
+  the "As in the game" preview of the menus' lines (their letters, windows and the darkened scene,
+  followed from the C code; the window places from the boot program's own table on the disc).
 - `package.py`: builds the download for the system it runs on and checks the built program:
   it starts it, types a line, saves and quits (`--report`), compares the file with what the source
   tool saves, and searches everything inside for game text. Build tools are pinned in
@@ -182,4 +187,7 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   (Disc 1, part menus' route); part `translator-place-title`
   (CTest `original-game-translator-place-title`) types a place title as words and checks it on the
   city map (Disc 1, part translator-map's route, Central Park chosen); part `translator-look` (CTest
-  `original-game-translator-look`) checks the game look against the game's own frames.
+  `original-game-translator-look`) checks the game look against the game's own frames; part
+  `translator-menu-look` (CTest `original-game-translator-menu-look`) checks the menus' help line the
+  same way, with the game's own text and with four lines the Translator saved (Disc 1, part menus'
+  route on into the item list).

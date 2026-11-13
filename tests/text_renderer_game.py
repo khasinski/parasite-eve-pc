@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -205,6 +205,14 @@ Checks, each from pe_mods.log and frame dumps:
              pixel, the screen on a copy of Disc 1 with the file's pieces written in, every ink pixel of the
              words the Translator's in-game picture of them, and with the file's text alone the
              Translator's English one. Disc 1 only: PE.IMG, and so the picture, is the same on Disc 2.
+  translator-menu-look  The Translator's "As in the game" preview of the menus' help line (translator/menulook.py)
+             against the game's own frames: a file saved by the Translator gives four help lines Spanish words
+             (the item menu's hint and three descriptions, one with an accented letter); on the menus part's
+             route on into the item list, the help window at the top of each frame (its edges over the
+             darkened scene, its letters, the clock's frame; the clock's digits show the play time, so they
+             are left out) must be, pixel for pixel, the Translator's drawing of that line over the field
+             frame from before the menu opened; and the same with the game's own text and the English pack.
+             Disc 1 only.
   translator-menu-words  The menus' words redrawn in the Translator: eight of the words the status menu shows
              (Bonus Point, Offense, Level, Next Level, Equipment, Active Time, and the SYS and SORT icons)
              saved from Disc 1 as PNGs by the tool, wiped and redrawn as pale bars over a red line (fitted to
@@ -1969,6 +1977,90 @@ def translator_menu_words(game, discs, out, localization):
     return 0
 
 
+# ---- Part translator-menu-look: the help line as the menus draw it ----
+
+# MENU_STEPS to the menu (Triangle in front of Carnegie Hall), then Cross into the item list and down it: the
+# help line at the top shows the hint, then each item's description (found with the English run: these are the
+# lines shown at each frame). Every key that holds the same English is given the same words, so whichever of
+# them the game picks shows them.
+MENU_LOOK_STEPS = presses([(FIRST_BOX, CROSS, 'first'), (20630, CROSS, 'box2'), (22140, CROSS, 'profile'),
+                           (22450, CROSS, 'grid'), (22760, START, 'typed'), (23070, START, 'end')]
+                          + [(23380 + k, CROSS, f'box{3 + n}') for n, k in enumerate((0, 1510, 3020, 4530, 6660))]
+                          + [(31550, TRIANGLE, 'field'), (31860, CROSS, 'status'), (31980, DOWN, 'handgun'),
+                             (32100, DOWN, 'melee'), (32220, 0, 'medicine')])
+MENU_LOOK_LINES = {'status': 'Use Item', 'handgun': 'Handgun', 'melee': 'Melee Weapon', 'medicine': 'Restores 45 HP'}
+MENU_LOOK_WORDS = {'Use Item': 'Usar un objeto', 'Handgun': 'Pistola corta', 'Melee Weapon': 'Arma de mano (más)',
+                   'Restores 45 HP': 'Recupera 45 PV de Aya'}
+
+
+def translator_menu_look(game, discs, out, localization):
+    """Part translator-menu-look (see the module notes). Disc 1 only (the user's choice)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        print('SKIP translator menu look: needs Pillow (the game look draws with it)')
+        return 77
+    import pelang
+    from translator import gamelook as gl, menulook as ml, project as tp
+    english, _, _ = make_english_pack(discs, out, localization)
+    the_game = tp.Game()
+    texts, _ = tp.read_english(english, the_game)
+    keys = {line: sorted(k for k, t in texts.items() if t == line and ml.can_draw(k)) for line in MENU_LOOK_WORDS}
+    check(all(keys.values()), f'no help line holds {[w for w, k in keys.items() if not k]}')
+    tr = tp.Translation(the_game, 'es', 'Menu look test')
+    for line, words in MENU_LOOK_WORDS.items():
+        for key in keys[line]:
+            tr.set_text(key, words)
+    path = out / 'translator-menu-look.pelang'
+    saved = tr.save(path)
+    check(not saved.left_out and not saved.whole, f'the Translator left lines out: {saved.left_out} {saved.whole}')
+    mine = gl.Pack.read(pelang.pack_bytes(path))
+    held = tp.read_pack_text(mine.data, the_game).texts
+    for line, words in MENU_LOOK_WORDS.items():
+        check(all(held.get(k) == words for k in keys[line]), f'the saved file does not hold "{words}" for {keys[line]}')
+    with zipfile.ZipFile(english) if zipfile.is_zipfile(english) else open(english, 'rb') as f:
+        english_pack = gl.Pack.read(f.read(pelang.BUNDLE_TEXT) if isinstance(f, zipfile.ZipFile) else f.read())
+    look_disc, menu_disc = gl.DiscLook(discs[0]), ml.MenuDisc(discs[0])
+    x, y, w, h = menu_disc.windows[ml.HELP_WINDOW]
+    pack = ('es', 'Menu look test', None, path)
+    print(f'translator menu look: the Translator saved {sum(len(k) for k in keys.values())} help lines; '
+          f'the help window is {w} x {h} at {x},{y}')
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-menu-look-{which}', MENU_LOOK_STEPS,
+                                   pack=p, pad=NEW_GAME)
+                for which, p in (('pack', pack), ('english', None))}
+        works = {which: run.result() for which, run in runs.items()}
+    check("text: Menu look test (es)'s stretches in use" in mods_log(works['pack']),
+          f"none of the file's text drew: {works['pack']}")
+    for which, use in (('english', english_pack), ('pack', mine)):
+        mf = ml.MenuFont(gl.Font(look_disc, use), menu_disc)
+        _, _, field = frame(works[which], 'field')
+        for label, line in MENU_LOOK_LINES.items():
+            key = keys[line][0]
+            look = ml.look(mf, use.text(key), key, field)
+            width, _, rgb = frame(works[which], label)
+
+            def mine_at(px, py):
+                return look.rgb[(py * gl.W + px) * 3:(py * gl.W + px) * 3 + 3]
+
+            def frame_at(px, py):
+                return rgb[(py * width + px) * 3:(py * width + px) * 3 + 3]
+
+            wrong = [(px, py) for py in range(y - 2, y + h) for px in range(gl.W)
+                     if not any(bx <= px < bx + bw and by <= py < by + bh for bx, by, bw, bh in look.digits)
+                     and mine_at(px, py) != frame_at(px, py)]
+            check(not wrong, f"{which} {label}: the help line is not the Translator's menu look at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {works[which]}')
+            words = MENU_LOOK_WORDS[line] if which == 'pack' else line
+            print(f'PASS translator menu look, {which} {label} ("{words}", {key}): the help window, its edges, '
+                  f"letters and clock frame are the Translator's, pixel for pixel ({len(look.text.placed)} letters, "
+                  f'{look.text.width} px)')
+    return 0
+
+
 def look_is_the_frame(work, label, look, font, raw, name, gl):
     """The Translator's game look (translator/gamelook.py) of `raw` against the game's frame: every
     pixel it draws is the frame's, and every pixel of the frame's text area in the letters' own
@@ -2628,7 +2720,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
                               ('translator-battle', translator_battle),
                               ('translator-cards', translator_cards), ('translator-tutorial', translator_tutorial),
                               ('translator-game-over', translator_game_over),
-                              ('translator-menu-words', translator_menu_words), ('translator-look', translator_look)):
+                              ('translator-menu-words', translator_menu_words),
+                              ('translator-menu-look', translator_menu_look), ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

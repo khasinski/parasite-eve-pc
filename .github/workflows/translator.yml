@@ -72,7 +72,7 @@ jobs:
         shell: bash
         run: |
           run=(); [ "$RUNNER_OS" = Linux ] && run=(xvfb-run -a)
-          "${run[@]}" python -I localization/tests/test_translator.py WindowTest DownloadCheckTest PictureWindowTest PictureFitTest GameLookWindowTest PictureRuleTest GameLookRuleTest CityMapRuleTest
+          "${run[@]}" python -I localization/tests/test_translator.py WindowTest DownloadCheckTest PictureWindowTest PictureFitTest GameLookWindowTest PictureRuleTest GameLookRuleTest MenuLookRuleTest CityMapRuleTest
       # Also when the window tests failed: the built program's window picture shows what they saw.
       - name: Build the download and check the built program
         if: success() || failure()

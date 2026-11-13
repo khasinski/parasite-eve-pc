@@ -630,7 +630,8 @@ def check_row(game: Game, key: str, text: str, lang: str, name: str = "Preview",
             name_px = layout.NAME_WIDTH
         if not key.startswith(("dlg/", "battle/")):
             px = menu.width(raw, game.metrics) if game.metrics is not None and key not in namelib.KEYS else None
-            return Preview(False, menu_px=px, final=final, name_px=name_px)
+            return Preview(False, menu_px=px, final=final, name_px=name_px, key=key, pack=pack,
+                           shown_name=shown_name)
         if key.startswith("dlg/"):
             raw = split_page_end(raw)[0]
         screens = _screens(raw, forms, shown_name, name_px)
