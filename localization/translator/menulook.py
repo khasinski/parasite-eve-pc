@@ -506,6 +506,7 @@ class Look:
     text: Text | None = None
     top: int = 0                                 # the first row worth showing
     inked: set = field(default_factory=set)      # pixels drawn over (nothing of the scene shows)
+    focus: tuple | None = None                   # rows (first, past the last) the preview should keep in view
 
 
 def context_of(key: str) -> str | None:
@@ -605,13 +606,30 @@ def count_sprite(kind: int) -> int | None:
     return None if kind < 0x13 else kind + 0xC
 
 
-def item_cells(menu: MenuDisc):
-    """(window x, y, w, h, the first cell's x, y, cell width, row height) for the start list."""
-    x, y, w, h = menu.windows[ITEM_WINDOW]
-    gx, gy, columns, rows, _, cell_w, row_h, _ = menu.grids[ITEM_GRID]
-    shown = min(rows, (ITEM_SLOTS + columns - 1) // columns)       # Draw_SetPrimCallback
+def grid_cells(menu: MenuDisc, window: int, grid: int, count: int):
+    """(window x, y, w, h, the first cell's x, y, cell width, row height, columns) for a list of
+    `count` cells: Draw_SetPrimCallback shortens the window to the rows the list fills (up to the
+    grid's own rows); MenuWidget_DrawListRow draws each cell 2 px in from its corner."""
+    x, y, w, h = menu.windows[window]
+    gx, gy, columns, rows, _, cell_w, row_h, _ = menu.grids[grid]
+    shown = min(rows, (count + columns - 1) // columns)
     h += row_h * (shown - rows)
     return x, y, w, h, x + gx + 2, y + gy + 2, cell_w, row_h, columns
+
+
+def item_cells(menu: MenuDisc):
+    """grid_cells for the start list (Aya's 10 slots)."""
+    return grid_cells(menu, ITEM_WINDOW, ITEM_GRID, ITEM_SLOTS)
+
+
+def draw_cursor(screen: Screen, x: int, y: int, w: int, h: int, pulse: int | None = PULSE, blink: int = 0) -> None:
+    """A list's cursor on the cell at (x, y): the tile added whose grey pulses, then the window's bars
+    (Draw_AllocColorTriGradient; `blink` 1 while the bars blink). The list puts it in after the cells,
+    so the GPU draws it first, under them."""
+    if pulse is not None:
+        screen.blend(tile_add(x, y, w, h), (pulse, pulse, pulse), 1)
+    for pixels, rgb, sign in bevel(x, y, w, h, mode=blink):
+        screen.blend(pixels, rgb, sign)
 
 
 def item_list(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
@@ -637,11 +655,8 @@ def item_list(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seco
         screen.blend(pixels, rgb, sign)
     # Drawn as the GPU takes the list: the last thing the game puts in is drawn first. The cursor goes in
     # after the cells (MenuWidget_DrawList), each cell's blue tile after the cell.
-    cx, cy = x0 - 2 + cell_w * (cursor % columns), y0 - 2 + row_h * (cursor // columns)
-    if pulse is not None:
-        screen.blend(tile_add(cx, cy, cell_w, row_h), (pulse, pulse, pulse), 1)
-    for pixels, rgb, sign in bevel(cx, cy, cell_w, row_h, mode=blink):
-        screen.blend(pixels, rgb, sign)
+    draw_cursor(screen, x0 - 2 + cell_w * (cursor % columns), y0 - 2 + row_h * (cursor // columns),
+                cell_w, row_h, pulse, blink)
     text = None
     for s in reversed(range(len(slots))):
         i, equipped = slots[s]
@@ -685,7 +700,72 @@ def _three(value: int) -> list[int]:
     return out
 
 
-DRAWN = {"help line": help_line, "item list": item_list}
+# The Parasite Energy list (Menu_CreateSkillActionScreen, skills.c): window 0x08 holding grid 0x08, two
+# columns of 100 x 16 cells, the PEs Aya has learned in their own order (Item_PackParasiteSpells: bit n
+# of her PE flags is PE n, its name table 8's entry n + 0xEB, item record n + 235). Each cell is only the
+# name, from the cell's start (Menu_DrawModNameItem), dimmed when the PE can't be used now
+# (Menu_GetItemSlotAvailability -> Menu_CheckItemAffordable). The cursor as the item list's. The PE bar
+# (Draw_AllocColorQuad) is in the HP box, outside the window: not drawn (the user's choice).
+PE_WINDOW = PE_GRID = 0x08
+PE_FIRST = 235                       # item/235 = PE 0 (Heal 1) .. item/254 = PE 19 (Liberate)
+PE_COUNT = 20
+# The PEs a game teaches: 0-12 (Heal 1 .. Preraise), 18 Full Recover, 19 Liberate. 13-17 (Mito14-18)
+# are names no game ever gives Aya; one of them is shown in its own place only while it is translated.
+LEARNABLE = tuple(range(13)) + (18, 19)
+HEALS = (0, 1, 2, 18)                # Menu_CheckItemAffordable: not while HP is full
+
+
+def pe_key(p: int) -> str:
+    return f"item/{PE_FIRST + p:03d}"
+
+
+def pe_usable(rec: bytes, p: int, hurt: bool = True) -> bool:
+    """Whether the field menu draws this PE's name undimmed (Menu_CheckItemAffordable outside battle,
+    with PE enough for it): the record's flag bit 0 (Heal 1-3 and Full Recover), and for the heals,
+    Aya hurt."""
+    return bool(rec[5] & 1) and (hurt or p not in HEALS)
+
+
+def pe_list(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
+            pulse: int | None = PULSE, blink: int = 0, dim: bool = True, learned=LEARNABLE,
+            hurt: bool = True) -> Look:
+    """The PE list with every PE a game teaches (or `learned`) and this one under the cursor, as the
+    field menu draws it with Aya hurt (or not: `hurt`); the help line above it with the PE's
+    description. Names are the pack's; a name the pack doesn't hold is left out."""
+    menu, pack = mf.menu, mf.pack
+    p = int(key.split("/")[1]) - PE_FIRST
+    shown = sorted(set(learned) | {p})
+    cursor = shown.index(p)
+    screen = Screen(background, dim)
+    notes = set()
+    description = pack.text(f"desc/{PE_FIRST + p:03d}")
+    _, digits = draw_help(screen, mf, description, f"desc/{PE_FIRST + p:03d}", seconds)
+    if description is None:
+        notes.add("its description is not in the file")
+    wx, wy, ww, wh, x0, y0, cell_w, row_h, columns = grid_cells(menu, PE_WINDOW, PE_GRID, len(shown))
+    for pixels, rgb, sign in bevel(wx, wy, ww, wh):
+        screen.blend(pixels, rgb, sign)
+    cx, cy = x0 - 2 + cell_w * (cursor % columns), y0 - 2 + row_h * (cursor // columns)
+    draw_cursor(screen, cx, cy, cell_w, row_h, pulse, blink)
+    text = None
+    for s in reversed(range(len(shown))):
+        q = shown[s]
+        name = raw if q == p else pack.text(pe_key(q))
+        if name is None:
+            notes.add("a name the file doesn't hold is left out")
+            continue
+        colour = TEXT_COLOUR if pe_usable(menu.items[PE_FIRST + q], q, hurt) else DIM_COLOUR
+        laid = lay_out(mf, name, x0 + cell_w * (s % columns), y0 + row_h * (s // columns), colour)
+        draw_text(screen, mf, laid)
+        if q == p:
+            text = laid
+            notes |= laid.notes
+    where = "the PE list: every PE a game teaches, this one under the cursor"
+    return Look(screen.rgb(), where, sorted(notes), digits, text, top=0, inked=screen.inked,
+                focus=(cy, cy + row_h))
+
+
+DRAWN = {"help line": help_line, "item list": item_list, "parasite energy list": pe_list}
 
 
 def can_draw(key: str) -> bool:
@@ -694,11 +774,15 @@ def can_draw(key: str) -> bool:
 
 def context_keys(key: str) -> list[str]:
     """The other rows the game look of `key` shows: for an item's name, the other first items' names
-    and the item's description (the help line above the list)."""
-    if context_of(key) != "item list":
-        return []
-    k = int(key.split("/")[1])
-    return [item_key(i) for i, _ in START_ITEMS if i != k] + [f"desc/{k:03d}"]
+    and the item's description (the help line above the list); for a PE's, the other PEs a game
+    teaches and the PE's description."""
+    where = context_of(key)
+    k = int(key.split("/")[1]) if where in ("item list", "parasite energy list") else 0
+    if where == "item list":
+        return [item_key(i) for i, _ in START_ITEMS if i != k] + [f"desc/{k:03d}"]
+    if where == "parasite energy list":
+        return [pe_key(q) for q in LEARNABLE if PE_FIRST + q != k] + [f"desc/{k:03d}"]
+    return []
 
 
 def look(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0) -> Look | None:

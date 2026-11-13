@@ -218,6 +218,13 @@ Checks, each from pe_mods.log and frame dumps:
              Translator's item list. The menus freeze the room while the list is up, so the scene behind
              one frame's list is another frame's less what the Translator adds there (that frame's cursor
              cell left out); the cursor's grey follows the frame counter and is read from the frame.
+             The PE list the same way: Continue from the save editor's sample save D (Day 5, ten PEs), to
+             the N.Y.P.D. lobby, Aya's HP put below full by the game's test switch, into the PE list with
+             the cursor on Heal 1, Heal 2 and Detox; the file names the ten PEs and those three's
+             descriptions in Spanish. The list's window (names, the heals bright and the others dimmed, the
+             cursor) and the help window above it must be the Translator's, pixel for pixel. (Behind the
+             help window: the lobby frame from before the menu, darkened as the frame's own free corner
+             is. The menus leave that room at about two thirds, not at the half of Carnegie Hall.)
              Disc 1 only.
   translator-menu-words  The menus' words redrawn in the Translator: eight of the words the status menu shows
              (Bonus Point, Offense, Level, Next Level, Equipment, Active Time, and the SYS and SORT icons)
@@ -251,7 +258,7 @@ import sys
 import tempfile
 import typing
 
-SELECT, START, UP, DOWN, TRIANGLE, CROSS = 1, 8, 16, 64, 4096, 16384
+SELECT, START, UP, RIGHT, DOWN, TRIANGLE, CROSS = 1, 8, 16, 32, 64, 4096, 16384
 NEW_GAME = [(10000, START), (10010, 0), (11000, UP), (11010, 0), (11500, CROSS), (11510, 0)]
 FIRST_BOX = 18000          # dlg/M001/009 "Man: What's wrong?..." is on screen and waits
 NAME_BOX = 19000           # dlg/M001/010 "{name}: ...I dunno..." after one Cross
@@ -2001,6 +2008,26 @@ MENU_LOOK_WORDS = {'Use Item': 'Usar un objeto', 'Handgun': 'Pistola corta', 'Me
 MENU_LOOK_ITEMS = {'M84F': 'M84F corta', 'N Vest': 'Chaleco N', 'Club 1': 'Porra 1', 'Ammo Crate': 'Caja balas',
                    'Medicine 1': 'Medicina 1'}
 MENU_LOOK_CURSOR = {'handgun': 'M84F', 'melee': 'Club 1', 'medicine': 'Medicine 1'}
+# The PE list (translator/menulook.py pe_list), on Disc 1: Continue from the save editor's sample save D (Day 5;
+# Aya knows the ten PEs of PE_LOOK_LEARNED), Cross on the map's N.Y.P.D. #17 and again to go there; in the
+# lobby the game's own test switch puts Aya's HP at 300 of 335 (hurt: the field menu draws the heals' names
+# bright), then Triangle, Down to the PE icon, Cross into the list: the cursor on Heal 1, Heal 2, then Detox.
+def pe_look_steps():
+    return map_steps()[:-1] + presses([(MAP_AT, CROSS, 'map'), (17400, CROSS, 'go'), (18100, TRIANGLE, 'lobby'),
+                                       (18410, DOWN, 'pe-menu'), (18530, CROSS, 'pe-icon'),
+                                       (18850, RIGHT, 'heal1'), (18970, DOWN, 'heal2'), (19090, 0, 'detox')])
+
+
+PE_LOOK_HP = '18050:335:300'
+PE_LOOK_LEARNED = (0, 1, 2, 3, 5, 6, 7, 8, 9, 10)
+PE_LOOK_FREE = (0, 180, 130, 224)    # the lobby's floor left of Aya: no window, tab or HP box over it
+PE_LOOK_NAMES = {'Heal 1': 'Curación 1', 'Heal 2': 'Curación 2', 'Heal 3': 'Curación 3', 'Detox': 'Antídoto',
+                 'Barrier': 'Barrera', 'Energy Shot': 'Disparo PE', 'Scan': 'Analizar', 'Slow': 'Lentitud',
+                 'Haste': 'Prisa', 'Confuse': 'Confundir'}
+PE_LOOK_CURSOR = {'heal1': 'Heal 1', 'heal2': 'Heal 2', 'detox': 'Detox'}
+PE_LOOK_LINES = {'heal1': 'Restores 30 HP', 'heal2': 'Restores 60 HP', 'detox': 'Removes Effects of Poison'}
+PE_LOOK_WORDS = {'Restores 30 HP': 'Recupera 30 PV', 'Restores 60 HP': 'Recupera 60 PV',
+                 'Removes Effects of Poison': 'Quita el veneno'}
 
 
 def translator_menu_look(game, discs, out, localization):
@@ -2025,21 +2052,35 @@ def translator_menu_look(game, discs, out, localization):
                  for line in MENU_LOOK_ITEMS}
     check(sorted(int(k[0][5:]) for k in item_keys.values() if len(k) == 1) == sorted(i for i, _ in ml.START_ITEMS),
           f"the first items' names are not one row each: {item_keys}")
+    pe_keys = {line: sorted(k for k, t in texts.items() if t == line and ml.context_of(k) == 'parasite energy list')
+               for line in PE_LOOK_NAMES}
+    check(sorted(int(k[0][5:]) - ml.PE_FIRST for k in pe_keys.values() if len(k) == 1) == list(PE_LOOK_LEARNED),
+          f"the Day 5 PEs' names are not one row each: {pe_keys}")
+    check(struct.unpack_from('<I', MAP_SAVE.read_bytes(), 0x144)[0] == sum(1 << p for p in PE_LOOK_LEARNED),
+          f'sample save D does not hold the PEs {PE_LOOK_LEARNED}')
+    keys.update({line: sorted(k for k, t in texts.items() if t == line and ml.context_of(k) == 'help line')
+                 for line in PE_LOOK_WORDS})
+    check(all(f'desc/{int(pe_keys[PE_LOOK_CURSOR[label]][0][5:]):03d}' in keys[line]
+              for label, line in PE_LOOK_LINES.items()), f"the PEs' descriptions are not {PE_LOOK_LINES}")
     tr = tp.Translation(the_game, 'es', 'Menu look test')
-    for line, words in MENU_LOOK_WORDS.items():
+    for line, words in (MENU_LOOK_WORDS | PE_LOOK_WORDS).items():
         for key in keys[line]:
             tr.set_text(key, words)
     for line, words in MENU_LOOK_ITEMS.items():
         tr.set_text(item_keys[line][0], words)
+    for line, words in PE_LOOK_NAMES.items():
+        tr.set_text(pe_keys[line][0], words)
     path = out / 'translator-menu-look.pelang'
     saved = tr.save(path)
     check(not saved.left_out and not saved.whole, f'the Translator left lines out: {saved.left_out} {saved.whole}')
     mine = gl.Pack.read(pelang.pack_bytes(path))
     held = tp.read_pack_text(mine.data, the_game).texts
-    for line, words in MENU_LOOK_WORDS.items():
+    for line, words in (MENU_LOOK_WORDS | PE_LOOK_WORDS).items():
         check(all(held.get(k) == words for k in keys[line]), f'the saved file does not hold "{words}" for {keys[line]}')
     for line, words in MENU_LOOK_ITEMS.items():
         check(held.get(item_keys[line][0]) == words, f'the saved file does not hold "{words}" for {item_keys[line]}')
+    for line, words in PE_LOOK_NAMES.items():
+        check(held.get(pe_keys[line][0]) == words, f'the saved file does not hold "{words}" for {pe_keys[line]}')
     with zipfile.ZipFile(english) if zipfile.is_zipfile(english) else open(english, 'rb') as f:
         english_pack = gl.Pack.read(f.read(pelang.BUNDLE_TEXT) if isinstance(f, zipfile.ZipFile) else f.read())
     look_disc, menu_disc = gl.DiscLook(discs[0]), ml.MenuDisc(discs[0])
@@ -2047,20 +2088,38 @@ def translator_menu_look(game, discs, out, localization):
     pack = ('es', 'Menu look test', None, path)
     print(f'translator menu look: the Translator saved {sum(len(k) for k in keys.values())} help lines; '
           f'the help window is {w} x {h} at {x},{y}')
+    check(MAP_SAVE.is_file(), f'no sample save {MAP_SAVE}')
     with ThreadPoolExecutor(max_workers=2) as pool:
         runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-menu-look-{which}', MENU_LOOK_STEPS,
                                    pack=p, pad=NEW_GAME)
                 for which, p in (('pack', pack), ('english', None))}
+        pe_runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-pe-look-{which}', pe_look_steps(),
+                                      pack=p, pad=CONTINUE, card=MAP_SAVE.read_bytes(), hp=PE_LOOK_HP)
+                   for which, p in (('pack', pack), ('english', None))}
         works = {which: run.result() for which, run in runs.items()}
-    check("text: Menu look test (es)'s stretches in use" in mods_log(works['pack']),
-          f"none of the file's text drew: {works['pack']}")
+        pe_works = {which: run.result() for which, run in pe_runs.items()}
+    for made in (works, pe_works):
+        check("text: Menu look test (es)'s stretches in use" in mods_log(made['pack']),
+              f"none of the file's text drew: {made['pack']}")
+    # The help line, over the scene as it was when Triangle was pressed: 'field' at half, as the Translator
+    # darkens its room; the lobby (the PE list) as much darker as that frame's own free corner is.
+    helped = [(works, 'field', label, line, keys[line][0], MENU_LOOK_WORDS) for label, line in MENU_LOOK_LINES.items()]
+    helped += [(pe_works, 'lobby', label, line, f'desc/{int(pe_keys[PE_LOOK_CURSOR[label]][0][5:]):03d}', PE_LOOK_WORDS)
+               for label, line in PE_LOOK_LINES.items()]
     for which, use in (('english', english_pack), ('pack', mine)):
         mf = ml.MenuFont(gl.Font(look_disc, use), menu_disc)
-        _, _, field = frame(works[which], 'field')
-        for label, line in MENU_LOOK_LINES.items():
-            key = keys[line][0]
-            look = ml.look(mf, use.text(key), key, field)
-            width, _, rgb = frame(works[which], label)
+        for made, behind, label, line, key, said in helped:
+            work = made[which]
+            _, _, field = frame(work, behind)
+            width, _, rgb = frame(work, label)
+            if made is works:
+                look = ml.help_line(mf, use.text(key), key, field)
+            else:
+                dark = darkened_as(field, rgb, PE_LOOK_FREE, gl)
+                check(dark, f'{which} {label}: the scene outside the menu is not the lobby frame darkened: {work}')
+                screen = ml.Screen(dark, dim=False)
+                text, digits = ml.draw_help(screen, mf, use.text(key), key)
+                look = ml.Look(screen.rgb(), '', [], digits, text)
 
             def mine_at(px, py):
                 return look.rgb[(py * gl.W + px) * 3:(py * gl.W + px) * 3 + 3]
@@ -2072,8 +2131,8 @@ def translator_menu_look(game, discs, out, localization):
                      if not any(bx <= px < bx + bw and by <= py < by + bh for bx, by, bw, bh in look.digits)
                      and mine_at(px, py) != frame_at(px, py)]
             check(not wrong, f"{which} {label}: the help line is not the Translator's menu look at {wrong[:6]} "
-                             f'({len(wrong)} pixels): {works[which]}')
-            words = MENU_LOOK_WORDS[line] if which == 'pack' else line
+                             f'({len(wrong)} pixels): {work}')
+            words = said[line] if which == 'pack' else line
             print(f'PASS translator menu look, {which} {label} ("{words}", {key}): the help window, its edges, '
                   f"letters and clock frame are the Translator's, pixel for pixel ({len(look.text.placed)} letters, "
                   f'{look.text.width} px)')
@@ -2087,28 +2146,83 @@ def translator_menu_look(game, discs, out, localization):
             print(f'PASS translator menu look, {which} {label} (cursor on "{words}"): the item list window, its '
                   f"icons, names, count boxes, blue tiles and cursor are the Translator's, pixel for pixel "
                   f"(the cursor's grey {pulse:#x})")
+        for label, line in PE_LOOK_CURSOR.items():
+            wrong, pulse = pe_list_is_the_frame(pe_works[which], label, mf, use, pe_keys, ml, gl)
+            check(not wrong, f"{which} {label}: the PE list is not the Translator's at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {pe_works[which]}')
+            words = PE_LOOK_NAMES[line] if which == 'pack' else line
+            print(f'PASS translator menu look, {which} {label} (cursor on "{words}"): the PE list window, its '
+                  f"names (the heals bright with Aya hurt, the others dimmed) and cursor are the Translator's, "
+                  f"pixel for pixel (the cursor's grey {pulse:#x})")
     return 0
+
+
+def darkened_as(scene, shown, free, gl):
+    """The frame `scene` darkened as the frame `shown` has it in the box `free` (x0, y0, x1, y1; nothing of
+    the menu there): every colour part times n/128, rounded down, for the one n that box agrees with
+    (the largest, when several fit its few colours). None when no n does."""
+    def v5(c):
+        return (c * 31 + 127) // 255
+
+    x0, y0, x1, y1 = free
+    pairs = {(v5(scene[k]), v5(shown[k])) for y in range(y0, y1) for x in range(x0, x1)
+             for k in range((y * gl.W + x) * 3, (y * gl.W + x) * 3 + 3)}
+    fits = [n for n in range(1, 129) if all(a * n >> 7 == b for a, b in pairs)]
+    if not fits or len({a for a, _ in pairs}) < 8:
+        return None
+    return bytes(((v5(c) * fits[-1] >> 7) * 255 + 15) // 31 for c in scene)
 
 
 def item_list_is_the_frame(work, label, mf, use, item_keys, ml, gl):
     """translator-menu-look: the Translator's item list (menulook.item_list, the cursor on this frame's
     item) against the frame, inside the list window: (the pixels that differ, the cursor's grey)."""
-    def v5(c):
-        return (c * 31 + 127) // 255
-
     def slot_of(key):
         return [i for i, _ in ml.START_ITEMS].index(int(key[5:]))
 
     key = item_keys[MENU_LOOK_CURSOR[label]][0]
     other = next(o for o in MENU_LOOK_CURSOR if o != label)
     okey = item_keys[MENU_LOOK_CURSOR[other]][0]
+
+    def draw(k, background, pulse):
+        return ml.item_list(mf, use.text(k), k, background, pulse=pulse, dim=False)
+
+    return list_is_the_frame(work, label, other, key, okey, draw, ml.item_cells(mf.menu), slot_of(key), slot_of(okey),
+                             gl)
+
+
+def pe_list_is_the_frame(work, label, mf, use, pe_keys, ml, gl):
+    """translator-menu-look: the Translator's PE list (menulook.pe_list with the PEs of the sample save,
+    Aya hurt, the cursor on this frame's PE) against the frame, inside the list window: (the pixels
+    that differ, the cursor's grey)."""
+    def slot_of(key):
+        return PE_LOOK_LEARNED.index(int(key[5:]) - ml.PE_FIRST)
+
+    key = pe_keys[PE_LOOK_CURSOR[label]][0]
+    other = next(o for o in PE_LOOK_CURSOR if o != label)
+    okey = pe_keys[PE_LOOK_CURSOR[other]][0]
+
+    def draw(k, background, pulse):
+        return ml.pe_list(mf, use.text(k), k, background, pulse=pulse, dim=False, learned=PE_LOOK_LEARNED)
+
+    cells = ml.grid_cells(mf.menu, ml.PE_WINDOW, ml.PE_GRID, len(PE_LOOK_LEARNED))
+    return list_is_the_frame(work, label, other, key, okey, draw, cells, slot_of(key), slot_of(okey), gl)
+
+
+def list_is_the_frame(work, label, other, key, okey, draw, cells, slot, oslot, gl):
+    """A menu list as the Translator draws it (draw(key, the scene behind, the cursor's grey)) against
+    the frame `label`, inside the list's window, the cursor on cell `slot`. The scene behind is worked
+    out from the frame `other` (the same list with the cursor on cell `oslot`). Returns (the pixels
+    that differ, the cursor's grey)."""
+    def v5(c):
+        return (c * 31 + 127) // 255
+
     _, _, here = frame(work, label)
     _, _, there = frame(work, other)
     # What the Translator adds to the scene in the other frame (its cursor's tile left out), drawn over a
     # flat 8 so nothing reaches 0 or 31 on the way; the scene there is that frame less it.
     grey = bytes([(8 * 255 + 15) // 31]) * (gl.W * gl.H * 3)
-    added = ml.item_list(mf, use.text(okey), okey, grey, pulse=None, dim=False)
-    wx, wy, ww, wh, x0, y0, cell_w, row_h, columns = ml.item_cells(mf.menu)
+    added = draw(okey, grey, None)
+    wx, wy, ww, wh, x0, y0, cell_w, row_h, columns = cells
     scene = bytearray(there)
     for y in range(wy, wy + wh):
         for x in range(wx, wx + ww):
@@ -2118,16 +2232,15 @@ def item_list_is_the_frame(work, label, mf, use, item_keys, ml, gl):
                 v = v5(there[k]) - (v5(added.rgb[k]) - 8)
                 check(0 <= v <= 31, f'{label}: no scene gives the frame {other} at {x},{y}')
                 scene[k] = (v * 255 + 15) // 31
-    slot, oslot = slot_of(key), slot_of(okey)
     cx, cy = x0 - 2 + cell_w * (slot % columns), y0 - 2 + row_h * (slot // columns)
     ox, oy = x0 - 2 + cell_w * (oslot % columns), y0 - 2 + row_h * (oslot // columns)
     # The cursor's grey: read where only the scene and the tile meet (inside the cell, nothing drawn on it).
-    plain = ml.item_list(mf, use.text(key), key, bytes(scene), pulse=0, dim=False)
+    plain = draw(key, bytes(scene), 0)
     px, py = next((x, y) for y in range(cy + 3, cy + row_h - 3) for x in range(cx + 3, cx + cell_w - 3)
                   if (x, y) not in plain.inked)
     k = (py * gl.W + px) * 3
     pulse = max(0, v5(here[k]) - v5(plain.rgb[k])) * 8
-    look = ml.item_list(mf, use.text(key), key, bytes(scene), pulse=pulse, dim=False)
+    look = draw(key, bytes(scene), pulse)
     wrong = [(x, y) for y in range(wy, wy + wh) for x in range(wx, wx + ww)
              if not (ox <= x < ox + cell_w and oy <= y < oy + row_h)
              and look.rgb[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] != here[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3]]

@@ -951,8 +951,8 @@ class App:
         lang, name = (tr.lang, tr.name) if tr and mine else ("en", "English")
         default = tr.default_name if tr and mine else ""
         rules = tr.rules_for(key, text) if tr and mine else P.Rules()
-        # The rows the game shows beside this one, for "As in the game" (the item list's other names and
-        # the item's description): the translator's words, else the game's own.
+        # The rows the game shows beside this one, for "As in the game" (the item list's or PE list's other
+        # names and the description): the translator's words, else the game's own.
         context = {k: (tr.text(k) if tr and mine else "") or self.english.get(k, "") for k in ML.context_keys(key)}
 
         def done(result, error):
@@ -1082,7 +1082,10 @@ class App:
         look = ML.look(mf, raw, pv.key, views[view] if views else None)
         if look is None:
             return False
-        top = max(0, min(GL.H - VIEW, look.top))
+        top = look.top
+        if look.focus and look.focus[1] + 4 > top + VIEW:      # keep the cursor's row in view (the PE list's last rows)
+            top = min(look.focus[0], look.focus[1] + 4 - VIEW)
+        top = max(0, min(GL.H - VIEW, top))
         self.show_game_picture(look.rgb, top, f"{look.where}   •   {pv.menu_px} px as the menus measure it"
                                + ("   •   click the picture for another view" if len(views) > 1 else ""),
                                "The game's own letters and window, from your disc; behind them a room, darkened "

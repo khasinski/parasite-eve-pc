@@ -477,6 +477,41 @@ class EnglishTest(unittest.TestCase):
         self.assertEqual(notes, {})
         print(f"\n{len(keys)} English item names drawn in the item list at the manifest's widths")
 
+    def test_the_pe_list_draws_every_pe_name_beside_the_others(self):
+        """The PE list's window and grid as the discs have them (the same on both), which PEs the field
+        menu can use (Heal 1-3 and Full Recover), and every English PE name drawn under the cursor at the
+        manifest's width, inside its 100 px cell, with the other PEs a game teaches and nothing left out."""
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        from translator import gamelook as G, menulook as M
+        menus = [M.MenuDisc(d) for d in self.discs]
+        for md in menus:
+            self.assertEqual(md.windows[M.PE_WINDOW], (28, 32, 204, 132))
+            self.assertEqual(md.grids[M.PE_GRID][:8], (2, 2, 2, 8, 8, 100, 16, 0))
+            self.assertEqual(M.grid_cells(md, M.PE_WINDOW, M.PE_GRID, len(M.LEARNABLE)),
+                             (28, 32, 204, 132, 32, 36, 100, 16, 2))
+            pes = md.items[M.PE_FIRST:M.PE_FIRST + M.PE_COUNT]
+            self.assertEqual([r[0] for r in pes], [0xFF] * 20)
+            self.assertEqual([p for p in range(20) if M.pe_usable(pes[p], p)], [0, 1, 2, 18])
+            self.assertEqual([p for p in range(20) if M.pe_usable(pes[p], p, hurt=False)], [])
+        pack = G.Pack.read(pelang.pack_bytes(self.pack))
+        mf = M.MenuFont(G.Font(G.DiscLook(self.discs[0]), pack), menus[0])
+        keys = [k for k in GAME.rows if M.context_of(k) == "parasite energy list" and pack.text(k)]
+        self.assertEqual(keys, [M.pe_key(p) for p in range(20)])
+        wrong, notes = {}, {}
+        for k in keys:
+            look = M.pe_list(mf, pack.text(k), k, None)
+            x = look.text.placed[0].x - look.text.placed[0].letter.x
+            if look.text.width != GAME.rows[k]["menu_px"] or look.text.width > 98:
+                wrong[k] = (look.text.width, GAME.rows[k]["menu_px"])
+            if look.notes or (x - 32) % 100 or look.focus[1] - look.focus[0] != 16:
+                notes[k] = (look.notes, x, look.focus)
+        self.assertEqual(wrong, {})
+        self.assertEqual(notes, {})
+        print(f"\n{len(keys)} English PE names drawn in the PE list at the manifest's widths")
+
     def test_the_english_pack_reads_back_as_the_discs_own_text_every_row(self):
         self.assertEqual(self.wrong, 0)
         self.assertGreater(len(self.english), 2800)
@@ -545,6 +580,56 @@ class EnglishTest(unittest.TestCase):
             texts = [window.canvas.itemcget(i, "text") for i in window.canvas.find_all()
                      if window.canvas.type(i) == "text"]
             self.assertTrue(any("the item list" in t for t in texts), texts)
+        finally:
+            root.destroy()
+
+    def test_the_window_shows_a_pe_name_in_the_pe_list_beside_the_other_pes(self):
+        """"As in the game" for a PE's name: the PE list, with the translator's words for the PEs they
+        have translated and the game's English for the others; Liberate, on the last row, kept in view."""
+        if not window_works():
+            self.skipTest("no screen for a window here")
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        import time
+        import tkinter as tk
+        from translator import app as A, gamelook as G
+        A.SETTINGS = self.dir / "pe-list-settings.json"
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "pe-list.pelang"), select="item/254", new=("es", "Español"))
+            window.load_english(str(self.pack))
+            until = time.monotonic() + 60
+            while (window.english_busy or not window.english) and time.monotonic() < until:
+                root.update()
+                time.sleep(0.02)
+            self.assertIsNone(window.use_disc(self.discs[0], remember=False))
+            window.tr.set_text("item/235", "Curar 1")
+            window.tr.set_text("item/254", "Liberar")
+            window.preview = None
+            window.check_now()
+            until = time.monotonic() + 60
+            while window.preview is None and time.monotonic() < until:
+                root.update()
+                time.sleep(0.02)
+            pack = G.Pack.read(window.preview.pack)
+            alone = lambda key, text, lang: G.Pack.read(P.check_row(GAME, key, text, lang, "x").preview.pack).text(key)
+            self.assertEqual(pack.text("item/235"), alone("item/235", "Curar 1", "es"))
+            for key in ("item/236", "item/247", "item/253", "desc/254"):
+                self.assertEqual(pack.text(key), alone(key, self.english[key], "es"), key)
+            self.assertIsNone(pack.text("item/250"))            # a cut PE is not beside Liberate
+            window.look_mode.set("game")
+            shown, show = [], window.show_game_picture
+            window.show_game_picture = lambda rgb, top, *rest: (shown.append(top), show(rgb, top, *rest))
+            self.assertTrue(window.draw_game())
+            texts = [window.canvas.itemcget(i, "text") for i in window.canvas.find_all()
+                     if window.canvas.type(i) == "text"]
+            self.assertTrue(any("the PE list" in t for t in texts), texts)
+            # Liberate's cell is rows 146-161: the picture starts low enough to show it, whole
+            self.assertEqual(len(shown), 1)
+            self.assertLessEqual(shown[0], 146)
+            self.assertGreaterEqual(shown[0] + A.VIEW, 162)
         finally:
             root.destroy()
 
@@ -1628,11 +1713,67 @@ class MenuLookRuleTest(unittest.TestCase):
         for key in ("desc/005", "misc/040", "misc/088", "sys/014", "sys/092"):
             self.assertEqual(M.context_of(key), "help line", key)
             self.assertTrue(M.can_draw(key), key)
-        for key in ("sys/008", "misc/089", "dlg/M001/009", "battle/000", "item/235"):
+        for key in ("sys/008", "misc/089", "dlg/M001/009", "battle/000", "sys/016"):
             self.assertFalse(M.can_draw(key), key)
         for key in ("item/000", "item/067", "item/234"):
             self.assertEqual(M.context_of(key), "item list")
             self.assertTrue(M.can_draw(key), key)
+        for key in ("item/235", "item/248", "item/254"):
+            self.assertEqual(M.context_of(key), "parasite energy list")
+            self.assertTrue(M.can_draw(key), key)
+
+    def test_the_pe_list_rules(self):
+        """The PE list's rows: PE n is item/235 + n; the PEs a game teaches (0-12, Full Recover, Liberate);
+        which names the field menu draws undimmed (flag bit 0, the heals only while Aya is hurt); the rows
+        shown beside a PE's name (the other PEs a game teaches, its description)."""
+        from translator import menulook as M
+        self.assertEqual((M.pe_key(0), M.pe_key(18), M.pe_key(19)), ("item/235", "item/253", "item/254"))
+        self.assertEqual(M.LEARNABLE, (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 19))
+        record = lambda flags: bytes([0xFF, 0, 0x96, 0, 0, flags]) + bytes(26)
+        self.assertEqual([M.pe_usable(record(f), p) for p, f in ((0, 3), (18, 3), (3, 2), (19, 2), (7, 2))],
+                         [True, True, False, False, False])
+        self.assertEqual([M.pe_usable(record(3), p, hurt=False) for p in (0, 1, 2, 18)], [False] * 4)
+        self.assertTrue(M.pe_usable(record(1), 5, hurt=False))
+        others = [f"item/{k:03d}" for k in list(range(235, 248)) + [253, 254]]
+        self.assertEqual(M.context_keys("item/236"), [k for k in others if k != "item/236"] + ["desc/236"])
+        self.assertEqual(M.context_keys("item/250"), others + ["desc/250"])
+
+    def test_the_pe_list_puts_the_pe_under_the_cursor_in_its_own_place(self):
+        """pe_list with no disc: every PE a game teaches in two columns of 100 x 16 cells, the one being
+        translated in its own place under the cursor (a cut one too), the window as many rows as the
+        list fills, the heals bright and the rest dimmed."""
+        from translator import gamelook as G, menulook as M
+        md = FakeMenuDisc()
+        md.windows[M.PE_WINDOW] = (28, 32, 204, 132)
+        md.grids = [(0,) * 8] * M.SIMPLE_COUNT
+        md.grids[M.PE_GRID] = (2, 2, 2, 8, 8, 100, 16, 0)
+        md.items = [bytes(32)] * 255
+        for p in range(20):
+            md.items[235 + p] = bytes([0xFF, 0, 0x96 + p, 0, 0, 3 if p in (0, 1, 2, 18) else 2]) + bytes(26)
+        rows = {f"item/{235 + p:03d}": f"PE {p}" for p in range(20)}
+        rows["desc/236"] = "Cura 60 PV"
+        result = P.check_row(GAME, "item/236", "Curar 2", "es", "Español", context=rows)
+        pack = G.Pack.read(result.preview.pack)
+        mf = M.MenuFont(G.Font(FakeLookDisc(), pack), md)
+        look = M.pe_list(mf, pack.text("item/236"), "item/236", None)
+        self.assertEqual(M.grid_cells(md, M.PE_WINDOW, M.PE_GRID, 15), (28, 32, 204, 132, 32, 36, 100, 16, 2))
+        self.assertEqual(M.grid_cells(md, M.PE_WINDOW, M.PE_GRID, 10), (28, 32, 204, 84, 32, 36, 100, 16, 2))
+        self.assertEqual(look.focus, (34, 50))                         # Heal 2: the right column's first row
+        self.assertEqual(look.text.placed[0].x, 132 + look.text.placed[0].letter.x)
+        self.assertEqual({p.y for p in look.text.placed}, {37})
+        self.assertEqual(look.text.placed[0].colour, M.TEXT_COLOUR)
+        self.assertEqual(look.notes, [])
+        cut = M.pe_list(mf, pack.text("item/250"), "item/250", None)
+        self.assertEqual(cut.focus, (34 + 16 * 6, 50 + 16 * 6))       # PE 15 is the 14th of 16: row 6, right
+        self.assertEqual(cut.text.placed[0].x, 132 + cut.text.placed[0].letter.x)
+        self.assertEqual(cut.text.placed[0].colour, M.DIM_COLOUR)
+        last = M.pe_list(mf, pack.text("item/254"), "item/254", None)
+        self.assertEqual(last.focus, (34 + 16 * 7, 50 + 16 * 7))      # Liberate is the 15th of 15
+        self.assertEqual(M.pe_list(mf, pack.text("item/253"), "item/253", None).text.placed[0].colour, M.TEXT_COLOUR)
+        self.assertEqual(M.pe_list(mf, pack.text("item/253"), "item/253", None, hurt=False).text.placed[0].colour,
+                         M.DIM_COLOUR)
+        alone = M.pe_list(mf, pack.text("item/236"), "item/236", None, learned=(1,))
+        self.assertEqual(alone.focus, (34, 50))
 
     def test_the_item_list_rules(self):
         """Menu_DrawSlotRow's count box (guns, kinds 1-7, and kinds 0x13 on), its three places with blanks
@@ -1996,9 +2137,9 @@ class PictureDiscTest(unittest.TestCase):
     def test_the_tune_up_screenshot_on_the_disc_is_one_layer_of_two_screens(self):
         """About Icons 7 and 8 (M362) show the same tile list e7: loading 7's PNG with the screenshot
         changed changes 8 the same; 8's PNG as the game has it keeps that; changed otherwise, refused."""
+        disc = self.discs()[0]                   # first: it skips without Pillow or a disc
         from PIL import ImageDraw
         from translator import artwork as A
-        disc = self.discs()[0]
         seven, eight = A.BY_ID["tutorial/icons-7"], A.BY_ID["tutorial/icons-8"]
         self.assertEqual(A.shared_with(seven), [(eight, 7)])
         img = A.image(seven, disc.english[seven.id], disc.layout[seven.id])
@@ -2561,7 +2702,14 @@ class PictureFitTest(unittest.TestCase):
     the largest picture, fit it with the buttons in sight, at 2x in a 900-high window and still in
     sight in a window for a 768-high screen; resizing the window changes the zoom. The battle words
     show their copies in the fight's colours too, Game Over itself as the game shows it, and still fit."""
-    setUp, tearDown = WindowTest.setUp, WindowTest.tearDown
+    tearDown = WindowTest.tearDown
+
+    def setUp(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")                  # the Pictures window draws with it
+        WindowTest.setUp(self)
 
     def test_the_map_fits_the_pictures_window_with_its_buttons_in_sight(self):
         import tkinter as tk
