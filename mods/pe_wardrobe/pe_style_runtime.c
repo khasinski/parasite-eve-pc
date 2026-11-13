@@ -35,6 +35,8 @@ typedef struct {
 /* Battle cue colors, one place. */
 static const CueColor CUE_CYAN = {0x60, 0xe0, 0xff}; /* guard, refund, Striker */
 static const CueColor CUE_COUNTER = {0xff, 0x90, 0x30}; /* Bulwark loaded */
+static const CueColor CUE_EXPOSED = {0xff, 0x30, 0x30}; /* Bulwark full bar */
+enum { EXPOSED_ALTERNATE_FRAMES = 8 }; /* red/orange when Exposed + loaded */
 static const CueColor CUE_RUSH = {0xff, 0x50, 0x40}; /* Quickstep burst */
 static const CueColor CUE_SPENT = {0x30, 0x30, 0x30}; /* Quickstep HP pip */
 static const CueColor CUE_CRACK = {0xff, 0x90, 0x30}; /* Channeler cracked */
@@ -190,11 +192,15 @@ static int controllable(void) {
          !g_BattleHitActionPending &&
          (player->actionMode < 4 || player->actionMode == core->actionMode12);
 }
-static int guarded(void) {
+/* Bulwark phase right now: guarded below full AT, exposed on a full bar, off
+ * whenever Aya is not free to move. */
+static int bulwark_phase(void) {
   Combatant *core = pe_aya_core();
-  return core &&
-         pe_style_guard(&session, core->hpAlive, FULL_AT, controllable());
+  return core ? pe_bulwark_phase(&session, core->hpAlive, FULL_AT,
+                                 controllable())
+              : PE_BW_OFF;
 }
+static int guarded(void) { return bulwark_phase() == PE_BW_GUARDED; }
 static int living_enemies(void) {
   unsigned i;
   for (i = 0; i < 7; i++)
@@ -210,12 +216,87 @@ static int update(void *ctx, void *user) {
   pe_quickstep_tick(&session,
                     session.style == PE_STYLE_QUICKSTEP && controllable());
   pe_channeler_tick(&session);
+  Combatant *core = pe_aya_core();
+  if (core && session.style == PE_STYLE_BULWARK &&
+      pe_bulwark_observe_hp(&session, (s16)core->curHP))
+    pe_log("costume_style", "rally pool emptied by a heal hp=%d",
+           (s16)core->curHP);
   frame_count++;
   if (pulse)
     pulse--;
   if (pe_pulse)
     pe_pulse--;
   return 0;
+}
+/* Rally "+N": orange, just outside the right edge of the native status panel
+ * (84 px wide, full) on the HP row. Glyphs are the native HUD digit strip;
+ * the "+" is two flat tiles. Position and color live here. */
+enum {
+  RALLY_X = 0x56, /* from g_HudOrigin.x; the panel ends at 0x54 */
+  RALLY_Y = 11,   /* the HP digits' row */
+  RALLY_DIGITS = 4
+};
+static const CueColor CUE_RALLY = {0xff, 0x90, 0x30};
+void Draw_InitDrawModeSprtPacket(void *packet, int tpage);
+static RenderPagedSpritePacket rally_digits[2][RALLY_DIGITS];
+static RenderColorTilePacket rally_plus[2][2];
+static int rally_ready;
+static void rally_init(void) {
+  int page = GetTPage(0, 1, 0x100, 0x1E0); /* as Battle_DrawHPBar */
+  u16 clut = GetClut(0x130, 0x1F8);
+  for (unsigned slot = 0; slot < 2; slot++) {
+    for (unsigned i = 0; i < RALLY_DIGITS; i++) {
+      RenderSpritePacket *s = &rally_digits[slot][i].sprite;
+      Draw_InitDrawModeSprtPacket(&rally_digits[slot][i], page);
+      s->clut = clut;
+      s->width = 6;
+      s->height = 0xA;
+      s->v = 0xE8;
+      BATTLE_SET_SPRITE_COLOR(*s, CUE_RALLY.r, CUE_RALLY.g, CUE_RALLY.b);
+    }
+    for (unsigned i = 0; i < 2; i++) {
+      RenderColorTilePacket *t = &rally_plus[slot][i];
+      SetTile(t);
+      t->r0 = CUE_RALLY.r;
+      t->g0 = CUE_RALLY.g;
+      t->b0 = CUE_RALLY.b;
+    }
+  }
+  rally_ready = 1;
+}
+static void draw_rally(void) {
+  unsigned left = pe_bulwark_rally_left(&session), digits[RALLY_DIGITS], n = 0;
+  unsigned slot = (unsigned)g_ActiveDrawSlot;
+  if (!left || slot > 1)
+    return;
+  if (!rally_ready)
+    rally_init();
+  if (left > 9999)
+    left = 9999;
+  do {
+    digits[n++] = left % 10;
+    left /= 10;
+  } while (left && n < RALLY_DIGITS);
+  int x = g_HudOrigin.x + RALLY_X, y = g_HudOrigin.y + RALLY_Y;
+  RenderColorTilePacket *bar = &rally_plus[slot][0], *post = &rally_plus[slot][1];
+  bar->x0 = (u16)x;
+  bar->y0 = (u16)(y + 4);
+  bar->w = 5;
+  bar->h = 1;
+  post->x0 = (u16)(x + 2);
+  post->y0 = (u16)(y + 2);
+  post->w = 1;
+  post->h = 5;
+  AddPrim(D_800B0E38.ordering[slot] + 4, bar);
+  AddPrim(D_800B0E38.ordering[slot] + 4, post);
+  x += 7;
+  for (unsigned i = n; i-- > 0; x += 6) {
+    RenderSpritePacket *s = &rally_digits[slot][i].sprite;
+    s->u = (u8)(digits[i] * 8);
+    s->x = (s16)x;
+    s->y = (s16)y;
+    AddPrim(D_800B0E38.ordering[slot] + 4, &rally_digits[slot][i]);
+  }
 }
 static int hud(void *ctx, void *user) {
   unsigned i;
@@ -244,13 +325,21 @@ static int hud(void *ctx, void *user) {
       tint_color(&p->color.bytes.r, &p->color.bytes.g, &p->color.bytes.b,
                  &pe_tints[slot], pe_color);
     }
-  /* Cyan: guarded or a Quickstep refund landing. Orange: a Retaliate counter
-   * is loaded while the guard is off (typically a full bar, ready to act).
+  draw_rally();
+  /* Cyan: guarded or a Quickstep refund landing. Red: Bulwark Exposed (full
+   * bar, free to move), alternating with orange when a counter is loaded.
+   * Orange: a counter is loaded and neither guard nor Exposed applies.
    * Red: Quickstep burst, faster and taking more damage. */
   CueColor c;
-  if (guarded() || pulse) {
+  int phase = bulwark_phase();
+  if (phase == PE_BW_GUARDED || pulse) {
     c = CUE_CYAN;
-  } else if (session.style == PE_STYLE_BULWARK && session.counter_store) {
+  } else if (phase == PE_BW_EXPOSED) {
+    c = session.bw.store &&
+                (frame_count / EXPOSED_ALTERNATE_FRAMES) % 2 != 0
+            ? CUE_COUNTER
+            : CUE_EXPOSED;
+  } else if (session.style == PE_STYLE_BULWARK && session.bw.store) {
     c = CUE_COUNTER;
   } else if (pe_quickstep_burst(&session)) {
     c = CUE_RUSH;
@@ -287,21 +376,24 @@ static int hp_loss(void *ctx, void *user) {
   (void)user;
   ensure_session();
   if (q && q->actor == pe_aya_core() && q->source >= 1 && q->source <= 3) {
-    int guard = guarded();
+    int phase = bulwark_phase();
     before = *q->loss;
-    /* Bulwark guard or Quickstep Overextended, judged as the hit resolves. */
-    *q->loss = pe_style_damage(&session, *q->loss, guard);
+    /* Bulwark guard / Exposed or Quickstep Overextended, judged as the hit
+     * resolves. */
+    *q->loss = pe_style_damage(&session, *q->loss, phase);
     if (*q->loss != before && session.style == PE_STYLE_QUICKSTEP)
       pe_log("costume_style", "overextended loss=%d->%d burst=%u", before,
              *q->loss, session.qs.burst);
-    /* Retaliate stores the HP actually lost, never more than Aya had. */
+    /* Counter store and Rally pool take the HP actually lost from a guarded
+     * hit, never more than Aya had. Exposed hits feed nothing. */
     int taken = *q->loss;
     if (q->current_hp >= 0 && taken > q->current_hp)
       taken = q->current_hp;
-    pe_style_absorb(&session, taken, guard);
+    pe_bulwark_absorb(&session, taken, phase);
     if (*q->loss != before && session.style == PE_STYLE_BULWARK)
-      pe_log("costume_style", "bulwark loss=%d->%d atb=%u store=%u", before,
-             *q->loss, pe_aya_core()->hpAlive, session.counter_store);
+      pe_log("costume_style", "bulwark %s loss=%d->%d store=%u pool=%u",
+             phase == PE_BW_EXPOSED ? "exposed" : "guarded", before, *q->loss,
+             session.bw.store, session.bw.pool);
     /* Channeler Backlash: a damaging hit at full charge cracks, then breaks. */
     if (*q->loss > 0) {
       int backlash = pe_channeler_hit(&session);
@@ -435,10 +527,20 @@ static int outgoing(void *ctx, void *user) {
   if (q && session.style == PE_STYLE_BULWARK && q->source == pe_aya_core() &&
       normal_weapon() && candidate(q->target)) {
     int before = *q->damage;
-    *q->damage = pe_style_counter(&session, before, q->ordinary);
-    if (*q->damage != before)
-      pe_log("costume_style", "retaliate damage=%d->%d store=%u", before,
-             *q->damage, session.counter_store);
+    unsigned bonus;
+    *q->damage = pe_bulwark_counter(&session, before, q->ordinary, &bonus);
+    Combatant *aya = pe_aya_core();
+    if (bonus && aya) {
+      /* Rally: the boosted hit wins back HP equal to its bonus, up to the
+       * pool's share and never above max HP. */
+      unsigned heal = pe_bulwark_rally(&session, bonus, (s16)aya->curHP,
+                                       (s16)aya->maxHP);
+      aya->curHP = (u16)(aya->curHP + heal);
+      pe_log("costume_style",
+             "counter damage=%d->%d store=%u rally=%u left=%u hp=%d", before,
+             *q->damage, session.bw.store, heal,
+             pe_bulwark_rally_left(&session), (s16)aya->curHP);
+    }
   }
   if (session.style == PE_STYLE_STRIKER && q && q->source == pe_aya_core())
     pe_log("costume_style",
@@ -565,7 +667,7 @@ static int action_end(void *ctx, void *user) {
     pe_log("costume_style", "quickstep refund=%u burst=%u",
            core->hpAlive - before, session.qs.burst);
   }
-  pe_style_counter_resolve(&session);
+  pe_bulwark_resolve(&session);
   if (session.style == PE_STYLE_CHANNELER) {
     if (pe_channeler_resolve(&session, pe_in_battle() &&
                                            (s16)core->curHP > 0 &&
@@ -708,8 +810,12 @@ static void guard_info(char *out, unsigned size) {
              session.ch.cracked ? ", cracked" : "");
     return;
   }
-  snprintf(out, size, "%s, counter %u",
-           guarded() ? "Protected" : "Not protected", session.counter_store);
+  int phase = bulwark_phase();
+  snprintf(out, size, "%s, counter %u, rally +%u",
+           phase == PE_BW_GUARDED   ? "Guarded"
+           : phase == PE_BW_EXPOSED ? "Exposed"
+                                    : "Neither",
+           session.bw.store, pe_bulwark_rally_left(&session));
 }
 static const PeStyleDef *browsed_style(void) {
   const PeCostume *c = pe_wardrobe_browsed();
@@ -751,15 +857,17 @@ void pe_styles_register(const char *mod_id) {
   pe_menu_register_info(PE_PAGE_WARDROBE, "Costume style",
                         "Quickstep: half-HP breaks and kills +20% AT, 3 s "
                         "speed, +20% damage taken meanwhile. Bulwark: "
-                        "25% guard; hits taken load a counter. Striker: point-"
+                        "25% guard below full AT; guarded hits load a counter "
+                        "that wins back up to half that HP; +15% damage taken "
+                        "on a full bar. Striker: point-"
                         "blank guns +25%, outer 30% of gun range -20%. Channeler: weapon hits charge the next "
                         "support PE (1 = half, 2 = free); at 2, a hit cracks "
                         "it and a second breaks one.",
                         style_info);
   pe_menu_register_info(
       PE_PAGE_WARDROBE, "Style state",
-      "Bulwark: guard below full AT while free to move, and stored counter "
-      "damage. Channeler: Spellweave charges. Half-bar features must be off "
+      "Bulwark: guarded or exposed, stored counter damage and HP left to "
+      "win back. Channeler: Spellweave charges. Half-bar features must be off "
       "for Bulwark.",
       guard_info);
   pe_hook_add(PE_HOOK_BATTLE_UPDATE, update, NULL, PE_PRIORITY_EARLY, mod_id);

@@ -79,13 +79,30 @@ typedef struct {
   unsigned char zone[PE_STYLE_TARGETS]; /* PE_ST_* per snapshotted recipient */
 } PeStrikerState;
 
+/* ---- Bulwark (Revision 6.4, single-guard build) -------------------------
+ * Numbers and switches: PeBulwarkTuning (pe_style_catalog.c). Rules:
+ * pe_style_bulwark.c. */
+enum { PE_BW_OFF, PE_BW_GUARDED, PE_BW_EXPOSED }; /* phase per resolved hit */
+typedef struct {
+  unsigned guard_percent;   /* incoming damage while guarded (below full AT) */
+  unsigned counter_percent; /* per-hit counter bonus cap, % of the hit */
+  unsigned rally_percent;   /* share of the Rally pool won back; 0 = off */
+  unsigned exposed_percent; /* incoming damage on a full bar; 100 = off */
+} PeBulwarkTuning;
+typedef struct {
+  unsigned store, spent;   /* counter */
+  unsigned pool, regained; /* Rally */
+  int last_hp;             /* heal detection */
+  unsigned hp_seen;
+} PeBulwarkState;
+
 typedef struct {
   PeStyleId id;
   const char *key, *name, *benefit, *limitation;
-  unsigned implemented, charge_percent, damage_percent;
-  unsigned counter_percent; /* Revision 5 Retaliate per-hit cap */
+  unsigned implemented, charge_percent;
   PeQuickstepTuning quickstep;
   PeStrikerTuning striker;
+  PeBulwarkTuning bulwark;
   PeChannelerTuning channeler;
 } PeStyleDef;
 typedef struct {
@@ -96,7 +113,7 @@ typedef struct {
   unsigned action_open, action_canceled, pending_damage;
   unsigned pe_remainder;
   PeQuickstepState qs;                   /* Quickstep */
-  unsigned counter_store, counter_spent; /* Retaliate */
+  PeBulwarkState bw;                     /* Bulwark */
   PeChannelerState ch;                   /* Channeler */
 } PeStyleSession;
 
@@ -121,12 +138,26 @@ unsigned pe_quickstep_exposed_percent(const PeStyleSession *s); /* 100 = off */
 int pe_quickstep_spent(const PeStyleSession *s, const void *enemy, int hp,
                        int max_hp);
 int pe_style_charge(PeStyleSession *s, int increment);
-int pe_style_guard(const PeStyleSession *s, unsigned gauge, unsigned full,
-                   int controllable);
-int pe_style_damage(const PeStyleSession *s, int loss, int guarded);
-void pe_style_absorb(PeStyleSession *s, int taken, int guarded);
-int pe_style_counter(PeStyleSession *s, int damage, int ordinary);
-void pe_style_counter_resolve(PeStyleSession *s);
+/* Every incoming-damage multiplier, once per eligible hit. phase is Bulwark's
+ * (PE_BW_*); other styles pass PE_BW_OFF. */
+int pe_style_damage(const PeStyleSession *s, int loss, int phase);
+/* Bulwark. */
+int pe_bulwark_phase(const PeStyleSession *s, unsigned gauge, unsigned full,
+                     int controllable);
+unsigned pe_bulwark_percent(const PeStyleSession *s, int phase);
+/* HP actually lost from a hit; only guarded hits feed store and pool. */
+void pe_bulwark_absorb(PeStyleSession *s, int taken, int phase);
+/* An outgoing hit of the open weapon action: returns the boosted damage and
+ * the bonus in *bonus_out (for Rally). */
+int pe_bulwark_counter(PeStyleSession *s, int damage, int ordinary,
+                       unsigned *bonus_out);
+/* HP to restore for a counter bonus, capped by the pool and max HP. */
+unsigned pe_bulwark_rally(PeStyleSession *s, unsigned bonus, int hp,
+                          int max_hp);
+unsigned pe_bulwark_rally_left(const PeStyleSession *s); /* the "+N" */
+/* Each frame: an HP gain we did not cause empties the pool. 1 if it did. */
+int pe_bulwark_observe_hp(PeStyleSession *s, int hp);
+void pe_bulwark_resolve(PeStyleSession *s); /* weapon action end */
 void pe_style_action_begin(PeStyleSession *s, int gun, int weapon);
 /* Striker. Point-blank: horizontal offset to the recipient's hit cylinder
  * centre and its scaled radius. */

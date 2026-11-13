@@ -29,6 +29,30 @@ int g_ActiveDrawSlot;
 BattleGaugePrim g_BattleStatusPointerSprites[2],
     g_BattleTargetHighlightSprites[2][3];
 BattleStatusPointerPrim g_BattleStatusPointerTriangles[2];
+BattleHudOrigin g_HudOrigin;
+/* GPU stand-ins: record what the Rally "+N" submits. */
+static unsigned prims_added, tiles_set, sprites_inited;
+static const void *last_prim;
+void AddPrim(void *ot, void *prim) {
+  (void)ot;
+  prims_added++;
+  last_prim = prim;
+}
+u_short GetTPage(int tp, int abr, int x, int y) {
+  (void)tp;
+  (void)abr;
+  return (u_short)(x + y);
+}
+u_short GetClut(int x, int y) { return (u_short)(x ^ y); }
+void SetTile(void *tile) {
+  (void)tile;
+  tiles_set++;
+}
+void Draw_InitDrawModeSprtPacket(void *packet, int tpage) {
+  (void)packet;
+  (void)tpage;
+  sprites_inited++;
+}
 static Combatant aya;
 static BattleAction weapon_action;
 static ItemDataRecord weapon;
@@ -353,17 +377,30 @@ int main(void) {
   assert(!session.active && !session.qs.pending && !session.qs.burst &&
          !session.qs.marks);
   start(&guard);
+  aya.maxHP = 200;
   assert(guarded());
   assert(loss(100, 1) == 75 && loss(1, 1) == 1);
   g_BattleAtbMarkers[0].sprite.color.bytes.r = 17;
   fire(PE_HOOK_BATTLE_HUD, NULL);
   assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0x60);
   assert(loss(100, 4) == 100);
+  assert(session.bw.store == 76 && session.bw.pool == 76);
   aya.hpAlive = 9000;
-  assert(!guarded() && loss(100, 1) == 100);
+  assert(!guarded() && bulwark_phase() == PE_BW_EXPOSED);
+  assert(loss(100, 1) == 115); /* Exposed: full bar, free to move */
+  assert(session.bw.store == 76 && session.bw.pool == 76); /* feeds nothing */
+  /* Exposed with a loaded counter: red, alternating with orange. */
+  frame_count = 0;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  /* Guard off at a full bar, but the guarded hits above loaded a counter. */
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0xff);
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0xff &&
+         g_BattleAtbMarkers[0].sprite.color.bytes.g == 0x30);
+  frame_count = EXPOSED_ALTERNATE_FRAMES;
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.g == 0x90);
+  /* Hit reactions, actions and forced control: neither guarded nor exposed. */
+  g_BattleHitActionPending = 1;
+  assert(bulwark_phase() == PE_BW_OFF && loss(100, 1) == 100);
+  g_BattleHitActionPending = 0;
   aya.hpAlive = 0;
   player.actionMode = 0;
   assert(guarded()); /* normal movement, not only the idle pose */
@@ -387,18 +424,28 @@ int main(void) {
   fire(PE_HOOK_AT_CHARGE, &q);
   assert(inc == 0);
   assert(aya.scaledOffense == 0); /* derived stats never rewritten */
-  /* Retaliate: guarded losses (75 + 1) were stored; periodic source 4 and the
-   * unguarded full-bar hit were not. */
-  assert(session.counter_store == 76);
+  /* Counter store and Rally pool: guarded losses (75 + 1); periodic source 4,
+   * the Exposed hit and the hit-reaction hit added nothing. */
+  assert(session.bw.store == 76 && session.bw.pool == 76);
   PeHookHpLoss lethal_q = {&aya, 10, &(int){40}, 1};
   fire(PE_HOOK_HP_LOSS, &lethal_q);
-  assert(session.counter_store == 86); /* never more HP than Aya had */
-  session.counter_store = 76;
-  aya.hpAlive = 9000; /* guard off, counter loaded: orange marker */
-  g_BattleAtbMarkers[0].sprite.color.bytes.r = 17;
+  assert(session.bw.store == 86 &&
+         session.bw.pool == 86); /* never more HP than Aya had */
+  session.bw.store = 76;
+  session.bw.pool = 76;
+  assert(pe_bulwark_rally_left(&session) == 38); /* half the pool */
+  /* "+N" beside the HP row: "+", then the digits, in the native strip. */
+  prims_added = 0;
+  g_HudOrigin.x = 16;
+  g_HudOrigin.y = 180;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0xff);
-  aya.hpAlive = 0;
+  assert(sprites_inited == 2 * RALLY_DIGITS && tiles_set == 4);
+  assert(prims_added == 4 && last_prim == &rally_digits[0][0]);
+  assert(rally_plus[0][0].x0 == 16 + RALLY_X &&
+         rally_digits[0][1].sprite.u == 3 * 8 &&
+         rally_digits[0][0].sprite.u == 8 * 8 &&
+         rally_digits[0][0].sprite.y == 180 + RALLY_Y &&
+         rally_digits[0][0].sprite.color.bytes.g == 0x90);
   BattleEntity foe = {0};
   foe.core = &g_BattleEnemySlots[0].combatant;
   ((EnemyCombatant *)foe.core)->hpAlive = 100;
@@ -406,35 +453,68 @@ int main(void) {
   weapon.kind = 1;
   fire(PE_HOOK_PLAYER_ACTION, &aya); /* a weapon action that misses */
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.counter_store == 76); /* kept for a later hit */
+  assert(session.bw.store == 76 && session.bw.pool == 76); /* both kept */
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   int counter_dealt = 100;
   PeHookEnemyDamage counter_hit = {&aya, &foe, &counter_dealt, 1};
   fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
-  assert(counter_dealt == 150 && session.counter_store == 26); /* +50% cap */
+  assert(counter_dealt == 150 && session.bw.store == 26); /* +50% cap */
+  /* Rally: the 50 bonus wins back HP up to half the pool (38). */
+  assert(aya.curHP == 138 && pe_bulwark_rally_left(&session) == 0);
+  fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  assert(session.bw.pool == 76); /* our own gain is not a heal */
   counter_dealt = 9;
   fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
-  assert(counter_dealt == 14 && session.counter_store == 21); /* ceil 4.5 */
+  assert(counter_dealt == 14 && session.bw.store == 21); /* ceil 4.5 */
+  assert(aya.curHP == 138); /* Rally already at its cap */
   counter_hit.ordinary = 0;
   counter_dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
   assert(counter_dealt == 100); /* PE / instant effects never counter */
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(session.counter_store == 0); /* leftovers lost after a counter */
-  session.counter_store = 30;
+  assert(session.bw.store == 0 && session.bw.pool == 0 &&
+         !session.bw.regained); /* leftovers lost after a counter */
+  session.bw.store = 30;
   aya.action = NULL; /* non-weapon actions neither spend nor clear it */
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   counter_hit.ordinary = 1;
   counter_dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(counter_dealt == 100 && session.counter_store == 30);
-  session.counter_store = 0;
+  assert(counter_dealt == 100 && session.bw.store == 30);
+  /* Rally never raises HP above max. */
+  aya.curHP = 195;
+  fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  session.bw.pool = 100;
+  aya.action = &weapon_action;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  counter_dealt = 20;
+  fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
+  assert(counter_dealt == 30 && aya.curHP == 200 && session.bw.store == 20);
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  /* A heal empties the pool but keeps the store. */
+  session.bw.store = 40;
+  session.bw.pool = 40;
+  aya.curHP = 150;
+  fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  assert(session.bw.pool == 40 && pe_bulwark_rally_left(&session) == 20);
+  aya.curHP = 180; /* an item or PE heal */
+  fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  assert(session.bw.pool == 0 && session.bw.store == 40 &&
+         !pe_bulwark_rally_left(&session));
+  prims_added = 0;
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(prims_added == 0); /* no "+N" with nothing to win back */
+  session.bw.store = 0;
   fire(PE_HOOK_BATTLE_HUD, NULL);
   assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0x60); /* guarded */
   aya.hpAlive = 9000;
   fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.g == 0x30); /* Exposed */
+  g_BattleHitActionPending = 1; /* neither guarded nor exposed */
+  fire(PE_HOOK_BATTLE_HUD, NULL);
   assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 17); /* restored */
+  g_BattleHitActionPending = 0;
   aya.hpAlive = 0;
   half = 1;
   fire(PE_HOOK_BATTLE_UPDATE, NULL);

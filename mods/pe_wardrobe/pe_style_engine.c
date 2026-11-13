@@ -28,53 +28,20 @@ int pe_style_charge(PeStyleSession *s, int increment) {
   return saturate(scaled / 100);
 }
 
-/* ---- Bulwark: guard and Retaliate --------------------------------------- */
-int pe_style_guard(const PeStyleSession *s, unsigned gauge, unsigned full,
-                   int controllable) {
-  return is(s, PE_STYLE_BULWARK) && gauge < full && controllable;
-}
-/* Every incoming-damage multiplier, once per eligible hit: Bulwark's guard or
- * Quickstep's Overextended (the two never share an encounter). */
-int pe_style_damage(const PeStyleSession *s, int loss, int guarded) {
+/* ---- Incoming damage ------------------------------------------------------
+ * Bulwark's guard or Exposed (pe_style_bulwark.c), or Quickstep's
+ * Overextended. The styles never share an encounter. */
+int pe_style_damage(const PeStyleSession *s, int loss, int phase) {
   uint64_t scaled;
-  unsigned percent = 100;
+  unsigned percent;
   if (loss <= 0)
     return loss;
-  if (guarded && is(s, PE_STYLE_BULWARK))
-    percent = pe_style_definition(s->style)->damage_percent;
-  else
-    percent = pe_quickstep_exposed_percent(s);
+  percent = is(s, PE_STYLE_BULWARK) ? pe_bulwark_percent(s, phase)
+                                    : pe_quickstep_exposed_percent(s);
   if (percent == 100)
     return loss;
   scaled = ((uint64_t)(unsigned)loss * percent + 50) / 100;
   return scaled ? saturate(scaled) : 1;
-}
-void pe_style_absorb(PeStyleSession *s, int taken, int guarded) {
-  uint64_t total;
-  if (!guarded || !is(s, PE_STYLE_BULWARK) || taken <= 0)
-    return;
-  total = (uint64_t)s->counter_store + (unsigned)taken;
-  s->counter_store = total > INT_MAX ? INT_MAX : (unsigned)total;
-}
-int pe_style_counter(PeStyleSession *s, int damage, int ordinary) {
-  uint64_t cap;
-  unsigned bonus;
-  if (!is(s, PE_STYLE_BULWARK) || !s->weapon_action || !s->action_open ||
-      !ordinary || damage <= 0 || !s->counter_store)
-    return damage;
-  cap = ((uint64_t)(unsigned)damage *
-             pe_style_definition(s->style)->counter_percent +
-         99) /
-        100;
-  bonus = cap < s->counter_store ? (unsigned)cap : s->counter_store;
-  s->counter_store -= bonus;
-  s->counter_spent = 1;
-  return saturate((uint64_t)(unsigned)damage + bonus);
-}
-void pe_style_counter_resolve(PeStyleSession *s) {
-  if (s->counter_spent)
-    s->counter_store = 0; /* one counter per weapon action that landed */
-  s->counter_spent = 0;
 }
 
 /* ---- Shared action bookkeeping (Striker rules: pe_style_striker.c) ------ */
@@ -86,7 +53,7 @@ void pe_style_action_begin(PeStyleSession *s, int gun, int weapon) {
   s->action_open = 1;
   s->action_canceled = 0;
   s->pending_damage = 0;
-  s->counter_spent = 0;
+  s->bw.spent = 0;
 }
 
 /* ---- Channeler: action bookkeeping (rules in pe_style_channeler.c) ------ */

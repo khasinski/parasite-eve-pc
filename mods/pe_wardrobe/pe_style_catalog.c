@@ -8,8 +8,7 @@ static const PeStyleDef definitions[PE_STYLE_COUNT] = {
      .benefit = "Native combat",
      .limitation = "No costume ability",
      .implemented = 1,
-     .charge_percent = 100,
-     .damage_percent = 100},
+     .charge_percent = 100},
     {.id = PE_STYLE_QUICKSTEP,
      .key = "quickstep",
      .name = "Quickstep",
@@ -17,7 +16,6 @@ static const PeStyleDef definitions[PE_STYLE_COUNT] = {
      .limitation = "While rushing you take 20% more damage",
      .implemented = 1,
      .charge_percent = 100,
-     .damage_percent = 100,
      /* Build spec 4.1 and 5. Tune here, one value at a time. */
      .quickstep = {.triggers = PE_QS_TRIGGER_BREAKPOINT | PE_QS_TRIGGER_KILL,
                    .breakpoints = {50},
@@ -29,12 +27,15 @@ static const PeStyleDef definitions[PE_STYLE_COUNT] = {
     {.id = PE_STYLE_BULWARK,
      .key = "bulwark",
      .name = "Bulwark",
-     .benefit = "Guarded hits load a counter attack",
-     .limitation = "Must take hits to power a counter",
+     .benefit = "Guard below full AT; hit back to win HP back",
+     .limitation = "Sitting on a full AT bar: +15% damage taken",
      .implemented = 1,
      .charge_percent = 100,
-     .damage_percent = 75,
-     .counter_percent = 50},
+     /* Build spec 4.3 and 5, single-guard build. Tune here, one at a time. */
+     .bulwark = {.guard_percent = 75,
+                 .counter_percent = 50,
+                 .rally_percent = 50, /* 0 turns Rally off */
+                 .exposed_percent = 115}}, /* 100 turns Exposed off */
     {.id = PE_STYLE_STRIKER,
      .key = "striker",
      .name = "Striker",
@@ -42,7 +43,6 @@ static const PeStyleDef definitions[PE_STYLE_COUNT] = {
      .limitation = "Shots from your gun's outer range deal -20%",
      .implemented = 1,
      .charge_percent = 100,
-     .damage_percent = 100,
      /* Build spec 4.2 and 5. Tune here, one value at a time. */
      .striker = {.point_blank_gap = 96, /* calibrate first (spec 8) */
                  .point_blank_percent = 125,
@@ -55,7 +55,6 @@ static const PeStyleDef definitions[PE_STYLE_COUNT] = {
      .limitation = "At full charge, a hit cracks it; a 2nd breaks one",
      .implemented = 1,
      .charge_percent = 100,
-     .damage_percent = 100,
      /* Build spec 4.4 and 5. Tune here, one value at a time. */
      .channeler = {.max_charges = 2,
                    .discount = {0, 50, 100},

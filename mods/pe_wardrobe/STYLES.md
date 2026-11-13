@@ -21,8 +21,9 @@ outfit, spends Junk, changes the mode or changes the current encounter snapshot.
 - `pe_style_quickstep.c`: Quickstep's rules only (breakpoints, kill trigger,
   refund, burst, Overextended, HP-pip query). Pure logic; every number and
   switch is `PeQuickstepTuning` in the catalog.
-- `pe_style_channeler.c` and `pe_style_striker.c`: the same split for
-  Channeler (`PeChannelerTuning`) and Striker (`PeStrikerTuning`).
+- `pe_style_channeler.c`, `pe_style_striker.c` and `pe_style_bulwark.c`: the
+  same split for Channeler (`PeChannelerTuning`), Striker (`PeStrikerTuning`)
+  and Bulwark (`PeBulwarkTuning`).
 - `pe_style_runtime.c`: the only native combat adapter: snapshots the successfully
   applied appearance, receives typed hooks, applies engine results and draws cues.
 - Wardrobe registry/skin loader: retains ownership and model-loading responsibility;
@@ -42,7 +43,8 @@ pack mappings and deferred costumes still resolve to Original.
 | Quickstep | yes | unit | no |
 | Channeler | yes | unit | no |
 | Striker (falloff) | yes | unit | no |
-| Bulwark (Rally, Exposed, Brace) | no | | |
+| Bulwark (Counter, Rally, Exposed, single guard) | yes | unit | no |
+| Bulwark Brace (two-level guard) | no: only after Rally plays well (spec 7, 11) | | |
 
 **TODO — one shared playtest package after all four are built.** Not one per
 style. When Striker and Bulwark land, build a single package (extend local
@@ -54,6 +56,43 @@ style. When Striker and Bulwark land, build a single package (extend local
   they see each con coming, could they say how to avoid it, did it feel fair);
 - turns on the `costume_style` log so refunds, Overextended, charges, crack,
   break, counters and Rally can be checked after a session.
+
+## Bulwark, Revision 6.4 single-guard build (current; supersedes Retaliate below)
+
+Source of truth: build spec section 4.3. Rules in `pe_style_bulwark.c`,
+numbers in `.bulwark` in `pe_style_catalog.c`.
+
+- Phase, judged per resolved hit (HP-loss sources 1-3): **guarded** when AT
+  is below full and Aya is free to move (x0.75); **Exposed** when AT is full
+  and she is free to move (x1.15); **off** during actions, recovery, hit
+  reactions, menus and forced control (native).
+- Counter store and Rally pool: the HP actually lost from guarded hits only.
+  Exposed, periodic and off-phase hits add nothing.
+- Counter: each ordinary hit of the next weapon action gains
+  `min(store, ceil(hit x 50%))`. When an action that landed a bonus
+  completes, the leftover store and pool are discarded; a weapon action that
+  never hits keeps both. PE, items and other actions neither spend nor clear.
+- Rally: each boosted hit restores HP equal to its bonus until 50% of the pool
+  (rounded up) is won back, never above max HP.
+- Healing first empties the pool: any HP gain Bulwark did not cause (items,
+  PE heals, Preraise) is spotted the next battle frame and clears the pool;
+  the store stays.
+- Cues: AT marker cyan while guarded, red while Exposed (alternating with
+  orange every 8 frames if a counter is loaded), orange when a counter is
+  loaded and neither applies. Rally "+N" (HP still to win back) in orange
+  native HUD digits just right of the status panel on the HP row.
+
+**Changing it.** `guard_percent`, `counter_percent`, `rally_percent` (0 turns
+Rally off), `exposed_percent` (100 turns Exposed off) in `.bulwark`. Colors:
+`CUE_EXPOSED`, `CUE_COUNTER`, `CUE_RALLY`, `EXPOSED_ALTERNATE_FRAMES`;
+"+N" position: `RALLY_X` / `RALLY_Y`; all in `pe_style_runtime.c`.
+
+**Not done yet.** Brace (x0.65 still / x0.85 moving) waits until Rally plays
+well (spec sections 7 and 11). The "+N" sits outside the 84-px native panel
+because the panel has no free room: check it is readable in game, and that
+the native HUD strip's digits look right in orange. A heal and a hit landing
+in the same battle frame could hide the heal from the pool check. Not
+playtested.
 
 ## Striker, Revision 6.4 (current; supersedes the Striker notes below)
 
