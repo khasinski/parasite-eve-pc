@@ -78,7 +78,8 @@ class PictureWindow:
         ttk.Label(right, text="Your picture").pack(anchor="w")
         self.your_view = ttk.Label(right, background="#000000")
         self.your_view.pack(anchor="w", pady=(2, 8))
-        # Only for a picture the game tints as it draws it (the battle words): yours in those colours.
+        # Only for a picture the game tints as it draws it (the battle words): yours in those colours; for
+        # Game Over, yours as the screen shows it (darker, dithered).
         self.fight_label = ttk.Label(right, text="", wraplength=560, justify="left")
         self.fight_view = ttk.Label(right, background="#000000")
         self.tip = ttk.Label(right, text="", wraplength=560, justify="left")
@@ -133,7 +134,7 @@ class PictureWindow:
 
     @staticmethod
     def copies(pic: A.Picture) -> int:
-        return 2 + len(pic.tints)
+        return 2 + A.previews(pic)
 
     def _resized(self, event) -> None:
         """The window made larger or smaller: the pictures at the zoom that fits it now."""
@@ -169,12 +170,14 @@ class PictureWindow:
             if tr is not None:
                 yours = A.shown(disc, pic, A.read_pieces(tr.parts))
                 self.your_view.configure(image=self._photo(A.png(pic, yours, layout)), text="")
-            if pic.tints:
-                self.fight_label.configure(text=("Your picture" if tr is not None else "The game's picture")
-                                           + " in a fight, in the colours the game draws it with: "
-                                           + _tint_list(pic.tints))
+            if A.previews(pic):
+                whose = "Your picture" if tr is not None else "The game's picture"
+                self.fight_label.configure(text=whose + (" in a fight, in the colours the game draws it with: "
+                                                         + _tint_list(pic.tints) if pic.tints else
+                                                         " as the game shows it: a little darker, with the "
+                                                         "PlayStation's dot pattern, on the black screen"))
                 self.fight_label.pack(anchor="w", before=self.tip)
-                self.fight_view.configure(image=self._photo(A.tinted_png(pic, yours)), text="")
+                self.fight_view.configure(image=self._photo(A.preview_png(pic, yours)), text="")
                 self.fight_view.pack(anchor="w", pady=(2, 8), before=self.tip)
         locked = tr is None or bool(tr.locked)
         self.save_png.configure(state="normal" if ready else "disabled")

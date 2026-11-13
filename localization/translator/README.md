@@ -48,8 +48,8 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
 Button", New Game, Continue, Tutorial, EX Game and the publisher line, the city map's place
 names (one picture with all ten), and the battle words (one picture with the words, numbers and
 marks of a fight: Miss, NO TARGET, ENERGY SHOT, SCAN, CONFUSE and the rest), the day title
-cards ("Day 1 RESONANCE" to "Epilogue SYMBIOSIS", one picture each), and the Tutorial (its menu
-and its 29 pages of words, one picture per screen). They are read from your own
+cards ("Day 1 RESONANCE" to "Epilogue SYMBIOSIS", one picture each), the Tutorial (its menu
+and its 29 pages of words, one picture per screen), and the Game Over words. They are read from your own
 disc (**Choose disc…**: a Parasite Eve USA disc image, Disc 1 or Disc 2, unchanged; it is
 remembered on your computer). Nothing of the disc is put anywhere but your translation.
 
@@ -87,6 +87,10 @@ remembered on your computer). Nothing of the disc is put anywhere but your trans
    picked: the game keeps it six times (once plain, five times with the green ring on one choice),
    and the tool puts yours into all six, with the game's green ring drawn back on the five at the
    English places, so keep the choices where they are.
+   Game Over is the words alone, 120×24, with 16 colours: each pixel becomes the nearest of them,
+   and the first one, black, is see-through (the screen behind is black; Aya, lying behind the
+   words, shows only there). The game draws the words a little darker than the PNG, with the
+   PlayStation's fine dot pattern; the window shows your picture that way too.
 3. **Load PNG…**. "Your picture" shows it as the game will. **Use the game's picture** undoes it.
 4. Save the translation: the picture goes into its `pictures.bin`. Other pictures already in the
    file (a fan patch's) stay as they are, and can be redrawn the same way.
@@ -119,7 +123,8 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
 
 ## Not there yet
 
-- More pictures with words (Game Over), and drawing missing letters.
+- More pictures with words (the menus' other words, on the same page as Game Over), and drawing
+  missing letters.
 
 ## Code
 
@@ -131,7 +136,8 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   shows each line, from the disc). `picture_window.py`: the Pictures window; `artwork.py`: the pictures'
   list, PNG out and in, and their pieces in `pictures.bin` (TIM pixels: `petext/tim.py`; a day
   card's tiles and colour rows read from its room, as `gamelook.room_views` draws them; a Tutorial
-  screen's layers read the same way and drawn in the game's order, by depth, the shadow subtracted).
+  screen's layers read the same way and drawn in the game's order, by depth, the shadow subtracted;
+  Game Over found through the game's glyph table on its page of words, drawn darker and dithered).
 - `package.py`: builds the download for the system it runs on and checks the built program:
   it starts it, types a line, saves and quits (`--report`), compares the file with what the source
   tool saves, and searches everything inside for game text. Build tools are pinned in
@@ -152,5 +158,7 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   continues the sample saves of Days 2-5 (Disc 1) and Day 6 (Disc 2) with day cards redrawn in them
   (no route reaches the Epilogue's card or Day 1's); part `translator-tutorial` (CTest
   `original-game-translator-tutorial`) goes through the whole Tutorial with all 30 screens redrawn in
-  it (Disc 1, the pad route of CTest `original-game-tutorial`); part `translator-look` (CTest
+  it (Disc 1, the pad route of CTest `original-game-tutorial`); part `translator-game-over` (CTest
+  `original-game-translator-game-over`) loses the first fight with Game Over redrawn (Disc 1, part
+  battle's route, Aya's HP set to 1 by the game's own test switch); part `translator-look` (CTest
   `original-game-translator-look`) checks the game look against the game's own frames.

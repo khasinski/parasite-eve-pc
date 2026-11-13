@@ -750,6 +750,40 @@ def subtracted(under: int, shadow: int) -> int:
     return sum(max(0, (under >> s & 31) - (shadow >> s & 31)) << s for s in (0, 5, 10))
 
 
+def made_up_glyph_page(width: int = 120, height: int = 24, rect=(448, 0, 64, 254), before: int = 1):
+    """(an entry, a resident pack, where the page's pixels start in the entry) of the test's own, laid out as
+    the game's: the entry a scene blob whose raw image list holds `before` small images and then the page
+    (VRAM `rect`), pixels counting up; the pack's glyph table with glyph 0x8B at u 0 v 184, `width` x
+    `height`, colour row 448,233."""
+    import struct
+    from translator import artwork as A
+    images = b""
+    for k in range(before):                                         # 2 words x 1 row elsewhere
+        images += struct.pack("<I4H", 16, 900 + 2 * k, 500, 2, 1) + b"\x01\x02\x03\x04"
+    page_at = 16 + len(images) + 12
+    x, y, w, h = rect
+    pixels = bytes((k * 7) % 251 for k in range(w * h * 2))
+    images += struct.pack("<I4H", 12 + len(pixels), x, y, w, h) + pixels + b"\0\0\0\0"
+    sub = 16 + len(images)
+    blob = struct.pack("<II", 0, sub) + bytes(8) + images
+    blob += bytes(8) + struct.pack("<I", 1 << 22 | (sub + 12)) + struct.pack("<3I", 0, 16, A.RAW_IMAGES)
+    resident = bytearray(0x40 + 8 * 0x90)
+    struct.pack_into("<i", resident, A.GLYPHS, 0x40)
+    struct.pack_into("<BBHBBBB", resident, 0x40 + 8 * 0x8B, 0, 184, 233 << 6 | 448 >> 4, width, height, 0, 0)
+    return blob, bytes(resident), page_at
+
+
+def made_up_glyph(width: int = 8, height: int = 3, colours=None):
+    """A Glyph of the test's own and its bytes: pixels counting through the 16 colours, then the colours."""
+    import struct
+    from translator import artwork as A
+    pic = A.Glyph("test/glyph", "Test", "Glyph", 9, 0x8B, (448, 0), (width, height), (100, 100), 0, A.GAME_OVER_TIP)
+    colours = colours or [0] + [k | (31 - k) << 5 | 8 << 10 for k in range(2, 32, 2)]
+    numbers = [k % 16 for k in range(width * height)]
+    data = bytes(numbers[k] | numbers[k + 1] << 4 for k in range(0, len(numbers), 2)) + struct.pack("<16H", *colours)
+    return pic, data
+
+
 class FakeDisc:
     """artwork.Disc's parts for one made-up picture at PE.IMG byte 3000 of sectors 1-3: no disc."""
 
@@ -1098,6 +1132,74 @@ class PictureRuleTest(unittest.TestCase):
             self.assertEqual(img.getpixel((x, y + 3)), (r, 0, 0))
             self.assertEqual(img.getpixel((x, y + 6)), (0, r, 0))
 
+    def test_a_glyph_is_found_from_the_glyph_table_and_the_entrys_raw_images(self):
+        """Game Over's kind: its rows and colours are where the disc's own glyph table and the entry's raw image
+        list put them (another image before the page moves them along); a glyph of another size, or one that is
+        not inside one raw image, is refused."""
+        from translator import artwork as A
+        pic = A.GAME_OVER_WORDS
+        for before in (1, 3):
+            blob, resident, page = made_up_glyph_page(before=before)
+            parts = A._glyph_parts(pic, blob, resident)
+            self.assertEqual(parts, [(page + (184 + r) * 128, 60) for r in range(24)] + [(page + 233 * 128, 32)])
+        blob, resident, _ = made_up_glyph_page(width=100)
+        with self.assertRaisesRegex(ValueError, "is 100x24"):
+            A._glyph_parts(pic, blob, resident)
+        blob, resident, _ = made_up_glyph_page(rect=(448, 0, 64, 200))          # stops above the colours
+        with self.assertRaisesRegex(ValueError, "not in one raw image"):
+            A._glyph_parts(pic, blob, resident)
+        blob, resident, _ = made_up_glyph_page(rect=(448, 190, 64, 64))         # starts below the first row
+        with self.assertRaisesRegex(ValueError, "not in one raw image"):
+            A._glyph_parts(pic, blob, resident)
+
+    def test_a_glyph_png_out_and_back_is_the_same_bytes_and_keeps_its_colours(self):
+        """A PNG of Game Over has its own 16 colours (palette or RGB, same bytes back); a colour it lacks
+        becomes the nearest of the 16 (with a note); the colours, the English ones or a translation's, stay;
+        another size is refused."""
+        from PIL import Image, ImageDraw
+        from petext import tim as T
+        from translator import artwork as A
+        pic, data = made_up_glyph()
+        png = A.png(pic, data)
+        self.assertEqual(Image.open(io.BytesIO(png)).mode, "P")
+        self.assertEqual(A.from_png(pic, data, png).tim, data)
+        back = A.from_png(pic, data, png_bytes(Image.open(io.BytesIO(png)).convert("RGB")))
+        self.assertEqual((back.tim, back.notes), (data, []))
+        img = Image.open(io.BytesIO(png)).convert("RGB")
+        near = tuple(min(255, c + 3) for c in T.rgb_of(A.glyph_colours(pic, data)[5]))
+        ImageDraw.Draw(img).point((0, 0), fill=near)                       # number 0 there before
+        loaded = A.from_png(pic, data, png_bytes(img))
+        self.assertEqual(A.glyph_numbers(pic, loaded.tim)[0], 5)
+        self.assertEqual(A.glyph_numbers(pic, loaded.tim)[1:], A.glyph_numbers(pic, data)[1:])
+        self.assertEqual(loaded.tim[-32:], data[-32:])
+        self.assertIn("1 pixels were not one of the picture's 16 colours", " ".join(loaded.notes))
+        theirs = data[:-2] + (0x7FFF).to_bytes(2, "little")                  # a translation's own last colour
+        self.assertEqual(A.from_png(pic, data, A.png(pic, theirs), theirs).tim, theirs)
+        with self.assertRaisesRegex(ValueError, "must stay 8×3"):
+            A.from_png(pic, data, png_bytes(Image.new("RGB", (9, 3))))
+
+    def test_a_glyph_in_the_game_is_darker_and_dithered_by_its_place_on_the_screen(self):
+        """Game Over as the screen shows it: each colour part as 8 bits times the drawing colour over 128,
+        plus the PlayStation's 4x4 dither at that screen pixel, cut to 5 bits; colour 0 the black screen."""
+        from translator import artwork as A
+        white = 0x7FFF
+        self.assertEqual(A.dithered(white, 128, 1, 0), (255, 255, 255))           # dither 0 there
+        self.assertEqual(A.dithered(white, 128, 0, 0), (247, 247, 247))           # 248 - 4 -> 30
+        self.assertEqual(A.dithered(white, 128, 2, 1), (255, 255, 255))           # 248 + 3 -> 31
+        self.assertEqual(A.dithered(1, 120, 0, 0), (0, 0, 0))                     # 7 - 4 -> 0
+        self.assertEqual(A.dithered(16 << 5, 120, 3, 3)[1], A.screen_rgb(14 << 5)[1])   # 120 - 2 -> 14
+        self.assertEqual(A.dithered(white, 120, 0, 3), A.dithered(white, 120, 4, 7))     # every 4 pixels
+        pic, data = made_up_glyph()
+        img = A.in_game(pic, data)
+        colours, numbers = A.glyph_colours(pic, data), A.glyph_numbers(pic, data)
+        for k, n in enumerate(numbers):
+            x, y = k % 8, k // 8
+            want = (0, 0, 0) if n == 0 else A.dithered(colours[n], 120, 100 + x, 100 + y)
+            self.assertEqual(img.getpixel((x, y)), want)
+        self.assertNotEqual(A.in_game(pic, data, 116).tobytes(), img.tobytes())
+        self.assertEqual(A.previews(pic), 1)
+        self.assertEqual(A.preview_png(pic, data), png_bytes(img))
+
     def test_a_picture_loaded_keeps_every_other_piece(self):
         import zlib
         from petext import pictures as pf, tim as T
@@ -1185,7 +1287,7 @@ class GameLookRuleTest(unittest.TestCase):
 
 
 class PictureDiscTest(unittest.TestCase):
-    """The pictures with words (title screen, city map, battle words, day cards, Tutorial) from the real discs (PE_TEST_DISC,
+    """The pictures with words (title screen, city map, battle words, day cards, Tutorial, Game Over) from the real discs (PE_TEST_DISC,
     PE_TEST_DISC2): each one read out as a PNG and loaded back gives the disc's bytes, and is the same
     on both discs. With the player packs (PE_TEST_PLAYER_PACKS) too: each pack's pictures as it shows
     them, out as a PNG and back, change nothing (their own colours included)."""
@@ -1241,6 +1343,71 @@ class PictureDiscTest(unittest.TestCase):
             for word, (x0, y0, w, h) in boxes.items():
                 ink = sum(1 for y in range(y0, y0 + h) for x in range(x0, x0 + w) if numbers[y * 256 + x])
                 self.assertGreater(ink, w * h // 8, word)
+
+    def test_game_over_is_the_glyph_the_end_of_a_lost_fight_draws(self):
+        """Game Over on both discs: glyph 0x8B of the resident pack's table (120x24 at u 0 v 184 of page 448,0,
+        colour row 448,233), rows 184-207 of entry 9's raw image at VRAM 448,0 (64x254 words, its pixels from
+        the entry's byte 20); no other glyph overlaps it or uses its colours; colour 0 see-through and no colour
+        with the see-through bit (so no blending); and the tool's in-game picture is an independent model of
+        what the GPU draws at x 100, y 100 with brightness 120 and 116."""
+        import struct
+        from petext import disc as discs
+        from translator import artwork as A
+        pic = A.GAME_OVER_WORDS
+        for disc in self.discs():
+            game = discs.Game(disc.path)
+            try:
+                resident = game.resident_pack()
+                entry = game.pe(game.sectors[9], game.sectors[10] - game.sectors[9])
+            finally:
+                game.disc.f.close()
+            self.assertEqual(struct.unpack_from("<I4H", entry, 8), (12 + 64 * 254 * 2, 448, 0, 64, 254))
+            self.assertEqual(disc.segments[pic.id], [(20 + (184 + r) * 128, 60) for r in range(24)] + [(20 + 233 * 128, 32)])
+            table = struct.unpack_from("<i", resident, 8)[0]
+            end = struct.unpack_from("<i", resident, 12)[0]                       # the next table of the pack
+            glyphs = [struct.unpack_from("<BBHBBBB", resident, table + 8 * k) for k in range((end - table) // 8)]
+            self.assertEqual(glyphs[0x8B][:6], (0, 184, 233 << 6 | 448 >> 4, 120, 24, 0))
+            for k, (u, v, clut, w, h, _, _) in enumerate(glyphs):
+                if k != 0x8B and w and h:
+                    self.assertFalse(u < 120 and v < 208 and v + h > 184, k)
+                    self.assertNotEqual(clut, glyphs[0x8B][2], k)
+            english = disc.english[pic.id]
+            colours = struct.unpack_from("<16H", entry, 20 + 233 * 128)
+            self.assertEqual(A.glyph_colours(pic, english), colours)
+            self.assertEqual(colours[0], 0)
+            self.assertFalse(any(c & 0x8000 for c in colours))
+            numbers = [entry[20 + (184 + y) * 128 + x // 2] >> 4 * (x & 1) & 15 for y in range(24) for x in range(120)]
+            self.assertEqual(A.glyph_numbers(pic, english), numbers)
+            self.assertGreater(sum(1 for n in numbers if n), 900)
+            dither = ((-4, 0, -3, 1), (2, -2, 3, -1), (-3, 1, -4, 0), (3, -1, 2, -2))
+            for brightness in (120, 116):
+                model = []
+                for k, n in enumerate(numbers):
+                    x, y = 100 + k % 120, 100 + k // 120
+                    parts = [max(0, min(255, (colours[n] >> s & 31) * brightness // 16 + dither[y % 4][x % 4])) >> 3
+                             for s in (0, 5, 10)]
+                    model.append((0, 0, 0) if n == 0 else tuple((p * 255 + 15) // 31 for p in parts))
+                drawn = A.in_game(pic, english, brightness).tobytes()
+                self.assertEqual([tuple(drawn[k:k + 3]) for k in range(0, len(drawn), 3)], model, brightness)
+
+    def test_a_redrawn_game_over_keeps_the_rest_of_its_page(self):
+        """Game Over shares its page with the menus' other words, which the French, German and Spanish packs
+        redrew: loading a Game Over over each pack changes only Game Over's bytes of the page."""
+        from translator import artwork as A
+        packs = player_packs()
+        if not packs:
+            self.skipTest("needs PE_TEST_PLAYER_PACKS (a folder of .pelang translations)")
+        pic, disc = A.GAME_OVER_WORDS, self.discs()[0]
+        base, data = disc.around[pic.id]
+        mine = set(k for a, n in disc.segments[pic.id] for k in range(a, a + n))
+        new = bytes(b ^ 0x11 for b in disc.english[pic.id][:1440]) + disc.english[pic.id][1440:]
+        for path in packs:
+            with self.subTest(pack=path.name):
+                pieces = A.read_pieces(zip_parts(path))
+                before = A._lay(base, data, pieces)[0]
+                after = A._lay(base, data, A.put(disc, pic, pieces, new))[0]
+                self.assertEqual(A.shown(disc, pic, A.put(disc, pic, pieces, new)), new)
+                self.assertEqual([k for k in range(len(data)) if before[k] != after[k] and k not in mine], [])
 
     def test_the_day_cards_are_their_rooms_views_as_the_screen_shows_them(self):
         """Each day card is its room's view (gamelook.room_views, which the game's frames of Days 2-4
@@ -1855,7 +2022,7 @@ class AllPicturesDisc:
     """artwork.Disc's parts with every picture made up at its real size and kind: no disc."""
     SIZES = {"title/press-start": (24, 144, 24), "title/new-game": (24, 84, 24), "title/continue": (24, 84, 24),
              "title/tutorial": (24, 84, 24), "title/ex-game": (24, 84, 24), "title/published-by": (4, 256, 64),
-             "map/place-names": (4, 256, 143), "battle/words": (4, 256, 32)}
+             "map/place-names": (4, 256, 143), "battle/words": (4, 256, 32), "game-over": (4, 120, 24)}
 
     def __init__(self, path):
         from translator import artwork as A
@@ -1863,6 +2030,11 @@ class AllPicturesDisc:
         self.english, self.around, self.layout, self.segments = {}, {}, {}, {}
         for pic in A.PICTURES:
             if isinstance(pic, A.Screen):
+                continue
+            if isinstance(pic, A.Glyph):
+                _, data = made_up_glyph(*pic.size)
+                self.english[pic.id], self.around[pic.id] = data, (0, data + bytes(-len(data) % 2048))
+                self.segments[pic.id] = [(0, len(data))]
                 continue
             if isinstance(pic, A.Card):
                 card, self.layout[pic.id] = made_up_card()
@@ -1883,7 +2055,7 @@ class PictureFitTest(unittest.TestCase):
     """The Pictures window from source with a made-up disc (GitHub runs it): the city map's names,
     the largest picture, fit it with the buttons in sight, at 2x in a 900-high window and still in
     sight in a window for a 768-high screen; resizing the window changes the zoom. The battle words
-    show their copies in the fight's colours too, and still fit."""
+    show their copies in the fight's colours too, Game Over itself as the game shows it, and still fit."""
     setUp, tearDown = WindowTest.setUp, WindowTest.tearDown
 
     def test_the_map_fits_the_pictures_window_with_its_buttons_in_sight(self):
@@ -1912,10 +2084,13 @@ class PictureFitTest(unittest.TestCase):
                     self.assertEqual(pw.your_view.winfo_height() >= h * pw.zoom, True, details)
                     self.assertLessEqual(bottom, pw.win.winfo_height(), details)    # the buttons in sight
                     self.assertLessEqual(right, pw.win.winfo_width(), details)
-                    self.assertEqual(bool(pw.fight_view.winfo_ismapped()), bool(pic.tints), details)
+                    self.assertEqual(bool(pw.fight_view.winfo_ismapped()), bool(PW.A.previews(pic)), details)
                     if pic.tints:                  # yours in each of the game's tints, one above the other
                         self.assertGreaterEqual(pw.fight_view.winfo_height(), h * len(pic.tints) * pw.zoom, details)
                         self.assertIn("red (Miss)", pw.fight_label.cget("text"))
+                    if pic.id == "game-over":      # yours as the screen shows it
+                        self.assertGreaterEqual(pw.fight_view.winfo_height(), h * pw.zoom, details)
+                        self.assertIn("as the game shows it", pw.fight_label.cget("text"))
                     # The largest zoom that fits the window as it really is: a screen smaller than the
                     # height asked for (GitHub's Windows and Mac runners) gives a smaller window.
                     room_w = pw.win.winfo_width() - PW.ROOM_AROUND[0]

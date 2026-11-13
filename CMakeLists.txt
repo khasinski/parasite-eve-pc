@@ -811,6 +811,15 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-tutorial-evidence translator-tutorial)
             set_tests_properties(original-game-translator-tutorial PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 2400 LABELS "game-assets;mods;localization")
+            # The Game Over words redrawn in the Translator: on part battle's route, with Aya's HP set to 1
+            # by the game's test switch, the still Game Over (both of its brightnesses) with the file chosen
+            # is the Translator's picture of it, pixel for pixel, and the one on a copy of Disc 1 with the
+            # file's pieces written in. Needs Pillow. Disc 1 only.
+            add_test(NAME original-game-translator-game-over COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-game-over-evidence translator-game-over)
+            set_tests_properties(original-game-translator-game-over PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
             # The Translator's "As in the game" preview against the game's own frames: the first box
             # (English pack, and each player pack given by PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_)
             # and Disc 2's boxes on the ship, every letter pixel; the first box's room picture.

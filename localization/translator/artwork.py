@@ -162,6 +162,47 @@ class Screen:
         return f"{self.where}: {self.name}"
 
 
+@dataclass(frozen=True)
+class Glyph:
+    """One word cut out of a page that holds many: a glyph of the resident pack's glyph table (PE.IMG entry 2,
+    `Draw_LookupGlyphDescriptor`: u, v, colour row, width, height), 4-bit, on a page that PE.IMG entry
+    `entry` sends to video memory as a raw image (the blob's list under RAW_IMAGES, `Scene_LoadFieldBg`). Its
+    bytes: each pixel row's bytes, then its 16 colours. Where they are is read from the disc's glyph table
+    and the entry's image list (and refused if they are not as the code below expects).
+    Game Over (glyph 0x8B): drawn by Battle_StepPostBattle (src/main/battle/encounter.c) as one quad,
+    1:1 at x 100-220, y 100-124 once it has grown and stopped, colour 0 see-through, no blending (none of
+    its colours has the see-through bit), each colour times the drawing colour (120 and 116 on alternate
+    frames: the two draw buffers) over 128 with the PlayStation's dither, on a black screen. Checked pixel
+    for pixel against the game's frames (56 frames, both brightnesses)."""
+    id: str
+    where: str
+    name: str
+    entry: int               # PE.IMG entry holding the page
+    glyph: int               # the glyph table's entry
+    page: tuple              # (VRAM x, y) of the page the game draws it from (its texture page)
+    size: tuple              # (width, height) in pixels, as the glyph table has it
+    at: tuple                # (x, y) on the screen once it stands still: where the dither starts
+    crc: int                 # CRC-32 of its English bytes (`Disc.english`: the pixel rows, then the 16 colours)
+    tip: str
+    brightness: tuple = (120, 116)    # the drawing colours it is shown with, one frame each
+    tints: tuple = ()
+
+    @property
+    def label(self) -> str:
+        return f"{self.where}: {self.name}"
+
+
+RAW_IMAGES = 0xABADC06C       # key of a scene blob's raw image list (src/main/scene/room_load.c)
+GLYPHS = 0x08                 # the resident pack's directory slot of the glyph table (pe1/resident_tables.h)
+# The PlayStation's 4x4 dither, added to an 8-bit colour part before it is cut to 5 bits, by screen pixel.
+DITHER = ((-4, 0, -3, 1), (2, -2, 3, -1), (-3, 1, -4, 0), (3, -1, 2, -2))
+GAME_OVER_TIP = ("The words shown when Aya falls in a fight and the game is over. 16 colours: each pixel of yours "
+                 "becomes the nearest of them, so draw with the colours of the saved PNG. Its first colour, black, is "
+                 "see-through: the screen behind the words is black, and Aya, who lies behind them, shows only "
+                 "there. The game draws the words a little darker than the PNG, with the PlayStation's fine dot "
+                 "pattern (see the preview), in the middle of the screen. Keep the words inside {w}×{h}.")
+
+
 @dataclass
 class Layer:
     entry: int               # the room's tile list
@@ -274,7 +315,12 @@ def _tutorial_screens() -> tuple:
     return tuple(out)
 
 
-PICTURES = PICTURES + _tutorial_screens()
+# Game Over: glyph 0x8B of the system page (PE.IMG entry 9, VRAM 448,0, read at every scene change). The rest of
+# that page holds the menus' and the fight's other words, not part of this picture.
+GAME_OVER_WORDS = Glyph("game-over", "Game Over", "Game Over", 9, 0x8B, (448, 0), (120, 24), (100, 100), 0x19112F64,
+                        GAME_OVER_TIP)
+
+PICTURES = PICTURES + _tutorial_screens() + (GAME_OVER_WORDS,)
 BY_ID = {p.id: p for p in PICTURES}
 
 
@@ -320,6 +366,21 @@ class Disc:
                     self.english[pic.id], self.around[pic.id] = english, (base, data)
                     self.segments[pic.id], self.layout[pic.id] = segments, layout
                     continue
+                if isinstance(pic, Glyph):
+                    first = game.sectors[pic.entry]
+                    data = game.pe(first, game.sectors[pic.entry + 1] - first)
+                    try:
+                        segments = _glyph_parts(pic, data, game.resident_pack())
+                    except (ValueError, struct.error) as e:
+                        raise NotTheDisc(f"{self.path.name}: the picture \"{pic.name}\" is not the game's own ({e}). "
+                                         "Use an unchanged USA disc, not a patched one.") from e
+                    english = b"".join(data[a:a + n] for a, n in segments)
+                    if zlib.crc32(english) != pic.crc:
+                        raise NotTheDisc(f"{self.path.name}: the picture \"{pic.name}\" is not the game's own. "
+                                         "Use an unchanged USA disc, not a patched one.")
+                    self.english[pic.id], self.around[pic.id] = english, (first * SECTOR, data)
+                    self.segments[pic.id] = segments
+                    continue
                 lo, hi = self.span(pic)
                 first, last = lo // SECTOR, (hi - 1) // SECTOR
                 data = game.pe(first, last - first + 1)
@@ -350,6 +411,54 @@ def _uploads(blob: bytes, at: int):
         yield at + off, (r >> 10) & 0x7FF, r >> 21, r & 0x3FF, h
         if src2 & 0xFFFFFF:
             yield at + off + (src2 & 0xFFFFFF), (r2 >> 10) & 0x7FF, r2 >> 21, r2 & 0x3FF, src2 >> 24
+
+
+def _raw_images(blob: bytes):
+    """(byte of the pixels, VRAM x, y, w, h) of each raw image in a scene blob's list (key RAW_IMAGES), as
+    Scene_LoadFieldBg uploads them: {u32 length from its own first byte, RECT, pixels}, until a length of 0."""
+    sub = struct.unpack_from("<I", blob, 4)[0]
+    table = struct.unpack_from("<I", blob, sub + 8)[0]
+    for k in range(table >> 22):
+        _, payload, key = struct.unpack_from("<3I", blob, (table & 0x3FFFFF) + 12 * k)
+        if key != RAW_IMAGES:
+            continue
+        at = payload & 0xFFFFFF
+        while True:
+            length = struct.unpack_from("<I", blob, at)[0]
+            if length == 0:
+                return
+            x, y, w, h = struct.unpack_from("<4H", blob, at + 4)
+            if length != 12 + w * h * 2:
+                raise ValueError(f"a raw image at byte {at} is not its length")
+            yield at + 12, x, y, w, h
+            at += length
+    raise ValueError("no raw image list")
+
+
+def _glyph_parts(pic: Glyph, data: bytes, resident: bytes) -> list:
+    """A glyph's bytes in its entry (`data`, from the entry's first byte): each pixel row, then its 16 colours,
+    found from the disc's own glyph table and the entry's raw image that covers the glyph's page."""
+    table = struct.unpack_from("<i", resident, GLYPHS)[0]
+    u, v, clut, w, h, mode = struct.unpack_from("<BBHBBB", resident, table + 8 * pic.glyph)
+    if (w, h) != pic.size or mode != 0 or u % 2 or w % 2:
+        raise ValueError(f"glyph {pic.glyph:#x} is {w}x{h} at {u},{v} (mode {mode})")
+    cx, cy = (clut & 63) * 16, clut >> 6
+
+    def byte(x: int, y: int) -> int | None:              # (VRAM word x, y) -> byte in the entry
+        for at, rx, ry, rw, rh in _raw_images(data):
+            if rx <= x and x < rx + rw and ry <= y < ry + rh:
+                return at + ((y - ry) * rw + x - rx) * 2
+        return None
+
+    x0, y0 = pic.page[0] + u // 4, pic.page[1] + v
+    first, last, colours = byte(x0, y0), byte(pic.page[0] + (u + w - 1) // 4, y0 + h - 1), byte(cx, cy)
+    if first is None or last is None or colours is None or byte(cx + 15, cy) != colours + 30:
+        raise ValueError(f"glyph {pic.glyph:#x} is not in one raw image of entry {pic.entry}")
+    stride = (byte(x0, y0 + 1) or 0) - first
+    if stride <= 0 or last != first + (h - 1) * stride + ((u + w - 1) // 4 - u // 4) * 2:
+        raise ValueError(f"glyph {pic.glyph:#x}'s rows are not in one raw image")
+    first += (u % 4) // 2
+    return [(first + r * stride, w // 2) for r in range(h)] + [(colours, 32)]
 
 
 def _card_parts(room: tuple, data: bytes, view: int) -> tuple[list, CardLayout]:
@@ -578,7 +687,59 @@ def write_pieces(parts: dict[str, bytes], pieces) -> None:
 # ---- PNG out and in (Pillow) ----
 
 def size(pic, data: bytes) -> tuple[int, int]:
+    if isinstance(pic, Glyph):
+        return pic.size
     return CARD_SIZE if isinstance(pic, (Card, Screen)) else timlib.read(data).size
+
+
+def glyph_numbers(pic: Glyph, data: bytes) -> list[int]:
+    """A glyph's palette numbers, row by row (4-bit: the low half of a byte is the left pixel)."""
+    w, h = pic.size
+    return [b >> s & 15 for b in data[:w * h // 2] for s in (0, 4)]
+
+
+def glyph_colours(pic: Glyph, data: bytes) -> tuple:
+    w, h = pic.size
+    return struct.unpack_from("<16H", data, w * h // 2)
+
+
+def _with_numbers(pic: Glyph, data: bytes, numbers: list[int]) -> bytes:
+    w, h = pic.size
+    return bytes(numbers[k] | numbers[k + 1] << 4 for k in range(0, w * h, 2)) + data[w * h // 2:]
+
+
+def dithered(colour: int, brightness: int, x: int, y: int) -> tuple[int, int, int]:
+    """A colour drawn as a textured quad with a drawing colour (128 = as it is) at screen pixel (x, y): each
+    5-bit part as 8 bits times the drawing colour over 128, plus the PlayStation's dither there, cut to 5
+    bits, then as the screen shows it."""
+    d = DITHER[y & 3][x & 3]
+    return screen_rgb(sum((max(0, min(255, (((colour >> s) & 31) << 3) * brightness // 128 + d)) >> 3) << s
+                          for s in (0, 5, 10)))
+
+
+def in_game(pic: Glyph, data: bytes, brightness: int | None = None):
+    """The glyph as the game's screen shows it once it stands still: darker by the drawing colour, dithered
+    by its place on the screen, over the black screen (colour 0 is see-through)."""
+    from PIL import Image
+    b = pic.brightness[0] if brightness is None else brightness
+    colours, w = glyph_colours(pic, data), pic.size[0]
+    img = Image.new("RGB", pic.size)
+    img.putdata([dithered(colours[n], b, pic.at[0] + k % w, pic.at[1] + k // w) if colours[n] else (0, 0, 0)
+                 for k, n in enumerate(glyph_numbers(pic, data))])
+    return img
+
+
+def previews(pic) -> int:
+    """How many copies the Pictures window shows below the picture: its tints, or one as in the game."""
+    return len(pic.tints) or (1 if isinstance(pic, Glyph) else 0)
+
+
+def preview_png(pic, data: bytes) -> bytes:
+    if isinstance(pic, Glyph):
+        out = io.BytesIO()
+        in_game(pic, data).save(out, "PNG")
+        return out.getvalue()
+    return tinted_png(pic, data)
 
 
 def screen_rgb(colour: int) -> tuple[int, int, int]:
@@ -736,6 +897,11 @@ def image(pic, tim_bytes: bytes, layout: CardLayout | None = None):
         return _card_image(tim_bytes, layout)
     if isinstance(pic, Screen):
         return screen_image(tim_bytes, layout)
+    if isinstance(pic, Glyph):
+        img = Image.new("P", pic.size)
+        img.putpalette([c for colour in glyph_colours(pic, tim_bytes) for c in timlib.rgb_of(colour)], rawmode="RGB")
+        img.putdata(glyph_numbers(pic, tim_bytes))
+        return img
     tim = timlib.read(tim_bytes)
     if tim.bits in (4, 8):
         img = Image.new("P", tim.size)
@@ -802,10 +968,31 @@ def from_png(pic, english: bytes, data: bytes, current: bytes | None = None,
         return _screen_from_png(pic, img, english, current or english, layout)
     # On the picture as it is now: a translation that changed a picture's colours (the German and Chinese
     # packs did, on the map) keeps them; only the pixels are the PNG's (put() keeps the length).
-    tim = timlib.read(current or english)
+    now = current or english
+    if isinstance(pic, Glyph):
+        if img.size != pic.size:
+            raise ValueError(f"the picture is {img.width}×{img.height}; it must stay {pic.size[0]}×{pic.size[1]}, "
+                             "the size the game draws.")
+        palette = [timlib.rgb_of(c) for c in glyph_colours(pic, now)]
+        numbers, notes = _palette_numbers(img, palette, glyph_numbers(pic, now))
+        return Loaded(_with_numbers(pic, now, numbers), notes)
+    tim = timlib.read(now)
     if img.size != tim.size:
         raise ValueError(f"the picture is {img.width}×{img.height}; it must stay {tim.width}×{tim.height}, "
                          "the size the game draws.")
+    if tim.bits == 24:
+        rgb, notes = _see_through_black(img)
+        return Loaded(timlib.with_rgb(tim, (rgb or img.convert("RGB")).tobytes()), notes)
+    if tim.bits not in (4, 8):
+        raise ValueError("this tool can't load that kind of picture yet")
+    palette = [timlib.rgb_of(c) for c in tim.palettes[pic.palette]]
+    numbers, notes = _palette_numbers(img, palette, timlib.indices(tim))
+    return Loaded(timlib.with_indices(tim, numbers), notes)
+
+
+def _see_through_black(img) -> tuple:
+    """(the PNG as RGB with its see-through parts drawn black, or None when it has none, and a note)."""
+    from PIL import Image
     notes = []
     if img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info):
         rgba = img.convert("RGBA")
@@ -816,20 +1003,22 @@ def from_png(pic, english: bytes, data: bytes, current: bytes | None = None,
         rgb = flat
     else:
         rgb = None
-    if tim.bits == 24:
-        return Loaded(timlib.with_rgb(tim, (rgb or img.convert("RGB")).tobytes()), notes)
-    if tim.bits not in (4, 8):
-        raise ValueError("this tool can't load that kind of picture yet")
-    palette = [timlib.rgb_of(c) for c in tim.palettes[pic.palette]]
+    return rgb, notes
+
+
+def _palette_numbers(img, palette: list, before: list) -> tuple[list[int], list[str]]:
+    """A PNG as palette numbers of `palette` (its colours as RGB) on a picture whose numbers are `before`, and
+    notes: a palette PNG with these colours in this order gives its numbers back as they are; otherwise each
+    pixel the number it had when it is still that colour, else the nearest colour's."""
+    rgb, notes = _see_through_black(img)
     if rgb is None and img.mode == "P":
         theirs = img.getpalette() or []
         same = all(tuple(theirs[i * 3:i * 3 + 3]) == palette[i] for i in range(len(palette)) if i * 3 + 3 <= len(theirs))
         numbers = list(img.tobytes())        # one byte per pixel in a palette image
         if same and len(theirs) >= len(palette) * 3 and max(numbers) < len(palette):
-            return Loaded(timlib.with_indices(tim, numbers), notes)
+            return numbers, notes
     flat = (rgb or img.convert("RGB")).tobytes()
     pixels = [tuple(flat[k:k + 3]) for k in range(0, len(flat), 3)]
-    before = timlib.indices(tim)
     nearest: dict[tuple, int] = {}
     numbers, off = [], 0
     for k, colour in enumerate(pixels):
@@ -846,7 +1035,7 @@ def from_png(pic, english: bytes, data: bytes, current: bytes | None = None,
         numbers.append(n)
     if off:
         notes.append(f"{off:,} pixels were not one of the picture's {len(palette)} colours: the nearest one is used.")
-    return Loaded(timlib.with_indices(tim, numbers), notes)
+    return numbers, notes
 
 
 def _flatten(img):

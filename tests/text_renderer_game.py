@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-battle,translator-cards,translator-tutorial,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -188,6 +188,15 @@ Checks, each from pe_mods.log and frame dumps:
              the Translator's picture of it (the menu with each choice picked: the copy with its green
              ring), the screen on a copy of Disc 1 with the file's pieces written in, and with the file's
              text alone the Translator's picture of the English screen. Disc 1 only.
+  translator-game-over  The Game Over words redrawn in the Translator: saved from Disc 1 as a PNG by the tool,
+             wiped and redrawn as pale bars over a red line (red is none of its 16 greens, so the nearest
+             is taken), loaded back through the scripted run (--picture) and saved. The file must change
+             Game Over, to the PNG's pixels and with its colours as they were, and no other picture; and
+             on part battle's route, with Aya's HP set to 1 by the game's own test switch so Melissa fells
+             her, two frames of the still Game Over (one at each of its two brightnesses) must be, pixel for
+             pixel, the screen on a copy of Disc 1 with the file's pieces written in, every ink pixel of the
+             words the Translator's in-game picture of them, and with the file's text alone the
+             Translator's English one. Disc 1 only: PE.IMG, and so the picture, is the same on Disc 2.
   translator-look  The Translator's "As in the game" preview (localization/translator/gamelook.py)
              against the game's own frames: the first box with the English pack (made from the discs)
              and with each player pack given (PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_), and the five
@@ -1576,6 +1585,126 @@ def translator_tutorial(game, discs, out, localization):
     return 0
 
 
+# ---- Part translator-game-over: the Game Over words ----
+
+# Part battle's route to the Melissa fight, where Aya's HP is 35 at FIGHT_AT; the game's own test switch sets
+# it to 1 there, and Melissa's next hit fells her: no Preraise, no Revive, so Battle_StepPostBattle plays the
+# game over. The words stand still at x 100-220, y 100-124 from vblank 66164 to 66221 (found frame by frame),
+# drawn with brightness 120 and 116 on alternate frames (the two draw buffers); these two are one of each.
+GAME_OVER_HP = f'{FIGHT_AT}:35:1'
+GAME_OVER_AT = (66200, 66202)
+
+
+def translator_game_over(game, discs, out, localization):
+    """Part translator-game-over (see the module notes). Disc 1 only (the user's choice: PE.IMG, and so the
+    picture, is the same bytes on Disc 2)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator game over: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    pic = artwork.BY_ID['game-over']
+    english = disc.english[pic.id]
+    # Saved by the Translator and redrawn in a paint program: the words wiped to black (see-through), then
+    # five pale bars and a red line under them (red is none of its 16 greens: the nearest is taken).
+    saved = out / 'game-over.png'
+    saved.write_bytes(artwork.png(pic, english))
+    img = Image.open(saved)
+    check(img.mode == 'P' and img.size == (120, 24), f'the saved Game Over is {img.mode} {img.size}')
+    pale = tuple(img.getpalette()[3:6])                         # its colour 1, the palest green
+    img = img.convert('RGB')
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((0, 0, 119, 23), fill=(0, 0, 0))
+    for x in range(4, 110, 22):
+        draw.rectangle((x, 3, x + 13, 16), fill=pale)
+    draw.line((2, 20, 117, 20), fill=(230, 20, 20), width=2)
+    img.save(saved)
+    expected = artwork.from_png(pic, english, saved.read_bytes())
+    check(any('not one of the picture' in n for n in expected.notes), f'no colour was fitted: {expected.notes}')
+    path, report = out / 'translator-game-over.pelang', out / 'translator-game-over-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Game Over test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
+                         timeout=600)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save Game Over: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    check(artwork.shown(disc, pic, pieces) == expected.tim, "the saved Game Over is not the PNG's pixels")
+    check(expected.tim[-32:] == english[-32:], 'the colours changed')
+    others = [p.id for p in artwork.PICTURES if p.id != pic.id and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-game-over-text.pelang'           # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Game Over test', None, path), ('es', 'Game Over test', None, plain)
+    print(f'translator game over: the Translator saved the redrawn Game Over as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Game Over test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    steps = presses([(FIGHT_AT, 0, 'fight')] + [(at, 0, f'still-{at}') for at in GAME_OVER_AT])
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            runs = {which: pool.submit(run_fixed, game, use, out / f'translator-game-over-{which}', steps, pack=p,
+                                       pad=BATTLE_ROUTE, hp=GAME_OVER_HP)
+                    for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                          ('text-only', discs[:1], text_only))}
+            works = {which: run.result() for which, run in runs.items()}
+        log = mods_log(works['pack'])
+        check(log_pieces.search(log) and 'its pictures are in use' in log,
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {works['pack']}")
+        x0, y0 = pic.at
+        w, h = pic.size
+        ink = {which: [n != 0 for n in artwork.glyph_numbers(pic, data)]
+               for which, data in (('mine', expected.tim), ('english', english))}
+
+        def box(f):
+            width, _, rgb = f
+            return [tuple(rgb[((y0 + y) * width + x0 + x) * 3:((y0 + y) * width + x0 + x) * 3 + 3])
+                    for y in range(h) for x in range(w)]
+
+        def rgb_list(img):
+            data = img.tobytes()
+            return [tuple(data[k:k + 3]) for k in range(0, len(data), 3)]
+
+        seen = set()
+        for at in GAME_OVER_AT:
+            label = f'still-{at}'
+            frames = {which: frame(works[which], label) for which in works}
+            check(frames['pack'] == frames['written-in'],
+                  f"{label}: the screen with the file is not the one on the disc with its pieces written in: "
+                  f"{works['pack']} vs {works['written-in']}")
+            plain_box, my_box = box(frames['text-only']), box(frames['pack'])
+            # The brightness of this frame: the one at which the English words are the frame's, every ink pixel.
+            fits = [b for b in pic.brightness
+                    if all(p == q for p, q, i in zip(plain_box, rgb_list(artwork.in_game(pic, english, b)),
+                                                     ink['english']) if i)]
+            check(len(fits) == 1, f"{label}: with the text alone the words are not the Translator's English picture "
+                                  f"at brightness 120 or 116 ({fits}): {works['text-only']}")
+            b = fits[0]
+            seen.add(b)
+            mine = rgb_list(artwork.in_game(pic, expected.tim, b))
+            wrong = sum(1 for p, q, i in zip(my_box, mine, ink['mine']) if i and p != q)
+            check(wrong == 0, f"{label}: {wrong} of the words' pixels on the screen with the file are not the "
+                              f"Translator's picture at brightness {b}: {works['pack']}")
+            same = sum(1 for p, q, i, j in zip(my_box, plain_box, ink['mine'], ink['english']) if not i and not j and p != q)
+            check(same == 0, f'{label}: {same} see-through pixels show something else than the English screen does')
+            differ = sum(1 for p, q in zip(my_box, plain_box) if p != q)
+            print(f"PASS translator game over, vblank {at} (brightness {b}): the words on the screen are the "
+                  f"Translator's picture of them, pixel for pixel, and the screen is the one on the disc with the "
+                  f"pieces written in ({differ} pixels of the box differ from the English screen)")
+        check(seen == set(pic.brightness), f'the frames kept show only brightness {seen}')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
 def look_is_the_frame(work, label, look, font, raw, name, gl):
     """The Translator's game look (translator/gamelook.py) of `raw` against the game's frame: every
     pixel it draws is the frame's, and every pixel of the frame's text area in the letters' own
@@ -1979,9 +2108,10 @@ def name_letters(pack):
 # ---- The game ----
 
 def run(game, discs, work, pack=None, present=(), mods=True, pad=(), start=None, driver=None, frame_limit=None,
-        crash_after=None, card=None, save_after=None, all_mods=None):
+        crash_after=None, card=None, save_after=None, all_mods=None, hp=None):
     """One headless run in its own folder, with `pack` chosen and the `present` packs beside it. From vblank `start` the game pauses at each control point;
-    driver(vblank, work) keeps frames (keep()) and returns the next command, or None to quit."""
+    driver(vblank, work) keeps frames (keep()) and returns the next command, or None to quit. `hp`: the game's
+    own test switch --diagnostic-hp-at VBLANK:EXPECTED:VALUE (Aya's HP set at that vblank)."""
     work.mkdir(parents=True)
     config = work / 'config'
     (config / 'lang').mkdir(parents=True)
@@ -2007,6 +2137,8 @@ def run(game, discs, work, pack=None, present=(), mods=True, pad=(), start=None,
         args += ['--test-crash-after', str(crash_after)]
     if save_after:
         args += ['--test-save-after', str(save_after)]
+    if hp:
+        args += ['--diagnostic-hp-at', hp]
     for tick, mask in pad:
         args += ['--pad-at', f'{tick}:{mask}']
     env = dict(os.environ, SDL_AUDIODRIVER='dummy', SDL_AUDIO_DRIVER='dummy', PSYZ_AUDIO_CLOCK='video',
@@ -2230,7 +2362,7 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
                               ('translator', translator_file), ('translator-pictures', translator_pictures),
                               ('translator-map', translator_map), ('translator-battle', translator_battle),
                               ('translator-cards', translator_cards), ('translator-tutorial', translator_tutorial),
-                              ('translator-look', translator_look)):
+                              ('translator-game-over', translator_game_over), ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]
