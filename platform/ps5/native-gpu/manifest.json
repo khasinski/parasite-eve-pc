@@ -162,9 +162,9 @@
       "component": "game",
       "path": "mods/CMakeLists.txt",
       "added": false,
-      "size": 11543,
+      "size": 24237,
       "before": "2551915e3524bd18f8d4a62106c458a4f7904c5e9d2ea5ac15bcf95e4b7cfce2",
-      "after": "15dc14eb7a8ffb23c48d1ba344944995c21f7230fef49e27aed544b558ceed26"
+      "after": "cd53e38d46bca6643485de262f5e129b3d7fecb08056cc8b2066c74f39857c73"
     },
     {
       "component": "game",

@@ -20,8 +20,9 @@
  * for well over 10 frames before the save screen opens.) With no save Aya has already put the phone
  * down when the question shows, and the ring page's pick-up sound plays: found headless 2026-11-09,
  * neither No nor backing out leaves the phone's task waiting on her put-down as a save does, and
- * holding her any earlier stalls a Yes. Only real save phones' questions: the sewer's "Press the
- * switch" or "Cancel" is not a phone call. */
+ * holding her before the save menu opens stalls a Yes. The frame hook below holds her once the
+ * save menu is open, so backing out can continue directly into a call. Only real save phones'
+ * questions: the sewer's "Press the switch" or "Cancel" is not a phone call. */
 #include <stdio.h>
 
 #include "pe_game.h"
@@ -86,6 +87,26 @@ static int pe_on_committed(void *ctx, void *user) {
     return 0;
 }
 
+/* Catch a backed-out save before the field advances the put-down animation.
+ * The save opcode has opened its menu and Aya's task can now wait on the hang-up.
+ * Holding before the menu opens would also freeze her initial pickup. */
+static int pe_on_frame(void *ctx, void *user) {
+    (void)ctx;
+    (void)user;
+    if (!pe_game_loaded() || g_SceneDispatchToken != s_token || s_state != SPOT_ASKED || s_kind != 1) return 0;
+    if (!pe_phone_unsaved_on() || pe_phone_mode() == PE_PHONE_OFF) {
+        if (pe_phone_hold_active()) pe_phone_hold_release();
+        return 0;
+    }
+    if (g_GameState.flags & 0x1000) {
+        if (!pe_phone_hold_active()) (void)pe_phone_hold_begin();
+    } else if (pe_phone_hold_active()) {
+        pe_log("phone", "room=%d saved=0 ask=1 held=1", s_spot.room);
+        s_state = SPOT_SAVED;
+    }
+    return 0;
+}
+
 static int pe_on_reset(void *ctx, void *user) {
     (void)ctx;
     (void)user;
@@ -135,6 +156,7 @@ void pe_phone_spot_status(char *out, unsigned size) {
 
 void pe_phone_spot_register(const char *mod_id) {
     /* ahead of every other page handler (a language pack's is EARLY), like Wayne's menu */
+    pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_EARLY, mod_id);
     pe_hook_add(PE_HOOK_TEXT_PAGE, pe_on_page, NULL, PE_PRIORITY_EARLY - 100, mod_id);
     pe_hook_add(pe_event_id(PE_EVENT_SAVE_COMMITTED), pe_on_committed, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);

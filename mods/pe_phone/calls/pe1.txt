@@ -14,6 +14,9 @@
 # game replaces it with its own calls. Once you change it, it's yours and is never overwritten; a
 # newer game puts its calls beside it in pe1.txt.new (not loaded) to copy from.
 #
+# All calls are outgoing: Aya dials, the other party answers. Establish who she reached and why
+# she called before the other party responds to her situation.
+#
 # ---- How a call is written ----
 #
 #   [pe1/pizza]                    the call's key, in square brackets: pack/name.
@@ -22,7 +25,7 @@
 #   caller = John's of Times Square        the name shown for the other side
 #   tone = funny                   serious or funny (F1 > Call tone picks which can come up)
 #   day = 1                        story day it can play on: 1 to 6, a range 2-5, or any
-#   them: John's on Forty-Fourth.           a line the caller says
+#   them: John's on Forty-Fourth.           a line the person Aya called says
 #   aya: Can you deliver to Carnegie Hall?   a line Aya says (shown with the name the player gave her)
 #
 # Optional settings (the default is in brackets):
@@ -94,7 +97,9 @@ tone = serious
 day = 1
 weight = 2
 once = yes
-them: Aya, I've got two firefighters trying to get past the tape.
+them: Daniel here.
+aya: Daniel, it's Aya. How's the cordon?
+them: I've got two firefighters trying to get past the tape.
 aya: Hold them back. People started burning before anything else did.
 them: Then why are you still in there?
 aya: Because she is.
@@ -112,9 +117,9 @@ aya: No. The fire department could use a slice, though.
 caller = ???
 tone = funny
 day = 1
-them: Carnegie Hall? I'm calling about my tickets.
-aya: The show's canceled.
-them: Can I move them to tomorrow?
+them: Ticket reservations.
+aya: I need Carnegie Hall security. The show's canceled.
+them: Would you like tickets for tomorrow instead?
 aya: Sir, there isn't a stage.
 
 
@@ -140,8 +145,9 @@ tone = funny
 day = 1
 rooms = 32
 weight = 2
-them: Emergency line. Can you get to a window?
-aya: I'm in the sewer.
+them: Emergency line. Where are you calling from?
+aya: Officer Brea. I'm in the sewer.
+them: Can you get to a window?
 them: ...kssh... Is that a no?
 aya: Put me down for a no.
 
@@ -152,7 +158,9 @@ aya: Put me down for a no.
 caller = Daniel
 tone = serious
 day = 1-5
-them: Aya? Where are you?
+them: Daniel here.
+aya: It's Aya. Just checking in.
+them: Where are you?
 aya: Still inside. I'm fine.
 them: You don't sound fine.
 aya: I'll call you when I'm out.
@@ -177,6 +185,8 @@ aya: Thanks. I noticed.
 caller = Landlord
 tone = funny
 day = any
+them: Hello?
+aya: It's Brea. I'm calling about the rent.
 them: Miss Brea, your rent is late.
 aya: I'm a little busy saving New York.
 them: New York doesn't pay my rent.
@@ -185,6 +195,8 @@ them: New York doesn't pay my rent.
 caller = Salesman
 tone = funny
 day = any
+them: Insurance sales. How can I help you?
+aya: I was trying to reach the emergency claims line.
 them: Ma'am, have you given any thought to fire insurance?
 aya: More than you would believe.
 them: Wonderful! Can I put you down for-
@@ -197,7 +209,9 @@ aya: No.
 caller = 1010 WINS
 tone = funny
 day = 1-2
-them: 1010 WINS traffic desk. How bad is Seventh Avenue?
+them: 1010 WINS traffic desk.
+aya: Brea, NYPD. I'm calling about the road closures.
+them: How bad is Seventh Avenue?
 aya: Depends. Are you driving a fire truck?
 them: No. Why?
 aya: Last I saw, only fire trucks were getting through.
@@ -217,6 +231,8 @@ them: Bring me junk and I'll make you something nice.
 caller = Wayne
 tone = serious
 day = 2-6
+them: Precinct armory. Wayne here.
+aya: Wayne, it's Aya. Still taking scrap?
 them: Got any more junk for me?
 aya: A bag full. Most of it used to be guns.
 them: Perfect. Bring it on by.
@@ -235,7 +251,9 @@ them: They all thought it was a person knocking.
 caller = Chief Baker
 tone = serious
 day = 2-5
-them: Brea. Tell me you have good news.
+them: Baker.
+aya: Brea, sir. Checking in.
+them: Tell me you have good news.
 aya: I'm still standing, sir.
 them: In this city right now, that counts.
 
@@ -245,6 +263,8 @@ tone = serious
 day = 2
 weight = 2
 once = yes
+them: Baker.
+aya: Brea, sir. Any word from the Hall?
 them: The press wants to know if it was arson. What can I tell them?
 aya: I watched people catch fire. I never saw anyone light a match.
 them: All right. I'll tell them we're still taking statements.
@@ -256,6 +276,7 @@ day = 2
 weight = 2
 once = yes
 them: Medical Examiner's office.
+aya: Officer Brea, NYPD. I'm calling about the Carnegie Hall victims.
 aya: Did you find anything in the lungs?
 them: Hardly any smoke. Most of them died before they could breathe it.
 aya: The first man caught fire before I saw any smoke.
@@ -285,7 +306,9 @@ aya: It was nonfiction when I saw it.
 caller = Maeda
 tone = serious
 day = 3-5
-them: Aya. Did you ever feel heat before you saw the fire?
+them: Maeda speaking.
+aya: It's Aya. Anything new with the sample?
+them: Did you ever feel heat before you saw the fire?
 aya: Why are you asking?
 them: I put a drop of the sample on a cold slide. The glass is warm now.
 aya: What did you put under it?
@@ -295,7 +318,9 @@ them: Nothing. It's sitting on the table.
 caller = Daniel
 tone = serious
 day = 3-5
-them: You eat anything today?
+them: Daniel here.
+aya: Daniel, it's Aya. Got a minute?
+them: For you? Sure. You eat anything today?
 aya: Does coffee count?
 them: Not three days running, it doesn't.
 
@@ -308,6 +333,8 @@ tone = serious
 day = 4-5
 weight = 2
 once = yes
+them: Daniel here.
+aya: It's Aya. I'll check in again when I can.
 them: Aya. Whatever happens next, don't do it alone.
 aya: I won't.
 them: I mean it.
@@ -364,7 +391,7 @@ aya: What kind of research?
 them: That's all it says. The rest of the page is about the exhibits.
 
 # ---- Day 2: Central Park ----
-# With Warner's supplies on (Economy > Warner helps out, Junk economy on), Wayne calls first.
+# With Warner's supplies on (Economy > Warner helps out, Junk economy on), Aya reaches Wayne first.
 
 [pe1/park_wayne]
 caller = Wayne
@@ -374,7 +401,9 @@ rooms = 59 64 75 87
 priority = 13
 once = yes
 needs = warner.supplies
-them: {name}! Wayne. Torres had me load Warner up with supplies for you.
+them: Precinct armory. Wayne here.
+aya: Wayne, it's {name}. I'm at the park.
+them: Torres had me load Warner up with supplies for you.
 aya: Warner? Where is he?
 them: Headed for the park to meet up with you and Daniel. Ammo, gear, the works.
 them: He'll hold anything you can't carry, too. Just find him and ask.
@@ -388,7 +417,9 @@ day = 2
 rooms = 59 64 75 87
 priority = 11
 once = yes
-them: {name}? It's Cathy. Daniel radioed in from the gate.
+them: 17th Precinct. Cathy speaking.
+aya: It's {name}. Any word from the park gate?
+them: Daniel radioed in from there.
 aya: Can anyone get through?
 them: Nobody from this side. I'll ask them to keep a car at the gate for you.
 aya: Tell them to stay back from the wall.
@@ -428,7 +459,9 @@ rooms = 97
 priority = 10
 once = yes
 after = pe1/street_dispatch
-them: Front desk. Is Dr. Maeda with you? He didn't come back last night.
+them: Front desk.
+aya: Officer Brea. I'm calling about Dr. Maeda's room.
+them: Is he with you? He didn't come back last night.
 aya: He's with me. Is something wrong?
 them: His room is full of notebooks and a jar of something. Housekeeping refuses.
 aya: Tell housekeeping that's a good instinct.
@@ -472,7 +505,9 @@ rooms = 126 138 154 325
 priority = 11
 once = yes
 after = pe1/hospital_records
-them: {name}? Are you all right? It's still hot out here.
+them: Maeda speaking.
+aya: It's {name}. I'm inside the hospital.
+them: Are you all right? It's still hot out here.
 aya: I'm fine. I still have the bell.
 them: Good. I wish I had something more useful to give you.
 aya: Just stay where I can find you.
@@ -513,7 +548,9 @@ day = 5
 rooms = 163
 priority = 10
 once = yes
-them: Got Maeda's message. Where are you?
+them: Daniel here.
+aya: Daniel, it's Aya. Did Maeda get through to you?
+them: Got his message. Where are you?
 aya: Under Chinatown. Whatever came out of the park is down here, and it's moving.
 them: Moving where?
 aya: I'll tell you when I catch up to it.
@@ -527,8 +564,9 @@ day = 5
 rooms = 176 184
 priority = 10
 once = yes
-them: Reservoir control. Who is this? The pumps started on their own.
-aya: That's me. Police.
+them: Reservoir control.
+aya: Officer Brea. I started the pumps down here.
+them: That was you? We thought they'd started on their own.
 them: Then what's the rest of the flow? Something big is in the lines.
 aya: Which way is it going?
 them: Uptown. Toward the park side of the city.
@@ -542,7 +580,9 @@ day = 5
 rooms = 195 196 237 238 340
 priority = 11
 once = yes
-them: Museum security. I was in the fossil hall when we cleared out.
+them: Museum security.
+aya: Officer Brea. Were you here when the museum was evacuated?
+them: I was in the fossil hall when we cleared out.
 aya: Did you see anything?
 them: No. Something scraped behind me. It stopped whenever I stopped.
 aya: I'm glad you made it out.
@@ -555,6 +595,8 @@ rooms = 195 196 237 238 340
 priority = 10
 once = yes
 after = pe1/museum_guard
+them: Daniel here.
+aya: It's Aya. I'm inside the museum. Where are you?
 them: I'm on my way with Maeda. Don't go any deeper without us.
 aya: Too late, Daniel.
 them: Then don't go any deeper without calling.
@@ -569,10 +611,12 @@ day = 6
 rooms = 276
 priority = 11
 once = yes
-them: Hello? Is my son on that boat? Wayne? He said he was on a cruise.
+them: Hello?
+aya: Officer Brea, NYPD. May I speak to Wayne?
+them: No. Isn't he on that boat with you? He said he was on a cruise.
 aya: It's a Navy cruiser, ma'am.
 them: He told me there was a buffet.
-aya: I'll tell him you called.
+aya: I'll tell him you asked about him.
 
 [pe1/cruiser_baker]
 caller = Chief Baker
@@ -582,7 +626,9 @@ rooms = 276
 priority = 10
 once = yes
 after = pe1/cruiser_mom
-them: Brea. Every window in the city is looking at that harbor.
+them: Baker.
+aya: Brea, sir. Calling from the cruiser.
+them: Every window in the city is looking at that harbor.
 aya: Then they can see we're still here, sir.
 them: Bring it home, Brea. That's an order.
 
@@ -664,13 +710,14 @@ tone = serious
 day = 6
 priority = 1
 once = yes
-them: Officer Brea? Albert Wesker. Thank you for taking my call.
-aya: How did you know where I'd be?
+them: S.T.A.R.S. office. Captain Wesker.
+aya: Brea, NYPD. I'm following up on our request for backup.
 them: I hear you left Carnegie Hall without a burn. Did you feel the heat?
 aya: I gave my statement.
 them: Yes. I was more interested in your blood work.
 aya: Where did you see that?
-them: We'll be in touch.
+them: I'll see what I can arrange.
+aya: Captain? I asked about the blood work.
 
 
 # ======== Final Fantasy, December 24-29, 1997 ========
@@ -682,10 +729,11 @@ tone = serious
 day = 1
 priority = 1
 once = yes
-them: Could she see you from the stage?
-aya: She looked right at me.
-them: With the house lights down? I can barely see the first row. Where were you?
-aya: In the back.
+them: Celes speaking.
+aya: It's Aya. I need to ask you something about performing.
+aya: Could you see someone at the back with the house lights down?
+them: I can barely see the first row. Why?
+aya: The actress looked right at me.
 
 [pe1/ff_red_xiii]
 caller = Red XIII
@@ -726,6 +774,8 @@ tone = funny
 day = 5
 priority = 1
 once = yes
+them: Cloud here.
+aya: Cloud, it's Aya. I'm checking on that pickup.
 them: You said one scientist and one case.
 aya: That's right. Don't open the case.
 them: Does it open from the inside?
@@ -738,8 +788,10 @@ tone = serious
 day = 6
 priority = 1
 once = yes
+them: Sephiroth.
+aya: Officer Brea. I was told you knew something about the fire.
 them: When you walked out of the theater, did you wonder why you were spared?
 aya: I wondered who was still inside.
 them: Of course. What did you wonder when you were alone?
 aya: Who told you I walked out?
-them: You did. Just now.
+them: You called for answers. Are you sure you want them?
