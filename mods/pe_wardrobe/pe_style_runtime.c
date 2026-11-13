@@ -24,28 +24,45 @@ static struct {
 } action_targets[PE_STYLE_TARGETS];
 static unsigned action_target_count;
 typedef struct {
-  u8 r, g, b;
+  u8 r, g, b;    /* native color */
+  u8 tr, tg, tb; /* cue color applied */
   int tinted;
 } TargetTint;
+typedef struct {
+  u8 r, g, b;
+} CueColor;
+/* Battle cue colors, one place. */
+static const CueColor CUE_CYAN = {0x60, 0xe0, 0xff}; /* guard, refund, Striker */
+static const CueColor CUE_COUNTER = {0xff, 0x90, 0x30}; /* Bulwark loaded */
+static const CueColor CUE_RUSH = {0xff, 0x50, 0x40}; /* Quickstep burst */
+static const CueColor CUE_SPENT = {0x30, 0x30, 0x30}; /* Quickstep HP pip */
 static TargetTint target_tints[2][4], triangle_tints[2];
 static TargetTint pe_tints[2];
 static u8 pe_codes[2];
 static void restore_rgb(u8 *r, u8 *g, u8 *b, TargetTint *t) {
-  if (t->tinted && *r == 0x60 && *g == 0xe0 && *b == 0xff) {
+  if (t->tinted && *r == t->tr && *g == t->tg && *b == t->tb) {
     *r = t->r;
     *g = t->g;
     *b = t->b;
   }
   t->tinted = 0;
 }
-static void tint_rgb(u8 *r, u8 *g, u8 *b, TargetTint *t) {
+static void tint_color(u8 *r, u8 *g, u8 *b, TargetTint *t, CueColor c) {
+  if (t->tinted && *r == t->tr && *g == t->tg && *b == t->tb)
+    return; /* already ours this frame: keep the native color saved */
   t->r = *r;
   t->g = *g;
   t->b = *b;
+  t->tr = c.r;
+  t->tg = c.g;
+  t->tb = c.b;
   t->tinted = 1;
-  *r = 0x60;
-  *g = 0xe0;
-  *b = 0xff;
+  *r = c.r;
+  *g = c.g;
+  *b = c.b;
+}
+static void tint_rgb(u8 *r, u8 *g, u8 *b, TargetTint *t) {
+  tint_color(r, g, b, t, CUE_CYAN);
 }
 static RenderSpritePacket *target_packet(unsigned slot, unsigned index) {
   return index ? &g_BattleTargetHighlightSprites[slot][index - 1].sprite
@@ -182,6 +199,8 @@ static int update(void *ctx, void *user) {
   (void)ctx;
   (void)user;
   ensure_session();
+  pe_quickstep_tick(&session,
+                    session.style == PE_STYLE_QUICKSTEP && controllable());
   if (pulse)
     pulse--;
   if (pe_pulse)
@@ -207,16 +226,20 @@ static int hud(void *ctx, void *user) {
       tint_rgb(&p->color.bytes.r, &p->color.bytes.g, &p->color.bytes.b,
                &pe_tints[slot]);
     }
-  /* Cyan: guarded or a Quickstep refund. Orange: a Retaliate counter is
-   * loaded while the guard is off (typically a full bar, ready to act). */
-  u8 r, g, b;
+  /* Cyan: guarded or a Quickstep refund landing. Orange: a Retaliate counter
+   * is loaded while the guard is off (typically a full bar, ready to act).
+   * Red: Quickstep burst, faster and taking more damage. */
+  CueColor c;
   if (guarded() || pulse) {
-    r = 0x60, g = 0xe0, b = 0xff;
+    c = CUE_CYAN;
   } else if (session.style == PE_STYLE_BULWARK && session.counter_store) {
-    r = 0xff, g = 0x90, b = 0x30;
+    c = CUE_COUNTER;
+  } else if (pe_quickstep_burst(&session)) {
+    c = CUE_RUSH;
   } else {
     return 0;
   }
+  u8 r = c.r, g = c.g, b = c.b;
   for (i = 0; i < 2; i++) {
     RenderSpritePacket *p = &g_BattleAtbMarkers[i].sprite;
     marker[i].r = p->color.bytes.r;
@@ -248,7 +271,11 @@ static int hp_loss(void *ctx, void *user) {
   if (q && q->actor == pe_aya_core() && q->source >= 1 && q->source <= 3) {
     int guard = guarded();
     before = *q->loss;
+    /* Bulwark guard or Quickstep Overextended, judged as the hit resolves. */
     *q->loss = pe_style_damage(&session, *q->loss, guard);
+    if (*q->loss != before && session.style == PE_STYLE_QUICKSTEP)
+      pe_log("costume_style", "overextended loss=%d->%d burst=%u", before,
+             *q->loss, session.qs.burst);
     /* Retaliate stores the HP actually lost, never more than Aya had. */
     int taken = *q->loss;
     if (q->current_hp >= 0 && taken > q->current_hp)
@@ -278,8 +305,9 @@ static int hit_end(void *ctx, void *user) {
   BattleEntity *target = ctx;
   (void)user;
   if (target && target == hit_entity && target->core) {
-    pe_style_kill(&session, hit_hp, ((EnemyCombatant *)target->core)->hpAlive,
-                  1);
+    const EnemyCombatant *foe = target->core;
+    /* Judged against max HP at the time of the hit, per enemy or part. */
+    pe_quickstep_hit(&session, foe, hit_hp, foe->hpAlive, foe->maxHp);
     pe_style_weapon_damage(&session, hit_hp,
                            ((EnemyCombatant *)target->core)->hpAlive,
                            hit_ordinary);
@@ -393,24 +421,38 @@ static int target_preview(void *ctx, void *user) {
     return 0;
   }
   ensure_session();
-  if (!q || q->mode < 0 || q->mode > 2 || q->out_of_range || !normal_gun() ||
-      session.style != PE_STYLE_STRIKER)
+  if (q->mode < 0 || q->mode > 2 ||
+      (session.style != PE_STYLE_STRIKER && session.style != PE_STYLE_QUICKSTEP))
     return 0;
   const BattleEntity *e = (BattleEntity *)g_FieldActorListHead;
   for (unsigned visited = 0; e && visited < 256; visited++, e = e->next) {
-    if (&e->renderObject == q->object && point_blank(e)) {
-      unsigned slot = g_ActiveDrawSlot;
-      if (slot > 1)
+    if (&e->renderObject != q->object)
+      continue;
+    CueColor c;
+    if (session.style == PE_STYLE_STRIKER) {
+      if (q->out_of_range || !normal_gun() || !point_blank(e))
         return 0;
-      for (unsigned i = 0; i < 4; i++) {
-        RenderSpritePacket *p = target_packet(slot, i);
-        tint_rgb(&p->color.bytes.r, &p->color.bytes.g, &p->color.bytes.b,
-                 &target_tints[slot][i]);
-      }
-      BattleStatusPointerPrim *p = &g_BattleStatusPointerTriangles[slot];
-      tint_rgb(&p->r, &p->g, &p->b, &triangle_tints[slot]);
-      break;
+      c = CUE_CYAN;
+    } else {
+      /* Quickstep HP pip: the marker darkens once this enemy has dropped to
+       * half, so its breakpoint refund is used up. */
+      const EnemyCombatant *foe = e->core;
+      if (!candidate(e) ||
+          !pe_quickstep_spent(&session, foe, foe->hpAlive, foe->maxHp))
+        return 0;
+      c = CUE_SPENT;
     }
+    unsigned slot = g_ActiveDrawSlot;
+    if (slot > 1)
+      return 0;
+    for (unsigned i = 0; i < 4; i++) {
+      RenderSpritePacket *p = target_packet(slot, i);
+      tint_color(&p->color.bytes.r, &p->color.bytes.g, &p->color.bytes.b,
+                 &target_tints[slot][i], c);
+    }
+    BattleStatusPointerPrim *p = &g_BattleStatusPointerTriangles[slot];
+    tint_color(&p->r, &p->g, &p->b, &triangle_tints[slot], c);
+    break;
   }
   return 0;
 }
@@ -455,12 +497,13 @@ static int action_end(void *ctx, void *user) {
   if (!core || ctx != core || !session.active)
     return 0;
   before = core->hpAlive;
-  core->hpAlive = (u16)pe_style_resolve(
+  core->hpAlive = (u16)pe_quickstep_resolve(
       &session, before, FULL_AT,
       pe_in_battle() && (s16)core->curHP > 0 && living_enemies());
   if (core->hpAlive > before) {
     pulse = 12;
-    pe_log("costume_style", "quickstep refund=%u", core->hpAlive - before);
+    pe_log("costume_style", "quickstep refund=%u burst=%u",
+           core->hpAlive - before, session.qs.burst);
   }
   pe_style_counter_resolve(&session);
   if (session.style == PE_STYLE_CHANNELER) {
@@ -539,7 +582,7 @@ static int player_move(void *ctx, void *user) {
   if (!q || !q->factor || !q->combat || !pe_in_battle() ||
       q->actor != pe_player() || session.style != PE_STYLE_QUICKSTEP)
     return 0;
-  *q->factor = pe_style_move(&session, *q->factor);
+  *q->factor = pe_quickstep_move(&session, *q->factor);
   return 0;
 }
 static int reset(void *ctx, void *user) {
@@ -626,7 +669,8 @@ void pe_styles_register(const char *mod_id) {
                         "Ownership rules are unchanged.",
                         preview_tradeoff);
   pe_menu_register_info(PE_PAGE_WARDROBE, "Costume style",
-                        "Quickstep: kills +25% AT and a speed burst. Bulwark: "
+                        "Quickstep: half-HP breaks and kills +20% AT, 3 s "
+                        "speed, +20% damage taken meanwhile. Bulwark: "
                         "25% guard; hits taken load a counter. Striker: close "
                         "guns +25%. Channeler: weapon hits charge the next PE "
                         "power (3 = free); half passive PE.",

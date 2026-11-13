@@ -199,10 +199,10 @@ int main(void) {
   fire(PE_HOOK_ENEMY_HIT, &target);
   fire(PE_HOOK_ENEMY_HIT_END, &target);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.hpAlive == 2250);
+  assert(aya.hpAlive == 1800); /* 20% of a full bar */
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.hpAlive == 2250);
-  /* Momentum: battle movement is 25% faster until the next action. */
+  assert(aya.hpAlive == 1800);
+  /* Momentum: battle movement is 25% faster during the burst. */
   int factor = 0x10000;
   PeHookPlayerMove move = {&player, &factor, 0, 1};
   fire(PE_HOOK_PLAYER_MOVE, &move);
@@ -212,32 +212,146 @@ int main(void) {
   fire(PE_HOOK_PLAYER_MOVE, &move);
   assert(factor == 0x10000);
   move.combat = 1;
+  int kill_key;
   aya.hpAlive = 8500;
-  pe_style_kill(&session, 10, 0, 1);
+  pe_quickstep_hit(&session, &kill_key, 10, 0, 0);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.hpAlive == 9000);
+  assert(aya.hpAlive == 9000); /* clamped at a full bar */
   aya.hpAlive = 0;
-  pe_style_kill(&session, 10, 0, 1);
+  pe_quickstep_hit(&session, &kill_key, 10, 0, 0);
   g_BattleEnemySlots[1].combatant.hpAlive = 0;
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
-  assert(aya.hpAlive == 0 && !session.pending_kill);
+  assert(aya.hpAlive == 0 && !session.qs.pending); /* encounter-ending */
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   factor = 0x10000;
   fire(PE_HOOK_PLAYER_MOVE, &move);
   assert(factor == 0x10000); /* burst ends when the next action begins */
+  assert(loss(100, 1) == 100); /* and Overextended with it */
   aya.stateFlags = 0x80000;
   ((EnemyCombatant *)target.core)->hpAlive = 10;
   fire(PE_HOOK_ENEMY_HIT, &target);
   ((EnemyCombatant *)target.core)->hpAlive = 0;
   fire(PE_HOOK_ENEMY_HIT_END, &target);
-  assert(!session.pending_kill);
+  assert(!session.qs.pending); /* PE kills never refund */
+  aya.stateFlags = 0;
+
+  /* ---- Quickstep half-HP breakpoint, burst, Overextended and HP pip ---- */
+  g_BattleEnemySlots[1].combatant.hpAlive = 100; /* another enemy remains */
+  BattleEntity qa = {0}, qb = {0};
+  EnemyCombatant *fa = &g_BattleEnemySlots[2].combatant,
+                 *fb = &g_BattleEnemySlots[3].combatant;
+  qa.core = fa;
+  qb.core = fb;
+  fa->hpAlive = fa->maxHp = 100;
+  fb->hpAlive = fb->maxHp = 100;
+#define QS_HIT(e, hp)                                                          \
+  do {                                                                         \
+    fire(PE_HOOK_ENEMY_HIT, &(e));                                             \
+    ((EnemyCombatant *)(e).core)->hpAlive = (hp);                              \
+    fire(PE_HOOK_ENEMY_HIT_END, &(e));                                         \
+  } while (0)
+  aya.hpAlive = 0;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  QS_HIT(qa, 60);
+  assert(!session.qs.pending); /* above half: nothing yet */
+  QS_HIT(qa, 50);
+  assert(session.qs.pending); /* exactly half counts as crossed */
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  assert(aya.hpAlive == 1800 && session.qs.burst == 90);
+  /* Healing never re-arms a crossed breakpoint. */
+  aya.hpAlive = 0;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  fa->hpAlive = 90;
+  QS_HIT(qa, 40);
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  assert(aya.hpAlive == 0 && !session.qs.burst);
+  /* Several breakpoints and a kill in one action: still one refund. */
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  QS_HIT(qb, 30);
+  QS_HIT(qa, 0);
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  assert(aya.hpAlive == 1800);
+  /* A boss phase that rewrites max HP gets a fresh breakpoint. */
+  aya.hpAlive = 0;
+  fb->maxHp = 200;
+  fb->hpAlive = 200;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  QS_HIT(qb, 90);
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  assert(aya.hpAlive == 1800);
+  /* A miss or a non-damaging hit earns nothing. */
+  aya.hpAlive = 0;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  QS_HIT(qb, 90);
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  assert(aya.hpAlive == 0);
+  /* Burst: 90 controllable frames; hit reactions and menus don't count. */
+  aya.hpAlive = 0;
+  fb->maxHp = 300;
+  fb->hpAlive = 300;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  QS_HIT(qb, 100);
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  assert(session.qs.burst == 90);
+  assert(loss(100, 1) == 120 && loss(1, 1) == 1); /* Overextended x1.20 */
+  assert(loss(100, 4) == 100); /* status ticks are not eligible */
+  g_BattleHitActionPending = 1;
+  fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  assert(session.qs.burst == 90); /* frozen while not controllable */
+  g_BattleHitActionPending = 0;
+  for (int i = 0; i < 13; i++)
+    fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  g_BattleAtbMarkers[0].sprite.color.bytes.r = 17;
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0xff &&
+         g_BattleAtbMarkers[0].sprite.color.bytes.g == 0x50); /* rush cue */
+  for (int i = 0; i < 76; i++)
+    fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  assert(pe_quickstep_burst(&session) && session.qs.burst == 1);
+  fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  assert(!pe_quickstep_burst(&session)); /* 3 s of controllable time */
+  assert(loss(100, 1) == 100);
+  factor = 0x10000;
+  fire(PE_HOOK_PLAYER_MOVE, &move);
+  assert(factor == 0x10000);
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 17); /* restored */
+  /* HP pip: the target marker darkens once the enemy is at half or below. */
+  BattleEntity fresh = {0};
+  EnemyCombatant *ff = &g_BattleEnemySlots[4].combatant;
+  fresh.core = ff;
+  ff->maxHp = 100;
+  ff->hpAlive = 60;
+  assert(!pe_quickstep_spent(&session, ff, ff->hpAlive, ff->maxHp));
+  assert(pe_quickstep_spent(&session, fb, fb->hpAlive, fb->maxHp));
+  ff->hpAlive = 50;
+  assert(pe_quickstep_spent(&session, ff, ff->hpAlive, ff->maxHp));
+  ff->hpAlive = 60;
+  fresh.next = &qb;
+  g_FieldActorListHead = (FieldActor *)&fresh;
+  g_ActiveDrawSlot = 0;
+  g_BattleStatusPointerSprites[0].sprite.color.bytes.r = 17;
+  PeHookTargetPreview pip = {&fresh.renderObject, 0, 1, 1};
+  fire(PE_HOOK_TARGET_PREVIEW, &pip); /* fresh enemy: no pip, even far */
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
+  pip.object = &qb.renderObject;
+  fire(PE_HOOK_TARGET_PREVIEW, &pip);
+  fire(PE_HOOK_TARGET_PREVIEW, &pip); /* twice a frame keeps the native */
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0x30);
+  pip.phase = 0;
+  fire(PE_HOOK_TARGET_PREVIEW, &pip);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
+  g_FieldActorListHead = NULL;
+#undef QS_HIT
+  memset(&g_BattleEnemySlots[2], 0, sizeof g_BattleEnemySlots[0] * 3);
   /* Session and mode cannot change mid-encounter. */
   worn = &guard;
   requested = 0;
   settings_tick();
   assert(requested == 1 && saves == 1 && session.style == PE_STYLE_QUICKSTEP);
   fire(PE_HOOK_SCENE_START, NULL);
-  assert(!session.active && !session.pending_kill);
+  assert(!session.active && !session.qs.pending && !session.qs.burst &&
+         !session.qs.marks);
   start(&guard);
   assert(guarded());
   assert(loss(100, 1) == 75 && loss(1, 1) == 1);

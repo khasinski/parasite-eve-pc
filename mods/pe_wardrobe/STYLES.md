@@ -16,8 +16,11 @@ outfit, spends Junk, changes the mode or changes the current encounter snapshot.
 
 - `pe_style_catalog.c`: stable style definitions, descriptions, numeric parameters
   and explicit namespaced costume mappings. No game globals or asset mutation.
-- `pe_style_engine.c`: deterministic encounter state, one-per-action refund,
-  fractional charge scaling and damage rules. No native pointers, files or UI.
+- `pe_style_engine.c`: deterministic encounter state, fractional charge
+  scaling and damage rules. No native pointers, files or UI.
+- `pe_style_quickstep.c`: Quickstep's rules only (breakpoints, kill trigger,
+  refund, burst, Overextended, HP-pip query). Pure logic; every number and
+  switch is `PeQuickstepTuning` in the catalog.
 - `pe_style_runtime.c`: the only native combat adapter: snapshots the successfully
   applied appearance, receives typed hooks, applies engine results and draws cues.
 - Wardrobe registry/skin loader: retains ownership and model-loading responsibility;
@@ -30,15 +33,46 @@ existing `PeCostume` service layout. Unknown packs and deferred rigs stay Origin
 All four styles now use the same catalog, engine and native adapter. Unknown
 pack mappings and deferred costumes still resolve to Original.
 
-## Revision 5 (current rules)
+## Quickstep, Revision 6.4 (current; supersedes the Quickstep notes below)
+
+Source of truth: `Parasite Eve Costume Combat Styles Build Spec.md` section 4.1.
+
+- Trigger: a weapon hit (gun or club, not PE) that takes an enemy or part from
+  above to at-or-below 50% of its current max HP for the first time, or a kill
+  while other enemies remain. One refund per action. Breakpoints are tracked
+  per enemy combatant (parts with their own HP count separately); healing never
+  re-arms one; a changed max HP (new boss phase) does.
+- Refund: 20% of a full bar, added in `PE_HOOK_PLAYER_ACTION_END` (LATE, after
+  the native reset), clamped to full. None on the encounter-ending action.
+- Burst: x1.25 movement for 90 controllable battle frames (3 s at 30 a
+  second), ticked in `PE_HOOK_BATTLE_UPDATE` only while `controllable()`; ends
+  early when Aya's next action begins.
+- Overextended: eligible incoming losses (HP-loss sources 1-3) x1.20 during
+  the burst, through the same `pe_style_damage` call as Bulwark's guard.
+- Cues: AT marker cyan for 12 frames when the refund lands, then red while the
+  burst lasts. HP pip: the target marker turns dark grey when the targeted
+  enemy is at or below half (its breakpoint is spent), for guns and clubs, in
+  or out of range.
+
+**Changing it.** Edit `.quickstep` in `pe_style_catalog.c`:
+`triggers` (drop `PE_QS_TRIGGER_KILL` or `_BREAKPOINT` to test either alone),
+`breakpoints` (`{50, 25}` adds a second threshold, up to 4), `refund_percent`,
+`burst_frames` (0 turns off the burst and Overextended), `move_percent`,
+`exposed_percent` (100 turns off Overextended), `exposed_grace_frames`
+(Overextended starts this many burst frames in). Cue colors are the `CUE_*`
+constants at the top of `pe_style_runtime.c`.
+
+**Not done yet.** Scripted-HP enemies (the Actress) are not excluded: their
+identities still need to be read from the Bestiary. The pip tints the native
+target marker rather than drawing a separate pip. Not playtested.
+
+## Revision 5
 
 The design doc's Revision 5 replaces two passive taxes with build-and-release
 mechanics. Where this section conflicts with "Implemented first pass" below,
 this section wins.
 
-- Quickstep momentum: an awarded refund sets `move_boost`; `PE_HOOK_PLAYER_MOVE`
-  (LATE, battle input steps only) scales the factor by 125% until the next
-  `PE_HOOK_PLAYER_ACTION` or encounter end. Animation speed is untouched.
+- Quickstep momentum (superseded by Revision 6.4 above).
 - Bulwark / Retaliate: `charge_percent` is 100 (native). Guard is unchanged.
   `pe_style_absorb` stores the guarded loss actually taken (capped at Aya's
   current HP). During the next ordinary weapon action, `pe_style_counter` adds

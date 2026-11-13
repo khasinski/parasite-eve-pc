@@ -14,30 +14,7 @@ static int is(const PeStyleSession *s, PeStyleId id) {
 }
 static int saturate(uint64_t v) { return v > INT_MAX ? INT_MAX : (int)v; }
 
-/* ---- Quickstep ---------------------------------------------------------- */
-void pe_style_kill(PeStyleSession *s, int before, int after, int weapon) {
-  if (is(s, PE_STYLE_QUICKSTEP) && weapon && before > 0 && after <= 0)
-    s->pending_kill = 1;
-}
-unsigned pe_style_resolve(PeStyleSession *s, unsigned gauge, unsigned full,
-                          int continues) {
-  unsigned pending = s->pending_kill;
-  uint64_t total;
-  s->pending_kill =
-      0; /* resolve once, including final kill / duplicate callbacks */
-  if (!is(s, PE_STYLE_QUICKSTEP) || !pending || !continues)
-    return gauge;
-  s->move_boost = 1; /* momentum lasts until the next action begins */
-  total = (uint64_t)gauge +
-          (uint64_t)full * pe_style_definition(s->style)->refund_percent / 100;
-  return total > full ? full : (unsigned)total;
-}
-int pe_style_move(const PeStyleSession *s, int factor) {
-  if (!is(s, PE_STYLE_QUICKSTEP) || !s->move_boost || factor <= 0)
-    return factor;
-  return saturate((uint64_t)(unsigned)factor *
-                  pe_style_definition(s->style)->move_percent / 100);
-}
+/* Quickstep lives in pe_style_quickstep.c. */
 
 /* ---- Shared AT scaling (native 100% for every current style) ------------ */
 int pe_style_charge(PeStyleSession *s, int increment) {
@@ -56,15 +33,21 @@ int pe_style_guard(const PeStyleSession *s, unsigned gauge, unsigned full,
                    int controllable) {
   return is(s, PE_STYLE_BULWARK) && gauge < full && controllable;
 }
+/* Every incoming-damage multiplier, once per eligible hit: Bulwark's guard or
+ * Quickstep's Overextended (the two never share an encounter). */
 int pe_style_damage(const PeStyleSession *s, int loss, int guarded) {
   uint64_t scaled;
-  if (!guarded || !is(s, PE_STYLE_BULWARK) || loss <= 0)
+  unsigned percent = 100;
+  if (loss <= 0)
     return loss;
-  scaled = ((uint64_t)(unsigned)loss *
-                pe_style_definition(s->style)->damage_percent +
-            50) /
-           100;
-  return scaled ? (int)scaled : 1;
+  if (guarded && is(s, PE_STYLE_BULWARK))
+    percent = pe_style_definition(s->style)->damage_percent;
+  else
+    percent = pe_quickstep_exposed_percent(s);
+  if (percent == 100)
+    return loss;
+  scaled = ((uint64_t)(unsigned)loss * percent + 50) / 100;
+  return scaled ? saturate(scaled) : 1;
 }
 void pe_style_absorb(PeStyleSession *s, int taken, int guarded) {
   uint64_t total;
@@ -108,7 +91,7 @@ int pe_style_point_blank(const PeStyleSession *s, int dx, int dz,
   return (uint64_t)(x * x) + (uint64_t)(z * z) <= reach * reach;
 }
 void pe_style_action_begin(PeStyleSession *s, int gun, int weapon) {
-  s->pending_kill = 0;
+  pe_quickstep_action_begin(s);
   s->close_targets = 0;
   s->gun_action = gun != 0;
   s->weapon_action = weapon != 0 || gun != 0;
@@ -116,7 +99,6 @@ void pe_style_action_begin(PeStyleSession *s, int gun, int weapon) {
   s->action_canceled = 0;
   s->pending_damage = 0;
   s->counter_spent = 0;
-  s->move_boost = 0;
 }
 void pe_style_target(PeStyleSession *s, unsigned index, int close) {
   if (index < PE_STYLE_TARGETS && close)
