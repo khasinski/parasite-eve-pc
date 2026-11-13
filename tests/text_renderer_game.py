@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-battle,translator-cards,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-battle,translator-cards,translator-tutorial,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -177,6 +177,17 @@ Checks, each from pe_mods.log and frame dumps:
              for pixel, the Translator's picture of it, the card on a copy of the disc with the file's
              pieces written in, and with the file's text alone the Translator's picture of the
              English card.
+  translator-tutorial  The Tutorial redrawn in the Translator: all 30 screens (the menu and the 29 pages of
+             words) saved from Disc 1 as PNGs by the tool, each with a dark band of white bars and a red
+             line over its words (the shadowed top rows of About Icons 5-9 and How to Save included), its
+             screenshot (but About Icons 8's, so the Tune-up screenshot loaded from 7's PNG must be kept)
+             and the menu's lines, loaded back through the scripted run (--picture) and saved in one file.
+             The file must change those screens, as the tool makes them from the PNGs, and no other
+             picture; and on the pad route of CTest original-game-tutorial (the whole Tutorial: both
+             controllers, icons, battle, save, each menu choice) every screen must be, pixel for pixel,
+             the Translator's picture of it (the menu with each choice picked: the copy with its green
+             ring), the screen on a copy of Disc 1 with the file's pieces written in, and with the file's
+             text alone the Translator's picture of the English screen. Disc 1 only.
   translator-look  The Translator's "As in the game" preview (localization/translator/gamelook.py)
              against the game's own frames: the first box with the English pack (made from the discs)
              and with each player pack given (PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_), and the five
@@ -1383,6 +1394,188 @@ def translator_cards(game, discs, out, localization):
     return 0
 
 
+# ---- Part translator-tutorial: the Tutorial's screens ----
+
+# The pad route of CTest original-game-tutorial (tests/actor_animation/test_native_replays.inc,
+# original_native_tutorial: real input through the whole Tutorial), read from that file so the two stay one.
+REPLAYS = Path(__file__).resolve().parent / 'actor_animation' / 'test_native_replays.inc'
+# The screen on show at each of the route's control points kept (index: picture id, # the menu's choice),
+# found by matching the game's frames with the Translator's pictures (every page, 0 pixels differing).
+TUTORIAL_AT = {0: 'tutorial/menu#1', 2: 'tutorial/controller-1', 3: 'tutorial/controller-2',
+               5: 'tutorial/controller-3', 7: 'tutorial/controller-4', 9: 'tutorial/controller-5',
+               11: 'tutorial/controller-6', 15: 'tutorial/analog-1', 17: 'tutorial/analog-2', 19: 'tutorial/analog-3',
+               21: 'tutorial/analog-4', 23: 'tutorial/analog-5', 25: 'tutorial/analog-6', 27: 'tutorial/analog-7',
+               68: 'tutorial/menu#2', 71: 'tutorial/icons-1', 72: 'tutorial/icons-2', 74: 'tutorial/icons-3',
+               76: 'tutorial/icons-4', 80: 'tutorial/icons-5', 81: 'tutorial/icons-6', 83: 'tutorial/icons-7',
+               85: 'tutorial/icons-8', 87: 'tutorial/icons-9', 92: 'tutorial/menu#3', 95: 'tutorial/battle-1',
+               96: 'tutorial/battle-2', 98: 'tutorial/battle-3', 100: 'tutorial/battle-4', 102: 'tutorial/battle-5',
+               105: 'tutorial/battle-6', 109: 'tutorial/menu#4', 112: 'tutorial/save', 115: 'tutorial/menu#5'}
+
+
+def tutorial_route():
+    """(pad presses before the first control point, the commands at the control points, the first one's
+    vblank, the frame limit) of original_native_tutorial."""
+    body = REPLAYS.read_text(encoding='utf-8')
+    body = body[body.index('static int original_native_tutorial'):]
+    body = body[:body.index('SDL_Environment')]
+    text = ''.join(re.findall(r'"([^"]*)"', body[body.index('const char *commands='):]))
+    commands = [c for c in text.split('\\n') if c]
+    pads = [(int(a), int(b, 0)) for a, b in re.findall(r'"--pad-at","(\d+):(0x[0-9a-fA-F]+|\d+)"', body)]
+    start = int(re.search(r'"--control-at","(\d+)"', body)[1])
+    limit = int(re.search(r'"--frame-limit","(\d+)"', body)[1])
+    check(len(commands) == 123 and commands[-1] == 'quit' and len(pads) == 6,
+          f'the route of original_native_tutorial is not the one this part was made for: {len(commands)} commands')
+    return pads, commands, start, limit
+
+
+def tutorial_driver(commands):
+    """Keeps the frame at each control point of TUTORIAL_AT, then gives the route's command."""
+    state = {'i': 0}
+
+    def drive(vblank, work):
+        i = state['i']
+        state['i'] += 1
+        if i in TUTORIAL_AT:
+            keep(work, f'c{i:03}')
+        return commands[i] if i < len(commands) and commands[i] != 'quit' else None
+    drive.state = state
+    return drive
+
+
+def tutorial_redraw(img, pid):
+    """A paint program's redrawing of a Tutorial screen saved by the Translator: over the words at the
+    bottom (the shadowed top rows of About Icons 5-9 and How to Save included) a dark band with white bars
+    and a red line, colours the squares there mostly don't have; the same over the screenshot (and the Game
+    Over screen), but not on About Icons 8, whose Tune-up screenshot (shown on 7 as well) stays as the
+    game has it in its PNG, so 7's change must be kept; and over the menu's lines."""
+    from PIL import ImageDraw
+    draw = ImageDraw.Draw(img)
+
+    def band(x0, y0, x1, y1):
+        draw.rectangle((x0, y0, x1, y1), fill=(8, 8, 16))
+        for x in range(x0 + 6, x1 - 8, 10):
+            draw.rectangle((x, y0 + 3, x + 5, y1 - 6), fill=(255, 255, 255))
+        draw.line((x0 + 4, y1 - 3, x1 - 4, y1 - 3), fill=(230, 20, 20), width=2)
+
+    if pid == 'tutorial/menu':
+        band(80, 70, 240, 100)
+        band(80, 130, 240, 160)
+        return
+    band(20, 152, 300, 186)
+    if pid.startswith(('tutorial/icons', 'tutorial/battle')) and pid != 'tutorial/icons-8':
+        band(90, 50, 230, 80)
+
+
+def translator_tutorial(game, discs, out, localization):
+    """Part translator-tutorial (see the module notes). Disc 1 only (the user's choice: the Tutorial is
+    on both discs, PE.IMG the same bytes)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image
+    except ImportError:
+        print('SKIP translator tutorial: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    screens = [p for p in artwork.PICTURES if isinstance(p, artwork.Screen)]
+    check(len(screens) == 30, f'{len(screens)} Tutorial screens, not 30')
+    args, pngs = [], {}
+    for pic in screens:
+        saved = out / f"{pic.id.replace('/', '-')}.png"
+        saved.write_bytes(artwork.png(pic, disc.english[pic.id], disc.layout[pic.id]))
+        img = Image.open(saved)
+        check(img.size == (320, 224), f'the saved screen {pic.id} is {img.size}')
+        img = img.convert('RGB')
+        tutorial_redraw(img, pic.id)
+        img.save(saved)
+        pngs[pic.id] = saved.read_bytes()
+        args += ['--picture', f'{pic.id}={saved}']
+    # What the Translator must make of them, loaded in the same order here.
+    expected = []
+    for pic in screens:
+        layout = disc.layout[pic.id]
+        loaded = artwork.from_png(pic, disc.english[pic.id], pngs[pic.id], artwork.shown(disc, pic, expected), layout)
+        if pic.id == 'tutorial/icons-8':
+            check(any('the change loaded there is kept' in n for n in loaded.notes),
+                  f"About Icons 8's PNG did not keep 7's Tune-up screenshot: {loaded.notes}")
+        expected = artwork.put(disc, pic, expected, loaded.tim)
+    path, report = out / 'translator-tutorial.pelang', out / 'translator-tutorial-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Tutorial test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], *args], capture_output=True, text=True, timeout=1200)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the Tutorial: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    for pic in screens:
+        check(artwork.shown(disc, pic, pieces) == artwork.shown(disc, pic, expected),
+              f'the saved screen {pic.id} is not what its PNG makes')
+        check(artwork.redrawn(disc, pic, pieces), f'the saved screen {pic.id} is still the English one')
+    others = [p.id for p in artwork.PICTURES if not isinstance(p, artwork.Screen) and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    seven, eight = (artwork.BY_ID[f'tutorial/icons-{k}'] for k in (7, 8))
+    shot = (60, 4, 268, 148)
+    check(artwork.image(eight, artwork.shown(disc, eight, pieces), disc.layout[eight.id]).crop(shot).tobytes() ==
+          artwork.image(seven, artwork.shown(disc, seven, pieces), disc.layout[seven.id]).crop(shot).tobytes(),
+          "About Icons 8's Tune-up screenshot is not the one loaded from 7's PNG")
+    plain = out / 'translator-tutorial-text.pelang'           # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Tutorial test', None, path), ('es', 'Tutorial test', None, plain)
+    print(f'translator tutorial: the Translator saved {len(screens)} redrawn Tutorial screens as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Tutorial test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    pads, commands, start, limit = tutorial_route()
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        runs = {}
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                  ('text-only', discs[:1], text_only)):
+                driver = tutorial_driver(commands)
+                runs[which] = (driver, pool.submit(run, game, use, out / f'tutorial-{which}', pack=p, pad=pads,
+                                                   start=start, driver=driver, frame_limit=limit))
+            works = {which: job.result() for which, (_, job) in runs.items()}
+        for which, (driver, _) in runs.items():
+            check(driver.state['i'] >= max(TUTORIAL_AT) + 1,
+                  f'{which}: the run stopped at control point {driver.state["i"]}: {works[which]}')
+        log = mods_log(works['pack'])
+        check(log_pieces.search(log) and 'its pictures are in use' in log,
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {works['pack']}")
+
+        def screen_of(f, name):
+            w, h, rgb = f
+            check(w == 320 and h >= 224, f'{name}: a frame of {w}x{h}')
+            return rgb[:320 * 224 * 3]
+
+        for i, name in sorted(TUTORIAL_AT.items()):
+            pid, _, choice = name.partition('#')
+            pic, layout = artwork.BY_ID[pid], disc.layout[pid]
+            label = f'c{i:03}'
+            frames = {which: frame(works[which], label) for which in works}
+            mine = artwork.screen_image(artwork.shown(disc, pic, pieces), layout, int(choice) if choice else None)
+            english = artwork.screen_image(disc.english[pid], layout, int(choice) if choice else None)
+            check(screen_of(frames['text-only'], name) == english.tobytes(),
+                  f"{name}: with the text alone the screen is not the Translator's picture of the English one: "
+                  f"{works['text-only']} {label}")
+            check(frames['pack'] == frames['written-in'],
+                  f"{name}: the screen with the file is not the one on the disc with its pieces written in: "
+                  f"{works['pack']} vs {works['written-in']} {label}")
+            check(screen_of(frames['pack'], name) == mine.tobytes(),
+                  f"{name}: the screen with the file is not the Translator's picture of it: {works['pack']} {label}")
+            a, b = mine.tobytes(), english.tobytes()
+            differ = sum(1 for k in range(0, len(a), 3) if a[k:k + 3] != b[k:k + 3])
+            print(f"PASS translator tutorial, {name} (control point {i}): the screen is the Translator's picture "
+                  f'of it, pixel for pixel, and the one on the disc with the pieces written in ({differ} pixels '
+                  'differ from the English screen)')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
 def look_is_the_frame(work, label, look, font, raw, name, gl):
     """The Translator's game look (translator/gamelook.py) of `raw` against the game's frame: every
     pixel it draws is the frame's, and every pixel of the frame's text area in the letters' own
@@ -2036,7 +2229,7 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
                               ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
                               ('translator', translator_file), ('translator-pictures', translator_pictures),
                               ('translator-map', translator_map), ('translator-battle', translator_battle),
-                              ('translator-cards', translator_cards),
+                              ('translator-cards', translator_cards), ('translator-tutorial', translator_tutorial),
                               ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)

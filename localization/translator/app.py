@@ -134,6 +134,7 @@ class App:
         self.pictures_window = None
         self._pictures_by_script = list(pictures or [])
         self.pictures_loaded: list[dict] = []
+        self.picture_files: dict[str, str] = {}         # picture id -> the PNG last loaded for it (its name)
         self._select_first, self._type_first = select, type_text
         self._typed_by_script = (select, type_text) if select and type_text else None
         if select in self.game.rows:
@@ -472,6 +473,7 @@ class App:
 
     def use(self, tr: P.Translation) -> None:
         self.tr, self.dirty = tr, False
+        self.picture_files = {}
         self.state, self.said = {}, {}
         self.settings["last"] = str(tr.path)
         save_settings(self.settings)
@@ -528,8 +530,10 @@ class App:
         from .picture_window import PictureWindow
         self.pictures_window = PictureWindow(self)
 
-    def load_picture(self, pic: A.Picture, png: bytes | None) -> A.Loaded:
-        """A PNG as the translation's picture (None: back to the game's). Saved with the translation."""
+    def load_picture(self, pic: A.Picture, png: bytes | None, name: str = "your PNG") -> A.Loaded:
+        """A PNG as the translation's picture (None: back to the game's). Saved with the translation.
+        `name`: the PNG's file name, to name it if it disagrees with another screen's (the Tune-up
+        screenshot, shown on two Tutorial screens)."""
         tr, disc = self.tr, self.picture_disc
         if tr is None or disc is None or tr.locked:
             raise ValueError("open a translation you can save and choose your disc first")
@@ -537,10 +541,18 @@ class App:
         if png is None:
             loaded = A.Loaded(disc.english[pic.id], [])
             new = A.put(disc, pic, pieces, None)
+            self.picture_files.pop(pic.id, None)
         else:
-            loaded = A.from_png(pic, disc.english[pic.id], png, A.shown(disc, pic, pieces),
-                                getattr(disc, "layout", {}).get(pic.id))
+            try:
+                loaded = A.from_png(pic, disc.english[pic.id], png, A.shown(disc, pic, pieces),
+                                    getattr(disc, "layout", {}).get(pic.id))
+            except A.Disagree as e:
+                other = self.picture_files.get(e.other.id)
+                raise ValueError(f"{e} The two PNGs that disagree: {name} (for this screen) and "
+                                 + (f"{other} (loaded for \"{e.other.label}\")." if other else
+                                    f"the one already in the translation for \"{e.other.label}\".")) from e
             new = A.put(disc, pic, pieces, loaded.tim)
+            self.picture_files[pic.id] = name
         A.write_pieces(tr.parts, new)
         self.dirty = True
         self.count()
@@ -554,7 +566,7 @@ class App:
             if pid not in A.BY_ID:
                 return f"no picture {pid}"
             try:
-                loaded = self.load_picture(A.BY_ID[pid], Path(path).read_bytes())
+                loaded = self.load_picture(A.BY_ID[pid], Path(path).read_bytes(), Path(path).name)
             except (OSError, ValueError) as e:
                 return f"picture {pid}: {e}"
             self.pictures_loaded.append({"id": pid, "notes": loaded.notes})

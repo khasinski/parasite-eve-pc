@@ -619,6 +619,137 @@ def made_up_card(grey_rows: int = 28):
     return bytes(rows) + bytes(tiles), layout
 
 
+TUTORIAL_GREEN = 253                # in the made-up colour rows: pure green (the menu's ring), white, red
+SHADOW_ROW = 500                   # the made-up shadow's colour row: greys with the see-through bit
+
+
+def made_up_tutorial_rows() -> bytes:
+    """32 colour rows: even rows greys, odd rows greys turning blue (the made-up layers use even rows), row 500 the shadow's dark greys with
+    the see-through bit (drawn subtracted), and in rows 508-511 pure green, white and red at 253-255."""
+    import struct
+    rows = bytearray(256 * 32 * 2)
+    for r in range(32):
+        for i in range(1, 256):
+            g = i * 31 // 255
+            colour = g | g << 5 | (g if r % 2 == 0 else min(31, g + 6)) << 10
+            if r + 480 == SHADOW_ROW:
+                colour = 0x8000 | min(31, i // 8) * 0x421
+            if r >= 28 and i >= TUTORIAL_GREEN:
+                colour = {TUTORIAL_GREEN: 31 << 5, 254: 0x7FFF, 255: 31}[i]
+            struct.pack_into("<H", rows, (r * 256 + i) * 2, colour)
+    return bytes(rows)
+
+
+def _tutorial_roles(pic):
+    """(layer, role) for each of a real Tutorial screen's layers and copies: the shapes of the real ones."""
+    out = [(pic.layers[0][0], "back"), (pic.layers[1][0], "shadow")]
+    for e, _, _ in pic.layers[2:]:
+        if pic.copies:
+            out.append((e, "menu"))
+        elif e in pic.words:
+            out.append((e, "strip" if e == pic.words[0] else "panel"))
+        elif pic.room in (354, 355):
+            out.append((e, "controller" if e == pic.layers[2][0] else "close-up"))
+        else:
+            out.append((e, "picture"))
+    return out + [(e, f"menu {k + 1}") for k, e in enumerate(pic.copies)]
+
+
+def made_up_tutorial():
+    """Every Tutorial screen made up at its real shape, no disc: {id: (base, room bytes, segments, layout)}.
+    The screens of a room share one room's bytes, so a layer two screens show (the Tune-up screenshot) is
+    one set of bytes, as on the disc. Layers: the picture behind (20x14 tiles, depth 4088), the shadow
+    (14x10 at 61,4, depth 1219, subtracted), the words (20x5 at 0,152; depth 1243, under the shadow, in
+    M362 and M366), panels and the menu (13x9 at 60,4, their right edge see-through), the controller
+    (depth 24) and close-ups (7x5 at 160,40). The menu's copy k has a 2-pixel green ring around line k
+    and a few specks a step lighter all over (as the game's copies have)."""
+    import struct
+    from translator import artwork as A
+    shapes = {"back": (0, 0, 20, 14, 4088), "shadow": (61, 4, 14, 10, 1219), "strip": (0, 152, 20, 5, 8),
+              "panel": (60, 4, 13, 9, 8), "menu": (60, 4, 13, 9, 8), "controller": (60, 4, 13, 9, 24),
+              "close-up": (160, 40, 7, 5, 8), "picture": (60, 4, 13, 9, 8)}
+    rows, rooms, out = made_up_tutorial_rows(), {}, {}
+    for pic in A.PICTURES:
+        if not isinstance(pic, A.Screen):
+            continue
+        blob, placed = rooms.setdefault(pic.room, (bytearray(rows), {}))
+        moves = {e: (dx, dy) for e, dx, dy in pic.layers}
+        segments, layers, at = [(0, len(rows))], [], len(rows)
+        for e, role in _tutorial_roles(pic):
+            kind = "menu" if role.startswith("menu") else role
+            x0, y0, cols, lines, depth = shapes[kind]
+            if kind == "strip":
+                y0 = 151 if pic.room == 366 else 152
+                depth = 1243 if pic.room in (362, 366) else 8
+            if e not in placed:
+                tiles = []
+                for t in range(cols * lines):
+                    x, y = x0 + t % cols * 16, y0 + t // cols * 16
+                    row = SHADOW_ROW if kind == "shadow" else 508 + 2 * (t % 2) if kind == "menu" else 480 + 2 * ((t + e) % 14)
+                    like = pic.words[0] if role.startswith("menu ") else e     # a copy is the menu, ringed
+                    numbers = bytearray(((like * 37 + pic.room + t * 3 + i) % 220) + 20 for i in range(256))
+                    if kind == "shadow":
+                        numbers = bytearray((t + i) % 64 + 8 for i in range(256))
+                    if kind in ("panel", "menu", "picture", "controller") and t % cols == cols - 1:
+                        for i in range(256):
+                            if i % 16 >= 12:
+                                numbers[i] = 0                      # the panel's see-through right edge
+                    if role.startswith("menu "):
+                        k = int(role[5:])
+                        for i in range(256):
+                            px, py = x + i % 16, y + i // 16
+                            band = 40 + k * 20
+                            if (70 <= px <= 250 and py in (band, band + 1, band + 14, band + 15)) or \
+                                    (band <= py <= band + 15 and px in (70, 71, 249, 250)):
+                                numbers[i] = TUTORIAL_GREEN
+                            elif (px * 7 + py * 3 + k) % 41 == 0 and 0 < numbers[i] < 200:
+                                numbers[i] += 8                     # a speck one step lighter: not the ring
+                    tiles.append((x, y, len(blob)))
+                    blob += struct.pack("<H", row) + numbers
+                placed[e] = (depth, kind == "shadow", tiles)
+            depth, shadow, tiles = placed[e]
+            dx, dy = moves.get(e, moves.get(pic.words[0], (0, 0)))
+            layers.append(A.Layer(e, depth, shadow, e in pic.words, not role.startswith("menu "),
+                                  [(x + dx, y + dy) for x, y, _ in tiles], at))
+            segments += [(off, 258) for _, _, off in tiles]
+            at += 258 * len(tiles)
+        out[pic.id] = (pic.room, segments, A.ScreenLayout(layers, tuple(range(480, 512))))
+    final = {room: bytes(blob + bytes(-len(blob) % 2048)) for room, (blob, _) in rooms.items()}
+    return {pid: ((room - 300) * 1000 * 2048, final[room], segments, layout)
+            for pid, (room, segments, layout) in out.items()}
+
+
+class TutorialDisc:
+    """artwork.Disc's parts for the made-up Tutorial screens (made_up_tutorial), no disc."""
+
+    def __init__(self, path="made-up.cue"):
+        self.path = Path(path)
+        self.english, self.around, self.segments, self.layout = {}, {}, {}, {}
+        self.add_tutorial()
+
+    def add_tutorial(self):
+        for pid, (base, data, segments, layout) in made_up_tutorial().items():
+            self.around[pid], self.segments[pid], self.layout[pid] = (base, data), segments, layout
+            self.english[pid] = b"".join(data[a:a + n] for a, n in segments)
+
+
+def tutorial_value(data: bytes, layout, entry: int, x: int, y: int) -> int:
+    """The 15-bit colour layer `entry` (drawn or a copy) has at screen (x, y), from the screen's bytes."""
+    import struct
+    layer = next(lay for lay in layout.layers if lay.entry == entry)
+    for t, (tx, ty) in enumerate(layer.tiles):
+        if tx <= x < tx + 16 and ty <= y < ty + 16:
+            at = layer.at + t * 258
+            row = struct.unpack_from("<H", data, at)[0] & 511
+            n = data[at + 2 + (y - ty) * 16 + x - tx]
+            return struct.unpack_from("<H", data, ((row - 480) * 256 + n) * 2)[0]
+    raise KeyError((entry, x, y))
+
+
+def subtracted(under: int, shadow: int) -> int:
+    return sum(max(0, (under >> s & 31) - (shadow >> s & 31)) << s for s in (0, 5, 10))
+
+
 class FakeDisc:
     """artwork.Disc's parts for one made-up picture at PE.IMG byte 3000 of sectors 1-3: no disc."""
 
@@ -778,6 +909,167 @@ class PictureRuleTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "320×224"):
             A.from_png(pic, card, png_bytes(Image.new("RGB", (320, 240))), None, layout)
 
+    def test_a_tutorial_screen_is_its_layers_drawn_in_the_games_order(self):
+        """Deepest first; the shadow subtracted from what is under it; colour 0 see-through; the words under
+        the shadow where they are deeper (M362), over it elsewhere (M361); the menu's layers moved, and a
+        choice drawn with its ringed copy."""
+        from translator import artwork as A
+        disc = TutorialDisc()
+
+        def screen(pid, choice=None):
+            img = A.screen_image(disc.english[pid], disc.layout[pid], choice)
+            return lambda x, y: img.getpixel((x, y))
+
+        for pid, strip, panel, back, shadow, under_shadow in (("tutorial/icons-5", 0, 5, 10, 9, True),
+                                                              ("tutorial/icons-1", 0, 4, 9, 8, False)):
+            data, layout = disc.english[pid], disc.layout[pid]
+            at = screen(pid)
+            s = tutorial_value(data, layout, shadow, 100, 155)
+            self.assertTrue(s & 0x8000 and s & 0x7FFF)
+            words = tutorial_value(data, layout, strip, 100, 155)
+            self.assertEqual(at(100, 155), A.screen_rgb(subtracted(words, s) if under_shadow else words), pid)
+            self.assertEqual(at(70, 10), A.screen_rgb(tutorial_value(data, layout, panel, 70, 10)), pid)
+            self.assertEqual(tutorial_value(data, layout, panel, 265, 10), 0)            # see-through: under it
+            self.assertEqual(at(265, 10), A.screen_rgb(subtracted(tutorial_value(data, layout, back, 265, 10),
+                                                                  tutorial_value(data, layout, shadow, 265, 10))))
+            self.assertEqual(at(5, 5), A.screen_rgb(tutorial_value(data, layout, back, 5, 5)))
+        data, layout = disc.english["tutorial/menu"], disc.layout["tutorial/menu"]
+        self.assertEqual(screen("tutorial/menu")(5, 0), A.screen_rgb(tutorial_value(data, layout, 8, 5, 0)))
+        self.assertEqual([lay.tiles[0] for lay in layout.layers[:3]], [(0, -6), (61 - 13, 4 + 31), (57, 35)])
+        ring = (100 - 3, 40 + 2 * 20 + 31)      # the top of copy 2's ring, moved with the menu
+        self.assertEqual(screen("tutorial/menu", 2)(*ring), A.screen_rgb(31 << 5))
+        self.assertNotEqual(screen("tutorial/menu")(*ring), A.screen_rgb(31 << 5))
+        self.assertNotEqual(screen("tutorial/menu", 3)(*ring), A.screen_rgb(31 << 5))
+
+    def test_a_tutorial_screen_out_as_png_and_back_is_the_same_bytes(self):
+        from translator import artwork as A
+        disc = TutorialDisc()
+        for pid in disc.english:
+            pic, layout, english = A.BY_ID[pid], disc.layout[pid], disc.english[pid]
+            self.assertEqual(A.size(pic, english), (320, 224))
+            self.assertEqual(A.from_png(pic, english, A.png(pic, english, layout), None, layout),
+                             A.Loaded(english, []), pid)
+
+    def test_only_the_words_of_a_tutorial_png_are_taken(self):
+        """Greys painted over the words, the picture behind and the controller: the words are exactly the
+        PNG's, every other layer keeps its bytes, and the pixels left are counted in a note."""
+        from PIL import ImageDraw
+        from translator import artwork as A
+        disc = TutorialDisc()
+        pid = "tutorial/controller-1"
+        pic, layout, english = A.BY_ID[pid], disc.layout[pid], disc.english[pid]
+        img = A.image(pic, english, layout)
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((10, 160, 300, 175), fill=A.screen_rgb(10 * 0x421))      # the words
+        draw.rectangle((0, 0, 9, 9), fill=(255, 0, 255))                        # the picture behind
+        draw.rectangle((100, 20, 109, 29), fill=(255, 0, 255))                  # the controller
+        loaded = A.from_png(pic, english, png_bytes(img), None, layout)
+        got = A.image(pic, loaded.tim, layout)
+        for x in range(320):
+            for y in range(152, 224):
+                self.assertEqual(got.getpixel((x, y)), img.getpixel((x, y)), (x, y))
+        strip = next(lay for lay in layout.layers if lay.entry == 0)
+        part = slice(strip.at, strip.at + 258 * len(strip.tiles))
+        self.assertNotEqual(loaded.tim[part], english[part])
+        self.assertEqual(loaded.tim[:part.start] + loaded.tim[part.stop:], english[:part.start] + english[part.stop:])
+        self.assertTrue(any(n.startswith("200 pixels you changed are not part of the words") for n in loaded.notes),
+                        loaded.notes)
+
+    def test_the_shadow_is_taken_back_off_redrawn_words_under_it(self):
+        """In M362 the shadow falls on the words' top rows: a pixel painted there in a darkened colour
+        becomes the colour that, darkened, is it; and the screen is the PNG."""
+        from translator import artwork as A
+        disc = TutorialDisc()
+        pid = "tutorial/icons-5"
+        pic, layout, english = A.BY_ID[pid], disc.layout[pid], disc.english[pid]
+        import struct
+        s = tutorial_value(english, layout, 9, 100, 155)
+        strip = next(lay for lay in layout.layers if lay.entry == 0)
+        t = next(t for t, (x, y) in enumerate(strip.tiles) if x <= 100 < x + 16 and y <= 155 < y + 16)
+        row = struct.unpack_from("<H", english, strip.at + t * 258)[0] & 511
+        wanted = struct.unpack_from("<H", english, ((row - 480) * 256 + 230) * 2)[0]    # a light colour of its row
+        self.assertNotEqual(wanted, tutorial_value(english, layout, 0, 100, 155))
+        painted = subtracted(wanted, s)
+        img = A.image(pic, english, layout)
+        img.putpixel((100, 155), A.screen_rgb(painted))
+        loaded = A.from_png(pic, english, png_bytes(img), None, layout)
+        got = tutorial_value(loaded.tim, layout, 0, 100, 155)
+        self.assertEqual(subtracted(got, s), painted)
+        self.assertNotEqual(got & 0x7FFF, painted)                   # the light colour, not the dark one painted
+        self.assertEqual(A.image(pic, loaded.tim, layout).tobytes(), img.tobytes())
+        self.assertEqual(loaded.notes, ["1 of the screen's squares with words changed."])
+
+    def test_the_menu_drawn_once_goes_into_its_copies_with_the_ring_put_back(self):
+        """The menu painted over: each choice's screen is the new menu with the English green ring on it,
+        and only the ring: the copies' specks (a step of colour) are not put back. Squares of the menu not
+        painted leave the copies as they were."""
+        from PIL import ImageDraw
+        from translator import artwork as A
+        disc = TutorialDisc()
+        pic, layout, english = A.BY_ID["tutorial/menu"], disc.layout["tutorial/menu"], disc.english["tutorial/menu"]
+        img = A.image(pic, english, layout)
+        ImageDraw.Draw(img).rectangle((60, 60, 250, 170), fill=A.screen_rgb(3 * 0x421))
+        loaded = A.from_png(pic, english, png_bytes(img), None, layout)
+        menu = A.image(pic, loaded.tim, layout)
+        self.assertEqual(menu.tobytes(), img.tobytes())
+        green = A.screen_rgb(31 << 5)
+        for k, copy in enumerate((lay for lay in layout.layers if not lay.drawn), 1):
+            ring = {(x + k2 % 16, y + k2 // 16) for (x, y), ks in A.ring_of(english, layout, copy).items() for k2 in ks}
+            band = 40 + k * 20 + 31
+            drawn = {(x - 3, y) for x in range(70, 251) for y in (band, band + 1, band + 14, band + 15)} | \
+                    {(x - 3, y) for y in range(band, band + 16) for x in (70, 71, 249, 250)}
+            self.assertEqual(ring, {p for p in drawn if p[1] < 4 + 144 + 31}, k)     # the ring inside the menu
+            chosen, before = A.screen_image(loaded.tim, layout, k), A.screen_image(english, layout, k)
+            for y in range(224):
+                for x in range(320):
+                    p = (x, y)
+                    if p in ring:
+                        self.assertEqual(chosen.getpixel(p), green, (k, p))
+                    elif 60 <= x <= 250 and 60 <= y <= 170:          # painted: the new menu, specks and all gone
+                        self.assertEqual(chosen.getpixel(p), menu.getpixel(p), (k, p))
+                    elif not (57 <= x < 265 and 35 <= y < 179):      # outside the menu: as it was
+                        self.assertEqual(chosen.getpixel(p), before.getpixel(p), (k, p))
+            plain = next(lay for lay in layout.layers if lay.word and lay.drawn)
+            for t, place in enumerate(plain.tiles):
+                if loaded.tim[plain.at + t * 258:plain.at + t * 258 + 258] == english[plain.at + t * 258:plain.at + t * 258 + 258]:
+                    at = copy.at + copy.tiles.index(place) * 258
+                    self.assertEqual(loaded.tim[at:at + 258], english[at:at + 258], (k, place))
+
+    def test_the_tune_up_screenshot_takes_a_change_from_either_png_and_refuses_two_that_differ(self):
+        """About Icons 7 and 8 show one screenshot. Changed in 7's PNG, it is changed on 8 too; 8's PNG
+        saved before (the screenshot as the game has it) keeps 7's change; 8's PNG changing it otherwise
+        is refused (Disagree names 7) and nothing of it is loaded."""
+        from PIL import ImageDraw
+        from translator import artwork as A
+        disc = TutorialDisc()
+        seven, eight = A.BY_ID["tutorial/icons-7"], A.BY_ID["tutorial/icons-8"]
+        self.assertEqual([(o.id, e) for o, e in A.shared_with(seven)], [("tutorial/icons-8", 7)])
+        self.assertEqual([(o.id, e) for o, e in A.shared_with(eight)], [("tutorial/icons-7", 7)])
+        saved_eight = A.image(eight, disc.english[eight.id], disc.layout[eight.id])
+        img = A.image(seven, disc.english[seven.id], disc.layout[seven.id])
+        ImageDraw.Draw(img).rectangle((80, 40, 150, 60), fill=A.screen_rgb(5 * 0x421))
+        loaded = A.from_png(seven, disc.english[seven.id], png_bytes(img), None, disc.layout[seven.id])
+        self.assertIn('The screenshot is also on "Tutorial: About Icons 8/9 · Added effects": it changes there too.',
+                      loaded.notes)
+        pieces = A.put(disc, seven, [], loaded.tim)
+        now = A.shown(disc, eight, pieces)
+        self.assertEqual(A.image(eight, now, disc.layout[eight.id]).crop((80, 40, 151, 61)).tobytes(),
+                         img.crop((80, 40, 151, 61)).tobytes())
+        # 8's PNG as saved before, its words redrawn: the words are taken, the screenshot stays 7's.
+        ImageDraw.Draw(saved_eight).rectangle((20, 180, 60, 190), fill=A.screen_rgb(5 * 0x421))
+        kept = A.from_png(eight, disc.english[eight.id], png_bytes(saved_eight), now, disc.layout[eight.id])
+        self.assertIn('The screenshot is also on "Tutorial: About Icons 7/9 · Tune-up Icon": the change loaded there '
+                      'is kept.', kept.notes)
+        shown = A.image(eight, kept.tim, disc.layout[eight.id])
+        self.assertEqual(shown.crop((80, 40, 151, 61)).tobytes(), img.crop((80, 40, 151, 61)).tobytes())
+        self.assertEqual(shown.crop((20, 180, 61, 191)).tobytes(), saved_eight.crop((20, 180, 61, 191)).tobytes())
+        other = A.image(eight, now, disc.layout[eight.id])
+        ImageDraw.Draw(other).rectangle((100, 100, 120, 110), fill=A.screen_rgb(28 * 0x421))
+        with self.assertRaises(A.Disagree) as said:
+            A.from_png(eight, disc.english[eight.id], png_bytes(other), now, disc.layout[eight.id])
+        self.assertIs(said.exception.other, seven)
+        self.assertIn("This PNG was not loaded", str(said.exception))
+
     def test_a_tint_is_the_gpus_colour_times_the_drawing_colour(self):
         """The battle words' preview: each 5-bit part times the drawing colour over 128 (128 = as it is),
         at most 31, as the PlayStation draws a tinted sprite; the see-through bit stays."""
@@ -893,7 +1185,7 @@ class GameLookRuleTest(unittest.TestCase):
 
 
 class PictureDiscTest(unittest.TestCase):
-    """The pictures with words (title screen, city map, battle words, day cards) from the real discs (PE_TEST_DISC,
+    """The pictures with words (title screen, city map, battle words, day cards, Tutorial) from the real discs (PE_TEST_DISC,
     PE_TEST_DISC2): each one read out as a PNG and loaded back gives the disc's bytes, and is the same
     on both discs. With the player packs (PE_TEST_PLAYER_PACKS) too: each pack's pictures as it shows
     them, out as a PNG and back, change nothing (their own colours included)."""
@@ -969,6 +1261,107 @@ class PictureDiscTest(unittest.TestCase):
                     self.assertEqual(mine[:220 * 320 * 3], view[4 * 320 * 3:], pic.id)
             finally:
                 game.disc.f.close()
+
+    def test_the_tutorial_screens_are_their_rooms_layers_as_the_game_draws_them(self):
+        """Each Tutorial screen (and the menu with each choice picked) is, pixel for pixel, the model the
+        game's frames of the CTest original-game-tutorial's route were matched with (every page, 0 pixels
+        differing; translator-tutorial checks them again): the room's pictures put in video memory, the
+        screen's tile lists drawn from there by depth (deepest first, at one depth the later list first),
+        colour 0 see-through, the shadow subtracted. Built here from the disc on its own, not from the
+        tool's bytes. Both discs: the same bytes (the CRCs)."""
+        import struct
+        from petext import disc as D
+        from translator import artwork as A, gamelook as G
+        fives = [[(c >> s & 31) for s in (0, 5, 10)] for c in range(32768)]
+
+        def model(game, pic, choice=None):
+            first, scratch, texture, size = game.rooms[pic.room - 1]
+            vram = bytearray(1024 * 512 * 2)
+            for blob in (game.pe(first, scratch), game.pe(first + scratch, texture)):
+                for off, x, y, w, h in G._uploads(blob):
+                    if off + w * h * 2 <= len(blob) and x + w <= 1024 and y + h <= 512:
+                        for r in range(h):
+                            to = ((y + r) * 1024 + x) * 2
+                            vram[to:to + w * 2] = blob[off + r * w * 2:off + (r + 1) * w * 2]
+            run = game.pe(first + scratch + texture, size)
+            directory = struct.unpack_from("<I", run, 4)[0]
+            packed = struct.unpack_from("<I", run, directory + 0x1C)[0]
+            geom = struct.unpack_from("<I", run, (packed & 0x3FFFFF) + 4)[0] & 0xFFFFFF
+            table = geom + struct.unpack_from("<i", run, geom + 0x14)[0]
+            shown = [(choice if choice and e == pic.words[0] else e, dx, dy) for e, dx, dy in pic.layers]
+            depth = {e: (struct.unpack_from("<I", run, table + e * 0x38)[0] >> 8) & 0xFFF for e, _, _ in shown}
+            screen = [(0, 0, 0)] * (320 * 224)
+            for e, dx, dy in sorted(shown, key=lambda t: (-depth[t[0]], -t[0])):
+                at = table + e * 0x38
+                n = struct.unpack_from("<H", run, at + 0x26)[0]
+                pos, uv = struct.unpack_from("<ii", run, at + 0x28)
+                sx, sy = struct.unpack_from("<hh", run, at + 0xC)
+                for k in range(n):
+                    a = struct.unpack_from("<I", run, at + pos + k * 4)[0]
+                    w0 = struct.unpack_from("<I", run, at + uv + k * 8)[0]
+                    x, y = sx + dx + (a >> 22), sy + dy + ((a >> 12) & 1023)
+                    u, v = run[at + uv + k * 8 + 4], run[at + uv + k * 8 + 3]
+                    clut = ((w0 & 511) * 1024 + ((w0 >> 5) & 0x3F0)) * 2
+                    page_x, page_y = (w0 >> 10) & 0x3C0, (w0 >> 7) & 256
+                    for j in range(16):
+                        for i in range(16):
+                            if not (0 <= x + i < 320 and 0 <= y + j < 224):
+                                continue
+                            index = vram[((page_y + v + j) * 1024 + page_x + (u + i) // 2) * 2 + ((u + i) & 1)]
+                            c = vram[clut + index * 2] | vram[clut + index * 2 + 1] << 8
+                            if not c:
+                                continue
+                            p = (y + j) * 320 + x + i
+                            if w0 & (1 << 23) and c & 0x8000:             # the shadow: subtracted
+                                screen[p] = tuple(max(0, a - b) for a, b in zip(screen[p], fives[c & 0x7FFF]))
+                            else:
+                                screen[p] = tuple(fives[c & 0x7FFF])
+            return bytes(v for five in screen for v in G.rgb_of(five[0] | five[1] << 5 | five[2] << 10))
+
+        for disc in self.discs():
+            game = D.Game(disc.path)
+            try:
+                for pic in A.PICTURES:
+                    if not isinstance(pic, A.Screen):
+                        continue
+                    layout = disc.layout[pic.id]
+                    with self.subTest(disc=disc.path.name, screen=pic.id):
+                        self.assertEqual(A.image(pic, disc.english[pic.id], layout).tobytes(), model(game, pic))
+                        for k, e in enumerate(pic.copies, 1):
+                            self.assertEqual(A.screen_image(disc.english[pic.id], layout, k).tobytes(),
+                                             model(game, pic, e), k)
+                        drawn = [lay for lay in layout.layers if lay.drawn]
+                        self.assertEqual([lay.shadow for lay in drawn], [False, True] + [False] * (len(drawn) - 2))
+                        self.assertEqual(drawn[0].depth, 4088)
+                        words_depth = {lay.depth for lay in drawn if lay.word and lay.entry == pic.words[0]}
+                        self.assertEqual(words_depth, {1243} if pic.room in (362, 366) else {8})
+            finally:
+                game.disc.f.close()
+
+    def test_the_tune_up_screenshot_on_the_disc_is_one_layer_of_two_screens(self):
+        """About Icons 7 and 8 (M362) show the same tile list e7: loading 7's PNG with the screenshot
+        changed changes 8 the same; 8's PNG as the game has it keeps that; changed otherwise, refused."""
+        from PIL import ImageDraw
+        from translator import artwork as A
+        disc = self.discs()[0]
+        seven, eight = A.BY_ID["tutorial/icons-7"], A.BY_ID["tutorial/icons-8"]
+        self.assertEqual(A.shared_with(seven), [(eight, 7)])
+        img = A.image(seven, disc.english[seven.id], disc.layout[seven.id])
+        ImageDraw.Draw(img).rectangle((90, 50, 160, 70), fill=(0, 0, 0))
+        pieces = A.put(disc, seven, [], A.from_png(seven, disc.english[seven.id], png_bytes(img), None,
+                                                   disc.layout[seven.id]).tim)
+        now = A.shown(disc, eight, pieces)
+        on_seven = A.image(seven, A.shown(disc, seven, pieces), disc.layout[seven.id])
+        on_eight = A.image(eight, now, disc.layout[eight.id])
+        self.assertEqual(on_eight.crop((60, 4, 268, 148)).tobytes(), on_seven.crop((60, 4, 268, 148)).tobytes())
+        self.assertNotEqual(now, disc.english[eight.id])
+        game_png = A.png(eight, disc.english[eight.id], disc.layout[eight.id])
+        kept = A.from_png(eight, disc.english[eight.id], game_png, now, disc.layout[eight.id])
+        self.assertEqual(kept.tim, now)
+        other = A.image(eight, now, disc.layout[eight.id])
+        ImageDraw.Draw(other).rectangle((100, 100, 140, 120), fill=(255, 255, 255))
+        with self.assertRaises(A.Disagree):
+            A.from_png(eight, disc.english[eight.id], png_bytes(other), now, disc.layout[eight.id])
 
     def test_each_player_packs_pictures_out_and_back_change_nothing(self):
         from translator import artwork as A
@@ -1469,6 +1862,8 @@ class AllPicturesDisc:
         self.path = Path(path)
         self.english, self.around, self.layout, self.segments = {}, {}, {}, {}
         for pic in A.PICTURES:
+            if isinstance(pic, A.Screen):
+                continue
             if isinstance(pic, A.Card):
                 card, self.layout[pic.id] = made_up_card()
                 self.english[pic.id], self.around[pic.id] = card, (0, card + bytes(-len(card) % 2048))
@@ -1478,6 +1873,7 @@ class AllPicturesDisc:
             tim = made_up_tim(bits, w, h, palette=list(range(0, 16 * 2048, 2048)) if bits == 4 else None)
             self.english[pic.id] = tim
             self.around[pic.id] = (0, tim + bytes(-len(tim) % 2048))
+        TutorialDisc.add_tutorial(self)
 
     def span(self, pic):
         return 0, len(self.english[pic.id])
@@ -1508,7 +1904,7 @@ class PictureFitTest(unittest.TestCase):
                     pw.list.selection_set(pic.id)
                     for _ in range(3):
                         root.update()
-                    w, h = (320, 224) if pic.id.startswith("day/") else AllPicturesDisc.SIZES[pic.id][1:]
+                    w, h = (320, 224) if pic.id.startswith(("day/", "tutorial/")) else AllPicturesDisc.SIZES[pic.id][1:]
                     bottom = pw.message.winfo_rooty() - pw.win.winfo_rooty()
                     right = pw.your_view.winfo_rootx() - pw.win.winfo_rootx() + pw.your_view.winfo_width()
                     details = dict(picture=pic.id, height=pw.win.winfo_height(), zoom=pw.zoom, bottom=bottom,
@@ -1533,6 +1929,33 @@ class PictureFitTest(unittest.TestCase):
                 self.assertEqual(seen[(900, "title/new-game")], 3, seen)
                 self.assertEqual(seen[(900, "battle/words")], 2, seen)
             self.assertEqual(seen[(668, "map/place-names")], 1, seen)
+        finally:
+            root.destroy()
+
+    def test_two_pngs_that_change_the_tune_up_screenshot_differently_are_named(self):
+        """About Icons 7 and 8 show one screenshot: 8's PNG changing it otherwise than 7's (loaded first)
+        is refused with both PNGs named, and the translation keeps 7's change only."""
+        import tkinter as tk
+        from PIL import ImageDraw
+        from translator import app as A, artwork as W
+        A.SETTINGS = self.dir / "settings.json"
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "p.pelang"), new=("fr", "Français"))
+            disc = window.picture_disc = AllPicturesDisc(self.dir / "made-up.cue")
+            seven, eight = W.BY_ID["tutorial/icons-7"], W.BY_ID["tutorial/icons-8"]
+            pngs = []
+            for pic, box in ((seven, (80, 40, 150, 60)), (eight, (100, 100, 120, 110))):
+                img = W.image(pic, disc.english[pic.id], disc.layout[pic.id])
+                ImageDraw.Draw(img).rectangle(box, fill=W.screen_rgb(5 * 0x421))
+                pngs.append(png_bytes(img))
+            window.load_picture(seven, pngs[0], "seven.png")
+            before = dict(window.tr.parts)
+            with self.assertRaises(ValueError) as said:
+                window.load_picture(eight, pngs[1], "eight.png")
+            self.assertIn('The two PNGs that disagree: eight.png (for this screen) and seven.png (loaded for '
+                          '"Tutorial: About Icons 7/9 · Tune-up Icon").', str(said.exception))
+            self.assertEqual(window.tr.parts, before)
         finally:
             root.destroy()
 

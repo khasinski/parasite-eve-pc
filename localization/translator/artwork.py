@@ -54,6 +54,35 @@ BATTLE = ("The words, numbers and marks shown in a fight. Draw with the greys of
           "The numbers, the I II III tabs and the other marks need no translating. Keep it {w}×{h}.")
 
 
+def _tutorial(words: str, rest: str, extra: str = "") -> str:
+    return ("A page of the Tutorial, as the screen shows it. Redraw " + words + ". The rest of the screen (" + rest +
+            ") is the game's and stays as it is, whatever your PNG has there. The words are made of 16×16 squares, and "
+            "each square can use only one of the room's sets of 256 colours: for each square you change, the tool picks "
+            "the set that fits your drawing best, and each pixel becomes its nearest colour in that set." + extra +
+            " Keep it {w}×{h}.")
+
+
+STRIP = "the words at the bottom"
+STRIP_SHOT = "the words at the bottom and, if you like, the game screenshot above them"
+CONTROLLER = "the PE picture behind, the shadow, the controller pictures"
+BEHIND = "the PE picture behind and the shadow"
+SCREENSHOT = (" The screenshot is optional: it shows the game's own menus, with their words in English, and may stay "
+              "as it is.")
+GAME_OVER = " The Game Over screen above the words is optional and may stay in English."
+SHADOWED = (" The shadow of the frame above falls on the top rows of the words: draw them as you see them there, and "
+            "the tool takes the shadow back off.")
+TUNE_UP = (" The Tune-up screenshot is on two pages, this one and the next: a change loaded from either PNG goes on "
+           "both. If both PNGs change it, differently, the tool says so and doesn't load the second until they "
+           "are the same.")
+MENU = ("The Tutorial menu, as the screen shows it, with no choice picked. Redraw its words. The game keeps six copies "
+        "of the menu: this one and five with the green ring on one choice. Yours goes into all six: the tool draws the "
+        "game's green ring back on the five, at the same places as the English ones, so keep the choices where they "
+        "are. The rest of the screen (the PE picture behind and the shadow) is the game's and stays as it is. The menu "
+        "is made of 16×16 squares, and each square can use only one of the room's sets of 256 colours: for each "
+        "square you change, the tool picks the set that fits your drawing best, and each pixel becomes its nearest "
+        "colour in that set. Keep it {w}×{h}.")
+
+
 @dataclass(frozen=True)
 class Picture:
     id: str                  # stays the same for good: scripted runs and tests name pictures by it
@@ -107,6 +136,49 @@ class CardLayout:
     rows: tuple              # the colour rows the room's tiles use: the sets a changed tile may take
 
 
+@dataclass(frozen=True)
+class Screen:
+    """A page of the Tutorial as the screen shows it. Each Tutorial room (M353-M366) has one view made of
+    several tile lists ("layers": the PE picture behind, a shadow, the words at the bottom, a picture
+    panel...) that its script shows a few at a time. A layer is 16x16 8-bit tiles like a card's, on the
+    room's colour rows; no texture tile is shared between layers (checked when the disc is read). The
+    game draws a screen's layers by their depth, the farthest first (Render_DrawSpriteEntry,
+    src/main/render/mesh_list.c: `(u32 at +0 >> 8) & 0xFFF`; same depth: the later list first), colour 0
+    see-through, and the shadow layer (its tiles' texture word has bit 23) subtracted from what is
+    under it. Checked pixel for pixel against the game's frames of every page of the Tutorial."""
+    id: str
+    where: str
+    name: str
+    room: int                # M number
+    layers: tuple            # (tile list, x move, y move) for each layer the screen shows
+    words: tuple             # the layers with words: the only ones a PNG of the screen changes
+    crc: int                 # CRC-32 of its English bytes (`Disc.english`: colour rows, then each layer's tiles)
+    tip: str
+    copies: tuple = ()       # layers kept with the screen but not drawn: the menu's five copies with a choice ringed
+    tints: tuple = ()
+
+    @property
+    def label(self) -> str:
+        return f"{self.where}: {self.name}"
+
+
+@dataclass
+class Layer:
+    entry: int               # the room's tile list
+    depth: int
+    shadow: bool             # drawn by subtracting from what is under it
+    word: bool               # a PNG of the screen changes it
+    drawn: bool              # False for the menu's ringed copies
+    tiles: list              # each tile's (x, y) on the screen (moved), in the order of the screen's bytes
+    at: int                  # its first tile's byte in the screen's bytes
+
+
+@dataclass
+class ScreenLayout:
+    layers: list             # Layer, in the order of the screen's bytes
+    rows: tuple              # the colour rows the room's tiles use: the sets a changed tile may take
+
+
 # The title screen, PE.IMG entry 70 (checked on both USA discs). Its other pictures hold no words to
 # translate: TIM 0 the title picture, TIM 2 "© 1998 SQUARE", TIM 7 the menu's green highlight.
 PICTURES = (
@@ -142,6 +214,67 @@ PICTURES = (
     Card("day/6", "Day title card", "Day 6 · LIBERATION", 352, 2, 0x401EF5B7, CARD),
     Card("day/epilogue", "Day title card", "Epilogue · SYMBIOSIS", 352, 3, 0xA6953E99, CARD),
 )
+
+# The Tutorial (title screen > Tutorial), rooms M353-M366: 30 screens, each made of its room's layers as the
+# game's frames show them (the CTest original-game-tutorial's route, every page). In each room the last layer
+# is the PE picture behind and the one before it the shadow; M354/M355 also show the big controller (e6/e7)
+# and a close-up of the button. The menu (M353) is moved by the game: the picture behind up 6 rows, the
+# shadow and the menu down 31 rows (and left 13 and 3 pixels); its bottom band (e6) is not drawn. Its
+# copies e1-e5, each with the green ring on one choice, are the screens of choices 1-5; e0, with no choice
+# ringed, is never shown but is the one the translator draws. Same bytes on both discs (the CRCs).
+_TUTORIAL_CRC = {
+    "tutorial/menu": 0x2505C632,
+    "tutorial/controller-1": 0xB79BDD11, "tutorial/controller-2": 0x2BD21FA4, "tutorial/controller-3": 0xE0BB57CC,
+    "tutorial/controller-4": 0x1F981358, "tutorial/controller-5": 0xCBAB06AA, "tutorial/controller-6": 0x3190C7A1,
+    "tutorial/analog-1": 0x5558EA4F, "tutorial/analog-2": 0x127CC435, "tutorial/analog-3": 0x4B461748,
+    "tutorial/analog-4": 0xC6CA2E3B, "tutorial/analog-5": 0x9B6C8ED8, "tutorial/analog-6": 0xCF7FF73C,
+    "tutorial/analog-7": 0x13FA4145,
+    "tutorial/icons-1": 0xB0CE99E6, "tutorial/icons-2": 0x803091B8, "tutorial/icons-3": 0x618773A8,
+    "tutorial/icons-4": 0x1A57C742, "tutorial/icons-5": 0x4251734E, "tutorial/icons-6": 0x0D682FB2,
+    "tutorial/icons-7": 0x51EC4288, "tutorial/icons-8": 0xCB2C33AF, "tutorial/icons-9": 0x050DFD15,
+    "tutorial/battle-1": 0xAB776775, "tutorial/battle-2": 0x7A90447A, "tutorial/battle-3": 0xA47B1FF6,
+    "tutorial/battle-4": 0x6CE8B03E, "tutorial/battle-5": 0x8BDACEDB, "tutorial/battle-6": 0x1DE4491A,
+    "tutorial/save": 0x8F12C6D7,
+}
+
+
+def _tutorial_screens() -> tuple:
+    out = [Screen("tutorial/menu", "Tutorial", "Menu (How to Use the Controller … Return to Main Title)", 353,
+                  ((8, 0, -6), (7, -13, 31), (0, -3, 31)), (0,), _TUTORIAL_CRC.get("tutorial/menu", 0), MENU,
+                  copies=(1, 2, 3, 4, 5))]
+
+    def page(pid, name, room, layers, words, tip):
+        out.append(Screen(pid, "Tutorial", name, room, tuple((e, 0, 0) for e in layers), words,
+                          _TUTORIAL_CRC.get(pid, 0), tip))
+
+    buttons = ("Directional buttons", "START button", "Triangle button", "Cross button", "Square button",
+               "Circle button")
+    for k, name in enumerate(buttons):              # strip k, the controller (e6), the close-up e(7+k)
+        page(f"tutorial/controller-{k + 1}", f"Controller {k + 1}/6 · {name}", 354, (14, 13, 6, 7 + k, k), (k,),
+             _tutorial(STRIP, CONTROLLER))
+    for k, name in enumerate(("Left stick",) + buttons[1:] + ("Note on the analog mode",)):
+        page(f"tutorial/analog-{k + 1}", f"Analog Controller {k + 1}/7 · {name}", 355, (16, 15, 7, 8 + k, k), (k,),
+             _tutorial(STRIP, CONTROLLER))
+    for k, name in enumerate(("Item Icon", "PE Icon", "Weapon Icon", "Armor Icon")):    # strip k, screenshot e(4+k)
+        page(f"tutorial/icons-{k + 1}", f"About Icons {k + 1}/9 · {name}", 361, (9, 8, k, 4 + k), (k, 4 + k),
+             _tutorial(STRIP_SHOT, BEHIND, SCREENSHOT))
+    # M362: strip k with screenshot e5, e6, e7, e7, e8 (the Tune-up screenshot twice). Its strips are drawn
+    # under the shadow (depth 1243), which darkens their top rows.
+    for k, (name, shot) in enumerate((("System Icon", 5), ("Sort Icon", 6), ("Tune-up Icon", 7),
+                                      ("Added effects", 7), ("BP Icon", 8))):
+        page(f"tutorial/icons-{k + 5}", f"About Icons {k + 5}/9 · {name}", 362, (10, 9, k, shot), (k, shot),
+             _tutorial(STRIP_SHOT, BEHIND, SCREENSHOT + SHADOWED + (TUNE_UP if shot == 7 else "")))
+    for k, name in enumerate(("Gauges", "Attack", "Items", "Parasite Energy", "Escape", "Game Over")):
+        page(f"tutorial/battle-{k + 1}", f"Battle Screen {k + 1}/6 · {name}", 363, (13, 12, k, 6 + k), (k, 6 + k),
+             _tutorial(STRIP_SHOT if k < 5 else "the words at the bottom and, if you like, the Game Over screen",
+                       BEHIND, SCREENSHOT if k < 5 else GAME_OVER))
+    # M366: the words (drawn under the shadow, like M362's) and a picture of the save room, which has none.
+    page("tutorial/save", "How to Save", 366, (3, 2, 0, 1), (0,),
+         _tutorial(STRIP, "the PE picture behind, the shadow and the picture of the save room", SHADOWED))
+    return tuple(out)
+
+
+PICTURES = PICTURES + _tutorial_screens()
 BY_ID = {p.id: p for p in PICTURES}
 
 
@@ -169,13 +302,14 @@ class Disc:
             self.layout: dict[str, CardLayout] = {}
             rooms: dict[int, tuple[int, bytes]] = {}
             for pic in PICTURES:
-                if isinstance(pic, Card):
+                if isinstance(pic, (Card, Screen)):
                     room = game.rooms[pic.room - 1]
                     if pic.room not in rooms:
                         rooms[pic.room] = (room[0] * SECTOR, game.pe(room[0], room[1] + room[2] + room[3]))
                     base, data = rooms[pic.room]
                     try:
-                        segments, layout = _card_parts(room, data, pic.view)
+                        segments, layout = (_card_parts(room, data, pic.view) if isinstance(pic, Card)
+                                            else _screen_parts(room, data, pic))
                     except (ValueError, struct.error) as e:
                         raise NotTheDisc(f"{self.path.name}: the picture \"{pic.name}\" is not the game's own ({e}). "
                                          "Use an unchanged USA disc, not a patched one.") from e
@@ -281,6 +415,93 @@ def _card_parts(room: tuple, data: bytes, view: int) -> tuple[list, CardLayout]:
     return segments, CardLayout(tiles, tuple(sorted(rows)))
 
 
+SHADOW_BIT = 1 << 23              # in a tile's texture word: the tile is drawn subtracted (the Tutorial's shadow)
+
+
+def _room_layers(room: tuple, data: bytes) -> tuple:
+    """Every tile list of a room's one view (the Tutorial's rooms): the colour rows' segment, {list: (depth,
+    shadow, [(x, y, texture word's byte, its 16 rows' segments)])} and the colour rows the tiles use. Raises
+    ValueError if the room is not as expected: a tile not 16x16 8-bit on the room's colour rows, a list
+    mixing drawing modes, two tiles of a list at one place, or two tiles (of any list) sharing pixels."""
+    _, scratch, texture, _ = room
+    rects = list(_uploads(data[:scratch * SECTOR], 0)) + \
+        list(_uploads(data[scratch * SECTOR:(scratch + texture) * SECTOR], scratch * SECTOR))
+
+    def vram(x: int, y: int, n: int) -> int:
+        found = [off + ((y - ry) * w + x - rx) * 2 for off, rx, ry, w, h in rects
+                 if rx <= x and x + n <= rx + w and ry <= y < ry + h]
+        if len(found) != 1:
+            raise ValueError(f"video memory {x},{y} is in {len(found)} of the room's pictures")
+        return found[0]
+
+    cx, cy, cw, ch = COLOUR_ROWS
+    colours = (vram(cx, cy, cw), cw * ch * 2)
+    if vram(cx, cy + ch - 1, cw) != colours[0] + (ch - 1) * cw * 2:
+        raise ValueError("the colour rows are not one picture")
+    at = (scratch + texture) * SECTOR
+    run = data[at:]
+    directory = struct.unpack_from("<I", run, 4)[0]
+    packed = struct.unpack_from("<I", run, directory + 0x1C)[0]
+    geom = struct.unpack_from("<I", run, (packed & 0x3FFFFF) + 4)[0] & 0xFFFFFF
+    count = struct.unpack_from("<H", run, geom + 6)[0]
+    table = geom + struct.unpack_from("<i", run, geom + 0x14)[0]
+    lists, rows, texels = {}, set(), []
+    for i in range(count):
+        e = table + i * 0x38
+        if not run[e] & 2 or run[e + 0x24] != 0:
+            raise ValueError(f"tile list {i} is not one of the room's view")
+        n = struct.unpack_from("<H", run, e + 0x26)[0]
+        pos, uv = struct.unpack_from("<ii", run, e + 0x28)
+        sx, sy = struct.unpack_from("<hh", run, e + 0xC)
+        tiles, seen, modes = [], set(), set()
+        for k in range(n):
+            a = struct.unpack_from("<I", run, e + pos + k * 4)[0]
+            w0 = struct.unpack_from("<I", run, e + uv + k * 8)[0]
+            x, y = sx + (a >> 22), sy + ((a >> 12) & 1023)
+            u, v = run[e + uv + k * 8 + 4], run[e + uv + k * 8 + 3]
+            page_x, page_y = (w0 >> 10) & 0x3C0, (w0 >> 7) & 256
+            if u % 2 or (x, y) in seen or (w0 >> 5) & 0x3F0 or not cy <= w0 & 511 < cy + ch:
+                raise ValueError(f"tile {k} of list {i} is not a 16x16 tile on the room's colour rows")
+            seen.add((x, y))
+            modes.add(bool(w0 & SHADOW_BIT))
+            rows.add(w0 & 511)
+            rows_at = [vram(page_x + u // 2, page_y + v + j, TILE // 2) for j in range(TILE)]
+            texels.extend(rows_at)
+            tiles.append((x, y, at + e + uv + k * 8, rows_at))
+        if len(modes) > 1:
+            raise ValueError(f"tile list {i} mixes drawing modes")
+        lists[i] = ((struct.unpack_from("<I", run, e)[0] >> 8) & 0xFFF, modes == {True}, tiles)
+    texels.sort()
+    if any(b < a + TILE for a, b in zip(texels, texels[1:])):
+        raise ValueError("two of the room's tiles share pixels")
+    return colours, lists, tuple(sorted(rows))
+
+
+def _screen_parts(room: tuple, data: bytes, screen: Screen) -> tuple[list, ScreenLayout]:
+    """A Tutorial screen's bytes in its room's sectors: the colour rows, then for each of its layers (and the
+    menu's copies) each tile's texture word's low half and its 16 rows of 16 pixels; and its layout."""
+    colours, lists, rows = _room_layers(room, data)
+    segments, layers, at = [colours], [], colours[1]
+    shown = [(e, dx, dy, True) for e, dx, dy in screen.layers]
+    word_move = {e: (dx, dy) for e, dx, dy in screen.layers if e in screen.words}
+    shown += [(e, *word_move[screen.words[0]], False) for e in screen.copies]
+    for e, dx, dy, drawn in shown:
+        if e not in lists:
+            raise ValueError(f"the room has no tile list {e}")
+        depth, shadow, tiles = lists[e]
+        layers.append(Layer(e, depth, shadow, e in screen.words, drawn, [(x + dx, y + dy) for x, y, _, _ in tiles], at))
+        for _, _, word, rows_at in tiles:
+            segments.append((word, 2))
+            segments.extend((r, TILE) for r in rows_at)
+        at += len(tiles) * (2 + TILE * TILE)
+    if sum(1 for layer in layers if layer.shadow and layer.drawn) > 1:
+        raise ValueError("a screen with two shadows")
+    menu = next((layer for layer in layers if layer.word and layer.drawn), None)
+    if any(sorted(menu.tiles) != sorted(layer.tiles) for layer in layers if not layer.drawn):
+        raise ValueError("the menu's copies are not laid out as the menu")
+    return segments, ScreenLayout(layers, rows)
+
+
 def _segments(disc, pic) -> list:
     got = getattr(disc, "segments", {}).get(pic.id)
     if got is None:                                  # a test's made-up disc: one TIM
@@ -357,7 +578,7 @@ def write_pieces(parts: dict[str, bytes], pieces) -> None:
 # ---- PNG out and in (Pillow) ----
 
 def size(pic, data: bytes) -> tuple[int, int]:
-    return CARD_SIZE if isinstance(pic, Card) else timlib.read(data).size
+    return CARD_SIZE if isinstance(pic, (Card, Screen)) else timlib.read(data).size
 
 
 def screen_rgb(colour: int) -> tuple[int, int, int]:
@@ -405,13 +626,116 @@ def _card_image(data: bytes, layout: CardLayout):
     return img
 
 
+_RGB: dict[int, tuple] = {}
+
+
+def _rgb(colour: int) -> tuple[int, int, int]:
+    colour &= 0x7FFF
+    got = _RGB.get(colour)
+    if got is None:
+        got = _RGB[colour] = screen_rgb(colour)
+    return got
+
+
+def _subtract(under: int, shadow: int) -> int:
+    """A shadow pixel drawn subtracted (the GPU's B-F): each 5-bit part, at least 0."""
+    return (max(0, (under & 31) - (shadow & 31)) | max(0, (under >> 5 & 31) - (shadow >> 5 & 31)) << 5 |
+            max(0, (under >> 10 & 31) - (shadow >> 10 & 31)) << 10)
+
+
+def _dist(a: tuple, b: tuple) -> int:
+    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
+
+
+def _screen_colours(data: bytes) -> tuple:
+    """The colour rows 480-511, 256 colours each, as one list (row r's colour i at (r - 480) * 256 + i)."""
+    return struct.unpack_from(f"<{COLOUR_ROWS[2] * COLOUR_ROWS[3]}H", data, 0)
+
+
+def _layer_tiles(data: bytes, layer: Layer):
+    """Each tile's (x, y on the screen, texture word's low half, its 256 palette numbers, its first byte)."""
+    at = layer.at
+    for x, y in layer.tiles:
+        yield x, y, struct.unpack_from("<H", data, at)[0], data[at + 2:at + 2 + TILE * TILE], at
+        at += 2 + TILE * TILE
+
+
+def _drawing(layout: ScreenLayout, choice: int | None = None) -> list:
+    """The layers the screen draws, in the game's order: the deepest first, at one depth the later list
+    first. `choice` (the menu, 1-5): the copy with that choice ringed in place of the menu."""
+    drawn = [layer for layer in layout.layers if layer.drawn]
+    if choice:
+        copies = [layer for layer in layout.layers if not layer.drawn]
+        drawn = [copies[choice - 1] if layer.word else layer for layer in drawn]
+    return sorted(drawn, key=lambda layer: (-layer.depth, -layer.entry))
+
+
+def _draw(screen: list, colours: tuple, data: bytes, layer: Layer, last=None, pos: int = 0, shade=None) -> None:
+    """One layer onto the screen (15-bit colours): colour 0 see-through; a shadow's pixels (with the
+    see-through bit, as the GPU blends only those) subtracted, the rest put. `last` gets `pos` where an
+    ordinary pixel was put, `shade` the shadow's colour where one was subtracted."""
+    w, h = CARD_SIZE
+    top = COLOUR_ROWS[1]
+    for x, y, word, numbers, _ in _layer_tiles(data, layer):
+        base = ((word & 511) - top) * 256
+        for j in range(max(0, -y), min(TILE, h - y)):
+            row = (y + j) * w + x
+            for i in range(max(0, -x), min(TILE, w - x)):
+                c = colours[base + numbers[j * TILE + i]]
+                if not c:
+                    continue
+                if layer.shadow and c & 0x8000:
+                    screen[row + i] = _subtract(screen[row + i], c)
+                    if shade is not None:
+                        shade[row + i] = c
+                else:
+                    screen[row + i] = c
+                    if last is not None:
+                        last[row + i] = pos
+
+
+def _compose(data: bytes, layout: ScreenLayout, choice: int | None = None) -> list:
+    colours = _screen_colours(data)
+    screen = [0] * (CARD_SIZE[0] * CARD_SIZE[1])
+    for layer in _drawing(layout, choice):
+        _draw(screen, colours, data, layer)
+    return screen
+
+
+def screen_image(data: bytes, layout: ScreenLayout, choice: int | None = None):
+    """A Tutorial screen as the game shows it (nothing drawn: black). `choice` (the menu, 1-5): the screen
+    with that choice picked, the copy with its green ring in place of the menu."""
+    from PIL import Image
+    img = Image.new("RGB", CARD_SIZE)
+    img.putdata([_rgb(v) for v in _compose(data, layout, choice)])
+    return img
+
+
+class Disagree(ValueError):
+    """A picture shown on two screens (the Tune-up screenshot) changed differently in their two PNGs."""
+
+    def __init__(self, other: Screen, message: str) -> None:
+        super().__init__(message)
+        self.other = other
+
+
+def shared_with(pic) -> list:
+    """(other screen, layer) for each word layer of a Tutorial screen that another screen shows too."""
+    if not isinstance(pic, Screen):
+        return []
+    return [(other, e) for other in PICTURES if isinstance(other, Screen) and other is not pic
+            and other.room == pic.room for e in pic.words if e in other.words]
+
+
 def image(pic, tim_bytes: bytes, layout: CardLayout | None = None):
-    """The picture as a Pillow image: RGB for a 24-bit one and a card; for a 4/8-bit one a palette image
-    with the picture's own colours in its own order, so a paint program that keeps the palette gives
-    the same palette numbers back."""
+    """The picture as a Pillow image: RGB for a 24-bit one, a card and a Tutorial screen; for a 4/8-bit one
+    a palette image with the picture's own colours in its own order, so a paint program that keeps the
+    palette gives the same palette numbers back."""
     from PIL import Image
     if isinstance(pic, Card):
         return _card_image(tim_bytes, layout)
+    if isinstance(pic, Screen):
+        return screen_image(tim_bytes, layout)
     tim = timlib.read(tim_bytes)
     if tim.bits in (4, 8):
         img = Image.new("P", tim.size)
@@ -474,6 +798,8 @@ def from_png(pic, english: bytes, data: bytes, current: bytes | None = None,
         raise ValueError(f"that file is not a picture this tool can read ({e})") from e
     if isinstance(pic, Card):
         return _card_from_png(img, current or english, layout)
+    if isinstance(pic, Screen):
+        return _screen_from_png(pic, img, english, current or english, layout)
     # On the picture as it is now: a translation that changed a picture's colours (the German and Chinese
     # packs did, on the map) keeps them; only the pixels are the PNG's (put() keeps the length).
     tim = timlib.read(current or english)
@@ -602,3 +928,279 @@ def _card_from_png(img, current: bytes, layout: CardLayout) -> Loaded:
     if off:
         notes.append(f"{off:,} pixels were not one of their square's colours: the nearest one is used.")
     return Loaded(bytes(out), notes)
+
+
+class _Rows:
+    """The room's colour rows, for choosing a changed square's row and its pixels' numbers."""
+
+    def __init__(self, colours: tuple, rows: tuple) -> None:
+        self.colours, self.rows = colours, rows
+        top = COLOUR_ROWS[1]
+        self.of = {r: colours[(r - top) * 256:(r - top + 1) * 256] for r in rows}
+        self.zero = {r: next((i for i, c in enumerate(cols) if c == 0), None) for r, cols in self.of.items()}
+        self.index = {}
+        for r, cols in self.of.items():
+            first: dict[int, int] = {}
+            for i, c in enumerate(cols):
+                first.setdefault(c, i)
+            self.index[r] = first
+        self._near: dict = {}
+        self._opaque: dict = {}
+
+    def opaque(self, row: int, shadow: int) -> list:
+        """(number, colour on the screen) of the row's drawn colours, darkened by `shadow`."""
+        key = (row, shadow)
+        if key not in self._opaque:
+            self._opaque[key] = [(i, _rgb(_subtract(c, shadow) if shadow else c))
+                                 for i, c in enumerate(self.of[row]) if c]
+        return self._opaque[key]
+
+    def nearest(self, row: int, shadow: int, colour: tuple) -> tuple[int, int]:
+        """(distance, number) of the row's drawn colour nearest to `colour` on the screen (darkened by
+        `shadow`): the first of the nearest."""
+        key = (row, shadow, colour)
+        got = self._near.get(key)
+        if got is None:
+            got = self._near[key] = min((_dist(rgb, colour), i) for i, rgb in self.opaque(row, shadow))
+        return got
+
+    def number_of(self, row: int, colour: int) -> int:
+        """The number of a 15-bit colour in the row: the same colour if it has it (see-through for
+        see-through), else the nearest drawn colour."""
+        got = self.index[row].get(colour)
+        if got is not None:
+            return got
+        return self.nearest(row, 0, _rgb(colour))[1]
+
+
+def _screen_from_png(pic: Screen, img, english: bytes, current: bytes, layout: ScreenLayout) -> Loaded:
+    """A Tutorial screen from a PNG of it. Only its word layers change: of each, the pixels the screen
+    shows (not covered by a layer drawn later, inside the screen). A square whose pixels on the screen are
+    as they are now stays as it is (its bytes too). A changed square takes, of the room's colour rows, the
+    one that can draw its pixels on the screen closest overall (its own row on a tie), and each pixel the
+    number in that row that shows nearest to the PNG: a drawn colour, darkened where the shadow falls on
+    it, or see-through (what is under it). Pixels of a word layer the screen doesn't show keep their
+    colour. The menu's ringed copies follow the menu (_ring_copies). A layer another screen shows too (the
+    Tune-up screenshot): this PNG's change is taken; a PNG that leaves it as the game has it keeps the
+    change loaded from the other screen; both changed, differently: Disagree, nothing loaded."""
+    from PIL import Image, ImageChops, ImageStat
+    w, h = CARD_SIZE
+    if img.size != CARD_SIZE:
+        raise ValueError(f"the picture is {img.width}×{img.height}; it must stay {w}×{h}, the size of the screen.")
+    rgb, notes = _flatten(img)
+    want = rgb.tobytes()
+    if want == screen_image(current, layout).tobytes():
+        return Loaded(current, notes)
+    colours = _screen_colours(current)
+    rows = _Rows(colours, layout.rows)
+    count = w * h
+    screen, last, shade = [0] * count, [-1] * count, [0] * count
+    under, place, shadow_pos = {}, {}, -1
+    for pos, layer in enumerate(_drawing(layout)):
+        if layer.word:
+            under[layer.entry], place[layer.entry] = screen[:], pos
+        if layer.shadow:
+            shadow_pos = pos
+        _draw(screen, colours, current, layer, last, pos, shade)
+    out = bytearray(current)
+    taken = bytearray(count)                       # the pixels a word layer shows: the PNG decides them
+    off_by_layer: dict[int, int] = {}
+    costs: dict = {}
+
+    def cost_image(row: int):
+        """How far each PNG pixel is from the row's nearest drawn colour (Pillow's nearest-colour mapping):
+        to choose a fully shown square's row quickly."""
+        if row not in costs:
+            pal = Image.new("P", (1, 1))
+            opaque = [c for _, c in rows.opaque(row, 0)] or [(0, 0, 0)]
+            pal.putpalette([v for c in (opaque + opaque[-1:] * 256)[:256] for v in c])
+            costs[row] = ImageChops.difference(rgb, rgb.quantize(palette=pal, dither=Image.Dither.NONE).convert("RGB"))
+        return costs[row]
+
+    for layer in layout.layers:
+        if not (layer.word and layer.drawn):
+            continue
+        pos, beneath = place[layer.entry], under[layer.entry]
+        shaded = shadow_pos > pos
+        off = 0
+
+        def shown(c: int, p: int, s: int) -> tuple:
+            v = c if c else beneath[p]
+            return _rgb(_subtract(v, s) if s else v)
+
+        for x, y, word, numbers, at in _layer_tiles(current, layer):
+            own = word & 511
+            mine = rows.of[own]
+            px, inside = [], 0
+            for j in range(max(0, -y), min(TILE, h - y)):
+                for i in range(max(0, -x), min(TILE, w - x)):
+                    inside += 1
+                    p = (y + j) * w + x + i
+                    if last[p] <= pos:
+                        taken[p] = 1
+                        px.append((j * TILE + i, p, shade[p] if shaded else 0, tuple(want[p * 3:p * 3 + 3])))
+            if all(shown(mine[numbers[k]], p, s) == q for k, p, s, q in px):
+                continue
+            if inside == len(px) and all(not s and mine[numbers[k]] for k, p, s, q in px):
+                box = (max(0, x), max(0, y), min(w, x + TILE), min(h, y + TILE))
+                score = {r: sum(ImageStat.Stat(cost_image(r).crop(box)).sum2) for r in layout.rows}
+            else:
+                score = {}
+                for r in layout.rows:
+                    z, total = rows.zero[r], 0
+                    for k, p, s, q in px:
+                        d = rows.nearest(r, s, q)[0]
+                        if z is not None:
+                            d = min(d, _dist(shown(0, p, s), q))
+                        total += d
+                    score[r] = total
+            best = min(layout.rows, key=lambda r: (score[r], r != own, r))
+            new, z = bytearray(numbers), rows.zero[best]
+            seen = {k: (p, s, q) for k, p, s, q in px}
+            for k, n in enumerate(numbers):
+                if k in seen:
+                    p, s, q = seen[k]
+                    if best == own and shown(mine[n], p, s) == q:
+                        continue
+                    d, i = rows.nearest(best, s, q)
+                    if z is not None:
+                        ds = _dist(shown(0, p, s), q)
+                        if ds < d or (ds == d and mine[n] == 0):
+                            d, i = ds, z
+                    new[k] = i
+                    off += d > 0
+                elif best != own:
+                    new[k] = rows.number_of(best, mine[n])
+            struct.pack_into("<H", out, at, (word & ~511 & 0xFFFF) | best)
+            out[at + 2:at + 2 + TILE * TILE] = new
+        off_by_layer[layer.entry] = off
+    if any(not layer.drawn for layer in layout.layers):
+        _ring_copies(english, current, out, layout, rows)
+    for other, entry in shared_with(pic):
+        layer = next(layer for layer in layout.layers if layer.entry == entry and layer.drawn)
+        part = slice(layer.at, layer.at + len(layer.tiles) * (2 + TILE * TILE))
+        new, now, game = (_layer_values(data, layer) for data in (out, current, english))
+        if new == now:
+            continue
+        if new == game:                    # this PNG left it as the game has it: the other PNG's change stays
+            out[part] = current[part]
+            off_by_layer[entry] = 0
+            notes.append(f'The screenshot is also on "{other.label}": the change loaded there is kept.')
+        elif now == game:
+            notes.append(f'The screenshot is also on "{other.label}": it changes there too.')
+        else:
+            raise Disagree(other, f'The screenshot is on two screens, this one and "{other.label}", and this PNG '
+                                  'changes it differently from the one loaded there. Make it the same in both PNGs '
+                                  '(or change it in one of them only). This PNG was not loaded.')
+    changed = recoloured = 0
+    for layer in layout.layers:
+        if layer.word and layer.drawn:
+            for _, _, word, _, at in _layer_tiles(current, layer):
+                if out[at:at + 2 + TILE * TILE] != current[at:at + 2 + TILE * TILE]:
+                    changed += 1
+                    recoloured += struct.unpack_from("<H", out, at)[0] != word
+    outside = sum(1 for p in range(count) if not taken[p] and want[p * 3:p * 3 + 3] != bytes(_rgb(screen[p])))
+    notes.append(f"{changed} of the screen's squares with words changed" +
+                 (f"; {recoloured} took another set of colours." if recoloured else "."))
+    off = sum(off_by_layer.values())
+    if off:
+        notes.append(f"{off:,} pixels were not one of their square's colours: the nearest one is used.")
+    if outside:
+        notes.append(f"{outside:,} pixels you changed are not part of the words (the picture behind, the shadow and "
+                     "the pictures without words stay the game's): they were left as they are.")
+    return Loaded(bytes(out), notes)
+
+
+def _layer_values(data: bytes, layer: Layer) -> list:
+    """Every pixel of a layer's tiles as its 15-bit colour (what it draws, whatever its numbers and rows)."""
+    colours, top = _screen_colours(data), COLOUR_ROWS[1]
+    out = []
+    for _, _, word, numbers, _ in _layer_tiles(data, layer):
+        base = ((word & 511) - top) * 256
+        out.extend(colours[base + n] for n in numbers)
+    return out
+
+
+RING_STEP, RING_SURE = 3, 8       # 5-bit steps: a ring pixel, a pixel surely of the ring
+
+
+def _steps(a: int, b: int) -> int:
+    return max(abs((a >> s & 31) - (b >> s & 31)) for s in (0, 5, 10))
+
+
+def ring_of(english: bytes, layout: ScreenLayout, copy: Layer) -> dict:
+    """The English green ring of one of the menu's copies: {tile place: [its pixels' numbers 0-255]}. The
+    copies differ from the plain menu all over by a step or two of colour (each was packed into its colour
+    rows on its own), which is not the ring; the ring is where a copy differs by RING_STEP or more, inside
+    the box around the pixels that differ by RING_SURE or more (checked on the US discs: that is the ring
+    and only the ring, on each copy)."""
+    menu = next(layer for layer in layout.layers if layer.word and layer.drawn)
+    plain = _layer_values(english, menu)
+    ringed = _layer_values(english, copy)
+    where = {place: t for t, place in enumerate(menu.tiles)}
+    differ = []
+    for t, (x, y) in enumerate(copy.tiles):
+        t0 = where[(x, y)]
+        for k in range(TILE * TILE):
+            step = _steps(plain[t0 * 256 + k], ringed[t * 256 + k])
+            if step >= RING_STEP:
+                differ.append((x + k % TILE, y + k // TILE, step, (x, y), k))
+    sure = [(px, py) for px, py, step, _, _ in differ if step >= RING_SURE]
+    if not sure:
+        return {}
+    left, right = min(p[0] for p in sure) - 2, max(p[0] for p in sure) + 2
+    high, low = min(p[1] for p in sure) - 2, max(p[1] for p in sure) + 2
+    out: dict = {}
+    for px, py, _, place, k in differ:
+        if left <= px <= right and high <= py <= low:
+            out.setdefault(place, []).append(k)
+    return out
+
+
+def _ring_copies(english: bytes, current: bytes, out: bytearray, layout: ScreenLayout, rows: _Rows) -> None:
+    """The menu drawn once: each square of the menu that changed goes into the five copies as it now is,
+    with the English green ring put back on it (ring_of: those pixels keep the English copy's colour). A
+    square of the menu that didn't change leaves the copies' as they are. A square with ring pixels keeps
+    the menu's row when that row has the ring's colours, else takes the row that draws the two together
+    best."""
+    menu = next(layer for layer in layout.layers if layer.word and layer.drawn)
+    game = _screen_colours(english)
+    top, size = COLOUR_ROWS[1], 2 + TILE * TILE
+
+    def values(data: bytes, cols: tuple, at: int) -> list:
+        base = ((struct.unpack_from("<H", data, at)[0] & 511) - top) * 256
+        return [cols[base + n] for n in data[at + 2:at + size]]
+
+    rings = {copy.entry: ring_of(english, layout, copy) for copy in layout.layers if not copy.drawn}
+    for t, place in enumerate(menu.tiles):
+        at0 = menu.at + t * size
+        if out[at0:at0 + size] == current[at0:at0 + size]:
+            continue
+        own, numbers0 = struct.unpack_from("<H", out, at0)[0] & 511, out[at0 + 2:at0 + size]
+        now = values(out, rows.colours, at0)
+        for copy in (layer for layer in layout.layers if not layer.drawn):
+            at = copy.at + copy.tiles.index(place) * size
+            word = struct.unpack_from("<H", out, at)[0] & ~511 & 0xFFFF
+            mine = values(english, game, at)
+            ring = {k: mine[k] for k in rings[copy.entry].get(place, ())}
+            if not ring:
+                struct.pack_into("<H", out, at, word | own)
+                out[at + 2:at + size] = numbers0
+                continue
+            wanted = [ring.get(k, c) for k, c in enumerate(now)]
+
+            def cost(r: int) -> int:
+                total = 0
+                for c in wanted:
+                    if c not in rows.index[r]:
+                        total += 3 * 255 ** 2 if c == 0 else rows.nearest(r, 0, _rgb(c))[0]
+                return total
+
+            best = own if all(c in rows.index[own] for c in ring.values()) else \
+                min(layout.rows, key=lambda r: (cost(r), r != own, r))
+            new = bytearray(numbers0)
+            for k, c in enumerate(wanted):
+                if best != own or k in ring:
+                    new[k] = rows.number_of(best, c)
+            struct.pack_into("<H", out, at, word | best)
+            out[at + 2:at + size] = new

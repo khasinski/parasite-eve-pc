@@ -214,7 +214,7 @@ class PictureWindow:
         if not path:
             return
         try:
-            loaded = self.app.load_picture(self.picked(), Path(path).read_bytes())
+            loaded = self.app.load_picture(self.picked(), Path(path).read_bytes(), Path(path).name)
         except (OSError, ValueError) as e:
             messagebox.showerror("Could not use that picture", str(e), parent=self.win)
             return
