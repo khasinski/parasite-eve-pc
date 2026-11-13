@@ -460,6 +460,8 @@ class App:
                 messagebox.showerror("Could not open it", f"{Path(path).name}\n\n{error}")
                 return
             self.use(tr)
+            if tr.map_as_bytes:
+                self.say("Note: " + P.MAP_AS_BYTES.replace("this line", "its Dialogue MAP lines") + ".")
             if tr.locked:
                 whole = tr.locked.get("")
                 messagebox.showinfo(
@@ -715,6 +717,7 @@ class App:
         if tr is not None:
             out.update(lang=tr.lang, name=tr.name, translated=tr.translated(), from_patch=tr.from_patch,
                        locked=len(tr.locked), fonts=list(tr.cjk_fonts), pictures=self.pictures_loaded,
+                       map_as_bytes=tr.map_as_bytes,
                        disc_error=self.disc_error, look=self.look_mode.get(),
                        look_rooms=len(self.shown) if self.shown else 0)
             if self._typed_by_script:

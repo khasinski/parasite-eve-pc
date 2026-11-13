@@ -43,7 +43,7 @@ so you can submit a language a part at a time.
 
 | Column | What it is |
 |---|---|
-| `key` | Which text: `dlg/M001/009` is page 9 of the message bank first used in room M001; `item/`, `desc/`, `sys/`, `misc/` are the menus' item names, descriptions, system messages and the rest |
+| `key` | Which text: `dlg/M001/009` is page 9 of the message bank first used in room M001; `dlg/MAP/` is the city map (place titles and its narration: type the words only, the build centres them); `item/`, `desc/`, `sys/`, `misc/` are the menus' item names, descriptions, system messages and the rest |
 | `english`, `japanese` | The game's text, for reference (from your discs) |
 | `speaker`, `before`, `after` | Who speaks, and the pages before and after in the same scene |
 | `box`, `widest_px` | Where it is shown and how much room there is |

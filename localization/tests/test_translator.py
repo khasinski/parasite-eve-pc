@@ -28,12 +28,13 @@ import sys
 import tempfile
 import unittest
 import zipfile
+import zlib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
 import pelang  # noqa: E402
-from petext import alphabets, layout  # noqa: E402
+from petext import alphabets, citymap, gametext as gt, layout, pictures as picturebin  # noqa: E402
 from translator import project as P  # noqa: E402
 
 GAME = P.Game()
@@ -412,8 +413,10 @@ class EnglishTest(unittest.TestCase):
     def test_the_english_pack_reads_back_as_the_discs_own_text_every_row(self):
         self.assertEqual(self.wrong, 0)
         self.assertGreater(len(self.english), 2800)
-        differ = [k for k, text in self.english.items() if text != self.strings[k]["text"]]
+        # (the city map's lines are shown as words, without the spaces that centre them)
+        differ = [k for k, text in self.english.items() if text != citymap.shown_words(k, self.strings[k]["text"])]
         self.assertEqual(differ, [])
+        self.assertEqual(len([k for k in self.english if citymap.placed(k)]), 14)
         print(f"\n{len(self.english)} rows of the English pack read back as the discs' text ({len(self.discs)} disc(s))")
 
     def test_the_window_with_the_english_pack_types_into_the_row_asked_for(self):
@@ -532,10 +535,172 @@ class EnglishTest(unittest.TestCase):
         self.assertEqual(len(strict), 5, "the five English pages that run past their own box")
         self.assertTrue(all(k.startswith("dlg/M044/") for k in strict))
 
+    def test_the_city_maps_lines_typed_as_words_land_where_the_english_has_them(self):
+        """The English's own words for the 14 map lines, typed as words only: the compiler's
+        centring puts most lines exactly where the English has them, and none more than a space away
+        (the English placed them by eye: citymap.CENTRE)."""
+        keys = sorted(k for k in self.english if citymap.placed(k))
+        out = self.dir / "map-words.bin"
+        command_line_build({k: self.english[k] for k in keys}, "en", "Words", out)
+        built = pelang.read_pack(out)[2]
+        exact = lines = 0
+        for key in keys:
+            mine, theirs = built[pelang.fnv1a(key)].split(b"\xf7"), bytes.fromhex(self.strings[key]["raw"]).split(b"\xf7")
+            self.assertEqual(len(mine), len(theirs), key)
+            for a, b in zip(mine, theirs):
+                lines += 1
+                exact += a == b
+                self.assertEqual(a.lstrip(b"\x0f"), b.lstrip(b"\x0f"), key)       # the words are the English's
+                spaces = len(a) - len(a.lstrip(b"\x0f")) - (len(b) - len(b.lstrip(b"\x0f")))
+                self.assertLessEqual(abs(spaces), 1 if a.lstrip(b"\x0f") else 2, (key, a, b))
+        print(f"\nthe English map lines typed as words: {exact} of {lines} lines placed exactly as the English")
+        self.assertGreaterEqual(exact, 32)
+
+
+class CityMapRuleTest(unittest.TestCase):
+    """The city map's lines (dlg/MAP, petext/citymap.py), with no disc: typed as words, centred by
+    the compiler; a line with its own spacing kept; a file still carrying them as bytes flagged."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    @staticmethod
+    def spaces(words: str, kind: str) -> int:
+        width = gt.lines(gt.encode(words, extended=True))[0]
+        return max(0, (2 * citymap.CENTRE[kind] - width + 7) // 14)
+
+    def test_the_map_lines_and_bank_are_in_the_manifest(self):
+        keys = sorted(k for k in GAME.keys if k.startswith("dlg/MAP/"))
+        self.assertEqual(keys, [f"dlg/MAP/{p:03d}" for p in range(15)])
+        self.assertEqual([citymap.placed(k) for k in keys], [None] + ["title"] * 10 + ["narration"] * 4)
+        self.assertIn({"key": "MAP", "crc32": "fc4679c2"}, GAME.banks)
+        self.assertTrue(all(GAME.rows[k]["boxes"] == ["default"] for k in keys))
+
+    def test_a_line_typed_as_words_is_centred_and_a_title_goes_to_the_third_line(self):
+        t = P.Translation(GAME, "es", "Prueba")
+        t.set_text("dlg/MAP/005", "Barrio Soho")
+        t.set_text("dlg/MAP/002", "Comisaría{br}número 17")
+        t.set_text("dlg/MAP/012", "La gente lo olvidará{br}y seguirá con su vida.{fb07 C8}")
+        built, left, _ = t.compile()
+        self.assertTrue(built.ok, built.said[-400:])
+        self.assertEqual(left, {})
+        texts = P.read_pack_text(built.pack, GAME).texts
+        pad = lambda w, kind: " " * self.spaces(w, kind) + w
+        self.assertEqual(texts["dlg/MAP/005"], "{br}{br}" + pad("Barrio Soho", "title"))
+        self.assertEqual(texts["dlg/MAP/002"], "{br}" + pad("Comisaría", "title") + "{br}" + pad("número 17", "title"))
+        self.assertEqual(texts["dlg/MAP/012"], pad("La gente lo olvidará", "narration") + "{br}"
+                         + pad("y seguirá con su vida.", "narration") + "{fb07 C8}")
+        # the preview calls none of that a change to the words
+        check = t.check_row("dlg/MAP/005")
+        self.assertEqual((check.errors, check.warnings, check.preview.wrapped), ([], [], False))
+        # and the command line writes the same pack from the same words
+        command_line_build(dict(t.texts), "es", "Prueba", self.dir / "cli.bin")
+        self.assertEqual(built.pack, (self.dir / "cli.bin").read_bytes())
+
+    def test_a_line_with_its_own_spacing_is_kept_until_its_words_change(self):
+        """A pack whose map line has spacing of its own (a fan patch's): the Translator shows the
+        words, saves the line exactly as the pack had it, also after reopening, and centres it only
+        once the words change."""
+        own = "{br}  Soho{br}  New York"                      # not where the tool would put it
+        path = self.dir / "own.pelang"
+        command_line_build({"dlg/MAP/005": own}, "es", "Prueba", path)
+        t = P.Translation.open(path, GAME)
+        self.assertEqual((t.text("dlg/MAP/005"), t.layouts), ("Soho{br}New York", {"dlg/MAP/005": own}))
+        self.assertEqual(t.locked, {})
+        saved = self.dir / "saved.pelang"
+        t.save(saved)
+        self.assertEqual(pelang.pack_bytes(saved), pelang.pack_bytes(path))
+        again = P.Translation.open(saved, GAME)
+        self.assertTrue(again.from_work)
+        self.assertEqual((again.text("dlg/MAP/005"), again.layouts["dlg/MAP/005"]), ("Soho{br}New York", own))
+        again.save(self.dir / "twice.pelang")
+        self.assertEqual(pelang.pack_bytes(self.dir / "twice.pelang"), pelang.pack_bytes(path))
+        again.set_text("dlg/MAP/005", "SoHo{br}New York")
+        again.save(self.dir / "changed.pelang")
+        text = P.read_pack_text(pelang.pack_bytes(self.dir / "changed.pelang"), GAME).texts["dlg/MAP/005"]
+        self.assertEqual(text, "{br}" + " " * self.spaces("SoHo", "title") + "SoHo{br}"
+                         + " " * self.spaces("New York", "title") + "New York")
+        reopened = P.Translation.open(self.dir / "changed.pelang", GAME)
+        self.assertEqual((reopened.text("dlg/MAP/005"), reopened.layouts), ("SoHo{br}New York", {}))
+
+    def test_a_file_still_carrying_the_map_as_bytes_is_flagged_on_its_map_lines(self):
+        path = self.dir / "pack.bin"
+        command_line_build({"dlg/MAP/004": "Parque Central"}, "es", "Prueba", path)
+        for sector, flagged in ((citymap.USA_SECTORS[0], True), (citymap.USA_SECTORS[1] - 1, True),
+                                (citymap.USA_SECTORS[1], False)):
+            with self.subTest(sector=sector):
+                bundle = self.dir / f"b{sector}.pelang"
+                with zipfile.ZipFile(bundle, "w") as z:
+                    z.writestr("text.bin", path.read_bytes())
+                    z.writestr("pictures.bin", picturebin.write([picturebin.Piece(sector, 428, 0, b"\xfe\x01")]))
+                t = P.Translation.open(bundle, GAME)
+                self.assertEqual(t.map_as_bytes, flagged)
+                self.assertEqual(P.MAP_AS_BYTES in t.check_row("dlg/MAP/004").warnings, flagged)
+                self.assertNotIn(P.MAP_AS_BYTES, t.check_row(plain_dialogue(1)[0], "Hola.").warnings)
+
+    def test_only_a_change_to_the_map_entrys_text_is_left_to_the_text(self):
+        """petext/citymap.only_text_changed: the banks and table may change (a patch's bank of another
+        size moves what follows); the parts after them may only move."""
+        table = lambda parts: b"".join(p.to_bytes(4, "little") for p in parts)
+        art = bytes(range(256)) * 4
+        english = table((16, 32, 64, 64 + 512)) + b"\x11" * 16 + b"\x22" * 32 + art + b"\0" * 64
+        moved = table((16, 32, 48, 48 + 512)) + b"\x33" * 16 + b"\x44" * 16 + art + b"\0" * 80
+        self.assertTrue(citymap.only_text_changed(english, moved))
+        drawn = bytearray(moved)
+        drawn[100] ^= 1
+        self.assertFalse(citymap.only_text_changed(english, bytes(drawn)))
+        with self.assertRaises(ValueError):
+            citymap.parts(table((16, 64, 32, 600)) + art)
+
+
+class CityMapDiscTest(unittest.TestCase):
+    """The city map's entry on the real discs (PE_TEST_DISC, PE_TEST_DISC2)."""
+
+    def test_the_map_entry_and_bank_are_where_the_translator_expects_them_on_each_disc(self):
+        from petext.disc import Game
+        discs = [d for d in (os.environ.get("PE_TEST_DISC"), os.environ.get("PE_TEST_DISC2")) if d and Path(d).is_file()]
+        if not discs:
+            self.skipTest("needs PE_TEST_DISC (USA disc 1); PE_TEST_DISC2 adds disc 2")
+        bank = next(b for b in GAME.banks if b["key"] == citymap.BANK_KEY)
+        for path in discs:
+            with self.subTest(disc=path):
+                g = Game(path)
+                self.addCleanup(g.disc.f.close)
+                self.assertEqual((g.sectors[citymap.ENTRY], g.sectors[citymap.ENTRY + 1]), citymap.USA_SECTORS)
+                entry = citymap.entry_bytes(g)
+                pages, used = gt.pages(citymap.english_bank(entry))
+                self.assertEqual(f"{zlib.crc32(citymap.english_bank(entry)[:used]):08x}", bank["crc32"])
+                self.assertEqual(sorted(pages), list(range(15)))
+                self.assertEqual(citymap.parts(entry)[:2], (16, 428))
+                self.assertTrue(citymap.only_text_changed(entry, entry))
+
 
 def player_packs() -> list[Path]:
     folder = os.environ.get("PE_TEST_PLAYER_PACKS")
     return sorted(Path(folder).glob("*.pelang")) if folder and Path(folder).is_dir() else []
+
+
+def new_bank_names(entries: dict[int, bytes]) -> set[int]:
+    """The bank names (bank/<CRC> -> its key) the manifest has that a pack made before them lacks:
+    the build writes every bank's name, so saving such a pack adds those entries and nothing else
+    (the city map's bank came after the player packs were first made)."""
+    return {pelang.fnv1a(f"bank/{b['crc32']}") for b in GAME.banks} - set(entries)
+
+
+def assert_same_but_new_bank_names(test, saved: Path, original: Path) -> None:
+    """The file's parts as the original's, its text.bin's entries too but for new_bank_names."""
+    a, b = zip_parts(saved), zip_parts(original)
+    test.assertEqual({k: v for k, v in a.items() if k != "text.bin"}, {k: v for k, v in b.items() if k != "text.bin"})
+    was, now = pelang.read_pack(original)[2], pelang.read_pack(saved)[2]
+    if not new_bank_names(was):
+        test.assertEqual(a["text.bin"], b["text.bin"])
+        return
+    test.assertEqual({h: v for h, v in now.items() if h in was}, was)
+    test.assertEqual(set(now) - set(was), new_bank_names(was))
 
 
 def zip_parts(path: Path) -> dict[str, bytes]:
@@ -1591,17 +1756,34 @@ class PlayerPackTest(unittest.TestCase):
                 copy = self.dir / path.name
                 report = t.save(copy)
                 self.assertEqual(report.left_out, {})
-                self.assertEqual(zip_parts(copy), zip_parts(path))      # text.bin, pictures, readme
+                assert_same_but_new_bank_names(self, copy, path)       # text.bin, pictures, readme
                 again = P.Translation.open(copy, GAME)
                 self.assertEqual((again.from_work, again.from_patch, again.locked), (True, True, {}))
                 self.assertEqual(again.texts, t.texts)
                 self.assertEqual(again.rules.patch_rows, frozenset(held))
                 twice = self.dir / ("again " + path.name)
                 again.save(twice)
-                self.assertEqual(zip_parts(twice), zip_parts(path))
+                assert_same_but_new_bank_names(self, twice, path)
                 self.assertEqual(path.read_bytes(), before)
                 print(f"\n{path.name}: {t.name} ({t.lang}), {len(held)} rows, {len(t.own_letters)} letter "
                       f"pictures of its own, {len(t.own_cjk)} CJK pictures; saves back byte for byte")
+
+    def test_the_city_maps_lines_are_lines_in_the_packs_own_letters(self):
+        """A pack that translates the city map has it as dlg/MAP lines, not as raw bytes in its
+        pictures (which drew the German and French patches' letter pairs as other letters), and every
+        letter of those lines is one its dialogue uses elsewhere."""
+        for path in self.packs:
+            with self.subTest(pack=path.name):
+                t = P.Translation.open(path, GAME)
+                lines = {k: v for k, v in t.texts.items() if citymap.placed(k)}
+                self.assertFalse(t.map_as_bytes)
+                if not lines:
+                    continue
+                elsewhere = {ch for k, v in t.texts.items() if k.startswith("dlg/") and not citymap.placed(k)
+                             for ch in re.sub(r"\{[^}]*\}", "", v)}
+                odd = {ch for v in lines.values() for ch in re.sub(r"\{[^}]*\}", "", v)} - elsewhere
+                self.assertEqual(odd, set(), f"letters in its map lines that its dialogue never uses")
+                print(f"\n{path.name}: {len(lines)} city map lines, in letters its dialogue uses")
 
     def test_a_line_changed_in_a_fan_pack_keeps_its_rules_and_is_the_only_change(self):
         """A line the strict rules refuse (its waits differ from the English...) is changed: it
@@ -1623,7 +1805,7 @@ class PlayerPackTest(unittest.TestCase):
                 self.assertEqual(report.left_out, {})
                 was, now = pelang.read_pack(path)[2], pelang.read_pack(copy)[2]
                 differ = {GAME.by_hash.get(h, h) for h in set(was) | set(now) if was.get(h) != now.get(h)}
-                self.assertEqual(differ, {key})
+                self.assertEqual(differ, {key} | new_bank_names(was))
                 again = P.Translation.open(copy, GAME)
                 self.assertEqual((again.text(key), again.from_patch, again.locked), (changed, True, {}))
                 self.assertNotIn(key, again.rules.patch_rows)

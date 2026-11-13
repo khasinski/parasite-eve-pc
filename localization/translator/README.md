@@ -40,6 +40,10 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
      is asked for the first time). Click the picture for the room's other views, or other rooms
      that show the line. Not drawn that way yet: menus, item names and battle lines, right-to-left
      languages, and the button icons in a few lines (the preview says so).
+   - **Dialogue MAP** is the city map: the place title shown when Aya arrives somewhere
+     (lines 1-10) and the map's narration (11-14). Type only the words, with `{br}` between lines:
+     the tool centres each line and puts a title on the box's third line, as the English has them.
+     A line from a pack that already has its own spacing keeps it until you change its words.
 4. **Save** (Ctrl+S). Ctrl+Up and Ctrl+Down move between lines.
 
 ## Pictures with words
@@ -117,6 +121,10 @@ you change or add follow the same rules. The patch's own letter shapes and width
 pack itself, so saving it untouched gives back the same pack, byte for byte. If even those rules
 would change lines nobody edited, the file opens for reading only and saving is switched off.
 
+Packs made before the city map's lines were text kept them as raw bytes in `pictures.bin`. Opening
+one says so: the game shows those bytes, not lines typed for Dialogue MAP, so use a newer copy of
+the pack.
+
 Chinese, Japanese and Korean: characters the pack has no picture of are drawn from a font file.
 Pick one with **Font…** at the top; it is remembered on your computer, not put in the file. Once
 saved, those characters' pictures are in the pack, so it opens and builds again without the font.
@@ -160,5 +168,7 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   `original-game-translator-tutorial`) goes through the whole Tutorial with all 30 screens redrawn in
   it (Disc 1, the pad route of CTest `original-game-tutorial`); part `translator-game-over` (CTest
   `original-game-translator-game-over`) loses the first fight with Game Over redrawn (Disc 1, part
-  battle's route, Aya's HP set to 1 by the game's own test switch); part `translator-look` (CTest
+  battle's route, Aya's HP set to 1 by the game's own test switch); part `translator-place-title`
+  (CTest `original-game-translator-place-title`) types a place title as words and checks it on the
+  city map (Disc 1, part translator-map's route, Central Park chosen); part `translator-look` (CTest
   `original-game-translator-look`) checks the game look against the game's own frames.

@@ -785,6 +785,15 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-map-evidence translator-map)
             set_tests_properties(original-game-translator-map PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # The city map's place titles as text: a title typed as words in the Translator is centred on
+            # the box's third line, and on the map (Day 5 sample save, Central Park chosen) the title with
+            # the file is the one of a copy of Disc 1 whose bank holds that line; with the English pack the
+            # game's own; with PE_TEST_PLAYER_PACKS each player pack's line likewise. Disc 1 only.
+            add_test(NAME original-game-translator-place-title COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-place-title-evidence translator-place-title)
+            set_tests_properties(original-game-translator-place-title PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
             # The battle words redrawn in the Translator (PNG out, every grey step turned over, loaded
             # back, saved): the first fight (Melissa) with the file chosen is the one on a copy of Disc 1
             # with the file's pieces written in. Needs Pillow. Disc 1 only: the route starts a New Game;

@@ -42,8 +42,8 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 import pelang  # noqa: E402
-from petext import alphabets, battle, cjk, gametext as gt, layout, menu, names as namelib, rtl, stretch  # noqa: E402
-from petext import letters as lettertable, manifest as srcman, validation  # noqa: E402
+from petext import alphabets, battle, citymap, cjk, gametext as gt, layout, menu, names as namelib, rtl, stretch  # noqa: E402
+from petext import letters as lettertable, manifest as srcman, pictures as picturebin, validation  # noqa: E402
 
 MANIFEST = ROOT / "data" / "manifest.json"
 # Every file under localization/ other than code that the Translator reads: the download carries
@@ -51,13 +51,17 @@ MANIFEST = ROOT / "data" / "manifest.json"
 DATA_FILES = ("data/manifest.json", "data/menu_layouts.json", "data/script_opcodes.json")
 DISC_DATA_FILES = ("data/script_opcodes.json",)  # read only once a disc is chosen (the game look's rooms)
 WORK = "translator/work.json"
-WORK_FORMAT, WORK_VERSION = "pe-translator-work", 2
-WORK_READS = (1, 2)                          # 2 added "rules"; a version 1 file is a strict one
+WORK_FORMAT, WORK_VERSION = "pe-translator-work", 3
+# 2 added "rules" (a version 1 file is a strict one); 3 a row's "layout": a city map line's own
+# spacing, which an older Translator would not keep (so it reads such a file from its pack instead)
+WORK_READS = (1, 2, 3)
 PATCH_IMPORT = "patch import"                # the notes import-patch gives a fan patch's rows
 CJK_LANGS = ("zh", "ja", "ko")               # languages whose letters may need a font file
 PICTURES, README = "pictures.bin", "readme.txt"
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)            # fixed, so the same work always makes the same file
 PAGE_END = 0xF9
+MAP_AS_BYTES = ("this file still keeps the city map's place titles as raw bytes (it was made before they "
+                "were lines), so the game shows those, not this line; a newer copy of the pack has them as lines")
 
 # pelang.py is one compiler with state of its own (the pack being built) and it reports by
 # printing: one build at a time.
@@ -255,6 +259,17 @@ def read_pack_text(data_or_path, game: Game) -> PackText:
     return PackText(lang, name, texts, unknown, version)
 
 
+def _as_words(texts: dict[str, str]) -> tuple[dict[str, str], dict[str, str]]:
+    """(texts with the city map's lines as words, key -> the spaced text of each line that had
+    spacing of its own)."""
+    words, spaced = {}, {}
+    for key, text in texts.items():
+        words[key] = citymap.shown_words(key, text)
+        if words[key] != text:
+            spaced[key] = text
+    return words, spaced
+
+
 def read_english(path, game: Game) -> tuple[dict[str, str], int]:
     """(key -> the game's English, rows that aren't the game's) of an English pack. The second
     number is 0 for a pack `pelang.py english` made from the real discs: every row's text has the
@@ -262,7 +277,8 @@ def read_english(path, game: Game) -> tuple[dict[str, str], int]:
     pack = read_pack_text(path, game)
     wrong = sum(1 for key, text in pack.texts.items()
                 if srcman.english_hash(text) != game.rows[key]["english_hash"])
-    return pack.texts, wrong + pack.unknown
+    # The city map's lines as a translator reads and types them: words, without their spacing.
+    return {k: citymap.shown_words(k, t) for k, t in pack.texts.items()}, wrong + pack.unknown
 
 
 # ---- languages -------------------------------------------------------------------------------------
@@ -621,8 +637,10 @@ def check_row(game: Game, key: str, text: str, lang: str, name: str = "Preview",
         boxes = boxes_of(game, key) if key.startswith("dlg/") else [
             Box("battle", battle.X, 20, battle.WIDTH, 1, battle.WIDTH, True)]
         typed = pelang.split_page_end(text)[0]
+        # (a map line's spacing is the compiler's own placing, not a change to the words)
+        as_built = citymap.shown_words(key, final.replace("{end F9}", "").replace("{end FF}", ""))
         return Preview(True, screens, boxes, name_px, final=final,
-                       wrapped=final.replace("{end F9}", "").replace("{end FF}", "") != typed,
+                       wrapped=as_built != citymap.shown_words(key, typed),
                        right_to_left=rtl.is_rtl(lang), key=key, pack=pack, shown_name=shown_name)
 
     with _LOCK:
@@ -671,6 +689,10 @@ class Translation:
         self.own_letters: tuple = ()
         self.own_cjk: tuple = ()
         self.patch_text: dict[str, str] = {}
+        # The city map's lines are shown and typed as words (citymap.shown_words); a line the file
+        # holds with its own spacing (a fan patch's, or one saved before) keeps it while its words
+        # stay the same: key -> that text.
+        self.layouts: dict[str, str] = {}
         # A pack read back from its compiled text (made by other means: a fan patch import, the
         # English pack): the rows a save would not write back as the file has them -> why. While
         # there are any, save refuses, so opening and saving can never quietly change a pack.
@@ -703,17 +725,19 @@ class Translation:
         self.path, self.parts, self.unknown = path, parts, read.unknown
         self.pack = pelang.pack_bytes(path)
         self.own_letters, self.own_cjk = letters_in_pack(self.pack)
-        self.texts = dict(read.texts)
+        words, self.layouts = _as_words(read.texts)
+        self.texts = dict(words)
         patch_rows: list[str] = []
         if isinstance(work, dict) and work.get("format") == WORK_FORMAT and work.get("version") in WORK_READS:
             rows = work.get("rows") or {}
             self.notes = {k: r["note"] for k, r in rows.items() if k in game.rows and r.get("note")}
-            typed = {k: r["text"] for k, r in rows.items() if k in game.rows and r.get("text")}
+            typed, kept = _as_words({k: r["text"] for k, r in rows.items() if k in game.rows and r.get("text")})
+            kept.update({k: r["layout"] for k, r in rows.items() if k in game.rows and r.get("layout")})
             rules = work.get("rules") or {}
             self.from_patch = rules.get("from_patch") is True
             patch_rows = [k for k in rules.get("patch_rows") or [] if k in game.rows]
             if work.get("text_sha256") == hashlib.sha256(self.pack).hexdigest():
-                self.texts, self.from_work = typed, True
+                self.texts, self.layouts, self.from_work = typed, kept, True
             else:
                 # The pack was rebuilt by something else since: its text is what the game shows, so
                 # it wins; rows only the work part has (they didn't pass the checks) are kept.
@@ -725,7 +749,7 @@ class Translation:
                 # Made by other means, most likely from a fan patch with its looser rules: if those
                 # write every row back as the pack has it, the pack keeps them (and every line edited
                 # or added later follows them too).
-                self.from_patch, self.patch_text = True, dict(read.texts)
+                self.from_patch, self.patch_text = True, dict(words)
                 looser = self.untouched_changes()
                 if len(looser) < len(self.locked) or not looser:
                     self.locked = looser
@@ -791,14 +815,43 @@ class Translation:
 
     # -- checking --
 
+    def as_built(self, key: str, text: str) -> str:
+        """What the compiler is given for a row: a map line whose words are still those of its own
+        spacing (self.layouts) keeps that spacing; any other text as it is (the compiler places a
+        map line typed as words)."""
+        kept = self.layouts.get(key)
+        return kept if kept is not None and citymap.shown_words(key, kept) == text else text
+
+    def _kept_layout(self, key: str) -> str:
+        """The spacing a map line keeps (see as_built), "" when it has none."""
+        text = self.texts.get(key, "")
+        return self.layouts[key] if text and key in self.layouts and self.as_built(key, text) != text else ""
+
+    def _built_texts(self, texts: dict[str, str]) -> dict[str, str]:
+        return {k: self.as_built(k, t) for k, t in texts.items()}
+
     def check(self) -> Built:
         """Every translated row through the compiler, as a save would."""
-        return build(self.game, self.texts, self.lang, self.name, keep_names_from=self.pack, rules=self.rules)
+        return build(self.game, self._built_texts(self.texts), self.lang, self.name, keep_names_from=self.pack,
+                     rules=self.rules)
 
     def check_row(self, key: str, text: str | None = None) -> RowCheck:
         text = self.text(key) if text is None else text
-        return check_row(self.game, key, text, self.lang, self.name, default_name=self.default_name,
-                         rules=self.rules_for(key, text))
+        checked = check_row(self.game, key, self.as_built(key, text), self.lang, self.name,
+                            default_name=self.default_name, rules=self.rules_for(key, text))
+        if text and citymap.placed(key) and self.map_as_bytes:
+            checked.warnings.append(MAP_AS_BYTES)
+        return checked
+
+    @property
+    def map_as_bytes(self) -> bool:
+        """Whether the file's pictures.bin still carries the city map's entry (its text as bytes, as
+        packs made before the dlg/MAP lines did): the game then shows those bytes, not the lines."""
+        try:
+            pieces = picturebin.read(self.parts[PICTURES]) if PICTURES in self.parts else []
+        except ValueError:
+            return False
+        return any(citymap.USA_SECTORS[0] <= p.sector < citymap.USA_SECTORS[1] for p in pieces)
 
     # -- saving --
 
@@ -818,7 +871,8 @@ class Translation:
             for key in bad:
                 left[key] = built.errors(key)
                 del texts[key]
-            built = build(self.game, texts, self.lang, self.name, keep_names_from=self.pack, rules=self.rules)
+            built = build(self.game, self._built_texts(texts), self.lang, self.name, keep_names_from=self.pack,
+                          rules=self.rules)
         return built, left, first
 
     def save(self, path=None) -> SaveReport:
@@ -845,7 +899,8 @@ class Translation:
             raise RuntimeError(f"the built pack is missing rows it should hold: {missing[:10]}")
         work = {"format": WORK_FORMAT, "version": WORK_VERSION, "lang": self.lang, "name": self.name,
                 "text_sha256": hashlib.sha256(pack).hexdigest(),
-                "rows": {k: {f: v for f, v in (("text", self.texts.get(k, "")), ("note", self.notes.get(k, ""))) if v}
+                "rows": {k: {f: v for f, v in (("text", self.texts.get(k, "")), ("note", self.notes.get(k, "")),
+                                                ("layout", self._kept_layout(k))) if v}
                          for k in sorted(set(self.texts) | set(self.notes))
                          if self.texts.get(k) or self.notes.get(k)}}
         if self.from_patch:                  # font files stay on this computer: not in the file

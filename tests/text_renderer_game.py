@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -160,6 +160,14 @@ Checks, each from pe_mods.log and frame dumps:
              must be, pixel for pixel, the map of a copy of Disc 1 with the file's pieces written in, and
              not the English one. Disc 1 only: no sample save reaches the map on Disc 2 (the Day 5 save
              needs Disc 1; PE.IMG, and so the picture, is byte for byte the same on both discs).
+  translator-place-title  The city map's place titles as text (dlg/MAP, PE.IMG entry 76's bank): the
+             Translator's scripted run types "Parque Central" as words only into Central Park's title and
+             saves; the pack's line must be those words centred on the box's third line by the rule of
+             petext/citymap.py. Then on part translator-map's route, RIGHT and Cross to Central Park, the
+             title on the screen with the file chosen must be, pixel for pixel, the one of a copy of Disc 1
+             whose bank holds that line (and not the English), and with the English pack the game's own.
+             With PE_TEST_PLAYER_PACKS, each player pack translating that title likewise shows its line as
+             a disc holding it does. Disc 1 only (the map's entry is the same bytes on Disc 2).
   translator-battle  The battle words redrawn in the Translator: the picture (PE.IMG entry 11: the words,
              numbers and marks of a fight) saved from the disc as a PNG by the tool, every inked pixel's
              grey step turned over (so every word and number drawn from it changes), loaded back
@@ -1030,16 +1038,25 @@ def translator_file(game, discs, out, localization):
           f'the Translator left rows of the game\'s own text out: {list(report.left_out.items())[:5]} {report.whole}')
     with zipfile.ZipFile(saved) as z:
         check(project.WORK in z.namelist() and 'text.bin' in z.namelist(), f'not a Translator file: {z.namelist()}')
-    # It holds the game's own bytes, but for the pages the compiler rewrapped (English that runs past its box).
+    # It holds the game's own bytes, but for the pages the compiler rewrapped (English that runs past its
+    # box) and the city map's lines: shown and typed as words, they are centred by the compiler's rule,
+    # which puts some a space from where the English put them by eye (petext/citymap.py).
+    from petext import citymap
     was, now = pelang.read_pack(path)[2], pelang.read_pack(saved)[2]
     changed = sorted(rows.by_hash[h] for h in was if h in rows.by_hash and now.get(h) != was[h])
+    respaced = [k for k in changed if citymap.placed(k)]
+    words = lambda raw: [line.lstrip(b'\x0f') for line in raw.split(b'\xf7')]
+    check(all(words(now[pelang.fnv1a(k)]) == words(was[pelang.fnv1a(k)]) for k in respaced),
+          f'the city map lines\' words changed: {respaced}')
+    changed = [k for k in changed if k not in respaced]
     wrapped = sorted(k for k, said in report.warnings.items() if any('wrapped to fit' in w for w in said))
     check(set(now) == set(was) and changed == wrapped and len(changed) < 10,
           f'the Translator\'s file differs from the English pack in {changed[:10]}; rewrapped: {wrapped[:10]}')
     again = project.Translation.open(saved, rows)
     check(again.from_work and again.texts == english and not again.locked, 'the file does not reopen as it was saved')
-    print(f'translator file: {report.in_pack} rows saved by the Translator, {len(now) - len(changed)} entries byte for '
-          f'byte the English pack\'s, {len(changed)} pages rewrapped to their box ({", ".join(changed)}); reopens as saved')
+    print(f'translator file: {report.in_pack} rows saved by the Translator, {len(now) - len(changed) - len(respaced)} '
+          f'entries byte for byte the English pack\'s, {len(changed)} pages rewrapped to their box '
+          f'({", ".join(changed)}), {len(respaced)} city map lines centred by the rule; reopens as saved')
     return game_is_its_own(game, discs, out, ('en', 'Translator file', None, saved), 'translator', 'translator file')
 
 
@@ -1215,6 +1232,123 @@ def translator_map(game, discs, out, localization):
     finally:
         shutil.rmtree(out / 'discs', ignore_errors=True)
     return 0
+
+
+# ---- Part translator-place-title: the city map's place titles as text ----
+
+# Part translator-map's route, then RIGHT (to Central Park, the place next to N.Y.P.D. #17 that day) and
+# Cross: the camera flies to the park and its title (dlg/MAP/004) shows at the bottom from about vblank
+# 17260; PLACE_AT is well inside that.
+PLACE_KEY, PLACE_AT = 'dlg/MAP/004', 17620
+PLACE_TITLE = (0, 170, 320, 230)                # where the title is drawn (the box's three lines)
+PLACE_WORDS = 'Parque Central'
+
+
+def place_steps():
+    return map_steps()[:-1] + presses([(MAP_AT, 0, 'map'), (MAP_AT + 10, 32, 'right'), (17000, CROSS, 'cross'),
+                                       (PLACE_AT, 0, 'title')])
+
+
+def city_map_written_in(cue, localization, page, raw, out):
+    """A copy of `cue` whose city map bank (PE.IMG entry 76) has page `page` replaced by `raw` (the
+    pack's bytes for it), as a disc patched with that line would hold it; the bank keeps its place
+    and the parts after it, padded with zeros up to them."""
+    sys.path.insert(0, str(localization))
+    from petext import citymap, gametext as gt, pictures
+    from petext.disc import Game
+    import zlib
+    game = Game(cue)
+    try:
+        entry, start = citymap.entry_bytes(game), game.sectors[citymap.ENTRY]
+    finally:
+        game.disc.f.close()
+    parts = citymap.parts(entry)
+    pages, used = gt.pages(citymap.english_bank(entry))
+    page_bytes = lambda ps: b''.join(b'\xfe' + bytes([p]) + text + bytes([end]) for p, (text, end) in sorted(ps.items()))
+    check(page_bytes(pages) == entry[parts[1]:parts[1] + used], 'the city map bank does not read back as its pages')
+    # (a pack keeps a page's own F9 end after its text; any other page ends as the game's does)
+    pages[page] = (raw[:-1], 0xF9) if raw.endswith(b'\xf9') else (raw, pages[page][1])
+    bank = page_bytes(pages)
+    room = parts[2] - parts[1]
+    # A longer line than the English's: room is made by emptying the narration pages (11-14), which
+    # this route never shows; the page asked for and the place titles stay.
+    for spare in (14, 13, 12, 11):
+        if len(bank) <= room or spare == page:
+            continue
+        pages[spare] = (b'', pages[spare][1])
+        bank = page_bytes(pages)
+    check(len(bank) <= room and parts[2] <= 2048, f'the new bank ({len(bank)} bytes) does not fit its {room}')
+    english = entry[parts[1]:parts[2]]
+    piece = pictures.Piece(start, parts[1], zlib.crc32(english), bank + bytes(room - len(bank)))
+    return pieces_written_in(cue, [piece], out)
+
+
+def translator_place_title(game, discs, out, localization):
+    """Part translator-place-title (see the module notes). Disc 1 only."""
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import citymap, gametext as gt
+    check(MAP_SAVE.is_file(), f'no sample save {MAP_SAVE}')
+    # The Translator: a new translation with the place title typed as words only.
+    path, report = out / 'translator-place-title.pelang', out / 'translator-place-title-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Place test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--select', PLACE_KEY, '--type', PLACE_WORDS], capture_output=True, text=True, timeout=300)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok') and said.get('row_state') == 'ok',
+          f'the Translator did not save the place title: {said} {ran.stderr[-600:]}')
+    raw = pelang.read_pack(path)[2][pelang.fnv1a(PLACE_KEY)]
+    # Centred and on the box's third line, as the English titles are (the rule, worked out apart).
+    width = gt.lines(gt.encode(PLACE_WORDS))[0]
+    spaces = max(0, (2 * citymap.CENTRE['title'] - width + 7) // 14)
+    check(raw == b'\xf7\xf7' + b'\x0f' * spaces + gt.encode(PLACE_WORDS),
+          f'the place title is not centred on the third line: {raw.hex(" ")}')
+    pack = ('es', 'Place test', None, path)
+    english_path, _, _ = make_english_pack(discs, out, localization)
+    english_pack = ('en', 'English pack', None, english_path)
+    steps = place_steps()
+    runs = [('plain', discs[:1], None), ('pack', discs[:1], pack), ('english-pack', discs[:1], english_pack)]
+    players = {}
+    for p in player_packs_given():
+        lang, name, entries = pelang.read_pack(p)
+        if pelang.fnv1a(PLACE_KEY) in entries:
+            players[lang] = ((lang, name, None, p), entries[pelang.fnv1a(PLACE_KEY)])
+    try:
+        written = {'pack': city_map_written_in(discs[0], localization, 4, raw, out / 'discs' / 'pack')}
+        for lang, (player, line) in players.items():
+            written[lang] = city_map_written_in(discs[0], localization, 4, line, out / 'discs' / lang)
+            runs += [(lang, discs[:1], player), (f'{lang}-written-in', [written[lang][0]], player)]
+        runs.append(('written-in', [written['pack'][0]], pack))
+        frames = {which: run_fixed(game, use, out / f'place-title-{which}', steps, pad=CONTINUE,
+                                   card=MAP_SAVE.read_bytes(), **({'pack': p} if p else {}))
+                  for which, use, p in runs}
+        for which, work in frames.items():
+            check(scene_at(work, MAP_AT) == MAP_SCENE, f'{which}: the city map is not on screen at vblank {MAP_AT}')
+        title = lambda which: crop(frames[which], 'title', PLACE_TITLE)
+        check(lit(frames['plain'], 'title', PLACE_TITLE) > 100, f'no place title on screen: {frames["plain"]}')
+        check(frame(frames['english-pack'], 'title') == frame(frames['plain'], 'title'),
+              f'with the English pack the place title is not the game\'s own: {frames["english-pack"]}')
+        check(frame(frames['pack'], 'title') == frame(frames['written-in'], 'title'),
+              f'the place title with the file is not the one of a disc holding that line: {frames["pack"]}')
+        check(title('pack') != title('plain'), f'the place title is still English: {frames["pack"]}')
+        print(f'PASS translator place title, disc 1: "{PLACE_WORDS}" typed as words is centred on the third line; '
+              f'with the file the title is, pixel for pixel, the one of a disc holding that line; with the English '
+              f'pack it is the game\'s own')
+        for lang in players:
+            check(frame(frames[lang], 'title') == frame(frames[f'{lang}-written-in'], 'title'),
+                  f'{lang}: the place title is not the pack\'s line as a disc holding it shows it: {frames[lang]}')
+            print(f'PASS translator place title, player pack {lang}: the title is its line, pixel for pixel as a '
+                  f'disc holding that line shows it')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
+def player_packs_given():
+    """The player packs of PE_TEST_PLAYER_PACKS (a folder of .pelang files), if it is set."""
+    folder = os.getenv('PE_TEST_PLAYER_PACKS')
+    return sorted(Path(folder).glob('*.pelang')) if folder and Path(folder).is_dir() else []
 
 
 # ---- Part translator-battle: the battle words ----
@@ -2360,7 +2494,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
                               ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
                               ('translator', translator_file), ('translator-pictures', translator_pictures),
-                              ('translator-map', translator_map), ('translator-battle', translator_battle),
+                              ('translator-map', translator_map), ('translator-place-title', translator_place_title),
+                              ('translator-battle', translator_battle),
                               ('translator-cards', translator_cards), ('translator-tutorial', translator_tutorial),
                               ('translator-game-over', translator_game_over), ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below

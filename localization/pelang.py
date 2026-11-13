@@ -53,7 +53,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from petext import battle, gametext as gt, latin, validation, layout, menu  # noqa: E402
+from petext import battle, citymap, gametext as gt, latin, validation, layout, menu  # noqa: E402
 from petext import modtext, cjk, letters as lettertable, stretch, names as namelib
 from petext import manifest as srcman  # noqa: E402
 from petext import wrap as wrapping  # noqa: E402
@@ -457,6 +457,11 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
         if wrapped != raw:
             raw = wrapped
             note = "wrapped to fit the box" + (f", {added} screen(s) added" if added else "") + "; check the breaks"
+    if citymap.placed(key):
+        # The city map's lines: typed as words only, they are centred as the English (petext/citymap.py).
+        cmds, space = list(validation.commands(raw)), bytes([gt.CODE_OF[" "]])
+        if citymap.words_only(key, cmds, space):
+            raw = citymap.place(key, cmds, space, lambda c: layout.measure(c, name_px))
     layout_errors, warnings = layout.check(key, raw, source, widest_name, name_px, metrics, layouts)
     errors.extend(layout_errors)
     if note:
@@ -1248,6 +1253,30 @@ def cmd_import_patch(a):
                     elif text is not None:
                         if after[page][1] != end and after[page][1] in (0xF9, 0xFF):
                             text += f"{{end {after[page][1]:02X}}}"     # the box waits, or closes, as the patch's
+                        rows.append({"key": key, "translation": text, "notes": "patch import"})
+            # The city map's bank (petext/citymap.py): its place titles and narration, read as any
+            # room's pages when the patch changed only that text (else they come with its pictures).
+            map_before, map_after = citymap.entry_bytes(original), citymap.entry_bytes(translated)
+            if map_before != map_after and not citymap.only_text_changed(map_before, map_after):
+                left.append({"key": f"dlg/{citymap.BANK_KEY}/*", "reason": "the patch changed the city map's "
+                             "pictures too: its text comes with them"})
+            elif map_before != map_after:
+                before = gt.pages(citymap.english_bank(map_before))[0]
+                after = patchimport.patched_pages(citymap.english_bank(map_after))
+                prefix = f"dlg/{citymap.BANK_KEY}/"
+                left += [{"key": f"{prefix}{page:03}", "reason": "page only in the patch"} for page in sorted(set(after) - set(before))]
+                for page, (raw, end) in sorted(before.items()):
+                    key = f"{prefix}{page:03}"
+                    if page not in after:
+                        left.append({"key": key, "reason": "page missing from the patch"})
+                        continue
+                    end_changed += after[page][1] != end
+                    text, why = patchimport.compare_page(raw, after[page][0], letters, pairs)
+                    if why:
+                        left.append({"key": key, "reason": why})
+                    elif text is not None:
+                        if after[page][1] != end and after[page][1] in (0xF9, 0xFF):
+                            text += f"{{end {after[page][1]:02X}}}"
                         rows.append({"key": key, "translation": text, "notes": "patch import"})
             manifest = json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))
             before, after = dict(table_entries(original.resident_pack())), dict(table_entries(translated.resident_pack()))

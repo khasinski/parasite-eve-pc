@@ -102,7 +102,9 @@ python -I pelang.py build fr.csv --strings out/text/strings.json --lang fr --nam
    the boxes it shows in, `banks.json` (each message bank's CRC32), `menu_glyphs.json` (the menus'
    glyph widths), plus the item reports. Keys: `sys/NNN`, `item/NNN`, `desc/NNN`, `misc/NNN`
    for the resident text tables, `dlg/MNNN/PPP` for room dialogue (the message bank first used by
-   room MNNN, page PPP), `battle/NNN` for the battle messages (below). The 148 table slots that
+   room MNNN, page PPP; `dlg/MAP/PPP` is the city map's bank in PE.IMG entry 76: the place title
+   shown on arrival and the map's narration, centred by `pelang.py build` when typed as words only,
+   petext/citymap.py), `battle/NNN` for the battle messages (below). The 148 table slots that
    hold filler the game never shows are left out.
 2. **Template.** `pelang.py template` writes the translator CSV: key, English, Japanese (for
    reference), translation, box, widest line, rooms, notes. `--merge old.csv` carries the
