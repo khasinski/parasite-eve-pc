@@ -109,55 +109,49 @@ the native HUD strip's digits look right in orange. A heal and a hit landing
 in the same battle frame could hide the heal from the pool check. Not
 playtested.
 
-## Striker, Revision 6.4 (current; supersedes the Striker notes below)
+## Striker, Revision 6.4 + playtest rework (current; supersedes older notes)
 
 Source of truth: build spec section 4.2. Rules in `pe_style_striker.c`,
-numbers in `.striker` in `pe_style_catalog.c`.
+numbers in `.striker` in `pe_style_catalog.c`. Reworked 2026-11-13 after the
+first playtest: the outer-band-only penalty almost never applied (0 of 12
+shots that could hit), and a 96 or 200 gap felt like touching.
 
-- Snapshot: when a gun action starts, every live targetable enemy gets one
-  zone, fixed for that action even if it moves. Each recipient (splash,
-  spread, secondary) uses its own zone; unrecorded recipients are native.
-- Point-blank (x1.25): horizontal surface gap from Aya's native 63-unit
+- Snapshot: when a gun action starts, every live targetable enemy gets its
+  own damage percent, fixed for that action even if it moves. Splash, spread
+  and secondary recipients each use their own; unrecorded ones are native.
+- Close range (x1.25): horizontal surface gap from Aya's native 63-unit
   footprint to the enemy's scaled hit cylinder is at most `point_blank_gap`
-  (200; the spec's 96 felt like touching in the first playtest). Same for every gun. Wins over falloff on short-range guns.
-- Falloff (x0.80): the native targeting distance (`target_x/z` to Aya, the
-  value the out-of-range marker and native accuracy use) is at least 70% of
-  the gun's native range. Shots beyond range that still hit natively are in
-  the band too. Range is `action->range`, which the game builds from the
-  weapon's base plus bonus range stat, so mod-changed guns are included.
-  Under Darkness the native 200-unit range is used, as the game does.
-  Range 0 (unknown) turns falloff off rather than guessing.
+  (300; ring 363 units from Aya's centre). Same for every gun.
+- Falloff: past the ring, damage drops steadily with the enemy's near-edge
+  distance (native targeting distance minus its hit radius), from 100% at the
+  ring to 100 - `falloff_max_penalty` (75%) at the gun's native range, and
+  stays at 75% beyond it. Range is `action->range` (base + bonus range stat,
+  so mod-changed guns are included); Darkness uses the native 200. If the
+  whole dome is inside the ring (Darkness, very short guns) there is no
+  gradient, but beyond-range hits are still 75%. Range 0 (unknown): native.
 - Ordinary gun hits only. Clubs, PE, scripted damage and non-ordinary hits are
   untouched. A falloff hit never rounds to 0.
-- Cue: target marker cyan at point-blank, native red in the middle, purple
-  (`CUE_FAR`) in the falloff band (was dim red, too close to the native dark
-  out-of-range marker). Beyond range the native dark marker is left as is.
-  Preview and the committed snapshot call the same zone function. One-line
-  hints the first time a point-blank and a far target are aimed at.
-  Confirmed on screen in `build-styles/live-striker-ui2` (a temporary build
-  with the band at 90% so most aims fell in it).
+- Cues: while aiming, a flat cyan ring on the floor at the close-range radius,
+  drawn like the native dome (same view matrix, screen offset, ordering
+  table, LINE_G2, 48 segments) and growing with it; no core hook. Target
+  marker: cyan at close range; past the ring it shades from the native red
+  toward purple (`CUE_FAR`) in step with the penalty; out of range the native
+  dark marker is left alone. Preview and snapshot use the same calculation.
+  One-line hints the first time a close and a far target are aimed at.
+- Log: `striker range ... pct=N` per recipient at action start and
+  `striker damage=A->B recipient=i pct=N` per scaled hit.
 
-**Changing it.** `point_blank_gap`, `point_blank_percent`,
-`falloff_band_percent` (0 turns falloff off) and `falloff_percent` in
-`.striker`. Falloff color: `CUE_FAR` in `pe_style_runtime.c`.
+**Changing it.** `point_blank_gap`, `point_blank_percent` and
+`falloff_max_penalty` (0 turns falloff off) in `.striker`. Colors:
+`CUE_RING`, `CUE_FAR`, `CUE_NATIVE_TARGET` in `pe_style_runtime.c`.
 
-- Point-blank ring: while aiming a gun, a flat cyan circle on the floor at
-  Aya's footprint + the gap (263 units) from her centre: an enemy whose body
-  reaches it is point-blank. Drawn from the target-preview hook like the
-  native dome (same view matrix, screen offset, ordering table, LINE_G2
-  packets, 48 segments) and grows with it over 10 frames. No new core hook.
-  Color `CUE_RING`, smoothness `RING_SEGMENTS` in `pe_style_runtime.c`.
-
-**Not done yet.** In a native capture (`build-styles/live-ring-capture`) the
-ring shows as a small flat oval at Aya's feet, mostly behind her legs:
-point-blank is genuinely close and the battle camera is low. The 70% falloff
-line is not drawn. Marker tint confirmed on screen
-(`build-styles/live-marker-gap400`, a temporary build with the gap at 400 so
-every aim is point-blank): cyan marker and arrow, larger ring. Note the
-pedebug harness's "gap" uses the actor contact cylinder, not the hit cylinder
-Striker judges, so it can call a target point-blank when Striker does not;
-read the `striker range ... zone=` log lines instead. The 200 gap and the 30%
-band are uncalibrated (spec section 8). Not playtested.
+**Checked.** Unit tests cover the gradient, edge distance, beyond range,
+Darkness and unknown range. Native run `build-styles/live-striker-falloff`:
+every scaled hit matched its logged percent (the scripted fight only produced
+close-range shots, 125%). Screens: `live-striker-ui2` (purple), and
+`live-striker-falloff-shots` (wider ring, cyan). The pedebug harness's "gap"
+uses a different cylinder; read the `pct=` log lines instead. Gap 300 and the
+25% penalty are first guesses for the next playtest.
 
 ## Channeler, Revision 6.4 (current; supersedes the Channeler notes below)
 

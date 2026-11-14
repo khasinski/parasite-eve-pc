@@ -39,17 +39,17 @@ static const PeStyleDef definitions[PE_STYLE_COUNT] = {
     {.id = PE_STYLE_STRIKER,
      .key = "striker",
      .name = "Striker",
-     .benefit = "Point-blank gun hits deal +25% damage",
-     .limitation = "Shots from your gun's outer range deal -20%",
+     .benefit = "Close-range gun hits deal +25% damage",
+     .limitation = "Gun damage drops with distance: -25% at max range",
      .implemented = 1,
      .charge_percent = 100,
-     /* Build spec 4.2 and 5. Tune here, one value at a time. */
-     /* Gap 200 (spec said 96): 96 was nearly touching in playtest, too
-      * small a ring to aim for. Still calibrating (spec 8). */
-     .striker = {.point_blank_gap = 200,
+     /* Build spec 4.2 and 5. Tune here, one value at a time. Playtest
+      * 2026-11-13: gap 96 -> 200 -> 300 (close range, not touching); the
+      * falloff is now a steady drop from the ring to the dome edge, since
+      * an outer-band-only penalty was almost never felt. */
+     .striker = {.point_blank_gap = 300,
                  .point_blank_percent = 125,
-                 .falloff_band_percent = 30, /* 0 turns falloff off */
-                 .falloff_percent = 80}},
+                 .falloff_max_penalty = 25}}, /* 0 turns falloff off */
     {.id = PE_STYLE_CHANNELER,
      .key = "channeler",
      .name = "Channeler",

@@ -90,6 +90,8 @@ static const CueColor CUE_CRACK = {0xff, 0x90, 0x30}; /* Channeler cracked */
 /* Striker far band (-20%): muted purple, clearly apart from the native
  * in-range red (96,14,14) and out-of-range dark red (32,0a,0a). */
 static const CueColor CUE_FAR = {0x90, 0x60, 0xd0};
+/* The native in-range target marker red the falloff shading starts from. */
+static const CueColor CUE_NATIVE_TARGET = {0x96, 0x14, 0x14};
 enum { CRACK_FLICKER_FRAMES = 4 };
 static unsigned frame_count;
 static TargetTint target_tints[2][4], triangle_tints[2];
@@ -645,15 +647,21 @@ static unsigned native_range(void) {
     return AYA_DARKNESS_RANGE;
   return core->action->range > 0 ? (unsigned)core->action->range : 0u;
 }
-/* Striker zone for one recipient, the same call for preview and snapshot. */
-static int striker_zone(const BattleEntity *e) {
+/* Striker damage percent for one recipient, the same call for preview and
+ * snapshot. 100 = native. */
+static unsigned striker_percent(const BattleEntity *e) {
   BattleEntity *p = pe_player();
   if (!p || !candidate(e))
-    return PE_ST_NATIVE;
-  return pe_striker_zone(&session, point_blank(e),
-                         e->renderObject.target_x - p->posX.parts.integer,
-                         e->renderObject.target_z - p->posZ.parts.integer,
-                         native_range());
+    return 100;
+  unsigned radius =
+      e->moveSpeed
+          ? (unsigned)(u16)e->renderObject.hit_cylinder.radius * e->moveSpeed /
+                4096u
+          : 0u;
+  return pe_striker_shot_percent(
+      &session, point_blank(e), radius,
+      e->renderObject.target_x - p->posX.parts.integer,
+      e->renderObject.target_z - p->posZ.parts.integer, native_range());
 }
 static int outgoing(void *ctx, void *user) {
   PeHookEnemyDamage *q = ctx;
@@ -695,8 +703,8 @@ static int outgoing(void *ctx, void *user) {
       int before = *q->damage;
       *q->damage = pe_striker_damage(&session, i, before, 1);
       if (*q->damage != before)
-        pe_log("costume_style", "striker damage=%d->%d recipient=%u", before,
-               *q->damage, i);
+        pe_log("costume_style", "striker damage=%d->%d recipient=%u pct=%u",
+               before, *q->damage, i, pe_striker_target_percent(&session, i));
       break;
     }
   }
@@ -779,19 +787,31 @@ static int target_preview(void *ctx, void *user) {
       continue;
     CueColor c;
     if (session.style == PE_STYLE_STRIKER) {
-      /* Cyan point-blank, native red in the middle, dim red in the falloff
-       * band. Beyond range the native marker is already dark: left alone. */
+      /* Cyan at close range. Past the ring the marker shades from the native
+       * red toward purple as the damage penalty grows. Beyond range the
+       * native dark marker is left alone (it also says "may miss"). */
       if (q->out_of_range || !normal_gun())
         return 0;
-      int zone = striker_zone(e);
-      if (zone == PE_ST_POINT_BLANK) {
+      unsigned percent = striker_percent(e);
+      unsigned max_penalty =
+          pe_style_definition(PE_STYLE_STRIKER)->striker.falloff_max_penalty;
+      if (percent > 100) {
         c = CUE_CYAN;
-        hint(HINT_POINT_BLANK, "Striker: cyan target = point-blank, +25% gun "
+        hint(HINT_POINT_BLANK, "Striker: cyan target = close range, +25% gun "
                                "damage. Reach the cyan ring.");
-      } else if (zone == PE_ST_FALLOFF) {
-        c = CUE_FAR;
-        hint(HINT_FAR, "Striker: purple target = far shot, 20% less damage. "
-                       "Get closer.");
+      } else if (percent < 100 && max_penalty) {
+        unsigned t = 100 - percent; /* 1..max_penalty */
+        c.r = (u8)(CUE_NATIVE_TARGET.r +
+                   ((int)CUE_FAR.r - CUE_NATIVE_TARGET.r) * (int)t /
+                       (int)max_penalty);
+        c.g = (u8)(CUE_NATIVE_TARGET.g +
+                   ((int)CUE_FAR.g - CUE_NATIVE_TARGET.g) * (int)t /
+                       (int)max_penalty);
+        c.b = (u8)(CUE_NATIVE_TARGET.b +
+                   ((int)CUE_FAR.b - CUE_NATIVE_TARGET.b) * (int)t /
+                       (int)max_penalty);
+        hint(HINT_FAR, "Striker: the further the target, the less damage, "
+                       "down to -25%. Purple = far.");
       } else {
         return 0;
       }
@@ -836,10 +856,10 @@ static int action_begin(void *ctx, void *user) {
         unsigned i = action_target_count++;
         action_targets[i].entity = e;
         action_targets[i].core = e->core;
-        pe_striker_target(&session, i, striker_zone(e));
+        pe_striker_target(&session, i, striker_percent(e));
         pe_log("costume_style",
                "striker range recipient=%u dx=%d dz=%d radius=%u scale=%u "
-               "tx=%d tz=%d range=%u zone=%d",
+               "tx=%d tz=%d range=%u pct=%u",
                i,
                e->renderObject.hit_cylinder.value0 -
                    pe_player()->posX.parts.integer,
@@ -849,7 +869,7 @@ static int action_begin(void *ctx, void *user) {
                (unsigned)e->moveSpeed,
                e->renderObject.target_x - pe_player()->posX.parts.integer,
                e->renderObject.target_z - pe_player()->posZ.parts.integer,
-               native_range(), pe_striker_target_zone(&session, i));
+               native_range(), pe_striker_target_percent(&session, i));
       }
       pe_log("costume_style", "striker snapshot targets=%u range=%u",
              action_target_count, native_range());
@@ -1073,8 +1093,8 @@ void pe_styles_register(const char *mod_id) {
                         "speed, +20% damage taken meanwhile. Bulwark: "
                         "25% guard below full AT; guarded hits load a counter "
                         "that wins back up to half that HP; +15% damage taken "
-                        "on a full bar. Striker: point-"
-                        "blank guns +25%, outer 30% of gun range -20%. Channeler: weapon hits charge the next "
+                        "on a full bar. Striker: close-range guns +25%; past "
+                        "the ring damage drops, -25% at max range. Channeler: weapon hits charge the next "
                         "support PE (1 = half, 2 = free); at 2, a hit cracks "
                         "it and a second breaks one.",
                         style_info);

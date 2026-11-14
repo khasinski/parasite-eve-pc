@@ -599,39 +599,49 @@ int main(void) {
                                 300)); /* equal surface gap, larger enemy */
   assert(!pe_striker_point_blank(&session, 0, 0, 0));
   assert(!pe_striker_point_blank(&session, INT_MIN, INT_MIN, 100));
-  /* Zones: falloff from 70% of native range, beyond range included. */
-  assert(pe_striker_zone(&session, 0, 699, 0, 1000) == PE_ST_NATIVE);
-  assert(pe_striker_zone(&session, 0, 700, 0, 1000) == PE_ST_FALLOFF);
-  assert(pe_striker_zone(&session, 0, 420, 560, 1000) == PE_ST_FALLOFF);
-  assert(pe_striker_zone(&session, 0, 1700, 0, 1000) == PE_ST_FALLOFF);
-  assert(pe_striker_zone(&session, 1, 900, 0, 1000) ==
-         PE_ST_POINT_BLANK); /* point-blank wins on short guns */
-  assert(pe_striker_zone(&session, 0, 5000, 0, 0) ==
-         PE_ST_NATIVE); /* unknown range: no falloff, never a guess */
-  assert(pe_striker_zone(&session, 0, INT_MIN, INT_MIN, 1000) ==
-         PE_ST_FALLOFF);
-  assert(pe_striker_percent(&session, PE_ST_POINT_BLANK) == 125 &&
-         pe_striker_percent(&session, PE_ST_FALLOFF) == 80 &&
-         pe_striker_percent(&session, PE_ST_NATIVE) == 100);
+  /* Falloff: past the ring (Aya's 63 + the 300 gap = 363 from her centre),
+   * damage drops steadily with the enemy's near-edge distance, to -25% at the
+   * gun's native range and beyond: percent = 100 - 25 * (edge - 363) / (range
+   * - 363), rounded down. */
+  assert(pe_striker_ring_radius(&session) == 363);
+  assert(pe_striker_shot_percent(&session, 0, 0, 363, 0, 1000) == 100);
+  assert(pe_striker_shot_percent(&session, 0, 0, 682, 0, 1000) == 88);
+  assert(pe_striker_shot_percent(&session, 0, 0, 999, 0, 1000) == 76);
+  assert(pe_striker_shot_percent(&session, 0, 0, 1000, 0, 1000) == 75);
+  assert(pe_striker_shot_percent(&session, 0, 0, 1700, 0, 1000) == 75);
+  assert(pe_striker_shot_percent(&session, 0, 100, 682, 0, 1000) ==
+         92); /* measured from the enemy's near edge, not its centre */
+  assert(pe_striker_shot_percent(&session, 0, 0, 409, 545, 1000) ==
+         88); /* horizontal distance 681 */
+  assert(pe_striker_shot_percent(&session, 1, 0, 900, 0, 1000) ==
+         125); /* close range wins */
+  assert(pe_striker_shot_percent(&session, 0, 0, 5000, 0, 0) ==
+         100); /* unknown range: no falloff, never a guess */
+  assert(pe_striker_shot_percent(&session, 0, 0, 200, 0, 300) == 100 &&
+         pe_striker_shot_percent(&session, 0, 0, 400, 0, 300) ==
+             75); /* dome inside the ring: no gradient, beyond still -25% */
+  assert(pe_striker_shot_percent(&session, 0, 0, INT_MIN, INT_MIN, 1000) == 75);
   PeStyleSession capacity;
   pe_style_begin(&capacity, PE_STYLE_STRIKER);
   pe_style_action_begin(&capacity, 1, 1);
-  pe_striker_target(&capacity, 63, PE_ST_POINT_BLANK);
-  pe_striker_target(&capacity, 64, PE_ST_POINT_BLANK);
-  pe_striker_target(&capacity, 1, PE_ST_FALLOFF);
-  pe_striker_target(&capacity, 2, 7); /* not a zone: ignored */
+  pe_striker_target(&capacity, 63, 125);
+  pe_striker_target(&capacity, 64, 125);
+  pe_striker_target(&capacity, 1, 75);
+  pe_striker_target(&capacity, 2, 0);   /* not a percent: ignored */
+  pe_striker_target(&capacity, 3, 300); /* out of range: ignored */
   assert(pe_striker_damage(&capacity, 63, 100, 1) == 125);
   assert(pe_striker_damage(&capacity, 64, 100, 1) == 100);
   assert(pe_striker_damage(&capacity, 0, 100, 1) == 100);
-  assert(pe_striker_damage(&capacity, 1, 100, 1) == 80);
+  assert(pe_striker_damage(&capacity, 1, 100, 1) == 75);
   assert(pe_striker_damage(&capacity, 1, 1, 1) == 1); /* never zero */
   assert(pe_striker_damage(&capacity, 1, 100, 0) == 100);
-  assert(pe_striker_damage(&capacity, 2, 100, 1) == 100);
+  assert(pe_striker_damage(&capacity, 2, 100, 1) == 100 &&
+         pe_striker_damage(&capacity, 3, 100, 1) == 100);
   pe_style_action_begin(&capacity, 0, 1); /* club: no bonus, no falloff */
-  pe_striker_target(&capacity, 1, PE_ST_FALLOFF);
+  pe_striker_target(&capacity, 1, 75);
   assert(pe_striker_damage(&capacity, 1, 100, 1) == 100);
   pe_style_begin(&capacity, PE_STYLE_QUICKSTEP);
-  assert(pe_striker_zone(&capacity, 1, 0, 0, 1000) == PE_ST_NATIVE);
+  assert(pe_striker_shot_percent(&capacity, 1, 0, 0, 0, 1000) == 100);
   BattleEntity far = {0}, unknown = {0};
   target = (BattleEntity){0};
   target.core = &g_BattleEnemySlots[0].combatant;
@@ -728,17 +738,18 @@ int main(void) {
   dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
   assert(dealt == 100);
-  /* Falloff: native targeting distance against the gun's native range. */
+  /* Falloff: the enemy's near edge (target distance - its radius 100) past
+   * the ring (363), against the gun's native range. */
   weapon_action.range = 1000;
-  target.renderObject.hit_cylinder.value0 = 2000; /* not point-blank */
-  target.renderObject.target_x = 700;
+  target.renderObject.hit_cylinder.value0 = 2000; /* not close range */
+  target.renderObject.target_x = 700;             /* edge 600: 91% */
   far.renderObject.hit_cylinder.value0 = 2000;
-  far.renderObject.target_x = 699;
+  far.renderObject.target_x = 400; /* edge 300, inside the ring: native */
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   gun_hit.target = &target;
   dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
-  assert(dealt == 80);
+  assert(dealt == 91);
   gun_hit.target = &far;
   dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
@@ -748,8 +759,8 @@ int main(void) {
   target.renderObject.hit_cylinder.value0 = 0;
   dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
-  assert(dealt == 80); /* moving closer after commit changes nothing */
-  /* Preview uses the same zones: cyan, untouched, dim. */
+  assert(dealt == 91); /* moving closer after commit changes nothing */
+  /* Preview uses the same calculation: cyan, untouched, shaded purple. */
   g_BattleStatusPointerSprites[0].sprite.color.bytes.r = 17;
   cue.out_of_range = 0;
   cue.phase = 1;
@@ -759,15 +770,21 @@ int main(void) {
   fire(PE_HOOK_TARGET_PREVIEW, &cue);
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
   target.renderObject.hit_cylinder.value0 = 2000;
-  target.renderObject.target_x = 500;
+  target.renderObject.target_x = 463; /* edge 363: no penalty yet */
   cue.phase = 1;
   fire(PE_HOOK_TARGET_PREVIEW, &cue);
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
-  target.renderObject.target_x = 800;
+  target.renderObject.target_x = 1000; /* the dome edge: full -25% */
   fire(PE_HOOK_TARGET_PREVIEW, &cue);
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0x90 &&
-         g_BattleStatusPointerTriangles[0].b == 0xd0); /* purple far band */
-  assert((hints_shown & HINT_FAR) && (hints_shown & HINT_POINT_BLANK));
+         g_BattleStatusPointerTriangles[0].b == 0xd0); /* full purple */
+  cue.phase = 0;
+  fire(PE_HOOK_TARGET_PREVIEW, &cue);
+  cue.phase = 1;
+  target.renderObject.target_x = 813; /* edge 713: 87%, part way */
+  fire(PE_HOOK_TARGET_PREVIEW, &cue);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0x93 &&
+         g_BattleStatusPointerSprites[0].sprite.color.bytes.b == 0x75);  assert((hints_shown & HINT_FAR) && (hints_shown & HINT_POINT_BLANK));
   cue.phase = 0;
   fire(PE_HOOK_TARGET_PREVIEW, &cue);
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
@@ -821,19 +838,20 @@ int main(void) {
     fire(PE_HOOK_TARGET_PREVIEW, &cue);
     cue.phase = 1;
   }
-  /* Beyond native range a hit still lands at falloff. */
+  /* Beyond native range a hit still lands at the full -25%. */
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
-  assert(dealt == 80);
-  /* Darkness: the native 200-unit range. */
+  assert(dealt == 75);
+  /* Darkness: the native 200-unit range, all inside the ring: no gradient,
+   * but a hit from beyond it is still -25%. */
   aya.stateFlags |= AYA_DARKNESS;
-  target.renderObject.target_x = 140;
+  target.renderObject.target_x = 200;
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
-  assert(dealt == 80);
-  target.renderObject.target_x = 139;
+  assert(dealt == 75);
+  target.renderObject.target_x = 199;
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);

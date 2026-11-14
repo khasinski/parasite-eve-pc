@@ -68,15 +68,13 @@ enum {
   PE_STYLE_TARGETS = 64,     /* recipients snapshotted per gun action */
   PE_ST_AYA_FOOTPRINT = 63   /* Aya's native radius, never the costume's */
 };
-enum { PE_ST_NATIVE, PE_ST_POINT_BLANK, PE_ST_FALLOFF }; /* zones */
 typedef struct {
-  unsigned point_blank_gap;      /* surface gap in world units, every gun */
-  unsigned point_blank_percent;  /* gun hit damage at point-blank */
-  unsigned falloff_band_percent; /* outer % of native gun range; 0 = off */
-  unsigned falloff_percent;      /* gun hit damage in the falloff band */
+  unsigned point_blank_gap;     /* close-range surface gap, every gun */
+  unsigned point_blank_percent; /* gun hit damage at close range */
+  unsigned falloff_max_penalty; /* % lost at the dome edge and beyond; 0 off */
 } PeStrikerTuning;
 typedef struct {
-  unsigned char zone[PE_STYLE_TARGETS]; /* PE_ST_* per snapshotted recipient */
+  unsigned char percent[PE_STYLE_TARGETS]; /* damage %, 0 = not recorded */
 } PeStrikerState;
 
 /* ---- Bulwark (Revision 6.4, single-guard build) -------------------------
@@ -168,14 +166,15 @@ int pe_striker_point_blank(const PeStyleSession *s, int dx, int dz,
                            unsigned radius);
 /* Radius of the point-blank aiming ring around Aya's centre; 0 off. */
 unsigned pe_striker_ring_radius(const PeStyleSession *s);
-/* Zone for one recipient: close from pe_striker_point_blank, dx/dz the native
- * targeting offset, range the gun's native range (0 = unknown, no falloff). */
-int pe_striker_zone(const PeStyleSession *s, int close, int dx, int dz,
-                    unsigned range);
+/* Damage percent for one recipient: close from pe_striker_point_blank, radius
+ * its scaled hit radius, dx/dz the native targeting offset, range the gun's
+ * native range (0 = unknown, no falloff). 100 = native. */
+unsigned pe_striker_shot_percent(const PeStyleSession *s, int close,
+                                 unsigned radius, int dx, int dz,
+                                 unsigned range);
 void pe_striker_action_begin(PeStyleSession *s); /* clears the snapshot */
-void pe_striker_target(PeStyleSession *s, unsigned index, int zone);
-int pe_striker_target_zone(const PeStyleSession *s, unsigned index);
-unsigned pe_striker_percent(const PeStyleSession *s, int zone);
+void pe_striker_target(PeStyleSession *s, unsigned index, unsigned percent);
+unsigned pe_striker_target_percent(const PeStyleSession *s, unsigned index);
 /* An ordinary gun hit on snapshot recipient index. */
 int pe_striker_damage(const PeStyleSession *s, unsigned index, int damage,
                       int ordinary);

@@ -82,12 +82,13 @@ def run_case(args,on,game,flows,card):
             else:s.advance(4)
         (run/'samples.json').write_text(json.dumps(samples),encoding='utf-8')
     events=[line for line in (run/'pe_play.log').read_text(errors='replace').splitlines() if line.startswith('costume_style ')]
-    hits=[tuple(map(int,re.search(r'damage=(\d+)->(\d+)',line).groups())) for line in events if 'striker damage=' in line]
+    hits=[tuple(map(int,re.search(r'damage=(\d+)->(\d+) recipient=\d+ pct=(\d+)',line).groups())) for line in events if 'striker damage=' in line]
     result={'run':str(run),'gun_slot_in_copied_fixture':gun_slot,'samples':len(samples),'events':events,'damage_pairs':hits,'coverage':'bounded functional trace; balance not asserted'}
     if on:
         assert any('begin=striker' in line and 'ready=1' in line for line in events),result
-        assert hits,'no qualifying close gun hits in scripted trace'
-        assert all(after==(before*125+50)//100 for before,after in hits),result
+        # Each hit scaled by its own snapshot percent: 125 close, 75-99 falloff.
+        assert hits,'no Striker-scaled gun hits in scripted trace'
+        assert all(after==max(1,(before*pct+50)//100) and 75<=pct<=125 for before,after,pct in hits),result
     else:
         assert any('begin=original enabled=0' in line for line in events),result
         assert not hits,result

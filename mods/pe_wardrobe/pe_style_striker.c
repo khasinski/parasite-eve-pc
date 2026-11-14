@@ -1,12 +1,13 @@
-/* Striker, Revision 6.4 (build spec 4.2). Pure rules: no game globals.
+/* Striker (build spec 4.2, falloff reworked 2026-11-13 after playtest). Pure
+ * rules: no game globals.
  *
- * Every gun action snapshots each possible recipient into one zone:
- *   point-blank  surface gap <= striker.point_blank_gap (same for every gun)
- *   falloff      native distance in the outer falloff_band_percent of the
- *                gun's native range, or beyond it
- *   native       everything between
- * Point-blank wins where the two overlap. Numbers live in PeStrikerTuning
- * (pe_style_catalog.c). */
+ * Every gun action snapshots each possible recipient's damage percent:
+ *   close range  its body reaches the ring (surface gap <= point_blank_gap,
+ *                the same for every gun): point_blank_percent (125)
+ *   falloff      past the ring, damage drops steadily with the enemy's edge
+ *                distance, from 100% at the ring to 100 - falloff_max_penalty
+ *                (75%) at the gun's native range, and stays there beyond it
+ * Numbers live in PeStrikerTuning (pe_style_catalog.c). */
 #include "pe_style.h"
 #include <limits.h>
 #include <string.h>
@@ -34,8 +35,8 @@ static uint64_t isqrt(uint64_t v) {
   return r;
 }
 
-/* Aya's native footprint plus the point-blank gap: an enemy whose body
- * reaches this circle around her centre is point-blank. The aiming ring is
+/* Aya's native footprint plus the close-range gap: an enemy whose body
+ * reaches this circle around her centre is close range. The aiming ring is
  * drawn at this radius. */
 unsigned pe_striker_ring_radius(const PeStyleSession *s) {
   return on(s) ? PE_ST_AYA_FOOTPRINT + tuning(s)->point_blank_gap : 0u;
@@ -52,44 +53,45 @@ int pe_striker_point_blank(const PeStyleSession *s, int dx, int dz,
   return (uint64_t)(x * x) + (uint64_t)(z * z) <= reach * reach;
 }
 
-int pe_striker_zone(const PeStyleSession *s, int close, int dx, int dz,
-                    unsigned range) {
+unsigned pe_striker_shot_percent(const PeStyleSession *s, int close,
+                                 unsigned radius, int dx, int dz,
+                                 unsigned range) {
   const PeStrikerTuning *t;
   int64_t x = dx, z = dz;
-  uint64_t dist;
+  uint64_t dist, edge, start;
+  unsigned max_penalty;
   if (!on(s))
-    return PE_ST_NATIVE;
-  if (close)
-    return PE_ST_POINT_BLANK; /* wins over an overlapping falloff band */
+    return 100;
   t = tuning(s);
-  if (!t->falloff_band_percent || t->falloff_band_percent > 100 || !range)
-    return PE_ST_NATIVE; /* unknown range: no falloff, never a guess */
+  if (close)
+    return t->point_blank_percent;
+  max_penalty = t->falloff_max_penalty > 99 ? 99 : t->falloff_max_penalty;
+  if (!max_penalty || !range)
+    return 100; /* unknown range: no falloff, never a guess */
   /* The native distance the gun's accuracy and range check use. */
   dist = isqrt((uint64_t)(x * x) + (uint64_t)(z * z));
-  return dist * 100u >= (uint64_t)range * (100u - t->falloff_band_percent)
-             ? PE_ST_FALLOFF
-             : PE_ST_NATIVE;
+  if (dist >= range)
+    return 100 - max_penalty; /* beyond the dome */
+  start = pe_striker_ring_radius(s);
+  if (range <= start)
+    return 100; /* the whole dome is inside the ring: no room to fall off */
+  edge = dist > radius ? dist - radius : 0; /* the enemy's near edge */
+  if (edge <= start)
+    return 100;
+  return 100 - (unsigned)((uint64_t)max_penalty * (edge - start) /
+                          (range - start));
 }
 
 void pe_striker_action_begin(PeStyleSession *s) {
-  memset(s->st.zone, PE_ST_NATIVE, sizeof s->st.zone);
+  memset(s->st.percent, 0, sizeof s->st.percent); /* 0 = not recorded */
 }
-void pe_striker_target(PeStyleSession *s, unsigned index, int zone) {
-  if (index < PE_STYLE_TARGETS && zone >= PE_ST_NATIVE && zone <= PE_ST_FALLOFF)
-    s->st.zone[index] = (unsigned char)zone;
+void pe_striker_target(PeStyleSession *s, unsigned index, unsigned percent) {
+  if (index < PE_STYLE_TARGETS && percent && percent <= 255)
+    s->st.percent[index] = (unsigned char)percent;
 }
-int pe_striker_target_zone(const PeStyleSession *s, unsigned index) {
-  return index < PE_STYLE_TARGETS ? s->st.zone[index] : PE_ST_NATIVE;
-}
-
-unsigned pe_striker_percent(const PeStyleSession *s, int zone) {
-  if (!on(s))
-    return 100;
-  if (zone == PE_ST_POINT_BLANK)
-    return tuning(s)->point_blank_percent;
-  if (zone == PE_ST_FALLOFF)
-    return tuning(s)->falloff_percent;
-  return 100;
+unsigned pe_striker_target_percent(const PeStyleSession *s, unsigned index) {
+  unsigned p = index < PE_STYLE_TARGETS ? s->st.percent[index] : 0;
+  return p ? p : 100;
 }
 
 int pe_striker_damage(const PeStyleSession *s, unsigned index, int damage,
@@ -99,7 +101,7 @@ int pe_striker_damage(const PeStyleSession *s, unsigned index, int damage,
   if (!on(s) || !s->gun_action || !ordinary || damage <= 0 ||
       index >= PE_STYLE_TARGETS)
     return damage;
-  percent = pe_striker_percent(s, s->st.zone[index]);
+  percent = pe_striker_target_percent(s, index);
   if (percent == 100)
     return damage;
   scaled = ((uint64_t)(unsigned)damage * percent + 50u) / 100u;
