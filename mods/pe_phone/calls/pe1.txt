@@ -511,11 +511,10 @@ them: Hello? Who is this?
 aya: Officer Brea, NYPD. Dispatch gave me your number. You didn't evacuate.
 them: I can't. My son's on his way home from Jersey.
 them: If I'm gone, he walks into an empty apartment.
-aya: What's his name?
-them: Tommy. Tommy Alvarez. He's nineteen. He thinks he knows everything.
-aya: I'll tell Dispatch to watch for him. Where should I tell him to find you?
-them: My sister's, in Queens. ...All right. I'll go.
-aya: Tommy Alvarez, nineteen, knows everything. I've got it.
+aya: Tape a note to the door. Tell him where you went.
+them: He's nineteen. He thinks he knows everything.
+aya: Then he knows how to read a note on his own front door.
+them: ...All right. I'll go.
 
 # ---- Day 3: the precinct after the attack ----
 
@@ -697,7 +696,7 @@ aya: What have you been telling them?
 them: Nothing. I've been writing down names. Who they're looking for.
 aya: How many?
 them: Four pages. I didn't know what else to do.
-aya: You did right, Ruth. Read me the first name.
+aya: That's more than most of us did, Ruth.
 
 
 # ======== Raccoon City, December 24-29, 1997 ========
