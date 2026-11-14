@@ -130,7 +130,9 @@ static void pe_info_row(int row) {
     if (index < 0) return;
     if (row == 0) line = c ? c->name : "Aya's own clothes";
     if (row == 1) line = pe_wardrobe_worn() == c ? "Worn" : "X: Wear this outfit";
-    if (row == 2) {
+    /* Costumes are cosmetic by default: the style line only shows while the
+     * F1 "Costume abilities (prototype)" setting is on. */
+    if (row == 2 && pe_styles_enabled()) {
         pe_styles_describe(c ? c->key : NULL, label, sizeof label);
         line = label;
     }
@@ -163,7 +165,9 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
     }
     if (buttons & PE_MENU_CIRCLE) { pe_close(); Menu_PlayCancelSound(); return 1; }
     if (buttons & PE_SELECT) {
-        if (buttons & PE_REPEAT) return 1;
+        /* Only turns the prototype off again; turning it on is an F1 choice, so
+         * a stray Select never gives a costume combat effects. */
+        if (buttons & PE_REPEAT || !pe_styles_enabled()) return 1;
         if (s_stage.fullscreen || !pe_styles_set_enabled(!pe_styles_enabled())) { Menu_PlayErrorSound(); return 1; }
         snprintf(s_note, sizeof s_note, "%s", pe_styles_enabled() ? "Costume abilities on" : "Vanilla combat: abilities off");
         s_note_tick = s_tick;
@@ -197,10 +201,15 @@ static int pe_on_help_text(void *ctx, void *user) {
     (void)user;
     if (!s_screen.list || MenuWidget_GetCurrentNode() != s_screen.list) return 0;
     if (s_tick - s_note_tick < 150) snprintf(line, sizeof line, "%s", s_note);
+    else if (!pe_styles_enabled()) { /* cosmetic only: no style lines */
+        if ((s_tick / 150) % 3 == 1) snprintf(line, sizeof line, "%s", pe_l10n_ui("L1 R1: Group   Left Right: Turn"));
+        else if ((s_tick / 150) % 3 == 2) snprintf(line, sizeof line, "%s", pe_l10n_ui("X: Wear   Square: Pause   Circle: Back"));
+        else snprintf(line, sizeof line, pe_l10n_ui("%s   %d outfits   X: Wear"), pe_l10n_ui(s_group[s_category]), s_members);
+    }
     else if ((s_tick / 150) % 6 == 1) snprintf(line, sizeof line, "%s", pe_l10n_ui("L1 R1: Group   Left Right: Turn"));
     else if ((s_tick / 150) % 6 == 2) snprintf(line, sizeof line, "%s", pe_l10n_ui(style->implemented ? style->benefit : "Style coming later: vanilla combat"));
     else if ((s_tick / 150) % 6 == 3) snprintf(line, sizeof line, "%s", pe_l10n_ui(style->implemented ? style->limitation : "This outfit currently has no ability"));
-    else if ((s_tick / 150) % 6 == 4) snprintf(line, sizeof line, "%s", pe_l10n_ui("Select: Toggle costume abilities"));
+    else if ((s_tick / 150) % 6 == 4) snprintf(line, sizeof line, "%s", pe_l10n_ui("Select: Turn costume abilities off"));
     else if ((s_tick / 150) % 6 == 5) snprintf(line, sizeof line, "%s", pe_l10n_ui("X: Wear   Square: Pause   Circle: Back"));
     else snprintf(line, sizeof line, pe_l10n_ui("%s   %d outfits   X: Wear"), pe_l10n_ui(s_group[s_category]), s_members);
     pe_tr_ascii(s_text, sizeof s_text, line);

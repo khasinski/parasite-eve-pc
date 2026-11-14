@@ -1071,24 +1071,28 @@ static void preview_tradeoff(char *out, unsigned size) {
            d->implemented ? d->limitation
                           : "No costume ability in this prototype");
 }
+/* The style rows live on their own sub-page, so the Wardrobe page itself only
+ * shows the one prototype setting: costumes read as cosmetic by default. */
+#define PE_PAGE_WARDROBE_STYLES PE_PAGE_WARDROBE "/Costume abilities"
 void pe_styles_register(const char *mod_id) {
   pe_menu_register_toggle(
       PE_PAGE_WARDROBE, "Costume abilities (prototype)",
-      "Off: vanilla combat. On: costume style. Change outside battle only.",
+      "Off (default): costumes are cosmetic only. On: each costume gives its "
+      "prototype combat style. Change outside battle only.",
       &requested, settings_tick);
-  pe_menu_register_info(PE_PAGE_WARDROBE, "Selected style",
+  pe_menu_register_info(PE_PAGE_WARDROBE_STYLES, "Selected style",
                         "Preview for the highlighted F1 costume; browsing "
                         "changes no combat state.",
                         preview_info);
   pe_menu_register_info(
-      PE_PAGE_WARDROBE, "Style benefit",
+      PE_PAGE_WARDROBE_STYLES, "Style benefit",
       "The highlighted costume's ability when costume abilities are enabled.",
       preview_benefit);
-  pe_menu_register_info(PE_PAGE_WARDROBE, "Style tradeoff",
+  pe_menu_register_info(PE_PAGE_WARDROBE_STYLES, "Style tradeoff",
                         "The highlighted costume's cost or limitation. "
                         "Ownership rules are unchanged.",
                         preview_tradeoff);
-  pe_menu_register_info(PE_PAGE_WARDROBE, "Costume style",
+  pe_menu_register_info(PE_PAGE_WARDROBE_STYLES, "Costume style",
                         "Quickstep: half-HP breaks and kills +20% AT, 3 s "
                         "speed, +20% damage taken meanwhile. Bulwark: "
                         "25% guard below full AT; guarded hits load a counter "
@@ -1099,7 +1103,7 @@ void pe_styles_register(const char *mod_id) {
                         "it and a second breaks one.",
                         style_info);
   pe_menu_register_info(
-      PE_PAGE_WARDROBE, "Style state",
+      PE_PAGE_WARDROBE_STYLES, "Style state",
       "Bulwark: guarded or exposed, stored counter damage and HP left to "
       "win back. Channeler: Spellweave charges. Half-bar features must be off "
       "for Bulwark.",

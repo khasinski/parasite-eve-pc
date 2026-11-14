@@ -158,12 +158,18 @@ int main(void) {
     assert(s_stage.x>=156 && s_stage.w<=128 && s_info->parent->y<224);
     assert(s_members==41 && pe_current()==40 && s_screen.list->scroll_y==35);
     draw_all();assert(!wears && !provider_loads && s_stage.source.kind==PE_MODEL_SKIN);
-    send(PE_SELECT);assert(abilities && mode_changes==1 && worn==&costumes[39]);
-    send(PE_SELECT|PE_REPEAT);assert(abilities && mode_changes==1);
-    send(PE_SELECT);assert(!abilities && mode_changes==2 && !wears);
+    /* Costumes are cosmetic by default: Select cannot turn abilities on (that is
+     * an F1 choice), so no style text shows either. */
+    send(PE_SELECT);assert(!abilities && mode_changes==0 && worn==&costumes[39]);
+    /* With the F1 prototype on, Select only turns it back off. */
+    abilities=1;
+    send(PE_SELECT|PE_REPEAT);assert(abilities && mode_changes==0);
+    send(PE_SELECT);assert(!abilities && mode_changes==1 && !wears);
     assert(!strcmp(s_stage.source.folder,"harlequin"));
+    abilities=1;
     send(PE_TRIANGLE);assert(s_stage.fullscreen);
-    send(PE_SELECT);assert(!abilities && mode_changes==2); /* preview cannot change combat mode */
+    send(PE_SELECT);assert(abilities && mode_changes==1); /* preview cannot change combat mode */
+    abilities=0;
     send(PE_MENU_CROSS);assert(!s_stage.fullscreen && !wears); /* fullscreen Cross only exits */
     int selected=s_screen.list->cursor_y;
     assert(s_screen.list->update==pe_screen_preview_input);

@@ -1,16 +1,23 @@
 # Costume style prototype
 
-Off by default. F1 > PE Enhancements > Collection > Wardrobe > Costume abilities
-switches between cosmetic-only vanilla combat and the worn costume's shared style.
-Only change costumes/mode outside battle. Each encounter captures one style.
-The native Wardrobe also accepts Select to toggle the same saved preference.
-Holding Select cannot repeatedly toggle it, and fullscreen preview cannot change it.
-Style labels show on/off, later, or blocked (unsupported partial-bar policy).
-The help line cycles the selected style's benefit, tradeoff and browser controls.
-F1 also shows Selected style, Style benefit and Style tradeoff for the costume
-highlighted in its browser, including costumes not yet purchased. The existing
-Costume style row describes the worn/active style. Previewing never wears an
-outfit, spends Junk, changes the mode or changes the current encounter snapshot.
+**Costumes are cosmetic only by default** (decided 2026-11-13: costume and
+style are not linked for players yet). With the default setting no style
+appears anywhere a player normally looks:
+- the native Wardrobe shows no style line and no style help text, and its
+  Select button cannot turn styles on (it can only turn them off again);
+- F1 > PE Enhancements > Collection > Wardrobe shows just one row,
+  "Costume abilities (prototype)", off. The style rows (Selected style, Style
+  benefit, Style tradeoff, Costume style, Style state) live on the
+  sub-page Wardrobe > Costume abilities.
+
+Turning "Costume abilities (prototype)" on in F1 is the only way in. Then the
+worn costume's shared style applies in combat, the Wardrobe shows each
+costume's style and cycles its benefit and tradeoff in the help line, and
+Select turns the prototype off. Only change costumes or the mode outside
+battle; each encounter captures one style. Style labels show on/off, later,
+or blocked (unsupported partial-bar policy). Previewing never wears an
+outfit, spends Junk, changes the mode or changes the current encounter
+snapshot. The playtest package turns the prototype on in its own profiles.
 
 ## Layers
 
