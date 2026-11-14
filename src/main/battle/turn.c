@@ -1,4 +1,5 @@
 #include "pe1/akao.h"
+#include "pe_hooks.h"
 #include "pe1/pe_image.h"
 #include "pe1/asset_find.h"
 #include "pe1/battle.h"
@@ -242,6 +243,7 @@ static inline void FinishAction(void) {
     g_ActiveActor->hpAlive = 0;
     g_ActiveActor->stateFlags |= 0x200000;
     BattleCmd_ResetTableCursor();
+    PE_HOOK(PE_HOOK_PLAYER_ACTION, g_ActiveActor);
 }
 int Battle_HandleItemMenu(void) {
     u8 active=1;
@@ -259,6 +261,7 @@ int Battle_HandleItemMenu(void) {
          * Japanese code reads before the queue there. */
         if ((g_FieldPadPressed&0x2000) && !MenuWidget_FindByModeAndSelectedBase(1,0) && (PE_JAPAN || g_BattleItemMenuState!=2)) {
             cancelled=1;
+            PE_HOOK(PE_HOOK_PLAYER_ACTION_CANCEL,g_ActiveActor);
             if (!PE_JAPAN && g_BattleRemainingActions==(g_ActiveActor->action->turnWord&15))g_BattleSlotCancelPending=1;
             else g_BattleSlotCancelPending=0;
             if (g_BattleItemMenuState==1) MenuWidget_InitPool();

@@ -48,6 +48,7 @@ const char *pe_ward_last_said(void) { return s_said[0] ? s_said : "-"; }
 
 /* ---- the mod ---- */
 static void pe_reset(void) {
+    if (pe_in_battle()) { pe_ward_say("Reset wardrobe outside battle"); return; }
     pe_ward_profile_clear();
     pe_wardrobe_reset();
     pe_ward_profile_save();

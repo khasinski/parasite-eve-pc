@@ -131,6 +131,9 @@ static inline int pe_ch_on(int c) { return (int)((g_ch_run.active >> c) & 1u); }
 static inline int pe_ch_level(int c) { return pe_ch_on(c) ? g_ch_run.level[c] : 0; }
 static inline int pe_ch_assisted(void) { return g_ch_run.dropped || (g_ch_run.flags & CH_FLAG_CHEATS); }
 
+/* New Game title picker: commits to levels only on Start game; 0 if unavailable. */
+int pe_ch_start_pick(int levels[CH_COUNT]);
+
 /* pe_ch_run.c */
 int pe_ch_run_register(const char *mod_id);       /* the record, the rows, load / new game / sync */
 unsigned pe_ch_rows_mask(void);                    /* what the rows ask for (the next pick at the title) */

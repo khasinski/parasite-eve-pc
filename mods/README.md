@@ -204,6 +204,19 @@ All off until chosen; while they are off the mod writes nothing.
 Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): add `pe_challenges`
 to build it.
 
+New Game opens a title-style challenge picker when this mod is enabled. Each challenge shows
+its current Off / On / level value and description. Hardcore is the first row, followed by the
+other challenges; Clear all challenges and Start game are at the bottom. Choose a row to edit it; Back keeps its
+previous value. Combine challenges, Clear all challenges, then Start game to commit the draft.
+Long lists scroll through six rows, with a range indicator. Hardcore's Start game summary warns
+that death ends the run permanently and challenge levels cannot be lowered after starting.
+
+The picker is independent of Combat styles: with both mods enabled, style selection comes first,
+then challenges; with only one enabled, only its picker appears; with neither, New Game proceeds
+without either question. A build may omit either mod. Continue/load and EX Game do not open the
+challenge picker. Headless or unavailable UI preserves the F1 choices. Settings are saved only
+when Start game confirms the draft; the existing run record, locks and F1 controls stay in use.
+
 F1 > Challenges, all off until chosen (while every one is off the mod writes nothing). The top
 page starts with Hardcore (featured: `CH_DEF_FEATURED` puts a challenge's row there), then an
 overview (Run, On now, Cleared, Warnings); every other challenge sits on its category's

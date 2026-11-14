@@ -101,6 +101,18 @@ void Menu_MainUpdate(s32 arg0) {
             } else if (temp_a2 & 0x100) {
                 state0->hpAlive = temp_a1 + (state0->scaledOffense >> 1);
             }
+#if defined(PE_MODS) && PE_MODS
+            {
+                /* Local increment only: never rewrite derived rate/base stats. */
+                int before = (u16)(temp_a1 - state0->scaledOffense);
+                int increment = (int)state0->hpAlive - before;
+                PeHookAtCharge query = {state0, &increment};
+                if (increment > 0) {
+                    PE_HOOK(PE_HOOK_AT_CHARGE, &query);
+                    state0->hpAlive = (u16)(before + increment);
+                }
+            }
+#endif
             temp_a1_2 = g_ActiveActor;
             if ((temp_a1_2->exp_or_acc < temp_a1_2->maxAtk) && !(*temp_s2 & 0x2600)) {
                 temp_v0 = temp_a1_2->atbRate - 3;
@@ -113,7 +125,17 @@ void Menu_MainUpdate(s32 arg0) {
                 if (temp_v0_2 < 0x1999) {
                     temp_a1_2->atbStep = 0x1999;
                 }
+#if defined(PE_MODS) && PE_MODS
+                {
+                    int increment = temp_a1_2->atbStep;
+                    PeHookPeRecovery query = {g_ActiveActor, g_ActiveActor->exp_or_acc,
+                        temp_a1_2->maxAtk, &increment};
+                    PE_HOOK(PE_HOOK_PE_RECOVERY, &query);
+                    temp_v0_3 = g_ActiveActor->exp_or_acc + increment;
+                }
+#else
                 temp_v0_3 = g_ActiveActor->exp_or_acc + temp_a1_2->atbStep;
+#endif
                 g_ActiveActor->exp_or_acc = temp_v0_3;
                 if (temp_v0_3 >= temp_a1_2->maxAtk) {
                     temp_a1_2->atbGauge = 0xF0;

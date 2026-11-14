@@ -276,6 +276,7 @@ add_library(parasite-eve-original OBJECT
     src/main/battle/phase.c
     src/main/battle/enemy_slots.c
     src/main/battle/enemy_movement.c
+    src/main/battle/enemy_entity_anim.c
     src/main/entity/combat.c
     src/main/aya/stats.c
     src/main/item/active_list.c
@@ -1252,6 +1253,29 @@ if(BUILD_TESTING)
             endif()
         endforeach()
     endif()
+endif()
+
+# Clang's COFF linker diagnoses unresolved references even in unused functions.
+# The actor fixture exercises real shared actors/processes, so retain its own
+# entry point but close the same runtime graph as the game. Do not stub engine
+# functions or suppress undefined symbols. Production objects are reused; only
+# the desktop host is compiled again with an entry point the fixture never calls.
+if(BUILD_TESTING AND MINGW AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+    add_library(pe-actor-lifecycle-host OBJECT src/main/boot/main.c)
+    target_include_directories(pe-actor-lifecycle-host PRIVATE
+        $<TARGET_PROPERTY:parasite-eve-pc,INCLUDE_DIRECTORIES>)
+    target_compile_definitions(pe-actor-lifecycle-host PRIVATE
+        $<TARGET_PROPERTY:parasite-eve-pc,COMPILE_DEFINITIONS>
+        main=pe_actor_lifecycle_unused_game_entry)
+    target_link_libraries(pe-actor-lifecycle-host PRIVATE
+        $<TARGET_PROPERTY:parasite-eve-pc,LINK_LIBRARIES>)
+    get_target_property(actor_fixture_runtime parasite-eve-pc SOURCES)
+    list(REMOVE_ITEM actor_fixture_runtime src/main/boot/main.c)
+    set_property(TARGET test-original-actor-lifecycle PROPERTY SOURCES
+        tests/original_actor_lifecycle.c ${actor_fixture_runtime}
+        $<TARGET_OBJECTS:pe-actor-lifecycle-host>)
+    target_link_libraries(test-original-actor-lifecycle PRIVATE
+        $<TARGET_PROPERTY:parasite-eve-pc,LINK_LIBRARIES>)
 endif()
 
 # Every program built from the mods' objects also needs what they link (the Wardrobe's character
