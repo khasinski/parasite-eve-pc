@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe1/pe_image.h"
 #include "pe1/draw_state.h"
 #include "pe1/inventory.h"
 #include "pe1/inventory_queries.h"
@@ -237,8 +238,15 @@ reserved:
             option_node->y = height - 0x14;
         }
 
-        Text_CopyFFTerminatedBytes(g_MenuItemLabelBuffer, Text_LookupTable4(0x71));
-        Text_AppendFFTerminatedBytes(g_MenuItemLabelBuffer, Inv_LookupActiveListDisplayData(item));
+        if (PE_JAPAN) {
+            /* Japanese word order: the item, then 「に装備変更します」. */
+            g_MenuItemLabelBuffer[0] = 0xFF;
+            Text_AppendFFTerminatedBytes(g_MenuItemLabelBuffer, Inv_LookupActiveListDisplayData(item));
+            Text_AppendFFTerminatedBytes(g_MenuItemLabelBuffer, Text_LookupTable4(0x71));
+        } else {
+            Text_CopyFFTerminatedBytes(g_MenuItemLabelBuffer, Text_LookupTable4(0x71));
+            Text_AppendFFTerminatedBytes(g_MenuItemLabelBuffer, Inv_LookupActiveListDisplayData(item));
+        }
         if (Draw_MeasureTextWidth(g_MenuItemLabelBuffer) >= 0x78) {
             width = Draw_MeasureTextWidth(g_MenuItemLabelBuffer);
         } else {
@@ -278,6 +286,7 @@ error:
                 MenuWidget_DestroyNode(node);
                 MenuWidget_NavScrollTo(5);
                 MenuWidget_NavScrollTo(6);
+                if (PE_JAPAN) MenuWidget_NavScrollTo(0x1C);   /* the Japanese item tab */
                 MenuWidget_SetCurrentNode(MenuWidget_FindByModeAndSelectedBase(2, 0));
                 Menu_StepInventoryRoot(0x33E, -1, -1);
             } else {

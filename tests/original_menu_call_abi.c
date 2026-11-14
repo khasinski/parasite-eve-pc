@@ -97,6 +97,9 @@ unsigned char g_TextboxKernGlyph0F;
 static const TextboxGlyphSpacing s_textbox_widths[78];
 const TextboxGlyphSpacing *g_TextboxGlyphWidths = s_textbox_widths;
 unsigned g_TextboxGlyphCount = 78;
+/* The USA release unless a case sets the Japanese one (pe1/pe_image.h). */
+u8 g_GameRegion;
+const TextboxGlyphSpacing g_TextboxGlyphSpacingJapanese[60];
 FieldFontTextureState g_FieldFontTextureState;
 extern int g_TextCursorStackBottom[28];
 static u8 *format_text;

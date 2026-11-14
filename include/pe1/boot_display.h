@@ -94,7 +94,8 @@ extern RECT *g_BootDisplayFontImageRect;
 extern RECT *g_BootDisplayFontClutRect;
 extern u8 *g_BootDisplayFontImagePixels;
 extern u16 *g_BootDisplayFontClutPixels;
-#define g_BootDisplayFontTim (g_CdLoadAreaBase + 0x5b2c)
+/* The credits font, after the entry's tables (0x140 bytes later on the Japanese discs). */
+#define g_BootDisplayFontTim (g_CdLoadAreaBase + (PE_JAPAN ? 0x5c6c : 0x5b2c))
 extern s32 g_BootDisplayPlaybackCurrentPos;
 extern s32 g_BootDisplayPlaybackEndPos;
 extern s32 g_BootDisplayPlaybackStartPos;

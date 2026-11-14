@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe1/pe_image.h"
 #include "pe_hooks.h"
 #include "pe1/field_sprite_state.h"
 #include "pe1/akao_send.h"
@@ -211,6 +212,25 @@ int Script_OpenSaveLoadMenu(int **arg0) {
     ScriptNode *node;
     int flags;
     uintptr_t cursor;
+
+    if (PE_JAPAN) {
+        /* The Japanese release: the first pass marks the node and runs the opcode again next
+         * frame; the second opens the menu and lets the script go on in the same frame. */
+        if (state->flags & 0x1000) return 1;
+        node = g_ScriptNodePool;
+        if (!(node->flags & 0x20)) {
+            node->flags |= 0x20;
+            node->active = 1;
+            g_ScriptCursorAddress -= 0xC;
+            return 0;
+        }
+        Render_BeginSceneLoad();
+        Menu_OpenSaveLoadEntryPoint(**saved);
+        state->flags |= 0x9000;
+        g_GameStateFlags |= 4;
+        g_ScriptNodePool->flags &= 0xFFDF;
+        return 1;
+    }
 
     if (!(state->flags & 0x1000)) {
 

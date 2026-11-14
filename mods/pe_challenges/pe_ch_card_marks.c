@@ -30,6 +30,7 @@
 #include "pe1/memcard.h"
 #include "pe1/menu_context_help.h"
 #include "pe1/menu_widget.h"
+extern const char *g_MemCardFilenameFormatPtr;   /* the mounted release's card names */
 
 #define CH_PORTS          2
 #define CH_SLOTS          15
@@ -80,7 +81,7 @@ static void pe_check_slot(int port, int index, const MemCardSaveSlot *slot, PeSl
     m->key_hp = slot->currentHp;
     m->key_max = slot->maxHp;
     m->key_flag = slot->titleStyleFlag;
-    snprintf(card_name, sizeof card_name, "bu%d0:BASLUS-00662000000%c%c", port, slot->titleStyleFlag + '0', index + 'A');
+    snprintf(card_name, sizeof card_name, g_MemCardFilenameFormatPtr, port, slot->titleStyleFlag + '0', index + 'A');
     Psyz_AdjustPath(path, card_name, (int)sizeof path);
     if (!(f = fopen(path, "rb"))) { pe_log("challenge_card", "card=%d slot=%d unreadable path=%s", port + 1, index + 1, path); return; }
     if (fread(s_card, 1, sizeof s_card, f) != sizeof s_card) {

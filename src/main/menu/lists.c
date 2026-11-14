@@ -1,4 +1,5 @@
 #include "pe1/aya.h"
+#include "pe1/pe_image.h"
 #include "pe1/text_render.h"
 #include "pe_hooks.h"
 #include "pe1/draw_state.h"
@@ -616,7 +617,7 @@ void Menu_DrawParasiteAbilityItem(int arg0) {
 void Menu_DrawItemIcon(int arg0) {
     const u8 *letter = arg0 >= 0 ? PeText_NthLetter(g_MenuItemIconGlyphTable, (unsigned)arg0) : NULL;
     Draw_StatePush();
-    Draw_OffsetCursor(2, 0);
+    if (!PE_JAPAN) Draw_OffsetCursor(2, 0);   /* the Japanese grid has no 2 px inset */
     if (letter) {
         if (PeText_LetterBytes(letter) == 2) Draw_AllocTexturedQuad(letter[0]);
         Draw_AllocTexturedQuad(letter[PeText_LetterBytes(letter) - 1]);

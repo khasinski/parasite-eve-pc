@@ -1,7 +1,6 @@
 # Parasite Eve
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/bQkCVvrkem)
-[![Get it on RecompLauncher](https://recomplauncher.com/assets/press/launcher/badge-dark.svg)](https://recomplauncher.com/game/parasite-eve-pc)
 
 A native PC port of Parasite Eve, built from the original game code with
 [our PsyZ fork](https://github.com/khasinski/parasite-eve-psyz).
@@ -16,7 +15,8 @@ See the [changelog](CHANGELOG.md) for changes.
 
 Works with [RecompLauncher](https://recomplauncher.com): it installs and updates the game from these releases and sets it up with your Disc 1 image.
 
-You need your own **North American CUE/BIN or CHD images**. Game data is not included.
+You need your own **North American CUE/BIN or CHD images**, or the **Japanese** ones (SLPS-01230/01231). Game data is not included.
+With the Japanese discs the game plays as the Japanese release does: Japanese text, kana name entry, its balance, Circle to confirm and its own memory card files. Don't mix discs of the two releases.
 Keep each CUE file next to its BIN file. A CHD is a single file (its first track must be the data track, as `chdman createcd` makes from a CUE/BIN).
 
 1. Launch Parasite Eve and select your disc images. Selecting both discs enables automatic switching.

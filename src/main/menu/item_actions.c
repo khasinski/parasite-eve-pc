@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe1/pe_image.h"
 #include "pe1/aya.h"
 #include "pe1/battle_modifiers.h"
 #include "pe1/draw_level_bar.h"
@@ -81,6 +82,14 @@ void Menu_ConfigureScreen(void) {
     node->linkedNext = other;
     other->linkedPrevious = node;
 
+    if (PE_JAPAN) {
+        /* The Japanese item screen slides its 0x1C tab down one 16 px row per two mod slots of
+         * the selected item, from its 0x7C home row. */
+        MenuWidgetNode *tab = MenuWidget_FindByModeAndSelectedBase(1, 0x1C);
+        ItemDataRecord *data = Inv_LookupActiveListData(Inv_RestoreSelection(0));
+        if (tab && data) MenuWidget_OffsetPosition(tab, 0, ((data->tailCount + 1) >> 1) * 16 - (tab->y - 0x7C));
+    }
+
     node = MenuWidget_FindByModeAndSelectedBase(2, 5);
     if (node != 0) {
         value = -1;
@@ -146,6 +155,7 @@ void Menu_InitCategoryTabs(void) {
     MenuWidget_NavScrollTo(5);
     MenuWidget_NavScrollTo(6);
     MenuWidget_NavScrollTo(7);
+    if (PE_JAPAN) MenuWidget_NavScrollTo(0x1C);   /* the Japanese item tab */
 
     node = MenuWidget_FindByModeAndSelectedBase(2, 0);
     if (node == 0) {
@@ -286,6 +296,7 @@ int Menu_StepSkillSelect(MenuWidgetNode *arg0, unsigned int arg1) {
             MenuWidget_NavScrollTo(5);
             MenuWidget_NavScrollTo(6);
             MenuWidget_NavScrollTo(7);
+            if (PE_JAPAN) MenuWidget_NavScrollTo(0x1C);   /* the Japanese item tab */
             var_v0 = MenuWidget_FindByModeAndSelectedBase(2, 0);
             if (var_v0 == 0) {
                 var_v0 = MenuWidget_FindByModeAndSelectedBase(2, 0x32);
@@ -389,6 +400,7 @@ int Menu_EquipStatsInputHandler(MenuWidgetNode *node, unsigned int flags) {
         MenuWidget_NavScrollTo(5);
         MenuWidget_NavScrollTo(6);
         MenuWidget_NavScrollTo(7);
+        if (PE_JAPAN) MenuWidget_NavScrollTo(0x1C);   /* the Japanese item tab */
         target = MenuWidget_FindByModeAndSelectedBase(2, 0);
         if (target == NULL) {
             target = MenuWidget_FindByModeAndSelectedBase(2, 0x32);
@@ -457,6 +469,7 @@ int Menu_InventoryNavigate(MenuWidgetNode *arg0, MenuWidgetNode *arg1, unsigned 
         MenuWidget_NavScrollTo(5);
         MenuWidget_NavScrollTo(6);
         MenuWidget_NavScrollTo(7);
+        if (PE_JAPAN) MenuWidget_NavScrollTo(0x1C);   /* the Japanese item tab */
 
         node = MenuWidget_FindByModeAndSelectedBase(2, 0);
         if (node == 0) {
@@ -488,8 +501,8 @@ void Menu_CreateItemList(void) {
 
     Menu_SetDeferredCallback(0);
 
-    parent->grid_width = 0xDC;
-    parent->x = 0x32;
+    parent->grid_width = PE_JAPAN ? 0xAA : 0xDC;   /* Japanese layout */
+    parent->x = PE_JAPAN ? 0x4B : 0x32;
     parent->visible_rows += 0xA;
 
     child->x = parent->grid_width - 0x44;

@@ -2587,11 +2587,11 @@
     },
     {
       "path": "include/pe1/boot_disc_check.h",
-      "sha256": "34ccf6f05b6996fafe779abcd8c1830f2a2f502d59414b244344f77f74a1bf73"
+      "sha256": "abf94f628fc86cd87fd7d65c61c3a0e781bb8dd4e8b2f0513f1f2b8bfcfc5b91"
     },
     {
       "path": "include/pe1/boot_display.h",
-      "sha256": "05cfa489cf591f1210f777d914d93d4e6b5cd59d6fe50578c84cfc21cc7a28e6"
+      "sha256": "ed445c6cf55ecfe31c1b8dac1afd031361cb2f048dbbffbb3eb18f2b3bad76c9"
     },
     {
       "path": "include/pe1/boot_services.h",
@@ -3139,7 +3139,7 @@
     },
     {
       "path": "include/pe1/pe_image.h",
-      "sha256": "a53abba015d5ca0f58415d581c1438a7c72793ca3cde894344c44fc91b9856fd"
+      "sha256": "f6db8984e83bb0fa08166f370284ae872d21e4d19c4ae01fca629476316c3bdd"
     },
     {
       "path": "include/pe1/planar_shadow.h",
@@ -3819,7 +3819,7 @@
     },
     {
       "path": "include/pe1/textbox.h",
-      "sha256": "81ac5778532081af473195297db2bdf202e4ab58077420b812fcbb3233a14730"
+      "sha256": "5752e64e68ddae9ae5c61a7846f8d7a66596e5f831cb8bd4daa3354edd081e52"
     },
     {
       "path": "include/pe1/textbox_open.h",
@@ -3923,7 +3923,7 @@
     },
     {
       "path": "mods/host/pe_extension_store.h",
-      "sha256": "c4f1e91bc020f2cfea028920ce780f103ae076d665c9e478cadd1cce6a1da59f"
+      "sha256": "82fd17a5897a816c7cedd2fa923f84763532a31a4f8a519d60c562b630f7c998"
     },
     {
       "path": "mods/host/pe_file_io.h",
@@ -4339,7 +4339,7 @@
     },
     {
       "path": "mods/pe_quicksave/pe_quicksave.c",
-      "sha256": "dbb1567ac6a028f87be05528baccc46cca697c3bc071cc601b686b95d0017d69"
+      "sha256": "0e91ce8bb11acc132681e3764f7ae8a90a533691c81f62f8206a07c8951f1fb0"
     },
     {
       "path": "mods/pe_rebalance/pe_atb_items.c",
@@ -4495,7 +4495,7 @@
     },
     {
       "path": "src/main/item/active_list.c",
-      "sha256": "2df63573a9484ac89d263e61a6254c7bccde1a05133f42952e34fa914c948797"
+      "sha256": "70f18678c244f9d679dcf3d9ad678c54d2cbcd444b315fa0a5b4cf09ed9d5734"
     },
     {
       "path": "src/main/item/armor_capacity.c",
@@ -4507,7 +4507,7 @@
     },
     {
       "path": "src/main/memcard/save_flow.c",
-      "sha256": "4f01de2f43c24ef061562ba2598cb604db5782ae25b10c4c7267735cbaae2ca7"
+      "sha256": "c4224aea251e78a986d2535f1945fbc13eade65a78247eb74ebf1a0d8879413e"
     }
   ]
 }
