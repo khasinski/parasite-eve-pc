@@ -65,7 +65,8 @@ int pe_menu_register_tick(PeMenuPerFrame fn);
 int pe_menu_choose(const char *title, const char *help, const char *const *names, unsigned count, int initial);
 /* The same question in the title menu's look: `names` centred like New Game / Continue, a green
  * glow behind the selected one, and its `descriptions` entry (one per row) under the list.
- * `keys` is the small key line ("" for the default). At most 12 rows; returns as above. */
+ * `keys` is the small key line ("" for the default). Long lists scroll through six visible rows;
+ * returns as above. */
 int pe_menu_choose_title(const char *title, const char *keys, const char *const *names,
                          const char *const *descriptions, unsigned count, int initial);
 /* A read-only line: text() fills the value shown on the right (Junk, prices, results). */

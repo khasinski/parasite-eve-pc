@@ -178,8 +178,10 @@ static int pe_on_save_read(void *ctx, void *user) {
 
 /* The host reset the record: the rows picked at the title are the new run's. */
 static int pe_on_new_game(void *ctx, void *user) {
+    const PeHookNewGame *q = ctx;
+    (void)user;
+    if (q && q->kind == PE_NEW_GAME_TITLE && pe_ch_start_pick(s_on)) pe_menu_save_settings();
     const unsigned want = pe_ch_rows_mask();
-    (void)ctx; (void)user;
     memset(&g_ch_run, 0, sizeof g_ch_run);
     pe_ch_assist_reset();
     if (want) {
@@ -220,7 +222,7 @@ int pe_ch_run_register(const char *mod_id) {
     failed |= pe_hook_add(PE_HOOK_FRAME, pe_on_tick, NULL, PE_PRIORITY_NORMAL, mod_id);
     failed |= pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_tick, NULL, PE_PRIORITY_NORMAL, mod_id);
     failed |= pe_hook_add(PE_HOOK_SAVE_READ, pe_on_save_read, NULL, PE_PRIORITY_EARLY, mod_id);
-    failed |= pe_hook_add(PE_HOOK_NEW_GAME, pe_on_new_game, NULL, PE_PRIORITY_EARLY, mod_id);
+    failed |= pe_hook_add(PE_HOOK_NEW_GAME, pe_on_new_game, NULL, PE_PRIORITY_EARLY + 10, mod_id);
     /* Featured challenges first, on the Challenges top page (sub 0): used the most, one press away. */
     for (unsigned i = 0; i < g_ch_def_count; ++i)
         if (g_ch_defs[i]->flags & CH_DEF_FEATURED) failed |= pe_register_row(g_ch_defs[i]);

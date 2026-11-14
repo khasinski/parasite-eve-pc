@@ -1099,7 +1099,7 @@ static int new_game_pick(void *ctx, void *user) {
   if (!q || q->kind != PE_NEW_GAME_TITLE)
     return 0;
   int choice = pe_menu_choose_title(
-      "Choose your combat style", "Up/Down select   Cross/Enter start",
+      "Choose your combat style", "Up/Down select   Cross/Enter continue",
       new_game_names, new_game_descriptions, PE_STYLE_COUNT,
       valid_style(requested));
   if (choice < 0)
