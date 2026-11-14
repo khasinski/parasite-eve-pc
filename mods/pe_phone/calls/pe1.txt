@@ -97,6 +97,7 @@ them: He's eating.
 caller = Daniel
 tone = serious
 day = 1
+rooms = 20
 weight = 2
 once = yes
 them: Dollis.
@@ -111,7 +112,7 @@ caller = John's of Times Square
 tone = funny
 day = 1
 them: John's on Forty-Fourth. We close in ten.
-aya: Can you get six pies to Carnegie Hall? They're for the fire department.
+aya: Daniel asked me to get six pies to Carnegie Hall. You still delivering?
 them: For the fire guys? Sure. How do they like them?
 aya: Anything but well done.
 
@@ -176,7 +177,7 @@ tone = serious
 day = any
 them: 17th Precinct.
 aya: It's Brea. Anything I should know?
-them: Phones haven't stopped all night. You're the first call that isn't screaming.
+them: Phones haven't stopped. You're the first call that isn't screaming.
 aya: Give it a minute.
 
 [pe1/time_line]
@@ -341,8 +342,8 @@ day = 4-5
 weight = 2
 once = yes
 them: Dollis.
-aya: It's me. I'm about to go in. I wanted somebody to know.
-them: Then wait for me. Whatever happens next, don't do it alone.
+aya: It's me. No reason. I just wanted to hear somebody normal.
+them: Then hear this. Whatever happens next, don't do it alone.
 aya: I won't.
 them: I mean it.
 aya: So do I.
@@ -361,7 +362,7 @@ rooms = 20
 priority = 10
 once = yes
 them: 17th Precinct.
-aya: Officer Brea, inside Carnegie Hall. The audience is dead. They burned in their seats.
+aya: Officer Brea. I'm inside Carnegie Hall. People burned in their seats. Send medics.
 them: All of them? Brea, how many people are we talking about?
 aya: I stopped counting. One of the actresses did it. She's still in the building.
 them: Fire department's on the way. Stay where you are.
@@ -409,11 +410,10 @@ priority = 13
 once = yes
 needs = warner.supplies
 them: Armory, Wayne.
-aya: Wayne, it's {name}. I'm at Central Park.
-them: Good, you're alive. Torres had me load Warner up with supplies for you.
-aya: Warner? Where is he?
-them: Headed for the park to meet up with you and Daniel. Ammo, gear, the works.
-them: He'll hold anything you can't carry, too. Just find him and ask.
+aya: Wayne, it's {name}. I'm at Central Park and running low on ammo.
+them: Already handled. Torres had me load Warner up for you.
+aya: Where do I find him?
+them: He's on his way to you. He'll hold what you can't carry, too.
 aya: Thanks, Wayne. Tell Torres thanks too.
 them: Tell him yourself. He'll pretend he didn't hear you.
 
@@ -439,6 +439,7 @@ rooms = 59 64 75 87
 priority = 10
 once = yes
 after = pe1/park_wall
+aya: Zoo security? I need another way out of the park.
 them: You've reached the Central Park Zoo. We're closed for the holiday.
 them: Please do not feed the animals.
 aya: Too late. They're feeding themselves.
@@ -453,7 +454,7 @@ rooms = 97
 priority = 11
 once = yes
 them: Warner here.
-aya: There's nobody on the street out here.
+aya: Warner, it's Brea. I'm at the barricade. Where did everybody go?
 them: Evacuation order came down last night. We're moving people over the bridges.
 aya: Who's staying?
 them: Us. Baker volunteered the whole precinct.
@@ -528,8 +529,8 @@ priority = 10
 once = yes
 after = pe1/hospital_maeda
 them: St. Francis Pharmacy. We're closed due to... We're closed.
-aya: I'm upstairs. I'm a police officer.
-them: Then you know why we're closed.
+aya: Officer Brea. I'm upstairs. Why'd you close the pharmacy?
+them: You're upstairs? Then you know why we're closed.
 
 # ---- Day 5: the warehouse ----
 
@@ -542,9 +543,9 @@ priority = 10
 once = yes
 them: Dispatch.
 aya: Brea, at the warehouse. Where's the backup the officer outside called for?
-them: He called it in an hour ago.
-aya: From where?
-them: Westway Diner. Ninth Avenue. He asked if you wanted coffee.
+them: On scene. Staging at the Westway Diner on Ninth Avenue.
+aya: That's six blocks away.
+them: They want to know if you take sugar.
 
 # ---- Day 5: Chinatown ----
 
@@ -587,11 +588,12 @@ rooms = 195 196 237 238 340
 priority = 11
 once = yes
 them: Museum security. We're closed.
-aya: Officer Brea. I'm inside. Were you the last one out?
-them: I was in the fossil hall when we cleared out.
+aya: Officer Brea. I'm inside. Which halls did your people clear?
+them: All of them. I did the fossil hall last.
 aya: Did you see anything?
 them: No. Something scraped behind me. It stopped whenever I stopped.
-aya: I'm glad you didn't stop for long.
+aya: Where were you standing when it started?
+them: By the big skeleton. I didn't look up.
 
 [pe1/museum_daniel]
 caller = Daniel
@@ -615,7 +617,7 @@ caller = Wayne's Mom
 tone = funny
 day = 6
 rooms = 276
-priority = 11
+priority = 10
 once = yes
 them: Hello?
 aya: Is this Wayne's mother? Officer Brea, NYPD. He asked me to call. He's all right.
@@ -630,12 +632,11 @@ caller = Chief Baker
 tone = serious
 day = 6
 rooms = 276
-priority = 10
+priority = 11
 once = yes
-after = pe1/cruiser_mom
 them: Baker.
-aya: Brea, sir. I'm on the cruiser.
-them: Every window in the city is looking at that harbor.
+aya: Brea, sir. I'm on the cruiser. Is everyone off the waterfront?
+them: Battery Park's clear. The whole city is watching that harbor.
 aya: Then they can see we're still here, sir.
 them: Bring it home, Brea. That's an order.
 
@@ -691,8 +692,8 @@ day = 4
 priority = 1
 once = yes
 them: S.T.A.R.S. office. Redfield. If it's the cat again, try tuna.
-aya: NYPD. How long has it been up there?
-them: Since lunch. First action we've had all day. How's New York?
+aya: Brea, NYPD. I heard your unit handles strange animal attacks.
+them: Strange? We get cats up trees. How's New York?
 aya: I chased something up a tree. Then it chased me down.
 them: See, that's the kind of call I signed up for.
 aya: I'll trade you. How much tuna have you got?
@@ -756,10 +757,10 @@ tone = funny
 day = 3
 priority = 1
 once = yes
-aya: How long would it take you to get into a police evidence locker?
-them: The 17th's? About twelve seconds.
+aya: Somebody got into our evidence locker last night. Your name came up.
+them: Mine? I'm hurt. Also, it only takes twelve seconds.
 aya: That's oddly specific.
-them: I timed it last night. Relax, I put the jar back. It was moving.
+them: Relax, I put the jar back! It was moving.
 
 [pe1/ff_tifa]
 caller = Tifa
@@ -768,10 +769,10 @@ day = 4
 priority = 1
 once = yes
 them: Seventh Heaven. Kitchen's closed, bar's open.
-aya: Still? Half the city has evacuated.
-them: Then half the city is going to be thirsty when it gets back.
-aya: Save me a seat.
-them: Back door's unlocked. Knock twice.
+aya: Officer Brea. I need somewhere that will take people in off the street.
+them: Then you found it. How many?
+aya: A dozen, maybe. They're scared.
+them: Back door's unlocked. Tell them to knock twice.
 
 [pe1/ff_cloud]
 caller = Cloud
@@ -795,8 +796,8 @@ priority = 1
 once = yes
 them: Sephiroth.
 aya: Officer Brea. I was told you knew something about the fire.
-them: When you walked out of the theater, did you wonder why you were spared?
-aya: I wondered who was still inside.
-them: Of course. What did you wonder when you were alone?
-aya: Who told you I walked out?
-them: You did. Just now.
+them: I've watched a town burn. The ones it spares feel it anyway.
+aya: Feel what?
+them: The heat. It never touched you, but you felt it.
+aya: Who told you that?
+them: No one. You just did.
