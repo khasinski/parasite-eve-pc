@@ -13,6 +13,7 @@
 #include <psyz/video.h>
 #include <psyz/gpu.h>
 #include "pe1/field_actor.h"
+#include "pe1/mouse_input.h"
 #include "pe1/script_node.h"
 #include "pe1/geom_state.h"
 #include "pe1/render_object.h"
@@ -38,6 +39,7 @@ void PadInit(int mode);
 #include "pe1/inventory_slots.h"
 #include "pe1/menu_inventory.h"
 #include "pe1/menu_widget.h"
+#include "pe1/menu_scroll_cursor.h"
 #include "pe1/pad_state.h"
 #include "pe1/player_entity.h"
 #include "pe1/psyq_callbacks.h"
@@ -334,12 +336,23 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
     printf("],\"menu\":");
     if (g_MenuWidgetCurrentNode) {
         MenuWidgetNode *node = g_MenuWidgetCurrentNode;
+        int list_x = 0, list_y = 0;
+        const int list = node->mode == 2;
+        if (list) {
+            MenuWidget_ScreenPosition(node, &list_x, &list_y);
+        }
+        /* list: screen x, y, cell width, height, columns, rows shown, rows, first row shown */
         printf(
-            "{\"mode\":%d,\"selection\":%d,\"cursor\":[%d,%d]}",
+            "{\"mode\":%d,\"selection\":%d,\"cursor\":[%d,%d],\"list\":[%d,%d,%d,%d,%d,%d,%d,%d],\"plain\":%s}",
             node->mode,
             node->selected_base,
             node->cursor_x,
-            node->cursor_y
+            node->cursor_y,
+            list_x, list_y,
+            list ? node->draw_state : 0, list ? node->disabled : 0,
+            list ? node->grid_width : 0, list ? node->visible_rows : 0,
+            list ? node->y_limit : 0, list ? node->scroll_y : 0,
+            node->update == Menu_StepScrollCursor ? "true" : "false"
         );
     } else {
         printf("null");
@@ -769,6 +782,29 @@ static void Boot_ReadHostControlCommand(void) {
         }
         g_BootHostGraphicsOptions(geometry, antialiasing, filtering);
         g_BootHostControlAt = g_BootHostVBlankCount + 8;
+        return;
+    }
+    if (!strncmp(line, "mouse ", 6)) {
+        /* mouse X Y ACTION FRAMES: the mouse at screen point X, Y (move, left,
+         * right, middle, up or down for the wheel), then FRAMES with no buttons. */
+        static const char *const actions[] = {"move", "left", "right", "middle", "up", "down"};
+        int x, y, action = -1;
+        unsigned long frames = 0;
+        char name[16], extra;
+        if (sscanf(line + 6, "%d %d %15s %lu %c", &x, &y, name, &frames, &extra) == 4) {
+            for (int i = 0; i < 6; ++i) {
+                if (!strcmp(name, actions[i])) action = i;
+            }
+        }
+        if (action < 0 || x < -100 || x > 420 || y < -100 || y > 324 || !frames ||
+            frames > g_BootHostVBlankLimit - g_BootHostVBlankCount) {
+            fprintf(stderr, "Invalid mouse control command\n");
+            fflush(stderr);
+            _Exit(2);
+        }
+        Mouse_TestEvent(x, y, (enum MouseAction)action);
+        hostButtons = 0;
+        g_BootHostControlAt = g_BootHostVBlankCount + (u32)frames;
         return;
     }
     if (strncmp(line, "advance ", 8)) {
@@ -1229,6 +1265,11 @@ void Field_HandleStateTransition(void) {
             }
         }
 
+        /* The mouse presses the game's own buttons (pe1/mouse_input.h). */
+        if (g_BootHostActive) {
+            pad_bits |= Mouse_FrameButtons();
+        }
+
         int run_mask = g_FieldRenderFlagTable[0];
         PE_HOOK(PE_HOOK_PAD_MAP, (&(PeHookPadMap){pad_bits, &run_mask}));
         g_FieldPadBits = 0;
@@ -1478,12 +1519,16 @@ void Boot_ResetPadInput(void) {
     SDL_AddEventWatch(Boot_WatchPadEvent, NULL);
     memset(held, 0, sizeof(held));
     focused = true;
+    Mouse_Reset();
     memset(g_PadPackets, 0, sizeof(g_PadPackets));
     g_PadPackets[1].header = 0x00ff;
     publish();
 }
 
 void Boot_HandlePadEvent(const SDL_Event *event) {
+    if (focused || event->type == SDL_EVENT_WINDOW_FOCUS_LOST) {
+        Mouse_HandleEvent(event);
+    }
     if (event->type == SDL_EVENT_WINDOW_FOCUS_LOST || event->type == SDL_EVENT_QUIT) {
         focused = false;
         memset(held, 0, sizeof(held));
