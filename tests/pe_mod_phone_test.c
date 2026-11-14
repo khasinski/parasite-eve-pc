@@ -307,7 +307,7 @@ static void test_pe1_pack(void) {
     PePhoneContext sewer = {32, 0x68, 1, 3}, park = {87, 0xF8, 2, 3}, carnegie = {1, 0x40, 1, 3};
     int i, k, funny = 0;
     load_pe1();
-    assert(s_pack_count == 54);
+    assert(s_pack_count == 56);
     memset(&r, 0, sizeof r);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, pe_holds, 0)->key, "pe1/sewer_emergency"));
     for (i = 0; i < 64; ++i) {                                                        /* never elsewhere */
@@ -369,6 +369,19 @@ static void test_cruiser_serious(void) {
     load_pe1();
     memset(&r, 0, sizeof r);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 7u)->key, "pe1/cruiser_baker"));
+    /* Mixed: Baker, Wayne's mom, then Ruth at the precinct, ahead of the day's crossover */
+    {
+        static const char *const order[] = {"pe1/cruiser_baker", "pe1/cruiser_mom", "pe1/precinct_names", "pe1/raccoon_wesker"};
+        int i;
+        x.tone_mask = 3;
+        s_crossovers_on = 1;
+        for (i = 0; i < 4; ++i) {
+            const PePhoneCall *c = pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 7u);
+            assert(c && !strcmp(c->key, order[i]));
+            pe_phone_record_played(&r, c);
+        }
+        s_crossovers_on = 0;
+    }
 }
 
 /* A day's set calls play in order at whichever of its phones Aya uses, then the random pool. */

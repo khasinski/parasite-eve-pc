@@ -95,13 +95,14 @@
 #            (hospital: records 12, Maeda 11, pharmacy 10). Use after only when a call really
 #            needs the earlier one, and never make a funny call wait on a serious one (or the
 #            other way): with Call tone on one side, the waiting call could never play.
+#   5        Ruth at the precinct, from the cruiser: after Baker and Wayne's mom, before crossovers
 #   1        crossover calls: after every set call that fits, before any random call. They have no
 #            rooms, so they can come up at any phone on their day once its set calls are heard.
 #            Raccoon City sits above Final Fantasy in the file, so it plays first on a shared day.
 #   0        the random pool: everything else
 #
-# A call of your own with priority 2 to 9 plays after this file's set calls and before the
-# crossovers; 14 or more plays before everything here.
+# A call of your own with priority 2 to 9 plays after this file's day set calls (10 and up) and
+# before the crossovers; 14 or more plays before everything here.
 #
 # Keep it spoiler-safe: nothing from after the call's day.
 
@@ -500,6 +501,22 @@ aya: Why?
 them: There's a jar on his desk. They say it moved.
 aya: Tell housekeeping to trust that instinct.
 
+[pe1/evac_callback]
+caller = Mrs. Alvarez
+tone = serious
+day = 3
+weight = 2
+once = yes
+them: Hello? Who is this?
+aya: Officer Brea, NYPD. Dispatch gave me your number. You didn't evacuate.
+them: I can't. My son's on his way home from Jersey.
+them: If I'm gone, he walks into an empty apartment.
+aya: What's his name?
+them: Tommy. Tommy Alvarez. He's nineteen. He thinks he knows everything.
+aya: I'll tell Dispatch to watch for him. Where should I tell him to find you?
+them: My sister's, in Queens. ...All right. I'll go.
+aya: Tommy Alvarez, nineteen, knows everything. I've got it.
+
 # ---- Day 3: the precinct after the attack ----
 
 [pe1/precinct_down]
@@ -664,6 +681,23 @@ aya: Brea, sir. I'm on the cruiser. Is everyone off the waterfront?
 them: Battery Park's clear. The whole city is watching that harbor.
 aya: Then they can see we're still here, sir.
 them: Bring it home, Brea. That's an order.
+
+[pe1/precinct_names]
+caller = 17th Precinct
+tone = serious
+day = 6
+rooms = 276
+priority = 5
+once = yes
+them: 17th Precinct... I mean, hello?
+aya: This is Officer Brea. I need the desk sergeant, or Chief Baker.
+them: There's nobody here. Just me. Ruth. I clean the building.
+them: The phone kept ringing, so I answered it.
+aya: What have you been telling them?
+them: Nothing. I've been writing down names. Who they're looking for.
+aya: How many?
+them: Four pages. I didn't know what else to do.
+aya: You did right, Ruth. Read me the first name.
 
 
 # ======== Raccoon City, December 24-29, 1997 ========
