@@ -30,6 +30,11 @@ ADVANCE = [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6, 8, 11, 14, 9, 8, 7, 8, 7, 7, 8
 # What the English box moves its pen: with the English text flag the game sets
 # g_TextboxKernGlyph0F, and the box pulls every space (code 0x0F) back 7 px (textbox.c).
 BOX_ADVANCE = ADVANCE[:0x0F] + [ADVANCE[0x0F] - 7] + ADVANCE[0x10:]
+# The codes those tables measure: the game's own letters, 00-4C. The table's last entry, 4D, is a
+# 0 the game never draws; with a pack in use the language mod puts its first Latin Extended letter
+# there ("à") with its base letter's width, as it does every code from 4D on (install_widths in
+# mods/pe_lang/pe_lang.c), so those are measured as the mod draws them (_latin_advance).
+GAME_CODES = 0x4D
 WIDE = 12          # a glyph from the extra pages, a symbol, a digit of a number
 LINE_HEIGHT = 12
 
@@ -47,15 +52,17 @@ PACK_DRAWN: dict = {}
 def base_advance(code: int) -> int:
     """A fixed code's dialogue width, the space's before the box pulls it back: the pack's own
     picture's, else the game's (g_TextboxGlyphSpacing)."""
-    return PACK_DRAWN[code].advance() if code in PACK_DRAWN else ADVANCE[code]
+    if code in PACK_DRAWN:
+        return PACK_DRAWN[code].advance()
+    return ADVANCE[code] if code < GAME_CODES else (_latin_advance(code) or WIDE)
 
 
 def box_advance(code: int) -> int:
-    """How far the English box moves its pen after a code below 78 (BOX_ADVANCE), or a fixed code
-    the pack draws itself."""
+    """How far the English box moves its pen after a game code (BOX_ADVANCE), a fixed code the
+    pack draws itself, or a code from 4D on as the language mod draws it (GAME_CODES)."""
     if code in PACK_DRAWN:
         return PACK_DRAWN[code].advance() - (ADVANCE[0x0F] - BOX_ADVANCE[0x0F] if code == 0x0F else 0)
-    return BOX_ADVANCE[code]
+    return BOX_ADVANCE[code] if code < GAME_CODES else (_latin_advance(code) or WIDE)
 
 
 def base_metric(code: int, metrics: bytes) -> int:
@@ -208,7 +215,7 @@ def lines(b: bytes) -> list[int]:
             w += box_advance(c)
         elif c in PACK_LETTERS:
             w += PACK_LETTERS[c].advance()
-        elif c < len(BOX_ADVANCE):
+        elif c < GAME_CODES:
             w += BOX_ADVANCE[c]
         elif c < 0xF1:
             w += _latin_advance(c) or WIDE

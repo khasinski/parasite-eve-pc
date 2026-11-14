@@ -1,9 +1,10 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-battle-look,translator-look,translator-letters]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
-chinese, spanish, italian, german and french, original-game-text-renderer-chinese, -spanish, ...)
+chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
+-spanish, ...)
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). Nothing opens a
 window and nothing touches the user's own settings, cards or packs: every run has its own
@@ -130,6 +131,149 @@ Checks, each from pe_mods.log and frame dumps:
              Italian), adds its own, and draws its menus' spaces 5 px wide, which the pack's space is in
              the menus: on Disc 2, the load screen's help line (sys/080) must light exactly the pack's
              letters with those spaces. test_fr_matches_patch.py checks the text against the patched game.
+  english-pack  The game's own English as a pack (pelang.py english, made here from the player's discs: the
+             pack a new language starts from). With it chosen the game must be the game: a New Game
+             through the first boxes, the name entry, the boxes up to the free field and the status panel
+             (the menus part's route), every kept frame whole and pixel for pixel the frame of the same
+             route with no pack, while the log says the pack is the language in use and its text drew
+             (no letter falls back to '?'). On Disc 2 (PE_TEST_DISC2; else 77 after Disc 1): the Spanish
+             part's route from the Day 6 sample save, the day's title card and the five boxes on the
+             ship, again every frame the game's own. localization/tests/test_en_pack.py checks every row
+             of the pack against the disc's bytes.
+  translator  A file saved by the Translator (localization/translator/): the English pack opened as the
+             English, every row typed into a new translation as it is, and saved. The file must hold
+             the English pack's own bytes but for the few pages the compiler rewraps to their box,
+             carry the Translator's work part, and reopen as saved; and with it chosen the game must
+             be the game on the english-pack part's routes, both discs, every frame pixel for pixel.
+             So the game opens what the Translator writes, work part and all.
+  translator-pictures  Pictures redrawn in the Translator: three title screen pictures saved from
+             the disc as PNGs by the tool, redrawn (two 24-bit ones in new colours, the 16-colour one
+             with its own palette), loaded back through the window's scripted run (--picture) and
+             saved. The file must change those three pictures and no other; and with it chosen, the
+             title screen started from each disc must be, pixel for pixel, the title screen of a copy
+             of that disc with the file's pieces written in, and not the English one.
+  translator-map  The city map's place names redrawn in the Translator: the picture saved from the disc
+             as a PNG by the tool, three names redrawn in both their copies (the letters, and the letters
+             on the dark band), loaded back through the scripted run (--picture) and saved. The file must
+             change that picture and no other, to exactly the PNG's pixels; and with it chosen, the city
+             map (Continue from the save editor's Day 5 sample save, one Cross at the day's title card)
+             must be, pixel for pixel, the map of a copy of Disc 1 with the file's pieces written in, and
+             not the English one. Disc 1 only: no sample save reaches the map on Disc 2 (the Day 5 save
+             needs Disc 1; PE.IMG, and so the picture, is byte for byte the same on both discs).
+  translator-place-title  The city map's place titles as text (dlg/MAP, PE.IMG entry 76's bank): the
+             Translator's scripted run types "Parque Central" as words only into Central Park's title and
+             saves; the pack's line must be those words centred on the box's third line by the rule of
+             petext/citymap.py. Then on part translator-map's route, RIGHT and Cross to Central Park, the
+             title on the screen with the file chosen must be, pixel for pixel, the one of a copy of Disc 1
+             whose bank holds that line (and not the English), and with the English pack the game's own.
+             With PE_TEST_PLAYER_PACKS, each player pack translating that title likewise shows its line as
+             a disc holding it does. Disc 1 only (the map's entry is the same bytes on Disc 2).
+  translator-battle  The battle words redrawn in the Translator: the picture (PE.IMG entry 11: the words,
+             numbers and marks of a fight) saved from the disc as a PNG by the tool, every inked pixel's
+             grey step turned over (so every word and number drawn from it changes), loaded back
+             through the scripted run (--picture) and saved. The file must change that picture and no
+             other, to exactly the PNG's pixels; and with it chosen, the first fight (part battle's
+             route to Melissa, Aya's time bar full) must be, pixel for pixel, the fight on a copy of
+             Disc 1 with the file's pieces written in, and not the English one. Disc 1 only: the route
+             starts a New Game, which Disc 1 holds; PE.IMG, and so the picture, is the same on both.
+  translator-cards  The day title cards redrawn in the Translator: Days 2-5 (Disc 1) and Day 6 (Disc 2) saved
+             from the disc as PNGs by the tool, each with a new dark band of white and red "letters" over
+             its word (colours the squares there don't have, so they take other colour sets), loaded
+             back through the scripted run (--picture) and saved in one file. The file must change
+             those cards and no other picture, each to the PNG's pixels exactly; and Continuing each
+             day's sample save (A-D on Disc 1, F on Disc 2), the day's card on the screen must be, pixel
+             for pixel, the Translator's picture of it, the card on a copy of the disc with the file's
+             pieces written in, and with the file's text alone the Translator's picture of the
+             English card.
+  translator-tutorial  The Tutorial redrawn in the Translator: all 30 screens (the menu and the 29 pages of
+             words) saved from Disc 1 as PNGs by the tool, each with a dark band of white bars and a red
+             line over its words (the shadowed top rows of About Icons 5-9 and How to Save included), its
+             screenshot (but About Icons 8's, so the Tune-up screenshot loaded from 7's PNG must be kept)
+             and the menu's lines, loaded back through the scripted run (--picture) and saved in one file.
+             The file must change those screens, as the tool makes them from the PNGs, and no other
+             picture; and on the pad route of CTest original-game-tutorial (the whole Tutorial: both
+             controllers, icons, battle, save, each menu choice) every screen must be, pixel for pixel,
+             the Translator's picture of it (the menu with each choice picked: the copy with its green
+             ring), the screen on a copy of Disc 1 with the file's pieces written in, and with the file's
+             text alone the Translator's picture of the English screen. Disc 1 only.
+  translator-game-over  The Game Over words redrawn in the Translator: saved from Disc 1 as a PNG by the tool,
+             wiped and redrawn as pale bars over a red line (red is none of its 16 greens, so the nearest
+             is taken), loaded back through the scripted run (--picture) and saved. The file must change
+             Game Over, to the PNG's pixels and with its colours as they were, and no other picture; and
+             on part battle's route, with Aya's HP set to 1 by the game's own test switch so Melissa fells
+             her, two frames of the still Game Over (one at each of its two brightnesses) must be, pixel for
+             pixel, the screen on a copy of Disc 1 with the file's pieces written in, every ink pixel of the
+             words the Translator's in-game picture of them, and with the file's text alone the
+             Translator's English one. Disc 1 only: PE.IMG, and so the picture, is the same on Disc 2.
+  translator-menu-look  The Translator's "As in the game" preview of the menus' help line (translator/menulook.py)
+             against the game's own frames: a file saved by the Translator gives four help lines Spanish words
+             (the item menu's hint and three descriptions, one with an accented letter); on the menus part's
+             route on into the item list, the help window at the top of each frame (its edges over the
+             darkened scene, its letters, the clock's frame; the clock's digits show the play time, so they
+             are left out) must be, pixel for pixel, the Translator's drawing of that line over the field
+             frame from before the menu opened; and the same with the game's own text and the English pack.
+             The same file names Aya's five first items in Spanish: on the frames with the cursor on M84F,
+             Club 1 and Medicine 1, the item list's window (its cells: icons, names, count boxes, the blue
+             tiles of the equipped items, the cursor's bars and pulsing tile) must be, pixel for pixel, the
+             Translator's item list. The menus freeze the room while the list is up, so the scene behind
+             one frame's list is another frame's less what the Translator adds there (that frame's cursor
+             cell left out); the cursor's grey follows the frame counter and is read from the frame.
+             The PE list the same way: Continue from the save editor's sample save D (Day 5, ten PEs), to
+             the N.Y.P.D. lobby, Aya's HP put below full by the game's test switch, into the PE list with
+             the cursor on Heal 1, Heal 2 and Detox; the file names the ten PEs and those three's
+             descriptions in Spanish. The list's window (names, the heals bright and the others dimmed, the
+             cursor) and the help window above it must be the Translator's, pixel for pixel. (Behind the
+             help window: the lobby frame from before the menu, darkened as the frame's own free corner
+             is. The menus leave that room at about two thirds, not at the half of Carnegie Hall.)
+             The menus' boxes and choices the same way, with the file's Spanish for their rows: on the item
+             route, Cross on Medicine 1 (Use / Move / Discard, the cursor on Move, then Discard) and Cross
+             again ("Medicine 1 will be discarded" with OK / Cancel, the cursor on Cancel, then OK); on the
+             PE route, Cross on Heal 2 ("Heal 2 will be used", OK, then Cancel), and the Continue on the
+             way there ("Loading" with its blocks, "File loaded" with OK). These boxes cover what is under
+             them: each box must be the Translator's, pixel for pixel. A new game's config menu (status,
+             Down to SYS, Cross): the list with the cursor on each row, Mono / Stereo, Default / Memory and
+             the window colour's R and G, each with its hint in the help line. The config windows are the
+             see-through kind: the scene behind them is worked out from a second frame as for the lists,
+             and the help window is drawn over the field frame as above. Yes / No and the memory card's
+             other messages are drawn by the same code and have only the tool's unit tests.
+             Disc 1 only.
+  translator-battle-look  The Translator's "As in the game" preview of the battle lines (translator/battlelook.py)
+             against the game's own frames: part battle's route into the first fight (Melissa), Escape from
+             the battle menu, and "Can't escape!" (battle/010) shows on the battle bar at the bottom. With a
+             file the Translator saved (that line in Spanish) and with the game's own text and the English
+             pack, the bar and everything under it (rows 180 to the screen's end) must be, pixel for pixel,
+             the Translator's drawing of the line over the first fight's room (M005, its third view), on
+             several frames while the line is up; the file's line must not be the English one. The other
+             battle lines (the Scan panel's, "Failed to escape") need Aya to know Scan or a fight she can
+             run from: they are drawn by the same code and have only the tool's unit tests, and so has the
+             bar at the top. Disc 1 only.
+  translator-menu-words  The menus' words redrawn in the Translator: eight of the words the status menu shows
+             (Bonus Point, Offense, Level, Next Level, Equipment, Active Time, and the SYS and SORT icons)
+             saved from Disc 1 as PNGs by the tool, wiped and redrawn as pale bars over a red line (fitted to
+             the nearest of each word's 16 colours), loaded back through the scripted run (--picture) and
+             saved in one file. The file must change those words, to the PNGs' pixels and with their colours
+             as they were, and no other picture; and on the menus part's route, the status menu must be,
+             pixel for pixel, the menu on a copy of Disc 1 with the file's pieces written in, every ink
+             pixel of each word the Translator's picture of it as the menus draw it (the icons at half
+             brightness), see-through pixels as the English menu, and with the file's text alone the
+             Translator's English words. Disc 1 only: PE.IMG, and so the page, is the same on Disc 2.
+  translator-look  The Translator's "As in the game" preview (localization/translator/gamelook.py)
+             against the game's own frames: the first box with the English pack (made from the discs)
+             and with each player pack given (PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_), and the five
+             boxes on the ship on Disc 2: every letter pixel the tool draws is the frame's, and every
+             text pixel of the frame is one the tool draws. The first box's room (M010, found from the
+             room scripts) is the frame's background in its top rows, pixel for pixel.
+  translator-letters  Letters the game can't draw yet, drawn in a PNG (localization/translator/letterart.py):
+             Greek, Hebrew and Arabic. For each, a file with made-up lines in that language (the first box
+             and the five boxes on the ship) is opened in the Translator's scripted window, which saves
+             the letters PNG (with Disc 1 chosen: the game's own letters as a style guide); every square
+             is painted with a made-up letter of its own (Arabic shapes reach the sides they join on) and
+             the window loads the PNG back and saves the file. Every square must come back drawn, the
+             pack must hold each letter the lines use as exactly the painted dots plus the shadow (one
+             dot right and below) at the width of its rightmost dot + 2, and the language mod must draw
+             no '?'. On Disc 1 the first box, and on Disc 2 the five boxes on the ship, must be pixel for
+             pixel the Translator's "As in the game" drawing of them (right to left for Hebrew and
+             Arabic, Arabic joined), with every painted letter among the pictures it draws.
 """
 import binascii
 import csv
@@ -146,7 +290,7 @@ import sys
 import tempfile
 import typing
 
-SELECT, START, UP, DOWN, TRIANGLE, CROSS = 1, 8, 16, 64, 4096, 16384
+SELECT, START, UP, RIGHT, DOWN, TRIANGLE, CROSS = 1, 8, 16, 32, 64, 4096, 16384
 NEW_GAME = [(10000, START), (10010, 0), (11000, UP), (11010, 0), (11500, CROSS), (11510, 0)]
 FIRST_BOX = 18000          # dlg/M001/009 "Man: What's wrong?..." is on screen and waits
 NAME_BOX = 19000           # dlg/M001/010 "{name}: ...I dunno..." after one Cross
@@ -806,19 +950,22 @@ def pieces_written_in(cue, pieces, out):
     return str(sheet), len(writes)
 
 
-def check_title_pictures(game, discs, out, part, label, pack, plain_pack, pieces, title_words):
+def check_title_pictures(game, discs, out, part, label, pack, plain_pack, pieces, title_words, disc=0):
     """The title screen with the pack on the player's disc against the game on a copy of the disc with
     the pack's picture pieces written in (as a patched disc holds them) and the pack's text alone
     (`plain_pack`): the same frame, pixel for pixel; with the text alone on the player's disc, the
-    English words (`title_words`: where they are, or None for anywhere on the frame)."""
+    English words (`title_words`: where they are, or None for anywhere on the frame). `disc`: which
+    of `discs` the game starts from (0: Disc 1)."""
     log_pieces = re.compile(rf'{re.escape(label)}, \d+ entries, {len(pieces)} picture pieces')
+    number, tag = disc + 1, '' if disc == 0 else f'-disc{disc + 1}'
     try:
-        written = [pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')]
-        check(written[0][1] == len(pieces), f'only {written[0][1]} of {len(pieces)} pieces land on Disc 1')
+        written = [pieces_written_in(discs[disc], pieces, out / 'discs' / f'disc{number}')]
+        check(written[0][1] == len(pieces), f'only {written[0][1]} of {len(pieces)} pieces land on Disc {number}')
         title = [(TITLE_AT, 'title', None)]
-        frames = {which: run_fixed(game, use, out / f'{part}-title-{which}', title, pack=p)
-                  for which, use, p in (('pack', discs[:1], pack), ('written-in', [written[0][0]], plain_pack),
-                                        ('text-only', discs[:1], plain_pack))}
+        mine = discs[disc:disc + 1]
+        frames = {which: run_fixed(game, use, out / f'{part}-title{tag}-{which}', title, pack=p)
+                  for which, use, p in (('pack', mine, pack), ('written-in', [written[0][0]], plain_pack),
+                                        ('text-only', mine, plain_pack))}
         check(log_pieces.search(mods_log(frames['pack'])) and 'its pictures are in use' in mods_log(frames['pack']),
               f'the pack\'s {len(pieces)} picture pieces were not loaded and put in: {frames["pack"]}')
         check(lit(frames['text-only'], 'title', PRESS_START) > 100, f'no title screen at vblank {TITLE_AT}: '
@@ -829,8 +976,8 @@ def check_title_pictures(game, discs, out, part, label, pack, plain_pack, pieces
         words = (lambda w: crop(w, 'title', title_words)) if title_words else (lambda w: frame(w, 'title'))
         check(words(frames['pack']) != words(frames['text-only']),
               f'the title screen\'s words are still English: {frames["pack"]}')
-        print(f'PASS {part} pictures, disc 1: the {len(pieces)} pieces loaded; the title screen\'s words are the '
-              "patch's picture, pixel for pixel as on the disc with the pieces written in")
+        print(f'PASS {part} pictures, disc {number}: the {len(pieces)} pieces loaded; the title screen\'s words '
+              "are the pack's picture, pixel for pixel as on the disc with the pieces written in")
     finally:
         shutil.rmtree(out / 'discs', ignore_errors=True)
 
@@ -865,6 +1012,1813 @@ def german_patch(game, discs, out, localization):
 
 def french_patch(game, discs, out, localization):
     return fan_patch(game, discs, out, localization, FRENCH)
+
+
+def same_frames(plain, packed, labels, what):
+    """Every kept frame of the run with the pack is, whole and pixel for pixel, the run's without."""
+    for label in labels:
+        a, b = frame(plain, label), frame(packed, label)
+        if a != b:
+            width, rgb_a, rgb_b = a[0], a[2], b[2]
+            at = next((i // 3 for i in range(0, min(len(rgb_a), len(rgb_b)), 3) if rgb_a[i:i + 3] != rgb_b[i:i + 3]), 0)
+            raise Failed(f'{what}: frame "{label}" with the pack is not the game\'s own (first '
+                         f'difference at x {at % width}, y {at // width}): {packed}')
+
+
+def make_english_pack(discs, out, localization):
+    """(the English pack `pelang.py english` makes from the discs, the rows it holds, the game's rows)."""
+    text = out / 'text'
+    subprocess.run([sys.executable, '-I', str(localization / 'extract_text.py'), *discs, '--out', str(text)],
+                   check=True, stdout=subprocess.DEVNULL)
+    path = out / 'en.pelang'
+    made = subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'english',
+                           str(text / 'strings.json'), '-o', str(path)], capture_output=True, text=True)
+    check(made.returncode == 0, f'pelang.py english failed: {made.stdout[-600:]}{made.stderr[-600:]}')
+    rows = re.search(r'(\d+) of (\d+) rows', made.stdout)
+    check(rows and int(rows[1]) >= 2800, f'the English pack holds too few rows: {made.stdout[:300]}')
+    return path, rows[1], rows[2]
+
+
+def game_is_its_own(game, discs, out, pack, tag, what):
+    """With `pack` (the game's own text) chosen, every kept frame of the menus part's route, and of
+    the Disc 2 route, is the frame without it. 77 after the Disc 1 checks when PE_TEST_DISC2 isn't set."""
+    name = f'{pack[1]} ({pack[0]})'
+
+    def in_use(work, where):
+        log = mods_log(work)
+        check(f'pe_lang: language: {name}' in log, f'{where}: {pack[1]} is not the language in use: {work}')
+        check(f"text: {name}'s stretches in use" in log, f"{where}: none of the pack's text drew: {work}")
+        missing = [line for line in log.splitlines()
+                   if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line)]
+        check(not missing, f'{where}: letters fell back to "?": {missing[:5]}: {work}')
+
+    plain = run_fixed(game, discs, out / f'{tag}-off', MENU_STEPS, pad=NEW_GAME)
+    packed = run_fixed(game, discs, out / f'{tag}-on', MENU_STEPS, pack=pack, pad=NEW_GAME)
+    in_use(packed, 'Disc 1')
+    check(lit(plain, 'first', BOX) > 200 and lit(plain, 'grid', GRID) > 200 and lit(plain, 'status', STATUS_NAME) > 20,
+          f'the route did not reach the first box, the name entry and the status panel: {plain}')
+    labels = [label for _, label, _ in MENU_STEPS]
+    same_frames(plain, packed, labels, 'Disc 1')
+    print(f'PASS {what}, Disc 1: a New Game through the first boxes, the name entry and the status panel is the '
+          f'game\'s own, all {len(labels)} frames pixel for pixel')
+    if len(discs) < 2:
+        print(f'SKIP {what} on Disc 2: PE_TEST_DISC2 is not set')
+        return 77
+    plain, _ = run_disc2(game, discs, out / f'{tag}-disc2-off', None)
+    packed, room = run_disc2(game, discs, out / f'{tag}-disc2-on', pack)
+    in_use(packed, 'Disc 2')
+    labels = [label for _, label, _ in disc2_steps()]
+    check(all(lit(plain, label, BOX) > 100 for label in DISC2_BOXES), f"the ship's boxes are not on screen: {plain}")
+    same_frames(plain, packed, labels, 'Disc 2')
+    print(f'PASS {what}, Disc 2 (room {room}): the day\'s title card and the five boxes on the ship are the '
+          f'game\'s own, all {len(labels)} frames pixel for pixel')
+    return 0
+
+
+def english_pack(game, discs, out, localization):
+    """Part english-pack (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't set."""
+    path, held, total = make_english_pack(discs, out, localization)
+    print(f'english pack: {held} of {total} rows, each byte for byte the game\'s')
+    return game_is_its_own(game, discs, out, ('en', 'English pack', None, path), 'english-pack', 'english pack')
+
+
+def translator_file(game, discs, out, localization):
+    """Part translator (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't set."""
+    path, _, _ = make_english_pack(discs, out, localization)
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from translator import project
+    rows = project.Game()
+    english, wrong = project.read_english(path, rows)
+    check(wrong == 0 and len(english) >= 2800, f'the Translator reads {wrong} rows of the English pack wrong')
+    work = project.Translation(rows, 'en', 'Translator file')
+    for key, text in english.items():
+        work.set_text(key, text)
+    saved = out / 'translator.pelang'
+    report = work.save(saved)
+    check(not report.left_out and not report.whole,
+          f'the Translator left rows of the game\'s own text out: {list(report.left_out.items())[:5]} {report.whole}')
+    with zipfile.ZipFile(saved) as z:
+        check(project.WORK in z.namelist() and 'text.bin' in z.namelist(), f'not a Translator file: {z.namelist()}')
+    # It holds the game's own bytes, but for the pages the compiler rewrapped (English that runs past its
+    # box) and the city map's lines: shown and typed as words, they are centred by the compiler's rule,
+    # which puts some a space from where the English put them by eye (petext/citymap.py).
+    from petext import citymap
+    was, now = pelang.read_pack(path)[2], pelang.read_pack(saved)[2]
+    changed = sorted(rows.by_hash[h] for h in was if h in rows.by_hash and now.get(h) != was[h])
+    respaced = [k for k in changed if citymap.placed(k)]
+    words = lambda raw: [line.lstrip(b'\x0f') for line in raw.split(b'\xf7')]
+    check(all(words(now[pelang.fnv1a(k)]) == words(was[pelang.fnv1a(k)]) for k in respaced),
+          f'the city map lines\' words changed: {respaced}')
+    changed = [k for k in changed if k not in respaced]
+    wrapped = sorted(k for k, said in report.warnings.items() if any('wrapped to fit' in w for w in said))
+    check(set(now) == set(was) and changed == wrapped and len(changed) < 10,
+          f'the Translator\'s file differs from the English pack in {changed[:10]}; rewrapped: {wrapped[:10]}')
+    again = project.Translation.open(saved, rows)
+    check(again.from_work and again.texts == english and not again.locked, 'the file does not reopen as it was saved')
+    print(f'translator file: {report.in_pack} rows saved by the Translator, {len(now) - len(changed) - len(respaced)} '
+          f'entries byte for byte the English pack\'s, {len(changed)} pages rewrapped to their box '
+          f'({", ".join(changed)}), {len(respaced)} city map lines centred by the rule; reopens as saved')
+    return game_is_its_own(game, discs, out, ('en', 'Translator file', None, saved), 'translator', 'translator file')
+
+
+def translator_pictures(game, discs, out, localization):
+    """Part translator-pictures (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2
+    isn't set."""
+    import json
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator pictures: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    # Each picture saved from the disc by the Translator, redrawn as a person would in a paint
+    # program: the 24-bit words on black in new colours, the 16-colour line with its own colours.
+    redraw = {'title/press-start': (255, 220, 40), 'title/new-game': (80, 200, 255), 'title/published-by': None}
+    loads = []
+    for pid, colour in redraw.items():
+        pic = artwork.BY_ID[pid]
+        saved = out / f'{pid.replace("/", "-")}.png'
+        saved.write_bytes(artwork.png(pic, disc.english[pid]))
+        img = Image.open(saved)
+        if colour:
+            img = img.convert('RGB')
+            draw = ImageDraw.Draw(img)
+            draw.rectangle((0, 0, img.width - 1, img.height - 1), fill=(0, 0, 0))
+            for x in range(4, img.width - 4, 6):
+                draw.rectangle((x, 5, x + 2, img.height - 6), fill=colour)
+        else:
+            draw = ImageDraw.Draw(img)                 # a palette picture: drawn with palette number 15
+            draw.rectangle((8, 8, img.width // 2, 20), fill=15)
+        img.save(saved)
+        loads += ['--picture', f'{pid}={saved}']
+    path, report = out / 'translator-pictures.pelang', out / 'translator-pictures-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Pictures test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], *loads], capture_output=True, text=True, timeout=300)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the pictures: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    for pid in redraw:
+        check(artwork.redrawn(disc, artwork.BY_ID[pid], pieces), f'{pid} is not in the saved file')
+    others = [p.id for p in artwork.PICTURES if p.id not in redraw and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-pictures-text.pelang'           # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Pictures test', None, path), ('es', 'Pictures test', None, plain)
+    print(f'translator pictures: the Translator saved {len(redraw)} redrawn pictures as {len(pieces)} pieces')
+    for n in range(len(discs)):
+        check_title_pictures(game, discs, out, 'translator-pictures', 'Pictures test (es)', pack, text_only, pieces,
+                             PRESS_START, disc=n)
+    if len(discs) < 2:
+        print('SKIP translator pictures on Disc 2: PE_TEST_DISC2 is not set')
+        return 77
+    return 0
+
+
+# ---- Part translator-map: the city map's place names ----
+
+# The save editor's sample save D (save-editor/samples, in the repository; a save holds no disc data):
+# Day 5. After the load the day's title card waits for Cross; then the city map (scene MAP_SCENE) is
+# on screen from about vblank 16400 and waits for a choice, eight place names showing (Subway and
+# Chrysler BLDG. are not offered that day), N.Y.P.D. #17 in gold as the place Aya is at.
+MAP_SAVE = Path(__file__).resolve().parent.parent / 'save-editor' / 'samples' / 'bu00' / 'BASLUS-006620000000D'
+MAP_SCENE = 0xA8000048
+MAP_AT = 16800
+# Rows of the picture (13 each, from 0) redrawn by part translator-map: Chinatown, N.Y.P.D. #17 (the
+# gold one that day) and Central Park.
+MAP_REDRAWN = (1, 7, 8)
+
+
+def map_steps():
+    steps = loaded_steps()[:-3]                 # Continue from card 1, slot 1, up to the loaded game
+    return steps + presses([(16200, CROSS, 'day-card'), (MAP_AT, 0, 'map')])
+
+
+def scene_at(work, vblank):
+    """The scene the game was in at that control point (its game.log)."""
+    for line in (work / 'game.log').read_text(encoding='utf-8', errors='replace').splitlines():
+        if line.startswith('{"event":"control"'):
+            event = json.loads(line)
+            if event['vblanks'] == vblank:
+                return event['scene']
+    return None
+
+
+def translator_map(game, discs, out, localization):
+    """Part translator-map (see the module notes). Disc 1 only."""
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures, tim as timlib
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator map: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    check(MAP_SAVE.is_file(), f'no sample save {MAP_SAVE}')
+    disc = artwork.Disc(discs[0])
+    pic = artwork.BY_ID['map/place-names']
+    # Saved from the disc by the Translator and redrawn as a person would in a paint program: in each
+    # redrawn name's row, the letters copy (left) and the dark band copy (right) painted over with
+    # the picture's own colours, then kept as an ordinary RGB PNG.
+    saved = out / 'map-place-names.png'
+    saved.write_bytes(artwork.png(pic, disc.english[pic.id]))
+    img = Image.open(saved)
+    check(img.mode == 'P' and img.size == (256, 143), f'the saved map picture is {img.mode} {img.size}')
+    draw = ImageDraw.Draw(img)
+    for row in MAP_REDRAWN:
+        top = row * 13
+        draw.rectangle((0, top, 126, top + 11), fill=0)
+        draw.rectangle((128, top, 254, top + 11), fill=0)
+        for x in range(2, 110, 9):                      # new "letters": bars, and under them the band
+            draw.rectangle((x, top + 2, x + 4, top + 10), fill=15)
+            draw.rectangle((128 + x, top + 1, 128 + x + 7, top + 11), fill=5)
+            draw.rectangle((128 + x, top + 2, 128 + x + 4, top + 10), fill=15)
+    img.convert('RGB').save(saved)
+    expected = artwork.from_png(pic, disc.english[pic.id], saved.read_bytes()).tim
+    path, report = out / 'translator-map.pelang', out / 'translator-map-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Map test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
+                         timeout=300)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the map picture: {said} '
+                                                 f'{ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    shown = artwork.shown(disc, pic, pieces)
+    check(shown == expected, "the saved map picture is not the PNG's pixels")
+    now, was = timlib.indices(timlib.read(shown)), timlib.indices(timlib.read(disc.english[pic.id]))
+    changed = sorted({k // 256 // 13 for k, (a, b) in enumerate(zip(now, was)) if a != b})
+    check(changed == list(MAP_REDRAWN), f'the saved map picture changed rows {changed}, not {list(MAP_REDRAWN)}')
+    others = [p.id for p in artwork.PICTURES if p.id != pic.id and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-map-text.pelang'                # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Map test', None, path), ('es', 'Map test', None, plain)
+    print(f'translator map: the Translator saved the redrawn place names (rows {list(MAP_REDRAWN)}) as '
+          f'{len(pieces)} pieces')
+    log_pieces = re.compile(rf'Map test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        steps = map_steps()
+        frames = {which: run_fixed(game, use, out / f'translator-map-{which}', steps, pack=p, pad=CONTINUE,
+                                   card=MAP_SAVE.read_bytes())
+                  for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                        ('text-only', discs[:1], text_only))}
+        for which, work in frames.items():
+            check(scene_at(work, MAP_AT) == MAP_SCENE, f'{which}: the city map is not on screen at vblank {MAP_AT}: '
+                                                       f'{work}')
+        check(log_pieces.search(mods_log(frames['pack'])) and 'its pictures are in use' in mods_log(frames['pack']),
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {frames['pack']}")
+        check(frame(frames['pack'], 'map') == frame(frames['written-in'], 'map'),
+              f'the city map with the file is not the one of the disc with its pieces written in: '
+              f"{frames['pack']} vs {frames['written-in']}")
+        _, _, mine = frame(frames['pack'], 'map')
+        _, _, english = frame(frames['text-only'], 'map')
+        differ = sum(1 for k in range(0, len(mine), 3) if mine[k:k + 3] != english[k:k + 3])
+        check(differ > 300, f"the city map's place names are still English ({differ} pixels differ): "
+                            f"{frames['pack']}")
+        print(f"PASS translator map, disc 1: the {len(pieces)} pieces loaded; the city map's place names are the "
+              f"file's picture, pixel for pixel as on the disc with the pieces written in ({differ} pixels differ "
+              'from the English map)')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
+# ---- Part translator-place-title: the city map's place titles as text ----
+
+# Part translator-map's route, then RIGHT (to Central Park, the place next to N.Y.P.D. #17 that day) and
+# Cross: the camera flies to the park and its title (dlg/MAP/004) shows at the bottom from about vblank
+# 17260; PLACE_AT is well inside that.
+PLACE_KEY, PLACE_AT = 'dlg/MAP/004', 17620
+PLACE_TITLE = (0, 170, 320, 230)                # where the title is drawn (the box's three lines)
+PLACE_WORDS = 'Parque Central'
+
+
+def place_steps():
+    return map_steps()[:-1] + presses([(MAP_AT, 0, 'map'), (MAP_AT + 10, 32, 'right'), (17000, CROSS, 'cross'),
+                                       (PLACE_AT, 0, 'title')])
+
+
+def city_map_written_in(cue, localization, page, raw, out):
+    """A copy of `cue` whose city map bank (PE.IMG entry 76) has page `page` replaced by `raw` (the
+    pack's bytes for it), as a disc patched with that line would hold it; the bank keeps its place
+    and the parts after it, padded with zeros up to them."""
+    sys.path.insert(0, str(localization))
+    from petext import citymap, gametext as gt, pictures
+    from petext.disc import Game
+    import zlib
+    game = Game(cue)
+    try:
+        entry, start = citymap.entry_bytes(game), game.sectors[citymap.ENTRY]
+    finally:
+        game.disc.f.close()
+    parts = citymap.parts(entry)
+    pages, used = gt.pages(citymap.english_bank(entry))
+    page_bytes = lambda ps: b''.join(b'\xfe' + bytes([p]) + text + bytes([end]) for p, (text, end) in sorted(ps.items()))
+    check(page_bytes(pages) == entry[parts[1]:parts[1] + used], 'the city map bank does not read back as its pages')
+    # (a pack keeps a page's own F9 end after its text; any other page ends as the game's does)
+    pages[page] = (raw[:-1], 0xF9) if raw.endswith(b'\xf9') else (raw, pages[page][1])
+    bank = page_bytes(pages)
+    room = parts[2] - parts[1]
+    # A longer line than the English's: room is made by emptying the narration pages (11-14), which
+    # this route never shows; the page asked for and the place titles stay.
+    for spare in (14, 13, 12, 11):
+        if len(bank) <= room or spare == page:
+            continue
+        pages[spare] = (b'', pages[spare][1])
+        bank = page_bytes(pages)
+    check(len(bank) <= room and parts[2] <= 2048, f'the new bank ({len(bank)} bytes) does not fit its {room}')
+    english = entry[parts[1]:parts[2]]
+    piece = pictures.Piece(start, parts[1], zlib.crc32(english), bank + bytes(room - len(bank)))
+    return pieces_written_in(cue, [piece], out)
+
+
+def translator_place_title(game, discs, out, localization):
+    """Part translator-place-title (see the module notes). Disc 1 only."""
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import citymap, gametext as gt
+    check(MAP_SAVE.is_file(), f'no sample save {MAP_SAVE}')
+    # The Translator: a new translation with the place title typed as words only.
+    path, report = out / 'translator-place-title.pelang', out / 'translator-place-title-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Place test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--select', PLACE_KEY, '--type', PLACE_WORDS], capture_output=True, text=True, timeout=300)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok') and said.get('row_state') == 'ok',
+          f'the Translator did not save the place title: {said} {ran.stderr[-600:]}')
+    raw = pelang.read_pack(path)[2][pelang.fnv1a(PLACE_KEY)]
+    # Centred and on the box's third line, as the English titles are (the rule, worked out apart).
+    width = gt.lines(gt.encode(PLACE_WORDS))[0]
+    spaces = max(0, (2 * citymap.CENTRE['title'] - width + 7) // 14)
+    check(raw == b'\xf7\xf7' + b'\x0f' * spaces + gt.encode(PLACE_WORDS),
+          f'the place title is not centred on the third line: {raw.hex(" ")}')
+    pack = ('es', 'Place test', None, path)
+    english_path, _, _ = make_english_pack(discs, out, localization)
+    english_pack = ('en', 'English pack', None, english_path)
+    steps = place_steps()
+    runs = [('plain', discs[:1], None), ('pack', discs[:1], pack), ('english-pack', discs[:1], english_pack)]
+    players = {}
+    for p in player_packs_given():
+        lang, name, entries = pelang.read_pack(p)
+        if pelang.fnv1a(PLACE_KEY) in entries:
+            players[lang] = ((lang, name, None, p), entries[pelang.fnv1a(PLACE_KEY)])
+    try:
+        written = {'pack': city_map_written_in(discs[0], localization, 4, raw, out / 'discs' / 'pack')}
+        for lang, (player, line) in players.items():
+            written[lang] = city_map_written_in(discs[0], localization, 4, line, out / 'discs' / lang)
+            runs += [(lang, discs[:1], player), (f'{lang}-written-in', [written[lang][0]], player)]
+        runs.append(('written-in', [written['pack'][0]], pack))
+        frames = {which: run_fixed(game, use, out / f'place-title-{which}', steps, pad=CONTINUE,
+                                   card=MAP_SAVE.read_bytes(), **({'pack': p} if p else {}))
+                  for which, use, p in runs}
+        for which, work in frames.items():
+            check(scene_at(work, MAP_AT) == MAP_SCENE, f'{which}: the city map is not on screen at vblank {MAP_AT}')
+        title = lambda which: crop(frames[which], 'title', PLACE_TITLE)
+        check(lit(frames['plain'], 'title', PLACE_TITLE) > 100, f'no place title on screen: {frames["plain"]}')
+        check(frame(frames['english-pack'], 'title') == frame(frames['plain'], 'title'),
+              f'with the English pack the place title is not the game\'s own: {frames["english-pack"]}')
+        check(frame(frames['pack'], 'title') == frame(frames['written-in'], 'title'),
+              f'the place title with the file is not the one of a disc holding that line: {frames["pack"]}')
+        check(title('pack') != title('plain'), f'the place title is still English: {frames["pack"]}')
+        print(f'PASS translator place title, disc 1: "{PLACE_WORDS}" typed as words is centred on the third line; '
+              f'with the file the title is, pixel for pixel, the one of a disc holding that line; with the English '
+              f'pack it is the game\'s own')
+        for lang in players:
+            check(frame(frames[lang], 'title') == frame(frames[f'{lang}-written-in'], 'title'),
+                  f'{lang}: the place title is not the pack\'s line as a disc holding it shows it: {frames[lang]}')
+            print(f'PASS translator place title, player pack {lang}: the title is its line, pixel for pixel as a '
+                  f'disc holding that line shows it')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
+def player_packs_given():
+    """The player packs of PE_TEST_PLAYER_PACKS (a folder of .pelang files), if it is set."""
+    folder = os.getenv('PE_TEST_PLAYER_PACKS')
+    return sorted(Path(folder).glob('*.pelang')) if folder and Path(folder).is_dir() else []
+
+
+# ---- Part translator-battle: the battle words ----
+
+FIGHT_AT = 65600                # part battle's route: in the Melissa fight, Aya's time bar full
+
+
+def translator_battle(game, discs, out, localization):
+    """Part translator-battle (see the module notes). Disc 1 only."""
+    import zipfile
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures, tim as timlib
+    try:
+        from PIL import Image
+    except ImportError:
+        print('SKIP translator battle: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    pic = artwork.BY_ID['battle/words']
+    # Saved from the disc by the Translator and redrawn in a paint program: every inked pixel's grey step
+    # turned over (step n to 16 - n; 0, the see-through black, stays), kept as an ordinary RGB PNG.
+    saved = out / 'battle-words.png'
+    saved.write_bytes(artwork.png(pic, disc.english[pic.id]))
+    img = Image.open(saved)
+    check(img.mode == 'P' and img.size == (256, 32), f'the saved battle words picture is {img.mode} {img.size}')
+    img = img.point(lambda n: 16 - n if 0 < n < 16 else n)
+    img.convert('RGB').save(saved)
+    expected = artwork.from_png(pic, disc.english[pic.id], saved.read_bytes()).tim
+    path, report = out / 'translator-battle.pelang', out / 'translator-battle-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Battle test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
+                         timeout=300)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the battle words: {said} '
+                                                 f'{ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    shown = artwork.shown(disc, pic, pieces)
+    check(shown == expected, "the saved battle words are not the PNG's pixels")
+    now, was = timlib.indices(timlib.read(shown)), timlib.indices(timlib.read(disc.english[pic.id]))
+    check(all(a == (16 - b if b else 0) for a, b in zip(now, was)), 'the saved battle words are not turned over')
+    check(timlib.read(shown).palettes == timlib.read(disc.english[pic.id]).palettes, 'the colours changed')
+    others = [p.id for p in artwork.PICTURES if p.id != pic.id and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-battle-text.pelang'             # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Battle test', None, path), ('es', 'Battle test', None, plain)
+    print(f'translator battle: the Translator saved the redrawn battle words as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Battle test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        steps = presses([(FIGHT_AT, 0, 'fight')])
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            runs = {which: pool.submit(run_fixed, game, use, out / f'translator-battle-{which}', steps, pack=p,
+                                       pad=BATTLE_ROUTE)
+                    for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                          ('text-only', discs[:1], text_only))}
+            frames = {which: run.result() for which, run in runs.items()}
+        check(log_pieces.search(mods_log(frames['pack'])) and 'its pictures are in use' in mods_log(frames['pack']),
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {frames['pack']}")
+        check(frame(frames['pack'], 'fight') == frame(frames['written-in'], 'fight'),
+              f'the fight with the file is not the one on the disc with its pieces written in: '
+              f"{frames['pack']} vs {frames['written-in']}")
+        _, _, mine = frame(frames['pack'], 'fight')
+        _, _, english = frame(frames['text-only'], 'fight')
+        differ = sum(1 for k in range(0, len(mine), 3) if mine[k:k + 3] != english[k:k + 3])
+        check(differ > 100, f'the fight still shows the English battle words ({differ} pixels differ): '
+                            f"{frames['pack']}")
+        print(f"PASS translator battle, disc 1: the {len(pieces)} pieces loaded; the fight draws the file's battle "
+              f'words, pixel for pixel as on the disc with the pieces written in ({differ} pixels differ from the '
+              'English fight)')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
+# ---- Part translator-cards: the day title cards ----
+
+SAMPLES = Path(__file__).resolve().parent.parent / 'save-editor' / 'samples' / 'bu00'
+# Card, sample save (save-editor/samples: a save holds no disc data), disc (0: Disc 1): Continue shows
+# the day's card from before CARD_AT until Cross.
+CARDS = (('day/2', 'A', 0), ('day/3', 'B', 0), ('day/4', 'C', 0), ('day/5', 'D', 0), ('day/6', 'F', 1))
+CARD_AT = 16190
+
+
+def translator_cards(game, discs, out, localization):
+    """Part translator-cards (see the module notes). Day 6 needs Disc 2."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator cards: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    cards = [c for c in CARDS if c[2] < len(discs)]
+    if len(cards) < len(CARDS):
+        print('translator cards: no PE_TEST_DISC2, Day 6 (Disc 2) left out')
+    disc = artwork.Disc(discs[0])
+    args, expected = [], {}
+    for pid, _, _ in cards:
+        pic, layout = artwork.BY_ID[pid], disc.layout[pid]
+        # Saved by the Translator and redrawn in a paint program: over the word at the bottom left, a
+        # dark band with white bars and a red line (colours the squares there don't have), saved as RGB.
+        saved = out / f"card-{pid.replace('/', '-')}.png"
+        saved.write_bytes(artwork.png(pic, disc.english[pid], layout))
+        img = Image.open(saved)
+        check(img.size == (320, 224), f'the saved card {pid} is {img.size}')
+        img = img.convert('RGB')
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((36, 158, 196, 186), fill=(8, 8, 16))
+        for x in range(42, 190, 10):
+            draw.rectangle((x, 163, x + 5, 180), fill=(255, 255, 255))
+        draw.line((40, 183, 192, 183), fill=(230, 20, 20), width=2)
+        img.save(saved)
+        expected[pid] = artwork.from_png(pic, disc.english[pid], saved.read_bytes(), None, layout)
+        check(any('took another set of colours' in n for n in expected[pid].notes),
+              f'no square of {pid} took another colour set: {expected[pid].notes}')
+        args += ['--picture', f'{pid}={saved}']
+    path, report = out / 'translator-cards.pelang', out / 'translator-cards-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Cards test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], *args], capture_output=True, text=True, timeout=600)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the cards: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    for pid, _, _ in cards:
+        check(artwork.shown(disc, artwork.BY_ID[pid], pieces) == expected[pid].tim,
+              f"the saved card {pid} is not the PNG's pixels")
+    redrawn = {pid for pid, _, _ in cards}
+    others = [p.id for p in artwork.PICTURES if p.id not in redrawn and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-cards-text.pelang'              # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Cards test', None, path), ('es', 'Cards test', None, plain)
+    print(f'translator cards: the Translator saved {len(cards)} redrawn day cards as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Cards test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    steps = loaded_steps()[:-3] + presses([(CARD_AT, 0, 'card')])
+    try:
+        written = {}
+        for k in sorted({c[2] for c in cards}):
+            written[k], landed = pieces_written_in(discs[k], pieces, out / 'discs' / f'disc{k + 1}')
+            check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc {k + 1}')
+        jobs = {}
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for pid, save, k in cards:
+                card = (SAMPLES / f'BASLUS-006620000000{save}').read_bytes()
+                copy = list(discs[:k + 1])
+                copy[k] = written[k]
+                for which, use, p in (('pack', discs[:k + 1], pack), ('written-in', copy, text_only),
+                                      ('text-only', discs[:k + 1], text_only)):
+                    jobs[(pid, which)] = pool.submit(run_fixed, game, use, out / f"cards-{pid.replace('/', '-')}-{which}",
+                                                     steps, pack=p, pad=CONTINUE, card=card)
+            works = {key: job.result() for key, job in jobs.items()}
+        for pid, save, k in cards:
+            pic, layout = artwork.BY_ID[pid], disc.layout[pid]
+            frames = {which: frame(works[(pid, which)], 'card') for which in ('pack', 'written-in', 'text-only')}
+            mine = artwork.image(pic, expected[pid].tim, layout).tobytes()
+            english = artwork.image(pic, disc.english[pid], layout).tobytes()
+            log = mods_log(works[(pid, 'pack')])
+            check(log_pieces.search(log) and 'its pictures are in use' in log,
+                  f"{pid}: the file's {len(pieces)} picture pieces were not loaded and put in: {works[(pid, 'pack')]}")
+            check(frames['text-only'][2] == english,
+                  f"{pid}: with the text alone the screen is not the Translator's picture of the English card: "
+                  f"{works[(pid, 'text-only')]}")
+            check(frames['pack'] == frames['written-in'],
+                  f'{pid}: the card with the file is not the one on the disc with its pieces written in: '
+                  f"{works[(pid, 'pack')]} vs {works[(pid, 'written-in')]}")
+            check(frames['pack'][2] == mine, f"{pid}: the card with the file is not the Translator's picture of it: "
+                                             f"{works[(pid, 'pack')]}")
+            differ = sum(1 for i in range(0, len(mine), 3) if mine[i:i + 3] != english[i:i + 3])
+            print(f"PASS translator cards, {pid} (save {save}, Disc {k + 1}): the card on the screen is the "
+                  f"Translator's picture of it, pixel for pixel, and the one on the disc with the pieces written in "
+                  f"({differ} pixels differ from the English card)")
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
+# ---- Part translator-tutorial: the Tutorial's screens ----
+
+# The pad route of CTest original-game-tutorial (tests/actor_animation/test_native_replays.inc,
+# original_native_tutorial: real input through the whole Tutorial), read from that file so the two stay one.
+REPLAYS = Path(__file__).resolve().parent / 'actor_animation' / 'test_native_replays.inc'
+# The screen on show at each of the route's control points kept (index: picture id, # the menu's choice),
+# found by matching the game's frames with the Translator's pictures (every page, 0 pixels differing).
+TUTORIAL_AT = {0: 'tutorial/menu#1', 2: 'tutorial/controller-1', 3: 'tutorial/controller-2',
+               5: 'tutorial/controller-3', 7: 'tutorial/controller-4', 9: 'tutorial/controller-5',
+               11: 'tutorial/controller-6', 15: 'tutorial/analog-1', 17: 'tutorial/analog-2', 19: 'tutorial/analog-3',
+               21: 'tutorial/analog-4', 23: 'tutorial/analog-5', 25: 'tutorial/analog-6', 27: 'tutorial/analog-7',
+               68: 'tutorial/menu#2', 71: 'tutorial/icons-1', 72: 'tutorial/icons-2', 74: 'tutorial/icons-3',
+               76: 'tutorial/icons-4', 80: 'tutorial/icons-5', 81: 'tutorial/icons-6', 83: 'tutorial/icons-7',
+               85: 'tutorial/icons-8', 87: 'tutorial/icons-9', 92: 'tutorial/menu#3', 95: 'tutorial/battle-1',
+               96: 'tutorial/battle-2', 98: 'tutorial/battle-3', 100: 'tutorial/battle-4', 102: 'tutorial/battle-5',
+               105: 'tutorial/battle-6', 109: 'tutorial/menu#4', 112: 'tutorial/save', 115: 'tutorial/menu#5'}
+
+
+def tutorial_route():
+    """(pad presses before the first control point, the commands at the control points, the first one's
+    vblank, the frame limit) of original_native_tutorial."""
+    body = REPLAYS.read_text(encoding='utf-8')
+    body = body[body.index('static int original_native_tutorial'):]
+    body = body[:body.index('SDL_Environment')]
+    text = ''.join(re.findall(r'"([^"]*)"', body[body.index('const char *commands='):]))
+    commands = [c for c in text.split('\\n') if c]
+    pads = [(int(a), int(b, 0)) for a, b in re.findall(r'"--pad-at","(\d+):(0x[0-9a-fA-F]+|\d+)"', body)]
+    start = int(re.search(r'"--control-at","(\d+)"', body)[1])
+    limit = int(re.search(r'"--frame-limit","(\d+)"', body)[1])
+    check(len(commands) == 123 and commands[-1] == 'quit' and len(pads) == 6,
+          f'the route of original_native_tutorial is not the one this part was made for: {len(commands)} commands')
+    return pads, commands, start, limit
+
+
+def tutorial_driver(commands):
+    """Keeps the frame at each control point of TUTORIAL_AT, then gives the route's command."""
+    state = {'i': 0}
+
+    def drive(vblank, work):
+        i = state['i']
+        state['i'] += 1
+        if i in TUTORIAL_AT:
+            keep(work, f'c{i:03}')
+        return commands[i] if i < len(commands) and commands[i] != 'quit' else None
+    drive.state = state
+    return drive
+
+
+def tutorial_redraw(img, pid):
+    """A paint program's redrawing of a Tutorial screen saved by the Translator: over the words at the
+    bottom (the shadowed top rows of About Icons 5-9 and How to Save included) a dark band with white bars
+    and a red line, colours the squares there mostly don't have; the same over the screenshot (and the Game
+    Over screen), but not on About Icons 8, whose Tune-up screenshot (shown on 7 as well) stays as the
+    game has it in its PNG, so 7's change must be kept; and over the menu's lines."""
+    from PIL import ImageDraw
+    draw = ImageDraw.Draw(img)
+
+    def band(x0, y0, x1, y1):
+        draw.rectangle((x0, y0, x1, y1), fill=(8, 8, 16))
+        for x in range(x0 + 6, x1 - 8, 10):
+            draw.rectangle((x, y0 + 3, x + 5, y1 - 6), fill=(255, 255, 255))
+        draw.line((x0 + 4, y1 - 3, x1 - 4, y1 - 3), fill=(230, 20, 20), width=2)
+
+    if pid == 'tutorial/menu':
+        band(80, 70, 240, 100)
+        band(80, 130, 240, 160)
+        return
+    band(20, 152, 300, 186)
+    if pid.startswith(('tutorial/icons', 'tutorial/battle')) and pid != 'tutorial/icons-8':
+        band(90, 50, 230, 80)
+
+
+def translator_tutorial(game, discs, out, localization):
+    """Part translator-tutorial (see the module notes). Disc 1 only (the user's choice: the Tutorial is
+    on both discs, PE.IMG the same bytes)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image
+    except ImportError:
+        print('SKIP translator tutorial: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    screens = [p for p in artwork.PICTURES if isinstance(p, artwork.Screen)]
+    check(len(screens) == 30, f'{len(screens)} Tutorial screens, not 30')
+    args, pngs = [], {}
+    for pic in screens:
+        saved = out / f"{pic.id.replace('/', '-')}.png"
+        saved.write_bytes(artwork.png(pic, disc.english[pic.id], disc.layout[pic.id]))
+        img = Image.open(saved)
+        check(img.size == (320, 224), f'the saved screen {pic.id} is {img.size}')
+        img = img.convert('RGB')
+        tutorial_redraw(img, pic.id)
+        img.save(saved)
+        pngs[pic.id] = saved.read_bytes()
+        args += ['--picture', f'{pic.id}={saved}']
+    # What the Translator must make of them, loaded in the same order here.
+    expected = []
+    for pic in screens:
+        layout = disc.layout[pic.id]
+        loaded = artwork.from_png(pic, disc.english[pic.id], pngs[pic.id], artwork.shown(disc, pic, expected), layout)
+        if pic.id == 'tutorial/icons-8':
+            check(any('the change loaded there is kept' in n for n in loaded.notes),
+                  f"About Icons 8's PNG did not keep 7's Tune-up screenshot: {loaded.notes}")
+        expected = artwork.put(disc, pic, expected, loaded.tim)
+    path, report = out / 'translator-tutorial.pelang', out / 'translator-tutorial-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Tutorial test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], *args], capture_output=True, text=True, timeout=1200)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the Tutorial: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    for pic in screens:
+        check(artwork.shown(disc, pic, pieces) == artwork.shown(disc, pic, expected),
+              f'the saved screen {pic.id} is not what its PNG makes')
+        check(artwork.redrawn(disc, pic, pieces), f'the saved screen {pic.id} is still the English one')
+    others = [p.id for p in artwork.PICTURES if not isinstance(p, artwork.Screen) and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    seven, eight = (artwork.BY_ID[f'tutorial/icons-{k}'] for k in (7, 8))
+    shot = (60, 4, 268, 148)
+    check(artwork.image(eight, artwork.shown(disc, eight, pieces), disc.layout[eight.id]).crop(shot).tobytes() ==
+          artwork.image(seven, artwork.shown(disc, seven, pieces), disc.layout[seven.id]).crop(shot).tobytes(),
+          "About Icons 8's Tune-up screenshot is not the one loaded from 7's PNG")
+    plain = out / 'translator-tutorial-text.pelang'           # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Tutorial test', None, path), ('es', 'Tutorial test', None, plain)
+    print(f'translator tutorial: the Translator saved {len(screens)} redrawn Tutorial screens as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Tutorial test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    pads, commands, start, limit = tutorial_route()
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        runs = {}
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                  ('text-only', discs[:1], text_only)):
+                driver = tutorial_driver(commands)
+                runs[which] = (driver, pool.submit(run, game, use, out / f'tutorial-{which}', pack=p, pad=pads,
+                                                   start=start, driver=driver, frame_limit=limit))
+            works = {which: job.result() for which, (_, job) in runs.items()}
+        for which, (driver, _) in runs.items():
+            check(driver.state['i'] >= max(TUTORIAL_AT) + 1,
+                  f'{which}: the run stopped at control point {driver.state["i"]}: {works[which]}')
+        log = mods_log(works['pack'])
+        check(log_pieces.search(log) and 'its pictures are in use' in log,
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {works['pack']}")
+
+        def screen_of(f, name):
+            w, h, rgb = f
+            check(w == 320 and h >= 224, f'{name}: a frame of {w}x{h}')
+            return rgb[:320 * 224 * 3]
+
+        for i, name in sorted(TUTORIAL_AT.items()):
+            pid, _, choice = name.partition('#')
+            pic, layout = artwork.BY_ID[pid], disc.layout[pid]
+            label = f'c{i:03}'
+            frames = {which: frame(works[which], label) for which in works}
+            mine = artwork.screen_image(artwork.shown(disc, pic, pieces), layout, int(choice) if choice else None)
+            english = artwork.screen_image(disc.english[pid], layout, int(choice) if choice else None)
+            check(screen_of(frames['text-only'], name) == english.tobytes(),
+                  f"{name}: with the text alone the screen is not the Translator's picture of the English one: "
+                  f"{works['text-only']} {label}")
+            check(frames['pack'] == frames['written-in'],
+                  f"{name}: the screen with the file is not the one on the disc with its pieces written in: "
+                  f"{works['pack']} vs {works['written-in']} {label}")
+            check(screen_of(frames['pack'], name) == mine.tobytes(),
+                  f"{name}: the screen with the file is not the Translator's picture of it: {works['pack']} {label}")
+            a, b = mine.tobytes(), english.tobytes()
+            differ = sum(1 for k in range(0, len(a), 3) if a[k:k + 3] != b[k:k + 3])
+            print(f"PASS translator tutorial, {name} (control point {i}): the screen is the Translator's picture "
+                  f'of it, pixel for pixel, and the one on the disc with the pieces written in ({differ} pixels '
+                  'differ from the English screen)')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
+# ---- Part translator-game-over: the Game Over words ----
+
+# Part battle's route to the Melissa fight, where Aya's HP is 35 at FIGHT_AT; the game's own test switch sets
+# it to 1 there, and Melissa's next hit fells her: no Preraise, no Revive, so Battle_StepPostBattle plays the
+# game over. The words stand still at x 100-220, y 100-124 from vblank 66164 to 66221 (found frame by frame),
+# drawn with brightness 120 and 116 on alternate frames (the two draw buffers); these two are one of each.
+GAME_OVER_HP = f'{FIGHT_AT}:35:1'
+GAME_OVER_AT = (66200, 66202)
+
+
+def translator_game_over(game, discs, out, localization):
+    """Part translator-game-over (see the module notes). Disc 1 only (the user's choice: PE.IMG, and so the
+    picture, is the same bytes on Disc 2)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator game over: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    pic = artwork.BY_ID['game-over']
+    english = disc.english[pic.id]
+    # Saved by the Translator and redrawn in a paint program: the words wiped to black (see-through), then
+    # five pale bars and a red line under them (red is none of its 16 greens: the nearest is taken).
+    saved = out / 'game-over.png'
+    saved.write_bytes(artwork.png(pic, english))
+    img = Image.open(saved)
+    check(img.mode == 'P' and img.size == (120, 24), f'the saved Game Over is {img.mode} {img.size}')
+    pale = tuple(img.getpalette()[3:6])                         # its colour 1, the palest green
+    img = img.convert('RGB')
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((0, 0, 119, 23), fill=(0, 0, 0))
+    for x in range(4, 110, 22):
+        draw.rectangle((x, 3, x + 13, 16), fill=pale)
+    draw.line((2, 20, 117, 20), fill=(230, 20, 20), width=2)
+    img.save(saved)
+    expected = artwork.from_png(pic, english, saved.read_bytes())
+    check(any('not one of the picture' in n for n in expected.notes), f'no colour was fitted: {expected.notes}')
+    path, report = out / 'translator-game-over.pelang', out / 'translator-game-over-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Game Over test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
+                         timeout=600)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save Game Over: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    check(artwork.shown(disc, pic, pieces) == expected.tim, "the saved Game Over is not the PNG's pixels")
+    check(expected.tim[-32:] == english[-32:], 'the colours changed')
+    others = [p.id for p in artwork.PICTURES if p.id != pic.id and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-game-over-text.pelang'           # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Game Over test', None, path), ('es', 'Game Over test', None, plain)
+    print(f'translator game over: the Translator saved the redrawn Game Over as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Game Over test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    steps = presses([(FIGHT_AT, 0, 'fight')] + [(at, 0, f'still-{at}') for at in GAME_OVER_AT])
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            runs = {which: pool.submit(run_fixed, game, use, out / f'translator-game-over-{which}', steps, pack=p,
+                                       pad=BATTLE_ROUTE, hp=GAME_OVER_HP)
+                    for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                          ('text-only', discs[:1], text_only))}
+            works = {which: run.result() for which, run in runs.items()}
+        log = mods_log(works['pack'])
+        check(log_pieces.search(log) and 'its pictures are in use' in log,
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {works['pack']}")
+        x0, y0 = pic.at
+        w, h = pic.size
+        ink = {which: [n != 0 for n in artwork.glyph_numbers(pic, data)]
+               for which, data in (('mine', expected.tim), ('english', english))}
+
+        def box(f):
+            width, _, rgb = f
+            return [tuple(rgb[((y0 + y) * width + x0 + x) * 3:((y0 + y) * width + x0 + x) * 3 + 3])
+                    for y in range(h) for x in range(w)]
+
+        def rgb_list(img):
+            data = img.tobytes()
+            return [tuple(data[k:k + 3]) for k in range(0, len(data), 3)]
+
+        seen = set()
+        for at in GAME_OVER_AT:
+            label = f'still-{at}'
+            frames = {which: frame(works[which], label) for which in works}
+            check(frames['pack'] == frames['written-in'],
+                  f"{label}: the screen with the file is not the one on the disc with its pieces written in: "
+                  f"{works['pack']} vs {works['written-in']}")
+            plain_box, my_box = box(frames['text-only']), box(frames['pack'])
+            # The brightness of this frame: the one at which the English words are the frame's, every ink pixel.
+            fits = [b for b in pic.brightness
+                    if all(p == q for p, q, i in zip(plain_box, rgb_list(artwork.in_game(pic, english, b)),
+                                                     ink['english']) if i)]
+            check(len(fits) == 1, f"{label}: with the text alone the words are not the Translator's English picture "
+                                  f"at brightness 120 or 116 ({fits}): {works['text-only']}")
+            b = fits[0]
+            seen.add(b)
+            mine = rgb_list(artwork.in_game(pic, expected.tim, b))
+            wrong = sum(1 for p, q, i in zip(my_box, mine, ink['mine']) if i and p != q)
+            check(wrong == 0, f"{label}: {wrong} of the words' pixels on the screen with the file are not the "
+                              f"Translator's picture at brightness {b}: {works['pack']}")
+            same = sum(1 for p, q, i, j in zip(my_box, plain_box, ink['mine'], ink['english']) if not i and not j and p != q)
+            check(same == 0, f'{label}: {same} see-through pixels show something else than the English screen does')
+            differ = sum(1 for p, q in zip(my_box, plain_box) if p != q)
+            print(f"PASS translator game over, vblank {at} (brightness {b}): the words on the screen are the "
+                  f"Translator's picture of them, pixel for pixel, and the screen is the one on the disc with the "
+                  f"pieces written in ({differ} pixels of the box differ from the English screen)")
+        check(seen == set(pic.brightness), f'the frames kept show only brightness {seen}')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
+# ---- Part translator-menu-words: the menus' words ----
+
+# The status menu at MENU_STEPS's 'status' (Triangle in front of Carnegie Hall): where each of these words is
+# drawn, and at which drawing colour (found by matching the English words against that frame: every ink
+# pixel at 128, or at 64 for the icons that aren't picked).
+STATUS_WORDS = {'menu/bonus-point': (170, 36, 128), 'menu/offense': (170, 57, 128), 'menu/level': (70, 57, 128),
+                'menu/next-level': (37, 83, 128), 'menu/equipment': (33, 104, 128),
+                'menu/active-time': (170, 121, 128), 'menu-icon/sys': (10, 82, 64), 'menu-icon/sort': (10, 98, 64)}
+
+
+def translator_menu_words(game, discs, out, localization):
+    """Part translator-menu-words (see the module notes). Disc 1 only (the user's choice: PE.IMG, and so the
+    page, is the same bytes on Disc 2)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    import pelang
+    from petext import pictures
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('SKIP translator menu words: needs Pillow (the Translator reads and writes PNGs with it)')
+        return 77
+    from translator import artwork
+    disc = artwork.Disc(discs[0])
+    expected, loads = {}, []
+    # Each saved by the Translator and redrawn in a paint program: wiped to black (see-through), then pale bars
+    # in the word's own second colour and a red line under them (fitted to the nearest of its 16 colours).
+    for pid in STATUS_WORDS:
+        pic = artwork.BY_ID[pid]
+        english = disc.english[pid]
+        saved = out / (pid.replace('/', '-') + '.png')
+        saved.write_bytes(artwork.png(pic, english))
+        img = Image.open(saved)
+        check(img.mode == 'P' and img.size == pic.size, f'the saved {pid} is {img.mode} {img.size}')
+        colours = artwork.glyph_colours(pic, english)
+        bright = max(range(1, 16), key=lambda n: sum(artwork.screen_rgb(colours[n])) if colours[n] else -1)
+        pale = tuple(img.getpalette()[bright * 3:bright * 3 + 3])
+        img = img.convert('RGB')
+        w, h = pic.size
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((0, 0, w - 1, h - 1), fill=(0, 0, 0))
+        for x in range(1, w - 3, 6):
+            draw.rectangle((x, 1, x + 2, h - 4), fill=pale)
+        draw.line((0, h - 2, w - 1, h - 2), fill=(230, 20, 20))
+        img.save(saved)
+        expected[pid] = artwork.from_png(pic, english, saved.read_bytes()).tim
+        check(expected[pid] != english and expected[pid][-32:] == english[-32:], f'{pid}: not redrawn, or its colours changed')
+        loads += ['--picture', f'{pid}={saved}']
+    path, report = out / 'translator-menu-words.pelang', out / 'translator-menu-words-report.json'
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+                          'Menu words test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
+                          '--disc', discs[0]] + loads, capture_output=True, text=True, timeout=600)
+    said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+    check(ran.returncode == 0 and said.get('ok'), f'the Translator did not save the menu words: {said} {ran.stderr[-600:]}')
+    with zipfile.ZipFile(path) as z:
+        pieces = pictures.read(z.read('pictures.bin'))
+    for pid, tim in expected.items():
+        check(artwork.shown(disc, artwork.BY_ID[pid], pieces) == tim, f"the saved {pid} is not the PNG's pixels")
+    others = [p.id for p in artwork.PICTURES if p.id not in expected and artwork.redrawn(disc, p, pieces)]
+    check(not others, f'pictures nobody loaded changed: {others}')
+    plain = out / 'translator-menu-words-text.pelang'          # the same file's text alone
+    plain.write_bytes(pelang.pack_bytes(path))
+    pack, text_only = ('es', 'Menu words test', None, path), ('es', 'Menu words test', None, plain)
+    print(f'translator menu words: the Translator saved {len(expected)} redrawn menu words as {len(pieces)} pieces')
+    log_pieces = re.compile(rf'Menu words test \(es\), \d+ entries, {len(pieces)} picture pieces')
+    try:
+        written, landed = pieces_written_in(discs[0], pieces, out / 'discs' / 'disc1')
+        check(landed == len(pieces), f'only {landed} of {len(pieces)} pieces land on Disc 1')
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            runs = {which: pool.submit(run_fixed, game, use, out / f'translator-menu-words-{which}', MENU_STEPS,
+                                       pack=p, pad=NEW_GAME)
+                    for which, use, p in (('pack', discs[:1], pack), ('written-in', [written], text_only),
+                                          ('text-only', discs[:1], text_only))}
+            works = {which: run.result() for which, run in runs.items()}
+        log = mods_log(works['pack'])
+        check(log_pieces.search(log) and 'its pictures are in use' in log,
+              f"the file's {len(pieces)} picture pieces were not loaded and put in: {works['pack']}")
+        frames = {which: frame(works[which], 'status') for which in works}
+        check(frames['pack'] == frames['written-in'],
+              f"the status menu with the file is not the one on the disc with its pieces written in: "
+              f"{works['pack']} vs {works['written-in']}")
+
+        def box(f, x0, y0, w, h):
+            width, _, rgb = f
+            return [tuple(rgb[((y0 + y) * width + x0 + x) * 3:((y0 + y) * width + x0 + x) * 3 + 3])
+                    for y in range(h) for x in range(w)]
+
+        def rgb_list(img):
+            data = img.tobytes()
+            return [tuple(data[k:k + 3]) for k in range(0, len(data), 3)]
+
+        for pid, (x0, y0, b) in STATUS_WORDS.items():
+            pic = artwork.BY_ID[pid]
+            w, h = pic.size
+            english = disc.english[pid]
+            ink = {which: [artwork.glyph_colours(pic, data)[n] != 0 for n in artwork.glyph_numbers(pic, data)]
+                   for which, data in (('mine', expected[pid]), ('english', english))}
+            plain_box, my_box = box(frames['text-only'], x0, y0, w, h), box(frames['pack'], x0, y0, w, h)
+            wrong = sum(1 for p, q, i in zip(plain_box, rgb_list(artwork.in_game(pic, english, b)), ink['english'])
+                        if i and p != q)
+            check(wrong == 0, f"{pid}: with the text alone, {wrong} of the English word's pixels at {x0},{y0} are not "
+                              f"the Translator's English picture at drawing colour {b}: {works['text-only']}")
+            wrong = sum(1 for p, q, i in zip(my_box, rgb_list(artwork.in_game(pic, expected[pid], b)), ink['mine'])
+                        if i and p != q)
+            check(wrong == 0, f"{pid}: {wrong} of the word's pixels on the screen with the file are not the "
+                              f"Translator's picture at drawing colour {b}: {works['pack']}")
+            same = sum(1 for p, q, i, j in zip(my_box, plain_box, ink['mine'], ink['english'])
+                       if not i and not j and p != q)
+            check(same == 0, f'{pid}: {same} see-through pixels show something else than the English menu does')
+            differ = sum(1 for p, q in zip(my_box, plain_box) if p != q)
+            print(f"PASS translator menu words, {pid} at {x0},{y0} (drawing colour {b}): the Translator's picture, "
+                  f"pixel for pixel ({differ} pixels of its box differ from the English menu)")
+        print('PASS translator menu words: the status menu with the file is the one on the disc with its pieces '
+              'written in')
+    finally:
+        shutil.rmtree(out / 'discs', ignore_errors=True)
+    return 0
+
+
+# ---- Part translator-menu-look: the help line as the menus draw it ----
+
+# MENU_STEPS to the menu (Triangle in front of Carnegie Hall), then Cross into the item list and down it: the
+# help line at the top shows the hint, then each item's description (found with the English run: these are the
+# lines shown at each frame). Every key that holds the same English is given the same words, so whichever of
+# them the game picks shows them.
+MENU_LOOK_STEPS = presses([(FIRST_BOX, CROSS, 'first'), (20630, CROSS, 'box2'), (22140, CROSS, 'profile'),
+                           (22450, CROSS, 'grid'), (22760, START, 'typed'), (23070, START, 'end')]
+                          + [(23380 + k, CROSS, f'box{3 + n}') for n, k in enumerate((0, 1510, 3020, 4530, 6660))]
+                          + [(31550, TRIANGLE, 'field'), (31860, CROSS, 'status'), (31980, DOWN, 'handgun'),
+                             (32100, DOWN, 'melee'), (32220, 0, 'medicine')])
+MENU_LOOK_LINES = {'status': 'Use Item', 'handgun': 'Handgun', 'melee': 'Melee Weapon', 'medicine': 'Restores 45 HP'}
+MENU_LOOK_WORDS = {'Use Item': 'Usar un objeto', 'Handgun': 'Pistola corta', 'Melee Weapon': 'Arma de mano (más)',
+                   'Restores 45 HP': 'Recupera 45 PV de Aya'}
+# Aya's first items (translator/menulook.py START_ITEMS), and which of them the cursor is on in each frame.
+MENU_LOOK_ITEMS = {'M84F': 'M84F corta', 'N Vest': 'Chaleco N', 'Club 1': 'Porra 1', 'Ammo Crate': 'Caja balas',
+                   'Medicine 1': 'Medicina 1'}
+MENU_LOOK_CURSOR = {'handgun': 'M84F', 'melee': 'Club 1', 'medicine': 'Medicine 1'}
+# The PE list (translator/menulook.py pe_list), on Disc 1: Continue from the save editor's sample save D (Day 5;
+# Aya knows the ten PEs of PE_LOOK_LEARNED), Cross on the map's N.Y.P.D. #17 and again to go there; in the
+# lobby the game's own test switch puts Aya's HP at 300 of 335 (hurt: the field menu draws the heals' names
+# bright), then Triangle, Down to the PE icon, Cross into the list: the cursor on Heal 1, Heal 2, then Detox.
+def pe_look_steps():
+    return map_steps()[:-1] + presses([(MAP_AT, CROSS, 'map'), (17400, CROSS, 'go'), (18100, TRIANGLE, 'lobby'),
+                                       (18410, DOWN, 'pe-menu'), (18530, CROSS, 'pe-icon'),
+                                       (18850, RIGHT, 'heal1'), (18970, DOWN, 'heal2'), (19090, 0, 'detox')])
+
+
+PE_LOOK_HP = '18050:335:300'
+PE_LOOK_LEARNED = (0, 1, 2, 3, 5, 6, 7, 8, 9, 10)
+PE_LOOK_FREE = (0, 180, 130, 224)    # the lobby's floor left of Aya: no window, tab or HP box over it
+PE_LOOK_NAMES = {'Heal 1': 'Curación 1', 'Heal 2': 'Curación 2', 'Heal 3': 'Curación 3', 'Detox': 'Antídoto',
+                 'Barrier': 'Barrera', 'Energy Shot': 'Disparo PE', 'Scan': 'Analizar', 'Slow': 'Lentitud',
+                 'Haste': 'Prisa', 'Confuse': 'Confundir'}
+PE_LOOK_CURSOR = {'heal1': 'Heal 1', 'heal2': 'Heal 2', 'detox': 'Detox'}
+PE_LOOK_LINES = {'heal1': 'Restores 30 HP', 'heal2': 'Restores 60 HP', 'detox': 'Removes Effects of Poison'}
+PE_LOOK_WORDS = {'Restores 30 HP': 'Recupera 30 PV', 'Restores 60 HP': 'Recupera 60 PV',
+                 'Removes Effects of Poison': 'Quita el veneno'}
+LEFT, CIRCLE = 128, 8192
+
+
+def after(start, moves):
+    """presses() for (button, label) one every 120 vblanks from `start`."""
+    return presses([(start + 120 * n, button, label) for n, (button, label) in enumerate(moves)])
+
+
+# The menus' boxes (translator/menulook.py). The item route goes on from 'medicine': Cross on Medicine 1 opens
+# Use / Move / Discard (Use dimmed at full HP, the cursor on Move), Down to Discard, Cross: "Medicine 1 will
+# be discarded", the cursor on Cancel; Right, then Left to OK. The PE route goes on from 'detox': Up to Heal 2,
+# Cross: "Heal 2 will be used", the cursor on OK; Left, then Right to Cancel. A frame is kept before its
+# button acts, so each label is what the button before it left on the screen.
+def box_item_steps():
+    return MENU_LOOK_STEPS[:-1] + after(32220, [(CROSS, 'medicine'), (DOWN, 'act'), (CROSS, 'act2'),
+                                                (RIGHT, 'discard'), (LEFT, 'discard2'), (CIRCLE, 'discard3'),
+                                                (0, 'back')])
+
+
+def box_pe_steps():
+    return pe_look_steps()[:-1] + after(19090, [(UP, 'detox'), (CROSS, 'heal2b'), (LEFT, 'confirm'),
+                                                (RIGHT, 'confirm2'), (0, 'confirm3')])
+
+
+# A new game's config menu: status, Down three times to SYS, Cross into the list (cursor on Sound), Cross for
+# Mono / Stereo, Down, Circle back, Down to Cursor, Cross for Default / Memory, Down, Circle, Down to Window,
+# Cross for the colour (on R), Right to G, Circle, Down to Position.
+def config_steps():
+    head = MENU_LOOK_STEPS[:MENU_LOOK_STEPS.index((31860, 'status', f'advance 10 {CROSS}'))]
+    return head + after(31860, [(DOWN, 'status'), (DOWN, 'd1'), (DOWN, 'd2'), (CROSS, 'sys'), (CROSS, 'config'),
+                                (DOWN, 'sound'), (CIRCLE, 'sound2'), (DOWN, 'c1'), (CROSS, 'c2'), (DOWN, 'cursor'),
+                                (CIRCLE, 'cursor2'), (DOWN, 'c3'), (CROSS, 'c4'), (RIGHT, 'window'),
+                                (DOWN, 'window2'), (CIRCLE, 'window3'), (DOWN, 'c5'), (CROSS, 'c6'), (0, 'position')])
+
+
+# The boxes' rows in the file (the names they are joined with are MENU_LOOK_ITEMS' and PE_LOOK_NAMES').
+# ---- Part translator-battle-look: a battle line as the Translator draws it ----
+
+BATTLE_LOOK_WORDS = {'battle/010': '¡No puedes huir!'}
+BATTLE_LOOK_FRAMES = ('l0', 'l1', 'line', 'l3')      # while "Can't escape!" is up (75 frames from the Cross)
+BATTLE_LOOK_ROWS = (180, 224)                        # the bar (191-210) and what is under it: the room alone
+
+
+def battle_look_steps():
+    """Part battle's route on to the line: Triangle, Down to Escape, Cross; frames while the line is up."""
+    return presses([(65600, TRIANGLE, 'battle'), (65700, DOWN, 'items'), (65760, DOWN, 'weapon'),
+                    (65820, DOWN, 'armor'), (65880, CROSS, 'escape'), (65900, 0, 'l0'), (65930, 0, 'l1'),
+                    (66000, 0, 'line'), (66030, 0, 'l3')])
+
+
+def translator_battle_look(game, discs, out, localization):
+    """Part translator-battle-look (see the module notes). Disc 1 only (the user's choice)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        print('SKIP translator battle look: needs Pillow (the game look draws with it)')
+        return 77
+    import pelang
+    from translator import battlelook as bl, gamelook as gl, project as tp
+    english, _, _ = make_english_pack(discs, out, localization)
+    the_game = tp.Game()
+    tr = tp.Translation(the_game, 'es', 'Battle look test')
+    for key, words in BATTLE_LOOK_WORDS.items():
+        tr.set_text(key, words)
+    path = out / 'translator-battle-look.pelang'
+    saved = tr.save(path)
+    check(not saved.left_out and not saved.whole, f'the Translator left lines out: {saved.left_out} {saved.whole}')
+    mine = gl.Pack.read(pelang.pack_bytes(path))
+    held = tp.read_pack_text(mine.data, the_game).texts
+    check(all(held.get(k) == w for k, w in BATTLE_LOOK_WORDS.items()), f'the saved file does not hold {BATTLE_LOOK_WORDS}')
+    with zipfile.ZipFile(english) if zipfile.is_zipfile(english) else open(english, 'rb') as f:
+        english_pack = gl.Pack.read(f.read(pelang.BUNDLE_TEXT) if isinstance(f, zipfile.ZipFile) else f.read())
+    look_disc = gl.DiscLook(discs[0])
+    room = look_disc.views(bl.ROOM)[bl.VIEW]
+    pack = ('es', 'Battle look test', None, path)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-battle-look-{which}',
+                                   battle_look_steps(), pack=p, pad=BATTLE_ROUTE)
+                for which, p in (('pack', pack), ('english', None))}
+        works = {which: run.result() for which, run in runs.items()}
+    top, bottom = BATTLE_LOOK_ROWS
+    key = 'battle/010'
+    bars = {}
+    for which, use in (('english', english_pack), ('pack', mine)):
+        look = bl.look(gl.Font(look_disc, use), use.text(key), key, room)
+        check(look.notes == [] and look.bar == (191, 211), f'{which}: the Translator says {look.notes}, bar {look.bar}')
+        want = look.rgb[top * 320 * 3:bottom * 320 * 3]
+        for label in BATTLE_LOOK_FRAMES:
+            width, height, rgb = frame(works[which], label)
+            check((width, height) == (320, 224), f'{which} {label}: a {width} x {height} frame')
+            got = rgb[top * width * 3:bottom * width * 3]
+            differ = sum(1 for k in range(0, len(got), 3) if got[k:k + 3] != want[k:k + 3])
+            check(differ == 0, f"{which} {label}: the battle bar is not the Translator's ({differ} pixels differ): "
+                               f"{works[which]}")
+            print(f"PASS translator battle look, disc 1, {which} {label}: rows {top}-{bottom - 1} are the "
+                  f"Translator's battle bar with {key} over room M{bl.ROOM:03d}, 0 pixels differ")
+        bars[which] = want
+    check(bars['pack'] != bars['english'], "the file's line drew as the English one")
+    print(f'PASS translator battle look: "{BATTLE_LOOK_WORDS[key]}" and the English line, each on '
+          f'{len(BATTLE_LOOK_FRAMES)} frames. The other battle lines and the bar at the top: unit tests only')
+    return 0
+
+
+BOX_WORDS = {'sys/000': 'Usar', 'sys/001': 'Mover', 'sys/002': 'Tirar', 'sys/004': ' se tirará', 'sys/005': 'Vale',
+             'sys/006': 'Anular', 'sys/026': ' se usará', 'sys/070': 'Cargando', 'sys/084': 'Partida cargada',
+             'sys/008': 'Sí', 'sys/040': 'Sonido', 'sys/041': 'Puntero', 'sys/042': 'Ventana', 'sys/043': 'Posición',
+             'sys/046': 'Mono', 'sys/047': 'Estéreo', 'sys/049': 'Inicial', 'sys/050': 'Recordar', 'sys/051': 'Hecho',
+             'sys/052': 'Original', 'sys/053': 'R', 'sys/054': 'V', 'sys/055': 'A',
+             'misc/049': 'Elige el sonido', 'misc/050': 'Elige el puntero', 'misc/051': 'Cambia la ventana',
+             'misc/052': 'Cambia la posición', 'misc/058': 'Sonido monoaural', 'misc/059': 'Sonido estéreo',
+             'misc/061': 'Puntero al inicio', 'misc/062': 'Recordar el puntero', 'misc/063': 'Ajusta el rojo',
+             'misc/064': 'Ajusta el verde'}
+# Boxes that cover what is under them: (run, frame, the row drawn, what the draw is given besides).
+BOX_FRAMES = [('item', 'act', 'sys/001', {'dimmed': (0,)}), ('item', 'act2', 'sys/002', {'dimmed': (0,)}),
+              ('item', 'discard2', 'sys/004', {}), ('item', 'discard3', 'sys/005', {}),
+              ('pe', 'confirm', 'sys/026', {'label': ('item/236', 'sys/026')}),
+              ('pe', 'confirm3', 'sys/006', {'label': ('item/236', 'sys/026')}),
+              ('pe', 'continue6', 'sys/070', {}), ('pe', 'continue9', 'sys/084', {}), ('pe', 'continue9', 'sys/008', {})]
+# The config menu: (frame, the row drawn, the frame the scene behind it is worked out from, that frame's row).
+CONFIG_FRAMES = [('config', 'sys/040', 'c2', 'sys/041'), ('c2', 'sys/041', 'config', 'sys/040'),
+                 ('c4', 'sys/042', 'c6', 'sys/043'), ('c6', 'sys/043', 'c4', 'sys/042'),
+                 ('sound', 'sys/046', 'sound2', 'sys/047'), ('sound2', 'sys/047', 'sound', 'sys/046'),
+                 ('cursor', 'sys/049', 'cursor2', 'sys/050'), ('cursor2', 'sys/050', 'cursor', 'sys/049'),
+                 ('window', 'sys/053', 'window2', 'sys/054'), ('window2', 'sys/054', 'window', 'sys/053')]
+
+
+def translator_menu_look(game, discs, out, localization):
+    """Part translator-menu-look (see the module notes). Disc 1 only (the user's choice)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        print('SKIP translator menu look: needs Pillow (the game look draws with it)')
+        return 77
+    import pelang
+    from translator import gamelook as gl, menulook as ml, project as tp
+    english, _, _ = make_english_pack(discs, out, localization)
+    the_game = tp.Game()
+    texts, _ = tp.read_english(english, the_game)
+    keys = {line: sorted(k for k, t in texts.items() if t == line and ml.context_of(k) == 'help line')
+            for line in MENU_LOOK_WORDS}
+    check(all(keys.values()), f'no help line holds {[w for w, k in keys.items() if not k]}')
+    item_keys = {line: sorted(k for k, t in texts.items() if t == line and ml.context_of(k) == 'item list')
+                 for line in MENU_LOOK_ITEMS}
+    check(sorted(int(k[0][5:]) for k in item_keys.values() if len(k) == 1) == sorted(i for i, _ in ml.START_ITEMS),
+          f"the first items' names are not one row each: {item_keys}")
+    pe_keys = {line: sorted(k for k, t in texts.items() if t == line and ml.context_of(k) == 'parasite energy list')
+               for line in PE_LOOK_NAMES}
+    check(sorted(int(k[0][5:]) - ml.PE_FIRST for k in pe_keys.values() if len(k) == 1) == list(PE_LOOK_LEARNED),
+          f"the Day 5 PEs' names are not one row each: {pe_keys}")
+    check(struct.unpack_from('<I', MAP_SAVE.read_bytes(), 0x144)[0] == sum(1 << p for p in PE_LOOK_LEARNED),
+          f'sample save D does not hold the PEs {PE_LOOK_LEARNED}')
+    keys.update({line: sorted(k for k, t in texts.items() if t == line and ml.context_of(k) == 'help line')
+                 for line in PE_LOOK_WORDS})
+    check(all(f'desc/{int(pe_keys[PE_LOOK_CURSOR[label]][0][5:]):03d}' in keys[line]
+              for label, line in PE_LOOK_LINES.items()), f"the PEs' descriptions are not {PE_LOOK_LINES}")
+    tr = tp.Translation(the_game, 'es', 'Menu look test')
+    for line, words in (MENU_LOOK_WORDS | PE_LOOK_WORDS).items():
+        for key in keys[line]:
+            tr.set_text(key, words)
+    for line, words in MENU_LOOK_ITEMS.items():
+        tr.set_text(item_keys[line][0], words)
+    for line, words in PE_LOOK_NAMES.items():
+        tr.set_text(pe_keys[line][0], words)
+    taken = set(tr.texts) & set(BOX_WORDS)
+    check(not taken, f'the boxes\' rows are also given other words: {sorted(taken)}')
+    for key, words in BOX_WORDS.items():
+        tr.set_text(key, words)
+    path = out / 'translator-menu-look.pelang'
+    saved = tr.save(path)
+    check(not saved.left_out and not saved.whole, f'the Translator left lines out: {saved.left_out} {saved.whole}')
+    mine = gl.Pack.read(pelang.pack_bytes(path))
+    held = tp.read_pack_text(mine.data, the_game).texts
+    for line, words in (MENU_LOOK_WORDS | PE_LOOK_WORDS).items():
+        check(all(held.get(k) == words for k in keys[line]), f'the saved file does not hold "{words}" for {keys[line]}')
+    for line, words in MENU_LOOK_ITEMS.items():
+        check(held.get(item_keys[line][0]) == words, f'the saved file does not hold "{words}" for {item_keys[line]}')
+    for line, words in PE_LOOK_NAMES.items():
+        check(held.get(pe_keys[line][0]) == words, f'the saved file does not hold "{words}" for {pe_keys[line]}')
+    check(all(held.get(k) == words for k, words in BOX_WORDS.items()),
+          f"the saved file does not hold the boxes' rows: {[k for k, w in BOX_WORDS.items() if held.get(k) != w]}")
+    with zipfile.ZipFile(english) if zipfile.is_zipfile(english) else open(english, 'rb') as f:
+        english_pack = gl.Pack.read(f.read(pelang.BUNDLE_TEXT) if isinstance(f, zipfile.ZipFile) else f.read())
+    look_disc, menu_disc = gl.DiscLook(discs[0]), ml.MenuDisc(discs[0])
+    x, y, w, h = menu_disc.windows[ml.HELP_WINDOW]
+    pack = ('es', 'Menu look test', None, path)
+    print(f'translator menu look: the Translator saved {sum(len(k) for k in keys.values())} help lines; '
+          f'the help window is {w} x {h} at {x},{y}')
+    check(MAP_SAVE.is_file(), f'no sample save {MAP_SAVE}')
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-menu-look-{which}', box_item_steps(),
+                                   pack=p, pad=NEW_GAME)
+                for which, p in (('pack', pack), ('english', None))}
+        pe_runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-pe-look-{which}', box_pe_steps(),
+                                      pack=p, pad=CONTINUE, card=MAP_SAVE.read_bytes(), hp=PE_LOOK_HP)
+                   for which, p in (('pack', pack), ('english', None))}
+        config_runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-config-look-{which}',
+                                          config_steps(), pack=p, pad=NEW_GAME)
+                       for which, p in (('pack', pack), ('english', None))}
+        works = {which: run.result() for which, run in runs.items()}
+        pe_works = {which: run.result() for which, run in pe_runs.items()}
+        config_works = {which: run.result() for which, run in config_runs.items()}
+    for made in (works, pe_works, config_works):
+        check("text: Menu look test (es)'s stretches in use" in mods_log(made['pack']),
+              f"none of the file's text drew: {made['pack']}")
+    # The help line, over the scene as it was when Triangle was pressed: 'field' at half, as the Translator
+    # darkens its room; the lobby (the PE list) as much darker as that frame's own free corner is.
+    helped = [(works, 'field', label, line, keys[line][0], MENU_LOOK_WORDS) for label, line in MENU_LOOK_LINES.items()]
+    helped += [(pe_works, 'lobby', label, line, f'desc/{int(pe_keys[PE_LOOK_CURSOR[label]][0][5:]):03d}', PE_LOOK_WORDS)
+               for label, line in PE_LOOK_LINES.items()]
+    for which, use in (('english', english_pack), ('pack', mine)):
+        mf = ml.MenuFont(gl.Font(look_disc, use), menu_disc)
+        for made, behind, label, line, key, said in helped:
+            work = made[which]
+            _, _, field = frame(work, behind)
+            width, _, rgb = frame(work, label)
+            if made is works:
+                look = ml.help_line(mf, use.text(key), key, field)
+            else:
+                dark = darkened_as(field, rgb, PE_LOOK_FREE, gl)
+                check(dark, f'{which} {label}: the scene outside the menu is not the lobby frame darkened: {work}')
+                screen = ml.Screen(dark, dim=False)
+                text, digits = ml.draw_help(screen, mf, use.text(key), key)
+                look = ml.Look(screen.rgb(), '', [], digits, text)
+
+            def mine_at(px, py):
+                return look.rgb[(py * gl.W + px) * 3:(py * gl.W + px) * 3 + 3]
+
+            def frame_at(px, py):
+                return rgb[(py * width + px) * 3:(py * width + px) * 3 + 3]
+
+            wrong = [(px, py) for py in range(y - 2, y + h) for px in range(gl.W)
+                     if not any(bx <= px < bx + bw and by <= py < by + bh for bx, by, bw, bh in look.digits)
+                     and mine_at(px, py) != frame_at(px, py)]
+            check(not wrong, f"{which} {label}: the help line is not the Translator's menu look at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {work}')
+            words = said[line] if which == 'pack' else line
+            print(f'PASS translator menu look, {which} {label} ("{words}", {key}): the help window, its edges, '
+                  f"letters and clock frame are the Translator's, pixel for pixel ({len(look.text.placed)} letters, "
+                  f'{look.text.width} px)')
+    for which, use in (('english', english_pack), ('pack', mine)):
+        mf = ml.MenuFont(gl.Font(look_disc, use), menu_disc)
+        for label, line in MENU_LOOK_CURSOR.items():
+            wrong, pulse = item_list_is_the_frame(works[which], label, mf, use, item_keys, ml, gl)
+            check(not wrong, f"{which} {label}: the item list is not the Translator's at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {works[which]}')
+            words = MENU_LOOK_ITEMS[line] if which == 'pack' else line
+            print(f'PASS translator menu look, {which} {label} (cursor on "{words}"): the item list window, its '
+                  f"icons, names, count boxes, blue tiles and cursor are the Translator's, pixel for pixel "
+                  f"(the cursor's grey {pulse:#x})")
+        for label, line in PE_LOOK_CURSOR.items():
+            wrong, pulse = pe_list_is_the_frame(pe_works[which], label, mf, use, pe_keys, ml, gl)
+            check(not wrong, f"{which} {label}: the PE list is not the Translator's at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {pe_works[which]}')
+            words = PE_LOOK_NAMES[line] if which == 'pack' else line
+            print(f'PASS translator menu look, {which} {label} (cursor on "{words}"): the PE list window, its '
+                  f"names (the heals bright with Aya hurt, the others dimmed) and cursor are the Translator's, "
+                  f"pixel for pixel (the cursor's grey {pulse:#x})")
+    for which, use in (('english', english_pack), ('pack', mine)):
+        mf = ml.MenuFont(gl.Font(look_disc, use), menu_disc)
+        for run, label, key, given in BOX_FRAMES:
+            work = (works if run == 'item' else pe_works)[which]
+            wrong, pulse, box = box_is_the_frame(work, label, mf, use, key, given, ml, gl)
+            check(not wrong, f"{which} {label}: the box is not the Translator's {key} at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {work}')
+            parts = 'edges, tile, letters and cursor' if pulse is not None else 'edges, tile, letters and blocks'
+            grey = f" (the cursor's grey {pulse:#x})" if pulse is not None else ''
+            print(f'PASS translator menu look, {which} {label} ({key}): the box at {box}, its {parts} are the '
+                  f"Translator's {ml.context_of(key)}, pixel for pixel{grey}")
+        work = config_works[which]
+        _, _, field = frame(work, 'field')
+        for label, key, other, okey in CONFIG_FRAMES:
+            wrong, pulse = config_is_the_frame(work, label, other, mf, use, key, okey, ml, gl)
+            check(not wrong, f"{which} {label}: the config menu is not the Translator's {key} at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {work}')
+            hint = ml.misc_key(config_hint(ml, key))
+            screen = ml.Screen(field)
+            text, digits = ml.draw_help(screen, mf, use.text(hint), hint)
+            width, _, rgb = frame(work, label)
+            hx, hy, hw, hh = menu_disc.windows[ml.HELP_WINDOW]
+            mine = screen.rgb()
+            wrong = [(px, py) for py in range(hy - 2, hy + hh) for px in range(gl.W)
+                     if not any(bx <= px < bx + bw and by <= py < by + bh for bx, by, bw, bh in digits)
+                     and mine[(py * gl.W + px) * 3:(py * gl.W + px) * 3 + 3] != rgb[(py * width + px) * 3:(py * width + px) * 3 + 3]]
+            check(not wrong, f"{which} {label}: the help line is not the Translator's {hint} at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {work}')
+            print(f"PASS translator menu look, {which} {label} ({key}): the config windows and the cursor are the "
+                  f"Translator's {ml.context_of(key)}, pixel for pixel (the cursor's grey {pulse:#x}), and the "
+                  f'help line its hint {hint} ({len(text.placed)} letters)')
+    return 0
+
+
+def box_is_the_frame(work, label, mf, use, key, given, ml, gl):
+    """translator-menu-look: a box that covers what is under it (menulook's message, confirm, action and
+    progress boxes) against the frame, inside the box: (the pixels that differ, the cursor's grey, the box).
+    The cursor's grey follows the frame counter: the one of the nine the tile can have that the frame shows
+    (None for a box with no cursor)."""
+    _, _, here = frame(work, label)
+    draw = ml.DRAWN[ml.context_of(key)]
+
+    def look(pulse):
+        kw = dict(given, dim=False)
+        if draw is not ml.progress_box:
+            kw['pulse'] = pulse
+        return draw(mf, use.text(key), key, None, **kw)
+
+    plain = look(0)
+    xs, ys = [x for x, _ in plain.inked], [y for _, y in plain.inked]
+    box = (min(xs), min(ys), max(xs) + 1, max(ys) + 1)
+    check(len(plain.inked) == (box[2] - box[0]) * (box[3] - box[1]), f'{label}: the box {box} does not cover all of it')
+
+    def differ(drawn):
+        return [(x, y) for y in range(box[1], box[3]) for x in range(box[0], box[2])
+                if drawn.rgb[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] != here[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3]]
+
+    if draw is ml.progress_box:
+        return differ(plain), None, box
+    tries = {pulse: differ(look(pulse)) for pulse in range(0, 0x41, 8)}
+    pulse = min(tries, key=lambda p: len(tries[p]))
+    return tries[pulse], pulse, box
+
+
+def config_hint(ml, key):
+    """The misc row of the hint the help line shows over this config row (menulook's config looks)."""
+    n = int(key[4:])
+    if n in ml.CONFIG_ROWS:
+        return ml.CONFIG_HINT + ml.CONFIG_ROWS.index(n)
+    for window, rows, _, hint, _ in ml.CHOICES.values():
+        if n in rows:
+            return hint + rows.index(n)
+    return ml.CHANNEL_HINT + ml.CHANNELS.index(n) if n in ml.CHANNELS else ml.OPTION_HINT + ml.OPTIONS.index(n)
+
+
+def config_is_the_frame(work, label, other, mf, use, key, okey, ml, gl):
+    """translator-menu-look: the config menu's windows (the list, and the window of the row picked) against
+    the frame, the scene behind them worked out from the frame `other` (the cursor on `okey`), as
+    list_is_the_frame does for the lists: (the pixels that differ, the cursor's grey)."""
+    menu = mf.menu
+    where = ml.context_of(key)
+    draw = ml.DRAWN[where]
+    boxes = [ml.grid_cells(menu, ml.CONFIG_WINDOW, ml.CONFIG_WINDOW, len(ml.CONFIG_ROWS))[:4]]
+
+    def cell(k):
+        n = int(k[4:])
+        if where == 'config menu':
+            wx, wy, ww, wh, x0, y0, cw, rh, _ = ml.grid_cells(menu, ml.CONFIG_WINDOW, ml.CONFIG_WINDOW, 4)
+            return x0 - 2, y0 - 2 + rh * ml.CONFIG_ROWS.index(n), cw, rh
+        if where in ml.CHOICES:
+            window, rows = ml.CHOICES[where][:2]
+            wx, wy, ww, wh, x0, y0, cw, rh, _ = ml.grid_cells(menu, window, window, len(rows))
+            return x0 - 2, y0 - 2 + rh * rows.index(n), cw, rh
+        wx, wy, _, _ = menu.windows[ml.COLOUR_WINDOW]
+        gx, gy, _, cw, rh = ml._cell(menu, ml.COLOUR_WINDOW)
+        return wx + gx + cw * ml.CHANNELS.index(n), wy + gy, cw, rh
+
+    if where in ml.CHOICES:
+        window, rows = ml.CHOICES[where][:2]
+        boxes.append(ml.grid_cells(menu, window, window, len(rows))[:4])
+    elif where != 'config menu':
+        boxes.append(menu.windows[ml.COLOUR_WINDOW])
+    return scene_is_the_frame(work, label, other, lambda bg, pulse: draw(mf, use.text(key), key, bg, pulse=pulse, dim=False),
+                              lambda bg, pulse: draw(mf, use.text(okey), okey, bg, pulse=pulse, dim=False),
+                              boxes, cell(key), cell(okey), gl)
+
+
+def darkened_as(scene, shown, free, gl):
+    """The frame `scene` darkened as the frame `shown` has it in the box `free` (x0, y0, x1, y1; nothing of
+    the menu there): every colour part times n/128, rounded down, for the one n that box agrees with
+    (the largest, when several fit its few colours). None when no n does."""
+    def v5(c):
+        return (c * 31 + 127) // 255
+
+    x0, y0, x1, y1 = free
+    pairs = {(v5(scene[k]), v5(shown[k])) for y in range(y0, y1) for x in range(x0, x1)
+             for k in range((y * gl.W + x) * 3, (y * gl.W + x) * 3 + 3)}
+    fits = [n for n in range(1, 129) if all(a * n >> 7 == b for a, b in pairs)]
+    if not fits or len({a for a, _ in pairs}) < 8:
+        return None
+    return bytes(((v5(c) * fits[-1] >> 7) * 255 + 15) // 31 for c in scene)
+
+
+def item_list_is_the_frame(work, label, mf, use, item_keys, ml, gl):
+    """translator-menu-look: the Translator's item list (menulook.item_list, the cursor on this frame's
+    item) against the frame, inside the list window: (the pixels that differ, the cursor's grey)."""
+    def slot_of(key):
+        return [i for i, _ in ml.START_ITEMS].index(int(key[5:]))
+
+    key = item_keys[MENU_LOOK_CURSOR[label]][0]
+    other = next(o for o in MENU_LOOK_CURSOR if o != label)
+    okey = item_keys[MENU_LOOK_CURSOR[other]][0]
+
+    def draw(k, background, pulse):
+        return ml.item_list(mf, use.text(k), k, background, pulse=pulse, dim=False)
+
+    return list_is_the_frame(work, label, other, key, okey, draw, ml.item_cells(mf.menu), slot_of(key), slot_of(okey),
+                             gl)
+
+
+def pe_list_is_the_frame(work, label, mf, use, pe_keys, ml, gl):
+    """translator-menu-look: the Translator's PE list (menulook.pe_list with the PEs of the sample save,
+    Aya hurt, the cursor on this frame's PE) against the frame, inside the list window: (the pixels
+    that differ, the cursor's grey)."""
+    def slot_of(key):
+        return PE_LOOK_LEARNED.index(int(key[5:]) - ml.PE_FIRST)
+
+    key = pe_keys[PE_LOOK_CURSOR[label]][0]
+    other = next(o for o in PE_LOOK_CURSOR if o != label)
+    okey = pe_keys[PE_LOOK_CURSOR[other]][0]
+
+    def draw(k, background, pulse):
+        return ml.pe_list(mf, use.text(k), k, background, pulse=pulse, dim=False, learned=PE_LOOK_LEARNED)
+
+    cells = ml.grid_cells(mf.menu, ml.PE_WINDOW, ml.PE_GRID, len(PE_LOOK_LEARNED))
+    return list_is_the_frame(work, label, other, key, okey, draw, cells, slot_of(key), slot_of(okey), gl)
+
+
+def list_is_the_frame(work, label, other, key, okey, draw, cells, slot, oslot, gl):
+    """A menu list as the Translator draws it (draw(key, the scene behind, the cursor's grey)) against
+    the frame `label`, inside the list's window, the cursor on cell `slot`. The scene behind is worked
+    out from the frame `other` (the same list with the cursor on cell `oslot`). Returns (the pixels
+    that differ, the cursor's grey)."""
+    wx, wy, ww, wh, x0, y0, cell_w, row_h, columns = cells
+    cell = (x0 - 2 + cell_w * (slot % columns), y0 - 2 + row_h * (slot // columns), cell_w, row_h)
+    ocell = (x0 - 2 + cell_w * (oslot % columns), y0 - 2 + row_h * (oslot // columns), cell_w, row_h)
+    return scene_is_the_frame(work, label, other, lambda bg, pulse: draw(key, bg, pulse),
+                              lambda bg, pulse: draw(okey, bg, pulse), [(wx, wy, ww, wh)], cell, ocell, gl)
+
+
+def scene_is_the_frame(work, label, other, draw, odraw, boxes, cell, ocell, gl):
+    """See-through menu windows as the Translator draws them (draw(the scene behind, the cursor's grey))
+    against the frame `label`, inside `boxes` (x, y, w, h), the cursor on `cell` (x, y, w, h). The scene
+    behind is worked out from the frame `other`, which odraw draws with its cursor on `ocell`. Returns (the
+    pixels that differ, the cursor's grey)."""
+    def v5(c):
+        return (c * 31 + 127) // 255
+
+    _, _, here = frame(work, label)
+    _, _, there = frame(work, other)
+    # What the Translator adds to the scene in the other frame (its cursor's tile left out), drawn over a
+    # flat 8 so nothing reaches 0 or 31 on the way; the scene there is that frame less it.
+    grey = bytes([(8 * 255 + 15) // 31]) * (gl.W * gl.H * 3)
+    added = odraw(grey, None)
+    inside = {(x, y) for bx, by, bw, bh in boxes for y in range(by, by + bh) for x in range(bx, bx + bw)}
+    scene = bytearray(there)
+    for x, y in inside:
+        if (x, y) in added.inked:
+            continue                         # drawn over: no scene shows there, in either frame
+        for k in range((y * gl.W + x) * 3, (y * gl.W + x) * 3 + 3):
+            v = v5(there[k]) - (v5(added.rgb[k]) - 8)
+            check(0 <= v <= 31, f'{label}: no scene gives the frame {other} at {x},{y}')
+            scene[k] = (v * 255 + 15) // 31
+    cx, cy, cw, ch = cell
+    ox, oy, ow, oh = ocell
+    # The cursor's grey: read where only the scene and the tile meet (inside the cell, nothing drawn on it).
+    plain = draw(bytes(scene), 0)
+    px, py = next((x, y) for y in range(cy + 3, cy + ch - 3) for x in range(cx + 3, cx + cw - 3)
+                  if (x, y) not in plain.inked)
+    k = (py * gl.W + px) * 3
+    pulse = max(0, v5(here[k]) - v5(plain.rgb[k])) * 8
+    look = draw(bytes(scene), pulse)
+    wrong = sorted((x, y) for x, y in inside
+                   if not (ox <= x < ox + ow and oy <= y < oy + oh)
+                   and look.rgb[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] != here[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3])
+    return wrong, pulse
+
+
+def look_is_the_frame(work, label, look, font, raw, name, gl):
+    """The Translator's game look (translator/gamelook.py) of `raw` against the game's frame: every
+    pixel it draws is the frame's, and every pixel of the frame's text area in the letters' own
+    colours is one it draws (a scene pixel or two of those colours aside). Returns the pixels drawn."""
+    width, height, rgb = frame(work, label)
+    check((width, height) == (gl.W, gl.H), f'{label}: a {width} x {height} frame, not the game screen: {work}')
+    placed = look.screens[0]
+    over = gl.draw(font, placed, rgb)
+    alone = gl.draw(font, placed, bytes(gl.W * gl.H * 3))
+    changed = [(k // 3 % gl.W, k // 3 // gl.W) for k in range(0, len(rgb), 3) if over[k:k + 3] != rgb[k:k + 3]]
+    check(not changed, f"{label}: the game look's letters are not the frame's at {changed[:6]} "
+                       f'({len(changed)} pixels): {work}')
+    inks = {bytes(gl.rgb_of(font.clut[1]))}          # the letters' strokes (their dark shadow is in scenes too)
+    missed = [(x, y) for y in range(160, gl.H) for x in range(gl.W)
+              if rgb[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] in inks
+              and alone[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] == b'\0\0\0']
+    check(len(missed) <= 3, f"{label}: the frame has text the game look doesn't draw at {missed[:6]} "
+                            f'({len(missed)} pixels): {work}')
+    drawn = sum(1 for k in range(0, len(alone), 3) if alone[k:k + 3] != b'\0\0\0')
+    check(drawn > 300, f'{label}: the game look drew only {drawn} pixels: {work}')
+    return drawn
+
+
+def translator_look(game, discs, out, localization):
+    """Part translator-look (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't
+    set, or when none of the player packs is given."""
+    sys.path.insert(0, str(localization))
+    import pelang
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        print('SKIP translator look: needs Pillow (the game look makes its picture with it)')
+        return 77
+    from translator import gamelook as gl
+    disc = gl.DiscLook(discs[0])
+    shown = disc.shown_in()
+    check(shown.get('dlg/M001/009') == [10], f'the first box is not shown in room M010: {shown.get("dlg/M001/009")}')
+    english, _, _ = make_english_pack(discs, out, localization)
+
+    def look_of(path, key, name='Aya'):
+        pack = gl.Pack.read(pelang.pack_bytes(path))
+        font = gl.Font(disc, pack)
+        raw = pack.text(key)
+        check(raw, f'{path.name} has no {key}')
+        return gl.lay_out(font, raw, gl.name_bytes(pack, name)), font, raw
+
+    first = [(FIRST_BOX, 'first', None)]
+    work = run_fixed(game, discs, out / 'look-english', first, pack=('en', 'English pack', None, english), pad=NEW_GAME)
+    look, font, raw = look_of(english, 'dlg/M001/009')
+    drawn = look_is_the_frame(work, 'first', look, font, raw, 'Aya', gl)
+    # The room behind it: the scene's top rows (no one stands there), every pixel the room picture's.
+    _, _, rgb = frame(work, 'first')
+    views = disc.views(10)
+    check(views and views[0][:40 * gl.W * 3] == rgb[:40 * gl.W * 3],
+          f"the top of room M010's picture is not the frame's: {work}")
+    print(f'PASS translator look, English: the first box drawn by the Translator is the game\'s frame, all {drawn} '
+          "pixels of its letters; room M010's picture is the frame's background")
+
+    # "à" (code 4D, a 0 in the game's own width table): the language mod draws it 8 px wide, and the
+    # pack compiler must measure every line as the game draws it.
+    sheet = out / 'a-grave.csv'
+    with sheet.open('w', encoding='utf-8', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=['key', 'translation', 'notes'])
+        w.writeheader()
+        w.writerow({'key': 'dlg/M001/009', 'translation': 'Çà et là: voilà, à à à!{br}àààà, déjà.', 'notes': ''})
+    grave = out / 'a-grave.pelang'
+    made = subprocess.run([sys.executable, '-I', str(localization / 'pelang.py'), 'build', '--strings',
+                           str(localization / 'data' / 'manifest.json'), '--lang', 'fr', '--name', 'A grave', '-o',
+                           str(grave), str(sheet)], capture_output=True, text=True)
+    check(made.returncode == 0, f'the "à" pack did not build: {made.stdout[-400:]}{made.stderr[-400:]}')
+    work = run_fixed(game, discs, out / 'look-a-grave', first, pack=('fr', 'A grave', None, grave), pad=NEW_GAME)
+    look, font, raw = look_of(grave, 'dlg/M001/009')
+    drawn = look_is_the_frame(work, 'first', look, font, raw, 'Aya', gl)
+    lines = {}
+    for p in look.screens[0]:
+        lines.setdefault(p.y, []).append(p)
+    ends = [ps[-1].x - ps[-1].letter.x + ps[-1].letter.advance - gl.LINE_X for _, ps in sorted(lines.items())]
+    from petext import gametext as gt
+    measured = gt.lines(pelang.read_pack(grave)[2][pelang.fnv1a('dlg/M001/009')].rstrip(b'\xff\xf9'))
+    check(ends == measured, f'the compiler measures the "à" lines {measured}, the game draws them {ends}')
+    print(f'PASS translator look, "à": the game draws it as the Translator does (all {drawn} pixels), and the '
+          f'compiler measures its lines as drawn ({ends} px)')
+
+    skipped = []
+    for env, label in (('PE_TEST_ES_PACK', 'Spanish'), ('PE_TEST_IT_PACK', 'Italian'), ('PE_TEST_DE_PACK', 'German'),
+                       ('PE_TEST_FR_PACK', 'French'), ('PE_TEST_ZH_PACK', 'Chinese')):
+        path = Path(os.getenv(env) or '')
+        if not path.is_file():
+            skipped.append(f'{label} ({env} is not set)')
+            continue
+        code, name, _ = pelang.read_pack(path)
+        work = run_fixed(game, discs, out / f'look-{code}', first, pack=(code, name, None, path), pad=NEW_GAME)
+        look, font, raw = look_of(path, 'dlg/M001/009')
+        drawn = look_is_the_frame(work, 'first', look, font, raw, 'Aya', gl)
+        print(f'PASS translator look, {label}: the first box with the pack\'s own letters is the game\'s frame, all '
+              f'{drawn} pixels')
+
+    if len(discs) < 2:
+        skipped.append('Disc 2 (PE_TEST_DISC2 is not set)')
+    else:
+        work, room = run_disc2(game, discs, out / 'look-disc2', ('en', 'English pack', None, english))
+        total = 0
+        for label, key in DISC2_BOXES.items():
+            look, font, raw = look_of(english, key)
+            total += look_is_the_frame(work, label, look, font, raw, 'Aya', gl)
+        print(f'PASS translator look, Disc 2 (room {room}): the {len(DISC2_BOXES)} boxes on the ship drawn by the '
+              f'Translator are the game\'s frames, all {total} pixels')
+    if skipped:
+        print('SKIP translator look: not checked: ' + '; '.join(skipped))
+        return 77
+    return 0
+
+
+# ---- Part translator-letters: letters the game can't draw yet, painted in a PNG ----
+
+# Made-up lines (no game text): the first box, and the five boxes on the ship on Disc 2 (four of them
+# hold {name}, as the game's do). Each language's first box uses most of the letters it has to draw.
+LETTER_TEXTS = {
+    'el': ('Greek letters test', {
+        'dlg/M001/009': 'Ώρα για λόγια: ΓΔΘΛΞΠΣΦΨΩ!{br}αβγδεζηθ κλμξπρστ φχψω άέήώς',
+        'dlg/M275/008': '{name}! Πού είσαι; Ψάχνω παντού.',
+        'dlg/M275/009': '{name}, έλα γρήγορα εδώ πάνω!',
+        'dlg/M275/010': 'Δεν ξέρω τι γίνεται, {name}.',
+        'dlg/M275/011': 'Περίμενε με εδώ, {name}, θα έρθω.',
+        'dlg/M275/012': 'Φύγαμε τώρα, Ψάξε το Ω και το Λ.'}),
+    'he': ('Hebrew letters test', {
+        'dlg/M001/009': 'שלום! מה קורה פה (1997)?{br}אבגדהוזחטיכלמנסעפצקרשת ךםןףץ',
+        'dlg/M275/008': '{name}! איפה את? אני מחפש בכל מקום.',
+        'dlg/M275/009': '{name}, בואי מהר לכאן למעלה!',
+        'dlg/M275/010': 'אני לא יודע מה קורה, {name}.',
+        'dlg/M275/011': 'חכי לי כאן, {name}, אני בא.',
+        'dlg/M275/012': 'הולכים עכשיו, צריך למצוא את הספינה.'}),
+    'ar': ('Arabic letters test', {
+        'dlg/M001/009': 'مرحبا يا صديقي! لا شيء هنا.{br}بيت ثلج خوخ ذهب ظل غيم قط',
+        'dlg/M275/008': '{name}! أين أنت يا صديقتي',
+        'dlg/M275/009': '{name}, تعال بسرعة إلى هنا!',
+        'dlg/M275/010': 'لا أعرف ماذا يحدث, {name}.',
+        'dlg/M275/011': 'انتظرني هنا, {name}, أنا قادم.',
+        'dlg/M275/012': 'هيا بنا الآن, علينا أن نجد السفينة.'}),
+}
+
+
+def test_letter(k, joins):
+    """{(x, y)} of the made-up letter painted in square k: a box of its own width and bars, a dot that
+    tells it from the others; a joined shape's bottom line reaches both sides of its ink."""
+    w = 3 + k % 6
+    pts = {(1, y) for y in range(2, 9)} | {(w, y) for y in range(2 + k % 3, 9)} | {(x, 8) for x in range(1, w + 1)}
+    pts |= {(x, 2 + k % 5) for x in range(1, w + 1)} | {(1 + (k // 6) % w, 1)}
+    if joins:
+        pts |= {(x, 8) for x in range(0, w + 2)}
+    return pts
+
+
+def shadowed(points):
+    """144 pixels: 1 for the painted dots, 2 for the shadow one dot right and below each (the game's
+    look), as the pack must hold the letter."""
+    cell = [0] * 144
+    for x, y in points:
+        cell[y * 12 + x] = 1
+    for x, y in points:
+        if x + 1 < 12 and y + 1 < 12 and not cell[(y + 1) * 12 + x + 1]:
+            cell[(y + 1) * 12 + x + 1] = 2
+    return cell
+
+
+def cut_shape(cell):
+    """A joined shape as the language mod cuts it (pe_lang_letter_cut): from its first painted column,
+    its painted width + the shadow column, the pixels moved to start there."""
+    xs = [i % 12 for i, v in enumerate(cell) if v == 1]
+    first, width = min(xs), min(max(xs) - min(xs) + 2, 12 - min(xs))
+    return [cell[i + first] if i % 12 + first < 12 and i % 12 < width else 0 for i in range(144)]
+
+
+def translator_letters(game, discs, out, localization):
+    """Part translator-letters (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't
+    set."""
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    try:
+        from PIL import Image
+    except ImportError:
+        print('SKIP translator letters: needs Pillow (the letters PNG and the game look are made with it)')
+        return 77
+    import pelang
+    from petext import rtl
+    from translator import gamelook as gl, letterart as la, project as tp
+    english, _, _ = make_english_pack(discs, out, localization)
+    the_game = tp.Game()
+    look_disc = gl.DiscLook(discs[0])
+    for lang, (name, texts) in LETTER_TEXTS.items():
+        tr = tp.Translation(the_game, lang, name)
+        for key, text in texts.items():
+            tr.set_text(key, text)
+        path = out / f'letters-{lang}.pelang'
+        saved = tr.save(path)
+        check(not saved.left_out and not saved.whole, f'{lang}: lines left out: {saved.left_out} {saved.whole}')
+        rows = tr.letters_to_draw()
+        shapes = la.every_shape(rows)
+
+        def window(*args):
+            report = out / f'letters-{lang}-report.json'
+            report.unlink(missing_ok=True)
+            ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--english',
+                                  str(english), '--settings', str(out / 'translator-settings.json'), '--report',
+                                  str(report), '--disc', discs[0], *args], capture_output=True, text=True, timeout=300)
+            said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+            check(ran.returncode == 0 and said.get('ok'), f'{lang}: the Translator failed: {said} {ran.stderr[-600:]}')
+            return said
+
+        empty, painted = out / f'letters-{lang}-empty.png', out / f'letters-{lang}-painted.png'
+        window('--save-letters', str(empty))
+        img = Image.open(empty).convert('RGB')
+        strip = img.size == la.size(rows, True)
+        check(strip and img.size != la.size(rows, False), f'{lang}: the letters PNG has no style strip: {img.size}')
+        drawn = {}
+        for k, (shape, (x, y)) in enumerate(la.squares(rows, True).items()):
+            check(all(img.getpixel((x + i % 12, y + i // 12))[0] < 128 for i in range(144)),
+                  f'{lang}: the square of {shape.char} is not empty in the saved PNG')
+            drawn[shape.char] = test_letter(k, shape.joins)
+            for px, py in drawn[shape.char]:
+                img.putpixel((x + px, y + py), (255, 255, 255))
+        img.save(painted)
+        said = window('--letters', str(painted))
+        check(said['letters'].get('drawn') == sorted(drawn) and not said['letters'].get('empty')
+              and not said['letters'].get('notes') and said['letters_drawn'] == sorted(drawn),
+              f"{lang}: the Translator did not take every painted square: {said['letters']}")
+        again = tp.Translation.open(path, the_game)
+        check(again.texts == texts and set(again.drawn) == set(drawn), f'{lang}: the file does not reopen as saved')
+
+        # The pack: every letter the lines show, as exactly its painted dots and their shadow.
+        data = pelang.pack_bytes(path)
+        at, count = struct.unpack_from('<II', data, 80)
+        records = {chr(struct.unpack_from('<I', data, at + 80 * k)[0]): data[at + 80 * k:at + 80 * (k + 1)]
+                   for k in range(count)}
+        shown = set(''.join(texts.values())) | (rtl.shapes_for(texts.values()) if rtl.is_rtl(lang) else set())
+        used = sorted(ch for ch in drawn if ch in shown)
+        check(used, f'{lang}: no painted letter is used')
+        for ch in used:
+            r = records.get(ch)
+            check(r is not None, f'{lang}: {ch} (U+{ord(ch):04X}) is not in the pack')
+            pixels = [r[8 + i // 2] >> ((i & 1) * 4) & 15 for i in range(144)]
+            check(r[6] == 0xFF and pixels == shadowed(drawn[ch]) and r[5] == max(x for x, _ in drawn[ch]) + 2,
+                  f'{lang}: {ch} in the pack is not the painted letter (base {r[6]:02X}, advance {r[5]})')
+        print(f'translator letters, {name}: the Translator saved {len(shapes)} squares (game letters as a style guide '
+              f'beside them), took all {len(drawn)} painted letters back, and the pack holds the {len(used)} its lines '
+              'use as painted, with their shadow and widths')
+
+        pack = (lang, name, None, path)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(run_fixed, game, discs[:1], out / f'letters-{lang}-disc1', [(FIRST_BOX, 'first', None)],
+                                pack=pack, pad=NEW_GAME)
+            second = pool.submit(run_disc2, game, discs, out / f'letters-{lang}-disc2', pack) if len(discs) > 1 else None
+            works = [('Disc 1', first.result(), {'first': 'dlg/M001/009'})]
+            if second is not None:
+                work2, room = second.result()
+                works.append((f'Disc 2 (room {room})', work2, DISC2_BOXES))
+        mine = gl.Pack.read(data)
+        font = gl.Font(look_disc, mine)
+        for where, work, boxes in works:
+            log = mods_log(work)
+            check(f"text: {name} ({lang})'s stretches in use" in log, f'{where}: the pack did not draw: {work}')
+            missing = [line for line in log.splitlines() if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line)]
+            check(not missing, f'{where}: letters fell back to "?": {missing[:5]}: {work}')
+            total = 0
+            for label, key in boxes.items():
+                raw = mine.text(key)
+                look = gl.lay_out(font, raw, gl.name_bytes(mine, 'Aya'), right_to_left=rtl.is_rtl(lang))
+                check(look.notes == [] and len(look.screens) == 1, f'{where} {label}: {look.notes}, {len(look.screens)} screens')
+                total += look_is_the_frame(work, label, look, font, raw, 'Aya', gl)
+                pictures = {tuple(p.letter.pixels) for p in look.screens[0]}
+                # the letters the box shows: for Arabic, the shapes its words take (petext/rtl.py join)
+                letters = set()
+                for line in texts[key].replace('{name}', '').split('{br}'):
+                    letters |= set(rtl.join(line)[0]) if rtl.is_rtl(lang) else set(line)
+                taken = sorted(set(used) & letters)
+                check(taken, f'{where} {label}: no painted letter in the box')
+                for ch in taken:
+                    cell = shadowed(drawn[ch])
+                    want = cut_shape(cell) if rtl.is_joining(ord(ch)) else cell
+                    check(tuple(want) in pictures, f'{where} {label}: the painted {ch} (U+{ord(ch):04X}) is not among '
+                                                   f'the letters drawn')
+            print(f'PASS translator letters, {name}, {where}: {len(boxes)} box(es) are the Translator\'s "As in the '
+                  f'game" drawing, all {total} letter pixels, with the painted letters'
+                  + (', right to left' if rtl.is_rtl(lang) else '') + (', joined' if lang == 'ar' else ''))
+    if len(discs) < 2:
+        print('SKIP translator letters on Disc 2: PE_TEST_DISC2 is not set')
+        return 77
+    return 0
 
 
 def menu_line(codes, drawn):
@@ -1157,9 +3111,10 @@ def name_letters(pack):
 # ---- The game ----
 
 def run(game, discs, work, pack=None, present=(), mods=True, pad=(), start=None, driver=None, frame_limit=None,
-        crash_after=None, card=None, save_after=None, all_mods=None):
+        crash_after=None, card=None, save_after=None, all_mods=None, hp=None):
     """One headless run in its own folder, with `pack` chosen and the `present` packs beside it. From vblank `start` the game pauses at each control point;
-    driver(vblank, work) keeps frames (keep()) and returns the next command, or None to quit."""
+    driver(vblank, work) keeps frames (keep()) and returns the next command, or None to quit. `hp`: the game's
+    own test switch --diagnostic-hp-at VBLANK:EXPECTED:VALUE (Aya's HP set at that vblank)."""
     work.mkdir(parents=True)
     config = work / 'config'
     (config / 'lang').mkdir(parents=True)
@@ -1185,6 +3140,8 @@ def run(game, discs, work, pack=None, present=(), mods=True, pad=(), start=None,
         args += ['--test-crash-after', str(crash_after)]
     if save_after:
         args += ['--test-save-after', str(save_after)]
+    if hp:
+        args += ['--diagnostic-hp-at', hp]
     for tick, mask in pad:
         args += ['--pad-at', f'{tick}:{mask}']
     env = dict(os.environ, SDL_AUDIODRIVER='dummy', SDL_AUDIO_DRIVER='dummy', PSYZ_AUDIO_CLOCK='video',
@@ -1404,7 +3361,16 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
     for part, check_patch in (('chinese', chinese_patch), ('spanish', spanish_patch), ('italian', italian_patch),
-                              ('german', german_patch), ('french', french_patch)):
+                              ('german', german_patch), ('french', french_patch), ('english-pack', english_pack),
+                              ('translator', translator_file), ('translator-pictures', translator_pictures),
+                              ('translator-map', translator_map), ('translator-place-title', translator_place_title),
+                              ('translator-battle', translator_battle),
+                              ('translator-cards', translator_cards), ('translator-tutorial', translator_tutorial),
+                              ('translator-game-over', translator_game_over),
+                              ('translator-menu-words', translator_menu_words),
+                              ('translator-menu-look', translator_menu_look),
+                              ('translator-battle-look', translator_battle_look), ('translator-look', translator_look),
+                              ('translator-letters', translator_letters)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

@@ -2,6 +2,7 @@
 
   python -I pelang.py template out/text/strings.json -o fr.csv [--merge old-fr.csv]
   python -I pelang.py pseudo   out/text/strings.json -o qps.csv
+  python -I pelang.py english  out/text/strings.json -o en.pelang
   python -I pelang.py build    fr.csv --strings out/text/strings.json --lang fr --name "French" -o fr.pelang
   python -I pelang.py bundle   fr.pelang -o "French.pelang" [--readme credits.txt] [--pictures cd1.bin ...]
 
@@ -52,7 +53,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from petext import battle, gametext as gt, latin, validation, layout, menu  # noqa: E402
+from petext import battle, citymap, gametext as gt, latin, validation, layout, menu  # noqa: E402
 from petext import modtext, cjk, letters as lettertable, stretch, names as namelib
 from petext import manifest as srcman  # noqa: E402
 from petext import wrap as wrapping  # noqa: E402
@@ -295,6 +296,82 @@ def cmd_pseudo(a) -> int:
     return 0
 
 
+def game_bytes(key: str, source: dict) -> bytes | None:
+    """What a pack entry holds when it is the game's own text for `key`: the row's bytes as the disc
+    has them, and for a dialogue page that doesn't end in FF, its own page end. None when the source
+    has no text (the committed manifest)."""
+    if not source.get("raw") and "text" not in source:
+        return None
+    raw = bytes.fromhex(source.get("raw") or "")
+    end = source.get("end", "FF")
+    return raw + (bytes([int(end, 16)]) if key.startswith("dlg/") and end != "FF" else b"")
+
+
+def cmd_english(a) -> int:
+    """The game's own English as a pack, from the player's discs: the place a new language starts
+    from, and the check that a pack built from the game's text is the game. Every row goes through
+    `build` as a translation would; a row is kept only when what build wrote for it is byte for byte
+    what the disc has, so with this pack the game shows exactly what it shows without one. The rest
+    (pages with no text, and the few rows build can't write as they are: the name entry's grids, a
+    page that is only controls) are left out: the game shows its own text there."""
+    import contextlib
+    import io
+    import tempfile
+    if srcman.is_manifest(a.strings):
+        print(f"error: {a.strings} is the source manifest: it has no game text. Give strings.json from "
+              "extract_text.py, run on your own discs", file=sys.stderr)
+        return 1
+    strings = load_strings(a.strings)
+    rows, left = [], {}
+    for r in template_rows(strings):
+        if not r["english"]:
+            left[r["key"]] = "no text"
+            continue
+        try:
+            validation.check(gt.encode(r["english"], extended=True), r["english"])
+        except ValueError:
+            left[r["key"]] = "controls the pack tool doesn't write"
+            continue
+        if r["key"] in namelib.GRIDS and empty_grid_cells(r["english"]) != r["english"]:
+            # A pack's name grid has its picture cells emptied; the game's own keeps them.
+            left[r["key"]] = "the pack tool writes it differently"
+            continue
+        rows.append(dict(r, translation=r["english"]))
+    with tempfile.TemporaryDirectory() as tmp:
+        work, pack = Path(tmp) / "english.csv", Path(tmp) / "english.pelang"
+        for attempt in range(2):
+            write_csv(work, rows)
+            said = io.StringIO()
+            with contextlib.redirect_stdout(said), contextlib.redirect_stderr(said):
+                # As the game has it: no rewrapping (a few English pages run past their box).
+                failed = main(["build", str(work), "--strings", str(a.strings), "--lang", a.lang, "--name", a.name,
+                               "-o", str(pack), "--no-wrap", "--max-messages", "100000",
+                               *(["--banks", str(a.banks)] if a.banks else [])])
+            if failed:
+                errors = [line for line in said.getvalue().splitlines() if line.startswith("error")]
+                print("\n".join(errors[:50] or said.getvalue().splitlines()[-50:]), file=sys.stderr)
+                return 1
+            built = read_pack(pack)[2]
+            other = [r for r in rows if built.get(fnv1a(r["key"])) != game_bytes(r["key"], strings[r["key"]])]
+            if not other:
+                break
+            if attempt:
+                print(f"error: {len(other)} rows still differ from the game's bytes: "
+                      f"{', '.join(r['key'] for r in other[:20])}", file=sys.stderr)
+                return 1
+            left.update({r["key"]: "the pack tool writes it differently" for r in other})
+            rows = [r for r in rows if r["key"] not in left]
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_bytes(pack.read_bytes())
+    why: dict[str, list[str]] = {}
+    for key, reason in sorted(left.items()):
+        why.setdefault(reason, []).append(key)
+    print(f"wrote {a.out}: {a.name} ({a.lang}), {len(rows)} of {len(strings)} rows, each byte for byte the game's")
+    for reason, keys in why.items():
+        print(f"left to the game ({reason}): {len(keys)}: {', '.join(keys)}")
+    return 0
+
+
 PAGE_END = re.compile(r"\{end (F9|FF)\}$", re.IGNORECASE)
 
 
@@ -380,6 +457,11 @@ def check_row(key: str, text: str, source: dict, widest_name: dict[str, int], na
         if wrapped != raw:
             raw = wrapped
             note = "wrapped to fit the box" + (f", {added} screen(s) added" if added else "") + "; check the breaks"
+    if citymap.placed(key):
+        # The city map's lines: typed as words only, they are centred as the English (petext/citymap.py).
+        cmds, space = list(validation.commands(raw)), bytes([gt.CODE_OF[" "]])
+        if citymap.words_only(key, cmds, space):
+            raw = citymap.place(key, cmds, space, lambda c: layout.measure(c, name_px))
     layout_errors, warnings = layout.check(key, raw, source, widest_name, name_px, metrics, layouts)
     errors.extend(layout_errors)
     if note:
@@ -751,33 +833,52 @@ def read_pack(path: Path) -> tuple[str, str, dict[int, bytes]]:
         start = text_at + off
         out[h] = data[start:data.index(b"\xff", start)]
     if version == 4:
-        out = {h: _expand_stretches(data, raw) for h, raw in out.items()}
+        expand = _stretch_expander(data)             # the pack's tables, read once
+        out = {h: expand(raw) for h, raw in out.items()}
     return lang.rstrip(b"\0").decode(), name.rstrip(b"\0").decode(), out
 
 
-def _expand_stretches(data: bytes, raw: bytes) -> bytes:
-    dictionary, glyphs = struct.unpack_from("<II", data, 64)
-    letters_at, letters = struct.unpack_from("<II", data, 80)
-    at, runs = struct.unpack_from("<II", data, 88)
+def fixed_letter_forms() -> dict[str, bytes]:
+    """letter -> its one byte, for the codes that mean the same in every pack."""
     back = {ch: bytes([code]) for code, ch in gt.CHARS.items()}
     back.update({ch: bytes([code]) for ch, code in gt._latin_codes().items()})
-    extra = 0
-    for k in range(letters):
-        r = data[letters_at + k * lettertable.RECORD:]
-        if lettertable.coded(k, r):
-            back[chr(struct.unpack_from("<I", r)[0])] = bytes([r[4]])
-        else:                                      # no code: as build wrote it before the stretches
-            back[chr(struct.unpack_from("<I", r)[0])] = lettertable.extra_token(extra)
-            extra += 1
-    for k in range(glyphs):
-        back[chr(struct.unpack_from("<I", data, dictionary + k * cjk.RECORD)[0])] = cjk.token(k)
+    return back
+
+
+def pack_letter_forms(data: bytes) -> dict[str, bytes]:
+    """letter -> the bytes it has in a compiled pack's text as read_pack gives it: the fixed codes,
+    then the pack's own letter table (a letter with no code as build wrote it before the stretches)
+    and its CJK dictionary. A version 1 pack has only the fixed codes."""
+    version = struct.unpack_from("<I", data, 4)[0]
+    back = fixed_letter_forms()
+    if version > 2:
+        letters_at, letters = struct.unpack_from("<II", data, 80)
+        extra = 0
+        for k in range(letters):
+            r = data[letters_at + k * lettertable.RECORD:]
+            if lettertable.coded(k, r):
+                back[chr(struct.unpack_from("<I", r)[0])] = bytes([r[4]])
+            else:                                      # no code: as build wrote it before the stretches
+                back[chr(struct.unpack_from("<I", r)[0])] = lettertable.extra_token(extra)
+                extra += 1
+    if version > 1:
+        dictionary, glyphs = struct.unpack_from("<II", data, 64)
+        for k in range(glyphs):
+            back[chr(struct.unpack_from("<I", data, dictionary + k * cjk.RECORD)[0])] = cjk.token(k)
+    return back
+
+
+def _stretch_expander(data: bytes):
+    """A function giving a version 4 pack's entry with its stretches as the bytes they stand for."""
+    at, runs = struct.unpack_from("<II", data, 88)
+    back = pack_letter_forms(data)
     starts = struct.unpack_from(f"<{runs + 1}I", data, at)
     pool = at + (runs + 1) * 4
     table = stretch.Stretches()
     for k in range(runs):
         table.runs.append("".join(chr(c) for c in struct.unpack_from(
             f"<{starts[k + 1] - starts[k]}I", data, pool + starts[k] * 4)))
-    return stretch.expand(raw, table, back)
+    return lambda raw: stretch.expand(raw, table, back)
 
 
 # The user supplies this original patch; translated content is never bundled.
@@ -1153,6 +1254,30 @@ def cmd_import_patch(a):
                         if after[page][1] != end and after[page][1] in (0xF9, 0xFF):
                             text += f"{{end {after[page][1]:02X}}}"     # the box waits, or closes, as the patch's
                         rows.append({"key": key, "translation": text, "notes": "patch import"})
+            # The city map's bank (petext/citymap.py): its place titles and narration, read as any
+            # room's pages when the patch changed only that text (else they come with its pictures).
+            map_before, map_after = citymap.entry_bytes(original), citymap.entry_bytes(translated)
+            if map_before != map_after and not citymap.only_text_changed(map_before, map_after):
+                left.append({"key": f"dlg/{citymap.BANK_KEY}/*", "reason": "the patch changed the city map's "
+                             "pictures too: its text comes with them"})
+            elif map_before != map_after:
+                before = gt.pages(citymap.english_bank(map_before))[0]
+                after = patchimport.patched_pages(citymap.english_bank(map_after))
+                prefix = f"dlg/{citymap.BANK_KEY}/"
+                left += [{"key": f"{prefix}{page:03}", "reason": "page only in the patch"} for page in sorted(set(after) - set(before))]
+                for page, (raw, end) in sorted(before.items()):
+                    key = f"{prefix}{page:03}"
+                    if page not in after:
+                        left.append({"key": key, "reason": "page missing from the patch"})
+                        continue
+                    end_changed += after[page][1] != end
+                    text, why = patchimport.compare_page(raw, after[page][0], letters, pairs)
+                    if why:
+                        left.append({"key": key, "reason": why})
+                    elif text is not None:
+                        if after[page][1] != end and after[page][1] in (0xF9, 0xFF):
+                            text += f"{{end {after[page][1]:02X}}}"
+                        rows.append({"key": key, "translation": text, "notes": "patch import"})
             manifest = json.loads((ROOT / "data/manifest.json").read_text(encoding="utf-8"))
             before, after = dict(table_entries(original.resident_pack())), dict(table_entries(translated.resident_pack()))
             for key in sorted(k for k in manifest["entries"] if k.split("/")[0] in ("sys", "item", "desc", "misc")):
@@ -1283,6 +1408,14 @@ def main(argv=None) -> int:
     sa.add_argument("languages", nargs="+", help="language codes from petext/alphabets.py: `pelang.py languages` lists them")
     sa.add_argument("-o", "--out", type=Path, required=True)
     sub.add_parser("languages", help="which languages the pack tool can write today")
+    en = sub.add_parser("english", help="the game's own English as a pack: where a new language starts, "
+                                        "and the proof a pack of the game's text is the game")
+    en.add_argument("strings", type=Path, help="strings.json from extract_text.py (your own discs)")
+    en.add_argument("-o", "--out", type=Path, required=True)
+    en.add_argument("--lang", default="en", help="language code (default: en)")
+    en.add_argument("--name", default="English pack",
+                    help='the name the Language row shows (default: "English pack"; the row "English" is the game itself)')
+    en.add_argument("--banks", type=Path, help="banks.json from extract_text.py (default: beside strings.json)")
     b = sub.add_parser("build", help="check a translated CSV and write a .pelang pack")
     b.add_argument("csv", type=Path, nargs="+",
                    help="the translation; several files (one per disc) when they hold the same text for rows they share")
@@ -1376,7 +1509,7 @@ def main(argv=None) -> int:
         return 0
     return {"import-italian": cmd_import_italian, "import-spanish": cmd_import_spanish, "import-patch": cmd_import_patch,
             "template": cmd_template, "pseudo": cmd_pseudo, "sample": cmd_sample, "languages": cmd_languages,
-            "build": cmd_build, "bundle": cmd_bundle,
+            "build": cmd_build, "bundle": cmd_bundle, "english": cmd_english,
             "export": cmd_export, "manifest": cmd_manifest,
             "latin-header": cmd_latin_header, "cyrillic-header": cmd_cyrillic_header}[a.cmd](a)
 

@@ -59,7 +59,7 @@ def main() -> int:
     # The words at 2x, advancing like the dialogue box.
     x, y = 20, rows * (pitch + 20) + 30
     for c in raw:
-        adv = gt.BOX_ADVANCE[c] if c < len(gt.BOX_ADVANCE) else gt._latin_advance(c) or gt.WIDE
+        adv = gt.BOX_ADVANCE[c] if c < gt.GAME_CODES else gt._latin_advance(c) or gt.WIDE
         paste(img, cells.get(c, [0] * 144), x, y, 2)
         x += adv * 2
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
