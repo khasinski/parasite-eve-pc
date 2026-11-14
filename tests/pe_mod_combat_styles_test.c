@@ -103,6 +103,20 @@ int pe_menu_register_choice(const char *p, const char *l, const char *d,
   style_choices = count;
   return 0;
 }
+/* The New Game question: records what was asked, answers with `answer`. */
+static int answer = -1, asked, asked_initial;
+static const char *const *asked_names, *const *asked_descriptions;
+int pe_menu_choose_title(const char *title, const char *keys,
+                         const char *const *names,
+                         const char *const *descriptions, unsigned count,
+                         int initial) {
+  assert(title && keys && count == PE_STYLE_COUNT);
+  asked++;
+  asked_names = names;
+  asked_descriptions = descriptions;
+  asked_initial = initial;
+  return answer;
+}
 int pe_menu_register_tick(PeMenuPerFrame fn) {
   menu_tick = fn;
   return 0;
@@ -227,6 +241,35 @@ int main(void) {
   requested = PE_STYLE_ORIGINAL;
   menu_tick();
   assert(!pe_styles_enabled());
+  /* The title's New Game asks for a style (Vanilla first, a description for
+   * each) and sets it; the Tutorial and the EX Game don't ask. */
+  PeHookNewGame title_game = {PE_NEW_GAME_TITLE};
+  requested = PE_STYLE_BULWARK;
+  menu_tick();
+  answer = PE_STYLE_STRIKER;
+  saved_count = saves;
+  fire(PE_HOOK_NEW_GAME, &title_game);
+  assert(asked == 1 && asked_initial == PE_STYLE_BULWARK &&
+         !strcmp(asked_names[0], "Vanilla") &&
+         !strcmp(asked_names[PE_STYLE_STRIKER], "Striker"));
+  for (int i = 0; i < PE_STYLE_COUNT; i++)
+    assert(asked_descriptions[i] && strlen(asked_descriptions[i]) > 20);
+  assert(requested == PE_STYLE_STRIKER && enabled == PE_STYLE_STRIKER &&
+         saves == saved_count + 1);
+  answer = PE_STYLE_ORIGINAL; /* Vanilla */
+  fire(PE_HOOK_NEW_GAME, &title_game);
+  assert(asked == 2 && requested == PE_STYLE_ORIGINAL && !pe_styles_enabled());
+  answer = -1; /* no window: the setting stays */
+  requested = PE_STYLE_CHANNELER;
+  menu_tick();
+  fire(PE_HOOK_NEW_GAME, &title_game);
+  assert(asked == 3 && requested == PE_STYLE_CHANNELER);
+  PeHookNewGame tutorial = {PE_NEW_GAME_TUTORIAL}, ex_game = {PE_NEW_GAME_EX};
+  fire(PE_HOOK_NEW_GAME, &tutorial);
+  fire(PE_HOOK_NEW_GAME, &ex_game);
+  assert(asked == 3 && requested == PE_STYLE_CHANNELER);
+  requested = PE_STYLE_ORIGINAL;
+  menu_tick();
   saves = 0;
   /* The planned costume mapping, kept for a later Wardrobe link. */
   pe_pack_pe1_costumes_register();

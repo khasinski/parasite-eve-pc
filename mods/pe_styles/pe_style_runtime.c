@@ -1073,6 +1073,48 @@ static void all_styles(char *out, unsigned size) {
 /* Choice names in PeStyleId order, so the saved index is the style. */
 static const char *const style_names[PE_STYLE_COUNT] = {
     "Off", "Quickstep", "Bulwark", "Striker", "Channeler"};
+/* The New Game question: the same order, "Vanilla" for Off, and what each
+ * style does and what it costs. */
+static const char *const new_game_names[PE_STYLE_COUNT] = {
+    "Vanilla", "Quickstep", "Bulwark", "Striker", "Channeler"};
+static const char *const new_game_descriptions[PE_STYLE_COUNT] = {
+    "The original combat, unchanged.",
+    "Knock an enemy below half its HP, or kill one while others remain, to "
+    "gain 20% of your AT bar and 3 seconds of faster movement. While you rush, "
+    "you take 20% more damage.",
+    "While your AT bar charges you take 25% less damage, and that damage loads "
+    "a counter: your next hits deal extra damage and win back up to half of it "
+    "as HP. Waiting on a full AT bar, you take 15% more damage.",
+    "Gun hits deal 25% more at close range (inside the cyan ring shown while "
+    "aiming). Further away, damage drops steadily, down to 25% less at the "
+    "edge of your gun's range.",
+    "Each attack that damages an enemy charges your next support PE: 1 charge "
+    "makes it half price, 2 make it free. At 2 charges a hit cracks the "
+    "charge, and a second hit before you cast loses one."};
+/* The title's New Game asks which style this game uses; the answer is the
+ * F1 setting from then on. Headless runs (no window) keep the setting. */
+static int new_game_pick(void *ctx, void *user) {
+  const PeHookNewGame *q = ctx;
+  (void)user;
+  if (!q || q->kind != PE_NEW_GAME_TITLE)
+    return 0;
+  int choice = pe_menu_choose_title(
+      "Choose your combat style", "Up/Down select   Cross/Enter start",
+      new_game_names, new_game_descriptions, PE_STYLE_COUNT,
+      valid_style(requested));
+  if (choice < 0)
+    return 0;
+  requested = valid_style(choice);
+  settings_tick();
+  pe_menu_save_settings();
+  pe_log("costume_style", "new game style=%s",
+         pe_style_definition((PeStyleId)requested)->key);
+  return 0;
+}
+static int new_game(void *ctx, void *user) {
+  new_game_pick(ctx, user);
+  return reset(ctx, user);
+}
 void pe_styles_register(const char *mod_id) {
   pe_menu_register_choice(
       PE_PAGE_STYLES, "Style",
@@ -1129,5 +1171,6 @@ void pe_styles_register(const char *mod_id) {
               mod_id);
   pe_hook_add(PE_HOOK_SCENE_START, reset, NULL, PE_PRIORITY_NORMAL, mod_id);
   pe_hook_add(PE_HOOK_SAVE_READ, reset, NULL, PE_PRIORITY_NORMAL, mod_id);
-  pe_hook_add(PE_HOOK_NEW_GAME, reset, NULL, PE_PRIORITY_NORMAL, mod_id);
+  /* EARLY: the style is set before other mods react to the new game. */
+  pe_hook_add(PE_HOOK_NEW_GAME, new_game, NULL, PE_PRIORITY_EARLY, mod_id);
 }
