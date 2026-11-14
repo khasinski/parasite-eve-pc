@@ -47,9 +47,14 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
      and its description in the help line above. A Parasite Energy's name is drawn in the PE list:
      every PE a game teaches (Heal 1 to Preraise, Full Recover, Liberate) in your words where you
      have translated them, the one you are on under the cursor, as the menu shows them when Aya is
-     hurt (the heals bright, the others grey), and its description in the help line above. Not
-     drawn that way yet: the other menu places (boxes and choices), battle lines, right-to-left
-     languages, and the button icons in a few lines (the preview says so).
+     hurt (the heals bright, the others grey), and its description in the help line above. The
+     menus' boxes and choices are drawn too, each alone over the darkened room: a message with its
+     OK, a question with its two choices (OK / Cancel, Yes / No; "Medicine 1 will be discarded",
+     "Heal 1 will be used" with the name in your words where you have translated it), an item's
+     Use / Move / Discard, the memory card's Saving / Loading box, and the config menu with its
+     Sound, Cursor and Window choices and their hints in the help line. Not drawn that way yet:
+     battle lines, right-to-left languages, and the button icons in a few lines (the preview says
+     so).
    - **Dialogue MAP** is the city map: the place title shown when Aya arrives somewhere
      (lines 1-10) and the map's narration (11-14). Type only the words, with `{br}` between lines:
      the tool centres each line and puts a title on the box's third line, as the English has them.
@@ -198,4 +203,6 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   `original-game-translator-look`) checks the game look against the game's own frames; part
   `translator-menu-look` (CTest `original-game-translator-menu-look`) checks the menus' help line the
   same way, with the game's own text and with four lines the Translator saved (Disc 1, part menus'
-  route on into the item list), and the item list and the PE list (Day 5 sample save) with them.
+  route on into the item list), and the item list and the PE list (Day 5 sample save) with them,
+  and the menus' boxes (an item's actions, "will be discarded" / "will be used" with their choices,
+  Loading, File loaded) and the config menu with its choices and hints.

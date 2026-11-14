@@ -512,6 +512,86 @@ class EnglishTest(unittest.TestCase):
         self.assertEqual(notes, {})
         print(f"\n{len(keys)} English PE names drawn in the PE list at the manifest's widths")
 
+    def test_every_box_row_is_drawn_in_its_box(self):
+        """The boxes' and the config menu's windows and grids as both discs have them (BoxMenuDisc's
+        numbers), and every English row of the menus' boxes and choices drawn: nothing left out, the line
+        at the manifest's width (a confirm label: joined with its name), inside the screen, the box on
+        the screen."""
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        from translator import gamelook as G, menulook as M
+        menus = [M.MenuDisc(d) for d in self.discs]
+        for md in menus:
+            for n, w in BoxMenuDisc.WINDOWS.items():
+                self.assertEqual((md.windows[n], md.grids[n][:8]), (w, BoxMenuDisc.GRIDS[n]), hex(n))
+        pack = G.Pack.read(pelang.pack_bytes(self.pack))
+        mf = M.MenuFont(G.Font(G.DiscLook(self.discs[0]), pack), menus[0])
+        lists = ("help line", "item list", "parasite energy list")
+        keys = [k for k in GAME.rows if M.can_draw(k) and M.context_of(k) not in lists]
+        self.assertEqual(len(keys), 52)
+        unseen = {"sys/044", "sys/045"}          # MAX, max: the config list ends at Position
+        wrong = {}
+        for k in keys:
+            look = M.look(mf, pack.text(k), k, None)
+            ends = [p.x - p.letter.x for p in look.text.placed] + [p.x + p.letter.drawn for p in look.text.placed]
+            label = M.context_of(k) == "confirm label" and k in M.confirm_of(k)[0] and len(M.confirm_of(k)[0]) > 1
+            # (a label the game joins is shown whole: sys/073's first line is sys/071 and sys/073 together)
+            whole = M.joined(*[pack.text(r) for r in M.confirm_of(k)[0]]) if label else None
+            width = (M.measure(mf, M.split_line(mf, whole)[0]) if label else GAME.rows[k]["menu_px"])
+            top, bottom = look.focus
+            found = (look.notes if k not in unseen else [], look.text.width == width,
+                     0 <= min(ends) and max(ends) <= 320, 0 <= top < bottom <= 224)
+            if found != ([], True, True, True):
+                wrong[k] = (found, look.text.width, width)
+        self.assertEqual(wrong, {})
+        print(f"\n{len(keys)} English rows of the menus' boxes and choices drawn in their boxes")
+
+    def test_the_window_shows_a_confirm_label_joined_with_the_item_s_name(self):
+        """"As in the game" for "will be discarded": the confirm box with Medicine 1's name in the
+        translator's words, and the game's own Cancel beside their OK."""
+        if not window_works():
+            self.skipTest("no screen for a window here")
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        import time
+        import tkinter as tk
+        from translator import app as A, gamelook as G
+        A.SETTINGS = self.dir / "box-settings.json"
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "box.pelang"), select="sys/004", new=("es", "Español"))
+            window.load_english(str(self.pack))
+            until = time.monotonic() + 60
+            while (window.english_busy or not window.english) and time.monotonic() < until:
+                root.update()
+                time.sleep(0.02)
+            self.assertIsNone(window.use_disc(self.discs[0], remember=False))
+            window.tr.set_text("item/005", "Medicina 1")
+            window.tr.set_text("sys/004", " se tirará")
+            window.tr.set_text("sys/005", "Vale")
+            window.preview = None
+            window.check_now()
+            until = time.monotonic() + 60
+            while window.preview is None and time.monotonic() < until:
+                root.update()
+                time.sleep(0.02)
+            # (compared as text: a pack's stretches are numbered by what else is in it)
+            shown = P.read_pack_text(window.preview.pack, GAME).texts
+            self.assertEqual({k: shown.get(k) for k in ("sys/004", "item/005", "sys/005", "sys/006")},
+                             {"sys/004": " se tirará", "item/005": "Medicina 1", "sys/005": "Vale",
+                              "sys/006": self.english["sys/006"]})
+            window.look_mode.set("game")
+            self.assertTrue(window.draw_game())
+            texts = [window.canvas.itemcget(i, "text") for i in window.canvas.find_all()
+                     if window.canvas.type(i) == "text"]
+            self.assertTrue(any("a confirm box" in t for t in texts), texts)
+        finally:
+            root.destroy()
+
     def test_the_english_pack_reads_back_as_the_discs_own_text_every_row(self):
         self.assertEqual(self.wrong, 0)
         self.assertGreater(len(self.english), 2800)
@@ -1704,6 +1784,28 @@ class FakeMenuDisc:
         return 0
 
 
+class BoxMenuDisc(FakeMenuDisc):
+    """FakeMenuDisc with the boxes' and the config menu's windows and grids as the boot program has them
+    on both USA discs (EnglishTest.test_every_box_row_is_drawn_in_its_box checks them)."""
+
+    WINDOWS = {0x02: (0, 0, 60, 52), 0x03: (0, 0, 60, 36), 0x20: (28, 32, 72, 100), 0x21: (100, 32, 62, 36),
+               0x23: (100, 48, 72, 36), 0x27: (0, 0, 160, 50), 0x28: (0, 0, 100, 50), 0x29: (0, 0, 200, 50),
+               0x2A: (0, 0, 200, 50), 0x2E: (100, 64, 184, 40), 0x31: (0, 0, 0, 0), 0x3D: (0, 0, 100, 50)}
+    GRIDS = {0x02: (2, 2, 1, 3, 3, 56, 16, 16), 0x03: (2, 2, 1, 2, 2, 56, 16, 16), 0x20: (2, 2, 1, 6, 6, 68, 16, 16),
+             0x21: (2, 2, 1, 2, 2, 58, 16, 16), 0x23: (2, 2, 1, 2, 2, 68, 16, 0), 0x27: (0,) * 8,
+             0x28: (10, 30, 1, 1, 1, 60, 16, 0), 0x29: (0, 0, 2, 1, 1, 64, 16, 0), 0x2A: (0, 0, 2, 1, 1, 64, 16, 0),
+             0x2E: (2, 12, 3, 1, 1, 32, 16, 12), 0x31: (102, 2, 1, 2, 2, 80, 18, 0), 0x3D: (10, 30, 1, 1, 1, 60, 16, 0)}
+
+    def __init__(self):
+        from translator import menulook as M
+        super().__init__()
+        self.grids = [(0,) * 8] * M.SIMPLE_COUNT
+        for n, w in self.WINDOWS.items():
+            self.windows[n] = w
+        for n, g in self.GRIDS.items():
+            self.grids[n] = g
+
+
 class MenuLookRuleTest(unittest.TestCase):
     """The menus' look with no disc: which lines it draws, letters placed as the compiler measures
     menu lines, and the window's edges."""
@@ -1713,7 +1815,7 @@ class MenuLookRuleTest(unittest.TestCase):
         for key in ("desc/005", "misc/040", "misc/088", "sys/014", "sys/092"):
             self.assertEqual(M.context_of(key), "help line", key)
             self.assertTrue(M.can_draw(key), key)
-        for key in ("sys/008", "misc/089", "dlg/M001/009", "battle/000", "sys/016"):
+        for key in ("sys/031", "misc/089", "dlg/M001/009", "battle/000", "sys/016"):
             self.assertFalse(M.can_draw(key), key)
         for key in ("item/000", "item/067", "item/234"):
             self.assertEqual(M.context_of(key), "item list")
@@ -1843,6 +1945,139 @@ class MenuLookRuleTest(unittest.TestCase):
         self.assertNotIn((8, 12), left)
         self.assertIn((8, 13), left)
         self.assertTrue(all(30 <= y <= 31 for _, y in bottom) and all(306 <= x <= 307 for x, _ in right))
+
+    def test_the_boxes_rows_and_what_is_shown_beside_them(self):
+        """Which box draws each row of the menus' boxes and choices, and the rows each is shown with: the
+        name a confirm label is joined with, the choices, a message's second line and its OK, a config
+        row's hint in the help line."""
+        from translator import menulook as M
+        where = {"sys/000": "item actions", "sys/003": "item actions", "sys/004": "confirm label",
+                 "sys/005": "OK/cancel choice", "sys/007": "dialog line", "sys/008": "OK button",
+                 "sys/041": "config menu", "sys/046": "sound choice", "sys/049": "cursor choice",
+                 "sys/051": "colour options", "sys/054": "colour channel", "sys/064": "progress box",
+                 "sys/070": "progress box", "sys/074": "confirm label", "sys/099": "dialog line",
+                 "sys/108": "yes/no choice"}
+        for key, place in where.items():
+            self.assertEqual(M.context_of(key), place, key)
+            self.assertTrue(M.can_draw(key), key)
+        self.assertEqual(M.context_keys("sys/004"), ["item/005", "sys/005", "sys/006"])
+        self.assertEqual(M.context_keys("sys/005"), ["item/005", "sys/004", "sys/006"])
+        self.assertEqual(M.context_keys("sys/026"), ["item/235", "sys/005", "sys/006"])
+        self.assertEqual(M.context_keys("sys/113"), ["item/062", "sys/005", "sys/006"])
+        self.assertEqual(M.context_keys("sys/073"), ["sys/071", "sys/108", "sys/109", "sys/074"])
+        self.assertEqual(M.context_keys("sys/008"), ["sys/084"])
+        self.assertEqual(M.context_keys("sys/084"), ["sys/008"])
+        self.assertEqual(M.context_keys("sys/061"), ["sys/063", "sys/008"])
+        self.assertEqual(M.context_keys("sys/003"), ["sys/001", "sys/002"])
+        self.assertEqual(M.context_keys("sys/041"), ["sys/040", "sys/042", "sys/043", "misc/050"])
+        self.assertEqual(M.context_keys("sys/047"), ["sys/040", "sys/041", "sys/042", "sys/043", "sys/046", "misc/059"])
+        self.assertEqual(M.context_keys("sys/052"), ["sys/040", "sys/041", "sys/042", "sys/043", "sys/053", "sys/054",
+                                                     "sys/055", "sys/051", "misc/067"])
+        self.assertEqual(M.context_keys("sys/070"), [])
+        self.assertEqual(M.joined(b"ab\xff", None, b"cd\xffzz"), b"abcd\xff")
+
+    def box_look(self, key, text, context):
+        """A box drawn with no disc (BoxMenuDisc): the row in Spanish beside `context`."""
+        from translator import gamelook as G, menulook as M
+        result = P.check_row(GAME, key, text, "es", "Español", context=context)
+        self.assertEqual(result.errors, [], (key, result.errors))
+        pack = G.Pack.read(result.preview.pack)
+        mf = M.MenuFont(G.Font(FakeLookDisc(), pack), BoxMenuDisc())
+        return mf, M.look(mf, pack.text(key), key, None)
+
+    @staticmethod
+    def left(text):
+        return text.placed[0].x - text.placed[0].letter.x
+
+    @staticmethod
+    def lit(look, x, y):
+        """Whether something was added to the black screen at (x, y) (the cursor's tile)."""
+        return look.rgb[(y * 320 + x) * 3] > 0
+
+    def test_a_message_box_is_as_wide_as_its_line_with_its_ok_at_the_right(self):
+        from translator import menulook as M
+        mf, look = self.box_look("sys/084", "Partida cargada correctamente", {"sys/008": "Vale"})
+        width = M.measure(mf, mf.pack.text("sys/084"))
+        x, w = (300 - max(100, width)) >> 1, max(100, width) + 20
+        self.assertEqual(look.focus, (95, 145))
+        self.assertEqual(self.left(look.text), x + ((w - (width + 4)) >> 1))
+        self.assertEqual({p.y for p in look.text.placed}, {105 + 1})
+        ok = M.lay_out(mf, mf.pack.text("sys/008"), 0, 0).width
+        _, ok_look = self.box_look("sys/008", "Vale", {"sys/084": "Partida cargada correctamente"})
+        self.assertEqual(self.left(ok_look.text), x + w - 0x44 + 2 + ((60 - (ok + 4)) >> 1))
+        self.assertEqual({p.y for p in ok_look.text.placed}, {95 + 30 + 2 + 1})
+        self.assertTrue(self.lit(look, x + w - 0x44 + 3, 95 + 30 + 12))           # the cursor on OK
+        # a box of two lines (sys/061 over sys/063) is a line taller, OK under the second
+        _, two = self.box_look("sys/063", "Sin bloque libre", {"sys/061": "Tarjeta de memoria 1", "sys/008": "Vale"})
+        self.assertEqual(two.focus, (95, 95 + 50 + M.LINE_STEP))
+        self.assertEqual({p.y for p in two.text.placed}, {105 + M.LINE_STEP + 1})
+        self.assertEqual(two.notes, [])
+        _, alone = self.box_look("sys/063", "Sin bloque libre", {})
+        self.assertIn("a row the file doesn't hold is left out", alone.notes)
+
+    def test_a_confirm_box_joins_the_name_to_its_label_and_puts_the_cursor_where_the_game_does(self):
+        from translator import menulook as M
+        rows = {"item/005": "Medicina 1", "sys/005": "Sí", "sys/006": "Cancelar"}
+        mf, look = self.box_look("sys/004", " se tirará", rows)
+        whole = M.joined(mf.pack.text("item/005"), mf.pack.text("sys/004"))
+        width = max(0x78, M.measure(mf, whole))
+        x, w = (300 - width) >> 1, width + 20
+        self.assertEqual(look.focus, (95, 145))
+        self.assertEqual(self.left(look.text), x + ((w - (width + 4)) >> 1))
+        self.assertEqual(look.text.width, M.measure(mf, whole))
+        gx, gy = x + ((w - 0x80) >> 1), 95 + 50 - 0x14
+        # Menu_StepItemDetailPanel puts the cursor on Cancel; Heal's "will be used" on OK
+        self.assertEqual((self.lit(look, gx + 3, gy + 12), self.lit(look, gx + 64 + 3, gy + 12)), (False, True))
+        _, used = self.box_look("sys/026", " se usará", {"item/235": "Curar 1", "sys/005": "Sí", "sys/006": "No"})
+        ux = (300 - max(0x78, used.text.width)) >> 1
+        ugx = ux + ((max(0x78, used.text.width) + 20 - 0x80) >> 1)
+        self.assertEqual((self.lit(used, ugx + 3, gy + 12), self.lit(used, ugx + 64 + 3, gy + 12)), (True, False))
+        # a choice being translated gets the cursor, and is the text the preview points at
+        _, cancel = self.box_look("sys/006", "Anular", rows)
+        self.assertEqual({p.y for p in cancel.text.placed}, {gy + 2 + 1})
+        _, ok = self.box_look("sys/005", "Vale", rows)
+        self.assertEqual({p.y for p in ok.text.placed}, {gy + 2 + 1})
+        self.assertGreater(self.left(cancel.text), self.left(ok.text) + 32)
+
+    def test_an_items_actions_and_the_progress_box_sit_in_the_middle_of_the_screen(self):
+        from translator import menulook as M
+        mf, reload_ = self.box_look("sys/003", "Recargar", {"sys/001": "Mover", "sys/002": "Tirar"})
+        width = M.lay_out(mf, mf.pack.text("sys/003"), 0, 0).width
+        self.assertEqual(reload_.focus, (94, 94 + 52))                       # window 2: 60 x 52 in the middle
+        self.assertEqual(self.left(reload_.text), 130 + 2 + 2 + ((56 - (width + 4)) >> 1))
+        self.assertEqual({p.y for p in reload_.text.placed}, {94 + 2 + 2 + 1})
+        _, move = self.box_look("sys/001", "Mover", {"sys/000": "Usar", "sys/002": "Tirar"})
+        self.assertEqual({p.y for p in move.text.placed}, {94 + 2 + 2 + 16 + 1})
+        self.assertTrue(self.lit(move, 133, 94 + 2 + 16 + 12))               # the cursor on Move
+        self.assertFalse(self.lit(move, 133, 94 + 2 + 12))
+        mf, saving = self.box_look("sys/069", "Guardando", {})
+        width = M.lay_out(mf, mf.pack.text("sys/069"), 0, 0).width
+        self.assertEqual(saving.focus, (95, 145))                            # window 0x27: 160 x 50
+        self.assertEqual(self.left(saving.text), 80 + ((160 - (width + 4)) >> 1))
+        self.assertEqual({p.y for p in saving.text.placed}, {105 + 1})
+
+    def test_the_config_menu_shows_the_rows_hint_and_its_choices(self):
+        from translator import menulook as M
+        rows = {"sys/040": "Sonido", "sys/042": "Ventana", "sys/043": "Posición", "misc/050": "Elige el cursor"}
+        mf, cursor = self.box_look("sys/041", "Cursor", rows)
+        self.assertEqual({p.y for p in cursor.text.placed}, {36 + 16 + 1})
+        self.assertEqual(cursor.notes, [])
+        self.assertTrue(self.lit(cursor, 33, 34 + 16 + 12))                  # the cursor on the second row
+        self.assertEqual(cursor.focus, (0, 32 + 4 * 16 + 4))                 # four rows shown, with the help line
+        _, unseen = self.box_look("sys/044", "MAX", rows)
+        self.assertIn("a row the game never shows (its list ends at Position)", unseen.notes)
+        # Stereo in use in a new game: the blue tile on its row; the cursor on Mono
+        _, mono = self.box_look("sys/046", "Mono", {"sys/047": "Estéreo"})
+        x0, y0 = 100 + 2 + 2, 32 + 2 + 2
+        self.assertEqual({p.y for p in mono.text.placed}, {y0 + 1})
+        blue = lambda y: mono.rgb[(y * 320 + x0 + 1) * 3: (y * 320 + x0 + 1) * 3 + 3]
+        self.assertGreater(blue(y0 + 16 + 1)[2], blue(y0 + 16 + 1)[0])
+        self.assertEqual(blue(y0 + 1)[2], blue(y0 + 1)[0])
+        # R, G, B each in its own colour
+        _, green = self.box_look("sys/054", "V", {"sys/053": "R", "sys/055": "A"})
+        self.assertEqual({p.colour for p in green.text.placed}, {(0, 0x80, 0)})
+        _, done = self.box_look("sys/051", "Hecho", {"sys/052": "Inicial"})
+        self.assertEqual({p.colour for p in done.text.placed}, {M.TEXT_COLOUR})
 
     def test_the_scene_is_darkened_and_the_bars_drawn_into_it(self):
         from translator import menulook as M

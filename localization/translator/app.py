@@ -952,7 +952,8 @@ class App:
         default = tr.default_name if tr and mine else ""
         rules = tr.rules_for(key, text) if tr and mine else P.Rules()
         # The rows the game shows beside this one, for "As in the game" (the item list's or PE list's other
-        # names and the description): the translator's words, else the game's own.
+        # names and the description; a box's other rows, the name its label is joined with, a config
+        # row's hint): the translator's words, else the game's own.
         context = {k: (tr.text(k) if tr and mine else "") or self.english.get(k, "") for k in ML.context_keys(key)}
 
         def done(result, error):

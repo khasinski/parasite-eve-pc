@@ -225,6 +225,17 @@ Checks, each from pe_mods.log and frame dumps:
              cursor) and the help window above it must be the Translator's, pixel for pixel. (Behind the
              help window: the lobby frame from before the menu, darkened as the frame's own free corner
              is. The menus leave that room at about two thirds, not at the half of Carnegie Hall.)
+             The menus' boxes and choices the same way, with the file's Spanish for their rows: on the item
+             route, Cross on Medicine 1 (Use / Move / Discard, the cursor on Move, then Discard) and Cross
+             again ("Medicine 1 will be discarded" with OK / Cancel, the cursor on Cancel, then OK); on the
+             PE route, Cross on Heal 2 ("Heal 2 will be used", OK, then Cancel), and the Continue on the
+             way there ("Loading" with its blocks, "File loaded" with OK). These boxes cover what is under
+             them: each box must be the Translator's, pixel for pixel. A new game's config menu (status,
+             Down to SYS, Cross): the list with the cursor on each row, Mono / Stereo, Default / Memory and
+             the window colour's R and G, each with its hint in the help line. The config windows are the
+             see-through kind: the scene behind them is worked out from a second frame as for the lists,
+             and the help window is drawn over the field frame as above. Yes / No and the memory card's
+             other messages are drawn by the same code and have only the tool's unit tests.
              Disc 1 only.
   translator-menu-words  The menus' words redrawn in the Translator: eight of the words the status menu shows
              (Bonus Point, Offense, Level, Next Level, Equipment, Active Time, and the SYS and SORT icons)
@@ -2028,6 +2039,63 @@ PE_LOOK_CURSOR = {'heal1': 'Heal 1', 'heal2': 'Heal 2', 'detox': 'Detox'}
 PE_LOOK_LINES = {'heal1': 'Restores 30 HP', 'heal2': 'Restores 60 HP', 'detox': 'Removes Effects of Poison'}
 PE_LOOK_WORDS = {'Restores 30 HP': 'Recupera 30 PV', 'Restores 60 HP': 'Recupera 60 PV',
                  'Removes Effects of Poison': 'Quita el veneno'}
+LEFT, CIRCLE = 128, 8192
+
+
+def after(start, moves):
+    """presses() for (button, label) one every 120 vblanks from `start`."""
+    return presses([(start + 120 * n, button, label) for n, (button, label) in enumerate(moves)])
+
+
+# The menus' boxes (translator/menulook.py). The item route goes on from 'medicine': Cross on Medicine 1 opens
+# Use / Move / Discard (Use dimmed at full HP, the cursor on Move), Down to Discard, Cross: "Medicine 1 will
+# be discarded", the cursor on Cancel; Right, then Left to OK. The PE route goes on from 'detox': Up to Heal 2,
+# Cross: "Heal 2 will be used", the cursor on OK; Left, then Right to Cancel. A frame is kept before its
+# button acts, so each label is what the button before it left on the screen.
+def box_item_steps():
+    return MENU_LOOK_STEPS[:-1] + after(32220, [(CROSS, 'medicine'), (DOWN, 'act'), (CROSS, 'act2'),
+                                                (RIGHT, 'discard'), (LEFT, 'discard2'), (CIRCLE, 'discard3'),
+                                                (0, 'back')])
+
+
+def box_pe_steps():
+    return pe_look_steps()[:-1] + after(19090, [(UP, 'detox'), (CROSS, 'heal2b'), (LEFT, 'confirm'),
+                                                (RIGHT, 'confirm2'), (0, 'confirm3')])
+
+
+# A new game's config menu: status, Down three times to SYS, Cross into the list (cursor on Sound), Cross for
+# Mono / Stereo, Down, Circle back, Down to Cursor, Cross for Default / Memory, Down, Circle, Down to Window,
+# Cross for the colour (on R), Right to G, Circle, Down to Position.
+def config_steps():
+    head = MENU_LOOK_STEPS[:MENU_LOOK_STEPS.index((31860, 'status', f'advance 10 {CROSS}'))]
+    return head + after(31860, [(DOWN, 'status'), (DOWN, 'd1'), (DOWN, 'd2'), (CROSS, 'sys'), (CROSS, 'config'),
+                                (DOWN, 'sound'), (CIRCLE, 'sound2'), (DOWN, 'c1'), (CROSS, 'c2'), (DOWN, 'cursor'),
+                                (CIRCLE, 'cursor2'), (DOWN, 'c3'), (CROSS, 'c4'), (RIGHT, 'window'),
+                                (DOWN, 'window2'), (CIRCLE, 'window3'), (DOWN, 'c5'), (CROSS, 'c6'), (0, 'position')])
+
+
+# The boxes' rows in the file (the names they are joined with are MENU_LOOK_ITEMS' and PE_LOOK_NAMES').
+BOX_WORDS = {'sys/000': 'Usar', 'sys/001': 'Mover', 'sys/002': 'Tirar', 'sys/004': ' se tirará', 'sys/005': 'Vale',
+             'sys/006': 'Anular', 'sys/026': ' se usará', 'sys/070': 'Cargando', 'sys/084': 'Partida cargada',
+             'sys/008': 'Sí', 'sys/040': 'Sonido', 'sys/041': 'Puntero', 'sys/042': 'Ventana', 'sys/043': 'Posición',
+             'sys/046': 'Mono', 'sys/047': 'Estéreo', 'sys/049': 'Inicial', 'sys/050': 'Recordar', 'sys/051': 'Hecho',
+             'sys/052': 'Original', 'sys/053': 'R', 'sys/054': 'V', 'sys/055': 'A',
+             'misc/049': 'Elige el sonido', 'misc/050': 'Elige el puntero', 'misc/051': 'Cambia la ventana',
+             'misc/052': 'Cambia la posición', 'misc/058': 'Sonido monoaural', 'misc/059': 'Sonido estéreo',
+             'misc/061': 'Puntero al inicio', 'misc/062': 'Recordar el puntero', 'misc/063': 'Ajusta el rojo',
+             'misc/064': 'Ajusta el verde'}
+# Boxes that cover what is under them: (run, frame, the row drawn, what the draw is given besides).
+BOX_FRAMES = [('item', 'act', 'sys/001', {'dimmed': (0,)}), ('item', 'act2', 'sys/002', {'dimmed': (0,)}),
+              ('item', 'discard2', 'sys/004', {}), ('item', 'discard3', 'sys/005', {}),
+              ('pe', 'confirm', 'sys/026', {'label': ('item/236', 'sys/026')}),
+              ('pe', 'confirm3', 'sys/006', {'label': ('item/236', 'sys/026')}),
+              ('pe', 'continue6', 'sys/070', {}), ('pe', 'continue9', 'sys/084', {}), ('pe', 'continue9', 'sys/008', {})]
+# The config menu: (frame, the row drawn, the frame the scene behind it is worked out from, that frame's row).
+CONFIG_FRAMES = [('config', 'sys/040', 'c2', 'sys/041'), ('c2', 'sys/041', 'config', 'sys/040'),
+                 ('c4', 'sys/042', 'c6', 'sys/043'), ('c6', 'sys/043', 'c4', 'sys/042'),
+                 ('sound', 'sys/046', 'sound2', 'sys/047'), ('sound2', 'sys/047', 'sound', 'sys/046'),
+                 ('cursor', 'sys/049', 'cursor2', 'sys/050'), ('cursor2', 'sys/050', 'cursor', 'sys/049'),
+                 ('window', 'sys/053', 'window2', 'sys/054'), ('window2', 'sys/054', 'window', 'sys/053')]
 
 
 def translator_menu_look(game, discs, out, localization):
@@ -2070,6 +2138,10 @@ def translator_menu_look(game, discs, out, localization):
         tr.set_text(item_keys[line][0], words)
     for line, words in PE_LOOK_NAMES.items():
         tr.set_text(pe_keys[line][0], words)
+    taken = set(tr.texts) & set(BOX_WORDS)
+    check(not taken, f'the boxes\' rows are also given other words: {sorted(taken)}')
+    for key, words in BOX_WORDS.items():
+        tr.set_text(key, words)
     path = out / 'translator-menu-look.pelang'
     saved = tr.save(path)
     check(not saved.left_out and not saved.whole, f'the Translator left lines out: {saved.left_out} {saved.whole}')
@@ -2081,6 +2153,8 @@ def translator_menu_look(game, discs, out, localization):
         check(held.get(item_keys[line][0]) == words, f'the saved file does not hold "{words}" for {item_keys[line]}')
     for line, words in PE_LOOK_NAMES.items():
         check(held.get(pe_keys[line][0]) == words, f'the saved file does not hold "{words}" for {pe_keys[line]}')
+    check(all(held.get(k) == words for k, words in BOX_WORDS.items()),
+          f"the saved file does not hold the boxes' rows: {[k for k, w in BOX_WORDS.items() if held.get(k) != w]}")
     with zipfile.ZipFile(english) if zipfile.is_zipfile(english) else open(english, 'rb') as f:
         english_pack = gl.Pack.read(f.read(pelang.BUNDLE_TEXT) if isinstance(f, zipfile.ZipFile) else f.read())
     look_disc, menu_disc = gl.DiscLook(discs[0]), ml.MenuDisc(discs[0])
@@ -2089,16 +2163,20 @@ def translator_menu_look(game, discs, out, localization):
     print(f'translator menu look: the Translator saved {sum(len(k) for k in keys.values())} help lines; '
           f'the help window is {w} x {h} at {x},{y}')
     check(MAP_SAVE.is_file(), f'no sample save {MAP_SAVE}')
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-menu-look-{which}', MENU_LOOK_STEPS,
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-menu-look-{which}', box_item_steps(),
                                    pack=p, pad=NEW_GAME)
                 for which, p in (('pack', pack), ('english', None))}
-        pe_runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-pe-look-{which}', pe_look_steps(),
+        pe_runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-pe-look-{which}', box_pe_steps(),
                                       pack=p, pad=CONTINUE, card=MAP_SAVE.read_bytes(), hp=PE_LOOK_HP)
                    for which, p in (('pack', pack), ('english', None))}
+        config_runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-config-look-{which}',
+                                          config_steps(), pack=p, pad=NEW_GAME)
+                       for which, p in (('pack', pack), ('english', None))}
         works = {which: run.result() for which, run in runs.items()}
         pe_works = {which: run.result() for which, run in pe_runs.items()}
-    for made in (works, pe_works):
+        config_works = {which: run.result() for which, run in config_runs.items()}
+    for made in (works, pe_works, config_works):
         check("text: Menu look test (es)'s stretches in use" in mods_log(made['pack']),
               f"none of the file's text drew: {made['pack']}")
     # The help line, over the scene as it was when Triangle was pressed: 'field' at half, as the Translator
@@ -2154,7 +2232,111 @@ def translator_menu_look(game, discs, out, localization):
             print(f'PASS translator menu look, {which} {label} (cursor on "{words}"): the PE list window, its '
                   f"names (the heals bright with Aya hurt, the others dimmed) and cursor are the Translator's, "
                   f"pixel for pixel (the cursor's grey {pulse:#x})")
+    for which, use in (('english', english_pack), ('pack', mine)):
+        mf = ml.MenuFont(gl.Font(look_disc, use), menu_disc)
+        for run, label, key, given in BOX_FRAMES:
+            work = (works if run == 'item' else pe_works)[which]
+            wrong, pulse, box = box_is_the_frame(work, label, mf, use, key, given, ml, gl)
+            check(not wrong, f"{which} {label}: the box is not the Translator's {key} at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {work}')
+            parts = 'edges, tile, letters and cursor' if pulse is not None else 'edges, tile, letters and blocks'
+            grey = f" (the cursor's grey {pulse:#x})" if pulse is not None else ''
+            print(f'PASS translator menu look, {which} {label} ({key}): the box at {box}, its {parts} are the '
+                  f"Translator's {ml.context_of(key)}, pixel for pixel{grey}")
+        work = config_works[which]
+        _, _, field = frame(work, 'field')
+        for label, key, other, okey in CONFIG_FRAMES:
+            wrong, pulse = config_is_the_frame(work, label, other, mf, use, key, okey, ml, gl)
+            check(not wrong, f"{which} {label}: the config menu is not the Translator's {key} at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {work}')
+            hint = ml.misc_key(config_hint(ml, key))
+            screen = ml.Screen(field)
+            text, digits = ml.draw_help(screen, mf, use.text(hint), hint)
+            width, _, rgb = frame(work, label)
+            hx, hy, hw, hh = menu_disc.windows[ml.HELP_WINDOW]
+            mine = screen.rgb()
+            wrong = [(px, py) for py in range(hy - 2, hy + hh) for px in range(gl.W)
+                     if not any(bx <= px < bx + bw and by <= py < by + bh for bx, by, bw, bh in digits)
+                     and mine[(py * gl.W + px) * 3:(py * gl.W + px) * 3 + 3] != rgb[(py * width + px) * 3:(py * width + px) * 3 + 3]]
+            check(not wrong, f"{which} {label}: the help line is not the Translator's {hint} at {wrong[:6]} "
+                             f'({len(wrong)} pixels): {work}')
+            print(f"PASS translator menu look, {which} {label} ({key}): the config windows and the cursor are the "
+                  f"Translator's {ml.context_of(key)}, pixel for pixel (the cursor's grey {pulse:#x}), and the "
+                  f'help line its hint {hint} ({len(text.placed)} letters)')
     return 0
+
+
+def box_is_the_frame(work, label, mf, use, key, given, ml, gl):
+    """translator-menu-look: a box that covers what is under it (menulook's message, confirm, action and
+    progress boxes) against the frame, inside the box: (the pixels that differ, the cursor's grey, the box).
+    The cursor's grey follows the frame counter: the one of the nine the tile can have that the frame shows
+    (None for a box with no cursor)."""
+    _, _, here = frame(work, label)
+    draw = ml.DRAWN[ml.context_of(key)]
+
+    def look(pulse):
+        kw = dict(given, dim=False)
+        if draw is not ml.progress_box:
+            kw['pulse'] = pulse
+        return draw(mf, use.text(key), key, None, **kw)
+
+    plain = look(0)
+    xs, ys = [x for x, _ in plain.inked], [y for _, y in plain.inked]
+    box = (min(xs), min(ys), max(xs) + 1, max(ys) + 1)
+    check(len(plain.inked) == (box[2] - box[0]) * (box[3] - box[1]), f'{label}: the box {box} does not cover all of it')
+
+    def differ(drawn):
+        return [(x, y) for y in range(box[1], box[3]) for x in range(box[0], box[2])
+                if drawn.rgb[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] != here[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3]]
+
+    if draw is ml.progress_box:
+        return differ(plain), None, box
+    tries = {pulse: differ(look(pulse)) for pulse in range(0, 0x41, 8)}
+    pulse = min(tries, key=lambda p: len(tries[p]))
+    return tries[pulse], pulse, box
+
+
+def config_hint(ml, key):
+    """The misc row of the hint the help line shows over this config row (menulook's config looks)."""
+    n = int(key[4:])
+    if n in ml.CONFIG_ROWS:
+        return ml.CONFIG_HINT + ml.CONFIG_ROWS.index(n)
+    for window, rows, _, hint, _ in ml.CHOICES.values():
+        if n in rows:
+            return hint + rows.index(n)
+    return ml.CHANNEL_HINT + ml.CHANNELS.index(n) if n in ml.CHANNELS else ml.OPTION_HINT + ml.OPTIONS.index(n)
+
+
+def config_is_the_frame(work, label, other, mf, use, key, okey, ml, gl):
+    """translator-menu-look: the config menu's windows (the list, and the window of the row picked) against
+    the frame, the scene behind them worked out from the frame `other` (the cursor on `okey`), as
+    list_is_the_frame does for the lists: (the pixels that differ, the cursor's grey)."""
+    menu = mf.menu
+    where = ml.context_of(key)
+    draw = ml.DRAWN[where]
+    boxes = [ml.grid_cells(menu, ml.CONFIG_WINDOW, ml.CONFIG_WINDOW, len(ml.CONFIG_ROWS))[:4]]
+
+    def cell(k):
+        n = int(k[4:])
+        if where == 'config menu':
+            wx, wy, ww, wh, x0, y0, cw, rh, _ = ml.grid_cells(menu, ml.CONFIG_WINDOW, ml.CONFIG_WINDOW, 4)
+            return x0 - 2, y0 - 2 + rh * ml.CONFIG_ROWS.index(n), cw, rh
+        if where in ml.CHOICES:
+            window, rows = ml.CHOICES[where][:2]
+            wx, wy, ww, wh, x0, y0, cw, rh, _ = ml.grid_cells(menu, window, window, len(rows))
+            return x0 - 2, y0 - 2 + rh * rows.index(n), cw, rh
+        wx, wy, _, _ = menu.windows[ml.COLOUR_WINDOW]
+        gx, gy, _, cw, rh = ml._cell(menu, ml.COLOUR_WINDOW)
+        return wx + gx + cw * ml.CHANNELS.index(n), wy + gy, cw, rh
+
+    if where in ml.CHOICES:
+        window, rows = ml.CHOICES[where][:2]
+        boxes.append(ml.grid_cells(menu, window, window, len(rows))[:4])
+    elif where != 'config menu':
+        boxes.append(menu.windows[ml.COLOUR_WINDOW])
+    return scene_is_the_frame(work, label, other, lambda bg, pulse: draw(mf, use.text(key), key, bg, pulse=pulse, dim=False),
+                              lambda bg, pulse: draw(mf, use.text(okey), okey, bg, pulse=pulse, dim=False),
+                              boxes, cell(key), cell(okey), gl)
 
 
 def darkened_as(scene, shown, free, gl):
@@ -2213,6 +2395,18 @@ def list_is_the_frame(work, label, other, key, okey, draw, cells, slot, oslot, g
     the frame `label`, inside the list's window, the cursor on cell `slot`. The scene behind is worked
     out from the frame `other` (the same list with the cursor on cell `oslot`). Returns (the pixels
     that differ, the cursor's grey)."""
+    wx, wy, ww, wh, x0, y0, cell_w, row_h, columns = cells
+    cell = (x0 - 2 + cell_w * (slot % columns), y0 - 2 + row_h * (slot // columns), cell_w, row_h)
+    ocell = (x0 - 2 + cell_w * (oslot % columns), y0 - 2 + row_h * (oslot // columns), cell_w, row_h)
+    return scene_is_the_frame(work, label, other, lambda bg, pulse: draw(key, bg, pulse),
+                              lambda bg, pulse: draw(okey, bg, pulse), [(wx, wy, ww, wh)], cell, ocell, gl)
+
+
+def scene_is_the_frame(work, label, other, draw, odraw, boxes, cell, ocell, gl):
+    """See-through menu windows as the Translator draws them (draw(the scene behind, the cursor's grey))
+    against the frame `label`, inside `boxes` (x, y, w, h), the cursor on `cell` (x, y, w, h). The scene
+    behind is worked out from the frame `other`, which odraw draws with its cursor on `ocell`. Returns (the
+    pixels that differ, the cursor's grey)."""
     def v5(c):
         return (c * 31 + 127) // 255
 
@@ -2221,29 +2415,28 @@ def list_is_the_frame(work, label, other, key, okey, draw, cells, slot, oslot, g
     # What the Translator adds to the scene in the other frame (its cursor's tile left out), drawn over a
     # flat 8 so nothing reaches 0 or 31 on the way; the scene there is that frame less it.
     grey = bytes([(8 * 255 + 15) // 31]) * (gl.W * gl.H * 3)
-    added = draw(okey, grey, None)
-    wx, wy, ww, wh, x0, y0, cell_w, row_h, columns = cells
+    added = odraw(grey, None)
+    inside = {(x, y) for bx, by, bw, bh in boxes for y in range(by, by + bh) for x in range(bx, bx + bw)}
     scene = bytearray(there)
-    for y in range(wy, wy + wh):
-        for x in range(wx, wx + ww):
-            if (x, y) in added.inked:
-                continue                     # drawn over: no scene shows there, in either frame
-            for k in range((y * gl.W + x) * 3, (y * gl.W + x) * 3 + 3):
-                v = v5(there[k]) - (v5(added.rgb[k]) - 8)
-                check(0 <= v <= 31, f'{label}: no scene gives the frame {other} at {x},{y}')
-                scene[k] = (v * 255 + 15) // 31
-    cx, cy = x0 - 2 + cell_w * (slot % columns), y0 - 2 + row_h * (slot // columns)
-    ox, oy = x0 - 2 + cell_w * (oslot % columns), y0 - 2 + row_h * (oslot // columns)
+    for x, y in inside:
+        if (x, y) in added.inked:
+            continue                         # drawn over: no scene shows there, in either frame
+        for k in range((y * gl.W + x) * 3, (y * gl.W + x) * 3 + 3):
+            v = v5(there[k]) - (v5(added.rgb[k]) - 8)
+            check(0 <= v <= 31, f'{label}: no scene gives the frame {other} at {x},{y}')
+            scene[k] = (v * 255 + 15) // 31
+    cx, cy, cw, ch = cell
+    ox, oy, ow, oh = ocell
     # The cursor's grey: read where only the scene and the tile meet (inside the cell, nothing drawn on it).
-    plain = draw(key, bytes(scene), 0)
-    px, py = next((x, y) for y in range(cy + 3, cy + row_h - 3) for x in range(cx + 3, cx + cell_w - 3)
+    plain = draw(bytes(scene), 0)
+    px, py = next((x, y) for y in range(cy + 3, cy + ch - 3) for x in range(cx + 3, cx + cw - 3)
                   if (x, y) not in plain.inked)
     k = (py * gl.W + px) * 3
     pulse = max(0, v5(here[k]) - v5(plain.rgb[k])) * 8
-    look = draw(key, bytes(scene), pulse)
-    wrong = [(x, y) for y in range(wy, wy + wh) for x in range(wx, wx + ww)
-             if not (ox <= x < ox + cell_w and oy <= y < oy + row_h)
-             and look.rgb[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] != here[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3]]
+    look = draw(bytes(scene), pulse)
+    wrong = sorted((x, y) for x, y in inside
+                   if not (ox <= x < ox + ow and oy <= y < oy + oh)
+                   and look.rgb[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3] != here[(y * gl.W + x) * 3:(y * gl.W + x) * 3 + 3])
     return wrong, pulse
 
 

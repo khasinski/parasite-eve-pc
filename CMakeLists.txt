@@ -841,7 +841,9 @@ if(BUILD_TESTING)
             # The Translator's "As in the game" preview of the menus' help line against the game's own
             # frames: a file the Translator saved (four help lines in Spanish) and the game's own text, on
             # the menus' route into the item list, the help window pixel for pixel; the item list and the
-            # Parasite Energy list (from the save editor's Day 5 sample save) likewise. Needs Pillow. Disc 1.
+            # Parasite Energy list (from the save editor's Day 5 sample save) likewise; the menus' boxes
+            # (an item's actions, a confirm box, Loading, File loaded) and the config menu with its
+            # choices likewise. Needs Pillow. Disc 1.
             add_test(NAME original-game-translator-menu-look COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
                 ${CMAKE_BINARY_DIR}/translator-menu-look-evidence translator-menu-look)

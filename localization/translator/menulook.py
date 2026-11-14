@@ -358,14 +358,14 @@ def _triangle(p) -> list[tuple[int, int]]:
             for x in range(min(x0, x1, x2) - 1, max(x0, x1, x2) + 1) if _inside(p, x, y)]
 
 
-def bevel(x: int, y: int, w: int, h: int, colour: int = WINDOW_COLOUR, mode: int = 0) -> list[tuple[list, tuple, int]]:
-    """A window's bars (Draw_AllocColorGradient over a rectangle, g_WipeRectEdgeList): [(pixels, rgb,
-    sign)], sign +1 added to what is under, -1 taken off it, in drawing order. `mode` picks the colour
-    of g_DrawBlendColorPair (1: the list cursor's bars while it blinks, Draw_AllocColorTriGradient)."""
-    corners = [(x, y), (x + w, y), (x, y + h), (x + w, y + h)]
+def bars(points, bright, dark, x: int = 0, y: int = 0, colour: int = WINDOW_COLOUR, mode: int = 0):
+    """A window's bars from its corners (Draw_EmitWipeBar): 2 px bars along the edges `bright`, added to
+    what is under them, then along the edges `dark`, taken off it; [(pixels, rgb, sign)] in drawing
+    order. `mode` picks the colour of g_DrawBlendColorPair (1: the list cursor's bars while it blinks)."""
+    corners = [(x + px, y + py) for px, py in points]
     pair = [colour & 0xFFFFFF, _halves(colour)]
     out = []
-    for edges, width, sign in (([(0, 1), (0, 2)], 2, 1), ([(1, 3), (2, 3)], -2, -1)):
+    for edges, width, sign in ((bright, 2, 1), (dark, -2, -1)):
         for i, j in edges:                                   # Draw_AllocColorRect
             a, b = list(corners[i]), list(corners[j])
             fa, fb, mag = list(a), list(b), abs(width)
@@ -384,6 +384,13 @@ def bevel(x: int, y: int, w: int, h: int, colour: int = WINDOW_COLOUR, mode: int
             pixels = set(_triangle((tuple(a), tuple(b), tuple(fa)))) | set(_triangle((tuple(fb), tuple(fa), tuple(b))))
             out.append((sorted(pixels), (c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF), sign))
     return out
+
+
+def bevel(x: int, y: int, w: int, h: int, colour: int = WINDOW_COLOUR, mode: int = 0) -> list[tuple[list, tuple, int]]:
+    """A window's bars (Draw_AllocColorGradient over a rectangle, g_WipeRectEdgeList): [(pixels, rgb,
+    sign)], sign +1 added to what is under, -1 taken off it, in drawing order. `mode` picks the colour
+    of g_DrawBlendColorPair (1: the list cursor's bars while it blinks, Draw_AllocColorTriGradient)."""
+    return bars(((0, 0), (w, 0), (0, h), (w, h)), ((0, 1), (0, 2)), ((1, 3), (2, 3)), x, y, colour, mode)
 
 
 def _halves(colour: int) -> int:
@@ -513,6 +520,8 @@ def context_of(key: str) -> str | None:
     """Which place of the menus draws this line, from data/menu_layouts.json, as far as this preview
     draws it."""
     import fnmatch
+    if key in OWN_CONTEXT:
+        return OWN_CONTEXT[key]
     for c in _layouts()["contexts"]:
         if any(fnmatch.fnmatchcase(key, k) or _in_range(key, k) for k in c["keys"]):
             return c["id"]
@@ -765,7 +774,443 @@ def pe_list(mf: MenuFont, raw: bytes, key: str, background: bytes | None, second
                 focus=(cy, cy + row_h))
 
 
-DRAWN = {"help line": help_line, "item list": item_list, "parasite energy list": pe_list}
+# ---- the boxes and choices --------------------------------------------------------------------------
+#
+# The pop-up boxes (a message with OK, a question with two choices, an item's actions, the memory card's
+# progress) are windows the game makes with MenuWidget_CreateSimpleNode(..., 1): Draw_AllocColorGradient
+# then fills them with a 32 x 32 tile of the menus' page in the colours at VRAM 448,228 (solid grey)
+# under the bars, and they sit in the middle of the screen (0xA0 less half the table's width, 0x78 less
+# half its height). Their words are centred as Draw_PrintCenteredTextInWidth does it: the pen moves
+# (room - (measured + 4)) >> 1 on. The config menu's windows are the see-through kind, at their own
+# places in the window table.
+
+BOX_CLUT = 0x391C                    # the tile's colours (Draw_AllocColorGradient): VRAM 448,228
+MESSAGE_WINDOW = 0x28                # Menu_CreateNotificationDialog / Menu_CreateTwoLineDialog (0x3D: its second copy)
+CONFIRM_WINDOW, FORMAT_WINDOW = 0x29, 0x2A    # Menu_DrawItemLabel over two choices
+PROGRESS_WINDOW = 0x27               # MemCard_DrawProgress
+ACTION_WINDOW = 0x02                 # Menu_OpenItemActionSubmenu: three rows (0x03: two, Move and Discard)
+CONFIG_WINDOW, SOUND_WINDOW, CURSOR_WINDOW = 0x20, 0x21, 0x23     # main_menu.c
+COLOUR_WINDOW, COLOUR_OPTIONS = 0x2E, 0x31
+LINE_STEP = 0x0E                     # a box's next line (Draw_OffsetCursor(0, 0xE))
+STILL = 0x40                         # a cursor's tile in a list that isn't the one in use (g_DrawColorShaded)
+ON_BLOCK, OFF_BLOCK, BLOCKS = 0x83, 0x82, 8
+UP_ARROW, DOWN_ARROW = 0x4A, 0x4B
+# g_MenuBlendColorPanelPoints (main_menu.c): the colour window's corners, then the edges that get the
+# bright bars and the edges that get the dark ones (two boxes side by side).
+COLOUR_POINTS = ((0, 0), (100, 0), (184, 0), (0, 40), (100, 40), (184, 40))
+COLOUR_BRIGHT, COLOUR_DARK = ((0, 1), (1, 2), (0, 3), (1, 4)), ((3, 4), (4, 5), (1, 4), (2, 5))
+
+# Which place draws a row this file knows better than data/menu_layouts.json (whose limits stay as
+# they are): sys/000 "Use" is the first of an item's actions (skills.c copies it into the confirm
+# box's label and writes over it before it is drawn), and the rows no layout names.
+OWN_CONTEXTS = {"item actions": ("sys/000", "sys/001", "sys/002", "sys/003"),
+                "cursor choice": ("sys/049", "sys/050"),
+                "progress box": ("sys/064", "sys/069", "sys/070"),
+                "confirm label": ("sys/074",),
+                "dialog line": ("sys/099",)}
+OWN_CONTEXT = {key: where for where, keys in OWN_CONTEXTS.items() for key in keys}
+
+
+def sys_key(n: int) -> str:
+    return f"sys/{n:03d}"
+
+
+def misc_key(n: int) -> str:
+    return f"misc/{n:03d}"
+
+
+def _end(raw: bytes) -> int:
+    return raw.index(0xFF) if 0xFF in raw else len(raw)
+
+
+def joined(*parts: bytes | None) -> bytes:
+    """Text_CopyFFTerminatedBytes then Text_AppendFFTerminatedBytes: the parts one after another."""
+    return b"".join(p[:_end(p)] for p in parts if p) + b"\xff"
+
+
+def _breaks(mf: MenuFont, raw: bytes) -> list[int]:
+    """Where a pack's line breaks are in a menu line (Menu_LineBreakOffset's walk, PeText_LineBreakAt)."""
+    out, i, end, runs = [], 0, _end(raw), mf.pack.stretches
+    while i < end:
+        b = raw[i]
+        if b == 0xF1:
+            if i + 3 < end and raw[i + 1] == 0xC6 and raw[i + 2] < 240 and raw[i + 3] < 240:
+                k = raw[i + 2] * 240 + raw[i + 3]
+                if k < len(runs) and runs[k] == [LINE_BREAK]:
+                    out.append(i)
+            i += 4
+        else:
+            i += 2 if b >= 0xFA else 1
+    return out
+
+
+def split_line(mf: MenuFont, raw: bytes) -> list[bytes]:
+    """Menu_SplitDialogLine: the line, and what follows its first line break when something does (a
+    break with nothing after it is dropped)."""
+    at, end = _breaks(mf, raw), _end(raw)
+    if not at:
+        return [raw[:end] + b"\xff"]
+    if at[0] + 4 >= end:
+        return [raw[:at[0]] + b"\xff"]
+    return [raw[:at[0]] + b"\xff", raw[at[0] + 4:end] + b"\xff"]
+
+
+def measure(mf: MenuFont, raw: bytes) -> int:
+    """Draw_MeasureTextWidth: every letter of the text, whatever lines a pack's breaks put them on."""
+    at, end = [-4] + _breaks(mf, raw), _end(raw)
+    return sum(lay_out(mf, raw[a + 4:b] + b"\xff", 0, 0).width for a, b in zip(at, at[1:] + [end]))
+
+
+def centred(mf: MenuFont, raw: bytes, x: int, y: int, room: int, colour=TEXT_COLOUR) -> Text:
+    """Draw_PrintCenteredTextInWidth: the text from the cursor (x, y), moved on by half of what the
+    room leaves it (the measured width and 4 more)."""
+    return lay_out(mf, raw, x + ((room - (measure(mf, raw) + 4)) >> 1), y, colour)
+
+
+def draw_box(screen: Screen, menu: MenuDisc, x: int, y: int, w: int, h: int, dimmed: bool = False) -> None:
+    """A pop-up box (Draw_AllocColorGradient, textured): the tile over all of it, then its bars."""
+    colours = menu.colours(BOX_CLUT)
+    tint = DIM_COLOUR if dimmed else TEXT_COLOUR
+    for j in range(h):
+        for i in range(w):
+            screen.put(x + i, y + j, colours[menu.index(i & 31, j & 31)], tint)
+    for pixels, rgb, sign in bevel(x, y, w, h):
+        screen.blend(pixels, rgb, sign)
+
+
+def centre_of(menu: MenuDisc, window: int) -> tuple[int, int, int, int]:
+    """MenuWidget_CreateSimpleNode: a window as the table has it, or in the middle of the screen
+    when the table gives it no x."""
+    x, y, w, h = menu.windows[window]
+    if x:
+        return x, y, w, h
+    return 0xA0 - (w >> 1), (0x50 if y else 0x78) - (h >> 1), w, h
+
+
+def _cell(menu: MenuDisc, grid: int) -> tuple[int, int, int, int, int]:
+    gx, gy, columns, _, _, cell_w, row_h, _ = menu.grids[grid]
+    return gx, gy, columns, cell_w, row_h
+
+
+def _finish(screen: Screen, where: str, notes: set, text: Text | None, box: tuple, digits=()) -> Look:
+    x, y, w, h = box
+    return Look(screen.rgb(), where, sorted(notes | (text.notes if text else set())), list(digits), text,
+                top=max(0, y - 43), inked=screen.inked, focus=(y, y + h))
+
+
+def _said(mf: MenuFont, raw: bytes, key: str, want: str, notes: set) -> bytes | None:
+    """The bytes of row `want`: the line being drawn itself, or the pack's (noted when it has none)."""
+    if want == key:
+        return raw
+    found = mf.pack.text(want)
+    if found is None:
+        notes.add("a row the file doesn't hold is left out")
+    return found
+
+
+# A message with OK. One line (Menu_CreateNotificationDialog: a message, sometimes with a second row
+# after it on the same line) or two (Menu_CreateTwoLineDialog); the box is as wide as its widest line
+# and 20 more, 120 at least, from x (300 - that) / 2, and a line taller for each line a pack's break
+# adds. Each row is shown in the box the game puts it in; the memory card's rows with card 1's.
+TWO_LINES = {61: (61, 63), 63: (61, 63), 85: (85, 86), 86: (85, 86),
+             66: (71, 66), 67: (71, 67), 75: (71, 75), 71: (71, 66), 72: (72, 66)}
+OK_ROW, OK_MESSAGE = 8, 84           # sys/008 "OK" is shown under sys/084 "File loaded"
+
+
+def message_rows(key: str) -> tuple[int, ...]:
+    """The rows of table sys in the row's message box, one a line."""
+    n = int(key.split("/")[1])
+    return (OK_MESSAGE,) if n == OK_ROW else TWO_LINES.get(n, (n,))
+
+
+def message_box(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
+                pulse: int | None = PULSE, blink: int = 0, dim: bool = True) -> Look:
+    """A message box with its OK, as Menu_DrawNotificationText / Menu_DrawTwoLineDialogText draw it."""
+    menu, notes = mf.menu, set()
+    lines, text = [], None
+    for row in message_rows(key):
+        said = _said(mf, raw, key, sys_key(row), notes)
+        if said is not None:
+            lines += [(part, sys_key(row) == key) for part in split_line(mf, said)]
+    x, y, w, h = centre_of(menu, MESSAGE_WINDOW)
+    width = max([100] + [measure(mf, part) for part, _ in lines])
+    extra = LINE_STEP * max(0, len(lines) - 1)
+    x, w, h = (300 - width) >> 1, width + 20, h + extra
+    screen = Screen(background, dim)
+    draw_box(screen, menu, x, y, w, h)
+    _, gy, _, cell_w, row_h = _cell(menu, MESSAGE_WINDOW)
+    cx, cy = x + w - 0x44, y + gy + extra
+    draw_cursor(screen, cx, cy, cell_w, row_h, pulse, blink)
+    ok = _said(mf, raw, key, sys_key(OK_ROW), notes)
+    if ok is not None:
+        laid = centred(mf, ok, cx + 2, cy + 2, cell_w)
+        draw_text(screen, mf, laid)
+        text = laid if key == sys_key(OK_ROW) else text
+    for n, (part, mine) in reversed(list(enumerate(lines))):
+        laid = centred(mf, part, x, y + 10 + LINE_STEP * n, w)
+        draw_text(screen, mf, laid)
+        if mine:
+            text = laid
+    return _finish(screen, "a message box with its OK", notes, text, (x, y, w, h))
+
+
+# A question with two choices (Menu_DrawItemLabel over Menu_DrawActionOptionRow's two cells): the label
+# 10 px down, centred in the box; the box as wide as the label and 20 more, 140 at least; the choices
+# from (width - 128) / 2, 20 px above the bottom, each centred in a 64 px cell. Which label and which
+# choices each row is shown with, and where the game first puts the cursor (the second choice wherever
+# it sets cursor_x to 1):
+#   the label's rows, the choices' first row in sys, the cursor's cell, a second label line, the window
+CONFIRMS = {
+    "discard": (("item/005", "sys/004"), 5, 1, None, CONFIRM_WINDOW),            # Menu_StepItemDetailPanel
+    "use pe": (("item/235", "sys/026"), 5, 0, None, CONFIRM_WINDOW),             # Menu_StepItemDetailPanel2
+    "equip": (("sys/113", "item/062"), 5, 0, None, CONFIRM_WINDOW),              # Menu_StepEquipConfirm
+    "add slot": (("sys/097",), 5, 0, None, CONFIRM_WINDOW),                      # item_actions.c
+    "overwrite": (("sys/068",), 108, 1, None, CONFIRM_WINDOW),                   # save_screens.c
+    "format": (("sys/071", "sys/073"), 108, 1, 74, FORMAT_WINDOW),               # Menu_StepItemGrid2
+}
+CONFIRM_OF = {4: "discard", 5: "discard", 6: "discard", 26: "use pe", 113: "equip", 97: "add slot",
+              68: "overwrite", 108: "overwrite", 109: "overwrite", 73: "format", 74: "format"}
+
+
+def confirm_of(key: str) -> tuple:
+    return CONFIRMS[CONFIRM_OF[int(key.split("/")[1])]]
+
+
+def confirm_box(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
+                pulse: int | None = PULSE, blink: int = 0, dim: bool = True, label=None,
+                cursor: int | None = None) -> Look:
+    """A confirm box: its label (the row, joined with a name where the game joins one) over its two
+    choices, the cursor where the game first puts it, or on the choice being translated. `label`,
+    `cursor`: another label's rows and the cursor's cell, for a box the game shows."""
+    menu, notes = mf.menu, set()
+    label_keys, first, start, second, window = confirm_of(key)
+    label_keys = label or label_keys
+    choices = [sys_key(first), sys_key(first + 1)]
+    if cursor is None:
+        cursor = choices.index(key) if key in choices else start
+    whole = joined(*[_said(mf, raw, key, k, notes) for k in label_keys])
+    lines = split_line(mf, whole)
+    x, y, w, h = centre_of(menu, window)
+    if window == FORMAT_WINDOW:
+        width = max([0x78] + [measure(mf, part) for part in lines])
+        h = 0x42 + (LINE_STEP if len(lines) > 1 else 0)
+    else:
+        width, h = max(0x78, measure(mf, whole)), 0x32
+    x, w = (300 - width) >> 1, width + 20
+    screen = Screen(background, dim)
+    draw_box(screen, menu, x, y, w, h)
+    _, _, _, cell_w, row_h = _cell(menu, window)
+    gx, gy = x + ((w - 0x80) >> 1), y + h - 0x14
+    draw_cursor(screen, gx + cell_w * cursor, gy, cell_w, row_h, pulse, blink)
+    text = None
+    for n in (1, 0):
+        said = _said(mf, raw, key, choices[n], notes)
+        if said is not None:
+            laid = centred(mf, said, gx + 2 + cell_w * n, gy + 2, cell_w)
+            draw_text(screen, mf, laid)
+            text = laid if key == choices[n] else text
+    if second is not None:
+        said = _said(mf, raw, key, sys_key(second), notes)
+        if said is not None:
+            laid = centred(mf, said, x, y + 10 + LINE_STEP * len(lines), w)
+            draw_text(screen, mf, laid)
+            text = laid if key == sys_key(second) else text
+    for n, part in reversed(list(enumerate(lines))):
+        laid = centred(mf, part, x, y + 10 + LINE_STEP * n, w)
+        draw_text(screen, mf, laid)
+        if key in label_keys and n == 0:
+            text = laid
+    return _finish(screen, "a confirm box: its label and two choices", notes, text, (x, y, w, h))
+
+
+# An item's actions (Menu_OpenItemActionSubmenu, Menu_ContextPick): Use, Move, Discard for an item that
+# is used (Medicine), Reload, Move, Discard for a gun or its bullets; each centred in a 56 px cell.
+# Use is dimmed while the item can't be used (Medicine at full HP): shown bright, as with Aya hurt.
+ACTIONS = {0: (0, 1, 2), 1: (0, 1, 2), 2: (0, 1, 2), 3: (3, 1, 2)}
+
+
+def action_box(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
+               pulse: int | None = PULSE, blink: int = 0, dim: bool = True, dimmed=(), cursor: int | None = None) -> Look:
+    """The box of an item's actions with the cursor on this one. `dimmed`: the rows of sys the game
+    draws dimmed just then; `cursor`: the cursor's row when it isn't this one's."""
+    menu, notes = mf.menu, set()
+    rows = ACTIONS[int(key.split("/")[1])]
+    x, y, w, h = centre_of(menu, ACTION_WINDOW)
+    gx, gy, _, cell_w, row_h = _cell(menu, ACTION_WINDOW)
+    screen = Screen(background, dim)
+    draw_box(screen, menu, x, y, w, h)
+    at = rows.index(int(key.split("/")[1])) if cursor is None else cursor
+    draw_cursor(screen, x + gx, y + gy + row_h * at, cell_w, row_h, pulse, blink)
+    text = None
+    for n, row in reversed(list(enumerate(rows))):
+        said = _said(mf, raw, key, sys_key(row), notes)
+        if said is None:
+            continue
+        laid = centred(mf, said, x + gx + 2, y + gy + 2 + row_h * n, cell_w,
+                       DIM_COLOUR if row in dimmed else TEXT_COLOUR)
+        draw_text(screen, mf, laid)
+        text = laid if sys_key(row) == key else text
+    return _finish(screen, "the box of an item's actions", notes, text, (x, y, w, h))
+
+
+# The memory card's progress box (MemCard_DrawProgress): the word centred 10 px down, and for Saving
+# and Loading eight blocks under it, ON for each part done (sprites of the menus' page: pictures).
+BLOCKS_ON = 3
+NO_BLOCKS = 64                       # sys/064 "Formatting" has none
+
+
+def progress_box(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
+                 dim: bool = True, done: int = BLOCKS_ON) -> Look:
+    """The progress box with this word, `done` of its eight blocks ON."""
+    menu = mf.menu
+    x, y, w, h = centre_of(menu, PROGRESS_WINDOW)
+    screen = Screen(background, dim)
+    draw_box(screen, menu, x, y, w, h)
+    if int(key.split("/")[1]) != NO_BLOCKS:
+        for n in reversed(range(BLOCKS)):
+            draw_sprite(screen, menu, ON_BLOCK if n < done else OFF_BLOCK, x + 16 + 16 * n, y + 30)
+    text = centred(mf, raw, x, y + 10, w)
+    draw_text(screen, mf, text)
+    return _finish(screen, "the memory card's progress box", set(), text, (x, y, w, h))
+
+
+# The config menu (main_menu.c): window 0x20 with Sound, Cursor, Window, Position (Draw_SetPrimCallback
+# shows four of the grid's six rows: MAX and max are rows the game never shows), each centred in a
+# 68 px cell; beside it the window of the row picked: Mono / Stereo (0x21), Default / Memory (0x23), or
+# the window colour's (0x2E: R, G, B with their values between arrows, and Completed / Default).
+# The help line above shows the hint of the cursor's row (Menu_DrawContextHelpText). While a second
+# window is open the list's other rows are dimmed and its cursor stands still.
+CONFIG_ROWS = (40, 41, 42, 43)                   # sys rows; 44 and 45 follow in the table
+CONFIG_HINT, SOUND_HINT, CURSOR_HINT, CHANNEL_HINT, OPTION_HINT = 49, 58, 61, 63, 66      # misc rows
+#   window, its rows, the config list's row, the first hint, the choice in use in a new game
+CHOICES = {"sound choice": (SOUND_WINDOW, (46, 47), 0, SOUND_HINT, 1),
+           "cursor choice": (CURSOR_WINDOW, (49, 50), 1, CURSOR_HINT, 0)}
+CHANNELS, OPTIONS = (53, 54, 55), (51, 52)
+CHANNEL_VALUE = (0x40 - 0x20) >> 1               # the default window colour's parts: 16
+
+
+def _config_list(screen: Screen, mf: MenuFont, raw: bytes, key: str, rows, cursor: int, in_use: bool,
+                 pulse, blink, notes: set):
+    """Window 0x20 with `rows`, the cursor on row `cursor`; in_use: it is the list the player is in."""
+    menu = mf.menu
+    wx, wy, ww, wh, x0, y0, cell_w, row_h, _ = grid_cells(menu, CONFIG_WINDOW, CONFIG_WINDOW, len(rows))
+    for pixels, rgb, sign in bevel(wx, wy, ww, wh):
+        screen.blend(pixels, rgb, sign)
+    draw_cursor(screen, x0 - 2, y0 - 2 + row_h * cursor, cell_w, row_h, pulse if in_use else STILL,
+                blink if in_use else 0)
+    text = None
+    for n, row in reversed(list(enumerate(rows))):
+        said = _said(mf, raw, key, sys_key(row), notes)
+        if said is None:
+            continue
+        laid = centred(mf, said, x0, y0 + row_h * n, cell_w, TEXT_COLOUR if in_use or n == cursor else DIM_COLOUR)
+        draw_text(screen, mf, laid)
+        text = laid if sys_key(row) == key else text
+    return text, (wx, wy, ww, wh)
+
+
+def _hint(screen: Screen, mf: MenuFont, row: int, seconds: int, notes: set):
+    hint = mf.pack.text(misc_key(row))
+    if hint is None:
+        notes.add("its hint in the help line is not in the file")
+    return draw_help(screen, mf, hint, misc_key(row), seconds)[1]
+
+
+def config_menu(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
+                pulse: int | None = PULSE, blink: int = 0, dim: bool = True) -> Look:
+    """The config menu's list with the cursor on this row (a row the game never shows after the four
+    it does)."""
+    n, notes = int(key.split("/")[1]), set()
+    rows = CONFIG_ROWS if n in CONFIG_ROWS else CONFIG_ROWS + (n,)
+    cursor = rows.index(n)
+    screen = Screen(background, dim)
+    if cursor < len(CONFIG_ROWS):
+        digits = _hint(screen, mf, CONFIG_HINT + cursor, seconds, notes)
+    else:
+        digits = draw_help(screen, mf, None, key, seconds)[1]
+        notes.add("a row the game never shows (its list ends at Position)")
+    text, box = _config_list(screen, mf, raw, key, rows, cursor, True, pulse, blink, notes)
+    return _finish(screen, "the config menu", notes, text, (box[0], 0, box[2], box[1] + box[3]), digits)
+
+
+def config_choice(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
+                  pulse: int | None = PULSE, blink: int = 0, dim: bool = True, in_use: int | None = None) -> Look:
+    """Mono / Stereo or Default / Memory beside the config menu, the cursor on this row; the blue tile
+    on the one in use (Draw_DropShadow: Stereo and Default in a new game, or `in_use`)."""
+    menu, notes = mf.menu, set()
+    window, rows, picked, hint, default = CHOICES[context_of(key)]
+    at = rows.index(int(key.split("/")[1]))
+    in_use = default if in_use is None else in_use
+    screen = Screen(background, dim)
+    digits = _hint(screen, mf, hint + at, seconds, notes)
+    _config_list(screen, mf, raw, key, CONFIG_ROWS, picked, False, pulse, blink, notes)
+    wx, wy, ww, wh, x0, y0, cell_w, row_h, _ = grid_cells(menu, window, window, len(rows))
+    for pixels, rgb, sign in bevel(wx, wy, ww, wh):
+        screen.blend(pixels, rgb, sign)
+    draw_cursor(screen, x0 - 2, y0 - 2 + row_h * at, cell_w, row_h, pulse, blink)
+    text = None
+    for n, row in reversed(list(enumerate(rows))):
+        if n == in_use:
+            c = EQUIPPED_TILE
+            screen.blend(tile_add(x0, y0 + row_h * n, cell_w - 4, row_h - 4), (c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF), 1)
+        said = _said(mf, raw, key, sys_key(row), notes)
+        if said is None:
+            continue
+        laid = centred(mf, said, x0, y0 + row_h * n, cell_w)
+        draw_text(screen, mf, laid)
+        text = laid if sys_key(row) == key else text
+    return _finish(screen, "the config menu: " + ("Sound" if window == SOUND_WINDOW else "Cursor"), notes, text,
+                   (wx, 0, ww, wy + wh), digits)
+
+
+def colour_window(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0,
+                  pulse: int | None = PULSE, blink: int = 0, dim: bool = True) -> Look:
+    """The window colour's window beside the config menu: R, G, B (each in its own colour, its value
+    10 px on, an arrow above and under it) and Completed / Default; the cursor on this row."""
+    menu, notes = mf.menu, set()
+    n = int(key.split("/")[1])
+    screen = Screen(background, dim)
+    digits = _hint(screen, mf, CHANNEL_HINT + CHANNELS.index(n) if n in CHANNELS else OPTION_HINT + OPTIONS.index(n),
+                   seconds, notes)
+    _config_list(screen, mf, raw, key, CONFIG_ROWS, 2, False, pulse, blink, notes)
+    wx, wy, ww, wh = menu.windows[COLOUR_WINDOW]
+    for pixels, rgb, sign in bars(COLOUR_POINTS, COLOUR_BRIGHT, COLOUR_DARK, wx, wy):
+        screen.blend(pixels, rgb, sign)
+    gx, gy, _, cell_w, row_h = _cell(menu, COLOUR_WINDOW)
+    ox, oy, _, option_w, option_h = _cell(menu, COLOUR_OPTIONS)
+    if n in CHANNELS:
+        draw_cursor(screen, wx + gx + cell_w * CHANNELS.index(n), wy + gy, cell_w, row_h, pulse, blink)
+    else:
+        draw_cursor(screen, wx + ox, wy + oy + option_h * OPTIONS.index(n), option_w, option_h, pulse, blink)
+    text = None
+    for k, row in reversed(list(enumerate(OPTIONS))):
+        said = _said(mf, raw, key, sys_key(row), notes)
+        if said is not None:
+            laid = centred(mf, said, wx + ox + 2, wy + oy + 2 + option_h * k + 1, option_w)
+            draw_text(screen, mf, laid)
+            text = laid if sys_key(row) == key else text
+    for k, row in reversed(list(enumerate(CHANNELS))):
+        x, y = wx + gx + 2 + cell_w * k, wy + gy + 2
+        for d, digit in reversed(list(enumerate(_three(CHANNEL_VALUE)))):
+            draw_digit(screen, menu, digit, x + 10 + 5 * d, y + 3, DIGITS_PLAIN)
+        said = _said(mf, raw, key, sys_key(row), notes)
+        if said is not None:
+            laid = lay_out(mf, said, x, y, tuple(0x80 if c == k else 0 for c in range(3)))
+            draw_text(screen, mf, laid)
+            text = laid if sys_key(row) == key else text
+    for k in reversed(range(3)):                 # Menu_DrawBlendColorArrows: dimmed while no direction is held
+        draw_sprite(screen, menu, DOWN_ARROW, wx + 0x12 + 0x20 * k, wy + 5 + 0x19, DIM_COLOUR)
+    for k in reversed(range(3)):
+        draw_sprite(screen, menu, UP_ARROW, wx + 0x12 + 0x20 * k, wy + 5, DIM_COLOUR)
+    return _finish(screen, "the config menu: Window", notes, text, (wx, 0, ww, wy + wh), digits)
+
+
+DRAWN = {"help line": help_line, "item list": item_list, "parasite energy list": pe_list,
+         "dialog line": message_box, "OK button": message_box,
+         "confirm label": confirm_box, "OK/cancel choice": confirm_box, "yes/no choice": confirm_box,
+         "item actions": action_box, "progress box": progress_box,
+         "config menu": config_menu, "sound choice": config_choice, "cursor choice": config_choice,
+         "colour options": colour_window, "colour channel": colour_window}
 
 
 def can_draw(key: str) -> bool:
@@ -775,14 +1220,31 @@ def can_draw(key: str) -> bool:
 def context_keys(key: str) -> list[str]:
     """The other rows the game look of `key` shows: for an item's name, the other first items' names
     and the item's description (the help line above the list); for a PE's, the other PEs a game
-    teaches and the PE's description."""
+    teaches and the PE's description; for a row of a box or of the config menu, the box's other rows
+    (the name a label is joined with, the choices, the hint in the help line)."""
     where = context_of(key)
-    k = int(key.split("/")[1]) if where in ("item list", "parasite energy list") else 0
+    k = int(key.split("/")[1]) if where in DRAWN and where != "help line" else 0
     if where == "item list":
         return [item_key(i) for i, _ in START_ITEMS if i != k] + [f"desc/{k:03d}"]
     if where == "parasite energy list":
         return [pe_key(q) for q in LEARNABLE if PE_FIRST + q != k] + [f"desc/{k:03d}"]
-    return []
+    rows: list[str] = []
+    if where in ("dialog line", "OK button"):
+        rows = [sys_key(n) for n in message_rows(key)] + [sys_key(OK_ROW)]
+    elif where in ("confirm label", "OK/cancel choice", "yes/no choice"):
+        label, first, _, second, _ = confirm_of(key)
+        rows = list(label) + [sys_key(first), sys_key(first + 1)] + ([sys_key(second)] if second is not None else [])
+    elif where == "item actions":
+        rows = [sys_key(n) for n in ACTIONS[k]]
+    elif where == "config menu":
+        rows = [sys_key(n) for n in CONFIG_ROWS] + ([misc_key(CONFIG_HINT + CONFIG_ROWS.index(k))] if k in CONFIG_ROWS else [])
+    elif where in CHOICES:
+        _, choices, _, hint, _ = CHOICES[where]
+        rows = [sys_key(n) for n in CONFIG_ROWS + choices] + [misc_key(hint + choices.index(k))]
+    elif where in ("colour options", "colour channel"):
+        hint = CHANNEL_HINT + CHANNELS.index(k) if k in CHANNELS else OPTION_HINT + OPTIONS.index(k)
+        rows = [sys_key(n) for n in CONFIG_ROWS + CHANNELS + OPTIONS] + [misc_key(hint)]
+    return [r for r in rows if r != key]
 
 
 def look(mf: MenuFont, raw: bytes, key: str, background: bytes | None, seconds: int = 0) -> Look | None:
