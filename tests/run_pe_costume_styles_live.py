@@ -53,19 +53,31 @@ def run_case(args, style, game, flows):
     result={'run':str(run),'samples':len(samples),'mean_charge_step':sum(increments)/len(increments),
             'common_charge_steps':Counter(increments).most_common(4),'hp_at_trace_end':samples[-1]['hp'],'events':events,
             'coverage':'bounded functional trace; victory and balance not asserted'}
+    def pairs(tag):
+        return [tuple(map(int,re.search(r'loss=(\d+)->(\d+)',line).groups())) for line in events if tag in line]
     if style=='quickstep':
+        # Revision 6.4: half-HP breakpoint or non-final kill, 20% of a full bar
+        # (less only when the bar clamps at full); Overextended x1.20 in the burst.
         assert any('begin=quickstep' in line for line in events),result
-        assert sum('quickstep refund=2250' in line for line in events)==1,result
+        refunds=[int(re.search(r'refund=(\d+)',line).group(1)) for line in events if 'quickstep refund=' in line]
+        assert refunds and all(0<r<=1800 for r in refunds),result
+        over=pairs('overextended loss=')
+        assert all(after==max(1,(before*120+50)//100) for before,after in over),result
+        result['quickstep_refunds']=refunds;result['overextended']=over
     elif style=='bulwark':
-        losses=[tuple(map(int,re.search(r'loss=(\d+)->(\d+)',line).groups())) for line in events if 'bulwark loss=' in line]
-        assert losses,result
-        assert all(after==max(1,(before*75+50)//100) for before,after in losses),result
-        # Retaliate: guarded losses build the store; any counter respects the +50% per-hit cap.
-        stores=[int(re.search(r'store=(\d+)',line).group(1)) for line in events if 'bulwark loss=' in line]
+        # Revision 6.4 single guard: x0.75 guarded, x1.15 Exposed on a full bar.
+        guarded=pairs('bulwark guarded loss=');exposed=pairs('bulwark exposed loss=')
+        assert guarded,result
+        assert all(after==max(1,(before*75+50)//100) for before,after in guarded),result
+        assert all(after==max(1,(before*115+50)//100) for before,after in exposed),result
+        stores=[int(re.search(r'store=(\d+)',line).group(1)) for line in events if 'bulwark guarded loss=' in line]
         assert stores and stores[0]>0,result
-        counters=[tuple(map(int,re.search(r'damage=(\d+)->(\d+)',line).groups())) for line in events if 'retaliate damage=' in line]
+        # Counter within the +50% per-hit cap; Rally never heals more than the bonus.
+        counters=[tuple(map(int,re.search(r'damage=(\d+)->(\d+)',line).groups())) for line in events if 'counter damage=' in line]
         assert all(before<after<=before+(before*50+99)//100 for before,after in counters),result
-        result['retaliate_counters']=counters
+        rallies=[(int(re.search(r'damage=(\d+)->(\d+)',l).group(2))-int(re.search(r'damage=(\d+)',l).group(1)),int(re.search(r'rally=(\d+)',l).group(1))) for l in events if 'counter damage=' in l]
+        assert all(heal<=bonus for bonus,heal in rallies),result
+        result.update(guarded=guarded,exposed=exposed,counters=counters,rally=rallies)
     else:
         assert any('begin=original enabled=0' in line for line in events),result
         assert not any('refund=' in line or 'loss=' in line for line in events),result
@@ -87,7 +99,7 @@ def main():
         futures=[pool.submit(run_case,args,name,game,flows) for name in ('quickstep','bulwark','vanilla')]
         results=dict(f.result() for f in futures)
     native=results['vanilla']['mean_charge_step']
-    # Revision 5: Retaliate charges at native speed.
+    # Revision 6.4: no style changes AT charge speed.
     assert abs(results['bulwark']['mean_charge_step']/native-1)<0.005,results
     assert abs(results['quickstep']['mean_charge_step']/native-1)<0.005,results
     assert hashlib.sha256(args.card.read_bytes()).hexdigest()==before

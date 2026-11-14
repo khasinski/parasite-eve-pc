@@ -46,16 +46,22 @@ pack mappings and deferred costumes still resolve to Original.
 | Bulwark (Counter, Rally, Exposed, single guard) | yes | unit | no |
 | Bulwark Brace (two-level guard) | no: only after Rally plays well (spec 7, 11) | | |
 
-**TODO — one shared playtest package after all four are built.** Not one per
-style. When Striker and Bulwark land, build a single package (extend local
-`tools/New-CostumeStylePlaytest.ps1`) that:
-- holds copied saves only, under `build-styles/` (never committed);
-- starts with Costume + playstyle on, one save per style, each wearing a
-  costume of that style at a spot with a regular fight and a boss nearby;
-- includes the playtest sheet from the build spec section 10 (fun gate: did
-  they see each con coming, could they say how to avoid it, did it feel fair);
-- turns on the `costume_style` log so refunds, Overextended, charges, crack,
-  break, counters and Rally can be checked after a session.
+**Shared playtest package: built** (2026-11-13) at
+`build-styles/costume-playtest-rev6/` (copied saves, never committed). One
+exe, four isolated profiles under `profiles/<style>/`, one launcher each
+(`Play Quickstep.cmd` ...). Every profile starts from the same Day 2 Central
+Park save (regular park fights nearby; the Giant Worms and the carriage Eve
+later that day), with costume abilities on and that style's costume worn;
+Striker's copy has the gun equipped. Each profile writes its own
+`pe_play.log` (`costume_style` lines). `PLAYTEST SHEET.txt` covers the
+section 10 fun gate (per con: seen coming, avoidable, fair) and the section 8
+calibration checks.
+
+Rebuild with local `tools/New-CostumeStylePlaytestPackage.ps1` (sheet source:
+`tools/costume-playtest-sheet.txt`; both git-ignored). It needs `-Card` (the
+save every style starts from) and `-StrikerCard` (the same save with a gun
+equipped, e.g. a `run_pe_striker_live.py` fixture copy), plus the Guard and
+Daniel bundles.
 
 ## Bulwark, Revision 6.4 single-guard build (current; supersedes Retaliate below)
 
