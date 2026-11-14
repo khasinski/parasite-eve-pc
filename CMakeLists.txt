@@ -849,6 +849,15 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-menu-look-evidence translator-menu-look)
             set_tests_properties(original-game-translator-menu-look PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # The Translator's "As in the game" preview of the battle lines against the game's own frames:
+            # "Can't escape!" in the first fight, with a file the Translator saved (that line in Spanish)
+            # and with the game's own text, the battle bar and the room under it pixel for pixel. The other
+            # battle lines: the tool's unit tests only. Needs Pillow. Disc 1.
+            add_test(NAME original-game-translator-battle-look COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-battle-look-evidence translator-battle-look)
+            set_tests_properties(original-game-translator-battle-look PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
             # The Translator's "As in the game" preview against the game's own frames: the first box
             # (English pack, and each player pack given by PE_TEST_ES_PACK, _IT_, _DE_, _FR_, _ZH_)
             # and Disc 2's boxes on the ship, every letter pixel; the first box's room picture.

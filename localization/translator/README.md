@@ -52,9 +52,12 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
      OK, a question with its two choices (OK / Cancel, Yes / No; "Medicine 1 will be discarded",
      "Heal 1 will be used" with the name in your words where you have translated it), an item's
      Use / Move / Discard, the memory card's Saving / Loading box, and the config menu with its
-     Sound, Cursor and Window choices and their hints in the help line. Not drawn that way yet:
-     battle lines, right-to-left languages, and the button icons in a few lines (the preview says
-     so).
+     Sound, Cursor and Window choices and their hints in the help line. A battle line (the Scan
+     panel's lines, running away) is drawn on the battle bar over the first fight's room (Aya, the
+     enemy and the HP panel are not drawn); the HP line shows 9999/9999, the widest it gets. The bar
+     starts at the bottom, as in the first fight; click the picture to see it at the top, where other
+     fights put it. Not drawn that way yet: right-to-left languages, and the button icons in a few
+     lines (the preview says so).
    - **Dialogue MAP** is the city map: the place title shown when Aya arrives somewhere
      (lines 1-10) and the map's narration (11-14). Type only the words, with `{br}` between lines:
      the tool centres each line and puts a title on the box's third line, as the English has them.
@@ -172,7 +175,8 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   Over drawn darker and dithered, the menu words in their own colours and at half). `menulook.py`:
   the "As in the game" preview of the menus' lines (their letters, windows and the darkened scene,
   followed from the C code; the window and list places from the boot program's own tables on the
-  disc, the items' icons and kinds from the resident data).
+  disc, the items' icons and kinds from the resident data). `battlelook.py`: the "As in the game"
+  preview of the battle lines (the dialogue letters on the battle bar, over the first fight's room).
 - `package.py`: builds the download for the system it runs on and checks the built program:
   it starts it, types a line, saves and quits (`--report`), compares the file with what the source
   tool saves, and searches everything inside for game text. Build tools are pinned in
@@ -205,4 +209,8 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   same way, with the game's own text and with four lines the Translator saved (Disc 1, part menus'
   route on into the item list), and the item list and the PE list (Day 5 sample save) with them,
   and the menus' boxes (an item's actions, "will be discarded" / "will be used" with their choices,
-  Loading, File loaded) and the config menu with its choices and hints.
+  Loading, File loaded) and the config menu with its choices and hints; part `translator-battle-look`
+  (CTest `original-game-translator-battle-look`) checks a battle line the same way: "Can't escape!"
+  in the first fight, with the game's own text and a line the Translator saved (Disc 1, part battle's
+  route). The other battle lines need Aya to know Scan or a fight she can run from: they are drawn
+  by the same code and checked by the unit tests only.

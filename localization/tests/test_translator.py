@@ -548,6 +548,40 @@ class EnglishTest(unittest.TestCase):
         self.assertEqual(wrong, {})
         print(f"\n{len(keys)} English rows of the menus' boxes and choices drawn in their boxes")
 
+    def test_every_battle_line_is_drawn_on_the_battle_bar(self):
+        """The first fight's room (M005, its third view) the same on both discs, and every English battle
+        line drawn on the bar: one line from x 20, as long as the manifest measures it (the HP line with
+        9999 in its two number slots, 12 px a digit, where the manifest counts five), inside the screen,
+        nothing the preview can't draw."""
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        from petext import battle
+        from translator import battlelook as B, gamelook as G
+        looks = [G.DiscLook(d) for d in self.discs]
+        rooms = [d.views(B.ROOM) for d in looks]
+        for views in rooms:
+            self.assertEqual(views, rooms[0])
+        self.assertEqual(len(rooms[0]), 3)
+        pack = G.Pack.read(pelang.pack_bytes(self.pack))
+        font = G.Font(looks[0], pack)
+        wrong = {}
+        for k in battle.LINES:
+            for top in (False, True):
+                look = B.look(font, pack.text(k), k, rooms[0][B.VIEW], top)
+                placed = G.lay_out(font, pack.text(k), b"", battle.X, (B.TOP if top else B.BOTTOM)[1],
+                                   numbers=B.NUMBERS.get(k, ())).screens[0]
+                last = placed[-1]
+                end = last.x - last.letter.x + last.letter.advance - battle.X
+                row = GAME.rows[k]
+                width = row["lines_px"][0] - 12 * (5 - 4) * len(row["structure"])
+                found = (look.notes, placed[0].x - placed[0].letter.x, end == width)
+                if found != ([], battle.X, True):
+                    wrong[(k, top)] = (found, end, width)
+        self.assertEqual(wrong, {})
+        print(f"\n{len(battle.LINES)} English battle lines drawn on the battle bar, at the bottom and at the top")
+
     def test_the_window_shows_a_confirm_label_joined_with_the_item_s_name(self):
         """"As in the game" for "will be discarded": the confirm box with Medicine 1's name in the
         translator's words, and the game's own Cancel beside their OK."""
@@ -1724,6 +1758,92 @@ class FakeLookDisc:
             for x in range(3, 8):
                 self.page[(y0 + 9) * 256 + x0 + x] = 1
         self.font = self.area_font = tim
+
+
+class FakeBattleDisc(FakeLookDisc):
+    """FakeLookDisc with the first fight's room: three views, each one grey the screen can show (5-bit
+    values 8, 12, 16)."""
+
+    def views(self, number: int) -> list[bytes]:
+        return [bytes([((8 + 4 * k) * 255 + 15) // 31]) * (320 * 224 * 3) for k in range(3)] if number == 5 else []
+
+
+class BattleLookRuleTest(unittest.TestCase):
+    """The battle lines' game look with no disc: the bar where the game puts it, the line on it in
+    the dialogue letters as the compiler measures them, the HP line's numbers."""
+
+    def look(self, key: str, text: str, top: bool = False):
+        from translator import battlelook as B, gamelook as G
+        result = P.check_row(GAME, key, text, "es", "Español")
+        self.assertEqual(result.errors, [], result.errors)
+        pack = G.Pack.read(result.preview.pack)
+        font = G.Font(FakeBattleDisc(), pack)
+        return result, pack, font, B.look(font, pack.text(key), key, FakeBattleDisc().views(5)[2], top)
+
+    def test_the_line_sits_on_the_bar_at_the_bottom_or_the_top(self):
+        from translator import battlelook as B, gamelook as G, menulook as M
+        for top in (False, True):
+            result, pack, font, look = self.look("battle/010", "¡No puedes huir!", top)
+            bar_y, line_y = B.TOP if top else B.BOTTOM
+            self.assertEqual(look.bar, (bar_y, bar_y + 20))
+            self.assertEqual(look.notes, [])
+            # the room as it is (not darkened) outside the bar; the bar's bevel over it, the letters on it
+            grey = (16 * 255 + 15) // 31
+            screen = M.Screen(FakeBattleDisc().views(5)[2], dim=False)
+            for pixels, rgb, sign in M.bevel(0, bar_y, 320, 20):
+                screen.blend(pixels, rgb, sign)
+            placed = G.lay_out(font, pack.text("battle/010"), b"", 20, line_y).screens[0]
+            self.assertEqual(look.rgb, G.draw(font, placed, screen.rgb()))
+            outside = [y for y in range(224) if not bar_y <= y < bar_y + 20]
+            self.assertTrue(all(look.rgb[(y * 320 + x) * 3] == grey for y in outside for x in range(0, 320, 7)))
+            self.assertNotEqual(look.rgb[(bar_y * 320 + 100) * 3], grey)
+            self.assertEqual({p.y for p in placed}, {line_y})
+            last = placed[-1]
+            self.assertEqual(last.x - last.letter.x + last.letter.advance - 20, result.preview.screens[0].widths[0])
+            self.assertIn("at the top" if top else "at the bottom", look.where)
+
+    def test_the_hp_line_shows_9999_in_both_number_slots(self):
+        from translator import battlelook as B, gamelook as G
+        result, pack, font, look = self.look("battle/001", "PV {num}/{num}")
+        raw = pack.text("battle/001")
+
+        def laid(numbers):
+            placed = G.lay_out(font, raw, b"", 20, B.BOTTOM[1], numbers=numbers).screens[0]
+            last = placed[-1]
+            return placed, last.x - last.letter.x + last.letter.advance - 20
+
+        nines, end = laid(B.NUMBERS["battle/001"])
+        ones, one_end = laid((1, 1))
+        self.assertEqual(B.NUMBERS["battle/001"], (9999, 9999))
+        self.assertEqual((len(nines) - len(ones), end - one_end), (6, 6 * 12))   # three more digits each, 12 px apart
+        self.assertEqual(end, result.preview.screens[0].widths[0] - 2 * 12)      # the compiler counts five digits a slot
+        nine = G._fixed(font.page, 9, 0)
+        self.assertEqual([(p.letter.pixels, p.letter.advance) for p in nines[-4:]], [(nine.pixels, 12)] * 4)
+        self.assertIn("HP 9999/9999", look.where)
+        self.assertEqual(look.notes, [])
+
+    def test_a_number_slot_past_the_values_ends_the_line(self):
+        """As the game does when a page has more FB 08 than values (Menu_DrawTextboxEntries returns)."""
+        from translator import gamelook as G
+        _, pack, font, _ = self.look("battle/001", "PV {num}/{num}")
+        raw = pack.text("battle/001")
+        one = G.lay_out(font, raw, b"", 20, 195, numbers=(7,)).screens[0]
+        both = G.lay_out(font, raw, b"", 20, 195, numbers=(7, 8)).screens[0]
+        self.assertEqual(len(both), len(one) + 1)          # the second number's one digit ("/" is in both)
+        self.assertEqual(G.lay_out(font, raw, b"", 20, 195).screens[0][-1].letter.pixels,
+                         G._fixed(font.page, 5, 0).pixels)  # no values: the sample digits, as before
+
+    def test_a_line_too_long_for_the_screen_is_said(self):
+        from translator import battlelook as B, gamelook as G
+        from petext import battle
+        result = P.check_row(GAME, "battle/010", "W" * 40, "es", "Español")
+        pack = G.Pack.read(result.preview.pack)
+        look = B.look(G.Font(FakeBattleDisc(), pack), pack.text("battle/010"), "battle/010",
+                      FakeBattleDisc().views(5)[2])
+        self.assertTrue(result.errors)                     # the compiler says so too
+        self.assertIn("the line runs off the screen", look.notes)
+        self.assertTrue(B.can_draw("battle/000") and not B.can_draw("dlg/M001/009") and not B.can_draw("sys/000"))
+        self.assertEqual(battle.X, 20)
 
 
 class GameLookRuleTest(unittest.TestCase):
@@ -3053,6 +3173,46 @@ class GameLookWindowTest(unittest.TestCase):
             texts = [window.canvas.itemcget(i, "text") for i in window.canvas.find_all()
                      if window.canvas.type(i) == "text"]
             self.assertTrue(any("Letter shapes are your computer's" in t for t in texts), texts)
+        finally:
+            root.destroy()
+
+    def test_a_battle_line_is_drawn_on_the_bar_and_a_click_moves_the_bar(self):
+        """With a disc's look (a made-up one here), a battle line is drawn on the battle bar at the bottom;
+        a click on the picture moves the bar to the top, and the next click back."""
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        import tkinter as tk
+        from translator import app as A
+        A.SETTINGS = self.dir / "settings.json"
+        root = tk.Tk()
+        try:
+            window = A.App(root, None, str(self.dir / "g.pelang"), select="battle/010", new=("es", "Español"))
+            window.look_disc = FakeBattleDisc()
+            window.tr.set_text("battle/010", "¡No puedes huir!")
+            window.check_now()
+            for _ in range(100):
+                root.update()
+                if window.preview is not None:
+                    break
+                __import__("time").sleep(0.05)
+            self.assertIsNotNone(window.preview)
+            window.look_mode.set("game")
+
+            def notes():
+                window.draw()
+                return " ".join(window.canvas.itemcget(i, "text") for i in window.canvas.find_all()
+                                if window.canvas.type(i) == "text")
+
+            self.assertTrue(window.draw_game())
+            said = notes()
+            self.assertIn("the battle bar at the bottom", said)
+            self.assertIn("first fight's room", said)
+            window.next_room_picture()
+            self.assertIn("the battle bar at the top", notes())
+            window.next_room_picture()
+            self.assertIn("the battle bar at the bottom", notes())
         finally:
             root.destroy()
 

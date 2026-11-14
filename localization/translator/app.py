@@ -23,7 +23,7 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import artwork as A, gamelook as GL, menulook as ML, project as P
+from . import artwork as A, battlelook as BL, gamelook as GL, menulook as ML, project as P
 
 SETTINGS = Path.home() / ".pe-translator.json"
 SCALE = 2                                    # the preview: the game's pixels, twice the size,
@@ -130,6 +130,7 @@ class App:
         self.fonts: dict[bytes, GL.Font] = {}
         self.menu_disc: ML.MenuDisc | None = None       # the menus' look: their page, metrics, windows
         self.room_pick = (0, 0)                         # which room and view is behind the text
+        self.battle_top = False                         # battle lines: the bar at the top (a click on the picture)
         self.look_photo = None
         self.disc_error: str | None = None
         self.pictures_window = None
@@ -1013,8 +1014,12 @@ class App:
         self.draw()
 
     def next_room_picture(self) -> None:
-        """The next view of the room behind the text, then the next room that shows the line."""
-        if self.look_mode.get() == "game":
+        """The next view of the room behind the text, then the next room that shows the line; for a
+        battle line, the bar to the other place the game puts it (top or bottom)."""
+        if self.look_mode.get() == "game" and self.preview is not None and BL.can_draw(self.preview.key):
+            self.battle_top = not self.battle_top
+            self.draw()
+        elif self.look_mode.get() == "game":
             room, view = self.room_pick
             self.room_pick = (room, view + 1)
             self.draw()
@@ -1026,7 +1031,8 @@ class App:
         if pv is None or disc is None or not pv.pack or not GL.can_draw_here():
             return False
         menu = not pv.dialogue and self.menu_disc is not None and ML.can_draw(pv.key)
-        if not menu and (not pv.dialogue or not pv.key.startswith("dlg/")):
+        fight = pv.dialogue and BL.can_draw(pv.key)
+        if not menu and not fight and (not pv.dialogue or not pv.key.startswith("dlg/")):
             return False
         pack = GL.Pack.read(pv.pack)
         if GL.can_draw(pack.lang):
@@ -1041,6 +1047,8 @@ class App:
                 self.fonts.pop(next(iter(self.fonts)))
         if menu:
             return self.draw_menu_game(font, raw)
+        if fight:
+            return self.draw_battle_game(font, raw, GL.name_bytes(pack, pv.shown_name))
         box = pv.boxes[0] if pv.boxes else P.Box("default", 20, 174, None, None, None, False)
         x, y = (GL.LINE_X, GL.LINE_Y) if box.name == "default" else (box.x, box.y)
         look = GL.lay_out(font, raw, GL.name_bytes(pack, pv.shown_name), x, y,
@@ -1091,6 +1099,21 @@ class App:
                                + ("   •   click the picture for another view" if len(views) > 1 else ""),
                                "The game's own letters and window, from your disc; behind them a room, darkened "
                                "as the menus darken the scene." +
+                               (" Not drawn as the game does: " + "; ".join(look.notes) + "." if look.notes else ""))
+        return True
+
+    def draw_battle_game(self, font: GL.Font, raw: bytes, name: bytes) -> bool:
+        """A battle line as the game draws it (battlelook.py): on the battle bar, over the first
+        fight's room; a click on the picture moves the bar to the top and back."""
+        pv, disc = self.preview, self.look_disc
+        views = disc.views(BL.ROOM)
+        background = views[BL.VIEW] if len(views) > BL.VIEW else None
+        look = BL.look(font, raw, pv.key, background, self.battle_top, name)
+        top = 0 if self.battle_top else GL.H - VIEW        # the bar and the scene next to it, to the screen's edge
+        self.show_game_picture(look.rgb, top, f"{look.where}   •   click the picture for the "
+                               + ("bottom" if self.battle_top else "top") + " (the game picks one per fight)",
+                               "The game's own letters and battle bar, from your disc; behind them the first "
+                               "fight's room (Aya, the enemy and the HP panel aren't drawn)." +
                                (" Not drawn as the game does: " + "; ".join(look.notes) + "." if look.notes else ""))
         return True
 

@@ -458,10 +458,14 @@ class Look:
 
 
 def lay_out(font: Font, raw: bytes, name: bytes = b"", box_x: int = LINE_X, box_y: int = LINE_Y,
-            digits: int = 5) -> Look:
+            digits: int = 5, numbers: tuple[int, ...] | None = None) -> Look:
     """A page's letters as Menu_DrawTextboxEntries places them, screen by screen (F8 starts the
-    next). `name`: the player's name in the pack's letters (FA)."""
+    next). `name`: the player's name in the pack's letters (FA). `numbers`: the values the game puts
+    in the page's number slots (Render_SetupColorTable), one per FB 08 in order, each drawn in its
+    decimal digits 12 px apart; a slot past them ends the page, as the game stops drawing there.
+    Without them, every FB 08 draws `digits` sample digits."""
     screens, here, notes = [], [], set()
+    slots = list(numbers) if numbers is not None else None
     x, y, colour = box_x, box_y, GREY
     i = 0
 
@@ -514,6 +518,11 @@ def lay_out(font: Font, raw: bytes, name: bytes = b"", box_x: int = LINE_X, box_
                 colour = GREY
             elif n in (7, 9):
                 i += 1
+            elif n == 8 and slots is not None:
+                if not slots:
+                    break
+                for d in str(slots.pop(0)):
+                    add(_fixed(font.page, int(d), 0))
             elif n == 8:
                 for d in range(digits):
                     add(_fixed(font.page, (d + 1) % 10, 0))

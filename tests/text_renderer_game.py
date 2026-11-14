@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-battle-look,translator-look]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -237,6 +237,16 @@ Checks, each from pe_mods.log and frame dumps:
              and the help window is drawn over the field frame as above. Yes / No and the memory card's
              other messages are drawn by the same code and have only the tool's unit tests.
              Disc 1 only.
+  translator-battle-look  The Translator's "As in the game" preview of the battle lines (translator/battlelook.py)
+             against the game's own frames: part battle's route into the first fight (Melissa), Escape from
+             the battle menu, and "Can't escape!" (battle/010) shows on the battle bar at the bottom. With a
+             file the Translator saved (that line in Spanish) and with the game's own text and the English
+             pack, the bar and everything under it (rows 180 to the screen's end) must be, pixel for pixel,
+             the Translator's drawing of the line over the first fight's room (M005, its third view), on
+             several frames while the line is up; the file's line must not be the English one. The other
+             battle lines (the Scan panel's, "Failed to escape") need Aya to know Scan or a fight she can
+             run from: they are drawn by the same code and have only the tool's unit tests, and so has the
+             bar at the top. Disc 1 only.
   translator-menu-words  The menus' words redrawn in the Translator: eight of the words the status menu shows
              (Bonus Point, Offense, Level, Next Level, Equipment, Active Time, and the SYS and SORT icons)
              saved from Disc 1 as PNGs by the tool, wiped and redrawn as pale bars over a red line (fitted to
@@ -2075,6 +2085,76 @@ def config_steps():
 
 
 # The boxes' rows in the file (the names they are joined with are MENU_LOOK_ITEMS' and PE_LOOK_NAMES').
+# ---- Part translator-battle-look: a battle line as the Translator draws it ----
+
+BATTLE_LOOK_WORDS = {'battle/010': '¡No puedes huir!'}
+BATTLE_LOOK_FRAMES = ('l0', 'l1', 'line', 'l3')      # while "Can't escape!" is up (75 frames from the Cross)
+BATTLE_LOOK_ROWS = (180, 224)                        # the bar (191-210) and what is under it: the room alone
+
+
+def battle_look_steps():
+    """Part battle's route on to the line: Triangle, Down to Escape, Cross; frames while the line is up."""
+    return presses([(65600, TRIANGLE, 'battle'), (65700, DOWN, 'items'), (65760, DOWN, 'weapon'),
+                    (65820, DOWN, 'armor'), (65880, CROSS, 'escape'), (65900, 0, 'l0'), (65930, 0, 'l1'),
+                    (66000, 0, 'line'), (66030, 0, 'l3')])
+
+
+def translator_battle_look(game, discs, out, localization):
+    """Part translator-battle-look (see the module notes). Disc 1 only (the user's choice)."""
+    import zipfile
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        print('SKIP translator battle look: needs Pillow (the game look draws with it)')
+        return 77
+    import pelang
+    from translator import battlelook as bl, gamelook as gl, project as tp
+    english, _, _ = make_english_pack(discs, out, localization)
+    the_game = tp.Game()
+    tr = tp.Translation(the_game, 'es', 'Battle look test')
+    for key, words in BATTLE_LOOK_WORDS.items():
+        tr.set_text(key, words)
+    path = out / 'translator-battle-look.pelang'
+    saved = tr.save(path)
+    check(not saved.left_out and not saved.whole, f'the Translator left lines out: {saved.left_out} {saved.whole}')
+    mine = gl.Pack.read(pelang.pack_bytes(path))
+    held = tp.read_pack_text(mine.data, the_game).texts
+    check(all(held.get(k) == w for k, w in BATTLE_LOOK_WORDS.items()), f'the saved file does not hold {BATTLE_LOOK_WORDS}')
+    with zipfile.ZipFile(english) if zipfile.is_zipfile(english) else open(english, 'rb') as f:
+        english_pack = gl.Pack.read(f.read(pelang.BUNDLE_TEXT) if isinstance(f, zipfile.ZipFile) else f.read())
+    look_disc = gl.DiscLook(discs[0])
+    room = look_disc.views(bl.ROOM)[bl.VIEW]
+    pack = ('es', 'Battle look test', None, path)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        runs = {which: pool.submit(run_fixed, game, discs[:1], out / f'translator-battle-look-{which}',
+                                   battle_look_steps(), pack=p, pad=BATTLE_ROUTE)
+                for which, p in (('pack', pack), ('english', None))}
+        works = {which: run.result() for which, run in runs.items()}
+    top, bottom = BATTLE_LOOK_ROWS
+    key = 'battle/010'
+    bars = {}
+    for which, use in (('english', english_pack), ('pack', mine)):
+        look = bl.look(gl.Font(look_disc, use), use.text(key), key, room)
+        check(look.notes == [] and look.bar == (191, 211), f'{which}: the Translator says {look.notes}, bar {look.bar}')
+        want = look.rgb[top * 320 * 3:bottom * 320 * 3]
+        for label in BATTLE_LOOK_FRAMES:
+            width, height, rgb = frame(works[which], label)
+            check((width, height) == (320, 224), f'{which} {label}: a {width} x {height} frame')
+            got = rgb[top * width * 3:bottom * width * 3]
+            differ = sum(1 for k in range(0, len(got), 3) if got[k:k + 3] != want[k:k + 3])
+            check(differ == 0, f"{which} {label}: the battle bar is not the Translator's ({differ} pixels differ): "
+                               f"{works[which]}")
+            print(f"PASS translator battle look, disc 1, {which} {label}: rows {top}-{bottom - 1} are the "
+                  f"Translator's battle bar with {key} over room M{bl.ROOM:03d}, 0 pixels differ")
+        bars[which] = want
+    check(bars['pack'] != bars['english'], "the file's line drew as the English one")
+    print(f'PASS translator battle look: "{BATTLE_LOOK_WORDS[key]}" and the English line, each on '
+          f'{len(BATTLE_LOOK_FRAMES)} frames. The other battle lines and the bar at the top: unit tests only')
+    return 0
+
+
 BOX_WORDS = {'sys/000': 'Usar', 'sys/001': 'Mover', 'sys/002': 'Tirar', 'sys/004': ' se tirará', 'sys/005': 'Vale',
              'sys/006': 'Anular', 'sys/026': ' se usará', 'sys/070': 'Cargando', 'sys/084': 'Partida cargada',
              'sys/008': 'Sí', 'sys/040': 'Sonido', 'sys/041': 'Puntero', 'sys/042': 'Ventana', 'sys/043': 'Posición',
@@ -3100,7 +3180,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
                               ('translator-cards', translator_cards), ('translator-tutorial', translator_tutorial),
                               ('translator-game-over', translator_game_over),
                               ('translator-menu-words', translator_menu_words),
-                              ('translator-menu-look', translator_menu_look), ('translator-look', translator_look)):
+                              ('translator-menu-look', translator_menu_look),
+                              ('translator-battle-look', translator_battle_look), ('translator-look', translator_look)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]
