@@ -1,6 +1,12 @@
 /* Native adapter. Definitions and simulation have no dependency on game state.
  */
 #include "pe1/battle_ailment.h"
+#include "pe1/field_actor.h"
+#include "pe1/field_glow_line.h"
+#include "pe1/fixed_point.h"
+#include "pe1/geom_state.h"
+#include "pe1/render_animation_frame.h"
+#include "pe1/render_matrix_slot.h"
 #include "pe1/battle_reset_stats.h"
 #include "pe1/battle_status.h"
 #include "pe1/draw_buffers.h"
@@ -562,6 +568,61 @@ static int outgoing(void *ctx, void *user) {
   }
   return 0;
 }
+/* Striker point-blank ring: a flat circle on the floor around Aya while she
+ * aims a gun, drawn like the native targeting dome (same view matrix, screen
+ * offset, ordering table and LINE_G2 packets) and growing with it. An enemy
+ * whose body reaches the ring is point-blank. Radius:
+ * pe_striker_ring_radius; color and smoothness here. */
+enum { RING_SEGMENTS = 48, DOME_GROW_FRAMES = 10, OT_DEPTH_LIMIT = 0x1000 };
+static const CueColor CUE_RING = {0x60, 0xe0, 0xff}; /* point-blank cyan */
+static FieldLineG2Packet ring_lines[2][RING_SEGMENTS];
+static unsigned ring_drawn; /* segments submitted last time (tests, logs) */
+static void draw_point_blank_ring(void) {
+  unsigned slot = (unsigned)g_ActiveDrawSlot;
+  unsigned radius = pe_striker_ring_radius(&session);
+  unsigned frame = (unsigned)g_BattleAttackAnimFrame;
+  const GteMatrix *view = g_ViewMatrixSlot.value;
+  int sxy[RING_SEGMENTS];
+  long depth[RING_SEGMENTS];
+  ring_drawn = 0;
+  if (slot > 1 || !radius || !view || !g_PlayerEntity ||
+      !g_OtBufferTable[slot])
+    return;
+  if (frame < DOME_GROW_FRAMES) /* the dome opens over 10 frames */
+    radius = radius * frame / DOME_GROW_FRAMES;
+  if (!radius)
+    return;
+  int cx = Pe1Fixed_Integer(&g_PlayerEntity->pos_x);
+  int cy = Pe1Fixed_Integer(&g_PlayerEntity->pos_y); /* floor, as the dome */
+  int cz = Pe1Fixed_Integer(&g_PlayerEntity->pos_z);
+  SetRotMatrix(view);
+  SetTransMatrix(view);
+  Render_SetGteScreenOffset();
+  for (unsigned i = 0; i < RING_SEGMENTS; i++) {
+    int angle = (int)(i * 4096u / RING_SEGMENTS), p, flag;
+    GteShortVector v = {(s16)(cx + rcos(angle) * (int)radius / 4096), (s16)cy,
+                        (s16)(cz + rsin(angle) * (int)radius / 4096), 0};
+    depth[i] = RotTransPers(&v, &sxy[i], &p, &flag);
+  }
+  Render_ResetGteScreenOffset();
+  RenderNativeTag *ot = (RenderNativeTag *)g_OtBufferTable[slot] + 2;
+  for (unsigned i = 0; i < RING_SEGMENTS; i++) {
+    unsigned j = (i + 1) % RING_SEGMENTS;
+    long z = (depth[i] + depth[j]) / 2;
+    if (z <= 0 || z >= OT_DEPTH_LIMIT)
+      continue; /* behind the camera or past the table, as the dome skips */
+    FieldLineG2Packet *line = &ring_lines[slot][i];
+    line->tag.length = 4;
+    line->code = 0x50; /* LINE_G2 */
+    line->r0 = line->r1 = CUE_RING.r;
+    line->g0 = line->g1 = CUE_RING.g;
+    line->b0 = line->b1 = CUE_RING.b;
+    line->xy0 = (u32)sxy[i];
+    line->xy1 = (u32)sxy[j];
+    AddPrim(ot + z, line);
+    ring_drawn++;
+  }
+}
 static int target_preview(void *ctx, void *user) {
   PeHookTargetPreview *q = ctx;
   (void)user;
@@ -575,6 +636,9 @@ static int target_preview(void *ctx, void *user) {
   if (q->mode < 0 || q->mode > 2 ||
       (session.style != PE_STYLE_STRIKER && session.style != PE_STYLE_QUICKSTEP))
     return 0;
+  /* Aiming a gun as Striker: the point-blank ring, with the native dome. */
+  if (session.style == PE_STYLE_STRIKER && normal_gun())
+    draw_point_blank_ring();
   const BattleEntity *e = (BattleEntity *)g_FieldActorListHead;
   for (unsigned visited = 0; e && visited < 256; visited++, e = e->next) {
     if (&e->renderObject != q->object)

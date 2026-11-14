@@ -163,6 +163,8 @@ void pe_style_action_begin(PeStyleSession *s, int gun, int weapon);
  * centre and its scaled radius. */
 int pe_striker_point_blank(const PeStyleSession *s, int dx, int dz,
                            unsigned radius);
+/* Radius of the point-blank aiming ring around Aya's centre; 0 off. */
+unsigned pe_striker_ring_radius(const PeStyleSession *s);
 /* Zone for one recipient: close from pe_striker_point_blank, dx/dz the native
  * targeting offset, range the gun's native range (0 = unknown, no falloff). */
 int pe_striker_zone(const PeStyleSession *s, int close, int dx, int dz,

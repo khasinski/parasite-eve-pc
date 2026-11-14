@@ -128,9 +128,19 @@ numbers in `.striker` in `pe_style_catalog.c`.
 `falloff_band_percent` (0 turns falloff off) and `falloff_percent` in
 `.striker`. Falloff color: `CUE_FAR` in `pe_style_runtime.c`.
 
-**Not done yet.** The targeting dome is the native wireframe at full range;
-drawing the point-blank ring and the 70% line on it needs a new core render
-hook, so the zones show on the target marker only. The 96 gap and the 30%
+- Point-blank ring: while aiming a gun, a flat cyan circle on the floor at
+  Aya's footprint + the gap (159 units) from her centre: an enemy whose body
+  reaches it is point-blank. Drawn from the target-preview hook like the
+  native dome (same view matrix, screen offset, ordering table, LINE_G2
+  packets, 48 segments) and grows with it over 10 frames. No new core hook.
+  Color `CUE_RING`, smoothness `RING_SEGMENTS` in `pe_style_runtime.c`.
+
+**Not done yet.** In a native capture (`build-styles/live-ring-capture`) the
+ring shows as a small flat oval at Aya's feet, mostly behind her legs:
+point-blank is genuinely close and the battle camera is low. The 70% falloff
+line is not drawn. The same capture showed the target marker staying native
+red at point-blank, so the marker zone tint is not reaching the screen;
+not yet diagnosed. The 96 gap and the 30%
 band are uncalibrated (spec section 8). Not playtested.
 
 ## Channeler, Revision 6.4 (current; supersedes the Channeler notes below)

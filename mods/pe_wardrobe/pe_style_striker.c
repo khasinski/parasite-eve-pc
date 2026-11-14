@@ -34,6 +34,13 @@ static uint64_t isqrt(uint64_t v) {
   return r;
 }
 
+/* Aya's native footprint plus the point-blank gap: an enemy whose body
+ * reaches this circle around her centre is point-blank. The aiming ring is
+ * drawn at this radius. */
+unsigned pe_striker_ring_radius(const PeStyleSession *s) {
+  return on(s) ? PE_ST_AYA_FOOTPRINT + tuning(s)->point_blank_gap : 0u;
+}
+
 int pe_striker_point_blank(const PeStyleSession *s, int dx, int dz,
                            unsigned radius) {
   uint64_t reach;
@@ -41,7 +48,7 @@ int pe_striker_point_blank(const PeStyleSession *s, int dx, int dz,
   if (!on(s) || !radius || radius > 1048576u)
     return 0;
   /* Horizontal surface gap: Aya's native footprint, never the costume's. */
-  reach = (uint64_t)radius + PE_ST_AYA_FOOTPRINT + tuning(s)->point_blank_gap;
+  reach = (uint64_t)radius + pe_striker_ring_radius(s);
   return (uint64_t)(x * x) + (uint64_t)(z * z) <= reach * reach;
 }
 

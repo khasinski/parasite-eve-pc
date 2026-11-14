@@ -30,6 +30,19 @@ BattleGaugePrim g_BattleStatusPointerSprites[2],
     g_BattleTargetHighlightSprites[2][3];
 BattleStatusPointerPrim g_BattleStatusPointerTriangles[2];
 BattleHudOrigin g_HudOrigin;
+/* Camera and player stand-ins for the Striker point-blank ring. */
+GeomScrollRecord g_GeomScroll;
+int g_BattleAttackAnimFrame;
+FieldActor *g_PlayerEntity;
+static unsigned screen_offset_sets, screen_offset_resets;
+int Render_SetGteScreenOffset(void) {
+  screen_offset_sets++;
+  return 0;
+}
+int Render_ResetGteScreenOffset(void) {
+  screen_offset_resets++;
+  return 0;
+}
 /* GPU stand-ins: record what the Rally "+N" submits. */
 static unsigned prims_added, tiles_set, sprites_inited;
 static const void *last_prim;
@@ -718,6 +731,50 @@ int main(void) {
   fire(PE_HOOK_TARGET_PREVIEW, &cue);
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
   cue.out_of_range = 0;
+  /* Point-blank ring while aiming a gun: drawn with the native dome, at
+   * Aya's footprint + the point-blank gap, growing as the dome opens. */
+  {
+    static GteMatrix view = {{{4096, 0, 0}, {0, 4096, 0}, {0, 0, 4096}},
+                             {0, 0, 2000}};
+    static FieldActor me;
+    static unsigned char ot_storage[2][64];
+    g_ViewMatrixSlot.value = &view;
+    g_PlayerEntity = &me;
+    g_OtBufferTable[0] = ot_storage[0];
+    g_OtBufferTable[1] = ot_storage[1];
+    assert(pe_striker_ring_radius(&session) == 63 + 96);
+    g_BattleAttackAnimFrame = DOME_GROW_FRAMES;
+    unsigned sets = screen_offset_sets;
+    fire(PE_HOOK_TARGET_PREVIEW, &cue);
+    assert(ring_drawn == RING_SEGMENTS && screen_offset_sets == sets + 1 &&
+           screen_offset_resets == screen_offset_sets);
+    assert(ring_lines[0][0].code == 0x50 && ring_lines[0][0].r0 == 0x60 &&
+           ring_lines[0][0].g1 == 0xe0 && ring_lines[0][0].tag.length == 4);
+    g_BattleAttackAnimFrame = 0; /* dome not open yet: no ring */
+    fire(PE_HOOK_TARGET_PREVIEW, &cue);
+    assert(ring_drawn == 0);
+    g_BattleAttackAnimFrame = DOME_GROW_FRAMES;
+    weapon.kind = 8; /* a club: no ring */
+    ring_drawn = 7;
+    fire(PE_HOOK_TARGET_PREVIEW, &cue);
+    assert(ring_drawn == 7);
+    weapon.kind = 1;
+    cue.mode = 4; /* not gun targeting */
+    fire(PE_HOOK_TARGET_PREVIEW, &cue);
+    assert(ring_drawn == 7);
+    cue.mode = 0;
+    g_ViewMatrixSlot.value = NULL; /* no camera yet: nothing drawn */
+    fire(PE_HOOK_TARGET_PREVIEW, &cue);
+    assert(ring_drawn == 0);
+    PeStyleSession other;
+    pe_style_begin(&other, PE_STYLE_QUICKSTEP);
+    assert(pe_striker_ring_radius(&other) == 0);
+    g_PlayerEntity = NULL;
+    g_OtBufferTable[0] = g_OtBufferTable[1] = NULL;
+    cue.phase = 0;
+    fire(PE_HOOK_TARGET_PREVIEW, &cue);
+    cue.phase = 1;
+  }
   /* Beyond native range a hit still lands at falloff. */
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   dealt = 100;
