@@ -78,6 +78,29 @@
 # it heard, and keeping set calls to one day means an old one never comes back. Chain calls with
 # after so a day's story carries on from phone to phone, whichever phone Aya uses next.
 #
+# ---- Which call plays ----
+#
+# Each time Aya stays on the line, the game:
+#   1. drops every call that doesn't fit right now: wrong day or story value, wrong phone (rooms),
+#      a tone F1 > Call tone leaves out, an after call not heard yet, a once call already heard,
+#      or a needs that doesn't hold (crossover calls with F1 > Crossover calls off);
+#   2. of the calls left with a priority above 0, plays the highest one not heard yet. On a tie,
+#      the call nearer the top of the file wins;
+#   3. if none, picks at random among the calls left with priority 0, by weight, avoiding the
+#      last five played. Calls with a priority never join this random pick, even once heard.
+#
+# Priorities in this file, highest first:
+#   13       Wayne at Central Park (only with Warner's supplies on)
+#   10 - 12  set calls at their own phones: on a day with several, the higher plays first and
+#            the next one waits on it with after (hospital: records 12, Maeda 11, pharmacy 10)
+#   1        crossover calls: after every set call that fits, before any random call. They have no
+#            rooms, so they can come up at any phone on their day once its set calls are heard.
+#            Raccoon City sits above Final Fantasy in the file, so it plays first on a shared day.
+#   0        the random pool: everything else
+#
+# A call of your own with priority 2 to 9 plays after this file's set calls and before the
+# crossovers; 14 or more plays before everything here.
+#
 # Keep it spoiler-safe: nothing from after the call's day.
 
 
