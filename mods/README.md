@@ -205,7 +205,8 @@ Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): 
 to build it.
 
 New Game opens a title-style challenge picker when this mod is enabled. Each challenge shows
-its current Off / On / level value and description. Choose a row to edit it; Back keeps its
+its current Off / On / level value and description. Hardcore is the first row, followed by the
+other challenges; Clear all challenges and Start game are at the bottom. Choose a row to edit it; Back keeps its
 previous value. Combine challenges, Clear all challenges, then Start game to commit the draft.
 Long lists scroll through six rows, with a range indicator. Hardcore's Start game summary warns
 that death ends the run permanently and challenge levels cannot be lowered after starting.

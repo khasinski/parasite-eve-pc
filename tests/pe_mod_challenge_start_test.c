@@ -26,7 +26,7 @@ static const PeChallengeDef defs[CH_COUNT] = {
     {CH_HALF_HEALTH, "Half", "Half", "Half"},
 };
 const PeChallengeDef *const g_ch_defs[] = {
-    &defs[0], &defs[1], &defs[2], &defs[3],  &defs[4],  &defs[5], &defs[6],
+    &defs[1], &defs[2], &defs[3], &defs[4],  &defs[5],  &defs[6], &defs[0],
     &defs[7], &defs[8], &defs[9], &defs[10], &defs[11], &defs[12]};
 const unsigned g_ch_def_count = CH_COUNT;
 const PeChallengeCategory g_ch_categories[CH_CATEGORIES] = {
@@ -52,11 +52,12 @@ int pe_menu_choose_title(const char *title, const char *keys,
          initial < (int)count);
   assert(asked < answer_count);
   if (!strcmp(title, "Choose your challenges")) {
-    assert(count == CH_COUNT + 2 && !strcmp(names[0], "Start game"));
-    if (expect_hardcore_summary && strstr(names[2], "On"))
-      assert(strstr(descriptions[0], "permanently") &&
-             strstr(descriptions[0], "cannot be lowered"));
-    if (expect_tough_label && strstr(names[3], "2x"))
+    assert(count == CH_COUNT + 2 && !strcmp(names[CH_COUNT + 1], "Start game"));
+    assert(!strncmp(names[0], "Hardcore:", 9));
+    if (expect_hardcore_summary && strstr(names[0], "On"))
+      assert(strstr(descriptions[CH_COUNT + 1], "permanently") &&
+             strstr(descriptions[CH_COUNT + 1], "cannot be lowered"));
+    if (expect_tough_label && strstr(names[1], "2x"))
       expect_tough_label = 0;
   }
   return answers[asked++];
@@ -138,31 +139,31 @@ int main(void) {
   /* Selecting multiple challenges and levels uses save ids, not catalog
    * positions. */
   expect_hardcore_summary = expect_tough_label = 1;
-  SCRIPT(2, 1, 3, 2, 4, 1, 0);
+  SCRIPT(0, 1, 1, 2, 2, 1, CH_COUNT + 1);
   assert(pe_ch_start_pick(levels));
   assert(levels[CH_HARDCORE] == 1 && levels[CH_TOUGH] == 2 &&
          levels[CH_NO_PE] == 1);
   assert(!expect_tough_label && asked == answer_count);
   /* Back keeps a level, and clearing never changes the input until Start. */
-  SCRIPT(3, 3, 0);
+  SCRIPT(1, 3, CH_COUNT + 1);
   assert(pe_ch_start_pick(levels) && levels[CH_TOUGH] == 2);
-  SCRIPT(1, -1);
+  SCRIPT(CH_COUNT, -1);
   assert(!pe_ch_start_pick(levels) && levels[CH_TOUGH] == 2);
-  SCRIPT(3, 0, -1);
+  SCRIPT(1, 0, -1);
   assert(!pe_ch_start_pick(levels) && levels[CH_TOUGH] == 2);
   SCRIPT(-1);
   assert(!pe_ch_start_pick(levels) && levels[CH_HARDCORE] == 1);
-  SCRIPT(1, 0);
+  SCRIPT(CH_COUNT, CH_COUNT + 1);
   assert(pe_ch_start_pick(levels));
   for (int i = 0; i < CH_COUNT; ++i)
     assert(!levels[i]);
   /* Every catalog entry can be selected in one new game. */
   int all[CH_COUNT * 2 + 1];
   for (int i = 0; i < CH_COUNT; ++i) {
-    all[i * 2] = i + 2;
+    all[i * 2] = i;
     all[i * 2 + 1] = 1;
   }
-  all[CH_COUNT * 2] = 0;
+  all[CH_COUNT * 2] = CH_COUNT + 1;
   script(all, CH_COUNT * 2 + 1);
   assert(pe_ch_start_pick(levels));
   for (int i = 0; i < CH_COUNT; ++i)
@@ -175,7 +176,7 @@ int main(void) {
   PeHookNewGame title = {PE_NEW_GAME_TITLE}, ex = {PE_NEW_GAME_EX};
   pe_ch_rows_clear();
   saved = changed = 0;
-  SCRIPT(2, 1, 3, 2, 0);
+  SCRIPT(0, 1, 1, 2, CH_COUNT + 1);
   new_game_hook(&title, NULL);
   assert(saved == 1 && changed == 1 && pe_ch_on(CH_HARDCORE) &&
          pe_ch_level(CH_TOUGH) == 2);
@@ -194,7 +195,7 @@ int main(void) {
   SCRIPT(-1);
   new_game_hook(&title, NULL);
   assert(saved == 1 && pe_ch_level(CH_TOUGH) == 2);
-  SCRIPT(1, 0);
+  SCRIPT(CH_COUNT, CH_COUNT + 1);
   new_game_hook(&title, NULL);
   assert(saved == 2 && !g_ch_run.active && !g_ch_run.run_id);
   puts("challenge startup: selection, levels, Back, clear, unavailable, run "
