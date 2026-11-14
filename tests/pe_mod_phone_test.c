@@ -331,6 +331,7 @@ static void test_pe1_pack(void) {
             if (c->after) {
                 for (k = 0; k < s_pack_count && strcmp(s_pack[k]->key, c->after); ++k) {}
                 assert(k < s_pack_count && s_pack[k]->priority > c->priority);   /* chain runs downhill */
+                assert(s_pack[k]->tone == c->tone);   /* else Call tone on one side strands the call */
             }
         }
     }
@@ -397,9 +398,14 @@ static void test_set_calls(void) {
     pe_phone_record_played(&r, c);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 12345u)->key, "pe1/park_wall"));
     s_warner_on = 0;
-    x.tone_mask = 2;                                                /* funny only: the zoo call's turn */
+    x.tone_mask = 2;                                /* funny only: the zoo call needs no serious call first */
     memset(&r, 0, sizeof r);
-    assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 1u)->key, "pe1/park_", 9));   /* waits on the wall update */
+    assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 1u)->key, "pe1/park_zoo"));
+    {
+        PePhoneContext street = {97, 0xA0, 3, 2}, hospital = {126, 0xC0, 4, 2};
+        assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &street, &r, pe_holds, 1u)->key, "pe1/street_hotel"));
+        assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &hospital, &r, pe_holds, 1u)->key, "pe1/hospital_pharmacy"));
+    }
     memset(&r, 0, sizeof r);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &hall, &r, pe_holds, 7u)->key, "pe1/hall_report"));
     assert(strcmp(pe_phone_pick(s_pack, s_pack_count, &hall2, &r, pe_holds, 7u)->key, "pe1/hall_report"));   /* Day 1 only */
