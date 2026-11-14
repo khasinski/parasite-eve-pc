@@ -337,7 +337,7 @@ static void test_pe1_pack(void) {
     assert(funny == 20);
 }
 
-/* Crossover calls need the Crossover calls switch (phone.crossovers), off by default. */
+/* Crossover calls need the Crossover calls switch (phone.crossovers, on by default): off leaves them out. */
 static void test_crossovers(void) {
     PePhoneRecord r;
     PePhoneContext x = {1, 0xA0, 2, 3};          /* a phone with no set calls, Day 2 */

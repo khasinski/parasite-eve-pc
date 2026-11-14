@@ -44,7 +44,7 @@
 # Conditions mods offer for needs:
 #   warner.supplies                Warner carries Wayne's supplies: shops mod, Economy > Warner
 #                                  helps out, and the Junk economy on
-#   phone.crossovers               F1 > Phone Calls > Crossover calls is on (off by default):
+#   phone.crossovers               F1 > Phone Calls > Crossover calls is on (on by default):
 #                                  calls to characters from other games
 #
 # Text: letters, digits, spaces and . , : ! ? ' - + * % / only (the game's font has nothing
@@ -644,7 +644,7 @@ them: Bring it home, Brea. That's an order.
 
 
 # ======== Raccoon City, December 24-29, 1997 ========
-# Crossover calls (F1 > Phone Calls > Crossover calls, off by default). One call per story day.
+# Crossover calls (F1 > Phone Calls > Crossover calls, on by default). One call per story day.
 # The sewer emergency call still takes precedence at its phone.
 
 [pe1/raccoon_irons]

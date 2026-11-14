@@ -14,7 +14,7 @@ static int s_mode = PE_PHONE_ASK;
 static int s_tone = PE_TONE_MIXED;
 static int s_sounds = 1;
 static int s_unsaved = 1;                 /* ask after a phone use with no save too (No, or backing out) */
-static int s_crossovers;                  /* calls from other games' characters: off unless the player opts in */
+static int s_crossovers = 1;              /* calls from other games' characters: on unless the player opts out */
 static int s_preview;                     /* 0: a call picked as usual; n: call n-1 */
 static const char *const k_modes[] = {"Ask after saving", "Always call", "Off"};
 static const char *const k_tones[] = {"Mixed", "Serious only", "Funny only"};
