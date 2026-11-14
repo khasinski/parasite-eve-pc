@@ -866,6 +866,16 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-look-evidence translator-look)
             set_tests_properties(original-game-translator-look PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 900 LABELS "game-assets;mods;localization")
+            # Letters the game can't draw yet, painted in the Translator's letters PNG: Greek, Hebrew and
+            # Arabic files the Translator saved with every letter painted. The pack holds each as painted
+            # (with its shadow), and the first box on Disc 1 and the five ship boxes on Disc 2 are, pixel
+            # for pixel, the Translator's "As in the game" drawing (right to left, Arabic joined). Needs
+            # Pillow; PE_TEST_DISC2 for Disc 2 (else 77 after Disc 1).
+            add_test(NAME original-game-translator-letters COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/text_renderer_game.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/translator-letters-evidence translator-letters)
+            set_tests_properties(original-game-translator-letters PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 1800 LABELS "game-assets;mods;localization")
         endif()
         # The English pack (pelang.py english) from the real discs: every row it holds is the disc's
         # own bytes, only empty pages and four known rows are left to the game, and one pack serves

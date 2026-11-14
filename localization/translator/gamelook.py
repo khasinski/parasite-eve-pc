@@ -14,7 +14,10 @@ Everything the game decides is followed here from its own code, so the picture i
 
 From the player's disc (never kept anywhere else): the dialogue font page (PE.IMG entry 10), the
 room backgrounds, and the room scripts, which say which rooms open each dialogue page.
-Not drawn yet: right-to-left packs, button icons (FB 00-03, page 2), letters of the area font
+Right-to-left packs (Hebrew, Arabic) are drawn as the box draws them (textbox.c Textbox_EmitLine,
+PeText_LineFinish): each line read whole, joined (petext/rtl.py), put in drawing order, letters with
+no code cut to their strokes where they join (pe_lang_letter_cut), the line ending at x 300.
+Not drawn yet: button icons (FB 00-03, page 2), letters of the area font
 page (FC, FD and the highest FB codes come from entry 45, the first area's: other areas differ),
 styled boxes' backgrounds. The preview says when a page has any of these.
 """
@@ -35,6 +38,7 @@ W, H = 320, 224                  # the game's screen
 CELL, COLUMNS = 12, 21
 FONT_ENTRY, AREA_FONT_ENTRY = 10, 45
 LINE_X, LINE_Y, LINE_HEIGHT = 0x14, 0xAE, 12
+RIGHT_EDGE = 320 - 0x14          # a right-to-left line in the default box ends here (Textbox_RightEdge)
 GREY, RED = (0x80, 0x80, 0x80), (0xFF, 0, 0)
 SPACE, QUESTION = 0x0F, 0x2C
 LATIN_FIRST = 0x4D
@@ -411,6 +415,7 @@ class Letter:
     advance: int
     page: int = 0                # 0: font page 0's palette; 1: the area page's
     note: str = ""
+    coded: bool = True           # a letter of the font page (else made in the letter cache: PE_TEXT_NO_CODE)
 
 
 def _native(font: Font, code: int, kerning: bool) -> Letter | None:
@@ -429,12 +434,18 @@ def _resolve(font: Font, letter: int, kerning: bool) -> Letter:
     for r in pack.extra:
         if _rd32(r, 0) == letter:
             # made in the letter cache from the disc's own page, before the pack's letters (pe_lang_cjk.c)
-            return Letter(0, letter_cell(r, _cell(font.original, r[6]) if r[6] != 0xFF else None), 12,
-                          r[5] if r[6] == 0xFF else SPACING[r[6]] + r[5])
+            cell = letter_cell(r, _cell(font.original, r[6]) if r[6] != 0xFF else None)
+            box = _ink(cell) if r[6] == 0xFF and rtl.is_joining(letter) else None
+            if box:
+                # a joined shape: cut to its strokes and shadow (pe_lang_letter_cut), the pen one past
+                first, width = box[0], min(box[1] - box[0] + 2, CELL - box[0])
+                moved = [cell[i + first] if i % CELL + first < CELL else 0 for i in range(CELL * CELL)]
+                return Letter(0, moved, width, width + 1, coded=False)
+            return Letter(0, cell, 12, r[5] if r[6] == 0xFF else SPACING[r[6]] + r[5], coded=False)
     for k, r in enumerate(pack.cjk):
         if _rd32(r, 0) == letter:
             return Letter(0, [r[4 + i // 2] >> ((i & 1) * 4) & 15 for i in range(144)], 12,
-                          pack.widths[k] if k < len(pack.widths) else 12)
+                          pack.widths[k] if k < len(pack.widths) else 12, coded=False)
     code = next((c for c in range(0x4D) if DEFAULT_UNICODE[c] == letter), QUESTION)
     return _native(font, code, kerning)
 
@@ -457,24 +468,75 @@ class Look:
     notes: list[str]
 
 
+@dataclass
+class _Read:
+    """A letter of a right-to-left line as the box read it (PeText_LineRead)."""
+    uni: int
+    letter: Letter | None        # None: resolved once the line is joined (a stretch's letter)
+    colour: tuple[int, int, int]
+    kerning: bool = True
+
+
+def _finish_line(font: Font, line: list[_Read], right: int, y: int) -> list[Placed]:
+    """PeText_LineFinish and Textbox_EmitLine: the line joined, put in drawing order (brackets
+    turned), each letter's pen moved by its advance, less where a letter with no code joins one on
+    its right; the whole line ending at `right`."""
+    shapes, keep, nxt = rtl.join_letters([r.uni for r in line])
+    kept: list[tuple[int, Letter, bool, _Read]] = []
+    for r, shape, k, n in zip(line, shapes, keep, nxt):
+        if not k:
+            continue
+        letter = r.letter if r.letter is not None and shape == r.uni else _resolve(font, shape, r.kerning)
+        kept.append((shape, letter, n, r))
+    order, turned = rtl.order("".join(chr(s) for s, _, _, _ in kept))
+    letters = [l for _, l, _, _ in kept]
+    for k, i in enumerate(order):
+        if turned[k]:
+            letters[i] = _resolve(font, ord(rtl.MIRROR[chr(kept[i][0])]), kept[i][3].kerning)
+    out, pen = [], 0
+    for k, i in enumerate(order):
+        l = letters[i]
+        advance = l.advance
+        if k + 1 < len(order):
+            r = order[k + 1]
+            if r + 1 == i and kept[r][2] and not l.coded and not letters[r].coded:
+                advance = min(advance, l.x + l.w - 1 - letters[r].x)     # the last column is the shadow
+        out.append((pen + l.x, l, kept[i][3].colour))
+        pen += advance
+    left = right - pen
+    return [Placed(left + x, y, l, colour) for x, l, colour in out]
+
+
 def lay_out(font: Font, raw: bytes, name: bytes = b"", box_x: int = LINE_X, box_y: int = LINE_Y,
-            digits: int = 5, numbers: tuple[int, ...] | None = None) -> Look:
+            digits: int = 5, numbers: tuple[int, ...] | None = None, right_to_left: bool = False,
+            right: int = RIGHT_EDGE) -> Look:
     """A page's letters as Menu_DrawTextboxEntries places them, screen by screen (F8 starts the
     next). `name`: the player's name in the pack's letters (FA). `numbers`: the values the game puts
     in the page's number slots (Render_SetupColorTable), one per FB 08 in order, each drawn in its
     decimal digits 12 px apart; a slot past them ends the page, as the game stops drawing there.
-    Without them, every FB 08 draws `digits` sample digits."""
+    Without them, every FB 08 draws `digits` sample digits. `right_to_left`: a pack that reads
+    right to left (rtl.is_rtl of its language): each line ends at `right` (_finish_line)."""
     screens, here, notes = [], [], set()
     slots = list(numbers) if numbers is not None else None
     x, y, colour = box_x, box_y, GREY
+    line: list[_Read] = []
     i = 0
 
-    def add(letter: Letter | None):
+    def add(letter: Letter | None, uni: int | None = None, kerning: bool = True):
         nonlocal x
+        if right_to_left:
+            if letter is not None or uni is not None:
+                line.append(_Read(uni if uni is not None else 0, letter, colour, kerning))
+            return
         if letter is None:
             return
         here.append(Placed(x + letter.x, y, letter, colour))
         x += letter.advance
+
+    def end_line():
+        if right_to_left and line:
+            here.extend(_finish_line(font, line, right, y))
+            line.clear()
 
     while i < len(raw):
         b = raw[i]
@@ -485,25 +547,31 @@ def lay_out(font: Font, raw: bytes, name: bytes = b"", box_x: int = LINE_X, box_
                 for cp in font.pack.stretches[hi * 240 + lo]:
                     if 0x10FE7F <= cp <= 0x10FEFF:
                         continue                         # narrowing and line-break marks: menus only
-                    add(_resolve(font, cp, True))
+                    if right_to_left:
+                        add(None, cp)                    # resolved once the line is joined
+                    else:
+                        add(_resolve(font, cp, True))
             elif kind == 0xC5 and hi * 240 + lo < len(font.pack.cjk):
                 r = font.pack.cjk[hi * 240 + lo]
-                add(Letter(0, [r[4 + k // 2] >> ((k & 1) * 4) & 15 for k in range(144)], 12, 12))
+                add(Letter(0, [r[4 + k // 2] >> ((k & 1) * 4) & 15 for k in range(144)], 12, 12, coded=False),
+                    _rd32(r, 0))
             continue
         if b in (0xF9, 0xFF):
             break
         if b == 0xF7:
+            end_line()
             x, y = box_x, y + LINE_HEIGHT
             i += 1
             continue
         if b == 0xF8:
+            end_line()
             screens.append(here)
             here, x, y = [], box_x, box_y
             i += 1
             continue
         if b == 0xFA:
             for c in name:
-                add(_native(font, c, False))
+                add(_native(font, c, False), font.pack.unicode[c], False)
             i += 1
             continue
         if b == 0xFB and i + 1 < len(raw):
@@ -511,6 +579,8 @@ def lay_out(font: Font, raw: bytes, name: bytes = b"", box_x: int = LINE_X, box_
             i += 2
             if n <= 3:
                 notes.add("a button icon (drawn as a blank)")
+                if right_to_left:
+                    add(Letter(0, [0] * 144, 12, 12), 0x20)
                 x += 12
             elif n == 4:
                 colour = RED
@@ -543,16 +613,18 @@ def lay_out(font: Font, raw: bytes, name: bytes = b"", box_x: int = LINE_X, box_
         i += 1
         if letter is None:
             break
-        add(letter)
+        add(letter, font.pack.unicode[b])
+    end_line()
     screens.append(here)
     return Look(screens, sorted(notes))
 
 
 def draw(font: Font, placed: list[Placed], background: bytes | None = None) -> bytes:
     """The screen, 320 x 224 RGB: the background (black when None) with the letters over it, each a
-    12 x 12 sprite in its palette, colour 0 see-through, tinted by the box's colour (x * c / 128)."""
+    12 x 12 sprite in its palette, colour 0 see-through, tinted by the box's colour (x * c / 128). The box queues its letters with AddPrim, so the first
+    one queued is drawn last, in front of the next (textbox.c Textbox_EmitLetter)."""
     out = bytearray(background or bytes(W * H * 3))
-    for p in placed:
+    for p in reversed(placed):
         clut = font.clut if p.letter.page == 0 else font.area_clut
         for k, index in enumerate(p.letter.pixels):
             px, py = p.x + k % CELL, p.y + k // CELL
@@ -577,10 +649,10 @@ def name_bytes(pack: Pack, name: str) -> bytes:
     return bytes(out)
 
 
-def can_draw(lang: str) -> str | None:
+def can_draw(lang: str, menus: bool = False) -> str | None:
     """Why the game look can't draw this language yet, or None."""
-    if rtl.is_rtl(lang):
-        return "right-to-left languages are drawn with the computer font for now"
+    if rtl.is_rtl(lang) and menus:
+        return "right-to-left menus are drawn with the computer font for now"
     return None
 
 

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 from . import gamelook as GL
 from . import menulook as ML
-from petext import battle
+from petext import battle, rtl
 
 ROOM, VIEW = 5, 2                    # the first fight's room picture: M005, view 3 (disc.views(5)[2])
 BAR_W, BAR_H = 320, 20
@@ -52,7 +52,7 @@ def look(font: GL.Font, raw: bytes, key: str, background: bytes | None, top: boo
     for pixels, rgb, sign in ML.bevel(0, bar_y, BAR_W, BAR_H):
         screen.blend(pixels, rgb, sign)
     numbers = NUMBERS.get(key, ())
-    laid = GL.lay_out(font, raw, name, battle.X, line_y, numbers=numbers)
+    laid = GL.lay_out(font, raw, name, battle.X, line_y, numbers=numbers, right_to_left=rtl.is_rtl(font.pack.lang))
     notes = list(laid.notes)
     if len(laid.screens) > 1:
         notes.append("a second screen the game doesn't show here (only the first is drawn)")

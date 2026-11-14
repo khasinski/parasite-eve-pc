@@ -56,8 +56,10 @@ warn the first time: on Windows "More info", then "Run anyway"; on macOS right-c
      panel's lines, running away) is drawn on the battle bar over the first fight's room (Aya, the
      enemy and the HP panel are not drawn); the HP line shows 9999/9999, the widest it gets. The bar
      starts at the bottom, as in the first fight; click the picture to see it at the top, where other
-     fights put it. Not drawn that way yet: right-to-left languages, and the button icons in a few
-     lines (the preview says so).
+     fights put it. Hebrew and Arabic dialogue and battle lines are drawn right to left, as the game
+     draws them: each line ending at the box's right side, Arabic letters joined. Not drawn that
+     way yet: right-to-left menus (they use the computer font), and the button icons in a few lines
+     (the preview says so).
    - **Dialogue MAP** is the city map: the place title shown when Aya arrives somewhere
      (lines 1-10) and the map's narration (11-14). Type only the words, with `{br}` between lines:
      the tool centres each line and puts a title on the box's third line, as the English has them.
@@ -126,6 +128,35 @@ remembered on your computer). Nothing of the disc is put anywhere but your trans
 4. Save the translation: the picture goes into its `pictures.bin`. Other pictures already in the
    file (a fan patch's) stay as they are, and can be redrawn the same way.
 
+## Letters the game can't draw yet
+
+Some languages have letters nobody has drawn for the game yet: Icelandic (3), Serbian (10),
+Macedonian (6), Kazakh (3), Greek (36), Hebrew (27) and Arabic (102 shapes: each letter's joined
+forms). The game shows a question mark for each until they are drawn. **Letters…** lists the ones
+your translation still needs. There is no drawing in this program: the letters go out as a PNG and
+come back.
+
+1. **Save as PNG…**. Each letter has a 12×12 square, real size (one dot of the game is one pixel:
+   zoom in to paint), with the letter large beside it in a computer font. Faint lines in the square
+   show the capital top, the small-letter top and the bottom line, where the game's own letters
+   sit. With your disc chosen (Pictures…), a strip at the top shows some of the game's own letters
+   as a guide to its style.
+2. Paint each letter in white (any bright colour), dot by dot, in its square. Paint only the letter:
+   the tool adds the dark shadow, one dot right and below, as the game's letters have it. The
+   letter's width follows its rightmost dot. A square left empty stays a question mark.
+   Arabic: one row per letter, its shapes side by side (alone, end, middle, start). An orange mark
+   outside the square, on the bottom line, shows the side a shape joins on: its stroke must reach
+   that side on the bottom line, so it touches the next letter. The game sets joined shapes
+   touching, right to left.
+3. **Load PNG…**. The list marks the letters now drawn, the window shows the one you pick as the
+   game draws it, and with your disc chosen, a line of your dialogue that uses them as the game
+   shows it. **Back to the question mark** undoes one letter.
+4. Save the translation: the letters go into it (in the pack, the ones your lines use; in the work
+   part, all of them, so a letter you drew before typing a line that uses it is kept).
+
+A PNG saved before your lines needed more letters still loads. If the tool says the PNG is the
+wrong size, save a new one and paint in that.
+
 ## The file
 
 A translation is one `.pelang`. It is the file players add to the game, and the file you open
@@ -134,7 +165,7 @@ again to go on. It is a zip holding:
 | part | what |
 |---|---|
 | `text.bin` | the compiled pack: every line that passes the checks |
-| `translator/work.json` | your lines as you typed them, lines that don't pass yet, and your notes |
+| `translator/work.json` | your lines as you typed them, lines that don't pass yet, your notes, and the letters you drew |
 | `pictures.bin` | the redrawn pictures (kept exactly as they were until you load one) |
 | `readme.txt`, anything else | kept exactly as they were |
 
@@ -158,7 +189,8 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
 
 ## Not there yet
 
-- Drawing missing letters.
+- Right-to-left menus in the "As in the game" preview (drawn with the computer font).
+- Persian, Urdu, Hindi, Bengali and Thai, which need more than letters (new text layout).
 
 ## Code
 
@@ -177,6 +209,10 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   followed from the C code; the window and list places from the boot program's own tables on the
   disc, the items' icons and kinds from the resident data). `battlelook.py`: the "As in the game"
   preview of the battle lines (the dialogue letters on the battle bar, over the first fight's room).
+  `letterart.py`: the letters the game can't draw yet, their PNG out and in, and how a painted
+  letter goes into the pack (a picture of its own, as a fan patch's letters do: `build
+  --patch-letters`); `letters_window.py`: the Letters window. Right-to-left lines in the game look
+  follow `textbox.c` and `PeText_LineFinish` (`gamelook.lay_out`, `right_to_left`).
 - `package.py`: builds the download for the system it runs on and checks the built program:
   it starts it, types a line, saves and quits (`--report`), compares the file with what the source
   tool saves, and searches everything inside for game text. Build tools are pinned in
@@ -213,4 +249,8 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   (CTest `original-game-translator-battle-look`) checks a battle line the same way: "Can't escape!"
   in the first fight, with the game's own text and a line the Translator saved (Disc 1, part battle's
   route). The other battle lines need Aya to know Scan or a fight she can run from: they are drawn
-  by the same code and checked by the unit tests only.
+  by the same code and checked by the unit tests only. Part `translator-letters` (CTest
+  `original-game-translator-letters`) has the Translator save the letters PNG of Greek, Hebrew and
+  Arabic files, paints every square with a made-up letter, loads it back, and checks the pack holds
+  each letter as painted and that the first box (Disc 1) and the five boxes on the ship (Disc 2) are,
+  pixel for pixel, the "As in the game" drawing, right to left for Hebrew and Arabic.

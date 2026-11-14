@@ -23,7 +23,7 @@ import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import artwork as A, battlelook as BL, gamelook as GL, menulook as ML, project as P
+from . import artwork as A, battlelook as BL, gamelook as GL, letterart as LA, menulook as ML, project as P
 
 SETTINGS = Path.home() / ".pe-translator.json"
 SCALE = 2                                    # the preview: the game's pixels, twice the size,
@@ -91,10 +91,13 @@ class App:
                  select: str | None = None, type_text: str | None = None,
                  new: tuple[str, str] | None = None, report: str | None = None,
                  screenshot: str | None = None, disc: str | None = None,
-                 pictures: list[tuple[str, str]] | None = None) -> None:
+                 pictures: list[tuple[str, str]] | None = None, letters: str | None = None,
+                 save_letters: str | None = None) -> None:
         """`new` (language code, name) starts a new translation saved as `translation`, with no
         dialog. `disc`: the disc the pictures are read from (remembered). `pictures`: (picture id,
-        PNG file) to load into the translation before a scripted save, as Load PNG… does. `report`: save once the typing is in, quit, and write what happened to that file
+        PNG file) to load into the translation before a scripted save, as Load PNG… does. `letters`: a
+        letters PNG to load the same way (the Letters window's Load PNG…), and `save_letters`: where to
+        save the letters PNG first (its Save as PNG…). `report`: save once the typing is in, quit, and write what happened to that file
         (a JSON object) — the check a test or the download's build runs, since a program with no
         console can't print. `screenshot`: with `report`, a PNG of the window just before saving."""
         self.root = root
@@ -137,6 +140,9 @@ class App:
         self._pictures_by_script = list(pictures or [])
         self.pictures_loaded: list[dict] = []
         self.picture_files: dict[str, str] = {}         # picture id -> the PNG last loaded for it (its name)
+        self.letters_window = None
+        self._letters_by_script, self._save_letters = letters, save_letters
+        self.letters_done: dict = {}                    # what the scripted run did with letters (its report)
         self._select_first, self._type_first = select, type_text
         self._typed_by_script = (select, type_text) if select and type_text else None
         if select in self.game.rows:
@@ -197,6 +203,9 @@ class App:
         # The pictures with words (title screen...): from the translator's disc, as PNGs.
         self.pictures_button = ttk.Button(bar, text="Pictures…", command=self.open_pictures, state="disabled")
         self.pictures_button.pack(side="left", padx=(6, 0))
+        # Letters the game can't draw yet (Greek, Hebrew, Arabic...): out as a PNG and back in.
+        self.letters_button = ttk.Button(bar, text="Letters…", command=self.open_letters, state="disabled")
+        self.letters_button.pack(side="left", padx=(6, 0))
         self.title = ttk.Label(bar, text="Open the English pack to begin.")
         self.title.pack(side="left", padx=12)
         self.progress = ttk.Label(bar, text="")
@@ -483,6 +492,7 @@ class App:
         save_settings(self.settings)
         self.save_button.configure(state="disabled" if tr.locked else "normal")
         self.pictures_button.configure(state="normal")
+        self.letters_button.configure(state="normal")
         if tr.needs_font():
             fonts = [f for f in self.settings.get("cjk_fonts") or [] if isinstance(f, str) and Path(f).is_file()]
             if fonts and not tr.cjk_fonts:
@@ -500,6 +510,66 @@ class App:
         self.check_all()
         if self.pictures_window is not None:
             self.pictures_window.refresh()
+        if self.letters_window is not None:
+            self.letters_window.refresh()
+
+    # ---- letters the game can't draw yet ----
+
+    def open_letters(self) -> None:
+        if self.letters_window is not None:
+            self.letters_window.win.lift()
+            return
+        from .letters_window import LettersWindow
+        self.letters_window = LettersWindow(self)
+
+    def letters_png(self) -> bytes:
+        """The letters PNG of the open translation: its letters as drawn so far, the game's own
+        letters as a style guide when a disc is chosen."""
+        tr = self.tr
+        if tr is None:
+            raise ValueError("open a translation first")
+        rows = tr.letters_to_draw()
+        drawn = {s.char: tr.letter(s.char) for s in LA.every_shape(rows) if tr.letter(s.char)}
+        style = LA.style_letters(self.look_disc.page, self.look_disc.font.palettes[0]) if self.look_disc else None
+        language = P.alphabets.BY_CODE[tr.lang].name if tr.lang in P.alphabets.BY_CODE else tr.name
+        return LA.png(rows, language, drawn, style)
+
+    def load_letters(self, png: bytes) -> LA.Loaded:
+        """A painted letters PNG into the translation (saved with it): each painted square draws its
+        letter, an empty one gives the letter back its question mark."""
+        tr = self.tr
+        if tr is None or tr.locked:
+            raise ValueError("open a translation you can save first")
+        loaded = LA.from_png(png, tr.letters_to_draw())
+        for ch, rows in loaded.drawn.items():
+            tr.set_letter(ch, rows)
+        self.dirty = True
+        self.fonts = {}
+        self.count()
+        if self.key is not None:
+            self.check_now()
+        self.check_all()
+        return loaded
+
+    def _scripted_letters(self) -> str | None:
+        """--save-letters, then --letters (a scripted run, before its save). Returns what went wrong."""
+        if self._save_letters:
+            path, self._save_letters = self._save_letters, None
+            try:
+                Path(path).write_bytes(self.letters_png())
+            except (OSError, ValueError, ImportError) as e:
+                return f"could not save the letters PNG: {e}"
+            self.letters_done["saved"] = path
+        if self._letters_by_script:
+            path, self._letters_by_script = self._letters_by_script, None
+            try:
+                loaded = self.load_letters(Path(path).read_bytes())
+            except (OSError, ValueError, ImportError) as e:
+                return f"could not load the letters PNG: {e}"
+            self.letters_done.update(drawn=sorted(ch for ch, rows in loaded.drawn.items() if rows),
+                                     empty=sorted(ch for ch, rows in loaded.drawn.items() if not rows),
+                                     notes=loaded.notes)
+        return None
 
     # ---- pictures ----
 
@@ -680,6 +750,10 @@ class App:
         if failed:
             self.finish(f"could not load the pictures: {failed}")
             return
+        failed = self._scripted_letters()
+        if failed:
+            self.finish(failed)
+            return
         if self.screenshot:
             self.shot_error = self.take_screenshot(self.screenshot)
 
@@ -720,7 +794,8 @@ class App:
         if tr is not None:
             out.update(lang=tr.lang, name=tr.name, translated=tr.translated(), from_patch=tr.from_patch,
                        locked=len(tr.locked), fonts=list(tr.cjk_fonts), pictures=self.pictures_loaded,
-                       map_as_bytes=tr.map_as_bytes,
+                       map_as_bytes=tr.map_as_bytes, letters=self.letters_done,
+                       letters_drawn=sorted(tr.drawn),
                        disc_error=self.disc_error, look=self.look_mode.get(),
                        look_rooms=len(self.shown) if self.shown else 0)
             if self._typed_by_script:
@@ -962,6 +1037,10 @@ class App:
                 return                       # an older answer: the line has changed since
             if error:
                 self.show_messages([f"The check itself failed: {error}"], [], checked=True)
+                # A scripted run waits for this row's mark, which a failed check never sets: end the
+                # run now with the reason (a module missing...), not with a timeout two minutes later.
+                if self.report and mine and self._typed_by_script and key == self._typed_by_script[0]:
+                    self.finish(f"the check itself failed on {key}: {type(error).__name__}: {error}")
                 return
             self.preview, self.screen = result.preview, 0
             self.preview_title.configure(text="How the game draws it" if mine else
@@ -1035,7 +1114,7 @@ class App:
         if not menu and not fight and (not pv.dialogue or not pv.key.startswith("dlg/")):
             return False
         pack = GL.Pack.read(pv.pack)
-        if GL.can_draw(pack.lang):
+        if GL.can_draw(pack.lang, menus=menu):
             return False
         raw = pack.text(pv.key)
         if raw is None:
@@ -1051,8 +1130,12 @@ class App:
             return self.draw_battle_game(font, raw, GL.name_bytes(pack, pv.shown_name))
         box = pv.boxes[0] if pv.boxes else P.Box("default", 20, 174, None, None, None, False)
         x, y = (GL.LINE_X, GL.LINE_Y) if box.name == "default" else (box.x, box.y)
+        # a right-to-left line ends at the box's right side (textbox.c Textbox_RightEdge)
+        right = box.x + box.width if box.name != "default" and box.width and x + 12 < box.x + box.width <= 320 \
+            else GL.RIGHT_EDGE
         look = GL.lay_out(font, raw, GL.name_bytes(pack, pv.shown_name), x, y,
-                          max(1, P.layout.advance(b"\xfb\x08", pv.name_px) // 12))
+                          max(1, P.layout.advance(b"\xfb\x08", pv.name_px) // 12),
+                          right_to_left=P.rtl.is_rtl(pack.lang), right=right)
         screens = look.screens
         self.screen = max(0, min(len(screens) - 1, self.screen))
         rooms = (self.shown or {}).get(pv.key, [])
@@ -1262,6 +1345,8 @@ def main(argv=None) -> int:
     ap.add_argument("--screenshot", help=argparse.SUPPRESS)
     ap.add_argument("--disc", help="your Parasite Eve (USA) disc, for the pictures (remembered)")
     ap.add_argument("--picture", action="append", default=[], metavar="ID=PNG", help=argparse.SUPPRESS)
+    ap.add_argument("--letters", help=argparse.SUPPRESS)       # a letters PNG to load before saving
+    ap.add_argument("--save-letters", help=argparse.SUPPRESS)  # where to save the letters PNG first
     a = ap.parse_args(argv)
     if a.new and not a.translation:
         ap.error("--new needs the file to save the new translation as")
@@ -1276,6 +1361,6 @@ def main(argv=None) -> int:
         SETTINGS = Path(a.settings)
     root = tk.Tk()
     app = App(root, a.english, a.translation, a.select, a.type, tuple(a.new) if a.new else None, a.report,
-              a.screenshot, a.disc, pictures)
+              a.screenshot, a.disc, pictures, a.letters, a.save_letters)
     root.mainloop()                          # a scripted run closes the window itself (App.finish)
     return app.exit_code

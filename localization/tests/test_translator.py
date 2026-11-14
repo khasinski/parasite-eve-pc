@@ -1039,6 +1039,13 @@ def a_font_for(chars: str) -> str | None:
     return None
 
 
+def the_window_has_pillow() -> bool:
+    """Whether the scripted window can load Pillow. run_window starts it with `python -I`, which
+    hides the user's own site-packages, so a Pillow installed there (pip install --user) is seen by
+    the tests but not by the window."""
+    return subprocess.run([sys.executable, "-I", "-c", "import PIL"], capture_output=True).returncode == 0
+
+
 def one_word_changed(text: str) -> str:
     """The text with one letter doubled in its first word of four letters or more (any script),
     outside its tags ({name}, {wait}...)."""
@@ -1846,6 +1853,406 @@ class BattleLookRuleTest(unittest.TestCase):
         self.assertEqual(battle.X, 20)
 
 
+LETTER_COUNTS = {"is": 3, "sr-Cyrl": 10, "mk": 6, "kk": 3, "el": 36, "he": 27, "ar": 102}
+
+
+def made_up_strokes(k: int, joins: str = "") -> tuple[str, ...]:
+    """A made-up letter of its own for square k (12 rows of '.'/'#'): a box of its own width, a bar
+    and a dot; a joined shape's bottom line reaches both sides of its ink."""
+    w = 3 + k % 6
+    pts = {(1, y) for y in range(2, 9)} | {(w, y) for y in range(2 + k % 3, 9)} | {(x, 8) for x in range(1, w + 1)}
+    pts |= {(x, 2 + k % 5) for x in range(1, w + 1)} | {(1 + (k // 6) % w, 1)}
+    if joins:
+        pts |= {(x, 8) for x in range(0, w + 2)}
+    return tuple("".join("#" if (x, y) in pts else "." for x in range(12)) for y in range(12))
+
+
+def paint(png: bytes, squares: dict, letters: dict, colour=(255, 255, 255)) -> bytes:
+    """The letters PNG with `letters` (char -> 12 rows) painted into their squares."""
+    from PIL import Image
+    img = Image.open(io.BytesIO(png)).convert("RGBA")
+    for shape, (x, y) in squares.items():
+        for yy, row in enumerate(letters.get(shape.char, ())):
+            for xx, v in enumerate(row):
+                if v == "#":
+                    img.putpixel((x + xx, y + yy), colour + (255,))
+    return png_bytes(img)
+
+
+def shadow_of(rows: tuple[str, ...]) -> list[int]:
+    """144 pixels: 1 painted, 2 the shadow one dot right and below (the game's look), worked out here."""
+    cell = [1 if v == "#" else 0 for row in rows for v in row]
+    out = list(cell)
+    for i, v in enumerate(cell):
+        x, y = i % 12, i // 12
+        if v and x < 11 and y < 11 and not out[i + 13]:
+            out[i + 13] = 2
+    return out
+
+
+def unpack(fmt, data, at):
+    import struct
+    return struct.unpack_from(fmt, data, at)
+
+
+class LetterArtTest(unittest.TestCase):
+    """Letters the game can't draw yet, as a PNG and back (translator/letterart.py), with no disc:
+    which letters, the PNG out and in, and the letters in the translation and its pack."""
+
+    def setUp(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow (the letters PNG is made with it)")
+        from translator import letterart
+        self.L = letterart
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_letters_to_draw_are_the_ones_the_game_shows_as_a_question_mark(self):
+        L = self.L
+        for lang, count in LETTER_COUNTS.items():
+            shapes = L.every_shape(L.wanted(lang))
+            self.assertEqual(len(shapes), count, lang)
+            self.assertEqual(len({s.char for s in shapes}), count, lang)
+            for s in shapes:
+                self.assertEqual(P.lettertable.CATALOG[s.char].art, P.lettertable.PLACEHOLDER, (lang, s.char))
+            self.assertTrue(all(len(row) <= L.PER_ROW for row in L.wanted(lang)))
+        language = alphabets.BY_CODE["el"]
+        self.assertEqual({s.char for s in L.every_shape(L.wanted("el"))},
+                         {c for c in alphabets.full_alphabet(language) if L.needs_drawing(c)})
+        self.assertEqual(L.wanted("fr"), [])
+        self.assertEqual(L.wanted("de"), [])
+        # a letter of another language that a line uses comes after the language's own
+        self.assertEqual([s.char for s in L.every_shape(L.wanted("fr", ["Où est Ωmega?"]))], ["Ω"])
+        self.assertEqual(L.every_shape(L.wanted("el", ["ð"]))[-1].char, "ð")
+        self.assertEqual(len(L.every_shape(L.wanted("el", ["αβγ ΓΔ"]))), 36)
+
+    def test_an_arabic_row_is_each_letters_shapes_with_the_sides_they_join_on(self):
+        L = self.L
+        from petext import rtl
+        rows = L.wanted("ar")
+        beh = next(row for row in rows if row[0].char == "ﺏ")
+        self.assertEqual([(s.char, s.joins, s.what) for s in beh],
+                         [("ﺏ", "", "alone"), ("ﺐ", "r", "end"), ("ﺒ", "rl", "middle"),
+                          ("ﺑ", "l", "start")])
+        alef = next(row for row in rows if row[0].char == "ﺍ")
+        self.assertEqual([(s.joins, s.what) for s in alef], [("", "alone"), ("r", "end")])
+        self.assertIn([("ﻻ", ""), ("ﻼ", "r")], [[(s.char, s.joins) for s in row] for row in rows])
+        # Every shape the renderer's joining gives the language's letters, in any word, is in the PNG,
+        # and it joins on exactly the sides the PNG marks.
+        letters = [c for c in alphabets.full_alphabet(alphabets.BY_CODE["ar"]) if ord(c) in rtl.FORMS]
+        words = [a + b + c for a in letters for b in letters for c in letters[:6]] + ["لا", "سلام", "بلا"]
+        marked = {s.char: s.joins for s in L.every_shape(rows)}
+        for word in words:
+            joined, touches = rtl.join(word)
+            for k, ch in enumerate(joined):
+                self.assertIn(ch, marked, (word, f"{ord(ch):04X}"))
+                right, left = k > 0 and touches[k - 1], touches[k]
+                self.assertEqual(("r" in marked[ch], "l" in marked[ch]), (right, left), (word, f"{ord(ch):04X}"))
+
+    def test_a_png_out_and_back_gives_the_same_letters(self):
+        L = self.L
+        for lang in LETTER_COUNTS:
+            rows = L.wanted(lang)
+            shapes = L.every_shape(rows)
+            letters = {s.char: made_up_strokes(k, s.joins) for k, s in enumerate(shapes)}
+            for style in (None, [([1] * 144, (None, (250, 250, 250)))] * 3):
+                png = L.png(rows, lang, letters, style)
+                back = L.from_png(png, rows)
+                self.assertEqual((back.drawn, back.notes), (letters, []), lang)
+                empty = L.from_png(L.png(rows, lang, {}, style), rows)
+                self.assertEqual(empty.drawn, {s.char: None for s in shapes})
+                # painted into the empty PNG the tool saved, as a person would
+                again = L.from_png(paint(L.png(rows, lang, {}, style), L.squares(rows, bool(style)), letters), rows)
+                self.assertEqual(again.drawn, letters)
+
+    def test_a_dot_is_painted_where_it_is_bright_and_nothing_else_counts(self):
+        L = self.L
+        from PIL import Image
+        rows = L.wanted("is")
+        squares = L.squares(rows, False)
+        one = {s.char: made_up_strokes(k) for k, s in enumerate(L.every_shape(rows))}
+        png = L.png(rows, "Icelandic", {})
+        for colour in ((255, 255, 255), (255, 0, 0), (200, 200, 0), (0, 0, 130)):
+            self.assertEqual(L.from_png(paint(png, squares, one, colour), rows).drawn, one, colour)
+        for colour in ((100, 100, 100), (0, 0, 127), L.GUIDE, L.FRAME):
+            self.assertEqual(set(L.from_png(paint(png, squares, one, colour), rows).drawn.values()), {None}, colour)
+        img = Image.open(io.BytesIO(paint(png, squares, one))).convert("RGBA")
+        for x, y in squares.values():                  # see-through dots are empty, however bright
+            for i in range(144):
+                r, g, b, _ = img.getpixel((x + i % 12, y + i // 12))
+                img.putpixel((x + i % 12, y + i // 12), (r, g, b, 0))
+        self.assertEqual(set(L.from_png(png_bytes(img), rows).drawn.values()), {None})
+        # the faint lines show in an empty square and read as empty
+        img = Image.open(io.BytesIO(png)).convert("RGB")
+        x, y = next(iter(squares.values()))
+        self.assertEqual([img.getpixel((x + 4, y + r)) for r in L.GUIDE_ROWS], [L.GUIDE] * 3)
+        self.assertEqual(img.getpixel((x + 4, y + 5)), L.SQUARE)
+
+    def test_a_png_a_paint_program_saved_without_its_note_still_loads(self):
+        L = self.L
+        from PIL import Image
+        rows = L.wanted("el")
+        letters = {s.char: made_up_strokes(k) for k, s in enumerate(L.every_shape(rows))}
+        png = L.png(rows, "Greek", letters)
+        self.assertIn(L.CHUNK, Image.open(io.BytesIO(png)).info)
+        bare = png_bytes(Image.open(io.BytesIO(png)).convert("RGB"))
+        self.assertNotIn(L.CHUNK, Image.open(io.BytesIO(bare)).info)
+        self.assertEqual(L.from_png(bare, rows).drawn, letters)
+
+    def test_a_png_saved_before_more_letters_were_needed_still_loads(self):
+        L = self.L
+        from PIL import Image
+        before = L.wanted("el")
+        after = L.wanted("el", ["Γεια ðþÞ אבג"])         # lines now use Icelandic and Hebrew letters too
+        self.assertGreater(len(after), len(before))      # a row more
+        letters = {s.char: made_up_strokes(k) for k, s in enumerate(L.every_shape(before))}
+        png = L.png(before, "Greek", letters)
+        self.assertEqual(L.from_png(png, after).drawn, letters)     # by the PNG's own list of letters
+        bare = png_bytes(Image.open(io.BytesIO(png)).convert("RGB"))
+        # with no note, still while the squares are where they were (new letters come after the others)
+        two_more = L.wanted("el", ["Γεια ðþ"])
+        self.assertEqual(L.size(two_more, False), L.size(before, False))
+        self.assertEqual(L.from_png(bare, two_more).drawn, {**letters, "ð": None, "þ": None})
+        with self.assertRaises(ValueError) as said:
+            L.from_png(bare, after)
+        self.assertIn("Save as PNG", str(said.exception))
+        self.assertIn(f"{Image.open(io.BytesIO(bare)).size[0]} x", str(said.exception))
+        # and the other way: a PNG with letters the translation no longer needs
+        later = L.png(after, "Greek", {**letters, "ð": made_up_strokes(1)})
+        loaded = L.from_png(later, before)
+        self.assertEqual(loaded.drawn, letters)
+        self.assertEqual(loaded.notes, ["letters this translation doesn't need were left out: ð"])
+
+    def test_what_is_not_a_letters_png_is_refused_in_plain_words(self):
+        L = self.L
+        from PIL import Image
+        rows = L.wanted("el")
+        with self.assertRaises(ValueError) as said:
+            L.from_png(b"not a picture", rows)
+        self.assertIn("not a picture", str(said.exception))
+        with self.assertRaises(ValueError) as said:
+            L.from_png(png_bytes(Image.new("RGB", (64, 64))), rows)
+        self.assertIn("64 x 64", str(said.exception))
+
+    def test_a_letter_off_its_squares_edge_or_not_reaching_its_joining_side_is_said(self):
+        L = self.L
+        rows = L.wanted("ar")
+        shapes = L.every_shape(rows)
+        middle = next(s for s in shapes if s.what == "middle")
+        alone = next(s for s in shapes if s.what == "alone")
+        short = tuple("." * 12 if y != 5 else ".####......." for y in range(12))   # nothing on the bottom line
+        edge = tuple(("#" * 12) if y == 11 else "." * 12 for y in range(12))
+        loaded = L.from_png(L.png(rows, "Arabic", {middle.char: short, alone.char: edge}), rows)
+        self.assertEqual(loaded.drawn[middle.char], short)
+        said = " | ".join(loaded.notes)
+        self.assertIn(f"{middle.char} (middle shape) doesn't reach its right side on the bottom line", said)
+        self.assertIn(f"{middle.char} (middle shape) doesn't reach its left side", said)
+        self.assertIn(f"{alone.char} (alone shape): dots in the square's last column or row", said)
+        self.assertNotIn("alone shape) doesn't reach", said)
+
+    def test_the_pack_holds_a_drawn_letter_as_painted_with_its_shadow(self):
+        """Drawn letters go into the pack as pictures of its own, exactly as `pelang.py build
+        --patch-letters` writes them; the work part keeps them all, also those no line uses."""
+        L = self.L
+        tr = P.Translation(GAME, "el", "Ελληνικά")
+        key = plain_dialogue(1)[0]
+        tr.set_text(key, "Γεια σου, φίλε μου.")
+        gamma, psi = made_up_strokes(2), made_up_strokes(7)
+        tr.set_letter("Γ", gamma)
+        tr.set_letter("Ψ", psi)                       # no line uses it
+        path = self.dir / "el.pelang"
+        saved = tr.save(path)
+        self.assertEqual((saved.left_out, saved.whole), ({}, []))
+        with zipfile.ZipFile(path) as z:
+            work = json.loads(z.read(P.WORK))
+            text = z.read("text.bin")
+        self.assertEqual(work["version"], P.WORK_VERSION)
+        self.assertEqual(work["letters"], {"Γ": list(gamma), "Ψ": list(psi)})
+        records = {}
+        at, count = unpack("<II", text, 80)
+        for k in range(count):
+            r = text[at + 80 * k:at + 80 * (k + 1)]
+            records[chr(unpack("<I", r, 0)[0])] = r
+        r = records["Γ"]
+        pixels = [r[8 + i // 2] >> ((i & 1) * 4) & 15 for i in range(144)]
+        self.assertEqual((r[6], r[5], r[7], pixels), (0xFF, max(row.rfind("#") for row in gamma) + 2, 0, shadow_of(gamma)))
+        self.assertNotIn("Ψ", records)                # the pack holds only what its lines show
+        # byte for byte what the command line writes with the same letters (--patch-letters)
+        sheet, letters, out = self.dir / "t.csv", self.dir / "letters.json", self.dir / "cli.bin"
+        with open(sheet, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=pelang.SUBMISSION_COLUMNS)
+            w.writeheader()
+            w.writerow({"key": key, "translation": "Γεια σου, φίλε μου.", "notes": ""})
+        letters.write_text(json.dumps({"letters": [
+            {"letter": ch, "picture": list(L.picture(rows)), "dialogue": L.advance(rows), "menu": 0}
+            for ch, rows in (("Γ", gamma), ("Ψ", psi))]}, ensure_ascii=False), encoding="utf-8")
+        done = subprocess.run([sys.executable, "-I", str(HERE / "pelang.py"), "build", str(sheet), "--strings",
+                               str(P.MANIFEST), "--lang", "el", "--name", "Ελληνικά", "-o", str(out),
+                               "--max-messages", "1000000", "--patch-letters", str(letters)],
+                              capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stdout[-600:] + done.stderr[-600:])
+        self.assertEqual(out.read_bytes(), text)
+        # reopened: the letters are the work part's; a letter given back its '?' leaves pack and file
+        again = P.Translation.open(path, GAME)
+        self.assertEqual(again.drawn, {"Γ": gamma, "Ψ": psi})
+        self.assertEqual(again.own_letters, ())
+        self.assertEqual(again.letter("Γ"), gamma)
+        self.assertIsNone(again.letter("Δ"))
+        again.set_letter("Γ", None)
+        again.save()
+        third = P.Translation.open(path, GAME)
+        self.assertEqual(third.drawn, {"Ψ": psi})
+        self.assertNotIn("Γ", {entry[0] for entry in P.letters_in_pack(third.pack)[0]})
+        with self.assertRaises(ValueError):
+            again.set_letter("Δ", ("#",) * 12)
+
+    def test_a_file_from_before_letters_still_opens(self):
+        tr = P.Translation(GAME, "fr", "Français")
+        tr.set_text(plain_dialogue(1)[0], "Une ligne.")
+        path = self.dir / "fr.pelang"
+        tr.save(path)
+        with zipfile.ZipFile(path) as z:
+            parts = {i.filename: z.read(i) for i in z.infolist()}
+        work = json.loads(parts[P.WORK])
+        work["version"] = 3
+        with zipfile.ZipFile(path, "w") as z:
+            for name, data in parts.items():
+                z.writestr(name, json.dumps(work) if name == P.WORK else data)
+        again = P.Translation.open(path, GAME)
+        self.assertTrue(again.from_work)
+        self.assertEqual((again.drawn, again.texts), ({}, tr.texts))
+
+    def test_drawn_arabic_shapes_reach_the_pack_for_every_shape_of_a_used_letter(self):
+        L = self.L
+        from petext import rtl
+        tr = P.Translation(GAME, "ar", "عربي")
+        tr.set_text(plain_dialogue(1)[0], "بيت لا")
+        rows = tr.letters_to_draw()
+        letters = {s.char: made_up_strokes(k, s.joins) for k, s in enumerate(L.every_shape(rows))}
+        for ch, strokes in letters.items():
+            tr.set_letter(ch, strokes)
+        tr.save(self.dir / "ar.pelang")
+        own = {entry[0]: entry[1] for entry in P.letters_in_pack(pelang.pack_bytes(self.dir / "ar.pelang"))[0]}
+        # every shape of the letters used (alone, end, middle, start), drawn as painted; the ones the
+        # words take now among them
+        wanted = set(letters) & rtl.shapes_for(["بيت لا"])
+        self.assertTrue(set(rtl.join("بيت")[0]) | set(rtl.join("لا")[0]) <= wanted)
+        self.assertEqual(len(wanted), 4 * 4 + 2 + 2)     # beh, yeh, teh, lam: four shapes each; alef, lam-alef: two
+        for ch in wanted:
+            self.assertEqual(L.from_picture(own[ch]), letters[ch], f"{ord(ch):04X}")
+
+
+def rtl_model(pictures: dict, word: str, right: int = 300) -> dict:
+    """{(x, row): 1 or 2} of an Arabic word as the game draws it, worked out here (the model the game
+    part `rtl` holds to the game's frames): the renderer's shapes in drawing order, each cut to its
+    strokes and shadow, one pixel apart or touching where they join, the line ending at `right`, the
+    leftmost letter in front."""
+    from petext import rtl
+    joined, nxt = rtl.join(word)
+    order, _ = rtl.order(joined)
+    placed, pen = [], 0
+    for k, i in enumerate(order):
+        cell = pictures[joined[i]]
+        xs = [p % 12 for p, v in enumerate(cell) if v == 1]
+        first, w = min(xs), min(max(xs) - min(xs) + 2, 12 - min(xs))
+        advance = w + 1
+        if k + 1 < len(order) and order[k + 1] + 1 == i and nxt[order[k + 1]]:
+            advance = w - 1
+        placed.append((pen, first, w, cell))
+        pen += advance
+    pixels = {}
+    for at, first, w, cell in reversed(placed):
+        for p, v in enumerate(cell):
+            if v and first <= p % 12 < first + w:
+                pixels[(right - pen + at + p % 12 - first, p // 12)] = v
+    return pixels
+
+
+def fake_font():
+    """A Font-like object with FakeLookDisc's palette, for gamelook.draw."""
+    from petext import tim as T
+    clut = T.read(made_up_tim(4, 8, 1, palette=[0, 0x7BDE, 0x0421] + [0] * 13)).palettes[0]
+    return type("FakeFont", (), {"clut": clut, "area_clut": clut})()
+
+
+class RightToLeftLookTest(unittest.TestCase):
+    """The game look of right-to-left lines (gamelook.lay_out right_to_left), with no disc: Arabic as
+    the game draws it (the model the game's frames were matched to), Hebrew lines ending at x 300 in
+    the mirror order of a left-to-right line."""
+
+    def setUp(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        from translator import gamelook as G, letterart as L
+        self.G, self.L = G, L
+
+    def pack_with_letters(self, lang: str, key: str, text: str):
+        tr = P.Translation(GAME, lang, lang)
+        tr.set_text(key, text)
+        letters = {s.char: made_up_strokes(k, s.joins) for k, s in enumerate(self.L.every_shape(tr.letters_to_draw()))}
+        for ch, rows in letters.items():
+            tr.set_letter(ch, rows)
+        checked = tr.check_row(key)
+        self.assertEqual(checked.errors, [])
+        pack = self.G.Pack.read(checked.preview.pack)
+        return pack, self.G.Font(FakeLookDisc(), pack), letters
+
+    def test_an_arabic_word_is_joined_right_to_left_and_ends_at_300(self):
+        G = self.G
+        key = plain_dialogue(1)[0]
+        for word in ("سلام", "بيت", "مستشفى", "لا", "قط"):
+            pack, font, letters = self.pack_with_letters("ar", key, word)
+            look = G.lay_out(font, pack.text(key), right_to_left=True)
+            self.assertEqual((look.notes, len(look.screens)), ([], 1))
+            drawn = G.draw(font, look.screens[0])
+            got = {(i // 3 % G.W, i // 3 // G.W - G.LINE_Y): drawn[i:i + 3] for i in range(0, len(drawn), 3)
+                   if drawn[i:i + 3] != b"\0\0\0"}
+            want = rtl_model({ch: shadow_of(rows) for ch, rows in letters.items()}, word)
+            self.assertEqual(set(got), set(want), word)
+            stroke = bytes(G.rgb_of(font.clut[1]))
+            self.assertEqual({p for p, c in got.items() if c == stroke}, {p for p, v in want.items() if v == 1}, word)
+            # the rightmost letter's pen moves one past its shadow column to the line's end
+            self.assertEqual(max(x for x, _ in want), G.RIGHT_EDGE - 2, word)
+
+    def test_a_hebrew_line_is_the_mirror_order_ending_at_300(self):
+        G = self.G
+        from petext import rtl
+        key = plain_dialogue(1)[0]
+        text = "שלום Aya (1997)!"
+        pack, font, _ = self.pack_with_letters("he", key, text)
+        placed = G.lay_out(font, pack.text(key), right_to_left=True).screens[0]
+        xs = [p.x - p.letter.x for p in placed]
+        self.assertEqual(xs, sorted(xs))                  # placed left to right
+        last = placed[-1]
+        self.assertEqual(last.x - last.letter.x + last.letter.advance, G.RIGHT_EDGE)
+        # the Hebrew letters (each painted its own way) in the order the renderer draws them
+        visual = rtl.visual(text)
+        hebrew = [ch for ch in visual if "א" <= ch <= "ת"]
+        cells = {tuple(G._resolve(font, ord(ch), True).pixels): ch for ch in hebrew}
+        self.assertEqual(len(cells), len(set(hebrew)))
+        self.assertEqual([cells[tuple(p.letter.pixels)] for p in placed if tuple(p.letter.pixels) in cells], hebrew)
+        self.assertEqual(len(placed), len(visual))         # spaces are letters too (blank ones)
+        left = G.lay_out(font, pack.text(key)).screens[0]
+        self.assertEqual(left[0].x - left[0].letter.x, G.LINE_X)      # left to right still starts at 20
+
+    def test_the_first_letter_queued_is_drawn_in_front(self):
+        """The box queues its letters with AddPrim, so the first is drawn last (Textbox_EmitLetter)."""
+        G = self.G
+        a, b = G.Letter(0, [1] * 144, 12, 6), G.Letter(0, [2] * 144, 12, 6)
+        font = fake_font()
+        out = G.draw(font, [G.Placed(0, 0, a, G.GREY), G.Placed(6, 0, b, G.GREY)])
+        both = 8 * 3                                      # x 8, y 0: both letters cover it
+        self.assertEqual(out[both:both + 3], bytes(G.rgb_of(font.clut[1])))
+        self.assertEqual(out[14 * 3:15 * 3], bytes(G.rgb_of(font.clut[2])))
+
+
 class GameLookRuleTest(unittest.TestCase):
     """The game look's rules with no disc: the room scripts' opcodes are the game's, and letters
     are placed as the compiler measures them."""
@@ -2208,6 +2615,40 @@ class MenuLookRuleTest(unittest.TestCase):
             screen.blend(pixels, rgb, sign)
         at = lambda x, y: screen.v[(y * M.W + x) * 3]
         self.assertEqual((at(100, 12), at(8, 20), at(100, 31), at(307, 20), at(100, 20)), (16, 12, 0, 4, 8))
+
+
+class LettersDiscTest(unittest.TestCase):
+    """The letters PNG's style guide from the real discs (PE_TEST_DISC, PE_TEST_DISC2): the game's own
+    letters, as the dialogue font page has them, in the font's colours; the same from both discs."""
+
+    def test_the_style_strip_is_the_games_own_letters(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("needs Pillow")
+        from translator import gamelook as G, letterart as L
+        discs = [d for d in (os.environ.get("PE_TEST_DISC"), os.environ.get("PE_TEST_DISC2")) if d and Path(d).is_file()]
+        if not discs:
+            self.skipTest("needs PE_TEST_DISC (and PE_TEST_DISC2)")
+        rows = L.wanted("el")
+        pngs = []
+        for disc in discs:
+            look = G.DiscLook(disc)
+            colours = look.font.palettes[0]
+            png = L.png(rows, "Greek", {}, L.style_letters(look.page, colours))
+            img = Image.open(io.BytesIO(png)).convert("RGB")
+            self.assertEqual(img.size, L.size(rows, True))
+            top = L.MARGIN + L.LINE * 3 + 6 + 2
+            for k, ch in enumerate(L.STYLE_SAMPLE):
+                cell = G._cell(look.page, gt.CODE_OF[ch])
+                self.assertTrue(any(v == 1 for v in cell), ch)
+                for i, v in enumerate(cell):
+                    x, y = L.MARGIN + 140 + k * 12 + i % 12, top + i // 12
+                    want = G.rgb_of(colours[v]) if v and colours[v] else L.BACK
+                    self.assertEqual(img.getpixel((x, y)), want, (disc, ch, i))
+            self.assertEqual({s.char: None for s in L.every_shape(rows)}, L.from_png(png, rows).drawn)
+            pngs.append(png)
+        self.assertEqual(len(set(pngs)), 1)
 
 
 class PictureDiscTest(unittest.TestCase):
@@ -2691,6 +3132,20 @@ finally:
 sys.exit(code)
 """
 
+# Runs the window (translate.py, scripted with --report) with every check of a line raising, as it
+# does when Pillow can't be loaded where the window runs and a line needs letters drawn from a font.
+BROKEN_CHECK_RUN = r"""
+import os, runpy, sys
+start, args = sys.argv[1], sys.argv[2:]
+sys.path.insert(0, os.path.dirname(start))
+from translator import project as P
+def broken(*a, **k):
+    raise ModuleNotFoundError("No module named 'PIL' (made up by the test)")
+P.check_row = broken
+sys.argv = [start] + args
+runpy.run_path(start, run_name="__main__")
+"""
+
 
 def window_works() -> bool:
     return subprocess.run([sys.executable, "-I", "-c", "import tkinter; tkinter.Tk().destroy()"],
@@ -2766,12 +3221,14 @@ class WindowTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_window(self, *extra, audit: Path | None = None, opened: Path | None = None,
-                   new: tuple[str, str] = ("fr", "Français")):
-        """The scripted window: a new translation (`new`), or the file `opened` opened as it is."""
+                   new: tuple[str, str] = ("fr", "Français"), broken_check: bool = False):
+        """The scripted window: a new translation (`new`), or the file `opened` opened as it is.
+        `broken_check`: every check of a line raises (BROKEN_CHECK_RUN)."""
         saved, report = opened or self.dir / f"Parasite Eve - {new[1]}.pelang", self.dir / "report.json"
         start = [] if opened else ["--new", *new]
         args = [str(saved), *start, "--settings", str(self.dir / "settings.json"), "--report", str(report), *extra]
-        cmd = [sys.executable, "-I"] + (["-c", AUDITED_RUN, str(audit), str(START)] if audit else [str(START)])
+        cmd = [sys.executable, "-I"] + (["-c", AUDITED_RUN, str(audit), str(START)] if audit else
+                                        ["-c", BROKEN_CHECK_RUN, str(START)] if broken_check else [str(START)])
         done = subprocess.run(cmd + args, capture_output=True, text=True, timeout=300)
         self.assertTrue(report.is_file(), done.stdout[-800:] + done.stderr[-800:])
         return done.returncode, json.loads(report.read_text(encoding="utf-8")), saved
@@ -2805,6 +3262,19 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertFalse(report["ok"])
         self.assertIn("missing.pelang", report["error"])
+
+    def test_a_check_that_fails_ends_the_scripted_run_at_once_with_its_reason(self):
+        """A check that raises (Pillow missing where the window runs, say) never marks the row: the
+        run says why straight away instead of waiting two minutes and saying "timed out"."""
+        key = plain_dialogue(1)[0]
+        code, report, saved = self.run_window("--select", key, "--type", "Une ligne.", broken_check=True)
+        self.assertEqual(code, 1, report)
+        self.assertFalse(report["ok"])
+        self.assertIn(f"the check itself failed on {key}", report["error"])
+        self.assertIn("ModuleNotFoundError: No module named 'PIL' (made up by the test)", report["error"])
+        self.assertLess(report["seconds"], 60)
+        self.assertEqual((report["row"], report["text_in_row"], report["row_state"]), (key, "Une ligne.", ""))
+        self.assertEqual(P.Translation.open(saved, GAME).texts, {})     # the new file, the line not saved in it
 
     def layout(self, font_scale: float, screen: int | None = None, widths: tuple = ()) -> dict:
         import tkinter as tk
@@ -2965,6 +3435,9 @@ class WindowTest(unittest.TestCase):
         self.assertIn("Font", no_font["left_out"][key][0])
         if font is None:
             self.skipTest("no Chinese font file on this computer (or no Pillow)")
+        if not the_window_has_pillow():
+            self.skipTest("Pillow is only in this Python's user folder, which the window (python -I) "
+                          "doesn't see: run the tests with a Python that has Pillow installed for it")
         (self.dir / "settings.json").write_text(json.dumps({"cjk_fonts": [font]}), encoding="utf-8")
         (self.dir / "Parasite Eve - Chinese.pelang").unlink()
         code, report, saved = self.run_window("--select", key, "--type", typed, new=("zh-Hans", "Chinese"))
@@ -3213,6 +3686,118 @@ class GameLookWindowTest(unittest.TestCase):
             self.assertIn("the battle bar at the top", notes())
             window.next_room_picture()
             self.assertIn("the battle bar at the bottom", notes())
+        finally:
+            root.destroy()
+
+
+class LettersWindowTest(unittest.TestCase):
+    """Letters the game can't draw yet, in the window from source (GitHub runs it; no disc, no game
+    text): the scripted run's Save as PNG / Load PNG, the Letters window, a right-to-left line in the
+    game look."""
+    tearDown = WindowTest.tearDown
+    run_window = WindowTest.run_window
+
+    def setUp(self):
+        WindowTest.setUp(self)
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("needs Pillow")
+        if not the_window_has_pillow():
+            self.skipTest("the window (python -I) can't load Pillow here")
+
+    def test_the_letters_png_saved_painted_and_loaded_back_goes_into_the_file(self):
+        from translator import letterart as L
+        empty = self.dir / "Greek letters.png"
+        code, report, saved = self.run_window("--save-letters", str(empty), new=("el", "Ελληνικά"))
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report["letters"], {"saved": str(empty)})
+        rows = L.wanted("el")
+        png = empty.read_bytes()
+        self.assertEqual(L.from_png(png, rows).drawn, {s.char: None for s in L.every_shape(rows)})
+        letters = {s.char: made_up_strokes(k) for k, s in enumerate(L.every_shape(rows))}
+        painted = self.dir / "painted.png"
+        painted.write_bytes(paint(png, L.squares(rows, False), letters))
+        key = plain_dialogue(1)[0]
+        code, report, saved = self.run_window("--letters", str(painted), "--select", key, "--type", "Γεια σου ΔΘΛ",
+                                              opened=saved)
+        self.assertEqual(code, 0, report)
+        self.assertEqual((report["letters"]["drawn"], report["letters"]["empty"], report["letters"]["notes"]),
+                         (sorted(letters), [], []))
+        self.assertEqual(report["row_state"], "ok")
+        again = P.Translation.open(saved, GAME)
+        self.assertEqual((again.drawn, again.texts), (letters, {key: "Γεια σου ΔΘΛ"}))
+        own = {entry[0]: entry for entry in P.letters_in_pack(again.pack)[0]}
+        self.assertEqual(set(own), set("Γεια σου ΔΘΛ") & set(letters))
+        self.assertEqual(own["Δ"][1:3], (L.picture(letters["Δ"]), L.advance(letters["Δ"])))
+
+    def test_a_picture_that_isnt_the_letters_png_fails_the_run_saying_why(self):
+        from PIL import Image
+        wrong = self.dir / "wrong.png"
+        Image.new("RGB", (64, 64)).save(wrong)
+        code, report, saved = self.run_window("--letters", str(wrong), new=("he", "עברית"))
+        self.assertEqual(code, 1, report)
+        self.assertIn("could not load the letters PNG", report["error"])
+        self.assertIn("Save as PNG", report["error"])
+
+    def open_app(self, lang: str, name: str, key: str | None = None):
+        import tkinter as tk
+        from translator import app as A
+        A.SETTINGS = self.dir / "settings.json"
+        root = tk.Tk()
+        return root, A.App(root, None, str(self.dir / f"{lang}.pelang"), select=key, new=(lang, name))
+
+    def test_the_letters_window_lists_the_letters_and_marks_the_drawn_ones(self):
+        from translator import letterart as L
+        root, app = self.open_app("he", "עברית")
+        try:
+            app.open_letters()
+            win = app.letters_window
+            self.assertEqual(len(win.list.get_children()), 27)
+            self.assertEqual({win.list.set(i, "state") for i in win.list.get_children()}, {"a ? in the game"})
+            self.assertIn("27 letters of Hebrew", win.intro.cget("text"))
+            rows = app.tr.letters_to_draw()
+            letters = {s.char: made_up_strokes(k) for k, s in enumerate(L.every_shape(rows))}
+            loaded = app.load_letters(paint(app.letters_png(), L.squares(rows, False), letters))
+            self.assertEqual(sum(1 for v in loaded.drawn.values() if v), 27)
+            win.marks()
+            win.show()
+            self.assertEqual({win.list.set(i, "state") for i in win.list.get_children()}, {"drawn"})
+            self.assertTrue(app.dirty)
+            self.assertGreater(len(win.canvas.find_all()), 20)     # the picked letter's dots
+            win.list.selection_set("0")
+            win.clear_letter()
+            self.assertEqual(win.list.set("0", "state"), "a ? in the game")
+            self.assertNotIn(win.shapes[0].char, app.tr.drawn)
+            # the PNG saved now shows the 26 still drawn
+            self.assertEqual(sum(1 for v in L.from_png(app.letters_png(), rows).drawn.values() if v), 26)
+            win.close()
+            self.assertIsNone(app.letters_window)
+        finally:
+            root.destroy()
+        root, app = self.open_app("fr", "Français")
+        try:
+            app.open_letters()
+            self.assertIn("nothing to draw", app.letters_window.intro.cget("text"))
+            self.assertEqual(str(app.letters_window.save_png.cget("state")), "disabled")
+        finally:
+            root.destroy()
+
+    def test_a_right_to_left_line_is_drawn_as_in_the_game(self):
+        key = plain_dialogue(1)[0]
+        root, app = self.open_app("he", "עברית", key)
+        try:
+            app.look_disc = FakeLookDisc()
+            app.tr.set_text(key, "שלום Aya!")
+            app.check_now()
+            for _ in range(100):
+                root.update()
+                if app.preview is not None:
+                    break
+                __import__("time").sleep(0.05)
+            self.assertIsNotNone(app.preview)
+            app.look_mode.set("game")
+            self.assertTrue(app.draw_game())             # it fell back to the computer font before
         finally:
             root.destroy()
 

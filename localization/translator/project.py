@@ -44,6 +44,7 @@ if str(ROOT) not in sys.path:
 import pelang  # noqa: E402
 from petext import alphabets, battle, citymap, cjk, gametext as gt, layout, menu, names as namelib, rtl, stretch  # noqa: E402
 from petext import letters as lettertable, manifest as srcman, pictures as picturebin, validation  # noqa: E402
+from . import letterart  # noqa: E402
 
 MANIFEST = ROOT / "data" / "manifest.json"
 # Every file under localization/ other than code that the Translator reads: the download carries
@@ -51,10 +52,11 @@ MANIFEST = ROOT / "data" / "manifest.json"
 DATA_FILES = ("data/manifest.json", "data/menu_layouts.json", "data/script_opcodes.json")
 DISC_DATA_FILES = ("data/script_opcodes.json",)  # read only once a disc is chosen (the game look's rooms)
 WORK = "translator/work.json"
-WORK_FORMAT, WORK_VERSION = "pe-translator-work", 3
+WORK_FORMAT, WORK_VERSION = "pe-translator-work", 4
 # 2 added "rules" (a version 1 file is a strict one); 3 a row's "layout": a city map line's own
-# spacing, which an older Translator would not keep (so it reads such a file from its pack instead)
-WORK_READS = (1, 2, 3)
+# spacing, which an older Translator would not keep (so it reads such a file from its pack instead);
+# 4 "letters": the letters the translator drew (letterart.py), kept even while no line uses them
+WORK_READS = (1, 2, 3, 4)
 PATCH_IMPORT = "patch import"                # the notes import-patch gives a fan patch's rows
 CJK_LANGS = ("zh", "ja", "ko")               # languages whose letters may need a font file
 PICTURES, README = "pictures.bin", "readme.txt"
@@ -701,6 +703,10 @@ class Translation:
         # holds with its own spacing (a fan patch's, or one saved before) keeps it while its words
         # stay the same: key -> that text.
         self.layouts: dict[str, str] = {}
+        # Letters the translator drew (letterart.py: loaded from a letters PNG): letter -> 12 rows of
+        # '.' and '#', its painted dots. The pack gets them as pictures of its own (with the shadow);
+        # the work part keeps them all, also those no line uses yet (the pack holds only used ones).
+        self.drawn: dict[str, tuple[str, ...]] = {}
         # A pack read back from its compiled text (made by other means: a fan patch import, the
         # English pack): the rows a save would not write back as the file has them -> why. While
         # there are any, save refuses, so opening and saving can never quietly change a pack.
@@ -742,6 +748,7 @@ class Translation:
             typed, kept = _as_words({k: r["text"] for k, r in rows.items() if k in game.rows and r.get("text")})
             kept.update({k: r["layout"] for k, r in rows.items() if k in game.rows and r.get("layout")})
             rules = work.get("rules") or {}
+            self.drawn = _drawn_letters(work.get("letters"))
             self.from_patch = rules.get("from_patch") is True
             patch_rows = [k for k in rules.get("patch_rows") or [] if k in game.rows]
             if work.get("text_sha256") == hashlib.sha256(self.pack).hexdigest():
@@ -751,6 +758,8 @@ class Translation:
                 # it wins; rows only the work part has (they didn't pass the checks) are kept.
                 self.texts.update({k: t for k, t in typed.items() if k not in self.texts})
         self.patch_text = {k: self.texts[k] for k in patch_rows if self.texts.get(k)}
+        # the pack's copies of the drawn letters are the tool's own: the work part's are the ones kept
+        self.own_letters = tuple(entry for entry in self.own_letters if entry[0] not in self.drawn)
         if not self.from_work:
             self.locked = self.untouched_changes()
             if self.locked and not self.from_patch:
@@ -806,7 +815,8 @@ class Translation:
     @property
     def rules(self) -> Rules:
         """What the pack is built with: see Rules. A row stays the patch's only while its text is."""
-        return Rules(self.from_patch, self.own_letters, self.own_cjk, tuple(self.cjk_fonts),
+        own = tuple(entry for entry in self.own_letters if entry[0] not in self.drawn)
+        return Rules(self.from_patch, own + letterart.as_rules(self.drawn), self.own_cjk, tuple(self.cjk_fonts),
                      frozenset(k for k, t in self.patch_text.items() if self.texts.get(k) == t))
 
     def rules_for(self, key: str, text: str) -> Rules:
@@ -816,6 +826,32 @@ class Translation:
         if self.patch_text.get(key) == text:
             rows |= {key}
         return replace(rules, patch_rows=frozenset(rows))
+
+    # -- letters the game can't draw yet (letterart.py) --
+
+    def letters_to_draw(self) -> list[list]:
+        """The rows of the letters PNG: the language's letters the game can't draw yet, then any
+        other such letter the lines use (letterart.wanted)."""
+        return letterart.wanted(self.lang, [t for t in self.texts.values() if t])
+
+    def letter(self, ch: str) -> tuple[str, ...] | None:
+        """A letter's painted dots as the translation has them: the translator's drawing, else the
+        pack's own picture of it (a fan patch's), else None (the game shows a question mark)."""
+        if ch in self.drawn:
+            return self.drawn[ch]
+        own = next((entry for entry in self.own_letters if entry[0] == ch), None)
+        return letterart.from_picture(own[1]) if own else None
+
+    def set_letter(self, ch: str, rows: tuple[str, ...] | None) -> None:
+        """Draw a letter (12 rows of '.'/'#'), or with None give it back its question mark (a pack's
+        own picture of it goes too)."""
+        if rows is None or not any("#" in r for r in rows):
+            self.drawn.pop(ch, None)
+            self.own_letters = tuple(entry for entry in self.own_letters if entry[0] != ch)
+            return
+        if len(rows) != letterart.CELL or any(len(r) != letterart.CELL or set(r) - set(".#") for r in rows):
+            raise ValueError(f"{ch}: a letter is 12 rows of 12 dots")
+        self.drawn[ch] = tuple(rows)
 
     def needs_font(self) -> bool:
         """Whether the language's letters may need a font file (CJK_LANGS)."""
@@ -911,6 +947,8 @@ class Translation:
                                                 ("layout", self._kept_layout(k))) if v}
                          for k in sorted(set(self.texts) | set(self.notes))
                          if self.texts.get(k) or self.notes.get(k)}}
+        if self.drawn:
+            work["letters"] = {ch: list(rows) for ch, rows in sorted(self.drawn.items())}
         if self.from_patch:                  # font files stay on this computer: not in the file
             work["rules"] = {"from_patch": True, "patch_rows": sorted(self.rules.patch_rows)}
         blob = io.BytesIO()
@@ -937,6 +975,17 @@ class Translation:
             if m.level == "warning" and m.key:
                 warnings.setdefault(m.key, []).append(m.text)
         return SaveReport(path, sum(1 for h in held if h in self.game.by_hash), left, warnings, whole)
+
+
+def _drawn_letters(saved) -> dict[str, tuple[str, ...]]:
+    """The work part's "letters", each checked (12 rows of 12 '.'/'#'); anything else is dropped."""
+    out = {}
+    for ch, rows in (saved or {}).items() if isinstance(saved, dict) else ():
+        if (isinstance(ch, str) and len(ch) == 1 and isinstance(rows, list) and len(rows) == letterart.CELL
+                and all(isinstance(r, str) and len(r) == letterart.CELL and not set(r) - set(".#") for r in rows)
+                and any("#" in r for r in rows)):
+            out[ch] = tuple(rows)
+    return out
 
 
 def pelang_entries(pack: bytes) -> dict[int, bytes]:

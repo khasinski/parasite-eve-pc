@@ -1,6 +1,6 @@
 """The text renderer in the real game: language packs' stretches, name letters and saved names.
 
-  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-battle-look,translator-look]]
+  python text_renderer_game.py GAME.exe [WORK_DIR [english,packs,name,menus,save,many,menu-letters,rtl,split,drawn,battle,chinese,spanish,italian,german,french,english-pack,translator,translator-pictures,translator-map,translator-place-title,translator-battle,translator-cards,translator-tutorial,translator-game-over,translator-menu-words,translator-menu-look,translator-battle-look,translator-look,translator-letters]]
 
 (battle is left out by default: it runs as its own test, original-game-text-renderer-battle; so are
 chinese, spanish, italian, german, french and english-pack, original-game-text-renderer-chinese,
@@ -263,6 +263,17 @@ Checks, each from pe_mods.log and frame dumps:
              boxes on the ship on Disc 2: every letter pixel the tool draws is the frame's, and every
              text pixel of the frame is one the tool draws. The first box's room (M010, found from the
              room scripts) is the frame's background in its top rows, pixel for pixel.
+  translator-letters  Letters the game can't draw yet, drawn in a PNG (localization/translator/letterart.py):
+             Greek, Hebrew and Arabic. For each, a file with made-up lines in that language (the first box
+             and the five boxes on the ship) is opened in the Translator's scripted window, which saves
+             the letters PNG (with Disc 1 chosen: the game's own letters as a style guide); every square
+             is painted with a made-up letter of its own (Arabic shapes reach the sides they join on) and
+             the window loads the PNG back and saves the file. Every square must come back drawn, the
+             pack must hold each letter the lines use as exactly the painted dots plus the shadow (one
+             dot right and below) at the width of its rightmost dot + 2, and the language mod must draw
+             no '?'. On Disc 1 the first box, and on Disc 2 the five boxes on the ship, must be pixel for
+             pixel the Translator's "As in the game" drawing of them (right to left for Hebrew and
+             Arabic, Arabic joined), with every painted letter among the pictures it draws.
 """
 import binascii
 import csv
@@ -2633,6 +2644,183 @@ def translator_look(game, discs, out, localization):
     return 0
 
 
+# ---- Part translator-letters: letters the game can't draw yet, painted in a PNG ----
+
+# Made-up lines (no game text): the first box, and the five boxes on the ship on Disc 2 (four of them
+# hold {name}, as the game's do). Each language's first box uses most of the letters it has to draw.
+LETTER_TEXTS = {
+    'el': ('Greek letters test', {
+        'dlg/M001/009': 'Ώρα για λόγια: ΓΔΘΛΞΠΣΦΨΩ!{br}αβγδεζηθ κλμξπρστ φχψω άέήώς',
+        'dlg/M275/008': '{name}! Πού είσαι; Ψάχνω παντού.',
+        'dlg/M275/009': '{name}, έλα γρήγορα εδώ πάνω!',
+        'dlg/M275/010': 'Δεν ξέρω τι γίνεται, {name}.',
+        'dlg/M275/011': 'Περίμενε με εδώ, {name}, θα έρθω.',
+        'dlg/M275/012': 'Φύγαμε τώρα, Ψάξε το Ω και το Λ.'}),
+    'he': ('Hebrew letters test', {
+        'dlg/M001/009': 'שלום! מה קורה פה (1997)?{br}אבגדהוזחטיכלמנסעפצקרשת ךםןףץ',
+        'dlg/M275/008': '{name}! איפה את? אני מחפש בכל מקום.',
+        'dlg/M275/009': '{name}, בואי מהר לכאן למעלה!',
+        'dlg/M275/010': 'אני לא יודע מה קורה, {name}.',
+        'dlg/M275/011': 'חכי לי כאן, {name}, אני בא.',
+        'dlg/M275/012': 'הולכים עכשיו, צריך למצוא את הספינה.'}),
+    'ar': ('Arabic letters test', {
+        'dlg/M001/009': 'مرحبا يا صديقي! لا شيء هنا.{br}بيت ثلج خوخ ذهب ظل غيم قط',
+        'dlg/M275/008': '{name}! أين أنت يا صديقتي',
+        'dlg/M275/009': '{name}, تعال بسرعة إلى هنا!',
+        'dlg/M275/010': 'لا أعرف ماذا يحدث, {name}.',
+        'dlg/M275/011': 'انتظرني هنا, {name}, أنا قادم.',
+        'dlg/M275/012': 'هيا بنا الآن, علينا أن نجد السفينة.'}),
+}
+
+
+def test_letter(k, joins):
+    """{(x, y)} of the made-up letter painted in square k: a box of its own width and bars, a dot that
+    tells it from the others; a joined shape's bottom line reaches both sides of its ink."""
+    w = 3 + k % 6
+    pts = {(1, y) for y in range(2, 9)} | {(w, y) for y in range(2 + k % 3, 9)} | {(x, 8) for x in range(1, w + 1)}
+    pts |= {(x, 2 + k % 5) for x in range(1, w + 1)} | {(1 + (k // 6) % w, 1)}
+    if joins:
+        pts |= {(x, 8) for x in range(0, w + 2)}
+    return pts
+
+
+def shadowed(points):
+    """144 pixels: 1 for the painted dots, 2 for the shadow one dot right and below each (the game's
+    look), as the pack must hold the letter."""
+    cell = [0] * 144
+    for x, y in points:
+        cell[y * 12 + x] = 1
+    for x, y in points:
+        if x + 1 < 12 and y + 1 < 12 and not cell[(y + 1) * 12 + x + 1]:
+            cell[(y + 1) * 12 + x + 1] = 2
+    return cell
+
+
+def cut_shape(cell):
+    """A joined shape as the language mod cuts it (pe_lang_letter_cut): from its first painted column,
+    its painted width + the shadow column, the pixels moved to start there."""
+    xs = [i % 12 for i, v in enumerate(cell) if v == 1]
+    first, width = min(xs), min(max(xs) - min(xs) + 2, 12 - min(xs))
+    return [cell[i + first] if i % 12 + first < 12 and i % 12 < width else 0 for i in range(144)]
+
+
+def translator_letters(game, discs, out, localization):
+    """Part translator-letters (see the module notes); 77 after the Disc 1 checks when PE_TEST_DISC2 isn't
+    set."""
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, str(localization))
+    try:
+        from PIL import Image
+    except ImportError:
+        print('SKIP translator letters: needs Pillow (the letters PNG and the game look are made with it)')
+        return 77
+    import pelang
+    from petext import rtl
+    from translator import gamelook as gl, letterart as la, project as tp
+    english, _, _ = make_english_pack(discs, out, localization)
+    the_game = tp.Game()
+    look_disc = gl.DiscLook(discs[0])
+    for lang, (name, texts) in LETTER_TEXTS.items():
+        tr = tp.Translation(the_game, lang, name)
+        for key, text in texts.items():
+            tr.set_text(key, text)
+        path = out / f'letters-{lang}.pelang'
+        saved = tr.save(path)
+        check(not saved.left_out and not saved.whole, f'{lang}: lines left out: {saved.left_out} {saved.whole}')
+        rows = tr.letters_to_draw()
+        shapes = la.every_shape(rows)
+
+        def window(*args):
+            report = out / f'letters-{lang}-report.json'
+            report.unlink(missing_ok=True)
+            ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--english',
+                                  str(english), '--settings', str(out / 'translator-settings.json'), '--report',
+                                  str(report), '--disc', discs[0], *args], capture_output=True, text=True, timeout=300)
+            said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
+            check(ran.returncode == 0 and said.get('ok'), f'{lang}: the Translator failed: {said} {ran.stderr[-600:]}')
+            return said
+
+        empty, painted = out / f'letters-{lang}-empty.png', out / f'letters-{lang}-painted.png'
+        window('--save-letters', str(empty))
+        img = Image.open(empty).convert('RGB')
+        strip = img.size == la.size(rows, True)
+        check(strip and img.size != la.size(rows, False), f'{lang}: the letters PNG has no style strip: {img.size}')
+        drawn = {}
+        for k, (shape, (x, y)) in enumerate(la.squares(rows, True).items()):
+            check(all(img.getpixel((x + i % 12, y + i // 12))[0] < 128 for i in range(144)),
+                  f'{lang}: the square of {shape.char} is not empty in the saved PNG')
+            drawn[shape.char] = test_letter(k, shape.joins)
+            for px, py in drawn[shape.char]:
+                img.putpixel((x + px, y + py), (255, 255, 255))
+        img.save(painted)
+        said = window('--letters', str(painted))
+        check(said['letters'].get('drawn') == sorted(drawn) and not said['letters'].get('empty')
+              and not said['letters'].get('notes') and said['letters_drawn'] == sorted(drawn),
+              f"{lang}: the Translator did not take every painted square: {said['letters']}")
+        again = tp.Translation.open(path, the_game)
+        check(again.texts == texts and set(again.drawn) == set(drawn), f'{lang}: the file does not reopen as saved')
+
+        # The pack: every letter the lines show, as exactly its painted dots and their shadow.
+        data = pelang.pack_bytes(path)
+        at, count = struct.unpack_from('<II', data, 80)
+        records = {chr(struct.unpack_from('<I', data, at + 80 * k)[0]): data[at + 80 * k:at + 80 * (k + 1)]
+                   for k in range(count)}
+        shown = set(''.join(texts.values())) | (rtl.shapes_for(texts.values()) if rtl.is_rtl(lang) else set())
+        used = sorted(ch for ch in drawn if ch in shown)
+        check(used, f'{lang}: no painted letter is used')
+        for ch in used:
+            r = records.get(ch)
+            check(r is not None, f'{lang}: {ch} (U+{ord(ch):04X}) is not in the pack')
+            pixels = [r[8 + i // 2] >> ((i & 1) * 4) & 15 for i in range(144)]
+            check(r[6] == 0xFF and pixels == shadowed(drawn[ch]) and r[5] == max(x for x, _ in drawn[ch]) + 2,
+                  f'{lang}: {ch} in the pack is not the painted letter (base {r[6]:02X}, advance {r[5]})')
+        print(f'translator letters, {name}: the Translator saved {len(shapes)} squares (game letters as a style guide '
+              f'beside them), took all {len(drawn)} painted letters back, and the pack holds the {len(used)} its lines '
+              'use as painted, with their shadow and widths')
+
+        pack = (lang, name, None, path)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(run_fixed, game, discs[:1], out / f'letters-{lang}-disc1', [(FIRST_BOX, 'first', None)],
+                                pack=pack, pad=NEW_GAME)
+            second = pool.submit(run_disc2, game, discs, out / f'letters-{lang}-disc2', pack) if len(discs) > 1 else None
+            works = [('Disc 1', first.result(), {'first': 'dlg/M001/009'})]
+            if second is not None:
+                work2, room = second.result()
+                works.append((f'Disc 2 (room {room})', work2, DISC2_BOXES))
+        mine = gl.Pack.read(data)
+        font = gl.Font(look_disc, mine)
+        for where, work, boxes in works:
+            log = mods_log(work)
+            check(f"text: {name} ({lang})'s stretches in use" in log, f'{where}: the pack did not draw: {work}')
+            missing = [line for line in log.splitlines() if 'text: ' in line and ("shows '?'" in line or 'no stretch' in line)]
+            check(not missing, f'{where}: letters fell back to "?": {missing[:5]}: {work}')
+            total = 0
+            for label, key in boxes.items():
+                raw = mine.text(key)
+                look = gl.lay_out(font, raw, gl.name_bytes(mine, 'Aya'), right_to_left=rtl.is_rtl(lang))
+                check(look.notes == [] and len(look.screens) == 1, f'{where} {label}: {look.notes}, {len(look.screens)} screens')
+                total += look_is_the_frame(work, label, look, font, raw, 'Aya', gl)
+                pictures = {tuple(p.letter.pixels) for p in look.screens[0]}
+                # the letters the box shows: for Arabic, the shapes its words take (petext/rtl.py join)
+                letters = set()
+                for line in texts[key].replace('{name}', '').split('{br}'):
+                    letters |= set(rtl.join(line)[0]) if rtl.is_rtl(lang) else set(line)
+                taken = sorted(set(used) & letters)
+                check(taken, f'{where} {label}: no painted letter in the box')
+                for ch in taken:
+                    cell = shadowed(drawn[ch])
+                    want = cut_shape(cell) if rtl.is_joining(ord(ch)) else cell
+                    check(tuple(want) in pictures, f'{where} {label}: the painted {ch} (U+{ord(ch):04X}) is not among '
+                                                   f'the letters drawn')
+            print(f'PASS translator letters, {name}, {where}: {len(boxes)} box(es) are the Translator\'s "As in the '
+                  f'game" drawing, all {total} letter pixels, with the painted letters'
+                  + (', right to left' if rtl.is_rtl(lang) else '') + (', joined' if lang == 'ar' else ''))
+    if len(discs) < 2:
+        print('SKIP translator letters on Disc 2: PE_TEST_DISC2 is not set')
+        return 77
+    return 0
+
+
 def menu_line(codes, drawn):
     """{(x, row)} of the stroke pixels of a menu line from its pen's start, as the menus draw it: each
     letter cut by its metrics (menu_letter), the pen moved by its drawn width and 1 px, 2 px after a
@@ -3181,7 +3369,8 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
                               ('translator-game-over', translator_game_over),
                               ('translator-menu-words', translator_menu_words),
                               ('translator-menu-look', translator_menu_look),
-                              ('translator-battle-look', translator_battle_look), ('translator-look', translator_look)):
+                              ('translator-battle-look', translator_battle_look), ('translator-look', translator_look),
+                              ('translator-letters', translator_letters)):
         if part in parts:                   # a fan patch's pack: needs none of the test packs below
             result = check_patch(game, discs, out, localization)
             parts = [p for p in parts if p != part]

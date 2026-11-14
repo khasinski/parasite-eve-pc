@@ -13,6 +13,8 @@ The check, on the built program itself (no Python of this computer involved):
   1. Start it with a new translation, type a line into a row through the window, save, quit
      (translator/app.py --report). With --english it also loads that English pack first.
   2. The file it saved must be byte for byte what this source tool saves from the same line.
+     Then the letters PNG: a new Greek translation saves it (it must look as the source tool's),
+     every square painted it is loaded back, and the file must be the source tool's too.
   3. Its data files must be exactly translator/project.py DATA_FILES, and no part of it may hold
      game text: every file and every packed part (opened all the way down) is searched for a
      pack's "PELG" header (a pack stores runs of letters packed, so a pack is found by its header),
@@ -148,6 +150,70 @@ def use_it(built: Path, check: Path, english: Path | None) -> dict:
     print(f"the built program: started, typed, saved and quit in {seconds:.1f} s; "
           f"its file is byte for byte the source tool's")
     return said
+
+
+LETTERS_LANG, LETTERS_NAME = "el", "Ελληνικά"
+
+
+def made_up_letter(k: int) -> tuple[str, ...]:
+    """A made-up letter for square k (12 rows of '.'/'#'), each one different."""
+    w = 3 + k % 6
+    pts = {(1, y) for y in range(2, 9)} | {(w, y) for y in range(2 + k % 3, 9)} | {(x, 8) for x in range(1, w + 1)}
+    pts |= {(x, 2 + k % 5) for x in range(1, w + 1)} | {(1 + (k // 6) % w, 1)}
+    return tuple("".join("#" if (x, y) in pts else "." for x in range(12)) for y in range(12))
+
+
+def letters_work(built: Path, check: Path) -> None:
+    """The letters PNG in the built program: a new Greek translation saves its letters PNG
+    (--save-letters), which must look as the source tool's; every square painted, the program loads
+    it back (--letters) and saves; the file must be byte for byte what the source tool saves with the
+    same letters."""
+    from PIL import Image
+    from translator import letterart as LA
+    game = P.Game()
+    saved, report = check / f"Parasite Eve - {LETTERS_NAME}.pelang", check / "letters-report.json"
+    empty, painted = check / "letters.png", check / "letters-painted.png"
+    for old in (saved, report, empty, painted):
+        old.unlink(missing_ok=True)
+
+    def run(*args) -> dict:
+        report.unlink(missing_ok=True)
+        done = subprocess.run([str(program_of(built)), str(saved), *args, "--settings", str(check / "settings.json"),
+                               "--report", str(report)], timeout=600, capture_output=True, text=True)
+        if not report.is_file():
+            fail(f"letters: the program wrote no report (exit {done.returncode}): {done.stderr[-600:]}")
+        said = json.loads(report.read_text(encoding="utf-8"))
+        if done.returncode != 0 or not said.get("ok") or not said.get("frozen"):
+            fail(f"letters: the run failed (exit {done.returncode}): {said.get('error')}")
+        return said
+
+    run("--new", LETTERS_LANG, LETTERS_NAME, "--save-letters", str(empty))
+    rows = LA.wanted(LETTERS_LANG)
+    shapes = LA.every_shape(rows)
+    source = Image.open(io.BytesIO(LA.png(rows, "Greek", {}))).convert("RGB")
+    theirs = Image.open(empty).convert("RGB")
+    if theirs.size != source.size or theirs.tobytes() != source.tobytes():
+        fail("letters: the built program's letters PNG is not the source tool's")
+    letters = {s.char: made_up_letter(k) for k, s in enumerate(shapes)}
+    img = theirs.copy()
+    for shape, (x, y) in LA.squares(rows, False).items():
+        for yy, row in enumerate(letters[shape.char]):
+            for xx, v in enumerate(row):
+                if v == "#":
+                    img.putpixel((x + xx, y + yy), (255, 255, 255))
+    img.save(painted)
+    said = run("--letters", str(painted))
+    if said.get("letters_drawn") != sorted(letters) or said["letters"].get("notes"):
+        fail(f"letters: the built program did not take every painted letter: {said.get('letters')}")
+    same = P.Translation(game, LETTERS_LANG, LETTERS_NAME)
+    for ch, strokes in letters.items():
+        same.set_letter(ch, strokes)
+    with tempfile.TemporaryDirectory() as tmp:
+        same.save(Path(tmp) / "same.pelang")
+        if saved.read_bytes() != (Path(tmp) / "same.pelang").read_bytes():
+            fail("letters: the saved file is not what the source tool saves with the same letters")
+    print(f"the built program: saved the {len(shapes)} Greek letters as a PNG (as the source tool draws it), "
+          "loaded them painted, and its file is byte for byte the source tool's")
 
 
 # ---- 3. what is inside ---------------------------------------------------------------------------------
@@ -292,6 +358,7 @@ def main(argv=None) -> int:
         check_versions()
         built = build(a.out / "work")
     use_it(built, check, a.english)
+    letters_work(built, check)
     game, needles = P.Game(), Needles()
     for pack in ([a.english] if a.english else []) + (sorted(a.packs.glob("*.pelang")) if a.packs else []):
         needles.add_pack(pack, game)
