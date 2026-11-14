@@ -20,7 +20,7 @@
  *     pe_ch_bundles.c      Bundles page: Purist, Nightmare, Clear all
  *     pe_ch_events.c       events other mods can listen to (changed, assisted, cleared, ended)
  *   screens (the game's own widgets and windows)
- *     pe_ch_screen.c       the Challenges row in Aya's menu: this run, run history
+ *     pe_ch_screen.c       Challenges in Aya's System list: active and completed challenges
  *     pe_ch_notice.c       a field notice in the game's dialogue window, one option to close it
  *     pe_ch_card_marks.c   Hardcore saves marked in the game's save / load lists (window, title bar)
  *   challenges
