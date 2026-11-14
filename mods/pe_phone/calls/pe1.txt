@@ -540,8 +540,8 @@ priority = 11
 once = yes
 after = pe1/hospital_records
 them: Maeda! I mean, Maeda speaking.
-aya: It's {name}. My old file is in this hospital's basement. I'm going down.
-them: Alone? It's still hot out here. Down there will be worse.
+aya: It's {name}. If they kept my file, it's in the basement. I'm going down.
+them: Alone? It's still hot out here. Please be careful down there.
 aya: I'll be fine. I still have the bell.
 them: Good. I wish I had something more useful to give you.
 aya: Just stay where I can find you.
@@ -631,9 +631,9 @@ after = pe1/museum_guard
 them: Dollis.
 aya: It's me. A guard heard something follow him through the fossil hall. I'm heading there.
 them: Don't. I'm on my way with Maeda. Don't go any deeper without us.
-aya: Too late, Daniel.
-them: Then don't go any deeper without calling.
-aya: That I can do.
+aya: I'll call you when I get there.
+them: Call me before you do anything stupid.
+aya: Then I'd better call you now.
 
 # ---- Day 6: the Navy cruiser ----
 
