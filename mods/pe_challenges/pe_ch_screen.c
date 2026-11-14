@@ -17,7 +17,7 @@
  *                 fastest time, Hardcore, the first clear.
  *   L1 / R1 switch pages (This run, Run history, Records by category), Circle or Cross goes back.
  *
- * The row shows with a game loaded once this run has had a challenge or the history has a run.
+ * The Aya menu entry is hidden; challenge settings and run tracking remain available in F1.
  */
 #include <stdio.h>
 #include <string.h>
@@ -340,7 +340,8 @@ static void pe_open(MenuWidgetNode *main_list) {
 }
 
 static int pe_row_shown(void) {
-    return pe_game_loaded() && (g_ch_run.ever || pe_ch_history_count() > 0 || pe_ch_records_cleared() > 0);
+    /* Keep Aya's menu uncluttered, including saves with challenge history or records. */
+    return 0;
 }
 
 /* The row's icon: Revive's inventory icon (item 0x12), the game's own art for life and death. */

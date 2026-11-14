@@ -284,8 +284,9 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   fallen-run window in the field, closing to nothing) and Preview fallen saves (Hardcore saves grey
   in the save / load lists for the session).
 - **Not yet:** Scarcity, no bonus-point spending.
-- **Challenges in Aya's menu** (`pe_ch_screen.c`): a Challenges row (order 35, after the Wardrobe)
-  opens a read-only screen from the game's own widgets, laid out like the Bestiary's. **This run**:
+- **Challenges in Aya's menu** (`pe_ch_screen.c`): the Challenges row is hidden. Challenge settings
+  remain in F1, and run history and records continue to be tracked. The retained screen code uses
+  the game's own widgets, laid out like the Bestiary's. **This run**:
   the run's challenges with levels (lowered ones dim, a run-locking one in the game's yellow), and
   Clean / Assisted, battles won, knockouts, time. **Run history** (L1 / R1): every challenge run,
   newest first, cleared in yellow, fallen dim, with its challenges and numbers. **Records**: one
