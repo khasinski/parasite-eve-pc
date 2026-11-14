@@ -195,10 +195,8 @@ int pe_channeler_hit(PeStyleSession *s);
 void pe_channeler_tick(PeStyleSession *s); /* every battle frame */
 int pe_channeler_full(const PeStyleSession *s);
 
-/* Wardrobe adapter, intentionally separate from the testable style engine. */
+/* Native adapter (pe_style_runtime.c), separate from the testable engine. */
 void pe_styles_register(const char *mod_id);
+/* 1 while a style is chosen or applies (the F1 choice is not Off). */
 int pe_styles_enabled(void);
-/* Shared F1/native-menu preference; rejects all in-battle changes. */
-int pe_styles_set_enabled(int value);
-void pe_styles_describe(const char *costume_key, char *out, unsigned size);
 #endif

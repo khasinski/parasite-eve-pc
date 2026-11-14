@@ -1,5 +1,10 @@
-/* Native adapter. Definitions and simulation have no dependency on game state.
- */
+/* Combat styles: the native adapter. Definitions and simulation
+ * (pe_style_*.c) have no dependency on game state.
+ *
+ * Its own mod (pe_styles), independent of the Wardrobe: the player picks a
+ * style in F1 > PE Enhancements > Combat styles (Off by default). Costumes are
+ * cosmetic; linking a costume to a style (pe_style_for_costume) is kept for a
+ * later integration through a service. */
 #include "pe1/battle_ailment.h"
 #include "pe1/field_actor.h"
 #include "pe1/field_glow_line.h"
@@ -14,12 +19,15 @@
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_services.h"
 #include "pe_style.h"
-#include "pe_wardrobe.h"
 #include <stdio.h>
 #include <string.h>
 #define FULL_AT 9000u
+#define PE_PAGE_STYLES "Combat styles" /* F1 > PE Enhancements > Combat styles */
 static PeStyleSession session;
+/* PeStyleId values. requested: the F1 choice (saved); enabled: the style that
+ * applies, taken from requested outside battle only; locked: the encounter's. */
 static int requested, enabled, locked;
 static int hit_hp;
 static const void *hit_entity;
@@ -212,7 +220,16 @@ static void tint_bar(unsigned bar, CueColor left, CueColor right) {
     t->tinted = 1;
   }
 }
-int pe_styles_enabled(void) { return enabled || requested; }
+/* A saved choice that is out of range or not built yet means Off. */
+static int valid_style(int id) {
+  return id > PE_STYLE_ORIGINAL && id < PE_STYLE_COUNT &&
+                 pe_style_definition((PeStyleId)id)->implemented
+             ? id
+             : PE_STYLE_ORIGINAL;
+}
+int pe_styles_enabled(void) {
+  return enabled != PE_STYLE_ORIGINAL || valid_style(requested);
+}
 static int partial_actions(void) {
   const PeBattleActionPolicyApi *api =
       pe_service_get("battle_action_policy", 1);
@@ -223,10 +240,10 @@ static void settings_tick(void) {
     if (requested != locked) {
       requested = locked;
       pe_menu_save_settings();
-      pe_toast("Change costume abilities outside battle");
+      pe_toast("Change the combat style outside battle");
     }
   } else {
-    enabled = requested != 0;
+    enabled = valid_style(requested);
     locked = enabled;
     pe_style_end(&session);
     action_target_count = 0;
@@ -239,17 +256,8 @@ static void settings_tick(void) {
     restore_pe_cue();
   }
 }
-int pe_styles_set_enabled(int value) {
-  if (pe_in_battle())
-    return 0;
-  requested = value != 0;
-  settings_tick();
-  pe_menu_save_settings();
-  return 1;
-}
 static void ensure_session(void) {
-  const PeCostume *c;
-  PeStyleId id = PE_STYLE_ORIGINAL;
+  PeStyleId id;
   if (!pe_in_battle()) {
     pe_style_end(&session);
     return;
@@ -264,18 +272,16 @@ static void ensure_session(void) {
     return;
   }
   locked = enabled;
-  c = pe_wardrobe_worn();
-  if (enabled && pe_skin_appearance_ready(c))
-    id = pe_style_for_costume(c ? c->key : NULL);
+  id = (PeStyleId)enabled;
   if (id == PE_STYLE_BULWARK && partial_actions()) {
     id = PE_STYLE_ORIGINAL;
     pe_toast("Bulwark needs half-bar actions off; using vanilla");
   }
   pe_style_begin(&session, id);
   action_target_count = 0;
-  pe_log("costume_style", "begin=%s enabled=%d costume=%s ready=%d",
+  pe_log("costume_style", "begin=%s enabled=%d chosen=%s",
          pe_style_definition(session.style)->key, enabled,
-         c ? c->key : "original", pe_skin_appearance_ready(c));
+         pe_style_definition((PeStyleId)valid_style(requested))->key);
 }
 static int controllable(void) {
   Combatant *core = pe_aya_core();
@@ -1013,29 +1019,27 @@ static int reset(void *ctx, void *user) {
   hit_entity = NULL;
   return 0;
 }
-void pe_styles_describe(const char *key, char *out, unsigned size) {
-  const PeStyleDef *d = pe_style_definition(pe_style_for_costume(key));
-  const char *state = d->id == PE_STYLE_ORIGINAL ? "native"
-                      : !d->implemented          ? "later"
-                      : !enabled                 ? "off"
-                      : d->id == PE_STYLE_BULWARK && partial_actions()
-                          ? "blocked"
-                          : "on";
-  snprintf(out, size, "%s (%s)", d->name, state);
-}
+/* What the F1 choice means right now: in battle the encounter's style, else
+ * the chosen one (or why it falls back). */
 static void style_info(char *out, unsigned size) {
-  const PeCostume *c = pe_wardrobe_worn();
+  int chosen = valid_style(requested);
   if (pe_in_battle() && session.active) {
-    snprintf(out, size, "%s (active)",
-             pe_style_definition(session.style)->name);
+    snprintf(out, size, "%s (this battle)",
+             session.style == PE_STYLE_ORIGINAL
+                 ? "Off"
+                 : pe_style_definition(session.style)->name);
     return;
   }
-  if (enabled && pe_style_for_costume(c ? c->key : NULL) == PE_STYLE_BULWARK &&
-      partial_actions()) {
-    snprintf(out, size, "Original (disable half-bar actions for Bulwark)");
+  if (chosen == PE_STYLE_ORIGINAL) {
+    snprintf(out, size, "Off: vanilla combat");
     return;
   }
-  pe_styles_describe(c ? c->key : NULL, out, size);
+  if (chosen == PE_STYLE_BULWARK && partial_actions()) {
+    snprintf(out, size, "Off (turn half-bar actions off for Bulwark)");
+    return;
+  }
+  snprintf(out, size, "%s, from the next battle",
+           pe_style_definition((PeStyleId)chosen)->name);
 }
 static void guard_info(char *out, unsigned size) {
   if (session.style == PE_STYLE_CHANNELER) {
@@ -1051,59 +1055,50 @@ static void guard_info(char *out, unsigned size) {
                                     : "Neither",
            session.bw.store, pe_bulwark_rally_left(&session));
 }
-static const PeStyleDef *browsed_style(void) {
-  const PeCostume *c = pe_wardrobe_browsed();
-  return pe_style_definition(pe_style_for_costume(c ? c->key : NULL));
+static const PeStyleDef *chosen_style(void) {
+  return pe_style_definition((PeStyleId)valid_style(requested));
 }
-static void preview_info(char *out, unsigned size) {
-  const PeCostume *c = pe_wardrobe_browsed();
-  pe_styles_describe(c ? c->key : NULL, out, size);
-}
-static void preview_benefit(char *out, unsigned size) {
-  const PeStyleDef *d = browsed_style();
+static void chosen_benefit(char *out, unsigned size) {
+  const PeStyleDef *d = chosen_style();
   snprintf(out, size, "%s",
-           d->implemented ? d->benefit
-                          : "Native combat; planned style not available");
+           d->id == PE_STYLE_ORIGINAL ? "Vanilla combat" : d->benefit);
 }
-static void preview_tradeoff(char *out, unsigned size) {
-  const PeStyleDef *d = browsed_style();
-  snprintf(out, size, "%s",
-           d->implemented ? d->limitation
-                          : "No costume ability in this prototype");
+static void chosen_tradeoff(char *out, unsigned size) {
+  const PeStyleDef *d = chosen_style();
+  snprintf(out, size, "%s", d->id == PE_STYLE_ORIGINAL ? "-" : d->limitation);
 }
-/* The style rows live on their own sub-page, so the Wardrobe page itself only
- * shows the one prototype setting: costumes read as cosmetic by default. */
-#define PE_PAGE_WARDROBE_STYLES PE_PAGE_WARDROBE "/Costume abilities"
+static void all_styles(char *out, unsigned size) {
+  snprintf(out, size, "Quickstep, Bulwark, Striker, Channeler");
+}
+/* Choice names in PeStyleId order, so the saved index is the style. */
+static const char *const style_names[PE_STYLE_COUNT] = {
+    "Off", "Quickstep", "Bulwark", "Striker", "Channeler"};
 void pe_styles_register(const char *mod_id) {
-  pe_menu_register_toggle(
-      PE_PAGE_WARDROBE, "Costume abilities (prototype)",
-      "Off (default): costumes are cosmetic only. On: each costume gives its "
-      "prototype combat style. Change outside battle only.",
-      &requested, settings_tick);
-  pe_menu_register_info(PE_PAGE_WARDROBE_STYLES, "Selected style",
-                        "Preview for the highlighted F1 costume; browsing "
-                        "changes no combat state.",
-                        preview_info);
-  pe_menu_register_info(
-      PE_PAGE_WARDROBE_STYLES, "Style benefit",
-      "The highlighted costume's ability when costume abilities are enabled.",
-      preview_benefit);
-  pe_menu_register_info(PE_PAGE_WARDROBE_STYLES, "Style tradeoff",
-                        "The highlighted costume's cost or limitation. "
-                        "Ownership rules are unchanged.",
-                        preview_tradeoff);
-  pe_menu_register_info(PE_PAGE_WARDROBE_STYLES, "Costume style",
+  pe_menu_register_choice(
+      PE_PAGE_STYLES, "Style",
+      "Off (default): vanilla combat. Pick a prototype combat style; it "
+      "applies from the next battle. Change outside battle only.",
+      &requested, style_names, PE_STYLE_COUNT);
+  pe_menu_register_tick(settings_tick);
+  pe_menu_register_info(PE_PAGE_STYLES, "Now", "Which style applies.",
+                        style_info);
+  pe_menu_register_info(PE_PAGE_STYLES, "Benefit",
+                        "What the chosen style gives you.", chosen_benefit);
+  pe_menu_register_info(PE_PAGE_STYLES, "Tradeoff",
+                        "The chosen style's challenge.", chosen_tradeoff);
+  pe_menu_register_info(PE_PAGE_STYLES, "All styles",
                         "Quickstep: half-HP breaks and kills +20% AT, 3 s "
                         "speed, +20% damage taken meanwhile. Bulwark: "
                         "25% guard below full AT; guarded hits load a counter "
                         "that wins back up to half that HP; +15% damage taken "
                         "on a full bar. Striker: close-range guns +25%; past "
-                        "the ring damage drops, -25% at max range. Channeler: weapon hits charge the next "
-                        "support PE (1 = half, 2 = free); at 2, a hit cracks "
-                        "it and a second breaks one.",
-                        style_info);
+                        "the ring damage drops, -25% at max range. Channeler: "
+                        "weapon hits charge the next support PE (1 = half, "
+                        "2 = free); at 2, a hit cracks it and a second breaks "
+                        "one.",
+                        all_styles);
   pe_menu_register_info(
-      PE_PAGE_WARDROBE_STYLES, "Style state",
+      PE_PAGE_STYLES, "Battle state",
       "Bulwark: guarded or exposed, stored counter damage and HP left to "
       "win back. Channeler: Spellweave charges. Half-bar features must be off "
       "for Bulwark.",

@@ -2,7 +2,7 @@
 #undef NDEBUG
 #endif
 #include "../mods/pe_wardrobe/pe_pack_pe1_costumes.c"
-#include "../mods/pe_wardrobe/pe_style_runtime.c"
+#include "../mods/pe_styles/pe_style_runtime.c"
 
 static unsigned mapped[PE_STYLE_COUNT], registered;
 static int collect_costume(const PeCostume *c) {
@@ -72,25 +72,16 @@ static Combatant aya;
 static BattleAction weapon_action;
 static ItemDataRecord weapon;
 static BattleEntity player, target;
-static const PeCostume *worn;
-static const PeCostume *browsed;
-static PeMenuText preview_text, benefit_text, tradeoff_text;
-static int battle, ready = 1, half, saves;
+static PeMenuText now_text, benefit_text, tradeoff_text;
+static PeMenuPerFrame menu_tick;
+static unsigned style_choices;
+static int battle, half, saves;
 static PeHookFn hooks[PE_HOOK_COUNT];
-static PeCostume quick = {.key = "pe1/t_shirt"}, guard = {.key = "pe1/guard"},
-                 striker = {.key = "pe1/daniel"},
-                 channeler = {.key = "pe1/evening_dress"},
-                 future = {.key = "other/new"};
 ItemDataRecord *pe_equipped(int armor) { return armor ? NULL : &weapon; }
 int pe_in_battle(void) { return battle; }
 Combatant *pe_aya_core(void) { return &aya; }
 BattleEntity *pe_player(void) { return &player; }
-const PeCostume *pe_wardrobe_worn(void) { return worn; }
-const PeCostume *pe_wardrobe_browsed(void) { return browsed; }
-int pe_skin_appearance_ready(const PeCostume *c) {
-  (void)c;
-  return ready;
-}
+
 static unsigned toasts;
 static char last_toast[160];
 void pe_toast(const char *s) {
@@ -102,22 +93,28 @@ void pe_log(const char *t, const char *f, ...) {
   (void)f;
 }
 void pe_menu_save_settings(void) { saves++; }
-int pe_menu_register_toggle(const char *p, const char *l, const char *d, int *v,
-                            PeMenuPerFrame tick) {
-  (void)p;
-  (void)l;
+int pe_menu_register_choice(const char *p, const char *l, const char *d,
+                            int *index, const char *const *names,
+                            unsigned count) {
+  assert(!strcmp(p, "Combat styles") && !strcmp(l, "Style") &&
+         index == &requested && !strcmp(names[0], "Off") &&
+         !strcmp(names[PE_STYLE_STRIKER], "Striker"));
   (void)d;
-  (void)v;
-  (void)tick;
+  style_choices = count;
+  return 0;
+}
+int pe_menu_register_tick(PeMenuPerFrame fn) {
+  menu_tick = fn;
   return 0;
 }
 int pe_menu_register_info(const char *p, const char *l, const char *d,
                           PeMenuText t) {
-  if (!strcmp(l, "Selected style"))
-    preview_text = t;
-  if (!strcmp(l, "Style benefit"))
+  assert(!strcmp(p, "Combat styles"));
+  if (!strcmp(l, "Now"))
+    now_text = t;
+  if (!strcmp(l, "Benefit"))
     benefit_text = t;
-  if (!strcmp(l, "Style tradeoff"))
+  if (!strcmp(l, "Tradeoff"))
     tradeoff_text = t;
   (void)p;
   (void)l;
@@ -152,11 +149,11 @@ static void fire(int id, void *ctx) {
   assert(hooks[id]);
   hooks[id](ctx, NULL);
 }
-static void start(const PeCostume *c) {
+/* A new encounter with this style picked in F1 (outside battle). */
+static void start(PeStyleId style) {
   battle = 0;
   settings_tick();
-  worn = c;
-  requested = 1;
+  requested = (int)style;
   settings_tick();
   memset(&aya, 0, sizeof aya);
   memset(g_BattleEnemySlots, 0, sizeof g_BattleEnemySlots);
@@ -189,50 +186,59 @@ static void weapon_hit(int amount, int ordinary) {
 }
 int main(void) {
   char label[64];
-  assert(pe_styles_set_enabled(1) && pe_styles_enabled());
-  pe_styles_describe(quick.key, label, sizeof label);
-  assert(!strcmp(label, "Quickstep (on)"));
-  assert(pe_styles_set_enabled(0) && !pe_styles_enabled());
-  pe_styles_describe(quick.key, label, sizeof label);
-  assert(!strcmp(label, "Quickstep (off)"));
-  pe_styles_describe(future.key, label, sizeof label);
-  assert(!strcmp(label, "Original (native)"));
+  /* Its own mod: an F1 choice, Off by default, nothing from the Wardrobe. */
+  pe_styles_register("test");
+  assert(style_choices == PE_STYLE_COUNT && menu_tick == settings_tick);
+  assert(!pe_styles_enabled() && requested == PE_STYLE_ORIGINAL);
+  now_text(label, sizeof label);
+  assert(!strcmp(label, "Off: vanilla combat"));
+  benefit_text(label, sizeof label);
+  assert(!strcmp(label, "Vanilla combat"));
+  requested = PE_STYLE_QUICKSTEP;
+  menu_tick();
+  assert(pe_styles_enabled() && enabled == PE_STYLE_QUICKSTEP);
+  now_text(label, sizeof label);
+  assert(!strcmp(label, "Quickstep, from the next battle"));
+  benefit_text(label, sizeof label);
+  assert(!strcmp(label, pe_style_definition(PE_STYLE_QUICKSTEP)->benefit));
+  tradeoff_text(label, sizeof label);
+  assert(!strcmp(label, pe_style_definition(PE_STYLE_QUICKSTEP)->limitation));
+  requested = 99; /* a bad saved value means Off */
+  menu_tick();
+  assert(enabled == PE_STYLE_ORIGINAL && !pe_styles_enabled());
   half = 1;
-  assert(pe_styles_set_enabled(1));
-  pe_styles_describe(guard.key, label, sizeof label);
-  assert(!strcmp(label, "Bulwark (blocked)"));
+  requested = PE_STYLE_BULWARK;
+  now_text(label, sizeof label);
+  assert(!strcmp(label, "Off (turn half-bar actions off for Bulwark)"));
   half = 0;
+  menu_tick();
+  /* Changing the style in battle is refused and reverted. */
   battle = 1;
+  fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  assert(session.style == PE_STYLE_BULWARK);
   int saved_count = saves;
-  assert(!pe_styles_set_enabled(0) && pe_styles_enabled() &&
-         saves == saved_count);
+  requested = PE_STYLE_STRIKER;
+  menu_tick();
+  assert(requested == PE_STYLE_BULWARK && saves == saved_count + 1 &&
+         strstr(last_toast, "outside battle"));
+  now_text(label, sizeof label);
+  assert(!strcmp(label, "Bulwark (this battle)"));
   battle = 0;
-  assert(pe_styles_set_enabled(0));
+  requested = PE_STYLE_ORIGINAL;
+  menu_tick();
+  assert(!pe_styles_enabled());
   saves = 0;
+  /* The planned costume mapping, kept for a later Wardrobe link. */
   pe_pack_pe1_costumes_register();
   assert(registered == 40 && mapped[PE_STYLE_ORIGINAL] == 1);
   assert(mapped[PE_STYLE_QUICKSTEP] == 10 && mapped[PE_STYLE_BULWARK] == 8);
   assert(mapped[PE_STYLE_STRIKER] == 10 && mapped[PE_STYLE_CHANNELER] == 11);
-  pe_styles_register("test");
-  assert(!pe_styles_enabled());
   assert(pe_style_for_costume("pe1/opera_doublet") == PE_STYLE_QUICKSTEP);
   assert(pe_style_for_costume("pe1/opera_knight") == PE_STYLE_BULWARK);
   assert(pe_style_for_costume("pe1/opera_actress") == PE_STYLE_ORIGINAL);
   assert(pe_style_for_costume("other/guard") == PE_STYLE_ORIGINAL);
-  start(&quick);
+  start(PE_STYLE_QUICKSTEP);
   assert(session.style == PE_STYLE_QUICKSTEP);
-  browsed = &guard;
-  preview_text(label, sizeof label);
-  assert(!strcmp(label, "Bulwark (on)") && worn == &quick &&
-         session.style == PE_STYLE_QUICKSTEP);
-  benefit_text(label, sizeof label);
-  assert(!strcmp(label, pe_style_definition(PE_STYLE_BULWARK)->benefit));
-  tradeoff_text(label, sizeof label);
-  assert(!strcmp(label, pe_style_definition(PE_STYLE_BULWARK)->limitation));
-  browsed = &future;
-  benefit_text(label, sizeof label);
-  assert(!strcmp(label, "Native combat"));
-  assert(worn == &quick && session.style == PE_STYLE_QUICKSTEP);
   target.core = &g_BattleEnemySlots[0].combatant;
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   ((EnemyCombatant *)target.core)->hpAlive = 20;
@@ -406,15 +412,15 @@ int main(void) {
   g_FieldActorListHead = NULL;
 #undef QS_HIT
   memset(&g_BattleEnemySlots[2], 0, sizeof g_BattleEnemySlots[0] * 3);
-  /* Session and mode cannot change mid-encounter. */
-  worn = &guard;
-  requested = 0;
+  /* Session and style cannot change mid-encounter. */
+  requested = PE_STYLE_BULWARK;
   settings_tick();
-  assert(requested == 1 && saves == 1 && session.style == PE_STYLE_QUICKSTEP);
+  assert(requested == PE_STYLE_QUICKSTEP && saves == 1 &&
+         session.style == PE_STYLE_QUICKSTEP);
   fire(PE_HOOK_SCENE_START, NULL);
   assert(!session.active && !session.qs.pending && !session.qs.burst &&
          !session.qs.marks);
-  start(&guard);
+  start(PE_STYLE_BULWARK);
   aya.maxHP = 200;
   assert(guarded());
   toasts = 0;
@@ -579,16 +585,12 @@ int main(void) {
   assert(session.style ==
          PE_STYLE_ORIGINAL); /* no reactivation until next encounter */
   half = 1;
-  start(&guard);
+  start(PE_STYLE_BULWARK);
   assert(session.style == PE_STYLE_ORIGINAL && !guarded());
   half = 0;
-  ready = 0;
-  start(&quick);
+  start(PE_STYLE_ORIGINAL);
   assert(session.style == PE_STYLE_ORIGINAL);
-  ready = 1;
-  start(&future);
-  assert(session.style == PE_STYLE_ORIGINAL);
-  start(&striker);
+  start(PE_STYLE_STRIKER);
   assert(session.style == PE_STYLE_STRIKER);
   /* Edge of point-blank for a radius-100 enemy: its radius + Aya's 63 + the
    * tuned gap. Follows the catalog value. */
@@ -878,7 +880,7 @@ int main(void) {
   weapon_action.range = 0;
   target.renderObject.target_x = 0;
   far.renderObject.target_x = 0;
-  start(&channeler);
+  start(PE_STYLE_CHANNELER);
   aya.action = &weapon_action;
   weapon.kind = 1;
   aya.maxAtk = 1000;
@@ -1101,7 +1103,7 @@ int main(void) {
   requested = 0;
   settings_tick();
   assert(!pe_styles_enabled());
-  puts("Costume styles: registered hooks, attribution, one refund, momentum, "
+  puts("Combat styles: F1 choice, registered hooks, attribution, one refund, momentum, "
        "final kill, mode lock, guard boundaries, Retaliate counter, "
        "Spellweave charges and casts, fallback and cleanup passed.");
   return 0;

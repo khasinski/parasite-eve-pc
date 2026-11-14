@@ -35,7 +35,7 @@ def run_case(args,name,game,flows,card):
     for mod in ('quality of life','rebalance','economy','battle rewards','Mod Catalog','shops','collection','stacked items'):
         ini+=f'Manage mods/PE Enhancements: {mod}=0\n'
     ini+='Manage mods/PE Enhancements: wardrobe=1\nManage mods/Warp=0\nManage mods/Quick save=0\nManage mods/Cheats=0\n'
-    ini+=f'PE Enhancements/Collection/Wardrobe/Costume abilities (prototype)={int(on)}\n'
+    ini+=f'PE Enhancements/Combat styles/Style={4 if on else 0}\n'  # pe_styles: Channeler
     files={'pe_wardrobe.ini':b'format 1\nimported none\ncostume pe1/evening_dress\nworn pe1/evening_dress\n'}
     with game.Session(args.exe,run,cards=[fixture_card],disc1=str(args.disc1),disc2=str(args.disc2),mods_ini=ini,extra_files=files,log=lambda x:None) as s:
         flows.load_save(s,1)
@@ -55,7 +55,7 @@ def run_case(args,name,game,flows,card):
         (run/'samples.json').write_text(json.dumps(samples),encoding='utf-8')
         s.shot('trace-end')
     events=[line for line in (run/'pe_play.log').read_text(errors='replace').splitlines() if line.startswith('costume_style ')]
-    # Revision 5 Spellweave: completed damaging weapon queues add charges; no PE refund.
+    # Spellweave: completed damaging weapon queues add charges; no PE refund.
     charges=[int(re.search(r'charges=(\d+)$',line).group(1)) for line in events if 'spellweave charges=' in line]
     refunds=[line for line in events if 'refund=' in line]
     passive=[]
@@ -67,11 +67,14 @@ def run_case(args,name,game,flows,card):
             passive.append((delta,step))
     assert len(passive)>=10,'insufficient passive recovery samples'
     if on:
-        assert any('begin=channeler' in line and 'ready=1' in line for line in events),events
+        assert any('begin=channeler' in line and 'chosen=channeler' in line for line in events),events
         assert charges,'no Spellweave charge from a completed damaging action'
-        assert charges==list(range(1,len(charges)+1)) and max(charges)<=3,charges
+        # Revision 6.4: 1-2 charges; Backlash (crack, then break) can take one back.
+        assert charges[0]==1 and all(1<=c<=2 for c in charges),charges
+        breaks=[line for line in events if 'spellweave break' in line]
+        assert all('charges=1' in line for line in breaks),breaks
         assert not refunds,refunds
-        assert all(abs(delta*2-step)<=1 for delta,step in passive),passive[:10]
+        assert all(delta==step for delta,step in passive),passive[:10]  # native regen
     else:
         assert not charges and not refunds,events
         assert all(delta==step for delta,step in passive),passive[:10]

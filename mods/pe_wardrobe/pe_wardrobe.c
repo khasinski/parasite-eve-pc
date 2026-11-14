@@ -27,7 +27,6 @@
 #include <string.h>
 
 #include "pe_wardrobe.h"
-#include "pe_style.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_translate.h"
@@ -435,5 +434,5 @@ void pe_wardrobe_register(const char *mod_id) {
 
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 #include "pe_checkpoint_collection.h"
-int pe_wardrobe_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){if(pe_styles_enabled()||s_checkpoint_epoch==UINT32_MAX||s_loaded||s_reload_after_menu)return 0;if(apply&&(!in||!pe_wardrobe_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_costumes,0,PE_MAX_COSTUMES,1);PE_CK_S(w,s_event,-1,INT_MAX,1);PE_CK_S(w,s_room_bank,-1,255,1);return w.ok&&w.at==16;}
+int pe_wardrobe_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){if(s_checkpoint_epoch==UINT32_MAX||s_loaded||s_reload_after_menu)return 0;if(apply&&(!in||!pe_wardrobe_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_costumes,0,PE_MAX_COSTUMES,1);PE_CK_S(w,s_event,-1,INT_MAX,1);PE_CK_S(w,s_room_bank,-1,255,1);return w.ok&&w.at==16;}
 #endif

@@ -50,7 +50,7 @@ def run_case(args,on,game,flows,card):
     for mod in ('quality of life','rebalance','economy','battle rewards','Mod Catalog','shops','collection','stacked items'):
         ini+=f'Manage mods/PE Enhancements: {mod}=0\n'
     ini+='Manage mods/PE Enhancements: wardrobe=1\nManage mods/Warp=0\nManage mods/Quick save=0\nManage mods/Cheats=0\n'
-    ini+=f'PE Enhancements/Collection/Wardrobe/Costume abilities (prototype)={int(on)}\n'
+    ini+=f'PE Enhancements/Combat styles/Style={3 if on else 0}\n'  # pe_styles: Striker
     files={'pe_wardrobe.ini':b'format 1\nimported none\ncostume pe1/daniel\nworn pe1/daniel\n'}
     files.update(('pe_skins/daniel/'+p.name,p.read_bytes()) for p in args.daniel.glob('*.bin'))
     with game.Session(args.exe,run,cards=[fixture_card],disc1=str(args.disc1),disc2=str(args.disc2),mods_ini=ini,extra_files=files,log=lambda x:None) as s:
@@ -85,7 +85,7 @@ def run_case(args,on,game,flows,card):
     hits=[tuple(map(int,re.search(r'damage=(\d+)->(\d+) recipient=\d+ pct=(\d+)',line).groups())) for line in events if 'striker damage=' in line]
     result={'run':str(run),'gun_slot_in_copied_fixture':gun_slot,'samples':len(samples),'events':events,'damage_pairs':hits,'coverage':'bounded functional trace; balance not asserted'}
     if on:
-        assert any('begin=striker' in line and 'ready=1' in line for line in events),result
+        assert any('begin=striker' in line and 'chosen=striker' in line for line in events),result
         # Each hit scaled by its own snapshot percent: 125 close, 75-99 falloff.
         assert hits,'no Striker-scaled gun hits in scripted trace'
         assert all(after==max(1,(before*pct+50)//100) and 75<=pct<=125 for before,after,pct in hits),result

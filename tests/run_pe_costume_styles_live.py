@@ -21,7 +21,7 @@ def run_case(args, style, game, flows):
     disabled=['quality of life','rebalance','economy','battle rewards','Mod Catalog','shops','collection','stacked items']
     ini='Manage mods/All mods=1\n'+''.join(f'Manage mods/PE Enhancements: {m}=0\n' for m in disabled)
     ini+='Manage mods/PE Enhancements: wardrobe=1\nManage mods/Warp=0\nManage mods/Quick save=0\nManage mods/Cheats=0\n'
-    ini+=f'PE Enhancements/Collection/Wardrobe/Costume abilities (prototype)={int(style!="vanilla")}\n'
+    ini+=f'PE Enhancements/Combat styles/Style={ {"quickstep":1,"bulwark":2}.get(style,0) }\n'  # pe_styles choice
     key='pe1/t_shirt' if style=='quickstep' else 'pe1/guard'
     files={'pe_wardrobe.ini':f'format 1\nimported none\ncostume {key}\nworn {key}\n'.encode()}
     if key=='pe1/guard':

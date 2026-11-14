@@ -2,7 +2,7 @@
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it. Language packs
 # are available in standard builds, but the original text remains the default and no pack ships.
-set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats pe_phone)
+set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone)
 if(NOT PE_PS5_GAME)
     list(APPEND pe_default_mods pe_lang)
 endif()
@@ -267,15 +267,17 @@ if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
         pe_phone/pe_phone_record.c pe_phone/pe_phone_pick.c pe_phone/pe_phone_file.c)
     target_compile_definitions(test-mod-phone PRIVATE PE_PHONE_CALLS_FILE="${CMAKE_CURRENT_SOURCE_DIR}/pe_phone/calls/pe1.txt")
 endif()
+if(BUILD_TESTING AND "pe_styles" IN_LIST PE_MOD_LIST)
+    pe_feature_test(combat-styles ${PROJECT_SOURCE_DIR}/tests/pe_mod_combat_styles_test.c
+        pe_styles/pe_style_catalog.c pe_styles/pe_style_engine.c
+        pe_styles/pe_style_quickstep.c pe_styles/pe_style_channeler.c
+        pe_styles/pe_style_striker.c pe_styles/pe_style_bulwark.c)
+endif()
 if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
     pe_feature_test(skin-bounds ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_bounds_test.c)
-    pe_feature_test(wardrobe-menu ${PROJECT_SOURCE_DIR}/tests/pe_mod_wardrobe_menu_test.c pe_wardrobe/pe_style_catalog.c)
+    pe_feature_test(wardrobe-menu ${PROJECT_SOURCE_DIR}/tests/pe_mod_wardrobe_menu_test.c)
     # Match the standalone fixture: eliminate unused native inline helpers.
     target_compile_options(test-mod-wardrobe-menu PRIVATE $<IF:$<BOOL:${MSVC}>,/O1,-O1>)
-    pe_feature_test(costume-styles ${PROJECT_SOURCE_DIR}/tests/pe_mod_costume_styles_test.c
-        pe_wardrobe/pe_style_catalog.c pe_wardrobe/pe_style_engine.c
-        pe_wardrobe/pe_style_quickstep.c pe_wardrobe/pe_style_channeler.c
-        pe_wardrobe/pe_style_striker.c pe_wardrobe/pe_style_bulwark.c)
     pe_feature_test(packs ${PROJECT_SOURCE_DIR}/tests/pe_mod_packs_test.c pe_wardrobe/pe_packs.c)
     target_link_libraries(test-mod-packs PRIVATE pe_download_json pe_download_zip)
     set_tests_properties(mod-packs PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")

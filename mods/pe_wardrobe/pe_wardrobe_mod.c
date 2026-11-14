@@ -15,7 +15,6 @@
 #include "pe_model.h"
 #include "pe_pages.h"
 #include "pe_wardrobe.h"
-#include "pe_style.h"
 
 #define MOD_ID "pe_wardrobe"
 
@@ -61,7 +60,6 @@ static int wardrobe_init(void) {
     pe_ward_profile_transactions_init();
     pe_service_publish("costumes", 1, &g_pe_costumes_api, MOD_ID);
     pe_wardrobe_register(MOD_ID);
-    pe_styles_register(MOD_ID);
     pe_wardrobe_menu_register(MOD_ID);
     pe_skin_register(MOD_ID);
     pe_pack_pe1_costumes_register();

@@ -1,40 +1,37 @@
-# Costume style prototype
+# Combat styles (mod `pe_styles`)
 
-**Costumes are cosmetic only by default** (decided 2026-11-13: costume and
-style are not linked for players yet). With the default setting no style
-appears anywhere a player normally looks:
-- the native Wardrobe shows no style line and no style help text, and its
-  Select button cannot turn styles on (it can only turn them off again);
-- F1 > PE Enhancements > Collection > Wardrobe shows just one row,
-  "Costume abilities (prototype)", off. The style rows (Selected style, Style
-  benefit, Style tradeoff, Costume style, Style state) live on the
-  sub-page Wardrobe > Costume abilities.
+Its own mod since 2026-11-13, independent of the Wardrobe. Costumes are
+cosmetic; the Wardrobe knows nothing about styles.
 
-Turning "Costume abilities (prototype)" on in F1 is the only way in. Then the
-worn costume's shared style applies in combat, the Wardrobe shows each
-costume's style and cycles its benefit and tradeoff in the help line, and
-Select turns the prototype off. Only change costumes or the mode outside
-battle; each encounter captures one style. Style labels show on/off, later,
-or blocked (unsupported partial-bar policy). Previewing never wears an
-outfit, spends Junk, changes the mode or changes the current encounter
-snapshot. The playtest package turns the prototype on in its own profiles.
+- **Pick a style:** F1 > PE Enhancements > Combat styles > Style: Off,
+  Quickstep, Bulwark, Striker or Channeler. **Off by default** (vanilla
+  combat). Saved in `pe_mods.ini` as `PE Enhancements/Combat styles/Style=N`
+  (N = `PeStyleId`: 1 Quickstep, 2 Bulwark, 3 Striker, 4 Channeler).
+- Change it outside battle only; a change in battle is reverted with a
+  toast. The choice applies from the next battle, and each encounter keeps
+  the style it started with.
+- The same page shows Now (what applies), Benefit and Tradeoff of the chosen
+  style, All styles (descriptions) and Battle state (Bulwark and Channeler).
+- Bulwark falls back to Off while a half-bar (partial action) policy is on.
+- Mod list: "PE Enhancements: combat styles" in Manage mods. Like every mod
+  without native checkpoint ownership, it blocks the experimental native
+  checkpoint while it runs.
+- Costume link, later: `pe_style_for_costume` keeps the planned costume to
+  style mapping (tested), so a later version can offer "follow worn costume"
+  through a service. Nothing reads the Wardrobe today.
 
 ## Layers
 
-- `pe_style_catalog.c`: stable style definitions, descriptions, numeric parameters
-  and explicit namespaced costume mappings. No game globals or asset mutation.
+- `pe_styles_mod.c`: the mod and its F1 page.
+- `pe_style_catalog.c`: stable style definitions, descriptions, numeric
+  parameters and the planned costume mapping. No game globals.
 - `pe_style_engine.c`: deterministic encounter state, fractional charge
   scaling and damage rules. No native pointers, files or UI.
-- `pe_style_quickstep.c`: Quickstep's rules only (breakpoints, kill trigger,
-  refund, burst, Overextended, HP-pip query). Pure logic; every number and
-  switch is `PeQuickstepTuning` in the catalog.
-- `pe_style_channeler.c`, `pe_style_striker.c` and `pe_style_bulwark.c`: the
-  same split for Channeler (`PeChannelerTuning`), Striker (`PeStrikerTuning`)
-  and Bulwark (`PeBulwarkTuning`).
-- `pe_style_runtime.c`: the only native combat adapter: snapshots the successfully
-  applied appearance, receives typed hooks, applies engine results and draws cues.
-- Wardrobe registry/skin loader: retains ownership and model-loading responsibility;
-  no combat logic is placed in costume loaders or generated asset tables.
+- `pe_style_quickstep.c`, `pe_style_striker.c`, `pe_style_bulwark.c`,
+  `pe_style_channeler.c`: one style's rules each, every number in its
+  `Pe*Tuning` block in the catalog.
+- `pe_style_runtime.c`: the only native combat adapter: reads the F1 choice,
+  receives typed hooks, applies engine results and draws cues.
 
 New styles get a stable ID and one definition; mappings reuse that definition.
 Add specialized rules to the engine/event boundary with disc-free tests. Do not

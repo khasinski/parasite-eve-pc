@@ -112,12 +112,7 @@ int pe_hook_dispatch(int i,void *ctx) {(void)i;(void)ctx;return 0;}
 static PeCostume costumes[40];
 static const PeCostume *worn;
 static int wears, provider_loads, shows, hides, story_bank=10;
-static int abilities, mode_changes;
-int pe_styles_enabled(void) { return abilities; }
-int pe_styles_set_enabled(int on) { abilities=on!=0; ++mode_changes; return 1; }
-void pe_styles_describe(const char *key,char *out,unsigned size) {
-    snprintf(out,size,"%s (%s)",pe_style_definition(pe_style_for_costume(key))->name,abilities?"on":"off");
-}
+/* Costumes are cosmetic: the Wardrobe has no combat-style hooks to stub. */
 int pe_wardrobe_owned_count(void) {return 40;}
 const PeCostume *pe_wardrobe_owned(int k) {return k>=0&&k<40?&costumes[k]:NULL;}
 const PeCostume *pe_wardrobe_worn(void) {return worn;}
@@ -158,18 +153,10 @@ int main(void) {
     assert(s_stage.x>=156 && s_stage.w<=128 && s_info->parent->y<224);
     assert(s_members==41 && pe_current()==40 && s_screen.list->scroll_y==35);
     draw_all();assert(!wears && !provider_loads && s_stage.source.kind==PE_MODEL_SKIN);
-    /* Costumes are cosmetic by default: Select cannot turn abilities on (that is
-     * an F1 choice), so no style text shows either. */
-    send(PE_SELECT);assert(!abilities && mode_changes==0 && worn==&costumes[39]);
-    /* With the F1 prototype on, Select only turns it back off. */
-    abilities=1;
-    send(PE_SELECT|PE_REPEAT);assert(abilities && mode_changes==0);
-    send(PE_SELECT);assert(!abilities && mode_changes==1 && !wears);
+    /* Costumes are cosmetic: combat styles are their own mod (pe_styles). */
+    assert(worn==&costumes[39] && !wears);
     assert(!strcmp(s_stage.source.folder,"harlequin"));
-    abilities=1;
     send(PE_TRIANGLE);assert(s_stage.fullscreen);
-    send(PE_SELECT);assert(abilities && mode_changes==1); /* preview cannot change combat mode */
-    abilities=0;
     send(PE_MENU_CROSS);assert(!s_stage.fullscreen && !wears); /* fullscreen Cross only exits */
     int selected=s_screen.list->cursor_y;
     assert(s_screen.list->update==pe_screen_preview_input);
