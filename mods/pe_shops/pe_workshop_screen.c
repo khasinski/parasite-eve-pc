@@ -76,7 +76,7 @@ static PeScreen s_screen;
 static MenuWidgetNode *s_info, *s_frame;
 static PeModelStage s_stage;
 static int s_open, s_mode;
-static int s_services[PE_WS_SERVICES], s_nservices;
+static int s_services[PE_WS_SERVICE_CAPACITY], s_nservices;
 static int s_cursor[MODES];                   /* each mode's row, kept while the screen is open */
 static int s_gear[64], s_ngear;               /* Mod Permit: the bag slots listed, refreshed per mode */
 static char s_note[64];
@@ -410,6 +410,7 @@ static void pe_cross(void) {
         else if (service == PE_WS_REBUILD) pe_show_mode(MODE_REBUILD, s_cursor[MODE_REBUILD]);
         else if (service == PE_WS_WARDROBE) pe_show_mode(MODE_WARDROBE, s_cursor[MODE_WARDROBE]);
         else if (service == PE_WS_PERMIT) pe_show_mode(MODE_PERMIT, s_cursor[MODE_PERMIT]);
+        else if (!pe_ws_open_service(service, s_screen.list)) pe_refuse("Service unavailable");
         return;
     }
     case MODE_PERMIT: {

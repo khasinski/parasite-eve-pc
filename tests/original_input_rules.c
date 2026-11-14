@@ -149,6 +149,12 @@ int main(int argc, char **argv) {
     pe_menu_load_settings();
     static int enabled = 1;
     assert(!pe_menu_register_toggle(NULL, "Test option", "", &enabled, NULL));
+    static int applied=15,existing=15;
+    assert(!pe_menu_bind_setting("PE Enhancements/Bonus Points/Applied feature flags",&applied,0,15));
+    assert(!pe_menu_bind_setting("Old/Option",&existing,0,15)&&existing==7);
+    assert(pe_menu_bind_setting("Old/Option",&existing,0,15)==-1);
+    assert(pe_menu_bind_setting(NULL,&existing,0,15)==-1);
+    applied=8; /* only a confirmed apply would update the bound value */
     /* Menu availability includes save/extension admission, even when the mod
      * itself is running. Keep this host dependency in the standalone fixture. */
     PeMenuRow owned = {0}; owned.mod_id = "test_mod";
@@ -170,7 +176,7 @@ int main(int argc, char **argv) {
     }
     save_fault = 0; pe_menu_save_settings();
     size_t bytes; char *data = SDL_LoadFile(path, &bytes);
-    assert(data && strstr(data, "Old/Option=7") && strstr(data, "Test option=1")); SDL_free(data);
+    assert(data && strstr(data, "Old/Option=7") && strstr(data, "Test option=1") && strstr(data,"Bonus Points/Applied feature flags=8")); SDL_free(data);
     assert(SDL_RemovePath(path));
     save_fault = 2; pe_menu_save_settings();
     SDL_PathInfo info; assert(!SDL_GetPathInfo(path, &info));

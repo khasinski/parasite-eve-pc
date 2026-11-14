@@ -596,6 +596,7 @@ SavePromptBlock g_BattleScanPanel;
 void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
     BattleActionSoundTable soundTable;
     s32 dmg;
+    s32 hp_before;
 
     PE_HOOK(PE_HOOK_SPELL, (&(PeHookSpell){idx, ent}));
     dmg = 0;
@@ -604,6 +605,7 @@ void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
         Akao_SendPositionalCmdStereo(soundTable.soundId[idx], 1, D_8009D254->posX.parts.integer, D_8009D254->posY.parts.integer, D_8009D254->posZ.parts.integer);
         ACTOR = D_8009D254->core;
     }
+    hp_before = (s16)ACTOR->curHP;
     switch (idx) {
     case PE_SPELL_HEAL_1:
         dmg = 0x3C0000;
@@ -748,6 +750,8 @@ void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
         ACTOR->stateFlags = (ACTOR->stateFlags | 0x80000) & ~0x200000;
         break;
     }
+    PE_HOOK(PE_HOOK_SPELL_DONE, (&(PeHookSpellDone){idx, ent, ACTOR, hp_before, &dmg}));
+    (void)hp_before;
     if ((s16)ACTOR->maxHP < (s16)ACTOR->curHP) {
         ACTOR->curHP = ACTOR->maxHP;
     }

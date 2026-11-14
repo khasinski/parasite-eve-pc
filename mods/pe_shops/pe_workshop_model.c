@@ -21,17 +21,35 @@ static const char *const s_help[PE_WS_SERVICES] = {
     "Add a mod slot to a gun or armor",
 };
 
+static const PeWsService *extra_services[PE_WS_EXTRA_SERVICES];
+static unsigned extra_count;
+int pe_ws_register_service(const PeWsService *s) {
+    if(!s||!s->id||!s->id[0]||!s->name||!s->help||!s->open||extra_count==PE_WS_EXTRA_SERVICES)return 0;
+    for(unsigned i=0;i<extra_count;++i)if(!strcmp(s->id,extra_services[i]->id))return 0;
+    extra_services[extra_count++]=s;return 1;
+}
+static const PeWsService *extra_service(int service) {
+    int at=service-PE_WS_SERVICES;
+    return at>=0&&(unsigned)at<extra_count?extra_services[at]:NULL;
+}
+int pe_ws_open_service(int service, struct MenuWidgetNode *from) {
+    const PeWsService *s=extra_service(service);
+    return s&&(!s->available||s->available())?s->open(from):0;
+}
+
 int pe_ws_services(int *out) {
     int n = 0;
     out[n++] = PE_WS_REQUISITION;
     out[n++] = PE_WS_REBUILD;
     if (pe_service_get("wardrobe", 1)) out[n++] = PE_WS_WARDROBE;   /* while a mod offers costumes */
     out[n++] = PE_WS_PERMIT;
+    for(unsigned i=0;i<extra_count;++i)
+        if(!extra_services[i]->available||extra_services[i]->available())out[n++]=PE_WS_SERVICES+(int)i;
     return n;
 }
 
-const char *pe_ws_service_name(int s) { return s >= 0 && s < PE_WS_SERVICES ? s_name[s] : ""; }
-const char *pe_ws_service_help(int s) { return s >= 0 && s < PE_WS_SERVICES ? s_help[s] : ""; }
+const char *pe_ws_service_name(int s) { const PeWsService *extra=extra_service(s); return s >= 0 && s < PE_WS_SERVICES ? s_name[s] : extra ? extra->name : ""; }
+const char *pe_ws_service_help(int s) { const PeWsService *extra=extra_service(s); return s >= 0 && s < PE_WS_SERVICES ? s_help[s] : extra ? extra->help : ""; }
 
 int pe_ws_goods(int row, PeWsGoods *g) {
     memset(g, 0, sizeof *g);

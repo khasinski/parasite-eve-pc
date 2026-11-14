@@ -1,5 +1,9 @@
 # Native build products and local environments
 build/
+/build-bp-ui-preview/
+/build-bp-ui-headless/
+/build-bp-battle/
+/build-bp-ui-headless-*.log
 .venv/
 .cache/
 *.o
@@ -68,3 +72,6 @@ test_regex*.py
 
 # Local compatibility validation build
 /build-compat/
+
+/BP-UI-Preview/
+/prototypes/bp-ui/userdata/
