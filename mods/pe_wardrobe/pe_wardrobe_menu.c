@@ -125,9 +125,9 @@ static void pe_info_row(int row) {
     const PeCostume *c = pe_costume(index);
     const char *line = "";
     if (index < 0) return;
+    /* Costumes are cosmetic. Combat styles are their own mod (pe_styles). */
     if (row == 0) line = c ? c->name : "Aya's own clothes";
     if (row == 1) line = pe_wardrobe_worn() == c ? "Worn" : "X: Wear this outfit";
-    if (row == 2) line = s_preview ? "Triangle: Full view" : "Preview unavailable";
     static const unsigned caps[3] = {28, 24, 20};
     pe_print(line, s_info->draw_state - 4, caps[row]);
 }
@@ -156,6 +156,7 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
         pe_stage_fullscreen(&s_stage, 0); Menu_PlayCancelSound(); return 1;
     }
     if (buttons & PE_MENU_CIRCLE) { pe_close(); Menu_PlayCancelSound(); return 1; }
+
     if (buttons & PE_PRESS) return 1;
     if (buttons & PE_MENU_CROSS) {
         if (index < 0 || (index > 0 && !c) || pe_wardrobe_worn() == c) { Menu_PlayErrorSound(); return 1; }
