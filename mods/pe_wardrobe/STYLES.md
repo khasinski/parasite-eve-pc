@@ -138,9 +138,12 @@ numbers in `.striker` in `pe_style_catalog.c`.
 **Not done yet.** In a native capture (`build-styles/live-ring-capture`) the
 ring shows as a small flat oval at Aya's feet, mostly behind her legs:
 point-blank is genuinely close and the battle camera is low. The 70% falloff
-line is not drawn. The same capture showed the target marker staying native
-red at point-blank, so the marker zone tint is not reaching the screen;
-not yet diagnosed. The 96 gap and the 30%
+line is not drawn. Marker tint confirmed on screen
+(`build-styles/live-marker-gap400`, a temporary build with the gap at 400 so
+every aim is point-blank): cyan marker and arrow, larger ring. Note the
+pedebug harness's "gap" uses the actor contact cylinder, not the hit cylinder
+Striker judges, so it can call a target point-blank when Striker does not;
+read the `striker range ... zone=` log lines instead. The 96 gap and the 30%
 band are uncalibrated (spec section 8). Not playtested.
 
 ## Channeler, Revision 6.4 (current; supersedes the Channeler notes below)
