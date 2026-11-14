@@ -44,6 +44,8 @@
 # Conditions mods offer for needs:
 #   warner.supplies                Warner carries Wayne's supplies: shops mod, Economy > Warner
 #                                  helps out, and the Junk economy on
+#   phone.crossovers               F1 > Phone Calls > Crossover calls is on (off by default):
+#                                  calls to characters from other games
 #
 # Text: letters, digits, spaces and . , : ! ? ' - + * % / only (the game's font has nothing
 # else). {name} is Aya's name as the player typed it. Write a line as long as you like: it wraps
@@ -642,7 +644,8 @@ them: Bring it home, Brea. That's an order.
 
 
 # ======== Raccoon City, December 24-29, 1997 ========
-# One call per story day. The sewer emergency call still takes precedence at its phone.
+# Crossover calls (F1 > Phone Calls > Crossover calls, off by default). One call per story day.
+# The sewer emergency call still takes precedence at its phone.
 
 [pe1/raccoon_irons]
 caller = Chief Irons
@@ -650,6 +653,7 @@ tone = serious
 day = 1
 priority = 1
 once = yes
+needs = phone.crossovers
 them: Raccoon City Police. Chief Irons speaking.
 aya: Brea, NYPD. Dispatch said you had officers in town. Can you spare them?
 them: That little fire at the opera? Surely New York has a fire department.
@@ -663,6 +667,7 @@ tone = funny
 day = 2
 priority = 1
 once = yes
+needs = phone.crossovers
 them: Thank you for calling Umbrella. How can we help you feel better?
 aya: Can a drug make your own cells turn on you?
 them: Let me transfer you to Product Safety.
@@ -677,6 +682,7 @@ tone = serious
 day = 3
 priority = 1
 once = yes
+needs = phone.crossovers
 them: Who gave you this number?
 aya: Dr. Maeda. He wanted a second opinion from your husband.
 them: My husband doesn't take calls.
@@ -691,6 +697,7 @@ tone = funny
 day = 4
 priority = 1
 once = yes
+needs = phone.crossovers
 them: S.T.A.R.S. office. Redfield. If it's the cat again, try tuna.
 aya: Brea, NYPD. I heard your unit handles strange animal attacks.
 them: Strange? We get cats up trees. How's New York?
@@ -704,6 +711,7 @@ tone = serious
 day = 5
 priority = 1
 once = yes
+needs = phone.crossovers
 them: Kendo Gun Shop. Robert speaking.
 aya: Wayne at the NYPD armory says you might have recoil springs.
 them: Tell Wayne I've got a drawer full. What's he building?
@@ -716,6 +724,7 @@ tone = serious
 day = 6
 priority = 1
 once = yes
+needs = phone.crossovers
 them: S.T.A.R.S. office. Wesker.
 aya: Officer Brea, NYPD. We asked your unit for backup.
 them: Officer Brea. The one who walked out of Carnegie Hall without a burn.
@@ -726,7 +735,8 @@ them: No. We'll be in touch.
 
 
 # ======== Final Fantasy, December 24-29, 1997 ========
-# One call per story day. Matching Raccoon City calls have first pick when both are eligible.
+# Crossover calls, as above. One call per story day. Matching Raccoon City calls have first pick
+# when both are eligible.
 
 [pe1/ff_celes]
 caller = Celes
@@ -734,6 +744,7 @@ tone = serious
 day = 1
 priority = 1
 once = yes
+needs = phone.crossovers
 them: Celes. If this is about the encore, the answer is still no.
 aya: It's about the stage. With the house lights down, can you see the back row?
 them: I can barely see the first. The lights blind you. Why?
@@ -746,6 +757,7 @@ tone = funny
 day = 2
 priority = 1
 once = yes
+needs = phone.crossovers
 aya: They told me to ask for the animal expert.
 them: They told you to ask for the animal.
 aya: Then maybe you can tell me why the tracks stop at the fence.
@@ -757,6 +769,7 @@ tone = funny
 day = 3
 priority = 1
 once = yes
+needs = phone.crossovers
 aya: Somebody got into our evidence locker last night. Your name came up.
 them: Mine? I'm hurt. Also, it only takes twelve seconds.
 aya: That's oddly specific.
@@ -768,6 +781,7 @@ tone = serious
 day = 4
 priority = 1
 once = yes
+needs = phone.crossovers
 them: Seventh Heaven. Kitchen's closed, bar's open.
 aya: Officer Brea. I need somewhere that will take people in off the street.
 them: Then you found it. How many?
@@ -780,6 +794,7 @@ tone = funny
 day = 5
 priority = 1
 once = yes
+needs = phone.crossovers
 them: Cloud here.
 aya: Cloud, it's Aya. I'm checking on that pickup.
 them: You said one scientist and one case.
@@ -794,6 +809,7 @@ tone = serious
 day = 6
 priority = 1
 once = yes
+needs = phone.crossovers
 them: Sephiroth.
 aya: Officer Brea. I was told you knew something about the fire.
 them: I've watched a town burn. The ones it spares feel it anyway.

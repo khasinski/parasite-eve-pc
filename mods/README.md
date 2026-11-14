@@ -147,7 +147,9 @@ screen). Nothing in the game's scripts is patched.
 - Conditions: `needs = warner.supplies` plays a call only while another mod's feature is on. The
   mod that owns the feature offers the name with `add_condition(name, holds)`; a name nobody offers
   never holds, so neither mod needs the other. Offered now: `warner.supplies` (pe_shops: Warner
-  helps out and the Junk economy on), used by `pe1/park_wayne`, Wayne's call at Central Park.
+  helps out and the Junk economy on), used by `pe1/park_wayne`, Wayne's call at Central Park;
+  `phone.crossovers` (Phone Calls itself: F1 > Phone Calls > Crossover calls, off by default),
+  used by the Raccoon City and Final Fantasy calls in `pe1.txt`.
 - Picking: a set call (priority > 0) not heard yet first; else weighted random among the calls
   that fit, leaving out the last five played.
 - Text: ASCII in the game's glyphs (letters, digits, space, `. , : ! ? ' - + * % /`, `{name}`).
