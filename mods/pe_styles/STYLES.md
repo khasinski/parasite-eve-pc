@@ -7,6 +7,14 @@ cosmetic; the Wardrobe knows nothing about styles.
   Quickstep, Bulwark, Striker or Channeler. **Off by default** (vanilla
   combat). Saved in `pe_mods.ini` as `PE Enhancements/Combat styles/Style=N`
   (N = `PeStyleId`: 1 Quickstep, 2 Bulwark, 3 Striker, 4 Channeler).
+- **New Game asks:** choosing New Game on the title opens a list in the
+  title menu's look (centred words, a green glow behind the selected one):
+  Vanilla, Quickstep, Bulwark, Striker, Channeler, with a short description
+  of what the highlighted style does and costs. The answer becomes the F1
+  setting above. The cursor starts on the current setting. Tutorial and EX
+  Game don't ask; headless runs (no window) keep the setting. Drawn by the
+  host's `pe_menu_choose_title` with the overlay's IBM Plex Sans (the
+  title's own words are pictures; a serif font can replace it later).
 - Change it outside battle only; a change in battle is reverted with a
   toast. The choice applies from the next battle, and each encounter keeps
   the style it started with.
