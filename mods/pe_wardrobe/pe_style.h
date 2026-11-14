@@ -137,6 +137,9 @@ unsigned pe_quickstep_exposed_percent(const PeStyleSession *s); /* 100 = off */
 /* HP pip: 1 once this enemy is at or below its first breakpoint. */
 int pe_quickstep_spent(const PeStyleSession *s, const void *enemy, int hp,
                        int max_hp);
+/* Target cue: 1 while this living enemy can still give its half-HP refund. */
+int pe_quickstep_available(const PeStyleSession *s, const void *enemy, int hp,
+                           int max_hp);
 int pe_style_charge(PeStyleSession *s, int increment);
 /* Every incoming-damage multiplier, once per eligible hit. phase is Bulwark's
  * (PE_BW_*); other styles pass PE_BW_OFF. */

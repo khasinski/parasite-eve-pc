@@ -129,9 +129,13 @@ numbers in `.striker` in `pe_style_catalog.c`.
   Range 0 (unknown) turns falloff off rather than guessing.
 - Ordinary gun hits only. Clubs, PE, scripted damage and non-ordinary hits are
   untouched. A falloff hit never rounds to 0.
-- Cue: target marker cyan at point-blank, native red in the middle, dim red
-  (`CUE_FAR`) in the falloff band. Beyond range the native dark marker is
-  left as is. Preview and the committed snapshot call the same zone function.
+- Cue: target marker cyan at point-blank, native red in the middle, purple
+  (`CUE_FAR`) in the falloff band (was dim red, too close to the native dark
+  out-of-range marker). Beyond range the native dark marker is left as is.
+  Preview and the committed snapshot call the same zone function. One-line
+  hints the first time a point-blank and a far target are aimed at.
+  Confirmed on screen in `build-styles/live-striker-ui2` (a temporary build
+  with the band at 90% so most aims fell in it).
 
 **Changing it.** `point_blank_gap`, `point_blank_percent`,
 `falloff_band_percent` (0 turns falloff off) and `falloff_percent` in
@@ -219,10 +223,16 @@ Source of truth: `Parasite Eve Costume Combat Styles Build Spec.md` section 4.1.
   early when Aya's next action begins.
 - Overextended: eligible incoming losses (HP-loss sources 1-3) x1.20 during
   the burst, through the same `pe_style_damage` call as Bulwark's guard.
-- Cues: AT marker cyan for 12 frames when the refund lands, then red while the
-  burst lasts. HP pip: the target marker turns dark grey when the targeted
-  enemy is at or below half (its breakpoint is spent), for guns and clubs, in
-  or out of range.
+- Cues (redesigned 2026-11-13, one meaning per element):
+  - AT bar **fill** flashes bright white-cyan for 12 battle frames when a
+    refund lands, then pulses orange while the burst lasts (faster, +20%
+    damage taken).
+  - Target **marker** is gold while that enemy can still give its half-HP
+    refund (`pe_quickstep_available`), native once spent. Out of range the
+    native dark marker is left alone. (Was a dark-grey "spent" pip, easily
+    mistaken for the native out-of-range marker.)
+  - One-line hints the first time a refund lands and a gold target shows.
+  Confirmed on screen in `build-styles/live-quickstep-ui2` and `-ui3`.
 
 **Changing it.** Edit `.quickstep` in `pe_style_catalog.c`:
 `triggers` (drop `PE_QS_TRIGGER_KILL` or `_BREAKPOINT` to test either alone),

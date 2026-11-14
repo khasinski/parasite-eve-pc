@@ -337,6 +337,10 @@ int main(void) {
   QS_HIT(qb, 100);
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
   assert(session.qs.burst == 90);
+  /* The refund flashes the AT bar fill bright; the first one explains it. */
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattleAtbGauges[0].r0 == 0x80 && g_BattleAtbGauges[0].b1 == 0xff);
+  assert(hints_shown & HINT_REFUND);
   assert(loss(100, 1) == 120 && loss(1, 1) == 1); /* Overextended x1.20 */
   assert(loss(100, 4) == 100); /* status ticks are not eligible */
   g_BattleHitActionPending = 1;
@@ -347,8 +351,9 @@ int main(void) {
     fire(PE_HOOK_BATTLE_UPDATE, NULL);
   g_BattleAtbMarkers[0].sprite.color.bytes.r = 17;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0xff &&
-         g_BattleAtbMarkers[0].sprite.color.bytes.g == 0x50); /* rush cue */
+  /* Rushing: the AT bar fill pulses orange; the marker stays native. */
+  assert(g_BattleAtbGauges[0].r0 == 0x70 && g_BattleAtbGauges[0].r1 == 0xff &&
+         g_BattleAtbMarkers[0].sprite.color.bytes.r == 17);
   for (int i = 0; i < 76; i++)
     fire(PE_HOOK_BATTLE_UPDATE, NULL);
   assert(pe_quickstep_burst(&session) && session.qs.burst == 1);
@@ -359,8 +364,9 @@ int main(void) {
   fire(PE_HOOK_PLAYER_MOVE, &move);
   assert(factor == 0x10000);
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 17); /* restored */
-  /* HP pip: the target marker darkens once the enemy is at half or below. */
+  assert(g_BattleAtbGauges[0].r0 == 0 &&
+         g_BattleAtbMarkers[0].sprite.color.bytes.r == 17); /* native again */
+  /* Target cue: gold while the enemy can still give its half-HP refund. */
   BattleEntity fresh = {0};
   EnemyCombatant *ff = &g_BattleEnemySlots[4].combatant;
   fresh.core = ff;
@@ -375,16 +381,28 @@ int main(void) {
   g_FieldActorListHead = (FieldActor *)&fresh;
   g_ActiveDrawSlot = 0;
   g_BattleStatusPointerSprites[0].sprite.color.bytes.r = 17;
+  assert(pe_quickstep_available(&session, ff, ff->hpAlive, ff->maxHp) &&
+         !pe_quickstep_available(&session, fb, fb->hpAlive, fb->maxHp) &&
+         !pe_quickstep_available(&session, ff, 0, ff->maxHp));
   PeHookTargetPreview pip = {&fresh.renderObject, 0, 1, 1};
-  fire(PE_HOOK_TARGET_PREVIEW, &pip); /* fresh enemy: no pip, even far */
+  fire(PE_HOOK_TARGET_PREVIEW, &pip); /* out of range: native dark marker */
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
-  pip.object = &qb.renderObject;
+  pip.out_of_range = 0;
   fire(PE_HOOK_TARGET_PREVIEW, &pip);
   fire(PE_HOOK_TARGET_PREVIEW, &pip); /* twice a frame keeps the native */
-  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0x30);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0xff &&
+         g_BattleStatusPointerSprites[0].sprite.color.bytes.g == 0xd0 &&
+         g_BattleStatusPointerTriangles[0].g == 0xd0); /* gold: still worth it */
+  assert(hints_shown & HINT_GOLD);
   pip.phase = 0;
   fire(PE_HOOK_TARGET_PREVIEW, &pip);
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
+  pip.phase = 1;
+  pip.object = &qb.renderObject; /* below half: refund used, native marker */
+  fire(PE_HOOK_TARGET_PREVIEW, &pip);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
+  pip.phase = 0;
+  fire(PE_HOOK_TARGET_PREVIEW, &pip);
   g_FieldActorListHead = NULL;
 #undef QS_HIT
   memset(&g_BattleEnemySlots[2], 0, sizeof g_BattleEnemySlots[0] * 3);
@@ -747,8 +765,9 @@ int main(void) {
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);
   target.renderObject.target_x = 800;
   fire(PE_HOOK_TARGET_PREVIEW, &cue);
-  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0x5a &&
-         g_BattleStatusPointerTriangles[0].r == 0x5a);
+  assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0x90 &&
+         g_BattleStatusPointerTriangles[0].b == 0xd0); /* purple far band */
+  assert((hints_shown & HINT_FAR) && (hints_shown & HINT_POINT_BLANK));
   cue.phase = 0;
   fire(PE_HOOK_TARGET_PREVIEW, &cue);
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 17);

@@ -56,7 +56,11 @@ enum {
   HINT_COUNTER = 4,
   HINT_CHARGE = 8,
   HINT_FULL = 16,
-  HINT_CRACK = 32
+  HINT_CRACK = 32,
+  HINT_REFUND = 64,
+  HINT_GOLD = 128,
+  HINT_POINT_BLANK = 256,
+  HINT_FAR = 512
 };
 /* Channeler PE bar fill: blue at 1 charge (half price), bright cyan when
  * full (free), flickering orange once cracked. */
@@ -72,12 +76,20 @@ static void hint(unsigned bit, const char *text) {
   hints_shown |= bit;
   pe_toast(text);
 }
-static const CueColor CUE_RUSH = {0xff, 0x50, 0x40}; /* Quickstep burst */
-static const CueColor CUE_SPENT = {0x30, 0x30, 0x30}; /* Quickstep HP pip */
+/* Quickstep AT bar fill: a bright flash when a refund lands, then pulsing
+ * orange while rushing (faster, and taking more damage). */
+static const CueColor CUE_REFUND_LOW = {0x80, 0xff, 0xff};
+static const CueColor CUE_REFUND_HIGH = {0xff, 0xff, 0xff};
+static const CueColor CUE_RUSH_LOW = {0x70, 0x20, 0x00};
+static const CueColor CUE_RUSH_HIGH = {0xff, 0x80, 0x20}; /* g pulses */
+/* Quickstep target marker: gold while that enemy can still give its half-HP
+ * refund (above half). Positive, and unlike the native dark out-of-range
+ * marker. */
+static const CueColor CUE_GOLD = {0xff, 0xd0, 0x30};
 static const CueColor CUE_CRACK = {0xff, 0x90, 0x30}; /* Channeler cracked */
-/* Striker falloff: between the native in-range red (96,14,14) and the native
- * out-of-range dark red (32,0a,0a). */
-static const CueColor CUE_FAR = {0x5a, 0x1e, 0x1e};
+/* Striker far band (-20%): muted purple, clearly apart from the native
+ * in-range red (96,14,14) and out-of-range dark red (32,0a,0a). */
+static const CueColor CUE_FAR = {0x90, 0x60, 0xd0};
 enum { CRACK_FLICKER_FRAMES = 4 };
 static unsigned frame_count;
 static TargetTint target_tints[2][4], triangle_tints[2];
@@ -445,15 +457,23 @@ static int hud(void *ctx, void *user) {
     hint(HINT_EXPOSED, "Bulwark: red AT bar = exposed, you take 15% more "
                        "damage. Act now!");
   }
-  /* AT marker. Cyan: a Quickstep refund landing. Orange: a Bulwark counter is
-   * loaded. Red: Quickstep burst, faster and taking more damage. */
+  /* Quickstep: the AT bar FILL flashes bright as a refund lands, then pulses
+   * orange while rushing (faster, and taking 20% more damage). */
+  if (session.style == PE_STYLE_QUICKSTEP) {
+    if (pulse) {
+      tint_bar(BAR_AT, CUE_REFUND_LOW, CUE_REFUND_HIGH);
+    } else if (pe_quickstep_burst(&session)) {
+      unsigned t = frame_count % (2 * EXPOSED_PULSE_FRAMES);
+      unsigned up = t < EXPOSED_PULSE_FRAMES ? t : 2 * EXPOSED_PULSE_FRAMES - t;
+      CueColor high = CUE_RUSH_HIGH;
+      high.g = (u8)(0x40 + up * (0xa0 - 0x40) / EXPOSED_PULSE_FRAMES);
+      tint_bar(BAR_AT, CUE_RUSH_LOW, high);
+    }
+  }
+  /* AT marker: orange only while a Bulwark counter is loaded. */
   CueColor c;
-  if (pulse) {
-    c = CUE_CYAN;
-  } else if (session.style == PE_STYLE_BULWARK && session.bw.store) {
+  if (session.style == PE_STYLE_BULWARK && session.bw.store) {
     c = CUE_COUNTER;
-  } else if (pe_quickstep_burst(&session)) {
-    c = CUE_RUSH;
   } else {
     return 0;
   }
@@ -764,20 +784,27 @@ static int target_preview(void *ctx, void *user) {
       if (q->out_of_range || !normal_gun())
         return 0;
       int zone = striker_zone(e);
-      if (zone == PE_ST_POINT_BLANK)
+      if (zone == PE_ST_POINT_BLANK) {
         c = CUE_CYAN;
-      else if (zone == PE_ST_FALLOFF)
+        hint(HINT_POINT_BLANK, "Striker: cyan target = point-blank, +25% gun "
+                               "damage. Reach the cyan ring.");
+      } else if (zone == PE_ST_FALLOFF) {
         c = CUE_FAR;
-      else
+        hint(HINT_FAR, "Striker: purple target = far shot, 20% less damage. "
+                       "Get closer.");
+      } else {
         return 0;
+      }
     } else {
-      /* Quickstep HP pip: the marker darkens once this enemy has dropped to
-       * half, so its breakpoint refund is used up. */
+      /* Quickstep: gold while this enemy can still give its half-HP refund;
+       * native once spent. Out of range the native dark marker stays. */
       const EnemyCombatant *foe = e->core;
-      if (!candidate(e) ||
-          !pe_quickstep_spent(&session, foe, foe->hpAlive, foe->maxHp))
+      if (q->out_of_range || !candidate(e) ||
+          !pe_quickstep_available(&session, foe, foe->hpAlive, foe->maxHp))
         return 0;
-      c = CUE_SPENT;
+      c = CUE_GOLD;
+      hint(HINT_GOLD, "Quickstep: gold target = above half HP. Knock it below "
+                      "half for +AT and speed.");
     }
     unsigned slot = g_ActiveDrawSlot;
     if (slot > 1)
@@ -842,6 +869,8 @@ static int action_end(void *ctx, void *user) {
       pe_in_battle() && (s16)core->curHP > 0 && living_enemies());
   if (core->hpAlive > before) {
     pulse = 12;
+    hint(HINT_REFUND, "Quickstep: +AT and 3 s of speed! Orange AT bar = "
+                      "rushing: you take 20% more damage.");
     pe_log("costume_style", "quickstep refund=%u burst=%u",
            core->hpAlive - before, session.qs.burst);
   }

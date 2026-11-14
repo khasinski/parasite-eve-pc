@@ -129,3 +129,12 @@ int pe_quickstep_spent(const PeStyleSession *s, const void *enemy, int hp,
     return 1;
   return hp <= threshold(max_hp, t->breakpoints[0]);
 }
+
+int pe_quickstep_available(const PeStyleSession *s, const void *enemy, int hp,
+                           int max_hp) {
+  const PeQuickstepTuning *t = tuning();
+  if (!on(s) || !(t->triggers & PE_QS_TRIGGER_BREAKPOINT) ||
+      !t->breakpoints[0] || max_hp <= 0 || hp <= 0)
+    return 0;
+  return !pe_quickstep_spent(s, enemy, hp, max_hp);
+}
