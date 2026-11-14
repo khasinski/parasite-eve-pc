@@ -110,7 +110,7 @@ numbers in `.striker` in `pe_style_catalog.c`.
   spread, secondary) uses its own zone; unrecorded recipients are native.
 - Point-blank (x1.25): horizontal surface gap from Aya's native 63-unit
   footprint to the enemy's scaled hit cylinder is at most `point_blank_gap`
-  (96). Same for every gun. Wins over falloff on short-range guns.
+  (200; the spec's 96 felt like touching in the first playtest). Same for every gun. Wins over falloff on short-range guns.
 - Falloff (x0.80): the native targeting distance (`target_x/z` to Aya, the
   value the out-of-range marker and native accuracy use) is at least 70% of
   the gun's native range. Shots beyond range that still hit natively are in
@@ -129,7 +129,7 @@ numbers in `.striker` in `pe_style_catalog.c`.
 `.striker`. Falloff color: `CUE_FAR` in `pe_style_runtime.c`.
 
 - Point-blank ring: while aiming a gun, a flat cyan circle on the floor at
-  Aya's footprint + the gap (159 units) from her centre: an enemy whose body
+  Aya's footprint + the gap (263 units) from her centre: an enemy whose body
   reaches it is point-blank. Drawn from the target-preview hook like the
   native dome (same view matrix, screen offset, ordering table, LINE_G2
   packets, 48 segments) and grows with it over 10 frames. No new core hook.
@@ -143,7 +143,7 @@ line is not drawn. Marker tint confirmed on screen
 every aim is point-blank): cyan marker and arrow, larger ring. Note the
 pedebug harness's "gap" uses the actor contact cylinder, not the hit cylinder
 Striker judges, so it can call a target point-blank when Striker does not;
-read the `striker range ... zone=` log lines instead. The 96 gap and the 30%
+read the `striker range ... zone=` log lines instead. The 200 gap and the 30%
 band are uncalibrated (spec section 8). Not playtested.
 
 ## Channeler, Revision 6.4 (current; supersedes the Channeler notes below)

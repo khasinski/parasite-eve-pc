@@ -548,9 +548,12 @@ int main(void) {
   assert(session.style == PE_STYLE_ORIGINAL);
   start(&striker);
   assert(session.style == PE_STYLE_STRIKER);
-  assert(pe_striker_point_blank(&session, 259, 0, 100));
-  assert(!pe_striker_point_blank(&session, 260, 0, 100));
-  assert(pe_striker_point_blank(&session, 459, 0,
+  /* Edge of point-blank for a radius-100 enemy: its radius + Aya's 63 + the
+   * tuned gap. Follows the catalog value. */
+#define PB_EDGE (163 + (int)pe_style_definition(PE_STYLE_STRIKER)->striker.point_blank_gap)
+  assert(pe_striker_point_blank(&session, PB_EDGE, 0, 100));
+  assert(!pe_striker_point_blank(&session, PB_EDGE + 1, 0, 100));
+  assert(pe_striker_point_blank(&session, PB_EDGE + 200, 0,
                                 300)); /* equal surface gap, larger enemy */
   assert(!pe_striker_point_blank(&session, 0, 0, 0));
   assert(!pe_striker_point_blank(&session, INT_MIN, INT_MIN, 100));
@@ -593,10 +596,10 @@ int main(void) {
   ((EnemyCombatant *)target.core)->hpAlive = 100;
   target.moveSpeed = 4096;
   target.renderObject.hit_cylinder.radius = 100;
-  target.renderObject.hit_cylinder.value0 = 259;
+  target.renderObject.hit_cylinder.value0 = PB_EDGE;
   far = target;
   far.core = &g_BattleEnemySlots[1].combatant;
-  far.renderObject.hit_cylinder.value0 = 260;
+  far.renderObject.hit_cylinder.value0 = PB_EDGE + 1;
   target.next = &far;
   g_FieldActorListHead = (FieldActor *)&target;
   aya.action = &weapon_action;
@@ -654,7 +657,7 @@ int main(void) {
   dealt = 100;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
   assert(dealt == 100); /* club snapshot cannot become gun */
-  target.renderObject.hit_cylinder.value0 = 259;
+  target.renderObject.hit_cylinder.value0 = PB_EDGE;
   fire(PE_HOOK_PLAYER_ACTION, &aya);
   dealt = INT_MAX;
   fire(PE_HOOK_ENEMY_DAMAGE, &gun_hit);
@@ -669,7 +672,7 @@ int main(void) {
   g_BattleStatusPointerSprites[0].sprite.color.bytes.r = 17;
   fire(PE_HOOK_TARGET_PREVIEW, &cue);
   assert(g_BattleStatusPointerSprites[0].sprite.color.bytes.r == 0x60);
-  target.renderObject.hit_cylinder.value0 = 260;
+  target.renderObject.hit_cylinder.value0 = PB_EDGE + 1;
   cue.phase = 0;
   fire(PE_HOOK_TARGET_PREVIEW, &cue);
   cue.phase = 1;
@@ -742,7 +745,7 @@ int main(void) {
     g_PlayerEntity = &me;
     g_OtBufferTable[0] = ot_storage[0];
     g_OtBufferTable[1] = ot_storage[1];
-    assert(pe_striker_ring_radius(&session) == 63 + 96);
+    assert(pe_striker_ring_radius(&session) == (unsigned)PB_EDGE - 100);
     g_BattleAttackAnimFrame = DOME_GROW_FRAMES;
     unsigned sets = screen_offset_sets;
     fire(PE_HOOK_TARGET_PREVIEW, &cue);

@@ -44,7 +44,9 @@ static const PeStyleDef definitions[PE_STYLE_COUNT] = {
      .implemented = 1,
      .charge_percent = 100,
      /* Build spec 4.2 and 5. Tune here, one value at a time. */
-     .striker = {.point_blank_gap = 96, /* calibrate first (spec 8) */
+     /* Gap 200 (spec said 96): 96 was nearly touching in playtest, too
+      * small a ring to aim for. Still calibrating (spec 8). */
+     .striker = {.point_blank_gap = 200,
                  .point_blank_percent = 125,
                  .falloff_band_percent = 30, /* 0 turns falloff off */
                  .falloff_percent = 80}},
