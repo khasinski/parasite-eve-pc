@@ -3,10 +3,11 @@
   python -m pip install -r localization/translator/requirements-download.txt
   python -I localization/translator/package.py --out OUT [--english "English pack.pelang"] [--packs DIR]
 
-What it makes (in OUT):
-  Windows  Parasite-Eve-Translator-windows-x86_64.exe   one program file
-  macOS    Parasite-Eve-Translator-macos-<chip>.zip      one Parasite Eve Translator.app
-  Linux    Parasite-Eve-Translator-linux-x86_64.tar.gz   one program file
+What it makes (in OUT), named with the release version (CMakeLists.txt's project VERSION, as the
+game's and the Save Editor's release files are: 0.12.0 -> 0.12):
+  Windows  Parasite-Eve-Translator-0.12-windows-x86_64.exe   one program file
+  macOS    Parasite-Eve-Translator-0.12-macos-<chip>.zip      one Parasite Eve Translator.app
+  Linux    Parasite-Eve-Translator-0.12-linux-x86_64.tar.gz   one program file
 and check/ with what the check saw (report.json, the window's picture, the file it saved).
 
 The check, on the built program itself (no Python of this computer involved):
@@ -43,6 +44,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 LOCALIZATION = HERE.parent
+REPO = LOCALIZATION.parent
 sys.path.insert(0, str(LOCALIZATION))
 import pelang  # noqa: E402
 from translator import project as P  # noqa: E402
@@ -62,6 +64,15 @@ def target() -> str:
     chip = {"amd64": "x86_64", "x86_64": "x86_64", "arm64": "arm64", "aarch64": "arm64"}.get(machine, machine)
     system = {"win32": "windows", "darwin": "macos"}.get(sys.platform, "linux" if sys.platform.startswith("linux") else sys.platform)
     return f"{system}-{chip}"
+
+
+def release_version(cmake: Path = REPO / "CMakeLists.txt") -> str:
+    """The release's version as its file names carry it: project(... VERSION 0.12.0 ...) -> "0.12"."""
+    found = re.search(r"^project\(parasite-eve-pc\s+VERSION\s+(\d+)\.(\d+)(?:\.\d+)*\s",
+                      cmake.read_text(encoding="utf-8"), re.M)
+    if not found:
+        fail(f"no project(parasite-eve-pc VERSION x.y.z) in {cmake}")
+    return f"{found[1]}.{found[2]}"
 
 
 def fail(why: str) -> None:
@@ -317,8 +328,8 @@ def look_inside(built: Path, needles: Needles) -> None:
 
 # ---- 4. the download -----------------------------------------------------------------------------------
 
-def make_download(built: Path, out: Path) -> Path:
-    name = f"{DOWNLOAD}-{target()}"
+def make_download(built: Path, out: Path, version: str) -> Path:
+    name = f"{DOWNLOAD}-{version}-{target()}"
     if built.suffix == ".app":
         download = out / f"{name}.zip"
         download.unlink(missing_ok=True)
@@ -346,6 +357,7 @@ def main(argv=None) -> int:
     ap.add_argument("--packs", type=Path, help="a folder of .pelang translations whose lines are searched for")
     ap.add_argument("--built", type=Path, help="check this already built program instead of building")
     a = ap.parse_args(argv)
+    version = release_version()
     a.out = a.out.resolve()
     a.out.mkdir(parents=True, exist_ok=True)
     check = a.out / "check"
@@ -363,7 +375,7 @@ def main(argv=None) -> int:
     for pack in ([a.english] if a.english else []) + (sorted(a.packs.glob("*.pelang")) if a.packs else []):
         needles.add_pack(pack, game)
     look_inside(built, needles)
-    make_download(built, a.out)
+    make_download(built, a.out, version)
     print("PASS")
     return 0
 

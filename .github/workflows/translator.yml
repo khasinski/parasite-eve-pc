@@ -4,7 +4,10 @@ name: Translator
 # tests from source, then localization/translator/package.py builds the one-file program and checks
 # the built program itself (it starts, a typed line is saved byte for byte as the source tool saves
 # it, and nothing but the tool's own data files is inside). No disc and no game text here.
-# The downloads are kept as build artifacts; a release page gets them only when added by hand.
+# The downloads carry the release version (CMakeLists.txt's project VERSION) in their names and go
+# on the release page with the game's and the Save Editor's files; CMakeLists.txt is among the paths
+# below so the commit that sets a new version builds them under the new name. native-c's
+# windows-package-startup (release_tag) checks the Windows one downloaded from the release.
 
 on:
   workflow_dispatch:
@@ -20,6 +23,7 @@ on:
       - localization/extract_text.py
       - localization/tests/test_translator.py
       - .github/workflows/translator.yml
+      - CMakeLists.txt
   pull_request:
     paths:
       - localization/translate.py
@@ -32,6 +36,7 @@ on:
       - localization/extract_text.py
       - localization/tests/test_translator.py
       - .github/workflows/translator.yml
+      - CMakeLists.txt
 
 permissions:
   contents: read
@@ -83,7 +88,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Parasite-Eve-Translator-${{ matrix.target }}
-          path: translator-dist/Parasite-Eve-Translator-${{ matrix.target }}.*
+          path: translator-dist/Parasite-Eve-Translator-*-${{ matrix.target }}.*
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()

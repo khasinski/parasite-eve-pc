@@ -406,6 +406,34 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $help -notmatch 'Usage:' -or $help -notmatch 'inspect') { throw 'Editor CLI startup failed' }
           $help | Set-Content editor-smoke/help.txt
           @{ scope = 'Windows editor CLI startup only; GUI and editing unverified'; archive_sha256 = $digest; executable_sha256 = (Get-FileHash $executables[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() } | ConvertTo-Json | Set-Content editor-smoke/verification.json
+      - name: Check downloaded Translator startup
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --pattern 'Parasite-Eve-Translator-*-windows-x86_64.exe' --dir translator-smoke
+          if ($LASTEXITCODE -ne 0) { throw 'Translator download failed' }
+          $programs = @(Get-ChildItem translator-smoke -Filter '*.exe')
+          if ($programs.Count -ne 1) { throw 'Expected one Translator program' }
+          $releases = gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Translator release metadata request failed' }
+          $release = @($releases | Where-Object tag_name -EQ $env:RELEASE_TAG)
+          if ($release.Count -ne 1) { throw 'Expected one Translator release' }
+          $asset = @($release[0].assets | Where-Object name -EQ $programs[0].Name)
+          $digest = (Get-FileHash $programs[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($asset.Count -ne 1 -or $asset[0].digest -ne "sha256:$digest") { throw 'Translator program digest mismatch' }
+          # The window opens a new French translation, a line is typed into the first box and saved,
+          # and the program writes what it did to report.json and quits. No English pack or disc here.
+          $work = (Resolve-Path translator-smoke).Path
+          $arguments = "`"$work\French.pelang`" --new fr French --select dlg/M001/004 --type `"A test line.`" --settings `"$work\settings.json`" --report `"$work\report.json`""
+          $run = Start-Process -FilePath $programs[0].FullName -ArgumentList $arguments -PassThru
+          $null = $run.Handle
+          if (-not $run.WaitForExit(180000)) { $run.Kill($true); throw 'Translator did not finish within 3 minutes' }
+          if (-not (Test-Path "$work\report.json")) { throw "Translator wrote no report (exit $($run.ExitCode))" }
+          $report = Get-Content "$work\report.json" -Raw | ConvertFrom-Json
+          if ($run.ExitCode -ne 0 -or -not $report.ok -or -not $report.frozen -or $report.row -ne 'dlg/M001/004' -or $report.row_state -ne 'ok' -or $report.in_pack -ne 1) { throw "Translator startup failed: $($report | ConvertTo-Json -Compress)" }
+          @{ scope = 'Windows Translator startup only: a new translation, one line typed and saved through the window'; program_sha256 = $digest; saved_sha256 = $report.file_sha256; seconds = $report.seconds } | ConvertTo-Json | Set-Content translator-smoke/verification.json
       - name: Preserve exact package startup evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -416,3 +444,5 @@ jobs:
             package-smoke/verification.json
             editor-smoke/help.txt
             editor-smoke/verification.json
+            translator-smoke/report.json
+            translator-smoke/verification.json

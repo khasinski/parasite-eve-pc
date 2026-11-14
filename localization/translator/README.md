@@ -11,12 +11,13 @@ python -I localization/translate.py
 It needs Python 3.11 or newer with Tk (the standard Windows and macOS installers have it). No disc
 is needed for text.
 
-Or the download, which needs no Python: one program file for Windows
-(`Parasite-Eve-Translator-windows-x86_64.exe`), one app for macOS (`...-macos-arm64.zip` for Apple
-chips, `...-macos-x86_64.zip` for Intel) and one program for Linux (`...-linux-x86_64.tar.gz`). The
-`Translator` workflow builds them. They are not signed, so Windows SmartScreen and macOS Gatekeeper
-warn the first time: on Windows "More info", then "Run anyway"; on macOS right-click the app, then
-"Open".
+Or the download, which needs no Python, from the game's release page next to the game and the Save
+Editor: one program file for Windows (`Parasite-Eve-Translator-<version>-windows-x86_64.exe`), one
+app for macOS (`...-macos-arm64.zip` for Apple chips, `...-macos-x86_64.zip` for Intel) and one
+program for Linux (`...-linux-x86_64.tar.gz`). The `Translator` workflow builds them, named with
+the version in `CMakeLists.txt`, for the release. They are not signed, so Windows SmartScreen and
+macOS Gatekeeper warn the first time: on Windows "More info", then "Run anyway"; on macOS
+right-click the app, then "Open".
 
 ## Using it
 
