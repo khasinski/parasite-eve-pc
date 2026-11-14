@@ -17,6 +17,7 @@
 #include "pe_style.h"
 #include "pe_wardrobe.h"
 #include <stdio.h>
+#include <string.h>
 #define FULL_AT 9000u
 static PeStyleSession session;
 static int requested, enabled, locked;
@@ -41,8 +42,22 @@ typedef struct {
 /* Battle cue colors, one place. */
 static const CueColor CUE_CYAN = {0x60, 0xe0, 0xff}; /* guard, refund, Striker */
 static const CueColor CUE_COUNTER = {0xff, 0x90, 0x30}; /* Bulwark loaded */
-static const CueColor CUE_EXPOSED = {0xff, 0x30, 0x30}; /* Bulwark full bar */
-enum { EXPOSED_ALTERNATE_FRAMES = 8 }; /* red/orange when Exposed + loaded */
+/* Bulwark AT bar fill, left to right like the native teal-to-mint gradient:
+ * blue while guarded, red pulsing while Exposed. */
+static const CueColor CUE_GUARD_LOW = {0x10, 0x30, 0x90};
+static const CueColor CUE_GUARD_HIGH = {0x70, 0xb0, 0xff};
+static const CueColor CUE_EXPOSED_LOW = {0x60, 0x00, 0x00};
+static const CueColor CUE_EXPOSED_HIGH = {0xff, 0x30, 0x30}; /* r pulses */
+enum { EXPOSED_PULSE_FRAMES = 12 }; /* dim to bright and back: 24 frames */
+/* First time per play session, a one-line explanation (toast). */
+enum { HINT_GUARD = 1, HINT_EXPOSED = 2, HINT_COUNTER = 4 };
+static unsigned hints_shown;
+static void hint(unsigned bit, const char *text) {
+  if (hints_shown & bit)
+    return;
+  hints_shown |= bit;
+  pe_toast(text);
+}
 static const CueColor CUE_RUSH = {0xff, 0x50, 0x40}; /* Quickstep burst */
 static const CueColor CUE_SPENT = {0x30, 0x30, 0x30}; /* Quickstep HP pip */
 static const CueColor CUE_CRACK = {0xff, 0x90, 0x30}; /* Channeler cracked */
@@ -125,6 +140,45 @@ static void restore_marker(void) {
     marker[i].tinted = 0;
   }
 }
+/* Bulwark AT bar fill tint, both draw buffers; restored only if nothing else
+ * changed the colors since. */
+typedef struct {
+  u8 native[4][3], cue[4][3];
+  int tinted;
+} GaugeTint;
+static GaugeTint gauge_tints[2];
+static u8 *gauge_rgb(RenderGouraudQuad *q, unsigned v) {
+  return v == 0 ? &q->r0 : v == 1 ? &q->r1 : v == 2 ? &q->r2 : &q->r3;
+}
+static void restore_gauge(void) {
+  for (unsigned slot = 0; slot < 2; slot++) {
+    GaugeTint *t = &gauge_tints[slot];
+    RenderGouraudQuad *q = &g_BattleAtbGauges[slot];
+    int ours = t->tinted;
+    for (unsigned v = 0; ours && v < 4; v++)
+      ours = !memcmp(gauge_rgb(q, v), t->cue[v], 3);
+    for (unsigned v = 0; ours && v < 4; v++)
+      memcpy(gauge_rgb(q, v), t->native[v], 3);
+    t->tinted = 0;
+  }
+}
+/* Vertices 0 and 2 are the bar's left end, 1 and 3 its right end. */
+static void tint_gauge(CueColor left, CueColor right) {
+  for (unsigned slot = 0; slot < 2; slot++) {
+    GaugeTint *t = &gauge_tints[slot];
+    RenderGouraudQuad *q = &g_BattleAtbGauges[slot];
+    for (unsigned v = 0; v < 4; v++) {
+      CueColor c = v % 2 ? right : left;
+      u8 *rgb = gauge_rgb(q, v);
+      if (!t->tinted)
+        memcpy(t->native[v], rgb, 3);
+      rgb[0] = t->cue[v][0] = c.r;
+      rgb[1] = t->cue[v][1] = c.g;
+      rgb[2] = t->cue[v][2] = c.b;
+    }
+    t->tinted = 1;
+  }
+}
 int pe_styles_enabled(void) { return enabled || requested; }
 static int partial_actions(void) {
   const PeBattleActionPolicyApi *api =
@@ -146,6 +200,7 @@ static void settings_tick(void) {
     restore_target_cue();
     hit_entity = NULL;
     restore_marker();
+  restore_gauge();
     pulse = 0;
     pe_pulse = 0;
     restore_pe_cue();
@@ -309,6 +364,7 @@ static int hud(void *ctx, void *user) {
   (void)ctx;
   (void)user;
   restore_marker();
+  restore_gauge();
   restore_pe_cue();
   /* Channeler PE label: cyan pulse on each charge or cast, steady cyan at full
    * charge, orange flicker once cracked. A break drops it back to the
@@ -332,19 +388,26 @@ static int hud(void *ctx, void *user) {
                  &pe_tints[slot], pe_color);
     }
   draw_rally();
-  /* Cyan: guarded or a Quickstep refund landing. Red: Bulwark Exposed (full
-   * bar, free to move), alternating with orange when a counter is loaded.
-   * Orange: a counter is loaded and neither guard nor Exposed applies.
-   * Red: Quickstep burst, faster and taking more damage. */
-  CueColor c;
+  /* Bulwark, one meaning per element: the AT bar FILL is the guard state
+   * (blue guarded, pulsing red Exposed), the AT MARKER is orange while a
+   * counter is loaded, and "+N" beside HP is the HP left to win back. */
   int phase = bulwark_phase();
-  if (phase == PE_BW_GUARDED || pulse) {
-    c = CUE_CYAN;
+  if (phase == PE_BW_GUARDED) {
+    tint_gauge(CUE_GUARD_LOW, CUE_GUARD_HIGH);
   } else if (phase == PE_BW_EXPOSED) {
-    c = session.bw.store &&
-                (frame_count / EXPOSED_ALTERNATE_FRAMES) % 2 != 0
-            ? CUE_COUNTER
-            : CUE_EXPOSED;
+    unsigned t = frame_count % (2 * EXPOSED_PULSE_FRAMES);
+    unsigned up = t < EXPOSED_PULSE_FRAMES ? t : 2 * EXPOSED_PULSE_FRAMES - t;
+    CueColor high = CUE_EXPOSED_HIGH;
+    high.r = (u8)(0xa0 + up * (0xff - 0xa0) / EXPOSED_PULSE_FRAMES);
+    tint_gauge(CUE_EXPOSED_LOW, high);
+    hint(HINT_EXPOSED, "Bulwark: red AT bar = exposed, you take 15% more "
+                       "damage. Act now!");
+  }
+  /* AT marker. Cyan: a Quickstep refund landing. Orange: a Bulwark counter is
+   * loaded. Red: Quickstep burst, faster and taking more damage. */
+  CueColor c;
+  if (pulse) {
+    c = CUE_CYAN;
   } else if (session.style == PE_STYLE_BULWARK && session.bw.store) {
     c = CUE_COUNTER;
   } else if (pe_quickstep_burst(&session)) {
@@ -396,6 +459,10 @@ static int hp_loss(void *ctx, void *user) {
     if (q->current_hp >= 0 && taken > q->current_hp)
       taken = q->current_hp;
     pe_bulwark_absorb(&session, taken, phase);
+    if (session.style == PE_STYLE_BULWARK && phase == PE_BW_GUARDED &&
+        taken > 0)
+      hint(HINT_GUARD, "Bulwark: blue AT bar = guarded, 25% less damage. "
+                       "Orange marker = counter ready.");
     if (*q->loss != before && session.style == PE_STYLE_BULWARK)
       pe_log("costume_style", "bulwark %s loss=%d->%d store=%u pool=%u",
              phase == PE_BW_EXPOSED ? "exposed" : "guarded", before, *q->loss,
@@ -542,6 +609,8 @@ static int outgoing(void *ctx, void *user) {
       unsigned heal = pe_bulwark_rally(&session, bonus, (s16)aya->curHP,
                                        (s16)aya->maxHP);
       aya->curHP = (u16)(aya->curHP + heal);
+      hint(HINT_COUNTER, "Counter! Extra damage, and HP won back (orange +N "
+                         "by your HP).");
       pe_log("costume_style",
              "counter damage=%d->%d store=%u rally=%u left=%u hp=%d", before,
              *q->damage, session.bw.store, heal,
@@ -834,6 +903,7 @@ static int reset(void *ctx, void *user) {
   (void)ctx;
   (void)user;
   restore_marker();
+  restore_gauge();
   pulse = 0;
   pe_pulse = 0;
   restore_pe_cue();

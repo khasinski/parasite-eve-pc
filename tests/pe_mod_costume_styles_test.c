@@ -23,6 +23,7 @@ s8 g_BattleLiveEnemyCount;
 u8 g_BattleEnemyEscapeFlag;
 u16 g_BattleHitActionPending;
 RenderPagedSpritePacket g_BattleAtbMarkers[2];
+RenderGouraudQuad g_BattleAtbGauges[2];
 RenderPagedSpritePacket g_BattlePeLabels[2];
 FieldActor *g_FieldActorListHead;
 int g_ActiveDrawSlot;
@@ -89,7 +90,12 @@ int pe_skin_appearance_ready(const PeCostume *c) {
   (void)c;
   return ready;
 }
-void pe_toast(const char *s) { (void)s; }
+static unsigned toasts;
+static char last_toast[160];
+void pe_toast(const char *s) {
+  toasts++;
+  snprintf(last_toast, sizeof last_toast, "%s", s ? s : "");
+}
 void pe_log(const char *t, const char *f, ...) {
   (void)t;
   (void)f;
@@ -392,24 +398,38 @@ int main(void) {
   start(&guard);
   aya.maxHP = 200;
   assert(guarded());
+  toasts = 0;
   assert(loss(100, 1) == 75 && loss(1, 1) == 1);
+  /* The first guarded hit explains the cues once per session. */
+  assert(toasts == 1 && strstr(last_toast, "blue AT bar"));
   g_BattleAtbMarkers[0].sprite.color.bytes.r = 17;
+  g_BattleAtbGauges[0].r0 = 0;
+  g_BattleAtbGauges[0].g1 = 0xff;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0x60);
+  /* Guarded: blue bar fill. Counter loaded: orange marker. */
+  assert(g_BattleAtbGauges[0].r0 == 0x10 && g_BattleAtbGauges[0].b1 == 0xff &&
+         g_BattleAtbGauges[1].b2 == 0x90);
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0xff &&
+         g_BattleAtbMarkers[0].sprite.color.bytes.g == 0x90);
   assert(loss(100, 4) == 100);
   assert(session.bw.store == 76 && session.bw.pool == 76);
   aya.hpAlive = 9000;
   assert(!guarded() && bulwark_phase() == PE_BW_EXPOSED);
   assert(loss(100, 1) == 115); /* Exposed: full bar, free to move */
   assert(session.bw.store == 76 && session.bw.pool == 76); /* feeds nothing */
-  /* Exposed with a loaded counter: red, alternating with orange. */
+  /* Exposed: the bar fill turns red and pulses; the marker still says the
+   * counter is loaded. The first time, a hint explains it. */
   frame_count = 0;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0xff &&
-         g_BattleAtbMarkers[0].sprite.color.bytes.g == 0x30);
-  frame_count = EXPOSED_ALTERNATE_FRAMES;
+  assert(g_BattleAtbGauges[0].r0 == 0x60 && g_BattleAtbGauges[0].g0 == 0 &&
+         g_BattleAtbGauges[0].r1 == 0xa0);
+  assert(toasts == 2 && strstr(last_toast, "red AT bar"));
+  frame_count = EXPOSED_PULSE_FRAMES;
   fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(g_BattleAtbGauges[0].r1 == 0xff); /* pulse at its brightest */
   assert(g_BattleAtbMarkers[0].sprite.color.bytes.g == 0x90);
+  fire(PE_HOOK_BATTLE_HUD, NULL);
+  assert(toasts == 2); /* each hint once */
   /* Hit reactions, actions and forced control: neither guarded nor exposed. */
   g_BattleHitActionPending = 1;
   assert(bulwark_phase() == PE_BW_OFF && loss(100, 1) == 100);
@@ -472,6 +492,7 @@ int main(void) {
   PeHookEnemyDamage counter_hit = {&aya, &foe, &counter_dealt, 1};
   fire(PE_HOOK_ENEMY_DAMAGE, &counter_hit);
   assert(counter_dealt == 150 && session.bw.store == 26); /* +50% cap */
+  assert(toasts == 3 && strstr(last_toast, "Counter!"));
   /* Rally: the 50 bonus wins back HP up to half the pool (38). */
   assert(aya.curHP == 138 && pe_bulwark_rally_left(&session) == 0);
   fire(PE_HOOK_BATTLE_UPDATE, NULL);
@@ -520,13 +541,15 @@ int main(void) {
   assert(prims_added == 0); /* no "+N" with nothing to win back */
   session.bw.store = 0;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 0x60); /* guarded */
+  assert(g_BattleAtbGauges[0].r0 == 0x10); /* guarded: blue */
+  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 17); /* no counter */
   aya.hpAlive = 9000;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.g == 0x30); /* Exposed */
+  assert(g_BattleAtbGauges[0].r0 == 0x60); /* Exposed: red */
   g_BattleHitActionPending = 1; /* neither guarded nor exposed */
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattleAtbMarkers[0].sprite.color.bytes.r == 17); /* restored */
+  assert(g_BattleAtbGauges[0].r0 == 0 && g_BattleAtbGauges[0].g1 == 0xff &&
+         g_BattleAtbMarkers[0].sprite.color.bytes.r == 17); /* native */
   g_BattleHitActionPending = 0;
   aya.hpAlive = 0;
   half = 1;

@@ -83,15 +83,24 @@ numbers in `.bulwark` in `pe_style_catalog.c`.
 - Healing first empties the pool: any HP gain Bulwark did not cause (items,
   PE heals, Preraise) is spotted the next battle frame and clears the pool;
   the store stays.
-- Cues: AT marker cyan while guarded, red while Exposed (alternating with
-  orange every 8 frames if a counter is loaded), orange when a counter is
-  loaded and neither applies. Rally "+N" (HP still to win back) in orange
-  native HUD digits just right of the status panel on the HP row.
+- Cues, one meaning per element (redesigned 2026-11-13 after the first
+  playtest found the single multi-color marker hard to read):
+  - AT bar **fill**: blue while guarded, pulsing red while Exposed, native
+    otherwise. The native fill is teal-to-mint, so a cyan marker on it barely
+    showed.
+  - AT **marker**: orange while a counter is loaded (any phase).
+  - Rally **"+N"** (HP still to win back) in orange native HUD digits just
+    right of the status panel on the HP row.
+  - One-line hints (toast), each once per play session: first guarded hit,
+    first Exposed full bar, first counter hit.
+  Confirmed on screen in `build-styles/live-bulwark-ui2` (blue bar, orange
+  marker, "+2") and `live-bulwark-ui` (red bar).
 
 **Changing it.** `guard_percent`, `counter_percent`, `rally_percent` (0 turns
 Rally off), `exposed_percent` (100 turns Exposed off) in `.bulwark`. Colors:
-`CUE_EXPOSED`, `CUE_COUNTER`, `CUE_RALLY`, `EXPOSED_ALTERNATE_FRAMES`;
-"+N" position: `RALLY_X` / `RALLY_Y`; all in `pe_style_runtime.c`.
+`CUE_GUARD_LOW/HIGH`, `CUE_EXPOSED_LOW/HIGH`, `EXPOSED_PULSE_FRAMES`,
+`CUE_COUNTER`, `CUE_RALLY`; "+N" position: `RALLY_X` / `RALLY_Y`; hint text:
+`hint(...)` calls; all in `pe_style_runtime.c`.
 
 **Not done yet.** Brace (x0.65 still / x0.85 moving) waits until Rally plays
 well (spec sections 7 and 11). The "+N" sits outside the 84-px native panel
