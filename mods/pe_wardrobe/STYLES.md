@@ -178,14 +178,24 @@ numbers in `.channeler` in `pe_style_catalog.c`.
   count as the same enemy attack. No PE is ever taken.
 - Passive regen is native (`pe_recovery_percent` 100 leaves the hook
   untouched).
-- Cues: PE label pulses cyan on each charge and on a cast, glows cyan at full
-  charge, flickers orange once cracked, and drops to no glow after a break.
+- Cues, one meaning per element (redesigned 2026-11-13; the old PE label
+  tint showed nothing at 1 charge):
+  - PE bar **fill** = what the next support power costs: blue at 1 charge
+    (half price), bright cyan when full (free), flickering orange once
+    cracked (the next hit loses a charge). Native green with no charges.
+  - **"1/2" / "2/2"** in native HUD digits beside the PE bar (same column as
+    Bulwark's "+N", PE row); orange flicker when cracked.
+  - One-line hints (toast), each once per play session: first charge, first
+    full charge, first crack.
+  Confirmed on screen in `build-styles/live-channeler-ui2`.
 
-**Changing it.** `max_charges` (up to 4) with matching `discount[]`;
-`overchannel_percent` 0 turns Overchannel off; `backlash` 0 turns the con
-off; `backlash_group_frames` for how close hits count as one attack;
-`pe_recovery_percent` below 100 brings back slower regen. Crack color and
-flicker speed: `CUE_CRACK` and `CRACK_FLICKER_FRAMES` in `pe_style_runtime.c`.
+**Changing it.** `max_charges` (up to 4; the "n/m" count assumes 9 or less)
+with matching `discount[]`; `overchannel_percent` 0 turns Overchannel off;
+`backlash` 0 turns the con off; `backlash_group_frames` for how close hits
+count as one attack; `pe_recovery_percent` below 100 brings back slower regen.
+Colors and flicker: `CUE_HALF_*`, `CUE_FREE_*`, `CUE_CRACK_LOW`, `CUE_CRACK`,
+`CRACK_FLICKER_FRAMES`; count position `CHARGE_Y`; all in
+`pe_style_runtime.c`.
 
 **Not done yet.** Barrier's menu cost and can-afford check stay native (its
 cost is a third of max PE, not a table cost, so the cost hook never sees

@@ -50,7 +50,21 @@ static const CueColor CUE_EXPOSED_LOW = {0x60, 0x00, 0x00};
 static const CueColor CUE_EXPOSED_HIGH = {0xff, 0x30, 0x30}; /* r pulses */
 enum { EXPOSED_PULSE_FRAMES = 12 }; /* dim to bright and back: 24 frames */
 /* First time per play session, a one-line explanation (toast). */
-enum { HINT_GUARD = 1, HINT_EXPOSED = 2, HINT_COUNTER = 4 };
+enum {
+  HINT_GUARD = 1,
+  HINT_EXPOSED = 2,
+  HINT_COUNTER = 4,
+  HINT_CHARGE = 8,
+  HINT_FULL = 16,
+  HINT_CRACK = 32
+};
+/* Channeler PE bar fill: blue at 1 charge (half price), bright cyan when
+ * full (free), flickering orange once cracked. */
+static const CueColor CUE_HALF_LOW = {0x10, 0x40, 0x90};
+static const CueColor CUE_HALF_HIGH = {0x40, 0x90, 0xff};
+static const CueColor CUE_FREE_LOW = {0x30, 0x90, 0xc0};
+static const CueColor CUE_FREE_HIGH = {0xb0, 0xff, 0xff};
+static const CueColor CUE_CRACK_LOW = {0x80, 0x38, 0x00};
 static unsigned hints_shown;
 static void hint(unsigned bit, const char *text) {
   if (hints_shown & bit)
@@ -140,33 +154,38 @@ static void restore_marker(void) {
     marker[i].tinted = 0;
   }
 }
-/* Bulwark AT bar fill tint, both draw buffers; restored only if nothing else
- * changed the colors since. */
+/* Bar fill tints (Bulwark: AT bar, Channeler: PE bar), both draw buffers;
+ * restored only if nothing else changed the colors since. */
 typedef struct {
   u8 native[4][3], cue[4][3];
   int tinted;
 } GaugeTint;
-static GaugeTint gauge_tints[2];
+enum { BAR_AT, BAR_PE, BAR_COUNT };
+static GaugeTint gauge_tints[BAR_COUNT][2];
+static RenderGouraudQuad *bar_quad(unsigned bar, unsigned slot) {
+  return bar == BAR_AT ? &g_BattleAtbGauges[slot] : &g_BattlePeGauges[slot][0];
+}
 static u8 *gauge_rgb(RenderGouraudQuad *q, unsigned v) {
   return v == 0 ? &q->r0 : v == 1 ? &q->r1 : v == 2 ? &q->r2 : &q->r3;
 }
 static void restore_gauge(void) {
-  for (unsigned slot = 0; slot < 2; slot++) {
-    GaugeTint *t = &gauge_tints[slot];
-    RenderGouraudQuad *q = &g_BattleAtbGauges[slot];
-    int ours = t->tinted;
-    for (unsigned v = 0; ours && v < 4; v++)
-      ours = !memcmp(gauge_rgb(q, v), t->cue[v], 3);
-    for (unsigned v = 0; ours && v < 4; v++)
-      memcpy(gauge_rgb(q, v), t->native[v], 3);
-    t->tinted = 0;
-  }
+  for (unsigned bar = 0; bar < BAR_COUNT; bar++)
+    for (unsigned slot = 0; slot < 2; slot++) {
+      GaugeTint *t = &gauge_tints[bar][slot];
+      RenderGouraudQuad *q = bar_quad(bar, slot);
+      int ours = t->tinted;
+      for (unsigned v = 0; ours && v < 4; v++)
+        ours = !memcmp(gauge_rgb(q, v), t->cue[v], 3);
+      for (unsigned v = 0; ours && v < 4; v++)
+        memcpy(gauge_rgb(q, v), t->native[v], 3);
+      t->tinted = 0;
+    }
 }
 /* Vertices 0 and 2 are the bar's left end, 1 and 3 its right end. */
-static void tint_gauge(CueColor left, CueColor right) {
+static void tint_bar(unsigned bar, CueColor left, CueColor right) {
   for (unsigned slot = 0; slot < 2; slot++) {
-    GaugeTint *t = &gauge_tints[slot];
-    RenderGouraudQuad *q = &g_BattleAtbGauges[slot];
+    GaugeTint *t = &gauge_tints[bar][slot];
+    RenderGouraudQuad *q = bar_quad(bar, slot);
     for (unsigned v = 0; v < 4; v++) {
       CueColor c = v % 2 ? right : left;
       u8 *rgb = gauge_rgb(q, v);
@@ -299,22 +318,31 @@ enum {
 };
 static const CueColor CUE_RALLY = {0xff, 0x90, 0x30};
 void Draw_InitDrawModeSprtPacket(void *packet, int tpage);
+/* Channeler charge count "1/2" / "2/2": cyan (orange flicker when cracked),
+ * same column as Rally "+N", on the PE bar's row. */
+enum { CHARGE_Y = 0x15, CHARGE_GLYPHS = 3, GLYPH_SLASH = 10 };
 static RenderPagedSpritePacket rally_digits[2][RALLY_DIGITS];
+static RenderPagedSpritePacket charge_glyphs[2][CHARGE_GLYPHS];
 static RenderColorTilePacket rally_plus[2][2];
 static int rally_ready;
+/* One native HUD digit-strip glyph (0-9, 10 = '/'), as the HP digits. */
+static void init_glyph(RenderPagedSpritePacket *p, int page, u16 clut,
+                       CueColor c) {
+  Draw_InitDrawModeSprtPacket(p, page);
+  p->sprite.clut = clut;
+  p->sprite.width = 6;
+  p->sprite.height = 0xA;
+  p->sprite.v = 0xE8;
+  BATTLE_SET_SPRITE_COLOR(p->sprite, c.r, c.g, c.b);
+}
 static void rally_init(void) {
   int page = GetTPage(0, 1, 0x100, 0x1E0); /* as Battle_DrawHPBar */
   u16 clut = GetClut(0x130, 0x1F8);
   for (unsigned slot = 0; slot < 2; slot++) {
-    for (unsigned i = 0; i < RALLY_DIGITS; i++) {
-      RenderSpritePacket *s = &rally_digits[slot][i].sprite;
-      Draw_InitDrawModeSprtPacket(&rally_digits[slot][i], page);
-      s->clut = clut;
-      s->width = 6;
-      s->height = 0xA;
-      s->v = 0xE8;
-      BATTLE_SET_SPRITE_COLOR(*s, CUE_RALLY.r, CUE_RALLY.g, CUE_RALLY.b);
-    }
+    for (unsigned i = 0; i < RALLY_DIGITS; i++)
+      init_glyph(&rally_digits[slot][i], page, clut, CUE_RALLY);
+    for (unsigned i = 0; i < CHARGE_GLYPHS; i++)
+      init_glyph(&charge_glyphs[slot][i], page, clut, CUE_CYAN);
     for (unsigned i = 0; i < 2; i++) {
       RenderColorTilePacket *t = &rally_plus[slot][i];
       SetTile(t);
@@ -359,6 +387,28 @@ static void draw_rally(void) {
     AddPrim(D_800B0E38.ordering[slot] + 4, &rally_digits[slot][i]);
   }
 }
+static void draw_charges(void) {
+  unsigned slot = (unsigned)g_ActiveDrawSlot, have = session.ch.charges;
+  unsigned max = pe_style_definition(PE_STYLE_CHANNELER)->channeler.max_charges;
+  if (session.style != PE_STYLE_CHANNELER || !have || slot > 1 || max > 9)
+    return;
+  if (!rally_ready)
+    rally_init();
+  CueColor c = session.ch.cracked &&
+                       (frame_count / CRACK_FLICKER_FRAMES) % 2 == 0
+                   ? CUE_CRACK
+                   : CUE_CYAN;
+  unsigned glyph[CHARGE_GLYPHS] = {have, GLYPH_SLASH, max};
+  int x = g_HudOrigin.x + RALLY_X, y = g_HudOrigin.y + CHARGE_Y;
+  for (unsigned i = 0; i < CHARGE_GLYPHS; i++) {
+    RenderSpritePacket *s = &charge_glyphs[slot][i].sprite;
+    s->u = (u8)(glyph[i] * 8);
+    s->x = (s16)(x + 6 * (int)i);
+    s->y = (s16)y;
+    BATTLE_SET_SPRITE_COLOR(*s, c.r, c.g, c.b);
+    AddPrim(D_800B0E38.ordering[slot] + 4, &charge_glyphs[slot][i]);
+  }
+}
 static int hud(void *ctx, void *user) {
   unsigned i;
   (void)ctx;
@@ -366,40 +416,32 @@ static int hud(void *ctx, void *user) {
   restore_marker();
   restore_gauge();
   restore_pe_cue();
-  /* Channeler PE label: cyan pulse on each charge or cast, steady cyan at full
-   * charge, orange flicker once cracked. A break drops it back to the
-   * one-charge look (no glow). */
-  int pe_cue = pe_pulse != 0;
-  CueColor pe_color = CUE_CYAN;
-  if (pe_channeler_full(&session)) {
-    pe_cue = 1;
-    if (session.ch.cracked) {
-      pe_color = CUE_CRACK;
-      pe_cue = (frame_count / CRACK_FLICKER_FRAMES) % 2 == 0;
-    }
+  /* Channeler, one meaning per element: the PE bar FILL is what your next
+   * support power costs (blue = half price, bright cyan = free, orange
+   * flicker = cracked, the next hit loses a charge), and "1/2" or "2/2"
+   * beside the PE bar is the charge count. */
+  if (session.style == PE_STYLE_CHANNELER && session.ch.charges) {
+    if (session.ch.cracked && (frame_count / CRACK_FLICKER_FRAMES) % 2 == 0)
+      tint_bar(BAR_PE, CUE_CRACK_LOW, CUE_CRACK);
+    else if (pe_channeler_full(&session))
+      tint_bar(BAR_PE, CUE_FREE_LOW, CUE_FREE_HIGH);
+    else
+      tint_bar(BAR_PE, CUE_HALF_LOW, CUE_HALF_HIGH);
   }
-  if (pe_cue)
-    for (unsigned slot = 0; slot < 2; slot++) {
-      RenderSpritePacket *p = &g_BattlePeLabels[slot].sprite;
-      pe_codes[slot] = p->color.bytes.code;
-      /* The native PE label is raw-textured: enable modulation for the cue. */
-      p->color.bytes.code &= (u8)~1u;
-      tint_color(&p->color.bytes.r, &p->color.bytes.g, &p->color.bytes.b,
-                 &pe_tints[slot], pe_color);
-    }
+  draw_charges();
   draw_rally();
   /* Bulwark, one meaning per element: the AT bar FILL is the guard state
    * (blue guarded, pulsing red Exposed), the AT MARKER is orange while a
    * counter is loaded, and "+N" beside HP is the HP left to win back. */
   int phase = bulwark_phase();
   if (phase == PE_BW_GUARDED) {
-    tint_gauge(CUE_GUARD_LOW, CUE_GUARD_HIGH);
+    tint_bar(BAR_AT, CUE_GUARD_LOW, CUE_GUARD_HIGH);
   } else if (phase == PE_BW_EXPOSED) {
     unsigned t = frame_count % (2 * EXPOSED_PULSE_FRAMES);
     unsigned up = t < EXPOSED_PULSE_FRAMES ? t : 2 * EXPOSED_PULSE_FRAMES - t;
     CueColor high = CUE_EXPOSED_HIGH;
     high.r = (u8)(0xa0 + up * (0xff - 0xa0) / EXPOSED_PULSE_FRAMES);
-    tint_gauge(CUE_EXPOSED_LOW, high);
+    tint_bar(BAR_AT, CUE_EXPOSED_LOW, high);
     hint(HINT_EXPOSED, "Bulwark: red AT bar = exposed, you take 15% more "
                        "damage. Act now!");
   }
@@ -474,6 +516,9 @@ static int hp_loss(void *ctx, void *user) {
         pe_log("costume_style", "spellweave %s charges=%u",
                backlash == PE_CH_CRACK ? "crack" : "break",
                session.ch.charges);
+      if (backlash == PE_CH_CRACK)
+        hint(HINT_CRACK, "Cracked! One more hit loses a charge. Cast a "
+                         "support PE to keep it.");
     }
   }
   return 0;
@@ -807,6 +852,12 @@ static int action_end(void *ctx, void *user) {
                                            living_enemies())) {
       pe_pulse = 12;
       pe_log("costume_style", "spellweave charges=%u", session.ch.charges);
+      if (pe_channeler_full(&session))
+        hint(HINT_FULL, "Fully charged: your next support PE is free. A hit "
+                        "now cracks the charge (orange).");
+      else
+        hint(HINT_CHARGE, "Channeler: hits charge your next support PE. "
+                          "Blue PE bar = half price, bright = free.");
     }
   } else {
     session.action_open = 0;

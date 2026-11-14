@@ -24,6 +24,7 @@ u8 g_BattleEnemyEscapeFlag;
 u16 g_BattleHitActionPending;
 RenderPagedSpritePacket g_BattleAtbMarkers[2];
 RenderGouraudQuad g_BattleAtbGauges[2];
+RenderGouraudQuad g_BattlePeGauges[2][2];
 RenderPagedSpritePacket g_BattlePeLabels[2];
 FieldActor *g_FieldActorListHead;
 int g_ActiveDrawSlot;
@@ -472,7 +473,7 @@ int main(void) {
   g_HudOrigin.x = 16;
   g_HudOrigin.y = 180;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(sprites_inited == 2 * RALLY_DIGITS && tiles_set == 4);
+  assert(sprites_inited == 2 * (RALLY_DIGITS + CHARGE_GLYPHS) && tiles_set == 4);
   assert(prims_added == 4 && last_prim == &rally_digits[0][0]);
   assert(rally_plus[0][0].x0 == 16 + RALLY_X &&
          rally_digits[0][1].sprite.u == 3 * 8 &&
@@ -856,16 +857,23 @@ int main(void) {
   assert(session.ch.charges == 1 && aya.exp_or_acc == 0); /* no PE refund */
   fire(PE_HOOK_PLAYER_ACTION_END, &aya);
   assert(session.ch.charges == 1); /* one charge per queue */
+  /* One charge: blue PE bar (half price), "1/2" beside it, a first-time
+   * hint. The PE label itself stays native. */
+  assert(strstr(last_toast, "hits charge your next support PE"));
   g_BattlePeLabels[0].sprite.color.bytes.r = 19;
   g_BattlePeLabels[0].sprite.color.bytes.code = 0x65;
+  g_BattlePeGauges[0][0].r0 = 0;
+  g_BattlePeGauges[0][0].g1 = 0xff;
+  prims_added = 0;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 0x60);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.code == 0x64);
-  for (int i = 0; i < 13; i++)
-    fire(PE_HOOK_BATTLE_UPDATE, NULL);
-  fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.code == 0x65);
+  assert(g_BattlePeGauges[0][0].r0 == 0x10 && g_BattlePeGauges[0][0].b1 == 0xff &&
+         g_BattlePeGauges[1][0].g2 == 0x40);
+  assert(prims_added == CHARGE_GLYPHS && charge_glyphs[0][0].sprite.u == 1 * 8 &&
+         charge_glyphs[0][1].sprite.u == GLYPH_SLASH * 8 &&
+         charge_glyphs[0][2].sprite.u == 2 * 8 &&
+         charge_glyphs[0][0].sprite.color.bytes.g == 0xe0);
+  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19 &&
+         g_BattlePeLabels[0].sprite.color.bytes.code == 0x65);
   /* Passive PE regeneration is native: the hook leaves it untouched. */
   unsigned recovered = 0;
   aya.peRecoveryStep = 777;
@@ -918,7 +926,9 @@ int main(void) {
   for (int i = 0; i < 13; i++)
     fire(PE_HOOK_BATTLE_UPDATE, NULL);
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 0x60); /* steady at 2 */
+  /* Full: bright PE bar (free), "2/2", and the full-charge hint. */
+  assert(g_BattlePeGauges[0][0].r1 == 0xb0 && charge_glyphs[0][0].sprite.u == 2 * 8);
+  assert(strstr(last_toast, "Fully charged"));
   /* Two charges: support powers show free; attack powers, Energy Shot and
    * Liberate keep their cost. */
   menu_cost = 60;
@@ -937,11 +947,14 @@ int main(void) {
   assert(session.ch.charges == 2 && session.ch.cracked);
   frame_count = 0;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 0xff &&
-         g_BattlePeLabels[0].sprite.color.bytes.g == 0x90); /* crack tint */
+  /* Cracked: bar and count flicker orange; first-time hint. */
+  assert(g_BattlePeGauges[0][0].r0 == 0x80 && g_BattlePeGauges[0][0].g1 == 0x90 &&
+         charge_glyphs[0][0].sprite.color.bytes.g == 0x90);
+  assert(strstr(last_toast, "Cracked!"));
   frame_count = CRACK_FLICKER_FRAMES;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19); /* flicker off */
+  assert(g_BattlePeGauges[0][0].r1 == 0xb0 &&
+         charge_glyphs[0][0].sprite.color.bytes.g == 0xe0); /* flicker off */
   /* More hits from the same enemy attack count as that one hit. */
   loss(10, 2);
   loss(10, 3);
@@ -957,7 +970,8 @@ int main(void) {
   loss(10, 1);
   assert(session.ch.charges == 1 && !session.ch.cracked); /* not full */
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19); /* one-charge look */
+  assert(g_BattlePeGauges[0][0].r1 == 0x40 &&
+         charge_glyphs[0][0].sprite.u == 1 * 8); /* back to the half-price look */
   /* Recharge, crack, then cast: Overchannel and the crack clears. */
   weapon.kind = 1;
   weapon_action.actionCode.actionId = 0;
@@ -986,8 +1000,10 @@ int main(void) {
   fire(PE_HOOK_BATTLE_HUD, NULL);
   for (int i = 0; i < 13; i++)
     fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  prims_added = 0;
   fire(PE_HOOK_BATTLE_HUD, NULL);
-  assert(g_BattlePeLabels[0].sprite.color.bytes.r == 19);
+  assert(g_BattlePeGauges[0][0].r0 == 0 && g_BattlePeGauges[0][0].g1 == 0xff &&
+         prims_added == 0); /* no charges: native bar, no count */
   /* One charge on Scan: half of its cost after other mods (Rebalance 30). */
   session.ch.charges = 1;
   aya.exp_or_acc = 0;
