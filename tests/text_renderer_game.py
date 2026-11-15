@@ -3416,7 +3416,9 @@ def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters
         log = mods_log(work)
         check('All mods off' in log, f'All mods is not off in this run: {work}')
         check('pe_lang: started' in log, f'the language mod did not start with All mods off: {work}')
-        started = [line for line in log.splitlines() if ': started ' in line and not line.startswith('pe_lang:')]
+        # Font runs with All mods off too; with Original picked (the default here) it changes nothing.
+        started = [line for line in log.splitlines()
+                   if ': started ' in line and not line.startswith(('pe_lang:', 'pe_fonts:'))]
         check(not started, f'another mod started with All mods off: {started}: {work}')
         check(f'pe_lang: language: {greek[1]} ({greek[0]})' in log, f'the saved language is not the one in use: {work}')
         check(crop(work, 'first', BOX) == crop(out / 'pack-el', 'first', BOX),

@@ -47,6 +47,7 @@ static unsigned char s_page_work[PAGE_BYTES];
 static TextboxGlyphSpacing s_game_widths[78];
 static unsigned char s_game_metrics[PE_FONT_CODES];
 static int s_metrics_saved;
+static int s_widths_touched;            /* a font's widths went in since the start (or Original's back) */
 
 static const Font *active_font(void) {
     return s_choice > 0 && (unsigned)s_choice <= s_font_count ? s_fonts[s_choice - 1] : NULL;
@@ -67,8 +68,13 @@ static void install_metrics(const PeFontSheet *sheet) {
         metrics[i] = sheet && sheet->metric[i] ? sheet->metric[i] : s_game_metrics[i];
 }
 
+/* Original from the start writes nothing: the game's own tables stay as the disc and the game left
+ * them (a saved copy could be stale after a disc change). Only after a font's widths went in are
+ * the saved ones put back. */
 static void install_widths(void) {
     const Font *font = active_font();
+    if (!font && !s_widths_touched) return;
+    s_widths_touched = font != NULL;
     memcpy(g_TextboxGlyphSpacing, s_game_widths, sizeof s_game_widths);
     if (font)
         for (unsigned i = 0; i < PE_FONT_CODES; ++i)
@@ -227,6 +233,7 @@ static void fonts_shutdown(void) {
     memset(s_fonts, 0, sizeof s_fonts);
     s_font_count = 0;
     s_page_saved = 0;
+    s_metrics_saved = 0;
 }
 
 const PeMod pe_mod_pe_fonts = {MOD_ID, "Font", "0.1", NULL, fonts_init, fonts_shutdown};
