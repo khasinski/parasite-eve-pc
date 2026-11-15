@@ -68,6 +68,17 @@ static int pe_row_saved(const PeMenuRow *row) {
     return row->kind == PE_ROW_TOGGLE || row->kind == PE_ROW_CHOICE || row->kind == PE_ROW_INT;
 }
 
+static struct {char key[192];int *value;} s_bound[32];
+static unsigned s_bound_count;
+int pe_menu_bind_setting(const char *key,int *value,int minimum,int maximum){
+    if(!key||!value||strlen(key)>=sizeof s_bound[0].key||minimum>maximum||s_bound_count==32)return -1;
+    for(unsigned i=0;i<s_bound_count;++i)if(!strcmp(key,s_bound[i].key))return -1;
+    PeSaved *saved=pe_saved_find(key);
+    if(saved&&saved->value>=minimum&&saved->value<=maximum)*value=saved->value;
+    snprintf(s_bound[s_bound_count].key,sizeof s_bound[0].key,"%s",key);
+    s_bound[s_bound_count++].value=value;return 0;
+}
+
 void pe_menu_save_settings(void) {
     char path[1100], key[192], temporary[1180];
     SDL_IOStream *f;
@@ -82,6 +93,11 @@ void pe_menu_save_settings(void) {
             snprintf(saved->key, sizeof(saved->key), "%s", key);
         }
         if (saved) saved->value = *s_rows[i].value;
+    }
+    for(unsigned b=0;b<s_bound_count;++b){
+        PeSaved *saved=pe_saved_find(s_bound[b].key);
+        if(!saved&&s_saved_count<PE_MAX_SAVED){saved=&s_saved[s_saved_count++];snprintf(saved->key,sizeof saved->key,"%s",s_bound[b].key);}
+        if(saved)saved->value=*s_bound[b].value;
     }
     if (pe_mod_path(path, sizeof(path), "pe_mods.ini") != 0) {
         pe_mod_log(NULL, "cannot resolve pe_mods.ini");

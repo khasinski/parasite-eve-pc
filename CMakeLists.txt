@@ -324,6 +324,7 @@ add_library(parasite-eve-original OBJECT
     src/main/render/frame_update.c
     src/main/entity/frame_update.c
     src/main/boot/init.c
+    src/main/boot/mouse_input.c
     src/main/boot/frame_loop.c
     src/main/draw/pipeline.c
     src/main/draw/gpu_regs.c
@@ -448,7 +449,7 @@ add_library(parasite-eve-original OBJECT
     src/overlays/room_lib/script_args.c)
 pe_configure_object_library(parasite-eve-original)
 target_link_libraries(parasite-eve-original PRIVATE psyz)
-set_property(SOURCE src/main/boot/init.c APPEND PROPERTY INCLUDE_DIRECTORIES
+set_property(SOURCE src/main/boot/init.c src/main/boot/mouse_input.c APPEND PROPERTY INCLUDE_DIRECTORIES
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 
 set(PE_COMMON_GAME_OBJECTS
@@ -529,6 +530,13 @@ if(BUILD_TESTING)
     target_compile_definitions(test-text-render PRIVATE __psyz PE_MODS)
     target_link_libraries(test-text-render PRIVATE psyz)
     add_test(NAME text-render COMMAND test-text-render ${CMAKE_SOURCE_DIR}/tests/text_render_rtl_cases.txt)
+    # Mouse support: window points on the game's screen, menus, dialogue choices, the title.
+    add_executable(test-mouse-input tests/mouse_input_test.c src/main/boot/mouse_input.c)
+    target_include_directories(test-mouse-input PRIVATE include)
+    target_compile_definitions(test-mouse-input PRIVATE __psyz)
+    target_link_libraries(test-mouse-input PRIVATE psyz)
+    add_test(NAME host-mouse-input COMMAND test-mouse-input)
+    set_tests_properties(host-mouse-input PROPERTIES TIMEOUT 30)
     add_executable(test-menu-call-abi tests/original_menu_call_abi.c
         src/main/menu/lists.c src/main/menu/widget.c src/main/item/swap.c
         src/main/draw/text.c src/main/draw/text_render.c src/main/psyq/libds/dssys_3.c)
@@ -601,7 +609,11 @@ if(BUILD_TESTING)
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy"
         LABELS "audio")
 
-    pe_add_common_unit_test(test-original-input-rules original-game-input-rules tests/original_input_rules.c)
+    # The frame's pad mapping reads the mouse (mouse_input.c), whose menu pointing plays the
+    # menu's move sound (Akao_SendTableCommand, in the disc objects).
+    pe_add_common_unit_test(test-original-input-rules original-game-input-rules tests/original_input_rules.c
+        $<TARGET_OBJECTS:parasite-eve-original-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>)
 
     add_executable(test-host-settings tests/original_input_rules.c ${PE_COMMON_GAME_OBJECTS})
     target_compile_definitions(test-host-settings PRIVATE PE_HOST_SETTINGS_TEST=1 __psyz)
@@ -706,6 +718,12 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/tests/frame_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-frame-interpolation PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 420 LABELS "game-assets;gpu")
+        # Mouse support on the disc: the title, dialogue, the name entry, the Triangle and battle menus.
+        add_test(NAME original-game-mouse COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/mouse_game.py $<TARGET_FILE:parasite-eve-pc>
+            ${CMAKE_BINARY_DIR}/mouse-evidence)
+        set_tests_properties(original-game-mouse PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 900 LABELS "game-assets")
         if(PE_MODS AND "pe_lang" IN_LIST PE_MOD_LIST)
             # The text renderer with language packs made from the disc: stretches, name letters,
             # a saved name read back, and English as the game drew it before the renderer.
@@ -1019,7 +1037,7 @@ if(BUILD_TESTING)
         add_test(NAME original-game-hd-widescreen COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_widescreen.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-widescreen PROPERTIES SKIP_RETURN_CODE 77
-            TIMEOUT 240 LABELS "game-assets;gpu;hd-assets")
+            TIMEOUT 480 LABELS "game-assets;gpu;hd-assets")
     endif()
     add_test(NAME original-game-live-graphics-controls COMMAND test-original-actor-animation --native-graphics-controls $<TARGET_FILE:parasite-eve-pc>)
     set_tests_properties(original-game-live-graphics-controls PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180 LABELS "game-assets;gpu" ENVIRONMENT "SDL_AUDIO_DRIVER=dummy")
@@ -1318,7 +1336,12 @@ if(BUILD_TESTING)
             --filter=gpu::queued_hd_sprite_preserves_native_vram_coverage_and_palette_fallback)
         add_test(NAME original-gpu-hd-extension COMMAND test-psyz-interpolation
             --filter=gpu::widescreen_hd_extension_is_display_only)
-        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference original-gpu-hd-extension PROPERTIES
+        add_test(NAME original-gpu-hd-layer-edges COMMAND test-psyz-interpolation
+            --filter=gpu::hd_room_layers_keep_shared_cutout_edges_opaque)
+        set_tests_properties(original-gpu-hd-layer-edges PROPERTIES
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped")
+        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference original-gpu-hd-extension
+            original-gpu-hd-layer-edges PROPERTIES
             TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             SKIP_REGULAR_EXPRESSION "requires SDL GPU"

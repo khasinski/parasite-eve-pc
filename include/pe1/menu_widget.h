@@ -63,6 +63,8 @@ MenuWidgetNode *MenuWidget_CreateNode(int mode, MenuWidgetNode *parent,
                                      MenuWidgetNode *attachTo);
 
 void MenuWidget_DestroyNode(MenuWidgetNode *node);
+/* The screen position of a list widget's top-left cell. */
+void MenuWidget_ScreenPosition(MenuWidgetNode *node, int *x, int *y);
 void MenuWidget_DestroyNodeRecursive(MenuWidgetNode *node);
 void Draw_PushPrimToList(MenuWidgetNode *node);
 
