@@ -137,7 +137,7 @@ for x, y, side in positions:
     front_xy.append((x, y)); front_cells.append(rgba)
     front_depth.append(seam_depth(entry_of[side], side, x, y))
 
-# Atlas: 16 columns of 68x68 cells (2 px replicated gutter); PNG holds HD over a reference half.
+# Atlas: 16 columns of 68x68 cells (2 px full-view gutters); PNG holds HD over a reference half.
 cols = 16; rows = (len(front_cells) + cols - 1) // cols
 half = rows * 68
 atlas = np.zeros((half * 2, cols * 68, 4), np.uint8)
