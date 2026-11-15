@@ -60,7 +60,9 @@ class Scope(unittest.TestCase):
             payload=self.module.encode_sidecar([old,front])
             source=root/'source.bin';source.write_bytes(payload)
             os.link(source,pack/(geom+'-wide.bin'))
-            (pack/'manifest.json').write_text(json.dumps(dict(widescreen=[],extras=[])))
+            # Another room can name the very same serialized geometry/group binding.
+            (pack/'manifest.json').write_text(json.dumps(dict(widescreen=[
+                dict(room='M377',group=1,geometry_key=geom)],extras=[])))
             center=root/'center.png';Image.new('RGB',(1280,64),'blue').save(center)
             generated=root/'generated.png';Image.new('RGB',(1728,64),'green').save(generated)
             view=dict(active_bbox=[0,0,320,16],native_origin=[0,0],controllers=[])
@@ -78,6 +80,8 @@ class Scope(unittest.TestCase):
             self.assertEqual(len(backdrop['positions']),6)
             self.assertEqual(source.read_bytes(),payload)
             manifest=json.loads((pack/'manifest.json').read_text())
+            self.assertEqual(len(manifest['widescreen']),1)
+            self.assertEqual(manifest['widescreen'][0]['room'],'M044')
             index=next(r for r in manifest['extras'] if r['kind']=='widescreen-index')
             self.assertEqual(index['sha256'],self.module.digest(pack/index['file']))
 

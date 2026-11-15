@@ -290,7 +290,8 @@ def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56)
         bounds=[left,right,top,bottom],cells=len(cells),side_margin=margin,source=digest(Path(center_path)),
         generated=digest(Path(generated)),registration=registration,animation='static')
     # Rebuild the sidecar with all already installed groups for this geometry.
-    records=[r for r in manifest.get('widescreen',[]) if (r['room'],r['group'])!=(room,group)]
+    records=[r for r in manifest.get('widescreen',[])
+             if (r.get('geometry_key'),r['group'])!=(geometry,group)]
     metadata['positions']=cells;records.append(metadata)
     # The sidecar is authoritative for foreground records; older manifests only
     # describe backdrops. Replacing one backdrop must preserve every other layer.
