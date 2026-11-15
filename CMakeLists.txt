@@ -326,6 +326,7 @@ add_library(parasite-eve-original OBJECT
     src/main/render/frame_update.c
     src/main/entity/frame_update.c
     src/main/boot/init.c
+    src/main/boot/mouse_input.c
     src/main/boot/frame_loop.c
     src/main/draw/pipeline.c
     src/main/draw/gpu_regs.c
@@ -454,7 +455,7 @@ if(PE_MELEE_PROTOTYPE)
 endif()
 pe_configure_object_library(parasite-eve-original)
 target_link_libraries(parasite-eve-original PRIVATE psyz)
-set_property(SOURCE src/main/boot/init.c APPEND PROPERTY INCLUDE_DIRECTORIES
+set_property(SOURCE src/main/boot/init.c src/main/boot/mouse_input.c APPEND PROPERTY INCLUDE_DIRECTORIES
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 
 set(PE_COMMON_GAME_OBJECTS
@@ -535,6 +536,13 @@ if(BUILD_TESTING)
     target_compile_definitions(test-text-render PRIVATE __psyz PE_MODS)
     target_link_libraries(test-text-render PRIVATE psyz)
     add_test(NAME text-render COMMAND test-text-render ${CMAKE_SOURCE_DIR}/tests/text_render_rtl_cases.txt)
+    # Mouse support: window points on the game's screen, menus, dialogue choices, the title.
+    add_executable(test-mouse-input tests/mouse_input_test.c src/main/boot/mouse_input.c)
+    target_include_directories(test-mouse-input PRIVATE include)
+    target_compile_definitions(test-mouse-input PRIVATE __psyz)
+    target_link_libraries(test-mouse-input PRIVATE psyz)
+    add_test(NAME host-mouse-input COMMAND test-mouse-input)
+    set_tests_properties(host-mouse-input PROPERTIES TIMEOUT 30)
     add_executable(test-menu-call-abi tests/original_menu_call_abi.c
         src/main/menu/lists.c src/main/menu/widget.c src/main/item/swap.c
         src/main/draw/text.c src/main/draw/text_render.c src/main/psyq/libds/dssys_3.c)
@@ -607,7 +615,11 @@ if(BUILD_TESTING)
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy"
         LABELS "audio")
 
-    pe_add_common_unit_test(test-original-input-rules original-game-input-rules tests/original_input_rules.c)
+    # The frame's pad mapping reads the mouse (mouse_input.c), whose menu pointing plays the
+    # menu's move sound (Akao_SendTableCommand, in the disc objects).
+    pe_add_common_unit_test(test-original-input-rules original-game-input-rules tests/original_input_rules.c
+        $<TARGET_OBJECTS:parasite-eve-original-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>)
 
     add_executable(test-host-settings tests/original_input_rules.c ${PE_COMMON_GAME_OBJECTS})
     target_compile_definitions(test-host-settings PRIVATE PE_HOST_SETTINGS_TEST=1 __psyz)
@@ -712,6 +724,12 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/tests/frame_interpolation.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-frame-interpolation PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 420 LABELS "game-assets;gpu")
+        # Mouse support on the disc: the title, dialogue, the name entry, the Triangle and battle menus.
+        add_test(NAME original-game-mouse COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/mouse_game.py $<TARGET_FILE:parasite-eve-pc>
+            ${CMAKE_BINARY_DIR}/mouse-evidence)
+        set_tests_properties(original-game-mouse PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 900 LABELS "game-assets")
         if(PE_MODS AND "pe_lang" IN_LIST PE_MOD_LIST)
             # The text renderer with language packs made from the disc: stretches, name letters,
             # a saved name read back, and English as the game drew it before the renderer.
@@ -899,6 +917,16 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-letters-evidence translator-letters)
             set_tests_properties(original-game-translator-letters PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # F1 > Font on the real discs: Original draws the first box as the game does; Pixel Sans puts
+            # exactly its picture's letters in the font page and changes the dialogue and the load
+            # screen, on Disc 1 and Disc 2 (PE_TEST_DISC2, else skipped after Disc 1).
+            if("pe_fonts" IN_LIST PE_MOD_LIST)
+                add_test(NAME original-game-font COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/font_game.py $<TARGET_FILE:parasite-eve-pc>
+                    ${CMAKE_BINARY_DIR}/font-evidence)
+                set_tests_properties(original-game-font PROPERTIES SKIP_RETURN_CODE 77
+                    TIMEOUT 600 LABELS "game-assets;mods")
+            endif()
         endif()
         # The English pack (pelang.py english) from the real discs: every row it holds is the disc's
         # own bytes, only empty pages and four known rows are left to the game, and one pack serves
@@ -907,7 +935,8 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/localization/tests/test_en_pack.py)
         set_tests_properties(localization-english-pack PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 600 LABELS "game-assets;localization")
-        # The Translator's work with no window (localization/translator/project.py): a .pelang in,
+        # Headless editor/core suite: Tk imports are forbidden. Visual/layout tests run separately
+        # in translator.yml (Linux uses Xvfb). A .pelang in,
         # rows a person edits, a .pelang out. Its rule tests need nothing; PE_TEST_DISC (and
         # PE_TEST_DISC2) adds the real English pack, every row; PE_TEST_PLAYER_PACKS (a folder of
         # .pelang translations) adds real packs. 77 when any of those was skipped.
@@ -1289,6 +1318,18 @@ if(BUILD_TESTING)
         add_test(NAME original-gpu-widescreen-native-readback COMMAND test-psyz-interpolation
             --filter=gpu::scaled_widescreen_keeps_native_readback)
         set_tests_properties(original-gpu-widescreen-native-readback PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-widescreen-subpixel-pan COMMAND test-psyz-interpolation
+            --filter=gpu::widescreen_subpixel_shift_moves_picture_uniformly)
+        set_tests_properties(original-gpu-widescreen-subpixel-pan PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-widescreen-room-dither COMMAND test-psyz-interpolation
+            --filter=gpu::widescreen_room_step_keeps_its_dither)
+        set_tests_properties(original-gpu-widescreen-room-dither PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")

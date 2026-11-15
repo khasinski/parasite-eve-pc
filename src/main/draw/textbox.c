@@ -1,3 +1,4 @@
+#include "pe1/mouse_input.h"
 #include "common.h"
 #include "pe_hooks.h"
 #include "pe1/text_render.h"
@@ -643,6 +644,7 @@ void Menu_DrawTextboxEntries(void) {
                             g_MenuEquipSlotIndex = g_DialogueChoiceCursor;
                         }
                         stream++;
+                        Mouse_NoteDialogueChoice(baseX, right, selectionCursor->y, temp_v1_9);
                         selectionFrame = g_ActiveDrawSlot;
                         selectionSprite = &g_TextboxChoiceCursor[selectionFrame].sprite;
                         selectionSprite->x = selectionCursor->x;

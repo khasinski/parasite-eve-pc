@@ -39,6 +39,16 @@ Psyz_SetOverlayEventFilter_SDL3(PsyzOverlayEventFilter_SDL3 f) {
   return f;
 }
 void SDL_ResetKeyboard(void) {}
+/* The panel's mouse mapping asks for the window; without these the static SDL
+ * archive's dynapi object (which also defines the two stubs above) is pulled in. */
+SDL_Window *SDL_GetWindowFromID(SDL_WindowID id) {
+  (void)id;
+  return NULL;
+}
+float SDL_GetWindowPixelDensity(SDL_Window *window) {
+  (void)window;
+  return 1.0f;
+}
 int pe_mod_interactive(void) { return 0; }
 void pe_mod_log(const char *id, const char *fmt, ...) {
   (void)id;
@@ -166,6 +176,33 @@ int main(void) {
   e.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
   pe_choose_event(&e);
   assert(!s_choose.open && s_choose.result == 14);
+  /* The mouse over the title look's rows (46 units each from 64, across the window): pointing
+   * selects a row, a left click takes it, a point off the rows or a right click (no way out
+   * here) does nothing. */
+  s_choose.open = 1;
+  s_choose.result = -1;
+  s_origin_x = s_origin_y = 0;
+  s_shown_w = 700;
+  s_shown_h = pe_title_design_h(6);
+  memset(&e, 0, sizeof e);
+  e.type = SDL_EVENT_MOUSE_MOTION;
+  e.motion.x = 350;
+  e.motion.y = TITLE_TOP + 2 * TITLE_ROW_H + 5;
+  pe_choose_event(&e);
+  assert(s_choose.open && s_choose.cursor == s_choose.scroll + 2);
+  e.motion.y = TITLE_TOP + 6 * TITLE_ROW_H + 5; /* the description under the rows */
+  pe_choose_event(&e);
+  assert(s_choose.cursor == s_choose.scroll + 2);
+  memset(&e, 0, sizeof e);
+  e.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+  e.button.button = SDL_BUTTON_RIGHT;
+  e.button.x = 10;
+  e.button.y = TITLE_TOP + 5;
+  pe_choose_event(&e);
+  assert(s_choose.open && s_choose.cursor == s_choose.scroll + 2);
+  e.button.button = SDL_BUTTON_LEFT;
+  pe_choose_event(&e);
+  assert(!s_choose.open && s_choose.result == 9);
   s_choose.count = 5;
   s_choose.cursor = s_choose.scroll = 0;
   assert(pe_choose_visible() ==
@@ -175,6 +212,6 @@ int main(void) {
   assert(pe_choose_visible() ==
          VISIBLE_ROWS); /* Other panel questions keep their viewport. */
   puts("title choices: scrolling, wrap, Home/End, controller acceptance and "
-       "style geometry passed");
+       "style geometry, mouse pointing and clicks passed");
   return 0;
 }
