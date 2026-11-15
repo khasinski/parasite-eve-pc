@@ -353,8 +353,8 @@ void Render_RefreshHdBackgrounds(void) {
     GeomEntry *entries=(void *)((u8 *)g_GeomState+g_GeomState->entry_offset);
     for (u32 index=0;index<g_GeomState->entry_count06;++index) {
         GeomEntry *entry=entries+index;
-        if (!entry->u30.prim) continue;
         uint64_t key=Render_LoadHdEntryAtlas(index);
+        if (!entry->u30.prim) continue;
         RenderTilePacket *packets=entry->u30.prim;
         for (unsigned slot=0;slot<2;++slot) for (unsigned i=0;i<entry->prim_count;++i) {
             RenderTilePacket *p=packets+slot*entry->prim_count+i;
