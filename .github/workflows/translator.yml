@@ -71,13 +71,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends xvfb xauth libtk8.6 fonts-wqy-zenhei
+      - name: Headless editor tests (Tk imports forbidden)
+        run: python -I localization/tests/test_translator.py HeadlessEditorTest
       # On Linux the window needs a screen: xvfb-run gives it one. Exit 77 (a test skipped) fails
       # the step on purpose: every one of these tests must run here.
       - name: Window tests from source
         shell: bash
         run: |
           run=(); [ "$RUNNER_OS" = Linux ] && run=(xvfb-run -a)
-          "${run[@]}" python -I localization/tests/test_translator.py WindowTest DownloadCheckTest PictureWindowTest PictureFitTest GameLookWindowTest PictureRuleTest GameLookRuleTest BattleLookRuleTest MenuLookRuleTest CityMapRuleTest LetterArtTest RightToLeftLookTest LettersWindowTest
+          "${run[@]}" python -I localization/tests/test_translator.py --gui WindowTest DownloadCheckTest PictureWindowTest PictureFitTest GameLookWindowTest PictureRuleTest GameLookRuleTest BattleLookRuleTest MenuLookRuleTest CityMapRuleTest LetterArtTest RightToLeftLookTest LettersWindowTest
       # Also when the window tests failed: the built program's window picture shows what they saw.
       - name: Build the download and check the built program
         if: success() || failure()

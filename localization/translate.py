@@ -14,7 +14,12 @@ for _name in ("stdout", "stderr"):
         setattr(sys, _name, open(os.devnull, "w", encoding="utf-8"))
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from translator.app import main  # noqa: E402
+# A batch run must never import Tk: even initializing its window backend can
+# activate the process on macOS. Both frontends share Translation's operations.
+if "--headless" in sys.argv[1:]:
+    from translator.project import headless_main as main  # noqa: E402
+else:
+    from translator.app import main  # noqa: E402
 
 if __name__ == "__main__":
     sys.exit(main())
