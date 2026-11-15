@@ -12,6 +12,38 @@ import subprocess
 import struct
 import sys
 import tempfile
+import zlib
+
+
+def read_png_rgb(path):
+    """Decode a non-interlaced 8-bit RGB PNG (the packs' reference planes)."""
+    data=Path(path).read_bytes();at=8;idat=b'';header=None
+    while at<len(data):
+        size,kind=struct.unpack_from('>I4s',data,at);body=data[at+8:at+8+size];at+=12+size
+        if kind==b'IHDR':header=struct.unpack('>IIBBBBB',body)
+        elif kind==b'IDAT':idat+=body
+    width,height,depth,colour,_,_,interlace=header
+    assert depth==8 and colour==2 and not interlace,path
+    raw=zlib.decompress(idat);stride=width*3;rows=[];previous=bytearray(stride)
+    for y in range(height):
+        kind=raw[y*(stride+1)];line=bytearray(raw[y*(stride+1)+1:(y+1)*(stride+1)])
+        for x in range(stride):
+            a=line[x-3] if x>=3 else 0;b=previous[x];c=previous[x-3] if x>=3 else 0
+            if kind==1:line[x]=(line[x]+a)&255
+            elif kind==2:line[x]=(line[x]+b)&255
+            elif kind==3:line[x]=(line[x]+(a+b)//2)&255
+            elif kind==4:
+                p=a+b-c;pa,pb,pc=abs(p-a),abs(p-b),abs(p-c)
+                line[x]=(line[x]+(a if pa<=pb and pa<=pc else b if pb<=pc else c))&255
+        rows.append(bytes(line));previous=line
+    return width,height,rows
+
+
+def write_png_rgba(path,width,rows):
+    chunk=lambda kind,body:struct.pack('>I',len(body))+kind+body+struct.pack('>I',zlib.crc32(kind+body))
+    raw=b''.join(b'\0'+row for row in rows)
+    Path(path).write_bytes(b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,len(rows),8,6,0,0,0))+
+                           chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b''))
 
 
 def main(executable):
@@ -60,6 +92,26 @@ def main(executable):
     descriptor+=b''.join(struct.pack('<hh',x,y) for x,y in cells)
     (under/(geometry+'-under.bin')).write_bytes(descriptor)
 
+    # The original room covers every 4:3 pixel, so the underlay must stay
+    # hidden behind it (issue #208: edge feathering exposed what lies under a
+    # foreground's hole). It is revealed only through authored coverage: give
+    # the room's base layer a half-transparent material over its unchanged
+    # reference plane, with and without the underlay beneath it.
+    base_key=int.from_bytes(bytes.fromhex(geometry),'big')
+    for byte in struct.pack('<I',1):base_key=((base_key^byte)*1099511628211)&(2**64-1)
+    base_name=f'{base_key:016x}'
+    reference_width,reference_height,reference_rows=read_png_rgb(baseline/(base_name+'.ref.png'))
+    material_rows=[bytes((90,90,90,128))*reference_width]*reference_height
+    reference_rows=[bytes(b for i in range(0,len(row),3) for b in row[i:i+3]+b'\xff') for row in reference_rows]
+    mattes=[]
+    for name,underlay in (('matte-pack',False),('matte-underlay-pack',True)):
+        directory=output/name;directory.mkdir();mattes.append(directory)
+        for source in (under if underlay else baseline).iterdir():
+            if source.name.startswith(base_name):continue
+            try: os.link(source,directory/source.name)
+            except OSError: shutil.copyfile(source,directory/source.name)
+        write_png_rgba(directory/(base_name+'.png'),reference_width,material_rows+reference_rows)
+
     broken_under=output/'incomplete-underlay-pack';broken_under.mkdir()
     for source in baseline.iterdir():
         try: os.link(source,broken_under/source.name)
@@ -105,7 +157,7 @@ def main(executable):
         wide, extended = case
         directory=output/f'{wide}-{extended}';directory.mkdir()
         env=dict(os.environ,SDL_AUDIODRIVER='dummy',PSYZ_AUDIO_CLOCK='video',
-                 PE_CONFIG_HOME=str(directory/'config'),PE_HD_BACKGROUNDS=str((baseline,pack,broken,under,broken_under,kind0,layered,bad_depth)[extended]))
+                 PE_CONFIG_HOME=str(directory/'config'),PE_HD_BACKGROUNDS=str((baseline,pack,broken,under,broken_under,kind0,layered,bad_depth,*mattes)[extended]))
         args=[str(Path(executable).resolve()),'--disc',str(Path(disc).resolve()),'--headless-gpu',
               '--internal-resolution','4','--widescreen',str(wide),'--frame-limit','25100',
               '--control-at','25000','--dump-frame',str(directory/'frame.ppm'),
@@ -135,11 +187,11 @@ def main(executable):
         return case,(states,frames)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results=dict(pool.map(run,[(0,0),(0,1),(1,0),(1,1),(1,2),(0,3),(1,3),(0,4),(1,5),(1,6),(1,7)]))
+        results=dict(pool.map(run,[(0,0),(0,1),(1,0),(1,1),(1,2),(0,3),(1,3),(0,4),(1,5),(1,6),(1,7),(0,8),(0,9)]))
     for wide in (0,1):
         native,backdrop=results[wide,0],results[wide,3]
         assert native[0]==backdrop[0],f'Underlay changed game state, native VRAM or PCM: {output}'
-        assert native[1]!=backdrop[1],f'Underlay sidecar had no presentation effect in aspect {wide}: {output}'
+        assert native[1]==backdrop[1],f'Underlay showed through opaque original room coverage in aspect {wide}: {output}'
         a,b=results[wide,0],results[wide,1]
         assert a[0]==b[0],f'HD side tiles changed game state, native VRAM or PCM: {output}'
         for original,enhanced in zip(a[1],b[1]):
@@ -155,6 +207,10 @@ def main(executable):
                     at=(y*width+x)*3
                     lit+=max(pixels[at:at+3])>12
             assert lit>(height-80)*margin//2,f'Side material is absent/stale: {output}'
+    matte,revealed=results[0,8],results[0,9]
+    assert matte[0]==revealed[0]==results[0,0][0],f'Authored coverage or underlay changed game state, native VRAM or PCM: {output}'
+    assert matte[1]!=results[0,0][1],f'Authored base coverage had no presentation effect: {output}'
+    assert matte[1]!=revealed[1],f'Underlay was not visible through authored coverage: {output}'
     assert results[1,0]==results[1,2],f'Incomplete sidecar did not fall back exactly: {output}'
     assert results[0,0]==results[0,4],f'Incomplete underlay did not fall back exactly: {output}'
     assert results[1,5]==results[1,1],f'PEW2 backdrop records did not draw exactly as PEW1: {output}'
@@ -169,8 +225,8 @@ def main(executable):
         assert plain!=front and green>((height-80)//4)*((margin-16)//4)//2,f'Depth-sorted side layer is not drawn: {output}'
     assert results[1,7]==results[1,0],f'Invalid PEW2 depth did not fall back exactly: {output}'
     (output/'proof.json').write_text(json.dumps(dict(passed=True,checkpoints=2,
-        exact_4_3=True,native_vram_pcm_and_state_equal=True,visible_side_material=True,visible_underlay_both_aspects=True,incomplete_sidecar_exact_fallback=True,pew2_backdrop_exact=True,pew2_front_layer_visible=True,pew2_invalid_depth_fallback=True),indent=2)+'\n')
-    print(f'HD widescreen: legacy 4:3 exact; underlays visible in both aspects; PEW2 backdrop exact, front layer drawn, bad depth rejected; state/VRAM/PCM exact: {output}')
+        exact_4_3=True,native_vram_pcm_and_state_equal=True,visible_side_material=True,underlay_hidden_by_opaque_room=True,underlay_visible_through_authored_coverage=True,incomplete_sidecar_exact_fallback=True,pew2_backdrop_exact=True,pew2_front_layer_visible=True,pew2_invalid_depth_fallback=True),indent=2)+'\n')
+    print(f'HD widescreen: legacy 4:3 exact; underlay hidden by opaque rooms, visible through authored coverage; PEW2 backdrop exact, front layer drawn, bad depth rejected; state/VRAM/PCM exact: {output}')
     return 0
 
 

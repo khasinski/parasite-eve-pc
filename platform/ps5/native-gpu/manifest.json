@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "83cb290f5af628abf15daa25187741d531135a96a0f097ff3ed06afc96f1faac"
+      "sha256": "aebcf81e5e244c82859b32f004ba318f2d95d1e02ee256fb6dc5ad4f95dcecf9"
     },
     {
       "path": "mods/host/pe_api_native.c",
