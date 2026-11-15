@@ -3185,8 +3185,26 @@ runpy.run_path(start, run_name="__main__")
 
 
 def window_works() -> bool:
+    # A Tk availability probe itself creates a window and can activate Python
+    # on macOS. Never run it on the user's desktop without explicit opt-in.
+    if os.environ.get("PE_TEST_TRANSLATOR_GUI") != "1":
+        return False
     return subprocess.run([sys.executable, "-I", "-c", "import tkinter; tkinter.Tk().destroy()"],
                           capture_output=True).returncode == 0
+
+
+class WindowOptInTest(unittest.TestCase):
+    def test_default_test_run_never_probes_a_real_window(self):
+        with mock.patch.dict(os.environ, {"PE_TEST_TRANSLATOR_GUI": "0"}), \
+                mock.patch.object(subprocess, "run") as run:
+            self.assertFalse(window_works())
+            run.assert_not_called()
+
+    def test_dedicated_display_can_explicitly_enable_the_probe(self):
+        with mock.patch.dict(os.environ, {"PE_TEST_TRANSLATOR_GUI": "1"}), \
+                mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
+            self.assertTrue(window_works())
+            run.assert_called_once()
 
 
 class DownloadCheckTest(unittest.TestCase):

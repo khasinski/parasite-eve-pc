@@ -255,3 +255,17 @@ saved, those characters' pictures are in the pack, so it opens and builds again 
   Arabic files, paints every square with a made-up letter, loads it back, and checks the pack holds
   each letter as painted and that the first box (Disc 1) and the five boxes on the ship (Disc 2) are,
   pixel for pixel, the "As in the game" drawing, right to left for Hebrew and Arabic.
+
+### Testing without interrupting a desktop
+
+Normal test runs never open Tk windows. GUI tests require
+`PE_TEST_TRANSLATOR_GUI=1`; run them on a dedicated display, such as a remote
+Linux virtual screen:
+
+```sh
+PE_TEST_TRANSLATOR_GUI=1 xvfb-run -a python3 -I localization/tests/test_translator.py
+```
+
+`PE_TEST_DISC`, `PE_TEST_DISC2` and `PE_TEST_PLAYER_PACKS` enable the optional
+owned-disc and language-pack checks as usual. A skipped GUI test is reported
+as a skip, rather than counted as verified.
