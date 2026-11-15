@@ -55,6 +55,7 @@ static bool Host_StateChord(const SDL_Event *event);
 #include "pe1/game_timers.h"
 #include "pe1/geom_state.h"
 #include "pe1/pad_state.h"
+#include "pe1/mouse_input.h"
 #include "pe1/psyq_gpu.h"
 #include "pe1/memcard.h"
 #include "pe1/save.h"
@@ -86,6 +87,7 @@ static struct {
     int widescreen;
     int dynamic_lighting;
     int effect_geometry_correction;
+    int vsync; /* HOST_VSYNC_*: 0 Auto keeps psyz's refresh-rate detection */
 #ifdef PE_PS5_GPU_NATIVE
     int fsr1,fsr1_sharpness,model_fill_lighting,movie_blur,movie_presentation,battle_debris_3d,gameplay_fill,movie_cleanup,sprite_filtering;
     int show_fps;
@@ -834,6 +836,9 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
 #endif
         } else if (!strcmp(key, "frame_interpolation")) {
             if(v>1)return 0;host_options.frame_interpolation=v;
+        } else if (!strcmp(key, "vsync")) {
+            if (v > HOST_VSYNC_OFF) return 0;
+            host_options.vsync = v;
         } else if (!strcmp(key, "geometry_correction")) {
             if (v > 1) {
                 return 0;
@@ -1015,6 +1020,7 @@ static int Host_SaveOptions(void) {
         "widescreen = %s\n"
         "dynamic_lighting = %s\n"
         "effect_geometry_correction = %s\n"
+        "vsync = %d\n"
 #ifdef PE_PS5_GPU_NATIVE
         "sprite_filtering = %s\nmovie_cleanup = %u\ngameplay_fill = %s\nfsr1 = %s\nfsr1_sharpness = %u\nmodel_fill_lighting = %u\nparticle_lighting = %s\ndialogue_text = %s\ntriangle_menu_font = %s\nmovie_blur = %s\nmovie_presentation = %u\nbattle_debris_3d = %u\nplayer_shadow = %u\n"
 #endif
@@ -1039,6 +1045,7 @@ static int Host_SaveOptions(void) {
         host_options.widescreen ? "true" : "false",
         host_options.dynamic_lighting ? "true" : "false",
         host_options.effect_geometry_correction ? "true" : "false",
+        host_options.vsync,
 #ifdef PE_PS5_GPU_NATIVE
         host_options.sprite_filtering?"true":"false",(unsigned)host_options.movie_cleanup,host_options.gameplay_fill ? "true" : "false",host_options.fsr1 ? "true" : "false",(unsigned)host_options.fsr1_sharpness,(unsigned)host_options.model_fill_lighting,host_options.particle_lighting?"true":"false",host_options.dialogue_text?"true":"false",host_options.triangle_menu_font?"true":"false",host_options.movie_presentation==1?"true":"false",(unsigned)host_options.movie_presentation,(unsigned)host_options.battle_debris_3d,(unsigned)host_options.player_shadow,
 #endif
@@ -1364,6 +1371,7 @@ static void Host_InitOptions(int enabled) {
     host_options.model_filtering = 0;
     host_options.dynamic_lighting = 0;
     host_options.effect_geometry_correction = 0;
+    host_options.vsync = HOST_VSYNC_AUTO;
 #ifdef PE_PS5_GPU_NATIVE
     host_options.frame_interpolation = 1; /* Owner requested display-only 60 Hz; saved explicit choice loads afterward. */
     host_options.widescreen = 1; /* Genuine wide default only when no saved choice. */
@@ -1510,6 +1518,26 @@ static void Host_TraceAspectSelection(const char *phase, int force) {
 #endif
 }
 
+/* Auto is psyz's own choice (driver VSync on ~60 Hz displays, its frame
+ * limiter otherwise) and is never requested, so the default leaves the
+ * renderer exactly as it starts. Headless and offscreen runs select
+ * limitless pacing themselves; a saved preference never overrides that. */
+static void Host_ApplyVsync(SDL_Window *window) {
+#if defined(PE_PS5)
+    (void)window;
+#else
+    static const PsyzVsyncMode modes[] = {PSYZ_VSYNC_AUTO, PSYZ_VSYNC_ON, PSYZ_VSYNC_OFF};
+    static int applied = HOST_VSYNC_AUTO;
+    int wanted = ClampIndex(host_options.vsync, COUNT_OF(modes));
+    if (!window || wanted == applied || Psyz_VideoGetVsyncMode() == PSYZ_VSYNC_LIMITLESS) {
+        return;
+    }
+    if (Psyz_VideoSetVsyncMode(modes[wanted]) == 0) {
+        applied = wanted;
+    }
+#endif
+}
+
 static void Host_ApplyOptions(SDL_Window *window) {
 #ifdef PE_PS5_GPU_NATIVE
     Psyz_VideoSetShutdownCallback(Host_NativeApplicationShutdown);
@@ -1556,6 +1584,7 @@ static void Host_ApplyOptions(SDL_Window *window) {
         host_options.effect_geometry_correction = Psyz_VideoGetEffectGeometryCorrection();
     }
     Psyz_VideoSetWidescreen(host_options.widescreen != 0);
+    Host_ApplyVsync(window);
 #ifdef PE_PS5_GPU_NATIVE
     static int appliedBackgrounds=-1;
     if(appliedBackgrounds!=host_options.hd_backgrounds){Host_HdApply();appliedBackgrounds=host_options.hd_backgrounds;}
@@ -2628,7 +2657,8 @@ static void Host_ProcessSettingsEvent(
     }
 
     if (state->capturing_binding) {
-        if (event->type == SDL_EVENT_KEY_DOWN && event->key.scancode == SDL_SCANCODE_ESCAPE) {
+        if ((event->type == SDL_EVENT_KEY_DOWN && event->key.scancode == SDL_SCANCODE_ESCAPE) ||
+            (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && event->button.button == SDL_BUTTON_RIGHT)) {
             state->capturing_binding = 0;
             state->dirty = 1;
             return;
@@ -2812,6 +2842,12 @@ static void Host_ProcessSettingsEvent(
                 state->dirty = 1;
             }
         }
+    } else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && event->button.button == SDL_BUTTON_RIGHT) {
+        /* Right click: as Escape, back a level or close. */
+#ifdef PE_PS5_GPU_NATIVE
+        if (!Host_SettingsBack(state))
+#endif
+        state->open = 0;
     } else if (event->type == SDL_EVENT_MOUSE_MOTION) {
         Host_ProcessSettingsPointer(state, event->motion.x, event->motion.y, 0, game, fallbackWindow);
     } else if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
@@ -3909,7 +3945,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
                      "Graphics: render resolution %ux (renderer %ux), fullscreen %s, aspect ratio %s, "
 #endif
                      "dithering %s, geometry correction %s, antialiasing %s, model textures %s, "
-                     "dynamic lighting %s, effect geometry %s\r\n"
+                     "dynamic lighting %s, effect geometry %s, VSync %s\r\n"
                      "Audio: master volume %u%%\r\n"
                      "Controls: speed-up %ux while %s, field run threshold %u\r\n"
                      "Discs: disc 1 %s, disc 2 %s\r\n",
@@ -3927,6 +3963,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
                      kFilterNames[host_options.model_filtering != 0],
                      kSwitchNames[host_options.dynamic_lighting != 0],
                      kSwitchNames[host_options.effect_geometry_correction != 0],
+                     host_options.vsync == HOST_VSYNC_ON ? "On" : host_options.vsync == HOST_VSYNC_OFF ? "Off" : "Auto",
                      host_options.volume, host_options.speed_factor,
                      host_options.speed_toggle ? "toggled on" : "held",
                      host_options.analog_run_threshold, Host_CrashFileName(host_options.discs[0]),
@@ -4060,9 +4097,18 @@ static int Host_TestSave(void) {
     int ok = io && SDL_WriteIO(io, g_MemCardFileBuffer, sizeof(g_MemCardFileBuffer)) == sizeof(g_MemCardFileBuffer);
     if (io && !SDL_CloseIO(io)) ok = 0;
     if (ok) {
+#ifdef PE_MODS
+        ok = pe_mod_save_publish(temporary, target);
+        if (ok) pe_mod_save_committed(target);
+#else
         SDL_RemovePath(target);
         ok = SDL_RenamePath(temporary, target);
+#endif
     }
+#ifdef PE_MODS
+    /* As the save menu does: a failed save must not leave a staged companion behind. */
+    if (!ok) pe_mod_save_cancelled();
+#endif
     if (!ok) SDL_RemovePath(temporary);
     fprintf(stderr, "Test save: %s %s at VBlank %u\n", ok ? "wrote" : built < 0 ? "refused" : "failed to write",
             target, (unsigned)g_BootHostVBlankCount);
@@ -4183,7 +4229,7 @@ static void Host_PrintHelp(const char *program_name) {
     printf("--dump-frame writes the rendered display as RGB888 PPM at each control/terminal boundary.\n");
     printf("--dump-audio writes stereo 44100 Hz signed-16-bit little-endian PCM; requires headless and PSYZ_AUDIO_CLOCK=video.\n");
     printf("Headless editor capture: lighting-export PATH writes the original posed Aya mesh and PATH.vram (requires --dump-vram).\n");
-    printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
+    printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, mouse X Y move|left|right|middle|up|down FRAMES (at a 320x224 screen point), graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
     printf("Headless fixtures only: --diagnostic-hp-at VBLANK:EXPECTED_HP:VALUE (requires --frame-limit; output is marked coverage-only)\n");
     printf("--test-crash-after N / --test-abort-after N crash on purpose at VBlank N to check the crash report (its path is printed).\n");
     printf("--test-ignore-hit-reactions lands every hit as a plain hit (no criticals or grazes), for route replays recorded that way.\n");

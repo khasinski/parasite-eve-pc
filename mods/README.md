@@ -16,8 +16,8 @@ Two switches, so a modded build is safe to hand out:
 - **Runtime**: F1 > Manage mods > **All mods**, **off by default**. Until a player turns it on and
   restarts, no mod starts and nothing but the F1 panel touches the game. Below it, one toggle per
   mod; a mod turned off doesn't start, nor do the mods that need it. Changes apply at the next start.
-  The one exception is **Language packs**: a language the player picked is no gameplay change, so
-  it runs with All mods off too (its own toggle turns it off).
+  The exceptions are **Language packs** and **Font**: a language or font the player picked is no
+  gameplay change, so they run with All mods off too (their own toggles turn them off).
 
 The upstream test suite (`-DBUILD_TESTING=ON`) gives the same results with `PE_MODS` on and off.
 
@@ -77,6 +77,17 @@ gives one copy), INVENTORY_REBUILD (duplicates fold into one slot), SLOT_DRAWN (
 rounds column). Only base items of kinds 10 and 12..15 stack; Junk stays out while pe_economy's
 Junk economy is on. Saved in the companion file as the `pe_stacks/counts` section (204 bytes, up to 100 stacks); an older `pe_stacks.counts` record moves there on load. With the
 mod or the option off, extra copies go back into free slots as plain items.
+
+## Font (pe_fonts)
+
+F1 > Font: Original keeps the game's own letters; Pixel Sans (shipped in `mods/fonts/`) swaps in a
+bolder set, drawn from Pixeloid Sans Bold by GGBotNet (SIL OFL 1.1, see `mods/fonts/README.txt`).
+The pick shows at once and is kept in `pe_fonts_selection.txt` in the user folder.
+Every `.png` in `mods/fonts/` beside the game or in the user folder is a choice, named after its
+file, with no code to add; `mods/fonts/README.txt` describes the picture. The letters go into the
+dialogue font page as it goes to VRAM (PE_HOOK_TIM_UPLOAD, before pe_lang adds its accents) and
+their widths into the dialogue and menu tables. US and European discs only; the Japanese discs keep
+their own letters.
 
 ## Warp (pe_warp)
 
@@ -147,7 +158,9 @@ screen). Nothing in the game's scripts is patched.
 - Conditions: `needs = warner.supplies` plays a call only while another mod's feature is on. The
   mod that owns the feature offers the name with `add_condition(name, holds)`; a name nobody offers
   never holds, so neither mod needs the other. Offered now: `warner.supplies` (pe_shops: Warner
-  helps out and the Junk economy on), used by `pe1/park_wayne`, Wayne's call at Central Park.
+  helps out and the Junk economy on), used by `pe1/park_wayne`, Wayne's call at Central Park;
+  `phone.crossovers` (Phone Calls itself: F1 > Phone Calls > Crossover calls, on by default),
+  used by the Raccoon City and Final Fantasy calls in `pe1.txt`.
 - Picking: a set call (priority > 0) not heard yet first; else weighted random among the calls
   that fit, leaving out the last five played.
 - Text: ASCII in the game's glyphs (letters, digits, space, `. , : ! ? ' - + * % /`, `{name}`).
@@ -204,6 +217,19 @@ All off until chosen; while they are off the mod writes nothing.
 Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): add `pe_challenges`
 to build it.
 
+New Game opens a title-style challenge picker when this mod is enabled. Each challenge shows
+its current Off / On / level value and description. Hardcore is the first row, followed by the
+other challenges; Clear all challenges and Start game are at the bottom. Choose a row to edit it; Back keeps its
+previous value. Combine challenges, Clear all challenges, then Start game to commit the draft.
+Long lists scroll through six rows, with a range indicator. Hardcore's Start game summary warns
+that death ends the run permanently and challenge levels cannot be lowered after starting.
+
+The picker is independent of Combat styles: with both mods enabled, style selection comes first,
+then challenges; with only one enabled, only its picker appears; with neither, New Game proceeds
+without either question. A build may omit either mod. Continue/load and EX Game do not open the
+challenge picker. Headless or unavailable UI preserves the F1 choices. Settings are saved only
+when Start game confirms the draft; the existing run record, locks and F1 controls stay in use.
+
 F1 > Challenges, all off until chosen (while every one is off the mod writes nothing). The top
 page starts with Hardcore (featured: `CH_DEF_FEATURED` puts a challenge's row there), then an
 overview (Run, On now, Cleared, Warnings); every other challenge sits on its category's
@@ -226,7 +252,7 @@ sub-page (a category left with no rows gets no page), then Presets, This run and
 | Run rules | Hardcore | permadeath; New Game only; locks the run | pe_ch_hardcore.c |
 
 Each definition names its category (`PeChallengeDef.category`; names and descriptions in
-`g_ch_categories`, pe_challenges.c), so F1 and the Records pages group by it with no list to
+`g_ch_categories`, pe_challenges.c), so F1 groups by it with no list to
 update. Rows moved from the top page to their category page keep their saved picks
 (`pe_menu_alias_setting` from `Challenges/<label>` to `Challenges/<category>/<label>`).
 
@@ -284,14 +310,20 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   fallen-run window in the field, closing to nothing) and Preview fallen saves (Hardcore saves grey
   in the save / load lists for the session).
 - **Not yet:** Scarcity, no bonus-point spending.
-- **Challenges in Aya's menu** (`pe_ch_screen.c`): a Challenges row (order 35, after the Wardrobe)
-  opens a read-only screen from the game's own widgets, laid out like the Bestiary's. **This run**:
-  the run's challenges with levels (lowered ones dim, a run-locking one in the game's yellow), and
-  Clean / Assisted, battles won, knockouts, time. **Run history** (L1 / R1): every challenge run,
-  newest first, cleared in yellow, fallen dim, with its challenges and numbers. **Records**: one
-  page per category with each challenge's record (below) and the category's count of clears.
-  Game text uses only what the game's font has (letters, digits, `. , : ! ? ' / + - %`). The title bar gives
-  the highlighted challenge's description, then the controls. Challenges are still chosen in F1.
+- **Challenges in Aya's menu** (`pe_ch_screen.c`): no row of its own in Aya's menu. The game's
+  System list (the SYS icon, "Set User Preferences": Sound, Cursor, Window, Position) gets a fifth
+  row, **Challenges**, outside battle with a game loaded; the panel widens to fit it. It opens a
+  read-only screen from the game's own widgets: two framed lists side by side, **Active** (the
+  challenges on in this run) and **Completed** (every challenge with a record, below; cleared
+  clean in the game's yellow), each under a framed title with its count ("Completed 5/13"). Left /
+  Right moves between them; the list not in use is dimmed. The info panel below gives the
+  highlighted challenge: on Active its level (a run-locking one in yellow) and what it does, on
+  Completed its clears, best level, fastest time, Hardcore and first clear. The title bar gives the
+  run (Clean / Assisted, battles won, knockouts, time), then the controls; Circle or Cross goes
+  back to the System list. The game's handler reads System rows 4 and 5 as a jump to bonus points,
+  so Cross on our row is taken before it. Run history stays in `pe_challenges.ini` and F1's This
+  run page. Game text uses only what the game's font has (letters, digits, `. , : ! ? ' / + - %`).
+  Challenges are still chosen in F1.
 - **Run history** (`pe_ch_history.c`): `pe_challenges.ini` beside the preferences, one line per run
   (`<id> ko= st=playing|cleared|fallen on= ever= drop= fl= b= t= lv= at=`; the older
   `<id> <knockouts> [dead]` lines still read). It is per user, like `pe_collection.ini`: knockouts
@@ -314,7 +346,7 @@ Tough crowd 2x) only turn challenges on; Clear all is press-twice.
   Hardcore run, the first clear's date. Kept per user in `pe_challenges_records.ini` (one line per
   challenge id). It is fed by listening to `challenges.run_cleared`, like any other mod could be;
   the first time the file is missing, cleared runs already in the history are counted once. Shown
-  on the Records page of Aya's Challenges screen (cleared clean in yellow, not cleared dim) and as
+  in the Completed list of Aya's Challenges screen (cleared clean in yellow) and as
   "Challenges cleared N of M" in F1.
 - **This run (F1):** status, challenges on / used / lowered, cheats, battles won, knockouts and time.
 - **Hardcore (permadeath):** chosen at the title for a New Game only, and its run locks every
@@ -684,11 +716,18 @@ In pe_collection/:
 - `pe_bestiary_menu.c`: a Bestiary row in Aya's main menu (icon: the B of the BP icon) once a creature is
   met: the area's creatures (L1 / R1 change area; unmet ones "???"), the model turning with its idle
   animation in a game panel (host pe_model_stage; Left / Right turn it, Triangle full screen, Square
-  pause, Select the next form), and what is known by tier below. Unmet creatures of a reached area
+  pause, Select the next form), and what is known by tier below. The browser sits in the game's
+  screen area (right of the icon rail, under the title bar), widened to the status screen's right
+  edge. Details wrap to the panel width and native drawing budget;
+  L2 / R2 scroll the information independently of the creature list. Changing creatures or
+  unlocking a tier returns to the first detail line. Unmet creatures of a reached area
   show as a silhouette; others and bosses show nothing. Cross buys the next tier after the game's
   Yes / No (host `pe_confirm`). NEW: tiers not looked at yet (profile `seen`) list in the game's
   yellow. Debug > Collection: Junk, Give 1000 Junk, Test creature (its tiers, kills, NEW), Unlock
   next tier, Add a kill, Reset creature, Mark creature NEW, Clear / Make all NEW.
+  `tests/run_pe_bestiary_menu_test.ps1` checks the layout, wrapping without lost text (also when the
+  overflowing glyph is a space), scrolling, the title bar's Info page only when it scrolls, translated
+  glyph boundaries, dense text drawing limits, viewer controls and teardown.
 In pe_wardrobe/:
 - `pe_wardrobe.c`: the costume registry. A costume is one of the game's player bundles (bank 10 /
   12 / 13, rewritten at the start of Aya's model load, PE_HOOK_PLAYER_BANK), a skin folder

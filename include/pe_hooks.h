@@ -76,8 +76,69 @@ typedef enum PeHookId {
                            * which Unicode letter a one-byte code draws (pe1/text_render.h) */
     PE_HOOK_DISC_READ, /* PeHookDiscRead: PE.IMG sectors just read, before the game looks at them;
                         * their bytes may be changed in place (a translation's pictures) */
+    /* Costume combat styles; appended after upstream's IDs. */
+    PE_HOOK_AT_CHARGE, /* PeHookAtCharge: eligible native AT increment, after status modifiers */
+    PE_HOOK_PLAYER_ACTION_END, /* Combatant *: previously nonempty native action queue completed */
+    PE_HOOK_PLAYER_ACTION, /* Combatant *: committed action queue, after native AT reset */
+    PE_HOOK_BATTLE_HUD, /* NULL: native battle HUD prepared, before primitive submission */
+    PE_HOOK_ENEMY_DAMAGE, /* PeHookEnemyDamage: final local loss, before enemy HP commit */
+    PE_HOOK_TARGET_PREVIEW, /* PeHookTargetPreview: selected target panel has been prepared */
+    PE_HOOK_PE_RECOVERY, /* PeHookPeRecovery: eligible native passive PE increment only */
+    PE_HOOK_ACTION_MODE, /* PeHookActionMode: valid native actor pose change */
+    PE_HOOK_PLAYER_ACTION_CANCEL, /* Combatant *: pending queue abandoned/canceled */
+    PE_HOOK_ENEMY_EFFECT, /* PeHookEnemyEffect: an enemy attack's effect on its target
+                           * (Battle_ApplyEnemyAttack): stage 0 at entry, stage 1 once an
+                           * ailment passed the armor roll; *cancel skips the effect;
+                           * appended, previous hook IDs unchanged */
+    PE_HOOK_SPELL_DONE,  /* PeHookSpellDone: Battle_ApplySpellEffect after the power's effect,
+                          * before the HP clamp and the PE drain; *drain may change; appended */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookPeRecovery {
+    const void *actor;
+    int current, maximum;
+    int *increment; /* 16.16 native PE units; rates/divisors stay native */
+} PeHookPeRecovery;
+typedef struct PeHookActionMode {
+    const void *actor;
+    int mode;
+} PeHookActionMode;
+
+typedef struct PeHookEnemyDamage {
+    const void *source, *target;
+    int *damage;
+    int ordinary; /* excludes PE and native instant-kill status effects */
+} PeHookEnemyDamage;
+typedef struct PeHookTargetPreview {
+    const void *object; /* RenderObjectEntity * of the selected target */
+    int mode, out_of_range;
+    int phase; /* 0 before preparation (restore prior cue), 1 after preparation */
+} PeHookTargetPreview;
+
+typedef struct PeHookAtCharge {
+    const void *actor;
+    int *increment;
+} PeHookAtCharge;
+
+/* Stage 0: the effect is about to run (cancel skips all of it, buff strips included).
+ * Stage 1: an ailment (poison, confusion, darkness, stiffness) is about to land after
+ * the armor's resist roll failed (cancel = resisted; one-use immunity is kept). */
+typedef struct PeHookEnemyEffect {
+    int effect;          /* ENEMY_EFFECT_* */
+    int stage;
+    const void *target;  /* Combatant *, the attacked actor */
+    int *cancel;
+} PeHookEnemyEffect;
+
+/* drain: the PE cost in 16.16 before PE Light (Barrier's cost is already taken). */
+typedef struct PeHookSpellDone {
+    unsigned spell;
+    struct BattleEntity *target;
+    void *actor;         /* Combatant *, the caster */
+    int hp_before;       /* the caster's HP before the effect */
+    int *drain;
+} PeHookSpellDone;
 
 typedef struct PeHookEquipmentGuard {
     int kind; /* 0 native value, 1 record, 2 Tools selections */

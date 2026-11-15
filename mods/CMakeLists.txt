@@ -2,9 +2,10 @@
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it. Language packs
 # are available in standard builds, but the original text remains the default and no pack ships.
-set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_stacks pe_warp pe_quicksave pe_cheats pe_phone)
+# pe_fonts adds F1 > Font (Original, or a picture from mods/fonts/); Original is the default.
+set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone)
 if(NOT PE_PS5_GAME)
-    list(APPEND pe_default_mods pe_lang)
+    list(APPEND pe_default_mods pe_lang pe_fonts)
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 
@@ -25,6 +26,20 @@ if(PE_BUNDLE_LANGUAGE_PACKS AND NOT PE_PS5_GAME AND "pe_lang" IN_LIST PE_MOD_LIS
         COMMENT "Validate and compile bundled language packs"
         VERBATIM)
     add_dependencies(parasite-eve-pc pe-language-packs)
+endif()
+
+# F1 > Font reads mods/fonts/ beside the game; copy the shipped pictures there.
+if("pe_fonts" IN_LIST PE_MOD_LIST)
+    if(APPLE AND PE_MACOS_BUNDLE)
+        set(pe_font_dir "$<TARGET_BUNDLE_CONTENT_DIR:parasite-eve-pc>/Resources/mods/fonts")
+    else()
+        set(pe_font_dir "$<TARGET_FILE_DIR:parasite-eve-pc>/mods/fonts")
+    endif()
+    add_custom_target(pe-font-files
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/fonts" "${pe_font_dir}"
+        COMMENT "Copy the font pictures beside the game"
+        VERBATIM)
+    add_dependencies(parasite-eve-pc pe-font-files)
 endif()
 
 set(pe_host_sources
@@ -64,10 +79,13 @@ if(PE_PS5_PLUGINS AND NOT PE_PS5_GPU_NATIVE)
     list(REMOVE_ITEM pe_host_sources host/ui/pe_ui_gpu.c)
     list(APPEND pe_host_sources host/ui/pe_ui_ps5_cpu.c)
 endif()
+set(PE_EXTRA_MODS "" CACHE STRING "Additional mods appended to the configured suite")
+set(pe_enabled_mods ${PE_MOD_LIST} ${PE_EXTRA_MODS})
+list(REMOVE_DUPLICATES pe_enabled_mods)
 set(pe_mod_sources ${pe_host_sources})
 set(pe_mod_decls "")
 set(pe_mod_refs "")
-foreach(mod IN LISTS PE_MOD_LIST)
+foreach(mod IN LISTS pe_enabled_mods)
     file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${mod}/*.c)
     list(APPEND pe_mod_sources ${mod_files})
     string(APPEND pe_mod_decls "extern const PeMod pe_mod_${mod};\n")
@@ -111,6 +129,15 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     target_compile_definitions(pe-mod-frequency PRIVATE __psyz PE_MODS=1 PE_NATIVE_STATE_CPU_COMPONENTS=1)
     target_link_libraries(pe-mod-frequency PRIVATE psyz)
     add_test(NAME pe-mod-frequency COMMAND pe-mod-frequency)
+endif()
+
+# Font pictures: the reader, the page writes, and the shipped mods/fonts/ pictures.
+if(BUILD_TESTING AND "pe_fonts" IN_LIST PE_MOD_LIST)
+    add_executable(test-mod-fonts ${PROJECT_SOURCE_DIR}/tests/pe_mod_fonts_test.c pe_fonts/pe_fonts_sheet.c)
+    target_include_directories(test-mod-fonts PRIVATE pe_fonts)
+    target_compile_options(test-mod-fonts PRIVATE $<IF:$<BOOL:${MSVC}>,/UNDEBUG,-UNDEBUG>)
+    target_link_libraries(test-mod-fonts PRIVATE SDL3::SDL3)
+    add_test(NAME mod-fonts COMMAND test-mod-fonts "${PROJECT_SOURCE_DIR}/mods/fonts")
 endif()
 
 if(BUILD_TESTING)
@@ -263,13 +290,28 @@ endif()
 if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
     # The pure core and the game's own pack; the game side is covered by pe-native-debug's
     # scenarios/phone_calls.py.
+    pe_feature_test(phone-cancel ${PROJECT_SOURCE_DIR}/tests/pe_mod_phone_cancel_test.c)
     pe_feature_test(phone ${PROJECT_SOURCE_DIR}/tests/pe_mod_phone_test.c pe_phone/pe_phone_text.c
         pe_phone/pe_phone_record.c pe_phone/pe_phone_pick.c pe_phone/pe_phone_file.c)
     target_compile_definitions(test-mod-phone PRIVATE PE_PHONE_CALLS_FILE="${CMAKE_CURRENT_SOURCE_DIR}/pe_phone/calls/pe1.txt")
 endif()
+if(BUILD_TESTING)
+    pe_feature_test(title-choice ${PROJECT_SOURCE_DIR}/tests/pe_mod_title_choice_test.c)
+endif()
+if(BUILD_TESTING AND "pe_challenges" IN_LIST PE_MOD_LIST)
+    pe_feature_test(challenge-start ${PROJECT_SOURCE_DIR}/tests/pe_mod_challenge_start_test.c)
+endif()
+if(BUILD_TESTING AND "pe_styles" IN_LIST PE_MOD_LIST)
+    pe_feature_test(combat-styles ${PROJECT_SOURCE_DIR}/tests/pe_mod_combat_styles_test.c
+        pe_styles/pe_style_catalog.c pe_styles/pe_style_engine.c
+        pe_styles/pe_style_quickstep.c pe_styles/pe_style_channeler.c
+        pe_styles/pe_style_striker.c pe_styles/pe_style_bulwark.c)
+endif()
 if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
     pe_feature_test(skin-bounds ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_bounds_test.c)
     pe_feature_test(wardrobe-menu ${PROJECT_SOURCE_DIR}/tests/pe_mod_wardrobe_menu_test.c)
+    # Match the standalone fixture: eliminate unused native inline helpers.
+    target_compile_options(test-mod-wardrobe-menu PRIVATE $<IF:$<BOOL:${MSVC}>,/O1,-O1>)
     pe_feature_test(packs ${PROJECT_SOURCE_DIR}/tests/pe_mod_packs_test.c pe_wardrobe/pe_packs.c)
     target_link_libraries(test-mod-packs PRIVATE pe_download_json pe_download_zip)
     set_tests_properties(mod-packs PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
