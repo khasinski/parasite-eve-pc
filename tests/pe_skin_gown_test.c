@@ -92,7 +92,8 @@ static void blob_test(int rooms) {
     }
     /* Aliased rows must each be repaired from the original, never twice. */
     for (unsigned i = 0; i < 2; ++i) {
-        pg_put32(p + table + 12 * i, rooms ? 0x12345678 : n);
+        /* Model records keep a flag byte above the 24-bit length. */
+        pg_put32(p + table + 12 * i, rooms ? 0x12345678 : n | 0xab000000);
         pg_put32(p + table + 12 * i + 4, 128 | (rooms ? 0 : 0x15000000));
         pg_put32(p + table + 12 * i + 8, n);
     }
@@ -105,10 +106,15 @@ static void blob_test(int rooms) {
     unsigned off = pg_u32(p + table + 4) & 0xffffff, off2 = pg_u32(p + table + 16) & 0xffffff;
     assert(off >= 128 + n && off2 > off);
     assert(!memcmp(p + 128, row, n));
-    unsigned len = rooms ? pg_u32(p + table + 8) : pg_u32(p + table);
+    unsigned len = rooms ? pg_u32(p + table + 8) : pg_u32(p + table) & 0xffffff;
     assert(!memcmp(p + off, p + off2, len));
     if (rooms)
         assert(pg_u32(p + table) == 0x12345678);
+    else
+        for (unsigned i = 0; i < 2; ++i) {
+            assert(p[table + 12 * i + 3] == 0xab);
+            assert(p[table + 12 * i + 7] == 0x15);
+        }
     free(p);
     /* Reject a malformed offset without modifying/replacing the source. */
     p = original;
@@ -130,6 +136,8 @@ int main(int argc, char **argv) {
     for (unsigned n = 0; n < 12; ++n)
         assert(!pg_prepared(prepared, n));
     assert(!pg_prepared(NULL, 0));
+    /* A short-read meta.bin leaves data NULL; never dereference it. */
+    assert(!pg_prepared(NULL, 12));
     /* Optional locally owned disc assets; never required by CI or committed. */
     if (argc == 3) {
         const char *names[] = {"model.bin", "day1.bin", "day2.bin", "day3.bin", "day4.bin",

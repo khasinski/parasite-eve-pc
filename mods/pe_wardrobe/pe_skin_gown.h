@@ -22,8 +22,9 @@ static int pg_leg(unsigned i) { return (i >= 21 && i <= 23) || (i >= 25 && i <= 
 static int pg_legacy(const char *folder) {
     return folder && (!strcmp(folder, "melissa") || !strcmp(folder, "opera_actress"));
 }
+/* meta may be NULL (missing or short-read meta.bin) whatever size says. */
 static int pg_prepared(const uint8_t *meta, unsigned size) {
-    return size >= 12 && !memcmp(meta, "PEMT", 4) && !memcmp(meta + 8, "GWN1", 4);
+    return meta && size >= 12 && !memcmp(meta, "PEMT", 4) && !memcmp(meta + 8, "GWN1", 4);
 }
 static int pg_channels(const uint8_t *p, unsigned n, PeGownChannel c[90]) {
     unsigned at = 12, frames, wide;
@@ -229,8 +230,8 @@ static int pg_blob(uint8_t **data, unsigned *size, int rooms, const unsigned res
         pg_put32(out + rec + 4, used | (rooms ? 0 : pg_u32(p + rec + 4) & 0xff000000));
         if (rooms)
             pg_put32(out + rec + 8, len);
-        else
-            pg_put32(out + rec, len);
+        else /* length lives in the low 24 bits; keep the record's top byte */
+            pg_put32(out + rec, len | (pg_u32(p + rec) & 0xff000000));
         used = next;
     }
     free(row);

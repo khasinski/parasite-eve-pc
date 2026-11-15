@@ -112,7 +112,7 @@ static int pe_read(const char *folder, const char *name, PeBlob *b) {
     fseek(f, 0, SEEK_SET);
     if (n < 8 || (u32)n > PE_FILE_MAX || !(b->data = malloc((size_t)n))) { fclose(f); return 0; }
     b->size = (u32)n;
-    if (fread(b->data, 1, (size_t)n, f) != (size_t)n) { free(b->data); b->data = NULL; fclose(f); return 0; }
+    if (fread(b->data, 1, (size_t)n, f) != (size_t)n) { free(b->data); b->data = NULL; b->size = 0; fclose(f); return 0; }
     fclose(f);
     return 1;
 }
