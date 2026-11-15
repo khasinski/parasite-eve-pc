@@ -12,7 +12,7 @@ int pe_ch_start_pick(int levels[CH_COUNT]) {
   /* Feature Hardcore first without changing the catalog or saved challenge ids.
    */
   rows[row_count++] = pe_ch_def(CH_HARDCORE);
-  for (unsigned i = 0; i < g_ch_def_count; ++i)
+  for (unsigned i = 0; i < g_ch_def_count && row_count < CH_COUNT; ++i)
     if (g_ch_defs[i]->id != CH_HARDCORE)
       rows[row_count++] = g_ch_defs[i];
   const int clear_row = (int)row_count, start_row = clear_row + 1;
@@ -46,7 +46,7 @@ int pe_ch_start_pick(int levels[CH_COUNT]) {
     }
     int choice = pe_menu_choose_title(
         "Choose your challenges", "Up/Down select   Cross/Enter choose", names,
-        descriptions, g_ch_def_count + 2, cursor);
+        descriptions, row_count + 2, cursor);
     if (choice < 0)
       return 0;
     if (choice == start_row) {
