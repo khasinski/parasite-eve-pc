@@ -65,7 +65,11 @@ void MenuWidget_DestroyNode(MenuWidgetNode *n) {
 MenuWidgetNode *MenuWidget_GetCurrentNode(void) { return current; }
 void MenuWidget_SetCurrentNode(MenuWidgetNode *n) { current=n; }
 int MenuWidget_GridCellIndex(MenuWidgetNode *n) { return n->cursor_y; }
-MenuWidgetSimpleDescriptor *MenuWidget_LookupSimpleDescriptor(unsigned int i) { static MenuWidgetSimpleDescriptor d={28,24,252,0};(void)i;return &d; }
+MenuWidgetSimpleDescriptor *MenuWidget_LookupSimpleDescriptor(unsigned int i) {
+    /* the discs' own: 0 the icon rail, 1 the screen area, 7 the status screen's right-hand panel */
+    static MenuWidgetSimpleDescriptor rail={8,32,20,132},area={28,32,252,132},status={180,32,128,132};
+    return i==0?&rail:i==7?&status:&area;
+}
 void Draw_SetPrimCallback(MenuWidgetNode *n,int rows) {
     int old=n->visible_rows;n->y_limit=(rows+n->grid_width-1)/n->grid_width;n->visible_rows=n->y_limit<n->visible_rows_mirror?n->y_limit:n->visible_rows_mirror;
     n->parent->visible_rows+=n->disabled*(n->visible_rows-old);
@@ -166,6 +170,13 @@ static void draw_all(void) {
  if(frame_bytes>0x2800)fprintf(stderr,"advance %d bytes %zu quad %zu\n",font_advance,frame_bytes,sizeof(RenderTexturedQuad));
  assert(frame_bytes<=0x2800);
 }
+/* Whether the title bar ever offers L2 R2 over a full cycle of its pages. */
+static int help_offers_scroll(void) {
+ u8 want[8];int seen=0;pe_text_from_ascii(want,sizeof want,"L2 R2");
+ s_said_tick=-100000;
+ for(s_tick=0;s_tick<4*PE_HELP_TICKS;s_tick+=PE_HELP_TICKS) {u8 *text=NULL;pe_on_help_text(&text,NULL);assert(text);seen|=!memcmp(text,want,5);}
+ return seen;
+}
 static void check_all_lines(void) {
  pe_build_info();
  assert(s_info_count>PE_INFO_ROWS);
@@ -190,8 +201,9 @@ static void check_all_lines(void) {
 int main(void) {
  g_DrawPacketArenaBase=g_DrawPacketCursor=packet_arena;g_DrawOrderingTableEntry=(unsigned int *)&ordering;
  pe_bestiary_menu_register("test");MenuWidgetNode from={0};pe_open(&from);
- assert(s_screen.panel->x==8 && s_info->parent->x==8 && s_info->parent->grid_width==304);
- assert(s_info->parent->x+s_info->parent->grid_width<=320);
+ /* right of the icon rail, under the title bar, out to the status screen's right edge */
+ assert(s_screen.panel->x==28 && s_screen.panel->y==32 && s_info->parent->x==28 && s_info->parent->grid_width==280);
+ assert(s_info->parent->x+s_info->parent->grid_width<=308);
  assert(s_screen.list->visible_rows_mirror==6 && s_info->visible_rows_mirror==4);
  for(font_advance=4;font_advance<=10;++font_advance) {draw_all();check_all_lines();}
  send(PE_MENU_R2);assert(s_info_top==1);
@@ -204,7 +216,22 @@ int main(void) {
  send(PE_MENU_SQUARE);assert(s_paused);
  known=PE_BESTIARY_MET;draw_all();check_all_lines();
  known=0;draw_all();assert(s_info_top==0);
+ assert(s_info_count<=PE_INFO_ROWS && !help_offers_scroll());   /* one page: no Info page in the title bar */
+ known=7;draw_all();assert(s_info_count>PE_INFO_ROWS && help_offers_scroll());
+ known=0;draw_all();
  known=7;send(PE_MENU_L1);draw_all();
+ { /* the glyph that overflows is a space: the word before it stays on the line */
+  const int saved_advance=font_advance;font_advance=14;draw_all();   /* the width, not the glyph budget, binds */
+  const int fit=(s_info->draw_state-4)/font_advance;
+  static char edge[128];const PeCreatureInfo *c=info(pe_current());const char *saved_drop=c->drop;
+  assert(fit>8 && fit+4<(int)sizeof edge);
+  memset(edge,'A',fit-6);strcpy(edge+fit-6," BB");     /* "Drop: " + word = exactly the width */
+  creatures[pe_current()].drop=edge;pe_build_info();
+  int first=-1;for(int i=0;i<s_info_count;++i)if(s_info_lines[i].source==2){first=i;break;}
+  assert(first>=0 && s_info_lines[first].length==fit);
+  assert(s_info_lines[first+1].source==2 && s_info_lines[first+1].length==2);
+  creatures[pe_current()].drop=saved_drop;font_advance=saved_advance;draw_all();
+ }
  static char long_loot[400];memset(long_loot,'A',sizeof long_loot-1);creatures[1].drop=long_loot;
  draw_all();check_all_lines();
  extended=1;draw_all();check_all_lines();
@@ -213,6 +240,6 @@ int main(void) {
  send(PE_MENU_CIRCLE);assert(current==&from && !s_screen.list);
  pe_open(&from);draw_all();assert(s_info_top==0);
  send(PE_MENU_CIRCLE);for(int i=0;i<24;++i)assert(!used[i]);
- printf("Bestiary checks passed: full-width panel, complete wrapped details, bounded scrolling, selection reset, locked tiers, viewer controls, teardown; peak %zu bytes.\n",max_frame_bytes);
+ printf("Bestiary checks passed: full-width panel, complete wrapped details, overflowing-space breaks, bounded scrolling, Info page only when it scrolls, selection reset, locked tiers, viewer controls, teardown; peak %zu bytes.\n",max_frame_bytes);
  return 0;
 }

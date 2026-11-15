@@ -289,10 +289,12 @@ static void pe_build_info(void) {
                 text[next] = G_END;
                 measured = Draw_MeasureTextWidth(text + begin);
                 text[next] = saved;
+                /* A space that overflows still ends the line: break there, not at the
+                 * previous space, so the word before it stays on this line. */
+                if (text[pos] == 0x0F) space = pos;
                 if ((measured > width || glyphs >= max_glyphs) && fit > begin) break;
                 fit = next;
                 ++glyphs;
-                if (text[pos] == 0x0F) space = pos;
                 pos = next;
             }
             unsigned stop = text[pos] != G_END && space > begin ? space : fit;
@@ -439,7 +441,10 @@ static int pe_on_help_text(void *ctx, void *user) {
     if (s_tick - s_said_tick < PE_SAID_TICKS) {
         snprintf(line, sizeof line, "%s", s_said);
     } else {
-        switch ((s_tick / PE_HELP_TICKS) % 4) {
+        int pages;
+        pe_build_info();
+        pages = s_info_count > PE_INFO_ROWS ? s_info_count - PE_INFO_ROWS + 1 : 1;
+        switch ((s_tick / PE_HELP_TICKS) % (pages > 1 ? 4 : 3)) {   /* the Info page only when it scrolls */
         case 0:
             for (i = 0; i < s_members; ++i) met += pe_met(s_member[i]);
             snprintf(line, sizeof line, pe_l10n_ui("%s   %d / %d   Junk %u"), s_areas ? pe_l10n_ui(s_area_name[s_area]) : "", met, s_members, pe_col_junk());
@@ -447,8 +452,7 @@ static int pe_on_help_text(void *ctx, void *user) {
         case 1: snprintf(line, sizeof line, "%s", pe_l10n_ui("L1 R1: Area   Left Right: Turn")); break;
         case 2: snprintf(line, sizeof line, "%s", pe_l10n_ui("X: Buy   Triangle: View   Square: Pause")); break;
         default:
-            pe_build_info();
-            snprintf(line, sizeof line, pe_l10n_ui("L2 R2: Info   %u / %u"), (unsigned)s_info_top + 1, (unsigned)(s_info_count > PE_INFO_ROWS ? s_info_count - PE_INFO_ROWS + 1 : 1));
+            snprintf(line, sizeof line, pe_l10n_ui("L2 R2: Info   %u / %u"), (unsigned)s_info_top + 1, (unsigned)pages);
             break;
         }
     }
@@ -466,8 +470,14 @@ static int pe_on_frame(void *ctx, void *user) {
 }
 
 static void pe_open(MenuWidgetNode *main_list) {
-    /* Keep a small safe margin, using the full native screen instead of the inventory inset. */
-    const int x = 8, y = 24, width = 304;
+    /* The game's screen area (Aya's inventory panel, right of the menu's icon rail, under the title
+     * bar), widened to the right edge of the status screen's right-hand panel (28..308 on both the
+     * USA and Japanese discs) so the details get room without covering the rail. */
+    const MenuWidgetSimpleDescriptor *d = MenuWidget_LookupSimpleDescriptor(1);
+    const MenuWidgetSimpleDescriptor *r = MenuWidget_LookupSimpleDescriptor(7);
+    const int x = d && d->x > 0 ? d->x : 28, y = d && d->y > 0 ? d->y : 24, base = d && d->width > 0 ? d->width : 252;
+    const int right = r && r->x > 0 && r->width > 0 ? r->x + r->width : 308;
+    const int width = right - x > base ? right - x : base;
     int ix, iy, iw, ih, bx, by, bw, bh;
     pe_build_areas();
     if (!s_areas) return;
