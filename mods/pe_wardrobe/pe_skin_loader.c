@@ -33,6 +33,7 @@
 
 #include "pe_wardrobe.h"
 #include "pe_skin_collision.h"
+#include "pe_skin_gown.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -99,7 +100,7 @@ static int pe_read(const char *folder, const char *name, PeBlob *b) {
         unsigned char *data;
         unsigned size;
         if (!pe_pack_read(folder, name, &data, &size, PE_FILE_MAX)) return 0;
-        if (size <= 8) { free(data); return 0; }
+        if (size < 8) { free(data); return 0; }
         b->data = data;
         b->size = (u32)size;
         return 1;
@@ -109,7 +110,7 @@ static int pe_read(const char *folder, const char *name, PeBlob *b) {
     fseek(f, 0, SEEK_END);
     n = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (n <= 8 || (u32)n > PE_FILE_MAX || !(b->data = malloc((size_t)n))) { fclose(f); return 0; }
+    if (n < 8 || (u32)n > PE_FILE_MAX || !(b->data = malloc((size_t)n))) { fclose(f); return 0; }
     b->size = (u32)n;
     if (fread(b->data, 1, (size_t)n, f) != (size_t)n) { free(b->data); b->data = NULL; fclose(f); return 0; }
     fclose(f);
@@ -181,6 +182,19 @@ static PeSkin *pe_load(const char *folder) {
     if (!k->nrooms) pe_log("skin", "%s: rooms.bin missing or unreadable (room animations stay Aya's)", folder);
     k->gun_part = -1;
     if (pe_read(folder, "meta.bin", &meta) && !memcmp(meta.data, "PEMT", 4) && meta.data[4] < 64) k->gun_part = meta.data[4];
+    /* PEMT + gun part (u32), optionally GWN1: builder already repaired legs.
+     * Only the two built-in folders use this legacy repair; unrelated packs
+     * and Aya's own outfits retain their authored animations. The loaded
+     * cache above makes this a once-per-skin operation. */
+    if (pg_legacy(folder) && !pg_prepared(meta.data, meta.size)) {
+        unsigned rest[29][3];
+        int repaired = pg_rest(k->model.data, k->model.size, rest);
+        if (repaired) repaired = pg_blob(&k->model.data, &k->model.size, 0, rest);
+        for (d = 1; repaired && d <= 8; ++d) repaired = pg_blob(&k->day[d].data, &k->day[d].size, 0, rest);
+        if (repaired && k->nrooms) repaired = pg_blob(&k->rooms.data, &k->rooms.size, 1, rest);
+        if (!repaired) { free(meta.data); return pe_load_failed(folder, "gown animations invalid"); }
+        pe_log("skin", "%s: legacy gown leg animations repaired", folder);
+    }
     free(meta.data);
     pe_log("skin", "%s loaded: model %u, textures %u, rooms %u", folder, k->model.size, k->tex.size, k->nrooms);
     k->ok = 1;
