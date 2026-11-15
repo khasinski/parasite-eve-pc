@@ -138,8 +138,11 @@ static void test_record(void) {
 
 /* ---- picking ---- */
 
-static int s_warner_on;   /* the one condition these tests offer, as pe_shops would */
-static int pe_holds(const char *name) { return !strcmp(name, "warner.supplies") && s_warner_on; }
+static int s_warner_on;       /* warner.supplies, as pe_shops would offer it */
+static int s_crossovers_on;   /* phone.crossovers, as Phone Calls' own F1 switch offers it */
+static int pe_holds(const char *name) {
+    return (!strcmp(name, "warner.supplies") && s_warner_on) || (!strcmp(name, "phone.crossovers") && s_crossovers_on);
+}
 
 static void test_needs(void) {
     PePhoneCall needy = CALL("t/needy", PE_CALL_SERIOUS, 1, 0, 0, 0, 9, NULL);
@@ -304,7 +307,7 @@ static void test_pe1_pack(void) {
     PePhoneContext sewer = {32, 0x68, 1, 3}, park = {87, 0xF8, 2, 3}, carnegie = {1, 0x40, 1, 3};
     int i, k, funny = 0;
     load_pe1();
-    assert(s_pack_count == 54);
+    assert(s_pack_count == 56);
     memset(&r, 0, sizeof r);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &sewer, &r, pe_holds, 0)->key, "pe1/sewer_emergency"));
     for (i = 0; i < 64; ++i) {                                                        /* never elsewhere */
@@ -328,10 +331,57 @@ static void test_pe1_pack(void) {
             if (c->after) {
                 for (k = 0; k < s_pack_count && strcmp(s_pack[k]->key, c->after); ++k) {}
                 assert(k < s_pack_count && s_pack[k]->priority > c->priority);   /* chain runs downhill */
+                assert(s_pack[k]->tone == c->tone);   /* else Call tone on one side strands the call */
             }
         }
     }
     assert(funny == 20);
+}
+
+/* Crossover calls need the Crossover calls switch (phone.crossovers, on by default): off leaves them out. */
+static void test_crossovers(void) {
+    PePhoneRecord r;
+    PePhoneContext x = {1, 0xA0, 2, 3};          /* a phone with no set calls, Day 2 */
+    const PePhoneCall *c;
+    int i, tagged = 0;
+    load_pe1();
+    for (i = 0; i < s_pack_count; ++i) {
+        const int cross = !strncmp(s_pack[i]->key, "pe1/raccoon_", 12) || !strncmp(s_pack[i]->key, "pe1/ff_", 7);
+        assert(cross == (s_pack[i]->needs && !strcmp(s_pack[i]->needs, "phone.crossovers")));
+        tagged += cross;
+    }
+    assert(tagged == 12);
+    memset(&r, 0, sizeof r);
+    for (i = 0; i < 64; ++i) {
+        c = pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, (uint32_t)i * 7919u);
+        assert(c && strncmp(c->key, "pe1/raccoon_", 12) && strncmp(c->key, "pe1/ff_", 7));
+    }
+    s_crossovers_on = 1;
+    c = pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 7u);
+    assert(c && !strcmp(c->key, "pe1/raccoon_umbrella"));    /* on: the day's crossover comes first */
+    s_crossovers_on = 0;
+}
+
+/* Baker's cruiser call doesn't wait on the funny call to Wayne's mom: it plays with serious only. */
+static void test_cruiser_serious(void) {
+    PePhoneRecord r;
+    PePhoneContext x = {276, 0xF8, 6, 1};
+    load_pe1();
+    memset(&r, 0, sizeof r);
+    assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 7u)->key, "pe1/cruiser_baker"));
+    /* Mixed: Baker, Wayne's mom, then Ruth at the precinct, ahead of the day's crossover */
+    {
+        static const char *const order[] = {"pe1/cruiser_baker", "pe1/cruiser_mom", "pe1/precinct_names", "pe1/raccoon_wesker"};
+        int i;
+        x.tone_mask = 3;
+        s_crossovers_on = 1;
+        for (i = 0; i < 4; ++i) {
+            const PePhoneCall *c = pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 7u);
+            assert(c && !strcmp(c->key, order[i]));
+            pe_phone_record_played(&r, c);
+        }
+        s_crossovers_on = 0;
+    }
 }
 
 /* A day's set calls play in order at whichever of its phones Aya uses, then the random pool. */
@@ -361,9 +411,14 @@ static void test_set_calls(void) {
     pe_phone_record_played(&r, c);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 12345u)->key, "pe1/park_wall"));
     s_warner_on = 0;
-    x.tone_mask = 2;                                                /* funny only: the zoo call's turn */
+    x.tone_mask = 2;                                /* funny only: the zoo call needs no serious call first */
     memset(&r, 0, sizeof r);
-    assert(strncmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 1u)->key, "pe1/park_", 9));   /* waits on the wall update */
+    assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &x, &r, pe_holds, 1u)->key, "pe1/park_zoo"));
+    {
+        PePhoneContext street = {97, 0xA0, 3, 2}, hospital = {126, 0xC0, 4, 2};
+        assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &street, &r, pe_holds, 1u)->key, "pe1/street_hotel"));
+        assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &hospital, &r, pe_holds, 1u)->key, "pe1/hospital_pharmacy"));
+    }
     memset(&r, 0, sizeof r);
     assert(!strcmp(pe_phone_pick(s_pack, s_pack_count, &hall, &r, pe_holds, 7u)->key, "pe1/hall_report"));
     assert(strcmp(pe_phone_pick(s_pack, s_pack_count, &hall2, &r, pe_holds, 7u)->key, "pe1/hall_report"));   /* Day 1 only */
@@ -388,6 +443,8 @@ int main(void) {
     test_call_file();
     test_pe1_pack();
     test_set_calls();
+    test_crossovers();
+    test_cruiser_serious();
     puts("pe_phone: all checks passed");
     return 0;
 }

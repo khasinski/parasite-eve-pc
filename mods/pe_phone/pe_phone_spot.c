@@ -20,14 +20,16 @@
  * for well over 10 frames before the save screen opens.) With no save Aya has already put the phone
  * down when the question shows, and the ring page's pick-up sound plays: found headless 2026-11-09,
  * neither No nor backing out leaves the phone's task waiting on her put-down as a save does, and
- * holding her any earlier stalls a Yes. Only real save phones' questions: the sewer's "Press the
- * switch" or "Cancel" is not a phone call. */
+ * holding her before the save menu opens stalls a Yes. The frame hook below holds her once the
+ * save menu is open, so backing out can continue directly into a call. Only real save phones'
+ * questions: the sewer's "Press the switch" or "Cancel" is not a phone call. */
 #include <stdio.h>
 
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_phone.h"
 #include "pe1/game_state.h"
+#include "pe1/menu_state.h"
 #include "pe1/scene_dispatch.h"
 #include "pe1/script_queue.h"
 
@@ -41,6 +43,7 @@ static int s_state = SPOT_IDLE;
 static int s_kind;                     /* 1 a save phone's question, 3 the sewer's emergency phone */
 static int s_quiet;                    /* our call is up: the phone's pages aren't a new phone */
 static int s_free;
+static int s_card_open;                /* the memory card screen was open at the last frame */
 static int s_token = -1;
 static PePhoneSpot s_spot = {-1, 0};
 static PePhoneSpot s_seen = {-1, 0};   /* the last phone seen, for F1 */
@@ -72,6 +75,7 @@ static int pe_on_page(void *ctx, void *user) {
         s_state = SPOT_ASKED;
         s_kind = kind;
         s_free = 0;
+        s_card_open = 0;
     }
     return 0;
 }
@@ -83,6 +87,30 @@ static int pe_on_committed(void *ctx, void *user) {
     pe_log("phone", "room=%d saved=1", s_spot.room);
     if (pe_phone_mode() != PE_PHONE_OFF) (void)pe_phone_hold_begin();   /* keep her at the phone */
     s_state = SPOT_SAVED;
+    return 0;
+}
+
+/* Catch a backed-out save before the field advances the put-down animation.
+ * The save opcode (231) has opened the memory card screen and Aya's task can now wait on the
+ * hang-up. Holding before the screen opens would also freeze her initial pickup. The card screen's
+ * own state is watched, not game-state flag 0x1000: the item menu and other opcodes set that too.
+ * One try per opening: a phone whose task doesn't wait there keeps its fallback (and the log quiet). */
+static int pe_on_frame(void *ctx, void *user) {
+    int open;
+    (void)ctx;
+    (void)user;
+    if (!pe_game_loaded() || g_SceneDispatchToken != s_token || s_state != SPOT_ASKED || s_kind != 1) return 0;
+    if (!pe_phone_unsaved_on() || pe_phone_mode() == PE_PHONE_OFF) {
+        if (pe_phone_hold_active()) pe_phone_hold_release();
+        return 0;
+    }
+    open = g_MemCardDialogState != 0;
+    if (open && !s_card_open && !pe_phone_hold_active()) (void)pe_phone_hold_begin();
+    else if (!open && s_card_open && pe_phone_hold_active()) {
+        pe_log("phone", "room=%d saved=0 ask=1 held=1", s_spot.room);
+        s_state = SPOT_SAVED;
+    }
+    s_card_open = open;
     return 0;
 }
 
@@ -119,6 +147,7 @@ int pe_phone_spot_ready(PePhoneSpot *out) {
 void pe_phone_spot_clear(void) {
     s_state = SPOT_IDLE;
     s_free = 0;
+    s_card_open = 0;
 }
 
 void pe_phone_spot_quiet(int on) { s_quiet = on; }
@@ -135,6 +164,7 @@ void pe_phone_spot_status(char *out, unsigned size) {
 
 void pe_phone_spot_register(const char *mod_id) {
     /* ahead of every other page handler (a language pack's is EARLY), like Wayne's menu */
+    pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_EARLY, mod_id);
     pe_hook_add(PE_HOOK_TEXT_PAGE, pe_on_page, NULL, PE_PRIORITY_EARLY - 100, mod_id);
     pe_hook_add(pe_event_id(PE_EVENT_SAVE_COMMITTED), pe_on_committed, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, pe_on_reset, NULL, PE_PRIORITY_NORMAL, mod_id);

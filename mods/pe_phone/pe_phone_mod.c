@@ -14,6 +14,7 @@ static int s_mode = PE_PHONE_ASK;
 static int s_tone = PE_TONE_MIXED;
 static int s_sounds = 1;
 static int s_unsaved = 1;                 /* ask after a phone use with no save too (No, or backing out) */
+static int s_crossovers = 1;              /* calls from other games' characters: on unless the player opts out */
 static int s_preview;                     /* 0: a call picked as usual; n: call n-1 */
 static const char *const k_modes[] = {"Ask after saving", "Always call", "Off"};
 static const char *const k_tones[] = {"Mixed", "Serious only", "Funny only"};
@@ -21,6 +22,7 @@ static const char *const k_tones[] = {"Mixed", "Serious only", "Funny only"};
 int pe_phone_mode(void) { return s_mode; }
 int pe_phone_sounds_on(void) { return s_sounds; }
 int pe_phone_unsaved_on(void) { return s_unsaved; }
+static int pe_crossovers_on(void) { return s_crossovers; }   /* "phone.crossovers" for calls' needs */
 
 int pe_phone_tone_mask(void) {
     if (s_tone == PE_TONE_SERIOUS) return 1 << PE_CALL_SERIOUS;
@@ -79,6 +81,7 @@ static void pe_check(void) {
 
 static int pe_phone_init(void) {
     pe_phone_service_register(PE_PHONE_MOD_ID);
+    (void)pe_phone_calls()->add_condition("phone.crossovers", pe_crossovers_on);
     (void)pe_phone_packs_load();
     pe_phone_spot_register(PE_PHONE_MOD_ID);
     pe_phone_flow_register(PE_PHONE_MOD_ID);
@@ -94,6 +97,9 @@ static int pe_phone_init(void) {
                             &s_unsaved, NULL);
     pe_menu_register_choice(0, "Call tone", "Which calls can come up: the sensible ones, the silly ones, or both.",
                             &s_tone, k_tones, 3);
+    pe_menu_register_toggle(0, "Crossover calls",
+                            "Calls to characters from other games (Raccoon City, Final Fantasy). Off: only Parasite Eve's own people.",
+                            &s_crossovers, NULL);
     pe_menu_register_toggle(0, "Phone sounds", "The phone's own sounds: picking up and dialling, then putting it down.",
                             &s_sounds, NULL);
     pe_menu_register_action(0, "Forget heard calls",
