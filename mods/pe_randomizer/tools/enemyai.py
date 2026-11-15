@@ -30,8 +30,7 @@ Self and spawner numbers, run-time numbers and sounds are listed, not counted.
 model placed in the enemy VRAM blocks (randomizer-models.txt, the rooms ctest) and no V var write of its own
 (story-writes.txt: replacing its script would drop the write; such actors stay), boss or not (a creature
 marked * in enemies.txt; the bestiary marks every Museum and Chrysler creature too), with its room's VRAM use;
-and per slot the foes that may take it, bosses and the rest alike: another creature, a model taking no more
-entity memory blocks than the slot's (blocks= in randomizer-models.txt), a slot no body part attaches to (op 212),
+and per slot the foes that may take it, bosses and the rest alike: another creature, a slot no body part attaches to (op 212),
 a foe starting no room slot written for its own room (g_RoomMNNN handlers), no ent or events conflict, the same
 spawner events (a fight's spawner counts on them),
 both with one spawner or both not (pe_rand_ai.c patches one), a scripted slot only a foe with a lead sub id
@@ -291,29 +290,38 @@ def write_table(pool, model, writers, path, deny=frozenset(), heads=None, bound=
         shared = any(users[k] > 1 for k in range(block, min(block + count, 8)))
         foes.append(dict(r=r, boss="*" in r["who"], block=block, count=count, shared=shared, end=end, rows_end=rows_end,
                          mem=mem))
-    def ok(a, b):
-        if a is b or a["r"]["ids"] == b["r"]["ids"]: return False
-        # Entity memory: a room has 16 blocks (Entity_AllocBlock) and each spawned copy of a model takes 1, 2, 4 or 8,
-        # aligned to its size; when none are free the spawn draws from NULL (M086's Worm slot <- M234's Scorpion,
-        # 2 -> 4 blocks, crashed in the real battle code). A foe whose model takes no more than the slot's own keeps
-        # the room within its vanilla use.
-        if b["mem"] > a["mem"]: return False
+    def why(a, b):
+        """None when foe b may take foe a's slot, else the first rule that stops it."""
+        if a is b or a["r"]["ids"] == b["r"]["ids"]: return "same creature"
+        # Entity memory: each spawned copy of a model takes 1, 2, 4 or 8 blocks (Entity_AllocBlock). The game had 16
+        # per room (M086's Worm slot <- M234's Scorpion, 2 -> 4 blocks, drew from NULL); the native build has
+        # ENTITY_ALLOCATION_SLOTS (64), and vanilla rooms use at most 14 of them (mod-randomizer-realfights mem=), so a
+        # bigger model is no reason to refuse a foe. realfights fails a fight where a spawn still gets none.
         # A slot other actors of its room address by number (a boss's body parts) keeps its own foe.
-        if (a["r"]["room"], a["r"]["entity"]) in heads: return False
+        if (a["r"]["room"], a["r"]["entity"]) in heads: return "heads"
         # A foe with helpers (the Giant Spider's legs, given its N vars) stays with them: neither moves nor is replaced.
-        if (a["r"]["room"], a["r"]["entity"]) in helps or (b["r"]["room"], b["r"]["entity"]) in helps: return False
+        if (a["r"]["room"], a["r"]["entity"]) in helps or (b["r"]["room"], b["r"]["entity"]) in helps: return "helpers"
         # A foe whose effects are its own room's (g_RoomMNNN handlers) stays in that room.
-        if (b["r"]["room"], b["r"]["entity"]) in bound and a["r"]["room"] != b["r"]["room"]: return False
+        if (b["r"]["room"], b["r"]["entity"]) in bound and a["r"]["room"] != b["r"]["room"]: return "room-bound"
         # A scripted fight (M013's Rat) is spawned by op 8 with sub id 0 and its actor sends 0x70 at once; a random
         # foe sends it only with its lead sub id (else the battle never comes in: black screen). So a scripted slot
         # takes a random foe with a lead (pe_rand_ai.c gives the slot's op 8 that sub id); a scripted foe goes nowhere.
-        if b["r"]["kind"] == "scripted" or (a["r"]["kind"] == "scripted" and b["r"]["lead"] is None): return False
+        if b["r"]["kind"] == "scripted" or (a["r"]["kind"] == "scripted" and b["r"]["lead"] is None): return "scripted"
         if {(a["r"]["room"], b["r"]["room"], b["r"]["entity"]), ("*", b["r"]["room"], b["r"]["entity"]),
                 (a["r"]["room"], a["r"]["entity"], "*")} & deny:
-            return False
+            return "deny"
         c = pair(a["r"], b["r"], {})
-        return (not c["ent"] and not c["events"] and to_spawner(a["r"]) == to_spawner(b["r"])
-                and (len(a["r"]["spawners"]) == 1) == (len(b["r"]["spawners"]) == 1))
+        if c["ent"]: return "addresses another actor"
+        if c["events"] or to_spawner(a["r"]) != to_spawner(b["r"]): return "spawner events"
+        if (len(a["r"]["spawners"]) == 1) != (len(b["r"]["spawners"]) == 1): return "spawner count"
+        return None
+    def ok(a, b): return why(a, b) is None
+    if os.environ.get("PE_ENEMYAI_WHY"):   # tally of the rule that stops each pair (stderr), for variety work
+        tally = {}
+        for a in foes:
+            for b in foes:
+                if a is not b: k = why(a, b) or "ok"; tally[k] = tally.get(k, 0) + 1
+        for k, n in sorted(tally.items(), key=lambda x: -x[1]): print(f"why	{k}	{n}", file=sys.stderr)
     words = (len(foes) + 31) // 32
     head = ["/* Generated by tools/enemyai.py --table from the AI scan, the rooms ctest's models listing and the story",
             " * writes: the battle randomizer's foes (pe_rand_gen.c pe_rand_foes_generate), room order. ok[a] bit b: foe",

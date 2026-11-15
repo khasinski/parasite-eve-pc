@@ -851,8 +851,10 @@ script runs the fight (the Theater, Day 1 Sewer and Cruiser bosses, Sheeva, the 
 enemy they can swap with and stay, and so do the Centipede and the Crab, whose body parts follow the head's
 animations (op 212), and the Giant Spider, whose legs (helpers of another creature id) wait on N vars it sets
 at steps of its HP, numbered per room (`enemyai.py` `helped()`; FOES_VERSION 5). The bestiary's boss mark also covers every Museum and Chrysler enemy, which move from
-this version on. A slot only takes an enemy whose model needs no more of the room's 16 entity memory
-blocks (`Entity_AllocBlock`) than its own (`blocks=` in the rooms ctest's models listing). M013's scripted
+this version on. An enemy's model size no longer limits where it goes (FOES_VERSION 6): the game gave each
+room 16 entity memory blocks (`Entity_AllocBlock`), the native build 64 (`ENTITY_ALLOCATION_SLOTS`; the first
+16 where the game had them, the rest used only once those are taken), and vanilla fights use at most 14
+(`mod-randomizer-realfights` writes `mem=` and fails a fight where a spawn gets none). M013's scripted
 Rat fight takes a normal enemy too: the room spawns it with the sub id that enemy's script needs to start
 its battle (`pe_rand_ai.c`). An enemy's script carries its own room (floor polygons, the points it hops or
 flies to, the floor's height): in the copy these go from that room's battle floor onto a box inside the

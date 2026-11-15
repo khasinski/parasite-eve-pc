@@ -575,13 +575,19 @@ static void pe_geo_step(uint32_t *step, uint32_t at, void *user) {
         }
         g->polygons += moved != 0;
     } else if (op == 119 && count >= 8) {
+        /* A quad with a corner on the source floor, or around the floor's middle, moves whole: corners off the floor
+         * go by the same scale (the Central Park snakes surface only while Aya stands in a quad drawn around the
+         * whole battle area, two corners off the floor: left in place, no Aya in another room was ever inside). */
         unsigned on = 0, zero = 0;
+        uint8_t quad[32];
         for (unsigned i = 0; i < 4; ++i) {
             if (pe_mode(step, 2 * i) || pe_mode(step, 2 * i + 1)) return;
             on += (unsigned)pe_geo_in(g, (int32_t)step[2 + 2 * i], (int32_t)step[3 + 2 * i]);
             zero += (unsigned)pe_geo_small((int32_t)step[2 + 2 * i], (int32_t)step[3 + 2 * i]);
+            memcpy(quad + 8 * i, &step[2 + 2 * i], 4);
+            memcpy(quad + 8 * i + 4, &step[3 + 2 * i], 4);
         }
-        if (on < 4 || zero == 4) return;
+        if (zero == 4 || (!on && !pe_in_poly(quad, 4, (g->from.x0 + g->from.x1) / 2, (g->from.z0 + g->from.z1) / 2))) return;
         for (unsigned i = 0; i < 4; ++i) {
             step[2 + 2 * i] = (uint32_t)pe_geo_x(g, (int32_t)step[2 + 2 * i]);
             step[3 + 2 * i] = (uint32_t)pe_geo_z(g, (int32_t)step[3 + 2 * i]);

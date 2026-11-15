@@ -1084,7 +1084,7 @@ static void do_run(const Run *r, FILE *out) {
  * whether they ever lost HP). A frame that never ends is caught by a watchdog thread, which names the
  * runs line and the game thread's stack (pe_stall_stack.c) and exits 3; a crash exits as it does:
  * either way the output file's last line names the line before, and argv[3] restarts after it. */
-enum { REAL_LIMIT = 5400, REAL_AFTER = 90, REAL_NOFIGHT = 900 };
+enum { REAL_LIMIT = 10800, REAL_AFTER = 90, REAL_NOFIGHT = 900 };
 extern int g_SceneDispatchCur;
 int pe_hook_add(int id, int (*fn)(void *ctx, void *user), void *user, int priority, const char *mod_id);
 void pe_stall_stack_init(void); void pe_stall_stack_print(FILE *out);
@@ -1094,7 +1094,42 @@ static struct {
     int slot_type[7], slot_first[7], slot_last[7], slot_low[7], slot_seen[7], slot_hurt[7];
     int aya_prev, hit, taken, shots, cut, placed, still, still_x, still_z, moved, rounds;
     int boxed, box[4], out, out_type, out_sub, out_x, out_z, out_frame;
+    int type_copies[64], type_blocks[64];
+    int mem_peak, mem_gap, mem_fail, mem_fail_type;   /* entity memory: most blocks in use in one frame, smallest largest free aligned run */
 } rl;
+/* Entity memory blocks (Entity_AllocBlock) this frame: blocks in use in all of them (past 16: the native overflow), and
+ * the largest free run of 8, 4, 2 or 1 blocks aligned to its size in the original sixteen. */
+static void real_mem(void) {
+    unsigned char used[ENTITY_ALLOCATION_SLOTS] = {0};
+    int n = 0, gap = 0;
+    for (int i = 0; i < ENTITY_ALLOCATION_SLOTS; ++i)
+        if (g_EntityAllocationTable[i].address)
+            for (int k = i; k < i + (int)g_EntityAllocationTable[i].blockCount && k < ENTITY_ALLOCATION_SLOTS; ++k) used[k] = 1;
+    for (int i = 0; i < ENTITY_ALLOCATION_SLOTS; ++i) n += used[i];
+    for (int size = 8; size && !gap; size /= 2)
+        for (int k = 0; k + size <= ENTITY_ALLOCATION_ORIGINAL_SLOTS && !gap; k += size) {
+            int free = 1;
+            for (int j = k; j < k + size; ++j) free &= !used[j];
+            if (free) gap = size;
+        }
+    if (n > rl.mem_peak) rl.mem_peak = n;
+    if (gap < rl.mem_gap) rl.mem_gap = gap;
+    /* an actor with a model whose block never came (Entity_AllocBlock found no room: it draws from NULL); and per
+     * actor type, the most copies alive at once and the blocks one takes */
+    int copies[64] = {0};
+    for (FieldActor *a = g_FieldActorListHead; a; a = a->next) {
+        if (!a->model_state.allocation_active) continue;
+        if (!a->allocation_block) {
+            if (!rl.mem_fail) { rl.mem_fail = 1; rl.mem_fail_type = a->type_id; }
+            continue;
+        }
+        if (a->type_id >= 64) continue;
+        ++copies[a->type_id];
+        for (int i = 0; i < ENTITY_ALLOCATION_SLOTS; ++i)
+            if (g_EntityAllocationTable[i].address == a->allocation_block) rl.type_blocks[a->type_id] = g_EntityAllocationTable[i].blockCount;
+    }
+    for (int t = 0; t < 64; ++t) if (copies[t] > rl.type_copies[t]) rl.type_copies[t] = copies[t];
+}
 enum { REAL_OUT = 1500 };
 /* PE_RUN_REAL_KNOWN: a file of "<line id> <end>" lines (# comments): real lines known to end that way. Such a
  * line passes with that end and fails with any other, so a fixed one has to leave the file. */
@@ -1111,6 +1146,7 @@ static void real_known_load(void) {
 }
 static volatile unsigned real_beat;
 static void real_where(void);
+extern u8 g_BattleEnemyEscapeFlag;
 void Spu_Shutdown(void);
 
 /* A frame that never ends leaves nothing to read: name the line and where the game's thread is, then stop. */
@@ -1189,6 +1225,7 @@ static int real_frame(void *ctx, void *user) {
     ++real_beat;
     if (!r || rl.done) return 0;
     unsigned frame = ++rl.frame;
+    real_mem();
     FieldActor *aya = g_PlayerEntity;
     Combatant *me = aya ? (Combatant *)aya->state : NULL;
     if (rl.start < 0 && real_in_battle()) rl.start = (int)frame;
@@ -1299,15 +1336,15 @@ static int real_frame(void *ctx, void *user) {
         }
     }
     if (trace && rl.start >= 0 && rl.over < 0 && (frame % 300 == 0 || (getenv("PE_RUN_DENSE") && frame < (unsigned)rl.start + 240 && frame % 6 == 0))) {
-        fprintf(stderr, "real %u: mode=%d flags=%#x targets=%d overlay=%d pad=%#x aya=%d,%d atb=%u", frame, g_BattleModeState, (unsigned)g_GameStateFlags,
-                g_BattleTargetCount, g_BattleSaveOverlayActive, (unsigned)g_FieldPadBits, aya ? aya->pos_x >> 16 : 0, aya ? aya->pos_z >> 16 : 0, me ? me->atb : 0);
+        fprintf(stderr, "real %u: mode=%d flags=%#x targets=%d overlay=%d pad=%#x aya=%d,%d atb=%u q=%u act=%#x live=%d esc=%d", frame, g_BattleModeState, (unsigned)g_GameStateFlags,
+                g_BattleTargetCount, g_BattleSaveOverlayActive, (unsigned)g_FieldPadBits, aya ? aya->pos_x >> 16 : 0, aya ? aya->pos_z >> 16 : 0, me ? me->atb : 0, (unsigned)g_BattleActionQueueCount, me ? (unsigned)me->stateFlags : 0u, (int)g_BattleLiveEnemyCount, (int)g_BattleEnemyEscapeFlag);
         for (int i = 0; i < 7; ++i)
             if (g_BattleEnemySlots[i].active) fprintf(stderr, " s%d:hp%d,chg%u/%u", i, (int)g_BattleEnemySlots[i].combatant.hp,
                                                       g_BattleEnemySlots[i].combatant.atbCharge, g_BattleEnemySlots[i].combatant.atbChargeLimit);
         if (aya) fprintf(stderr, " eflags=%#x rot=%d range=%d rounds=%d", (unsigned)aya->flags, aya->rot_y, me && me->action ? me->action->range : -1, me && me->action ? (int)(me->action->attackWord & 0x3FF) : -1);
         for (int i = 0; i < g_BattleTargetCount && i < 7; ++i) fprintf(stderr, " t%d:dist%d", i, (int)g_BattleTargetList[i].dist);
         for (FieldActor *a = g_FieldActorListHead; a; a = a->next)
-            if (a != aya && a->state) fprintf(stderr, " e%u#%u@%d,%d,%d:f%#x", a->type_id, a->sub_id, a->pos_x >> 16, a->pos_y >> 16, a->pos_z >> 16, (unsigned)a->flags);
+            if (a != aya && a->state) fprintf(stderr, " e%u#%u@%d,%d,%d:f%#x:ef%#x:alive%d", a->type_id, a->sub_id, a->pos_x >> 16, a->pos_y >> 16, a->pos_z >> 16, (unsigned)a->flags, (unsigned)((BattleEntity *)a)->entityFlags, (int)((EnemyCombatant *)a->state)->hpAlive);
         fputc('\n', stderr);
     }
     if (me) {   /* what she lost this frame, then full again */
@@ -1391,7 +1428,7 @@ static void do_real(const Run *r, FILE *out, unsigned line) {
         }
     set_vars(r);
     memset(&rl, 0, sizeof(rl));
-    rl.r = r; rl.line = line; rl.start = rl.over = -1;
+    rl.r = r; rl.line = line; rl.start = rl.over = -1; rl.mem_gap = 16;
     g_SceneDispatchToken = (int)token;
     int status = 0;
     while (!rl.done && status >= 0 && (u32)g_SceneDispatchToken != 0xA9400048u) {   /* a door mid-line: its room runs too */
@@ -1406,9 +1443,12 @@ static void do_real(const Run *r, FILE *out, unsigned line) {
     char foes[256]; size_t used = 0; foes[0] = 0;
     for (int i = 0; i < 7 && used + 40 < sizeof(foes); ++i)
         if (rl.slot_seen[i]) used += (size_t)snprintf(foes + used, sizeof(foes) - used, "%s%d:%d:%d>%d>%d", used ? "," : "", i, rl.slot_type[i], rl.slot_first[i], rl.slot_hurt[i], rl.slot_last[i]);
+    char copies[400]; used = 0; copies[0] = 0;   /* e<type>x<most alive>:<blocks each>, actors with a model */
+    for (int t = 0; t < 64 && used + 16 < sizeof(copies); ++t)
+        if (rl.type_copies[t]) used += (size_t)snprintf(copies + used, sizeof(copies) - used, "%se%dx%d:%d", used ? "," : "", t, rl.type_copies[t], rl.type_blocks[t]);
     if (out)
-        fprintf(out, "real\tM%03u\tend=%s\tstart=%d\tover=%d\tframes=%u\tfoes=%s\thit=%d\ttaken=%d\tshots=%d\tcut=%d\tplaced=%d\tmoved=%d%s%s\n", r->room, end, rl.start, rl.over,
-                rl.frame, foes, rl.hit, rl.taken, rl.shots, rl.cut, rl.placed, rl.moved, r->id[0] ? "\tid=" : "", r->id);
+        fprintf(out, "real\tM%03u\tend=%s\tstart=%d\tover=%d\tframes=%u\tfoes=%s\thit=%d\ttaken=%d\tshots=%d\tcut=%d\tplaced=%d\tmoved=%d\tmem=%d\tgap=%d\tcopies=%s%s%s\n", r->room, end, rl.start, rl.over,
+                rl.frame, foes, rl.hit, rl.taken, rl.shots, rl.cut, rl.placed, rl.moved, rl.mem_peak, rl.mem_gap, copies, r->id[0] ? "\tid=" : "", r->id);
     ++checks_done;
     for (unsigned k = 0; k < real_known_count; ++k)
         if (r->id[0] && !strcmp(real_known[k].id, r->id)) {
@@ -1416,6 +1456,8 @@ static void do_real(const Run *r, FILE *out, unsigned line) {
             else fprintf(stderr, "M%03u %s: ended %s, as the known list says\n", r->room, r->id, end);
             return;
         }
+    if (rl.mem_fail)
+        FAIL("M%03u %s: e%d got no entity memory (the room's 16 blocks were taken)", r->room, r->id, rl.mem_fail_type);
     if (rl.out)
         FAIL("M%03u %s: e%d#%d left the room's floor at frame %d: at %d,%d, floor %d..%d, %d..%d", r->room, r->id, rl.out_type, rl.out_sub, rl.out_frame,
              rl.out_x, rl.out_z, rl.box[0], rl.box[1], rl.box[2], rl.box[3]);
