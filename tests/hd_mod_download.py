@@ -22,7 +22,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
    m=dict(version=version,url=f'http://127.0.0.1:{self.server.server_port}/upscale-v{version}.zip',sha256='0'*64 if mode=='hash' else hashlib.sha256(blob).hexdigest(),size=len(blob),format='unsupported' if mode=='format' else 'webp-reference-png')
    if mode=='features':m['required_features']=['future-feature-v1']
    elif mode=='feature-type':m['required_features']='invalid'
-   else:m['required_features']=['underlay-v1','static-matte-v1','selective-matte-v1']
+   else:m['required_features']=['underlay-v1','static-matte-v1','selective-matte-v1','widescreen-layers-v2']
    blob=json.dumps(m).encode()
   else:
    self.server.downloads+=1
@@ -73,7 +73,7 @@ class Installer(unittest.TestCase):
    try:
     result=run();self.assertEqual(result.returncode,0,result.stdout+result.stderr);self.assertTrue(pointer.is_file(),f'Installer wrote to the wrong Unicode path: {result.stdout} / {result.stderr}; files: {list(root.rglob(chr(42)))}');old=pointer.read_bytes();installed=pathlib.Path(json.loads(old)['directory']);self.assertEqual((installed/(KEY+'.webp')).read_bytes(),b'background material')
     self.assertIn('X-PE-Version',server.client_headers);self.assertIn('X-PE-Build',server.client_headers);self.assertIn('ParasiteEve/',server.client_headers['User-Agent'])
-    for headers in (server.catalog_headers,server.client_headers):self.assertEqual(headers.get('X-PE-HD-Features'),'underlay-v1,static-matte-v1,selective-matte-v1')
+    for headers in (server.catalog_headers,server.client_headers):self.assertEqual(headers.get('X-PE-HD-Features'),'underlay-v1,static-matte-v1,selective-matte-v1,widescreen-layers-v2')
     self.assertEqual(server.downloads,1);result=run();self.assertEqual(result.returncode,0,result.stdout);self.assertEqual(server.downloads,1);self.assertEqual(pointer.read_bytes(),old)
     self.assertEqual(run('--verify-backgrounds').returncode,0)
     under=installed/(KEY+'-under.bin');self.assertEqual(under.read_bytes(),b'PEW1\0\0\0\0')
