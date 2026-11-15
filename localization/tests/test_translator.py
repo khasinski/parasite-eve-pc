@@ -3305,12 +3305,14 @@ class DownloadCheckTest(unittest.TestCase):
     def test_the_download_is_named_with_the_release_version(self):
         """Its name carries the version as the game's and the Save Editor's release files do."""
         cmake = (HERE.parent / "CMakeLists.txt").read_text(encoding="utf-8")
-        major, minor = re.search(r"^project\(parasite-eve-pc VERSION (\d+)\.(\d+)\.", cmake, re.M).groups()
-        self.assertEqual(self.K.release_version(), f"{major}.{minor}")
+        major, minor, patch = re.search(r"^project\(parasite-eve-pc VERSION (\d+)\.(\d+)\.(\d+)", cmake, re.M).groups()
+        self.assertEqual(self.K.release_version(), f"{major}.{minor}" + (f".{patch}" if int(patch) else ""))
         sample = self.dir / "CMakeLists.txt"
         sample.write_text("cmake_minimum_required(VERSION 3.20)\nproject(parasite-eve-pc VERSION 1.4.0 LANGUAGES C)\n",
                           encoding="utf-8")
         self.assertEqual(self.K.release_version(sample), "1.4")
+        sample.write_text("project(parasite-eve-pc VERSION 0.13.1 LANGUAGES C)\n", encoding="utf-8")
+        self.assertEqual(self.K.release_version(sample), "0.13.1")
         sample.write_text("project(something-else VERSION 2.0.0)\n", encoding="utf-8")
         with self.assertRaises(SystemExit):
             self.K.release_version(sample)

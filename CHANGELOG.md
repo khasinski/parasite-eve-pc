@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.1
+
+- Added optional **Melee Combat** for Clubs 1–5: faster windups, body-based reach, a 25% rear-hit bonus and a timed follow-up for one quarter of the first hit. Configure each feature under **F1 → PE Enhancements → Combat → Melee**; gameplay mods remain off by default.
+- Added **Original / Enhanced / Custom** combat presets for enabled combat mods. Original restores native combat rules; individual choices remain available.
+- Rebalance's optional progression bonuses now include Club 1, and weapon identification handles plain item IDs correctly.
+- Added automated checks for melee damage, offer timing, invalid targets, presets and PE costs. Fixed companion download names losing the patch version.
+
 ## 0.13
 
 - Improved HD widescreen layer alignment and filtering. Adding side artwork no longer changes the scale of the original picture. Coverage still depends on the installed background pack.

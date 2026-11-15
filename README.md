@@ -67,6 +67,7 @@ Open **F1 → PE Enhancements** to configure them.
   still count for story checks; browse them through **Key Items** in Aya's main menu.
 - **Remembered sorting** (`pe_qol`): Auto keeps the game's own sort settings; moving items by hand
   switches back to Manual. Square in the Use Item list opens sorting.
+- **Melee Combat** (`pe_melee`): optional club follow-ups, rear-hit bonuses, faster swings and body-based reach. Configure them in **F1 → PE Enhancements → Combat → Melee**. Combat presets offer Original, Enhanced and Custom choices for enabled mods.
 - **Combat rules** (`pe_rebalance`): Vanilla, Rebalanced and Custom rules for gun and armor
   effects: Heat/Frost, Rate of Fire, gun progression bonuses, Attack All crowd damage, status
   chances, Critical Up, Quickdraw and armor tradeoffs; weapon DPS in the help text.

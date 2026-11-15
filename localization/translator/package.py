@@ -68,11 +68,11 @@ def target() -> str:
 
 def release_version(cmake: Path = REPO / "CMakeLists.txt") -> str:
     """The release's version as its file names carry it: project(... VERSION 0.12.0 ...) -> "0.12"."""
-    found = re.search(r"^project\(parasite-eve-pc\s+VERSION\s+(\d+)\.(\d+)(?:\.\d+)*\s",
+    found = re.search(r"^project\(parasite-eve-pc\s+VERSION\s+(\d+)\.(\d+)(?:\.(\d+))?\s",
                       cmake.read_text(encoding="utf-8"), re.M)
     if not found:
         fail(f"no project(parasite-eve-pc VERSION x.y.z) in {cmake}")
-    return f"{found[1]}.{found[2]}"
+    return f"{found[1]}.{found[2]}" + (f".{found[3]}" if found[3] and int(found[3]) else "")
 
 
 def fail(why: str) -> None:
