@@ -145,6 +145,11 @@ version/directory is in `mods/upscale/active.json` beside those preferences.
 `--download-backgrounds` and `--verify-backgrounds` use the same installer without
 a window. `PE_CONFIG_HOME` selects an isolated profile for headless checks;
 `PE_HD_SERVER=http://127.0.0.1:PORT` is a localhost-only test override.
+For scripted-view replay, `PE_TEST_CAMERA_STATE=1` adds the original camera
+group, position, script origin, flags, mesh tint and digital/analog base angles
+to each headless diagnostic record. It only reads host-owned camera state;
+the default replay JSON is unchanged. Keep these observations separate from
+optional HD material identifiers when checking native state equality.
 
 The game advertises `X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1` when requesting
 the catalog and archive. The server keeps versioned catalogs so older games
@@ -299,6 +304,133 @@ link when replacing an atlas, preserving the baseline. It accepts
 `--assets-root`, `--baseline` and `--out` for separate checkouts, refuses existing
 outputs and writes its audit beside the new output directory.
 
+### Completing 16:9 coverage
+
+Audit the actual artwork queue before generating more sides:
+
+```
+python docs/assets/hd-widescreen/prepare.py --audit SCOPE.json --assets-root PATH_TO_ASSETS --pack PACK
+```
+
+The normal 320x224 field viewport needs 398 native source pixels for 16:9.
+A tall scrolling canvas does not increase that requirement. Native-wide views
+enter camera/coverage review instead of the outpainting queue; short banners
+receive an intentional-framing review. Serialized animation footprints remain
+separate from live animation qualification.
+
+Identical geometry/group bindings can share one extension only when every
+serialized source context, native reference, entry flag, crop and origin agrees.
+A changed animation phase prevents that reuse. Existing art is a review candidate,
+not proof of completed integration. Geometry-only views without an HD background
+are tracked separately rather than being silently dropped from the game scope.
+
+The audit records all aliases and requirements, including original 4:3 materials,
+coherent foregrounds and underlays, controller timing, camera extremes, actor
+occlusion and verified versioned distribution. It never marks a view runtime
+verified from its dimensions. Regression: `python tests/hd_widescreen_catalog.py`
+(Pillow, NumPy and OpenCV required).
+
+
+The original renderer can export camera coverage samples without opening a game
+window. Build `test-original-actor-animation` with `BUILD_TESTING=ON`, then run:
+
+```sh
+PSYZ_HEADLESS=1 SDL_AUDIODRIVER=dummy PE_TEST_DISC="DISC.cue" \
+PE_WS_CAMERA_GRID=1 PE_WS_ANIMATIONS=1 PE_WS_REPORT=coverage.jsonl \
+./build/test-original-actor-animation --widescreen-rooms
+```
+
+Consume the report only after the process exits successfully. Each JSON line
+identifies a numeric room-table map, mesh group, controller pose, camera X/Y,
+reported picture span and whether that sample supports the full 16:9 view.
+Maps 410 onward use the asset catalog's `E00` onward labels. The camera grid
+checks vertical start/middle/end; animation mode checks each authored controller
+phase individually with other controllers at their default state. It also
+asserts that original 4:3 tile packets retain their screen positions.
+This checks the original tile-linking path and coverage bands; GPU pixels,
+script-switched layers, palette changes and combined animation timing still
+need separate review. Use a current executable with PEW2 support for foreground
+side-layer GPU checks; an older executable can silently fall back to 4:3.
+
+
+For an already wide source whose clear-black cutaway causes conservative native
+coverage bounds (M235/g0), export its existing canvas extent explicitly:
+
+```sh
+python docs/assets/hd-widescreen/prepare.py --native-extent --room M235 --group 0 \
+  --assets-root PATH_TO_ASSETS --pack WORKING_PACK
+```
+
+The exporter requires enough source width for the 320x224 field's 16:9 view and
+at least 224 source lines. It checks the original black corner in every
+serialized entry, including inactive/controller phases, and verifies the native
+reference pixel checksums. PEW1's required material cell is a transparent
+marker at that verified black corner; the declared bounds describe the existing
+picture canvas. The marker leaves the original clear colour and flashes visible.
+Original atlases and animation phases remain unchanged. Existing outpainted
+bindings are protected, and other groups and PEW2 foreground depths survive
+export. The resulting metadata still requires runtime review. This is an
+alternative authoring operation for eligible wide sources; narrow maps require
+new side artwork. Runtime testing needs the PsyZ native-readback correction
+when a shifted widescreen view uses high-resolution presentation.
+
+
+For a foreground surface with discontinuous neighbouring tile depths, authoring
+can supply `MASKDIR/ROOM-left-depth.json` (or `right`) alongside its mask.
+It contains an `entry` number and `anchors` as `[native_x, native_y, depth]`
+triples. Select at least three non-collinear tiles on the same physical surface;
+every triple is checked against the original entry, and the anchors must share
+its tile-grid phase. The exporter fits that local
+depth plane and rejects inconsistent anchors or extrapolation outside the native
+foreground range. Other views retain the existing nearest-row depth method.
+All foreground cells follow the original entry's tile-grid phase, independently
+of the backdrop grid, including entries with irregular per-row depths and no
+plane guide. Partial cells outside the authored canvas stay transparent.
+
+Presentation-only margin materials interpolate cell-local UVs and carry their
+integer atlas origin without interpolation. Their bilinear RGBA filtering uses
+the same subtexel phase independently of atlas placement, so coherent foreground
+RGB does not introduce one-level color seams over the backdrop. Native sprites
+retain their existing sampling path. PsyZ's headless GPU test
+`gpu::widescreen_margin_color_is_independent_of_atlas_slot` checks identical
+patterned materials near opposite atlas edges at 2x, 4x, 7x and 8x in both aspect
+modes; the test fails on the previous sampler and passes on the local-UV path.
+The mask and depth-guide hashes are recorded in the pack metadata. A successful
+export still needs actor probes behind and in front of the extended surface.
+
+Foreground extension atlases preserve the coherent backdrop RGB underneath the
+mask, including samples outside the silhouette. The exporter stores masked-out
+samples with alpha 1/255 instead of zero. Extension draws use a binary 0.5 alpha
+cutoff, so these samples remain fully invisible, while bypassing the loader's
+alpha-zero RGB extrusion. This convention is only for extension commands; it is
+not an alpha-blended native room matte. Verify hidden-actor background equality
+as well as actor occlusion and unchanged 4:3 output after authoring a new layer.
+
+Filter gutters must sample neighbouring pixels from the complete registered
+image, rather than repeating each tile's edge. This applies to both backdrop
+and foreground margins: their grids can differ, and repeated edges produce
+color seams at fractional scales such as 7x even when 4x looks correct.
+Foreground authoring requires `MASKDIR/ROOM-gGG-wide-rgb.png`, copied from the
+backdrop export's `ROOM-gGG-wide-registered.png`. Its dimensions and visible
+side RGB are checked before export. RGB underneath transparent parts of the
+original center is retained for filtering, while their alpha stays below the
+binary cutoff. Gutter alpha follows the same full-view mask and remains
+invisible outside the authored bounds. Keep these overlapping margin atlases
+lossless so independent compression cannot break their shared RGB.
+
+When rebuilding atlases from a reviewed registered composite, use
+`prepare.py --registered` with its original `--center` and matching `--margin`.
+This repacks without another registration or resampling pass. Export refuses
+incorrect dimensions or any changed center pixel before writing pack files;
+new generated artwork must still go through normal registration and review.
+
+Room picture bounds must clip presentation after the complete widescreen view
+has been scaled. Cropping first and rounding a narrower destination changes
+the original picture's sample grid when side artwork is added. PsyZ tests this
+independently of HD assets at 2x, 4x, 7x and 8x; actual 4:3 presentation keeps
+its separate path. Include native-picture interior equality when comparing an
+unextended room with its widescreen export, as well as native state/VRAM checks.
+
 ### Black cutout contours and static layer gaps
 
 `--preserve-source-black` keeps black interiors and voids without stamping a
@@ -337,3 +469,8 @@ static planes, and is excluded from new underlay coverage. Static foregrounds
 explicitly use their authored HD mattes with palette witnesses instead of being
 clipped to the PS1 staircase. This is a reviewed M097 artwork recipe, not an
 unreviewed global change to every room. The output audit records input hashes.
+
+Background catalogs containing the reviewed PEW2 widescreen layers require
+`widescreen-layers-v2`. The downloader advertises and accepts this capability;
+older clients keep receiving their compatible catalog. This gates the newer
+margin sampling and foreground authoring together without replacing older ZIPs.
