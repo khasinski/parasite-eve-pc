@@ -92,6 +92,23 @@ static uint32_t pe_rw_bag_count_of(int v) {
     for (i = 0; i < PE_RW_BAG_SLOTS; ++i) n += g_AyaSaveState.inventory_items[i] == v;
     return n;
 }
+/* Copies of `v` in the bag, stacks counted (pe_stacks folds a Mod Permit taken from the list into
+ * the one already carried, so its slots alone don't show the take). */
+static uint32_t pe_rw_bag_copies(int v) {
+    const PeStacksApi *stacks = (const PeStacksApi *)pe_service_get("stacks", 1);
+    return stacks && stacks->total ? (uint32_t)stacks->total(0, (uint16_t)v) : pe_rw_bag_count_of(v);
+}
+/* One copy of `v` off the bag: one off its stack, else the slot. */
+static void pe_rw_bag_take_one(int v) {
+    const PeStacksApi *stacks = (const PeStacksApi *)pe_service_get("stacks", 1);
+    int i;
+    for (i = 0; i < PE_RW_BAG_SLOTS; ++i)
+        if (g_AyaSaveState.inventory_items[i] == v) {
+            if (stacks && stacks->take) stacks->take(0, i);
+            else g_AyaSaveState.inventory_items[i] = 0;
+            return;
+        }
+}
 static uint32_t pe_rw_held(int v) {
     uint32_t n = pe_rw_bag_count_of(v);
     int i;
@@ -124,6 +141,16 @@ static const struct { int effect; const char *name; uint8_t weight; } s_rw_econ_
     { PE_FX_SCAVENGER, "Scavenger mod", 1 }, { PE_FX_LUCKY_FIND, "Lucky Find mod", 2 },
     { PE_FX_SALVAGER, "Salvager mod", 4 },   { PE_FX_BARGAIN, "Bargain mod", 3 },
 };
+/* The list's "<mod> mod" names can run past its column: say in full what was unlocked. */
+static void pe_rw_econ_unlocked(int mod, int no_room) {
+    const PeCatalogApi *cat = pe_rw_catalog();
+    char msg[64];
+    if (cat) cat->unlock_armor(s_rw_econ_mods[mod].effect);
+    if (no_room) pe_log("econ_unlock", "mod=%s source=drop no_room=1", s_rw_econ_mods[mod].name);
+    else pe_log("econ_unlock", "mod=%s source=drop", s_rw_econ_mods[mod].name);
+    snprintf(msg, sizeof msg, "%s unlocked in the Mod Catalog", s_rw_econ_mods[mod].name);
+    pe_toast(msg);
+}
 static char s_rw_cascade_path[96];
 static const uint16_t s_rw_booster_base[] = { 0x1Du, 0x21u, 0x25u, 0x29u, 0x2Du, 0x31u };
 
@@ -277,7 +304,7 @@ static void pe_rw_policy_show(const PeHookRewards *r, PeEconProgress *g) {
             /* Carried by a Mod Permit entry: never next to a real one. */
             if (pe_rw_list_has(r, kept, PE_RW_ITEM_MOD_PERMIT)) continue;
             s_rw_found.econ_shown = mod;
-            s_rw_found.permits_before = pe_rw_bag_count_of(PE_RW_ITEM_MOD_PERMIT);
+            s_rw_found.permits_before = pe_rw_bag_copies(PE_RW_ITEM_MOD_PERMIT);
             id = PE_RW_ITEM_MOD_PERMIT;
         }
         if (kept >= PE_RW_REWARD_SLOTS) {
@@ -403,7 +430,7 @@ static int pe_rw_on_rewards(void *ctx, void *user) {
                     continue;
                 }
                 s_rw_found.econ_shown = (int)(id & 0xFFu) % PE_ECON_COUNT;
-                s_rw_found.permits_before = pe_rw_bag_count_of(PE_RW_ITEM_MOD_PERMIT);
+                s_rw_found.permits_before = pe_rw_bag_copies(PE_RW_ITEM_MOD_PERMIT);
                 id = PE_RW_ITEM_MOD_PERMIT;
             }
             if (kept < PE_RW_REWARD_SLOTS) {
@@ -470,14 +497,12 @@ static void pe_rw_forget_list(void) {
 
 /* With the bag full, an economy mod on the list is taken where it stands. */
 static void pe_rw_econ_without_room(void) {
-    const PeCatalogApi *cat = pe_rw_catalog();
     int n = g_InvActiveListCount > 10 ? 10 : g_InvActiveListCount, i;
     if (g_InvActiveListOverride != g_InvActiveListItems || pe_rw_free_bag_slot(pe_rw_bag_limit()) >= 0) return;
     for (i = 0; i < n && s_rw_found.econ_shown >= 0; ++i) {
         if (g_InvActiveListItems[i] != PE_RW_ITEM_MOD_PERMIT) continue;
         g_InvActiveListItems[i] = 0;
-        if (cat) cat->unlock_armor(s_rw_econ_mods[s_rw_found.econ_shown].effect);
-        pe_log("econ_unlock", "mod=%s source=drop no_room=1", s_rw_econ_mods[s_rw_found.econ_shown].name);
+        pe_rw_econ_unlocked(s_rw_found.econ_shown, 1);
         s_rw_found.econ_shown = -1;
         s_rw_found.econ_list_seen = 0;
     }
@@ -498,12 +523,9 @@ static void pe_rw_tick(void) {
     pe_rw_restore_text_color();
     pe_rw_econ_without_room();
     if (s_rw_found.econ_shown >= 0) {      /* the "<mod> mod" entry, not taken yet */
-        if (pe_rw_bag_count_of(PE_RW_ITEM_MOD_PERMIT) > s_rw_found.permits_before) {
-            const PeCatalogApi *cat = pe_rw_catalog();
-            for (i = 0; i < PE_RW_BAG_SLOTS; ++i)
-                if (g_AyaSaveState.inventory_items[i] == PE_RW_ITEM_MOD_PERMIT) { g_AyaSaveState.inventory_items[i] = 0; break; }
-            if (cat) cat->unlock_armor(s_rw_econ_mods[s_rw_found.econ_shown].effect);
-            pe_log("econ_unlock", "mod=%s source=drop", s_rw_econ_mods[s_rw_found.econ_shown].name);
+        if (pe_rw_bag_copies(PE_RW_ITEM_MOD_PERMIT) > s_rw_found.permits_before) {
+            pe_rw_bag_take_one(PE_RW_ITEM_MOD_PERMIT);   /* the entry's stand-in, not the Permits carried */
+            pe_rw_econ_unlocked(s_rw_found.econ_shown, 0);
             s_rw_found.econ_shown = -1;
         } else if (g_InvActiveListOverride) {
             s_rw_found.econ_list_seen = 1;
