@@ -275,8 +275,8 @@ def _store_backdrop(pack, metadata, atlas):
 def package_native_extent(room, group, pack, assets=ASSETS):
     """Declare an existing wide canvas, including original black cutaway space.
 
-    PEW1 requires a material cell. A source-black corner cell supplies that
-    compatibility record; it never adds new imagery or replaces original phases.
+    PEW1 requires a material cell. A transparent marker at a verified black
+    corner supplies that record without painting over the original background.
     """
     views,rooms=catalog(assets);view=views[room,group]
     x0,y0,x1,y1=view['active_bbox']
@@ -308,8 +308,9 @@ def package_native_extent(room, group, pack, assets=ASSETS):
     key=hashlib.sha256(f'{geometry}:native-picture-extent:{group}'.encode()).hexdigest()[:16]
     metadata=dict(room=room,group=group,geometry_key=geometry,key=key,
         bounds=[left,x1+ox,top,y1+oy],cells=1,positions=[[left,top]],native_extent=True,
-        animation='original, unchanged',native_corner_references=sources,runtime_verified=False)
-    return _store_backdrop(pack,metadata,Image.new('RGBA',(68,136),(0,0,0,255)))
+        animation='original, unchanged',native_corner_references=sources,
+        material='transparent compatibility marker',runtime_verified=False)
+    return _store_backdrop(pack,metadata,Image.new('RGBA',(68,136),(0,0,0,0)))
 
 
 def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56):

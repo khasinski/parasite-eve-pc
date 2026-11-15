@@ -355,8 +355,9 @@ python docs/assets/hd-widescreen/prepare.py --native-extent --room M235 --group 
 The exporter requires enough source width for the 320x224 field's 16:9 view and
 at least 224 source lines. It checks the original black corner in every
 serialized entry, including inactive/controller phases, and verifies the native
-reference pixel checksums. PEW1's required material cell uses that original
-black corner; the declared bounds describe the existing picture canvas.
+reference pixel checksums. PEW1's required material cell is a transparent
+marker at that verified black corner; the declared bounds describe the existing
+picture canvas. The marker leaves the original clear colour and flashes visible.
 Original atlases and animation phases remain unchanged. Existing outpainted
 bindings are protected, and other groups and PEW2 foreground depths survive
 export. The resulting metadata still requires runtime review. This is an

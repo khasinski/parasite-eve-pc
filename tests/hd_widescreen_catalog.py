@@ -115,6 +115,8 @@ class Scope(unittest.TestCase):
             self.assertEqual(len(record['native_corner_references']),2)
             payload=(pack/(geom+'-wide.bin')).read_bytes()
             atlas=(pack/(record['key']+'.png')).read_bytes()
+            # Extent metadata must not paint over flashes or the native clear colour.
+            self.assertFalse(np.asarray(Image.open(pack/(record['key']+'.png')))[:,:,3].any())
             self.module.package_native_extent('M235',0,pack,assets)
             self.assertEqual(payload,(pack/(geom+'-wide.bin')).read_bytes())
             self.assertEqual(atlas,(pack/(record['key']+'.png')).read_bytes())
