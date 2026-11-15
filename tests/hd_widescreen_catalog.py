@@ -185,6 +185,57 @@ class Scope(unittest.TestCase):
                 self.assertEqual(len(manifest['widescreen_foreground']),1)
                 for extra in manifest['extras']:
                     self.assertEqual(extra['sha256'],hashlib.sha256((dst/extra['file']).read_bytes()).hexdigest())
+            # A cell at the right overscan boundary is only half inside the
+            # canvas. Keep its authored half, with transparent padding outside.
+            Image.new('L',(224,64),255).save(masks/'M044-right-mask.png')
+            fake.native_layers=lambda room,group:({},[dict(entry=4,tiles=[
+                dict(x=288,y=0,depth=90),dict(x=304,y=0,depth=100)])])
+            argv=[str(script),'M044','2',str(src),str(dst),str(masks),'right:4']
+            with patch.dict(sys.modules,{'inspect_room':fake,'prepare':self.module}),patch.object(sys,'argv',argv):
+                runpy.run_path(str(script),run_name='__main__')
+            front=next(r for r in self.module.read_sidecar(dst/(geom+'-wide.bin'))
+                       if r['group']==2 and r['kind']==1)
+            self.assertEqual(front['positions'],[(320,0),(336,0),(352,0),(368,0)])
+            import numpy as np
+            rgba=np.array(Image.open(dst/(front['key']+'.png')).convert('RGBA'))
+            cell=rgba[2:66,3*68+2:3*68+66,3]
+            self.assertTrue((cell[:,:32]==255).all())
+            self.assertFalse(cell[:,32:].any())
+
+            # A thin railing can have a disconnected far-depth fragment in the
+            # next tile. A reviewed source plane must not infer its slope from
+            # that unrelated fragment (the M208 edge case).
+            fake.native_layers=lambda room,group:({},[dict(entry=4,tiles=[
+                dict(x=0,y=7,depth=1000),dict(x=16,y=7,depth=4087),
+                dict(x=0,y=23,depth=1048),dict(x=16,y=23,depth=1008)])])
+            guide_path=masks/'M044-left-depth.json'
+            guide=dict(entry=4,anchors=[[0,7,1000],[0,23,1048],[16,23,1008]])
+            guide_path.write_text(json.dumps(guide))
+            argv=[str(script),'M044','2',str(src),str(dst),str(masks),'left:4']
+            with patch.dict(sys.modules,{'inspect_room':fake,'prepare':self.module}),patch.object(sys,'argv',argv):
+                runpy.run_path(str(script),run_name='__main__')
+            records=self.module.read_sidecar(dst/(geom+'-wide.bin'))
+            front=next(r for r in records if r['group']==2 and r['kind']==1)
+            self.assertEqual(front['depths'],[1112,1072,1032,992,1160,1120,1080,1040])
+            self.assertEqual(front['positions'],[(-64,-9),(-48,-9),(-32,-9),(-16,-9),
+                (-64,7),(-48,7),(-32,7),(-16,7)])
+            self.assertIn(other,records)
+            manifest=json.loads((dst/'manifest.json').read_text())
+            strip=manifest['widescreen_foreground'][0]['strips'][0]
+            self.assertEqual(strip['depth_guide_sha256'],hashlib.sha256(guide_path.read_bytes()).hexdigest())
+            stable={p.name:p.read_bytes() for p in dst.iterdir() if p.is_file()}
+            bad=[
+                ([[0,7,1001],[0,23,1048],[16,23,1008]],'original tile'),
+                ([[0,7,1000],[16,7,4087],[0,7,1000]],'stable local plane'),
+                ([[0,7,1000],[16,7,4087],[0,23,1048],[16,23,1008]],'stable local plane'),
+                ([[0,7,1000],[16,7,4087],[0,23,1048]],'PEW2 foreground range'),
+            ]
+            for anchors,message in bad:
+                guide_path.write_text(json.dumps(dict(entry=4,anchors=anchors)))
+                with patch.dict(sys.modules,{'inspect_room':fake,'prepare':self.module}),patch.object(sys,'argv',argv):
+                    with self.assertRaisesRegex(ValueError,message):
+                        runpy.run_path(str(script),run_name='__main__')
+                self.assertEqual(stable,{p.name:p.read_bytes() for p in dst.iterdir() if p.is_file()})
             self.assertEqual((src/(geom+'-wide.bin')).read_bytes(),payload)
 
     def test_sidecar_roundtrip_and_invalid_depth_count(self):

@@ -364,3 +364,17 @@ export. The resulting metadata still requires runtime review. This is an
 alternative authoring operation for eligible wide sources; narrow maps require
 new side artwork. Runtime testing needs the PsyZ native-readback correction
 when a shifted widescreen view uses high-resolution presentation.
+
+
+For a foreground surface with discontinuous neighbouring tile depths, authoring
+can supply `MASKDIR/ROOM-left-depth.json` (or `right`) alongside its mask.
+It contains an `entry` number and `anchors` as `[native_x, native_y, depth]`
+triples. Select at least three non-collinear tiles on the same physical surface;
+every triple is checked against the original entry, and the anchors must share
+its tile-grid phase. The exporter fits that local
+depth plane and rejects inconsistent anchors or extrapolation outside the native
+foreground range. Other views retain the existing nearest-row depth method.
+Guided cells also follow the original foreground tile-grid phase, independently
+of the backdrop grid; partial cells outside the authored canvas stay transparent.
+The mask and depth-guide hashes are recorded in the pack metadata. A successful
+export still needs actor probes behind and in front of the extended surface.

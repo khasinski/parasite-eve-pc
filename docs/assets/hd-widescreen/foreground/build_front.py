@@ -3,7 +3,11 @@
 build_front.py ROOM GROUP SRC_PACK OUT_PACK MASKDIR STRIP:ENTRY [STRIP:ENTRY ...]
 STRIP is left|right (MASKDIR/ROOM-STRIP-mask.png, 224 HD px wide, from cut.py);
 ENTRY is the native foreground entry whose seam tiles give the depths.
-OUT_PACK is a hard-linked copy of SRC_PACK whose ROOM sidecar is rewritten as PEW2."""
+OUT_PACK is a hard-linked copy of SRC_PACK whose ROOM sidecar is rewritten as PEW2.
+An optional ROOM-STRIP-depth.json selects a local surface with entry and anchors
+[[native_x,native_y,native_depth], ...]. Every anchor must exist in the original
+entry; three non-collinear anchors define its depth plane. Use this only after
+reviewing a surface whose neighbouring tiles have discontinuous depths."""
 import hashlib, json, os, shutil, struct, sys
 from pathlib import Path
 import numpy as np
@@ -35,6 +39,28 @@ for i, (x, y) in enumerate(wide['xy']):
     canvas[Y:Y + c.shape[0], X:X + c.shape[1]] = c
 alpha = np.zeros(canvas.shape[:2], np.uint8)
 view, layers = ir.native_layers(room, group)
+depth_guides = {}
+for side, entry in strips:
+    guide_path = maskdir / f'{room}-{side}-depth.json'
+    if not guide_path.exists(): continue
+    guide = json.loads(guide_path.read_text())
+    anchors = guide.get('anchors', [])
+    if guide.get('entry') != entry or len(anchors) < 3:
+        raise ValueError('Depth guide needs an entry and at least three native anchors')
+    tiles = next(L for L in layers if L['entry'] == entry)['tiles']
+    native = {(tt['x'], tt['y'], tt['depth']) for tt in tiles}
+    if any(len(a) != 3 or any(type(v) is not int for v in a) or tuple(a) not in native for a in anchors):
+        raise ValueError('Depth guide anchor does not match an original tile')
+    matrix = np.array([[x, y, 1] for x, y, _ in anchors], dtype=float)
+    values = np.array([d for _, _, d in anchors], dtype=float)
+    coefficients, _, rank, _ = np.linalg.lstsq(matrix, values, rcond=None)
+    if rank != 3 or np.max(np.abs(matrix @ coefficients - values)) > 2:
+        raise ValueError('Depth guide anchors do not describe a stable local plane')
+    phase = (anchors[0][0] % 16, anchors[0][1] % 16)
+    if any((x % 16, y % 16) != phase for x, y, _ in anchors):
+        raise ValueError('Depth guide anchors do not share the native tile grid')
+    depth_guides[side] = dict(coefficients=coefficients, path=guide_path, phase=phase)
+
 entry_of = {}
 for side, entry in strips:
     m = np.asarray(Image.open(maskdir / f'{room}-{side}-mask.png').convert('L')) > 127
@@ -47,6 +73,11 @@ alpha[:, (0 - l) * 4:(320 - l) * 4] = 0
 
 def seam_depth(entry, side, x, y):
     """Native depth of ENTRY's tiles nearest the seam in tile row y, extrapolated linearly to x."""
+    if side in depth_guides:
+        d = int(round(float(depth_guides[side]['coefficients'] @ [x, y, 1])))
+        if not 1 <= d <= 4095:
+            raise ValueError('Depth guide extrapolation leaves the PEW2 foreground range')
+        return d
     tiles = next(L for L in layers if L['entry'] == entry)['tiles']
     rows = sorted({tt['y'] for tt in tiles}, key=lambda ty: abs(ty - y))
     for ty in rows:
@@ -67,13 +98,26 @@ def seam_depth(entry, side, x, y):
 
 
 front_xy, front_depth, front_cells = [], [], []
-for x, y in wide['xy']:
-    X, Y = (x - l) * 4, (y - t) * 4
-    a = alpha[Y:Y + 64, X:X + 64]
-    if a.shape != (64, 64) or not a.any(): continue
-    side = 'left' if x < 0 else 'right'
+positions = [(x, y, 'left' if x < 0 else 'right') for x, y in wide['xy']
+             if ('left' if x < 0 else 'right') not in depth_guides]
+for side, guide in depth_guides.items():
+    # Match the source foreground grid, which may be offset from the backdrop.
+    # M208's rail starts at y=23: using the backdrop's y=0 grid would move its
+    # depth boundaries by seven pixels across the original-picture seam.
+    gx, gy = guide['phase']
+    lo, hi = (l, 0) if side == 'left' else (320, r)
+    positions.extend((x, y, side) for y in range((t-gy)//16*16+gy, b, 16)
+                     for x in range((lo-gx)//16*16+gx, hi, 16))
+for x, y, side in positions:
     if side not in entry_of: continue
-    rgba = canvas[Y:Y + 64, X:X + 64].copy(); rgba[..., 3] = a
+    X, Y = (x - l) * 4, (y - t) * 4
+    x0, y0 = max(0, X), max(0, Y)
+    x1, y1 = min(canvas.shape[1], X+64), min(canvas.shape[0], Y+64)
+    if x0 >= x1 or y0 >= y1: continue
+    rgba = np.zeros((64, 64, 4), np.uint8)
+    rgba[y0-Y:y1-Y, x0-X:x1-X] = canvas[y0:y1, x0:x1]
+    rgba[y0-Y:y1-Y, x0-X:x1-X, 3] = alpha[y0:y1, x0:x1]
+    if not rgba[..., 3].any(): continue
     front_xy.append((x, y)); front_cells.append(rgba)
     front_depth.append(seam_depth(entry_of[side], side, x, y))
 
@@ -111,7 +155,10 @@ fronts = [r for r in manifest.get('widescreen_foreground',[])
           if (r['geometry_key'],r['group']) != (geom,group)]
 fronts.append(dict(room=room,group=group,geometry_key=geom,key=f'{key:016x}',
     cells=len(front_xy),strips=[dict(side=side,entry=entry,
-    mask_sha256=digest(maskdir/f'{room}-{side}-mask.png')) for side,entry in strips]))
+    mask_sha256=digest(maskdir/f'{room}-{side}-mask.png'),
+    **(dict(depth_guide_sha256=digest(depth_guides[side]['path']),
+           native_grid_phase=list(depth_guides[side]['phase'])) if side in depth_guides else {}))
+    for side,entry in strips]))
 manifest['widescreen_foreground'] = fronts
 manifest_path = dst/'manifest.json'; temporary = manifest_path.with_suffix('.partial')
 temporary.write_text(json.dumps(manifest,indent=2)+'\n'); temporary.replace(manifest_path)
