@@ -18,7 +18,8 @@
  *
  * Enemies (F1 > Randomizer > Randomize enemies, on top of the items, same seed): the seed's foe plan
  * (pe_rand_foes_generate) goes into the model and AI switches, which give each moved slot its foe's model,
- * animations and script at every load of its room; the foe's own script sets its stats. Bosses take bosses.
+ * animations and script at every load of its room; the slot keeps its stats. Bosses and the rest mix
+ * (PE_RAND_MOVE_BOSSES); bosses whose room runs the fight stay.
  * The game keeps whether it was started with enemies on (the "pe_randomizer.foes" record). */
 #include <stdio.h>
 #include <string.h>
@@ -622,7 +623,7 @@ static void pe_rand_spoiler(void) {
         fprintf(f, ": %s (was %s)\n", pe_item_name(s_layout[n]), pe_item_name(g_pe_rand_spots[n].vanilla));
     }
     if (s_foes_run.on) {
-        fprintf(f, "\nEnemies (%u of %u slots moved; bosses take bosses):\n", s_plan_moved, (unsigned)PE_RAND_FOES);
+        fprintf(f, "\nEnemies (%u of %u slots moved, bosses included):\n", s_plan_moved, (unsigned)PE_RAND_FOES);
         for (unsigned i = 0; i < PE_RAND_FOES; ++i) {
             const PeRandFoe *a = &g_pe_rand_foes[i], *b = &g_pe_rand_foes[s_plan[i]];
             if (s_plan[i] == i) continue;
@@ -746,7 +747,8 @@ static int pe_rand_init(void) {
     pe_menu_register_action(0, "Random seed", "Pick a new seed.", pe_rand_random_seed);
     pe_menu_register_toggle(0, "Randomize enemies", "New Game also shuffles enemies with the same seed: each takes another "
                             "enemy's model and moves, from any day, and keeps the strength of the one it replaces. "
-                            "Bosses stay as they are. Off: items only.", &s_foes_enabled, NULL);
+                            "Some bosses join in: a rat may take the alligator's place, with its strength. "
+                            "Off: items only.", &s_foes_enabled, NULL);
     pe_menu_register_info(0, "This game", "The seed this game was started with. F1 changes only reach the next New Game.",
                           pe_rand_run_text);
     pe_menu_begin(0);

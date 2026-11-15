@@ -41,7 +41,10 @@
 #include "pe1/boot_services.h"
 #include "pe1/cdrom.h"
 #include "pe1/game_state.h"
+#include "pe1/entity_allocation.h"
 #include "pe1/reloc_block.h"
+#include "pe1/render_object.h"
+#include "pe1/render_shadow.h"
 #include "pe1/scene_room.h"
 #include "pe1/scene_room_load.h"
 #include "pe1/script_queue.h"
@@ -276,8 +279,20 @@ static void walk_room(unsigned room, FILE *out, FILE *spots, unsigned *steps_tot
 
 /* Disc 2 must carry the same room table and room bytes as disc 1. */
 /* Third file: each room's actor models for the battle randomizer's model swap (bank slot, payload size,
- * the bank root's VRAM word as Render_SetupEntityPrims splits it, model counts, row ids) and the TIM
- * rectangles the loader uploads from the scratch and texture blobs. */
+ * the bank root's VRAM word as Render_SetupEntityPrims splits it, model counts, row ids, blocks= the entity
+ * memory blocks one op 8 spawn of it takes) and the TIM rectangles the loader uploads from the scratch and
+ * texture blobs. */
+
+/* Scene_LoadMap's full allocation (op 8: packets twice, animation entries, part matrices, two shadow quads) in
+ * Entity_AllocBlock's blocks: 1, 2, 4 or 8 of the room's 16. */
+static unsigned model_blocks(const RenderObjectHeader *h) {
+    size_t size = 2 * (h->packet34_count * sizeof(RenderPacket34) + h->packet28_count * sizeof(RenderPacket28) +
+                       h->packet24_count * sizeof(RenderPacket24) + h->packet1c_count * sizeof(RenderPacket1C)) +
+                  h->animation_entry_count * sizeof(RenderAnimationLookupEntry) + h->part_count * sizeof(RenderMatrix) +
+                  2 * sizeof(RenderShadowQuad);
+    return size <= ENTITY_ALLOCATION_BLOCK_SIZE ? 1 : size <= 2 * ENTITY_ALLOCATION_BLOCK_SIZE ? 2
+         : size <= 4 * ENTITY_ALLOCATION_BLOCK_SIZE ? 4 : 8;
+}
 static void list_tims(unsigned room, FILE *out, const char *blob_name, const u8 *blob) {
     const SceneRoomDirectory *dir = (const SceneRoomDirectory *)(blob + word_at(blob, 4));
     for (unsigned i = 0; i < dir->tims >> 22; ++i) {
@@ -306,7 +321,7 @@ static void list_models(unsigned room, FILE *out) {
             if (row->u.row.group != r->source.bytes.slot) continue;
             fprintf(out, "%s%u", sep, row->source.bytes.slot); sep = ",";
         }
-        fputc('\n', out);
+        fprintf(out, "\tblocks=%u\n", model_blocks((const RenderObjectHeader *)m));
     }
     list_tims(room, out, "scratch", (const u8 *)g_GameState.scene_load_scratch);
     list_tims(room, out, "texture", (const u8 *)g_GameState.texture_load_scratch);

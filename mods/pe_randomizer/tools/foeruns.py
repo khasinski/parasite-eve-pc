@@ -22,8 +22,8 @@ value sums or another foe count than the room's own fight (mean=: a Bear and its
 problems. --lines: only write <out>-runs.txt (no plan run). Exit 1 on a failure, 77 when an input is missing.
 
 --pairs <pe_rand_foes.h> (ctest mod-randomizer-foepairs; SEED list ignored, give 0): not seeds' plans but every
-swap any seed can plan: each slot with each foe the table allows it (g_pe_rand_foe_ok; boss slots stay as they
-are). Round k gives every slot its k-th allowed foe, so a room's line moves all its slots at once; rounds run
+swap any seed can plan: each slot with each foe the table allows it (g_pe_rand_foe_ok; with PE_RAND_MOVE_BOSSES
+0 in pe_randomizer.h, boss slots stay and boss foes go nowhere, as in the generator). Round k gives every slot its k-th allowed foe, so a room's line moves all its slots at once; rounds run
 PAIR_ROUNDS at a time (<out>-runs.txt and <out>.txt hold the last batch; failing lines go to <out>-fails.txt).
 A swap the mod refuses in that company (the room's enemy VRAM is full) is retried alone before it counts."""
 import os, re, subprocess, sys
@@ -50,10 +50,14 @@ def pairs(table):
     rows = [[int(w, 16) for w in re.findall(r"0x[0-9a-f]{8}", r)] for r in
             re.findall(r"^\s*\{ (0x[0-9a-f]{8}(?:, 0x[0-9a-f]{8})*) \},$", text.split("g_pe_rand_foe_ok")[1], re.M)]
     if not foes or len(foes) != len(rows): sys.exit(f"foeruns: {table}: {len(foes)} foes, {len(rows)} rows")
+    head = open(os.path.join(os.path.dirname(table), "pe_randomizer.h")).read()
+    m = re.search(r"#define PE_RAND_MOVE_BOSSES (\d+)", head)
+    bosses = bool(m and int(m[1]))   # as pe_rand_foes_generate: with 0, boss slots stay and boss foes go nowhere
     rounds = []
     for i, (room, ent, boss) in enumerate(foes):
-        if boss: continue
-        allowed = [b for b in range(len(foes)) if b != i and rows[i][b >> 5] >> (b & 31) & 1]
+        if boss and not bosses: continue
+        allowed = [b for b in range(len(foes)) if b != i and rows[i][b >> 5] >> (b & 31) & 1
+                   and (bosses or not foes[b][2])]
         for k, b in enumerate(allowed):
             if k == len(rounds): rounds.append([])
             rounds[k].append((room, ent, foes[b][0], foes[b][1]))

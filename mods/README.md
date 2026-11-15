@@ -844,13 +844,20 @@ spoiler) beside the preferences: where each key item is now, Hard's ways back, t
 
 F1 > Randomizer > Randomize enemies (off by default), set before New Game: the same seed also
 shuffles enemies. Each of 259 enemy slots (`pe_rand_foes.h`, written by `tools/enemyai.py --table`)
-takes another enemy's model, animations and script, so its moves and stats too, from any day. Boss
-fights stay vanilla for now (`PE_RAND_MOVE_BOSSES` 0; with 1, bosses only take bosses). M013's scripted
+takes another enemy's model, animations and script, so its moves, from any day; the slot keeps its own
+stats (HP, attack, level, value). Bosses join the pool (`PE_RAND_MOVE_BOSSES` 1): a boss slot can take a
+normal enemy and a boss can turn up in a normal fight, with that fight's stats. Bosses whose room's own
+script runs the fight (the Theater, Day 1 Sewer and Cruiser bosses, Sheeva, the Museum dinosaurs) have no
+enemy they can swap with and stay, and so do the Centipede and the Crab, whose body parts follow the head's
+animations (op 212). The bestiary's boss mark also covers every Museum and Chrysler enemy, which move from
+this version on. A slot only takes an enemy whose model needs no more of the room's 16 entity memory
+blocks (`Entity_AllocBlock`) than its own (`blocks=` in the rooms ctest's models listing). M013's scripted
 Rat fight takes a normal enemy too: the room spawns it with the sub id that enemy's script needs to start
 its battle (`pe_rand_ai.c`). An enemy's script carries its own room (floor polygons, the points it hops or
 flies to, the floor's height): in the copy these go from that room's battle floor onto a box inside the
 slot's, so it stays in the room it fights in. Left out: enemies whose own script sets a story flag, multi-part bosses whose parts
-call each other, and swaps whose fights fail headless (`tools/foe-deny.txt`). The plan
+call each other, and swaps or foes whose fights fail headless (`tools/foe-deny.txt`: the Chrysler bee parts
+and Monster Box go nowhere). The plan
 (`pe_rand_foes_generate`) goes into the model and AI switches, which swap at each load of a room. The
 game keeps the choice in the `pe_randomizer.foes` record with `PE_RAND_FOES_VERSION`; a save from
 another version plays its enemies vanilla, with a message. The spoiler gets an Enemies section. Checks:

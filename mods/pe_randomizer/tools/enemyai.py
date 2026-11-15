@@ -28,12 +28,16 @@ Per (A slot <- B actor) pair of placed enemy actors with a creature, the conflic
 Self and spawner numbers, run-time numbers and sounds are listed, not counted.
 --table: the battle randomizer's foe table (pe_rand_foes.h, section 5): every placed actor with a creature, a
 model placed in the enemy VRAM blocks (randomizer-models.txt, the rooms ctest) and no V var write of its own
-(story-writes.txt: replacing its script would drop the write; such actors stay), boss or not (the boss pool:
-a creature marked * in enemies.txt), with its room's VRAM use; and per slot the foes that may take it: same
-pool, another creature, no ent or events conflict, the same spawner events (a fight's spawner counts on them),
+(story-writes.txt: replacing its script would drop the write; such actors stay), boss or not (a creature
+marked * in enemies.txt; the bestiary marks every Museum and Chrysler creature too), with its room's VRAM use;
+and per slot the foes that may take it, bosses and the rest alike: another creature, a model taking no more
+entity memory blocks than the slot's (blocks= in randomizer-models.txt), a slot no body part attaches to (op 212),
+a foe starting no room slot written for its own room (g_RoomMNNN handlers), no ent or events conflict, the same
+spawner events (a fight's spawner counts on them),
 both with one spawner or both not (pe_rand_ai.c patches one), a scripted slot only a foe with a lead sub id
 (a scripted foe nowhere), and not in --deny (lines `MNNN<MBBB:E`: room
-NNN's slots don't take room BBB's actor E; swaps whose fights fail headless, mod-randomizer-foefights).
+NNN's slots don't take room BBB's actor E, `*<MBBB:E` no slot does, `MNNN:E<*` that slot takes none; swaps
+whose fights fail headless, mod-randomizer-foefights / -realfights).
 --check: every actor has steps in its block, every room slot an actor starts is installed in its own room
 with a handler the source binds, and each slot number has one handler in every room (what makes "pm" 0: B's
 slots only need installing in A's room). Exit 1 on a failure, 77 when an input (or the disc) is missing."""
@@ -113,7 +117,8 @@ def touched(steps, t):
 
 def scan(steps, t):
     mine = [(at, op, a) for at, (e, op, a, _) in sorted(steps.items()) if e == t]
-    r = dict(ops=sorted({op for _, op, _ in mine}), pm=set(), ent=set(), events=set(), akao=set(), text=set(), assets=set())
+    r = dict(ops=sorted({op for _, op, _ in mine}), pm=set(), ent=set(), events=set(), akao=set(), text=set(), assets=set(),
+             attach=set())
     subs = set()
     for _, op, a in mine:
         k = lambda i: a[i] if len(a) > i else None
@@ -126,6 +131,8 @@ def scan(steps, t):
         if idx is not None and k(idx):
             m, v = a[idx]
             r["ent"].add(v if m == 0 else DS.operand(m, v))
+            # op 212 (Script_SetEntityParentLink): this actor becomes a part of that one and takes its animations
+            if op == 212: r["attach"].add(v if m == 0 else DS.operand(m, v))
         if op == 28 and len(a) > 2: r["events"].add((a[0][1] if a[0][0] == 0 else DS.operand(*a[0]), DS.operand(*a[2])))
         if op == 38 and k(0) and k(0)[0] == 1: subs.add(a[0][1])
         if op in (34, 35) and k(0): r["text"].add(DS.operand(*a[0]))
@@ -172,15 +179,18 @@ def pair(a, b, slots):
 
 
 def models(path):
-    """{room: {slot: (block, count, row)}} from randomizer-models.txt (block -1: not placed in the blocks)."""
+    """{room: {slot: (block, count, row, mem)}} from randomizer-models.txt (block -1: not placed in the blocks;
+    mem: the entity memory blocks one op 8 spawn of the model takes, the rooms ctest's blocks=)."""
     out = {}
     for line in open(path):
-        f = line.rstrip("\n").split("\t")
+        f = line.rstrip("\r\n").split("\t")
         if len(f) < 8 or f[1] != "model": continue
         v = {k: int(x) for k, x in (kv.split("=") for kv in f[3:8])}
         x, y, n = v["x"], v["y"], v["mode"]
         block = (x - 512) // 64 * 2 + y // 128 if n and 512 <= x < 768 and y < 256 else -1
-        out.setdefault(int(f[0][1:]), {})[int(f[2])] = (block, n, v["pal"] - 450)
+        mem = re.search(r"\tblocks=(\d+)", line)
+        if not mem: sys.exit(f"enemyai: {path}: no blocks= on the model lines (rerun ctest mod-randomizer-rooms)")
+        out.setdefault(int(f[0][1:]), {})[int(f[2])] = (block, n, v["pal"] - 450, int(mem[1]))
     return out
 
 
@@ -195,34 +205,76 @@ def story_writers(path):
 def deny_list(path):
     out = set()
     for line in open(path) if path else []:
-        m = re.match(r"M(\d+)<M(\d+):(\d+)", line)
-        if m: out.add((int(m[1]), int(m[2]), int(m[3])))
+        # *<MBBB:E: that foe goes to no slot; MNNN:E<*: that slot takes no foe
+        m = re.match(r"(?:M(\d+)|\*)<M(\d+):(\d+)", line)
+        if m: out.add((int(m[1]) if m[1] else "*", int(m[2]), int(m[3])))
+        m = re.match(r"M(\d+):(\d+)<\*", line)
+        if m: out.add((int(m[1]), int(m[2]), "*"))
     return out
 
 
-def write_table(pool, model, writers, path, deny=frozenset()):
-    """pe_rand_foes.h; returns the foe count."""
+def addressed(rows):
+    """{(room, entity): [parts]}: actors another actor of the room attaches to with op 212
+    (Script_SetEntityParentLink: flags 0x600000). The Centipede (M188 e5) and the Crab (M269 e3) are such heads:
+    their body parts (e6-e8, e4-e9) take every animation the head sets (Entity_SetActionMode), so another foe's
+    animation numbers run past the parts' own table (crash in the real battle code)."""
+    out = {}
+    for r in rows:
+        for x in r.get("attach", ()):
+            if isinstance(x, int) and x not in (0, r["entity"]):
+                out.setdefault((r["room"], x), []).append(r["entity"])
+    return out
+
+
+def room_bound(rows, slots):
+    """{(room, entity)}: actors that start a room slot (op 106) whose handler is written for their own room
+    (g_RoomMNNN...: it draws with that room's models, e.g. the Worm's RoomM086_SeekerController; in another room
+    FieldFx_ModelScrollUv read through NULL)."""
+    out = set()
+    for r in rows:
+        own = slots.get(r["room"], {})
+        if any(isinstance(s, int) and not is_global(s) and re.match(r"g_RoomM\d{3}", str(own.get(s, ""))) for s in r["pm"]):
+            out.add((r["room"], r["entity"]))
+    return out
+
+
+def write_table(pool, model, writers, path, deny=frozenset(), heads=None, bound=frozenset()):
+    """pe_rand_foes.h; returns the foe count. heads: addressed(rows), slots that take no foe; bound: room_bound(),
+    foes that go to no other slot."""
+    heads = heads or {}
     foes = []
     for r in pool:
         slots = model.get(r["room"], {})
         if (r["room"], r["entity"]) in writers or slots.get(r["entity"], (-1,))[0] < 0: continue
-        block, count, _ = slots[r["entity"]]
+        block, count, _, mem = slots[r["entity"]]
         users = [0] * 8
         end = rows_end = 0
-        for b, n, row in slots.values():
+        for b, n, row, _ in slots.values():
             if n and 0 <= row < 8: rows_end = max(rows_end, row + n)
             if b < 0: continue
             end = max(end, b + n)
             for k in range(b, min(b + n, 8)): users[k] += 1
         shared = any(users[k] > 1 for k in range(block, min(block + count, 8)))
-        foes.append(dict(r=r, boss="*" in r["who"], block=block, count=count, shared=shared, end=end, rows_end=rows_end))
+        foes.append(dict(r=r, boss="*" in r["who"], block=block, count=count, shared=shared, end=end, rows_end=rows_end,
+                         mem=mem))
     def ok(a, b):
-        if a is b or a["r"]["ids"] == b["r"]["ids"] or a["boss"] != b["boss"]: return False
+        if a is b or a["r"]["ids"] == b["r"]["ids"]: return False
+        # Entity memory: a room has 16 blocks (Entity_AllocBlock) and each spawned copy of a model takes 1, 2, 4 or 8,
+        # aligned to its size; when none are free the spawn draws from NULL (M086's Worm slot <- M234's Scorpion,
+        # 2 -> 4 blocks, crashed in the real battle code). A foe whose model takes no more than the slot's own keeps
+        # the room within its vanilla use.
+        if b["mem"] > a["mem"]: return False
+        # A slot other actors of its room address by number (a boss's body parts) keeps its own foe.
+        if (a["r"]["room"], a["r"]["entity"]) in heads: return False
+        # A foe whose effects are its own room's (g_RoomMNNN handlers) stays in that room.
+        if (b["r"]["room"], b["r"]["entity"]) in bound and a["r"]["room"] != b["r"]["room"]: return False
         # A scripted fight (M013's Rat) is spawned by op 8 with sub id 0 and its actor sends 0x70 at once; a random
         # foe sends it only with its lead sub id (else the battle never comes in: black screen). So a scripted slot
         # takes a random foe with a lead (pe_rand_ai.c gives the slot's op 8 that sub id); a scripted foe goes nowhere.
         if b["r"]["kind"] == "scripted" or (a["r"]["kind"] == "scripted" and b["r"]["lead"] is None): return False
-        if (a["r"]["room"], b["r"]["room"], b["r"]["entity"]) in deny: return False
+        if {(a["r"]["room"], b["r"]["room"], b["r"]["entity"]), ("*", b["r"]["room"], b["r"]["entity"]),
+                (a["r"]["room"], a["r"]["entity"], "*")} & deny:
+            return False
         c = pair(a["r"], b["r"], {})
         return (not c["ent"] and not c["events"] and to_spawner(a["r"]) == to_spawner(b["r"])
                 and (len(a["r"]["spawners"]) == 1) == (len(b["r"]["spawners"]) == 1))
@@ -319,7 +371,8 @@ def main():
     if out_path: f.close()
     if table_path:
         if not models_path or not writes_path: sys.exit("--table needs --models and --writes")
-        n = write_table(pool, models(models_path), story_writers(writes_path), table_path, deny_list(deny_path))
+        n = write_table(pool, models(models_path), story_writers(writes_path), table_path, deny_list(deny_path),
+                        addressed(rows), room_bound(rows, slots))
         print(f"enemyai: {n} foes in {table_path}", file=sys.stderr)
     print(f"enemyai: {len(rows)} actors, {len(slots)} rooms, {total} pairs, {hist.get((), 0)} clean "
           f"({len(random_)} random <- random)" + ("" if disc else "; no disc: room PM slots not read"), file=sys.stderr)

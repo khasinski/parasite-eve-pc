@@ -15,7 +15,8 @@ One line per enemy actor and creature id it sets:
   group (per spawning entity: this actor's count in each formation, a run of back-to-back op 8 / op 17 2500
   spawns, and the fight's size; "never placed" = no step places it, a dead copy or placed some other way),
   fight (op 85 sites in the spawning entities, else the room's; each with the ways to reach it, doorscan),
-  kind (boss / random (op 26 in the fight's entity) / scripted; story-gated when a way tests V0x4a),
+  kind (random (op 26 in the fight's entity) / scripted, bosses too (the * says boss); story-gated when a way
+  tests V0x4a),
   after (story variables and doors the fight's routine reaches after op 85, forward only: what a won battle sets),
   pm (PM commands the actor starts with op 106, Script_GetEntityEffect -> Scene_LoadRoomAssets: 0-7 and
   85-114 are global code, 8-84 and 115+ come from the room's script directory and die with the room).
@@ -291,7 +292,8 @@ def census(rooms, meta, collection_data, disc):
                       or "never placed",
                 fight="; ".join(f"e{steps[at][0]} +{at:06X} if {ways[at]}" for at in mine) or "no op 85 in room",
                 spawners=spawners, story="V0x4a" in " ".join(ways.values()),
-                kind="no op 111" if t not in allocs else "boss" if boss else "random" if randomized else "scripted" if mine else "none",
+                kind="no op 111" if t not in allocs else "random" if randomized else "scripted" if mine else "none",
+                boss=boss,
                 after=", ".join(dict.fromkeys(after)) or "-",
                 pm=", ".join(f"{c}{'g' if c < 8 or 85 <= c <= 114 else 'r'}" for c in pm) or "-"))
     by = {(r["room"], r["entity"]): r for r in out}
@@ -391,7 +393,8 @@ if __name__ == "__main__":
         print(f"enemyscan: {write_blocks(rows, rooms_steps, blocks_path)} stat blocks", file=sys.stderr)
     with (open(out_path, "w") if out_path else sys.stdout) as f: write(rows, f)
     rooms = {r["room"] for r in rows}
-    kinds = {k: sum(1 for r in rows if r["kind"] == k) for k in ("boss", "random", "scripted", "none")}
+    kinds = {k: sum(1 for r in rows if r["kind"] == k) for k in ("random", "scripted", "none")}
+    kinds["boss"] = sum(1 for r in rows if r.get("boss"))
     print(f"enemyscan: {len(rows)} enemy actor lines in {len(rooms)} rooms ({', '.join(f'{v} {k}' for k, v in kinds.items())})"
           + ("" if disc else "; no disc: starting placements not read"), file=sys.stderr)
     if do_check:

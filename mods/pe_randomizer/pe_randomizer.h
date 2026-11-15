@@ -163,16 +163,18 @@ typedef struct PeRandFoe {
 } PeRandFoe;
 
 /* out[i]: the foe whose script and model foe i's slot takes (i: it stays). Each slot takes a random foe its
- * ok row allows (ok: count rows of words = (count + 31) / 32 words; bosses only take bosses, and with
- * PE_RAND_MOVE_BOSSES 0 boss slots stay) and whose model
+ * ok row allows (ok: count rows of words = (count + 31) / 32 words; bosses and the rest mix, and with
+ * PE_RAND_MOVE_BOSSES 0 boss slots stay and boss foes go nowhere) and whose model
  * fits in the room's VRAM after the swaps before it in the room (pe_rand_model_apply's rule, in table order);
  * else it stays. Same seed, same plan on every machine. Returns how many slots moved. */
 unsigned pe_rand_foes_generate(const PeRandFoe *foes, const uint32_t *ok, unsigned count, uint32_t seed, uint16_t *out);
 /* Raise PE_RAND_FOES_VERSION whenever the same seed would give a different plan (the generator or pe_rand_foes.h).
  * A save keeps the version it was made with; a build that doesn't know it leaves that game's enemies vanilla. */
-#define PE_RAND_FOES_VERSION 3
-/* 0: boss fights stay vanilla, normal fights only (the user's test runs). */
-#define PE_RAND_MOVE_BOSSES 0
+#define PE_RAND_FOES_VERSION 4
+/* 1: bosses join the pool: a boss slot may take any foe its ok row allows, and a boss any slot (a Rat for the
+ * Alligator). Bosses whose room's own script runs the fight have no ok pairs and stay. 0: only non-boss foes
+ * move (version 3's plans). The bestiary's boss mark also covers every Museum and Chrysler creature. */
+#define PE_RAND_MOVE_BOSSES 1
 
 /* The checks every plan passes (also used by the tests). 0 = fine, else a reason. */
 const char *pe_rand_foes_check(const PeRandFoe *foes, const uint32_t *ok, unsigned count, const uint16_t *plan);

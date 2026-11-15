@@ -1136,10 +1136,24 @@ static int real_on_floor(int x, int z) {
     return 0;
 }
 
+/* The pad button the target menu takes as cancel (field bit 0x2000, Battle_HandleItemMenu) and not as confirm
+ * (field bit 0x200): the boot pad code swaps pad 0x2000 and 0x4000, then g_FieldRenderFlagTable maps them. */
+static u16 real_cancel_button(void) {
+    static const u16 buttons[] = { 0x1000, 0x2000, 0x8000, 0x4000, 0x10, 0x20, 0x40, 0x80 };
+    for (unsigned i = 0; i < sizeof buttons / sizeof *buttons; ++i) {
+        u16 b = buttons[i], m = (u16)((b & ~0x6000u) | (b & 0x2000 ? 0x4000 : 0) | (b & 0x4000 ? 0x2000 : 0));
+        if ((g_FieldRenderFlagTable[13] & m) && !(g_FieldRenderFlagTable[9] & m)) return b;
+    }
+    return 0;
+}
+
 static int real_pad(void *ctx, void *user) {
     (void)ctx; (void)user;
-    /* the attack button (Cross): down 2 frames in every 12 while a battle is on */
-    u16 down = rl.r && !rl.done && real_in_battle() && rl.frame % 12 < 2 ? 0x4000 : 0;
+    /* the attack button (Cross): down 2 frames in every 12 while a battle is on. With the target menu open
+     * (battle state 1) and no foe to target (a Mole underground), cancel instead, as a player would: the menu
+     * holds the battle's time, so a foe that hides until the time runs again would never come back. */
+    u16 press = g_BattleModeState == 1 && g_BattleTargetCount == 0 ? real_cancel_button() : 0x4000;
+    u16 down = rl.r && !rl.done && real_in_battle() && rl.frame % 12 < 2 ? press : 0;
     g_PadPackets[0].header = 0x4000; g_PadPackets[0].buttons = (u16)~down;
     return 0;
 }

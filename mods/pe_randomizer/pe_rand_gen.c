@@ -315,7 +315,8 @@ unsigned pe_rand_foes_generate(const PeRandFoe *foes, const uint32_t *ok, unsign
         unsigned n = 0;
         if (!i || foes[i].room != foes[i - 1].room) { end = foes[i].end; rows_end = foes[i].rows_end; }
         if (foes[i].boss && !PE_RAND_MOVE_BOSSES) continue;
-        for (unsigned b = 0; b < count; ++b) if (foe_ok(ok, count, i, b)) pick[n++] = (uint16_t)b;
+        for (unsigned b = 0; b < count; ++b)
+            if (foe_ok(ok, count, i, b) && (PE_RAND_MOVE_BOSSES || !foes[b].boss)) pick[n++] = (uint16_t)b;
         while (n) {   /* a random one of those left, until one fits */
             const unsigned k = rng_below(&rng, n), b = pick[k];
             pick[k] = pick[--n];
@@ -333,8 +334,7 @@ const char *pe_rand_foes_check(const PeRandFoe *foes, const uint32_t *ok, unsign
             return "table not in room order";
         if (plan[i] == i) continue;
         if (plan[i] >= count || !foe_ok(ok, count, i, plan[i])) return "a slot takes a foe it may not";
-        if (foes[i].boss != foes[plan[i]].boss) return "a boss and a foe swapped";
-        if (foes[i].boss && !PE_RAND_MOVE_BOSSES) return "a boss moved";
+        if ((foes[i].boss || foes[plan[i]].boss) && !PE_RAND_MOVE_BOSSES) return "a boss moved";
         if (!foe_fits(&foes[i], &foes[plan[i]], &end, &rows_end)) return "a model doesn't fit its room";
     }
     return 0;

@@ -2,7 +2,7 @@
 # found by mod-randomizer-foefights. The Chrysler Building bee parts (M418 e3, e4: parts of e5's Queen Bee fight) in
 # the lone-boss slots of the Actress, Sheeva and the Ultimate Being: the battle never starts (no op 85), because the
 # slot's own script has a part in starting it (M428 e2 sets N0x13 = 1, which its spawner e3 waits for; M005's run
-# sets V0xa|0x4, the bee run doesn't). The same parts win in the Eve (M023, M089), Alligator (M034) and M430 slots.
+# sets V0xa|0x4, the bee run doesn't). (Covered now by the *<M418 lines below: they fail everywhere.)
 M005<M418:3
 M005<M418:4
 M123<M418:3
@@ -11,3 +11,22 @@ M350<M418:3
 M350<M418:4
 M428<M418:3
 M428<M418:4
+# `*` for the slot: that foe goes nowhere. The Chrysler Monster Box (M295 e3, random fights M434-M437 e3) adds its own level
+# and value into N vars of its own (N0x1d...) and divides them by the fight's count: in another slot those sums are
+# its Chrysler ones, not the slot's (mean= has two divides more than the room's own fight; foefights, seeds 1-3:
+# M082 M111 M140 M147 M153 M232 M358 M405 M409). Its own slots still take other foes.
+*<M295:3
+*<M434:3
+*<M435:3
+*<M436:3
+*<M437:3
+# The bee parts go nowhere: in the real battle code (mod-randomizer-realfights, 2026-11-11) they fail in every
+# slot they could take, not only the four above: M023/M089 Eve and M159 never start the battle, M034's Alligator
+# slot starts it but the part never acts (headless `win` had hidden this).
+*<M418:3
+*<M418:4
+# The Giant Dogman (M118 e6) leaps by distances made for its own big room (not points the copy can move):
+# M358 left the floor; M032, M065, M075 never ended (real battle code, 2026-11-12). Its slot takes other foes.
+*<M118:6
+# `MNNN:E<*`: that slot takes no foe (none needed now). Slots whose room attaches body parts to them (op 212: the
+# Centipede M188 e5, the Crab M269 e3) are left out by enemyai.py's own rule, not here.
