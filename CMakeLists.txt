@@ -1129,6 +1129,12 @@ if(BUILD_TESTING)
         target_include_directories(test-psyz-interpolation PRIVATE third_party/psyz/ztest)
         target_compile_definitions(test-psyz-interpolation PRIVATE __psyz PSYZ_TEST_SDL_GPU=1)
         target_link_libraries(test-psyz-interpolation PRIVATE psyz)
+        add_test(NAME original-gpu-widescreen-native-readback COMMAND test-psyz-interpolation
+            --filter=gpu::scaled_widescreen_keeps_native_readback)
+        set_tests_properties(original-gpu-widescreen-native-readback PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-native-attributes COMMAND test-psyz-interpolation --filter=gpu::ps1_polygon_attribute_gradients)
         set_tests_properties(original-gpu-native-attributes PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
