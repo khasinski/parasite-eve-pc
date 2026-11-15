@@ -3347,6 +3347,12 @@ def card_file(work):
 
 
 def main(game, work=None, parts='english,packs,name,menus,save,many,menu-letters,rtl,split,drawn'):
+    gui_parts = {'translator-pictures', 'translator-map', 'translator-place-title',
+                 'translator-battle', 'translator-cards', 'translator-tutorial',
+                 'translator-game-over', 'translator-menu-words', 'translator-letters'}
+    if gui_parts.intersection(parts.split(',')) and os.getenv('PE_TEST_TRANSLATOR_GUI') != '1':
+        print('SKIP: translator GUI checks require PE_TEST_TRANSLATOR_GUI=1 on a dedicated display')
+        return 77
     disc = os.getenv('PE_TEST_DISC')
     if not disc:
         print('PE_TEST_DISC is not set: skipped')
