@@ -4003,7 +4003,7 @@
     },
     {
       "path": "mods/host/pe_mod_panel.c",
-      "sha256": "797bb91fb7e10f4b61ffe75a0b8ac69d87c6af1752707d9638e96ec40f269977"
+      "sha256": "c23e99a986f14d952928abbfe450753e0a2b07fc3a997e31a1be818cd2654cec"
     },
     {
       "path": "mods/host/pe_model.c",

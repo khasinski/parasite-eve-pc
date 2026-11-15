@@ -785,6 +785,7 @@ static void pe_choose_event(const SDL_Event *ev) {
         float x, y;                     /* pointing selects a row, a left click takes it */
         int slot;
         if (!pe_mouse_point(ev, &x, &y)) return;
+        if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev->button.button != SDL_BUTTON_LEFT) return;
         slot = s_choose.descriptions ? pe_mouse_title_slot(x, y, visible) : pe_mouse_slot(x, y, visible);
         if (slot < 0 || s_choose.scroll + slot >= n) return;
         accept = ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev->button.button == SDL_BUTTON_LEFT;
