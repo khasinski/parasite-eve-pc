@@ -119,7 +119,7 @@ jobs:
           assert len(r.findall('.//testcase')) == 30
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           r = E.parse('build/mod-features.xml')
-          assert len(r.findall('.//testcase')) == 17
+          assert len(r.findall('.//testcase')) == 18
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           PYTEST
       - name: Verify and build save editor
@@ -244,7 +244,7 @@ jobs:
           $incomplete = $report.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error')
           if ($cases.Count -ne 30 -or $incomplete.Count -ne 0) { throw 'Expected 30 executed source-only cases without failures or skips' }
           [xml]$features = Get-Content build/mod-features.xml
-          if ($features.SelectNodes('//testcase').Count -ne 17 -or $features.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error').Count -ne 0) { throw 'Expected all 17 mod feature regressions without failures or skips' }
+          if ($features.SelectNodes('//testcase').Count -ne 18 -or $features.SelectNodes('//testcase/skipped | //testcase/failure | //testcase/error').Count -ne 0) { throw 'Expected all 18 mod feature regressions without failures or skips' }
       - name: Build and test Windows save editor
         shell: pwsh
         env:
