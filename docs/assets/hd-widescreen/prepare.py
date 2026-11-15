@@ -246,7 +246,7 @@ def encode_sidecar(records):
     return bytes(data)
 
 
-def package(room, group, generated, center_path, pack, assets=ASSETS):
+def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56):
     views, rooms = catalog(assets)
     view = views[room, group]
     if view['controllers']:
@@ -258,9 +258,13 @@ def package(room, group, generated, center_path, pack, assets=ASSETS):
     x0,y0,x1,y1 = view['active_bbox']
     if center.size != ((x1-x0)*4,(y1-y0)*4):
         raise ValueError('Center dimensions do not match the original active view at 4x')
-    material, registration = register(center, Image.open(generated), 224)
+    # Field rendering uses a 320x224 display, even on a taller scrolling canvas.
+    # A smaller overscan is valid only when it still covers the entire 16:9 field.
+    if not isinstance(margin, int) or margin <= 0 or margin > 2048 or (x1-x0)+2*margin < field_view_width():
+        raise ValueError('Side margin does not cover the complete widescreen field')
+    material, registration = register(center, Image.open(generated), margin*4)
     native_x,native_y = view['native_origin']
-    left,right,top,bottom = x0+native_x-56,x1+native_x+56,y0+native_y,y1+native_y
+    left,right,top,bottom = x0+native_x-margin,x1+native_x+margin,y0+native_y,y1+native_y
     cells = []
     for y in range(top, bottom, 16):
         for x in list(range(left, x0+native_x, 16)) + list(range(x1+native_x, right, 16)):
@@ -274,7 +278,7 @@ def package(room, group, generated, center_path, pack, assets=ASSETS):
                 nx,ny=x+px/4,y+py/4
                 if ny>=bottom or (x0+native_x<=nx<x1+native_x) or nx>=right:
                     continue
-                sx=int((nx-(x0+native_x))*4)+224;sy=int((ny-top)*4)
+                sx=int((nx-(x0+native_x))*4)+margin*4;sy=int((ny-top)*4)
                 if 0<=sx<material.width and 0<=sy<material.height:
                     tile.putpixel((px,py),(*material.getpixel((sx,sy)),255))
         padded=Image.fromarray(np.pad(np.asarray(tile),((2,2),(2,2),(0,0)),mode='edge'))
@@ -283,7 +287,7 @@ def package(room, group, generated, center_path, pack, assets=ASSETS):
     key=hashlib.sha256(f'{geometry}:{group}:widescreen-v1'.encode()).hexdigest()[:16]
     pack=Path(pack);manifest_path=pack/'manifest.json';manifest=json.loads(manifest_path.read_text())
     metadata = dict(room=room,group=group,key=key,geometry_key=geometry,
-        bounds=[left,right,top,bottom],cells=len(cells),source=digest(Path(center_path)),
+        bounds=[left,right,top,bottom],cells=len(cells),side_margin=margin,source=digest(Path(center_path)),
         generated=digest(Path(generated)),registration=registration,animation='static')
     # Rebuild the sidecar with all already installed groups for this geometry.
     records=[r for r in manifest.get('widescreen',[]) if (r['room'],r['group'])!=(room,group)]
@@ -312,6 +316,7 @@ def package(room, group, generated, center_path, pack, assets=ASSETS):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--room');p.add_argument('--group',type=int,default=0)
+    p.add_argument('--margin',type=int,default=56,help='Side overscan in PS1 pixels; must cover the complete 16:9 field')
     p.add_argument('--audit',type=Path);p.add_argument('--assets-root',type=Path,default=ASSETS)
     p.add_argument('--published-pack',type=Path,help='Known shipped pack; working candidates alone are never called published')
     p.add_argument('--generated',type=Path);p.add_argument('--center',type=Path)
@@ -322,4 +327,4 @@ if __name__=='__main__':
         print(json.dumps({k:result[k] for k in ('hd_views','retail_views','action_counts','shared_geometry_families','variant_binding_reviews','unique_binding_jobs','job_action_counts')},indent=2))
     else:
         if not a.room or not a.generated or not a.center:p.error('--room, --generated and --center are required when packaging')
-        print(json.dumps(package(a.room,a.group,a.generated,a.center,a.pack,a.assets_root),indent=2))
+        print(json.dumps(package(a.room,a.group,a.generated,a.center,a.pack,a.assets_root,a.margin),indent=2))

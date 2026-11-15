@@ -67,10 +67,15 @@ class Scope(unittest.TestCase):
             room=dict(geometry_key=geom,entries=[dict(group=1,tiles=1,flags=2)])
             with patch.object(self.module,'catalog',return_value=({('M044',1):view},{'M044':room})), \
                  patch.object(self.module,'register',return_value=(Image.open(generated),{})):
-                self.module.package('M044',1,generated,center,pack)
+                self.module.package('M044',1,generated,center,pack,margin=48)
+                with self.assertRaisesRegex(ValueError,'complete widescreen'):
+                    self.module.package('M044',1,generated,center,pack,margin=38)
             result=self.module.read_sidecar(pack/(geom+'-wide.bin'))
             self.assertEqual(next(r for r in result if r['kind']==1),front)
             self.assertEqual(len(result),2)
+            backdrop=next(r for r in result if r['kind']==0)
+            self.assertEqual(backdrop['bounds'],[-48,368,0,16])
+            self.assertEqual(len(backdrop['positions']),6)
             self.assertEqual(source.read_bytes(),payload)
             manifest=json.loads((pack/'manifest.json').read_text())
             index=next(r for r in manifest['extras'] if r['kind']=='widescreen-index')
