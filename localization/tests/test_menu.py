@@ -59,7 +59,11 @@ class MenuTest(unittest.TestCase):
     def test_width_is_draw_measure_text_width(self):
         self.assertEqual(menu.width(gt.encode("AB"), METRICS), 2 * (6 + 1))
         self.assertEqual(menu.width(gt.encode("1 W"), METRICS), (6 + 2) + (6 + 2) + (10 + 1))
-        self.assertEqual(menu.width(bytes([0xFB, 0x00]), METRICS), 12)          # page 1 code 0: a sprite
+        # page 1 code 0, a 12 px button picture: the game measures it as glyph 0x100 - 19 = 0xED + 1
+        self.assertEqual(menu.width(bytes([0xFB, 0x00]), METRICS), 6 + 1)
+        wide = bytearray(METRICS)
+        wide[0xED] = 0xC0
+        self.assertEqual(menu.width(bytes([0xFB, 0x00]), bytes(wide)), 12 + 1)
         self.assertEqual(menu.width(gt.encode("AB") + b"\xffAB", METRICS), 14)  # stops at the end
 
     def test_latin_letters_measure_as_pe_lang_sets_them(self):

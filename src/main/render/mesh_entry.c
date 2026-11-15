@@ -70,6 +70,7 @@ typedef struct {
 } HdBackdropGroup;
 static HdBackdropGroup hd_wide[HD_WIDE_GROUPS],hd_under[HD_WIDE_GROUPS],hd_front[HD_FRONT_LAYERS];
 static unsigned hd_front_count;
+static uint64_t Render_LoadHdEntryAtlas(unsigned index);
 
 static void Render_ResetHdWidescreen(void) {
     hd_wide_trace_status=0;
@@ -179,6 +180,9 @@ static void Render_LoadHdBackdrop(HdBackdropGroup *tiles,const char *suffix) {
     SDL_CloseIO(file);
     if(!valid){
         Render_ResetHdWidescreen();hd_wide_trace_status=2;Psyz_GpuResetSpriteAtlases();
+        /* A rejected optional file must not evict the already loaded room
+         * materials, including on the in-session refresh path. */
+        for(unsigned i=0;i<g_GeomState->entry_count06;++i)Render_LoadHdEntryAtlas(i);
         fprintf(stderr,"Ignoring incomplete HD %s geometry %016" PRIx64 "\n",suffix,hd_geometry_key);
     }
     else hd_wide_trace_status=3;
@@ -270,6 +274,17 @@ void Render_LinkHdUnderlayBackdrop(int slot,RenderNativeTag *ordering) {
     Render_LinkHdBackdrop(slot,ordering,hd_under,0x400000u);
 }
 
+static uint64_t Render_LoadHdEntryAtlas(unsigned index) {
+    if (!hd_geometry_key || !*hd_background_path) return 0;
+    uint64_t key=Render_HdHash(hd_geometry_key,&index,4);
+    const char *formats[]={"webp","png","bmp"};char filename[4096];
+    for(unsigned i=0;i<3;++i) {
+        int n=snprintf(filename,sizeof(filename),"%s/%016" PRIx64 ".%s",hd_background_path,key,formats[i]);
+        if(n>=0 && (size_t)n<sizeof(filename) && Psyz_GpuLoadSpriteAtlas(key,filename)==1)return key;
+    }
+    return 0;
+}
+
 /* Hash immutable descriptors before scripts animate the native entries. The
  * exporter hashes the same little-endian fields, independent of host pointers. */
 void Render_PrepareHdBackgrounds(void) {
@@ -293,7 +308,13 @@ void Render_PrepareHdBackgrounds(void) {
     }
     if (previous_key!=hash) Psyz_GpuResetSpriteAtlases();
     hd_geometry_key=hash;
-    if (*hd_background_path) Render_LoadHdWidescreen();
+    if (*hd_background_path) {
+        /* Original materials keep their GPU cells when optional side layers
+         * are added. Moving them changes filtered UV rounding even if that
+         * side layer belongs to another, currently inactive view. */
+        for(unsigned i=0;i<g_GeomState->entry_count06;++i)Render_LoadHdEntryAtlas(i);
+        Render_LoadHdWidescreen();
+    }
     fprintf(stderr,"HD background geometry %016" PRIx64 " (%u entries)\n",hash,(unsigned)g_GeomState->entry_count06);
 }
 
@@ -329,18 +350,11 @@ void Render_RefreshHdBackgrounds(void) {
     Render_ResetHdWidescreen();
     Psyz_GpuResetSpriteAtlases();
     snprintf(hd_background_directory,sizeof(hd_background_directory),"%s",pack?pack:"");
-    if (*hd_background_path) Render_LoadHdWidescreen();
     GeomEntry *entries=(void *)((u8 *)g_GeomState+g_GeomState->entry_offset);
     for (u32 index=0;index<g_GeomState->entry_count06;++index) {
         GeomEntry *entry=entries+index;
+        uint64_t key=Render_LoadHdEntryAtlas(index);
         if (!entry->u30.prim) continue;
-        uint64_t key=Render_HdHash(hd_geometry_key,&index,4);
-        int loaded=0;const char *formats[]={"webp","png","bmp"};char filename[4096];
-        for (unsigned i=0;*hd_background_path && i<3 && !loaded;++i) {
-            int n=snprintf(filename,sizeof(filename),"%s/%016" PRIx64 ".%s",hd_background_path,key,formats[i]);
-            if (n>=0 && (size_t)n<sizeof(filename)) loaded=Psyz_GpuLoadSpriteAtlas(key,filename)==1;
-        }
-        if (!loaded) key=0;
         RenderTilePacket *packets=entry->u30.prim;
         for (unsigned slot=0;slot<2;++slot) for (unsigned i=0;i<entry->prim_count;++i) {
             RenderTilePacket *p=packets+slot*entry->prim_count+i;
@@ -348,6 +362,7 @@ void Render_RefreshHdBackgrounds(void) {
             p->hd_key_low=(u32)key;p->hd_key_high=(u32)(key>>32);
         }
     }
+    if (*hd_background_path) Render_LoadHdWidescreen();
 }
 
 /* A mesh entry seen as the address its self-relative array offsets add to. */
@@ -382,19 +397,9 @@ int Render_LoadMeshEntry(GeomEntry *entry, RenderTilePacket *buffer, void **end)
     paletteMax = paletteStart;
 
     uint64_t atlas_key=0;
-    if (hd_geometry_key && *hd_background_path) {
-        const GeomEntry *entries=(const void *)((const u8 *)g_GeomState+g_GeomState->entry_offset);
-        u32 index=(u32)(entry-entries);
-        atlas_key=Render_HdHash(hd_geometry_key,&index,4);
-        char filename[4096];
-        const char *formats[]={"webp","png","bmp"};
-        int loaded=0;
-        for (unsigned format=0;format<3 && !loaded;++format) {
-            int size=snprintf(filename,sizeof(filename),"%s/%016" PRIx64 ".%s",hd_background_path,atlas_key,formats[format]);
-            if (size>=0 && (size_t)size<sizeof(filename))
-                loaded=Psyz_GpuLoadSpriteAtlas(atlas_key,filename)==1;
-        }
-        if (!loaded) atlas_key=0;
+    if(hd_geometry_key && *hd_background_path) {
+        const GeomEntry *hd_entries=(const void *)((const u8 *)g_GeomState+g_GeomState->entry_offset);
+        atlas_key=Render_LoadHdEntryAtlas((unsigned)(entry-hd_entries));
     }
     for(unsigned i=0;i<count;++i)
         Psyz_GpuRegisterInterpolationBackgroundPair(&buffer[i].r,&buffer[count+i].r);

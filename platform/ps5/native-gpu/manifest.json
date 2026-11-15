@@ -4383,7 +4383,7 @@
     },
     {
       "path": "mods/pe_rewards/pe_rewards.c",
-      "sha256": "41a27927473ca0a500adbc9e743822f512e568897a0419ec3bbeb7b25bcdac20"
+      "sha256": "7c8fce2f210809b695329960f3534e41ed05018daf91bb845fb4b90f552fc140"
     },
     {
       "path": "mods/pe_shops/pe_field_wayne.c",
@@ -4459,11 +4459,15 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_loader.c",
-      "sha256": "97d40253deb07752e4187c8a6d582606f2e131ade58550effabe6d79bd0edb77"
+      "sha256": "43c397402fb62762dee113a3098978893d5575da26f2edd96b42096265e44834"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_rows.h",
       "sha256": "44d161141f7988a9112e540d1e13e1367920d36fad0030aee227a7cb3b8d68da"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_skin_gown.h",
+      "sha256": "4cfcc6e0f03e5fa7a064ed54969301fd751c65bbf3d3ed3828adedd47bf347f3"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe.c",
