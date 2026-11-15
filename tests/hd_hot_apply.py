@@ -35,6 +35,18 @@ def check_inactive_m054(executable, disc, pack, output, timeline, atlas_file, at
     (extra/(geometry+'-wide.bin')).write_bytes(struct.pack('<4sIIIQiiiihh',
         b'PEW1',1,255,1,atlas_key,0,16,0,16,0,0))
 
+    rejected=output/'m054-rejected';rejected.mkdir()
+    for source in extra.iterdir():
+        if source.name!=geometry+'-wide.bin':
+            try: os.link(source,rejected/source.name)
+            except OSError: shutil.copyfile(source,rejected/source.name)
+    # Allocate the first optional atlas, then reject a missing second one.
+    # Recovery must restore the original material allocation and bindings.
+    descriptor=(extra/(geometry+'-wide.bin')).read_bytes()
+    descriptor=descriptor[:4]+struct.pack('<I',2)+descriptor[8:]
+    descriptor+=struct.pack('<IIQiiiihh',254,1,atlas_key+1,0,16,0,16,0,0)
+    (rejected/(geometry+'-wide.bin')).write_bytes(descriptor)
+
     def capture(name, selected):
         work=output/name;work.mkdir()
         (work/'input.txt').write_text('advance 600 0\nadvance 30 0\nadvance 240 0\nquit\n')
@@ -76,8 +88,11 @@ continue
         return states,(work/'vram.bin').read_bytes(),(work/'frame.ppm').read_bytes(),hashlib.sha256((work/'audio.pcm').read_bytes()).hexdigest()
 
     before=capture('m054-before',base);after=capture('m054-after',extra)
+    fallback=capture('m054-rejected-capture',rejected)
+    assert 'Ignoring incomplete HD wide geometry' in (output/'m054-rejected-capture'/'game.log').read_text()
     checks=dict(states_equal=before[0]==after[0],native_vram_equal=before[1]==after[1],
-                rendered_pixels_equal=before[2]==after[2],pcm_equal=before[3]==after[3])
+                rendered_pixels_equal=before[2]==after[2],pcm_equal=before[3]==after[3],
+                rejected_sidecar_preserves_original=before==fallback)
     (output/'m054-atlas-order-proof.json').write_text(json.dumps(checks,indent=2)+'\n')
     assert all(checks.values()),f'Inactive M054 atlas changed output: {checks}: {output}'
     print(f'M054 inactive atlas: pixels, native state, VRAM and PCM exact: {output}')
