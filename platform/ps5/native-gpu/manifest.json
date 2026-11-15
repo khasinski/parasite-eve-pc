@@ -4454,8 +4454,16 @@
       "sha256": "7126b1ecc12cb926ca51684acda8750c883f05ef1c3f28b7d09b03758aedc4de"
     },
     {
+      "path": "mods/pe_wardrobe/pe_skin_collision.h",
+      "sha256": "9a44d11f4bd7e745ca240677805b50ff8db6b95f218f5ecd8cb7fd8c4e936999"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_skin_gown.h",
+      "sha256": "ccf5b15b3b22c929da567f3f9bfe8ab7da6c7bc0e82f6ee73e41608ce8785f08"
+    },
+    {
       "path": "mods/pe_wardrobe/pe_skin_loader.c",
-      "sha256": "86a31c69b3e7e0824eb1adcf02b74b6ae07ed1b278cbc2e486c9ebcc3dd9e5df"
+      "sha256": "aa6ded94a29e821316098e9d40756c7fe67cc97e829b025c3c94cdcff2579a16"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe.c",
