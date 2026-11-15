@@ -929,7 +929,8 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/localization/tests/test_en_pack.py)
         set_tests_properties(localization-english-pack PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 600 LABELS "game-assets;localization")
-        # The Translator's work with no window (localization/translator/project.py): a .pelang in,
+        # Headless editor/core suite: Tk imports are forbidden. Visual/layout tests run separately
+        # in translator.yml (Linux uses Xvfb). A .pelang in,
         # rows a person edits, a .pelang out. Its rule tests need nothing; PE_TEST_DISC (and
         # PE_TEST_DISC2) adds the real English pack, every row; PE_TEST_PLAYER_PACKS (a folder of
         # .pelang translations) adds real packs. 77 when any of those was skipped.
