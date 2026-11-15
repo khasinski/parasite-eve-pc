@@ -654,7 +654,7 @@ static void pe_panel_run(void) {
  * (pe_lang: the language, the first start with packs). A row is the only way out: Escape and F1
  * do nothing here. Closing the game's window leaves it unanswered. */
 static struct {
-    int open, dirty, cursor, scroll, result, count;
+    int open, dirty, cursor, scroll, result, count, cancelable;
     const char *const *names;
     const char *const *descriptions; /* the title look: one per row, or NULL */
     const char *title, *help;
@@ -694,6 +694,10 @@ static void pe_choose_event(const SDL_Event *ev) {
         s_choose.open = 0;
         SDL_PushEvent((SDL_Event *)ev);
         return;
+    }
+    if(s_choose.cancelable&&((ev->type==SDL_EVENT_KEY_DOWN&&(ev->key.scancode==SDL_SCANCODE_ESCAPE||ev->key.scancode==SDL_SCANCODE_F1)) ||
+       (ev->type==SDL_EVENT_GAMEPAD_BUTTON_DOWN&&(ev->gbutton.button==SDL_GAMEPAD_BUTTON_EAST||ev->gbutton.button==SDL_GAMEPAD_BUTTON_GUIDE)))){
+        s_choose.result=-1;s_choose.open=0;return;
     }
     if (ev->type == SDL_EVENT_KEY_DOWN) {
         switch (ev->key.scancode) {
@@ -782,26 +786,28 @@ static void pe_paint_title(int w, int h) {
 }
 
 static int pe_choose_run(const char *title, const char *help, const char *const *names,
-                         const char *const *descriptions, unsigned count, int initial);
+                         const char *const *descriptions, unsigned count, int initial, int allow_panel);
 
 int pe_menu_choose(const char *title, const char *help, const char *const *names, unsigned count, int initial) {
-    return pe_choose_run(title, help, names, NULL, count, initial);
+    return pe_choose_run(title, help, names, NULL, count, initial, 0);
 }
 int pe_menu_choose_title(const char *title, const char *keys, const char *const *names,
                          const char *const *descriptions, unsigned count, int initial) {
     if (!descriptions) return -1;
-    return pe_choose_run(title, keys, names, descriptions, count, initial);
+    return pe_choose_run(title, keys, names, descriptions, count, initial, 0);
 }
 
 static int pe_choose_run(const char *title, const char *help, const char *const *names,
-                         const char *const *descriptions, unsigned count, int initial) {
+                         const char *const *descriptions, unsigned count, int initial, int allow_panel) {
+    const int in_panel=s_panel.open;
     const int audio_paused = Psyz_AudioIsPaused();
-    if (!names || !count || count > MAX_ENTRIES || s_panel.open || s_choose.open || !pe_mod_interactive()) return -1;
+    if (!names || !count || count > MAX_ENTRIES || (s_panel.open && !allow_panel) || s_choose.open || !pe_mod_interactive()) return -1;
     if (!pe_ui_gpu_ready()) {
         pe_mod_log(NULL, "question unavailable: no GPU overlay");
         return -1;
     }
     memset(&s_choose, 0, sizeof s_choose);
+    s_choose.cancelable=allow_panel;
     s_choose.descriptions = descriptions;
     s_choose.names = names;
     s_choose.count = (int)count;
@@ -823,10 +829,17 @@ static int pe_choose_run(const char *title, const char *help, const char *const 
     }
     pe_ui_gpu_hide();
     SDL_ResetKeyboard();     /* a held key must not reach the resumed pad poll */
-    Psyz_PauseHostClock_SDL3(false);
+    if(!in_panel)Psyz_PauseHostClock_SDL3(false);
     if (!audio_paused) Psyz_AudioUnpause();
-    pe_toast_block(0);
+    if(!in_panel)pe_toast_block(0);
+    else s_panel.dirty=1;
     return s_choose.result;
+}
+
+int pe_menu_confirm(const char *title,const char *help){
+    static const char *const answers[]={"Yes","No"};
+    int result=pe_choose_run(title,help,answers,NULL,2,1,1);
+    return result<0?-1:result==0;
 }
 
 #ifdef PE_PS5_PLUGINS
