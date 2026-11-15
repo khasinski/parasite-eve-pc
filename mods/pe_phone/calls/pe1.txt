@@ -555,7 +555,7 @@ rooms = 126 138 154 325
 priority = 11
 once = yes
 after = pe1/hospital_records
-them: Maeda! I mean, Maeda speaking.
+them: Hello? Maeda speaking.
 aya: It's {name}. If they kept my file, it's in the basement. I'm going down.
 them: Alone? It's still hot out here. Please be careful down there.
 aya: I'll be fine. I still have the bell.
@@ -583,7 +583,7 @@ rooms = 266
 priority = 10
 once = yes
 them: Dispatch.
-aya: Brea, at the warehouse. Where's the backup the officer outside called for?
+aya: Brea, at the warehouse. Where's my backup?
 them: On scene. Staging at the Westway Diner on Ninth Avenue.
 aya: That's six blocks away.
 them: They want to know if you take sugar.
@@ -814,6 +814,7 @@ day = 2
 priority = 1
 once = yes
 needs = phone.crossovers
+them: Cosmo Canyon Observatory.
 aya: They told me to ask for the animal expert.
 them: They told you to ask for the animal.
 aya: Then maybe you can tell me why the tracks stop at the fence.
@@ -826,8 +827,9 @@ day = 3
 priority = 1
 once = yes
 needs = phone.crossovers
+them: Yuffie! Lost something? I probably found it.
 aya: Somebody got into our evidence locker last night. Your name came up.
-them: Mine? I'm hurt. Also, it only takes twelve seconds.
+them: Mine? I'm hurt. And your lock only takes twelve seconds.
 aya: That's oddly specific.
 them: Relax, I put the jar back! It was moving.
 
