@@ -4,16 +4,20 @@
 #include "common.h"
 #include "pe1/field_actor.h"
 
-/* Sixteen allocation slots: a run length followed by its scratch-buffer address.
- * A zero address marks a free slot. */
+/* Allocation slots: a run length followed by its block's address. A zero address marks a free slot.
+ * The first sixteen are the original ones, in the render scratch buffer. Native builds add more after them
+ * in a buffer of their own (entity_overflow), used only once the sixteen are taken: a room the original
+ * game fills keeps every model at its original address, and a room holding more (randomized enemies with
+ * bigger models) gets them instead of Entity_AllocBlock returning NULL. */
 typedef struct EntityAllocationBlock {
     u32 blockCount;
     uintptr_t address;
 } EntityAllocationBlock;
 
+#define ENTITY_ALLOCATION_ORIGINAL_SLOTS 16
+#define ENTITY_ALLOCATION_SLOTS 64
 
-
-extern EntityAllocationBlock g_EntityAllocationTable[16];
+extern EntityAllocationBlock g_EntityAllocationTable[ENTITY_ALLOCATION_SLOTS];
 /* Bytes per allocation block in the render scratch buffer. */
 /* Native packet links are wider than PS1 DMA words. Keep the original
  * sixteen-slot/1-2-4-8-block allocation policy with room for native packets. */

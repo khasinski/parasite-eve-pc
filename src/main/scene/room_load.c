@@ -1019,6 +1019,26 @@ static void SceneRoom_InstallAndResetScriptDescriptor(int room_number, unsigned 
     }
 }
 
+/* Script slots for the battle randomizer (an actor brought from another room): what a slot holds, a slot
+ * set back as it was, and another room's handler record installed the way that room's own load does it. */
+const void *SceneRoom_ScriptSlot(unsigned int slot)
+{
+    return slot < 85 ? (const void *)g_PmCmdHandlerTable[slot] : slot < 85 + 104 ? g_FieldFxTaskPrograms[slot - 85] : NULL;
+}
+
+void SceneRoom_SetScriptSlot(unsigned int slot, const void *native)
+{
+    if (slot < 85) g_PmCmdHandlerTable[slot] = (void *)native;
+    else if (slot < 85 + 104) g_FieldFxTaskPrograms[slot - 85] = (void *)native;
+}
+
+const void *SceneRoom_InstallRoomScript(int room_number, unsigned int slot, u32 address)
+{
+    const void *native = slot < 85 + 104 ? SceneRoom_ResolveScriptDescriptor(room_number, slot, address) : NULL;
+    if (native) SceneRoom_InstallAndResetScriptDescriptor(room_number, slot, native);
+    return native;
+}
+
 int Scene_LoadRoom(unsigned int roomId)
 {
     static GeomState *geometry_owner;

@@ -17,13 +17,21 @@ u32 g_FieldModelColorBackup[256];
 #define MODEL_VERTEX(model, offset) ((FieldModelVertex *)&(model)->bytes[offset])
 #define MODEL_COLOR(model, offset) (((FieldModelColor *)&(model)->bytes[offset])->word)
 
+/* A NULL model is skipped: a mod can run an effect in a room whose assets lack its model
+ * (the room's Asset_FindTable08ByU32Key lookup returns NULL there). */
 void FieldFx_ModelScrollUv(FieldTexturedModel *model, u8 xOffset, u8 yOffset) {
-    FieldModelHeader *header = &model->header;
-    FieldModelTri *tri = header->tris;
+    FieldModelHeader *header;
+    FieldModelTri *tri;
     FieldModelQuad *quad;
     u8 *uv;
     int i;
 
+    if (model == NULL) {
+        g_FieldFxModelDepthBias = 0;
+        return;
+    }
+    header = &model->header;
+    tri = header->tris;
     if (header->uOffset != xOffset || header->vOffset != yOffset) {
         i = 0;
         header->uOffset = xOffset;
@@ -78,9 +86,13 @@ void FieldFx_ModelSetDepthBias(short value) {
 void FieldFx_ModelSaveColors(char *data) {
     FieldModelHeader *table = (FieldModelHeader *)data;
     int i = 0;
-    u32 *src = (u32 *)(data + table->colorOffset);
+    u32 *src;
     u32 *dst = g_FieldModelColorBackup;
 
+    if (data == NULL) {
+        return;
+    }
+    src = (u32 *)(data + table->colorOffset);
     while (i < table->colorCount) {
         i++;
         *dst++ = *src++;
@@ -91,8 +103,12 @@ void FieldFx_ModelRestoreColors(char *data) {
     FieldModelHeader *table = (FieldModelHeader *)data;
     int i = 0;
     u32 *src = g_FieldModelColorBackup;
-    u32 *dst = (u32 *)(data + table->colorOffset);
+    u32 *dst;
 
+    if (data == NULL) {
+        return;
+    }
+    dst = (u32 *)(data + table->colorOffset);
     while (i < table->colorCount) {
         i++;
         *dst++ = *src++;
@@ -109,8 +125,12 @@ void FieldFx_ModelScaleColors(char *data, u16 factor)
     u32 green_product;
     FieldModelHeader *table = (FieldModelHeader *)data;
     u32 scratch; /* Original scratchpad word is local to this calculation. */
-    FieldModelColor *entry = (FieldModelColor *)(data + table->colorOffset);
+    FieldModelColor *entry;
 
+    if (data == NULL) {
+        return;
+    }
+    entry = (FieldModelColor *)(data + table->colorOffset);
     for (i = 0; i < table->colorCount; i++, entry++) {
         red = entry->rgb.r;
         red *= factor;
@@ -146,9 +166,13 @@ void FieldFx_ModelScaleColors(char *data, u16 factor)
 
 void FieldFx_ModelSetColors(char *data, u8 r, u8 g, u8 b) {
     FieldModelHeader *table = (FieldModelHeader *)data;
-    FieldModelColor *entry = (FieldModelColor *)(data + table->colorOffset);
+    FieldModelColor *entry;
     int i;
 
+    if (data == NULL) {
+        return;
+    }
+    entry = (FieldModelColor *)(data + table->colorOffset);
     for (i = 0; i < table->colorCount;) {
         i++;
         entry->rgb.r = r;
@@ -160,11 +184,15 @@ void FieldFx_ModelSetColors(char *data, u8 r, u8 g, u8 b) {
 
 void FieldFx_ModelShiftColors(char *data, int rDelta, int gDelta, int bDelta) {
     FieldModelHeader *table = (FieldModelHeader *)data;
-    FieldModelColor *entry = (FieldModelColor *)(data + table->colorOffset);
+    FieldModelColor *entry;
     int i;
     s16 value;
     s16 blue;
 
+    if (data == NULL) {
+        return;
+    }
+    entry = (FieldModelColor *)(data + table->colorOffset);
     for (i = 0; i < table->colorCount; i++, entry++) {
         value = entry->rgb.r;
         value += rDelta;
@@ -216,6 +244,9 @@ void FieldFx_ModelDraw(FieldTexturedModel *model, GteMatrix *placement)
     int i;
 
     FieldModelScratch workspace;
+    if (model == NULL) {
+        return;
+    }
     sp = &workspace;
     sp->tpage = g_FieldFxModelTpage;
     sp->clut = g_FieldFxModelClut;

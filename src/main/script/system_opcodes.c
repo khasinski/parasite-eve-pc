@@ -588,6 +588,16 @@ int Script_InitEntityMoveState(int **unused) {
     return 1;
 }
 
+/* The power of an actor's attack, as its script sets it (a mod may change it). */
+static int Script_EnemyPower(int power) {
+#ifdef PE_MODS
+    PeHookEnemyPower hook = { g_CurrentEntity, power };
+    PE_HOOK(PE_HOOK_ENEMY_POWER, &hook);
+    power = hook.power;
+#endif
+    return power;
+}
+
 int Script_SetEntityAnim12Args(int **arg0) {
     Script_SetObjAnimEntry12(
         (ScriptAnimObj *)g_CurrentEntity,
@@ -595,7 +605,7 @@ int Script_SetEntityAnim12Args(int **arg0) {
         (u8)*arg0[1],
         (u8)*arg0[2],
         (u8)*arg0[3],
-        (u16)*arg0[4],
+        (u16)Script_EnemyPower(*arg0[4]),
         (s8)*arg0[5],
         (s8)*arg0[6],
         (s8)*arg0[7],
@@ -612,7 +622,7 @@ int Script_SetEntityAnim5Args(int **arg0) {
         (u8)*arg0[1],
         (u8)*arg0[2],
         (u8)*arg0[3],
-        (u16)*arg0[4]);
+        (u16)Script_EnemyPower(*arg0[4]));
     return 1;
 }
 

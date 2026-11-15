@@ -9,6 +9,7 @@
 #include "pe1/psyq_libc.h"
 #include "pe1/room_floor.h"
 #include "pe1/script_anim.h"
+#include "pe_hooks.h"
 
 /* Script setup and execution share six inline animation-event records. */
 
@@ -355,6 +356,13 @@ void Entity_WriteFieldByCmd(FieldActor *arg0, s32 arg1, s32 arg2) {
         return;
     temp_a0 = arg0->state;
     temp_a1 = arg1 & 0xFF;
+#ifdef PE_MODS
+    {
+        PeHookEnemyField hook = { arg0, temp_a1, arg2 };
+        PE_HOOK(PE_HOOK_ENEMY_FIELD, &hook);
+        arg2 = hook.value;
+    }
+#endif
     switch (temp_a1) {                              /* switch 1 */
     case 0x28:                                      /* switch 1 */
         temp_a0->amount_mirror = arg2;

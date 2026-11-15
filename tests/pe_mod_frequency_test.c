@@ -197,6 +197,9 @@ int pe_menu_register_choice(const char *p, const char *l, const char *d, int *v,
     else { assert(c==4);mode=v; }
     return 0;
 }
+int pe_mod_active(const char *m) { (void)m; return 1; }
+int pe_hook_add(int id, PeHookFn fn, void *u, int p, const char *m);
+int pe_hook_add_beside(int id, PeHookFn fn, void *u, int p, const char *m) { return pe_hook_add(id, fn, u, p, m); }
 int pe_hook_add(int id, PeHookFn fn, void *u, int p, const char *m) {
     (void)u; (void)p; (void)m;
     if(id==PE_HOOK_SCRIPT_RANDOM) on_random=fn;
