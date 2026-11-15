@@ -8,7 +8,9 @@ Disc 2 pieces can share one file (mods/pe_lang/pe_lang_pictures.c).
 
 What counts as picture data (everything else a patch changes is reported, never taken):
 - each room's first two runs, both picture bundles (its third holds models, scripts and text);
-- the whole of entry 9 (the field's background pictures) and entry 76 (effect pictures);
+- the whole of entry 9 (the field's background pictures) and entry 76 (the city map's effect
+  pictures), except when a patch changed only entry 76's message banks (petext/citymap.py): those
+  are text, the pack's dlg/MAP rows;
 - every TIM picture found in the other entries, except the letters page at VRAM 320,0, which a
   translation file's letters already replace;
 - in a room whose picture bundles the patch changed, the colour row each 16 px tile of a picture
@@ -32,6 +34,8 @@ from __future__ import annotations
 import struct
 import zlib
 from dataclasses import dataclass
+
+from petext import citymap
 
 SECTOR = 2048
 MAGIC, VERSION = b"PEPX", 1
@@ -189,14 +193,20 @@ def diff(original, translated) -> tuple[list[Piece], dict]:
     other = split
     pieces: list[Piece] = []
     taken: dict[str, int] = {}
+    left: dict[str, int] = {}
+    city = original.sectors[citymap.ENTRY] * SECTOR
     for lo, hi, what in pictures:
         a, b = _pe_bytes(original, lo, hi), _pe_bytes(translated, lo, hi)
         if a == b:
             continue
+        if lo == city and citymap.only_text_changed(a, b):
+            # Only the city map's message banks changed: they come as its dlg/MAP rows.
+            left[f"entry {citymap.ENTRY}, the city map's text (its dlg/{citymap.BANK_KEY} rows)"] = \
+                sum(y - x for x, y in _changed(a, b))
+            continue
         for piece in _sector_pieces(lo, a, b):
             pieces.append(piece)
             taken[what] = taken.get(what, 0) + len(piece.data)
-    left: dict[str, int] = {}
     for lo, hi, what in other:
         a, b = _pe_bytes(original, lo, hi), _pe_bytes(translated, lo, hi)
         if a != b:

@@ -21,6 +21,8 @@ Keys:
                                           and descriptions, the rest); NNN is the table index
   dlg/MNNN/PPP   room dialogue: the message bank first used by room MNNN (banks are shared by
                  rooms of an area), page PPP
+  dlg/MAP/PPP    the city map's bank (PE.IMG entry 76): the place title shown on arrival, the
+                 map's narration
   battle/NNN     the battle messages the boot program holds itself (the Scan panel's lines,
                  running away), in the order they sit there (petext/battle.py)
 Boxes: "default" is the standard dialogue box (style 0, x 20, y 174); "styled x,y,w,h" is a box
@@ -41,7 +43,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from petext import battle, gametext as gt, jatext as ja, menu  # noqa: E402
+from petext import battle, citymap, gametext as gt, jatext as ja, menu  # noqa: E402
 from petext.disc import Game  # noqa: E402
 from petext.script import MODE_IMMEDIATE, Instr, opcodes, task_block, walk  # noqa: E402
 
@@ -357,6 +359,16 @@ def main():
                                        "why": f"page {page} not in the room's bank"})
                     continue
                 b.setdefault("boxes", defaultdict(set))[page].add(box)
+        en = citymap.english_bank(citymap.entry_bytes(g))
+        pages, used = gt.pages(en)
+        h = hashlib.sha1(en[:used]).hexdigest()
+        if h not in banks:
+            # The city map's bank (petext/citymap.py). No room's script opens these pages: the map's
+            # own code does, in box style 3, which draws at the standard box's place without its dark
+            # band, so they are measured as the default box.
+            banks[h] = {"key": citymap.BANK_KEY, "rooms": [], "pages": pages, "crc32": zlib.crc32(en[:used]),
+                        "size": used, "possible": {"default"}, "complete": True,
+                        "boxes": {p: {"default"} for p in pages}}
 
     for b in banks.values():
         for pid, (raw, end) in sorted(b["pages"].items()):
