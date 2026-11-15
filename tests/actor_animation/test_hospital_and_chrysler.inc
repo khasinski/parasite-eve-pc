@@ -1047,7 +1047,7 @@ static int original_widescreen_rooms(void)
         GeomStateAddress address;address.state=state;address.word+=state->entry_offset;
         unsigned groups=0;
         for(unsigned i=0;i<state->entry_count06;++i)groups|=1u<<(address.entry[i].group&31);
-        int least=-RENDER_WIDESCREEN_MARGIN,most=320+RENDER_WIDESCREEN_MARGIN,widest=0,narrowest=0;
+        int least=-RENDER_WIDESCREEN_MARGIN,most=320+RENDER_WIDESCREEN_MARGIN,widest=0;
         int room_black_before=0,room_black_now=0,room_trimmed=0,room_past_black=0;
         for(unsigned group=0;group<32;++group){
             if(!(groups&(1u<<group)))continue;
@@ -1133,7 +1133,7 @@ static int original_widescreen_rooms(void)
                 room_black_before=black_before>room_black_before?black_before:room_black_before;
                 room_black_now=black_now>room_black_now?black_now:room_black_now;
                 least=left>least?left:least;most=right<most?right:most;
-                widest=widest>right-left?widest:right-left;narrowest=narrowest&&narrowest<right-left?narrowest:right-left;
+                widest=widest>right-left?widest:right-left;
                 ++positions;
                 if(x==high)break;
             }
@@ -1143,7 +1143,7 @@ static int original_widescreen_rooms(void)
             free(saved_flags);
         }
         ++rooms;
-        if(narrowest==320+2*RENDER_WIDESCREEN_MARGIN)++full;else if(widest==320)++classic;else ++partial;
+        if(room_black_now==0)++full;else if(widest==320)++classic;else ++partial;
         rooms_barred_before+=room_black_before>0;rooms_barred_now+=room_black_now>0;rooms_trimmed+=room_trimmed;
         rooms_past_black+=room_past_black;
         printf("Widescreen M%03u: %d..%d at every position, widest %d, most black %d (was %d)\n",
