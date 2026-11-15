@@ -276,10 +276,12 @@ static char s_all_note[192];
 static int s_manage_ready, s_boot_all;
 static int s_boot_mod_on[PE_MAX_MODS], s_boot_state[PE_MAX_MODS];
 enum { PE_MOD_RUNNING, PE_MOD_OFF, PE_MOD_NEEDS, PE_MOD_FAILED, PE_MOD_ALL_OFF };
-/* Language packs are the one mod All mods doesn't hold back: a player who drops a pack in lang/
- * and picks it gets the game in that language with every gameplay mod still off. Its own Manage
- * mods row turns it off, and with no language picked it leaves the game's text as it is. */
-static int pe_mod_needs_master(const PeMod *mod) { return strcmp(mod->id, "pe_lang") != 0; }
+/* Language packs and the font are the mods All mods doesn't hold back: a player who picks a
+ * language or a font gets it with every gameplay mod still off. Their own Manage mods rows turn
+ * them off, and with no language picked, or the Original font, the game's text stays as it is. */
+static int pe_mod_needs_master(const PeMod *mod) {
+    return strcmp(mod->id, "pe_lang") != 0 && strcmp(mod->id, "pe_fonts") != 0;
+}
 static int pe_manage_requested(int i, unsigned visiting) {
     const char *const *req; int j;
     if((!s_all_on && pe_mod_needs_master(g_pe_mods[i])) || !s_mod_on[i] || (visiting & (1u << i)))return 0;
@@ -353,7 +355,7 @@ static void pe_start_mods(void) {
 
     while (g_pe_mods[mod_count] && mod_count < PE_MAX_MODS) mod_count++;
     pe_manage_register(mod_count);
-    if (!s_all_on) pe_mod_log(NULL, "All mods off (Manage mods): pages browsable, the game plays as the original (a picked language aside)");
+    if (!s_all_on) pe_mod_log(NULL, "All mods off (Manage mods): pages browsable, the game plays as the original (a picked language or font aside)");
     /* Init every mod once the mods it needs have, in that order; active only if on and every mod
      * it needs is active. */
     while (progress) {
@@ -595,7 +597,7 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread) {
     } while (0)
 
     PE_OUT("Mod API %d, mod host %s, All mods %s\r\n", PE_MOD_API_VERSION, s_started ? "started" : "not started yet",
-           s_all_on ? "on" : s_running_count ? "off (only Language packs ran)" : "off (mods did not touch the game)");
+           s_all_on ? "on" : s_running_count ? "off (only Language packs and Font ran)" : "off (mods did not touch the game)");
     for (i = 0; g_pe_mods[i] && i < PE_MAX_MODS; i++)
         PE_OUT("  %s: %s\r\n", g_pe_mods[i]->name, s_mod_note[i][0] ? s_mod_note[i] : g_pe_mods[i]->id);
 
