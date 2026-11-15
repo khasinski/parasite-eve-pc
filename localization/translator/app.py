@@ -179,7 +179,7 @@ class App:
 
     def _build_window(self) -> None:
         root = self.root
-        root.title("Parasite Eve Translator")
+        root.title("Parasite Eve Translator — by: mekanik")
         # The size it opens at, made smaller to fit a smaller screen (laptops, a 1280 wide screen).
         window_width = min(1360, root.winfo_screenwidth() - 40)
         height = min(820, root.winfo_screenheight() - 80)
