@@ -47,6 +47,22 @@ class Scope(unittest.TestCase):
         with self.assertRaises(ValueError): self.module.field_view_width(height=0)
         with self.assertRaises(ValueError): self.module.scope_record(self.view(0))
 
+    def test_outpainting_export_refuses_native_wide_views_before_writes(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            pack=Path(tmp)/'pack';pack.mkdir()
+            manifest=pack/'manifest.json';manifest.write_text('{"widescreen":[]}')
+            before=manifest.read_bytes()
+            for width in (398,400,512):
+                view=self.view(width,512)
+                with patch.object(self.module,'catalog',return_value=(
+                        {('M235',0):view},{'M235':{}})):
+                    with self.assertRaisesRegex(ValueError,'Native-wide views'):
+                        self.module.package('M235',0,Path(tmp)/'missing-generated.png',
+                                            Path(tmp)/'missing-center.png',pack)
+                self.assertEqual(manifest.read_bytes(),before)
+                self.assertEqual(list(pack.iterdir()),[manifest])
+
     def test_packaging_backdrop_preserves_foreground_and_source_hardlinks(self):
         from unittest.mock import patch
         import os

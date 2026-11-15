@@ -316,13 +316,15 @@ def package_native_extent(room, group, pack, assets=ASSETS):
 def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56):
     views, rooms = catalog(assets)
     view = views[room, group]
+    x0,y0,x1,y1 = view['active_bbox']
+    if x1-x0 >= field_view_width():
+        raise ValueError('Native-wide views require camera review, not outpainting; use native extent export when needed')
     if view['controllers']:
         raise ValueError('Animated views require a reviewed source-driven phase extension; static export refused')
     entries=[e for e in rooms[room]['entries'] if e['group']==group and e['tiles']]
     if any(not (e['flags']&2) or (e['flags']&12) for e in entries):
         raise ValueError('Script-switched/scrolled layers require a phase-aware review; static export refused')
     center = Image.open(center_path).convert('RGB')
-    x0,y0,x1,y1 = view['active_bbox']
     if center.size != ((x1-x0)*4,(y1-y0)*4):
         raise ValueError('Center dimensions do not match the original active view at 4x')
     # Field rendering uses a 320x224 display, even on a taller scrolling canvas.
