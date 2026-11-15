@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Improved HD widescreen layer alignment and filtering. Adding side artwork no longer changes the scale of the original picture. Coverage still depends on the installed background pack.
+
 - Added the **Japanese release**: select your own Japanese discs (SLPS-01230/01231) and the game plays as it does there, in Japanese with its own font, kana name entry and balance (its weapon, enemy and boss numbers come from the disc), Circle to confirm, and its own memory card files. Disc 1 and Disc 2 must come from the same release. Language packs are for the USA discs and stay off with the Japanese ones.
 - Fixed **Always run** (`pe_qol`) making Aya walk while the action button (Cross / A) is held, which slowed her down whenever **Repeat interact** was used. Only the run button walks now, with the d-pad and the stick, and examining works while running. With the stick, holding the run button now also walks on diagonals, and with Always run off the stick is left exactly as the original reads it.
 
