@@ -39,6 +39,16 @@ Psyz_SetOverlayEventFilter_SDL3(PsyzOverlayEventFilter_SDL3 f) {
   return f;
 }
 void SDL_ResetKeyboard(void) {}
+/* The panel's mouse mapping asks for the window; without these the static SDL
+ * archive's dynapi object (which also defines the two stubs above) is pulled in. */
+SDL_Window *SDL_GetWindowFromID(SDL_WindowID id) {
+  (void)id;
+  return NULL;
+}
+float SDL_GetWindowPixelDensity(SDL_Window *window) {
+  (void)window;
+  return 1.0f;
+}
 int pe_mod_interactive(void) { return 0; }
 void pe_mod_log(const char *id, const char *fmt, ...) {
   (void)id;
