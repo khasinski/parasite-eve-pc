@@ -11,8 +11,10 @@
 /* Save_BuildCardFile's path for a checkpoint: byte 0x18 is the title's slot letter. The companion
  * inside is named after the mapped path, which Psyz_AdjustPath cuts to a 20-byte card name, so
  * loads must bind to that shorter name. */
-#define PE_CHECKPOINT_CARD_PATH "BASLUS-00662PEQUICKSAVE0A"
-#define PE_CHECKPOINT_BINDING "BASLUS-00662PEQUICKS"
+#include "pe1/pe_image.h"
+/* The Japanese discs' checkpoints carry their own card name, so neither release loads the other's. */
+#define PE_CHECKPOINT_CARD_PATH (PE_JAPAN ? "BISLPS-01230PEQUICKSAVE0A" : "BASLUS-00662PEQUICKSAVE0A")
+#define PE_CHECKPOINT_BINDING (PE_JAPAN ? "BISLPS-01230PEQUICKS" : "BASLUS-00662PEQUICKS")
 int pe_checkpoint_pack(unsigned char *, unsigned, unsigned *, const unsigned char *);
 int pe_checkpoint_unpack(const unsigned char *, unsigned, const char *, unsigned char *);
 int pe_checkpoint_write(const char *path, const unsigned char *block);

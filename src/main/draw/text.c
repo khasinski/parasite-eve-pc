@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe1/pe_image.h"
 #include "pe1/dialogue_alpha.h"
 #include "pe_hooks.h"
 #include "pe1/mod_text.h"
@@ -880,27 +881,27 @@ void Draw_AllocTexturedRect(int value, int width)
 
 void Draw_PrintNumberWidth6(int value) {
     Draw_AllocTexturedRect(value, 6);
-    AdvanceCursor(6);
+    if (!PE_JAPAN) AdvanceCursor(6);   /* the Japanese release has no gap after numbers */
 }
 
 void Draw_PrintNumberWidth5(int value) {
     Draw_AllocTexturedRect(value, 5);
-    AdvanceCursor(5);
+    if (!PE_JAPAN) AdvanceCursor(5);   /* the Japanese release has no gap after numbers */
 }
 
 void Draw_PrintNumberWidth4(int value) {
     Draw_AllocTexturedRect(value, 4);
-    AdvanceCursor(4);
+    if (!PE_JAPAN) AdvanceCursor(4);   /* the Japanese release has no gap after numbers */
 }
 
 void Draw_PrintNumberWidth3(int value) {
     Draw_AllocTexturedRect(value, 3);
-    AdvanceCursor(3);
+    if (!PE_JAPAN) AdvanceCursor(3);   /* the Japanese release has no gap after numbers */
 }
 
 void Draw_PrintNumberWidth2(int value) {
     Draw_AllocTexturedRect(value, 2);
-    AdvanceCursor(2);
+    if (!PE_JAPAN) AdvanceCursor(2);   /* the Japanese release has no gap after numbers */
 }
 
 /* Moves the cursor and saves the new position. */

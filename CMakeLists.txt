@@ -710,6 +710,13 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/text-renderer-battle-evidence battle)
             set_tests_properties(original-game-text-renderer-battle PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 600 LABELS "game-assets;mods")
+            # The Japanese release from its own Disc 1 (PE_TEST_JA_DISC): its tables, title, Japanese
+            # text bank and card files, language packs left out, and no mixing with USA discs.
+            add_test(NAME original-game-japanese-release COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/japanese_release.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/japanese-release-evidence)
+            set_tests_properties(original-game-japanese-release PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods")
             # The Chinese pack made from a fan patch, its letters the patch's own pictures, on screen
             # on Disc 1 and Disc 2. The pack stays out of the repository: PE_TEST_ZH_PACK names it,
             # PE_TEST_DISC2 adds Disc 2 (else skipped).
@@ -844,6 +851,10 @@ if(BUILD_TESTING)
         add_test(NAME original-game-hd-hot-apply COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;gpu;hd-assets")
+        add_test(NAME original-game-hd-inactive-atlas COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc> --inactive-atlas-only)
+        set_tests_properties(original-game-hd-inactive-atlas PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 240 LABELS "game-assets;gpu;hd-assets")
         add_test(NAME original-game-hd-widescreen COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_widescreen.py $<TARGET_FILE:parasite-eve-pc>)
@@ -1119,6 +1130,12 @@ if(BUILD_TESTING)
         target_include_directories(test-psyz-interpolation PRIVATE third_party/psyz/ztest)
         target_compile_definitions(test-psyz-interpolation PRIVATE __psyz PSYZ_TEST_SDL_GPU=1)
         target_link_libraries(test-psyz-interpolation PRIVATE psyz)
+        add_test(NAME original-gpu-widescreen-native-readback COMMAND test-psyz-interpolation
+            --filter=gpu::scaled_widescreen_keeps_native_readback)
+        set_tests_properties(original-gpu-widescreen-native-readback PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-native-attributes COMMAND test-psyz-interpolation --filter=gpu::ps1_polygon_attribute_gradients)
         set_tests_properties(original-gpu-native-attributes PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"

@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe1/pe_image.h"
 #include "pe_hooks.h"
 #include "pe1/battle_level_up.h"
 #include "pe1/akao_counters.h"
@@ -23,6 +24,7 @@
 #include "pe1/menu_widget.h"
 #include "pe1/psyq_gpu.h"
 #include "pe1/text.h"
+static u8 g_MenuBlendColorPanelPointsJapanese[32];
 
 MenuBonusStatWorkspace g_MenuBonusStatWorkspace;
 int g_MenuPendingTotalExp;
@@ -160,7 +162,7 @@ void Menu_OpenBlendColorScreen(MenuWidgetNode *arg0) {
     panel = MenuWidget_CreateNode(0x2E, parent, parent);
     parent->draw = Menu_DrawBlendColorArrows;
     parent->update = Menu_StepColorSelect;
-    parent->appearance.gradientPoints = g_MenuBlendColorPanelPoints;
+    parent->appearance.gradientPoints = PE_JAPAN ? g_MenuBlendColorPanelPointsJapanese : g_MenuBlendColorPanelPoints;
     parent->disabled = 1;
     panel->draw = Menu_DrawBlendColorChannelList;
     panel->flags = 1;
@@ -497,6 +499,10 @@ void Menu_DrawExpReviewPanel(MenuWidgetNode *unused) {
     Draw_PrintRawText(Text_LookupTable4(0xC));
     Draw_OffsetCursor(0x74, 0);
     Draw_PrintNumberWidth2(Menu_GetBattleCount());
+    if (PE_JAPAN) {                            /* the count's suffix (回) */
+        Draw_OffsetCursor(2, 0);
+        Draw_PrintRawText(Text_LookupTable4(0xD));
+    }
     Draw_StatePop();
 }
 
@@ -749,7 +755,7 @@ s32 Menu_StepParasiteScreen(MenuWidgetNode *arg0, unsigned int arg1) {
             Inv_RecalcSlotStats();
             MenuWidget_DestroyNode(arg0);
             MenuWidget_DestroyNode(MenuWidget_FindByModeAndSelectedBase(1, 0x1E));
-            MenuWidget_NavScrollTo(0x1C);
+            if (!PE_JAPAN) MenuWidget_NavScrollTo(0x1C);   /* the USA spell panel's own 0x1C node */
             Akao_FlushBgmVolumeFade();
             var_a0 = 0xA;
             if (Menu_GetBattleCount() != 0) {
@@ -808,6 +814,8 @@ s32 Menu_OpenEquipSlotSwap(s32 arg0) {
 
 /* Original USA data at 0x800922D4. */
 u8 g_MenuBlendColorPanelPoints[32] = {0x00,0x00,0x64,0x00,0xB8,0x00,0x00,0x28,0x64,0x28,0xB8,0x28,0xFF,0x00,0x01,0x01,0x02,0x00,0x03,0x01,0x04,0xFF,0x03,0x04,0x04,0x05,0x01,0x04,0x02,0x05,0xFF,0x00};
+/* The Japanese release's (0x80091D9C): a narrower right edge. */
+static u8 g_MenuBlendColorPanelPointsJapanese[32] = {0x00,0x00,0x64,0x00,0xA4,0x00,0x00,0x28,0x64,0x28,0xA4,0x28,0xFF,0x00,0x01,0x01,0x02,0x00,0x03,0x01,0x04,0xFF,0x03,0x04,0x04,0x05,0x01,0x04,0x02,0x05,0xFF,0x00};
 
 /* Original USA data at 0x800922F4. */
 u8 g_MenuExpReviewPanelPoints[32] = {0x00,0x00,0xA2,0x00,0x00,0x22,0xA2,0x22,0x00,0x36,0xA2,0x36,0xFF,0x00,0x01,0x00,0x02,0x02,0x03,0x02,0x04,0xFF,0x01,0x03,0x02,0x03,0x03,0x05,0x04,0x05,0xFF,0x00};

@@ -19,6 +19,16 @@ unsigned char g_TextboxKernGlyph0F;
 static TextboxGlyphSpacing s_widths[241];
 const TextboxGlyphSpacing *g_TextboxGlyphWidths = s_widths;
 unsigned g_TextboxGlyphCount = 78;
+/* The USA release unless a case sets the Japanese one (pe1/pe_image.h); the Japanese spacing of
+ * codes 10-4B, a stand-in with every pair different. */
+u8 g_GameRegion;
+const TextboxGlyphSpacing g_TextboxGlyphSpacingJapanese[60] = {
+#define J(i) {(i) % 3, 8 + (i) % 5}
+    J(0),J(1),J(2),J(3),J(4),J(5),J(6),J(7),J(8),J(9),J(10),J(11),J(12),J(13),J(14),J(15),J(16),J(17),J(18),J(19),
+    J(20),J(21),J(22),J(23),J(24),J(25),J(26),J(27),J(28),J(29),J(30),J(31),J(32),J(33),J(34),J(35),J(36),J(37),J(38),J(39),
+    J(40),J(41),J(42),J(43),J(44),J(45),J(46),J(47),J(48),J(49),J(50),J(51),J(52),J(53),J(54),J(55),J(56),J(57),J(58),J(59),
+#undef J
+};
 FieldFontTextureState g_FieldFontTextureState;
 static unsigned char s_metrics[2048];
 int Draw_LookupGlyphMetrics(int glyph) { return s_metrics[glyph & 2047]; }
@@ -744,6 +754,49 @@ static void test_rtl_lines(void) {
     assert(!PeText_RightToLeft());
 }
 
+/* The Japanese discs (pe1/pe_image.h): every one-byte letter up to F6 draws (kana and kanji past the
+ * USA's 78), codes 10-4B with the Japanese spacing, the rest and every two-byte letter as 12 px cells
+ * on a 14 px pitch; a name's two-byte letters are the font's own cells, never asked of a pack; menu
+ * letters get a 2 px gap and sit a pixel higher. */
+static void test_japanese(void) {
+    PeTextItem item;
+    g_GameRegion = 1;
+    for (unsigned code = 0; code <= 0xF6; ++code) {
+        unsigned char text[2] = {(unsigned char)code, 0xFF};
+        if (code == 0x0F) continue;              /* the space, kerned by the box's state */
+        assert(PeText_Read(PE_TEXT_DIALOGUE, text, ~0u, 1, &item) == 1 && item.count == 1 && !item.stop);
+        const PeTextLetter *l = &item.letter[0];
+        assert(l->page == 0 && l->u == (code % 21) * 12 && l->v == (code / 21) * 12 && l->w == 12 && l->h == 12);
+        if (code - 0x10u < 60u) {
+            const TextboxGlyphSpacing *w = &g_TextboxGlyphSpacingJapanese[code - 0x10];
+            assert(l->x == -w->left && item.advance == w->right - w->left);
+        } else assert(l->x == 0 && item.advance == 14);
+    }
+    {   /* FB D5: page-0 cell D5+ED past 441, so the area kanji page's cell 9 */
+        static const unsigned char fb[] = {0xFB, 0xD5, 0xFF}, fc[] = {0xFC, 0x92, 0xFF};
+        assert(PeText_Read(PE_TEXT_DIALOGUE, fb, ~0u, 1, &item) == 2 && item.advance == 14);
+        assert(item.letter[0].page == 1 && item.letter[0].u == 9 * 12 && item.letter[0].v == 0);
+        assert(PeText_Read(PE_TEXT_DIALOGUE, fc, ~0u, 1, &item) == 2 && item.advance == 14);
+        assert(item.letter[0].page == 1 && item.letter[0].u == (198 % 21) * 12 && item.letter[0].v == (198 / 21) * 12);
+        /* the same letters in a name: the font's own cells, with no pack asked */
+        int hooks = s_hooks;
+        s_hooks = 1;
+        assert(PeText_Read(PE_TEXT_DIALOGUE_NAME, fb, 2, 1, &item) == 2 && !item.stop && item.advance == 14);
+        assert(item.letter[0].page == 1 && item.letter[0].u == 9 * 12 && item.letter[0].v == 0);
+        assert(PeText_Read(PE_TEXT_DIALOGUE_NAME, fc, 2, 1, &item) == 2 && !item.stop);
+        assert(item.letter[0].page == 1 && item.letter[0].u == (198 % 21) * 12);
+        s_hooks = hooks;
+    }
+    for (int glyph = 0; glyph < 0x4D; ++glyph) {   /* menus: a 2 px gap for every letter, no pixel down */
+        unsigned char text[2] = {(unsigned char)glyph, 0xFF};
+        g_TextRenderMode = 0;
+        assert(PeText_Read(PE_TEXT_MENU, text, ~0u, 1, &item) == 1 && item.count == 1);
+        assert(item.letter[0].x == 1 && item.letter[0].y == 0);
+        assert(item.advance == ((Draw_LookupGlyphMetrics(glyph) >> 4) & 15) + 2);
+    }
+    g_GameRegion = 0;
+}
+
 int main(int argc, char **argv) {
     unsigned i, cases;
     for (i = 0; i < sizeof s_metrics; ++i) s_metrics[i] = (unsigned char)next_random();
@@ -762,10 +815,12 @@ int main(int argc, char **argv) {
     test_name_letters();
     test_credits();
     test_rtl_lines();
+    test_japanese();
     s_rtl_on = 1;
     cases = test_rtl_cases(argc > 1 ? argv[1] : "tests/text_render_rtl_cases.txt");
     s_rtl_on = 0;
     puts("text renderer: every letter code matches the old drawing code, credits roll included; stretches place right, narrowed lines fit");
+    puts("text renderer: the Japanese discs' letters, kana and kanji, in boxes, names and menus with the Japanese spacing");
     printf("text renderer: %u right-to-left cases ordered and joined as written, in dialogue and menus\n", cases);
     return 0;
 }

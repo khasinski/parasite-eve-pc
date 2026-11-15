@@ -37,6 +37,7 @@
 #include <string.h>
 
 #include "common.h"
+#include "pe1/pe_image.h"
 #include "pe1/psyq_gpu.h"
 #include "pe1/psyq_tim.h"
 #include "pe1/resident_tables.h"
@@ -85,11 +86,17 @@ static int s_next;                      /* saved for the next start: the F1 row 
 static int s_ask;                       /* the first start with packs: the language is still to be asked */
 static void ask_language(void);
 
+/* Language packs translate the USA discs' English text. On the Japanese discs the game shows its
+ * own Japanese text: no pack is used there, its letters never go on the font page (whose cells
+ * past 4C hold the Japanese kana and kanji) and its pictures are never put in. The language
+ * chosen for the USA discs stays saved. */
 static const PeLangPack *active_pack(void) {
+    if (PE_JAPAN) return NULL;
     return s_choice > 0 && (unsigned)s_choice <= s_pack_count ? &s_packs[s_choice - 1] : NULL;
 }
 
 static int on_text_lookup(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     PeHookTextLookup *lookup = ctx;
     const unsigned char *text = pe_lang_pack_table(active_pack(), lookup->table, lookup->index);
     (void)user;
@@ -133,6 +140,7 @@ static uint32_t s_bank_crc;
 static int s_bank_known;
 
 static int on_text_page(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     PeHookTextPage *box = ctx;
     const unsigned char *text;
     (void)user;
@@ -260,6 +268,7 @@ static void add_glyphs(unsigned char *pixels) {
 }
 
 static int on_tim_upload(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     ask_language();
     unsigned char *pixels = font_pixels(ctx);
     (void)user;
@@ -277,6 +286,7 @@ static int on_tim_upload(void *ctx, void *user) {
 /* A new room can load its bank where the last one was: measure again. The resident pack can be
  * read again too, so the menu widths go back in. */
 static int on_scene_start(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     (void)ctx;
     (void)user;
     s_bank = NULL;
@@ -294,6 +304,7 @@ static int cjk_upload(unsigned cell, const unsigned char *pixels, void *user) {
     return LoadImage(&r, aligned);
 }
 static int on_text_glyph(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     PeHookTextGlyph *g = ctx;
     unsigned id, cell = 0x2C; /* visible '?' if the frame exhausts its cache */
     const PeLangPack *pack = active_pack();
@@ -354,6 +365,7 @@ static int name_letter_missing(PeHookTextLetter *l, const PeLangPack *pack) {
 /* The text renderer (pe1/text_render.h): a stretch's letters, and how a letter draws. The
  * renderer asks only for letters the game's English set lacks or a pack overrides. */
 static int on_text_stretch(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     PeHookTextStretch *s = ctx;
     unsigned count = 0;
     const PeLangPack *pack = active_pack();
@@ -401,6 +413,7 @@ static unsigned extra_metric(const PeLangPack *pack, unsigned k) {
  * its one-byte codes draw, for the renderer's right-to-left lines. */
 static const PeLangPack *s_rtl_logged;
 static int on_text_script(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     PeHookTextScript *t = ctx;
     const PeLangPack *pack = active_pack();
     (void)user;
@@ -415,6 +428,7 @@ static int on_text_script(void *ctx, void *user) {
 }
 
 static int on_text_letter(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     PeHookTextLetter *l = ctx;
     const PeLangPack *pack = active_pack();
     const unsigned *codes;
@@ -490,6 +504,7 @@ static int on_text_letter(void *ctx, void *user) {
 static const PeLangPack *s_pictures_logged;
 static int on_disc_read(void *ctx, void *user) {
     ask_language();
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     PeHookDiscRead *read = ctx;
     const PeLangPack *pack = active_pack();
     (void)user;
@@ -555,6 +570,7 @@ static void names_put(const PeLangPack *pack) {
  * lacks some of a name's letters (the window shows '?'), the copy gets the letters of a pack that
  * has them all, so the name comes back whole after a load. */
 static int on_names_write(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     unsigned char *block = ctx;
     const PeLangPack *pack = active_pack();
     (void)user;
@@ -571,11 +587,13 @@ static int on_names_write(void *ctx, void *user) {
     return 0;
 }
 static int on_names_read(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     (void)ctx; (void)user;
     s_names_pending = 1;                     /* once the game has the save's windows */
     return 0;
 }
 static int on_names_new_game(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     (void)ctx; (void)user;
     memset(&s_kept_names, 0, sizeof s_kept_names);
     return 0;
@@ -608,6 +626,7 @@ static void names_frame(void) {
 }
 
 static int on_cjk_frame(void *ctx, void *user) {
+    if (PE_JAPAN) return 0;                 /* the Japanese discs keep their own text (active_pack) */
     (void)ctx; (void)user;
     names_frame();
     pe_cjk_frame(&s_cjk);
@@ -668,7 +687,9 @@ static const char *choice_name(int choice) {
 
 static void active_text(char *out, unsigned size) {
     const PeLangPack *pack = active_pack();
-    if (s_next != s_choice)
+    if (PE_JAPAN)
+        snprintf(out, size, "Japanese (the Japanese discs' own text; packs are for the USA discs)");
+    else if (s_next != s_choice)
         snprintf(out, size, "%s now, %s after a restart", choice_name(s_choice), choice_name(s_next));
     else if (pack) snprintf(out, size, "%s, %u entries", pack->name, pack->count);
     else snprintf(out, size, s_pack_count ? "English" : "no packs found");
@@ -710,7 +731,7 @@ static int language_set(int choice) {
  * the language is loaded. The answer is saved, so the question doesn't come back; F1 > Language
  * changes it from then on. Unanswered (the window closed on it), it is asked at the next start. */
 static void ask_language(void) {
-    if (!s_ask) return;
+    if (!s_ask || PE_JAPAN) return;      /* asked at a start with the USA discs */
     s_ask = 0;
     int picked = pe_menu_choose("Language", "Pick the language for the game's text. To change it later: "
                                 "F1 > Language, then restart the game.", s_names, s_pack_count + 1, 0);
