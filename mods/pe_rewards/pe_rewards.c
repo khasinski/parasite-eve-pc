@@ -109,9 +109,15 @@ static void pe_rw_bag_take_one(int v) {
             return;
         }
 }
+/* Copies of `v` in the bag and Wayne's crate, stacks counted: two Mod Permits (or Tools) folded
+ * into one slot by pe_stacks are two held, so the cascade's "already holds" caps see them. */
 static uint32_t pe_rw_held(int v) {
-    uint32_t n = pe_rw_bag_count_of(v);
+    const PeStacksApi *stacks = (const PeStacksApi *)pe_service_get("stacks", 1);
+    uint32_t n;
     int i;
+    if (stacks && stacks->total)
+        return (uint32_t)stacks->total(0, (uint16_t)v) + (uint32_t)stacks->total(1, (uint16_t)v);
+    n = pe_rw_bag_count_of(v);
     for (i = 0; i < PE_RW_STORAGE_SLOTS; ++i) n += g_WayneStorageItems[i] == v;
     return n;
 }
@@ -261,10 +267,6 @@ static uint16_t pe_rw_roll_rare(uint32_t exp) {
 /* ---- the opt-in Economy path: one engine per battle, so Enhanced's fields above stay frozen ---- */
 static uint32_t s_rw_policy_seq[2];   /* the pending entries on the open list, by sequence */
 
-static uint32_t pe_rw_copies(int item) {
-    const PeStacksApi *stacks = (const PeStacksApi *)pe_service_get("stacks", 1);
-    return stacks ? (uint32_t)stacks->total(0, (uint16_t)item) + (uint32_t)stacks->total(1, (uint16_t)item) : pe_rw_held(item);
-}
 
 static int pe_rw_list_has(const PeHookRewards *r, uint32_t kept, int item) {
     uint32_t i;
@@ -314,7 +316,7 @@ static void pe_rw_policy_show(const PeHookRewards *r, PeEconProgress *g) {
         r->list[kept].id = (s16)id;
         r->list[kept++].extra = -1;
         s_rw_found.rare_shown[a] = (uint16_t)id;
-        s_rw_found.rare_before[a] = pe_rw_bag_count_of(id);
+        s_rw_found.rare_before[a] = pe_rw_bag_copies(id);
         s_rw_found.rare_is_econ[a] = e->kind == PE_ECON_PENDING_EFFECT;
         s_rw_policy_seq[a] = e->sequence;
     }
@@ -332,10 +334,10 @@ static void pe_rw_policy_battle(const PeHookRewards *r, const PeWalletApi *walle
     in.exp = (uint32_t)r->exp;
     in.wallet_room = wallet->room();
     in.generation = pe_reg_generation();
-    in.held_super_tool = pe_rw_copies(0x36);
-    in.held_permits = pe_rw_copies(PE_RW_ITEM_MOD_PERMIT);
-    in.held_tools = pe_rw_copies(0x16);
-    in.tool_kit = pe_rw_copies(0x35) || in.held_super_tool;
+    in.held_super_tool = pe_rw_held(0x36);
+    in.held_permits = pe_rw_held(PE_RW_ITEM_MOD_PERMIT);
+    in.held_tools = pe_rw_held(0x16);
+    in.tool_kit = pe_rw_held(0x35) || in.held_super_tool;
     in.boss = (uint8_t)s_rw_boss_battle;
     in.has_list = r->list != NULL;
     in.scavenger = (uint8_t)pe_rw_armor_has(PE_FX_SCAVENGER);
@@ -437,7 +439,7 @@ static int pe_rw_on_rewards(void *ctx, void *user) {
                 r->list[kept].id = (s16)id;
                 r->list[kept++].extra = -1;
                 s_rw_found.rare_shown[a] = id;
-                s_rw_found.rare_before[a] = pe_rw_bag_count_of(id);
+                s_rw_found.rare_before[a] = pe_rw_bag_copies(id);
                 s_rw_found.rare_is_econ[a] = id == PE_RW_ITEM_MOD_PERMIT && s_rw_found.econ_shown >= 0;
             } else {
                 s_rw.rare_carry = id;
@@ -540,7 +542,7 @@ static void pe_rw_tick(void) {
             int a;
             for (a = 0; a < 2; ++a) {
                 if (!s_rw_found.rare_shown[a] || s_rw_found.rare_is_econ[a]) continue;
-                pe_log(pe_rw_bag_count_of(s_rw_found.rare_shown[a]) > s_rw_found.rare_before[a] ? "rare_take" : "rare_left",
+                pe_log(pe_rw_bag_copies(s_rw_found.rare_shown[a]) > s_rw_found.rare_before[a] ? "rare_take" : "rare_left",
                        "item=0x%02X", (unsigned)s_rw_found.rare_shown[a]);
             }
             pe_rw_policy_settle();
