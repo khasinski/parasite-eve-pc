@@ -345,6 +345,17 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
         printf("null");
     }
 
+    const char *camera_observations = getenv("PE_TEST_CAMERA_STATE");
+    if (camera_observations && !strcmp(camera_observations, "1")) {
+        const GeomScrollCoordinates *camera = &g_GeomScroll.state.position;
+        printf(",\"camera\":{\"group\":%u,\"position\":[%d,%d],\"origin\":[%d,%d],"
+               "\"flags\":%u,\"mesh_tint\":%d,\"base_angles\":[%u,%u]}",
+               (unsigned)camera->groupSelect, camera->x, camera->y,
+               camera->originX, camera->originY, (unsigned)g_GeomScroll.state.flags,
+               (int)camera->meshTintLevel, (unsigned)camera->baseAngleDigital,
+               (unsigned)camera->baseAngleAnalog);
+    }
+
     printf(",\"combat\":{\"mode\":%d,\"live_enemies\":%d", g_BattleModeState, (int)g_BattleLiveEnemyCount);
     if (g_PlayerEntity && g_PlayerEntity->state) {
         Combatant *player = (Combatant *)g_PlayerEntity->state;

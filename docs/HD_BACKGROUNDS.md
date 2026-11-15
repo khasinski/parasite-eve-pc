@@ -145,6 +145,11 @@ version/directory is in `mods/upscale/active.json` beside those preferences.
 `--download-backgrounds` and `--verify-backgrounds` use the same installer without
 a window. `PE_CONFIG_HOME` selects an isolated profile for headless checks;
 `PE_HD_SERVER=http://127.0.0.1:PORT` is a localhost-only test override.
+For scripted-view replay, `PE_TEST_CAMERA_STATE=1` adds the original camera
+group, position, script origin, flags, mesh tint and digital/analog base angles
+to each headless diagnostic record. It only reads host-owned camera state;
+the default replay JSON is unchanged. Keep these observations separate from
+optional HD material identifiers when checking native state equality.
 
 The game advertises `X-PE-HD-Features: underlay-v1,static-matte-v1,selective-matte-v1` when requesting
 the catalog and archive. The server keeps versioned catalogs so older games
