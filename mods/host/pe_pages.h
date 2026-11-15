@@ -21,6 +21,7 @@
 
 #define PE_PAGE_MOVEMENT       "Movement"
 #define PE_PAGE_COMBAT         "Combat"
+#define PE_PAGE_MELEE          "Combat/Melee"
 #define PE_PAGE_MOD_EFFECTS    "Combat/Mod effects"
 #define PE_PAGE_PE_BALANCE     "Combat/Parasite Energy"
 #define PE_PAGE_QUICK_POWERS    "Combat/Parasite Energy/Quick powers"

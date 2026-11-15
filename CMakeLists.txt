@@ -40,6 +40,8 @@ endif()
 option(BUILD_TESTING "Build original game tests" OFF)
 include(CTest)
 
+option(PE_MELEE_PROTOTYPE "Build the experimental Melee Combat features" OFF)
+
 # Mod host (mods/). Off: the PE_HOOK lines compile to nothing.
 option(PE_MODS "Build with the mod host and the mods in mods/" OFF)
 if(PE_MODS)
@@ -447,6 +449,10 @@ add_library(parasite-eve-original OBJECT
     src/overlays/room_lib/timed_spawn.c
     src/overlays/room_lib/homing_projectile_seeds.c
     src/overlays/room_lib/script_args.c)
+if(PE_MELEE_PROTOTYPE)
+    target_sources(parasite-eve-original PRIVATE src/main/battle/melee.c)
+    target_compile_definitions(parasite-eve-original PRIVATE PE_MELEE_PROTOTYPE=1)
+endif()
 pe_configure_object_library(parasite-eve-original)
 target_link_libraries(parasite-eve-original PRIVATE psyz)
 set_property(SOURCE src/main/boot/init.c src/main/boot/mouse_input.c APPEND PROPERTY INCLUDE_DIRECTORIES
@@ -663,6 +669,11 @@ if(BUILD_TESTING)
         $<TARGET_OBJECTS:parasite-eve-original-actor-animation>)
     target_include_directories(test-original-actor-animation PRIVATE include tests)
     target_link_libraries(test-original-actor-animation PRIVATE psyz ${PE_COMMON_GAME_LIBS})
+    if(PE_MELEE_PROTOTYPE AND PE_MODS)
+        target_compile_definitions(test-original-actor-animation PRIVATE PE_MELEE_PROTOTYPE=1 PE_MODS=1)
+        add_test(NAME prototype-melee-damage-rules COMMAND test-original-actor-animation
+            --melee-rules ${CMAKE_BINARY_DIR}/melee-rules-evidence)
+    endif()
     add_test(NAME original-game-movie-early-exit COMMAND test-original-actor-animation --movie-early-exit)
     set_tests_properties(original-game-movie-early-exit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30 LABELS "game-assets;audio")
     add_test(NAME original-game-movie-audio-lock-order COMMAND test-original-actor-animation --movie-audio-lock-order)
