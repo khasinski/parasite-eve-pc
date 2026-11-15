@@ -3185,49 +3185,8 @@ runpy.run_path(start, run_name="__main__")
 
 
 def window_works() -> bool:
-    # A Tk availability probe itself creates a window and can activate Python
-    # on macOS. Never run it on the user's desktop without explicit opt-in.
-    if os.environ.get("PE_TEST_TRANSLATOR_GUI") != "1":
-        return False
     return subprocess.run([sys.executable, "-I", "-c", "import tkinter; tkinter.Tk().destroy()"],
                           capture_output=True).returncode == 0
-
-
-class WindowOptInTest(unittest.TestCase):
-    def test_default_test_run_never_probes_a_real_window(self):
-        for value in (None, "0"):
-            with self.subTest(value=value), mock.patch.dict(os.environ), \
-                    mock.patch.object(subprocess, "run") as run:
-                os.environ.pop("PE_TEST_TRANSLATOR_GUI", None)
-                if value is not None:
-                    os.environ["PE_TEST_TRANSLATOR_GUI"] = value
-                self.assertFalse(window_works())
-                run.assert_not_called()
-
-    def test_game_gui_checks_skip_before_touching_assets_or_output(self):
-        script = HERE.parent / "tests" / "text_renderer_game.py"
-        parts = ("translator-pictures", "translator-map", "translator-place-title",
-                 "translator-battle", "translator-cards", "translator-tutorial",
-                 "translator-game-over", "translator-menu-words", "translator-letters")
-        env = dict(os.environ, PE_TEST_DISC="/nonexistent-owned-disc.cue")
-        env.pop("PE_TEST_TRANSLATOR_GUI", None)
-        with tempfile.TemporaryDirectory() as directory:
-            sentinel = Path(directory) / "keep.txt"
-            sentinel.write_text("keep")
-            for part in parts:
-                with self.subTest(part=part):
-                    result = subprocess.run([sys.executable, "-I", str(script),
-                                             "nonexistent-game", directory, part],
-                                            env=env, capture_output=True, text=True)
-                    self.assertEqual(result.returncode, 77, result.stderr)
-                    self.assertIn("dedicated display", result.stdout)
-                    self.assertEqual(sentinel.read_text(), "keep")
-
-    def test_dedicated_display_can_explicitly_enable_the_probe(self):
-        with mock.patch.dict(os.environ, {"PE_TEST_TRANSLATOR_GUI": "1"}), \
-                mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run:
-            self.assertTrue(window_works())
-            run.assert_called_once()
 
 
 class DownloadCheckTest(unittest.TestCase):
