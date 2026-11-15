@@ -3,6 +3,7 @@
 #include "menu_memcard_screen.h"
 #include "pe1/boot.h"
 #include "pe_hooks.h"
+#include "pe1/mouse_input.h"
 #include <psyz/video.h>
 #include <stdio.h>
 
@@ -29,6 +30,26 @@ static inline MemcardImageNode *MenuCard_FindImageNode(s32 kind) {
     return node;
 }
 
+/* The mouse over the title menu: its rows are 20 pixels apart, the cursor's
+ * y on each (140 Load when a card has a file, 160 New Game, 180 Continue,
+ * 200 Tutorial), each row's words drawn from y + 2. The rows the cursor can
+ * take are those Up/Down reach (MenuCard_HandleListInput). */
+static void MenuCard_PointListRow(MemcardImageNode *cursor) {
+    static unsigned seen;
+    int x, y, row;
+    if (!Mouse_Moved(&seen, &x, &y) || x < 96 || x >= 224 || y < 142) {
+        return;
+    }
+    row = 140 + (y - 142) / 20 * 20;
+    if (row == cursor->y || row < (MenuCard_FindImageNode(6)->intensity == 0x100 ? 140 : 160) ||
+        row > MenuCard_FindImageNode(5)->y) {
+        return;
+    }
+    g_MemcardScreenTimer = 0;
+    cursor->y = row;
+    Menu_PlayMoveSound();
+}
+
 /* Scroll and confirm handling for the memory card list screen. */
 void MenuCard_HandleListInput(void) {
     s32 pad;
@@ -36,6 +57,7 @@ void MenuCard_HandleListInput(void) {
     MemcardImageNode *node;
 
     pad = Draw_RemapStatusFlags();
+    Mouse_NoteTitleScreen();
     if(g_BootHostActive && g_BootHostPadEventCount && pad!=g_MemcardPrevPad){
         printf("{\"event\":\"title_input\",\"vblank\":%u,\"pad\":%u,\"timer\":%d,\"nodes\":[",
             g_BootHostVBlankCount,(u32)pad,g_MemcardScreenTimer);
@@ -97,6 +119,7 @@ void MenuCard_HandleListInput(void) {
             }
         }
         node = MenuCard_FindImageNode(7);
+        MenuCard_PointListRow(node);
         if (pad & 0x20) {
             if (node->y == 160 || node->y == 180 || node->y == 200 || node->y == 140) {
                 g_MemcardScreenTimer = 1001;

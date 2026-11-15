@@ -3115,7 +3115,7 @@
     },
     {
       "path": "include/pe1/menu_widget.h",
-      "sha256": "fc6b1310b30a412752a21de3e100f05e30c83532f96849c3b6173d82c25837fc"
+      "sha256": "cd8bdbf5fe4e8ce077077febea2327e861ffb2412789cca1ad1a429607778c86"
     },
     {
       "path": "include/pe1/model_fill_lighting.h",
@@ -4003,7 +4003,7 @@
     },
     {
       "path": "mods/host/pe_mod_panel.c",
-      "sha256": "a06c0888a77a99c06ad5a58e06b460000d6b9a8532cc0f8ce4e405312508f1f9"
+      "sha256": "c23e99a986f14d952928abbfe450753e0a2b07fc3a997e31a1be818cd2654cec"
     },
     {
       "path": "mods/host/pe_model.c",
