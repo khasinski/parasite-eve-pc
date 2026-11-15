@@ -340,17 +340,19 @@ def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56)
             cells.append((x,y))
     cols = min(16,len(cells));rows = math.ceil(len(cells)/cols)
     atlas = Image.new('RGBA',(cols*68,rows*136))
+    rgb = np.asarray(material.convert('RGB'))
     for i,(x,y) in enumerate(cells):
-        tile = Image.new('RGBA',(64,64))
-        for py in range(64):
-            for px in range(64):
-                nx,ny=x+px/4,y+py/4
-                if ny>=bottom or (x0+native_x<=nx<x1+native_x) or nx>=right:
-                    continue
-                sx=int((nx-(x0+native_x))*4)+margin*4;sy=int((ny-top)*4)
-                if 0<=sx<material.width and 0<=sy<material.height:
-                    tile.putpixel((px,py),(*material.getpixel((sx,sy)),255))
-        padded=Image.fromarray(np.pad(np.asarray(tile),((2,2),(2,2),(0,0)),mode='edge'))
+        # Filter gutters sample the same full RGB field as adjacent cells,
+        # including the original center under transparent margin samples.
+        nx=x+(np.arange(68)-2)/4;ny=y+(np.arange(68)-2)/4
+        sx=(x-(x0+native_x))*4+margin*4+np.arange(68)-2
+        sy=(y-top)*4+np.arange(68)-2
+        color=rgb[np.clip(sy,0,rgb.shape[0]-1)[:,None],np.clip(sx,0,rgb.shape[1]-1)[None,:]]
+        visible=((nx< x0+native_x)|(nx>=x1+native_x))&(nx>=left)&(nx<right)
+        visible=(ny[:,None]>=top)&(ny[:,None]<bottom)&visible[None,:]
+        # Alpha 1/255 is discarded by the margin shader but prevents the
+        # loader from extruding unrelated edge RGB into transparent samples.
+        padded=Image.fromarray(np.dstack((color,np.where(visible,255,1).astype(np.uint8))))
         atlas.paste(padded,((i%cols)*68,(i//cols)*68))
     geometry=rooms[room]['geometry_key']
     key=hashlib.sha256(f'{geometry}:{group}:widescreen-v1'.encode()).hexdigest()[:16]

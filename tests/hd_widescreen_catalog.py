@@ -80,7 +80,12 @@ class Scope(unittest.TestCase):
             (pack/'manifest.json').write_text(json.dumps(dict(widescreen=[
                 dict(room='M377',group=1,geometry_key=geom)],extras=[])))
             center=root/'center.png';Image.new('RGB',(1280,64),'blue').save(center)
-            generated=root/'generated.png';Image.new('RGB',(1728,64),'green').save(generated)
+            import numpy as np
+            generated=root/'generated.png'
+            pixels=np.zeros((64,1728,3),dtype=np.uint8)
+            pixels[:,:,0]=np.arange(1728,dtype=np.uint16)[None,:]%256
+            pixels[:,:,1]=np.arange(64,dtype=np.uint8)[:,None];pixels[:,:,2]=37
+            Image.fromarray(pixels).save(generated)
             view=dict(active_bbox=[0,0,320,16],native_origin=[0,0],controllers=[])
             room=dict(geometry_key=geom,entries=[dict(group=1,tiles=1,flags=2)])
             with patch.object(self.module,'catalog',return_value=({('M044',1):view},{'M044':room})), \
@@ -94,6 +99,11 @@ class Scope(unittest.TestCase):
             backdrop=next(r for r in result if r['kind']==0)
             self.assertEqual(backdrop['bounds'],[-48,368,0,16])
             self.assertEqual(len(backdrop['positions']),6)
+            # A gutter between cells must contain the neighbouring source
+            # pixel, not a repeated copy of the cell's edge (visible at 7x).
+            rgba=np.array(Image.open(pack/(backdrop['key']+'.png')))
+            self.assertEqual(tuple(rgba[7,68]),(62,5,37,255))
+            self.assertEqual(tuple(rgba[7,2*68+66]),(192,5,37,1))
             self.assertEqual(source.read_bytes(),payload)
             manifest=json.loads((pack/'manifest.json').read_text())
             self.assertEqual(len(manifest['widescreen']),1)
@@ -168,6 +178,9 @@ class Scope(unittest.TestCase):
             (src/(geom+'-wide.bin')).write_bytes(payload)
             Image.new('RGBA',(16*68,2*68),(50,80,110,255)).save(src/(backdrop['key']+'.png'))
             Image.new('L',(224,64),255).save(masks/'M044-left-mask.png')
+            context=Image.new('RGB',(1728,64),'white')
+            context.paste('red',(224,0,1504,64))
+            context.save(masks/'M044-g02-wide-rgb.png')
             (src/'manifest.json').write_text(json.dumps(dict(widescreen=[dict(room='M044',group=2,geometry_key=geom)],extras=[])))
             fake=types.ModuleType('inspect_room')
             fake.atlas_cells=lambda pack,key:[__import__('numpy').full((64,64,4),255,dtype='uint8') for _ in range(8)]
@@ -223,6 +236,22 @@ class Scope(unittest.TestCase):
             self.assertEqual(front['positions'],[(309,-8),(325,-8),(341,-8),(357,-8),(373,-8),
                 (309,8),(325,8),(341,8),(357,8),(373,8)])
             self.assertEqual(front['depths'],[100,110,120,130,140,280,260,240,220,200])
+            # Transparent samples inside the native picture retain its RGB,
+            # so a partial foreground cell can filter across the source seam
+            # without blending black or unrelated foreground edge colors.
+            rgba=np.array(Image.open(dst/(front['key']+'.png')).convert('RGBA'))
+            self.assertEqual(tuple(rgba[42,10]),(255,0,0,1))
+            context_path=masks/'M044-g02-wide-rgb.png'
+            original_context=context_path.read_bytes()
+            stable={p.name:p.read_bytes() for p in dst.iterdir() if p.is_file()}
+            for bad_context,message in [(Image.new('RGB',(1,1),'white'),'dimensions'),
+                                        (Image.new('RGB',(1728,64),'black'),'side pixels')]:
+                bad_context.save(context_path)
+                with patch.dict(sys.modules,{'inspect_room':fake,'prepare':self.module}),patch.object(sys,'argv',argv):
+                    with self.assertRaisesRegex(ValueError,message):
+                        runpy.run_path(str(script),run_name='__main__')
+                self.assertEqual(stable,{p.name:p.read_bytes() for p in dst.iterdir() if p.is_file()})
+            context_path.write_bytes(original_context)
 
             # A thin railing can have a disconnected far-depth fragment in the
             # next tile. A reviewed source plane must not infer its slope from

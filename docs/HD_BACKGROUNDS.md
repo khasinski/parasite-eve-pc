@@ -396,3 +396,15 @@ cutoff, so these samples remain fully invisible, while bypassing the loader's
 alpha-zero RGB extrusion. This convention is only for extension commands; it is
 not an alpha-blended native room matte. Verify hidden-actor background equality
 as well as actor occlusion and unchanged 4:3 output after authoring a new layer.
+
+Filter gutters must sample neighbouring pixels from the complete registered
+image, rather than repeating each tile's edge. This applies to both backdrop
+and foreground margins: their grids can differ, and repeated edges produce
+color seams at fractional scales such as 7x even when 4x looks correct.
+Foreground authoring requires `MASKDIR/ROOM-gGG-wide-rgb.png`, copied from the
+backdrop export's `ROOM-gGG-wide-registered.png`. Its dimensions and visible
+side RGB are checked before export. RGB underneath transparent parts of the
+original center is retained for filtering, while their alpha stays below the
+binary cutoff. Gutter alpha follows the same full-view mask and remains
+invisible outside the authored bounds. Keep these overlapping margin atlases
+lossless so independent compression cannot break their shared RGB.

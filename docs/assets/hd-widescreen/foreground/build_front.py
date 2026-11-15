@@ -3,6 +3,9 @@
 build_front.py ROOM GROUP SRC_PACK OUT_PACK MASKDIR STRIP:ENTRY [STRIP:ENTRY ...]
 STRIP is left|right (MASKDIR/ROOM-STRIP-mask.png, 224 HD px wide, from cut.py);
 ENTRY is the native foreground entry whose seam tiles give the depths.
+MASKDIR/ROOM-gGG-wide-rgb.png must contain the complete registered composite
+(including its original center) from the backdrop export. Its visible side RGB
+must match the backdrop exactly. Keep overlapping margin atlases lossless.
 OUT_PACK is a hard-linked copy of SRC_PACK whose ROOM sidecar is rewritten as PEW2.
 An optional ROOM-STRIP-depth.json selects a local surface with entry and anchors
 [[native_x,native_y,native_depth], ...]. Every anchor must exist in the original
@@ -37,6 +40,16 @@ for i, (x, y) in enumerate(wide['xy']):
     X, Y = (x - l) * 4, (y - t) * 4
     c = cells[i][:max(0, min(64, canvas.shape[0] - Y)), :max(0, min(64, canvas.shape[1] - X))]
     canvas[Y:Y + c.shape[0], X:X + c.shape[1]] = c
+context_path = maskdir / f'{room}-g{group:02d}-wide-rgb.png'
+if not context_path.exists():
+    raise ValueError('Missing coherent RGB context: '+str(context_path))
+rgb_context = np.asarray(Image.open(context_path).convert('RGB'))
+if rgb_context.shape != (*canvas.shape[:2],3):
+    raise ValueError('Coherent RGB context dimensions do not match the backdrop')
+authored = canvas[...,3] > 127
+authored[:,(0-l)*4:(320-l)*4] = False
+if not np.array_equal(rgb_context[authored],canvas[...,:3][authored]):
+    raise ValueError('Coherent RGB context differs from the backdrop side pixels')
 alpha = np.zeros(canvas.shape[:2], np.uint8)
 view, layers = ir.native_layers(room, group)
 depth_guides = {}
@@ -130,7 +143,13 @@ half = rows * 68
 atlas = np.zeros((half * 2, cols * 68, 4), np.uint8)
 for i, c in enumerate(front_cells):
     X, Y = (i % cols) * 68, (i // cols) * 68
-    padded = np.pad(c, ((2, 2), (2, 2), (0, 0)), mode='edge')
+    x,y=front_xy[i];sx=(x-l)*4+np.arange(68)-2;sy=(y-t)*4+np.arange(68)-2
+    ix=np.clip(sx,0,canvas.shape[1]-1);iy=np.clip(sy,0,canvas.shape[0]-1)
+    color=rgb_context[iy[:,None],ix[None,:]]
+    coverage=alpha[iy[:,None],ix[None,:]].copy()
+    valid=(sy[:,None]>=0)&(sy[:,None]<canvas.shape[0])&(sx[None,:]>=0)&(sx[None,:]<canvas.shape[1])
+    coverage[~valid]=0
+    padded=np.dstack((color,coverage))
     # Extension commands use binary alpha testing (<0.5 is discarded), not
     # alpha blending. Keep transparent samples below that threshold but nonzero:
     # the GPU loader otherwise extrudes foreground RGB into alpha-zero pixels,
@@ -162,6 +181,7 @@ manifest['extras'] = extras
 fronts = [r for r in manifest.get('widescreen_foreground',[])
           if (r['geometry_key'],r['group']) != (geom,group)]
 fronts.append(dict(room=room,group=group,geometry_key=geom,key=f'{key:016x}',
+    rgb_context_sha256=digest(context_path),
     cells=len(front_xy),strips=[dict(side=side,entry=entry,
     mask_sha256=digest(maskdir/f'{room}-{side}-mask.png'),
     **(dict(depth_guide_sha256=digest(depth_guides[side]['path']),
