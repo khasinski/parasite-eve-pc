@@ -187,7 +187,9 @@ class Scope(unittest.TestCase):
                     self.assertEqual(extra['sha256'],hashlib.sha256((dst/extra['file']).read_bytes()).hexdigest())
             # A cell at the right overscan boundary is only half inside the
             # canvas. Keep its authored half, with transparent padding outside.
-            Image.new('L',(224,64),255).save(masks/'M044-right-mask.png')
+            right_mask=Image.new('L',(224,64),255)
+            right_mask.paste(0,(8,8,12,12))
+            right_mask.save(masks/'M044-right-mask.png')
             fake.native_layers=lambda room,group:({},[dict(entry=4,tiles=[
                 dict(x=288,y=0,depth=90),dict(x=304,y=0,depth=100)])])
             argv=[str(script),'M044','2',str(src),str(dst),str(masks),'right:4']
@@ -200,7 +202,14 @@ class Scope(unittest.TestCase):
             rgba=np.array(Image.open(dst/(front['key']+'.png')).convert('RGBA'))
             cell=rgba[2:66,3*68+2:3*68+66,3]
             self.assertTrue((cell[:,:32]==255).all())
-            self.assertFalse(cell[:,32:].any())
+            self.assertTrue((cell[:,32:]==1).all())
+            # Preserve the coherent source RGB through a hole in the matte.
+            # Alpha 1/255 survives loader extrusion, but extension shader's
+            # binary 0.5 cutoff still discards it completely.
+            hole=rgba[10:14,10:14]
+            self.assertTrue((hole[...,:3]==255).all())
+            self.assertTrue((hole[...,3]==1).all())
+            self.assertFalse((hole[...,3]/255.0>=0.5).any())
 
             # A thin railing can have a disconnected far-depth fragment in the
             # next tile. A reviewed source plane must not infer its slope from

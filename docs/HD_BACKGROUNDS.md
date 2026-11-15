@@ -378,3 +378,11 @@ Guided cells also follow the original foreground tile-grid phase, independently
 of the backdrop grid; partial cells outside the authored canvas stay transparent.
 The mask and depth-guide hashes are recorded in the pack metadata. A successful
 export still needs actor probes behind and in front of the extended surface.
+
+Foreground extension atlases preserve the coherent backdrop RGB underneath the
+mask, including samples outside the silhouette. The exporter stores masked-out
+samples with alpha 1/255 instead of zero. Extension draws use a binary 0.5 alpha
+cutoff, so these samples remain fully invisible, while bypassing the loader's
+alpha-zero RGB extrusion. This convention is only for extension commands; it is
+not an alpha-blended native room matte. Verify hidden-actor background equality
+as well as actor occlusion and unchanged 4:3 output after authoring a new layer.

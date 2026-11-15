@@ -128,6 +128,11 @@ atlas = np.zeros((half * 2, cols * 68, 4), np.uint8)
 for i, c in enumerate(front_cells):
     X, Y = (i % cols) * 68, (i // cols) * 68
     padded = np.pad(c, ((2, 2), (2, 2), (0, 0)), mode='edge')
+    # Extension commands use binary alpha testing (<0.5 is discarded), not
+    # alpha blending. Keep transparent samples below that threshold but nonzero:
+    # the GPU loader otherwise extrudes foreground RGB into alpha-zero pixels,
+    # replacing the coherent background RGB needed by bilinear edge samples.
+    padded[..., 3] = np.where(padded[..., 3] == 0, 1, padded[..., 3])
     atlas[Y:Y + 68, X:X + 68] = padded
     atlas[half + Y:half + Y + 68, X:X + 68] = padded
 key_bytes = hashlib.sha256(atlas.tobytes() + b'pe-front').digest()[:8]
