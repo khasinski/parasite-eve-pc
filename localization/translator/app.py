@@ -10,7 +10,6 @@ the window.
 """
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import queue
@@ -139,7 +138,6 @@ class App:
         self.pictures_window = None
         self._pictures_by_script = list(pictures or [])
         self.pictures_loaded: list[dict] = []
-        self.picture_files: dict[str, str] = {}         # picture id -> the PNG last loaded for it (its name)
         self.letters_window = None
         self._letters_by_script, self._save_letters = letters, save_letters
         self.letters_done: dict = {}                    # what the scripted run did with letters (its report)
@@ -486,7 +484,6 @@ class App:
 
     def use(self, tr: P.Translation) -> None:
         self.tr, self.dirty = tr, False
-        self.picture_files = {}
         self.state, self.said = {}, {}
         self.settings["last"] = str(tr.path)
         save_settings(self.settings)
@@ -523,26 +520,14 @@ class App:
         self.letters_window = LettersWindow(self)
 
     def letters_png(self) -> bytes:
-        """The letters PNG of the open translation: its letters as drawn so far, the game's own
-        letters as a style guide when a disc is chosen."""
-        tr = self.tr
-        if tr is None:
+        if self.tr is None:
             raise ValueError("open a translation first")
-        rows = tr.letters_to_draw()
-        drawn = {s.char: tr.letter(s.char) for s in LA.every_shape(rows) if tr.letter(s.char)}
-        style = LA.style_letters(self.look_disc.page, self.look_disc.font.palettes[0]) if self.look_disc else None
-        language = P.alphabets.BY_CODE[tr.lang].name if tr.lang in P.alphabets.BY_CODE else tr.name
-        return LA.png(rows, language, drawn, style)
+        return self.tr.letters_png(self.look_disc)
 
     def load_letters(self, png: bytes) -> LA.Loaded:
-        """A painted letters PNG into the translation (saved with it): each painted square draws its
-        letter, an empty one gives the letter back its question mark."""
-        tr = self.tr
-        if tr is None or tr.locked:
+        if self.tr is None:
             raise ValueError("open a translation you can save first")
-        loaded = LA.from_png(png, tr.letters_to_draw())
-        for ch, rows in loaded.drawn.items():
-            tr.set_letter(ch, rows)
+        loaded = self.tr.load_letters(png)
         self.dirty = True
         self.fonts = {}
         self.count()
@@ -606,29 +591,9 @@ class App:
         self.pictures_window = PictureWindow(self)
 
     def load_picture(self, pic: A.Picture, png: bytes | None, name: str = "your PNG") -> A.Loaded:
-        """A PNG as the translation's picture (None: back to the game's). Saved with the translation.
-        `name`: the PNG's file name, to name it if it disagrees with another screen's (the Tune-up
-        screenshot, shown on two Tutorial screens)."""
-        tr, disc = self.tr, self.picture_disc
-        if tr is None or disc is None or tr.locked:
+        if self.tr is None or self.picture_disc is None:
             raise ValueError("open a translation you can save and choose your disc first")
-        pieces = A.read_pieces(tr.parts)
-        if png is None:
-            loaded = A.Loaded(disc.english[pic.id], [])
-            new = A.put(disc, pic, pieces, None)
-            self.picture_files.pop(pic.id, None)
-        else:
-            try:
-                loaded = A.from_png(pic, disc.english[pic.id], png, A.shown(disc, pic, pieces),
-                                    getattr(disc, "layout", {}).get(pic.id))
-            except A.Disagree as e:
-                other = self.picture_files.get(e.other.id)
-                raise ValueError(f"{e} The two PNGs that disagree: {name} (for this screen) and "
-                                 + (f"{other} (loaded for \"{e.other.label}\")." if other else
-                                    f"the one already in the translation for \"{e.other.label}\".")) from e
-            new = A.put(disc, pic, pieces, loaded.tim)
-            self.picture_files[pic.id] = name
-        A.write_pieces(tr.parts, new)
+        loaded = self.tr.load_picture(self.picture_disc, pic, png, name)
         self.dirty = True
         self.count()
         return loaded
@@ -1332,30 +1297,10 @@ class App:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="The Parasite Eve Translator")
-    ap.add_argument("translation", nargs="?", help="a .pelang translation to open")
-    ap.add_argument("--english", help="the English pack (remembered after the first time)")
-    ap.add_argument("--select", help=argparse.SUPPRESS)       # for tests: the row to show first,
-    ap.add_argument("--type", help=argparse.SUPPRESS)         # and text to type into it
-    # For the checks (tests, the download's build): start a new translation with no dialog, keep the
-    # settings in another file than the person's own, and save, quit and report (see App).
-    ap.add_argument("--new", nargs=2, metavar=("LANG", "NAME"), help=argparse.SUPPRESS)
-    ap.add_argument("--settings", help=argparse.SUPPRESS)
-    ap.add_argument("--report", help=argparse.SUPPRESS)
-    ap.add_argument("--screenshot", help=argparse.SUPPRESS)
-    ap.add_argument("--disc", help="your Parasite Eve (USA) disc, for the pictures (remembered)")
-    ap.add_argument("--picture", action="append", default=[], metavar="ID=PNG", help=argparse.SUPPRESS)
-    ap.add_argument("--letters", help=argparse.SUPPRESS)       # a letters PNG to load before saving
-    ap.add_argument("--save-letters", help=argparse.SUPPRESS)  # where to save the letters PNG first
-    a = ap.parse_args(argv)
-    if a.new and not a.translation:
-        ap.error("--new needs the file to save the new translation as")
-    pictures = []
-    for item in a.picture:
-        pid, sep, path = item.partition("=")
-        if not sep:
-            ap.error("--picture takes ID=PNG")
-        pictures.append((pid, path))
+    a = P.arguments(argv)
+    if a.headless:
+        return P.headless_main(argv)
+    pictures = a.picture_pairs
     if a.settings:
         global SETTINGS
         SETTINGS = Path(a.settings)

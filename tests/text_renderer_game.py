@@ -1159,7 +1159,7 @@ def translator_pictures(game, discs, out, localization):
         img.save(saved)
         loads += ['--picture', f'{pid}={saved}']
     path, report = out / 'translator-pictures.pelang', out / 'translator-pictures-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Pictures test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], *loads], capture_output=True, text=True, timeout=300)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -1246,7 +1246,7 @@ def translator_map(game, discs, out, localization):
     img.convert('RGB').save(saved)
     expected = artwork.from_png(pic, disc.english[pic.id], saved.read_bytes()).tim
     path, report = out / 'translator-map.pelang', out / 'translator-map-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Map test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
                          timeout=300)
@@ -1355,7 +1355,7 @@ def translator_place_title(game, discs, out, localization):
     check(MAP_SAVE.is_file(), f'no sample save {MAP_SAVE}')
     # The Translator: a new translation with the place title typed as words only.
     path, report = out / 'translator-place-title.pelang', out / 'translator-place-title-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Place test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--select', PLACE_KEY, '--type', PLACE_WORDS], capture_output=True, text=True, timeout=300)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -1443,7 +1443,7 @@ def translator_battle(game, discs, out, localization):
     img.convert('RGB').save(saved)
     expected = artwork.from_png(pic, disc.english[pic.id], saved.read_bytes()).tim
     path, report = out / 'translator-battle.pelang', out / 'translator-battle-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Battle test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
                          timeout=300)
@@ -1540,7 +1540,7 @@ def translator_cards(game, discs, out, localization):
               f'no square of {pid} took another colour set: {expected[pid].notes}')
         args += ['--picture', f'{pid}={saved}']
     path, report = out / 'translator-cards.pelang', out / 'translator-cards-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Cards test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], *args], capture_output=True, text=True, timeout=600)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -1710,7 +1710,7 @@ def translator_tutorial(game, discs, out, localization):
                   f"About Icons 8's PNG did not keep 7's Tune-up screenshot: {loaded.notes}")
         expected = artwork.put(disc, pic, expected, loaded.tim)
     path, report = out / 'translator-tutorial.pelang', out / 'translator-tutorial-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Tutorial test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], *args], capture_output=True, text=True, timeout=1200)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -1826,7 +1826,7 @@ def translator_game_over(game, discs, out, localization):
     expected = artwork.from_png(pic, english, saved.read_bytes())
     check(any('not one of the picture' in n for n in expected.notes), f'no colour was fitted: {expected.notes}')
     path, report = out / 'translator-game-over.pelang', out / 'translator-game-over-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Game Over test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0], '--picture', f'{pic.id}={saved}'], capture_output=True, text=True,
                          timeout=600)
@@ -1952,7 +1952,7 @@ def translator_menu_words(game, discs, out, localization):
         check(expected[pid] != english and expected[pid][-32:] == english[-32:], f'{pid}: not redrawn, or its colours changed')
         loads += ['--picture', f'{pid}={saved}']
     path, report = out / 'translator-menu-words.pelang', out / 'translator-menu-words-report.json'
-    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--new', 'es',
+    ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--new', 'es',
                           'Menu words test', '--settings', str(out / 'translator-settings.json'), '--report', str(report),
                           '--disc', discs[0]] + loads, capture_output=True, text=True, timeout=600)
     said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}
@@ -2733,7 +2733,7 @@ def translator_letters(game, discs, out, localization):
         def window(*args):
             report = out / f'letters-{lang}-report.json'
             report.unlink(missing_ok=True)
-            ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), str(path), '--english',
+            ran = subprocess.run([sys.executable, '-I', str(localization / 'translate.py'), '--headless', str(path), '--english',
                                   str(english), '--settings', str(out / 'translator-settings.json'), '--report',
                                   str(report), '--disc', discs[0], *args], capture_output=True, text=True, timeout=300)
             said = json.loads(report.read_text(encoding='utf-8')) if report.exists() else {}

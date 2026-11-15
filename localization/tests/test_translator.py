@@ -15,11 +15,13 @@ Three sets of tests:
   real packs   needs PE_TEST_PLAYER_PACKS (a folder of .pelang translations): each opens with every
                row it holds, and each either saves back unchanged or refuses to save.
 
-  python -I localization/tests/test_translator.py          (77: something was skipped)
+  python -I localization/tests/test_translator.py          (headless; 77: assets missing)
+  xvfb-run -a python -I localization/tests/test_translator.py --gui WindowTest (visual suite)
 """
 import contextlib
 import csv
 import io
+import importlib.abc
 import json
 import os
 import re
@@ -66,6 +68,72 @@ def command_line_build(texts: dict, lang: str, name: str, out: Path) -> str:
     if code:
         raise AssertionError(said.getvalue()[-800:])
     return said.getvalue()
+
+
+def needs_display(test):
+    """A visual/layout assertion, run by the separate --gui suite on a dedicated display."""
+    test.needs_display = True
+    return test
+
+
+class HeadlessEditorTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+
+    def run_editor(self, *args):
+        # A forbidden import fails before Tk can initialize any desktop API.
+        runner = """import importlib.abc, runpy, sys
+class NoTk(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in ('tkinter', '_tkinter') or fullname == 'translator.app':
+            raise AssertionError('headless editor tried to import GUI: ' + fullname)
+sys.meta_path.insert(0, NoTk())
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name='__main__')
+"""
+        report = self.dir / "report.json"
+        result = subprocess.run([sys.executable, "-I", "-c", runner, str(HERE / "translate.py"),
+                                 "--headless", *map(str, args), "--report", str(report)],
+                                capture_output=True, text=True, timeout=60)
+        self.assertTrue(report.exists(), result.stderr)
+        return result, json.loads(report.read_text())
+
+    def test_edit_save_and_reopen_use_the_same_model_without_tk(self):
+        key = plain_dialogue(1)[0]
+        path = self.dir / "translation.pelang"
+        result, report = self.run_editor(path, "--new", "fr", "French", "--select", key, "--type", "Une ligne.")
+        self.assertEqual(result.returncode, 0, report)
+        self.assertTrue(report['headless'])
+        self.assertEqual((report['row_state'], report['in_pack']), ('ok', 1))
+        reference = P.Translation(GAME, "fr", "French")
+        reference.set_text(key, "Une ligne.")
+        reference.save(self.dir / "reference.pelang")
+        self.assertEqual(path.read_bytes(), (self.dir / "reference.pelang").read_bytes())
+        result, report = self.run_editor(path, "--select", key, "--type", "Une autre ligne.")
+        self.assertEqual(result.returncode, 0, report)
+        self.assertEqual(P.Translation.open(path, GAME).text(key), "Une autre ligne.")
+
+    def test_failed_english_load_keeps_the_existing_translation(self):
+        path = self.dir / "translation.pelang"
+        P.Translation(GAME, "fr", "French").save(path)
+        before = path.read_bytes()
+        result, report = self.run_editor(path, "--english", self.dir / "missing.pelang")
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse(report['ok'])
+        self.assertIn('English pack did not load', report['error'])
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_invalid_text_remains_editable_but_is_left_out_of_the_pack(self):
+        key = plain_dialogue(1)[0]
+        path = self.dir / "translation.pelang"
+        typed = "{wait}" * 3 + "x" * 900
+        result, report = self.run_editor(path, "--new", "fr", "French", "--select", key, "--type", typed)
+        self.assertEqual(result.returncode, 0, report)
+        self.assertEqual(report['row_state'], 'error')
+        self.assertIn(key, report['left_out'])
+        self.assertEqual(P.Translation.open(path, GAME).text(key), typed)
 
 
 class RuleTest(unittest.TestCase):
@@ -619,6 +687,7 @@ class EnglishTest(unittest.TestCase):
         self.assertEqual(wrong, {})
         print(f"\n{len(battle.LINES)} English battle lines drawn on the battle bar, at the bottom and at the top")
 
+    @needs_display
     def test_the_window_shows_a_confirm_label_joined_with_the_item_s_name(self):
         """"As in the game" for "will be discarded": the confirm box with Medicine 1's name in the
         translator's words, and the game's own Cancel beside their OK."""
@@ -672,6 +741,7 @@ class EnglishTest(unittest.TestCase):
         self.assertEqual(len([k for k in self.english if citymap.placed(k)]), 14)
         print(f"\n{len(self.english)} rows of the English pack read back as the discs' text ({len(self.discs)} disc(s))")
 
+    @needs_display
     def test_the_window_with_the_english_pack_types_into_the_row_asked_for(self):
         """The English pack loads while the window is up and refills the list: the row being
         worked on must stay (it once jumped to the first row, and the typing landed there)."""
@@ -691,6 +761,7 @@ class EnglishTest(unittest.TestCase):
                              (key, typed, 1, "ok"))
             self.assertEqual(P.Translation.open(saved, GAME).texts, {key: typed})
 
+    @needs_display
     def test_the_window_shows_an_item_name_in_the_item_list_beside_the_other_names(self):
         """"As in the game" for an item's name: the item list, with the translator's words for the
         first items they have translated and the game's English for the others."""
@@ -734,6 +805,7 @@ class EnglishTest(unittest.TestCase):
         finally:
             root.destroy()
 
+    @needs_display
     def test_the_window_shows_a_pe_name_in_the_pe_list_beside_the_other_pes(self):
         """"As in the game" for a PE's name: the PE list, with the translator's words for the PEs they
         have translated and the game's English for the others; Liberate, on the last row, kept in view."""
@@ -784,6 +856,7 @@ class EnglishTest(unittest.TestCase):
         finally:
             root.destroy()
 
+    @needs_display
     def test_the_row_being_worked_on_stays_when_the_english_pack_arrives(self):
         """The same, in that order for sure: a row picked and typed in, then the English pack loads."""
         if not window_works():
@@ -3257,6 +3330,7 @@ class DownloadCheckTest(unittest.TestCase):
         self.assertIn("data files inside", self.caught(built))
 
 
+@needs_display
 class WindowTest(unittest.TestCase):
     """The window itself (translator/app.py) started as a program, from source: the scripted run
     the download's build also uses (--new, --select, --type, --report). No disc, no game text."""
@@ -3512,6 +3586,7 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(read, set(P.DATA_FILES) - set(P.DISC_DATA_FILES))   # no disc in this run
 
 
+@needs_display
 class PictureWindowTest(unittest.TestCase):
     """The Pictures window from source, with no disc (GitHub runs it): it opens, says to choose the
     disc, offers nothing to load, and a file that is not a disc is refused in plain words."""
@@ -3575,6 +3650,7 @@ class AllPicturesDisc:
         return 0, len(self.english[pic.id])
 
 
+@needs_display
 class PictureFitTest(unittest.TestCase):
     """The Pictures window from source with a made-up disc (GitHub runs it): the city map's names,
     the largest picture, fit it with the buttons in sight, at 2x in a 900-high window and still in
@@ -3670,6 +3746,7 @@ class PictureFitTest(unittest.TestCase):
             root.destroy()
 
 
+@needs_display
 class GameLookWindowTest(unittest.TestCase):
     """The preview's switch from source, with no disc (GitHub runs it): "As in the game" with no disc
     draws the computer font's preview, as before."""
@@ -3740,6 +3817,7 @@ class GameLookWindowTest(unittest.TestCase):
             root.destroy()
 
 
+@needs_display
 class LettersWindowTest(unittest.TestCase):
     """Letters the game can't draw yet, in the window from source (GitHub runs it; no disc, no game
     text): the scripted run's Save as PNG / Load PNG, the Letters window, a right-to-left line in the
@@ -3852,6 +3930,7 @@ class LettersWindowTest(unittest.TestCase):
             root.destroy()
 
 
+@needs_display
 class PlayerPackWindowTest(unittest.TestCase):
     """The window with a real player pack (PE_TEST_PLAYER_PACKS). Apart from WindowTest, which
     GitHub runs and where every test must run: the packs hold game text and never go there."""
@@ -3879,8 +3958,49 @@ class PlayerPackWindowTest(unittest.TestCase):
                          {k: v for k, v in zip_parts(packs[0]).items() if k != pelang.BUNDLE_TEXT})
 
 
+class HeadlessLoader(unittest.TestLoader):
+    def loadTestsFromName(self, name, module=None):
+        suite = super().loadTestsFromName(name, module)
+        def visual(tests):
+            for test in tests:
+                if isinstance(test, unittest.TestSuite):
+                    yield from visual(test)
+                elif (getattr(type(test), "needs_display", False)
+                      or getattr(getattr(test, test._testMethodName), "needs_display", False)):
+                    yield test
+        # Explicitly requesting a visual test must not produce an empty green run.
+        target = module
+        try:
+            for part in name.split('.'):
+                target = getattr(target, part)
+        except AttributeError:
+            target = None
+        if getattr(target, "needs_display", False) or next(visual(suite), None) is not None:
+            raise ValueError("visual tests require --gui on a dedicated display (for example remote Xvfb)")
+        return suite
+
+    def loadTestsFromTestCase(self, case):
+        if getattr(case, "needs_display", False):
+            return self.suiteClass()
+        names = [name for name in self.getTestCaseNames(case)
+                 if not getattr(getattr(case, name), "needs_display", False)]
+        return self.suiteClass(case(name) for name in names)
+
+
+class NoDesktopImports(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split('.')[0] in ('tkinter', '_tkinter') or fullname == 'translator.app':
+            raise AssertionError('desktop import in headless suite: ' + fullname)
+
+
 if __name__ == "__main__":
-    result = unittest.main(exit=False, verbosity=2).result
+    gui = "--gui" in sys.argv
+    if gui:
+        sys.argv.remove("--gui")
+    else:
+        sys.meta_path.insert(0, NoDesktopImports())
+    result = unittest.main(exit=False, verbosity=2,
+                           testLoader=unittest.TestLoader() if gui else HeadlessLoader()).result
     if not result.wasSuccessful():
         sys.exit(1)
     sys.exit(77 if result.skipped else 0)
