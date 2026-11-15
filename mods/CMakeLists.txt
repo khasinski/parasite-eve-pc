@@ -267,6 +267,12 @@ if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
         pe_phone/pe_phone_record.c pe_phone/pe_phone_pick.c pe_phone/pe_phone_file.c)
     target_compile_definitions(test-mod-phone PRIVATE PE_PHONE_CALLS_FILE="${CMAKE_CURRENT_SOURCE_DIR}/pe_phone/calls/pe1.txt")
 endif()
+if(BUILD_TESTING)
+    pe_feature_test(title-choice ${PROJECT_SOURCE_DIR}/tests/pe_mod_title_choice_test.c)
+endif()
+if(BUILD_TESTING AND "pe_challenges" IN_LIST PE_MOD_LIST)
+    pe_feature_test(challenge-start ${PROJECT_SOURCE_DIR}/tests/pe_mod_challenge_start_test.c)
+endif()
 if(BUILD_TESTING AND "pe_styles" IN_LIST PE_MOD_LIST)
     pe_feature_test(combat-styles ${PROJECT_SOURCE_DIR}/tests/pe_mod_combat_styles_test.c
         pe_styles/pe_style_catalog.c pe_styles/pe_style_engine.c

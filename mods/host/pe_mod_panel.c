@@ -660,7 +660,11 @@ static struct {
     const char *title, *help;
 } s_choose;
 
-static int pe_choose_visible(void) { return s_choose.count < VISIBLE_ROWS ? s_choose.count : VISIBLE_ROWS; }
+/* Title rows are larger than panel rows; cap their viewport instead of shrinking long lists. */
+static int pe_choose_visible(void) {
+    const int limit = s_choose.descriptions ? 6 : VISIBLE_ROWS;
+    return s_choose.count < limit ? s_choose.count : limit;
+}
 
 static void pe_paint_choose(int w, int h) {
     const float s = s_scale;
@@ -733,7 +737,7 @@ static int pe_title_design_h(int count) { return TITLE_TOP + count * TITLE_ROW_H
 static void pe_paint_title(int w, int h) {
     const float s = s_scale;
     const float cx = (float)w * 0.5f;
-    const float desc_top = (float)(TITLE_TOP + s_choose.count * TITLE_ROW_H);
+    const float desc_top = (float)(TITLE_TOP + pe_choose_visible() * TITLE_ROW_H);
     int i;
     pe_ui_fill_round_rect(&s_surface, 0, 0, (float)w, (float)h, 18 * s, (PeColor){0.0f, 0.0f, 0.0f, 0.72f});
     if (s_choose.title[0]) {
@@ -741,11 +745,11 @@ static void pe_paint_title(int w, int h) {
         pe_upper(text, sizeof text, s_choose.title);
         pe_spaced(cx, 40 * s, 13 * s, 4 * s, text, pe_ui_alpha(pe_look_dim, 0.9f), PE_ALIGN_CENTRE);
     }
-    for (i = 0; i < s_choose.count; ++i) {
-        const int selected = i == s_choose.cursor;
+    for (i = 0; i < pe_choose_visible(); ++i) {
+        const int at = s_choose.scroll + i, selected = at == s_choose.cursor;
         const float em = 27 * s, mid = (TITLE_TOP + i * TITLE_ROW_H + TITLE_ROW_H * 0.5f) * s;
         if (selected) {   /* the title's glow: soft green layers behind the word */
-            const float tw = pe_ui_text_width(s_choose.names[i], em);
+            const float tw = pe_ui_text_width(s_choose.names[at], em);
             int k;
             for (k = 0; k < 4; ++k) {
                 const float grow = (float)(3 - k) * 7 * s;
@@ -754,8 +758,15 @@ static void pe_paint_title(int w, int h) {
                                       pe_ui_alpha(pe_title_glow, 0.10f + 0.07f * (float)k));
             }
         }
-        pe_ui_draw_text(&s_surface, cx, mid + 9 * s, em, s_choose.names[i],
+        pe_ui_draw_text(&s_surface, cx, mid + 9 * s, em, s_choose.names[at],
                         pe_ui_alpha(pe_look_text, selected ? 1.0f : 0.70f), PE_ALIGN_CENTRE);
+    }
+    if (s_choose.count > pe_choose_visible()) {
+        char range[40];
+        snprintf(range, sizeof range, "%d-%d / %d", s_choose.scroll + 1,
+                 s_choose.scroll + pe_choose_visible(), s_choose.count);
+        pe_ui_draw_text(&s_surface, (PANEL_W - PANEL_PAD) * s, (desc_top - 2) * s,
+                        11 * s, range, pe_look_dim, PE_ALIGN_RIGHT);
     }
     pe_px_rect((int)(PANEL_PAD * s), (int)((desc_top + 4) * s), (int)((PANEL_W - 2 * PANEL_PAD) * s), 1,
                pe_ui_alpha(pe_look_silver, 0.18f));
@@ -786,7 +797,6 @@ static int pe_choose_run(const char *title, const char *help, const char *const 
                          const char *const *descriptions, unsigned count, int initial) {
     const int audio_paused = Psyz_AudioIsPaused();
     if (!names || !count || count > MAX_ENTRIES || s_panel.open || s_choose.open || !pe_mod_interactive()) return -1;
-    if (descriptions && count > VISIBLE_ROWS) return -1; /* the title look does not scroll */
     if (!pe_ui_gpu_ready()) {
         pe_mod_log(NULL, "question unavailable: no GPU overlay");
         return -1;
@@ -806,7 +816,7 @@ static int pe_choose_run(const char *title, const char *help, const char *const 
     s_choose.open = s_choose.dirty = 1;
     while (s_choose.open) {
         if (s_choose.descriptions)
-            pe_show(&s_choose.dirty, pe_title_design_h(s_choose.count), pe_paint_title);
+            pe_show(&s_choose.dirty, pe_title_design_h(pe_choose_visible()), pe_paint_title);
         else
             pe_show(&s_choose.dirty, HEADER_H + pe_choose_visible() * ROW_H + FOOTER_H, pe_paint_choose);
         Psyz_VideoVSync(0);

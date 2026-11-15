@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "37c70b73be6378d8bca5c4aafb15a366a7f644ab5bd453e9175eefa1f3ad1f2e"
+      "sha256": "48ea3ac6b7001448c24ac4a97d1d6b048d305105d3eef6c0c5a87f1b0be54466"
     },
     {
       "path": "mods/host/pe_api_native.c",
@@ -3999,11 +3999,11 @@
     },
     {
       "path": "mods/host/pe_mod_menu.h",
-      "sha256": "238ed31f236ddd719a2cd0078aa279e6b0d6176377421ab6a0d9581b385b73c0"
+      "sha256": "93b61b23a88a635bd4cd99dc75fce727b986ab587d6abe42fa6dcbaa6783f8a3"
     },
     {
       "path": "mods/host/pe_mod_panel.c",
-      "sha256": "ff36845ed21ad397874d97cb1f751a2e2298467e833646a515c925573b3f3103"
+      "sha256": "6811f9cb3bb19f66f9d8682dd3a52e19007774cfa38c1fc2c5aa337e22e082b1"
     },
     {
       "path": "mods/host/pe_model.c",
