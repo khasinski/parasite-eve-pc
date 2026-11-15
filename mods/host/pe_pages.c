@@ -1,9 +1,11 @@
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_combat_presets.h"
 
 void pe_pages_describe(void) {
     pe_menu_top_page(PE_MENU_PAGE, "Version " PE_ENHANCEMENTS_VERSION ". Quality of life, rebalance, economy and collection, by topic.", 10);
     pe_menu_begin(PE_MENU_PAGE);
+    pe_combat_presets_register();
     pe_menu_page(PE_PAGE_MOVEMENT, "Always run and how fast Aya moves.", 10);
     pe_menu_page(PE_PAGE_COMBAT, "Damage rules, gun mods and Parasite Energy.", 20);
     pe_menu_page(PE_PAGE_MOD_EFFECTS, "How gun and armor mods behave in battle.", 10);

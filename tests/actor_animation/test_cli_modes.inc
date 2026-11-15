@@ -1,3 +1,6 @@
+#if defined(PE_MELEE_PROTOTYPE) && defined(PE_MODS)
+    if(argc==3 && !strcmp(argv[1],"--melee-rules"))return prototype_melee_damage_rules(argv[2])?0:1;
+#endif
     if(argc==2 && !strcmp(argv[1],"--movie-early-exit")){
         const char *path=getenv("PE_TEST_DISC");if(!path || !*path)return getenv("PE_REQUIRE_GAME_ASSETS")?1:77;
         PeDisc disc={0};if(!pe_disc_open(&disc,path))return 1;
