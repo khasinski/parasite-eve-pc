@@ -3959,6 +3959,26 @@ class PlayerPackWindowTest(unittest.TestCase):
 
 
 class HeadlessLoader(unittest.TestLoader):
+    def loadTestsFromName(self, name, module=None):
+        suite = super().loadTestsFromName(name, module)
+        def visual(tests):
+            for test in tests:
+                if isinstance(test, unittest.TestSuite):
+                    yield from visual(test)
+                elif (getattr(type(test), "needs_display", False)
+                      or getattr(getattr(test, test._testMethodName), "needs_display", False)):
+                    yield test
+        # Explicitly requesting a visual test must not produce an empty green run.
+        target = module
+        try:
+            for part in name.split('.'):
+                target = getattr(target, part)
+        except AttributeError:
+            target = None
+        if getattr(target, "needs_display", False) or next(visual(suite), None) is not None:
+            raise ValueError("visual tests require --gui on a dedicated display (for example remote Xvfb)")
+        return suite
+
     def loadTestsFromTestCase(self, case):
         if getattr(case, "needs_display", False):
             return self.suiteClass()
