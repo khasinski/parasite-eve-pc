@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe_hooks.h"
 #include "pe1/battle.h"
 #include "pe1/field_actor.h"
 #include "pe1/battle_entity_anim.h"
@@ -326,6 +327,10 @@ void Battle_BuildStatusPrimHeader(RenderObjectEntity *, s8);
 void Battle_DrawSpellName(void);
 void Battle_DrawStatusSymbol(s8);
 void Battle_DrawStatusOverlay(RenderObjectEntity *object, int mode, int outOfRange, int entityId) {
+#if defined(PE_MODS) && PE_MODS
+    PeHookTargetPreview preview = {object, mode, outOfRange, 0};
+    PE_HOOK(PE_HOOK_TARGET_PREVIEW, &preview);
+#endif
     int modeArg = mode;
     if ((s8)modeArg != 8) {
         int modeMinusOne = modeArg - 1;
@@ -382,6 +387,12 @@ void Battle_DrawStatusOverlay(RenderObjectEntity *object, int mode, int outOfRan
     }
     if (((BattleTurnBits *)&g_ActiveActor->action->turnWord)->slot >= 2)
         Battle_DrawTargetHighlight();
+#if defined(PE_MODS) && PE_MODS
+    {
+        preview.phase = 1;
+        PE_HOOK(PE_HOOK_TARGET_PREVIEW, &preview);
+    }
+#endif
 }
 
 /* Builds the rotating target pointer and the two connector lines that tie

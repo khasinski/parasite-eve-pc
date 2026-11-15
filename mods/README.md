@@ -207,6 +207,19 @@ All off until chosen; while they are off the mod writes nothing.
 Not in the default `PE_MOD_LIST` yet (the PS5 port pins `mods/CMakeLists.txt`): add `pe_challenges`
 to build it.
 
+New Game opens a title-style challenge picker when this mod is enabled. Each challenge shows
+its current Off / On / level value and description. Hardcore is the first row, followed by the
+other challenges; Clear all challenges and Start game are at the bottom. Choose a row to edit it; Back keeps its
+previous value. Combine challenges, Clear all challenges, then Start game to commit the draft.
+Long lists scroll through six rows, with a range indicator. Hardcore's Start game summary warns
+that death ends the run permanently and challenge levels cannot be lowered after starting.
+
+The picker is independent of Combat styles: with both mods enabled, style selection comes first,
+then challenges; with only one enabled, only its picker appears; with neither, New Game proceeds
+without either question. A build may omit either mod. Continue/load and EX Game do not open the
+challenge picker. Headless or unavailable UI preserves the F1 choices. Settings are saved only
+when Start game confirms the draft; the existing run record, locks and F1 controls stay in use.
+
 F1 > Challenges, all off until chosen (while every one is off the mod writes nothing). The top
 page starts with Hardcore (featured: `CH_DEF_FEATURED` puts a challenge's row there), then an
 overview (Run, On now, Cleared, Warnings); every other challenge sits on its category's
@@ -693,11 +706,18 @@ In pe_collection/:
 - `pe_bestiary_menu.c`: a Bestiary row in Aya's main menu (icon: the B of the BP icon) once a creature is
   met: the area's creatures (L1 / R1 change area; unmet ones "???"), the model turning with its idle
   animation in a game panel (host pe_model_stage; Left / Right turn it, Triangle full screen, Square
-  pause, Select the next form), and what is known by tier below. Unmet creatures of a reached area
+  pause, Select the next form), and what is known by tier below. The browser sits in the game's
+  screen area (right of the icon rail, under the title bar), widened to the status screen's right
+  edge. Details wrap to the panel width and native drawing budget;
+  L2 / R2 scroll the information independently of the creature list. Changing creatures or
+  unlocking a tier returns to the first detail line. Unmet creatures of a reached area
   show as a silhouette; others and bosses show nothing. Cross buys the next tier after the game's
   Yes / No (host `pe_confirm`). NEW: tiers not looked at yet (profile `seen`) list in the game's
   yellow. Debug > Collection: Junk, Give 1000 Junk, Test creature (its tiers, kills, NEW), Unlock
   next tier, Add a kill, Reset creature, Mark creature NEW, Clear / Make all NEW.
+  `tests/run_pe_bestiary_menu_test.ps1` checks the layout, wrapping without lost text (also when the
+  overflowing glyph is a space), scrolling, the title bar's Info page only when it scrolls, translated
+  glyph boundaries, dense text drawing limits, viewer controls and teardown.
 In pe_wardrobe/:
 - `pe_wardrobe.c`: the costume registry. A costume is one of the game's player bundles (bank 10 /
   12 / 13, rewritten at the start of Aya's model load, PE_HOOK_PLAYER_BANK), a skin folder

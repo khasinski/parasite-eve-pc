@@ -112,6 +112,7 @@ int pe_hook_dispatch(int i,void *ctx) {(void)i;(void)ctx;return 0;}
 static PeCostume costumes[40];
 static const PeCostume *worn;
 static int wears, provider_loads, shows, hides, story_bank=10;
+/* Costumes are cosmetic: the Wardrobe has no combat-style hooks to stub. */
 int pe_wardrobe_owned_count(void) {return 40;}
 const PeCostume *pe_wardrobe_owned(int k) {return k>=0&&k<40?&costumes[k]:NULL;}
 const PeCostume *pe_wardrobe_worn(void) {return worn;}
@@ -152,6 +153,8 @@ int main(void) {
     assert(s_stage.x>=156 && s_stage.w<=128 && s_info->parent->y<224);
     assert(s_members==41 && pe_current()==40 && s_screen.list->scroll_y==35);
     draw_all();assert(!wears && !provider_loads && s_stage.source.kind==PE_MODEL_SKIN);
+    /* Costumes are cosmetic: combat styles are their own mod (pe_styles). */
+    assert(worn==&costumes[39] && !wears);
     assert(!strcmp(s_stage.source.folder,"harlequin"));
     send(PE_TRIANGLE);assert(s_stage.fullscreen);
     send(PE_MENU_CROSS);assert(!s_stage.fullscreen && !wears); /* fullscreen Cross only exits */
