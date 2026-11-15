@@ -40,7 +40,9 @@ Translators can try the [Simplified Chinese rendering pilot](localization/pilots
 
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.
 
-**Escape → Graphics → VSync** chooses how frames reach the display. **Auto** (the default) syncs to displays running at about 60 Hz and uses the game's own frame limiter on others, such as 120 Hz or 144 Hz monitors. **On** always waits for the display's refresh, which avoids tearing at any refresh rate. **Off** always uses the frame limiter; like Auto on a high-refresh display, it can tear. Game speed stays the same in every mode, and the change applies immediately. It is saved as `vsync` in the `[graphics]` section of `parasite-eve.toml` (`0` Auto, `1` On, `2` Off).
+**Escape → Graphics → VSync** offers Auto, On and Off. Auto synchronizes near 60 Hz and uses a frame limiter on other displays; On prevents tearing at any refresh rate. Game speed stays the same.
+
+For text, **F1 → Font** offers Original and Pixel Sans. The separate [Translator](localization/translator/README.md) can create and edit language packs.
 
 If the game crashes, it saves a report and shows where to find it. Attach that file when reporting the problem on Discord.
 
@@ -90,8 +92,7 @@ Open **F1 → PE Enhancements** to configure them.
   register their own creatures and costumes.
 - **Quick save** (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to
   the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Files
-  are kept beside the preferences as `quicksave_<slot>.pec`; loading restarts the saved room the
-  way a loaded save does. Works in the free field, outside battles, movies and room changes.
+  are kept beside the preferences as `quicksave_<slot>.pec`; quick load also works from the title screen. Quick saves work during battles, events and movies.
 - **Cheats** (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle,
   and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod
   writes nothing to the game state.
