@@ -17,6 +17,8 @@ const PeCostumesApi g_pe_costumes_api = {.add = collect_costume};
 Pe1GameState g_GameState;
 GameStateBlock g_GameStateBlock;
 Combatant *g_ActiveActor;
+BattleInitSlot g_BattleActionQueue[45];
+u8 g_BattleActionQueueCount;
 BattleEnemySlot g_BattleEnemySlots[7];
 int g_BattleModeState;
 s8 g_BattleLiveEnemyCount;
@@ -1088,11 +1090,59 @@ int main(void) {
          prims_added == 0); /* no charges: native bar, no count */
   /* One charge on Scan: half of its cost after other mods (Rebalance 30). */
   session.ch.charges = 1;
-  aya.exp_or_acc = 0;
+  aya.exp_or_acc = 100 << 16;
   cost_override = 30;
   cast.spell = 7;
   fire(PE_HOOK_SPELL, &cast);
-  assert(aya.exp_or_acc == (30 << 16) * 50 / 100 && aya.curHP == 58);
+  assert(aya.exp_or_acc == (100 << 16) + (30 << 16) * 50 / 100 &&
+         aya.curHP == 58);
+  /* Short of the full cost, the refund never lets the native subtraction
+   * take PE below zero: 10 PE held, Scan 30, half refunded -> 15 + 5. */
+  session.ch.charges = 1;
+  aya.exp_or_acc = 10 << 16;
+  fire(PE_HOOK_SPELL, &cast);
+  assert(aya.exp_or_acc == 30 << 16 && !session.ch.charges);
+  /* The same with no charges left (a second power queued on them). */
+  aya.exp_or_acc = 10 << 16;
+  fire(PE_HOOK_SPELL, &cast);
+  assert(aya.exp_or_acc == 30 << 16);
+  aya.exp_or_acc = 40 << 16; /* enough: untouched, native pays in full */
+  fire(PE_HOOK_SPELL, &cast);
+  assert(aya.exp_or_acc == 40 << 16);
+  /* Committing a support PE at the discounted cost locks the charges:
+   * Backlash cannot break them between the menu and the cast. */
+  session.ch.charges = 2;
+  session.ch.cracked = 1;
+  session.ch.group = 0;
+  g_BattleActionQueueCount = 1;
+  g_BattleActionQueue[0].command = 0x183 + 7; /* Scan */
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  assert(session.ch.locked);
+  loss(10, 1);
+  for (int i = 0; i < 40; i++)
+    fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  loss(10, 1);
+  assert(session.ch.charges == 2 && session.ch.cracked);
+  aya.exp_or_acc = 0;
+  fire(PE_HOOK_SPELL, &cast);
+  assert(aya.exp_or_acc == 30 << 16 && !session.ch.locked); /* free */
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  /* A canceled commit, or a weapon action, leaves Backlash live. */
+  session.ch.charges = 2;
+  session.ch.cracked = 1;
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  fire(PE_HOOK_PLAYER_ACTION_CANCEL, &aya);
+  assert(!session.ch.locked);
+  g_BattleActionQueue[0].command = 1; /* attack */
+  fire(PE_HOOK_PLAYER_ACTION, &aya);
+  assert(!session.ch.locked);
+  for (int i = 0; i < 40; i++)
+    fire(PE_HOOK_BATTLE_UPDATE, NULL);
+  loss(10, 1);
+  assert(session.ch.charges == 1);
+  fire(PE_HOOK_PLAYER_ACTION_END, &aya);
+  g_BattleActionQueueCount = 0;
+  g_BattleActionQueue[0].command = 0;
   cost_override = -1;
   /* Two charges on Barrier: free (a third of max PE refunded). */
   session.ch.charges = 2;

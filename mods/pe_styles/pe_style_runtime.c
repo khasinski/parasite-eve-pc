@@ -612,8 +612,10 @@ static int recovery(void *ctx, void *user) {
 }
 static int cancel_action(void *ctx, void *user) {
   (void)user;
-  if (ctx == pe_aya_core())
+  if (ctx == pe_aya_core()) {
     pe_style_action_cancel(&session);
+    pe_channeler_unlock(&session);
+  }
   return 0;
 }
 static int actor_mode(void *ctx, void *user) {
@@ -846,12 +848,26 @@ static int target_preview(void *ctx, void *user) {
   }
   return 0;
 }
+static int weave_power(unsigned spell);
+/* The committed queue (PLAYER_ACTION) holds a support PE the charges pay for. */
+static int queued_weave_power(void) {
+  unsigned i, count = g_BattleActionQueueCount;
+  for (i = 0; i < count && i < 45u; i++) {
+    unsigned command = (u16)g_BattleActionQueue[i].command;
+    if (command >= 0x183u && command < 0x197u && weave_power(command - 0x183u))
+      return 1;
+  }
+  return 0;
+}
 static int action_begin(void *ctx, void *user) {
   (void)user;
   ensure_session();
   if (ctx == pe_aya_core()) {
     pe_style_action_begin(&session, normal_gun(), normal_weapon());
     action_target_count = 0;
+    pe_channeler_unlock(&session);
+    if (session.style == PE_STYLE_CHANNELER && queued_weave_power())
+      pe_channeler_lock(&session);
     if (session.style == PE_STYLE_STRIKER && session.gun_action) {
       const BattleEntity *e = (BattleEntity *)g_FieldActorListHead;
       for (unsigned visited = 0;
@@ -901,6 +917,7 @@ static int action_end(void *ctx, void *user) {
            core->hpAlive - before, session.qs.burst);
   }
   pe_bulwark_resolve(&session);
+  pe_channeler_unlock(&session);
   if (session.style == PE_STYLE_CHANNELER) {
     if (pe_channeler_resolve(&session, pe_in_battle() &&
                                            (s16)core->curHP > 0 &&
@@ -974,14 +991,23 @@ static int spell(void *ctx, void *user) {
   if (!q || !core || !pe_in_battle() || g_ActiveActor != core)
     return 0;
   ensure_session();
-  if (session.style != PE_STYLE_CHANNELER || !session.ch.charges ||
-      !weave_power(q->spell))
+  if (session.style != PE_STYLE_CHANNELER || !weave_power(q->spell))
     return 0;
   unsigned charges = session.ch.charges;
   unsigned raw = weave_raw_cost(core, q->spell);
-  unsigned percent = pe_channeler_cast(&session, &overchannel);
+  unsigned percent = charges ? pe_channeler_cast(&session, &overchannel) : 0;
+  if (!charges)
+    overchannel = 0;
   /* Refund first; the native code then subtracts its full cost. */
   unsigned refund = (unsigned)((uint64_t)raw * percent / 100u);
+  /* The menu let this power through at the discounted price; if that price
+   * no longer holds (a second power queued on the same charges), never let
+   * the native subtraction take PE below zero. */
+  int64_t after = (int64_t)core->exp_or_acc + refund - raw;
+  if (after < 0)
+    refund += (unsigned)-after;
+  if (!refund && !charges)
+    return 0;
   core->exp_or_acc = (s32)((u32)core->exp_or_acc + refund);
   if (overchannel && q->spell <= 2u) /* native clamps HP to max afterwards */
     core->curHP = (u16)(core->curHP +
@@ -990,7 +1016,8 @@ static int spell(void *ctx, void *user) {
                                  ->channeler.overchannel_percent +
                          99) /
                             100);
-  pe_pulse = 12;
+  if (charges)
+    pe_pulse = 12;
   pe_log("costume_style",
          "spellweave cast spell=%u charges=%u refund=%u/%u overchannel=%d",
          q->spell, charges, refund, raw, overchannel);

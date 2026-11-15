@@ -185,7 +185,12 @@ numbers in `.channeler` in `pe_style_catalog.c`.
 - Backlash: only at max charges. An HP-loss hit (sources 1-3) cracks the
   weave; a later hit breaks one charge; casting clears the crack. Hits within
   `backlash_group_frames` (30 = 1 s, refreshed by each hit) of the last one
-  count as the same enemy attack. No PE is ever taken.
+  count as the same enemy attack. No PE is ever taken. Once a support power
+  the charges pay for is committed (`PE_HOOK_PLAYER_ACTION`), Backlash leaves
+  the charges alone until it is cast or the action ends or is canceled, so the
+  price shown in the menu is the price paid. As a last guard the refund never
+  lets the native subtraction take PE below zero (e.g. a second power queued
+  on charges the first one spends).
 - Passive regen is native (`pe_recovery_percent` 100 leaves the hook
   untouched).
 - Cues, one meaning per element (redesigned 2026-11-13; the old PE label

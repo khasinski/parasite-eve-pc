@@ -6,7 +6,8 @@
  * Con (Backlash, warning first): at max charges the first eligible incoming
  * hit cracks the weave; a second one before casting breaks one charge. Hits
  * within backlash_group_frames of each other count as one enemy attack. No PE
- * is ever lost.
+ * is ever lost. Once a discounted support PE is committed the charges are
+ * locked: Backlash cannot change its price before it is cast.
  *
  * Pure logic, no game globals. Every number is PeChannelerTuning in
  * pe_style_catalog.c:
@@ -69,8 +70,16 @@ unsigned pe_channeler_cast(PeStyleSession *s, int *overchannel) {
     *overchannel = 1;
   s->ch.charges = 0;
   s->ch.cracked = 0; /* casting clears the crack */
+  s->ch.locked = 0;
   return percent;
 }
+
+void pe_channeler_lock(PeStyleSession *s) {
+  if (on(s) && s->ch.charges)
+    s->ch.locked = 1;
+}
+
+void pe_channeler_unlock(PeStyleSession *s) { s->ch.locked = 0; }
 
 int pe_channeler_full(const PeStyleSession *s) {
   return on(s) && max_charges() && s->ch.charges >= max_charges();
@@ -78,7 +87,7 @@ int pe_channeler_full(const PeStyleSession *s) {
 
 int pe_channeler_hit(PeStyleSession *s) {
   const PeChannelerTuning *t = tuning();
-  if (!pe_channeler_full(s) || !t->backlash)
+  if (!pe_channeler_full(s) || !t->backlash || s->ch.locked)
     return PE_CH_NONE;
   if (s->ch.group) {
     s->ch.group = t->backlash_group_frames; /* same attack, still going */
