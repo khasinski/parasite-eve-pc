@@ -32,6 +32,9 @@ Combatant *pe_aya_core(void) { return &aya; }
 BattleEntity *pe_player(void) { return &player; }
 void pe_log(const char *tag, const char *fmt, ...) { (void)tag; (void)fmt; }
 void pe_toast(const char *text) { (void)text; }
+int pe_service_publish(const char *n,int v,const void *api,const char *mod) {
+    (void)n;(void)v;(void)api;(void)mod;return 0;
+}
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod) {
     (void)user; (void)priority; (void)mod; hooks[id] = fn; return 0;
 }

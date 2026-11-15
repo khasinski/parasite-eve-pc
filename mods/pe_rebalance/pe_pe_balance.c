@@ -5,11 +5,12 @@
  * Rules: Vanilla / Rebalanced (default) / Custom (any row changed).
  *
  *   - PE heals scale with Aya's max HP (Heal 1 / 2 / 3: 15 / 30 / 65%, never below the vanilla
- *     30 / 60 / 280), and Detox / Scan cost 60 / 30 PE (vanilla 100 / 50). Both at the entry of
- *     Battle_ApplySpellEffect (PE_HOOK_SPELL, in battle and from the menu): the extra HP is added
- *     before the game's own heal (it clamps to max HP after), and the PE difference is refunded
- *     before the game subtracts its fixed cost (PE Light armor, effect flag 0x200, takes a third
- *     off both, as the game does).
+ *     30 / 60 / 280), and Detox / Scan cost 60 / 30 PE (vanilla 100 / 50). Both at
+ *     PE_HOOK_SPELL_DONE (after the power's own effect, before the HP clamp and the PE drain, in
+ *     battle and from the menu), registered early: the extra HP joins the game's heal and the cost
+ *     replaces the drain the game then charges (PE Light armor, effect flag 0x200, takes a third
+ *     off, as the game does). Other mods at the same hook (the BP overhaul's Mastery) see and
+ *     scale these values instead of stacking on a refund.
  *   - Scan summary: vanilla Scan only flashes one "Susceptible to ..." line per weakness and never
  *     shows resistances; Rebalanced adds one on-screen line with both.
  *
@@ -114,14 +115,21 @@ static void pe_scan_summary(BattleEntity *target) {
 }
 
 static int pe_on_spell(void *ctx, void *user) {
-    static const int vanilla_heal[3] = { 30, 60, 280 };
     const PeHookSpell *spell = (const PeHookSpell *)ctx;
     Combatant *core = pe_aya_core();
-    int vanilla_cost = 0, cost = 0;
     (void)user;
     if (!core || (pe_in_battle() && g_ActiveActor != core)) return 0;
     if (spell->spell == 7u && s_scan_summary) pe_scan_summary(spell->target);
-    if (!core) return 0;
+    return 0;
+}
+
+/* After the power's effect: extra heal and the cost, before the game clamps HP and charges. */
+static int pe_on_spell_done(void *ctx, void *user) {
+    static const int vanilla_heal[3] = { 30, 60, 280 };
+    PeHookSpellDone *spell = (PeHookSpellDone *)ctx;
+    Combatant *core = pe_aya_core();
+    (void)user;
+    if (!core || spell->actor != core) return 0;
     if (spell->spell <= 2u) {                          /* heals: a share of max HP, never below vanilla */
         const int pct = spell->spell == 0 ? s_heal1 : spell->spell == 1 ? s_heal2 : s_heal3;
         if (pct > 0) {
@@ -129,15 +137,9 @@ static int pe_on_spell(void *ctx, void *user) {
             if (want > vanilla_heal[spell->spell]) core->curHP = (u16)(core->curHP + (want - vanilla_heal[spell->spell]));
         }
     }
-    if (spell->spell == 3u) { vanilla_cost = 100; cost = s_cost_detox; }
-    if (spell->spell == 7u) { vanilla_cost = 50; cost = s_cost_scan; }
-    if (vanilla_cost && cost != vanilla_cost) {        /* refund the difference before the game charges */
-        int32_t original = vanilla_cost * 0x10000, desired = cost * 0x10000;
-        if (core->attributes && (core->attributes->effectFlags & 0x200u)) {
-            original = original * 2 / 3;
-            desired = desired * 2 / 3;
-        }
-        core->exp_or_acc = (s32)((u32)core->exp_or_acc + (u32)(original - desired));
+    if (spell->drain) {
+        if (spell->spell == 3u && s_cost_detox != 100) *spell->drain = s_cost_detox * 0x10000;
+        if (spell->spell == 7u && s_cost_scan != 50) *spell->drain = s_cost_scan * 0x10000;
     }
     return 0;
 }
@@ -175,6 +177,8 @@ void pe_pe_balance_register(const char *mod_id) {
     pe_menu_register_tick(pe_balance_tick);
     pe_hook_add(PE_HOOK_POWER_COST, pe_power_cost, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SPELL, pe_on_spell, NULL, PE_PRIORITY_NORMAL, mod_id);
+    /* Early: other mods at this hook (BP Mastery) scale the values set here. */
+    pe_hook_add(PE_HOOK_SPELL_DONE, pe_on_spell_done, NULL, PE_PRIORITY_EARLY, mod_id);
 }
 
 #if PE_NATIVE_STATE_CPU_COMPONENTS

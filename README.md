@@ -15,7 +15,8 @@ See the [changelog](CHANGELOG.md) for changes.
 
 Works with [RecompLauncher](https://recomplauncher.com): it installs and updates the game from these releases and sets it up with your Disc 1 image.
 
-You need your own **North American CUE/BIN or CHD images**. Game data is not included.
+You need your own **North American CUE/BIN or CHD images**, or the **Japanese** ones (SLPS-01230/01231). Game data is not included.
+With the Japanese discs the game plays as the Japanese release does: Japanese text, kana name entry, its balance, Circle to confirm and its own memory card files. Don't mix discs of the two releases.
 Keep each CUE file next to its BIN file. A CHD is a single file (its first track must be the data track, as `chdman createcd` makes from a CUE/BIN).
 
 1. Launch Parasite Eve and select your disc images. Selecting both discs enables automatic switching.
@@ -39,6 +40,8 @@ Translators can try the [Simplified Chinese rendering pilot](localization/pilots
 
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.
 
+**Escape → Graphics → VSync** chooses how frames reach the display. **Auto** (the default) syncs to displays running at about 60 Hz and uses the game's own frame limiter on others, such as 120 Hz or 144 Hz monitors. **On** always waits for the display's refresh, which avoids tearing at any refresh rate. **Off** always uses the frame limiter; like Auto on a high-refresh display, it can tear. Game speed stays the same in every mode, and the change applies immediately. It is saved as `vsync` in the `[graphics]` section of `parasite-eve.toml` (`0` Auto, `1` On, `2` Off).
+
 If the game crashes, it saves a report and shows where to find it. Attach that file when reporting the problem on Discord.
 
 ## Mods
@@ -46,7 +49,9 @@ If the game crashes, it saves a report and shows where to find it. Attach that f
 Downloads include an optional mod host. When building from source, enable it with `-DPE_MODS=ON`. Without it, the
 `PE_HOOK(...)` lines in the game compile to nothing. In a mod build, **F1** opens the Mods panel;
 mods start only after **F1 → Manage mods → All mods** is turned on and the game restarted.
-Settings are saved in `pe_mods.ini`. See [the mod guide](mods/README.md) for writing a mod.
+Settings are saved in `pe_mods.ini`. [Built-in mods](docs/MODS.md) describes each mod, its F1 settings and defaults,
+and what the `mods` folder is for: the mods are built into the game, so that folder holds only the developer
+guide. See [the mod guide](mods/README.md) for writing a mod.
 
 ### PE Enhancements
 
@@ -85,7 +90,7 @@ Open **F1 → PE Enhancements** to configure them.
   register their own creatures and costumes.
 - **Quick save** (`pe_quicksave`): ten save slots in the game's own card format. **F10** saves to
   the current slot, **F11** loads it, **F12** cycles the slot (also **F1 → Quick save**). Files
-  are kept beside the preferences as `quicksave_<slot>.mcd`; loading restarts the saved room the
+  are kept beside the preferences as `quicksave_<slot>.pec`; loading restarts the saved room the
   way a loaded save does. Works in the free field, outside battles, movies and room changes.
 - **Cheats** (`pe_cheats`): **F1 → Cheats** — God mode, Infinite ammo and PE, Win this battle,
   and Learn all / Restore PE powers. Every cheat is off until chosen; while they are off the mod

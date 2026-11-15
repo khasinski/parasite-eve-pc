@@ -25,8 +25,10 @@ ItemDataRecord *pe_equipped(int armor) { return armor ? &s_armor : NULL; }
 int pe_rec_has_effect(const ItemDataRecord *rec, int effect) { (void)rec; return s_scavenger && effect == PE_FX_SCAVENGER; }
 static int s_test_free_field, s_test_loaded, s_test_toasts;
 static const PeCatalogApi *s_test_catalog;   /* the parity run has none */
+static const PeStacksApi *s_test_stacks;     /* nor stacks */
 const void *pe_service_get(const char *name, int version) {
     (void)version;
+    if (!strcmp(name, "stacks")) return s_test_stacks;
     if (!strcmp(name, "wallet")) return &s_wallet_api;
     if (!strcmp(name, "junk")) return &s_junk_api;
     if (!strcmp(name, "catalog")) return s_test_catalog;
@@ -277,6 +279,64 @@ static void test_policy_path(void) {
     s_test_loaded = 0;
 }
 
+/* pe_stacks as the bag sees it: extra copies of an item on its first slot. */
+static int s_stack_extra[256];
+static int test_stack_total(int list, uint16_t item) {
+    int n = 0;
+    if (list != 0) return 0;
+    for (int i = 0; i < PE_RW_BAG_SLOTS; ++i) n += g_AyaSaveState.inventory_items[i] == item;
+    return n ? n + s_stack_extra[item & 0xFF] : 0;
+}
+static int test_stack_take(int list, int slot) {
+    const int id = g_AyaSaveState.inventory_items[slot];
+    if (list != 0 || !id) return 0;
+    if (s_stack_extra[id & 0xFF]) --s_stack_extra[id & 0xFF];
+    else g_AyaSaveState.inventory_items[slot] = 0;
+    return 1;
+}
+static const PeStacksApi s_stacks = {.total = test_stack_total, .take = test_stack_take};
+
+/* Issue #210: an economy mod drop is a Mod Permit entry named "<mod> mod". With pe_stacks the
+ * Permit taken joins the Permits Aya carries, so no bag slot fills: the take must still unlock the
+ * mod (and only that mod, so Requisition stops selling it) and give back no extra Permit. */
+static void test_econ_drop_with_permit_stack(void) {
+    BattleRewardSlot list[10];
+    PeHookRewards reward = {.exp = 500, .list = list};
+    int scavenger = -1, i;
+    for (i = 0; i < PE_ECON_COUNT; ++i) if (s_rw_econ_mods[i].effect == PE_FX_SCAVENGER) scavenger = i;
+    assert(scavenger >= 0 && !s_wallet_api.policy());
+    for (int stacks = 0; stacks < 2; ++stacks) {
+        memset(&g_AyaSaveState, 0, sizeof g_AyaSaveState);
+        memset(s_stack_extra, 0, sizeof s_stack_extra);
+        memset(s_unlocked, 0, sizeof s_unlocked);
+        g_AyaSaveState.inventory_slot_count = 10;
+        g_AyaSaveState.inventory_items[0] = PE_ITEM_MOD_PERMIT;   /* two Permits carried */
+        if (stacks) s_stack_extra[PE_ITEM_MOD_PERMIT] = 1;
+        else g_AyaSaveState.inventory_items[1] = PE_ITEM_MOD_PERMIT;
+        s_test_stacks = stacks ? &s_stacks : NULL;
+        s_test_catalog = &s_catalog;
+        s_test_loaded = 1;
+        s_st.rare_carry = (uint16_t)(PE_ECON_DROP | (unsigned)scavenger);   /* shown this battle */
+        s_st.rare_dry = 0;
+        clear_list(list);
+        battle_end(&reward);
+        assert(s_rw_found.econ_shown == scavenger && on_list(list, PE_ITEM_MOD_PERMIT));
+        assert(s_rw_found.permits_before == 2u);
+        /* Taken: the game adds a Mod Permit, which pe_stacks folds into the carried one. */
+        if (stacks) ++s_stack_extra[PE_ITEM_MOD_PERMIT];
+        else g_AyaSaveState.inventory_items[2] = PE_ITEM_MOD_PERMIT;
+        pe_rw_tick();
+        assert(s_rw_found.econ_shown < 0);
+        for (i = 0; i < 32; ++i) assert(s_unlocked[i] == (i == PE_FX_SCAVENGER));
+        assert((stacks ? test_stack_total(0, PE_ITEM_MOD_PERMIT) : (int)pe_rw_bag_count_of(PE_ITEM_MOD_PERMIT)) == 2);
+        pe_rw_forget_list();
+        s_rw_found.rare_shown[0] = s_rw_found.rare_shown[1] = 0;
+    }
+    s_test_stacks = NULL;
+    s_test_catalog = NULL;
+    s_test_loaded = 0;
+}
+
 #define PINNED 0xA31B4CD7B0A66B68ull  /* the economy mod before D10 step 1, and after it: identical */
 
 static uint64_t s_hash = 1469598103934665603ull;
@@ -376,6 +436,7 @@ int main(void) {
     printf("parity hash 0x%016llX (pinned 0x%016llX)\n", (unsigned long long)s_hash, (unsigned long long)PINNED);
     assert(s_hash == PINNED);
     test_policy_path();
+    test_econ_drop_with_permit_stack();
     puts("Loot parity: 400 scripted battles match the pinned record, lists and Junk; wallet copy in / out, battle_junk, rewards-off and the opt-in path passed");
     return 0;
 }

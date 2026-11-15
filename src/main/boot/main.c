@@ -87,6 +87,7 @@ static struct {
     int widescreen;
     int dynamic_lighting;
     int effect_geometry_correction;
+    int vsync; /* HOST_VSYNC_*: 0 Auto keeps psyz's refresh-rate detection */
 #ifdef PE_PS5_GPU_NATIVE
     int fsr1,fsr1_sharpness,model_fill_lighting,movie_blur,movie_presentation,battle_debris_3d,gameplay_fill,movie_cleanup,sprite_filtering;
     int show_fps;
@@ -835,6 +836,9 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
 #endif
         } else if (!strcmp(key, "frame_interpolation")) {
             if(v>1)return 0;host_options.frame_interpolation=v;
+        } else if (!strcmp(key, "vsync")) {
+            if (v > HOST_VSYNC_OFF) return 0;
+            host_options.vsync = v;
         } else if (!strcmp(key, "geometry_correction")) {
             if (v > 1) {
                 return 0;
@@ -1016,6 +1020,7 @@ static int Host_SaveOptions(void) {
         "widescreen = %s\n"
         "dynamic_lighting = %s\n"
         "effect_geometry_correction = %s\n"
+        "vsync = %d\n"
 #ifdef PE_PS5_GPU_NATIVE
         "sprite_filtering = %s\nmovie_cleanup = %u\ngameplay_fill = %s\nfsr1 = %s\nfsr1_sharpness = %u\nmodel_fill_lighting = %u\nparticle_lighting = %s\ndialogue_text = %s\ntriangle_menu_font = %s\nmovie_blur = %s\nmovie_presentation = %u\nbattle_debris_3d = %u\nplayer_shadow = %u\n"
 #endif
@@ -1040,6 +1045,7 @@ static int Host_SaveOptions(void) {
         host_options.widescreen ? "true" : "false",
         host_options.dynamic_lighting ? "true" : "false",
         host_options.effect_geometry_correction ? "true" : "false",
+        host_options.vsync,
 #ifdef PE_PS5_GPU_NATIVE
         host_options.sprite_filtering?"true":"false",(unsigned)host_options.movie_cleanup,host_options.gameplay_fill ? "true" : "false",host_options.fsr1 ? "true" : "false",(unsigned)host_options.fsr1_sharpness,(unsigned)host_options.model_fill_lighting,host_options.particle_lighting?"true":"false",host_options.dialogue_text?"true":"false",host_options.triangle_menu_font?"true":"false",host_options.movie_presentation==1?"true":"false",(unsigned)host_options.movie_presentation,(unsigned)host_options.battle_debris_3d,(unsigned)host_options.player_shadow,
 #endif
@@ -1221,7 +1227,7 @@ static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char 
     HostCardImport *import = userdata;
     char source[8192], target[4096], device[64], temporary[4160], entry[64];
     snprintf(source, sizeof(source), "%s%s", dirname, name);
-    if (strlen(name) != 20 || strncmp(name, "BASLUS-00662", 11)) {
+    if (strlen(name) != 20 || (strncmp(name, "BASLUS-00662", 12) && strncmp(name, "BISLPS-01230", 12))) {
         if (Host_IsCardImage(name)) {
             ++import->rejected;
             fprintf(stderr, "Memory cards: %s is a memory card image, not a PsyZ save; "
@@ -1365,6 +1371,7 @@ static void Host_InitOptions(int enabled) {
     host_options.model_filtering = 0;
     host_options.dynamic_lighting = 0;
     host_options.effect_geometry_correction = 0;
+    host_options.vsync = HOST_VSYNC_AUTO;
 #ifdef PE_PS5_GPU_NATIVE
     host_options.frame_interpolation = 1; /* Owner requested display-only 60 Hz; saved explicit choice loads afterward. */
     host_options.widescreen = 1; /* Genuine wide default only when no saved choice. */
@@ -1511,6 +1518,26 @@ static void Host_TraceAspectSelection(const char *phase, int force) {
 #endif
 }
 
+/* Auto is psyz's own choice (driver VSync on ~60 Hz displays, its frame
+ * limiter otherwise) and is never requested, so the default leaves the
+ * renderer exactly as it starts. Headless and offscreen runs select
+ * limitless pacing themselves; a saved preference never overrides that. */
+static void Host_ApplyVsync(SDL_Window *window) {
+#if defined(PE_PS5)
+    (void)window;
+#else
+    static const PsyzVsyncMode modes[] = {PSYZ_VSYNC_AUTO, PSYZ_VSYNC_ON, PSYZ_VSYNC_OFF};
+    static int applied = HOST_VSYNC_AUTO;
+    int wanted = ClampIndex(host_options.vsync, COUNT_OF(modes));
+    if (!window || wanted == applied || Psyz_VideoGetVsyncMode() == PSYZ_VSYNC_LIMITLESS) {
+        return;
+    }
+    if (Psyz_VideoSetVsyncMode(modes[wanted]) == 0) {
+        applied = wanted;
+    }
+#endif
+}
+
 static void Host_ApplyOptions(SDL_Window *window) {
 #ifdef PE_PS5_GPU_NATIVE
     Psyz_VideoSetShutdownCallback(Host_NativeApplicationShutdown);
@@ -1557,6 +1584,7 @@ static void Host_ApplyOptions(SDL_Window *window) {
         host_options.effect_geometry_correction = Psyz_VideoGetEffectGeometryCorrection();
     }
     Psyz_VideoSetWidescreen(host_options.widescreen != 0);
+    Host_ApplyVsync(window);
 #ifdef PE_PS5_GPU_NATIVE
     static int appliedBackgrounds=-1;
     if(appliedBackgrounds!=host_options.hd_backgrounds){Host_HdApply();appliedBackgrounds=host_options.hd_backgrounds;}
@@ -1705,7 +1733,7 @@ static int Host_SelectImage(unsigned identity, char *path, size_t size) {
     }
 
     char title[100];
-    snprintf(title, sizeof(title), "Parasite Eve - select USA Disc %u", identity);
+    snprintf(title, sizeof(title), "Parasite Eve - select Disc %u", identity);
     SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_FILTERS_POINTER, (void *)filters);
     SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, 1);
     SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, false);
@@ -1747,7 +1775,12 @@ static int Host_InstallImage(unsigned identity, const char *path) {
     }
 
     /* Inspection deliberately leaves the bound image and original tables alone. */
-    if (Asset_ValidatePeImage(image, &found) || found != identity) {
+    unsigned region = 0, other_region = 0, other_identity = 0;
+    PeDisc *other = g_CdImageVolumes[2 - identity];
+    if (Asset_ValidatePeImageRegion(image, &found, &region) || found != identity ||
+        /* Disc 1 and Disc 2 must come from the same release (USA or Japanese). */
+        (other && (Asset_ValidatePeImageRegion(other, &other_identity, &other_region) ||
+                   other_region != region))) {
         pe_disc_close(image);
         return 0;
     }
@@ -1783,7 +1816,7 @@ static int Host_AddImage(unsigned identity, int required) {
     snprintf(
         message,
         sizeof(message),
-        "Select the Parasite Eve (USA) Disc %u CUE or BIN image. The current image will remain mounted.",
+        "Select the Parasite Eve Disc %u CUE or BIN image (USA or Japanese, the same release as the other disc). The current image will remain mounted.",
         identity
     );
     if (required) {
@@ -1800,7 +1833,7 @@ static int Host_AddImage(unsigned identity, int required) {
             snprintf(
                 message,
                 sizeof(message),
-                "This is not a valid Parasite Eve (USA) Disc %u image. Please select Disc %u.",
+                "This is not a valid Parasite Eve Disc %u image, or it is from the other release (USA or Japanese) than the other disc. Please select Disc %u.",
                 identity,
                 identity
             );
@@ -1813,7 +1846,7 @@ static int Host_AddImage(unsigned identity, int required) {
         snprintf(
             message,
             sizeof(message),
-            "Parasite Eve (USA) Disc %u is needed to continue. Choose its image, or quit the game. Unsaved progress is lost if you quit.",
+            "Parasite Eve Disc %u is needed to continue. Choose its image, or quit the game. Unsaved progress is lost if you quit.",
             identity
         );
         SDL_MessageBoxButtonData buttons[] = {
@@ -3912,7 +3945,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
                      "Graphics: render resolution %ux (renderer %ux), fullscreen %s, aspect ratio %s, "
 #endif
                      "dithering %s, geometry correction %s, antialiasing %s, model textures %s, "
-                     "dynamic lighting %s, effect geometry %s\r\n"
+                     "dynamic lighting %s, effect geometry %s, VSync %s\r\n"
                      "Audio: master volume %u%%\r\n"
                      "Controls: speed-up %ux while %s, field run threshold %u\r\n"
                      "Discs: disc 1 %s, disc 2 %s\r\n",
@@ -3930,6 +3963,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
                      kFilterNames[host_options.model_filtering != 0],
                      kSwitchNames[host_options.dynamic_lighting != 0],
                      kSwitchNames[host_options.effect_geometry_correction != 0],
+                     host_options.vsync == HOST_VSYNC_ON ? "On" : host_options.vsync == HOST_VSYNC_OFF ? "Off" : "Auto",
                      host_options.volume, host_options.speed_factor,
                      host_options.speed_toggle ? "toggled on" : "held",
                      host_options.analog_run_threshold, Host_CrashFileName(host_options.discs[0]),
@@ -4063,9 +4097,18 @@ static int Host_TestSave(void) {
     int ok = io && SDL_WriteIO(io, g_MemCardFileBuffer, sizeof(g_MemCardFileBuffer)) == sizeof(g_MemCardFileBuffer);
     if (io && !SDL_CloseIO(io)) ok = 0;
     if (ok) {
+#ifdef PE_MODS
+        ok = pe_mod_save_publish(temporary, target);
+        if (ok) pe_mod_save_committed(target);
+#else
         SDL_RemovePath(target);
         ok = SDL_RenamePath(temporary, target);
+#endif
     }
+#ifdef PE_MODS
+    /* As the save menu does: a failed save must not leave a staged companion behind. */
+    if (!ok) pe_mod_save_cancelled();
+#endif
     if (!ok) SDL_RemovePath(temporary);
     fprintf(stderr, "Test save: %s %s at VBlank %u\n", ok ? "wrote" : built < 0 ? "refused" : "failed to write",
             target, (unsigned)g_BootHostVBlankCount);
@@ -4169,7 +4212,7 @@ static int Host_ConfigurePortable(int *argc, char **argv) {
 
 static void Host_PrintHelp(const char *program_name) {
     printf(
-        "Usage: %s [--game <USA Disc 1 CUE/BIN/CHD>] [--disc <USA Disc 1 CUE/BIN/CHD>] [--disc2 <USA Disc 2 CUE/BIN/CHD>] [--choose-discs] "
+        "Usage: %s [--game <Disc 1 CUE/BIN/CHD>] [--disc <Disc 1 CUE/BIN/CHD>] [--disc2 <Disc 2 CUE/BIN/CHD>] [--choose-discs] "
         "[--geometry-correction 0|1] [--antialiasing 0|1] [--model-filtering 0|1] [--widescreen 0|1] [--frame-interpolation 0|1] "
         "[--dynamic-lighting 0|1] [--effect-geometry-correction 0|1] "
         "[--headless | --headless-gpu] [--internal-resolution 1..8] [--frame-limit N] [--control-at N] "
@@ -4620,6 +4663,7 @@ int main(int argc, char **argv) {
     }
 
 mount_images:
+    unsigned mounted_region = ~0u;
     for (unsigned slot = 0; slot < 2; ++slot) {
         if (!paths[slot]) {
             continue;
@@ -4632,9 +4676,14 @@ mount_images:
         int mounted = Asset_OpenPeImage();
         unsigned identity = g_PeImageMountFlags;
         if (mounted || (identity != 1 && identity != 2) || g_CdImageVolumes[identity - 1]) {
-            fprintf(stderr, "Invalid or duplicate USA disc image (status %d)\n", mounted);
+            fprintf(stderr, "Invalid or duplicate Parasite Eve disc image (status %d)\n", mounted);
             goto image_error;
         }
+        if (mounted_region != ~0u && mounted_region != g_GameRegion) {
+            fprintf(stderr, "Disc 1 and Disc 2 are from different releases (USA and Japanese)\n");
+            goto image_error;
+        }
+        mounted_region = g_GameRegion;
         g_CdImageVolumes[identity - 1] = &images[slot];
     }
     CdRom_BindImage(g_CdImageVolumes[0] ? g_CdImageVolumes[0] : g_CdImageVolumes[1], NULL);
@@ -4654,7 +4703,7 @@ image_error:
     SDL_ShowSimpleMessageBox(
         SDL_MESSAGEBOX_ERROR,
         "Parasite Eve",
-        "Cannot mount these images. Select the USA Disc 1 and Disc 2 CUE or CHD files together. Cancel to quit.",
+        "Cannot mount these images. Select Disc 1 and Disc 2 of the same release (USA or Japanese) together. Cancel to quit.",
         NULL
     );
     {
@@ -4925,7 +4974,7 @@ unsigned CPE_StateHostReasonBits(void){
 #endif
 }
 const char *CPE_StateHostReasonText(unsigned bits){
-    if(bits&32768u)return "Add both USA disc images in System before checkpointing";
+    if(bits&32768u)return "Add both disc images in System before checkpointing";
     if(bits&16384u)return "HD character texture pack: waiting for a valid character texture index";
     if(bits&64u)return "Particle mode has not applied; reselect Extra particle geometry in Advanced";
     if(bits&1u)return "Headless mode cannot capture gameplay";

@@ -6,6 +6,7 @@
 #include "pe_save_admission.h"
 #include "pe_save_emission.h"
 #include <psyz/system.h>
+u8 g_GameRegion;   /* the USA release (pe1/pe_image.h) */
 #ifdef _WIN32
 #include <windows.h>
 #endif

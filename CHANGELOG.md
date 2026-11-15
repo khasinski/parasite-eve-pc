@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added the **Japanese release**: select your own Japanese discs (SLPS-01230/01231) and the game plays as it does there, in Japanese with its own font, kana name entry and balance (its weapon, enemy and boss numbers come from the disc), Circle to confirm, and its own memory card files. Disc 1 and Disc 2 must come from the same release. Language packs are for the USA discs and stay off with the Japanese ones.
+- Fixed **Always run** (`pe_qol`) making Aya walk while the action button (Cross / A) is held, which slowed her down whenever **Repeat interact** was used. Only the run button walks now, with the d-pad and the stick, and examining works while running. With the stick, holding the run button now also walks on diagonals, and with Always run off the stick is left exactly as the original reads it.
+
 ## 0.12
 
 - Added **language packs**: put a `.pelang` file in the new `lang` folder beside the game, or pick one with **F1 → Language → Add a translation**. The first start that finds a pack asks which language to use; to change it later, pick another under F1 → Language and restart. A pack can replace the game's text, letters and pictures with words, and works with All mods off. Releases contain no translations: packs made from fan translations (German, French, Spanish, Italian, Simplified Chinese) are shared separately.

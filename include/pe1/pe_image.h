@@ -110,6 +110,13 @@ extern char g_PeDisc1MarkerPath[]; /* "\FMV1\PEDISC01.IDF;1" */
 extern char g_PeImagePath[];       /* "\PE.IMG;1" */
 extern char g_PeDisc2MarkerPath[]; /* "\FMV2\PEDISC02.IDF;1" */
 
+/* Which release the mounted discs are. Japanese discs (SLPS-01230/01231) keep the same program
+ * with its tables elsewhere in the executable, Japanese text and the Japanese balance; the USA
+ * discs (SLUS-00662/00668) are the default. Set when PE.IMG mounts (Asset_OpenPeImage). */
+enum { PE_REGION_USA = 0, PE_REGION_JAPAN = 1 };
+extern u8 g_GameRegion;
+#define PE_JAPAN (g_GameRegion == PE_REGION_JAPAN)
+
 int Asset_SearchByKeyType(int type);
 /* -1: no image; -2: archive/marker missing; -3: invalid resident data. */
 int Asset_OpenPeImage(void);

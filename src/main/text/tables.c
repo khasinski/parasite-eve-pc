@@ -300,6 +300,15 @@ TextboxGlyphSpacing g_TextboxGlyphSpacing[78] = {
     {0,7},{0,7},{0,8},{0,9},{0,5},{0,4},{0,8},{0,5},{0,11},{0,9},{0,7},{0,8},{0,8},
     {0,7},{0,6},{0,5},{0,9},{0,9},{0,11},{0,7},{0,9},{0,6},{0,4},{0,4},{0,7},{0,0},
 };
+/* Japanese release (0x8009118C): the dialogue spacing of codes 10-4B only (its Latin letters and
+ * signs); every other letter, kana and kanji included, is a fixed 12 px cell. */
+const TextboxGlyphSpacing g_TextboxGlyphSpacingJapanese[60] = {
+    {0,12},{1,11},{2,11},{1,11},{1,11},{1,11},{2,11},{1,12},{4,9},{3,11},{1,12},{1,11},
+    {0,12},{1,12},{2,11},{1,11},{2,11},{1,12},{1,11},{1,12},{1,12},{1,12},{0,12},{1,11},
+    {1,12},{1,11},{2,12},{4,8},{3,10},{1,8},{1,5},{1,5},{2,11},{2,11},{2,10},{2,11},
+    {2,10},{3,10},{1,11},{1,11},{4,9},{4,9},{1,11},{4,9},{1,12},{1,11},{2,11},{1,10},
+    {2,11},{3,10},{2,11},{3,10},{1,11},{1,11},{0,12},{1,11},{1,11},{2,10},{4,8},{1,5},
+};
 const TextboxGlyphSpacing *g_TextboxGlyphWidths = g_TextboxGlyphSpacing;
 unsigned g_TextboxGlyphCount = sizeof(g_TextboxGlyphSpacing) / sizeof(*g_TextboxGlyphSpacing);
 

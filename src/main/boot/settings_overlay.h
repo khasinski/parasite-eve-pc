@@ -189,6 +189,8 @@ static int ClampIndex(int index, int count) {
 
 static const char *const kSwitchNames[] = {"Off", "On"};
 
+enum { HOST_VSYNC_AUTO = 0, HOST_VSYNC_ON = 1, HOST_VSYNC_OFF = 2 };
+
 /* graphics */
 
 #if defined(PE_PS5) && !defined(PE_PS5_GPU_NATIVE)
@@ -296,6 +298,11 @@ static const OverlaySetting kSystem[]={
 ACCESSORS(DynamicLighting,host_options.dynamic_lighting!=0,host_options.dynamic_lighting=i)
 ACCESSORS(EffectGeometryCorrection,host_options.effect_geometry_correction!=0,host_options.effect_geometry_correction=i)
 #else
+#ifndef PE_PS5
+static const char *const kVsyncNames[] = {"Auto", "On", "Off"};
+ACCESSORS(Vsync, ClampIndex(host_options.vsync, COUNT_OF(kVsyncNames)),
+          host_options.vsync = i)
+#endif
 static const char *const kFrameRateNames[]={"30 Hz (original)","60 Hz (interpolated)"};
 ACCESSORS(FrameInterpolation,host_options.frame_interpolation!=0,
           host_options.frame_interpolation=i)
@@ -368,6 +375,8 @@ static const OverlaySetting kGraphics[] = {
             kSwitchNames, DynamicLighting),
     SETTING("Effect geometry", "Subpixel vertex precision for spell and particle effects.",
             kSwitchNames, EffectGeometryCorrection),
+    SETTING("VSync", "Auto uses display sync at 60 Hz and the frame limiter otherwise. On always syncs to the display; Off may tear. Game speed is unchanged.",
+            kVsyncNames, Vsync),
 #endif
 };
 
