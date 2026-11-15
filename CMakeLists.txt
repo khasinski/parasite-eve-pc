@@ -852,6 +852,10 @@ if(BUILD_TESTING)
             ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-hot-apply PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 240 LABELS "game-assets;gpu;hd-assets")
+        add_test(NAME original-game-hd-inactive-atlas COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/tests/hd_hot_apply.py $<TARGET_FILE:parasite-eve-pc> --inactive-atlas-only)
+        set_tests_properties(original-game-hd-inactive-atlas PROPERTIES SKIP_RETURN_CODE 77
+            TIMEOUT 240 LABELS "game-assets;gpu;hd-assets")
         add_test(NAME original-game-hd-widescreen COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_widescreen.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-widescreen PROPERTIES SKIP_RETURN_CODE 77
