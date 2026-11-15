@@ -63,6 +63,11 @@ int pe_menu_register_tick(PeMenuPerFrame fn);
  * or -1 when it can't be shown (headless, no window yet, the panel open) or the game's window
  * was closed on it. For a choice a mod needs before the game loads anything. */
 int pe_menu_choose(const char *title, const char *help, const char *const *names, unsigned count, int initial);
+/* The same question in the title menu's look: `names` centred like New Game / Continue, a green
+ * glow behind the selected one, and its `descriptions` entry (one per row) under the list.
+ * `keys` is the small key line ("" for the default). At most 12 rows; returns as above. */
+int pe_menu_choose_title(const char *title, const char *keys, const char *const *names,
+                         const char *const *descriptions, unsigned count, int initial);
 /* A read-only line: text() fills the value shown on the right (Junk, prices, results). */
 typedef void (*PeMenuText)(char *out, unsigned size);
 int pe_menu_register_info(const char *sub, const char *label, const char *description, PeMenuText text);

@@ -76,8 +76,44 @@ typedef enum PeHookId {
                            * which Unicode letter a one-byte code draws (pe1/text_render.h) */
     PE_HOOK_DISC_READ, /* PeHookDiscRead: PE.IMG sectors just read, before the game looks at them;
                         * their bytes may be changed in place (a translation's pictures) */
+    /* Costume combat styles; appended after upstream's IDs. */
+    PE_HOOK_AT_CHARGE, /* PeHookAtCharge: eligible native AT increment, after status modifiers */
+    PE_HOOK_PLAYER_ACTION_END, /* Combatant *: previously nonempty native action queue completed */
+    PE_HOOK_PLAYER_ACTION, /* Combatant *: committed action queue, after native AT reset */
+    PE_HOOK_BATTLE_HUD, /* NULL: native battle HUD prepared, before primitive submission */
+    PE_HOOK_ENEMY_DAMAGE, /* PeHookEnemyDamage: final local loss, before enemy HP commit */
+    PE_HOOK_TARGET_PREVIEW, /* PeHookTargetPreview: selected target panel has been prepared */
+    PE_HOOK_PE_RECOVERY, /* PeHookPeRecovery: eligible native passive PE increment only */
+    PE_HOOK_ACTION_MODE, /* PeHookActionMode: valid native actor pose change */
+    PE_HOOK_PLAYER_ACTION_CANCEL, /* Combatant *: pending queue abandoned/canceled */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookPeRecovery {
+    const void *actor;
+    int current, maximum;
+    int *increment; /* 16.16 native PE units; rates/divisors stay native */
+} PeHookPeRecovery;
+typedef struct PeHookActionMode {
+    const void *actor;
+    int mode;
+} PeHookActionMode;
+
+typedef struct PeHookEnemyDamage {
+    const void *source, *target;
+    int *damage;
+    int ordinary; /* excludes PE and native instant-kill status effects */
+} PeHookEnemyDamage;
+typedef struct PeHookTargetPreview {
+    const void *object; /* RenderObjectEntity * of the selected target */
+    int mode, out_of_range;
+    int phase; /* 0 before preparation (restore prior cue), 1 after preparation */
+} PeHookTargetPreview;
+
+typedef struct PeHookAtCharge {
+    const void *actor;
+    int *increment;
+} PeHookAtCharge;
 
 typedef struct PeHookEquipmentGuard {
     int kind; /* 0 native value, 1 record, 2 Tools selections */

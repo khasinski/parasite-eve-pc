@@ -656,6 +656,7 @@ static void pe_panel_run(void) {
 static struct {
     int open, dirty, cursor, scroll, result, count;
     const char *const *names;
+    const char *const *descriptions; /* the title look: one per row, or NULL */
     const char *title, *help;
 } s_choose;
 
@@ -720,14 +721,78 @@ static void pe_choose_event(const SDL_Event *ev) {
     }
 }
 
+/* ---- the same question in the title menu's look ----
+ * Centred words like the title's New Game / Continue / Tutorial, a soft green glow behind the
+ * selected one, and that row's description under the list. No panel frame: a dark veil over
+ * the (dimmed) screen. */
+enum { TITLE_TOP = 64, TITLE_ROW_H = 46, TITLE_DESC_H = 132 };
+static const PeColor pe_title_glow = {0.30f, 0.95f, 0.50f, 1.0f};
+
+static int pe_title_design_h(int count) { return TITLE_TOP + count * TITLE_ROW_H + TITLE_DESC_H; }
+
+static void pe_paint_title(int w, int h) {
+    const float s = s_scale;
+    const float cx = (float)w * 0.5f;
+    const float desc_top = (float)(TITLE_TOP + s_choose.count * TITLE_ROW_H);
+    int i;
+    pe_ui_fill_round_rect(&s_surface, 0, 0, (float)w, (float)h, 18 * s, (PeColor){0.0f, 0.0f, 0.0f, 0.72f});
+    if (s_choose.title[0]) {
+        char text[160];
+        pe_upper(text, sizeof text, s_choose.title);
+        pe_spaced(cx, 40 * s, 13 * s, 4 * s, text, pe_ui_alpha(pe_look_dim, 0.9f), PE_ALIGN_CENTRE);
+    }
+    for (i = 0; i < s_choose.count; ++i) {
+        const int selected = i == s_choose.cursor;
+        const float em = 27 * s, mid = (TITLE_TOP + i * TITLE_ROW_H + TITLE_ROW_H * 0.5f) * s;
+        if (selected) {   /* the title's glow: soft green layers behind the word */
+            const float tw = pe_ui_text_width(s_choose.names[i], em);
+            int k;
+            for (k = 0; k < 4; ++k) {
+                const float grow = (float)(3 - k) * 7 * s;
+                pe_ui_fill_round_rect(&s_surface, cx - tw * 0.5f - 18 * s - grow, mid - 17 * s - grow * 0.45f,
+                                      tw + 36 * s + 2 * grow, 34 * s + grow * 0.9f, 17 * s + grow * 0.45f,
+                                      pe_ui_alpha(pe_title_glow, 0.10f + 0.07f * (float)k));
+            }
+        }
+        pe_ui_draw_text(&s_surface, cx, mid + 9 * s, em, s_choose.names[i],
+                        pe_ui_alpha(pe_look_text, selected ? 1.0f : 0.70f), PE_ALIGN_CENTRE);
+    }
+    pe_px_rect((int)(PANEL_PAD * s), (int)((desc_top + 4) * s), (int)((PANEL_W - 2 * PANEL_PAD) * s), 1,
+               pe_ui_alpha(pe_look_silver, 0.18f));
+    if (s_choose.descriptions && s_choose.descriptions[s_choose.cursor])
+        pe_wrapped(PANEL_PAD * s, (desc_top + 32) * s, 21 * s, (PANEL_W - 2 * PANEL_PAD) * s, 15 * s, 3,
+                   s_choose.descriptions[s_choose.cursor], pe_look_text);
+    {
+        char keys[96];
+        pe_upper(keys, sizeof keys, s_choose.help[0] ? s_choose.help : "Up/Down select   Enter choose");
+        pe_spaced(cx, (desc_top + TITLE_DESC_H - 18) * s, 10 * s, 1.6f * s, keys, pe_ui_alpha(pe_look_dim, 0.85f),
+                  PE_ALIGN_CENTRE);
+    }
+}
+
+static int pe_choose_run(const char *title, const char *help, const char *const *names,
+                         const char *const *descriptions, unsigned count, int initial);
+
 int pe_menu_choose(const char *title, const char *help, const char *const *names, unsigned count, int initial) {
+    return pe_choose_run(title, help, names, NULL, count, initial);
+}
+int pe_menu_choose_title(const char *title, const char *keys, const char *const *names,
+                         const char *const *descriptions, unsigned count, int initial) {
+    if (!descriptions) return -1;
+    return pe_choose_run(title, keys, names, descriptions, count, initial);
+}
+
+static int pe_choose_run(const char *title, const char *help, const char *const *names,
+                         const char *const *descriptions, unsigned count, int initial) {
     const int audio_paused = Psyz_AudioIsPaused();
     if (!names || !count || count > MAX_ENTRIES || s_panel.open || s_choose.open || !pe_mod_interactive()) return -1;
+    if (descriptions && count > VISIBLE_ROWS) return -1; /* the title look does not scroll */
     if (!pe_ui_gpu_ready()) {
         pe_mod_log(NULL, "question unavailable: no GPU overlay");
         return -1;
     }
     memset(&s_choose, 0, sizeof s_choose);
+    s_choose.descriptions = descriptions;
     s_choose.names = names;
     s_choose.count = (int)count;
     s_choose.title = title ? title : "";
@@ -740,7 +805,10 @@ int pe_menu_choose(const char *title, const char *help, const char *const *names
     Psyz_AudioPause();
     s_choose.open = s_choose.dirty = 1;
     while (s_choose.open) {
-        pe_show(&s_choose.dirty, HEADER_H + pe_choose_visible() * ROW_H + FOOTER_H, pe_paint_choose);
+        if (s_choose.descriptions)
+            pe_show(&s_choose.dirty, pe_title_design_h(s_choose.count), pe_paint_title);
+        else
+            pe_show(&s_choose.dirty, HEADER_H + pe_choose_visible() * ROW_H + FOOTER_H, pe_paint_choose);
         Psyz_VideoVSync(0);
     }
     pe_ui_gpu_hide();
