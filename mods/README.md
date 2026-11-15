@@ -690,11 +690,18 @@ In pe_collection/:
 - `pe_bestiary_menu.c`: a Bestiary row in Aya's main menu (icon: the B of the BP icon) once a creature is
   met: the area's creatures (L1 / R1 change area; unmet ones "???"), the model turning with its idle
   animation in a game panel (host pe_model_stage; Left / Right turn it, Triangle full screen, Square
-  pause, Select the next form), and what is known by tier below. Unmet creatures of a reached area
+  pause, Select the next form), and what is known by tier below. The browser sits in the game's
+  screen area (right of the icon rail, under the title bar), widened to the status screen's right
+  edge. Details wrap to the panel width and native drawing budget;
+  L2 / R2 scroll the information independently of the creature list. Changing creatures or
+  unlocking a tier returns to the first detail line. Unmet creatures of a reached area
   show as a silhouette; others and bosses show nothing. Cross buys the next tier after the game's
   Yes / No (host `pe_confirm`). NEW: tiers not looked at yet (profile `seen`) list in the game's
   yellow. Debug > Collection: Junk, Give 1000 Junk, Test creature (its tiers, kills, NEW), Unlock
   next tier, Add a kill, Reset creature, Mark creature NEW, Clear / Make all NEW.
+  `tests/run_pe_bestiary_menu_test.ps1` checks the layout, wrapping without lost text (also when the
+  overflowing glyph is a space), scrolling, the title bar's Info page only when it scrolls, translated
+  glyph boundaries, dense text drawing limits, viewer controls and teardown.
 In pe_wardrobe/:
 - `pe_wardrobe.c`: the costume registry. A costume is one of the game's player bundles (bank 10 /
   12 / 13, rewritten at the start of Aya's model load, PE_HOOK_PLAYER_BANK), a skin folder
