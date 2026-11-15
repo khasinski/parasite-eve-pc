@@ -1,0 +1,6 @@
+# What package.py needs to build the Parasite Eve Translator download. Only for building it:
+# the tool itself runs on Python's own library, and the download carries its own Python.
+# Pillow goes into the download for the screen grab of the build's check and for Chinese/Japanese/
+# Korean letters (petext/cjk.py).
+pyinstaller==6.22.3
+pillow==13.0.0
