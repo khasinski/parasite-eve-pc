@@ -377,6 +377,15 @@ foreground range. Other views retain the existing nearest-row depth method.
 All foreground cells follow the original entry's tile-grid phase, independently
 of the backdrop grid, including entries with irregular per-row depths and no
 plane guide. Partial cells outside the authored canvas stay transparent.
+
+Presentation-only margin materials interpolate cell-local UVs and carry their
+integer atlas origin without interpolation. Their bilinear RGBA filtering uses
+the same subtexel phase independently of atlas placement, so coherent foreground
+RGB does not introduce one-level color seams over the backdrop. Native sprites
+retain their existing sampling path. PsyZ's headless GPU test
+`gpu::widescreen_margin_color_is_independent_of_atlas_slot` checks identical
+patterned materials near opposite atlas edges at 2x, 4x, 7x and 8x in both aspect
+modes; the test fails on the previous sampler and passes on the local-UV path.
 The mask and depth-guide hashes are recorded in the pack metadata. A successful
 export still needs actor probes behind and in front of the extended surface.
 
