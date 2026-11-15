@@ -4,6 +4,7 @@
  * fixture. No file I/O, pack providers, hooks, textures or asset-loading calls.
  * Static storage belongs to the including loader (or isolated test instance).
  */
+#include <stdlib.h>
 #include <string.h>
 #include "pe1/field_actor.h"
 #include "pe1/game_state.h"
@@ -15,6 +16,7 @@
 #define PE_ROOM_SLOT0    24          /* room animation rows: bank_rows[0][24..47] */
 #define PE_ROOM_SLOTS    24
 #define PE_BANK_LONG_DRESS 11
+#define PE_IDLE_ROW      0x15        /* her idle row: the rest pose for bones a row lacks */
 
 typedef struct { u8 *data; u32 size; } PeBlob;
 
@@ -30,6 +32,7 @@ typedef struct {
 static PeSkin s_skin[PE_MAX_SKINS];
 static int s_skins;
 static PeSkin *s_room_pack;             /* the room pack whose rows are in, with the game's model */
+static int s_fitting;                   /* a game outfit's rows are fitted to its model (pe_fit_rows) */
 static void *s_replaced[PE_ROWS_PER_BANK];   /* the game's row each pointed slot held */
 
 static u32 rd32(const u8 *b, u32 o) { return (u32)b[o] | (u32)b[o + 1] << 8 | (u32)b[o + 2] << 16 | (u32)b[o + 3] << 24; }
@@ -144,8 +147,117 @@ static int pe_fits(const void *row) {
     return h && ((const u8 *)row)[1] + 1u == h->part_count;
 }
 
+/* ---- rows fitted to the model ----
+ * A game outfit worn where the story has another skeleton plays that skeleton's room animations
+ * when no room pack has a copy: a jacket row (29 bones) on the evening dress (31 parts) leaves her
+ * last two parts undecoded. Their matrices are composed in place every frame, so the stale ones
+ * compound into a flickering, stretched piece of the gown (issue #220); a longer row would write
+ * past her matrices. A fitted copy drives exactly her parts: missing bones hold her idle row's
+ * first pose (identity when that row doesn't fit either), extra bones are dropped. Copies are
+ * kept by content for the session, so a slot or running animation never points at freed memory. */
+#define PE_MAX_FITTED 512
+
+typedef struct { u32 hash, size; const void *model; u8 *data; } PeFitted;
+static PeFitted s_fitted[PE_MAX_FITTED];
+static int s_nfitted;
+
+/* The offset of channel `index` (0-2 the root translation, then three per bone), or 0. */
+static u32 pe_channel_at(const u8 *p, u32 size, u32 index) {
+    const unsigned flags = p[0], frames = p[2];
+    const u32 stride = ((frames >> 1) + 1u) * 4u;
+    const int shrt = (flags & 3u) == 2u;
+    const u32 bstride = shrt ? stride : ((frames >> 2) + 1u) * 4u;
+    u32 cur = 12u, k;
+    for (k = 0; k < index; ++k) {
+        if (cur > size || size - cur < 4u) return 0;
+        if (k < 3) cur += (p[cur] | p[cur + 1] << 8) ? 4u : stride;
+        else cur += (shrt ? (p[cur] | p[cur + 1] << 8) != 0 : p[cur] != 0) ? 4u : bstride;
+    }
+    return cur <= size && size - cur >= 4u ? cur : 0;
+}
+
+/* Bone `bone`'s angle on `axis` at frame 0, in the decoder's 4096-per-turn units. */
+static unsigned pe_rest_angle(const u8 *p, u32 size, unsigned bone, unsigned axis) {
+    const u32 at = pe_channel_at(p, size, 3u + bone * 3u + axis);
+    if (!at) return 0;
+    if ((p[0] & 3u) == 2u) return (unsigned)(p[at + 2] | p[at + 3] << 8);
+    return p[at + 1] * 0x10u;
+}
+
+static u32 pe_row_hash(const u8 *p, u32 n) {
+    u32 h = 0x811C9DC5u, i;
+    for (i = 0; i < n; ++i) h = (h ^ p[i]) * 0x01000193u;
+    return h;
+}
+
+static int pe_fitted_ours(const void *p) {
+    int i;
+    for (i = 0; i < s_nfitted; ++i) if (s_fitted[i].data == p) return 1;
+    return 0;
+}
+
+/* `row` driving exactly the worn model's parts: the row itself when it already does, else a
+ * fitted copy, NULL if it can't be made. */
+static void *pe_fit_row(void *row) {
+    const RenderObjectHeader *h = g_GameState.bank_slots[0];
+    const u8 *p = row, *rest = g_GameState.bank_rows[0][PE_IDLE_ROW];
+    u32 n, size, hash, rest_size;
+    unsigned have, want, bone, axis;
+    u8 *copy;
+    int i;
+    if (!row || !h || !h->part_count || pe_fitted_ours(row)) return row;
+    have = p[1] + 1u;
+    want = h->part_count;
+    if (have == want) return row;
+    if (!(n = pe_row_length(p, 0x10000u))) return NULL;
+    hash = pe_row_hash(p, n);
+    for (i = 0; i < s_nfitted; ++i)
+        if (s_fitted[i].hash == hash && s_fitted[i].size == n && s_fitted[i].model == h) return s_fitted[i].data;
+    if (s_nfitted == PE_MAX_FITTED) return NULL;
+    size = want < have ? pe_channel_at(p, n, 3u + want * 3u) : n + (want - have) * 12u;
+    if (!size || !(copy = malloc(size))) return NULL;
+    memcpy(copy, p, size < n ? size : n);
+    copy[1] = (u8)(want - 1u);
+    rest_size = rest && rest[1] + 1u == want ? pe_row_length(rest, 0x10000u) : 0;
+    for (bone = have; bone < want; ++bone)
+        for (axis = 0; axis < 3; ++axis) {
+            u8 *c = copy + n + ((bone - have) * 3u + axis) * 4u;
+            const unsigned angle = rest_size ? pe_rest_angle(rest, rest_size, bone, axis) : 0;
+            c[0] = 1;                                    /* a constant channel */
+            c[1] = c[2] = c[3] = 0;
+            if ((p[0] & 3u) == 2u) {
+                c[2] = (u8)angle;
+                c[3] = (u8)(angle >> 8);
+            } else c[1] = (u8)(angle >> 4);
+        }
+    s_fitted[s_nfitted++] = (PeFitted){hash, n, h, copy};
+    return copy;
+}
+
+/* Every room slot and the running animation fitted to the worn game outfit's model; 1 if any
+ * pointer changed. */
+static int pe_fit_rows(void) {
+    FieldActor *player = g_PlayerEntity;
+    void *p, *fit;
+    int slot, changed = 0;
+    for (slot = PE_ROOM_SLOT0; slot < PE_ROOM_SLOT0 + PE_ROOM_SLOTS; ++slot) {
+        p = g_GameState.bank_rows[0][slot];
+        if (!p || (fit = pe_fit_row(p)) == p || !fit) continue;
+        if (!s_replaced[slot]) s_replaced[slot] = p;
+        g_GameState.bank_rows[0][slot] = fit;
+        changed = 1;
+    }
+    if (player && player->model_state.model_header == g_GameState.bank_slots[0] && (p = player->action_data) &&
+        (fit = pe_fit_row(p)) && fit != p) {
+        player->action_data = fit;
+        changed = 1;
+    }
+    return changed;
+}
+
 static int pe_any_ours(const void *p) {
     int i;
+    if (pe_fitted_ours(p)) return 1;
     for (i = 0; i < s_skins; ++i) if (s_skin[i].ok && pe_ours(&s_skin[i], p)) return 1;
     return 0;
 }
@@ -160,6 +272,7 @@ static void pe_restore_rows(void) {
         if (s_replaced[slot] && pe_any_ours(g_GameState.bank_rows[0][slot])) g_GameState.bank_rows[0][slot] = s_replaced[slot];
     memset(s_replaced, 0, sizeof s_replaced);
     s_room_pack = NULL;
+    s_fitting = 0;
 }
 
 static void pe_room_rows(const PeSkin *k) {

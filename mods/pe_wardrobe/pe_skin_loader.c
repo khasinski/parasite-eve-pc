@@ -204,10 +204,16 @@ static PeSkin *pe_wanted(void) {
     return c && c->bank < 0 && c->bundle ? pe_load(c->bundle) : NULL;
 }
 
-/* The worn game outfit's room pack, while that outfit is the loaded player bundle. */
-static PeSkin *pe_wanted_rooms(void) {
+/* The worn game outfit, while it is the loaded player bundle. */
+static const PeCostume *pe_worn_outfit(void) {
     const PeCostume *c = pe_wardrobe_worn();
-    return c && c->bank >= 0 && c->bundle && c->bank == g_GameState.loaded_entity_bank ? pe_load_rooms(c->bundle) : NULL;
+    return c && c->bank >= 0 && c->bank == g_GameState.loaded_entity_bank ? c : NULL;
+}
+
+/* That outfit's room pack. */
+static PeSkin *pe_wanted_rooms(void) {
+    const PeCostume *c = pe_worn_outfit();
+    return c && c->bundle ? pe_load_rooms(c->bundle) : NULL;
 }
 
 /* ---- textures ---- */
@@ -276,16 +282,22 @@ static void pe_keep(PeSkin *k) {
 }
 
 /* A game outfit worn where the story has another: the room's animations for that other skeleton
- * are swapped for the pack's copies, retargeted to the outfit's (the model stays the game's). */
+ * are swapped for the pack's copies, retargeted to the outfit's (the model stays the game's). Rows
+ * with no copy (no pack, or none for that row) are fitted to the outfit's parts (pe_fit_rows). */
 static void pe_keep_rooms(void) {
     PeSkin *r;
+    int outfit;
     if (s_pointed) return;
-    r = pe_can_apply() ? pe_wanted_rooms() : NULL;
-    if (s_room_pack && s_room_pack != r) pe_restore_rows();     /* that outfit came off */
-    if (!r) return;
+    outfit = pe_can_apply() && pe_worn_outfit();
+    r = outfit ? pe_wanted_rooms() : NULL;
+    if ((s_room_pack && s_room_pack != r) || (s_fitting && !outfit)) pe_restore_rows();   /* that outfit came off */
+    if (!outfit) return;
     s_room_pack = r;
-    pe_room_rows(r);
-    pe_running_row(r);
+    if (r) {
+        pe_room_rows(r);
+        pe_running_row(r);
+    }
+    s_fitting |= pe_fit_rows();
 }
 
 /* Her actor takes the model and idle row again, as the room load does (step 0x27). */
@@ -389,6 +401,7 @@ static int pe_on_load(void *ctx, void *user) {
     (void)user;
     s_tex_known = 0;
     s_tex = s_pointed = s_room_pack = NULL;
+    s_fitting = 0;
     s_gun_written = -1;
     memset(s_replaced, 0, sizeof s_replaced);
     return 0;
@@ -408,7 +421,7 @@ void pe_skin_register(const char *mod_id) {
 #if PE_NATIVE_STATE_CPU_COMPONENTS
 #include "pe_checkpoint_collection.h"
 int pe_skin_checkpoint_walk(const unsigned char*in,unsigned char*out,int apply){
-if(s_checkpoint_epoch==UINT32_MAX||s_tex||s_pointed||s_room_pack)return 0;for(int i=0;i<s_skins;i++)if(s_skin[i].loaded)return 0;for(int i=0;i<PE_ROWS_PER_BANK;i++)if(s_replaced[i])return 0;
+if(s_checkpoint_epoch==UINT32_MAX||s_tex||s_pointed||s_room_pack||s_fitting)return 0;for(int i=0;i<s_skins;i++)if(s_skin[i].loaded)return 0;for(int i=0;i<PE_ROWS_PER_BANK;i++)if(s_replaced[i])return 0;
 if((s_game_tex.size&&!s_game_tex.data)||s_game_tex.size>PE_FILE_MAX)return 0;
 if(apply&&(!in||!pe_skin_checkpoint_walk(in,0,0)))return 0;PeCheckpointWire w={in,out,0,apply,1};PE_CK_U(w,s_checkpoint_epoch,1,UINT32_MAX-1,1);PE_CK_S(w,s_game_tex_bank,-1,255,1);PE_CK_U(w,s_game_tex.size,0,PE_FILE_MAX,1);PE_CK_S(w,s_instant,0,1,1);PE_CK_S(w,s_tex_known,0,1,0);PE_CK_S(w,s_gun_written,-1,INT_MAX,0);return w.ok&&w.at==24;}
 #endif
