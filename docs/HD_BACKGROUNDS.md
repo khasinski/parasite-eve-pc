@@ -166,13 +166,15 @@ exact native state, VRAM and PCM checks.
 
 ### Reviewed foreground coverage (issue #56)
 
-Legacy packs also receive inward edge feathering for matched opaque HD room
-sprites above 1x. This filters native coverage inside its existing silhouette;
-it never adds foreground colour outside native coverage. Tile bounds are clamped
-to prevent neighbouring VRAM texels from contaminating the matte. SPIR-V, Metal
-and DXIL are generated from the same shader. This fallback reduces hard cutout
-edges in the current pack; coordinated artwork and authored mattes address the
-remaining material seams in the reviewed replacement pack.
+Matched opaque HD room sprites in legacy packs keep exact native coverage.
+Room layers are complementary cutouts: a foreground's opaque texels are exactly
+the transparent hole in the layer beneath it, and nothing is drawn under that
+hole. An earlier inward edge feather faded coverage on both sides of that shared
+edge, so the clear colour showed through as a dark staircase around foreground
+objects (issue #208). Coordinated artwork, authored mattes and underlays refine
+edges instead. `ctest -R '^original-gpu-hd-layer-edges$'` draws complementary
+layers over black at 2x and 4x and requires full material colour everywhere.
+SPIR-V, Metal and DXIL are generated from the same shader.
 
 Regular RGB packs keep the original native cutout rules. An RGBA material with
 non-opaque alpha explicitly opts into a refined coverage matte for opaque HD
@@ -202,7 +204,9 @@ native scene review remain unfinished; no new production pack has been published
 The extension GPU regression covers both aspects, 1x/2x, HD off/on, absent
 atlases and original draws in front. The real-disc widescreen test additionally
 loads a synthetic diagnostic underlay through the actual room-sidecar path and
-compares original game state, VRAM and PCM at both checkpoints.
+compares original game state, VRAM and PCM at both checkpoints. The underlay
+must stay hidden behind the original room's opaque coverage in both aspects,
+and show through a synthetic half-transparent authored base material.
 
 A reviewed **static** atlas with non-opaque alpha may opt into an HD silhouette
 using a same-key `-matte.bin` sidecar containing exactly four bytes, `PEM1`.
@@ -217,8 +221,8 @@ For a local correction, `PEM2` followed by a cell-selection bitmap opts in only
 the reviewed static cells. The bitmap has exactly `ceil(columns * rows / 8)`
 bytes; bit 0 selects material cell 0, with row-order numbering. Reference-plane
 cells are not counted. Empty, truncated, extended or out-of-range masks fall
-back as a whole. Unselected cells keep their own alpha policy, including legacy
-feathering for fully opaque material. Packs using this format must require
+back as a whole. Unselected cells keep their own alpha policy; fully opaque
+material keeps exact native coverage. Packs using this format must require
 `selective-matte-v1`; older games then continue receiving a compatible catalog.
 Both formats require review of the backdrop in every relevant animation pose.
 Fractional-alpha pixels retain their authored straight RGB; colour extrusion
