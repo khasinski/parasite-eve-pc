@@ -374,8 +374,9 @@ every triple is checked against the original entry, and the anchors must share
 its tile-grid phase. The exporter fits that local
 depth plane and rejects inconsistent anchors or extrapolation outside the native
 foreground range. Other views retain the existing nearest-row depth method.
-Guided cells also follow the original foreground tile-grid phase, independently
-of the backdrop grid; partial cells outside the authored canvas stay transparent.
+All foreground cells follow the original entry's tile-grid phase, independently
+of the backdrop grid, including entries with irregular per-row depths and no
+plane guide. Partial cells outside the authored canvas stay transparent.
 The mask and depth-guide hashes are recorded in the pack metadata. A successful
 export still needs actor probes behind and in front of the extended surface.
 

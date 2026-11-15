@@ -211,6 +211,19 @@ class Scope(unittest.TestCase):
             self.assertTrue((hole[...,3]==1).all())
             self.assertFalse((hole[...,3]/255.0>=0.5).any())
 
+            # M081's irregular tree layer has no single depth plane. Its
+            # per-row depths must still use the native (5, 8) tile grid.
+            fake.native_layers=lambda room,group:({},[dict(entry=4,tiles=[
+                dict(x=293,y=-8,depth=90),dict(x=309,y=-8,depth=100),
+                dict(x=293,y=8,depth=300),dict(x=309,y=8,depth=280)])])
+            with patch.dict(sys.modules,{'inspect_room':fake,'prepare':self.module}),patch.object(sys,'argv',argv):
+                runpy.run_path(str(script),run_name='__main__')
+            front=next(r for r in self.module.read_sidecar(dst/(geom+'-wide.bin'))
+                       if r['group']==2 and r['kind']==1)
+            self.assertEqual(front['positions'],[(309,-8),(325,-8),(341,-8),(357,-8),(373,-8),
+                (309,8),(325,8),(341,8),(357,8),(373,8)])
+            self.assertEqual(front['depths'],[100,110,120,130,140,280,260,240,220,200])
+
             # A thin railing can have a disconnected far-depth fragment in the
             # next tile. A reviewed source plane must not infer its slope from
             # that unrelated fragment (the M208 edge case).

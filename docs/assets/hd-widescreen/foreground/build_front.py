@@ -98,13 +98,16 @@ def seam_depth(entry, side, x, y):
 
 
 front_xy, front_depth, front_cells = [], [], []
-positions = [(x, y, 'left' if x < 0 else 'right') for x, y in wide['xy']
-             if ('left' if x < 0 else 'right') not in depth_guides]
-for side, guide in depth_guides.items():
+positions = []
+for side, entry in strips:
     # Match the source foreground grid, which may be offset from the backdrop.
     # M208's rail starts at y=23: using the backdrop's y=0 grid would move its
     # depth boundaries by seven pixels across the original-picture seam.
-    gx, gy = guide['phase']
+    tiles = next(L for L in layers if L['entry'] == entry)['tiles']
+    phases = {(tt['x'] % 16, tt['y'] % 16) for tt in tiles}
+    if len(phases) != 1:
+        raise ValueError('Foreground entry does not share a native tile grid')
+    gx, gy = next(iter(phases))
     lo, hi = (l, 0) if side == 'left' else (320, r)
     positions.extend((x, y, side) for y in range((t-gy)//16*16+gy, b, 16)
                      for x in range((lo-gx)//16*16+gx, hi, 16))
