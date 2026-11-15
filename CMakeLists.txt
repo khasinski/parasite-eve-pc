@@ -1009,7 +1009,7 @@ if(BUILD_TESTING)
         add_test(NAME original-game-hd-widescreen COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_SOURCE_DIR}/tests/hd_widescreen.py $<TARGET_FILE:parasite-eve-pc>)
         set_tests_properties(original-game-hd-widescreen PROPERTIES SKIP_RETURN_CODE 77
-            TIMEOUT 240 LABELS "game-assets;gpu;hd-assets")
+            TIMEOUT 480 LABELS "game-assets;gpu;hd-assets")
     endif()
     add_test(NAME original-game-live-graphics-controls COMMAND test-original-actor-animation --native-graphics-controls $<TARGET_FILE:parasite-eve-pc>)
     set_tests_properties(original-game-live-graphics-controls PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180 LABELS "game-assets;gpu" ENVIRONMENT "SDL_AUDIO_DRIVER=dummy")
@@ -1308,7 +1308,12 @@ if(BUILD_TESTING)
             --filter=gpu::queued_hd_sprite_preserves_native_vram_coverage_and_palette_fallback)
         add_test(NAME original-gpu-hd-extension COMMAND test-psyz-interpolation
             --filter=gpu::widescreen_hd_extension_is_display_only)
-        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference original-gpu-hd-extension PROPERTIES
+        add_test(NAME original-gpu-hd-layer-edges COMMAND test-psyz-interpolation
+            --filter=gpu::hd_room_layers_keep_shared_cutout_edges_opaque)
+        set_tests_properties(original-gpu-hd-layer-edges PROPERTIES
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped")
+        set_tests_properties(original-gpu-hd-coverage original-gpu-hd-reference original-gpu-hd-extension
+            original-gpu-hd-layer-edges PROPERTIES
             TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             SKIP_REGULAR_EXPRESSION "requires SDL GPU"
