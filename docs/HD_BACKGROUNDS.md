@@ -414,3 +414,10 @@ When rebuilding atlases from a reviewed registered composite, use
 This repacks without another registration or resampling pass. Export refuses
 incorrect dimensions or any changed center pixel before writing pack files;
 new generated artwork must still go through normal registration and review.
+
+Room picture bounds must clip presentation after the complete widescreen view
+has been scaled. Cropping first and rounding a narrower destination changes
+the original picture's sample grid when side artwork is added. PsyZ tests this
+independently of HD assets at 2x, 4x, 7x and 8x; actual 4:3 presentation keeps
+its separate path. Include native-picture interior equality when comparing an
+unextended room with its widescreen export, as well as native state/VRAM checks.
