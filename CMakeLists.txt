@@ -1314,6 +1314,12 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-widescreen-subpixel-pan COMMAND test-psyz-interpolation
+            --filter=gpu::widescreen_subpixel_shift_moves_picture_uniformly)
+        set_tests_properties(original-gpu-widescreen-subpixel-pan PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-native-attributes COMMAND test-psyz-interpolation --filter=gpu::ps1_polygon_attribute_gradients)
         set_tests_properties(original-gpu-native-attributes PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
