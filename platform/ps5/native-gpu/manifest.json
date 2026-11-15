@@ -4459,11 +4459,11 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_loader.c",
-      "sha256": "43c397402fb62762dee113a3098978893d5575da26f2edd96b42096265e44834"
+      "sha256": "cc7afd8c845e5656ddffd325d094edcbec6a8f97e661813582b349e55a4bf286"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_rows.h",
-      "sha256": "44d161141f7988a9112e540d1e13e1367920d36fad0030aee227a7cb3b8d68da"
+      "sha256": "7407354953fcbc82d1e8f6d7d01887385f436f8b248e35aade9a92d4f273a904"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_gown.h",
