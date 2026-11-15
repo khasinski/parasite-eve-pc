@@ -201,6 +201,51 @@ def register(center, generated, margin=224):
         inliers=int(inliers.sum()), residual_p95=p95)
 
 
+def read_sidecar(path):
+    """Read either authoring format without discarding depth-sorted layers."""
+    data = Path(path).read_bytes()
+    if data[:4] not in (b'PEW1', b'PEW2'):
+        raise ValueError('Unknown widescreen sidecar format')
+    version2 = data[:4] == b'PEW2'
+    count, = struct.unpack_from('<I', data, 4)
+    records = []; offset = 8
+    for _ in range(count):
+        group, cells, key, *bounds = struct.unpack_from('<IIQiiii', data, offset)
+        offset += 32
+        kind = 0
+        if version2:
+            kind, = struct.unpack_from('<I', data, offset); offset += 4
+        if kind not in (0, 1):
+            raise ValueError('Unknown widescreen layer kind')
+        positions = [struct.unpack_from('<hh', data, offset + j*4) for j in range(cells)]
+        offset += cells*4
+        depths = list(struct.unpack_from(f'<{cells}H', data, offset)) if kind else []
+        offset += cells*2 if kind else 0
+        records.append(dict(group=group, key=f'{key:016x}', bounds=bounds,
+                            positions=positions, depths=depths, kind=kind))
+    if offset != len(data):
+        raise ValueError('Trailing widescreen sidecar data')
+    return records
+
+
+def encode_sidecar(records):
+    version2 = any(r.get('kind', 0) for r in records)
+    data = bytearray((b'PEW2' if version2 else b'PEW1') + struct.pack('<I', len(records)))
+    for record in records:
+        positions = record['positions']; kind = record.get('kind', 0)
+        if kind not in (0, 1):
+            raise ValueError('Unknown widescreen layer kind')
+        data.extend(struct.pack('<IIQiiii', record['group'], len(positions),
+                                int(record['key'], 16), *record['bounds']))
+        if version2: data.extend(struct.pack('<I', kind))
+        for xy in positions: data.extend(struct.pack('<hh', *xy))
+        if kind:
+            if len(record['depths']) != len(positions):
+                raise ValueError('Foreground depth count does not match cells')
+            data.extend(struct.pack(f'<{len(positions)}H', *record['depths']))
+    return bytes(data)
+
+
 def package(room, group, generated, center_path, pack, assets=ASSETS):
     views, rooms = catalog(assets)
     view = views[room, group]
@@ -243,13 +288,17 @@ def package(room, group, generated, center_path, pack, assets=ASSETS):
     # Rebuild the sidecar with all already installed groups for this geometry.
     records=[r for r in manifest.get('widescreen',[]) if (r['room'],r['group'])!=(room,group)]
     metadata['positions']=cells;records.append(metadata)
-    selected=[r for r in records if r['geometry_key']==geometry]
-    data=bytearray(struct.pack('<II',0x31574550,len(selected)))
-    for r in selected:
-        data.extend(struct.pack('<IIQiiii',r['group'],r['cells'],int(r['key'],16),*r['bounds']))
-        for xy in r['positions']:data.extend(struct.pack('<hh',*xy))
-    atlas.save(pack/(key+'.png'))
-    sidecar=pack/(geometry+'-wide.bin');sidecar.write_bytes(data)
+    # The sidecar is authoritative for foreground records; older manifests only
+    # describe backdrops. Replacing one backdrop must preserve every other layer.
+    sidecar=pack/(geometry+'-wide.bin')
+    selected=read_sidecar(sidecar) if sidecar.exists() else []
+    selected=[r for r in selected if not (r['group']==group and r.get('kind',0)==0)]
+    selected.append(metadata)
+    data=encode_sidecar(selected)
+    atlas_path=pack/(key+'.png')
+    # Candidate packs use hard links: replace files rather than mutating a source pack.
+    temporary=atlas_path.with_suffix('.partial.png');atlas.save(temporary);temporary.replace(atlas_path)
+    temporary=sidecar.with_suffix('.partial');temporary.write_bytes(data);temporary.replace(sidecar)
     extra_files={key+'.png':'widescreen-atlas',sidecar.name:'widescreen-index'}
     extras=[r for r in manifest.get('extras',[]) if r['file'] not in extra_files]
     extras.extend(dict(file=name,kind=kind,sha256=digest(pack/name)) for name,kind in extra_files.items())

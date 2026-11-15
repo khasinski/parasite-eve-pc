@@ -47,6 +47,48 @@ class Scope(unittest.TestCase):
         with self.assertRaises(ValueError): self.module.field_view_width(height=0)
         with self.assertRaises(ValueError): self.module.scope_record(self.view(0))
 
+    def test_packaging_backdrop_preserves_foreground_and_source_hardlinks(self):
+        from unittest.mock import patch
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); pack=root/'pack'; pack.mkdir()
+            geom='0123456789abcdef'
+            front=dict(group=2,key='123456789abcdef0',bounds=[-56,-39,0,17],
+                       positions=[(-56,0),(-40,16)],kind=1,depths=[104,682])
+            old=dict(group=1,key='23456789abcdef01',bounds=[-56,376,0,16],
+                     positions=[(-56,0)],kind=0,depths=[])
+            payload=self.module.encode_sidecar([old,front])
+            source=root/'source.bin';source.write_bytes(payload)
+            os.link(source,pack/(geom+'-wide.bin'))
+            (pack/'manifest.json').write_text(json.dumps(dict(widescreen=[],extras=[])))
+            center=root/'center.png';Image.new('RGB',(1280,64),'blue').save(center)
+            generated=root/'generated.png';Image.new('RGB',(1728,64),'green').save(generated)
+            view=dict(active_bbox=[0,0,320,16],native_origin=[0,0],controllers=[])
+            room=dict(geometry_key=geom,entries=[dict(group=1,tiles=1,flags=2)])
+            with patch.object(self.module,'catalog',return_value=({('M044',1):view},{'M044':room})), \
+                 patch.object(self.module,'register',return_value=(Image.open(generated),{})):
+                self.module.package('M044',1,generated,center,pack)
+            result=self.module.read_sidecar(pack/(geom+'-wide.bin'))
+            self.assertEqual(next(r for r in result if r['kind']==1),front)
+            self.assertEqual(len(result),2)
+            self.assertEqual(source.read_bytes(),payload)
+            manifest=json.loads((pack/'manifest.json').read_text())
+            index=next(r for r in manifest['extras'] if r['kind']=='widescreen-index')
+            self.assertEqual(index['sha256'],self.module.digest(pack/index['file']))
+
+    def test_sidecar_roundtrip_and_invalid_depth_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'wide.bin'
+            for kind in (0,1):
+                record=dict(group=2,key='0123456789abcdef',bounds=[-56,-39,0,17],
+                            positions=[(-56,0),(-40,16)],kind=kind,depths=[104,682] if kind else [])
+                path.write_bytes(self.module.encode_sidecar([record]))
+                self.assertEqual(self.module.read_sidecar(path),[record])
+            record['depths']=[]
+            with self.assertRaises(ValueError):self.module.encode_sidecar([record])
+            path.write_bytes(path.read_bytes()+b'extra')
+            with self.assertRaises(ValueError):self.module.read_sidecar(path)
+
     def test_exact_shared_source_reuses_binding_but_different_phase_does_not(self):
         with tempfile.TemporaryDirectory() as tmp:
             assets=Path(tmp)/'assets';pack=Path(tmp)/'pack';pack.mkdir()
