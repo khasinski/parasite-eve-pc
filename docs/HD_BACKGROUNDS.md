@@ -342,3 +342,24 @@ This checks the original tile-linking path and coverage bands; GPU pixels,
 script-switched layers, palette changes and combined animation timing still
 need separate review. Use a current executable with PEW2 support for foreground
 side-layer GPU checks; an older executable can silently fall back to 4:3.
+
+
+For an already wide source whose clear-black cutaway causes conservative native
+coverage bounds (M235/g0), export its existing canvas extent explicitly:
+
+```sh
+python docs/assets/hd-widescreen/prepare.py --native-extent --room M235 --group 0 \
+  --assets-root PATH_TO_ASSETS --pack WORKING_PACK
+```
+
+The exporter requires enough source width for the 320x224 field's 16:9 view and
+at least 224 source lines. It checks the original black corner in every
+serialized entry, including inactive/controller phases, and verifies the native
+reference pixel checksums. PEW1's required material cell uses that original
+black corner; the declared bounds describe the existing picture canvas.
+Original atlases and animation phases remain unchanged. Existing outpainted
+bindings are protected, and other groups and PEW2 foreground depths survive
+export. The resulting metadata still requires runtime review. This is an
+alternative authoring operation for eligible wide sources; narrow maps require
+new side artwork. Runtime testing needs the PsyZ native-readback correction
+when a shifted widescreen view uses high-resolution presentation.

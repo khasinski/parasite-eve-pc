@@ -85,6 +85,57 @@ class Scope(unittest.TestCase):
             index=next(r for r in manifest['extras'] if r['kind']=='widescreen-index')
             self.assertEqual(index['sha256'],self.module.digest(pack/index['file']))
 
+    def test_native_extent_checks_inactive_phases_and_keeps_existing_art(self):
+        import numpy as np
+        with tempfile.TemporaryDirectory() as tmp:
+            assets=Path(tmp)/'assets';pack=Path(tmp)/'pack';pack.mkdir()
+            geom='0123456789abcdef';view=dict(self.view(512,240),room='M235',group=0,native_origin=[0,0])
+            view['controllers']=[dict(id=0)]
+            room=dict(room='M235',geometry_key=geom,entries=[])
+            for study in ('hd-static','hd-day1','hd-animated'):
+                root=assets/study;(root/'refs').mkdir(parents=True)
+                (root/'views.json').write_text('[]')
+                (root/'tasks.json').write_text(json.dumps(dict(rooms=[],tasks=[])))
+            root=assets/'hd-animated'
+            # Opaque PS1 black is valid; a coloured inactive phase outside the
+            # corner must not prevent exporting the existing canvas extent.
+            black=np.zeros((1,16,16),dtype=np.uint16);black[0,0,0]=0x8000
+            colour=np.full((1,16,16),0x1f,dtype=np.uint16)
+            np.save(root/'refs/black.npy',black);np.save(root/'refs/colour.npy',colour)
+            import hashlib
+            tasks=[dict(room='M235',group=0,entry=0,ref='black.npy',tiles=[[0,0]],ref_sha256=hashlib.sha256(black.tobytes()).hexdigest()),
+                   dict(room='M235',group=0,entry=1,ref='colour.npy',tiles=[[256,128]],ref_sha256=hashlib.sha256(colour.tobytes()).hexdigest())]
+            def write():
+                (root/'views.json').write_text(json.dumps([view]))
+                (root/'tasks.json').write_text(json.dumps(dict(rooms=[room],tasks=tasks)))
+            write();(pack/'manifest.json').write_text('{"widescreen":[],"extras":[]}')
+            record=self.module.package_native_extent('M235',0,pack,assets)
+            self.assertEqual(record['bounds'],[0,512,0,240])
+            self.assertFalse(record['runtime_verified'])
+            self.assertEqual(len(record['native_corner_references']),2)
+            payload=(pack/(geom+'-wide.bin')).read_bytes()
+            atlas=(pack/(record['key']+'.png')).read_bytes()
+            self.module.package_native_extent('M235',0,pack,assets)
+            self.assertEqual(payload,(pack/(geom+'-wide.bin')).read_bytes())
+            self.assertEqual(atlas,(pack/(record['key']+'.png')).read_bytes())
+            before=(pack/'manifest.json').read_bytes()
+            expected=tasks[1]['ref_sha256'];tasks[1]['ref_sha256']='0'*64;write()
+            with self.assertRaisesRegex(ValueError,'checksum'):
+                self.module.package_native_extent('M235',0,pack,assets)
+            tasks[1]['ref_sha256']=expected
+            tasks[1]['tiles']=[[0,0]];write()
+            with self.assertRaisesRegex(ValueError,'serialized phase'):
+                self.module.package_native_extent('M235',0,pack,assets)
+            self.assertEqual(before,(pack/'manifest.json').read_bytes())
+            tasks[1]['tiles']=[[256,128]];view['active_bbox'][2]=320;write()
+            with self.assertRaisesRegex(ValueError,'already wide'):
+                self.module.package_native_extent('M235',0,pack,assets)
+            view['active_bbox'][2]=512;write()
+            manifest=json.loads(before);manifest['widescreen'][0].pop('native_extent')
+            (pack/'manifest.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError,'existing outpainted'):
+                self.module.package_native_extent('M235',0,pack,assets)
+
     def test_foreground_rebuild_preserves_other_layers_and_updates_hashes(self):
         from unittest.mock import patch
         import runpy,sys,types,hashlib

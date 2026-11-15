@@ -246,6 +246,72 @@ def encode_sidecar(records):
     return bytes(data)
 
 
+def _store_backdrop(pack, metadata, atlas):
+    """Replace a shared binding atomically, preserving other groups and PEW2 depths."""
+    geometry,group,key=metadata['geometry_key'],metadata['group'],metadata['key']
+    pack=Path(pack);manifest_path=pack/'manifest.json';manifest=json.loads(manifest_path.read_text())
+    records=[r for r in manifest.get('widescreen',[])
+             if (r.get('geometry_key'),r['group'])!=(geometry,group)]
+    records.append(metadata)
+    # The sidecar is authoritative for foreground records; older manifests only
+    # describe backdrops. Replacing one backdrop must preserve every other layer.
+    sidecar=pack/(geometry+'-wide.bin')
+    selected=read_sidecar(sidecar) if sidecar.exists() else []
+    selected=[r for r in selected if not (r['group']==group and r.get('kind',0)==0)]
+    selected.append(metadata)
+    data=encode_sidecar(selected)
+    atlas_path=pack/(key+'.png')
+    # Candidate packs use hard links: replace files rather than mutating a source pack.
+    temporary=atlas_path.with_suffix('.partial.png');atlas.save(temporary);temporary.replace(atlas_path)
+    temporary=sidecar.with_suffix('.partial');temporary.write_bytes(data);temporary.replace(sidecar)
+    extra_files={key+'.png':'widescreen-atlas',sidecar.name:'widescreen-index'}
+    extras=[r for r in manifest.get('extras',[]) if r['file'] not in extra_files]
+    extras.extend(dict(file=name,kind=kind,sha256=digest(pack/name)) for name,kind in extra_files.items())
+    manifest['extras']=extras;manifest['widescreen']=records
+    temporary=manifest_path.with_suffix('.partial');temporary.write_text(json.dumps(manifest,indent=2)+'\n');temporary.replace(manifest_path)
+    return metadata
+
+
+def package_native_extent(room, group, pack, assets=ASSETS):
+    """Declare an existing wide canvas, including original black cutaway space.
+
+    PEW1 requires a material cell. A source-black corner cell supplies that
+    compatibility record; it never adds new imagery or replaces original phases.
+    """
+    views,rooms=catalog(assets);view=views[room,group]
+    x0,y0,x1,y1=view['active_bbox']
+    if x1-x0<field_view_width() or y1-y0<224:
+        raise ValueError('Native extent requires an already wide full-height source')
+    geometry=rooms[room]['geometry_key'];pack=Path(pack)
+    installed=json.loads((pack/'manifest.json').read_text())
+    if any(r['geometry_key']==geometry and r['group']==group and not r.get('native_extent')
+           for r in installed.get('widescreen',[])):
+        raise ValueError('Native extent must not replace existing outpainted artwork')
+    root=assets/view['study'];data=json.loads((root/'tasks.json').read_text())
+    tasks=[t for t in data['tasks'] if (t['room'],t['group'])==(room,group)]
+    if not tasks:raise ValueError('Missing native phase references')
+    sources=[]
+    for task in tasks:
+        path=root/'refs'/task['ref'];sha=digest(path)
+        refs=np.load(path,allow_pickle=False)
+        pixel_sha=hashlib.sha256(refs.tobytes()).hexdigest()
+        if task.get('ref_sha256',pixel_sha)!=pixel_sha:raise ValueError('Native reference checksum mismatch')
+        if refs.shape!=(len(task['tiles']),16,16):raise ValueError('Invalid native tile references')
+        # Include inactive and controlled entries: every serialized phase must
+        # keep this corner black. Colours elsewhere in the room are untouched.
+        for ref,(x,y) in zip(refs,task['tiles']):
+            l,t,r,b=max(x,x0),max(y,y0),min(x+16,x0+16),min(y+16,y0+16)
+            if l<r and t<b and np.any(ref[t-y:b-y,l-x:r-x]&0x7fff):
+                raise ValueError('Native corner contains colour in a serialized phase')
+        sources.append(dict(entry=task['entry'],ref=task['ref'],sha256=sha,pixel_sha256=pixel_sha))
+    ox,oy=view['native_origin'];left,top=x0+ox,y0+oy
+    key=hashlib.sha256(f'{geometry}:native-picture-extent:{group}'.encode()).hexdigest()[:16]
+    metadata=dict(room=room,group=group,geometry_key=geometry,key=key,
+        bounds=[left,x1+ox,top,y1+oy],cells=1,positions=[[left,top]],native_extent=True,
+        animation='original, unchanged',native_corner_references=sources,runtime_verified=False)
+    return _store_backdrop(pack,metadata,Image.new('RGBA',(68,136),(0,0,0,255)))
+
+
 def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56):
     views, rooms = catalog(assets)
     view = views[room, group]
@@ -285,30 +351,11 @@ def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56)
         atlas.paste(padded,((i%cols)*68,(i//cols)*68))
     geometry=rooms[room]['geometry_key']
     key=hashlib.sha256(f'{geometry}:{group}:widescreen-v1'.encode()).hexdigest()[:16]
-    pack=Path(pack);manifest_path=pack/'manifest.json';manifest=json.loads(manifest_path.read_text())
     metadata = dict(room=room,group=group,key=key,geometry_key=geometry,
         bounds=[left,right,top,bottom],cells=len(cells),side_margin=margin,source=digest(Path(center_path)),
         generated=digest(Path(generated)),registration=registration,animation='static')
-    # Rebuild the sidecar with all already installed groups for this geometry.
-    records=[r for r in manifest.get('widescreen',[])
-             if (r.get('geometry_key'),r['group'])!=(geometry,group)]
-    metadata['positions']=cells;records.append(metadata)
-    # The sidecar is authoritative for foreground records; older manifests only
-    # describe backdrops. Replacing one backdrop must preserve every other layer.
-    sidecar=pack/(geometry+'-wide.bin')
-    selected=read_sidecar(sidecar) if sidecar.exists() else []
-    selected=[r for r in selected if not (r['group']==group and r.get('kind',0)==0)]
-    selected.append(metadata)
-    data=encode_sidecar(selected)
-    atlas_path=pack/(key+'.png')
-    # Candidate packs use hard links: replace files rather than mutating a source pack.
-    temporary=atlas_path.with_suffix('.partial.png');atlas.save(temporary);temporary.replace(atlas_path)
-    temporary=sidecar.with_suffix('.partial');temporary.write_bytes(data);temporary.replace(sidecar)
-    extra_files={key+'.png':'widescreen-atlas',sidecar.name:'widescreen-index'}
-    extras=[r for r in manifest.get('extras',[]) if r['file'] not in extra_files]
-    extras.extend(dict(file=name,kind=kind,sha256=digest(pack/name)) for name,kind in extra_files.items())
-    manifest['extras']=extras;manifest['widescreen']=records
-    temporary=manifest_path.with_suffix('.partial');temporary.write_text(json.dumps(manifest,indent=2)+'\n');temporary.replace(manifest_path)
+    metadata['positions']=cells
+    _store_backdrop(pack,metadata,atlas)
     material.save(Path(generated).with_name(f'{room}-g{group:02d}-wide-registered.png'))
     Path(generated).with_name(f'{room}-g{group:02d}-registration.json').write_text(json.dumps(metadata,indent=2)+'\n')
     return metadata
@@ -317,15 +364,21 @@ def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56)
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--room');p.add_argument('--group',type=int,default=0)
+    p.add_argument('--native-extent',action='store_true',help='Declare an already wide native canvas after checking every serialized corner phase')
     p.add_argument('--margin',type=int,default=56,help='Side overscan in PS1 pixels; must cover the complete 16:9 field')
     p.add_argument('--audit',type=Path);p.add_argument('--assets-root',type=Path,default=ASSETS)
     p.add_argument('--published-pack',type=Path,help='Known shipped pack; working candidates alone are never called published')
     p.add_argument('--generated',type=Path);p.add_argument('--center',type=Path)
     p.add_argument('--pack',type=Path,required=True)
     a=p.parse_args()
+    if a.native_extent and (a.audit or a.generated or a.center):
+        p.error('--native-extent cannot be combined with audit or generated artwork')
     if a.audit:
         result=audit_catalog(a.assets_root.resolve(),a.pack.resolve(),a.audit,a.published_pack.resolve() if a.published_pack else None)
         print(json.dumps({k:result[k] for k in ('hd_views','retail_views','action_counts','shared_geometry_families','variant_binding_reviews','unique_binding_jobs','job_action_counts')},indent=2))
+    elif a.native_extent:
+        if not a.room:p.error('--room is required for native extent export')
+        print(json.dumps(package_native_extent(a.room,a.group,a.pack,a.assets_root),indent=2))
     else:
         if not a.room or not a.generated or not a.center:p.error('--room, --generated and --center are required when packaging')
         print(json.dumps(package(a.room,a.group,a.generated,a.center,a.pack,a.assets_root,a.margin),indent=2))
