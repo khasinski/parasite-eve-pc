@@ -300,6 +300,42 @@ static void test_title_and_pause(void) {
     default_buttons();
 }
 
+/* A move made before a screen was up is not a point at it (the title's own cursor), and the
+ * window's mouse is not read at all for a headless run or a replay. */
+static void test_stale_and_window_input(void) {
+    static unsigned seen;
+    unsigned out[1];
+    int x, y;
+    MenuWidgetNode list = list_node(40, 40, 60, 12, 1, 4, 4);
+    SDL_Event wheel;
+    g_MenuWidgetCurrentNode = NULL;
+    Mouse_TestEvent(150, 170, MOUSE_MOVE);
+    CHECK(Mouse_Moved(&seen, &x, &y) && x == 150 && y == 170, "a fresh move is reported");
+    Mouse_TestEvent(150, 190, MOUSE_MOVE);
+    idle();
+    CHECK(!Mouse_Moved(&seen, &x, &y), "a move frames ago is not reported to a screen just up");
+    CHECK(!Mouse_Moved(&seen, &x, &y), "nor later");
+    Mouse_TestEvent(150, 150, MOUSE_MOVE);
+    frames(1, out);
+    CHECK(Mouse_Moved(&seen, &x, &y) && y == 150, "the next move is");
+
+    memset(&wheel, 0, sizeof wheel);
+    wheel.type = SDL_EVENT_MOUSE_WHEEL;
+    wheel.wheel.y = 1.0f;
+    g_MenuWidgetCurrentNode = &list;
+    Mouse_SetWindowInput(0);
+    Mouse_HandleEvent(&wheel);
+    frames(1, out);
+    CHECK(!out[0], "window input off: the wheel presses nothing %x", out[0]);
+    Mouse_SetWindowInput(1);
+    Mouse_HandleEvent(&wheel);
+    frames(1, out);
+    CHECK(out[0] == 0x10, "window input on: the wheel steps Up %x", out[0]);
+    idle();
+    Mouse_SetWindowInput(0);
+    g_MenuWidgetCurrentNode = NULL;
+}
+
 int main(void) {
     default_buttons();
     Mouse_Reset();
@@ -310,6 +346,7 @@ int main(void) {
     test_walk();
     test_choice();
     test_title_and_pause();
+    test_stale_and_window_input();
     if (s_failed) return 1;
     printf("mouse input: all checks passed\n");
     return 0;

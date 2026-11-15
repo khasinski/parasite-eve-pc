@@ -30,6 +30,8 @@ static struct {
     int x, y;             /* the last point on the game's screen */
     int known, moved;     /* a point was seen; it moved since the last frame */
     unsigned serial;      /* counts the moves, for Mouse_Moved */
+    unsigned moved_frame; /* the frame of the last move */
+    int window_input;     /* the game window's own mouse events are taken (Mouse_SetWindowInput) */
     unsigned title;       /* the frame the title screen was last up */
     MouseClick queue[QUEUE_SIZE];
     unsigned head, count;
@@ -135,6 +137,7 @@ static void Mouse_At(int x, int y) {
     if (!s_mouse.known || x != s_mouse.x || y != s_mouse.y) {
         s_mouse.moved = 1;
         s_mouse.serial++;
+        s_mouse.moved_frame = s_mouse.frame;
     }
     s_mouse.x = x;
     s_mouse.y = y;
@@ -151,8 +154,18 @@ void Mouse_Reset(void) {
     s_mouse.walk.node = NULL;
 }
 
+void Mouse_SetWindowInput(int enabled) {
+    s_mouse.window_input = enabled != 0;
+    if (!enabled) {
+        Mouse_Reset();
+    }
+}
+
 void Mouse_HandleEvent(const SDL_Event *event) {
     int x, y;
+    if (!s_mouse.window_input && event->type != SDL_EVENT_WINDOW_FOCUS_LOST) {
+        return; /* a replayed or headless run: only its own commands move the mouse */
+    }
     switch (event->type) {
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         Mouse_Reset();
@@ -199,6 +212,11 @@ void Mouse_TestEvent(int x, int y, enum MouseAction action) {
 
 int Mouse_Moved(unsigned *seen, int *x, int *y) {
     if (!s_mouse.known || *seen == s_mouse.serial) {
+        return 0;
+    }
+    if (s_mouse.frame - s_mouse.moved_frame > 2) {
+        /* Moved before this screen was up (a nudge while the game loaded): not a point at it. */
+        *seen = s_mouse.serial;
         return 0;
     }
     *seen = s_mouse.serial;

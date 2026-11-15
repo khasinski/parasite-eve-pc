@@ -1484,6 +1484,20 @@ static void Boot_PollConfiguredPad(void) {
     }
 }
 
+/* The mouse reads the events the game window gets after the host's windows (F1, Esc and the
+ * questions they ask) had theirs: a click or move made on one of those never reaches the game.
+ * (The event watch below sees every event, those too.) */
+static PsyzOverlayEventCB_SDL3 s_prevMouseEventCB;
+static void Boot_MouseEvent(const SDL_Event *event) {
+    if (s_prevMouseEventCB) {
+        s_prevMouseEventCB(event);
+    }
+    if (focused && (event->type == SDL_EVENT_MOUSE_MOTION || event->type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                    event->type == SDL_EVENT_MOUSE_WHEEL)) {
+        Mouse_HandleEvent(event);
+    }
+}
+
 static bool Boot_WatchPadEvent(void *userdata, SDL_Event *event) {
     (void)userdata;
     Boot_HandlePadEvent(event);
@@ -1520,14 +1534,23 @@ void Boot_ResetPadInput(void) {
     memset(held, 0, sizeof(held));
     focused = true;
     Mouse_Reset();
+    {
+        static bool mouse_hooked;
+        if (!mouse_hooked) {
+            mouse_hooked = true;
+            s_prevMouseEventCB = Psyz_OverlayEvent_SDL3(Boot_MouseEvent);
+        }
+    }
+    /* Headless runs and input replays (--pad-at) take no window mouse: only their own commands. */
+    Mouse_SetWindowInput(g_BootHostActive && native_pad_poll && !g_BootHostPadEventCount);
     memset(g_PadPackets, 0, sizeof(g_PadPackets));
     g_PadPackets[1].header = 0x00ff;
     publish();
 }
 
 void Boot_HandlePadEvent(const SDL_Event *event) {
-    if (focused || event->type == SDL_EVENT_WINDOW_FOCUS_LOST) {
-        Mouse_HandleEvent(event);
+    if (event->type == SDL_EVENT_WINDOW_FOCUS_LOST) {
+        Mouse_Reset();
     }
     if (event->type == SDL_EVENT_WINDOW_FOCUS_LOST || event->type == SDL_EVENT_QUIT) {
         focused = false;

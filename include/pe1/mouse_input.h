@@ -22,8 +22,11 @@ enum MouseAction {
     MOUSE_WHEEL_DOWN,
 };
 
-/* An SDL event from the game window (called for every event). */
+/* An SDL event the game window got and no host window (F1, Esc) took. */
 void Mouse_HandleEvent(const union SDL_Event *event);
+/* Whether the game window's mouse is read at all: off (the default) for headless runs and
+ * input replays, which only Mouse_TestEvent moves. */
+void Mouse_SetWindowInput(int enabled);
 /* Forgets queued clicks and moves (focus lost, pad reset). Clicks made while the game
  * was held still (the F1 or Esc panel, a load) are dropped by themselves. */
 void Mouse_Reset(void);
