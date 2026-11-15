@@ -23,6 +23,19 @@ language already exists, carry its translations into your working file:
 python -I localization/pelang.py template localization/out/text/strings.json -o work-de.csv --merge localization/translations/de.csv
 ```
 
+### The English pack
+
+```
+python -I localization/pelang.py english localization/out/text/strings.json -o en.pelang
+```
+
+The game's own English as a pack, "English pack" under F1 > Language. Every row in it is byte for
+byte the row on your disc, so the game with it chosen is the game without it. Use it to see that
+your setup works before you translate a word (put it in `lang/`, pick it, play: nothing changes),
+and as the pack your language starts from. The command lists the few rows it leaves to the game
+(pages with no text, and the name entry's grids). Like `work-de.csv` it holds the game's text: it
+stays on your machine and never goes into the repository.
+
 ## 2. Translate
 
 Open `work-de.csv` and fill the `translation` column. An empty translation keeps the game's text,
@@ -30,7 +43,7 @@ so you can submit a language a part at a time.
 
 | Column | What it is |
 |---|---|
-| `key` | Which text: `dlg/M001/009` is page 9 of the message bank first used in room M001; `item/`, `desc/`, `sys/`, `misc/` are the menus' item names, descriptions, system messages and the rest |
+| `key` | Which text: `dlg/M001/009` is page 9 of the message bank first used in room M001; `dlg/MAP/` is the city map (place titles and its narration: type the words only, the build centres them); `item/`, `desc/`, `sys/`, `misc/` are the menus' item names, descriptions, system messages and the rest |
 | `english`, `japanese` | The game's text, for reference (from your discs) |
 | `speaker`, `before`, `after` | Who speaks, and the pages before and after in the same scene |
 | `box`, `widest_px` | Where it is shown and how much room there is |
@@ -73,7 +86,8 @@ python -I localization/pelang.py build work-de.csv --strings localization/out/te
 
 Errors stop the build (a missing glyph, a changed tag, menu text past its room); warnings are for
 you to look at (rewrapped pages, glossary differences, a row left in English). Put `de.pelang` in
-`lang/` beside the game, start with All mods on, and pick it under F1 > Language.
+`lang/` beside the game and start it: the first time it finds a pack it asks which language to
+use. Later, pick one under F1 > Language and restart the game.
 
 For layout review, set `PE_TEST_TEXTBOX_LAYOUT=1` when running the native game
 with `--headless` and `--control-at` or `--frame-limit`. Its JSON snapshots add

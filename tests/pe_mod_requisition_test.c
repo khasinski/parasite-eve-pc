@@ -142,5 +142,13 @@ int main(void) {
     *selection=row(8);buy();*selection=row(9);buy();assert(!g_AyaInventoryItems[2]);buy();assert(g_AyaInventoryItems[2]==9);
     *selection=row(6);buy();*shop_pct=200;buy();assert(!g_AyaInventoryItems[3]);buy();assert(g_AyaInventoryItems[3]==6);
     reset();club();assert(!g_AyaInventoryItems[0]);club();assert(g_AyaInventoryItems[0]==0x100);
+    /* Issue #210: an effect unlocked another way (a rare drop goes through the same "catalog"
+     * service) leaves the board; buying Lucky Find, then Bargain, unlocks those two alone. */
+    reset();{int all=pe_shop_count();
+    assert(pe_catalog_unlock_armor(PE_FX_SCAVENGER) && pe_shop_count()==all-1 && row(0xF001)==-1);
+    assert(!strcmp(pe_shop_blocked(0xF001),"Already unlocked"));before=junk;assert(!purchase(0xF001) && junk==before);
+    reset();*selection=row(0xF002);buy();buy();assert(unlocked==1u<<PE_FX_LUCKY_FIND && row(0xF002)==-1);
+    *selection=row(0xF000);buy();buy();assert(unlocked==((1u<<PE_FX_LUCKY_FIND)|(1u<<PE_FX_BARGAIN)));
+    assert(pe_shop_count()==all-2 && row(0xF000)==-1 && row(0xF001)>=0 && row(0xF003)>=0 && junk==10000-225-125);}
     puts("Requisition checks passed: prices, ammo/full bags, unlocks, Tool cap/kits, rescue/storage, guards, PESH saves, confirmation.");
 }

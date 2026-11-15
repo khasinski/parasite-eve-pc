@@ -38,7 +38,7 @@ def advance(c: bytes, name_width: int = NAME_WIDTH) -> int:
     if op in gt.PACK_LETTERS:
         return gt.PACK_LETTERS[op].advance()
     if op < 0xF1:
-        return gt.BOX_ADVANCE[op] if op < len(gt.BOX_ADVANCE) else (gt._latin_advance(op) or gt.WIDE)
+        return gt.BOX_ADVANCE[op] if op < gt.GAME_CODES else (gt._latin_advance(op) or gt.WIDE)
     return 0
 
 
