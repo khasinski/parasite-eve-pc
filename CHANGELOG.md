@@ -1,9 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.13
 
 - Added the **Japanese release**: select your own Japanese discs (SLPS-01230/01231) and the game plays as it does there, in Japanese with its own font, kana name entry and balance (its weapon, enemy and boss numbers come from the disc), Circle to confirm, and its own memory card files. Disc 1 and Disc 2 must come from the same release. Language packs are for the USA discs and stay off with the Japanese ones.
 - Fixed **Always run** (`pe_qol`) making Aya walk while the action button (Cross / A) is held, which slowed her down whenever **Repeat interact** was used. Only the run button walks now, with the d-pad and the stick, and examining works while running. With the stick, holding the run button now also walks on diagonals, and with Always run off the stick is left exactly as the original reads it.
+
+- Improved HD background layer edges and widescreen sampling, keeping the original 4:3 picture stable and preserving foreground depth. Newer background packs are offered only to clients that support their layer format.
+- Reduced vertical camera jitter with widescreen and 60 Hz interpolation.
+- Fixed missing or displaced parts of Aya's dress when Wardrobe animations use a different skeleton.
+- Fixed dropped armor upgrades and stacked Tools / Mod Permits being counted incorrectly by economy mods.
+- Added optional mouse controls, a VSync setting and an Original / Pixel Sans font choice.
+- Expanded optional costume styles, challenge settings and the BP overhaul; improved Bestiary details and phone-call cancellation.
+- Added the Translator desktop tool, with headless batch editing and automated checks that do not open windows.
 
 ## 0.12
 
