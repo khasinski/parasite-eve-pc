@@ -2,6 +2,7 @@
 #define MENU_MEMCARD_IMAGE_H
 
 #include "common.h"
+#include "pe1/pe_image.h"
 #include "pe1/menu_sound.h"
 #include "pe1/cdrom_buffers.h"
 
@@ -19,9 +20,11 @@ typedef struct MemcardImagePreset { s32 x, y, parameter; } MemcardImagePreset;
 extern MemcardImageNode *g_MemcardFreeImageNodes, *g_MemcardPendingNodeTail, *g_MemcardPendingNodeHead, *g_MemcardActiveNodeHead;
 extern MemcardImageNode *g_MemcardActiveNodeTail; /* Active-list tail. */
 extern MemcardImageNode g_MemcardImageNodePool[8];
-#define g_MemcardImagePresets ((MemcardImagePreset *)(g_MemcardImageBundle + 0x3DB08))
-/* USA title bank retains its authored offsets and preset data as data. */
-#define g_MemcardImageBundle (g_StrFileDirBuffer + 0x4264)
+/* The title bank keeps its authored offsets and preset data as data, in PE.IMG entry 70 after the
+ * title code. The Japanese entry has less code before it (no publisher logo, MenuCard_ShowLogoFade)
+ * and one image fewer (8: that logo), so its bank and presets start earlier. */
+#define g_MemcardImageBundle (g_StrFileDirBuffer + (PE_JAPAN ? 0x3EEC : 0x4264))
+#define g_MemcardImagePresets ((MemcardImagePreset *)(g_MemcardImageBundle + (PE_JAPAN ? 0x3BAC4 : 0x3DB08)))
 #define g_MemcardImageOffsets ((s32 *)(g_MemcardImageBundle + 4))
 
 MemcardImageNode *MenuCard_CreateImageNode(s32 kind);

@@ -1,0 +1,302 @@
+[
+  {
+    "key": "mod/ui/1902a661",
+    "source": "Medicine 4 + Full Cure into Panacea",
+    "text": "Medicine 4 + Full Cure into Panacea",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/28f9348e",
+    "text": "Pocket empty",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Pocket empty",
+    "contexts": [
+      "mods/pe_qol/pe_key_items.c"
+    ]
+  },
+  {
+    "key": "mod/ui/2d9b6ef4",
+    "source": "Aya's own",
+    "text": "Aya's own",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/2f842069",
+    "text": "Story checks can use these even with a full bag.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Story checks can use these even with a full bag.",
+    "contexts": [
+      "mods/pe_qol/pe_key_items.c"
+    ]
+  },
+  {
+    "key": "mod/ui/4862d933",
+    "source": "Escape from ordinary battles",
+    "text": "Escape from ordinary battles",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/490ee65e",
+    "source": "Wearing %s when you leave",
+    "text": "Wearing %s when you leave",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/549d25ee",
+    "source": "Wearing %s",
+    "text": "Wearing %s",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/58d26a66",
+    "source": "Escape from normal battles",
+    "text": "Escape from normal battles",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/58d4bb09",
+    "text": "Keys leave the bag. Off returns them as space allows.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Keys leave the bag. Off returns them as space allows.",
+    "contexts": [
+      "mods/pe_qol/pe_key_items.c"
+    ]
+  },
+  {
+    "key": "mod/ui/60e98b7f",
+    "source": "Tip: Square sorts the bag.",
+    "text": "Tip: Square sorts the bag.",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/6104be48",
+    "text": "Key items didn't fit in the bag: turn quality of life back on to use them",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Key items didn't fit in the bag: turn quality of life back on to use them",
+    "contexts": [
+      "mods/pe_qol/pe_key_items.c"
+    ]
+  },
+  {
+    "key": "mod/ui/6301d17f",
+    "source": "WORN",
+    "text": "WORN",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/6a91281a",
+    "source": "2 Medicine 2 into Medicine 3",
+    "text": "2 Medicine 2 into Medicine 3",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/6c891fc8",
+    "source": "Restores 400 HP and Cures All Status",
+    "text": "Restores 400 HP and Cures All Status",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/75afe364",
+    "source": "All",
+    "text": "All",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/8aaf704c",
+    "source": "2 Medicine 1 into Medicine 2",
+    "text": "2 Medicine 1 into Medicine 2",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/8b316e1e",
+    "source": "OWNED",
+    "text": "OWNED",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/8d6e1441",
+    "source": "Bought Smoke Grenade",
+    "text": "Bought Smoke Grenade",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/8fef996d",
+    "source": "Turn on Junk economy first",
+    "text": "Turn on Junk economy first",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/91edab7e",
+    "text": "Pocketed keys",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Pocketed keys",
+    "contexts": [
+      "mods/pe_qol/pe_key_items.c"
+    ]
+  },
+  {
+    "key": "mod/ui/98dbf226",
+    "source": "Wearing %s   Junk %u",
+    "text": "Wearing %s   Junk %u",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/a3420d74",
+    "source": "2 Medicine 3 into Medicine 4",
+    "text": "2 Medicine 3 into Medicine 4",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/a3db2f4d",
+    "source": "Wearing %s from the next room",
+    "text": "Wearing %s from the next room",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/a877081f",
+    "source": "Buy in the field, outside battle and game menus",
+    "text": "Buy in the field, outside battle and game menus",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/ad3e9921",
+    "source": "Press Buy again to spend Junk",
+    "text": "Press Buy again to spend Junk",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/cd1ac90c",
+    "text": "Key",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Key",
+    "contexts": [
+      "mods/pe_qol/pe_key_items.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d47f4398",
+    "text": "Unique key and story items stored outside the bag.",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Unique key and story items stored outside the bag.",
+    "contexts": [
+      "mods/pe_qol/pe_key_items.c"
+    ]
+  },
+  {
+    "key": "mod/ui/d747aeeb",
+    "text": "Key item pocket",
+    "max_glyphs": 128,
+    "width": 320,
+    "source": "Key item pocket",
+    "contexts": [
+      "mods/pe_qol/pe_key_items.c"
+    ]
+  },
+  {
+    "key": "mod/ui/e628045e",
+    "source": "Tip: Square sorts the bag. Auto sort is on: new items are sorted for you.",
+    "text": "Tip: Square sorts the bag. Auto sort is on: new items are sorted for you.",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  },
+  {
+    "key": "mod/ui/ef86436e",
+    "source": "Panacea",
+    "text": "Panacea",
+    "max_glyphs": 128,
+    "width": 320,
+    "contexts": [
+      "inventory actions or collection"
+    ]
+  }
+]

@@ -318,7 +318,8 @@ s32 MenuCard_RunListScreen(void) {
         DrawSync(0);
         VSync(0);
         VSync(0);
-        if (g_LogoFadePlayed == 0) {
+        /* The publisher logo (image 8) is the USA release's; the Japanese title has none. */
+        if (g_LogoFadePlayed == 0 && !PE_JAPAN) {
             g_LogoFadePlayed = 1;
             MenuCard_ShowLogoFade();
         }
@@ -344,25 +345,26 @@ s32 MenuCard_RunListScreen(void) {
             g_MemcardScreenBuffers[0]->dirty.w = g_MemcardScreenBuffers[1]->dirty.w = 0;
             g_MemcardScreenPage = g_ActiveDrawSlot;
             g_MemcardScreenBuffers[0]->overlay.w = g_MemcardScreenBuffers[1]->overlay.w = 0;
+            /* The Japanese picture area is a row higher: one row less above, one more below. */
             rect.x = 0;
             rect.y = 0;
             rect.w = 0x1E0;
-            rect.h = 0x14;
+            rect.h = PE_JAPAN ? 0x13 : 0x14;
             ClearImage(&rect, 0, 0, 0);
             rect.x = 0;
-            rect.y = 0xE0;
+            rect.y = PE_JAPAN ? 0xDF : 0xE0;
             rect.w = 0x1E0;
-            rect.h = 0x10;
+            rect.h = PE_JAPAN ? 0x11 : 0x10;
             ClearImage(&rect, 0, 0, 0);
             rect.x = 0;
             rect.y = 0xF0;
             rect.w = 0x1E0;
-            rect.h = 0x14;
+            rect.h = PE_JAPAN ? 0x13 : 0x14;
             ClearImage(&rect, 0, 0, 0);
             rect.x = 0;
-            rect.y = 0x1D0;
+            rect.y = PE_JAPAN ? 0x1CF : 0x1D0;
             rect.w = 0x1E0;
-            rect.h = 0x10;
+            rect.h = PE_JAPAN ? 0x11 : 0x10;
             ClearImage(&rect, 0, 0, 0);
             initialPage = g_MemcardScreenPage == 0;
             g_MemcardScreenPage = initialPage;

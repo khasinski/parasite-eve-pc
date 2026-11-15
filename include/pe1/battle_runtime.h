@@ -132,6 +132,10 @@ extern s8 g_AyaAttackStep;
 /* The BattleEvasionOutcome Battle_CheckEvasion fills for the current hit
  * (status and reaction); Battle_StepAyaAction writes the record itself. */
 extern BattleEvasionOutcome g_EvasionOutcome;
+/* --test-ignore-hit-reactions: every hit lands as a plain hit (no critical, graze or splash factor),
+ * as before the 0.12 fix. Only for recorded route replays made with that behaviour: criticals
+ * shorten battles, which moves the random encounters later recordings walk past. */
+extern u8 g_BattleTestIgnoreHitReactions;
 extern s16 g_AyaActionTimer;
 /* Aya's world position (16.16) saved before an action moves her. */
 typedef struct BattleSavedPosition {

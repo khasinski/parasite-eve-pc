@@ -18,6 +18,9 @@ static int host_open_assists;
 #include <stdlib.h>
 #include <string.h>
 #include <SDL3/SDL.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>   /* _NSGetExecutablePath: the setup wizard's relaunch */
+#endif
 #ifdef _WIN32
 #include <direct.h>
 #elif !defined(PE_PS5)
@@ -39,6 +42,7 @@ static bool Host_StateChord(const SDL_Event *event);
 #include <psyz/system.h>
 #include <psyz/video.h>
 #include "pe1/boot.h"
+#include "pe1/battle_runtime.h"
 #include "pe1/boot_disc_check.h"
 #include "pe1/boot_display.h"
 #include "pe1/boot_services.h"
@@ -52,6 +56,7 @@ static bool Host_StateChord(const SDL_Event *event);
 #include "pe1/geom_state.h"
 #include "pe1/pad_state.h"
 #include "pe1/psyq_gpu.h"
+#include "pe1/memcard.h"
 #include "pe1/save.h"
 #include "pe1/save_tail_state.h"
 #include "pe1/scene_dispatch.h"
@@ -241,6 +246,15 @@ typedef enum HostBindDevice {
     HOST_BIND_CONTROLLER = 1
 } HostBindDevice;
 
+#ifndef PE_VERSION
+#define PE_VERSION "development"
+#endif
+#ifndef PE_BUILD_ID
+#define PE_BUILD_ID "development"
+#endif
+/* JSON and PNG/ZIP helpers are built in every configuration (CMake pe_download_deps). */
+#include <cJSON.h>
+#include <miniz.h>
 #if PE_DESKTOP_MOD_DOWNLOADS
 /* Versioned desktop background packs. Only a fully verified staging directory
  * can replace the active pointer; failed/cancelled downloads keep the old pack. */
@@ -268,14 +282,6 @@ typedef unsigned long long u_int64;
 #undef DrawText
 /* WinSock's IPv4 member alias also collides with the PS1 kernel's TCB. */
 #undef s_addr
-#endif
-#include <cJSON.h>
-#include <miniz.h>
-#ifndef PE_VERSION
-#define PE_VERSION "development"
-#endif
-#ifndef PE_BUILD_ID
-#define PE_BUILD_ID "development"
 #endif
 static struct {
     SDL_Thread *thread;
@@ -1214,7 +1220,7 @@ static SDL_EnumerationResult SDLCALL Host_ImportCard(void *userdata, const char 
     HostCardImport *import = userdata;
     char source[8192], target[4096], device[64], temporary[4160], entry[64];
     snprintf(source, sizeof(source), "%s%s", dirname, name);
-    if (strlen(name) != 20 || strncmp(name, "BASLUS-00662", 11)) {
+    if (strlen(name) != 20 || (strncmp(name, "BASLUS-00662", 12) && strncmp(name, "BISLPS-01230", 12))) {
         if (Host_IsCardImage(name)) {
             ++import->rejected;
             fprintf(stderr, "Memory cards: %s is a memory card image, not a PsyZ save; "
@@ -1698,7 +1704,7 @@ static int Host_SelectImage(unsigned identity, char *path, size_t size) {
     }
 
     char title[100];
-    snprintf(title, sizeof(title), "Parasite Eve - select USA Disc %u", identity);
+    snprintf(title, sizeof(title), "Parasite Eve - select Disc %u", identity);
     SDL_SetPointerProperty(props, SDL_PROP_FILE_DIALOG_FILTERS_POINTER, (void *)filters);
     SDL_SetNumberProperty(props, SDL_PROP_FILE_DIALOG_NFILTERS_NUMBER, 1);
     SDL_SetBooleanProperty(props, SDL_PROP_FILE_DIALOG_MANY_BOOLEAN, false);
@@ -1740,7 +1746,12 @@ static int Host_InstallImage(unsigned identity, const char *path) {
     }
 
     /* Inspection deliberately leaves the bound image and original tables alone. */
-    if (Asset_ValidatePeImage(image, &found) || found != identity) {
+    unsigned region = 0, other_region = 0, other_identity = 0;
+    PeDisc *other = g_CdImageVolumes[2 - identity];
+    if (Asset_ValidatePeImageRegion(image, &found, &region) || found != identity ||
+        /* Disc 1 and Disc 2 must come from the same release (USA or Japanese). */
+        (other && (Asset_ValidatePeImageRegion(other, &other_identity, &other_region) ||
+                   other_region != region))) {
         pe_disc_close(image);
         return 0;
     }
@@ -1776,7 +1787,7 @@ static int Host_AddImage(unsigned identity, int required) {
     snprintf(
         message,
         sizeof(message),
-        "Select the Parasite Eve (USA) Disc %u CUE or BIN image. The current image will remain mounted.",
+        "Select the Parasite Eve Disc %u CUE or BIN image (USA or Japanese, the same release as the other disc). The current image will remain mounted.",
         identity
     );
     if (required) {
@@ -1793,7 +1804,7 @@ static int Host_AddImage(unsigned identity, int required) {
             snprintf(
                 message,
                 sizeof(message),
-                "This is not a valid Parasite Eve (USA) Disc %u image. Please select Disc %u.",
+                "This is not a valid Parasite Eve Disc %u image, or it is from the other release (USA or Japanese) than the other disc. Please select Disc %u.",
                 identity,
                 identity
             );
@@ -1806,7 +1817,7 @@ static int Host_AddImage(unsigned identity, int required) {
         snprintf(
             message,
             sizeof(message),
-            "Parasite Eve (USA) Disc %u is needed to continue. Choose its image, or quit the game. Unsaved progress is lost if you quit.",
+            "Parasite Eve Disc %u is needed to continue. Choose its image, or quit the game. Unsaved progress is lost if you quit.",
             identity
         );
         SDL_MessageBoxButtonData buttons[] = {
@@ -3167,6 +3178,7 @@ static int Host_CrashRoom(void) {
     return room;
 }
 
+#if PE_DESKTOP_MOD_DOWNLOADS
 static size_t Host_DiscardCurlWrite(char *ptr, size_t size, size_t nmemb, void *userdata) {
     (void)ptr;
     (void)userdata;
@@ -3238,6 +3250,18 @@ static int Host_UploadScreenshotFiles(
     curl_easy_cleanup(curl);
     return res == CURLE_OK && status >= 200 && status < 300;
 }
+#else
+/* Builds without the download services have no curl: webhook uploads report failure. */
+static int Host_UploadScreenshotFiles(
+    const char *url,
+    const char *png_path,
+    const char *json_path,
+    const char *summary_message
+) {
+    (void)url; (void)png_path; (void)json_path; (void)summary_message;
+    return 0;
+}
+#endif
 
 static char host_last_screenshot_png[4096];
 static char host_last_screenshot_json[4096];
@@ -4004,6 +4028,48 @@ static void Host_TakeRoomSnapshot(void) {
     SDL_SetAtomicInt(&host_room_snapshot,(int)(snapshot - host_room_snapshots));
 }
 
+/* --test-save-after: the save menu's save to memory card 1, slot 1, without
+ * the menu: Save_BuildHeader, then Save_BuildCardFile (the save data, every
+ * mod's save write handler, the checksum) on the path the menu formats for an
+ * empty card's first slot, written whole to that card file. Only in the free
+ * field (no battle, event, menu or movie), where a phone is used. The game's
+ * own header fields and Aya's record links are put back as for the room
+ * snapshot above. */
+static int Host_TestSave(void) {
+    static SaveRuntimeState header;
+    char path[0x20], target[4096], temporary[4120];
+    if ((g_GameStateFlags & 0x2006u) || (g_GameStateFlagsWord & 0xB600u) ||
+        g_GameState.scene_audio.tracks.movie_active)
+        return 0;
+    BattleStateTail *action = g_AyaBattleState.action;
+    BattleAttributes *attributes = g_AyaBattleState.attributes;
+    const int transfer = D_800A5D50;
+    memcpy(&header, &g_SaveRuntimeState, sizeof(header));
+    Save_BuildHeader();
+    if (action && action != &g_SavedBattleStateTail) g_AyaBattleState.action = &g_SavedBattleStateTail;
+    if (attributes && attributes != &g_BattleEquipStateBlock) g_AyaBattleState.attributes = &g_BattleEquipStateBlock;
+    snprintf(path, sizeof(path), g_MemCardFilenameFormatPtr, 0, '0', 'A');
+    const int built = Save_BuildCardFile(path);
+    g_AyaBattleState.action = action;
+    g_AyaBattleState.attributes = attributes;
+    memcpy(&g_SaveRuntimeState, &header, sizeof(header));
+    D_800A5D50 = transfer;
+    Psyz_AdjustPath(target, path, sizeof(target));
+    snprintf(temporary, sizeof(temporary), "%s.tmp", target);
+    SDL_IOStream *io = built < 0 ? NULL : SDL_IOFromFile(temporary, "wb");
+    int ok = io && SDL_WriteIO(io, g_MemCardFileBuffer, sizeof(g_MemCardFileBuffer)) == sizeof(g_MemCardFileBuffer);
+    if (io && !SDL_CloseIO(io)) ok = 0;
+    if (ok) {
+        SDL_RemovePath(target);
+        ok = SDL_RenamePath(temporary, target);
+    }
+    if (!ok) SDL_RemovePath(temporary);
+    fprintf(stderr, "Test save: %s %s at VBlank %u\n", ok ? "wrote" : built < 0 ? "refused" : "failed to write",
+            target, (unsigned)g_BootHostVBlankCount);
+    fflush(stderr);
+    return 1;
+}
+
 static void Host_CrashHex(char *out, size_t size, size_t *used, const u8 *data, size_t count, unsigned address) {
     for (size_t i = 0; i < count && *used + 1 < size; ++i) {
         const char *end = i % 32 == 31 || i + 1 == count ? "\r\n" : "";
@@ -4100,12 +4166,12 @@ static int Host_ConfigurePortable(int *argc, char **argv) {
 
 static void Host_PrintHelp(const char *program_name) {
     printf(
-        "Usage: %s [--game <USA Disc 1 CUE/BIN/CHD>] [--disc <USA Disc 1 CUE/BIN/CHD>] [--disc2 <USA Disc 2 CUE/BIN/CHD>] [--choose-discs] "
+        "Usage: %s [--game <Disc 1 CUE/BIN/CHD>] [--disc <Disc 1 CUE/BIN/CHD>] [--disc2 <Disc 2 CUE/BIN/CHD>] [--choose-discs] "
         "[--geometry-correction 0|1] [--antialiasing 0|1] [--model-filtering 0|1] [--widescreen 0|1] [--frame-interpolation 0|1] "
         "[--dynamic-lighting 0|1] [--effect-geometry-correction 0|1] "
         "[--headless | --headless-gpu] [--internal-resolution 1..8] [--frame-limit N] [--control-at N] "
         "[--dump-vram PATH] [--dump-frame PATH] [--dump-audio PATH] [--pad-at VBLANK:BUTTON_MASK ...] "
-        "[--test-crash-after N | --test-abort-after N]\n",
+        "[--test-crash-after N | --test-abort-after N] [--test-save-after N] [--test-ignore-hit-reactions]\n",
         program_name
     );
     printf("--download-backgrounds / --verify-backgrounds manage the optional HD pack without opening a window.\n");
@@ -4120,6 +4186,8 @@ static void Host_PrintHelp(const char *program_name) {
     printf("Headless control: --control-at N pauses for stdin commands: advance FRAMES BUTTON_MASK, graphics PGXP AA FILTER (0/1; advances 8 blanks), or quit (requires --frame-limit).\n");
     printf("Headless fixtures only: --diagnostic-hp-at VBLANK:EXPECTED_HP:VALUE (requires --frame-limit; output is marked coverage-only)\n");
     printf("--test-crash-after N / --test-abort-after N crash on purpose at VBlank N to check the crash report (its path is printed).\n");
+    printf("--test-ignore-hit-reactions lands every hit as a plain hit (no criticals or grazes), for route replays recorded that way.\n");
+    printf("--test-save-after N saves to memory card 1, slot 1 at the first free field frame from VBlank N, as the save menu does (the file is printed).\n");
 }
 
 static int Host_ParsePadEventArg(const char *spec, int argc) {
@@ -4241,6 +4309,14 @@ int main(int argc, char **argv) {
 #ifndef PE_PS5
     int setup_argument = 0;
     for (int i = 1; i < argc; ++i) if (!strcmp(argv[i], "--setup")) setup_argument = 1;
+#ifdef __APPLE__
+    /* In a bundle SDL_GetBasePath() is Contents/Resources, not where the executable is. */
+    {
+        uint32_t size = sizeof(host_executable);
+        if (_NSGetExecutablePath(host_executable, &size) != 0) host_executable[0] = '\0';
+    }
+    if (!*host_executable)
+#endif
     snprintf(host_executable, sizeof(host_executable), "%s%s", SDL_GetBasePath() ? SDL_GetBasePath() : "",
              Welcome_FileName(argv[0]));
     const int first_launch = interactive && Host_FirstLaunch();
@@ -4254,6 +4330,7 @@ int main(int argc, char **argv) {
     CrashReport_Install(interactive, Host_DescribeCrash);
     CrashReport_SetSaveData(Host_DescribeSaveData);
     g_BootSceneStarted = Host_TakeRoomSnapshot;
+    g_BootTestSave = Host_TestSave;
 #ifdef PE_MODS
     CrashReport_SetMods(pe_mod_crash_describe);
 #endif
@@ -4371,6 +4448,17 @@ int main(int argc, char **argv) {
             }
             g_BootHostCrashAt = (u32)tick;
             g_BootHostCrashAbort = abort_crash;
+        } else if (!strcmp(argv[arg], "--test-ignore-hit-reactions")) {
+            g_BattleTestIgnoreHitReactions = 1;
+        } else if (!strcmp(argv[arg], "--test-save-after")) {
+            char *end = NULL;
+            errno = 0;
+            unsigned long tick = arg + 1 < argc ? strtoul(argv[++arg], &end, 10) : 0;
+            if (!tick || tick > INT_MAX || errno || *end || g_BootHostSaveAt) {
+                fprintf(stderr, "Invalid or duplicate test save VBlank\n");
+                return EXIT_FAILURE;
+            }
+            g_BootHostSaveAt = (u32)tick;
         } else if (!strcmp(argv[arg], "--dump-vram")) {
             if (arg + 1 >= argc || g_BootHostVramPath) {
                 fprintf(stderr, "Missing or duplicate capture path\n");
@@ -4529,6 +4617,7 @@ int main(int argc, char **argv) {
     }
 
 mount_images:
+    unsigned mounted_region = ~0u;
     for (unsigned slot = 0; slot < 2; ++slot) {
         if (!paths[slot]) {
             continue;
@@ -4541,9 +4630,14 @@ mount_images:
         int mounted = Asset_OpenPeImage();
         unsigned identity = g_PeImageMountFlags;
         if (mounted || (identity != 1 && identity != 2) || g_CdImageVolumes[identity - 1]) {
-            fprintf(stderr, "Invalid or duplicate USA disc image (status %d)\n", mounted);
+            fprintf(stderr, "Invalid or duplicate Parasite Eve disc image (status %d)\n", mounted);
             goto image_error;
         }
+        if (mounted_region != ~0u && mounted_region != g_GameRegion) {
+            fprintf(stderr, "Disc 1 and Disc 2 are from different releases (USA and Japanese)\n");
+            goto image_error;
+        }
+        mounted_region = g_GameRegion;
         g_CdImageVolumes[identity - 1] = &images[slot];
     }
     CdRom_BindImage(g_CdImageVolumes[0] ? g_CdImageVolumes[0] : g_CdImageVolumes[1], NULL);
@@ -4563,7 +4657,7 @@ image_error:
     SDL_ShowSimpleMessageBox(
         SDL_MESSAGEBOX_ERROR,
         "Parasite Eve",
-        "Cannot mount these images. Select the USA Disc 1 and Disc 2 CUE or CHD files together. Cancel to quit.",
+        "Cannot mount these images. Select Disc 1 and Disc 2 of the same release (USA or Japanese) together. Cancel to quit.",
         NULL
     );
     {
@@ -4834,7 +4928,7 @@ unsigned CPE_StateHostReasonBits(void){
 #endif
 }
 const char *CPE_StateHostReasonText(unsigned bits){
-    if(bits&32768u)return "Add both USA disc images in System before checkpointing";
+    if(bits&32768u)return "Add both disc images in System before checkpointing";
     if(bits&16384u)return "HD character texture pack: waiting for a valid character texture index";
     if(bits&64u)return "Particle mode has not applied; reselect Extra particle geometry in Advanced";
     if(bits&1u)return "Headless mode cannot capture gameplay";

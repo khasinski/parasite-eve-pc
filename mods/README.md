@@ -19,6 +19,8 @@ Two switches, so a modded build is safe to hand out:
   A mod can ask in its init to run alone (`pe_mod_run_alone`): while it runs, no other mod starts,
   and Manage mods says which one runs alone. The randomizer does, when Randomize new games is on.
   A handler added with `pe_hook_add_beside` goes on beside it (only Always run has any).
+  The one exception is **Language packs**: a language the player picked is no gameplay change, so
+  it runs with All mods off too (its own toggle turns it off).
 
 The upstream test suite (`-DBUILD_TESTING=ON`) gives the same results with `PE_MODS` on and off.
 
@@ -63,6 +65,8 @@ mods/
   pe_phone/            Phone Calls: after saving at a phone, "Stay on the line?" and a short call
   pe_challenges/       optional harder rules per run (one file per challenge, Hardcore permadeath),
                        bundles, assisted marker, run summary (opt-in via PE_MOD_LIST)
+  pe_lang/             language packs: the game's text from a .pelang pack, F1 > Language (not built
+                       by default; docs/LOCALIZATION.md, tools in localization/)
   pe_hello/            example mod (not built by default)
 ```
 

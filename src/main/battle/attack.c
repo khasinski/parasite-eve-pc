@@ -265,6 +265,12 @@ int Battle_StepCharacterAction(BattleInitSlot *slot)
 u8 g_BattleHitTimer;
 extern u8 g_BattleActionIndex;
 extern u8 g_BattleHitPending;
+u8 g_BattleTestIgnoreHitReactions;
+
+static inline s8 Battle_RolledReaction(void)
+{
+    return g_BattleTestIgnoreHitReactions ? 0 : g_EvasionOutcome.reaction;
+}
 
 /* Apply the evasion outcome Battle_CheckEvasion left in g_EvasionOutcome to
  * one target: a resolved hit sets the hit state, the
@@ -285,7 +291,7 @@ static inline void ApplyEvasionOutcome(BattleEntity *target)
         EnemyCoreFlagBits *bits = (EnemyCoreFlagBits *)&core->coreFlags;
         bits->hitState = 1;
         bits->category = g_ActiveActor->action->attackWord >> 20;
-        bits->reaction = g_EvasionOutcome.reaction;
+        bits->reaction = Battle_RolledReaction();
     }
     else if (g_EvasionOutcome.status == 0)
     {
@@ -356,7 +362,7 @@ void Battle_ResolveHitOnTimer(void)
         s16 reaction;
         Battle_CheckEvasion(selectedSlot->actor, &g_EvasionOutcome, 0);
         ApplyEvasionOutcome(selectedSlot->actor);
-        reaction = g_EvasionOutcome.reaction;
+        reaction = Battle_RolledReaction();
         if (g_EvasionOutcome.status == 1)
         {
             for (target = (BattleEntity *)g_FieldActorListHead; target != 0; target = target->next)

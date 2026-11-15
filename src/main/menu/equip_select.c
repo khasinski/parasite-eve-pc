@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe1/pe_image.h"
 #include "pe1/draw_level_bar.h"
 #include "pe1/draw_state.h"
 #include "pe1/inventory.h"
@@ -353,6 +354,10 @@ s32 Menu_StepSkillScreen(MenuWidgetNode *panel, unsigned int flags) {
         panel = MenuWidget_FindByModeAndSelectedBase(1, 6);
         if (panel != NULL) {
             MenuWidget_DestroyNode(panel);
+            if (PE_JAPAN) {                     /* the Japanese item tab goes with the panel */
+                MenuWidgetNode *tab = MenuWidget_FindByModeAndSelectedBase(1, 0x1C);
+                if (tab) MenuWidget_DestroyNode(tab);
+            }
             Menu_CreateBonusPointAllocationView();
             Menu_PlayCancelSound();
         }
@@ -493,6 +498,7 @@ int Menu_InventoryPageInputHandler(MenuWidgetNode *root, u32 flags) {
         MenuWidget_NavScrollTo(7);
         MenuWidget_DestroyNode(root);
         MenuWidget_NavScrollTo(5);
+        if (PE_JAPAN) MenuWidget_NavScrollTo(0x1C);   /* the Japanese item tab */
         Menu_CreateBonusPointAllocationView();
         Menu_PlayCancelSound();
         return 1;

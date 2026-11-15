@@ -1,4 +1,5 @@
 #include <SDL3/SDL.h>
+#include "pe1/pe_image.h"
 #include "pe_hooks.h"
 #include <ctype.h>
 #include <errno.h>
@@ -70,6 +71,8 @@ _Alignas(16) u8 D_8010BD00[BOOT_TEXTURE_WORKSPACE_BYTES];
 _Alignas(16) u8 D_80120D08[0x200000];
 _Alignas(16) u8 g_SceneLoadScratchArea[0x20000];
 static _Alignas(16) u8 g_BootLoadedSceneArea[0x80008];
+/* The mounted release (pe1/pe_image.h): set by Asset_OpenPeImage, USA until a disc mounts. */
+u8 g_GameRegion;
 u8 *g_StrFileDirBuffer = g_BootLoadedSceneArea + 8;
 static _Alignas(16) u8 g_BootDisplayWorkArea[BOOT_DISPLAY_WORK_SIZE];
 u8 *g_CdLoadAreaBase = g_BootDisplayWorkArea;
@@ -93,6 +96,7 @@ u32 g_BootHostVBlankCount;
 u32 g_BootHostControlAt;
 u32 g_BootHostCrashAt;
 int g_BootHostCrashAbort;
+u32 g_BootHostSaveAt;
 void (*g_BootHostHdOptions)(int, const char *);
 void (*g_BootHostGraphicsOptions)(int, int, int);
 const char *g_BootHostVramPath;
@@ -262,6 +266,20 @@ static void Boot_PrintHostDiagnosticJson(int terminal) {
     );
     for (unsigned i = 0; i < 4; ++i) {
         printf("%s{\"state\":%u,\"page\":%d}", i ? "," : "", g_TextboxEntries[i].state, g_TextboxEntries[i].page_id);
+    }
+    /* Optional layout observations leave the default replay protocol intact. */
+    const char *layout = getenv("PE_TEST_TEXTBOX_LAYOUT");
+    if (layout && !strcmp(layout, "1")) {
+        printf("],\"dialogue_layout\":[");
+        for (unsigned i = 0; i < 4; ++i) {
+            const TextboxEntry *entry = &g_TextboxEntries[i];
+            printf("%s{\"style\":%u,\"background\":%u,\"flags\":%u,\"rect\":",
+                   i ? "," : "", entry->style, entry->background, (u32)entry->control.flags);
+            if (entry->state && entry->style && entry->style != 3)
+                printf("[%u,%u,%u,%u]", entry->x, entry->y, entry->width, entry->height);
+            else printf("null");
+            putchar('}');
+        }
     }
     printf("],\"actors\":[");
 
@@ -1198,11 +1216,17 @@ void Field_HandleStateTransition(void) {
         g_FieldPadLastFrame = old_pad_bits;
         inverted = ~(u16)pad;
         pad_bits = base_bits;
-        if (inverted & 0x2000) {
-            pad_bits = base_bits | 0x4000;
-        }
-        if (inverted & 0x4000) {
-            pad_bits |= 0x2000;
+        if (PE_JAPAN) {
+            /* The Japanese release keeps the pad as it is: Circle confirms, Cross cancels. */
+            pad_bits = rawInverted;
+        } else {
+            /* The USA release swaps Circle and Cross, so Cross confirms. */
+            if (inverted & 0x2000) {
+                pad_bits = base_bits | 0x4000;
+            }
+            if (inverted & 0x4000) {
+                pad_bits |= 0x2000;
+            }
         }
 
         int run_mask = g_FieldRenderFlagTable[0];

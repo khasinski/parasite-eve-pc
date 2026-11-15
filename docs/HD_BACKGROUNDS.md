@@ -69,6 +69,20 @@ scene, and inherits its original fade/tint packet colors. Their explicit GPU mar
 presentation. They currently require SDL_GPU at an internal resolution above 1x,
 like the existing HD mesh path. At 1x they are not displayed.
 
+A single backdrop sits behind every actor, so side continuations of a room's
+foreground layers (M001's ambulance and police car, M002's canopy) were drawn
+under the characters walking past them. `PEW2` sidecars fix this with
+depth-sorted layers. Each record gains a `u32` kind after its bounds: kind 0 is
+the `PEW1` backdrop; kind 1 is followed, after its positions, by one `u16`
+native depth per cell (the foreground entry's depth plus its tile offset,
+1..4095). The renderer links such a cell exactly where `Render_DrawSpriteEntry`
+links a native tile of that depth, and skips it when the native tile would be
+skipped, so it covers and is covered by actors like the native part of the same
+object. A view may have several kind-1 layers next to its backdrop; their art
+must be transparent outside the object (alpha below 0.5 draws nothing, in both
+the GPU and CPU paths). Depths come from the foreground entry's tiles nearest
+the seam, extrapolated across the side. `PEW1` sidecars load unchanged.
+
 Artwork coverage is **not complete**. The first installed static candidates are
 M001 and M002. The working catalog has 490 background views, with 488 still
 pending. Wider native rooms continue using their original stored picture; other

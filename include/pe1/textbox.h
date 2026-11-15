@@ -34,8 +34,9 @@ typedef struct TextboxEntry {
     TextboxNumber numbers[5];
 } TextboxEntry;
 
+/* The name a dialogue box inserts (FA): up to 8 letters, two bytes each at most (pe1/text_render.h). */
 typedef struct TextboxNameGlyphs {
-    u8 glyphs[9];
+    u8 glyphs[17];
     s8 count;
 } TextboxNameGlyphs;
 extern TextboxNameGlyphs g_TextboxNameGlyphs;
@@ -58,6 +59,8 @@ extern TextboxGlyphSpacing g_TextboxGlyphSpacing[78];
  * longer one to draw glyphs past code 77 (codes from g_TextboxGlyphCount on stop the box). */
 extern const TextboxGlyphSpacing *g_TextboxGlyphWidths;
 extern unsigned g_TextboxGlyphCount;
+/* The Japanese release's spacing for codes 10-4B (the rest of its letters are fixed 12 px). */
+extern const TextboxGlyphSpacing g_TextboxGlyphSpacingJapanese[60];
 enum { TEXTBOX_GLYPH_PACKET_CAPACITY = 0x2400 / 28 };
 
 /* The dialogue choice cursor, one texture-page + sprite packet per frame

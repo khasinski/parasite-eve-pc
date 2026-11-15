@@ -11,6 +11,7 @@
 #include "pe_inventory.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe1/draw_state.h"
 #include "pe1/inventory_slots.h"
 #include "pe1/menu_context_help.h"
@@ -31,7 +32,7 @@ static void pe_key_row(int index) {
     const ItemDataRecord *rec = id ? Inv_LookupItemRecordScaled(id) : NULL;
     if (!id) {
         Draw_SetTextDimmed(1);
-        Draw_PrintRawText(pe_text_from_ascii(s_text, sizeof s_text, "No key items"));
+        Draw_PrintRawText(pe_tr_ascii(s_text, sizeof s_text, "No key items"));
         Draw_SetTextDimmed(0);
         return;
     }
@@ -61,7 +62,7 @@ static int pe_on_help_text(void *ctx, void *user) {
     (void)user;
     if (!s_screen.list || MenuWidget_GetCurrentNode() != s_screen.list) return 0;
     if ((id = pe_keys_item(MenuWidget_GridCellIndex(s_screen.list)))) *text = Text_LookupTableC(id - 1u);   /* item descriptions */
-    else *text = pe_text_from_ascii(s_text, sizeof s_text, "The key item pocket is empty");
+    else *text = pe_tr_ascii(s_text, sizeof s_text, "The key item pocket is empty");
     return 0;
 }
 

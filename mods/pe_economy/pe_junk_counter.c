@@ -3,6 +3,7 @@
 #include "pe_economy.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe1/draw_state.h"
@@ -31,7 +32,6 @@ static int pe_draw_junk(void *ctx, void *user) {
     if (list->has_scroll && list->y_limit - list->visible_rows - list->scroll_y == 0) top += 16;
     int saved_x = g_TextCursorX, saved_y = g_TextCursorY;
     int saved_dim = g_DrawTextDimmed;
-    static u8 label[] = { 0x19, 0x44, 0x3D, 0x3A, 0xFF }; /* Junk */
     uint32_t junk = pe_loot_junk();
     if (junk > 99999u) junk = 99999u;
     int digits = 1;
@@ -40,7 +40,8 @@ static int pe_draw_junk(void *ctx, void *user) {
     Draw_SetTextDimmed(0);
     g_TextCursorX = left + 10;
     g_TextCursorY = top + 2;
-    Draw_PrintRawText(label);
+    unsigned char translated[32];
+    Draw_PrintRawText(pe_tr_ascii(translated,sizeof translated,"Junk"));
     g_TextCursorX = left + width - 10 - digits * 5;
     g_TextCursorY = top + 6;
     uint32_t divisor = 1;

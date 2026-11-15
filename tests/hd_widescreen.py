@@ -66,11 +66,46 @@ def main(executable):
         except OSError: shutil.copyfile(source,broken_under/source.name)
     (broken_under/(geometry+'-under.bin')).write_bytes(b'PEW1\x01\x00\x00\x00')
 
+    # PEW2: the reviewed sidecar rewritten with kind-0 records must draw exactly
+    # as PEW1; a depth-sorted (kind 1) layer must show over the side art without
+    # touching state, native VRAM or PCM; a kind-1 depth of 0 rejects the file.
+    def pew2(extra=b'',extra_count=0):
+        data=(pack/(geometry+'-wide.bin')).read_bytes();assert data[:4]==b'PEW1'
+        groups=struct.unpack_from('<I',data,4)[0];at=8;out=bytearray(b'PEW2'+struct.pack('<I',groups+extra_count))
+        for _ in range(groups):
+            count=struct.unpack_from('<I',data,at+4)[0]
+            out+=data[at:at+32]+struct.pack('<I',0)+data[at+32:at+32+count*4];at+=32+count*4
+        assert at==len(data)
+        return bytes(out+extra)
+    def layered_pack(name,descriptor):
+        directory=output/name;directory.mkdir()
+        for source in pack.iterdir():
+            if source.is_file() and not source.name.endswith('-wide.bin'):
+                try: os.link(source,directory/source.name)
+                except OSError: shutil.copyfile(source,directory/source.name)
+        (directory/(geometry+'-wide.bin')).write_bytes(descriptor)
+        return directory
+    kind0=layered_pack('pew2-backdrop-pack',pew2())
+    front_key=0xf00df00df00df00d
+    front_cells=[(x,y) for y in range(0,240,16) for x in (320,336,352,368)]
+    width=16*68;half=((len(front_cells)+15)//16)*68
+    pixels=b'\0'*(width*half*3)+bytes((20,250,20))*(width*half)
+    header=struct.pack('<2sIHHI',b'BM',54+len(pixels),0,0,54)
+    header+=struct.pack('<IiiHHIIiiII',40,width,half*2,1,24,0,len(pixels),0,0,0,0)
+    def front(depth):
+        layer=struct.pack('<IIQiiiiI',0,len(front_cells),front_key,320,384,0,240,1)
+        layer+=b''.join(struct.pack('<hh',x,y) for x,y in front_cells)
+        return layer+b''.join(struct.pack('<H',depth) for _ in front_cells)
+    layered=layered_pack('pew2-front-pack',pew2(front(8),1))
+    (layered/f'{front_key:016x}.bmp').write_bytes(header+pixels)
+    bad_depth=layered_pack('pew2-bad-depth-pack',pew2(front(0),1))
+    (bad_depth/f'{front_key:016x}.bmp').write_bytes(header+pixels)
+
     def run(case):
         wide, extended = case
         directory=output/f'{wide}-{extended}';directory.mkdir()
         env=dict(os.environ,SDL_AUDIODRIVER='dummy',PSYZ_AUDIO_CLOCK='video',
-                 PE_CONFIG_HOME=str(directory/'config'),PE_HD_BACKGROUNDS=str((baseline,pack,broken,under,broken_under)[extended]))
+                 PE_CONFIG_HOME=str(directory/'config'),PE_HD_BACKGROUNDS=str((baseline,pack,broken,under,broken_under,kind0,layered,bad_depth)[extended]))
         args=[str(Path(executable).resolve()),'--disc',str(Path(disc).resolve()),'--headless-gpu',
               '--internal-resolution','4','--widescreen',str(wide),'--frame-limit','25100',
               '--control-at','25000','--dump-frame',str(directory/'frame.ppm'),
@@ -100,7 +135,7 @@ def main(executable):
         return case,(states,frames)
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results=dict(pool.map(run,[(0,0),(0,1),(1,0),(1,1),(1,2),(0,3),(1,3),(0,4)]))
+        results=dict(pool.map(run,[(0,0),(0,1),(1,0),(1,1),(1,2),(0,3),(1,3),(0,4),(1,5),(1,6),(1,7)]))
     for wide in (0,1):
         native,backdrop=results[wide,0],results[wide,3]
         assert native[0]==backdrop[0],f'Underlay changed game state, native VRAM or PCM: {output}'
@@ -122,9 +157,20 @@ def main(executable):
             assert lit>(height-80)*margin//2,f'Side material is absent/stale: {output}'
     assert results[1,0]==results[1,2],f'Incomplete sidecar did not fall back exactly: {output}'
     assert results[0,0]==results[0,4],f'Incomplete underlay did not fall back exactly: {output}'
+    assert results[1,5]==results[1,1],f'PEW2 backdrop records did not draw exactly as PEW1: {output}'
+    assert results[1,6][0]==results[1,1][0],f'Depth-sorted side layer changed state, native VRAM or PCM: {output}'
+    for plain,front in zip(results[1,1][1],results[1,6][1]):
+        header,pixels=front.split(b'\n255\n',1)
+        width,height=map(int,header.splitlines()[-1].split())
+        margin=(width-320*4)//2;green=0
+        for y in range(40,height-40,4):
+            for x in range(width-margin+8,width-8,4):
+                r,g,b=pixels[(y*width+x)*3:(y*width+x)*3+3];green+=g>200 and r<80 and b<80
+        assert plain!=front and green>((height-80)//4)*((margin-16)//4)//2,f'Depth-sorted side layer is not drawn: {output}'
+    assert results[1,7]==results[1,0],f'Invalid PEW2 depth did not fall back exactly: {output}'
     (output/'proof.json').write_text(json.dumps(dict(passed=True,checkpoints=2,
-        exact_4_3=True,native_vram_pcm_and_state_equal=True,visible_side_material=True,visible_underlay_both_aspects=True,incomplete_sidecar_exact_fallback=True),indent=2)+'\n')
-    print(f'HD widescreen: legacy 4:3 exact; underlays visible in both aspects; state/VRAM/PCM exact: {output}')
+        exact_4_3=True,native_vram_pcm_and_state_equal=True,visible_side_material=True,visible_underlay_both_aspects=True,incomplete_sidecar_exact_fallback=True,pew2_backdrop_exact=True,pew2_front_layer_visible=True,pew2_invalid_depth_fallback=True),indent=2)+'\n')
+    print(f'HD widescreen: legacy 4:3 exact; underlays visible in both aspects; PEW2 backdrop exact, front layer drawn, bad depth rejected; state/VRAM/PCM exact: {output}')
     return 0
 
 
