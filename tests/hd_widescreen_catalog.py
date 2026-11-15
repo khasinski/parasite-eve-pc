@@ -111,6 +111,33 @@ class Scope(unittest.TestCase):
             index=next(r for r in manifest['extras'] if r['kind']=='widescreen-index')
             self.assertEqual(index['sha256'],self.module.digest(pack/index['file']))
 
+    def test_registered_repack_is_exact_and_rejects_changed_center_before_writes(self):
+        import numpy as np
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);pack=root/'pack';pack.mkdir()
+            (pack/'manifest.json').write_text(json.dumps(dict(widescreen=[],extras=[])))
+            center=root/'center.png';Image.new('RGB',(1280,64),'blue').save(center)
+            pixels=np.zeros((64,1728,3),dtype=np.uint8)
+            pixels[:,:,0]=np.arange(1728,dtype=np.uint16)[None,:]%256
+            pixels[:,224:1504]=[0,0,255]
+            generated=root/'reviewed.png';Image.fromarray(pixels).save(generated)
+            view=dict(active_bbox=[0,0,320,16],native_origin=[0,0],controllers=[])
+            room=dict(geometry_key='0123456789abcdef',entries=[dict(group=1,tiles=1,flags=2)])
+            with patch.object(self.module,'catalog',return_value=({('M044',1):view},{'M044':room})), \
+                 patch.object(self.module,'register',side_effect=AssertionError('Repack must not resample')):
+                result=self.module.package('M044',1,generated,center,pack,registered=True)
+                self.assertEqual(result['registration']['method'],'exact-center-repack')
+                self.assertTrue(np.array_equal(pixels,np.array(Image.open(root/'M044-g01-wide-registered.png'))))
+                stable={p.name:p.read_bytes() for p in pack.iterdir()}
+                pixels[0,224,0]=1;Image.fromarray(pixels).save(generated)
+                with self.assertRaisesRegex(ValueError,'exact original center'):
+                    self.module.package('M044',1,generated,center,pack,registered=True)
+                Image.new('RGB',(1,1)).save(generated)
+                with self.assertRaisesRegex(ValueError,'dimensions'):
+                    self.module.package('M044',1,generated,center,pack,registered=True)
+                self.assertEqual(stable,{p.name:p.read_bytes() for p in pack.iterdir()})
+
     def test_native_extent_checks_inactive_phases_and_keeps_existing_art(self):
         import numpy as np
         with tempfile.TemporaryDirectory() as tmp:

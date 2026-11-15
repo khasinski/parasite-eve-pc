@@ -313,7 +313,7 @@ def package_native_extent(room, group, pack, assets=ASSETS):
     return _store_backdrop(pack,metadata,Image.new('RGBA',(68,136),(0,0,0,0)))
 
 
-def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56):
+def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56, registered=False):
     views, rooms = catalog(assets)
     view = views[room, group]
     x0,y0,x1,y1 = view['active_bbox']
@@ -331,7 +331,16 @@ def package(room, group, generated, center_path, pack, assets=ASSETS, margin=56)
     # A smaller overscan is valid only when it still covers the entire 16:9 field.
     if not isinstance(margin, int) or margin <= 0 or margin > 2048 or (x1-x0)+2*margin < field_view_width():
         raise ValueError('Side margin does not cover the complete widescreen field')
-    material, registration = register(center, Image.open(generated), margin*4)
+    if registered:
+        material = Image.open(generated).convert('RGB')
+        if material.size != (center.width+margin*8, center.height):
+            raise ValueError('Registered material dimensions do not match the full view')
+        if not np.array_equal(np.asarray(material)[:,margin*4:margin*4+center.width],
+                              np.asarray(center)):
+            raise ValueError('Registered material must retain the exact original center')
+        registration = dict(method='exact-center-repack', original_center_exact=True)
+    else:
+        material, registration = register(center, Image.open(generated), margin*4)
     native_x,native_y = view['native_origin']
     left,right,top,bottom = x0+native_x-margin,x1+native_x+margin,y0+native_y,y1+native_y
     cells = []
@@ -371,11 +380,14 @@ if __name__=='__main__':
     p.add_argument('--room');p.add_argument('--group',type=int,default=0)
     p.add_argument('--native-extent',action='store_true',help='Declare an already wide native canvas after checking every serialized corner phase')
     p.add_argument('--margin',type=int,default=56,help='Side overscan in PS1 pixels; must cover the complete 16:9 field')
+    p.add_argument('--registered',action='store_true',help='Repack reviewed material without resampling; requires an exact original center')
     p.add_argument('--audit',type=Path);p.add_argument('--assets-root',type=Path,default=ASSETS)
     p.add_argument('--published-pack',type=Path,help='Known shipped pack; working candidates alone are never called published')
     p.add_argument('--generated',type=Path);p.add_argument('--center',type=Path)
     p.add_argument('--pack',type=Path,required=True)
     a=p.parse_args()
+    if a.registered and (a.audit or a.native_extent):
+        p.error('--registered is only valid when packaging artwork')
     if a.native_extent and (a.audit or a.generated or a.center):
         p.error('--native-extent cannot be combined with audit or generated artwork')
     if a.audit:
@@ -386,4 +398,4 @@ if __name__=='__main__':
         print(json.dumps(package_native_extent(a.room,a.group,a.pack,a.assets_root),indent=2))
     else:
         if not a.room or not a.generated or not a.center:p.error('--room, --generated and --center are required when packaging')
-        print(json.dumps(package(a.room,a.group,a.generated,a.center,a.pack,a.assets_root,a.margin),indent=2))
+        print(json.dumps(package(a.room,a.group,a.generated,a.center,a.pack,a.assets_root,a.margin,a.registered),indent=2))

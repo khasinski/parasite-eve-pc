@@ -408,3 +408,9 @@ original center is retained for filtering, while their alpha stays below the
 binary cutoff. Gutter alpha follows the same full-view mask and remains
 invisible outside the authored bounds. Keep these overlapping margin atlases
 lossless so independent compression cannot break their shared RGB.
+
+When rebuilding atlases from a reviewed registered composite, use
+`prepare.py --registered` with its original `--center` and matching `--margin`.
+This repacks without another registration or resampling pass. Export refuses
+incorrect dimensions or any changed center pixel before writing pack files;
+new generated artwork must still go through normal registration and review.
