@@ -26,6 +26,22 @@ for family,tasks in families.items():
 retain={tuple(x.split(':')) for x in a.retain_controller};fallback={}
 if a.fallback_pack:
  fallback={t['key']:t for t in json.loads((a.fallback_pack/'manifest.json').read_text())['atlases']}
+# An opaque underlay can also contain the black outline of a higher layer.
+# Use all silhouettes in the same view, not just the current entry's cutout.
+view_contours={}
+def view_contour(task,shape):
+ key=(task['room'],task['group'])
+ if key not in view_contours:
+  edge=np.zeros(shape,bool)
+  for sibling in data['tasks']:
+   if (sibling['room'],sibling['group'])!=key:continue
+   mask=np.zeros(shape,np.uint8)
+   for (x,y),ref in zip(sibling['tiles'],np.load(root/'refs'/sibling['ref'])):
+    mask[y:y+16,x:x+16]|=(ref!=0).astype(np.uint8)
+   mask=np.pad(mask,1)
+   edge|=cv2.morphologyEx(mask,cv2.MORPH_GRADIENT,np.ones((3,3),np.uint8))[1:-1,1:-1]!=0
+  view_contours[key]=edge
+ return view_contours[key]
 records=[]
 for t in data['tasks']:
  if a.room and t['room']!=a.room:continue
@@ -56,6 +72,19 @@ for t in data['tasks']:
   enhanced=np.uint8(np.rint(enhanced*(1-alpha)+restored*alpha))
   applied_materials.append(region['reason'])
  refs=np.load(root/'refs'/t['ref']);n=len(refs);cols=min(16,n);rows=(n+cols-1)//cols;atlas=np.zeros((rows*136,cols*68,3),dtype='uint8')
+ # Preserve source black interiors/voids, but do not burn the PS1's
+ # one-native-pixel opaque-black cutout contour into the HD colour plane.
+ # Trace the complete entry so a packet boundary is never treated as an edge.
+ # Alpha, native references and semitransparent materials remain authoritative.
+ black_contour=None
+ if a.preserve_source_black:
+  native=np.zeros((enhanced.shape[0]//4,enhanced.shape[1]//4),np.uint16)
+  opaque=np.zeros(native.shape,bool)
+  for i,((x,y),ref) in enumerate(zip(t['tiles'],refs)):
+   native[y:y+16,x:x+16]=ref
+   semi=t.get('tile_meta',[{}]*n)[i].get('semi',False)
+   if not semi:opaque[y:y+16,x:x+16]=True
+  black_contour=(native==0x8000)&view_contour(t,native.shape)&opaque
  # Trace the complete entry before cutting packets: simplify native stairs
  # by at most half a native pixel, then rasterize an antialiased 4x contour.
  # Small holes/details remain unsimplified. No blur reaches across tile cuts.
@@ -80,7 +109,8 @@ for t in data['tasks']:
   patch=enhanced[y*4:y*4+64,x*4:x*4+64].copy();assert patch.shape==(64,64,3)
   rgb=np.stack([(ref&31)*255//31,((ref>>5)&31)*255//31,((ref>>10)&31)*255//31],axis=-1).astype('uint8');rgb=np.repeat(np.repeat(rgb,4,0),4,1)
   if a.preserve_source_black:
-   black=np.repeat(np.repeat((ref&0x7fff)==0,4,0),4,1);patch[black]=0
+   preserve=((ref&0x7fff)==0)&~black_contour[y:y+16,x:x+16]
+   black=np.repeat(np.repeat(preserve,4,0),4,1);patch[black]=0
   for region in detail_regions:
    if region['room']!=t['room']:continue
    x0,y0,x1,y1=region['bbox'];left,right=max(x,x0),min(x+16,x1);top,bottom=max(y,y0),min(y+16,y1)

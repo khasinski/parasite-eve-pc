@@ -298,3 +298,42 @@ same-key WebP. The issue-56 candidate builder removes only the old candidate
 link when replacing an atlas, preserving the baseline. It accepts
 `--assets-root`, `--baseline` and `--out` for separate checkouts, refuses existing
 outputs and writes its audit beside the new output directory.
+
+### Black cutout contours and static layer gaps
+
+`--preserve-source-black` keeps black interiors and voids without stamping a
+one-native-pixel black contour over the HD material. Contours are traced across
+complete entries and shared across a view, so packet cuts cannot become edges
+and an opaque underlay cannot reintroduce another layer's original outline.
+Semitransparent packets retain source black and all native references/coverage
+remain unchanged.
+
+The underlay builder also reconstructs missing strips around other opaque static
+layers, rather than only its originally reported foreground. It copies adjacent
+HD background colours within eight HD texels (two native pixels), excluding
+transparent and opaque-black samples. Opaque-black base texels in that same narrow
+strip can inherit the adjacent background colour; black interiors remain intact.
+Moving and semitransparent layers do not define these gutters. Native masks,
+reference planes, actor occlusion and original animation remain authoritative.
+
+`tests/hd_pack_png.py` covers the cross-entry contour, packet boundaries, retained
+black details/semitransparency, and a second foreground's missing gutter, with
+baseline preservation and exact native-reference checks. Assets must be rebuilt
+and visually reviewed before publishing a new pack; updating the game alone does
+not replace downloaded artwork.
+
+M097's source-restored colour bands can still contain a baked PS1 staircase even
+when a gap is filled. Its reviewed follow-up uses one registered HD image for
+all eight opaque static layers, the base and their underlay:
+
+```sh
+python build_underlays.py --assets PATH --baseline PACK --out NEW_DIRECTORY --rooms M097 --coherent-static
+```
+
+This mode requires the existing M097 underlay and registered anchor metadata.
+It keeps every native room reference and all animated atlas files. Controller
+coverage plus a three-native-pixel margin retains its existing material in all
+static planes, and is excluded from new underlay coverage. Static foregrounds
+explicitly use their authored HD mattes with palette witnesses instead of being
+clipped to the PS1 staircase. This is a reviewed M097 artwork recipe, not an
+unreviewed global change to every room. The output audit records input hashes.
