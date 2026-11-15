@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pe_hooks.h"
 #include <string.h>
 #include "pe1/battle.h"
 #include "pe1/battle_cmd.h"
@@ -559,6 +560,7 @@ void Battle_FlushScriptSounds(void) {
         index++;
     }
 
+    if (g_BattleActionQueueCount) PE_HOOK(PE_HOOK_PLAYER_ACTION_CANCEL,g_ActiveActor);
     flags = g_GameStateFlags;
     mask = -0x101;
     g_BattleActionQueueCount = 0;
@@ -600,7 +602,9 @@ void Battle_StepScriptEntry(void)
             }
         }
     } else {
+        int completed = g_BattleActionQueueCount != 0;
         g_BattleActionIndex = 0;
         g_BattleActionQueueCount = 0;
+        if (completed) PE_HOOK(PE_HOOK_PLAYER_ACTION_END, g_ActiveActor);
     }
 }

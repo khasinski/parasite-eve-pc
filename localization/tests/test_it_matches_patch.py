@@ -37,7 +37,7 @@ HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
 import pelang  # noqa: E402
 from extract_text import table_entries  # noqa: E402
-from petext import battle, font, gametext as gt, letters as lt, patchfile, patchimport, pictures, validation  # noqa: E402
+from petext import battle, citymap, font, gametext as gt, letters as lt, patchfile, patchimport, pictures, validation  # noqa: E402
 from petext.disc import Game  # noqa: E402
 
 # The patch's accented letters, read from its letter pictures by eye (2026-11-10).
@@ -120,6 +120,18 @@ def compare_text(original, patched, entries: dict[int, bytes], code_of: dict[str
                 differ[key] = "page missing from the patch"
             else:
                 check(key, raw, after[page][0])
+    # The city map's bank (petext/citymap.py): the patch changed only its text there, which the
+    # pack has as dlg/MAP lines.
+    map_a, map_b = citymap.entry_bytes(original), citymap.entry_bytes(patched)
+    if not citymap.only_text_changed(map_a, map_b):
+        raise AssertionError("the patch changed more than the city map's text in its entry")
+    after = patchimport.patched_pages(citymap.english_bank(map_b))
+    for page, (raw, _) in gt.pages(citymap.english_bank(map_a))[0].items():
+        key = f"dlg/{citymap.BANK_KEY}/{page:03}"
+        if page not in after:
+            differ[key] = "page missing from the patch"
+        else:
+            check(key, raw, after[page][0])
     manifest = json.loads((HERE / "data/manifest.json").read_text(encoding="utf-8"))
     before, after = dict(table_entries(original.resident_pack())), dict(table_entries(patched.resident_pack()))
     for key in manifest["entries"]:

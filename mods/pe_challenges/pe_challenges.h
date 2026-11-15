@@ -20,7 +20,7 @@
  *     pe_ch_bundles.c      Bundles page: Purist, Nightmare, Clear all
  *     pe_ch_events.c       events other mods can listen to (changed, assisted, cleared, ended)
  *   screens (the game's own widgets and windows)
- *     pe_ch_screen.c       the Challenges row in Aya's menu: this run, run history
+ *     pe_ch_screen.c       Challenges in Aya's System list: active and completed challenges
  *     pe_ch_notice.c       a field notice in the game's dialogue window, one option to close it
  *     pe_ch_card_marks.c   Hardcore saves marked in the game's save / load lists (window, title bar)
  *   challenges
@@ -130,6 +130,9 @@ extern PeChallengeRun g_ch_run;
 static inline int pe_ch_on(int c) { return (int)((g_ch_run.active >> c) & 1u); }
 static inline int pe_ch_level(int c) { return pe_ch_on(c) ? g_ch_run.level[c] : 0; }
 static inline int pe_ch_assisted(void) { return g_ch_run.dropped || (g_ch_run.flags & CH_FLAG_CHEATS); }
+
+/* New Game title picker: commits to levels only on Start game; 0 if unavailable. */
+int pe_ch_start_pick(int levels[CH_COUNT]);
 
 /* pe_ch_run.c */
 int pe_ch_run_register(const char *mod_id);       /* the record, the rows, load / new game / sync */

@@ -1,6 +1,9 @@
 #ifndef PE_SERVICES_H
 #define PE_SERVICES_H
 
+/* Optional compatibility query; consumers never include a concrete mod. */
+typedef struct PeBattleActionPolicyApi { int (*partial_actions)(void); } PeBattleActionPolicyApi;
+
 /* The services mods offer each other (pe_service_publish / pe_service_get), in one neutral
  * place so no mod includes another mod's headers. A service is a versioned table of functions;
  * a mod that doesn't find one carries on without it.

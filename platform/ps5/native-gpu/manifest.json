@@ -3839,7 +3839,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "61d35b1e761548287683ead02c9ff8e557d9bd57847c01eab193d2fe20da4ebc"
+      "sha256": "9e7174ff393c8841345343916ee4befe4118da4975b30c416fc0c755936ca886"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "e21f7f2f8e51851f14308da6d7325c9b815bf7d615adf2ca04dcefaeed8358fb"
+      "sha256": "83cb290f5af628abf15daa25187741d531135a96a0f097ff3ed06afc96f1faac"
     },
     {
       "path": "mods/host/pe_api_native.c",
@@ -3999,11 +3999,11 @@
     },
     {
       "path": "mods/host/pe_mod_menu.h",
-      "sha256": "97f6a55ecea98b3e4662e1d2836ad7f8ace133ab3b72ee86623b355b880a95b4"
+      "sha256": "330ca17d78b5cb40105e278faf05f9a69cce1b0aa8d99380c87c60bc08d4b57a"
     },
     {
       "path": "mods/host/pe_mod_panel.c",
-      "sha256": "80cd690e4d8ba642c3d0d2953e646de584530db6b3e01bddc97cf86bb7953b99"
+      "sha256": "a06c0888a77a99c06ad5a58e06b460000d6b9a8532cc0f8ce4e405312508f1f9"
     },
     {
       "path": "mods/host/pe_model.c",
@@ -4111,7 +4111,7 @@
     },
     {
       "path": "mods/host/pe_services.h",
-      "sha256": "19ce41645b16d38ff9aca23560a736f8c649ca57793aa450612fabad42e2c6e9"
+      "sha256": "40446043654fec8b628dbd7d8f2df8382fc89ec8e99a25f9ca50c7aa249b6971"
     },
     {
       "path": "mods/host/pe_shop_api.c",
@@ -4223,7 +4223,7 @@
     },
     {
       "path": "mods/pe_collection/pe_bestiary_menu.c",
-      "sha256": "451fda051b78564c45d95a6c308cfa9150257a9a05ed2ff79870d8eaa4454825"
+      "sha256": "a582aab8ee5a3746450c07caef9aba2a694f04ebc9b736ca3b62ad68730204dc"
     },
     {
       "path": "mods/pe_collection/pe_collection.c",
@@ -4343,7 +4343,7 @@
     },
     {
       "path": "mods/pe_rebalance/pe_atb_items.c",
-      "sha256": "897acbd77f167dac8a7052f6eb45e467c7bdc5164dab028932f79098976ce7af"
+      "sha256": "faa28a915e27d3cb2da7729fea2f3bc13b7019ae5d96c152a113379115e13ce7"
     },
     {
       "path": "mods/pe_rebalance/pe_atb_items.h",
@@ -4383,7 +4383,7 @@
     },
     {
       "path": "mods/pe_rewards/pe_rewards.c",
-      "sha256": "41a27927473ca0a500adbc9e743822f512e568897a0419ec3bbeb7b25bcdac20"
+      "sha256": "7c8fce2f210809b695329960f3534e41ed05018daf91bb845fb4b90f552fc140"
     },
     {
       "path": "mods/pe_shops/pe_field_wayne.c",
@@ -4454,16 +4454,28 @@
       "sha256": "7126b1ecc12cb926ca51684acda8750c883f05ef1c3f28b7d09b03758aedc4de"
     },
     {
+      "path": "mods/pe_wardrobe/pe_skin_collision.h",
+      "sha256": "9a44d11f4bd7e745ca240677805b50ff8db6b95f218f5ecd8cb7fd8c4e936999"
+    },
+    {
       "path": "mods/pe_wardrobe/pe_skin_loader.c",
-      "sha256": "86a31c69b3e7e0824eb1adcf02b74b6ae07ed1b278cbc2e486c9ebcc3dd9e5df"
+      "sha256": "43c397402fb62762dee113a3098978893d5575da26f2edd96b42096265e44834"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_skin_rows.h",
+      "sha256": "44d161141f7988a9112e540d1e13e1367920d36fad0030aee227a7cb3b8d68da"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_skin_gown.h",
+      "sha256": "4cfcc6e0f03e5fa7a064ed54969301fd751c65bbf3d3ed3828adedd47bf347f3"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe.c",
-      "sha256": "86520c804809c8305a4ecb8a230fc3fe7a6ae2ad79962e5624453e9847ebbe9d"
+      "sha256": "8f95dd9701f34c7ea1cdc7d565b46d41d7a6d5a9e4c8819b7fa13059f2f2b79a"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe.h",
-      "sha256": "37695588b34a508dfb8958de2b7693b7ffa2c2cf4b4769c14b7edef571c97d91"
+      "sha256": "b38bf992927e9c7771e51e867d4a9b8327329991bb1b37f3b26d409768e46cc6"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe_data.h",
@@ -4471,11 +4483,11 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe_menu.c",
-      "sha256": "a404b6cc928ba2efd2838ee52a3c72e2d88001eaed0eb130dc726bc60f3453f7"
+      "sha256": "6cb7b37450edfc54c5862299e53cb2ca2cbcb39d3be94eefc06b969718d6ed6f"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe_mod.c",
-      "sha256": "934a7d95d8614e35d4fd91c86b39ccedd1ac697b5dabc15586e00114cb6ece99"
+      "sha256": "2c5c27dd54d314e38ec1f27a14a2e7d9e7b09e78c859886d5b6a3befa2e0c29b"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe_profile.c",

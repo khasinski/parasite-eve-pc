@@ -93,7 +93,15 @@ def is_arabic(c: int) -> bool:
 
 def join(letters: str) -> tuple[str, list[bool]]:
     """(the letters joined, whether each touches the next): PeText_Join."""
-    cps = [ord(c) for c in letters]
+    cps, keep, nxt = join_letters([ord(c) for c in letters])
+    out = [(chr(c), n) for c, n, k in zip(cps, nxt, keep) if k]
+    return "".join(c for c, _ in out), [n for _, n in out]
+
+
+def join_letters(letters: list[int]) -> tuple[list[int], list[bool], list[bool]]:
+    """PeText_Join letter by letter: (each letter's shape, whether it is kept (marks and the alef
+    of a lam-alef go), whether it touches the next kept letter)."""
+    cps = list(letters)
     keep = [not is_mark(c) for c in cps]
     types = [join_type(c) if k else "U" for c, k in zip(cps, keep)]
     nxt = [False] * len(cps)
@@ -123,8 +131,7 @@ def join(letters: str) -> tuple[str, list[bool]]:
             continue
         alone = FORMS[c][0]
         cps[i] = alone + (3 if before and after else 1 if before else 2 if after else 0)
-    out = [(chr(c), n) for c, n, k in zip(cps, nxt, keep) if k]
-    return "".join(c for c, _ in out), [n for _, n in out]
+    return cps, keep, nxt
 
 
 # ---- ordering (PeText_Order) ----
