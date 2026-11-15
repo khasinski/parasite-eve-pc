@@ -961,7 +961,9 @@ done:
  * from the ordering table, not the renderer's record). With PsyZ's VRAM copy
  * on, the renderer also drops tile columns whose texels hold no picture; the
  * positions where that ends the picture short of the whole tiles are
- * counted. */
+ * counted. PE_WS_CAMERA_GRID also checks the top, middle and bottom camera
+ * bounds; PE_WS_REPORT exports samples for artwork triage (consume only after
+ * a successful process exit). This is a tile-linking test, not GPU visual QA. */
 #include <psyz/gpu.h>
 #include <psyz/video.h>
 #include "pe1/geom_state.h"
@@ -1027,6 +1029,10 @@ static int original_widescreen_rooms(void)
     unsigned barred_before=0,barred_now=0,rooms_barred_before=0,rooms_barred_now=0;
     unsigned trimmed=0,rooms_trimmed=0,past_black=0,rooms_past_black=0,animation_states=0;
     int animated=getenv("PE_WS_ANIMATIONS")!=NULL;
+    int camera_grid=getenv("PE_WS_CAMERA_GRID")!=NULL;
+    const char *report_path=getenv("PE_WS_REPORT");
+    FILE *report=report_path?fopen(report_path,"w"):NULL;
+    if(report_path && !report)goto done;
     if(!buffer || Asset_OpenPeImage()!=0 || Psyz_GpuSetVramCopy(1)!=0)goto done;
     Boot_InitGameState();D_8009CDC8='m';fx_image_io=1;
     g_ActiveDrawSlot=0;D_800B0E38.ordering[0]=ordering;
@@ -1048,6 +1054,8 @@ static int original_widescreen_rooms(void)
             g_GeomScroll.state.position.groupSelect=(u8)group;void *end=NULL;
             if(Render_DrawMeshList(buffer,&end) || (char *)end>(char *)buffer+buffer_size){fprintf(stderr,"Widescreen M%03u group%u: mesh list failed\n",map,group);goto done;}
             int low=g_GeomScroll.state.position.boundsMinX,high=g_GeomScroll.state.position.boundsMaxX;
+            int low_y=g_GeomScroll.state.position.boundsMinY,high_y=g_GeomScroll.state.position.boundsMaxY;
+            const int camera_y[]={low_y,(low_y+high_y)/2,high_y};
             GeomStateAddress controls;controls.state=state;controls.word+=state->ctrl_offset;
             unsigned poses=1;
             if(animated)for(unsigned c=0;c<state->entry_count;++c)
@@ -1077,6 +1085,9 @@ static int original_widescreen_rooms(void)
                         ++animation_states;break;
                     }
                 }
+            for(unsigned iy=0;iy<(camera_grid?3u:1u);++iy){
+                if(iy && camera_y[iy]==camera_y[iy-1])continue;
+                g_GeomScroll.state.position.y=(s16)camera_y[iy];
             for(int x=low;;x+=animated?(high-low+1)/2+1:8){
                 if(x>high)x=high;
                 g_GeomScroll.state.position.x=(s16)x;Render_ScrollEntries();
@@ -1114,6 +1125,10 @@ static int original_widescreen_rooms(void)
                 if(black_now!=0 && black_now!=2*(199-160)){
                     fprintf(stderr,"Widescreen M%03u group%u x%d: %d black, neither 16:9 nor 4:3 (span %d..%d)\n",
                         map,group,x,black_now,left,right);goto done;}
+                if(report && fprintf(report,
+                    "{\"map\":%u,\"group\":%u,\"pose\":%u,\"x\":%d,\"y\":%d,"
+                    "\"left\":%d,\"right\":%d,\"full_16_9\":%s,\"native_tiles_preserved\":true}\n",
+                    map,group,pose,x,camera_y[iy],left,right,black_now?"false":"true")<0)goto done;
                 barred_before+=black_before>0;barred_now+=black_now>0;
                 room_black_before=black_before>room_black_before?black_before:room_black_before;
                 room_black_now=black_now>room_black_now?black_now:room_black_now;
@@ -1121,6 +1136,7 @@ static int original_widescreen_rooms(void)
                 widest=widest>right-left?widest:right-left;narrowest=narrowest&&narrowest<right-left?narrowest:right-left;
                 ++positions;
                 if(x==high)break;
+            }
             }
             }
             for(unsigned e=0;e<state->entry_count06;++e)address.entry[e].head.b.flags=saved_flags[e];
@@ -1143,6 +1159,7 @@ static int original_widescreen_rooms(void)
     printf("Widescreen animation: %u authored controller states checked%s\n",animation_states,animated?" at camera start, middle and end":" (static pass)");
     result=rooms==0 || (animated && !animation_states);
 done:
+    if(report && fclose(report))result=1;
     Psyz_VideoSetWidescreen(0);Psyz_GpuSetVramCopy(0);free(buffer);
     fx_image_io=0;CdRom_BindImage(NULL,NULL);g_CdImageVolumes[0]=NULL;pe_disc_close(&disc);
     return result;

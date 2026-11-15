@@ -320,3 +320,25 @@ coherent foregrounds and underlays, controller timing, camera extremes, actor
 occlusion and verified versioned distribution. It never marks a view runtime
 verified from its dimensions. Regression: `python tests/hd_widescreen_catalog.py`
 (Pillow, NumPy and OpenCV required).
+
+
+The original renderer can export camera coverage samples without opening a game
+window. Build `test-original-actor-animation` with `BUILD_TESTING=ON`, then run:
+
+```sh
+PSYZ_HEADLESS=1 SDL_AUDIODRIVER=dummy PE_TEST_DISC="DISC.cue" \
+PE_WS_CAMERA_GRID=1 PE_WS_ANIMATIONS=1 PE_WS_REPORT=coverage.jsonl \
+./build/test-original-actor-animation --widescreen-rooms
+```
+
+Consume the report only after the process exits successfully. Each JSON line
+identifies a numeric room-table map, mesh group, controller pose, camera X/Y,
+reported picture span and whether that sample supports the full 16:9 view.
+Maps 410 onward use the asset catalog's `E00` onward labels. The camera grid
+checks vertical start/middle/end; animation mode checks each authored controller
+phase individually with other controllers at their default state. It also
+asserts that original 4:3 tile packets retain their screen positions.
+This checks the original tile-linking path and coverage bands; GPU pixels,
+script-switched layers, palette changes and combined animation timing still
+need separate review. Use a current executable with PEW2 support for foreground
+side-layer GPU checks; an older executable can silently fall back to 4:3.
