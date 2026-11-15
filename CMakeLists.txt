@@ -609,7 +609,11 @@ if(BUILD_TESTING)
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy;SDL_VIDEODRIVER=dummy"
         LABELS "audio")
 
-    pe_add_common_unit_test(test-original-input-rules original-game-input-rules tests/original_input_rules.c)
+    # The frame's pad mapping reads the mouse (mouse_input.c), whose menu pointing plays the
+    # menu's move sound (Akao_SendTableCommand, in the disc objects).
+    pe_add_common_unit_test(test-original-input-rules original-game-input-rules tests/original_input_rules.c
+        $<TARGET_OBJECTS:parasite-eve-original-disc>
+        $<TARGET_OBJECTS:parasite-eve-original-akao>)
 
     add_executable(test-host-settings tests/original_input_rules.c ${PE_COMMON_GAME_OBJECTS})
     target_compile_definitions(test-host-settings PRIVATE PE_HOST_SETTINGS_TEST=1 __psyz)
