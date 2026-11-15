@@ -128,14 +128,16 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     add_test(NAME pe-mod-frequency COMMAND pe-mod-frequency)
 endif()
 
-if(BUILD_TESTING)
-    # Font pictures: the reader, the page writes, and the shipped mods/fonts/ pictures.
+# Font pictures: the reader, the page writes, and the shipped mods/fonts/ pictures.
+if(BUILD_TESTING AND "pe_fonts" IN_LIST PE_MOD_LIST)
     add_executable(test-mod-fonts ${PROJECT_SOURCE_DIR}/tests/pe_mod_fonts_test.c pe_fonts/pe_fonts_sheet.c)
     target_include_directories(test-mod-fonts PRIVATE pe_fonts)
     target_compile_options(test-mod-fonts PRIVATE $<IF:$<BOOL:${MSVC}>,/UNDEBUG,-UNDEBUG>)
     target_link_libraries(test-mod-fonts PRIVATE SDL3::SDL3)
     add_test(NAME mod-fonts COMMAND test-mod-fonts "${PROJECT_SOURCE_DIR}/mods/fonts")
+endif()
 
+if(BUILD_TESTING)
     add_executable(test-mod-settings ${PROJECT_SOURCE_DIR}/tests/original_input_rules.c)
     target_include_directories(test-mod-settings PRIVATE ${PROJECT_SOURCE_DIR}/include host)
     target_compile_definitions(test-mod-settings PRIVATE PE_MOD_SETTINGS_TEST=1 __psyz)
