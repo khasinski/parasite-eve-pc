@@ -9,6 +9,7 @@
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_atb_items.h"
+#include "pe_services.h"
 #include "pe1/menu_state.h"
 #include "pe1/battle_status.h"
 #define PE_AYA_SLOT_COUNT 50
@@ -312,7 +313,10 @@ void pe_atb_items_shutdown(void) {
     if (s_st.tinted && s_st.have_normal) pe_bar_colors(0, NULL);
     pe_reset();
 }
+static int pe_partial_actions(void) { return s_enabled && (pe_any_allowed() || g_pe_quick_mask); }
+static const PeBattleActionPolicyApi s_action_policy = { pe_partial_actions };
 void pe_atb_items_register(const char *mod_id) {
+    pe_service_publish("battle_action_policy", 1, &s_action_policy, mod_id);
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_atb_update, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_POWER_AVAILABLE, pe_power_available, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_FRAME, pe_atb_frame, NULL, PE_PRIORITY_LATE, mod_id);

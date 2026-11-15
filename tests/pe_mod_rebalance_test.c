@@ -85,6 +85,26 @@ static void setup(void){
     e->field04.bytes.kind=1;e->coreFlags=0x10000;
     g_BattleEnemySlots[0].active=1;g_BattleHitPending=0;
 }
+static int boundary_input,boundary_ordinary;
+static int damage_boundary(void *ctx,void *user){
+    PeHookEnemyDamage *q=ctx;(void)user;
+    assert(q->source==&aya && q->target==&target);
+    boundary_input=*q->damage;boundary_ordinary=q->ordinary;
+    if(q->ordinary)*q->damage=7;
+    return 0;
+}
+static void native_damage_boundary(void){
+    setup();Battle_StepEnemyMovement(&target);
+    int baseline=1000-((EnemyCombatant*)target.core)->hpAlive;
+    setup();hooks[PE_HOOK_ENEMY_DAMAGE]=damage_boundary;
+    Battle_StepEnemyMovement(&target);
+    assert(boundary_input==baseline && boundary_ordinary && ((EnemyCombatant*)target.core)->hpAlive==993);
+    setup();((EnemyCombatant*)target.core)->statusFlags2|=0x01000000u;
+    Battle_StepEnemyMovement(&target);assert(!boundary_ordinary);
+    setup();aya.stateFlags|=0x80000u;
+    Battle_StepEnemyMovement(&target);assert(!boundary_ordinary);
+    hooks[PE_HOOK_ENEMY_DAMAGE]=NULL;
+}
 static void vanilla(void){
     setting("Rules",0);setup();tick();
     /* Scripts can choose an action hold different from the factory table. */
@@ -100,6 +120,7 @@ static void vanilla(void){
         assert(!memcmp(target.core,&expected,sizeof expected));assert(!memcmp(&action,&expected_action,sizeof action));assert((unsigned)rand()==random_after);++cases;
     }
     printf("Vanilla: authored animation holds and %u original damage/status/RNG cases preserved\n",cases);
+    native_damage_boundary();
 }
 static void scoped(void){
     setting("Rules",1);setup();tick();action.turnWord|=0x100;

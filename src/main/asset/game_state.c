@@ -37,7 +37,32 @@ AkaoVoiceBankEntry g_AkaoVoiceBankEntries[20] = {
     {0,0,0x17,0,{1000,1000}}, {0,0,0x17,9,{1001,1001}}
 };
 
-static int Asset_ReadPeImage(PeDisc *disc, unsigned *identity, int mount)
+extern const char *g_MemCardFilenameFormatPtr;
+extern const char g_MemCardFilenameFormatUsa[], g_MemCardFilenameFormatJapan[];
+
+/* Where each release keeps the five tables read below: rooms, PE.IMG sectors, the audio
+ * directory and the two menu widget sets. The Japanese executable is the same program with
+ * these 0x538 bytes earlier. */
+typedef struct { u32 rooms, sectors, audio, simple, grid; } PeExecutableTables;
+static const PeExecutableTables kExecutableTables[2] = {
+    [PE_REGION_USA] = {0x80093378u, 0x800930d8u, 0x8009317cu, 0x80092478u, 0x80092888u},
+    [PE_REGION_JAPAN] = {0x80092e40u, 0x80092ba0u, 0x80092c44u, 0x80091f40u, 0x80092350u},
+};
+
+/* SLPS_012.30 / SLPS_012.31 are the Japanese discs; everything else is read as USA. */
+static unsigned Asset_ExecutableRegion(const char *path)
+{
+    const char *name = path;
+    for (const char *p = path; *p; ++p) if (*p == '\\' || *p == '/') name = p + 1;
+    char upper[16];
+    size_t n = 0;
+    for (; name[n] && n + 1 < sizeof(upper); ++n)
+        upper[n] = (char)(name[n] >= 'a' && name[n] <= 'z' ? name[n] - 32 : name[n]);
+    upper[n] = 0;
+    return !strcmp(upper, "SLPS_012.30") || !strcmp(upper, "SLPS_012.31") ? PE_REGION_JAPAN : PE_REGION_USA;
+}
+
+static int Asset_ReadPeImage(PeDisc *disc, unsigned *identity, unsigned *region_out, int mount)
 {
     PeDiscFile archive, marker;
     unsigned flags = 0;
@@ -75,13 +100,15 @@ static int Asset_ReadPeImage(PeDisc *disc, unsigned *identity, int mount)
         !pe_disc_read(disc, &executable, 0, header, sizeof(header)) || memcmp(header,"PS-X EXE",8)) return -3;
     u32 base=(u32)header[24]|(u32)header[25]<<8|(u32)header[26]<<16|(u32)header[27]<<24;
     u32 bytes=(u32)header[28]|(u32)header[29]<<8|(u32)header[30]<<16|(u32)header[31]<<24;
-    if (base>0x800930d8u || bytes<sizeof(room_data) || 0x80093378u-base>bytes-sizeof(room_data) ||
+    const unsigned region = Asset_ExecutableRegion(executable_path);
+    const PeExecutableTables *at = &kExecutableTables[region];
+    if (base>at->simple || bytes<sizeof(room_data) || at->rooms-base>bytes-sizeof(room_data) ||
         (u64)bytes+0x800>executable.size ||
-        !pe_disc_read(disc,&executable,0x800ull+0x80093378u-base,room_data,sizeof(room_data)) ||
-        !pe_disc_read(disc,&executable,0x800ull+0x800930d8u-base,sector_data,sizeof(sector_data)) ||
-        !pe_disc_read(disc,&executable,0x800ull+0x8009317cu-base,audio_data,sizeof(audio_data)) ||
-        !pe_disc_read(disc,&executable,0x800ull+0x80092478u-base,simple,sizeof(simple)) ||
-        !pe_disc_read(disc,&executable,0x800ull+0x80092888u-base,grid,sizeof(grid))) return -3;
+        !pe_disc_read(disc,&executable,0x800ull+at->rooms-base,room_data,sizeof(room_data)) ||
+        !pe_disc_read(disc,&executable,0x800ull+at->sectors-base,sector_data,sizeof(sector_data)) ||
+        !pe_disc_read(disc,&executable,0x800ull+at->audio-base,audio_data,sizeof(audio_data)) ||
+        !pe_disc_read(disc,&executable,0x800ull+at->simple-base,simple,sizeof(simple)) ||
+        !pe_disc_read(disc,&executable,0x800ull+at->grid-base,grid,sizeof(grid))) return -3;
     for(unsigned i=0;i<SCENE_ROOM_COUNT;++i) {
         const u8 *p=room_data+i*8;
         ranges[i].start=(u32)p[0]|(u32)p[1]<<8|(u32)p[2]<<16|(u32)p[3]<<24;
@@ -101,7 +128,10 @@ static int Asset_ReadPeImage(PeDisc *disc, unsigned *identity, int mount)
         previous=boundary;
     }
     if(identity)*identity=flags;
+    if(region_out)*region_out=region;
     if(!mount)return 0;
+    g_GameRegion = (u8)region;
+    g_MemCardFilenameFormatPtr = region == PE_REGION_JAPAN ? g_MemCardFilenameFormatJapan : g_MemCardFilenameFormatUsa;
     memcpy(g_RoomSectorTable,ranges,sizeof(ranges));memcpy(g_PeImageSectorTable,sectors,sizeof(sectors));
     memcpy(g_SceneSectorDirectory,audio_data,sizeof(audio_data));
     memcpy(g_MenuWidgetSimpleDescriptors,simple,sizeof(simple));
@@ -116,12 +146,18 @@ static int Asset_ReadPeImage(PeDisc *disc, unsigned *identity, int mount)
 int Asset_ValidatePeImage(PeDisc *disc, unsigned *identity)
 {
     if(identity)*identity=0;
-    return Asset_ReadPeImage(disc,identity,0);
+    return Asset_ReadPeImage(disc,identity,NULL,0);
+}
+int Asset_ValidatePeImageRegion(PeDisc *disc, unsigned *identity, unsigned *region)
+{
+    if(identity)*identity=0;
+    if(region)*region=PE_REGION_USA;
+    return Asset_ReadPeImage(disc,identity,region,0);
 }
 int Asset_OpenPeImage(void)
 {
     g_PeImageMountFlags=0;
-    return Asset_ReadPeImage(g_CdImage,NULL,1);
+    return Asset_ReadPeImage(g_CdImage,NULL,NULL,1);
 }
 
 /* File images need no tray notice or physical-disc command queue. */
@@ -163,7 +199,9 @@ void Boot_FinishFrame(void) {
         g_RenderDrawEnvArray[g_ActiveDrawSlot].dfe = 0;
         Akao_Cmd_99_9B_9D(0);
     }
-    if (g_GameStateFlags & 0x20) {
+    /* The Japanese release sends the second fade command only in a frame without the first one. */
+    if ((g_GameStateFlags & 0x20) &&
+        (!PE_JAPAN || (!(g_GameState.flags & 0x200) && !(g_GameStateFlags & 0x10)))) {
         Akao_Cmd_98_9A_9C(0);
     }
 }

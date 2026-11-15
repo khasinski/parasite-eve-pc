@@ -102,7 +102,9 @@ python -I pelang.py build fr.csv --strings out/text/strings.json --lang fr --nam
    the boxes it shows in, `banks.json` (each message bank's CRC32), `menu_glyphs.json` (the menus'
    glyph widths), plus the item reports. Keys: `sys/NNN`, `item/NNN`, `desc/NNN`, `misc/NNN`
    for the resident text tables, `dlg/MNNN/PPP` for room dialogue (the message bank first used by
-   room MNNN, page PPP), `battle/NNN` for the battle messages (below). The 148 table slots that
+   room MNNN, page PPP; `dlg/MAP/PPP` is the city map's bank in PE.IMG entry 76: the place title
+   shown on arrival and the map's narration, centred by `pelang.py build` when typed as words only,
+   petext/citymap.py), `battle/NNN` for the battle messages (below). The 148 table slots that
    hold filler the game never shows are left out.
 2. **Template.** `pelang.py template` writes the translator CSV: key, English, Japanese (for
    reference), translation, box, widest line, rooms, notes. `--merge old.csv` carries the
@@ -277,6 +279,14 @@ the translations, a pack holds one `bank/<crc32>` entry per message bank, whose 
 key in ASCII (`M001`).
 
 ## The Japanese source
+
+**The Japanese discs themselves** can also be played (pe1/pe_image.h, `g_GameRegion`): the game reads
+their executable's tables, shows the rooms' Japanese bank with the language index at 0, and draws
+the Japanese font with the Japanese box rule (codes 10-4B with their own spacing, everything else,
+two-byte letters included, as 12 px cells on a 14 px pitch; 14 px lines). Language packs are never
+used with them: `pe_lang` keeps its saved choice but answers none of its hooks, asks nothing, puts
+no letter on the font page (whose cells past 4C hold the kana and kanji) and no picture into the
+disc reads. The extraction tools below read the Japanese discs as before.
 
 `extract_text.py --ja` reads the Japanese release (SLPS-01230 / 01231) and puts each Japanese line
 on the same key as its US line. The Japanese scripts open the same pages in the same order as the

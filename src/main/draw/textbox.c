@@ -4,6 +4,7 @@
 #include "pe1/mod_text.h"
 #include "pe1/draw_state.h"
 #include "pe1/boot_disc_check.h"
+#include "pe1/pe_image.h"
 #include "pe1/field_pad.h"
 #include "pe1/menu_flags.h"
 #include "pe1/psyq_bios.h"
@@ -381,7 +382,7 @@ void Menu_DrawTextboxEntries(void) {
         if (g_TextboxEntries[textboxIndex].state != 0) {
             orderingTable = D_800B0E38.ordering[g_ActiveDrawSlot] + 1;
             textbox = &g_TextboxEntries[textboxIndex];
-            glyphWidth = 12;
+            glyphWidth = PE_JAPAN ? 14 : 12;   /* the Japanese box sets 12 px cells on a 14 px pitch */
             stopDrawing = 0;
             if (textbox->state == 1) {
                 textbox->control.parts.delay = 0U;
@@ -448,7 +449,7 @@ void Menu_DrawTextboxEntries(void) {
             number = numberStart;
             glyphAdvance = glyphWidth;
             currentPacket = nextPacket;
-            lineHeight = 12;
+            lineHeight = PE_JAPAN ? 14 : 12;
             for (;;) {
                 font = &g_TextboxFontPages[0];
                 temp_v1_3 = *stream;
@@ -645,7 +646,7 @@ void Menu_DrawTextboxEntries(void) {
                         selectionFrame = g_ActiveDrawSlot;
                         selectionSprite = &g_TextboxChoiceCursor[selectionFrame].sprite;
                         selectionSprite->x = selectionCursor->x;
-                        selectionSprite->y = (s16)(selectionCursor->y + ((s8)g_DialogueChoiceCursor * 12));
+                        selectionSprite->y = (s16)(selectionCursor->y + ((s8)g_DialogueChoiceCursor * (PE_JAPAN ? 14 : 12)));
                         AddPrim(D_800B0E38.ordering[selectionFrame] + 1,
                                 &g_TextboxChoiceCursor[selectionFrame]);
                         break;
@@ -660,7 +661,7 @@ void Menu_DrawTextboxEntries(void) {
                     break;
             }
             if (rtl && Textbox_EmitLine(right, cursor.y, &nextPacket, packetLimit, orderingTable) < 0) return;
-            glyphWidth = 12;
+            glyphWidth = PE_JAPAN ? 14 : 12;
             if (textbox->state == 1) {
                 textbox->state = 2U;
             }

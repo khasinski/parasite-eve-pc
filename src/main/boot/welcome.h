@@ -57,7 +57,7 @@ static void Welcome_Row(int row, const char **label, const char **value, Color *
         if (!s_welcome.disc_state[row]) {
             *value = row ? "Not set (can wait)" : "Not set";
         } else if (s_welcome.disc_state[row] < 0) {
-            *value = row ? "Not the USA Disc 2" : "Not the USA Disc 1";
+            *value = row ? "Not Disc 2 of this release" : "Not a Disc 1";
             *valueColor = kDanger;
         } else {
             const char *file = Welcome_FileName(s_welcome.disc[row]);
@@ -90,7 +90,7 @@ static void Welcome_Help(const char **first, const char **second) {
         return;
     }
     if (s_welcome.row < 2) {
-        *first = "Choose the Parasite Eve (USA) CUE or BIN image for this disc.";
+        *first = "Choose the Parasite Eve CUE or BIN image for this disc (USA or Japanese).";
         *second = s_welcome.portable ? "Keep it inside the game folder so the portable copy finds it."
                                      : "Picking the other disc by mistake puts it in its own slot.";
     } else if (s_welcome.row == 2) {
@@ -120,7 +120,7 @@ static void Welcome_Paint(OverlaySurface *surface, const OverlayLayout *layout) 
     DrawText(surface, (float)OVERLAY_PAD * s, 84.0f * s, 16.0f * s,
              s_welcome.step == 0 ? s_welcome.full ? "A short setup before the first start. Where should the game keep"
                                                   : "Setting up again. Where should the game keep"
-                                 : "Point the game at your Parasite Eve (USA) disc images.",
+                                 : "Point the game at your Parasite Eve disc images (USA or Japanese).",
              WithAlpha(kText, 0.82f), ALIGN_LEFT);
     DrawText(surface, (float)OVERLAY_PAD * s, 108.0f * s, 16.0f * s,
              s_welcome.step == 0 ? "your settings, saves and mods?" : "CUE or BIN files, as dumped from your own discs.",
