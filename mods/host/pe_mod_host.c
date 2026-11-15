@@ -34,6 +34,9 @@
 extern const PeMod *const g_pe_mods[]; /* generated: pe_mod_list.c */
 
 enum { PE_MAX_HANDLERS = 256, PE_MAX_EVENTS = 64, PE_MAX_SERVICES = 32, PE_MAX_MODS = 32 };
+/* Every mod of the build, filled when the mods start. Code a hook can reach reads this, not
+ * g_pe_mods: naming that table links every mod into whatever calls a hook. */
+static const PeMod *s_mods[PE_MAX_MODS];
 
 typedef struct {
     int id, priority, order;
@@ -120,7 +123,7 @@ static int pe_manage_requested(int i, unsigned visiting);
 static int s_manage_count;
 int pe_mod_requested(const char *mod_id) {
     for (int i = 0; mod_id && i < s_manage_count; i++)
-        if (!strcmp(g_pe_mods[i]->id, mod_id)) return pe_manage_requested(i, 0);
+        if (!strcmp(s_mods[i]->id, mod_id)) return pe_manage_requested(i, 0);
     return 0;
 }
 
@@ -219,9 +222,6 @@ static const char *s_inited_ids[PE_MAX_MODS];
 static int s_inited_count;
 static const char *s_current_mod;          /* the mod whose init is running */
 static const char *s_alone_mod;            /* asked to run alone (pe_mod_run_alone) */
-/* Every mod of the build, filled when the mods start. Code a hook can reach reads this, not
- * g_pe_mods: naming that table links every mod into whatever calls a hook. */
-static const PeMod *s_mods[PE_MAX_MODS];
 static int s_mod_state[PE_MAX_MODS], s_mod_count;
 
 int pe_mod_run_alone(void) {
@@ -303,7 +303,7 @@ enum { PE_MOD_RUNNING, PE_MOD_OFF, PE_MOD_NEEDS, PE_MOD_FAILED, PE_MOD_ALL_OFF, 
 static int pe_mod_needs_master(const PeMod *mod) { return strcmp(mod->id, "pe_lang") != 0; }
 static int pe_manage_requested(int i, unsigned visiting) {
     const char *const *req; int j;
-    if((!s_all_on && pe_mod_needs_master(g_pe_mods[i])) || !s_mod_on[i] || (visiting & (1u << i)))return 0;
+    if((!s_all_on && pe_mod_needs_master(s_mods[i])) || !s_mod_on[i] || (visiting & (1u << i)))return 0;
     visiting |= 1u << i;
     for(req=s_mods[i]->requires;req && *req;req++) {
         for(j=0;j<s_manage_count;j++)if(!strcmp(*req,s_mods[j]->id))break;
@@ -326,7 +326,7 @@ void pe_mod_manage_refresh(void) {
     snprintf(s_all_note,sizeof(s_all_note),"Master now: %s. Next launch: %s. %s",s_boot_all?"On":"Off",s_all_on?"On":"Off",pending?"Restart game to apply.":"No pending change.");
     for(i=0;i<s_manage_count;i++) {
         int requested=pe_manage_requested(i,0);
-        snprintf(s_mod_note[i],sizeof(s_mod_note[i]),"%s %s. Now: %s. Next launch: %s. %s",g_pe_mods[i]->id,g_pe_mods[i]->version,now[s_boot_state[i]],requested?"enabled":(!s_all_on&&pe_mod_needs_master(g_pe_mods[i])?"master Off":(!s_mod_on[i]?"Off":"dependency blocked")),pending?"Restart game to apply.":"Startup activation; settings do not hot-start mods.");
+        snprintf(s_mod_note[i],sizeof(s_mod_note[i]),"%s %s. Now: %s. Next launch: %s. %s",s_mods[i]->id,s_mods[i]->version,now[s_boot_state[i]],requested?"enabled":(!s_all_on&&pe_mod_needs_master(s_mods[i])?"master Off":(!s_mod_on[i]?"Off":"dependency blocked")),pending?"Restart game to apply.":"Startup activation; settings do not hot-start mods.");
     }
 #ifdef PE_PS5_PLUGINS
     if(changed && log_budget) {
@@ -355,9 +355,9 @@ static void pe_manage_register(int mod_count) {
         s_mod_on[i] = 1;
 #ifdef PE_PS5_PLUGINS
         /* Balance changes require an explicit per-mod choice on PS5. */
-        if (!strcmp(g_pe_mods[i]->id, "pe_rebalance")) s_mod_on[i] = 0;
+        if (!strcmp(s_mods[i]->id, "pe_rebalance")) s_mod_on[i] = 0;
 #endif
-        pe_menu_register_toggle(0, g_pe_mods[i]->name, s_mod_note[i], &s_mod_on[i], NULL);
+        pe_menu_register_toggle(0, s_mods[i]->name, s_mod_note[i], &s_mod_on[i], NULL);
     }
     pe_menu_begin(0);
 }
@@ -431,7 +431,7 @@ static void pe_start_mods(void) {
     while (progress) {
         progress = 0;
         for (i = 0; i < mod_count; i++) {
-            const PeMod *mod = g_pe_mods[i];
+            const PeMod *mod = s_mods[i];
             int ok;
             if (tried[i] || !pe_requires_inited(mod)) continue;
             tried[i] = progress = 1;
@@ -455,7 +455,7 @@ static void pe_start_mods(void) {
     for (i = 0; i < mod_count; i++)
         if (!tried[i]) {
             state[i] = PE_MOD_NEEDS;
-            pe_mod_log(g_pe_mods[i]->id, "missing a required mod, mod off");
+            pe_mod_log(s_mods[i]->id, "missing a required mod, mod off");
         }
     /* A running mod that asked to run alone: every other one goes back to inactive (inits only
      * register, so nothing of theirs has touched the game yet). */
@@ -655,8 +655,8 @@ int pe_mod_snapshot_save_tail(unsigned char *block) {
 static const char *pe_mod_label(const char *mod_id) {
     int i;
     if (!mod_id || !strcmp(mod_id, "host") || !strcmp(mod_id, "menu")) return "the mod host";
-    for (i = 0; g_pe_mods[i] && i < PE_MAX_MODS; i++)
-        if (!strcmp(g_pe_mods[i]->id, mod_id)) return g_pe_mods[i]->name;
+    for (i = 0; s_mods[i] && i < PE_MAX_MODS; i++)
+        if (!strcmp(s_mods[i]->id, mod_id)) return s_mods[i]->name;
     return mod_id;
 }
 
@@ -671,8 +671,8 @@ void pe_mod_crash_describe(char *out, size_t size, int on_game_thread) {
 
     PE_OUT("Mod API %d, mod host %s, All mods %s\r\n", PE_MOD_API_VERSION, s_started ? "started" : "not started yet",
            s_all_on ? "on" : s_running_count ? "off (only Language packs ran)" : "off (mods did not touch the game)");
-    for (i = 0; g_pe_mods[i] && i < PE_MAX_MODS; i++)
-        PE_OUT("  %s: %s\r\n", g_pe_mods[i]->name, s_mod_note[i][0] ? s_mod_note[i] : g_pe_mods[i]->id);
+    for (i = 0; s_mods[i] && i < PE_MAX_MODS; i++)
+        PE_OUT("  %s: %s\r\n", s_mods[i]->name, s_mod_note[i][0] ? s_mod_note[i] : s_mods[i]->id);
 
     if (!depth) {
         PE_OUT("Mod code running at the crash: none.%s\r\n",
@@ -759,7 +759,7 @@ static char s_state_blocker_text[128];
 int pe_mod_state_options(uint32_t out[4]){s_state_blocker=0;s_state_blocker_mod=0;
 #define STATE_DENY(reason) do{s_state_blocker=(reason);return 0;}while(0)
  if(!out||!s_started)STATE_DENY(1);if(s_call_depth||s_current_mod)STATE_DENY(2);if(!pe_mod_state_panel_closed())STATE_DENY(3);if(!pe_save_state_idle())STATE_DENY(4);
- for(int i=0;i<s_manage_count;i++){const char *id=g_pe_mods[i]->id;if(strcmp(id,"pe_assists")&&strcmp(id,"pe_qol")&&strcmp(id,"pe_rebalance")&&strcmp(id,"pe_economy")&&strcmp(id,"pe_collection"))STATE_DENY(5);}
+ for(int i=0;i<s_manage_count;i++){const char *id=s_mods[i]->id;if(strcmp(id,"pe_assists")&&strcmp(id,"pe_qol")&&strcmp(id,"pe_rebalance")&&strcmp(id,"pe_economy")&&strcmp(id,"pe_collection"))STATE_DENY(5);}
  for(int i=0;i<s_handler_count;i++)if(s_handlers[i].active&&s_handlers[i].mod_id){const char *id=s_handlers[i].mod_id;if(strcmp(id,"host")&&strcmp(id,"menu")&&strcmp(id,"present")&&strcmp(id,"pe_assists")
 #if PE_NATIVE_STATE_QOL
  &&strcmp(id,"pe_qol")
@@ -875,7 +875,7 @@ void pe_mod_state_after_restore(void){/* Pure derived-cache reset on both target
 int pe_mod_master_active_now(void){return s_boot_all;}
 int pe_mod_master_requested(void){return s_all_on;}
 void pe_mod_master_toggle_next_launch(void){if(!s_manage_ready)return;s_all_on=!s_all_on;pe_mod_manage_refresh();pe_menu_save_settings();}
-int pe_mod_request_assists_only(void){if(!s_manage_ready)return 0;int found=0;for(int i=0;i<s_manage_count;i++)if(!strcmp(g_pe_mods[i]->id,"pe_assists"))found=1;if(!found)return 0;for(int i=0;i<s_manage_count;i++)s_mod_on[i]=!strcmp(g_pe_mods[i]->id,"pe_assists");s_all_on=1;pe_mod_manage_refresh();pe_menu_save_settings();return 1;}
+int pe_mod_request_assists_only(void){if(!s_manage_ready)return 0;int found=0;for(int i=0;i<s_manage_count;i++)if(!strcmp(s_mods[i]->id,"pe_assists"))found=1;if(!found)return 0;for(int i=0;i<s_manage_count;i++)s_mod_on[i]=!strcmp(s_mods[i]->id,"pe_assists");s_all_on=1;pe_mod_manage_refresh();pe_menu_save_settings();return 1;}
 #endif
 
 int pe_mod_data_available(const char *owner) {
