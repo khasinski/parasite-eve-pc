@@ -4061,13 +4061,17 @@ static int Host_TestSave(void) {
     if (io && !SDL_CloseIO(io)) ok = 0;
     if (ok) {
 #ifdef PE_MODS
-        ok = pe_mod_save_publish(temporary,target);
-        if(ok)pe_mod_save_committed(target);
+        ok = pe_mod_save_publish(temporary, target);
+        if (ok) pe_mod_save_committed(target);
 #else
         SDL_RemovePath(target);
-        ok = SDL_RenamePath(temporary,target);
+        ok = SDL_RenamePath(temporary, target);
 #endif
     }
+#ifdef PE_MODS
+    /* As the save menu does: a failed save must not leave a staged companion behind. */
+    if (!ok) pe_mod_save_cancelled();
+#endif
     if (!ok) SDL_RemovePath(temporary);
     fprintf(stderr, "Test save: %s %s at VBlank %u\n", ok ? "wrote" : built < 0 ? "refused" : "failed to write",
             target, (unsigned)g_BootHostVBlankCount);

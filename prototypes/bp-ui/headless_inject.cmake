@@ -1,12 +1,20 @@
-# This explicit BP build follows the complete current upstream suite.
-# Drop stale minimal-preview caches; append BP without duplicating upstream's list.
-unset(PE_MOD_LIST CACHE)
+# This explicit BP build follows the complete current upstream suite plus pe_bp.
+# pe_bp is appended as a normal (directory-scoped) variable, never written to the
+# cache: configuring the same build dir without this file builds the default list.
+# The linker wrappers below need GNU ld/lld; Apple ld64 has no --wrap.
+include(CheckLinkerFlag)
+check_linker_flag(C "-Wl,--wrap=pe_host_init" BP_UI_LINKER_HAS_WRAP)
+if(NOT BP_UI_LINKER_HAS_WRAP)
+    message(WARNING "BP UI headless preview skipped: the linker does not support "
+        "-Wl,--wrap (Apple ld64 on macOS). Use GNU ld or lld (Linux, Windows "
+        "clang/MinGW). This build is the normal game with the default mod list.")
+    return()
+endif()
 set(PE_EXTRA_MODS ${PE_EXTRA_MODS} pe_bp)
 list(REMOVE_DUPLICATES PE_EXTRA_MODS)
-set(PE_EXTRA_MODS "${PE_EXTRA_MODS}" CACHE STRING "Additional mods appended to the configured suite" FORCE)
 # Explicit developer-only injection. Production CMake and mod lists stay untouched.
 # Configure the game with -DCMAKE_PROJECT_parasite-eve-pc_INCLUDE=<this file>.
-# The live backend is the pe_bp mod (mods/pe_bp); add it to PE_MOD_LIST for live data.
+# The live backend is the pe_bp mod (mods/pe_bp), appended to PE_EXTRA_MODS above.
 function(bp_ui_headless_attach)
     if(NOT TARGET pe-mods OR NOT TARGET parasite-eve-pc)
         message(FATAL_ERROR "BP UI headless preview requires PE_MODS=ON")

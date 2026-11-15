@@ -36,8 +36,10 @@ can actually verify persistent extension records.
 ## Full PE Enhancements suite (r11)
 
 The explicit BP build now uses the current upstream default mod list plus
-pe_bp through PE_EXTRA_MODS. Stale three-module caches are cleared by the
-explicit injection file; upstream defaults stay in mods/CMakeLists.txt. The
+pe_bp through PE_EXTRA_MODS. The injection file appends pe_bp as a
+non-cached variable, so the build dir never remembers it; build_headless.ps1
+clears stale PE_MOD_LIST/PE_EXTRA_MODS caches. Upstream defaults stay in
+mods/CMakeLists.txt. The
 build includes QoL, Rebalance, Economy, Rewards, Catalog, Shops, Collection,
 Wardrobe, Stacks, Warp, Quicksave, Cheats, Phone, Language and BP.
 
@@ -221,7 +223,8 @@ wrapping, F1-only settings and no-op transactions.
 
 headless_inject.cmake explicitly adds the preview to the test executable. The
 production root build and mod list remain unchanged. Clang/MinGW is the tested
-Windows toolchain; linker wrappers need a GNU-compatible linker.
+Windows toolchain; linker wrappers need a GNU-compatible linker (ld/lld). On
+macOS (Apple ld64) the injection file skips the preview with a warning.
 
 ~~~powershell
 ./prototypes/bp-ui/build_headless.ps1

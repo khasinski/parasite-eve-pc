@@ -75,3 +75,4 @@ test_regex*.py
 
 /BP-UI-Preview/
 /prototypes/bp-ui/userdata/
+/prototypes/bp-ui/preview.html
