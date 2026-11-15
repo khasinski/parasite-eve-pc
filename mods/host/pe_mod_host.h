@@ -48,13 +48,17 @@ const void *pe_service_get(const char *name, int version);
 
 int pe_mod_is_running(const char *mod_id);
 /* Every mod's init runs (its F1 pages exist), but only active mods touch the game: off in Manage
- * mods, with All mods off, or needing an inactive mod, a mod's handlers, ticks, services and
- * main-menu rows are skipped. pe_mod_current(): the mod whose init is running (owner of what it
+ * mods, with All mods off (Language packs aside: a language the player picked is no gameplay
+ * change), or needing an inactive mod, a mod's handlers, ticks, services and main-menu rows are
+ * skipped. pe_mod_current(): the mod whose init is running (owner of what it
  * registers), else NULL. pe_mod_active(): NULL and the host's own are always active. */
 const char *pe_mod_current(void);
 int pe_mod_data_available(const char *mod_id);
 int pe_mod_active(const char *mod_id);
 int pe_mod_interactive(void);
+/* Whether `mod_id` is set to run at this start (All mods where it counts, its own Manage mods row
+ * and the mods it needs). Known once the settings are read, so a mod's init can ask. */
+int pe_mod_requested(const char *mod_id);
 /* Refresh requested-vs-started mod notes; never starts/stops a mod. */
 void pe_mod_manage_refresh(void);
 int pe_mod_path(char *out, size_t size, const char *file);

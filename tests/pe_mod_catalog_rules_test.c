@@ -32,7 +32,17 @@ static int test_take(int l,int slot) {
 }
 static const PeStacksApi test_stacks={.take=test_take};
 const void *pe_service_get(const char *n,int v) { return (!strcmp(n,"stacks")&&v==1&&stack_extra>=0)?&test_stacks:NULL; }
+int pe_catalog_armor_unlocked(int effect);
+int pe_catalog_unlock_armor(int effect);
 int main(void) {
+    /* The "catalog" service (Requisition, battle rewards) and the Catalog's own install rule read
+     * one record: unlocking an economy effect sets that effect alone (issue #210). */
+    for (int e=PE_FX_BARGAIN;e<=PE_FX_SALVAGER;++e) {
+        pe_catalog_state()->bits[1]=0;
+        assert(pe_catalog_unlock_armor(e) && !pe_catalog_unlock_armor(e));
+        for (int k=1;k<32;++k) assert(pe_catalog_armor_unlocked(k)==(k==e) && pe_cat_unlocked(1,k)==(k==e));
+    }
+    pe_catalog_state()->bits[1]=0;
     g_AyaSaveState.inventory_slot_count=10;
     g_AyaSaveState.equipped_weapon_slot=0;g_AyaSaveState.equipped_armor_slot=1;
     bases[0x45]=(ItemDataRecord){.iconId=1,.itemId=0x45,.kind=1,.tailCount=3,.tailCapacity=3};

@@ -29,6 +29,7 @@
 #include "pe_wardrobe.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe1/game_state.h"
@@ -152,13 +153,14 @@ static int pe_needs_reload(const PeCostume *c) {
 
 static void pe_set_worn(const PeCostume *c, int now) {
     char msg[96];
+    if (pe_in_battle()) { pe_ward_say("Change costumes outside battle"); return; }
     const int reload = pe_needs_reload(c);
     pe_ward_profile_set_worn(c ? c->key : "");
     pe_ward_profile_save();
     pe_log("wardrobe", "wear=%s reload=%d", c ? c->key : "own", reload);
     pe_event_emit(s_event, (void *)c);
     if (!now) return;
-    snprintf(msg, sizeof msg, !reload || pe_reload() ? "Wearing %s" : "Wearing %s from the next room", c ? c->name : "Aya's own clothes");
+    snprintf(msg, sizeof msg, !reload || pe_reload() ? pe_l10n_ui("Wearing %s") : pe_l10n_ui("Wearing %s from the next room"), c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own clothes"));
     pe_ward_say(msg);
 }
 
@@ -182,7 +184,7 @@ static int pe_buy(const PeCostume *c, char *msg, size_t size) {
     }
     if (!pe_ward_spend(c->price)) {
         pe_ward_profile_cancel_owned();
-        snprintf(msg, size, "Need %u Junk (have %u)", (unsigned)c->price, pe_ward_junk()); goto done;
+        snprintf(msg, size, pe_l10n_ui("Need %u Junk (have %u)"), (unsigned)c->price, pe_ward_junk()); goto done;
     }
     if (!pe_ward_profile_commit_owned()) {
         int refunded = pe_ward_refund(c->price);
@@ -232,6 +234,11 @@ static void pe_filter(void) {
 
 static unsigned pe_count(void) { pe_filter(); return s_count ? (unsigned)s_count : 1u; }
 
+const PeCostume *pe_wardrobe_browsed(void) {
+    pe_filter();
+    return s_count ? s_costume[s_list[s_sel]] : NULL;
+}
+
 static const char *pe_state_name(const PeCostume *c) {
     if (pe_worn() == c) return "worn";
     if (pe_ward_profile_owned(c->key) || !c->price) return "owned";
@@ -242,15 +249,16 @@ static const char *pe_name(unsigned n) {
     const PeCostume *c;
     const char *state;
     pe_filter();
-    if (!s_count) return "None";
+    if (!s_count) return pe_l10n_ui("None");
     if (n >= (unsigned)s_count) n = 0;
     c = s_costume[s_list[n]];
-    if ((state = pe_state_name(c))) snprintf(s_name, sizeof s_name, "%s  [%s]  (%u/%d)", c->name, state, n + 1, s_count);
-    else snprintf(s_name, sizeof s_name, "%s  %u Junk  (%u/%d)", c->name, (unsigned)c->price, n + 1, s_count);
+    if ((state = pe_state_name(c))) snprintf(s_name, sizeof s_name, "%s  [%s]  (%u/%d)", pe_l10n_ui(c->name), state, n + 1, s_count);
+    else snprintf(s_name, sizeof s_name, "%s  %u Junk  (%u/%d)", pe_l10n_ui(c->name), (unsigned)c->price, n + 1, s_count);
     return s_name;
 }
 
 static void pe_accept(void) {
+    if (pe_in_battle()) { pe_ward_say("Change costumes outside battle"); return; }
     const PeCostume *c;
     char msg[96];
     pe_filter();
@@ -268,7 +276,7 @@ static void pe_default(void) {
 
 static void pe_status(char *out, unsigned size) {
     const PeCostume *c = pe_worn();
-    snprintf(out, size, "Wearing %s   Junk %u", c ? c->name : "Aya's own", pe_ward_junk());
+    snprintf(out, size, pe_l10n_ui("Wearing %s   Junk %u"), c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own"), pe_ward_junk());
 }
 
 static void pe_result(char *out, unsigned size) { snprintf(out, size, "%s", pe_ward_last_said()); }
@@ -286,7 +294,7 @@ static int pe_ward_count(void) { int n = 1, i; for (i = 0; i < s_costumes; ++i) 
 static const char *pe_ward_name(int k) {
     int own;
     const PeCostume *c = pe_ward_costume(k, &own);
-    return own ? "Aya's own clothes" : c ? c->name : "";
+    return own ? "Aya's own clothes" : c ? pe_l10n_ui(c->name) : "";
 }
 static unsigned pe_ward_price(int k) { int own; const PeCostume *c = pe_ward_costume(k, &own); return c ? c->price : 0u; }
 static int pe_ward_state(int k) {
@@ -299,19 +307,21 @@ static int pe_ward_state(int k) {
 static int pe_ward_pick(int k, char *msg, size_t size) {   /* buy if needed, then wear (from the next room) */
     int own;
     const PeCostume *c = pe_ward_costume(k, &own);
+    if (pe_in_battle()) { snprintf(msg,size,"Change costumes outside battle"); return 0; }
     if (!own && !c) return 0;
     if (c && !pe_buy(c, msg, size)) return 0;
     pe_set_worn(c, 0);
     const PeProfileTransactionsApi*t=pe_service_get("profile_transactions",1);
     if(c&&t&&t->struct_size>=sizeof *t&&t->pending("pe_wardrobe/ownership",c->key))
-        snprintf(msg,size,"Wearing %s; save the game to keep this purchase",c->name);
-    else snprintf(msg, size, "Wearing %s when you leave", c ? c->name : "Aya's own clothes");
+        snprintf(msg,size,"Wearing %s; save the game to keep this purchase",pe_l10n_ui(c->name));
+    else snprintf(msg, size, pe_l10n_ui("Wearing %s when you leave"), c ? pe_l10n_ui(c->name) : pe_l10n_ui("Aya's own clothes"));
     return 1;
 }
 /* The Wardrobe screen's rule: a skin bank or bundle, never a provider's gameplay loader. */
 static int pe_ward_preview(int k, PeModelSource *src) {
     int own;
     const PeCostume *c = pe_ward_costume(k, &own);
+
     if (!own && !c) return 0;
     if (c && c->bank < 0 && (c->load || !c->bundle || !*c->bundle)) return 0;
     memset(src, 0, sizeof *src);
@@ -346,6 +356,7 @@ const PeCostume *pe_wardrobe_owned(int k) {
 const PeCostume *pe_wardrobe_worn(void) { return pe_worn(); }
 
 void pe_wardrobe_wear_later(const PeCostume *c) {
+    if (pe_in_battle()) { pe_ward_say("Change costumes outside battle"); return; }
     s_reload_after_menu = pe_needs_reload(c);        /* a skin goes in by itself as the menu closes */
     pe_set_worn(c, 0);
 }
@@ -391,6 +402,7 @@ static void pe_unlock_all(void) {
     pe_ward_say(msg);
 }
 static void pe_lock_all(void) {
+    if (pe_in_battle()) { pe_ward_say("Change costume ownership outside battle"); return; }
     int locked = 0;
     if (pe_find(pe_ward_profile_worn()) >= 0) pe_set_worn(NULL, 1);
     for (int i = 0; i < s_costumes; ++i)

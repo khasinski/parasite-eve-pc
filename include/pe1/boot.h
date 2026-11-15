@@ -20,6 +20,12 @@ extern int (*g_BootMovieSkipConfirm)(void);
 /* Called when a scene has loaded, after the mods' scene start hook, before
  * its first frame (the crash report's room snapshot). */
 extern void (*g_BootSceneStarted)(void);
+/* --test-save-after N: from VBlank N, the first free field frame saves to
+ * memory card 1, slot 1 through the game's own save writer (as the save menu
+ * does), for tests that load the save back. g_BootTestSave returns nonzero
+ * once the save is done (or failed), zero to try again next frame. */
+extern u32 g_BootHostSaveAt;
+extern int (*g_BootTestSave)(void);
 extern u32 g_BootHostVBlankLimit,g_BootHostVBlankCount;
 /* Headless diagnostic boundary; stdin controls input and graphics settings. */
 extern u32 g_BootHostControlAt;

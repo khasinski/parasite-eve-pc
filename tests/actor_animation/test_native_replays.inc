@@ -436,9 +436,11 @@ static int original_native_bootstrap(const char *executable,int field_control)
         if(n<0 || (size_t)n>=sizeof(directory) || !SDL_CreateDirectory(directory))return 1;
         snprintf(capture,sizeof(capture),"%s/frame.vram",directory);
         const char *limit=field_control==15?"191600":input==23?"261381":input==22?"246050":input==21?"222996":input==20?"200826":input==19?"154203":input==18?"131932":input==17?"112000":input==16?"104000":input==15?"95751":input==14?"82000":input==13?"64554":input==12?"60634":input==11?"58000":input==10?"52000":input==9?"42000":input==8?"35500":input>=6?"33500":input==5?"30000":input==4?"24000":input>=2?"14000":input?"13000":"8000";
-        const char *args[8192]={executable,"--disc",disc,"--headless","--frame-limit",limit,"--dump-vram",capture};
+        /* The routes were recorded while hits never rolled criticals (fixed in 0.12); criticals end
+         * battles sooner and move later random encounters, so the recordings keep plain hits. */
+        const char *args[8192]={executable,"--disc",disc,"--headless","--frame-limit",limit,"--dump-vram",capture,"--test-ignore-hit-reactions"};
         const char *events[]={"10000:8","10010:0","11000:0x10","11010:0","11500:0x4000","11510:0"};
-        unsigned at=8;
+        unsigned at=9;
         for(unsigned event=0;event<(input==3?4u:input==2 || input>=4?6u:input?1u:0u);++event){
             unsigned index=input==3 && event>=2?event+2:event;
             args[at++]="--pad-at";args[at++]=events[index];
@@ -467,12 +469,12 @@ static int original_native_bootstrap(const char *executable,int field_control)
             }
             printf("Carnegie idle interaction offset: %+d VBlanks\n",interaction_offset);
         }
-        if(field_control==14)for(unsigned i=8;i+3<at;i+=2){
+        if(field_control==14)for(unsigned i=9;i+3<at;i+=2){
             unsigned tick,mask,release,released_mask,previous_tick,previous_mask;
             if(strcmp(args[i],"--pad-at") || strcmp(args[i+2],"--pad-at") ||
                sscanf(args[i+1],"%u:%u",&tick,&mask)!=2 ||
                sscanf(args[i+3],"%u:%u",&release,&released_mask)!=2 ||
-               i<10 || sscanf(args[i-1],"%u:%u",&previous_tick,&previous_mask)!=2 ||
+               i<11 || sscanf(args[i-1],"%u:%u",&previous_tick,&previous_mask)!=2 ||
                previous_mask || tick<159000 || mask!=16384 || released_mask || release!=tick+4)continue;
             snprintf(shifted[shifted_count],sizeof(shifted[0]),"%u:%u",(unsigned)((int)tick+interaction_offset),mask);
             args[i+1]=shifted[shifted_count++];
@@ -494,8 +496,8 @@ static int original_native_bootstrap(const char *executable,int field_control)
             else if(side && strcmp(side,"center"))return 1;
             diary_shift=mask==128?-20:mask==32?20:0;
             snprintf(diary_nudge,sizeof(diary_nudge),"191017:%u",mask);
-            unsigned kept=8;
-            for(unsigned i=8;i+1<at;i+=2) {
+            unsigned kept=9;
+            for(unsigned i=9;i+1<at;i+=2) {
                 unsigned tick,value;
                 if(strcmp(args[i],"--pad-at") || sscanf(args[i+1],"%u:%u",&tick,&value)!=2)return 1;
                 if(tick>191048)continue;

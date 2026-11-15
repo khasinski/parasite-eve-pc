@@ -270,6 +270,12 @@ int Battle_StepCharacterAction(BattleInitSlot *slot)
 u8 g_BattleHitTimer;
 extern u8 g_BattleActionIndex;
 extern u8 g_BattleHitPending;
+u8 g_BattleTestIgnoreHitReactions;
+
+static inline s8 Battle_RolledReaction(void)
+{
+    return g_BattleTestIgnoreHitReactions ? 0 : g_EvasionOutcome.reaction;
+}
 
 /* Apply the evasion outcome Battle_CheckEvasion left in g_EvasionOutcome to
  * one target: a resolved hit sets the hit state, the
@@ -290,7 +296,7 @@ static inline void ApplyEvasionOutcome(BattleEntity *target)
         EnemyCoreFlagBits *bits = (EnemyCoreFlagBits *)&core->coreFlags;
         bits->hitState = 1;
         bits->category = g_ActiveActor->action->attackWord >> 20;
-        bits->reaction = g_EvasionOutcome.reaction;
+        bits->reaction = Battle_RolledReaction();
     }
     else if (g_EvasionOutcome.status == 0)
     {
@@ -366,7 +372,7 @@ void Battle_ResolveHitOnTimer(void)
         s16 reaction;
         Battle_CheckEvasion(selectedSlot->actor, &g_EvasionOutcome, 0);
         ApplyEvasionOutcome(selectedSlot->actor);
-        reaction = g_EvasionOutcome.reaction;
+        reaction = Battle_RolledReaction();
         if (g_EvasionOutcome.status == 1)
         {
             for (target = (BattleEntity *)g_FieldActorListHead; target != 0; target = target->next)
@@ -600,6 +606,7 @@ SavePromptBlock g_BattleScanPanel;
 void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
     BattleActionSoundTable soundTable;
     s32 dmg;
+    s32 hp_before;
 
     PE_HOOK(PE_HOOK_SPELL, (&(PeHookSpell){idx, ent}));
     dmg = 0;
@@ -608,6 +615,7 @@ void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
         Akao_SendPositionalCmdStereo(soundTable.soundId[idx], 1, D_8009D254->posX.parts.integer, D_8009D254->posY.parts.integer, D_8009D254->posZ.parts.integer);
         ACTOR = D_8009D254->core;
     }
+    hp_before = (s16)ACTOR->curHP;
     switch (idx) {
     case PE_SPELL_HEAL_1:
         dmg = 0x3C0000;
@@ -752,6 +760,8 @@ void Battle_ApplySpellEffect(u32 idx, BattleEntity *ent) {
         ACTOR->stateFlags = (ACTOR->stateFlags | 0x80000) & ~0x200000;
         break;
     }
+    PE_HOOK(PE_HOOK_SPELL_DONE, (&(PeHookSpellDone){idx, ent, ACTOR, hp_before, &dmg}));
+    (void)hp_before;
     if ((s16)ACTOR->maxHP < (s16)ACTOR->curHP) {
         ACTOR->curHP = ACTOR->maxHP;
     }

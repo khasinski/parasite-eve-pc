@@ -29,6 +29,10 @@ typedef unsigned (*PeMenuChoiceCount)(void);
 typedef const char *(*PeMenuChoiceName)(unsigned index);
 
 void pe_menu_begin(const char *page);
+/* Applied profile values without an editable row; restored at registration, saved with F1. */
+int pe_menu_bind_setting(const char *key, int *value, int minimum, int maximum);
+/* Existing F1 question renderer, Yes/No with No selected. Returns 1/0/-1. */
+int pe_menu_confirm(const char *title, const char *help);
 
 int pe_menu_register_toggle(const char *sub, const char *label, const char *description,
                             int *flag, PeMenuPerFrame per_frame);
@@ -45,6 +49,9 @@ int pe_menu_register_live_int(const char *sub, const char *label, const char *de
 int pe_menu_register_live_choice(const char *sub, const char *label, const char *description,
                                  const char *const *names, unsigned count, PeMenuGet get,
                                  PeMenuSet set);
+/* A live choice registered with `names` now has `count` entries (the array itself may have
+ * grown in place): a mod adding to its list while the game runs. Returns -1 if no row has it. */
+int pe_menu_live_choice_resize(const char *const *names, unsigned count);
 /* A choice whose list depends on other rows; *index resets to 0 when the
  * list length changes. name_fn returns strings that outlive the call. */
 int pe_menu_register_dynamic_choice(const char *sub, const char *label, const char *description,
@@ -55,6 +62,17 @@ int pe_menu_register_live_dynamic_choice(const char *sub, const char *label, con
                                          unsigned max_count, PeMenuChoiceCount count_fn,
                                          PeMenuChoiceName name_fn, PeMenuGet get, PeMenuSet set);
 int pe_menu_register_tick(PeMenuPerFrame fn);
+/* A question in the Mods panel's look, modal like the panel: `title`, the `count` rows of `names`
+ * (the cursor starts on `initial`) and a line of `help`. Only a row answers it. Returns the row,
+ * or -1 when it can't be shown (headless, no window yet, the panel open) or the game's window
+ * was closed on it. For a choice a mod needs before the game loads anything. */
+int pe_menu_choose(const char *title, const char *help, const char *const *names, unsigned count, int initial);
+/* The same question in the title menu's look: `names` centred like New Game / Continue, a green
+ * glow behind the selected one, and its `descriptions` entry (one per row) under the list.
+ * `keys` is the small key line ("" for the default). Long lists scroll through six visible rows;
+ * returns as above. */
+int pe_menu_choose_title(const char *title, const char *keys, const char *const *names,
+                         const char *const *descriptions, unsigned count, int initial);
 /* A read-only line: text() fills the value shown on the right (Junk, prices, results). */
 typedef void (*PeMenuText)(char *out, unsigned size);
 int pe_menu_register_info(const char *sub, const char *label, const char *description, PeMenuText text);
@@ -68,6 +86,13 @@ int pe_menu_top_page(const char *page, const char *description, int order);
 
 /* Open an existing page synchronously; unknown pages fall back to Manage mods. */
 int pe_mod_panel_open_page(const char *page);
+/* An extra key and pad button (SDL_GAMEPAD_BUTTON_COUNT / + 1: left / right trigger) that open
+ * and close the panel besides F1 and Guide; <= 0 key and < 0 button for none. */
+void pe_mod_panel_set_open_binding(int key, int button);
+/* Open the panel where F1 would (synchronously); 0 when it cannot draw. */
+int pe_mod_panel_open(void);
+/* Close the panel once the current row's action returns (back to the game). */
+void pe_mod_panel_close(void);
 
 /* ---- for the panel ---- */
 

@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "pe1/text.h"
+#include "pe1/mod_text.h"
 
 #define G_NEWLINE 0xF7u
 #define G_END     0xFFu
@@ -91,7 +92,11 @@ static inline void pe_t_item(PeText *t, unsigned id) {
     const unsigned char *name = id ? (const unsigned char *)Text_LookupTable8(id - 1u) : NULL;
     unsigned i;
     if (!name) { pe_t_str(t, "?"); return; }
-    for (i = 0; i < 24 && name[i] != G_END; ++i) pe_t_byte(t, name[i]);
+    for (i = 0; i < 24 && name[i] != G_END;) {
+        unsigned bytes = Pe_ExtendedGlyph(name+i, NULL) ? 4u : 1u;
+        if (i+bytes > 24 || t->n+bytes > PE_GAMETEXT_MAX-2u) break;
+        for (unsigned k=0; k<bytes; ++k) pe_t_byte(t, name[i++]);
+    }
     if (id == 0x02) pe_t_str(t, " x15");  /* both bullet boxes are "Bullets" */
     if (id == 0x03) pe_t_str(t, " x30");
 }

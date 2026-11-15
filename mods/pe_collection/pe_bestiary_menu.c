@@ -26,6 +26,7 @@
 #include "pe_gametext.h"
 #include "pe_main_menu.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_model_stage.h"
 #include "pe1/draw_state.h"
 #include "pe1/menu_draw_list.h"
@@ -45,6 +46,8 @@
 #define PE_TURN_HAND      96      /* 4096 a turn */
 #define PE_MENU_L1        0x4u
 #define PE_MENU_R1        0x8u
+#define PE_MENU_L2        0x1u
+#define PE_MENU_R2        0x2u
 #define PE_MENU_LEFT      0x8000u
 #define PE_MENU_RIGHT     0x2000u
 #define PE_MENU_TRIANGLE  0x10u
@@ -60,7 +63,13 @@
 
 static PeScreen s_screen;
 static MenuWidgetNode *s_frame, *s_info;
-static u8 s_text[96];
+static u8 s_text[2048];
+/* Wrapped lines reference complete encoded glyphs, including language-pack tokens. */
+typedef struct { unsigned short source, start, length, tier; } PeInfoLine;
+static u8 s_info_text[PE_INFO_ROWS][2048];
+static PeInfoLine s_info_lines[256];
+static int s_info_count, s_info_top, s_info_creature = -1;
+static unsigned s_info_state;
 
 /* areas: the sections creatures register under, in order */
 static const char *s_area_name[PE_AREAS];
@@ -130,13 +139,30 @@ static int pe_current(void) {
 }
 
 /* ---- the list ---- */
+static int pe_list_text(int h) {
+    const PeCreatureInfo *c = pe_b()->info(h);
+    unsigned pos = 0, glyphs = 0;
+    pe_tr_ascii(s_text, sizeof s_text, pe_met(h) ? pe_l10n_ui(c->name) : "???");
+    while (s_text[pos] != G_END) {
+        const unsigned next = pos + (Pe_ExtendedGlyph(s_text + pos, NULL) ? 4u : 1u);
+        const u8 saved = s_text[next];
+        s_text[next] = G_END;
+        if (Draw_MeasureTextWidth(s_text) > s_screen.list->draw_state - 4) break;
+        s_text[next] = saved;
+        pos = next; ++glyphs;
+    }
+    s_text[pos] = G_END;
+    return glyphs;
+}
+
 static void pe_row(int row) {
     const int h = row < s_members ? s_member[row] : -1;
     const PeCreatureInfo *c = h >= 0 ? pe_b()->info(h) : NULL;
     if (!c) return;
     if (!pe_met(h)) Draw_SetTextDimmed(1);
     else if (pe_bestiary_new(h)) Draw_SetColor(PE_COLOR_NEW);
-    Draw_PrintRawText(pe_text_from_ascii(s_text, sizeof s_text, pe_met(h) ? c->name : "???"));
+    pe_list_text(h);
+    Draw_PrintRawText(s_text);
     Draw_SetTextDimmed(0);
     Draw_SetColor(PE_COLOR_TEXT);
 }
@@ -186,50 +212,120 @@ static void pe_elements(char *out, size_t size, unsigned bits) {
     static const char *const names[5] = {"heat", "frost", "cyanide", "acid", "tranq"};
     int i, n = 0;
     out[0] = 0;
-    for (i = 0; i < 5; ++i)
-        if (bits & (1u << i)) n += snprintf(out + n, size - (size_t)n, "%s%s", n ? ", " : "", names[i]);
-    if (!n) snprintf(out, size, "none");
+    for (i = 0; i < 5; ++i) {
+        if (!(bits & (1u << i)) || (size_t)n >= size) continue;
+        int added = snprintf(out+n,size-(size_t)n,"%s%s",n?", ":"",pe_l10n_ui(names[i]));
+        if (added<0 || (size_t)added>=size-(size_t)n) break;
+        n += added;
+    }
+    if (!n) snprintf(out, size, "%s", pe_l10n_ui("none"));
 }
 
-static void pe_info_row(int row) {
+static void pe_info_source(int row, char *line, size_t size) {
     const int h = pe_current();
     const PeCreatureInfo *c = h >= 0 ? pe_b()->info(h) : NULL;
     const unsigned state = h >= 0 ? pe_b()->state(h) : 0;
-    char line[96], a[48], b[48];
+    char a[128], b[128];
     if (!c) return;
     line[0] = 0;
     if (!(state & PE_BESTIARY_MET)) {
-        if (row == 0) snprintf(line, sizeof line, "???");
-        if (row == 1) snprintf(line, sizeof line, "%s", c->boss ? "Not met yet" : "Not met yet: defeat one to learn about it");
+        if (row == 0) snprintf(line, size, "???");
+        if (row == 1) snprintf(line, size, "%s", c->boss ? pe_l10n_ui("Not met yet") : pe_l10n_ui("Not met yet: defeat one to learn about it"));
     } else if (row == 0) {
-        snprintf(line, sizeof line, "%s  HP %u  Def %u  Kills %u", c->name, c->hp, c->defense, pe_b()->kills(h));
+        snprintf(line, size, pe_l10n_ui("%s  HP %u  Def %u  Kills %u"), pe_l10n_ui(c->name), c->hp, c->defense, pe_b()->kills(h));
     } else if (row == 1) {
         if (state & PE_BESTIARY_WEAK) {
             pe_elements(a, sizeof a, c->weak);
             pe_elements(b, sizeof b, c->strong);
-            snprintf(line, sizeof line, "Weak: %s   Strong: %s", a, b);
+            snprintf(line, size, pe_l10n_ui("Weak: %s   Strong: %s"), a, b);
         } else {
-            snprintf(line, sizeof line, "Weaknesses: Scan, %s or %u Junk", c->boss ? "defeat" : "5 kills", c->price_weak);
+            snprintf(line, size, pe_l10n_ui("Weaknesses: Scan, %s or %u Junk"), c->boss ? pe_l10n_ui("defeat") : pe_l10n_ui("5 kills"), c->price_weak);
         }
     } else if (row == 2) {
-        if (state & PE_BESTIARY_LOOT) snprintf(line, sizeof line, "Drop: %s", c->drop ? c->drop : "-");
-        else if (c->boss) snprintf(line, sizeof line, "Loot: %u Junk", c->price_loot);
-        else snprintf(line, sizeof line, "Loot: 15 kills or %u Junk", c->price_loot);
+        if (state & PE_BESTIARY_LOOT) snprintf(line, size, pe_l10n_ui("Drop: %s"), c->drop ? pe_l10n_ui(c->drop) : "-");
+        else if (c->boss) snprintf(line, size, pe_l10n_ui("Loot: %u Junk"), c->price_loot);
+        else snprintf(line, size, pe_l10n_ui("Loot: 15 kills or %u Junk"), c->price_loot);
     } else if (row == 3 && (state & PE_BESTIARY_LOOT)) {
-        snprintf(line, sizeof line, "Steal: %s", c->steal ? c->steal : "-");
+        snprintf(line, size, pe_l10n_ui("Steal: %s"), c->steal ? pe_l10n_ui(c->steal) : "-");
     }
-    {
-        const unsigned tier = row == 0 ? PE_BESTIARY_MET : row == 1 ? PE_BESTIARY_WEAK : PE_BESTIARY_LOOT;
-        if (!(state & PE_BESTIARY_MET) || (state & tier)) Draw_SetTextDimmed(0);
-        else Draw_SetTextDimmed(1);                 /* locked tiers read dimmer */
-        if ((state & PE_BESTIARY_MET) && (s_fresh & tier)) Draw_SetColor(PE_COLOR_NEW);
+}
+
+/* Wrap to the native widget's actual pixel width; fullscreen still uses the game's
+ * 320-pixel coordinate space. Never split a four-byte translated glyph. */
+static void pe_build_info(void) {
+    const int h = pe_current();
+    const unsigned state = h >= 0 ? pe_b()->state(h) : 0;
+    const int width = s_info ? s_info->draw_state - 4 : 1;
+    char line[512];
+    /* Keep 6 KB of the native 16 KB packet arena for frames, title and side rail.
+     * Dense text must wrap before exhausting it, even with a narrow font. */
+    int list_glyphs = 0;
+    if (s_screen.list) {
+        for (int i = 0; i < s_screen.list->visible_rows; ++i) {
+            const int row = s_screen.list->scroll_y + i;
+            if (row < s_members) list_glyphs += pe_list_text(s_member[row]);
+        }
     }
-    Draw_PrintRawText(pe_text_from_ascii(s_text, sizeof s_text, line));
+    int max_glyphs = (0x2800 / (int)sizeof(RenderTexturedQuad) - list_glyphs) / PE_INFO_ROWS;
+    if (max_glyphs < 1) max_glyphs = 1;
+    if (h != s_info_creature || state != s_info_state) s_info_top = 0;
+    s_info_creature = h;
+    s_info_state = state;
+    s_info_count = 0;
+    for (int row = 0; row < PE_INFO_ROWS; ++row) {
+        u8 *text = s_info_text[row];
+        unsigned begin = 0;
+        line[0] = 0;
+        pe_info_source(row, line, sizeof line);
+        pe_tr_ascii(text, sizeof s_info_text[row], line);
+        while (text[begin] != G_END && s_info_count < 256) {
+            unsigned pos = begin, fit = begin, space = begin;
+            int glyphs = 0;
+            while (text[pos] != G_END) {
+                const unsigned bytes = Pe_ExtendedGlyph(text + pos, NULL) ? 4u : 1u;
+                const unsigned next = pos + bytes;
+                const u8 saved = text[next];
+                int measured;
+                text[next] = G_END;
+                measured = Draw_MeasureTextWidth(text + begin);
+                text[next] = saved;
+                /* A space that overflows still ends the line: break there, not at the
+                 * previous space, so the word before it stays on this line. */
+                if (text[pos] == 0x0F) space = pos;
+                if ((measured > width || glyphs >= max_glyphs) && fit > begin) break;
+                fit = next;
+                ++glyphs;
+                pos = next;
+            }
+            unsigned stop = text[pos] != G_END && space > begin ? space : fit;
+            PeInfoLine *out = &s_info_lines[s_info_count++];
+            out->source = row; out->start = begin; out->length = stop - begin;
+            out->tier = row == 0 ? PE_BESTIARY_MET : row == 1 ? PE_BESTIARY_WEAK : PE_BESTIARY_LOOT;
+            begin = stop;
+            while (text[begin] == 0x0F) ++begin;
+        }
+    }
+    const int max_top = s_info_count > PE_INFO_ROWS ? s_info_count - PE_INFO_ROWS : 0;
+    if (s_info_top > max_top) s_info_top = max_top;
+}
+
+static void pe_info_row(int row) {
+    const int index = s_info_top + row;
+    if (index >= s_info_count) return;
+    const PeInfoLine *line = &s_info_lines[index];
+    memcpy(s_text, s_info_text[line->source] + line->start, line->length);
+    s_text[line->length] = G_END;
+    Draw_SetTextDimmed((s_info_state & PE_BESTIARY_MET) && !(s_info_state & line->tier));
+    if ((s_info_state & PE_BESTIARY_MET) && (s_fresh & line->tier)) Draw_SetColor(PE_COLOR_NEW);
+    Draw_PrintRawText(s_text);
     Draw_SetTextDimmed(0);
     Draw_SetColor(PE_COLOR_TEXT);
 }
 
-static void pe_draw_info(MenuWidgetNode *node) { MenuWidget_DrawList(node, pe_info_row); }
+static void pe_draw_info(MenuWidgetNode *node) {
+    pe_build_info();
+    MenuWidget_DrawList(node, pe_info_row);
+}
 
 /* ---- input ---- */
 static void pe_set_area(int area) {
@@ -262,7 +358,7 @@ static void pe_buy_answer(int yes) {
     (void)pe_bestiary_next_price(h, &bit);
     if (pe_bestiary_buy(h)) {
         if (h == pe_current()) s_fresh |= bit;
-        snprintf(msg, sizeof msg, "Learned its %s   Junk %u", bit == PE_BESTIARY_WEAK ? "weaknesses" : "loot", pe_col_junk());
+        snprintf(msg, sizeof msg, pe_l10n_ui("Learned its %s   Junk %u"), bit == PE_BESTIARY_WEAK ? pe_l10n_ui("weaknesses") : pe_l10n_ui("loot"), pe_col_junk());
         pe_say(msg);
     } else {
         pe_say(pe_col_last_said());
@@ -279,12 +375,12 @@ static void pe_buy(int h) {
     if (!bit) { pe_say("Everything about it is known"); Menu_PlayErrorSound(); return; }
     if (!pe_col_junk_ready(msg, sizeof msg)) { pe_say(msg); Menu_PlayErrorSound(); return; }
     if (pe_col_junk() < price) {
-        snprintf(msg, sizeof msg, "Need %u Junk (have %u)", price, pe_col_junk());
+        snprintf(msg, sizeof msg, pe_l10n_ui("Need %u Junk (have %u)"), price, pe_col_junk());
         pe_say(msg);
         Menu_PlayErrorSound();
         return;
     }
-    snprintf(msg, sizeof msg, "Learn its %s for %u Junk?", bit == PE_BESTIARY_WEAK ? "weaknesses" : "loot", price);
+    snprintf(msg, sizeof msg, pe_l10n_ui("Learn its %s for %u Junk?"), bit == PE_BESTIARY_WEAK ? pe_l10n_ui("weaknesses") : pe_l10n_ui("loot"), price);
     s_buying = h;
     pe_confirm(msg, 1, pe_buy_answer);
     Menu_PlayConfirmSound();
@@ -299,6 +395,13 @@ static int pe_input(MenuWidgetNode *panel, unsigned int buttons) {
         return 1;
     }
     if (buttons & PE_MENU_CIRCLE) { pe_close(); Menu_PlayCancelSound(); return 1; }
+    if (buttons & (PE_MENU_L2 | PE_MENU_R2)) {
+        pe_build_info();
+        const int max_top = s_info_count > PE_INFO_ROWS ? s_info_count - PE_INFO_ROWS : 0;
+        const int next = s_info_top + ((buttons & PE_MENU_R2) ? 1 : -1);
+        if (next >= 0 && next <= max_top) { s_info_top = next; Menu_PlayMoveSound(); }
+        return 1;
+    }
     if (buttons & PE_MENU_PRESS) return 1;          /* Cross down: acted on at its release */
     if (buttons & PE_MENU_CROSS) { pe_buy(h); return 1; }
     if (buttons & PE_MENU_TRIANGLE) {               /* the model full screen */
@@ -338,16 +441,22 @@ static int pe_on_help_text(void *ctx, void *user) {
     if (s_tick - s_said_tick < PE_SAID_TICKS) {
         snprintf(line, sizeof line, "%s", s_said);
     } else {
-        switch ((s_tick / PE_HELP_TICKS) % 3) {
+        int pages;
+        pe_build_info();
+        pages = s_info_count > PE_INFO_ROWS ? s_info_count - PE_INFO_ROWS + 1 : 1;
+        switch ((s_tick / PE_HELP_TICKS) % (pages > 1 ? 4 : 3)) {   /* the Info page only when it scrolls */
         case 0:
             for (i = 0; i < s_members; ++i) met += pe_met(s_member[i]);
-            snprintf(line, sizeof line, "%s   %d / %d   Junk %u", s_areas ? s_area_name[s_area] : "", met, s_members, pe_col_junk());
+            snprintf(line, sizeof line, pe_l10n_ui("%s   %d / %d   Junk %u"), s_areas ? pe_l10n_ui(s_area_name[s_area]) : "", met, s_members, pe_col_junk());
             break;
-        case 1: snprintf(line, sizeof line, "L1 R1: Area   Left Right: Turn"); break;
-        default: snprintf(line, sizeof line, "X: Buy   Triangle: View   Square: Pause"); break;
+        case 1: snprintf(line, sizeof line, "%s", pe_l10n_ui("L1 R1: Area   Left Right: Turn")); break;
+        case 2: snprintf(line, sizeof line, "%s", pe_l10n_ui("X: Buy   Triangle: View   Square: Pause")); break;
+        default:
+            snprintf(line, sizeof line, pe_l10n_ui("L2 R2: Info   %u / %u"), (unsigned)s_info_top + 1, (unsigned)pages);
+            break;
         }
     }
-    *text = pe_text_from_ascii(s_text, sizeof s_text, line);
+    *text = pe_tr_ascii(s_text, sizeof s_text, line);
     return 0;
 }
 
@@ -361,8 +470,14 @@ static int pe_on_frame(void *ctx, void *user) {
 }
 
 static void pe_open(MenuWidgetNode *main_list) {
-    const MenuWidgetSimpleDescriptor *d = MenuWidget_LookupSimpleDescriptor(1);   /* the game's screen area */
-    const int x = d && d->x > 0 ? d->x : 28, y = d && d->y > 0 ? d->y : 24, width = d && d->width > 0 ? d->width : 252;
+    /* The game's screen area (Aya's inventory panel, right of the menu's icon rail, under the title
+     * bar), widened to the right edge of the status screen's right-hand panel (28..308 on both the
+     * USA and Japanese discs) so the details get room without covering the rail. */
+    const MenuWidgetSimpleDescriptor *d = MenuWidget_LookupSimpleDescriptor(1);
+    const MenuWidgetSimpleDescriptor *r = MenuWidget_LookupSimpleDescriptor(7);
+    const int x = d && d->x > 0 ? d->x : 28, y = d && d->y > 0 ? d->y : 24, base = d && d->width > 0 ? d->width : 252;
+    const int right = r && r->x > 0 && r->width > 0 ? r->x + r->width : 308;
+    const int width = right - x > base ? right - x : base;
     int ix, iy, iw, ih, bx, by, bw, bh;
     pe_build_areas();
     if (!s_areas) return;
@@ -378,6 +493,8 @@ static void pe_open(MenuWidgetNode *main_list) {
     pe_stage_place(&s_stage, bx, by, bw, bh);
     pe_log("bestiary", "screen: list %d,%d %dx%d  model box %d,%d %dx%d", ix, iy, iw, ih, bx, by, bw, bh);
     s_shown = -1;
+    s_info_creature = -1;
+    s_info_top = 0;
     pe_build_members();
     pe_screen_rows(&s_screen, s_members ? s_members : 1, s_cursor[s_area]);
 }

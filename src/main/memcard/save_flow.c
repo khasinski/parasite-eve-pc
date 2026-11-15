@@ -32,7 +32,11 @@ int g_McOpPending, g_MemCardSavePollTimeout, g_MemCardReadContext;
 int g_SaveTitleStyleFlag, D_800A5D50;
 u8 *g_SaveIoCursor;
 char g_MemCardFilePath[0x20];
-const char *g_MemCardFilenameFormatPtr = "bu%d0:BASLUS-00662000000%c%c";
+/* The card files' names: the USA release's, or the Japanese one's when its discs are mounted
+ * (Asset_OpenPeImage); the two never see each other's saves, as on the PlayStation. */
+const char g_MemCardFilenameFormatUsa[] = "bu%d0:BASLUS-00662000000%c%c";
+const char g_MemCardFilenameFormatJapan[] = "bu%d0:BISLPS-01230000000%c%c";
+const char *g_MemCardFilenameFormatPtr = g_MemCardFilenameFormatUsa;
 static char g_MemCardSearchPattern[] = "bu00:*";
 char *g_MemCardSearchPatternPtr = g_MemCardSearchPattern;
 MemCardFileHeader g_MemCardIconHeader;

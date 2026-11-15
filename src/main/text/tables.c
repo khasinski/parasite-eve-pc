@@ -87,6 +87,20 @@ void *Text_LookupTable4(unsigned int index) {
     return Text_NoteLookup(resident, text);
 }
 
+/* Saves keep the edited name as bytes. Providers must avoid pack-local glyph IDs here;
+ * ordinary inventory lookups still receive the translated display name. */
+void *Text_LookupEditableName(unsigned int kind, unsigned int index) {
+    if (kind != 4 && kind != 8) return NULL;
+    ResidentDataPack *pack = &g_ResidentDataPack;
+    TextTableDirectory *directory = (TextTableDirectory *)&pack->bytes[pack->directory.text];
+    unsigned slot = kind == 4 ? 0 : 1;
+    TextOffsetTable *table = (TextOffsetTable *)&directory->bytes[directory->header.tableOffsets[slot]];
+    if (index >= table->header.count) return NULL;
+    void *resident = &table->bytes[table->header.offsets[index]], *text = resident;
+    PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){kind, index, &text, 1}));
+    return Text_NoteLookup(resident, text);
+}
+
 void *Text_LookupTable8(unsigned int index) {
     ResidentDataPack *pack = &g_ResidentDataPack;
     TextTableDirectory *directory;
@@ -139,6 +153,17 @@ void *Text_LookupTable10(unsigned int index) {
     void *resident = &table->bytes[offset], *text = resident;
     PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){16, index, &text}));
     return Text_NoteLookup(resident, text);
+}
+
+/* The battle messages below (the Scan panel's and running away's) are in the boot program, not
+ * the resident tables, so they reach a pack as table 20. The textbox draws straight from the
+ * pointer, with no copy, so a replacement only has to outlive the box, as the others do. */
+u8 *Text_LookupBattleMessage(unsigned int index, u8 *texts, unsigned int stride) {
+    void *text = texts + (unsigned int)g_SaveMetadataWindowIndex * stride;
+    if (g_SaveMetadataWindowIndex != 0) {
+        PE_HOOK(PE_HOOK_TEXT_LOOKUP, (&(PeHookTextLookup){20, index, &text}));
+    }
+    return text;
 }
 
 /* Text-table-3 entry naming the location of map `map`. */
@@ -274,6 +299,15 @@ TextboxGlyphSpacing g_TextboxGlyphSpacing[78] = {
     {0,7},{0,9},{0,7},{0,9},{0,4},{0,7},{0,6},{0,4},{0,4},{0,8},{0,8},{0,7},{0,7},
     {0,7},{0,7},{0,8},{0,9},{0,5},{0,4},{0,8},{0,5},{0,11},{0,9},{0,7},{0,8},{0,8},
     {0,7},{0,6},{0,5},{0,9},{0,9},{0,11},{0,7},{0,9},{0,6},{0,4},{0,4},{0,7},{0,0},
+};
+/* Japanese release (0x8009118C): the dialogue spacing of codes 10-4B only (its Latin letters and
+ * signs); every other letter, kana and kanji included, is a fixed 12 px cell. */
+const TextboxGlyphSpacing g_TextboxGlyphSpacingJapanese[60] = {
+    {0,12},{1,11},{2,11},{1,11},{1,11},{1,11},{2,11},{1,12},{4,9},{3,11},{1,12},{1,11},
+    {0,12},{1,12},{2,11},{1,11},{2,11},{1,12},{1,11},{1,12},{1,12},{1,12},{0,12},{1,11},
+    {1,12},{1,11},{2,12},{4,8},{3,10},{1,8},{1,5},{1,5},{2,11},{2,11},{2,10},{2,11},
+    {2,10},{3,10},{1,11},{1,11},{4,9},{4,9},{1,11},{4,9},{1,12},{1,11},{2,11},{1,10},
+    {2,11},{3,10},{2,11},{3,10},{1,11},{1,11},{0,12},{1,11},{1,11},{2,10},{4,8},{1,5},
 };
 const TextboxGlyphSpacing *g_TextboxGlyphWidths = g_TextboxGlyphSpacing;
 unsigned g_TextboxGlyphCount = sizeof(g_TextboxGlyphSpacing) / sizeof(*g_TextboxGlyphSpacing);

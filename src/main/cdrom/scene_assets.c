@@ -19,6 +19,7 @@
 #include "pe1/gpu_image.h"
 #include "pe1/gte.h"
 #include "pe1/pe_image.h"
+#include "pe_hooks.h"
 #include "pe1/psyq_cd.h"
 #include "pe1/psyq_ds_queue.h"
 #include "pe1/psyq_gpu.h"
@@ -681,6 +682,10 @@ int CdRom_ReadSectorsFromLba(u32 lba, void *destination, u32 sectors)
     uint64_t bytes = (uint64_t)sectors * 2048u;
     if (offset > mounted_archive.size || bytes > mounted_archive.size - offset || bytes > SIZE_MAX) return -1;
     if (!pe_disc_read(g_CdImage, &mounted_archive, offset, destination, (size_t)bytes)) return -1;
+    {
+        PeHookDiscRead read = {lba - mounted_archive.sector, sectors, destination};
+        PE_HOOK(PE_HOOK_DISC_READ, &read);
+    }
     g_GameState.flags |= 0x1004000u;
     completion = 0;
     return 1;

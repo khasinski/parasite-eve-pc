@@ -517,6 +517,7 @@ void Battle_Update(void) {
     }
     if (g_BattleEnemyEscapeFlag != 0) {
         Battle_DrawActiveStatus();
+        PE_HOOK(PE_HOOK_BATTLE_HUD, NULL);
     }
 #ifdef PE_MELEE_PROTOTYPE
     Battle_MeleeDraw();

@@ -20,6 +20,7 @@
 #include "pe_game.h"
 #include "pe_gametext.h"
 #include "pe_mod_host.h"
+#include "pe_translate.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
 #include "pe1/draw_state.h"
@@ -89,8 +90,8 @@ static void pe_on_confirm(MenuWidgetNode *dialog, int yes) {
             char msg[64];
             int unlocks = 0;
             const unsigned junk = (unsigned)pe_catalog_dismantle_reward(rec, &unlocks);
-            snprintf(msg, sizeof msg, "Dismantled %s: +%u Junk", pe_cat_item_name(rec->itemId), junk);
-            if (unlocks) snprintf(msg + strlen(msg), sizeof msg - strlen(msg), ", %d new effect%s", unlocks, unlocks == 1 ? "" : "s");
+            snprintf(msg, sizeof msg, pe_l10n_ui("Dismantled %s: +%u Junk"), pe_cat_item_name(rec->itemId), junk);
+            if (unlocks) snprintf(msg + strlen(msg), sizeof msg - strlen(msg), pe_l10n_ui(", %d new effect%s"), unlocks, unlocks == 1 ? "" : "s");
             pe_toast(msg);
             pe_log("dismantle", "item=0x%02X junk=%u unlocks=%d menu=1", rec->itemId, junk, unlocks);
         }
@@ -108,14 +109,14 @@ static void pe_reword(MenuWidgetNode *child) {
     char text[4][48];
     u8 suffix[48];
     int i, width = 0;
-    snprintf(text[0], sizeof text[0], ": %u Junk, %d mod%s recovered, rebuildable", junk, mods, mods == 1 ? "" : "s");
-    snprintf(text[1], sizeof text[1], ": %u Junk, %d mod%s recovered", junk, mods, mods == 1 ? "" : "s");
-    snprintf(text[2], sizeof text[2], ": %u Junk, rebuildable", junk);
-    snprintf(text[3], sizeof text[3], ": %u Junk", junk);
+    snprintf(text[0], sizeof text[0], pe_l10n_ui(": %u Junk, %d mod%s recovered, rebuildable"), junk, mods, mods == 1 ? "" : "s");
+    snprintf(text[1], sizeof text[1], pe_l10n_ui(": %u Junk, %d mod%s recovered"), junk, mods, mods == 1 ? "" : "s");
+    snprintf(text[2], sizeof text[2], pe_l10n_ui(": %u Junk, rebuildable"), junk);
+    snprintf(text[3], sizeof text[3], pe_l10n_ui(": %u Junk"), junk);
     for (i = mods ? 0 : 2; i < 4; ++i) {
         if (name) Text_CopyFFTerminatedBytes(g_MenuItemLabelBuffer, (u8 *)name);
         else g_MenuItemLabelBuffer[0] = 0xFF;
-        Text_AppendFFTerminatedBytes(g_MenuItemLabelBuffer, pe_text_from_ascii(suffix, sizeof suffix, text[i]));
+        Text_AppendFFTerminatedBytes(g_MenuItemLabelBuffer, pe_tr_ascii(suffix, sizeof suffix, text[i]));
         width = Draw_MeasureTextWidth(g_MenuItemLabelBuffer);
         if (width <= PE_MAX_TEXT) break;
     }
@@ -144,7 +145,7 @@ static int pe_on_item_actions(void *ctx, void *user) {
     if (!(s_rec = pe_dismantlable(a->list_id, a->slot))) return 0;
     for (row = 0; row < 3 && g_MenuItemActionStateTable[a->context][row] != PE_ACTION_DISCARD; ++row) {}
     if (row == 3 || a->list->draw != Menu_DrawContextActionList) { s_rec = NULL; return 0; }
-    if (!s_label[0]) pe_text_from_ascii(s_label, sizeof s_label, "Dismantle");
+    pe_tr_ascii(s_label, sizeof s_label, "Dismantle");
     s_row = row;
     a->panel->grid_width += PE_WIDEN;
     a->list->draw_state += PE_WIDEN;                     /* the cell, so the text stays centred */

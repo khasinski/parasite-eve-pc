@@ -1,4 +1,5 @@
 #include "pe1/akao.h"
+#include "pe1/pe_image.h"
 #include "pe1/akao_send.h"
 #include "pe1/scene_assets.h"
 #include "pe1/aya.h"
@@ -96,13 +97,21 @@ void Menu_CopyPromptCodes(unsigned char *src) {
     int value;
 
     dst = g_TextboxNameGlyphs.glyphs;
-    end = dst + 8;
+    end = dst + 16;
+    if (PE_JAPAN) end = dst + 12;      /* six letters, two bytes each at most */
+    /* whole letters only: a two-byte one (pe1/text_render.h) is never split */
     while (dst < end) {
         value = *src;
         if (value == 0xFF) {
             break;
         }
-        *dst++ = value;
+        if (value >= 0xFB && value <= 0xFE && src[1] != 0xFF) {
+            if (dst + 2 > end) break;
+            *dst++ = (unsigned char)value;
+            src++;
+            value = *src;
+        }
+        *dst++ = (unsigned char)value;
         src++;
     }
 
@@ -118,12 +127,15 @@ void Inv_RecalcSlotStats(void) {
     Combatant *actor;
     AyaLevelStats *row;
 
+    /* The Japanese release recomputes the stats, max HP included, only while Aya's combatant
+     * exists, and doesn't lower her live HP to a lower maximum (the USA release does both). */
+    if (PE_JAPAN && !(((BattleEntity *)g_PlayerEntity) && ((BattleEntity *)g_PlayerEntity)->core)) return;
     Aya_StatQueryLevelAndSubLevel(0, (s16)*p++, &level, 0);
     row = Aya_LookupLevelStats(level);
     hp = ((g_StatScaleBase[0] + 20) * row->hp) / 20;
     g_AyaSaveState.max_hp = hp;
     if (((BattleEntity *)g_PlayerEntity) && (actor = ((BattleEntity *)g_PlayerEntity)->core)) {
-        if ((s16)(actor->maxHP = hp) < (s16)actor->curHP)
+        if ((s16)(actor->maxHP = hp) < (s16)actor->curHP && !PE_JAPAN)
             actor->curHP = hp;
         if ((s16)actor->maxHP < (s16)actor->hpMirror)
             actor->hpMirror = actor->maxHP;
