@@ -28,6 +28,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 import zlib
 from pathlib import Path
 
@@ -253,6 +254,42 @@ class RuleTest(unittest.TestCase):
             P.Translation.open(self.dir / "empty.pelang", GAME)
         with self.assertRaises(P.NotAPack):
             P.Translation.open(self.dir / "missing.pelang", GAME)
+
+    def test_a_zip_whose_parts_unpack_too_large_is_refused_before_reading_them(self):
+        """A part that unpacks past what the game reads (the work part included), or claims more
+        than deflate can make of its size, is refused by its sizes alone, with no part read."""
+        t = self.new()
+        t.set_text(plain_dialogue(1)[0], "Une ligne.")
+        good = self.dir / "fr.pelang"
+        t.save(good)
+        with zipfile.ZipFile(good) as z:
+            pack = z.read(pelang.BUNDLE_TEXT)
+
+        def bundle(name, part):
+            path = self.dir / f"{name}.pelang"
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+                z.writestr(pelang.BUNDLE_TEXT, pack)
+                z.writestr(name, part)
+            return path
+
+        big = b"\0" * (pelang.PACK_MAX + 1)
+        cases = [(bundle(P.WORK.replace("/", "_"), big), "unpacks to"),
+                 (bundle(P.PICTURES, b"\0" * (pelang.PICTURES_MAX + 1)), "unpacks to")]
+        with zipfile.ZipFile(self.dir / "work.pelang", "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr(pelang.BUNDLE_TEXT, pack)
+            z.writestr(P.WORK, big)
+        cases.append((self.dir / "work.pelang", P.WORK))
+        with mock.patch.object(zipfile.ZipFile, "read", side_effect=AssertionError("a part was read")):
+            for path, said in cases:
+                with self.subTest(path.name), self.assertRaisesRegex(P.NotAPack, re.escape(said)):
+                    P.Translation.open(path, GAME)
+        # a part far more compressed than deflate makes, under the size limits
+        ratio = bundle("readme.txt", b"\0" * (2 << 20))
+        with mock.patch.object(P, "ZIP_MAX_RATIO", 100), self.assertRaisesRegex(P.NotAPack, "more than a zip can"):
+            P.Translation.open(ratio, GAME)
+        # and a pack well inside the limits still opens
+        self.assertEqual(P.Translation.open(ratio, GAME).lang, "fr")
+        self.assertEqual(P.Translation.open(good, GAME).lang, "fr")
 
     def test_every_language_the_tool_offers_reads_back_as_the_same_pack(self):
         """Each ready language's whole alphabet, typed, saved, read back from the compiled pack

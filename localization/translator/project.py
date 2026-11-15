@@ -77,6 +77,32 @@ class NotAPack(ValueError):
     """The file isn't a .pelang the pack code reads."""
 
 
+# A zipped .pelang is only unpacked as far as the game would: no part larger than the game reads
+# it (or than a pack, for the parts the game doesn't read), and all of them together no larger
+# than the largest .pelang the game opens. A part that claims to unpack to far more than deflate
+# can make of its size is refused too, before any of it is read.
+ZIP_MAX_RATIO = 1100                         # deflate tops out near 1032:1
+ZIP_RATIO_FROM = 1 << 20                     # small parts are never refused for their ratio
+
+
+def _check_zip_sizes(z: zipfile.ZipFile, name: str) -> None:
+    total = 0
+    for info in z.infolist():
+        if info.is_dir():
+            continue
+        limit = {pelang.BUNDLE_TEXT: pelang.PACK_MAX, PICTURES: pelang.PICTURES_MAX}.get(info.filename, pelang.PACK_MAX)
+        if info.file_size > limit:
+            raise NotAPack(f"{name}: its {info.filename} unpacks to {info.file_size} bytes, "
+                           f"more than the {limit >> 20} MB the game reads")
+        if info.file_size > ZIP_RATIO_FROM and info.file_size > ZIP_MAX_RATIO * max(info.compress_size, 1):
+            raise NotAPack(f"{name}: its {info.filename} claims to unpack {info.compress_size} bytes "
+                           f"to {info.file_size}, more than a zip can")
+        total += info.file_size
+        if total > pelang.BUNDLE_MAX:
+            raise NotAPack(f"{name}: its parts unpack to more than the "
+                           f"{pelang.BUNDLE_MAX >> 20} MB the game opens")
+
+
 class WouldChange(RuntimeError):
     """A save would change rows of a pack nobody edited (Translation.locked says which)."""
 
@@ -718,6 +744,8 @@ class Translation:
     def open(cls, path, game: Game) -> "Translation":
         path = Path(path)
         try:
+            if path.stat().st_size > pelang.BUNDLE_MAX:
+                raise NotAPack(f"{path.name} is larger than the {pelang.BUNDLE_MAX >> 20} MB the game opens")
             data = path.read_bytes()
         except OSError as e:
             raise NotAPack(f"can't read {path.name}: {e}") from e
@@ -725,6 +753,7 @@ class Translation:
         if data.startswith(b"PK\x03\x04"):
             try:
                 with zipfile.ZipFile(io.BytesIO(data)) as z:
+                    _check_zip_sizes(z, path.name)
                     for info in z.infolist():
                         if info.is_dir() or info.filename == pelang.BUNDLE_TEXT:
                             continue
@@ -732,6 +761,8 @@ class Translation:
                             work = json.loads(z.read(info).decode("utf-8"))
                         else:
                             parts[info.filename] = z.read(info)
+            except NotAPack:
+                raise
             except (zipfile.BadZipFile, ValueError, UnicodeDecodeError) as e:
                 raise NotAPack(f"{path.name} is damaged: {e}") from e
         read = read_pack_text(path, game)

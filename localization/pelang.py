@@ -802,6 +802,7 @@ def write_pack(path: Path, lang: str, name: str, entries: dict[str, bytes], atla
 BUNDLE_TEXT = "text.bin"          # the pack inside a zipped .pelang (pe_lang_bundle.h)
 BUNDLE_MAX = 256 << 20             # largest .pelang the game opens
 PACK_MAX = 64 << 20                # largest pack the game reads
+PICTURES_MAX = 64 << 20            # largest pictures.bin the game reads (pe_lang_pictures.h)
 
 
 def pack_bytes(path: Path) -> bytes:
