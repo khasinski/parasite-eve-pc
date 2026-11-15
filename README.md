@@ -40,6 +40,8 @@ Translators can try the [Simplified Chinese rendering pilot](localization/pilots
 
 For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz (interpolated)**. This optional setting smooths models and camera movement while keeping the original game speed. It is off by default.
 
+**Escape → Graphics → VSync** chooses how frames reach the display. **Auto** (the default) syncs to displays running at about 60 Hz and uses the game's own frame limiter on others, such as 120 Hz or 144 Hz monitors. **On** always waits for the display's refresh, which avoids tearing at any refresh rate. **Off** always uses the frame limiter; like Auto on a high-refresh display, it can tear. Game speed stays the same in every mode, and the change applies immediately. It is saved as `vsync` in the `[graphics]` section of `parasite-eve.toml` (`0` Auto, `1` On, `2` Off).
+
 If the game crashes, it saves a report and shows where to find it. Attach that file when reporting the problem on Discord.
 
 ## Mods

@@ -86,6 +86,7 @@ static struct {
     int widescreen;
     int dynamic_lighting;
     int effect_geometry_correction;
+    int vsync; /* HOST_VSYNC_*: 0 Auto keeps psyz's refresh-rate detection */
 #ifdef PE_PS5_GPU_NATIVE
     int fsr1,fsr1_sharpness,model_fill_lighting,movie_blur,movie_presentation,battle_debris_3d,gameplay_fill,movie_cleanup,sprite_filtering;
     int show_fps;
@@ -834,6 +835,9 @@ static int Host_ParseOptionValue(const char *section, const char *key, char *val
 #endif
         } else if (!strcmp(key, "frame_interpolation")) {
             if(v>1)return 0;host_options.frame_interpolation=v;
+        } else if (!strcmp(key, "vsync")) {
+            if (v > HOST_VSYNC_OFF) return 0;
+            host_options.vsync = v;
         } else if (!strcmp(key, "geometry_correction")) {
             if (v > 1) {
                 return 0;
@@ -1015,6 +1019,7 @@ static int Host_SaveOptions(void) {
         "widescreen = %s\n"
         "dynamic_lighting = %s\n"
         "effect_geometry_correction = %s\n"
+        "vsync = %d\n"
 #ifdef PE_PS5_GPU_NATIVE
         "sprite_filtering = %s\nmovie_cleanup = %u\ngameplay_fill = %s\nfsr1 = %s\nfsr1_sharpness = %u\nmodel_fill_lighting = %u\nparticle_lighting = %s\ndialogue_text = %s\ntriangle_menu_font = %s\nmovie_blur = %s\nmovie_presentation = %u\nbattle_debris_3d = %u\nplayer_shadow = %u\n"
 #endif
@@ -1039,6 +1044,7 @@ static int Host_SaveOptions(void) {
         host_options.widescreen ? "true" : "false",
         host_options.dynamic_lighting ? "true" : "false",
         host_options.effect_geometry_correction ? "true" : "false",
+        host_options.vsync,
 #ifdef PE_PS5_GPU_NATIVE
         host_options.sprite_filtering?"true":"false",(unsigned)host_options.movie_cleanup,host_options.gameplay_fill ? "true" : "false",host_options.fsr1 ? "true" : "false",(unsigned)host_options.fsr1_sharpness,(unsigned)host_options.model_fill_lighting,host_options.particle_lighting?"true":"false",host_options.dialogue_text?"true":"false",host_options.triangle_menu_font?"true":"false",host_options.movie_presentation==1?"true":"false",(unsigned)host_options.movie_presentation,(unsigned)host_options.battle_debris_3d,(unsigned)host_options.player_shadow,
 #endif
@@ -1364,6 +1370,7 @@ static void Host_InitOptions(int enabled) {
     host_options.model_filtering = 0;
     host_options.dynamic_lighting = 0;
     host_options.effect_geometry_correction = 0;
+    host_options.vsync = HOST_VSYNC_AUTO;
 #ifdef PE_PS5_GPU_NATIVE
     host_options.frame_interpolation = 1; /* Owner requested display-only 60 Hz; saved explicit choice loads afterward. */
     host_options.widescreen = 1; /* Genuine wide default only when no saved choice. */
@@ -1510,6 +1517,26 @@ static void Host_TraceAspectSelection(const char *phase, int force) {
 #endif
 }
 
+/* Auto is psyz's own choice (driver VSync on ~60 Hz displays, its frame
+ * limiter otherwise) and is never requested, so the default leaves the
+ * renderer exactly as it starts. Headless and offscreen runs select
+ * limitless pacing themselves; a saved preference never overrides that. */
+static void Host_ApplyVsync(SDL_Window *window) {
+#if defined(PE_PS5)
+    (void)window;
+#else
+    static const PsyzVsyncMode modes[] = {PSYZ_VSYNC_AUTO, PSYZ_VSYNC_ON, PSYZ_VSYNC_OFF};
+    static int applied = HOST_VSYNC_AUTO;
+    int wanted = ClampIndex(host_options.vsync, COUNT_OF(modes));
+    if (!window || wanted == applied || Psyz_VideoGetVsyncMode() == PSYZ_VSYNC_LIMITLESS) {
+        return;
+    }
+    if (Psyz_VideoSetVsyncMode(modes[wanted]) == 0) {
+        applied = wanted;
+    }
+#endif
+}
+
 static void Host_ApplyOptions(SDL_Window *window) {
 #ifdef PE_PS5_GPU_NATIVE
     Psyz_VideoSetShutdownCallback(Host_NativeApplicationShutdown);
@@ -1556,6 +1583,7 @@ static void Host_ApplyOptions(SDL_Window *window) {
         host_options.effect_geometry_correction = Psyz_VideoGetEffectGeometryCorrection();
     }
     Psyz_VideoSetWidescreen(host_options.widescreen != 0);
+    Host_ApplyVsync(window);
 #ifdef PE_PS5_GPU_NATIVE
     static int appliedBackgrounds=-1;
     if(appliedBackgrounds!=host_options.hd_backgrounds){Host_HdApply();appliedBackgrounds=host_options.hd_backgrounds;}
@@ -3909,7 +3937,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
                      "Graphics: render resolution %ux (renderer %ux), fullscreen %s, aspect ratio %s, "
 #endif
                      "dithering %s, geometry correction %s, antialiasing %s, model textures %s, "
-                     "dynamic lighting %s, effect geometry %s\r\n"
+                     "dynamic lighting %s, effect geometry %s, VSync %s\r\n"
                      "Audio: master volume %u%%\r\n"
                      "Controls: speed-up %ux while %s, field run threshold %u\r\n"
                      "Discs: disc 1 %s, disc 2 %s\r\n",
@@ -3927,6 +3955,7 @@ static void Host_DescribeCrash(char *out, size_t size) {
                      kFilterNames[host_options.model_filtering != 0],
                      kSwitchNames[host_options.dynamic_lighting != 0],
                      kSwitchNames[host_options.effect_geometry_correction != 0],
+                     host_options.vsync == HOST_VSYNC_ON ? "On" : host_options.vsync == HOST_VSYNC_OFF ? "Off" : "Auto",
                      host_options.volume, host_options.speed_factor,
                      host_options.speed_toggle ? "toggled on" : "held",
                      host_options.analog_run_threshold, Host_CrashFileName(host_options.discs[0]),
