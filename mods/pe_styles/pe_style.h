@@ -58,6 +58,7 @@ typedef struct {
   unsigned charges;
   unsigned cracked;     /* Backlash warning given at full charge */
   unsigned group;       /* frames left in the current enemy attack */
+  unsigned locked;      /* a committed support PE holds the charges */
 } PeChannelerState;
 enum { PE_CH_NONE, PE_CH_CRACK, PE_CH_BREAK }; /* pe_channeler_hit result */
 
@@ -190,6 +191,11 @@ unsigned pe_channeler_discount(const PeStyleSession *s);
 /* Spends every charge on a support PE power; returns the refunded share of its
  * cost in percent and sets *overchannel at max charges. Clears the crack. */
 unsigned pe_channeler_cast(PeStyleSession *s, int *overchannel);
+/* A support PE chosen at the discounted cost is committed: Backlash leaves the
+ * charges alone until it is cast (pe_channeler_cast) or the action ends or is
+ * canceled (pe_channeler_unlock), so the price shown is the price paid. */
+void pe_channeler_lock(PeStyleSession *s);
+void pe_channeler_unlock(PeStyleSession *s);
 /* Backlash: an eligible incoming hit. Returns PE_CH_CRACK / _BREAK / _NONE. */
 int pe_channeler_hit(PeStyleSession *s);
 void pe_channeler_tick(PeStyleSession *s); /* every battle frame */
