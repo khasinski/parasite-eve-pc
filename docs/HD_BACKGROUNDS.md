@@ -469,3 +469,8 @@ static planes, and is excluded from new underlay coverage. Static foregrounds
 explicitly use their authored HD mattes with palette witnesses instead of being
 clipped to the PS1 staircase. This is a reviewed M097 artwork recipe, not an
 unreviewed global change to every room. The output audit records input hashes.
+
+Background catalogs containing the reviewed PEW2 widescreen layers require
+`widescreen-layers-v2`. The downloader advertises and accepts this capability;
+older clients keep receiving their compatible catalog. This gates the newer
+margin sampling and foreground authoring together without replacing older ZIPs.
