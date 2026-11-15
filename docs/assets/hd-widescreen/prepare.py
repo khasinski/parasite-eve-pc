@@ -19,16 +19,151 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def catalog():
+def catalog(assets=ASSETS):
     views = {}
     rooms = {}
     for study in ('hd-static', 'hd-day1', 'hd-animated'):
-        root = ASSETS / study
+        root = assets / study
         tasks = json.loads((root / 'tasks.json').read_text())
         rooms.update({r['room']: r for r in tasks['rooms'] if 'geometry_key' in r})
         for v in json.loads((root / 'views.json').read_text()):
             views[v['room'], v['group']] = {**v, 'study': study}
     return views, rooms
+
+
+def field_view_width(width=320, height=224):
+    """Match PsyZ's whole-pixel 16:9 viewport for the NTSC field display.
+
+    A tall scrolling background is still viewed through 224 screen lines;
+    dividing its whole canvas width by its whole height gives the wrong scope.
+    """
+    if width <= 0 or height <= 0:
+        raise ValueError('Invalid field dimensions')
+    aspect = width / height
+    return 2 * math.floor(min(width * (16 / 9) / aspect, width / .75) / 2)
+
+
+def scope_record(view, target_width=398, prepared=False, published=False):
+    left, top, right, bottom = view['active_bbox']
+    width, height = right-left, bottom-top
+    if width <= 0 or height <= 0:
+        raise ValueError('Empty source view')
+    if width >= target_width:
+        action = 'verify-native-wide'
+    elif height < 224:
+        action = 'review-intentional-framing'
+    elif published:
+        action = 'verify-published-extension'
+    elif prepared:
+        action = 'review-existing-extension'
+    elif view['controllers']:
+        action = 'extend-with-original-animation'
+    else:
+        action = 'extend-static'
+    return dict(source_width=width, source_height=height,
+                target_width=target_width, action=action,
+                new_pixels_required_by_width=width < target_width,
+                runtime_verified=False)
+
+
+def audit_catalog(assets, pack, output, published_pack=None):
+    """Inventory scope and aliases; never label dimensions as runtime proof."""
+    from collections import Counter, defaultdict
+    views, rooms = catalog(assets)
+    retail = json.loads((assets/'widescreen/catalog.json').read_text())
+    native = {(r['id'],v['group']):v for r in retail['rooms'] if r['disc']==1 for v in r['views']}
+    work_path=assets/'hd-widescreen/expansion-20261108/work-catalog.json'
+    work=json.loads(work_path.read_text())['records'] if work_path.exists() else []
+    edge_entries={(r['room'],r['group']):r.get('animated_edge_entries') for r in work}
+    prepared={(r['room'],r['group']) for r in work if r.get('work_status') in
+              ('already-installed','installed-static-extension')}
+    manifest=json.loads((pack/'manifest.json').read_text())
+    known_art={(r['room'],r['group']) for r in manifest.get('widescreen',[])}
+    prepared |= known_art
+    shipped=json.loads((published_pack/'manifest.json').read_text()) if published_pack else {}
+    published={(r['room'],r['group']) for r in shipped.get('widescreen',[])}
+    groups=defaultdict(list); records=[]; hashes={}
+    def cached_digest(path):
+        if path not in hashes:hashes[path]=digest(path)
+        return hashes[path]
+    study_data={study:json.loads((assets/study/'tasks.json').read_text()) for study in ('hd-static','hd-day1','hd-animated')}
+    for key,view in sorted(views.items()):
+        room,group=key
+        source=assets/view['study']/'inputs'/view['base_canvas_input']
+        if not source.exists():raise FileNotFoundError(source)
+        geometry=rooms[room]['geometry_key']; frame=native.get(key,{})
+        entries=[e for e in rooms[room]['entries'] if e['group']==group and e['tiles']]
+        source_tasks=[t for t in study_data[view['study']]['tasks'] if (t['room'],t['group'])==key]
+        contexts=[(t['entry'],cached_digest(assets/view['study']/'inputs'/t['input']),
+                   cached_digest(assets/view['study']/'refs'/t['ref'])) for t in source_tasks]
+        signature=hashlib.sha256(json.dumps([sorted(contexts),[(e['index'],e['flags']) for e in entries]],sort_keys=True).encode()).hexdigest()
+        controlled={slot['entry'] for c in view['controllers'] for slot in c['slots']}
+        unstable=[e['index'] for e in entries if (e['index'] not in controlled and not e['flags']&2) or e['flags']&12]
+        record=dict(room=room,group=group,study=view['study'],geometry_key=geometry,
+                    native_origin=view['native_origin'],active_bbox=view['active_bbox'],
+                    source_sha256=cached_digest(source),serialized_context_sha256=signature,
+                    script_or_scroll_review_entries=unstable,controller_count=len(view['controllers']),
+                    serialized_edge_animation_entries=edge_entries.get(key),
+                    camera_bounds=frame.get('camera_bounds'),
+                    original_tile_bounds=frame.get('tile_bounds_active'),
+                    **scope_record(view,field_view_width(),key in prepared,key in published))
+        if record['action']=='extend-static' and unstable:record['action']='review-script-switched-or-scrolled'
+        record['camera_extent_review_required']=bool(frame.get('camera_bounds') and
+            (frame['camera_bounds'][0]!=frame['camera_bounds'][1] or frame['camera_bounds'][2]!=frame['camera_bounds'][3]))
+        groups[(geometry,group)].append(record)
+        records.append(record)
+    aliases=[]
+    for (geometry,group),family in sorted(groups.items()):
+        if len(family)<2:continue
+        contexts={(r['source_sha256'],r['serialized_context_sha256'],tuple(r['active_bbox']),tuple(r['native_origin'])) for r in family}
+        aliases.append(dict(geometry_key=geometry,group=group,
+                            views=[f"{r['room']}-g{r['group']:02}" for r in family],
+                            distinct_source_contexts=len(contexts),
+                            variant_binding_review_required=len(contexts)>1))
+    jobs=[]
+    for (geometry,group),family in sorted(groups.items()):
+        contexts={(r['serialized_context_sha256'],r['source_sha256'],tuple(r['active_bbox']),tuple(r['native_origin'])) for r in family}
+        published_family=[r for r in family if (r['room'],r['group']) in published]
+        prepared_family=[r for r in family if (r['room'],r['group']) in prepared]
+        if len(contexts)==1:
+            representative=(published_family or prepared_family or family)[0]
+            for record in family:
+                record['shared_artwork_representative']=[representative['room'],group]
+                if record['new_pixels_required_by_width'] and record['source_height']>=224:
+                    if published_family:record['action']='verify-published-extension'
+                    elif prepared_family:record['action']='review-existing-extension'
+            jobs.append(dict(geometry_key=geometry,group=group,
+                             representative=[representative['room'],group],
+                             aliases=[[r['room'],group] for r in family],
+                             action=representative['action'],new_artwork=representative['action'] in
+                             ('extend-static','extend-with-original-animation'),runtime_verified=False,
+                             serialized_edge_animation_entries=representative['serialized_edge_animation_entries']))
+        else:
+            jobs.append(dict(geometry_key=geometry,group=group,
+                             aliases=[[r['room'],group] for r in family],
+                             action='review-variant-binding',new_artwork=False,runtime_verified=False))
+    unrepresented=[dict(room=k[0],group=k[1],dimensions=[v['width'],v['height']],
+                        action='review-native-scene-without-hd-background',runtime_verified=False)
+                   for k,v in sorted(native.items()) if k not in views]
+    result=dict(scope='All existing HD background views; geometry-only views tracked separately. Source dimensions and aliases are triage, not complete camera/layer/runtime qualification.',
+                field_view=dict(width=320,height=224,widescreen_width=field_view_width()),
+                source_pack_manifest_sha256=digest(pack/'manifest.json'),
+                published_pack_manifest_sha256=digest(published_pack/'manifest.json') if published_pack else None,
+                hd_views=len(records),retail_views=len(native),
+                action_counts=dict(Counter(r['action'] for r in records)),
+                shared_geometry_families=len(aliases),
+                variant_binding_reviews=sum(a['variant_binding_review_required'] for a in aliases),
+                unique_binding_jobs=len(jobs),job_action_counts=dict(Counter(j['action'] for j in jobs)),
+                views=records,aliases=aliases,jobs=jobs,native_only_views=unrepresented,
+                requirements=['No unnecessary outpainting of native-wide views',
+                              'Coherent foreground and backdrop materials and HD mattes',
+                              'Original animation phases, palette changes, scripts and gameplay remain authoritative',
+                              'Existing 4:3 materials retained except explicitly approved artwork corrections',
+                              'Camera-edge and actor-occlusion checks with hidden GPU replay',
+                              'Published pack uses versioning, checked hashes and atomic installation'])
+    output.parent.mkdir(parents=True,exist_ok=True)
+    output.write_text(json.dumps(result,indent=2)+'\n')
+    return result
 
 
 def register(center, generated, margin=224):
@@ -66,8 +201,8 @@ def register(center, generated, margin=224):
         inliers=int(inliers.sum()), residual_p95=p95)
 
 
-def package(room, group, generated, center_path, pack):
-    views, rooms = catalog()
+def package(room, group, generated, center_path, pack, assets=ASSETS):
+    views, rooms = catalog(assets)
     view = views[room, group]
     if view['controllers']:
         raise ValueError('Animated views require a reviewed source-driven phase extension; static export refused')
@@ -127,7 +262,15 @@ def package(room, group, generated, center_path, pack):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--room',required=True);p.add_argument('--group',type=int,default=0)
-    p.add_argument('--generated',type=Path,required=True);p.add_argument('--center',type=Path,required=True)
+    p.add_argument('--room');p.add_argument('--group',type=int,default=0)
+    p.add_argument('--audit',type=Path);p.add_argument('--assets-root',type=Path,default=ASSETS)
+    p.add_argument('--published-pack',type=Path,help='Known shipped pack; working candidates alone are never called published')
+    p.add_argument('--generated',type=Path);p.add_argument('--center',type=Path)
     p.add_argument('--pack',type=Path,required=True)
-    a=p.parse_args();print(json.dumps(package(a.room,a.group,a.generated,a.center,a.pack),indent=2))
+    a=p.parse_args()
+    if a.audit:
+        result=audit_catalog(a.assets_root.resolve(),a.pack.resolve(),a.audit,a.published_pack.resolve() if a.published_pack else None)
+        print(json.dumps({k:result[k] for k in ('hd_views','retail_views','action_counts','shared_geometry_families','variant_binding_reviews','unique_binding_jobs','job_action_counts')},indent=2))
+    else:
+        if not a.room or not a.generated or not a.center:p.error('--room, --generated and --center are required when packaging')
+        print(json.dumps(package(a.room,a.group,a.generated,a.center,a.pack,a.assets_root),indent=2))

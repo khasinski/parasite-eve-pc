@@ -294,3 +294,29 @@ same-key WebP. The issue-56 candidate builder removes only the old candidate
 link when replacing an atlas, preserving the baseline. It accepts
 `--assets-root`, `--baseline` and `--out` for separate checkouts, refuses existing
 outputs and writes its audit beside the new output directory.
+
+### Completing 16:9 coverage
+
+Audit the actual artwork queue before generating more sides:
+
+```
+python docs/assets/hd-widescreen/prepare.py --audit SCOPE.json --assets-root PATH_TO_ASSETS --pack PACK
+```
+
+The normal 320x224 field viewport needs 398 native source pixels for 16:9.
+A tall scrolling canvas does not increase that requirement. Native-wide views
+enter camera/coverage review instead of the outpainting queue; short banners
+receive an intentional-framing review. Serialized animation footprints remain
+separate from live animation qualification.
+
+Identical geometry/group bindings can share one extension only when every
+serialized source context, native reference, entry flag, crop and origin agrees.
+A changed animation phase prevents that reuse. Existing art is a review candidate,
+not proof of completed integration. Geometry-only views without an HD background
+are tracked separately rather than being silently dropped from the game scope.
+
+The audit records all aliases and requirements, including original 4:3 materials,
+coherent foregrounds and underlays, controller timing, camera extremes, actor
+occlusion and verified versioned distribution. It never marks a view runtime
+verified from its dimensions. Regression: `python tests/hd_widescreen_catalog.py`
+(Pillow, NumPy and OpenCV required).
