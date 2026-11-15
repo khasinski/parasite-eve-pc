@@ -35,6 +35,8 @@
 #define CH_LIST_ROWS   4
 #define CH_INFO_ROWS   3
 #define CH_GAP         4
+#define CH_MENU_UP     0x1000u
+#define CH_MENU_DOWN   0x4000u
 #define CH_MENU_LEFT   0x8000u
 #define CH_MENU_RIGHT  0x2000u
 #define CH_COLOR_TEXT  0x808080    /* the game's menu white */
@@ -57,8 +59,8 @@ static int s_drawing;   /* the column a list draw is for */
 
 /* ---- text ---------------------------------------------------------------------------------- */
 
-/* Print ASCII, cut with "..." to `width` pixels (the game's font is proportional). */
-static void pe_print_fit(const char *ascii, int width) {
+/* ASCII as game text, cut with "..." to `width` pixels (the game's font is proportional). */
+static u8 *pe_fit(const char *ascii, int width) {
     size_t n = 0;
     pe_text_from_ascii(s_text, sizeof s_text, ascii);
     while (n < sizeof s_text - 1 && s_text[n] != 0xFF) ++n;
@@ -67,7 +69,14 @@ static void pe_print_fit(const char *ascii, int width) {
         if (n >= 3) s_text[n - 3] = s_text[n - 2] = s_text[n - 1] = pe_glyph('.');
         while (n && Draw_MeasureTextWidth(s_text) > width) s_text[--n] = 0xFF;
     }
-    Draw_PrintRawText(s_text);
+    return s_text;
+}
+
+static void pe_print_fit(const char *ascii, int width) { Draw_PrintRawText(pe_fit(ascii, width)); }
+
+static int pe_width(const char *ascii) {
+    pe_text_from_ascii(s_text, sizeof s_text, ascii);
+    return Draw_MeasureTextWidth(s_text);
 }
 
 /* A title-bar line, cut to the room left of the game's clock. */
@@ -78,11 +87,6 @@ static u8 *pe_title_fit(const char *ascii) {
     while (n < sizeof s_text - 1 && s_text[n] != 0xFF) ++n;
     while (n && Draw_MeasureTextWidth(s_text) > CH_TITLE_W) s_text[--n] = 0xFF;
     return s_text;
-}
-
-static int pe_width(const char *ascii) {
-    pe_text_from_ascii(s_text, sizeof s_text, ascii);
-    return Draw_MeasureTextWidth(s_text);
 }
 
 /* `ascii` word-wrapped to `width` pixels: line 0 is the words that fit, line 1 the rest (the
@@ -119,6 +123,25 @@ static const char *pe_level_name(const PeChallengeDef *d, int level) {
 
 /* ---- the two lists ------------------------------------------------------------------------- */
 
+/* Both lists keep their full height (the game's frames don't shrink to a short list); the cursor
+ * stays on real rows (pe_list_input). */
+static int pe_rows_shown(int column) { return s_count[column] > CH_LIST_ROWS ? s_count[column] : CH_LIST_ROWS; }
+
+/* The rows each list was left on, kept to its rows now (another save, or a challenge cleared,
+ * changes the counts between visits): the cursor on a challenge, the list scrolled no further than
+ * its end and keeping the cursor in view. */
+static void pe_clamp(void) {
+    for (int c = 0; c < CH_COLUMNS; ++c) {
+        const int last = s_count[c] ? s_count[c] - 1 : 0, end = pe_rows_shown(c) - CH_LIST_ROWS;
+        if (s_cursor[c] > last) s_cursor[c] = last;
+        if (s_cursor[c] < 0) s_cursor[c] = 0;
+        if (s_scroll[c] > end) s_scroll[c] = end;
+        if (s_scroll[c] > s_cursor[c]) s_scroll[c] = s_cursor[c];
+        if (s_scroll[c] < s_cursor[c] - CH_LIST_ROWS + 1) s_scroll[c] = s_cursor[c] - CH_LIST_ROWS + 1;
+        if (s_scroll[c] < 0) s_scroll[c] = 0;
+    }
+}
+
 static void pe_build(void) {
     s_count[CH_ACTIVE] = s_count[CH_DONE] = 0;
     for (unsigned i = 0; i < g_ch_def_count; ++i) {
@@ -127,6 +150,7 @@ static void pe_build(void) {
         if (pe_ch_on(d->id)) s_rows[CH_ACTIVE][s_count[CH_ACTIVE]++] = d->id;
         if (r && (r->clean || r->assisted)) s_rows[CH_DONE][s_count[CH_DONE]++] = d->id;
     }
+    pe_clamp();
 }
 
 static const PeChallengeDef *pe_at(int column, int row) {
@@ -158,14 +182,24 @@ static void pe_draw_other(MenuWidgetNode *node) { s_drawing = !s_focus; MenuWidg
 
 /* ---- the headers: "Active 3", "Completed 5/13" --------------------------------------------- */
 
+/* "Completed  5/13": the name with a gap that fits the column (the Japanese font is wider), else
+ * the count alone, cut with "..." if even that is too long. */
 static void pe_head_row(int column, int row) {
-    char line[48];
+    static const char *const gaps[] = {"  ", " "};
+    const char *name = column == CH_ACTIVE ? "Active" : "Completed";
+    const int width = g_DrawTextPosX - 4;
+    char count[16], line[48];
     if (row) return;
-    if (column == CH_ACTIVE) snprintf(line, sizeof line, "Active  %d", s_count[CH_ACTIVE]);
-    else snprintf(line, sizeof line, "Completed  %d/%u", s_count[CH_DONE], g_ch_def_count);
+    if (column == CH_ACTIVE) snprintf(count, sizeof count, "%d", s_count[CH_ACTIVE]);
+    else snprintf(count, sizeof count, "%d/%u", s_count[CH_DONE], g_ch_def_count);
+    snprintf(line, sizeof line, "%s", count);   /* the count alone, if the name never fits */
+    for (size_t i = 0; i < sizeof gaps / sizeof *gaps; ++i) {
+        char named[48];
+        snprintf(named, sizeof named, "%s%s%s", name, gaps[i], count);
+        if (pe_width(named) <= width) { snprintf(line, sizeof line, "%s", named); break; }
+    }
     if (column != s_focus) Draw_SetTextDimmed(1);
-    pe_text_from_ascii(s_text, sizeof s_text, line);
-    Draw_PrintCenteredTextInWidth(s_text, g_DrawTextPosX);
+    Draw_PrintCenteredTextInWidth(pe_fit(line, width), g_DrawTextPosX);
     Draw_SetTextDimmed(0);
 }
 static void pe_head_active(int row) { pe_head_row(CH_ACTIVE, row); }
@@ -219,13 +253,16 @@ static void pe_draw_info(MenuWidgetNode *node) { MenuWidget_DrawList(node, pe_in
 
 /* ---- focus: the selectable list moves to the other column ---------------------------------- */
 
-/* Both lists keep their full height (the game's frames don't shrink to a short list); the cursor
- * stays on real rows (pe_list_input). */
-static int pe_rows_shown(int column) { return s_count[column] > CH_LIST_ROWS ? s_count[column] : CH_LIST_ROWS; }
-
 static int pe_list_input(MenuWidgetNode *list, unsigned int buttons) {
-    const int handled = pe_screen_preview_input(list, buttons);
     const int last = s_count[s_focus] ? s_count[s_focus] - 1 : 0;
+    int handled;
+    /* Down from the last challenge onto the frame's empty rows, or Up / Down in a list of one or
+     * none: the cursor stays, without the move sound. */
+    if (!(buttons & (CH_MENU_LEFT | CH_MENU_RIGHT)) &&
+        (((buttons & CH_MENU_DOWN) && list->cursor_y >= last && last < list->y_limit - 1) ||
+         ((buttons & (CH_MENU_UP | CH_MENU_DOWN)) && last == 0)))
+        return 1;
+    handled = pe_screen_preview_input(list, buttons);
     if (list->cursor_y > last) {
         list->cursor_y = last;
         if (list->scroll_y > last) list->scroll_y = last;
@@ -236,6 +273,7 @@ static int pe_list_input(MenuWidgetNode *list, unsigned int buttons) {
 static void pe_place(void) {
     MenuWidgetNode *other_panel = s_other ? s_other->parent : NULL;
     if (!s_screen.panel || !other_panel) return;
+    pe_clamp();
     s_screen.panel->x = s_column_x[s_focus];
     other_panel->x = s_column_x[!s_focus];
     pe_screen_rows(&s_screen, pe_rows_shown(s_focus), s_cursor[s_focus]);
