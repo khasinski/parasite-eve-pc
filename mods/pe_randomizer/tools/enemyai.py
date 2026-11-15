@@ -226,6 +226,39 @@ def addressed(rows):
     return out
 
 
+def n_flow(steps):
+    """{entity: (N vars it writes, N vars it reads)}: op 10 (Script_AssignValue) writes its first operand and op 9
+    (Script_EvalExpr) its second; every other N operand is a read."""
+    out = {}
+    for e, op, a, _ in steps.values():
+        w, r = out.setdefault(e, (set(), set()))
+        dest = 0 if op == 10 else 1 if op == 9 else -1
+        for i, (mode, v) in enumerate(a):
+            if mode == 4: (w if i == dest else r).add(v)
+    return out
+
+
+def helped(rows, rooms):
+    """{(room, entity): {(helper, N var)}}: actors with helpers, actors of their room with no creature of their own
+    (census "never placed") that read an N var the actor sets. The Giant Spider (M156/M291/M380 e3) sets one N var
+    per leg (e4-e6, which wait on it with op 9 and clear it at their end) at steps of its HP, and the numbers differ
+    per room (M156 N0x12-0x14, M380 N0x13-0x15); pe_rand_ai.c gives a moved foe's N vars new numbers too. So in
+    another slot the foe loses its helpers, and another foe in its slot leaves them waiting: M380's fight with
+    M156's spider never ended (seed 123456 real line, stuck). Only helpers of another creature id count (the legs
+    are 0x0200, each a combatant the fight waits on); a normal Spider's second copy (same id) reads its N vars too,
+    but fights end without it (its slot took other foes in the real lines, won)."""
+    helpers = {(r["room"], r["entity"]): r["ids"] for r in rows if r["group"] == "never placed"}
+    out = {}
+    for r in rows:
+        if r["group"] == "never placed": continue
+        flow = n_flow(rooms[r["room"]][1])
+        mine = flow.get(r["entity"], (set(), set()))[0]
+        for e, (writes, reads) in flow.items():   # N vars it only reads: given to it (N0xa, set by all, is not)
+            if e != r["entity"] and helpers.get((r["room"], e), r["ids"]) != r["ids"]:
+                for v in mine & reads - writes: out.setdefault((r["room"], r["entity"]), set()).add((e, v))
+    return out
+
+
 def room_bound(rows, slots):
     """{(room, entity)}: actors that start a room slot (op 106) whose handler is written for their own room
     (g_RoomMNNN...: it draws with that room's models, e.g. the Worm's RoomM086_SeekerController; in another room
@@ -238,10 +271,11 @@ def room_bound(rows, slots):
     return out
 
 
-def write_table(pool, model, writers, path, deny=frozenset(), heads=None, bound=frozenset()):
+def write_table(pool, model, writers, path, deny=frozenset(), heads=None, bound=frozenset(), helps=None):
     """pe_rand_foes.h; returns the foe count. heads: addressed(rows), slots that take no foe; bound: room_bound(),
-    foes that go to no other slot."""
+    foes that go to no other slot; helps: helped(), foes that neither move nor give up their slot."""
     heads = heads or {}
+    helps = helps or {}
     foes = []
     for r in pool:
         slots = model.get(r["room"], {})
@@ -266,6 +300,8 @@ def write_table(pool, model, writers, path, deny=frozenset(), heads=None, bound=
         if b["mem"] > a["mem"]: return False
         # A slot other actors of its room address by number (a boss's body parts) keeps its own foe.
         if (a["r"]["room"], a["r"]["entity"]) in heads: return False
+        # A foe with helpers (the Giant Spider's legs, given its N vars) stays with them: neither moves nor is replaced.
+        if (a["r"]["room"], a["r"]["entity"]) in helps or (b["r"]["room"], b["r"]["entity"]) in helps: return False
         # A foe whose effects are its own room's (g_RoomMNNN handlers) stays in that room.
         if (b["r"]["room"], b["r"]["entity"]) in bound and a["r"]["room"] != b["r"]["room"]: return False
         # A scripted fight (M013's Rat) is spawned by op 8 with sub id 0 and its actor sends 0x70 at once; a random
@@ -372,7 +408,7 @@ def main():
     if table_path:
         if not models_path or not writes_path: sys.exit("--table needs --models and --writes")
         n = write_table(pool, models(models_path), story_writers(writes_path), table_path, deny_list(deny_path),
-                        addressed(rows), room_bound(rows, slots))
+                        addressed(rows), room_bound(rows, slots), helped(rows, rooms))
         print(f"enemyai: {n} foes in {table_path}", file=sys.stderr)
     print(f"enemyai: {len(rows)} actors, {len(slots)} rooms, {total} pairs, {hist.get((), 0)} clean "
           f"({len(random_)} random <- random)" + ("" if disc else "; no disc: room PM slots not read"), file=sys.stderr)

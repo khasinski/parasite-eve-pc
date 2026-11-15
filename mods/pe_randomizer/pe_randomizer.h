@@ -170,7 +170,7 @@ typedef struct PeRandFoe {
 unsigned pe_rand_foes_generate(const PeRandFoe *foes, const uint32_t *ok, unsigned count, uint32_t seed, uint16_t *out);
 /* Raise PE_RAND_FOES_VERSION whenever the same seed would give a different plan (the generator or pe_rand_foes.h).
  * A save keeps the version it was made with; a build that doesn't know it leaves that game's enemies vanilla. */
-#define PE_RAND_FOES_VERSION 4
+#define PE_RAND_FOES_VERSION 5
 /* 1: bosses join the pool: a boss slot may take any foe its ok row allows, and a boss any slot (a Rat for the
  * Alligator). Bosses whose room's own script runs the fight have no ok pairs and stay. 0: only non-boss foes
  * move (version 3's plans). The bestiary's boss mark also covers every Museum and Chrysler creature. */

@@ -1129,6 +1129,7 @@ static int real_watch(void *unused) {
     return 0;
 }
 
+enum { REAL_HP_BASE = 1000000 };   /* 0xF4240: boss scripts compare their HP with it (M380 e3) */
 static int real_in_battle(void) { return (g_GameStateFlags & 2) != 0; }
 static int real_on_floor(int x, int z) {
     unsigned n = g_CollisionDb ? g_CollisionDb->triangleCount : 0;
@@ -1138,12 +1139,32 @@ static int real_on_floor(int x, int z) {
 
 /* The pad button the target menu takes as cancel (field bit 0x2000, Battle_HandleItemMenu) and not as confirm
  * (field bit 0x200): the boot pad code swaps pad 0x2000 and 0x4000, then g_FieldRenderFlagTable maps them. */
-static u16 real_cancel_button(void) {
+static u16 real_field_button(unsigned bit, unsigned not_bit) {
     static const u16 buttons[] = { 0x1000, 0x2000, 0x8000, 0x4000, 0x10, 0x20, 0x40, 0x80 };
     for (unsigned i = 0; i < sizeof buttons / sizeof *buttons; ++i) {
         u16 b = buttons[i], m = (u16)((b & ~0x6000u) | (b & 0x2000 ? 0x4000 : 0) | (b & 0x4000 ? 0x2000 : 0));
-        if ((g_FieldRenderFlagTable[13] & m) && !(g_FieldRenderFlagTable[9] & m)) return b;
+        if ((g_FieldRenderFlagTable[bit] & m) && !(g_FieldRenderFlagTable[not_bit] & m)) return b;
     }
+    return 0;
+}
+static u16 real_cancel_button(void) { return real_field_button(13, 9); }
+
+/* A script of the room stands on op 34 (Script_YieldWhileTableEntrySet): a text box waits for the player. */
+static int real_text_open(void) {
+    for (FieldActor *a = g_FieldActorListHead; a; a = a->next)
+        for (int i = 0; i < 3; ++i)
+            for (ScriptNode *n = a->script_node_lists[i]; n; n = n->next)
+                if (n->current.script && !(n->flags & 0x50) && n->active && (n->current.script[0] & 0x1FFF) == 34) return 1;
+    return 0;
+}
+
+/* One of her scripts stands on a walk to a point (op 68 Script_MoveTowardPoint, op 219 Render_CameraTrackEntityAngle). */
+static int real_walked(FieldActor *a) {
+    for (int i = 0; i < 3; ++i)
+        for (ScriptNode *n = a->script_node_lists[i]; n; n = n->next) {
+            u32 op = n->current.script ? n->current.script[0] & 0x1FFF : 0;
+            if ((n->flags & 0x20) && (op == 68 || op == 219)) return 1;
+        }
     return 0;
 }
 
@@ -1151,9 +1172,13 @@ static int real_pad(void *ctx, void *user) {
     (void)ctx; (void)user;
     /* the attack button (Cross): down 2 frames in every 12 while a battle is on. With the target menu open
      * (battle state 1) and no foe to target (a Mole underground), cancel instead, as a player would: the menu
-     * holds the battle's time, so a foe that hides until the time runs again would never come back. */
+     * holds the battle's time, so a foe that hides until the time runs again would never come back.
+     * Before the battle, a text box the room opens (M111, M199: the fight comes after it) is closed the same
+     * way, with the button the text takes as next (field bit 0x100, textbox.c) and not as cancel. */
     u16 press = g_BattleModeState == 1 && g_BattleTargetCount == 0 ? real_cancel_button() : 0x4000;
-    u16 down = rl.r && !rl.done && real_in_battle() && rl.frame % 12 < 2 ? press : 0;
+    int text = rl.r && !rl.done && !real_in_battle() && rl.start < 0 && real_text_open();
+    if (text) press = real_field_button(8, 13);
+    u16 down = rl.r && !rl.done && (real_in_battle() || text) && rl.frame % 12 < 2 ? press : 0;
     g_PadPackets[0].header = 0x4000; g_PadPackets[0].buttons = (u16)~down;
     return 0;
 }
@@ -1168,7 +1193,9 @@ static int real_frame(void *ctx, void *user) {
     Combatant *me = aya ? (Combatant *)aya->state : NULL;
     if (rl.start < 0 && real_in_battle()) rl.start = (int)frame;
     if (rl.start >= 0 && rl.over < 0 && !real_in_battle()) rl.over = (int)frame;
-    if (rl.start < 0 && r->at && frame >= AT_FRAME && aya) {   /* her stops, in turn, then the last one */
+    /* her stops, in turn, then the last one; not while the room walks her itself (op 68 or 219: M199's walk to
+     * its fight after a text), where holding her at the stop means the walk never arrives */
+    if (rl.start < 0 && r->at && frame >= AT_FRAME && aya && !real_walked(aya)) {
         unsigned stop = (frame - AT_FRAME) / AT_FRAMES;
         if (stop >= (unsigned)r->at) stop = (unsigned)r->at - 1;
         if (r->at_actor[stop] < 0) {
@@ -1185,12 +1212,22 @@ static int real_frame(void *ctx, void *user) {
             if (!slot->active) continue;
             int hp = (int)slot->combatant.hp;
             if (!rl.slot_seen[i]) { rl.slot_seen[i] = 1; rl.slot_type[i] = slot->combatant.lowAndEntityId.bytes.entityId; rl.slot_first[i] = rl.slot_low[i] = rl.slot_hurt[i] = hp; }
-            else if (hp < rl.slot_last[i]) {
+            else if (rl.slot_first[i] > REAL_HP_BASE) {
+                /* A boss whose script counts its HP above REAL_HP_BASE (M380's Giant Spider: 1000450, real 450)
+                 * acts at steps on the way down (a leg's phase flag) and dies by its script below the base: each of
+                 * her hits takes a quarter of the real HP, so every step is seen. */
+                if (hp < rl.slot_last[i]) {
+                    ++rl.shots; ++rl.cut;
+                    if (rl.slot_hurt[i] == rl.slot_first[i]) rl.slot_hurt[i] = hp;
+                    slot->combatant.hp = hp = hp - (rl.slot_first[i] - REAL_HP_BASE) / 4;
+                }
+            } else if (hp < rl.slot_last[i]) {
                 ++rl.shots;
                 /* her first hit on a foe is the game's own number; the rest of its HP is cut so her next hit kills it */
                 if (rl.slot_hurt[i] == rl.slot_first[i]) { rl.slot_hurt[i] = hp; if (hp > 1) { slot->combatant.hp = hp = 1; ++rl.cut; } }
             }
-            if (rl.slot_hurt[i] != rl.slot_first[i] && hp > 1) slot->combatant.hp = hp = 1;   /* a foe that heals: cut again */
+            if (rl.slot_first[i] <= REAL_HP_BASE && rl.slot_hurt[i] != rl.slot_first[i] && hp > 1)
+                slot->combatant.hp = hp = 1;   /* a foe that heals: cut again */
             rl.slot_last[i] = hp;
             if (hp < rl.slot_low[i]) rl.slot_low[i] = hp;
         }

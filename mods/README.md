@@ -849,7 +849,8 @@ stats (HP, attack, level, value). Bosses join the pool (`PE_RAND_MOVE_BOSSES` 1)
 normal enemy and a boss can turn up in a normal fight, with that fight's stats. Bosses whose room's own
 script runs the fight (the Theater, Day 1 Sewer and Cruiser bosses, Sheeva, the Museum dinosaurs) have no
 enemy they can swap with and stay, and so do the Centipede and the Crab, whose body parts follow the head's
-animations (op 212). The bestiary's boss mark also covers every Museum and Chrysler enemy, which move from
+animations (op 212), and the Giant Spider, whose legs (helpers of another creature id) wait on N vars it sets
+at steps of its HP, numbered per room (`enemyai.py` `helped()`; FOES_VERSION 5). The bestiary's boss mark also covers every Museum and Chrysler enemy, which move from
 this version on. A slot only takes an enemy whose model needs no more of the room's 16 entity memory
 blocks (`Entity_AllocBlock`) than its own (`blocks=` in the rooms ctest's models listing). M013's scripted
 Rat fight takes a normal enemy too: the room spawns it with the sub id that enemy's script needs to start
