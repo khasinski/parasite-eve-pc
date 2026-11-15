@@ -3,7 +3,7 @@
  *
  * Original keeps the game's own letters. Every picture in mods/fonts/ (beside the game, or in the
  * user folder beside pe_mods.ini) is another choice, named after its file, with no code to add; the
- * release brings Chicago. The letters go into the dialogue font page as it goes to VRAM
+ * release brings Pixel Sans. The letters go into the dialogue font page as it goes to VRAM
  * (PE_HOOK_TIM_UPLOAD, or at once when F1 picks one) and the widths into the game's own tables, so
  * pe_lang builds its accents on the font in use. The rest of the page stays as it is. */
 #include <SDL3/SDL.h>

@@ -80,8 +80,9 @@ mod or the option off, extra copies go back into free slots as plain items.
 
 ## Font (pe_fonts)
 
-F1 > Font: Original keeps the game's own letters; Chicago (shipped in `mods/fonts/`) swaps in a
-rounder set. The pick shows at once and is kept in `pe_fonts_selection.txt` in the user folder.
+F1 > Font: Original keeps the game's own letters; Pixel Sans (shipped in `mods/fonts/`) swaps in a
+bolder set, drawn from Pixeloid Sans Bold by GGBotNet (SIL OFL 1.1, see `mods/fonts/README.txt`).
+The pick shows at once and is kept in `pe_fonts_selection.txt` in the user folder.
 Every `.png` in `mods/fonts/` beside the game or in the user folder is a choice, named after its
 file, with no code to add; `mods/fonts/README.txt` describes the picture. The letters go into the
 dialogue font page as it goes to VRAM (PE_HOOK_TIM_UPLOAD, before pe_lang adds its accents) and

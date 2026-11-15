@@ -80,7 +80,7 @@ static void test_shipped(const char *dir) {
     char path[4096];
     int count = 0;
     char **files = SDL_GlobDirectory(dir, "*.png", SDL_GLOB_CASEINSENSITIVE, &count);
-    int chicago = 0;
+    int shipped = 0;
     assert(files && count > 0);
     for (int i = 0; i < count; ++i) {
         snprintf(path, sizeof path, "%s/%s", dir, files[i]);
@@ -98,15 +98,15 @@ static void test_shipped(const char *dir) {
             assert(sheet.metric[code] != 0);
         }
         assert(sheet.advance[PE_FONT_SPACE] > 0);
-        if (!SDL_strcasecmp(files[i], "Chicago.png")) {
-            chicago = 1;
+        if (!SDL_strcasecmp(files[i], "Pixel_Sans.png")) {
+            shipped = 1;
             test_round_trip(&sheet);
         }
         SDL_DestroySurface(image);
         SDL_DestroySurface(loaded);
     }
     SDL_free(files);
-    assert(chicago);
+    assert(shipped);
 }
 
 int main(int argc, char **argv) {

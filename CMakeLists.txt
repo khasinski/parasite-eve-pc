@@ -893,7 +893,7 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-letters-evidence translator-letters)
             set_tests_properties(original-game-translator-letters PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 1800 LABELS "game-assets;mods;localization")
-            # F1 > Font on the real discs: Original draws the first box as the game does; Chicago puts
+            # F1 > Font on the real discs: Original draws the first box as the game does; Pixel Sans puts
             # exactly its picture's letters in the font page and changes the dialogue and the load
             # screen, on Disc 1 and Disc 2 (PE_TEST_DISC2, else skipped after Disc 1).
             if("pe_fonts" IN_LIST PE_MOD_LIST)

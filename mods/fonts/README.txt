@@ -13,3 +13,10 @@ Making a font
 - To set a width by hand, put one pure magenta pixel (255, 0, 255) in the cell: the width becomes
   that pixel's column + 1, counting from 1. It is never drawn.
 - A cell left empty keeps the game's own letter.
+
+Pixel Sans
+- Pixel_Sans.png is Pixeloid Sans Bold by GGBotNet (https://ggbot.itch.io/pixeloid-font,
+  version 1.0), drawn at its own 9 pixel size, standing on row 8 of each cell, with a dark shadow one
+  pixel right and down. Copyright (c) 2020-2025 GGBotNet, with Reserved Font Name "Pixeloid".
+- It is licensed under the SIL Open Font License, Version 1.1; the full text is in OFL.txt beside it.
+  As the licence asks of a changed font, this one goes by another name, not "Pixeloid".

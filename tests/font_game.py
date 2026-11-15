@@ -1,17 +1,17 @@
-"""F1 > Font in the real game: Original keeps the game's letters, Chicago puts its own in.
+"""F1 > Font in the real game: Original keeps the game's letters, Pixel Sans puts its own in.
 
   python font_game.py GAME.exe [WORK_DIR]
 
 Set PE_TEST_DISC (and PE_TEST_DISC2); otherwise this asset test is skipped (77). GAME.exe must have
-mods/fonts/Chicago.png beside it (the build copies it there). Every run has its own PE_CONFIG_HOME
+mods/fonts/Pixel_Sans.png beside it (the build copies it there). Every run has its own PE_CONFIG_HOME
 and memory card folder under WORK_DIR, so nothing touches the player's settings or cards.
 
 Checks, from frame and video memory dumps:
   Disc 1, a New Game to the first dialogue box (dlg/M001/009):
-    Original  the box is the same, pixel for pixel, as the game drew it before the text renderer.
-    Chicago   the dialogue font page in video memory holds exactly Chicago.png's letters (light
-              pixels stroke, dark ones shadow, see-through ones empty), and every other byte of the
-              page is the Original run's; the box differs from Original's.
+    Original    the box is the same, pixel for pixel, as the game drew it before the text renderer.
+    Pixel Sans  the dialogue font page in video memory holds exactly Pixel_Sans.png's letters (light
+                pixels stroke, dark ones shadow, see-through ones empty), and every other byte of the
+                page is the Original run's; the box differs from Original's.
   Disc 2 (PE_TEST_DISC2; else skipped after Disc 1), Continue from the save editor's sample save:
     the same page check on Disc 2's first dialogue, and both the load screen (menu letters) and the
     dialogue differ from the Original run's.
@@ -34,7 +34,7 @@ trg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(trg)
 check, Failed = trg.check, trg.Failed
 
-FONT_FILE = 'Chicago.png'
+FONT_FILE = 'Pixel_Sans.png'
 CODES, CELL, COLUMNS = 77, 12, 21
 PAGE_X, PAGE_W, PAGE_H = 0x140, 64, 256          # halfwords: 256 4-bit pixels a row
 LOAD_SCREEN = (0, 0, 320, 240)
@@ -107,14 +107,14 @@ def nibble(page, x, y):
     return b >> 4 if x & 1 else b & 15
 
 
-def check_page(chicago_page, original_page, cells, where):
-    """The page holds Chicago's letters where it has ink, and the Original page everywhere else."""
+def check_page(chosen_page, original_page, cells, where):
+    """The page holds Pixel Sans' letters where it has ink, and the Original page everywhere else."""
     for code in range(CODES):
         cx, cy = code % COLUMNS * CELL, code // COLUMNS * CELL
         for i in range(CELL * CELL):
             x, y = cx + i % CELL, cy + i // CELL
             want = cells[code][i] if code in cells else nibble(original_page, x, y)
-            got = nibble(chicago_page, x, y)
+            got = nibble(chosen_page, x, y)
             check(got == want, f'{where}: code {code:02X} pixel ({i % CELL},{i // CELL}) is {got}, expected {want}')
     covered = set()
     for code in range(CODES):
@@ -123,7 +123,7 @@ def check_page(chicago_page, original_page, cells, where):
     for y in range(PAGE_H):
         for x in range(256):
             if (x, y) not in covered:
-                check(nibble(chicago_page, x, y) == nibble(original_page, x, y),
+                check(nibble(chosen_page, x, y) == nibble(original_page, x, y),
                       f'{where}: page pixel ({x},{y}) past the letters changed')
 
 
@@ -197,18 +197,18 @@ def main(game, work=None):
 
     first = [(trg.FIRST_BOX, 'first', None)]
     original = run(game, discs, out / 'disc1-original', None, first, pad=trg.NEW_GAME)
-    chicago = run(game, discs, out / 'disc1-chicago', FONT_FILE, first, pad=trg.NEW_GAME)
+    pixel_sans = run(game, discs, out / 'disc1-pixel_sans', FONT_FILE, first, pad=trg.NEW_GAME)
     check(trg.lit(original, 'first', trg.BOX) > 200, f'no dialogue at the first box: {original}')
     check(hashlib.sha256(trg.crop(original, 'first', trg.BOX)).hexdigest() == trg.ENGLISH['first'],
           f'Original: the first box is not as the game draws it: {original}')
     print('PASS disc 1 original: the first box is the game\'s own, pixel for pixel')
-    log = trg.mods_log(chicago)
-    check('font "Chicago"' in log, f'Chicago was not loaded from beside the game: {chicago}')
-    check_page(font_page(chicago, 'first'), font_page(original, 'first'), cells, f'disc 1 ({chicago})')
-    check(trg.lit(chicago, 'first', trg.BOX) > 200, f'Chicago: no dialogue at the first box: {chicago}')
-    check(trg.crop(chicago, 'first', trg.BOX) != trg.crop(original, 'first', trg.BOX),
-          f'Chicago: the first box looks as Original\'s: {chicago}')
-    print(f'PASS disc 1 chicago: the font page holds Chicago\'s {len(cells)} letters, the rest is the game\'s; '
+    log = trg.mods_log(pixel_sans)
+    check('font "Pixel Sans"' in log, f'Pixel Sans was not loaded from beside the game: {pixel_sans}')
+    check_page(font_page(pixel_sans, 'first'), font_page(original, 'first'), cells, f'disc 1 ({pixel_sans})')
+    check(trg.lit(pixel_sans, 'first', trg.BOX) > 200, f'Pixel Sans: no dialogue at the first box: {pixel_sans}')
+    check(trg.crop(pixel_sans, 'first', trg.BOX) != trg.crop(original, 'first', trg.BOX),
+          f'Pixel Sans: the first box looks as Original\'s: {pixel_sans}')
+    print(f'PASS disc 1 pixel_sans: the font page holds Pixel Sans\' {len(cells)} letters, the rest is the game\'s; '
           'the first box changed')
 
     if len(discs) < 2:
@@ -218,19 +218,19 @@ def main(game, work=None):
     route = trg.disc2_steps()
     steps = route[:-1] + [(route[-1][0], 'after', 'advance 200 0')]
     runs = {}
-    for name, font in (('original', None), ('chicago', FONT_FILE)):
+    for name, font in (('original', None), ('pixel_sans', FONT_FILE)):
         runs[name] = run(game, discs, out / f'disc2-{name}', font, steps, pad=trg.CONTINUE,
                          card=trg.DISC2_SAVE.read_bytes(), crash_after=steps[-1][0] + 100)
         where = re.search(r'Game: room (\d+), .*?, disc (\d+),', trg.crash_report(runs[name]))
         check(where and where[2] == '2', f'not on Disc 2 after the boxes: {runs[name]}')
-    o, c = runs['original'], runs['chicago']
+    o, c = runs['original'], runs['pixel_sans']
     check_page(font_page(c, 'box008'), font_page(o, 'box008'), cells, f'disc 2 ({c})')
     check(trg.crop(c, 'continue1', LOAD_SCREEN) != trg.crop(o, 'continue1', LOAD_SCREEN),
-          f'Chicago: the load screen looks as Original\'s: {c}')
-    check(trg.lit(c, 'box008', trg.BOX) > 100, f'Chicago: no dialogue on Disc 2: {c}')
+          f'Pixel Sans: the load screen looks as Original\'s: {c}')
+    check(trg.lit(c, 'box008', trg.BOX) > 100, f'Pixel Sans: no dialogue on Disc 2: {c}')
     check(trg.crop(c, 'box008', trg.BOX) != trg.crop(o, 'box008', trg.BOX),
-          f'Chicago: the Disc 2 box looks as Original\'s: {c}')
-    print('PASS disc 2 chicago: the font page holds Chicago\'s letters; the load screen and the dialogue changed')
+          f'Pixel Sans: the Disc 2 box looks as Original\'s: {c}')
+    print('PASS disc 2 pixel_sans: the font page holds Pixel Sans\' letters; the load screen and the dialogue changed')
     return 0
 
 
