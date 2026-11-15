@@ -5,6 +5,16 @@
 Pe1GameState g_GameState;
 FieldActor *g_PlayerEntity;
 static void put32(u8 *p,u32 v) { memcpy(p,&v,4); }
+/* A one-frame row of constant channels: bone b's axis a holds value (b*3+a)&0xFF. */
+static u32 make_row(u8 *p,unsigned bones,int shrt,unsigned bias) {
+    u32 at=12;memset(p,0,12);p[0]=shrt?2:0;p[1]=(u8)(bones-1);p[2]=1;
+    for(unsigned k=0;k<3;++k,at+=4){p[at]=1;p[at+1]=0;p[at+2]=(u8)k;p[at+3]=0;}
+    for(unsigned k=0;k<bones*3;++k,at+=4){
+        p[at]=1;p[at+1]=0;p[at+2]=0;p[at+3]=0;
+        if(shrt){p[at+2]=(u8)((k+bias)*16);p[at+3]=(u8)(((k+bias)*16)>>8);}else p[at+1]=(u8)(k+bias);
+    }
+    return at;
+}
 int main(void) {
     u8 data[512]={0};PeBlob b={.data=data,.size=sizeof data};
     put32(data+4,8);assert(pe_dir(&b));
@@ -60,6 +70,42 @@ int main(void) {
     assert(g_GameState.bank_rows[0][28]==row && !s_replaced[28]);
     g_SceneAreaType=10;pe_point_bundle(bundle);
     assert(g_GameState.bank_rows[0][28]==bundle+220);
-    puts("Skin containers: bounds, long dress scene rows and restoration passed");
+    /* Issue #220: a jacket room row (29 bones) on the worn evening dress (31 parts) leaves two parts
+     * undecoded, compounding into a stretched gown; its fitted copy drives all 31. */
+    {
+        static u8 idle[1024],jacket[1024],longer[1024],shrt[1024];
+        const u32 nidle=make_row(idle,31,0,100),njacket=make_row(jacket,29,0,0),nlonger=make_row(longer,33,0,0);
+        const u32 nshort=make_row(shrt,29,1,0);
+        RenderObjectHeader gown={0};gown.part_count=31;
+        FieldActor actor={0};
+        memset(&g_GameState,0,sizeof g_GameState);memset(s_replaced,0,sizeof s_replaced);s_skins=0;
+        g_GameState.bank_slots[0]=&gown;g_GameState.bank_rows[0][0x15]=idle;
+        g_GameState.bank_rows[0][31]=jacket;g_GameState.bank_rows[0][32]=longer;g_GameState.bank_rows[0][33]=shrt;
+        g_GameState.bank_rows[0][34]=idle;
+        actor.model_state.model_header=&gown;actor.action_data=jacket;g_PlayerEntity=&actor;
+        assert(pe_row_length(idle,sizeof idle)==nidle&&pe_row_length(jacket,sizeof jacket)==njacket);
+        assert(pe_fit_rows());
+        u8 *fit=g_GameState.bank_rows[0][31];
+        assert(fit!=jacket&&s_replaced[31]==jacket&&actor.action_data==fit);
+        assert(fit[1]==30&&pe_row_length(fit,0x10000)==njacket+24&&fit[0]==jacket[0]&&!memcmp(fit+2,jacket+2,njacket-2));
+        for(unsigned k=29*3;k<31*3;++k)assert(fit[24+k*4]==1&&fit[24+k*4+1]==(u8)(k+100));   /* idle's rest pose */
+        u8 *cut=g_GameState.bank_rows[0][32];
+        assert(cut!=longer&&cut[1]==30&&pe_row_length(cut,0x10000)==nlonger-24&&!memcmp(cut+2,longer+2,nlonger-26));
+        u8 *half=g_GameState.bank_rows[0][33];
+        assert(half[1]==30&&pe_row_length(half,0x10000)==nshort+24);
+        for(unsigned k=29*3;k<31*3;++k)assert((half[24+k*4+2]|half[24+k*4+3]<<8)==(k+100)*16u);
+        assert(g_GameState.bank_rows[0][34]==idle&&!s_replaced[34]);                /* rows that fit stay */
+        assert(!pe_fit_rows()&&g_GameState.bank_rows[0][31]==fit&&actor.action_data==fit);   /* settled */
+        actor.action_data=jacket;assert(pe_fit_rows()&&actor.action_data==fit);  /* one copy per row */
+        pe_restore_rows();
+        assert(g_GameState.bank_rows[0][31]==jacket&&g_GameState.bank_rows[0][32]==longer&&
+               g_GameState.bank_rows[0][33]==shrt&&!s_fitting);
+        g_GameState.bank_rows[0][0x15]=jacket;                 /* no idle row of her parts: identity */
+        memset(longer,7,12);make_row(longer,29,0,50);g_GameState.bank_rows[0][31]=longer;
+        assert(pe_fit_rows());fit=g_GameState.bank_rows[0][31];
+        for(unsigned k=29*3;k<31*3;++k)assert(fit[24+k*4]==1&&fit[24+k*4+1]==0);
+        gown.part_count=29;assert(pe_fit_row(jacket)==jacket);
+    }
+    puts("Skin containers: bounds, long dress scene rows, fitted rows and restoration passed");
     return 0;
 }

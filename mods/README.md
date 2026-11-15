@@ -751,6 +751,9 @@ In pe_wardrobe/:
   may carry a room pack (rooms.bin alone: pe_skins/outfit_evening, outfit_tshirt, made by the
   bridge's build_outfit_rooms.py): rooms install Aya's animations for the outfit the story has her
   in (29, 31 or 23 parts), so the evening dress worn on a jacket day gets them retargeted to its own.
+  A room row with no copy (no pack installed, or none for that row) is fitted to the outfit's part
+  count instead: missing bones hold the outfit's idle pose, extra bones are dropped. Otherwise the
+  undecoded gown parts compound into a flickering, stretched shape in cutscenes (issue #220).
   When rebuilding packs for Day 1 long-dress scenes, the generator must accept the shortest
   23-part row (300 bytes, not the jacket-only minimum of 372). In the bridge generator, check
   `FP_BYTES` and invalidate `tools/pe_assets/skins/room_rows.pkl` before rebuilding; changing the
