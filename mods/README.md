@@ -16,8 +16,8 @@ Two switches, so a modded build is safe to hand out:
 - **Runtime**: F1 > Manage mods > **All mods**, **off by default**. Until a player turns it on and
   restarts, no mod starts and nothing but the F1 panel touches the game. Below it, one toggle per
   mod; a mod turned off doesn't start, nor do the mods that need it. Changes apply at the next start.
-  The one exception is **Language packs**: a language the player picked is no gameplay change, so
-  it runs with All mods off too (its own toggle turns it off).
+  The exceptions are **Language packs** and **Font**: a language or font the player picked is no
+  gameplay change, so they run with All mods off too (their own toggles turn them off).
 
 The upstream test suite (`-DBUILD_TESTING=ON`) gives the same results with `PE_MODS` on and off.
 
@@ -77,6 +77,17 @@ gives one copy), INVENTORY_REBUILD (duplicates fold into one slot), SLOT_DRAWN (
 rounds column). Only base items of kinds 10 and 12..15 stack; Junk stays out while pe_economy's
 Junk economy is on. Saved in the companion file as the `pe_stacks/counts` section (204 bytes, up to 100 stacks); an older `pe_stacks.counts` record moves there on load. With the
 mod or the option off, extra copies go back into free slots as plain items.
+
+## Font (pe_fonts)
+
+F1 > Font: Original keeps the game's own letters; Pixel Sans (shipped in `mods/fonts/`) swaps in a
+bolder set, drawn from Pixeloid Sans Bold by GGBotNet (SIL OFL 1.1, see `mods/fonts/README.txt`).
+The pick shows at once and is kept in `pe_fonts_selection.txt` in the user folder.
+Every `.png` in `mods/fonts/` beside the game or in the user folder is a choice, named after its
+file, with no code to add; `mods/fonts/README.txt` describes the picture. The letters go into the
+dialogue font page as it goes to VRAM (PE_HOOK_TIM_UPLOAD, before pe_lang adds its accents) and
+their widths into the dialogue and menu tables. US and European discs only; the Japanese discs keep
+their own letters.
 
 ## Warp (pe_warp)
 

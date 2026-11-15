@@ -2,9 +2,10 @@
 # Each mod is a folder here holding .c files and defining `const PeMod pe_mod_<folder>`.
 # pe_hello is the example mod; add it to the list to build it. Language packs
 # are available in standard builds, but the original text remains the default and no pack ships.
+# pe_fonts adds F1 > Font (Original, or a picture from mods/fonts/); Original is the default.
 set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone)
 if(NOT PE_PS5_GAME)
-    list(APPEND pe_default_mods pe_lang)
+    list(APPEND pe_default_mods pe_lang pe_fonts)
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 
@@ -25,6 +26,20 @@ if(PE_BUNDLE_LANGUAGE_PACKS AND NOT PE_PS5_GAME AND "pe_lang" IN_LIST PE_MOD_LIS
         COMMENT "Validate and compile bundled language packs"
         VERBATIM)
     add_dependencies(parasite-eve-pc pe-language-packs)
+endif()
+
+# F1 > Font reads mods/fonts/ beside the game; copy the shipped pictures there.
+if("pe_fonts" IN_LIST PE_MOD_LIST)
+    if(APPLE AND PE_MACOS_BUNDLE)
+        set(pe_font_dir "$<TARGET_BUNDLE_CONTENT_DIR:parasite-eve-pc>/Resources/mods/fonts")
+    else()
+        set(pe_font_dir "$<TARGET_FILE_DIR:parasite-eve-pc>/mods/fonts")
+    endif()
+    add_custom_target(pe-font-files
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/fonts" "${pe_font_dir}"
+        COMMENT "Copy the font pictures beside the game"
+        VERBATIM)
+    add_dependencies(parasite-eve-pc pe-font-files)
 endif()
 
 set(pe_host_sources
@@ -114,6 +129,15 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     target_compile_definitions(pe-mod-frequency PRIVATE __psyz PE_MODS=1 PE_NATIVE_STATE_CPU_COMPONENTS=1)
     target_link_libraries(pe-mod-frequency PRIVATE psyz)
     add_test(NAME pe-mod-frequency COMMAND pe-mod-frequency)
+endif()
+
+# Font pictures: the reader, the page writes, and the shipped mods/fonts/ pictures.
+if(BUILD_TESTING AND "pe_fonts" IN_LIST PE_MOD_LIST)
+    add_executable(test-mod-fonts ${PROJECT_SOURCE_DIR}/tests/pe_mod_fonts_test.c pe_fonts/pe_fonts_sheet.c)
+    target_include_directories(test-mod-fonts PRIVATE pe_fonts)
+    target_compile_options(test-mod-fonts PRIVATE $<IF:$<BOOL:${MSVC}>,/UNDEBUG,-UNDEBUG>)
+    target_link_libraries(test-mod-fonts PRIVATE SDL3::SDL3)
+    add_test(NAME mod-fonts COMMAND test-mod-fonts "${PROJECT_SOURCE_DIR}/mods/fonts")
 endif()
 
 if(BUILD_TESTING)

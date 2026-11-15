@@ -911,6 +911,16 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/translator-letters-evidence translator-letters)
             set_tests_properties(original-game-translator-letters PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 1800 LABELS "game-assets;mods;localization")
+            # F1 > Font on the real discs: Original draws the first box as the game does; Pixel Sans puts
+            # exactly its picture's letters in the font page and changes the dialogue and the load
+            # screen, on Disc 1 and Disc 2 (PE_TEST_DISC2, else skipped after Disc 1).
+            if("pe_fonts" IN_LIST PE_MOD_LIST)
+                add_test(NAME original-game-font COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/font_game.py $<TARGET_FILE:parasite-eve-pc>
+                    ${CMAKE_BINARY_DIR}/font-evidence)
+                set_tests_properties(original-game-font PROPERTIES SKIP_RETURN_CODE 77
+                    TIMEOUT 600 LABELS "game-assets;mods")
+            endif()
         endif()
         # The English pack (pelang.py english) from the real discs: every row it holds is the disc's
         # own bytes, only empty pages and four known rows are left to the game, and one pack serves
