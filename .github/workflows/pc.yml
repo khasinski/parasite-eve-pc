@@ -135,7 +135,7 @@ jobs:
           cp build/parasite-eve-pc README.md CHANGELOG.md LICENSE.md THIRD_PARTY_NOTICES.md recomplauncher.json "$stage/"
           mkdir -p "$stage/lang"
           cp localization/lang-folder-readme.txt "$stage/lang/README.txt"
-          cp docs/CODE_ORGANIZATION.md "$stage/docs/"
+          cp docs/CODE_ORGANIZATION.md docs/MODS.md "$stage/docs/"
           cp mods/README.md "$stage/mods/"
           cp -r mods/fonts "$stage/mods/"
           cp docs/images/gameplay.png "$stage/docs/images/"
@@ -267,7 +267,7 @@ jobs:
           New-Item -ItemType Directory -Force "$game/lang" | Out-Null
           Copy-Item localization/lang-folder-readme.txt "$game/lang/README.txt"
           Copy-Item docs/images/gameplay.png "$game/docs/images/"
-          Copy-Item docs/CODE_ORGANIZATION.md "$game/docs/"
+          Copy-Item docs/CODE_ORGANIZATION.md, docs/MODS.md "$game/docs/"
           Copy-Item mods/README.md "$game/mods/"
           Copy-Item -Recurse mods/fonts "$game/mods/"
           Get-ChildItem third_party/psyz -Recurse -File | Where-Object { $_.Name -match '^(LICENSE|COPYING|NOTICE|COPYRIGHT)' -and $_.FullName -notmatch '[\\/]\.git[\\/]' } | ForEach-Object {

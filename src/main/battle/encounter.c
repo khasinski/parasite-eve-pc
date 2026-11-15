@@ -511,6 +511,7 @@ void Battle_Update(void) {
     }
     if (g_BattleEnemyEscapeFlag != 0) {
         Battle_DrawActiveStatus();
+        PE_HOOK(PE_HOOK_BATTLE_HUD, NULL);
     }
     if (g_MenuFrameCommand != 0) {
         Render_BeginSceneLoad();
