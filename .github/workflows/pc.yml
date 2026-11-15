@@ -46,6 +46,12 @@ jobs:
           assert not list(contents.rglob('*.pelang'))
           PYBUNDLE
 
+      - name: Verify opt-in melee build and native combat regressions
+        run: |
+          cmake -S . -B build -DPE_MELEE_PROTOTYPE=ON
+          cmake --build build --target test-original-actor-animation test-mod-combat-presets --parallel 4
+          ctest --test-dir build --output-on-failure --no-tests=error -R '^(prototype-melee-damage-rules|mod-combat-presets|original-game-actor-animation)$'
+
   linux-no-downloads:
     # PE_DESKTOP_MOD_DOWNLOADS=OFF (the PS5-style host): no libcurl installed, so any curl use outside
     # the option fails the build. Screenshots and Wardrobe packs still build with cJSON and miniz.
