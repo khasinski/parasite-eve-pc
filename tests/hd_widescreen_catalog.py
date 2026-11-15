@@ -76,6 +76,39 @@ class Scope(unittest.TestCase):
             index=next(r for r in manifest['extras'] if r['kind']=='widescreen-index')
             self.assertEqual(index['sha256'],self.module.digest(pack/index['file']))
 
+    def test_foreground_rebuild_preserves_other_layers_and_updates_hashes(self):
+        from unittest.mock import patch
+        import runpy,sys,types,hashlib
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);src=root/'src';dst=root/'dst';masks=root/'masks'
+            src.mkdir();masks.mkdir();geom='0123456789abcdef'
+            backdrop=dict(group=2,key='1111111111111111',bounds=[-56,376,0,16],
+                positions=[(-56,0),(-40,0),(-24,0),(-8,0),(320,0),(336,0),(352,0),(368,0)],kind=0,depths=[])
+            other=dict(group=1,key='2222222222222222',bounds=[-56,-55,0,1],
+                positions=[(-56,0)],kind=1,depths=[250])
+            payload=self.module.encode_sidecar([backdrop,other])
+            (src/(geom+'-wide.bin')).write_bytes(payload)
+            Image.new('RGBA',(16*68,2*68),(50,80,110,255)).save(src/(backdrop['key']+'.png'))
+            Image.new('L',(224,64),255).save(masks/'M044-left-mask.png')
+            (src/'manifest.json').write_text(json.dumps(dict(widescreen=[dict(room='M044',group=2,geometry_key=geom)],extras=[])))
+            fake=types.ModuleType('inspect_room')
+            fake.atlas_cells=lambda pack,key:[__import__('numpy').full((64,64,4),255,dtype='uint8') for _ in range(8)]
+            fake.native_layers=lambda room,group:({},[dict(entry=4,tiles=[dict(x=0,y=0,depth=100),dict(x=16,y=0,depth=110)])])
+            script=Path(__file__).resolve().parents[1]/'docs/assets/hd-widescreen/foreground/build_front.py'
+            for source in (src,dst):
+                argv=[str(script),'M044','2',str(source),str(dst),str(masks),'left:4']
+                with patch.dict(sys.modules,{'inspect_room':fake,'prepare':self.module}),patch.object(sys,'argv',argv):
+                    runpy.run_path(str(script),run_name='__main__')
+                records=self.module.read_sidecar(dst/(geom+'-wide.bin'))
+                self.assertEqual(len(records),3)
+                self.assertIn(other,records)
+                self.assertEqual(next(r for r in records if r['kind']==0),backdrop)
+                manifest=json.loads((dst/'manifest.json').read_text())
+                self.assertEqual(len(manifest['widescreen_foreground']),1)
+                for extra in manifest['extras']:
+                    self.assertEqual(extra['sha256'],hashlib.sha256((dst/extra['file']).read_bytes()).hexdigest())
+            self.assertEqual((src/(geom+'-wide.bin')).read_bytes(),payload)
+
     def test_sidecar_roundtrip_and_invalid_depth_count(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'wide.bin'

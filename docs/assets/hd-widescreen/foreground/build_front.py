@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 import inspect_room as ir
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from prepare import read_sidecar, encode_sidecar, digest
 
 room, group, src, dst, maskdir = sys.argv[1], int(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]), Path(sys.argv[5])
 strips = [(a.split(':')[0], int(a.split(':')[1])) for a in sys.argv[6:]]
@@ -21,8 +23,9 @@ if not dst.exists():
     for f in src.iterdir():
         if f.is_file(): os.link(f, dst / f.name)
 
-wide_all = ir.read_wide(src / f'{geom}-wide.bin')
-wide = wide_all[group]
+wide_all = read_sidecar(src / f'{geom}-wide.bin')
+wide = next(r for r in wide_all if r['group'] == group and r.get('kind', 0) == 0)
+wide = dict(wide, xy=wide['positions'])
 l, r, t, b = wide['bounds']
 cells = ir.atlas_cells(src, wide['key'])
 canvas = np.zeros(((b - t) * 4, (r - l) * 4, 4), np.uint8)
@@ -85,19 +88,32 @@ for i, c in enumerate(front_cells):
     atlas[half + Y:half + Y + 68, X:X + 68] = padded
 key_bytes = hashlib.sha256(atlas.tobytes() + b'pe-front').digest()[:8]
 key = int.from_bytes(key_bytes, 'little') or 1
-Image.fromarray(atlas).save(dst / f'{key:016x}.png')
+atlas_path = dst / f'{key:016x}.png'
+temporary = atlas_path.with_suffix('.partial.png')
+Image.fromarray(atlas).save(temporary); temporary.replace(atlas_path)
 
-# PEW2: every original record as a kind-0 backdrop, then the foreground layer.
-out = bytearray(b'PEW2' + struct.pack('<I', len(wide_all) + 1))
-for g, rec in wide_all.items():
-    out += struct.pack('<IIQiiiiI', g, len(rec['xy']), int(rec['key'], 16), *rec['bounds'], 0)
-    out += b''.join(struct.pack('<hh', *p) for p in rec['xy'])
+# Replace this view's foreground only; preserve all other groups and depths.
+if not front_xy:
+    raise ValueError('Foreground masks contain no side cells')
+records = [r for r in wide_all if not (r['group'] == group and r.get('kind', 0) == 1)]
 xs = [p[0] for p in front_xy]; ys = [p[1] for p in front_xy]
-out += struct.pack('<IIQiiiiI', group, len(front_xy), key, min(xs), max(xs) + 1, min(ys), max(ys) + 1, 1)
-out += b''.join(struct.pack('<hh', *p) for p in front_xy)
-out += b''.join(struct.pack('<H', d) for d in front_depth)
+records.append(dict(group=group, key=f'{key:016x}', kind=1,
+    bounds=[min(xs),max(xs)+1,min(ys),max(ys)+1], positions=front_xy, depths=front_depth))
 sidecar = dst / f'{geom}-wide.bin'
-if sidecar.exists(): sidecar.unlink()   # a hard link to the source pack: never write through it
-sidecar.write_bytes(out)
+temporary = sidecar.with_suffix('.partial')
+temporary.write_bytes(encode_sidecar(records)); temporary.replace(sidecar)
+# A development pack must pass the same payload checks as an installed pack.
+files = {atlas_path.name:'widescreen-foreground-atlas',sidecar.name:'widescreen-index'}
+extras = [r for r in manifest.get('extras',[]) if r['file'] not in files]
+extras.extend(dict(file=name,kind=kind,sha256=digest(dst/name)) for name,kind in files.items())
+manifest['extras'] = extras
+fronts = [r for r in manifest.get('widescreen_foreground',[])
+          if (r['geometry_key'],r['group']) != (geom,group)]
+fronts.append(dict(room=room,group=group,geometry_key=geom,key=f'{key:016x}',
+    cells=len(front_xy),strips=[dict(side=side,entry=entry,
+    mask_sha256=digest(maskdir/f'{room}-{side}-mask.png')) for side,entry in strips]))
+manifest['widescreen_foreground'] = fronts
+manifest_path = dst/'manifest.json'; temporary = manifest_path.with_suffix('.partial')
+temporary.write_text(json.dumps(manifest,indent=2)+'\n'); temporary.replace(manifest_path)
 print(f'{room} g{group}: {len(front_xy)} foreground cells, atlas {key:016x}, depths',
       sorted(set(front_depth))[:6], '...', max(front_depth))
