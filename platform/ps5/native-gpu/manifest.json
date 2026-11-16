@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "be50ed8600a01321d90f2c11e16bb940527a4c60068ddd4a4f3bafa079461ee3"
+      "sha256": "082958ef3e7a044b63618a3b7a372dc796bd7675ca59b2ca5a1e1c272d467c65"
     },
     {
       "path": "mods/host/pe_api_native.c",
@@ -4291,7 +4291,7 @@
     },
     {
       "path": "mods/pe_economy/pe_loot.c",
-      "sha256": "972aa85a4b66b2b49016682b775f5a20a08421591e53f8a2c2f1e2f07e1471f7"
+      "sha256": "f99c3bad7f88582b9b37bbb63fb9ca105413f3c2c2f4174756c3ed1f35af12db"
     },
     {
       "path": "mods/pe_economy/pe_smoke.c",
@@ -4458,16 +4458,16 @@
       "sha256": "9a44d11f4bd7e745ca240677805b50ff8db6b95f218f5ecd8cb7fd8c4e936999"
     },
     {
+      "path": "mods/pe_wardrobe/pe_skin_gown.h",
+      "sha256": "4cfcc6e0f03e5fa7a064ed54969301fd751c65bbf3d3ed3828adedd47bf347f3"
+    },
+    {
       "path": "mods/pe_wardrobe/pe_skin_loader.c",
       "sha256": "cc7afd8c845e5656ddffd325d094edcbec6a8f97e661813582b349e55a4bf286"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_rows.h",
       "sha256": "7407354953fcbc82d1e8f6d7d01887385f436f8b248e35aade9a92d4f273a904"
-    },
-    {
-      "path": "mods/pe_wardrobe/pe_skin_gown.h",
-      "sha256": "4cfcc6e0f03e5fa7a064ed54969301fd751c65bbf3d3ed3828adedd47bf347f3"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe.c",
