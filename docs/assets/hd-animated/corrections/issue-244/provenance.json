@@ -1,6 +1,6 @@
 {
   "issue": 244,
-  "pack_version": "0.5",
+  "pack_version": "0.5.1",
   "tool": "OpenAI built-in image_gen; exact model revision not exposed",
   "prompt": "Edit target image 1: faithfully repair a Parasite Eve HD game background. Image 2 is the original game frame and is the STRICT authority for geometry, gate pose, visibility and perspective. Maintain image 1's detailed blue-gray police station materials, muted exposure, fixed camera, exact canvas and black void. The LEFT movable barred gate panel MUST BE OPEN and absent from the opening, exactly as image 2: replace those invented closed left bars with the unobstructed blue-gray landing floor behind them. Keep the stationary upper horizontal gate beam and right barred partition in the exact image-2 positions. Repair the landing immediately behind the upper beam: image 1 incorrectly extends stairs too far down and leaves a black slit; image 2 has a continuous flat landing there. Copy image-2 geometry faithfully with HD material detail. Do not invent or shift doors, walls, objects or camera. The solid door at the lower left stays closed. No people, no text. Output a single full scene at the same 1280x1024 framing, with the dark bottom canvas padding retained.",
   "inputs": [
@@ -53,5 +53,11 @@
     "alpha": "all pixel identical",
     "other_packets": "all byte identical",
     "changed_packets": 8
+  },
+  "phase_lighting": {
+    "source": "original lossless inputs, six warning-light phases",
+    "method": "dark material plus per-phase RGB differences; Gaussian sigma 2 at 4x",
+    "new_image_generation": false,
+    "regression": "M116-phase-regression-after.json"
   }
 }
