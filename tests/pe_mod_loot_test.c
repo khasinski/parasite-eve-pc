@@ -5,6 +5,7 @@
 #include "../mods/pe_economy/pe_loot.c"
 #include "../mods/pe_rewards/pe_rewards.c"
 #include "pe_econ_test_host.inc"
+size_t Script_TaskBytesAvailable(const void *address) { (void)address; return 0; }
 SaveRuntimeState g_SaveRuntimeState;
 GameStateBlock g_GameStateBlock;
 Pe1GameState g_GameState;

@@ -68,6 +68,11 @@ const void *pe_service_get(const char *name, int version) {
 static FieldActor s_actor;
 static u32 s_after_remove[] = { 0x00B08009u, 0, 1, 0, LOCAL, 1, 0x0032400Au, 0, LOCAL, 0, 0x00002000u, 0 };
 static u32 s_elsewhere[] = { 0x00B08009u, 0, 0, 0, LOCAL, 1, 0x0032400Au, 0, LOCAL, 0, 0x00002000u, 0 };
+static size_t s_task_bytes = sizeof s_after_remove;
+size_t Script_TaskBytesAvailable(const void *address) {
+    if (address == s_after_remove || address == s_elsewhere) return s_task_bytes;
+    return 0;
+}
 
 /* The game's own remove (Inv_DispatchCommand 1112): the first Junk slot of the active list. */
 static void game_remove(void) {
@@ -175,6 +180,15 @@ int main(void) {
     for (i = 1; i <= 20; ++i) g_AyaSaveState.inventory_items[i] = PE_ITEM_JUNK;
     on = hand_in(s_elsewhere);
     assert(on == 20 && s_wayne == 20);
+
+    /* Even a matching loop prefix is not safe to inspect when the task ends
+     * before the complete guard. Keep the original pace for every truncation. */
+    for (i = 0; i < 10; ++i) {
+        s_task_bytes = (size_t)i * sizeof(u32);
+        reset(1, 1, 0, 450, 0); on = hand_in(s_after_remove);
+        assert(on == 300 && s_wayne == 300 && s_st.junk == 150);
+    }
+    s_task_bytes = sizeof s_after_remove;
 
     puts("Wayne hand-in: Quick hand-in matches one-at-a-time from the counter and the bag");
     return 0;

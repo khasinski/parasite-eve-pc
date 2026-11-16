@@ -4327,7 +4327,7 @@
     },
     {
       "path": "mods/pe_economy/pe_loot.c",
-      "sha256": "f99c3bad7f88582b9b37bbb63fb9ca105413f3c2c2f4174756c3ed1f35af12db"
+      "sha256": "b6deb421f29c23610fba10e8bef08f790431bd7d79d1702e5b2f3841c0d900e9"
     },
     {
       "path": "mods/pe_economy/pe_smoke.c",
