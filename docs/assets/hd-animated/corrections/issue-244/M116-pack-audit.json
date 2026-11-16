@@ -1,0 +1,19 @@
+{
+  "changed_atlases": 8,
+  "changed_keys": [
+    "6cc6ab8eea25247d",
+    "2cd1537e3db9ab5b",
+    "8cd6a775e783eeca",
+    "6cf14b4c38773ff5",
+    "ccf69f43e2418364",
+    "ace6a35ce4e2b917",
+    "0cebf7548eacfc86",
+    "ed069b2adfa04db1"
+  ],
+  "all_other_atlases_byte_identical": true,
+  "all_native_references_byte_identical": true,
+  "all_extras_byte_identical": true,
+  "all_door_pose_atlases_byte_identical": true,
+  "baseline_manifest_sha256": "c667f9e40fe834ad2efb1a44d92929d4dc7c2b17864d161060b4ba2eae1b2bec",
+  "candidate_manifest_sha256": "c6e404cfa82c880bec5cb15bf1f8f0feb99db72ba4175074c4723e049d6190fc"
+}
