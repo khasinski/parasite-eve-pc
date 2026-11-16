@@ -122,9 +122,10 @@ shared counter that holds up to 99999.
 
 **Wayne hand-in** sets what Wayne's Discard junk gives him: **Next gun** (the default) gives only
 what the next gun needs, **All Junk** gives everything. **Quick hand-in**, on by default, has
-Wayne count counter Junk 100 at a time instead of one by one, so 300 Junk takes three of his steps
+Wayne count Junk 100 at a time instead of one by one, so 300 Junk takes three of his steps
 (a few seconds) rather than well over a minute. His count, the Junk spent and the gun at 300 come out
-the same; turn it off for the original pace.
+the same. It works for counter Junk and for Junk in the bag (Junk economy off, or stacked with
+Stacked items); turn it off for the original pace.
 
 **Choose playstyle** and **Apply playstyle** pick how generous the economy is. Applying only works
 in the field.
