@@ -46,6 +46,7 @@
 #include "pe1/game_timers.h"
 #include "pe1/inventory_state.h"
 #include "pe1/script_state.h"
+#include "pe1/reloc_block.h"
 #include "pe1/text.h"
 
 #define MOD_ID "pe_economy"
@@ -327,7 +328,7 @@ static int pe_on_item_count(void *ctx, void *user) {
  * Wayne's locals, or -1 when the remove came from anything else. */
 static int pe_handin_local(void) {
     const u32 *c = g_ScriptCursor;
-    if (!c || !g_CurrentEntity) return -1;
+    if (!c || !g_CurrentEntity || Script_TaskBytesAvailable(c) < 10 * sizeof(*c)) return -1;
     if (c[0] != 0x00B08009u || c[1] != 0 || c[2] != 1u || c[3] != 0 || c[5] != 1u ||
         c[6] != 0x0032400Au || c[7] != 0 || c[8] != c[4] || c[9] != 0 || c[4] >= 0x38u)
         return -1;
