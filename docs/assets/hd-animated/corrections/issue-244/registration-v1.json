@@ -1,0 +1,17 @@
+{
+  "matches": 70,
+  "inliers": 44,
+  "matrix": [
+    [
+      0.9996670192768196,
+      -0.0025598481261865516,
+      0.464801746093293
+    ],
+    [
+      -0.0012530604531131725,
+      1.0014558267955658,
+      -0.019090127416627415
+    ]
+  ],
+  "crop": "remove only original bottom canvas padding before affine registration"
+}
