@@ -119,7 +119,7 @@ jobs:
           assert len(r.findall('.//testcase')) == 30
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           r = E.parse('build/mod-features.xml')
-          assert len(r.findall('.//testcase')) == 18
+          assert len(r.findall('.//testcase')) == 19
           assert not any(r.findall('.//' + tag) for tag in ['skipped', 'failure', 'error'])
           PYTEST
       - name: Verify and build save editor
