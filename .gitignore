@@ -74,5 +74,10 @@ test_regex*.py
 /build-compat/
 
 /BP-UI-Preview/
+/build-mods/
+/build.log
+/build-modular.log
+/configure.log
+/test-debug-control.exe
 /prototypes/bp-ui/userdata/
 /prototypes/bp-ui/preview.html

@@ -1,4 +1,4 @@
-/* The debug control's commands (mods/host/pe_debug_control.c) against a stand-in game: map numbers
+/* Separately link the transport and command modules against a stand-in game: map numbers
  * to room ids, warp's refusals, script variables, actors, find-script, place / place-near, and
  * save-block with and without a companion file. Commands go in and answers come out through the
  * real files (<folder>/cmd, <folder>/out), in a folder under the test's working directory. */
@@ -13,7 +13,41 @@
 #include <sys/stat.h>
 #define TEST_MKDIR(p) mkdir(p, 0700)
 #endif
-#include "../mods/host/pe_debug_control.c"
+#include "../mods/host/debug/pe_debug_internal.h"
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "pe_game.h"
+#include "pe_hooks.h"
+#include "pe_mod_host.h"
+#include "pe_save.h"
+#include "pe1/asset_table.h"
+#include "pe1/battle_runtime.h"
+#include "pe1/battle_start.h"
+#include "pe1/random.h"
+#include "pe1/battle_context.h"
+#include "pe1/battle_modifiers.h"
+#include "pe1/battle_saved_state.h"
+#include "pe1/weapon_list_output.h"
+#include "pe_mod_menu.h"
+#include "pe1/field_actor.h"
+#include "pe1/game_state.h"
+#include "pe1/game_timers.h"
+#include "pe1/inventory_state.h"
+#include "pe1/inventory_queries.h"
+#include "pe1/memcard.h"
+#include "pe1/player_entity.h"
+#include "pe1/scene_dispatch.h"
+#include "pe1/script_queue.h"
+#include "psyz/system.h"
+
+
+#define PE_SCRIPT_SCAN 0x8000
+static PeHookFn s_hooks[PE_HOOK_COUNT];
+static void *s_hook_users[PE_HOOK_COUNT];
+
 
 #define DIR "pe-debug-control-test"
 
@@ -25,6 +59,37 @@ Pe1GameState g_GameState;
 SaveRuntimeState g_SaveRuntimeState;
 GameStateBlock g_GameStateBlock;
 FieldActor *g_FieldActorListHead, *g_PlayerEntity;
+int g_BattleFrameCounter, g_BattleModeState;
+u32 g_FrameRngCounter;
+s8 g_BattleTargetIndex;
+u8 g_BattleActionQueueCount;
+BattleEnemySlot g_BattleEnemySlots[7];
+Combatant *g_ActiveActor;
+s32 g_ItemDropRngIndex;
+u8 g_ItemDropRngTable[521];
+static ItemDataRecord s_weapon;
+static PeMenuRow s_row;
+static int s_given;
+static u32 s_levels[99];
+ItemDataRecord *pe_base_item(unsigned id) { return id && id <= 255 ? &s_weapon : NULL; }
+int Inv_AddItem(int id) { s_given = id; return 0; }
+void Inv_SelectActiveList(int mode) { (void)mode; }
+void *Aya_GetLevelExpTable(void) { return s_levels; }
+void BattleCmd_LoadWeaponModifiers(void) {}
+void Inv_RecalcSlotStats(void) {}
+void Inv_BuildWeaponList(int mode, WeaponListOutput *out) { (void)mode; (void)out; }
+void Inv_BuildArmorList(BattleAttributes *out) { (void)out; }
+BattleStateTail g_SavedBattleStateTail;
+BattleAttributes g_BattleEquipStateBlock;
+static unsigned s_rng;
+void Psyz_Srand(unsigned seed) { s_rng = seed; }
+unsigned Psyz_RandState(void) { return s_rng; }
+ItemDataRecord *pe_equipped(int armor) { return armor ? NULL : &s_weapon; }
+int pe_mod_is_running(const char *name) { return !strcmp(name, "test"); }
+int pe_menu_row_count(void) { return 1; }
+PeMenuRow *pe_menu_row(int i) { (void)i; return &s_row; }
+int pe_menu_row_active(const PeMenuRow *r) { (void)r; return 1; }
+void pe_menu_row_value_text(PeMenuRow *r, char *out, unsigned size) { (void)r; snprintf(out, size, "wallet 12"); }
 u8 g_MemCardFileBuffer[0x2000];
 const char *g_MemCardFilenameFormatPtr = "bu%d0:BASLUS-00662000000%c%c";
 
@@ -57,7 +122,7 @@ void Psyz_AdjustPath(char *dst, const char *src, int maxlen) {   /* "bu00:NAME" 
 }
 void pe_mod_save_cancelled(void) { ++s_cancelled; }
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod) {
-    (void)id; (void)fn; (void)user; (void)priority; (void)mod;
+    s_hooks[id] = fn; s_hook_users[id] = user; (void)priority; (void)mod;
     return 0;
 }
 void pe_log(const char *tag, const char *fmt, ...) { (void)tag; (void)fmt; }
@@ -71,7 +136,7 @@ static const char *ask(const char *cmd) {
     fprintf(f, "%s\n", cmd);
     fclose(f);
     remove(DIR "/out");
-    pe_ctl_poll();
+    pe_debug_control_poll();
     f = fopen(DIR "/out", "r");
     assert(f && fgets(s_answer, sizeof s_answer, f));
     fclose(f);
@@ -94,17 +159,66 @@ int main(void) {
     remove(DIR "/companion.pex");
     remove(DIR "/block.bin");
     setvbuf(stdout, NULL, _IONBF, 0);
-    snprintf(s_dir, sizeof s_dir, "%s", DIR);
+    assert(!pe_debug_control_start(NULL));
+    assert(!pe_debug_control_start(""));
+    assert(!s_hooks[PE_HOOK_FRAME]);
+    assert(pe_debug_control_start(DIR));
+    assert(!pe_debug_control_start(DIR));  /* no repeated hook installation */
+    {
+        size_t count, m, c, other, index;
+        const PeDebugModule *const *modules = pe_debug_modules(&count);
+        assert(count > 1);
+        for (m = 0; m < count; ++m) {
+            assert(modules[m]->name && modules[m]->commands && modules[m]->count);
+            for (c = 0; c < modules[m]->count; ++c) {
+                const PeDebugCommand *command = &modules[m]->commands[c];
+                assert(command->name && *command->name && command->run);
+                assert(command->arguments >= PE_DEBUG_EXACT && command->arguments <= PE_DEBUG_OPTIONAL);
+                for (other = m; other < count; ++other)
+                    for (index = other == m ? c + 1 : 0; index < modules[other]->count; ++index)
+                        assert(strcmp(command->name, modules[other]->commands[index].name));
+            }
+        }
+    }
 
-    /* Map numbers -> room ids, as pe_warp's checkpoints and the game's own rooms have them. */
-    assert(pe_ctl_room_id(48) == 0xA8004448u);
-    assert(pe_ctl_room_id(52) == 0xA8005148u);
-    assert(pe_ctl_room_id(195) == 0xA80292C8u);
-    assert(pe_ctl_room_id(374) == 0xA8067248u);
-    assert(pe_ctl_room_id(1000) == 0 && pe_ctl_room_id(-1) == 0);
+    /* Map-number conversion is checked through the actual registered warp handler. */
+    assert(!strcmp(ask("warp 195"), "ok warp token=A80292C8"));
+    assert(!strcmp(ask("warp 374"), "ok warp token=A8067248"));
+    assert(starts(ask("warp -1"), "err warp"));
+    s_warped = 0;
 
     assert(starts(ask("ping"), "ok ping "));
     assert(!strcmp(ask("nonsense"), "err nonsense unknown command"));
+    assert(!strcmp(ask("battle-state-more"), "err battle-state-more unknown command"));
+    assert(!strcmp(ask("rng-get extra"), "err rng-get extra unknown command"));
+    assert(!strcmp(ask("trace on more"), "err trace on more unknown command"));
+    assert(!strcmp(ask("ping "), "err ping  unknown command"));
+    {
+        char snapshot[1200], command[1300];
+        int value = 0;
+        s_row.kind = PE_ROW_TOGGLE; s_row.value = &value;
+        s_row.label = "Enabled"; s_row.mod_id = "test";
+        snprintf(s_row.page, sizeof s_row.page, "Test");
+        assert(!strcmp(ask("ini-set Test/Enabled 1"), "ok ini-set Test/Enabled=1 restart_required=0") && value == 1);
+        assert(starts(ask("ini-set Test/Enabled 2"), "err ini-set") && value == 1);
+        assert(starts(ask("ini-set unknown 0"), "err ini-set"));
+        assert(strstr(ask("mod-state test"), "\"running\":true"));
+        assert(starts(ask("mod-state unknown"), "err mod-state"));
+        Psyz_Srand(123); g_FrameRngCounter = 456; g_ItemDropRngIndex = 520;
+        memset(g_ItemDropRngTable, 0xab, sizeof g_ItemDropRngTable);
+        snprintf(snapshot, sizeof snapshot, "%s", ask("rng-get") + 11);
+        Psyz_Srand(789); g_FrameRngCounter = 0; g_ItemDropRngIndex = 0;
+        memset(g_ItemDropRngTable, 0, sizeof g_ItemDropRngTable);
+        snprintf(command, sizeof command, "rng-set %s", snapshot);
+        assert(starts(ask(command), "ok rng-set 123 456 520 ab"));
+        assert(Psyz_RandState() == 123 && g_FrameRngCounter == 456 && g_ItemDropRngTable[520] == 0xab);
+        assert(starts(ask("rng-set 0 0 521 00"), "err rng-set"));
+        assert(Psyz_RandState() == 123 && g_ItemDropRngIndex == 520);
+        assert(strstr(ask("battle-state"), "\"active\":false"));
+        assert(!strcmp(ask("trace on"), "ok trace on"));
+        s_hooks[PE_HOOK_FRAME](NULL, s_hook_users[PE_HOOK_FRAME]);
+        assert(!strcmp(ask("trace off"), "ok trace off"));
+    }
 
     /* room */
     g_SceneDispatchToken = g_SceneDispatchCur = (int)0xA8004448u;
@@ -139,6 +253,50 @@ int main(void) {
     g_FieldActorListHead = &s_actor[0];
     g_PlayerEntity = &s_actor[1];
     assert(!strcmp(ask("actors"), "ok actors 0:2.0@0,0,f0 1:0.0*@0,4194304,f0 2:6.0@-65536,5,f0"));
+    {
+        static Combatant player;
+        static FieldActorState npc;
+        player.curHP = 45; player.maxHP = 100; player.atb = 9000;
+        player.currentPe = 123 << 16; player.maxPe = 200 << 16;
+        g_ActiveActor = &player;
+        s_actor[1].state = (FieldActorState *)&player;
+        s_actor[0].state = (FieldActorState *)&g_BattleEnemySlots[0].combatant;
+        s_actor[2].state = &npc;
+        g_BattleEnemySlots[0].active = 1;
+        g_BattleEnemySlots[0].combatant.hp = 35;
+        g_BattleEnemySlots[0].combatant.maxHp = 35;
+        g_BattleEnemySlots[0].combatant.coreFlags = 0x18000;
+        g_GameStateFlags |= 2;
+        assert(strstr(ask("battle-state"), "\"hp\":35,\"max_hp\":35"));
+        assert(!strstr(s_answer, "\"actor\":2"));  /* NPC state is not an enemy core */
+        remove(DIR "/battle.jsonl");
+        ask("trace on");
+        s_hooks[PE_HOOK_ENEMY_HIT]((BattleEntity *)&s_actor[0], s_hook_users[PE_HOOK_ENEMY_HIT]);
+        g_BattleEnemySlots[0].combatant.hp = -19;
+        s_hooks[PE_HOOK_ENEMY_HIT_END]((BattleEntity *)&s_actor[0], s_hook_users[PE_HOOK_ENEMY_HIT_END]);
+        {
+            char event[1024];
+            f = fopen(DIR "/battle.jsonl", "r");
+            assert(f && fgets(event, sizeof event, f)); fclose(f);
+            assert(strstr(event, "\"loss\":54") && strstr(event, "\"critical\":true"));
+        }
+        ask("trace off");
+        g_GameStateFlags &= ~2u;
+        assert(!strcmp(ask("set-stat hp 80"), "ok set-stat hp=80") && player.curHP == 80);
+        assert(starts(ask("set-stat hp 101"), "err set-stat") && player.curHP == 80);
+        assert(!strcmp(ask("give 14"), "ok give 14") && s_given == 0x14);
+        assert(starts(ask("give 100"), "err give"));
+        g_AyaInventoryItems[0] = 0x100;
+        g_InventoryRuntime.equipment[0].iconId = 1;
+        g_InventoryRuntime.equipment[0].kind = 4;
+        g_InventoryRuntime.equipment[0].itemId = 0x44;
+        assert(!strcmp(ask("equip 0"), "ok equip slot=0 id=44"));
+        s_free = 0;
+        assert(starts(ask("give 14"), "err give"));
+        assert(starts(ask("set-stat bp 99"), "err set-stat"));
+        assert(starts(ask("equip 0"), "err equip"));
+        s_free = 1;
+    }
     assert(!strcmp(ask("find-script 1040A8 0 14"), "ok find-script 0@1A98"));
     assert(!strcmp(ask("find-script 1040A8 0 15"), "ok find-script none"));
     assert(!strcmp(ask("find-script zz"), "err find-script find-script WORD [WORD ...]"));
@@ -172,6 +330,8 @@ int main(void) {
     }
     s_free = 0;
     assert(!strcmp(ask("save-block 1"), "err save-block not in free field"));
+    assert(!strcmp(ask("save-block"), "err save-block not in free field"));
+    assert(!strcmp(ask("save-block "), "err save-block slot 1..15"));
 
     puts("Debug control: room ids, warp, variables, actors, find-script, place, save-block with companion");
     return 0;
