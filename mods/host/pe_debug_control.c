@@ -1,11 +1,13 @@
 /* Debug control: lets a test script ask the running game for things a player would need to walk
  * somewhere for. Off unless the environment variable PE_DEBUG_CONTROL names a folder; nothing
  * shows in F1 and players never meet it. A host feature, so it answers whichever mods are on or
- * off (All mods off included).
+ * off (All mods off included). docs/DEBUG_CONTROL.md has the commands and a small client.
  *
  * The script writes one command per line to <folder>/cmd (written to cmd.tmp, then renamed); the
- * game picks it up in free field, deletes it, and appends one line per command to <folder>/out:
- * "ok <command> ..." or "err <command> <why>".
+ * game reads it every 10 frames, in any state, deletes it, and appends one line per command to
+ * <folder>/out: "ok <command> ..." or "err <command> <why>". A file, not the control mode's stdin,
+ * so it also works in a game someone is playing (to save a spot as a test's starting point).
+ * save-block and warp refuse outside free field.
  *
  *   save-block [N] build the card file a save to slot N (1 = A, the default) would write, with the
  *                 game's own Save_BuildHeader and Save_BuildCardFile (the mods' save hook, the
@@ -33,7 +35,7 @@
  *                 the transfer starts; the script waits for "room" to name the new map. Only the
  *                 room and story progress change: who stands in it still follows the rest of the
  *                 story state (day, scene flags), so for a person or an event, start from a save
- *                 made there (a scenario save, pe-native-debug/scenarios.py).
+ *                 made there (save-block in a game being played).
  *   actors        answer "ok actors <i>:<type>.<sub>[*]@<x>,<z>,f<flags> ...": the room's actors in
  *                 the order of the control-mode state ("actors"); * marks Aya.
  *   find-script W [W ...]  the actors whose script holds these words (hex, consecutive), searched
@@ -45,24 +47,24 @@
  *   get-var N     answer "ok get-var <N>=<hex>": script variable N (0..511).
  *   set-var N V   set script variable N to V (hex).
  */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "pe_game.h"
+#include "pe_hooks.h"
 #include "pe_mod_host.h"
 #include "pe_save.h"
-#include "pe1/inventory_state.h"
-#include "pe1/memcard.h"
-#include <math.h>
 #include "pe1/asset_table.h"
 #include "pe1/field_actor.h"
 #include "pe1/game_state.h"
 #include "pe1/game_timers.h"
+#include "pe1/inventory_state.h"
+#include "pe1/memcard.h"
 #include "pe1/player_entity.h"
 #include "pe1/scene_dispatch.h"
 #include "pe1/script_queue.h"
-#include "pe_hooks.h"
 #include "psyz/system.h"
 
 #define PE_VAR_STORY      74

@@ -287,6 +287,7 @@ if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
 endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
+    pe_feature_test(debug-control ${PROJECT_SOURCE_DIR}/tests/pe_mod_debug_control_test.c)   # host: any mod list
 endif()
 if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
     # The pure core and the game's own pack; the game side is covered by pe-native-debug's
