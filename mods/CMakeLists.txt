@@ -42,6 +42,17 @@ if("pe_fonts" IN_LIST PE_MOD_LIST)
     add_dependencies(parasite-eve-pc pe-font-files)
 endif()
 
+set(pe_debug_sources
+    host/pe_debug_control.c
+    host/debug/pe_debug_field.c
+    host/debug/pe_debug_save.c
+    host/debug/pe_debug_battle.c
+    host/debug/pe_debug_rng.c
+    host/debug/pe_debug_setup.c
+    host/debug/pe_debug_settings.c
+    host/debug/pe_debug_trace.c
+)
+
 set(pe_host_sources
     host/pe_mod_host.c      # registry, hooks, services, events, logs
     host/pe_mod_menu.c      # Mods panel rows and pe_mods.ini
@@ -65,6 +76,7 @@ set(pe_host_sources
     host/pe_economy_policy.c
     host/pe_content_api.c
     host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
+    ${pe_debug_sources}    # opt-in transport and independently compiled command modules
     host/pe_present.c       # image presenter: pictures pasted into the finished frame
     host/pe_disc_assets.c   # read-only game data from the player's disc (rooms)
     host/pe_model_skin.c    # isolated Wardrobe asset reads
@@ -287,6 +299,7 @@ if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
 endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
+    pe_feature_test(debug-control ${PROJECT_SOURCE_DIR}/tests/pe_mod_debug_control_test.c ${pe_debug_sources})   # host: any mod list
 endif()
 if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
     # The pure core and the game's own pack; the game side is covered by pe-native-debug's

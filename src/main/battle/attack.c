@@ -338,7 +338,11 @@ void Battle_ResolveHitOnTimer(void)
                     {
                     case 2:
                         PE_HOOK(PE_HOOK_STEAL, NULL);
-                        if (Inv_AddItem(((EnemyCombatant *)selectedSlot->actor->core)->stealItemId) != 0)
+                        int stolen_item = ((EnemyCombatant *)selectedSlot->actor->core)->stealItemId;
+                        int stolen_result = Inv_AddItem(stolen_item);
+                        PeHookStealResult steal_event = {stolen_item, stolen_result == 0};
+                        PE_HOOK(PE_HOOK_STEAL_RESULT, &steal_event);
+                        if (stolen_result != 0)
                         {
                             EnemyCombatant *enemy = selectedSlot->actor->core;
                             g_BattleSaveOverlayActive = 1;

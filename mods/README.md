@@ -37,6 +37,7 @@ mods/
     pe_game_facts.c      those facts as tables: mod effect names and groups, power tags
     pe_main_menu.*       extra rows in Aya's main menu, screens from the game's own widgets, Yes / No
     pe_equip_sync.c      edited equipment reaches the next battle
+    pe_debug_control.c   commands from a test script, off unless PE_DEBUG_CONTROL is set (docs/DEBUG_CONTROL.md)
     pe_gametext.h        text in the game's glyph code; pe_item_table.h the game's item names
     pe_image.h           the picture type the image code shares (RGBA, straight alpha)
     pe_present.*         image presenter: the only code that puts pictures into the game's frame
