@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed untextured parts of opened chests moving out of sync with their lids and bodies at 60 Hz. Textureless geometry now keeps its interpolation history when the renderer reuses vertex-buffer slots.
+
 ## 0.13
 
 - Improved HD widescreen layer alignment and filtering. Adding side artwork no longer changes the scale of the original picture. Coverage still depends on the installed background pack.

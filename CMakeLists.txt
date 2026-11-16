@@ -1339,6 +1339,12 @@ if(BUILD_TESTING)
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
             FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
             ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
+        add_test(NAME original-gpu-untextured-interpolation COMMAND test-psyz-interpolation
+            --filter=gpu::untextured_geometry_keeps_interpolation_with_textured_neighbors)
+        set_tests_properties(original-gpu-untextured-interpolation PROPERTIES TIMEOUT 90 LABELS "gpu"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
+            FAIL_REGULAR_EXPRESSION "ztest: 0 passed|[1-9][0-9]* skipped"
+            ENVIRONMENT "PSYZ_HEADLESS=gpu;SDL_AUDIO_DRIVER=dummy;PSYZ_VSYNC_LIMITLESS=1")
         add_test(NAME original-gpu-frame-interpolation COMMAND test-psyz-interpolation --filter=gpu::interpolated*)
         set_tests_properties(original-gpu-frame-interpolation PROPERTIES TIMEOUT 90 LABELS "gpu"
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/psyz/psyz/tests"
