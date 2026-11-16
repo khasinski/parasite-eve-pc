@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "b031fda21ff13f4b302e7f1319c5bada9b3d768071bae0cf758bac0b6fdc9f9f"
+      "sha256": "f35781f2969bdf2d98163acc59c141853c1c061cfc6a0cc878811533ef328ce2"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4327,7 +4327,7 @@
     },
     {
       "path": "mods/pe_economy/pe_loot.c",
-      "sha256": "972aa85a4b66b2b49016682b775f5a20a08421591e53f8a2c2f1e2f07e1471f7"
+      "sha256": "f99c3bad7f88582b9b37bbb63fb9ca105413f3c2c2f4174756c3ed1f35af12db"
     },
     {
       "path": "mods/pe_economy/pe_smoke.c",
