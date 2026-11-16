@@ -5,7 +5,7 @@
 - Fixed opened chest interiors shifting out of sync with the rest of the chest at 60 Hz.
 - Added **Quick hand-in** under Economy: Wayne can count Junk in batches of 100. Turn it off for the original pace.
 - Added opt-in headless debug controls for automated gameplay tests, save export, RNG and battle tracing.
-- Optional HD background pack **0.5** fixes the open passage and landing upstairs at the NYPD. Update the pack through **Escape → Mods → Background pack**.
+- An update to the optional HD background pack fixes the open passage and landing upstairs at the NYPD. Update the pack through **Escape → Mods → Background pack**.
 
 ## 0.13
 
