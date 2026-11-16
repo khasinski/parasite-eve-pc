@@ -88,14 +88,18 @@ static void pe_ctl_run(char *line) {
 }
 
 void pe_debug_control_poll(void) {
-    char path[1100], line[2048];
+    char path[1100], claimed[1100], line[2048];
     FILE *f;
     if (!s_dir[0]) return;
     pe_debug_path(path, sizeof path, "cmd");
-    if (!(f = fopen(path, "r"))) return;
+    pe_debug_path(claimed, sizeof claimed, "cmd.processing");
+    /* Claim before replying: a client may publish its next command as soon
+     * as it sees a response. Never remove that newly published command. */
+    if (rename(path, claimed)) return;
+    if (!(f = fopen(claimed, "r"))) { remove(claimed); return; }
     while (fgets(line, sizeof line, f)) pe_ctl_run(line);
     fclose(f);
-    remove(path);
+    remove(claimed);
 }
 
 static int pe_ctl_frame(void *ctx, void *user) {

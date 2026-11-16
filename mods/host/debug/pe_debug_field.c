@@ -10,6 +10,8 @@
 #include "pe1/player_entity.h"
 #include "pe1/scene_dispatch.h"
 #include "pe1/script_queue.h"
+#include "pe1/reloc_block.h"
+#include "pe1/field_collision.h"
 
 #define PE_VAR_STORY 74
 #define PE_VAR_COUNT 512
@@ -75,13 +77,16 @@ static void pe_ctl_warp(const char *args) {
 
 static void pe_ctl_actors(const char *args) {
     (void)args;
-    static char list[PE_ACTORS_MAX * 48];
+    static char list[PE_ACTORS_MAX * 96];
     FieldActor *a;
     int i, at = 0;
     list[0] = 0;
-    for (a = g_FieldActorListHead, i = 0; a && i < PE_ACTORS_MAX; a = a->next, ++i)
-        at += snprintf(list + at, sizeof list - at, "%s%d:%u.%u%s@%d,%d,f%X", i ? " " : "", i, a->type_id, a->sub_id,
+    for (a = g_FieldActorListHead, i = 0; a && i < PE_ACTORS_MAX; a = a->next, ++i) {
+        int written = snprintf(list + at, sizeof list - at, "%s%d:%u.%u%s@%d,%d,f%X", i ? " " : "", i, a->type_id, a->sub_id,
                        a == g_PlayerEntity ? "*" : "", a->pos_x, a->pos_z, a->flags);
+        if (written < 0 || (size_t)written >= sizeof list - at) break;
+        at += written;
+    }
     pe_debug_reply("ok %s %s", "actors", list);
 }
 
@@ -94,11 +99,15 @@ static void pe_ctl_find_script(const char *args) {
     if (!n) { pe_debug_reply("err %s %s", "find-script", "find-script WORD [WORD ...]"); return; }
     found[0] = 0;
     for (a = g_FieldActorListHead, i = 0; a && i < PE_ACTORS_MAX; a = a->next, ++i) {
-        int off;
+        size_t off, bytes;
         if (!a->script_base) continue;
-        for (off = 0; off + n * 4 <= PE_SCRIPT_SCAN; off += 4)
+        bytes = Script_TaskBytesAvailable(a->script_base);
+        if (bytes > PE_SCRIPT_SCAN) bytes = PE_SCRIPT_SCAN;
+        for (off = 0; off + (size_t)n * 4 <= bytes; off += 4)
             if (!memcmp(a->script_base + off, words, (size_t)n * 4)) {
-                at += snprintf(found + at, sizeof found - at, "%s%d@%X", at ? " " : "", i, off);
+                int written = snprintf(found + at, sizeof found - at, "%s%d@%X", at ? " " : "", i, (unsigned)off);
+                if (written < 0 || (size_t)written >= sizeof found - at) break;
+                at += written;
                 break;
             }
     }
@@ -110,6 +119,8 @@ static void pe_ctl_set_player(int x, int z, int yaw) {
     p->pos_x = p->base_x = x;
     p->pos_z = p->base_z = z;
     p->rot_y = p->saved_rot_y = (short)(yaw & 0xFFF);
+    p->collision_face = p->collision_face_mirror = NULL;
+    Entity_FindFloor((struct BattleEntity *)p);
 }
 
 static void pe_ctl_place(const char *args) {

@@ -235,6 +235,22 @@ int Script_SpawnChildNode(int **args) {
     return 1;
 }
 
+static const u8 *task_source;
+static size_t task_source_size;
+static RelocBlock *task_owner;
+
+size_t Script_TaskBytesAvailable(const void *address) {
+    uintptr_t at = (uintptr_t)address, base = (uintptr_t)task_source;
+    if (!address || !task_source || task_owner != g_SceneDataTable1 ||
+        at < base || at - base >= task_source_size) return 0;
+    size_t available = task_source_size - (size_t)(at - base);
+    for (uintptr_t i = 0; i < task_owner->count; ++i) {
+        uintptr_t next = (uintptr_t)task_owner->offsets[i];
+        if (next > at && next - at < available) available = (size_t)(next - at);
+    }
+    return available;
+}
+
 RelocBlock *Script_RelocBlock(void *block, size_t size) {
     static RelocBlock *resolved;
     u8 *bytes = block;
@@ -267,6 +283,9 @@ RelocBlock *Script_RelocBlock(void *block, size_t size) {
     free(resolved);
     resolved = next;
     g_SceneDataTable1 = resolved;
+    task_source = bytes;
+    task_source_size = size;
+    task_owner = resolved;
     return resolved;
 }
 

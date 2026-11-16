@@ -125,7 +125,15 @@ int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod) 
     s_hooks[id] = fn; s_hook_users[id] = user; (void)priority; (void)mod;
     return 0;
 }
-void pe_log(const char *tag, const char *fmt, ...) { (void)tag; (void)fmt; }
+static int s_enqueue_during_dispatch;
+void pe_log(const char *tag, const char *fmt, ...) {
+    (void)fmt;
+    if (s_enqueue_during_dispatch && !strcmp(tag, "debug_control")) {
+        FILE *f = fopen(DIR "/cmd", "w");
+        assert(f); fputs("ping\n", f); fclose(f);
+        s_enqueue_during_dispatch = 0;
+    }
+}
 void pe_mod_log(const char *mod, const char *fmt, ...) { (void)mod; (void)fmt; }
 
 /* ---- a command in, its answer out ---- */
@@ -148,6 +156,18 @@ static int starts(const char *s, const char *prefix) { return !strncmp(s, prefix
 
 static FieldActor s_actor[3];
 static unsigned char s_script[3][PE_SCRIPT_SCAN];
+static size_t s_script_bytes[3] = {PE_SCRIPT_SCAN, PE_SCRIPT_SCAN, PE_SCRIPT_SCAN};
+static unsigned s_floor_refreshes;
+size_t Script_TaskBytesAvailable(const void *address) {
+    for (unsigned i = 0; i < 3; ++i) if (address == s_script[i]) return s_script_bytes[i];
+    return 0;
+}
+void Entity_FindFloor(struct BattleEntity *actor) {
+    FieldActor *field = (FieldActor *)actor;
+    assert(!field->collision_face && !field->collision_face_mirror);
+    field->collision_face = field->collision_face_mirror = (void *)s_script;
+    ++s_floor_refreshes;
+}
 
 int main(void) {
     static const u32 junk_count[3] = { 0x001040A8u, 0, 0x14 };
@@ -300,6 +320,11 @@ int main(void) {
     assert(!strcmp(ask("find-script 1040A8 0 14"), "ok find-script 0@1A98"));
     assert(!strcmp(ask("find-script 1040A8 0 15"), "ok find-script none"));
     assert(!strcmp(ask("find-script zz"), "err find-script find-script WORD [WORD ...]"));
+    /* A signature beyond the payload must not be read, even when the storage
+     * happens to continue with another task. */
+    s_script_bytes[0] = 0x1A98 + sizeof junk_count - 1;
+    assert(!strcmp(ask("find-script 001040A8 0 14"), "ok find-script none"));
+    s_script_bytes[0] = PE_SCRIPT_SCAN;
 
     /* place / place-near: beside Wayne on Aya's side, facing him (yaw 0x800 = toward -z) */
     assert(!strcmp(ask("place-near 0"), "ok place-near 0,1572864,2048"));
@@ -309,6 +334,7 @@ int main(void) {
     assert(starts(ask("place-near 9"), "err place-near"));      /* nobody */
     assert(!strcmp(ask("place 100 -200 1024"), "ok place 100,-200"));
     assert(s_actor[1].pos_x == 100 && s_actor[1].pos_z == -200 && s_actor[1].rot_y == 1024);
+    assert(s_floor_refreshes == 3 && s_actor[1].collision_face == (void *)s_script);
 
     /* save-block: no companion, then with one (copied, named, and the staged one dropped) */
     assert(!strcmp(ask("save-block 1"), "ok save-block BASLUS-006620000000A") && s_cancelled == 1);
@@ -333,6 +359,13 @@ int main(void) {
     assert(!strcmp(ask("save-block"), "err save-block not in free field"));
     assert(!strcmp(ask("save-block "), "err save-block slot 1..15"));
 
-    puts("Debug control: room ids, warp, variables, actors, find-script, place, save-block with companion");
+    /* Publishing a next request during processing must survive cleanup. */
+    f = fopen(DIR "/cmd", "w"); assert(f); fputs("ping\n", f); fclose(f);
+    s_enqueue_during_dispatch = 1;
+    pe_debug_control_poll();
+    f = fopen(DIR "/cmd", "r"); assert(f); fclose(f);
+    pe_debug_control_poll();
+    assert(!fopen(DIR "/cmd", "r") && !fopen(DIR "/cmd.processing", "r"));
+    puts("Debug control: room ids, warp, variables, actors, bounded find-script, floor refresh, save-block and queued commands");
     return 0;
 }

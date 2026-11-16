@@ -41,7 +41,8 @@ The command protocol and existing argument semantics are unchanged by this split
 ### File protocol
 
 The script writes one command per line to `<folder>/cmd` (write `cmd.tmp`, then rename it, so the
-game never reads half a file). The game reads it every 10 frames, in any state, deletes it, and
+game never reads half a file). During gameplay the game claims it as `cmd.processing` every 10
+frames, then removes that claimed file, and
 appends one answer line per command to `<folder>/out`:
 
 ```
@@ -114,6 +115,10 @@ peek/poke, Junk setup, equipment-mod replacement, and movie/dialogue skipping re
 this implementation. `mod-state` is the registered F1 view, not a dump of every private variable.
 
 ### A warp gets the room, not the scene
+
+Placement refreshes Aya's floor triangle so movement does not keep using the triangle from her
+previous position. Choose a point on the room's walkable mesh. `find-script` only scans bytes
+inside the loaded task payload and stops at the next task, rather than reading a fixed 32 KiB.
 
 `warp` loads the room and can set story progress. Who stands in the room, and what they say, also
 follows the story day and scene flags, which a warp doesn't touch. For example, warping to Wayne's

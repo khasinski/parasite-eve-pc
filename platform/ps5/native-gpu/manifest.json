@@ -3247,7 +3247,7 @@
     },
     {
       "path": "include/pe1/reloc_block.h",
-      "sha256": "ed13b86ed5f35e38e6521b75d0f56d8656a738a5ce13e4bf157cde49a61291b8"
+      "sha256": "061db0bf1d4276bf6c8ebc41e16646a96c7af3ecb9f54430e5e804a150de48bf"
     },
     {
       "path": "include/pe1/render_anim_position.h",
@@ -3855,7 +3855,7 @@
     },
     {
       "path": "mods/host/debug/pe_debug_field.c",
-      "sha256": "19784862728d90d4ab5ce667a50b031e4977ddb42223bec534977d4914a72b20"
+      "sha256": "fdbbeebc4645ce7369a87ecfd0d25e779d3e83af294373d0bd1cfba2dc536ae9"
     },
     {
       "path": "mods/host/debug/pe_debug_internal.h",
@@ -3931,7 +3931,7 @@
     },
     {
       "path": "mods/host/pe_debug_control.c",
-      "sha256": "859065f6c9a2356a0590282a91e6e3dd5de9493953ae9e11e6432b574c91ae9b"
+      "sha256": "c271edf715de2c26e4fb365f752d0feeb6a5b222ab6ea7fc64d6fc690f52ba48"
     },
     {
       "path": "mods/host/pe_disc_assets.c",
