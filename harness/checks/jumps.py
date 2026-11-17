@@ -9,12 +9,19 @@ from pedebug import debugroom, flows, places
 from pedebug.game import GameError
 from pedebug.runner import check
 
-from ._common import FAST_BATTLES, walk_into_battle
+from ._common import FAST_BATTLES, through_dialogue, walk_into_battle
 
 
 def _one_jump(ctx, name: str, **jump_args) -> dict:
-    s = ctx.session(cards=[ctx.card("C")], name="jump-" + "".join(c if c.isalnum() else "-" for c in name).strip("-"))
-    flows.load_save(s, flows.slot_of(ctx.card("C")))
+    """From save C, or a New Game for the Day 1 chapters (STORY_EARLY)."""
+    early = name in debugroom.STORY_EARLY
+    s = ctx.session(cards=None if early else [ctx.card("C")],
+                    name="jump-" + "".join(c if c.isalnum() else "-" for c in name).strip("-"))
+    if early:
+        flows.new_game(s)
+        through_dialogue(s, what="control after the opening")
+    else:
+        flows.load_save(s, flows.slot_of(ctx.card("C")))
     try:
         e = debugroom.jump(s, name, strong=True, **jump_args)
         here = places.room(s)
@@ -30,9 +37,9 @@ def _one_jump(ctx, name: str, **jump_args) -> dict:
 
 @check("story-jumps", tags=("jumps",), needs=("card:C",), timeout_s=1800)
 def story_jumps(ctx):
-    """Every story point jump() supports (debugroom.STORY minus STORY_LIMITS), from save C, four
-    games at once: each lands with Aya in control in the room STORY_MAP lists. Writes jumps.json
-    (name, map, story)."""
+    """Every story point jump() supports (debugroom.STORY minus STORY_LIMITS), strong, from save C
+    (the Day 1 chapters from a New Game), four games at once: each lands with Aya in control in the
+    room STORY_MAP lists. Cruiser needs pe_assists in the build. Writes jumps.json (name, map, story)."""
     names = [n for n in debugroom.STORY if n not in debugroom.STORY_LIMITS]
     with cf.ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(lambda n: _one_jump(ctx, n), names))
@@ -48,6 +55,47 @@ def story_jumps(ctx):
             ctx.expect(r["map"] == want, f"{r['name']}: map {r['map']}, expected {want}")
         ctx.note(f"{r['name']} (day {debugroom.STORY_DAY[r['name']]}): map {r['map']}, story {r['story']:X}")
     ctx.fact("jumps", f"{sum(r['error'] is None for r in results)} of {len(results)}")
+
+
+def _one_ride(ctx, name: str) -> dict:
+    early = name in debugroom.RIDES_EARLY
+    s = ctx.session(cards=None if early else [ctx.card("C")],
+                    name="ride-" + "".join(c if c.isalnum() else "-" for c in name).strip("-"))
+    if early:
+        flows.new_game(s)
+        through_dialogue(s, what="control after the opening")
+    else:
+        flows.load_save(s, flows.slot_of(ctx.card("C")))
+    try:
+        e = debugroom.ride(s, name, strong=True)
+        here = places.room(s)
+        s.shot("landed")
+        return {"name": name, "map": e["map"], "story": here["story"], "free": here["free"], "error": None}
+    except GameError as err:
+        return {"name": name, "map": None, "error": str(err).splitlines()[0]}
+    finally:
+        s.save_inputs()
+        s.quit()
+        ctx.sessions.remove(s)
+
+
+@check("copcar-rides", tags=("jumps",), needs=("card:C",), timeout_s=1800)
+def copcar_rides(ctx):
+    """Every Copcar Event ride (debugroom.RIDES), strong, from save C (Theatre-NYPD from a New
+    Game), four games at once: each is
+    played on until Aya has control, in the room RIDE_MAP lists. Writes rides.json."""
+    with cf.ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda n: _one_ride(ctx, n), debugroom.RIDES))
+    (ctx.dir / "rides.json").write_text(json.dumps(results, indent=1))
+    for r in results:
+        if not ctx.expect(r["error"] is None, f"{r['name']}: {r['error']}"):
+            continue
+        ctx.expect(r["map"] != debugroom.DEBUG_ROOM and r["free"], f"{r['name']}: ended in map {r['map']} with control")
+        want = debugroom.RIDE_MAP.get(r["name"])
+        if want is not None:
+            ctx.expect(r["map"] == want, f"{r['name']}: map {r['map']}, expected {want}")
+        ctx.note(f"{r['name']}: map {r['map']}, story {r['story']:X}")
+    ctx.fact("rides", f"{sum(r['error'] is None for r in results)} of {len(results)}")
 
 
 @check("story-jump-one", tags=("diag", "jumps"), needs=("card:C",), timeout_s=300)

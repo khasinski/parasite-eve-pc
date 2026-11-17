@@ -7,7 +7,7 @@
   python pe.py diag [--quick|--full] diagnostics; --full adds saves, mods on/off, economy, challenges
   python pe.py run NAME... [--tag T] [--repeat N] [--jobs N]
   python pe.py report                the latest run's report
-  python pe.py build [CHECKOUT] [--extra-mods "pe_bp;pe_challenges"] [--toolchain DIR] [--use]
+  python pe.py build [CHECKOUT] [--extra-mods "pe_assists;pe_bp;pe_challenges"] [--toolchain DIR] [--use]
   python pe.py play                  start the game in a window with the debug channel on
   python pe.py live state|ui|battle|events|watch|snapshot [NAME]|mod ID|cmd "..."
   python pe.py capture NAME          save the playing game's spot as a scenario save
@@ -362,7 +362,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("build")
     p.add_argument("checkout", nargs="?", help="a game checkout (default: this repository)")
     p.add_argument("--dir", default="build-harness")
-    p.add_argument("--extra-mods", default="pe_bp;pe_challenges"); p.add_argument("--tests", action="store_true")
+    p.add_argument("--extra-mods", default="pe_assists;pe_bp;pe_challenges"); p.add_argument("--tests", action="store_true")
     p.add_argument("--toolchain", help="a folder with cmake, ninja and clang (or PE_TOOLCHAIN)")
     p.add_argument("--use", action="store_true", help="point harness.json at the result")
     p.set_defaults(fn=cmd_build)

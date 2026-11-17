@@ -22,7 +22,7 @@ python pe.py diag             # the diagnostics suite; report in runs/diag/<time
 `search_roots` in `harness.json`.
 
 `pe.py build [CHECKOUT] --use` configures and builds a checkout (default: this one) into
-`build-harness/` with mods and the opt-in mods (`pe_bp;pe_challenges`), using CMake, Ninja and a
+`build-harness/` with mods and the opt-in mods (`pe_assists;pe_bp;pe_challenges`), using CMake, Ninja and a
 compiler from PATH or `--toolchain DIR`, and points `harness.json` at it.
 
 Most checks start from your own saves: see [fixtures/README.md](fixtures/README.md). Without
@@ -106,23 +106,26 @@ loaded save:
 
 ```python
 from pedebug import debugroom
-debugroom.jump(s, "Warehouse", strong=True)   # chapter start, in control; strong: God mode + level 99
+debugroom.jump(s, "Warehouse", strong=True)   # chapter start, in control; strong: God mode, No HP loss, level 99
 debugroom.battles(s, on=False)                 # random encounters off (the game's debug switch)
 debugroom.give(s, "Get Bullets")               # also Poisons, Status Item, Tools, Tune up Items, weapon
-debugroom.copcar(s, "Theatre-NYPD")            # the car rides between places
+debugroom.ride(s, "NYPD- Hospital")           # a Copcar Event ride, played on to control (RIDES)
+clear = debugroom.finish_game(s)               # the ending, credits and the Clear Data save
 ```
 
 `debugroom.STORY` lists the 31 story points (Opening ... Chrysler 77F) and `STORY_DAY` their days.
 A jump runs the chapter's own start: its first room, its opening event (watched; `watch=False`
 skips it, faster but the event's script doesn't run), fights it opens with (attacked), Enter Name,
 the day title card, and any save offered (declined), until Aya has control. Aya keeps her level,
-HP and bag: `strong=True` turns on the Cheats mod's God mode and infinite ammo and PE first (late
-chapters open with fights a low-level Aya loses).
+HP and bag: `strong=True` turns on the Cheats mod's God mode and infinite ammo and PE and the
+Assists mod's No HP loss (battle) first, and raises her to level 99 (late chapters open with fights
+a low-level Aya loses). God mode alone isn't enough for Cruiser (`STORY_STRONG`): its boss hits
+harder than Aya's maximum HP, so it needs pe_assists in the build (`pe.py build` adds it).
 
-Five story points don't reach free field yet (`STORY_LIMITS`; `jump` refuses them unless
-`force=True`): Theatre Exterior and NYPD -Day1- stop in the NYPD office in event mode; Cruiser's
-opening fight beats Aya even with God mode; Port and Theatre Epilogue run into the ending and the
-title.
+The Day 1 chapters (`STORY_EARLY`: Theatre Exterior, NYPD -Day1-) play on into the next morning at
+the precinct, whose scene waits forever when the save's story is past Day 1: jump to them from a
+New Game. Port and Theatre Epilogue run into the ending (`STORY_LIMITS`; `finish_game` plays the
+ending through to the Clear Data save).
 
 Limits: story progress (variable 74, which the save screen's and Phone Calls' Day comes from) is
 whatever the chapter's start sets; `STORY_KEEPS` lists the chapters that leave the save's value, and
@@ -166,7 +169,10 @@ Helicopter) play through into the next one's first room.
 | `mods-full-bag-qol-off` | pe_qol off with one free slot: one key back, two kept, nothing lost |
 | `wayne-handin` | Discard junk with Quick hand-in off and on: same result, much faster |
 | `challenge-hardcore-start` | New Game with Hardcore: the run is active, locked and saved |
-| `story-jumps` (tag `jumps`) | the 26 supported story points from save C: each lands with control in the room `STORY_MAP` lists (about 3 minutes, 4 at a time) |
+| `challenge-hardcore-death` | a Hardcore game over marks the run fallen; loading its save shows "This Hardcore run has ended" and goes back to the title |
+| `story-jumps` (tag `jumps`) | the 29 story points that end in free field (save C; the Day 1 chapters from a New Game): each lands with control in the room `STORY_MAP` lists (about 4 minutes, 4 at a time) |
+| `copcar-rides` (tag `jumps`) | the 10 Copcar Event rides from save C: each played on to control in the room `RIDE_MAP` lists |
+| `ex-game-from-ending` (tags `jumps`, `ex`) | save C (Junk, pocketed keys) to the ending, credits and Clear Data save: the mods reset at the EX start (no Junk or keys in the clear save), then the EX round from it (several minutes) |
 | `debug-room-switches` (tag `jumps`) | Get Bullets changes the bag; Battle OFF stops encounters, Battle ON brings them back |
 
 ### Known game bugs
