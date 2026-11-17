@@ -158,6 +158,7 @@ Helicopter) play through into the next one's first room.
 | `save-vanilla-defaults` | a save without mods' data starts every mod from defaults |
 | `save-phone-matches-block` | a phone save holds the same mods' data as save-block |
 | `save-new-game-fresh` | New Game after a loaded save carries no Junk, unlocks, Tools or pocketed keys |
+| `ex-game-start` | EX Game from Clear Data save J (the title's EX Game row; Continue won't load clear data): level 1 in the opening room, Bonus Points and bag carried, mods running, a valid container saved |
 | `mods-each-off` | every mod in the build off on its own: every record and companion section kept (pe_stacks off: its stacked copies handed to the bag or still counted) |
 | `mods-qol-off-returns-keys` | pe_qol off hands the pocketed keys to the bag; on again pockets them |
 | `mods-all-off-and-back` | All mods off and on again: nothing lost |

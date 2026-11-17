@@ -5,6 +5,7 @@ Nothing here is committed: saves are yours (and the game's data). The checks loo
 | Path | What | Used by |
 |---|---|---|
 | `cards/BASLUS-006620000000C` | a memory card file saved to **slot C** at a **save phone**, Day 2 or later, with a weapon equipped and room to walk into a random encounter. The checks were written against a Central Park save (map 87, Day 2) | `field-commands`, `bp-challenges-state`, `battle-win`, `battle-loss`, `phone-save-call`, `reset-new-game`, selftest |
+| `cards/BASLUS-006620000001J` | a **Clear Data** save (the `1` in the name) in slot J, from finishing the game and saving after the credits | `ex-game-start` |
 | `scenarios/wayne_day4/` | a scenario save at Wayne's bench in the precinct (map 48), Day 4 or later, with some Junk | `wayne-menu` |
 
 Card files are the game's own saves: copy one from your memory-card folder (the save editor shows

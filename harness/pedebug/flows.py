@@ -183,6 +183,33 @@ def save_at_phone(s: Session, number: int) -> None:
     in_field(s, what="free field after saving")
 
 
+def ex_game(s: Session, number: int, card: int = 1, from_boot: bool = True) -> None:
+    """From the title: EX Game, the card, Clear Data save No `number` (see slot_of), through
+    "File loaded". The title's EX Game row (above New Game) appears only when a card holds clear
+    data (MemCard_HasAnyPresentFile); it opens the same file list as Continue with the clear-data
+    flag set (Save_SetTitleStyleFlag). Continue's list shows clear saves but won't load them."""
+    if from_boot:
+        to_title(s)
+    s.press("start")
+    s.advance(100)
+    s.press("up", hold=4, after=40)                     # Continue -> New Game
+    s.press("up", hold=4, after=40)                     # New Game -> EX Game
+    s.press("cross")
+    s.wait(lambda st: _menu_sel(st) == 36, timeout=600, what="Select Slot")
+    s.advance(60)
+    if card == 2:
+        s.press("down")
+    s.press("cross")
+    s.wait(lambda st: _menu_sel(st) == 37, timeout=600, what="the file list")
+    s.advance(60)
+    for _ in range(number - 1):
+        s.press("down", hold=4, after=30)
+    s.press("cross")
+    s.wait(lambda st: _menu_sel(st) == 40, timeout=900, what='"File loaded"')
+    s.advance(60)
+    s.press("cross")
+
+
 TITLE_SCENE = 0xA9400048
 RESET_COMBO = game.L1 | game.L2 | game.R1 | game.R2 | game.START | game.SELECT
 
