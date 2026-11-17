@@ -165,7 +165,7 @@ Helicopter) play through into the next one's first room.
 | `mods-full-bag-qol-off` | pe_qol off with one free slot: one key back, two kept, nothing lost |
 | `wayne-handin` | Discard junk with Quick hand-in off and on: same result, much faster |
 | `challenge-hardcore-start` | New Game with Hardcore: the run is active, locked and saved |
-| `story-jumps` (tag `jumps`) | the 26 supported story points from save C: each lands with control in the room `STORY_MAP` lists (about 10 minutes) |
+| `story-jumps` (tag `jumps`) | the 26 supported story points from save C: each lands with control in the room `STORY_MAP` lists (about 3 minutes, 4 at a time) |
 | `debug-room-switches` (tag `jumps`) | Get Bullets changes the bag; Battle OFF stops encounters, Battle ON brings them back |
 
 ### Known game bugs
