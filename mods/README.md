@@ -747,7 +747,10 @@ In pe_wardrobe/:
   Kept in host memory: Aya's textures are swapped
   at the game's upload (PE_HOOK_PLAYER_TEXTURES, the game's own kept for changing back), and
   bank_slots[0] and her rows point at the skin before her actor takes them (PE_HOOK_PLAYER_ROWS) and
-  every frame; the weapon follows the skin's hand, room animations use retargeted copies. Instant
+  every frame; the weapon follows the skin's hand, room animations use retargeted copies. A row
+  the skin can't play (another bone count, no retargeted copy) gets the skin's idle pose held for
+  its length ("idle pose held" in the log), and the mirror rooms' reflection actor draws the worn
+  skin instead of the room's own Aya mesh. Instant
   swap (Wardrobe, experimental, off) changes skins in place without a room reload. A game outfit
   may carry a room pack (rooms.bin alone: pe_skins/outfit_evening, outfit_tshirt, made by the
   bridge's build_outfit_rooms.py): rooms install Aya's animations for the outfit the story has her
@@ -801,6 +804,8 @@ In pe_wardrobe/:
   the Wardrobe (the host never calls it by name). Recipe packs (Parasite Eve's own characters,
   shared as instructions) are listed as needing a build: the bridge's
   tools/pe_assets/pe_pack_build.py builds them from the player's disc into an assets pack here.
+  Models from other games are converted on the player's computer: `tools/re2-skin/` builds an
+  assets pack from a Resident Evil 2 PC player model (BioRand's `claire.re2/PL01.PLD`).
   Not yet: default-appearance replacement. `tests/pe_mod_packs_test.c` writes real zips and folders; the model fixture covers
   the preview reader and the shape check's refusals.
 - `pe_wardrobe_profile.c`: costumes owned and the one worn, by key, in pe_wardrobe.ini beside the

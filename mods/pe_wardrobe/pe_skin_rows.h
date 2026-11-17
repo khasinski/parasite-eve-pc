@@ -11,6 +11,8 @@
 #include "pe1/player_entity.h"
 #include "pe1/scene_assets.h"
 
+void pe_log(const char *tag, const char *fmt, ...);   /* pe_mod_host.h; the fixture stubs it */
+
 #define PE_MAX_SKINS     64
 #define PE_ROWS_PER_BANK 48
 #define PE_ROOM_SLOT0    24          /* room animation rows: bank_rows[0][24..47] */
@@ -131,9 +133,18 @@ static void *pe_room_copy(const PeSkin *k, const void *p) {
     return NULL;
 }
 
+/* Hold rows: the skin's idle pose for a game row that doesn't fit the skin and has no copy. */
+#define PE_HOLD_MAX (12u + (3u + 64u * 3u) * 4u)
+static u8 s_hold[PE_ROWS_PER_BANK + 1][PE_HOLD_MAX];   /* one per slot, the last for a running row */
+
+static int pe_is_hold(const void *p) {
+    return (const u8 *)p >= s_hold[0] && (const u8 *)p < s_hold[0] + sizeof s_hold;
+}
+
 static int pe_ours(const PeSkin *k, const void *p) {
     const u8 *b = p;
     int d;
+    if (pe_is_hold(p)) return 1;
     if (b >= k->model.data && b < k->model.data + k->model.size) return 1;
     if (k->nrooms && b >= k->rooms.data && b < k->rooms.data + k->rooms.size) return 1;
     for (d = 1; d <= 8; ++d) if (b >= k->day[d].data && b < k->day[d].data + k->day[d].size) return 1;
@@ -145,6 +156,76 @@ static int pe_ours(const PeSkin *k, const void *p) {
 static int pe_fits(const void *row) {
     const RenderObjectHeader *h = g_GameState.bank_slots[0];
     return h && ((const u8 *)row)[1] + 1u == h->part_count;
+}
+
+/* The skin bundle's own row `id`, or NULL. */
+static const u8 *pe_skin_row(const PeSkin *k, unsigned id) {
+    const SceneAssetDirectory *dir = pe_dir(&k->model);
+    const SceneBankAssetRecord *rec;
+    u32 i;
+    if (!dir) return NULL;
+    rec = SceneAsset_ResolveOffset(k->model.data, dir->bankRowEntries & 0x3FFFFFu);
+    for (i = 0; i < dir->bankRowEntries >> 22; ++i)
+        if (rec[i].source.bytes.id == id) return SceneAsset_ResolveOffset(k->model.data, rec[i].source.offsetAndId & 0xFFFFFFu);
+    return NULL;
+}
+
+/* Frame 0 of each channel (3 translations, then 3 angles per bone). Constant or not, the first
+ * sample sits right after the marker: a halfword for wide channels, a byte otherwise. */
+static int pe_first_samples(const u8 *p, s16 *out, unsigned max) {
+    const unsigned frames = p[2], n = 3u + (p[1] + 1u) * 3u;
+    const int shrt = (p[0] & 3u) == 2u;
+    const u32 stride = ((frames >> 1) + 1u) * 4u, bstride = shrt ? stride : ((frames >> 2) + 1u) * 4u;
+    u32 cur = 12u;
+    unsigned c;
+    if (n > max || !pe_row_length(p, 0x10000u)) return 0;
+    for (c = 0; c < n; ++c) {
+        const int wide = c < 3 || shrt;
+        const int constant = wide ? (p[cur] | p[cur + 1] << 8) != 0 : p[cur] != 0;
+        out[c] = wide ? (s16)(p[cur + 2] | p[cur + 3] << 8) : (s16)p[cur + 1];
+        cur += constant ? 4u : wide ? stride : bstride;
+    }
+    return (int)n;
+}
+
+/* A row the skin can play in place of `game` (more or fewer bones than its parts): the skin's idle
+ * pose held still, with the game row's frame count, hit values and starting position, so scripts
+ * waiting on the animation time it the same and nothing reads past the skin's matrices. */
+static void *pe_hold_row(const PeSkin *k, const u8 *game, int slot) {
+    const RenderObjectHeader *h = g_GameState.bank_slots[0];
+    const u8 *idle = pe_skin_row(k, PE_IDLE_ROW);
+    s16 g[3 + 128 * 3], s[3 + 64 * 3];
+    u8 *o = s_hold[slot];
+    unsigned c, n;
+    int shrt;
+    if (!h || !idle || idle[1] + 1u != h->part_count || !pe_first_samples(game, g, 3 + 128 * 3) ||
+        !(n = (unsigned)pe_first_samples(idle, s, 3 + 64 * 3)))
+        return NULL;
+    shrt = (idle[0] & 3u) == 2u;
+    memcpy(o, idle, 2);
+    o[2] = game[2];
+    memcpy(o + 3, game + 3, 9);
+    for (c = 0; c < n; ++c) {
+        u8 *ch = o + 12u + 4u * c;
+        const s16 v = c < 3 ? g[c] : s[c];
+        if (c < 3 || shrt) { ch[0] = 1; ch[1] = 0; ch[2] = (u8)v; ch[3] = (u8)((u16)v >> 8); }
+        else { ch[0] = 1; ch[1] = (u8)v; ch[2] = 0; ch[3] = 0; }
+    }
+    return o;
+}
+
+/* Any slot still holding a game row the skin can't play gets a hold row. */
+static void pe_guard_rows(const PeSkin *k) {
+    int slot;
+    for (slot = 0; slot < PE_ROWS_PER_BANK; ++slot) {
+        u8 *p = g_GameState.bank_rows[0][slot];
+        void *hold;
+        if (!p || pe_ours(k, p) || pe_fits(p) || !pe_row_length(p, 0x10000u)) continue;
+        if (!(hold = pe_hold_row(k, p, slot))) continue;
+        pe_log("skin", "%s: slot %d row has %u bones, no copy: idle pose held", k->folder, slot, p[1] + 1u);
+        if (!s_replaced[slot]) s_replaced[slot] = p;
+        g_GameState.bank_rows[0][slot] = hold;
+    }
 }
 
 /* ---- rows fitted to the model ----
@@ -297,6 +378,10 @@ static void pe_running_row(const PeSkin *k) {
         if (s_replaced[slot] == a && pe_ours(k, g_GameState.bank_rows[0][slot])) copy = g_GameState.bank_rows[0][slot];
     if (!copy && k->nrooms) copy = pe_room_copy(k, a);
     if (copy && ((u8 *)copy)[2] == ((u8 *)a)[2] && pe_fits(copy)) player->action_data = copy;
+    else if (!pe_fits(a) && (copy = pe_hold_row(k, a, PE_ROWS_PER_BANK)) != NULL) {
+        pe_log("skin", "%s: running row has %u bones, no copy: idle pose held", k->folder, ((u8 *)a)[1] + 1u);
+        player->action_data = copy;
+    }
 }
 
 #endif

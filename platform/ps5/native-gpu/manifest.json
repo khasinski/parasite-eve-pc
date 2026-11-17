@@ -4499,11 +4499,11 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_loader.c",
-      "sha256": "cc7afd8c845e5656ddffd325d094edcbec6a8f97e661813582b349e55a4bf286"
+      "sha256": "99d919909f2f0c3a59b0e55d89ba235b7efd24ba7f7820d4440e93453287d6ae"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_rows.h",
-      "sha256": "7407354953fcbc82d1e8f6d7d01887385f436f8b248e35aade9a92d4f273a904"
+      "sha256": "03bddf7baa64fa5ef69c51349b134d279022eec890d1f652e9e45c0322066620"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe.c",
