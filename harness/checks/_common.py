@@ -9,6 +9,7 @@ ALL_MODS = "Manage mods/All mods=1\n"
 # pe_qol's Battle frequency "Every check": an encounter within a few hundred frames of walking.
 FAST_BATTLES = ALL_MODS + "PE Enhancements/Combat/Battle frequency=3\nCombat/Battle frequency=3\n"
 STAY_ON_LINE_PAGE = 32513          # pe_phone's "Stay on the line?" box
+NAME_ENTRY, NAME_END = 17, 25      # Enter Name (menu selections): the letter grid, and its END button
 
 
 def walk_into_battle(s: Session, budget: int = 8000) -> dict:
@@ -68,3 +69,42 @@ def phone_save(s: Session, number: int = 2, stay_on_line: bool = False, budget: 
         else:
             s.advance(30)
     flows.in_field(s, what="free field after the phone")
+
+
+def through_dialogue(s: Session, budget: int = 400, what: str = "free field") -> None:
+    """Read on (Cross) through whatever boxes come up until Aya can move: a New Game's opening,
+    a person's lines. GameError if she can't after `budget` presses."""
+    for _ in range(budget):
+        if flows.free_field(s.state):
+            s.advance(30)
+            if flows.free_field(s.state):
+                return
+        sel = flows._menu_sel(s.state)
+        if sel == NAME_ENTRY:                    # a New Game's Enter Name: Start goes to END
+            s.press("start", hold=4, after=40)
+        elif sel == NAME_END:                    # END: keep the default name
+            s.press("cross", hold=4, after=60)
+        elif s.state.dialogue:
+            s.press("cross", hold=4, after=30)
+        else:
+            s.advance(30)
+    raise GameError(f"never reached {what}: {s.state.short()}")
+
+
+def leave_choice(s: Session, page: int, cancel_row: int | None = None) -> None:
+    """Close a choice box (Wayne's menu) through its last row (or `cancel_row`), then read on to
+    free field. Circle doesn't close these; the script waits for an answer."""
+    for _ in range(20):
+        boxes = [b for b in s.ui()["dialogue"] if b["page"] == page]
+        if not boxes:
+            break
+        box = boxes[0]
+        want = box["choices"] - 1 if cancel_row is None else cancel_row
+        if box["choice"] < want:
+            s.press("down", hold=4, after=10)
+        elif box["choice"] > want:
+            s.press("up", hold=4, after=10)
+        else:
+            s.press("cross", hold=4, after=40)
+            break
+    through_dialogue(s, what="free field after the choice")

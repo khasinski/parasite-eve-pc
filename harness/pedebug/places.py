@@ -108,12 +108,12 @@ def set_var(s: Session, n: int, value: int) -> None:
 
 
 # ---- scenario saves: a real save made at the spot, with a note of where it is ----
-def save_scenario(s: Session, name: str, note: str = "") -> Path:
+def save_scenario(s: Session, name: str, note: str = "", root: Path | None = None) -> Path:
     """Save the game as it is now (free field) as scenario `name`: the card file a save to slot A
     would write, its companion file when it has one (in .pe-ext/), and scenario.json (room, story,
-    day, actors, note)."""
+    day, actors, note). root: another scenarios folder (a test's own)."""
     files = s.save_files(1)
-    d = SCENARIOS / name
+    d = Path(root or SCENARIOS) / name
     if d.exists():
         shutil.rmtree(d)
     d.mkdir(parents=True)
@@ -126,17 +126,17 @@ def save_scenario(s: Session, name: str, note: str = "") -> Path:
     return d
 
 
-def scenario(name: str) -> tuple[Path, dict]:
-    d = SCENARIOS / name
+def scenario(name: str, root: Path | None = None) -> tuple[Path, dict]:
+    d = Path(root or SCENARIOS) / name
     if not (d / "scenario.json").exists():
-        raise GameError(f"no scenario {name!r} in {SCENARIOS}")
+        raise GameError(f"no scenario {name!r} in {d.parent}")
     meta = json.loads((d / "scenario.json").read_text())
     return d / meta["card"], meta
 
 
-def open_scenario(exe, run_dir, name: str, **session_args) -> Session:
+def open_scenario(exe, run_dir, name: str, root: Path | None = None, **session_args) -> Session:
     """A Session loaded into scenario `name`, in its room's free field (the caller closes it)."""
-    card, meta = scenario(name)
+    card, meta = scenario(name, root)
     extra = dict(session_args.pop("extra_files", None) or {})
     for rel in meta.get("files", []):
         if "/" in rel:                                   # the companion: beside the card, in bu00

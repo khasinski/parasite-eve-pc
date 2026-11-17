@@ -34,7 +34,7 @@ them they are skipped (with the reason), not failed.
 |---|---|
 | `doctor [--boot]` | Python, config, build (debug control, opt-in mods, not locked by a running game), discs, fixture cards, scenario saves, disk space. Every FAIL line says how to fix it. `--boot` also runs `boot-title` and `field-commands` |
 | `list [-v] [--tag T]` | every check, its tags, and what it is missing here (it is then skipped, not failed) |
-| `diag [--quick]` | the `diag` checks (several minutes, in parallel); `--quick`: boot and field only |
+| `diag [--quick\|--full]` | the `diag` checks (about a minute, in parallel); `--quick`: boot and field only; `--full`: every check (saves, mods on/off, economy, challenges) |
 | `run NAME... [--tag T]` | chosen checks (`battle-*` matches by prefix); `--repeat N` runs each N times to find flaky ones |
 | `report [--suite S]` | the latest run's report |
 | `play` | starts the game in a window with the debug channel in `runs/live-ctl` |
@@ -111,3 +111,38 @@ scenario saves) and `pedebug.flows` (title, loading, talking, saving, soft reset
 | `phone-save-call` | a phone save to slot B and a call: save_committed, the card written, the call's pages, heard calls |
 | `wayne-menu` | Wayne's menu: the economy's extra rows, the cursor through ui-state, Cancel's row |
 | `reset-new-game` | soft reset to the title, then New Game: a fresh Aya, no Junk |
+| `places-warp-find-place` | variables, warp (and its refusals), finding Wayne by his script, placing Aya, a scenario saved and reopened |
+| `requisition-buy` | Wayne > Workshop > Requisition: Cancel buys nothing, OK spends the price and carries the item |
+
+`--full` adds (tags `saves`, `mods`, `economy`, `challenges`; record lists and the mod list come from the build, so new mods are covered):
+
+| Check | Proves |
+|---|---|
+| `save-old-format-upgrades` | an old per-mod-block save loads and saves as the record container with the same values; the window blocks stay |
+| `save-round-trip` | a current save (records and companion) saves again byte for byte |
+| `save-official-window` | a build without the container wrote the key pocket: it wins, the rest stays |
+| `save-damaged-record` | one overwritten record resets alone |
+| `save-newer-format-refused` | a newer container format is refused at the file list (its companion can't be read), the card untouched |
+| `save-vanilla-defaults` | a save without mods' data starts every mod from defaults |
+| `save-phone-matches-block` | a phone save holds the same mods' data as save-block |
+| `save-new-game-fresh` | New Game after a loaded save carries no Junk, unlocks, Tools or pocketed keys |
+| `mods-each-off` | every mod in the build off on its own: every record and companion section kept (pe_stacks off: its stacked copies handed to the bag or still counted) |
+| `mods-qol-off-returns-keys` | pe_qol off hands the pocketed keys to the bag; on again pockets them |
+| `mods-all-off-and-back` | All mods off and on again: nothing lost |
+| `mods-mixed-sequence` | five mixes in a row, saving each time: it ends as it started |
+| `mods-full-bag-qol-off` | pe_qol off with one free slot: one key back, two kept, nothing lost |
+| `wayne-handin` | Discard junk with Quick hand-in off and on: same result, much faster |
+| `challenge-hardcore-start` | New Game with Hardcore: the run is active, locked and saved |
+
+### Known game bugs
+
+A check can mark an expectation a known, reported game bug breaks (`ctx.known_bug(cond, what,
+bug)`): the run reports it as `known` (in the console, `report.md` and `results.json`) instead of
+failing, and says so once it holds again so the marker can go. One is marked today, found by these
+checks: **a damaged mods' container makes the whole save unloadable** (`save-damaged-record`), even
+with its companion link intact: `pe_save_peek` and `pe_save_prepare_load` refuse any damaged
+container, so the load shows "Data is unreadable" instead of the documented recovery (reset the
+damaged record, keep the rest).
+
+Not covered yet: a Hardcore death (needs a fight without a Revive from a new game) and the EX
+Game carryover (needs a cleared save).

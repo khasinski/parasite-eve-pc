@@ -4,7 +4,7 @@
   python pe.py setup                 find the build, discs and fixtures; write harness.json
   python pe.py doctor [--boot]       check everything is in place (--boot: start the game too)
   python pe.py list [--tag T]        the checks, their tags and whether they can run here
-  python pe.py diag [--quick]        quick diagnostics: boot, field, battles, phone, Wayne, title
+  python pe.py diag [--quick|--full] diagnostics; --full adds saves, mods on/off, economy, challenges
   python pe.py run NAME... [--tag T] [--repeat N] [--jobs N]
   python pe.py report                the latest run's report
   python pe.py build [CHECKOUT] [--extra-mods "pe_bp;pe_challenges"] [--toolchain DIR] [--use]
@@ -152,7 +152,8 @@ def _run(names, tags, a, suite) -> int:
 
 
 def cmd_diag(a) -> int:
-    return _run([], ["quick"] if a.quick else ["diag"], a, "diag-quick" if a.quick else "diag")
+    tags = ["all"] if a.full else ["quick"] if a.quick else ["diag"]
+    return _run([], tags, a, "full" if a.full else "diag-quick" if a.quick else "diag")
 
 
 def cmd_run(a) -> int:
@@ -353,6 +354,7 @@ def main(argv=None) -> int:
             p.add_argument("--suite", default="run")
         else:
             p.add_argument("--quick", action="store_true", help="boot and field only (about a minute)")
+            p.add_argument("--full", action="store_true", help="every check: saves, mods on/off, economy, challenges too")
         p.add_argument("--jobs", type=int, default=_jobs_default())
         p.add_argument("--repeat", type=int, default=1, help="run each check N times (flakiness)")
         p.set_defaults(fn=fn)

@@ -72,6 +72,8 @@ def select(names=(), tags=()) -> list[Check]:
     """By name (exact or prefix*), or by tag; none given: tag "diag"."""
     if not names and not tags:
         tags = ("diag",)
+    if "all" in tags:                                   # everything but the harness's own selftest
+        return [c for c in REGISTRY.values() if "selftest" not in c.tags]
     out = []
     for c in REGISTRY.values():
         hit = any(c.name == n or (n.endswith("*") and c.name.startswith(n[:-1])) for n in names)
@@ -95,6 +97,7 @@ class Ctx:
         self.log = log
         self.sessions: list[Session] = []
         self.failures: list[str] = []
+        self.known: list[str] = []      # failures of known, reported game bugs (status "known")
         self.notes: list[str] = []
         self.facts: dict = {}           # values worth seeing in the report (timings, counts)
         self.vblanks = 0
@@ -129,6 +132,16 @@ class Ctx:
             self.log(f"  {self.check.name}: FAILED {what}")
         return bool(cond)
 
+    def known_bug(self, cond, what: str, bug: str) -> bool:
+        """An expectation a known game bug breaks: recorded as "known" (shown in every report, not a
+        failure). When it holds again, that is said too, so the marker can go."""
+        if not cond:
+            self.known.append(f"{what} [known bug: {bug}]")
+            self.log(f"  {self.check.name}: KNOWN BUG {what}")
+        else:
+            self.notes.append(f"known bug no longer seen ({bug}): {what}; remove the marker")
+        return bool(cond)
+
     def require(self, cond, what: str) -> None:
         """A hard check: the check ends here."""
         if not cond:
@@ -140,10 +153,11 @@ class Ctx:
 @dataclass
 class Result:
     name: str
-    status: str                  # pass / fail / error / skip
+    status: str                  # pass / known / fail / error / skip
     seconds: float = 0.0
     message: str = ""
     failures: list = field(default_factory=list)
+    known: list = field(default_factory=list)
     notes: list = field(default_factory=list)
     facts: dict = field(default_factory=dict)
     folder: str = ""
@@ -230,6 +244,8 @@ def run_one(chk: Check, cfg, folder: Path, log) -> Result:
         chk.fn(ctx)
         if ctx.failures:
             status, message = "fail", f"{len(ctx.failures)} expectation(s) failed"
+        elif ctx.known:
+            status, message = "known", f"{len(ctx.known)} known game bug(s): " + ctx.known[0]
     except Expectation as e:
         status, message = "fail", str(e)
     except GameError as e:
@@ -244,7 +260,7 @@ def run_one(chk: Check, cfg, folder: Path, log) -> Result:
     captured = []
     if status != "pass":
         try:
-            captured = capture(ctx, message + ("\n" + "\n".join(ctx.failures) if ctx.failures else ""))
+            captured = capture(ctx, message + "".join("\n" + f for f in ctx.failures + ctx.known))
         except Exception as e:
             (folder / "capture-error.txt").write_text(traceback.format_exc())
     for s in ctx.sessions:
@@ -253,7 +269,7 @@ def run_one(chk: Check, cfg, folder: Path, log) -> Result:
             s.quit()
         except Exception:
             pass
-    return Result(chk.name, status, time.time() - t0, message, ctx.failures, ctx.notes, ctx.facts,
+    return Result(chk.name, status, time.time() - t0, message, ctx.failures, ctx.known, ctx.notes, ctx.facts,
                   str(folder), captured)
 
 
@@ -285,23 +301,24 @@ def run(checks: list[Check], suite: str = "diag", jobs: int = 3, cfg=None, log=p
 
 
 def write_reports(out: Path, suite: str, results: list[Result], seconds: float, cfg) -> None:
-    counts = {k: sum(r.status == k for r in results) for k in ("pass", "fail", "error", "skip")}
+    counts = {k: sum(r.status == k for r in results) for k in ("pass", "known", "fail", "error", "skip")}
     (out / "results.json").write_text(json.dumps({
         "suite": suite, "exe": cfg.exe, "seconds": round(seconds, 1), "counts": counts,
         "results": [r.__dict__ for r in results]}, indent=1))
-    lines = [f"# {suite}: {counts['pass']} passed, {counts['fail']} failed, {counts['error']} errors, "
-             f"{counts['skip']} skipped ({seconds:.0f} s)", "", f"Build: `{cfg.exe}`", "",
+    lines = [f"# {suite}: {counts['pass']} passed, {counts['known']} known bugs, {counts['fail']} failed, "
+             f"{counts['error']} errors, {counts['skip']} skipped ({seconds:.0f} s)", "", f"Build: `{cfg.exe}`", "",
              "| Check | Result | Time | Detail |", "|---|---|---|---|"]
     for r in results:
         detail = (r.message.splitlines()[0] if r.message else "").replace("|", "\\|")[:150]
         lines.append(f"| {r.name} | {r.status} | {r.seconds:.0f} s | {detail} |")
     for r in results:
-        if not (r.failures or r.notes or r.facts or r.captured or r.status in ("fail", "error")):
+        if not (r.failures or r.known or r.notes or r.facts or r.captured or r.status in ("fail", "error")):
             continue
         lines += ["", f"## {r.name}: {r.status}", ""]
         if r.message:
             lines += ["```", r.message, "```", ""]
         lines += [f"- expected, not seen: {f}" for f in r.failures]
+        lines += [f"- KNOWN GAME BUG: {k}" for k in r.known]
         lines += [f"- {k}: {v}" for k, v in r.facts.items()]
         lines += [f"- {n}" for n in r.notes]
         if r.captured:
