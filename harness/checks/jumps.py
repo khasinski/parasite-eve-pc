@@ -12,11 +12,11 @@ from pedebug.runner import check
 from ._common import FAST_BATTLES, walk_into_battle
 
 
-def _one_jump(ctx, name: str) -> dict:
+def _one_jump(ctx, name: str, **jump_args) -> dict:
     s = ctx.session(cards=[ctx.card("C")], name="jump-" + "".join(c if c.isalnum() else "-" for c in name).strip("-"))
     flows.load_save(s, flows.slot_of(ctx.card("C")))
     try:
-        e = debugroom.jump(s, name, strong=True)
+        e = debugroom.jump(s, name, strong=True, **jump_args)
         here = places.room(s)
         s.shot("landed")
         return {"name": name, "map": e["map"], "story": here["story"], "free": here["free"], "error": None}
@@ -52,10 +52,12 @@ def story_jumps(ctx):
 
 @check("story-jump-one", tags=("diag", "jumps"), needs=("card:C",), timeout_s=300)
 def story_jump_one(ctx):
-    """A single jump in the quick suite: save C to Warehouse (Day 4), in control, story set."""
-    r = _one_jump(ctx, "Warehouse")
+    """A single jump in the quick suite: save C to Warehouse (Day 4), in control, with story progress
+    set through jump(story=...) since Warehouse's start leaves the save's."""
+    r = _one_jump(ctx, "Warehouse", story=0x22C)
     ctx.require(r["error"] is None, f"Warehouse: {r['error']}")
     ctx.expect(r["map"] != debugroom.DEBUG_ROOM and r["free"], f"landed in map {r['map']} with control")
+    ctx.expect(r["story"] == 0x22C, f"story progress set with story= (Warehouse keeps the save's): {r['story']:X}")
     ctx.fact("Warehouse", f"map {r['map']}, story {r['story']:X}")
 
 

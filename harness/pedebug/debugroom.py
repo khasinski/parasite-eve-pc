@@ -58,6 +58,10 @@ STORY_MAP: dict[str, int] = {
     "Aircraft Carrier": 273, "Helicopter": 273, "Statue of Liberty": 273, "Chrysler  1F": 290,
     "Chrysler  71F": 312, "Chrysler  77F": 318,
 }
+# Chapters whose start leaves story progress (variable 74) as the save had it: the Day the save
+# screen and Phone Calls show comes from it, so pass jump(story=...) when that matters.
+STORY_KEEPS = ["Under Theatre", "Warehouse", "Subway", "Brooklyn Bridge", "Chrysler  1F", "Chrysler  71F",
+               "Chrysler  77F"]
 # Story points a jump can't bring to free field yet, and why (jump() refuses them unless forced).
 STORY_LIMITS = {
     "Theatre Exterior": "stops in the NYPD office (map 42) in event mode, no dialogue or menu to answer",
@@ -171,7 +175,7 @@ def strengthen(s: Session, level: int = 99) -> None:
 
 
 def jump(s: Session, name: str, watch: bool = True, strong: bool = False, budget: int = 2500,
-         force: bool = False) -> dict:
+         force: bool = False, story: int | None = None, day: int | None = None) -> dict:
     """Jump to a story point (STORY, e.g. "Warehouse") from free field anywhere: the debug room's
     story menu, then the chapter's own "Will you watch this event?" (Watch), reading on through the
     scene until Aya has control in the chapter's first room. Returns that room's scene_loaded event.
@@ -180,7 +184,9 @@ def jump(s: Session, name: str, watch: bool = True, strong: bool = False, budget
     some set it (Chinatown: 220), some leave it as the save had it (Warehouse from save C: F8). A
     check that needs a story value sets it (places.set_var) or checks what it needs.
     On the way it attacks in a fight the chapter opens with, takes the default name at New Game's
-    Enter Name and declines any save. Aya is as the save had her: strong=True first raises her to
+    Enter Name and declines any save. story= sets story progress afterwards (STORY_KEEPS lists the
+    chapters that leave it as it was); day= the game's day index (set-day). Aya is as the save had
+    her: strong=True first raises her to
     level 99 at full HP, which late chapters' opening fights need (Cruiser kills a level-13 Aya)."""
     if name not in STORY:
         raise GameError(f"no story point {name!r}; one of {STORY}")
@@ -230,6 +236,10 @@ def jump(s: Session, name: str, watch: bool = True, strong: bool = False, budget
         s.shot(f"jump-{name}")
         raise GameError(f"jump {name!r}: no control in the chapter's room: {s.state.short()}")
     e = s.events.last("scene_loaded")
+    if story is not None:                 # story progress the chapter's start didn't set (STORY_KEEPS)
+        places.set_var(s, 74, story)
+    if day is not None:                   # the game's day index (set-day), not the shown Day
+        s.command(f"set-day {day}")
     want = STORY_MAP.get(name)
     if want is not None and e["map"] != want:
         raise GameError(f"jump {name!r} landed in map {e['map']}, not {want}")

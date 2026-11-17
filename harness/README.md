@@ -124,9 +124,9 @@ Five story points don't reach free field yet (`STORY_LIMITS`; `jump` refuses the
 opening fight beats Aya even with God mode; Port and Theatre Epilogue run into the ending and the
 title.
 
-Limits: the game's story day (`room`'s `day`) isn't updated by a jump; story progress (variable 74)
-is whatever the chapter's start sets (some leave the save's value), so a check needing a story value
-sets or checks it itself; a jump starts a chapter, so a moment inside one still needs playing
+Limits: story progress (variable 74, which the save screen's and Phone Calls' Day comes from) is
+whatever the chapter's start sets; `STORY_KEEPS` lists the chapters that leave the save's value, and
+`jump(..., story=0x...)` sets it afterwards. `day=` sets the game's separate day index (`set-day`); a jump starts a chapter, so a moment inside one still needs playing
 forward or a scenario save. Several chapters that are cutscenes only (Street, Aircraft Carrier,
 Helicopter) play through into the next one's first room.
 
