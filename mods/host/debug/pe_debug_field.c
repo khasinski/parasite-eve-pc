@@ -12,6 +12,7 @@
 #include "pe1/script_queue.h"
 #include "pe1/reloc_block.h"
 #include "pe1/field_collision.h"
+#include "pe1/scene_transition.h"
 
 #define PE_VAR_STORY 74
 #define PE_VAR_COUNT 512
@@ -207,6 +208,21 @@ static void pe_ctl_var(const char *args, int set) {
     pe_debug_reply("ok %s %s", set ? "set-var" : "get-var", detail);
 }
 
+/* The story day as the game's own day change sets it (Scene_SetStoryDay, which day-change scripts
+ * call): current and pending day, and the day's character bank reloads at the next room load. */
+static void pe_ctl_set_day(const char *args) {
+    char detail[48], extra;
+    int day = 0;
+    if (sscanf(args, "%d %c", &day, &extra) != 1 || day < 1 || day > 8) {
+        pe_debug_reply("err %s %s", "set-day", "set-day N (1..8)");
+        return;
+    }
+    if (!pe_free_field()) { pe_debug_reply("err %s %s", "set-day", "not in free field"); return; }
+    Scene_SetStoryDay(day);
+    snprintf(detail, sizeof detail, "day=%d", (int)g_GameState.current_story_day);
+    pe_debug_reply("ok %s %s", "set-day", detail);
+}
+
 static void pe_ctl_get_var(const char *args) { pe_ctl_var(args, 0); }
 static void pe_ctl_set_var(const char *args) { pe_ctl_var(args, 1); }
 
@@ -219,6 +235,7 @@ static const PeDebugCommand s_commands[] = {
     {"place", PE_DEBUG_ARGS, pe_ctl_place},
     {"get-var", PE_DEBUG_ARGS, pe_ctl_get_var},
     {"set-var", PE_DEBUG_ARGS, pe_ctl_set_var},
+    {"set-day", PE_DEBUG_ARGS, pe_ctl_set_day},
 };
 
 const PeDebugModule pe_debug_field_module = {

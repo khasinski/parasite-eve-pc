@@ -70,6 +70,7 @@ A game whose window pauses when unfocused answers once it runs again.
 | `place X Z [YAW]` | put Aya at `X`, `Z` (16.16 field units, as the state's `position`), facing `YAW` (0x1000 = a full turn). A spot with no floor (off the room's walkable area) is refused (`err place no floor at that spot`) and Aya stays where she was |
 | `place-near I [DIST]` | put Aya `DIST` (default `0x180000`) from actor `I`, on her side of them, facing them; refused like `place` when that spot has no floor |
 | `get-var N` / `set-var N V` | script variable `N` (0..511), value in hex |
+| `set-day N` | the game's day index (`g_GameState.current_story_day`, 1..8) as its own day-change scripts set it (`Scene_SetStoryDay`): current and pending, the day's character bank reloading at the next room load. Free field only; `room` shows it as `day`. Not the Day the save screen and Phone Calls show: that comes from story progress (`set-var 74`, `Save_ClassifyPlaytime`), and the two don't match one to one (a Day 2 save has index 4) |
 | `save-block [N]` | the card file a save to slot `N` (1 = A) would write now, built by the game's own `Save_BuildHeader` and `Save_BuildCardFile` (mods' records and CRC included), to `<folder>/block.bin`. Free field only. See below |
 | `mods-tail` | the mods' save data as a save made now would hold it, to `<folder>/tail.bin` |
 | `bag` | `ok bag <id>,<id>,...`: Aya's bag, slot by slot (hex, 0 = empty) |

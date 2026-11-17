@@ -133,6 +133,8 @@ int Text_EncodeBase32(char *out, unsigned int v) {
     for (i = 0; i < 6; ++i) out[i] = (char)g_Base32CharTable[(v >> ((5 - i) * 5 + 2)) & 0x1F];
     return 0;
 }
+static int s_day_calls;
+int Scene_SetStoryDay(int day) { g_GameState.current_story_day = (s8)day; ++s_day_calls; return 0; }
 int Script_EncodeBarcode(int **args) { s_warp_arg = (unsigned)*args[0]; ++s_warped; return 1; }
 int Inv_GetAyaSlotLimit(void) { return 30; }
 void Save_BuildHeader(void) {}
@@ -367,6 +369,14 @@ int main(void) {
     assert(!strcmp(ask("get-var 48"), "ok get-var 48=12C"));
     assert(starts(ask("get-var 512"), "err get-var"));
     assert(starts(ask("set-var 3"), "err set-var"));
+
+    /* set-day: the game's own day change, 1..8, free field only */
+    assert(!strcmp(ask("set-day 3"), "ok set-day day=3") && s_day_calls == 1);
+    assert(starts(ask("set-day 9"), "err set-day") && starts(ask("set-day x"), "err set-day") && s_day_calls == 1);
+    s_free = 0;
+    assert(!strcmp(ask("set-day 2"), "err set-day not in free field") && s_day_calls == 1);
+    s_free = 1;
+    g_GameState.current_story_day = 5;
 
     /* actors: Wayne (2.0) holds his Junk count at +1A98; Aya is the second actor */
     s_actor[0].next = &s_actor[1];
