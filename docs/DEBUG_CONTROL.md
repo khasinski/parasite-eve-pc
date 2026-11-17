@@ -67,8 +67,8 @@ A game whose window pauses when unfocused answers once it runs again.
 | `warp MAP [STORY]` | go to map number `MAP` (or a room id `0x...`) through the field script's own room transfer, as `pe_warp` does; with `STORY` (hex), set story progress first. Free field only, and never the room Aya is in (that transfer never finishes; use `set-var 74`). Answers when the transfer starts: wait for `room` to name the new map |
 | `actors` | `ok actors <i>:<type>.<sub>[*]@<x>,<z>,f<flags> ...`, in the order of the control-mode state's `actors`; `*` marks Aya |
 | `find-script W [W ...]` | `ok find-script <i>@<offset> ...`: the actors whose script holds these consecutive words (hex), searched over the first 32 KB. Finds a person by what their script does |
-| `place X Z [YAW]` | put Aya at `X`, `Z` (16.16 field units, as the state's `position`), facing `YAW` (0x1000 = a full turn) |
-| `place-near I [DIST]` | put Aya `DIST` (default `0x180000`) from actor `I`, on her side of them, facing them |
+| `place X Z [YAW]` | put Aya at `X`, `Z` (16.16 field units, as the state's `position`), facing `YAW` (0x1000 = a full turn). A spot with no floor (off the room's walkable area) is refused (`err place no floor at that spot`) and Aya stays where she was |
+| `place-near I [DIST]` | put Aya `DIST` (default `0x180000`) from actor `I`, on her side of them, facing them; refused like `place` when that spot has no floor |
 | `get-var N` / `set-var N V` | script variable `N` (0..511), value in hex |
 | `save-block [N]` | the card file a save to slot `N` (1 = A) would write now, built by the game's own `Save_BuildHeader` and `Save_BuildCardFile` (mods' records and CRC included), to `<folder>/block.bin`. Free field only. See below |
 | `mods-tail` | the mods' save data as a save made now would hold it, to `<folder>/tail.bin` |

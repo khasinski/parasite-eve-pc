@@ -137,13 +137,25 @@ static void pe_ctl_find_script(const char *args) {
     pe_debug_reply("ok %s %s", "find-script", at ? found : "none");
 }
 
-static void pe_ctl_set_player(int x, int z, int yaw) {
+/* Aya to x, z facing yaw, on the floor triangle there. A spot with no floor (off the room's walkable
+ * mesh) is refused and everything put back: the field's movement reads the floor triangle, and a
+ * null one crashed it (Geo_ClipToFloorBoundary). 1: placed; 0: no floor there. */
+static int pe_ctl_set_player(int x, int z, int yaw) {
     FieldActor *p = g_PlayerEntity;
+    const int px = p->pos_x, py = p->pos_y, pz = p->pos_z, bx = p->base_x, bz = p->base_z;
+    const short ry = p->rot_y, sry = p->saved_rot_y;
+    void *const face = p->collision_face, *const mirror = p->collision_face_mirror;
     p->pos_x = p->base_x = x;
     p->pos_z = p->base_z = z;
     p->rot_y = p->saved_rot_y = (short)(yaw & 0xFFF);
     p->collision_face = p->collision_face_mirror = NULL;
     Entity_FindFloor((struct BattleEntity *)p);
+    if (p->collision_face) return 1;
+    p->pos_x = px; p->pos_y = py; p->pos_z = pz;
+    p->base_x = bx; p->base_z = bz;
+    p->rot_y = ry; p->saved_rot_y = sry;
+    p->collision_face = face; p->collision_face_mirror = mirror;
+    return 0;
 }
 
 static void pe_ctl_place(const char *args) {
@@ -151,7 +163,10 @@ static void pe_ctl_place(const char *args) {
     int x, z, yaw;
     int n = sscanf(args, "%d %d %d", &x, &z, &yaw);
     if (n < 2 || !g_PlayerEntity) { pe_debug_reply("err %s %s", "place", g_PlayerEntity ? "place X Z [YAW]" : "no Aya"); return; }
-    pe_ctl_set_player(x, z, n >= 3 ? yaw : g_PlayerEntity->rot_y);
+    if (!pe_ctl_set_player(x, z, n >= 3 ? yaw : g_PlayerEntity->rot_y)) {
+        pe_debug_reply("err %s %s", "place", "no floor at that spot (off the room's walkable area); Aya not moved");
+        return;
+    }
     snprintf(detail, sizeof detail, "%d,%d", x, z);
     pe_debug_reply("ok %s %s", "place", detail);
 }
@@ -170,8 +185,11 @@ static void pe_ctl_place_near(const char *args) {
     len = sqrt(dx * dx + dz * dz);
     if (len < 1.0) { dx = 0; dz = 1; len = 1; }
     dx /= len; dz /= len;
-    pe_ctl_set_player(a->pos_x + (int)(dx * dist), a->pos_z + (int)(dz * dist),
-                      (int)lround(atan2(-dx, -dz) * 4096.0 / (2.0 * 3.14159265358979)));
+    if (!pe_ctl_set_player(a->pos_x + (int)(dx * dist), a->pos_z + (int)(dz * dist),
+                           (int)lround(atan2(-dx, -dz) * 4096.0 / (2.0 * 3.14159265358979)))) {
+        pe_debug_reply("err %s %s", "place-near", "no floor at that spot (try a smaller DIST); Aya not moved");
+        return;
+    }
     snprintf(detail, sizeof detail, "%d,%d,%d", p->pos_x, p->pos_z, p->rot_y);
     pe_debug_reply("ok %s %s", "place-near", detail);
 }

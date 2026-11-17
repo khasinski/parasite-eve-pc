@@ -193,11 +193,13 @@ size_t Script_TaskBytesAvailable(const void *address) {
     for (unsigned i = 0; i < 3; ++i) if (address == s_script[i]) return s_script_bytes[i];
     return 0;
 }
+static int s_no_floor;          /* the next spot is off the walkable mesh: no triangle found */
 void Entity_FindFloor(struct BattleEntity *actor) {
     FieldActor *field = (FieldActor *)actor;
     assert(!field->collision_face && !field->collision_face_mirror);
-    field->collision_face = field->collision_face_mirror = (void *)s_script;
     ++s_floor_refreshes;
+    if (s_no_floor) return;      /* as the game's: the face stays as it was (null here) */
+    field->collision_face = field->collision_face_mirror = (void *)s_script;
 }
 
 int main(void) {
@@ -438,6 +440,15 @@ int main(void) {
     assert(!strcmp(ask("place 100 -200 1024"), "ok place 100,-200"));
     assert(s_actor[1].pos_x == 100 && s_actor[1].pos_z == -200 && s_actor[1].rot_y == 1024);
     assert(s_floor_refreshes == 3 && s_actor[1].collision_face == (void *)s_script);
+    /* Off the walkable mesh: refused, and Aya stays where she was, on her floor (a null floor
+     * triangle crashed the field's movement). */
+    s_no_floor = 1;
+    assert(starts(ask("place 999999999 999999999 7"), "err place no floor"));
+    assert(s_actor[1].pos_x == 100 && s_actor[1].pos_z == -200 && s_actor[1].rot_y == 1024);
+    assert(s_actor[1].collision_face == (void *)s_script && s_actor[1].collision_face_mirror == (void *)s_script);
+    assert(starts(ask("place-near 0 0x7FFFFFF"), "err place-near no floor"));
+    assert(s_actor[1].pos_x == 100 && s_actor[1].pos_z == -200 && s_actor[1].collision_face == (void *)s_script);
+    s_no_floor = 0;
 
     /* save-block: no companion, then with one (copied, named, and the staged one dropped) */
     assert(!strcmp(ask("save-block 1"), "ok save-block BASLUS-006620000000A") && s_cancelled == 1);
