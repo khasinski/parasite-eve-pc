@@ -120,15 +120,16 @@ wait for an event and know exactly where it happened. Send `events` first to lea
 | `started` | `map`, `free`, `battle` | first field frame after the channel starts |
 | `scene_loaded` | `map` | a room finished loading, before its first frame (also the same room again) |
 | `room` | `map`, `token`, `story` | the room token changed |
+| `to_title` | `from_map` | the field loop ended for the title: a game over or a soft reset. A battle still on gets `battle_ended` with `"left":true` first |
 | `control` / `no_control` | | free field (Aya can move) began / ended |
-| `menu_opened` / `menu_closed` | | the native menu layer |
+| `menu_opened` / `menu_closed` | | the native menu layer; in battle also the command menu each time the gauge fills |
 | `paused` / `unpaused` | | the game's pause |
 | `dialogue_opened` | `box`, `page`, `choices`, `text` | a box opened (or a box went on to another page) |
 | `dialogue_waiting` | `box`, `page`, `choices`, `text` | the box finished typing and waits for a press; `text` is the full page as drawn |
 | `dialogue_changed` | `box`, `page`, `choices`, `text` | an open box's text or choice count changed (a mod rewrote it, as the economy does Wayne's menu rows) |
 | `dialogue_closed` | `box`, `page` (+ `choices`, `answer`) | for a choice, `answer` is the row the game's script receives, -1 if none. A mod that adds rows maps them back, so this can differ from the row on screen (Wayne's Cancel is 5 with Workshop shown) |
 | `battle_started` / `battle_ended` | `hp` on end | battle flag on / off |
-| `player_down` | | Aya's HP reached 0 in battle |
+| `player_down` | | Aya's HP reached 0 in battle (again after a revive) |
 | `title` / `title_left` | | the title menu began running / the field ran again |
 | `save_loaded` | | a card save's block was read into the game |
 | `new_game` | | a new game started |
@@ -154,8 +155,16 @@ pe_mod_state_provider("economy", wallet_state, NULL);
 
 Providers only read. They run only from `mod-state` and `snapshot`, only while the mod is
 running, and inside `pe_mod_call_begin` so a crash in one names it. Registration costs a table
-entry and nothing else when debug control is off. `pe_economy` provides `economy`: wallet Junk,
-Wayne's hand-in, store status, the active path, the saved policy and its pending rewards.
+entry and nothing else when debug control is off. Providers so far:
+
+| Mod | Provider | State |
+|---|---|---|
+| `pe_economy` | `economy` | wallet Junk, Wayne's hand-in, store status, the active path, the saved policy and its pending rewards |
+| `pe_shops` | `requisition` | the Requisition board as shown now: each row's id, name, price and why it can't be bought; rescue needed |
+| `pe_challenges` | `run` | active challenges with levels, ever/dropped masks, assisted, cheats, underway, locked, run id, battles, seconds, the rows' next pick |
+| `pe_bp` | `bp` | unspent BP, feature flags, Defense and Mastery ranks by id, Fortitude mode, resets, Active Time steps, the EX Game carryover |
+
+`pe_challenges` and `pe_bp` are opt-in mods (`PE_EXTRA_MODS`); their providers build with them.
 
 ### Failure capture
 
@@ -197,7 +206,7 @@ Dedicated critical-roll events (including misses), challenge-specific trigger/se
 events, runtime hot-start/hot-stop of mods, arbitrary memory peek/poke, Junk setup,
 equipment-mod replacement, and movie/dialogue skipping remain outside this implementation.
 `mod-state` is the registered F1 view plus whatever live state a mod chooses to provide, not a
-dump of every private variable. Live-state providers exist for `pe_economy` so far.
+dump of every private variable. Live-state providers exist for `pe_economy`, `pe_shops`, `pe_challenges` and `pe_bp`.
 
 ### A warp gets the room, not the scene
 

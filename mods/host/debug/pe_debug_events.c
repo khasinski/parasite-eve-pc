@@ -17,11 +17,15 @@
 #include "pe1/textbox.h"
 #include "pe1/textbox_open.h"
 
+#define PE_TITLE_TOKEN 0xA9400048u   /* the title scene (Boot_Shutdown, main.c's scene switch) */
+
 static unsigned s_seq;
 static int s_ready;              /* the first frame records the starting state without events */
 static int s_title;              /* the title menu ran since the last field frame */
+static int s_left;               /* the field loop ended for the title: wait for a field frame */
 static struct {
     int token, free, menu, battle, paused, hp_zero;
+    int map, hp;     /* as of the last field frame: gone once the field loop ends */
 } s_last;
 static struct { unsigned char state; short page; int choices; unsigned sum; } s_box[4];
 
@@ -111,7 +115,15 @@ static void pe_events_frame(void) {
                  free ? "true" : "false", battle ? "true" : "false");
     }
     if (s_title) { s_title = 0; pe_event("title_left", NULL); }
-    if (token != s_last.token)
+    if (token != s_last.token && (unsigned)token == PE_TITLE_TOKEN) {
+        /* The field loop is ending for the title (a game over or a soft reset): its frames
+         * stop, so close what is open now. Seen from the last field frame's FRAME_DRAWN. */
+        if (s_last.battle) pe_event("battle_ended", "\"hp\":%d,\"left\":true", s_last.hp);
+        pe_event("to_title", "\"from_map\":%d", s_last.map);
+        s_last.token = token; s_last.battle = battle = 0;
+        s_left = 1;
+        return;               /* nothing else of this frame's field state means anything now */
+    } else if (token != s_last.token)
         pe_event("room", "\"map\":%d,\"token\":\"%08X\",\"story\":%u", pe_room_number(), (unsigned)token,
                  (unsigned)g_ScriptVariableBank[74]);
     if (battle != s_last.battle) {
@@ -125,11 +137,15 @@ static void pe_events_frame(void) {
     if (free != s_last.free) pe_event(free ? "control" : "no_control", NULL);
     s_last.token = token; s_last.free = free; s_last.menu = menu;
     s_last.battle = battle; s_last.paused = paused; s_last.hp_zero = hp_zero;
+    s_last.map = pe_room_number(); s_last.hp = p ? (int)p->curHP : -1;
 }
 
 static int pe_events_hook(void *ctx, void *user) {
     int kind = (int)(intptr_t)user;
-    if (kind == PE_HOOK_SCENE_START) pe_event("scene_loaded", "\"map\":%d", pe_room_number());
+    if (kind == PE_HOOK_FRAME_DRAWN) {
+        /* Also after the frame's game logic, so a field loop that ends this frame is seen. */
+        if (s_ready && !s_title && !s_left) pe_events_frame();
+    } else if (kind == PE_HOOK_SCENE_START) pe_event("scene_loaded", "\"map\":%d", pe_room_number());
     else if (kind == PE_HOOK_SAVE_READ) pe_event("save_loaded", NULL);
     else if (kind == PE_HOOK_NEW_GAME) pe_event("new_game", NULL);
     else if (kind == PE_HOOK_TITLE_FRAME) {
@@ -143,12 +159,18 @@ static int pe_events_hook(void *ctx, void *user) {
 }
 
 static void pe_events_install(void) {
-    static const int hooks[] = {PE_HOOK_SCENE_START, PE_HOOK_SAVE_READ, PE_HOOK_NEW_GAME, PE_HOOK_TITLE_FRAME};
+    static const int hooks[] = {PE_HOOK_SCENE_START, PE_HOOK_SAVE_READ, PE_HOOK_NEW_GAME, PE_HOOK_TITLE_FRAME,
+                                PE_HOOK_FRAME_DRAWN};
     unsigned i;
     int saved = pe_event_id(PE_EVENT_SAVE_COMMITTED);
     for (i = 0; i < sizeof hooks / sizeof *hooks; ++i)
         pe_hook_add(hooks[i], pe_events_hook, (void *)(intptr_t)hooks[i], 10000, "host");
     if (saved >= 0) pe_hook_add(saved, pe_events_hook, (void *)(intptr_t)saved, 10000, "host");
+}
+
+static void pe_events_field_frame(void) {
+    s_left = 0;               /* the field runs again (a save loaded, a new game) */
+    pe_events_frame();
 }
 
 static void pe_ctl_events(const char *args) {
@@ -163,5 +185,5 @@ static const PeDebugCommand s_commands[] = {
 };
 
 const PeDebugModule pe_debug_events_module = {
-    "events", s_commands, sizeof s_commands / sizeof *s_commands, pe_events_install, pe_events_frame
+    "events", s_commands, sizeof s_commands / sizeof *s_commands, pe_events_install, pe_events_field_frame
 };

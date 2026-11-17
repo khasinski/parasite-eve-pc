@@ -491,6 +491,9 @@ int main(void) {
             "\"event\":\"scene_loaded\",\"map\":48",
             "\"event\":\"new_game\"",
             "\"event\":\"save_committed\"",
+            "\"event\":\"battle_started\"",
+            "\"event\":\"battle_ended\",\"hp\":80,\"left\":true",
+            "\"event\":\"to_title\",\"from_map\":48",
         };
         char line[1024], answer[64];
         unsigned n = 0, seq;
@@ -520,7 +523,14 @@ int main(void) {
         fire(PE_HOOK_SAVE_READ);
         frame();
         fire(PE_HOOK_SCENE_START); fire(PE_HOOK_NEW_GAME); fire(TEST_SAVE_EVENT);
-        g_GameStateFlags &= ~4u; aya->curHP = 80; s_free = 1;
+        /* A game over: Aya down in a battle, the field loop ends for the title. Its last frame's
+         * FRAME_DRAWN sees the title token; no field frame follows. */
+        aya->curHP = 80;
+        g_GameStateFlags |= 2; frame();
+        g_SceneDispatchToken = (int)0xA9400048u;
+        fire(PE_HOOK_FRAME_DRAWN); fire(PE_HOOK_FRAME_DRAWN);
+        g_GameStateFlags &= ~6u; aya->curHP = 80; s_free = 1;
+        g_SceneDispatchToken = (int)0xA8005148u;
         f = fopen(DIR "/events.jsonl", "r");
         assert(f);
         while (fgets(line, sizeof line, f)) {

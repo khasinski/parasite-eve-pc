@@ -3855,7 +3855,7 @@
     },
     {
       "path": "mods/host/debug/pe_debug_events.c",
-      "sha256": "c4f104486dabf960b2c4af8256e8a210f8bfec3ed8a89ff4423bec3e1052b93a"
+      "sha256": "6d9f4606cb035f09a967e8b8e5a201847a759ef388867bce21fd73332863a35c"
     },
     {
       "path": "mods/host/debug/pe_debug_field.c",
@@ -4327,7 +4327,7 @@
     },
     {
       "path": "mods/pe_economy/pe_econ_state.c",
-      "sha256": "7053c18ce6e4486b33068b2a278280d214912c479f8686d6201763a2082ca089"
+      "sha256": "f2911c7d7b28bea9eb19f9db22b09c49aba21e7d4d9e4673331d87afa4499ffa"
     },
     {
       "path": "mods/pe_economy/pe_econ_store.c",
@@ -4471,7 +4471,11 @@
     },
     {
       "path": "mods/pe_shops/pe_shops_mod.c",
-      "sha256": "ad52504593b0a975c6b0357bac492f6bd8c5664e60f9b6fca7a5f4819e121a8f"
+      "sha256": "67d096a6d03ebede7308939197e8692066f745b2d4ac6d5a2dcada61cb3d23e7"
+    },
+    {
+      "path": "mods/pe_shops/pe_shops_state.c",
+      "sha256": "34fbfa601e4f654445fb1c848be2a6d3a83a326f909ea23e06990609955bad7b"
     },
     {
       "path": "mods/pe_shops/pe_shops_wallet.c",

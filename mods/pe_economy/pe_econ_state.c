@@ -1,5 +1,6 @@
 /* The economy's live state for test tools (pe_mod_state.h): the Junk wallet, Wayne's hand-in
  * and the saved Economy policy with its pending rewards. Reads only; called by debug control. */
+#include <stddef.h>
 #include "pe_mod_state.h"
 #include "pe_economy.h"
 #include "pe_econ_store.h"
