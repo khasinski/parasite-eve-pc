@@ -99,6 +99,37 @@ Reading the game: `s.ui()`, `s.battle()`, `s.mod_state(id)`, `s.live(id, provide
 `s.snapshot(name)`, `s.command("...")`, plus `pedebug.places` (warp, place, find people,
 scenario saves) and `pedebug.flows` (title, loading, talking, saving, soft reset, New Game).
 
+## Jumping to a story point
+
+The game's own debug room (map 360) is still on the disc. `pedebug.debugroom` drives it from any
+loaded save:
+
+```python
+from pedebug import debugroom
+debugroom.jump(s, "Warehouse", strong=True)   # chapter start, in control; strong: God mode + level 99
+debugroom.battles(s, on=False)                 # random encounters off (the game's debug switch)
+debugroom.give(s, "Get Bullets")               # also Poisons, Status Item, Tools, Tune up Items, weapon
+debugroom.copcar(s, "Theatre-NYPD")            # the car rides between places
+```
+
+`debugroom.STORY` lists the 31 story points (Opening ... Chrysler 77F) and `STORY_DAY` their days.
+A jump runs the chapter's own start: its first room, its opening event (watched; `watch=False`
+skips it, faster but the event's script doesn't run), fights it opens with (attacked), Enter Name,
+the day title card, and any save offered (declined), until Aya has control. Aya keeps her level,
+HP and bag: `strong=True` turns on the Cheats mod's God mode and infinite ammo and PE first (late
+chapters open with fights a low-level Aya loses).
+
+Five story points don't reach free field yet (`STORY_LIMITS`; `jump` refuses them unless
+`force=True`): Theatre Exterior and NYPD -Day1- stop in the NYPD office in event mode; Cruiser's
+opening fight beats Aya even with God mode; Port and Theatre Epilogue run into the ending and the
+title.
+
+Limits: the game's story day (`room`'s `day`) isn't updated by a jump; story progress (variable 74)
+is whatever the chapter's start sets (some leave the save's value), so a check needing a story value
+sets or checks it itself; a jump starts a chapter, so a moment inside one still needs playing
+forward or a scenario save. Several chapters that are cutscenes only (Street, Aircraft Carrier,
+Helicopter) play through into the next one's first room.
+
 ## The checks
 
 | Check | Proves |
@@ -112,6 +143,7 @@ scenario saves) and `pedebug.flows` (title, loading, talking, saving, soft reset
 | `wayne-menu` | Wayne's menu: the economy's extra rows, the cursor through ui-state, Cancel's row |
 | `reset-new-game` | soft reset to the title, then New Game: a fresh Aya, no Junk |
 | `places-warp-find-place` | variables, warp (and its refusals), finding Wayne by his script, placing Aya, a scenario saved and reopened |
+| `story-jump-one` | the debug room's story menu: save C to Warehouse, in control in its first room |
 | `requisition-buy` | Wayne > Workshop > Requisition: Cancel buys nothing, OK spends the price and carries the item |
 
 `--full` adds (tags `saves`, `mods`, `economy`, `challenges`; record lists and the mod list come from the build, so new mods are covered):
@@ -133,6 +165,8 @@ scenario saves) and `pedebug.flows` (title, loading, talking, saving, soft reset
 | `mods-full-bag-qol-off` | pe_qol off with one free slot: one key back, two kept, nothing lost |
 | `wayne-handin` | Discard junk with Quick hand-in off and on: same result, much faster |
 | `challenge-hardcore-start` | New Game with Hardcore: the run is active, locked and saved |
+| `story-jumps` (tag `jumps`) | the 26 supported story points from save C: each lands with control in the room `STORY_MAP` lists (about 10 minutes) |
+| `debug-room-switches` (tag `jumps`) | Get Bullets changes the bag; Battle OFF stops encounters, Battle ON brings them back |
 
 ### Known game bugs
 
