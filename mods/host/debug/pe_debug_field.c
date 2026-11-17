@@ -50,6 +50,29 @@ static void pe_ctl_room(const char *args) {
     pe_debug_reply("ok %s %s", "room", detail);
 }
 
+void pe_debug_room_write(FILE *f) {
+    char name[8] = { 0 };
+    Text_EncodeBase32(name, (unsigned)g_SceneDispatchToken);
+    name[6] = 0;
+    fprintf(f, "{\"map\":%d,\"name\":", pe_room_number());
+    pe_debug_json_string(f, name);
+    fprintf(f, ",\"token\":\"%08X\",\"story\":%u,\"day\":%d,\"free\":%s,\"flags\":%u}",
+            (unsigned)g_SceneDispatchToken, (unsigned)g_ScriptVariableBank[PE_VAR_STORY],
+            (int)g_GameState.current_story_day, pe_free_field() ? "true" : "false", (unsigned)g_GameStateFlags);
+}
+
+void pe_debug_actors_write(FILE *f) {
+    FieldActor *a;
+    int i;
+    fputc('[', f);
+    for (a = g_FieldActorListHead, i = 0; a && i < PE_ACTORS_MAX; a = a->next, ++i)
+        fprintf(f, "%s{\"index\":%d,\"type\":%u,\"sub\":%u,\"player\":%s,\"position\":[%d,%d,%d],"
+                "\"yaw\":%d,\"flags\":%u,\"script\":%s}", i ? "," : "", i, a->type_id, a->sub_id,
+                a == g_PlayerEntity ? "true" : "false", a->pos_x, a->pos_y, a->pos_z, a->rot_y,
+                (unsigned)a->flags, a->script_base ? "true" : "false");
+    fputc(']', f);
+}
+
 static void pe_ctl_warp(const char *args) {
     char target[32], detail[64];
     unsigned id, story = 0;

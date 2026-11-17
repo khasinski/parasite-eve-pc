@@ -19,7 +19,7 @@ the gameplay mod list, and remain dormant until `PE_DEBUG_CONTROL` enables the c
 
 | File under `mods/host/` | Responsibility |
 |---|---|
-| `pe_debug_control.c` | File polling, command matching, replies, JSON string escaping and frame counter |
+| `pe_debug_control.c` | File polling, command matching, replies, JSON string escaping, frame counter and command history |
 | `debug/pe_debug_field.c` | Rooms, warps, actor/script lookup, positioning and script variables |
 | `debug/pe_debug_save.c` | Card-block/companion export and saved mod tail |
 | `debug/pe_debug_battle.c` | Battle-state snapshots |
@@ -27,7 +27,10 @@ the gameplay mod list, and remain dormant until `PE_DEBUG_CONTROL` enables the c
 | `debug/pe_debug_setup.c` | Bag queries/filling, item grants, equipment and character setup |
 | `debug/pe_debug_settings.c` | Registered mod values and runtime options |
 | `debug/pe_debug_trace.c` | Trace enable/disable, battle hook subscriptions and frame observations |
+| `debug/pe_debug_ui.c` | Native menu layer, open dialogue boxes and recently shown dialogue pages |
+| `debug/pe_debug_snapshot.c` | One-file failure capture built from the other modules' writers |
 | `debug/pe_debug_internal.h` | Private command/module contract and shared transport helpers |
+| `pe_mod_state.c` / `pe_mod_state.h` | Mods' live-state providers (public API) and their JSON writer |
 
 Each module owns its command table and private handlers. The core matches exact command
 boundaries and passes arguments to the owning module. Add a command to the relevant module's
@@ -76,9 +79,51 @@ A game whose window pauses when unfocused answers once it runs again.
 | `give ITEM` | add a hex base item ID (1..FF) through the native inventory path, including mod hooks; free field only |
 | `equip BAG_SLOT` | equip existing weapon/armor in decimal bag slot and rebuild native stat/equipment caches; free field only |
 | `set-stat level\|hp\|pe-raw\|bp VALUE` | decimal values; level 1..99 updates EXP and derived stats, HP/PE cannot exceed current maxima, BP 0..99999; free field only |
-| `mod-state MOD_ID` | JSON of running state and registered F1 stored values/info rows; inactive callbacks are not run |
+| `mod-state MOD_ID` | JSON of running state and registered F1 stored values/info rows; inactive callbacks are not run. A mod with live-state providers also gets `"live"`: `{"<provider>":{...}}` while running, `null` when not (see below) |
+| `ui-state` | one JSON object: `menu` (native menu layer open, active mode, selected item, action submenu, memory-card dialog, save slot), `dialogue` (each open box: state `typing`/`waiting`, page, style, rect, text, choice count and cursor) and `recent_pages` (the last 8 pages a box opened, with frame, map and the text as drawn) |
+| `snapshot [NAME]` | write `snapshot[-NAME].json` in the control folder: room, ui-state, battle-state, bag, actors (position, yaw, flags), every running mod's live state and the last 32 commands and answers. Answers `ok snapshot <file>` |
 | `ini-set PAGE/LABEL VALUE` | change a registered stored option in memory using its full INI key (spaces allowed). Range checked. Does not persist to disk. `restart_required=1` for Manage mods options: apply those in the next session's INI; this command does not start/stop mods |
 | `trace on` / `trace off` | append events to `battle.jsonl` in the control folder; off initially |
+
+### Dialogue and menus
+
+`ui-state` reads the game's own dialogue boxes (`g_TextboxEntries`) and menu globals, so a test
+can wait for a box to reach `waiting`, check its text, move the choice cursor with pad input and
+confirm it landed. Text is decoded with the English glyph table (`pe_gametext.h`); control codes
+show as `{XX}` and line breaks as ` / `. `recent_pages` is filled by a late `PE_HOOK_TEXT_PAGE`
+handler (after language packs and mods replaced the page), then follows the open box's text each
+frame, since some mods rewrite a box after it opened (Wayne's menu rows). It survives the box
+closing.
+
+The F1 Mods panel is modal: the game, and with it this channel, stops while it is open, so it is
+not reported. Menus a mod draws in the field (Wayne's shop, the Requisition list) report through
+that mod's live-state provider.
+
+### Mods' live state
+
+A mod registers providers from its init (`mods/host/pe_mod_state.h`):
+
+```c
+static void wallet_state(PeStateWriter *w, void *user) {
+    pe_state_int(w, "junk", junk);
+    pe_state_begin_list(w, "pending");
+    /* ... */
+    pe_state_end(w);
+}
+pe_mod_state_provider("economy", wallet_state, NULL);
+```
+
+Providers only read. They run only from `mod-state` and `snapshot`, only while the mod is
+running, and inside `pe_mod_call_begin` so a crash in one names it. Registration costs a table
+entry and nothing else when debug control is off. `pe_economy` provides `economy`: wallet Junk,
+Wayne's hand-in, store status, the active path, the saved policy and its pending rewards.
+
+### Failure capture
+
+On a timeout or a failed check, a test runner sends `snapshot <test-name>` and attaches the file
+to its report. The file is written to `<name>.tmp` and renamed, so a reader never sees half of it.
+Crashes are already covered by the game's crash report (`logs\crash-<date>.txt`: stacks, game
+state, the mods and their save data); the channel adds nothing there.
 
 ### Battle traces and deterministic runs
 
@@ -110,9 +155,10 @@ chosen-group command needs a validated encounter loader/catalog; directly passin
 function would produce invalid tests. Bosses still require scenario saves.
 
 Dedicated critical-roll events (including misses), challenge-specific trigger/settlement
-events, full live mod-state providers, runtime hot-start/hot-stop of mods, arbitrary memory
-peek/poke, Junk setup, equipment-mod replacement, and movie/dialogue skipping remain outside
-this implementation. `mod-state` is the registered F1 view, not a dump of every private variable.
+events, runtime hot-start/hot-stop of mods, arbitrary memory peek/poke, Junk setup,
+equipment-mod replacement, and movie/dialogue skipping remain outside this implementation.
+`mod-state` is the registered F1 view plus whatever live state a mod chooses to provide, not a
+dump of every private variable. Live-state providers exist for `pe_economy` so far.
 
 ### A warp gets the room, not the scene
 

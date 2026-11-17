@@ -28,6 +28,20 @@ void pe_debug_path(char *out, size_t size, const char *name);
 void pe_debug_reply(const char *fmt, const char *command, const char *detail);
 void pe_debug_json_string(FILE *f, const char *text);
 unsigned pe_debug_frame(void);
+/* The last commands and answers, oldest first, as a JSON list of {"frame","line"}. */
+void pe_debug_history_write(FILE *f);
+
+/* JSON writers shared by a command and `snapshot` (one value each, no newline). */
+void pe_debug_room_write(FILE *f);
+void pe_debug_actors_write(FILE *f);
+void pe_debug_battle_write(FILE *f);
+void pe_debug_bag_write(FILE *f);
+void pe_debug_ui_write(FILE *f);
+
+/* Mods' live-state providers (host/pe_mod_state.c, API in pe_mod_state.h). */
+int pe_mod_state_count(const char *owner);
+void pe_mod_state_write(FILE *f, const char *owner);
+void pe_mod_state_write_running(FILE *f);
 
 /* Internal lifecycle/registry access is also used by the separately linked regression test. */
 int pe_debug_control_start(const char *dir);
@@ -41,5 +55,7 @@ extern const PeDebugModule pe_debug_rng_module;
 extern const PeDebugModule pe_debug_setup_module;
 extern const PeDebugModule pe_debug_settings_module;
 extern const PeDebugModule pe_debug_trace_module;
+extern const PeDebugModule pe_debug_ui_module;
+extern const PeDebugModule pe_debug_snapshot_module;
 
 #endif

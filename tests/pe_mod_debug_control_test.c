@@ -42,6 +42,12 @@
 #include "pe1/scene_dispatch.h"
 #include "pe1/script_queue.h"
 #include "psyz/system.h"
+#include "pe_mod_state.h"
+#include "pe1/menu_dialog.h"
+#include "pe1/menu_state.h"
+#include "pe1/save.h"
+#include "pe1/textbox.h"
+#include "pe1/textbox_open.h"
 
 
 #define PE_SCRIPT_SCAN 0x8000
@@ -67,6 +73,25 @@ BattleEnemySlot g_BattleEnemySlots[7];
 Combatant *g_ActiveActor;
 s32 g_ItemDropRngIndex;
 u8 g_ItemDropRngTable[521];
+TextboxEntry g_TextboxEntries[4];
+u8 g_DialogueChoiceCursor;
+unsigned char g_MenuActiveMode;
+int g_InvSelectedItemIndex, g_MenuActionSubmenuOpen, g_MemCardDialogState, g_SaveSelectedSlot;
+unsigned int g_MenuActionSubmenuSel;
+static const char *s_current_mod;
+static int s_mod_calls;
+const char *pe_mod_current(void) { return s_current_mod; }
+void pe_mod_call_begin(const char *mod, const char *what, const char *detail) { (void)mod; (void)what; (void)detail; ++s_mod_calls; }
+void pe_mod_call_end(void) {}
+static void wallet_state(PeStateWriter *w, void *user) {
+    pe_state_int(w, "junk", *(int *)user);
+    pe_state_text(w, "name", "a \"quoted\" one");
+    pe_state_begin_list(w, "list");
+    pe_state_int(w, NULL, 1);
+    pe_state_begin_object(w, NULL);
+    pe_state_bool(w, "ok", 1);
+    /* left open: the reader closes the object and the list */
+}
 static ItemDataRecord s_weapon;
 static PeMenuRow s_row;
 static int s_given;
@@ -223,7 +248,79 @@ int main(void) {
         assert(starts(ask("ini-set Test/Enabled 2"), "err ini-set") && value == 1);
         assert(starts(ask("ini-set unknown 0"), "err ini-set"));
         assert(strstr(ask("mod-state test"), "\"running\":true"));
+        assert(!strstr(s_answer, "\"live\""));                  /* no providers yet */
         assert(starts(ask("mod-state unknown"), "err mod-state"));
+        {
+            static int junk = 12;
+            assert(pe_mod_state_provider("wallet", wallet_state, &junk) == -1);   /* outside init */
+            s_current_mod = "test";
+            assert(pe_mod_state_provider("wallet", wallet_state, &junk) == 0);
+            assert(pe_mod_state_provider("wallet", wallet_state, &junk) == -1);  /* same name */
+            assert(pe_mod_state_provider("", wallet_state, &junk) == -1);
+            s_current_mod = "stopped";
+            assert(pe_mod_state_provider("wallet", wallet_state, &junk) == 0);   /* other owner */
+            s_current_mod = NULL;
+            s_mod_calls = 0;
+            assert(strstr(ask("mod-state test"),
+                          "\"live\":{\"wallet\":{\"junk\":12,\"name\":\"a \\\"quoted\\\" one\",\"list\":[1,{\"ok\":true}]}}}"));
+            assert(s_mod_calls == 1);
+            /* A stopped mod's provider is never called; it still answers, with live null. */
+            assert(strstr(ask("mod-state stopped"), "\"running\":false,\"rows\":[],\"live\":null}"));
+            assert(s_mod_calls == 1);
+        }
+        {
+            /* ui-state: one dialogue box waiting on a two-way choice ("Yes"), and a page the
+             * box opened earlier, read through the late TEXT_PAGE hook. */
+            static unsigned char yes[] = { 0x28, 0x34, 0x42, 0xFF };
+            static unsigned char hello[] = { 0x17, 0x34, 0x3B, 0x3B, 0x3E, 0xFF };
+            unsigned char *message = hello;
+            PeHookTextPage page = { NULL, 23, &message };
+            assert(s_hooks[PE_HOOK_TEXT_PAGE]);
+            s_hooks[PE_HOOK_TEXT_PAGE](&page, s_hook_users[PE_HOOK_TEXT_PAGE]);
+            g_TextboxEntries[1].state = 2;
+            g_TextboxEntries[1].page_id = 24;
+            g_TextboxEntries[1].message = yes;
+            g_TextboxEntries[1].control.flags = 0x200000 | (2 << 0x16);
+            g_DialogueChoiceCursor = 1;
+            g_SaveSelectedSlot = 3;
+            ask("ui-state");
+            assert(starts(s_answer, "ok ui-state {\"menu\":{\"open\":false"));
+            assert(strstr(s_answer, "\"save_slot\":3"));
+            assert(strstr(s_answer, "{\"box\":1,\"state\":\"waiting\",\"page\":24,"));
+            assert(strstr(s_answer, "\"text\":\"Yes\",\"choices\":2,\"choice\":1}"));
+            assert(strstr(s_answer, "\"recent_pages\":[{\"frame\":0,\"map\":48,\"page\":23,\"text\":\"Hello\"}]"));
+            /* A mod rewrites the open box of page 23: the page's entry follows what it draws. */
+            g_TextboxEntries[1].page_id = 23;
+            s_hooks[PE_HOOK_FRAME](NULL, s_hook_users[PE_HOOK_FRAME]);
+            assert(strstr(ask("ui-state"), "\"page\":23,\"text\":\"Yes\"}]"));
+            g_TextboxEntries[1].state = 0;
+        }
+        {
+            /* snapshot: one JSON file holding every part, with the commands that led here. */
+            char *json;
+            long size;
+            assert(starts(ask("snapshot a/b"), "err snapshot"));
+            assert(!strcmp(ask("snapshot fail-1"), "ok snapshot snapshot-fail-1.json"));
+            f = fopen(DIR "/snapshot-fail-1.json", "rb");
+            assert(f);
+            fseek(f, 0, SEEK_END); size = ftell(f); fseek(f, 0, SEEK_SET);
+            json = calloc(1, (size_t)size + 1);
+            assert(json && fread(json, 1, (size_t)size, f) == (size_t)size);
+            fclose(f);
+            assert(starts(json, "{\"version\":1,"));
+            assert(strstr(json, "\"room\":{\"map\":48"));
+            assert(strstr(json, "\"ui\":{\"menu\""));
+            assert(strstr(json, "\"battle\":{\"active\""));
+            assert(strstr(json, "\"bag\":["));
+            assert(strstr(json, "\"actors\":["));
+            assert(strstr(json, "\"mods\":{\"test\":{\"wallet\":{\"junk\":12"));
+            assert(!strstr(json, "\"stopped\""));
+            assert(strstr(json, "\"line\":\"> snapshot fail-1\"}]"));
+            assert(strstr(json, "\"line\":\"err snapshot "));
+            free(json);
+            assert(!strcmp(ask("snapshot"), "ok snapshot snapshot.json"));
+            assert(!fopen(DIR "/snapshot.json.tmp", "r"));
+        }
         Psyz_Srand(123); g_FrameRngCounter = 456; g_ItemDropRngIndex = 520;
         memset(g_ItemDropRngTable, 0xab, sizeof g_ItemDropRngTable);
         snprintf(snapshot, sizeof snapshot, "%s", ask("rng-get") + 11);
