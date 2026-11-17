@@ -163,6 +163,7 @@ entry and nothing else when debug control is off. Providers so far:
 | `pe_shops` | `requisition` | the Requisition board as shown now: each row's id, name, price and why it can't be bought; rescue needed |
 | `pe_challenges` | `run` | active challenges with levels, ever/dropped masks, assisted, cheats, underway, locked, run id, battles, seconds, the rows' next pick |
 | `pe_bp` | `bp` | unspent BP, feature flags, Defense and Mastery ranks by id, Fortitude mode, resets, Active Time steps, the EX Game carryover |
+| `pe_phone` | `calls` | mode, tone, ask-without-saving, a question or call up (`busy`, `box_open`, `holding`), the phone save waiting for its question (`saved_at`), the last phone seen, calls loaded and the keys this save heard |
 
 `pe_challenges` and `pe_bp` are opt-in mods (`PE_EXTRA_MODS`); their providers build with them.
 
@@ -206,7 +207,7 @@ Dedicated critical-roll events (including misses), challenge-specific trigger/se
 events, runtime hot-start/hot-stop of mods, arbitrary memory peek/poke, Junk setup,
 equipment-mod replacement, and movie/dialogue skipping remain outside this implementation.
 `mod-state` is the registered F1 view plus whatever live state a mod chooses to provide, not a
-dump of every private variable. Live-state providers exist for `pe_economy`, `pe_shops`, `pe_challenges` and `pe_bp`.
+dump of every private variable. Live-state providers exist for `pe_economy`, `pe_shops`, `pe_phone`, `pe_challenges` and `pe_bp`.
 
 ### A warp gets the room, not the scene
 

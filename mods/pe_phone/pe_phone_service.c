@@ -33,6 +33,7 @@ static const PeSaveRecord s_record = {"pe_phone.heard", 1, &s_rec, sizeof s_rec,
 
 void pe_phone_calls_played(const PePhoneCall *call) { pe_phone_record_played(&s_rec, call); }
 unsigned pe_phone_heard_count(void) { return s_rec.heard_count; }
+const PePhoneRecord *pe_phone_heard_record(void) { return &s_rec; }
 
 /* ---- the service ---- */
 
