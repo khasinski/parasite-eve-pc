@@ -3383,7 +3383,7 @@
     },
     {
       "path": "include/pe1/room_grab_attack.h",
-      "sha256": "ed0a9c05ba0636f39c9a717ea7baaa03fef4d0b7ead4b4e07da37ab76f0fb256"
+      "sha256": "4450df004a58eda7894f34a3a329158a1819678131634c78fd4e1dac079ff2f9"
     },
     {
       "path": "include/pe1/room_ground_eruption.h",
@@ -3391,7 +3391,7 @@
     },
     {
       "path": "include/pe1/room_ground_sweep.h",
-      "sha256": "6865cc6208b40e7b260fa37f479a79993bf968f57e044ee49b53c65920a1a552"
+      "sha256": "f119ec417adb0f376a98e705952db82f449d39a2d6608bcb51d9e3b749e4f957"
     },
     {
       "path": "include/pe1/room_homing_flash.h",
@@ -3575,7 +3575,7 @@
     },
     {
       "path": "include/pe1/room_rising_spray.h",
-      "sha256": "c8f8c7a6e13f7e4cc8482b646acfd2917ecff38db4d43ce9474f608ff1d302fc"
+      "sha256": "c1fd7f9f9e190bacb626cd0a0ed4ffde2661780271871c5e0948917b1192fb0a"
     },
     {
       "path": "include/pe1/room_script_record.h",
@@ -3595,7 +3595,7 @@
     },
     {
       "path": "include/pe1/room_spark.h",
-      "sha256": "e08f5483ab6732a8131e5bc8c7dcad303c2438f037809a91a78ec1215ba43e9b"
+      "sha256": "c151b5a09bd4357be71e930977d020b27b4ad40acec5e379212101af47b8872b"
     },
     {
       "path": "include/pe1/room_spark_attacks.h",

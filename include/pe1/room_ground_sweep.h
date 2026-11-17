@@ -30,13 +30,4 @@ typedef struct RoomGroundSweepMark {
     u16 frame;                    /* 0x0A */
 } RoomGroundSweepMark;
 
-/* First object of the primary channel's pool: its packet flags. */
-typedef struct RoomGroundSweepHitObject {
-    u32 flags;
-} RoomGroundSweepHitObject;
-
-typedef struct RoomGroundSweepHitPool {
-    RoomGroundSweepHitObject *object;
-} RoomGroundSweepHitPool;
-
 #endif
