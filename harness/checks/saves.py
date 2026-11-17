@@ -12,7 +12,7 @@ from pedebug.runner import check
 from . import _saves as sv
 from ._common import phone_save, through_dialogue
 
-# Known game bug (fix: sirebacon fix/save-load-recovery): pe_save_peek and pe_save_prepare_load
+# Known game bug (fixed by khasinski/parasite-eve-pc PR 271): pe_save_peek and pe_save_prepare_load
 # (mods/host/pe_save.c) refuse any damaged container, even with the companion link record intact,
 # so pe_mod_load_admit refuses the whole save ("Data is unreadable") instead of the recovery
 # pe_save_on_read documents (reset the damaged record, keep the rest). One bad record locks the

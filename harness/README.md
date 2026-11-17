@@ -142,7 +142,7 @@ failing, and says so once it holds again so the marker can go. One is marked tod
 checks: **a damaged mods' container makes the whole save unloadable** (`save-damaged-record`), even
 with its companion link intact: `pe_save_peek` and `pe_save_prepare_load` refuse any damaged
 container, so the load shows "Data is unreadable" instead of the documented recovery (reset the
-damaged record, keep the rest).
+damaged record, keep the rest). Fixed by PR 271; the check reports when the marker can go.
 
 Not covered yet: a Hardcore death (needs a fight without a Revive from a new game) and the EX
 Game carryover (needs a cleared save).
