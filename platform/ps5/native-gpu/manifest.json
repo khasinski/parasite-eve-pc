@@ -3847,11 +3847,15 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "98226a39fa872e9e840a775e384d37ca139aa392d4aae082c52bc1f5ddf8185f"
+      "sha256": "a411f28dc525ddb166249dece39a614182aa8f66d440d9fdc7b783e42785d043"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
       "sha256": "709229b287b2aaea1cfbd7fbc6f05ebeda65270c7dda31d34542f044519b446b"
+    },
+    {
+      "path": "mods/host/debug/pe_debug_events.c",
+      "sha256": "c4f104486dabf960b2c4af8256e8a210f8bfec3ed8a89ff4423bec3e1052b93a"
     },
     {
       "path": "mods/host/debug/pe_debug_field.c",
@@ -3859,7 +3863,7 @@
     },
     {
       "path": "mods/host/debug/pe_debug_internal.h",
-      "sha256": "9254962783098a4b50a9bec6b2665e47eed86a8ad5282b3eacff1183457ca318"
+      "sha256": "e45161b02fcf5faa613b199e5f4b4404561e07f4805723e59b343cebd63d2830"
     },
     {
       "path": "mods/host/debug/pe_debug_rng.c",
@@ -3939,7 +3943,7 @@
     },
     {
       "path": "mods/host/pe_debug_control.c",
-      "sha256": "8378d87c9f0ecf81f27ee1dcbcf32033ecb4dce9004eb76632d9aa528887edde"
+      "sha256": "99264891640ec77e9315e718bd1105fed18dece6a8edcc0caff395d0445cd4d4"
     },
     {
       "path": "mods/host/pe_disc_assets.c",

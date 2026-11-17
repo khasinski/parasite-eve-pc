@@ -51,8 +51,14 @@
 
 
 #define PE_SCRIPT_SCAN 0x8000
-static PeHookFn s_hooks[PE_HOOK_COUNT];
-static void *s_hook_users[PE_HOOK_COUNT];
+#define TEST_SAVE_EVENT PE_HOOK_COUNT        /* pe_event_id("save.committed") */
+static PeHookFn s_hooks[PE_HOOK_COUNT + 1];
+static void *s_hook_users[PE_HOOK_COUNT + 1];
+u32 g_BootHostVBlankCount;
+s8 g_MenuEquipSlotIndex;
+int pe_event_id(const char *name) { return !strcmp(name, PE_EVENT_SAVE_COMMITTED) ? TEST_SAVE_EVENT : -1; }
+static void frame(void) { s_hooks[PE_HOOK_FRAME](NULL, s_hook_users[PE_HOOK_FRAME]); }
+static void fire(int hook) { s_hooks[hook](NULL, s_hook_users[hook]); }
 
 
 #define DIR "pe-debug-control-test"
@@ -463,6 +469,73 @@ int main(void) {
     f = fopen(DIR "/cmd", "r"); assert(f); fclose(f);
     pe_debug_control_poll();
     assert(!fopen(DIR "/cmd", "r") && !fopen(DIR "/cmd.processing", "r"));
-    puts("Debug control: room ids, warp, variables, actors, bounded find-script, floor refresh, save-block and queued commands");
+
+    /* Event log: changes only, one line each, in the order they happened. */
+    {
+        static unsigned char hi[] = { 0x17, 0x38, 0xFF };          /* "Hi" */
+        static unsigned char hi_more[] = { 0x17, 0x38, 0x2B, 0xFF }; /* "Hi!" */
+        static const char *const expected[] = {
+            "\"event\":\"dialogue_opened\",\"box\":2,\"page\":7,\"choices\":2,\"text\":\"Hi\"",
+            "\"event\":\"dialogue_waiting\",\"box\":2,\"page\":7,\"choices\":2,\"text\":\"Hi\"",
+            "\"event\":\"dialogue_changed\",\"box\":2,\"page\":7,\"choices\":3,\"text\":\"Hi!\"",
+            "\"event\":\"dialogue_closed\",\"box\":2,\"page\":7,\"choices\":3,\"answer\":1",
+            "\"event\":\"room\",\"map\":48,\"token\":\"A8005148\"",
+            "\"event\":\"battle_started\"",
+            "\"event\":\"player_down\"",
+            "\"event\":\"battle_ended\",\"hp\":0",
+            "\"event\":\"menu_opened\"",
+            "\"event\":\"no_control\"",
+            "\"event\":\"title\"",
+            "\"event\":\"save_loaded\"",
+            "\"event\":\"title_left\"",
+            "\"event\":\"scene_loaded\",\"map\":48",
+            "\"event\":\"new_game\"",
+            "\"event\":\"save_committed\"",
+        };
+        char line[1024], answer[64];
+        unsigned n = 0, seq;
+        Combatant *aya = (Combatant *)g_PlayerEntity->state;
+        s_free = 1;
+        frame();                                  /* settle: the state as it is now */
+        remove(DIR "/events.jsonl");
+        assert(sscanf(ask("events"), "ok events %u", &seq) == 1);
+        frame();
+        assert(!fopen(DIR "/events.jsonl", "r"));  /* nothing changed: nothing written */
+        g_TextboxEntries[2].state = 1; g_TextboxEntries[2].page_id = 7; g_TextboxEntries[2].message = hi;
+        g_TextboxEntries[2].control.flags = 0x200000 | (2 << 0x16);
+        g_MenuEquipSlotIndex = -1;
+        frame(); frame();                         /* opened once, not twice */
+        g_TextboxEntries[2].state = 2; frame();
+        g_TextboxEntries[2].message = hi_more;              /* a mod adds a row */
+        g_TextboxEntries[2].control.flags = 0x200000 | (3 << 0x16);
+        frame(); frame();
+        g_MenuEquipSlotIndex = 1; g_TextboxEntries[2].state = 0; frame();
+        g_SceneDispatchToken = (int)0xA8005148u; frame();
+        g_GameStateFlags |= 2; frame();
+        aya->curHP = 0; frame(); frame();
+        g_GameStateFlags &= ~2u; frame();
+        g_GameStateFlags |= 4; frame();
+        s_free = 0; frame();
+        fire(PE_HOOK_TITLE_FRAME); fire(PE_HOOK_TITLE_FRAME);
+        fire(PE_HOOK_SAVE_READ);
+        frame();
+        fire(PE_HOOK_SCENE_START); fire(PE_HOOK_NEW_GAME); fire(TEST_SAVE_EVENT);
+        g_GameStateFlags &= ~4u; aya->curHP = 80; s_free = 1;
+        f = fopen(DIR "/events.jsonl", "r");
+        assert(f);
+        while (fgets(line, sizeof line, f)) {
+            char want[32];
+            assert(n < sizeof expected / sizeof *expected);
+            snprintf(want, sizeof want, "{\"seq\":%u,", seq + n + 1);
+            assert(starts(line, want));
+            assert(strstr(line, expected[n]));
+            ++n;
+        }
+        fclose(f);
+        assert(n == sizeof expected / sizeof *expected);
+        snprintf(answer, sizeof answer, "ok events %u", seq + n);
+        assert(!strcmp(ask("events"), answer));
+    }
+    puts("Debug control: room ids, warp, variables, actors, bounded find-script, floor refresh, save-block, queued commands, ui-state, snapshot, live mod state and the event log");
     return 0;
 }

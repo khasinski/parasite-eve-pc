@@ -57,5 +57,6 @@ extern const PeDebugModule pe_debug_settings_module;
 extern const PeDebugModule pe_debug_trace_module;
 extern const PeDebugModule pe_debug_ui_module;
 extern const PeDebugModule pe_debug_snapshot_module;
+extern const PeDebugModule pe_debug_events_module;
 
 #endif

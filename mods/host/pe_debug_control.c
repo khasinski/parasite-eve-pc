@@ -80,6 +80,7 @@ static const PeDebugModule *const s_modules[] = {
     &pe_debug_trace_module,
     &pe_debug_ui_module,
     &pe_debug_snapshot_module,
+    &pe_debug_events_module,
 };
 
 const PeDebugModule *const *pe_debug_modules(size_t *count) {

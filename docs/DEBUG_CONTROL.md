@@ -29,6 +29,7 @@ the gameplay mod list, and remain dormant until `PE_DEBUG_CONTROL` enables the c
 | `debug/pe_debug_trace.c` | Trace enable/disable, battle hook subscriptions and frame observations |
 | `debug/pe_debug_ui.c` | Native menu layer, open dialogue boxes and recently shown dialogue pages |
 | `debug/pe_debug_snapshot.c` | One-file failure capture built from the other modules' writers |
+| `debug/pe_debug_events.c` | Event log: rooms, dialogue, menus, battles, control, saves and loads, as they change |
 | `debug/pe_debug_internal.h` | Private command/module contract and shared transport helpers |
 | `pe_mod_state.c` / `pe_mod_state.h` | Mods' live-state providers (public API) and their JSON writer |
 
@@ -81,6 +82,7 @@ A game whose window pauses when unfocused answers once it runs again.
 | `set-stat level\|hp\|pe-raw\|bp VALUE` | decimal values; level 1..99 updates EXP and derived stats, HP/PE cannot exceed current maxima, BP 0..99999; free field only |
 | `mod-state MOD_ID` | JSON of running state and registered F1 stored values/info rows; inactive callbacks are not run. A mod with live-state providers also gets `"live"`: `{"<provider>":{...}}` while running, `null` when not (see below) |
 | `ui-state` | one JSON object: `menu` (native menu layer open, active mode, selected item, action submenu, memory-card dialog, save slot), `dialogue` (each open box: state `typing`/`waiting`, page, style, rect, text, choice count and cursor) and `recent_pages` (the last 8 pages a box opened, with frame, map and the text as drawn) |
+| `events` | `ok events <seq>`: the sequence number of the last event written to `events.jsonl` (see below); read lines after it |
 | `snapshot [NAME]` | write `snapshot[-NAME].json` in the control folder: room, ui-state, battle-state, bag, actors (position, yaw, flags), every running mod's live state and the last 32 commands and answers. Answers `ok snapshot <file>` |
 | `ini-set PAGE/LABEL VALUE` | change a registered stored option in memory using its full INI key (spaces allowed). Range checked. Does not persist to disk. `restart_required=1` for Manage mods options: apply those in the next session's INI; this command does not start/stop mods |
 | `trace on` / `trace off` | append events to `battle.jsonl` in the control folder; off initially |
@@ -98,6 +100,43 @@ closing.
 The F1 Mods panel is modal: the game, and with it this channel, stops while it is open, so it is
 not reported. Menus a mod draws in the field (Wayne's shop, the Requisition list) report through
 that mod's live-state provider.
+
+### Event log
+
+While the channel is on, the game appends one JSON line to `<folder>/events.jsonl` whenever
+something a test waits for changes, on the frame it changes (not at the 10-frame command poll):
+
+```
+{"seq":12,"frame":152,"vblank":9431,"event":"dialogue_waiting","box":0,"page":164,"choices":7,"text":"..."}
+```
+
+`seq` counts from 1 for the run, `frame` is the channel's field-frame count (as in `ping`) and
+`vblank` the game's VBlank count (the control mode state's `vblanks`), so a headless runner can
+wait for an event and know exactly where it happened. Send `events` first to learn the current
+`seq`, then act and wait for a later line.
+
+| Event | Fields | When |
+|---|---|---|
+| `started` | `map`, `free`, `battle` | first field frame after the channel starts |
+| `scene_loaded` | `map` | a room finished loading, before its first frame (also the same room again) |
+| `room` | `map`, `token`, `story` | the room token changed |
+| `control` / `no_control` | | free field (Aya can move) began / ended |
+| `menu_opened` / `menu_closed` | | the native menu layer |
+| `paused` / `unpaused` | | the game's pause |
+| `dialogue_opened` | `box`, `page`, `choices`, `text` | a box opened (or a box went on to another page) |
+| `dialogue_waiting` | `box`, `page`, `choices`, `text` | the box finished typing and waits for a press; `text` is the full page as drawn |
+| `dialogue_changed` | `box`, `page`, `choices`, `text` | an open box's text or choice count changed (a mod rewrote it, as the economy does Wayne's menu rows) |
+| `dialogue_closed` | `box`, `page` (+ `choices`, `answer`) | for a choice, `answer` is the row the game's script receives, -1 if none. A mod that adds rows maps them back, so this can differ from the row on screen (Wayne's Cancel is 5 with Workshop shown) |
+| `battle_started` / `battle_ended` | `hp` on end | battle flag on / off |
+| `player_down` | | Aya's HP reached 0 in battle |
+| `title` / `title_left` | | the title menu began running / the field ran again |
+| `save_loaded` | | a card save's block was read into the game |
+| `new_game` | | a new game started |
+| `save_committed` | | the save screen wrote and published a card save |
+
+Only changes are written, so an idle game writes nothing. The command channel itself only runs
+on field frames; at the title it answers once the field runs again, but `title` and
+`save_loaded` are still logged.
 
 ### Mods' live state
 
