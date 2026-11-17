@@ -118,8 +118,8 @@ wait for an event and know exactly where it happened. Send `events` first to lea
 | Event | Fields | When |
 |---|---|---|
 | `started` | `map`, `free`, `battle` | first field frame after the channel starts |
-| `scene_loaded` | `map` | a room finished loading, before its first frame (also the same room again) |
-| `room` | `map`, `token`, `story` | the room token changed |
+| `room` | `map`, `token`, `story` | the room token changed: a transfer started (on the old room's last frame). `scene_loaded` follows once the new room is in |
+| `scene_loaded` | `map` | a room finished loading, before its first frame (also the same room again). Wait for this, not `room`, before acting in the new room |
 | `to_title` | `from_map` | the field loop ended for the title: a game over or a soft reset. A battle still on gets `battle_ended` with `"left":true` first |
 | `control` / `no_control` | | free field (Aya can move) began / ended |
 | `menu_opened` / `menu_closed` | | the native menu layer; in battle also the command menu each time the gauge fills |
