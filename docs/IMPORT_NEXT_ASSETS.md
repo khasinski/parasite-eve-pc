@@ -4,7 +4,7 @@ Research baseline: `786ac4fd8`. This survey covers the tested local PS1 images a
 
 ## PC preview implementation
 
-The Windows importer was tested with the local `External Games` folder on a clean
+Before the Gian reader was added, the Windows importer was tested with the local `External Games` folder on a clean
 profile. The game cataloged 778 Sound entries, using the same public services for all
 sources. F1 > Import > Sounds offers a source game selector and pages of 64 samples.
 
@@ -32,8 +32,8 @@ F1 playback were outside the headless verification.
 
 ### Why Dino Crisis imported three samples
 
-The current reader at `mods/pe_src_dc1/pe_src_dc1_sound.c` matches exactly
-`PSX/DATA/ST60E.DAT`. It uses that archive's one conventional VAB header and fixed
+The initial reader at `mods/pe_src_dc1/pe_src_dc1_sound.c` matched exactly
+`PSX/DATA/ST60E.DAT`. It used that archive's one conventional VAB header and fixed
 body range, which contain three waveforms. The three entries measure the reader's
 coverage of one archive.
 
@@ -62,14 +62,16 @@ Studio is a candidate for comparing exports against the same US disc revision. T
 survey checked the public project documentation and source list and derived the bank
 counts independently from the local disc.
 
-For the importer, share a bounded archive walker with the existing Dino Crisis source
-mod, route VAB and Gian banks into the shared SPU decoder, and preserve the existing
-`dc1:sound/st60e/waveNN` IDs. Use archive, bank and waveform identifiers for the new
-entries so identical payloads can share storage while retaining their source references.
-Check that a broad sound reader and the costume reader can both run for a matching
-archive, or use a deliberately disjoint match on verified files. The current scanner
-chooses the first matching reader. The local costume `CORE0?.DAT` archives did not
-contain type-4 blocks. No production reader was changed in this pass.
+The new reader shares an archive walker with the costume reader and routes VAB and
+Gian through the same SPU decoder. It emits one entry per source occurrence at
+`dc1:sound/<archive>/bankNN/waveNN`, except that the three `dc1:sound/st60e/waveNN`
+IDs are preserved. Cache keys include the archive path so two byte-identical archives
+keep distinct source references. The catalog retains every occurrence. It does not
+deduplicate PCM by content.
+
+The model matcher comes first. The verified US `CORE0?.DAT` costume archives contain
+no type-4 blocks. Dino Crisis 2 remains outside this change. On the tested US disc,
+the result is 3,701 sound entries and the existing four Regina models.
 
 ## First implementation target: one Resident Evil 2 sound effect
 

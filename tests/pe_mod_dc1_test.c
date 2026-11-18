@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "pe_imp.h"
+#include "pe_imp_internal.h"
 #include "pe_src_dc1.h"
 
 static uint8_t buf[1 << 18];
@@ -147,6 +148,117 @@ static void made_up(void) {
     printf("made-up CORE archive: tiles, bones turned into RE's frame, stitched quad, mirrored hand\n");
 }
 
+/* Minimal ISO with two names for the same source bytes, so a warm scan also
+ * checks that a path-dependent reader retains both stable bank IDs. */
+static void iso_record(uint32_t pos, const char *name, unsigned len, unsigned extent,
+                       unsigned size, int directory)
+{
+    unsigned record = 33 + len + !(len % 2);
+    buf[pos] = (uint8_t)record;
+    put32(pos + 2, extent);
+    put32(pos + 10, size);
+    buf[pos + 25] = directory ? 2 : 0;
+    buf[pos + 32] = (uint8_t)len;
+    memcpy(buf + pos + 33, name, len);
+}
+
+static void write_iso(const char *path, unsigned size)
+{
+    FILE *f = fopen(path, "wb");
+    assert(f && fwrite(buf, 1, size, f) == size && !fclose(f));
+}
+
+static void made_up_sound(void)
+{
+    enum { S = 2048, DAT = 21 * S, META = DAT + S, BODY = DAT + 2 * S,
+           META2 = DAT + 3 * S, BODY2 = DAT + 4 * S, END = DAT + 5 * S };
+    memset(buf, 0, END);
+    memcpy(buf + 16 * S, "\1CD001\1", 7);
+    memcpy(buf + 17 * S, "\377CD001\1", 7);
+    iso_record(16 * S + 156, "\0", 1, 18, S, 1);
+    iso_record(18 * S, "PSX", 3, 19, S, 1);
+    iso_record(19 * S, "DATA", 4, 20, S, 1);
+    iso_record(20 * S, "AAA.DAT;1", 9, 21, 5 * S, 0);
+    iso_record(20 * S + buf[20 * S], "BBB.DAT;1", 9, 21, 5 * S, 0);
+
+    put32(DAT, 3), put32(DAT + 4, 16);
+    put32(DAT + 16, 4), put32(DAT + 20, 48);
+    put32(DAT + 32, 3), put32(DAT + 36, 16);
+    put32(DAT + 48, 4), put32(DAT + 52, 16);
+    memcpy(buf + DAT + 64, "dummy header    ", 16);
+    memcpy(buf + META, "Gian", 4);
+    memcpy(buf + META2, "Gian", 4);
+    buf[META + 10] = 2;
+    buf[META2 + 10] = 1;
+    buf[BODY + 1] = 1; /* Early flag 1 is part of the wave that ends in flag 7. */
+    buf[BODY + 2] = 1;
+    buf[BODY + 17] = 7;
+    buf[BODY + 33] = 3;
+    buf[BODY + 34] = 15;
+    buf[BODY2 + 1] = 7;
+
+    const char *root = "pe-dc1-test/store", *image = "pe-dc1-test/gian.iso";
+    assert(!pe_imp_mkdirs("pe-dc1-test"));
+    write_iso(image, END);
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_dc1_sound_ps1));
+    PeImpScan scan;
+    assert(!pe_imp_scan(root, image, "dc1", &scan) && !scan.refused);
+    assert(!pe_imp_scan(root, image, "dc1", &scan) && !scan.refused && scan.skipped == 2);
+    PeImpSound *sound;
+    assert(!pe_imp_catalog_sound(root, "dc1:sound/aaa/bank01/wave01", &sound, NULL, 0));
+    assert(sound->frames == 56 && sound->pcm[0] == 4096);
+    free(sound);
+    assert(!pe_imp_catalog_sound(root, "dc1:sound/bbb/bank01/wave02", &sound, NULL, 0));
+    assert(sound->frames == 28 && sound->pcm[0] == -4096);
+    free(sound);
+    assert(!pe_imp_catalog_sound(root, "dc1:sound/bbb/bank02/wave01", &sound, NULL, 0));
+    free(sound);
+
+    buf[META + 10] = 3;
+    write_iso(image, END);
+    assert(!pe_imp_scan(root, image, "dc1", &scan) && scan.refused == 2);
+    assert(pe_imp_catalog_sound(root, "dc1:sound/aaa/bank01/wave01", &sound, NULL, 0) && !sound);
+    buf[META + 10] = 2;
+    put32(DAT + 24, 1); /* Mismatched SPU destination. */
+    write_iso(image, END);
+    assert(!pe_imp_scan(root, image, "dc1", &scan) && scan.refused == 2);
+}
+
+static void sound_disc(const char *cue)
+{
+    const char *root = "pe-dc1-test/real-store";
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_dc1_core_ps1));
+    assert(!pe_imp_add_reader(&g_dc1_sound_ps1));
+    PeImpScan scan;
+    assert(!pe_imp_scan(root, cue, "dc1", &scan));
+    if (scan.refused) printf("%d sound scan refusals, last: %s\n", scan.refused, scan.last_error);
+    assert(!scan.refused);
+    assert(!pe_imp_scan(root, cue, "dc1", &scan) && !scan.refused && scan.skipped > 400);
+    PeImpAsset *assets;
+    int n = pe_imp_catalog_assets(root, "dc1", &assets), sounds = 0, models = 0;
+    for (int i = 0; i < n; ++i) {
+        sounds += !strcmp(assets[i].type, "Sound");
+        models += !strcmp(assets[i].type, "Model");
+    }
+    free(assets);
+    printf("Dino Crisis US catalog: %d sounds, %d models\n", sounds, models);
+    assert(sounds == 3701 && models == 4);
+    PeImpSound *sound;
+    for (unsigned i = 1; i <= 3; ++i) {
+        static const unsigned frames[] = {7420, 32312, 7224};
+        char id[40];
+        snprintf(id, sizeof id, "dc1:sound/st60e/wave%02u", i);
+        assert(!pe_imp_catalog_sound(root, id, &sound, NULL, 0));
+        assert(sound->frames == frames[i - 1]);
+        free(sound);
+    }
+    assert(!pe_imp_catalog_sound(root, "dc1:sound/core/bank01/wave01", &sound, NULL, 0));
+    assert(sound->frames == 8680);
+    free(sound);
+}
+
 static void disc(const char *cue) {
     char why[300] = "";
     PeImpDisc *d = pe_imp_disc_open(cue, why, sizeof why);
@@ -179,8 +291,12 @@ static void disc(const char *cue) {
 int main(void) {
     test_lz();
     made_up();
+    made_up_sound();
     const char *cue = getenv("PE_TEST_DC1_DISC");
-    if (cue && *cue) disc(cue);
+    if (cue && *cue) {
+        disc(cue);
+        sound_disc(cue);
+    }
     else printf("PE_TEST_DC1_DISC not set: disc part skipped\n");
     printf("dc1 reader passed\n");
     return 0;

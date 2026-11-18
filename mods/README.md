@@ -721,7 +721,8 @@ Scan again reruns it.
 **Sounds (PC).** F1 > Import > Sounds lists waveforms from scanned copies of Resident Evil
 Director's Cut, Resident Evil 2, Resident Evil 3, Dino Crisis, and Final Fantasy VII. Choose
 a source game, browse the pages, select a waveform, and choose **Preview sound**. These are
-raw sample auditions at a fixed reference pitch. The shared asset and audio services also
+raw sample auditions at a fixed reference pitch. Dino Crisis (US) includes Gian and VAB
+sample banks embedded in DAT archives. The shared asset and audio services also
 work with the Import UI disabled. See [the mod API](../docs/MOD_API.md#imported-sound-previews).
 
 Other games' files are read only then, when the player asks, never during play. Aya's data comes

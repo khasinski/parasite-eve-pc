@@ -111,6 +111,7 @@ typedef struct {
     PeImpReadFn read;
     const char *companion;                    /* exact ISO path, or .extension to pair by stem */
     PeImpReadPairFn read_pair;                /* both inputs participate in the store key */
+    int path_key;                             /* single-file reader derives IDs from its ISO path */
 } PeImpReader;
 int pe_imp_add_reader(const PeImpReader *r); /* 0, or -1 (bad, duplicate, full) */
 int pe_imp_readers(void);

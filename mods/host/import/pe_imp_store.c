@@ -304,6 +304,12 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
         memcpy(pair + 64, secondary, 64);
         memcpy(pair + 128, logical_path, 64);
         pe_imp_sha256_hex((const uint8_t *)pair, sizeof pair, sha);
+    } else if (rd->path_key) {
+        char key[64 + PE_IMP_PATH_MAX];
+        memcpy(key, sha, 64);
+        int len = snprintf(key + 64, sizeof key - 64, "%s/%s/%s", rd->platform, rd->format, path);
+        if (len < 0 || (size_t)len >= sizeof key - 64) return -1;
+        pe_imp_sha256_hex((const uint8_t *)key, 64 + (size_t)len, sha);
     }
     snprintf(dir, sizeof dir, "%s/%s/%s", root, rd->game, sha);
     if (current(c, dir, rd, image, path, sha)) { out->skipped++; return 0; }

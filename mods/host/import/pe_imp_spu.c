@@ -60,7 +60,7 @@ int pe_imp_spu_emit(PeImpSink *sink, const char *bank, unsigned wave,
         free(clip);
         return reject(why, n, "invalid SPU ADPCM block");
     }
-    char id[48], name[48], label[24];
+    char id[48], name[48], label[32];
     snprintf(label, sizeof label, "%s", bank);
     for (char *p = label; *p; ++p)
         if (*p >= 'a' && *p <= 'z') *p -= 'a' - 'A';

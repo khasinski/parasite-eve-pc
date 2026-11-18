@@ -25,6 +25,7 @@
 #include "pe_imp.h"
 #include "pe_imp_rig.h"
 #include "pe_src_dc1.h"
+#include "pe_src_dc1_archive.h"
 
 #define BONES 15
 #define MODEL_AT 0x80180000u
@@ -108,21 +109,21 @@ int dc1_core_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why,
     memset(out, 0, sizeof out), memset(m, 0, sizeof *m);
     {
         Buf x = {data, size};
-        NEED(0, 0x800, "archive index");
-        uint32_t at = 0x800;
-        for (uint32_t i = 0; i < 128 && memcmp(data + 16 * i, "dummy", 5); i++) {
-            uint32_t t = u32at(&x, 16 * i), sz = u32at(&x, 16 * i + 4), a = u32at(&x, 16 * i + 8), b = u32at(&x, 16 * i + 12);
-            NEED(at, sz, "archive block");
-            if (t == 8 && !image) {
-                if (dc1_lz(data + at, sz, &image, &image_size)) { snprintf(why, n, "CORE: image doesn't decompress"); goto bad; }
-                image_w = 2 * (b & 0xffff);
-            } else if (t == 2 && !pal_rows) {
-                pal_at = at, pal_rows = sz / 512;
-            } else if (t == 7 && a == MODEL_AT && !model) {
-                if (dc1_lz(data + at, sz, &model, &model_size)) { snprintf(why, n, "CORE: model doesn't decompress"); goto bad; }
+        Dc1Archive archive;
+        if (!dc1_archive_open(&archive, data, size)) { snprintf(why, n, "CORE: invalid archive index"); goto bad; }
+        Dc1Block block;
+        int rc;
+        while ((rc = dc1_archive_next(&archive, &block)) > 0) {
+            if (block.type == 8 && !image) {
+                if (dc1_lz(block.data, block.size, &image, &image_size)) { snprintf(why, n, "CORE: image doesn't decompress"); goto bad; }
+                image_w = 2 * (block.tag & 0xffff);
+            } else if (block.type == 2 && !pal_rows) {
+                pal_at = (uint32_t)(block.data - data), pal_rows = block.size / 512;
+            } else if (block.type == 7 && block.address == MODEL_AT && !model) {
+                if (dc1_lz(block.data, block.size, &model, &model_size)) { snprintf(why, n, "CORE: model doesn't decompress"); goto bad; }
             }
-            at += (sz + 2047) / 2048 * 2048;
         }
+        if (rc < 0) { snprintf(why, n, "CORE: archive block past the end"); goto bad; }
         if (!model || !image || !pal_rows) { snprintf(why, n, "CORE: no model, image or palette"); goto bad; }
         if (image_w != 256 || image_size < 256 * 256) { snprintf(why, n, "CORE: image %u wide, %u bytes", image_w, image_size); goto bad; }
         m->pal_rows = pal_rows > 256 ? 256 : pal_rows;
