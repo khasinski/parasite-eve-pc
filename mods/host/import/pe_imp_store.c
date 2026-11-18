@@ -48,6 +48,43 @@ int pe_imp_mkdirs(const char *path) {
 typedef struct { uint32_t type; char id[PE_IMP_ID_MAX], name[PE_IMP_NAME_MAX]; void *obj; } Item;
 struct PeImpSink { Item item[MAX_ITEMS]; int items; };
 
+static unsigned schema_version(uint32_t type) {
+    switch (type) {
+    case PE_IMP_MODEL: return PE_IMP_MODEL_VERSION;
+    case PE_IMP_SOUND: return PE_IMP_SOUND_VERSION;
+    default: return 0;
+    }
+}
+
+/* Keep the original Model stamp so existing costume catalogs are still current. */
+static const char *schema_key(uint32_t types) {
+    if (types == PE_IMP_MODEL) return "model_version";
+    if (types == PE_IMP_SOUND) return "sound_version";
+    return "schema_versions";
+}
+
+static unsigned schema_stamp(uint32_t types) {
+    if (types == PE_IMP_MODEL || types == PE_IMP_SOUND) return schema_version(types);
+    unsigned stamp = 0;
+    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_TEXTSET; type <<= 1)
+        if (types & type) stamp = (stamp * 31 + type + schema_version(type)) & 0x7fffffff;
+    return stamp;
+}
+
+static uint32_t stored_type(const char *name) {
+    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_TEXTSET; type <<= 1)
+        if (schema_version(type) && !strcmp(name, pe_imp_type_name(type))) return type;
+    return 0;
+}
+
+static int save_obj(const Item *it, const char *folder, char *why, size_t n) {
+    switch (it->type) {
+    case PE_IMP_MODEL: return pe_imp_model_save(it->obj, folder, why, n);
+    case PE_IMP_SOUND: return pe_imp_sound_save(it->obj, folder, why, n);
+    default: return -1;
+    }
+}
+
 static void free_obj(uint32_t type, void *obj) {
     if (!obj) return;
     if (type == PE_IMP_MODEL) pe_imp_model_free(obj);
@@ -67,7 +104,7 @@ static int local_id_ok(const char *s) {          /* "player/pl01": lower case, a
 }
 
 int pe_imp_emit(PeImpSink *s, uint32_t type, const char *proposed, const char *name, void *obj) {
-    if (!s || s->items == MAX_ITEMS || !proposed || !local_id_ok(proposed) || type != PE_IMP_MODEL) {
+    if (!s || s->items == MAX_ITEMS || !proposed || !local_id_ok(proposed) || !obj || !schema_version(type)) {
         free_obj(type, obj);
         return -1;
     }
@@ -232,36 +269,47 @@ static int current(Catalog *c, const char *dir, const PeImpReader *rd, const cha
     int ok = s && !strcmp(pj_str(pj_get(s, "reader"), ""), rd->format) &&
              !strcmp(pj_str(pj_get(s, "platform"), ""), rd->platform) &&
              pj_int(pj_get(s, "reader_version"), -1) == rd->version &&
-             pj_int(pj_get(s, "model_version"), -1) == PE_IMP_MODEL_VERSION;
+             pj_int(pj_get(s, schema_key(rd->produces)), -1) == schema_stamp(rd->produces);
     pj_free(s);
     if (!ok) return 0;
     snprintf(p, sizeof p, "%s/items.json", dir);
     PjNode *items = pj_load(p, NULL, 0);
     if (!items || items->kind != PJ_ARRAY) { pj_free(items); return 0; }
     for (const PjNode *it = items->child; it; it = it->next) {
+        uint32_t type = stored_type(pj_str(pj_get(it, "type"), ""));
+        const char *id = pj_str(pj_get(it, "id"), "");
+        if (!type || !(rd->produces & type) || !local_id_ok(id)) continue;
         Source src = {{0}};
         snprintf(src.sha, sizeof src.sha, "%s", sha);
         snprintf(src.dir, sizeof src.dir, "%s", pj_str(pj_get(it, "dir"), ""));
         snprintf(src.platform, sizeof src.platform, "%s", rd->platform);
         snprintf(src.image, sizeof src.image, "%s", image);
         snprintf(src.path, sizeof src.path, "%s", path);
-        const char *type = pj_str(pj_get(it, "type"), "");
-        cat_note(c, rd->game, pj_str(pj_get(it, "id"), ""), pj_str(pj_get(it, "name"), ""),
-                 !strcmp(type, "Model") ? PE_IMP_MODEL : 0, rd->tags, &src);
+        cat_note(c, rd->game, id, pj_str(pj_get(it, "name"), ""), type, rd->tags, &src);
     }
     pj_free(items);
     return 1;
 }
 
 static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const char *image, const char *path,
-                      const uint8_t *data, uint32_t size, PeImpScan *out) {
+                      const uint8_t *data, uint32_t size,
+                      const uint8_t *companion, uint32_t companion_size, PeImpScan *out) {
     char sha[65], dir[PE_IMP_PATH_MAX], p[PE_IMP_PATH_MAX], why[200] = "";
     pe_imp_sha256_hex(data, size, sha);
+    if (rd->read_pair) {
+        char pair[128], secondary[65];
+        pe_imp_sha256_hex(companion, companion_size, secondary);
+        memcpy(pair, sha, 64);
+        memcpy(pair + 64, secondary, 64);
+        pe_imp_sha256_hex((const uint8_t *)pair, sizeof pair, sha);
+    }
     snprintf(dir, sizeof dir, "%s/%s/%s", root, rd->game, sha);
     if (current(c, dir, rd, image, path, sha)) { out->skipped++; return 0; }
     PeImpSink *sink = calloc(1, sizeof *sink);
     if (!sink) return -1;
-    int rc = rd->read(data, size, path, sink, why, sizeof why);
+    int rc = rd->read_pair
+        ? rd->read_pair(data, size, companion, companion_size, sink, why, sizeof why)
+        : rd->read(data, size, path, sink, why, sizeof why);
     if (!rc && pe_imp_mkdirs(dir)) rc = -1, snprintf(why, sizeof why, "can't create the store folder");
     snprintf(p, sizeof p, "%s/items.json", dir);
     remove(p);                                         /* items.json last: absent = not committed */
@@ -270,7 +318,7 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
         Item *it = &sink->item[i];
         char sub[PE_IMP_PATH_MAX];
         snprintf(sub, sizeof sub, "%s/%d", dir, i);
-        if (pe_imp_mkdirs(sub) || pe_imp_model_save(it->obj, sub, why, sizeof why)) rc = -1;
+        if (pe_imp_mkdirs(sub) || save_obj(it, sub, why, sizeof why)) rc = -1;
     }
     if (!rc) {
         snprintf(p, sizeof p, "%s/source.json", dir);
@@ -280,8 +328,8 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
             fputs("{\"game\": ", f), pj_write_string(f, rd->game);
             fputs(", \"platform\": ", f), pj_write_string(f, rd->platform);
             fputs(", \"reader\": ", f), pj_write_string(f, rd->format);
-            fprintf(f, ", \"reader_version\": %u, \"model_version\": %d, \"size\": %u, \"sha256\": \"%s\", \"path\": ",
-                    rd->version, PE_IMP_MODEL_VERSION, size, sha);
+            fprintf(f, ", \"reader_version\": %u, \"%s\": %u, \"size\": %u, \"sha256\": \"%s\", \"path\": ",
+                    rd->version, schema_key(rd->produces), schema_stamp(rd->produces), size, sha);
             pj_write_string(f, path), fputs(", \"image\": ", f), pj_write_string(f, image), fputs("}\n", f);
             rc = fclose(f) ? -1 : 0;
         }
@@ -364,8 +412,23 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
             snprintf(out->last_error, sizeof out->last_error, "%s: %s", path, why);
             continue;
         }
-        out->files_read++;
-        store_file(&cat, root, pe_imp_reader(r), pe_imp_disc_label(d), path, data, size, out);
+        const PeImpReader *rd = pe_imp_reader(r);
+        uint8_t *companion = NULL;
+        uint32_t companion_size = 0;
+        if (rd->companion) {
+            int index = pe_imp_disc_find(d, rd->companion);
+            if (index < 0 || pe_imp_disc_size(d, index) == 0 ||
+                pe_imp_disc_read(d, index, &companion, &companion_size, why, sizeof why)) {
+                out->refused++;
+                snprintf(out->last_error, sizeof out->last_error, "%s: can't read companion %s",
+                         path, rd->companion);
+                free(data);
+                continue;
+            }
+        }
+        out->files_read += rd->companion ? 2 : 1;
+        store_file(&cat, root, rd, label, path, data, size, companion, companion_size, out);
+        free(companion);
         free(data);
     }
     int rc = cat_save(&cat, cat_path);
@@ -403,28 +466,51 @@ int pe_imp_catalog_assets(const char *root, const char *game, PeImpAsset **out) 
     return n;
 }
 
-int pe_imp_catalog_model(const char *root, const char *asset_id, PeImpModel *m, char *why, size_t n) {
-    char game[16] = "", path[PE_IMP_PATH_MAX];
+static int catalog_path(const char *root, const char *asset_id, uint32_t type,
+                        char path[PE_IMP_PATH_MAX], char *why, size_t n) {
+    char game[16] = "";
     const char *colon = strchr(asset_id, ':');
     if (!colon || colon == asset_id || (size_t)(colon - asset_id) >= sizeof game) {
         if (why && n) snprintf(why, n, "%s is not a <game>:<id> asset ID", asset_id);
         return -1;
     }
     memcpy(game, asset_id, (size_t)(colon - asset_id));
-    snprintf(path, sizeof path, "%s/%s/catalog.json", root, game);
+    if (strspn(game, "abcdefghijklmnopqrstuvwxyz0123456789-_") != strlen(game) ||
+        !local_id_ok(colon + 1) ||
+        snprintf(path, PE_IMP_PATH_MAX, "%s/%s/catalog.json", root, game) >= PE_IMP_PATH_MAX) {
+        if (why && n) snprintf(why, n, "invalid catalog asset ID or path");
+        return -1;
+    }
     Catalog cat;
     cat_load(&cat, path);
     Entry *e = cat_find(&cat, asset_id);
     int rc = -1;
     if (!e || !e->srcs) {
         if (why && n) snprintf(why, n, "%s is not in the catalog: scan its disc first", asset_id);
-    } else if (strcmp(e->type, "Model")) {
-        if (why && n) snprintf(why, n, "%s is a %s, not a Model", asset_id, e->type);
+    } else if (strcmp(e->type, pe_imp_type_name(type))) {
+        if (why && n) snprintf(why, n, "%s is a %s, expected %s", asset_id, e->type, pe_imp_type_name(type));
     } else {
         qsort(e->src, (size_t)e->srcs, sizeof *e->src, src_cmp);
-        snprintf(path, sizeof path, "%s/%s/%s/%s", root, game, e->src[0].sha, e->src[0].dir);
-        rc = pe_imp_model_load(path, m, why, n);
+        Source *src = &e->src[0];
+        if (strlen(src->sha) == 64 && strspn(src->sha, "0123456789abcdef") == 64 &&
+            *src->dir && strspn(src->dir, "0123456789") == strlen(src->dir) &&
+            snprintf(path, PE_IMP_PATH_MAX, "%s/%s/%s/%s", root, game, src->sha, src->dir) < PE_IMP_PATH_MAX)
+            rc = 0;
+        else if (why && n) snprintf(why, n, "%s has an invalid catalog location", asset_id);
     }
     free(cat.e);
     return rc;
+}
+
+int pe_imp_catalog_model(const char *root, const char *id, PeImpModel *model, char *why, size_t n) {
+    char path[PE_IMP_PATH_MAX];
+    if (catalog_path(root, id, PE_IMP_MODEL, path, why, n)) return -1;
+    return pe_imp_model_load(path, model, why, n);
+}
+
+int pe_imp_catalog_sound(const char *root, const char *id, PeImpSound **out, char *why, size_t n) {
+    char path[PE_IMP_PATH_MAX];
+    *out = NULL;
+    if (catalog_path(root, id, PE_IMP_SOUND, path, why, n)) return -1;
+    return pe_imp_sound_load(path, out, why, n);
 }

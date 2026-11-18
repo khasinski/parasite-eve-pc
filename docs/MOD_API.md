@@ -129,6 +129,25 @@ all described in `EXTENSION_APIS.md`.
 Events let a mod announce something without knowing who listens. Existing events include
 `bestiary.unlock`, `wardrobe.worn` and `play.log`.
 
+### Imported sound previews
+
+On PC, get `PeAssetsApi` with `pe_service_get("assets", 1)` and `PeAudioApi` with
+`pe_service_get("audio", 1)`. Both tables are declared in `mods/host/pe_services.h`.
+Handle missing services and verify `struct_size` before calling them.
+
+1. In a menu or setup action, pass a source game and a page offset to `list_sounds`.
+   Save the selected catalog ID if the mod needs the selection across sessions.
+2. Call `acquire_sound` with that ID on the main thread. A nonzero handle owns one
+   reference while the clip loads on a worker. Duplicate requests share resident PCM.
+3. Poll `status` on subsequent frames. When ready, call `preview_clip`. The service
+   queues a one-shot audition. The newest audition replaces the previous one.
+4. `release` each acquired reference on completion, cancellation, or shutdown.
+   A missing or invalid clip reports unavailable. Callers may retain their default
+   sound when an audition is unavailable.
+
+The service reads the existing import catalog and works with the Import UI disabled.
+Prepared pack entries, gameplay slots, and polyphonic mixing are future integration work.
+
 ## F1 menu rows
 
 Call `pe_menu_begin("Page")` first. Pass 0 to return to `PE Enhancements`. `sub` is a sub-page, which

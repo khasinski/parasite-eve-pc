@@ -718,6 +718,12 @@ Scan again reruns it.
   same pack id and folder names as tools/re2-skin, so keys such as `re2-local/claire.re2` match).
   The Wardrobe loads it at the next start.
 
+**Sounds (PC).** F1 > Import > Sounds lists six waveforms from the RE2 PS1 ARMS01
+bank after scanning a supported disc. Select a waveform and choose **Preview sound**.
+These are auditions at a fixed reference pitch. The `pe_assets` mod supplies the shared
+`assets` and `audio` services, which can also audition clips from the existing catalog
+with the Import UI disabled. See [the mod API](../docs/MOD_API.md#imported-sound-previews).
+
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 

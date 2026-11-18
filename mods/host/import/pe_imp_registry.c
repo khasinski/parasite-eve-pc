@@ -35,7 +35,8 @@ static int word_ok(const char *s, size_t max) {
 }
 
 int pe_imp_add_reader(const PeImpReader *r) {
-    if (!r || r->api.version != PE_IMP_API_VERSION || r->api.size != sizeof *r || !r->read || !r->match ||
+    if (!r || r->api.version != PE_IMP_API_VERSION || r->api.size != sizeof *r || !r->match ||
+        (r->read ? (r->companion || r->read_pair) : (!r->companion || !r->read_pair)) ||
         !word_ok(r->game, 15) || !word_ok(r->platform, 15) || !word_ok(r->format, 15) || !r->produces)
         return -1;
     for (int i = 0; i < s_readers; i++)

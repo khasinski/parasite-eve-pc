@@ -6,7 +6,7 @@
  * then built into Parasite Eve packs. Plain C with stdio only, for PC and PS5.
  *
  *   disc images   pe_imp_disc_*: a .cue (first data track), a raw .bin or an .iso; ISO 9660 files
- *   data types    PeImpModel today; each type has check, save (to a store folder) and load
+ *   data types    Model and Sound, with bounded save and load
  *   readers       registered by source-game mods (pe_src_<game>): file pattern -> neutral data
  *   store         <root>/<game>/<sha256 of the file>/<item>/..., rebuilt when a reader's version changes
  *   catalog       <root>/<game>/catalog.json: "<game>:<kind>/<name>" -> its copies in the store
@@ -81,6 +81,16 @@ int pe_imp_model_check(const PeImpModel *m, char *why, size_t n);
 int pe_imp_model_save(const PeImpModel *m, const char *folder, char *why, size_t n);
 int pe_imp_model_load(const char *folder, PeImpModel *m, char *why, size_t n);
 
+/* Sound is a short mono PCM clip. The allocation owns its PCM frames. */
+#define PE_IMP_SOUND_VERSION 1
+typedef struct {
+    uint32_t rate, frames;
+    int16_t pcm[];
+} PeImpSound;
+PeImpSound *pe_imp_sound_alloc(uint32_t rate, uint32_t frames);
+int pe_imp_sound_save(const PeImpSound *sound, const char *folder, char *why, size_t n);
+int pe_imp_sound_load(const char *folder, PeImpSound **sound, char *why, size_t n);
+
 /* ---- readers ---- */
 typedef struct PeImpSink PeImpSink;
 /* A reader hands each item it decodes to the sink: `proposed` is a local ID ("player/pl01"),
@@ -88,6 +98,9 @@ typedef struct PeImpSink PeImpSink;
 int pe_imp_emit(PeImpSink *s, uint32_t type, const char *proposed, const char *name, void *obj);
 typedef int (*PeImpReadFn)(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink,
                            char *why, size_t n);
+typedef int (*PeImpReadPairFn)(const uint8_t *primary, uint32_t primary_size,
+                               const uint8_t *companion, uint32_t companion_size,
+                               PeImpSink *sink, char *why, size_t n);
 typedef struct {
     PeImpApi api;                             /* {PE_IMP_API_VERSION, sizeof(PeImpReader)} */
     const char *game, *platform, *format;     /* "re2", "ps1", "pld" */
@@ -96,6 +109,8 @@ typedef struct {
     const char *match;                        /* file pattern, '?' one char, '*' within a folder */
     const char *tags;                         /* "human player", copied into the catalog */
     PeImpReadFn read;
+    const char *companion;                    /* exact ISO path for a paired reader */
+    PeImpReadPairFn read_pair;                /* both inputs participate in the store key */
 } PeImpReader;
 int pe_imp_add_reader(const PeImpReader *r); /* 0, or -1 (bad, duplicate, full) */
 int pe_imp_readers(void);
@@ -173,6 +188,7 @@ typedef struct {
 int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan *out);
 /* An asset's model from its first copy (PS1 first), loaded from the store. */
 int pe_imp_catalog_model(const char *root, const char *asset_id, PeImpModel *m, char *why, size_t n);
+int pe_imp_catalog_sound(const char *root, const char *asset_id, PeImpSound **sound, char *why, size_t n);
 /* A game's catalog entries, sorted by ID; *out is malloc'd (free it). */
 typedef struct {
     char id[PE_IMP_ID_MAX], name[PE_IMP_NAME_MAX], type[16], tags[64];

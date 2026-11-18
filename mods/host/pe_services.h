@@ -30,6 +30,30 @@ typedef struct PeBattleActionPolicyApi { int (*partial_actions)(void); } PeBattl
 #include <stddef.h>
 #include <stdint.h>
 
+/* assets v1 and audio v1. Preview handles address imported catalog data by stable
+ * source ID. Call on the main thread and release each acquired reference once.
+ * list_sounds does catalog I/O and belongs in a menu or setup action.
+ * acquire_sound prepares the PCM on a worker. status reports 1 ready, 0 pending,
+ * or -1 unavailable. Zero is an invalid handle. */
+typedef uint32_t PeAssetHandle;
+typedef struct {
+    char id[80];
+    char name[48];
+    char tags[64];
+} PeAssetInfo;
+typedef struct {
+    uint32_t struct_size;
+    int (*list_sounds)(const char *game, unsigned offset, PeAssetInfo *out, unsigned capacity);
+    PeAssetHandle (*acquire_sound)(const char *source_id);
+    int (*status)(PeAssetHandle handle);
+    void (*release)(PeAssetHandle handle);
+} PeAssetsApi;
+
+typedef struct {
+    uint32_t struct_size;
+    int (*preview_clip)(PeAssetHandle handle); /* 1 queued, 0 pending, -1 unavailable */
+} PeAudioApi;
+
 /* Economy armor effects, in the game's unused armor effect numbers 17-20. */
 #define PE_FX_BARGAIN    17 /* prices -15% */
 #define PE_FX_SCAVENGER  18 /* battle Junk +50% */

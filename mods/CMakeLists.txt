@@ -6,6 +6,7 @@
 set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone
     pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import)   # F1 > Import: source games first, then the page
 if(NOT PE_PS5_GAME)
+    list(PREPEND pe_default_mods pe_assets)
     list(APPEND pe_default_mods pe_lang pe_fonts)
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
@@ -50,6 +51,7 @@ set(pe_import_core_sources
     host/import/pe_imp_json.c       # a small bounded JSON reader and writer (no cJSON on PS5)
     host/import/pe_imp_sha256.c     # store keys
     host/import/pe_imp_model.c      # the Model type: check, store, load
+    host/import/pe_imp_sound.c      # the Sound type: bounded PCM
     host/import/pe_imp_registry.c   # readers, file patterns, naming tables
     host/import/pe_imp_store.c      # the extract-once store and the catalog
     host/import/pe_imp_packs.c      # packs in the format the Wardrobe loads
@@ -301,8 +303,13 @@ endfunction()
 if(BUILD_TESTING)
     # Importer core and the RE2 reader on made-up data; PE_TEST_RE2_DISC adds the real disc.
     pe_feature_test(import ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_test.c ${pe_import_core_sources}
-        pe_src_re2/pe_src_re2_pld.c)
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c)
     target_include_directories(test-mod-import PRIVATE host/import pe_src_re2)
+    if(NOT PE_PS5_GAME)
+        pe_feature_test(assets ${PROJECT_SOURCE_DIR}/tests/pe_mod_assets_test.c
+            pe_assets/pe_assets.c ${pe_import_core_sources})
+        target_include_directories(test-mod-assets PRIVATE host/import)
+    endif()
     # The RE3 reader on a made-up person; PE_TEST_RE3_DISC adds every player file on the disc.
     pe_feature_test(re3 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re3_test.c ${pe_import_core_sources}
         pe_src_re3/pe_src_re3_pld.c)
@@ -324,7 +331,7 @@ if(BUILD_TESTING)
     if(TARGET pe_download_json AND TARGET pe_download_zip)
         # F1 > Import's scan and build, then the Wardrobe's pack reader loading the result.
         pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_core_sources}
-            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2.c
+            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2.c
             pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1.c
             pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c
             pe_wardrobe/pe_packs.c pe_import/pe_import_job.c)

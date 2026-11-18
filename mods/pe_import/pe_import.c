@@ -112,11 +112,62 @@ static void text_folders(char *out, unsigned size) {
 typedef struct { PeImpAsset a; char label[96]; int target; } Item;
 static Item s_items[MAX_ITEMS];
 static int s_nitems, s_pick, s_listed;
+static PeAssetInfo s_sounds[MAX_ITEMS];
+static int s_nsounds, s_sound_pick;
+static PeAssetHandle s_preview;
+static const PeAssetsApi *s_preview_assets;
+static char s_sound_status[80] = "Select a sound to preview.";
+
+static const PeAssetsApi *assets_api(void) {
+    const PeAssetsApi *api = pe_service_get("assets", 1);
+    return api && api->struct_size >= sizeof *api ? api : NULL;
+}
+
+static void release_preview(void) {
+    if (s_preview) s_preview_assets->release(s_preview);
+    s_preview = 0;
+    s_preview_assets = NULL;
+}
+
+static unsigned sound_count(void) {
+    poll();
+    return s_nsounds ? (unsigned)s_nsounds : 1;
+}
+
+static const char *sound_name(unsigned i) {
+    return i < (unsigned)s_nsounds ? s_sounds[i].name : "No imported sounds";
+}
+
+static void preview_sound(void) {
+    release_preview();
+    if (s_sound_pick < 0 || s_sound_pick >= s_nsounds || SDL_GetAtomicInt(&s_state) != 0) {
+        snprintf(s_sound_status, sizeof s_sound_status, "Scan a supported disc first.");
+        return;
+    }
+    s_preview_assets = assets_api();
+    s_preview = s_preview_assets ? s_preview_assets->acquire_sound(s_sounds[s_sound_pick].id) : 0;
+    snprintf(s_sound_status, sizeof s_sound_status, "%s", s_preview ? "Loading sound..." : "Sound unavailable.");
+}
+
+static void sound_status(char *out, unsigned size) {
+    poll();
+    if (s_preview) {
+        const PeAudioApi *audio = pe_service_get("audio", 1);
+        int rc = audio && audio->struct_size >= sizeof *audio ? audio->preview_clip(s_preview) : -1;
+        if (rc) {
+            snprintf(s_sound_status, sizeof s_sound_status, "%s", rc > 0 ? "Preview queued." : "Sound unavailable.");
+            release_preview();
+        }
+    }
+    snprintf(out, size, "%s", s_sound_status);
+}
 
 static void refresh(void) {
     char games[32][16];
     int ng = 0;
     s_nitems = 0;
+    s_nsounds = 0;
+    const PeAssetsApi *assets = assets_api();
     for (int r = 0; r < pe_imp_readers() && ng < 32; r++) {
         int seen = 0;
         for (int g = 0; g < ng; g++) seen |= !strcmp(games[g], pe_imp_reader(r)->game);
@@ -136,7 +187,12 @@ static void refresh(void) {
                 break;
             }
         free(a);
+        if (assets && s_nsounds < MAX_ITEMS) {
+            int got = assets->list_sounds(games[g], 0, s_sounds + s_nsounds, MAX_ITEMS - s_nsounds);
+            if (got > 0) s_nsounds += got;
+        }
     }
+    if (s_sound_pick >= s_nsounds) s_sound_pick = 0;
     if (s_pick >= s_nitems) s_pick = 0;
     s_listed = 1;
 }
@@ -273,6 +329,7 @@ static void poll(void) {
 
 static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
+    release_preview();
     poll();
     return 0;
 }
@@ -349,7 +406,7 @@ static int import_init(void) {
     if (pe_mod_path(s_folders_file, sizeof s_folders_file, "import/folders.txt")) return 1;
     folders_load();
     pe_menu_begin(PAGE);
-    pe_menu_top_page(PAGE, "Costumes from your other PlayStation games: put their disc images in the folder below.", 60);
+    pe_menu_top_page(PAGE, "Import assets from your other PlayStation games.", 60);
     pe_menu_register_info(0, "Automatic import", "Costumes built by themselves from the discs in the folder, and the discs still missing.", text_auto);
     pe_menu_register_info(0, "Disc images folder", "Put your disc images here (.cue with its .bin, or .iso), loose or one folder deep.", text_folder);
     pe_menu_register_action(0, "Open the folder", "Opens the disc images folder.", open_folder);
@@ -363,6 +420,13 @@ static int import_init(void) {
     pe_menu_register_info("Build by hand", "From", "Where the selected model comes from.", text_asset);
     pe_menu_register_action("Build by hand", "Build as a costume", "Builds the selected model as a Wardrobe costume, in a pack of your own. For personal use only.", build);
     pe_menu_register_info("Build by hand", "Last build", "What the last build did.", text_build);
+    if (pe_mod_requested("pe_assets")) {
+        pe_menu_page("Sounds", "Audition short sounds from your scanned discs.", 20);
+        pe_menu_register_dynamic_choice("Sounds", "Sound", "Choose an imported sound.", &s_sound_pick,
+                                        MAX_ITEMS, sound_count, sound_name);
+        pe_menu_register_action("Sounds", "Preview sound", "Plays the selected sound once.", preview_sound);
+        pe_menu_register_info("Sounds", "Preview", "Status of the selected preview.", sound_status);
+    }
     pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_LATE, MOD_ID);
     /* The game binds its discs before the mods start (main.c), so the first run starts now, on its
      * thread, while the title loads; its results reach the Wardrobe on the first field frame, or
@@ -373,6 +437,7 @@ static int import_init(void) {
 }
 
 static void import_shutdown(void) {
+    release_preview();
     if (s_thread) SDL_WaitThread(s_thread, NULL), s_thread = NULL;  /* never leave a build half-written */
     if (s_lock) SDL_DestroyMutex(s_lock), s_lock = NULL;
 }
