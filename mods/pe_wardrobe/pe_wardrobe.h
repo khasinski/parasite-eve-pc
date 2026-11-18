@@ -69,6 +69,7 @@ void pe_wardrobe_menu_register(const char *mod_id);
  * A pack costume's bundle is "@<pack id>/<folder>"; the skin loader reads its files through here. */
 void pe_packs_scan(void);                        /* at start-up */
 void pe_packs_register(void);                    /* their costumes into the registry */
+int pe_packs_add_new(char *names, unsigned size); /* while running: only new packs / characters (wardrobe_packs) */
 void pe_packs_page_register(void);               /* F1 > Collection > Wardrobe > Packs */
 int pe_pack_read(const char *ref, const char *name, unsigned char **data, unsigned *size, unsigned max);
 int pe_pack_has(const char *ref, const char *name);

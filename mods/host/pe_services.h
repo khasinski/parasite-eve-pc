@@ -216,6 +216,15 @@ typedef struct PeCostumesApi {
     int (*reload)(void);                    /* the game's same-room reload, so a change shows now; 0 if not now */
 } PeCostumesApi;
 
+/* "wardrobe_packs" v1 (pe_wardrobe): character packs added while the game runs (F1 > Import writes
+ * them). add_new reads packs/ again and registers only what is new: new packs and new character
+ * folders in packs already loaded; costumes already registered are untouched. Returns the number
+ * added; `names` (may be NULL) receives their names, comma-separated. Main thread only. */
+typedef struct PeWardrobePacksApi {
+    uint32_t struct_size;
+    int (*add_new)(char *names, unsigned size);
+} PeWardrobePacksApi;
+
 /* Events (pe_event_id): "bestiary.unlock" (PeBestiaryEvent *), "wardrobe.worn" (const PeCostume *,
  * NULL for Aya's own). */
 typedef struct PeBestiaryEvent {

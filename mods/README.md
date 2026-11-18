@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone;pe_src_re2;pe_import` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -66,6 +66,9 @@ mods/
   pe_lang/             language packs: the game's text from a .pelang pack, F1 > Language (not built
                        by default; docs/LOCALIZATION.md, tools in localization/)
   pe_hello/            example mod (not built by default)
+  pe_import/           F1 > Import: models from the player's other PlayStation games, built into packs
+  pe_src_re2/          import source: Resident Evil 2 (its readers, naming table and rig)
+  host/import/         the importer core (disc images, store, catalog, PE formats); see Import below
 ```
 
 ## Stacked items (pe_stacks)
@@ -684,6 +687,48 @@ While his box is the counter the shop allows buying though the field is busy
 host/pe_equip_sync.c (a host feature, so it works whichever mods are loaded) reruns the game's
 equipment rebuild in free field whenever the equipped gun or armor record changes, so Catalog,
 Tool, Rebuild and editor changes reach the next battle.
+
+## Import (pe_import, pe_src_<game>, host/import)
+
+F1 > Import brings models from the player's other PlayStation games into Parasite Eve, in the game
+itself (PC and PS5, no outside tools). The player only provides the discs: disc images (.cue with
+its .bin, or .iso) in `<preferences>/import/discs/`, loose or one folder deep, or in folders of
+their own added with F1 > Import > Add a folder (the system's folder picker; kept one per line in
+`<preferences>/import/folders.txt`, which is edited by hand where there is no picker, as on PS5).
+
+**Automatic.** When the game starts, a worker thread (`pe_import_job.c`) reads new or changed disc
+images and builds everything the source games mark automatic (`pe_imp_add_auto`; RE2: Claire from
+disc 2, Leon from disc 1) unless its pack already holds a build of the same source file by the
+same builder. Back on the main thread the Wardrobe adds the new costumes at once (the
+`wardrobe_packs` service, `pe_packs_add_new`: only new packs and characters; registered costumes
+stay put), with a message. F1 > Import > Automatic import says what's ready and which discs to add;
+Scan again reruns it.
+
+**By hand** (F1 > Import > Build by hand), for anything else:
+
+- **Scanning**: each image a source game recognises is read once into the store,
+  `<preferences>/import/store/<game>/<sha256 of the file>/`, and its catalog
+  (`<game>/catalog.json`: stable IDs such as `re2:player/claire`). Files already read by the same
+  reader version are skipped.
+- **Model** lists what a builder target can make (today: costumes, from models a rig fits), and
+  **Build as a costume** writes it as a pack in `<preferences>/packs/<game>-local/` (format 1, the
+  same pack id and folder names as tools/re2-skin, so keys such as `re2-local/claire.re2` match).
+  The Wardrobe loads it at the next start.
+
+Other games' files are read only then, when the player asks, never during play. Aya's data comes
+from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
+
+- `host/import/`: the core. `pe_imp.h` (disc images, the Model type, readers, rigs, targets, store,
+  catalog, packs), `pe_imp_pe.h` (PE's model and row formats, retargeting, the rows rooms install),
+  `pe_imp_rig.h` (a rig profile). Plain C with stdio; its own JSON reader (no cJSON on PS5).
+- `pe_src_<game>/`: one mod per source game registers its readers, naming table and rigs. Nothing
+  in the core names a game.
+- `pe_wardrobe/pe_skin_build.c` + `pe_skin_target.c`: the skins target, a port of tools/re2-skin
+  (PR #4). Every file is byte for byte the Python's except texture.bin (our colour reduction) and
+  angles at gimbal lock, where the Python read rounding noise (`pe_imp_to_yxz`).
+- Tests: `mod-import` (made-up disc images and models, broken files, the store; real disc with
+  `PE_TEST_RE2_DISC`), `mod-skin-build` and `mod-import-flow` (need `PE_TEST_DISC` and
+  `PE_TEST_RE2_DISC`; `PE_TEST_SKIN_REFERENCE` compares with tools/re2-skin's output).
 
 ## Collection (pe_collection) and Wardrobe (pe_wardrobe)
 

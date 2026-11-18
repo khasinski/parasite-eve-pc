@@ -3,7 +3,8 @@
 # pe_hello is the example mod; add it to the list to build it. Language packs
 # are available in standard builds, but the original text remains the default and no pack ships.
 # pe_fonts adds F1 > Font (Original, or a picture from mods/fonts/); Original is the default.
-set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone)
+set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone
+    pe_src_re2 pe_import)   # F1 > Import: source games first, then the page
 if(NOT PE_PS5_GAME)
     list(APPEND pe_default_mods pe_lang pe_fonts)
 endif()
@@ -42,6 +43,20 @@ if("pe_fonts" IN_LIST PE_MOD_LIST)
     add_dependencies(parasite-eve-pc pe-font-files)
 endif()
 
+# The importer core (design: Cross-Game Asset Import). Plain C, PC and PS5. Source games register
+# their readers from their own mods (pe_src_<game>); nothing here names a game.
+set(pe_import_core_sources
+    host/import/pe_imp_disc.c       # PS1 disc images: .cue / .bin / .iso, ISO 9660
+    host/import/pe_imp_json.c       # a small bounded JSON reader and writer (no cJSON on PS5)
+    host/import/pe_imp_sha256.c     # store keys
+    host/import/pe_imp_model.c      # the Model type: check, store, load
+    host/import/pe_imp_registry.c   # readers, file patterns, naming tables
+    host/import/pe_imp_store.c      # the extract-once store and the catalog
+    host/import/pe_imp_packs.c      # packs in the format the Wardrobe loads
+    host/import/pe_imp_pe_disc.c    # Aya's bundles and rooms from the player's PE disc images
+    host/import/pe_imp_pe_model.c   # PE models and animation rows: decode, encode, pose
+    host/import/pe_imp_pe_retarget.c)   # Aya's rows on another skeleton; the rows rooms install
+
 set(pe_debug_sources
     host/pe_debug_control.c
     host/debug/pe_debug_field.c
@@ -76,6 +91,7 @@ set(pe_host_sources
     host/pe_economy_policy.c
     host/pe_content_api.c
     host/pe_registry.c      # mods' definitions: collected at start, sealed, then read-only
+    ${pe_import_core_sources}   # the importer core: other games' disc images, import mode only
     ${pe_debug_sources}    # opt-in transport and independently compiled command modules
     host/pe_present.c       # image presenter: pictures pasted into the finished frame
     host/pe_disc_assets.c   # read-only game data from the player's disc (rooms)
@@ -119,7 +135,7 @@ if("pe_phone" IN_LIST PE_MOD_LIST)
 endif()
 
 add_library(pe-mods OBJECT ${pe_mod_sources} ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_list.c)
-target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host
+target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host host/import
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 target_compile_definitions(pe-mods PRIVATE __psyz)
 target_link_libraries(pe-mods PRIVATE psyz)
@@ -282,6 +298,29 @@ function(pe_feature_test name)
     endif()
     add_test(NAME mod-${name} COMMAND test-mod-${name})
 endfunction()
+if(BUILD_TESTING)
+    # Importer core and the RE2 reader on made-up data; PE_TEST_RE2_DISC adds the real disc.
+    pe_feature_test(import ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_test.c ${pe_import_core_sources}
+        pe_src_re2/pe_src_re2_pld.c)
+    target_include_directories(test-mod-import PRIVATE host/import pe_src_re2)
+    # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
+    pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_core_sources}
+        pe_src_re2/pe_src_re2_pld.c pe_wardrobe/pe_skin_build.c)
+    target_include_directories(test-mod-skin-build PRIVATE host/import pe_src_re2)
+    target_compile_definitions(test-mod-skin-build PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+    set_tests_properties(mod-skin-build PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+    if(TARGET pe_download_json AND TARGET pe_download_zip)
+        # F1 > Import's scan and build, then the Wardrobe's pack reader loading the result.
+        pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_core_sources}
+            pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2.c pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c
+            pe_wardrobe/pe_packs.c pe_import/pe_import_job.c)
+        target_include_directories(test-mod-import-flow PRIVATE host/import pe_src_re2 pe_import)
+        target_compile_definitions(test-mod-import-flow PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+        target_link_libraries(test-mod-import-flow PRIVATE pe_download_json pe_download_zip)
+        set_tests_properties(mod-import-flow PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
+            ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
+endif()
 if(BUILD_TESTING AND "pe_economy" IN_LIST PE_MOD_LIST)
     pe_feature_test(loot ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
     pe_feature_test(loot-parity ${PROJECT_SOURCE_DIR}/tests/pe_mod_loot_parity_test.c pe_economy/pe_econ_store.c pe_economy/pe_econ_config.c pe_economy/pe_econ_engine.c)
@@ -332,7 +371,9 @@ if(BUILD_TESTING AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
 endif()
 if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST AND "pe_wardrobe" IN_LIST PE_MOD_LIST)
     pe_feature_test(collection ${PROJECT_SOURCE_DIR}/tests/pe_mod_collection_test.c pe_collection/pe_collection.c pe_collection/pe_profile.c pe_collection/pe_bestiary.c pe_collection/pe_pack_pe1.c
-        pe_wardrobe/pe_wardrobe_mod.c pe_wardrobe/pe_wardrobe_profile.c pe_wardrobe/pe_wardrobe.c pe_wardrobe/pe_pack_pe1_costumes.c)
+        pe_wardrobe/pe_wardrobe_mod.c pe_wardrobe/pe_wardrobe_profile.c pe_wardrobe/pe_wardrobe.c pe_wardrobe/pe_pack_pe1_costumes.c
+        pe_wardrobe/pe_skin_target.c pe_wardrobe/pe_skin_build.c ${pe_import_core_sources})   # the Wardrobe registers the skins target
+    target_include_directories(test-mod-collection PRIVATE host/import)
     set_tests_properties(mod-collection PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 if(BUILD_TESTING AND "pe_collection" IN_LIST PE_MOD_LIST)
