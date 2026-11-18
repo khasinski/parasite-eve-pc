@@ -13,7 +13,8 @@
 
 typedef struct {
     char id[PE_IMP_ID_MAX];
-    PeImpSound *sound;
+    uint32_t type;
+    void *data;
     SDL_Thread *worker;
     SDL_AtomicInt result;
     unsigned refs;
@@ -35,7 +36,7 @@ static void reap(void)
             clip->worker = NULL;
         }
         if (!clip->refs && !clip->worker && clip->handle) {
-            free(clip->sound);
+            free(clip->data);
             memset(clip, 0, sizeof *clip);
         }
     }
@@ -52,19 +53,28 @@ static Clip *lookup(PeAssetHandle handle)
 static int load_clip(void *arg)
 {
     Clip *clip = arg;
-    int rc = pe_imp_catalog_sound(s_store, clip->id, &clip->sound, NULL, 0);
+    int rc;
+    if (clip->type == PE_IMP_SONG) {
+        PeImpSong *song;
+        rc = pe_imp_catalog_song(s_store, clip->id, &song, NULL, 0);
+        clip->data = song;
+    } else {
+        PeImpSound *sound;
+        rc = pe_imp_catalog_sound(s_store, clip->id, &sound, NULL, 0);
+        clip->data = sound;
+    }
     SDL_SetAtomicInt(&clip->result, rc ? -1 : 1);
     return 0;
 }
 
-static PeAssetHandle acquire_sound(const char *id)
+static PeAssetHandle acquire(const char *id, uint32_t type)
 {
     if (!pe_mod_active(MOD_ID) || !id || !*id || strlen(id) >= PE_IMP_ID_MAX) return 0;
     reap();
     Clip *empty = NULL;
     for (unsigned i = 0; i < SLOTS; ++i) {
         Clip *clip = &s_clips[i];
-        if (clip->handle && !strcmp(clip->id, id)) {
+        if (clip->handle && clip->type == type && !strcmp(clip->id, id)) {
             if (clip->refs == UINT32_MAX) return 0;
             ++clip->refs;
             return clip->handle;
@@ -76,6 +86,7 @@ static PeAssetHandle acquire_sound(const char *id)
     if (!++s_next) ++s_next;
     empty->handle = s_next;
     empty->refs = 1;
+    empty->type = type;
     empty->worker = SDL_CreateThread(load_clip, "pe_asset_clip", empty);
     if (!empty->worker) {
         memset(empty, 0, sizeof *empty);
@@ -83,6 +94,9 @@ static PeAssetHandle acquire_sound(const char *id)
     }
     return empty->handle;
 }
+
+static PeAssetHandle acquire_sound(const char *id) { return acquire(id, PE_IMP_SOUND); }
+static PeAssetHandle acquire_song(const char *id) { return acquire(id, PE_IMP_SONG); }
 
 static int status(PeAssetHandle handle)
 {
@@ -99,7 +113,8 @@ static void release(PeAssetHandle handle)
     reap();
 }
 
-static int list_sounds(const char *game, unsigned offset, PeAssetInfo *out, unsigned capacity)
+static int list_assets(const char *game, const char *type, unsigned offset,
+                       PeAssetInfo *out, unsigned capacity)
 {
     if (!pe_mod_active(MOD_ID) || !game || !*game || strlen(game) > 15 ||
         strlen(game) != strspn(game, "abcdefghijklmnopqrstuvwxyz0123456789-_") ||
@@ -109,7 +124,7 @@ static int list_sounds(const char *game, unsigned offset, PeAssetInfo *out, unsi
     int count = pe_imp_catalog_assets(s_store, game, &assets);
     unsigned written = 0;
     for (int i = 0; i < count && written < capacity; ++i) {
-        if (strcmp(assets[i].type, "Sound")) continue;
+        if (strcmp(assets[i].type, type)) continue;
         if (offset) { --offset; continue; }
         PeAssetInfo *info = &out[written++];
         snprintf(info->id, sizeof info->id, "%s", assets[i].id);
@@ -120,11 +135,44 @@ static int list_sounds(const char *game, unsigned offset, PeAssetInfo *out, unsi
     return count < 0 ? -1 : (int)written;
 }
 
+static int list_sounds(const char *game, unsigned offset, PeAssetInfo *out, unsigned capacity)
+{
+    return list_assets(game, "Sound", offset, out, capacity);
+}
+
+static int list_songs(const char *game, unsigned offset, PeAssetInfo *out, unsigned capacity)
+{
+    return list_assets(game, "Song", offset, out, capacity);
+}
+
+static int song_view(PeAssetHandle handle, PeSongView *out)
+{
+    if (!out) return -1;
+    memset(out, 0, sizeof *out);
+    int ready = status(handle);
+    if (ready != 1) return ready;
+    const Clip *clip = lookup(handle);
+    if (clip->type != PE_IMP_SONG) return -1;
+    const PeImpSong *song = clip->data;
+    const uint8_t *secondary = song->payload + song->seq_size[0];
+    const uint8_t *instruments = secondary + song->seq_size[1];
+    *out = (PeSongView){
+        .format = PE_SONG_PSX_SEQ_VAB,
+        .sequence = {song->payload, song->seq_size[1] ? secondary : NULL},
+        .sequence_size = {song->seq_size[0], song->seq_size[1]},
+        .instruments = instruments, .samples = instruments + song->instrument_size,
+        .instrument_size = song->instrument_size, .sample_size = song->sample_size
+    };
+    return 1;
+}
+
 static int preview_clip(PeAssetHandle handle)
 {
     int ready = status(handle);
     if (ready != 1) return ready;
-    const PeImpSound *sound = lookup(handle)->sound;
+    const Clip *clip = lookup(handle);
+    if (clip->type != PE_IMP_SOUND) return -1;
+    const PeImpSound *sound = clip->data;
     if (!s_preview || sound->rate != s_rate) {
         SDL_DestroyAudioStream(s_preview);
         SDL_AudioSpec spec = {.format = SDL_AUDIO_S16, .channels = 1, .freq = (int)sound->rate};
@@ -139,7 +187,10 @@ static int preview_clip(PeAssetHandle handle)
     return 1;
 }
 
-static const PeAssetsApi k_assets = {sizeof(PeAssetsApi), list_sounds, acquire_sound, status, release};
+static const PeAssetsApi k_assets = {
+    sizeof(PeAssetsApi), list_sounds, acquire_sound, status, release,
+    list_songs, acquire_song, song_view
+};
 static const PeAudioApi k_audio = {sizeof(PeAudioApi), preview_clip};
 
 static int init(void)
@@ -155,7 +206,7 @@ static void shutdown(void)
     s_preview = NULL;
     for (unsigned i = 0; i < SLOTS; ++i) {
         if (s_clips[i].worker) SDL_WaitThread(s_clips[i].worker, NULL);
-        free(s_clips[i].sound);
+        free(s_clips[i].data);
     }
     memset(s_clips, 0, sizeof s_clips);
 }

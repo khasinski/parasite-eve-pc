@@ -2,6 +2,20 @@
 
 Research baseline: `786ac4fd8`. This survey covers the tested local PS1 images and the importer at that commit. No game assets, captures, or extracted output are included.
 
+## RE2 music source implementation
+
+The RE2 PS1 `COMMON/SOUND/*.BGM` reader uses the footer offsets to preserve one or
+two sequences, followed by the VAB instrument header and sample data. It checks the
+ordering, signatures, VAB sizes, and sample spans before storing a bounded Song.
+The local disc survey found 108 containers on each original US disc and 114 on the
+US Dual Shock Disc 1. Those are source inventory counts. Playback has not been checked.
+
+F1 > Import > Music exposes the catalog with stable IDs such as `re2:music/main00`.
+The shared asset service lists songs and exposes immutable source data to builders.
+The next playback stage can render these assets offline for streaming, with PE scripts
+retaining their start, stop, and fade controls. Other games can register Song providers
+without changing the catalog browser.
+
 ## PC preview implementation
 
 Before the Gian reader was added, the Windows importer was tested with the local `External Games` folder on a clean

@@ -725,6 +725,11 @@ raw sample auditions at a fixed reference pitch. Dino Crisis (US) includes Gian 
 sample banks embedded in DAT archives. The shared asset and audio services also
 work with the Import UI disabled. See [the mod API](../docs/MOD_API.md#imported-sound-previews).
 
+**Music (PC).** F1 > Import > Music lists source songs after scanning an RE2 PS1
+disc. The reader preserves the main sequence, an optional secondary sequence, and the
+instrument bank and samples. This stage provides extraction and browsing. Playback
+requires a renderer and a prepared-track playback path.
+
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 

@@ -91,6 +91,21 @@ PeImpSound *pe_imp_sound_alloc(uint32_t rate, uint32_t frames);
 int pe_imp_sound_save(const PeImpSound *sound, const char *folder, char *why, size_t n);
 int pe_imp_sound_load(const char *folder, PeImpSound **sound, char *why, size_t n);
 
+/* Song stores a bounded source sequence and its instruments for the builder.
+ * Gameplay playback will use a prepared track. Payload order is main sequence,
+ * optional secondary sequence, instrument header, then samples. */
+#define PE_IMP_SONG_VERSION 1
+#define PE_IMP_SONG_MAX (2u << 20)
+enum { PE_IMP_SONG_PSX_SEQ_VAB = 1 };
+typedef struct {
+    uint32_t format, seq_size[2], instrument_size, sample_size;
+    uint8_t payload[];
+} PeImpSong;
+PeImpSong *pe_imp_song_alloc(uint32_t format, uint32_t main_size, uint32_t sub_size,
+                            uint32_t instrument_size, uint32_t sample_size);
+int pe_imp_song_save(const PeImpSong *song, const char *folder, char *why, size_t n);
+int pe_imp_song_load(const char *folder, PeImpSong **song, char *why, size_t n);
+
 /* ---- readers ---- */
 typedef struct PeImpSink PeImpSink;
 /* A reader hands each item it decodes to the sink: `proposed` is a local ID ("player/pl01"),
@@ -190,6 +205,7 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
 /* An asset's model from its first copy (PS1 first), loaded from the store. */
 int pe_imp_catalog_model(const char *root, const char *asset_id, PeImpModel *m, char *why, size_t n);
 int pe_imp_catalog_sound(const char *root, const char *asset_id, PeImpSound **sound, char *why, size_t n);
+int pe_imp_catalog_song(const char *root, const char *asset_id, PeImpSong **song, char *why, size_t n);
 /* A game's catalog entries, sorted by ID; *out is malloc'd (free it). */
 typedef struct {
     char id[PE_IMP_ID_MAX], name[PE_IMP_NAME_MAX], type[16], tags[64];

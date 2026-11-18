@@ -95,8 +95,8 @@ static void readers_signature(char *out, size_t size) {
         snprintf(out + u, size - u, "%s/%s/%s %u;", rd->game, rd->platform, rd->format, rd->version);
     }
     size_t u = strlen(out);
-    snprintf(out + u, size - u, "model %d sound %d naming %08x", PE_IMP_MODEL_VERSION, PE_IMP_SOUND_VERSION,
-             (unsigned)pe_imp_naming_hash());
+    snprintf(out + u, size - u, "model %d sound %d song %d naming %08x", PE_IMP_MODEL_VERSION, PE_IMP_SOUND_VERSION,
+             PE_IMP_SONG_VERSION, (unsigned)pe_imp_naming_hash());
 }
 
 static IndexEntry *index_find(Index *ix, const char *path) {

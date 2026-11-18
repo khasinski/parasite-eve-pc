@@ -219,6 +219,70 @@ static void sound_status(char *out, unsigned size) {
     snprintf(out, size, "%s", s_sound_status);
 }
 
+/* Song browsing uses the same paged catalog service as other mods. */
+static PeAssetInfo s_songs[SOUND_PAGE_SIZE + 1];
+static char s_music_games[SOUND_GAMES_MAX][16];
+static int s_music_games_count, s_music_game, s_music_loaded_game = -1;
+static int s_songs_count, s_song_pick, s_music_more;
+static unsigned s_music_offset, s_music_loaded_offset;
+
+static void music_rows(void) {
+    if (SDL_GetAtomicInt(&s_state) != 0) return;
+    if (s_music_loaded_game != s_music_game) s_music_offset = 0;
+    if (s_music_loaded_game == s_music_game && s_music_loaded_offset == s_music_offset) return;
+    const PeAssetsApi *assets = assets_api();
+    int got = assets && s_music_game >= 0 && s_music_game < s_music_games_count
+        ? assets->list_songs(s_music_games[s_music_game], s_music_offset, s_songs, SOUND_PAGE_SIZE + 1)
+        : 0;
+    s_music_more = got > SOUND_PAGE_SIZE;
+    s_songs_count = s_music_more ? SOUND_PAGE_SIZE : got > 0 ? got : 0;
+    s_song_pick = 0;
+    s_music_loaded_game = s_music_game;
+    s_music_loaded_offset = s_music_offset;
+}
+
+static unsigned music_game_count(void) {
+    poll();
+    return s_music_games_count ? (unsigned)s_music_games_count : 1;
+}
+
+static const char *music_game_name(unsigned i) {
+    return i < (unsigned)s_music_games_count ? pe_imp_game_title(s_music_games[i]) : "No music sources";
+}
+
+static unsigned song_count(void) {
+    poll();
+    music_rows();
+    return s_songs_count ? (unsigned)s_songs_count : 1;
+}
+
+static const char *song_name(unsigned i) {
+    return i < (unsigned)s_songs_count ? s_songs[i].name : "No imported tracks";
+}
+
+static void music_previous(void) {
+    music_rows();
+    if (!s_music_offset || SDL_GetAtomicInt(&s_state) != 0) return;
+    s_music_offset -= SOUND_PAGE_SIZE;
+    music_rows();
+}
+
+static void music_next(void) {
+    music_rows();
+    if (!s_music_more || SDL_GetAtomicInt(&s_state) != 0) return;
+    s_music_offset += SOUND_PAGE_SIZE;
+    music_rows();
+}
+
+static void music_source(char *out, unsigned size) {
+    music_rows();
+    if (s_song_pick < 0 || s_song_pick >= s_songs_count) {
+        snprintf(out, size, "%s", "Scan a supported disc to find tracks.");
+        return;
+    }
+    snprintf(out, size, "%s (source sequence)", s_songs[s_song_pick].id);
+}
+
 static void refresh(void) {
     char games[32][16];
     int ng = 0;
@@ -226,6 +290,8 @@ static void refresh(void) {
     s_nsounds = 0;
     s_sound_game_count = 0;
     s_sound_loaded_game = -1;
+    s_music_loaded_game = -1;
+    s_music_games_count = s_songs_count = 0;
     const PeAssetsApi *assets = assets_api();
     for (int r = 0; r < pe_imp_readers() && ng < 32; r++) {
         int seen = 0;
@@ -235,22 +301,28 @@ static void refresh(void) {
     for (int g = 0; g < ng; g++) {
         PeImpAsset *a;
         int n = pe_imp_catalog_assets(s_job.store, games[g], &a);
-        for (int i = 0; i < n && s_nitems < MAX_ITEMS; i++)
+        int has_sounds = 0, has_songs = 0;
+        for (int i = 0; i < n; i++) {
+            has_sounds |= !strcmp(a[i].type, "Sound");
+            has_songs |= !strcmp(a[i].type, "Song");
+            if (s_nitems == MAX_ITEMS || strcmp(a[i].type, "Model")) continue;
             for (int t = 0; t < pe_imp_targets(); t++) {
                 const PeImpTarget *tg = pe_imp_target(t);
-                uint32_t type = !strcmp(a[i].type, "Model") ? PE_IMP_MODEL : 0;
-                if (!(tg->consumes & type) || (tg->needs_rig && !pe_imp_rig_for(a[i].id))) continue;
+                if (!(tg->consumes & PE_IMP_MODEL) || (tg->needs_rig && !pe_imp_rig_for(a[i].id))) continue;
                 Item *it = &s_items[s_nitems++];
                 it->a = a[i], it->target = t;
                 snprintf(it->label, sizeof it->label, "%s (%s)", a[i].name, pe_imp_game_title(games[g]));
                 break;
             }
+        }
         free(a);
-        PeAssetInfo first;
-        if (assets && s_sound_game_count < SOUND_GAMES_MAX && assets->list_sounds(games[g], 0, &first, 1) == 1)
+        if (assets && has_sounds)
             snprintf(s_sound_games[s_sound_game_count++], sizeof s_sound_games[0], "%s", games[g]);
+        if (assets && has_songs)
+            snprintf(s_music_games[s_music_games_count++], sizeof s_music_games[0], "%s", games[g]);
     }
     if (s_sound_game >= s_sound_game_count) s_sound_game = 0;
+    if (s_music_game >= s_music_games_count) s_music_game = 0;
     if (s_pick >= s_nitems) s_pick = 0;
     s_listed = 1;
 }
@@ -489,6 +561,14 @@ static int import_init(void) {
         pe_menu_register_info("Sounds", "Page", "Current page of imported sounds.", sound_page);
         pe_menu_register_action("Sounds", "Preview sound", "Plays the selected sound once.", preview_sound);
         pe_menu_register_info("Sounds", "Preview", "Status of the selected preview.", sound_status);
+        pe_menu_page("Music", "Browse imported music sequences. Playback is pending.", 30);
+        pe_menu_register_dynamic_choice("Music", "Source game", "Choose a game with imported music.",
+                                        &s_music_game, SOUND_GAMES_MAX, music_game_count, music_game_name);
+        pe_menu_register_dynamic_choice("Music", "Track", "Choose an imported track from this page.",
+                                        &s_song_pick, SOUND_PAGE_SIZE, song_count, song_name);
+        pe_menu_register_action("Music", "Next page", "Show additional tracks.", music_next);
+        pe_menu_register_action("Music", "Previous page", "Return to the previous group of tracks.", music_previous);
+        pe_menu_register_info("Music", "From", "Catalog ID of the selected track.", music_source);
     }
     pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_LATE, MOD_ID);
     /* The game binds its discs before the mods start (main.c), so the first run starts now, on its

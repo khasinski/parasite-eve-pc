@@ -148,6 +148,19 @@ Handle missing services and verify `struct_size` before calling them.
 The service reads the existing import catalog and works with the Import UI disabled.
 Prepared pack entries, gameplay slots, and polyphonic mixing are future integration work.
 
+### Imported song sources
+
+The `assets` v1 table appends `list_songs`, `acquire_song`, and `song_view`.
+Use `struct_size` to check that the provider includes these fields. List by source game
+with the same paging contract as sounds. A song handle uses the same `status` and
+`release` operations as a sound handle.
+
+`song_view` returns a read-only view of the source representation. For
+`PE_SONG_PSX_SEQ_VAB` it includes up to two PlayStation sequences, a VAB instrument
+header, and the associated SPU sample bytes. Keep the handle while using the view.
+This interface serves import tooling and builders. The `audio` sound preview service
+accepts short PCM sound handles only.
+
 ## F1 menu rows
 
 Call `pe_menu_begin("Page")` first. Pass 0 to return to `PE Enhancements`. `sub` is a sub-page, which

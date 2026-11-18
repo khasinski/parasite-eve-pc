@@ -52,6 +52,7 @@ static unsigned schema_version(uint32_t type) {
     switch (type) {
     case PE_IMP_MODEL: return PE_IMP_MODEL_VERSION;
     case PE_IMP_SOUND: return PE_IMP_SOUND_VERSION;
+    case PE_IMP_SONG: return PE_IMP_SONG_VERSION;
     default: return 0;
     }
 }
@@ -60,11 +61,12 @@ static unsigned schema_version(uint32_t type) {
 static const char *schema_key(uint32_t types) {
     if (types == PE_IMP_MODEL) return "model_version";
     if (types == PE_IMP_SOUND) return "sound_version";
+    if (types == PE_IMP_SONG) return "song_version";
     return "schema_versions";
 }
 
 static unsigned schema_stamp(uint32_t types) {
-    if (types == PE_IMP_MODEL || types == PE_IMP_SOUND) return schema_version(types);
+    if (types == PE_IMP_MODEL || types == PE_IMP_SOUND || types == PE_IMP_SONG) return schema_version(types);
     unsigned stamp = 0;
     for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_TEXTSET; type <<= 1)
         if (types & type) stamp = (stamp * 31 + type + schema_version(type)) & 0x7fffffff;
@@ -81,6 +83,7 @@ static int save_obj(const Item *it, const char *folder, char *why, size_t n) {
     switch (it->type) {
     case PE_IMP_MODEL: return pe_imp_model_save(it->obj, folder, why, n);
     case PE_IMP_SOUND: return pe_imp_sound_save(it->obj, folder, why, n);
+    case PE_IMP_SONG: return pe_imp_song_save(it->obj, folder, why, n);
     default: return -1;
     }
 }
@@ -531,4 +534,11 @@ int pe_imp_catalog_sound(const char *root, const char *id, PeImpSound **out, cha
     *out = NULL;
     if (catalog_path(root, id, PE_IMP_SOUND, path, why, n)) return -1;
     return pe_imp_sound_load(path, out, why, n);
+}
+
+int pe_imp_catalog_song(const char *root, const char *id, PeImpSong **out, char *why, size_t n) {
+    char path[PE_IMP_PATH_MAX];
+    *out = NULL;
+    if (catalog_path(root, id, PE_IMP_SONG, path, why, n)) return -1;
+    return pe_imp_song_load(path, out, why, n);
 }

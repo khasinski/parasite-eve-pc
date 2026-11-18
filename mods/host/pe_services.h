@@ -41,12 +41,25 @@ typedef struct {
     char name[48];
     char tags[64];
 } PeAssetInfo;
+enum { PE_SONG_PSX_SEQ_VAB = 1 };
+typedef struct {
+    uint32_t format;
+    const uint8_t *sequence[2];       /* secondary is NULL when absent */
+    uint32_t sequence_size[2];
+    const uint8_t *instruments, *samples;
+    uint32_t instrument_size, sample_size;
+} PeSongView;
+
 typedef struct {
     uint32_t struct_size;
     int (*list_sounds)(const char *game, unsigned offset, PeAssetInfo *out, unsigned capacity);
     PeAssetHandle (*acquire_sound)(const char *source_id);
     int (*status)(PeAssetHandle handle);
     void (*release)(PeAssetHandle handle);
+    int (*list_songs)(const char *game, unsigned offset, PeAssetInfo *out, unsigned capacity);
+    PeAssetHandle (*acquire_song)(const char *source_id);
+    /* 1 ready, 0 pending, -1 unavailable. Pointers live until release. */
+    int (*song_view)(PeAssetHandle handle, PeSongView *out);
 } PeAssetsApi;
 
 typedef struct {
