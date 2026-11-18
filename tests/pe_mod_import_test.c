@@ -214,7 +214,9 @@ static void test_sound(void) {
     dirrec(&iso, "COMMON", 19, 2048, 1), sector_pad(&iso);
     dirrec(&iso, "SOUND", 20, 2048, 1), sector_pad(&iso);
     dirrec(&iso, "ARMS01.EDH;1", 21, sizeof header, 0);
-    dirrec(&iso, "ARMS01.VB;1", 23, sizeof vb, 0), sector_pad(&iso);
+    dirrec(&iso, "ARMS01.VB;1", 23, sizeof vb, 0);
+    dirrec(&iso, "ARMS02.EDH;1", 21, sizeof header, 0);
+    dirrec(&iso, "ARMS02.VB;1", 23, sizeof vb, 0), sector_pad(&iso);
     put(&iso, header, sizeof header), sector_pad(&iso);
     put(&iso, vb, sizeof vb), sector_pad(&iso);
 
@@ -223,7 +225,7 @@ static void test_sound(void) {
     CHECK(!pe_imp_mkdirs("pe-import-test/discs"));
     write_file(image, iso.b, iso.n);
     pe_imp_registry_reset();
-    CHECK(!pe_imp_add_reader(&g_re2_arms01_ps1));
+    CHECK(!pe_imp_add_reader(&g_re2_sound_ps1));
     PeImpScan scan;
     PeImpSound *clip;
     const char *id = "re2:sound/arms01/wave01";
@@ -231,7 +233,11 @@ static void test_sound(void) {
     CHECK(!pe_imp_catalog_sound(store, id, &clip, NULL, 0));
     CHECK(clip && clip->rate == 44100 && clip->frames == 28 && clip->pcm[0] == 4096 && clip->pcm[1] == -4096);
     free(clip);
-    CHECK(!pe_imp_scan(store, image, NULL, &scan) && scan.skipped == 1);
+    CHECK(!pe_imp_scan(store, image, NULL, &scan) && scan.skipped == 2);
+    /* Byte-identical banks with distinct names must keep both catalog IDs on a warm scan. */
+    CHECK(!pe_imp_catalog_sound(store, "re2:sound/arms02/wave01", &clip, NULL, 0));
+    CHECK(clip && clip->pcm[0] == 4096);
+    free(clip);
 
     /* Only the companion changed. The cached PCM must be replaced. */
     iso.b[23 * 2048 + 2] = 0xe2;
@@ -243,7 +249,7 @@ static void test_sound(void) {
 
     iso.b[23 * 2048] = 0xf0;
     write_file(image, iso.b, iso.n);
-    CHECK(!pe_imp_scan(store, image, NULL, &scan) && scan.refused == 1);
+    CHECK(!pe_imp_scan(store, image, NULL, &scan) && scan.refused == 2);
     CHECK(pe_imp_catalog_sound(store, id, &clip, NULL, 0) == -1 && !clip);
     free(iso.b);
 }
@@ -381,7 +387,7 @@ static void test_real_disc(void) {
     pe_imp_registry_reset();
     pe_imp_add_reader(&g_re2_pld_ps1);
     pe_imp_set_naming("re2", g_re2_naming);
-    CHECK(!pe_imp_add_reader(&g_re2_arms01_ps1));
+    CHECK(!pe_imp_add_reader(&g_re2_sound_ps1));
     PeImpScan sc;
     int rc = pe_imp_scan("pe-import-test/real-store", cue, NULL, &sc);
     printf("real disc: game %s, %d files read, %d items, %d skipped, %d refused %s\n",

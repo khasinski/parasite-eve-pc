@@ -100,7 +100,7 @@ typedef int (*PeImpReadFn)(const uint8_t *data, uint32_t size, const char *path,
                            char *why, size_t n);
 typedef int (*PeImpReadPairFn)(const uint8_t *primary, uint32_t primary_size,
                                const uint8_t *companion, uint32_t companion_size,
-                               PeImpSink *sink, char *why, size_t n);
+                               const char *path, PeImpSink *sink, char *why, size_t n);
 typedef struct {
     PeImpApi api;                             /* {PE_IMP_API_VERSION, sizeof(PeImpReader)} */
     const char *game, *platform, *format;     /* "re2", "ps1", "pld" */
@@ -109,7 +109,7 @@ typedef struct {
     const char *match;                        /* file pattern, '?' one char, '*' within a folder */
     const char *tags;                         /* "human player", copied into the catalog */
     PeImpReadFn read;
-    const char *companion;                    /* exact ISO path for a paired reader */
+    const char *companion;                    /* exact ISO path, or .extension to pair by stem */
     PeImpReadPairFn read_pair;                /* both inputs participate in the store key */
 } PeImpReader;
 int pe_imp_add_reader(const PeImpReader *r); /* 0, or -1 (bad, duplicate, full) */

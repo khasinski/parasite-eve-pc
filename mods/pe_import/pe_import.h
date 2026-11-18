@@ -21,7 +21,7 @@ typedef struct {
     const PeImpProgress *progress;    /* the job: "reading <disc>" i of n, "building <name>" k of m */
     const PeImpProgress *step;        /* inside a build: its steps and the room scan */
     /* results; unchanged: disc images skipped because nothing changed since they were last looked at */
-    int discs_read, unknown, failed, models, built, current, missing, unchanged;
+    int discs_read, unknown, failed, items, built, current, missing, unchanged;
     char games[200], problem[240], built_names[400], missing_discs[400];
 } PeImportJob;
 void pe_import_job_run(PeImportJob *j);

@@ -406,7 +406,7 @@ Service definitions live in `host/pe_services.h`, never in a mod's folder: `junk
 `catalog` and `rebuild` v1 (pe_catalog), `keys` v1 (pe_qol), `bestiary` v1 (pe_collection), `wardrobe` and
 `costumes` v1 (pe_wardrobe).
 
-The shared registry (host/pe_registry.h; bridge findings D6 §11) is for mods' definitions that
+The shared registry (host/pe_registry.h; bridge findings D6 Â§11) is for mods' definitions that
 other mods build on: custom content, equipment effects, Catalog entries and shop offers. During
 its init a mod declares batches (`pe_reg_batch`) and submits entries (`pe_reg_submit`) under its
 own namespace, "<mod id>/<name>"; it gets a receipt, not a definition. Once every mod has started
@@ -414,7 +414,7 @@ the host seals the registry: limits, keys declared twice (every claimant fails, 
 references and batch requirements, to a fixed point, the same whatever order mods start in. Then
 `pe_reg_find`, `pe_reg_count` / `pe_reg_key` (canonical order) and `pe_reg_batch_result` (with the
 reason) answer; nothing new is accepted until the next start. No mod uses it yet.
-`tests/pe_mod_registry_test.c` runs the D6 §11.6 examples. Events: `play.log` (every pe_log row), `save.committed` (the host: a card save was published), `bestiary.unlock`, `wardrobe.worn`, `phone.call_start` / `phone.call_end`.
+`tests/pe_mod_registry_test.c` runs the D6 Â§11.6 examples. Events: `play.log` (every pe_log row), `save.committed` (the host: a card save was published), `bestiary.unlock`, `wardrobe.worn`, `phone.call_start` / `phone.call_end`.
 A mod that registers into another mod's service at init lists that mod in its `requires`.
 
 ## The Mods panel
@@ -718,11 +718,11 @@ Scan again reruns it.
   same pack id and folder names as tools/re2-skin, so keys such as `re2-local/claire.re2` match).
   The Wardrobe loads it at the next start.
 
-**Sounds (PC).** F1 > Import > Sounds lists six waveforms from the RE2 PS1 ARMS01
-bank after scanning a supported disc. Select a waveform and choose **Preview sound**.
-These are auditions at a fixed reference pitch. The `pe_assets` mod supplies the shared
-`assets` and `audio` services, which can also audition clips from the existing catalog
-with the Import UI disabled. See [the mod API](../docs/MOD_API.md#imported-sound-previews).
+**Sounds (PC).** F1 > Import > Sounds lists waveforms from scanned copies of Resident Evil
+Director's Cut, Resident Evil 2, Resident Evil 3, Dino Crisis, and Final Fantasy VII. Choose
+a source game, browse the pages, select a waveform, and choose **Preview sound**. These are
+raw sample auditions at a fixed reference pitch. The shared asset and audio services also
+work with the Import UI disabled. See [the mod API](../docs/MOD_API.md#imported-sound-previews).
 
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
@@ -751,7 +751,7 @@ from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 ## Collection (pe_collection) and Wardrobe (pe_wardrobe)
 
 F1 > PE Enhancements > Collection and Wardrobe. Cosmetic and information only; Junk comes from the
-economy's `junk` service. Two mods since November 2026 (bridge findings D8 §12, D9): the
+economy's `junk` service. Two mods since November 2026 (bridge findings D8 Â§12, D9): the
 Collection is the Bestiary, the Wardrobe the costumes; neither needs the other. Each is a
 registry: its creatures or costumes come from packs, and Parasite Eve's own are just the first
 pack (`pe_collection/pe_pack_pe1.c`, `pe_wardrobe/pe_pack_pe1_costumes.c`). Other mods (an import
@@ -825,7 +825,7 @@ In pe_wardrobe/:
   23-part row (300 bytes, not the jacket-only minimum of 372). In the bridge generator, check
   `FP_BYTES` and invalidate `tools/pe_assets/skins/room_rows.pkl` before rebuilding; changing the
   threshold alone keeps the old cached set. The generator must also collect the bank 11 bundle
-  rows 28–34 (image entry 19), not only rows installed by room archives: none of those seven
+  rows 28â€“34 (image entry 19), not only rows installed by room archives: none of those seven
   fingerprints occurs in the room-only scan of either US disc. Updated `rooms.bin` copies are required as well as
   the loader fix: updating the game executable does not repair existing skin assets.
 - `pe_wardrobe_menu.c`: a Wardrobe row in Aya's main menu (icon: the Equip Armor icon, twice) once a
@@ -849,8 +849,8 @@ In pe_wardrobe/:
   rules, on by default) restricts wearing to owned or free costumes, bought with Junk. With the
   rule off, or no such mod running, every installed costume can be worn and nothing is bought or
   written as owned. What Aya wears follows a rule change at the next room load only; a costume the
-  rule locks comes off there with its key kept (bridge findings D8 §12).
-- `pe_packs.c`: character packs (bridge findings D8 §3, format v1) dropped in
+  rule locks comes off there with its key kept (bridge findings D8 Â§12).
+- `pe_packs.c`: character packs (bridge findings D8 Â§3, format v1) dropped in
   `<preferences>/packs/` as a plain zip or the same layout unzipped: `pack.json` (`format` 1, `id`
   of a-z / 0-9 / -, at most 31, `kind` "assets"), `LICENSE`, and `characters/<folder>/` with
   `character.json` (`name`, `group`, `tier`: extra, outfit, supporting, main or special) and the

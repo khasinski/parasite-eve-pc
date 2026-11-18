@@ -297,10 +297,12 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
     char sha[65], dir[PE_IMP_PATH_MAX], p[PE_IMP_PATH_MAX], why[200] = "";
     pe_imp_sha256_hex(data, size, sha);
     if (rd->read_pair) {
-        char pair[128], secondary[65];
+        char pair[192], secondary[65], logical_path[65];
         pe_imp_sha256_hex(companion, companion_size, secondary);
+        pe_imp_sha256_hex((const uint8_t *)path, strlen(path), logical_path);
         memcpy(pair, sha, 64);
         memcpy(pair + 64, secondary, 64);
+        memcpy(pair + 128, logical_path, 64);
         pe_imp_sha256_hex((const uint8_t *)pair, sizeof pair, sha);
     }
     snprintf(dir, sizeof dir, "%s/%s/%s", root, rd->game, sha);
@@ -308,7 +310,7 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
     PeImpSink *sink = calloc(1, sizeof *sink);
     if (!sink) return -1;
     int rc = rd->read_pair
-        ? rd->read_pair(data, size, companion, companion_size, sink, why, sizeof why)
+        ? rd->read_pair(data, size, companion, companion_size, path, sink, why, sizeof why)
         : rd->read(data, size, path, sink, why, sizeof why);
     if (!rc && pe_imp_mkdirs(dir)) rc = -1, snprintf(why, sizeof why, "can't create the store folder");
     snprintf(p, sizeof p, "%s/items.json", dir);
@@ -416,12 +418,22 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
         uint8_t *companion = NULL;
         uint32_t companion_size = 0;
         if (rd->companion) {
-            int index = pe_imp_disc_find(d, rd->companion);
+            char sibling[PE_IMP_PATH_MAX];
+            const char *name = rd->companion;
+            if (name[0] == '.') {
+                const char *dot = strrchr(path, '.');
+                const char *slash = strrchr(path, '/');
+                if (!dot || (slash && dot < slash) ||
+                    snprintf(sibling, sizeof sibling, "%.*s%s", (int)(dot - path), path, name) >= (int)sizeof sibling)
+                    sibling[0] = 0;
+                name = sibling;
+            }
+            int index = pe_imp_disc_find(d, name);
             if (index < 0 || pe_imp_disc_size(d, index) == 0 ||
                 pe_imp_disc_read(d, index, &companion, &companion_size, why, sizeof why)) {
                 out->refused++;
                 snprintf(out->last_error, sizeof out->last_error, "%s: can't read companion %s",
-                         path, rd->companion);
+                         path, name);
                 free(data);
                 continue;
             }

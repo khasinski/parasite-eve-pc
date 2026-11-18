@@ -201,7 +201,7 @@ static void scan(PeImportJob *j) {
         if (!rc && sc.refused) { j->failed++, snprintf(j->problem, sizeof j->problem, "%s", sc.last_error); continue; }
         index_put(&ix, f->path[i], size, mtime, rc ? "" : sc.game);     /* read, or looked at and not supported */
         if (unsupported) { j->unknown++; continue; }
-        j->discs_read++, j->models += sc.items + sc.skipped;
+        j->discs_read++, j->items += sc.items + sc.skipped;
         add_once(j->games, sizeof j->games, pe_imp_game_title(sc.game));
     }
     index_save(j, &ix);
@@ -294,7 +294,7 @@ static void build_autos(PeImportJob *j) {
 }
 
 void pe_import_job_run(PeImportJob *j) {
-    j->discs_read = j->unknown = j->failed = j->models = j->built = j->current = j->missing = j->unchanged = 0;
+    j->discs_read = j->unknown = j->failed = j->items = j->built = j->current = j->missing = j->unchanged = 0;
     j->games[0] = j->problem[0] = j->built_names[0] = j->missing_discs[0] = 0;
     scan(j);
     build_autos(j);

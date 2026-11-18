@@ -4,10 +4,31 @@ Research baseline: `786ac4fd8`. This survey covers the tested local PS1 images a
 
 ## PC preview implementation
 
-The first implementation registers the ARMS01 reader, stores six bounded PCM clips, and
-publishes preview services through the independent asset mod. F1 uses these services to
-browse and audition. An isolated service test exercises the same API with generated sound
-and no Import UI. The broader runtime pack and slot contract below remains the design target.
+The Windows importer was tested with the local `External Games` folder on a clean
+profile. The game cataloged 778 Sound entries, using the same public services for all
+sources. F1 > Import > Sounds offers a source game selector and pages of 64 samples.
+
+| Game | Cataloged samples | Verified extraction path |
+| --- | ---: | --- |
+| Resident Evil Director's Cut Dual Shock | 141 | 35 `PSXUSA/SOUND` HED/VB pairs using the shared VAB reader |
+| Resident Evil 2 | 243 | EDH/VB pairs under `COMMON/SOUND` across the original and Dual Shock discs |
+| Resident Evil 3 | 298 | 34 VH/VB pairs under `CD_DATA/SOUND`, split at each waveform's flag-7 terminator |
+| Dino Crisis | 3 | Embedded VAB in the US `PSX/DATA/ST60E.DAT` room archive |
+| Final Fantasy VII | 93 | Instrument sample addresses in `SOUND/INSTR.DAT` and their waveforms in `INSTR.ALL`, identical across the three discs |
+| Dino Crisis 2 | 0 | Offline probe decoded non-silent XA PCM from channel 14 of `STAGE00.XAS`. The game importer still needs raw sectors, channel and clip boundaries, and a first content check. |
+
+The Dino Crisis XA probe also decoded a channel from its `STAGE00.XAS`. XA and raw SPU
+are separate formats. The shared SPU decoder handles the bank providers in the table.
+For the remaining XA work, preserve the duplicated Mode 2 subheader, demultiplex by
+file and channel, and check stream boundaries before assigning catalog IDs. The probe
+decoded 48 sectors with FFmpeg in memory and wrote no audio files.
+
+FFVII's entries are instrument waveforms. Its effect sequences and music tracks still
+need their own playback or rendering path. The instrument layout was cross-checked against
+[the sample bank format](https://wiki.ffrtt.ru/index.php/FF7/PSX/Sound/INSTRx.ALL) and
+[the instrument index format](https://wiki.ffrtt.ru/index.php?title=FF7%2FPSX%2FSound%2FINSTRx.DAT).
+The imported waveforms use a fixed audition pitch. Native event bindings and interactive
+F1 playback were outside the headless verification.
 
 ## First implementation target: one Resident Evil 2 sound effect
 

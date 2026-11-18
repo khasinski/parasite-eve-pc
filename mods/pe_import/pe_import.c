@@ -112,8 +112,13 @@ static void text_folders(char *out, unsigned size) {
 typedef struct { PeImpAsset a; char label[96]; int target; } Item;
 static Item s_items[MAX_ITEMS];
 static int s_nitems, s_pick, s_listed;
-static PeAssetInfo s_sounds[MAX_ITEMS];
-static int s_nsounds, s_sound_pick;
+enum { SOUND_PAGE_SIZE = 64, SOUND_GAMES_MAX = 32 };
+static PeAssetInfo s_sounds[SOUND_PAGE_SIZE + 1];
+static char s_sound_games[SOUND_GAMES_MAX][16];
+static int s_nsounds, s_sound_pick, s_sound_game_count, s_sound_game;
+static int s_sound_loaded_game = -1, s_sound_more;
+static unsigned s_sound_loaded_offset;
+static unsigned s_sound_offset;
 static PeAssetHandle s_preview;
 static const PeAssetsApi *s_preview_assets;
 static char s_sound_status[80] = "Select a sound to preview.";
@@ -129,9 +134,59 @@ static void release_preview(void) {
     s_preview_assets = NULL;
 }
 
+static void sound_rows(void) {
+    if (SDL_GetAtomicInt(&s_state) != 0) return;
+    if (s_sound_loaded_game != s_sound_game) {
+        release_preview();
+        s_sound_offset = 0;
+    }
+    if (s_sound_loaded_game == s_sound_game && s_sound_offset == s_sound_loaded_offset) return;
+    const PeAssetsApi *assets = assets_api();
+    int got = assets && s_sound_game >= 0 && s_sound_game < s_sound_game_count
+        ? assets->list_sounds(s_sound_games[s_sound_game], s_sound_offset,
+                             s_sounds, SOUND_PAGE_SIZE + 1)
+        : 0;
+    s_sound_more = got > SOUND_PAGE_SIZE;
+    s_nsounds = s_sound_more ? SOUND_PAGE_SIZE : got > 0 ? got : 0;
+    s_sound_pick = 0;
+    s_sound_loaded_game = s_sound_game;
+    s_sound_loaded_offset = s_sound_offset;
+}
+
 static unsigned sound_count(void) {
     poll();
+    sound_rows();
     return s_nsounds ? (unsigned)s_nsounds : 1;
+}
+
+static unsigned sound_game_count(void) {
+    poll();
+    return s_sound_game_count ? (unsigned)s_sound_game_count : 1;
+}
+
+static const char *sound_game_name(unsigned i) {
+    return i < (unsigned)s_sound_game_count ? pe_imp_game_title(s_sound_games[i]) : "No sound sources";
+}
+
+static void sound_next(void) {
+    sound_rows();
+    if (!s_sound_more || SDL_GetAtomicInt(&s_state) != 0) return;
+    release_preview();
+    s_sound_offset += SOUND_PAGE_SIZE;
+    sound_rows();
+}
+
+static void sound_previous(void) {
+    sound_rows();
+    if (!s_sound_offset || SDL_GetAtomicInt(&s_state) != 0) return;
+    release_preview();
+    s_sound_offset -= SOUND_PAGE_SIZE;
+    sound_rows();
+}
+
+static void sound_page(char *out, unsigned size) {
+    sound_rows();
+    snprintf(out, size, "%u%s", 1 + s_sound_offset / SOUND_PAGE_SIZE, s_sound_more ? " (more available)" : "");
 }
 
 static const char *sound_name(unsigned i) {
@@ -139,6 +194,7 @@ static const char *sound_name(unsigned i) {
 }
 
 static void preview_sound(void) {
+    sound_rows();
     release_preview();
     if (s_sound_pick < 0 || s_sound_pick >= s_nsounds || SDL_GetAtomicInt(&s_state) != 0) {
         snprintf(s_sound_status, sizeof s_sound_status, "Scan a supported disc first.");
@@ -151,6 +207,7 @@ static void preview_sound(void) {
 
 static void sound_status(char *out, unsigned size) {
     poll();
+    sound_rows();
     if (s_preview) {
         const PeAudioApi *audio = pe_service_get("audio", 1);
         int rc = audio && audio->struct_size >= sizeof *audio ? audio->preview_clip(s_preview) : -1;
@@ -167,6 +224,8 @@ static void refresh(void) {
     int ng = 0;
     s_nitems = 0;
     s_nsounds = 0;
+    s_sound_game_count = 0;
+    s_sound_loaded_game = -1;
     const PeAssetsApi *assets = assets_api();
     for (int r = 0; r < pe_imp_readers() && ng < 32; r++) {
         int seen = 0;
@@ -187,12 +246,11 @@ static void refresh(void) {
                 break;
             }
         free(a);
-        if (assets && s_nsounds < MAX_ITEMS) {
-            int got = assets->list_sounds(games[g], 0, s_sounds + s_nsounds, MAX_ITEMS - s_nsounds);
-            if (got > 0) s_nsounds += got;
-        }
+        PeAssetInfo first;
+        if (assets && s_sound_game_count < SOUND_GAMES_MAX && assets->list_sounds(games[g], 0, &first, 1) == 1)
+            snprintf(s_sound_games[s_sound_game_count++], sizeof s_sound_games[0], "%s", games[g]);
     }
-    if (s_sound_pick >= s_nsounds) s_sound_pick = 0;
+    if (s_sound_game >= s_sound_game_count) s_sound_game = 0;
     if (s_pick >= s_nitems) s_pick = 0;
     s_listed = 1;
 }
@@ -422,8 +480,13 @@ static int import_init(void) {
     pe_menu_register_info("Build by hand", "Last build", "What the last build did.", text_build);
     if (pe_mod_requested("pe_assets")) {
         pe_menu_page("Sounds", "Audition short sounds from your scanned discs.", 20);
-        pe_menu_register_dynamic_choice("Sounds", "Sound", "Choose an imported sound.", &s_sound_pick,
-                                        MAX_ITEMS, sound_count, sound_name);
+        pe_menu_register_dynamic_choice("Sounds", "Source game", "Choose a game with imported sounds.",
+                                        &s_sound_game, SOUND_GAMES_MAX, sound_game_count, sound_game_name);
+        pe_menu_register_dynamic_choice("Sounds", "Sound", "Choose an imported sound from this page.",
+                                        &s_sound_pick, SOUND_PAGE_SIZE, sound_count, sound_name);
+        pe_menu_register_action("Sounds", "Next page", "Show additional sounds.", sound_next);
+        pe_menu_register_action("Sounds", "Previous page", "Return to the previous group of sounds.", sound_previous);
+        pe_menu_register_info("Sounds", "Page", "Current page of imported sounds.", sound_page);
         pe_menu_register_action("Sounds", "Preview sound", "Plays the selected sound once.", preview_sound);
         pe_menu_register_info("Sounds", "Preview", "Status of the selected preview.", sound_status);
     }

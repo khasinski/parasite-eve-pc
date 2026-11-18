@@ -155,8 +155,8 @@ int main(void) {
     pe_import_job_run(&j);
     printf("  progress: %d discs read reported, %d builds, %d build steps, %d room-scan reports\n", s_reading, s_building, s_steps, s_rooms);
     assert(s_reading >= 1 && s_building == 1 && s_steps == 3 && s_rooms >= 90);   /* 900 rooms, every 10th */
-    printf("first run: %d disc(s) (%s), %d models, built %d (%s), current %d, missing %d (%s)%s%s\n", j.discs_read, j.games,
-           j.models, j.built, j.built_names, j.current, j.missing, j.missing_discs, j.failed ? ", problem: " : "", j.problem);
+    printf("first run: %d disc(s) (%s), %d catalog items, built %d (%s), current %d, missing %d (%s)%s%s\n", j.discs_read, j.games,
+           j.items, j.built, j.built_names, j.current, j.missing, j.missing_discs, j.failed ? ", problem: " : "", j.problem);
     assert(j.discs_read == 1 && !j.failed && j.built == 1 && j.current == 0 && j.missing == 6);
     assert(strstr(j.built_names, "Claire") && strstr(j.missing_discs, "disc 1"));
 
