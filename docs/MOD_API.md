@@ -158,8 +158,16 @@ with the same paging contract as sounds. A song handle uses the same `status` an
 `song_view` returns a read-only view of the source representation. For
 `PE_SONG_PSX_SEQ_VAB` it includes up to two PlayStation sequences, a VAB instrument
 header, and the associated SPU sample bytes. Keep the handle while using the view.
-This interface serves import tooling and builders. The `audio` sound preview service
-accepts short PCM sound handles only.
+This interface serves import tooling and builders.
+
+To play a song, the `audio` v1 table appends `play_song`, `stop_song` and `song_playing`
+(check `struct_size`). Pass a song handle to `play_song` once its `status` is ready: it
+returns 1 when the song is playing on its own stream, looping until `stop_song`, 0 while the
+handle is still loading, and -1 when the song can't be played. The service keeps its own copy,
+so release the handle once `play_song` returns 1. One song plays at a time; a new one replaces
+it. To render a song yourself (offline, or on a platform without the service), use
+`mods/host/import/pe_imp_seq.h`: `pe_imp_seq_open` on the view's main sequence, instruments and
+samples, then `pe_imp_seq_render` for 44.1 kHz stereo PCM.
 
 ## F1 menu rows
 

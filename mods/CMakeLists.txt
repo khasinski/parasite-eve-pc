@@ -55,6 +55,7 @@ set(pe_import_core_sources
     host/import/pe_imp_sound.c      # the Sound type: bounded PCM
     host/import/pe_imp_song.c       # the Song type: sequenced source music
     host/import/pe_imp_spu.c        # shared PS1 sound decoder
+    host/import/pe_imp_seq.c        # PS1 sequences (SEQ + VAB) played as PCM
     host/import/pe_imp_registry.c   # readers, file patterns, naming tables
     host/import/pe_imp_store.c      # the extract-once store and the catalog
     host/import/pe_imp_packs.c      # packs in the format the Wardrobe loads
@@ -325,6 +326,10 @@ if(BUILD_TESTING)
     pe_feature_test(dc1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_dc1_test.c ${pe_import_core_sources}
         pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c)
     target_include_directories(test-mod-dc1 PRIVATE host/import pe_src_dc1)
+    # Music playback on made-up songs; PE_TEST_RE2_DISC adds RE2's MAIN00 (PE_TEST_SEQ_WAV writes it out).
+    pe_feature_test(seq ${PROJECT_SOURCE_DIR}/tests/pe_mod_seq_test.c ${pe_import_core_sources}
+        pe_src_re2/pe_src_re2_music.c)
+    target_include_directories(test-mod-seq PRIVATE host/import pe_src_re2)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
     pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_core_sources}
         pe_src_re2/pe_src_re2_pld.c pe_wardrobe/pe_skin_build.c)

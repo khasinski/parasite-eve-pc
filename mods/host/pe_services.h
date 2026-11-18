@@ -65,6 +65,12 @@ typedef struct {
 typedef struct {
     uint32_t struct_size;
     int (*preview_clip)(PeAssetHandle handle); /* 1 queued, 0 pending, -1 unavailable */
+    /* Songs (added after preview_clip: check struct_size). play_song starts the song on its own
+     * stream, looping, replacing any playing one: 1 playing, 0 pending, -1 unavailable (the
+     * handle may be released once it returns 1). stop_song stops it; song_playing: 1 or 0. */
+    int (*play_song)(PeAssetHandle handle);
+    void (*stop_song)(void);
+    int (*song_playing)(void);
 } PeAudioApi;
 
 /* Economy armor effects, in the game's unused armor effect numbers 17-20. */

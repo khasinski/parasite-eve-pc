@@ -274,6 +274,56 @@ static void music_next(void) {
     music_rows();
 }
 
+/* playing a track: load it on the asset service's worker, then start it from the status row */
+static PeAssetHandle s_song;
+static char s_song_name[48], s_music_status[96] = "Choose a track and play it.";
+
+static const PeAudioApi *audio_api(void) {
+    const PeAudioApi *a = pe_service_get("audio", 1);
+    return a && a->struct_size >= sizeof *a ? a : NULL;
+}
+
+static void release_song(void) {
+    const PeAssetsApi *assets = assets_api();
+    if (s_song && assets) assets->release(s_song);
+    s_song = 0;
+}
+
+static void play_track(void) {
+    music_rows();
+    release_song();
+    const PeAssetsApi *assets = assets_api();
+    if (s_song_pick < 0 || s_song_pick >= s_songs_count || !assets || !audio_api()) {
+        snprintf(s_music_status, sizeof s_music_status, "Scan a disc with music first.");
+        return;
+    }
+    s_song = assets->acquire_song(s_songs[s_song_pick].id);
+    snprintf(s_song_name, sizeof s_song_name, "%s", s_songs[s_song_pick].name);
+    snprintf(s_music_status, sizeof s_music_status, s_song ? "Loading %s..." : "%s is unavailable.", s_song_name);
+}
+
+static void stop_track(void) {
+    release_song();
+    const PeAudioApi *audio = audio_api();
+    if (audio) audio->stop_song();
+    snprintf(s_music_status, sizeof s_music_status, "Stopped.");
+}
+
+static void music_status(char *out, unsigned size) {
+    const PeAudioApi *audio = audio_api();
+    if (s_song && audio) {
+        int rc = audio->play_song(s_song);
+        if (rc) {
+            snprintf(s_music_status, sizeof s_music_status, rc > 0 ? "Playing %s (loops until stopped)" : "%s couldn't be played.",
+                     s_song_name);
+            release_song();
+        }
+    } else if (audio && !audio->song_playing() && !strncmp(s_music_status, "Playing", 7)) {
+        snprintf(s_music_status, sizeof s_music_status, "%s ended.", s_song_name);
+    }
+    snprintf(out, size, "%s", s_music_status);
+}
+
 static void music_source(char *out, unsigned size) {
     music_rows();
     if (s_song_pick < 0 || s_song_pick >= s_songs_count) {
@@ -561,7 +611,7 @@ static int import_init(void) {
         pe_menu_register_info("Sounds", "Page", "Current page of imported sounds.", sound_page);
         pe_menu_register_action("Sounds", "Preview sound", "Plays the selected sound once.", preview_sound);
         pe_menu_register_info("Sounds", "Preview", "Status of the selected preview.", sound_status);
-        pe_menu_page("Music", "Browse imported music sequences. Playback is pending.", 30);
+        pe_menu_page("Music", "Listen to music from your scanned discs, played from the game's own sequences and instruments.", 30);
         pe_menu_register_dynamic_choice("Music", "Source game", "Choose a game with imported music.",
                                         &s_music_game, SOUND_GAMES_MAX, music_game_count, music_game_name);
         pe_menu_register_dynamic_choice("Music", "Track", "Choose an imported track from this page.",
@@ -569,6 +619,9 @@ static int import_init(void) {
         pe_menu_register_action("Music", "Next page", "Show additional tracks.", music_next);
         pe_menu_register_action("Music", "Previous page", "Return to the previous group of tracks.", music_previous);
         pe_menu_register_info("Music", "From", "Catalog ID of the selected track.", music_source);
+        pe_menu_register_action("Music", "Play track", "Plays the selected track, looping, until you stop it.", play_track);
+        pe_menu_register_action("Music", "Stop", "Stops the track that's playing.", stop_track);
+        pe_menu_register_info("Music", "Playback", "What's playing.", music_status);
     }
     pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_LATE, MOD_ID);
     /* The game binds its discs before the mods start (main.c), so the first run starts now, on its
@@ -581,6 +634,7 @@ static int import_init(void) {
 
 static void import_shutdown(void) {
     release_preview();
+    release_song();
     if (s_thread) SDL_WaitThread(s_thread, NULL), s_thread = NULL;  /* never leave a build half-written */
     if (s_lock) SDL_DestroyMutex(s_lock), s_lock = NULL;
 }

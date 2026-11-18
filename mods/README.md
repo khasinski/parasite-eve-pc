@@ -727,8 +727,14 @@ work with the Import UI disabled. See [the mod API](../docs/MOD_API.md#imported-
 
 **Music (PC).** F1 > Import > Music lists source songs after scanning an RE2 PS1
 disc. The reader preserves the main sequence, an optional secondary sequence, and the
-instrument bank and samples. This stage provides extraction and browsing. Playback
-requires a renderer and a prepared-track playback path.
+instrument bank and samples. Choose a track and **Play track**: it plays from the game's own
+sequence and instruments, looping until **Stop**. `host/import/pe_imp_seq.c` renders a PS1
+sequence (SEQ) on its bank (VAB) to 44.1 kHz stereo: programs and key-split tones, the SPU's
+ADSR envelope, pitch bend, volume, pan and expression, and the sequence's loop marks; reverb
+isn't modelled. Plain C, so the same renderer can prepare tracks offline for in-game use later;
+on PC the audio service (`play_song`, `stop_song`, `song_playing`) pulls it from an SDL stream.
+`mod-seq` tests it on made-up songs, and on RE2's MAIN00 with `PE_TEST_RE2_DISC`
+(`PE_TEST_SEQ_WAV` writes what it rendered to a WAV file).
 
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).

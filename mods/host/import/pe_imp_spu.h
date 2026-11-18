@@ -4,6 +4,9 @@
 
 enum { PE_IMP_SPU_BLOCK = 16, PE_IMP_SPU_FRAMES = 28 };
 
+/* bytes / 16 * 28 frames into dst, ignoring loop flags; -1 on a bad block */
+int pe_imp_spu_decode(const uint8_t *src, uint32_t bytes, int16_t *dst);
+
 int pe_imp_spu_emit(PeImpSink *sink, const char *bank, unsigned wave,
                     const uint8_t *data, uint32_t bytes, char *why, size_t n);
 int pe_imp_vab_read(PeImpSink *sink, const char *bank, const uint8_t *header, uint32_t header_size,

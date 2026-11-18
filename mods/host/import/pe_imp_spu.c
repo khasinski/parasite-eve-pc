@@ -24,11 +24,10 @@ static int floor_div64(int value)
     return value >= 0 ? value / 64 : (value - 63) / 64;
 }
 
-static int decode(const uint8_t *src, uint32_t bytes, PeImpSound *out)
+int pe_imp_spu_decode(const uint8_t *src, uint32_t bytes, int16_t *dst)
 {
     static const int filter[][2] = {{0, 0}, {60, 0}, {115, -52}, {98, -55}, {122, -60}};
     int prev = 0, prev2 = 0;
-    int16_t *dst = out->pcm;
     for (uint32_t block = 0; block < bytes; block += PE_IMP_SPU_BLOCK) {
         unsigned predictor = src[block] >> 4;
         unsigned shift = src[block] & 15;
@@ -56,7 +55,7 @@ int pe_imp_spu_emit(PeImpSink *sink, const char *bank, unsigned wave,
         return reject(why, n, "invalid SPU waveform size");
     PeImpSound *clip = pe_imp_sound_alloc(PREVIEW_RATE, bytes / PE_IMP_SPU_BLOCK * PE_IMP_SPU_FRAMES);
     if (!clip) return reject(why, n, "SPU waveform exceeds the Sound budget");
-    if (decode(data, bytes, clip)) {
+    if (pe_imp_spu_decode(data, bytes, clip->pcm)) {
         free(clip);
         return reject(why, n, "invalid SPU ADPCM block");
     }

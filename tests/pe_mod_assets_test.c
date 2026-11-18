@@ -20,6 +20,7 @@ int pe_mod_path(char *out, size_t n, const char *file)
 }
 
 int pe_mod_active(const char *owner) { return !strcmp(owner, "pe_assets"); }
+void pe_mod_log(const char *mod_id, const char *fmt, ...) { (void)mod_id, (void)fmt; }
 
 int pe_service_publish(const char *name, int version, const void *api, const char *owner)
 {

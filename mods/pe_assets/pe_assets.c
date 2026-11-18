@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "pe_imp.h"
+#include "pe_imp_seq.h"
 #include "pe_mod_host.h"
 #include "pe_services.h"
 
@@ -24,6 +25,9 @@ typedef struct {
 static Clip s_clips[SLOTS];
 static PeAssetHandle s_next;
 static SDL_AudioStream *s_preview;
+static SDL_AudioStream *s_music;                 /* the playing song's stream */
+static PeImpSeqPlayer *s_player;                 /* used only by s_music's callback once started */
+static SDL_AtomicInt s_music_done;
 static unsigned s_rate;
 static char s_store[PE_IMP_PATH_MAX];
 
@@ -187,11 +191,64 @@ static int preview_clip(PeAssetHandle handle)
     return 1;
 }
 
+/* SDL asks for more of the song: render it on the audio thread */
+static void SDLCALL feed_song(void *user, SDL_AudioStream *stream, int additional, int total)
+{
+    (void)user, (void)total;
+    int16_t buf[2 * 1024];
+    int frames = additional / 4 + 1;
+    while (frames > 0) {
+        uint32_t want = frames > 1024 ? 1024 : (uint32_t)frames;
+        uint32_t got = pe_imp_seq_render(s_player, buf, want);
+        if (got) SDL_PutAudioStreamData(stream, buf, (int)(got * 4));
+        if (got < want) { SDL_SetAtomicInt(&s_music_done, 1); break; }
+        frames -= (int)got;
+    }
+}
+
+static void stop_song(void)
+{
+    if (s_music && SDL_WasInit(SDL_INIT_AUDIO)) SDL_DestroyAudioStream(s_music);   /* waits for the callback */
+    s_music = NULL;
+    pe_imp_seq_close(s_player);
+    s_player = NULL;
+}
+
+static int play_song(PeAssetHandle handle)
+{
+    PeSongView view;
+    int ready = song_view(handle, &view);
+    if (ready != 1) return ready;
+    stop_song();
+    char why[160] = "";
+    s_player = pe_imp_seq_open(view.sequence[0], view.sequence_size[0], view.instruments, view.instrument_size,
+                               view.samples, view.sample_size, 0, why, sizeof why);
+    if (!s_player) {
+        pe_mod_log(MOD_ID, "song %s not played: %s", lookup(handle)->id, why);
+        return -1;
+    }
+    SDL_SetAtomicInt(&s_music_done, 0);
+    SDL_AudioSpec spec = {.format = SDL_AUDIO_S16, .channels = 2, .freq = PE_IMP_SEQ_RATE};
+    s_music = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, feed_song, NULL);
+    if (!s_music || !SDL_SetAudioStreamGain(s_music, (float)Psyz_AudioGetOutputVolume() / 100.0f) ||
+        !SDL_ResumeAudioStreamDevice(s_music)) {
+        stop_song();
+        return -1;
+    }
+    return 1;
+}
+
+static int song_playing(void)
+{
+    if (s_music && SDL_GetAtomicInt(&s_music_done) && !SDL_GetAudioStreamQueued(s_music)) stop_song();
+    return s_music != NULL;
+}
+
 static const PeAssetsApi k_assets = {
     sizeof(PeAssetsApi), list_sounds, acquire_sound, status, release,
     list_songs, acquire_song, song_view
 };
-static const PeAudioApi k_audio = {sizeof(PeAudioApi), preview_clip};
+static const PeAudioApi k_audio = {sizeof(PeAudioApi), preview_clip, play_song, stop_song, song_playing};
 
 static int init(void)
 {
@@ -202,6 +259,7 @@ static int init(void)
 
 static void shutdown(void)
 {
+    stop_song();
     /* SDL also destroys all audio streams when the audio subsystem quits. */
     if (s_preview && SDL_WasInit(SDL_INIT_AUDIO))
         SDL_DestroyAudioStream(s_preview);
