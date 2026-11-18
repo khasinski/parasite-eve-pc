@@ -211,16 +211,26 @@ def part_win(game):
 
 
 def escape(game, limit=12000):
-    """Battle menu, Down three times (Escape from Battle), Cross; again until it works."""
+    """Battle menu, Down three times (Escape from Battle), Cross; again until it works.
+    Only with Aya's time bar full: before that the menu holds just Use Item and Change Weapon, so
+    the Downs land on Change Weapon and the Cross opens the weapon screen instead."""
     end = game.vblank + limit
     while game.vblank < end:
-        if not game.battle()['active']:
+        b = game.battle()
+        if not b['active']:
             return
+        if b['player']['atb'] < 9000:
+            game.adv(30)
+            continue
         game.press(TRIANGLE, 60)
         for _ in range(3):
             game.press(DOWN, 50)
         game.press(CROSS, 400)
-    raise Failed(f'escape never worked by vblank {game.vblank}')
+    try:
+        game.raw(f'capture {game.work / "escape-failed"}')
+    except Exception:
+        pass
+    raise Failed(f'escape never worked by vblank {game.vblank}: {game.battle()}')
 
 
 def part_run(game):
