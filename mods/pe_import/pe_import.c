@@ -16,6 +16,7 @@
 
 #include "pe_imp.h"
 #include "pe_imp_mdec.h"
+#include "pe_imp_room.h"
 #include "pe_imp_pe.h"
 #include "pe_import.h"
 #include "pe_mod_host.h"
@@ -371,30 +372,94 @@ static unsigned room_count(void) {
 }
 static const char *room_name(unsigned i) { return i < (unsigned)s_nrooms ? s_rooms[i].name : "-"; }
 
-/* every view of one room as <rooms>/<game>/<room>_<view>.bmp; the number written, or -1 */
-static int export_room(const PeImpAsset *a, char *why, size_t n) {
+typedef struct { int pictures, cameras, masks, errors; } RoomExport;
+
+static int save_room_bmp(const char *path, const PeImpImageSet *set, uint8_t *pixels,
+                         SDL_PixelFormat format, int bytes_per_pixel) {
+    SDL_Surface *surface = SDL_CreateSurfaceFrom((int)set->width, (int)set->height, format,
+                                                 pixels, (int)set->width * bytes_per_pixel);
+    if (!surface) return 0;
+    int ok = SDL_SaveBMP(surface, path);
+    SDL_DestroySurface(surface);
+    return ok;
+}
+
+static void write_room_view(FILE *file, uint32_t frame, const PeImpRoomView *view, int foreground) {
+    fprintf(file, "    {\"frame\": %u, \"slot\": %u", frame, view->slot);
+    if (view->game) {
+        fprintf(file, ", \"eye\": [%d, %d, %d], \"target\": [%d, %d, %d], \"projection_raw\": %u",
+                view->eye[0], view->eye[1], view->eye[2], view->target[0], view->target[1], view->target[2],
+                view->projection);
+    }
+    fprintf(file, ", \"foreground_exported\": %s, \"masks\": [", foreground ? "true" : "false");
+    for (uint32_t i = 0; i < view->mask_count; i++) {
+        const PeImpRoomMask *m = &view->masks[i];
+        fprintf(file, "%s\n      {\"atlas\": [%u, %u], \"screen\": [%d, %d], "
+                      "\"size\": [%u, %u], \"depth_raw\": %u}",
+                i ? "," : "", (unsigned)m->u, (unsigned)m->v, m->x, m->y,
+                (unsigned)m->width, (unsigned)m->height, (unsigned)m->depth);
+    }
+    fprintf(file, "%s]}", view->mask_count ? "\n    " : "");
+}
+
+static RoomExport export_room(const PeImpAsset *a, char *why, size_t n) {
     PeImpImageSet *set;
-    if (pe_imp_catalog_imageset(s_job.store, a->id, &set, why, n)) return -1;
+    if (pe_imp_catalog_imageset(s_job.store, a->id, &set, why, n)) return (RoomExport){.errors = 1};
     const char *colon = strchr(a->id, ':'), *slash = strrchr(a->id, '/');
+    const char *room = slash ? slash + 1 : a->id;
     char game[16] = "", folder[1200], path[1300];
     snprintf(game, sizeof game, "%.*s", colon ? (int)(colon - a->id) : 0, a->id);
     snprintf(folder, sizeof folder, "%s/%s", s_rooms_dir, game);
-    pe_imp_mkdirs(folder);
-    uint8_t *rgb = malloc((size_t)set->width * set->height * 3);
-    int written = 0;
-    for (uint32_t v = 0; rgb && v < set->count; v++) {
-        uint32_t size;
-        const uint8_t *f = pe_imp_imageset_frame(set, v, &size);
-        if (pe_imp_mdec_decode(f, size, set->width, set->height, rgb, why, n)) continue;
-        SDL_Surface *surface = SDL_CreateSurfaceFrom((int)set->width, (int)set->height, SDL_PIXELFORMAT_RGB24, rgb,
-                                                     (int)set->width * 3);
-        snprintf(path, sizeof path, "%s/%s_%u.bmp", folder, slash ? slash + 1 : a->id, v);
-        if (surface && SDL_SaveBMP(surface, path)) written++;
-        if (surface) SDL_DestroySurface(surface);
+    size_t pixels = (size_t)set->width * set->height;
+    PeImpRoomView *view = malloc(sizeof *view);
+    uint8_t *rgb = malloc(pixels * 3), *rgba = malloc(pixels * 4);
+    RoomExport result = {0};
+    if (!view || !rgb || !rgba || pe_imp_mkdirs(folder)) {
+        snprintf(why, n, "Couldn't prepare the room export.");
+        result.errors++;
+    } else {
+        snprintf(path, sizeof path, "%s/%s_cameras.json", folder, room);
+        FILE *json = fopen(path, "wb");
+        if (json) fprintf(json, "{\n  \"game\": \"%s\", \"room\": \"%s\", \"views\": [\n", game, room);
+        else result.errors++;
+        for (uint32_t v = 0; v < set->count; v++) {
+            uint32_t size;
+            const uint8_t *f = pe_imp_imageset_frame(set, v, &size);
+            snprintf(path, sizeof path, "%s/%s_%u.bmp", folder, room, v);
+            if (!pe_imp_mdec_decode(f, size, set->width, set->height, rgb, why, n) &&
+                save_room_bmp(path, set, rgb, SDL_PIXELFORMAT_RGB24, 3)) result.pictures++;
+            else result.errors++;
+
+            int rc = pe_imp_room_view(set, v, view), foreground = 0;
+            if (rc < 0) {
+                result.errors++;
+                *view = (PeImpRoomView){.slot = v};
+            } else {
+                result.cameras += view->game != 0;
+                rc = pe_imp_room_foreground(set, v, view, rgba);
+                if (rc == 0) {
+                    snprintf(path, sizeof path, "%s/%s_%u_mask.bmp", folder, room, v);
+                    foreground = save_room_bmp(path, set, rgba, SDL_PIXELFORMAT_RGBA32, 4);
+                    result.masks += foreground;
+                    result.errors += !foreground;
+                } else if (rc < 0) result.errors++;
+            }
+            if (json) {
+                if (v) fputs(",\n", json);
+                write_room_view(json, v, view, foreground);
+            }
+        }
+        if (json) {
+            fputs("\n  ]\n}\n", json);
+            if (ferror(json)) result.errors++;
+            if (fclose(json)) result.errors++;
+        }
     }
+    free(view);
+    free(rgba);
     free(rgb);
     free(set);
-    return written;
+    return result;
 }
 
 static int rooms_ready(void) {
@@ -409,21 +474,25 @@ static void export_selected_room(void) {
     if (!rooms_ready()) return;
     char why[200] = "";
     const PeImpAsset *a = &s_rooms[s_room_pick < s_nrooms ? s_room_pick : 0];
-    int n = export_room(a, why, sizeof why);
-    if (n < 0) snprintf(s_room_status, sizeof s_room_status, "%s: %s", a->name, why);
-    else snprintf(s_room_status, sizeof s_room_status, "%s: %d picture%s written to %s", a->name, n, n == 1 ? "" : "s", s_rooms_dir);
+    RoomExport counts = export_room(a, why, sizeof why);
+    if (!counts.pictures && why[0]) snprintf(s_room_status, sizeof s_room_status, "%s. %s", a->name, why);
+    else snprintf(s_room_status, sizeof s_room_status, "%s. %d pictures, %d cameras, %d masks, %d errors",
+                  a->name, counts.pictures, counts.cameras, counts.masks, counts.errors);
 }
 
 static void export_game_rooms(void) {
     if (!rooms_ready()) return;
-    char why[200] = "";
-    int total = 0;
+    char why[200];
+    RoomExport total = {0};
     for (int i = 0; i < s_nrooms; i++) {
-        int n = export_room(&s_rooms[i], why, sizeof why);
-        if (n > 0) total += n;
+        RoomExport counts = export_room(&s_rooms[i], why, sizeof why);
+        total.pictures += counts.pictures;
+        total.cameras += counts.cameras;
+        total.masks += counts.masks;
+        total.errors += counts.errors;
     }
-    snprintf(s_room_status, sizeof s_room_status, "%s: %d rooms, %d pictures written to %s",
-             room_game_name((unsigned)s_room_game), s_nrooms, total, s_rooms_dir);
+    snprintf(s_room_status, sizeof s_room_status, "%s. %d pictures, %d cameras, %d masks, %d errors",
+             room_game_name((unsigned)s_room_game), total.pictures, total.cameras, total.masks, total.errors);
 }
 
 static void room_from(char *out, unsigned size) {
@@ -716,8 +785,8 @@ static int import_init(void) {
                                     &s_room_game, ROOM_GAMES_MAX, room_game_count, room_game_name);
     pe_menu_register_dynamic_choice("Rooms", "Room", "Choose an imported room.", &s_room_pick, ROOMS_MAX, room_count, room_name);
     pe_menu_register_info("Rooms", "From", "Catalog ID of the selected room.", room_from);
-    pe_menu_register_action("Rooms", "Export pictures", "Writes every camera view of the selected room as a .bmp picture.", export_selected_room);
-    pe_menu_register_action("Rooms", "Export every room", "Writes every room of this game as .bmp pictures. Takes a little while.", export_game_rooms);
+    pe_menu_register_action("Rooms", "Export pictures", "Exports the room backgrounds, transparent foreground masks, and camera JSON.", export_selected_room);
+    pe_menu_register_action("Rooms", "Export every room", "Exports backgrounds, foreground masks, and camera JSON for every room of this game.", export_game_rooms);
     pe_menu_register_action("Rooms", "Open the pictures folder", "Opens the folder the pictures are written to.", open_rooms_folder);
     pe_menu_register_info("Rooms", "Last export", "What the last export did.", room_status);
     if (pe_mod_requested("pe_assets")) {

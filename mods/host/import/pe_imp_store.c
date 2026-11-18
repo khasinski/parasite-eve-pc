@@ -304,7 +304,7 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
     pe_imp_sha256_hex(data, size, sha);
     if (rd->read_pair) {
         char pair[192], secondary[65], logical_path[65];
-        pe_imp_sha256_hex(companion, companion_size, secondary);
+        pe_imp_sha256_hex(companion ? companion : (const uint8_t *)"", companion_size, secondary);
         pe_imp_sha256_hex((const uint8_t *)path, strlen(path), logical_path);
         memcpy(pair, sha, 64);
         memcpy(pair + 64, secondary, 64);
@@ -429,7 +429,15 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
         }
         uint8_t *companion = NULL;
         uint32_t companion_size = 0;
-        if (rd->companion) {
+        if (rd->find_companion) {
+            int index = rd->find_companion(d, path);
+            if (index >= 0 && pe_imp_disc_read(d, index, &companion, &companion_size, why, sizeof why)) {
+                out->refused++;
+                snprintf(out->last_error, sizeof out->last_error, "%s: %s", path, why);
+                free(data);
+                continue;
+            }
+        } else if (rd->companion) {
             char sibling[PE_IMP_PATH_MAX];
             const char *name = rd->companion;
             if (name[0] == '.') {
@@ -450,7 +458,7 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
                 continue;
             }
         }
-        out->files_read += rd->companion ? 2 : 1;
+        out->files_read += companion ? 2 : 1;
         store_file(&cat, root, rd, label, path, data, size, companion, companion_size, out);
         free(companion);
         free(data);

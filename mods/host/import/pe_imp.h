@@ -18,7 +18,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define PE_IMP_API_VERSION 1
+#define PE_IMP_API_VERSION 2
 #define PE_IMP_FILE_MAX    (64u << 20)      /* one file read from a disc image */
 #define PE_IMP_PATH_MAX    1100
 #define PE_IMP_ID_MAX      80               /* "re2:player/claire" */
@@ -122,17 +122,21 @@ int pe_imp_song_load(const char *folder, PeImpSong **song, char *why, size_t n);
 /* ImageSet stores still pictures as the source game keeps them, decoded on demand. MDEC: each
  * picture is a PS1 MDEC frame (pe_imp_mdec.h) of width x height pixels; Resident Evil's room
  * backgrounds, one picture per camera view. Payload: the frames back to back, size[i] bytes each. */
-#define PE_IMP_IMAGESET_VERSION 1
+#define PE_IMP_IMAGESET_VERSION 2
 #define PE_IMP_IMAGESET_MAX (4u << 20)
 #define PE_IMP_IMAGESET_VIEWS 32
 enum { PE_IMP_IMAGESET_MDEC = 1 };
 typedef struct {
     uint32_t format, width, height, count, size[PE_IMP_IMAGESET_VIEWS];
+    uint32_t extra[PE_IMP_IMAGESET_VIEWS];  /* optional per-view room data, after all frames */
     uint8_t payload[];
 } PeImpImageSet;
 /* sizes: `count` frame sizes; the payload is left for the caller to fill */
 PeImpImageSet *pe_imp_imageset_alloc(uint32_t format, uint32_t width, uint32_t height, uint32_t count,
                                      const uint32_t *sizes);
+PeImpImageSet *pe_imp_imageset_alloc_extra(uint32_t format, uint32_t width, uint32_t height, uint32_t count,
+                                           const uint32_t *sizes, const uint32_t *extra);
+const uint8_t *pe_imp_imageset_extra(const PeImpImageSet *set, uint32_t i, uint32_t *size);
 /* where picture i starts in the payload */
 const uint8_t *pe_imp_imageset_frame(const PeImpImageSet *set, uint32_t i, uint32_t *size);
 int pe_imp_imageset_save(const PeImpImageSet *set, const char *folder, char *why, size_t n);
@@ -143,16 +147,13 @@ typedef struct PeImpSink PeImpSink;
 /* A reader hands each item it decodes to the sink: `proposed` is a local ID ("player/pl01"),
  * `name` a display name, `obj` the type's struct (the sink takes ownership, even on failure). */
 int pe_imp_emit(PeImpSink *s, uint32_t type, const char *proposed, const char *name, void *obj);
-/* Room backgrounds as Resident Evil keeps them: one MDEC frame of w x h pixels at the start of each
- * `slot`-byte slot (slots that hold no frame are skipped). Emits one ImageSet; 1 if there were no
- * frames, -1 on failure. */
-int pe_imp_emit_mdec_slots(PeImpSink *s, const char *proposed, const char *name, const uint8_t *data, uint32_t size,
-                           uint32_t slot, uint32_t w, uint32_t h);
 typedef int (*PeImpReadFn)(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink,
                            char *why, size_t n);
 typedef int (*PeImpReadPairFn)(const uint8_t *primary, uint32_t primary_size,
                                const uint8_t *companion, uint32_t companion_size,
                                const char *path, PeImpSink *sink, char *why, size_t n);
+/* An optional paired input, resolved by the reader. Return -1 to run it with an empty companion. */
+typedef int (*PeImpFindCompanionFn)(PeImpDisc *disc, const char *path);
 typedef struct {
     PeImpApi api;                             /* {PE_IMP_API_VERSION, sizeof(PeImpReader)} */
     const char *game, *platform, *format;     /* "re2", "ps1", "pld" */
@@ -165,6 +166,7 @@ typedef struct {
     PeImpReadPairFn read_pair;                /* both inputs participate in the store key */
     int path_key;                             /* single-file reader derives IDs from its ISO path */
     int xa;                                   /* read gets the file's XA audio records (pe_imp_disc_xa) */
+    PeImpFindCompanionFn find_companion;      /* alternative to a required .companion path */
 } PeImpReader;
 int pe_imp_add_reader(const PeImpReader *r); /* 0, or -1 (bad, duplicate, full) */
 int pe_imp_readers(void);

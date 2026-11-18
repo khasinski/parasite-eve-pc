@@ -1,0 +1,33 @@
+#ifndef PE_IMP_ROOM_H
+#define PE_IMP_ROOM_H
+
+#include "pe_imp.h"
+
+enum { PE_IMP_RE1 = 1, PE_IMP_RE2, PE_IMP_RE3 };
+#define PE_IMP_ROOM_MASK_MAX 1024u
+
+typedef struct {
+    int32_t x, y;                          /* destination on the background */
+    uint16_t u, v, width, height, depth;    /* atlas coordinates and source depth */
+} PeImpRoomMask;
+
+typedef struct {
+    uint32_t slot, game, projection;        /* original BSS slot and unmodified projection word */
+    int32_t eye[3], target[3];              /* source coordinates, Y down */
+    uint32_t mask_count;
+    PeImpRoomMask masks[PE_IMP_ROOM_MASK_MAX];
+} PeImpRoomView;
+
+/* A missing RDT still produces an ImageSet and preserves the original slot numbers. */
+int pe_imp_emit_re_room(PeImpSink *sink, unsigned game, const char *path,
+                        const uint8_t *bss, uint32_t bss_size, const uint8_t *rdt, uint32_t rdt_size);
+int pe_imp_re_room_companion(PeImpDisc *disc, const char *path, unsigned game);
+
+/* Legacy ImageSets return a slot number and game == 0. Malformed metadata returns -1. */
+int pe_imp_room_view(const PeImpImageSet *set, uint32_t frame, PeImpRoomView *view);
+
+/* Write a transparent foreground at the ImageSet dimensions, in R, G, B, A byte order.
+ * Returns 0 with pixels, 1 for no atlas, or -1 for invalid data. */
+int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImpRoomView *view, uint8_t *rgba);
+
+#endif

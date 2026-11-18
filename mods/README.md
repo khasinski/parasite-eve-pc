@@ -750,17 +750,24 @@ resampled to 44.1 kHz); readers set `xa` to get a file's audio sectors (`pe_imp_
 raw `.bin` images only). `mod-xa` tests it on made-up sectors and on Dino Crisis's tracks with
 `PE_TEST_DC1_DISC` (`PE_TEST_XA_WAV`).
 
-**Rooms.** F1 > Import > Rooms lists room backgrounds after scanning a Resident Evil disc: RE1
-Director's Cut (`STAGE?/ROOM*.BSS`, 132 rooms, 747 camera views), RE2 (`COMMON/BSS/ROOM*.BSS`, 125
-rooms, 1,257 views) and RE3 (`CD_DATA/STAGE?/R*.BSS`, 122 rooms, 1,436 views). Each view is a
-320 x 240 MDEC frame at the start of a fixed slot (32 KB in RE1, 64 KB in RE2 and RE3); a room is
-one **ImageSet** (`pe_imp.h`) holding its frames as they are, decoded on demand by
-`host/import/pe_imp_mdec.c` with the game's own LIBPRESS table (`MdecDiag_ExpandDecoderTable`,
-handed in with `pe_imp_mdec_set_table`). **Export pictures** writes the selected room's views as
-`.bmp` files to `<preferences>/import/rooms/<game>/`, **Export every room** the whole game's. Using
-them as rooms in play (camera, collision, masks) is later work. `mod-mdec` tests the decoder on
-made-up data and decodes every view with `PE_TEST_RE1_DISC`, `PE_TEST_RE2_DISC` and
-`PE_TEST_RE3_DISC` (`PE_TEST_ROOMS_DIR` writes them out).
+**Rooms.** F1 > Import > Rooms lists the room backgrounds after scanning a Resident Evil
+(Director's Cut, RE2, or RE3) PS1 disc. Each ImageSet holds 320 × 240 MDEC frames in their
+original BSS slot order, plus the matching camera and any foreground data. The importer pairs
+RE1 and RE2 backgrounds with RDT files and extracts the RE3 RDT from the room's ARD.
+RE1 supplies the foreground atlas as a TIM in the RDT. RE2 and RE3 store it compressed in
+the BSS slot. The importer decodes both backgrounds and atlases on demand.
+
+**Export pictures** writes the selected room's background BMPs, transparent `*_mask.bmp`
+foreground layers, and one `*_cameras.json` file to `<preferences>/import/rooms/<game>/`.
+**Export every room** writes these for the whole game. Camera JSON preserves the source slot,
+eye and target (source units, Y down), raw projection word, and per-tile atlas position,
+screen position, dimensions, and raw depth. Some discs have extra BSS pictures without a matching
+camera record. Those backgrounds still export. Discs already scanned are picked up by the next
+import scan. Collision and in-game room placement are separate from this export.
+
+`mod-mdec` tests the legacy store and checks backgrounds, camera pairing, and foreground pixels
+with `PE_TEST_RE1_DISC`, `PE_TEST_RE2_DISC`, and `PE_TEST_RE3_DISC`.
+Set `PE_TEST_ROOMS_DIR` to write background previews during that test.
 
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).

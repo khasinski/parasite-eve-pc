@@ -60,6 +60,7 @@ set(pe_import_core_sources
     host/import/pe_imp_xa.c         # CD-XA streamed audio: decoding and playback
     host/import/pe_imp_akao.c       # Square's AKAO sequences (FF7) played as PCM
     host/import/pe_imp_mdec.c       # MDEC frames (room backgrounds) to RGB
+    host/import/pe_imp_room.c       # Resident Evil PS1 cameras and foreground masks
     host/import/pe_imp_registry.c   # readers, file patterns, naming tables
     host/import/pe_imp_store.c      # the extract-once store and the catalog
     host/import/pe_imp_packs.c      # packs in the format the Wardrobe loads
