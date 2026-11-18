@@ -418,12 +418,12 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
         if (r < 0) continue;
         uint8_t *data;
         uint32_t size;
-        if (pe_imp_disc_read(d, i, &data, &size, why, sizeof why)) {
+        const PeImpReader *rd = pe_imp_reader(r);
+        if (rd->xa ? pe_imp_disc_xa(d, i, &data, &size, why, sizeof why) : pe_imp_disc_read(d, i, &data, &size, why, sizeof why)) {
             out->refused++;
             snprintf(out->last_error, sizeof out->last_error, "%s: %s", path, why);
             continue;
         }
-        const PeImpReader *rd = pe_imp_reader(r);
         uint8_t *companion = NULL;
         uint32_t companion_size = 0;
         if (rd->companion) {

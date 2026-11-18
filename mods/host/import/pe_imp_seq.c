@@ -2,7 +2,7 @@
  *   SEQ   "pQES", u32 version, u16 ticks per quarter (big-endian), u24 tempo in microseconds per
  *         quarter (big-endian), 2 bytes time signature; then events, each after a delta time
  *         (MIDI variable length): note off/on, controller, program, pitch bend, running status.
- *         FF 51 t t t sets the tempo; FF 2F ends. Loops: controller 99 = 20 marks the start
+ *         FF 51 t t t sets the tempo; FF 2F ends. System messages (F0-FE) are skipped. Loops: controller 99 = 20 marks the start
  *         (controller 6 then gives the count, 0 or 127 forever), controller 99 = 30 the end.
  *   VAB   32-byte header ("pBAV", ..., u16 programs at 18, tones at 20, samples at 22, master
  *         volume at 24); 128 program records of 16 bytes (tone count, volume, ..., pan at 4);
@@ -268,8 +268,17 @@ static int events(PeImpSeqPlayer *p) {
             p->ch[ch].bend = (int)((b << 7 | a)) - 8192;
             for (int i = 0; i < PE_IMP_SEQ_VOICES; i++) if (p->v[i].on && p->v[i].channel == ch) set_pitch(p, &p->v[i]);
             break;
-        default:                                  /* FF: meta */
-            if (st != 0xff || byte_at(p, &a)) return -1;
+        default:
+            if (st == 0xf0 || st == 0xf7) {       /* system exclusive: skipped by its length */
+                uint32_t len;
+                if (vlq(p, &len) || len > p->seq_size - p->at) return -1;
+                p->at += len;
+                break;
+            }
+            if (st == 0xf1 || st == 0xf3) { if (byte_at(p, &a)) return -1; break; }
+            if (st == 0xf2) { if (byte_at(p, &a) || byte_at(p, &b)) return -1; break; }
+            if (st != 0xff) break;                /* tune request, real-time: no data */
+            if (byte_at(p, &a)) return -1;        /* FF: meta */
             if (a == 0x2f) return -1;
             if (a == 0x51) {
                 unsigned t0, t1, t2;

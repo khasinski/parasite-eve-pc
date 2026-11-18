@@ -160,6 +160,16 @@ static int read_emd(const uint8_t *data, uint32_t size, const char *path, PeImpS
 const PeImpReader g_re1_emd_ps1 = {
     {PE_IMP_API_VERSION, sizeof(PeImpReader)}, "re1", "ps1", "emd", 1, PE_IMP_MODEL,
     "*/ENEMY/CHAR1?.EMD", "human player", read_emd};
+/* The other people, as the game's NPCs (EM1020-EM102E: the team, Wesker, Kenneth, Forrest,
+ * Richard, Enrico) and the Director's Cut's other outfits (EM1030-EM1035). Same layout, same
+ * 15-bone person; the ones found lying or sitting keep their rest pose's low root, which the fit
+ * doesn't use. */
+const PeImpReader g_re1_emd_npc_ps1 = {
+    {PE_IMP_API_VERSION, sizeof(PeImpReader)}, "re1", "ps1", "emd-npc", 1, PE_IMP_MODEL,
+    "*/ENEMY/EM102?.EMD", "human", read_emd};
+const PeImpReader g_re1_emd_alt_ps1 = {
+    {PE_IMP_API_VERSION, sizeof(PeImpReader)}, "re1", "ps1", "emd-alt", 1, PE_IMP_MODEL,
+    "*/ENEMY/EM103?.EMD", "human player", read_emd};
 
 /* RE2's fit (pe_src_re2_pld.c explains each line). RE1's chest reaches below the waist's top,
  * with no gap between them: no hip lift, no lids to hide. */
@@ -201,4 +211,17 @@ const char g_re1_naming[] =
     "{\"player/char10\": {\"id\": \"player/chris\", \"name\": \"Chris\"},"
     " \"player/char11\": {\"id\": \"player/jill\", \"name\": \"Jill\"},"
     " \"player/char12\": {\"id\": \"player/barry\", \"name\": \"Barry\"},"
-    " \"player/char13\": {\"id\": \"player/rebecca\", \"name\": \"Rebecca\"}}";
+    " \"player/char13\": {\"id\": \"player/rebecca\", \"name\": \"Rebecca\"},"
+    /* NPCs and outfits, named by BioRand's character IDs and by sight (2026-11-18). Left as
+     * proposed: EM1020-23 and EM102A-2D (the team again, as NPCs), EM1029 (Kenneth with empty
+     * hands), EM102E (Wesker's second model). */
+    " \"player/em1024\": {\"id\": \"player/wesker\", \"name\": \"Wesker\"},"
+    " \"player/em1025\": {\"id\": \"player/kenneth\", \"name\": \"Kenneth\"},"
+    " \"player/em1026\": {\"id\": \"player/forrest\", \"name\": \"Forrest\"},"
+    " \"player/em1027\": {\"id\": \"player/richard\", \"name\": \"Richard\"},"
+    " \"player/em1028\": {\"id\": \"player/enrico\", \"name\": \"Enrico\"},"
+    " \"player/em1030\": {\"id\": \"player/chris_leather_jacket\", \"name\": \"Leather Jacket Chris\"},"
+    " \"player/em1031\": {\"id\": \"player/jill_black_top\", \"name\": \"Black Top Jill\"},"
+    " \"player/em1032\": {\"id\": \"player/chris_camo\", \"name\": \"Camo Chris\"},"
+    " \"player/em1033\": {\"id\": \"player/jill_denim\", \"name\": \"Denim Jill\"},"
+    " \"player/em1035\": {\"id\": \"player/rebecca_red\", \"name\": \"Red Rebecca\"}}";

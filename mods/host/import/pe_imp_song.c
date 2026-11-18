@@ -18,8 +18,10 @@ static size_t payload_size(uint32_t format, uint32_t main, uint32_t sub,
                            uint32_t instruments, uint32_t samples)
 {
     uint64_t total = (uint64_t)main + sub + instruments + samples;
-    if (format != PE_IMP_SONG_PSX_SEQ_VAB || main < 15 || (sub && sub < 15) ||
-        instruments < 32 || total > PE_IMP_SONG_MAX)
+    if (total > PE_IMP_SONG_MAX) return 0;
+    if (format == PE_IMP_SONG_PSX_XA)                 /* header, then whole sectors of sound groups */
+        return main == 16 && !sub && !instruments && samples && samples % 2304 == 0 ? (size_t)total : 0;
+    if (format != PE_IMP_SONG_PSX_SEQ_VAB || main < 15 || (sub && sub < 15) || instruments < 32)
         return 0;
     return (size_t)total;
 }
@@ -55,6 +57,7 @@ static int bad(char *why, size_t n)
 
 static int has_signatures(const PeImpSong *song)
 {
+    if (song->format == PE_IMP_SONG_PSX_XA) return !memcmp(song->payload, "XAS1", 4);
     const uint8_t *sub = song->payload + song->seq_size[0];
     return !memcmp(song->payload, "pQES", 4) &&
            (!song->seq_size[1] || !memcmp(sub, "pQES", 4)) &&

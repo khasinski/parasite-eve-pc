@@ -6,6 +6,7 @@
 #include <string.h>
 #include "pe_imp.h"
 #include "pe_imp_seq.h"
+#include "pe_imp_xa.h"
 #include "pe_mod_host.h"
 #include "pe_services.h"
 
@@ -27,6 +28,7 @@ static PeAssetHandle s_next;
 static SDL_AudioStream *s_preview;
 static SDL_AudioStream *s_music;                 /* the playing song's stream */
 static PeImpSeqPlayer *s_player;                 /* used only by s_music's callback once started */
+static PeImpXaPlayer *s_xa;                       /* or this, for a streamed song */
 static SDL_AtomicInt s_music_done;
 static unsigned s_rate;
 static char s_store[PE_IMP_PATH_MAX];
@@ -158,6 +160,12 @@ static int song_view(PeAssetHandle handle, PeSongView *out)
     const Clip *clip = lookup(handle);
     if (clip->type != PE_IMP_SONG) return -1;
     const PeImpSong *song = clip->data;
+    if (song->format == PE_IMP_SONG_PSX_XA) {
+        *out = (PeSongView){.format = PE_SONG_PSX_XA, .sequence = {song->payload, NULL},
+                            .sequence_size = {song->seq_size[0], 0}, .samples = song->payload + song->seq_size[0],
+                            .sample_size = song->sample_size};
+        return 1;
+    }
     const uint8_t *secondary = song->payload + song->seq_size[0];
     const uint8_t *instruments = secondary + song->seq_size[1];
     *out = (PeSongView){
@@ -199,7 +207,7 @@ static void SDLCALL feed_song(void *user, SDL_AudioStream *stream, int additiona
     int frames = additional / 4 + 1;
     while (frames > 0) {
         uint32_t want = frames > 1024 ? 1024 : (uint32_t)frames;
-        uint32_t got = pe_imp_seq_render(s_player, buf, want);
+        uint32_t got = s_xa ? pe_imp_xa_render(s_xa, buf, want) : pe_imp_seq_render(s_player, buf, want);
         if (got) SDL_PutAudioStreamData(stream, buf, (int)(got * 4));
         if (got < want) { SDL_SetAtomicInt(&s_music_done, 1); break; }
         frames -= (int)got;
@@ -211,7 +219,8 @@ static void stop_song(void)
     if (s_music && SDL_WasInit(SDL_INIT_AUDIO)) SDL_DestroyAudioStream(s_music);   /* waits for the callback */
     s_music = NULL;
     pe_imp_seq_close(s_player);
-    s_player = NULL;
+    pe_imp_xa_close(s_xa);
+    s_player = NULL, s_xa = NULL;
 }
 
 static int play_song(PeAssetHandle handle)
@@ -221,14 +230,17 @@ static int play_song(PeAssetHandle handle)
     if (ready != 1) return ready;
     stop_song();
     char why[160] = "";
-    s_player = pe_imp_seq_open(view.sequence[0], view.sequence_size[0], view.instruments, view.instrument_size,
-                               view.samples, view.sample_size, 0, why, sizeof why);
-    if (!s_player) {
+    if (view.format == PE_SONG_PSX_XA)
+        s_xa = pe_imp_xa_open(view.sequence[0], view.sequence_size[0], view.samples, view.sample_size, 0, why, sizeof why);
+    else
+        s_player = pe_imp_seq_open(view.sequence[0], view.sequence_size[0], view.instruments, view.instrument_size,
+                                   view.samples, view.sample_size, 0, why, sizeof why);
+    if (!s_player && !s_xa) {
         pe_mod_log(MOD_ID, "song %s not played: %s", lookup(handle)->id, why);
         return -1;
     }
     SDL_SetAtomicInt(&s_music_done, 0);
-    SDL_AudioSpec spec = {.format = SDL_AUDIO_S16, .channels = 2, .freq = PE_IMP_SEQ_RATE};
+    SDL_AudioSpec spec = {.format = SDL_AUDIO_S16, .channels = 2, .freq = PE_IMP_SEQ_RATE};   /* both players: 44.1 kHz stereo */
     s_music = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, feed_song, NULL);
     if (!s_music || !SDL_SetAudioStreamGain(s_music, (float)Psyz_AudioGetOutputVolume() / 100.0f) ||
         !SDL_ResumeAudioStreamDevice(s_music)) {

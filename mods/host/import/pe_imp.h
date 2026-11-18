@@ -48,6 +48,12 @@ uint32_t pe_imp_disc_lba(const PeImpDisc *d, int i);         /* the file's first
 uint32_t pe_imp_disc_count(const PeImpDisc *d);              /* sectors in the image */
 /* `count` 2048-byte sectors from `lba` into out; -1 outside the image or on a bad sector. */
 int pe_imp_disc_sectors(PeImpDisc *d, uint32_t lba, uint32_t count, uint8_t *out, char *why, size_t n);
+/* A file's CD-XA audio sectors (mode 2 form 2, the audio bit set), as records of
+ * PE_IMP_XA_RECORD bytes: file, channel, submode, coding (the subheader), then the 2304 bytes of
+ * sound groups. Only raw images (.bin, 2352-byte sectors) keep them: -1 for a cooked .iso.
+ * *data is malloc'd (free it). */
+#define PE_IMP_XA_RECORD 2308u
+int pe_imp_disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n);
 
 /* ---- Model: a skeleton, parts bound to bones, an 8-bit indexed texture ----
  * As the source stores it: y down, its own units. Part p's vertices are in bone p's frame; parts
@@ -95,8 +101,11 @@ int pe_imp_sound_load(const char *folder, PeImpSound **sound, char *why, size_t 
  * Gameplay playback will use a prepared track. Payload order is main sequence,
  * optional secondary sequence, instrument header, then samples. */
 #define PE_IMP_SONG_VERSION 1
-#define PE_IMP_SONG_MAX (2u << 20)
-enum { PE_IMP_SONG_PSX_SEQ_VAB = 1 };
+#define PE_IMP_SONG_MAX (8u << 20)
+/* PSX_SEQ_VAB: payload as above. PSX_XA: an XA stream (streamed music): main_size is its 16-byte
+ * header ("XAS1", coding, file, channel, 0, u32 sectors, u32 0), sample_size the sectors' sound
+ * groups (2304 bytes each), no secondary sequence or instruments. */
+enum { PE_IMP_SONG_PSX_SEQ_VAB = 1, PE_IMP_SONG_PSX_XA = 2 };
 typedef struct {
     uint32_t format, seq_size[2], instrument_size, sample_size;
     uint8_t payload[];
@@ -127,6 +136,7 @@ typedef struct {
     const char *companion;                    /* exact ISO path, or .extension to pair by stem */
     PeImpReadPairFn read_pair;                /* both inputs participate in the store key */
     int path_key;                             /* single-file reader derives IDs from its ISO path */
+    int xa;                                   /* read gets the file's XA audio records (pe_imp_disc_xa) */
 } PeImpReader;
 int pe_imp_add_reader(const PeImpReader *r); /* 0, or -1 (bad, duplicate, full) */
 int pe_imp_readers(void);

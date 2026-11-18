@@ -41,7 +41,7 @@ typedef struct {
     char name[48];
     char tags[64];
 } PeAssetInfo;
-enum { PE_SONG_PSX_SEQ_VAB = 1 };
+enum { PE_SONG_PSX_SEQ_VAB = 1, PE_SONG_PSX_XA = 2 };   /* XA: sequence[0] is its 16-byte header, samples the sound groups */
 typedef struct {
     uint32_t format;
     const uint8_t *sequence[2];       /* secondary is NULL when absent */

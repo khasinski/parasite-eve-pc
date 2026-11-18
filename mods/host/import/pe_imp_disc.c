@@ -253,3 +253,30 @@ int pe_imp_disc_read(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *
     *data = buf, *size = f->size;
     return 0;
 }
+
+int pe_imp_disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n) {
+    *data = NULL, *size = 0;
+    if (i < 0 || i >= d->files) return fail(why, n, "%s", "no such file");
+    if (d->sector != RAW) return fail(why, n, "%s", "streamed audio needs a raw .bin image, not a .iso");
+    File *f = &d->file[i];
+    uint32_t secs = (f->size + COOKED - 1) / COOKED;
+    if (f->lba > d->count || secs > d->count - f->lba) return fail(why, n, "%s", "sectors outside the image");
+    if ((uint64_t)secs * PE_IMP_XA_RECORD > PE_IMP_FILE_MAX) return fail(why, n, "%s is too large", f->name);
+    uint8_t *buf = malloc((size_t)(secs ? secs : 1) * PE_IMP_XA_RECORD), s[RAW];
+    if (!buf) return fail(why, n, "%s", "out of memory");
+    uint32_t used = 0;
+    for (uint32_t k = 0; k < secs; k++) {
+        if (fseek(d->f, (long)((f->lba + k) * (long long)RAW), SEEK_SET) || fread(s, 1, RAW, d->f) != RAW) {
+            free(buf);
+            return fail(why, n, "%s", "read error in the image");
+        }
+        if (memcmp(s, k_sync, 12)) { free(buf); return fail(why, n, "%s", "a sector has no sync pattern"); }
+        /* mode 2, form 2 (submode bit 5), audio (bit 2) */
+        if (s[15] != 2 || (s[18] & 0x24) != 0x24) continue;
+        memcpy(buf + used, s + 16, 4);
+        memcpy(buf + used + 4, s + 24, 2304);
+        used += PE_IMP_XA_RECORD;
+    }
+    *data = buf, *size = used;
+    return 0;
+}

@@ -1,7 +1,8 @@
 /* pe_src_re1's reader (mods/pe_src_re1/pe_src_re1_emd.c).
  *   made-up   a small RE1 person: bones and parts come out in RE2's order with their offsets,
  *             faces as stored, the extra 16th object kept last; truncated copies refused
- *   disc      with PE_TEST_RE1_DISC (the Director's Cut Dual Shock .cue): CHAR10-13 read, faces
+ *   disc      with PE_TEST_RE1_DISC (the Director's Cut Dual Shock .cue): CHAR10-13 and the 20 NPC
+ *             and outfit files (EM1020-102E, EM1030-1035) read; CHAR10-13's faces
  *             as counted from the files (689, 685, 681, 697); Chris's head and waist where RE2
  *             keeps them */
 #include <assert.h>
@@ -105,10 +106,11 @@ static void disc(const char *cue) {
     assert(d);
     static const struct { const char *file; int faces; } want[] = {
         {"CHAR10.EMD", 689}, {"CHAR11.EMD", 685}, {"CHAR12.EMD", 681}, {"CHAR13.EMD", 697}};
-    int found = 0;
+    int found = 0, people = 0;
     for (int i = 0; i < pe_imp_disc_files(d); i++) {
         const char *name = pe_imp_disc_name(d, i), *s = strrchr(name, '/');
-        if (!s || !strstr(name, "/ENEMY/CHAR1")) continue;
+        int npc = s && (!strncmp(s + 1, "EM102", 5) || !strncmp(s + 1, "EM103", 5));
+        if (!s || (!strstr(name, "/ENEMY/CHAR1") && !npc)) continue;
         uint8_t *data;
         uint32_t size;
         assert(!pe_imp_disc_read(d, i, &data, &size, why, sizeof why));
@@ -121,6 +123,7 @@ static void disc(const char *cue) {
         for (uint32_t p = 0; p < m.parts; p++) faces += (int)m.part[p].tris;
         for (unsigned k = 0; k < sizeof want / sizeof want[0]; k++)
             if (!strcmp(s + 1, want[k].file)) { assert(faces == want[k].faces); found++; }
+        if (npc) people++;
         if (!strcmp(s + 1, "CHAR10.EMD")) {
             /* Chris: head (RE1 1) at RE2's 8 with 155 faces, waist (RE1 2) at RE2's 1 */
             assert(m.rel[8][0] == -98 && m.rel[8][1] == -704 && m.part[8].tris == 155);
@@ -130,7 +133,8 @@ static void disc(const char *cue) {
         pe_imp_model_free(&m);
     }
     pe_imp_disc_close(d);
-    assert(found == 4);
+    printf("  %d NPC and outfit files read as people\n", people);
+    assert(found == 4 && people == 20);
 }
 
 int main(void) {

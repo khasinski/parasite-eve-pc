@@ -1,7 +1,7 @@
 /* The automatic import end to end, without the page: the job the worker runs at start-up
  * (mods/pe_import/pe_import_job.c), then the Wardrobe adding the result while the game runs.
  *   start-up   pe_src_re1, pe_src_re2, pe_src_re3 and pe_src_dc1's own inits (games, readers,
- *              naming, rigs; Chris, Jill, Claire, Leon, Jill, Carlos and Regina automatic); the skins target as the Wardrobe registers it; packs/ empty
+ *              naming, rigs; Chris, Jill, Wesker, Forrest, Claire, Leon, Jill, Carlos and Regina automatic); the skins target as the Wardrobe registers it; packs/ empty
  *   run        the folder holds RE2 disc 2: it is read, Claire built into
  *              <prefs>/packs/re2-local/characters/claire.re2, Leon reported as needing disc 1
  *   folder     the folder of all the games: RE1, RE2 disc 1, RE3 and Dino Crisis read; Chris, Jill
@@ -131,7 +131,7 @@ int main(void) {
     /* start-up: RE1, RE2, RE3 and Dino Crisis's own mods register themselves, the Wardrobe its skins target, packs/ is empty */
     pe_imp_registry_reset();
     assert(pe_mod_pe_src_re1.init() == 0 && pe_mod_pe_src_re2.init() == 0 && pe_mod_pe_src_re3.init() == 0 && pe_mod_pe_src_dc1.init() == 0);
-    assert(!pe_skin_target_register() && pe_imp_targets() == 1 && pe_imp_autos() == 7);
+    assert(!pe_skin_target_register() && pe_imp_targets() == 1 && pe_imp_autos() == 9);
     pe_packs_scan();
     pe_packs_register();
     assert(s_nadded == 0);
@@ -157,7 +157,7 @@ int main(void) {
     assert(s_reading >= 1 && s_building == 1 && s_steps == 3 && s_rooms >= 90);   /* 900 rooms, every 10th */
     printf("first run: %d disc(s) (%s), %d catalog items, built %d (%s), current %d, missing %d (%s)%s%s\n", j.discs_read, j.games,
            j.items, j.built, j.built_names, j.current, j.missing, j.missing_discs, j.failed ? ", problem: " : "", j.problem);
-    assert(j.discs_read == 1 && !j.failed && j.built == 1 && j.current == 0 && j.missing == 6);
+    assert(j.discs_read == 1 && !j.failed && j.built == 1 && j.current == 0 && j.missing == 8);
     assert(strstr(j.built_names, "Claire") && strstr(j.missing_discs, "disc 1"));
 
     /* the main thread then tells the Wardrobe: Claire is a costume at once, no restart */
@@ -178,7 +178,7 @@ int main(void) {
     pe_import_job_run(&j);
     printf("second run: %d discs read, %d unchanged, built %d, current %d, missing %d\n", j.discs_read, j.unchanged,
            j.built, j.current, j.missing);
-    assert(j.discs_read == 0 && j.unchanged == 1 && j.built == 0 && j.current == 1 && j.missing == 6 && !j.failed);
+    assert(j.discs_read == 0 && j.unchanged == 1 && j.built == 0 && j.current == 1 && j.missing == 8 && !j.failed);
     assert(pe_packs_add_new(added, sizeof added) == 0);
 
     /* an added folder: the folder of games the disc came from (one game per subfolder, other
@@ -196,12 +196,13 @@ int main(void) {
            j.discs_read, j.games, j.unknown, j.built, j.built_names, j.current, j.missing, j.failed ? ", problem: " : "", j.problem);
     printf("  (%d unchanged)\n", j.unchanged);
     fflush(stdout);
-    assert(!j.failed && j.missing == 0 && j.current == 1 && j.built == 6 && strstr(j.built_names, "Leon") && strstr(j.built_names, "Regina"));
+    assert(!j.failed && j.missing == 0 && j.current == 1 && j.built == 8 && strstr(j.built_names, "Leon") && strstr(j.built_names, "Regina") &&
+           strstr(j.built_names, "Wesker") && strstr(j.built_names, "Forrest"));
     assert(strstr(j.built_names, "Jill") && strstr(j.built_names, "Carlos") && strstr(j.built_names, "Chris"));
     assert(j.discs_read == 5 && j.unknown == 4);
     assert(!strncmp(j.games, "Resident Evil, ", 15) || strstr(j.games, ", Resident Evil,") || strstr(j.games, "Resident Evil 3, Resident Evil"));     /* RE1, RE2 disc 1, the Dual Shock disc 1, RE3, DC1 */
     assert(strstr(j.games, "Dino Crisis"));
-    assert(pe_packs_add_new(added, sizeof added) == 6 && strstr(added, "Regina (DC1)") && strstr(added, "Chris (RE1)") && strstr(added, "Jill (RE1)") &&
+    assert(pe_packs_add_new(added, sizeof added) == 8 && strstr(added, "Forrest (RE1)") && strstr(added, "Regina (DC1)") && strstr(added, "Chris (RE1)") && strstr(added, "Jill (RE1)") &&
            strstr(added, "Leon (RE2)") && strstr(added, "Jill (RE3)") &&
            strstr(added, "Carlos (RE3)"));
     for (int i = 0; i < s_nadded; i++)
@@ -213,7 +214,7 @@ int main(void) {
     pe_import_job_run(&j);
     printf("last run: %d read, %d not supported, %d unchanged, built %d, current %d\n", j.discs_read, j.unknown,
            j.unchanged, j.built, j.current);
-    assert(j.discs_read == 0 && j.unknown == 0 && j.unchanged == 11 && j.built == 0 && j.current == 7 && !j.failed);
+    assert(j.discs_read == 0 && j.unknown == 0 && j.unchanged == 11 && j.built == 0 && j.current == 9 && !j.failed);
     printf("import flow passed\n");
     return 0;
 }
