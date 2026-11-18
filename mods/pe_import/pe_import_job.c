@@ -61,7 +61,8 @@ static SDL_EnumerationResult on_entry(void *user, const char *dir, const char *n
         }
         return SDL_ENUM_CONTINUE;
     }
-    if ((ends(name, ".cue") || ends(name, ".iso") || ends(name, ".bin")) && f->n < MAX_IMAGES)
+    /* a PC game folder (Resident Evil 3's rofs*.dat archives) counts once, by its rofs1.dat */
+    if ((ends(name, ".cue") || ends(name, ".iso") || ends(name, ".bin") || !SDL_strcasecmp(name, "rofs1.dat")) && f->n < MAX_IMAGES)
         snprintf(f->path[f->n++], sizeof f->path[0], "%s", full);
     return SDL_ENUM_CONTINUE;
 }
@@ -255,6 +256,7 @@ static int need(const PeImportJob *j, const PeImpAuto *au, const PeImpTarget **t
     const char *colon = strchr(a->id, ':'), *last = strrchr(a->id, '/');
     snprintf(game, gn, "%.*s", (int)(colon - a->id), a->id);
     snprintf(folder, fn, "%s/%s-local/characters/%.30s.%s", j->packs, game, last ? last + 1 : colon + 1, game);
+    if ((*tg)->current) return (*tg)->current(a, builder) ? 0 : 1;   /* a target with its own place */
     return current(folder, a, builder) ? 0 : 1;
 }
 
@@ -282,7 +284,7 @@ static void build_autos(PeImportJob *j) {
         snprintf(what, sizeof what, "building %s", label);
         PE_IMP_PROGRESS(j->progress, what, ++done, todo);
         if (!pe && !(pe = j->pe_source(why, sizeof why))) { j->failed++, snprintf(j->problem, sizeof j->problem, "%s", why); break; }
-        if (pe_imp_pack_character(j->packs, &a, builder, folder, sizeof folder, why, sizeof why) ||
+        if (pe_imp_target_place(tg, j->packs, &a, builder, folder, sizeof folder, why, sizeof why) ||
             tg->build(&(PeImpBuild){j->store, pe, j->normals, j->step}, a.id, folder, log, sizeof log, why, sizeof why)) {
             j->failed++, snprintf(j->problem, sizeof j->problem, "%s: %s", a.name, why);
             continue;

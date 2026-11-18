@@ -54,6 +54,7 @@ static unsigned schema_version(uint32_t type) {
     case PE_IMP_SOUND: return PE_IMP_SOUND_VERSION;
     case PE_IMP_SONG: return PE_IMP_SONG_VERSION;
     case PE_IMP_IMAGESET: return PE_IMP_IMAGESET_VERSION;
+    case PE_IMP_ANIMATION: return PE_IMP_ANIMATION_VERSION;
     default: return 0;
     }
 }
@@ -87,6 +88,7 @@ static int save_obj(const Item *it, const char *folder, char *why, size_t n) {
     case PE_IMP_SOUND: return pe_imp_sound_save(it->obj, folder, why, n);
     case PE_IMP_SONG: return pe_imp_song_save(it->obj, folder, why, n);
     case PE_IMP_IMAGESET: return pe_imp_imageset_save(it->obj, folder, why, n);
+    case PE_IMP_ANIMATION: return pe_imp_animation_save(it->obj, folder, why, n);
     default: return -1;
     }
 }
@@ -94,6 +96,7 @@ static int save_obj(const Item *it, const char *folder, char *why, size_t n) {
 static void free_obj(uint32_t type, void *obj) {
     if (!obj) return;
     if (type == PE_IMP_MODEL) pe_imp_model_free(obj);
+    if (type == PE_IMP_ANIMATION) pe_imp_animation_free(obj);
     free(obj);
 }
 
@@ -538,6 +541,12 @@ int pe_imp_catalog_model(const char *root, const char *id, PeImpModel *model, ch
     char path[PE_IMP_PATH_MAX];
     if (catalog_path(root, id, PE_IMP_MODEL, path, why, n)) return -1;
     return pe_imp_model_load(path, model, why, n);
+}
+
+int pe_imp_catalog_animation(const char *root, const char *id, PeImpAnimation *a, char *why, size_t n) {
+    char path[PE_IMP_PATH_MAX];
+    if (catalog_path(root, id, PE_IMP_ANIMATION, path, why, n)) return -1;
+    return pe_imp_animation_load(path, a, why, n);
 }
 
 int pe_imp_catalog_sound(const char *root, const char *id, PeImpSound **out, char *why, size_t n) {

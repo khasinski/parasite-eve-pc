@@ -32,6 +32,7 @@
 #include "pe_enemy_pack.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
+#include "pe_services.h"
 #include "pe1/battle.h"
 #include "pe1/battle_entity_anim.h"
 #include "pe1/battle_runtime.h"
@@ -80,6 +81,7 @@ typedef struct {
     double frame;
     int blow_done, stagger, last_hp, dead;
     int drawn_frames, tris, hits, damage_done, attacks_started;
+    int event_frame, sounds;         /* last frame whose events ran; sounds played */
     unsigned seen;                   /* bit per role: idle walk hurt die, attack = 1 << 4 */
 } PeFoe;
 
@@ -240,7 +242,29 @@ static void pe_set_anim(PeFoe *f, int role, int anim) {
     f->role = role;
     f->anim = anim;
     f->frame = 0;
+    f->event_frame = -1;
     f->seen |= 1u << role;
+}
+
+/* The anim's sound events from the last frame run up to `to` (wrapping when it loops), on the
+ * audio service's effect voices (pe_assets): footsteps, swings. Silent without the service. */
+static void pe_play_events(PeFoe *f, int to) {
+    const PeEnemyAnim *an = &s_pack.anim[f->anim];
+    static const PeAudioApi *audio;
+    if (!an->event || to == f->event_frame) return;
+    if (!audio) {
+        const PeAudioApi *a = pe_service_get("audio", 1);
+        if (a && a->struct_size >= sizeof *a && a->play_effect) audio = a;
+    }
+    for (int guard = 0, k = f->event_frame; guard < an->frames && k != to; guard++) {
+        k = k + 1 >= an->frames ? 0 : k + 1;
+        unsigned snd = an->event[k] & PE_ENEMY_EVENT_SOUND;
+        if (snd && (int)snd < s_pack.sounds && s_pack.sound[snd].pcm) {
+            f->sounds++;
+            if (audio) audio->play_effect(s_pack.sound[snd].pcm, (uint32_t)s_pack.sound[snd].frames, (uint32_t)s_pack.sound[snd].rate, 1.0f);
+        }
+    }
+    f->event_frame = to;
 }
 
 static int pe_angle_to(const FieldActor *from, const FieldActor *to) {
@@ -440,6 +464,7 @@ static void pe_foe_think(PeFoe *f) {
     f->frame += s_pack.fps / 30.0;
     if (f->frame >= cur->frames) f->frame = loop ? fmod(f->frame, cur->frames) : cur->frames - 1;
     done = f->frame >= cur->frames - 1;
+    pe_play_events(f, (int)f->frame);
 
     if (hp <= 0) {   /* death: its anim plays, then the game fades and frees it */
         if (!f->dead) {
@@ -577,8 +602,18 @@ static int pe_on_battle(void *ctx, void *user) {
     return 0;
 }
 
+/* A pack was built (the importer's enemies target, maybe on its worker): list them again on the
+ * main thread, between fights. */
+static SDL_AtomicInt s_rescan;
+void pe_enemy_packs_changed(void) { SDL_SetAtomicInt(&s_rescan, 1); }
+
 static int pe_on_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
+    if (!s.active && !s_armed && SDL_GetAtomicInt(&s_rescan)) {
+        SDL_SetAtomicInt(&s_rescan, 0);
+        if (s_loaded >= 0) pe_enemy_pack_free(&s_pack), s_loaded = -1;   /* list indexes may move */
+        pe_scan();
+    }
     if (s.active && !pe_in_battle()) {
         int beaten = 0;
         for (int i = 0; i < s.foes; ++i) beaten += s.foe[i].dead;
@@ -712,10 +747,10 @@ void pe_enemy_status_text(char *out, unsigned size) {
         if (f->seen & (1u << i)) snprintf(seen + strlen(seen), sizeof seen - strlen(seen), "%s%s", seen[0] ? "+" : "", k_role_names[i]);
     core = pe_core(f);
     if (core && g_PlayerEntity) dist = (int)pe_dist(f->actor, g_PlayerEntity);
-    snprintf(out, size, "%s hp=%d/%d anim=%s frames=%d tris=%d seen=%s hits=%d damage=%d dist=%d charge=%d foes=%d room=%d sent=%d",
+    snprintf(out, size, "%s hp=%d/%d anim=%s frames=%d tris=%d seen=%s hits=%d damage=%d dist=%d charge=%d foes=%d room=%d sent=%d sounds=%d",
              s_pack.name, core ? core->hpAlive : 0, s_pack.hp, f->role >= 0 ? k_role_names[f->role] : "-",
              f->drawn_frames, f->tris, seen, f->hits, f->damage_done, dist, core ? (int)core->curHP : 0, s.foes,
-             s.room_enemies, s.sent_away);
+             s.room_enemies, s.sent_away, f->sounds);
 }
 
 void pe_enemy_battle_init(void) {

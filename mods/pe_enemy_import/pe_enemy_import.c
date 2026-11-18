@@ -17,6 +17,7 @@
 
 #include "pe_encounter.h"
 #include "pe_enemy_battle.h"
+#include "pe_enemy_build.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -416,6 +417,7 @@ static void pe_enemy_text(char *out, unsigned size) { pe_enemy_status_text(out, 
 
 static int enemy_import_init(void) {
     pe_enemy_battle_init();
+    if (pe_enemy_target_register()) pe_mod_log(MOD_ID, "the importer refused the enemies builder");
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_LATE, MOD_ID);
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_battle, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_SCRIPT_RANDOM, pe_on_random, NULL, PE_PRIORITY_LATE, MOD_ID);

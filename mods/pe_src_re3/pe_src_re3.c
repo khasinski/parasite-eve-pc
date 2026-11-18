@@ -7,6 +7,7 @@
 static const PeImpAuto k_autos[] = {
     {"re3:player/jill", "skins", "Resident Evil 3 disc (Jill)"},
     {"re3:player/carlos", "skins", "Resident Evil 3 disc (Carlos)"},
+    {"re3:enemy/nemesis", "enemies", "Resident Evil 3 PC folder (Nemesis)"},
 };
 
 static int init(void) {
@@ -14,7 +15,9 @@ static int init(void) {
     if (pe_imp_add_game("re3", "Resident Evil 3", "Resident Evil") || pe_imp_add_reader(&g_re3_pld_ps1) ||
         pe_imp_add_reader(&g_re3_sound_ps1) || pe_imp_add_reader(&g_re3_bgm_ps1) ||
         pe_imp_add_reader(&g_re3_room_music_ps1) || pe_imp_add_reader(&g_re3_rooms_ps1) ||
-        pe_imp_set_naming("re3", g_re3_naming) || pe_imp_add_rig("re3", "player/", &g_re3_human_rig)) {
+        pe_imp_set_naming("re3", g_re3_naming) || pe_imp_add_rig("re3", "player/", &g_re3_human_rig) ||
+        pe_imp_add_reader(&g_re3_emd_pc) || pe_imp_add_reader(&g_re3_tones_pc) ||
+        pe_imp_add_enemy("re3", "enemy/nemesis", &g_re3_nemesis)) {
         pe_mod_log("pe_src_re3", "readers refused by the importer");
         return 1;
     }

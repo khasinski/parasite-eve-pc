@@ -531,7 +531,8 @@ static void refresh(void) {
             if (s_nitems == MAX_ITEMS || strcmp(a[i].type, "Model")) continue;
             for (int t = 0; t < pe_imp_targets(); t++) {
                 const PeImpTarget *tg = pe_imp_target(t);
-                if (!(tg->consumes & PE_IMP_MODEL) || (tg->needs_rig && !pe_imp_rig_for(a[i].id))) continue;
+                if (!(tg->consumes & PE_IMP_MODEL) || (tg->needs_rig && !pe_imp_rig_for(a[i].id)) ||
+                    (tg->accepts && !tg->accepts(a[i].id))) continue;
                 Item *it = &s_items[s_nitems++];
                 it->a = a[i], it->target = t;
                 snprintf(it->label, sizeof it->label, "%s (%s)", a[i].name, pe_imp_game_title(games[g]));
@@ -708,16 +709,16 @@ static void build(void) {
     int rc = !pe;
     if (pe) {
         PeImpBuild ctx = {s_job.store, pe, (const int16_t (*)[4])g_RenderNormalTable};
-        rc = pe_imp_pack_character(s_job.packs, &it->a, builder, folder, sizeof folder, why, sizeof why) ||
+        rc = pe_imp_target_place(tg, s_job.packs, &it->a, builder, folder, sizeof folder, why, sizeof why) ||
              tg->build(&ctx, it->a.id, folder, log, sizeof log, why, sizeof why);
         pe_imp_pe_close(pe);
     }
     if (rc) snprintf(s_build, sizeof s_build, "%s: %s", it->label, why);
     else {
         const PeWardrobePacksApi *w = pe_service_get("wardrobe_packs", 1);
-        int n = w && w->struct_size >= sizeof *w ? w->add_new(added, sizeof added) : 0;
+        int n = !tg->place && w && w->struct_size >= sizeof *w ? w->add_new(added, sizeof added) : 0;
         snprintf(s_build, sizeof s_build, "%s built (%s). %s", it->label, log,
-                 n ? "It's in the Wardrobe now." : "Rebuilt: it shows when Aya next changes clothes or the game restarts.");
+                 tg->place ? "" : n ? "It's in the Wardrobe now." : "Rebuilt: it shows when Aya next changes clothes or the game restarts.");
     }
     pe_mod_log(MOD_ID, "build: %s", s_build);
     pe_toast(s_build);
@@ -768,7 +769,7 @@ static int import_init(void) {
     pe_menu_begin(PAGE);
     pe_menu_top_page(PAGE, "Import assets from your other PlayStation games.", 60);
     pe_menu_register_info(0, "Automatic import", "Costumes built by themselves from the discs in the folder, and the discs still missing.", text_auto);
-    pe_menu_register_info(0, "Disc images folder", "Put your disc images here (.cue with its .bin, or .iso), loose or one folder deep.", text_folder);
+    pe_menu_register_info(0, "Disc images folder", "Put your disc images here (.cue with its .bin, or .iso), loose or one folder deep; a Resident Evil 3 PC folder (rofs1.dat) works too.", text_folder);
     pe_menu_register_action(0, "Open the folder", "Opens the disc images folder.", open_folder);
     pe_menu_register_info(0, "Added folders", "More folders disc images are read from, where they already are.", text_folders);
     pe_menu_register_action(0, "Add a folder", "Pick a folder that holds disc images (loose or one game per subfolder); it's read at once and at every start.", add_folder);

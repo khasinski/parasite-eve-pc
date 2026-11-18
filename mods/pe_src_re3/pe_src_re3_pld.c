@@ -335,4 +335,6 @@ const char g_re3_naming[] =
     " \"player/pl08\": {\"id\": \"player/carlos\", \"name\": \"Carlos\"},"
     " \"player/pl09\": {\"id\": \"player/mikhail\", \"name\": \"Mikhail\"},"
     " \"player/pl0a\": {\"id\": \"player/nikolai\", \"name\": \"Nikolai\"},"
-    " \"player/pl0c\": {\"id\": \"player/dario\", \"name\": \"Dario\"}}";
+    " \"player/pl0c\": {\"id\": \"player/dario\", \"name\": \"Dario\"},"
+    " \"enemy/em34\": {\"id\": \"enemy/nemesis\", \"name\": \"Nemesis\"},"
+    " \"enemy/em34/moves\": {\"id\": \"enemy/nemesis/moves\", \"name\": \"Nemesis moves\"}}";

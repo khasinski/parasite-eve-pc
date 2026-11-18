@@ -35,6 +35,7 @@ TEST_HP = 100
 REACH = 900                        # the Nemesis pack's attack reach
 FOE_TYPE = 0xEE                    # the imported enemy's actor type
 TEX_X, TEX_Y = 320, 256
+HAS_SOUNDS = False                 # the pack lists sounds: its moves' sound frames play
 
 
 def status(game):
@@ -111,6 +112,8 @@ def part_alone(game, work, rows, tex_w, tex_h):
     F.check('attack' in st['seen'], f'alone: it never attacked: {st["text"]}')
     F.check(num(st, 'hits') >= 1, f'alone: no blow landed: {st["text"]}')
     F.check(num(st, 'damage') > 0, f'alone: its blow took no HP: {st["text"]}')
+    if HAS_SOUNDS:
+        F.check(num(st, 'sounds') > 0, f'alone: none of its sound frames played: {st["text"]}')
 
     # Aya shoots until it is beaten
     hp_seen, shots, seen, end = [TEST_HP], 0, set(), game.vblank + 40000
@@ -178,6 +181,8 @@ def run(exe, disc, pack, work):
     pixels = tex[12 + 512 * pals:]
     rows = [pixels[y * tex_w:(y + 1) * tex_w] for y in range(tex_h)]
     spec = json.loads((pack / 'enemy.json').read_text())
+    global HAS_SOUNDS
+    HAS_SOUNDS = bool(spec.get('sounds'))
 
     def setup(config):
         dst = config / 'pe_enemies' / 'test-enemy'

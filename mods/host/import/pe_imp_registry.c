@@ -6,6 +6,7 @@
 
 #include "pe_imp.h"
 #include "pe_imp_internal.h"
+#include "pe_imp_enemy.h"
 
 #define MAX_READERS 128
 #define MAX_NAMING 64
@@ -186,6 +187,26 @@ const struct PeImpRig *pe_imp_rig_for(const char *asset_id) {
     return NULL;
 }
 
+#define MAX_ENEMIES 64
+static struct { char id[PE_IMP_ID_MAX]; const PeImpEnemyProfile *p; } s_enemy[MAX_ENEMIES];
+static int s_enemies;
+
+int pe_imp_add_enemy(const char *game, const char *local_id, const PeImpEnemyProfile *p) {
+    char id[PE_IMP_ID_MAX];
+    if (!word_ok(game, 15) || !local_id || !p || !p->moves || s_enemies == MAX_ENEMIES ||
+        snprintf(id, sizeof id, "%s:%s", game, local_id) >= (int)sizeof id)
+        return -1;
+    for (int i = 0; i < s_enemies; i++) if (!strcmp(s_enemy[i].id, id)) return -1;
+    snprintf(s_enemy[s_enemies].id, sizeof s_enemy[0].id, "%s", id);
+    s_enemy[s_enemies++].p = p;
+    return 0;
+}
+
+const PeImpEnemyProfile *pe_imp_enemy_for(const char *asset_id) {
+    for (int i = 0; i < s_enemies; i++) if (!strcmp(s_enemy[i].id, asset_id)) return s_enemy[i].p;
+    return NULL;
+}
+
 int pe_imp_add_target(const PeImpTarget *t) {
     if (!t || t->api.version != PE_IMP_API_VERSION || t->api.size != sizeof *t || !t->build || !t->module ||
         !t->verb || s_targets == MAX_TARGETS)
@@ -213,5 +234,5 @@ const PeImpTarget *pe_imp_target(int i) { return i >= 0 && i < s_targets ? s_tar
 
 void pe_imp_registry_reset(void) {
     for (int i = 0; i < s_namings; i++) pj_free(s_naming[i].root);
-    s_readers = s_namings = s_games = s_rigs = s_targets = s_autos = 0;
+    s_readers = s_namings = s_games = s_rigs = s_targets = s_autos = s_enemies = 0;
 }

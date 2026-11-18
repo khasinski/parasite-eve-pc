@@ -11,4 +11,17 @@ extern const PeImpReader g_re3_pld_ps1;
 extern const PeImpReader g_re3_sound_ps1, g_re3_bgm_ps1, g_re3_room_music_ps1, g_re3_rooms_ps1;
 extern const char g_re3_naming[];
 
+/* Enemies (pe_src_re3_emd.c, pe_src_re3_tones.c, pe_src_re3_enemies.c) */
+#include "pe_imp_enemy.h"
+/* an EMD and its TIM -> the Model (bound parts skinned) and the Animation; 0, or -1 with a reason */
+int re3_emd_parse(const uint8_t *emd, uint32_t emd_size, const uint8_t *tim, uint32_t tim_size,
+                  PeImpModel *m, PeImpAnimation *anim, char *why, size_t n);
+int re3_tim_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, size_t n);
+int re3_tone_count(const uint8_t *vh, uint32_t vh_size);          /* -1: not an RE3 bank */
+double re3_tone_rate(int note, int centre, int fine);
+PeImpSound *re3_tone_sound(const uint8_t *vh, uint32_t vh_size, const uint8_t *vb, uint32_t vb_size, int t,
+                           char *why, size_t n);
+extern const PeImpReader g_re3_emd_pc, g_re3_tones_pc;
+extern const PeImpEnemyProfile g_re3_nemesis;
+
 #endif

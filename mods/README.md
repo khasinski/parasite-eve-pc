@@ -135,6 +135,24 @@ refusals, posing, behavior fields; a real pack with PE_TEST_ENEMY_PACK) and `ene
 (PE_TEST_DISC + PE_TEST_ENEMY_PACK: alone and beside the room's enemies, it appears, walks,
 attacks, is hurt, dies, the battle is won and the VRAM block given back).
 
+**Built in the game (F1 > Import)**, the same way as costumes: a source game's mod registers
+readers, a naming table and an **enemy profile** (`host/import/pe_imp_enemy.h`: moves for the
+roles and attacks, HP, power, reach, height, sounds) for an asset; the `enemies` builder target
+(pe_enemy_build.c, pe_enemy_target.c, "Build as an enemy") turns the catalogued Model, its
+Animation and its Sounds into a pack in `<prefs>/pe_enemies/<game>-<name>/` (targets may now name
+their own place and which assets they take: `accepts`, `place`, `current` in PeImpTarget). Pack
+additions: anims version 2 carry a u16 event per frame (sound number, hit frame); "sounds" lists
+WAV files. Sound frames play through the `audio` service's new `play_effect` (several voices at
+once). Importer core additions: Model v2 (optional per-corner skin: bone + second bone, written
+only for skinned models), the Animation type (moves, frames, per-frame events), and a PC game
+folder of RE3 `rofs*.dat` archives opened like a disc image (pe_imp_rofs.c). pe_src_re3 reads RE3
+PC enemies (`ROOM/EMD/EM??.EMD` + TIM: skinned model and all moves; step flag 0x800 = hit frame,
+top 4 bits = sound) and enemy sound banks (`DATA/SOUND/E_??.VH` + VB, as tones at their pitch);
+Nemesis = EM34 with his profile and an automatic build once the RE3 PC folder is in the import
+folders. Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
+PE_TEST_RE3_PC = the RE3 PC folder adds EM34 and E_34) and `mod-enemy-build` (builder on made-up
+data; with PE_TEST_RE3_PC Nemesis built from the store into `enemy-build-test/nemesis`).
+
 ## Quick save (pe_quicksave)
 
 F10 saves to the current slot, F11 loads it, F12 picks the next of 10 slots (also F1 > Quick save).

@@ -23,6 +23,11 @@ static int write_text(const char *path, const char *text) {
     return fclose(f) || bad ? -1 : 0;
 }
 
+int pe_imp_target_place(const PeImpTarget *t, const char *packs, const PeImpAsset *a, const char *builder,
+                        char *folder, size_t fn, char *why, size_t n) {
+    return t->place ? t->place(a, builder, folder, fn, why, n) : pe_imp_pack_character(packs, a, builder, folder, fn, why, n);
+}
+
 int pe_imp_pack_character(const char *packs, const PeImpAsset *a, const char *builder,
                           char *folder, size_t fn, char *why, size_t n) {
     char game[16] = "", local[PE_IMP_ID_MAX] = "", name[48], pack[PE_IMP_PATH_MAX], path[PE_IMP_PATH_MAX];

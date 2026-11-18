@@ -49,9 +49,11 @@ endif()
 # their readers from their own mods (pe_src_<game>); nothing here names a game.
 set(pe_import_core_sources
     host/import/pe_imp_disc.c       # PS1 disc images: .cue / .bin / .iso, ISO 9660
+    host/import/pe_imp_rofs.c       # RE3 PC rofs*.dat archives, a game folder read like a disc
     host/import/pe_imp_json.c       # a small bounded JSON reader and writer (no cJSON on PS5)
     host/import/pe_imp_sha256.c     # store keys
     host/import/pe_imp_model.c      # the Model type: check, store, load
+    host/import/pe_imp_anim.c       # the Animation type: moves with per-frame events
     host/import/pe_imp_sound.c      # the Sound type: bounded PCM
     host/import/pe_imp_song.c       # the Song type: sequenced source music
     host/import/pe_imp_imageset.c   # the ImageSet type: still pictures (room backgrounds)
@@ -325,6 +327,12 @@ if(BUILD_TESTING)
     pe_feature_test(re3 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re3_test.c ${pe_import_core_sources}
         pe_src_re3/pe_src_re3_pld.c)
     target_include_directories(test-mod-re3 PRIVATE host/import pe_src_re3)
+    # RE3's enemies: the PC folder (rofs archives), EMD models with their moves, enemy sound banks,
+    # on made-up data; PE_TEST_RE3_PC (the RE3 PC folder) adds Nemesis (EM34, E_34) read for real.
+    pe_feature_test(re3-enemy ${PROJECT_SOURCE_DIR}/tests/pe_mod_re3_enemy_test.c ${pe_import_core_sources}
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c)
+    target_include_directories(test-mod-re3-enemy PRIVATE host/import pe_src_re3)
+    set_tests_properties(mod-re3-enemy PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
     # The RE1 reader on a made-up person; PE_TEST_RE1_DISC adds the four people on the disc.
     pe_feature_test(re1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re1_test.c ${pe_import_core_sources}
         pe_src_re1/pe_src_re1_emd.c)
@@ -362,6 +370,7 @@ if(BUILD_TESTING)
         pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_core_sources}
             pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2.c
             pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3_rooms.c pe_src_re3/pe_src_re3.c
+            pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c
             pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c pe_src_dc1/pe_src_dc1_music.c pe_src_dc1/pe_src_dc1.c
             pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c
             pe_wardrobe/pe_packs.c pe_import/pe_import_job.c)
@@ -398,6 +407,14 @@ if(BUILD_TESTING AND "pe_enemy_import" IN_LIST PE_MOD_LIST)
     target_include_directories(test-mod-enemy-pack PRIVATE pe_enemy_import)
     target_link_libraries(test-mod-enemy-pack PRIVATE pe_download_json)
     set_tests_properties(mod-enemy-pack PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
+    # The enemies builder: a made-up model and moves -> a pack that loads back (events, sounds, hit
+    # frames); PE_TEST_RE3_PC adds Nemesis built from the RE3 PC folder through the importer's store.
+    pe_feature_test(enemy-build ${PROJECT_SOURCE_DIR}/tests/pe_enemy_build_test.c pe_enemy_import/pe_enemy_build.c
+        pe_enemy_import/pe_enemy_pack.c ${pe_import_core_sources}
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c)
+    target_include_directories(test-mod-enemy-build PRIVATE pe_enemy_import host/import pe_src_re3)
+    target_link_libraries(test-mod-enemy-build PRIVATE pe_download_json)
+    set_tests_properties(mod-enemy-build PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 300)
 endif()
 if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
     # The pure core and the game's own pack; the game side is covered by pe-native-debug's

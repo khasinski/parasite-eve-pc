@@ -128,17 +128,59 @@ static int load_anim(PeEnemyPack *p, const char *dir, const char *name, const ch
     if (p->anims == PE_ENEMY_MAX_ANIMS) return fail(err, es, "too many animations", file);
     b = read_file(dir, file, &size);
     if (!b) return fail(err, es, "missing or unreadable", file);
-    if (size < 12 || memcmp(b, "PEEA", 4) || rd16(b + 4) != 1) { free(b); return fail(err, es, "not a version 1 animation", file); }
+    unsigned version = size >= 12 && !memcmp(b, "PEEA", 4) ? rd16(b + 4) : 0;
+    if (version != 1 && version != 2) { free(b); return fail(err, es, "not a version 1 or 2 animation", file); }
     if ((int)rd16(b + 6) != p->bones) { free(b); return fail(err, es, "made for another skeleton", file); }
     a = &p->anim[p->anims];
     a->frames = (int)rd16(b + 8);
     per = 3u + 3u * p->bones;
-    if (a->frames < 1 || size < 12u + 2u * per * a->frames) { free(b); return fail(err, es, "no frames or shorter than its count", file); }
+    if (a->frames < 1 || size < 12u + 2u * (per + (version == 2)) * a->frames) { free(b); return fail(err, es, "no frames or shorter than its count", file); }
     if (!(a->data = malloc(2u * per * a->frames))) { free(b); return fail(err, es, "out of memory", file); }
     for (i = 0; i < per * a->frames; ++i) a->data[i] = (int16_t)rds16(b + 12 + 2 * i);
+    if (version == 2) {
+        if (!(a->event = malloc(2u * a->frames))) { free(a->data); a->data = NULL; free(b); return fail(err, es, "out of memory", file); }
+        for (i = 0; i < (unsigned)a->frames; ++i) a->event[i] = (uint16_t)rd16(b + 12 + 2 * (per * a->frames + i));
+    }
     free(b);
     snprintf(a->name, sizeof a->name, "%s", name);
     p->anims++;
+    return 0;
+}
+
+static unsigned rd32(const uint8_t *p) { return rd16(p) | rd16(p + 2) << 16; }
+
+int pe_enemy_wav_parse(const uint8_t *b, unsigned size, PeEnemySound *s) {
+    unsigned at = 12, rate = 0, fmt_ok = 0;
+    memset(s, 0, sizeof *s);
+    if (size < 12 || memcmp(b, "RIFF", 4) || memcmp(b + 8, "WAVE", 4)) return -1;
+    while (at + 8 <= size) {
+        unsigned len = rd32(b + at + 4), body = at + 8;
+        if (len > size - body) return -1;
+        if (!memcmp(b + at, "fmt ", 4) && len >= 16) {
+            rate = rd32(b + body + 4);
+            fmt_ok = rd16(b + body) == 1 && rd16(b + body + 2) == 1 && rd16(b + body + 14) == 16;
+        } else if (!memcmp(b + at, "data", 4)) {
+            unsigned frames = len / 2;
+            if (!fmt_ok || rate < 8000 || rate > 48000 || !frames || frames > rate * 10) return -1;
+            if (!(s->pcm = malloc(2u * frames))) return -1;
+            for (unsigned i = 0; i < frames; ++i) s->pcm[i] = (int16_t)rds16(b + body + 2 * i);
+            s->rate = (int)rate, s->frames = (int)frames;
+            return 0;
+        }
+        at = body + len + (len & 1);
+    }
+    return -1;
+}
+
+static int load_sound(PeEnemyPack *p, const char *dir, const char *file, char *err, unsigned es) {
+    unsigned size = 0;
+    uint8_t *b;
+    if (p->sounds == PE_ENEMY_MAX_SOUNDS) return fail(err, es, "too many sounds", file);
+    if (!(b = read_file(dir, file, &size))) return fail(err, es, "missing or unreadable", file);
+    int rc = pe_enemy_wav_parse(b, size, &p->sound[p->sounds]);
+    free(b);
+    if (rc) return fail(err, es, "not a mono 16-bit PCM WAV of 8000-48000 Hz, at most 10 seconds", file);
+    p->sounds++;
     return 0;
 }
 
@@ -201,6 +243,10 @@ int pe_enemy_pack_load(PeEnemyPack *p, const char *dir, char *err, unsigned es) 
     }
     for (i = 0; i < PE_ANIM_ROLES; ++i) p->role[i] = pe_enemy_pack_anim(p, k_roles[i]);
     if (p->role[PE_ANIM_IDLE] < 0) { fail(err, es, "needs an \"idle\" anim", "enemy.json"); goto done; }
+    cJSON_ArrayForEach(it, cJSON_GetObjectItemCaseSensitive(j, "sounds")) {
+        if (!cJSON_IsString(it)) { fail(err, es, "a sound isn't a file name", "enemy.json"); goto done; }
+        if (load_sound(p, dir, it->valuestring, err, es)) goto done;
+    }
     attacks = cJSON_GetObjectItemCaseSensitive(j, "attacks");
     cJSON_ArrayForEach(it, attacks) {
         PeEnemyAttack *a;
@@ -227,7 +273,8 @@ void pe_enemy_pack_free(PeEnemyPack *p) {
     free(p->triangle);
     free(p->palette);
     free(p->pixels);
-    for (i = 0; i < p->anims; ++i) free(p->anim[i].data);
+    for (i = 0; i < p->anims; ++i) free(p->anim[i].data), free(p->anim[i].event);
+    for (i = 0; i < p->sounds; ++i) free(p->sound[i].pcm);
     memset(p, 0, sizeof *p);
     for (i = 0; i < PE_ANIM_ROLES; ++i) p->role[i] = -1;
 }

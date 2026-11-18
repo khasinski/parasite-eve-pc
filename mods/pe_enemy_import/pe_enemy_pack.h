@@ -5,6 +5,7 @@
  *                               model.bin    "PEEM": bones, vertices bound to bones, triangles
  *                               texture.bin  "PEET": 8-bit texture and its palettes (PSX colours)
  *                               anims/<move>.bin "PEEA": one move, a pose per game frame
+ *                               sounds/<nn>.wav  what the moves play (optional)
  *
  * All little-endian. model.bin (version 1):
  *   char[4] "PEEM", u16 version, bones, vertices, triangles, tex width, tex height, palettes, 0
@@ -17,7 +18,11 @@
  * enemy.json may add "behavior" {speed, charge, radius, stagger} and per attack "power" and
  *   "hit" (see PeEnemyPack, PeEnemyAttack); the imported enemy's own fight logic reads them.
  * anims (version 1): char[4] "PEEA", u16 version, bones, frames, 0; per frame s16 root x, y, z,
- *   then s16 x, y, z angles per bone (4096 = a full turn; rotation = X * Y * Z, parent first). */
+ *   then s16 x, y, z angles per bone (4096 = a full turn; rotation = X * Y * Z, parent first).
+ *   Version 2 adds a u16 event per frame after the frames: low byte = the sound it plays (an
+ *   index into enemy.json's "sounds", 0 none), 0x100 = a blow can land on this frame.
+ * enemy.json may list "sounds": [file, ...]: PCM WAV files, mono, 16-bit, 8000-48000 Hz, at most
+ *   10 seconds each; an event's sound number k plays sounds[k]. */
 #ifndef PE_ENEMY_PACK_H
 #define PE_ENEMY_PACK_H
 
@@ -29,6 +34,8 @@
 #define PE_ENEMY_MAX_ANIMS 12
 #define PE_ENEMY_MAX_ATTACKS 4
 #define PE_ENEMY_NO_BONE 0xFF
+#define PE_ENEMY_MAX_SOUNDS 32
+enum { PE_ENEMY_EVENT_SOUND = 0x00FF, PE_ENEMY_EVENT_HIT = 0x0100 };
 
 enum { PE_ANIM_IDLE, PE_ANIM_WALK, PE_ANIM_HURT, PE_ANIM_DIE, PE_ANIM_ROLES };
 
@@ -40,7 +47,10 @@ typedef struct {
     char name[24];
     int frames;
     int16_t *data;          /* frames * (3 + 3 * bones) */
+    uint16_t *event;        /* frames (version 2), else NULL */
 } PeEnemyAnim;
+
+typedef struct { int rate, frames; int16_t *pcm; } PeEnemySound;
 
 typedef struct {
     int anim;               /* index into anims */
@@ -69,7 +79,12 @@ typedef struct {
     int role[PE_ANIM_ROLES];   /* anim index per role, -1 none */
     int attacks;
     PeEnemyAttack attack[PE_ENEMY_MAX_ATTACKS];
+    int sounds;
+    PeEnemySound sound[PE_ENEMY_MAX_SOUNDS];
 } PeEnemyPack;
+
+/* A PCM WAV (mono, 16-bit) from memory; 0, or -1. s->pcm is malloc'd. */
+int pe_enemy_wav_parse(const uint8_t *data, unsigned size, PeEnemySound *s);
 
 /* Loads <dir>/enemy.json and the files it names. 0 on success; else -1 and why in err. */
 int pe_enemy_pack_load(PeEnemyPack *pack, const char *dir, char *err, unsigned err_size);

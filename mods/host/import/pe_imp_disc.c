@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "pe_imp.h"
+#include "pe_imp_rofs.h"
 
 #define RAW 2352u
 #define COOKED 2048u
@@ -19,14 +20,18 @@
 
 static const unsigned char k_sync[12] = {0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0};
 
-typedef struct { char name[NAME_MAX_LEN]; uint32_t lba, size; } File;
+typedef struct { char name[NAME_MAX_LEN]; uint32_t lba, size; int arch; } File;
 
+#define ROFS_MAX 32                                   /* rofs1.dat .. rofs32.dat */
 struct PeImpDisc {
     FILE *f;
     uint32_t sector, count;
     File *file;
     int files, cap;
     char label[256];
+    /* a PC game folder (pe_imp_rofs.c): archives instead of sectors; lba = the entry's offset */
+    int rofs;
+    char *arch[ROFS_MAX];
 };
 
 static int fail(char *why, size_t n, const char *fmt, const char *a) {
@@ -106,6 +111,7 @@ static int sectors(PeImpDisc *d, uint32_t lba, uint32_t count, uint8_t *out, cha
     return 0;
 }
 
+void pe_imp_disc_close(PeImpDisc *d);
 static int add_file(PeImpDisc *d, const char *name, uint32_t lba, uint32_t size) {
     if (d->files >= MAX_FILES) return -1;
     if (d->files == d->cap) {
@@ -181,8 +187,11 @@ done:
     return rc;
 }
 
+static PeImpDisc *pe_imp_rofs_open(const char *path, char *why, size_t n);
+
 PeImpDisc *pe_imp_disc_open(const char *path, char *why, size_t n) {
     char bin[PE_IMP_PATH_MAX];
+    if (pe_imp_rofs_path(path)) return pe_imp_rofs_open(path, why, n);
     if (ends_with(path, ".cue")) {
         if (cue_bin(path, bin, sizeof bin, why, n)) return NULL;
     } else if (snprintf(bin, sizeof bin, "%s", path) >= (int)sizeof bin) {
@@ -215,9 +224,49 @@ bad:
     return NULL;
 }
 
+/* A PC game's folder of rofs<N>.dat archives (RE3 PC 1999), named by any one of them: each archive
+ * is one folder ("DATA/SOUND"), its files listed as "DATA/SOUND/E_34.VH" like a disc's. */
+static PeImpDisc *pe_imp_rofs_open(const char *path, char *why, size_t n) {
+    PeImpDisc *d = calloc(1, sizeof *d);
+    if (!d) return NULL;
+    size_t dir = (size_t)(base_name(path) - path);
+    char folder[256] = "PC";
+    if (dir > 1) {                                   /* the folder's own name labels the source */
+        char tmp[PE_IMP_PATH_MAX];
+        snprintf(tmp, sizeof tmp, "%.*s", (int)(dir - 1), path);
+        snprintf(folder, sizeof folder, "%s", base_name(tmp));
+    }
+    snprintf(d->label, sizeof d->label, "%s (PC)", folder);
+    d->rofs = 1;
+    for (int a = 0; a < ROFS_MAX; a++) {
+        char arch[PE_IMP_PATH_MAX], names[2][32];
+        PeImpRofsEntry *e = NULL;
+        int count = 0;
+        if (dir + 16 >= sizeof arch) break;
+        snprintf(arch, sizeof arch, "%.*srofs%d.dat", (int)dir, path, a + 1);
+        if (pe_imp_rofs_list(arch, names, &e, &count, NULL, 0)) continue;   /* gaps are fine */
+        if (!(d->arch[a] = malloc(strlen(arch) + 1))) { free(e); goto bad; }
+        strcpy(d->arch[a], arch);
+        for (int i = 0; i < count; i++) {
+            char full[NAME_MAX_LEN];
+            snprintf(full, sizeof full, "%s/%s/%s", names[0], names[1], e[i].name);
+            for (char *c = full; *c; c++) *c = (char)toupper((unsigned char)*c);
+            if (add_file(d, full, e[i].offset, e[i].size)) { free(e); fail(why, n, "%s has too many files", d->label); goto bad; }
+            d->file[d->files - 1].arch = a;
+        }
+        free(e);
+    }
+    if (!d->files) { fail(why, n, "%s: no readable rofs archives", d->label); goto bad; }
+    return d;
+bad:
+    pe_imp_disc_close(d);
+    return NULL;
+}
+
 void pe_imp_disc_close(PeImpDisc *d) {
     if (!d) return;
     if (d->f) fclose(d->f);
+    for (int a = 0; a < ROFS_MAX; a++) free(d->arch[a]);
     free(d->file);
     free(d);
 }
@@ -229,6 +278,7 @@ const char *pe_imp_disc_label(const PeImpDisc *d) { return d->label; }
 uint32_t pe_imp_disc_lba(const PeImpDisc *d, int i) { return i >= 0 && i < d->files ? d->file[i].lba : 0; }
 uint32_t pe_imp_disc_count(const PeImpDisc *d) { return d->count; }
 int pe_imp_disc_sectors(PeImpDisc *d, uint32_t lba, uint32_t count, uint8_t *out, char *why, size_t n) {
+    if (d->rofs) return fail(why, n, "%s", "a PC game folder has no sectors");
     return sectors(d, lba, count, out, why, n);
 }
 
@@ -246,6 +296,7 @@ int pe_imp_disc_read(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *
     if (i < 0 || i >= d->files) return fail(why, n, "%s", "no such file");
     File *f = &d->file[i];
     if (f->size > PE_IMP_FILE_MAX) return fail(why, n, "%s is too large", f->name);
+    if (d->rofs) return pe_imp_rofs_read(d->arch[f->arch], f->lba, f->size, data, size, why, n);
     uint32_t secs = (f->size + COOKED - 1) / COOKED;
     uint8_t *buf = malloc((size_t)secs * COOKED + 1);
     if (!buf) return fail(why, n, "%s", "out of memory");
@@ -257,6 +308,7 @@ int pe_imp_disc_read(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *
 int pe_imp_disc_xa(PeImpDisc *d, int i, uint8_t **data, uint32_t *size, char *why, size_t n) {
     *data = NULL, *size = 0;
     if (i < 0 || i >= d->files) return fail(why, n, "%s", "no such file");
+    if (d->rofs) return fail(why, n, "%s", "a PC game folder has no streamed CD audio");
     if (d->sector != RAW) return fail(why, n, "%s", "streamed audio needs a raw .bin image, not a .iso");
     File *f = &d->file[i];
     uint32_t secs = (f->size + COOKED - 1) / COOKED;

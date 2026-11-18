@@ -10,5 +10,6 @@ const char *pe_enemy_choice_name(unsigned i);
 void pe_enemy_battle_arm(int choice, int count, int send_away);
 void pe_enemy_battle_disarm(void);
 void pe_enemy_status_text(char *out, unsigned size);
+void pe_enemy_packs_changed(void);              /* any thread: list the packs again between fights */
 
 #endif
