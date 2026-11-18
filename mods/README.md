@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone;pe_src_re1;pe_src_re2;pe_src_re3;pe_import` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone;pe_src_re1;pe_src_re2;pe_src_re3;pe_src_dc1;pe_import` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -70,6 +70,7 @@ mods/
   pe_src_re1/          import source: Resident Evil, Director's Cut (its reader, naming table and rig)
   pe_src_re2/          import source: Resident Evil 2 (its readers, naming table and rig)
   pe_src_re3/          import source: Resident Evil 3 (its reader, naming table and rig)
+  pe_src_dc1/          import source: Dino Crisis (Regina's outfits; its reader, naming table and rig)
   host/import/         the importer core (disc images, store, catalog, PE formats); see Import below
 ```
 
@@ -700,7 +701,7 @@ their own added with F1 > Import > Add a folder (the system's folder picker; kep
 
 **Automatic.** When the game starts, a worker thread (`pe_import_job.c`) reads new or changed disc
 images and builds everything the source games mark automatic (`pe_imp_add_auto`; RE1: Chris and Jill;
-RE2: Claire from disc 2, Leon from disc 1; RE3: Jill and Carlos) unless its pack already holds a build of the same source file by the
+RE2: Claire from disc 2, Leon from disc 1; RE3: Jill and Carlos; Dino Crisis: Regina) unless its pack already holds a build of the same source file by the
 same builder. Back on the main thread the Wardrobe adds the new costumes at once (the
 `wardrobe_packs` service, `pe_packs_add_new`: only new packs and characters; registered costumes
 stay put), with a message. F1 > Import > Automatic import says what's ready and which discs to add;
@@ -727,13 +728,17 @@ from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
   in the core names a game. RE1's people are rigid like RE2's, in another bone order; its reader
   puts them in RE2's order (`pe_src_re1_emd.c`). RE3's people are skinned (an arm is one mesh in the root's frame, a
   table says which bone moves each vertex); its reader splits them back into RE2's 15 bone-local
-  parts, so the fit is RE2's (`pe_src_re3_pld.c` has the layout).
+  parts, so the fit is RE2's (`pe_src_re3_pld.c` has the layout). Dino Crisis packs Regina into
+  compressed archives (`PSX/DATA/CORE0x.DAT`, one per outfit) with a skinned vertex pool and a
+  tiled texture; `pe_src_dc1_core.c` documents what was worked out from the disc. A game whose
+  disc shares another's file layout names a file that tells them apart (`pe_imp_add_disc_id`:
+  Dino Crisis 2 has the same CORE names).
 - `pe_wardrobe/pe_skin_build.c` + `pe_skin_target.c`: the skins target, a port of tools/re2-skin
   (PR #4). Every file is byte for byte the Python's except texture.bin (our colour reduction) and
   angles at gimbal lock, where the Python read rounding noise (`pe_imp_to_yxz`).
 - Tests: `mod-import` (made-up disc images and models, broken files, the store; real disc with
-  `PE_TEST_RE2_DISC`), `mod-re1` and `mod-re3` (a made-up person each; the real people with `PE_TEST_RE1_DISC`,
-  `PE_TEST_RE3_DISC`),
+  `PE_TEST_RE2_DISC`), `mod-re1`, `mod-re3` and `mod-dc1` (made-up data each; the real people with
+  `PE_TEST_RE1_DISC`, `PE_TEST_RE3_DISC`, `PE_TEST_DC1_DISC`),
   `mod-skin-build` and `mod-import-flow` (need `PE_TEST_DISC` and
   `PE_TEST_RE2_DISC`; `PE_TEST_SKIN_REFERENCE` compares with tools/re2-skin's output).
 

@@ -377,5 +377,5 @@ static void import_shutdown(void) {
     if (s_lock) SDL_DestroyMutex(s_lock), s_lock = NULL;
 }
 
-static const char *const k_requires[] = {"pe_wardrobe", "pe_src_re1", "pe_src_re2", "pe_src_re3", NULL};
+static const char *const k_requires[] = {"pe_wardrobe", "pe_src_re1", "pe_src_re2", "pe_src_re3", "pe_src_dc1", NULL};
 const PeMod pe_mod_pe_import = {MOD_ID, "Import from other games", "0.2", k_requires, import_init, import_shutdown};

@@ -276,6 +276,16 @@ static void test_scan(void) {
     pj_free(cat);
     CHECK(!pe_imp_set_naming("re2", g_re2_naming) && pe_imp_naming_hash() == before);
 
+    /* disc IDs: a game that names one claims only a disc holding it (another game's disc can share
+     * its file layout); the ID is part of the hash that makes old scans run again */
+    CHECK(pe_imp_add_disc_id("re2", "SLUS_007.48") == -1);               /* the game isn't added yet */
+    CHECK(!pe_imp_add_game("re2", "Resident Evil 2", "Resident Evil") && !pe_imp_add_disc_id("re2", "SLUS_007.48"));
+    CHECK(pe_imp_naming_hash() != before);
+    CHECK(pe_imp_scan("pe-import-test/store", "pe-import-test/discs/Made Up.cue", NULL, &sc) == -1);
+    CHECK(strstr(sc.last_error, "no reader recognises") != NULL);
+    CHECK(!pe_imp_add_disc_id("re2", "PL1/*/PL01.PLD") && pe_imp_disc_id_count("re2") == 2);
+    CHECK(!pe_imp_scan("pe-import-test/store", "pe-import-test/discs/Made Up.cue", NULL, &sc) && !strcmp(sc.game, "re2"));
+
     /* a broken image: folder records pointing past the end are refused, not followed */
     iso[18 * 2048 + 2 * 34 + 2] = 0xff;                        /* PL1's LBA -> far away */
     write_file("pe-import-test/discs/broken.iso", iso, isize);

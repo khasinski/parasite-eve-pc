@@ -4,7 +4,7 @@
 # are available in standard builds, but the original text remains the default and no pack ships.
 # pe_fonts adds F1 > Font (Original, or a picture from mods/fonts/); Original is the default.
 set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shops pe_collection pe_wardrobe pe_styles pe_stacks pe_warp pe_quicksave pe_cheats pe_phone
-    pe_src_re1 pe_src_re2 pe_src_re3 pe_import)   # F1 > Import: source games first, then the page
+    pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import)   # F1 > Import: source games first, then the page
 if(NOT PE_PS5_GAME)
     list(APPEND pe_default_mods pe_lang pe_fonts)
 endif()
@@ -311,6 +311,10 @@ if(BUILD_TESTING)
     pe_feature_test(re1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re1_test.c ${pe_import_core_sources}
         pe_src_re1/pe_src_re1_emd.c)
     target_include_directories(test-mod-re1 PRIVATE host/import pe_src_re1)
+    # The Dino Crisis reader on a made-up archive; PE_TEST_DC1_DISC adds Regina's four outfits.
+    pe_feature_test(dc1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_dc1_test.c ${pe_import_core_sources}
+        pe_src_dc1/pe_src_dc1_core.c)
+    target_include_directories(test-mod-dc1 PRIVATE host/import pe_src_dc1)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
     pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_core_sources}
         pe_src_re2/pe_src_re2_pld.c pe_wardrobe/pe_skin_build.c)
@@ -321,10 +325,10 @@ if(BUILD_TESTING)
         # F1 > Import's scan and build, then the Wardrobe's pack reader loading the result.
         pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_core_sources}
             pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2.c
-            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3.c
+            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1.c
             pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c
             pe_wardrobe/pe_packs.c pe_import/pe_import_job.c)
-        target_include_directories(test-mod-import-flow PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3 pe_import)
+        target_include_directories(test-mod-import-flow PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import)
         target_compile_definitions(test-mod-import-flow PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
         target_link_libraries(test-mod-import-flow PRIVATE pe_download_json pe_download_zip)
         set_tests_properties(mod-import-flow PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600

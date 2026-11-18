@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "98038b55485e17384eb03d5742570246220e6dc59fda45791786f931b7877a52"
+      "sha256": "f881279d4a8d782059d8ef5f063a307284b9e7975c940134dee3b4812da48e22"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4563,7 +4563,7 @@
     },
     {
       "path": "mods/host/import/pe_imp.h",
-      "sha256": "d501408df15c335cf44e4c5b366b0b681970cabc3e56b448afd2625850221505"
+      "sha256": "a7c20a263df0fc82fd8e469b935e375e67f931501d9cd84687fbe4c17a511df2"
     },
     {
       "path": "mods/host/import/pe_imp_internal.h",
@@ -4591,11 +4591,11 @@
     },
     {
       "path": "mods/host/import/pe_imp_registry.c",
-      "sha256": "a6a98835ba255bc855758b857861ad047cdf9f4734a7459f48752f8a15870838"
+      "sha256": "61c86b1541aebf48f06f05ccbe682eb650f46fdb2bab29b4d8c6dfbdb5ee2ec4"
     },
     {
       "path": "mods/host/import/pe_imp_store.c",
-      "sha256": "2f1b43d93ddbf6bd4089e453803da4baa5d882832ffd5ef4b01dd41471a1db4f"
+      "sha256": "1c1f0e8be08a768c8a44e7ca8ad08f3a7dd8d0224580d6f166ab57b33a6ac552"
     },
     {
       "path": "mods/host/import/pe_imp_pe.h",
@@ -4635,7 +4635,7 @@
     },
     {
       "path": "mods/pe_import/pe_import.c",
-      "sha256": "904a3e0a028056c12444e71cffea8daaebc2039eb5e1cc3edda13783a12e3a1f"
+      "sha256": "9022d8e8f3fcf78ae0c2168d83c1e88892f445f6eed5f9a3cd96d08af63fbf1d"
     },
     {
       "path": "mods/pe_import/pe_import.h",
@@ -4644,6 +4644,18 @@
     {
       "path": "mods/pe_import/pe_import_game.c",
       "sha256": "52dab06dc9f4df10ea6b2b7e7300e608d2579634a965481192b3662b7948f95a"
+    },
+    {
+      "path": "mods/pe_src_dc1/pe_src_dc1.c",
+      "sha256": "cd1afe94e8b8a882033aeeee2c60c01b3544e75c8a2b9bdebafa224dd1197319"
+    },
+    {
+      "path": "mods/pe_src_dc1/pe_src_dc1.h",
+      "sha256": "64072488057609a08e516c973f16334f0754067e6afffb6b201b19baf29882b2"
+    },
+    {
+      "path": "mods/pe_src_dc1/pe_src_dc1_core.c",
+      "sha256": "5573e1b7161ffcf259a85e1be499c74cd6b6b27ffbdd4e41444ab97bff29be1d"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.c",

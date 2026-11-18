@@ -213,7 +213,10 @@ static const char *pick_game(PeImpDisc *d) {
     int best_n = 0;
     for (int r = 0; r < pe_imp_readers(); r++) {
         const char *g = pe_imp_reader(r)->game;
-        int n = 0;
+        int n = 0, ids = pe_imp_disc_id_count(g), have = !ids;
+        for (int k = 0; k < ids && !have; k++)
+            for (int i = 0; i < pe_imp_disc_files(d) && !have; i++) have = pe_imp_match(pe_imp_disc_id(g, k), pe_imp_disc_name(d, i));
+        if (!have) continue;                         /* another game's disc with the same layout */
         for (int i = 0; i < pe_imp_disc_files(d); i++) n += reader_for(g, pe_imp_disc_name(d, i)) >= 0;
         if (n > best_n) best = g, best_n = n;
     }

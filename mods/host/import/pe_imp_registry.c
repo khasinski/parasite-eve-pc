@@ -77,6 +77,8 @@ int pe_imp_set_naming(const char *game, const char *json) {
     return 0;
 }
 
+static uint32_t disc_id_hash(uint32_t h);
+
 uint32_t pe_imp_naming_hash(void) {
     uint32_t h = 2166136261u;
     for (int i = 0; i < s_namings; i++)
@@ -84,7 +86,7 @@ uint32_t pe_imp_naming_hash(void) {
             for (const char *c = part ? s_naming[i].json : s_naming[i].game; *c; c++) h = (h ^ (uint8_t)*c) * 16777619u;
             h = (h ^ 0xffu) * 16777619u;
         }
-    return h;
+    return disc_id_hash(h);
 }
 
 /* The naming table's {id, name} for a proposed ID, if any. */
@@ -105,7 +107,8 @@ void pe_imp_rename(const char *game, const char *proposed, const char **id, cons
 #define MAX_GAMES 32
 #define MAX_RIGS 64
 #define MAX_TARGETS 32
-static struct { char game[16], title[48], group[48]; } s_game[MAX_GAMES];
+#define MAX_DISC_IDS 8
+static struct { char game[16], title[48], group[48]; const char *disc_id[MAX_DISC_IDS]; int disc_ids; } s_game[MAX_GAMES];
 static struct { char game[16], prefix[48]; const struct PeImpRig *rig; } s_rig[MAX_RIGS];
 static const PeImpTarget *s_target[MAX_TARGETS];
 static int s_games, s_rigs, s_targets;
@@ -116,8 +119,39 @@ int pe_imp_add_game(const char *game, const char *title, const char *group) {
     snprintf(s_game[s_games].game, sizeof s_game[0].game, "%s", game);
     snprintf(s_game[s_games].title, sizeof s_game[0].title, "%s", title);
     snprintf(s_game[s_games].group, sizeof s_game[0].group, "%s", group);
+    s_game[s_games].disc_ids = 0;
     s_games++;
     return 0;
+}
+
+int pe_imp_add_disc_id(const char *game, const char *pattern) {
+    for (int i = 0; i < s_games; i++)
+        if (!strcmp(s_game[i].game, game)) {
+            if (!pattern || !*pattern || s_game[i].disc_ids == MAX_DISC_IDS) return -1;
+            s_game[i].disc_id[s_game[i].disc_ids++] = pattern;
+            return 0;
+        }
+    return -1;                                       /* add the game first */
+}
+
+static uint32_t disc_id_hash(uint32_t h) {
+    for (int g = 0; g < s_games; g++)
+        for (int i = 0; i < s_game[g].disc_ids; i++) {
+            for (const char *c = s_game[g].disc_id[i]; *c; c++) h = (h ^ (uint8_t)*c) * 16777619u;
+            h = (h ^ 0xfeu) * 16777619u;
+        }
+    return h;
+}
+
+int pe_imp_disc_id_count(const char *game) {
+    for (int i = 0; i < s_games; i++) if (!strcmp(s_game[i].game, game)) return s_game[i].disc_ids;
+    return 0;
+}
+
+const char *pe_imp_disc_id(const char *game, int k) {
+    for (int i = 0; i < s_games; i++)
+        if (!strcmp(s_game[i].game, game)) return k >= 0 && k < s_game[i].disc_ids ? s_game[i].disc_id[k] : NULL;
+    return NULL;
 }
 
 const char *pe_imp_game_title(const char *game) {

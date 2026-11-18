@@ -104,14 +104,20 @@ int pe_imp_match(const char *pattern, const char *path);
 /* A naming table renames proposed IDs once, by hand: {"player/pl01": {"id": "player/claire",
  * "name": "Claire"}}. Set by the source game's mod; the JSON text must outlive the game. */
 int pe_imp_set_naming(const char *game, const char *json);
-/* A hash of every naming table: when it changes, disc images already read are scanned again so
- * the catalog takes the new names. */
+/* A hash of every naming table and disc ID: when it changes, disc images already read are scanned
+ * again so the catalog takes the new names. */
 uint32_t pe_imp_naming_hash(void);
 
 /* ---- source games and rigs (registered by pe_src_<game>) ---- */
 /* "re2", "Resident Evil 2", the Wardrobe group "Resident Evil" */
 int pe_imp_add_game(const char *game, const char *title, const char *group);
 const char *pe_imp_game_title(const char *game);           /* the id itself if unknown */
+/* A file that tells the game's disc apart from others with the same layout ("SLUS_009.22": Dino
+ * Crisis and Dino Crisis 2 share PSX/DATA/CORE??.DAT). A game with disc IDs claims a disc only when
+ * one of them is on it; a game without any goes by its readers' file patterns alone. */
+int pe_imp_add_disc_id(const char *game, const char *pattern);
+int pe_imp_disc_id_count(const char *game);
+const char *pe_imp_disc_id(const char *game, int i);
 const char *pe_imp_game_group(const char *game);
 struct PeImpRig;
 /* Assets "<game>:<prefix>..." fit with this rig ("re2", "player/", the RE2 human rig). */
