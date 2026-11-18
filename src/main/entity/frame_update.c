@@ -17,6 +17,7 @@
 #include "pe1/script_node.h"
 #include "pe1/script_queue.h"
 #include "pe_actor_texture_pages.h"
+#include "pe_hooks.h"
 
 /* Original USA per-type integration callbacks (800915DC). */
 FieldActorCallbacks g_FieldActorTypeCallbacks[13] = {
@@ -314,6 +315,9 @@ void Entity_FrameUpdate(void) {
 
             if (entity == g_PlayerEntity && (g_GameState.flags & 0x40000)) {
                 continue;
+            }
+            if (PE_HOOK(PE_HOOK_ACTOR_RENDER, (&(PeHookActorDraw){entity, g_EntityRenderScratch}))) {
+                continue;   /* a mod's own actor (no game model): the mod drew it */
             }
             if (entity->model_state.allocation_active != 0) {
                 entity->render_object.header->scale = entity->move_speed;

@@ -93,8 +93,16 @@ typedef enum PeHookId {
     PE_HOOK_SPELL_DONE,  /* PeHookSpellDone: Battle_ApplySpellEffect after the power's effect,
                           * before the HP clamp and the PE drain; *drain may change; appended */
     PE_HOOK_STEAL_RESULT, /* PeHookStealResult: native inventory transfer completed */
+    PE_HOOK_ACTOR_RENDER, /* PeHookActorDraw: Entity_FrameUpdate, before an actor's model is posed
+                           * and drawn (view set); nonzero: the actor is a mod's own and the mod
+                           * drew it: the game's posing, draw and shadow are skipped; appended */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookActorDraw {
+    void *actor;         /* FieldActor * */
+    const void *view;    /* the entity view matrix (GteMatrix, then the projection distance) */
+} PeHookActorDraw;
 
 typedef struct PeHookStealResult {
     int item, success;

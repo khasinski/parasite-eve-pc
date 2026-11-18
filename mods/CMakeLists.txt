@@ -8,7 +8,7 @@ set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shop
 if(NOT PE_PS5_GAME)
     list(PREPEND pe_default_mods pe_assets)
     list(REMOVE_ITEM pe_default_mods pe_import)
-    list(APPEND pe_default_mods pe_src_ff7 pe_import pe_lang pe_fonts)
+    list(APPEND pe_default_mods pe_src_ff7 pe_import pe_lang pe_fonts pe_enemy_import)   # pe_enemy_import: F1 > Fights, desktop only
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 
@@ -85,6 +85,7 @@ set(pe_host_sources
     host/pe_mod_panel.c     # the F1 panel: navigation and input
     host/pe_pages.c         # PE Enhancements page layout
     host/pe_game.c          # game access helpers
+    host/pe_encounter.c     # random encounters in room bytecode
     host/pe_game_facts.c    # game facts as tables: effect names and groups, power tags
     host/pe_main_menu.c     # extra rows in Aya's main menu, screens from game widgets
     host/pe_equip_sync.c    # edited equipment reaches the next battle
@@ -162,6 +163,7 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     add_executable(pe-mod-frequency
         ${PROJECT_SOURCE_DIR}/tests/pe_mod_frequency_test.c
         pe_qol/pe_battle_frequency.c
+        host/pe_encounter.c
         pe_qol/pe_move.c)
     target_include_directories(pe-mod-frequency PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_qol
         "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
@@ -388,6 +390,14 @@ endif()
 if(BUILD_TESTING)
     pe_feature_test(registry ${PROJECT_SOURCE_DIR}/tests/pe_mod_registry_test.c host/pe_registry.c)
     pe_feature_test(debug-control ${PROJECT_SOURCE_DIR}/tests/pe_mod_debug_control_test.c ${pe_debug_sources})   # host: any mod list
+    pe_feature_test(encounter ${PROJECT_SOURCE_DIR}/tests/pe_encounter_test.c host/pe_encounter.c)   # random-encounter spots
+endif()
+if(BUILD_TESTING AND "pe_enemy_import" IN_LIST PE_MOD_LIST)
+    # Imported enemy packs: loading, refusals, posing; with PE_TEST_ENEMY_PACK also a real pack.
+    pe_feature_test(enemy-pack ${PROJECT_SOURCE_DIR}/tests/pe_enemy_pack_test.c pe_enemy_import/pe_enemy_pack.c)
+    target_include_directories(test-mod-enemy-pack PRIVATE pe_enemy_import)
+    target_link_libraries(test-mod-enemy-pack PRIVATE pe_download_json)
+    set_tests_properties(mod-enemy-pack PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
     # The pure core and the game's own pack; the game side is covered by pe-native-debug's

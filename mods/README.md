@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone;pe_src_re1;pe_src_re2;pe_src_re3;pe_src_dc1;pe_import` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone;pe_src_re1;pe_src_re2;pe_src_re3;pe_src_dc1;pe_import` (desktop builds add `pe_assets;pe_src_ff7;pe_lang;pe_fonts;pe_enemy_import`; add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -60,6 +60,7 @@ mods/
   pe_warp/             warp menu to story checkpoints, from the Pathogen Eve port
   pe_quicksave/        10 quick save slots in the game's own save format (F10 / F11 / F12)
   pe_cheats/           god mode, infinite ammo and PE, instant win, all PE powers
+  pe_enemy_import/     F1 > Fights: start a chosen random battle in its own room; imported enemy packs
   pe_phone/            Phone Calls: after saving at a phone, "Stay on the line?" and a short call
   pe_challenges/       optional harder rules per run (one file per challenge, Hardcore permadeath),
                        bundles, assisted marker, run summary (opt-in via PE_MOD_LIST)
@@ -101,6 +102,38 @@ their own letters.
 F1 > Warp: pick a story checkpoint and Warp. It sets script variable 74 (story progress) to that
 point and runs the field script's own room transfer (Script_EncodeBarcode) on the next free field
 frame, never during a battle, an event, a room change or a movie.
+
+## Fights (pe_enemy_import)
+
+F1 > Fights: pick an area and a fight, then Start fight. A room's enemies live in that room's data,
+so a picked fight is that room's own random battle: the field script's room transfer (as pe_warp,
+story variable set to the area's point), Aya stood in the spot's floor zone (mods/host/pe_encounter.c
+finds the zones in the loaded room script) and that spot's encounter roll made to succeed once.
+After a win or an escape the script variables go back as they were and Aya returns to where she
+stood. A loss is the game's own Game Over. The list holds only fights the `enemy-import-fights-all`
+CTest saw start and come back. Logs `cheat_fight_picker`, so challenge runs count as assisted.
+
+**Imported enemy** (pe_enemy_battle.c, pe_enemy_pack.c): a pack in `<prefs>/pe_enemies/<folder>/`
+(formats in pe_enemy_pack.h: enemy.json, model.bin, texture.bin, anims/) is added to the picked
+fight as a new enemy; nothing of the room is replaced. **How many** adds 1-3 of it; **Room's
+enemies** lets the room's own foes fight too or sends them away. Each one is a new actor from the
+game's actor pool (type 0xEE, no model or script) with its own enemy record (Entity_AllocSlot),
+stood on the floor (Entity_FindFloor). It joins once the room's battle script has started the clock
+(g_BattleEnemyEscapeFlag) plus 10 frames (900 frames at most). Its brain runs each battle frame:
+turn and walk to Aya, attack when its time bar is full (curHP >= 9000) and Aya is in reach, land
+the blow at the attack's "hit" frame through the game's enemy-hit path (effect record power,
+coreFlags bit 31, Aya stateFlags 0x4000), stagger when shot (unless mid-attack), and at 0 HP play
+its death animation, then the game's own death fade, EXP (hpMirror = exp) and free. Drawing: at
+PE_HOOK_ACTOR_RENDER (Entity_FrameUpdate, before posing) the mod poses the pack's model (every
+vertex on its bone, joint vertices half and half on two) and links it as textured triangles,
+depth-sorted like the game's, and returns nonzero so the game skips its own posing, draw and
+shadow for that actor. The texture goes to VRAM x 320..511, y 256..511 (palettes x 512, y 500..),
+which no battle room uses; what was there is saved and put back after the battle. Pack fields the
+brain reads: hp, defense, exp; "behavior" {speed, charge, radius, stagger}; per attack "power"
+(else "damage"), "range" and "hit" (else half the animation). Tests: `mod-enemy-pack` (loader,
+refusals, posing, behavior fields; a real pack with PE_TEST_ENEMY_PACK) and `enemy-import-nemesis`
+(PE_TEST_DISC + PE_TEST_ENEMY_PACK: alone and beside the room's enemies, it appears, walks,
+attacks, is hurt, dies, the battle is won and the VRAM block given back).
 
 ## Quick save (pe_quicksave)
 
