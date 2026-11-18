@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "f881279d4a8d782059d8ef5f063a307284b9e7975c940134dee3b4812da48e22"
+      "sha256": "c3532b118a9da724fb28052b42a0917becb3e299de08d4e8f7feabccc24df2ad"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4027,7 +4027,7 @@
     },
     {
       "path": "mods/host/pe_mod_host.h",
-      "sha256": "7772e351d5d2dd4dbbd987befd346e07d1808da117058039f5163f4e033e4b9d"
+      "sha256": "37db35f8ba24a615f6bb8495809cd6fb7a99ea23754f20f6d7cd47081b99ec7c"
     },
     {
       "path": "mods/host/pe_mod_menu.c",
@@ -4147,7 +4147,7 @@
     },
     {
       "path": "mods/host/pe_services.h",
-      "sha256": "55ad4efd2789ea8344102ff26d1c0aba6e6f90d0fef4ae67b26060e70d574cea"
+      "sha256": "9dd2732f4173fd7191faac977b2cd64ce60110e54bda8430ae0e82a4aafe79e4"
     },
     {
       "path": "mods/host/pe_shop_api.c",
@@ -4563,7 +4563,7 @@
     },
     {
       "path": "mods/host/import/pe_imp.h",
-      "sha256": "a7c20a263df0fc82fd8e469b935e375e67f931501d9cd84687fbe4c17a511df2"
+      "sha256": "f85cafb57d28872388de50578d296791b658e94ad663c48a80929b3eaa34c61f"
     },
     {
       "path": "mods/host/import/pe_imp_internal.h",
@@ -4586,16 +4586,32 @@
       "sha256": "65f796ad8983ab27e89d126bdc80ba2440d15b1cda9d9f52961699655b9051f6"
     },
     {
+      "path": "mods/host/import/pe_imp_song.c",
+      "sha256": "584b401e4c6d9103eaf143a54566fa3782eeadb60ffeabc6b9238c0696f1bab7"
+    },
+    {
+      "path": "mods/host/import/pe_imp_sound.c",
+      "sha256": "747daf3d7cf2ab5b77193ee8010a8d9d6699659505af94948a965d88c85a8d76"
+    },
+    {
+      "path": "mods/host/import/pe_imp_spu.c",
+      "sha256": "244de2fb3ca27f9dab164a1623ba59410c6ba3433b85fcbefbb26e4ea6e20046"
+    },
+    {
+      "path": "mods/host/import/pe_imp_spu.h",
+      "sha256": "7305751ca6a0c6ab265f9a645e2b9d50bbc9ca5512b95bc68c981d6cb7ed901f"
+    },
+    {
       "path": "mods/host/import/pe_imp_model.c",
       "sha256": "08a6c392a3ee651e2655a58875d24b7e309fa298d414bffc3bea30c6a029488a"
     },
     {
       "path": "mods/host/import/pe_imp_registry.c",
-      "sha256": "61c86b1541aebf48f06f05ccbe682eb650f46fdb2bab29b4d8c6dfbdb5ee2ec4"
+      "sha256": "7e3fbc43457aa83d2382fc3aa5ee7c97712e28283116f4db56a177c1fbbed0f2"
     },
     {
       "path": "mods/host/import/pe_imp_store.c",
-      "sha256": "1c1f0e8be08a768c8a44e7ca8ad08f3a7dd8d0224580d6f166ab57b33a6ac552"
+      "sha256": "e26a986f9792d0af5980baae5459c8f1afdae6a11499f2fbab516fff345f111e"
     },
     {
       "path": "mods/host/import/pe_imp_pe.h",
@@ -4635,11 +4651,11 @@
     },
     {
       "path": "mods/pe_import/pe_import.c",
-      "sha256": "9022d8e8f3fcf78ae0c2168d83c1e88892f445f6eed5f9a3cd96d08af63fbf1d"
+      "sha256": "0d324fd97d4d08d7c2f3e91916df51179bdf9673ee08c6efcf80e1e972d8fd55"
     },
     {
       "path": "mods/pe_import/pe_import.h",
-      "sha256": "5561994464acf74c5cc24e76d2a09ac697cff918142c0bbb0505ee9e9ab7bd50"
+      "sha256": "a3b0d9c67a36c758d01f8c5dadfccab0625168b62fe73e03b778c3664ac4b421"
     },
     {
       "path": "mods/pe_import/pe_import_game.c",
@@ -4647,55 +4663,83 @@
     },
     {
       "path": "mods/pe_src_dc1/pe_src_dc1.c",
-      "sha256": "cd1afe94e8b8a882033aeeee2c60c01b3544e75c8a2b9bdebafa224dd1197319"
+      "sha256": "f9b8b42021ed70858f047251d55d58c5e7106a1607db451f8ff3c0be4264bb29"
     },
     {
       "path": "mods/pe_src_dc1/pe_src_dc1.h",
-      "sha256": "64072488057609a08e516c973f16334f0754067e6afffb6b201b19baf29882b2"
+      "sha256": "bb057cfd996648a142bee21c9b740b4abdb73c205fa9e4b1685eaee1d926cf90"
+    },
+    {
+      "path": "mods/pe_src_dc1/pe_src_dc1_archive.c",
+      "sha256": "025a490d31ec1c6e68c25a39b72e8c5fb20d84ac98455461b024bc17b2afa086"
+    },
+    {
+      "path": "mods/pe_src_dc1/pe_src_dc1_archive.h",
+      "sha256": "d8fb2b32d39ce31b4007834f672ef2893e34d18d3614fceab1697bbb5114aed9"
     },
     {
       "path": "mods/pe_src_dc1/pe_src_dc1_core.c",
-      "sha256": "5573e1b7161ffcf259a85e1be499c74cd6b6b27ffbdd4e41444ab97bff29be1d"
+      "sha256": "8cfa6e93f54b57c46634699d05f2c6d25561a9faef0592445038311073ee8b70"
+    },
+    {
+      "path": "mods/pe_src_dc1/pe_src_dc1_sound.c",
+      "sha256": "76e1508ee947debcb4b77a409a5d7f0b6bb4e75dbf0cc5a77fac7ba7ff34a8f7"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.c",
-      "sha256": "e59359edca8039b526b4f694b662366d5d913aa8e04236db641bd782301495ea"
+      "sha256": "42e025c2bc61f2f793025cdb2edca795c06ff80b84d7c3fdd5f0036def4b7413"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.h",
-      "sha256": "a6e8dee8711638c64e8d0ef39c4bfe182f1e43127fbdb60c56bc8f57a2a4a164"
+      "sha256": "42134e7afb8144b06e2b2e4030d21780d41b68f553a34e02e52b25def30b4ca8"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1_emd.c",
       "sha256": "580495e4be314c0636f06dd76f8341084feb4820f31833e509b92aa4bfea4578"
     },
     {
+      "path": "mods/pe_src_re1/pe_src_re1_sound.c",
+      "sha256": "ccc8d1cf9e8473b84013158efbc56148a3e4fb78525fd65e166855e3ba157bbc"
+    },
+    {
       "path": "mods/pe_src_re2/pe_src_re2.c",
-      "sha256": "8efe274a39e7f57e099bbdc8bea0e1ed136cab59a7afc7c6dce6c9f3fa8ed3b0"
+      "sha256": "3ab7e5b87f144d5b8565e2e559eb18319b8d14767d5b0c314604fb652113f0c1"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.h",
-      "sha256": "9cfab98978960e6f28bb6f396605289dcdb1b514c56095b1001d0e456cf43ef0"
+      "sha256": "1d05b955c22648a4f558efdebc10be023ff9c15a95559fdfcf99c7603f96d415"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2_pld.c",
       "sha256": "aceb57d60707c14294c5f4e1d548c5c90333f855c407be4d156d5caa46521086"
     },
     {
+      "path": "mods/pe_src_re2/pe_src_re2_music.c",
+      "sha256": "d4b8c0fb4217b5dd19105dd7c665b7f56de956f9ca911dcfbecaae1206e43694"
+    },
+    {
+      "path": "mods/pe_src_re2/pe_src_re2_sound.c",
+      "sha256": "315d8d71b6a4b40e7d3e8f2c074198b462b93270702adb71784ac60e227b5f23"
+    },
+    {
       "path": "mods/pe_src_re3/pe_src_re3.c",
-      "sha256": "08e8cf5272cedb15b75a90765ea8d44529f26c296fc68b353ced4ff41ed370de"
+      "sha256": "f23c87639d6193fc055d26ada870588cf8107b9d4a455273f0f89d0da2b1dc21"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.h",
-      "sha256": "81c9a1c32ea09fefd20bdd2a5f8809c43872afe5fd39af3f33371f18d289275e"
+      "sha256": "84bb698f8b1581e0a6870ae4e46d0b46cda493c1ec875be78013613417596485"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_pld.c",
       "sha256": "706e08fd8c7a6e1b7b516d53c3492d9178be208e1086723e647ab3a935a1be8c"
     },
     {
+      "path": "mods/pe_src_re3/pe_src_re3_sound.c",
+      "sha256": "bd25a4dc61a2224f425e1baad88eb6ee8ceda4a5f7506151815a6506889a48f3"
+    },
+    {
       "path": "mods/pe_import/pe_import_job.c",
-      "sha256": "1ebabba9b6350c0e08d40618424cf2c9bb7ae695d0a7130f18322a404893881d"
+      "sha256": "a60e127a47405c41839e3057d99145fda6e610e8ac32c69f39e3c3291e95a93a"
     }
   ]
 }
