@@ -7,6 +7,7 @@
 #include "pe_imp.h"
 #include "pe_imp_seq.h"
 #include "pe_imp_xa.h"
+#include "pe_imp_akao.h"
 #include "pe_mod_host.h"
 #include "pe_services.h"
 
@@ -17,6 +18,7 @@ typedef struct {
     char id[PE_IMP_ID_MAX];
     uint32_t type;
     void *data;
+    void *bank;                                      /* an AKAO song's instrument bank */
     SDL_Thread *worker;
     SDL_AtomicInt result;
     unsigned refs;
@@ -29,6 +31,7 @@ static SDL_AudioStream *s_preview;
 static SDL_AudioStream *s_music;                 /* the playing song's stream */
 static PeImpSeqPlayer *s_player;                 /* used only by s_music's callback once started */
 static PeImpXaPlayer *s_xa;                       /* or this, for a streamed song */
+static PeImpAkaoPlayer *s_akao;                   /* or this, for a Square sequence */
 static SDL_AtomicInt s_music_done;
 static unsigned s_rate;
 static char s_store[PE_IMP_PATH_MAX];
@@ -43,6 +46,7 @@ static void reap(void)
         }
         if (!clip->refs && !clip->worker && clip->handle) {
             free(clip->data);
+            free(clip->bank);
             memset(clip, 0, sizeof *clip);
         }
     }
@@ -64,6 +68,16 @@ static int load_clip(void *arg)
         PeImpSong *song;
         rc = pe_imp_catalog_song(s_store, clip->id, &song, NULL, 0);
         clip->data = song;
+        if (!rc && song->format == PE_IMP_SONG_AKAO) {   /* and its bank: "<game>:" + the ID in its header */
+            char bank[PE_IMP_ID_MAX];
+            const char *colon = strchr(clip->id, ':');
+            PeImpSong *b = NULL;
+            int g = colon ? (int)(colon - clip->id) : 0;
+            snprintf(bank, sizeof bank, "%.*s:%.72s", g, clip->id, (const char *)song->payload + 8);
+            rc = pe_imp_catalog_song(s_store, bank, &b, NULL, 0);
+            if (!rc && b->format != PE_IMP_SONG_AKAO_BANK) rc = -1;
+            clip->bank = b;
+        }
     } else {
         PeImpSound *sound;
         rc = pe_imp_catalog_sound(s_store, clip->id, &sound, NULL, 0);
@@ -131,6 +145,8 @@ static int list_assets(const char *game, const char *type, unsigned offset,
     unsigned written = 0;
     for (int i = 0; i < count && written < capacity; ++i) {
         if (strcmp(assets[i].type, type)) continue;
+        const char *colon = strchr(assets[i].id, ':');
+        if (colon && !strncmp(colon + 1, "bank/", 5)) continue;   /* instrument banks aren't music */
         if (offset) { --offset; continue; }
         PeAssetInfo *info = &out[written++];
         snprintf(info->id, sizeof info->id, "%s", assets[i].id);
@@ -160,6 +176,16 @@ static int song_view(PeAssetHandle handle, PeSongView *out)
     const Clip *clip = lookup(handle);
     if (clip->type != PE_IMP_SONG) return -1;
     const PeImpSong *song = clip->data;
+    if (song->format == PE_IMP_SONG_AKAO) {
+        const PeImpSong *bank = clip->bank;
+        const uint8_t *bh = bank->payload;
+        *out = (PeSongView){.format = PE_SONG_AKAO, .sequence = {song->payload + 80, NULL},
+                            .sequence_size = {song->seq_size[0] - 80, 0}, .instruments = bh + 16,
+                            .samples = bh + 16 + bank->instrument_size, .instrument_size = bank->instrument_size,
+                            .sample_size = bank->sample_size,
+                            .sample_base = (uint32_t)bh[4] | (uint32_t)bh[5] << 8 | (uint32_t)bh[6] << 16 | (uint32_t)bh[7] << 24};
+        return 1;
+    }
     if (song->format == PE_IMP_SONG_PSX_XA) {
         *out = (PeSongView){.format = PE_SONG_PSX_XA, .sequence = {song->payload, NULL},
                             .sequence_size = {song->seq_size[0], 0}, .samples = song->payload + song->seq_size[0],
@@ -207,7 +233,8 @@ static void SDLCALL feed_song(void *user, SDL_AudioStream *stream, int additiona
     int frames = additional / 4 + 1;
     while (frames > 0) {
         uint32_t want = frames > 1024 ? 1024 : (uint32_t)frames;
-        uint32_t got = s_xa ? pe_imp_xa_render(s_xa, buf, want) : pe_imp_seq_render(s_player, buf, want);
+        uint32_t got = s_xa ? pe_imp_xa_render(s_xa, buf, want)
+                     : s_akao ? pe_imp_akao_render(s_akao, buf, want) : pe_imp_seq_render(s_player, buf, want);
         if (got) SDL_PutAudioStreamData(stream, buf, (int)(got * 4));
         if (got < want) { SDL_SetAtomicInt(&s_music_done, 1); break; }
         frames -= (int)got;
@@ -220,7 +247,8 @@ static void stop_song(void)
     s_music = NULL;
     pe_imp_seq_close(s_player);
     pe_imp_xa_close(s_xa);
-    s_player = NULL, s_xa = NULL;
+    pe_imp_akao_close(s_akao);
+    s_player = NULL, s_xa = NULL, s_akao = NULL;
 }
 
 static int play_song(PeAssetHandle handle)
@@ -232,10 +260,13 @@ static int play_song(PeAssetHandle handle)
     char why[160] = "";
     if (view.format == PE_SONG_PSX_XA)
         s_xa = pe_imp_xa_open(view.sequence[0], view.sequence_size[0], view.samples, view.sample_size, 0, why, sizeof why);
+    else if (view.format == PE_SONG_AKAO)
+        s_akao = pe_imp_akao_open(view.sequence[0], view.sequence_size[0], view.instruments, view.instrument_size,
+                                  view.samples, view.sample_size, view.sample_base, 0, why, sizeof why);
     else
         s_player = pe_imp_seq_open(view.sequence[0], view.sequence_size[0], view.instruments, view.instrument_size,
                                    view.samples, view.sample_size, 0, why, sizeof why);
-    if (!s_player && !s_xa) {
+    if (!s_player && !s_xa && !s_akao) {
         pe_mod_log(MOD_ID, "song %s not played: %s", lookup(handle)->id, why);
         return -1;
     }
@@ -279,6 +310,7 @@ static void shutdown(void)
     for (unsigned i = 0; i < SLOTS; ++i) {
         if (s_clips[i].worker) SDL_WaitThread(s_clips[i].worker, NULL);
         free(s_clips[i].data);
+        free(s_clips[i].bank);
     }
     memset(s_clips, 0, sizeof s_clips);
 }

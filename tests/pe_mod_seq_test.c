@@ -6,6 +6,8 @@
  *   disc      with PE_TEST_RE2_DISC: RE2's MAIN00 scanned into a store, rendered for 20 seconds:
  *             sound, voices in use, the sequence moving. PE_TEST_SEQ_WAV=<path> also writes those
  *             seconds as a WAV file to listen to (it stays on this computer).
+ *   RE3       with PE_TEST_RE3_DISC: SOUND/MAINxx.BGM and the room archives' tracks scanned (4 and
+ *             42 distinct across 169 rooms); every one plays; most make sound.
  *   RE1       with PE_TEST_RE1_DISC: the 94 sequences in SOUND/SEPxx.HSB scanned; every one plays
  *             (three seconds each); none hangs; most make sound. */
 #include <assert.h>
@@ -19,6 +21,7 @@
 #include "pe_imp_seq.h"
 #include "pe_src_re2.h"
 #include "pe_src_re1.h"
+#include "pe_src_re3.h"
 
 static uint8_t vab[32 + 128 * 16 + 16 * 32 + 512], smp[48];
 
@@ -230,8 +233,59 @@ static void re1(const char *cue) {
     assert(songs == 94 && !sc.refused && loud > songs / 2);
 }
 
+/* every Song a game's readers catalog: each opens and plays three seconds; returns those with sound */
+static int play_all(const char *game, const char *wav_env, const char *wav_id, int *songs) {
+    char why[300] = "";
+    PeImpAsset *a;
+    int n = pe_imp_catalog_assets("pe-seq-test/store", game, &a), loud = 0;
+    *songs = 0;
+    for (int i = 0; i < n; i++) {
+        if (strcmp(a[i].type, "Song")) continue;
+        (*songs)++;
+        PeImpSong *song;
+        assert(!pe_imp_catalog_song("pe-seq-test/store", a[i].id, &song, why, sizeof why));
+        const uint8_t *vh = song->payload + song->seq_size[0];
+        PeImpSeqPlayer *p = pe_imp_seq_open(song->payload, song->seq_size[0], vh, song->instrument_size,
+                                            vh + song->instrument_size, song->sample_size, 1, why, sizeof why);
+        if (!p) fprintf(stderr, "  %s refused: %s\n", a[i].id, why);
+        assert(p);
+        int16_t *pcm;
+        uint32_t frames = render_all(p, 3 * PE_IMP_SEQ_RATE, &pcm);
+        double sum = 0;
+        for (uint32_t k = 0; k < 2 * frames; k++) sum += (double)pcm[k] * pcm[k];
+        loud += frames && sqrt(sum / (2.0 * frames)) > 100;
+        free(pcm);
+        pe_imp_seq_close(p);
+        const char *wav = getenv(wav_env);
+        if (wav && *wav && strstr(a[i].id, wav_id)) {
+            p = pe_imp_seq_open(song->payload, song->seq_size[0], vh, song->instrument_size,
+                                vh + song->instrument_size, song->sample_size, 1, why, sizeof why);
+            uint32_t got = render_all(p, 30 * PE_IMP_SEQ_RATE, &pcm);
+            write_wav(wav, pcm, got);
+            free(pcm);
+            pe_imp_seq_close(p);
+        }
+        free(song);
+    }
+    free(a);
+    return loud;
+}
+
+static void re3(const char *cue) {
+    PeImpScan sc;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_re3_bgm_ps1) && !pe_imp_add_reader(&g_re3_room_music_ps1));
+    assert(!pe_imp_scan("pe-seq-test/store", cue, NULL, &sc));
+    if (sc.refused) fprintf(stderr, "  refused: %s\n", sc.last_error);
+    int songs, loud = play_all("re3", "PE_TEST_SEQ_WAV_RE3", "main33", &songs);
+    printf("RE3: %d tracks from %d files read, %d with sound in their first 3 seconds\n", songs, sc.files_read, loud);
+    assert(songs == 46 && !sc.refused && loud > songs / 2);
+}
+
 int main(void) {
     made_up();
+    const char *r3 = getenv("PE_TEST_RE3_DISC");
+    if (r3 && *r3) re3(r3);
     const char *r1 = getenv("PE_TEST_RE1_DISC");
     if (r1 && *r1) re1(r1);
     const char *cue = getenv("PE_TEST_RE2_DISC");

@@ -159,7 +159,9 @@ with the same paging contract as sounds. A song handle uses the same `status` an
 `PE_SONG_PSX_SEQ_VAB` it includes up to two PlayStation sequences, a VAB instrument
 header, and the associated SPU sample bytes. For `PE_SONG_PSX_XA` (streamed music) the first
 sequence is a 16-byte header and the samples are CD-XA sound groups (render them with
-`mods/host/import/pe_imp_xa.h`). Keep the handle while using the view.
+`mods/host/import/pe_imp_xa.h`). For `PE_SONG_AKAO` (Square's sequences, FF7) the first sequence
+is the AKAO block, and the instruments, samples and `sample_base` come from the song's bank
+(render them with `mods/host/import/pe_imp_akao.h`). Music lists leave instrument banks out. Keep the handle while using the view.
 This interface serves import tooling and builders.
 
 To play a song, the `audio` v1 table appends `play_song`, `stop_song` and `song_playing`

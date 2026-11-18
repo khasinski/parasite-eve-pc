@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include "pe_imp_spu.h"
 #include "pe_mod_host.h"
+#include "pe_src_ff7.h"
+#include <stdlib.h>
+#include <string.h>
 
 static uint32_t le32(const uint8_t *p)
 {
@@ -32,23 +35,35 @@ static int read_instruments(const uint8_t *table, uint32_t table_size,
             return -1;
         ++count;
     }
-    if (count) return 0;
+    if (count) {
+        /* the bank as it is, for the songs (pe_src_ff7_music.c): header, table, samples */
+        PeImpSong *song = pe_imp_song_alloc(PE_IMP_SONG_AKAO_BANK, 16, 0, RECORD * INSTRUMENTS, size);
+        if (!song) goto invalid;
+        memset(song->payload, 0, 16);
+        memcpy(song->payload, "AKB1", 4);
+        memcpy(song->payload + 4, bank, 4);
+        memcpy(song->payload + 16, table, RECORD * INSTRUMENTS);
+        memcpy(song->payload + 16 + RECORD * INSTRUMENTS, body, size);
+        if (pe_imp_emit(sink, PE_IMP_SONG, "bank/instr", "Instruments", song)) goto invalid;
+        return 0;
+    }
 invalid:
     if (why && n) snprintf(why, n, "invalid FFVII instrument bank or sample boundaries");
     return -1;
 }
 
-static const PeImpReader k_instruments = {
+const PeImpReader g_ff7_instruments_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "ff7", .platform = "ps1", .format = "akao-instr",
-    .version = 1, .produces = PE_IMP_SOUND, .match = "SOUND/INSTR.DAT",
+    .version = 2, .produces = PE_IMP_SOUND | PE_IMP_SONG, .match = "SOUND/INSTR.DAT",
     .tags = "sound sample instrument", .companion = ".ALL", .read_pair = read_instruments
 };
 
 static int init(void)
 {
     return pe_imp_add_game("ff7", "Final Fantasy VII", "Final Fantasy") ||
-           pe_imp_add_reader(&k_instruments);
+           pe_imp_add_reader(&g_ff7_instruments_ps1) || pe_imp_add_reader(&g_ff7_field_music_ps1) ||
+           pe_imp_add_reader(&g_ff7_cue_music_ps1);
 }
 
 const PeMod pe_mod_pe_src_ff7 = {"pe_src_ff7", "Import source: Final Fantasy VII", "0.1", NULL, init, NULL};

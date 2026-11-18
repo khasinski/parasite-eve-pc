@@ -729,8 +729,15 @@ work with the Import UI disabled. See [the mod API](../docs/MOD_API.md#imported-
 RE2 (`COMMON/SOUND/*.BGM`: a sequence or two, the bank and samples), RE1 Director's Cut
 (`SOUND/SEPxx.HSB`: a bank and a package of sequences, one Song each, 94 on the US disc) and
 Dino Crisis (`PSX/DATA_XA/STAGE00.XAS`: seven streamed CD-XA tracks; the other XA files are
-speech). RE3's music uses its own sequence and bank formats, and FF7's Square's AKAO: not
-read yet. Choose a track and **Play track**: it plays from the game's own
+speech) and RE3 (`SOUND/MAINxx.BGM` with its `.VB`, and the room archives' tracks: 46, the 169
+rooms sharing 42, one catalog entry each; its compact banks are rebuilt as standard VABs) and FF7
+(the AKAO songs inside the LZS-compressed `FIELD/*.DAT` files and `ENEMY6/*.SND`, 92 across the
+three discs, one entry per song number; they play on the game's own instrument bank, `INSTR.DAT`
+and `INSTR.ALL`, cataloged once as `ff7:bank/instr`). Square's AKAO sequences play through
+`host/import/pe_imp_akao.c` (first-generation AKAO: notes, ties, rests, octaves and the
+instruments' pitch tables, envelopes, loops and jumps, tempo, drum kits; reverb, LFOs and
+overlay voices aren't modelled). `mod-akao` tests it on made-up songs and on FF7 CD1 with
+`PE_TEST_FF7_DISC` (`PE_TEST_AKAO_WAV`). Choose a track and **Play track**: it plays from the game's own
 sequence and instruments, looping until **Stop**. `host/import/pe_imp_seq.c` renders a PS1
 sequence (SEQ) on its bank (VAB) to 44.1 kHz stereo: programs and key-split tones, the SPU's
 ADSR envelope, pitch bend, volume, pan and expression, and the sequence's loop marks; reverb

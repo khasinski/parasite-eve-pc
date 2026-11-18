@@ -105,7 +105,11 @@ int pe_imp_sound_load(const char *folder, PeImpSound **sound, char *why, size_t 
 /* PSX_SEQ_VAB: payload as above. PSX_XA: an XA stream (streamed music): main_size is its 16-byte
  * header ("XAS1", coding, file, channel, 0, u32 sectors, u32 0), sample_size the sectors' sound
  * groups (2304 bytes each), no secondary sequence or instruments. */
-enum { PE_IMP_SONG_PSX_SEQ_VAB = 1, PE_IMP_SONG_PSX_XA = 2 };
+/* AKAO: a Square sequence (main_size: an 80-byte header, "AKS1" then at 8 its instrument bank's
+ * local catalog ID, NUL-padded; then the "AKAO" block). AKAO_BANK: that bank (main_size 16: "AKB1",
+ * u32 SPU address of the first sample byte; instrument_size: 128 records of 64 bytes;
+ * sample_size: the samples). A bank's local ID starts with "bank/"; music lists leave it out. */
+enum { PE_IMP_SONG_PSX_SEQ_VAB = 1, PE_IMP_SONG_PSX_XA = 2, PE_IMP_SONG_AKAO = 3, PE_IMP_SONG_AKAO_BANK = 4 };
 typedef struct {
     uint32_t format, seq_size[2], instrument_size, sample_size;
     uint8_t payload[];

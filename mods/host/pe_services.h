@@ -41,13 +41,16 @@ typedef struct {
     char name[48];
     char tags[64];
 } PeAssetInfo;
-enum { PE_SONG_PSX_SEQ_VAB = 1, PE_SONG_PSX_XA = 2 };   /* XA: sequence[0] is its 16-byte header, samples the sound groups */
+/* XA: sequence[0] is its 16-byte header, samples the sound groups. AKAO: sequence[0] the AKAO
+ * block, instruments its bank's 128 records, samples the bank's samples from sample_base. */
+enum { PE_SONG_PSX_SEQ_VAB = 1, PE_SONG_PSX_XA = 2, PE_SONG_AKAO = 3 };
 typedef struct {
     uint32_t format;
     const uint8_t *sequence[2];       /* secondary is NULL when absent */
     uint32_t sequence_size[2];
     const uint8_t *instruments, *samples;
     uint32_t instrument_size, sample_size;
+    uint32_t sample_base;                             /* AKAO: the SPU address of samples[0] */
 } PeSongView;
 
 typedef struct {
