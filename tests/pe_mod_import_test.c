@@ -264,6 +264,18 @@ static void test_scan(void) {
           !pj_at(pj_get(e, "sources"), 1));
     pj_free(cat);
 
+    /* a new naming table: the next scan of the image files Claire under her new ID, and the old
+     * one is gone from the catalog (no stale entry beside it) */
+    uint32_t before = pe_imp_naming_hash();
+    CHECK(!pe_imp_set_naming("re2", "{\"player/pl01\": {\"id\": \"player/claire_b\", \"name\": \"Claire B\"}}"));
+    CHECK(pe_imp_naming_hash() != before);
+    CHECK(!pe_imp_scan("pe-import-test/store", "pe-import-test/discs/Made Up.cue", NULL, &sc));
+    cat = pj_load("pe-import-test/store/re2/catalog.json", why, sizeof why);
+    CHECK(cat && !pj_get(cat, "re2:player/claire") && pj_get(cat, "re2:player/claire_b") &&
+          !strcmp(pj_str(pj_get(pj_get(cat, "re2:player/claire_b"), "name"), ""), "Claire B"));
+    pj_free(cat);
+    CHECK(!pe_imp_set_naming("re2", g_re2_naming) && pe_imp_naming_hash() == before);
+
     /* a broken image: folder records pointing past the end are refused, not followed */
     iso[18 * 2048 + 2 * 34 + 2] = 0xff;                        /* PL1's LBA -> far away */
     write_file("pe-import-test/discs/broken.iso", iso, isize);

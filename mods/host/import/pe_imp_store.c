@@ -157,8 +157,11 @@ static int cat_save(Catalog *c, const char *path) {
     if (!f) return -1;
     qsort(c->e, (size_t)c->n, sizeof *c->e, entry_cmp);
     fputs("{\n", f);
+    int first = 1;
     for (int i = 0; i < c->n; i++) {
         Entry *e = &c->e[i];
+        if (!e->srcs) continue;                    /* renamed or gone: nothing points here now */
+        fputs(first ? "" : ",\n", f), first = 0;
         qsort(e->src, (size_t)e->srcs, sizeof *e->src, src_cmp);
         fputs(" ", f), pj_write_string(f, e->id), fputs(": {\"name\": ", f), pj_write_string(f, e->name);
         fputs(", \"type\": ", f), pj_write_string(f, e->type), fputs(", \"tags\": ", f), pj_write_string(f, e->tags);
@@ -171,9 +174,9 @@ static int cat_save(Catalog *c, const char *path) {
             fputs(", \"image\": ", f), pj_write_string(f, d->image);
             fputs(", \"path\": ", f), pj_write_string(f, d->path), fputs("}", f);
         }
-        fputs(i + 1 < c->n ? "]},\n" : "]}\n", f);
+        fputs("]}", f);
     }
-    fputs("}\n", f);
+    fputs(first ? "}\n" : "\n}\n", f);
     if (fclose(f)) return -1;
     remove(path);
     return rename(tmp, path);
@@ -338,6 +341,15 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
     }
     Catalog cat;
     cat_load(&cat, cat_path);
+    /* this image's entries are noted again below, under today's names: forget the old ones */
+    const char *label = pe_imp_disc_label(d);
+    for (int k = 0; k < cat.n; k++) {
+        Entry *e = &cat.e[k];
+        int kept = 0;
+        for (int s = 0; s < e->srcs; s++)
+            if (strcmp(e->src[s].image, label)) e->src[kept++] = e->src[s];
+        e->srcs = kept;
+    }
     for (int i = 0; i < pe_imp_disc_files(d); i++) {
         const char *path = pe_imp_disc_name(d, i);
         int r = reader_for(game, path);

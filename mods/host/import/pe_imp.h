@@ -104,6 +104,9 @@ int pe_imp_match(const char *pattern, const char *path);
 /* A naming table renames proposed IDs once, by hand: {"player/pl01": {"id": "player/claire",
  * "name": "Claire"}}. Set by the source game's mod; the JSON text must outlive the game. */
 int pe_imp_set_naming(const char *game, const char *json);
+/* A hash of every naming table: when it changes, disc images already read are scanned again so
+ * the catalog takes the new names. */
+uint32_t pe_imp_naming_hash(void);
 
 /* ---- source games and rigs (registered by pe_src_<game>) ---- */
 /* "re2", "Resident Evil 2", the Wardrobe group "Resident Evil" */

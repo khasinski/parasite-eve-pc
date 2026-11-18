@@ -196,4 +196,13 @@ const PeImpRig g_re2_human_rig = {
  * a recipe uses. Unnamed models keep their proposed id. */
 const char g_re2_naming[] =
     "{\"player/pl00\": {\"id\": \"player/leon\", \"name\": \"Leon\"},"
-    " \"player/pl01\": {\"id\": \"player/claire\", \"name\": \"Claire\"}}";
+    " \"player/pl01\": {\"id\": \"player/claire\", \"name\": \"Claire\"},"
+    /* named by sight from the discs' own textures (2026-11-18); PL02-PL07 (Leon and Claire
+     * variants whose in-game use isn't known) keep their proposed IDs */
+    " \"player/pl08\": {\"id\": \"player/leon_tank_top\", \"name\": \"Tank Top Leon\"},"
+    " \"player/pl09\": {\"id\": \"player/claire_flame_jacket\", \"name\": \"Flame Jacket Claire\"},"
+    " \"player/pl0a\": {\"id\": \"player/leon_leather_jacket\", \"name\": \"Leather Jacket Leon\"},"
+    " \"player/pl0c\": {\"id\": \"player/hunk\", \"name\": \"HUNK\"},"
+    " \"player/pl0d\": {\"id\": \"player/tofu\", \"name\": \"Tofu\"},"
+    " \"player/pl0e\": {\"id\": \"player/ada\", \"name\": \"Ada\"},"
+    " \"player/pl0f\": {\"id\": \"player/sherry\", \"name\": \"Sherry\"}}";

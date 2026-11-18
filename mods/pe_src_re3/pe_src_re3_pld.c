@@ -321,8 +321,18 @@ const PeImpRig g_re3_human_rig = {
 #undef MID
 #undef MESH
 
-/* Hand-kept: the reader proposes player/pl00; people know her as Jill. PL01-PL07 are her other
- * outfits, PL09-PL0E the other mercenaries: they keep their proposed IDs for now. */
+/* Hand-kept: the reader proposes player/pl00; people know her as Jill. The rest were named by
+ * sight from the disc's own textures (2026-11-18). Left as proposed: PL01 (Jill with a vest; its
+ * in-game name isn't known), PL07 (a copy of PL00), PL0B (a wounded soldier, not identified),
+ * PL0E (a copy of PL0C). */
 const char g_re3_naming[] =
     "{\"player/pl00\": {\"id\": \"player/jill\", \"name\": \"Jill\"},"
-    " \"player/pl08\": {\"id\": \"player/carlos\", \"name\": \"Carlos\"}}";
+    " \"player/pl02\": {\"id\": \"player/jill_biker\", \"name\": \"Biker Jill\"},"
+    " \"player/pl03\": {\"id\": \"player/jill_stars\", \"name\": \"S.T.A.R.S. Jill\"},"
+    " \"player/pl04\": {\"id\": \"player/jill_white_suit\", \"name\": \"White Suit Jill\"},"
+    " \"player/pl05\": {\"id\": \"player/jill_police\", \"name\": \"Police Jill\"},"
+    " \"player/pl06\": {\"id\": \"player/jill_catsuit\", \"name\": \"Catsuit Jill\"},"
+    " \"player/pl08\": {\"id\": \"player/carlos\", \"name\": \"Carlos\"},"
+    " \"player/pl09\": {\"id\": \"player/mikhail\", \"name\": \"Mikhail\"},"
+    " \"player/pl0a\": {\"id\": \"player/nikolai\", \"name\": \"Nikolai\"},"
+    " \"player/pl0c\": {\"id\": \"player/dario\", \"name\": \"Dario\"}}";

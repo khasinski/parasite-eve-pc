@@ -77,6 +77,16 @@ int pe_imp_set_naming(const char *game, const char *json) {
     return 0;
 }
 
+uint32_t pe_imp_naming_hash(void) {
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < s_namings; i++)
+        for (int part = 0; part < 2; part++) {
+            for (const char *c = part ? s_naming[i].json : s_naming[i].game; *c; c++) h = (h ^ (uint8_t)*c) * 16777619u;
+            h = (h ^ 0xffu) * 16777619u;
+        }
+    return h;
+}
+
 /* The naming table's {id, name} for a proposed ID, if any. */
 void pe_imp_rename(const char *game, const char *proposed, const char **id, const char **name) {
     *id = proposed;
