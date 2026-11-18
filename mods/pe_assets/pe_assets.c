@@ -202,7 +202,9 @@ static int init(void)
 
 static void shutdown(void)
 {
-    SDL_DestroyAudioStream(s_preview);
+    /* SDL also destroys all audio streams when the audio subsystem quits. */
+    if (s_preview && SDL_WasInit(SDL_INIT_AUDIO))
+        SDL_DestroyAudioStream(s_preview);
     s_preview = NULL;
     for (unsigned i = 0; i < SLOTS; ++i) {
         if (s_clips[i].worker) SDL_WaitThread(s_clips[i].worker, NULL);

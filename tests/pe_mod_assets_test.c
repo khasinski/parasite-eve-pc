@@ -83,7 +83,9 @@ int main(void)
     while ((rc = assets->status(missing)) == 0 && SDL_GetTicks() < deadline) SDL_Delay(1);
     assert(rc == -1 && audio->preview_clip(missing) == -1);
     assets->release(missing);
-    pe_mod_pe_assets.shutdown();
+    /* PsyZ's window-close path can tear down SDL before the mod host fallback. */
     SDL_Quit();
+    pe_mod_pe_assets.shutdown();
+    pe_mod_pe_assets.shutdown();
     return 0;
 }
