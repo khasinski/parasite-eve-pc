@@ -30,6 +30,47 @@ need their own playback or rendering path. The instrument layout was cross-check
 The imported waveforms use a fixed audition pitch. Native event bindings and interactive
 F1 playback were outside the headless verification.
 
+### Why Dino Crisis imported three samples
+
+The current reader at `mods/pe_src_dc1/pe_src_dc1_sound.c` matches exactly
+`PSX/DATA/ST60E.DAT`. It uses that archive's one conventional VAB header and fixed
+body range, which contain three waveforms. The three entries measure the reader's
+coverage of one archive.
+
+The local US Track 1 ISO directory has 422 DAT files under `PSX/DATA`. Walking their
+archive entry tables found 389 archives with sound and 490 adjacent type-3/type-4 pairs.
+The type-3 entry is metadata and type 4 is SPU ADPCM. All 490 pairs match on the
+archive's SPU address and tag fields. Only `ST60E.DAT` uses `pBAV`. The other 489
+use `Gian`. [PSX-SPX documents the archive and audio entry types](https://psx-spx.consoledev.net/dev/ps1/cdr/cdromfileformats/archives/#dino-crisis-1-and-2-psxdatadat-and-dbs-and-tex-dummy-header).
+
+For every `Gian` bank, the little-endian count at header offset 10 agreed with the
+number of SPU blocks with flag byte `0x03` or `0x07` in its paired body, and the
+final block was a terminator. All type-4 blocks had supported predictor and range
+values. The `Gian` banks contain **3,698 sample occurrences**, representing **910
+distinct encoded clips** by exact SHA-256. The largest encoded clip was 91,184 bytes.
+An in-memory probe decoded representative samples from `CORE.DAT`, `DOOR00.DAT`,
+and both banks in `CLEAR.DAT` to non-silent PCM, including a flag-`0x03` clip.
+The counts cover embedded SPU banks. XA streams and type-5 entries were outside this
+pass. Pitch, loop metadata interpretation and gameplay cue names still need verification.
+
+[Modern Edition](https://github.com/Rotmill/Dino-Crisis-Modern-Edition) provides runtime
+context. Its companion [Dino Crisis ME Studio](https://github.com/Rotmill/Dino-Crisis-Studio)
+documents disc-based sound browsing and exporting. Its
+[CMake source list](https://github.com/Rotmill/Dino-Crisis-Studio/blob/main/CMakeLists.txt)
+identifies `src/dat.cpp`, `src/sound.cpp`, and `src/synth.cpp` as reference points.
+Studio is a candidate for comparing exports against the same US disc revision. This
+survey checked the public project documentation and source list and derived the bank
+counts independently from the local disc.
+
+For the importer, share a bounded archive walker with the existing Dino Crisis source
+mod, route VAB and Gian banks into the shared SPU decoder, and preserve the existing
+`dc1:sound/st60e/waveNN` IDs. Use archive, bank and waveform identifiers for the new
+entries so identical payloads can share storage while retaining their source references.
+Check that a broad sound reader and the costume reader can both run for a matching
+archive, or use a deliberately disjoint match on verified files. The current scanner
+chooses the first matching reader. The local costume `CORE0?.DAT` archives did not
+contain type-4 blocks. No production reader was changed in this pass.
+
 ## First implementation target: one Resident Evil 2 sound effect
 
 The strongest extraction result is RE2's `COMMON/SOUND/ARMS01.EDH` and `ARMS01.VB`. Both files matched across the two tested original US discs and Dual Shock US Disc 1. The 3,240-byte EDH contains a VAB header at byte 128. Its one program declares six tones referencing a bank of six waveforms. The VAB size table accounts for all 23,600 bytes in the VB. All six samples decoded in memory to non-silent PCM in a local probe, including waveform 2 (2,080 compressed bytes, 3,640 decoded mono frames before trimming). This proves extraction of the waveforms. The exact gameplay event, pitch, and envelope for a given tone still need verification.
