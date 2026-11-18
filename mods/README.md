@@ -9,7 +9,7 @@ cmake --build build-mods
 ```
 
 `PE_MOD_LIST` (CMake cache) picks the mods, by folder name. Default:
-`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone;pe_src_re2;pe_import` (add `pe_hello` for the example).
+`pe_qol;pe_rebalance;pe_economy;pe_rewards;pe_catalog;pe_shops;pe_collection;pe_wardrobe;pe_stacks;pe_warp;pe_quicksave;pe_cheats;pe_phone;pe_src_re2;pe_src_re3;pe_import` (add `pe_hello` for the example).
 
 Two switches, so a modded build is safe to hand out:
 - **Build**: `PE_MODS` off (the default) leaves no mod code in the game at all.
@@ -68,6 +68,7 @@ mods/
   pe_hello/            example mod (not built by default)
   pe_import/           F1 > Import: models from the player's other PlayStation games, built into packs
   pe_src_re2/          import source: Resident Evil 2 (its readers, naming table and rig)
+  pe_src_re3/          import source: Resident Evil 3 (its reader, naming table and rig)
   host/import/         the importer core (disc images, store, catalog, PE formats); see Import below
 ```
 
@@ -698,7 +699,7 @@ their own added with F1 > Import > Add a folder (the system's folder picker; kep
 
 **Automatic.** When the game starts, a worker thread (`pe_import_job.c`) reads new or changed disc
 images and builds everything the source games mark automatic (`pe_imp_add_auto`; RE2: Claire from
-disc 2, Leon from disc 1) unless its pack already holds a build of the same source file by the
+disc 2, Leon from disc 1; RE3: Jill and Carlos) unless its pack already holds a build of the same source file by the
 same builder. Back on the main thread the Wardrobe adds the new costumes at once (the
 `wardrobe_packs` service, `pe_packs_add_new`: only new packs and characters; registered costumes
 stay put), with a message. F1 > Import > Automatic import says what's ready and which discs to add;
@@ -722,12 +723,15 @@ from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
   catalog, packs), `pe_imp_pe.h` (PE's model and row formats, retargeting, the rows rooms install),
   `pe_imp_rig.h` (a rig profile). Plain C with stdio; its own JSON reader (no cJSON on PS5).
 - `pe_src_<game>/`: one mod per source game registers its readers, naming table and rigs. Nothing
-  in the core names a game.
+  in the core names a game. RE3's people are skinned (an arm is one mesh in the root's frame, a
+  table says which bone moves each vertex); its reader splits them back into RE2's 15 bone-local
+  parts, so the fit is RE2's (`pe_src_re3_pld.c` has the layout).
 - `pe_wardrobe/pe_skin_build.c` + `pe_skin_target.c`: the skins target, a port of tools/re2-skin
   (PR #4). Every file is byte for byte the Python's except texture.bin (our colour reduction) and
   angles at gimbal lock, where the Python read rounding noise (`pe_imp_to_yxz`).
 - Tests: `mod-import` (made-up disc images and models, broken files, the store; real disc with
-  `PE_TEST_RE2_DISC`), `mod-skin-build` and `mod-import-flow` (need `PE_TEST_DISC` and
+  `PE_TEST_RE2_DISC`), `mod-re3` (a made-up RE3 person; every player file with `PE_TEST_RE3_DISC`),
+  `mod-skin-build` and `mod-import-flow` (need `PE_TEST_DISC` and
   `PE_TEST_RE2_DISC`; `PE_TEST_SKIN_REFERENCE` compares with tools/re2-skin's output).
 
 ## Collection (pe_collection) and Wardrobe (pe_wardrobe)
