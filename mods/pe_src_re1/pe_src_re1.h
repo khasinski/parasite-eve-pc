@@ -7,7 +7,7 @@ extern const PeImpRig g_re1_human_rig;
 
 int re1_emd_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, size_t n);
 extern const PeImpReader g_re1_emd_ps1, g_re1_emd_npc_ps1, g_re1_emd_alt_ps1;
-extern const PeImpReader g_re1_sound_ps1, g_re1_music_ps1;
+extern const PeImpReader g_re1_sound_ps1, g_re1_music_ps1, g_re1_rooms_ps1;
 extern const char g_re1_naming[];
 
 #endif

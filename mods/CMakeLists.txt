@@ -54,10 +54,12 @@ set(pe_import_core_sources
     host/import/pe_imp_model.c      # the Model type: check, store, load
     host/import/pe_imp_sound.c      # the Sound type: bounded PCM
     host/import/pe_imp_song.c       # the Song type: sequenced source music
+    host/import/pe_imp_imageset.c   # the ImageSet type: still pictures (room backgrounds)
     host/import/pe_imp_spu.c        # shared PS1 sound decoder
     host/import/pe_imp_seq.c        # PS1 sequences (SEQ + VAB) played as PCM
     host/import/pe_imp_xa.c         # CD-XA streamed audio: decoding and playback
     host/import/pe_imp_akao.c       # Square's AKAO sequences (FF7) played as PCM
+    host/import/pe_imp_mdec.c       # MDEC frames (room backgrounds) to RGB
     host/import/pe_imp_registry.c   # readers, file patterns, naming tables
     host/import/pe_imp_store.c      # the extract-once store and the catalog
     host/import/pe_imp_packs.c      # packs in the format the Wardrobe loads
@@ -340,6 +342,12 @@ if(BUILD_TESTING)
     pe_feature_test(akao ${PROJECT_SOURCE_DIR}/tests/pe_mod_akao_test.c ${pe_import_core_sources}
         pe_src_ff7/pe_src_ff7.c pe_src_ff7/pe_src_ff7_music.c)
     target_include_directories(test-mod-akao PRIVATE host/import pe_src_ff7)
+    # MDEC frames and room backgrounds; PE_TEST_RE1/2/3_DISC decode every room view on those discs
+    # (PE_TEST_ROOMS_DIR writes them out).
+    pe_feature_test(mdec ${PROJECT_SOURCE_DIR}/tests/pe_mod_mdec_test.c ${pe_import_core_sources}
+        pe_src_re1/pe_src_re1_rooms.c pe_src_re2/pe_src_re2_rooms.c pe_src_re3/pe_src_re3_rooms.c
+        ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
+    target_include_directories(test-mod-mdec PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
     pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_core_sources}
         pe_src_re2/pe_src_re2_pld.c pe_wardrobe/pe_skin_build.c)
@@ -349,8 +357,8 @@ if(BUILD_TESTING)
     if(TARGET pe_download_json AND TARGET pe_download_zip)
         # F1 > Import's scan and build, then the Wardrobe's pack reader loading the result.
         pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_core_sources}
-            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2.c
-            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3.c
+            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2.c
+            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3_rooms.c pe_src_re3/pe_src_re3.c
             pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c pe_src_dc1/pe_src_dc1_music.c pe_src_dc1/pe_src_dc1.c
             pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c
             pe_wardrobe/pe_packs.c pe_import/pe_import_job.c)

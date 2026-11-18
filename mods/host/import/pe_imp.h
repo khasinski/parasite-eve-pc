@@ -119,11 +119,35 @@ PeImpSong *pe_imp_song_alloc(uint32_t format, uint32_t main_size, uint32_t sub_s
 int pe_imp_song_save(const PeImpSong *song, const char *folder, char *why, size_t n);
 int pe_imp_song_load(const char *folder, PeImpSong **song, char *why, size_t n);
 
+/* ImageSet stores still pictures as the source game keeps them, decoded on demand. MDEC: each
+ * picture is a PS1 MDEC frame (pe_imp_mdec.h) of width x height pixels; Resident Evil's room
+ * backgrounds, one picture per camera view. Payload: the frames back to back, size[i] bytes each. */
+#define PE_IMP_IMAGESET_VERSION 1
+#define PE_IMP_IMAGESET_MAX (4u << 20)
+#define PE_IMP_IMAGESET_VIEWS 32
+enum { PE_IMP_IMAGESET_MDEC = 1 };
+typedef struct {
+    uint32_t format, width, height, count, size[PE_IMP_IMAGESET_VIEWS];
+    uint8_t payload[];
+} PeImpImageSet;
+/* sizes: `count` frame sizes; the payload is left for the caller to fill */
+PeImpImageSet *pe_imp_imageset_alloc(uint32_t format, uint32_t width, uint32_t height, uint32_t count,
+                                     const uint32_t *sizes);
+/* where picture i starts in the payload */
+const uint8_t *pe_imp_imageset_frame(const PeImpImageSet *set, uint32_t i, uint32_t *size);
+int pe_imp_imageset_save(const PeImpImageSet *set, const char *folder, char *why, size_t n);
+int pe_imp_imageset_load(const char *folder, PeImpImageSet **set, char *why, size_t n);
+
 /* ---- readers ---- */
 typedef struct PeImpSink PeImpSink;
 /* A reader hands each item it decodes to the sink: `proposed` is a local ID ("player/pl01"),
  * `name` a display name, `obj` the type's struct (the sink takes ownership, even on failure). */
 int pe_imp_emit(PeImpSink *s, uint32_t type, const char *proposed, const char *name, void *obj);
+/* Room backgrounds as Resident Evil keeps them: one MDEC frame of w x h pixels at the start of each
+ * `slot`-byte slot (slots that hold no frame are skipped). Emits one ImageSet; 1 if there were no
+ * frames, -1 on failure. */
+int pe_imp_emit_mdec_slots(PeImpSink *s, const char *proposed, const char *name, const uint8_t *data, uint32_t size,
+                           uint32_t slot, uint32_t w, uint32_t h);
 typedef int (*PeImpReadFn)(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink,
                            char *why, size_t n);
 typedef int (*PeImpReadPairFn)(const uint8_t *primary, uint32_t primary_size,
@@ -220,6 +244,7 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
 int pe_imp_catalog_model(const char *root, const char *asset_id, PeImpModel *m, char *why, size_t n);
 int pe_imp_catalog_sound(const char *root, const char *asset_id, PeImpSound **sound, char *why, size_t n);
 int pe_imp_catalog_song(const char *root, const char *asset_id, PeImpSong **song, char *why, size_t n);
+int pe_imp_catalog_imageset(const char *root, const char *asset_id, PeImpImageSet **set, char *why, size_t n);
 /* A game's catalog entries, sorted by ID; *out is malloc'd (free it). */
 typedef struct {
     char id[PE_IMP_ID_MAX], name[PE_IMP_NAME_MAX], type[16], tags[64];

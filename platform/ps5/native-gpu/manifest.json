@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "3d51d8ad6e26dabb0b802faef3714bded2c6af1cdce9b608083f75c827c00691"
+      "sha256": "69bcc83fb34b8e468b11032fa2b3f4a05b20900ea50837470e950edbe001190e"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4563,7 +4563,7 @@
     },
     {
       "path": "mods/host/import/pe_imp.h",
-      "sha256": "edacd770885d88a7b320d3830c6da6d9f6254c2028abd6506c5e8168b19bc166"
+      "sha256": "73f925dce2f847594f143ff78b7cbaf9f7400baf8f5e07df8a02bfe0bba0585e"
     },
     {
       "path": "mods/host/import/pe_imp_internal.h",
@@ -4635,7 +4635,7 @@
     },
     {
       "path": "mods/host/import/pe_imp_store.c",
-      "sha256": "be940a551bf083bd64ac303b29e166125f94249a05befa120ecb742d3d3752f7"
+      "sha256": "0bba757b744e70fa3a4583719792b42adf37dc11906944eb01a834767cde30fc"
     },
     {
       "path": "mods/host/import/pe_imp_pe.h",
@@ -4675,7 +4675,7 @@
     },
     {
       "path": "mods/pe_import/pe_import.c",
-      "sha256": "3c514c35a32757965345fd69344b2120bfbeff1f48354417414dd01a2d9fe5e5"
+      "sha256": "b2de09d397ec4be46f0a01dfede5c9a2cc192bdd22076c03121045ddf2c2b4b7"
     },
     {
       "path": "mods/pe_import/pe_import.h",
@@ -4715,11 +4715,11 @@
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.c",
-      "sha256": "2c1c0b54d6366d9e3b0e795a2d4df23404194095a307a13f9485dc58401ee25b"
+      "sha256": "f690456aff5185016c7293a3bfd626a1cf3f6a77e3e1dc8b68c4a4c23d9bd729"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.h",
-      "sha256": "5c07fa90b0aa10463cbb1264dd3e3a18b20f144153ef4cf0092314b33d0af9a3"
+      "sha256": "4b51dd437999093bae2387f02ecbaadff9f47b7d8cef7b170c94d3fb6ba4c08d"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1_emd.c",
@@ -4735,11 +4735,11 @@
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.c",
-      "sha256": "3ab7e5b87f144d5b8565e2e559eb18319b8d14767d5b0c314604fb652113f0c1"
+      "sha256": "d2308bb93f0761ec6f3d469de17c1c3602c1e82f19099c50cd5cc60f3b7f7ec0"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.h",
-      "sha256": "1d05b955c22648a4f558efdebc10be023ff9c15a95559fdfcf99c7603f96d415"
+      "sha256": "bb6183486cafce329fb21db13dc699d11a5ba599c85fd47c9afc83dcf6ef191f"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2_pld.c",
@@ -4755,11 +4755,11 @@
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.c",
-      "sha256": "1c963d73c9c2e7cee021182c2290d1f9efb72814d1ef76e6a11064a381f3fa07"
+      "sha256": "bd7273cfe371e4baa36d6a378a8f1047515b5e825885ae48053e3131c1a74505"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.h",
-      "sha256": "9a0f31bcf1a5a0c6370b44f83d3c3d6c22f9e9543bcc258d1a003153da1cd825"
+      "sha256": "468a316e0405b4020977ef8fdae9531709600c5bb3e7eef74f39276f39ebef09"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_pld.c",
@@ -4775,7 +4775,31 @@
     },
     {
       "path": "mods/pe_import/pe_import_job.c",
-      "sha256": "a60e127a47405c41839e3057d99145fda6e610e8ac32c69f39e3c3291e95a93a"
+      "sha256": "8c97afc74f1274a350a6128cb59e704814a1c3cf891d25f513a5b1657052959a"
+    },
+    {
+      "path": "mods/host/import/pe_imp_mdec.c",
+      "sha256": "ffac0b2c667fa66565afd605ae029d2b4f06e3c1c311c0b512d334413c78ca61"
+    },
+    {
+      "path": "mods/host/import/pe_imp_mdec.h",
+      "sha256": "8b36039a5c387e249b69f55bf4b530c08f46647036544aa47e4ff4e6ed29cd81"
+    },
+    {
+      "path": "mods/host/import/pe_imp_imageset.c",
+      "sha256": "3983de7fa37e5895fc62301b0bce1f7fc80eceb87acb388f34c603269dc2430a"
+    },
+    {
+      "path": "mods/pe_src_re1/pe_src_re1_rooms.c",
+      "sha256": "c20c2666c639cad8e51857dd0a7587d63def34326f4ef3f8125cb1de1b334ac1"
+    },
+    {
+      "path": "mods/pe_src_re2/pe_src_re2_rooms.c",
+      "sha256": "26277ff23cfbc41c12ba8c77e3cdca1498bc48546e21fd0ec3f57721f1f5fb2d"
+    },
+    {
+      "path": "mods/pe_src_re3/pe_src_re3_rooms.c",
+      "sha256": "13569d077025e5630313e4f093bc19f178123d9c64cb5277d608d7de003db399"
     }
   ]
 }

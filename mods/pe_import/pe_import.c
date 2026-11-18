@@ -15,11 +15,13 @@
 #include <SDL3/SDL.h>
 
 #include "pe_imp.h"
+#include "pe_imp_mdec.h"
 #include "pe_imp_pe.h"
 #include "pe_import.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_services.h"
+#include "pe1/boot_display.h"
 #include "pe1/render_object.h"
 
 #define MOD_ID "pe_import"
@@ -333,6 +335,105 @@ static void music_source(char *out, unsigned size) {
     snprintf(out, size, "%s (source sequence)", s_songs[s_song_pick].id);
 }
 
+/* ---- Rooms: room backgrounds (ImageSets), exported as pictures to look at ---- */
+enum { ROOMS_MAX = 256, ROOM_GAMES_MAX = 16 };
+static char s_room_games[ROOM_GAMES_MAX][16];
+static int s_room_games_count, s_room_game, s_room_pick, s_rooms_loaded_game = -1, s_nrooms;
+static PeImpAsset s_rooms[ROOMS_MAX];
+static char s_rooms_dir[1100], s_room_status[300] = "Choose a room and export its pictures.";
+static void listed(void);
+
+static void room_rows(void) {
+    if (s_rooms_loaded_game == s_room_game) return;
+    s_nrooms = 0;
+    if (s_room_game < s_room_games_count && SDL_GetAtomicInt(&s_state) == 0) {
+        PeImpAsset *a;
+        int n = pe_imp_catalog_assets(s_job.store, s_room_games[s_room_game], &a);
+        for (int i = 0; i < n && s_nrooms < ROOMS_MAX; i++)
+            if (!strcmp(a[i].type, "ImageSet")) s_rooms[s_nrooms++] = a[i];
+        free(a);
+    }
+    s_rooms_loaded_game = s_room_game;
+    if (s_room_pick >= s_nrooms) s_room_pick = 0;
+}
+
+static unsigned room_game_count(void) {
+    listed();
+    return s_room_games_count ? (unsigned)s_room_games_count : 1;
+}
+static const char *room_game_name(unsigned i) {
+    return i < (unsigned)s_room_games_count ? pe_imp_game_title(s_room_games[i]) : "No rooms scanned";
+}
+static unsigned room_count(void) {
+    listed();
+    room_rows();
+    return s_nrooms ? (unsigned)s_nrooms : 1;
+}
+static const char *room_name(unsigned i) { return i < (unsigned)s_nrooms ? s_rooms[i].name : "-"; }
+
+/* every view of one room as <rooms>/<game>/<room>_<view>.bmp; the number written, or -1 */
+static int export_room(const PeImpAsset *a, char *why, size_t n) {
+    PeImpImageSet *set;
+    if (pe_imp_catalog_imageset(s_job.store, a->id, &set, why, n)) return -1;
+    const char *colon = strchr(a->id, ':'), *slash = strrchr(a->id, '/');
+    char game[16] = "", folder[1200], path[1300];
+    snprintf(game, sizeof game, "%.*s", colon ? (int)(colon - a->id) : 0, a->id);
+    snprintf(folder, sizeof folder, "%s/%s", s_rooms_dir, game);
+    pe_imp_mkdirs(folder);
+    uint8_t *rgb = malloc((size_t)set->width * set->height * 3);
+    int written = 0;
+    for (uint32_t v = 0; rgb && v < set->count; v++) {
+        uint32_t size;
+        const uint8_t *f = pe_imp_imageset_frame(set, v, &size);
+        if (pe_imp_mdec_decode(f, size, set->width, set->height, rgb, why, n)) continue;
+        SDL_Surface *surface = SDL_CreateSurfaceFrom((int)set->width, (int)set->height, SDL_PIXELFORMAT_RGB24, rgb,
+                                                     (int)set->width * 3);
+        snprintf(path, sizeof path, "%s/%s_%u.bmp", folder, slash ? slash + 1 : a->id, v);
+        if (surface && SDL_SaveBMP(surface, path)) written++;
+        if (surface) SDL_DestroySurface(surface);
+    }
+    free(rgb);
+    free(set);
+    return written;
+}
+
+static int rooms_ready(void) {
+    room_rows();
+    if (s_nrooms && SDL_GetAtomicInt(&s_state) == 0) return 1;
+    snprintf(s_room_status, sizeof s_room_status, "%s",
+             s_nrooms ? "A scan is running; try again when it's done." : "Scan a disc with rooms first.");
+    return 0;
+}
+
+static void export_selected_room(void) {
+    if (!rooms_ready()) return;
+    char why[200] = "";
+    const PeImpAsset *a = &s_rooms[s_room_pick < s_nrooms ? s_room_pick : 0];
+    int n = export_room(a, why, sizeof why);
+    if (n < 0) snprintf(s_room_status, sizeof s_room_status, "%s: %s", a->name, why);
+    else snprintf(s_room_status, sizeof s_room_status, "%s: %d picture%s written to %s", a->name, n, n == 1 ? "" : "s", s_rooms_dir);
+}
+
+static void export_game_rooms(void) {
+    if (!rooms_ready()) return;
+    char why[200] = "";
+    int total = 0;
+    for (int i = 0; i < s_nrooms; i++) {
+        int n = export_room(&s_rooms[i], why, sizeof why);
+        if (n > 0) total += n;
+    }
+    snprintf(s_room_status, sizeof s_room_status, "%s: %d rooms, %d pictures written to %s",
+             room_game_name((unsigned)s_room_game), s_nrooms, total, s_rooms_dir);
+}
+
+static void room_from(char *out, unsigned size) {
+    room_rows();
+    if (!s_nrooms) { snprintf(out, size, "-"); return; }
+    const PeImpAsset *a = &s_rooms[s_room_pick < s_nrooms ? s_room_pick : 0];
+    snprintf(out, size, "%s, %s %s", a->id, a->platform, a->path);
+}
+static void room_status(char *out, unsigned size) { snprintf(out, size, "%s", s_room_status); }
+
 static void refresh(void) {
     char games[32][16];
     int ng = 0;
@@ -342,6 +443,8 @@ static void refresh(void) {
     s_sound_loaded_game = -1;
     s_music_loaded_game = -1;
     s_music_games_count = s_songs_count = 0;
+    s_room_games_count = 0;
+    s_rooms_loaded_game = -1;
     const PeAssetsApi *assets = assets_api();
     for (int r = 0; r < pe_imp_readers() && ng < 32; r++) {
         int seen = 0;
@@ -351,8 +454,9 @@ static void refresh(void) {
     for (int g = 0; g < ng; g++) {
         PeImpAsset *a;
         int n = pe_imp_catalog_assets(s_job.store, games[g], &a);
-        int has_sounds = 0, has_songs = 0;
+        int has_sounds = 0, has_songs = 0, has_rooms = 0;
         for (int i = 0; i < n; i++) {
+            has_rooms |= !strcmp(a[i].type, "ImageSet");
             has_sounds |= !strcmp(a[i].type, "Sound");
             has_songs |= !strcmp(a[i].type, "Song");
             if (s_nitems == MAX_ITEMS || strcmp(a[i].type, "Model")) continue;
@@ -370,7 +474,10 @@ static void refresh(void) {
             snprintf(s_sound_games[s_sound_game_count++], sizeof s_sound_games[0], "%s", games[g]);
         if (assets && has_songs)
             snprintf(s_music_games[s_music_games_count++], sizeof s_music_games[0], "%s", games[g]);
+        if (has_rooms && s_room_games_count < ROOM_GAMES_MAX)
+            snprintf(s_room_games[s_room_games_count++], sizeof s_room_games[0], "%s", games[g]);
     }
+    if (s_room_game >= s_room_games_count) s_room_game = 0;
     if (s_sound_game >= s_sound_game_count) s_sound_game = 0;
     if (s_music_game >= s_music_games_count) s_music_game = 0;
     if (s_pick >= s_nitems) s_pick = 0;
@@ -547,12 +654,12 @@ static void build(void) {
     pe_toast(s_build);
 }
 
-static void open_folder(void) {
+static void open_path(const char *dir) {
     char url[1400];
     unsigned n = (unsigned)snprintf(url, sizeof url, "file:///");
-    pe_imp_mkdirs(s_job.discs);
-    for (unsigned i = 0; s_job.discs[i] && n + 4 < sizeof url; ++i) {
-        char c = s_job.discs[i];
+    pe_imp_mkdirs(dir);
+    for (unsigned i = 0; dir[i] && n + 4 < sizeof url; ++i) {
+        char c = dir[i];
         if (c == '\\') url[n++] = '/';
         else if (c == ' ') { memcpy(url + n, "%20", 3); n += 3; }
         else url[n++] = c;
@@ -560,6 +667,8 @@ static void open_folder(void) {
     url[n] = 0;
     if (!SDL_OpenURL(url)) pe_toast("Import: couldn't open the folder; it is shown on this page");
 }
+static void open_folder(void) { open_path(s_job.discs); }
+static void open_rooms_folder(void) { open_path(s_rooms_dir); }
 
 static void text_auto(char *out, unsigned size) {                    /* F1 is open: no frames, so poll here */
     poll();
@@ -580,6 +689,8 @@ static int import_init(void) {
     if (pe_mod_path(s_job.discs, sizeof s_job.discs, "import/discs") || pe_mod_path(s_job.store, sizeof s_job.store, "import/store") ||
         pe_mod_path(s_job.packs, sizeof s_job.packs, "packs"))
         return 1;
+    if (pe_mod_path(s_rooms_dir, sizeof s_rooms_dir, "import/rooms")) return 1;
+    pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);      /* the game's own MDEC table, for rooms */
     s_job.pe_source = pe_import_game_source;
     s_job.normals = (const int16_t (*)[4])g_RenderNormalTable;
     pe_imp_mkdirs(s_job.discs);
@@ -600,6 +711,15 @@ static int import_init(void) {
     pe_menu_register_info("Build by hand", "From", "Where the selected model comes from.", text_asset);
     pe_menu_register_action("Build by hand", "Build as a costume", "Builds the selected model as a Wardrobe costume, in a pack of your own. For personal use only.", build);
     pe_menu_register_info("Build by hand", "Last build", "What the last build did.", text_build);
+    pe_menu_page("Rooms", "Room backgrounds from your scanned discs, one picture per camera view, exported to look at.", 40);
+    pe_menu_register_dynamic_choice("Rooms", "Source game", "Choose a game with imported rooms.",
+                                    &s_room_game, ROOM_GAMES_MAX, room_game_count, room_game_name);
+    pe_menu_register_dynamic_choice("Rooms", "Room", "Choose an imported room.", &s_room_pick, ROOMS_MAX, room_count, room_name);
+    pe_menu_register_info("Rooms", "From", "Catalog ID of the selected room.", room_from);
+    pe_menu_register_action("Rooms", "Export pictures", "Writes every camera view of the selected room as a .bmp picture.", export_selected_room);
+    pe_menu_register_action("Rooms", "Export every room", "Writes every room of this game as .bmp pictures. Takes a little while.", export_game_rooms);
+    pe_menu_register_action("Rooms", "Open the pictures folder", "Opens the folder the pictures are written to.", open_rooms_folder);
+    pe_menu_register_info("Rooms", "Last export", "What the last export did.", room_status);
     if (pe_mod_requested("pe_assets")) {
         pe_menu_page("Sounds", "Audition short sounds from your scanned discs.", 20);
         pe_menu_register_dynamic_choice("Sounds", "Source game", "Choose a game with imported sounds.",

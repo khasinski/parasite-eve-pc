@@ -750,6 +750,18 @@ resampled to 44.1 kHz); readers set `xa` to get a file's audio sectors (`pe_imp_
 raw `.bin` images only). `mod-xa` tests it on made-up sectors and on Dino Crisis's tracks with
 `PE_TEST_DC1_DISC` (`PE_TEST_XA_WAV`).
 
+**Rooms.** F1 > Import > Rooms lists room backgrounds after scanning a Resident Evil disc: RE1
+Director's Cut (`STAGE?/ROOM*.BSS`, 132 rooms, 747 camera views), RE2 (`COMMON/BSS/ROOM*.BSS`, 125
+rooms, 1,257 views) and RE3 (`CD_DATA/STAGE?/R*.BSS`, 122 rooms, 1,436 views). Each view is a
+320 x 240 MDEC frame at the start of a fixed slot (32 KB in RE1, 64 KB in RE2 and RE3); a room is
+one **ImageSet** (`pe_imp.h`) holding its frames as they are, decoded on demand by
+`host/import/pe_imp_mdec.c` with the game's own LIBPRESS table (`MdecDiag_ExpandDecoderTable`,
+handed in with `pe_imp_mdec_set_table`). **Export pictures** writes the selected room's views as
+`.bmp` files to `<preferences>/import/rooms/<game>/`, **Export every room** the whole game's. Using
+them as rooms in play (camera, collision, masks) is later work. `mod-mdec` tests the decoder on
+made-up data and decodes every view with `PE_TEST_RE1_DISC`, `PE_TEST_RE2_DISC` and
+`PE_TEST_RE3_DISC` (`PE_TEST_ROOMS_DIR` writes them out).
+
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 

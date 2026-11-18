@@ -120,6 +120,7 @@ static void remove_tree(const char *path) {
 }
 
 int main(void) {
+    setvbuf(stdout, NULL, _IONBF, 0);
     const char *pe1 = getenv("PE_TEST_DISC"), *re2 = getenv("PE_TEST_RE2_DISC");
     if (!pe1 || !*pe1 || !re2 || !*re2) { printf("PE_TEST_DISC and PE_TEST_RE2_DISC not set: skipped\n"); return 77; }
     char store[700], packs[700];
@@ -127,6 +128,7 @@ int main(void) {
     snprintf(store, sizeof store, "%s/import/store", s_dir);
     snprintf(packs, sizeof packs, "%s/packs", s_dir);
     remove_tree(packs);
+    remove_tree(store);                                  /* the first run expects an empty store */
 
     /* start-up: RE1, RE2, RE3 and Dino Crisis's own mods register themselves, the Wardrobe its skins target, packs/ is empty */
     pe_imp_registry_reset();
