@@ -24,6 +24,15 @@ static void add_text(char *out, size_t size, const char *text) {
     if (used + 3 < size) snprintf(out + used, size - used, "%s%s", used ? ", " : "", text);
 }
 
+/* add `text` to a ", " list unless it's already a whole item ("Resident Evil" isn't in
+ * "Resident Evil 2") */
+static void add_once(char *out, size_t size, const char *text) {
+    size_t len = strlen(text);
+    for (const char *p = out; (p = strstr(p, text)) != NULL; p++)
+        if ((p == out || (p >= out + 2 && p[-2] == ',' && p[-1] == ' ')) && (p[len] == 0 || p[len] == ',')) return;
+    add_text(out, size, text);
+}
+
 /* ---- the disc images in the folder, loose or one folder deep ---- */
 typedef struct { char path[MAX_IMAGES][1100]; int n, depth; } Found;
 
@@ -182,7 +191,7 @@ static void scan(PeImportJob *j) {
         IndexEntry *e = index_find(&ix, f->path[i]);
         if (e && e->size == size && e->mtime == mtime && index_still_there(j, e)) {   /* nothing changed: not opened */
             j->unchanged++;
-            if (e->game[0] && !strstr(j->games, pe_imp_game_title(e->game))) add_text(j->games, sizeof j->games, pe_imp_game_title(e->game));
+            if (e->game[0]) add_once(j->games, sizeof j->games, pe_imp_game_title(e->game));
             continue;
         }
         PeImpScan sc;
@@ -192,7 +201,7 @@ static void scan(PeImportJob *j) {
         index_put(&ix, f->path[i], size, mtime, rc ? "" : sc.game);     /* read, or looked at and not supported */
         if (unsupported) { j->unknown++; continue; }
         j->discs_read++, j->models += sc.items + sc.skipped;
-        if (!strstr(j->games, pe_imp_game_title(sc.game))) add_text(j->games, sizeof j->games, pe_imp_game_title(sc.game));
+        add_once(j->games, sizeof j->games, pe_imp_game_title(sc.game));
     }
     index_save(j, &ix);
     free(ix.e);
