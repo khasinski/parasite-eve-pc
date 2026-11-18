@@ -1,5 +1,7 @@
 /* RE2 PS1 BGM archives store one or two sequences, a VAB header and samples.
- * The footer lists these offsets in reverse order after two opaque words. */
+ * The footer lists these offsets in reverse order after one opaque word.
+ * The serialized VAB header has an extra four-byte slot before the VB data.
+ * The size in the VAB header counts the standard header and complete VB. */
 #include <stdio.h>
 #include <string.h>
 #include "pe_imp_spu.h"
@@ -16,14 +18,14 @@ static uint32_t le32(const uint8_t *p)
 }
 
 typedef struct {
-    uint32_t secondary, instruments, samples, end;
+    uint32_t secondary, instruments, instrument_size, samples, end;
 } BgmRanges;
 
 static int ranges(const uint8_t *data, uint32_t size, unsigned seqs, BgmRanges *out)
 {
     enum { SEQ_HEADER = 15, VAB_HEADER = 32, VAB_PROGRAMS = 128 * 16,
-           VAB_TONES = 16 * 32, VAB_LENGTHS = 512 };
-    uint32_t footer_size = (4 + seqs) * 4;
+           VAB_TONES = 16 * 32, VAB_LENGTHS = 512, VB_GAP = 4 };
+    uint32_t footer_size = (3 + seqs) * 4;
     if (size < footer_size || le32(data + size - 4)) return 0;
 
     uint32_t end = size - footer_size;
@@ -39,8 +41,8 @@ static int ranges(const uint8_t *data, uint32_t size, unsigned seqs, BgmRanges *
     const uint8_t *header = data + vh;
     unsigned programs = le16(header + 18), waves = le16(header + 22);
     uint32_t lengths = VAB_HEADER + VAB_PROGRAMS + programs * VAB_TONES;
-    if (programs > 128 || waves > 254 || lengths + VAB_LENGTHS != vb - vh ||
-        le32(header + 12) != end - vh || le16(header + lengths))
+    if (programs > 128 || waves > 254 || lengths + VAB_LENGTHS + VB_GAP != vb - vh ||
+        le32(header + 12) != end - vh - VB_GAP || le16(header + lengths))
         return 0;
 
     uint32_t total = 0;
@@ -51,7 +53,7 @@ static int ranges(const uint8_t *data, uint32_t size, unsigned seqs, BgmRanges *
     }
     if (total != end - vb) return 0;
 
-    *out = (BgmRanges){split, vh, vb, end};
+    *out = (BgmRanges){split, vh, lengths + VAB_LENGTHS, vb, end};
     return 1;
 }
 
@@ -68,12 +70,14 @@ static int read_bgm(const uint8_t *data, uint32_t size, const char *path, PeImpS
 
     PeImpSong *song = pe_imp_song_alloc(PE_IMP_SONG_PSX_SEQ_VAB,
         parts.secondary, parts.instruments - parts.secondary,
-        parts.samples - parts.instruments, parts.end - parts.samples);
+        parts.instrument_size, parts.end - parts.samples);
     if (!song) {
         if (why && n) snprintf(why, n, "could not allocate RE2 Song");
         return -1;
     }
-    memcpy(song->payload, data, parts.end);
+    size_t sample_offset = (size_t)parts.instruments + parts.instrument_size;
+    memcpy(song->payload, data, sample_offset);
+    memcpy(song->payload + sample_offset, data + parts.samples, song->sample_size);
 
     char id[48], name[48];
     snprintf(id, sizeof id, "music/%s", stem);
@@ -88,6 +92,6 @@ static int read_bgm(const uint8_t *data, uint32_t size, const char *path, PeImpS
 const PeImpReader g_re2_music_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re2", .platform = "ps1", .format = "bgm-seq-vab",
-    .version = 1, .produces = PE_IMP_SONG, .match = "COMMON/SOUND/*.BGM",
+    .version = 2, .produces = PE_IMP_SONG, .match = "COMMON/SOUND/*.BGM",
     .tags = "music sequence", .read = read_bgm, .path_key = 1
 };

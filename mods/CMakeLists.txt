@@ -306,7 +306,7 @@ endfunction()
 if(BUILD_TESTING)
     # Importer core and the RE2 reader on made-up data; PE_TEST_RE2_DISC adds the real disc.
     pe_feature_test(import ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_test.c ${pe_import_core_sources}
-        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c)
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c)
     target_include_directories(test-mod-import PRIVATE host/import pe_src_re2)
     if(NOT PE_PS5_GAME)
         pe_feature_test(assets ${PROJECT_SOURCE_DIR}/tests/pe_mod_assets_test.c

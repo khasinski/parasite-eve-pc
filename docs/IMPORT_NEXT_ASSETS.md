@@ -7,8 +7,12 @@ Research baseline: `786ac4fd8`. This survey covers the tested local PS1 images a
 The RE2 PS1 `COMMON/SOUND/*.BGM` reader uses the footer offsets to preserve one or
 two sequences, followed by the VAB instrument header and sample data. It checks the
 ordering, signatures, VAB sizes, and sample spans before storing a bounded Song.
-The local disc survey found 108 containers on each original US disc and 114 on the
-US Dual Shock Disc 1. Those are source inventory counts. Playback has not been checked.
+The VB offset includes a four-byte gap after the standard VAB header. The reader
+omits that gap from the stored header and preserves the last four sample bytes
+before the footer.
+The corrected reader imported all 108 containers on each original US disc and all
+114 on the US Dual Shock Disc 1, with zero refusals. The combined Windows catalog
+contained 117 distinct track IDs. Playback has not been implemented.
 
 F1 > Import > Music exposes the catalog with stable IDs such as `re2:music/main00`.
 The shared asset service lists songs and exposes immutable source data to builders.

@@ -417,6 +417,50 @@ static void test_real_disc(void) {
     free(clip);
 }
 
+static void test_music_disc(void) {
+    const char *cue = getenv("PE_TEST_RE2_MUSIC_DISC");
+    if (!cue || !*cue) cue = getenv("PE_TEST_RE2_DISC");
+    if (!cue || !*cue) return;
+
+    char why[200];
+    PeImpDisc *disc = pe_imp_disc_open(cue, why, sizeof why);
+    CHECK(disc != NULL);
+    if (!disc) return;
+    int expected = 0;
+    for (int i = 0; i < pe_imp_disc_files(disc); ++i)
+        expected += pe_imp_match(g_re2_music_ps1.match, pe_imp_disc_name(disc, i));
+    int has_sub37 = pe_imp_disc_find(disc, "COMMON/SOUND/SUB_37.BGM") >= 0;
+    pe_imp_disc_close(disc);
+    CHECK(expected > 0);
+
+    const char *store = "pe-import-test/music-store";
+    pe_imp_registry_reset();
+    CHECK(!pe_imp_add_reader(&g_re2_music_ps1));
+    PeImpScan scan;
+    CHECK(!pe_imp_scan(store, cue, NULL, &scan));
+    printf("RE2 music: %d source files, %d refused%s%s\n", expected, scan.refused,
+           scan.refused ? ": " : "", scan.refused ? scan.last_error : "");
+    CHECK(!scan.refused && scan.items + scan.skipped == expected);
+
+    PeImpAsset *assets;
+    int count = pe_imp_catalog_assets(store, "re2", &assets);
+    CHECK(count == expected);
+    free(assets);
+
+    PeImpSong *song;
+    CHECK(!pe_imp_catalog_song(store, "re2:music/main00", &song, why, sizeof why));
+    CHECK(song && song->seq_size[0] == 1568 && !song->seq_size[1] &&
+          song->instrument_size == 4128 && song->sample_size == 114896);
+    free(song);
+
+    if (has_sub37) {
+        CHECK(!pe_imp_catalog_song(store, "re2:music/sub_37", &song, why, sizeof why));
+        CHECK(song && song->seq_size[0] == 1624 && song->seq_size[1] == 24 &&
+              song->instrument_size == 3104 && song->sample_size == 12016);
+        free(song);
+    }
+}
+
 int main(void) {
     test_basics();
     test_pld();
@@ -424,6 +468,7 @@ int main(void) {
     test_sound();
     test_to_yxz();
     test_real_disc();
+    test_music_disc();
     if (!s_fail) printf("importer core and RE2 reader passed\n");
     return s_fail;
 }
