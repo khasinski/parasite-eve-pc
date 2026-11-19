@@ -53,6 +53,43 @@ static uint32_t made_up_room(uint8_t *b, uint32_t cap) {
     return cap;
 }
 
+/* an RE1 room: camera zones (one the camera's own area), one script procedure with a door to
+ * stage 2 room 5 and an item, then the end of the chain */
+static void made_up_re1(PeImpRdt *r) {
+    static uint8_t b[0x400];
+    memset(b, 0, sizeof b);
+    uint32_t rvd = 0x100, init = 0x200, main_scd = 0x300;
+    put32(b + 0x48 + 0 * 4, rvd);
+    put32(b + 0x48 + 6 * 4, init);
+    put32(b + 0x48 + 7 * 4, main_scd);
+    put16(b + rvd, 9), put16(b + rvd + 2, 0);                       /* camera 0's own area */
+    put16(b + rvd + 20, 1), put16(b + rvd + 22, 0);                 /* 0 -> 1 */
+    put16(b + rvd + 40, 0xffff);
+    uint8_t *p = b + init;
+    put16(p, 2 + 26 + 26);
+    p += 2;
+    p[0] = 0x0C, p[1] = 3;
+    put16(p + 2, 100), put16(p + 4, 200), put16(p + 6, 300), put16(p + 8, 400);
+    p[12] = 7, p[14] = 11, p[15] = (uint8_t)(3 << 5 | 5);
+    put16(p + 16, 1000), put16(p + 22, 2048), p[24] = 2;
+    p += 26;
+    p[0] = 0x18, p[1] = 4, p[10] = 0x2A, p[11] = 15;
+    char why[100];
+    assert(!pe_imp_rdt_read(PE_IMP_RE1, b, sizeof b, r, why, sizeof why));
+    assert(r->procedures == 1 && r->unreadable == 0 && r->doors == 1 && r->items == 1 && r->cuts == 2);
+    const PeImpRdtDoor *d = &r->door[0];
+    assert(d->zone.id == 3 && d->zone.x[1] == 400 && d->zone.z[2] == 600 && d->animation == 7 && d->lock_id == 11);
+    assert(d->stage == 2 && d->room == 5 && d->next_x == 1000 && d->next_dir == 2048 && d->lock_type == 2);
+    assert(r->item[0].item == 0x2A && r->item[0].count == 15);
+    assert(r->cut[0].flag == 1 && r->cut[1].flag == 0 && r->cut[1].from == 0 && r->cut[1].to == 1);
+    for (int round = 0; round < 2000; round++) {                   /* scrambled: stays in bounds */
+        static uint8_t c[0x400];
+        memcpy(c, b, sizeof c);
+        for (int k = 0; k < 8; k++) c[rand() % (int)sizeof c] = (uint8_t)rand();
+        pe_imp_rdt_read(PE_IMP_RE1, c, sizeof c, r, why, sizeof why);
+    }
+}
+
 static void made_up(void) {
     static uint8_t b[0x400];
     uint32_t size = made_up_room(b, sizeof b);
@@ -72,7 +109,7 @@ static void made_up(void) {
 
     /* not a room */
     assert(pe_imp_rdt_read(PE_IMP_RE2, b, 40, &r, why, sizeof why) == -1);
-    assert(pe_imp_rdt_read(1, b, size, &r, why, sizeof why) == -1);
+    assert(pe_imp_rdt_read(9, b, size, &r, why, sizeof why) == -1);
     /* cut short anywhere, and scrambled: read within bounds (fails or returns), never past them */
     for (uint32_t cut = 0; cut < size; cut += 7) {
         uint8_t *c = malloc(cut ? cut : 1);
@@ -87,6 +124,7 @@ static void made_up(void) {
         for (int k = 0; k < 8; k++) c[rand() % (int)sizeof c] = (uint8_t)rand();
         pe_imp_rdt_read(round & 1 ? PE_IMP_RE3 : PE_IMP_RE2, c, sizeof c, &r, why, sizeof why);
     }
+    made_up_re1(&r);
     printf("made-up room: doors, item, zone, enemy and camera zones read; damaged rooms stay in bounds\n");
 }
 
@@ -98,7 +136,9 @@ static void disc(const char *label, const char *cue, unsigned game) {
     uint32_t rooms = 0, procs = 0, bad = 0, doors = 0, aots = 0, items = 0, cuts = 0, enemies = 0, over = 0;
     for (int i = 0; i < pe_imp_disc_files(d); i++) {
         const char *name = pe_imp_disc_name(d, i);
-        int is_room = game == PE_IMP_RE2 ? pe_imp_match("PL?/RDT/ROOM*.RDT", name) : pe_imp_match("CD_DATA/STAGE?/R*.ARD", name);
+        int is_room = game == PE_IMP_RE1   ? pe_imp_match("*/STAGE?/ROOM*.RDT", name)
+                      : game == PE_IMP_RE2 ? pe_imp_match("PL?/RDT/ROOM*.RDT", name)
+                                           : pe_imp_match("CD_DATA/STAGE?/R*.ARD", name);
         if (!is_room) continue;
         uint8_t *data;
         uint32_t size;
@@ -110,8 +150,16 @@ static void disc(const char *label, const char *cue, unsigned game) {
             rooms++, procs += r.procedures, bad += r.unreadable, doors += r.doors, aots += r.aots;
             items += r.items, cuts += r.cuts, enemies += r.enemies;
             if (r.doors > PE_IMP_RDT_DOORS || r.aots > PE_IMP_RDT_AOTS || r.items > PE_IMP_RDT_ITEMS || r.cuts > PE_IMP_RDT_CUTS) over++;
+            const char *show = getenv("PE_TEST_RDT_ROOM");          /* e.g. ROOM1060: print its doors */
+            if (show && *show && strstr(name, show))
+                for (uint32_t k = 0; k < r.doors && k < PE_IMP_RDT_DOORS; k++) {
+                    const PeImpRdtDoor *dr = &r.door[k];
+                    printf("  %s door %u -> stage %d room %02X at (%d, %d, %d) facing %d, camera %u, animation %u, lock %u/%u\n",
+                           name, k, dr->stage == 0xFF ? -1 : dr->stage + 1, dr->room, dr->next_x, dr->next_y, dr->next_z,
+                           dr->next_dir, dr->camera, dr->animation, dr->lock_id, dr->lock_type);
+                }
             for (uint32_t k = 0; k < r.doors && k < PE_IMP_RDT_DOORS; k++)
-                assert(r.door[k].stage < 8);                              /* a stage, not garbage */
+                assert(r.door[k].stage < 8 || (game == PE_IMP_RE1 && r.door[k].stage == 0xFF));  /* a stage */
         }
         free(data);
     }
@@ -119,14 +167,16 @@ static void disc(const char *label, const char *cue, unsigned game) {
     printf("%s: %u rooms, %u procedures, %u unreadable spots, %u doors, %u zones, %u items, %u enemy placements, %u camera zones, %u rooms over the caps\n",
            label, rooms, procs, bad, doors, aots, items, enemies, cuts, over);
     assert(rooms > 100 && doors > 200 && cuts > 500 && !over);
-    if (game == PE_IMP_RE2) assert(!bad);
+    if (game != PE_IMP_RE3) assert(!bad);
     else assert(bad * 100 < procs);
 }
 
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     made_up();
-    const char *re2 = getenv("PE_TEST_RE2_DISC"), *re3 = getenv("PE_TEST_RE3_DISC");
+    const char *re1 = getenv("PE_TEST_RE1_DISC"), *re2 = getenv("PE_TEST_RE2_DISC"), *re3 = getenv("PE_TEST_RE3_DISC");
+    if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1);
+    else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
     if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3);
