@@ -12,7 +12,7 @@ static const PeImpAuto k_autos[] = {
 static int init(void) {
     for (unsigned i = 0; i < sizeof k_autos / sizeof k_autos[0]; i++) pe_imp_add_auto(&k_autos[i]);
     if (pe_imp_add_game("re2", "Resident Evil 2", "Resident Evil") || pe_imp_add_reader(&g_re2_pld_ps1) ||
-        pe_imp_add_reader(&g_re2_sound_ps1) || pe_imp_add_reader(&g_re2_music_ps1) || pe_imp_add_reader(&g_re2_rooms_ps1) || pe_imp_add_reader(&g_re2_logic_ps1) || pe_imp_add_reader(&g_re2_door_ps1) || pe_imp_add_reader(&g_re2_items_ps1) || pe_imp_add_reader(&g_re2_item_pictures_ps1) || pe_imp_add_reader(&g_re2_movies_ps1) || pe_imp_add_reader(&g_re2_files_ps1) || pe_imp_add_reader(&g_re2_maps_ps1) || pe_imp_add_reader(&g_re2_objects_ps1) || pe_imp_add_reader(&g_re2_player_movies_ps1) ||
+        pe_imp_add_reader(&g_re2_sound_ps1) || pe_imp_add_reader(&g_re2_music_ps1) || pe_imp_add_reader(&g_re2_rooms_ps1) || pe_imp_add_reader(&g_re2_logic_ps1) || pe_imp_add_reader(&g_re2_door_ps1) || pe_imp_add_reader(&g_re2_items_ps1) || pe_imp_add_reader(&g_re2_item_pictures_ps1) || pe_imp_add_reader(&g_re2_movies_ps1) || pe_imp_add_reader(&g_re2_files_ps1) || pe_imp_add_reader(&g_re2_maps_ps1) || pe_imp_add_reader(&g_re2_objects_ps1) || pe_imp_add_reader(&g_re2_door_models_ps1) || pe_imp_add_reader(&g_re2_player_movies_ps1) ||
         pe_imp_set_naming("re2", g_re2_naming) || pe_imp_add_rig("re2", "player/", &g_re2_human_rig)) {
         pe_mod_log("pe_src_re2", "readers refused by the importer");
         return 1;
