@@ -19,7 +19,7 @@
 #include <stdint.h>
 
 #define PE_IMP_API_VERSION 2
-#define PE_IMP_FILE_MAX    (64u << 20)      /* one file read from a disc image */
+#define PE_IMP_FILE_MAX    (128u << 20)     /* one file read from a disc image (RE2's longest movie is 92 MB) */
 #define PE_IMP_PATH_MAX    1100
 #define PE_IMP_ID_MAX      80               /* "re2:player/claire" */
 #define PE_IMP_NAME_MAX    48
@@ -32,7 +32,8 @@ enum {
     PE_IMP_SOUND = 1u << 3, PE_IMP_SONG = 1u << 4, PE_IMP_TEXTSET = 1u << 5,
     PE_IMP_ROOMLOGIC = 1u << 6,               /* pe_imp_logic.h */
     PE_IMP_DOORSCENE = 1u << 7,               /* pe_imp_logic.h */
-    PE_IMP_ITEMTABLE = 1u << 8                /* pe_imp_logic.h; the last type: the store walks types up to it */
+    PE_IMP_ITEMTABLE = 1u << 8,               /* pe_imp_logic.h */
+    PE_IMP_MOVIE = 1u << 9                    /* below; the last type: the store walks types up to it */
 };
 const char *pe_imp_type_name(uint32_t type);
 
@@ -175,6 +176,32 @@ const uint8_t *pe_imp_imageset_frame(const PeImpImageSet *set, uint32_t i, uint3
 int pe_imp_imageset_save(const PeImpImageSet *set, const char *folder, char *why, size_t n);
 int pe_imp_imageset_load(const char *folder, PeImpImageSet **set, char *why, size_t n);
 
+/* Movie: a PS1 STR movie as the game keeps it, copied once. Frames are MDEC frames (pe_imp_mdec.h)
+ * of width x height, in order; audio is the movie's CD-XA sectors as PE_IMP_XA_RECORD records
+ * (pe_imp_disc_xa: file, channel, submode, coding, 2304 bytes), in disc order. movie.bin:
+ *   "MOV1", u32 version 1, width, height, frames, audio records, then per frame u32 offset and
+ *   u32 size (from the start of the frame data), the frame data, then the audio records. */
+#define PE_IMP_MOVIE_VERSION 1
+#define PE_IMP_MOVIE_MAX (160u << 20)
+enum { PE_IMP_XA_BOTH = 2 };
+typedef struct {
+    uint32_t width, height, frames, audio_records;
+    uint32_t *offset, *size;                  /* per frame, into frame_data */
+    uint8_t *frame_data, *audio;
+    uint32_t frame_bytes;
+} PeImpMovie;
+/* From an STR file's 2048-byte sectors (pe_imp_disc_read; interleaved audio sectors are skipped by
+ * their header) and its XA records (may be NULL). NULL if no frame was found. */
+PeImpMovie *pe_imp_movie_from_str(const uint8_t *str, uint32_t size, const uint8_t *xa, uint32_t xa_size);
+void pe_imp_movie_free(PeImpMovie *m);
+int pe_imp_movie_save(const PeImpMovie *m, const char *folder, char *why, size_t n);
+int pe_imp_movie_load(const char *folder, PeImpMovie **m, char *why, size_t n);
+int pe_imp_catalog_movie(const char *root, const char *asset_id, PeImpMovie **m, char *why, size_t n);
+/* For readers: an STR file (and its XA records) as "movie/<name>"; 0 also when it holds no video. */
+struct PeImpSink;
+int pe_imp_emit_str(struct PeImpSink *sink, const uint8_t *str, uint32_t size, const uint8_t *xa, uint32_t xa_size,
+                    const char *path, char *why, size_t n);
+
 /* ---- readers ---- */
 typedef struct PeImpSink PeImpSink;
 /* A reader hands each item it decodes to the sink: `proposed` is a local ID ("player/pl01"),
@@ -198,7 +225,9 @@ typedef struct {
     const char *companion;                    /* exact ISO path, or .extension to pair by stem */
     PeImpReadPairFn read_pair;                /* both inputs participate in the store key */
     int path_key;                             /* single-file reader derives IDs from its ISO path */
-    int xa;                                   /* read gets the file's XA audio records (pe_imp_disc_xa) */
+    int xa;                                   /* 1: read gets the file's XA audio records (pe_imp_disc_xa);
+                                               * PE_IMP_XA_BOTH: read_pair gets the file and, as the
+                                               * companion, its XA records (a movie; none from an .iso) */
     PeImpFindCompanionFn find_companion;      /* alternative to a required .companion path */
 } PeImpReader;
 int pe_imp_add_reader(const PeImpReader *r); /* 0, or -1 (bad, duplicate, full) */

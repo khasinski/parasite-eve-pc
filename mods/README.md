@@ -868,6 +868,15 @@ RE2 106, RE3 228). Not yet known: the icons' palette (not stored plainly on the 
 icon each RE2 and RE3 item uses (RE1's icons follow the item numbers). The key pocket names RE keys
 from this table.
 
+**Movies.** Each RE STR movie (RE1 `ZMOVIE`, RE2 `ZMOVIE` and the player's `PL0`/`PL1` `ZMOVIE`, RE3 `CD_DATA/ZMOVIE`) is
+copied once into the store as a **Movie** (`host/import/pe_imp_movie.c`, `movie.bin`): a frame
+index, its MDEC frames (320 x 240 in RE1, 320 x 160 letterboxed in RE2 and RE3; decoded by
+`pe_imp_mdec.c` like the room backgrounds) and its CD-XA sound sectors as stored. That is about
+1 GB for all the discs (RE1 296 MB, RE2 330 MB a disc, RE3 120 MB). The sound needs a raw `.bin`
+image; an `.iso` has none. A reader can ask for a file and its XA sectors together
+(`xa = PE_IMP_XA_BOTH`), and one file may now be up to 128 MB (RE2's longest movie is 92 MB).
+`mod-rdt` reads a short movie from each disc, saves and loads it, and decodes a frame.
+
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 

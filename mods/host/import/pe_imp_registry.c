@@ -27,6 +27,7 @@ const char *pe_imp_type_name(uint32_t type) {
     case PE_IMP_ROOMLOGIC: return "RoomLogic";
     case PE_IMP_DOORSCENE: return "DoorScene";
     case PE_IMP_ITEMTABLE: return "ItemTable";
+    case PE_IMP_MOVIE: return "Movie";
     default: return "?";
     }
 }
@@ -40,7 +41,7 @@ static int word_ok(const char *s, size_t max) {
 
 int pe_imp_add_reader(const PeImpReader *r) {
     if (!r) return -1;
-    int paired = r->companion || r->find_companion;
+    int paired = r->companion || r->find_companion || r->xa == PE_IMP_XA_BOTH;   /* a movie pairs with its own XA */
     if (r->api.version != PE_IMP_API_VERSION || r->api.size != sizeof *r || !r->match ||
         (r->companion && r->find_companion) || (r->read ? (paired || r->read_pair) : (!paired || !r->read_pair)) ||
         !word_ok(r->game, 15) || !word_ok(r->platform, 15) || !word_ok(r->format, 15) || !r->produces)

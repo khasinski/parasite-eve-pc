@@ -13,9 +13,60 @@
 #include "pe_imp_internal.h"
 #include "pe_imp_logic.h"
 #include "pe_imp_rdt.h"
+#include "pe_imp_mdec.h"
 
 extern const PeImpReader g_re2_logic_ps1, g_re1_door_ps1, g_re2_door_ps1, g_re3_door_ps1;
 extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1, g_re3_logic_ps1;
+void MdecDiag_ExpandDecoderTable(void *buffer);   /* the game's, linked in */
+
+/* one movie: read from the disc, saved and loaded, a frame from its middle decoded
+ * (PE_TEST_MOVIE_PPM=<folder> writes that frame as <name>.ppm) */
+static void movie(const char *label, const char *cue, const char *path) {
+    char why[200];
+    PeImpDisc *d = pe_imp_disc_open(cue, why, sizeof why);
+    assert(d);
+    int i = pe_imp_disc_find(d, path);
+    assert(i >= 0);
+    uint8_t *str, *xa = NULL;
+    uint32_t size, xa_size = 0;
+    assert(!pe_imp_disc_read(d, i, &str, &size, why, sizeof why));
+    pe_imp_disc_xa(d, i, &xa, &xa_size, why, sizeof why);
+    pe_imp_disc_close(d);
+    PeImpMovie *m = pe_imp_movie_from_str(str, size, xa, xa_size);
+    free(str), free(xa);
+    assert(m);
+    pe_imp_mkdirs("pe-rdt-test/movie");
+    assert(!pe_imp_movie_save(m, "pe-rdt-test/movie", why, sizeof why));
+    PeImpMovie *back;
+    assert(!pe_imp_movie_load("pe-rdt-test/movie", &back, why, sizeof why));
+    assert(back->frames == m->frames && back->frame_bytes == m->frame_bytes && back->audio_records == m->audio_records);
+    assert(!memcmp(back->frame_data, m->frame_data, m->frame_bytes));
+    uint32_t f = back->frames / 2;
+    uint8_t *rgb = malloc((size_t)back->width * back->height * 3);
+    pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);
+    int rc = pe_imp_mdec_decode(back->frame_data + back->offset[f], back->size[f], back->width, back->height, rgb, why, sizeof why);
+    if (rc) printf("  frame %u: %s\n", f, why);
+    long sum = 0, sum2 = 0, px = (long)back->width * back->height * 3;
+    for (long k = 0; k < px; k++) sum += rgb[k], sum2 += (long)rgb[k] * rgb[k];
+    double mean = (double)sum / px, var = (double)sum2 / px - mean * mean;
+    const char *dir = getenv("PE_TEST_MOVIE_PPM");
+    if (dir && *dir) {
+        char out[400];
+        snprintf(out, sizeof out, "%s/%s.ppm", dir, label);
+        FILE *o = fopen(out, "wb");
+        if (o) { fprintf(o, "P6\n%u %u\n255\n", back->width, back->height); fwrite(rgb, 1, (size_t)px, o); fclose(o); }
+    }
+    printf("%s movie %s: %u x %u, %u frames (%u KB), %u sound sectors; frame %u variance %.0f\n", label, path, back->width,
+           back->height, back->frames, back->frame_bytes / 1024, back->audio_records, f, var);
+    assert(!rc && var > 50 && back->frames > 30 && back->audio_records > 10);
+    free(rgb);
+    pe_imp_movie_free(m), pe_imp_movie_free(back);
+    /* damaged: a cut file is refused */
+    FILE *c = fopen("pe-rdt-test/movie/movie.bin", "rb+");
+    fseek(c, 16, SEEK_SET), fputc(0xff, c), fputc(0xff, c), fputc(0xff, c), fputc(0x0f, c);
+    fclose(c);
+    assert(pe_imp_movie_load("pe-rdt-test/movie", &back, why, sizeof why) == -1);
+}
 
 /* a disc's item table: names by item number, icons kept; `want` is one item number and its name */
 static void scan_items(const char *label, const char *cue, const char *game, const PeImpReader *reader,
@@ -348,13 +399,15 @@ int main(void) {
     made_up();
     const char *re1 = getenv("PE_TEST_RE1_DISC"), *re2 = getenv("PE_TEST_RE2_DISC"), *re3 = getenv("PE_TEST_RE3_DISC");
     if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1), scan_doors("RE1", re1, "re1", &g_re1_door_ps1, 0),
-                     scan_items("RE1", re1, "re1", &g_re1_items_ps1, 2, "Beretta", 76);
+                     scan_items("RE1", re1, "re1", &g_re1_items_ps1, 2, "Beretta", 76),
+                     movie("RE1", re1, "PSXUSA/ZMOVIE/OJ.STR");
     else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
     if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1),
-                     scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106);
+                     scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106),
+                     movie("RE2", re2, "ZMOVIE/R200.STR");
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
-                     scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3);
+                     scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR");
     else printf("PE_TEST_RE3_DISC not set: RE3 rooms skipped\n");
     printf("RDT passed\n");
     return 0;
