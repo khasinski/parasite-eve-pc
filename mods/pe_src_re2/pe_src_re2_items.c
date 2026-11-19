@@ -3,6 +3,7 @@
  * Names: IntelOrca's biohazard-utils, Bio2ConstantTable.cs g_itemNames, Copyright (c) 2022-2023 Ted
  * John, MIT License. Item number = index. Which icon each item uses isn't known yet. */
 #include "pe_imp_items.h"
+#include "pe_imp_pictures.h"
 #include "pe_src_re2.h"
 
 static const char *const k_names[] = {
@@ -51,4 +52,19 @@ const PeImpReader g_re2_items_ps1 = {
     .game = "re2", .platform = "ps1", .format = "items",
     .version = 1, .produces = PE_IMP_ITEMTABLE, .match = "COMMON/DATA/ITEMALL.PIX",
     .tags = "items", .read = read_items
+};
+
+/* The item pictures in colour: COMMON/DATA/ITPS.ITP, a TIM every 0x3000 bytes (100 of them), 112 x 72, 8 bits, each with
+ * its own palette, as the inventory shows them. Cataloged as Pictures "items/pictures"; picture i is
+ * item i (checked: 1 the knife, 2 the handgun, 7 the shotgun). */
+static int read_pictures(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    (void)path;
+    return pe_imp_emit_tims(sink, "items/pictures", "Item pictures", data, size, 0x3000, why, n);
+}
+
+const PeImpReader g_re2_item_pictures_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re2", .platform = "ps1", .format = "item-pictures",
+    .version = 1, .produces = PE_IMP_PICTURES, .match = "COMMON/DATA/ITPS.ITP",
+    .tags = "items", .read = read_pictures
 };

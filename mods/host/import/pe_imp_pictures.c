@@ -182,3 +182,40 @@ int pe_imp_emit_tims_ex(PeImpSink *sink, const char *id, const char *name, const
     }
     return 0;
 }
+
+int pe_imp_emit_pix8(PeImpSink *sink, const char *id, const char *name, const uint8_t *pixels, uint32_t size,
+                     const uint8_t *palette, uint32_t width, uint32_t height, char *why, size_t n) {
+    if (!width || width % 2 || width > 1024 || !height || height > 512) return 0;
+    uint32_t page = width * height, count = size / page, tim = 8 + 12 + 512 + 12 + page;
+    if (!count) return 0;
+    uint8_t *packed = malloc((size_t)count * (4 + ((tim + 3) & ~3u)));
+    if (!packed) { if (why && n) snprintf(why, n, "out of memory"); return -1; }
+    uint32_t total = 0;
+    for (uint32_t p = 0; p < count; p++) {
+        uint8_t *o = packed + total, *t = o + 4;
+        for (int k = 0; k < 4; k++) o[k] = (uint8_t)(tim >> 8 * k);
+        memset(t, 0, 8), t[0] = 0x10, t[4] = 9;                         /* 8-bit, with a palette */
+        uint8_t *c = t + 8;
+        memset(c, 0, 12), c[0] = (uint8_t)(524 & 255), c[1] = (uint8_t)(524 >> 8), c[9] = 1, c[10] = 1;   /* 256 x 1 */
+        memcpy(c + 12, palette, 512);
+        uint8_t *img = c + 524;
+        uint32_t bytes = 12 + page;
+        memset(img, 0, 12);
+        for (int k = 0; k < 4; k++) img[k] = (uint8_t)(bytes >> 8 * k);
+        img[8] = (uint8_t)(width / 2), img[9] = (uint8_t)(width / 2 >> 8), img[10] = (uint8_t)height, img[11] = (uint8_t)(height >> 8);
+        memcpy(img + 12, pixels + (size_t)p * page, page);
+        uint32_t padded = (tim + 3) & ~3u;
+        memset(t + tim, 0, padded - tim);
+        total += 4 + padded;
+    }
+    PeImpLogicBuilder *b = pe_imp_logic_begin(0, 0, 0, 0);
+    pe_imp_logic_add(b, PE_IMP_PICTURE_TIMS, count, packed, total);
+    free(packed);
+    PeImpRoomLogic *l = pe_imp_logic_finish(b);
+    if (!l) { if (why && n) snprintf(why, n, "%s: too large", id); return -1; }
+    if (pe_imp_emit(sink, PE_IMP_PICTURES, id, name, l)) {
+        if (why && n) snprintf(why, n, "couldn't catalog %s", id);
+        return -1;
+    }
+    return 0;
+}

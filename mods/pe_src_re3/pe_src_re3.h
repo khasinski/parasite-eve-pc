@@ -8,7 +8,7 @@ extern const PeImpRig g_re3_human_rig;
 /* 0; -1 with a reason; -2 when the file isn't one of the people (nothing to read, no error) */
 int re3_pld_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, size_t n);
 extern const PeImpReader g_re3_pld_ps1;
-extern const PeImpReader g_re3_sound_ps1, g_re3_bgm_ps1, g_re3_room_music_ps1, g_re3_rooms_ps1, g_re3_logic_ps1, g_re3_door_ps1, g_re3_items_ps1, g_re3_movies_ps1, g_re3_files_ps1, g_re3_maps_ps1, g_re3_objects_ps1;
+extern const PeImpReader g_re3_sound_ps1, g_re3_bgm_ps1, g_re3_room_music_ps1, g_re3_rooms_ps1, g_re3_logic_ps1, g_re3_door_ps1, g_re3_items_ps1, g_re3_item_pictures_ps1, g_re3_movies_ps1, g_re3_files_ps1, g_re3_maps_ps1, g_re3_objects_ps1;
 extern const char g_re3_naming[];
 
 /* Enemies (pe_src_re3_emd.c, pe_src_re3_tones.c, pe_src_re3_enemies.c) */

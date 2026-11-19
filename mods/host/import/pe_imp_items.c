@@ -14,7 +14,7 @@ int pe_imp_emit_item_table(PeImpSink *sink, unsigned game, const char *const *na
     for (uint32_t i = 0; i < count; i++) {
         uint8_t *r = records + named * PE_IMP_ITEM_NAME_BYTES;
         if (!names[i] || !*names[i]) continue;
-        unsigned icon = icons_by_number && i < icon_count ? i : 0xFFFF;
+        unsigned icon = icons_by_number && i >= 1 && i - 1 < icon_count ? i - 1 : 0xFFFF;   /* icon k is item k + 1 */
         r[0] = (uint8_t)i, r[1] = (uint8_t)(i >> 8), r[2] = (uint8_t)icon, r[3] = (uint8_t)(icon >> 8);
         snprintf((char *)r + 4, 44, "%s", names[i]);
         named++;

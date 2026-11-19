@@ -18,6 +18,7 @@
 
 extern const PeImpReader g_re2_logic_ps1, g_re1_door_ps1, g_re2_door_ps1, g_re3_door_ps1;
 extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1, g_re3_logic_ps1;
+extern const PeImpReader g_re1_item_icons_ps1, g_re2_item_pictures_ps1, g_re3_item_pictures_ps1;
 void MdecDiag_ExpandDecoderTable(void *buffer);   /* the game's, linked in */
 extern const PeImpReader g_re2_objects_ps1, g_re3_objects_ps1, g_re1_objects_ps1, g_re1_file_text_ps1;
 extern const PeImpReader g_re1_files_ps1, g_re2_files_ps1, g_re3_files_ps1, g_re2_maps_ps1, g_re3_maps_ps1;
@@ -488,18 +489,21 @@ int main(void) {
                      movie("RE1", re1, "PSXUSA/ZMOVIE/OJ.STR"),
                      scan_files("RE1", re1, "re1", &g_re1_files_ps1, 19),
                      scan_objects(re1, "re1", &g_re1_objects_ps1, 500),
-                     scan_files("RE1 text map", re1, "re1", &g_re1_file_text_ps1, 40);
+                     scan_files("RE1 text map", re1, "re1", &g_re1_file_text_ps1, 40),
+                     scan_files("RE1 icon", re1, "re1", &g_re1_item_icons_ps1, 76);
     else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
     if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1),
                      scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106),
                      movie("RE2", re2, "ZMOVIE/R200.STR"),
                      scan_files("RE2", re2, "re2", &g_re2_files_ps1, 191),
-                     scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20), scan_objects(re2, "re2", &g_re2_objects_ps1, 400);
+                     scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20),
+                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100), scan_objects(re2, "re2", &g_re2_objects_ps1, 400);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
                      scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), scan_objects(re3, "re3", &g_re3_objects_ps1, 600), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),
                      scan_files("RE3", re3, "re3", &g_re3_files_ps1, 183),
-                     scan_files("RE3 map", re3, "re3", &g_re3_maps_ps1, 18);
+                     scan_files("RE3 map", re3, "re3", &g_re3_maps_ps1, 18),
+                     scan_files("RE3 item", re3, "re3", &g_re3_item_pictures_ps1, 134);
     else printf("PE_TEST_RE3_DISC not set: RE3 rooms skipped\n");
     printf("RDT passed\n");
     return 0;

@@ -882,8 +882,15 @@ file is scanned (RE1 `DATA/ITEM_ALL.PIX`, RE2 `COMMON/DATA/ITEMALL.PIX`, RE3 `CD
 `NAME` holds each item number with its name (from biohazard-utils' lists, MIT; RE1 75, RE2 124, RE3
 127) and its icon where known. `ICN8` keeps the 40 x 30 icons as stored, 8 bits per pixel (RE1 76,
 RE2 106, RE3 228). Not yet known: the icons' palette (not stored plainly on the discs), and which
-icon each RE2 and RE3 item uses (RE1's icons follow the item numbers). The key pocket names RE keys
-from this table.
+icon each RE2 and RE3 item uses (RE1's icon k is item k + 1; item 0 is "nothing"). The key pocket
+names RE keys from this table.
+
+**Item pictures in colour.** Pictures records, picture i for item i: RE2 `COMMON/DATA/ITPS.ITP` (100)
+and RE3 `CD_DATA/ETC/ITEMG.PIX` (134) hold the inventory's 112 x 72 item pictures, a TIM every 12 KB /
+10 KB, each with its own palette (`items/pictures`; 1 is the knife, 2 the handgun, 7 the shotgun).
+RE1's 40 x 30 icons take their colours from row 2 of `DATA/STATUS.TIM`'s palette, the status screen's
+(found by eye; rows 0 and 1 are wrong): `items/icons`, icon k for item k + 1 (`pe_imp_emit_pix8`).
+RE2's map pages are still grey (their palette isn't found).
 
 **Movies.** Each RE STR movie (RE1 `ZMOVIE`, RE2 `ZMOVIE` and the player's `PL0`/`PL1` `ZMOVIE`, RE3 `CD_DATA/ZMOVIE`) is
 copied once into the store as a **Movie** (`host/import/pe_imp_movie.c`, `movie.bin`): a frame
