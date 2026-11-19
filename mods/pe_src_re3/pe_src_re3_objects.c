@@ -34,6 +34,37 @@ static int object_parse(const uint8_t *data, uint32_t size, uint32_t mesh, uint3
     uint32_t objs = u32at(&x, md2 + 4), base = md2 + 8;
     if (!objs || objs > PE_IMP_MODEL_PARTS_MAX) goto bad;
     NEED(base, (uint64_t)24 * objs);
+    /* the skeleton: an EMR header at mesh + 4 (u16 tree offset, key frames offset, bones, key frame
+     * size; bone offsets s16 x, y, z from + 8; per bone u16 child count, offset of its child bytes,
+     * from the tree). Used when it names one bone per MD2 object (663 of 712); else one bone. */
+    NEED(mesh + 4, 8);
+    uint32_t emr = mesh + 4, tree = emr + u16at(&x, emr), nb = u16at(&x, emr + 4);
+    if (nb == objs && nb > 1 && nb <= PE_IMP_MODEL_BONES_MAX && ok(&x, emr + 8, 6ull * nb) && ok(&x, tree, 4ull * nb)) {
+        int16_t *parent = malloc(nb * sizeof *parent);
+        int32_t (*rel)[3] = calloc(nb, sizeof *rel), (*pos)[3] = calloc(nb, sizeof *pos);
+        int good = parent && rel && pos;
+        for (uint32_t b = 0; good && b < nb; b++) parent[b] = -1;
+        for (uint32_t b = 0; good && b < nb; b++) {
+            uint32_t kids = u16at(&x, tree + 4 * b), at = tree + u16at(&x, tree + 4 * b + 2);
+            if (!ok(&x, at, kids)) { good = 0; break; }
+            for (uint32_t k = 0; k < kids; k++) {
+                uint32_t c = u8at(&x, at + k);
+                if (c >= nb || c <= b) { good = 0; break; }               /* children come after their parent */
+                parent[c] = (int16_t)b;
+            }
+        }
+        for (uint32_t b = 0; good && b < nb; b++)
+            for (int c = 0; c < 3; c++) {
+                rel[b][c] = s16at(&x, emr + 8 + 6 * b + 2 * (uint32_t)c);
+                pos[b][c] = (parent[b] >= 0 ? pos[parent[b]][c] : 0) + rel[b][c];
+            }
+        if (good) {
+            free(m->parent), free(m->rel), free(m->pos);
+            m->bones = nb, m->parent = parent, m->rel = rel, m->pos = pos;
+        } else {
+            free(parent), free(rel), free(pos);
+        }
+    }
     m->parts = objs;
     m->part = calloc(objs, sizeof *m->part);
     if (!m->part) goto bad;
@@ -131,6 +162,6 @@ static int read_objects(const uint8_t *ard, uint32_t size, const char *path, PeI
 const PeImpReader g_re3_objects_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re3", .platform = "ps1", .format = "rdt-objects",
-    .version = 1, .produces = PE_IMP_MODEL, .match = "CD_DATA/STAGE?/R*.ARD",
+    .version = 2, .produces = PE_IMP_MODEL, .match = "CD_DATA/STAGE?/R*.ARD",
     .tags = "room object", .read = read_objects, .path_key = 1
 };

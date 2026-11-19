@@ -66,9 +66,9 @@ static void scan_objects(const char *cue, const char *game, const PeImpReader *r
     assert(objects && !pe_imp_catalog_model("pe-rdt-test/objects", first, &m, why, sizeof why));
     uint32_t faces = 0;
     for (uint32_t p = 0; p < m.parts; p++) faces += m.part[p].tris + m.part[p].quads;
-    printf("%s objects: %d one-bone models from %u room files; %s has %u faces, a %ux%u texture%s%s\n", game, objects,
+    printf("%s objects: %d models from %u room files; %s has %u faces, a %ux%u texture%s%s\n", game, objects,
            sc.files_read, first, faces, m.w, m.h, sc.refused ? ", refused: " : "", sc.refused ? sc.last_error : "");
-    assert(!sc.refused && objects >= want && m.bones == 1 && faces > 0);
+    assert(!sc.refused && objects >= want && m.bones >= 1 && faces > 0);
     pe_imp_model_free(&m);
 }
 

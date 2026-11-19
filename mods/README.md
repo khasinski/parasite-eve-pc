@@ -863,8 +863,9 @@ sharing `mesh_and_texture` with `re2_pld_parse`; the costume tests are unchanged
 stands is set by the room's script. RE3's room objects are too (`pe_src_re3/pe_src_re3_objects.c`;
 695 of 712, in 143 rooms): the same section-10 table; each mesh starts with a small header whose
 first u16 is the offset of an MD2 block (the player models' mesh format), read as one part per MD2
-object on one bone. The header's other fields look like a tiny skeleton and aren't read yet, so a
-prop whose pieces move separately comes out as it is stored. RE1's room props and floor items are
+object. The rest of that header is an EMR skeleton (tree, bone offsets); when it names one bone per
+MD2 object (663 of 712) the model gets those bones, piece i on bone i, so a prop whose pieces move
+can be animated; otherwise it is one bone. RE1's room props and floor items are
 too (`pe_src_re1/pe_src_re1_objects.c`, `object/...` and `item/...`; 589, Chris's and Jill's rooms
 merged): sections 2 and 3 list (TMD, TIM) pairs; the TMD's textured triangles and quads are read
 (modes 0x34/0x36, 0x24, 0x3C), the rare untextured and unlit ones passed over.
