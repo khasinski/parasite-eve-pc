@@ -22,6 +22,8 @@ typedef struct {
 int pe_imp_emit_re_room(PeImpSink *sink, unsigned game, const char *path,
                         const uint8_t *bss, uint32_t bss_size, const uint8_t *rdt, uint32_t rdt_size);
 int pe_imp_re_room_companion(PeImpDisc *disc, const char *path, unsigned game);
+/* RE3 keeps a room's RDT inside its .ARD (entry 8). 0 with the range, or -1. */
+int pe_imp_re3_ard_rdt(const uint8_t *ard, uint32_t size, const uint8_t **rdt, uint32_t *rdt_size);
 
 /* Legacy ImageSets return a slot number and game == 0. Malformed metadata returns -1. */
 int pe_imp_room_view(const PeImpImageSet *set, uint32_t frame, PeImpRoomView *view);

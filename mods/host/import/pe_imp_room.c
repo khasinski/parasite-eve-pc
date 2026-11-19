@@ -66,6 +66,12 @@ static Bytes ard_rdt(Bytes ard) {
     return (Bytes){0};
 }
 
+int pe_imp_re3_ard_rdt(const uint8_t *ard, uint32_t size, const uint8_t **rdt, uint32_t *rdt_size) {
+    Bytes b = ard_rdt((Bytes){ard, size});
+    *rdt = b.data, *rdt_size = b.size;
+    return b.data && b.size ? 0 : -1;
+}
+
 static const uint8_t *camera(Bytes rdt, unsigned game, uint32_t slot) {
     int re1 = game == PE_IMP_RE1;
     if (rdt.size < (re1 ? 148u : 40u) || slot >= rdt.data[1]) return NULL;

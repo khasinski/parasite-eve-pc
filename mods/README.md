@@ -769,6 +769,15 @@ import scan. Collision and in-game room placement are separate from this export.
 with `PE_TEST_RE1_DISC`, `PE_TEST_RE2_DISC`, and `PE_TEST_RE3_DISC`.
 Set `PE_TEST_ROOMS_DIR` to write background previews during that test.
 
+**Room logic (RE2, RE3).** `host/import/pe_imp_rdt.c` reads what happens in a room from its RDT:
+the doors (zone, where each leads, starting camera, door animation and sound, lock), the trigger
+zones, item pickups and enemy placements declared by the room's scripts, and the camera switch
+zones. It walks the scripts with the games' instruction sizes (from IntelOrca's biohazard-utils,
+MIT) and leaves the bytecode as it is for a later interpreter. `mod-rdt` checks it on a made-up
+room and damaged copies, and with `PE_TEST_RE2_DISC` / `PE_TEST_RE3_DISC` reads every room: RE2
+disc 1 has 1,940 script procedures (none unreadable) and 283 doors, RE3 4,238 procedures and 453
+doors. Not used by the game yet; RE1 has its own script format and comes later.
+
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 

@@ -60,6 +60,7 @@ set(pe_import_core_sources
     host/import/pe_imp_xa.c         # CD-XA streamed audio: decoding and playback
     host/import/pe_imp_akao.c       # Square's AKAO sequences (FF7) played as PCM
     host/import/pe_imp_mdec.c       # MDEC frames (room backgrounds) to RGB
+    host/import/pe_imp_rdt.c        # RE2/RE3 rooms: doors, trigger zones, items, camera zones
     host/import/pe_imp_room.c       # Resident Evil PS1 cameras and foreground masks
     host/import/pe_imp_registry.c   # readers, file patterns, naming tables
     host/import/pe_imp_store.c      # the extract-once store and the catalog
@@ -349,6 +350,9 @@ if(BUILD_TESTING)
         pe_src_re1/pe_src_re1_rooms.c pe_src_re2/pe_src_re2_rooms.c pe_src_re3/pe_src_re3_rooms.c
         ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
     target_include_directories(test-mod-mdec PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
+    # RE2/RE3 room logic on a made-up room; PE_TEST_RE2_DISC / PE_TEST_RE3_DISC read every room's scripts.
+    pe_feature_test(rdt ${PROJECT_SOURCE_DIR}/tests/pe_mod_rdt_test.c ${pe_import_core_sources})
+    target_include_directories(test-mod-rdt PRIVATE host/import)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
     pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_core_sources}
         pe_src_re2/pe_src_re2_pld.c pe_wardrobe/pe_skin_build.c)
