@@ -193,9 +193,9 @@ int pe_imp_logic_camera_zone(const PeImpRoomLogic *l, uint32_t i, PeImpCameraZon
     return 0;
 }
 
-static FILE *open_logic(const char *folder, const char *mode) {
+static FILE *open_logic(const char *folder, const char *file, const char *mode) {
     char path[PE_IMP_PATH_MAX];
-    if (snprintf(path, sizeof path, "%s/roomlogic.bin", folder) >= (int)sizeof path) return NULL;
+    if (snprintf(path, sizeof path, "%s/%s", folder, file) >= (int)sizeof path) return NULL;
     return fopen(path, mode);
 }
 
@@ -214,11 +214,11 @@ static uint32_t count_sections(const PeImpRoomLogic *l) {
     return at == l->size ? n : UINT32_MAX;
 }
 
-int pe_imp_logic_save(const PeImpRoomLogic *l, const char *folder, char *why, size_t n) {
+static int save_as(const PeImpRoomLogic *l, const char *folder, const char *file, char *why, size_t n) {
     uint32_t sections = count_sections(l);
     if (l->size > PE_IMP_ROOMLOGIC_MAX || sections == UINT32_MAX || !sections_ok(l->payload, l->size, sections))
         return bad(why, n);
-    FILE *f = open_logic(folder, "wb");
+    FILE *f = open_logic(folder, file, "wb");
     if (!f) return bad(why, n);
     uint8_t h[HEADER] = {'R', 'M', 'L', '1'};
     put32(h + 4, PE_IMP_ROOMLOGIC_VERSION), put32(h + 8, l->game), put32(h + 12, l->player);
@@ -228,9 +228,9 @@ int pe_imp_logic_save(const PeImpRoomLogic *l, const char *folder, char *why, si
     return ok ? 0 : bad(why, n);
 }
 
-int pe_imp_logic_load(const char *folder, PeImpRoomLogic **out, char *why, size_t n) {
+static int load_as(const char *folder, const char *file, PeImpRoomLogic **out, char *why, size_t n) {
     *out = NULL;
-    FILE *f = open_logic(folder, "rb");
+    FILE *f = open_logic(folder, file, "rb");
     if (!f) return bad(why, n);
     uint8_t h[HEADER];
     PeImpRoomLogic *l = NULL;
@@ -256,4 +256,17 @@ int pe_imp_logic_load(const char *folder, PeImpRoomLogic **out, char *why, size_
     }
     *out = l;
     return 0;
+}
+
+int pe_imp_logic_save(const PeImpRoomLogic *l, const char *folder, char *why, size_t n) {
+    return save_as(l, folder, "roomlogic.bin", why, n);
+}
+int pe_imp_logic_load(const char *folder, PeImpRoomLogic **out, char *why, size_t n) {
+    return load_as(folder, "roomlogic.bin", out, why, n);
+}
+int pe_imp_door_save(const PeImpRoomLogic *l, const char *folder, char *why, size_t n) {
+    return save_as(l, folder, "doorscene.bin", why, n);
+}
+int pe_imp_door_load(const char *folder, PeImpRoomLogic **out, char *why, size_t n) {
+    return load_as(folder, "doorscene.bin", out, why, n);
 }

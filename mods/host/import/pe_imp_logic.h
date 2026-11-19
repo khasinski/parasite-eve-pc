@@ -96,4 +96,16 @@ int pe_imp_logic_save(const PeImpRoomLogic *l, const char *folder, char *why, si
 int pe_imp_logic_load(const char *folder, PeImpRoomLogic **l, char *why, size_t n);
 int pe_imp_catalog_roomlogic(const char *root, const char *asset_id, PeImpRoomLogic **l, char *why, size_t n);
 
+/* DoorScene: a door transition as the source game keeps it (the 3D door, its animation and texture,
+ * its sounds), in the same sectioned container, stored as doorscene.bin. `room` is the door's
+ * number, `stage` its stage (RE3 keeps doors per stage; else 0), `player` 0. Sections:
+ *   VAB0  the door's sound bank (RE2: a VAB, header then samples)
+ *   SCN0  the scene as stored (RE2: the block after the sounds; RE1, RE3: the whole file)
+ * A per-game door module in the runtime reads SCN0; the sounds are also cataloged as Sounds. */
+#define PE_IMP_DOORSCENE_VERSION 1
+enum { PE_IMP_DOOR_VAB0 = PE_IMP_LOGIC_TAG('V', 'A', 'B', '0'), PE_IMP_DOOR_SCN0 = PE_IMP_LOGIC_TAG('S', 'C', 'N', '0') };
+int pe_imp_door_save(const PeImpRoomLogic *l, const char *folder, char *why, size_t n);
+int pe_imp_door_load(const char *folder, PeImpRoomLogic **l, char *why, size_t n);
+int pe_imp_catalog_doorscene(const char *root, const char *asset_id, PeImpRoomLogic **l, char *why, size_t n);
+
 #endif

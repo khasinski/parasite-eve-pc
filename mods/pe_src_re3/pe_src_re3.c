@@ -14,7 +14,7 @@ static int init(void) {
     for (unsigned i = 0; i < sizeof k_autos / sizeof k_autos[0]; i++) pe_imp_add_auto(&k_autos[i]);
     if (pe_imp_add_game("re3", "Resident Evil 3", "Resident Evil") || pe_imp_add_reader(&g_re3_pld_ps1) ||
         pe_imp_add_reader(&g_re3_sound_ps1) || pe_imp_add_reader(&g_re3_bgm_ps1) ||
-        pe_imp_add_reader(&g_re3_room_music_ps1) || pe_imp_add_reader(&g_re3_rooms_ps1) || pe_imp_add_reader(&g_re3_logic_ps1) ||
+        pe_imp_add_reader(&g_re3_room_music_ps1) || pe_imp_add_reader(&g_re3_rooms_ps1) || pe_imp_add_reader(&g_re3_logic_ps1) || pe_imp_add_reader(&g_re3_door_ps1) ||
         pe_imp_set_naming("re3", g_re3_naming) || pe_imp_add_rig("re3", "player/", &g_re3_human_rig) ||
         pe_imp_add_reader(&g_re3_emd_pc) || pe_imp_add_reader(&g_re3_tones_pc) ||
         pe_imp_add_enemy("re3", "enemy/nemesis", &g_re3_nemesis)) {

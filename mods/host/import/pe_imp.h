@@ -30,7 +30,8 @@ typedef struct { uint32_t version, size; } PeImpApi;
 enum {
     PE_IMP_MODEL = 1u << 0, PE_IMP_ANIMATION = 1u << 1, PE_IMP_IMAGESET = 1u << 2,
     PE_IMP_SOUND = 1u << 3, PE_IMP_SONG = 1u << 4, PE_IMP_TEXTSET = 1u << 5,
-    PE_IMP_ROOMLOGIC = 1u << 6                /* pe_imp_logic.h; the last type: the store walks types up to it */
+    PE_IMP_ROOMLOGIC = 1u << 6,               /* pe_imp_logic.h */
+    PE_IMP_DOORSCENE = 1u << 7                /* pe_imp_logic.h; the last type: the store walks types up to it */
 };
 const char *pe_imp_type_name(uint32_t type);
 

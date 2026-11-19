@@ -16,7 +16,7 @@ static int init(void) {
     for (unsigned i = 0; i < sizeof k_autos / sizeof k_autos[0]; i++) pe_imp_add_auto(&k_autos[i]);
     if (pe_imp_add_game("re1", "Resident Evil", "Resident Evil") || pe_imp_add_reader(&g_re1_emd_ps1) ||
         pe_imp_add_reader(&g_re1_emd_npc_ps1) || pe_imp_add_reader(&g_re1_emd_alt_ps1) ||
-        pe_imp_add_reader(&g_re1_sound_ps1) || pe_imp_add_reader(&g_re1_music_ps1) || pe_imp_add_reader(&g_re1_rooms_ps1) || pe_imp_add_reader(&g_re1_logic_ps1) ||
+        pe_imp_add_reader(&g_re1_sound_ps1) || pe_imp_add_reader(&g_re1_music_ps1) || pe_imp_add_reader(&g_re1_rooms_ps1) || pe_imp_add_reader(&g_re1_logic_ps1) || pe_imp_add_reader(&g_re1_door_ps1) ||
         pe_imp_set_naming("re1", g_re1_naming) || pe_imp_add_rig("re1", "player/", &g_re1_human_rig)) {
         pe_mod_log("pe_src_re1", "readers refused by the importer");
         return 1;

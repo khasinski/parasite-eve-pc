@@ -14,7 +14,35 @@
 #include "pe_imp_logic.h"
 #include "pe_imp_rdt.h"
 
-extern const PeImpReader g_re2_logic_ps1;
+extern const PeImpReader g_re2_logic_ps1, g_re1_door_ps1, g_re2_door_ps1, g_re3_door_ps1;
+
+/* a disc's door files scanned into a store: DoorScenes (and RE2's door sounds) */
+static void scan_doors(const char *label, const char *cue, const char *game, const PeImpReader *reader,
+                       int want_sound) {
+    PeImpScan sc;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(reader));
+    assert(!pe_imp_scan("pe-rdt-test/doors", cue, game, &sc));
+    if (sc.refused) printf("  refused: %s\n", sc.last_error);
+    PeImpAsset *a;
+    int n = pe_imp_catalog_assets("pe-rdt-test/doors", game, &a), doors = 0, sounds = 0;
+    char first[PE_IMP_ID_MAX] = "";
+    for (int i = 0; i < n; i++) {
+        if (!strcmp(a[i].type, "DoorScene")) { if (!doors++) snprintf(first, sizeof first, "%s", a[i].id); }
+        else if (!strcmp(a[i].type, "Sound") && strstr(a[i].id, "door")) sounds++;
+    }
+    free(a);
+    char why[200];
+    PeImpRoomLogic *l;
+    assert(doors && !pe_imp_catalog_doorscene("pe-rdt-test/doors", first, &l, why, sizeof why));
+    uint32_t scene = 0, vab = 0;
+    assert(pe_imp_logic_section(l, PE_IMP_DOOR_SCN0, NULL, &scene) && scene > 1000);
+    pe_imp_logic_section(l, PE_IMP_DOOR_VAB0, NULL, &vab);
+    printf("%s doors: %d DoorScenes from %u files, %d door sounds; %s: scene %u bytes, sound bank %u bytes\n",
+           label, doors, sc.files_read, sounds, first, scene, vab);
+    assert(!sc.refused && doors > 10 && (!want_sound || (sounds > doors && vab > 1000)));
+    free(l);
+}
 
 static void put16(uint8_t *p, int v) { p[0] = (uint8_t)v, p[1] = (uint8_t)((unsigned)v >> 8); }
 static void put32(uint8_t *p, uint32_t v) { put16(p, (int)(v & 0xffff)), put16(p + 2, (int)(v >> 16)); }
@@ -269,11 +297,11 @@ int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     made_up();
     const char *re1 = getenv("PE_TEST_RE1_DISC"), *re2 = getenv("PE_TEST_RE2_DISC"), *re3 = getenv("PE_TEST_RE3_DISC");
-    if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1);
+    if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1), scan_doors("RE1", re1, "re1", &g_re1_door_ps1, 0);
     else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
-    if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2);
+    if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
-    if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3);
+    if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0);
     else printf("PE_TEST_RE3_DISC not set: RE3 rooms skipped\n");
     printf("RDT passed\n");
     return 0;

@@ -845,6 +845,14 @@ of a file keeps its own store folder with `path_key`. `mod-rdt` saves and loads 
 damaged one, builds one for every room on the discs (about 0.8 MB for RE1, 1.3 MB for RE2, 1.7 MB
 for RE3), and scans RE2 into a store and reads room 105's doors back through the catalog.
 
+**Door transitions.** Each RE door file becomes a **DoorScene** record (`host/import/pe_imp_door.c`,
+same sectioned container as RoomLogic, `doorscene.bin`), cataloged as `door/<name>` (RE3:
+`door/<stage>-<name>`, as RE3 keeps doors per stage). RE2's `COMMON/DOOR/DOORnn.DO2` holds a sound
+bank (`VAB0`; its samples start 8 bytes after the bank header) and the 3D door scene (`SCN0`:
+animation, model, texture); its door sounds are also cataloged as Sounds (bank `door<nn>`, 151 on
+disc 1). RE1's `ITEM_M1/DOOR*.DOR` (21) and RE3's `STAGEs/DOOR*.DO1` (76) are kept whole as `SCN0`
+until their layouts are worked out. Playing the 3D door scene is the room runtime's job.
+
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 

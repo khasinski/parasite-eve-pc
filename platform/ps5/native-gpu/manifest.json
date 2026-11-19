@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "d6051e14748af6a8398f4e0502190d9127f68c733d6279f06878d3129eadb315"
+      "sha256": "dc1b7ef33b2e8244d0c7a909b44ad0ba177453a8fd23685ce82b40c9cd240afb"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4571,7 +4571,7 @@
     },
     {
       "path": "mods/host/import/pe_imp.h",
-      "sha256": "6db79115e1b1f62597f0beb23aeb1472d150826b4b2151d716527dcbc4477617"
+      "sha256": "58cee74b8b61826205dc77ca336fffbe64a34321809849cdfdd9feb7b1b77950"
     },
     {
       "path": "mods/host/import/pe_imp_internal.h",
@@ -4639,11 +4639,11 @@
     },
     {
       "path": "mods/host/import/pe_imp_registry.c",
-      "sha256": "eab995300c47e98fcfccb4c5ed579fba725028e47fff4787134f1435160e8382"
+      "sha256": "05956a3440b915ab98573cd46a92f34bd0f98ec9fbc0da341b06af87792206b3"
     },
     {
       "path": "mods/host/import/pe_imp_store.c",
-      "sha256": "c5ca65437fa2156f5b7379e1d1969db8ff61be9a580827be0d2e139f18deef03"
+      "sha256": "1ca11a49cd1a0caaa31c04931141f2c3021333b075ca284b15c11778630912a4"
     },
     {
       "path": "mods/host/import/pe_imp_pe.h",
@@ -4723,11 +4723,11 @@
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.c",
-      "sha256": "d44792465e2e37306f75d540c4acbbad81bb4f8b2869e02aa11be4a4751d5d9d"
+      "sha256": "ceecb03346ae0581359c304a3d19ba7370e606d722eb2c5ac023adb845259c14"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.h",
-      "sha256": "29978bd945f297a4e4a201af59d0df8adc63abe444007392f9e383a7498fd670"
+      "sha256": "7115d0b30dbeef3c318e3a004b14928efdb9207e761aeea02a2bc8db95d3e6b9"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1_emd.c",
@@ -4743,11 +4743,11 @@
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.c",
-      "sha256": "567511b9dceea04e89e0547f929104769a23e5fffe348a2e9c342b8387e58934"
+      "sha256": "d9eb2da9aa253c7d933148ed9615704f3e225b3ca889c26d36463dea2cc01c46"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.h",
-      "sha256": "172076892ea7e6f29d52594492c86a5fbd3b618994f99df769e69447b75fd08f"
+      "sha256": "9bc957b0d33f098b95dfdfb97ca47172690aeead633e1a46433479b4c4992dfe"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2_pld.c",
@@ -4763,11 +4763,11 @@
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.c",
-      "sha256": "5b2c6200f41c4819275c888b988a644ff6f748d6ca604d9a75cfe0bc11478a5d"
+      "sha256": "5157728109c506f8c2c9de8bda78b78e167a4fec40860ae38a70f7c02927dbac"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.h",
-      "sha256": "d5d50412b082e3143c7a37f5a13ba862e117956a10399af0a99c6f3d8d829e83"
+      "sha256": "5d0e6231621e11a4d201d43d95bd13e9aeefdcee2082f43cc1dd4ef09f52ac81"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_pld.c",
@@ -4783,7 +4783,7 @@
     },
     {
       "path": "mods/pe_import/pe_import_job.c",
-      "sha256": "50ea1c943cb79b3bf58aa6822fe758b981e691ec141a826540adb19f599cee68"
+      "sha256": "8856fa1eb72ee1ac80e2f5dce5ac0eac436361e882fc967c087342f55b0feaa1"
     },
     {
       "path": "mods/host/import/pe_imp_mdec.c",
@@ -4855,11 +4855,11 @@
     },
     {
       "path": "mods/host/import/pe_imp_logic.c",
-      "sha256": "6f9a5ddde2e758873b84570845387bf46473edad03278062d8a02b86ed3f0e21"
+      "sha256": "8a3f2217ae19ddede2227a1352229ad4ab8ef609162cecdf31b6f434e2ee4d7d"
     },
     {
       "path": "mods/host/import/pe_imp_logic.h",
-      "sha256": "20ecae8ddbdc59f04e8b294dc62079d28b67e08581fdc1c1f6f5616a4111b3dc"
+      "sha256": "47686cff3c4f3b2176f089f409f7dc0081da518fdb08b88b3798193bbd02f214"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1_logic.c",
@@ -4872,6 +4872,26 @@
     {
       "path": "mods/pe_src_re3/pe_src_re3_logic.c",
       "sha256": "39b07e424ab23298adfa465d6df5383448dac1cc63572f3ddde80630a30be016"
+    },
+    {
+      "path": "mods/host/import/pe_imp_door.c",
+      "sha256": "b7943ed92582e54d919cd589641b97de17f0aec53dff912b812782b419450891"
+    },
+    {
+      "path": "mods/host/import/pe_imp_door.h",
+      "sha256": "cb75a28918e984efd3c3f602f95eb891fb0bc9e6e0c034e8edba8191ed69e6ac"
+    },
+    {
+      "path": "mods/pe_src_re1/pe_src_re1_door.c",
+      "sha256": "fc047ecdb02500ee42b4654beeb167afb80a97cf3fd76543359235d2a2e908ae"
+    },
+    {
+      "path": "mods/pe_src_re2/pe_src_re2_door.c",
+      "sha256": "19ec9c4e5de727a24cf6107f7367cbbd7a61dcf38ba62a8a24d310013a51aea4"
+    },
+    {
+      "path": "mods/pe_src_re3/pe_src_re3_door.c",
+      "sha256": "abaed3bc956c617c48526d38e577b87146ecdc8941a49e7cce027560762bb6d4"
     }
   ]
 }
