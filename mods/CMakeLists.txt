@@ -53,6 +53,7 @@ set(pe_import_core_sources
     host/import/pe_imp_json.c       # a small bounded JSON reader and writer (no cJSON on PS5)
     host/import/pe_imp_sha256.c     # store keys
     host/import/pe_imp_model.c      # the Model type: check, store, load
+    host/import/pe_imp_fit.c        # the fit layer: a Model made fit for one use (docs/IMPORT_MODELS.md)
     host/import/pe_imp_anim.c       # the Animation type: moves with per-frame events
     host/import/pe_imp_sound.c      # the Sound type: bounded PCM
     host/import/pe_imp_song.c       # the Song type: sequenced source music
@@ -375,6 +376,9 @@ if(BUILD_TESTING)
         pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_logic.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_pld.c
         ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
     target_include_directories(test-mod-rdt PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
+    # The fit layer on made-up models (no disc): people, refusals with reasons, what each use drops.
+    pe_feature_test(fit ${PROJECT_SOURCE_DIR}/tests/pe_mod_fit_test.c ${pe_import_core_sources})
+    target_include_directories(test-mod-fit PRIVATE host/import)
     # Model audit (not pass/fail): every Model on PE_TEST_RE1/2/3_DISC checked and measured into a CSV
     # (PE_AUDIT_OUT), to plan the model clean-up layer. Run by hand: build test-mod-model-audit, run it.
     pe_feature_test(model-audit ${PROJECT_SOURCE_DIR}/tests/pe_model_audit.c ${pe_import_core_sources}

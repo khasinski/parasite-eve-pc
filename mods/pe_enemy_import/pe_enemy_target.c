@@ -1,11 +1,12 @@
 /* The enemies module's builder target, registered with the importer (F1 > Import): a catalogued
- * model with an enemy profile becomes an enemy pack (pe_enemy_build.c), with the moves and sounds
- * its profile names. Import mode only. */
+ * model with an enemy profile, fitted as an enemy (pe_imp_fit.h), becomes an enemy pack
+ * (pe_enemy_build.c), with the moves and sounds its profile names. Import mode only. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "pe_enemy_battle.h"
+#include "pe_imp_fit.h"
 #include "pe_enemy_build.h"
 #include "pe_mod_host.h"
 
@@ -18,7 +19,7 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
     snprintf(game, sizeof game, "%.*s", (int)(colon - asset_id), asset_id);
     PeImpModel m;
     PeImpAnimation a;
-    if (pe_imp_catalog_model(ctx->store, asset_id, &m, why, n)) return -1;
+    if (pe_imp_fit(ctx->store, asset_id, PE_IMP_USE_ENEMY, &m, NULL, why, n)) return -1;   /* zero-area faces dropped */
     snprintf(id, sizeof id, "%s:%s", game, prof->moves);
     if (pe_imp_catalog_animation(ctx->store, id, &a, why, n)) { pe_imp_model_free(&m); return -1; }
     PeImpSound *sounds[PE_ENEMY_MAX_SOUNDS] = {0};
@@ -87,7 +88,7 @@ static int enemies_current(const PeImpAsset *a, const char *builder) {
 }
 
 const PeImpTarget g_pe_enemy_target = {
-    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 1, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
+    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 2, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
     enemies_accepts, enemies_place, enemies_current};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }

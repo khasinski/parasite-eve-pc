@@ -192,6 +192,14 @@ const struct PeImpRig *pe_imp_rig_for(const char *asset_id) {
     return NULL;
 }
 
+/* the game's first rig (its human): for a model the fit layer finds is a person outside the rig's
+ * id prefix (RE2's people among its enemies) */
+const struct PeImpRig *pe_imp_rig_for_game(const char *game) {
+    for (int i = 0; game && i < s_rigs; i++)
+        if (!strcmp(s_rig[i].game, game)) return s_rig[i].rig;
+    return NULL;
+}
+
 #define MAX_ENEMIES 64
 static struct { char id[PE_IMP_ID_MAX]; const PeImpEnemyProfile *p; } s_enemy[MAX_ENEMIES];
 static int s_enemies;

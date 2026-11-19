@@ -257,6 +257,7 @@ struct PeImpRig;
 /* Assets "<game>:<prefix>..." fit with this rig ("re2", "player/", the RE2 human rig). */
 int pe_imp_add_rig(const char *game, const char *id_prefix, const struct PeImpRig *rig);
 const struct PeImpRig *pe_imp_rig_for(const char *asset_id);
+const struct PeImpRig *pe_imp_rig_for_game(const char *game);   /* its first rig, or NULL */
 
 /* What a source game builds by itself once its disc is there: an asset, the module that builds
  * it, and the disc to ask for while it's missing ("Resident Evil 2 disc 2"). */

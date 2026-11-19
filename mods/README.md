@@ -909,7 +909,9 @@ script; 83) aren't read.
 **Fixing imported models.** Before changing a model reader, the costume or enemy builder, or a mod
 that shows imported models, read [docs/IMPORT_MODELS.md](../docs/IMPORT_MODELS.md): readers stay
 faithful, mods never fix models, and each kind of fix has one place (reader, fit layer, builder or a
-data table), measured with the model audit (`test-mod-model-audit`).
+data table), measured with the model audit (`test-mod-model-audit`). Mods take models through the fit layer
+(`host/import/pe_imp_fit.c`): `pe_imp_fit(store, id, use, ...)` gives a copy fit for a costume, enemy,
+held weapon or prop, or a reason it can't serve; the costume and enemy targets use it.
 
 **Room objects (RE2).** The 3D props an RE2 room places (typewriters, boxes, floor items, swinging
 doors) become one-bone Models, `object/<stage><room>-<n>` (`pe_src_re2/pe_src_re2_objects.c`; 522 on

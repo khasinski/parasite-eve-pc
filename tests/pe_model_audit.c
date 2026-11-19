@@ -15,6 +15,7 @@
 
 #include "pe_imp.h"
 #include "pe_imp_internal.h"
+#include "pe_imp_fit.h"
 #include "pe_src_re1.h"
 #include "pe_src_re2.h"
 #include "pe_src_re3.h"
@@ -25,7 +26,7 @@ extern const PeImpReader g_re2_pld_ps1, g_re2_emd_ps1, g_re2_objects_ps1, g_re2_
 extern const PeImpReader g_re3_pld_ps1, g_re3_emd_ps1, g_re3_objects_ps1, g_re3_door_models_ps1, g_re3_weapons_ps1;
 
 typedef struct {
-    int models, human15, uv_builder, uv_relative, clut_over, degenerate, stubs, skinned, wide;
+    int models, human15, uv_builder, uv_relative, clut_over, degenerate, stubs, skinned, wide, wearable;
     double min_h, max_h;
 } Tally;
 
@@ -106,14 +107,21 @@ static void audit_game(const char *game, const char *cue, const PeImpReader *con
                 if (!seen && nrows < 64) rows_used[nrows++] = row;
             }
         }
+        PeImpModel fitted;
+        PeImpFitInfo fi;
+        char fit_why[200] = "";
+        int wearable = !pe_imp_fit_model(&m, a[i].id, PE_IMP_USE_COSTUME, &fitted, &fi, fit_why, sizeof fit_why);
+        if (wearable) pe_imp_model_free(&fitted);
+        for (char *c = fit_why; *c; c++) if (*c == ',') *c = ';';           /* one CSV column */
         double height = hi[1] - lo[1], width = hi[0] - lo[0], depth = hi[2] - lo[2];
         if (faces == 0) height = width = depth = 0;
         int npages = 0;
         for (int b = 0; b < 16; b++) npages += pages_used >> b & 1;
         int human15 = m.bones == 15;
-        fprintf(csv, "%s,%s,%s,%u,%u,%u,%u,%u,%u,%u,%ux%u,%u,%u,%d,%u-%u,%u,%u,%.0f,%.0f,%.0f,%s\n", game, a[i].id,
+        fprintf(csv, "%s,%s,%s,%u,%u,%u,%u,%u,%u,%u,%ux%u,%u,%u,%d,%u-%u,%u,%u,%.0f,%.0f,%.0f,%s,%d,%s\n", game, a[i].id,
                 category(a[i].id), m.bones, m.parts, faces, empty, stubs, skinned, degenerate, m.w, m.h, m.pal_rows, nrows,
-                npages, first_page == 0xFFFF ? 0 : first_page, last_page, uv_builder, uv_relative, width, height, depth, a[i].tags);
+                npages, first_page == 0xFFFF ? 0 : first_page, last_page, uv_builder, uv_relative, width, height, depth, a[i].tags,
+                wearable, wearable ? "" : fit_why);
         Tally *x = &t[cat_index(category(a[i].id))];
         x->models++;
         x->human15 += human15;
@@ -124,6 +132,7 @@ static void audit_game(const char *game, const char *cue, const PeImpReader *con
         x->stubs += stubs > 0;
         x->skinned += skinned > 0;
         x->wide += m.w > 256;
+        x->wearable += wearable;
         if (faces && (x->models == 1 || height < x->min_h)) x->min_h = height;
         if (faces && height > x->max_h) x->max_h = height;
         pe_imp_model_free(&m);
@@ -137,7 +146,7 @@ int main(void) {
     FILE *csv = fopen(out && *out ? out : "pe-model-audit/report.csv", "w");
     assert(csv);
     fprintf(csv, "game,id,category,bones,parts,faces,empty_parts,stub_parts,skinned_parts,degenerate_faces,texture,"
-                 "pal_rows,rows_used,pages_used,page_range,uv_out_builder,uv_out_relative,width,height,depth,tags\n");
+                 "pal_rows,rows_used,pages_used,page_range,uv_out_builder,uv_out_relative,width,height,depth,tags,wearable,not_wearable_why\n");
     static const PeImpReader *const re1[] = {&g_re1_emd_ps1, &g_re1_emd_npc_ps1, &g_re1_emd_alt_ps1, &g_re1_monsters_ps1,
                                              &g_re1_objects_ps1, &g_re1_door_models_ps1, &g_re1_weapons_ps1, NULL};
     static const PeImpReader *const re2[] = {&g_re2_pld_ps1, &g_re2_emd_ps1, &g_re2_objects_ps1, &g_re2_door_models_ps1,
@@ -155,9 +164,9 @@ int main(void) {
         audit_game(g[k].game, cue, g[k].r, csv, t);
         for (int c = 0; c < 7; c++) {
             if (!t[c].models) continue;
-            printf("  %s %-11s %4d models: 15-bone %d, skinned %d, texture wider than 256 %d, texels off (builder rule) %d,"
+            printf("  %s %-11s %4d models: wearable %d, 15-bone %d, skinned %d, texture wider than 256 %d, texels off (builder rule) %d,"
                    " (page-relative) %d, palette rows over %d, degenerate faces %d, stub parts %d, height %.0f-%.0f\n",
-                   g[k].game, cats[c], t[c].models, t[c].human15, t[c].skinned, t[c].wide, t[c].uv_builder, t[c].uv_relative,
+                   g[k].game, cats[c], t[c].models, t[c].wearable, t[c].human15, t[c].skinned, t[c].wide, t[c].uv_builder, t[c].uv_relative,
                    t[c].clut_over, t[c].degenerate, t[c].stubs, t[c].min_h, t[c].max_h);
         }
     }
