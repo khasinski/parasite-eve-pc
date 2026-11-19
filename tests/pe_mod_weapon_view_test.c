@@ -17,7 +17,9 @@
 #include "pe_model.h"
 #include "pe_model_imp.h"
 #include "pe_model_view.h"
+#include "pe_src_re1.h"
 #include "pe_src_re2.h"
+#include "pe_src_re3.h"
 #include "pe_wardrobe.h"
 
 static int s_fail;
@@ -80,7 +82,12 @@ static Picture draw(const PeModel *m, const char *name, int yaw) {
     const char *dir = getenv("PE_TEST_DIR");
     if (dir && *dir) {
         char path[1200];
-        snprintf(path, sizeof path, "%s/weapon-view-%s.ppm", dir, name);
+        char file[96];
+        size_t k = 0;
+        for (; name[k] && k + 1 < sizeof file; k++)                      /* names have spaces and brackets */
+            file[k] = (char)((name[k] >= 'a' && name[k] <= 'z') || (name[k] >= 'A' && name[k] <= 'Z') || (name[k] >= '0' && name[k] <= '9') ? name[k] : '-');
+        file[k] = 0;
+        snprintf(path, sizeof path, "%s/weapon-view-%s.ppm", dir, file);
         FILE *f = fopen(path, "wb");
         if (f) {
             fprintf(f, "P6\n160 160\n255\n");
@@ -125,7 +132,9 @@ int main(void) {
     PeModel out;
 
     CHECK(pe_imp_weapon_part("re2:weapon/pl00w02") == 11 && pe_imp_weapon_part("re3:weapon/pl08w02") == 11);
-    CHECK(pe_imp_weapon_part("re1:weapon/w02") == 14);
+    CHECK(pe_imp_weapon_part("re1:weapon/w02") == 14 && pe_imp_weapon_part("re1:weapon/w1b") == 14);
+    CHECK(pe_imp_weapon_part("re2:weapon/pl00w00") < 0 && pe_imp_weapon_part("re3:weapon/pl08w00") < 0 &&
+          pe_imp_weapon_part("re1:weapon/w00") < 0 && pe_imp_weapon_part("re1:weapon/w30") < 0);   /* empty hands */
     CHECK(pe_imp_weapon_part("re2:weapon/pl00w02/moves") < 0 && pe_imp_weapon_part("re2:player/leon") < 0 &&
           pe_imp_weapon_part("dc1:weapon/x") < 0 && pe_imp_weapon_part(NULL) < 0);
 
@@ -169,7 +178,10 @@ int main(void) {
             if (!strcmp(pe_ward_weapon_group(k), "Resident Evil 2")) { if (first < 0) first = k; listed++; }
         printf("weapons listed: %d (Resident Evil 2: %d)\n", pe_ward_weapons_count(), listed);
         CHECK(!strcmp(pe_ward_weapon_name(0), "Aya's gun") && !strcmp(pe_ward_weapon_group(0), "Parasite Eve"));
-        CHECK(listed >= 30 && first == 1);                               /* disc 2 has 32 */
+        CHECK(listed >= 25 && first >= 1);       /* disc 2: 32 files, empty hands left out; RE1 first if stored */
+        for (int k = first; k < first + listed; k++)                     /* named "<weapon> (<who>)" */
+            CHECK(strchr(pe_ward_weapon_name(k), '(') && strncmp(pe_ward_weapon_name(k), "No weapon", 9));
+        CHECK(!strcmp(pe_ward_weapon_name(first), "Knife (Claire)"));
         for (int k = first; k > 0 && k < first + 3; k++) {
             PeModelSource src;
             char name[64];
@@ -193,6 +205,43 @@ int main(void) {
         pe_ward_weapons_release();
         pe_model_release_all();
     } else printf("PE_TEST_RE2_DISC not set: imported weapons skipped\n");
+
+    /* RE1 and RE3 the same way: every weapon listed and named, some drawn (PE_TEST_WEAPONS_ALL: all) */
+    static const struct { const char *env, *game, *group; const PeImpReader *reader; const char *naming; } k_more[] = {
+        {"PE_TEST_RE1_DISC", "re1", "Resident Evil", &g_re1_weapons_ps1, g_re1_naming},
+        {"PE_TEST_RE3_DISC", "re3", "Resident Evil 3", &g_re3_weapons_ps1, g_re3_naming},
+    };
+    for (size_t g = 0; g < sizeof k_more / sizeof k_more[0]; g++) {
+        const char *disc = getenv(k_more[g].env);
+        if (!disc || !*disc) { printf("%s not set: skipped\n", k_more[g].env); continue; }
+        PeImpScan sc;
+        pe_imp_registry_reset();
+        CHECK(!pe_imp_add_reader(k_more[g].reader));
+        CHECK(!pe_imp_set_naming(k_more[g].game, k_more[g].naming));
+        CHECK(!pe_imp_scan(s_store, disc, NULL, &sc));
+        pe_ward_weapons_refresh();
+        int listed = 0;
+        const int all = getenv("PE_TEST_WEAPONS_ALL") != NULL;
+        for (int k = 0; k < pe_ward_weapons_count(); k++) {
+            if (strcmp(pe_ward_weapon_group(k), k_more[g].group)) continue;
+            printf("  %s\n", pe_ward_weapon_name(k));
+            CHECK(strchr(pe_ward_weapon_name(k), '(') && strncmp(pe_ward_weapon_name(k), "No weapon", 9));
+            if (listed++ >= 3 && !all) continue;
+            PeModelSource src;
+            char name[80];
+            CHECK(pe_ward_weapon_source(k, &src));
+            const PeModel *w = pe_model_load(&src);
+            CHECK(w != NULL);
+            if (!w) continue;
+            snprintf(name, sizeof name, "%s-%s", k_more[g].game, pe_ward_weapon_name(k));
+            p = draw(w, name, 3072);
+            CHECK(p.drawn > 100);
+        }
+        printf("%s weapons listed: %d\n", k_more[g].game, listed);
+        CHECK(listed >= 10);
+        pe_ward_weapons_release();
+        pe_model_release_all();
+    }
 
     printf(s_fail ? "weapon view FAILED\n" : "weapon view passed\n");
     return s_fail;

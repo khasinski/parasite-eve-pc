@@ -43,8 +43,8 @@ int pe_imp_fit(const char *root, const char *asset_id, PeImpUse use, PeImpModel 
 int pe_imp_fit_deny(const char *asset_id, unsigned uses, const char *reason);
 void pe_imp_fit_reset(void);                     /* tests: forget the deny list */
 /* A "<game>:weapon/..." Model is a player holding the weapon (the readers compose it as BioRand
- * does): the part the weapon is, or -1 for any other asset. RE2 and RE3 swap it in for part 11,
- * RE1 for part 14. */
+ * does): the part the weapon is, or -1 for any other asset and for the empty hand (weapon number 0:
+ * RE2/RE3 "plxxw00", RE1 "w00", "w10", ...). RE2 and RE3 swap it in for part 11, RE1 for part 14. */
 int pe_imp_weapon_part(const char *asset_id);
 
 #endif

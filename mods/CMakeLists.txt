@@ -381,11 +381,14 @@ if(BUILD_TESTING)
     pe_feature_test(fit ${PROJECT_SOURCE_DIR}/tests/pe_mod_fit_test.c ${pe_import_core_sources})
     target_include_directories(test-mod-fit PRIVATE host/import)
     # The Wardrobe's weapons on view: imported models as viewer models (made-up), and with
-    # PE_TEST_DISC / PE_TEST_RE2_DISC Aya's held gun and RE2's weapons drawn as the screen draws them.
+    # PE_TEST_DISC / PE_TEST_RE1/2/3_DISC Aya's held gun and the RE games' weapons, listed by name and
+    # drawn as the screen draws them (PE_TEST_WEAPONS_ALL: every one).
     pe_feature_test(weapon-view ${PROJECT_SOURCE_DIR}/tests/pe_mod_weapon_view_test.c ${pe_import_core_sources}
         host/pe_model.c host/pe_model_view.c host/pe_model_imp.c pe_wardrobe/pe_wardrobe_weapons.c
-        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_rbj.c)
-    target_include_directories(test-mod-weapon-view PRIVATE host/import pe_src_re2 pe_wardrobe)
+        pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_rbj.c
+        pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-weapon-view PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3 pe_wardrobe)
     set_tests_properties(mod-weapon-view PROPERTIES TIMEOUT 600 ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
     # Model audit (not pass/fail): every Model on PE_TEST_RE1/2/3_DISC checked and measured into a CSV
     # (PE_AUDIT_OUT), to plan the model clean-up layer. Run by hand: build test-mod-model-audit, run it.

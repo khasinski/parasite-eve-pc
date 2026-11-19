@@ -478,13 +478,25 @@ static int read_weapon(const uint8_t *data, uint32_t size, const uint8_t *chr, u
     stem[k] = 0;
     snprintf(id, sizeof id, "weapon/");
     for (size_t j = 0; stem[j]; j++) id[7 + j] = (char)(stem[j] >= 'A' && stem[j] <= 'Z' ? stem[j] + 32 : stem[j]), id[8 + j] = 0;
-    if (pe_imp_emit(sink, PE_IMP_MODEL, id, stem, m)) { snprintf(why, n, "could not catalog %s", id); return -1; }
+    /* "Wxy": x the character (Chris, Jill, Barry, Rebecca), y the weapon by BioRand's numbers
+     * (re1NpcHelper GetWeapon; checked by sight); 0 is unarmed, others keep their hex. */
+    static const char *const k_weapon[] = {"No weapon", "Combat Knife", "Beretta", "Shotgun", "Colt Python",
+                                           "FlameThrower", "Bazooka", "Rocket Launcher", "Minigun"};
+    static const char *const k_who[] = {"Chris", "Jill", "Barry", "Rebecca"};
+    unsigned wx = (unsigned)strtoul(stem + (stem[0] ? 1 : 0), NULL, 16);
+    char name[PE_IMP_NAME_MAX], weapon[24], who[16];
+    if ((wx & 15u) < sizeof k_weapon / sizeof k_weapon[0]) snprintf(weapon, sizeof weapon, "%s", k_weapon[wx & 15u]);
+    else snprintf(weapon, sizeof weapon, "Weapon %X", wx & 15u);
+    if ((wx >> 4) < 4u) snprintf(who, sizeof who, "%s", k_who[wx >> 4]);
+    else snprintf(who, sizeof who, "W%Xx", wx >> 4);
+    snprintf(name, sizeof name, "%s (%s)", weapon, who);
+    if (pe_imp_emit(sink, PE_IMP_MODEL, id, name, m)) { snprintf(why, n, "could not catalog %s", id); return -1; }
     return 0;
 }
 
 const PeImpReader g_re1_weapons_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re1", .platform = "ps1", .format = "emw",
-    .version = 2, .produces = PE_IMP_MODEL, .match = "*/PLAYERS/W??.EMW",
+    .version = 3, .produces = PE_IMP_MODEL, .match = "*/PLAYERS/W??.EMW",   /* 3: named */
     .tags = "weapon", .read_pair = read_weapon, .find_companion = find_char
 };

@@ -122,7 +122,7 @@ int pe_wardrobe_story_bank(void) {return story_bank;}
 static void provider(int wearing) {(void)wearing;++provider_loads;}
 /* Weapons on view (pe_wardrobe_weapons.c), simulated: Aya's gun and two imported. */
 static int weapon_refreshes, weapon_releases;
-static const char *const weapon_names[3]={"Aya's gun","PL00W02","PL01W03"};
+static const char *const weapon_names[3]={"Aya's gun","Knife (Claire)","Handgun Claire (Claire)"};
 void pe_ward_weapons_refresh(void) {++weapon_refreshes;}
 void pe_ward_weapons_release(void) {++weapon_releases;}
 int pe_ward_weapons_count(void) {return 3;}
