@@ -370,3 +370,91 @@ const PeImpReader g_re1_weapon_moves_ps1 = {
     .version = 1, .produces = PE_IMP_ANIMATION, .match = "*/PLAYERS/W??.EMW",
     .tags = "weapon", .read = read_weapon_moves, .path_key = 1
 };
+
+/* The weapons in hand: as BioRand's emdui does, a Wxx.EMW's mesh (one TMD object, the right hand with
+ * the weapon) replaces the player model's part 11 in RE1's order (14 in the RE2 order the models use);
+ * it is textured from the player's own picture. Which player: W<p><w> goes with CHAR1<p> (the four
+ * people files; inferred from the names, emdui loads every EMW beside a CHAR file). The Model
+ * "weapon/w02" is that player holding the weapon; "weapon/w02/moves" play on it. */
+static int tmd_part(const Buf *xp, uint32_t tmd, uint32_t obj, PeImpPart *out, char *why, size_t n) {
+    Buf x = *xp;
+    NEED(tmd, 12, "mesh header");
+    if (obj >= u32at(&x, tmd + 8)) { snprintf(why, n, "EMW: no object %u", obj); goto bad; }
+    uint32_t base = tmd + 12, at = base + 28 * obj;
+    NEED(at, 28, "object table");
+    uint32_t vo = u32at(&x, at), vc = u32at(&x, at + 4), no = u32at(&x, at + 8), nc = u32at(&x, at + 12);
+    uint32_t fo = u32at(&x, at + 16), fc = u32at(&x, at + 20);
+    if (!fc || fc > PE_IMP_MODEL_FACES_MAX) { snprintf(why, n, "EMW: %u faces", fc); goto bad; }
+    NEED((uint64_t)base + vo, (uint64_t)8 * vc, "vertices");
+    NEED((uint64_t)base + no, (uint64_t)8 * nc, "normals");
+    NEED((uint64_t)base + fo, (uint64_t)28 * fc, "triangles");
+    PeImpFace *f = calloc(fc, sizeof *f);
+    if (!f) { snprintf(why, n, "out of memory"); goto bad; }
+    for (uint32_t q = 0; q < fc; q++) {
+        uint32_t fa = base + fo + 28 * q;
+        for (uint32_t j = 0; j < 3; j++) {
+            uint32_t ni = u16at(&x, fa + 16 + 4 * j), vi = u16at(&x, fa + 18 + 4 * j);
+            if (vi >= vc || ni >= nc) { free(f); snprintf(why, n, "EMW: face %u points past its vertices", q); goto bad; }
+            for (int c = 0; c < 3; c++) {
+                f[q].v[j][c] = s16at(&x, base + vo + 8 * vi + 2 * (uint32_t)c);
+                f[q].n[j][c] = s16at(&x, base + no + 8 * ni + 2 * (uint32_t)c);
+            }
+            f[q].uv[j][0] = (uint8_t)u8at(&x, fa + 4 + 4 * j);
+            f[q].uv[j][1] = (uint8_t)u8at(&x, fa + 5 + 4 * j);
+        }
+        f[q].clut = (uint16_t)u16at(&x, fa + 6);
+        f[q].page = (uint16_t)u16at(&x, fa + 10);
+    }
+    free(out->tri), free(out->quad);
+    out->tri = f, out->tris = fc, out->quad = NULL, out->quads = 0;
+    return 0;
+bad:
+    return -1;
+}
+
+/* "<disc>/PLAYERS/W02.EMW" -> "<disc>/ENEMY/CHAR10.EMD" */
+static int find_char(PeImpDisc *d, const char *path) {
+    const char *slash = strrchr(path, '/');
+    if (!slash || slash[1] != 'W' || slash[2] < '0' || slash[2] > '3') return -1;
+    const char *up = slash;
+    while (up > path && up[-1] != '/') up--;                            /* the PLAYERS folder's start */
+    char p[PE_IMP_PATH_MAX];
+    if (snprintf(p, sizeof p, "%.*sENEMY/CHAR1%c.EMD", (int)(up - path), path, slash[2]) >= (int)sizeof p) return -1;
+    return pe_imp_disc_find(d, p);
+}
+
+static int read_weapon(const uint8_t *data, uint32_t size, const uint8_t *chr, uint32_t chr_size, const char *path,
+                       PeImpSink *sink, char *why, size_t n) {
+    if (!chr || size < 64) return 0;
+    Buf b = {data, size};
+    uint32_t edd = u32at(&b, size - 8), tmd = u32at(&b, size - 4);
+    if (!(edd && edd < tmd && tmd < size - 8)) return 0;
+    PeImpModel *m = calloc(1, sizeof *m);
+    if (!m) { snprintf(why, n, "out of memory"); return -1; }
+    char quiet[160];
+    if (re1_emd_parse(chr, chr_size, m, quiet, sizeof quiet)) { free(m); return 0; }
+    int to = -1;
+    for (int r = 0; r < BONES; r++) if (k_from_re1[r] == 11) to = r;   /* RE1's part 11 */
+    if (to < 0 || (uint32_t)to >= m->parts || tmd_part(&b, tmd, 0, &m->part[to], quiet, sizeof quiet) ||
+        pe_imp_model_check(m, quiet, sizeof quiet)) {
+        pe_imp_model_free(m), free(m);
+        return 0;
+    }
+    const char *s = strrchr(path, '/');
+    s = s ? s + 1 : path;
+    char stem[16] = "", id[32];
+    size_t k = 0;
+    while (s[k] && s[k] != '.' && k + 1 < sizeof stem) stem[k] = s[k], k++;
+    stem[k] = 0;
+    snprintf(id, sizeof id, "weapon/");
+    for (size_t j = 0; stem[j]; j++) id[7 + j] = (char)(stem[j] >= 'A' && stem[j] <= 'Z' ? stem[j] + 32 : stem[j]), id[8 + j] = 0;
+    if (pe_imp_emit(sink, PE_IMP_MODEL, id, stem, m)) { snprintf(why, n, "could not catalog %s", id); return -1; }
+    return 0;
+}
+
+const PeImpReader g_re1_weapons_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re1", .platform = "ps1", .format = "emw",
+    .version = 1, .produces = PE_IMP_MODEL, .match = "*/PLAYERS/W??.EMW",
+    .tags = "weapon", .read_pair = read_weapon, .find_companion = find_char
+};

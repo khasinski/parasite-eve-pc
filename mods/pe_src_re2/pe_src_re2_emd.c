@@ -97,12 +97,70 @@ const PeImpReader g_re2_emd_ps1 = {
     .tags = "enemy", .read = read_ems
 };
 
+
+/* BioRand (biohazard-utils' emdui, MIT, Ted John): a weapon file's first mesh part replaces the
+ * player model's part 11 (the right hand, here in RE2's part order), and its 56 x 32 picture goes into
+ * page 1 of the player's texture at (72, 224), each colour the nearest in palette row 1 (TimExtensions
+ * .WithWeaponTexture). */
+static uint32_t w_le32(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
+static unsigned w_le16(const uint8_t *p) { return p[0] | (unsigned)p[1] << 8; }
+
+static int weapon_texture(PeImpModel *m, const uint8_t *t, uint32_t size) {
+    if (size < 20 || w_le32(t) != 0x10 || (w_le32(t + 4) & 3) != 1 || !(w_le32(t + 4) & 8) || w_le16(t + 16) != 256) return -1;
+    uint32_t ln = w_le32(t + 8);
+    if (ln < 12 + 512 || 8ull + ln + 12 > size) return -1;
+    const uint8_t *img = t + 8 + ln;
+    uint32_t w = 2u * w_le16(img + 8), h = w_le16(img + 10);
+    if (w != 56 || h != 32 || 8ull + ln + 12 + (uint64_t)w * h > size) return -1;
+    if (m->w < 256 || m->h < 256 || m->pal_rows < 2) return -1;
+    int16_t best[256];
+    for (int i = 0; i < 256; i++) best[i] = -1;
+    for (uint32_t y = 0; y < h; y++)
+        for (uint32_t x = 0; x < w; x++) {
+            unsigned idx = img[12 + y * w + x];
+            if (best[idx] < 0) {
+                unsigned c = w_le16(t + 20 + 2 * idx);
+                long bd = -1;
+                for (int k = 0; k < 256; k++) {
+                    unsigned p = m->pal[1][k];
+                    if ((p == 0) != (c == 0)) continue;                     /* see-through stays see-through */
+                    long dr = (long)(c & 31) - (long)(p & 31), dg = (long)(c >> 5 & 31) - (long)(p >> 5 & 31),
+                         db = (long)(c >> 10 & 31) - (long)(p >> 10 & 31), dist = dr * dr + dg * dg + db * db;
+                    if (bd < 0 || dist < bd) bd = dist, best[idx] = (int16_t)k;
+                }
+                if (best[idx] < 0) best[idx] = 0;
+            }
+            m->image[(size_t)(224 + y) * m->w + 128 + 72 + x] = (uint8_t)best[idx];
+        }
+    return 0;
+}
+
+/* m's part `to` takes w's part 0 (its faces move over) */
+static void swap_hand(PeImpModel *m, uint32_t to, PeImpModel *w) {
+    free(m->part[to].tri), free(m->part[to].quad);
+    m->part[to].tri = w->part[0].tri, m->part[to].tris = w->part[0].tris;
+    m->part[to].quad = w->part[0].quad, m->part[to].quads = w->part[0].quads;
+    w->part[0].tri = w->part[0].quad = NULL, w->part[0].tris = w->part[0].quads = 0;
+}
+
+/* "<dir>/PLxxWyy.PLW" -> "<dir>/PLxx.PLD" */
+static int find_pld(PeImpDisc *d, const char *path) {
+    char p[PE_IMP_PATH_MAX];
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    const char *w = base + 4;                                           /* "PLxx" then 'W' */
+    if (strncmp(base, "PL", 2) || strlen(base) < 5 || *w != 'W' || (size_t)(w - path) + 5 > sizeof p) return -1;
+    snprintf(p, sizeof p, "%.*s.PLD", (int)(w - path), path);
+    return pe_imp_disc_find(d, p);
+}
+
 /* Players and weapons. PL?/PLD/PLxx.PLD and PLxxWyy.PLW share a layout: u32 directory offset; there
  * EDD, EMR, MD1, TIM offsets. A PLD's EDD/EMR are the player's moves ("player/pl00/moves", bones as
- * the model's); a PLW's are the player's moves with that weapon (aim, fire, reload) and its MD1 + TIM
- * the weapon in hand, a one-bone Model of its parts as stored, each in the frame of the arm bone it
- * replaces (which bones isn't mapped yet): "weapon/pl00w02" and "weapon/pl00w02/moves". */
-static int read_player(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+ * the model's). A PLW's are the player's moves with that weapon (aim, fire, reload), and the weapon
+ * Model "weapon/pl00w02" is the player PLxx.PLD holding it: part 11 swapped for the PLW's first part,
+ * the PLW's picture in the texture (above). Its moves play on it as they are. */
+static int emit_weapon(const uint8_t *data, uint32_t size, const uint8_t *pld, uint32_t pld_size, const char *path,
+                       PeImpSink *sink, char *why, size_t n) {
     const char *base = strrchr(path, '/');
     base = base ? base + 1 : path;
     char stem[16] = "", low[16] = "", id[48], name[48];
@@ -116,10 +174,14 @@ static int read_player(const uint8_t *data, uint32_t size, const char *path, PeI
     uint32_t edd = le32(data + dir), emr = le32(data + dir + 4), md1 = le32(data + dir + 8), tim = le32(data + dir + 12);
     if (!(edd < emr && emr < md1 && md1 < tim && tim < dir)) return 0;
     PeImpAnimation *a = re2_moves(data, size, emr, edd, emr, md1);
-    if (weapon) {
-        PeImpModel *m = calloc(1, sizeof *m);
+    if (weapon && pld) {
+        PeImpModel *m = calloc(1, sizeof *m), *w = calloc(1, sizeof *w);
         char quiet[160];
-        if (m && !re2_object_parse(data, size, md1, tim, m, quiet, sizeof quiet)) {
+        int ok = m && w && !re2_pld_parse(pld, pld_size, m, quiet, sizeof quiet);
+        int wok = ok && !re2_object_parse(data, size, md1, tim, w, quiet, sizeof quiet);
+        if (wok && m->parts > 11 && w->parts >= 1 && !weapon_texture(m, data + tim, dir - tim)) {
+            swap_hand(m, 11, w);
+            pe_imp_model_free(w), free(w), w = NULL;
             snprintf(id, sizeof id, "weapon/%s", low);
             snprintf(name, sizeof name, "%s", stem);
             if (pe_imp_emit(sink, PE_IMP_MODEL, id, name, m)) {
@@ -127,13 +189,25 @@ static int read_player(const uint8_t *data, uint32_t size, const char *path, PeI
                 snprintf(why, n, "could not catalog %s", id);
                 return -1;
             }
-        } else free(m);
+            m = NULL;
+        }
+        if (m) { if (ok) pe_imp_model_free(m); free(m); }
+        if (w) { if (wok) pe_imp_model_free(w); free(w); }
     }
     if (!a) return 0;
     snprintf(id, sizeof id, "%s/%s/moves", weapon ? "weapon" : "player", low);
     snprintf(name, sizeof name, "%s moves", stem);
     if (pe_imp_emit(sink, PE_IMP_ANIMATION, id, name, a)) { snprintf(why, n, "could not catalog %s", id); return -1; }
     return 0;
+}
+
+static int read_player(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    return emit_weapon(data, size, NULL, 0, path, sink, why, n);
+}
+
+static int read_weapon(const uint8_t *data, uint32_t size, const uint8_t *pld, uint32_t pld_size, const char *path,
+                       PeImpSink *sink, char *why, size_t n) {
+    return emit_weapon(data, size, pld, pld_size, path, sink, why, n);
 }
 
 const PeImpReader g_re2_player_moves_ps1 = {
@@ -146,6 +220,6 @@ const PeImpReader g_re2_player_moves_ps1 = {
 const PeImpReader g_re2_weapons_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re2", .platform = "ps1", .format = "plw",
-    .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/PL??W??.PLW",
-    .tags = "weapon", .read = read_player, .path_key = 1
+    .version = 2, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/PL??W??.PLW",
+    .tags = "weapon", .read_pair = read_weapon, .find_companion = find_pld
 };
