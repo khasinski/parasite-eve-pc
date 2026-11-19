@@ -10,7 +10,8 @@
  * TIM and the EMD. In the main archive's table (CDEMD0 on disc 1, CDEMD1 on disc 2) record k is
  * enemy 0x10 + k: lined up with biohazard-utils' Bio2ConstantTable g_enemyNames, every record's bone
  * count fits its name (15-bone zombies and people, the 17-bone dog, 22-bone lickers). Those become
- * "enemy/em<nn>". The other archives' tables start elsewhere and keep their archive order. Read only. */
+ * "enemy/em<nn>". The other archives' tables start at 0x10 too (bone counts agree with the main
+ * archive's same-numbered enemies on both discs): "enemy/em<nn>-cdemd2" and so on. Read only. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -103,7 +104,7 @@ static int read_ems(const uint8_t *data, uint32_t size, const uint8_t *exe, uint
     int main_archive = !strcmp(stem, "cdemd0") || !strcmp(stem, "cdemd1");
     int64_t table = -1;                                                 /* row 0: enemy 0x10 */
     uint32_t tim = 0, made = 0;
-    if (main_archive && exe) {                                          /* the pairs first, to find the table */
+    if (exe) {                                                          /* the pairs first, to find the table */
         uint32_t pt[128], pe2[128], np = 0, last = 0;
         int seen = 0;
         for (uint32_t at = 0; at + 64 <= size && np < 128; at += 2048) {
@@ -127,9 +128,12 @@ static int read_ems(const uint8_t *data, uint32_t size, const uint8_t *exe, uint
         uint32_t em = 0;
         for (uint32_t j = 0; table >= 0 && !em && j < TABLE_ROWS; j++)
             if (is_record(exe, exe_size, (uint64_t)table + 32 * j, tim / 2048, at / 2048)) em = 0x10 + j;
-        if (em) {
+        if (em && main_archive) {
             snprintf(id, sizeof id, "enemy/em%02x", em);
             snprintf(name, sizeof name, "EM%02X", em);
+        } else if (em) {                                                /* another archive's version of it */
+            snprintf(id, sizeof id, "enemy/em%02x-%s", em, stem);
+            snprintf(name, sizeof name, "EM%02X (%s)", em, stem);
         } else {
             snprintf(id, sizeof id, "enemy/%s-%u", stem, (unsigned)made);
             snprintf(name, sizeof name, "%s enemy %u", stem, (unsigned)made);
@@ -151,7 +155,7 @@ static int read_ems(const uint8_t *data, uint32_t size, const uint8_t *exe, uint
 const PeImpReader g_re2_emd_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re2", .platform = "ps1", .format = "ems",
-    .version = 2, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/CDEMD?.EMS",
+    .version = 3, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/CDEMD?.EMS",
     .tags = "enemy", .read_pair = read_ems, .find_companion = find_exe
 };
 

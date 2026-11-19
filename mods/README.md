@@ -162,8 +162,9 @@ holds a table per archive, 32 bytes per enemy ((sector, size) of two sound entri
 The main archive's table (CDEMD0 on disc 1, CDEMD1 on disc 2; found as the place where most of the
 archive's pairs have their record) has row k = enemy 0x10 + k, which every row's bone count fits
 against biohazard-utils' Bio2ConstantTable names (zombies 15, dog 17, lickers 22): those enemies are
-`enemy/em<nn>` (em10 zombie cop, em22 licker...); the other archives' tables start elsewhere and keep
-`enemy/cdemd<k>-<n>` (70 enemies on disc 1, 91 on disc 2). RE1's monsters are `ENEMY/EM10xx.EMD` and `EM11xx.EMD`
+`enemy/em<nn>` (em10 zombie cop, em22 licker...); the other archives' tables start at 0x10 too (their bone counts
+agree with the main archive's same enemies, 15 of 15 and 35 of 35): `enemy/em<nn>-cdemd2` and so on
+(70 enemies on disc 1, 91 on disc 2). RE1's monsters are `ENEMY/EM10xx.EMD` and `EM11xx.EMD`
 (not EM102x / EM103x, the people): the directory is the last 20 bytes, D0..D4 with a section implied
 at 0; D3 the TMD, D4 the TIM. The monster's skeleton and moves are the EMR at D1 with its EDD at D2
 (10 to 20 bones); when D0 isn't 0, the EMR at 0 with its EDD at D0 is the player's 15-bone moves for
