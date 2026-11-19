@@ -65,6 +65,7 @@ set(pe_import_core_sources
     host/import/pe_imp_rdt.c        # RE1-3 rooms: doors, trigger zones, items, camera zones
     host/import/pe_imp_logic.c      # the RoomLogic type: what happens in a room, for the runtime
     host/import/pe_imp_door.c       # RE door transitions as DoorScene records
+    host/import/pe_imp_items.c      # a game's item table (names, icons)
     host/import/pe_imp_room.c       # Resident Evil PS1 cameras and foreground masks
     host/import/pe_imp_registry.c   # readers, file patterns, naming tables
     host/import/pe_imp_store.c      # the extract-once store and the catalog
@@ -364,7 +365,8 @@ if(BUILD_TESTING)
     target_include_directories(test-mod-mdec PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
     # RE2/RE3 room logic on a made-up room; PE_TEST_RE2_DISC / PE_TEST_RE3_DISC read every room's scripts.
     pe_feature_test(rdt ${PROJECT_SOURCE_DIR}/tests/pe_mod_rdt_test.c ${pe_import_core_sources}
-        pe_src_re2/pe_src_re2_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re2/pe_src_re2_door.c pe_src_re3/pe_src_re3_door.c)
+        pe_src_re2/pe_src_re2_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re2/pe_src_re2_door.c pe_src_re3/pe_src_re3_door.c
+        pe_src_re1/pe_src_re1_items.c pe_src_re2/pe_src_re2_items.c pe_src_re3/pe_src_re3_items.c)
     target_include_directories(test-mod-rdt PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
     pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_core_sources}
@@ -375,8 +377,8 @@ if(BUILD_TESTING)
     if(TARGET pe_download_json AND TARGET pe_download_zip)
         # F1 > Import's scan and build, then the Wardrobe's pack reader loading the result.
         pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_core_sources}
-            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_door.c pe_src_re2/pe_src_re2.c
-            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3_rooms.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_door.c pe_src_re3/pe_src_re3.c
+            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re1/pe_src_re1_items.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_door.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2.c
+            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3_rooms.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_door.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3.c
             pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c
             pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c pe_src_dc1/pe_src_dc1_music.c pe_src_dc1/pe_src_dc1.c
             pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c

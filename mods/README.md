@@ -853,6 +853,15 @@ animation, model, texture); its door sounds are also cataloged as Sounds (bank `
 disc 1). RE1's `ITEM_M1/DOOR*.DOR` (21) and RE3's `STAGEs/DOOR*.DO1` (76) are kept whole as `SCN0`
 until their layouts are worked out. Playing the 3D door scene is the room runtime's job.
 
+**Items.** Each RE game's item table is an **ItemTable** record (`host/import/pe_imp_items.c`,
+`itemtable.bin`, same container), cataloged as `<game>:items/all` and built when the game's icon
+file is scanned (RE1 `DATA/ITEM_ALL.PIX`, RE2 `COMMON/DATA/ITEMALL.PIX`, RE3 `CD_DATA/ETC/ITEMI.PIX`).
+`NAME` holds each item number with its name (from biohazard-utils' lists, MIT; RE1 75, RE2 124, RE3
+127) and its icon where known. `ICN8` keeps the 40 x 30 icons as stored, 8 bits per pixel (RE1 76,
+RE2 106, RE3 228). Not yet known: the icons' palette (not stored plainly on the discs), and which
+icon each RE2 and RE3 item uses (RE1's icons follow the item numbers). The key pocket names RE keys
+from this table.
+
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 

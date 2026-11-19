@@ -108,4 +108,20 @@ int pe_imp_door_save(const PeImpRoomLogic *l, const char *folder, char *why, siz
 int pe_imp_door_load(const char *folder, PeImpRoomLogic **l, char *why, size_t n);
 int pe_imp_catalog_doorscene(const char *root, const char *asset_id, PeImpRoomLogic **l, char *why, size_t n);
 
+/* ItemTable: a game's items, in the same sectioned container, stored as itemtable.bin. `game` as
+ * above, the rest 0. Sections:
+ *   NAME  48-byte records: u16 item number (as pickups and scripts use it), u16 icon (index into
+ *         ICN8, 0xFFFF if not known yet), 44-byte name (UTF-8, NUL-padded)
+ *   ICN8  the inventory icons as stored: 40 x 30, 8 bits per pixel, records = icons. Their palette
+ *         isn't known yet, so they have no colours.
+ * The names are from IntelOrca's biohazard-utils lists (MIT). */
+#define PE_IMP_ITEMTABLE_VERSION 1
+enum { PE_IMP_ITEM_NAME = PE_IMP_LOGIC_TAG('N', 'A', 'M', 'E'), PE_IMP_ITEM_ICN8 = PE_IMP_LOGIC_TAG('I', 'C', 'N', '8'),
+       PE_IMP_ITEM_NAME_BYTES = 48, PE_IMP_ITEM_ICON_W = 40, PE_IMP_ITEM_ICON_H = 30 };
+typedef struct { uint16_t item, icon; char name[44]; } PeImpItemName;
+int pe_imp_item_name(const PeImpRoomLogic *table, uint32_t i, PeImpItemName *out);
+int pe_imp_items_save(const PeImpRoomLogic *l, const char *folder, char *why, size_t n);
+int pe_imp_items_load(const char *folder, PeImpRoomLogic **l, char *why, size_t n);
+int pe_imp_catalog_itemtable(const char *root, const char *asset_id, PeImpRoomLogic **l, char *why, size_t n);
+
 #endif

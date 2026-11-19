@@ -15,6 +15,34 @@
 #include "pe_imp_rdt.h"
 
 extern const PeImpReader g_re2_logic_ps1, g_re1_door_ps1, g_re2_door_ps1, g_re3_door_ps1;
+extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1;
+
+/* a disc's item table: names by item number, icons kept; `want` is one item number and its name */
+static void scan_items(const char *label, const char *cue, const char *game, const PeImpReader *reader,
+                       unsigned want, const char *want_name, unsigned want_icons) {
+    PeImpScan sc;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(reader));
+    assert(!pe_imp_scan("pe-rdt-test/items", cue, game, &sc));
+    char why[200], id[32];
+    snprintf(id, sizeof id, "%s:items/all", game);
+    PeImpRoomLogic *l;
+    if (pe_imp_catalog_itemtable("pe-rdt-test/items", id, &l, why, sizeof why)) { printf("  %s\n", why); assert(0); }
+    uint32_t names, icons;
+    pe_imp_logic_section(l, PE_IMP_ITEM_NAME, &names, NULL);
+    pe_imp_logic_section(l, PE_IMP_ITEM_ICN8, &icons, NULL);
+    int found = 0, with_icon = 0;
+    for (uint32_t i = 0; i < names; i++) {
+        PeImpItemName it;
+        assert(!pe_imp_item_name(l, i, &it) && it.name[0]);
+        with_icon += it.icon != 0xFFFF;
+        if (it.item == want) found = !strcmp(it.name, want_name);
+    }
+    printf("%s items: %u named, %u icons (%d matched to items); item %u is \"%s\"\n", label, names, icons, with_icon,
+           want, found ? want_name : "?");
+    assert(!sc.refused && found && icons == want_icons && names > 60);
+    free(l);
+}
 
 /* a disc's door files scanned into a store: DoorScenes (and RE2's door sounds) */
 static void scan_doors(const char *label, const char *cue, const char *game, const PeImpReader *reader,
@@ -297,11 +325,14 @@ int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     made_up();
     const char *re1 = getenv("PE_TEST_RE1_DISC"), *re2 = getenv("PE_TEST_RE2_DISC"), *re3 = getenv("PE_TEST_RE3_DISC");
-    if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1), scan_doors("RE1", re1, "re1", &g_re1_door_ps1, 0);
+    if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1), scan_doors("RE1", re1, "re1", &g_re1_door_ps1, 0),
+                     scan_items("RE1", re1, "re1", &g_re1_items_ps1, 2, "Beretta", 76);
     else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
-    if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1);
+    if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1),
+                     scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
-    if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0);
+    if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
+                     scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228);
     else printf("PE_TEST_RE3_DISC not set: RE3 rooms skipped\n");
     printf("RDT passed\n");
     return 0;

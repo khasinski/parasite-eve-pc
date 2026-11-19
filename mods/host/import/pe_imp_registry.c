@@ -26,6 +26,7 @@ const char *pe_imp_type_name(uint32_t type) {
     case PE_IMP_TEXTSET: return "TextSet";
     case PE_IMP_ROOMLOGIC: return "RoomLogic";
     case PE_IMP_DOORSCENE: return "DoorScene";
+    case PE_IMP_ITEMTABLE: return "ItemTable";
     default: return "?";
     }
 }

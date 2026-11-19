@@ -115,7 +115,8 @@ static int sections_ok(const uint8_t *p, uint32_t size, uint32_t sections) {
         if (bytes > size || padded > size - at - 12) return 0;
         uint32_t each = tag == PE_IMP_LOGIC_DOOR ? PE_IMP_LOGIC_DOOR_BYTES : tag == PE_IMP_LOGIC_TRIG ? PE_IMP_LOGIC_TRIG_BYTES
                       : tag == PE_IMP_LOGIC_PICK ? PE_IMP_LOGIC_PICK_BYTES : tag == PE_IMP_LOGIC_CAMZ ? PE_IMP_LOGIC_CAMZ_BYTES
-                      : tag == PE_IMP_LOGIC_ENEM ? PE_IMP_LOGIC_ENEM_BYTES : 0;
+                      : tag == PE_IMP_LOGIC_ENEM ? PE_IMP_LOGIC_ENEM_BYTES : tag == PE_IMP_ITEM_NAME ? PE_IMP_ITEM_NAME_BYTES
+                      : tag == PE_IMP_ITEM_ICN8 ? PE_IMP_ITEM_ICON_W * PE_IMP_ITEM_ICON_H : 0;
         if (each && (uint64_t)records * each != bytes) return 0;
         at += 12 + padded;
     }
@@ -269,4 +270,18 @@ int pe_imp_door_save(const PeImpRoomLogic *l, const char *folder, char *why, siz
 }
 int pe_imp_door_load(const char *folder, PeImpRoomLogic **out, char *why, size_t n) {
     return load_as(folder, "doorscene.bin", out, why, n);
+}
+int pe_imp_items_save(const PeImpRoomLogic *l, const char *folder, char *why, size_t n) {
+    return save_as(l, folder, "itemtable.bin", why, n);
+}
+int pe_imp_items_load(const char *folder, PeImpRoomLogic **out, char *why, size_t n) {
+    return load_as(folder, "itemtable.bin", out, why, n);
+}
+int pe_imp_item_name(const PeImpRoomLogic *l, uint32_t i, PeImpItemName *out) {
+    const uint8_t *p = record(l, PE_IMP_ITEM_NAME, PE_IMP_ITEM_NAME_BYTES, i);
+    if (!p) return -1;
+    out->item = (uint16_t)get16(p), out->icon = (uint16_t)get16(p + 2);
+    memcpy(out->name, p + 4, sizeof out->name);
+    out->name[sizeof out->name - 1] = 0;
+    return 0;
 }
