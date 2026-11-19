@@ -33,6 +33,7 @@ sys.path.insert(0, str(ROOT))
 from pedebug import config  # noqa: E402
 
 LIVE_DEFAULT = ROOT / "runs" / "live-ctl"
+LIVE_MARKER = ".pe-play-channel"   # marks a debug channel folder pe.py play may clear
 OK, BAD, WARN = "ok  ", "FAIL", "warn"
 
 
@@ -232,9 +233,15 @@ def cmd_play(a) -> int:
     cfg = config.load()
     folder = Path(a.dir).resolve()
     folder.mkdir(parents=True, exist_ok=True)
-    for f in folder.glob("*"):
-        if f.is_file():
-            f.unlink()
+    # Only a folder this command made is cleared: --dir pointing at one with other files is refused.
+    marker = folder / LIVE_MARKER
+    files = [f for f in folder.glob("*") if f.is_file() and f.name != LIVE_MARKER]
+    if files and not marker.exists() and folder != LIVE_DEFAULT.resolve():
+        print(f"{folder} has other files in it; give --dir an empty folder (or one pe.py play made)")
+        return 1
+    for f in files:
+        f.unlink()
+    marker.touch()
     env = dict(os.environ, PE_DEBUG_CONTROL=str(folder))
     args = [cfg.exe, "--disc", cfg.disc1, "--disc2", cfg.disc2]
     print(f"starting {cfg.exe}\n  debug channel: {folder}\n  then: python pe.py live state  (or watch, snapshot, ...)")
@@ -293,6 +300,11 @@ def cmd_capture(a) -> int:
     from pedebug.control import LiveGame
     from pedebug.game import GameError
     cfg = config.load()
+    try:
+        d = config.scenario_dir(cfg.scenarios, a.name)
+    except ValueError as e:
+        print(e)
+        return 1
     folder = Path(a.dir or os.environ.get("PE_DEBUG_CONTROL") or LIVE_DEFAULT)
     try:
         g = LiveGame(folder)
@@ -305,7 +317,6 @@ def cmd_capture(a) -> int:
         return 1
     card = words[2]
     companion = next((w.split("=", 1)[1] for w in words[3:] if w.startswith("companion=")), None)
-    d = cfg.scenarios / a.name
     if d.exists():
         shutil.rmtree(d)
     d.mkdir(parents=True)

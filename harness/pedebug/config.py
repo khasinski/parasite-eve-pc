@@ -83,6 +83,14 @@ def find_discs(roots) -> tuple[str, str]:
     return "", ""
 
 
+def scenario_dir(root: Path, name: str) -> Path:
+    """root/name for a scenario save; refuses a name that isn't one plain folder name, so replacing
+    the scenario can't remove anything outside root."""
+    if not name or name in (".", "..") or Path(name).name != name or "/" in name or "\\" in name:
+        raise ValueError(f"not a scenario name: {name!r} (use letters, digits, - and _)")
+    return Path(root) / name
+
+
 def fixtures_dir() -> Path:
     """The fixtures folder without discovering anything else (cheap; for module constants)."""
     if os.environ.get("PE_FIXTURES"):

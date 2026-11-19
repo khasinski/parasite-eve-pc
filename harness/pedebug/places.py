@@ -113,7 +113,7 @@ def save_scenario(s: Session, name: str, note: str = "", root: Path | None = Non
     would write, its companion file when it has one (in .pe-ext/), and scenario.json (room, story,
     day, actors, note). root: another scenarios folder (a test's own)."""
     files = s.save_files(1)
-    d = Path(root or SCENARIOS) / name
+    d = config.scenario_dir(Path(root or SCENARIOS), name)
     if d.exists():
         shutil.rmtree(d)
     d.mkdir(parents=True)
