@@ -849,6 +849,14 @@ names holds the samples; the header is rebuilt as a standard VAB with the same c
 (`re3_bank_size`, `re3_bank_rebuild`). The kept files take about what they
 take on the disc: about 123 MB for RE1 (Chris's and Jill's rooms are separate files), 22 MB for RE2,
 21 MB for RE3.
+
+**Room objects (RE2).** The 3D props an RE2 room places (typewriters, boxes, floor items, swinging
+doors) become one-bone Models, `object/<stage><room>-<n>` (`pe_src_re2/pe_src_re2_objects.c`; 522 on
+disc 1, in 106 rooms). A room file's section 10 lists them as (texture, mesh) offsets; each mesh is
+a one-part MD1 with an 8-bit TIM, read by the same code as RE2's player models (`re2_object_parse`,
+sharing `mesh_and_texture` with `re2_pld_parse`; the costume tests are unchanged). Where an object
+stands is set by the room's script. RE3's (MD2) and RE1's (TMD) objects aren't decoded yet; their
+data is in each room's `RDT0`.
 A scan now offers each file to every reader that matches it, not just the first; a second reader
 of a file keeps its own store folder with `path_key`. `mod-rdt` saves and loads a record, refuses a
 damaged one, builds one for every room on the discs (about 0.8 MB for RE1, 1.3 MB for RE2, 1.7 MB

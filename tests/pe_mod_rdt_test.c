@@ -19,7 +19,31 @@
 extern const PeImpReader g_re2_logic_ps1, g_re1_door_ps1, g_re2_door_ps1, g_re3_door_ps1;
 extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1, g_re3_logic_ps1;
 void MdecDiag_ExpandDecoderTable(void *buffer);   /* the game's, linked in */
+extern const PeImpReader g_re2_objects_ps1;
 extern const PeImpReader g_re1_files_ps1, g_re2_files_ps1, g_re3_files_ps1, g_re2_maps_ps1, g_re3_maps_ps1;
+
+/* RE2's room objects as one-bone Models; one loads back with faces and a texture */
+static void scan_objects(const char *cue) {
+    PeImpScan sc;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_re2_objects_ps1));
+    assert(!pe_imp_scan("pe-rdt-test/objects", cue, "re2", &sc));
+    PeImpAsset *a;
+    int n = pe_imp_catalog_assets("pe-rdt-test/objects", "re2", &a), objects = 0;
+    char first[PE_IMP_ID_MAX] = "";
+    for (int i = 0; i < n; i++)
+        if (!strcmp(a[i].type, "Model") && strstr(a[i].id, ":object/") && !objects++) snprintf(first, sizeof first, "%s", a[i].id);
+    free(a);
+    char why[200];
+    PeImpModel m;
+    assert(objects && !pe_imp_catalog_model("pe-rdt-test/objects", first, &m, why, sizeof why));
+    uint32_t faces = 0;
+    for (uint32_t p = 0; p < m.parts; p++) faces += m.part[p].tris + m.part[p].quads;
+    printf("RE2 objects: %d one-bone models from %u room files; %s has %u faces, a %ux%u texture%s%s\n", objects,
+           sc.files_read, first, faces, m.w, m.h, sc.refused ? ", refused: " : "", sc.refused ? sc.last_error : "");
+    assert(!sc.refused && objects > 400 && m.bones == 1 && faces > 0);
+    pe_imp_model_free(&m);
+}
 
 /* a disc's file pictures: every TIM kept decodes; `want` pictures at least
  * (PE_TEST_MOVIE_PPM=<folder> also writes the first 8-bit one as <label>_file.ppm) */
@@ -468,7 +492,7 @@ int main(void) {
                      scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106),
                      movie("RE2", re2, "ZMOVIE/R200.STR"),
                      scan_files("RE2", re2, "re2", &g_re2_files_ps1, 191),
-                     scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20);
+                     scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20), scan_objects(re2);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
                      scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),

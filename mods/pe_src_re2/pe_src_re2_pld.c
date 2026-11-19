@@ -29,6 +29,77 @@ static int16_t s16at(const Buf *x, uint32_t at) { return (int16_t)u16at(x, at); 
 
 #define NEED(at, len, what) do { if (!ok(&x, (at), (len))) { snprintf(why, n, "PLD: %s past the end", what); goto bad; } } while (0)
 
+/* MD1 mesh at md1 and 8-bit TIM at tim into m's parts and texture (players and room objects).
+ * 0, or -1 with a reason; m is left for the caller to free. */
+static int mesh_and_texture(const Buf *xp, uint32_t md1, uint32_t tim, PeImpModel *m, char *why, size_t n) {
+    Buf x = *xp;
+    /* mesh: per part a triangle object, then a quad object */
+    NEED(md1, 12, "mesh header");
+    uint32_t objs = u32at(&x, md1 + 8), base = md1 + 12, parts = objs / 2;
+    if (parts > PE_IMP_MODEL_PARTS_MAX) { snprintf(why, n, "PLD: %u parts", parts); return -1; }
+    NEED(base, (uint64_t)56 * parts, "part table");
+    m->parts = parts;
+    m->part = calloc(parts ? parts : 1, sizeof *m->part);
+    if (!m->part) { snprintf(why, n, "out of memory"); return -1; }
+    uint32_t total = 0;
+    for (uint32_t i = 0; i < parts; i++) {
+        for (int kind = 0; kind < 2; kind++) {
+            uint32_t at = base + 56 * i + 28 * (uint32_t)kind, k = kind ? 4 : 3;
+            uint32_t vo = u32at(&x, at), vc = u32at(&x, at + 4), no = u32at(&x, at + 8), nc = u32at(&x, at + 12);
+            uint32_t fo = u32at(&x, at + 16), fc = u32at(&x, at + 20), to = u32at(&x, at + 24);
+            if (fc > PE_IMP_MODEL_FACES_MAX || (total += fc) > PE_IMP_MODEL_FACES_MAX) { snprintf(why, n, "PLD: too many faces"); return -1; }
+            NEED((uint64_t)base + vo, (uint64_t)8 * vc, "vertices");
+            NEED((uint64_t)base + no, (uint64_t)8 * nc, "normals");
+            NEED((uint64_t)base + fo, (uint64_t)4 * k * fc, "faces");
+            NEED((uint64_t)base + to, (uint64_t)4 * k * fc, "texture records");
+            PeImpFace *f = fc ? calloc(fc, sizeof *f) : NULL;
+            if (fc && !f) { snprintf(why, n, "out of memory"); return -1; }
+            if (kind) m->part[i].quad = f, m->part[i].quads = fc;
+            else m->part[i].tri = f, m->part[i].tris = fc;
+            for (uint32_t q = 0; q < fc; q++) {
+                uint32_t fa = base + fo + 4 * k * q, ta = base + to + 4 * k * q;
+                for (uint32_t j = 0; j < k; j++) {
+                    uint32_t ni = u16at(&x, fa + 4 * j), vi = u16at(&x, fa + 4 * j + 2);
+                    if (vi >= vc || ni >= nc) { snprintf(why, n, "PLD: part %u face %u points past its vertices", i, q); return -1; }
+                    for (int c = 0; c < 3; c++) {
+                        f[q].v[j][c] = s16at(&x, base + vo + 8 * vi + 2 * c);
+                        f[q].n[j][c] = s16at(&x, base + no + 8 * ni + 2 * c);
+                    }
+                    f[q].uv[j][0] = (uint8_t)u8at(&x, ta + 4 * j);
+                    f[q].uv[j][1] = (uint8_t)u8at(&x, ta + 4 * j + 1);
+                }
+                f[q].clut = (uint16_t)u16at(&x, ta + 2);
+                f[q].page = (uint16_t)u16at(&x, ta + 6);
+            }
+        }
+    }
+
+    /* texture: an 8-bit TIM with palettes of 256 */
+    NEED(tim, 20, "texture header");
+    uint32_t flag = u32at(&x, tim + 4);
+    if ((flag & 3) != 1 || !(flag & 8)) { snprintf(why, n, "PLD: expected an 8-bit texture with palettes"); return -1; }
+    uint32_t ln = u32at(&x, tim + 8), cw = u16at(&x, tim + 16), ch = u16at(&x, tim + 18);
+    if (cw != 256 || !ch || ch > 256) { snprintf(why, n, "PLD: palettes %ux%u", cw, ch); return -1; }
+    NEED((uint64_t)tim + 20, (uint64_t)2 * cw * ch, "palettes");
+    m->pal_rows = ch;
+    m->pal = calloc(ch, sizeof *m->pal);
+    if (!m->pal) { snprintf(why, n, "out of memory"); return -1; }
+    for (uint32_t r = 0; r < ch; r++)
+        for (uint32_t c = 0; c < 256; c++) m->pal[r][c] = (uint16_t)u16at(&x, tim + 20 + 2 * cw * r + 2 * c);
+    uint64_t at = (uint64_t)tim + 8 + ln;
+    NEED(at, 12, "image header");
+    uint32_t w = 2u * u16at(&x, (uint32_t)at + 8), h = u16at(&x, (uint32_t)at + 10);
+    if (!w || !h || w > 1024 || h > 1024) { snprintf(why, n, "PLD: image %ux%u", w, h); return -1; }
+    NEED(at + 12, (uint64_t)w * h, "image");
+    m->w = w, m->h = h;
+    m->image = malloc((size_t)w * h);
+    if (!m->image) { snprintf(why, n, "out of memory"); return -1; }
+    memcpy(m->image, x.b + at + 12, (size_t)w * h);
+    return 0;
+bad:
+    return -1;
+}
+
 int re2_pld_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, size_t n) {
     Buf x = {data, size};
     memset(m, 0, sizeof *m);
@@ -65,68 +136,7 @@ int re2_pld_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, 
         for (int c = 0; c < 3; c++) m->pos[i][c] = (p >= 0 ? m->pos[p][c] : 0) + m->rel[i][c];
     }
 
-    /* mesh: per part a triangle object, then a quad object */
-    NEED(md1, 12, "mesh header");
-    uint32_t objs = u32at(&x, md1 + 8), base = md1 + 12, parts = objs / 2;
-    if (parts > PE_IMP_MODEL_PARTS_MAX) { snprintf(why, n, "PLD: %u parts", parts); goto bad; }
-    NEED(base, (uint64_t)56 * parts, "part table");
-    m->parts = parts;
-    m->part = calloc(parts ? parts : 1, sizeof *m->part);
-    if (!m->part) { snprintf(why, n, "out of memory"); goto bad; }
-    uint32_t total = 0;
-    for (uint32_t i = 0; i < parts; i++) {
-        for (int kind = 0; kind < 2; kind++) {
-            uint32_t at = base + 56 * i + 28 * (uint32_t)kind, k = kind ? 4 : 3;
-            uint32_t vo = u32at(&x, at), vc = u32at(&x, at + 4), no = u32at(&x, at + 8), nc = u32at(&x, at + 12);
-            uint32_t fo = u32at(&x, at + 16), fc = u32at(&x, at + 20), to = u32at(&x, at + 24);
-            if (fc > PE_IMP_MODEL_FACES_MAX || (total += fc) > PE_IMP_MODEL_FACES_MAX) { snprintf(why, n, "PLD: too many faces"); goto bad; }
-            NEED((uint64_t)base + vo, (uint64_t)8 * vc, "vertices");
-            NEED((uint64_t)base + no, (uint64_t)8 * nc, "normals");
-            NEED((uint64_t)base + fo, (uint64_t)4 * k * fc, "faces");
-            NEED((uint64_t)base + to, (uint64_t)4 * k * fc, "texture records");
-            PeImpFace *f = fc ? calloc(fc, sizeof *f) : NULL;
-            if (fc && !f) { snprintf(why, n, "out of memory"); goto bad; }
-            if (kind) m->part[i].quad = f, m->part[i].quads = fc;
-            else m->part[i].tri = f, m->part[i].tris = fc;
-            for (uint32_t q = 0; q < fc; q++) {
-                uint32_t fa = base + fo + 4 * k * q, ta = base + to + 4 * k * q;
-                for (uint32_t j = 0; j < k; j++) {
-                    uint32_t ni = u16at(&x, fa + 4 * j), vi = u16at(&x, fa + 4 * j + 2);
-                    if (vi >= vc || ni >= nc) { snprintf(why, n, "PLD: part %u face %u points past its vertices", i, q); goto bad; }
-                    for (int c = 0; c < 3; c++) {
-                        f[q].v[j][c] = s16at(&x, base + vo + 8 * vi + 2 * c);
-                        f[q].n[j][c] = s16at(&x, base + no + 8 * ni + 2 * c);
-                    }
-                    f[q].uv[j][0] = (uint8_t)u8at(&x, ta + 4 * j);
-                    f[q].uv[j][1] = (uint8_t)u8at(&x, ta + 4 * j + 1);
-                }
-                f[q].clut = (uint16_t)u16at(&x, ta + 2);
-                f[q].page = (uint16_t)u16at(&x, ta + 6);
-            }
-        }
-    }
-
-    /* texture: an 8-bit TIM with palettes of 256 */
-    NEED(tim, 20, "texture header");
-    uint32_t flag = u32at(&x, tim + 4);
-    if ((flag & 3) != 1 || !(flag & 8)) { snprintf(why, n, "PLD: expected an 8-bit texture with palettes"); goto bad; }
-    uint32_t ln = u32at(&x, tim + 8), cw = u16at(&x, tim + 16), ch = u16at(&x, tim + 18);
-    if (cw != 256 || !ch || ch > 256) { snprintf(why, n, "PLD: palettes %ux%u", cw, ch); goto bad; }
-    NEED((uint64_t)tim + 20, (uint64_t)2 * cw * ch, "palettes");
-    m->pal_rows = ch;
-    m->pal = calloc(ch, sizeof *m->pal);
-    if (!m->pal) { snprintf(why, n, "out of memory"); goto bad; }
-    for (uint32_t r = 0; r < ch; r++)
-        for (uint32_t c = 0; c < 256; c++) m->pal[r][c] = (uint16_t)u16at(&x, tim + 20 + 2 * cw * r + 2 * c);
-    uint64_t at = (uint64_t)tim + 8 + ln;
-    NEED(at, 12, "image header");
-    uint32_t w = 2u * u16at(&x, (uint32_t)at + 8), h = u16at(&x, (uint32_t)at + 10);
-    if (!w || !h || w > 1024 || h > 1024) { snprintf(why, n, "PLD: image %ux%u", w, h); goto bad; }
-    NEED(at + 12, (uint64_t)w * h, "image");
-    m->w = w, m->h = h;
-    m->image = malloc((size_t)w * h);
-    if (!m->image) { snprintf(why, n, "out of memory"); goto bad; }
-    memcpy(m->image, data + at + 12, (size_t)w * h);
+    if (mesh_and_texture(&x, md1, tim, m, why, n)) goto bad;
     return pe_imp_model_check(m, why, n);
 bad:
     pe_imp_model_free(m);
@@ -206,3 +216,19 @@ const char g_re2_naming[] =
     " \"player/pl0d\": {\"id\": \"player/tofu\", \"name\": \"Tofu\"},"
     " \"player/pl0e\": {\"id\": \"player/ada\", \"name\": \"Ada\"},"
     " \"player/pl0f\": {\"id\": \"player/sherry\", \"name\": \"Sherry\"}}";
+
+int re2_object_parse(const uint8_t *data, uint32_t size, uint32_t md1, uint32_t tim, PeImpModel *m, char *why, size_t n) {
+    Buf x = {data, size};
+    memset(m, 0, sizeof *m);
+    m->bones = 1;                                      /* a room object: one bone at the origin */
+    m->parent = malloc(sizeof *m->parent);
+    m->rel = calloc(1, sizeof *m->rel);
+    m->pos = calloc(1, sizeof *m->pos);
+    if (!m->parent || !m->rel || !m->pos) { snprintf(why, n, "out of memory"); goto bad; }
+    m->parent[0] = -1;
+    if (mesh_and_texture(&x, md1, tim, m, why, n)) goto bad;
+    return pe_imp_model_check(m, why, n);
+bad:
+    pe_imp_model_free(m);
+    return -1;
+}
