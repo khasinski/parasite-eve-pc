@@ -373,8 +373,8 @@ const PeImpReader g_re1_weapon_moves_ps1 = {
 
 /* The weapons in hand: as BioRand's emdui does, a Wxx.EMW's mesh (one TMD object, the right hand with
  * the weapon) replaces the player model's part 11 in RE1's order (14 in the RE2 order the models use);
- * it is textured from the player's own picture. Which player: W<p><w> goes with CHAR1<p> (the four
- * people files; inferred from the names, emdui loads every EMW beside a CHAR file). The Model
+ * it is textured from the player's own picture. Which player: the one whose skeleton it carries
+ * (find_char). The Model
  * "weapon/w02" is that player holding the weapon; "weapon/w02/moves" play on it. */
 static int tmd_part(const Buf *xp, uint32_t tmd, uint32_t obj, PeImpPart *out, char *why, size_t n) {
     Buf x = *xp;
@@ -412,15 +412,45 @@ bad:
     return -1;
 }
 
-/* "<disc>/PLAYERS/W02.EMW" -> "<disc>/ENEMY/CHAR10.EMD" */
+/* the people file whose skeleton is the EMW's: an EMW carries the 15-bone EMR (bone offsets from
+ * byte 8) of the player it was made for, and the four people's skeletons all differ, so the nearest
+ * (sum of offset differences) is its player: W0x, W2x, W15 and W35 Chris's (CHAR10), the other W1x and
+ * W3x Jill's (CHAR11); W23 is nearest Chris's (95 off, the rest are exact) */
+static uint32_t skeleton_distance(const uint8_t *a, uint32_t asz, uint32_t ea, const uint8_t *b, uint32_t bsz, uint32_t eb) {
+    if (ea + 8 + 6 * BONES > asz || eb + 8 + 6 * BONES > bsz) return 0xFFFFFFFFu;
+    if ((a[ea + 4] | a[ea + 5] << 8) != BONES || (b[eb + 4] | b[eb + 5] << 8) != BONES) return 0xFFFFFFFFu;
+    uint32_t d = 0;
+    for (uint32_t i = 0; i < 3 * BONES; i++) {
+        int x = (int16_t)(a[ea + 8 + 2 * i] | a[ea + 9 + 2 * i] << 8), y = (int16_t)(b[eb + 8 + 2 * i] | b[eb + 9 + 2 * i] << 8);
+        d += (uint32_t)(x > y ? x - y : y - x);
+    }
+    return d;
+}
+
 static int find_char(PeImpDisc *d, const char *path) {
     const char *slash = strrchr(path, '/');
-    if (!slash || slash[1] != 'W' || slash[2] < '0' || slash[2] > '3') return -1;
+    if (!slash) return -1;
     const char *up = slash;
     while (up > path && up[-1] != '/') up--;                            /* the PLAYERS folder's start */
-    char p[PE_IMP_PATH_MAX];
-    if (snprintf(p, sizeof p, "%.*sENEMY/CHAR1%c.EMD", (int)(up - path), path, slash[2]) >= (int)sizeof p) return -1;
-    return pe_imp_disc_find(d, p);
+    int self = pe_imp_disc_find(d, path), best = -1;
+    uint8_t *w = NULL;
+    uint32_t wsz = 0, best_d = 0xFFFFFFFFu;
+    char why[160];
+    if (self < 0 || pe_imp_disc_read(d, self, &w, &wsz, why, sizeof why)) return -1;
+    for (char p = '0'; p <= '3'; p++) {
+        char name[PE_IMP_PATH_MAX];
+        if (snprintf(name, sizeof name, "%.*sENEMY/CHAR1%c.EMD", (int)(up - path), path, p) >= (int)sizeof name) continue;
+        int i = pe_imp_disc_find(d, name);
+        uint8_t *c = NULL;
+        uint32_t csz = 0;
+        if (i < 0 || pe_imp_disc_read(d, i, &c, &csz, why, sizeof why)) continue;
+        uint32_t emr = csz >= 20 ? (uint32_t)(c[csz - 16] | c[csz - 15] << 8 | c[csz - 14] << 16 | (uint32_t)c[csz - 13] << 24) : 0;
+        uint32_t dist = skeleton_distance(w, wsz, 0, c, csz, emr);
+        if (dist < best_d) best_d = dist, best = i;
+        free(c);
+    }
+    free(w);
+    return best;
 }
 
 static int read_weapon(const uint8_t *data, uint32_t size, const uint8_t *chr, uint32_t chr_size, const char *path,
@@ -455,6 +485,6 @@ static int read_weapon(const uint8_t *data, uint32_t size, const uint8_t *chr, u
 const PeImpReader g_re1_weapons_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re1", .platform = "ps1", .format = "emw",
-    .version = 1, .produces = PE_IMP_MODEL, .match = "*/PLAYERS/W??.EMW",
+    .version = 2, .produces = PE_IMP_MODEL, .match = "*/PLAYERS/W??.EMW",
     .tags = "weapon", .read_pair = read_weapon, .find_companion = find_char
 };

@@ -175,9 +175,10 @@ move set (the EMR at D1, its EDD at D2), read as `player/<name>/moves` with bone
 their models (`g_re1_person_moves_ps1`, 24). RE1's weapons, `PLAYERS/Wxx.EMW`: the EMR at 0, the last 8 bytes the EDD and
 TMD offsets; the player's moves with that weapon, `weapon/wxx/moves` (RE2's bone order). The weapon
 Model `weapon/wxx` (32) is the player holding it, as BioRand's emdui composes it: the TMD's object
-replaces RE1's part 11 (14 in RE2's order), textured from the player's own picture. W<p><w> is paired
-with `CHAR1<p>` from the names alone: W0x on Chris's texture lands on gun pieces, W1x on Jill's
-partly on her ear, so the pairing is unverified. RE2's `PL?/PLD/PLxx.PLD` and `PLxxWyy.PLW` share a
+replaces RE1's part 11 (14 in RE2's order), textured from the player's own picture. Each EMW carries
+the skeleton of the player it was made for, and the four people's skeletons differ, so it is paired
+with the nearest: W0x, W2x, W15 and W35 Chris (`CHAR10`), the other W1x and W3x Jill (`CHAR11`); all
+match exactly but W23 (nearest Chris). RE2's `PL?/PLD/PLxx.PLD` and `PLxxWyy.PLW` share a
 layout (u32 directory: EDD, EMR, MD1, TIM): a PLD's moves are `player/plxx/moves` (10); a PLW's are
 the player's moves with that weapon, `weapon/plxxwyy/moves` (29; the other 6 have an empty EMR, no
 moves of their own). The weapon Model `weapon/plxxwyy` (35) is the player PLxx.PLD holding it, as
