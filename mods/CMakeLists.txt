@@ -368,7 +368,7 @@ if(BUILD_TESTING)
     # RE2/RE3 room logic on a made-up room; PE_TEST_RE2_DISC / PE_TEST_RE3_DISC read every room's scripts.
     pe_feature_test(rdt ${PROJECT_SOURCE_DIR}/tests/pe_mod_rdt_test.c ${pe_import_core_sources}
         pe_src_re2/pe_src_re2_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re2/pe_src_re2_door.c pe_src_re3/pe_src_re3_door.c
-        pe_src_re1/pe_src_re1_items.c pe_src_re2/pe_src_re2_items.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_logic.c
+        pe_src_re1/pe_src_re1_items.c pe_src_re2/pe_src_re2_items.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_music.c
         pe_src_re1/pe_src_re1_movies.c pe_src_re2/pe_src_re2_movies.c pe_src_re3/pe_src_re3_movies.c
         pe_src_re1/pe_src_re1_files.c pe_src_re2/pe_src_re2_files.c pe_src_re3/pe_src_re3_files.c
         ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)

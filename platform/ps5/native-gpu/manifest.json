@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "4073ad1580a16d8dacb094ed7627dfcfbb9d5f7c841e462523f1162d5f91170c"
+      "sha256": "c8a4b4a5f9d184119438ec8a07e27d4db8f2fae1b778ad0dc184a901dbdfa11d"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4767,7 +4767,7 @@
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.h",
-      "sha256": "7b5c94caa0ea047f6b5a8344276f6c21cabcceaf8b1a87a40794bd07bc23e73f"
+      "sha256": "96ab0e29e7fdf1dfb489f9239778f67d6efd242b81f4f9e0313adb1ce4a0d8b4"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_pld.c",
@@ -4775,7 +4775,7 @@
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_music.c",
-      "sha256": "91b919a31aeb84caccb0c02e123fff674f70d3d25c8dad3ea1a26de06f0f6a62"
+      "sha256": "6f9817d5aab5ef33cf9c714f5619d936f4c9745d65cd1b16cc7d48845b144637"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_sound.c",
@@ -4871,7 +4871,7 @@
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_logic.c",
-      "sha256": "48d3ce231c32563b06be0c136137613e90a5c718b3855701d9f6e01834211d3a"
+      "sha256": "6ff2dbacd10409b50e8d29a6f6c79c83d2d648a1267111785cc002af09b75469"
     },
     {
       "path": "mods/host/import/pe_imp_door.c",

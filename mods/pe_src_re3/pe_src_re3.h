@@ -24,4 +24,9 @@ PeImpSound *re3_tone_sound(const uint8_t *vh, uint32_t vh_size, const uint8_t *v
 extern const PeImpReader g_re3_emd_pc, g_re3_tones_pc;
 extern const PeImpEnemyProfile g_re3_nemesis;
 
+/* RE3's compact sound banks (pe_src_re3_music.c): the standard VAB header's size for the compact
+ * header at h (0 if it doesn't match vb_size samples), and that header rebuilt into v. */
+uint32_t re3_bank_size(const uint8_t *h, uint32_t avail, uint32_t vb_size, char *why, size_t n);
+int re3_bank_rebuild(const uint8_t *h, uint32_t vb_size, uint8_t *v, char *why, size_t n);
+
 #endif

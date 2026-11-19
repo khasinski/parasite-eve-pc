@@ -306,8 +306,20 @@ static void scan_re3(const char *cue) {
     uint32_t entries = 0, bytes = 0, whole = 0;
     assert(pe_imp_logic_section(l, PE_IMP_LOGIC_ARDS, &entries, &bytes) && entries >= 1);
     assert(pe_imp_logic_section(l, PE_IMP_LOGIC_RDT0, NULL, &whole) && whole > 10000);
-    printf("RE3 scan: logic/100 keeps %u archive entries (%u bytes) and its whole room (%u bytes)\n", entries, bytes, whole);
-    assert(!sc.refused);
+    PeImpAsset *a;
+    int count = pe_imp_catalog_assets("pe-rdt-test/store", "re3", &a), sounds = 0, banks = 0;
+    char last[24] = "";
+    for (int i = 0; i < count; i++) {
+        if (strcmp(a[i].type, "Sound") || !strstr(a[i].id, ":sound/room")) continue;
+        sounds++;
+        const char *slash = strrchr(a[i].id, '/');                  /* re3:sound/room100/wave01: bank up to it */
+        if (slash && strncmp(last, a[i].id, (size_t)(slash - a[i].id)))
+            snprintf(last, sizeof last, "%.*s", (int)(slash - a[i].id), a[i].id), banks++;
+    }
+    free(a);
+    printf("RE3 scan: logic/100 keeps %u archive entries (%u bytes) and its whole room (%u bytes); %d room sounds in %d banks%s%s\n",
+           entries, bytes, whole, sounds, banks, sc.refused ? ", refused: " : "", sc.refused ? sc.last_error : "");
+    assert(!sc.refused && sounds > 100 && banks > 50);
     free(l);
 }
 

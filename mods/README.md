@@ -843,7 +843,10 @@ can be added later without breaking a reader. The readers are `pe_src_re{1,2,3}_
 Each record also keeps the whole room file (`RDT0`, offsets intact: sound bank, lights, floors,
 objects and their textures, effects, animations), so the runtime never needs the disc again; RE3's
 also keeps its room archive's sound entries (`ARDS`). RE1 and RE2 rooms' sound banks are cataloged
-as Sounds too (bank `room<stage><room>`; 1,285 on RE2 disc 1). The kept files take about what they
+as Sounds too (bank `room<stage><room>`; 1,285 on RE2 disc 1). RE3's are too (1,609 in 153 rooms):
+its room file holds a compact bank header (after 0xFF padding) and the archive entry of the size it
+names holds the samples; the header is rebuilt as a standard VAB with the same code as RE3's music
+(`re3_bank_size`, `re3_bank_rebuild`). The kept files take about what they
 take on the disc: about 123 MB for RE1 (Chris's and Jill's rooms are separate files), 22 MB for RE2,
 21 MB for RE3.
 A scan now offers each file to every reader that matches it, not just the first; a second reader

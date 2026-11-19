@@ -29,36 +29,30 @@ static int refuse(char *why, size_t n, const char *m) {
     return -1;
 }
 
-/* BGM + samples -> a Song in the standard layout */
-static int convert(const uint8_t *bgm, uint32_t size, const uint8_t *vb, uint32_t vb_size, PeImpSong **out,
-                   char *why, size_t n) {
-    *out = NULL;
-    if (size < 16 + 32) return refuse(why, n, "too short");
-    uint32_t vh = le32(bgm);
-    if (vh < 16 || vh > size - 32) return refuse(why, n, "bank header outside the file");
-    const uint8_t *h = bgm + vh;
+/* A compact bank's checks; its standard header's size, or 0 (why says what's wrong) */
+uint32_t re3_bank_size(const uint8_t *h, uint32_t avail, uint32_t vb_size, char *why, size_t n) {
+    if (avail < 32) return refuse(why, n, "bank header outside the file"), 0;
     uint32_t vbs = le32(h), vh_size = le32(h + 4), table = le32(h + 8);
     unsigned programs = le16(h + 18), samples = le16(h + 22);
     uint32_t tones_at = 32 + programs * 16u;
-    if (vbs != vb_size || vh_size > size - vh || programs > 128 || !programs || samples > 254 || table < tones_at ||
+    if (vbs != vb_size || vh_size > avail || programs > 128 || !programs || samples > 254 || table < tones_at ||
         table + 2u * (samples + 1) > vh_size || (table - tones_at) % 32)
-        return refuse(why, n, "bank sizes");
-    if (le16(h + table + 2 * samples) * 8u != vb_size) return refuse(why, n, "sample table doesn't end with the samples");
+        return refuse(why, n, "bank sizes"), 0;
+    if (le16(h + table + 2 * samples) * 8u != vb_size)
+        return refuse(why, n, "sample table doesn't end with the samples"), 0;
+    unsigned present = 0;
+    for (unsigned p = 0; p < programs; p++) present += h[32 + 16 * p] != 0;
+    return 32 + 2048 + present * 512u + 512;
+}
+
+/* the compact bank at h rebuilt as a standard VAB header into v (re3_bank_size bytes) */
+int re3_bank_rebuild(const uint8_t *h, uint32_t vb_size, uint8_t *v, char *why, size_t n) {
+    uint32_t table = le32(h + 8);
+    unsigned programs = le16(h + 18), samples = le16(h + 22);
+    uint32_t tones_at = 32 + programs * 16u;
     unsigned records = (table - tones_at) / 32, present = 0;
     for (unsigned p = 0; p < programs; p++) present += h[32 + 16 * p] != 0;
-    uint32_t std = 32 + 2048 + present * 512u + 512, seq = 15 + 1 + (vh - 12);
-    PeImpSong *song = pe_imp_song_alloc(PE_IMP_SONG_PSX_SEQ_VAB, seq, 0, std, vb_size);
-    if (!song) return refuse(why, n, "too large for a Song");
-    uint8_t *s = song->payload;
-    /* the sequence: a standard header, a zero delta, the events */
-    memcpy(s, "pQES\0\0\0\1", 8);
-    s[8] = bgm[9], s[9] = bgm[8];                              /* ticks, big-endian */
-    s[10] = bgm[6], s[11] = bgm[5], s[12] = bgm[4];            /* tempo, 24-bit big-endian */
-    s[13] = bgm[10], s[14] = bgm[11];
-    s[15] = 0;
-    memcpy(s + 16, bgm + 12, vh - 12);
-    /* the bank: header, 128 programs, tone blocks for the programs present, sample sizes */
-    uint8_t *v = s + seq;
+    uint32_t std = 32 + 2048 + present * 512u + 512;
     memset(v, 0, std);
     memcpy(v, "pBAV", 4);
     v[4] = 7;
@@ -84,9 +78,34 @@ static int convert(const uint8_t *bgm, uint32_t size, const uint8_t *vb, uint32_
     uint8_t *sizes = v + 32 + 2048 + present * 512u;
     for (unsigned i = 1; i <= samples; i++) {
         unsigned a = le16(h + table + 2 * (i - 1)), b = le16(h + table + 2 * i);
-        if (b < a) { free(song); return refuse(why, n, "sample table goes backwards"); }
+        if (b < a) return refuse(why, n, "sample table goes backwards");
         sizes[2 * i] = (uint8_t)(b - a), sizes[2 * i + 1] = (uint8_t)((b - a) >> 8);
     }
+    return 0;
+}
+
+/* BGM + samples -> a Song in the standard layout */
+static int convert(const uint8_t *bgm, uint32_t size, const uint8_t *vb, uint32_t vb_size, PeImpSong **out,
+                   char *why, size_t n) {
+    *out = NULL;
+    if (size < 16 + 32) return refuse(why, n, "too short");
+    uint32_t vh = le32(bgm);
+    if (vh < 16 || vh > size - 32) return refuse(why, n, "bank header outside the file");
+    const uint8_t *h = bgm + vh;
+    uint32_t std = re3_bank_size(h, size - vh, vb_size, why, n), seq = 15 + 1 + (vh - 12);
+    if (!std) return -1;
+    PeImpSong *song = pe_imp_song_alloc(PE_IMP_SONG_PSX_SEQ_VAB, seq, 0, std, vb_size);
+    if (!song) return refuse(why, n, "too large for a Song");
+    uint8_t *s = song->payload;
+    /* the sequence: a standard header, a zero delta, the events */
+    memcpy(s, "pQES\0\0\0\1", 8);
+    s[8] = bgm[9], s[9] = bgm[8];                              /* ticks, big-endian */
+    s[10] = bgm[6], s[11] = bgm[5], s[12] = bgm[4];            /* tempo, 24-bit big-endian */
+    s[13] = bgm[10], s[14] = bgm[11];
+    s[15] = 0;
+    memcpy(s + 16, bgm + 12, vh - 12);
+    /* the bank: header, 128 programs, tone blocks for the programs present, sample sizes */
+    if (re3_bank_rebuild(h, vb_size, s + seq, why, n)) { free(song); return -1; }
     memcpy(s + seq + std, vb, vb_size);
     *out = song;
     return 0;
