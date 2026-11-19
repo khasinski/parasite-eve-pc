@@ -1,5 +1,6 @@
 /* PS1 RDT camera and PRI records, and BSS mask atlases. Format references:
  * https://github.com/pmandin/reevengi-tools/wiki (RDT, ARD and BSS). */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -253,6 +254,89 @@ static int room_data(const PeImpImageSet *set, uint32_t frame, Bytes *data, Byte
     *pri = (Bytes){data->data + header, len};
     *atlas = (Bytes){pri->data + len, atlas_size};
     return 0;
+}
+
+int pe_imp_re2_collision(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *out) {
+    out->count = 0;
+    if (!sca) return 1;
+    /* The count includes the 16-byte header. The next RDT section may
+     * begin after padding, so only inspect the counted entries. */
+    if (size < 16) return -1;
+    uint32_t count = le32(sca + 4);
+    if (!count || count - 1 > PE_RE2_COLLIDER_MAX || count > size / 16) return -1;
+    for (uint32_t i = 1; i < count; i++) {
+        const uint8_t *p = sca + i * 16;
+        unsigned shape = le16(p + 8) & 15;
+        if (!(le32(p + 12) & 1) || shape > 12) continue;
+        int32_t x = signed16(le16(p)), z = signed16(le16(p + 2));
+        out->entries[out->count++] = (PeRe2Collider){
+            x, z, x + (int32_t)le16(p + 4), z + (int32_t)le16(p + 6), (uint8_t)shape
+        };
+    }
+    return out->count ? 0 : 1;
+}
+
+int pe_imp_re2_image_collision(const PeImpImageSet *set, PeRe2RoomCollision *out) {
+    Bytes data, pri, atlas;
+    out->count = 0;
+    int rc = room_data(set, 0, &data, &pri, &atlas);
+    if (rc) return rc;
+    if (data.data[3] != '2' || data.data[6] != PE_IMP_RE2) return 1;
+    const uint8_t *sca = atlas.data + atlas.size;
+    return pe_imp_re2_collision(sca, (uint32_t)(data.data + data.size - sca), out);
+}
+
+static int triangle_hit(const PeRe2Collider *c, double x, double z, double radius) {
+    double w = c->x1 - c->x0, h = c->z1 - c->z0;
+    if (!w || !h) return 1;
+    x = fmin(c->x1, fmax(c->x0, x)) - c->x0;
+    z = fmin(c->z1, fmax(c->z0, z)) - c->z0;
+    unsigned shape = c->shape;
+    double line = (shape == 1 || shape == 4) ? h * x + w * z - w * h : h * x - w * z;
+    if (shape == 2 || shape == 4) line = -line;
+    return line >= -radius * hypot(w, h);
+}
+
+int pe_imp_re2_blocked(const PeRe2RoomCollision *room, double x, double z, double radius) {
+    if (fabs(x) > 32000 || fabs(z) > 32000) return 1;
+    for (unsigned i = 0; i < room->count; i++) {
+        const PeRe2Collider *c = &room->entries[i];
+        double dx = x - fmin(c->x1, fmax(c->x0, x));
+        double dz = z - fmin(c->z1, fmax(c->z0, z));
+        if (dx * dx + dz * dz > radius * radius) continue;
+        if (c->shape >= 1 && c->shape <= 4) {
+            if (triangle_hit(c, x, z, radius)) return 1;
+        } else if (c->shape == 6 || c->shape == 7) {
+            double rx = (c->x1 - c->x0) * .5, rz = (c->z1 - c->z0) * .5;
+            double nx = (x - c->x0 - rx) / fmax(1, rx + radius);
+            double nz = (z - c->z0 - rz) / fmax(1, rz + radius);
+            if (nx * nx + nz * nz <= 1) return 1;
+        } else {
+            /* The ground-floor preview treats ramps and raised shapes as solid. */
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void pe_imp_re2_slide(const PeRe2RoomCollision *room, double *x, double *z,
+                      double dx, double dz, double radius) {
+    double distance = hypot(dx, dz);
+    if (!isfinite(distance) || distance > 64000 || radius < 1) return;
+    /* Substeps check the swept path. Test each axis after a blocked diagonal
+     * so the unblocked portion of the move carries Aya along the wall. */
+    unsigned steps = (unsigned)fmax(1, ceil(distance / (radius * .5)));
+    dx /= steps;
+    dz /= steps;
+    for (unsigned i = 0; i < steps; i++) {
+        if (!pe_imp_re2_blocked(room, *x + dx, *z + dz, radius)) {
+            *x += dx;
+            *z += dz;
+        } else {
+            if (!pe_imp_re2_blocked(room, *x + dx, *z, radius)) *x += dx;
+            if (!pe_imp_re2_blocked(room, *x, *z + dz, radius)) *z += dz;
+        }
+    }
 }
 
 int pe_imp_room_view(const PeImpImageSet *set, uint32_t frame, PeImpRoomView *view) {

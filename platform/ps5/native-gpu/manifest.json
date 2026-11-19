@@ -3839,7 +3839,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "aeca38067b3a7e3685d29ec359bc9a58b71e05908d1649c2f4f467896b6c6b91"
+      "sha256": "c0d04c78c08a09f130381327f7a889764c0f03e13a24c580838c52a60f627aa4"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -4031,7 +4031,7 @@
     },
     {
       "path": "mods/host/pe_mod_host.c",
-      "sha256": "3e42df9d84d464972f0655b587af6ff924ca661e90b71ee1e5ca8d0f1cdc1388"
+      "sha256": "dc99cfae8a9f8f60b0cdc85cdb3d662b10dedcfde9404087c2c4c1a1daac9553"
     },
     {
       "path": "mods/host/pe_mod_host.h",
@@ -4823,11 +4823,11 @@
     },
     {
       "path": "mods/host/import/pe_imp_room.c",
-      "sha256": "04f424c5bc3ad197d1ad0463400c3dc5fb144b4cd8faf1752c4a7212fe02aa89"
+      "sha256": "77ead199360ab8ca220803baa6a837f9e03d321d69c851782980ee07a5809c3f"
     },
     {
       "path": "mods/host/import/pe_imp_room.h",
-      "sha256": "4ef9d8843adf27072888e3c13ce150aaf5a942f0e8aa04db2c68f5bca6a62ce4"
+      "sha256": "b0a724f8a6ba05c999fb06a65cdb638f5b463c155fe8d27d931af42a073ee017"
     },
     {
       "path": "mods/host/import/pe_imp_anim.c",

@@ -37,4 +37,23 @@ int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImp
 int pe_imp_room_foreground_depth(const PeImpImageSet *set, uint32_t frame,
                                  const PeImpRoomView *view, uint16_t *depth);
 
+/* RE2 ground-floor collision. Read an imported COLL section, or the same SCA
+ * payload from an older collision-preview ImageSet. Returns 1 if absent. */
+#define PE_RE2_COLLIDER_MAX 512u
+typedef struct {
+    int32_t x0, z0, x1, z1;
+    uint8_t shape;
+} PeRe2Collider;
+
+typedef struct {
+    unsigned count;
+    PeRe2Collider entries[PE_RE2_COLLIDER_MAX];
+} PeRe2RoomCollision;
+
+int pe_imp_re2_collision(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *out);
+int pe_imp_re2_image_collision(const PeImpImageSet *set, PeRe2RoomCollision *out);
+int pe_imp_re2_blocked(const PeRe2RoomCollision *room, double x, double z, double radius);
+void pe_imp_re2_slide(const PeRe2RoomCollision *room, double *x, double *z,
+                      double dx, double dz, double radius);
+
 #endif

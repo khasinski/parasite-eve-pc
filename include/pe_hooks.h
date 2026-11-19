@@ -103,6 +103,8 @@ typedef enum PeHookId {
                                * into the ordering table (4095 = farthest). A nonzero stage 1
                                * result also skips the native backdrop and its scroll offset. */
     PE_HOOK_FIELD_CAMERA, /* PeHookFieldCamera: nonzero supplies a fixed view for native actor drawing */
+    PE_HOOK_FIELD_MOVE, /* FieldActor *: after Aya integrates a movement step; positive consumes it
+                         * in a preview and restores her host-room position */
     PE_HOOK_COUNT
 } PeHookId;
 
@@ -116,6 +118,8 @@ typedef struct PeHookFieldCamera {
     const void *player;  /* FieldActor *, or NULL */
     void *matrix;        /* output GteMatrix with Q12 rotation and integer translation */
     int distance;        /* output GTE projection distance in pixels */
+    int player_only;     /* preview pose for Aya, with other native models hidden */
+    int player_yaw;      /* output model yaw when player_only is set */
 } PeHookFieldCamera;
 
 typedef struct PeHookActorDraw {

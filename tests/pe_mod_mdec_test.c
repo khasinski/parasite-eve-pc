@@ -153,6 +153,25 @@ static void write_ppm(const char *dir, const char *game, const char *id, unsigne
     if (f) { fprintf(f, "P6\n320 240\n255\n"); fwrite(rgb, 1, 320 * 240 * 3, f); fclose(f); }
 }
 
+static void re2_ground_collision(void) {
+    /* One thin ground-floor wall and one wall on the floor above. */
+    const uint8_t sca[] = {
+        0,0,0,0, 3,0,0,0, 0,0,0,0, 0,0,0,0,
+        100,0, 56,255, 4,0, 144,1, 0,0, 0,0, 1,0,0,0,
+        20,0, 56,255, 4,0, 144,1, 0,0, 0,0, 2,0,0,0
+    };
+    PeRe2RoomCollision room;
+    assert(pe_imp_re2_collision(sca, sizeof sca - 1, &room) == -1 && !room.count);
+    assert(!pe_imp_re2_collision(sca, sizeof sca, &room) && room.count == 1);
+    assert(!pe_imp_re2_blocked(&room, 20, 0, 10));
+    assert(pe_imp_re2_blocked(&room, 95, 0, 10));
+    double x = 0, z = 0;
+    pe_imp_re2_slide(&room, &x, &z, 200, 80, 10);
+    assert(x >= 80 && x < 90 && z > 79.9 && z < 80.1);
+    pe_imp_re2_slide(&room, &x, &z, -40, 0, 10);
+    assert(x >= 40 && x < 50);
+}
+
 static void disc(const char *label, const char *cue, const char *game, const PeImpReader *reader) {
     char why[300] = "";
     PeImpScan sc;
@@ -244,6 +263,7 @@ int main(void) {
     pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);
     made_up();
     made_up_masks();
+    re2_ground_collision();
     static const struct { const char *env, *label, *game; const PeImpReader *reader; } k_games[] = {
         {"PE_TEST_RE1_DISC", "RE1", "re1", &g_re1_rooms_ps1},
         {"PE_TEST_RE2_DISC", "RE2", "re2", &g_re2_rooms_ps1},

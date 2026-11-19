@@ -6,8 +6,8 @@
  * RE picture is drawn behind everything (stage 1): uploaded to VRAM as a 15-bit image where PE
  * keeps its background pages (320,256)-(639,495), then two textured quads at the far end of the
  * ordering table. For RE2, the native actor renderer uses the selected RID camera, and
- * the foreground cutouts are linked at their PRI depths. Aya's PE position is anchored
- * to a point in the selected view; the PE room still drives movement.
+ * the foreground cutouts are linked at their PRI depths. With ground-floor SCA
+ * data, movement advances a separate position in RE2 room coordinates.
  * Desktop only for now. */
 #include <math.h>
 #include <stdio.h>
@@ -15,11 +15,16 @@
 #include <string.h>
 
 #include "pe_imp.h"
+#include "pe_imp_logic.h"
 #include "pe_imp_mdec.h"
 #include "pe_imp_room.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_game.h"
 #include "pe1/boot_display.h"
+#include "pe1/field_movement.h"
+#include "pe1/geom_state.h"
+#include "pe1/pad_state.h"
 #include "pe1/player_entity.h"
 #include "pe1/psyq_gpu.h"
 #include "pe1/render_packets.h"
@@ -39,6 +44,7 @@
 #define ROOM_BACKGROUND_OT 4095
 #define FIELD_UI_OT_LAST 7
 #define RE_UNITS_PER_PE_UNIT 3
+#define AYA_ROOM_RADIUS 280
 
 typedef struct RoomMaskPacket {
     RenderTexturedQuad quad[2];
@@ -64,9 +70,19 @@ static void free_masks(void) {
 static struct {
     GteMatrix view;
     double origin[3];   /* PE-space camera-to-preview-origin translation */
+    double eye[3];
+    double right_x, right_z;
     int distance;
     int anchored;
 } s_camera;
+
+static struct {
+    PeRe2RoomCollision collision;
+    char room[PE_IMP_ID_MAX];
+    double x, z;
+    int yaw;
+    int active;
+} s_walk;
 
 /* RE2 RID stores distance in the upper half of the projection word, in Q7 pixels.
  * Build a right/down/forward basis in the games' shared Y-down convention. */
@@ -81,6 +97,9 @@ static void prepare_camera(const PeImpRoomView *view) {
     double level = hypot(x, z), length = hypot(level, y);
     if (!distance || !length) return;
     double rx = level ? z / level : 1.0, rz = level ? -x / level : 0.0;
+    s_camera.right_x = rx;
+    s_camera.right_z = rz;
+    for (int i = 0; i < 3; i++) s_camera.eye[i] = view->eye[i];
     double basis[3][3] = {
         {rx, 0, rz},
         {y * rz / length, level / length, -y * rx / length},
@@ -107,12 +126,113 @@ static void prepare_camera(const PeImpRoomView *view) {
     s_camera.distance = distance;
 }
 
+static int load_collision(const PeImpImageSet *set, const PeImpAsset *room) {
+    const char *number = strchr(room->id, '/') + 1;
+    /* Images are shared by discs. Prefer the scenario of the catalog's
+     * selected image, then the other scenario if its room is all we have. */
+    int player = 0;
+    PeImpAsset *assets;
+    int count = pe_imp_catalog_assets(s_store, "re2", &assets);
+    char id[PE_IMP_ID_MAX];
+    snprintf(id, sizeof id, "re2:logic/%s-1", number);
+    for (int i = 0; i < count; i++) {
+        if (!strcmp(assets[i].id, id) && !strcmp(assets[i].sha256, room->sha256)) {
+            player = 1;
+            break;
+        }
+    }
+    free(assets);
+    for (int attempt = 0; attempt < 2; attempt++) {
+        PeImpRoomLogic *logic;
+        snprintf(id, sizeof id, "re2:logic/%s-%d", number, player ^ attempt);
+        if (pe_imp_catalog_roomlogic(s_store, id, &logic, NULL, 0)) continue;
+        uint32_t size = 0;
+        const uint8_t *data = pe_imp_logic_section(logic, PE_IMP_LOGIC_COLL, NULL, &size);
+        int rc = pe_imp_re2_collision(data, size, &s_walk.collision);
+        free(logic);
+        if (!rc) return 0;
+    }
+    return pe_imp_re2_image_collision(set, &s_walk.collision);
+}
+
+/* Prefer the ground under the middle of the view. Try nearby points on
+ * the floor to avoid spawning inside a desk, staircase, or railing. */
+static int spawn_on_floor(void) {
+    static const int offsets_y[] = {56, 72, 88, 40, 24, 4};
+    static const int offsets_x[] = {0, -24, 24, -48, 48, -80, 80};
+    const GteMatrix *m = &s_camera.view;
+    for (unsigned i = 0; i < sizeof offsets_y / sizeof *offsets_y; i++) {
+        double sy = (double)offsets_y[i] / s_camera.distance;
+        double ray_y = (m->m[2][1] + sy * m->m[1][1]) / 4096.0;
+        if (fabs(ray_y) < 0.0001) continue;
+        double depth = -s_camera.eye[1] / ray_y;
+        if (depth < 2200 || depth > 12000 * RE_UNITS_PER_PE_UNIT) continue;
+        for (unsigned j = 0; j < sizeof offsets_x / sizeof *offsets_x; j++) {
+            double sx = (double)offsets_x[j] / s_camera.distance;
+            double x = s_camera.eye[0] + depth * (m->m[2][0] + sy * m->m[1][0] + sx * m->m[0][0]) / 4096.0;
+            double z = s_camera.eye[2] + depth * (m->m[2][2] + sy * m->m[1][2] + sx * m->m[0][2]) / 4096.0;
+            if (pe_imp_re2_blocked(&s_walk.collision, x, z, AYA_ROOM_RADIUS)) continue;
+            s_walk.x = x;
+            s_walk.z = z;
+            s_walk.yaw = (int)lround(atan2(-s_camera.right_z, s_camera.right_x) * (2048.0 / acos(-1.0)));
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void prepare_walk(const PeImpImageSet *set, const PeImpAsset *room) {
+    if (s_camera.distance && s_walk.active && !strcmp(s_walk.room, room->id)) return;
+    s_walk.active = 0;
+    if (!s_camera.distance || load_collision(set, room) || !spawn_on_floor()) return;
+    snprintf(s_walk.room, sizeof s_walk.room, "%s", room->id);
+    s_walk.active = 1;
+}
+
+static int on_move(void *ctx, void *user) {
+    (void)user;
+    const FieldActor *aya = ctx;
+    if (!s_show || !s_walk.active || aya != g_PlayerEntity || !pe_free_field()) return 0;
+    int analog = (g_PadPackets[0].header & 0xF000) == 0x7000 &&
+                 (abs(g_PadPackets[0].leftX - 128) > 16 || abs(g_PadPackets[0].leftY - 128) > 16);
+    if (analog || (g_FieldPadBits & (FIELD_PAD_UP | FIELD_PAD_DOWN | FIELD_PAD_LEFT | FIELD_PAD_RIGHT))) {
+        /* Recover the native walk/run step in screen axes. The native pad
+         * mapping gives physical Up a positive local Z step. */
+        double x = ((double)aya->pos_x - aya->base_x) * RE_UNITS_PER_PE_UNIT / 65536.0;
+        double z = ((double)aya->pos_z - aya->base_z) * RE_UNITS_PER_PE_UNIT / 65536.0;
+        const GteMatrix *basis = &g_GeomScroll.state.position.cameraBasis;
+        double right = (basis->m[0][0] * x + basis->m[2][0] * z) / 4096.0;
+        double forward = (basis->m[0][2] * x + basis->m[2][2] * z) / 4096.0;
+        double dx = right * s_camera.right_x - forward * s_camera.right_z;
+        double dz = right * s_camera.right_z + forward * s_camera.right_x;
+        if (dx || dz) {
+            s_walk.yaw = (int)lround(atan2(-dx, -dz) * (2048.0 / acos(-1.0)));
+            pe_imp_re2_slide(&s_walk.collision, &s_walk.x, &s_walk.z, dx, dz, AYA_ROOM_RADIUS);
+        }
+    }
+    return 1;
+}
+
 static int on_camera(void *ctx, void *user) {
     (void)user;
     PeHookFieldCamera *camera = ctx;
     const FieldActor *aya = camera->player;
     if (!s_show || !s_camera.distance || !aya) return 0;
-    if (!s_camera.anchored) {
+    if (s_walk.active) {
+        /* Only the render changes position. The native player stays at the
+         * host location for its floor, contact checks, and save data. */
+        double delta[3] = {
+            (s_walk.x - s_camera.eye[0]) / RE_UNITS_PER_PE_UNIT - aya->pos_x / 65536.0,
+            -s_camera.eye[1] / RE_UNITS_PER_PE_UNIT - aya->pos_y / 65536.0,
+            (s_walk.z - s_camera.eye[2]) / RE_UNITS_PER_PE_UNIT - aya->pos_z / 65536.0
+        };
+        for (int row = 0; row < 3; row++) {
+            const s16 *m = s_camera.view.m[row];
+            s_camera.view.t[row] = (s32)lround((m[0] * delta[0] + m[1] * delta[1] + m[2] * delta[2]) / 4096.0);
+        }
+        camera->player_only = 1;
+        camera->player_yaw = s_walk.yaw;
+    } else if (!s_camera.anchored) {
         /* Keep the PE simulation at its original coordinates. Bake the PE
          * starting position into the view translation once per selection. */
         double pos[3] = {aya->pos_x / 65536.0, aya->pos_y / 65536.0, aya->pos_z / 65536.0};
@@ -268,6 +388,7 @@ static int upload(void) {
         PeImpRoomView view;
         if (pe_imp_room_view(set, (uint32_t)s_view, &view)) view.game = 0;
         prepare_camera(&view);
+        prepare_walk(set, &s_rooms[s_pick]);
         /* DrawSync above retired any packets for the previous view. */
         free_masks();
         int masks = build_masks(set, &view, &s_masks, &s_mask_count);
@@ -315,6 +436,7 @@ static int on_scene(void *ctx, void *user) {
     free(s_original_picture);
     s_original_picture = NULL;
     s_show = 0;
+    s_walk.active = 0;
     snprintf(s_status, sizeof s_status, "Off.");
     return 0;
 }
@@ -334,10 +456,16 @@ static void hide(void) {
     }
     free_masks();
     s_show = 0;
+    s_walk.active = 0;
     snprintf(s_status, sizeof s_status, "Off.");
 }
 static void refresh(void) { s_listed = 0; list_rooms(); }
-static void text_status(char *out, unsigned size) { snprintf(out, size, "%s", s_status); }
+static void text_status(char *out, unsigned size) {
+    if (s_walk.active)
+        snprintf(out, size, "%s Ground floor x %.0f, z %.0f.", s_status, s_walk.x, s_walk.z);
+    else
+        snprintf(out, size, "%s", s_status);
+}
 
 static int init(void) {
     if (pe_mod_path(s_store, sizeof s_store, "import/store")) return 1;
@@ -355,6 +483,7 @@ static int init(void) {
     pe_menu_register_info(0, "Status", "What's shown.", text_status);
     pe_hook_add(PE_HOOK_FIELD_BACKGROUND, on_background, NULL, PE_PRIORITY_LATE, MOD_ID);
     pe_hook_add(PE_HOOK_FIELD_CAMERA, on_camera, NULL, PE_PRIORITY_LATE, MOD_ID);
+    pe_hook_add(PE_HOOK_FIELD_MOVE, on_move, NULL, PE_PRIORITY_LATE, MOD_ID);
     pe_hook_add(PE_HOOK_SCENE_START, on_scene, NULL, PE_PRIORITY_LATE, MOD_ID);
     return 0;
 }
