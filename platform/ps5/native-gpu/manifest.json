@@ -4111,11 +4111,11 @@
     },
     {
       "path": "mods/host/pe_save.c",
-      "sha256": "1c7506a1e885a58da068da760f1c853bac92bdc2ad25ae28c45d60976104d31f"
+      "sha256": "eb3d320b18fc1f3124ac5363d0237333f3da4e666e2f4f4e755b6e608186f214"
     },
     {
       "path": "mods/host/pe_save.h",
-      "sha256": "7c9fe2d9646fec279b8d9461db010d7f8c51674c693cbe58193fecbed7647aa2"
+      "sha256": "dcfe63729aa46b8c2dc98c35c10cad452bbdae8fa021f76512e2e2d8355065fc"
     },
     {
       "path": "mods/host/pe_save_admission.h",
@@ -4475,7 +4475,7 @@
     },
     {
       "path": "mods/pe_stacks/pe_stacks.c",
-      "sha256": "e2445ae0d84a1c742378da1d7ffc6aef3c5c0a533729d14756d354041ab8a1c7"
+      "sha256": "8a758147a939d83e94e74cc98bf8e21c20bafee60c4b626434032375c91781a7"
     },
     {
       "path": "mods/pe_wardrobe/pe_pack_pe1_costumes.c",
