@@ -69,6 +69,8 @@ void RoomEffect_GrabResetPlayer(FieldActor *unused, RoomGrabStateTail *state);
 int RoomEffect_GrabRelease(PmSlotHeader *raw);
 void RoomEffect_GrabNop6(void);
 int RoomEffect_GroundSweepMark(int mode, void *data, intptr_t argument);
+int RoomEffect_GroundSweepController(int mode, void *data, intptr_t argument);
+int RoomEffect_RisingSprayController(int mode, void *data, intptr_t argument);
 int RoomEffect_OrbitTrailParticle(int mode, void *data, intptr_t argument);
 int RoomEffect_RisingSprayParticle(int mode, void *data, intptr_t argument);
 

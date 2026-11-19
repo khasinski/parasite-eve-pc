@@ -1206,6 +1206,9 @@ if(BUILD_TESTING)
     add_test(NAME original-m221-spark-ring-burst-load COMMAND test-original-actor-animation --m221-load)
     set_tests_properties(original-m221-spark-ring-burst-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "render")
+    add_test(NAME original-grab-attack-hits COMMAND test-original-actor-animation --grab-attack-hits)
+    set_tests_properties(original-grab-attack-hits PROPERTIES TIMEOUT 60
+        ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "render")
     add_test(NAME original-m269-grab-load COMMAND test-original-actor-animation --m269-load)
     set_tests_properties(original-m269-grab-load PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60
         ENVIRONMENT "PSYZ_HEADLESS=1;SDL_AUDIODRIVER=dummy" LABELS "render")
