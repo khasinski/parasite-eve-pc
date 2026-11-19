@@ -94,8 +94,10 @@ static void scan_files(const char *label, const char *cue, const char *game, con
         pe_imp_logic_section(l, PE_IMP_PICTURE_TIMS, &count, NULL);
         const uint8_t *d = pe_imp_logic_section(l, PE_IMP_PICTURE_DOCS, &dn, &db);
         for (uint32_t k = 0; d && k < dn; k++) {
-            uint32_t first = d[4 * k] | (uint32_t)d[4 * k + 1] << 8, pages = d[4 * k + 2] | (uint32_t)d[4 * k + 3] << 8;
-            assert(first == doc_pages && pages >= 1);                     /* back to back, each at least its background */
+            uint32_t first = d[8 * k] | (uint32_t)d[8 * k + 1] << 8, pages = d[8 * k + 2] | (uint32_t)d[8 * k + 3] << 8;
+            uint32_t item = d[8 * k + 4] | (uint32_t)d[8 * k + 5] << 8;
+            assert(first == doc_pages && pages >= 1 && db == 8 * dn);       /* back to back, each at least its background */
+            if (!strcmp(game, "re2")) assert(item == 0x68 + k);           /* Chris's diary first */
             doc_pages += pages, docs++;
         }
         assert(!d || doc_pages == count);

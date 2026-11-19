@@ -10,7 +10,7 @@
 #define PE_IMP_PICTURES_VERSION 1
 /* TIMS: the pictures. DOCS: the documents of a file collection (RE2, RE3): records = documents;
  * bytes: per document u16 first picture, u16 pictures (its 8-bit background, then its 4-bit text
- * pages). FILE: the whole source file as stored, when it holds more than pictures (RE3's
+ * pages), u16 its item number in the game's ItemTable (its name there; 0: not an item), u16 0. FILE: the whole source file as stored, when it holds more than pictures (RE3's
  * map: its room and label tables). GREY (empty): the pictures had no palette on the disc and carry
  * a placeholder of 16 greys (RE2's maps). */
 enum { PE_IMP_PICTURE_TIMS = PE_IMP_LOGIC_TAG('T', 'I', 'M', 'S'), PE_IMP_PICTURE_FILE = PE_IMP_LOGIC_TAG('F', 'I', 'L', 'E'),
@@ -31,9 +31,9 @@ int pe_imp_emit_tims(PeImpSink *sink, const char *id, const char *name, const ui
 int pe_imp_emit_tims_ex(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
                         uint32_t step, int keep_file, char *why, size_t n);
 /* The same for a file collection, with DOCS: each 8-bit TIM starts a document, the TIMs after it
- * (its text pages) belong to it. */
+ * (its text pages) belong to it. Document k is item first_item + k (0: they aren't items). */
 int pe_imp_emit_documents(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
-                          uint32_t step, char *why, size_t n);
+                          uint32_t step, uint32_t first_item, char *why, size_t n);
 /* 256 x 256 4-bit pages without a palette, as TIMs with a placeholder grey palette (GREY). */
 int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
                        char *why, size_t n);

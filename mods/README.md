@@ -937,8 +937,10 @@ a TIM decoder to RGBA for 4-, 8- and 15-bit TIMs): RE1 `ITEM_M2/FILE*.TIM` as `f
 RE2 `COMMON/DATA/FILES.TIM` as `files/all` (216 TIMs), RE3 `CD_DATA/ETC/FILEGU.PIX` as `files/all`
 (183). Each document is an 8-bit background followed by its 4-bit text pages (a page may follow the
 background directly, off the 2 KB grid), so the record also has a DOCS section: per document its
-first picture and its picture count (RE2 25 documents, in the game's file order, the 25 file names
-in biohazard-utils' `Bio2ConstantTable.cs`; RE3 31). RE1's file text, `ITEM_M2/FILEM*.PIX` (a 64-byte palette, then
+first picture, its picture count and its item number in the game's ItemTable (its name there).
+RE2: 25 documents, document k = item 0x68 + k (Chris's diary to the second hint file, the order of
+biohazard-utils' `Bio2ConstantTable.cs`, checked against the titles on the pages). RE3: 31, item 0
+(its files aren't items; their titles are only on their pages). RE1's file text, `ITEM_M2/FILEM*.PIX` (a 64-byte palette, then
 4-bit pixels 512 wide), is cut into 512 x 192 pages and kept as 4-bit TIMs with that palette
 (`files/filem_00` and so on; 92 pages in 46 files). The
 container's cap is now 16 MB. `mod-rdt` scans each disc's files and decodes every picture.

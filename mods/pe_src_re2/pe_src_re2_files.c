@@ -1,18 +1,19 @@
 /* Resident Evil 2 files: COMMON/DATA/FILES.TIM: the file pages and pictures (216 TIMs), kept as
  * stored in a Pictures record (pe_imp_pictures.h). Each of the 25 documents is an 8-bit background
- * then its 4-bit text pages, in the game's file order (Chris's diary first); DOCS lists them. Read only. */
+ * then its 4-bit text pages, in the game's file order: document k is item 0x68 + k (Chris's diary to
+ * the second hint file, as in biohazard-utils' item list), so DOCS names each by its item. Read only. */
 #include "pe_imp_pictures.h"
 #include "pe_src_re2.h"
 
 static int read_files(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
     (void)path;
-    return pe_imp_emit_documents(sink, "files/all", "Files", data, size, 2048, why, n);
+    return pe_imp_emit_documents(sink, "files/all", "Files", data, size, 2048, 0x68, why, n);
 }
 
 const PeImpReader g_re2_files_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re2", .platform = "ps1", .format = "files",
-    .version = 2, .produces = PE_IMP_PICTURES, .match = "COMMON/DATA/FILES.TIM",
+    .version = 3, .produces = PE_IMP_PICTURES, .match = "COMMON/DATA/FILES.TIM",
     .tags = "files", .read = read_files
 };
 
