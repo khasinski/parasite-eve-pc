@@ -850,10 +850,14 @@ names holds the samples; the header is rebuilt as a standard VAB with the same c
 take on the disc: about 123 MB for RE1 (Chris's and Jill's rooms are separate files), 22 MB for RE2,
 21 MB for RE3.
 
-**Room animations (RE2).** Each room's RBJ (RDT section 22: per animation a flags word, an EMR of
+**Room animations (RE1, RE2).** Each room's RBJ (RDT section 22: per animation a flags word, an EMR of
 key frames, an EDD of moves; layout from biohazard-utils `Rbj.cs`, `Edd1.cs`, `Emr.cs`) becomes an
 Animation `roomanim/<stage><room>-<n>` at 30 frames a second (`pe_src_re2/pe_src_re2_rbj.c`; 114 on
-disc 1, mostly 15-bone people). RE1's and RE3's room animations aren't read yet.
+disc 1, mostly 15-bone people). RE1 keeps one set per room file in sections 9 (EMR) and 10 (EDD),
+the same layout with plain s16 angles (6 bytes a bone): one Animation `roomanim/<stage><room>-<player>`
+per file (`pe_src_re1/pe_src_re1_anims.c`; 334 of 335, Chris's and Jill's separate). RE3's rooms have
+no animation section (biohazard-utils' RE3 table has none, and a room archive holds only sound banks
+and the room file); its room moves aren't in the room files.
 
 **Room objects (RE2).** The 3D props an RE2 room places (typewriters, boxes, floor items, swinging
 doors) become one-bone Models, `object/<stage><room>-<n>` (`pe_src_re2/pe_src_re2_objects.c`; 522 on

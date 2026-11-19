@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "e8b817b00087b69b81eff0f11c9b1a91078d4e3aac301ab85bb957d09b871c3c"
+      "sha256": "d600aaf59b8a08928efac274ae6f1a4457a3e363173a0e621f40d7ebca7054fc"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4723,11 +4723,11 @@
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.c",
-      "sha256": "7efedd4811ec204f14aa5123496c381655157edb8014492421470d7c5a09dd26"
+      "sha256": "4bc6e2806722d528bfcab36b2f937a2e06405d9bbba4a647c87bea30623dcad1"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.h",
-      "sha256": "825781c71a99a8718bd2ee8bc780e53d82fa1a320dcc06a9a32cfc246a5eccb6"
+      "sha256": "476f16fd1eaf38f8950e2625ad902f9744c8f9310b455f3ef8d14377adcededb"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1_emd.c",
@@ -4763,11 +4763,11 @@
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.c",
-      "sha256": "bee92e019406d2ab1cbb405a0bd13327e30558b31b05df26b36d6639ba99199d"
+      "sha256": "ed4f60bcd8c3cf90a3b18fcae80d0575554c64591a6c3e82724afa342a28d8d9"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.h",
-      "sha256": "fe61300b60798dcc4f0e8fbe11a7ac11f89da2629b4e021625e7a810b4a5c6a2"
+      "sha256": "db7cd2c7e9cf5913b666d149607e80134747df81efdf89d6cec94bfa35d9a2e5"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_pld.c",
@@ -4955,7 +4955,7 @@
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_objects.c",
-      "sha256": "9b50b5470c4b9f96776b5d16146868a742d13a443044af2877dfabbb27dda389"
+      "sha256": "5dfc9f62baf4f32b9ae68cd90f9a4e836d85e6cc994f8e5accfaf4e22946b0be"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1_objects.c",
@@ -4964,6 +4964,10 @@
     {
       "path": "mods/pe_src_re2/pe_src_re2_rbj.c",
       "sha256": "1201adff729f7e229f9588ee743f028431c57095203cbc90496453d90641f01d"
+    },
+    {
+      "path": "mods/pe_src_re1/pe_src_re1_anims.c",
+      "sha256": "fa1aea8f075bce2f3513af2f41b1ca30b958cc4513a4190392af0c5fd828d44d"
     }
   ]
 }
