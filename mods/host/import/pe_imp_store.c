@@ -20,6 +20,7 @@
 
 #include "pe_imp_internal.h"
 #include "pe_imp_logic.h"
+#include "pe_imp_pictures.h"
 
 #define MAX_ITEMS 4096
 #define MAX_ENTRIES 20000
@@ -60,6 +61,7 @@ static unsigned schema_version(uint32_t type) {
     case PE_IMP_DOORSCENE: return PE_IMP_DOORSCENE_VERSION;
     case PE_IMP_ITEMTABLE: return PE_IMP_ITEMTABLE_VERSION;
     case PE_IMP_MOVIE: return PE_IMP_MOVIE_VERSION;
+    case PE_IMP_PICTURES: return PE_IMP_PICTURES_VERSION;
     default: return 0;
     }
 }
@@ -76,13 +78,13 @@ static const char *schema_key(uint32_t types) {
 static unsigned schema_stamp(uint32_t types) {
     if (types == PE_IMP_MODEL || types == PE_IMP_SOUND || types == PE_IMP_SONG || types == PE_IMP_IMAGESET) return schema_version(types);
     unsigned stamp = 0;
-    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_MOVIE; type <<= 1)
+    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_PICTURES; type <<= 1)
         if (types & type) stamp = (stamp * 31 + type + schema_version(type)) & 0x7fffffff;
     return stamp;
 }
 
 static uint32_t stored_type(const char *name) {
-    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_MOVIE; type <<= 1)
+    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_PICTURES; type <<= 1)
         if (schema_version(type) && !strcmp(name, pe_imp_type_name(type))) return type;
     return 0;
 }
@@ -98,6 +100,7 @@ static int save_obj(const Item *it, const char *folder, char *why, size_t n) {
     case PE_IMP_DOORSCENE: return pe_imp_door_save(it->obj, folder, why, n);
     case PE_IMP_ITEMTABLE: return pe_imp_items_save(it->obj, folder, why, n);
     case PE_IMP_MOVIE: return pe_imp_movie_save(it->obj, folder, why, n);
+    case PE_IMP_PICTURES: return pe_imp_pictures_save(it->obj, folder, why, n);
     default: return -1;
     }
 }
@@ -619,4 +622,11 @@ int pe_imp_catalog_movie(const char *root, const char *id, PeImpMovie **out, cha
     *out = NULL;
     if (catalog_path(root, id, PE_IMP_MOVIE, path, why, n)) return -1;
     return pe_imp_movie_load(path, out, why, n);
+}
+
+int pe_imp_catalog_pictures(const char *root, const char *id, PeImpRoomLogic **out, char *why, size_t n) {
+    char path[PE_IMP_PATH_MAX];
+    *out = NULL;
+    if (catalog_path(root, id, PE_IMP_PICTURES, path, why, n)) return -1;
+    return pe_imp_pictures_load(path, out, why, n);
 }

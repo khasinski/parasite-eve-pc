@@ -1,0 +1,27 @@
+#ifndef PE_IMP_PICTURES_H
+#define PE_IMP_PICTURES_H
+/* Pictures (files, maps, menus): PS1 TIM images kept as stored, in the sectioned container
+ * (pe_imp_logic.h), stored as pictures.bin. Section TIMS: records = pictures; bytes: per picture u32
+ * size, the TIM, padded to 4. pe_imp_tim_decode turns one into RGBA. */
+#include <stdlib.h>
+
+#include "pe_imp_logic.h"
+
+#define PE_IMP_PICTURES_VERSION 1
+enum { PE_IMP_PICTURE_TIMS = PE_IMP_LOGIC_TAG('T', 'I', 'M', 'S') };
+
+/* The TIM's byte count if `tim` starts a valid one (palette and pixels inside `size`), else 0. */
+uint32_t pe_imp_tim_size(const uint8_t *tim, uint32_t size);
+/* RGBA (alpha 0 for colour 0, PS1's see-through), malloc'd; NULL for a bad or 24-bit TIM. */
+uint8_t *pe_imp_tim_decode(const uint8_t *tim, uint32_t size, unsigned *width, unsigned *height);
+/* Picture i of a Pictures record; NULL if out of range. */
+const uint8_t *pe_imp_picture_tim(const PeImpRoomLogic *pictures, uint32_t i, uint32_t *size);
+/* For readers: every TIM in `data` (one at 0 if step is 0; else at each multiple of `step` where one
+ * starts, after the previous one) as one Pictures record. 0 also when there are none. */
+int pe_imp_emit_tims(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                     uint32_t step, char *why, size_t n);
+int pe_imp_pictures_save(const PeImpRoomLogic *l, const char *folder, char *why, size_t n);
+int pe_imp_pictures_load(const char *folder, PeImpRoomLogic **l, char *why, size_t n);
+int pe_imp_catalog_pictures(const char *root, const char *asset_id, PeImpRoomLogic **l, char *why, size_t n);
+
+#endif

@@ -24,7 +24,7 @@
 #include "pe_imp.h"
 
 #define PE_IMP_ROOMLOGIC_VERSION 1
-#define PE_IMP_ROOMLOGIC_MAX (2u << 20)
+#define PE_IMP_ROOMLOGIC_MAX (16u << 20)        /* the sectioned container's cap (RE2's file pages are 5 MB) */
 
 #define PE_IMP_LOGIC_TAG(a, b, c, d) ((uint32_t)(a) | (uint32_t)(b) << 8 | (uint32_t)(c) << 16 | (uint32_t)(d) << 24)
 enum {

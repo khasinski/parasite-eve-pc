@@ -877,6 +877,15 @@ image; an `.iso` has none. A reader can ask for a file and its XA sectors togeth
 (`xa = PE_IMP_XA_BOTH`), and one file may now be up to 128 MB (RE2's longest movie is 92 MB).
 `mod-rdt` reads a short movie from each disc, saves and loads it, and decodes a frame.
 
+**Files (readable documents).** The file pictures are kept as stored in **Pictures** records
+(`host/import/pe_imp_pictures.c`, `pictures.bin`, the sectioned container; one or more PS1 TIMs, with
+a TIM decoder to RGBA for 4-, 8- and 15-bit TIMs): RE1 `ITEM_M2/FILE*.TIM` as `files/<name>` (19),
+RE2 `COMMON/DATA/FILES.TIM` as `files/all` (191 TIMs, one per 2 KB boundary), RE3
+`CD_DATA/ETC/FILEGU.PIX` as `files/all` (183). They are the file covers and pages; which pages make up
+which document isn't known yet, and RE1's `ITEM_M2/FILEM*` (not TIMs) and the maps (RE2 `MAPS.PIX`,
+RE3 `MAP_U.MAP`) aren't read yet. The container's cap is now 16 MB. `mod-rdt` scans each disc's
+files and decodes every picture.
+
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 

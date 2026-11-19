@@ -28,6 +28,7 @@ const char *pe_imp_type_name(uint32_t type) {
     case PE_IMP_DOORSCENE: return "DoorScene";
     case PE_IMP_ITEMTABLE: return "ItemTable";
     case PE_IMP_MOVIE: return "Movie";
+    case PE_IMP_PICTURES: return "Pictures";
     default: return "?";
     }
 }

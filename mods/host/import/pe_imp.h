@@ -33,7 +33,8 @@ enum {
     PE_IMP_ROOMLOGIC = 1u << 6,               /* pe_imp_logic.h */
     PE_IMP_DOORSCENE = 1u << 7,               /* pe_imp_logic.h */
     PE_IMP_ITEMTABLE = 1u << 8,               /* pe_imp_logic.h */
-    PE_IMP_MOVIE = 1u << 9                    /* below; the last type: the store walks types up to it */
+    PE_IMP_MOVIE = 1u << 9,                   /* below */
+    PE_IMP_PICTURES = 1u << 10                /* pe_imp_pictures.h; the last type: the store walks types up to it */
 };
 const char *pe_imp_type_name(uint32_t type);
 

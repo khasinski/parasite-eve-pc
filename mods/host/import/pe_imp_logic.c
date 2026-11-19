@@ -285,3 +285,10 @@ int pe_imp_item_name(const PeImpRoomLogic *l, uint32_t i, PeImpItemName *out) {
     out->name[sizeof out->name - 1] = 0;
     return 0;
 }
+
+int pe_imp_pictures_save(const PeImpRoomLogic *l, const char *folder, char *why, size_t n) {
+    return save_as(l, folder, "pictures.bin", why, n);
+}
+int pe_imp_pictures_load(const char *folder, PeImpRoomLogic **out, char *why, size_t n) {
+    return load_as(folder, "pictures.bin", out, why, n);
+}
