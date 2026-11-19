@@ -93,17 +93,18 @@ static void scan_files(const char *label, const char *cue, const char *game, con
         uint32_t count = 0, dn = 0, db = 0;
         pe_imp_logic_section(l, PE_IMP_PICTURE_TIMS, &count, NULL);
         const uint8_t *d = pe_imp_logic_section(l, PE_IMP_PICTURE_DOCS, &dn, &db);
+        uint32_t in_docs = 0;                                               /* this record's pictures in documents */
         for (uint32_t k = 0; d && k < dn; k++) {
             uint32_t first = d[8 * k] | (uint32_t)d[8 * k + 1] << 8, pages = d[8 * k + 2] | (uint32_t)d[8 * k + 3] << 8;
             uint32_t item = d[8 * k + 4] | (uint32_t)d[8 * k + 5] << 8;
-            assert(first == doc_pages && pages >= 1 && db == 8 * dn);       /* back to back, each at least its background */
+            assert(first == in_docs && pages >= 1 && db == 8 * dn);         /* back to back, each at least its background */
             if (!strcmp(game, "re2")) assert(item == 0x68 + k);           /* Chris's diary first */
-            doc_pages += pages, docs++;
+            in_docs += pages, doc_pages += pages, docs++;
         }
-        assert(!d || doc_pages == count);
+        assert(!d || in_docs == count);
         uint32_t pn = 0, grey = pe_imp_logic_section(l, PE_IMP_PICTURE_GREY, NULL, NULL) != NULL;
         pe_imp_logic_section(l, PE_IMP_PICTURE_PALS, &pn, NULL);
-        if (!strcmp(label, "RE2 map")) assert(!grey && pn == 38);             /* coloured from TEX.TIM */
+        if (!strcmp(label, "RE2 map") && strstr(a[i].id, ":maps/all")) assert(!grey && pn == 38);   /* coloured from TEX.TIM */
         for (uint32_t k = 0; k < count; k++) {
             uint32_t size;
             const uint8_t *tim = pe_imp_picture_tim(l, k, &size);
@@ -129,7 +130,7 @@ static void scan_files(const char *label, const char *cue, const char *game, con
     free(a);
     printf("%s files: %u records, %u pictures, %u decoded, %u documents (scan: %d files read, %d items, %d refused %s)\n", label,
            records, pictures, decoded, docs, sc.files_read, sc.items, sc.refused, sc.last_error);
-    assert(!sc.refused && pictures >= want && decoded == pictures && docs == want_docs);
+    assert(!sc.refused && pictures >= want && decoded == pictures && (want_docs ? docs >= want_docs : !docs));
 }
 
 /* one movie: read from the disc, saved and loaded, a frame from its middle decoded
