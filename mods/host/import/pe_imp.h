@@ -66,7 +66,12 @@ typedef struct {
 typedef struct {
     PeImpFace *tri, *quad;
     uint32_t tris, quads;
+    /* Optional skin (model.bin v2): per face corner, the bone it follows and a second bone it
+     * follows half way (PE_IMP_NO_BONE: none). A skinned part's vertices are in the rest pose's
+     * model frame (each bone at `pos`, no rotation), not in its bone's frame. NULL: rigid. */
+    uint8_t (*tri_skin)[4][2], (*quad_skin)[4][2];
 } PeImpPart;
+#define PE_IMP_NO_BONE 0xFF
 typedef struct {
     uint32_t bones;
     int16_t *parent;                          /* -1: root */
@@ -78,7 +83,8 @@ typedef struct {
     uint32_t w, h;
     uint8_t *image;                           /* w * h palette indexes */
 } PeImpModel;
-#define PE_IMP_MODEL_VERSION 1
+#define PE_IMP_MODEL_VERSION 1                /* the store's stamp: v1 files and v2 (skinned) both load */
+#define PE_IMP_MODEL_SKIN_VERSION 2           /* model.bin of a model with skinned parts */
 #define PE_IMP_MODEL_BONES_MAX 256
 #define PE_IMP_MODEL_PARTS_MAX 256
 #define PE_IMP_MODEL_FACES_MAX 65536
@@ -86,6 +92,30 @@ void pe_imp_model_free(PeImpModel *m);
 int pe_imp_model_check(const PeImpModel *m, char *why, size_t n);
 int pe_imp_model_save(const PeImpModel *m, const char *folder, char *why, size_t n);
 int pe_imp_model_load(const char *folder, PeImpModel *m, char *why, size_t n);
+
+/* ---- Animation: a model's moves ----
+ * Frames at `fps`, in-between steps already expanded. Per frame: the root's offset s16[3] (model
+ * frame, the source's units, y down), then s16[3] angles per bone (4096 = a full turn, -2048..2047;
+ * rotation X * Y * Z as Resident Evil applies it, parent first), and one event word: the sound the
+ * source plays on that frame (PE_IMP_EVENT_SOUND: 1-255, 0 none; a number in the model's sound
+ * bank) and PE_IMP_EVENT_HIT on the frames a blow can land. */
+#define PE_IMP_ANIMATION_VERSION 1
+#define PE_IMP_ANIM_MOVES_MAX 256
+#define PE_IMP_ANIM_FRAMES_MAX 4096           /* per move */
+enum { PE_IMP_EVENT_SOUND = 0x00ff, PE_IMP_EVENT_HIT = 0x0100 };
+typedef struct {
+    uint32_t frames;
+    int16_t *data;                            /* frames * (3 + 3 * bones) */
+    uint16_t *event;                          /* frames */
+} PeImpMove;
+typedef struct {
+    uint32_t bones, fps, moves;
+    PeImpMove *move;                          /* an empty move (0 frames) keeps the source's numbering */
+} PeImpAnimation;
+void pe_imp_animation_free(PeImpAnimation *a);
+int pe_imp_animation_check(const PeImpAnimation *a, char *why, size_t n);
+int pe_imp_animation_save(const PeImpAnimation *a, const char *folder, char *why, size_t n);
+int pe_imp_animation_load(const char *folder, PeImpAnimation *a, char *why, size_t n);
 
 /* Sound is a short mono PCM clip. The allocation owns its PCM frames. */
 #define PE_IMP_SOUND_VERSION 1
@@ -211,6 +241,7 @@ typedef struct {
 
 /* ---- builder targets (registered by each module's mod: the Wardrobe builds skins) ---- */
 struct PeImpPe;
+struct PeImpAsset;
 typedef struct {
     const char *store;                        /* the store's root */
     struct PeImpPe *pe;                       /* Aya's data and the rooms */
@@ -226,7 +257,16 @@ typedef struct {
     /* Build one asset into `folder` (created, empty or holding an older build). */
     int (*build)(const PeImpBuild *ctx, const char *asset_id, const char *folder, char *log, size_t logn,
                  char *why, size_t n);
+    /* Optional (NULL: every model; the Wardrobe's packs, pe_imp_pack_character): */
+    int (*accepts)(const char *asset_id);   /* 1: this target builds the asset */
+    /* Make the asset's folder (filling `folder`) for a build by `builder`: 0, or -1 with a reason */
+    int (*place)(const struct PeImpAsset *a, const char *builder, char *folder, size_t fn, char *why, size_t n);
+    /* 1 if its place already holds a finished build of this source file by `builder` */
+    int (*current)(const struct PeImpAsset *a, const char *builder);
 } PeImpTarget;
+/* Where a target builds an asset: its place, else the Wardrobe's pack folder. */
+int pe_imp_target_place(const PeImpTarget *t, const char *packs, const struct PeImpAsset *a, const char *builder,
+                        char *folder, size_t fn, char *why, size_t n);
 int pe_imp_add_target(const PeImpTarget *t);
 int pe_imp_targets(void);
 const PeImpTarget *pe_imp_target(int i);
@@ -244,11 +284,12 @@ typedef struct {
 int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan *out);
 /* An asset's model from its first copy (PS1 first), loaded from the store. */
 int pe_imp_catalog_model(const char *root, const char *asset_id, PeImpModel *m, char *why, size_t n);
+int pe_imp_catalog_animation(const char *root, const char *asset_id, PeImpAnimation *a, char *why, size_t n);
 int pe_imp_catalog_sound(const char *root, const char *asset_id, PeImpSound **sound, char *why, size_t n);
 int pe_imp_catalog_song(const char *root, const char *asset_id, PeImpSong **song, char *why, size_t n);
 int pe_imp_catalog_imageset(const char *root, const char *asset_id, PeImpImageSet **set, char *why, size_t n);
 /* A game's catalog entries, sorted by ID; *out is malloc'd (free it). */
-typedef struct {
+typedef struct PeImpAsset {
     char id[PE_IMP_ID_MAX], name[PE_IMP_NAME_MAX], type[16], tags[64];
     char sha256[65], platform[16], path[128];               /* its first copy */
 } PeImpAsset;

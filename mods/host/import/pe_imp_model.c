@@ -7,6 +7,9 @@
  *   parts x (tris u32, quads u32)
  *   per part, its triangles then its quads, each: v s16[k][3], n s16[k][3], uv u8[k][2], clut u16, page u16
  *   pal_rows x 256 u16, then w * h u8
+ * Version 2 (a model with skinned parts) adds, after the image: parts x u8 (1: skinned), then per
+ * skinned part, per triangle then quad corner, u8 bone and u8 second bone (PE_IMP_NO_BONE: none).
+ * A model without skinned parts is still written as version 1.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +25,8 @@ static int fail(char *why, size_t n, const char *fmt, long a, long b) {
 void pe_imp_model_free(PeImpModel *m) {
     if (!m) return;
     if (m->part)
-        for (uint32_t p = 0; p < m->parts; p++) free(m->part[p].tri), free(m->part[p].quad);
+        for (uint32_t p = 0; p < m->parts; p++)
+            free(m->part[p].tri), free(m->part[p].quad), free(m->part[p].tri_skin), free(m->part[p].quad_skin);
     free(m->parent), free(m->rel), free(m->pos), free(m->part), free(m->pal), free(m->image);
     memset(m, 0, sizeof *m);
 }
@@ -46,6 +50,14 @@ int pe_imp_model_check(const PeImpModel *m, char *why, size_t n) {
         const PeImpPart *pt = &m->part[p];
         if ((pt->tris && !pt->tri) || (pt->quads && !pt->quad)) return fail(why, n, "model: part %ld has no faces", (long)p, 0);
         faces += pt->tris + pt->quads;
+        if ((pt->tri_skin || pt->quad_skin) && ((pt->tris && !pt->tri_skin) || (pt->quads && !pt->quad_skin)))
+            return fail(why, n, "model: part %ld is half skinned", (long)p, 0);
+        for (uint32_t i = 0; i < pt->tris + pt->quads && (pt->tri_skin || pt->quad_skin); i++) {
+            const uint8_t (*c)[2] = i < pt->tris ? pt->tri_skin[i] : pt->quad_skin[i - pt->tris];
+            for (int k = 0; k < (i < pt->tris ? 3 : 4); k++)
+                if (c[k][0] >= m->bones || (c[k][1] != PE_IMP_NO_BONE && c[k][1] >= m->bones))
+                    return fail(why, n, "model: part %ld follows bone %ld", (long)p, c[k][0] >= m->bones ? c[k][0] : c[k][1]);
+        }
         if (faces > PE_IMP_MODEL_FACES_MAX) return fail(why, n, "model: more than %ld faces", PE_IMP_MODEL_FACES_MAX, 0);
     }
     if (!m->w || !m->h || m->w > 1024 || m->h > 1024 || !m->image) return fail(why, n, "model: image %ldx%ld", (long)m->w, (long)m->h);
@@ -66,14 +78,20 @@ static void face_out(Out *o, const PeImpFace *f, int k) {
     w16(o, f->clut), w16(o, f->page);
 }
 
+static int skinned(const PeImpModel *m) {
+    for (uint32_t p = 0; p < m->parts; p++) if (m->part[p].tri_skin || m->part[p].quad_skin) return 1;
+    return 0;
+}
+
 int pe_imp_model_save(const PeImpModel *m, const char *folder, char *why, size_t n) {
     if (pe_imp_model_check(m, why, n)) return -1;
+    const int version = skinned(m) ? PE_IMP_MODEL_SKIN_VERSION : PE_IMP_MODEL_VERSION;
     char path[PE_IMP_PATH_MAX];
     snprintf(path, sizeof path, "%s/model.bin", folder);
     Out o = {fopen(path, "wb"), 0};
     if (!o.f) return fail(why, n, "can't write the store (model.bin)", 0, 0);
     fwrite("PEIM", 1, 4, o.f);
-    w32(&o, PE_IMP_MODEL_VERSION), w32(&o, m->bones), w32(&o, m->parts), w32(&o, m->pal_rows), w32(&o, m->w), w32(&o, m->h);
+    w32(&o, (uint32_t)version), w32(&o, m->bones), w32(&o, m->parts), w32(&o, m->pal_rows), w32(&o, m->w), w32(&o, m->h);
     for (uint32_t i = 0; i < m->bones; i++) w16(&o, (uint16_t)m->parent[i]);
     for (uint32_t i = 0; i < m->bones; i++) for (int c = 0; c < 3; c++) w32(&o, (uint32_t)m->rel[i][c]);
     for (uint32_t i = 0; i < m->bones; i++) for (int c = 0; c < 3; c++) w32(&o, (uint32_t)m->pos[i][c]);
@@ -84,6 +102,15 @@ int pe_imp_model_save(const PeImpModel *m, const char *folder, char *why, size_t
     }
     for (uint32_t r = 0; r < m->pal_rows; r++) for (int c = 0; c < 256; c++) w16(&o, m->pal[r][c]);
     o.bad |= fwrite(m->image, 1, (size_t)m->w * m->h, o.f) != (size_t)m->w * m->h;
+    if (version == PE_IMP_MODEL_SKIN_VERSION) {
+        for (uint32_t p = 0; p < m->parts; p++) w8(&o, m->part[p].tri_skin || m->part[p].quad_skin);
+        for (uint32_t p = 0; p < m->parts; p++) {
+            const PeImpPart *pt = &m->part[p];
+            if (!pt->tri_skin && !pt->quad_skin) continue;
+            for (uint32_t i = 0; i < pt->tris; i++) for (int k = 0; k < 3; k++) w8(&o, pt->tri_skin[i][k][0]), w8(&o, pt->tri_skin[i][k][1]);
+            for (uint32_t i = 0; i < pt->quads; i++) for (int k = 0; k < 4; k++) w8(&o, pt->quad_skin[i][k][0]), w8(&o, pt->quad_skin[i][k][1]);
+        }
+    }
     o.bad |= fclose(o.f) != 0;
     if (o.bad) return fail(why, n, "can't write the store (model.bin)", 0, 0);
 
@@ -94,7 +121,7 @@ int pe_imp_model_save(const PeImpModel *m, const char *folder, char *why, size_t
     for (uint32_t p = 0; p < m->parts; p++) tris += m->part[p].tris, quads += m->part[p].quads;
     fprintf(f, "{\"type\": \"Model\", \"version\": %d, \"bones\": %u, \"parts\": %u, \"triangles\": %u, "
                "\"quads\": %u, \"palettes\": %u, \"image\": [%u, %u], \"file\": \"model.bin\"}\n",
-            PE_IMP_MODEL_VERSION, m->bones, m->parts, tris, quads, m->pal_rows, m->w, m->h);
+            version, m->bones, m->parts, tris, quads, m->pal_rows, m->w, m->h);
     return fclose(f) ? fail(why, n, "can't write the store (model.json)", 0, 0) : 0;
 }
 
@@ -129,7 +156,11 @@ int pe_imp_model_load(const char *folder, PeImpModel *m, char *why, size_t n) {
     if (!buf || got != (size_t)size) { free(buf); return fail(why, n, "model.bin: read error", 0, 0); }
     In in = {buf + 4, buf + size, 0};
     int rc = -1;
-    if (memcmp(buf, "PEIM", 4) || r32(&in) != PE_IMP_MODEL_VERSION) { fail(why, n, "model.bin: not a Model v%ld", PE_IMP_MODEL_VERSION, 0); goto out; }
+    uint32_t version = memcmp(buf, "PEIM", 4) ? 0 : r32(&in);
+    if (version != PE_IMP_MODEL_VERSION && version != PE_IMP_MODEL_SKIN_VERSION) {
+        fail(why, n, "model.bin: not a Model v%ld or v%ld", PE_IMP_MODEL_VERSION, PE_IMP_MODEL_SKIN_VERSION);
+        goto out;
+    }
     m->bones = r32(&in), m->parts = r32(&in), m->pal_rows = r32(&in), m->w = r32(&in), m->h = r32(&in);
     if (!m->bones || m->bones > PE_IMP_MODEL_BONES_MAX || m->parts > PE_IMP_MODEL_PARTS_MAX ||
         m->pal_rows > 256 || m->w > 1024 || m->h > 1024 || !left(&in, (size_t)m->bones * 26 + (size_t)m->parts * 8)) {
@@ -166,6 +197,26 @@ int pe_imp_model_load(const char *folder, PeImpModel *m, char *why, size_t n) {
     for (uint32_t r = 0; r < m->pal_rows; r++) for (int c = 0; c < 256; c++) m->pal[r][c] = (uint16_t)r16(&in);
     memcpy(m->image, in.p, (size_t)m->w * m->h);
     in.p += (size_t)m->w * m->h;
+    if (version == PE_IMP_MODEL_SKIN_VERSION) {
+        if (!left(&in, m->parts)) { fail(why, n, "model.bin: no skin flags", 0, 0); goto out; }
+        const uint8_t *flag = in.p;
+        in.p += m->parts;
+        for (uint32_t p = 0; p < m->parts; p++) {
+            PeImpPart *pt = &m->part[p];
+            if (flag[p] > 1) { fail(why, n, "model.bin: part %ld's skin flag", (long)p, 0); goto out; }
+            if (!flag[p]) continue;
+            if (!left(&in, (size_t)pt->tris * 6 + (size_t)pt->quads * 8)) { fail(why, n, "model.bin: part %ld's skin is cut short", (long)p, 0); goto out; }
+            pt->tri_skin = calloc(pt->tris ? pt->tris : 1, sizeof *pt->tri_skin);
+            pt->quad_skin = calloc(pt->quads ? pt->quads : 1, sizeof *pt->quad_skin);
+            if (!pt->tri_skin || !pt->quad_skin) { fail(why, n, "out of memory", 0, 0); goto out; }
+            for (uint32_t i = 0; i < pt->tris; i++) {
+                for (int k = 0; k < 3; k++) pt->tri_skin[i][k][0] = (uint8_t)r8(&in), pt->tri_skin[i][k][1] = (uint8_t)r8(&in);
+                pt->tri_skin[i][3][1] = PE_IMP_NO_BONE;
+            }
+            for (uint32_t i = 0; i < pt->quads; i++)
+                for (int k = 0; k < 4; k++) pt->quad_skin[i][k][0] = (uint8_t)r8(&in), pt->quad_skin[i][k][1] = (uint8_t)r8(&in);
+        }
+    }
     if (in.bad || in.p != in.end) { fail(why, n, "model.bin: wrong length", 0, 0); goto out; }
     rc = pe_imp_model_check(m, why, n);
 out:

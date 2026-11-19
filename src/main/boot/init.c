@@ -714,6 +714,31 @@ static int Boot_ExportLightingModel(const char *path) {
     return success;
 }
 
+static int Boot_CaptureNow(const char *path) {
+    static _Alignas(8) u16 vram[1024 * 512];
+    char name[1040];
+    RECT all = {0, 0, 1024, 512};
+    int width = 0, height = 0, ok;
+    unsigned char *pixels;
+    FILE *out;
+
+    StoreImage(&all, vram);
+    DrawSync(0);
+    if (snprintf(name, sizeof name, "%s.vram", path) >= (int)sizeof name || !(out = Disc_Utf8File(name, "wb")))
+        return 0;
+    ok = fwrite(vram, 1, sizeof vram, out) == sizeof vram;
+    if (fclose(out)) ok = 0;
+    pixels = Psyz_VideoAllocRenderedFrame(&width, &height);
+    if (!ok || !pixels || width <= 0 || height <= 0) { free(pixels); return 0; }
+    snprintf(name, sizeof name, "%s.ppm", path);
+    if (!(out = Disc_Utf8File(name, "wb"))) { free(pixels); return 0; }
+    ok = fprintf(out, "P6\n%d %d\n255\n", width, height) > 0 &&
+         fwrite(pixels, 1, (size_t)width * height * 3, out) == (size_t)width * height * 3;
+    free(pixels);
+    if (fclose(out)) ok = 0;
+    return ok;
+}
+
 static void Boot_ReadHostControlCommand(void) {
     char line[1024];
     char *end = NULL;
@@ -767,6 +792,16 @@ static void Boot_ReadHostControlCommand(void) {
     if (!strcmp(line, "quit")) {
         BOOT_WRITE_PROFILE();
         _Exit(EXIT_SUCCESS);
+    }
+    if (!strncmp(line, "capture ", 8)) {
+        /* capture PATH: the displayed frame to PATH.ppm and VRAM to PATH.vram, now. */
+        if (!Boot_CaptureNow(line + 8)) {
+            fprintf(stderr, "Capture failed\n");
+            fflush(stderr);
+            _Exit(2);
+        }
+        g_BootHostControlAt = g_BootHostVBlankCount;
+        return;
     }
     if (!strncmp(line,"backgrounds ",12)) {
         const char *backend=SDL_GetEnvironmentVariable(SDL_GetEnvironment(),"PSYZ_HEADLESS");

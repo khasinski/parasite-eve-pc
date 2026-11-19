@@ -74,6 +74,12 @@ typedef struct {
     int (*play_song)(PeAssetHandle handle);
     void (*stop_song)(void);
     int (*song_playing)(void);
+    /* Effects (added after song_playing: check struct_size). play_effect plays mono 16-bit PCM
+     * (copied, 8000-48000 Hz) on one of a few voices of its own, so several play at once beside the
+     * preview and the song (footsteps and blows in a fight); when all are busy the one that started
+     * first is cut off. volume 0-1, times the game's volume. 1 playing, -1 unavailable. Main thread. */
+    int (*play_effect)(const int16_t *pcm, uint32_t frames, uint32_t rate, float volume);
+    void (*stop_effects)(void);
 } PeAudioApi;
 
 /* Economy armor effects, in the game's unused armor effect numbers 17-20. */

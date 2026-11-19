@@ -291,7 +291,48 @@ static const PeAssetsApi k_assets = {
     sizeof(PeAssetsApi), list_sounds, acquire_sound, status, release,
     list_songs, acquire_song, song_view
 };
-static const PeAudioApi k_audio = {sizeof(PeAudioApi), preview_clip, play_song, stop_song, song_playing};
+/* ---- effects: a few voices, each its own stream on the default device (SDL mixes them) ---- */
+#define VOICES 6
+static struct { SDL_AudioStream *stream; uint32_t rate, started; } s_voice[VOICES];
+static uint32_t s_effects;
+
+static int play_effect(const int16_t *pcm, uint32_t frames, uint32_t rate, float volume)
+{
+    if (!pcm || !frames || rate < 8000 || rate > 48000 || frames > rate * 10) return -1;
+    int v = 0;
+    for (int i = 0; i < VOICES; ++i) {               /* a free voice, else the one started first */
+        if (!s_voice[i].stream || !SDL_GetAudioStreamQueued(s_voice[i].stream)) { v = i; break; }
+        if (s_voice[i].started < s_voice[v].started) v = i;
+    }
+    if (s_voice[v].stream && s_voice[v].rate != rate) {
+        SDL_DestroyAudioStream(s_voice[v].stream);
+        s_voice[v].stream = NULL;
+    }
+    if (!s_voice[v].stream) {
+        SDL_AudioSpec spec = {.format = SDL_AUDIO_S16, .channels = 1, .freq = (int)rate};
+        if (!(s_voice[v].stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL))) return -1;
+        s_voice[v].rate = rate;
+    }
+    if (volume < 0) volume = 0;
+    if (volume > 1) volume = 1;
+    s_voice[v].started = ++s_effects;
+    if (!SDL_ClearAudioStream(s_voice[v].stream) ||
+        !SDL_SetAudioStreamGain(s_voice[v].stream, volume * (float)Psyz_AudioGetOutputVolume() / 100.0f) ||
+        !SDL_PutAudioStreamData(s_voice[v].stream, pcm, (int)(frames * sizeof *pcm)) ||
+        !SDL_FlushAudioStream(s_voice[v].stream) || !SDL_ResumeAudioStreamDevice(s_voice[v].stream)) return -1;
+    return 1;
+}
+
+static void stop_effects(void)
+{
+    for (int i = 0; i < VOICES; ++i) {
+        if (s_voice[i].stream && SDL_WasInit(SDL_INIT_AUDIO)) SDL_DestroyAudioStream(s_voice[i].stream);
+        s_voice[i].stream = NULL;
+    }
+}
+
+static const PeAudioApi k_audio = {sizeof(PeAudioApi), preview_clip, play_song, stop_song, song_playing,
+                                   play_effect, stop_effects};
 
 static int init(void)
 {
@@ -303,6 +344,7 @@ static int init(void)
 static void shutdown(void)
 {
     stop_song();
+    stop_effects();
     /* SDL also destroys all audio streams when the audio subsystem quits. */
     if (s_preview && SDL_WasInit(SDL_INIT_AUDIO))
         SDL_DestroyAudioStream(s_preview);
