@@ -73,19 +73,21 @@ def record_pixels(record: bytes) -> list[int]:
     return [v for b in record[8:80] for v in (b & 15, b >> 4)]
 
 
-def to_pack(raw: bytes, code_of: dict[str, int]) -> bytes:
-    """The patched game's bytes with each letter on the pack's code for it; commands as they are."""
+def to_pack(raw: bytes, code_of: dict[str, int], letters: dict[int, str] = ITALIAN) -> bytes:
+    """The patched game's bytes with each letter on the pack's code for it; commands as they are.
+    `letters`: the patch's own letters from 0x4D."""
     out = bytearray()
     for c in validation.commands(raw):
         if len(c) == 1 and c[0] < 0xF1:
-            char = ITALIAN.get(c[0]) if c[0] >= 0x4D else gt.CHARS.get(c[0])
+            char = letters.get(c[0]) if c[0] >= 0x4D else gt.CHARS.get(c[0])
             out.append(code_of.get(char, c[0]))
         else:
             out += c
     return bytes(out)
 
 
-def compare_text(original, patched, entries: dict[int, bytes], code_of: dict[str, int]) -> tuple[int, dict]:
+def compare_text(original, patched, entries: dict[int, bytes], code_of: dict[str, int],
+                 letters: dict[int, str] = ITALIAN) -> tuple[int, dict]:
     """(rows that match, {key: how it differs}) over the dialogue, the menu rows and battle lines."""
     disc = {"SLUS_006.62": "1", "SLUS_006.68": "2"}[original.exe_name]
     same, differ = 0, {}
@@ -100,7 +102,7 @@ def compare_text(original, patched, entries: dict[int, bytes], code_of: dict[str
         if got is None:
             differ[key] = "keeps the English"
             return
-        want = to_pack(patchimport.clean_page(ps1, english), code_of)
+        want = to_pack(patchimport.clean_page(ps1, english), code_of, letters)
         got = got[:-1] if got[-1:] == b"\xf9" else got          # the box's end, kept apart on the disc
         if got == want:
             same += 1
