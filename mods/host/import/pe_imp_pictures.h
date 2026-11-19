@@ -15,7 +15,9 @@
  * a placeholder of 16 greys (RE2's maps). */
 enum { PE_IMP_PICTURE_TIMS = PE_IMP_LOGIC_TAG('T', 'I', 'M', 'S'), PE_IMP_PICTURE_FILE = PE_IMP_LOGIC_TAG('F', 'I', 'L', 'E'),
        PE_IMP_PICTURE_GREY = PE_IMP_LOGIC_TAG('G', 'R', 'E', 'Y'),
-       PE_IMP_PICTURE_DOCS = PE_IMP_LOGIC_TAG('D', 'O', 'C', 'S') };
+       PE_IMP_PICTURE_DOCS = PE_IMP_LOGIC_TAG('D', 'O', 'C', 'S'), PE_IMP_PICTURE_PALS = PE_IMP_LOGIC_TAG('P', 'A', 'L', 'S') };
+/* PALS: other palettes the pictures can be shown with (RE2's map room states): records = palettes;
+ * bytes: 16 PS1 colours (u16) each. */
 
 /* The TIM's byte count if `tim` starts a valid one (palette and pixels inside `size`), else 0. */
 uint32_t pe_imp_tim_size(const uint8_t *tim, uint32_t size);
@@ -37,6 +39,10 @@ int pe_imp_emit_documents(PeImpSink *sink, const char *id, const char *name, con
 /* 256 x 256 4-bit pages without a palette, as TIMs with a placeholder grey palette (GREY). */
 int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
                        char *why, size_t n);
+/* The same with a real palette: `palette` (16 PS1 colours, 32 bytes) for every page, and `extra`
+ * palettes of 16 kept as PALS (none if extra_count is 0). No GREY. */
+int pe_imp_emit_pages4_palette(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                               const uint8_t palette[32], const uint8_t *extra, uint32_t extra_count, char *why, size_t n);
 /* A palette of palette_bytes (first 16 colours used), then 4-bit pixels `width` wide, cut into pages
  * page_h lines tall, each a 4-bit TIM with that palette (RE1's file text pages). */
 int pe_imp_emit_pix4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,

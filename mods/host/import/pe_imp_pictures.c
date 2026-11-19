@@ -113,8 +113,8 @@ int pe_imp_emit_pix4(PeImpSink *sink, const char *id, const char *name, const ui
 
 /* 256 x 256 pages at 4 bits a pixel without a palette (RE2's maps): each wrapped as a 4-bit TIM with
  * a placeholder palette of 16 greys (PE_IMP_PICTURE_GREY marks the record) */
-int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
-                       char *why, size_t n) {
+static int emit_pages4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                       const uint8_t *palette, const uint8_t *extra, uint32_t extra_count, char *why, size_t n) {
     enum { PAGE = 256 * 256 / 2, TIM = 8 + 12 + 32 + 12 + PAGE };
     uint32_t pages = size / PAGE;
     if (!pages) return 0;
@@ -129,7 +129,7 @@ int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const 
         memset(c, 0, 12), c[0] = 44, c[8] = 16, c[10] = 1;
         for (int k = 0; k < 16; k++) {
             unsigned g = k ? (unsigned)(k * 2 + 1) : 0;   /* 0 stays see-through, as on the PS1 */
-            unsigned v = g | g << 5 | g << 10;
+            unsigned v = palette ? (unsigned)(palette[2 * k] | palette[2 * k + 1] << 8) : g | g << 5 | g << 10;
             c[12 + 2 * k] = (uint8_t)v, c[13 + 2 * k] = (uint8_t)(v >> 8);
         }
         uint8_t *img = c + 44;                             /* image block: 64 x 256 16-bit units */
@@ -141,7 +141,8 @@ int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const 
     }
     PeImpLogicBuilder *b = pe_imp_logic_begin(0, 0, 0, 0);
     pe_imp_logic_add(b, PE_IMP_PICTURE_TIMS, pages, packed, pages * (4 + TIM));
-    pe_imp_logic_add(b, PE_IMP_PICTURE_GREY, 0, NULL, 0);
+    if (!palette) pe_imp_logic_add(b, PE_IMP_PICTURE_GREY, 0, NULL, 0);
+    if (extra_count) pe_imp_logic_add(b, PE_IMP_PICTURE_PALS, extra_count, extra, 32 * extra_count);
     free(packed);
     PeImpRoomLogic *l = pe_imp_logic_finish(b);
     if (!l) { if (why && n) snprintf(why, n, "%s: too large", id); return -1; }
@@ -150,6 +151,16 @@ int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const 
         return -1;
     }
     return 0;
+}
+
+int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                       char *why, size_t n) {
+    return emit_pages4(sink, id, name, data, size, NULL, NULL, 0, why, n);
+}
+
+int pe_imp_emit_pages4_palette(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                               const uint8_t palette[32], const uint8_t *extra, uint32_t extra_count, char *why, size_t n) {
+    return emit_pages4(sink, id, name, data, size, palette, extra, extra_count, why, n);
 }
 
 static int emit_tims(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,

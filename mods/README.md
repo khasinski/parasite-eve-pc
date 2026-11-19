@@ -946,8 +946,11 @@ biohazard-utils' `Bio2ConstantTable.cs`, checked against the titles on the pages
 container's cap is now 16 MB. `mod-rdt` scans each disc's files and decodes every picture.
 
 **Maps.** Also Pictures, as `maps/all`. RE2's `COMMON/DATA/MAPS.PIX` is 20 map pages of 256 x 256 at
-4 bits a pixel with no palette on the disc: each is wrapped as a 4-bit TIM with a placeholder palette
-of 16 greys, and the record is marked `GREY`. RE3's `CD_DATA/ETC/MAP_U.MAP` holds a section table,
+4 bits a pixel with no palette of their own: their colours are in `COMMON/DATA/TEX.TIM`'s palette (19
+rows of 32 = 38 palettes of 16, the map screen's room colours: blue, red, green and highlighted
+versions). Each page is wrapped as a 4-bit TIM with palette 16 (rooms blue on black, found by eye),
+and all 38 are kept as `PALS` so a runtime can recolour rooms by state. Without `TEX.TIM` the pages
+get a placeholder of 16 greys and the record is marked `GREY`. RE3's `CD_DATA/ETC/MAP_U.MAP` holds a section table,
 the room and label tables and 18 TIMs (9 maps and their legends, in their own colours): the TIMs,
 and the whole file as `FILE` for the tables. RE1's are `ITEM_M2/MAP00.TIM` to `MAP0E.TIM`, one 8-bit
 TIM each in its own colours, one record each as `maps/<name>` (`maps/map01` and so on; 15): MAP01 to

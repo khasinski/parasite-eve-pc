@@ -101,6 +101,9 @@ static void scan_files(const char *label, const char *cue, const char *game, con
             doc_pages += pages, docs++;
         }
         assert(!d || doc_pages == count);
+        uint32_t pn = 0, grey = pe_imp_logic_section(l, PE_IMP_PICTURE_GREY, NULL, NULL) != NULL;
+        pe_imp_logic_section(l, PE_IMP_PICTURE_PALS, &pn, NULL);
+        if (!strcmp(label, "RE2 map")) assert(!grey && pn == 38);             /* coloured from TEX.TIM */
         for (uint32_t k = 0; k < count; k++) {
             uint32_t size;
             const uint8_t *tim = pe_imp_picture_tim(l, k, &size);
