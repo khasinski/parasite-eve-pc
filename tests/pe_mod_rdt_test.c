@@ -15,7 +15,7 @@
 #include "pe_imp_rdt.h"
 
 extern const PeImpReader g_re2_logic_ps1, g_re1_door_ps1, g_re2_door_ps1, g_re3_door_ps1;
-extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1;
+extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1, g_re3_logic_ps1;
 
 /* a disc's item table: names by item number, icons kept; `want` is one item number and its name */
 static void scan_items(const char *label, const char *cue, const char *game, const PeImpReader *reader,
@@ -165,8 +165,11 @@ static void scan_re2(const char *cue) {
     assert(!pe_imp_add_reader(&g_re2_logic_ps1));
     assert(!pe_imp_scan("pe-rdt-test/store", cue, "re2", &sc));
     PeImpAsset *a;
-    int n = pe_imp_catalog_assets("pe-rdt-test/store", "re2", &a), rooms = 0;
-    for (int i = 0; i < n; i++) rooms += !strcmp(a[i].type, "RoomLogic");
+    int n = pe_imp_catalog_assets("pe-rdt-test/store", "re2", &a), rooms = 0, sounds = 0;
+    for (int i = 0; i < n; i++) {
+        rooms += !strcmp(a[i].type, "RoomLogic");
+        sounds += !strcmp(a[i].type, "Sound") && strstr(a[i].id, "room");
+    }
     free(a);
     char why[200], id[32];
     PeImpRoomLogic *l = NULL;
@@ -183,9 +186,28 @@ static void scan_re2(const char *cue) {
         assert(!pe_imp_logic_door(l, k, &d));
         to_106 |= d.stage == 0 && d.room == 6;
     }
-    printf("RE2 scan: %d RoomLogic entries from %u files; %s has %u doors%s\n", rooms, sc.files_read, id, doors,
-           to_106 ? ", one to room 106" : "");
-    assert(rooms > 100 && !sc.refused && doors >= 2 && to_106);
+    uint32_t whole = 0;
+    assert(pe_imp_logic_section(l, PE_IMP_LOGIC_RDT0, NULL, &whole) && whole > 10000);
+    printf("RE2 scan: %d RoomLogic entries and %d room sounds from %u files; %s has %u doors%s, whole room %u bytes\n",
+           rooms, sounds, sc.files_read, id, doors, to_106 ? ", one to room 106" : "", whole);
+    assert(rooms > 100 && !sc.refused && doors >= 2 && to_106 && sounds > rooms);
+    free(l);
+}
+
+/* RE3: the room archive's sound entries are kept with the room */
+static void scan_re3(const char *cue) {
+    PeImpScan sc;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_re3_logic_ps1));
+    assert(!pe_imp_scan("pe-rdt-test/store", cue, "re3", &sc));
+    char why[200];
+    PeImpRoomLogic *l;
+    if (pe_imp_catalog_roomlogic("pe-rdt-test/store", "re3:logic/100", &l, why, sizeof why)) { printf("  %s\n", why); assert(0); }
+    uint32_t entries = 0, bytes = 0, whole = 0;
+    assert(pe_imp_logic_section(l, PE_IMP_LOGIC_ARDS, &entries, &bytes) && entries >= 1);
+    assert(pe_imp_logic_section(l, PE_IMP_LOGIC_RDT0, NULL, &whole) && whole > 10000);
+    printf("RE3 scan: logic/100 keeps %u archive entries (%u bytes) and its whole room (%u bytes)\n", entries, bytes, whole);
+    assert(!sc.refused);
     free(l);
 }
 
@@ -332,7 +354,7 @@ int main(void) {
                      scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
-                     scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228);
+                     scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3);
     else printf("PE_TEST_RE3_DISC not set: RE3 rooms skipped\n");
     printf("RDT passed\n");
     return 0;

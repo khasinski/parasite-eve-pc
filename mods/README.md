@@ -840,6 +840,12 @@ camera zones, enemy placements as their source instruction) and keeps the room's
 messages and scripts as they are, for that game's interpreter. The future room runtime reads only
 these records through `pe_imp_catalog_roomlogic`, never a disc. The file is sectioned, so sections
 can be added later without breaking a reader. The readers are `pe_src_re{1,2,3}_logic.c`.
+Each record also keeps the whole room file (`RDT0`, offsets intact: sound bank, lights, floors,
+objects and their textures, effects, animations), so the runtime never needs the disc again; RE3's
+also keeps its room archive's sound entries (`ARDS`). RE1 and RE2 rooms' sound banks are cataloged
+as Sounds too (bank `room<stage><room>`; 1,285 on RE2 disc 1). The kept files take about what they
+take on the disc: about 123 MB for RE1 (Chris's and Jill's rooms are separate files), 22 MB for RE2,
+21 MB for RE3.
 A scan now offers each file to every reader that matches it, not just the first; a second reader
 of a file keeps its own store folder with `path_key`. `mod-rdt` saves and loads a record, refuses a
 damaged one, builds one for every room on the discs (about 0.8 MB for RE1, 1.3 MB for RE2, 1.7 MB

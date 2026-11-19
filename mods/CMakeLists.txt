@@ -366,7 +366,7 @@ if(BUILD_TESTING)
     # RE2/RE3 room logic on a made-up room; PE_TEST_RE2_DISC / PE_TEST_RE3_DISC read every room's scripts.
     pe_feature_test(rdt ${PROJECT_SOURCE_DIR}/tests/pe_mod_rdt_test.c ${pe_import_core_sources}
         pe_src_re2/pe_src_re2_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re2/pe_src_re2_door.c pe_src_re3/pe_src_re3_door.c
-        pe_src_re1/pe_src_re1_items.c pe_src_re2/pe_src_re2_items.c pe_src_re3/pe_src_re3_items.c)
+        pe_src_re1/pe_src_re1_items.c pe_src_re2/pe_src_re2_items.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_logic.c)
     target_include_directories(test-mod-rdt PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
     pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_core_sources}

@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "pe_imp_rdt.h"
+#include "pe_imp_spu.h"
 
 /* biohazard-utils Bio2ConstantTable.cs g_instructionSizes (MIT, Ted John) */
 static const uint8_t k_re2_sizes[] = {
@@ -311,8 +312,37 @@ static const Raw k_re3_raw[] = {{PE_IMP_LOGIC_COLL, 6}, {PE_IMP_LOGIC_MSG0, 13},
 
 static uint32_t min32(uint32_t a, uint32_t b) { return a < b ? a : b; }
 
-PeImpRoomLogic *pe_imp_rdt_logic(unsigned game, uint32_t player, uint32_t stage, uint32_t room,
-                                 const uint8_t *rdt, uint32_t size, char *why, size_t n) {
+/* RE3's room archive (.ARD): its other entries but the music (0, 1) and the RDT (8), packed as
+ * u32 count, then per entry u32 index, u32 type, u32 size and the bytes, padded to 4 */
+static void add_archive(PeImpLogicBuilder *b, const uint8_t *ard, uint32_t size) {
+    if (size < 2048 + 16) return;
+    uint32_t entries = le32(ard + 4);
+    if (entries < 9 || entries > 255 || 8 + entries * 8 > 2048) return;
+    uint32_t pos = 2048, total = 4, count = 0;
+    uint8_t *packed = malloc((size_t)size + 4 + entries * 16);
+    if (!packed) return;
+    for (uint32_t i = 0; i < entries; i++) {
+        uint32_t len = le32(ard + 8 + i * 8), type = le32(ard + 12 + i * 8);
+        if (pos > size || len > size - pos) break;
+        if (i >= 2 && i != 8) {
+            uint8_t *e = packed + total;
+            for (int k = 0; k < 4; k++)
+                e[k] = (uint8_t)(i >> 8 * k), e[4 + k] = (uint8_t)(type >> 8 * k), e[8 + k] = (uint8_t)(len >> 8 * k);
+            memcpy(e + 12, ard + pos, len);
+            uint32_t padded = (len + 3) & ~3u;
+            memset(e + 12 + len, 0, padded - len);
+            total += 12 + padded, count++;
+        }
+        pos += (len + 2047) & ~2047u;
+    }
+    for (int k = 0; k < 4; k++) packed[k] = (uint8_t)(count >> 8 * k);
+    if (count) pe_imp_logic_add(b, PE_IMP_LOGIC_ARDS, count, packed, total);
+    free(packed);
+}
+
+static PeImpRoomLogic *build_logic(unsigned game, uint32_t player, uint32_t stage, uint32_t room,
+                                   const uint8_t *rdt, uint32_t size, const uint8_t *ard, uint32_t ard_size,
+                                   char *why, size_t n) {
     PeImpRdt *r = malloc(sizeof *r);
     if (!r) { if (why && n) snprintf(why, n, "out of memory"); return NULL; }
     if (pe_imp_rdt_read(game, rdt, size, r, why, n)) { free(r); return NULL; }
@@ -331,10 +361,17 @@ PeImpRoomLogic *pe_imp_rdt_logic(unsigned game, uint32_t player, uint32_t stage,
         if (!section(game, rdt, size, raw[k].index, &off, &len))
             pe_imp_logic_add(b, raw[k].tag, 0, rdt + off, len);
     }
+    pe_imp_logic_add(b, PE_IMP_LOGIC_RDT0, 0, rdt, size);              /* the whole room, offsets intact */
+    if (ard) add_archive(b, ard, ard_size);
     free(r);
     PeImpRoomLogic *l = pe_imp_logic_finish(b);
     if (!l && why && n) snprintf(why, n, "RDT: the room is too large to keep");
     return l;
+}
+
+PeImpRoomLogic *pe_imp_rdt_logic(unsigned game, uint32_t player, uint32_t stage, uint32_t room,
+                                 const uint8_t *rdt, uint32_t size, char *why, size_t n) {
+    return build_logic(game, player, stage, room, rdt, size, NULL, 0, why, n);
 }
 
 int pe_imp_re_room_name(unsigned game, const char *path, uint32_t *stage, uint32_t *room, uint32_t *player) {
@@ -355,12 +392,32 @@ int pe_imp_re_room_name(unsigned game, const char *path, uint32_t *stage, uint32
     return 0;
 }
 
-int pe_imp_emit_re_logic(PeImpSink *sink, unsigned game, const char *path, const uint8_t *rdt, uint32_t size,
-                         const char *const players[2], char *why, size_t n) {
+/* the room's sound bank (RE1 sections 17/18, RE2 1/2: a VAB header and its samples) as Sounds in
+ * bank "room<stage><room>"; 0 if there is none */
+static int emit_room_sounds(PeImpSink *sink, unsigned game, uint32_t stage, uint32_t room, const uint8_t *rdt,
+                            uint32_t size, char *why, size_t n) {
+    uint32_t vh, vh_len, vb, vb_len;
+    unsigned hi = game == PE_IMP_RE1 ? 17 : 1, bi = game == PE_IMP_RE1 ? 18 : 2;
+    if (game == PE_IMP_RE3 || section(game, rdt, size, hi, &vh, &vh_len) || section(game, rdt, size, bi, &vb, &vb_len) ||
+        vh_len < 32 || memcmp(rdt + vh, "pBAV", 4))
+        return 0;
+    uint32_t programs = le16(rdt + vh + 18), waves = le16(rdt + vh + 22);
+    uint32_t header = 32 + 2048 + programs * 512 + 512, samples = 0;
+    if (!waves || programs > 128 || waves > 254 || header > vh_len) return 0;
+    for (uint32_t i = 1; i <= waves; i++) samples += le16(rdt + vh + 32 + 2048 + programs * 512 + 2 * i) * 8u;
+    if (samples > vb_len) return 0;
+    char bank[24];
+    snprintf(bank, sizeof bank, "room%x%02x", (unsigned)stage + 1, (unsigned)room);
+    return pe_imp_vab_read(sink, bank, rdt + vh, header, rdt + vb, samples, why, n);
+}
+
+static int emit_logic(PeImpSink *sink, unsigned game, const char *path, const uint8_t *rdt, uint32_t size,
+                      const uint8_t *ard, uint32_t ard_size, const char *const players[2], char *why, size_t n) {
     uint32_t stage, room, player;
     if (pe_imp_re_room_name(game, path, &stage, &room, &player) || player > 1) return 0;   /* not a room file */
-    PeImpRoomLogic *l = pe_imp_rdt_logic(game, player, stage, room, rdt, size, why, n);
+    PeImpRoomLogic *l = build_logic(game, player, stage, room, rdt, size, ard, ard_size, why, n);
     if (!l) return -1;
+    if (emit_room_sounds(sink, game, stage, room, rdt, size, why, n)) { free(l); return -1; }
     char id[32], name[48];
     if (game == PE_IMP_RE3) {
         snprintf(id, sizeof id, "logic/%x%02x", (unsigned)stage + 1, (unsigned)room);
@@ -375,4 +432,16 @@ int pe_imp_emit_re_logic(PeImpSink *sink, unsigned game, const char *path, const
         return -1;
     }
     return 0;
+}
+
+int pe_imp_emit_re_logic(PeImpSink *sink, unsigned game, const char *path, const uint8_t *rdt, uint32_t size,
+                         const char *const players[2], char *why, size_t n) {
+    return emit_logic(sink, game, path, rdt, size, NULL, 0, players, why, n);
+}
+
+int pe_imp_emit_re3_logic(PeImpSink *sink, const char *path, const uint8_t *ard, uint32_t size, char *why, size_t n) {
+    const uint8_t *rdt;
+    uint32_t rdt_size;
+    if (pe_imp_re3_ard_rdt(ard, size, &rdt, &rdt_size)) return 0;          /* an archive without a room */
+    return emit_logic(sink, PE_IMP_RE3, path, rdt, rdt_size, ard, size, NULL, why, n);
 }

@@ -61,10 +61,12 @@ PeImpRoomLogic *pe_imp_rdt_logic(unsigned game, uint32_t player, uint32_t stage,
 /* A room file's stage (0 = stage 1), room and player (RE1 ROOM1060.RDT: stage 0, room 0x06, player 0;
  * RE2 ROOM1051.RDT: player 1; RE3 R10A.ARD: player 0). 0, or -1 if the name isn't a room's. */
 int pe_imp_re_room_name(unsigned game, const char *path, uint32_t *stage, uint32_t *room, uint32_t *player);
-/* Emits a room file's RoomLogic as "logic/<stage><room>" (RE3) or "logic/<stage><room>-<player>"
+/* Emits a room file's RoomLogic (and, RE1/RE2, its sound bank as Sounds in bank "room<stage><room>") as "logic/<stage><room>" (RE3) or "logic/<stage><room>-<player>"
  * (RE1, RE2: each player has its own scripts), named with `players` (e.g. {"Chris", "Jill"}).
  * 0 (also for a file that isn't a room's), or -1 with a reason. */
 int pe_imp_emit_re_logic(PeImpSink *sink, unsigned game, const char *path, const uint8_t *rdt, uint32_t size,
                          const char *const players[2], char *why, size_t n);
+/* RE3: the room archive (.ARD) as a whole; the RoomLogic also keeps its sound entries (ARDS). */
+int pe_imp_emit_re3_logic(PeImpSink *sink, const char *path, const uint8_t *ard, uint32_t size, char *why, size_t n);
 
 #endif
