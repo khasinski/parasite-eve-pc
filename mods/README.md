@@ -906,6 +906,11 @@ Animation `roomanim/<stage><room>-<entry>-<n>` (`g_re3_room_anims_ps1`; 114 on t
 moves). EMRs with no EDD after them (key frames only, likely played straight through by the room
 script; 83) aren't read.
 
+**Fixing imported models.** Before changing a model reader, the costume or enemy builder, or a mod
+that shows imported models, read [docs/IMPORT_MODELS.md](../docs/IMPORT_MODELS.md): readers stay
+faithful, mods never fix models, and each kind of fix has one place (reader, fit layer, builder or a
+data table), measured with the model audit (`test-mod-model-audit`).
+
 **Room objects (RE2).** The 3D props an RE2 room places (typewriters, boxes, floor items, swinging
 doors) become one-bone Models, `object/<stage><room>-<n>` (`pe_src_re2/pe_src_re2_objects.c`; 522 on
 disc 1, in 106 rooms). A room file's section 10 lists them as (texture, mesh) offsets; each mesh is
