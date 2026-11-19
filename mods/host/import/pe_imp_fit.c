@@ -202,3 +202,11 @@ int pe_imp_fit(const char *root, const char *asset_id, PeImpUse use, PeImpModel 
     pe_imp_model_free(&m);
     return rc;
 }
+
+int pe_imp_weapon_part(const char *asset_id) {
+    const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
+    if (!colon || strncmp(colon + 1, "weapon/", 7) || strchr(colon + 8, '/')) return -1;   /* not ".../moves" */
+    if (colon - asset_id == 3 && !strncmp(asset_id, "re1", 3)) return 14;
+    if (colon - asset_id == 3 && (!strncmp(asset_id, "re2", 3) || !strncmp(asset_id, "re3", 3))) return 11;
+    return -1;
+}

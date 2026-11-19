@@ -119,6 +119,7 @@ set(pe_host_sources
     host/pe_model_skin.c    # isolated Wardrobe asset reads
     host/pe_model.c         # decoded game models: geometry, textures, idle animation
     host/pe_model_view.c    # a model posed, turned and drawn into a picture
+    host/pe_model_imp.c     # imported models (other games') as viewer models
     host/pe_model_stage.c   # a model on show: turning, idle animation, box or full screen
     host/ui/pe_ui_raster.c  # drawing: boxes and text
     host/ui/pe_ui_gpu.c     # the overlay quad
@@ -379,6 +380,13 @@ if(BUILD_TESTING)
     # The fit layer on made-up models (no disc): people, refusals with reasons, what each use drops.
     pe_feature_test(fit ${PROJECT_SOURCE_DIR}/tests/pe_mod_fit_test.c ${pe_import_core_sources})
     target_include_directories(test-mod-fit PRIVATE host/import)
+    # The Wardrobe's weapons on view: imported models as viewer models (made-up), and with
+    # PE_TEST_DISC / PE_TEST_RE2_DISC Aya's held gun and RE2's weapons drawn as the screen draws them.
+    pe_feature_test(weapon-view ${PROJECT_SOURCE_DIR}/tests/pe_mod_weapon_view_test.c ${pe_import_core_sources}
+        host/pe_model.c host/pe_model_view.c host/pe_model_imp.c pe_wardrobe/pe_wardrobe_weapons.c
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_rbj.c)
+    target_include_directories(test-mod-weapon-view PRIVATE host/import pe_src_re2 pe_wardrobe)
+    set_tests_properties(mod-weapon-view PROPERTIES TIMEOUT 600 ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
     # Model audit (not pass/fail): every Model on PE_TEST_RE1/2/3_DISC checked and measured into a CSV
     # (PE_AUDIT_OUT), to plan the model clean-up layer. Run by hand: build test-mod-model-audit, run it.
     pe_feature_test(model-audit ${PROJECT_SOURCE_DIR}/tests/pe_model_audit.c ${pe_import_core_sources}

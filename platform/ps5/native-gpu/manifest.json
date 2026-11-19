@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "975c7540d72ec954cb32cbee9d6ce620192e047aea20de5573ef815b7db0a6a1"
+      "sha256": "d4d1cf903f76dae8f82a9bd9300fbfa0947e9293bd86faed9c2d63527121e911"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -3935,11 +3935,11 @@
     },
     {
       "path": "mods/host/pe_disc_assets.c",
-      "sha256": "e516b726a3a635a4f5bbca485be5f82e2602a0d6459b9a1b43d1d0d6141a3740"
+      "sha256": "664a453a1849b8d20483e88b7ed3b19a2e6ad4615194755c2bfa92b37d2d30e6"
     },
     {
       "path": "mods/host/pe_disc_assets.h",
-      "sha256": "539261f2894a87d6e299d7953787af50e3c0f32d54c621c7f6ecc55affa88613"
+      "sha256": "e1dfea9aff9e2e75a44d09c90e889f9c877b6be37ed58702c2e8e83885385e0e"
     },
     {
       "path": "mods/host/pe_economy_policy.c",
@@ -4051,11 +4051,11 @@
     },
     {
       "path": "mods/host/pe_model.c",
-      "sha256": "54c34591a83c5b9cf24327d08798d23c27147ff4b56fe776fe45ed207b2ec839"
+      "sha256": "d21875c91dfc3e528930bfa8857180f54759eb795b055d4cfcf5636a563c657b"
     },
     {
       "path": "mods/host/pe_model.h",
-      "sha256": "2b5bb2934e5a9402f8b6d88956bd42831ec370f66a4ff6aa20974ec68808868a"
+      "sha256": "47cb54948b97dc623e03029117663f63da2eebc1f78fe3b2d13291fd47f24b53"
     },
     {
       "path": "mods/host/pe_model_skin.c",
@@ -4519,7 +4519,7 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe.h",
-      "sha256": "82e59c70efcc3eac7a735507b455479a66810fc1aae7cf77ee2dab6ebb35e5cf"
+      "sha256": "9d08c660a2430adffc903ed5788046efda27c3b2bc0da04a38d66a6af72f6877"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe_data.h",
@@ -4527,7 +4527,7 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe_menu.c",
-      "sha256": "6cb7b37450edfc54c5862299e53cb2ca2cbcb39d3be94eefc06b969718d6ed6f"
+      "sha256": "4ea32cb13cd7af83a6adb7e634043ca91ebdc6d746b92d6ed76d0d91b9d1676b"
     },
     {
       "path": "mods/pe_wardrobe/pe_wardrobe_mod.c",
@@ -4975,11 +4975,23 @@
     },
     {
       "path": "mods/host/import/pe_imp_fit.c",
-      "sha256": "385330d01f347125f0e664d2c6e31e268c9cf94f250d4cee91dad8fbab44704c"
+      "sha256": "afd30178976de5a5861258624719e423b0b4e37ad7da374ac947ed7e6fe0fc26"
     },
     {
       "path": "mods/host/import/pe_imp_fit.h",
-      "sha256": "ead74d50ed8d714d431441ae968c6f14fc509ff869bdc2a3e40d2b3056d237ea"
+      "sha256": "c5a2c0d70ea2301412c49867026c7e2041dab45d5e000d7d18ae86f0df29a737"
+    },
+    {
+      "path": "mods/host/pe_model_imp.c",
+      "sha256": "a97369da27ad45db038c5c7f1ffce26acc8f2f820847b9236455c3a13ec0a45b"
+    },
+    {
+      "path": "mods/host/pe_model_imp.h",
+      "sha256": "43d1b4adc8145313e98d44f43d1c2d76ddbf3e0bd6564ec6b516b04778f69b27"
+    },
+    {
+      "path": "mods/pe_wardrobe/pe_wardrobe_weapons.c",
+      "sha256": "c10478a7d6653a7d4eb1b7eadca2786e46ad6fb509cc1ab29bc8b02b89d28b74"
     }
   ]
 }

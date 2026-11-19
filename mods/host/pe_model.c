@@ -185,6 +185,24 @@ static int pe_decode(const PeRoomBlobs *room, int slot, int player, PeModel *out
 int pe_model_decode(const PeRoomBlobs *room, int slot, PeModel *out) { return pe_decode(room, slot, 0, out); }
 int pe_model_decode_player(const PeRoomBlobs *room, PeModel *out) { return pe_decode(room, 0, 1, out); }
 
+/* Keyed records (SceneAssetDirectory +0x08, Asset_FindTable08ByU32Key): reserved, offset, key. */
+#define PE_DIR_KEYS 0x08
+#define PE_HELD_GUN_KEY 0xC4B5BA04u
+
+int pe_model_decode_held_gun(const PeRoomBlobs *gun, PeModel *out) {
+    const PeBuf data = {gun->data, gun->data_size};
+    uint32_t at, n, i, off = 0;
+    memset(out, 0, sizeof *out);
+    if (!pe_records(data, PE_DIR_KEYS, &at, &n)) return 0;
+    for (i = 0; i < n && !off; ++i)
+        if (pe_u32(data, at + 12 * i + 8) == PE_HELD_GUN_KEY) off = pe_u32(data, at + 12 * i + 4) & 0xFFFFFFu;
+    if (!off || !pe_parse(data, off, out)) { pe_model_free(out); return 0; }
+    out->vram = calloc((size_t)PE_VRAM_W * PE_VRAM_H, sizeof *out->vram);   /* placed as stored */
+    if (!out->vram) { pe_model_free(out); return 0; }
+    pe_upload_tims(out->vram, (PeBuf){gun->texture, gun->texture_size});
+    return 1;
+}
+
 /* ---- a player skin's structure (the bridge's check_skins_struct.py) ---- */
 #define PE_AYA_PARTS 29
 
@@ -323,6 +341,12 @@ const PeModel *pe_model_load(const PeModelSource *src) {
     }
     s_cache[slot].used = ++s_tick;
     return s_cache[slot].external ? s_cache[slot].external : &s_cache[slot].model;
+}
+
+void pe_model_forget(const PeModel *external) {
+    int i;
+    for (i = 0; external && i < PE_CACHE; ++i)
+        if (s_cache[i].used && s_cache[i].external == external) memset(&s_cache[i], 0, sizeof s_cache[i]);
 }
 
 void pe_model_release_all(void) {

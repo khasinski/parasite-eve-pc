@@ -22,6 +22,11 @@ typedef struct PeRoomBlobs {
 int pe_disc_room(int map, PeRoomBlobs *out);
 /* Own copy of a playable Aya bundle (10, 12 or 13); free with pe_disc_room_free. */
 int pe_disc_player(int bank, PeRoomBlobs *out);
+/* The gun Aya holds: one model for every weapon (Scene_LoadRoom: PE.IMG run 12's keyed record
+ * 0xC4B5BA04), textured from run 39 (loaded at start; the day patches of runs 40 to 44 laid over
+ * it later leave the gun's texels alone). `data` the model's container, `texture` run 39's TIM
+ * blob, no scratch. Free with pe_disc_room_free. */
+int pe_disc_held_gun(PeRoomBlobs *out);
 void pe_disc_room_free(PeRoomBlobs *room);
 
 #endif
