@@ -68,3 +68,17 @@ const PeImpReader g_re1_file_text_ps1 = {
     .version = 1, .produces = PE_IMP_PICTURES, .match = "*/ITEM_M2/FILEM*.PIX",
     .tags = "files", .read = read_text
 };
+
+/* <dir>/DATA/CORE00.ETM: the common effects' sprite sheets (8 TIMs back to back; their EFF data is
+ * CORE00.ESP, kept as stored, as biohazard-utils leaves EFF data undecoded): "effects/core". */
+static int read_core_effects(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    (void)path;
+    return pe_imp_emit_tims(sink, "effects/core", "Common effects", data, size, 4, why, n);
+}
+
+const PeImpReader g_re1_core_effects_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re1", .platform = "ps1", .format = "core-effects",
+    .version = 1, .produces = PE_IMP_PICTURES, .match = "*/DATA/CORE00.ETM",
+    .tags = "effects", .read = read_core_effects
+};

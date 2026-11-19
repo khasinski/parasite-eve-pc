@@ -989,6 +989,15 @@ biohazard-utils' `Bio2ConstantTable.cs`, checked against the titles on the pages
 (`files/filem_00` and so on; 92 pages in 46 files). The
 container's cap is now 16 MB. `mod-rdt` scans each disc's files and decodes every picture.
 
+**Effects.** biohazard-utils treats an effect as an id, its EFF data and its sprite TIM, and doesn't
+decode the EFF data; here too the EFF data stays as stored (in each room's `RDT0`, and the common
+`CORE00.ESP`), and the sprite sheets are Pictures. RE2: a room's RDT section 20 (TIMs back to back),
+`effects/<stage><room>-<player>` (picture k = the room's effect k, ids in section 18; 373 sheets in 103
+rooms). RE3: section 20 of the room in each `.ARD`, ids in section 17, `effects/<stage><room>` (308 in
+141 rooms), and `ETC/CORE00.TIM`, the common effects' sheet, `effects/core`. RE1: `DATA/CORE00.ETM`,
+the common sheets (8), `effects/core`; RE1's per-room effect sheets and RE2's `CORE01.TIM` (raw, no
+TIM header) aren't read yet.
+
 **Maps.** Also Pictures, as `maps/all`. RE2's `COMMON/DATA/MAPS.PIX` is 20 map pages of 256 x 256 at
 4 bits a pixel with no palette of their own: their colours are in `COMMON/DATA/TEX.TIM`'s palette (19
 rows of 32 = 38 palettes of 16, the map screen's room colours: blue, red, green and highlighted
