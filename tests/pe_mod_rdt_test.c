@@ -21,7 +21,7 @@ extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1, g_re
 extern const PeImpReader g_re1_item_icons_ps1, g_re2_item_pictures_ps1, g_re3_item_pictures_ps1;
 void MdecDiag_ExpandDecoderTable(void *buffer);   /* the game's, linked in */
 extern const PeImpReader g_re2_objects_ps1, g_re3_objects_ps1, g_re1_objects_ps1, g_re1_file_text_ps1, g_re1_door_models_ps1,
-    g_re2_door_models_ps1;
+    g_re2_door_models_ps1, g_re3_door_models_ps1;
 extern const PeImpReader g_re1_files_ps1, g_re2_files_ps1, g_re3_files_ps1, g_re2_maps_ps1, g_re3_maps_ps1;
 
 /* RE2's room objects as one-bone Models; one loads back with faces and a texture */
@@ -527,7 +527,7 @@ int main(void) {
                      scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
-                     scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), scan_objects(re3, "re3", &g_re3_objects_ps1, 600), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),
+                     scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), scan_objects(re3, "re3", &g_re3_objects_ps1, 600), scan_objects(re3, "re3", &g_re3_door_models_ps1, 60), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),
                      scan_files("RE3", re3, "re3", &g_re3_files_ps1, 183),
                      scan_files("RE3 map", re3, "re3", &g_re3_maps_ps1, 18),
                      scan_files("RE3 item", re3, "re3", &g_re3_item_pictures_ps1, 134);

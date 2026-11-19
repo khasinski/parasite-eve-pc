@@ -886,8 +886,9 @@ TMD model of the door and its frame, 8-bit TIM); the TMD's objects become parts 
 takes several objects). RE2's door models are too (`doormodel/<nn>`, 55): the scene block starts
 with u32 offsets of the door's MD1 mesh and its TIM, read like a room object. Door animations aren't
 keyframes: RE2's scene holds a small door script (a table of offsets, then bytecode that moves the
-camera and turns the door), kept as stored for the runtime to interpret; RE3's `.DO1` holds a compact sound
-bank and a TIM but no TMD, its model format is still open. RE1's event scripts are kept as stored
+camera and turns the door), kept as stored for the runtime to interpret. RE3's door models are Models
+too (`doormodel/<stage>-<nn>`, 76): after the compact sound bank, a scene at a 2 KB boundary starts
+with u32 offsets of the door's MD2 mesh and its 8-bit TIM, read like an RE3 room object. RE1's event scripts are kept as stored
 (`SCD2`): they're state machines with nested actor streams, decoded by the runtime's interpreter.
 
 **Items.** Each RE game's item table is an **ItemTable** record (`host/import/pe_imp_items.c`,

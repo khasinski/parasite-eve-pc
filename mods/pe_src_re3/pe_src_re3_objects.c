@@ -21,15 +21,19 @@ static int16_t s16at(const Buf *x, uint32_t at) { return (int16_t)u16at(x, at); 
 
 #define NEED(at, len) do { if (!ok(&x, (at), (len))) goto bad; } while (0)
 
-static int object_parse(const uint8_t *data, uint32_t size, uint32_t mesh, uint32_t tim, PeImpModel *m) {
+/* mesh: the object's header (its skeleton and MD2 offset), or NO_MESH with md2 the MD2 block itself */
+#define NO_MESH 0xFFFFFFFFu
+static int object_parse(const uint8_t *data, uint32_t size, uint32_t mesh, uint32_t md2, uint32_t tim, PeImpModel *m) {
     Buf x = {data, size};
     memset(m, 0, sizeof *m);
     m->bones = 1;
     m->parent = malloc(sizeof *m->parent), m->rel = calloc(1, sizeof *m->rel), m->pos = calloc(1, sizeof *m->pos);
     if (!m->parent || !m->rel || !m->pos) goto bad;
     m->parent[0] = -1;
-    NEED(mesh, 2);
-    uint32_t md2 = mesh + u16at(&x, mesh);
+    if (mesh != NO_MESH) {
+        NEED(mesh, 2);
+        md2 = mesh + u16at(&x, mesh);
+    }
     NEED(md2, 8);
     uint32_t objs = u32at(&x, md2 + 4), base = md2 + 8;
     if (!objs || objs > PE_IMP_MODEL_PARTS_MAX) goto bad;
@@ -37,8 +41,8 @@ static int object_parse(const uint8_t *data, uint32_t size, uint32_t mesh, uint3
     /* the skeleton: an EMR header at mesh + 4 (u16 tree offset, key frames offset, bones, key frame
      * size; bone offsets s16 x, y, z from + 8; per bone u16 child count, offset of its child bytes,
      * from the tree). Used when it names one bone per MD2 object (663 of 712); else one bone. */
-    NEED(mesh + 4, 8);
-    uint32_t emr = mesh + 4, tree = emr + u16at(&x, emr), nb = u16at(&x, emr + 4);
+    uint32_t emr = mesh + 4, tree = 0, nb = 0;
+    if (mesh != NO_MESH && ok(&x, emr, 8)) tree = emr + u16at(&x, emr), nb = u16at(&x, emr + 4);
     if (nb == objs && nb > 1 && nb <= PE_IMP_MODEL_BONES_MAX && ok(&x, emr + 8, 6ull * nb) && ok(&x, tree, 4ull * nb)) {
         int16_t *parent = malloc(nb * sizeof *parent);
         int32_t (*rel)[3] = calloc(nb, sizeof *rel), (*pos)[3] = calloc(nb, sizeof *pos);
@@ -147,7 +151,7 @@ static int read_objects(const uint8_t *ard, uint32_t size, const char *path, PeI
         if (!mesh || mesh >= rdt_size || !tim || tim >= rdt_size) continue;    /* an empty slot */
         PeImpModel *m = calloc(1, sizeof *m);
         if (!m) { if (why && n) snprintf(why, n, "out of memory"); return -1; }
-        if (object_parse(rdt, rdt_size, mesh, tim, m)) { free(m); continue; }  /* not one we read */
+        if (object_parse(rdt, rdt_size, mesh, 0, tim, m)) { free(m); continue; }  /* not one we read */
         char id[40], name[48];
         snprintf(id, sizeof id, "object/%x%02x-%u", (unsigned)stage + 1, (unsigned)room, (unsigned)i);
         snprintf(name, sizeof name, "Room %u-%02X object %u", (unsigned)stage + 1, (unsigned)room, (unsigned)i);
@@ -164,4 +168,42 @@ const PeImpReader g_re3_objects_ps1 = {
     .game = "re3", .platform = "ps1", .format = "rdt-objects",
     .version = 2, .produces = PE_IMP_MODEL, .match = "CD_DATA/STAGE?/R*.ARD",
     .tags = "room object", .read = read_objects, .path_key = 1
+};
+
+/* CD_DATA/STAGEs/DOORnn.DO1, the door transitions: after the sound bank (see pe_imp_door.c), a scene
+ * at a 2 KB boundary starts with u32 offsets of the door's MD2 mesh and its 8-bit TIM (from the
+ * scene's start), as RE2's DO2. The first boundary whose pair reads is taken. The model becomes
+ * "doormodel/<stage>-<nn>". */
+static int read_door_model(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    const char *base = strrchr(path, '/'), *st = strstr(path, "STAGE");
+    base = base ? base + 1 : path;
+    if (strncmp(base, "DOOR", 4) || !st || st[5] < '0' || st[5] > '9') return 0;
+    char stem[16] = "", id[40], name[48];
+    size_t k = 0;
+    for (const char *c = base + 4; *c && *c != '.' && k + 1 < sizeof stem; c++) stem[k++] = (char)(*c >= 'A' && *c <= 'Z' ? *c + 32 : *c);
+    stem[k] = 0;
+    if (!k) return 0;
+    for (uint32_t scene = 2048; scene + 8 <= size; scene += 2048) {
+        Buf x = {data, size};
+        uint32_t md2 = scene + u32at(&x, scene), tim = scene + u32at(&x, scene + 4);
+        if (md2 <= scene || md2 >= size || tim <= scene || tim >= size) continue;
+        PeImpModel *m = calloc(1, sizeof *m);
+        if (!m) { if (why && n) snprintf(why, n, "out of memory"); return -1; }
+        if (object_parse(data, size, NO_MESH, md2, tim, m)) { free(m); continue; }
+        snprintf(id, sizeof id, "doormodel/%c-%s", st[5], stem);
+        snprintf(name, sizeof name, "Door model %c-%s", st[5], stem);
+        if (pe_imp_emit(sink, PE_IMP_MODEL, id, name, m)) {
+            if (why && n) snprintf(why, n, "couldn't catalog %s", id);
+            return -1;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+const PeImpReader g_re3_door_models_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re3", .platform = "ps1", .format = "door-model",
+    .version = 1, .produces = PE_IMP_MODEL, .match = "CD_DATA/STAGE?/DOOR*.DO1",
+    .tags = "door model", .read = read_door_model, .path_key = 1
 };
