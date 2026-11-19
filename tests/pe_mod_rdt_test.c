@@ -75,22 +75,29 @@ static void scan_objects(const char *cue, const char *game, const PeImpReader *r
 /* a disc's file pictures: every TIM kept decodes; `want` pictures at least
  * (PE_TEST_MOVIE_PPM=<folder> also writes the first 8-bit one as <label>_file.ppm) */
 static void scan_files(const char *label, const char *cue, const char *game, const PeImpReader *reader,
-                       unsigned want) {
+                       unsigned want, unsigned want_docs) {
     PeImpScan sc;
     pe_imp_registry_reset();
     assert(!pe_imp_add_reader(reader));
     assert(!pe_imp_scan("pe-rdt-test/files", cue, game, &sc));
     PeImpAsset *a;
     int n = pe_imp_catalog_assets("pe-rdt-test/files", game, &a);
-    unsigned records = 0, pictures = 0, decoded = 0, written = 0;
+    unsigned records = 0, pictures = 0, decoded = 0, written = 0, docs = 0, doc_pages = 0;
     for (int i = 0; i < n; i++) {
         if (strcmp(a[i].type, "Pictures")) continue;
         char why[200];
         PeImpRoomLogic *l;
         assert(!pe_imp_catalog_pictures("pe-rdt-test/files", a[i].id, &l, why, sizeof why));
         records++;
-        uint32_t count = 0;
+        uint32_t count = 0, dn = 0, db = 0;
         pe_imp_logic_section(l, PE_IMP_PICTURE_TIMS, &count, NULL);
+        const uint8_t *d = pe_imp_logic_section(l, PE_IMP_PICTURE_DOCS, &dn, &db);
+        for (uint32_t k = 0; d && k < dn; k++) {
+            uint32_t first = d[4 * k] | (uint32_t)d[4 * k + 1] << 8, pages = d[4 * k + 2] | (uint32_t)d[4 * k + 3] << 8;
+            assert(first == doc_pages && pages >= 1);                     /* back to back, each at least its background */
+            doc_pages += pages, docs++;
+        }
+        assert(!d || doc_pages == count);
         for (uint32_t k = 0; k < count; k++) {
             uint32_t size;
             const uint8_t *tim = pe_imp_picture_tim(l, k, &size);
@@ -114,9 +121,9 @@ static void scan_files(const char *label, const char *cue, const char *game, con
         free(l);
     }
     free(a);
-    printf("%s files: %u records, %u pictures, %u decoded (scan: %d files read, %d items, %d refused %s)\n", label,
-           records, pictures, decoded, sc.files_read, sc.items, sc.refused, sc.last_error);
-    assert(!sc.refused && pictures >= want && decoded == pictures);
+    printf("%s files: %u records, %u pictures, %u decoded, %u documents (scan: %d files read, %d items, %d refused %s)\n", label,
+           records, pictures, decoded, docs, sc.files_read, sc.items, sc.refused, sc.last_error);
+    assert(!sc.refused && pictures >= want && decoded == pictures && docs == want_docs);
 }
 
 /* one movie: read from the disc, saved and loaded, a frame from its middle decoded
@@ -513,24 +520,24 @@ int main(void) {
     if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1), scan_doors("RE1", re1, "re1", &g_re1_door_ps1, 0),
                      scan_items("RE1", re1, "re1", &g_re1_items_ps1, 2, "Beretta", 76),
                      movie("RE1", re1, "PSXUSA/ZMOVIE/OJ.STR"),
-                     scan_files("RE1", re1, "re1", &g_re1_files_ps1, 19),
+                     scan_files("RE1", re1, "re1", &g_re1_files_ps1, 19, 0),
                      scan_objects(re1, "re1", &g_re1_objects_ps1, 500),
-                     scan_files("RE1 text map", re1, "re1", &g_re1_file_text_ps1, 40),
-                     scan_files("RE1 icon", re1, "re1", &g_re1_item_icons_ps1, 76),
+                     scan_files("RE1 text map", re1, "re1", &g_re1_file_text_ps1, 40, 0),
+                     scan_files("RE1 icon", re1, "re1", &g_re1_item_icons_ps1, 76, 0),
                      scan_objects(re1, "re1", &g_re1_door_models_ps1, 15), scan_room_anims(re1, "re1", &g_re1_room_anims_ps1, 300);
     else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
     if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1),
                      scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106),
                      movie("RE2", re2, "ZMOVIE/R200.STR"),
-                     scan_files("RE2", re2, "re2", &g_re2_files_ps1, 191),
-                     scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20),
-                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2, "re2", &g_re2_rbj_ps1, 20);
+                     scan_files("RE2", re2, "re2", &g_re2_files_ps1, 216, 25),
+                     scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20, 0),
+                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100, 0), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2, "re2", &g_re2_rbj_ps1, 20);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
                      scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), scan_objects(re3, "re3", &g_re3_objects_ps1, 600), scan_objects(re3, "re3", &g_re3_door_models_ps1, 60), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),
-                     scan_files("RE3", re3, "re3", &g_re3_files_ps1, 183),
-                     scan_files("RE3 map", re3, "re3", &g_re3_maps_ps1, 18),
-                     scan_files("RE3 item", re3, "re3", &g_re3_item_pictures_ps1, 134);
+                     scan_files("RE3", re3, "re3", &g_re3_files_ps1, 183, 31),
+                     scan_files("RE3 map", re3, "re3", &g_re3_maps_ps1, 18, 0),
+                     scan_files("RE3 item", re3, "re3", &g_re3_item_pictures_ps1, 134, 0);
     else printf("PE_TEST_RE3_DISC not set: RE3 rooms skipped\n");
     printf("RDT passed\n");
     return 0;

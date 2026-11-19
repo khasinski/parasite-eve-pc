@@ -152,10 +152,10 @@ int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const 
     return 0;
 }
 
-int pe_imp_emit_tims_ex(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
-                        uint32_t step, int keep_file, char *why, size_t n) {
-    uint8_t *packed = malloc((size_t)size + 4096);
-    uint32_t total = 0, count = 0;
+static int emit_tims(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                     uint32_t step, int keep_file, int docs, char *why, size_t n) {
+    uint8_t *packed = malloc((size_t)size + 4096), *doc = NULL;
+    uint32_t total = 0, count = 0, docs_n = 0;
     if (!packed) { if (why && n) snprintf(why, n, "out of memory"); return -1; }
     for (uint32_t at = 0; at + 20 <= size;) {
         uint32_t t = pe_imp_tim_size(data + at, size - at);
@@ -165,15 +165,29 @@ int pe_imp_emit_tims_ex(PeImpSink *sink, const char *id, const char *name, const
         memcpy(packed + total + 4, data + at, t);
         uint32_t padded = (t + 3) & ~3u;
         memset(packed + total + 4 + t, 0, padded - t);
+        if (docs && count < 0xFFFF) {
+            if ((data[at + 4] & 3) == 1 || !docs_n) {                   /* an 8-bit background starts one */
+                uint8_t *more = realloc(doc, 4ull * (docs_n + 1));
+                if (!more) { free(doc), free(packed); if (why && n) snprintf(why, n, "out of memory"); return -1; }
+                doc = more;
+                doc[4 * docs_n] = (uint8_t)count, doc[4 * docs_n + 1] = (uint8_t)(count >> 8);
+                doc[4 * docs_n + 2] = doc[4 * docs_n + 3] = 0;
+                docs_n++;
+            }
+            uint32_t c = doc[4 * docs_n - 2] | (uint32_t)doc[4 * docs_n - 1] << 8;
+            c++, doc[4 * docs_n - 2] = (uint8_t)c, doc[4 * docs_n - 1] = (uint8_t)(c >> 8);
+        }
         total += 4 + padded, count++;
         if (!step) break;
-        at += (t + step - 1) / step * step;
+        uint32_t next = at + padded;                                     /* one right after it, else the next step */
+        at = next + 20 <= size && pe_imp_tim_size(data + next, size - next) ? next : (uint32_t)(((uint64_t)at + t + step - 1) / step * step);
     }
-    if (!count) { free(packed); return 0; }                          /* no pictures in it */
+    if (!count) { free(packed), free(doc); return 0; }               /* no pictures in it */
     PeImpLogicBuilder *b = pe_imp_logic_begin(0, 0, 0, 0);
     pe_imp_logic_add(b, PE_IMP_PICTURE_TIMS, count, packed, total);
+    if (docs_n) pe_imp_logic_add(b, PE_IMP_PICTURE_DOCS, docs_n, doc, 4 * docs_n);
     if (keep_file) pe_imp_logic_add(b, PE_IMP_PICTURE_FILE, 0, data, size);
-    free(packed);
+    free(packed), free(doc);
     PeImpRoomLogic *l = pe_imp_logic_finish(b);
     if (!l) { if (why && n) snprintf(why, n, "%s: too large", id); return -1; }
     if (pe_imp_emit(sink, PE_IMP_PICTURES, id, name, l)) {
@@ -181,6 +195,16 @@ int pe_imp_emit_tims_ex(PeImpSink *sink, const char *id, const char *name, const
         return -1;
     }
     return 0;
+}
+
+int pe_imp_emit_tims_ex(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                        uint32_t step, int keep_file, char *why, size_t n) {
+    return emit_tims(sink, id, name, data, size, step, keep_file, 0, why, n);
+}
+
+int pe_imp_emit_documents(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                          uint32_t step, char *why, size_t n) {
+    return emit_tims(sink, id, name, data, size, step, 0, 1, why, n);
 }
 
 int pe_imp_emit_pix8(PeImpSink *sink, const char *id, const char *name, const uint8_t *pixels, uint32_t size,

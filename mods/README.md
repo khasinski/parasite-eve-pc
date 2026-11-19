@@ -924,9 +924,11 @@ image; an `.iso` has none. A reader can ask for a file and its XA sectors togeth
 **Files (readable documents).** The file pictures are kept as stored in **Pictures** records
 (`host/import/pe_imp_pictures.c`, `pictures.bin`, the sectioned container; one or more PS1 TIMs, with
 a TIM decoder to RGBA for 4-, 8- and 15-bit TIMs): RE1 `ITEM_M2/FILE*.TIM` as `files/<name>` (19),
-RE2 `COMMON/DATA/FILES.TIM` as `files/all` (191 TIMs, one per 2 KB boundary), RE3
-`CD_DATA/ETC/FILEGU.PIX` as `files/all` (183). They are the file covers and pages; which pages make up
-which document isn't known yet. RE1's file text, `ITEM_M2/FILEM*.PIX` (a 64-byte palette, then
+RE2 `COMMON/DATA/FILES.TIM` as `files/all` (216 TIMs), RE3 `CD_DATA/ETC/FILEGU.PIX` as `files/all`
+(183). Each document is an 8-bit background followed by its 4-bit text pages (a page may follow the
+background directly, off the 2 KB grid), so the record also has a DOCS section: per document its
+first picture and its picture count (RE2 25 documents, in the game's file order, the 25 file names
+in biohazard-utils' `Bio2ConstantTable.cs`; RE3 31). RE1's file text, `ITEM_M2/FILEM*.PIX` (a 64-byte palette, then
 4-bit pixels 512 wide), is cut into 512 x 192 pages and kept as 4-bit TIMs with that palette
 (`files/filem_00` and so on; 92 pages in 46 files). The
 container's cap is now 16 MB. `mod-rdt` scans each disc's files and decodes every picture.
