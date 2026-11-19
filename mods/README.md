@@ -149,7 +149,11 @@ folder of RE3 `rofs*.dat` archives opened like a disc image (pe_imp_rofs.c). pe_
 PC enemies (`ROOM/EMD/EM??.EMD` + TIM: skinned model and all moves; step flag 0x800 = hit frame,
 top 4 bits = sound) and enemy sound banks (`DATA/SOUND/E_??.VH` + VB, as tones at their pitch);
 Nemesis = EM34 with his profile and an automatic build once the RE3 PC folder is in the import
-folders. Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
+folders. The PS1 disc keeps its enemies in each room's bundle, `CD_DATA/STAGEs/Rsrr.BIN` (u32 size,
+u32 count, per entry u32 length and tag, entries on 2 KB boundaries; tag byte 3 = the enemy number,
+byte 1 = 1 for its TIM, byte 2 a version): the same EMD and TIM formats, read by `g_re3_emd_ps1`
+into `enemy/em<nn>-<version>` and its moves (85 from 64 enemies; 21 come in two versions whose later
+move sets differ). The Nemesis profile still names the PC file's `enemy/em34`. Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
 PE_TEST_RE3_PC = the RE3 PC folder adds EM34 and E_34) and `mod-enemy-build` (builder on made-up
 data; with PE_TEST_RE3_PC Nemesis built from the store into `enemy-build-test/nemesis`).
 

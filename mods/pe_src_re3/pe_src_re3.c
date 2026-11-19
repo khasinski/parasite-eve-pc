@@ -16,7 +16,7 @@ static int init(void) {
         pe_imp_add_reader(&g_re3_sound_ps1) || pe_imp_add_reader(&g_re3_bgm_ps1) ||
         pe_imp_add_reader(&g_re3_room_music_ps1) || pe_imp_add_reader(&g_re3_rooms_ps1) || pe_imp_add_reader(&g_re3_logic_ps1) || pe_imp_add_reader(&g_re3_door_ps1) || pe_imp_add_reader(&g_re3_items_ps1) || pe_imp_add_reader(&g_re3_item_pictures_ps1) || pe_imp_add_reader(&g_re3_movies_ps1) || pe_imp_add_reader(&g_re3_files_ps1) || pe_imp_add_reader(&g_re3_maps_ps1) || pe_imp_add_reader(&g_re3_objects_ps1) || pe_imp_add_reader(&g_re3_door_models_ps1) ||
         pe_imp_set_naming("re3", g_re3_naming) || pe_imp_add_rig("re3", "player/", &g_re3_human_rig) ||
-        pe_imp_add_reader(&g_re3_emd_pc) || pe_imp_add_reader(&g_re3_tones_pc) ||
+        pe_imp_add_reader(&g_re3_emd_pc) || pe_imp_add_reader(&g_re3_emd_ps1) || pe_imp_add_reader(&g_re3_tones_pc) ||
         pe_imp_add_enemy("re3", "enemy/nemesis", &g_re3_nemesis)) {
         pe_mod_log("pe_src_re3", "readers refused by the importer");
         return 1;

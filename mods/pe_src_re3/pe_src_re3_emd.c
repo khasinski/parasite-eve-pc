@@ -1,4 +1,5 @@
-/* Resident Evil 3 enemy models (EMxx.EMD + EMxx.TIM), PC (rofs9: ROOM/EMD). Read only.
+/* Resident Evil 3 enemy models (EMxx.EMD + EMxx.TIM), PC (rofs9: ROOM/EMD) and PS1 (inside the
+ * rooms' CD_DATA/STAGEs/R*.BIN bundles, see read_bundle). Read only.
  * Layout as documented by reevengi (src/g_re3/emd.c), checked against the files; the vertex
  * binding and the step words decoded here from Nemesis (EM34). The Python prototype is
  * tools/emd3.py in the enemy importer's notes.
@@ -405,4 +406,51 @@ const PeImpReader g_re3_emd_pc = {
     .game = "re3", .platform = "pc", .format = "emd",
     .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "ROOM/EMD/EM??.EMD",
     .tags = "enemy", .companion = ".TIM", .read_pair = read_emd
+};
+
+/* PS1: CD_DATA/STAGEs/Rsrr.BIN, a room's enemy bundle: u32 size, u32 count, then per entry u32
+ * length, u32 tag; the entries from 2 KB, each at the next 2 KB boundary. Tag bytes: 0 the kind
+ * within the enemy (0 model, 1 and 2 its compact sound bank), 1 = 1 for the TIM, 2 a version byte,
+ * 3 the enemy number (0x10 = EM10). The EMD (15 sections) and TIM are the PC files' formats. One
+ * enemy can come in two versions whose later move sets differ (EM10 in stages 1-2 and 3-7); each
+ * becomes "enemy/em<nn>-<version>" and its moves; the same version in other rooms is the same bytes. */
+static int read_bundle(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    (void)path;
+    Buf b = {data, size}, *x = &b;
+    if (size < 2048 || u32at(x, 0) != size) return 0;                 /* not a bundle */
+    uint32_t count = u32at(x, 4);
+    if (!count || count > 64 || 8 + 8ull * count > 2048) return 0;
+    uint32_t pos[64], len[64], tag[64], at = 2048;
+    for (uint32_t i = 0; i < count; i++) {
+        len[i] = u32at(x, 8 + 8 * i), tag[i] = u32at(x, 12 + 8 * i), pos[i] = at;
+        if (at > size || len[i] > size - at) return 0;
+        at += (len[i] + 2047) & ~2047u;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        if ((tag[i] & 0xFFFF) || len[i] < 8 || u32at(x, pos[i] + 4) != 15) continue;   /* models only */
+        uint32_t t = count;
+        for (uint32_t k = 0; k < count; k++)
+            if (tag[k] >> 24 == tag[i] >> 24 && (tag[k] & 0xFFFF) == 0x0100) { t = k; break; }
+        if (t == count) continue;                                       /* no texture beside it */
+        unsigned em = tag[i] >> 24, version = tag[i] >> 16 & 0xFF;
+        char id[40], moves[48], name[48], quiet[160];
+        PeImpModel *m = calloc(1, sizeof *m);
+        PeImpAnimation *a = calloc(1, sizeof *a);
+        if (!m || !a) { free(m), free(a); snprintf(why, n, "out of memory"); return -1; }
+        if (re3_emd_parse(data + pos[i], len[i], data + pos[t], len[t], m, a, quiet, sizeof quiet)) { free(m), free(a); continue; }
+        snprintf(id, sizeof id, "enemy/em%02x-%02x", em, version);
+        snprintf(moves, sizeof moves, "%s/moves", id);
+        snprintf(name, sizeof name, "EM%02X (version %02X)", em, version);
+        if (pe_imp_emit(sink, PE_IMP_MODEL, id, name, m)) { pe_imp_animation_free(a), free(a); snprintf(why, n, "could not catalog %s", id); return -1; }
+        snprintf(name, sizeof name, "EM%02X (version %02X) moves", em, version);
+        if (pe_imp_emit(sink, PE_IMP_ANIMATION, moves, name, a)) { snprintf(why, n, "could not catalog %s", moves); return -1; }
+    }
+    return 0;
+}
+
+const PeImpReader g_re3_emd_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re3", .platform = "ps1", .format = "emd",
+    .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "CD_DATA/STAGE?/R*.BIN",
+    .tags = "enemy", .read = read_bundle
 };
