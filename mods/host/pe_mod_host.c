@@ -485,6 +485,7 @@ static const char *pe_hook_name(int id) {
         [PE_HOOK_SCENE_START] = "scene start",
         [PE_HOOK_FRAME] = "frame",
         [PE_HOOK_ACTOR_RENDER] = "actor render",
+        [PE_HOOK_FIELD_CAMERA] = "field camera",
         [PE_HOOK_HELP_TEXT] = "help text",
         [PE_HOOK_INV_COMMAND] = "inventory command",
         [PE_HOOK_ITEM_ADD] = "item add",

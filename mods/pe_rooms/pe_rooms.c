@@ -5,18 +5,21 @@
  * room Aya is in. PE's own background tiles are skipped (PE_HOOK_FIELD_BACKGROUND stage 0) and the
  * RE picture is drawn behind everything (stage 1): uploaded to VRAM as a 15-bit image where PE
  * keeps its background pages (320,256)-(639,495), then two textured quads at the far end of the
- * ordering table. Aya still walks on the PE room's floor with the PE camera; the RE camera,
- * collision, masks, doors and scripts come next. Turning it off leaves the PE room's pages
- * overwritten until the next room loads. Desktop only for now. */
+ * ordering table. For RE2, the native actor renderer uses the selected RID camera. Aya's
+ * PE position is anchored to a point in the selected view; the PE room still drives movement.
+ * Desktop only for now. */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "pe_imp.h"
 #include "pe_imp_mdec.h"
+#include "pe_imp_room.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe1/boot_display.h"
+#include "pe1/player_entity.h"
 #include "pe1/psyq_gpu.h"
 #include "pe1/render_packets.h"
 #include "pe1/render_prim.h"
@@ -33,9 +36,77 @@
 static char s_store[1100];
 static PeImpAsset *s_rooms;
 static int s_nrooms, s_listed, s_pick, s_view, s_show;
-static int s_uploaded = -1, s_uploaded_view = -1;      /* what VRAM holds: room index and view */
 static char s_status[200] = "Off.";
 static RenderTexturedQuad s_quads[2][2];               /* per draw slot: left and right halves */
+static uint16_t *s_original_picture;
+
+static struct {
+    GteMatrix view;
+    double origin[3];   /* PE-space camera-to-preview-origin translation */
+    int distance;
+    int anchored;
+} s_camera;
+
+/* RE2 RID stores distance in the upper half of the projection word, in Q7 pixels.
+ * Build a right/down/forward basis in the games' shared Y-down convention. */
+static void prepare_camera(const PeImpRoomView *view) {
+    s_camera.distance = 0;
+    s_camera.anchored = 0;
+    if (view->game != PE_IMP_RE2) return;
+    int distance = view->projection >> 23;
+    double x = (double)view->target[0] - view->eye[0];
+    double y = (double)view->target[1] - view->eye[1];
+    double z = (double)view->target[2] - view->eye[2];
+    double level = hypot(x, z), length = hypot(level, y);
+    if (!distance || !length) return;
+    double rx = level ? z / level : 1.0, rz = level ? -x / level : 0.0;
+    double basis[3][3] = {
+        {rx, 0, rz},
+        {y * rz / length, level / length, -y * rx / length},
+        {x / length, y / length, z / length}
+    };
+    for (int row = 0; row < 3; row++)
+        for (int col = 0; col < 3; col++)
+            s_camera.view.m[row][col] = (s16)lround(4096 * basis[row][col]);
+
+    /* Place the preview origin along the ray to (160,160) on the 320x240 image.
+     * Prefer its intersection with RE floor zero. Some views look across upper
+     * floors or up from below, so use the target depth for those previews. */
+    double slope = 40.0 / distance;
+    double ray_y = basis[2][1] + slope * basis[1][1];
+    double depth = fabs(ray_y) > 0.0001 ? -(double)view->eye[1] / ray_y : 0;
+    /* Preview scale. PE models use smaller units than RE2's room coordinates. */
+    const double re_units_per_pe_unit = 3.0;
+    /* Keep room for movement and actor geometry within PE's 4096-entry depth table. */
+    const double max_depth = 12000 * re_units_per_pe_unit;
+    if (depth < 2200 || depth > max_depth)
+        depth = fmin(max_depth, fmax(2200, length));
+    s_camera.origin[0] = 0;
+    s_camera.origin[1] = depth * slope / re_units_per_pe_unit;
+    s_camera.origin[2] = depth / re_units_per_pe_unit;
+    s_camera.distance = distance;
+}
+
+static int on_camera(void *ctx, void *user) {
+    (void)user;
+    PeHookFieldCamera *camera = ctx;
+    const FieldActor *aya = camera->player;
+    if (!s_show || !s_camera.distance || !aya) return 0;
+    if (!s_camera.anchored) {
+        /* Keep the PE simulation at its original coordinates. Bake the PE
+         * starting position into the view translation once per selection. */
+        double pos[3] = {aya->pos_x / 65536.0, aya->pos_y / 65536.0, aya->pos_z / 65536.0};
+        for (int row = 0; row < 3; row++) {
+            const s16 *m = s_camera.view.m[row];
+            s_camera.view.t[row] = (s32)lround(s_camera.origin[row] -
+                 (m[0] * pos[0] + m[1] * pos[1] + m[2] * pos[2]) / 4096.0);
+        }
+        s_camera.anchored = 1;
+    }
+    *(GteMatrix *)camera->matrix = s_camera.view;
+    camera->distance = s_camera.distance;
+    return 1;
+}
 
 static void list_rooms(void) {
     if (s_listed) return;
@@ -63,7 +134,6 @@ static const char *room_name(unsigned i) {
 
 /* decode the chosen view and put it in VRAM; 0 or -1 (s_status says why) */
 static int upload(void) {
-    if (s_uploaded == s_pick && s_uploaded_view == s_view) return 0;
     if (s_pick >= s_nrooms) { snprintf(s_status, sizeof s_status, "No room chosen."); return -1; }
     char why[200] = "";
     PeImpImageSet *set;
@@ -76,7 +146,7 @@ static int upload(void) {
     const uint8_t *frame = pe_imp_imageset_frame(set, (uint32_t)s_view, &size);
     uint8_t *rgb = malloc(PIC_W * PIC_H * 3);
     uint16_t *pix = malloc(PIC_W * PIC_H * 2);
-    if (!frame) snprintf(s_status, sizeof s_status, "%s has %u views (0-%u).", s_rooms[s_pick].name, set->count, set->count - 1);
+    if (!frame) snprintf(s_status, sizeof s_status, "%s has %u views.", s_rooms[s_pick].name, set->count);
     else if (!rgb || !pix) snprintf(s_status, sizeof s_status, "Out of memory.");
     else if (set->width != PIC_W || set->height != PIC_H) snprintf(s_status, sizeof s_status, "Not a 320 x 240 room picture.");
     else if (pe_imp_mdec_decode(frame, size, PIC_W, PIC_H, rgb, why, sizeof why)) snprintf(s_status, sizeof s_status, "%s", why);
@@ -87,11 +157,26 @@ static int upload(void) {
             pix[i] = v ? v : 0x8000;                    /* 0 would be see-through: keep black opaque */
         }
         RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
+        if (!s_original_picture) {
+            s_original_picture = malloc(PIC_W * PIC_H * sizeof *s_original_picture);
+            if (!s_original_picture) {
+                snprintf(s_status, sizeof s_status, "Out of memory.");
+                goto cleanup;
+            }
+            DrawSync(0);
+            StoreImage(&r, s_original_picture);
+            DrawSync(0);
+        }
         LoadImage(&r, pix);
         DrawSync(0);
-        s_uploaded = s_pick, s_uploaded_view = s_view, rc = 0;
-        snprintf(s_status, sizeof s_status, "Showing %s, view %d.", s_rooms[s_pick].name, s_view);
+        PeImpRoomView view;
+        if (pe_imp_room_view(set, (uint32_t)s_view, &view)) view.game = 0;
+        prepare_camera(&view);
+        rc = 0;
+        snprintf(s_status, sizeof s_status, "Showing %s, view %d (%s camera).",
+                 s_rooms[s_pick].name, s_view, s_camera.distance ? "RE2" : "PE");
     }
+cleanup:
     free(rgb);
     free(pix);
     free(set);
@@ -116,7 +201,7 @@ static void quad(RenderTexturedQuad *q, int screen_x, int page_x, int u0) {
 static int on_background(void *ctx, void *user) {
     (void)user;
     PeHookFieldBackground *b = ctx;
-    if (!s_show || s_uploaded < 0) return 0;
+    if (!s_show) return 0;
     if (b->stage == 0) return 1;                       /* skip the PE room's own tiles */
     if (b->slot < 0 || b->slot > 1 || !b->ordering) return 0;
     RenderNativeTag *far_end = (RenderNativeTag *)b->ordering + 4095;
@@ -126,24 +211,34 @@ static int on_background(void *ctx, void *user) {
         s_quads[b->slot][k].tag.address = far_end->address;
         far_end->address = (uintptr_t)&s_quads[b->slot][k];
     }
-    return 0;
+    return 1;
 }
 
 static int on_scene(void *ctx, void *user) {
     (void)ctx, (void)user;
-    s_uploaded = s_uploaded_view = -1;                 /* the room load replaced the pages */
-    if (s_show) upload();
+    /* The new room has already uploaded its own pages. */
+    free(s_original_picture);
+    s_original_picture = NULL;
+    s_show = 0;
+    snprintf(s_status, sizeof s_status, "Off.");
     return 0;
 }
 
 static void show(void) {
     list_rooms();
-    s_uploaded = -1;
-    s_show = !upload();
+    if (!upload()) s_show = 1;
 }
 static void hide(void) {
+    if (s_original_picture) {
+        RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
+        DrawSync(0);
+        LoadImage(&r, s_original_picture);
+        DrawSync(0);
+        free(s_original_picture);
+        s_original_picture = NULL;
+    }
     s_show = 0;
-    snprintf(s_status, sizeof s_status, "Off. The PE room's picture comes back at the next room.");
+    snprintf(s_status, sizeof s_status, "Off.");
 }
 static void refresh(void) { s_listed = 0; list_rooms(); }
 static void text_status(char *out, unsigned size) { snprintf(out, size, "%s", s_status); }
@@ -152,21 +247,24 @@ static int init(void) {
     if (pe_mod_path(s_store, sizeof s_store, "import/store")) return 1;
     pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);
     pe_menu_begin(PAGE);
-    pe_menu_top_page(PAGE, "Play imported Resident Evil rooms (prototype: show a room's picture).", 62);
+    pe_menu_top_page(PAGE, "Preview an imported room with Aya. RE2 views use their original camera.", 62);
     pe_menu_register_dynamic_choice(0, "Room", "An imported room (F1 > Import scans them).", &s_pick, ROOMS_MAX,
                                     room_count, room_name);
     pe_menu_register_int(0, "Camera view", "Which of the room's camera views to show.", &s_view, 0, 31, 1);
-    pe_menu_register_action(0, "Show it here", "Shows the room's picture as this room's background.", show);
-    pe_menu_register_action(0, "Stop showing it", "Back to the PE room's own picture (at the next room).", hide);
+    pe_menu_register_action(0, "Show it here", "Shows the selected picture and, for RE2, its fixed camera.", show);
+    pe_menu_register_action(0, "Stop showing it", "Restore the current PE room and camera.", hide);
     pe_menu_register_action(0, "Refresh the list", "Lists rooms imported since the game started.", refresh);
     pe_menu_register_info(0, "Status", "What's shown.", text_status);
     pe_hook_add(PE_HOOK_FIELD_BACKGROUND, on_background, NULL, PE_PRIORITY_LATE, MOD_ID);
+    pe_hook_add(PE_HOOK_FIELD_CAMERA, on_camera, NULL, PE_PRIORITY_LATE, MOD_ID);
     pe_hook_add(PE_HOOK_SCENE_START, on_scene, NULL, PE_PRIORITY_LATE, MOD_ID);
     return 0;
 }
 
 static void shutdown_rooms(void) {
     s_show = 0;
+    free(s_original_picture);
+    s_original_picture = NULL;
     free(s_rooms);
     s_rooms = NULL;
 }

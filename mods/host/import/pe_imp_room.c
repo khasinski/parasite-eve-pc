@@ -6,7 +6,8 @@
 
 #include "pe_imp_room.h"
 
-enum { ROOM_WIDTH = 320, ROOM_HEIGHT = 240, ROOM_HEADER = 40, TIM_MAX = 256 * 256 * 2 + 2048 };
+enum { ROOM_WIDTH = 320, ROOM_HEIGHT = 240, ROOM_HEADER = 40, ROOM_HEADER_COLLISION = 44,
+       TIM_MAX = 256 * 256 * 2 + 2048 };
 typedef struct { const uint8_t *data; uint32_t size; } Bytes;
 typedef struct {
     const uint8_t *pixels, *palette;
@@ -238,12 +239,19 @@ static int room_data(const PeImpImageSet *set, uint32_t frame, Bytes *data, Byte
     if (frame >= set->count) return -1;
     data->data = pe_imp_imageset_extra(set, frame, &data->size);
     if (!data->data) return 1;
-    if (data->size < ROOM_HEADER || memcmp(data->data, "RMV1", 4) ||
+    if (data->size < ROOM_HEADER || memcmp(data->data, "RMV", 3) ||
+        (data->data[3] != '1' && data->data[3] != '2') ||
         data->data[4] >= PE_IMP_IMAGESET_VIEWS || data->data[5] > PE_IMP_RE3) return -1;
+    /* The collision preview stored an explicit atlas size and appended the SCA block. */
+    int has_collision = data->data[3] == '2';
+    uint32_t header = has_collision ? ROOM_HEADER_COLLISION : ROOM_HEADER;
     uint32_t len = le32(data->data + 36);
-    if (len > data->size - ROOM_HEADER) return -1;
-    *pri = (Bytes){data->data + ROOM_HEADER, len};
-    *atlas = tail(*data, ROOM_HEADER + len);
+    if (header > data->size || len > data->size - header) return -1;
+    uint32_t remaining = data->size - header - len;
+    uint32_t atlas_size = has_collision ? le32(data->data + 40) : remaining;
+    if (atlas_size > remaining) return -1;
+    *pri = (Bytes){data->data + header, len};
+    *atlas = (Bytes){pri->data + len, atlas_size};
     return 0;
 }
 

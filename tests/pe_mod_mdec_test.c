@@ -104,6 +104,27 @@ static void made_up_masks(void) {
         assert(view.mask_count == 1 && view.masks[0].x == -1 && view.masks[0].depth == 7);
         assert(!pe_imp_room_foreground(set, 0, &view, rgba));
         assert(!rgba[3] && rgba[5] == 255 && rgba[7] == 255 && rgba[8] == 255 && rgba[11] == 255 && !rgba[15]);
+        if (game == PE_IMP_RE2) {
+            /* Collision-preview stores insert an atlas length and append SCA after it. */
+            uint32_t collision_extra[] = {extra[0] + 8};
+            PeImpImageSet *stored = pe_imp_imageset_alloc_extra(PE_IMP_IMAGESET_MDEC, 320, 240, 1,
+                                                                sizes, collision_extra);
+            assert(stored);
+            uint8_t *rmv2 = stored->payload + sizes[0];
+            memcpy(rmv2, rec, 40);
+            rmv2[3] = '2';
+            rmv2[6] = PE_IMP_RE2;
+            rmv2[40] = (uint8_t)(prefix + sizeof tim);
+            memcpy(rmv2 + 44, rec + 40, extra[0] - 40);
+            memset(rmv2 + extra[0] + 4, 0xff, 4);
+            PeImpRoomView collision_view;
+            assert(!pe_imp_room_view(stored, 0, &collision_view) && collision_view.game == PE_IMP_RE2 &&
+                   collision_view.projection == 230);
+            assert(!pe_imp_room_foreground(stored, 0, &collision_view, rgba));
+            rmv2[40] = 255;
+            assert(pe_imp_room_view(stored, 0, &collision_view) == -1);
+            free(stored);
+        }
         if (game != PE_IMP_RE1) {
             atlas[game == PE_IMP_RE2 ? 6 : 4] = 0;  /* backward reference before any pixels */
             assert(pe_imp_room_foreground(set, 0, &view, rgba) == -1);

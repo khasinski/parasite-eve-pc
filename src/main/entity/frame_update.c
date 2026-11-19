@@ -19,6 +19,10 @@
 #include "pe_actor_texture_pages.h"
 #include "pe_hooks.h"
 
+#ifdef PE_MODS
+#include <string.h>
+#endif
+
 /* Original USA per-type integration callbacks (800915DC). */
 FieldActorCallbacks g_FieldActorTypeCallbacks[13] = {
     {Entity_IntegratePositionFull, NULL},
@@ -310,6 +314,21 @@ void Entity_FrameUpdate(void) {
         }
 
         Render_SetGteScreenOffset();
+#ifdef PE_MODS
+        GteMatrixStorage fixed_view = {0};
+        PeHookFieldCamera field_camera = {g_PlayerEntity, &fixed_view.matrix, 0};
+        int fixed = PE_HOOK(PE_HOOK_FIELD_CAMERA, &field_camera) > 0;
+        u32 saved_view[9];
+        if (fixed) {
+            /* The actor renderer and shadows share this view packet. Leave the
+             * native scroll state intact for scripts and PE field movement. */
+            memcpy(saved_view, g_EntityRenderScratch, sizeof saved_view);
+            memcpy(g_EntityRenderScratch, fixed_view.words, sizeof fixed_view.words);
+            g_EntityRenderScratch[8] = field_camera.distance;
+            gte_ctc2_26(field_camera.distance);
+            Render_ResetGteScreenOffset();
+        }
+#endif
         for (entity = g_FieldActorListHead; entity != 0; entity = entity->next) {
             RenderObjectEntity *object;
 
@@ -353,6 +372,13 @@ void Entity_FrameUpdate(void) {
             }
         }
 
+#ifdef PE_MODS
+        if (fixed) {
+            memcpy(g_EntityRenderScratch, saved_view, sizeof saved_view);
+            gte_ctc2_26(saved_view[8]);
+            Render_SetGteScreenOffset();
+        }
+#endif
         Scene_LoadEntityTextures();
         Pm_RunPrimary();
         Render_ResetGteScreenOffset();

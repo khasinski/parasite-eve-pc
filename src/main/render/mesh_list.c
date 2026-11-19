@@ -276,7 +276,7 @@ void Render_LinkFieldSubpixel(int slot, RenderNativeTag *ordering) {
     int i;
 
     s_FieldShift[slot].active = 0;
-    PE_HOOK(PE_HOOK_FIELD_BACKGROUND, (&(PeHookFieldBackground){1, slot, ordering}));
+    if (PE_HOOK(PE_HOOK_FIELD_BACKGROUND, (&(PeHookFieldBackground){1, slot, ordering}))) return;
     Render_LinkHdUnderlayBackdrop(slot,ordering);
     if (!Psyz_VideoGetWidescreen()) return;
     if (s_WidescreenCover[slot].tiles) Render_LinkHdWidescreenBackdrop(slot,ordering);
