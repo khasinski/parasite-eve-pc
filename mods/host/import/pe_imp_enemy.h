@@ -19,9 +19,9 @@ typedef struct PeImpEnemyProfile {
     int yaw;                                  /* turn so +z faces Aya (4096 = a full turn) */
     /* roles idle, walk, hurt, die and every attack's own name -> a move of the Animation */
     struct { const char *name; int move; } anim[PE_IMP_ENEMY_ANIMS];
-    /* power: the game's attack power; range: reach in PE field units; the blow lands on the move's
-     * first frame marked PE_IMP_EVENT_HIT (else half way) */
-    struct { const char *anim; int power, range; } attack[PE_IMP_ENEMY_ATTACKS];
+    /* power: the game's attack power; range: reach in PE field units; hit: the frame the blow lands
+     * (0: the move's first frame marked PE_IMP_EVENT_HIT, else where it reaches furthest forward) */
+    struct { const char *anim; int power, range, hit; } attack[PE_IMP_ENEMY_ATTACKS];
     int speed, charge, radius, stagger;       /* as the pack's "behavior" (pe_enemy_pack.h) */
 } PeImpEnemyProfile;
 

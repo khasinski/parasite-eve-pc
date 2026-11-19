@@ -32,10 +32,10 @@ import enemy_import_fights as F   # noqa: E402
 
 AREA, FIGHT, MAP = 1, 10, '75'     # Day 2 Central Park, M075: Bear
 TEST_HP = 100
-REACH = 900                        # the Nemesis pack's attack reach
+REACH = 900                        # the pack's longest attack reach (read from enemy.json)
 FOE_TYPE = 0xEE                    # the imported enemy's actor type
 TEX_X, TEX_Y = 320, 256
-HAS_SOUNDS = False                 # the pack lists sounds: its moves' sound frames play
+HAS_SOUNDS = False                 # the pack lists sounds and its walk or attacks mark sound frames: they play
 
 
 def status(game):
@@ -181,8 +181,9 @@ def run(exe, disc, pack, work):
     pixels = tex[12 + 512 * pals:]
     rows = [pixels[y * tex_w:(y + 1) * tex_w] for y in range(tex_h)]
     spec = json.loads((pack / 'enemy.json').read_text())
-    global HAS_SOUNDS
-    HAS_SOUNDS = bool(spec.get('sounds'))
+    global HAS_SOUNDS, REACH
+    HAS_SOUNDS = bool(spec.get('sounds')) and sound_frames(pack, spec)
+    REACH = max([a.get('range', 0) for a in spec.get('attacks', [])] or [REACH])
 
     def setup(config):
         dst = config / 'pe_enemies' / 'test-enemy'
@@ -205,6 +206,20 @@ def run(exe, disc, pack, work):
         print(f"Aya's HP losses to enemy blows (trace): {losses}")
     finally:
         game.quit()
+
+
+def sound_frames(pack, spec):
+    """Whether the walk or an attack (the moves this test sees) marks a sound frame (PEEA v2 events)."""
+    names = [spec['anims'].get('walk')] + [spec['anims'].get(a['anim']) for a in spec.get('attacks', [])]
+    for name in filter(None, names):
+        data = (pack / name).read_bytes()
+        version, bones, frames = struct.unpack_from('<3H', data, 4)
+        if version < 2:
+            continue
+        at = 12 + frames * (3 + 3 * bones) * 2
+        if any(e & 0xff for e in struct.unpack_from(f'<{frames}H', data, at)):
+            return True
+    return False
 
 
 def main():

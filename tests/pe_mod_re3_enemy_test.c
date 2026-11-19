@@ -359,6 +359,7 @@ static void test_emd(void) {
 }
 
 /* ---- tones ---- */
+/* E_34's layout: one program, its two tones back to back */
 static void build_bank(Bytes *vh, Bytes *vb) {
     memset(vh, 0, sizeof *vh);
     memset(vb, 0, sizeof *vb);
@@ -366,15 +367,36 @@ static void build_bank(Bytes *vh, Bytes *vb) {
     pad(vh, 0x80 + 32);
     set16(vh, 0x80 + 18, 1), set16(vh, 0x80 + 20, 2), set16(vh, 0x80 + 22, 2);
     pad(vh, 0x80 + 32 + 16);
+    vh->b[0x80 + 32] = 2;                                        /* the program's tone count */
     uint8_t tone[2][32] = {{0}};
-    tone[0][2] = 127, tone[0][4] = 60, tone[0][5] = 0, tone[0][22] = 1;    /* note 60 on centre 60: 44100 */
-    tone[1][2] = 64, tone[1][4] = 73, tone[1][5] = 0, tone[1][22] = 2;     /* note 61 on centre 73: an octave down */
+    tone[0][2] = 127, tone[0][4] = 60, tone[0][6] = 60, tone[0][22] = 1;   /* note 60 on centre 60: 44100 */
+    tone[1][2] = 64, tone[1][4] = 73, tone[1][6] = 61, tone[1][22] = 2;    /* note 61 on centre 73: an octave down */
     put(vh, tone[0], 32), put(vh, tone[1], 32);
     b16(vh, 0), b16(vh, 4), b16(vh, 8);                          /* sample 1: 0-32, sample 2: 32-64 */
     for (int blk = 0; blk < 4; blk++) {
         b8(vb, 0x00), b8(vb, 0);                                 /* filter 0, shift 0: nibble * 4096 */
         for (int i = 0; i < 14; i++) b8(vb, 0x11);              /* every sample 1 -> 4096 */
     }
+}
+
+/* two programs (2 tones + 1) in a table of `slots` per program (0: packed, E_28), the file padded to
+ * 16 bytes; padded banks carry a wrong tone count in the header, as E_10 does */
+static void build_bank2(Bytes *vh, int slots) {
+    memset(vh, 0, sizeof *vh);
+    pad(vh, 0x80 + 32);
+    set16(vh, 0x80 + 18, 2), set16(vh, 0x80 + 20, slots ? 7 : 3), set16(vh, 0x80 + 22, 2);
+    pad(vh, 0x80 + 32 + 32);
+    vh->b[0x80 + 32] = 2, vh->b[0x80 + 48] = 1;
+    uint8_t tone[3][32] = {{0}}, empty[32] = {0};
+    tone[0][2] = 127, tone[0][4] = 60, tone[0][6] = 60, tone[0][22] = 1;
+    tone[1][2] = 64, tone[1][4] = 73, tone[1][6] = 61, tone[1][22] = 2;
+    tone[2][2] = 127, tone[2][4] = 72, tone[2][6] = 60, tone[2][22] = 2;   /* program 2: 60 on 72, an octave down */
+    put(vh, tone[0], 32), put(vh, tone[1], 32);
+    for (int i = 2; i < slots; i++) put(vh, empty, 32);
+    put(vh, tone[2], 32);
+    for (int i = 1; i < slots; i++) put(vh, empty, 32);
+    b16(vh, 0), b16(vh, 4), b16(vh, 8);
+    while (vh->n % 16) b8(vh, 0);
 }
 
 static void test_tones(void) {
@@ -391,8 +413,20 @@ static void test_tones(void) {
     assert(!re3_tone_sound(vh.b, vh.n, vb.b, vb.n, 2, why, sizeof why));
     assert(!re3_tone_sound(vh.b, vh.n, vb.b, 40, 1, why, sizeof why));           /* sample past the VB */
     assert(re3_tone_count(vh.b, 100) == -1);
+    /* the three tone table layouts: packed, 16 slots a program (E_10), the largest program's count (E_45) */
+    static const int layouts[3] = {0, 16, 2};
+    for (int l = 0; l < 3; l++) {
+        Bytes v2;
+        build_bank2(&v2, layouts[l]);
+        assert(re3_tone_count(v2.b, v2.n) == 3);
+        PeImpSound *a = re3_tone_sound(v2.b, v2.n, vb.b, vb.n, 1, why, sizeof why);
+        PeImpSound *c = re3_tone_sound(v2.b, v2.n, vb.b, vb.n, 2, why, sizeof why);   /* program 2's tone */
+        assert(a && a->frames == 56 && abs(a->pcm[3] - 2064) < 4);
+        assert(c && c->frames == 56 && c->pcm[3] == 4096);
+        free(a), free(c), free(v2.b);
+    }
     free(vh.b), free(vb.b);
-    printf("tones: rates from the tone table, resampled, volume\n");
+    printf("tones: rates from the tone table, resampled, volume; packed and padded tone tables\n");
 }
 
 /* ---- a made-up PC folder scanned into a store ---- */

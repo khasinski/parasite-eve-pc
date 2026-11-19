@@ -147,13 +147,16 @@ once). Importer core additions: Model v2 (optional per-corner skin: bone + secon
 only for skinned models), the Animation type (moves, frames, per-frame events), and a PC game
 folder of RE3 `rofs*.dat` archives opened like a disc image (pe_imp_rofs.c). pe_src_re3 reads RE3
 PC enemies (`ROOM/EMD/EM??.EMD` + TIM: skinned model and all moves; step flag 0x800 = hit frame,
-top 4 bits = sound) and enemy sound banks (`DATA/SOUND/E_??.VH` + VB, as tones at their pitch);
-Nemesis = EM34 with his profile and an automatic build once the RE3 PC folder is in the import
-folders. The PS1 disc keeps its enemies in each room's bundle, `CD_DATA/STAGEs/Rsrr.BIN` (u32 size,
+top 4 bits = sound) and enemy sound banks (`DATA/SOUND/E_??.VH` + VB, as tones at their pitch;
+sound banks come in three tone-table layouts (packed, 16 slots a program, or the largest program's
+count), told apart by where the sample table ends). Profiles with automatic builds once the RE3 PC
+folder is in the import folders: Nemesis (EM34), Zombie (EM10), Cerberus (EM20), Hunter (EM22),
+Giant Spider (EM25) and Drain Deimos (EM28); an attack may name its own hit frame (`hit`), else the
+move's 0x800 frame or its furthest reach is used. The PS1 disc keeps its enemies in each room's bundle, `CD_DATA/STAGEs/Rsrr.BIN` (u32 size,
 u32 count, per entry u32 length and tag, entries on 2 KB boundaries; tag byte 3 = the enemy number,
 byte 1 = 1 for its TIM, byte 2 a version): the same EMD and TIM formats, read by `g_re3_emd_ps1`
 into `enemy/em<nn>-<version>` and its moves (85 from 64 enemies; 21 come in two versions whose later
-move sets differ). The Nemesis profile still names the PC file's `enemy/em34`. RE2's PS1 enemies are
+move sets differ). The profiles still name the PC files' `enemy/em<nn>`. RE2's PS1 enemies are
 in `PL0/PLD/CDEMD0.EMS` and `CDEMD2.EMS`: TIM + EMD pairs on 2 KB boundaries (the archive's own index
 holds RAM addresses and isn't read). An EMD's directory names 8 sections: unknown, three move sets
 (EDD, EMR), the MD1 mesh; read as a PLD's model plus RE2's room-animation move format, by
@@ -191,9 +194,11 @@ small move sets of 7 and 9 bones (likely the weapon's own moving parts; `extra-m
 where they read), 7 the weapon's MD2 mesh and 8 its picture. The weapon Model (84) is composed as
 RE2's: MD2 object 0 replaces part 11 (BioRand leaves RE3 as a to-do; object 0's faces use the hand's
 palette and page and their UVs land in the pasted picture). Identical weapon files exist (PL00W02 = PL00W03), so the weapon
-readers key the store by path. Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
-PE_TEST_RE3_PC = the RE3 PC folder adds EM34 and E_34) and `mod-enemy-build` (builder on made-up
-data; with PE_TEST_RE3_PC Nemesis built from the store into `enemy-build-test/nemesis`).
+readers key the store by path. Tests: `mod-re3-enemy` (archives, EMD, tones in
+all three layouts and a scan on made-up data; PE_TEST_RE3_PC = the RE3 PC folder adds EM34, E_34
+and every enemy model in the folder) and `mod-enemy-build` (builder on made-up data; with
+PE_TEST_RE3_PC nothing in the folder refused and all six built from the store into
+`enemy-build-test/<name>`).
 
 ## Quick save (pe_quicksave)
 

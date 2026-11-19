@@ -177,7 +177,8 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
         PeEnemyAttack *at = &p->attack[p->attacks];
         if ((at->anim = pe_enemy_pack_anim(p, prof->attack[i].anim)) < 0) { fail(why, n, "an attack names \"%s\", not in the profile's moves", prof->attack[i].anim, 0); goto out; }
         at->power = at->damage = prof->attack[i].power, at->range = prof->attack[i].range;
-        at->hit = blow_frame(p, at->anim, pose);
+        int hit = prof->attack[i].hit;                 /* the profile's own frame, when it has one */
+        at->hit = hit > 0 && hit < p->anim[at->anim].frames ? hit : blow_frame(p, at->anim, pose);
         p->attacks++;
     }
     scale(p, info->scale);

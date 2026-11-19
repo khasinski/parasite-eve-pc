@@ -273,7 +273,8 @@ flinches when shot and falls when beaten, giving its own EXP. **How many** adds 
 files and are for your own use only.
 
 To make one in the game: turn on **Enemy import**, add your Resident Evil 3 PC folder (the one with
-`rofs1.dat`) under **F1 → Import**, and Nemesis is built by himself, with his own moves and sounds.
+`rofs1.dat`) under **F1 → Import**, and Nemesis, a Zombie, Cerberus, a Hunter, a Giant Spider and
+Drain Deimos are built by themselves, each with its own moves and sounds.
 Other enemies with a profile show in Import's list with **Build as an enemy**.
 
 ## Phone Calls

@@ -8,7 +8,9 @@
  *             Nemesis built from the catalog as the importer's target does: 16 bones, his moves,
  *             the blows on m7 and m10's first hit frames, E_34's tones as sounds, footsteps on the
  *             walk; the pack loads back. Kept in <PE_TEST_DIR>/enemy-build-test/nemesis for the
- *             game test (PE_TEST_ENEMY_PACK). */
+ *             game test (PE_TEST_ENEMY_PACK). Nothing in the folder refused; Zombie, Cerberus, Hunter,
+ *             Giant Spider and Drain Deimos built too (bones, their anims, each blow inside its move,
+ *             their own sounds), each kept in its own folder there. */
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -141,10 +143,78 @@ static void test_made_up(void) {
     bad = k_profile;
     bad.attack[0].anim = "kick";
     assert(pe_enemy_build(&m, &a, &bad, snd, 2, "x", &p, &info, why, sizeof why) == -1 && strstr(why, "kick"));
+    /* the profile's own hit frame wins over the move's flag; one past the move is passed over */
+    PeImpEnemyProfile own = k_profile;
+    own.attack[0].hit = 1;
+    assert(!pe_enemy_build(&m, &a, &own, snd, 2, "x", &p, &info, why, sizeof why) && p.attack[0].hit == 1);
+    pe_enemy_pack_free(&p);
+    own.attack[0].hit = 999;
+    assert(!pe_enemy_build(&m, &a, &own, snd, 2, "x", &p, &info, why, sizeof why) && p.attack[0].hit == 2);
+    pe_enemy_pack_free(&p);
     free(snd[1]);
     pe_imp_model_free(&m);
     pe_imp_animation_free(&a);
     printf("made-up: built, written and loaded back with events and sounds\n");
+}
+
+/* RE3's other enemies with a profile: built the same way, each pack kept beside Nemesis's */
+typedef struct { const char *id, *folder; const PeImpEnemyProfile *p; int bones; } More;
+static const More k_more[] = {
+    {"enemy/nemesis", "nemesis", &g_re3_nemesis, 16},
+    {"enemy/zombie", "zombie", &g_re3_zombie, 15},
+    {"enemy/cerberus", "cerberus", &g_re3_cerberus, 17},
+    {"enemy/hunter_beta", "hunter_beta", &g_re3_hunter, 20},
+    {"enemy/spider", "spider", &g_re3_spider, 20},
+    {"enemy/drain_deimos", "drain_deimos", &g_re3_drain_deimos, 21},
+};
+
+static void build_more(const char *store, const More *e) {
+    char asset[80], moves[80], why[200] = "";
+    snprintf(asset, sizeof asset, "re3:%s", e->id);
+    snprintf(moves, sizeof moves, "re3:%s", e->p->moves);
+    const PeImpEnemyProfile *prof = pe_imp_enemy_for(asset);
+    assert(prof == e->p);
+    PeImpModel m;
+    PeImpAnimation a;
+    if (pe_imp_catalog_model(store, asset, &m, why, sizeof why) || pe_imp_catalog_animation(store, moves, &a, why, sizeof why)) {
+        printf("real: %s: %s\n", asset, why);
+        assert(0);
+    }
+    PeImpSound *snd[PE_ENEMY_MAX_SOUNDS] = {0};
+    for (int i = 0; i < prof->sound_count; i++) {
+        char id[80];
+        snprintf(id, sizeof id, "re3:%s%02d", prof->sounds, i);
+        if (pe_imp_catalog_sound(store, id, &snd[i], why, sizeof why)) printf("real: %s: %s\n", id, why), assert(0);
+    }
+    PeEnemyPack p;
+    PeEnemyBuildInfo info;
+    int rc = pe_enemy_build(&m, &a, prof, snd, prof->sound_count, asset, &p, &info, why, sizeof why);
+    if (rc) printf("real: %s: %s\n", prof->name, why);
+    assert(!rc);
+    printf("real: %s %d bones, %d triangles, scale %.4f, hits %d/%d, %d sounds, %d sound frames\n", prof->name,
+           p.bones, p.triangles, info.scale, p.attack[0].hit, p.attacks > 1 ? p.attack[1].hit : -1, info.sounds,
+           info.sound_events);
+    int anims = 0, attacks = 0;
+    for (int k = 0; k < PE_IMP_ENEMY_ANIMS; k++) anims += prof->anim[k].name != NULL;
+    for (int k = 0; k < PE_IMP_ENEMY_ATTACKS; k++) attacks += prof->attack[k].anim != NULL;
+    assert(p.bones == e->bones && p.anims == anims && p.attacks == attacks && info.sounds == prof->sound_count);
+    for (int k = 0; k < attacks; k++) {                        /* the blow lands inside its move, not on its first frame */
+        int an = p.attack[k].anim;
+        assert(p.attack[k].hit > 0 && p.attack[k].hit < p.anim[an].frames);
+    }
+    char folder[1100];
+    snprintf(folder, sizeof folder, "%s/%s", s_dir, e->folder);
+    assert(!pe_enemy_write(&p, folder, why, sizeof why));
+    pe_enemy_pack_free(&p);
+    PeEnemyPack back;
+    char err[200] = "";
+    rc = pe_enemy_pack_load(&back, folder, err, sizeof err);
+    if (rc) printf("real: load %s: %s\n", folder, err);
+    assert(!rc && back.bones == e->bones);
+    pe_enemy_pack_free(&back);
+    for (int i = 0; i < prof->sound_count; i++) free(snd[i]);
+    pe_imp_model_free(&m);
+    pe_imp_animation_free(&a);
 }
 
 static void test_real(void) {
@@ -156,12 +226,13 @@ static void test_real(void) {
     pe_imp_registry_reset();
     assert(!pe_imp_add_game("re3", "Resident Evil 3", "Resident Evil"));
     assert(!pe_imp_add_reader(&g_re3_emd_pc) && !pe_imp_add_reader(&g_re3_tones_pc));
-    assert(!pe_imp_set_naming("re3", g_re3_naming) && !pe_imp_add_enemy("re3", "enemy/nemesis", &g_re3_nemesis));
+    assert(!pe_imp_set_naming("re3", g_re3_naming));
+    for (unsigned i = 0; i < sizeof k_more / sizeof k_more[0]; i++) assert(!pe_imp_add_enemy("re3", k_more[i].id, k_more[i].p));
     PeImpScan sc;
     int rc = pe_imp_scan(store, image, NULL, &sc);
     printf("real: scanned %d files, %d items, %d refused%s%s\n", sc.files_read, sc.items + sc.skipped, sc.refused,
            sc.last_error[0] ? ": " : "", sc.last_error);
-    assert(!rc && !strcmp(sc.game, "re3"));
+    assert(!rc && !strcmp(sc.game, "re3") && sc.refused == 0);   /* every enemy model and sound bank reads */
 
     const PeImpEnemyProfile *prof = pe_imp_enemy_for("re3:enemy/nemesis");
     assert(prof == &g_re3_nemesis);
@@ -201,6 +272,7 @@ static void test_real(void) {
     pe_imp_model_free(&m);
     pe_imp_animation_free(&a);
     printf("real: pack in %s\n", folder);
+    for (unsigned i = 1; i < sizeof k_more / sizeof k_more[0]; i++) build_more(store, &k_more[i]);
 }
 
 int main(void) {
