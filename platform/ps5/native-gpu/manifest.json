@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "0a63464706a1f734e39b1c2872c52b20ddb5a0475a06af7a0d76c05af83f3978"
+      "sha256": "975c7540d72ec954cb32cbee9d6ce620192e047aea20de5573ef815b7db0a6a1"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4667,7 +4667,7 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_build.c",
-      "sha256": "5701c5aa712cff94429f87bbcdebbd758cd18967665c5f3a38743bf987999d4f"
+      "sha256": "7e29b1f650f32bb75fa781b656ea6eb243651c35145741551126240cdaf77117"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_build.h",
@@ -4975,11 +4975,11 @@
     },
     {
       "path": "mods/host/import/pe_imp_fit.c",
-      "sha256": "1a2ffd235b82d7ca066f343a3373bb2ee8e3a8250601ef3294b88ebd9e78a953"
+      "sha256": "385330d01f347125f0e664d2c6e31e268c9cf94f250d4cee91dad8fbab44704c"
     },
     {
       "path": "mods/host/import/pe_imp_fit.h",
-      "sha256": "68aa5bdeba7e0c77d9e73232ee90a3cdc9e8bd47d591f0d6c2b02b0b2440e48c"
+      "sha256": "ead74d50ed8d714d431441ae968c6f14fc509ff869bdc2a3e40d2b3056d237ea"
     }
   ]
 }

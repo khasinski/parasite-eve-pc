@@ -434,7 +434,8 @@ static void place_n(const Fit *fit, const Placed *pl, const int16_t *nn, double 
 }
 
 /* ---- faces: what's buried inside the body is left out ---- */
-typedef struct { const PeImpFace *f; int part, corners, page_base; } Face;   /* page_base: the model's first page */
+typedef struct { const PeImpFace *f; int part, corners, page_base, dx, dy; } Face;   /* page_base: the model's first page;
+                                                                                    * dx, dy: its move in a repacked texture */
 
 static int collect_faces(const PeImpModel *m, const Fit *fit, Face **out, int *count) {
     const PeImpRig *rig = fit->rig;
@@ -471,7 +472,7 @@ static int collect_faces(const PeImpModel *m, const Fit *fit, Face **out, int *c
                     for (int k = 0; k < nc; k++) all &= f->v[k][1] > low - 10;
                     if (all) { lid_out++; continue; }
                 }
-                fs[n].f = f, fs[n].part = p, fs[n].corners = nc, fs[n].page_base = 0, n++;
+                fs[n].f = f, fs[n].part = p, fs[n].corners = nc, fs[n].page_base = fs[n].dx = fs[n].dy = 0, n++;
             }
         }
     }
@@ -482,13 +483,85 @@ static int collect_faces(const PeImpModel *m, const Fit *fit, Face **out, int *c
 /* ---- texture: groups of faces sharing texels, each with its own 16 colours ---- */
 /* A face's texel in the source picture: pages count from the first page the model's faces use (a
  * texture page is 128 texels wide at 8 bits), so a model on pages 1 and 2 maps as one on 0 and 1.
- * The costume's texture keeps these positions, so they must stay within 256 x 255: texture_fits
- * refuses a model whose faces span more than two pages (RE2's PL0D uses three) or fall outside its
- * picture, instead of reading the wrong page or past the picture. */
-static void atlas_xy(const Face *fc, int j, int *x, int *y) {
+ * The costume's texture is 256 x 255 and keeps those positions (dx = dy = 0) when they fit, which
+ * they do for a model on two pages: its output is as it always was. A model on three pages (RE2's
+ * PL0A and PL0D, some of its people) is repacked: faces whose texels may touch are kept together,
+ * and those pieces are shelf-packed into 256 x 255 in a fixed order, each face moved by its piece's
+ * (dx, dy). Colours are always read at the source position (output minus the move). */
+static void src_xy(const Face *fc, int j, int *x, int *y) {
     const PeImpFace *f = fc->f;
     *x = ((f->page & 15) - fc->page_base) * 128 + f->uv[j][0];
     *y = f->uv[j][1] < 254 ? f->uv[j][1] : 254;
+}
+
+static void atlas_xy(const Face *fc, int j, int *x, int *y) {
+    src_xy(fc, j, x, y);
+    *x += fc->dx, *y += fc->dy;
+}
+
+static int uf_find(int *par, int i);
+
+static int repack(Face *fs, int nf, char *why, size_t n) {
+    int (*box)[4] = malloc((size_t)nf * sizeof *box), *par = malloc((size_t)nf * sizeof *par), *order = malloc((size_t)nf * sizeof *order);
+    int (*piece)[4] = malloc((size_t)nf * sizeof *piece), *at = malloc((size_t)nf * 2 * sizeof *at), rc = -1;
+    if (!box || !par || !order || !piece || !at) { if (why && n) snprintf(why, n, "out of memory"); goto done; }
+    for (int i = 0; i < nf; i++) {                                     /* each face's texels, with cover_face's 1-texel pad */
+        int x, y;
+        box[i][0] = box[i][1] = 1 << 30, box[i][2] = box[i][3] = -1, par[i] = i;
+        for (int j = 0; j < fs[i].corners; j++) {
+            src_xy(&fs[i], j, &x, &y);
+            if (x - 1 < box[i][0]) box[i][0] = x - 1;
+            if (y - 1 < box[i][1]) box[i][1] = y - 1;
+            if (x + 1 > box[i][2]) box[i][2] = x + 1;
+            if (y + 1 > box[i][3]) box[i][3] = y + 1;
+        }
+        if (box[i][0] < 0) box[i][0] = 0;
+        if (box[i][1] < 0) box[i][1] = 0;
+    }
+    for (int i = 0; i < nf; i++)                                       /* faces whose boxes touch move together */
+        for (int k = i + 1; k < nf; k++)
+            if (box[i][0] <= box[k][2] && box[k][0] <= box[i][2] && box[i][1] <= box[k][3] && box[k][1] <= box[i][3])
+                par[uf_find(par, k)] = uf_find(par, i);
+    int pieces = 0;
+    for (int i = 0; i < nf; i++) {
+        int r = uf_find(par, i), p = -1;
+        for (int q = 0; q < pieces; q++) if (uf_find(par, order[q]) == r) { p = q; break; }
+        if (p < 0) p = pieces, order[pieces] = i, memcpy(piece[pieces], box[i], sizeof piece[0]), pieces++;
+        if (box[i][0] < piece[p][0]) piece[p][0] = box[i][0];
+        if (box[i][1] < piece[p][1]) piece[p][1] = box[i][1];
+        if (box[i][2] > piece[p][2]) piece[p][2] = box[i][2];
+        if (box[i][3] > piece[p][3]) piece[p][3] = box[i][3];
+    }
+    int *by_h = malloc((size_t)(pieces ? pieces : 1) * sizeof *by_h);
+    if (!by_h) { if (why && n) snprintf(why, n, "out of memory"); goto done; }
+    for (int q = 0; q < pieces; q++) by_h[q] = q;
+    for (int q = 1; q < pieces; q++)                                   /* tallest first, ties in face order */
+        for (int k = q; k > 0 && piece[by_h[k - 1]][3] - piece[by_h[k - 1]][1] < piece[by_h[k]][3] - piece[by_h[k]][1]; k--) {
+            int t = by_h[k]; by_h[k] = by_h[k - 1], by_h[k - 1] = t;
+        }
+    int cx = 0, cy = 0, shelf = 0, fit = 1;
+    for (int q = 0; q < pieces && fit; q++) {
+        int p = by_h[q], w = piece[p][2] - piece[p][0] + 1, h = piece[p][3] - piece[p][1] + 1;
+        if (cx + w > 256) cx = 0, cy += shelf, shelf = 0;
+        if (w > 256 || cy + h > 255) { fit = 0; break; }
+        at[2 * p] = cx, at[2 * p + 1] = cy;
+        cx += w;
+        if (h > shelf) shelf = h;
+    }
+    free(by_h);
+    if (!fit) {
+        if (why && n) snprintf(why, n, "the model's texture doesn't fit a costume's 256 x 255, even repacked");
+        goto done;
+    }
+    for (int i = 0; i < nf; i++) {
+        int r = uf_find(par, i), p = 0;
+        for (int q = 0; q < pieces; q++) if (uf_find(par, order[q]) == r) { p = q; break; }
+        fs[i].dx = at[2 * p] - piece[p][0], fs[i].dy = at[2 * p + 1] - piece[p][1];
+    }
+    rc = 0;
+done:
+    free(box), free(par), free(order), free(piece), free(at);
+    return rc;
 }
 
 static int texture_fits(const PeImpModel *m, Face *fs, int nf, char *why, size_t n) {
@@ -498,23 +571,20 @@ static int texture_fits(const PeImpModel *m, Face *fs, int nf, char *why, size_t
         if (pg < lo) lo = pg;
         if (pg > hi) hi = pg;
     }
-    if (nf && hi - lo > 1) {
-        if (why && n) snprintf(why, n, "the model's faces use texture pages %d to %d; a costume's texture holds two", lo, hi);
-        return -1;
-    }
     int off = 0;
     for (int i = 0; i < nf; i++) {
-        fs[i].page_base = nf ? lo : 0;
+        fs[i].page_base = nf ? lo : 0, fs[i].dx = fs[i].dy = 0;
         for (int j = 0; j < fs[i].corners; j++) {
             int x, y;
-            atlas_xy(&fs[i], j, &x, &y);
-            if (x < 0 || x > 255 || (uint32_t)x >= m->w || (uint32_t)y >= m->h) { off++; break; }
+            src_xy(&fs[i], j, &x, &y);
+            if (x < 0 || (uint32_t)x >= m->w || (uint32_t)y >= m->h) { off++; break; }
         }
     }
     if (off) {
         if (why && n) snprintf(why, n, "%d of the model's faces point outside its %ux%u texture", off, (unsigned)m->w, (unsigned)m->h);
         return -1;
     }
+    if (nf && hi - lo > 1) return repack(fs, nf, why, n);              /* past 256 texels: repack */
     return 0;
 }
 
@@ -686,8 +756,9 @@ static int build_texture(const PeImpModel *m, const Face *fs, int nf, uint16_t *
             int gg = slot[s];
             PIXELS_OF(gg, {
                 int x = key / 256, y = key % 256, fi = -1;
+                for (int i = 0; i < nf && fi < 0; i++) if (gid[i] == gg && has_px(&cv[i], key)) fi = i;   /* the face here */
                 for (int i = 0; i < nf && fi < 0; i++) if (gid[i] == gg) fi = i;
-                Rgb col = colour(m, x, y, CLUT_OF(fs[fi].f));
+                Rgb col = colour(m, x - fs[fi].dx, y - fs[fi].dy, CLUT_OF(fs[fi].f));   /* read at the source */
                 sum[0] += col.r, sum[1] += col.g, sum[2] += col.b, c++;
             });
             for (int k = 0; k < 3; k++) mean[s][k] = c ? sum[k] / c : 0;
@@ -716,9 +787,9 @@ static int build_texture(const PeImpModel *m, const Face *fs, int nf, uint16_t *
         for (int i = 0; i < nf && firstf < 0; i++) if (gid[i] == g) firstf = i;
         PIXELS_OF(g, { keys[k2++] = key; });                           /* sorted (x, y) */
         for (int j = 0; j < n; j++) {
-            int x = keys[j] / 256, y = keys[j] % 256, row = CLUT_OF(fs[firstf].f);
-            for (int i = 0; i < nf; i++) if (gid[i] == g && has_px(&cv[i], keys[j])) { row = CLUT_OF(fs[i].f); break; }
-            cols[j] = colour(m, x, y, row);
+            int x = keys[j] / 256, y = keys[j] % 256, row = CLUT_OF(fs[firstf].f), here = firstf;
+            for (int i = 0; i < nf; i++) if (gid[i] == g && has_px(&cv[i], keys[j])) { row = CLUT_OF(fs[i].f); here = i; break; }
+            cols[j] = colour(m, x - fs[here].dx, y - fs[here].dy, row);  /* read at the source */
         }
         Rgb qp[16];
         int np;

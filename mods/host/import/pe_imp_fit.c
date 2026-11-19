@@ -1,7 +1,8 @@
 /* The fit layer (pe_imp_fit.h, docs/IMPORT_MODELS.md). Rules from the model audit
  * (tests/pe_model_audit.c): bone count isn't a body type, so a person is RE2's human tree at a
- * standing height; a costume's texture holds two pages (texel x = (page - first page) * 128 + u);
- * placeholder parts and zero-area faces carry nothing a costume needs. Read only on its input. */
+ * standing height; every face must land inside its texture (texel x = (page - first page) * 128 + u;
+ * a model on three pages is the costume builder's to repack); placeholder parts and zero-area faces
+ * carry nothing a costume needs. Read only on its input. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -156,7 +157,6 @@ int pe_imp_fit_model(const PeImpModel *src, const char *asset_id, PeImpUse use, 
         if (in.height < PERSON_MIN || in.height > PERSON_MAX)
             REFUSE("a skeleton %d units tall: not standing at a person's height (%d-%d)", (int)in.height, PERSON_MIN, PERSON_MAX);
         if (in.skinned) REFUSE("skinned: the costume builder takes rigid parts");
-        if (in.pages > 2) REFUSE("its faces use texture pages %u to %u; a costume's texture holds two", lo, hi);
     }
 
     /* normalize, on a copy */

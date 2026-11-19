@@ -32,7 +32,7 @@ static void person(PeImpModel *m) {
         f->page = (uint16_t)(b & 1), f->clut = 480 << 6;
     }
     m->pal_rows = 2, m->pal = calloc(2, sizeof *m->pal);
-    m->w = 256, m->h = 256, m->image = calloc(256 * 256, 1);
+    m->w = 256, m->h = 256, m->image = calloc(384 * 256, 1);          /* room for a test to widen it to 384 */
 }
 
 static int count_faces(const PeImpModel *m) {
@@ -74,8 +74,11 @@ int main(void) {
     expect_refused(&m, PE_IMP_USE_COSTUME, "person's height");
     for (int b = 0; b < 15; b++) m.pos[b][1] *= 10;
 
-    m.part[3].tri[0].page = 2;                                          /* pages 0 to 2 */
-    expect_refused(&m, PE_IMP_USE_COSTUME, "texture pages 0 to 2");
+    m.part[3].tri[0].page = 2, m.w = 384;                               /* pages 0 to 2: the builder repacks */
+    assert(!pe_imp_fit_model(&m, "re2:player/test", PE_IMP_USE_COSTUME, &out, &info, why, sizeof why) && info.pages == 3);
+    pe_imp_model_free(&out);
+    m.w = 256;                                                          /* page 2 past a 256-wide picture */
+    expect_refused(&m, PE_IMP_USE_COSTUME, "outside its 256x256 texture");
     m.part[3].tri[0].page = 1;
 
     m.part[4].tri[0].uv[1][1] = 255;                                    /* inside 256 x 256 still */

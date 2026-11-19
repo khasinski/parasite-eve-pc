@@ -6,8 +6,8 @@
  *
  *   classify   can it serve the use? A costume (or a held weapon, a player holding it) needs the
  *              RE human skeleton (RE2's 15-bone tree, which RE1's and RE3's players are read into)
- *              standing at a person's height, rigid parts, and a texture on at most two pages with
- *              every face inside it. An enemy or a prop takes any model with faces.
+ *              standing at a person's height, rigid parts, and every face inside its texture (on
+ *              three pages the costume builder repacks it). An enemy or a prop takes any model with faces.
  *   normalize  on the copy, for that use only: zero-area faces dropped (all uses); placeholder parts
  *              (one face within a 16-unit box) emptied for costumes and weapons, their bones kept;
  *              faces outside the texture dropped for props (refused for costumes).
@@ -19,7 +19,7 @@
 
 typedef enum { PE_IMP_USE_COSTUME = 1, PE_IMP_USE_ENEMY, PE_IMP_USE_WEAPON, PE_IMP_USE_PROP } PeImpUse;
 
-#define PE_IMP_FIT_VERSION 1
+#define PE_IMP_FIT_VERSION 2
 
 typedef struct {
     int person;                    /* the RE human skeleton at a standing height */

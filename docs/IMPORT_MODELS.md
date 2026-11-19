@@ -57,8 +57,8 @@ ids and measurements, or fixtures cut from real files.
 
 - **Texture pages.** A face's texel is `x = (page − first page the model uses) × 128 + u`, `y = v`
   (8-bit textures; a page is 128 texels). The costume builder used `(page & 1) × 128`, which reads
-  the wrong page for a model on a third page (RE2 `pl0d`); fixed in `555f242d4`. A costume's texture
-  holds two pages, so a model spanning three is refused until the builder can repack it.
+  the wrong page for a model on a third page (RE2 `pl0a`, `pl0d`); fixed in `555f242d4`. A costume's
+  texture holds two pages' worth; the builder repacks a model on three (see the fit layer section).
 - **Bone count isn't a body type.** RE1 `em100d/em1012/em110d/em1112` and `em2d` have 15 bones and
   aren't standing people. Decide "wearable" by skeleton shape (the tree and limb proportions of the
   RE human), not by count.
@@ -88,10 +88,11 @@ int pe_imp_fit_deny(const char *asset_id, unsigned uses, const char *reason);   
   - the RE human skeleton: RE2's 15-bone tree, which RE1's and RE3's players are read into;
   - a joint height of 1,200–3,200 units;
   - rigid parts;
-  - a texture on at most two pages, with every face inside it.
+  - every face inside its texture.
 
   An enemy or a prop takes any model with faces. A refusal says why: "bone 5 hangs from 3: not the RE
-  human skeleton", "its faces use texture pages 0 to 2; a costume's texture holds two".
+  human skeleton", "a face of part 4 points outside its 256x200 texture". A model on three texture
+  pages is the costume builder's to repack (below).
 - **Normalize, on a copy, for that use only:**
   - zero-area faces are dropped for every use;
   - placeholder parts (one face in a 16-unit box) are emptied for costumes and weapons, keeping their bones;
@@ -126,13 +127,29 @@ On the discs (RE1 DC, RE2 disc 1, RE3), wearable:
 
 | | RE1 | RE2 | RE3 |
 |---|---|---|---|
-| players | 24 of 24 | 8 of 10 | 12 of 12 |
-| weapons | 32 of 32 | 32 of 35 | 84 of 84 |
-| people among the enemies | 0 | 31 | 0 |
+| players | 24 of 24 | 10 of 10 | 12 of 12 |
+| weapons | 32 of 32 | 35 of 35 | 84 of 84 |
+| people among the enemies | 0 | 39 | 0 |
 
-The refusals:
-- **Three texture pages:** RE2 `pl0a`, `pl0d` and `pl0d`'s weapons; RE2 people em40 (Irons), em44/em46 (Ben),
-  em4a (Marvin), em59/em5a (Claire and Leon outfits). These need the costume builder to repack textures.
-- **Skeleton in the wrong order:** RE1's and RE3's enemy-folder people are in their own game's bone order. Reading them into RE2's
-  order, as the player readers do, would make them candidates (RE3's are also skinned).
+Repacked for the first time:
+- RE2 `pl0a`, `pl0d` and `pl0d`'s weapons;
+- the RE2 people em40 (Irons), em44/em46 (Ben), em4a (Marvin) and em59/em5a (Claire and Leon outfits).
+
+The costume builder repacks them (below). Only Marvin has been built through the repack so far, in the
+skin-build test; the others pass the fit and should repack the same way.
+
+Still refused:
+- **Skeleton in the wrong order:** RE1's and RE3's enemy-folder people are in their own game's bone order.
+  Reading them into RE2's order, as the player readers do, would make them candidates (RE3's are also skinned).
 - **Not a person:** RE2 `em2d`.
+
+### Texture repacking (costume builder)
+
+A costume's texture is 256 x 255 at 4 bits. A model's faces keep their texel positions (pages
+counted from the first one used) when they fit, as every two-page model does, so those costumes come
+out exactly as before. A model on three pages is repacked:
+- faces whose texels may touch (their boxes, with the builder's 1-texel pad, overlap) stay together;
+- those pieces are shelf-packed into 256 x 255, tallest first, ties in face order;
+- each face's UVs move with its piece, and colours are read at the original position.
+
+A texture that doesn't fit even repacked is refused with that reason.

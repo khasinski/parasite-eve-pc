@@ -155,16 +155,17 @@ int main(void) {
         CHECK(a.rooms.n == b.rooms.n && !memcmp(a.rooms.b, b.rooms.b, a.rooms.n));
         pe_skin_files_free(&b);
         pe_skin_files_free(&a);
-        /* a face two pages past the rest (as RE2's PL0D has): refused with a reason, not built from
-         * the wrong page */
+        /* a face moved two pages over: inside a 384-wide picture it is repacked; past the picture it is
+         * refused with a reason, never built from the wrong place */
         PeImpPart *pt = &claire.part[0];
         PeImpFace *f = pt->quads ? &pt->quad[0] : &pt->tri[0];
         uint16_t page = f->page;
         f->page = (uint16_t)((page & ~15u) | (((page & 15u) + 2) & 15u));
         why[0] = 0;
-        CHECK(pe_skin_build(pe, &claire, &g_re2_human_rig, (const int16_t (*)[4])normals, NULL, &b, why, sizeof why) != 0);
-        printf("  three texture pages: refused (%s)\n", why);
-        CHECK(strstr(why, "texture pages") != NULL);
+        int moved = pe_skin_build(pe, &claire, &g_re2_human_rig, (const int16_t (*)[4])normals, NULL, &b, why, sizeof why);
+        printf("  a face two pages over: %s%s%s\n", moved ? "refused (" : "repacked", moved ? why : "", moved ? ")" : "");
+        CHECK(!moved || strstr(why, "outside") != NULL);
+        if (!moved) pe_skin_files_free(&b);
         f->page = page;
     }
     /* a person among the enemies (Ada, EM41), through the fit layer and the game's human rig, as the
@@ -185,6 +186,28 @@ int main(void) {
         }
         pe_imp_model_free(&ada);
     }
+    /* a person on three texture pages (Irons, Ben, Marvin, some Leon and Claire outfits): repacked
+     * into the costume's 256 x 255 */
+    static const char *const three[] = {"re2:enemy/em4a", "re2:enemy/em40", "re2:enemy/em44", "re2:enemy/em46",
+                                        "re2:enemy/em59", "re2:enemy/em5a", "re2:enemy/em59-cdemd3", "re2:enemy/em5a-cdemd3"};
+    int tried = 0;
+    for (size_t k = 0; k < sizeof three / sizeof *three && !tried; k++) {
+        PeImpModel wide;
+        if (pe_imp_fit("pe-skin-build-test/store", three[k], PE_IMP_USE_COSTUME, &wide, &fit, why, sizeof why)) continue;
+        if (fit.pages < 3) { pe_imp_model_free(&wide); continue; }
+        tried = 1;
+        PeSkinOut c;
+        int rc3 = pe_skin_build(pe, &wide, &g_re2_human_rig, (const int16_t (*)[4])normals, NULL, &c, why, sizeof why);
+        if (rc3) fprintf(stderr, "%s build: %s\n", three[k], why);
+        CHECK(!rc3);
+        if (!rc3) {
+            printf("  %s (pages %u to %u) repacked as a costume: %d vertices, %d texture groups\n", three[k], fit.page_first,
+                   fit.page_first + fit.pages - 1, c.vertices, c.groups);
+            pe_skin_files_free(&c);
+        }
+        pe_imp_model_free(&wide);
+    }
+    if (!tried) printf("  no three-page person in this store; repack skipped\n");
     pe_imp_pe_close(pe);
     pe_imp_model_free(&claire);
     if (!s_fail) printf("skins builder passed\n");
