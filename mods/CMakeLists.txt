@@ -312,7 +312,7 @@ endif()
 if(BUILD_TESTING)
     pe_feature_test(title-choice ${PROJECT_SOURCE_DIR}/tests/pe_mod_title_choice_test.c)
 endif()
-if(BUILD_TESTING AND "pe_challenges" IN_LIST PE_MOD_LIST)
+if(BUILD_TESTING AND "pe_challenges" IN_LIST pe_enabled_mods)   # opt-in: usually via PE_EXTRA_MODS
     pe_feature_test(challenge-start ${PROJECT_SOURCE_DIR}/tests/pe_mod_challenge_start_test.c)
 endif()
 if(BUILD_TESTING AND "pe_styles" IN_LIST PE_MOD_LIST)

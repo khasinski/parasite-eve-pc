@@ -49,6 +49,8 @@ jobs:
   linux-no-downloads:
     # PE_DESKTOP_MOD_DOWNLOADS=OFF (the PS5-style host): no libcurl installed, so any curl use outside
     # the option fails the build. Screenshots and Wardrobe packs still build with cJSON and miniz.
+    # It also builds the opt-in mods (PE_EXTRA_MODS), which no other job compiles. Nothing here is
+    # packaged, so they never reach a release.
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -66,12 +68,12 @@ jobs:
         run: |
           git submodule update --init third_party/psyz
           git -C third_party/psyz submodule update --init external/SDL
-      - name: Build and verify without downloads
+      - name: Build and verify without downloads, with the opt-in mods
         run: |
-          cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DPE_MODS=ON -DPE_DESKTOP_MOD_DOWNLOADS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DPE_MODS=ON -DPE_DESKTOP_MOD_DOWNLOADS=OFF -DCMAKE_BUILD_TYPE=RelWithDebInfo "-DPE_EXTRA_MODS=pe_assists;pe_bp;pe_challenges;pe_hello"
           cmake --build build --parallel 4
           ./build/parasite-eve-pc --help
-          ctest --test-dir build --output-on-failure --no-tests=error -R "^(host-settings|original-game-save-safety|mod-settings-save-safety|mod-save-records|mod-crash-save-tail|mod-preserve-save-tail|mod-inventory|mod-skin-bounds)$"
+          ctest --test-dir build --output-on-failure --no-tests=error -R "^(host-settings|original-game-save-safety|mod-settings-save-safety|mod-save-records|mod-crash-save-tail|mod-preserve-save-tail|mod-inventory|mod-skin-bounds|mod-challenge-start)$"
 
   linux:
     name: linux-${{ matrix.arch }}
