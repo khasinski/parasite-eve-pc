@@ -158,7 +158,13 @@ in `PL0/PLD/CDEMD0.EMS` and `CDEMD2.EMS`: TIM + EMD pairs on 2 KB boundaries (th
 holds RAM addresses and isn't read). An EMD's directory names 8 sections: unknown, three move sets
 (EDD, EMR), the MD1 mesh; read as a PLD's model plus RE2's room-animation move format, by
 `g_re2_emd_ps1` (`pe_src_re2/pe_src_re2_emd.c`), as `enemy/cdemd<k>-<n>` and its moves (70 of 72;
-which EM number each is isn't known yet). Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
+which EM number each is isn't known yet). RE1's monsters are `ENEMY/EM10xx.EMD` and `EM11xx.EMD`
+(not EM102x / EM103x, the people): the directory is the last 20 bytes, D0..D4 with a section implied
+at 0; D3 the TMD, D4 the TIM. The monster's skeleton and moves are the EMR at D1 with its EDD at D2
+(10 to 20 bones); when D0 isn't 0, the EMR at 0 with its EDD at D0 is the player's 15-bone moves for
+that monster (grabbed, bitten). Read by `g_re1_monsters_ps1` with the people's mesh code (any
+skeleton, part i on bone i) and RE1's room-animation moves, as `enemy/em<nnnn>`, its `moves` and
+`player-moves` (50 models, 86 move sets). Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
 PE_TEST_RE3_PC = the RE3 PC folder adds EM34 and E_34) and `mod-enemy-build` (builder on made-up
 data; with PE_TEST_RE3_PC Nemesis built from the store into `enemy-build-test/nemesis`).
 

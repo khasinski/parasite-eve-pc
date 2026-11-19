@@ -19,8 +19,8 @@ static uint32_t le16(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8; }
 static uint32_t le32(const uint8_t *p) { return le16(p) | le16(p + 2) << 16; }
 static int16_t s16(const uint8_t *p) { uint32_t v = le16(p); return (int16_t)(v < 0x8000 ? (int)v : (int)v - 0x10000); }
 
-static PeImpAnimation *animation(const uint8_t *rdt, uint32_t size, uint32_t emr, uint32_t edd) {
-    if (!emr || !edd || emr + 8 > size || edd + 4 > size) return NULL;
+PeImpAnimation *re1_moves(const uint8_t *rdt, uint32_t size, uint32_t emr, uint32_t edd) {
+    if (!edd || emr + 8 > size || edd + 4 > size) return NULL;
     uint32_t kf = emr + le16(rdt + emr + 2), bones = le16(rdt + emr + 4), kf_size = le16(rdt + emr + 6);
     if (!bones || bones > PE_IMP_MODEL_BONES_MAX || kf_size < 12 + 6 * bones || kf >= size) return NULL;
     uint32_t keys = (size - kf) / kf_size;                       /* bounded again by the frames below */
@@ -57,7 +57,8 @@ static PeImpAnimation *animation(const uint8_t *rdt, uint32_t size, uint32_t emr
 static int read_anims(const uint8_t *rdt, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
     uint32_t stage, room, player;
     if (pe_imp_re_room_name(PE_IMP_RE1, path, &stage, &room, &player) || size < 0x48 + 19 * 4) return 0;
-    PeImpAnimation *a = animation(rdt, size, le32(rdt + 0x48 + 4 * 9), le32(rdt + 0x48 + 4 * 10));
+    uint32_t emr = le32(rdt + 0x48 + 4 * 9), edd = le32(rdt + 0x48 + 4 * 10);
+    PeImpAnimation *a = emr ? re1_moves(rdt, size, emr, edd) : NULL;    /* 0: the room has none */
     if (!a) return 0;                                                   /* not one we read */
     char id[40], name[48];
     snprintf(id, sizeof id, "roomanim/%x%02x-%u", (unsigned)stage + 1, (unsigned)room, (unsigned)player);

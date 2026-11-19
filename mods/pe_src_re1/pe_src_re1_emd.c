@@ -34,58 +34,61 @@ static int16_t s16at(const Buf *x, uint32_t at) { return (int16_t)u16at(x, at); 
 /* RE2's part i is RE1's part k_from_re1[i] */
 static const int k_from_re1[BONES] = {0, 2, 6, 7, 8, 3, 4, 5, 1, 12, 13, 14, 9, 10, 11};
 
-int re1_emd_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, size_t n) {
+/* the model from the EMR at emr, the TMD at tmd and the TIM at tim. person: RE1's 15-bone person,
+ * bones and parts put in RE2's order (k_from_re1); else any skeleton (the monsters), as stored, part
+ * i on bone i */
+static int parse(const uint8_t *data, uint32_t size, uint32_t emr, uint32_t tmd, uint32_t tim, int person, PeImpModel *m,
+                 char *why, size_t n) {
     Buf x = {data, size};
     memset(m, 0, sizeof *m);
-    if (size < 64) { snprintf(why, n, "EMD: %u bytes", size); goto bad; }
-    uint32_t dir = size - 20, emr = u32at(&x, dir + 4), tmd = u32at(&x, dir + 12), tim = u32at(&x, dir + 16);
-    if (!(emr < tmd && tmd < tim && tim < dir)) { snprintf(why, n, "EMD: sections out of order"); goto bad; }
-
-    /* skeleton, RE1's order */
     NEED(emr, 8, "skeleton header");
     uint32_t arm = u16at(&x, emr), count = u16at(&x, emr + 4);
-    if (count != BONES) { snprintf(why, n, "EMD: %u bones, not RE1's 15-bone person", count); goto bad; }
-    NEED((uint64_t)emr + 8, 6 * BONES, "bone offsets");
-    NEED((uint64_t)emr + arm, 4 * BONES, "armature");
-    int parent[BONES], to_re2[BONES];
-    for (int i = 0; i < BONES; i++) parent[i] = -1, to_re2[k_from_re1[i]] = i;
-    for (uint32_t i = 0; i < BONES; i++) {
+    if (person ? count != BONES : !count || count > PE_IMP_MODEL_BONES_MAX) {
+        snprintf(why, n, "EMD: %u bones%s", count, person ? ", not RE1's 15-bone person" : "");
+        goto bad;
+    }
+    NEED((uint64_t)emr + 8, 6ull * count, "bone offsets");
+    NEED((uint64_t)emr + arm, 4ull * count, "armature");
+    int parent[PE_IMP_MODEL_BONES_MAX], to_re2[PE_IMP_MODEL_BONES_MAX], from[PE_IMP_MODEL_BONES_MAX];
+    for (uint32_t i = 0; i < count; i++) from[i] = person ? k_from_re1[i] : (int)i;
+    for (uint32_t i = 0; i < count; i++) parent[i] = -1, to_re2[from[i]] = (int)i;
+    for (uint32_t i = 0; i < count; i++) {
         uint32_t nc = u16at(&x, emr + arm + 4 * i), off = u16at(&x, emr + arm + 4 * i + 2);
         NEED((uint64_t)emr + arm + off, nc, "child list");
         for (uint32_t k = 0; k < nc; k++) {
             uint32_t c = u8at(&x, emr + arm + off + k);
-            if (c >= BONES) { snprintf(why, n, "EMD: bone %u has child %u", i, c); goto bad; }
+            if (c >= count) { snprintf(why, n, "EMD: bone %u has child %u", i, c); goto bad; }
             parent[c] = (int)i;
         }
     }
-    for (int i = 0; i < BONES; i++)
-        if (parent[i] >= i || (parent[i] >= 0 && to_re2[parent[i]] >= to_re2[i]) || (i && parent[i] < 0)) {
-            snprintf(why, n, "EMD: not RE1's person skeleton");
+    for (int i = 0; i < (int)count; i++)
+        if (parent[i] >= i || (parent[i] >= 0 && to_re2[parent[i]] >= to_re2[i]) || (person && i && parent[i] < 0)) {
+            snprintf(why, n, "EMD: %s", person ? "not RE1's person skeleton" : "a bone before its parent");
             goto bad;
         }
 
     /* mesh */
     NEED(tmd, 12, "mesh header");
     uint32_t nobj = u32at(&x, tmd + 8), base = tmd + 12;
-    if (nobj < BONES || nobj > PE_IMP_MODEL_PARTS_MAX) { snprintf(why, n, "EMD: %u mesh objects", nobj); goto bad; }
+    if (nobj < count || nobj > PE_IMP_MODEL_PARTS_MAX) { snprintf(why, n, "EMD: %u mesh objects", nobj); goto bad; }
     NEED(base, (uint64_t)28 * nobj, "object table");
-    m->bones = BONES;
-    m->parent = malloc(BONES * sizeof *m->parent);
-    m->rel = calloc(BONES, sizeof *m->rel);
-    m->pos = calloc(BONES, sizeof *m->pos);
+    m->bones = count;
+    m->parent = malloc(count * sizeof *m->parent);
+    m->rel = calloc(count, sizeof *m->rel);
+    m->pos = calloc(count, sizeof *m->pos);
     m->parts = nobj;
     m->part = calloc(nobj, sizeof *m->part);
     if (!m->parent || !m->rel || !m->pos || !m->part) { snprintf(why, n, "out of memory"); goto bad; }
-    for (int r = 0; r < BONES; r++) {
-        int i = k_from_re1[r];
+    for (int r = 0; r < (int)count; r++) {
+        int i = from[r];
         m->parent[r] = (int16_t)(parent[i] >= 0 ? to_re2[parent[i]] : -1);
         for (int c = 0; c < 3; c++) m->rel[r][c] = s16at(&x, emr + 8 + 6 * (uint32_t)i + 2 * (uint32_t)c);
     }
-    for (int r = 0; r < BONES; r++)
+    for (int r = 0; r < (int)count; r++)
         for (int c = 0; c < 3; c++) m->pos[r][c] = (m->parent[r] >= 0 ? m->pos[m->parent[r]][c] : 0) + m->rel[r][c];
     uint32_t total = 0;
     for (uint32_t p = 0; p < nobj; p++) {
-        uint32_t i = p < BONES ? (uint32_t)k_from_re1[p] : p, at = base + 28 * i;
+        uint32_t i = p < count ? (uint32_t)from[p] : p, at = base + 28 * i;
         uint32_t vo = u32at(&x, at), vc = u32at(&x, at + 4), no = u32at(&x, at + 8), nc = u32at(&x, at + 12);
         uint32_t fo = u32at(&x, at + 16), fc = u32at(&x, at + 20);
         if (fc > PE_IMP_MODEL_FACES_MAX || (total += fc) > PE_IMP_MODEL_FACES_MAX) { snprintf(why, n, "EMD: too many faces"); goto bad; }
@@ -137,6 +140,15 @@ int re1_emd_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, 
 bad:
     pe_imp_model_free(m);
     return -1;
+}
+
+int re1_emd_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, size_t n) {
+    memset(m, 0, sizeof *m);
+    if (size < 64) { snprintf(why, n, "EMD: %u bytes", size); return -1; }
+    Buf b = {data, size};
+    uint32_t dir = size - 20, emr = u32at(&b, dir + 4), tmd = u32at(&b, dir + 12), tim = u32at(&b, dir + 16);
+    if (!(emr < tmd && tmd < tim && tim < dir)) { snprintf(why, n, "EMD: sections out of order"); return -1; }
+    return parse(data, size, emr, tmd, tim, 1, m, why, n);
 }
 
 /* "PSXUSA/ENEMY/CHAR10.EMD" -> proposed "player/char10", name "CHAR10" */
@@ -225,3 +237,60 @@ const char g_re1_naming[] =
     " \"player/em1032\": {\"id\": \"player/chris_camo\", \"name\": \"Camo Chris\"},"
     " \"player/em1033\": {\"id\": \"player/jill_denim\", \"name\": \"Denim Jill\"},"
     " \"player/em1035\": {\"id\": \"player/rebecca_red\", \"name\": \"Red Rebecca\"}}";
+
+/* The monsters (and the other non-people: EM10xx and EM11xx but EM102x / EM103x, the people above).
+ * The directory, the last 20 bytes: u32 D0..D4, with a section implied at 0. D3 is the TMD, D4 the
+ * TIM. The monster's own skeleton and moves are the EMR at D1 with its EDD at D2 (10 to 20 bones).
+ * When D0 isn't 0, the EMR at 0 with its EDD at D0 is a second set of 15 bones: the player's moves
+ * for this monster (grabbed, bitten); a person's file has D0 = D1 = 0 and only that set. Moves as
+ * RE1's room animations (pe_src_re1_anims.c, s16 angles). "enemy/em1000", its "moves" and, when
+ * there, its "player-moves". */
+static int emit_moves(PeImpSink *sink, const char *id, const char *what, const char *stem, PeImpAnimation *a, char *why,
+                      size_t n) {
+    char mid[48], name[48];
+    snprintf(mid, sizeof mid, "%s/%s", id, what);
+    snprintf(name, sizeof name, "%s %s", stem, what);
+    if (pe_imp_emit(sink, PE_IMP_ANIMATION, mid, name, a)) { snprintf(why, n, "could not catalog %s", mid); return -1; }
+    return 0;
+}
+
+static int read_monster(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    const char *s = strrchr(path, '/');
+    s = s ? s + 1 : path;
+    if (strncmp(s, "EM1", 3) || (s[3] == '0' && (s[4] == '2' || s[4] == '3'))) return 0;   /* the people */
+    if (size < 64) return 0;
+    Buf b = {data, size};
+    uint32_t dir = size - 20, d[5];
+    for (int i = 0; i < 5; i++) d[i] = u32at(&b, dir + 4 * (uint32_t)i);
+    if (!(d[3] < d[4] && d[4] < dir) || d[1] >= d[2] || d[2] >= d[3] || (d[0] && d[0] >= d[1])) return 0;
+    PeImpModel *m = calloc(1, sizeof *m);
+    if (!m) { snprintf(why, n, "out of memory"); return -1; }
+    char quiet[160];
+    if (parse(data, size, d[1], d[3], d[4], 0, m, quiet, sizeof quiet)) { free(m); return 0; }
+    PeImpAnimation *own = re1_moves(data, d[3], d[1], d[2]), *player = d[0] ? re1_moves(data, d[1], 0, d[0]) : NULL;
+    if (own && own->bones != m->bones) pe_imp_animation_free(own), free(own), own = NULL;
+    char stem[16] = "", id[32];
+    size_t k = 0;
+    while (s[k] && s[k] != '.' && k + 1 < sizeof stem) stem[k] = s[k], k++;
+    stem[k] = 0;
+    snprintf(id, sizeof id, "enemy/");
+    for (size_t j = 0; stem[j]; j++) id[6 + j] = (char)(stem[j] >= 'A' && stem[j] <= 'Z' ? stem[j] + 32 : stem[j]), id[7 + j] = 0;
+    int rc = 0;
+    if (pe_imp_emit(sink, PE_IMP_MODEL, id, stem, m)) { snprintf(why, n, "could not catalog %s", id); rc = -1; }
+    if (own) {
+        if (!rc) rc = emit_moves(sink, id, "moves", stem, own, why, n);
+        else pe_imp_animation_free(own), free(own);
+    }
+    if (player) {
+        if (!rc) rc = emit_moves(sink, id, "player-moves", stem, player, why, n);
+        else pe_imp_animation_free(player), free(player);
+    }
+    return rc;
+}
+
+const PeImpReader g_re1_monsters_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re1", .platform = "ps1", .format = "emd-monster",
+    .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "*/ENEMY/EM1???.EMD",
+    .tags = "enemy", .read = read_monster, .path_key = 1
+};

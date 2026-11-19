@@ -341,7 +341,7 @@ if(BUILD_TESTING)
     set_tests_properties(mod-re3-enemy PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
     # The RE1 reader on a made-up person; PE_TEST_RE1_DISC adds the four people on the disc.
     pe_feature_test(re1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re1_test.c ${pe_import_core_sources}
-        pe_src_re1/pe_src_re1_emd.c)
+        pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c)
     target_include_directories(test-mod-re1 PRIVATE host/import pe_src_re1)
     # The Dino Crisis reader on a made-up archive; PE_TEST_DC1_DISC adds Regina's four outfits.
     pe_feature_test(dc1 ${PROJECT_SOURCE_DIR}/tests/pe_mod_dc1_test.c ${pe_import_core_sources}
@@ -372,7 +372,7 @@ if(BUILD_TESTING)
         pe_src_re1/pe_src_re1_movies.c pe_src_re2/pe_src_re2_movies.c pe_src_re3/pe_src_re3_movies.c
         pe_src_re1/pe_src_re1_files.c pe_src_re2/pe_src_re2_files.c pe_src_re3/pe_src_re3_files.c
         pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_pld.c pe_src_re3/pe_src_re3_objects.c pe_src_re1/pe_src_re1_objects.c
-        pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re3/pe_src_re3_emd.c
+        pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_emd.c pe_src_re3/pe_src_re3_emd.c
         ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
     target_include_directories(test-mod-rdt PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
