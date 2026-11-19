@@ -1999,7 +1999,7 @@
   "auxiliaryFiles": [
     {
       "path": "support/application-allocation-log.c",
-      "sha256": "30ff7c51833d5412048049e529d5d1f68612d5d7bf33eb2fabc4fb9d557a1eef",
+      "sha256": "a5d7c376610d6974c80c6268784e0f2798233b33618777509d0d25db70dee309",
       "bytes": 3595
     },
     {
@@ -4819,7 +4819,7 @@
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_enemies.c",
-      "sha256": "8ef21f9ea677e46e6bb4b0524d21e629396eefe68bf005c408b049b342aaaf70"
+      "sha256": "2df17ad290b839340a84e46df8495850e9384a7f20868789abcfc9c8a92e8856"
     },
     {
       "path": "mods/host/import/pe_imp_room.c",
@@ -4843,7 +4843,7 @@
     },
     {
       "path": "mods/host/import/pe_imp_enemy.h",
-      "sha256": "8c4cbcee9868c90e8948d58a52d0b62fc7db03cf8fc776a8c18717a19e856410"
+      "sha256": "b70609a5a3c65b659ba01b0c15e88d62d247834ff2b6055d99b4991a6db63cc4"
     },
     {
       "path": "mods/host/import/pe_imp_rdt.c",

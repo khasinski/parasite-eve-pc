@@ -5,7 +5,8 @@ battle record and its own fight logic); nothing of the room is replaced.
 A New Game is played to the first free field (as enemy_import_fights.py), Aya goes to level 30 and
 God mode keeps her up, and the picker starts M075's Bear fight with the pack's enemy.
   alone   Room's enemies "Sent away": the battle's only enemy is the imported one (its own actor
-          type, the pack's HP); its model is drawn every frame and its texture is in VRAM.
+          type, the pack's HP); its model is drawn every frame and its texture is in VRAM where
+          the mod says it put it (vram=, a block the room is not using).
           Aya waits: it walks to her (the distance shrinks), its time bar fills, it attacks and its
           blow lands through the game's enemy-hit path (Aya loses HP: the game's damage from the
           pack's attack power). Then Aya shoots: its HP goes down, it plays its hurt animation,
@@ -34,7 +35,6 @@ AREA, FIGHT, MAP = 1, 10, '75'     # Day 2 Central Park, M075: Bear
 TEST_HP = 100
 REACH = 900                        # the pack's longest attack reach (read from enemy.json)
 FOE_TYPE = 0xEE                    # the imported enemy's actor type
-TEX_X, TEX_Y = 320, 256
 HAS_SOUNDS = False                 # the pack lists sounds and its walk or attacks mark sound frames: they play
 
 
@@ -57,9 +57,9 @@ def num(st, key):
         return -1
 
 
-def vram_block(path, width, height):
-    data = Path(path).read_bytes()
-    return [data[((TEX_Y + y) * 1024 + TEX_X) * 2:((TEX_Y + y) * 1024 + TEX_X) * 2 + width] for y in range(height)]
+def vram_block(path, at, width, height):
+    data, (x, y0) = Path(path).read_bytes(), at
+    return [data[((y0 + y) * 1024 + x) * 2:((y0 + y) * 1024 + x) * 2 + width] for y in range(height)]
 
 
 def wait_joined(game, limit=3000):
@@ -87,8 +87,10 @@ def part_alone(game, work, rows, tex_w, tex_h):
     game.adv(30)
     game.raw(f'capture {work / "appears"}')
     st = status(game)
+    at = tuple(int(v) for v in st.get('vram', '-1,-1').split(','))
     F.check(num(st, 'tris') > 0 and num(st, 'frames') > 0, f'alone: not drawn: {st["text"]}')
-    F.check(vram_block(work / 'appears.vram', tex_w, tex_h) == rows, 'alone: the pack texture is not in VRAM')
+    F.check(at[0] >= 0 and vram_block(work / 'appears.vram', at, tex_w, tex_h) == rows,
+            f'alone: the pack texture is not in VRAM at {at}')
     first_dist = num(st, 'dist')
     print(f'alone: joined: {st["text"]}', flush=True)
 
@@ -148,7 +150,7 @@ def part_alone(game, work, rows, tex_w, tex_h):
     F.check(last.endswith(': won'), f'alone: Last fight is {last!r}')
     F.check('beaten (beaten 1 of 1)' in text, f'alone: Imported status says {text!r}')
     game.raw(f'capture {work / "after"}')
-    F.check(vram_block(work / 'after.vram', tex_w, tex_h) != rows, 'alone: the VRAM block was not given back')
+    F.check(vram_block(work / 'after.vram', at, tex_w, tex_h) != rows, 'alone: the VRAM block was not given back')
 
 
 def part_with(game, work):

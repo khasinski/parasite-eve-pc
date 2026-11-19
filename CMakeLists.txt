@@ -744,6 +744,13 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/enemy-import-nemesis-evidence)
             set_tests_properties(enemy-import-nemesis PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 900 LABELS "game-assets;mods")
+            # The same pack in every fight of the list: joining leaves the room's picture whole
+            # (its texture goes to VRAM the room is not using).
+            add_test(NAME enemy-import-rooms COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/enemy_import_rooms.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/enemy-import-rooms-evidence)
+            set_tests_properties(enemy-import-rooms PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 3600 LABELS "game-assets;mods;slow")
         endif()
         if(PE_MODS AND "pe_lang" IN_LIST PE_MOD_LIST)
             # The text renderer with language packs made from the disc: stretches, name letters,

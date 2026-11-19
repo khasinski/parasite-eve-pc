@@ -127,13 +127,17 @@ its death animation, then the game's own death fade, EXP (hpMirror = exp) and fr
 PE_HOOK_ACTOR_RENDER (Entity_FrameUpdate, before posing) the mod poses the pack's model (every
 vertex on its bone, joint vertices half and half on two) and links it as textured triangles,
 depth-sorted like the game's, and returns nonzero so the game skips its own posing, draw and
-shadow for that actor. The texture goes to VRAM x 320..511, y 256..511 (palettes x 512, y 500..),
-which no battle room uses; what was there is saved and put back after the battle. Pack fields the
+shadow for that actor. Rooms keep their pictures in VRAM in no fixed place, so the texture and
+palettes go to blocks chosen per battle: while the battle opens, the mod reads each frame's
+ordering table (PE_HOOK_FIELD_BACKGROUND stage 1) and marks the VRAM every textured packet reads;
+at the join each block goes where nothing was read, with the fewest non-black pixels (x 320,
+y 256 and palettes x 512, y 500 first). What was there is saved and put back after the battle. Pack fields the
 brain reads: hp, defense, exp; "behavior" {speed, charge, radius, stagger}; per attack "power"
 (else "damage"), "range" and "hit" (else half the animation). Tests: `mod-enemy-pack` (loader,
 refusals, posing, behavior fields; a real pack with PE_TEST_ENEMY_PACK) and `enemy-import-nemesis`
 (PE_TEST_DISC + PE_TEST_ENEMY_PACK: alone and beside the room's enemies, it appears, walks,
-attacks, is hurt, dies, the battle is won and the VRAM block given back).
+attacks, is hurt, dies, the battle is won and the VRAM block given back) and `enemy-import-rooms`
+(the same pack in every fight of the list: the room's picture stays whole when it joins).
 
 **Built in the game (F1 > Import)**, the same way as costumes: a source game's mod registers
 readers, a naming table and an **enemy profile** (`host/import/pe_imp_enemy.h`: moves for the

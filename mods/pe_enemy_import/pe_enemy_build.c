@@ -126,18 +126,33 @@ static int height_of(const PeEnemyPack *p, int idle, int16_t (*pose)[3]) {
     return -top;
 }
 
+/* how far in front of its centre (source units) frame k of an anim reaches. In front is where the
+ * profile's yaw turns to face Aya: the model's (-sin yaw, cos yaw) in x and z (2048: -z, 3072: +x). */
+static int front_of(const PeEnemyPack *p, int anim, int k, int16_t (*pose)[3]) {
+    const double ang = p->yaw * 2 * 3.14159265358979323846 / 4096.0, fx = -sin(ang), fz = cos(ang);
+    double front = 0;
+    if (pe_enemy_pose(p, anim, k, pose)) return -1;
+    for (int i = 0; i < p->vertices; i++) {
+        const double d = pose[i][0] * fx + pose[i][2] * fz;
+        if (d > front) front = d;
+    }
+    return (int)lrint(front);
+}
+
 /* the frame a blow lands: the move's first hit frame, else where it reaches furthest forward */
 static int blow_frame(const PeEnemyPack *p, int anim, int16_t (*pose)[3]) {
     const PeEnemyAnim *a = &p->anim[anim];
     for (int k = 0; a->event && k < a->frames; k++) if (a->event[k] & PE_ENEMY_EVENT_HIT) return k;
-    int best = 0, front = 1 << 30;
+    int best = 0, front = -1;
     for (int k = 0; k < a->frames; k++) {
-        if (pe_enemy_pose(p, anim, k, pose)) break;
-        for (int i = 0; i < p->vertices; i++)
-            if (pose[i][2] < front) front = pose[i][2], best = k;        /* source models face -z */
+        const int f = front_of(p, anim, k, pose);
+        if (f < 0) break;
+        if (f > front) front = f, best = k;
     }
     return best;
 }
+
+#define PE_AYA_HALF_WIDTH 120   /* PE field units: a blow lands on her body, not her centre */
 
 static void scale(PeEnemyPack *p, double sc) {
     for (int i = 0; i < p->bones; i++)
@@ -179,6 +194,10 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
         at->power = at->damage = prof->attack[i].power, at->range = prof->attack[i].range;
         int hit = prof->attack[i].hit;                 /* the profile's own frame, when it has one */
         at->hit = hit > 0 && hit < p->anim[at->anim].frames ? hit : blow_frame(p, at->anim, pose);
+        if (at->range <= 0) {   /* never inside its own body (radius): it would stand in Aya */
+            const int front = (int)lrint(front_of(p, at->anim, at->hit, pose) * info->scale);
+            at->range = (front > p->radius ? front : p->radius) + PE_AYA_HALF_WIDTH;
+        }
         p->attacks++;
     }
     scale(p, info->scale);

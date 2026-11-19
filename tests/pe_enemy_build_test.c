@@ -117,6 +117,24 @@ static void test_made_up(void) {
     assert(p.anim[1].event[1] == 1 && p.anim[1].event[2] == PE_ENEMY_EVENT_HIT && p.anim[1].event[3] == PE_ENEMY_EVENT_HIT);
     assert(p.sounds == 2 && !p.sound[0].pcm && p.sound[1].frames == 100 && info.sounds == 1 && info.sound_events == 1);
 
+    {   /* range 0: measured, how far in front the scaled model gets at the blow frame (at least
+         * its radius) + 120; yaw
+         * 3072 (as RE3's): in front is +x */
+        PeImpEnemyProfile measured = k_profile;
+        PeEnemyPack q;
+        PeEnemyBuildInfo qi;
+        int16_t pose[16][3];
+        int front = 0;
+        measured.attack[0].range = 0;
+        measured.yaw = 3072;
+        rc = pe_enemy_build(&m, &a, &measured, snd, 2, "test:enemy/test", &q, &qi, why, sizeof why);
+        assert(!rc && q.vertices <= 16);
+        assert(!pe_enemy_pose(&q, q.attack[0].anim, q.attack[0].hit, pose));
+        for (int i = 0; i < q.vertices; i++) front = pose[i][0] > front ? pose[i][0] : front;
+        assert(abs(q.attack[0].range - ((front > q.radius ? front : q.radius) + 120)) <= 2);
+        pe_enemy_pack_free(&q);
+    }
+
     char folder[1100];
     snprintf(folder, sizeof folder, "%s/made-up", s_dir);
     rc = pe_enemy_write(&p, folder, why, sizeof why);
