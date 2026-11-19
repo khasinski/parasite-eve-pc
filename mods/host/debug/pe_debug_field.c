@@ -12,6 +12,7 @@
 #include "pe1/script_queue.h"
 #include "pe1/reloc_block.h"
 #include "pe1/field_collision.h"
+#include "pe1/scene_transition.h"
 
 #define PE_VAR_STORY 74
 #define PE_VAR_COUNT 512
@@ -48,6 +49,29 @@ static void pe_ctl_room(const char *args) {
              (unsigned)g_SceneDispatchToken, (unsigned)g_ScriptVariableBank[PE_VAR_STORY],
              (int)g_GameState.current_story_day, pe_free_field());
     pe_debug_reply("ok %s %s", "room", detail);
+}
+
+void pe_debug_room_write(FILE *f) {
+    char name[8] = { 0 };
+    Text_EncodeBase32(name, (unsigned)g_SceneDispatchToken);
+    name[6] = 0;
+    fprintf(f, "{\"map\":%d,\"name\":", pe_room_number());
+    pe_debug_json_string(f, name);
+    fprintf(f, ",\"token\":\"%08X\",\"story\":%u,\"day\":%d,\"free\":%s,\"flags\":%u}",
+            (unsigned)g_SceneDispatchToken, (unsigned)g_ScriptVariableBank[PE_VAR_STORY],
+            (int)g_GameState.current_story_day, pe_free_field() ? "true" : "false", (unsigned)g_GameStateFlags);
+}
+
+void pe_debug_actors_write(FILE *f) {
+    FieldActor *a;
+    int i;
+    fputc('[', f);
+    for (a = g_FieldActorListHead, i = 0; a && i < PE_ACTORS_MAX; a = a->next, ++i)
+        fprintf(f, "%s{\"index\":%d,\"type\":%u,\"sub\":%u,\"player\":%s,\"position\":[%d,%d,%d],"
+                "\"yaw\":%d,\"flags\":%u,\"script\":%s}", i ? "," : "", i, a->type_id, a->sub_id,
+                a == g_PlayerEntity ? "true" : "false", a->pos_x, a->pos_y, a->pos_z, a->rot_y,
+                (unsigned)a->flags, a->script_base ? "true" : "false");
+    fputc(']', f);
 }
 
 static void pe_ctl_warp(const char *args) {
@@ -114,13 +138,25 @@ static void pe_ctl_find_script(const char *args) {
     pe_debug_reply("ok %s %s", "find-script", at ? found : "none");
 }
 
-static void pe_ctl_set_player(int x, int z, int yaw) {
+/* Aya to x, z facing yaw, on the floor triangle there. A spot with no floor (off the room's walkable
+ * mesh) is refused and everything put back: the field's movement reads the floor triangle, and a
+ * null one crashed it (Geo_ClipToFloorBoundary). 1: placed; 0: no floor there. */
+static int pe_ctl_set_player(int x, int z, int yaw) {
     FieldActor *p = g_PlayerEntity;
+    const int px = p->pos_x, py = p->pos_y, pz = p->pos_z, bx = p->base_x, bz = p->base_z;
+    const short ry = p->rot_y, sry = p->saved_rot_y;
+    void *const face = p->collision_face, *const mirror = p->collision_face_mirror;
     p->pos_x = p->base_x = x;
     p->pos_z = p->base_z = z;
     p->rot_y = p->saved_rot_y = (short)(yaw & 0xFFF);
     p->collision_face = p->collision_face_mirror = NULL;
     Entity_FindFloor((struct BattleEntity *)p);
+    if (p->collision_face) return 1;
+    p->pos_x = px; p->pos_y = py; p->pos_z = pz;
+    p->base_x = bx; p->base_z = bz;
+    p->rot_y = ry; p->saved_rot_y = sry;
+    p->collision_face = face; p->collision_face_mirror = mirror;
+    return 0;
 }
 
 static void pe_ctl_place(const char *args) {
@@ -128,7 +164,10 @@ static void pe_ctl_place(const char *args) {
     int x, z, yaw;
     int n = sscanf(args, "%d %d %d", &x, &z, &yaw);
     if (n < 2 || !g_PlayerEntity) { pe_debug_reply("err %s %s", "place", g_PlayerEntity ? "place X Z [YAW]" : "no Aya"); return; }
-    pe_ctl_set_player(x, z, n >= 3 ? yaw : g_PlayerEntity->rot_y);
+    if (!pe_ctl_set_player(x, z, n >= 3 ? yaw : g_PlayerEntity->rot_y)) {
+        pe_debug_reply("err %s %s", "place", "no floor at that spot (off the room's walkable area); Aya not moved");
+        return;
+    }
     snprintf(detail, sizeof detail, "%d,%d", x, z);
     pe_debug_reply("ok %s %s", "place", detail);
 }
@@ -147,8 +186,11 @@ static void pe_ctl_place_near(const char *args) {
     len = sqrt(dx * dx + dz * dz);
     if (len < 1.0) { dx = 0; dz = 1; len = 1; }
     dx /= len; dz /= len;
-    pe_ctl_set_player(a->pos_x + (int)(dx * dist), a->pos_z + (int)(dz * dist),
-                      (int)lround(atan2(-dx, -dz) * 4096.0 / (2.0 * 3.14159265358979)));
+    if (!pe_ctl_set_player(a->pos_x + (int)(dx * dist), a->pos_z + (int)(dz * dist),
+                           (int)lround(atan2(-dx, -dz) * 4096.0 / (2.0 * 3.14159265358979)))) {
+        pe_debug_reply("err %s %s", "place-near", "no floor at that spot (try a smaller DIST); Aya not moved");
+        return;
+    }
     snprintf(detail, sizeof detail, "%d,%d,%d", p->pos_x, p->pos_z, p->rot_y);
     pe_debug_reply("ok %s %s", "place-near", detail);
 }
@@ -166,6 +208,21 @@ static void pe_ctl_var(const char *args, int set) {
     pe_debug_reply("ok %s %s", set ? "set-var" : "get-var", detail);
 }
 
+/* The story day as the game's own day change sets it (Scene_SetStoryDay, which day-change scripts
+ * call): current and pending day, and the day's character bank reloads at the next room load. */
+static void pe_ctl_set_day(const char *args) {
+    char detail[48], extra;
+    int day = 0;
+    if (sscanf(args, "%d %c", &day, &extra) != 1 || day < 1 || day > 8) {
+        pe_debug_reply("err %s %s", "set-day", "set-day N (1..8)");
+        return;
+    }
+    if (!pe_free_field()) { pe_debug_reply("err %s %s", "set-day", "not in free field"); return; }
+    Scene_SetStoryDay(day);
+    snprintf(detail, sizeof detail, "day=%d", (int)g_GameState.current_story_day);
+    pe_debug_reply("ok %s %s", "set-day", detail);
+}
+
 static void pe_ctl_get_var(const char *args) { pe_ctl_var(args, 0); }
 static void pe_ctl_set_var(const char *args) { pe_ctl_var(args, 1); }
 
@@ -178,6 +235,7 @@ static const PeDebugCommand s_commands[] = {
     {"place", PE_DEBUG_ARGS, pe_ctl_place},
     {"get-var", PE_DEBUG_ARGS, pe_ctl_get_var},
     {"set-var", PE_DEBUG_ARGS, pe_ctl_set_var},
+    {"set-day", PE_DEBUG_ARGS, pe_ctl_set_day},
 };
 
 const PeDebugModule pe_debug_field_module = {
