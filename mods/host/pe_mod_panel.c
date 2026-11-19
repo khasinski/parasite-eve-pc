@@ -336,6 +336,61 @@ static void pe_wrapped(float x, float baseline, float step, float width, float e
     }
 }
 
+/* `text` in up to `max` lines no wider than `width` at `em`, broken after a space, slash, backslash,
+ * comma or semicolon (a folder path is one long word); a piece with nowhere to break is cut. The
+ * line count, or -1 if it needs more lines (with `force`, the last line takes what fits). */
+#define PE_INFO_LINE 200
+static int pe_split(const char *text, float width, float em, int max, char lines[][PE_INFO_LINE], int force) {
+    int n = 0;
+    while (*text == ' ') ++text;
+    while (*text && n < max) {
+        char buf[PE_INFO_LINE];
+        size_t len = strlen(text), fit = 0, brk = 0, i;
+        for (i = 1; i <= len && i < sizeof buf; ++i) {
+            memcpy(buf, text, i);
+            buf[i] = '\0';
+            if (pe_ui_text_width(buf, em) > width) break;
+            fit = i;
+            if (i == len || strchr(" /\\,;", text[i - 1])) brk = i;
+        }
+        if (!fit) fit = 1;
+        if (fit < len && n == max - 1 && !force) return -1;       /* doesn't fit in `max` lines */
+        if (fit < len && brk) fit = brk;
+        memcpy(lines[n], text, fit);
+        lines[n][fit] = '\0';
+        while (fit && lines[n][fit - 1] == ' ') lines[n][--fit] = '\0';
+        ++n;
+        text += strlen(lines[n - 1]);
+        while (*text == ' ') ++text;
+        if (n == max && *text && force) break;
+    }
+    return n;
+}
+
+/* An info row's value: in the value column when it fits; else across the room after the label,
+ * smaller and on up to three lines, right-aligned, so a long folder or status reads in full. */
+static void pe_paint_info(const char *label, const char *value, float mid, PeColor c) {
+    const float s = s_scale, value_x = (PANEL_W - PANEL_PAD - VALUE_W * 0.5f) * s;
+    static const struct { float em, step; int lines; } sizes[] = {{16, 0, 1}, {13, 15, 2}, {11, 12, 3}};
+    char lines[3][PE_INFO_LINE];
+    int k, n = -1;
+    if (pe_ui_text_width(value, 16 * s) <= (VALUE_W - 12) * s) {
+        pe_ui_draw_text(&s_surface, value_x, mid + 6 * s, 16 * s, value, c, PE_ALIGN_CENTRE);
+        return;
+    }
+    {
+        const float x1 = (PANEL_W - PANEL_PAD) * s, x0 = (PANEL_PAD + 16) * s + pe_ui_text_width(label, 17 * s) + 20 * s;
+        const float width = x1 - x0;
+        for (k = 0; k < 3 && n < 0; ++k) n = pe_split(value, width, sizes[k].em * s, sizes[k].lines, lines, 0);
+        if (n < 0) k = 3, n = pe_split(value, width, sizes[2].em * s, 3, lines, 1);
+        --k;
+        for (int i = 0; i < n; ++i) {
+            const float base = mid + sizes[k].em * 0.38f * s + (i - (n - 1) * 0.5f) * sizes[k].step * s;
+            pe_ui_draw_text(&s_surface, x1, base, sizes[k].em * s, lines[i], c, PE_ALIGN_RIGHT);
+        }
+    }
+}
+
 /* A row's ground: the selected one's band and cursor, or the rule above an unselected one. */
 static void pe_paint_row_ground(int slot, int selected) {
     const float s = s_scale, top = (HEADER_H + slot * ROW_H) * s, mid = top + ROW_H * 0.5f * s;
@@ -359,7 +414,7 @@ static void pe_paint_row_pe(const Entry *e, int slot, int selected) {
     const float label_x = (PANEL_PAD + 16) * s, value_x = (PANEL_W - PANEL_PAD - VALUE_W * 0.5f) * s;
     const int off = e->row >= 0 ? !pe_menu_row_active(pe_menu_row(e->row)) : !pe_page_active(e->page);
     const PeColor label = pe_ui_alpha(pe_look_text, (selected ? 1.0f : 0.78f) * (off ? 0.55f : 1.0f));
-    char value[96];
+    char value[512];
     pe_paint_row_ground(slot, selected);
     if (e->row < 0) {                                   /* link */
         pe_ui_draw_text(&s_surface, label_x, base, 17 * s, e->page + e->name_at, label, PE_ALIGN_LEFT);
@@ -376,7 +431,7 @@ static void pe_paint_row_pe(const Entry *e, int slot, int selected) {
         }
         pe_menu_row_value_text(row, value, sizeof value);
         if (row->kind == PE_ROW_INFO) {
-            pe_ui_draw_text(&s_surface, value_x, base, 16 * s, value, pe_ui_alpha(pe_look_dim, 0.95f), PE_ALIGN_CENTRE);
+            pe_paint_info(row->label, value, mid, pe_ui_alpha(pe_look_dim, 0.95f));
             return;
         }
         {                                               /* a framed field for values that change */
@@ -698,6 +753,24 @@ static void pe_panel_event(const SDL_Event *ev) {
     s_panel.dirty = 1;
 }
 
+/* Info rows can change while the panel is open (a worker's progress, a spinner): repaint when the
+ * text of any visible one does. Cheap: their text functions only format. */
+static void pe_watch_info(void) {
+    static uint32_t s_last;
+    uint32_t h = 2166136261u;
+    char value[512];
+    int i, visible = pe_visible_rows();
+    for (i = s_panel.scroll; i < s_panel.count && i < s_panel.scroll + visible; ++i) {
+        const Entry *e = &s_panel.entries[i];
+        PeMenuRow *row;
+        if (e->row < 0 || !(row = pe_menu_row(e->row)) || row->kind != PE_ROW_INFO) continue;
+        pe_menu_row_value_text(row, value, sizeof value);
+        for (const char *p = value; *p; ++p) h = (h ^ (unsigned char)*p) * 16777619u;
+        h = (h ^ (uint32_t)i) * 16777619u;
+    }
+    if (h != s_last) s_last = h, s_panel.dirty = 1;
+}
+
 static void pe_panel_run(void) {
     const int audio_paused = Psyz_AudioIsPaused();
     if (!pe_ui_gpu_ready()) {
@@ -712,6 +785,7 @@ static void pe_panel_run(void) {
     s_panel.dirty = 1;
     pe_open_page();
     while (s_panel.open) {
+        pe_watch_info();
         pe_refresh();
         Psyz_VideoVSync(0);
     }

@@ -99,6 +99,7 @@ int pe_skin_instant(void) { return 0; }
 void pe_packs_scan(void) {}                                   /* character packs: their own test */
 void pe_packs_register(void) {}
 void pe_packs_page_register(void) {}
+int pe_packs_add_new(char *names, unsigned size) { if (names && size) names[0] = 0; return 0; }   /* mod-import-flow */
 void pe_model_skin_set_reader(PeSkinReader read) { (void)read; }
 int pe_pack_read(const char *r, const char *n, unsigned char **d, unsigned *s, unsigned m) { (void)r; (void)n; (void)m; *d = NULL; *s = 0; return 0; }
 

@@ -13,6 +13,7 @@
 #include "pe1/render_prim.h"
 #include "pe1/render_shadow.h"
 #include "pe1/room_floor.h"
+#include "pe_hooks.h"
 #include <psyz/gpu.h>
 #include <psyz/video.h>
 #include <string.h>
@@ -275,6 +276,7 @@ void Render_LinkFieldSubpixel(int slot, RenderNativeTag *ordering) {
     int i;
 
     s_FieldShift[slot].active = 0;
+    if (PE_HOOK(PE_HOOK_FIELD_BACKGROUND, (&(PeHookFieldBackground){1, slot, ordering}))) return;
     Render_LinkHdUnderlayBackdrop(slot,ordering);
     if (!Psyz_VideoGetWidescreen()) return;
     if (s_WidescreenCover[slot].tiles) Render_LinkHdWidescreenBackdrop(slot,ordering);
@@ -662,6 +664,8 @@ s32 Render_BuildMeshList(void) {
     base.state->out_disp_y = base.state->disp_src_y - ((u16)g_GeomScroll.state.position.y - 112);
     base.word += base.state->entry_offset;
     i = 0;
+    /* An imported room shows its own picture instead (pe_hooks.h). */
+    if (PE_HOOK(PE_HOOK_FIELD_BACKGROUND, (&(PeHookFieldBackground){0, 0, NULL}))) count = 0;
     if (i < count) {
         entry = base.entry;
         do {

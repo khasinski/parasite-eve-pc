@@ -724,6 +724,27 @@ if(BUILD_TESTING)
             ${CMAKE_BINARY_DIR}/mouse-evidence)
         set_tests_properties(original-game-mouse PROPERTIES SKIP_RETURN_CODE 77
             TIMEOUT 900 LABELS "game-assets")
+        if(PE_MODS AND "pe_enemy_import" IN_LIST PE_MOD_LIST AND "pe_cheats" IN_LIST PE_MOD_LIST)
+            # F1 > Fights on Disc 1: a picked fight starts in its room with its enemies; won, run
+            # from and lost, the trip ends safely. -all: every fight in the list starts.
+            add_test(NAME enemy-import-fights COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/enemy_import_fights.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/enemy-import-evidence)
+            set_tests_properties(enemy-import-fights PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods")
+            add_test(NAME enemy-import-fights-all COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/enemy_import_fights.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/enemy-import-all-evidence --all)
+            set_tests_properties(enemy-import-fights-all PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 3600 LABELS "game-assets;mods;slow")
+            # An imported enemy (PE_TEST_ENEMY_PACK, built from the player's own files) in M075's
+            # fight: it appears, attacks with its pack's damage, is hurt and dies; the battle is won.
+            add_test(NAME enemy-import-nemesis COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/enemy_import_nemesis.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/enemy-import-nemesis-evidence)
+            set_tests_properties(enemy-import-nemesis PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 900 LABELS "game-assets;mods")
+        endif()
         if(PE_MODS AND "pe_lang" IN_LIST PE_MOD_LIST)
             # The text renderer with language packs made from the disc: stretches, name letters,
             # a saved name read back, and English as the game drew it before the renderer.

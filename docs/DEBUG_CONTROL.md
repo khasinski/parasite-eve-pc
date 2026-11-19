@@ -77,7 +77,8 @@ A game whose window pauses when unfocused answers once it runs again.
 | `equip BAG_SLOT` | equip existing weapon/armor in decimal bag slot and rebuild native stat/equipment caches; free field only |
 | `set-stat level\|hp\|pe-raw\|bp VALUE` | decimal values; level 1..99 updates EXP and derived stats, HP/PE cannot exceed current maxima, BP 0..99999; free field only |
 | `mod-state MOD_ID` | JSON of running state and registered F1 stored values/info rows; inactive callbacks are not run |
-| `ini-set PAGE/LABEL VALUE` | change a registered stored option in memory using its full INI key (spaces allowed). Range checked. Does not persist to disk. `restart_required=1` for Manage mods options: apply those in the next session's INI; this command does not start/stop mods |
+| `ini-set PAGE/LABEL VALUE` | change a registered stored option in memory using its full INI key (spaces allowed). Range checked (a list a mod fills, against its current length). Does not persist to disk. `restart_required=1` for Manage mods options: apply those in the next session's INI; this command does not start/stop mods |
+| `mod-action PAGE/LABEL` | run a registered F1 action row, as Enter on it does; refused for a mod that is off |
 | `trace on` / `trace off` | append events to `battle.jsonl` in the control folder; off initially |
 
 ### Battle traces and deterministic runs
@@ -108,6 +109,11 @@ advance after that boundary. Use identical command schedules for comparisons.
 group ID. Room scripts choose and create enemies and initialize encounter state. A generic
 chosen-group command needs a validated encounter loader/catalog; directly passing N to that
 function would produce invalid tests. Bosses still require scenario saves.
+
+A chosen random battle can be started through F1 > Fights (`mods/pe_enemy_import`): it takes Aya
+to the room, stands her in the spot's floor zone and makes that spot's own encounter roll succeed,
+so the room's script starts its battle. Tests drive it with `ini-set Fights/Area N`,
+`ini-set Fights/Fight N` and `mod-action Fights/Start fight` (`tests/enemy_import_fights.py`).
 
 Dedicated critical-roll events (including misses), challenge-specific trigger/settlement
 events, full live mod-state providers, runtime hot-start/hot-stop of mods, arbitrary memory
