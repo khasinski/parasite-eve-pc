@@ -295,6 +295,16 @@ const PeImpReader g_re1_monsters_ps1 = {
     .tags = "enemy", .read = read_monster, .path_key = 1
 };
 
+/* RE1's 15-bone moves into RE2's bone order, as the people's models are (k_from_re1) */
+static void to_re2_order(PeImpAnimation *a) {
+    for (uint32_t mv = 0; mv < a->moves; mv++)
+        for (uint32_t f = 0; f < a->move[mv].frames; f++) {
+            int16_t *d = a->move[mv].data + (size_t)f * (3 + 3 * BONES), old[3 * BONES];
+            memcpy(old, d + 3, sizeof old);
+            for (int r = 0; r < BONES; r++) memcpy(d + 3 + 3 * r, old + 3 * k_from_re1[r], 3 * sizeof *old);
+        }
+}
+
 /* The people's moves (CHAR1x, EM102x, EM103x): their one set, the EMR at D1 (0) with its EDD at D2,
  * bones put in RE2's order as their models' are (k_from_re1). "player/char10/moves". */
 static int read_person_moves(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
@@ -308,12 +318,7 @@ static int read_person_moves(const uint8_t *data, uint32_t size, const char *pat
     PeImpAnimation *a = re1_moves(data, tmd, emr, edd);
     if (!a) return 0;
     if (a->bones != BONES) { pe_imp_animation_free(a), free(a); return 0; }
-    for (uint32_t mv = 0; mv < a->moves; mv++)                         /* RE1's bone order -> RE2's */
-        for (uint32_t f = 0; f < a->move[mv].frames; f++) {
-            int16_t *d = a->move[mv].data + (size_t)f * (3 + 3 * BONES), old[3 * BONES];
-            memcpy(old, d + 3, sizeof old);
-            for (int r = 0; r < BONES; r++) memcpy(d + 3 + 3 * r, old + 3 * k_from_re1[r], 3 * sizeof *old);
-        }
+    to_re2_order(a);
     char stem[16] = "", id[40], name[40];
     size_t k = 0;
     while (s[k] && s[k] != '.' && k + 1 < sizeof stem) stem[k] = s[k], k++;
@@ -331,4 +336,37 @@ const PeImpReader g_re1_person_moves_ps1 = {
     .game = "re1", .platform = "ps1", .format = "emd-moves",
     .version = 1, .produces = PE_IMP_ANIMATION, .match = "*/ENEMY/*.EMD",
     .tags = "human player", .read = read_person_moves, .path_key = 1
+};
+
+/* The weapons: <dir>/PLAYERS/Wxx.EMW. The EMR (15 bones) at 0, then the file's last 8 bytes: u32 EDD
+ * offset, u32 TMD offset (one object: the weapon in hand, textured from the player's TIM, so not
+ * read as a Model yet). The player's moves with that weapon, RE2's bone order: "weapon/w00/moves". */
+static int read_weapon_moves(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    if (size < 64) return 0;
+    Buf b = {data, size};
+    uint32_t edd = u32at(&b, size - 8), tmd = u32at(&b, size - 4);
+    if (!(edd && edd < tmd && tmd < size - 8)) return 0;
+    PeImpAnimation *a = re1_moves(data, tmd, 0, edd);
+    if (!a) return 0;
+    if (a->bones != BONES) { pe_imp_animation_free(a), free(a); return 0; }
+    to_re2_order(a);
+    const char *s = strrchr(path, '/');
+    s = s ? s + 1 : path;
+    char stem[16] = "", id[40], name[40];
+    size_t k = 0;
+    while (s[k] && s[k] != '.' && k + 1 < sizeof stem) stem[k] = s[k], k++;
+    stem[k] = 0;
+    snprintf(id, sizeof id, "weapon/");
+    for (size_t j = 0; stem[j]; j++) id[7 + j] = (char)(stem[j] >= 'A' && stem[j] <= 'Z' ? stem[j] + 32 : stem[j]), id[8 + j] = 0;
+    strncat(id, "/moves", sizeof id - strlen(id) - 1);
+    snprintf(name, sizeof name, "%s moves", stem);
+    if (pe_imp_emit(sink, PE_IMP_ANIMATION, id, name, a)) { snprintf(why, n, "could not catalog %s", id); return -1; }
+    return 0;
+}
+
+const PeImpReader g_re1_weapon_moves_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re1", .platform = "ps1", .format = "emw-moves",
+    .version = 1, .produces = PE_IMP_ANIMATION, .match = "*/PLAYERS/W??.EMW",
+    .tags = "weapon", .read = read_weapon_moves, .path_key = 1
 };

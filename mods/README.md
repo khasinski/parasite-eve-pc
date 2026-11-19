@@ -166,7 +166,9 @@ that monster (grabbed, bitten). Read by `g_re1_monsters_ps1` with the people's m
 skeleton, part i on bone i) and RE1's room-animation moves, as `enemy/em<nnnn>`, its `moves` and
 `player-moves` (50 models, 86 move sets). Player moves and weapons: RE1's people files carry one
 move set (the EMR at D1, its EDD at D2), read as `player/<name>/moves` with bones in RE2's order like
-their models (`g_re1_person_moves_ps1`, 24). RE2's `PL?/PLD/PLxx.PLD` and `PLxxWyy.PLW` share a
+their models (`g_re1_person_moves_ps1`, 24). RE1's weapons, `PLAYERS/Wxx.EMW`: the EMR at 0, the last 8 bytes the EDD and
+TMD offsets; the player's moves with that weapon, `weapon/wxx/moves` (RE2's bone order; the TMD, the
+weapon in hand, has no texture of its own and isn't read yet). RE2's `PL?/PLD/PLxx.PLD` and `PLxxWyy.PLW` share a
 layout (u32 directory: EDD, EMR, MD1, TIM): a PLD's moves are `player/plxx/moves` (10); a PLW's are
 the player's moves with that weapon, `weapon/plxxwyy/moves` (29), and its MD1 + TIM the weapon in
 hand as a one-bone Model `weapon/plxxwyy` (35; parts as stored, in the frames of the arm bones they
