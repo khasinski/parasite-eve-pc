@@ -153,7 +153,12 @@ folders. The PS1 disc keeps its enemies in each room's bundle, `CD_DATA/STAGEs/R
 u32 count, per entry u32 length and tag, entries on 2 KB boundaries; tag byte 3 = the enemy number,
 byte 1 = 1 for its TIM, byte 2 a version): the same EMD and TIM formats, read by `g_re3_emd_ps1`
 into `enemy/em<nn>-<version>` and its moves (85 from 64 enemies; 21 come in two versions whose later
-move sets differ). The Nemesis profile still names the PC file's `enemy/em34`. Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
+move sets differ). The Nemesis profile still names the PC file's `enemy/em34`. RE2's PS1 enemies are
+in `PL0/PLD/CDEMD0.EMS` and `CDEMD2.EMS`: TIM + EMD pairs on 2 KB boundaries (the archive's own index
+holds RAM addresses and isn't read). An EMD's directory names 8 sections: unknown, three move sets
+(EDD, EMR), the MD1 mesh; read as a PLD's model plus RE2's room-animation move format, by
+`g_re2_emd_ps1` (`pe_src_re2/pe_src_re2_emd.c`), as `enemy/cdemd<k>-<n>` and its moves (70 of 72;
+which EM number each is isn't known yet). Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
 PE_TEST_RE3_PC = the RE3 PC folder adds EM34 and E_34) and `mod-enemy-build` (builder on made-up
 data; with PE_TEST_RE3_PC Nemesis built from the store into `enemy-build-test/nemesis`).
 

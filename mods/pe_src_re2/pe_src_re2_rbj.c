@@ -24,11 +24,11 @@ static int16_t s16(const uint8_t *p) { uint32_t v = le16(p); return (int16_t)(v 
 static int16_t angle(unsigned a) { return (int16_t)(a < 2048 ? (int)a : (int)a - 4096); }
 
 /* one RBJ animation (EMR at emr, EDD from edd to end, offsets inside rdt) as an Animation */
-static PeImpAnimation *animation(const uint8_t *rdt, uint32_t size, uint32_t emr, uint32_t edd, uint32_t end) {
-    if (emr + 8 > size || edd + 4 > end || end > size) return NULL;
+PeImpAnimation *re2_moves(const uint8_t *rdt, uint32_t size, uint32_t emr, uint32_t edd, uint32_t end, uint32_t kf_end) {
+    if (emr + 8 > size || edd + 4 > end || end > size || kf_end > size) return NULL;
     uint32_t kf = emr + le16(rdt + emr + 2), bones = le16(rdt + emr + 4), kf_size = le16(rdt + emr + 6);
     if (!bones || bones > PE_IMP_MODEL_BONES_MAX || kf_size < 12 + (bones * 9 + 1) / 2 || kf > size) return NULL;
-    uint32_t keys = (edd > kf ? edd - kf : 0) / kf_size;
+    uint32_t keys = (kf_end > kf ? kf_end - kf : 0) / kf_size;
     uint32_t moves = le16(rdt + edd + 2) / 4;
     if (!keys || !moves || moves > PE_IMP_ANIM_MOVES_MAX || edd + 4 * moves > end) return NULL;
     PeImpAnimation *a = calloc(1, sizeof *a);
@@ -74,7 +74,7 @@ static int read_rbj(const uint8_t *rdt, uint32_t size, const char *path, PeImpSi
     for (uint32_t i = 0; i < count; i++) {
         uint32_t flags = at + le32(rdt + table + 8 * i), edd = at + le32(rdt + table + 8 * i + 4);
         uint32_t end = i + 1 < count ? at + le32(rdt + table + 8 * (i + 1)) : table;
-        PeImpAnimation *a = animation(rdt, size, flags + 4, edd, end);
+        PeImpAnimation *a = re2_moves(rdt, size, flags + 4, edd, end, edd);
         if (!a) continue;                                                /* not one we read */
         char id[40], name[48];
         snprintf(id, sizeof id, "roomanim/%x%02x-%u", (unsigned)stage + 1, (unsigned)room, (unsigned)i);

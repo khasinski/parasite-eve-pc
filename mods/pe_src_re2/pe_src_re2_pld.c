@@ -107,7 +107,18 @@ int re2_pld_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, 
     uint32_t d = u32at(&x, 0);
     NEED(d, 16, "directory");
     uint32_t emr = u32at(&x, d + 4), md1 = u32at(&x, d + 8), tim = u32at(&x, d + 12);
+    return re2_skeleton_mesh(data, size, emr, md1, tim, m, why, n);
+bad:
+    pe_imp_model_free(m);
+    return -1;
+}
 
+/* the skeleton (EMR at emr), mesh (MD1 at md1) and texture (TIM at tim), all offsets in `data`: a
+ * PLD's, or an enemy's (pe_src_re2_emd.c) */
+int re2_skeleton_mesh(const uint8_t *data, uint32_t size, uint32_t emr, uint32_t md1, uint32_t tim, PeImpModel *m,
+                      char *why, size_t n) {
+    Buf x = {data, size};
+    memset(m, 0, sizeof *m);
     /* skeleton */
     NEED(emr, 8, "skeleton header");
     uint32_t arm = u16at(&x, emr), count = u16at(&x, emr + 4);
