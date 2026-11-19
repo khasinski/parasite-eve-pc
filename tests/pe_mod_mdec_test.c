@@ -71,6 +71,7 @@ static void made_up_masks(void) {
         0x1f, 0, 0, 0, 0xe0, 3, 0x1f, 0
     };
     static uint8_t rgba[320 * 240 * 4];
+    static uint16_t depths[320 * 240];
     for (unsigned game = PE_IMP_RE1; game <= PE_IMP_RE3; game++) {
         uint32_t sizes[] = {16}, prefix = game == PE_IMP_RE1 ? 0 : game == PE_IMP_RE2 ? 8 : 5;
         uint32_t extra[] = {64 + prefix + sizeof tim};
@@ -104,6 +105,15 @@ static void made_up_masks(void) {
         assert(view.mask_count == 1 && view.masks[0].x == -1 && view.masks[0].depth == 7);
         assert(!pe_imp_room_foreground(set, 0, &view, rgba));
         assert(!rgba[3] && rgba[5] == 255 && rgba[7] == 255 && rgba[8] == 255 && rgba[11] == 255 && !rgba[15]);
+        assert(!pe_imp_room_foreground_depth(set, 0, &view, depths));
+        assert(depths[0] == UINT16_MAX && depths[1] == 7 && depths[2] == 7 && depths[3] == UINT16_MAX);
+        view.masks[1] = view.masks[0];
+        view.masks[1].depth = 4;
+        view.mask_count = 2;
+        assert(!pe_imp_room_foreground_depth(set, 0, &view, depths) && depths[1] == 4);
+        view.masks[0].depth = 3;
+        assert(!pe_imp_room_foreground_depth(set, 0, &view, depths) && depths[1] == 3);
+        view.mask_count = 1;
         if (game == PE_IMP_RE2) {
             /* Collision-preview stores insert an atlas length and append SCA after it. */
             uint32_t collision_extra[] = {extra[0] + 8};

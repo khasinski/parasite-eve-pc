@@ -4823,11 +4823,11 @@
     },
     {
       "path": "mods/host/import/pe_imp_room.c",
-      "sha256": "bea0611d5f4006cf47187f142993f48957b69cf641e40e67407ae0bd64b7b067"
+      "sha256": "04f424c5bc3ad197d1ad0463400c3dc5fb144b4cd8faf1752c4a7212fe02aa89"
     },
     {
       "path": "mods/host/import/pe_imp_room.h",
-      "sha256": "ab2647492db2348ed68e7d0e1db153d6019a3958b07d2ce43689d11c69776e4e"
+      "sha256": "4ef9d8843adf27072888e3c13ce150aaf5a942f0e8aa04db2c68f5bca6a62ce4"
     },
     {
       "path": "mods/host/import/pe_imp_anim.c",

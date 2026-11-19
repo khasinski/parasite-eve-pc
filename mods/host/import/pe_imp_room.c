@@ -338,7 +338,8 @@ static uint8_t expand_5(uint32_t channel) {
     return (uint8_t)((channel << 3) | (channel >> 2));
 }
 
-int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImpRoomView *view, uint8_t *rgba) {
+static int decode_foreground(const PeImpImageSet *set, uint32_t frame, const PeImpRoomView *view,
+                             uint8_t *rgba, uint16_t *depth) {
     Bytes data, pri, atlas;
     int rc = room_data(set, frame, &data, &pri, &atlas);
     if (rc) return rc;
@@ -357,13 +358,8 @@ int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImp
         free(decoded);
         return -1;
     }
-    uint16_t *depth = malloc(ROOM_WIDTH * ROOM_HEIGHT * sizeof *depth);
-    if (!depth) {
-        free(decoded);
-        return -1;
-    }
     memset(depth, 0xff, ROOM_WIDTH * ROOM_HEIGHT * sizeof *depth);
-    memset(rgba, 0, ROOM_WIDTH * ROOM_HEIGHT * 4);
+    if (rgba) memset(rgba, 0, ROOM_WIDTH * ROOM_HEIGHT * 4);
     for (uint32_t i = 0; i < view->mask_count; i++) {
         const PeImpRoomMask *m = &view->masks[i];
         for (uint32_t row = 0; row < m->height && m->v + row < tim.height; row++) {
@@ -376,6 +372,7 @@ int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImp
                 uint32_t pixel = (uint32_t)(y * ROOM_WIDTH + x);
                 if (!color || m->depth > depth[pixel]) continue;
                 depth[pixel] = m->depth;
+                if (!rgba) continue;
                 uint8_t *dst = rgba + pixel * 4;
                 dst[0] = expand_5(color);
                 dst[1] = expand_5(color >> 5);
@@ -384,7 +381,19 @@ int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImp
             }
         }
     }
-    free(depth);
     free(decoded);
     return 0;
+}
+
+int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImpRoomView *view, uint8_t *rgba) {
+    uint16_t *depth = malloc(ROOM_WIDTH * ROOM_HEIGHT * sizeof *depth);
+    if (!depth) return -1;
+    int rc = decode_foreground(set, frame, view, rgba, depth);
+    free(depth);
+    return rc;
+}
+
+int pe_imp_room_foreground_depth(const PeImpImageSet *set, uint32_t frame,
+                                 const PeImpRoomView *view, uint16_t *depth) {
+    return decode_foreground(set, frame, view, NULL, depth);
 }

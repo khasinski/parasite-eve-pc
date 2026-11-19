@@ -5,8 +5,9 @@
  * room Aya is in. PE's own background tiles are skipped (PE_HOOK_FIELD_BACKGROUND stage 0) and the
  * RE picture is drawn behind everything (stage 1): uploaded to VRAM as a 15-bit image where PE
  * keeps its background pages (320,256)-(639,495), then two textured quads at the far end of the
- * ordering table. For RE2, the native actor renderer uses the selected RID camera. Aya's
- * PE position is anchored to a point in the selected view; the PE room still drives movement.
+ * ordering table. For RE2, the native actor renderer uses the selected RID camera, and
+ * the foreground cutouts are linked at their PRI depths. Aya's PE position is anchored
+ * to a point in the selected view; the PE room still drives movement.
  * Desktop only for now. */
 #include <math.h>
 #include <stdio.h>
@@ -32,13 +33,33 @@
 #define VRAM_Y 256
 #define PIC_W 320
 #define PIC_H 240
+#define FIELD_H 224
+#define PIC_TOP ((PIC_H - FIELD_H) / 2)
+#define PIC_SPLIT (PIC_W / 2)
+#define ROOM_BACKGROUND_OT 4095
+#define FIELD_UI_OT_LAST 7
+#define RE_UNITS_PER_PE_UNIT 3
+
+typedef struct RoomMaskPacket {
+    RenderTexturedQuad quad[2];
+    uint16_t depth;
+} RoomMaskPacket;
 
 static char s_store[1100];
 static PeImpAsset *s_rooms;
 static int s_nrooms, s_listed, s_pick, s_view, s_show;
+static int s_foreground = 1;
 static char s_status[200] = "Off.";
 static RenderTexturedQuad s_quads[2][2];               /* per draw slot: left and right halves */
 static uint16_t *s_original_picture;
+static RoomMaskPacket *s_masks;
+static size_t s_mask_count;
+
+static void free_masks(void) {
+    free(s_masks);
+    s_masks = NULL;
+    s_mask_count = 0;
+}
 
 static struct {
     GteMatrix view;
@@ -76,14 +97,13 @@ static void prepare_camera(const PeImpRoomView *view) {
     double ray_y = basis[2][1] + slope * basis[1][1];
     double depth = fabs(ray_y) > 0.0001 ? -(double)view->eye[1] / ray_y : 0;
     /* Preview scale. PE models use smaller units than RE2's room coordinates. */
-    const double re_units_per_pe_unit = 3.0;
     /* Keep room for movement and actor geometry within PE's 4096-entry depth table. */
-    const double max_depth = 12000 * re_units_per_pe_unit;
+    const double max_depth = 12000 * RE_UNITS_PER_PE_UNIT;
     if (depth < 2200 || depth > max_depth)
         depth = fmin(max_depth, fmax(2200, length));
     s_camera.origin[0] = 0;
-    s_camera.origin[1] = depth * slope / re_units_per_pe_unit;
-    s_camera.origin[2] = depth / re_units_per_pe_unit;
+    s_camera.origin[1] = depth * slope / RE_UNITS_PER_PE_UNIT;
+    s_camera.origin[2] = depth / RE_UNITS_PER_PE_UNIT;
     s_camera.distance = distance;
 }
 
@@ -132,6 +152,82 @@ static const char *room_name(unsigned i) {
     return name;
 }
 
+/* The right half begins at x=480 in VRAM, on the texture page at x=448.
+ * Rectangles use the same texels and crop for the backdrop and the masks. */
+static void picture_quad(RenderTexturedQuad *q, int x0, int y0, int x1, int y1) {
+    memset(q, 0, sizeof *q);
+    q->tag.length = 9;
+    q->color.bytes.r = q->color.bytes.g = q->color.bytes.b = 128;
+    q->color.bytes.code = 0x2C;
+    int page_offset = x0 < PIC_SPLIT ? 0 : 128;
+    q->tpage = (u16)(((VRAM_X + page_offset) / 64) | (VRAM_Y / 256) << 4 | 2 << 7);
+    q->x0 = q->x2 = (u16)x0;
+    q->x1 = q->x3 = (u16)x1;
+    q->y0 = q->y1 = (u16)(y0 - PIC_TOP);
+    q->y2 = q->y3 = (u16)(y1 - PIC_TOP);
+    q->u0 = q->u2 = (u8)(x0 - page_offset);
+    q->u1 = q->u3 = (u8)(x1 - page_offset);
+    q->v0 = q->v1 = (u8)y0;
+    q->v2 = q->v3 = (u8)y1;
+}
+
+static int mask_bucket(uint16_t pri_depth) {
+    /* PRI stores camera Z / 32 in RE2 units. PE sorts at camera Z / 4.
+     * Leave the foreground UI buckets free and discard depths behind the backdrop. */
+    int depth = (int)pri_depth * 8 / RE_UNITS_PER_PE_UNIT;
+    return depth > FIELD_UI_OT_LAST ? depth : FIELD_UI_OT_LAST + 1;
+}
+
+/* Group adjacent opaque pixels at the same depth into rectangles once per view.
+ * Sample the background at the cutout coordinates so the mask is seamless when
+ * no actor covers it, and needs no separate VRAM pages. */
+static int build_masks(const PeImpImageSet *set, const PeImpRoomView *view,
+                       RoomMaskPacket **out, size_t *count) {
+    if (!s_camera.distance || !view->mask_count) return 1;
+    uint16_t *depths = malloc(PIC_W * PIC_H * sizeof *depths);
+    if (!depths) return -1;
+    int rc = pe_imp_room_foreground_depth(set, (uint32_t)s_view, view, depths);
+    size_t capacity = 0;
+    if (rc) goto done;
+    for (int y = PIC_TOP; y < PIC_TOP + FIELD_H; y++) {
+        for (int x = 0; x < PIC_W; x++) {
+            uint16_t depth = depths[y * PIC_W + x];
+            int bucket = mask_bucket(depth);
+            if (bucket >= ROOM_BACKGROUND_OT) continue;
+            int edge = x < PIC_SPLIT ? PIC_SPLIT : PIC_W;
+            int end_x = x + 1, end_y = y + 1;
+            while (end_x < edge && depths[y * PIC_W + end_x] == depth) end_x++;
+            size_t width = (size_t)(end_x - x) * sizeof *depths;
+            while (end_y < PIC_TOP + FIELD_H &&
+                   !memcmp(depths + y * PIC_W + x, depths + end_y * PIC_W + x, width))
+                end_y++;
+            if (*count == capacity) {
+                size_t next = capacity ? capacity * 2 : 128;
+                RoomMaskPacket *packets = realloc(*out, next * sizeof *packets);
+                if (!packets) {
+                    free(*out);
+                    *out = NULL;
+                    *count = 0;
+                    rc = -1;
+                    goto done;
+                }
+                *out = packets;
+                capacity = next;
+            }
+            RoomMaskPacket *packet = &(*out)[(*count)++];
+            picture_quad(&packet->quad[0], x, y, end_x, end_y);
+            packet->quad[1] = packet->quad[0];
+            packet->depth = (uint16_t)bucket;
+            for (int row = y; row < end_y; row++)
+                memset(depths + row * PIC_W + x, 0xff, width);
+            x = end_x - 1;
+        }
+    }
+done:
+    free(depths);
+    return rc;
+}
+
 /* decode the chosen view and put it in VRAM; 0 or -1 (s_status says why) */
 static int upload(void) {
     if (s_pick >= s_nrooms) { snprintf(s_status, sizeof s_status, "No room chosen."); return -1; }
@@ -172,9 +268,13 @@ static int upload(void) {
         PeImpRoomView view;
         if (pe_imp_room_view(set, (uint32_t)s_view, &view)) view.game = 0;
         prepare_camera(&view);
+        /* DrawSync above retired any packets for the previous view. */
+        free_masks();
+        int masks = build_masks(set, &view, &s_masks, &s_mask_count);
         rc = 0;
-        snprintf(s_status, sizeof s_status, "Showing %s, view %d (%s camera).",
-                 s_rooms[s_pick].name, s_view, s_camera.distance ? "RE2" : "PE");
+        const char *foreground = s_mask_count ? ", foreground" : masks < 0 ? ", foreground unavailable" : "";
+        snprintf(s_status, sizeof s_status, "Showing %s, view %d (%s camera%s).",
+                 s_rooms[s_pick].name, s_view, s_camera.distance ? "RE2" : "PE", foreground);
     }
 cleanup:
     free(rgb);
@@ -183,19 +283,9 @@ cleanup:
     return rc;
 }
 
-/* a 160 x 224 half of the picture: 15-bit texture page at x0 (a multiple of 64), u from u0;
- * the picture's 240 lines are cropped by 8 at top and bottom to the field's 224 */
-static void quad(RenderTexturedQuad *q, int screen_x, int page_x, int u0) {
-    memset(q, 0, sizeof *q);
-    q->tag.length = 9;
-    q->color.bytes.r = q->color.bytes.g = q->color.bytes.b = 128;
-    q->color.bytes.code = 0x2C;                        /* textured four-point polygon, opaque */
-    q->tpage = (u16)((page_x / 64) | (VRAM_Y / 256) << 4 | 2 << 7);   /* 15-bit direct colour */
-    int x0 = screen_x, x1 = screen_x + 160, v0 = 8, v1 = 8 + 224;
-    q->x0 = (u16)x0, q->y0 = 0, q->u0 = (u8)u0, q->v0 = (u8)v0;
-    q->x1 = (u16)x1, q->y1 = 0, q->u1 = (u8)(u0 + 160), q->v1 = (u8)v0;
-    q->x2 = (u16)x0, q->y2 = 224, q->u2 = (u8)u0, q->v2 = (u8)v1;
-    q->x3 = (u16)x1, q->y3 = 224, q->u3 = (u8)(u0 + 160), q->v3 = (u8)v1;
+static void link_quad(RenderNativeTag *entry, RenderTexturedQuad *quad) {
+    quad->tag.address = entry->address;
+    entry->address = (uintptr_t)quad;
 }
 
 static int on_background(void *ctx, void *user) {
@@ -204,12 +294,15 @@ static int on_background(void *ctx, void *user) {
     if (!s_show) return 0;
     if (b->stage == 0) return 1;                       /* skip the PE room's own tiles */
     if (b->slot < 0 || b->slot > 1 || !b->ordering) return 0;
-    RenderNativeTag *far_end = (RenderNativeTag *)b->ordering + 4095;
-    quad(&s_quads[b->slot][0], 0, VRAM_X, 0);           /* VRAM x 320-479 */
-    quad(&s_quads[b->slot][1], 160, VRAM_X + 128, 32);  /* VRAM x 480-639, page at 448 */
-    for (int k = 0; k < 2; k++) {
-        s_quads[b->slot][k].tag.address = far_end->address;
-        far_end->address = (uintptr_t)&s_quads[b->slot][k];
+    RenderNativeTag *ordering = b->ordering;
+    RenderTexturedQuad *quads = s_quads[b->slot];
+    picture_quad(&quads[0], 0, PIC_TOP, PIC_SPLIT, PIC_TOP + FIELD_H);
+    picture_quad(&quads[1], PIC_SPLIT, PIC_TOP, PIC_W, PIC_TOP + FIELD_H);
+    link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[0]);
+    link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[1]);
+    if (s_foreground) {
+        for (size_t i = 0; i < s_mask_count; i++)
+            link_quad(&ordering[s_masks[i].depth], &s_masks[i].quad[b->slot]);
     }
     return 1;
 }
@@ -217,6 +310,8 @@ static int on_background(void *ctx, void *user) {
 static int on_scene(void *ctx, void *user) {
     (void)ctx, (void)user;
     /* The new room has already uploaded its own pages. */
+    if (s_masks) DrawSync(0);
+    free_masks();
     free(s_original_picture);
     s_original_picture = NULL;
     s_show = 0;
@@ -237,6 +332,7 @@ static void hide(void) {
         free(s_original_picture);
         s_original_picture = NULL;
     }
+    free_masks();
     s_show = 0;
     snprintf(s_status, sizeof s_status, "Off.");
 }
@@ -251,7 +347,9 @@ static int init(void) {
     pe_menu_register_dynamic_choice(0, "Room", "An imported room (F1 > Import scans them).", &s_pick, ROOMS_MAX,
                                     room_count, room_name);
     pe_menu_register_int(0, "Camera view", "Which of the room's camera views to show.", &s_view, 0, 31, 1);
-    pe_menu_register_action(0, "Show it here", "Shows the selected picture and, for RE2, its fixed camera.", show);
+    pe_menu_register_toggle(0, "Foreground masks", "Let foreground objects cover actors in RE2 views.",
+                            &s_foreground, NULL);
+    pe_menu_register_action(0, "Show it here", "Shows the selected picture and, for RE2, its camera and foreground.", show);
     pe_menu_register_action(0, "Stop showing it", "Restore the current PE room and camera.", hide);
     pe_menu_register_action(0, "Refresh the list", "Lists rooms imported since the game started.", refresh);
     pe_menu_register_info(0, "Status", "What's shown.", text_status);
@@ -263,6 +361,7 @@ static int init(void) {
 
 static void shutdown_rooms(void) {
     s_show = 0;
+    free_masks();
     free(s_original_picture);
     s_original_picture = NULL;
     free(s_rooms);

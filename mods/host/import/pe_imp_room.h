@@ -32,4 +32,9 @@ int pe_imp_room_view(const PeImpImageSet *set, uint32_t frame, PeImpRoomView *vi
  * Returns 0 with pixels, 1 for no atlas, or -1 for invalid data. */
 int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImpRoomView *view, uint8_t *rgba);
 
+/* Same foreground cutout as above. Returns the nearest raw PRI depth for
+ * each pixel, or UINT16_MAX for a transparent pixel. Size: width * height. */
+int pe_imp_room_foreground_depth(const PeImpImageSet *set, uint32_t frame,
+                                 const PeImpRoomView *view, uint16_t *depth);
+
 #endif
