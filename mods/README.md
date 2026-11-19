@@ -938,8 +938,10 @@ container's cap is now 16 MB. `mod-rdt` scans each disc's files and decodes ever
 4 bits a pixel with no palette on the disc: each is wrapped as a 4-bit TIM with a placeholder palette
 of 16 greys, and the record is marked `GREY`. RE3's `CD_DATA/ETC/MAP_U.MAP` holds a section table,
 the room and label tables and 18 TIMs (9 maps and their legends, in their own colours): the TIMs,
-and the whole file as `FILE` for the tables. RE1 has no map file; its map is probably drawn from
-data in its executable, and isn't imported. `mod-rdt` decodes every map picture.
+and the whole file as `FILE` for the tables. RE1's are `ITEM_M2/MAP00.TIM` to `MAP0E.TIM`, one 8-bit
+TIM each in its own colours, one record each as `maps/<name>` (`maps/map01` and so on; 15): MAP01 to
+MAP0B the floor maps (256 x 112), MAP00 and MAP0C to MAP0E the area overviews (256 x 160) the map
+screen shows as more of the game opens up. `mod-rdt` decodes every map picture.
 
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
