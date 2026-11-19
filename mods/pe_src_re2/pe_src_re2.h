@@ -9,7 +9,7 @@ int re2_pld_parse(const uint8_t *data, uint32_t size, PeImpModel *m, char *why, 
 extern const PeImpReader g_re2_pld_ps1;
 extern const PeImpReader g_re2_sound_ps1;
 extern const PeImpReader g_re2_music_ps1;
-extern const PeImpReader g_re2_rooms_ps1;
+extern const PeImpReader g_re2_rooms_ps1, g_re2_logic_ps1;
 extern const char g_re2_naming[];
 
 #endif

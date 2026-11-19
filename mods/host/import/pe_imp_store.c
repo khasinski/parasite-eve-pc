@@ -19,6 +19,7 @@
 #endif
 
 #include "pe_imp_internal.h"
+#include "pe_imp_logic.h"
 
 #define MAX_ITEMS 4096
 #define MAX_ENTRIES 20000
@@ -55,6 +56,7 @@ static unsigned schema_version(uint32_t type) {
     case PE_IMP_SONG: return PE_IMP_SONG_VERSION;
     case PE_IMP_IMAGESET: return PE_IMP_IMAGESET_VERSION;
     case PE_IMP_ANIMATION: return PE_IMP_ANIMATION_VERSION;
+    case PE_IMP_ROOMLOGIC: return PE_IMP_ROOMLOGIC_VERSION;
     default: return 0;
     }
 }
@@ -71,13 +73,13 @@ static const char *schema_key(uint32_t types) {
 static unsigned schema_stamp(uint32_t types) {
     if (types == PE_IMP_MODEL || types == PE_IMP_SOUND || types == PE_IMP_SONG || types == PE_IMP_IMAGESET) return schema_version(types);
     unsigned stamp = 0;
-    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_TEXTSET; type <<= 1)
+    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_ROOMLOGIC; type <<= 1)
         if (types & type) stamp = (stamp * 31 + type + schema_version(type)) & 0x7fffffff;
     return stamp;
 }
 
 static uint32_t stored_type(const char *name) {
-    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_TEXTSET; type <<= 1)
+    for (uint32_t type = PE_IMP_MODEL; type <= PE_IMP_ROOMLOGIC; type <<= 1)
         if (schema_version(type) && !strcmp(name, pe_imp_type_name(type))) return type;
     return 0;
 }
@@ -89,6 +91,7 @@ static int save_obj(const Item *it, const char *folder, char *why, size_t n) {
     case PE_IMP_SONG: return pe_imp_song_save(it->obj, folder, why, n);
     case PE_IMP_IMAGESET: return pe_imp_imageset_save(it->obj, folder, why, n);
     case PE_IMP_ANIMATION: return pe_imp_animation_save(it->obj, folder, why, n);
+    case PE_IMP_ROOMLOGIC: return pe_imp_logic_save(it->obj, folder, why, n);
     default: return -1;
     }
 }
@@ -246,6 +249,58 @@ static void cat_note(Catalog *c, const char *game, const char *proposed, const c
 }
 
 /* ---- scanning a disc image ---- */
+static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const char *image, const char *path,
+                      const uint8_t *data, uint32_t size,
+                      const uint8_t *companion, uint32_t companion_size, PeImpScan *out);
+
+/* One file through one reader: read it (and its companion), store what the reader makes. */
+static void scan_file(Catalog *cat, const char *root, const char *label, PeImpDisc *d, int i,
+                      const PeImpReader *rd, PeImpScan *out) {
+    char why[200] = "";
+    const char *path = pe_imp_disc_name(d, i);
+    uint8_t *data;
+    uint32_t size;
+    if (rd->xa ? pe_imp_disc_xa(d, i, &data, &size, why, sizeof why) : pe_imp_disc_read(d, i, &data, &size, why, sizeof why)) {
+        out->refused++;
+        snprintf(out->last_error, sizeof out->last_error, "%s: %s", path, why);
+        return;
+    }
+    uint8_t *companion = NULL;
+    uint32_t companion_size = 0;
+    if (rd->find_companion) {
+        int index = rd->find_companion(d, path);
+        if (index >= 0 && pe_imp_disc_read(d, index, &companion, &companion_size, why, sizeof why)) {
+            out->refused++;
+            snprintf(out->last_error, sizeof out->last_error, "%s: %s", path, why);
+            free(data);
+            return;
+        }
+    } else if (rd->companion) {
+        char sibling[PE_IMP_PATH_MAX];
+        const char *name = rd->companion;
+        if (name[0] == '.') {
+            const char *dot = strrchr(path, '.');
+            const char *slash = strrchr(path, '/');
+            if (!dot || (slash && dot < slash) ||
+                snprintf(sibling, sizeof sibling, "%.*s%s", (int)(dot - path), path, name) >= (int)sizeof sibling)
+                sibling[0] = 0;
+            name = sibling;
+        }
+        int index = pe_imp_disc_find(d, name);
+        if (index < 0 || pe_imp_disc_size(d, index) == 0 ||
+            pe_imp_disc_read(d, index, &companion, &companion_size, why, sizeof why)) {
+            out->refused++;
+            snprintf(out->last_error, sizeof out->last_error, "%s: can't read companion %s", path, name);
+            free(data);
+            return;
+        }
+    }
+    out->files_read += companion ? 2 : 1;
+    store_file(cat, root, rd, label, path, data, size, companion, companion_size, out);
+    free(companion);
+    free(data);
+}
+
 static int reader_for(const char *game, const char *path) {
     for (int r = 0; r < pe_imp_readers(); r++) {
         const PeImpReader *rd = pe_imp_reader(r);
@@ -418,54 +473,13 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
             if (strcmp(e->src[s].image, label)) e->src[kept++] = e->src[s];
         e->srcs = kept;
     }
-    for (int i = 0; i < pe_imp_disc_files(d); i++) {
-        const char *path = pe_imp_disc_name(d, i);
-        int r = reader_for(game, path);
-        if (r < 0) continue;
-        uint8_t *data;
-        uint32_t size;
-        const PeImpReader *rd = pe_imp_reader(r);
-        if (rd->xa ? pe_imp_disc_xa(d, i, &data, &size, why, sizeof why) : pe_imp_disc_read(d, i, &data, &size, why, sizeof why)) {
-            out->refused++;
-            snprintf(out->last_error, sizeof out->last_error, "%s: %s", path, why);
-            continue;
+    /* every reader that matches a file reads it (two readers of one file keep apart with path_key) */
+    for (int i = 0; i < pe_imp_disc_files(d); i++)
+        for (int r = 0; r < pe_imp_readers(); r++) {
+            const PeImpReader *rd = pe_imp_reader(r);
+            if ((!game || !strcmp(rd->game, game)) && pe_imp_match(rd->match, pe_imp_disc_name(d, i)))
+                scan_file(&cat, root, label, d, i, rd, out);
         }
-        uint8_t *companion = NULL;
-        uint32_t companion_size = 0;
-        if (rd->find_companion) {
-            int index = rd->find_companion(d, path);
-            if (index >= 0 && pe_imp_disc_read(d, index, &companion, &companion_size, why, sizeof why)) {
-                out->refused++;
-                snprintf(out->last_error, sizeof out->last_error, "%s: %s", path, why);
-                free(data);
-                continue;
-            }
-        } else if (rd->companion) {
-            char sibling[PE_IMP_PATH_MAX];
-            const char *name = rd->companion;
-            if (name[0] == '.') {
-                const char *dot = strrchr(path, '.');
-                const char *slash = strrchr(path, '/');
-                if (!dot || (slash && dot < slash) ||
-                    snprintf(sibling, sizeof sibling, "%.*s%s", (int)(dot - path), path, name) >= (int)sizeof sibling)
-                    sibling[0] = 0;
-                name = sibling;
-            }
-            int index = pe_imp_disc_find(d, name);
-            if (index < 0 || pe_imp_disc_size(d, index) == 0 ||
-                pe_imp_disc_read(d, index, &companion, &companion_size, why, sizeof why)) {
-                out->refused++;
-                snprintf(out->last_error, sizeof out->last_error, "%s: can't read companion %s",
-                         path, name);
-                free(data);
-                continue;
-            }
-        }
-        out->files_read += companion ? 2 : 1;
-        store_file(&cat, root, rd, label, path, data, size, companion, companion_size, out);
-        free(companion);
-        free(data);
-    }
     int rc = cat_save(&cat, cat_path);
     free(cat.e);
     pe_imp_disc_close(d);
@@ -568,4 +582,11 @@ int pe_imp_catalog_imageset(const char *root, const char *id, PeImpImageSet **ou
     *out = NULL;
     if (catalog_path(root, id, PE_IMP_IMAGESET, path, why, n)) return -1;
     return pe_imp_imageset_load(path, out, why, n);
+}
+
+int pe_imp_catalog_roomlogic(const char *root, const char *id, PeImpRoomLogic **out, char *why, size_t n) {
+    char path[PE_IMP_PATH_MAX];
+    *out = NULL;
+    if (catalog_path(root, id, PE_IMP_ROOMLOGIC, path, why, n)) return -1;
+    return pe_imp_logic_load(path, out, why, n);
 }

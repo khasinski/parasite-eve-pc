@@ -832,6 +832,19 @@ procedures and 453 doors. RE1 has its own script format (length-prefixed procedu
 instruction set; its event scripts aren't walked yet). `PE_TEST_RDT_ROOM=ROOM1060` prints a room's
 doors. Not used by the game yet.
 
+**RoomLogic: the contract for the room runtime.** A scan now also stores each RE room file as a
+**RoomLogic** record (`host/import/pe_imp_logic.h`), cataloged as `<game>:logic/<stage><room>`
+plus `-<player>` for RE1 and RE2, where Chris/Jill and Leon/Claire have their own scripts (for
+example `re2:logic/105-0`). It holds game-neutral records (doors, trigger zones, item pickups,
+camera zones, enemy placements as their source instruction) and keeps the room's collision,
+messages and scripts as they are, for that game's interpreter. The future room runtime reads only
+these records through `pe_imp_catalog_roomlogic`, never a disc. The file is sectioned, so sections
+can be added later without breaking a reader. The readers are `pe_src_re{1,2,3}_logic.c`.
+A scan now offers each file to every reader that matches it, not just the first; a second reader
+of a file keeps its own store folder with `path_key`. `mod-rdt` saves and loads a record, refuses a
+damaged one, builds one for every room on the discs (about 0.8 MB for RE1, 1.3 MB for RE2, 1.7 MB
+for RE3), and scans RE2 into a store and reads room 105's doors back through the catalog.
+
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 

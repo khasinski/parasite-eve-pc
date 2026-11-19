@@ -10,7 +10,11 @@
 #include <string.h>
 
 #include "pe_imp.h"
+#include "pe_imp_internal.h"
+#include "pe_imp_logic.h"
 #include "pe_imp_rdt.h"
+
+extern const PeImpReader g_re2_logic_ps1;
 
 static void put16(uint8_t *p, int v) { p[0] = (uint8_t)v, p[1] = (uint8_t)((unsigned)v >> 8); }
 static void put32(uint8_t *p, uint32_t v) { put16(p, (int)(v & 0xffff)), put16(p + 2, (int)(v >> 16)); }
@@ -51,6 +55,82 @@ static uint32_t made_up_room(uint8_t *b, uint32_t cap) {
     p += 22;
     p[0] = 1;                                                                  /* evt_end */
     return cap;
+}
+
+/* the made-up RE2 room as a stored RoomLogic: saved, loaded, every record read back; names parsed;
+ * damaged stored files refused */
+static void made_up_logic(const uint8_t *b, uint32_t size) {
+    char why[200];
+    PeImpRoomLogic *l = pe_imp_rdt_logic(PE_IMP_RE2, 1, 0, 5, b, size, why, sizeof why);
+    assert(l && l->game == PE_IMP_RE2 && l->player == 1 && l->room == 5);
+    pe_imp_mkdirs("pe-rdt-test/logic");
+    assert(!pe_imp_logic_save(l, "pe-rdt-test/logic", why, sizeof why));
+    PeImpRoomLogic *back;
+    assert(!pe_imp_logic_load("pe-rdt-test/logic", &back, why, sizeof why));
+    assert(back->size == l->size && !memcmp(back->payload, l->payload, l->size) && back->player == 1);
+    uint32_t records, bytes;
+    assert(pe_imp_logic_section(back, PE_IMP_LOGIC_DOOR, &records, &bytes) && records == 2 && bytes == 80);
+    assert(pe_imp_logic_section(back, PE_IMP_LOGIC_ENEM, &records, NULL) && records == 1);
+    assert(pe_imp_logic_section(back, PE_IMP_LOGIC_SCD0, NULL, &bytes) && bytes == 0x100);   /* the script, as is */
+    assert(!pe_imp_logic_section(back, PE_IMP_LOGIC_TAG('N', 'O', 'N', 'E'), NULL, NULL));
+    PeImpDoor d;
+    assert(!pe_imp_logic_door(back, 0, &d) && d.room == 6 && d.lock_id == 138 && d.zone.x[1] == 500 && d.next_z == -400);
+    assert(!pe_imp_logic_door(back, 1, &d) && d.zone.corners == 4 && d.zone.z[3] == 60);
+    assert(pe_imp_logic_door(back, 2, &d) == -1);
+    PeImpPickup k;
+    PeImpTrigger t;
+    PeImpCameraZone c;
+    assert(!pe_imp_logic_pickup(back, 0, &k) && k.item == 0x2D && k.flag == 12);
+    assert(!pe_imp_logic_trigger(back, 0, &t) && t.zone.sce == 5 && t.data[0] == 0xAA);
+    assert(!pe_imp_logic_camera_zone(back, 1, &c) && c.from == 1 && c.to == 0);
+    free(back);
+    /* a damaged file: every cut and a scrambled section table are refused or read in bounds */
+    FILE *f = fopen("pe-rdt-test/logic/roomlogic.bin", "rb+");
+    assert(f);
+    fseek(f, 28 + 8, SEEK_SET);
+    fputc(0xff, f), fputc(0xff, f), fputc(0xff, f), fputc(0x7f, f);    /* first section's length: huge */
+    fclose(f);
+    assert(pe_imp_logic_load("pe-rdt-test/logic", &back, why, sizeof why) == -1);
+    free(l);
+
+    uint32_t st, rm, pl;
+    assert(!pe_imp_re_room_name(PE_IMP_RE1, "PSXUSA/STAGE1/ROOM1061.RDT", &st, &rm, &pl) && st == 0 && rm == 6 && pl == 1);
+    assert(!pe_imp_re_room_name(PE_IMP_RE2, "PL1/RDT/ROOM20A1.RDT", &st, &rm, &pl) && st == 1 && rm == 0x0A && pl == 1);
+    assert(!pe_imp_re_room_name(PE_IMP_RE3, "CD_DATA/STAGE1/R10C.ARD", &st, &rm, &pl) && st == 0 && rm == 0x0C && pl == 0);
+    assert(pe_imp_re_room_name(PE_IMP_RE2, "PL0/RDT/ROOMXYZ0.RDT", &st, &rm, &pl) == -1);
+    assert(pe_imp_re_room_name(PE_IMP_RE3, "CD_DATA/STAGE1/R10.ARD", &st, &rm, &pl) == -1);
+    printf("made-up RoomLogic: saved, loaded and read back; damaged file refused; room names parsed\n");
+}
+
+/* a real scan of RE2's room files into a store: the runtime's view, through the catalog */
+static void scan_re2(const char *cue) {
+    PeImpScan sc;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_re2_logic_ps1));
+    assert(!pe_imp_scan("pe-rdt-test/store", cue, "re2", &sc));
+    PeImpAsset *a;
+    int n = pe_imp_catalog_assets("pe-rdt-test/store", "re2", &a), rooms = 0;
+    for (int i = 0; i < n; i++) rooms += !strcmp(a[i].type, "RoomLogic");
+    free(a);
+    char why[200], id[32];
+    PeImpRoomLogic *l = NULL;
+    for (int p = 0; p < 2 && !l; p++) {                  /* disc 1 is Leon's (player 0), disc 2 Claire's */
+        snprintf(id, sizeof id, "re2:logic/105-%d", p);
+        pe_imp_catalog_roomlogic("pe-rdt-test/store", id, &l, why, sizeof why);
+    }
+    assert(l);
+    uint32_t doors;
+    pe_imp_logic_section(l, PE_IMP_LOGIC_DOOR, &doors, NULL);
+    int to_106 = 0;
+    for (uint32_t k = 0; k < doors; k++) {
+        PeImpDoor d;
+        assert(!pe_imp_logic_door(l, k, &d));
+        to_106 |= d.stage == 0 && d.room == 6;
+    }
+    printf("RE2 scan: %d RoomLogic entries from %u files; %s has %u doors%s\n", rooms, sc.files_read, id, doors,
+           to_106 ? ", one to room 106" : "");
+    assert(rooms > 100 && !sc.refused && doors >= 2 && to_106);
+    free(l);
 }
 
 /* an RE1 room: camera zones (one the camera's own area), one script procedure with a door to
@@ -126,6 +206,7 @@ static void made_up(void) {
     }
     made_up_re1(&r);
     printf("made-up room: doors, item, zone, enemy and camera zones read; damaged rooms stay in bounds\n");
+    made_up_logic(b, size);
 }
 
 static void disc(const char *label, const char *cue, unsigned game) {
@@ -134,6 +215,8 @@ static void disc(const char *label, const char *cue, unsigned game) {
     assert(d);
     static PeImpRdt r;
     uint32_t rooms = 0, procs = 0, bad = 0, doors = 0, aots = 0, items = 0, cuts = 0, enemies = 0, over = 0;
+    uint64_t logic_bytes = 0;
+    uint32_t no_collision = 0;
     for (int i = 0; i < pe_imp_disc_files(d); i++) {
         const char *name = pe_imp_disc_name(d, i);
         int is_room = game == PE_IMP_RE1   ? pe_imp_match("*/STAGE?/ROOM*.RDT", name)
@@ -158,6 +241,14 @@ static void disc(const char *label, const char *cue, unsigned game) {
                            name, k, dr->stage == 0xFF ? -1 : dr->stage + 1, dr->room, dr->next_x, dr->next_y, dr->next_z,
                            dr->next_dir, dr->camera, dr->animation, dr->lock_id, dr->lock_type);
                 }
+            PeImpRoomLogic *l = pe_imp_rdt_logic(game, 0, 0, 0, rdt, rdt_size, why, sizeof why);
+            uint32_t ld = 0;
+            assert(l);
+            no_collision += !pe_imp_logic_section(l, PE_IMP_LOGIC_COLL, NULL, NULL);
+            pe_imp_logic_section(l, PE_IMP_LOGIC_DOOR, &ld, NULL);
+            assert(ld == r.doors);
+            logic_bytes += l->size;
+            free(l);
             for (uint32_t k = 0; k < r.doors && k < PE_IMP_RDT_DOORS; k++)
                 assert(r.door[k].stage < 8 || (game == PE_IMP_RE1 && r.door[k].stage == 0xFF));  /* a stage */
         }
@@ -166,6 +257,9 @@ static void disc(const char *label, const char *cue, unsigned game) {
     pe_imp_disc_close(d);
     printf("%s: %u rooms, %u procedures, %u unreadable spots, %u doors, %u zones, %u items, %u enemy placements, %u camera zones, %u rooms over the caps\n",
            label, rooms, procs, bad, doors, aots, items, enemies, cuts, over);
+    printf("%s: RoomLogic records %llu KB in all; %u rooms without collision\n", label,
+           (unsigned long long)(logic_bytes / 1024), no_collision);
+    assert(no_collision * 10 < rooms);
     assert(rooms > 100 && doors > 200 && cuts > 500 && !over);
     if (game != PE_IMP_RE3) assert(!bad);
     else assert(bad * 100 < procs);
@@ -177,7 +271,7 @@ int main(void) {
     const char *re1 = getenv("PE_TEST_RE1_DISC"), *re2 = getenv("PE_TEST_RE2_DISC"), *re3 = getenv("PE_TEST_RE3_DISC");
     if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1);
     else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
-    if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2);
+    if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3);
     else printf("PE_TEST_RE3_DISC not set: RE3 rooms skipped\n");

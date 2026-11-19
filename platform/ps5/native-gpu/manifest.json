@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "5b84b982a9d377beb309b791a928c777d24a9015c61fcffa5f0cf604cc43a7e5"
+      "sha256": "444077571946534aac736bc3f9675be287a17e57bfe0413e8e27f7eada499aa7"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4571,7 +4571,7 @@
     },
     {
       "path": "mods/host/import/pe_imp.h",
-      "sha256": "a3b885fed45e5d4675621ff8ba11aa71f3bcf7b049ff1f5502494338264b80a3"
+      "sha256": "6db79115e1b1f62597f0beb23aeb1472d150826b4b2151d716527dcbc4477617"
     },
     {
       "path": "mods/host/import/pe_imp_internal.h",
@@ -4639,11 +4639,11 @@
     },
     {
       "path": "mods/host/import/pe_imp_registry.c",
-      "sha256": "276c685195406841b4e0a5020ff6a4149d43b83e541f5b2802cf070b0d0a3511"
+      "sha256": "eab995300c47e98fcfccb4c5ed579fba725028e47fff4787134f1435160e8382"
     },
     {
       "path": "mods/host/import/pe_imp_store.c",
-      "sha256": "3ff768811c08390038c08f3d17ad570fe13b9830469b12fc478580de27340918"
+      "sha256": "c5ca65437fa2156f5b7379e1d1969db8ff61be9a580827be0d2e139f18deef03"
     },
     {
       "path": "mods/host/import/pe_imp_pe.h",
@@ -4723,11 +4723,11 @@
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.c",
-      "sha256": "f690456aff5185016c7293a3bfd626a1cf3f6a77e3e1dc8b68c4a4c23d9bd729"
+      "sha256": "d44792465e2e37306f75d540c4acbbad81bb4f8b2869e02aa11be4a4751d5d9d"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1.h",
-      "sha256": "4b51dd437999093bae2387f02ecbaadff9f47b7d8cef7b170c94d3fb6ba4c08d"
+      "sha256": "29978bd945f297a4e4a201af59d0df8adc63abe444007392f9e383a7498fd670"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1_emd.c",
@@ -4743,11 +4743,11 @@
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.c",
-      "sha256": "d2308bb93f0761ec6f3d469de17c1c3602c1e82f19099c50cd5cc60f3b7f7ec0"
+      "sha256": "567511b9dceea04e89e0547f929104769a23e5fffe348a2e9c342b8387e58934"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.h",
-      "sha256": "bb6183486cafce329fb21db13dc699d11a5ba599c85fd47c9afc83dcf6ef191f"
+      "sha256": "172076892ea7e6f29d52594492c86a5fbd3b618994f99df769e69447b75fd08f"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2_pld.c",
@@ -4763,11 +4763,11 @@
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.c",
-      "sha256": "6b068e41e776954e929c189cd4209306330b6434cb9e4b35608c6dcf53924e56"
+      "sha256": "5b2c6200f41c4819275c888b988a644ff6f748d6ca604d9a75cfe0bc11478a5d"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3.h",
-      "sha256": "200ecb510d8ff2f9e54f0ee238eaae9cc3df8866a9bbaae21d1fe46da6dc7b8f"
+      "sha256": "d5d50412b082e3143c7a37f5a13ba862e117956a10399af0a99c6f3d8d829e83"
     },
     {
       "path": "mods/pe_src_re3/pe_src_re3_pld.c",
@@ -4783,7 +4783,7 @@
     },
     {
       "path": "mods/pe_import/pe_import_job.c",
-      "sha256": "f7b3536c376009cae199fa2da9eea8a71049a4a598513899bf8a6ff782af8b1e"
+      "sha256": "50ea1c943cb79b3bf58aa6822fe758b981e691ec141a826540adb19f599cee68"
     },
     {
       "path": "mods/host/import/pe_imp_mdec.c",
@@ -4847,11 +4847,31 @@
     },
     {
       "path": "mods/host/import/pe_imp_rdt.c",
-      "sha256": "4126aae31a3240923d7c90a1989f8fe5d2915af69b9f3a0669a076a00fbab289"
+      "sha256": "c9af49c7722de8840f1868952aed084df4ae5ba1ba9b2540db1d5fc2b0676a40"
     },
     {
       "path": "mods/host/import/pe_imp_rdt.h",
-      "sha256": "80d15eec0fa9cd0e335d8ea5cbdd48629e70f8886aed4b7975eed36fd8ee761f"
+      "sha256": "e84a13dccd58bd4b8fea8e112fd30fc3009cfc1c37cfe22599a90df0194778ca"
+    },
+    {
+      "path": "mods/host/import/pe_imp_logic.c",
+      "sha256": "6f9a5ddde2e758873b84570845387bf46473edad03278062d8a02b86ed3f0e21"
+    },
+    {
+      "path": "mods/host/import/pe_imp_logic.h",
+      "sha256": "20ecae8ddbdc59f04e8b294dc62079d28b67e08581fdc1c1f6f5616a4111b3dc"
+    },
+    {
+      "path": "mods/pe_src_re1/pe_src_re1_logic.c",
+      "sha256": "cb0b0eaadd58a61a4d2d6bd9a21ca09f386c21ad8dcced190fd04f1eef988014"
+    },
+    {
+      "path": "mods/pe_src_re2/pe_src_re2_logic.c",
+      "sha256": "d47dc6c5fb941cb2815249fe69ab34db32a8974e497d7f517d77390b9bd377c5"
+    },
+    {
+      "path": "mods/pe_src_re3/pe_src_re3_logic.c",
+      "sha256": "39b07e424ab23298adfa465d6df5383448dac1cc63572f3ddde80630a30be016"
     }
   ]
 }

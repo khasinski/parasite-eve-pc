@@ -9,6 +9,7 @@
  * scripts: a chain of procedures, each a u16 length (counting itself) then its instructions, ending
  * with a length of 0. Section 8, the event scripts, has its own instruction set and isn't walked. */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pe_imp_rdt.h"
@@ -171,8 +172,17 @@ static void zone1(const uint8_t *ins, PeImpRdtZone *z) {
         z->x[i] = (int16_t)(xs[i] > 32767 ? 32767 : xs[i]), z->z[i] = (int16_t)(zs[i] > 32767 ? 32767 : zs[i]);
 }
 
+/* an enemy placement, kept as its instruction for the encounter work to read */
+static void keep_enemy(PeImpRdt *r, const uint8_t *ins, uint32_t size) {
+    if (r->enemies < PE_IMP_RDT_ENEMIES) {
+        memset(r->enemy[r->enemies], 0, PE_IMP_LOGIC_ENEM_BYTES);
+        memcpy(r->enemy[r->enemies], ins, size < PE_IMP_LOGIC_ENEM_BYTES ? size : PE_IMP_LOGIC_ENEM_BYTES);
+    }
+    r->enemies++;
+}
+
 static void visit1(void *ctx, uint32_t proc, uint32_t at, const uint8_t *ins, uint32_t size) {
-    (void)proc, (void)size;
+    (void)proc;
     PeImpRdt *r = ((Walk *)ctx)->out;
     r->instructions++;
     switch (ins[0]) {
@@ -209,8 +219,8 @@ static void visit1(void *ctx, uint32_t proc, uint32_t at, const uint8_t *ins, ui
         }
         r->items++;
         break;
-    case 0x1B:                                                   /* an enemy */
-        r->enemies++;
+    case 0x1B:                                                   /* an enemy, 22 bytes */
+        keep_enemy(r, ins, size);
         break;
     default:
         break;
@@ -218,7 +228,7 @@ static void visit1(void *ctx, uint32_t proc, uint32_t at, const uint8_t *ins, ui
 }
 
 static void visit(void *ctx, uint32_t proc, uint32_t at, const uint8_t *ins, uint32_t size) {
-    (void)proc, (void)size;
+    (void)proc;
     Walk *w = ctx;
     PeImpRdt *r = w->out;
     const Ops *o = w->ops;
@@ -252,7 +262,7 @@ static void visit(void *ctx, uint32_t proc, uint32_t at, const uint8_t *ins, uin
         }
         r->aots++;
     } else if (op == o->enemy) {
-        r->enemies++;
+        keep_enemy(r, ins, size);
     }
 }
 
@@ -286,6 +296,83 @@ int pe_imp_rdt_read(unsigned game, const uint8_t *rdt, uint32_t size, PeImpRdt *
             }
             out->cuts++;
         }
+    }
+    return 0;
+}
+
+/* sections kept as they are, per game: {tag, section index} */
+typedef struct { uint32_t tag; unsigned index; } Raw;
+static const Raw k_re1_raw[] = {{PE_IMP_LOGIC_COLL, 1}, {PE_IMP_LOGIC_MSG0, 11}, {PE_IMP_LOGIC_SCD0, 6},
+                                {PE_IMP_LOGIC_SCD1, 7}, {PE_IMP_LOGIC_SCD2, 8}};
+static const Raw k_re2_raw[] = {{PE_IMP_LOGIC_COLL, 6}, {PE_IMP_LOGIC_MSG0, 13}, {PE_IMP_LOGIC_MSG1, 14},
+                                {PE_IMP_LOGIC_SCD0, 16}, {PE_IMP_LOGIC_SCD1, 17}};
+static const Raw k_re3_raw[] = {{PE_IMP_LOGIC_COLL, 6}, {PE_IMP_LOGIC_MSG0, 13}, {PE_IMP_LOGIC_MSG1, 14},
+                                {PE_IMP_LOGIC_SCD0, 16}};
+
+static uint32_t min32(uint32_t a, uint32_t b) { return a < b ? a : b; }
+
+PeImpRoomLogic *pe_imp_rdt_logic(unsigned game, uint32_t player, uint32_t stage, uint32_t room,
+                                 const uint8_t *rdt, uint32_t size, char *why, size_t n) {
+    PeImpRdt *r = malloc(sizeof *r);
+    if (!r) { if (why && n) snprintf(why, n, "out of memory"); return NULL; }
+    if (pe_imp_rdt_read(game, rdt, size, r, why, n)) { free(r); return NULL; }
+    PeImpLogicBuilder *b = pe_imp_logic_begin(game, player, stage, room);
+    pe_imp_logic_add_door(b, r->door, min32(r->doors, PE_IMP_RDT_DOORS));
+    pe_imp_logic_add_trigger(b, r->aot, min32(r->aots, PE_IMP_RDT_AOTS));
+    pe_imp_logic_add_pickup(b, r->item, min32(r->items, PE_IMP_RDT_ITEMS));
+    pe_imp_logic_add_camera_zone(b, r->cut, min32(r->cuts, PE_IMP_RDT_CUTS));
+    uint32_t enemies = min32(r->enemies, PE_IMP_RDT_ENEMIES);
+    if (enemies) pe_imp_logic_add(b, PE_IMP_LOGIC_ENEM, enemies, r->enemy, enemies * PE_IMP_LOGIC_ENEM_BYTES);
+    const Raw *raw = game == PE_IMP_RE1 ? k_re1_raw : game == PE_IMP_RE2 ? k_re2_raw : k_re3_raw;
+    size_t raws = game == PE_IMP_RE1 ? sizeof k_re1_raw / sizeof *raw
+                : game == PE_IMP_RE2 ? sizeof k_re2_raw / sizeof *raw : sizeof k_re3_raw / sizeof *raw;
+    for (size_t k = 0; k < raws; k++) {
+        uint32_t off, len;
+        if (!section(game, rdt, size, raw[k].index, &off, &len))
+            pe_imp_logic_add(b, raw[k].tag, 0, rdt + off, len);
+    }
+    free(r);
+    PeImpRoomLogic *l = pe_imp_logic_finish(b);
+    if (!l && why && n) snprintf(why, n, "RDT: the room is too large to keep");
+    return l;
+}
+
+int pe_imp_re_room_name(unsigned game, const char *path, uint32_t *stage, uint32_t *room, uint32_t *player) {
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    const char *prefix = game == PE_IMP_RE3 ? "R" : "ROOM";
+    size_t skip = strlen(prefix), digits = game == PE_IMP_RE3 ? 3 : 4;
+    if (strncmp(base, prefix, skip)) return -1;
+    unsigned v[4] = {0};
+    for (size_t i = 0; i < digits; i++) {
+        char c = base[skip + i];
+        if (c >= '0' && c <= '9') v[i] = (unsigned)(c - '0');
+        else if (c >= 'A' && c <= 'F') v[i] = (unsigned)(c - 'A' + 10);
+        else return -1;
+    }
+    if (base[skip + digits] != '.' || !v[0]) return -1;
+    *stage = v[0] - 1, *room = v[1] << 4 | v[2], *player = game == PE_IMP_RE3 ? 0 : v[3];
+    return 0;
+}
+
+int pe_imp_emit_re_logic(PeImpSink *sink, unsigned game, const char *path, const uint8_t *rdt, uint32_t size,
+                         const char *const players[2], char *why, size_t n) {
+    uint32_t stage, room, player;
+    if (pe_imp_re_room_name(game, path, &stage, &room, &player) || player > 1) return 0;   /* not a room file */
+    PeImpRoomLogic *l = pe_imp_rdt_logic(game, player, stage, room, rdt, size, why, n);
+    if (!l) return -1;
+    char id[32], name[48];
+    if (game == PE_IMP_RE3) {
+        snprintf(id, sizeof id, "logic/%x%02x", (unsigned)stage + 1, (unsigned)room);
+        snprintf(name, sizeof name, "Room %u-%02X", (unsigned)stage + 1, (unsigned)room);
+    } else {
+        snprintf(id, sizeof id, "logic/%x%02x-%u", (unsigned)stage + 1, (unsigned)room, (unsigned)player);
+        snprintf(name, sizeof name, "Room %u-%02X (%s)", (unsigned)stage + 1, (unsigned)room,
+                 players && players[player] ? players[player] : player ? "player 2" : "player 1");
+    }
+    if (pe_imp_emit(sink, PE_IMP_ROOMLOGIC, id, name, l)) {
+        if (why && n) snprintf(why, n, "couldn't catalog %s", id);
+        return -1;
     }
     return 0;
 }
