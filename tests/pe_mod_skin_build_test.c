@@ -153,6 +153,17 @@ int main(void) {
         CHECK(a.rooms.n == b.rooms.n && !memcmp(a.rooms.b, b.rooms.b, a.rooms.n));
         pe_skin_files_free(&b);
         pe_skin_files_free(&a);
+        /* a face two pages past the rest (as RE2's PL0D has): refused with a reason, not built from
+         * the wrong page */
+        PeImpPart *pt = &claire.part[0];
+        PeImpFace *f = pt->quads ? &pt->quad[0] : &pt->tri[0];
+        uint16_t page = f->page;
+        f->page = (uint16_t)((page & ~15u) | (((page & 15u) + 2) & 15u));
+        why[0] = 0;
+        CHECK(pe_skin_build(pe, &claire, &g_re2_human_rig, (const int16_t (*)[4])normals, NULL, &b, why, sizeof why) != 0);
+        printf("  three texture pages: refused (%s)\n", why);
+        CHECK(strstr(why, "texture pages") != NULL);
+        f->page = page;
     }
     pe_imp_pe_close(pe);
     pe_imp_model_free(&claire);

@@ -434,7 +434,7 @@ static void place_n(const Fit *fit, const Placed *pl, const int16_t *nn, double 
 }
 
 /* ---- faces: what's buried inside the body is left out ---- */
-typedef struct { const PeImpFace *f; int part, corners; } Face;
+typedef struct { const PeImpFace *f; int part, corners, page_base; } Face;   /* page_base: the model's first page */
 
 static int collect_faces(const PeImpModel *m, const Fit *fit, Face **out, int *count) {
     const PeImpRig *rig = fit->rig;
@@ -471,7 +471,7 @@ static int collect_faces(const PeImpModel *m, const Fit *fit, Face **out, int *c
                     for (int k = 0; k < nc; k++) all &= f->v[k][1] > low - 10;
                     if (all) { lid_out++; continue; }
                 }
-                fs[n].f = f, fs[n].part = p, fs[n].corners = nc, n++;
+                fs[n].f = f, fs[n].part = p, fs[n].corners = nc, fs[n].page_base = 0, n++;
             }
         }
     }
@@ -480,9 +480,42 @@ static int collect_faces(const PeImpModel *m, const Fit *fit, Face **out, int *c
 }
 
 /* ---- texture: groups of faces sharing texels, each with its own 16 colours ---- */
-static void atlas_xy(const PeImpFace *f, int j, int *x, int *y) {
-    *x = (f->page & 1) * 128 + f->uv[j][0];
+/* A face's texel in the source picture: pages count from the first page the model's faces use (a
+ * texture page is 128 texels wide at 8 bits), so a model on pages 1 and 2 maps as one on 0 and 1.
+ * The costume's texture keeps these positions, so they must stay within 256 x 255: texture_fits
+ * refuses a model whose faces span more than two pages (RE2's PL0D uses three) or fall outside its
+ * picture, instead of reading the wrong page or past the picture. */
+static void atlas_xy(const Face *fc, int j, int *x, int *y) {
+    const PeImpFace *f = fc->f;
+    *x = ((f->page & 15) - fc->page_base) * 128 + f->uv[j][0];
     *y = f->uv[j][1] < 254 ? f->uv[j][1] : 254;
+}
+
+static int texture_fits(const PeImpModel *m, Face *fs, int nf, char *why, size_t n) {
+    int lo = 15, hi = 0;
+    for (int i = 0; i < nf; i++) {
+        int pg = fs[i].f->page & 15;
+        if (pg < lo) lo = pg;
+        if (pg > hi) hi = pg;
+    }
+    if (nf && hi - lo > 1) {
+        if (why && n) snprintf(why, n, "the model's faces use texture pages %d to %d; a costume's texture holds two", lo, hi);
+        return -1;
+    }
+    int off = 0;
+    for (int i = 0; i < nf; i++) {
+        fs[i].page_base = nf ? lo : 0;
+        for (int j = 0; j < fs[i].corners; j++) {
+            int x, y;
+            atlas_xy(&fs[i], j, &x, &y);
+            if (x < 0 || x > 255 || (uint32_t)x >= m->w || (uint32_t)y >= m->h) { off++; break; }
+        }
+    }
+    if (off) {
+        if (why && n) snprintf(why, n, "%d of the model's faces point outside its %ux%u texture", off, (unsigned)m->w, (unsigned)m->h);
+        return -1;
+    }
+    return 0;
 }
 
 static int in_tri(double px, double py, const int *a, const int *b, const int *c, double pad) {
@@ -501,7 +534,7 @@ typedef struct { int *px; int n; } Cover;                          /* pixel keys
 static int cover_face(const Face *fc, Cover *cv) {
     int pts[4][2], n = fc->corners, mnx = 1 << 30, mxx = -1, mny = 1 << 30, mxy = -1;
     for (int j = 0; j < n; j++) {
-        atlas_xy(fc->f, j, &pts[j][0], &pts[j][1]);
+        atlas_xy(fc, j, &pts[j][0], &pts[j][1]);
         if (pts[j][0] < mnx) mnx = pts[j][0];
         if (pts[j][0] > mxx) mxx = pts[j][0];
         if (pts[j][1] < mny) mny = pts[j][1];
@@ -895,7 +928,7 @@ static int build_model(const Aya *a, const Fit *fit, const Face *fs, int nf, con
             unsigned clut = (unsigned)(((448 + gi / 16) << 6) | (gi % 16));
             int uv[4][2];
             for (int j = 0; j < n; j++) {
-                atlas_xy(fs[i].f, order[j], &uv[j][0], &uv[j][1]);
+                atlas_xy(&fs[i], order[j], &uv[j][0], &uv[j][1]);
                 if (uv[j][0] > 255) bad = 1;                              /* struct 'B' would refuse it */
             }
             unsigned rec[12] = {(unsigned)uv[0][0], (unsigned)uv[0][1], clut, (unsigned)uv[1][0], (unsigned)uv[1][1], 31,
@@ -1242,6 +1275,7 @@ int pe_skin_build(PeImpPe *pe, const PeImpModel *src, const PeImpRig *rig, const
     if (place(src, &a, rig, &fit, out->log, sizeof out->log)) FAIL("fitting failed");
     PE_IMP_PROGRESS(prog, "packing the texture", 2, 4);
     if (collect_faces(src, &fit, &fs, &nf)) FAIL("out of memory");
+    if (texture_fits(src, fs, nf, why, n)) goto out;                  /* its reason is in `why` */
     face_pal = malloc((size_t)(nf ? nf : 1) * sizeof *face_pal);
     if (!face_pal || build_texture(src, fs, nf, words, pal, face_pal, &out->groups)) FAIL("the texture could not be packed");
     PE_IMP_PROGRESS(prog, "writing the model", 3, 4);
