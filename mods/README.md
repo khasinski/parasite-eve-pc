@@ -944,8 +944,9 @@ with u32 offsets of the door's MD2 mesh and its 8-bit TIM, read like an RE3 room
 per message; line break `
 `, page break `#`, green `{...}`, yes/no `@xx`). The character table and
 RE2/RE3's codes are biohazard-utils' (`Room/Msg.cs`); the English list is RE2's section 14 and RE3's
-13 (the US release's). RE1 (not in biohazard-utils) uses the same table in section 11 with 02 a line
-break and 79 + one byte ending a message; its entries starting 04 are cues, kept as empty strings
+13 (the US release's). RE1 (not in biohazard-utils) uses the same table in section 11 with its own
+codes: 01 p the end, 02 a line break, 03 p a page break, 04 p a pause or cue, 79 a full stop, 74-77
+the letters of "S.T.A.R.S."; its entries starting 04 are cues, kept as empty strings
 (518 / 958 / 1,110 messages with text). RE1's event scripts are kept as stored
 (`SCD2`): they're state machines with nested actor streams, decoded by the runtime's interpreter.
 
@@ -995,8 +996,10 @@ decode the EFF data; here too the EFF data stays as stored (in each room's `RDT0
 `effects/<stage><room>-<player>` (picture k = the room's effect k, ids in section 18; 373 sheets in 103
 rooms). RE3: section 20 of the room in each `.ARD`, ids in section 17, `effects/<stage><room>` (308 in
 141 rooms), and `ETC/CORE00.TIM`, the common effects' sheet, `effects/core`. RE1: `DATA/CORE00.ETM`,
-the common sheets (8), `effects/core`; RE1's per-room effect sheets and RE2's `CORE01.TIM` (raw, no
-TIM header) aren't read yet.
+the common sheets (8), `effects/core`; RE1's rooms: their effect ids and TIM table (Rdt1
+entries 13 and 15, one u32 offset per id in use), `effects/<stage><room>-<player>` (220). RE2's
+`CORE01.TIM`: two 256 x 256 4-bit pages with no header or palette, the grey placeholder (`GREY`),
+`effects/core`.
 
 **Maps.** Also Pictures, as `maps/all`. RE2's `COMMON/DATA/MAPS.PIX` is 20 map pages of 256 x 256 at
 4 bits a pixel with no palette of their own: their colours are in `COMMON/DATA/TEX.TIM`'s palette (19

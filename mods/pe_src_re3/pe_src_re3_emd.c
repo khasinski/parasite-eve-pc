@@ -484,7 +484,9 @@ PeImpAnimation *re3_moves(const uint8_t *data, uint32_t size, uint32_t emr, uint
     a->bones = set.bones, a->fps = 30, a->moves = set.moves;
     int32_t root_x = s16at(x, emr + 8), root_z = s16at(x, emr + 12);
     for (uint32_t mv = 0; mv < set.moves; mv++)
-        if (set_move(x, &set, mv, set.bones, root_x, root_z, &a->move[mv], quiet, sizeof quiet)) goto bad;
+        (void)set_move(x, &set, mv, set.bones, root_x, root_z, &a->move[mv], quiet, sizeof quiet);   /* a move past the
+                                                                         * key frames stays empty (a weapon's first small set shares
+                                                                         * its move list with the second, and has fewer key frames) */
     if (pe_imp_animation_check(a, quiet, sizeof quiet)) goto bad;
     return a;
 bad:

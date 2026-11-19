@@ -2,9 +2,11 @@
  * Kept as stored in a Pictures record (pe_imp_pictures.h); which pages make up which document is
  * not known yet. Read only. */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pe_imp_pictures.h"
+#include "pe_imp_rdt.h"
 #include "pe_src_re1.h"
 
 static int read_files(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
@@ -81,4 +83,47 @@ const PeImpReader g_re1_core_effects_ps1 = {
     .game = "re1", .platform = "ps1", .format = "core-effects",
     .version = 1, .produces = PE_IMP_PICTURES, .match = "*/DATA/CORE00.ETM",
     .tags = "effects", .read = read_core_effects
+};
+
+/* A room's effect sprite sheets (biohazard-utils' Rdt1: ESPIDs, ESPEFF and ESPTIM, the offset table's
+ * entries 13 to 15): 8 effect ids (0xFF unused), and per id in use a u32 offset of its TIM in the
+ * room file (-1 none). The TIMs, in id order, become "effects/<stage><room>-<player>"; the EFF data stays as
+ * stored in the room's RDT0. */
+static uint32_t rd32(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
+
+static int read_room_effects(const uint8_t *rdt, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    uint32_t stage, room, player;
+    if (pe_imp_re_room_name(PE_IMP_RE1, path, &stage, &room, &player) || size < 0x48 + 19 * 4) return 0;
+    uint32_t ids = rd32(rdt + 0x48 + 4 * 13), tims = rd32(rdt + 0x48 + 4 * 15);
+    if (!ids || !tims || ids + 8 > size || tims >= size) return 0;
+    uint8_t *packed = malloc(size);
+    uint32_t total = 0;
+    if (!packed) { if (why && n) snprintf(why, n, "out of memory"); return -1; }
+    for (uint32_t k = 0, used = 0; k < 8; k++) {
+        if (rdt[ids + k] == 0xFF) continue;
+        if (tims + 4ull * (used + 1) > size) break;
+        uint32_t at = rd32(rdt + tims + 4 * used++);               /* one entry per id in use */
+        if (at == 0xFFFFFFFFu || at >= size) continue;
+        uint32_t t = pe_imp_tim_size(rdt + at, size - at);
+        if (!t || total + ((t + 3) & ~3u) > size) continue;
+        memcpy(packed + total, rdt + at, t);
+        memset(packed + total + t, 0, ((t + 3) & ~3u) - t);
+        total += (t + 3) & ~3u;
+    }
+    int rc = 0;
+    if (total) {
+        char id[40], name[48];
+        snprintf(id, sizeof id, "effects/%x%02x-%u", (unsigned)stage + 1, (unsigned)room, (unsigned)player);
+        snprintf(name, sizeof name, "Room %u-%02X effects", (unsigned)stage + 1, (unsigned)room);
+        rc = pe_imp_emit_tims(sink, id, name, packed, total, 4, why, n);
+    }
+    free(packed);
+    return rc;
+}
+
+const PeImpReader g_re1_room_effects_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re1", .platform = "ps1", .format = "rdt-effects",
+    .version = 1, .produces = PE_IMP_PICTURES, .match = "*/STAGE?/ROOM*.RDT",
+    .tags = "effects", .read = read_room_effects, .path_key = 1
 };

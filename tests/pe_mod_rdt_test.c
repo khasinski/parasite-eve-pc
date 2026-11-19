@@ -22,7 +22,7 @@ extern const PeImpReader g_re1_item_icons_ps1, g_re2_item_pictures_ps1, g_re3_it
 void MdecDiag_ExpandDecoderTable(void *buffer);   /* the game's, linked in */
 extern const PeImpReader g_re2_objects_ps1, g_re3_objects_ps1, g_re1_objects_ps1, g_re1_file_text_ps1, g_re1_door_models_ps1,
     g_re2_door_models_ps1, g_re3_door_models_ps1, g_re1_room_anims_ps1, g_re1_maps_ps1;
-extern const PeImpReader g_re2_effects_ps1, g_re3_effects_ps1, g_re3_core_effects_ps1, g_re1_core_effects_ps1;
+extern const PeImpReader g_re2_core_effects_ps1, g_re2_effects_ps1, g_re3_effects_ps1, g_re3_core_effects_ps1, g_re1_core_effects_ps1, g_re1_room_effects_ps1;
 extern const PeImpReader g_re3_emd_ps1, g_re3_room_anims_ps1, g_re2_emd_ps1, g_re1_monsters_ps1, g_re1_person_moves_ps1, g_re1_weapon_moves_ps1, g_re1_weapons_ps1, g_re2_player_moves_ps1, g_re2_weapons_ps1, g_re3_player_moves_ps1, g_re3_weapons_ps1;
 extern const PeImpReader g_re1_files_ps1, g_re2_files_ps1, g_re3_files_ps1, g_re2_maps_ps1, g_re3_maps_ps1;
 
@@ -72,6 +72,7 @@ static void scan_text(const char *label, const char *cue, const char *game, cons
             const char *str = (const char *)t + at;
             size_t sl = strnlen(str, bytes - at);
             assert(at + sl < bytes);                                        /* NUL-terminated */
+            assert(!strstr(str, "Ã¢Â"));                  /* no double-encoded quotes */
             if (sl) texts++;
             if (phrase && strstr(str, phrase) && !found++) printf("  %s text: \"%s\"\n", label, str);
             at += (uint32_t)sl + 1;
@@ -584,15 +585,15 @@ int main(void) {
                      scan_objects(re1, "re1", &g_re1_objects_ps1, 500),
                      scan_files("RE1 text map", re1, "re1", &g_re1_file_text_ps1, 40, 0),
                      scan_files("RE1 icon", re1, "re1", &g_re1_item_icons_ps1, 76, 0),
-                     scan_files("RE1 map", re1, "re1", &g_re1_maps_ps1, 15, 0), scan_files("RE1 effect", re1, "re1", &g_re1_core_effects_ps1, 8, 0),
-                     scan_objects(re1, "re1", &g_re1_door_models_ps1, 15), scan_room_anims(re1, "re1", &g_re1_room_anims_ps1, 300), scan_text("RE1", re1, "re1", &g_re1_logic_ps1, 300, "the key"), scan_objects(re1, "re1", &g_re1_monsters_ps1, 40), scan_room_anims(re1, "re1", &g_re1_monsters_ps1, 40), scan_room_anims(re1, "re1", &g_re1_person_moves_ps1, 15), scan_room_anims(re1, "re1", &g_re1_weapon_moves_ps1, 25), scan_objects(re1, "re1", &g_re1_weapons_ps1, 25);
+                     scan_files("RE1 map", re1, "re1", &g_re1_maps_ps1, 15, 0), scan_files("RE1 effect", re1, "re1", &g_re1_core_effects_ps1, 8, 0), scan_files("RE1 room effect", re1, "re1", &g_re1_room_effects_ps1, 200, 0),
+                     scan_objects(re1, "re1", &g_re1_door_models_ps1, 15), scan_room_anims(re1, "re1", &g_re1_room_anims_ps1, 300), scan_text("RE1", re1, "re1", &g_re1_logic_ps1, 300, "S.T.A.R.S. Bravo team...!"), scan_objects(re1, "re1", &g_re1_monsters_ps1, 40), scan_room_anims(re1, "re1", &g_re1_monsters_ps1, 40), scan_room_anims(re1, "re1", &g_re1_person_moves_ps1, 15), scan_room_anims(re1, "re1", &g_re1_weapon_moves_ps1, 25), scan_objects(re1, "re1", &g_re1_weapons_ps1, 25);
     else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
     if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1),
                      scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106),
                      movie("RE2", re2, "ZMOVIE/R200.STR"),
                      scan_files("RE2", re2, "re2", &g_re2_files_ps1, 216, 25),
                      scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20, 0),
-                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100, 0), scan_files("RE2 effect", re2, "re2", &g_re2_effects_ps1, 300, 0), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2, "re2", &g_re2_rbj_ps1, 20), scan_text("RE2", re2, "re2", &g_re2_logic_ps1, 300, "locked"), scan_objects(re2, "re2", &g_re2_emd_ps1, 50), expect_model("re2:enemy/em10", 15), expect_model("re2:enemy/em22", 22), expect_model("re2:enemy/em20", 17), expect_either("re2:enemy/em25-cdemd2", "re2:enemy/em25-cdemd3", 20), scan_room_anims(re2, "re2", &g_re2_emd_ps1, 40), scan_room_anims(re2, "re2", &g_re2_player_moves_ps1, 5), scan_room_anims(re2, "re2", &g_re2_weapons_ps1, 20), scan_objects(re2, "re2", &g_re2_weapons_ps1, 20);
+                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100, 0), scan_files("RE2 effect", re2, "re2", &g_re2_effects_ps1, 300, 0), scan_files("RE2 core effect", re2, "re2", &g_re2_core_effects_ps1, 2, 0), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2, "re2", &g_re2_rbj_ps1, 20), scan_text("RE2", re2, "re2", &g_re2_logic_ps1, 300, "locked"), scan_objects(re2, "re2", &g_re2_emd_ps1, 50), expect_model("re2:enemy/em10", 15), expect_model("re2:enemy/em22", 22), expect_model("re2:enemy/em20", 17), expect_either("re2:enemy/em25-cdemd2", "re2:enemy/em25-cdemd3", 20), scan_room_anims(re2, "re2", &g_re2_emd_ps1, 40), scan_room_anims(re2, "re2", &g_re2_player_moves_ps1, 5), scan_room_anims(re2, "re2", &g_re2_weapons_ps1, 20), scan_objects(re2, "re2", &g_re2_weapons_ps1, 20);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
                      scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), scan_objects(re3, "re3", &g_re3_objects_ps1, 600), scan_objects(re3, "re3", &g_re3_door_models_ps1, 60), scan_objects(re3, "re3", &g_re3_emd_ps1, 80), scan_room_anims(re3, "re3", &g_re3_room_anims_ps1, 100), scan_text("RE3", re3, "re3", &g_re3_logic_ps1, 300, "forklift"), scan_room_anims(re3, "re3", &g_re3_player_moves_ps1, 5), scan_room_anims(re3, "re3", &g_re3_weapons_ps1, 20), scan_objects(re3, "re3", &g_re3_weapons_ps1, 20), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),

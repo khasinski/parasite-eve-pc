@@ -316,10 +316,11 @@ static uint32_t min32(uint32_t a, uint32_t b) { return a < b ? a : b; }
  * (Room/Msg.cs, MIT, Ted John): a message list is u16 offsets (the first / 2 = the count); a byte
  * below 96 is a character; F9 p green on (p 1) / off, FA p start, FB p a yes/no question, FC line
  * break, FD p page break, FE end. RE1 (not in biohazard-utils; read from the disc) uses the same table
- * in its message section (11), 02 a line break and 79 the end; its entries starting 04 are cues,
- * not text. The English list: RE1 section 11, RE2 14, RE3 13 (the US release's English). */
+ * in its message section (11) with its own codes: 01 p the end, 02 a line break, 03 p a page break,
+ * 04 p a pause or cue, 79 a full stop, 74-77 the letters of "S.T.A.R.S."; its entries starting 04
+ * are cues, not text. The English list: RE1 section 11, RE2 14, RE3 13 (the US release's English). */
 static const char *const k_chars[96] = {
-    " ", ".", "", "", "", "(", ")", "", "", "â", "â", "", "0", "1", "2", "3",
+    " ", ".", "", "", "", "(", ")", "", "", "“", "”", "", "0", "1", "2", "3",
     "4", "5", "6", "7", "8", "9", ":", "", ",", "\"", "!", "?", "", "A", "B", "C",
     "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
     "T", "U", "V", "W", "X", "Y", "Z", "[", "/", "]", "'", "-", "", "a", "b", "c",
@@ -354,10 +355,15 @@ static void add_text(PeImpLogicBuilder *b, unsigned game, const uint8_t *rdt, ui
         int text = !(game == PE_IMP_RE1 && at < end && m[at] == 0x04);
         for (uint32_t k = at; text && k < end; k++) {
             unsigned c = m[k];
-            if (game == PE_IMP_RE1) {
-                if (c == 0x79) break;
-                if (c == 0x02) { put(&o, &olen, &cap, "\n"); continue; }
-                if (c < 96) put(&o, &olen, &cap, k_chars[c]);
+            if (game == PE_IMP_RE1) {                                    /* RE1's own codes (read from the disc) */
+                static const char *const k_stars[4] = {"S.", "T.", "A.", "R."};
+                if (c == 0x01) break;                                       /* 01 p: the end */
+                if (c == 0x02) put(&o, &olen, &cap, "\n");
+                else if (c == 0x03) put(&o, &olen, &cap, "#"), k++;      /* 03 p: a page break */
+                else if (c == 0x04) k++;                                    /* 04 p: a pause or cue */
+                else if (c == 0x79) put(&o, &olen, &cap, ".");
+                else if (c >= 0x74 && c <= 0x77) put(&o, &olen, &cap, k_stars[c - 0x74]);   /* "S.T.A.R.S." */
+                else if (c < 96) put(&o, &olen, &cap, k_chars[c]);
                 continue;
             }
             if (c == 0xFE) break;

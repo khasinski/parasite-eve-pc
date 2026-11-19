@@ -72,3 +72,19 @@ const PeImpReader g_re2_effects_ps1 = {
     .version = 1, .produces = PE_IMP_PICTURES, .match = "PL?/RDT/ROOM*.RDT",
     .tags = "effects", .read = read_effects, .path_key = 1
 };
+
+/* COMMON/DATA/CORE01.TIM: the common effects' sprites, no TIM header: two 256 x 256 pages at 4 bits a
+ * pixel (equal-nibble runs throughout). Their palette isn't in the file (nor plainly beside it), so
+ * the pages get the grey placeholder, marked GREY, as the maps had: "effects/core". Their EFF data,
+ * CORE00.ESP, is kept as stored. */
+static int read_core_effects(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    (void)path;
+    return pe_imp_emit_pages4(sink, "effects/core", "Common effects", data, size, why, n);
+}
+
+const PeImpReader g_re2_core_effects_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re2", .platform = "ps1", .format = "core-effects",
+    .version = 1, .produces = PE_IMP_PICTURES, .match = "COMMON/DATA/CORE01.TIM",
+    .tags = "effects", .read = read_core_effects
+};
