@@ -147,5 +147,5 @@ const PeImpReader g_re2_weapons_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re2", .platform = "ps1", .format = "plw",
     .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/PL??W??.PLW",
-    .tags = "weapon", .read = read_player
+    .tags = "weapon", .read = read_player, .path_key = 1
 };

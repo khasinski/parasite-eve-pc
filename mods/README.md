@@ -168,9 +168,14 @@ skeleton, part i on bone i) and RE1's room-animation moves, as `enemy/em<nnnn>`,
 move set (the EMR at D1, its EDD at D2), read as `player/<name>/moves` with bones in RE2's order like
 their models (`g_re1_person_moves_ps1`, 24). RE2's `PL?/PLD/PLxx.PLD` and `PLxxWyy.PLW` share a
 layout (u32 directory: EDD, EMR, MD1, TIM): a PLD's moves are `player/plxx/moves` (10); a PLW's are
-the player's moves with that weapon, `weapon/plxxwyy/moves` (26), and its MD1 + TIM the weapon in
-hand as a one-bone Model `weapon/plxxwyy` (27; parts as stored, in the frames of the arm bones they
-replace, which isn't mapped yet). Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
+the player's moves with that weapon, `weapon/plxxwyy/moves` (29), and its MD1 + TIM the weapon in
+hand as a one-bone Model `weapon/plxxwyy` (35; parts as stored, in the frames of the arm bones they
+replace, which isn't mapped yet). RE3's `CD_DATA/PLD/PLxx.PLD` starts its directory EDD, EMR: the
+player's moves, bones in RE2's order like the model (`player/plxx/moves`, 15); a `PLxxWyy.PLW` has 9
+sections: 0-1 the player's moves with that weapon (`weapon/plxxwyy/moves`, 84), 2-6 two small move
+sets of 7 and 9 bones (likely the weapon's own moving parts, not read), 7 the weapon's MD2 mesh and 8
+its TIM (`weapon/plxxwyy`, 84). Identical weapon files exist (PL00W02 = PL00W03), so the weapon
+readers key the store by path. Tests: `mod-re3-enemy` (archives, EMD, tones and a scan on made-up data;
 PE_TEST_RE3_PC = the RE3 PC folder adds EM34 and E_34) and `mod-enemy-build` (builder on made-up
 data; with PE_TEST_RE3_PC Nemesis built from the store into `enemy-build-test/nemesis`).
 

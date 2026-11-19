@@ -331,12 +331,12 @@ if(BUILD_TESTING)
     endif()
     # The RE3 reader on a made-up person; PE_TEST_RE3_DISC adds every player file on the disc.
     pe_feature_test(re3 ${PROJECT_SOURCE_DIR}/tests/pe_mod_re3_test.c ${pe_import_core_sources}
-        pe_src_re3/pe_src_re3_pld.c)
+        pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_objects.c)
     target_include_directories(test-mod-re3 PRIVATE host/import pe_src_re3)
     # RE3's enemies: the PC folder (rofs archives), EMD models with their moves, enemy sound banks,
     # on made-up data; PE_TEST_RE3_PC (the RE3 PC folder) adds Nemesis (EM34, E_34) read for real.
     pe_feature_test(re3-enemy ${PROJECT_SOURCE_DIR}/tests/pe_mod_re3_enemy_test.c ${pe_import_core_sources}
-        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c)
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_objects.c)
     target_include_directories(test-mod-re3-enemy PRIVATE host/import pe_src_re3)
     set_tests_properties(mod-re3-enemy PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}")
     # The RE1 reader on a made-up person; PE_TEST_RE1_DISC adds the four people on the disc.
@@ -372,7 +372,7 @@ if(BUILD_TESTING)
         pe_src_re1/pe_src_re1_movies.c pe_src_re2/pe_src_re2_movies.c pe_src_re3/pe_src_re3_movies.c
         pe_src_re1/pe_src_re1_files.c pe_src_re2/pe_src_re2_files.c pe_src_re3/pe_src_re3_files.c
         pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_pld.c pe_src_re3/pe_src_re3_objects.c pe_src_re1/pe_src_re1_objects.c
-        pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_emd.c pe_src_re3/pe_src_re3_emd.c
+        pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_emd.c pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_pld.c
         ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
     target_include_directories(test-mod-rdt PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
@@ -427,7 +427,7 @@ if(BUILD_TESTING AND "pe_enemy_import" IN_LIST PE_MOD_LIST)
     # frames); PE_TEST_RE3_PC adds Nemesis built from the RE3 PC folder through the importer's store.
     pe_feature_test(enemy-build ${PROJECT_SOURCE_DIR}/tests/pe_enemy_build_test.c pe_enemy_import/pe_enemy_build.c
         pe_enemy_import/pe_enemy_pack.c ${pe_import_core_sources}
-        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c)
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_objects.c)
     target_include_directories(test-mod-enemy-build PRIVATE pe_enemy_import host/import pe_src_re3)
     target_link_libraries(test-mod-enemy-build PRIVATE pe_download_json)
     set_tests_properties(mod-enemy-build PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 300)

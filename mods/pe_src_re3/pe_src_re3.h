@@ -22,6 +22,12 @@ double re3_tone_rate(int note, int centre, int fine);
 PeImpSound *re3_tone_sound(const uint8_t *vh, uint32_t vh_size, const uint8_t *vb, uint32_t vb_size, int t,
                            char *why, size_t n);
 extern const PeImpReader g_re3_emd_pc, g_re3_emd_ps1, g_re3_room_anims_ps1, g_re3_tones_pc;
+/* RE3 moves: the EDD (8-byte moves) at edd..edd_end over the key frames of the EMR at emr, which run
+ * to kf_end; NULL if they don't read (pe_src_re3_emd.c) */
+PeImpAnimation *re3_moves(const uint8_t *data, uint32_t size, uint32_t emr, uint32_t edd, uint32_t edd_end, uint32_t kf_end);
+/* a one-bone Model of the MD2 block at md2 and the 8-bit TIM at tim (pe_src_re3_objects.c); 0 or -1 */
+int re3_md2_model(const uint8_t *data, uint32_t size, uint32_t md2, uint32_t tim, PeImpModel *m);
+extern const PeImpReader g_re3_player_moves_ps1, g_re3_weapons_ps1;
 extern const PeImpEnemyProfile g_re3_nemesis;
 
 /* RE3's compact sound banks (pe_src_re3_music.c): the standard VAB header's size for the compact

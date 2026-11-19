@@ -338,3 +338,66 @@ const char g_re3_naming[] =
     " \"player/pl0c\": {\"id\": \"player/dario\", \"name\": \"Dario\"},"
     " \"enemy/em34\": {\"id\": \"enemy/nemesis\", \"name\": \"Nemesis\"},"
     " \"enemy/em34/moves\": {\"id\": \"enemy/nemesis/moves\", \"name\": \"Nemesis moves\"}}";
+
+/* Player moves and weapons. A PLD's directory starts EDD, EMR: the player's moves, bones put in RE2's
+ * order as the model's are (k_to_re2): "player/pl00/moves". A PLxxWyy.PLW's directory (9 sections):
+ * 0 EDD and 1 EMR, the player's moves with that weapon ("weapon/pl00w02/moves", RE2's order); 2-6
+ * two small move sets (7 and 9 bones, likely the weapon's own moving parts; not read); 7 the
+ * weapon's MD2 mesh and 8 its TIM, a one-bone Model "weapon/pl00w02" (parts as stored, in the frame
+ * of the arm bone they replace, which isn't mapped yet). */
+static int read_player(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    const char *dot = strchr(base, '.');
+    int weapon = dot && !strcmp(dot, ".PLW");
+    if (size < 16) return 0;
+    Buf b = {data, size};
+    uint32_t dir = u32at(&b, 0), cnt = u32at(&b, 4);
+    if (cnt != (weapon ? 9u : 5u) || dir + 4 * cnt > size) return 0;
+    uint32_t sec[9];
+    for (uint32_t i = 0; i < cnt; i++) sec[i] = u32at(&b, dir + 4 * i);
+    for (uint32_t i = 1; i < cnt; i++) if (sec[i] <= sec[i - 1] || sec[i] >= dir) return 0;
+    char stem[16] = "", low[16] = "", id[48], name[48];
+    size_t k = 0;
+    for (const char *c = base; *c && *c != '.' && k + 1 < sizeof stem; c++, k++) stem[k] = *c, low[k] = (char)(*c >= 'A' && *c <= 'Z' ? *c + 32 : *c);
+    stem[k] = low[k] = 0;
+    PeImpAnimation *a = re3_moves(data, size, sec[1], sec[0], sec[1], sec[2]);
+    if (a && a->bones != BONES) pe_imp_animation_free(a), free(a), a = NULL;
+    for (uint32_t mv = 0; a && mv < a->moves; mv++)                    /* RE3's bone order -> RE2's */
+        for (uint32_t f = 0; f < a->move[mv].frames; f++) {
+            int16_t *d = a->move[mv].data + (size_t)f * (3 + 3 * BONES), old[3 * BONES];
+            memcpy(old, d + 3, sizeof old);
+            for (int r = 0; r < BONES; r++) memcpy(d + 3 + 3 * k_to_re2[r], old + 3 * r, 3 * sizeof *old);
+        }
+    if (weapon) {
+        PeImpModel *m = calloc(1, sizeof *m);
+        if (m && !re3_md2_model(data, size, sec[7], sec[8], m)) {
+            snprintf(id, sizeof id, "weapon/%s", low);
+            snprintf(name, sizeof name, "%s", stem);
+            if (pe_imp_emit(sink, PE_IMP_MODEL, id, name, m)) {
+                if (a) pe_imp_animation_free(a), free(a);
+                snprintf(why, n, "could not catalog %s", id);
+                return -1;
+            }
+        } else free(m);
+    }
+    if (!a) return 0;
+    snprintf(id, sizeof id, "%s/%s/moves", weapon ? "weapon" : "player", low);
+    snprintf(name, sizeof name, "%s moves", stem);
+    if (pe_imp_emit(sink, PE_IMP_ANIMATION, id, name, a)) { snprintf(why, n, "could not catalog %s", id); return -1; }
+    return 0;
+}
+
+const PeImpReader g_re3_player_moves_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re3", .platform = "ps1", .format = "pld-moves",
+    .version = 1, .produces = PE_IMP_ANIMATION, .match = "CD_DATA/PLD/PL??.PLD",
+    .tags = "human player", .read = read_player, .path_key = 1
+};
+
+const PeImpReader g_re3_weapons_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re3", .platform = "ps1", .format = "plw",
+    .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "CD_DATA/PLD/PL??W??.PLW",
+    .tags = "weapon", .read = read_player, .path_key = 1
+};

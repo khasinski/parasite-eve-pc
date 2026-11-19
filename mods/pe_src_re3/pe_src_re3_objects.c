@@ -163,6 +163,10 @@ static int read_objects(const uint8_t *ard, uint32_t size, const char *path, PeI
     return 0;
 }
 
+int re3_md2_model(const uint8_t *data, uint32_t size, uint32_t md2, uint32_t tim, PeImpModel *m) {
+    return object_parse(data, size, NO_MESH, md2, tim, m);
+}
+
 const PeImpReader g_re3_objects_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re3", .platform = "ps1", .format = "rdt-objects",

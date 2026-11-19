@@ -467,11 +467,14 @@ const PeImpReader g_re3_emd_ps1 = {
  * followed by a section holding its EDD (8-byte moves, as in the EMD). Each pair becomes an
  * Animation "roomanim/<stage><room>-<entry>-<n>". EMRs with no EDD after them (key frames only,
  * likely played straight through by the room script) aren't read. */
-static PeImpAnimation *room_animation(const Buf *x, uint32_t emr, uint32_t edd, uint32_t edd_end) {
+PeImpAnimation *re3_moves(const uint8_t *data, uint32_t size, uint32_t emr, uint32_t edd, uint32_t edd_end, uint32_t kf_end) {
+    Buf b = {data, size}, *x = &b;
     Set set;
     char quiet[160];
-    if (set_open(x, edd, emr, &set, quiet, sizeof quiet) || !set.moves || !set.bones || set.frames >= edd) return NULL;
-    set.end = edd;                                                      /* the key frames run up to the moves */
+    if (kf_end > size || edd_end > size || set_open(x, edd, emr, &set, quiet, sizeof quiet) || !set.moves || !set.bones ||
+        set.frames >= kf_end)
+        return NULL;
+    set.end = kf_end;                                                   /* the key frames run up to kf_end */
     for (uint32_t mv = 0; mv < set.moves; mv++) {
         uint32_t e = edd + 8 * mv, steps = u16at(x, e), off = u16at(x, e + 2);
         if (steps > 2000 || edd + off + 2ull * steps > edd_end) return NULL;
@@ -520,7 +523,7 @@ static int read_room_anims(const uint8_t *data, uint32_t size, const char *path,
                 uint32_t o = u32at(x, dir + 4 * j);
                 if (o > edd && o < end) end = o;
             }
-            PeImpAnimation *a = room_animation(x, emr, edd, end);
+            PeImpAnimation *a = re3_moves(x->b, x->size, emr, edd, end, edd);   /* key frames up to the moves */
             if (!a) continue;
             char id[48], name[64];
             snprintf(id, sizeof id, "roomanim/%s-%u-%u", room, (unsigned)i, (unsigned)made);
