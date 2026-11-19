@@ -25,6 +25,31 @@ extern const PeImpReader g_re2_objects_ps1, g_re3_objects_ps1, g_re1_objects_ps1
 extern const PeImpReader g_re1_files_ps1, g_re2_files_ps1, g_re3_files_ps1, g_re2_maps_ps1, g_re3_maps_ps1;
 
 /* RE2's room objects as one-bone Models; one loads back with faces and a texture */
+extern const PeImpReader g_re2_rbj_ps1;
+
+/* RE2's room animations (RBJ) as Animations; one loads back with moves and frames */
+static void scan_room_anims(const char *cue) {
+    PeImpScan sc;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_re2_rbj_ps1));
+    assert(!pe_imp_scan("pe-rdt-test/anims", cue, "re2", &sc));
+    PeImpAsset *a;
+    int n = pe_imp_catalog_assets("pe-rdt-test/anims", "re2", &a), anims = 0;
+    char first[PE_IMP_ID_MAX] = "";
+    for (int i = 0; i < n; i++)
+        if (!strcmp(a[i].type, "Animation") && !anims++) snprintf(first, sizeof first, "%s", a[i].id);
+    free(a);
+    char why[200];
+    PeImpAnimation an;
+    assert(anims && !pe_imp_catalog_animation("pe-rdt-test/anims", first, &an, why, sizeof why));
+    uint32_t frames = 0;
+    for (uint32_t m = 0; m < an.moves; m++) frames += an.move[m].frames;
+    printf("RE2 room animations: %d from %u room files; %s has %u bones, %u moves, %u frames%s%s\n", anims, sc.files_read,
+           first, an.bones, an.moves, frames, sc.refused ? ", refused: " : "", sc.refused ? sc.last_error : "");
+    assert(!sc.refused && anims > 20 && frames > 0);
+    pe_imp_animation_free(&an);
+}
+
 static void scan_objects(const char *cue, const char *game, const PeImpReader *reader, int want) {
     PeImpScan sc;
     pe_imp_registry_reset();
@@ -499,7 +524,7 @@ int main(void) {
                      movie("RE2", re2, "ZMOVIE/R200.STR"),
                      scan_files("RE2", re2, "re2", &g_re2_files_ps1, 191),
                      scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20),
-                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50);
+                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
                      scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), scan_objects(re3, "re3", &g_re3_objects_ps1, 600), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),

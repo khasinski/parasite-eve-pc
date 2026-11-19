@@ -850,6 +850,11 @@ names holds the samples; the header is rebuilt as a standard VAB with the same c
 take on the disc: about 123 MB for RE1 (Chris's and Jill's rooms are separate files), 22 MB for RE2,
 21 MB for RE3.
 
+**Room animations (RE2).** Each room's RBJ (RDT section 22: per animation a flags word, an EMR of
+key frames, an EDD of moves; layout from biohazard-utils `Rbj.cs`, `Edd1.cs`, `Emr.cs`) becomes an
+Animation `roomanim/<stage><room>-<n>` at 30 frames a second (`pe_src_re2/pe_src_re2_rbj.c`; 114 on
+disc 1, mostly 15-bone people). RE1's and RE3's room animations aren't read yet.
+
 **Room objects (RE2).** The 3D props an RE2 room places (typewriters, boxes, floor items, swinging
 doors) become one-bone Models, `object/<stage><room>-<n>` (`pe_src_re2/pe_src_re2_objects.c`; 522 on
 disc 1, in 106 rooms). A room file's section 10 lists them as (texture, mesh) offsets; each mesh is
@@ -879,7 +884,8 @@ model is also a Model, `doormodel/<name>` (21): a `.DOR` starts with three u32 o
 TMD model of the door and its frame, 8-bit TIM); the TMD's objects become parts (the TMD reader now
 takes several objects). RE2's door models are too (`doormodel/<nn>`, 55): the scene block starts
 with u32 offsets of the door's MD1 mesh and its TIM, read like a room object. Door animations aren't
-decoded yet (BioRand's EDD/EMR readers are the likely reference); RE3's `.DO1` holds a compact sound
+keyframes: RE2's scene holds a small door script (a table of offsets, then bytecode that moves the
+camera and turns the door), kept as stored for the runtime to interpret; RE3's `.DO1` holds a compact sound
 bank and a TIM but no TMD, its model format is still open. RE1's event scripts are kept as stored
 (`SCD2`): they're state machines with nested actor streams, decoded by the runtime's interpreter.
 
