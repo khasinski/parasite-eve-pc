@@ -172,6 +172,7 @@ void pe_ch_emit_cleared(uint32_t run_id);
 
 /* pe_ch_runlog.c */
 void pe_ch_runlog_register(const char *mod_id);
+void pe_ch_state_register(void);                   /* pe_ch_state.c: live state for test tools */
 
 /* pe_ch_history.c: one entry per run that had a challenge, newest last in the file. */
 enum { CH_RUN_PLAYING = 0, CH_RUN_CLEARED = 1, CH_RUN_FALLEN = 2 };

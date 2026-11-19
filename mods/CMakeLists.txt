@@ -51,6 +51,10 @@ set(pe_debug_sources
     host/debug/pe_debug_setup.c
     host/debug/pe_debug_settings.c
     host/debug/pe_debug_trace.c
+    host/debug/pe_debug_ui.c
+    host/debug/pe_debug_snapshot.c
+    host/debug/pe_debug_events.c
+    host/pe_mod_state.c          # mods' live-state providers (registered always, read only by debug control)
 )
 
 set(pe_host_sources

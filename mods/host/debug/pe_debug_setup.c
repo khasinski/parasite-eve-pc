@@ -9,6 +9,13 @@
 #include "pe1/inventory_queries.h"
 
 
+void pe_debug_bag_write(FILE *f) {
+    int i, n = Inv_GetAyaSlotLimit();
+    fputc('[', f);
+    for (i = 0; i < n && i < 50; i++) fprintf(f, "%s%u", i ? "," : "", (unsigned)(uint16_t)g_AyaInventoryItems[i]);
+    fputc(']', f);
+}
+
 static void pe_ctl_bag(const char *args) {
     (void)args;
     char list[50 * 6 + 1];
