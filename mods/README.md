@@ -157,8 +157,13 @@ move sets differ). The Nemesis profile still names the PC file's `enemy/em34`. R
 in `PL0/PLD/CDEMD0.EMS` and `CDEMD2.EMS`: TIM + EMD pairs on 2 KB boundaries (the archive's own index
 holds RAM addresses and isn't read). An EMD's directory names 8 sections: unknown, three move sets
 (EDD, EMR), the MD1 mesh; read as a PLD's model plus RE2's room-animation move format, by
-`g_re2_emd_ps1` (`pe_src_re2/pe_src_re2_emd.c`), as `enemy/cdemd<k>-<n>` and its moves (70 of 72;
-which EM number each is isn't known yet). RE1's monsters are `ENEMY/EM10xx.EMD` and `EM11xx.EMD`
+`g_re2_emd_ps1` (`pe_src_re2/pe_src_re2_emd.c`) with the disc's executable (SLUS_*) as companion: it
+holds a table per archive, 32 bytes per enemy ((sector, size) of two sound entries, the TIM, the EMD).
+The main archive's table (CDEMD0 on disc 1, CDEMD1 on disc 2; found as the place where most of the
+archive's pairs have their record) has row k = enemy 0x10 + k, which every row's bone count fits
+against biohazard-utils' Bio2ConstantTable names (zombies 15, dog 17, lickers 22): those enemies are
+`enemy/em<nn>` (em10 zombie cop, em22 licker...); the other archives' tables start elsewhere and keep
+`enemy/cdemd<k>-<n>` (70 enemies on disc 1, 91 on disc 2). RE1's monsters are `ENEMY/EM10xx.EMD` and `EM11xx.EMD`
 (not EM102x / EM103x, the people): the directory is the last 20 bytes, D0..D4 with a section implied
 at 0; D3 the TMD, D4 the TIM. The monster's skeleton and moves are the EMR at D1 with its EDD at D2
 (10 to 20 bones); when D0 isn't 0, the EMR at 0 with its EDD at D0 is the player's 15-bone moves for

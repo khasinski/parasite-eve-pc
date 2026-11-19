@@ -5,8 +5,12 @@
  * (EDD, EMR) at 1-2, 3-4, 5-6, and the MD1 mesh at 7. The first set's EMR is the skeleton. The model
  * is read as a PLD's (pe_src_re2_pld.c) with the TIM before it; the sets' moves as RE2's room
  * animations (pe_src_re2_rbj.c), back to back in one Animation at 30 frames a second. Each becomes
- * "enemy/<archive>-<n>" (n in archive order; which EM number each is isn't known yet) and its moves.
- * Read only. */
+ * "enemy/<archive>-<n>" (n in archive order) and its moves. Which enemy each is: the disc's executable
+ * (SLUS_*) holds the archives' tables, 32 bytes per enemy: (sector, size) of two sound entries, the
+ * TIM and the EMD. In the main archive's table (CDEMD0 on disc 1, CDEMD1 on disc 2) record k is
+ * enemy 0x10 + k: lined up with biohazard-utils' Bio2ConstantTable g_enemyNames, every record's bone
+ * count fits its name (15-bone zombies and people, the 17-bone dog, 22-bone lickers). Those become
+ * "enemy/em<nn>". The other archives' tables start elsewhere and keep their archive order. Read only. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,14 +59,60 @@ static PeImpAnimation *moves(const uint8_t *b, uint32_t size, const uint32_t sec
     return a;
 }
 
-static int read_ems(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+#define TABLE_ROWS 0x70
+static int is_record(const uint8_t *exe, uint32_t exe_size, uint64_t at, uint32_t t, uint32_t e) {
+    return at + 32 <= exe_size && le32(exe + at + 16) == t && le32(exe + at + 24) == e && le32(exe + at + 20) && le32(exe + at + 28);
+}
+
+/* the archive's table in the executable: of the places the first pair's record sits (the executable
+ * holds a table per archive, and the archives share their first enemies), the one where the most of
+ * the archive's pairs (TIM sector t[i], EMD sector e[i]) have their record, 32 bytes a row; -1 if none */
+static int64_t find_table(const uint8_t *exe, uint32_t exe_size, const uint32_t *t, const uint32_t *e, uint32_t pairs) {
+    int64_t best = -1;
+    uint32_t best_score = 0;
+    for (uint32_t c = 0; pairs && c + 32 <= exe_size; c += 4) {
+        if (!is_record(exe, exe_size, c, t[0], e[0])) continue;
+        uint32_t score = 0;
+        for (uint32_t i = 0; i < pairs; i++)
+            for (uint32_t j = 0; j < TABLE_ROWS; j++)
+                if (is_record(exe, exe_size, (uint64_t)c + 32 * j, t[i], e[i])) { score++; break; }
+        if (score > best_score) best_score = score, best = c;
+    }
+    return best;
+}
+
+/* "<disc>/SLUS_004.21": the disc's executable, at its root */
+static int find_exe(PeImpDisc *d, const char *path) {
+    (void)path;
+    for (int i = 0; i < pe_imp_disc_files(d); i++) {
+        const char *f = pe_imp_disc_name(d, i);
+        if (!strchr(f, '/') && (!strncmp(f, "SLUS_", 5) || !strncmp(f, "SCUS_", 5) || !strncmp(f, "SLES_", 5) || !strncmp(f, "SLPS_", 5)))
+            return i;
+    }
+    return -1;
+}
+
+static int read_ems(const uint8_t *data, uint32_t size, const uint8_t *exe, uint32_t exe_size, const char *path,
+                    PeImpSink *sink, char *why, size_t n) {
     const char *base = strrchr(path, '/');
     base = base ? base + 1 : path;
     char stem[16] = "";
     size_t k = 0;
     for (const char *c = base; *c && *c != '.' && k + 1 < sizeof stem; c++) stem[k++] = (char)(*c >= 'A' && *c <= 'Z' ? *c + 32 : *c);
     stem[k] = 0;
+    int main_archive = !strcmp(stem, "cdemd0") || !strcmp(stem, "cdemd1");
+    int64_t table = -1;                                                 /* row 0: enemy 0x10 */
     uint32_t tim = 0, made = 0;
+    if (main_archive && exe) {                                          /* the pairs first, to find the table */
+        uint32_t pt[128], pe2[128], np = 0, last = 0;
+        int seen = 0;
+        for (uint32_t at = 0; at + 64 <= size && np < 128; at += 2048) {
+            uint32_t sec[9];
+            if (is_tim8(data + at, size - at)) { last = at, seen = 1; continue; }
+            if (seen && emd_at(data, size, at, sec)) pt[np] = last / 2048, pe2[np] = at / 2048, np++, seen = 0;
+        }
+        table = find_table(exe, exe_size, pt, pe2, np);
+    }
     int have_tim = 0;
     for (uint32_t at = 0; at + 64 <= size; at += 2048) {
         uint32_t sec[9];
@@ -74,8 +124,16 @@ static int read_ems(const uint8_t *data, uint32_t size, const char *path, PeImpS
         char quiet[160], id[40], mid[48], name[48];
         if (re2_skeleton_mesh(data, size, sec[2], sec[7], tim, m, quiet, sizeof quiet)) { free(m); continue; }
         PeImpAnimation *a = moves(data, size, sec, m->bones);
-        snprintf(id, sizeof id, "enemy/%s-%u", stem, (unsigned)made);
-        snprintf(name, sizeof name, "%s enemy %u", stem, (unsigned)made);
+        uint32_t em = 0;
+        for (uint32_t j = 0; table >= 0 && !em && j < TABLE_ROWS; j++)
+            if (is_record(exe, exe_size, (uint64_t)table + 32 * j, tim / 2048, at / 2048)) em = 0x10 + j;
+        if (em) {
+            snprintf(id, sizeof id, "enemy/em%02x", em);
+            snprintf(name, sizeof name, "EM%02X", em);
+        } else {
+            snprintf(id, sizeof id, "enemy/%s-%u", stem, (unsigned)made);
+            snprintf(name, sizeof name, "%s enemy %u", stem, (unsigned)made);
+        }
         made++;
         if (pe_imp_emit(sink, PE_IMP_MODEL, id, name, m)) {
             if (a) pe_imp_animation_free(a), free(a);
@@ -93,8 +151,8 @@ static int read_ems(const uint8_t *data, uint32_t size, const char *path, PeImpS
 const PeImpReader g_re2_emd_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re2", .platform = "ps1", .format = "ems",
-    .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/CDEMD?.EMS",
-    .tags = "enemy", .read = read_ems
+    .version = 2, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/CDEMD?.EMS",
+    .tags = "enemy", .read_pair = read_ems, .find_companion = find_exe
 };
 
 

@@ -82,6 +82,17 @@ static void scan_text(const char *label, const char *cue, const char *game, cons
     assert(texts >= want && (!phrase || found));
 }
 
+
+/* a model the last scan (into pe-rdt-test/objects) cataloged, with `bones` bones */
+static void expect_model(const char *id, uint32_t bones) {
+    char why[200];
+    PeImpModel m;
+    if (pe_imp_catalog_model("pe-rdt-test/objects", id, &m, why, sizeof why)) { printf("  %s: %s\n", id, why); assert(0); }
+    printf("  %s: %u bones\n", id, m.bones);
+    assert(m.bones == bones);
+    pe_imp_model_free(&m);
+}
+
 static void scan_objects(const char *cue, const char *game, const PeImpReader *reader, int want) {
     PeImpScan sc;
     pe_imp_registry_reset();
@@ -570,7 +581,7 @@ int main(void) {
                      movie("RE2", re2, "ZMOVIE/R200.STR"),
                      scan_files("RE2", re2, "re2", &g_re2_files_ps1, 216, 25),
                      scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20, 0),
-                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100, 0), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2, "re2", &g_re2_rbj_ps1, 20), scan_text("RE2", re2, "re2", &g_re2_logic_ps1, 300, "locked"), scan_objects(re2, "re2", &g_re2_emd_ps1, 50), scan_room_anims(re2, "re2", &g_re2_emd_ps1, 40), scan_room_anims(re2, "re2", &g_re2_player_moves_ps1, 5), scan_room_anims(re2, "re2", &g_re2_weapons_ps1, 20), scan_objects(re2, "re2", &g_re2_weapons_ps1, 20);
+                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100, 0), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2, "re2", &g_re2_rbj_ps1, 20), scan_text("RE2", re2, "re2", &g_re2_logic_ps1, 300, "locked"), scan_objects(re2, "re2", &g_re2_emd_ps1, 50), expect_model("re2:enemy/em10", 15), expect_model("re2:enemy/em22", 22), expect_model("re2:enemy/em20", 17), scan_room_anims(re2, "re2", &g_re2_emd_ps1, 40), scan_room_anims(re2, "re2", &g_re2_player_moves_ps1, 5), scan_room_anims(re2, "re2", &g_re2_weapons_ps1, 20), scan_objects(re2, "re2", &g_re2_weapons_ps1, 20);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
                      scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), scan_objects(re3, "re3", &g_re3_objects_ps1, 600), scan_objects(re3, "re3", &g_re3_door_models_ps1, 60), scan_objects(re3, "re3", &g_re3_emd_ps1, 80), scan_room_anims(re3, "re3", &g_re3_room_anims_ps1, 100), scan_text("RE3", re3, "re3", &g_re3_logic_ps1, 300, "forklift"), scan_room_anims(re3, "re3", &g_re3_player_moves_ps1, 5), scan_room_anims(re3, "re3", &g_re3_weapons_ps1, 20), scan_objects(re3, "re3", &g_re3_weapons_ps1, 20), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),
