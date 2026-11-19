@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "pe_imp.h"
+#include "pe_imp_fit.h"
 #include "pe_imp_internal.h"
 #include "pe_imp_pe.h"
 #include "pe_skin_build.h"
@@ -120,6 +121,7 @@ int main(void) {
 
     pe_imp_registry_reset();
     CHECK(!pe_imp_add_reader(&g_re2_pld_ps1));
+    CHECK(!pe_imp_add_reader(&g_re2_emd_ps1));                         /* the people among the enemies */
     CHECK(!pe_imp_set_naming("re2", g_re2_naming));
     PeImpScan sc;
     CHECK(!pe_imp_scan("pe-skin-build-test/store", re2, NULL, &sc));
@@ -164,6 +166,24 @@ int main(void) {
         printf("  three texture pages: refused (%s)\n", why);
         CHECK(strstr(why, "texture pages") != NULL);
         f->page = page;
+    }
+    /* a person among the enemies (Ada, EM41), through the fit layer and the game's human rig, as the
+     * costume target builds it */
+    PeImpModel ada;
+    PeImpFitInfo fit;
+    if (pe_imp_fit("pe-skin-build-test/store", "re2:enemy/em41", PE_IMP_USE_COSTUME, &ada, &fit, why, sizeof why)) {
+        printf("  enemy/em41: not fitted (%s); skipped\n", why);
+    } else {
+        PeSkinOut c;
+        int rc2 = pe_skin_build(pe, &ada, &g_re2_human_rig, (const int16_t (*)[4])normals, NULL, &c, why, sizeof why);
+        if (rc2) fprintf(stderr, "enemy/em41 build: %s\n", why);
+        CHECK(!rc2);
+        if (!rc2) {
+            printf("  enemy/em41 as a costume: %d vertices, %d texture groups (fit: height %d, %u faces, %u dropped)\n", c.vertices,
+                   c.groups, fit.height, fit.faces, fit.dropped_degenerate + fit.dropped_stub);
+            pe_skin_files_free(&c);
+        }
+        pe_imp_model_free(&ada);
     }
     pe_imp_pe_close(pe);
     pe_imp_model_free(&claire);

@@ -388,7 +388,7 @@ if(BUILD_TESTING)
     target_include_directories(test-mod-model-audit PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
     pe_feature_test(skin-build ${PROJECT_SOURCE_DIR}/tests/pe_mod_skin_build_test.c ${pe_import_core_sources}
-        pe_src_re2/pe_src_re2_pld.c pe_wardrobe/pe_skin_build.c)
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_rbj.c pe_wardrobe/pe_skin_build.c)
     target_include_directories(test-mod-skin-build PRIVATE host/import pe_src_re2)
     target_compile_definitions(test-mod-skin-build PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
     set_tests_properties(mod-skin-build PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
