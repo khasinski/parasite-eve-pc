@@ -933,7 +933,13 @@ with u32 offsets of the door's MD1 mesh and its TIM, read like a room object. Do
 keyframes: RE2's scene holds a small door script (a table of offsets, then bytecode that moves the
 camera and turns the door), kept as stored for the runtime to interpret. RE3's door models are Models
 too (`doormodel/<stage>-<nn>`, 76): after the compact sound bank, a scene at a 2 KB boundary starts
-with u32 offsets of the door's MD2 mesh and its 8-bit TIM, read like an RE3 room object. RE1's event scripts are kept as stored
+with u32 offsets of the door's MD2 mesh and its 8-bit TIM, read like an RE3 room object. Each RoomLogic record also carries the room's messages as text (`TEXT`: one UTF-8 string
+per message; line break `
+`, page break `#`, green `{...}`, yes/no `@xx`). The character table and
+RE2/RE3's codes are biohazard-utils' (`Room/Msg.cs`); the English list is RE2's section 14 and RE3's
+13 (the US release's). RE1 (not in biohazard-utils) uses the same table in section 11 with 02 a line
+break and 79 + one byte ending a message; its entries starting 04 are cues, kept as empty strings
+(518 / 958 / 1,110 messages with text). RE1's event scripts are kept as stored
 (`SCD2`): they're state machines with nested actor streams, decoded by the runtime's interpreter.
 
 **Items.** Each RE game's item table is an **ItemTable** record (`host/import/pe_imp_items.c`,

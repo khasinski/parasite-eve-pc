@@ -17,7 +17,7 @@
 #include "pe_imp_pictures.h"
 
 extern const PeImpReader g_re2_logic_ps1, g_re1_door_ps1, g_re2_door_ps1, g_re3_door_ps1;
-extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1, g_re3_logic_ps1;
+extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1, g_re3_logic_ps1, g_re1_logic_ps1;
 extern const PeImpReader g_re1_item_icons_ps1, g_re2_item_pictures_ps1, g_re3_item_pictures_ps1;
 void MdecDiag_ExpandDecoderTable(void *buffer);   /* the game's, linked in */
 extern const PeImpReader g_re2_objects_ps1, g_re3_objects_ps1, g_re1_objects_ps1, g_re1_file_text_ps1, g_re1_door_models_ps1,
@@ -49,6 +49,37 @@ static void scan_room_anims(const char *cue, const char *game, const PeImpReader
            first, an.bones, an.moves, frames, sc.refused ? ", refused: " : "", sc.refused ? sc.last_error : "");
     assert(!sc.refused && anims >= want && frames > 0);
     pe_imp_animation_free(&an);
+}
+
+
+/* a disc's room text (TEXT in each RoomLogic): `want` messages with text at least, and `phrase` in one */
+static void scan_text(const char *label, const char *cue, const char *game, const PeImpReader *reader, int want, const char *phrase) {
+    PeImpScan sc;
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(reader));
+    assert(!pe_imp_scan("pe-rdt-test/text", cue, game, &sc));
+    PeImpAsset *a;
+    int n = pe_imp_catalog_assets("pe-rdt-test/text", game, &a), texts = 0, found = 0;
+    for (int i = 0; i < n; i++) {
+        if (strcmp(a[i].type, "RoomLogic")) continue;
+        char why[200];
+        PeImpRoomLogic *l;
+        if (pe_imp_catalog_roomlogic("pe-rdt-test/text", a[i].id, &l, why, sizeof why)) continue;
+        uint32_t count = 0, bytes = 0;
+        const uint8_t *t = pe_imp_logic_section(l, PE_IMP_LOGIC_TEXT, &count, &bytes);
+        for (uint32_t k = 0, at = 0; t && k < count && at < bytes; k++) {
+            const char *str = (const char *)t + at;
+            size_t sl = strnlen(str, bytes - at);
+            assert(at + sl < bytes);                                        /* NUL-terminated */
+            if (sl) texts++;
+            if (phrase && strstr(str, phrase) && !found++) printf("  %s text: \"%s\"\n", label, str);
+            at += (uint32_t)sl + 1;
+        }
+        free(l);
+    }
+    free(a);
+    printf("%s text: %d messages with text%s%s\n", label, texts, sc.refused ? ", refused: " : "", sc.refused ? sc.last_error : "");
+    assert(texts >= want && (!phrase || found));
 }
 
 static void scan_objects(const char *cue, const char *game, const PeImpReader *reader, int want) {
@@ -532,17 +563,17 @@ int main(void) {
                      scan_files("RE1 text map", re1, "re1", &g_re1_file_text_ps1, 40, 0),
                      scan_files("RE1 icon", re1, "re1", &g_re1_item_icons_ps1, 76, 0),
                      scan_files("RE1 map", re1, "re1", &g_re1_maps_ps1, 15, 0),
-                     scan_objects(re1, "re1", &g_re1_door_models_ps1, 15), scan_room_anims(re1, "re1", &g_re1_room_anims_ps1, 300), scan_objects(re1, "re1", &g_re1_monsters_ps1, 40), scan_room_anims(re1, "re1", &g_re1_monsters_ps1, 40), scan_room_anims(re1, "re1", &g_re1_person_moves_ps1, 15), scan_room_anims(re1, "re1", &g_re1_weapon_moves_ps1, 25), scan_objects(re1, "re1", &g_re1_weapons_ps1, 25);
+                     scan_objects(re1, "re1", &g_re1_door_models_ps1, 15), scan_room_anims(re1, "re1", &g_re1_room_anims_ps1, 300), scan_text("RE1", re1, "re1", &g_re1_logic_ps1, 300, "the key"), scan_objects(re1, "re1", &g_re1_monsters_ps1, 40), scan_room_anims(re1, "re1", &g_re1_monsters_ps1, 40), scan_room_anims(re1, "re1", &g_re1_person_moves_ps1, 15), scan_room_anims(re1, "re1", &g_re1_weapon_moves_ps1, 25), scan_objects(re1, "re1", &g_re1_weapons_ps1, 25);
     else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
     if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1),
                      scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106),
                      movie("RE2", re2, "ZMOVIE/R200.STR"),
                      scan_files("RE2", re2, "re2", &g_re2_files_ps1, 216, 25),
                      scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20, 0),
-                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100, 0), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2, "re2", &g_re2_rbj_ps1, 20), scan_objects(re2, "re2", &g_re2_emd_ps1, 50), scan_room_anims(re2, "re2", &g_re2_emd_ps1, 40), scan_room_anims(re2, "re2", &g_re2_player_moves_ps1, 5), scan_room_anims(re2, "re2", &g_re2_weapons_ps1, 20), scan_objects(re2, "re2", &g_re2_weapons_ps1, 20);
+                     scan_files("RE2 item", re2, "re2", &g_re2_item_pictures_ps1, 100, 0), scan_objects(re2, "re2", &g_re2_objects_ps1, 400), scan_objects(re2, "re2", &g_re2_door_models_ps1, 50), scan_room_anims(re2, "re2", &g_re2_rbj_ps1, 20), scan_text("RE2", re2, "re2", &g_re2_logic_ps1, 300, "locked"), scan_objects(re2, "re2", &g_re2_emd_ps1, 50), scan_room_anims(re2, "re2", &g_re2_emd_ps1, 40), scan_room_anims(re2, "re2", &g_re2_player_moves_ps1, 5), scan_room_anims(re2, "re2", &g_re2_weapons_ps1, 20), scan_objects(re2, "re2", &g_re2_weapons_ps1, 20);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
-                     scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), scan_objects(re3, "re3", &g_re3_objects_ps1, 600), scan_objects(re3, "re3", &g_re3_door_models_ps1, 60), scan_objects(re3, "re3", &g_re3_emd_ps1, 80), scan_room_anims(re3, "re3", &g_re3_room_anims_ps1, 100), scan_room_anims(re3, "re3", &g_re3_player_moves_ps1, 5), scan_room_anims(re3, "re3", &g_re3_weapons_ps1, 20), scan_objects(re3, "re3", &g_re3_weapons_ps1, 20), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),
+                     scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), scan_objects(re3, "re3", &g_re3_objects_ps1, 600), scan_objects(re3, "re3", &g_re3_door_models_ps1, 60), scan_objects(re3, "re3", &g_re3_emd_ps1, 80), scan_room_anims(re3, "re3", &g_re3_room_anims_ps1, 100), scan_text("RE3", re3, "re3", &g_re3_logic_ps1, 300, "forklift"), scan_room_anims(re3, "re3", &g_re3_player_moves_ps1, 5), scan_room_anims(re3, "re3", &g_re3_weapons_ps1, 20), scan_objects(re3, "re3", &g_re3_weapons_ps1, 20), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),
                      scan_files("RE3", re3, "re3", &g_re3_files_ps1, 183, 31),
                      scan_files("RE3 map", re3, "re3", &g_re3_maps_ps1, 18, 0),
                      scan_files("RE3 item", re3, "re3", &g_re3_item_pictures_ps1, 134, 0);

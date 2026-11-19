@@ -15,6 +15,9 @@
  *   SCD0 / SCD1 / SCD2  scripts (source; which part each is depends on the game: see pe_imp_rdt.c)
  *   RDT0  the whole room file as stored (every part: sounds, lights, floors, objects, effects,
  *         animations), its offsets intact, for the game's runtime module
+ *   TEXT  the room's messages as text: records = messages; bytes: each a UTF-8 string ending in
+ *         NUL ("" for an entry that isn't text). Line break "\n", page break "#", green text
+ *         "{...}", a yes/no question "@" + 2 hex digits (BioRand's Msg.ToString notation)
  *   ARDS  RE3: the room archive's other entries (room sounds): u32 count, then per entry u32 index,
  *         u32 type, u32 size, the bytes padded to 4
  * A runtime skips tags it doesn't know, so sections can be added without breaking it. */
@@ -34,6 +37,7 @@ enum {
     PE_IMP_LOGIC_MSG0 = PE_IMP_LOGIC_TAG('M', 'S', 'G', '0'), PE_IMP_LOGIC_MSG1 = PE_IMP_LOGIC_TAG('M', 'S', 'G', '1'),
     PE_IMP_LOGIC_SCD0 = PE_IMP_LOGIC_TAG('S', 'C', 'D', '0'), PE_IMP_LOGIC_SCD1 = PE_IMP_LOGIC_TAG('S', 'C', 'D', '1'),
     PE_IMP_LOGIC_SCD2 = PE_IMP_LOGIC_TAG('S', 'C', 'D', '2'), PE_IMP_LOGIC_RDT0 = PE_IMP_LOGIC_TAG('R', 'D', 'T', '0'),
+    PE_IMP_LOGIC_TEXT = PE_IMP_LOGIC_TAG('T', 'E', 'X', 'T'),
     PE_IMP_LOGIC_ARDS = PE_IMP_LOGIC_TAG('A', 'R', 'D', 'S')
 };
 enum { PE_IMP_LOGIC_DOOR_BYTES = 40, PE_IMP_LOGIC_TRIG_BYTES = 28, PE_IMP_LOGIC_PICK_BYTES = 32,

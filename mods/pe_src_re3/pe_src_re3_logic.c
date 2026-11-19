@@ -64,6 +64,6 @@ static int read_logic(const uint8_t *data, uint32_t size, const char *path, PeIm
 const PeImpReader g_re3_logic_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re3", .platform = "ps1", .format = "rdt-logic",
-    .version = 3, .produces = PE_IMP_ROOMLOGIC | PE_IMP_SOUND, .match = "CD_DATA/STAGE?/R*.ARD",
+    .version = 4, .produces = PE_IMP_ROOMLOGIC | PE_IMP_SOUND, .match = "CD_DATA/STAGE?/R*.ARD",
     .tags = "room logic", .read = read_logic, .path_key = 1
 };

@@ -312,6 +312,68 @@ static const Raw k_re3_raw[] = {{PE_IMP_LOGIC_COLL, 6}, {PE_IMP_LOGIC_MSG0, 13},
 
 static uint32_t min32(uint32_t a, uint32_t b) { return a < b ? a : b; }
 
+/* The room's messages as text (TEXT). The character table and RE2/RE3's codes are biohazard-utils'
+ * (Room/Msg.cs, MIT, Ted John): a message list is u16 offsets (the first / 2 = the count); a byte
+ * below 96 is a character; F9 p green on (p 1) / off, FA p start, FB p a yes/no question, FC line
+ * break, FD p page break, FE end. RE1 (not in biohazard-utils; read from the disc) uses the same table
+ * in its message section (11), 02 a line break and 79 the end; its entries starting 04 are cues,
+ * not text. The English list: RE1 section 11, RE2 14, RE3 13 (the US release's English). */
+static const char *const k_chars[96] = {
+    " ", ".", "", "", "", "(", ")", "", "", "â", "â", "", "0", "1", "2", "3",
+    "4", "5", "6", "7", "8", "9", ":", "", ",", "\"", "!", "?", "", "A", "B", "C",
+    "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
+    "T", "U", "V", "W", "X", "Y", "Z", "[", "/", "]", "'", "-", "", "a", "b", "c",
+    "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s",
+    "t", "u", "v", "w", "x", "y", "z", "", "", "", "", "", "", "", "", "",
+};
+
+static void put(char **o, size_t *len, size_t *cap, const char *s) {
+    size_t k = strlen(s);
+    if (!*o) return;
+    if (*len + k + 1 > *cap) {
+        size_t c = (*cap ? *cap * 2 : 1024) + k;
+        char *g = realloc(*o, c);
+        if (!g) { free(*o), *o = NULL; return; }
+        *o = g, *cap = c;
+    }
+    memcpy(*o + *len, s, k), *len += k;
+}
+
+static void add_text(PeImpLogicBuilder *b, unsigned game, const uint8_t *rdt, uint32_t size) {
+    uint32_t off, len;
+    unsigned index = game == PE_IMP_RE1 ? 11 : game == PE_IMP_RE2 ? 14 : 13;
+    if (section(game, rdt, size, index, &off, &len) || len < 2) return;
+    const uint8_t *m = rdt + off;
+    uint32_t count = le16(m) / 2;
+    if (!count || 2ull * count > len) return;
+    size_t olen = 0, cap = 1024;
+    char *o = malloc(cap), hex[8];
+    for (uint32_t i = 0; i < count && o; i++) {
+        uint32_t at = le16(m + 2 * i), end = i + 1 < count ? le16(m + 2 * i + 2) : len;
+        if (end > len || at > end) at = end = 0;
+        int text = !(game == PE_IMP_RE1 && at < end && m[at] == 0x04);
+        for (uint32_t k = at; text && k < end; k++) {
+            unsigned c = m[k];
+            if (game == PE_IMP_RE1) {
+                if (c == 0x79) break;
+                if (c == 0x02) { put(&o, &olen, &cap, "\n"); continue; }
+                if (c < 96) put(&o, &olen, &cap, k_chars[c]);
+                continue;
+            }
+            if (c == 0xFE) break;
+            if (c == 0xF9 && k + 1 < end) put(&o, &olen, &cap, m[++k] == 1 ? "{" : "}");
+            else if (c == 0xFA) k++;
+            else if (c == 0xFB && k + 1 < end) snprintf(hex, sizeof hex, "@%02X", m[++k]), put(&o, &olen, &cap, hex);
+            else if (c == 0xFC) put(&o, &olen, &cap, "\n");
+            else if (c == 0xFD) put(&o, &olen, &cap, "#"), k++;
+            else if (c < 96) put(&o, &olen, &cap, k_chars[c]);
+        }
+        if (o) put(&o, &olen, &cap, ""), o[olen++] = 0;               /* each ends in NUL */
+    }
+    if (o) pe_imp_logic_add(b, PE_IMP_LOGIC_TEXT, count, o, (uint32_t)olen);
+    free(o);
+}
+
 /* RE3's room archive (.ARD): its other entries but the music (0, 1) and the RDT (8), packed as
  * u32 count, then per entry u32 index, u32 type, u32 size and the bytes, padded to 4 */
 static void add_archive(PeImpLogicBuilder *b, const uint8_t *ard, uint32_t size) {
@@ -361,6 +423,7 @@ static PeImpRoomLogic *build_logic(unsigned game, uint32_t player, uint32_t stag
         if (!section(game, rdt, size, raw[k].index, &off, &len))
             pe_imp_logic_add(b, raw[k].tag, 0, rdt + off, len);
     }
+    add_text(b, game, rdt, size);
     pe_imp_logic_add(b, PE_IMP_LOGIC_RDT0, 0, rdt, size);              /* the whole room, offsets intact */
     if (ard) add_archive(b, ard, ard_size);
     free(r);
