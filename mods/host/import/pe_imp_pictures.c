@@ -73,6 +73,52 @@ const uint8_t *pe_imp_picture_tim(const PeImpRoomLogic *l, uint32_t i, uint32_t 
 
 int pe_imp_emit_tims(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
                      uint32_t step, char *why, size_t n) {
+    return pe_imp_emit_tims_ex(sink, id, name, data, size, step, 0, why, n);
+}
+
+/* 256 x 256 pages at 4 bits a pixel without a palette (RE2's maps): each wrapped as a 4-bit TIM with
+ * a placeholder palette of 16 greys (PE_IMP_PICTURE_GREY marks the record) */
+int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                       char *why, size_t n) {
+    enum { PAGE = 256 * 256 / 2, TIM = 8 + 12 + 32 + 12 + PAGE };
+    uint32_t pages = size / PAGE;
+    if (!pages) return 0;
+    uint8_t *packed = malloc((size_t)pages * (4 + TIM));
+    if (!packed) { if (why && n) snprintf(why, n, "out of memory"); return -1; }
+    static const uint8_t k_head[8] = {0x10, 0, 0, 0, 8, 0, 0, 0};
+    for (uint32_t p = 0; p < pages; p++) {
+        uint8_t *o = packed + p * (4 + TIM), *t = o + 4;
+        o[0] = (uint8_t)TIM, o[1] = (uint8_t)(TIM >> 8), o[2] = (uint8_t)(TIM >> 16), o[3] = 0;
+        memcpy(t, k_head, 8);
+        uint8_t *c = t + 8;                                /* palette block: 44 bytes, 16 x 1 at (0, 0) */
+        memset(c, 0, 12), c[0] = 44, c[8] = 16, c[10] = 1;
+        for (int k = 0; k < 16; k++) {
+            unsigned g = k ? (unsigned)(k * 2 + 1) : 0;   /* 0 stays see-through, as on the PS1 */
+            unsigned v = g | g << 5 | g << 10;
+            c[12 + 2 * k] = (uint8_t)v, c[13 + 2 * k] = (uint8_t)(v >> 8);
+        }
+        uint8_t *img = c + 44;                             /* image block: 64 x 256 16-bit units */
+        uint32_t bytes = 12 + PAGE;
+        memset(img, 0, 12);
+        for (int k = 0; k < 4; k++) img[k] = (uint8_t)(bytes >> 8 * k);
+        img[8] = 64, img[10] = 0, img[11] = 1;
+        memcpy(img + 12, data + (size_t)p * PAGE, PAGE);
+    }
+    PeImpLogicBuilder *b = pe_imp_logic_begin(0, 0, 0, 0);
+    pe_imp_logic_add(b, PE_IMP_PICTURE_TIMS, pages, packed, pages * (4 + TIM));
+    pe_imp_logic_add(b, PE_IMP_PICTURE_GREY, 0, NULL, 0);
+    free(packed);
+    PeImpRoomLogic *l = pe_imp_logic_finish(b);
+    if (!l) { if (why && n) snprintf(why, n, "%s: too large", id); return -1; }
+    if (pe_imp_emit(sink, PE_IMP_PICTURES, id, name, l)) {
+        if (why && n) snprintf(why, n, "couldn't catalog %s", id);
+        return -1;
+    }
+    return 0;
+}
+
+int pe_imp_emit_tims_ex(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                        uint32_t step, int keep_file, char *why, size_t n) {
     uint8_t *packed = malloc((size_t)size + 4096);
     uint32_t total = 0, count = 0;
     if (!packed) { if (why && n) snprintf(why, n, "out of memory"); return -1; }
@@ -91,6 +137,7 @@ int pe_imp_emit_tims(PeImpSink *sink, const char *id, const char *name, const ui
     if (!count) { free(packed); return 0; }                          /* no pictures in it */
     PeImpLogicBuilder *b = pe_imp_logic_begin(0, 0, 0, 0);
     pe_imp_logic_add(b, PE_IMP_PICTURE_TIMS, count, packed, total);
+    if (keep_file) pe_imp_logic_add(b, PE_IMP_PICTURE_FILE, 0, data, size);
     free(packed);
     PeImpRoomLogic *l = pe_imp_logic_finish(b);
     if (!l) { if (why && n) snprintf(why, n, "%s: too large", id); return -1; }

@@ -19,7 +19,7 @@
 extern const PeImpReader g_re2_logic_ps1, g_re1_door_ps1, g_re2_door_ps1, g_re3_door_ps1;
 extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1, g_re3_logic_ps1;
 void MdecDiag_ExpandDecoderTable(void *buffer);   /* the game's, linked in */
-extern const PeImpReader g_re1_files_ps1, g_re2_files_ps1, g_re3_files_ps1;
+extern const PeImpReader g_re1_files_ps1, g_re2_files_ps1, g_re3_files_ps1, g_re2_maps_ps1, g_re3_maps_ps1;
 
 /* a disc's file pictures: every TIM kept decodes; `want` pictures at least
  * (PE_TEST_MOVIE_PPM=<folder> also writes the first 8-bit one as <label>_file.ppm) */
@@ -47,7 +47,7 @@ static void scan_files(const char *label, const char *cue, const char *game, con
             uint8_t *rgba = tim ? pe_imp_tim_decode(tim, size, &w, &h) : NULL;
             pictures++, decoded += rgba != NULL;
             const char *dir = getenv("PE_TEST_MOVIE_PPM");
-            if (rgba && !written && dir && *dir && (tim[4] & 3) == 1) {
+            if (rgba && !written && dir && *dir && ((tim[4] & 3) == 1 || strstr(label, "map"))) {
                 char out[400];
                 snprintf(out, sizeof out, "%s/%s_file.ppm", dir, label);
                 FILE *o = fopen(out, "wb");
@@ -455,11 +455,13 @@ int main(void) {
     if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1),
                      scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106),
                      movie("RE2", re2, "ZMOVIE/R200.STR"),
-                     scan_files("RE2", re2, "re2", &g_re2_files_ps1, 191);
+                     scan_files("RE2", re2, "re2", &g_re2_files_ps1, 191),
+                     scan_files("RE2 map", re2, "re2", &g_re2_maps_ps1, 20);
     else printf("PE_TEST_RE2_DISC not set: RE2 rooms skipped\n");
     if (re3 && *re3) disc("RE3", re3, PE_IMP_RE3), scan_doors("RE3", re3, "re3", &g_re3_door_ps1, 0),
                      scan_items("RE3", re3, "re3", &g_re3_items_ps1, 1, "Combat Knife", 228), scan_re3(re3), movie("RE3", re3, "CD_DATA/ZMOVIE/INS05.STR"),
-                     scan_files("RE3", re3, "re3", &g_re3_files_ps1, 183);
+                     scan_files("RE3", re3, "re3", &g_re3_files_ps1, 183),
+                     scan_files("RE3 map", re3, "re3", &g_re3_maps_ps1, 18);
     else printf("PE_TEST_RE3_DISC not set: RE3 rooms skipped\n");
     printf("RDT passed\n");
     return 0;

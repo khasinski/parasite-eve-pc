@@ -882,9 +882,15 @@ image; an `.iso` has none. A reader can ask for a file and its XA sectors togeth
 a TIM decoder to RGBA for 4-, 8- and 15-bit TIMs): RE1 `ITEM_M2/FILE*.TIM` as `files/<name>` (19),
 RE2 `COMMON/DATA/FILES.TIM` as `files/all` (191 TIMs, one per 2 KB boundary), RE3
 `CD_DATA/ETC/FILEGU.PIX` as `files/all` (183). They are the file covers and pages; which pages make up
-which document isn't known yet, and RE1's `ITEM_M2/FILEM*` (not TIMs) and the maps (RE2 `MAPS.PIX`,
-RE3 `MAP_U.MAP`) aren't read yet. The container's cap is now 16 MB. `mod-rdt` scans each disc's
-files and decodes every picture.
+which document isn't known yet, and RE1's `ITEM_M2/FILEM*` (not TIMs) isn't read yet. The
+container's cap is now 16 MB. `mod-rdt` scans each disc's files and decodes every picture.
+
+**Maps.** Also Pictures, as `maps/all`. RE2's `COMMON/DATA/MAPS.PIX` is 20 map pages of 256 x 256 at
+4 bits a pixel with no palette on the disc: each is wrapped as a 4-bit TIM with a placeholder palette
+of 16 greys, and the record is marked `GREY`. RE3's `CD_DATA/ETC/MAP_U.MAP` holds a section table,
+the room and label tables and 18 TIMs (9 maps and their legends, in their own colours): the TIMs,
+and the whole file as `FILE` for the tables. RE1 has no map file; its map is probably drawn from
+data in its executable, and isn't imported. `mod-rdt` decodes every map picture.
 
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
