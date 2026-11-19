@@ -414,18 +414,23 @@ const PeImpReader g_re3_emd_pc = {
  * 3 the enemy number (0x10 = EM10). The EMD (15 sections) and TIM are the PC files' formats. One
  * enemy can come in two versions whose later move sets differ (EM10 in stages 1-2 and 3-7); each
  * becomes "enemy/em<nn>-<version>" and its moves; the same version in other rooms is the same bytes. */
+/* a room bundle's entries (positions, lengths, tags); 0 if `x` isn't one */
+static uint32_t bundle_entries(const Buf *x, uint32_t pos[64], uint32_t len[64], uint32_t tag[64]) {
+    if (x->size < 2048 || u32at(x, 0) != x->size) return 0;
+    uint32_t count = u32at(x, 4), at = 2048;
+    if (!count || count > 64) return 0;
+    for (uint32_t i = 0; i < count; i++) {
+        len[i] = u32at(x, 8 + 8 * i), tag[i] = u32at(x, 12 + 8 * i), pos[i] = at;
+        if (at > x->size || len[i] > x->size - at) return 0;
+        at += (len[i] + 2047) & ~2047u;
+    }
+    return count;
+}
+
 static int read_bundle(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
     (void)path;
     Buf b = {data, size}, *x = &b;
-    if (size < 2048 || u32at(x, 0) != size) return 0;                 /* not a bundle */
-    uint32_t count = u32at(x, 4);
-    if (!count || count > 64 || 8 + 8ull * count > 2048) return 0;
-    uint32_t pos[64], len[64], tag[64], at = 2048;
-    for (uint32_t i = 0; i < count; i++) {
-        len[i] = u32at(x, 8 + 8 * i), tag[i] = u32at(x, 12 + 8 * i), pos[i] = at;
-        if (at > size || len[i] > size - at) return 0;
-        at += (len[i] + 2047) & ~2047u;
-    }
+    uint32_t pos[64], len[64], tag[64], count = bundle_entries(x, pos, len, tag);
     for (uint32_t i = 0; i < count; i++) {
         if ((tag[i] & 0xFFFF) || len[i] < 8 || u32at(x, pos[i] + 4) != 15) continue;   /* models only */
         uint32_t t = count;
@@ -453,4 +458,83 @@ const PeImpReader g_re3_emd_ps1 = {
     .game = "re3", .platform = "ps1", .format = "emd",
     .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "CD_DATA/STAGE?/R*.BIN",
     .tags = "enemy", .read = read_bundle
+};
+
+/* PS1 room animations: a bundle's entries whose tag byte 3 is 0x80 or more (0x80 in most rooms,
+ * 0x81 in a few: the player characters' moves there, and the room's props'). Such an entry is u32
+ * directory offset, u32 count; the directory's u32 offsets name sections. An animation is a section
+ * holding a u32 flags word and an EMR (as in the EMD; 15 bones for a player, 7 or 9 for a prop)
+ * followed by a section holding its EDD (8-byte moves, as in the EMD). Each pair becomes an
+ * Animation "roomanim/<stage><room>-<entry>-<n>". EMRs with no EDD after them (key frames only,
+ * likely played straight through by the room script) aren't read. */
+static PeImpAnimation *room_animation(const Buf *x, uint32_t emr, uint32_t edd, uint32_t edd_end) {
+    Set set;
+    char quiet[160];
+    if (set_open(x, edd, emr, &set, quiet, sizeof quiet) || !set.moves || !set.bones || set.frames >= edd) return NULL;
+    set.end = edd;                                                      /* the key frames run up to the moves */
+    for (uint32_t mv = 0; mv < set.moves; mv++) {
+        uint32_t e = edd + 8 * mv, steps = u16at(x, e), off = u16at(x, e + 2);
+        if (steps > 2000 || edd + off + 2ull * steps > edd_end) return NULL;
+    }
+    PeImpAnimation *a = calloc(1, sizeof *a);
+    if (!a || !(a->move = calloc(set.moves, sizeof *a->move))) { free(a); return NULL; }
+    a->bones = set.bones, a->fps = 30, a->moves = set.moves;
+    int32_t root_x = s16at(x, emr + 8), root_z = s16at(x, emr + 12);
+    for (uint32_t mv = 0; mv < set.moves; mv++)
+        if (set_move(x, &set, mv, set.bones, root_x, root_z, &a->move[mv], quiet, sizeof quiet)) goto bad;
+    if (pe_imp_animation_check(a, quiet, sizeof quiet)) goto bad;
+    return a;
+bad:
+    pe_imp_animation_free(a);
+    free(a);
+    return NULL;
+}
+
+/* the section at `sec` is a flags word and an EMR: the EMR's offset, else 0 */
+static uint32_t room_emr(const Buf *x, uint32_t sec) {
+    uint32_t emr = sec + 4;
+    if (!ok(x, emr, 8)) return 0;
+    uint32_t tree = u16at(x, emr), kf = u16at(x, emr + 2), bones = u16at(x, emr + 4), size = u16at(x, emr + 6);
+    uint32_t need = 8 + (9 * bones + 1) / 2;
+    if (!bones || bones > 32 || size < need || size > need + 4 || tree < 8 || tree >= kf || emr + kf >= x->size) return 0;
+    return emr;
+}
+
+static int read_room_anims(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    if (base[0] != 'R' || !base[1] || !base[2] || !base[3]) return 0;
+    char room[4] = {(char)(base[1] | 32), (char)(base[2] | 32), (char)(base[3] | 32), 0};  /* "R10A.BIN" -> "10a" */
+    Buf whole = {data, size};
+    uint32_t pos[64], len[64], tag[64], count = bundle_entries(&whole, pos, len, tag);
+    for (uint32_t i = 0; i < count; i++) {
+        if (tag[i] >> 24 < 0x80 || len[i] < 8) continue;
+        Buf e = {data + pos[i], len[i]}, *x = &e;
+        uint32_t dir = u32at(x, 0), secs = u32at(x, 4), made = 0;
+        if (!secs || secs > 32 || !ok(x, dir, 4ull * secs)) continue;
+        for (uint32_t k = 0; k + 1 < secs; k++) {
+            uint32_t emr = room_emr(x, u32at(x, dir + 4 * k)), edd = u32at(x, dir + 4 * (k + 1));
+            if (!emr || edd >= len[i] || edd == emr + u16at(x, emr + 2)) continue;
+            uint32_t end = dir > edd ? dir : len[i];                    /* the moves end at the next section */
+            for (uint32_t j = 0; j < secs; j++) {
+                uint32_t o = u32at(x, dir + 4 * j);
+                if (o > edd && o < end) end = o;
+            }
+            PeImpAnimation *a = room_animation(x, emr, edd, end);
+            if (!a) continue;
+            char id[48], name[64];
+            snprintf(id, sizeof id, "roomanim/%s-%u-%u", room, (unsigned)i, (unsigned)made);
+            snprintf(name, sizeof name, "Room %c-%c%c animation %u.%u", room[0], room[1], room[2], (unsigned)i, (unsigned)made);
+            made++;
+            if (pe_imp_emit(sink, PE_IMP_ANIMATION, id, name, a)) { snprintf(why, n, "could not catalog %s", id); return -1; }
+        }
+    }
+    return 0;
+}
+
+const PeImpReader g_re3_room_anims_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re3", .platform = "ps1", .format = "bundle-anims",
+    .version = 1, .produces = PE_IMP_ANIMATION, .match = "CD_DATA/STAGE?/R*.BIN",
+    .tags = "room animation", .read = read_room_anims, .path_key = 1
 };

@@ -21,7 +21,7 @@ int re3_tone_count(const uint8_t *vh, uint32_t vh_size);          /* -1: not an 
 double re3_tone_rate(int note, int centre, int fine);
 PeImpSound *re3_tone_sound(const uint8_t *vh, uint32_t vh_size, const uint8_t *vb, uint32_t vb_size, int t,
                            char *why, size_t n);
-extern const PeImpReader g_re3_emd_pc, g_re3_emd_ps1, g_re3_tones_pc;
+extern const PeImpReader g_re3_emd_pc, g_re3_emd_ps1, g_re3_room_anims_ps1, g_re3_tones_pc;
 extern const PeImpEnemyProfile g_re3_nemesis;
 
 /* RE3's compact sound banks (pe_src_re3_music.c): the standard VAB header's size for the compact

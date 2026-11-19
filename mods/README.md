@@ -854,14 +854,19 @@ names holds the samples; the header is rebuilt as a standard VAB with the same c
 take on the disc: about 123 MB for RE1 (Chris's and Jill's rooms are separate files), 22 MB for RE2,
 21 MB for RE3.
 
-**Room animations (RE1, RE2).** Each room's RBJ (RDT section 22: per animation a flags word, an EMR of
+**Room animations (RE1, RE2, RE3).** Each room's RBJ (RDT section 22: per animation a flags word, an EMR of
 key frames, an EDD of moves; layout from biohazard-utils `Rbj.cs`, `Edd1.cs`, `Emr.cs`) becomes an
 Animation `roomanim/<stage><room>-<n>` at 30 frames a second (`pe_src_re2/pe_src_re2_rbj.c`; 114 on
 disc 1, mostly 15-bone people). RE1 keeps one set per room file in sections 9 (EMR) and 10 (EDD),
 the same layout with plain s16 angles (6 bytes a bone): one Animation `roomanim/<stage><room>-<player>`
-per file (`pe_src_re1/pe_src_re1_anims.c`; 334 of 335, Chris's and Jill's separate). RE3's rooms have
-no animation section (biohazard-utils' RE3 table has none, and a room archive holds only sound banks
-and the room file); its room moves aren't in the room files.
+per file (`pe_src_re1/pe_src_re1_anims.c`; 334 of 335, Chris's and Jill's separate). RE3's room files
+have no animation section; its room moves are in the room's enemy bundle, `CD_DATA/STAGEs/Rsrr.BIN`
+(see the enemies above), in the entries tagged 0x80 and up: u32 directory offset, u32 count, the
+directory's u32 section offsets. A section holding a flags word and an EMR (15 bones for a player, 7
+or 9 for a prop) followed by a section holding its EDD (8-byte moves, as in RE3's EMD) becomes an
+Animation `roomanim/<stage><room>-<entry>-<n>` (`g_re3_room_anims_ps1`; 114 on the disc, 1,478
+moves). EMRs with no EDD after them (key frames only, likely played straight through by the room
+script; 83) aren't read.
 
 **Room objects (RE2).** The 3D props an RE2 room places (typewriters, boxes, floor items, swinging
 doors) become one-bone Models, `object/<stage><room>-<n>` (`pe_src_re2/pe_src_re2_objects.c`; 522 on
