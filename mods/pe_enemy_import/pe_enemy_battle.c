@@ -19,7 +19,10 @@
  *   - while the game stops enemies (Aya's command menu) it stands still.
  * The room's own enemies fight too, unless Fights > Room's enemies is "Sent away": they are taken
  * out of the battle as it opens (no EXP for them), and the imported enemy stands where the first
- * one was.
+ * one was. When the opening outlasts PE_OPEN_LIMIT (a story line the player has not pressed
+ * through yet, as M118's), the imported enemy joins then but the room's enemies stay until the
+ * clock runs (Aya's time bar moves): the opening's scene uses them (M118's Giant Dogman), and
+ * sent away mid-scene it never ends, nor the battle.
  * The texture and palettes go to VRAM blocks the room is not using, chosen per battle (see
  * "where the texture goes"), saved before and put back when the battle ends. */
 #include <math.h>
@@ -97,6 +100,8 @@ static int s_send_away, s_count = 1;
 
 static struct {
     int active, uploaded, frames, open_frames, joined, sent_away, room_enemies;
+    int away_later;                  /* joined during the opening: send the room's enemies away
+                                      * once the clock runs */
     int tex_x, tex_y, clut_x, clut_y; /* where this battle's texture and palettes went */
     int height;                      /* the pack's standing height, field units */
     PeFoe foe[PE_FOES_MAX];
@@ -342,11 +347,14 @@ static int pe_spawn(int x, int y, int z) {
     return 1;
 }
 
-/* A room enemy out of the battle, as if never there: no EXP, no death steps. */
+/* A room enemy out of the battle, as if never there: no EXP, no death steps. One already at 0 HP
+ * (beaten before the room's enemies went, as by Cheats > Win this battle during an opening) is
+ * left to the game's death steps: the last of those checks for the victory. */
 static void pe_send_away(FieldActor *a) {
     EnemyCombatant *core = (EnemyCombatant *)a->state;
     FieldActor *c;
-    if (core->hpAlive > 0 && !(a->flags & 0x2000)) g_BattleLiveEnemyCount--;
+    if ((int)core->hpAlive <= 0) return;
+    if (!(a->flags & 0x2000)) g_BattleLiveEnemyCount--;
     core->hpAlive = 0;
     a->flags |= 0x10;   /* freed at the end of the frame, with its scripts and parts */
     for (c = g_FieldActorListHead; c; c = c->next)
@@ -569,10 +577,11 @@ static void pe_place(void) {
 
 /* ---- the battle ---- */
 
-static void pe_join(void) {
+static void pe_join(int early) {
     FieldActor *a, *first = NULL, *aya = g_PlayerEntity;
     int x, y, z, i;
     s.joined = 1;
+    s.away_later = s_send_away && early;
     if (!aya) return;
     for (a = g_FieldActorListHead; a; a = a->next)
         if (pe_is_room_enemy(a) && !(a->flags & 0x4000) && ((EnemyCombatant *)a->state)->hpAlive > 0) {
@@ -585,7 +594,7 @@ static void pe_join(void) {
         y = aya->pos_y;
         z = aya->pos_z + (int)(cos(aya->rot_y * 2 * PE_PI / 4096.0) * 2000.0 * 65536.0);
     }
-    if (s_send_away)
+    if (s_send_away && !s.away_later)
         for (a = g_FieldActorListHead; a; a = a->next)
             if (pe_is_room_enemy(a)) pe_send_away(a);
     for (i = 0; i < s_count; ++i) {
@@ -593,7 +602,7 @@ static void pe_join(void) {
          * when it stays */
         const double ang = atan2((x - aya->pos_x) / 65536.0, (z - aya->pos_z) / 65536.0) + PE_PI / 2;
         double side = (i - (s_count - 1) / 2.0) * (s_pack.radius * 3.0);
-        if (!s_send_away && first) side += s_pack.radius * 3.0;
+        if ((!s_send_away || s.away_later) && first) side += s_pack.radius * 3.0;
         if (!pe_spawn(x + (int)(sin(ang) * side * 65536.0), y, z + (int)(cos(ang) * side * 65536.0))) break;
     }
     if (!s.foes) {
@@ -741,7 +750,9 @@ static void pe_foe_think(PeFoe *f) {
             if (!reach || pe_reach(k) < reach) reach = pe_reach(k);
         if (!reach) reach = s_pack.radius * 3;
         const int moving = f->role == PE_ANIM_WALK;   /* starts a little further out than it stops */
-        if (aya && dist > reach * (moving ? 0.8 : 0.9) && s_pack.speed > 0 && abs(diff) < 0x400) {
+        /* (at least a unit to go: steps shrink as it closes in, and would never quite end) */
+        if (aya && dist > reach * (moving ? 0.8 : 0.9) && dist - reach * 0.8 >= 1.0 && s_pack.speed > 0 &&
+            abs(diff) < 0x400) {
             const double left = dist - reach * 0.8;
             const double step = s_pack.speed < left ? s_pack.speed : left;
             const double ang = a->rot_y * 2 * PE_PI / 4096.0;
@@ -771,15 +782,20 @@ static int pe_on_battle(void *ctx, void *user) {
          * would, and no time bar would fill. */
         ++s.frames;
         if (g_BattleEnemyEscapeFlag) s.open_frames++;
-        if (s.open_frames >= PE_OPEN_FRAMES) pe_join();
+        if (s.open_frames >= PE_OPEN_FRAMES) pe_join(0);
         else if (s.frames >= PE_OPEN_LIMIT) {
-            pe_mod_log(MOD_ID, "battle: the opening never ended; %s joins and the clock starts", s_pack.name);
+            pe_mod_log(MOD_ID, "battle: the opening is still on; %s joins%s", s_pack.name,
+                       s_send_away ? ", the room's enemies go when the clock runs" : "");
             g_BattleEnemyEscapeFlag = 1;
-            pe_join();
+            pe_join(1);
         }
         return 0;
     }
-    if (s_send_away) {   /* a room enemy that turns up later goes too */
+    if (s.away_later && g_PlayerEntity && g_PlayerEntity->state && ((Combatant *)g_PlayerEntity->state)->atb > 0) {
+        pe_mod_log(MOD_ID, "battle: the clock runs; the room's enemies go");
+        s.away_later = 0;
+    }
+    if (s_send_away && !s.away_later) {   /* a room enemy that turns up later goes too */
         for (FieldActor *a = g_FieldActorListHead; a; a = a->next)
             if (pe_is_room_enemy(a) && !(a->flags & 0x10)) pe_send_away(a);
     }
