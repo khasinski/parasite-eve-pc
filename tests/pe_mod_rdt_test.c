@@ -20,7 +20,7 @@ extern const PeImpReader g_re2_logic_ps1, g_re1_door_ps1, g_re2_door_ps1, g_re3_
 extern const PeImpReader g_re1_items_ps1, g_re2_items_ps1, g_re3_items_ps1, g_re3_logic_ps1;
 extern const PeImpReader g_re1_item_icons_ps1, g_re2_item_pictures_ps1, g_re3_item_pictures_ps1;
 void MdecDiag_ExpandDecoderTable(void *buffer);   /* the game's, linked in */
-extern const PeImpReader g_re2_objects_ps1, g_re3_objects_ps1, g_re1_objects_ps1, g_re1_file_text_ps1;
+extern const PeImpReader g_re2_objects_ps1, g_re3_objects_ps1, g_re1_objects_ps1, g_re1_file_text_ps1, g_re1_door_models_ps1;
 extern const PeImpReader g_re1_files_ps1, g_re2_files_ps1, g_re3_files_ps1, g_re2_maps_ps1, g_re3_maps_ps1;
 
 /* RE2's room objects as one-bone Models; one loads back with faces and a texture */
@@ -33,7 +33,7 @@ static void scan_objects(const char *cue, const char *game, const PeImpReader *r
     int n = pe_imp_catalog_assets("pe-rdt-test/objects", game, &a), objects = 0;
     char first[PE_IMP_ID_MAX] = "";
     for (int i = 0; i < n; i++)
-        if (!strcmp(a[i].type, "Model") && (strstr(a[i].id, ":object/") || strstr(a[i].id, ":item/")) && !objects++) snprintf(first, sizeof first, "%s", a[i].id);
+        if (!strcmp(a[i].type, "Model") && (strstr(a[i].id, ":object/") || strstr(a[i].id, ":item/") || strstr(a[i].id, ":doormodel/")) && !objects++) snprintf(first, sizeof first, "%s", a[i].id);
     free(a);
     char why[200];
     PeImpModel m;
@@ -490,7 +490,8 @@ int main(void) {
                      scan_files("RE1", re1, "re1", &g_re1_files_ps1, 19),
                      scan_objects(re1, "re1", &g_re1_objects_ps1, 500),
                      scan_files("RE1 text map", re1, "re1", &g_re1_file_text_ps1, 40),
-                     scan_files("RE1 icon", re1, "re1", &g_re1_item_icons_ps1, 76);
+                     scan_files("RE1 icon", re1, "re1", &g_re1_item_icons_ps1, 76),
+                     scan_objects(re1, "re1", &g_re1_door_models_ps1, 15);
     else printf("PE_TEST_RE1_DISC not set: RE1 rooms skipped\n");
     if (re2 && *re2) disc("RE2", re2, PE_IMP_RE2), scan_re2(re2), scan_doors("RE2", re2, "re2", &g_re2_door_ps1, 1),
                      scan_items("RE2", re2, "re2", &g_re2_items_ps1, 7, "Shotgun", 106),

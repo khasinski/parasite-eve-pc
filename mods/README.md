@@ -874,7 +874,11 @@ same sectioned container as RoomLogic, `doorscene.bin`), cataloged as `door/<nam
 bank (`VAB0`; its samples start 8 bytes after the bank header) and the 3D door scene (`SCN0`:
 animation, model, texture); its door sounds are also cataloged as Sounds (bank `door<nn>`, 151 on
 disc 1). RE1's `ITEM_M1/DOOR*.DOR` (21) and RE3's `STAGEs/DOOR*.DO1` (76) are kept whole as `SCN0`
-until their layouts are worked out. Playing the 3D door scene is the room runtime's job.
+until their layouts are worked out. Playing the 3D door scene is the room runtime's job. RE1's door
+model is also a Model, `doormodel/<name>` (21): a `.DOR` starts with three u32 offsets (animation,
+TMD model of the door and its frame, 8-bit TIM); the TMD's objects become parts (the TMD reader now
+takes several objects). The door animation isn't decoded yet; RE3's `.DO1` holds a compact sound
+bank and a TIM but no TMD, its model format is still open.
 
 **Items.** Each RE game's item table is an **ItemTable** record (`host/import/pe_imp_items.c`,
 `itemtable.bin`, same container), cataloged as `<game>:items/all` and built when the game's icon
@@ -890,7 +894,8 @@ and RE3 `CD_DATA/ETC/ITEMG.PIX` (134) hold the inventory's 112 x 72 item picture
 10 KB, each with its own palette (`items/pictures`; 1 is the knife, 2 the handgun, 7 the shotgun).
 RE1's 40 x 30 icons take their colours from row 2 of `DATA/STATUS.TIM`'s palette, the status screen's
 (found by eye; rows 0 and 1 are wrong): `items/icons`, icon k for item k + 1 (`pe_imp_emit_pix8`).
-RE2's map pages are still grey (their palette isn't found).
+RE2's map pages are still grey: no fixed palette was found, and the map screen recolours rooms by
+state (visited, current), so the colours are probably set by the game's code.
 
 **Movies.** Each RE STR movie (RE1 `ZMOVIE`, RE2 `ZMOVIE` and the player's `PL0`/`PL1` `ZMOVIE`, RE3 `CD_DATA/ZMOVIE`) is
 copied once into the store as a **Movie** (`host/import/pe_imp_movie.c`, `movie.bin`): a frame

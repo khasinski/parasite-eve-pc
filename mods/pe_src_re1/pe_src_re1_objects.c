@@ -1,7 +1,7 @@
 /* Resident Evil room objects and floor items: a room file's sections 2 (props) and 3 (items) list
  * (u32 model offset, u32 texture offset) pairs, header bytes 2 and 3 of them. A model is a PS1 TMD
  * (u32 0x41, u32 flags 0, u32 objects; per object 7 u32: vertices, count, normals, count,
- * primitives, count, scale, offsets from the object table) with one object; the texture an 8-bit
+ * primitives, count, scale, offsets from the object table), one part per object; the texture an 8-bit
  * TIM with palettes of 256. Primitives read (mode, words): 0x34/0x36 textured smooth triangle
  * (6: u0 v0 clut, u1 v1 page, u2 v2, n0 v0, n1 v1, n2 v2), 0x24 textured flat triangle (5: the
  * same uv words, n0 v0, v1 v2), 0x3C textured smooth quad (8: four uv words, four n/v pairs). The
@@ -27,61 +27,65 @@ static int16_t s16at(const Buf *x, uint32_t at) { return (int16_t)u16at(x, at); 
 static int tmd_parse(const uint8_t *data, uint32_t size, uint32_t tmd, uint32_t tim, PeImpModel *m) {
     Buf x = {data, size};
     PeImpFace *tri = NULL, *quad = NULL;
-    uint32_t tris = 0, quads = 0;
     memset(m, 0, sizeof *m);
     m->bones = 1;
     m->parent = malloc(sizeof *m->parent), m->rel = calloc(1, sizeof *m->rel), m->pos = calloc(1, sizeof *m->pos);
     if (!m->parent || !m->rel || !m->pos) goto bad;
     m->parent[0] = -1;
     NEED(tmd, 12);
-    if (u32at(&x, tmd) != 0x41 || u32at(&x, tmd + 4) != 0 || u32at(&x, tmd + 8) != 1) goto bad;
+    uint32_t objs = u32at(&x, tmd + 8), faces = 0;
+    if (u32at(&x, tmd) != 0x41 || u32at(&x, tmd + 4) != 0 || !objs || objs > PE_IMP_MODEL_PARTS_MAX) goto bad;
     uint32_t ot = tmd + 12;
-    NEED(ot, 28);
-    uint32_t vt = ot + u32at(&x, ot), nv = u32at(&x, ot + 4), nt = ot + u32at(&x, ot + 8), nn = u32at(&x, ot + 12);
-    uint32_t pt = ot + u32at(&x, ot + 16), np = u32at(&x, ot + 20);
-    if (np > MAX_PRIMS || nv > 65535 || nn > 65535) goto bad;
-    NEED(vt, (uint64_t)8 * nv);
-    NEED(nt, (uint64_t)8 * nn);
-    tri = calloc(np ? np : 1, sizeof *tri), quad = calloc(np ? np : 1, sizeof *quad);
-    if (!tri || !quad) goto bad;
-    uint32_t q = pt;
-    for (uint32_t k = 0; k < np; k++) {
-        NEED(q, 4);
-        uint32_t ilen = u8at(&x, q + 1), flag = u8at(&x, q + 2), mode = u8at(&x, q + 3), p = q + 4;
-        NEED(p, (uint64_t)4 * ilen);
-        q = p + 4 * ilen;
-        int smooth = (mode & ~2u) == 0x34 && ilen == 6, flat = mode == 0x24 && ilen == 5, four = mode == 0x3C && ilen == 8;
-        if (flag || !(smooth || flat || four)) continue;               /* untextured or unlit: passed over */
-        uint32_t corners = four ? 4 : 3, nidx[4], vidx[4];
-        PeImpFace *f = four ? &quad[quads] : &tri[tris];
-        memset(f, 0, sizeof *f);
-        for (uint32_t j = 0; j < corners; j++) {
-            f->uv[j][0] = (uint8_t)u8at(&x, p + 4 * j), f->uv[j][1] = (uint8_t)u8at(&x, p + 4 * j + 1);
-        }
-        f->clut = (uint16_t)u16at(&x, p + 2), f->page = (uint16_t)u16at(&x, p + 6);
-        uint32_t idx = p + 4 * (four ? 4 : 3);
-        if (flat) {
-            nidx[0] = nidx[1] = nidx[2] = u16at(&x, idx);
-            vidx[0] = u16at(&x, idx + 2), vidx[1] = u16at(&x, idx + 4), vidx[2] = u16at(&x, idx + 6);
-        } else {
-            for (uint32_t j = 0; j < corners; j++) nidx[j] = u16at(&x, idx + 4 * j), vidx[j] = u16at(&x, idx + 4 * j + 2);
-        }
-        for (uint32_t j = 0; j < corners; j++) {
-            if (vidx[j] >= nv || nidx[j] >= nn) goto bad;
-            for (int c = 0; c < 3; c++) {
-                f->v[j][c] = s16at(&x, vt + 8 * vidx[j] + 2 * (uint32_t)c);
-                f->n[j][c] = s16at(&x, nt + 8 * nidx[j] + 2 * (uint32_t)c);
-            }
-        }
-        if (four) quads++;
-        else tris++;
-    }
-    if (!tris && !quads) goto bad;
-    m->parts = 1;
-    m->part = calloc(1, sizeof *m->part);
+    NEED(ot, (uint64_t)28 * objs);
+    m->parts = objs;
+    m->part = calloc(objs, sizeof *m->part);
     if (!m->part) goto bad;
-    m->part[0].tri = tri, m->part[0].tris = tris, m->part[0].quad = quad, m->part[0].quads = quads;
-    tri = quad = NULL;
+    for (uint32_t o = 0; o < objs; o++) {                              /* one part per TMD object */
+        uint32_t ob = ot + 28 * o;
+        uint32_t vt = ot + u32at(&x, ob), nv = u32at(&x, ob + 4), nt = ot + u32at(&x, ob + 8), nn = u32at(&x, ob + 12);
+        uint32_t pt = ot + u32at(&x, ob + 16), np = u32at(&x, ob + 20);
+        uint32_t tris = 0, quads = 0;
+        if (np > MAX_PRIMS || nv > 65535 || nn > 65535) goto bad;
+        NEED(vt, (uint64_t)8 * nv);
+        NEED(nt, (uint64_t)8 * nn);
+        tri = calloc(np ? np : 1, sizeof *tri), quad = calloc(np ? np : 1, sizeof *quad);
+        if (!tri || !quad) goto bad;
+        uint32_t q = pt;
+        for (uint32_t k = 0; k < np; k++) {
+            NEED(q, 4);
+            uint32_t ilen = u8at(&x, q + 1), flag = u8at(&x, q + 2), mode = u8at(&x, q + 3), p = q + 4;
+            NEED(p, (uint64_t)4 * ilen);
+            q = p + 4 * ilen;
+            int smooth = (mode & ~2u) == 0x34 && ilen == 6, flat = mode == 0x24 && ilen == 5, four = mode == 0x3C && ilen == 8;
+            if (flag || !(smooth || flat || four)) continue;           /* untextured or unlit: passed over */
+            uint32_t corners = four ? 4 : 3, nidx[4], vidx[4];
+            PeImpFace *f = four ? &quad[quads] : &tri[tris];
+            memset(f, 0, sizeof *f);
+            for (uint32_t j = 0; j < corners; j++)
+                f->uv[j][0] = (uint8_t)u8at(&x, p + 4 * j), f->uv[j][1] = (uint8_t)u8at(&x, p + 4 * j + 1);
+            f->clut = (uint16_t)u16at(&x, p + 2), f->page = (uint16_t)u16at(&x, p + 6);
+            uint32_t idx = p + 4 * (four ? 4 : 3);
+            if (flat) {
+                nidx[0] = nidx[1] = nidx[2] = u16at(&x, idx);
+                vidx[0] = u16at(&x, idx + 2), vidx[1] = u16at(&x, idx + 4), vidx[2] = u16at(&x, idx + 6);
+            } else {
+                for (uint32_t j = 0; j < corners; j++) nidx[j] = u16at(&x, idx + 4 * j), vidx[j] = u16at(&x, idx + 4 * j + 2);
+            }
+            for (uint32_t j = 0; j < corners; j++) {
+                if (vidx[j] >= nv || nidx[j] >= nn) goto bad;
+                for (int c = 0; c < 3; c++) {
+                    f->v[j][c] = s16at(&x, vt + 8 * vidx[j] + 2 * (uint32_t)c);
+                    f->n[j][c] = s16at(&x, nt + 8 * nidx[j] + 2 * (uint32_t)c);
+                }
+            }
+            if (four) quads++;
+            else tris++;
+        }
+        if ((faces += tris + quads) > PE_IMP_MODEL_FACES_MAX) goto bad;
+        m->part[o].tri = tri, m->part[o].tris = tris, m->part[o].quad = quad, m->part[o].quads = quads;
+        tri = quad = NULL;
+    }
+    if (!faces) goto bad;
     /* texture: an 8-bit TIM with palettes of 256 */
     NEED(tim, 20);
     uint32_t tflag = u32at(&x, tim + 4);
@@ -144,4 +148,36 @@ const PeImpReader g_re1_objects_ps1 = {
     .game = "re1", .platform = "ps1", .format = "rdt-objects",
     .version = 1, .produces = PE_IMP_MODEL, .match = "*/STAGE?/ROOM*.RDT",
     .tags = "room object", .read = read_objects, .path_key = 1
+};
+
+/* <dir>/ITEM_M1/DOOR*.DOR, the door transitions: u32 offsets of the animation, the model (a TMD of
+ * the door and its frame) and its texture (an 8-bit TIM). The model becomes "doormodel/<name>"; the
+ * whole file, animation included, is the DoorScene (pe_src_re1_door.c). */
+static int read_door_model(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    if (size < 12) return 0;
+    uint32_t tmd = data[4] | (uint32_t)data[5] << 8 | (uint32_t)data[6] << 16 | (uint32_t)data[7] << 24;
+    uint32_t tim = data[8] | (uint32_t)data[9] << 8 | (uint32_t)data[10] << 16 | (uint32_t)data[11] << 24;
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    char stem[24] = "", id[40], name[48];
+    size_t k = 0;
+    for (const char *c = base + 4; *c && *c != '.' && k + 1 < sizeof stem; c++) stem[k++] = (char)(*c >= 'A' && *c <= 'Z' ? *c + 32 : *c);
+    stem[k] = 0;
+    PeImpModel *m = calloc(1, sizeof *m);
+    if (!m) { if (why && n) snprintf(why, n, "out of memory"); return -1; }
+    if (strncmp(base, "DOOR", 4) || !k || tmd_parse(data, size, tmd, tim, m)) { free(m); return 0; }
+    snprintf(id, sizeof id, "doormodel/%s", stem);
+    snprintf(name, sizeof name, "Door model %s", stem);
+    if (pe_imp_emit(sink, PE_IMP_MODEL, id, name, m)) {
+        if (why && n) snprintf(why, n, "couldn't catalog %s", id);
+        return -1;
+    }
+    return 0;
+}
+
+const PeImpReader g_re1_door_models_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re1", .platform = "ps1", .format = "door-model",
+    .version = 1, .produces = PE_IMP_MODEL, .match = "*/ITEM_M1/DOOR*.DOR",
+    .tags = "door", .read = read_door_model, .path_key = 1
 };
