@@ -887,7 +887,8 @@ disc 1). RE1's `ITEM_M1/DOOR*.DOR` (21) and RE3's `STAGEs/DOOR*.DO1` (76) are ke
 until their layouts are worked out. Playing the 3D door scene is the room runtime's job. RE1's door
 model is also a Model, `doormodel/<name>` (21): a `.DOR` starts with three u32 offsets (animation,
 TMD model of the door and its frame, 8-bit TIM); the TMD's objects become parts (the TMD reader now
-takes several objects). RE2's door models are too (`doormodel/<nn>`, 55): the scene block starts
+takes several objects). Its "animation" block is a door script too (36 u32 offsets to short command
+records, the same bytes in every `.DOR`), kept as stored with the rest of the file. RE2's door models are too (`doormodel/<nn>`, 55): the scene block starts
 with u32 offsets of the door's MD1 mesh and its TIM, read like a room object. Door animations aren't
 keyframes: RE2's scene holds a small door script (a table of offsets, then bytecode that moves the
 camera and turns the door), kept as stored for the runtime to interpret. RE3's door models are Models
