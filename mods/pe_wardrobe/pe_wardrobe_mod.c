@@ -15,6 +15,7 @@
 #include "pe_model.h"
 #include "pe_pages.h"
 #include "pe_wardrobe.h"
+#include "pe_skin_build.h"
 
 #define MOD_ID "pe_wardrobe"
 
@@ -67,6 +68,9 @@ static int wardrobe_init(void) {
     pe_packs_register();
     pe_model_skin_set_reader(pe_pack_read);          /* menu previews of pack costumes */
     pe_packs_page_register();
+    pe_skin_target_register();                       /* F1 > Import builds costumes through it */
+    static const PeWardrobePacksApi packs_api = {sizeof(PeWardrobePacksApi), pe_packs_add_new};
+    pe_service_publish("wardrobe_packs", 1, &packs_api, MOD_ID);   /* ... and adds them without a restart */
     pe_menu_register_action(PE_PAGE_DEBUG_COLLECTION, "Reset wardrobe", "Forget all costume unlocks and the costume worn.", pe_reset);
     pe_menu_register_tick(pe_ward_profile_tick);
     return 0;

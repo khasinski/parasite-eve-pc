@@ -3,11 +3,11 @@
  * the local RNG bound for this call instead of patching loaded bytecode.
  * No stored script pointers, frame scans or changes to unrelated RNG rolls. */
 #include <stdint.h>
-#include <string.h>
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_pages.h"
+#include "pe_encounter.h"
 #include "pe1/game_state.h"
 #include "pe1/game_timers.h"
 #include "pe1/scene_dispatch.h"
@@ -16,39 +16,6 @@
 enum { PE_ENC_NORMAL, PE_ENC_MORE, PE_ENC_LOTS, PE_ENC_ALWAYS };
 static int s_mode;
 static const char *const s_names[] = { "Normal", "More (2x)", "Lots (4x)", "Every check" };
-
-/* Bytecode is disk data: read words without assuming alignment. */
-static uint32_t pe_word(const unsigned char *p) {
-    uint32_t value;
-    memcpy(&value, p, sizeof value);
-    return value;
-}
-static unsigned pe_argc(uint32_t h) { return (h >> 13) & 15u; }
-static unsigned pe_mode(uint32_t h, unsigned arg) { return (h >> (17u + 3u * arg)) & 7u; }
-
-/* All lookahead stays within the current room's loaded asset allocation. */
-static int pe_encounter_roll(const unsigned char *code, size_t bytes) {
-    uint32_t h, compare;
-    size_t pos;
-    if (bytes < 52) return 0;
-    h = pe_word(code);
-    if ((h & 0x1FFFu) != 0x1Au || pe_argc(h) != 3 ||
-        pe_mode(h, 1) != 0 || pe_mode(h, 2) != 0 || pe_word(code + 12) != 0) return 0;
-    compare = pe_word(code + 20);
-    if ((compare & 0x1FFFu) != 9 || pe_argc(compare) != 4 ||
-        pe_word(code + 28) != 10 || pe_word(code + 36) != pe_word(code + 8) ||
-        pe_mode(compare, 2) != pe_mode(h, 0) ||
-        (pe_word(code + 44) & 0x1FFFu) != 5) return 0;
-    pos = 44;
-    for (unsigned n = 0; n < 16 && pos <= bytes - 8; ++n) {
-        uint32_t instruction = pe_word(code + pos);
-        size_t length = 8 + 4 * pe_argc(instruction);
-        if (length > bytes - pos) return 0;
-        if ((instruction & 0x1FFFu) == 0x55u && pe_argc(instruction) == 1) return 1;
-        pos += length;
-    }
-    return 0;
-}
 
 static int pe_on_random(void *ctx, void *user) {
     PeHookScriptRandom *roll = (PeHookScriptRandom *)ctx;
