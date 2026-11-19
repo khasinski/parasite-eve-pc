@@ -8,7 +8,7 @@ set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shop
 if(NOT PE_PS5_GAME)
     list(PREPEND pe_default_mods pe_assets)
     list(REMOVE_ITEM pe_default_mods pe_import)
-    list(APPEND pe_default_mods pe_src_ff7 pe_import pe_lang pe_fonts pe_enemy_import)   # pe_enemy_import: F1 > Fights, desktop only
+    list(APPEND pe_default_mods pe_src_ff7 pe_import pe_lang pe_fonts pe_enemy_import pe_rooms)   # pe_enemy_import: F1 > Fights; pe_rooms: RE rooms (prototype); desktop only
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 

@@ -3839,7 +3839,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "1831501a19079739639794e3c2e1667a0efeb50d60cf83523e64945a58408fcc"
+      "sha256": "b1e8d703e39661e137752292caeaf594b5cf0537648c2a6672ca59d87e0817bb"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "444077571946534aac736bc3f9675be287a17e57bfe0413e8e27f7eada499aa7"
+      "sha256": "d6051e14748af6a8398f4e0502190d9127f68c733d6279f06878d3129eadb315"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",

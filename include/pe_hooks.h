@@ -96,8 +96,19 @@ typedef enum PeHookId {
     PE_HOOK_ACTOR_RENDER, /* PeHookActorDraw: Entity_FrameUpdate, before an actor's model is posed
                            * and drawn (view set); nonzero: the actor is a mod's own and the mod
                            * drew it: the game's posing, draw and shadow are skipped; appended */
+    PE_HOOK_FIELD_BACKGROUND, /* PeHookFieldBackground: the room picture, each field frame. Stage 0
+                               * (Render_BuildMeshList): nonzero skips the room's own background
+                               * tiles this frame. Stage 1 (Render_LinkFieldSubpixel, everything
+                               * linked, before the GPU gets it): a mod may link its own packets
+                               * into the ordering table (4095 = farthest). Imported rooms; appended */
     PE_HOOK_COUNT
 } PeHookId;
+
+typedef struct PeHookFieldBackground {
+    int stage;          /* 0: may skip the room's own tiles; 1: may link packets */
+    int slot;           /* stage 1: the draw slot (0/1); packets must stay alive until it is shown */
+    void *ordering;     /* stage 1: RenderNativeTag[4096], the frame's ordering table */
+} PeHookFieldBackground;
 
 typedef struct PeHookActorDraw {
     void *actor;         /* FieldActor * */
