@@ -855,8 +855,14 @@ doors) become one-bone Models, `object/<stage><room>-<n>` (`pe_src_re2/pe_src_re
 disc 1, in 106 rooms). A room file's section 10 lists them as (texture, mesh) offsets; each mesh is
 a one-part MD1 with an 8-bit TIM, read by the same code as RE2's player models (`re2_object_parse`,
 sharing `mesh_and_texture` with `re2_pld_parse`; the costume tests are unchanged). Where an object
-stands is set by the room's script. RE3's (MD2) and RE1's (TMD) objects aren't decoded yet; their
-data is in each room's `RDT0`.
+stands is set by the room's script. RE3's room objects are too (`pe_src_re3/pe_src_re3_objects.c`;
+695 of 712, in 143 rooms): the same section-10 table; each mesh starts with a small header whose
+first u16 is the offset of an MD2 block (the player models' mesh format), read as one part per MD2
+object on one bone. The header's other fields look like a tiny skeleton and aren't read yet, so a
+prop whose pieces move separately comes out as it is stored. RE1's room props and floor items are
+too (`pe_src_re1/pe_src_re1_objects.c`, `object/...` and `item/...`; 589, Chris's and Jill's rooms
+merged): sections 2 and 3 list (TMD, TIM) pairs; the TMD's textured triangles and quads are read
+(modes 0x34/0x36, 0x24, 0x3C), the rare untextured and unlit ones passed over.
 A scan now offers each file to every reader that matches it, not just the first; a second reader
 of a file keeps its own store folder with `path_key`. `mod-rdt` saves and loads a record, refuses a
 damaged one, builds one for every room on the discs (about 0.8 MB for RE1, 1.3 MB for RE2, 1.7 MB
@@ -893,7 +899,9 @@ image; an `.iso` has none. A reader can ask for a file and its XA sectors togeth
 a TIM decoder to RGBA for 4-, 8- and 15-bit TIMs): RE1 `ITEM_M2/FILE*.TIM` as `files/<name>` (19),
 RE2 `COMMON/DATA/FILES.TIM` as `files/all` (191 TIMs, one per 2 KB boundary), RE3
 `CD_DATA/ETC/FILEGU.PIX` as `files/all` (183). They are the file covers and pages; which pages make up
-which document isn't known yet, and RE1's `ITEM_M2/FILEM*` (not TIMs) isn't read yet. The
+which document isn't known yet. RE1's file text, `ITEM_M2/FILEM*.PIX` (a 64-byte palette, then
+4-bit pixels 512 wide), is cut into 512 x 192 pages and kept as 4-bit TIMs with that palette
+(`files/filem_00` and so on; 92 pages in 46 files). The
 container's cap is now 16 MB. `mod-rdt` scans each disc's files and decodes every picture.
 
 **Maps.** Also Pictures, as `maps/all`. RE2's `COMMON/DATA/MAPS.PIX` is 20 map pages of 256 x 256 at

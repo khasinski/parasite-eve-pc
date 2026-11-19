@@ -30,6 +30,10 @@ int pe_imp_emit_tims_ex(PeImpSink *sink, const char *id, const char *name, const
 /* 256 x 256 4-bit pages without a palette, as TIMs with a placeholder grey palette (GREY). */
 int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
                        char *why, size_t n);
+/* A palette of palette_bytes (first 16 colours used), then 4-bit pixels `width` wide, cut into pages
+ * page_h lines tall, each a 4-bit TIM with that palette (RE1's file text pages). */
+int pe_imp_emit_pix4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                     uint32_t palette_bytes, uint32_t width, uint32_t page_h, char *why, size_t n);
 int pe_imp_pictures_save(const PeImpRoomLogic *l, const char *folder, char *why, size_t n);
 int pe_imp_pictures_load(const char *folder, PeImpRoomLogic **l, char *why, size_t n);
 int pe_imp_catalog_pictures(const char *root, const char *asset_id, PeImpRoomLogic **l, char *why, size_t n);

@@ -371,7 +371,7 @@ if(BUILD_TESTING)
         pe_src_re1/pe_src_re1_items.c pe_src_re2/pe_src_re2_items.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_music.c
         pe_src_re1/pe_src_re1_movies.c pe_src_re2/pe_src_re2_movies.c pe_src_re3/pe_src_re3_movies.c
         pe_src_re1/pe_src_re1_files.c pe_src_re2/pe_src_re2_files.c pe_src_re3/pe_src_re3_files.c
-        pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_pld.c
+        pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_pld.c pe_src_re3/pe_src_re3_objects.c pe_src_re1/pe_src_re1_objects.c
         ${PROJECT_SOURCE_DIR}/src/overlays/mdec_diag/vlc_build.c)
     target_include_directories(test-mod-rdt PRIVATE host/import pe_src_re1 pe_src_re2 pe_src_re3)
     # The skins builder against tools/re2-skin's output: needs PE_TEST_DISC and PE_TEST_RE2_DISC.
@@ -383,8 +383,8 @@ if(BUILD_TESTING)
     if(TARGET pe_download_json AND TARGET pe_download_zip)
         # F1 > Import's scan and build, then the Wardrobe's pack reader loading the result.
         pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_core_sources}
-            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re1/pe_src_re1_items.c pe_src_re1/pe_src_re1_movies.c pe_src_re1/pe_src_re1_files.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_door.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_movies.c pe_src_re2/pe_src_re2_files.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2.c
-            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3_rooms.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_door.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_movies.c pe_src_re3/pe_src_re3_files.c pe_src_re3/pe_src_re3.c
+            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re1/pe_src_re1_items.c pe_src_re1/pe_src_re1_movies.c pe_src_re1/pe_src_re1_files.c pe_src_re1/pe_src_re1_objects.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_door.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_movies.c pe_src_re2/pe_src_re2_files.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2.c
+            pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3_rooms.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_door.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_movies.c pe_src_re3/pe_src_re3_files.c pe_src_re3/pe_src_re3_objects.c pe_src_re3/pe_src_re3.c
             pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c
             pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c pe_src_dc1/pe_src_dc1_music.c pe_src_dc1/pe_src_dc1.c
             pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c

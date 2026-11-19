@@ -76,6 +76,41 @@ int pe_imp_emit_tims(PeImpSink *sink, const char *id, const char *name, const ui
     return pe_imp_emit_tims_ex(sink, id, name, data, size, step, 0, why, n);
 }
 
+/* A palette (its first 16 colours used) of `palette_bytes`, then 4-bit pixels `width` wide (RE1's file
+ * pages): cut into pages `page_h` lines tall, each wrapped as a 4-bit TIM with that palette. */
+int pe_imp_emit_pix4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
+                     uint32_t palette_bytes, uint32_t width, uint32_t page_h, char *why, size_t n) {
+    if (palette_bytes < 32 || size <= palette_bytes || !width || width % 4 || width > 1024 || !page_h || page_h > 512) return 0;
+    uint32_t page = width / 2 * page_h, pages = (size - palette_bytes) / page, tim = 8 + 44 + 12 + page;
+    if (!pages) return 0;
+    uint8_t *packed = malloc((size_t)pages * (4 + tim));
+    if (!packed) { if (why && n) snprintf(why, n, "out of memory"); return -1; }
+    for (uint32_t p = 0; p < pages; p++) {
+        uint8_t *o = packed + (size_t)p * (4 + tim), *t = o + 4;
+        for (int k = 0; k < 4; k++) o[k] = (uint8_t)(tim >> 8 * k);
+        memset(t, 0, 8), t[0] = 0x10, t[4] = 8;
+        uint8_t *c = t + 8;
+        memset(c, 0, 12), c[0] = 44, c[8] = 16, c[10] = 1;
+        memcpy(c + 12, data, 32);
+        uint8_t *img = c + 44;
+        uint32_t bytes = 12 + page;
+        memset(img, 0, 12);
+        for (int k = 0; k < 4; k++) img[k] = (uint8_t)(bytes >> 8 * k);
+        img[8] = (uint8_t)(width / 4), img[9] = (uint8_t)(width / 4 >> 8), img[10] = (uint8_t)page_h, img[11] = (uint8_t)(page_h >> 8);
+        memcpy(img + 12, data + palette_bytes + (size_t)p * page, page);
+    }
+    PeImpLogicBuilder *b = pe_imp_logic_begin(0, 0, 0, 0);
+    pe_imp_logic_add(b, PE_IMP_PICTURE_TIMS, pages, packed, pages * (4 + tim));
+    free(packed);
+    PeImpRoomLogic *l = pe_imp_logic_finish(b);
+    if (!l) { if (why && n) snprintf(why, n, "%s: too large", id); return -1; }
+    if (pe_imp_emit(sink, PE_IMP_PICTURES, id, name, l)) {
+        if (why && n) snprintf(why, n, "couldn't catalog %s", id);
+        return -1;
+    }
+    return 0;
+}
+
 /* 256 x 256 pages at 4 bits a pixel without a palette (RE2's maps): each wrapped as a 4-bit TIM with
  * a placeholder palette of 16 greys (PE_IMP_PICTURE_GREY marks the record) */
 int pe_imp_emit_pages4(PeImpSink *sink, const char *id, const char *name, const uint8_t *data, uint32_t size,
