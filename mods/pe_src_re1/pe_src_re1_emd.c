@@ -294,3 +294,41 @@ const PeImpReader g_re1_monsters_ps1 = {
     .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "*/ENEMY/EM1???.EMD",
     .tags = "enemy", .read = read_monster, .path_key = 1
 };
+
+/* The people's moves (CHAR1x, EM102x, EM103x): their one set, the EMR at D1 (0) with its EDD at D2,
+ * bones put in RE2's order as their models' are (k_from_re1). "player/char10/moves". */
+static int read_person_moves(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    const char *s = strrchr(path, '/');
+    s = s ? s + 1 : path;
+    int person = !strncmp(s, "CHAR1", 5) || (!strncmp(s, "EM10", 4) && (s[4] == '2' || s[4] == '3'));
+    if (!person || size < 64) return 0;
+    Buf b = {data, size};
+    uint32_t dir = size - 20, emr = u32at(&b, dir + 4), edd = u32at(&b, dir + 8), tmd = u32at(&b, dir + 12);
+    if (!(emr < edd && edd < tmd && tmd < dir)) return 0;
+    PeImpAnimation *a = re1_moves(data, tmd, emr, edd);
+    if (!a) return 0;
+    if (a->bones != BONES) { pe_imp_animation_free(a), free(a); return 0; }
+    for (uint32_t mv = 0; mv < a->moves; mv++)                         /* RE1's bone order -> RE2's */
+        for (uint32_t f = 0; f < a->move[mv].frames; f++) {
+            int16_t *d = a->move[mv].data + (size_t)f * (3 + 3 * BONES), old[3 * BONES];
+            memcpy(old, d + 3, sizeof old);
+            for (int r = 0; r < BONES; r++) memcpy(d + 3 + 3 * r, old + 3 * k_from_re1[r], 3 * sizeof *old);
+        }
+    char stem[16] = "", id[40], name[40];
+    size_t k = 0;
+    while (s[k] && s[k] != '.' && k + 1 < sizeof stem) stem[k] = s[k], k++;
+    stem[k] = 0;
+    snprintf(id, sizeof id, "player/");
+    for (size_t j = 0; stem[j]; j++) id[7 + j] = (char)(stem[j] >= 'A' && stem[j] <= 'Z' ? stem[j] + 32 : stem[j]), id[8 + j] = 0;
+    strncat(id, "/moves", sizeof id - strlen(id) - 1);
+    snprintf(name, sizeof name, "%s moves", stem);
+    if (pe_imp_emit(sink, PE_IMP_ANIMATION, id, name, a)) { snprintf(why, n, "could not catalog %s", id); return -1; }
+    return 0;
+}
+
+const PeImpReader g_re1_person_moves_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re1", .platform = "ps1", .format = "emd-moves",
+    .version = 1, .produces = PE_IMP_ANIMATION, .match = "*/ENEMY/*.EMD",
+    .tags = "human player", .read = read_person_moves, .path_key = 1
+};

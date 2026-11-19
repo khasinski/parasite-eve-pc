@@ -96,3 +96,56 @@ const PeImpReader g_re2_emd_ps1 = {
     .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/CDEMD?.EMS",
     .tags = "enemy", .read = read_ems
 };
+
+/* Players and weapons. PL?/PLD/PLxx.PLD and PLxxWyy.PLW share a layout: u32 directory offset; there
+ * EDD, EMR, MD1, TIM offsets. A PLD's EDD/EMR are the player's moves ("player/pl00/moves", bones as
+ * the model's); a PLW's are the player's moves with that weapon (aim, fire, reload) and its MD1 + TIM
+ * the weapon in hand, a one-bone Model of its parts as stored, each in the frame of the arm bone it
+ * replaces (which bones isn't mapped yet): "weapon/pl00w02" and "weapon/pl00w02/moves". */
+static int read_player(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink, char *why, size_t n) {
+    const char *base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+    char stem[16] = "", low[16] = "", id[48], name[48];
+    size_t k = 0;
+    for (const char *c = base; *c && *c != '.' && k + 1 < sizeof stem; c++, k++) stem[k] = *c, low[k] = (char)(*c >= 'A' && *c <= 'Z' ? *c + 32 : *c);
+    stem[k] = low[k] = 0;
+    int weapon = strchr(base, '.') && !strcmp(strchr(base, '.'), ".PLW");
+    if (size < 8) return 0;
+    uint32_t dir = le32(data);
+    if (dir < 16 || dir + 16 > size) return 0;
+    uint32_t edd = le32(data + dir), emr = le32(data + dir + 4), md1 = le32(data + dir + 8), tim = le32(data + dir + 12);
+    if (!(edd < emr && emr < md1 && md1 < tim && tim < dir)) return 0;
+    PeImpAnimation *a = re2_moves(data, size, emr, edd, emr, md1);
+    if (weapon) {
+        PeImpModel *m = calloc(1, sizeof *m);
+        char quiet[160];
+        if (m && !re2_object_parse(data, size, md1, tim, m, quiet, sizeof quiet)) {
+            snprintf(id, sizeof id, "weapon/%s", low);
+            snprintf(name, sizeof name, "%s", stem);
+            if (pe_imp_emit(sink, PE_IMP_MODEL, id, name, m)) {
+                if (a) pe_imp_animation_free(a), free(a);
+                snprintf(why, n, "could not catalog %s", id);
+                return -1;
+            }
+        } else free(m);
+    }
+    if (!a) return 0;
+    snprintf(id, sizeof id, "%s/%s/moves", weapon ? "weapon" : "player", low);
+    snprintf(name, sizeof name, "%s moves", stem);
+    if (pe_imp_emit(sink, PE_IMP_ANIMATION, id, name, a)) { snprintf(why, n, "could not catalog %s", id); return -1; }
+    return 0;
+}
+
+const PeImpReader g_re2_player_moves_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re2", .platform = "ps1", .format = "pld-moves",
+    .version = 1, .produces = PE_IMP_ANIMATION, .match = "PL?/PLD/PL??.PLD",
+    .tags = "human player", .read = read_player, .path_key = 1
+};
+
+const PeImpReader g_re2_weapons_ps1 = {
+    .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
+    .game = "re2", .platform = "ps1", .format = "plw",
+    .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/PL??W??.PLW",
+    .tags = "weapon", .read = read_player
+};
