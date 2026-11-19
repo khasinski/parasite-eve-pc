@@ -4835,7 +4835,7 @@
     },
     {
       "path": "mods/host/import/pe_imp_rofs.c",
-      "sha256": "0ad5eb6d6dc0baa47154a65f229a1af48bf4959cfbb85e63327c0dee51a8e83f"
+      "sha256": "ffdc060a19c38fe2d97f79f0921ac91c61a9531302d969102148c8fde74a33c8"
     },
     {
       "path": "mods/host/import/pe_imp_rofs.h",

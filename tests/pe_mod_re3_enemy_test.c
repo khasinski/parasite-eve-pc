@@ -110,12 +110,24 @@ static void write_rofs(const char *path, const char *a, const char *b, const RFi
     free(o.b);
 }
 
+/* leaves 0xAA all over the stack the next call will use */
+static void __attribute__((noinline)) dirty_stack(void) {
+    volatile uint8_t junk[16384];
+    for (size_t i = 0; i < sizeof junk; i++) junk[i] = 0xAA;
+}
+
 static void test_rofs(void) {
     /* the packer on its own */
     uint8_t src[64], out[64];
     uint32_t n = packed_sample(src);
     assert(pe_imp_rofs_depack(src, n, out, 7) == 7 && !memcmp(out, "HiAAAA!", 7));   /* the length stops it: padding bits */
     assert(pe_imp_rofs_depack(src, n, out, 3) == 3 && !memcmp(out, "HiA", 3));   /* bounded */
+    /* a copy from the window's last byte runs into the 256 after it: those start as zeros (left
+     * unset they took the stack's leftovers, and 69 of RE3's 100 enemy files came out wrong) */
+    static const uint8_t far_copy[] = {0xFF, 0xFF, 0x80};                    /* flag, start 0xFFF, 17 bytes */
+    static const uint8_t want[17] = {0xFF};
+    dirty_stack();
+    assert(pe_imp_rofs_depack(far_copy, sizeof far_copy, out, 17) == 17 && !memcmp(out, want, 17));
     /* encryption round trip */
     uint8_t buf[3000], copy[3000];
     for (int i = 0; i < 3000; i++) buf[i] = (uint8_t)(i * 7);
@@ -478,6 +490,27 @@ static int real(void) {
     const uint8_t *t0 = vh + 0x80 + 32 + 16 * (vh[0x80 + 18] | vh[0x80 + 19] << 8);
     for (int k = 0; k < 3; k++) assert(lround(re3_tone_rate(60 + k, t0[32 * k + 4], t0[32 * k + 5])) == rate0[k]);
     free(emd), free(tim), free(vh), free(vb);
+    /* every enemy model in the folder (ROOM/EMD and ROOM/EMD08, 100 on RE3 PC) reads */
+    int all = 0;
+    uint32_t tn2;
+    for (int i = 0; i < pe_imp_disc_files(d); i++) {
+        const char *nm = pe_imp_disc_name(d, i);
+        size_t len = strlen(nm);
+        if (strncmp(nm, "ROOM/EMD", 8) || len < 4 || strcmp(nm + len - 4, ".EMD")) continue;
+        char tn[256];
+        snprintf(tn, sizeof tn, "%.*s.TIM", (int)len - 4, nm);
+        int ti = pe_imp_disc_find(d, tn);
+        assert(ti >= 0 && !pe_imp_disc_read(d, i, &emd, &en, why, sizeof why) && !pe_imp_disc_read(d, ti, &tim, &tn2, why, sizeof why));
+        rc = re3_emd_parse(emd, en, tim, tn2, &m, &a, why, sizeof why);
+        if (rc) printf("real: %s: %s\n", nm, why);
+        assert(!rc);
+        pe_imp_model_free(&m);
+        pe_imp_animation_free(&a);
+        free(emd), free(tim);
+        all++;
+    }
+    printf("real: all %d enemy models in the folder read\n", all);
+    assert(all >= 100);
     pe_imp_disc_close(d);
     printf("real: EM34 and E_34 from the RE3 PC folder\n");
     return 0;
