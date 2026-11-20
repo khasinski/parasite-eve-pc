@@ -128,14 +128,23 @@ int pe_imp_scd_walk(unsigned game, const uint8_t *rdt, uint32_t size, PeImpScdVi
             uint32_t start = le16(rdt + off + 2 * k);
             uint32_t end = k + 1 < count ? le16(rdt + off + 2 * (k + 1)) : len;
             if (start >= len || end > len || end < start) { bad++; continue; }
+            /* The whole procedure, to the next one's start: an evt_end can sit inside an if block
+             * (RE2's rooms open with "if 4th Survivor: evt_end", the normal game's doors after it).
+             * Past an evt_end, bytes that don't read as an instruction are padding, not an error. */
             uint32_t p = off + start, stop = off + end;
+            int ended = 0;
             while (p < stop) {
                 uint8_t op = rdt[p];
                 uint32_t n = pe_imp_scd_size(game, op);
-                if (!n || p + n > stop) { bad++; break; }
+                if (!n || p + n > stop) { bad += !ended; break; }
                 if (visit) visit(ctx, proc, p, rdt + p, n);
                 p += n;
-                if (op == 1) break;                         /* evt_end */
+                if (op == 1) {                              /* evt_end: the last one unless code follows */
+                    uint32_t q = p;
+                    while (q < stop && !rdt[q]) q++;
+                    if (q == stop) break;                   /* only padding after it */
+                    ended = 1;
+                }
             }
             proc++;
         }
