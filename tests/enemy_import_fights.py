@@ -15,6 +15,7 @@ area and the fight, `mod-action` presses Start fight, `battle-state` reads the b
          trip comes back each time. Prints each fight's enemies (id, HP).
 
 Set PE_TEST_DISC (USA Disc 1); otherwise skipped (77). Every run is headless, in its own folder.
+Use --imported-room with PE_TEST_RE2_DISC to check a battle trip from an imported room.
 """
 import json
 import os
@@ -210,6 +211,37 @@ def part_win(game):
     print(f'win: M030 spot 2 started with {ids}, won, back home at {where}')
 
 
+def part_imported_room(exe, disc, work, re2_disc):
+    def setup(config):
+        folders = config / 'import' / 'folders.txt'
+        folders.parent.mkdir()
+        folders.write_text(f'{re2_disc.parent}\n', encoding='utf-8')
+
+    def room_rows(game):
+        rows = json.loads(game.ask('mod-state pe_re_play'))['rows']
+        return {row['label']: row['value'] for row in rows}
+
+    game = Game(exe, disc, work / 'imported-room', setup=setup,
+                ini='Cheats/God mode=1\nManage mods/Play imported games=1\n', limit=FIELD + 60000)
+    try:
+        game.ask('mod-action Play imported games/Start')
+        before = room_rows(game)
+        check(before['Status'].startswith('Room ') and before['Enemies'] != '-', before)
+        where = game.aya()
+        start_fight(game, 0, 1)
+        check(wait_battle(game) is not None, 'imported room: the native battle did not start')
+        paused = room_rows(game)
+        check(paused['Status'].startswith('Paused for battle.') and paused['Enemies'] == '-', paused)
+        win_when_ready(game)
+        wait_home(game)
+        check_home(game, where, 'imported room')
+        after = room_rows(game)
+        check(after['Status'] == before['Status'] and after['Enemies'] == before['Enemies'], (before, after))
+        print('imported room: native battle started, won, and returned to the same imported room and pose')
+    finally:
+        game.quit()
+
+
 def escape(game, limit=12000):
     """Battle menu, Down three times (Escape from Battle), Cross; again until it works.
     Only with Aya's time bar full: before that the menu holds just Use Item and Change Weapon, so
@@ -327,7 +359,13 @@ def main():
         return 77
     work.mkdir(parents=True, exist_ok=True)
     try:
-        if '--all' in sys.argv:
+        if '--imported-room' in sys.argv:
+            re2_disc = os.getenv('PE_TEST_RE2_DISC')
+            if not re2_disc or not Path(re2_disc).is_file():
+                print('PE_TEST_RE2_DISC is not set: skipped')
+                return 77
+            part_imported_room(exe, disc, work, Path(re2_disc).resolve())
+        elif '--all' in sys.argv:
             only = None   # --only AREA:FIGHT,... reruns some fights
             if '--only' in sys.argv:
                 only = {tuple(int(v) for v in item.split(':'))

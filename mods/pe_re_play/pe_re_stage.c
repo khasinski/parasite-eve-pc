@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <psyz/video.h>
 
 #include "pe_re_stage.h"
 #include "pe_re_session.h"
@@ -43,6 +44,10 @@
 #define RE_PERSON_HEIGHT 3037.0  /* an RE2 person, standing, in room units (Leon's mesh, the model audit) */
 #define PE_AYA_BANK 10           /* her day-1 bundle: the model measured for her height */
 #define AYA_ROOM_RADIUS 280
+#define FIELD_MESH_TRIANGLES 1024
+#define FIELD_IDLE_KIND 0x1f
+#define FIELD_IDLE_MOVE 0
+#define FIELD_TURN_RADIANS (6.283185307179586 / 4096.0)
 
 typedef struct RoomMaskPacket {
     RenderTexturedQuad quad[2];
@@ -61,6 +66,22 @@ static int s_shade = 128, s_curtain, s_hold;           /* a door's fade: picture
 static uint16_t *s_original_picture;
 static RoomMaskPacket *s_masks;
 static size_t s_mask_count;
+static int s_placement_markers;
+static int s_placement_meshes;
+static int s_placement_idle;
+static PeReEnemyPlacement s_placements[PE_RE_ENEMIES_MAX];
+static int s_placement_count;
+static RenderColorTrianglePacket s_marker_packets[2][PE_RE_ENEMIES_MAX][2];
+static RenderColorTrianglePacket s_placeholder_packets[2][PE_RE_ENEMIES_MAX][2];
+static RenderColorTrianglePacket s_mesh_packets[2][PE_RE_ENEMIES_MAX][FIELD_MESH_TRIANGLES];
+static struct {
+    PeImpModel model;
+    int tried;
+    int64_t foot_y;
+    unsigned first_page, first_palette;
+    int16_t *idle;
+    unsigned idle_frames, fps;
+} s_field_mesh[0x40];
 
 static struct {
     GteMatrix view;
@@ -372,6 +393,271 @@ static void link_quad(RenderNativeTag *entry, RenderTexturedQuad *quad) {
     entry->address = (uintptr_t)quad;
 }
 
+static int project_field_point(double x, double y, double z, double screen[3]) {
+    const double relative[] = {x - s_camera.eye[0], y - s_camera.eye[1], z - s_camera.eye[2]};
+    double view[3] = {0};
+    for (int row = 0; row < 3; row++)
+        for (int col = 0; col < 3; col++)
+            view[row] += s_camera.view.m[row][col] * relative[col] / 4096.0;
+    const double depth = view[2] / (4 * RE_UNITS_PER_PE_UNIT);
+    if (depth < 1 || depth >= ROOM_BACKGROUND_OT) return 0;
+    screen[0] = PIC_W / 2 + s_camera.distance * view[0] / view[2];
+    screen[1] = FIELD_H / 2 + s_camera.distance * view[1] / view[2];
+    screen[2] = depth;
+    return fabs(screen[0]) < 1024 && fabs(screen[1]) < 1024;
+}
+
+static void free_field_mesh(unsigned kind) {
+    pe_imp_model_free(&s_field_mesh[kind].model);
+    free(s_field_mesh[kind].idle);
+    memset(&s_field_mesh[kind], 0, sizeof s_field_mesh[kind]);
+}
+
+static void load_field_idle(unsigned kind, const PeImpModel *model) {
+    if (kind != FIELD_IDLE_KIND) return;
+    for (uint32_t b = 0; b < model->bones; b++)
+        if (model->parent[b] >= (int)b || (b != 0 && model->parent[b] < 0)) return;
+    for (uint32_t p = 0; p < model->parts && p < model->bones; p++)
+        if (model->part[p].tri_skin || model->part[p].quad_skin) return;
+    char id[PE_IMP_ID_MAX], why[160];
+    PeImpAnimation animation = {0};
+    snprintf(id, sizeof id, "re2:enemy/em%02x/moves", kind);
+    if (pe_imp_catalog_animation(s_store, id, &animation, why, sizeof why)) return;
+    if (animation.bones == model->bones && animation.moves > FIELD_IDLE_MOVE) {
+        PeImpMove *idle = &animation.move[FIELD_IDLE_MOVE];
+        s_field_mesh[kind].idle = idle->data;
+        s_field_mesh[kind].idle_frames = idle->frames;
+        s_field_mesh[kind].fps = animation.fps;
+        idle->data = NULL;
+    }
+    pe_imp_animation_free(&animation);
+}
+
+static void load_field_meshes(void) {
+    int wanted[0x40] = {0};
+    if (s_placement_meshes) {
+        for (int i = 0; i < s_placement_count; i++)
+            if (s_placements[i].kind < 0x40) wanted[s_placements[i].kind] = 1;
+    }
+    for (unsigned kind = 0; kind < 0x40; kind++) {
+        PeImpModel *model = &s_field_mesh[kind].model;
+        if (!wanted[kind]) {
+            if (s_field_mesh[kind].tried) free_field_mesh(kind);
+            continue;
+        }
+        if (s_field_mesh[kind].tried) continue;
+        s_field_mesh[kind].tried = 1;
+        char id[PE_IMP_ID_MAX], why[160] = "";
+        snprintf(id, sizeof id, "re2:enemy/em%02x", kind);
+        if (pe_imp_catalog_model(s_store, id, model, why, sizeof why)) continue;
+        int64_t foot = INT64_MIN;
+        unsigned first_page = 16, first_palette = 512;
+        for (uint32_t b = 0; b < model->parts && b < model->bones; b++) {
+            const PeImpPart *part = &model->part[b];
+            for (int quad = 0; quad < 2; quad++) {
+                const PeImpFace *faces = quad ? part->quad : part->tri;
+                const uint32_t count = quad ? part->quads : part->tris;
+                const int offset = (quad ? part->quad_skin : part->tri_skin) ? 0 : model->pos[b][1];
+                for (uint32_t i = 0; i < count; i++) {
+                    const unsigned page = faces[i].page & 15u, palette = faces[i].clut >> 6;
+                    if (page < first_page) first_page = page;
+                    if (palette < first_palette) first_palette = palette;
+                    for (int v = 0; v < 3 + quad; v++) {
+                        const int64_t y = (int64_t)faces[i].v[v][1] + offset;
+                        if (y > foot) foot = y;
+                    }
+                }
+            }
+        }
+        s_field_mesh[kind].foot_y = foot == INT64_MIN ? 0 : foot;
+        s_field_mesh[kind].first_page = first_page;
+        s_field_mesh[kind].first_palette = first_palette;
+        load_field_idle(kind, model);
+    }
+}
+
+static int on_import_published(void *ctx, void *user) {
+    (void)ctx;
+    (void)user;
+    /* Placements are independent of imported models. Replace the renderer's cache only. */
+    for (unsigned kind = 0; kind < 0x40; kind++)
+        if (s_field_mesh[kind].tried) free_field_mesh(kind);
+    if (s_placement_meshes) load_field_meshes();
+    return 0;
+}
+
+typedef struct FieldBonePose {
+    double r[3][3], t[3];
+} FieldBonePose;
+
+static void idle_pose(const PeImpModel *model, const int16_t *frame, const int16_t *first, FieldBonePose *pose) {
+    for (uint32_t b = 0; b < model->bones; b++) {
+        const int16_t *angle = frame + 3 + 3 * b;
+        const double sx = sin(angle[0] * FIELD_TURN_RADIANS), cx = cos(angle[0] * FIELD_TURN_RADIANS);
+        const double sy = sin(angle[1] * FIELD_TURN_RADIANS), cy = cos(angle[1] * FIELD_TURN_RADIANS);
+        const double sz = sin(angle[2] * FIELD_TURN_RADIANS), cz = cos(angle[2] * FIELD_TURN_RADIANS);
+        const double rotation[3][3] = {
+            {cy * cz, -cy * sz, sy},
+            {sx * sy * cz + cx * sz, cx * cz - sx * sy * sz, -sx * cy},
+            {sx * sz - cx * sy * cz, cx * sy * sz + sx * cz, cx * cy}
+        };
+        for (int r = 0; r < 3; r++) {
+            if (b == 0) {
+                memcpy(pose[b].r[r], rotation[r], sizeof rotation[r]);
+                /* The placement already supplies the root's position. Keep only its idle motion. */
+                pose[b].t[r] = model->pos[0][r] + (double)frame[r] - first[r];
+                continue;
+            }
+            const FieldBonePose *parent = &pose[model->parent[b]];
+            pose[b].t[r] = parent->t[r];
+            for (int c = 0; c < 3; c++) {
+                pose[b].t[r] += parent->r[r][c] * model->rel[b][c];
+                pose[b].r[r][c] = parent->r[r][0] * rotation[0][c] + parent->r[r][1] * rotation[1][c] +
+                                  parent->r[r][2] * rotation[2][c];
+            }
+        }
+    }
+}
+
+static unsigned face_colour(const PeImpModel *model, const PeImpFace *face, const int corners[3],
+                            unsigned first_page, unsigned first_palette) {
+    unsigned sum[3] = {0}, pixels = 0;
+    const unsigned page = (face->page & 15u) - first_page, palette = (face->clut >> 6) - first_palette;
+    if (palette >= model->pal_rows) return 0;
+    for (int i = 0; i < 3; i++) {
+        const unsigned u = face->uv[corners[i]][0] + 128u * page;
+        const unsigned v = face->uv[corners[i]][1];
+        if (u >= model->w || v >= model->h) continue;
+        const unsigned pixel = model->pal[palette][model->image[v * model->w + u]];
+        if (!pixel) continue;
+        for (int c = 0; c < 3; c++) sum[c] += (pixel >> (5 * c)) & 31;
+        pixels++;
+    }
+    if (!pixels) return 0;
+    return 0x10000u | (sum[0] / pixels) | (sum[1] / pixels) << 5 | (sum[2] / pixels) << 10;
+}
+
+static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned shade) {
+    static const int split[2][3] = {{0, 1, 2}, {1, 3, 2}};
+    const uint64_t vblanks = (uint32_t)Psyz_VideoVSync(-1);
+    for (int i = 0; i < s_placement_count; i++) {
+        const PeReEnemyPlacement *p = &s_placements[i];
+        if (p->kind >= 0x40) continue;
+        const PeImpModel *model = &s_field_mesh[p->kind].model;
+        const double foot = (double)s_field_mesh[p->kind].foot_y;
+        const double angle = pe_re_facing_of(p->dir) * FIELD_TURN_RADIANS;
+        const double cs = cos(angle), sn = sin(angle);
+        FieldBonePose pose[PE_IMP_MODEL_BONES_MAX];
+        const int16_t *idle = s_field_mesh[p->kind].idle;
+        const unsigned frames = s_field_mesh[p->kind].idle_frames;
+        const int animated = s_placement_idle && idle && frames;
+        if (animated) {
+            const unsigned frame = (vblanks * s_field_mesh[p->kind].fps / 60 + 7u * p->slot) % frames;
+            idle_pose(model, idle + frame * (3u + 3u * model->bones), idle, pose);
+        }
+        int emitted = 0;
+        for (uint32_t b = 0; b < model->parts && b < model->bones; b++) {
+            const PeImpPart *part = &model->part[b];
+            static const int32_t zero[3] = {0};
+            for (int quad = 0; quad < 2; quad++) {
+                const PeImpFace *faces = quad ? part->quad : part->tri;
+                const uint32_t count = quad ? part->quads : part->tris;
+                const int32_t *offset = (quad ? part->quad_skin : part->tri_skin) ? zero : model->pos[b];
+                for (uint32_t j = 0; j < count && emitted < FIELD_MESH_TRIANGLES; j++) {
+                    const PeImpFace *f = &faces[j];
+                    double screen[4][3];
+                    int visible = 0;
+                    for (int k = 0; k < 3 + quad; k++) {
+                        double mesh[3];
+                        for (int a = 0; a < 3; a++)
+                            mesh[a] = animated ? pose[b].t[a] + pose[b].r[a][0] * f->v[k][0] +
+                                      pose[b].r[a][1] * f->v[k][1] + pose[b].r[a][2] * f->v[k][2] :
+                                      (double)f->v[k][a] + offset[a];
+                        const double x = mesh[0], z = mesh[2];
+                        if (project_field_point(p->x + cs * x + sn * z, p->y - foot + mesh[1],
+                                                p->z - sn * x + cs * z, screen[k])) visible |= 1 << k;
+                    }
+                    for (int t = 0; t <= quad && emitted < FIELD_MESH_TRIANGLES; t++) {
+                        const int *v = split[t];
+                        if ((visible & (t ? 14 : 7)) != (t ? 14 : 7)) continue;
+                        const unsigned rgb = face_colour(model, f, v, s_field_mesh[p->kind].first_page,
+                                                         s_field_mesh[p->kind].first_palette);
+                        if (!rgb) continue;
+                        const double *a = screen[v[0]], *d = screen[v[1]], *c = screen[v[2]];
+                        if ((a[0] < 0 && d[0] < 0 && c[0] < 0) || (a[0] >= PIC_W && d[0] >= PIC_W && c[0] >= PIC_W) ||
+                            (a[1] < 0 && d[1] < 0 && c[1] < 0) || (a[1] >= FIELD_H && d[1] >= FIELD_H && c[1] >= FIELD_H)) continue;
+                        const int depth = (int)((a[2] + d[2] + c[2]) / 3);
+                        const int bucket = depth <= FIELD_UI_OT_LAST ? FIELD_UI_OT_LAST + 1 : depth;
+                        RenderColorTrianglePacket *packet = &s_mesh_packets[slot][i][emitted++];
+                        *packet = (RenderColorTrianglePacket){
+                            .color.bytes = {(rgb & 31) * 8 * shade / 128, ((rgb >> 5) & 31) * 8 * shade / 128,
+                                            ((rgb >> 10) & 31) * 8 * shade / 128, 0x20},
+                            .x0 = (uint16_t)(int)lround(a[0]), .y0 = (uint16_t)(int)lround(a[1]),
+                            .x1 = (uint16_t)(int)lround(d[0]), .y1 = (uint16_t)(int)lround(d[1]),
+                            .x2 = (uint16_t)(int)lround(c[0]), .y2 = (uint16_t)(int)lround(c[1])
+                        };
+                        packet->tag.length = 4;
+                        packet->tag.address = ordering[bucket].address;
+                        ordering[bucket].address = (uintptr_t)packet;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* Project a placement with the same fixed camera and ordering depth as the field actors. */
+static void link_field_triangle(RenderNativeTag *entry, RenderColorTrianglePacket *packet) {
+    packet->tag.length = 4;
+    packet->tag.address = entry->address;
+    entry->address = (uintptr_t)packet;
+}
+
+static void draw_placement_markers(RenderNativeTag *ordering, int slot, unsigned shade) {
+    for (int i = 0; i < s_placement_count; i++) {
+        const PeReEnemyPlacement *p = &s_placements[i];
+        if (p->kind >= 0x40) continue;     /* people are outside encounter placement testing */
+        double screen[3];
+        if (!project_field_point(p->x, p->y, p->z, screen)) continue;
+        const double x = screen[0], y = screen[1], depth = screen[2];
+        if (x < 5 || x >= PIC_W - 5 || y < 5 || y >= FIELD_H - 5) continue;
+        const int sx = (int)lround(x), sy = (int)lround(y);
+        const int bucket = depth <= FIELD_UI_OT_LAST ? FIELD_UI_OT_LAST + 1 : (int)depth;
+        if (s_placement_meshes && !s_field_mesh[p->kind].model.parts) {
+            double head[3];
+            if (project_field_point(p->x, p->y - 2000, p->z, head)) {
+                const int height = (int)lround(y - head[1]);
+                if (height > 4) {
+                    const int width = height < 64 ? 3 + height / 5 : 15;
+                    RenderColorTrianglePacket *body = s_placeholder_packets[slot][i];
+                    body[0] = (RenderColorTrianglePacket){
+                        .color.bytes = {240 * shade / 128, 160 * shade / 128, 48 * shade / 128, 0x20},
+                        .x0 = sx, .y0 = sy - height, .x1 = sx - width, .y1 = sy - height / 2,
+                        .x2 = sx + width, .y2 = sy - height / 2
+                    };
+                    body[1] = body[0];
+                    body[1].color.bytes.r /= 2;
+                    body[1].color.bytes.g /= 2;
+                    body[1].y0 = sy;
+                    link_field_triangle(&ordering[bucket], &body[0]);
+                    link_field_triangle(&ordering[bucket], &body[1]);
+                }
+            }
+        }
+        if (!s_placement_markers) continue;
+        RenderColorTrianglePacket *top = &s_marker_packets[slot][i][0];
+        RenderColorTrianglePacket *bottom = &s_marker_packets[slot][i][1];
+        *top = (RenderColorTrianglePacket){
+            .color.bytes = {255 * shade / 128, 40 * shade / 128, 195 * shade / 128, 0x20},
+            .x0 = sx - 5, .y0 = sy, .x1 = sx, .y1 = sy - 4, .x2 = sx + 5, .y2 = sy
+        };
+        *bottom = *top;
+        bottom->y1 = sy + 4;
+        link_field_triangle(&ordering[bucket], bottom);
+        link_field_triangle(&ordering[bucket], top);
+    }
+}
+
 static int on_background(void *ctx, void *user) {
     (void)user;
     PeHookFieldBackground *b = ctx;
@@ -386,6 +672,8 @@ static int on_background(void *ctx, void *user) {
     for (int k = 0; k < 2; k++) quads[k].color.bytes.r = quads[k].color.bytes.g = quads[k].color.bytes.b = shade;
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[0]);
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[1]);
+    if (s_placement_meshes && !s_hold) draw_placement_meshes(ordering, b->slot, shade);
+    if ((s_placement_markers || s_placement_meshes) && !s_hold) draw_placement_markers(ordering, b->slot, shade);
     if (s_foreground)
         for (size_t i = 0; i < s_mask_count; i++) {
             RenderTexturedQuad *m = &s_masks[i].quad[b->slot];
@@ -430,6 +718,18 @@ void pe_re_stage_hide(void) {
 }
 
 int pe_re_stage_active(void) { return s_show && s_walk.active; }
+void pe_re_stage_set_placement_markers(int on) { s_placement_markers = on; }
+void pe_re_stage_set_placement_idle(int on) { s_placement_idle = on; }
+void pe_re_stage_set_placement_meshes(int on) {
+    if (s_placement_meshes == on) return;
+    s_placement_meshes = on;
+    load_field_meshes();
+}
+void pe_re_stage_set_placements(const PeReEnemyPlacement *placements, int count) {
+    s_placement_count = count;
+    if (count) memcpy(s_placements, placements, (size_t)count * sizeof *placements);
+    if (s_placement_meshes) load_field_meshes();
+}
 void pe_re_stage_player(double *x, double *z, int *facing) { *x = s_walk.x, *z = s_walk.z, *facing = s_walk.yaw; }
 int pe_re_stage_floor(void) { return s_walk.floor; }
 
@@ -477,10 +777,13 @@ void pe_re_stage_init(const char *mod_id, const char *store) {
     pe_hook_add(PE_HOOK_FIELD_CAMERA, on_camera, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FIELD_MOVE, on_move, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_SCENE_START, on_scene, NULL, PE_PRIORITY_LATE, mod_id);
+    pe_hook_add(pe_event_id(PE_EVENT_IMPORT_PUBLISHED), on_import_published, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
 
 void pe_re_stage_shutdown(void) {
     s_show = s_walk.active = 0;
+    for (unsigned kind = 0; kind < 0x40; kind++)
+        if (s_field_mesh[kind].tried) free_field_mesh(kind);
     free_masks();
     free(s_original_picture);
     s_original_picture = NULL;

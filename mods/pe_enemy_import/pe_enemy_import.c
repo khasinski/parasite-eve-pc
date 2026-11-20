@@ -21,6 +21,7 @@
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_services.h"
 #include "pe1/asset_table.h"
 #include "pe1/battle_runtime.h"
 #include "pe1/field_actor.h"
@@ -120,7 +121,7 @@ static int s_area, s_pick, s_enemy, s_enemy_count, s_room_enemies;
 static const char *const k_counts[] = {"1", "2", "3"};
 static const char *const k_room_enemies[] = {"Fight too", "Sent away"};
 static struct {
-    int state, fight, frames, travel, same_room, live_enemies, saw_enemies;
+    int state, fight, frames, travel, same_room, live_enemies, saw_enemies, imported_room_paused;
     unsigned origin, target;
     int x, z, yaw;
     uintptr_t roll_next;   /* the forced roll's PeHookScriptRandom.next */
@@ -232,12 +233,28 @@ static void pe_finish(const char *result) {
            k_fights[s.fight].spot, result);
 }
 
+static const PeRePlayApi *pe_imported_room_api(void) {
+    const PeRePlayApi *api = pe_service_get("re_play", 1);
+    return api && api->struct_size >= sizeof *api && api->pause_for_battle &&
+           api->resume_after_battle ? api : NULL;
+}
+
+static void pe_end_trip(void) {
+    pe_enemy_battle_disarm();
+    if (s.imported_room_paused) {
+        const PeRePlayApi *api = pe_imported_room_api();
+        if (api) api->resume_after_battle();
+        s.imported_room_paused = 0;
+    }
+    s.state = PE_IDLE;
+}
+
 /* Fight over (or never started): put the script variables back and go home. */
 static void pe_go_home(void) {
     memcpy(g_ScriptVariableBank, s.vars, sizeof s.vars);
     if (s.same_room) {
         pe_place(s.x, s.z, s.yaw);
-        s.state = PE_IDLE;
+        pe_end_trip();
         pe_toast("Fights: back where you were");
         return;
     }
@@ -279,9 +296,20 @@ static void pe_leave(void) {
     const PeFight *f = &k_fights[s.fight];
     if (!pe_field_ready()) return;
     if (g_ScriptVariableBank[PE_VAR_BATTLE_FLAGS] & PE_SKIP_BATTLES) {
-        s.state = PE_IDLE;
+        pe_end_trip();
         pe_toast("Fights: turn off Combat > No random battles first");
         return;
+    }
+    const PeRePlayApi *api = pe_imported_room_api();
+    if (api) {
+        const int paused = api->pause_for_battle();
+        if (paused < 0) {
+            pe_finish("the imported room is busy");
+            pe_end_trip();
+            pe_toast("Fights: finish the current room action, then try again");
+            return;
+        }
+        s.imported_room_paused = paused > 0;
     }
     memcpy(s.vars, g_ScriptVariableBank, sizeof s.vars);
     s.origin = (unsigned)g_SceneDispatchToken;
@@ -309,7 +337,7 @@ static void pe_step(void) {
     if (s.state == PE_IDLE) return;
     if (!pe_save_loaded() || (unsigned)g_SceneDispatchToken == PE_TOKEN_TITLE) {   /* Game Over, the title */
         if (s.state >= PE_FIGHT) pe_finish("lost (Game Over)");
-        s.state = PE_IDLE;
+        pe_end_trip();
         return;
     }
     switch (s.state) {
@@ -321,7 +349,7 @@ static void pe_step(void) {
             pe_finish("the room never left Aya free");
             pe_toast("Fights: that room didn't let Aya go free; going back");
             if (pe_field_ready()) pe_go_home();
-            else { memcpy(g_ScriptVariableBank, s.vars, sizeof s.vars); s.state = PE_IDLE; }
+            else { memcpy(g_ScriptVariableBank, s.vars, sizeof s.vars); pe_end_trip(); }
             break;
         }
         if (!pe_field_ready() || (unsigned)g_SceneDispatchToken != s.target) { s.frames = 0; break; }
@@ -349,7 +377,7 @@ static void pe_step(void) {
         if (!pe_field_ready() || (unsigned)g_SceneDispatchToken != s.origin) { s.frames = 0; break; }
         if (++s.frames >= PE_SETTLE_FRAMES / 3) {
             pe_place(s.x, s.z, s.yaw);
-            s.state = PE_IDLE;
+            pe_end_trip();
             pe_toast("Fights: back where you were");
         }
         break;
@@ -389,14 +417,14 @@ static int pe_on_drawn(void *ctx, void *user) {
     (void)ctx; (void)user;
     if (s.state != PE_IDLE && ((unsigned)g_SceneDispatchToken == PE_TOKEN_TITLE || !pe_save_loaded())) {
         pe_finish(s.state >= PE_FIGHT ? "lost (Game Over)" : "the game ended");
-        s.state = PE_IDLE;
+        pe_end_trip();
     }
     return 0;
 }
 
 static int pe_on_new_game(void *ctx, void *user) {
     (void)ctx; (void)user;
-    s.state = PE_IDLE;
+    pe_end_trip();
     return 0;
 }
 

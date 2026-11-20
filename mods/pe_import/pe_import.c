@@ -672,6 +672,7 @@ static void publish(void) {
     }
     SDL_SetAtomicInt(&s_state, 0);
     refresh();
+    pe_event_emit(pe_event_id(PE_EVENT_IMPORT_PUBLISHED), NULL);
 }
 
 /* Main thread, whenever it can: hand finished results to the Wardrobe, take a picked folder.

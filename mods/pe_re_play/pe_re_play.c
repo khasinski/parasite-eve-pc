@@ -84,6 +84,10 @@ static void say(const char *text) {
  * the placement list changes; an encounter mod decides what to do with it. */
 static PeReEnemyPlacement s_enemies[PE_RE_ENEMIES_MAX];
 static int s_nenemies, s_room_reported;
+static int s_battle_paused;
+static int s_placement_markers;
+static int s_placement_meshes;
+static int s_placement_idle = 1;
 static int s_room_event = -1, s_enemies_event = -1;
 
 static int api_room(PeReRoomEvent *out) {
@@ -102,7 +106,11 @@ static int api_defeated(uint8_t killed_flag) {
     }
     return -1;
 }
-static const PeRePlayApi s_api = {sizeof s_api, api_room, api_defeated};
+static int pause_for_battle(void);
+static void resume_after_battle(void);
+static const PeRePlayApi s_api = {
+    sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle
+};
 
 static void report_enemies(void) {
     PeReEnemyPlacement placements[PE_RE_ENEMIES_MAX];
@@ -111,6 +119,7 @@ static void report_enemies(void) {
     if (!fresh && n == s_nenemies && pe_re_enemy_lists_equal(s_enemies, placements, n)) return;
     memcpy(s_enemies, placements, (size_t)n * sizeof *placements);
     s_nenemies = n, s_room_reported = 1;
+    pe_re_stage_set_placements(s_enemies, n);
     PeReRoomEvent e;
     if (api_room(&e)) return;
     e.fresh = fresh;
@@ -138,6 +147,25 @@ enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE };
 enum { TYPE_NONE, TYPE_OPEN, TYPE_SCREEN };
 static int s_typing, s_typed;
 static int s_pick, s_pick_at;
+
+static int pause_for_battle(void) {
+    if (!s_playing) return 0;
+    if (s_battle_paused || !pe_re_stage_active() || !pe_free_field() ||
+        pe_re_door_busy() || pe_re_box_busy() || s_typing != TYPE_NONE) return -1;
+    pe_re_stage_player(&s_session.x, &s_session.z, &s_session.facing);
+    s_session.floor = pe_re_stage_floor();
+    s_battle_paused = 1;
+    pe_re_stage_hide();
+    snprintf(s_status, sizeof s_status, "Paused for battle.");
+    return 1;
+}
+
+static void resume_after_battle(void) {
+    if (!s_battle_paused) return;
+    s_battle_paused = 0;
+    s_cross_held = s_square_held = 1;
+    s_session.key = s_session.key_trg = 0;
+}
 static int on_committed(void *ctx, void *user) {   /* a card save was written: a typewriter's counts */
     (void)ctx, (void)user;
     if (s_typing == TYPE_SCREEN) s_typed = 1;
@@ -269,16 +297,20 @@ static int keep_progress(void) {
 static void stop(void) {
     pe_re_door_cancel();
     pe_re_box_forget();
+    s_typing = TYPE_NONE;
     if (s_session.game && keep_progress()) pe_re_save_encode(&s_session, 0, s_saved);   /* for Continue */
     if (s_playing) pe_re_stage_hide();
     pe_re_session_end(&s_session);
     s_playing = 0;
     s_room_reported = 0;
+    pe_re_stage_set_placements(NULL, 0);
+    s_battle_paused = 0;
     snprintf(s_status, sizeof s_status, "Not playing.");
 }
 
 static void start(void) {
     char why[200] = "";
+    if (s_battle_paused) return;
     list_games();
     stop();
     if (s_pick >= s_offers) { snprintf(s_status, sizeof s_status, "Import a game first (F1 > Import)."); return; }
@@ -301,6 +333,7 @@ static void start(void) {
 static void resume(void) {
     PeReSaved saved;
     char why[200] = "";
+    if (s_battle_paused) return;
     s_resume = 0;
     if (pe_re_save_decode(s_saved, &saved) || !saved.game) {
         snprintf(s_status, sizeof s_status, "Nothing to continue in this save.");
@@ -327,6 +360,9 @@ static int on_save_read(void *ctx, void *user) {
     PeReSaved saved;
     (void)ctx, (void)user;
     pe_re_door_cancel();
+    s_battle_paused = 0;
+    s_typing = TYPE_NONE;
+    pe_re_stage_set_placements(NULL, 0);
     if (s_playing) {                            /* the loaded save replaces what was being played */
         pe_re_box_forget();
         pe_re_stage_hide();
@@ -350,7 +386,7 @@ static int on_new_game(void *ctx, void *user) {    /* the host has cleared the s
 static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
     if (s_resume && !s_playing && pe_free_field()) resume();
-    if (!s_playing) return 0;
+    if (!s_playing || s_battle_paused) return 0;
     if (s_typing == TYPE_OPEN && pe_re_stage_active() && !pe_re_box_busy() && pe_free_field()) {
         if (s_enabled) pe_re_save_encode(&s_session, 1, s_saved);   /* the ribbon already used */
         Render_BeginSceneLoad();                 /* what the save phones' opcode does (Script_OpenMemCardDialog) */
@@ -379,6 +415,9 @@ static int on_frame(void *ctx, void *user) {
     if (!pe_re_box_busy()) g_FieldPadPressed &= ~FIELD_PRESS_CROSS;
     pe_re_stage_set_masks(s_masks);
     pe_re_stage_set_size(s_size);
+    pe_re_stage_set_placement_markers(s_placement_markers);
+    pe_re_stage_set_placement_meshes(s_placement_meshes);
+    pe_re_stage_set_placement_idle(s_placement_idle);
     if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */
         const unsigned buttons = ~(unsigned)g_PadPackets[0].buttons;
         s_cross_held = (buttons & PAD_CROSS) != 0;
@@ -424,6 +463,7 @@ static int on_frame(void *ctx, void *user) {
     case PE_RE_CAMERA: show_room(1); break;
     case PE_RE_ROOM:                             /* the door's transition puts the next room up at black */
         s_room_reported = 0;
+        pe_re_stage_set_placements(NULL, 0);
         pe_re_door_begin(s_session.game->game, &s_session.door);
         snprintf(s_status, sizeof s_status, "Through the door to %x-%02X.%s%s", (unsigned)s_session.stage + 1,
                  (unsigned)s_session.room, s_session.said[0] ? " " : "", s_session.said);
@@ -451,6 +491,7 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
     int front = 0;
     double bx = 0, bz = 0;
     int found = 0;
+    if (s_battle_paused) return;
     if (!s_playing || !pe_imp_logic_section(s_session.logic, tag, &n, NULL)) {
         snprintf(s_status, sizeof s_status, "This room has no %ss.", what);
         return;
@@ -518,7 +559,7 @@ static void give_use_here(void) {           /* the item the last place to use on
     else snprintf(s_status, sizeof s_status, "Given the %s: press Square to use it.", name);
 }
 static void to_ramp(void) {
-    if (!s_playing) return;
+    if (!s_playing || s_battle_paused) return;
     if (!pe_re_stage_to_ramp()) { snprintf(s_status, sizeof s_status, "This room has no slopes or stairs."); return; }
     pe_re_stage_player(&s_session.x, &s_session.z, &s_session.facing);
     s_session.floor = pe_re_stage_floor();
@@ -526,6 +567,7 @@ static void to_ramp(void) {
 }
 static void to_room(void) {
     char why[200] = "";
+    if (s_battle_paused) return;
     if (!s_playing) { snprintf(s_status, sizeof s_status, "Start a game first."); return; }
     if (pe_re_session_enter(&s_session, s_store, (uint32_t)(s_jump_stage - 1), (uint32_t)s_jump_room, 0, 0, 0, 0, why,
                             sizeof why)) {
@@ -534,6 +576,7 @@ static void to_room(void) {
     }
     pe_re_door_cancel();
     s_room_reported = 0;
+    pe_re_stage_set_placements(NULL, 0);
     show_room(0);
 }
 
@@ -580,6 +623,9 @@ static int init(void) {
     pe_menu_register_action(0, "Start", "Starts in the game's first room. Walk with the pad; Cross in a doorway goes through.", start);
     pe_menu_register_action(0, "Continue", "Back where you left this save's imported game.", resume);
     pe_menu_register_action(0, "Stop", "Back to the Parasite Eve room and camera; Continue picks it up again.", stop);
+    pe_menu_register_toggle("Testing", "Placement markers", "Mark enemy positions using the room camera.", &s_placement_markers, NULL);
+    pe_menu_register_toggle("Testing", "Placement meshes", "Draw imported enemy meshes at their placements.", &s_placement_meshes, NULL);
+    pe_menu_register_toggle("Testing", "Placement idle animation", "Animate supported placement meshes in place.", &s_placement_idle, NULL);
     pe_menu_register_action("Testing", "Go to the next door", "Puts Aya in the room's doorways, one after another.", to_door);
     pe_menu_register_action("Testing", "Go to the next pickup", "Puts Aya on the room's items, one after another.", to_pickup);
     pe_menu_register_action("Testing", "Go to the next ramp", "Puts Aya at the foot of the room's slopes and stairs, one after another.", to_ramp);

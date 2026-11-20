@@ -31,6 +31,9 @@ typedef struct PeBattleActionPolicyApi { int (*partial_actions)(void); } PeBattl
 #include <stddef.h>
 #include <stdint.h>
 
+/* No payload. The importer has finished publishing its catalog changes on the main thread. */
+#define PE_EVENT_IMPORT_PUBLISHED "import.published"
+
 /* assets v1 and audio v1. Preview handles address imported catalog data by stable
  * source ID. Call on the main thread and release each acquired reference once.
  * list_sounds does catalog I/O and belongs in a menu or setup action.
@@ -408,6 +411,11 @@ typedef struct PeRePlayApi {
     /* Set a currently placed enemy's killed flag. The next room update reflects the defeat.
      * 0 on success, or -1 if the room or flag is unavailable or the flag is 0xFF. */
     int (*defeated)(uint8_t killed_flag);
+    /* Optional in v1. Pause the imported room for a native battle trip. Returns 1 when
+     * paused, 0 with no running imported room, or -1 if the room is busy. */
+    int (*pause_for_battle)(void);
+    /* Release the pause. The imported room returns on the next free field frame. */
+    void (*resume_after_battle)(void);
 } PeRePlayApi;
 
 /* ---- "bp" v1 (pe_bp, BP Overhaul preview): what the game's Bonus Points buy ----

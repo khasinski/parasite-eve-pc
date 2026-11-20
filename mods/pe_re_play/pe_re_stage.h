@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "pe_imp_logic.h"
+#include "pe_services.h"
 
 void pe_re_stage_init(const char *mod_id, const char *store);
 /* Show room `room_id` ("re2:room/100") from `camera`, collision of `floor` from `logic`. `place`:
@@ -23,6 +24,10 @@ void pe_re_stage_place(double x, double z);        /* move the player (testing) 
 void pe_re_stage_face(int facing);                 /* turn her (testing; 0 faces -z) */
 int pe_re_stage_blocked(double x, double z);       /* a wall at (x, z) on her floor (testing) */
 void pe_re_stage_set_masks(int on);
+void pe_re_stage_set_placement_markers(int on);
+void pe_re_stage_set_placement_meshes(int on);
+void pe_re_stage_set_placement_idle(int on);
+void pe_re_stage_set_placements(const PeReEnemyPlacement *placements, int count);
 /* A door's transition: the picture's brightness (128 full, 0 black), a black curtain in front of
  * everything (Aya too), and no walking while `hold`. */
 void pe_re_stage_fade(int shade, int curtain, int hold);
