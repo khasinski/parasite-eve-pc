@@ -8,7 +8,7 @@ set(pe_default_mods pe_qol pe_rebalance pe_economy pe_rewards pe_catalog pe_shop
 if(NOT PE_PS5_GAME)
     list(PREPEND pe_default_mods pe_assets)
     list(REMOVE_ITEM pe_default_mods pe_import)
-    list(APPEND pe_default_mods pe_src_ff7 pe_import pe_lang pe_fonts pe_enemy_import pe_rooms)   # pe_enemy_import: F1 > Fights; pe_rooms: RE rooms (prototype); desktop only
+    list(APPEND pe_default_mods pe_src_ff7 pe_import pe_lang pe_fonts pe_enemy_import pe_re_play)   # pe_enemy_import: F1 > Fights; pe_re_play: play imported games (room runtime); desktop only
 endif()
 set(PE_MOD_LIST ${pe_default_mods} CACHE STRING "Mods built into the game (folder names)")
 
@@ -379,6 +379,12 @@ if(BUILD_TESTING)
     # The fit layer on made-up models (no disc): people, refusals with reasons, what each use drops.
     pe_feature_test(fit ${PROJECT_SOURCE_DIR}/tests/pe_mod_fit_test.c ${pe_import_core_sources})
     target_include_directories(test-mod-fit PRIVATE host/import)
+    # The play session (pe_re_play): zones, cameras and doors on a made-up room; with PE_TEST_RE2_DISC,
+    # RE2's rooms walked door by door from the street.
+    pe_feature_test(re-session ${PROJECT_SOURCE_DIR}/tests/pe_mod_re_session_test.c ${pe_import_core_sources}
+        pe_re_play/pe_re_session.c pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2_pld.c)
+    target_include_directories(test-mod-re-session PRIVATE host/import pe_src_re2 pe_re_play)
+    set_tests_properties(mod-re-session PROPERTIES TIMEOUT 600)
     # Model audit (not pass/fail): every Model on PE_TEST_RE1/2/3_DISC checked and measured into a CSV
     # (PE_AUDIT_OUT), to plan the model clean-up layer. Run by hand: build test-mod-model-audit, run it.
     pe_feature_test(model-audit ${PROJECT_SOURCE_DIR}/tests/pe_model_audit.c ${pe_import_core_sources}
