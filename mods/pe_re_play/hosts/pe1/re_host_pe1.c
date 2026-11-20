@@ -1,0 +1,82 @@
+#include "../../re_host.h"
+#include "pe_re_box.h"
+#include "pe_re_stage.h"
+
+#include "pe_game.h"
+#include "pe_mod_host.h"
+#include "pe1/field_movement.h"
+#include "pe1/game_state.h"
+#include "pe1/menu_dialog.h"
+#include "pe1/pad_state.h"
+#include "pe1/scene_transition.h"
+
+static void init(const char *mod_id, const char *store) {
+    pe_re_stage_init(mod_id, store);
+    pe_re_box_init(mod_id);
+}
+
+static uint16_t held_buttons(void) {
+    const uint16_t raw = (uint16_t)~g_PadPackets[0].buttons;
+    return (uint16_t)((raw & 0xffu) << 8 | raw >> 8);
+}
+
+static void consume_native_interact(void) {
+    g_FieldPadPressed &= ~0x0100u;
+}
+
+static void open_save_screen(void) {
+    Render_BeginSceneLoad();
+    Menu_OpenStartupMemCardDialog();
+    g_GameState.flags |= 0x9000;
+    g_GameStateFlags |= 4;
+}
+
+static int native_menu_active(void) {
+    return (g_GameState.flags & 0x9000) != 0;
+}
+
+static void bind_lifecycle(const char *mod_id, ReHostCallback frame, ReHostCallback save_read,
+                           ReHostCallback new_game) {
+    pe_hook_add(PE_HOOK_FRAME, frame, NULL, PE_PRIORITY_NORMAL, mod_id);
+    pe_hook_add(PE_HOOK_SAVE_READ, save_read, NULL, PE_PRIORITY_NORMAL, mod_id);
+    pe_hook_add(PE_HOOK_NEW_GAME, new_game, NULL, PE_PRIORITY_NORMAL, mod_id);
+}
+
+const ReHost *re_host(void) {
+    static const ReHost host = {
+        .struct_size = sizeof host,
+        .init = init,
+        .shutdown = pe_re_stage_shutdown,
+        .show_room = pe_re_stage_show,
+        .hide_room = pe_re_stage_hide,
+        .room_active = pe_re_stage_active,
+        .room_fade = pe_re_stage_fade,
+        .player_pose = pe_re_stage_player,
+        .player_floor = pe_re_stage_floor,
+        .place_player = pe_re_stage_place,
+        .face_player = pe_re_stage_face,
+        .position_blocked = pe_re_stage_blocked,
+        .place_at_ramp = pe_re_stage_to_ramp,
+        .set_masks = pe_re_stage_set_masks,
+        .set_player_size = pe_re_stage_set_size,
+        .player_scale = pe_re_stage_scale,
+        .set_placement_markers = pe_re_stage_set_placement_markers,
+        .set_placement_meshes = pe_re_stage_set_placement_meshes,
+        .set_placement_idle = pe_re_stage_set_placement_idle,
+        .set_placements = pe_re_stage_set_placements,
+        .say = pe_re_box_say,
+        .choose = pe_re_box_choose,
+        .dialogue_choice = pe_re_box_choice,
+        .dialogue_busy = pe_re_box_busy,
+        .forget_dialogue = pe_re_box_forget,
+        .field_free = pe_free_field,
+        .held_buttons = held_buttons,
+        .consume_native_interact = consume_native_interact,
+        .open_save_screen = open_save_screen,
+        .native_menu_active = native_menu_active,
+        .arm_backdrop = pe_re_stage_backdrop_arm,
+        .release_backdrop = pe_re_stage_backdrop_release,
+        .bind_lifecycle = bind_lifecycle,
+    };
+    return &host;
+}

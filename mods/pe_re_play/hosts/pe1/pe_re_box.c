@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "pe_re_box.h"
+#include "../../re_host.h"
 
 #include "pe_game.h"
 #include "pe_gametext.h"
@@ -39,7 +40,7 @@ static int s_pages, s_at = -1, s_locked, s_taken, s_fresh;
 static TextboxEntry *s_box;
 static u32 s_pressed, s_bits;
 static int s_choosing, s_count, s_cur, s_result = -1;
-static char s_title[48], s_labels[PE_RE_BOX_CHOICES][41];
+static char s_title[48], s_labels[RE_HOST_DIALOGUE_CHOICES][41];
 static u16 s_raw, s_raw_new;                 /* the pad as PS1 reads it (active high), new presses */
 #define RAW_RIGHT 0x0020u
 #define RAW_LEFT 0x0080u
@@ -155,7 +156,7 @@ static void compose(void) {
 int pe_re_box_choose(const char *title, const char *const labels[], int n, int at) {
     if (!font_ready() || n <= 0) return 0;
     close_box();
-    s_count = n > PE_RE_BOX_CHOICES ? PE_RE_BOX_CHOICES : n;
+    s_count = n > RE_HOST_DIALOGUE_CHOICES ? RE_HOST_DIALOGUE_CHOICES : n;
     s_cur = at >= 0 && at < s_count ? at : 0;
     snprintf(s_title, sizeof s_title, "%s", title);
     for (int i = 0; i < s_count; i++) snprintf(s_labels[i], sizeof s_labels[i], "%s", labels[i]);

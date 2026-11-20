@@ -137,6 +137,12 @@ set(pe_mod_refs "")
 foreach(mod IN LISTS pe_enabled_mods)
     file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${mod}/*.c)
     list(APPEND pe_mod_sources ${mod_files})
+    if(mod STREQUAL "pe_re_play")
+        list(APPEND pe_mod_sources
+            pe_re_play/hosts/pe1/re_host_pe1.c
+            pe_re_play/hosts/pe1/pe_re_stage.c
+            pe_re_play/hosts/pe1/pe_re_box.c)
+    endif()
     string(APPEND pe_mod_decls "extern const PeMod pe_mod_${mod};\n")
     string(APPEND pe_mod_refs "    &pe_mod_${mod},\n")
 endforeach()

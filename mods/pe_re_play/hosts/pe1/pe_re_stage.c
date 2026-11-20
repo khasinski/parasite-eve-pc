@@ -12,7 +12,7 @@
 #include <psyz/video.h>
 
 #include "pe_re_stage.h"
-#include "pe_re_session.h"
+#include "../../pe_re_session.h"
 #include "pe_re_box.h"
 
 #include "pe_imp.h"

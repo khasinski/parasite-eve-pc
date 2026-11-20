@@ -4,7 +4,7 @@
 
 #include "pe_re_door.h"
 #include "pe_re_session.h"
-#include "pe_re_stage.h"
+#include "re_host.h"
 #include "pe_mod_host.h"
 #include "pe_services.h"
 
@@ -34,7 +34,7 @@ void pe_re_door_begin(const char *game, const PeImpDoor *door) {
         s_wave[i] = a->acquire_sound(id);
     }
     s_frame = 0;
-    pe_re_stage_fade(128, 0, 1);
+    re_host()->room_fade(128, 0, 1);
 }
 
 static void play(int i) {
@@ -55,17 +55,17 @@ PeReDoorStep pe_re_door_step(void) {
     if (s_frame < 0) return PE_RE_DOOR_IDLE;
     const int f = s_frame++;
     if (f < FADE_OUT) {
-        pe_re_stage_fade(128 - 128 * (f + 1) / FADE_OUT, 0, 1);
+        re_host()->room_fade(128 - 128 * (f + 1) / FADE_OUT, 0, 1);
         return PE_RE_DOOR_RUNNING;
     }
     if (f < FADE_OUT + HOLD) {
-        pe_re_stage_fade(0, 1, 1);
+        re_host()->room_fade(0, 1, 1);
         if (f - FADE_OUT < CLOSE_AT) play(0);              /* waits for it to be ready, a little */
         else play(1);
         return f == FADE_OUT ? PE_RE_DOOR_SWAP : PE_RE_DOOR_RUNNING;
     }
     if (f < FADE_OUT + HOLD + FADE_IN) {
-        pe_re_stage_fade(128 * (f - FADE_OUT - HOLD + 1) / FADE_IN, 0, 1);
+        re_host()->room_fade(128 * (f - FADE_OUT - HOLD + 1) / FADE_IN, 0, 1);
         return PE_RE_DOOR_RUNNING;
     }
     pe_re_door_cancel();
@@ -77,5 +77,5 @@ int pe_re_door_busy(void) { return s_frame >= 0; }
 void pe_re_door_cancel(void) {
     s_frame = -1;
     release();
-    pe_re_stage_fade(128, 0, 0);
+    re_host()->room_fade(128, 0, 0);
 }

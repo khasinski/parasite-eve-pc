@@ -25,25 +25,14 @@
 
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
-#include "pe_hooks.h"
-#include "pe1/battle_update.h"
-#include "pe1/pad_state.h"
-#include "pe1/game_state.h"
-#include "pe1/game_state_types.h"
-#include "pe1/scene_transition.h"
-#include "pe1/menu_dialog.h"
 #include "pe_extension_store.h"
-#include "pe_game.h"
-#include "pe_re_box.h"
 #include "pe_re_door.h"
 #include "pe_re_save.h"
 #include "pe_re_session.h"
-#include "pe_re_stage.h"
+#include "re_host.h"
 
 #define MOD_ID "pe_re_play"
 #define PAGE "Play imported games"
-#define PAD_CROSS 0x4000u                 /* PS1 pad word, active high once inverted */
-#define FIELD_PRESS_CROSS 0x0100u         /* g_FieldPadPressed: Cross (the field's talk / examine) */
 
 static char s_store[1100];
 static const PeReGame *s_offer[PE_RE_GAMES];
@@ -76,7 +65,7 @@ static const char *game_name(unsigned i) {
 
 /* In the game's dialogue band; a toast if no box can be had (the font not loaded yet). */
 static void say(const char *text) {
-    if (!pe_re_box_say(text)) pe_toast(text);
+    if (!re_host()->say(text)) pe_toast(text);
 }
 
 /* ---- enemies: reported, not fought here ("re_play" in pe_services.h) ----
@@ -91,7 +80,7 @@ static int s_placement_idle = 1;
 static int s_room_event = -1, s_enemies_event = -1;
 
 static int api_room(PeReRoomEvent *out) {
-    if (!out || !s_playing || !s_room_reported || !pe_re_stage_active() || pe_re_door_busy()) return -1;
+    if (!out || !s_playing || !s_room_reported || !re_host()->room_active() || pe_re_door_busy()) return -1;
     memset(out, 0, sizeof *out);
     out->struct_size = sizeof *out;
     out->game = s_session.game->game, out->stage = s_session.stage, out->room = s_session.room;
@@ -99,7 +88,7 @@ static int api_room(PeReRoomEvent *out) {
     return 0;
 }
 static int api_defeated(uint8_t killed_flag) {
-    if (!s_playing || !s_room_reported || !pe_re_stage_active() || pe_re_door_busy()) return -1;
+    if (!s_playing || !s_room_reported || !re_host()->room_active() || pe_re_door_busy()) return -1;
     for (int i = 0; i < s_nenemies; i++) {
         if (s_enemies[i].killed_flag == killed_flag)
             return pe_re_session_defeated(&s_session, killed_flag);
@@ -119,7 +108,7 @@ static void report_enemies(void) {
     if (!fresh && n == s_nenemies && pe_re_enemy_lists_equal(s_enemies, placements, n)) return;
     memcpy(s_enemies, placements, (size_t)n * sizeof *placements);
     s_nenemies = n, s_room_reported = 1;
-    pe_re_stage_set_placements(s_enemies, n);
+    re_host()->set_placements(s_enemies, n);
     PeReRoomEvent e;
     if (api_room(&e)) return;
     e.fresh = fresh;
@@ -138,8 +127,7 @@ static void text_enemies(char *out, unsigned size) {
         at += snprintf(out + at, size - (unsigned)at, " 0x%02X", s_enemies[i].kind);
 }
 
-/* ---- the pocket and the item box, in the band (pe_re_box_choose) ---- */
-#define PAD_SQUARE 0x8000u                /* raw pad: Square opens the pocket to use something */
+/* ---- the pocket and the item box ---- */
 enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE };
 /* A typewriter save: the ribbon is used when she says yes; PE's own save screen opens on the next
  * free frame (as its save phones' script opcode opens it); backing out without a save gives the
@@ -150,13 +138,13 @@ static int s_pick, s_pick_at;
 
 static int pause_for_battle(void) {
     if (!s_playing) return 0;
-    if (s_battle_paused || !pe_re_stage_active() || !pe_free_field() ||
-        pe_re_door_busy() || pe_re_box_busy() || s_typing != TYPE_NONE) return -1;
-    pe_re_stage_player(&s_session.x, &s_session.z, &s_session.facing);
-    s_session.floor = pe_re_stage_floor();
+    if (s_battle_paused || !re_host()->room_active() || !re_host()->field_free() ||
+        pe_re_door_busy() || re_host()->dialogue_busy() || s_typing != TYPE_NONE) return -1;
+    re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
+    s_session.floor = re_host()->player_floor();
     s_battle_paused = 1;
-    pe_re_stage_backdrop_arm();                  /* the battle plays in front of this room */
-    pe_re_stage_hide();
+    re_host()->arm_backdrop();                  /* the battle plays in front of this room */
+    re_host()->hide_room();
     snprintf(s_status, sizeof s_status, "Paused for battle.");
     return 1;
 }
@@ -164,7 +152,7 @@ static int pause_for_battle(void) {
 static void resume_after_battle(void) {
     if (!s_battle_paused) return;
     s_battle_paused = 0;
-    pe_re_stage_backdrop_release();
+    re_host()->release_backdrop();
     s_cross_held = s_square_held = 1;
     s_session.key = s_session.key_trg = 0;
 }
@@ -174,8 +162,8 @@ static int on_committed(void *ctx, void *user) {   /* a card save was written: a
     return 0;
 }
 static uint16_t s_use_here;                       /* testing: the item the last place to use one takes */
-static uint16_t s_pick_item[PE_RE_BOX_CHOICES];
-static int s_pick_slot[PE_RE_BOX_CHOICES];        /* pocket slot, or -1 - box slot */
+static uint16_t s_pick_item[RE_HOST_DIALOGUE_CHOICES];
+static int s_pick_slot[RE_HOST_DIALOGUE_CHOICES];        /* pocket slot, or -1 - box slot */
 
 static void held_label(const PeReHeld *h, const char *verb, char *out, size_t n) {
     char name[48];
@@ -185,33 +173,33 @@ static void held_label(const PeReHeld *h, const char *verb, char *out, size_t n)
 }
 
 static void open_pocket(void) {
-    static char text[PE_RE_BOX_CHOICES][41];
-    const char *labels[PE_RE_BOX_CHOICES];
+    static char text[RE_HOST_DIALOGUE_CHOICES][41];
+    const char *labels[RE_HOST_DIALOGUE_CHOICES];
     const PeReProgress *p = &s_session.progress;
     int n = 0;
-    for (int i = 0; i < p->held && n < PE_RE_BOX_CHOICES; i++, n++) {
+    for (int i = 0; i < p->held && n < RE_HOST_DIALOGUE_CHOICES; i++, n++) {
         held_label(&p->pocket[i], "", text[n], sizeof text[n]);
         labels[n] = text[n], s_pick_item[n] = p->pocket[i].item, s_pick_slot[n] = i;
     }
     if (!n) { say("You aren't carrying anything."); return; }
-    if (pe_re_box_choose("Use which item?", labels, n, 0)) s_pick = PICK_USE;
+    if (re_host()->choose("Use which item?", labels, n, 0)) s_pick = PICK_USE;
 }
 
 static void open_item_box(int at) {
-    static char text[PE_RE_BOX_CHOICES][41];
-    const char *labels[PE_RE_BOX_CHOICES];
+    static char text[RE_HOST_DIALOGUE_CHOICES][41];
+    const char *labels[RE_HOST_DIALOGUE_CHOICES];
     const PeReProgress *p = &s_session.progress;
     int n = 0;
-    for (int i = 0; i < p->held && n < PE_RE_BOX_CHOICES; i++, n++) {
+    for (int i = 0; i < p->held && n < RE_HOST_DIALOGUE_CHOICES; i++, n++) {
         held_label(&p->pocket[i], "Put in: ", text[n], sizeof text[n]);
         labels[n] = text[n], s_pick_slot[n] = i;
     }
-    for (int i = 0; i < p->boxed && n < PE_RE_BOX_CHOICES; i++, n++) {
+    for (int i = 0; i < p->boxed && n < RE_HOST_DIALOGUE_CHOICES; i++, n++) {
         held_label(&p->box[i], "Take out: ", text[n], sizeof text[n]);
         labels[n] = text[n], s_pick_slot[n] = -1 - i;
     }
     if (!n) { say("The item box is empty, and so are your pockets."); s_pick = PICK_NONE; return; }
-    s_pick = pe_re_box_choose("Item box", labels, n, at < n ? at : n - 1) ? PICK_BOX : PICK_NONE;
+    s_pick = re_host()->choose("Item box", labels, n, at < n ? at : n - 1) ? PICK_BOX : PICK_NONE;
 }
 
 /* a zone the session hands over: the pocket, an item box, a typewriter */
@@ -223,7 +211,7 @@ static void zone_handed(void) {
         static const char *const yes_no[2] = {"Yes", "No"};
         if (!pe_re_has(&s_session.progress, PE_RE2_INK_RIBBON))
             say("There's a typewriter. With an Ink Ribbon you could record your progress.");
-        else if (pe_re_box_choose("Use an Ink Ribbon to save?", yes_no, 2, 0))
+        else if (re_host()->choose("Use an Ink Ribbon to save?", yes_no, 2, 0))
             s_pick = PICK_SAVE;
         break;
     }
@@ -234,7 +222,7 @@ static void zone_handed(void) {
 
 /* a choice made in the band */
 static void picked(void) {
-    const int c = pe_re_box_choice();
+    const int c = re_host()->dialogue_choice();
     if (c == -1 || s_pick == PICK_NONE) return;
     const int mode = s_pick;
     s_pick = PICK_NONE;
@@ -262,16 +250,16 @@ static void picked(void) {
 static void show_room(int place) {
     char room[PE_IMP_ID_MAX], why[200] = "";
     pe_re_room_id(s_session.game->game, s_session.stage, s_session.room, room, sizeof room);
-    if (pe_re_stage_show(room, s_session.logic, s_session.camera, s_session.floor, place, s_session.x, s_session.z,
+    if (re_host()->show_room(room, s_session.logic, s_session.camera, s_session.floor, place, s_session.x, s_session.z,
                          s_session.facing, why, sizeof why)) {
         snprintf(s_status, sizeof s_status, "Stopped: %s.", why);
         pe_re_door_cancel();
-        pe_re_stage_hide();
+        re_host()->hide_room();
         pe_re_session_end(&s_session);
         s_playing = 0;
         return;
     }
-    pe_re_stage_player(&s_session.x, &s_session.z, &s_session.facing);
+    re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
     snprintf(s_status, sizeof s_status, "Room %x-%02X, camera %d.", (unsigned)s_session.stage + 1,
              (unsigned)s_session.room, s_session.camera);
 }
@@ -280,7 +268,7 @@ static void show_room(int place) {
 static void show_cut(void) {
     char room[PE_IMP_ID_MAX], why[200] = "";
     pe_re_room_id(s_session.game->game, s_session.stage, s_session.room, room, sizeof room);
-    if (pe_re_stage_show(room, s_session.logic, s_session.camera, s_session.floor, 1, s_session.x, s_session.z,
+    if (re_host()->show_room(room, s_session.logic, s_session.camera, s_session.floor, 1, s_session.x, s_session.z,
                          s_session.facing, why, sizeof why)) {
         pe_mod_log(MOD_ID, "cut to camera %d: %s", s_session.camera, why);
         s_session.camera = s_session.run.camera = s_session.run.camera_old;
@@ -288,7 +276,7 @@ static void show_cut(void) {
         show_room(1);
         return;
     }
-    pe_re_stage_player(&s_session.x, &s_session.z, &s_session.facing);
+    re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
 }
 
 static int keep_progress(void) {
@@ -298,16 +286,16 @@ static int keep_progress(void) {
 
 static void stop(void) {
     pe_re_door_cancel();
-    pe_re_box_forget();
+    re_host()->forget_dialogue();
     s_typing = TYPE_NONE;
     if (s_session.game && keep_progress()) pe_re_save_encode(&s_session, 0, s_saved);   /* for Continue */
-    if (s_playing) pe_re_stage_hide();
+    if (s_playing) re_host()->hide_room();
     pe_re_session_end(&s_session);
     s_playing = 0;
     s_room_reported = 0;
-    pe_re_stage_set_placements(NULL, 0);
+    re_host()->set_placements(NULL, 0);
     s_battle_paused = 0;
-    pe_re_stage_backdrop_release();
+    re_host()->release_backdrop();
     snprintf(s_status, sizeof s_status, "Not playing.");
 }
 
@@ -327,8 +315,8 @@ static void start(void) {
     }
     s_playing = 1, s_cross_held = 1;           /* the Cross that chose Start isn't a door press */
     if (!keep_progress()) pe_toast("Progress in this game won't be saved: the save's companion has no room.");
-    pe_re_stage_set_masks(s_masks);
-    pe_re_stage_set_size(s_size);
+    re_host()->set_masks(s_masks);
+    re_host()->set_player_size(s_size);
     show_room(0);
 }
 
@@ -353,8 +341,8 @@ static void resume(void) {
     }
     s_playing = 1, s_cross_held = 1;
     keep_progress();
-    pe_re_stage_set_masks(s_masks);
-    pe_re_stage_set_size(s_size);
+    re_host()->set_masks(s_masks);
+    re_host()->set_player_size(s_size);
     show_room(1);
 }
 
@@ -364,12 +352,12 @@ static int on_save_read(void *ctx, void *user) {
     (void)ctx, (void)user;
     pe_re_door_cancel();
     s_battle_paused = 0;
-    pe_re_stage_backdrop_release();
+    re_host()->release_backdrop();
     s_typing = TYPE_NONE;
-    pe_re_stage_set_placements(NULL, 0);
+    re_host()->set_placements(NULL, 0);
     if (s_playing) {                            /* the loaded save replaces what was being played */
-        pe_re_box_forget();
-        pe_re_stage_hide();
+        re_host()->forget_dialogue();
+        re_host()->hide_room();
         pe_re_session_end(&s_session);
         s_playing = 0;
     }
@@ -389,43 +377,40 @@ static int on_new_game(void *ctx, void *user) {    /* the host has cleared the s
 
 static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
-    if (s_resume && !s_playing && pe_free_field()) resume();
+    if (s_resume && !s_playing && re_host()->field_free()) resume();
     if (!s_playing || s_battle_paused) return 0;
-    if (s_typing == TYPE_OPEN && pe_re_stage_active() && !pe_re_box_busy() && pe_free_field()) {
+    if (s_typing == TYPE_OPEN && re_host()->room_active() && !re_host()->dialogue_busy() && re_host()->field_free()) {
         if (s_enabled) pe_re_save_encode(&s_session, 1, s_saved);   /* the ribbon already used */
-        Render_BeginSceneLoad();                 /* what the save phones' opcode does (Script_OpenMemCardDialog) */
-        Menu_OpenStartupMemCardDialog();
-        g_GameState.flags |= 0x9000;
-        g_GameStateFlags |= 4;
+        re_host()->open_save_screen();
         s_typing = TYPE_SCREEN;
         pe_mod_log("pe_re_play", "typewriter: save screen");
         return 0;
     }
-    if (s_typing == TYPE_SCREEN && pe_re_stage_active() && pe_free_field() && !(g_GameState.flags & 0x9000)) {
+    if (s_typing == TYPE_SCREEN && re_host()->room_active() && re_host()->field_free() && !re_host()->native_menu_active()) {
         if (!s_typed) pe_re_give(&s_session.progress, PE_RE2_INK_RIBBON, 1);   /* backed out: not used */
         snprintf(s_status, sizeof s_status, s_typed ? "Saved at the typewriter." : "Not saved.");
         s_typing = TYPE_NONE;
     }
-    if (g_GameState.flags & 0x9000) return 0;    /* PE's own menu (the save screen) has the pad */
-    if (!pe_re_stage_active()) {                /* PE loaded a room of its own: it's only the shell */
-        pe_re_box_forget();
-        if (!pe_free_field()) return 0;         /* once it has settled, the imported room again */
+    if (re_host()->native_menu_active()) return 0;    /* PE's own menu (the save screen) has the pad */
+    if (!re_host()->room_active()) {                /* PE loaded a room of its own: it's only the shell */
+        re_host()->forget_dialogue();
+        if (!re_host()->field_free()) return 0;         /* once it has settled, the imported room again */
         s_reshown++;
         show_room(1);
         return 0;
     }
     /* The room underneath never hears Cross (no talk, no examine). While a message box is up it's the
      * box's: it takes the pad itself (pe_re_box.c) and turns its pages with that Cross. */
-    if (!pe_re_box_busy()) g_FieldPadPressed &= ~FIELD_PRESS_CROSS;
-    pe_re_stage_set_masks(s_masks);
-    pe_re_stage_set_size(s_size);
-    pe_re_stage_set_placement_markers(s_placement_markers);
-    pe_re_stage_set_placement_meshes(s_placement_meshes);
-    pe_re_stage_set_placement_idle(s_placement_idle);
+    if (!re_host()->dialogue_busy()) re_host()->consume_native_interact();
+    re_host()->set_masks(s_masks);
+    re_host()->set_player_size(s_size);
+    re_host()->set_placement_markers(s_placement_markers);
+    re_host()->set_placement_meshes(s_placement_meshes);
+    re_host()->set_placement_idle(s_placement_idle);
     if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */
-        const unsigned buttons = ~(unsigned)g_PadPackets[0].buttons;
-        s_cross_held = (buttons & PAD_CROSS) != 0;
-        s_square_held = (buttons & PAD_SQUARE) != 0;
+        const unsigned buttons = re_host()->held_buttons();
+        s_cross_held = (buttons & RE_HOST_CROSS) != 0;
+        s_square_held = (buttons & RE_HOST_SQUARE) != 0;
         const PeReDoorStep door_step = pe_re_door_step();
         if (door_step == PE_RE_DOOR_SWAP) {
             show_room(1);
@@ -435,10 +420,9 @@ static int on_frame(void *ctx, void *user) {
         if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
         return 0;
     }
-    s_session.talking = pe_re_box_busy;
+    s_session.talking = re_host()->dialogue_busy;
     {   /* the scripts' key checks: the pad in the game's key bits (none while a box has it) */
-        const uint16_t raw = (uint16_t)~g_PadPackets[0].buttons;
-        const uint16_t pad = pe_re_box_busy() ? 0 : (uint16_t)((raw & 0xFFu) << 8 | raw >> 8);   /* libetc order */
+        const uint16_t pad = re_host()->dialogue_busy() ? 0 : re_host()->held_buttons();
         const uint32_t key = pe_re_scd_keys(pad);
         s_session.key_trg = key & ~s_session.key;
         s_session.key = key;
@@ -451,23 +435,23 @@ static int on_frame(void *ctx, void *user) {
     default: break;
     }
     {   /* Square: the pocket, to use something here */
-        const int square = (~(unsigned)g_PadPackets[0].buttons & PAD_SQUARE) != 0;
-        if (square && !s_square_held && !pe_re_box_busy()) open_pocket();
+        const int square = (re_host()->held_buttons() & RE_HOST_SQUARE) != 0;
+        if (square && !s_square_held && !re_host()->dialogue_busy()) open_pocket();
         s_square_held = square;
     }
-    const int cross = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;
-    const int pressed = cross && !s_cross_held && !pe_re_box_busy();   /* a box's Cross is the box's */
+    const int cross = (re_host()->held_buttons() & RE_HOST_CROSS) != 0;
+    const int pressed = cross && !s_cross_held && !re_host()->dialogue_busy();   /* a box's Cross is the box's */
     s_cross_held = cross;
     double x, z;
     int facing;
     char why[200] = "";
-    pe_re_stage_player(&x, &z, &facing);
-    s_session.facing = facing, s_session.floor = pe_re_stage_floor();
+    re_host()->player_pose(&x, &z, &facing);
+    s_session.facing = facing, s_session.floor = re_host()->player_floor();
     switch (pe_re_session_step(&s_session, s_store, x, z, pressed, why, sizeof why)) {
     case PE_RE_CAMERA: show_room(1); break;
     case PE_RE_ROOM:                             /* the door's transition puts the next room up at black */
         s_room_reported = 0;
-        pe_re_stage_set_placements(NULL, 0);
+        re_host()->set_placements(NULL, 0);
         pe_re_door_begin(s_session.game->game, &s_session.door);
         snprintf(s_status, sizeof s_status, "Through the door to %x-%02X.%s%s", (unsigned)s_session.stage + 1,
                  (unsigned)s_session.room, s_session.said[0] ? " " : "", s_session.said);
@@ -533,12 +517,12 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
         double sx, sz;
         for (int k = 0; k < 16; k++) {                    /* the first free spot round it */
             pe_re_front(bx, bz, k * 256 + 2048, &sx, &sz);
-            if (!pe_re_stage_blocked(sx, sz) || k == 15) { face = k * 256; break; }
+            if (!re_host()->position_blocked(sx, sz) || k == 15) { face = k * 256; break; }
         }
         pe_re_front(bx, bz, face + 2048, &bx, &bz);
     }
-    pe_re_stage_place(bx, bz);
-    if (front) pe_re_stage_face(face), s_session.facing = face;
+    re_host()->place_player(bx, bz);
+    if (front) re_host()->face_player(face), s_session.facing = face;
     s_session.x = bx, s_session.z = bz;
     snprintf(s_status, sizeof s_status, "At a %s in room %x-%02X: press Cross.", what, (unsigned)s_session.stage + 1,
              (unsigned)s_session.room);
@@ -564,9 +548,9 @@ static void give_use_here(void) {           /* the item the last place to use on
 }
 static void to_ramp(void) {
     if (!s_playing || s_battle_paused) return;
-    if (!pe_re_stage_to_ramp()) { snprintf(s_status, sizeof s_status, "This room has no slopes or stairs."); return; }
-    pe_re_stage_player(&s_session.x, &s_session.z, &s_session.facing);
-    s_session.floor = pe_re_stage_floor();
+    if (!re_host()->place_at_ramp()) { snprintf(s_status, sizeof s_status, "This room has no slopes or stairs."); return; }
+    re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
+    s_session.floor = re_host()->player_floor();
     snprintf(s_status, sizeof s_status, "At the foot of a slope or stairs: walk onto it.");
 }
 static void to_room(void) {
@@ -580,7 +564,7 @@ static void to_room(void) {
     }
     pe_re_door_cancel();
     s_room_reported = 0;
-    pe_re_stage_set_placements(NULL, 0);
+    re_host()->set_placements(NULL, 0);
     show_room(0);
 }
 
@@ -609,14 +593,13 @@ static void text_pocket(char *out, unsigned size) {
 }
 static void text_status(char *out, unsigned size) {
     if (s_playing) snprintf(out, size, "%s x %.0f, z %.0f, floor %d, doors %d, scale %.1f.", s_status, s_session.x,
-                            s_session.z, s_session.floor, s_session.doors_taken, pe_re_stage_scale());
+                            s_session.z, s_session.floor, s_session.doors_taken, re_host()->player_scale());
     else snprintf(out, size, "%s", s_status);
 }
 
 static int init(void) {
     if (pe_mod_path(s_store, sizeof s_store, "import/store")) return 1;
-    pe_re_stage_init(MOD_ID, s_store);
-    pe_re_box_init(MOD_ID);
+    re_host()->init(MOD_ID, s_store);
     pe_menu_begin(PAGE);
     pe_menu_top_page(PAGE, "Walk the rooms of a game you imported, as Aya.", 63);
     pe_menu_register_dynamic_choice(0, "Game", "A game imported from your own disc (F1 > Import).", &s_pick,
@@ -648,20 +631,18 @@ static int init(void) {
     pe_menu_register_info(0, "Pocket", "What you've picked up in this game.", text_pocket);
     pe_menu_register_info(0, "Scripts", "What this room's own scripts ran when you came in.", text_scripts);
     pe_menu_register_info(0, "Enemies", "Where this room's scripts put enemies: reported to an encounter mod, not fought here.", text_enemies);
-    pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    re_host()->bind_lifecycle(MOD_ID, on_frame, on_save_read, on_new_game);
     s_registered = pe_extension_register(&s_section) >= 0;
     pe_hook_add(pe_event_id(PE_EVENT_SAVE_COMMITTED), on_committed, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     s_room_event = pe_event_id("re_play.room"), s_enemies_event = pe_event_id("re_play.enemies");
     pe_service_publish("re_play", 1, &s_api, MOD_ID);
     if (!s_registered) pe_mod_log(MOD_ID, "progress section not registered: imported games won't be saved");
-    pe_hook_add(PE_HOOK_SAVE_READ, on_save_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);
-    pe_hook_add(PE_HOOK_NEW_GAME, on_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     return 0;
 }
 
 static void shutdown_play(void) {
     stop();
-    pe_re_stage_shutdown();
+    re_host()->shutdown();
 }
 
 const PeMod pe_mod_pe_re_play = {MOD_ID, "Play imported games", "0.1", NULL, init, shutdown_play};
