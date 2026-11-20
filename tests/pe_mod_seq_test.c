@@ -1,4 +1,4 @@
-/* PS1 SEQ + VAB playback (mods/host/import/pe_imp_seq.c).
+/* PS1 SEQ + VAB playback (mods/import/core/pe_imp_seq.c).
  *   made-up   a one-tone bank (a looping square wave) and short sequences: a half-second note
  *             plays for half a second plus its release, then the song ends; a note an octave up
  *             steps twice as fast (half the period); a loop section plays as many times as asked;

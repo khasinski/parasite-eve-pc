@@ -1,4 +1,4 @@
-/* AKAO playback (mods/host/import/pe_imp_akao.c) and FF7's music readers (pe_src_ff7).
+/* AKAO playback (mods/import/core/pe_imp_akao.c) and FF7's music readers (pe_src_ff7).
  *   made-up   a one-instrument bank (a looping square wave, pitch 0x1000 at octave 6) and short
  *             sequences: a quarter note at 120 bpm lasts half a second plus its release; an octave
  *             up steps twice as fast; an endless loop plays as many times as asked

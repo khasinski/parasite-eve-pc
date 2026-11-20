@@ -1,4 +1,4 @@
-/* MDEC frames (mods/host/import/pe_imp_mdec.c) and room backgrounds (the ImageSet type and the
+/* MDEC frames (mods/import/core/pe_imp_mdec.c) and room backgrounds (the ImageSet type and the
  * Resident Evil room readers).
  *   made-up   refused: not a frame, a wrong version, sizes not multiples of 16; an ImageSet
  *             round-trips through the store format, a bad one is refused

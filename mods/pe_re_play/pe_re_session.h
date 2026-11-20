@@ -2,7 +2,7 @@
 #define PE_RE_SESSION_H
 /* A play session in an imported game: which room, which camera, where the player stands, and what
  * the room's zones say about that. Game-neutral and PE-free: it reads only the import store's
- * RoomLogic records (host/import/pe_imp_logic.h), so it runs in tests without the game.
+ * RoomLogic records (import/core/pe_imp_logic.h), so it runs in tests without the game.
  *
  * Coordinates are the source game's floor coordinates (x, z; y down), facing 0..4095 a turn. */
 #include <stddef.h>

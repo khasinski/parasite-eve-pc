@@ -1,4 +1,4 @@
-/* CD-XA streamed audio (mods/host/import/pe_imp_xa.c, pe_src_dc1_music.c).
+/* CD-XA streamed audio (mods/import/core/pe_imp_xa.c, pe_src_dc1_music.c).
  *   made-up   sectors built here: stereo 4-bit (left units +1, right -1 at range 0: +-4096), a
  *             range shift, the first filter carrying the previous sample; mono 18.9 kHz played at
  *             44.1 kHz for 44100 / 18900 times its frames; a stream played twice is twice as long

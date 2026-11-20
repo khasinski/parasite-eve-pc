@@ -1,5 +1,5 @@
 /* RE3's enemies for the importer (mods/pe_src_re3/pe_src_re3_emd.c, pe_src_re3_tones.c, and the
- * PC folder source mods/host/import/pe_imp_rofs.c).
+ * PC folder source mods/import/core/pe_imp_rofs.c).
  *   rofs      made-up archives: packing (literals and a back reference into the starting window),
  *             the encryption, two archives in a folder with a gap opened like a disc image, files
  *             read back plain and packed; a broken archive refused

@@ -279,7 +279,7 @@ typedef struct {
     const char *store;                        /* the store's root */
     /* The game's own data its targets read, from the import mod's host (import_host.h); NULL when
      * the game supplies none. Its type is the game's: PE1 targets get a PeImpPe1Build
-     * (import_targets/pe1/pe_imp_pe.h). */
+     * (import/targets/pe1/pe_imp_pe.h). */
     const void *host;
     const PeImpProgress *progress;            /* may be NULL */
 } PeImpBuild;

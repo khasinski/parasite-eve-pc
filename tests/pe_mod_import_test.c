@@ -1,4 +1,4 @@
-/* Importer core (mods/host/import) and the RE2 player-model reader (mods/pe_src_re2), on made-up
+/* Importer core (mods/import/core) and the RE2 player-model reader (mods/pe_src_re2), on made-up
  * data: SHA-256, the JSON reader, file patterns, a made-up PLD (every truncation and seeded
  * corruptions must be refused cleanly), made-up disc images (cooked .iso, raw .bin behind a .cue)
  * scanned into a store and catalog, and the store round trip.

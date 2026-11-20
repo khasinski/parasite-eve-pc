@@ -1,4 +1,4 @@
-/* RE2/RE3 room logic (mods/host/import/pe_imp_rdt.c).
+/* RE2/RE3 room logic (mods/import/core/pe_imp_rdt.c).
  *   made-up   a room with one script holding a door, a four-point door, an item, a trigger zone and
  *             an enemy, plus two camera switch zones, reads back field for field; a cut-short or
  *             scrambled room is read without leaving its bounds

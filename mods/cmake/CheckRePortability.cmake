@@ -1,7 +1,7 @@
 # Check the portable code without requiring a compiler, Python, or imported discs.
 cmake_minimum_required(VERSION 3.16)
 set(mods "${CMAKE_CURRENT_LIST_DIR}/..")
-file(GLOB_RECURSE importer "${mods}/host/import/*.c" "${mods}/host/import/*.h")
+file(GLOB_RECURSE importer "${mods}/import/core/*.c" "${mods}/import/core/*.h")
 file(GLOB runtime "${mods}/pe_re_play/*.c" "${mods}/pe_re_play/*.h")
 file(GLOB_RECURSE readers "${mods}/pe_src_re[123]/*.c" "${mods}/pe_src_re[123]/*.h")
 # The import mod's menu and job; its adapter is under pe_import/hosts/.

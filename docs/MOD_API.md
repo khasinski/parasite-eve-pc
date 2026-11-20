@@ -159,9 +159,9 @@ with the same paging contract as sounds. A song handle uses the same `status` an
 `PE_SONG_PSX_SEQ_VAB` it includes up to two PlayStation sequences, a VAB instrument
 header, and the associated SPU sample bytes. For `PE_SONG_PSX_XA` (streamed music) the first
 sequence is a 16-byte header and the samples are CD-XA sound groups (render them with
-`mods/host/import/pe_imp_xa.h`). For `PE_SONG_AKAO` (Square's sequences, FF7) the first sequence
+`mods/import/core/pe_imp_xa.h`). For `PE_SONG_AKAO` (Square's sequences, FF7) the first sequence
 is the AKAO block, and the instruments, samples and `sample_base` come from the song's bank
-(render them with `mods/host/import/pe_imp_akao.h`). Music lists leave instrument banks out. Keep the handle while using the view.
+(render them with `mods/import/core/pe_imp_akao.h`). Music lists leave instrument banks out. Keep the handle while using the view.
 This interface serves import tooling and builders.
 
 To play a song, the `audio` v1 table appends `play_song`, `stop_song` and `song_playing`
@@ -170,7 +170,7 @@ returns 1 when the song is playing on its own stream, looping until `stop_song`,
 handle is still loading, and -1 when the song can't be played. The service keeps its own copy,
 so release the handle once `play_song` returns 1. One song plays at a time; a new one replaces
 it. To render a song yourself (offline, or on a platform without the service), use
-`mods/host/import/pe_imp_seq.h`: `pe_imp_seq_open` on the view's main sequence, instruments and
+`mods/import/core/pe_imp_seq.h`: `pe_imp_seq_open` on the view's main sequence, instruments and
 samples, then `pe_imp_seq_render` for 44.1 kHz stereo PCM.
 
 ## F1 menu rows

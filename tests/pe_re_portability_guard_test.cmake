@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.16)
 set(fixture "${CMAKE_CURRENT_BINARY_DIR}/re-portability-guard-fixture")
 file(MAKE_DIRECTORY "${fixture}/cmake" "${fixture}/pe_re_play/hosts/pe1"
-    "${fixture}/host/import" "${fixture}/pe_src_re2" "${fixture}/pe_import/hosts/pe1")
+    "${fixture}/import/core" "${fixture}/pe_src_re2" "${fixture}/pe_import/hosts/pe1")
 configure_file("${guard}" "${fixture}/cmake/CheckRePortability.cmake" COPYONLY)
 set(check "${CMAKE_COMMAND}" -P "${fixture}/cmake/CheckRePortability.cmake")
 
@@ -14,7 +14,7 @@ const char *example = "escaped quote: \" #include <pe1/in_string.h> g_String";
 file(WRITE "${fixture}/pe_re_play/hosts/pe1/fixture.c"
     "#include <pe1/game_state.h>\nint g_PlayerEntity;\n")
 file(WRITE "${fixture}/pe_src_re2/fixture.c" "int g_re2_reader;\n")
-file(WRITE "${fixture}/host/import/fixture.h" "#include <stdint.h>\n")
+file(WRITE "${fixture}/import/core/fixture.h" "#include <stdint.h>\n")
 file(WRITE "${fixture}/pe_import/fixture.c" "#include \"import_host.h\"\n")
 file(WRITE "${fixture}/host/re_play_api.h" "#include <stdint.h>\n")
 file(WRITE "${fixture}/pe_import/hosts/pe1/fixture.c"
@@ -32,7 +32,7 @@ file(APPEND "${fixture}/pe_re_play/fixture.c" [=[
 lude "pe_hooks.h"
 int fixture(void) { return g_PlayerEntity + PE_HOOK_FRAME; }
 ]=])
-file(APPEND "${fixture}/host/import/fixture.h" "extern int g_ImporterEngineGlobal;\n")
+file(APPEND "${fixture}/import/core/fixture.h" "extern int g_ImporterEngineGlobal;\n")
 file(APPEND "${fixture}/pe_src_re2/fixture.c" "extern int g_ReaderEngineGlobal;\n")
 file(APPEND "${fixture}/pe_import/fixture.c" "#include \"pe_imp_pe.h\"\nextern int g_ImportMenuGlobal;\n")
 file(APPEND "${fixture}/host/re_play_api.h" "#include \"pe1/battle_runtime.h\"\n")

@@ -72,7 +72,7 @@ mods/
   pe_src_re2/          import source: Resident Evil 2 (its readers, naming table and rig)
   pe_src_re3/          import source: Resident Evil 3 (its reader, naming table and rig)
   pe_src_dc1/          import source: Dino Crisis (Regina's outfits; its reader, naming table and rig)
-  host/import/         the importer core (disc images, store, catalog, PE formats); see Import below
+  import/core/         the importer core (disc images, store, catalog, PE formats); see Import below
 ```
 
 ## Stacked items (pe_stacks)
@@ -136,7 +136,7 @@ refusals, posing, behavior fields; a real pack with PE_TEST_ENEMY_PACK) and `ene
 attacks, is hurt, dies, the battle is won and the VRAM block given back).
 
 **Built in the game (F1 > Import)**, the same way as costumes: a source game's mod registers
-readers, a naming table and an **enemy profile** (`host/import/pe_imp_enemy.h`: moves for the
+readers, a naming table and an **enemy profile** (`import/core/pe_imp_enemy.h`: moves for the
 roles and attacks, HP, power, reach, height, sounds) for an asset; the `enemies` builder target
 (pe_enemy_build.c, pe_enemy_target.c, "Build as an enemy") turns the catalogued Model, its
 Animation and its Sounds into a pack in `<prefs>/pe_enemies/<game>-<name>/` (targets may now name
@@ -784,7 +784,7 @@ host/pe_equip_sync.c (a host feature, so it works whichever mods are loaded) rer
 equipment rebuild in free field whenever the equipped gun or armor record changes, so Catalog,
 Tool, Rebuild and editor changes reach the next battle.
 
-## Import (pe_import, pe_src_<game>, host/import)
+## Import (pe_import, pe_src_<game>, import/core)
 
 F1 > Import brings models from the player's other PlayStation games into Parasite Eve, in the game
 itself (PC and PS5, no outside tools). The player only provides the discs: disc images (.cue with
@@ -827,18 +827,18 @@ rooms sharing 42, one catalog entry each; its compact banks are rebuilt as stand
 (the AKAO songs inside the LZS-compressed `FIELD/*.DAT` files and `ENEMY6/*.SND`, 92 across the
 three discs, one entry per song number; they play on the game's own instrument bank, `INSTR.DAT`
 and `INSTR.ALL`, cataloged once as `ff7:bank/instr`). Square's AKAO sequences play through
-`host/import/pe_imp_akao.c` (first-generation AKAO: notes, ties, rests, octaves and the
+`import/core/pe_imp_akao.c` (first-generation AKAO: notes, ties, rests, octaves and the
 instruments' pitch tables, envelopes, loops and jumps, tempo, drum kits; reverb, LFOs and
 overlay voices aren't modelled). `mod-akao` tests it on made-up songs and on FF7 CD1 with
 `PE_TEST_FF7_DISC` (`PE_TEST_AKAO_WAV`). Choose a track and **Play track**: it plays from the game's own
-sequence and instruments, looping until **Stop**. `host/import/pe_imp_seq.c` renders a PS1
+sequence and instruments, looping until **Stop**. `import/core/pe_imp_seq.c` renders a PS1
 sequence (SEQ) on its bank (VAB) to 44.1 kHz stereo: programs and key-split tones, the SPU's
 ADSR envelope, pitch bend, volume, pan and expression, and the sequence's loop marks; reverb
 isn't modelled. Plain C, so the same renderer can prepare tracks offline for in-game use later;
 on PC the audio service (`play_song`, `stop_song`, `song_playing`) pulls it from an SDL stream.
 `mod-seq` tests it on made-up songs, on RE2's MAIN00 with `PE_TEST_RE2_DISC`
 (`PE_TEST_SEQ_WAV` writes what it rendered to a WAV file) and on RE1's 94 with
-`PE_TEST_RE1_DISC`. Streamed tracks play through `host/import/pe_imp_xa.c` (CD-XA ADPCM,
+`PE_TEST_RE1_DISC`. Streamed tracks play through `import/core/pe_imp_xa.c` (CD-XA ADPCM,
 resampled to 44.1 kHz); readers set `xa` to get a file's audio sectors (`pe_imp_disc_xa`,
 raw `.bin` images only). `mod-xa` tests it on made-up sectors and on Dino Crisis's tracks with
 `PE_TEST_DC1_DISC` (`PE_TEST_XA_WAV`).
@@ -862,7 +862,7 @@ import scan. Collision and in-game room placement are separate from this export.
 with `PE_TEST_RE1_DISC`, `PE_TEST_RE2_DISC`, and `PE_TEST_RE3_DISC`.
 Set `PE_TEST_ROOMS_DIR` to write background previews during that test.
 
-**Room logic (RE1, RE2, RE3).** `host/import/pe_imp_rdt.c` reads what happens in a room from its RDT:
+**Room logic (RE1, RE2, RE3).** `import/core/pe_imp_rdt.c` reads what happens in a room from its RDT:
 the doors (zone, where each leads, starting camera, door animation and sound, lock), the trigger
 zones, item pickups and enemy placements declared by the room's scripts, and the camera switch
 zones. It walks the scripts with the games' instruction sizes (from IntelOrca's biohazard-utils,
@@ -875,7 +875,7 @@ instruction set; its event scripts aren't walked yet). `PE_TEST_RDT_ROOM=ROOM106
 doors. Not used by the game yet.
 
 **RoomLogic: the contract for the room runtime.** A scan now also stores each RE room file as a
-**RoomLogic** record (`host/import/pe_imp_logic.h`), cataloged as `<game>:logic/<stage><room>`
+**RoomLogic** record (`import/core/pe_imp_logic.h`), cataloged as `<game>:logic/<stage><room>`
 plus `-<player>` for RE1 and RE2, where Chris/Jill and Leon/Claire have their own scripts (for
 example `re2:logic/105-0`). It holds game-neutral records (doors, trigger zones, item pickups,
 camera zones, enemy placements as their source instruction) and keeps the room's collision,
@@ -910,7 +910,7 @@ script; 83) aren't read.
 that shows imported models, read [docs/IMPORT_MODELS.md](../docs/IMPORT_MODELS.md): readers stay
 faithful, mods never fix models, and each kind of fix has one place (reader, fit layer, builder or a
 data table), measured with the model audit (`test-mod-model-audit`). Mods take models through the fit layer
-(`host/import/pe_imp_fit.c`): `pe_imp_fit(store, id, use, ...)` gives a copy fit for a costume, enemy,
+(`import/core/pe_imp_fit.c`): `pe_imp_fit(store, id, use, ...)` gives a copy fit for a costume, enemy,
 held weapon or prop, or a reason it can't serve; the costume and enemy targets use it.
 
 **Room objects (RE2).** The 3D props an RE2 room places (typewriters, boxes, floor items, swinging
@@ -932,7 +932,7 @@ of a file keeps its own store folder with `path_key`. `mod-rdt` saves and loads 
 damaged one, builds one for every room on the discs (about 0.8 MB for RE1, 1.3 MB for RE2, 1.7 MB
 for RE3), and scans RE2 into a store and reads room 105's doors back through the catalog.
 
-**Door transitions.** Each RE door file becomes a **DoorScene** record (`host/import/pe_imp_door.c`,
+**Door transitions.** Each RE door file becomes a **DoorScene** record (`import/core/pe_imp_door.c`,
 same sectioned container as RoomLogic, `doorscene.bin`), cataloged as `door/<name>` (RE3:
 `door/<stage>-<name>`, as RE3 keeps doors per stage). RE2's `COMMON/DOOR/DOORnn.DO2` holds a sound
 bank (`VAB0`; its samples start 8 bytes after the bank header) and the 3D door scene (`SCN0`:
@@ -957,7 +957,7 @@ the letters of "S.T.A.R.S."; its entries starting 04 are cues, kept as empty str
 (518 / 958 / 1,110 messages with text). RE1's event scripts are kept as stored
 (`SCD2`): they're state machines with nested actor streams, decoded by the runtime's interpreter.
 
-**Items.** Each RE game's item table is an **ItemTable** record (`host/import/pe_imp_items.c`,
+**Items.** Each RE game's item table is an **ItemTable** record (`import/core/pe_imp_items.c`,
 `itemtable.bin`, same container), cataloged as `<game>:items/all` and built when the game's icon
 file is scanned (RE1 `DATA/ITEM_ALL.PIX`, RE2 `COMMON/DATA/ITEMALL.PIX`, RE3 `CD_DATA/ETC/ITEMI.PIX`).
 `NAME` holds each item number with its name (from biohazard-utils' lists, MIT; RE1 75, RE2 124, RE3
@@ -975,7 +975,7 @@ RE2's map pages are still grey: no fixed palette was found, and the map screen r
 state (visited, current), so the colours are probably set by the game's code.
 
 **Movies.** Each RE STR movie (RE1 `ZMOVIE`, RE2 `ZMOVIE` and the player's `PL0`/`PL1` `ZMOVIE`, RE3 `CD_DATA/ZMOVIE`) is
-copied once into the store as a **Movie** (`host/import/pe_imp_movie.c`, `movie.bin`): a frame
+copied once into the store as a **Movie** (`import/core/pe_imp_movie.c`, `movie.bin`): a frame
 index, its MDEC frames (320 x 240 in RE1, 320 x 160 letterboxed in RE2 and RE3; decoded by
 `pe_imp_mdec.c` like the room backgrounds) and its CD-XA sound sectors as stored. That is about
 1 GB for all the discs (RE1 296 MB, RE2 330 MB a disc, RE3 120 MB). The sound needs a raw `.bin`
@@ -984,7 +984,7 @@ image; an `.iso` has none. A reader can ask for a file and its XA sectors togeth
 `mod-rdt` reads a short movie from each disc, saves and loads it, and decodes a frame.
 
 **Files (readable documents).** The file pictures are kept as stored in **Pictures** records
-(`host/import/pe_imp_pictures.c`, `pictures.bin`, the sectioned container; one or more PS1 TIMs, with
+(`import/core/pe_imp_pictures.c`, `pictures.bin`, the sectioned container; one or more PS1 TIMs, with
 a TIM decoder to RGBA for 4-, 8- and 15-bit TIMs): RE1 `ITEM_M2/FILE*.TIM` as `files/<name>` (19),
 RE2 `COMMON/DATA/FILES.TIM` as `files/all` (216 TIMs), RE3 `CD_DATA/ETC/FILEGU.PIX` as `files/all`
 (183). Each document is an 8-bit background followed by its 4-bit text pages (a page may follow the
@@ -1023,12 +1023,12 @@ screen shows as more of the game opens up. `mod-rdt` decodes every map picture.
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 
-- `host/import/`: the core, game-neutral. `pe_imp.h` (disc images, the Model type, readers, rigs,
+- `import/core/`: the core, game-neutral. `pe_imp.h` (disc images, the Model type, readers, rigs,
   targets, store, catalog, packs), `pe_imp_rig.h` (a rig profile). Plain C with stdio; its own JSON
   reader (no cJSON on PS5). Builder targets get the game's own data through `PeImpBuild.host`.
-- `import_targets/pe1/`: Parasite Eve's side, outside the core. `pe_imp_pe.h` (PE's model and row
+- `import/targets/pe1/`: Parasite Eve's side, outside the core. `pe_imp_pe.h` (PE's model and row
   formats, retargeting, the rows rooms install; a PE1 target's `PeImpBuild.host` is a
-  `PeImpPe1Build`). A PE2 port adds `import_targets/pe2/` beside it.
+  `PeImpPe1Build`). A PE2 port adds `import/targets/pe2/` beside it.
 - `pe_import/`: the F1 > Import menu and the automatic import, game-neutral; what they need from
   the game goes through `import_host.h`, whose PE1 adapter is `pe_import/hosts/pe1/`. The build's
   portability check (`mods/cmake/CheckRePortability.cmake`) refuses PE1 headers, globals and hook

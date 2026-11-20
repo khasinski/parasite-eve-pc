@@ -4,7 +4,7 @@ How to make an imported model usable by a mod (costumes, enemies, held weapons, 
 where each kind of fix belongs. Read this before changing a model reader, the costume builder,
 the enemy builder, or any mod that shows imported models.
 
-Baseline: feat/pe-import after the fit layer (see `git log -- mods/host/import/pe_imp_fit.c`). The model audit covered RE1 (Director's Cut Dual
+Baseline: feat/pe-import after the fit layer (see `git log -- mods/import/core/pe_imp_fit.c`). The model audit covered RE1 (Director's Cut Dual
 Shock), RE2 disc 1 and RE3: 2,360 models, none failing to load. Results are in
 `PE_Model_Audit_2026-11-19.md` (kept beside the repo; it lists ids and measurements only).
 
@@ -19,7 +19,7 @@ always versioned, always with a reason when something is refused.
 | The problem | Example | Fix it in |
 |---|---|---|
 | **The reader reads the disc wrong** | a wrong texture/skeleton pairing, a wrong control code, the wrong section | **The reader** (`mods/pe_src_reN/`). Bump the reader's `.version` so stores re-read. Never work around a reading bug downstream. |
-| **The data is true to the game but awkward to use** | placeholder (stub) parts, degenerate faces, faces outside the texture, scale, facing (RE models face −z) | **The fit layer** (`mods/host/import/pe_imp_fit.c`, see below). Applied per use, on a copy. |
+| **The data is true to the game but awkward to use** | placeholder (stub) parts, degenerate faces, faces outside the texture, scale, facing (RE models face −z) | **The fit layer** (`mods/import/core/pe_imp_fit.c`, see below). Applied per use, on a copy. |
 | **One consumer can't take it** | a costume texture holds 2 pages and 16 colours per group; the costume builder is rigid-only | **That consumer's builder** (`pe_wardrobe/pe_skin_build.c`, `pe_enemy_import/`). Convert it, or refuse with a reason. |
 | **One asset needs a person's call** | "this 15-bone model isn't a person", a height or name override | **A data table** in the game module, like the naming tables (`g_re2_naming`, `pe_imp_set_naming`). Not code. |
 
@@ -74,7 +74,7 @@ ids and measurements, or fixtures cut from real files.
 
 ## The fit layer
 
-`mods/host/import/pe_imp_fit.h` / `.c`. Mods ask for a model fitted for a use instead of loading it raw:
+`mods/import/core/pe_imp_fit.h` / `.c`. Mods ask for a model fitted for a use instead of loading it raw:
 
 ```c
 int pe_imp_fit(const char *root, const char *asset_id, PeImpUse use,   /* COSTUME, ENEMY, WEAPON, PROP */

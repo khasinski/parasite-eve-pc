@@ -278,9 +278,11 @@ All rights reserved.
 
 ## Resident Evil formats and engine references (import and play)
 
-The importer (`mods/host/import`, `mods/pe_src_re1`, `mods/pe_src_re2`, `mods/pe_src_re3`) and the room
-runtime (`mods/pe_re_play`) read the player's own Resident Evil discs. No game data is included. These
-projects were used:
+The importer (`mods/import/core`, `mods/pe_src_re1`, `mods/pe_src_re2`, `mods/pe_src_re3`) and the room
+runtime (`mods/pe_re_play`) read the player's own Resident Evil discs; the importer's Parasite Eve side
+(`mods/import/targets/pe1`, ported from the project's own MIT-licensed
+[psxrecomp-decomp-bridge](https://github.com/sirebacon/psxrecomp-decomp-bridge) `tools/pe_assets`)
+reads the player's Parasite Eve discs. No game data is included. These projects were used:
 
 **Adapted (tables and layouts ported, with these notices):**
 
