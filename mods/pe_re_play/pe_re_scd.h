@@ -8,15 +8,19 @@
  * Runs on entering a room: the init script (RDT section 16) procedure 0, then the main script
  * (section 17) procedure 0 up to its first wait or loop, following gosub / evt_exec / evt_chain,
  * within an instruction budget. Handled:
- *   control  if / else / endif (a false condition jumps to its block's end: just after its else,
- *            or after its endif 00, as every RE2 script is laid out), evt_end, return, gosub
+ *   control  if / else / endif as the game does them (bio2-ds decompilation, SCE0.C / SCE1.C, read
+ *            for behaviour only): if pushes its block end (record end + offset); a false condition
+ *            pops it and jumps there; else, reached on the true path, pops and jumps by its offset
+ *            from its own start; endif (2 bytes) pops. A false condition outside any if makes the
+ *            game wait until it's true: that thread stops for now. evt_end, return, gosub
  *   flags    ck / set (36 groups of 256), work variables: cmp / save / copy / calc
  *   items    keep_item_ck (the pocket)
  *   zones    aot_set, door_aot_se, item_aot_set and their 4-point forms: run = live;
  *            aot_reset: a zone's kind and data replaced (kind 0: gone)
  * Waits and loops (sleep, for, while, do, switch, goto) end that thread for now; every other
- * instruction is skipped and counted. Engine flags start at 0 except FG_STATUS bit 0, taken as the
- * player (0 Leon, 1 Claire): no script sets it (an assumption, from how the scripts use it). */
+ * instruction is skipped and counted. Engine flags start at 0 except FG_STATUS bit 0, the player:
+ * script bits count from each word's top bit, so it is the game's STAT_PLAYER (off Leon, on Claire);
+ * bit 1 is STAT_SCENARIO_B (bio2-ds def/FLAG.H). */
 #include <stdint.h>
 
 #include "pe_imp_logic.h"

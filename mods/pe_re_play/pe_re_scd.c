@@ -138,9 +138,9 @@ static void thread(Vm *vm, int script, unsigned proc) {
         case OP_IF:
             if (ifs < IFS) ifend[ifs++] = *pc + 4 + le16(ins + 2);
             break;
-        case OP_ELSE:                                      /* the true branch ran: past the else's block */
-            if (ifs > frame[frames - 1].ifs) ifs--;
-            *pc += 4 + le16(ins + 2);
+        case OP_ELSE:                                      /* the true branch ran: past the else's block, */
+            if (ifs > frame[frames - 1].ifs) ifs--;          /* counted from the else itself (Else_ck) */
+            *pc += le16(ins + 2);
             continue;
         case OP_ENDIF:
             if (ifs > frame[frames - 1].ifs) ifs--;
@@ -171,15 +171,12 @@ static void thread(Vm *vm, int script, unsigned proc) {
             if (!vm->out->skipped++) vm->out->first_skipped = op;
             break;
         }
-        if (cond == 0) {                                   /* false: to the end of its if block */
+        if (cond == 0) {                                   /* false: pop the if's block end and go there */
             if (ifs > frame[frames - 1].ifs) {
-                const uint32_t to = ifend[ifs - 1];
-                if (!to) { ifs = frame[--frames].ifs; continue; }   /* a bare condition in an else body */
-                if (to >= 4 && vm->rdt[to - 4] == OP_ELSE) ifend[ifs - 1] = 0;   /* into the else: its endif closes it */
-                else ifs--;
-                *pc = to;
-            } else {
-                ifs = frame[--frames].ifs;                 /* a condition outside any if ends the procedure */
+                *pc = ifend[--ifs];
+            } else {                                       /* outside any if: the game waits until it's true */
+                vm->out->stopped++;
+                return;
             }
             continue;
         }
