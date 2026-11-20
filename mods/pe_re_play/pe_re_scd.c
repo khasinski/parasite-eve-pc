@@ -14,7 +14,8 @@ enum {
     OP_GOSUB = 0x18, OP_RETURN = 0x19, OP_BREAK = 0x1A, OP_FOR2 = 0x1B,
     OP_CK = 0x21, OP_SET = 0x22, OP_CMP = 0x23, OP_SAVE = 0x24, OP_COPY = 0x25, OP_CALC = 0x26, OP_CALC2 = 0x27,
     OP_MESSAGE_ON = 0x2B, OP_AOT_SET = 0x2C, OP_DOOR_AOT_SE = 0x3B, OP_AOT_RESET = 0x46, OP_ITEM_AOT_SET = 0x4E,
-    OP_SCE_KEY_CK = 0x4F, OP_SCE_TRG_CK = 0x50, OP_KEEP_ITEM_CK = 0x5E,
+    OP_AOT_ON = 0x47, OP_SCE_KEY_CK = 0x4F, OP_SCE_TRG_CK = 0x50, OP_KEEP_ITEM_CK = 0x5E, OP_ITEM_LOST = 0x62,
+    OP_ITEM_GET = 0x76, OP_ITEM_CK_LOST = 0x88,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -300,6 +301,16 @@ static int step(Vm *vm, PeReScdTask *t) {
         zone_set(vm, ins[1], t->pc);
         t->pc += n;
         return CONTINUE;
+    case OP_AOT_ON:                                        /* the zone acts now, as if set off */
+        if (vm->run->naot_on < PE_RE_AOT_ON_MAX) vm->run->aot_on[vm->run->naot_on++] = ins[1];
+        t->pc += n;
+        return CONTINUE;
+    case OP_ITEM_LOST: case OP_ITEM_CK_LOST: case OP_ITEM_GET:
+        if (vm->host && code == OP_ITEM_GET && vm->host->give) vm->host->give(vm->host->ctx, ins[1], n > 2 ? ins[2] : 1);
+        else if (vm->host && code != OP_ITEM_GET && vm->host->lose)
+            vm->host->lose(vm->host->ctx, ins[1], code == OP_ITEM_CK_LOST && n > 2 ? ins[2] : 0);
+        t->pc += n;
+        return CONTINUE;
     case OP_AOT_RESET:
         if (vm->run->nreset < PE_RE_RESETS_MAX) {
             PeReReset *r = &vm->run->reset[vm->run->nreset++];
@@ -334,6 +345,12 @@ static void schedule(Vm *vm) {
     }
 }
 
+static void work_clr(PeReFlags *f) {                       /* Sce_work_clr */
+    for (int i = PE_RE_WORK_F_ATARI; i <= PE_RE_WORK_GET_ID; i++) f->work[i] = -1;
+    memset(f->bits[PE_RE_FG_USE], 0, sizeof f->bits[PE_RE_FG_USE]);
+    memset(&f->bits[5][4], 0, 4);                          /* Room_flg[1]: script bits 32-63 */
+}
+
 static int setup(Vm *vm, const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost *host, PeReScdRun *run,
                  int budget) {
     uint32_t size = 0;
@@ -353,7 +370,7 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
     if (pe_imp_rdt_section(vm.rdt, vm.size, SCRIPT_MAIN, &out->sec[1], &out->len[1])) out->sec[1] = out->len[1] = 0;
     if (!out->sec[0] && !out->sec[1]) return;
     out->ran = 1;
-    for (int i = PE_RE_WORK_F_ATARI; i <= PE_RE_WORK_GET_ID; i++) flags->work[i] = -1;   /* Sce_work_clr */
+    work_clr(flags);
     task_start(&out->task[0], proc_start(&vm, 0, 0));      /* Event_exec(0, 0) on the init script */
     out->task[0].proc = -1;
     task_start(&out->task[1], proc_start(&vm, 1, 0));      /* Event_exec(1, 0) on the main script */
@@ -363,7 +380,9 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
 void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost *host, PeReScdRun *run) {
     Vm vm;
     if (!run->ran || !setup(&vm, l, flags, host, run, BUDGET_TICK)) return;
+    exec_task(&vm, 0, 1);                                  /* Event_exec(0, 1): the every-frame handler */
     schedule(&vm);
+    work_clr(flags);
 }
 
 void pe_re_scd_exec(const PeImpRoomLogic *l, PeReScdRun *run, unsigned level, unsigned proc) {

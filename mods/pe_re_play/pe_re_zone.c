@@ -68,6 +68,17 @@ static int gather(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReP
     return n;
 }
 
+int pe_re_zone_by_id(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, uint8_t id,
+                     PeReZoneHit *out) {
+    Candidate *c = NULL;
+    int found = -1;
+    if (!room) return -1;
+    const int n = gather(room, run, p, &c);
+    for (int i = 0; i < n && found < 0; i++) if (c[i].hit.id == id) *out = c[i].hit, found = 0;
+    free(c);
+    return found;
+}
+
 int pe_re_zone_check(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
                      int facing, int floor, int manual, int16_t *work, PeReZoneHit *hits, int max) {
     Candidate *c = NULL;

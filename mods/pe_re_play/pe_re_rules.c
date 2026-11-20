@@ -13,8 +13,44 @@ int pe_re_has(const PeReProgress *p, uint16_t item) {
 int pe_re_give(PeReProgress *p, uint16_t item, uint16_t count) {
     for (int i = 0; i < p->held; i++)
         if (p->pocket[i].item == item) { p->pocket[i].count = (uint16_t)(p->pocket[i].count + (count ? count : 1)); return 0; }
-    if (p->held >= PE_RE_POCKET_MAX) return -1;
+    if (p->held >= PE_RE_POCKET_SLOTS) return -1;
     p->pocket[p->held].item = item, p->pocket[p->held++].count = count ? count : 1;
+    return 0;
+}
+
+static void drop_slot(PeReHeld *list, int *n, int i) {           /* Sort_item: the rest move up */
+    memmove(&list[i], &list[i + 1], sizeof *list * (size_t)(*n - i - 1));
+    (*n)--;
+}
+
+int pe_re_lose(PeReProgress *p, uint16_t item, uint16_t count) {
+    for (int i = 0; i < p->held; i++)
+        if (p->pocket[i].item == item) {
+            if (count && p->pocket[i].count > count) p->pocket[i].count = (uint16_t)(p->pocket[i].count - count);
+            else drop_slot(p->pocket, &p->held, i);
+            return 0;
+        }
+    return -1;
+}
+
+int pe_re_box_put(PeReProgress *p, int i) {
+    if (i < 0 || i >= p->held) return -1;
+    const PeReHeld h = p->pocket[i];
+    int k = 0;
+    while (k < p->boxed && p->box[k].item != h.item) k++;
+    if (k == p->boxed) {
+        if (p->boxed >= PE_RE_BOX_MAX) return -1;
+        p->box[p->boxed++] = h;
+    } else {
+        p->box[k].count = (uint16_t)(p->box[k].count + h.count);
+    }
+    drop_slot(p->pocket, &p->held, i);
+    return 0;
+}
+
+int pe_re_box_take(PeReProgress *p, int i) {
+    if (i < 0 || i >= p->boxed || pe_re_give(p, p->box[i].item, p->box[i].count)) return -1;
+    drop_slot(p->box, &p->boxed, i);
     return 0;
 }
 

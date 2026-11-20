@@ -20,6 +20,8 @@
 #define PE_RE_LOCKS 256
 #define PE_RE_TAKEN_MAX 1024
 #define PE_RE_POCKET_MAX 64
+#define PE_RE_POCKET_SLOTS 8                       /* what the player carries (RE2: eight slots) */
+#define PE_RE_BOX_MAX 64                           /* the item box, shared by every box */
 #define PE_RE_SCE_MESSAGE 4
 #define PE_RE_SAT_CHECK 0x10u
 #define PE_RE_LOCK_BOLT 254
@@ -35,10 +37,19 @@ typedef struct {
     PeReHeld pocket[PE_RE_POCKET_MAX];             /* items picked up, by item number */
     int held;
     PeReFlags flags;                               /* the game's flags, as its scripts set them */
+    PeReHeld box[PE_RE_BOX_MAX];                   /* in the item boxes */
+    int boxed;
 } PeReProgress;
 
 int pe_re_has(const PeReProgress *p, uint16_t item);
-int pe_re_give(PeReProgress *p, uint16_t item, uint16_t count);   /* 0, or -1 when the pocket is full */
+/* 0, or -1 when the pocket is full: a new item needs one of PE_RE_POCKET_SLOTS; one held already stacks. */
+int pe_re_give(PeReProgress *p, uint16_t item, uint16_t count);
+/* Out of the pocket: `count` of it, or all when 0 (Sce_Item_lost / Sce_Item_lost2). 0, or -1 if not held. */
+int pe_re_lose(PeReProgress *p, uint16_t item, uint16_t count);
+/* The item box: pocket slot `i` into it, or box slot `i` back into the pocket. 0, or -1 (no such
+ * slot, the box or the pocket full). */
+int pe_re_box_put(PeReProgress *p, int i);
+int pe_re_box_take(PeReProgress *p, int i);
 
 /* An item's name from the game's ItemTable (NULL table or unknown: "item <n>"). */
 void pe_re_item_name(const PeImpRoomLogic *items, uint16_t item, char *out, size_t n);

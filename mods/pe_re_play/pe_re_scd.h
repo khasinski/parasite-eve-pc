@@ -9,7 +9,9 @@
  * Tasks, as the game keeps them: up to 10 room tasks, each a script position with its own gosub
  * levels, open ifs and loops. Entering a room starts task 0 on the init script's (RDT section 16)
  * procedure 0 and task 1 on the main script's (17) procedure 0, then runs every task until it
- * yields (pe_re_scd_run); each frame after runs them again from where they stopped (pe_re_scd_tick).
+ * yields (pe_re_scd_run); each frame after runs them again from where they stopped (pe_re_scd_tick),
+ * after restarting task 0 on the main script's procedure 1, the room's every-frame handler (GAME.C
+ * calls Sce_scheduler each frame: Event_exec(0, 1), then every task, then Sce_work_clr).
  * gosub and evt_exec index the main script, as the game's do.
  *   control  if / else / endif (if pushes its block end; a false condition pops it and jumps there;
  *            outside any if the task waits, retrying it next frame), gosub / return, goto, evt_end
@@ -21,15 +23,18 @@
  *            bit 0 is STAT_PLAYER, off Leon, on Claire; bit 1 STAT_SCENARIO_B: bio2-ds def/FLAG.H)
  *   work     cmp / save / copy / calc / calc2 on the game's work variables (save-data halfwords,
  *            so they last across rooms)
- *   items    keep_item_ck (the pocket)
+ *   items    keep_item_ck (the pocket), sce_item_lost / sce_item_ck_lost (out of it, all or some),
+ *            sce_item_get (into it) (SCE2.C Sce_Item_lost / Sce_Item_lost2 / Sce_Item_get)
  *   pad      sce_key_ck (held) / sce_trg_ck (pressed this frame) against the game's key bits
  *            (bio2-ds SCE2.C Sce_key_ck / Sce_trg_ck; PAD.C Pad_set's Key_type table)
  *   zones    aot_set, door_aot_se, item_aot_set and their 4-point forms: run = live, in the slot
  *            of its id (a later zone with the same id replaces it, and clears that id's
  *            aot_reset); aot_reset: a zone's kind, check bits and data replaced (kind 0: gone)
  *   text     message_on: the room's message, for the caller to show
- * Every other instruction is skipped (counted). Entering a room clears the zone-hit work variables
- * (Sce_work_clr): F_atari (work 0), U_atari (1), Use_id (2) and Get_id (3) become -1. */
+ * Every other instruction is skipped (counted). Entering a room, and the end of every frame's run,
+ * clears what the frame's zones and item use left (Sce_work_clr): F_atari (work 0), U_atari (1),
+ * Use_id (2) and Get_id (3) become -1, and Use_flg (group 10) and Room_flg's second word (group 5,
+ * bits 32-63) are cleared. So the zone check after a frame's run sets them for the next one. */
 #include <stdint.h>
 
 #include "pe_imp_logic.h"
@@ -41,6 +46,8 @@
 #define PE_RE_LIVE_MAX 256
 #define PE_RE_RESETS_MAX 64
 #define PE_RE_TASKS 10
+#define PE_RE_AOT_ON_MAX 8
+#define PE_RE_FG_USE 10                        /* Use_flg: items usable here (bit = item) */
 #define PE_RE_LEVELS 4                         /* gosub levels a task keeps */
 #define PE_RE_SLOTS 256                        /* zone ids */
 #define PE_RE_WORK_F_ATARI 0                   /* the zone hit in front of the player (SCE_AT.C) */
@@ -83,6 +90,8 @@ typedef struct {
     PeReScdTask task[PE_RE_TASKS];
     uint32_t sec[2], len[2];                   /* init and main scripts in the room file */
     int waiting;                               /* tasks running after the last tick */
+    uint8_t aot_on[PE_RE_AOT_ON_MAX];          /* aot_on: zones the scripts set off, for the caller */
+    int naot_on;
 } PeReScdRun;
 
 /* What the scripts ask of the game. */
@@ -92,6 +101,8 @@ typedef struct {
     uint32_t key, key_trg;                     /* the game's key bits held / pressed this frame
                                                   (pe_re_scd_keys) */
     void *ctx;
+    void (*lose)(void *ctx, uint16_t item, uint16_t count);   /* count 0: all of it */
+    void (*give)(void *ctx, uint16_t item, uint16_t count);
 } PeReScdHost;
 
 /* Enter room `l`: start its init and main tasks and run every task until it yields. RE2 only;

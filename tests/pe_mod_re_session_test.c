@@ -77,6 +77,33 @@ int main(void) {
         }
     }
 
+    /* the pocket (eight slots), losing items, the item box, using an item */
+    {
+        static PeReProgress ip;
+        memset(&ip, 0, sizeof ip);
+        for (uint16_t it = 1; it <= PE_RE_POCKET_SLOTS; it++) CHECK(!pe_re_give(&ip, it, 1));
+        CHECK(pe_re_give(&ip, 99, 1) < 0 && !pe_re_give(&ip, 3, 5) && ip.held == PE_RE_POCKET_SLOTS);   /* full; stacks */
+        CHECK(!pe_re_lose(&ip, 3, 2) && pe_re_has(&ip, 3) && ip.pocket[2].count == 4);
+        CHECK(!pe_re_lose(&ip, 3, 0) && !pe_re_has(&ip, 3) && ip.held == 7 && ip.pocket[2].item == 4);   /* moved up */
+        CHECK(pe_re_lose(&ip, 3, 0) < 0);
+        CHECK(!pe_re_box_put(&ip, 0) && ip.boxed == 1 && ip.box[0].item == 1 && !pe_re_has(&ip, 1) && ip.held == 6);
+        CHECK(!pe_re_give(&ip, 1, 2) && !pe_re_box_put(&ip, ip.held - 1) && ip.boxed == 1 && ip.box[0].count == 3);
+        CHECK(!pe_re_box_take(&ip, 0) && ip.boxed == 0 && pe_re_has(&ip, 1) && pe_re_box_take(&ip, 0) < 0);
+        while (ip.held < PE_RE_POCKET_SLOTS) pe_re_give(&ip, (uint16_t)(50 + ip.held), 1);
+        ip.box[0].item = 77, ip.box[0].count = 1, ip.boxed = 1;
+        CHECK(pe_re_box_take(&ip, 0) < 0 && ip.boxed == 1);   /* pocket full: stays in the box */
+        static PeReSession us;
+        memset(&us, 0, sizeof us);
+        us.game = pe_re_game_named("re2");
+        pe_re_give(&us.progress, 0x40, 1);
+        us.progress.flags.work[PE_RE_WORK_USE_ID] = -1;
+        CHECK(pe_re_session_use(&us, 0x40) == PE_RE_SAID && strstr(us.said, "can't use") &&
+              us.progress.flags.work[PE_RE_WORK_USE_ID] == -1);
+        pe_re_flag_set(&us.progress.flags, PE_RE_FG_USE, 0x40, 1);
+        CHECK(pe_re_session_use(&us, 0x40) == PE_RE_STAY && us.progress.flags.work[PE_RE_WORK_USE_ID] == 0x40);
+        CHECK(pe_re_session_use(&us, 0x41) == PE_RE_STAY && us.uses == 1);   /* not held: nothing */
+    }
+
     /* a made-up room: camera 0 -> 1 past x 2000, back past x 1800; a door at the far end */
     PeImpLogicBuilder *b = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
     PeImpCameraZone cz[4];                  /* as RE2 stores them: each camera's own area first */
@@ -366,11 +393,55 @@ int main(void) {
     }
     pe_re_session_end(&r);
 
+    /* using an item where a room takes it, end to end: 1-08's valve spot. Standing facing it, the
+     * every-frame zone check sets its Use_flg bit and F_atari; using the item sets Use_id; the next
+     * frame's handler (main procedure 1) sees both and starts the room's event, which switches the
+     * spot off (aot_reset). Away from it, the item can't be used. */
+    {
+        static PeReSession v;
+        if (!pe_re_session_start(&v, s_store, pe_re_game_named("re2"), 0, why, sizeof why) &&
+            !pe_re_session_enter(&v, s_store, 0, 0x08, 0, 0, 0, 0, why, sizeof why)) {
+            uint32_t n = 0;
+            PeImpTrigger spot;
+            int have = 0;
+            pe_imp_logic_section(v.logic, PE_IMP_LOGIC_TRIG, &n, NULL);
+            for (uint32_t i = 0; i < n && !have; i++)
+                if (!pe_imp_logic_trigger(v.logic, i, &spot) && pe_re_scd_live(&v.run, spot.at) &&
+                    spot.zone.sce == PE_RE_ZONE_FLAG && (spot.data[0] | spot.data[1] << 8) == PE_RE_FG_USE)
+                    have = 1;
+            CHECK(have);
+            if (have) {
+                const uint16_t item = (uint16_t)(spot.data[2] | spot.data[3] << 8);
+                double cx = 0, cz = 0;
+                for (int c = 0; c < 4; c++) cx += spot.zone.x[c] / 4.0, cz += spot.zone.z[c] / 4.0;
+                pe_re_give(&v.progress, item, 1);
+                for (int f = 0; f < 30; f++) pe_re_session_tick(&v);     /* the room settles */
+                v.facing = 0, v.floor = 0;
+                pe_re_session_step(&v, s_store, cx, cz + 3000, 0, why, sizeof why);   /* far off */
+                CHECK(pe_re_session_use(&v, item) == PE_RE_SAID);
+                pe_re_session_tick(&v);
+                pe_re_session_step(&v, s_store, cx, cz + PE_RE_FRONT_REACH, 0, why, sizeof why);   /* facing it */
+                CHECK(v.progress.flags.work[PE_RE_WORK_F_ATARI] == spot.zone.id && pe_re_flag(&v.progress.flags, PE_RE_FG_USE, item));
+                const int resets = v.run.nreset;
+                CHECK(pe_re_session_use(&v, item) == PE_RE_STAY);
+                for (int f = 0; f < 5; f++) pe_re_session_tick(&v);
+                CHECK(v.run.nreset > resets && pe_re_zone_kind(&v.run, spot.zone.id, spot.zone.sce, NULL) == 0);
+                CHECK(v.progress.flags.work[PE_RE_WORK_USE_ID] == -1);   /* cleared after the frame */
+                printf("1-08 item %u used at zone %u: %d zones switched by its event\n", (unsigned)item,
+                       (unsigned)spot.zone.id, v.run.nreset - resets);
+            }
+        } else {
+            printf("1-08: %s\n", why);
+            CHECK(0);
+        }
+        pe_re_session_end(&v);
+    }
+
     /* every room's scripts, as a new game (Leon A): what ran, what was skipped */
     PeReProgress fresh;
     int rooms = 0, ran = 0, live_doors = 0, all_doors = 0, live_items = 0, all_items = 0;
     long executed = 0, skipped = 0, stopped = 0;
-    int kinds[16] = {0}, manual = 0, events = 0, events_found = 0, events_started = 0;
+    int kinds[16] = {0}, manual = 0, events = 0, events_found = 0, events_started = 0, use_zones = 0, use_found = 0;
     for (uint32_t st = 0; st < 7; st++)
         for (uint32_t rm = 0; rm < 64; rm++) {
             char lid[PE_IMP_ID_MAX];
@@ -404,6 +475,22 @@ int main(void) {
                 if (pe_imp_logic_trigger(rl, i, &tr) || !pe_re_scd_live(&run, tr.at)) continue;
                 const int k = pe_re_zone_kind(&run, tr.zone.id, tr.zone.sce, tr.data);
                 kinds[k & 15]++, manual += (tr.zone.sat & 0x10) != 0;
+                if (k == PE_RE_ZONE_FLAG && (tr.data[0] | tr.data[1] << 8) == PE_RE_FG_USE && tr.data[4]) {
+                    /* an item usable here: a flag-change zone that sets its Use_flg bit (SCE_AT.C Sce_Flg_chg
+                     * writes through the same flag table as the scripts' set) while she stands in it */
+                    double cx = 0, cz = 0;
+                    PeReZoneHit hit[16];
+                    for (int c = 0; c < 4; c++) cx += tr.zone.x[c] / 4.0, cz += tr.zone.z[c] / 4.0;
+                    const int under = (tr.zone.sat & PE_RE_SAT_UNDER) != 0;
+                    const int nh = pe_re_zone_check(rl, &run, &fresh, cx, under ? cz : cz + PE_RE_FRONT_REACH, 0,
+                                                    tr.zone.floor & 0x80 ? 0 : tr.zone.floor, 0, NULL, hit, 16);
+                    int found = 0;
+                    for (int h = 0; h < nh; h++) found |= hit[h].id == tr.zone.id;
+                    use_zones++, use_found += found;
+                    if (getenv("PE_TEST_RE_EVENTS"))
+                        printf("  %x%02x zone %u: item %u usable here, sat %02x%s\n", st + 1, rm, (unsigned)tr.zone.id,
+                               (unsigned)(tr.data[2] | tr.data[3] << 8), (unsigned)tr.zone.sat, found ? "" : " NOT FOUND");
+                }
                 if (k != PE_RE_ZONE_EVENT || !(tr.zone.sat & 1) || (tr.zone.super & 0x80)) continue;
                 events++;
                 double cx = 0, cz = 0;
@@ -435,6 +522,9 @@ int main(void) {
            events_found, events, events_started);
     CHECK(events > 0 && events_found * 10 >= events * 9 && events_started * 10 >= events * 9);
     CHECK(kinds[PE_RE_ZONE_SAVE] > 0 && kinds[PE_RE_ZONE_ITEMBOX] > 0);
+    printf("RE2 item use, new game: %d zones make an item usable, %d found where she stands; %d pocket zones\n",
+           use_zones, use_found, kinds[PE_RE_ZONE_STATUS]);
+    CHECK(use_zones > 5 && use_found * 10 >= use_zones * 9);
     printf("RE2 scripts, new game: %d rooms, %d ran; %ld instructions run, %ld skipped, %ld tasks over the frame budget "
            "(4 s of play); doors set up %d of %d, pickups %d of %d\n", rooms, ran, executed, skipped, stopped,
            live_doors, all_doors, live_items, all_items);

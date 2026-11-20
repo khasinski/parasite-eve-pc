@@ -7,6 +7,7 @@
  * Pad: taken right after it is read (PE_HOOK_FRAME, late), before any field logic, and handed back
  * when the boxes draw (PE_HOOK_TEXTBOXES) with no presses, so the Cross that turns a page doesn't
  * also reach the field (and the room's next zone). */
+#include <stdio.h>
 #include <string.h>
 
 #include "pe_re_box.h"
@@ -37,6 +38,13 @@ static unsigned char s_page[PAGES][PAGE_BYTES];
 static int s_pages, s_at = -1, s_locked, s_taken, s_fresh;
 static TextboxEntry *s_box;
 static u32 s_pressed, s_bits;
+static int s_choosing, s_count, s_cur, s_result = -1;
+static char s_title[48], s_labels[PE_RE_BOX_CHOICES][41];
+static u16 s_raw, s_raw_new;                 /* the pad as PS1 reads it (active high), new presses */
+#define RAW_RIGHT 0x0020u
+#define RAW_LEFT 0x0080u
+#define RAW_TRIANGLE 0x1000u
+#define RAW_CIRCLE 0x2000u
 
 static int font_ready(void) { return g_TextboxGlyphWidths && g_TextboxGlyphCount; }
 static int advance(unsigned char g) {
@@ -103,7 +111,7 @@ static void field_event(int value) {
 
 static void close_box(void) {
     if (box_open()) s_box->state = 0;
-    s_box = NULL, s_at = -1;
+    s_box = NULL, s_at = -1, s_choosing = 0;
     if (s_locked) field_event(FIELD_UNLOCK), s_locked = 0;
 }
 
@@ -128,15 +136,55 @@ int pe_re_box_say(const char *text) {
     return 1;
 }
 
+/* the choice's one page: title, the label between arrows, the hint */
+static void compose(void) {
+    char line[3][96];
+    int n = 0;
+    snprintf(line[0], sizeof line[0], "%s  %d/%d", s_title, s_cur + 1, s_count);
+    snprintf(line[1], sizeof line[1], "  - %s -", s_labels[s_cur]);
+    snprintf(line[2], sizeof line[2], "Left/Right, Cross: choose, Triangle: back");
+    memset(s_page, 0, sizeof s_page);
+    for (int l = 0; l < 3; l++) {
+        if (l && n + 1 < PAGE_BYTES) s_page[0][n++] = G_NEWLINE;
+        for (const char *p = line[l]; *p && n + 2 < PAGE_BYTES; p++) s_page[0][n++] = pe_glyph(*p);
+    }
+    s_page[0][n] = G_END;
+    s_pages = 1;
+}
+
+int pe_re_box_choose(const char *title, const char *const labels[], int n, int at) {
+    if (!font_ready() || n <= 0) return 0;
+    close_box();
+    s_count = n > PE_RE_BOX_CHOICES ? PE_RE_BOX_CHOICES : n;
+    s_cur = at >= 0 && at < s_count ? at : 0;
+    snprintf(s_title, sizeof s_title, "%s", title);
+    for (int i = 0; i < s_count; i++) snprintf(s_labels[i], sizeof s_labels[i], "%s", labels[i]);
+    compose();
+    if (!show(0)) { s_at = -1; return 0; }
+    s_choosing = 1, s_result = -1;
+    if (!s_locked) field_event(FIELD_LOCK), s_locked = 1;
+    s_fresh = 1;
+    return 1;
+}
+
+int pe_re_box_choice(void) {
+    const int r = s_result;
+    s_result = -1;
+    return r;
+}
+
 void pe_re_box_forget(void) {
     if (box_open()) s_box->state = 0;
-    s_box = NULL, s_at = -1, s_locked = 0, s_taken = 0;    /* a room load starts the field afresh */
+    s_box = NULL, s_at = -1, s_locked = 0, s_taken = 0, s_choosing = 0;    /* a room load starts the field afresh */
 }
 
 /* Right after the pad is read, before any field logic: while a box is up, the pad is ours. */
 static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
+    const u16 raw = (u16)~g_PadPackets[0].buttons;
+    s_raw_new = (u16)(raw & ~s_raw), s_raw = raw;
     if (s_at < 0) return 0;
+    if (s_fresh) s_raw_new = 0;
     s_pressed = s_fresh ? 0 : g_FieldPadPressed, s_bits = g_FieldPadBits;
     s_fresh = 0;
     g_FieldPadPressed = 0;
@@ -151,7 +199,16 @@ static int on_textboxes(void *ctx, void *user) {
     if (s_at < 0) return 0;
     const u32 pressed = s_taken ? s_pressed : 0;
     if (!box_open()) close_box();                           /* someone else took the box */
-    else if (pressed & PAD_CROSS) {
+    else if (s_choosing) {
+        const u16 raw = s_taken ? s_raw_new : 0;
+        if (pressed & PAD_CROSS) s_result = s_cur, close_box();
+        else if (raw & (RAW_TRIANGLE | RAW_CIRCLE)) s_result = -2, close_box();
+        else if (raw & (RAW_LEFT | RAW_RIGHT)) {
+            s_cur = (s_cur + (raw & RAW_RIGHT ? 1 : s_count - 1)) % s_count;
+            compose();
+            show(0);
+        }
+    } else if (pressed & PAD_CROSS) {
         if (s_at + 1 < s_pages && show(s_at + 1)) {}
         else close_box();
     }

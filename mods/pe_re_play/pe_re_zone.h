@@ -54,4 +54,8 @@ void pe_re_front(double x, double z, int facing, double *fx, double *fz);
 int pe_re_zone_check(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
                      int facing, int floor, int manual, int16_t *work, PeReZoneHit *hits, int max);
 
+/* The zone the scripts hold under `id` (aot_on sets it off): 0 and the zone, or -1. */
+int pe_re_zone_by_id(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, uint8_t id,
+                     PeReZoneHit *out);
+
 #endif

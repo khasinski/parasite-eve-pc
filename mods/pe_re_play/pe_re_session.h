@@ -62,10 +62,12 @@ typedef struct {
     PeImpDoor door;                   /* the last door taken (for its transition) */
     int (*talking)(void);             /* a message is up (scripts' wsleeping waits on it); NULL: never */
     int doors_taken;
+    const char *store;                /* the import store (for doors scripts set off) */
     uint32_t key, key_trg;            /* the game's key bits this frame (pe_re_scd_keys), for scripts */
     PeReZoneHit zone;                 /* the last zone acted on (PE_RE_ZONE: what the mod handles) */
     int auto_message;                 /* the walk-in message zone she's in (shown once), -1 */
     int events;                       /* events zones started */
+    int uses;                         /* items used on the room */
 } PeReSession;
 
 /* PE_RE_SAID: nothing moved, but `said` has something to show (a locked door, a pickup, a message).
@@ -97,7 +99,12 @@ void pe_re_session_place(PeReSession *s, double x, double z, int facing);
  * session where it was (`why` says). */
 PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, double z, int action, char *why, size_t n);
 void pe_re_session_end(PeReSession *s);
-/* A frame of the room's scripts. PE_RE_SAID when one put up a message (`said`); else PE_RE_STAY. */
+/* Use `item` from the pocket here, as choosing it on RE2's status screen does: when the room's
+ * scripts allow it here (flag group 10, Use_flg, its bit set) it becomes Use_id (work 2) for them
+ * to act on (open the way, take the item); else PE_RE_SAID: "You can't use the Red Jewel here." */
+PeReChange pe_re_session_use(PeReSession *s, uint16_t item);
+/* A frame of the room's scripts. PE_RE_SAID when one put up a message (`said`), PE_RE_ZONE when one
+ * set off a zone the mod handles (aot_on); else PE_RE_STAY. */
 PeReChange pe_re_session_tick(PeReSession *s);
 
 #endif

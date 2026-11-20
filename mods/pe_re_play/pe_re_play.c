@@ -52,7 +52,7 @@ static uint8_t s_saved[PE_RE_SAVE_SIZE];
 static const PeExtensionSection s_section = {"pe_re_play/progress", PE_RE_SAVE_VERSION, PE_RE_SAVE_VERSION,
                                              sizeof s_saved, s_saved};
 static int s_registered, s_enabled, s_resume;
-static int s_playing, s_cross_held, s_reshown;
+static int s_playing, s_cross_held, s_square_held, s_reshown;
 static char s_status[200] = "Not playing.";
 
 static void list_games(void) {
@@ -73,6 +73,86 @@ static const char *game_name(unsigned i) {
 /* In the game's dialogue band; a toast if no box can be had (the font not loaded yet). */
 static void say(const char *text) {
     if (!pe_re_box_say(text)) pe_toast(text);
+}
+
+/* ---- the pocket and the item box, in the band (pe_re_box_choose) ---- */
+#define PAD_SQUARE 0x8000u                /* raw pad: Square opens the pocket to use something */
+enum { PICK_NONE, PICK_USE, PICK_BOX };
+static int s_pick, s_pick_at;
+static uint16_t s_use_here;                       /* testing: the item the last place to use one takes */
+static uint16_t s_pick_item[PE_RE_BOX_CHOICES];
+static int s_pick_slot[PE_RE_BOX_CHOICES];        /* pocket slot, or -1 - box slot */
+
+static void held_label(const PeReHeld *h, const char *verb, char *out, size_t n) {
+    char name[48];
+    pe_re_item_name(s_session.items, h->item, name, sizeof name);
+    if (h->count > 1) snprintf(out, n, "%s%s x%u", verb, name, (unsigned)h->count);
+    else snprintf(out, n, "%s%s", verb, name);
+}
+
+static void open_pocket(void) {
+    static char text[PE_RE_BOX_CHOICES][41];
+    const char *labels[PE_RE_BOX_CHOICES];
+    const PeReProgress *p = &s_session.progress;
+    int n = 0;
+    for (int i = 0; i < p->held && n < PE_RE_BOX_CHOICES; i++, n++) {
+        held_label(&p->pocket[i], "", text[n], sizeof text[n]);
+        labels[n] = text[n], s_pick_item[n] = p->pocket[i].item, s_pick_slot[n] = i;
+    }
+    if (!n) { say("You aren't carrying anything."); return; }
+    if (pe_re_box_choose("Use which item?", labels, n, 0)) s_pick = PICK_USE;
+}
+
+static void open_item_box(int at) {
+    static char text[PE_RE_BOX_CHOICES][41];
+    const char *labels[PE_RE_BOX_CHOICES];
+    const PeReProgress *p = &s_session.progress;
+    int n = 0;
+    for (int i = 0; i < p->held && n < PE_RE_BOX_CHOICES; i++, n++) {
+        held_label(&p->pocket[i], "Put in: ", text[n], sizeof text[n]);
+        labels[n] = text[n], s_pick_slot[n] = i;
+    }
+    for (int i = 0; i < p->boxed && n < PE_RE_BOX_CHOICES; i++, n++) {
+        held_label(&p->box[i], "Take out: ", text[n], sizeof text[n]);
+        labels[n] = text[n], s_pick_slot[n] = -1 - i;
+    }
+    if (!n) { say("The item box is empty, and so are your pockets."); s_pick = PICK_NONE; return; }
+    s_pick = pe_re_box_choose("Item box", labels, n, at < n ? at : n - 1) ? PICK_BOX : PICK_NONE;
+}
+
+/* a zone the session hands over: the pocket, an item box, a typewriter */
+static void zone_handed(void) {
+    switch (s_session.zone.sce) {
+    case PE_RE_ZONE_STATUS: open_pocket(); break;
+    case PE_RE_ZONE_ITEMBOX: open_item_box(0); break;
+    default:
+        snprintf(s_status, sizeof s_status, "A typewriter here (not built yet).");
+        break;
+    }
+    pe_mod_log("pe_re_play", "zone %u kind %u", (unsigned)s_session.zone.id, (unsigned)s_session.zone.sce);
+}
+
+/* a choice made in the band */
+static void picked(void) {
+    const int c = pe_re_box_choice();
+    if (c == -1 || s_pick == PICK_NONE) return;
+    const int mode = s_pick;
+    s_pick = PICK_NONE;
+    if (c < 0) return;                                      /* backed out */
+    if (mode == PICK_USE) {
+        char name[48];
+        pe_re_item_name(s_session.items, s_pick_item[c], name, sizeof name);
+        if (pe_re_session_use(&s_session, s_pick_item[c]) == PE_RE_SAID) say(s_session.said);
+        else snprintf(s_status, sizeof s_status, "Used the %s.", name);
+        return;
+    }
+    const int slot = s_pick_slot[c];                        /* the box: put in or take out, and stay */
+    if (slot >= 0 ? pe_re_box_put(&s_session.progress, slot) : pe_re_box_take(&s_session.progress, -1 - slot)) {
+        say(slot >= 0 ? "The item box is full." : "You can't carry any more.");
+        return;
+    }
+    s_pick_at = c;
+    open_item_box(s_pick_at);
 }
 
 static void show_room(int place) {
@@ -209,7 +289,17 @@ static int on_frame(void *ctx, void *user) {
         s_session.key_trg = key & ~s_session.key;
         s_session.key = key;
     }
-    if (pe_re_session_tick(&s_session) == PE_RE_SAID) say(s_session.said);   /* the room's scripts, a frame */
+    picked();
+    switch (pe_re_session_tick(&s_session)) {     /* the room's scripts, a frame */
+    case PE_RE_SAID: say(s_session.said); break;
+    case PE_RE_ZONE: zone_handed(); break;
+    default: break;
+    }
+    {   /* Square: the pocket, to use something here */
+        const int square = (~(unsigned)g_PadPackets[0].buttons & PAD_SQUARE) != 0;
+        if (square && !s_square_held && !pe_re_box_busy()) open_pocket();
+        s_square_held = square;
+    }
     const int cross = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;
     const int pressed = cross && !s_cross_held && !pe_re_box_busy();   /* a box's Cross is the box's */
     s_cross_held = cross;
@@ -229,11 +319,7 @@ static int on_frame(void *ctx, void *user) {
         say(s_session.said);
         snprintf(s_status, sizeof s_status, "%s", s_session.said);
         break;
-    case PE_RE_ZONE:                             /* typewriters and item boxes come next */
-        snprintf(s_status, sizeof s_status, "%s here (not built yet).",
-                 s_session.zone.sce == PE_RE_ZONE_SAVE ? "A typewriter" : "An item box");
-        pe_mod_log("pe_re_play", "zone %u kind %u", (unsigned)s_session.zone.id, (unsigned)s_session.zone.sce);
-        break;
+    case PE_RE_ZONE: zone_handed(); break;          /* the pocket, an item box, a typewriter */
     case PE_RE_STAY:
         if (*why) snprintf(s_status, sizeof s_status, "That door: %s.", why);
         break;
@@ -245,9 +331,9 @@ static int on_frame(void *ctx, void *user) {
 /* Testing: stand in the middle of the room's next doorway, pickup or message zone (those its scripts
  * set up), one after another each time (the camera stays as it is). */
 static void to_zone(uint32_t tag, int kind, const char *what) {
-    static uint32_t s_next[4];
+    static uint32_t s_next[8];
     static const PeImpRoomLogic *s_room;
-    uint32_t n = 0, *next = &s_next[tag == PE_IMP_LOGIC_PICK ? 1 : tag != PE_IMP_LOGIC_TRIG ? 0 : kind == PE_RE_SCE_MESSAGE ? 2 : 3];
+    uint32_t n = 0, *next = &s_next[tag == PE_IMP_LOGIC_PICK ? 1 : tag != PE_IMP_LOGIC_TRIG ? 0 : kind & 7];
     int front = 0;
     double bx = 0, bz = 0;
     int found = 0;
@@ -269,8 +355,10 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
             zone = &pk.zone;
         } else if (tag == PE_IMP_LOGIC_TRIG) {
             if (pe_imp_logic_trigger(s_session.logic, i, &t) || !pe_re_scd_live(&s_session.run, t.at) ||
-                pe_re_zone_kind(&s_session.run, t.zone.id, t.zone.sce, NULL) != kind)
+                pe_re_zone_kind(&s_session.run, t.zone.id, t.zone.sce, t.data) != kind)
                 continue;
+            if (kind == PE_RE_ZONE_FLAG && ((t.data[0] | t.data[1] << 8) != PE_RE_FG_USE || !t.data[4])) continue;
+            if (kind == PE_RE_ZONE_FLAG) s_use_here = (uint16_t)(t.data[2] | t.data[3] << 8);
             zone = &t.zone;
             front = (t.zone.sat & (PE_RE_SAT_UNDER | PE_RE_SAT_FRONT)) == PE_RE_SAT_FRONT;
         } else if (pe_imp_logic_door(s_session.logic, i, &d) || !pe_re_scd_live(&s_session.run, d.at) ||
@@ -292,6 +380,15 @@ static void to_door(void) { to_zone(PE_IMP_LOGIC_DOOR, 0, "door"); }
 static void to_pickup(void) { to_zone(PE_IMP_LOGIC_PICK, 0, "pickup"); }
 static void to_message(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_SCE_MESSAGE, "message"); }
 static void to_event(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_EVENT, "event zone"); }
+static void to_item_spot(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_FLAG, "place to use an item"); }
+static void to_item_box(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_ITEMBOX, "item box"); }
+static void give_use_here(void) {           /* the item the last place to use one wants */
+    char name[48];
+    if (!s_playing || !s_use_here) { snprintf(s_status, sizeof s_status, "Go to a place to use an item first."); return; }
+    pe_re_item_name(s_session.items, s_use_here, name, sizeof name);
+    if (pe_re_give(&s_session.progress, s_use_here, 1)) snprintf(s_status, sizeof s_status, "No room for the %s.", name);
+    else snprintf(s_status, sizeof s_status, "Given the %s: press Square to use it.", name);
+}
 static void to_ramp(void) {
     if (!s_playing) return;
     if (!pe_re_stage_to_ramp()) { snprintf(s_status, sizeof s_status, "This room has no slopes or stairs."); return; }
@@ -357,6 +454,9 @@ static int init(void) {
     pe_menu_register_action("Testing", "Go to the next pickup", "Puts Aya on the room's items, one after another.", to_pickup);
     pe_menu_register_action("Testing", "Go to the next ramp", "Puts Aya at the foot of the room's slopes and stairs, one after another.", to_ramp);
     pe_menu_register_action("Testing", "Go to the next message", "Puts Aya where the room's messages are read, one after another.", to_message);
+    pe_menu_register_action("Testing", "Go to the next place to use an item", "Puts Aya facing where the room takes an item (a jewel in a statue), one after another.", to_item_spot);
+    pe_menu_register_action("Testing", "Give the item used there", "Puts the item that place takes in the pocket.", give_use_here);
+    pe_menu_register_action("Testing", "Go to the next item box", "Puts Aya at the room's item box: press Cross.", to_item_box);
     pe_menu_register_action("Testing", "Go to the next event zone", "Puts Aya where the room's events start (examined: press Cross), one after another.", to_event);
     pe_menu_register_int("Testing", "Stage", "The room to jump to: its stage.", &s_jump_stage, 1, 7, 1);
     pe_menu_register_int("Testing", "Room", "The room to jump to: its number in the stage (1-05 is 5).", &s_jump_room, 0, 63, 1);

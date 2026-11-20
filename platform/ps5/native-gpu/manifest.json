@@ -4983,11 +4983,19 @@
     },
     {
       "path": "mods/pe_re_play/pe_re_zone.c",
-      "sha256": "2bea22972ee2cc56f4362792002756174a893cf0dba89a0e2e1dbb746c9337ea"
+      "sha256": "5a820f70f42c5c146e194a0027821930c8976fed47a4843084642f27e54ed2bf"
     },
     {
       "path": "mods/pe_re_play/pe_re_zone.h",
-      "sha256": "4dde463f4a81583fd78a3c49b01feb2acaefbe2048c22703793ab8050e3bf3e6"
+      "sha256": "97c6fcc665e09aadf40ebeaf3e7757dea2b359154f9ff901ba942f8826288bc9"
+    },
+    {
+      "path": "mods/pe_re_play/pe_re_box.c",
+      "sha256": "99e576cd49c5110b5ec3a5982a8d15455583ac7292f8ff6662f9fb9929fd4517"
+    },
+    {
+      "path": "mods/pe_re_play/pe_re_play.c",
+      "sha256": "244d08898d158c690f8c90a06755154fdf70d16ebb279836b5320235eb63a648"
     }
   ]
 }

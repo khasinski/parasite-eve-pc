@@ -100,8 +100,10 @@ int pe_re_free_spot(const PeRe2RoomCollision *c, int floor, double *x, double *z
 /* ---- the session ---- */
 static int has_item(void *ctx, uint16_t item) { return pe_re_has(&((PeReSession *)ctx)->progress, item); }
 static int talking(void *ctx) { const PeReSession *s = ctx; return s->talking && s->talking(); }
+static void lose_item(void *ctx, uint16_t item, uint16_t count) { pe_re_lose(&((PeReSession *)ctx)->progress, item, count); }
+static void give_item(void *ctx, uint16_t item, uint16_t count) { pe_re_give(&((PeReSession *)ctx)->progress, item, count); }
 static PeReScdHost host_of(PeReSession *s) {
-    PeReScdHost h = {has_item, talking, s->key, s->key_trg, s};
+    PeReScdHost h = {has_item, talking, s->key, s->key_trg, s, lose_item, give_item};
     return h;
 }
 
@@ -116,6 +118,7 @@ static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room
     free(s->logic);
     s->logic = l, s->stage = stage, s->room = room;
     const PeReScdHost host = host_of(s);
+    memset(s->progress.flags.bits[PE_RE_FG_USE], 0, sizeof s->progress.flags.bits[PE_RE_FG_USE]);   /* Sce_work_clr */
     pe_re_scd_run(l, &s->progress.flags, &host, &s->run);   /* what its scripts set up */
     s->auto_message = -1;
     return 0;
@@ -124,7 +127,7 @@ static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room
 int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, uint32_t player, char *why, size_t n) {
     memset(s, 0, sizeof *s);
     if (!g) { snprintf(why, n, "no such game"); return -1; }
-    s->game = g, s->player = player;
+    s->game = g, s->player = player, s->store = store;
     pe_re_flag_set(&s->progress.flags, PE_RE_FG_STATUS, 0, player != 0);   /* who's playing (pe_re_scd.h) */
     if (load(s, store, g->stage, g->room, why, n)) { s->game = NULL; return -1; }
     char items[PE_IMP_ID_MAX];
@@ -206,7 +209,8 @@ static PeReChange zone_act(PeReSession *s, const char *store, const PeReZoneHit 
         pe_re_flag_set(&s->progress.flags, (unsigned)h->data[0] | (unsigned)h->data[1] << 8,
                        ((unsigned)h->data[2] | (unsigned)h->data[3] << 8) & 0xFF, h->data[4] | h->data[5]);
         return PE_RE_STAY;
-    case PE_RE_ZONE_SAVE: case PE_RE_ZONE_ITEMBOX:         /* for the mod: a typewriter, an item box */
+    case PE_RE_ZONE_SAVE: case PE_RE_ZONE_ITEMBOX: case PE_RE_ZONE_STATUS:   /* for the mod: a typewriter,
+                                                       an item box, the pocket to use something */
         return PE_RE_ZONE;
     default: return PE_RE_STAY;                            /* water, damage, drawers, ...: not yet */
     }
@@ -248,7 +252,8 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
             if (say_message(s, hits[i].data) == PE_RE_SAID) return PE_RE_SAID;
             continue;
         }
-        if (hits[i].sce == PE_RE_ZONE_ITEM || hits[i].sce == PE_RE_ZONE_SAVE || hits[i].sce == PE_RE_ZONE_ITEMBOX)
+        if (hits[i].sce == PE_RE_ZONE_ITEM || hits[i].sce == PE_RE_ZONE_SAVE || hits[i].sce == PE_RE_ZONE_ITEMBOX ||
+            hits[i].sce == PE_RE_ZONE_STATUS)
             continue;                                      /* those only ever answer an examine */
         const PeReChange c = zone_act(s, store, &hits[i], 0, why, n);
         if (c != PE_RE_STAY) return c;
@@ -264,9 +269,31 @@ PeReChange pe_re_session_tick(PeReSession *s) {
     if (!s->game || !s->logic) return PE_RE_STAY;
     const PeReScdHost host = host_of(s);
     pe_re_scd_tick(s->logic, &s->progress.flags, &host, &s->run);
+    for (int i = 0; i < s->run.naot_on; i++) {             /* aot_on: a zone set off by its script */
+        PeReZoneHit h;
+        if (pe_re_zone_by_id(s->logic, &s->run, &s->progress, s->run.aot_on[i], &h)) continue;
+        char why[8];
+        const PeReChange c = zone_act(s, s->store, &h, 1, why, sizeof why);
+        if (c == PE_RE_SAID || c == PE_RE_ZONE) { s->run.naot_on = 0; return c; }
+    }
+    s->run.naot_on = 0;
     const int m = s->run.message;
     s->run.message = -1;
     if (m >= 0 && !pe_re_message(s->logic, (uint32_t)m, s->said, sizeof s->said)) return PE_RE_SAID;
+    return PE_RE_STAY;
+}
+
+PeReChange pe_re_session_use(PeReSession *s, uint16_t item) {
+    char name[48];
+    s->said[0] = 0;
+    if (!s->game || !pe_re_has(&s->progress, item)) return PE_RE_STAY;
+    if (!pe_re_flag(&s->progress.flags, PE_RE_FG_USE, item)) {   /* the status screen's "can't use it here" */
+        pe_re_item_name(s->items, item, name, sizeof name);
+        snprintf(s->said, sizeof s->said, "You can't use the %s here.", name);
+        return PE_RE_SAID;
+    }
+    s->progress.flags.work[PE_RE_WORK_USE_ID] = (int16_t)item;  /* the room's script takes it from here */
+    s->uses++;
     return PE_RE_STAY;
 }
 
