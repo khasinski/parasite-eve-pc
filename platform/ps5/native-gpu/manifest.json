@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "a9e3653dff10af3d80ec22ca85a19c4a95653f20ce4c51c912f0ca957928c9e7"
+      "sha256": "32d1fff5dcc2363979096dcdcfdf0446672fe5afd1bbd68b9d4437bce26fe310"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4035,7 +4035,7 @@
     },
     {
       "path": "mods/host/pe_mod_host.h",
-      "sha256": "37db35f8ba24a615f6bb8495809cd6fb7a99ea23754f20f6d7cd47081b99ec7c"
+      "sha256": "774d5dc9fdeb2c18a8ef30d6aeaa76d065ccb5e616dc79e822540800b4f3c567"
     },
     {
       "path": "mods/host/pe_mod_menu.c",
@@ -4995,7 +4995,7 @@
     },
     {
       "path": "mods/pe_re_play/pe_re_play.c",
-      "sha256": "83291333e09e9260936745ca3b9e0e408f53e1130768349732e5e0d9b41f994d"
+      "sha256": "2ae51936170cd5b8db63bc33e3a92b7f0782eff532133e86b5472ac8092bbc0d"
     },
     {
       "path": "mods/pe_re_play/pe_re_save.c",
@@ -5032,6 +5032,22 @@
     {
       "path": "mods/host/pe_extension_section.h",
       "sha256": "f1932402f5e48833ce5ce7d5f672161200b4b5181c5f9e8a6775c4f96305bde6"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "3ee9c4d6ad4c1eb2696b1613694672ba4671af3b62e1b26fcad4eee38dce394f"
+    },
+    {
+      "path": "mods/cmake/CheckRePortability.cmake",
+      "sha256": "26cf23d520c6af3d1b6b911716493279c146b59c8ba2a0baa854378459eb043f"
+    },
+    {
+      "path": "mods/host/pe_mod_api.h",
+      "sha256": "bc5d4653e627a0c9d22c839f13c276b79c8e3d1756084d2d92192aa74ae0ec11"
+    },
+    {
+      "path": "mods/pe_re_play/pe_re_door.c",
+      "sha256": "ca661b78e05721708e13897925e4842e714bb698a0dce44313c4447b78fce1d8"
     }
   ]
 }

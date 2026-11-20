@@ -5,7 +5,7 @@
 #include "pe_re_door.h"
 #include "pe_re_session.h"
 #include "re_host.h"
-#include "pe_mod_host.h"
+#include "pe_mod_api.h"
 #include "pe_services.h"
 
 #define FADE_OUT 12                       /* frames */

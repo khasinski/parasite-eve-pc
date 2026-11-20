@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "pe_extension_section.h"
-#include "pe_mod_host.h"
+#include "pe_mod_api.h"
 #include "pe_mod_menu.h"
 #include "pe_re_door.h"
 #include "pe_re_save.h"

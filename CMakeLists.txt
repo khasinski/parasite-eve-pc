@@ -461,7 +461,10 @@ set(PE_COMMON_GAME_OBJECTS
     $<TARGET_OBJECTS:parasite-eve-original-e08>)
 if(PE_MODS)
     add_subdirectory(mods)
-    list(APPEND PE_COMMON_GAME_OBJECTS $<TARGET_OBJECTS:pe-mods>)
+    list(APPEND PE_COMMON_GAME_OBJECTS $<TARGET_OBJECTS:pe-mods> $<TARGET_OBJECTS:pe-import-core>)
+    if("pe_re_play" IN_LIST PE_MOD_LIST OR "pe_re_play" IN_LIST PE_EXTRA_MODS)
+        list(APPEND PE_COMMON_GAME_OBJECTS $<TARGET_OBJECTS:pe-re-play-core>)
+    endif()
 endif()
 # What the shared game objects need beyond psyz: zipped .pelang files are read with the mod
 # downloads' zip reader (mods/pe_lang/pe_lang_bundle.c).
