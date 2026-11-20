@@ -6,6 +6,8 @@ file(GLOB runtime "${mods}/pe_re_play/*.c" "${mods}/pe_re_play/*.h")
 file(GLOB_RECURSE readers "${mods}/pe_src_re[123]/*.c" "${mods}/pe_src_re[123]/*.h")
 # The import mod's menu and job; its adapter is under pe_import/hosts/.
 file(GLOB import_mod "${mods}/pe_import/*.c" "${mods}/pe_import/*.h")
+# The contract other mods read about a game being played.
+file(GLOB contracts "${mods}/host/re_play_api.h")
 
 set(literal [=[("[^"\\]*(\\.[^"\\]*)*"|'[^'\\]*(\\.[^'\\]*)*')]=])
 set(block_comment [=[/\*([^*]|\*+[^*/])*\*+/]=])
@@ -17,7 +19,7 @@ set(engine_header [=[([^
 >"]+|pe_game\.h|pe_hooks\.h|pe_imp_pe\.h)]=])
 set(include "#(${directive_space})*include(${directive_space})*[<\"]${engine_header}[>\"]")
 set(errors "")
-foreach(file IN LISTS importer runtime readers import_mod)
+foreach(file IN LISTS importer runtime readers import_mod contracts)
     file(READ "${file}" code)
     file(RELATIVE_PATH path "${mods}" "${file}")
     # C splices lines before recognizing tokens. Keep punctuation out of the CMake result list.

@@ -8,6 +8,7 @@
 
 #include "pe_imp_logic.h"
 #include "pe_services.h"
+#include "re_play_api.h"
 
 void pe_re_stage_init(const char *mod_id, const char *store);
 /* Show room `room_id` ("re2:room/100") from `camera`, collision of `floor` from `logic`. `place`:

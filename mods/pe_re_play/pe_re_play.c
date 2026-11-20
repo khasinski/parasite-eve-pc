@@ -68,7 +68,7 @@ static void say(const char *text) {
     if (!re_host()->say(text)) pe_toast(text);
 }
 
-/* ---- enemies: reported, not fought here ("re_play" in pe_services.h) ----
+/* ---- enemies: reported, not fought here ("re_play", re_play_api.h) ----
  * Each room's placements go out as "re_play.room" when she comes in and "re_play.enemies" when
  * the placement list changes; an encounter mod decides what to do with it. */
 static PeReEnemyPlacement s_enemies[PE_RE_ENEMIES_MAX];
@@ -634,8 +634,8 @@ static int init(void) {
     re_host()->bind_lifecycle(MOD_ID, on_frame, on_save_read, on_new_game);
     s_registered = pe_extension_register(&s_section) >= 0;
     pe_hook_add(pe_event_id(PE_EVENT_SAVE_COMMITTED), on_committed, NULL, PE_PRIORITY_NORMAL, MOD_ID);
-    s_room_event = pe_event_id("re_play.room"), s_enemies_event = pe_event_id("re_play.enemies");
-    pe_service_publish("re_play", 1, &s_api, MOD_ID);
+    s_room_event = pe_event_id(RE_PLAY_EVENT_ROOM), s_enemies_event = pe_event_id(RE_PLAY_EVENT_ENEMIES);
+    pe_service_publish(RE_PLAY_SERVICE, RE_PLAY_SERVICE_VERSION, &s_api, MOD_ID);
     if (!s_registered) pe_mod_log(MOD_ID, "progress section not registered: imported games won't be saved");
     return 0;
 }

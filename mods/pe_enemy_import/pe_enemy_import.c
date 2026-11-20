@@ -21,7 +21,7 @@
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
-#include "pe_services.h"
+#include "re_play_api.h"
 #include "pe1/asset_table.h"
 #include "pe1/battle_runtime.h"
 #include "pe1/field_actor.h"
@@ -234,7 +234,7 @@ static void pe_finish(const char *result) {
 }
 
 static const PeRePlayApi *pe_imported_room_api(void) {
-    const PeRePlayApi *api = pe_service_get("re_play", 1);
+    const PeRePlayApi *api = pe_service_get(RE_PLAY_SERVICE, RE_PLAY_SERVICE_VERSION);
     return api && api->struct_size >= sizeof *api && api->pause_for_battle &&
            api->resume_after_battle ? api : NULL;
 }

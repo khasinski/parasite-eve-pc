@@ -12,7 +12,7 @@
 #include "pe_imp_room.h"
 #include "pe_re_rules.h"
 #include "pe_re_zone.h"
-#include "pe_services.h"
+#include "re_play_api.h"
 
 #define PE_RE_GAMES 3
 #define PE_RE_STAGE_HERE 0xFFu        /* a door's stage: stay on this stage */

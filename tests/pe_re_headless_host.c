@@ -9,6 +9,7 @@
 #include "pe_re_door.h"
 #include "pe_re_save.h"
 #include "pe_services.h"
+#include "re_play_api.h"
 #include "re_host.h"
 
 extern const PeMod pe_mod_pe_re_play;
@@ -138,7 +139,7 @@ void pe_mod_log(const char *mod_id, const char *fmt, ...) { (void)mod_id; (void)
 void pe_toast(const char *text) { (void)text; }
 int pe_event_id(const char *name) {
     if (!strcmp(name, PE_EVENT_SAVE_COMMITTED)) return 1;
-    return !strcmp(name, "re_play.room") ? 2 : 3;
+    return !strcmp(name, RE_PLAY_EVENT_ROOM) ? 2 : 3;
 }
 int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_id) {
     (void)user; (void)priority; (void)mod_id;
@@ -149,12 +150,12 @@ int pe_hook_add(int id, PeHookFn fn, void *user, int priority, const char *mod_i
 int pe_event_emit(int id, void *ctx) { (void)id; (void)ctx; return 0; }
 int pe_service_publish(const char *name, int version, const void *api, const char *mod_id) {
     (void)mod_id;
-    if (strcmp(name, "re_play") || version != 1) return -1;
+    if (strcmp(name, RE_PLAY_SERVICE) || version != RE_PLAY_SERVICE_VERSION) return -1;
     s.api = api;
     return 0;
 }
 const void *pe_service_get(const char *name, int version) {
-    return version == 1 && !strcmp(name, "re_play") ? s.api : NULL;
+    return version == RE_PLAY_SERVICE_VERSION && !strcmp(name, RE_PLAY_SERVICE) ? s.api : NULL;
 }
 int pe_extension_register(const PeExtensionSection *section) { s.progress = section; return 0; }
 PeRegResult pe_extension_enable(const PeExtensionSection *section) {
