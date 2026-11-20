@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "87f4f762ea8ea79f28d55cf8a8a03570fe498f876238d96296d68c159fdbb5d2"
+      "sha256": "3f84e5c2547debbbe58a088bd6086173cf867adf35525e3d82cc9fb7aa666504"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4980,6 +4980,14 @@
     {
       "path": "mods/host/import/pe_imp_fit.h",
       "sha256": "ead74d50ed8d714d431441ae968c6f14fc509ff869bdc2a3e40d2b3056d237ea"
+    },
+    {
+      "path": "mods/pe_re_play/pe_re_zone.c",
+      "sha256": "2bea22972ee2cc56f4362792002756174a893cf0dba89a0e2e1dbb746c9337ea"
+    },
+    {
+      "path": "mods/pe_re_play/pe_re_zone.h",
+      "sha256": "4dde463f4a81583fd78a3c49b01feb2acaefbe2048c22703793ab8050e3bf3e6"
     }
   ]
 }
