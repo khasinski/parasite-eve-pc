@@ -79,6 +79,52 @@ static void say(const char *text) {
     if (!pe_re_box_say(text)) pe_toast(text);
 }
 
+/* ---- enemies: reported, not fought here ("re_play" in pe_services.h) ----
+ * Each room's placements go out as "re_play.room" when she comes in and "re_play.enemies" when
+ * its scripts place more; an encounter mod decides what to do with them. */
+static PeReEnemyPlacement s_enemies[PE_RE_ENEMIES_MAX];
+static int s_nenemies, s_reported;
+static const PeImpRoomLogic *s_reported_room;
+static int s_room_event = -1, s_enemies_event = -1;
+
+static int api_room(PeReRoomEvent *out) {
+    if (!s_playing || !s_session.game) return -1;
+    memset(out, 0, sizeof *out);
+    out->struct_size = sizeof *out;
+    out->game = s_session.game->game, out->stage = s_session.stage, out->room = s_session.room;
+    out->count = s_nenemies, out->enemies = s_enemies;
+    return 0;
+}
+static int api_defeated(uint8_t killed_flag) {
+    if (!s_playing) return -1;
+    const int r = pe_re_session_defeated(&s_session, killed_flag);
+    if (!r) s_nenemies = pe_re_session_enemies(&s_session, s_enemies, PE_RE_ENEMIES_MAX), s_reported = s_nenemies;
+    return r;
+}
+static const PeRePlayApi s_api = {sizeof s_api, api_room, api_defeated};
+
+static void report_enemies(void) {
+    const int fresh = s_session.logic != s_reported_room;
+    const int n = pe_re_session_enemies(&s_session, s_enemies, PE_RE_ENEMIES_MAX);
+    if (!fresh && n <= s_reported) { s_nenemies = n; return; }
+    s_nenemies = n, s_reported = n, s_reported_room = s_session.logic;
+    PeReRoomEvent e;
+    api_room(&e);
+    e.fresh = fresh;
+    pe_event_emit(fresh ? s_room_event : s_enemies_event, &e);
+    if (n) pe_mod_log(MOD_ID, "%s %x-%02X: %d enemies placed (first: kind 0x%02X at %d,%d)", fresh ? "room" : "more",
+                      (unsigned)s_session.stage + 1, (unsigned)s_session.room, n, s_enemies[0].kind, s_enemies[0].x,
+                      s_enemies[0].z);
+}
+
+static void text_enemies(char *out, unsigned size) {
+    if (!s_playing) { snprintf(out, size, "-"); return; }
+    if (!s_nenemies) { snprintf(out, size, "None placed here."); return; }
+    int at = snprintf(out, size, "%d placed (reported for fights):", s_nenemies);
+    for (int i = 0; i < s_nenemies && at > 0 && (unsigned)at < size; i++)
+        at += snprintf(out + at, size - (unsigned)at, " 0x%02X", s_enemies[i].kind);
+}
+
 /* ---- the pocket and the item box, in the band (pe_re_box_choose) ---- */
 #define PAD_SQUARE 0x8000u                /* raw pad: Square opens the pocket to use something */
 enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE };
@@ -364,6 +410,7 @@ static int on_frame(void *ctx, void *user) {
         if (*why) snprintf(s_status, sizeof s_status, "That door: %s.", why);
         break;
     }
+    if (s_playing) report_enemies();
     if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
     return 0;
 }
@@ -521,9 +568,12 @@ static int init(void) {
     pe_menu_register_info(0, "Status", "Where you are, or the last thing said.", text_status);
     pe_menu_register_info(0, "Pocket", "What you've picked up in this game.", text_pocket);
     pe_menu_register_info(0, "Scripts", "What this room's own scripts ran when you came in.", text_scripts);
+    pe_menu_register_info(0, "Enemies", "Where this room's scripts put enemies: reported to an encounter mod, not fought here.", text_enemies);
     pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     s_registered = pe_extension_register(&s_section) >= 0;
     pe_hook_add(pe_event_id(PE_EVENT_SAVE_COMMITTED), on_committed, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    s_room_event = pe_event_id("re_play.room"), s_enemies_event = pe_event_id("re_play.enemies");
+    pe_service_publish("re_play", 1, &s_api, MOD_ID);
     if (!s_registered) pe_mod_log(MOD_ID, "progress section not registered: imported games won't be saved");
     pe_hook_add(PE_HOOK_SAVE_READ, on_save_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_NEW_GAME, on_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);

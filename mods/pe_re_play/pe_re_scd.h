@@ -31,6 +31,7 @@
  *            of its id (a later zone with the same id replaces it, and clears that id's
  *            aot_reset); aot_reset: a zone's kind, check bits and data replaced (kind 0: gone)
  *   text     message_on: the room's message, for the caller to show
+ *   enemies  sce_em_set: run = placed (its offset kept; the caller reads the record)
  * Every other instruction is skipped (counted). Entering a room, and the end of every frame's run,
  * clears what the frame's zones and item use left (Sce_work_clr): F_atari (work 0), U_atari (1),
  * Use_id (2) and Get_id (3) become -1, and Use_flg (group 10) and Room_flg's second word (group 5,
@@ -47,6 +48,8 @@
 #define PE_RE_RESETS_MAX 64
 #define PE_RE_TASKS 10
 #define PE_RE_AOT_ON_MAX 8
+#define PE_RE_ENEMIES_MAX 16
+#define PE_RE_FG_ENEMY 6                       /* Enemy_flg: placements killed (Enemy_flg2, 7, from stage 4) */
 #define PE_RE_FG_USE 10                        /* Use_flg: items usable here (bit = item) */
 #define PE_RE_LEVELS 4                         /* gosub levels a task keeps */
 #define PE_RE_SLOTS 256                        /* zone ids */
@@ -91,6 +94,8 @@ typedef struct {
     uint32_t sec[2], len[2];                   /* init and main scripts in the room file */
     int waiting;                               /* tasks running after the last tick */
     uint8_t aot_on[PE_RE_AOT_ON_MAX];          /* aot_on: zones the scripts set off, for the caller */
+    uint32_t enemy[PE_RE_ENEMIES_MAX];         /* sce_em_set instructions that ran (RDT offsets) */
+    int nenemy;
     int naot_on;
 } PeReScdRun;
 

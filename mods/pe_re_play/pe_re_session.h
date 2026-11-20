@@ -12,6 +12,7 @@
 #include "pe_imp_room.h"
 #include "pe_re_rules.h"
 #include "pe_re_zone.h"
+#include "pe_services.h"
 
 #define PE_RE_GAMES 3
 #define PE_RE_STAGE_HERE 0xFFu        /* a door's stage: stay on this stage */
@@ -99,6 +100,12 @@ void pe_re_session_place(PeReSession *s, double x, double z, int facing);
  * session where it was (`why` says). */
 PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, double z, int action, char *why, size_t n);
 void pe_re_session_end(PeReSession *s);
+/* The enemies the room's scripts have placed, in the order they ran, skipping any whose killed
+ * flag is set (Sce_em_set: Enemy_flg, or Enemy_flg2 from stage 4 or on the special run). How many
+ * (up to `max`). */
+int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max);
+/* A placed enemy beaten: its killed flag set. 0, or -1 (no game, flag 0xFF). */
+int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag);
 /* Use `item` from the pocket here, as choosing it on RE2's status screen does: when the room's
  * scripts allow it here (flag group 10, Use_flg, its bit set) it becomes Use_id (work 2) for them
  * to act on (open the way, take the item); else PE_RE_SAID: "You can't use the Red Jewel here." */

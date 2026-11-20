@@ -15,7 +15,7 @@ enum {
     OP_CK = 0x21, OP_SET = 0x22, OP_CMP = 0x23, OP_SAVE = 0x24, OP_COPY = 0x25, OP_CALC = 0x26, OP_CALC2 = 0x27,
     OP_MESSAGE_ON = 0x2B, OP_AOT_SET = 0x2C, OP_DOOR_AOT_SE = 0x3B, OP_AOT_RESET = 0x46, OP_ITEM_AOT_SET = 0x4E,
     OP_AOT_ON = 0x47, OP_SCE_KEY_CK = 0x4F, OP_SCE_TRG_CK = 0x50, OP_KEEP_ITEM_CK = 0x5E, OP_ITEM_LOST = 0x62,
-    OP_ITEM_GET = 0x76, OP_ITEM_CK_LOST = 0x88,
+    OP_ITEM_GET = 0x76, OP_ITEM_CK_LOST = 0x88, OP_SCE_EM_SET = 0x44,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -301,6 +301,14 @@ static int step(Vm *vm, PeReScdTask *t) {
         zone_set(vm, ins[1], t->pc);
         t->pc += n;
         return CONTINUE;
+    case OP_SCE_EM_SET: {                                  /* an enemy placed (the caller checks its flag) */
+        PeReScdRun *r = vm->run;
+        int k = 0;
+        while (k < r->nenemy && r->enemy[k] != t->pc) k++;
+        if (k == r->nenemy && r->nenemy < PE_RE_ENEMIES_MAX) r->enemy[r->nenemy++] = t->pc;
+        t->pc += n;
+        return CONTINUE;
+    }
     case OP_AOT_ON:                                        /* the zone acts now, as if set off */
         if (vm->run->naot_on < PE_RE_AOT_ON_MAX) vm->run->aot_on[vm->run->naot_on++] = ins[1];
         t->pc += n;

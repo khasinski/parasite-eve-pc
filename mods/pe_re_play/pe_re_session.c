@@ -297,6 +297,36 @@ PeReChange pe_re_session_use(PeReSession *s, uint16_t item) {
     return PE_RE_STAY;
 }
 
+static unsigned enemy_group(const PeReSession *s) {        /* Sce_em_set's flag set */
+    return s->stage >= 3 || pe_re_flag(&s->progress.flags, PE_RE_FG_STATUS, 6) ? PE_RE_FG_ENEMY + 1 : PE_RE_FG_ENEMY;
+}
+
+int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max) {
+    uint32_t size = 0;
+    int n = 0;
+    if (!s->logic || !s->run.ran) return 0;
+    const uint8_t *rdt = pe_imp_logic_section(s->logic, PE_IMP_LOGIC_RDT0, NULL, &size);
+    for (int i = 0; rdt && i < s->run.nenemy && n < max; i++) {
+        const uint32_t at = s->run.enemy[i];
+        if (at + 22 > size) continue;
+        const uint8_t *e = rdt + at;                        /* SCE_EM_SET_WORK, 22 bytes */
+        if (e[9] != 0xFF && pe_re_flag(&s->progress.flags, enemy_group(s), e[9])) continue;   /* killed */
+        PeReEnemyPlacement *p = &out[n++];
+        p->slot = e[2], p->kind = e[3], p->behaviour = (uint16_t)(e[4] | e[5] << 8);
+        p->floor = e[6], p->sound = e[7], p->model = e[8], p->killed_flag = e[9];
+        p->x = (int16_t)(e[10] | e[11] << 8), p->y = (int16_t)(e[12] | e[13] << 8);
+        p->z = (int16_t)(e[14] | e[15] << 8), p->dir = (int16_t)(e[16] | e[17] << 8);
+        p->motion = (int16_t)(e[18] | e[19] << 8), p->ctr = (int16_t)(e[20] | e[21] << 8);
+    }
+    return n;
+}
+
+int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag) {
+    if (!s->game || killed_flag == 0xFF) return -1;
+    pe_re_flag_set(&s->progress.flags, enemy_group(s), killed_flag, 1);
+    return 0;
+}
+
 void pe_re_session_end(PeReSession *s) {
     free(s->logic);
     free(s->items);

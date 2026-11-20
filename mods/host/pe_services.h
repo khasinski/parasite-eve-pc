@@ -20,6 +20,7 @@ typedef struct PeBattleActionPolicyApi { int (*partial_actions)(void); } PeBattl
  *   "rebuild"   v1  pe_catalog  dismantled gear to buy back (Wayne's Workshop)
  *   "phonecalls" v1 pe_phone    calls Aya can make after saving at a phone (call packs)
  *   "bp"        v1  pe_bp       BP upgrades: ranks, quotes, checked purchases, pauses (preview)
+ *   "re_play"   v1  pe_re_play  an imported game being played: its room, enemy placements, defeats
  *
  * Providers (an import pack, a randomizer) register at their init, so they list "pe_collection"
  * in their PeMod requires. Keys are stable names saved in the player's profile ("pe1/rat",
@@ -369,6 +370,42 @@ typedef struct PePhoneCallsApi {
      * before pe_phone offers it from its first frame). 0 ok, -1 refused (logged). */
     int (*add_condition)(const char *name, int (*holds)(void));
 } PePhoneCallsApi;
+
+/* ---- "re_play" v1 (pe_re_play): an imported game being played ----
+ * The runtime only reports where the room's scripts put enemies; an encounter policy (another mod)
+ * decides what happens: placement battles, random encounters, nothing. Events (pe_event_id):
+ *   "re_play.room"     (const PeReRoomEvent *) the player came into a room (a door, a jump, a
+ *                      loaded save), with the enemies its scripts placed
+ *   "re_play.enemies"  (const PeReRoomEvent *) the room's scripts placed more since (an event)
+ * Positions are the source game's room units (x, z on the floor, y down, 1,800 a floor). A placed
+ * enemy's killed flag is the game's own: report a defeat with defeated() and the room's scripts stop
+ * placing it, as after a kill in the source game (RE2: Enemy_flg, Enemy_flg2 from stage 4). */
+typedef struct PeReEnemyPlacement {
+    uint8_t slot;                  /* the game's enemy slot (Em_no) */
+    uint8_t kind;                  /* the game's id (RE2: 0x10-0x3F creatures; 0x40 and up are people) */
+    uint16_t behaviour;            /* its Type word: pose and AI variant */
+    uint8_t floor, sound, model;
+    uint8_t killed_flag;           /* 0xFF: none (always placed) */
+    int16_t x, y, z, dir;          /* dir 0..4095 */
+    int16_t motion, ctr;
+} PeReEnemyPlacement;
+
+typedef struct PeReRoomEvent {
+    uint32_t struct_size;
+    const char *game;              /* "re2" */
+    uint32_t stage, room;          /* stage 0 = stage 1 */
+    int fresh;                     /* 1: came in; 0: more placed since */
+    int count;
+    const PeReEnemyPlacement *enemies;
+} PeReRoomEvent;
+
+typedef struct PeRePlayApi {
+    uint32_t struct_size;
+    /* The room being played and its placements (valid until the next frame); 0, or -1 if not playing. */
+    int (*room)(PeReRoomEvent *out);
+    /* A placed enemy was beaten: set its killed flag. 0, or -1 (not playing, flag 0xFF). */
+    int (*defeated)(uint8_t killed_flag);
+} PeRePlayApi;
 
 /* ---- "bp" v1 (pe_bp, BP Overhaul preview): what the game's Bonus Points buy ----
  * Reads the upgrades a save holds and buys, refunds or grants them through the same checked

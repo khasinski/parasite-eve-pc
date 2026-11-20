@@ -448,6 +448,33 @@ int main(void) {
         pe_re_session_end(&v);
     }
 
+    /* enemies: the street's placements reported; one beaten stays gone when she comes back */
+    {
+        static PeReSession v;
+        PeReEnemyPlacement e[PE_RE_ENEMIES_MAX];
+        if (!pe_re_session_start(&v, s_store, pe_re_game_named("re2"), 0, why, sizeof why)) {
+            for (int f = 0; f < 30; f++) pe_re_session_tick(&v);
+            const int n = pe_re_session_enemies(&v, e, PE_RE_ENEMIES_MAX);
+            int flagged = -1;
+            for (int i = 0; i < n && flagged < 0; i++) if (e[i].killed_flag != 0xFF) flagged = i;
+            printf("RE2 street: %d enemies placed (first kind 0x%02X at %d,%d)\n", n, n ? e[0].kind : 0, n ? e[0].x : 0,
+                   n ? e[0].z : 0);
+            CHECK(n > 0 && flagged >= 0);
+            if (flagged >= 0) {
+                const uint8_t flag = e[flagged].killed_flag;
+                CHECK(!pe_re_session_defeated(&v, flag) && pe_re_session_enemies(&v, e, PE_RE_ENEMIES_MAX) == n - 1);
+                CHECK(!pe_re_session_enter(&v, s_store, v.stage, v.room, 0, v.x, v.z, 0, why, sizeof why));
+                for (int f = 0; f < 30; f++) pe_re_session_tick(&v);
+                int back = 0;
+                const int m = pe_re_session_enemies(&v, e, PE_RE_ENEMIES_MAX);
+                for (int i = 0; i < m; i++) back |= e[i].killed_flag == flag;
+                CHECK(m == n - 1 && !back);
+            }
+            CHECK(pe_re_session_defeated(&v, 0xFF) < 0);
+        }
+        pe_re_session_end(&v);
+    }
+
     /* a typewriter and an item box (2-08): examined from in front, they're handed to the mod */
     {
         static PeReSession v;
@@ -486,6 +513,7 @@ int main(void) {
     PeReProgress fresh;
     int rooms = 0, ran = 0, live_doors = 0, all_doors = 0, live_items = 0, all_items = 0;
     long executed = 0, skipped = 0, stopped = 0;
+    int placed = 0, enem_records = 0;
     int kinds[16] = {0}, manual = 0, events = 0, events_found = 0, events_started = 0, use_zones = 0, use_found = 0;
     for (uint32_t st = 0; st < 7; st++)
         for (uint32_t rm = 0; rm < 64; rm++) {
@@ -498,6 +526,8 @@ int main(void) {
             pe_re_scd_run(rl, &fresh.flags, NULL, &run);
             for (int f = 0; f < 120; f++) pe_re_scd_tick(rl, &fresh.flags, NULL, &run);   /* four seconds of play */
             rooms++, ran += run.ran, executed += run.executed, skipped += run.skipped, stopped += run.stopped;
+            placed += run.nenemy;
+            { uint32_t ne = 0; pe_imp_logic_section(rl, PE_IMP_LOGIC_ENEM, &ne, NULL); enem_records += (int)ne; }
             if (run.messages && getenv("PE_TEST_RE_MESSAGES"))
                 printf("  %x%02x: message_on %d times in 4 s, %d tasks running, %d over budget\n", st + 1, rm,
                        run.messages, run.waiting, run.stopped);
@@ -567,6 +597,8 @@ int main(void) {
            events_found, events, events_started);
     CHECK(events > 0 && events_found * 10 >= events * 9 && events_started * 10 >= events * 9);
     CHECK(kinds[PE_RE_ZONE_SAVE] > 0 && kinds[PE_RE_ZONE_ITEMBOX] > 0);
+    printf("RE2 enemies, new game: %d placements run of %d in the rooms' scripts\n", placed, enem_records);
+    CHECK(placed > 50 && placed <= enem_records);
     printf("RE2 item use, new game: %d zones make an item usable, %d found where she stands; %d pocket zones\n",
            use_zones, use_found, kinds[PE_RE_ZONE_STATUS]);
     CHECK(use_zones > 5 && use_found * 10 >= use_zones * 9);
