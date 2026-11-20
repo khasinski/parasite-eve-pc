@@ -241,6 +241,21 @@ static void show_room(int place) {
              (unsigned)s_session.room, s_session.camera);
 }
 
+/* A script's cut to a camera: one the room's pictures don't have is let go (logged), not a stop. */
+static void show_cut(void) {
+    char room[PE_IMP_ID_MAX], why[200] = "";
+    pe_re_room_id(s_session.game->game, s_session.stage, s_session.room, room, sizeof room);
+    if (pe_re_stage_show(room, s_session.logic, s_session.camera, s_session.floor, 1, s_session.x, s_session.z,
+                         s_session.facing, why, sizeof why)) {
+        pe_mod_log(MOD_ID, "cut to camera %d: %s", s_session.camera, why);
+        s_session.camera = s_session.run.camera = s_session.run.camera_old;
+        s_session.run.camera_lock = 0;
+        show_room(1);
+        return;
+    }
+    pe_re_stage_player(&s_session.x, &s_session.z, &s_session.facing);
+}
+
 static int keep_progress(void) {
     if (!s_enabled && s_registered) s_enabled = pe_extension_enable(&s_section) == PE_REG_OK;
     return s_enabled;
@@ -379,6 +394,7 @@ static int on_frame(void *ctx, void *user) {
     switch (pe_re_session_tick(&s_session)) {     /* the room's scripts, a frame */
     case PE_RE_SAID: say(s_session.said); break;
     case PE_RE_ZONE: zone_handed(); break;
+    case PE_RE_CAMERA: show_cut(); break;
     default: break;
     }
     {   /* Square: the pocket, to use something here */

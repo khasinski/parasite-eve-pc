@@ -31,6 +31,8 @@
  *            of its id (a later zone with the same id replaces it, and clears that id's
  *            aot_reset); aot_reset: a zone's kind, check bits and data replaced (kind 0: gone)
  *   text     message_on: the room's message, for the caller to show
+ *   camera   cut_chg (that camera; camera zones locked out), cut_old (back to the one before,
+ *            unlocked), cut_auto (lock on / off) (SCE1.C Cut_chg / Cut_old / Cut_auto)
  *   enemies  sce_em_set: run = placed (its offset kept; the caller reads the record)
  * Every other instruction is skipped (counted). Entering a room, and the end of every frame's run,
  * clears what the frame's zones and item use left (Sce_work_clr): F_atari (work 0), U_atari (1),
@@ -95,6 +97,8 @@ typedef struct {
     int waiting;                               /* tasks running after the last tick */
     uint8_t aot_on[PE_RE_AOT_ON_MAX];          /* aot_on: zones the scripts set off, for the caller */
     uint32_t enemy[PE_RE_ENEMIES_MAX];         /* sce_em_set instructions that ran (RDT offsets) */
+    int camera, camera_old;                    /* the camera now (the caller keeps it current), the last */
+    int camera_lock;                           /* the scripts hold the camera: zones don't switch it */
     int nenemy;
     int naot_on;
 } PeReScdRun;

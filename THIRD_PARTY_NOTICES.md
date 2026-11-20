@@ -311,7 +311,8 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   `def/SCENARIO.H`), the pad's key bits for script key checks (`PAD.C`, `SCE2.C`), the frame's order
   and its every-frame handler (`GAME.C`, `SCE0.C` Sce_scheduler / Sce_work_clr), and item use, item
   scripts and item boxes (`ST_SUB00.C`, `SCE2.C`, `SCE_AT.C`), and enemy placements (`SCE2.C`
-  Sce_em_set, `EM_SET.H`). Our interpreter and zone checks are
+  Sce_em_set, `EM_SET.H`), and camera cuts (`SCE1.C` Cut_chg / Cut_old / Cut_auto). Our interpreter
+  and zone checks are
   written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

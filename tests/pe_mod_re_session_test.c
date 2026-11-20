@@ -2,6 +2,7 @@
  * doors on a made-up room; then, with PE_TEST_RE2_DISC, RE2 imported and walked door by door from
  * the street: every door must lead to an imported room that has the camera it names, and should
  * put the player on free floor. No disc data is kept. */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -222,7 +223,7 @@ int main(void) {
     /* every room reachable through doors from the street, breadth first */
     static uint32_t queue[ROOMS_MAX];
     static uint8_t seen[16][256];
-    int head = 0, tail = 0, doors = 0, missing = 0, no_camera = 0, blocked = 0, stuck = 0;
+    int head = 0, tail = 0, doors = 0, missing = 0, no_camera = 0, blocked = 0, stuck = 0, facing_known = 0, facing_re = 0, facing_stage = 0;
     PeReSession s;
     CHECK(!pe_re_session_start(&s, s_store, g, 0, why, sizeof why));
     pe_re_session_end(&s);
@@ -267,6 +268,26 @@ int main(void) {
                                ts + 1, d.room, d.next_x, d.next_z, d.next_y, c.count);
                 }
             }
+            {   /* which way she faces on landing: away from the door back, into the room */
+                uint32_t nb = 0;
+                double best = 1e18, vx = 0, vz = 0;
+                pe_imp_logic_section(t.logic, PE_IMP_LOGIC_DOOR, &nb, NULL);
+                for (uint32_t k = 0; k < nb; k++) {
+                    PeImpDoor b;
+                    if (pe_imp_logic_door(t.logic, k, &b) || b.room != room) continue;
+                    double bx = 0, bz = 0;
+                    for (int c4 = 0; c4 < 4; c4++) bx += b.zone.x[c4] / 4.0, bz += b.zone.z[c4] / 4.0;
+                    const double dd = (bx - d.next_x) * (bx - d.next_x) + (bz - d.next_z) * (bz - d.next_z);
+                    if (dd < best) best = dd, vx = d.next_x - bx, vz = d.next_z - bz;
+                }
+                if (best < 1e18 && (vx || vz)) {
+                    const double a = (d.next_dir & 4095) * (acos(-1.0) / 2048.0);
+                    facing_known++;
+                    facing_re += vx * cos(a) - vz * sin(a) > 0;          /* RE2's Rot_vector: 0 faces +x */
+                    const double y = pe_re_facing_of(d.next_dir) * (acos(-1.0) / 2048.0);
+                    facing_stage += -vx * sin(y) - vz * cos(y) > 0;      /* as the session turns her: 0 faces -z */
+                }
+            }
             free(set);
             pe_re_session_end(&t);
             if (!seen[ts][d.room] && tail < ROOMS_MAX) seen[ts][d.room] = 1, queue[tail++] = ts << 8 | d.room;
@@ -304,9 +325,12 @@ int main(void) {
                waves[0], waves[1], waves[2], waves[3]);
         CHECK(with > 0 && without * 10 <= with);
     }
+    printf("door landings facing into the room: %d of %d by RE2's angle, %d by the stage's\n", facing_re, facing_known,
+           facing_stage);
     printf("RE2 from the street: %d rooms reached, %d doors, %d to rooms not imported, %d without their camera, "
            "%d onto blocked floor, %d with no free floor near\n", tail, doors, missing, no_camera, blocked, stuck);
     CHECK(tail >= 40 && doors >= 100);
+    CHECK(facing_known > 100 && facing_stage == facing_re && facing_stage * 10 >= facing_known * 9);
 
     /* RE2's own rules: 1-05 holds the Cabin Key and the door to 1-06 that needs it */
     PeReSession r;
@@ -435,11 +459,17 @@ int main(void) {
                 CHECK(v.progress.flags.work[PE_RE_WORK_F_ATARI] == spot.zone.id && pe_re_flag(&v.progress.flags, PE_RE_FG_USE, item));
                 const int resets = v.run.nreset;
                 CHECK(pe_re_session_use(&v, item) == PE_RE_STAY);
-                for (int f = 0; f < 5; f++) pe_re_session_tick(&v);
+                int cuts = 0, held = 0;
+                for (int f = 0; f < 5; f++) cuts += pe_re_session_tick(&v) == PE_RE_CAMERA;
                 CHECK(v.run.nreset > resets && pe_re_zone_kind(&v.run, spot.zone.id, spot.zone.sce, NULL) == 0);
                 CHECK(v.progress.flags.work[PE_RE_WORK_USE_ID] == -1);   /* cleared after the frame */
-                printf("1-08 item %u used at zone %u: %d zones switched by its event\n", (unsigned)item,
-                       (unsigned)spot.zone.id, v.run.nreset - resets);
+                for (int f = 0; f < 600; f++) {                  /* the event plays: its camera cuts */
+                    cuts += pe_re_session_tick(&v) == PE_RE_CAMERA;
+                    held += v.run.camera_lock;
+                }
+                CHECK(cuts >= 2 && held > 0);
+                printf("1-08 item %u used at zone %u: %d zones switched by its event, %d camera cuts, last camera %d\n",
+                       (unsigned)item, (unsigned)spot.zone.id, v.run.nreset - resets, cuts, v.camera);
             }
         } else {
             printf("1-08: %s\n", why);

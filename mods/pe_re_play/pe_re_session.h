@@ -90,6 +90,9 @@ void pe_re_door_sound_id(const char *game, const PeImpDoor *d, unsigned wave, ch
 /* The floor a height stands on (y down, 1,800 units a floor, as the game rounds it: SCA.C). */
 int pe_re_floor_of(int y);
 void pe_re_session_place(PeReSession *s, double x, double z, int facing);
+/* The session's facing (the stage's yaw: 0 faces -z, 1024 -x) for an angle in the game's own terms
+ * (a door's landing direction: RE2's Rot_vector turns 0 to +x). */
+int pe_re_facing_of(int game_dir);
 /* After the player moved to (x, z) (facing s->facing, on s->floor): switch camera if a zone says
  * so. Pressing `action` examines (pe_re_zone.h): the first zone hit acts by its kind: a door
  * (locked: says why; else loads the next room and places the player as the door says), a pickup
@@ -111,7 +114,8 @@ int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag);
  * to act on (open the way, take the item); else PE_RE_SAID: "You can't use the Red Jewel here." */
 PeReChange pe_re_session_use(PeReSession *s, uint16_t item);
 /* A frame of the room's scripts. PE_RE_SAID when one put up a message (`said`), PE_RE_ZONE when one
- * set off a zone the mod handles (aot_on); else PE_RE_STAY. */
+ * set off a zone the mod handles (aot_on), PE_RE_CAMERA when one cut to another camera (camera
+ * zones stay out until it lets go); else PE_RE_STAY. */
 PeReChange pe_re_session_tick(PeReSession *s);
 
 #endif

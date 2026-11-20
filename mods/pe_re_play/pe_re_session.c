@@ -154,6 +154,8 @@ int pe_re_floor_of(int y) {
     return f < 0 ? 0 : f > 31 ? 31 : f;
 }
 
+int pe_re_facing_of(int game_dir) { return (game_dir - 1024) & 4095; }
+
 void pe_re_session_place(PeReSession *s, double x, double z, int facing) {
     s->x = x, s->z = z, s->facing = facing & 4095;
 }
@@ -162,7 +164,7 @@ void pe_re_session_place(PeReSession *s, double x, double z, int facing) {
 static PeReChange take_door(PeReSession *s, const char *store, const PeImpDoor *d, char *why, size_t n) {
     if (pe_re_door_try(&s->progress, d, s->items, s->said, sizeof s->said) == PE_RE_DOOR_LOCKED) return PE_RE_SAID;
     const uint32_t stage = d->stage == PE_RE_STAGE_HERE ? s->stage : d->stage;
-    if (!pe_re_session_enter(s, store, stage, d->room, d->camera, d->next_x, d->next_z, d->next_dir, why, n)) {
+    if (!pe_re_session_enter(s, store, stage, d->room, d->camera, d->next_x, d->next_z, pe_re_facing_of(d->next_dir), why, n)) {
         s->floor = pe_re_floor_of(d->next_y);
         s->door = *d;
         s->doors_taken++;
@@ -259,6 +261,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
         if (c != PE_RE_STAY) return c;
     }
     if (message_zone < 0) s->auto_message = -1;
+    if (s->run.ran && s->run.camera_lock) return PE_RE_STAY;   /* the scripts hold the camera */
     const int camera = pe_re_camera_at(s->logic, s->camera, x, z);
     if (camera == s->camera) return PE_RE_STAY;
     s->camera = camera;
@@ -268,6 +271,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
 PeReChange pe_re_session_tick(PeReSession *s) {
     if (!s->game || !s->logic) return PE_RE_STAY;
     const PeReScdHost host = host_of(s);
+    s->run.camera = s->camera;
     pe_re_scd_tick(s->logic, &s->progress.flags, &host, &s->run);
     for (int i = 0; i < s->run.naot_on; i++) {             /* aot_on: a zone set off by its script */
         PeReZoneHit h;
@@ -277,6 +281,10 @@ PeReChange pe_re_session_tick(PeReSession *s) {
         if (c == PE_RE_SAID || c == PE_RE_ZONE) { s->run.naot_on = 0; return c; }
     }
     s->run.naot_on = 0;
+    if (s->run.ran && s->run.camera != s->camera) {        /* a script cut to another camera */
+        s->camera = s->run.camera;
+        return PE_RE_CAMERA;
+    }
     const int m = s->run.message;
     s->run.message = -1;
     if (m >= 0 && !pe_re_message(s->logic, (uint32_t)m, s->said, sizeof s->said)) return PE_RE_SAID;
