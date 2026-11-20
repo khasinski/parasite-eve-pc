@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15
+
+- Added **Hold to skip dialogue** under Movement: hold Square, R1 or L1 to turn dialogue pages quickly. Questions still wait for your answer. Off by default.
+- Added **Auto Medicine order** under Combat: the Auto Medicine armor effect can use the weakest medicine first instead of Full Recover.
+- Added **Departure Mono** and **Plain Sans** to **F1 → Font**, beside Original and Pixel Sans.
+- Fixed the warehouse Crab's bubbles and eye beams doing no damage to Aya.
+- Fixed a save whose mods' data another build partly overwrote being refused as unreadable. It now loads, and only the lost mod records start over.
+- An update to the optional HD background pack fixes the restaurant and hanging signs in Chinatown, which were drawn over the street with black dots along their edges. Update the pack through **Escape → Mods → Background pack**.
+- Added more diagnostics to the opt-in debug controls and a headless test harness for automated gameplay checks.
+
 ## 0.14
 
 - Fixed opened chest interiors shifting out of sync with the rest of the chest at 60 Hz.
