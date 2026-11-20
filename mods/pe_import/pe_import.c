@@ -17,13 +17,10 @@
 #include "pe_imp.h"
 #include "pe_imp_mdec.h"
 #include "pe_imp_room.h"
-#include "pe_imp_pe.h"
 #include "pe_import.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_services.h"
-#include "pe1/boot_display.h"
-#include "pe1/render_object.h"
 
 #define MOD_ID "pe_import"
 #define PAGE "Import"
@@ -706,13 +703,13 @@ static void build(void) {
     const PeImpTarget *tg = pe_imp_target(it->target);
     char why[240] = "", folder[1100], log[160] = "", builder[64], added[200] = "";
     snprintf(builder, sizeof builder, "pe_import 1, %s %u", tg->module, tg->version);
-    PeImpPe *pe = pe_import_game_source(why, sizeof why);
-    int rc = !pe;
-    if (pe) {
-        PeImpBuild ctx = {s_job.store, pe, (const int16_t (*)[4])g_RenderNormalTable};
+    const void *targets = s_job.host->open_targets(why, sizeof why);
+    int rc = !targets;
+    if (targets) {
+        PeImpBuild ctx = {s_job.store, targets, NULL};
         rc = pe_imp_target_place(tg, s_job.packs, &it->a, builder, folder, sizeof folder, why, sizeof why) ||
              tg->build(&ctx, it->a.id, folder, log, sizeof log, why, sizeof why);
-        pe_imp_pe_close(pe);
+        s_job.host->close_targets(targets);
     }
     if (rc) snprintf(s_build, sizeof s_build, "%s: %s", it->label, why);
     else {
@@ -761,9 +758,8 @@ static int import_init(void) {
         pe_mod_path(s_job.packs, sizeof s_job.packs, "packs"))
         return 1;
     if (pe_mod_path(s_rooms_dir, sizeof s_rooms_dir, "import/rooms")) return 1;
-    pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);      /* the game's own MDEC table, for rooms */
-    s_job.pe_source = pe_import_game_source;
-    s_job.normals = (const int16_t (*)[4])g_RenderNormalTable;
+    s_job.host = import_host();
+    s_job.host->init();                                       /* the game's own tables (PE1: MDEC) */
     pe_imp_mkdirs(s_job.discs);
     if (pe_mod_path(s_folders_file, sizeof s_folders_file, "import/folders.txt")) return 1;
     folders_load();
@@ -814,7 +810,7 @@ static int import_init(void) {
         pe_menu_register_action("Music", "Stop", "Stops the track that's playing.", stop_track);
         pe_menu_register_info("Music", "Playback", "What's playing.", music_status);
     }
-    pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_LATE, MOD_ID);
+    s_job.host->bind_frame(MOD_ID, on_frame);
     /* The game binds its discs before the mods start (main.c), so the first run starts now, on its
      * thread, while the title loads; its results reach the Wardrobe on the first field frame, or
      * at once on this page (the menu stops frames). */

@@ -16,7 +16,6 @@
 #include "pe_imp_json.h"
 #include "pe_imp_logic.h"
 #include "pe_imp_pictures.h"
-#include "pe_imp_pe.h"
 #include "pe_import.h"
 
 #define MAX_IMAGES 64
@@ -263,7 +262,7 @@ static int need(const PeImportJob *j, const PeImpAuto *au, const PeImpTarget **t
 }
 
 static void build_autos(PeImportJob *j) {
-    PeImpPe *pe = NULL;
+    const void *targets = NULL;                                     /* the game's data, opened once */
     int todo = 0, done = 0;
     for (int i = 0; i < pe_imp_autos(); i++) {                       /* how many builds, for the progress */
         const PeImpTarget *tg;
@@ -285,16 +284,19 @@ static void build_autos(PeImportJob *j) {
         snprintf(label, sizeof label, "%s (%s)", a.name, pe_imp_game_title(game));
         snprintf(what, sizeof what, "building %s", label);
         PE_IMP_PROGRESS(j->progress, what, ++done, todo);
-        if (!pe && !(pe = j->pe_source(why, sizeof why))) { j->failed++, snprintf(j->problem, sizeof j->problem, "%s", why); break; }
+        if (!targets && !(targets = j->host->open_targets(why, sizeof why))) {
+            j->failed++, snprintf(j->problem, sizeof j->problem, "%s", why);
+            break;
+        }
         if (pe_imp_target_place(tg, j->packs, &a, builder, folder, sizeof folder, why, sizeof why) ||
-            tg->build(&(PeImpBuild){j->store, pe, j->normals, j->step}, a.id, folder, log, sizeof log, why, sizeof why)) {
+            tg->build(&(PeImpBuild){j->store, targets, j->step}, a.id, folder, log, sizeof log, why, sizeof why)) {
             j->failed++, snprintf(j->problem, sizeof j->problem, "%s: %s", a.name, why);
             continue;
         }
         j->built++;
         add_text(j->built_names, sizeof j->built_names, label);
     }
-    if (pe) pe_imp_pe_close(pe);
+    if (targets) j->host->close_targets(targets);
 }
 
 void pe_import_job_run(PeImportJob *j) {

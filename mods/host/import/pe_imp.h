@@ -274,12 +274,13 @@ typedef struct {
 #define PE_IMP_PROGRESS(p, what, done, total) do { if ((p) && (p)->fn) (p)->fn((p)->user, (what), (done), (total)); } while (0)
 
 /* ---- builder targets (registered by each module's mod: the Wardrobe builds skins) ---- */
-struct PeImpPe;
 struct PeImpAsset;
 typedef struct {
     const char *store;                        /* the store's root */
-    struct PeImpPe *pe;                       /* Aya's data and the rooms */
-    const int16_t (*normals)[4];              /* the game's 240 vertex normals */
+    /* The game's own data its targets read, from the import mod's host (import_host.h); NULL when
+     * the game supplies none. Its type is the game's: PE1 targets get a PeImpPe1Build
+     * (import_targets/pe1/pe_imp_pe.h). */
+    const void *host;
     const PeImpProgress *progress;            /* may be NULL */
 } PeImpBuild;
 typedef struct {

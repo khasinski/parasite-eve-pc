@@ -73,10 +73,14 @@ set(pe_import_core_sources
     host/import/pe_imp_registry.c   # readers, file patterns, naming tables
     host/import/pe_imp_store.c      # the extract-once store and the catalog
     host/import/pe_imp_packs.c)     # packs in the format the Wardrobe loads
+# The importer's PE1 targets: Parasite Eve's own formats, outside the game-neutral core. PE2 adds
+# import_targets/pe2 beside it. Their header (pe_imp_pe.h) is for PE1 code only; the portability
+# check refuses it in the core.
 set(pe_import_pe1_sources
-    host/import/pe_imp_pe_disc.c    # Aya's bundles and rooms from the player's PE disc images
-    host/import/pe_imp_pe_model.c   # PE models and animation rows: decode, encode, pose
-    host/import/pe_imp_pe_retarget.c)   # Aya's rows on another skeleton; the rows rooms install
+    import_targets/pe1/pe_imp_pe_disc.c    # Aya's bundles and rooms from the player's PE disc images
+    import_targets/pe1/pe_imp_pe_model.c   # PE models and animation rows: decode, encode, pose
+    import_targets/pe1/pe_imp_pe_retarget.c)   # Aya's rows on another skeleton; the rows rooms install
+include_directories(import_targets/pe1)
 
 set(pe_import_sources ${pe_import_core_sources} ${pe_import_pe1_sources})
 
@@ -165,6 +169,9 @@ foreach(mod IN LISTS pe_enabled_mods)
             pe_re_play/hosts/pe1/re_host_pe1.c
             pe_re_play/hosts/pe1/pe_re_stage.c
             pe_re_play/hosts/pe1/pe_re_box.c)
+    elseif(mod STREQUAL "pe_import")
+        file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/pe_import/*.c)
+        list(APPEND pe_mod_sources ${mod_files} pe_import/hosts/pe1/import_host_pe1.c)   # the menu, then its PE1 adapter
     else()
         file(GLOB mod_files CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${mod}/*.c)
         list(APPEND pe_mod_sources ${mod_files})
@@ -189,7 +196,7 @@ endif()
 
 add_library(pe-mods OBJECT ${pe_mod_sources} ${CMAKE_CURRENT_BINARY_DIR}/pe_mod_list.c)
 add_dependencies(pe-mods pe-re-portability)
-target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host host/import
+target_include_directories(pe-mods PRIVATE ${PROJECT_SOURCE_DIR}/include host host/import pe_import
     "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
 target_compile_definitions(pe-mods PRIVATE __psyz)
 target_link_libraries(pe-mods PRIVATE psyz)

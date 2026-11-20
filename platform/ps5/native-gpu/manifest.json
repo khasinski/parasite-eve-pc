@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "5b1baa24169e8223f89684f995c34bbb0b7c538e2e16f2fe8a89e7df3f748c42"
+      "sha256": "936698044fb9b68c7b1cfa7f85e043e56eafb59f1e48c34600c1b63663fcd385"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4571,7 +4571,7 @@
     },
     {
       "path": "mods/host/import/pe_imp.h",
-      "sha256": "e6c79beec8e7ecd64baf18b45948049f94bcc908869cbb0629e6e9b27f76f242"
+      "sha256": "7e000f80eafb482247e45220223b77ffc142679f0c2f3ccee0c7a077dc642e83"
     },
     {
       "path": "mods/host/import/pe_imp_internal.h",
@@ -4646,24 +4646,8 @@
       "sha256": "140538debfad904e64980e5edcd90bc72f7732616c19dedce5029abe64ced05f"
     },
     {
-      "path": "mods/host/import/pe_imp_pe.h",
-      "sha256": "d77be758cb3f06fc050007ccb31a3b35d855f194207f99f8709f675ab6d91810"
-    },
-    {
       "path": "mods/host/import/pe_imp_rig.h",
       "sha256": "b89788d94516f339d3e4784f018119163986192a8835ab979dc0ebf798dc7b2c"
-    },
-    {
-      "path": "mods/host/import/pe_imp_pe_disc.c",
-      "sha256": "8431d2627146cb366f9674f9c1cc7da32cc46814e5f0398f12692e74add939e7"
-    },
-    {
-      "path": "mods/host/import/pe_imp_pe_model.c",
-      "sha256": "f6ca0dbb9e034a9c77ad99b5e8325def2b5514268f4366dc253c47b292f3102b"
-    },
-    {
-      "path": "mods/host/import/pe_imp_pe_retarget.c",
-      "sha256": "166402b92af794ca539cff3f3a7f888c752d14d533e6bfea662c17d8da0b1b03"
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_build.c",
@@ -4675,7 +4659,7 @@
     },
     {
       "path": "mods/pe_wardrobe/pe_skin_target.c",
-      "sha256": "616cfc71a5084a8e70b66d4d59aab1b88218482fbfed5358bdaa6ab49061a8bd"
+      "sha256": "8ce8072282fa26c1e46cde2dc11fdcac42d7803f67f217354fc1f66d081900ef"
     },
     {
       "path": "mods/host/import/pe_imp_packs.c",
@@ -4683,15 +4667,11 @@
     },
     {
       "path": "mods/pe_import/pe_import.c",
-      "sha256": "408ab70b42945d9221034622d483ebb4a5721261f14fd4882e5a1e0b78fffe90"
+      "sha256": "f661a9ce0885a673d206bef0c93da4c203007f59b877fdfc3bf21f4fe64a9d4e"
     },
     {
       "path": "mods/pe_import/pe_import.h",
-      "sha256": "a3b0d9c67a36c758d01f8c5dadfccab0625168b62fe73e03b778c3664ac4b421"
-    },
-    {
-      "path": "mods/pe_import/pe_import_game.c",
-      "sha256": "52dab06dc9f4df10ea6b2b7e7300e608d2579634a965481192b3662b7948f95a"
+      "sha256": "a13c788063a3ee73796420a5d94ec4824437797cba87cc7eb859b6c4b77abb6f"
     },
     {
       "path": "mods/pe_src_dc1/pe_src_dc1.c",
@@ -4783,7 +4763,7 @@
     },
     {
       "path": "mods/pe_import/pe_import_job.c",
-      "sha256": "dc60865c47741c62f1f9f086a1e7ff824ff696f9fa27fa8bba9d17cddeb77cd6"
+      "sha256": "29b3cf45d0fe68dfd187134de4d5b3f13df520463a1ff58f81c96b12a8e8dfc3"
     },
     {
       "path": "mods/host/import/pe_imp_mdec.c",
@@ -5039,7 +5019,7 @@
     },
     {
       "path": "mods/cmake/CheckRePortability.cmake",
-      "sha256": "862d771c7827833cbc8e0604dbf6e7a1f78dcaf6b12591302d921fa70784fa4a"
+      "sha256": "b25556721e34356cd50a3dc2865f777e78dc971dd5d509d0a0bc269f0665a71e"
     },
     {
       "path": "mods/host/pe_mod_api.h",
@@ -5048,6 +5028,30 @@
     {
       "path": "mods/pe_re_play/pe_re_door.c",
       "sha256": "ca661b78e05721708e13897925e4842e714bb698a0dce44313c4447b78fce1d8"
+    },
+    {
+      "path": "mods/import_targets/pe1/pe_imp_pe.h",
+      "sha256": "aa1b911affd3e4b677cc06ab424395be5ff946023a995721570938bd9f199c7d"
+    },
+    {
+      "path": "mods/import_targets/pe1/pe_imp_pe_disc.c",
+      "sha256": "8431d2627146cb366f9674f9c1cc7da32cc46814e5f0398f12692e74add939e7"
+    },
+    {
+      "path": "mods/import_targets/pe1/pe_imp_pe_model.c",
+      "sha256": "f6ca0dbb9e034a9c77ad99b5e8325def2b5514268f4366dc253c47b292f3102b"
+    },
+    {
+      "path": "mods/import_targets/pe1/pe_imp_pe_retarget.c",
+      "sha256": "166402b92af794ca539cff3f3a7f888c752d14d533e6bfea662c17d8da0b1b03"
+    },
+    {
+      "path": "mods/pe_import/hosts/pe1/import_host_pe1.c",
+      "sha256": "f4073db66e3791e983f43a9b75dc266ef8963c8e359063e3b32e08ee8da04172"
+    },
+    {
+      "path": "mods/pe_import/import_host.h",
+      "sha256": "ca14bb113c2cf2aa96b2085f39e1fe0eda655ed3e4eab6f2e03a3d4040afb094"
     }
   ]
 }

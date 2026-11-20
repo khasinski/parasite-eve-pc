@@ -13,8 +13,10 @@
 
 static int skins_build(const PeImpBuild *ctx, const char *asset_id, const char *folder, char *log, size_t logn,
                        char *why, size_t n) {
+    const PeImpPe1Build *pe1 = ctx->host;               /* Aya's data: a PE1 target */
     PeImpModel m;
     PeImpFitInfo fit;
+    if (!pe1 || !pe1->pe) { snprintf(why, n, "the game gave no Parasite Eve data to build with"); return -1; }
     if (pe_imp_fit(ctx->store, asset_id, PE_IMP_USE_COSTUME, &m, &fit, why, n)) return -1;   /* the reason is in why */
     const PeImpRig *rig = pe_imp_rig_for(asset_id);
     if (!rig && fit.person) {
@@ -25,7 +27,7 @@ static int skins_build(const PeImpBuild *ctx, const char *asset_id, const char *
     }
     if (!rig) { pe_imp_model_free(&m); snprintf(why, n, "no rig fits %s", asset_id); return -1; }
     PeSkinOut f;
-    int rc = pe_skin_build(ctx->pe, &m, rig, ctx->normals, ctx->progress, &f, why, n);
+    int rc = pe_skin_build(pe1->pe, &m, rig, pe1->normals, ctx->progress, &f, why, n);
     pe_imp_model_free(&m);
     if (rc) return -1;
     if (log && logn)

@@ -75,17 +75,28 @@ static int normal_table(int16_t out[240][4]) {
     return 0;
 }
 
-/* Aya's data from the PE disc images, the game's 450 rooms (the game uses its open discs) */
+/* The job's host for this test (import_host.h): Aya's data from the PE disc images, the game's 450
+ * rooms (the game uses its open discs), and the normals read from the game's source. */
 static char s_pe1[1200];
-static struct PeImpPe *test_source(char *why, size_t n) {
+static int16_t s_normals[240][4];
+static PeImpPe1Build s_targets;
+static void test_init(void) {}
+static const void *test_open(char *why, size_t n) {
     char pe2[1200];
     snprintf(pe2, sizeof pe2, "%s", s_pe1);
     char *d1 = strstr(pe2, "Disc 1");
     if (d1) d1[5] = '2';
     PeImpPe *pe = pe_imp_pe_open(s_pe1, d1 ? pe2 : NULL, why, n);
-    if (pe) pe_imp_pe_set_rooms(pe, 450);
-    return pe;
+    if (!pe) return NULL;
+    pe_imp_pe_set_rooms(pe, 450);
+    s_targets.pe = pe, s_targets.normals = (const int16_t (*)[4])s_normals;
+    return &s_targets;
 }
+static void test_close(const void *targets) {
+    if (targets == &s_targets) pe_imp_pe_close(s_targets.pe), s_targets.pe = NULL;
+}
+static void test_bind_frame(const char *mod_id, int (*frame)(void *event, void *user)) { (void)mod_id, (void)frame; }
+static const ImportHost k_test_host = {sizeof k_test_host, test_init, test_open, test_close, test_bind_frame};
 
 /* what the page would show: every job and step report */
 static int s_reading, s_building, s_rooms, s_steps;
@@ -149,10 +160,8 @@ int main(void) {
     *slash = 0;                                                     /* the disc's folder */
     snprintf(j.store, sizeof j.store, "%s", store);
     snprintf(j.packs, sizeof j.packs, "%s", packs);
-    int16_t normals[240][4];
-    assert(!normal_table(normals));
-    j.normals = (const int16_t (*)[4])normals;
-    j.pe_source = test_source;
+    assert(!normal_table(s_normals));
+    j.host = &k_test_host;
     j.progress = &k_job, j.step = &k_step;
     pe_import_job_run(&j);
     printf("  progress: %d discs read reported, %d builds, %d build steps, %d room-scan reports\n", s_reading, s_building, s_steps, s_rooms);

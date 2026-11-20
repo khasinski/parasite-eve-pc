@@ -23,6 +23,12 @@ void pe_imp_buf_free(PeImpBuf *b);
  * bridge scans them) or, in the game, its own open discs (the import mod gives these ops, rooms
  * 1-450: the game's room table). */
 typedef struct PeImpPe PeImpPe;
+/* What a PE1 builder target gets as PeImpBuild.host: Aya's data and the rooms, and the game's 240
+ * vertex normals (g_RenderNormalTable). */
+typedef struct {
+    PeImpPe *pe;
+    const int16_t (*normals)[4];
+} PeImpPe1Build;
 typedef struct {
     int (*image)(void *user, int idx, PeImpBuf *out);              /* PE.IMG entry; 0 or -1 */
     int (*room)(void *user, int map, int disc, PeImpBuf *out);      /* a room's data; -1 if unreadable */

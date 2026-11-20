@@ -1023,9 +1023,16 @@ screen shows as more of the game opens up. `mod-rdt` decodes every map picture.
 Other games' files are read only then, when the player asks, never during play. Aya's data comes
 from the PE discs the game has open (`g_CdImageVolumes`, CUE/BIN or CHD).
 
-- `host/import/`: the core. `pe_imp.h` (disc images, the Model type, readers, rigs, targets, store,
-  catalog, packs), `pe_imp_pe.h` (PE's model and row formats, retargeting, the rows rooms install),
-  `pe_imp_rig.h` (a rig profile). Plain C with stdio; its own JSON reader (no cJSON on PS5).
+- `host/import/`: the core, game-neutral. `pe_imp.h` (disc images, the Model type, readers, rigs,
+  targets, store, catalog, packs), `pe_imp_rig.h` (a rig profile). Plain C with stdio; its own JSON
+  reader (no cJSON on PS5). Builder targets get the game's own data through `PeImpBuild.host`.
+- `import_targets/pe1/`: Parasite Eve's side, outside the core. `pe_imp_pe.h` (PE's model and row
+  formats, retargeting, the rows rooms install; a PE1 target's `PeImpBuild.host` is a
+  `PeImpPe1Build`). A PE2 port adds `import_targets/pe2/` beside it.
+- `pe_import/`: the F1 > Import menu and the automatic import, game-neutral; what they need from
+  the game goes through `import_host.h`, whose PE1 adapter is `pe_import/hosts/pe1/`. The build's
+  portability check (`mods/cmake/CheckRePortability.cmake`) refuses PE1 headers, globals and hook
+  IDs in all of these, and `pe_imp_pe.h` outside the PE1 folders.
 - `pe_src_<game>/`: one mod per source game registers its readers, naming table and rigs. Nothing
   in the core names a game. RE1's people are rigid like RE2's, in another bone order; its reader
   puts them in RE2's order (`pe_src_re1_emd.c`). RE3's people are skinned (an arm is one mesh in the root's frame, a
