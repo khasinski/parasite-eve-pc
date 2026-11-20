@@ -1,0 +1,53 @@
+{
+  "note": "register_anchors.py global affine, same SIFT/RANSAC settings; inlier_ratio = inliers / ratio-test matches",
+  "candidates": [
+    {
+      "id": "4f85e561c13f907c54adc00e",
+      "views": [
+        [
+          "M163",
+          0
+        ]
+      ],
+      "candidate": "4f85e561c13f907c54adc00e.png",
+      "matches": 359,
+      "inliers": 89,
+      "inlier_ratio": 0.2479108635097493,
+      "corner_displacement": 75.61241694358986,
+      "median_inlier_error": 0.5810142662770408,
+      "status": "global affine registered"
+    },
+    {
+      "id": "4f85e561c13f907c54adc00e",
+      "views": [
+        [
+          "M163",
+          0
+        ]
+      ],
+      "candidate": "4f85e561c13f907c54adc00e-v2a.png",
+      "matches": 325,
+      "inliers": 277,
+      "inlier_ratio": 0.8523076923076923,
+      "corner_displacement": 0.8595072688820307,
+      "median_inlier_error": 0.4709739207769881,
+      "status": "global affine registered"
+    },
+    {
+      "id": "4f85e561c13f907c54adc00e",
+      "views": [
+        [
+          "M163",
+          0
+        ]
+      ],
+      "candidate": "4f85e561c13f907c54adc00e-v2b.png",
+      "matches": 397,
+      "inliers": 342,
+      "inlier_ratio": 0.8614609571788413,
+      "corner_displacement": 0.9809725840701967,
+      "median_inlier_error": 0.4370792839358211,
+      "status": "global affine registered"
+    }
+  ]
+}
