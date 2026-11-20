@@ -20,3 +20,15 @@ Pixel Sans
   pixel right and down. Copyright (c) 2020-2025 GGBotNet, with Reserved Font Name "Pixeloid".
 - It is licensed under the SIL Open Font License, Version 1.1; the full text is in OFL.txt beside it.
   As the licence asks of a changed font, this one goes by another name, not "Pixeloid".
+
+Departure Mono
+- Departure_Mono.png is Departure Mono by Helena Zhang (https://departuremono.com, version 1.500),
+  drawn at 11 pixels with tools/fonts/font_sheet.py (threshold 115) and the same one-pixel shadow.
+  Copyright 2022-2024 Helena Zhang. Licensed under the SIL Open Font License, Version 1.1; the
+  full text is in OFL-DepartureMono.txt beside it. The font has no Reserved Font Name.
+
+Plain Sans
+- Plain_Sans.png is IBM Plex Sans Regular (https://github.com/IBM/plex), drawn at 11 pixels with
+  tools/fonts/font_sheet.py (threshold 80) and the same one-pixel shadow. Copyright 2017 IBM Corp.,
+  with Reserved Font Name "Plex". Licensed under the SIL Open Font License, Version 1.1; the full
+  text is in OFL-IBMPlex.txt beside it. As a changed font it goes by another name, not "Plex".

@@ -42,7 +42,7 @@ For smoother motion, enable **Escape → Graphics → Gameplay display → 60 Hz
 
 **Escape → Graphics → VSync** offers Auto, On and Off. Auto synchronizes near 60 Hz and uses a frame limiter on other displays; On prevents tearing at any refresh rate. Game speed stays the same.
 
-For text, **F1 → Font** offers Original and Pixel Sans. The separate [Translator](localization/translator/README.md) can create and edit language packs.
+For text, **F1 → Font** offers Original, Pixel Sans, Departure Mono and Plain Sans. The separate [Translator](localization/translator/README.md) can create and edit language packs.
 
 If the game crashes, it saves a report and shows where to find it. Attach that file when reporting the problem on Discord.
 
