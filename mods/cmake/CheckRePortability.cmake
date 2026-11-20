@@ -6,9 +6,14 @@ file(GLOB runtime "${mods}/pe_re_play/*.c" "${mods}/pe_re_play/*.h")
 file(GLOB_RECURSE readers "${mods}/pe_src_re[123]/*.c" "${mods}/pe_src_re[123]/*.h")
 
 set(literal [=[("[^"\\]*(\\.[^"\\]*)*"|'[^'\\]*(\\.[^'\\]*)*')]=])
-set(comment [=[//[^
-]*|/\*([^*]|\*+[^*/])*\*+/]=])
-set(include [=[#[ 	]*include[ 	]*[<"]([^>"]*/)?(pe1/[^>"]+|pe_game\.h|pe_hooks\.h)[>"]]=])
+set(block_comment [=[/\*([^*]|\*+[^*/])*\*+/]=])
+set(line_comment [=[//[^
+]*]=])
+set(directive_space "[ 	]|${block_comment}")
+set(engine_header [=[([^
+>"]*/)?(pe1/[^
+>"]+|pe_game\.h|pe_hooks\.h)]=])
+set(include "#(${directive_space})*include(${directive_space})*[<\"]${engine_header}[>\"]")
 set(errors "")
 foreach(file IN LISTS importer runtime readers)
     file(READ "${file}" code)
@@ -17,7 +22,7 @@ foreach(file IN LISTS importer runtime readers)
     string(REPLACE "\\\n" "" code "${code}")
     string(REGEX REPLACE "[][;]" " " code "${code}")
     # Recognize complete comments and literals before looking for engine tokens inside them.
-    string(REGEX MATCHALL "${comment}|${literal}|${include}|[A-Za-z_][A-Za-z_0-9]*" tokens "${code}")
+    string(REGEX MATCHALL "${block_comment}|${line_comment}|${literal}|${include}|[A-Za-z_][A-Za-z_0-9]*" tokens "${code}")
     list(FILTER tokens INCLUDE REGEX "^(#|g_|PE_HOOK_)")
     list(REMOVE_DUPLICATES tokens)
     string(REGEX MATCH "^pe_src_(re[123])/" reader "${path}")

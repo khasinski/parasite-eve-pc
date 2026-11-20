@@ -87,6 +87,9 @@ add_custom_target(pe-re-portability
     VERBATIM)
 if(BUILD_TESTING)
     add_test(NAME mod-re-portability COMMAND "${CMAKE_COMMAND}" -P "${pe_re_portability_check}")
+    add_test(NAME mod-re-portability-guard
+        COMMAND "${CMAKE_COMMAND}" "-Dguard=${pe_re_portability_check}"
+            -P "${PROJECT_SOURCE_DIR}/tests/pe_re_portability_guard_test.cmake")
 endif()
 
 add_library(pe-import-core OBJECT ${pe_import_core_sources})

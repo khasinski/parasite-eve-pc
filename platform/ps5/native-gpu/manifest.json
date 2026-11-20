@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "32d1fff5dcc2363979096dcdcfdf0446672fe5afd1bbd68b9d4437bce26fe310"
+      "sha256": "5b1baa24169e8223f89684f995c34bbb0b7c538e2e16f2fe8a89e7df3f748c42"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -5039,7 +5039,7 @@
     },
     {
       "path": "mods/cmake/CheckRePortability.cmake",
-      "sha256": "26cf23d520c6af3d1b6b911716493279c146b59c8ba2a0baa854378459eb043f"
+      "sha256": "862d771c7827833cbc8e0604dbf6e7a1f78dcaf6b12591302d921fa70784fa4a"
     },
     {
       "path": "mods/host/pe_mod_api.h",
