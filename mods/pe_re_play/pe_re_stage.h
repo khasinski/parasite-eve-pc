@@ -16,7 +16,11 @@ int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camer
 void pe_re_stage_hide(void);                       /* the PE room's own picture and camera back */
 int pe_re_stage_active(void);                      /* shown, with the player walking */
 void pe_re_stage_player(double *x, double *z, int *facing);
+void pe_re_stage_place(double x, double z);        /* move the player (testing) */
 void pe_re_stage_set_masks(int on);
+/* Aya's size in the room, percent of an RE person's height (100: as tall as Leon). */
+void pe_re_stage_set_size(int percent);
+double pe_re_stage_scale(void);                    /* room units per PE unit, for the status line */
 void pe_re_stage_shutdown(void);
 
 #endif

@@ -27,7 +27,7 @@
 
 static char s_store[1100];
 static const PeReGame *s_offer[PE_RE_GAMES];
-static int s_offers, s_pick, s_player, s_listed, s_masks = 1;
+static int s_offers, s_pick, s_player, s_listed, s_masks = 1, s_size = 100;
 static PeReSession s_session;
 static int s_playing, s_cross_held;
 static char s_status[200] = "Not playing.";
@@ -85,6 +85,7 @@ static void start(void) {
     }
     s_playing = 1, s_cross_held = 1;           /* the Cross that chose Start isn't a door press */
     pe_re_stage_set_masks(s_masks);
+    pe_re_stage_set_size(s_size);
     show_room(0);
 }
 
@@ -98,6 +99,7 @@ static int on_frame(void *ctx, void *user) {
         return 0;
     }
     pe_re_stage_set_masks(s_masks);
+    pe_re_stage_set_size(s_size);
     const int cross = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;
     const int pressed = cross && !s_cross_held;
     s_cross_held = cross;
@@ -116,9 +118,30 @@ static int on_frame(void *ctx, void *user) {
     return 0;
 }
 
+/* Testing: stand in the middle of the room's nearest doorway (the camera stays as it is). */
+static void to_door(void) {
+    uint32_t n = 0;
+    double best = -1, bx = 0, bz = 0;
+    if (!s_playing || !pe_imp_logic_section(s_session.logic, PE_IMP_LOGIC_DOOR, &n, NULL)) return;
+    for (uint32_t i = 0; i < n; i++) {
+        PeImpDoor d;
+        if (pe_imp_logic_door(s_session.logic, i, &d)) continue;
+        double cx = 0, cz = 0;
+        for (int k = 0; k < 4; k++) cx += d.zone.x[k] / 4.0, cz += d.zone.z[k] / 4.0;
+        const double dist = (cx - s_session.x) * (cx - s_session.x) + (cz - s_session.z) * (cz - s_session.z);
+        if (best < 0 || dist < best) best = dist, bx = cx, bz = cz;
+    }
+    if (best < 0) { snprintf(s_status, sizeof s_status, "This room has no doors."); return; }
+    pe_re_stage_place(bx, bz);
+    s_session.x = bx, s_session.z = bz;
+    snprintf(s_status, sizeof s_status, "In a doorway of room %x-%02X: Cross goes through.", (unsigned)s_session.stage + 1,
+             (unsigned)s_session.room);
+}
+
 static void refresh(void) { s_listed = 0; list_games(); }
 static void text_status(char *out, unsigned size) {
-    if (s_playing) snprintf(out, size, "%s x %.0f, z %.0f, doors %d.", s_status, s_session.x, s_session.z, s_session.doors_taken);
+    if (s_playing) snprintf(out, size, "%s x %.0f, z %.0f, doors %d, scale %.1f.", s_status, s_session.x, s_session.z,
+                            s_session.doors_taken, pe_re_stage_scale());
     else snprintf(out, size, "%s", s_status);
 }
 
@@ -131,8 +154,10 @@ static int init(void) {
                                     PE_RE_GAMES, game_count, game_name);
     pe_menu_register_int(0, "Scenario", "RE2: 0 Leon, 1 Claire.", &s_player, 0, 1, 1);
     pe_menu_register_toggle(0, "Foreground", "Let the room's foreground cover Aya.", &s_masks, NULL);
+    pe_menu_register_int(0, "Aya's size", "Percent of an RE person's height (100: as tall as Leon).", &s_size, 50, 200, 5);
     pe_menu_register_action(0, "Start", "Starts in the game's first room. Walk with the pad; Cross in a doorway goes through.", start);
     pe_menu_register_action(0, "Stop", "Back to the Parasite Eve room and camera.", stop);
+    pe_menu_register_action("Testing", "Go to the nearest door", "Puts Aya in the room's nearest doorway.", to_door);
     pe_menu_register_action(0, "Refresh the list", "Looks for games imported since the game started.", refresh);
     pe_menu_register_info(0, "Status", "Where you are.", text_status);
     pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);

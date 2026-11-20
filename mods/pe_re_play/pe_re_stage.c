@@ -27,6 +27,8 @@
 #include "pe1/render_packets.h"
 #include "pe1/render_prim.h"
 #include "pe_hooks.h"
+#include "pe_model.h"
+#include "pe_model_view.h"
 
 #define VRAM_X 320
 #define VRAM_Y 256
@@ -37,7 +39,8 @@
 #define PIC_SPLIT (PIC_W / 2)
 #define ROOM_BACKGROUND_OT 4095
 #define FIELD_UI_OT_LAST 7
-#define RE_UNITS_PER_PE_UNIT 3
+#define RE_PERSON_HEIGHT 3037.0  /* an RE2 person, standing, in room units (Leon's mesh, the model audit) */
+#define PE_AYA_BANK 10           /* her day-1 bundle: the model measured for her height */
 #define AYA_ROOM_RADIUS 280
 
 typedef struct RoomMaskPacket {
@@ -46,7 +49,11 @@ typedef struct RoomMaskPacket {
 } RoomMaskPacket;
 
 static const char *s_store;
-static int s_show, s_foreground = 1, s_view;
+static int s_show, s_foreground = 1, s_view, s_size = 100;
+/* RE room units per PE unit: Aya is drawn at her own size, the room divided by this, so it sets her
+ * size in the room. Measured from her model so she stands as tall as an RE person (pe_re_scale). */
+static double s_scale, s_aya_height;
+#define RE_UNITS_PER_PE_UNIT s_scale
 static RenderTexturedQuad s_quads[2][2];               /* per draw slot: left and right halves */
 static uint16_t *s_original_picture;
 static RoomMaskPacket *s_masks;
@@ -250,9 +257,29 @@ done:
     return rc;
 }
 
+/* Aya's standing height in PE units, from her model's first idle frame (once). */
+static double aya_height(void) {
+    if (s_aya_height <= 0) {
+        PeModelSource src;
+        PeViewFit fit;
+        memset(&src, 0, sizeof src);
+        src.kind = PE_MODEL_SKIN, src.map = PE_AYA_BANK;
+        const PeModel *m = pe_model_load(&src);
+        s_aya_height = m && pe_model_fit(m, &fit) && fit.y1 - fit.y0 > 50 ? fit.y1 - fit.y0 : 600;
+        pe_mod_log(NULL, "re play: Aya stands %.0f PE units tall", s_aya_height);
+    }
+    return s_aya_height;
+}
+
+static void pe_re_scale(void) {
+    double k = RE_PERSON_HEIGHT / aya_height() * 100.0 / (s_size > 0 ? s_size : 100);
+    s_scale = k < 1 ? 1 : k > 40 ? 40 : k;
+}
+
 int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camera, int place, double x, double z,
                      int facing, char *why, size_t n) {
     PeImpImageSet *set = NULL;
+    pe_re_scale();
     int rc = -1;
     uint32_t size = 0;
     if (!s_store || pe_imp_catalog_imageset(s_store, room_id, &set, why, n)) {
@@ -361,10 +388,16 @@ void pe_re_stage_hide(void) {
 
 int pe_re_stage_active(void) { return s_show && s_walk.active; }
 void pe_re_stage_player(double *x, double *z, int *facing) { *x = s_walk.x, *z = s_walk.z, *facing = s_walk.yaw; }
+void pe_re_stage_place(double x, double z) {
+    s_walk.x = x, s_walk.z = z;
+    s_walk.ghost = pe_imp_re2_blocked(&s_walk.collision, x, z, AYA_ROOM_RADIUS);
+}
 void pe_re_stage_set_masks(int on) { s_foreground = on; }
+void pe_re_stage_set_size(int percent) { if (percent != s_size) s_size = percent, pe_re_scale(); }
+double pe_re_stage_scale(void) { return s_scale; }
 
 void pe_re_stage_init(const char *mod_id, const char *store) {
-    s_store = store;
+    s_store = store, s_scale = 3;
     pe_imp_mdec_set_table(MdecDiag_ExpandDecoderTable);
     pe_hook_add(PE_HOOK_FIELD_BACKGROUND, on_background, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FIELD_CAMERA, on_camera, NULL, PE_PRIORITY_LATE, mod_id);

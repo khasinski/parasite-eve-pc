@@ -36,20 +36,23 @@ int main(void) {
 
     /* a made-up room: camera 0 -> 1 past x 2000, back past x 1800; a door at the far end */
     PeImpLogicBuilder *b = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
-    PeImpCameraZone cz[2];
+    PeImpCameraZone cz[4];                  /* as RE2 stores them: each camera's own area first */
     memset(cz, 0, sizeof cz);
-    cz[0].from = 0, cz[0].to = 1, rect(cz[0].x, cz[0].z, 2000, 0, 4000, 1000);
-    cz[1].from = 1, cz[1].to = 0, rect(cz[1].x, cz[1].z, 0, 0, 1800, 1000);
+    cz[0].from = 0, cz[0].to = 0, rect(cz[0].x, cz[0].z, 0, 0, 2100, 1000);
+    cz[1].from = 0, cz[1].to = 1, rect(cz[1].x, cz[1].z, 2000, 0, 4000, 1000);
+    cz[2].from = 1, cz[2].to = 0, rect(cz[2].x, cz[2].z, 0, 0, 4000, 1000);   /* camera 1's area, not a switch */
+    cz[3].from = 1, cz[3].to = 0, rect(cz[3].x, cz[3].z, 0, 0, 1800, 1000);
     PeImpDoor door;
     memset(&door, 0, sizeof door);
     rect(door.zone.x, door.zone.z, 3800, 0, 4000, 1000);
     door.stage = 14, door.room = 0xEE, door.camera = 2, door.next_x = 100, door.next_z = 200, door.next_dir = 1024;
-    CHECK(b && !pe_imp_logic_add_camera_zone(b, cz, 2) && !pe_imp_logic_add_door(b, &door, 1));
+    CHECK(b && !pe_imp_logic_add_camera_zone(b, cz, 4) && !pe_imp_logic_add_door(b, &door, 1));
     PeImpRoomLogic *l = pe_imp_logic_finish(b);
     CHECK(l != NULL);
     if (l) {
         CHECK(pe_re_camera_at(l, 0, 1000, 500) == 0 && pe_re_camera_at(l, 0, 2500, 500) == 1);
         CHECK(pe_re_camera_at(l, 1, 1900, 500) == 1 && pe_re_camera_at(l, 1, 1000, 500) == 0);   /* no flicker at the seam */
+        CHECK(pe_re_camera_at(l, 1, 3000, 500) == 1);          /* in camera 1's own area: stays */
         PeImpDoor d;
         CHECK(pe_re_door_at(l, 3900, 500, &d) == 0 && d.room == 0xEE && pe_re_door_at(l, 3000, 500, NULL) < 0);
         PeReSession s;                                          /* steps on a session holding it */

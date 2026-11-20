@@ -53,12 +53,19 @@ int pe_re_in_quad(const int16_t x[4], const int16_t z[4], double px, double pz) 
     return inside;
 }
 
+/* Switch zones come grouped by the camera they leave. Each group opens with that camera's own area,
+ * not a switch: RE2 and RE3 store it as the group's first record ("from 1 to 0" in room 1-00, a
+ * zone covering cameras 0 and 1, which taken as a switch flips 0 and 1 for ever); RE1 flags it 1. */
 int pe_re_camera_at(const PeImpRoomLogic *l, int camera, double x, double z) {
     uint32_t n = 0;
+    int group = -1;
     if (!l || !pe_imp_logic_section(l, PE_IMP_LOGIC_CAMZ, &n, NULL)) return camera;
     for (uint32_t i = 0; i < n; i++) {
         PeImpCameraZone c;
-        if (pe_imp_logic_camera_zone(l, i, &c) || c.from != camera || c.to == camera) continue;
+        if (pe_imp_logic_camera_zone(l, i, &c)) continue;
+        const int own = l->game == PE_IMP_RE1 ? c.flag == 1 : c.from != group;
+        group = c.from;
+        if (own || c.from != camera || c.to == camera) continue;
         if (pe_re_in_quad(c.x, c.z, x, z)) return c.to;
     }
     return camera;
