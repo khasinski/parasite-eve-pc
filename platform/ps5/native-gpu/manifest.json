@@ -3839,7 +3839,7 @@
     },
     {
       "path": "include/pe_hooks.h",
-      "sha256": "8cf010f6b0cd530093f6d65fa6af8898b5cf72bef1caf7e89e511e02f8d2cd7d"
+      "sha256": "3777a0663dd8e8f3fd246b544c8f252acda9b7f457c734ad64631a1134e92fc8"
     },
     {
       "path": "include/pe_model_texture_pages.h",
@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "36a2883148cf5e3cb280b6a13ad09fb02c67c2a010d45decb4570d010567923e"
+      "sha256": "fb24a50af4d098579378ee5dabee1c9cda6b077c3b7566d788e7575a964ff972"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4035,7 +4035,7 @@
     },
     {
       "path": "mods/host/pe_mod_host.c",
-      "sha256": "565551410463be4608f5d254b01bbe4905c50afa2dadb90d9880032188c2eb2c"
+      "sha256": "31ffd8ca953cfab50507f7bf9efafbfbfa89f34801ce0c23dfdb2e563f8903f6"
     },
     {
       "path": "mods/host/pe_mod_host.h",
@@ -4362,12 +4362,20 @@
       "sha256": "f22efda77813208cfc72cd69c39efc9f45ce665334db630131e7368e7bc3a2fb"
     },
     {
+      "path": "mods/pe_qol/pe_auto_medicine.c",
+      "sha256": "09f9e8c1b69b78b14939c52221e6109fe6b8c3496c3711fa0d018290665fc145"
+    },
+    {
       "path": "mods/pe_qol/pe_bag_sort.c",
       "sha256": "d15f7d70024354c275c139dcbd08c44937e9deab481bfe99441b6472faa5c14d"
     },
     {
       "path": "mods/pe_qol/pe_battle_frequency.c",
       "sha256": "5d4896f45ff8c8cd8ef27ea91da3786cd9d56f908b165e5a3c644344cf83d555"
+    },
+    {
+      "path": "mods/pe_qol/pe_dialogue_skip.c",
+      "sha256": "2d33cc3f56dec4915a4e464fb382a0e081605530cbbf6578ab9bb89647d7ba82"
     },
     {
       "path": "mods/pe_qol/pe_encounters.c",
@@ -4395,7 +4403,7 @@
     },
     {
       "path": "mods/pe_qol/pe_qol.c",
-      "sha256": "eeb922f3c8a28898dc542aa9409f175352c0019df263644f8daa87e194e9ec59"
+      "sha256": "b03c89b21469ab98167aef95d386163ac85e0b01a4edadc9d3190f0aa6689532"
     },
     {
       "path": "mods/pe_quicksave/pe_quicksave.c",
