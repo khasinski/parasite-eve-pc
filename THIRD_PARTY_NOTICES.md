@@ -306,8 +306,10 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
 **Consulted for behaviour (no code taken):**
 
 - [bio2-ds](https://github.com/MeganGrass/bio2-ds), a decompilation of Resident Evil 2 Dual Shock (no
-  license stated): the script engine's if / else / endif and scheduler (`SCE0.C`, `SCE1.C`) and the
-  engine flags (`def/FLAG.H`). Our interpreter is written independently from what it shows.
+  license stated): the script engine's if / else / endif and scheduler (`SCE0.C`, `SCE1.C`), the
+  engine flags (`def/FLAG.H`), the zone checks and what each zone kind does (`SCE_AT.C`,
+  `def/SCENARIO.H`), and the pad's key bits for script key checks (`PAD.C`, `SCE2.C`). Our
+  interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.
 - [Bio2ScriptViewer](https://github.com/OpenBiohazard2/Bio2ScriptViewer) (MIT, Copyright (c) 2021 Samuel

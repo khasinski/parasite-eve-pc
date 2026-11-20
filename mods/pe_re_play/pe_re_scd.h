@@ -22,10 +22,14 @@
  *   work     cmp / save / copy / calc / calc2 on the game's work variables (save-data halfwords,
  *            so they last across rooms)
  *   items    keep_item_ck (the pocket)
- *   zones    aot_set, door_aot_se, item_aot_set and their 4-point forms: run = live; aot_reset:
- *            a zone's kind and data replaced (kind 0: gone)
+ *   pad      sce_key_ck (held) / sce_trg_ck (pressed this frame) against the game's key bits
+ *            (bio2-ds SCE2.C Sce_key_ck / Sce_trg_ck; PAD.C Pad_set's Key_type table)
+ *   zones    aot_set, door_aot_se, item_aot_set and their 4-point forms: run = live, in the slot
+ *            of its id (a later zone with the same id replaces it, and clears that id's
+ *            aot_reset); aot_reset: a zone's kind, check bits and data replaced (kind 0: gone)
  *   text     message_on: the room's message, for the caller to show
- * Every other instruction is skipped (counted). Key and trigger checks are false for now. */
+ * Every other instruction is skipped (counted). Entering a room clears the zone-hit work variables
+ * (Sce_work_clr): F_atari (work 0), U_atari (1), Use_id (2) and Get_id (3) become -1. */
 #include <stdint.h>
 
 #include "pe_imp_logic.h"
@@ -38,6 +42,11 @@
 #define PE_RE_RESETS_MAX 64
 #define PE_RE_TASKS 10
 #define PE_RE_LEVELS 4                         /* gosub levels a task keeps */
+#define PE_RE_SLOTS 256                        /* zone ids */
+#define PE_RE_WORK_F_ATARI 0                   /* the zone hit in front of the player (SCE_AT.C) */
+#define PE_RE_WORK_U_ATARI 1                   /* the zone hit under the player */
+#define PE_RE_WORK_USE_ID 2                    /* the item last used */
+#define PE_RE_WORK_GET_ID 3                    /* the item last picked up */
 
 typedef struct {
     uint8_t bits[PE_RE_FLAG_GROUPS][32];
@@ -51,6 +60,7 @@ typedef struct { uint8_t id, sce, sat; uint8_t data[6]; } PeReReset;
 
 typedef struct {
     uint8_t status;                            /* 0 idle */
+    int16_t proc;                              /* the main script's procedure it started on (-1 init) */
     int8_t sub;                                /* gosub level */
     int8_t ifel[PE_RE_LEVELS], loop[PE_RE_LEVELS], loop_if[PE_RE_LEVELS][4];
     uint32_t pc, ret[PE_RE_LEVELS];
@@ -63,6 +73,7 @@ typedef struct {
     int ran;                                   /* 1: the scripts ran (else every record is live) */
     uint32_t live[PE_RE_LIVE_MAX];             /* RDT offsets of zone instructions that ran */
     int nlive;
+    uint32_t slot[PE_RE_SLOTS];                /* each zone id's instruction (RDT offset), 0 none */
     PeReReset reset[PE_RE_RESETS_MAX];         /* aot_reset, in order */
     int nreset;
     int executed, skipped, stopped;            /* instructions run, skipped (not handled), budgets run out */
@@ -78,6 +89,8 @@ typedef struct {
 typedef struct {
     int (*has)(void *ctx, uint16_t item);      /* keep_item_ck: the pocket holds it */
     int (*talking)(void *ctx);                 /* wsleeping: a message is still up */
+    uint32_t key, key_trg;                     /* the game's key bits held / pressed this frame
+                                                  (pe_re_scd_keys) */
     void *ctx;
 } PeReScdHost;
 
@@ -89,5 +102,13 @@ void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost
 /* Did the zone instruction at `at` run? (1 when the scripts didn't run, or `at` is 0: a record
  * stored before RoomLogic kept its origin, ZAT0.) */
 int pe_re_scd_live(const PeReScdRun *r, uint32_t at);
+/* Start procedure `proc` of the main script on task `level` (10 and up: the first free task 2-9),
+ * as an event zone does (Event_exec). It runs from the next tick. */
+void pe_re_scd_exec(const PeImpRoomLogic *l, PeReScdRun *run, unsigned level, unsigned proc);
+/* The game's key bits for a pad in libetc order (up 0x1000, cross 0x40, ...): bit n is set when the
+ * pad holds Key_type[0][n]'s button (bit 6/7/12 Cross, 8 R1, 9 Square, 13 Triangle, 14 Circle). */
+uint32_t pe_re_scd_keys(uint16_t pad);
+/* Is a task running main-script procedure `proc`? */
+int pe_re_scd_running(const PeReScdRun *run, unsigned proc);
 
 #endif

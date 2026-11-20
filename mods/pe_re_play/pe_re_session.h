@@ -11,6 +11,7 @@
 #include "pe_imp_logic.h"
 #include "pe_imp_room.h"
 #include "pe_re_rules.h"
+#include "pe_re_zone.h"
 
 #define PE_RE_GAMES 3
 #define PE_RE_STAGE_HERE 0xFFu        /* a door's stage: stay on this stage */
@@ -61,11 +62,16 @@ typedef struct {
     PeImpDoor door;                   /* the last door taken (for its transition) */
     int (*talking)(void);             /* a message is up (scripts' wsleeping waits on it); NULL: never */
     int doors_taken;
+    uint32_t key, key_trg;            /* the game's key bits this frame (pe_re_scd_keys), for scripts */
+    PeReZoneHit zone;                 /* the last zone acted on (PE_RE_ZONE: what the mod handles) */
+    int auto_message;                 /* the walk-in message zone she's in (shown once), -1 */
+    int events;                       /* events zones started */
 } PeReSession;
 
 /* PE_RE_SAID: nothing moved, but `said` has something to show (a locked door, a pickup, a message).
- * PE_RE_ROOM can come with `said` too (the key that opened the door). */
-typedef enum { PE_RE_STAY, PE_RE_CAMERA, PE_RE_ROOM, PE_RE_SAID } PeReChange;
+ * PE_RE_ROOM can come with `said` too (the key that opened the door).
+ * PE_RE_ZONE: a zone the mod handles (`zone`: a typewriter, an item box). */
+typedef enum { PE_RE_STAY, PE_RE_CAMERA, PE_RE_ROOM, PE_RE_SAID, PE_RE_ZONE } PeReChange;
 
 /* Start at the game's first room, camera 0, standing at (x, z) chosen by the caller later
  * (pe_re_session_place). 0, or -1 with the reason. */
@@ -81,10 +87,14 @@ void pe_re_door_sound_id(const char *game, const PeImpDoor *d, unsigned wave, ch
 /* The floor a height stands on (y down, 1,800 units a floor, as the game rounds it: SCA.C). */
 int pe_re_floor_of(int y);
 void pe_re_session_place(PeReSession *s, double x, double z, int facing);
-/* After the player moved to (x, z): switch camera if a zone says so. Pressing `action` checks, in
- * order: a door's zone (locked: says why; else loads the next room and places the player as the
- * door says), a pickup (into the pocket), a message zone (its text). What changed; a door whose room
- * fails to load leaves the session where it was (`why` says). */
+/* After the player moved to (x, z) (facing s->facing, on s->floor): switch camera if a zone says
+ * so. Pressing `action` examines (pe_re_zone.h): the first zone hit acts by its kind: a door
+ * (locked: says why; else loads the next room and places the player as the door says), a pickup
+ * (into the pocket), a message (its text), an event (starts its script task), a flag change, or
+ * a typewriter or item box (PE_RE_ZONE). With no hit, a door, pickup or message zone she stands in
+ * still answers. Every frame, zones that don't need an examine act too (events, flags, doors; a
+ * message once each time she walks in). What changed; a door whose room fails to load leaves the
+ * session where it was (`why` says). */
 PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, double z, int action, char *why, size_t n);
 void pe_re_session_end(PeReSession *s);
 /* A frame of the room's scripts. PE_RE_SAID when one put up a message (`said`); else PE_RE_STAY. */

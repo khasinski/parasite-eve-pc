@@ -53,6 +53,9 @@ PeReDoorAnswer pe_re_door_try(PeReProgress *p, const PeImpDoor *d, const PeImpRo
 
 /* `run`: what the room's scripts set up (pe_re_scd.h); NULL or not run: every record counts. A zone
  * is live when its instruction ran; aot_reset gives a zone id another kind and data (0: gone). */
+/* A pickup that's no longer there: no item, taken, or (when the scripts ran) its FG_ITEM flag set
+ * (item_aot_set isn't guarded in RE2's scripts: the engine skips an item whose flag is set). */
+int pe_re_pickup_gone(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, const PeImpPickup *pk);
 /* The pickup at (x, z) not taken yet, or -1. */
 int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
                     PeImpPickup *out);

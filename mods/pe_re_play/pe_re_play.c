@@ -202,6 +202,13 @@ static int on_frame(void *ctx, void *user) {
         return 0;
     }
     s_session.talking = pe_re_box_busy;
+    {   /* the scripts' key checks: the pad in the game's key bits (none while a box has it) */
+        const uint16_t raw = (uint16_t)~g_PadPackets[0].buttons;
+        const uint16_t pad = pe_re_box_busy() ? 0 : (uint16_t)((raw & 0xFFu) << 8 | raw >> 8);   /* libetc order */
+        const uint32_t key = pe_re_scd_keys(pad);
+        s_session.key_trg = key & ~s_session.key;
+        s_session.key = key;
+    }
     if (pe_re_session_tick(&s_session) == PE_RE_SAID) say(s_session.said);   /* the room's scripts, a frame */
     const int cross = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;
     const int pressed = cross && !s_cross_held && !pe_re_box_busy();   /* a box's Cross is the box's */
@@ -222,6 +229,11 @@ static int on_frame(void *ctx, void *user) {
         say(s_session.said);
         snprintf(s_status, sizeof s_status, "%s", s_session.said);
         break;
+    case PE_RE_ZONE:                             /* typewriters and item boxes come next */
+        snprintf(s_status, sizeof s_status, "%s here (not built yet).",
+                 s_session.zone.sce == PE_RE_ZONE_SAVE ? "A typewriter" : "An item box");
+        pe_mod_log("pe_re_play", "zone %u kind %u", (unsigned)s_session.zone.id, (unsigned)s_session.zone.sce);
+        break;
     case PE_RE_STAY:
         if (*why) snprintf(s_status, sizeof s_status, "That door: %s.", why);
         break;
@@ -232,17 +244,18 @@ static int on_frame(void *ctx, void *user) {
 
 /* Testing: stand in the middle of the room's next doorway, pickup or message zone (those its scripts
  * set up), one after another each time (the camera stays as it is). */
-static void to_zone(uint32_t tag, const char *what) {
-    static uint32_t s_next[3];
+static void to_zone(uint32_t tag, int kind, const char *what) {
+    static uint32_t s_next[4];
     static const PeImpRoomLogic *s_room;
-    uint32_t n = 0, *next = &s_next[tag == PE_IMP_LOGIC_PICK ? 1 : tag == PE_IMP_LOGIC_TRIG ? 2 : 0];
+    uint32_t n = 0, *next = &s_next[tag == PE_IMP_LOGIC_PICK ? 1 : tag != PE_IMP_LOGIC_TRIG ? 0 : kind == PE_RE_SCE_MESSAGE ? 2 : 3];
+    int front = 0;
     double bx = 0, bz = 0;
     int found = 0;
     if (!s_playing || !pe_imp_logic_section(s_session.logic, tag, &n, NULL)) {
         snprintf(s_status, sizeof s_status, "This room has no %ss.", what);
         return;
     }
-    if (s_room != s_session.logic) s_room = s_session.logic, s_next[0] = s_next[1] = s_next[2] = 0;
+    if (s_room != s_session.logic) s_room = s_session.logic, memset(s_next, 0, sizeof s_next);
     for (uint32_t k = 0; k < n && !found; k++) {
         const uint32_t i = (*next + k) % n;
         PeImpDoor d;
@@ -256,9 +269,10 @@ static void to_zone(uint32_t tag, const char *what) {
             zone = &pk.zone;
         } else if (tag == PE_IMP_LOGIC_TRIG) {
             if (pe_imp_logic_trigger(s_session.logic, i, &t) || !pe_re_scd_live(&s_session.run, t.at) ||
-                pe_re_zone_kind(&s_session.run, t.zone.id, t.zone.sce, NULL) != PE_RE_SCE_MESSAGE)
+                pe_re_zone_kind(&s_session.run, t.zone.id, t.zone.sce, NULL) != kind)
                 continue;
             zone = &t.zone;
+            front = (t.zone.sat & (PE_RE_SAT_UNDER | PE_RE_SAT_FRONT)) == PE_RE_SAT_FRONT;
         } else if (pe_imp_logic_door(s_session.logic, i, &d) || !pe_re_scd_live(&s_session.run, d.at) ||
                    pe_re_zone_kind(&s_session.run, d.zone.id, d.zone.sce, NULL) != d.zone.sce) {
             continue;
@@ -267,14 +281,17 @@ static void to_zone(uint32_t tag, const char *what) {
         found = 1, *next = i + 1;
     }
     if (!found) { snprintf(s_status, sizeof s_status, "This room has no %ss.", what); return; }
+    if (front) bz += PE_RE_FRONT_REACH;                  /* checked in front of her: stand back, facing it */
     pe_re_stage_place(bx, bz);
+    if (front) pe_re_stage_face(0), s_session.facing = 0;
     s_session.x = bx, s_session.z = bz;
     snprintf(s_status, sizeof s_status, "At a %s in room %x-%02X: press Cross.", what, (unsigned)s_session.stage + 1,
              (unsigned)s_session.room);
 }
-static void to_door(void) { to_zone(PE_IMP_LOGIC_DOOR, "door"); }
-static void to_pickup(void) { to_zone(PE_IMP_LOGIC_PICK, "pickup"); }
-static void to_message(void) { to_zone(PE_IMP_LOGIC_TRIG, "message"); }
+static void to_door(void) { to_zone(PE_IMP_LOGIC_DOOR, 0, "door"); }
+static void to_pickup(void) { to_zone(PE_IMP_LOGIC_PICK, 0, "pickup"); }
+static void to_message(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_SCE_MESSAGE, "message"); }
+static void to_event(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_EVENT, "event zone"); }
 static void to_ramp(void) {
     if (!s_playing) return;
     if (!pe_re_stage_to_ramp()) { snprintf(s_status, sizeof s_status, "This room has no slopes or stairs."); return; }
@@ -297,8 +314,9 @@ static void refresh(void) { s_listed = 0; list_games(); }
 static void text_scripts(char *out, unsigned size) {
     const PeReScdRun *r = &s_session.run;
     if (!s_playing || !r->ran) { snprintf(out, size, s_playing ? "Not run (every zone counts)." : "-"); return; }
-    snprintf(out, size, "%d tasks running; %d instructions, %d skipped (first 0x%02X), %d over budget; %d zones, %d changed.",
-             r->waiting, r->executed, r->skipped, r->skipped ? r->first_skipped : 0, r->stopped, r->nlive, r->nreset);
+    snprintf(out, size, "%d tasks running; %d instructions, %d skipped (first 0x%02X), %d over budget; %d zones, %d changed; %d events; F/U zone %d/%d.",
+             r->waiting, r->executed, r->skipped, r->skipped ? r->first_skipped : 0, r->stopped, r->nlive, r->nreset,
+             s_session.events, s_session.progress.flags.work[PE_RE_WORK_F_ATARI], s_session.progress.flags.work[PE_RE_WORK_U_ATARI]);
 }
 
 static void text_pocket(char *out, unsigned size) {
@@ -339,6 +357,7 @@ static int init(void) {
     pe_menu_register_action("Testing", "Go to the next pickup", "Puts Aya on the room's items, one after another.", to_pickup);
     pe_menu_register_action("Testing", "Go to the next ramp", "Puts Aya at the foot of the room's slopes and stairs, one after another.", to_ramp);
     pe_menu_register_action("Testing", "Go to the next message", "Puts Aya where the room's messages are read, one after another.", to_message);
+    pe_menu_register_action("Testing", "Go to the next event zone", "Puts Aya where the room's events start (examined: press Cross), one after another.", to_event);
     pe_menu_register_int("Testing", "Stage", "The room to jump to: its stage.", &s_jump_stage, 1, 7, 1);
     pe_menu_register_int("Testing", "Room", "The room to jump to: its number in the stage (1-05 is 5).", &s_jump_room, 0, 63, 1);
     pe_menu_register_action("Testing", "Go to that room", "Jumps there, camera 0, keeping what's been picked up.", to_room);

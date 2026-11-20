@@ -459,6 +459,7 @@ int pe_re_stage_to_ramp(void) {
     }
     return 0;
 }
+void pe_re_stage_face(int facing) { s_walk.yaw = facing & 4095; }
 void pe_re_stage_place(double x, double z) {
     s_walk.x = x, s_walk.z = z;
     s_walk.ghost = blocked_here(x, z);

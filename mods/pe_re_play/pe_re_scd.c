@@ -69,11 +69,37 @@ static void exec_task(Vm *vm, unsigned level, unsigned proc) {   /* Event_exec: 
     PeReScdTask *t = &vm->run->task[level];
     memset(t, 0, sizeof *t);
     task_start(t, proc_start(vm, 1, proc));
+    t->proc = (int16_t)proc;
 }
 
 static void live(Vm *vm, uint32_t at) {
     for (int i = 0; i < vm->run->nlive; i++) if (vm->run->live[i] == at) return;
     if (vm->run->nlive < PE_RE_LIVE_MAX) vm->run->live[vm->run->nlive++] = at;
+}
+
+/* A zone instruction ran: it takes its id's slot. The zone that held it is gone, and so is any
+ * aot_reset of that id (the game writes the new zone over the slot). */
+static void zone_set(Vm *vm, uint8_t id, uint32_t at) {
+    PeReScdRun *r = vm->run;
+    const uint32_t old = r->slot[id];
+    if (old && old != at)
+        for (int i = 0; i < r->nlive; i++)
+            if (r->live[i] == old) { r->live[i] = r->live[--r->nlive]; break; }
+    int k = 0;
+    for (int i = 0; i < r->nreset; i++) if (r->reset[i].id != id) r->reset[k++] = r->reset[i];
+    r->nreset = k;
+    r->slot[id] = at;
+    live(vm, at);
+}
+
+/* Pad_set's Key_type[0]: the pad button (libetc order) behind each of the game's key bits */
+static const uint16_t KEY_TYPE[16] = { 0x1000, 0x2000, 0x4000, 0x8000, 0x1000, 0x4000, 0x0040, 0x0040,
+                                       0x0008, 0x0080, 0x8000, 0x2000, 0x0040, 0x0010, 0x0020, 0x0000 };
+
+uint32_t pe_re_scd_keys(uint16_t pad) {
+    uint32_t key = 0;
+    for (int i = 0; i < 16; i++) if (pad & KEY_TYPE[i]) key |= 1u << i;
+    return key;
 }
 
 static int compare(int a, int op, int b) {
@@ -262,11 +288,16 @@ static int step(Vm *vm, PeReScdTask *t) {
     case OP_KEEP_ITEM_CK:
         t->pc += n;
         return vm->host && vm->host->has && vm->host->has(vm->host->ctx, ins[1]) ? CONTINUE : FALSE_COND;
-    case OP_SCE_KEY_CK: case OP_SCE_TRG_CK: t->pc += n; return FALSE_COND;
+    case OP_SCE_KEY_CK: case OP_SCE_TRG_CK: {          /* byte 1: the answer when a key matches */
+        const uint32_t keys = !vm->host ? 0 : code == OP_SCE_KEY_CK ? vm->host->key : vm->host->key_trg;
+        const int hit = (keys & le16(ins + 2)) != 0;
+        t->pc += n;
+        return (hit ? ins[1] : ins[1] ^ 1) ? CONTINUE : FALSE_COND;
+    }
     case OP_MESSAGE_ON: vm->run->message = ins[2], vm->run->messages++; t->pc += n; return CONTINUE;
     case OP_AOT_SET: case OP_DOOR_AOT_SE: case OP_ITEM_AOT_SET:
     case OP_AOT_SET_4P: case OP_DOOR_AOT_SET_4P: case OP_ITEM_AOT_SET_4P:
-        live(vm, t->pc);
+        zone_set(vm, ins[1], t->pc);
         t->pc += n;
         return CONTINUE;
     case OP_AOT_RESET:
@@ -322,7 +353,9 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
     if (pe_imp_rdt_section(vm.rdt, vm.size, SCRIPT_MAIN, &out->sec[1], &out->len[1])) out->sec[1] = out->len[1] = 0;
     if (!out->sec[0] && !out->sec[1]) return;
     out->ran = 1;
+    for (int i = PE_RE_WORK_F_ATARI; i <= PE_RE_WORK_GET_ID; i++) flags->work[i] = -1;   /* Sce_work_clr */
     task_start(&out->task[0], proc_start(&vm, 0, 0));      /* Event_exec(0, 0) on the init script */
+    out->task[0].proc = -1;
     task_start(&out->task[1], proc_start(&vm, 1, 0));      /* Event_exec(1, 0) on the main script */
     schedule(&vm);
 }
@@ -331,6 +364,18 @@ void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost
     Vm vm;
     if (!run->ran || !setup(&vm, l, flags, host, run, BUDGET_TICK)) return;
     schedule(&vm);
+}
+
+void pe_re_scd_exec(const PeImpRoomLogic *l, PeReScdRun *run, unsigned level, unsigned proc) {
+    Vm vm;
+    PeReFlags none;
+    if (!run->ran || !setup(&vm, l, &none, NULL, run, 0)) return;
+    exec_task(&vm, level, proc);
+}
+
+int pe_re_scd_running(const PeReScdRun *run, unsigned proc) {
+    for (int i = 0; i < PE_RE_TASKS; i++) if (run->task[i].status && run->task[i].proc == (int)proc) return 1;
+    return 0;
 }
 
 int pe_re_scd_live(const PeReScdRun *r, uint32_t at) {

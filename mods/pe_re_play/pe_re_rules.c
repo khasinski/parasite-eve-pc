@@ -100,6 +100,11 @@ int pe_re_zone_kind(const PeReScdRun *run, uint8_t id, int sce, uint8_t data[6])
 
 static int live(const PeReScdRun *run, uint32_t at) { return !run || pe_re_scd_live(run, at); }
 
+int pe_re_pickup_gone(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, const PeImpPickup *pk) {
+    return !pk->item || was_taken(p, taken_key(room, pk->flag)) ||
+           (run && run->ran && pe_re_flag(&p->flags, PE_RE_FG_ITEM, pk->flag));
+}
+
 int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
                     PeImpPickup *out) {
     uint32_t n = 0;
@@ -107,8 +112,7 @@ int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeR
     for (uint32_t i = 0; i < n; i++) {
         PeImpPickup pk;
         /* item_aot_set isn't guarded in RE2's scripts: the engine skips an item whose flag is set */
-        if (pe_imp_logic_pickup(room, i, &pk) || !pk.item || !live(run, pk.at) || was_taken(p, taken_key(room, pk.flag)) ||
-            (run && run->ran && pe_re_flag(&p->flags, PE_RE_FG_ITEM, pk.flag)) ||
+        if (pe_imp_logic_pickup(room, i, &pk) || !live(run, pk.at) || pe_re_pickup_gone(room, run, p, &pk) ||
             pe_re_zone_kind(run, pk.zone.id, pk.zone.sce, NULL) != pk.zone.sce)
             continue;
         if (pe_re_in_quad(pk.zone.x, pk.zone.z, x, z)) { if (out) *out = pk; return (int)i; }

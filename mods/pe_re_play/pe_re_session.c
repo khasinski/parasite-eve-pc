@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "pe_re_session.h"
+#include "pe_re_zone.h"
 
 /* First rooms: RE2 and RE3 open in the street (room 1-00); RE1 in the mansion's main hall (1-06).
  * Only RE2 has the cameras and collision the runtime uses so far (design doc, phase 4). */
@@ -99,7 +100,10 @@ int pe_re_free_spot(const PeRe2RoomCollision *c, int floor, double *x, double *z
 /* ---- the session ---- */
 static int has_item(void *ctx, uint16_t item) { return pe_re_has(&((PeReSession *)ctx)->progress, item); }
 static int talking(void *ctx) { const PeReSession *s = ctx; return s->talking && s->talking(); }
-static PeReScdHost host_of(PeReSession *s) { PeReScdHost h = {has_item, talking, s}; return h; }
+static PeReScdHost host_of(PeReSession *s) {
+    PeReScdHost h = {has_item, talking, s->key, s->key_trg, s};
+    return h;
+}
 
 static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room, char *why, size_t n) {
     char id[PE_IMP_ID_MAX];
@@ -113,6 +117,7 @@ static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room
     s->logic = l, s->stage = stage, s->room = room;
     const PeReScdHost host = host_of(s);
     pe_re_scd_run(l, &s->progress.flags, &host, &s->run);   /* what its scripts set up */
+    s->auto_message = -1;
     return 0;
 }
 
@@ -150,29 +155,105 @@ void pe_re_session_place(PeReSession *s, double x, double z, int facing) {
     s->x = x, s->z = z, s->facing = facing & 4095;
 }
 
-PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, double z, int action, char *why, size_t n) {
-    PeImpDoor d;
-    PeImpPickup pk;
-    if (!s->game || !s->logic) return PE_RE_STAY;
-    s->x = x, s->z = z;
-    if (action) s->said[0] = 0;
-    if (action && pe_re_door_at(s->logic, &s->run, x, z, &d) >= 0) {
-        if (pe_re_door_try(&s->progress, &d, s->items, s->said, sizeof s->said) == PE_RE_DOOR_LOCKED) return PE_RE_SAID;
-        const uint32_t stage = d.stage == PE_RE_STAGE_HERE ? s->stage : d.stage;
-        if (!pe_re_session_enter(s, store, stage, d.room, d.camera, d.next_x, d.next_z, d.next_dir, why, n)) {
-            s->floor = pe_re_floor_of(d.next_y);
-            s->door = d;
-            s->doors_taken++;
-            return PE_RE_ROOM;
-        }
-        return s->said[0] ? PE_RE_SAID : PE_RE_STAY;
+/* Through door `d`: locked says why; else the next room, placed as the door says. */
+static PeReChange take_door(PeReSession *s, const char *store, const PeImpDoor *d, char *why, size_t n) {
+    if (pe_re_door_try(&s->progress, d, s->items, s->said, sizeof s->said) == PE_RE_DOOR_LOCKED) return PE_RE_SAID;
+    const uint32_t stage = d->stage == PE_RE_STAGE_HERE ? s->stage : d->stage;
+    if (!pe_re_session_enter(s, store, stage, d->room, d->camera, d->next_x, d->next_z, d->next_dir, why, n)) {
+        s->floor = pe_re_floor_of(d->next_y);
+        s->door = *d;
+        s->doors_taken++;
+        return PE_RE_ROOM;
     }
-    if (action && pe_re_pickup_at(s->logic, &s->run, &s->progress, x, z, &pk) >= 0) {
+    return s->said[0] ? PE_RE_SAID : PE_RE_STAY;
+}
+
+static PeReChange say_message(PeReSession *s, const uint8_t data[6]) {
+    const uint32_t m = (uint32_t)data[0] | (uint32_t)data[1] << 8;
+    return pe_re_message(s->logic, m, s->said, sizeof s->said) ? PE_RE_STAY : PE_RE_SAID;
+}
+
+/* Sce_Event: Event_exec(data word 0, data byte 3). The game stops the scheduler's zone checks while
+ * an event plays (Stop_flg); that stop isn't kept here, so a zone set off every frame doesn't
+ * restart an event that's still running (`again` 0). */
+static void start_event(PeReSession *s, const uint8_t data[6], int again) {
+    const unsigned level = (unsigned)data[0] | (unsigned)data[1] << 8, proc = data[3];
+    if (!again && (level < PE_RE_TASKS ? s->run.task[level].status && s->run.task[level].proc == (int)proc
+                                       : pe_re_scd_running(&s->run, proc)))
+        return;
+    pe_re_scd_exec(s->logic, &s->run, level, proc);
+    s->events++;
+}
+
+/* What a zone does, by its kind (SCE_AT.C's handlers). */
+static PeReChange zone_act(PeReSession *s, const char *store, const PeReZoneHit *h, int examine, char *why, size_t n) {
+    s->zone = *h;
+    switch (h->sce) {
+    case PE_RE_ZONE_DOOR: {
+        PeImpDoor d;
+        if (h->from != PE_RE_FROM_DOOR || pe_imp_logic_door(s->logic, h->index, &d)) return PE_RE_STAY;
+        return take_door(s, store, &d, why, n);
+    }
+    case PE_RE_ZONE_ITEM: {
+        PeImpPickup pk;
+        if (h->from != PE_RE_FROM_PICKUP || pe_imp_logic_pickup(s->logic, h->index, &pk)) return PE_RE_STAY;
         pe_re_take(&s->progress, s->logic, &pk, s->items, s->said, sizeof s->said);
         return PE_RE_SAID;
     }
-    const int message = action ? pe_re_message_at(s->logic, &s->run, x, z) : -1;
-    if (message >= 0 && !pe_re_message(s->logic, (uint32_t)message, s->said, sizeof s->said)) return PE_RE_SAID;
+    case PE_RE_ZONE_MESSAGE: return say_message(s, h->data);
+    case PE_RE_ZONE_EVENT: start_event(s, h->data, examine); return PE_RE_STAY;
+    case PE_RE_ZONE_FLAG:                                  /* Sce_Flg_chg: group, bit, on/off */
+        pe_re_flag_set(&s->progress.flags, (unsigned)h->data[0] | (unsigned)h->data[1] << 8,
+                       ((unsigned)h->data[2] | (unsigned)h->data[3] << 8) & 0xFF, h->data[4] | h->data[5]);
+        return PE_RE_STAY;
+    case PE_RE_ZONE_SAVE: case PE_RE_ZONE_ITEMBOX:         /* for the mod: a typewriter, an item box */
+        return PE_RE_ZONE;
+    default: return PE_RE_STAY;                            /* water, damage, drawers, ...: not yet */
+    }
+}
+
+PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, double z, int action, char *why, size_t n) {
+    PeImpDoor d;
+    PeImpPickup pk;
+    PeReZoneHit hits[16];
+    if (!s->game || !s->logic) return PE_RE_STAY;
+    s->x = x, s->z = z;
+    if (action) {
+        s->said[0] = 0;
+        /* an examine: the game's own check (the point in front, or underfoot, by the zone's bits) */
+        if (pe_re_zone_check(s->logic, &s->run, &s->progress, x, z, s->facing, s->floor, 1, s->progress.flags.work,
+                             hits, 1) == 1) {
+            const PeReChange c = zone_act(s, store, &hits[0], 1, why, n);
+            if (c != PE_RE_STAY || s->said[0] || hits[0].sce == PE_RE_ZONE_EVENT || hits[0].sce == PE_RE_ZONE_FLAG)
+                return c;
+        }
+        /* else, more forgiving than the game: a door, pickup or message zone she stands in */
+        if (pe_re_door_at(s->logic, &s->run, x, z, &d) >= 0) return take_door(s, store, &d, why, n);
+        if (pe_re_pickup_at(s->logic, &s->run, &s->progress, x, z, &pk) >= 0) {
+            pe_re_take(&s->progress, s->logic, &pk, s->items, s->said, sizeof s->said);
+            return PE_RE_SAID;
+        }
+        const int message = pe_re_message_at(s->logic, &s->run, x, z);
+        if (message >= 0 && !pe_re_message(s->logic, (uint32_t)message, s->said, sizeof s->said)) return PE_RE_SAID;
+    }
+    /* every frame: the zones that don't wait for an examine */
+    const int nh = pe_re_zone_check(s->logic, &s->run, &s->progress, x, z, s->facing, s->floor, 0,
+                                    s->progress.flags.work, hits, 16);
+    int message_zone = -1;
+    for (int i = 0; i < nh; i++) {
+        if (hits[i].sce == PE_RE_ZONE_MESSAGE) {           /* once each time she walks into it */
+            message_zone = hits[i].id;
+            if (s->auto_message == hits[i].id || (s->talking && s->talking())) continue;
+            s->auto_message = hits[i].id;
+            if (say_message(s, hits[i].data) == PE_RE_SAID) return PE_RE_SAID;
+            continue;
+        }
+        if (hits[i].sce == PE_RE_ZONE_ITEM || hits[i].sce == PE_RE_ZONE_SAVE || hits[i].sce == PE_RE_ZONE_ITEMBOX)
+            continue;                                      /* those only ever answer an examine */
+        const PeReChange c = zone_act(s, store, &hits[i], 0, why, n);
+        if (c != PE_RE_STAY) return c;
+    }
+    if (message_zone < 0) s->auto_message = -1;
     const int camera = pe_re_camera_at(s->logic, s->camera, x, z);
     if (camera == s->camera) return PE_RE_STAY;
     s->camera = camera;

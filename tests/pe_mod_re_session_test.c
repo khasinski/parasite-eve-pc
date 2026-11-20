@@ -35,6 +35,48 @@ int main(void) {
     const int16_t sx[4] = {0, 1000, 1500, 500}, sz[4] = {0, 0, 1000, 1000};
     CHECK(pe_re_in_quad(sx, sz, 1200, 800) && !pe_re_in_quad(sx, sz, 100, 800));
 
+    /* the game's zone check (pe_re_zone.h) on made-up zones */
+    {
+        double fx, fz;
+        pe_re_front(0, 0, 0, &fx, &fz);
+        CHECK(fx > -1 && fx < 1 && fz > -621 && fz < -619);    /* facing 0: -z */
+        pe_re_front(0, 0, 1024, &fx, &fz);
+        CHECK(fx > -621 && fx < -619 && fz > -1 && fz < 1);    /* 1024: -x */
+        CHECK(pe_re_scd_keys(0x0040) == (1u << 6 | 1u << 7 | 1u << 12));   /* Cross */
+        CHECK(pe_re_scd_keys(0x1000) == (1u << 0 | 1u << 4) && pe_re_scd_keys(0x0020) == 1u << 14);
+        PeImpTrigger tz[4];
+        memset(tz, 0, sizeof tz);
+        tz[0].zone.id = 3, tz[0].zone.sce = PE_RE_ZONE_MESSAGE, tz[0].zone.sat = 0x31;      /* examine, in front */
+        rect(tz[0].zone.x, tz[0].zone.z, 0, 0, 1000, 1000);
+        tz[0].data[0] = 7;
+        tz[1].zone.id = 1, tz[1].zone.sce = PE_RE_ZONE_NOTHING, tz[1].zone.sat = 0x31;      /* kind 0: only F_atari */
+        rect(tz[1].zone.x, tz[1].zone.z, 0, 0, 1000, 1000);
+        tz[2].zone.id = 4, tz[2].zone.sce = PE_RE_ZONE_EVENT, tz[2].zone.sat = 0x41;        /* walk-in, underfoot */
+        rect(tz[2].zone.x, tz[2].zone.z, 0, 1000, 1000, 2000);
+        tz[2].data[0] = 10, tz[2].data[3] = 2;
+        tz[3].zone.id = 5, tz[3].zone.sce = PE_RE_ZONE_FLAG, tz[3].zone.sat = 0x41, tz[3].zone.floor = 1;   /* upstairs */
+        rect(tz[3].zone.x, tz[3].zone.z, 0, 1000, 1000, 2000);
+        PeImpLogicBuilder *zb = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
+        CHECK(zb && !pe_imp_logic_add_trigger(zb, tz, 4));
+        PeImpRoomLogic *zl = pe_imp_logic_finish(zb);
+        CHECK(zl != NULL);
+        if (zl) {
+            PeReProgress zp;
+            PeReZoneHit hit[4];
+            memset(&zp, 0, sizeof zp);
+            int16_t *w = zp.flags.work;
+            w[0] = w[1] = -1;
+            /* standing in it facing away: the front point is outside; facing it from 620 off: a hit */
+            CHECK(pe_re_zone_check(zl, NULL, &zp, 500, 500, 2048, 0, 1, w, hit, 1) == 0 && w[0] == -1);
+            CHECK(pe_re_zone_check(zl, NULL, &zp, 500, 1100, 0, 0, 1, w, hit, 1) == 1 && hit[0].id == 3 &&
+                  hit[0].data[0] == 7 && w[0] == 3);           /* zone 1 (kind 0) hit first, looked past */
+            CHECK(pe_re_zone_check(zl, NULL, &zp, 500, 1100, 0, 0, 0, w, hit, 4) == 1 && hit[0].id == 4 && w[1] == 4);
+            CHECK(pe_re_zone_check(zl, NULL, &zp, 500, 1500, 0, 1, 0, w, hit, 4) == 1 && hit[0].id == 5);   /* floor 1 */
+            CHECK(pe_re_zone_check(zl, NULL, &zp, 500, 5000, 0, 0, 0, w, hit, 4) == 0);
+            free(zl);
+        }
+    }
+
     /* a made-up room: camera 0 -> 1 past x 2000, back past x 1800; a door at the far end */
     PeImpLogicBuilder *b = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
     PeImpCameraZone cz[4];                  /* as RE2 stores them: each camera's own area first */
@@ -328,6 +370,7 @@ int main(void) {
     PeReProgress fresh;
     int rooms = 0, ran = 0, live_doors = 0, all_doors = 0, live_items = 0, all_items = 0;
     long executed = 0, skipped = 0, stopped = 0;
+    int kinds[16] = {0}, manual = 0, events = 0, events_found = 0, events_started = 0;
     for (uint32_t st = 0; st < 7; st++)
         for (uint32_t rm = 0; rm < 64; rm++) {
             char lid[PE_IMP_ID_MAX];
@@ -353,8 +396,45 @@ int main(void) {
                 PeImpPickup pk;
                 if (!pe_imp_logic_pickup(rl, i, &pk)) all_items++, live_items += pe_re_scd_live(&run, pk.at);
             }
+            /* the zones the scripts left: by kind; each event zone found where the game looks for it,
+             * and its task starting */
+            pe_imp_logic_section(rl, PE_IMP_LOGIC_TRIG, &n, NULL);
+            for (uint32_t i = 0; i < n; i++) {
+                PeImpTrigger tr;
+                if (pe_imp_logic_trigger(rl, i, &tr) || !pe_re_scd_live(&run, tr.at)) continue;
+                const int k = pe_re_zone_kind(&run, tr.zone.id, tr.zone.sce, tr.data);
+                kinds[k & 15]++, manual += (tr.zone.sat & 0x10) != 0;
+                if (k != PE_RE_ZONE_EVENT || !(tr.zone.sat & 1) || (tr.zone.super & 0x80)) continue;
+                events++;
+                double cx = 0, cz = 0;
+                for (int c = 0; c < 4; c++) cx += tr.zone.x[c] / 4.0, cz += tr.zone.z[c] / 4.0;
+                const int under = (tr.zone.sat & PE_RE_SAT_UNDER) != 0;
+                PeReZoneHit hit[16];
+                int16_t work[4] = {-1, -1, -1, -1};
+                const int floor = tr.zone.floor & 0x80 ? 0 : tr.zone.floor;
+                const int nh = pe_re_zone_check(rl, &run, &fresh, cx, under ? cz : cz + PE_RE_FRONT_REACH, 0, floor,
+                                                (tr.zone.sat & 0x10) != 0, work, hit, 16);
+                int found = 0;
+                for (int h = 0; h < nh; h++) found |= hit[h].id == tr.zone.id;
+                found |= work[under ? 1 : 0] == tr.zone.id;   /* an examine stopped at an earlier zone */
+                events_found += found;
+                const unsigned level = (unsigned)tr.data[0] | (unsigned)tr.data[1] << 8, proc = tr.data[3];
+                pe_re_scd_exec(rl, &run, level, proc);
+                events_started += pe_re_scd_running(&run, proc);
+                if (getenv("PE_TEST_RE_EVENTS"))
+                    printf("  %x%02x zone %u: event level %u proc %u sat %02x floor %02x%s%s\n", st + 1, rm,
+                           (unsigned)tr.zone.id, level, proc, (unsigned)tr.zone.sat, (unsigned)tr.zone.floor,
+                           found ? "" : " NOT FOUND", pe_re_scd_running(&run, proc) ? "" : " not started");
+            }
             free(rl);
         }
+    printf("RE2 zones, new game: %d message, %d event, %d flag, %d save, %d item box, %d other; %d of them examined; "
+           "event zones found %d of %d, started %d\n", kinds[PE_RE_ZONE_MESSAGE], kinds[PE_RE_ZONE_EVENT],
+           kinds[PE_RE_ZONE_FLAG], kinds[PE_RE_ZONE_SAVE], kinds[PE_RE_ZONE_ITEMBOX],
+           kinds[0] + kinds[3] + kinds[7] + kinds[8] + kinds[11] + kinds[12] + kinds[13] + kinds[14], manual,
+           events_found, events, events_started);
+    CHECK(events > 0 && events_found * 10 >= events * 9 && events_started * 10 >= events * 9);
+    CHECK(kinds[PE_RE_ZONE_SAVE] > 0 && kinds[PE_RE_ZONE_ITEMBOX] > 0);
     printf("RE2 scripts, new game: %d rooms, %d ran; %ld instructions run, %ld skipped, %ld tasks over the frame budget "
            "(4 s of play); doors set up %d of %d, pickups %d of %d\n", rooms, ran, executed, skipped, stopped,
            live_doors, all_doors, live_items, all_items);
