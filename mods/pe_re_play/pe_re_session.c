@@ -134,6 +134,11 @@ int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint3
     return 0;
 }
 
+int pe_re_floor_of(int y) {
+    const int f = (y - PE_RE2_FLOOR_HEIGHT / 2) / -PE_RE2_FLOOR_HEIGHT;
+    return f < 0 ? 0 : f > 31 ? 31 : f;
+}
+
 void pe_re_session_place(PeReSession *s, double x, double z, int facing) {
     s->x = x, s->z = z, s->facing = facing & 4095;
 }
@@ -148,6 +153,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
         if (pe_re_door_try(&s->progress, &d, s->items, s->said, sizeof s->said) == PE_RE_DOOR_LOCKED) return PE_RE_SAID;
         const uint32_t stage = d.stage == PE_RE_STAGE_HERE ? s->stage : d.stage;
         if (!pe_re_session_enter(s, store, stage, d.room, d.camera, d.next_x, d.next_z, d.next_dir, why, n)) {
+            s->floor = pe_re_floor_of(d.next_y);
             s->doors_taken++;
             return PE_RE_ROOM;
         }

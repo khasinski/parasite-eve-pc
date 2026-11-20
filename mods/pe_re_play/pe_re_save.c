@@ -25,7 +25,7 @@ void pe_re_save_encode(const PeReSession *s, int playing, uint8_t out[PE_RE_SAVE
     const PeReProgress *p = &s->progress;
     out[0] = (uint8_t)game_number(s->game), out[1] = (uint8_t)(playing != 0), out[2] = (uint8_t)s->player;
     out[3] = (uint8_t)s->stage, out[4] = (uint8_t)s->room, out[5] = (uint8_t)s->camera;
-    put16(out + 6, (uint32_t)(s->facing & 4095));
+    put16(out + 6, (uint32_t)(s->facing & 4095) | (uint32_t)(s->floor & 15) << 12);
     put32(out + 8, (uint32_t)(int32_t)lround(s->x)), put32(out + 12, (uint32_t)(int32_t)lround(s->z));
     memcpy(out + 16, p->unlocked, 32);
     for (int i = 0; i < p->held && i < PE_RE_POCKET_MAX; i++)
@@ -41,7 +41,7 @@ int pe_re_save_decode(const uint8_t in[PE_RE_SAVE_SIZE], PeReSaved *out) {
     out->game = pe_re_game(in[0] - 1);
     if (!out->game || in[2] > 1) return -1;
     out->playing = in[1] != 0, out->player = in[2], out->stage = in[3], out->room = in[4], out->camera = in[5];
-    out->facing = (int)get16(in + 6) & 4095;
+    out->facing = (int)get16(in + 6) & 4095, out->floor = (int)(get16(in + 6) >> 12);
     out->x = (int32_t)get32(in + 8), out->z = (int32_t)get32(in + 12);
     PeReProgress *p = &out->progress;
     memcpy(p->unlocked, in + 16, 32);
@@ -60,6 +60,7 @@ int pe_re_session_resume(PeReSession *s, const char *store, const PeReSaved *sav
     if (!saved->game) { snprintf(why, n, "no game in this save"); return -1; }
     if (pe_re_session_start(s, store, saved->game, saved->player, why, n)) return -1;
     s->progress = saved->progress;                        /* before the room's scripts run */
+    s->floor = saved->floor;
     if (pe_re_session_enter(s, store, saved->stage, saved->room, saved->camera, saved->x, saved->z, saved->facing, why, n)) {
         pe_re_session_end(s);
         return -1;

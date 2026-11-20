@@ -37,8 +37,11 @@ int pe_imp_room_foreground(const PeImpImageSet *set, uint32_t frame, const PeImp
 int pe_imp_room_foreground_depth(const PeImpImageSet *set, uint32_t frame,
                                  const PeImpRoomView *view, uint16_t *depth);
 
-/* RE2 ground-floor collision. Read an imported COLL section, or the same SCA
- * payload from an older collision-preview ImageSet. Returns 1 if absent. */
+/* RE2 collision (SCA). Read an imported COLL section, or the same SCA payload from an older
+ * collision-preview ImageSet. Returns 1 if absent. Each entry belongs to floors by a bitmask (its
+ * last word); floors are 1,800 units apart, floor n at y = -1800 * n (bio2-ds SCA.H / SCA.C,
+ * read for behaviour). The plain call reads floor 0. */
+#define PE_RE2_FLOOR_HEIGHT 1800
 #define PE_RE2_COLLIDER_MAX 512u
 typedef struct {
     int32_t x0, z0, x1, z1;
@@ -51,6 +54,7 @@ typedef struct {
 } PeRe2RoomCollision;
 
 int pe_imp_re2_collision(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *out);
+int pe_imp_re2_collision_floor(const uint8_t *sca, uint32_t size, unsigned floor, PeRe2RoomCollision *out);
 int pe_imp_re2_image_collision(const PeImpImageSet *set, PeRe2RoomCollision *out);
 int pe_imp_re2_blocked(const PeRe2RoomCollision *room, double x, double z, double radius);
 void pe_imp_re2_slide(const PeRe2RoomCollision *room, double *x, double *z,

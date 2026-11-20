@@ -4,7 +4,7 @@
  * pe_extension_store.h: 8 KB for every mod, 2 KB a section). One fixed byte layout, version 1,
  * little-endian, 1,040 bytes:
  *     0  u8 game (1 re1, 2 re2, 3 re3; 0 none), u8 playing, u8 player, u8 stage, u8 room, u8 camera,
- *        s16 facing
+ *        u16 facing (bits 0-11) | floor << 12
  *     8  s32 x, s32 z                                  where the player stands, room units
  *    16  u8 unlocked[32]                               lock flags opened (PeReProgress.unlocked)
  *    48  64 x (u16 item, u16 count)                    the pocket (item 0: empty)
@@ -22,7 +22,7 @@ typedef struct {
     const PeReGame *game;                 /* NULL: no imported game in this save */
     int playing;                          /* was in it when saved: resume there */
     uint32_t player, stage, room;
-    int camera, facing;
+    int camera, facing, floor;
     double x, z;
     PeReProgress progress;
 } PeReSaved;

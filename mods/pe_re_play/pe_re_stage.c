@@ -69,7 +69,7 @@ static struct {
 
 static struct {
     PeRe2RoomCollision collision;
-    double x, z;
+    double x, z, y;         /* y: the floor's height (floor n at -1800 n) */
     int yaw;
     int active;
     int ghost;              /* landed where the collision has no free floor: walk freely until clear */
@@ -119,7 +119,7 @@ static int spawn_on_floor(void) {
         double sy = (double)offsets_y[i] / s_camera.distance;
         double ray_y = (m->m[2][1] + sy * m->m[1][1]) / 4096.0;
         if (fabs(ray_y) < 0.0001) continue;
-        double depth = -s_camera.eye[1] / ray_y;
+        double depth = (s_walk.y - s_camera.eye[1]) / ray_y;      /* where the ray meets this floor */
         if (depth < 2200 || depth > 12000 * RE_UNITS_PER_PE_UNIT) continue;
         for (unsigned j = 0; j < sizeof offsets_x / sizeof *offsets_x; j++) {
             double sx = (double)offsets_x[j] / s_camera.distance;
@@ -181,7 +181,7 @@ static int on_camera(void *ctx, void *user) {
      * host location for its floor, contact checks, and save data. */
     double delta[3] = {
         (s_walk.x - s_camera.eye[0]) / RE_UNITS_PER_PE_UNIT - aya->pos_x / 65536.0,
-        -s_camera.eye[1] / RE_UNITS_PER_PE_UNIT - aya->pos_y / 65536.0,
+        (s_walk.y - s_camera.eye[1]) / RE_UNITS_PER_PE_UNIT - aya->pos_y / 65536.0,
         (s_walk.z - s_camera.eye[2]) / RE_UNITS_PER_PE_UNIT - aya->pos_z / 65536.0
     };
     for (int row = 0; row < 3; row++) {
@@ -287,8 +287,8 @@ static void pe_re_scale(void) {
     s_scale = k < 1 ? 1 : k > 40 ? 40 : k;
 }
 
-int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camera, int place, double x, double z,
-                     int facing, char *why, size_t n) {
+int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camera, int floor, int place, double x,
+                     double z, int facing, char *why, size_t n) {
     PeImpImageSet *set = NULL;
     pe_re_scale();
     int rc = -1;
@@ -313,11 +313,12 @@ int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camer
         uint32_t coll = 0;
         const uint8_t *data = logic ? pe_imp_logic_section(logic, PE_IMP_LOGIC_COLL, NULL, &coll) : NULL;
         if (!s_camera.distance) snprintf(why, n, "camera %d has no projection", camera);
-        else if ((!data || pe_imp_re2_collision(data, coll, &s_walk.collision)) &&
+        else if ((!data || pe_imp_re2_collision_floor(data, coll, (unsigned)floor, &s_walk.collision)) &&
                  pe_imp_re2_image_collision(set, &s_walk.collision))
             snprintf(why, n, "%s has no collision", room_id);
         else if (!place && !spawn_on_floor()) snprintf(why, n, "no free floor in camera %d", camera);
         else {
+            s_walk.y = -(double)floor * PE_RE2_FLOOR_HEIGHT;
             if (place) {                                     /* a door's landing point: clear of walls */
                 s_walk.x = x, s_walk.z = z, s_walk.yaw = facing;
                 /* The collision knows the ground floor only: upstairs a landing can be all "wall". */

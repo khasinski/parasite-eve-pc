@@ -76,7 +76,7 @@ static void say(const char *text) {
 static void show_room(int place) {
     char room[PE_IMP_ID_MAX], why[200] = "";
     pe_re_room_id(s_session.game->game, s_session.stage, s_session.room, room, sizeof room);
-    if (pe_re_stage_show(room, s_session.logic, s_session.camera, place, s_session.x, s_session.z,
+    if (pe_re_stage_show(room, s_session.logic, s_session.camera, s_session.floor, place, s_session.x, s_session.z,
                          s_session.facing, why, sizeof why)) {
         snprintf(s_status, sizeof s_status, "Stopped: %s.", why);
         pe_re_stage_hide();
@@ -245,7 +245,8 @@ static void to_zone(uint32_t tag, const char *what) {
                 pe_re_zone_kind(&s_session.run, t.zone.id, t.zone.sce, NULL) != PE_RE_SCE_MESSAGE)
                 continue;
             zone = &t.zone;
-        } else if (pe_imp_logic_door(s_session.logic, i, &d) || !pe_re_scd_live(&s_session.run, d.at)) {
+        } else if (pe_imp_logic_door(s_session.logic, i, &d) || !pe_re_scd_live(&s_session.run, d.at) ||
+                   pe_re_zone_kind(&s_session.run, d.zone.id, d.zone.sce, NULL) != d.zone.sce) {
             continue;
         }
         for (int c = 0; c < 4; c++) bx += zone->x[c] / 4.0, bz += zone->z[c] / 4.0;

@@ -257,6 +257,10 @@ static int room_data(const PeImpImageSet *set, uint32_t frame, Bytes *data, Byte
 }
 
 int pe_imp_re2_collision(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *out) {
+    return pe_imp_re2_collision_floor(sca, size, 0, out);
+}
+
+int pe_imp_re2_collision_floor(const uint8_t *sca, uint32_t size, unsigned floor, PeRe2RoomCollision *out) {
     out->count = 0;
     if (!sca) return 1;
     /* The count includes the 16-byte header. The next RDT section may
@@ -267,7 +271,7 @@ int pe_imp_re2_collision(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *
     for (uint32_t i = 1; i < count; i++) {
         const uint8_t *p = sca + i * 16;
         unsigned shape = le16(p + 8) & 15;
-        if (!(le32(p + 12) & 1) || shape > 12) continue;
+        if (floor > 31 || !(le32(p + 12) & (1u << floor)) || shape > 12) continue;   /* this floor's */
         int32_t x = signed16(le16(p)), z = signed16(le16(p + 2));
         out->entries[out->count++] = (PeRe2Collider){
             x, z, x + (int32_t)le16(p + 4), z + (int32_t)le16(p + 6), (uint8_t)shape

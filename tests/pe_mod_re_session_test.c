@@ -168,7 +168,7 @@ int main(void) {
             uint32_t coll = 0;
             const uint8_t *data = pe_imp_logic_section(t.logic, PE_IMP_LOGIC_COLL, NULL, &coll);
             PeRe2RoomCollision c;
-            if (data && !pe_imp_re2_collision(data, coll, &c)) {
+            if (data && !pe_imp_re2_collision_floor(data, coll, (unsigned)pe_re_floor_of(d.next_y), &c)) {
                 double fx = d.next_x, fz = d.next_z;
                 if (pe_imp_re2_blocked(&c, fx, fz, 280)) blocked++;
                 if (!pe_re_free_spot(&c, &fx, &fz, 280, 2000)) {          /* as the stage places Aya */
@@ -304,9 +304,10 @@ int main(void) {
            "wait or loop; doors set up %d of %d, pickups %d of %d\n", rooms, ran, executed, skipped, stopped,
            live_doors, all_doors, live_items, all_items);
     CHECK(rooms >= 100 && ran == rooms && live_doors * 10 >= all_doors * 7 && live_items > 0 && live_items < all_items);
-    /* No free floor near a landing is mostly upstairs (y -1800 and below): the collision decoder knows
-     * the ground floor only, and the stage walks Aya freely until she's clear. Guard the count. */
-    CHECK(missing * 20 <= doors && no_camera == 0 && stuck * 5 <= doors);
+    /* Landings are checked against their own floor's collision (1,800 units a floor). A few still
+     * have no free floor near (stairs and slopes count as solid for now; the stage walks Aya freely
+     * until she's clear): 7 of 263 on disc 1, was 40 before floors. Guard the count. */
+    CHECK(missing * 20 <= doors && no_camera == 0 && stuck * 20 <= doors);
 
     printf(s_fail ? "re session FAILED\n" : "re session passed\n");
     return s_fail;

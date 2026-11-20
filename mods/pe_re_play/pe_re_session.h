@@ -52,6 +52,7 @@ typedef struct {
     int camera;
     double x, z;
     int facing;
+    int floor;                        /* 0 ground; floor n stands at y = -1800 * n */
     PeImpRoomLogic *logic;            /* the room's record (owned) */
     PeImpRoomLogic *items;            /* the game's ItemTable, for names (owned; may be NULL) */
     PeReProgress progress;            /* locks opened, pickups taken, the pocket, the game's flags */
@@ -67,9 +68,12 @@ typedef enum { PE_RE_STAY, PE_RE_CAMERA, PE_RE_ROOM, PE_RE_SAID } PeReChange;
 /* Start at the game's first room, camera 0, standing at (x, z) chosen by the caller later
  * (pe_re_session_place). 0, or -1 with the reason. */
 int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, uint32_t player, char *why, size_t n);
-/* Load another room (a door's target): the new record replaces the old. 0 or -1. */
+/* Load another room (a door's target): the new record replaces the old. 0 or -1. The floor is
+ * left as it is: set s->floor (pe_re_floor_of) for a landing on another. */
 int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint32_t room, int camera, double x,
                         double z, int facing, char *why, size_t n);
+/* The floor a height stands on (y down, 1,800 units a floor, as the game rounds it: SCA.C). */
+int pe_re_floor_of(int y);
 void pe_re_session_place(PeReSession *s, double x, double z, int facing);
 /* After the player moved to (x, z): switch camera if a zone says so. Pressing `action` checks, in
  * order: a door's zone (locked: says why; else loads the next room and places the player as the
