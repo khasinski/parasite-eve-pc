@@ -5,6 +5,7 @@
  *   pe_re_session.c  the session: room, camera, position; camera switch zones and doors (no PE code)
  *   pe_re_stage.c    the room on the field screen: picture, masks, camera, walking with collision
  *   pe_re_box.c      messages in the game's dialogue band
+ *   pe_re_save.c     the progress, kept with the Parasite Eve save
  *   pe_re_play.c     the mod: F1 > Play imported games, and each frame's step
  *
  * The room is played inside whatever PE room Aya stands in (a shell room): she walks the imported
@@ -23,7 +24,10 @@
 #include "pe_mod_menu.h"
 #include "pe_hooks.h"
 #include "pe1/pad_state.h"
+#include "pe_extension_store.h"
+#include "pe_game.h"
 #include "pe_re_box.h"
+#include "pe_re_save.h"
 #include "pe_re_session.h"
 #include "pe_re_stage.h"
 
@@ -35,6 +39,13 @@ static char s_store[1100];
 static const PeReGame *s_offer[PE_RE_GAMES];
 static int s_offers, s_pick, s_player, s_listed, s_masks = 1, s_size = 100, s_jump_stage = 1, s_jump_room;
 static PeReSession s_session;
+/* The progress, in the save's companion (pe_re_save.h). Enabled before the first change; kept
+ * encoded while playing, and on Stop (so Continue picks it up). Loading a save that was in a game
+ * resumes there once the field is free. */
+static uint8_t s_saved[PE_RE_SAVE_SIZE];
+static const PeExtensionSection s_section = {"pe_re_play/progress", PE_RE_SAVE_VERSION, PE_RE_SAVE_VERSION,
+                                             sizeof s_saved, s_saved};
+static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held;
 static char s_status[200] = "Not playing.";
 
@@ -74,8 +85,14 @@ static void show_room(int place) {
              (unsigned)s_session.room, s_session.camera);
 }
 
+static int keep_progress(void) {
+    if (!s_enabled && s_registered) s_enabled = pe_extension_enable(&s_section) == PE_REG_OK;
+    return s_enabled;
+}
+
 static void stop(void) {
     pe_re_box_forget();
+    if (s_session.game && keep_progress()) pe_re_save_encode(&s_session, 0, s_saved);   /* for Continue */
     if (s_playing) pe_re_stage_hide();
     pe_re_session_end(&s_session);
     s_playing = 0;
@@ -96,13 +113,64 @@ static void start(void) {
         return;
     }
     s_playing = 1, s_cross_held = 1;           /* the Cross that chose Start isn't a door press */
+    if (!keep_progress()) pe_toast("Progress in this game won't be saved: the save's companion has no room.");
     pe_re_stage_set_masks(s_masks);
     pe_re_stage_set_size(s_size);
     show_room(0);
 }
 
+/* Where the save (or the last Stop) left off. */
+static void resume(void) {
+    PeReSaved saved;
+    char why[200] = "";
+    s_resume = 0;
+    if (pe_re_save_decode(s_saved, &saved) || !saved.game) {
+        snprintf(s_status, sizeof s_status, "Nothing to continue in this save.");
+        return;
+    }
+    if (!pe_re_imported(s_store, saved.game)) {
+        snprintf(s_status, sizeof s_status, "This save is in %s, which isn't imported here.", saved.game->title);
+        return;
+    }
+    stop();
+    if (pe_re_session_resume(&s_session, s_store, &saved, why, sizeof why)) {
+        snprintf(s_status, sizeof s_status, "Couldn't continue: %s.", why);
+        return;
+    }
+    s_playing = 1, s_cross_held = 1;
+    keep_progress();
+    pe_re_stage_set_masks(s_masks);
+    pe_re_stage_set_size(s_size);
+    show_room(1);
+}
+
+/* The host has put this save's bytes (or zeros) in s_saved. */
+static int on_save_read(void *ctx, void *user) {
+    PeReSaved saved;
+    (void)ctx, (void)user;
+    if (s_playing) {                            /* the loaded save replaces what was being played */
+        pe_re_box_forget();
+        pe_re_stage_hide();
+        pe_re_session_end(&s_session);
+        s_playing = 0;
+    }
+    s_resume = !pe_re_save_decode(s_saved, &saved) && saved.game && saved.playing;
+    snprintf(s_status, sizeof s_status, s_resume ? "Back to %s when the field is free." : "Not playing.",
+             saved.game ? saved.game->title : "");
+    return 0;
+}
+
+static int on_new_game(void *ctx, void *user) {    /* the host has cleared the section */
+    (void)ctx, (void)user;
+    stop();
+    memset(s_saved, 0, sizeof s_saved);
+    s_resume = 0;
+    return 0;
+}
+
 static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
+    if (s_resume && !s_playing && pe_free_field()) resume();
     if (!s_playing) return 0;
     if (!pe_re_stage_active()) {                /* PE moved to a room of its own */
         pe_re_box_forget();
@@ -139,6 +207,7 @@ static int on_frame(void *ctx, void *user) {
         if (*why) snprintf(s_status, sizeof s_status, "That door: %s.", why);
         break;
     }
+    if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
     return 0;
 }
 
@@ -237,7 +306,8 @@ static int init(void) {
     pe_menu_register_toggle(0, "Foreground", "Let the room's foreground cover Aya.", &s_masks, NULL);
     pe_menu_register_int(0, "Aya's size", "Percent of an RE person's height (100: as tall as Leon).", &s_size, 50, 200, 5);
     pe_menu_register_action(0, "Start", "Starts in the game's first room. Walk with the pad; Cross in a doorway goes through.", start);
-    pe_menu_register_action(0, "Stop", "Back to the Parasite Eve room and camera.", stop);
+    pe_menu_register_action(0, "Continue", "Back where you left this save's imported game.", resume);
+    pe_menu_register_action(0, "Stop", "Back to the Parasite Eve room and camera; Continue picks it up again.", stop);
     pe_menu_register_action("Testing", "Go to the next door", "Puts Aya in the room's doorways, one after another.", to_door);
     pe_menu_register_action("Testing", "Go to the next pickup", "Puts Aya on the room's items, one after another.", to_pickup);
     pe_menu_register_action("Testing", "Go to the next message", "Puts Aya where the room's messages are read, one after another.", to_message);
@@ -249,6 +319,10 @@ static int init(void) {
     pe_menu_register_info(0, "Pocket", "What you've picked up in this game.", text_pocket);
     pe_menu_register_info(0, "Scripts", "What this room's own scripts ran when you came in.", text_scripts);
     pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    s_registered = pe_extension_register(&s_section) >= 0;
+    if (!s_registered) pe_mod_log(MOD_ID, "progress section not registered: imported games won't be saved");
+    pe_hook_add(PE_HOOK_SAVE_READ, on_save_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_NEW_GAME, on_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     return 0;
 }
 

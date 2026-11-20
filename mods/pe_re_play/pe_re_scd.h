@@ -10,7 +10,7 @@
  * within an instruction budget. Handled:
  *   control  if / else / endif (a false condition jumps to its block's end: just after its else,
  *            or after its endif 00, as every RE2 script is laid out), evt_end, return, gosub
- *   flags    ck / set (32 groups of 256), work variables: cmp / save / copy / calc
+ *   flags    ck / set (36 groups of 256), work variables: cmp / save / copy / calc
  *   items    keep_item_ck (the pocket)
  *   zones    aot_set, door_aot_se, item_aot_set and their 4-point forms: run = live;
  *            aot_reset: a zone's kind and data replaced (kind 0: gone)
@@ -21,7 +21,7 @@
 
 #include "pe_imp_logic.h"
 
-#define PE_RE_FLAG_GROUPS 32
+#define PE_RE_FLAG_GROUPS 36                   /* RE2 scripts set groups 0-35 */
 #define PE_RE_FG_STATUS 1
 #define PE_RE_FG_ITEM 8
 #define PE_RE_LIVE_MAX 256

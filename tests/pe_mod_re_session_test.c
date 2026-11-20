@@ -10,6 +10,7 @@
 #include "pe_imp_internal.h"
 #include "pe_imp_logic.h"
 #include "pe_imp_room.h"
+#include "pe_re_save.h"
 #include "pe_re_session.h"
 #include "pe_src_re2.h"
 
@@ -237,6 +238,38 @@ int main(void) {
         }
         printf("1-05 after the key: its item_aot_set ran %d times, pickable %d\n", placed, found);
         CHECK(r.run.ran && placed >= 1 && !found && pe_re_flag(&r.progress.flags, PE_RE_FG_ITEM, 4));
+    }
+    /* saved and loaded: the bytes round-trip, and a resumed session is where it was, with what it had */
+    if (r.game) {
+        static uint8_t bytes[PE_RE_SAVE_SIZE], again[PE_RE_SAVE_SIZE];
+        PeReSaved saved;
+        PeReSession back;
+        r.x = 1234, r.z = -5678, r.facing = 1024, r.camera = 0;
+        pe_re_save_encode(&r, 1, bytes);
+        CHECK(!pe_re_save_decode(bytes, &saved) && saved.game == g && saved.playing && saved.room == 0x05 &&
+              saved.x == 1234 && saved.z == -5678 && saved.facing == 1024 && pe_re_has(&saved.progress, 88));
+        CHECK(!pe_re_session_resume(&back, s_store, &saved, why, sizeof why) && back.room == 0x05 && back.x == 1234);
+        CHECK(pe_re_has(&back.progress, 88) && pe_re_flag(&back.progress.flags, PE_RE_FG_ITEM, 4));
+        CHECK(!memcmp(back.progress.unlocked, r.progress.unlocked, sizeof r.progress.unlocked));
+        pe_re_save_encode(&back, 1, again);
+        CHECK(!memcmp(bytes, again, sizeof bytes));               /* stable */
+        PeImpDoor cabin;                                          /* the cabin door stays open */
+        uint32_t n = 0;
+        int di = -1;
+        pe_imp_logic_section(back.logic, PE_IMP_LOGIC_DOOR, &n, NULL);
+        for (uint32_t i = 0; i < n && di < 0; i++) if (!pe_imp_logic_door(back.logic, i, &cabin) && cabin.lock_type == 88) di = (int)i;
+        if (di >= 0) {
+            double dx = 0, dz = 0;
+            for (int k = 0; k < 4; k++) dx += cabin.zone.x[k] / 4.0, dz += cabin.zone.z[k] / 4.0;
+            CHECK(pe_re_session_step(&back, s_store, dx, dz, 1, why, sizeof why) == PE_RE_ROOM && back.room == 0x06 && !back.said[0]);
+        }
+        printf("saved %d bytes; resumed in %x-%02X with the Cabin Key, its door open\n", PE_RE_SAVE_SIZE,
+               (unsigned)saved.stage + 1, (unsigned)saved.room);
+        pe_re_session_end(&back);
+        memset(bytes, 0, sizeof bytes);
+        CHECK(!pe_re_save_decode(bytes, &saved) && !saved.game);  /* a save without a game */
+        bytes[0] = 9;
+        CHECK(pe_re_save_decode(bytes, &saved) < 0);
     }
     pe_re_session_end(&r);
 
