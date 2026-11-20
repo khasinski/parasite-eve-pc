@@ -16,13 +16,16 @@
  * (pe_re_scd.c, RE2): only the doors, items and messages they set up are there, and they set the
  * game's flags. Not yet: waits and loops in scripts (events), door animations, enemies
  * (reported to the encounter host later), saving. RE2 only for now: RE1 and RE3 rooms need their
- * cameras and collision drawn. PE loading another room of its own ends the session. */
+ * cameras and collision drawn. The PE room underneath is only a shell: it never hears Cross, and when
+ * Parasite Eve loads a room of its own (an event, a warp) the imported room comes back over it once
+ * the field is free. */
 #include <stdio.h>
 #include <string.h>
 
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
 #include "pe_hooks.h"
+#include "pe1/battle_update.h"
 #include "pe1/pad_state.h"
 #include "pe_extension_store.h"
 #include "pe_game.h"
@@ -34,6 +37,7 @@
 #define MOD_ID "pe_re_play"
 #define PAGE "Play imported games"
 #define PAD_CROSS 0x4000u                 /* PS1 pad word, active high once inverted */
+#define FIELD_PRESS_CROSS 0x0100u         /* g_FieldPadPressed: Cross (the field's talk / examine) */
 
 static char s_store[1100];
 static const PeReGame *s_offer[PE_RE_GAMES];
@@ -46,7 +50,7 @@ static uint8_t s_saved[PE_RE_SAVE_SIZE];
 static const PeExtensionSection s_section = {"pe_re_play/progress", PE_RE_SAVE_VERSION, PE_RE_SAVE_VERSION,
                                              sizeof s_saved, s_saved};
 static int s_registered, s_enabled, s_resume;
-static int s_playing, s_cross_held;
+static int s_playing, s_cross_held, s_reshown;
 static char s_status[200] = "Not playing.";
 
 static void list_games(void) {
@@ -172,13 +176,14 @@ static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
     if (s_resume && !s_playing && pe_free_field()) resume();
     if (!s_playing) return 0;
-    if (!pe_re_stage_active()) {                /* PE moved to a room of its own */
+    if (!pe_re_stage_active()) {                /* PE loaded a room of its own: it's only the shell */
         pe_re_box_forget();
-        pe_re_session_end(&s_session);
-        s_playing = 0;
-        snprintf(s_status, sizeof s_status, "Stopped: Parasite Eve loaded another room.");
+        if (!pe_free_field()) return 0;         /* once it has settled, the imported room again */
+        s_reshown++;
+        show_room(1);
         return 0;
     }
+    g_FieldPadPressed &= ~FIELD_PRESS_CROSS;    /* the room underneath never hears Cross: no talk, no examine */
     pe_re_stage_set_masks(s_masks);
     pe_re_stage_set_size(s_size);
     const int cross = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;

@@ -275,3 +275,43 @@ All rights reserved.
 ## zlib
 
 `localization/editor/vendor/zlib` holds the zlib 1.3.2 headers, and the translation editor links zlib through the`libz-sys` crate, under the zlib License. Copyright (C) 1995-2026 Jean-loup Gailly and Mark Adler. The license is in that folder.
+
+## Resident Evil formats and engine references (import and play)
+
+The importer (`mods/host/import`, `mods/pe_src_re1`, `mods/pe_src_re2`, `mods/pe_src_re3`) and the room
+runtime (`mods/pe_re_play`) read the player's own Resident Evil discs. No game data is included. These
+projects were used:
+
+**Adapted (tables and layouts ported, with these notices):**
+
+- [biohazard-utils](https://github.com/biorand/biohazard-utils) (MIT, Copyright (c) 2022-2023 Ted John):
+  script instruction sizes and signatures (`Bio2ConstantTable.cs`, `Bio3ConstantTable.cs`,
+  `OpcodeV2.cs`), item names, message codes (`Room/Msg.cs`), and the model, animation and room layouts
+  (`Rbj.cs`, `Edd1.cs`, `Emr.cs`, `Md2.cs`, `Rdt1.cs`, `Rdt2.cs`).
+- [BioRand](https://github.com/biorand/classic) (MIT, Copyright (c) 2022-2026 Ted John): how weapons
+  are composed onto players (emdui, `TimExtensions.WithWeaponTexture`), RE1 weapon numbers
+  (`re1NpcHelper.cs`), RE2 weapon slots, room and door data used to check names.
+
+MIT License: Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to
+do so, subject to the following conditions: The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT
+WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+**Consulted for behaviour (no code taken):**
+
+- [bio2-ds](https://github.com/MeganGrass/bio2-ds), a decompilation of Resident Evil 2 Dual Shock (no
+  license stated): the script engine's if / else / endif and scheduler (`SCE0.C`, `SCE1.C`) and the
+  engine flags (`def/FLAG.H`). Our interpreter is written independently from what it shows.
+- [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
+  Yuan), a reimplementation of the Resident Evil 2 engine.
+- [Bio2ScriptViewer](https://github.com/OpenBiohazard2/Bio2ScriptViewer) (MIT, Copyright (c) 2021 Samuel
+  Yuan): RE2 script instruction layouts, used to cross-check ours.
+- The reevengi notes (Patrice Mandin) on Resident Evil room files.
+
+If code from a consulted MIT project is ported later, its notice moves to the list above.
