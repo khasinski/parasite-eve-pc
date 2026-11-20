@@ -66,6 +66,47 @@ int main(void) {
         pe_re_session_end(&s);                                  /* frees l */
     }
 
+    /* rules on made-up records: a keyed door, a bolted pair, a pickup, a message */
+    PeReProgress pr;
+    memset(&pr, 0, sizeof pr);
+    PeImpDoor kd;
+    char say[200];
+    memset(&kd, 0, sizeof kd);
+    kd.lock_id = 138, kd.lock_type = 88;
+    CHECK(pe_re_door_try(&pr, &kd, NULL, say, sizeof say) == PE_RE_DOOR_LOCKED && !strcmp(say, "It's locked. It needs the item 88."));
+    CHECK(!pe_re_give(&pr, 88, 1) && pe_re_has(&pr, 88));
+    CHECK(pe_re_door_try(&pr, &kd, NULL, say, sizeof say) == PE_RE_DOOR_UNLOCKED && strstr(say, "Used the"));
+    CHECK(pe_re_door_try(&pr, &kd, NULL, say, sizeof say) == PE_RE_DOOR_OPEN && !*say);   /* stays open */
+    PeImpDoor far = kd, near = kd;                              /* one lock, two sides */
+    far.lock_id = near.lock_id = 131, far.lock_type = PE_RE_LOCK_OTHER_SIDE, near.lock_type = PE_RE_LOCK_BOLT;
+    CHECK(pe_re_door_try(&pr, &far, NULL, say, sizeof say) == PE_RE_DOOR_LOCKED && strstr(say, "other side"));
+    CHECK(pe_re_door_try(&pr, &near, NULL, say, sizeof say) == PE_RE_DOOR_UNLOCKED);
+    CHECK(pe_re_door_try(&pr, &far, NULL, say, sizeof say) == PE_RE_DOOR_OPEN);
+    b = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 5);
+    PeImpPickup pk[2];
+    PeImpTrigger tg;
+    memset(pk, 0, sizeof pk), memset(&tg, 0, sizeof tg);
+    rect(pk[0].zone.x, pk[0].zone.z, 0, 0, 500, 500), pk[0].item = 88, pk[0].count = 1, pk[0].flag = 4;
+    pk[1] = pk[0];                                              /* the same pickup on another branch */
+    rect(tg.zone.x, tg.zone.z, 1000, 0, 1500, 500), tg.zone.sce = PE_RE_SCE_MESSAGE, tg.zone.sat = 0x31, tg.data[0] = 1;
+    static const char text[] = "\nFirst.\0A paper,#\nnothing useful.\0";
+    CHECK(b && !pe_imp_logic_add_pickup(b, pk, 2) && !pe_imp_logic_add_trigger(b, &tg, 1) &&
+          !pe_imp_logic_add(b, PE_IMP_LOGIC_TEXT, 2, text, sizeof text - 1));
+    l = pe_imp_logic_finish(b);
+    CHECK(l != NULL);
+    if (l) {
+        PeReProgress q;
+        PeImpPickup got;
+        memset(&q, 0, sizeof q);
+        CHECK(pe_re_pickup_at(l, &q, 100, 100, &got) == 0 && got.item == 88);
+        CHECK(!pe_re_take(&q, l, &got, NULL, say, sizeof say) && !strcmp(say, "Picked up the item 88.") && pe_re_has(&q, 88));
+        CHECK(pe_re_pickup_at(l, &q, 100, 100, NULL) < 0);     /* both copies gone: same flag */
+        CHECK(pe_re_message_at(l, 1200, 100) == 1 && pe_re_message_at(l, 600, 100) < 0);
+        CHECK(!pe_re_message(l, 1, say, sizeof say) && !strcmp(say, "A paper, nothing useful."));
+        CHECK(!pe_re_message(l, 0, say, sizeof say) && !strcmp(say, "First.") && pe_re_message(l, 2, say, sizeof say));
+        free(l);
+    }
+
     char id[PE_IMP_ID_MAX];
     pe_re_logic_id("re2", 0, 0x0a, 1, id, sizeof id);
     CHECK(!strcmp(id, "re2:logic/10a-1"));
@@ -83,7 +124,7 @@ int main(void) {
     }
     PeImpScan sc;
     pe_imp_registry_reset();
-    CHECK(!pe_imp_add_reader(&g_re2_logic_ps1) && !pe_imp_add_reader(&g_re2_rooms_ps1));
+    CHECK(!pe_imp_add_reader(&g_re2_logic_ps1) && !pe_imp_add_reader(&g_re2_rooms_ps1) && !pe_imp_add_reader(&g_re2_items_ps1));
     CHECK(!pe_imp_set_naming("re2", g_re2_naming));
     CHECK(!pe_imp_scan(s_store, re2, NULL, &sc));
     const PeReGame *g = pe_re_game_named("re2");
@@ -145,6 +186,41 @@ int main(void) {
     printf("RE2 from the street: %d rooms reached, %d doors, %d to rooms not imported, %d without their camera, "
            "%d onto blocked floor, %d with no free floor near\n", tail, doors, missing, no_camera, blocked, stuck);
     CHECK(tail >= 40 && doors >= 100);
+
+    /* RE2's own rules: 1-05 holds the Cabin Key and the door to 1-06 that needs it */
+    PeReSession r;
+    CHECK(!pe_re_session_start(&r, s_store, g, 0, why, sizeof why) && r.items);
+    if (r.logic && !pe_re_session_enter(&r, s_store, 0, 0x05, 0, 0, 0, 0, why, sizeof why)) {
+        PeImpPickup key;
+        PeImpDoor cabin;
+        int ki = -1, di = -1;
+        uint32_t n = 0;
+        pe_imp_logic_section(r.logic, PE_IMP_LOGIC_PICK, &n, NULL);
+        for (uint32_t i = 0; i < n && ki < 0; i++) if (!pe_imp_logic_pickup(r.logic, i, &key) && key.item == 88) ki = (int)i;
+        pe_imp_logic_section(r.logic, PE_IMP_LOGIC_DOOR, &n, NULL);
+        for (uint32_t i = 0; i < n && di < 0; i++) if (!pe_imp_logic_door(r.logic, i, &cabin) && cabin.lock_type == 88) di = (int)i;
+        CHECK(ki >= 0 && di >= 0);
+        if (ki >= 0 && di >= 0) {
+            double dx = 0, dz = 0, kx = 0, kz = 0;
+            for (int k = 0; k < 4; k++) dx += cabin.zone.x[k] / 4.0, dz += cabin.zone.z[k] / 4.0, kx += key.zone.x[k] / 4.0, kz += key.zone.z[k] / 4.0;
+            CHECK(pe_re_session_step(&r, s_store, dx, dz, 1, why, sizeof why) == PE_RE_SAID);
+            printf("1-05 door: %s\n", r.said);
+            CHECK(!strcmp(r.said, "It's locked. It needs the Cabin Key."));
+            CHECK(pe_re_session_step(&r, s_store, kx, kz, 1, why, sizeof why) == PE_RE_SAID);
+            printf("1-05 pickup: %s\n", r.said);
+            CHECK(!strcmp(r.said, "Picked up the Cabin Key.") && pe_re_has(&r.progress, 88));
+            CHECK(pe_re_session_step(&r, s_store, kx, kz, 1, why, sizeof why) != PE_RE_SAID || strcmp(r.said, "Picked up the Cabin Key."));
+            CHECK(pe_re_session_step(&r, s_store, dx, dz, 1, why, sizeof why) == PE_RE_ROOM && r.room == 0x06);
+            printf("1-05 door again: %s -> room %x-%02X\n", r.said, (unsigned)r.stage + 1, (unsigned)r.room);
+            CHECK(!strcmp(r.said, "Used the Cabin Key."));
+        }
+    }
+    if (!pe_re_session_enter(&r, s_store, 0, 0x01, 0, 0, 0, 0, why, sizeof why)) {   /* 1-01's papers */
+        char m[200];
+        CHECK(!pe_re_message(r.logic, 13, m, sizeof m) && !strcmp(m, "Paper dated Sep. 18th. It looks irrelevant."));
+        CHECK(!pe_re_message(r.logic, 19, m, sizeof m) && !strcmp(m, "Gun cases and related paraphernalia."));
+    }
+    pe_re_session_end(&r);
     /* No free floor near a landing is mostly upstairs (y -1800 and below): the collision decoder knows
      * the ground floor only, and the stage walks Aya freely until she's clear. Guard the count. */
     CHECK(missing * 20 <= doors && no_camera == 0 && stuck * 5 <= doors);

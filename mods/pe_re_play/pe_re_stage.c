@@ -112,6 +112,8 @@ static int spawn_on_floor(void) {
     static const int offsets_y[] = {56, 72, 88, 40, 24, 4};
     static const int offsets_x[] = {0, -24, 24, -48, 48, -80, 80};
     const GteMatrix *m = &s_camera.view;
+    int fallback = 0;
+    double fx = 0, fz = 0;
     for (unsigned i = 0; i < sizeof offsets_y / sizeof *offsets_y; i++) {
         double sy = (double)offsets_y[i] / s_camera.distance;
         double ray_y = (m->m[2][1] + sy * m->m[1][1]) / 4096.0;
@@ -122,14 +124,21 @@ static int spawn_on_floor(void) {
             double sx = (double)offsets_x[j] / s_camera.distance;
             double x = s_camera.eye[0] + depth * (m->m[2][0] + sy * m->m[1][0] + sx * m->m[0][0]) / 4096.0;
             double z = s_camera.eye[2] + depth * (m->m[2][2] + sy * m->m[1][2] + sx * m->m[0][2]) / 4096.0;
+            if (!fallback) fallback = 1, fx = x, fz = z;
             if (pe_imp_re2_blocked(&s_walk.collision, x, z, AYA_ROOM_RADIUS)) continue;
             s_walk.x = x;
             s_walk.z = z;
+            s_walk.ghost = 0;
             s_walk.yaw = (int)lround(atan2(-s_camera.right_z, s_camera.right_x) * (2048.0 / acos(-1.0)));
             return 1;
         }
     }
-    return 0;
+    if (!fallback) return 0;
+    /* No free floor in view (the collision knows the ground floor only): stand on the first floor
+     * point in view and walk without collision until clear, as after a door. */
+    s_walk.x = fx, s_walk.z = fz, s_walk.ghost = 1;
+    s_walk.yaw = (int)lround(atan2(-s_camera.right_z, s_camera.right_x) * (2048.0 / acos(-1.0)));
+    return 1;
 }
 
 static int on_move(void *ctx, void *user) {

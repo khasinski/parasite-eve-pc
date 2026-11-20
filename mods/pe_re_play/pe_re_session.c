@@ -114,6 +114,9 @@ int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, ui
     if (!g) { snprintf(why, n, "no such game"); return -1; }
     s->game = g, s->player = player;
     if (load(s, store, g->stage, g->room, why, n)) { s->game = NULL; return -1; }
+    char items[PE_IMP_ID_MAX];
+    snprintf(items, sizeof items, "%s:items/all", g->game);
+    if (pe_imp_catalog_itemtable(store, items, &s->items, NULL, 0)) s->items = NULL;   /* names fall back to numbers */
     return 0;
 }
 
@@ -132,16 +135,25 @@ void pe_re_session_place(PeReSession *s, double x, double z, int facing) {
 
 PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, double z, int action, char *why, size_t n) {
     PeImpDoor d;
+    PeImpPickup pk;
     if (!s->game || !s->logic) return PE_RE_STAY;
     s->x = x, s->z = z;
+    if (action) s->said[0] = 0;
     if (action && pe_re_door_at(s->logic, x, z, &d) >= 0) {
+        if (pe_re_door_try(&s->progress, &d, s->items, s->said, sizeof s->said) == PE_RE_DOOR_LOCKED) return PE_RE_SAID;
         const uint32_t stage = d.stage == PE_RE_STAGE_HERE ? s->stage : d.stage;
         if (!pe_re_session_enter(s, store, stage, d.room, d.camera, d.next_x, d.next_z, d.next_dir, why, n)) {
             s->doors_taken++;
             return PE_RE_ROOM;
         }
-        return PE_RE_STAY;
+        return s->said[0] ? PE_RE_SAID : PE_RE_STAY;
     }
+    if (action && pe_re_pickup_at(s->logic, &s->progress, x, z, &pk) >= 0) {
+        pe_re_take(&s->progress, s->logic, &pk, s->items, s->said, sizeof s->said);
+        return PE_RE_SAID;
+    }
+    const int message = action ? pe_re_message_at(s->logic, x, z) : -1;
+    if (message >= 0 && !pe_re_message(s->logic, (uint32_t)message, s->said, sizeof s->said)) return PE_RE_SAID;
     const int camera = pe_re_camera_at(s->logic, s->camera, x, z);
     if (camera == s->camera) return PE_RE_STAY;
     s->camera = camera;
@@ -150,5 +162,6 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
 
 void pe_re_session_end(PeReSession *s) {
     free(s->logic);
+    free(s->items);
     memset(s, 0, sizeof *s);
 }

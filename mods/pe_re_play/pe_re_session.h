@@ -10,6 +10,7 @@
 
 #include "pe_imp_logic.h"
 #include "pe_imp_room.h"
+#include "pe_re_rules.h"
 
 #define PE_RE_GAMES 3
 #define PE_RE_STAGE_HERE 0xFFu        /* a door's stage: stay on this stage */
@@ -51,10 +52,15 @@ typedef struct {
     double x, z;
     int facing;
     PeImpRoomLogic *logic;            /* the room's record (owned) */
+    PeImpRoomLogic *items;            /* the game's ItemTable, for names (owned; may be NULL) */
+    PeReProgress progress;            /* locks opened, pickups taken, the pocket */
+    char said[200];                   /* the last thing to tell the player ("" if nothing) */
     int doors_taken;
 } PeReSession;
 
-typedef enum { PE_RE_STAY, PE_RE_CAMERA, PE_RE_ROOM } PeReChange;
+/* PE_RE_SAID: nothing moved, but `said` has something to show (a locked door, a pickup, a message).
+ * PE_RE_ROOM can come with `said` too (the key that opened the door). */
+typedef enum { PE_RE_STAY, PE_RE_CAMERA, PE_RE_ROOM, PE_RE_SAID } PeReChange;
 
 /* Start at the game's first room, camera 0, standing at (x, z) chosen by the caller later
  * (pe_re_session_place). 0, or -1 with the reason. */
@@ -63,9 +69,10 @@ int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, ui
 int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint32_t room, int camera, double x,
                         double z, int facing, char *why, size_t n);
 void pe_re_session_place(PeReSession *s, double x, double z, int facing);
-/* After the player moved to (x, z): switch camera if a zone says so. Pressing `action` in a door's
- * zone takes the door (loads the next room, places the player as the door says). What changed;
- * PE_RE_ROOM can also fail to load, which leaves the session in its room (`why` says). */
+/* After the player moved to (x, z): switch camera if a zone says so. Pressing `action` checks, in
+ * order: a door's zone (locked: says why; else loads the next room and places the player as the
+ * door says), a pickup (into the pocket), a message zone (its text). What changed; a door whose room
+ * fails to load leaves the session where it was (`why` says). */
 PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, double z, int action, char *why, size_t n);
 void pe_re_session_end(PeReSession *s);
 
