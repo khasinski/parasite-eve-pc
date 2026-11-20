@@ -59,6 +59,7 @@ typedef struct {
     PeReScdRun run;                   /* what this room's scripts set up when the player came in */
     char said[200];                   /* the last thing to tell the player ("" if nothing) */
     PeImpDoor door;                   /* the last door taken (for its transition) */
+    int (*talking)(void);             /* a message is up (scripts' wsleeping waits on it); NULL: never */
     int doors_taken;
 } PeReSession;
 
@@ -86,5 +87,7 @@ void pe_re_session_place(PeReSession *s, double x, double z, int facing);
  * fails to load leaves the session where it was (`why` says). */
 PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, double z, int action, char *why, size_t n);
 void pe_re_session_end(PeReSession *s);
+/* A frame of the room's scripts. PE_RE_SAID when one put up a message (`said`); else PE_RE_STAY. */
+PeReChange pe_re_session_tick(PeReSession *s);
 
 #endif

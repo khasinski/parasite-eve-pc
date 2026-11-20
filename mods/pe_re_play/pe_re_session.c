@@ -97,7 +97,9 @@ int pe_re_free_spot(const PeRe2RoomCollision *c, int floor, double *x, double *z
 }
 
 /* ---- the session ---- */
-static int has_item(void *ctx, uint16_t item) { return pe_re_has(ctx, item); }
+static int has_item(void *ctx, uint16_t item) { return pe_re_has(&((PeReSession *)ctx)->progress, item); }
+static int talking(void *ctx) { const PeReSession *s = ctx; return s->talking && s->talking(); }
+static PeReScdHost host_of(PeReSession *s) { PeReScdHost h = {has_item, talking, s}; return h; }
 
 static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room, char *why, size_t n) {
     char id[PE_IMP_ID_MAX];
@@ -109,7 +111,8 @@ static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room
     }
     free(s->logic);
     s->logic = l, s->stage = stage, s->room = room;
-    pe_re_scd_run(l, &s->progress.flags, has_item, &s->progress, &s->run);   /* what its scripts set up */
+    const PeReScdHost host = host_of(s);
+    pe_re_scd_run(l, &s->progress.flags, &host, &s->run);   /* what its scripts set up */
     return 0;
 }
 
@@ -174,6 +177,16 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
     if (camera == s->camera) return PE_RE_STAY;
     s->camera = camera;
     return PE_RE_CAMERA;
+}
+
+PeReChange pe_re_session_tick(PeReSession *s) {
+    if (!s->game || !s->logic) return PE_RE_STAY;
+    const PeReScdHost host = host_of(s);
+    pe_re_scd_tick(s->logic, &s->progress.flags, &host, &s->run);
+    const int m = s->run.message;
+    s->run.message = -1;
+    if (m >= 0 && !pe_re_message(s->logic, (uint32_t)m, s->said, sizeof s->said)) return PE_RE_SAID;
+    return PE_RE_STAY;
 }
 
 void pe_re_session_end(PeReSession *s) {

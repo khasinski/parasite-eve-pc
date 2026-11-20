@@ -187,7 +187,9 @@ static int on_frame(void *ctx, void *user) {
         show_room(1);
         return 0;
     }
-    g_FieldPadPressed &= ~FIELD_PRESS_CROSS;    /* the room underneath never hears Cross: no talk, no examine */
+    /* The room underneath never hears Cross (no talk, no examine). While a message box is up it's the
+     * box's: it takes the pad itself (pe_re_box.c) and turns its pages with that Cross. */
+    if (!pe_re_box_busy()) g_FieldPadPressed &= ~FIELD_PRESS_CROSS;
     pe_re_stage_set_masks(s_masks);
     pe_re_stage_set_size(s_size);
     if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */
@@ -199,6 +201,8 @@ static int on_frame(void *ctx, void *user) {
         if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
         return 0;
     }
+    s_session.talking = pe_re_box_busy;
+    if (pe_re_session_tick(&s_session) == PE_RE_SAID) say(s_session.said);   /* the room's scripts, a frame */
     const int cross = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;
     const int pressed = cross && !s_cross_held && !pe_re_box_busy();   /* a box's Cross is the box's */
     s_cross_held = cross;
@@ -293,8 +297,8 @@ static void refresh(void) { s_listed = 0; list_games(); }
 static void text_scripts(char *out, unsigned size) {
     const PeReScdRun *r = &s_session.run;
     if (!s_playing || !r->ran) { snprintf(out, size, s_playing ? "Not run (every zone counts)." : "-"); return; }
-    snprintf(out, size, "%d instructions, %d skipped%s%02X, %d threads waiting; %d zones set up, %d changed.", r->executed,
-             r->skipped, r->skipped ? " (first 0x" : " (", r->skipped ? r->first_skipped : 0, r->stopped, r->nlive, r->nreset);
+    snprintf(out, size, "%d tasks running; %d instructions, %d skipped (first 0x%02X), %d over budget; %d zones, %d changed.",
+             r->waiting, r->executed, r->skipped, r->skipped ? r->first_skipped : 0, r->stopped, r->nlive, r->nreset);
 }
 
 static void text_pocket(char *out, unsigned size) {

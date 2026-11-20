@@ -334,10 +334,14 @@ int main(void) {
             PeImpRoomLogic *rl = NULL;
             pe_re_logic_id("re2", st, rm, 0, lid, sizeof lid);
             if (pe_imp_catalog_roomlogic(s_store, lid, &rl, NULL, 0)) continue;
-            PeReScdRun run;
+            static PeReScdRun run;
             memset(&fresh, 0, sizeof fresh);
-            pe_re_scd_run(rl, &fresh.flags, NULL, NULL, &run);
+            pe_re_scd_run(rl, &fresh.flags, NULL, &run);
+            for (int f = 0; f < 120; f++) pe_re_scd_tick(rl, &fresh.flags, NULL, &run);   /* four seconds of play */
             rooms++, ran += run.ran, executed += run.executed, skipped += run.skipped, stopped += run.stopped;
+            if (run.messages && getenv("PE_TEST_RE_MESSAGES"))
+                printf("  %x%02x: message_on %d times in 4 s, %d tasks running, %d over budget\n", st + 1, rm,
+                       run.messages, run.waiting, run.stopped);
             uint32_t n = 0;
             pe_imp_logic_section(rl, PE_IMP_LOGIC_DOOR, &n, NULL);
             for (uint32_t i = 0; i < n; i++) {
@@ -351,8 +355,8 @@ int main(void) {
             }
             free(rl);
         }
-    printf("RE2 scripts, new game: %d rooms, %d ran; %ld instructions run, %ld skipped, %ld threads stopped at a "
-           "wait or loop; doors set up %d of %d, pickups %d of %d\n", rooms, ran, executed, skipped, stopped,
+    printf("RE2 scripts, new game: %d rooms, %d ran; %ld instructions run, %ld skipped, %ld tasks over the frame budget "
+           "(4 s of play); doors set up %d of %d, pickups %d of %d\n", rooms, ran, executed, skipped, stopped,
            live_doors, all_doors, live_items, all_items);
     CHECK(rooms >= 100 && ran == rooms && live_doors * 10 >= all_doors * 7 && live_items > 0 && live_items < all_items);
     /* Landings are checked against their own floor's collision (1,800 units a floor). A few still
