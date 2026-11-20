@@ -30,15 +30,16 @@ void pe_re_room_id(const char *game, uint32_t stage, uint32_t room, char *out, s
 }
 
 int pe_re_imported(const char *store, const PeReGame *g) {
-    char logic[PE_IMP_ID_MAX], room[PE_IMP_ID_MAX];
+    char logic[PE_IMP_ID_MAX], claire[PE_IMP_ID_MAX] = "", room[PE_IMP_ID_MAX];
     PeImpAsset *a = NULL;
     int found = 0;
     if (!store || !g) return 0;
     pe_re_logic_id(g->game, g->stage, g->room, 0, logic, sizeof logic);
+    if (!strcmp(g->game, "re2")) pe_re_logic_id(g->game, g->stage, g->room, 1, claire, sizeof claire);
     pe_re_room_id(g->game, g->stage, g->room, room, sizeof room);
     const int n = pe_imp_catalog_assets(store, g->game, &a);
     for (int i = 0; i < n; i++) {
-        if (!strcmp(a[i].id, logic)) found |= 1;
+        if (!strcmp(a[i].id, logic) || (*claire && !strcmp(a[i].id, claire))) found |= 1;
         if (!strcmp(a[i].id, room)) found |= 2;
     }
     free(a);

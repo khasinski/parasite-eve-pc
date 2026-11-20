@@ -15,6 +15,8 @@
 #include "pe_re_session.h"
 #include "pe_src_re2.h"
 
+int re_headless_smoke(const char *store, unsigned scenario);
+
 static int s_fail;
 #define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); s_fail = 1; } } while (0)
 
@@ -218,6 +220,7 @@ int main(void) {
     CHECK(!strcmp(id, "re1:room/106"));
     CHECK(pe_re_game_named("re2")->playable && !pe_re_game_named("re1")->playable && !pe_re_game_named("dc1"));
 
+    CHECK(!re_headless_smoke(NULL, 0));
     const char *re2 = getenv("PE_TEST_RE2_DISC");
     if (!re2 || !*re2) {
         printf("PE_TEST_RE2_DISC not set: the RE2 walk skipped\n");
@@ -233,12 +236,17 @@ int main(void) {
     const PeReGame *g = pe_re_game_named("re2");
     CHECK(pe_re_imported(s_store, g) && !pe_re_imported(s_store, pe_re_game_named("re3")));
 
+    PeReSession probe;
+    const unsigned scenario = pe_re_session_start(&probe, s_store, g, 0, why, sizeof why) != 0;
+    pe_re_session_end(&probe);
+    CHECK(!re_headless_smoke(s_store, scenario));
+
     /* every room reachable through doors from the street, breadth first */
     static uint32_t queue[ROOMS_MAX];
     static uint8_t seen[16][256];
     int head = 0, tail = 0, doors = 0, missing = 0, no_camera = 0, blocked = 0, stuck = 0, facing_known = 0, facing_re = 0, facing_stage = 0;
     PeReSession s;
-    CHECK(!pe_re_session_start(&s, s_store, g, 0, why, sizeof why));
+    CHECK(!pe_re_session_start(&s, s_store, g, scenario, why, sizeof why));
     pe_re_session_end(&s);
     queue[tail++] = g->stage << 8 | g->room, seen[g->stage][g->room] = 1;
     while (head < tail) {
@@ -246,7 +254,7 @@ int main(void) {
         head++;
         char lid[PE_IMP_ID_MAX];
         PeImpRoomLogic *rl = NULL;
-        pe_re_logic_id("re2", stage, room, 0, lid, sizeof lid);
+        pe_re_logic_id("re2", stage, room, scenario, lid, sizeof lid);
         if (pe_imp_catalog_roomlogic(s_store, lid, &rl, NULL, 0)) continue;
         uint32_t n = 0;
         pe_imp_logic_section(rl, PE_IMP_LOGIC_DOOR, &n, NULL);
@@ -258,7 +266,7 @@ int main(void) {
             if (ts >= 16) { missing++; continue; }
             PeReSession t;                                  /* take the door as the runtime does */
             memset(&t, 0, sizeof t);
-            t.game = g;
+            t.game = g, t.player = scenario;
             if (pe_re_session_enter(&t, s_store, ts, d.room, d.camera, d.next_x, d.next_z, d.next_dir, NULL, 0)) {
                 missing++;
                 continue;
@@ -316,7 +324,7 @@ int main(void) {
             for (uint32_t rm = 0; rm < 64; rm++) {
                 char lid[PE_IMP_ID_MAX];
                 PeImpRoomLogic *rl = NULL;
-                pe_re_logic_id("re2", st, rm, 0, lid, sizeof lid);
+                pe_re_logic_id("re2", st, rm, scenario, lid, sizeof lid);
                 if (pe_imp_catalog_roomlogic(s_store, lid, &rl, NULL, 0)) continue;
                 uint32_t n = 0;
                 pe_imp_logic_section(rl, PE_IMP_LOGIC_DOOR, &n, NULL);
@@ -344,6 +352,13 @@ int main(void) {
            "%d onto blocked floor, %d with no free floor near\n", tail, doors, missing, no_camera, blocked, stuck);
     CHECK(tail >= 40 && doors >= 100);
     CHECK(facing_known > 100 && facing_stage == facing_re && facing_stage * 10 >= facing_known * 9);
+
+    /* The detailed key, script and placement expectations below describe Leon A. */
+    if (scenario) {
+        CHECK(missing * 20 <= doors && no_camera == 0 && stuck * 20 <= doors);
+        printf(s_fail ? "Claire room walk FAILED\n" : "Claire room walk passed\n");
+        return s_fail;
+    }
 
     /* RE2's own rules: 1-05 holds the Cabin Key and the door to 1-06 that needs it */
     PeReSession r;
