@@ -11,8 +11,9 @@
  * room's floor, cameras switch where its zones say, and Cross in a door's zone takes her through
  * to the next room and camera (pe_re_rules.c: locked doors need their key, or say why; Cross picks
  * up items into the session's pocket and reads message zones, shown in the game's dialogue band (pe_re_box.c); RE keys
- * can't go into PE's key pocket, which holds PE items only). Not yet: the script interpreter
- * (events, flags the scripts set), door animations, enemies
+ * can't go into PE's key pocket, which holds PE items only). The room's own scripts run on entry
+ * (pe_re_scd.c, RE2): only the doors, items and messages they set up are there, and they set the
+ * game's flags. Not yet: waits and loops in scripts (events), door animations, enemies
  * (reported to the encounter host later), saving. RE2 only for now: RE1 and RE3 rooms need their
  * cameras and collision drawn. PE loading another room of its own ends the session. */
 #include <stdio.h>
@@ -141,8 +142,8 @@ static int on_frame(void *ctx, void *user) {
     return 0;
 }
 
-/* Testing: stand in the middle of the room's next doorway or pickup, one after another each time
- * (the camera stays as it is). */
+/* Testing: stand in the middle of the room's next doorway, pickup or message zone (those its scripts
+ * set up), one after another each time (the camera stays as it is). */
 static void to_zone(uint32_t tag, const char *what) {
     static uint32_t s_next[3];
     static const PeImpRoomLogic *s_room;
@@ -161,12 +162,16 @@ static void to_zone(uint32_t tag, const char *what) {
         PeImpTrigger t;
         const PeImpZone *zone = &d.zone;
         if (tag == PE_IMP_LOGIC_PICK) {
-            if (pe_imp_logic_pickup(s_session.logic, i, &pk)) continue;
+            if (pe_imp_logic_pickup(s_session.logic, i, &pk) || !pe_re_scd_live(&s_session.run, pk.at) ||
+                pe_re_flag(&s_session.progress.flags, PE_RE_FG_ITEM, pk.flag))
+                continue;
             zone = &pk.zone;
         } else if (tag == PE_IMP_LOGIC_TRIG) {
-            if (pe_imp_logic_trigger(s_session.logic, i, &t) || t.zone.sce != PE_RE_SCE_MESSAGE) continue;
+            if (pe_imp_logic_trigger(s_session.logic, i, &t) || !pe_re_scd_live(&s_session.run, t.at) ||
+                pe_re_zone_kind(&s_session.run, t.zone.id, t.zone.sce, NULL) != PE_RE_SCE_MESSAGE)
+                continue;
             zone = &t.zone;
-        } else if (pe_imp_logic_door(s_session.logic, i, &d)) {
+        } else if (pe_imp_logic_door(s_session.logic, i, &d) || !pe_re_scd_live(&s_session.run, d.at)) {
             continue;
         }
         for (int c = 0; c < 4; c++) bx += zone->x[c] / 4.0, bz += zone->z[c] / 4.0;
@@ -193,6 +198,13 @@ static void to_room(void) {
 }
 
 static void refresh(void) { s_listed = 0; list_games(); }
+static void text_scripts(char *out, unsigned size) {
+    const PeReScdRun *r = &s_session.run;
+    if (!s_playing || !r->ran) { snprintf(out, size, s_playing ? "Not run (every zone counts)." : "-"); return; }
+    snprintf(out, size, "%d instructions, %d skipped%s%02X, %d threads waiting; %d zones set up, %d changed.", r->executed,
+             r->skipped, r->skipped ? " (first 0x" : " (", r->skipped ? r->first_skipped : 0, r->stopped, r->nlive, r->nreset);
+}
+
 static void text_pocket(char *out, unsigned size) {
     size_t w = 0;
     out[0] = 0;
@@ -235,6 +247,7 @@ static int init(void) {
     pe_menu_register_action(0, "Refresh the list", "Looks for games imported since the game started.", refresh);
     pe_menu_register_info(0, "Status", "Where you are, or the last thing said.", text_status);
     pe_menu_register_info(0, "Pocket", "What you've picked up in this game.", text_pocket);
+    pe_menu_register_info(0, "Scripts", "What this room's own scripts ran when you came in.", text_scripts);
     pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     return 0;
 }

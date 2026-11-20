@@ -54,7 +54,7 @@ int main(void) {
         CHECK(pe_re_camera_at(l, 1, 1900, 500) == 1 && pe_re_camera_at(l, 1, 1000, 500) == 0);   /* no flicker at the seam */
         CHECK(pe_re_camera_at(l, 1, 3000, 500) == 1);          /* in camera 1's own area: stays */
         PeImpDoor d;
-        CHECK(pe_re_door_at(l, 3900, 500, &d) == 0 && d.room == 0xEE && pe_re_door_at(l, 3000, 500, NULL) < 0);
+        CHECK(pe_re_door_at(l, NULL, 3900, 500, &d) == 0 && d.room == 0xEE && pe_re_door_at(l, NULL, 3000, 500, NULL) < 0);
         PeReSession s;                                          /* steps on a session holding it */
         memset(&s, 0, sizeof s);
         s.game = pe_re_game_named("re2"), s.logic = l;
@@ -98,10 +98,10 @@ int main(void) {
         PeReProgress q;
         PeImpPickup got;
         memset(&q, 0, sizeof q);
-        CHECK(pe_re_pickup_at(l, &q, 100, 100, &got) == 0 && got.item == 88);
+        CHECK(pe_re_pickup_at(l, NULL, &q, 100, 100, &got) == 0 && got.item == 88);
         CHECK(!pe_re_take(&q, l, &got, NULL, say, sizeof say) && !strcmp(say, "Picked up the item 88.") && pe_re_has(&q, 88));
-        CHECK(pe_re_pickup_at(l, &q, 100, 100, NULL) < 0);     /* both copies gone: same flag */
-        CHECK(pe_re_message_at(l, 1200, 100) == 1 && pe_re_message_at(l, 600, 100) < 0);
+        CHECK(pe_re_pickup_at(l, NULL, &q, 100, 100, NULL) < 0);     /* both copies gone: same flag */
+        CHECK(pe_re_message_at(l, NULL, 1200, 100) == 1 && pe_re_message_at(l, NULL, 600, 100) < 0);
         CHECK(!pe_re_message(l, 1, say, sizeof say) && !strcmp(say, "A paper, nothing useful."));
         CHECK(!pe_re_message(l, 0, say, sizeof say) && !strcmp(say, "First.") && pe_re_message(l, 2, say, sizeof say));
         free(l);
@@ -219,8 +219,58 @@ int main(void) {
         char m[200];
         CHECK(!pe_re_message(r.logic, 13, m, sizeof m) && !strcmp(m, "Paper dated Sep. 18th. It looks irrelevant."));
         CHECK(!pe_re_message(r.logic, 19, m, sizeof m) && !strcmp(m, "Gun cases and related paraphernalia."));
+        CHECK(r.run.ran && r.run.nlive > 0);
+    }
+    /* 1-05 again: the Cabin Key was taken, so its FG_ITEM flag is set: the script still runs its
+     * item_aot_set (RE2 doesn't guard them), and the flag keeps it from being placed, as the engine does */
+    if (!pe_re_session_enter(&r, s_store, 0, 0x05, 0, 0, 0, 0, why, sizeof why)) {
+        uint32_t n = 0;
+        int placed = 0, found = 0;
+        pe_imp_logic_section(r.logic, PE_IMP_LOGIC_PICK, &n, NULL);
+        for (uint32_t i = 0; i < n; i++) {
+            PeImpPickup pk, again;
+            if (pe_imp_logic_pickup(r.logic, i, &pk) || pk.item != 88) continue;
+            placed += pe_re_scd_live(&r.run, pk.at);
+            double kx = 0, kz = 0;
+            for (int k = 0; k < 4; k++) kx += pk.zone.x[k] / 4.0, kz += pk.zone.z[k] / 4.0;
+            found += pe_re_pickup_at(r.logic, &r.run, &r.progress, kx, kz, &again) >= 0 && again.item == 88;
+        }
+        printf("1-05 after the key: its item_aot_set ran %d times, pickable %d\n", placed, found);
+        CHECK(r.run.ran && placed >= 1 && !found && pe_re_flag(&r.progress.flags, PE_RE_FG_ITEM, 4));
     }
     pe_re_session_end(&r);
+
+    /* every room's scripts, as a new game (Leon A): what ran, what was skipped */
+    PeReProgress fresh;
+    int rooms = 0, ran = 0, live_doors = 0, all_doors = 0, live_items = 0, all_items = 0;
+    long executed = 0, skipped = 0, stopped = 0;
+    for (uint32_t st = 0; st < 7; st++)
+        for (uint32_t rm = 0; rm < 64; rm++) {
+            char lid[PE_IMP_ID_MAX];
+            PeImpRoomLogic *rl = NULL;
+            pe_re_logic_id("re2", st, rm, 0, lid, sizeof lid);
+            if (pe_imp_catalog_roomlogic(s_store, lid, &rl, NULL, 0)) continue;
+            PeReScdRun run;
+            memset(&fresh, 0, sizeof fresh);
+            pe_re_scd_run(rl, &fresh.flags, NULL, NULL, &run);
+            rooms++, ran += run.ran, executed += run.executed, skipped += run.skipped, stopped += run.stopped;
+            uint32_t n = 0;
+            pe_imp_logic_section(rl, PE_IMP_LOGIC_DOOR, &n, NULL);
+            for (uint32_t i = 0; i < n; i++) {
+                PeImpDoor d;
+                if (!pe_imp_logic_door(rl, i, &d)) all_doors++, live_doors += pe_re_scd_live(&run, d.at);
+            }
+            pe_imp_logic_section(rl, PE_IMP_LOGIC_PICK, &n, NULL);
+            for (uint32_t i = 0; i < n; i++) {
+                PeImpPickup pk;
+                if (!pe_imp_logic_pickup(rl, i, &pk)) all_items++, live_items += pe_re_scd_live(&run, pk.at);
+            }
+            free(rl);
+        }
+    printf("RE2 scripts, new game: %d rooms, %d ran; %ld instructions run, %ld skipped, %ld threads stopped at a "
+           "wait or loop; doors set up %d of %d, pickups %d of %d\n", rooms, ran, executed, skipped, stopped,
+           live_doors, all_doors, live_items, all_items);
+    CHECK(rooms >= 100 && ran == rooms && live_doors * 10 >= all_doors * 7 && live_items > 0 && live_items < all_items);
     /* No free floor near a landing is mostly upstairs (y -1800 and below): the collision decoder knows
      * the ground floor only, and the stage walks Aya freely until she's clear. Guard the count. */
     CHECK(missing * 20 <= doors && no_camera == 0 && stuck * 5 <= doors);

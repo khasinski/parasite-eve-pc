@@ -37,8 +37,9 @@ int pe_re_imported(const char *store, const PeReGame *g);
 int pe_re_in_quad(const int16_t x[4], const int16_t z[4], double px, double pz);
 /* The camera to show from `camera` at (x, z): a switch zone's target, else `camera`. */
 int pe_re_camera_at(const PeImpRoomLogic *l, int camera, double x, double z);
-/* The door whose zone holds (x, z), or -1. */
-int pe_re_door_at(const PeImpRoomLogic *l, double x, double z, PeImpDoor *door);
+/* The door whose zone holds (x, z), or -1. `run` (may be NULL): only doors the room's scripts set
+ * up, and not turned into something else by an aot_reset. */
+int pe_re_door_at(const PeImpRoomLogic *l, const PeReScdRun *run, double x, double z, PeImpDoor *door);
 
 /* The nearest point to (x, z) where a body of `radius` stands clear of the collision (a door's
  * landing point can sit on a wall's edge): rings out to `reach`. 1 and the point, or 0. */
@@ -53,7 +54,8 @@ typedef struct {
     int facing;
     PeImpRoomLogic *logic;            /* the room's record (owned) */
     PeImpRoomLogic *items;            /* the game's ItemTable, for names (owned; may be NULL) */
-    PeReProgress progress;            /* locks opened, pickups taken, the pocket */
+    PeReProgress progress;            /* locks opened, pickups taken, the pocket, the game's flags */
+    PeReScdRun run;                   /* what this room's scripts set up when the player came in */
     char said[200];                   /* the last thing to tell the player ("" if nothing) */
     int doors_taken;
 } PeReSession;

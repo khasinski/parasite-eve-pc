@@ -89,12 +89,28 @@ static int was_taken(const PeReProgress *p, uint32_t key) {
     return 0;
 }
 
-int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReProgress *p, double x, double z, PeImpPickup *out) {
+int pe_re_zone_kind(const PeReScdRun *run, uint8_t id, int sce, uint8_t data[6]) {
+    for (int i = run && run->ran ? run->nreset - 1 : -1; i >= 0; i--)
+        if (run->reset[i].id == id) {
+            if (data) memcpy(data, run->reset[i].data, 6);
+            return run->reset[i].sce;
+        }
+    return sce;
+}
+
+static int live(const PeReScdRun *run, uint32_t at) { return !run || pe_re_scd_live(run, at); }
+
+int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
+                    PeImpPickup *out) {
     uint32_t n = 0;
     if (!room || !pe_imp_logic_section(room, PE_IMP_LOGIC_PICK, &n, NULL)) return -1;
     for (uint32_t i = 0; i < n; i++) {
         PeImpPickup pk;
-        if (pe_imp_logic_pickup(room, i, &pk) || !pk.item || was_taken(p, taken_key(room, pk.flag))) continue;
+        /* item_aot_set isn't guarded in RE2's scripts: the engine skips an item whose flag is set */
+        if (pe_imp_logic_pickup(room, i, &pk) || !pk.item || !live(run, pk.at) || was_taken(p, taken_key(room, pk.flag)) ||
+            (run && run->ran && pe_re_flag(&p->flags, PE_RE_FG_ITEM, pk.flag)) ||
+            pe_re_zone_kind(run, pk.zone.id, pk.zone.sce, NULL) != pk.zone.sce)
+            continue;
         if (pe_re_in_quad(pk.zone.x, pk.zone.z, x, z)) { if (out) *out = pk; return (int)i; }
     }
     return -1;
@@ -109,19 +125,33 @@ int pe_re_take(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *p
         return -1;
     }
     p->taken[p->ntaken++] = taken_key(room, pk->flag);
+    pe_re_flag_set(&p->flags, PE_RE_FG_ITEM, pk->flag, 1);
     if (pk->count > 1) snprintf(say, n, "Picked up %u %s.", (unsigned)pk->count, name);
     else snprintf(say, n, "Picked up the %s.", name);
     return 0;
 }
 
-int pe_re_message_at(const PeImpRoomLogic *room, double x, double z) {
+/* A message zone: a trigger of kind 4, or any live zone an aot_reset turned into one (a door that
+ * now only says it's locked). */
+int pe_re_message_at(const PeImpRoomLogic *room, const PeReScdRun *run, double x, double z) {
     uint32_t n = 0;
-    if (!room || !pe_imp_logic_section(room, PE_IMP_LOGIC_TRIG, &n, NULL)) return -1;
+    if (!room) return -1;
+    pe_imp_logic_section(room, PE_IMP_LOGIC_TRIG, &n, NULL);
     for (uint32_t i = 0; i < n; i++) {
         PeImpTrigger t;
-        if (pe_imp_logic_trigger(room, i, &t) || t.zone.sce != PE_RE_SCE_MESSAGE || !(t.zone.sat & PE_RE_SAT_CHECK))
-            continue;
-        if (pe_re_in_quad(t.zone.x, t.zone.z, x, z)) return t.data[0] | t.data[1] << 8;
+        uint8_t data[6];
+        if (pe_imp_logic_trigger(room, i, &t) || !live(run, t.at) || !(t.zone.sat & PE_RE_SAT_CHECK)) continue;
+        memcpy(data, t.data, sizeof data);
+        if (pe_re_zone_kind(run, t.zone.id, t.zone.sce, data) != PE_RE_SCE_MESSAGE) continue;
+        if (pe_re_in_quad(t.zone.x, t.zone.z, x, z)) return data[0] | data[1] << 8;
+    }
+    pe_imp_logic_section(room, PE_IMP_LOGIC_DOOR, &n, NULL);
+    for (uint32_t i = 0; i < n; i++) {
+        PeImpDoor d;
+        uint8_t data[6];
+        if (pe_imp_logic_door(room, i, &d) || !live(run, d.at)) continue;
+        if (pe_re_zone_kind(run, d.zone.id, d.zone.sce, data) != PE_RE_SCE_MESSAGE) continue;
+        if (pe_re_in_quad(d.zone.x, d.zone.z, x, z)) return data[0] | data[1] << 8;
     }
     return -1;
 }

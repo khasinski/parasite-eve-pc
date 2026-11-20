@@ -101,6 +101,20 @@ int pe_imp_logic_add_trigger(PeImpLogicBuilder *b, const PeImpTrigger *t, uint32
 int pe_imp_logic_add_pickup(PeImpLogicBuilder *b, const PeImpPickup *k, uint32_t n) {
     return add_records(b, PE_IMP_LOGIC_PICK, n, PE_IMP_LOGIC_PICK_BYTES, pack_pickup, k);
 }
+int pe_imp_logic_add_origins(PeImpLogicBuilder *b, const PeImpDoor *d, uint32_t nd, const PeImpTrigger *t, uint32_t nt,
+                             const PeImpPickup *k, uint32_t nk) {
+    const uint32_t n = nd + nt + nk;
+    if (!n) return 0;
+    uint8_t *tmp = calloc(n, 4);
+    if (!tmp) { if (b) b->failed = 1; return -1; }
+    for (uint32_t i = 0; i < nd; i++) put32(tmp + 4 * i, d[i].at);
+    for (uint32_t i = 0; i < nt; i++) put32(tmp + 4 * (nd + i), t[i].at);
+    for (uint32_t i = 0; i < nk; i++) put32(tmp + 4 * (nd + nt + i), k[i].at);
+    int rc = pe_imp_logic_add(b, PE_IMP_LOGIC_ZAT0, n, tmp, n * 4);
+    free(tmp);
+    return rc;
+}
+
 int pe_imp_logic_add_camera_zone(PeImpLogicBuilder *b, const PeImpCameraZone *c, uint32_t n) {
     return add_records(b, PE_IMP_LOGIC_CAMZ, n, PE_IMP_LOGIC_CAMZ_BYTES, pack_camera_zone, c);
 }
@@ -159,6 +173,17 @@ static const uint8_t *record(const PeImpRoomLogic *l, uint32_t tag, uint32_t eac
     return p && i < records && (uint64_t)(i + 1) * each <= bytes ? p + i * each : NULL;
 }
 
+/* record `i` of `tag`'s offset in the room file, from ZAT0 (0 if the store predates it) */
+static uint32_t origin(const PeImpRoomLogic *l, uint32_t tag, uint32_t i) {
+    uint32_t nd = 0, nt = 0, n = 0, base;
+    const uint8_t *z = pe_imp_logic_section(l, PE_IMP_LOGIC_ZAT0, &n, NULL);
+    if (!z) return 0;
+    pe_imp_logic_section(l, PE_IMP_LOGIC_DOOR, &nd, NULL);
+    pe_imp_logic_section(l, PE_IMP_LOGIC_TRIG, &nt, NULL);
+    base = tag == PE_IMP_LOGIC_DOOR ? 0 : tag == PE_IMP_LOGIC_TRIG ? nd : nd + nt;
+    return base + i < n ? get32(z + 4 * (base + i)) : 0;
+}
+
 int pe_imp_logic_door(const PeImpRoomLogic *l, uint32_t i, PeImpDoor *d) {
     const uint8_t *p = record(l, PE_IMP_LOGIC_DOOR, PE_IMP_LOGIC_DOOR_BYTES, i);
     if (!p) return -1;
@@ -167,6 +192,7 @@ int pe_imp_logic_door(const PeImpRoomLogic *l, uint32_t i, PeImpDoor *d) {
     d->next_x = gets16(p + 22), d->next_y = gets16(p + 24), d->next_z = gets16(p + 26), d->next_dir = gets16(p + 28);
     d->stage = p[30], d->room = p[31], d->camera = p[32], d->next_floor = p[33], d->texture = p[34];
     d->animation = p[35], d->sound = p[36], d->lock_id = p[37], d->lock_type = p[38], d->free = p[39];
+    d->at = origin(l, PE_IMP_LOGIC_DOOR, i);
     return 0;
 }
 int pe_imp_logic_trigger(const PeImpRoomLogic *l, uint32_t i, PeImpTrigger *t) {
@@ -175,6 +201,7 @@ int pe_imp_logic_trigger(const PeImpRoomLogic *l, uint32_t i, PeImpTrigger *t) {
     memset(t, 0, sizeof *t);
     get_zone(p, &t->zone);
     memcpy(t->data, p + 22, 6);
+    t->at = origin(l, PE_IMP_LOGIC_TRIG, i);
     return 0;
 }
 int pe_imp_logic_pickup(const PeImpRoomLogic *l, uint32_t i, PeImpPickup *k) {
@@ -184,6 +211,7 @@ int pe_imp_logic_pickup(const PeImpRoomLogic *l, uint32_t i, PeImpPickup *k) {
     get_zone(p, &k->zone);
     k->item = (uint16_t)get16(p + 22), k->count = (uint16_t)get16(p + 24), k->flag = (uint16_t)get16(p + 26);
     k->model = p[28], k->action = p[29];
+    k->at = origin(l, PE_IMP_LOGIC_PICK, i);
     return 0;
 }
 int pe_imp_logic_camera_zone(const PeImpRoomLogic *l, uint32_t i, PeImpCameraZone *c) {

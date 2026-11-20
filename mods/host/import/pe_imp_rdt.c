@@ -418,6 +418,8 @@ static PeImpRoomLogic *build_logic(unsigned game, uint32_t player, uint32_t stag
     pe_imp_logic_add_door(b, r->door, min32(r->doors, PE_IMP_RDT_DOORS));
     pe_imp_logic_add_trigger(b, r->aot, min32(r->aots, PE_IMP_RDT_AOTS));
     pe_imp_logic_add_pickup(b, r->item, min32(r->items, PE_IMP_RDT_ITEMS));
+    pe_imp_logic_add_origins(b, r->door, min32(r->doors, PE_IMP_RDT_DOORS), r->aot, min32(r->aots, PE_IMP_RDT_AOTS),
+                             r->item, min32(r->items, PE_IMP_RDT_ITEMS));
     pe_imp_logic_add_camera_zone(b, r->cut, min32(r->cuts, PE_IMP_RDT_CUTS));
     uint32_t enemies = min32(r->enemies, PE_IMP_RDT_ENEMIES);
     if (enemies) pe_imp_logic_add(b, PE_IMP_LOGIC_ENEM, enemies, r->enemy, enemies * PE_IMP_LOGIC_ENEM_BYTES);

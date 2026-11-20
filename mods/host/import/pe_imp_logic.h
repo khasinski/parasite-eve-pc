@@ -20,6 +20,9 @@
  *         "{...}", a yes/no question "@" + 2 hex digits (BioRand's Msg.ToString notation)
  *   ARDS  RE3: the room archive's other entries (room sounds): u32 count, then per entry u32 index,
  *         u32 type, u32 size, the bytes padded to 4
+ *   ZAT0  where each DOOR, TRIG and PICK record came from: u32 offset of its instruction in the room
+ *         file (RDT0), one a record, doors then triggers then pickups. A script interpreter matches
+ *         the instructions it runs against these (records `at`); older stores lack it (`at` 0).
  * A runtime skips tags it doesn't know, so sections can be added without breaking it. */
 #include <stddef.h>
 #include <stdint.h>
@@ -38,7 +41,8 @@ enum {
     PE_IMP_LOGIC_SCD0 = PE_IMP_LOGIC_TAG('S', 'C', 'D', '0'), PE_IMP_LOGIC_SCD1 = PE_IMP_LOGIC_TAG('S', 'C', 'D', '1'),
     PE_IMP_LOGIC_SCD2 = PE_IMP_LOGIC_TAG('S', 'C', 'D', '2'), PE_IMP_LOGIC_RDT0 = PE_IMP_LOGIC_TAG('R', 'D', 'T', '0'),
     PE_IMP_LOGIC_TEXT = PE_IMP_LOGIC_TAG('T', 'E', 'X', 'T'),
-    PE_IMP_LOGIC_ARDS = PE_IMP_LOGIC_TAG('A', 'R', 'D', 'S')
+    PE_IMP_LOGIC_ARDS = PE_IMP_LOGIC_TAG('A', 'R', 'D', 'S'),
+    PE_IMP_LOGIC_ZAT0 = PE_IMP_LOGIC_TAG('Z', 'A', 'T', '0')
 };
 enum { PE_IMP_LOGIC_DOOR_BYTES = 40, PE_IMP_LOGIC_TRIG_BYTES = 28, PE_IMP_LOGIC_PICK_BYTES = 32,
        PE_IMP_LOGIC_CAMZ_BYTES = 20, PE_IMP_LOGIC_ENEM_BYTES = 24 };
@@ -92,6 +96,9 @@ int pe_imp_logic_add_door(PeImpLogicBuilder *b, const PeImpDoor *doors, uint32_t
 int pe_imp_logic_add_trigger(PeImpLogicBuilder *b, const PeImpTrigger *t, uint32_t n);
 int pe_imp_logic_add_pickup(PeImpLogicBuilder *b, const PeImpPickup *p, uint32_t n);
 int pe_imp_logic_add_camera_zone(PeImpLogicBuilder *b, const PeImpCameraZone *c, uint32_t n);
+/* ZAT0 from the records' `at`, after their sections are added. */
+int pe_imp_logic_add_origins(PeImpLogicBuilder *b, const PeImpDoor *d, uint32_t nd, const PeImpTrigger *t, uint32_t nt,
+                             const PeImpPickup *k, uint32_t nk);
 PeImpRoomLogic *pe_imp_logic_finish(PeImpLogicBuilder *b);   /* frees the builder; NULL on failure */
 
 /* Reading one: a section's bytes (NULL if absent) and record count; then each record by index. */

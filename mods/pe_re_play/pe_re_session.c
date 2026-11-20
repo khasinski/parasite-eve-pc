@@ -71,12 +71,13 @@ int pe_re_camera_at(const PeImpRoomLogic *l, int camera, double x, double z) {
     return camera;
 }
 
-int pe_re_door_at(const PeImpRoomLogic *l, double x, double z, PeImpDoor *door) {
+int pe_re_door_at(const PeImpRoomLogic *l, const PeReScdRun *run, double x, double z, PeImpDoor *door) {
     uint32_t n = 0;
     if (!l || !pe_imp_logic_section(l, PE_IMP_LOGIC_DOOR, &n, NULL)) return -1;
     for (uint32_t i = 0; i < n; i++) {
         PeImpDoor d;
         if (pe_imp_logic_door(l, i, &d)) continue;
+        if (run && (!pe_re_scd_live(run, d.at) || pe_re_zone_kind(run, d.zone.id, d.zone.sce, NULL) != d.zone.sce)) continue;
         if (pe_re_in_quad(d.zone.x, d.zone.z, x, z)) { if (door) *door = d; return (int)i; }
     }
     return -1;
@@ -96,6 +97,8 @@ int pe_re_free_spot(const PeRe2RoomCollision *c, double *x, double *z, int radiu
 }
 
 /* ---- the session ---- */
+static int has_item(void *ctx, uint16_t item) { return pe_re_has(ctx, item); }
+
 static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room, char *why, size_t n) {
     char id[PE_IMP_ID_MAX];
     PeImpRoomLogic *l = NULL;
@@ -106,6 +109,7 @@ static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room
     }
     free(s->logic);
     s->logic = l, s->stage = stage, s->room = room;
+    pe_re_scd_run(l, &s->progress.flags, has_item, &s->progress, &s->run);   /* what its scripts set up */
     return 0;
 }
 
@@ -113,6 +117,7 @@ int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, ui
     memset(s, 0, sizeof *s);
     if (!g) { snprintf(why, n, "no such game"); return -1; }
     s->game = g, s->player = player;
+    pe_re_flag_set(&s->progress.flags, PE_RE_FG_STATUS, 0, player != 0);   /* who's playing (pe_re_scd.h) */
     if (load(s, store, g->stage, g->room, why, n)) { s->game = NULL; return -1; }
     char items[PE_IMP_ID_MAX];
     snprintf(items, sizeof items, "%s:items/all", g->game);
@@ -139,7 +144,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
     if (!s->game || !s->logic) return PE_RE_STAY;
     s->x = x, s->z = z;
     if (action) s->said[0] = 0;
-    if (action && pe_re_door_at(s->logic, x, z, &d) >= 0) {
+    if (action && pe_re_door_at(s->logic, &s->run, x, z, &d) >= 0) {
         if (pe_re_door_try(&s->progress, &d, s->items, s->said, sizeof s->said) == PE_RE_DOOR_LOCKED) return PE_RE_SAID;
         const uint32_t stage = d.stage == PE_RE_STAGE_HERE ? s->stage : d.stage;
         if (!pe_re_session_enter(s, store, stage, d.room, d.camera, d.next_x, d.next_z, d.next_dir, why, n)) {
@@ -148,11 +153,11 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
         }
         return s->said[0] ? PE_RE_SAID : PE_RE_STAY;
     }
-    if (action && pe_re_pickup_at(s->logic, &s->progress, x, z, &pk) >= 0) {
+    if (action && pe_re_pickup_at(s->logic, &s->run, &s->progress, x, z, &pk) >= 0) {
         pe_re_take(&s->progress, s->logic, &pk, s->items, s->said, sizeof s->said);
         return PE_RE_SAID;
     }
-    const int message = action ? pe_re_message_at(s->logic, x, z) : -1;
+    const int message = action ? pe_re_message_at(s->logic, &s->run, x, z) : -1;
     if (message >= 0 && !pe_re_message(s->logic, (uint32_t)message, s->said, sizeof s->said)) return PE_RE_SAID;
     const int camera = pe_re_camera_at(s->logic, s->camera, x, z);
     if (camera == s->camera) return PE_RE_STAY;

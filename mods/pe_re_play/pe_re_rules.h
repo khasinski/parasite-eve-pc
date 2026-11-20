@@ -15,6 +15,7 @@
 #include <stdint.h>
 
 #include "pe_imp_logic.h"
+#include "pe_re_scd.h"
 
 #define PE_RE_LOCKS 256
 #define PE_RE_TAKEN_MAX 1024
@@ -33,6 +34,7 @@ typedef struct {
     int ntaken;
     PeReHeld pocket[PE_RE_POCKET_MAX];             /* items picked up, by item number */
     int held;
+    PeReFlags flags;                               /* the game's flags, as its scripts set them */
 } PeReProgress;
 
 int pe_re_has(const PeReProgress *p, uint16_t item);
@@ -49,12 +51,18 @@ typedef enum { PE_RE_DOOR_OPEN, PE_RE_DOOR_UNLOCKED, PE_RE_DOOR_LOCKED } PeReDoo
  * gets what to tell them ("" when the door is simply open). */
 PeReDoorAnswer pe_re_door_try(PeReProgress *p, const PeImpDoor *d, const PeImpRoomLogic *items, char *say, size_t n);
 
+/* `run`: what the room's scripts set up (pe_re_scd.h); NULL or not run: every record counts. A zone
+ * is live when its instruction ran; aot_reset gives a zone id another kind and data (0: gone). */
 /* The pickup at (x, z) not taken yet, or -1. */
-int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReProgress *p, double x, double z, PeImpPickup *out);
-/* Take it: into the pocket, remembered; `say` gets "Picked up the Cabin Key." 0 or -1 (pocket full). */
+int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
+                    PeImpPickup *out);
+/* Take it: into the pocket, remembered (and its FG_ITEM flag set, as the game does, so the room's
+ * script stops placing it); `say` gets "Picked up the Cabin Key." 0 or -1 (pocket full). */
 int pe_re_take(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *pk, const PeImpRoomLogic *items,
                char *say, size_t n);
 /* The message zone checked at (x, z): its message index, or -1. */
-int pe_re_message_at(const PeImpRoomLogic *room, double x, double z);
+int pe_re_message_at(const PeImpRoomLogic *room, const PeReScdRun *run, double x, double z);
+/* The kind a zone id has now: its last aot_reset's, else `sce`; data likewise. */
+int pe_re_zone_kind(const PeReScdRun *run, uint8_t id, int sce, uint8_t data[6]);
 
 #endif
