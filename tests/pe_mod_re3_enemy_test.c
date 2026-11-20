@@ -243,7 +243,7 @@ static void build_emd(Bytes *o) {
     uint32_t no1 = o->n - base;
     for (int i = 0; i < 4; i++) for (int c = 0; c < 4; c++) b16(o, c == 1 ? 4096 : 0);
     uint32_t qo1 = o->n - base;
-    uint8_t q[16] = {0, 0, 4, 0, 8, 0, 1, 0, 0, 8, 0, 1, 8, 8, 2, 3};   /* page 4: u + 8; clut 1 */
+    uint8_t q[16] = {0, 0, 64, 0, 8, 0, 1, 0, 0, 8, 0, 1, 8, 8, 2, 3};  /* page byte 64: page 1; palette row 1 */
     put(o, q, 16);
     uint32_t vo0 = o->n - base;
     for (int i = 0; i < 4; i++) for (int c = 0; c < 4; c++) b16(o, i < 3 && c < 3 ? (unsigned)(uint16_t)v0[i][c] : 0);
@@ -286,10 +286,10 @@ static void test_emd(void) {
     assert(m.bones == 2 && m.parent[0] == -1 && m.parent[1] == 0);
     assert(m.pos[1][1] == -1100 && m.parts == 2);
     assert(m.w == 16 && m.h == 4 && m.pal_rows == 2 && m.pal[1][5] == 6 && m.image[63] == 63);
-    /* rigid quad in bone 1's frame, page byte and palette row kept */
+    /* rigid quad in bone 1's frame, its page as a PS1 page word (8-bit, page 1), palette row kept */
     assert(m.part[1].quads == 1 && m.part[1].tris == 0 && !m.part[1].quad_skin && !m.part[1].tri_skin);
     const PeImpFace *q = &m.part[1].quad[0];
-    assert(q->v[0][0] == -10 && q->v[3][1] == 20 && q->page == 4 && q->clut == 1 && q->uv[1][0] == 8 && q->n[0][1] == 4096);
+    assert(q->v[0][0] == -10 && q->v[3][1] == 20 && q->page == 0x81 && q->clut == (1 << 6) && q->uv[1][0] == 8 && q->n[0][1] == 4096);
     /* bound triangle (part 0) */
     const PeImpPart *p1 = &m.part[0];
     assert(p1->tris == 1 && p1->tri_skin);

@@ -24,9 +24,10 @@
  *            (u16 offsets from +8, each followed by a u16 count), triangle and quad counts. Vertex
  *            x, y, z, w s16. Triangle 12 bytes: u0 v0 page ? u1 v1 clut i0 u2 v2 i1 i2; quad 16:
  *            u0 v0 page ? u1 v1 clut ? u2 v2 i0 i1 u3 v3 i2 i3. Vertex indexes are bytes.
- *   TIM      8-bit with palettes, wider than 256: a texel's x = u + 2 * page.
+ *   TIM      8-bit with palettes, wider than 256: a texel's x = u + 2 * page byte (0, 64, 128).
  * Out: the Model (rigid parts in their bone's frame; bound parts skinned, in the model frame; a
- * face's clut = its palette row, page = the page byte: x = u + 2 * page) and the Animation (set 1's
+ * face's clut = a PS1 CLUT word naming its palette row (row << 6), page = a PS1 texture page word as the other readers store it: 8-bit,
+ * page x = page byte / 64, so a texel's x = (page & 15) * 128 + u) and the Animation (set 1's
  * moves, then sets 2 and 3's, at 30 frames a second; root = bone 0's x and z, the key's height). */
 #include <math.h>
 #include <stdio.h>
@@ -200,7 +201,7 @@ static int meshes(const Buf *x, uint32_t m14, uint32_t bind, uint32_t bind_end, 
                     }
                 }
                 if (skin[i].skin && !quad) pt->tri_skin[pt->tris][3][0] = 0, pt->tri_skin[pt->tris][3][1] = PE_IMP_NO_BONE;
-                face->clut = r[6] & 3, face->page = r[2];
+                face->clut = (uint16_t)((r[6] & 3) << 6), face->page = (uint16_t)(0x80 | r[2] >> 6);
                 if (quad) pt->quads++; else pt->tris++;
             }
         }
@@ -404,7 +405,7 @@ static int read_emd(const uint8_t *emd, uint32_t emd_size, const uint8_t *tim, u
 const PeImpReader g_re3_emd_pc = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re3", .platform = "pc", .format = "emd",
-    .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "ROOM/EMD/EM??.EMD",
+    .version = 2, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "ROOM/EMD/EM??.EMD",
     .tags = "enemy", .companion = ".TIM", .read_pair = read_emd
 };
 
@@ -456,7 +457,7 @@ static int read_bundle(const uint8_t *data, uint32_t size, const char *path, PeI
 const PeImpReader g_re3_emd_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re3", .platform = "ps1", .format = "emd",
-    .version = 1, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "CD_DATA/STAGE?/R*.BIN",
+    .version = 2, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "CD_DATA/STAGE?/R*.BIN",
     .tags = "enemy", .read = read_bundle
 };
 

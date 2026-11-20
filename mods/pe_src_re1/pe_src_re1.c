@@ -1,6 +1,7 @@
 /* Source game: Resident Evil (Director's Cut). Registers its reader, naming table and rig with
  * the importer. Import mode only: nothing here runs during play. */
 #include "pe_mod_host.h"
+#include "pe_imp_enemy.h"
 #include "pe_src_re1.h"
 
 /* Built by themselves once the disc is in the import folder (F1 > Import). Barry, Rebecca, the
@@ -17,7 +18,8 @@ static int init(void) {
     if (pe_imp_add_game("re1", "Resident Evil", "Resident Evil") || pe_imp_add_reader(&g_re1_emd_ps1) ||
         pe_imp_add_reader(&g_re1_emd_npc_ps1) || pe_imp_add_reader(&g_re1_emd_alt_ps1) ||
         pe_imp_add_reader(&g_re1_sound_ps1) || pe_imp_add_reader(&g_re1_music_ps1) || pe_imp_add_reader(&g_re1_rooms_ps1) || pe_imp_add_reader(&g_re1_logic_ps1) || pe_imp_add_reader(&g_re1_door_ps1) || pe_imp_add_reader(&g_re1_items_ps1) || pe_imp_add_reader(&g_re1_item_icons_ps1) || pe_imp_add_reader(&g_re1_movies_ps1) || pe_imp_add_reader(&g_re1_files_ps1) || pe_imp_add_reader(&g_re1_objects_ps1) || pe_imp_add_reader(&g_re1_file_text_ps1) || pe_imp_add_reader(&g_re1_door_models_ps1) || pe_imp_add_reader(&g_re1_room_anims_ps1) || pe_imp_add_reader(&g_re1_maps_ps1) || pe_imp_add_reader(&g_re1_monsters_ps1) || pe_imp_add_reader(&g_re1_person_moves_ps1) || pe_imp_add_reader(&g_re1_weapon_moves_ps1) || pe_imp_add_reader(&g_re1_weapons_ps1) || pe_imp_add_reader(&g_re1_core_effects_ps1) || pe_imp_add_reader(&g_re1_room_effects_ps1) ||
-        pe_imp_set_naming("re1", g_re1_naming) || pe_imp_add_rig("re1", "player/", &g_re1_human_rig)) {
+        pe_imp_set_naming("re1", g_re1_naming) || pe_imp_add_rig("re1", "player/", &g_re1_human_rig) ||
+        pe_imp_set_enemy_defaults("re1", PE_RE_ENEMY_YAW, PE_RE_ENEMY_SCALE)) {
         pe_mod_log("pe_src_re1", "readers refused by the importer");
         return 1;
     }

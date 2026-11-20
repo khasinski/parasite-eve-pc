@@ -48,19 +48,19 @@ static void made_up(PeImpModel *m, PeImpAnimation *a) {
     /* part 0 rigid (bone 0's frame): a quad from the floor (y +100 below the root) up to the root */
     static const int quad[4][3] = {{-10, 100, 0}, {10, 100, 0}, {-10, 0, 0}, {10, 0, 0}};
     m->part[0].quad = calloc(1, sizeof *m->part[0].quad), m->part[0].quads = 1;
-    face(&m->part[0].quad[0], quad, 4, 4, 0);
+    face(&m->part[0].quad[0], quad, 4, 0x81, 0x7800);   /* CLUT words: rows 480 and 481 */
     /* part 1 skinned (model frame): a triangle over the head, one corner joint between 1 and 0 */
     static const int tri[3][3] = {{0, -200, 0}, {5, -150, 0}, {-5, -150, 0}};
     m->part[1].tri = calloc(1, sizeof *m->part[1].tri), m->part[1].tris = 1;
-    face(&m->part[1].tri[0], tri, 3, 0, 1);
+    face(&m->part[1].tri[0], tri, 3, 0x80, 0x7840);
     m->part[1].tri_skin = calloc(1, sizeof *m->part[1].tri_skin);
     m->part[1].quad_skin = calloc(1, sizeof *m->part[1].quad_skin);
     uint8_t (*s)[2] = m->part[1].tri_skin[0];
     s[0][0] = 1, s[0][1] = PE_IMP_NO_BONE, s[1][0] = 1, s[1][1] = 0, s[2][0] = 1, s[2][1] = PE_IMP_NO_BONE;
-    m->w = 16, m->h = 4, m->pal_rows = 2;
+    m->w = 144, m->h = 4, m->pal_rows = 2;                 /* the quad on the second page */
     m->pal = calloc(2, sizeof *m->pal);
-    m->image = calloc(64, 1);
-    for (int i = 0; i < 64; i++) m->image[i] = (uint8_t)i;
+    m->image = calloc(576, 1);
+    for (int i = 0; i < 576; i++) m->image[i] = (uint8_t)i;
     m->pal[1][3] = 0x7fff;
     assert(!pe_imp_model_check(m, NULL, 0));
 
@@ -110,7 +110,7 @@ static void test_made_up(void) {
     found = 0;
     for (int i = 0; i < p.vertices; i++) found |= p.vertex[i].y == -300 && p.vertex[i].bone == 1 && p.vertex[i].bone2 == 0;
     assert(found);                                        /* the joint corner keeps its second bone */
-    assert(p.triangle[0].u[1] == 2 + 8 && p.triangle[2].palette == 1);   /* u + 2 * page */
+    assert(p.triangle[0].u[1] == 128 + 2 && p.triangle[2].palette == 1);   /* page 1 of 0: 128 + u */
     assert(p.anims == 2 && p.role[PE_ANIM_IDLE] == 0 && p.role[PE_ANIM_WALK] == -1);
     assert(p.anim[1].data[1] == -200);                    /* root height scaled */
     assert(p.attacks == 1 && p.attack[0].hit == 2 && p.attack[0].power == 30 && p.attack[0].range == 500);

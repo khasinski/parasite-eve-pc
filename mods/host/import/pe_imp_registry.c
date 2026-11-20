@@ -220,6 +220,31 @@ const PeImpEnemyProfile *pe_imp_enemy_for(const char *asset_id) {
     return NULL;
 }
 
+#define MAX_ENEMY_GAMES 16
+static struct { char game[16]; int yaw, scale; } s_enemy_game[MAX_ENEMY_GAMES];
+static int s_enemy_games;
+
+int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale) {
+    if (!word_ok(game, 15) || scale <= 0) return -1;
+    int i = 0;
+    while (i < s_enemy_games && strcmp(s_enemy_game[i].game, game)) i++;
+    if (i == MAX_ENEMY_GAMES) return -1;
+    if (i == s_enemy_games) s_enemy_games++;
+    snprintf(s_enemy_game[i].game, sizeof s_enemy_game[i].game, "%s", game);
+    s_enemy_game[i].yaw = yaw & 4095, s_enemy_game[i].scale = scale;
+    return 0;
+}
+
+int pe_imp_enemy_defaults(const char *game, int *yaw, int *scale) {
+    for (int i = 0; game && i < s_enemy_games; i++)
+        if (!strcmp(s_enemy_game[i].game, game)) {
+            if (yaw) *yaw = s_enemy_game[i].yaw;
+            if (scale) *scale = s_enemy_game[i].scale;
+            return 0;
+        }
+    return -1;
+}
+
 int pe_imp_add_target(const PeImpTarget *t) {
     if (!t || t->api.version != PE_IMP_API_VERSION || t->api.size != sizeof *t || !t->build || !t->module ||
         !t->verb || s_targets == MAX_TARGETS)
@@ -247,5 +272,5 @@ const PeImpTarget *pe_imp_target(int i) { return i >= 0 && i < s_targets ? s_tar
 
 void pe_imp_registry_reset(void) {
     for (int i = 0; i < s_namings; i++) pj_free(s_naming[i].root);
-    s_readers = s_namings = s_games = s_rigs = s_targets = s_autos = s_enemies = 0;
+    s_readers = s_namings = s_games = s_rigs = s_targets = s_autos = s_enemies = s_enemy_games = 0;
 }

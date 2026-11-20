@@ -275,7 +275,11 @@ files and are for your own use only.
 To make one in the game: turn on **Enemy import**, add your Resident Evil 3 PC folder (the one with
 `rofs1.dat`) under **F1 → Import**, and Nemesis, a Zombie, Cerberus, a Hunter, a Giant Spider and
 Drain Deimos are built by themselves, each with its own moves and sounds.
-Other enemies with a profile show in Import's list with **Build as an enemy**.
+Every other monster from a game you've imported (Resident Evil 1, 2 or 3) shows in Import's list
+with **Build as an enemy** too. Its moves are picked for it from how they look (standing still,
+walking, being hit, falling down, reaching out), and its size, HP and strength from how big it is.
+The picks are saved in its folder as `profile.json`: change a move number there (moves count from 0)
+and press **Build as an enemy** again to use your change.
 
 ## Phone Calls
 

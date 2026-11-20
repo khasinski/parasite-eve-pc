@@ -139,6 +139,30 @@ refusals, posing, behavior fields; a real pack with PE_TEST_ENEMY_PACK) and `ene
 attacks, is hurt, dies, the battle is won and the VRAM block given back) and `enemy-import-rooms`
 (the same pack in every fight of the list: the room's picture stays whole when it joins).
 
+**Guessed profiles** (`pe_enemy_import/pe_enemy_guess.c`): any catalogued `enemy/` model with moves
+beside it (`<id>/moves`) is built as an enemy even when no game mod wrote it a profile. Every move is
+posed and measured in the model's own height (does it loop, how much it moves, its height at the
+start, lowest and end, how far it reaches out past its first frame, hit and sound frames), and the
+roles are picked from that: idle (loops, stands, moves least), die (starts standing, ends at half
+height or lower), walk (loops, stands, moves more than the idle), hurt (6-45 frames, starts and ends
+standing, reaches out little; the most motion), attack and attack2 (start and end standing, reach out
+furthest any way; source hit frames first). HP, EXP, defense, power, radius and speed follow its size.
+What the moves can't tell comes from the game (`pe_imp_set_enemy_defaults`: yaw and units; RE1-3
+register 3072 and 190 per mille). Measured on RE3's six hand-profiled monsters (the same death for 4,
+walk for 4) and every RE2 Disc 1 enemy model (70 built, 54 with idle + death + attack; the others are
+critters with no death or no attack move). Every build writes the profile it used into the pack folder
+as `profile.json` (moves by number, sizes, attacks, behaviour) and its SHA-256 as `profile.made`;
+when the player changes `profile.json`, the pack counts as out of date and the next build uses the
+file (a hand-made profile can be changed the same way). Tests: `mod-enemy-guess` (made-up moves;
+PE_TEST_RE3_PC, PE_TEST_RE2_DISC, PE_TEST_RE1_DISC for the real ones; PE_GUESS_DUMP=1 prints every
+move's measurements), and `enemy-import-nemesis` with a guessed pack (RE2 EM10, EM20, EM2A pass).
+**Texture pages and palettes**: a face's `page` and `clut` are PS1 words for every reader (the RE3 EMD
+reader now converts its page byte, x = u + 2 * byte, to page word 0x80 | byte / 64, and its palette
+row to a CLUT word, row << 6); the enemy builder places a texel at (page & 15 - the first page the
+faces use) * 128 + u and takes the palette as the CLUT word's row (clut >> 6) less the first row used,
+as the costume builder does. Before, RE2 enemies lost every face (pages 0x80/0x81 read as x = 256+)
+or drew with the first palette only.
+
 **Built in the game (F1 > Import)**, the same way as costumes: a source game's mod registers
 readers, a naming table and an **enemy profile** (`host/import/pe_imp_enemy.h`: moves for the
 roles and attacks, HP, power, reach, height, sounds) for an asset; the `enemies` builder target
@@ -160,7 +184,8 @@ move's 0x800 frame or its furthest reach is used. The PS1 disc keeps its enemies
 u32 count, per entry u32 length and tag, entries on 2 KB boundaries; tag byte 3 = the enemy number,
 byte 1 = 1 for its TIM, byte 2 a version): the same EMD and TIM formats, read by `g_re3_emd_ps1`
 into `enemy/em<nn>-<version>` and its moves (85 from 64 enemies; 21 come in two versions whose later
-move sets differ). The profiles still name the PC files' `enemy/em<nn>`. RE2's PS1 enemies are
+move sets differ). The profiles still name the PC files' `enemy/em<nn>`; the PS1 ones get guessed
+profiles (below). RE2's PS1 enemies are
 in `PL0/PLD/CDEMD0.EMS` and `CDEMD2.EMS`: TIM + EMD pairs on 2 KB boundaries (the archive's own index
 holds RAM addresses and isn't read). An EMD's directory names 8 sections: unknown, three move sets
 (EDD, EMR), the MD1 mesh; read as a PLD's model plus RE2's room-animation move format, by

@@ -19,6 +19,9 @@ typedef struct {
 int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnemyProfile *prof,
                    PeImpSound *const *sounds, int sound_count, const char *source, PeEnemyPack *p,
                    PeEnemyBuildInfo *info, char *why, size_t n);
+/* Only the model (rest pose, source units, no anims): for posing moves while looking at them
+ * (pe_enemy_guess.c). 0, or -1 with a reason (p freed). */
+int pe_enemy_build_model(PeEnemyPack *p, const PeImpModel *m, int *skipped, char *why, size_t n);
 /* Its files into `folder` (created): what pe_enemy_pack_load reads back. */
 int pe_enemy_write(const PeEnemyPack *p, const char *folder, char *why, size_t n);
 

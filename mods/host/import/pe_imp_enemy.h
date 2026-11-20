@@ -31,4 +31,15 @@ typedef struct PeImpEnemyProfile {
 int pe_imp_add_enemy(const char *game, const char *local_id, const PeImpEnemyProfile *p);
 const PeImpEnemyProfile *pe_imp_enemy_for(const char *asset_id);
 
+/* A game's monsters that no profile names fight with a guessed one (pe_enemy_guess.c); what the
+ * guess can't see is the game's: `yaw` turns its models to face Aya, `scale` (per mille) takes its
+ * units to PE field units. A game without these still builds (yaw 0, 500 units tall). */
+int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale);
+int pe_imp_enemy_defaults(const char *game, int *yaw, int *scale);     /* 0, or -1: none set */
+
+/* The Resident Evil games' (1, 2 and 3 share the EMD's axes and units): their models face +x, and a
+ * person about 2900 units tall stands about 560 next to Aya (about 500), as RE3's zombie does. */
+#define PE_RE_ENEMY_YAW 3072
+#define PE_RE_ENEMY_SCALE 190
+
 #endif
