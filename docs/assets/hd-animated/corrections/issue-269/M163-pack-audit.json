@@ -1,0 +1,47 @@
+{
+  "method": "Pack 0.5.2: pack 0.5.1 with M163's two static atlases rebuilt from a re-registered anchor (#269, #268).\n\nM163's generated anchor 4f85e561 placed the restaurant block, its awning and the hanging\nsigns elsewhere than the source (registration review: scale 0.92, 25% inliers). One global\naffine cannot fix a local layout difference, so the HD restaurant was drawn over the street\n(#268) and its cut edges left black texels along the sign and awning (#269). The new anchor\n(-v2b, built-in imagegen with the recorded prompt plus a layout note) registers with 86%\ninliers; assemble_sources.py and hd-poc/pack.py (--room M163, same flags as the release)\nrebuild the view. Only atlases whose material changed are replaced; native references,\nevery other room and every other file stay byte identical. Materials are encoded exactly as\nissue-56/encode_webp.py does (cwebp -q 95 -m 6 -exact).\n",
+  "atlases": [
+    {
+      "key": "e8b5cc1a6bb39a1e",
+      "replaced": true,
+      "mean_abs_vs_051": 12.644,
+      "webp_sha256": "7dad4145860286a6598b850bb8784bed6956e2dfecd2d941d335118ff62205f4"
+    },
+    {
+      "key": "88b07822c1e956af",
+      "replaced": false,
+      "mean_abs_vs_051": 0.176
+    },
+    {
+      "key": "a8c07409bf4820fc",
+      "replaced": false,
+      "mean_abs_vs_051": 0.379
+    },
+    {
+      "key": "48bb2012157ddd8d",
+      "replaced": false,
+      "mean_abs_vs_051": 0.213
+    },
+    {
+      "key": "68cb1bf912dca7da",
+      "replaced": false,
+      "mean_abs_vs_051": 0.539
+    },
+    {
+      "key": "08c5c8016912646b",
+      "replaced": false,
+      "mean_abs_vs_051": 0.582
+    },
+    {
+      "key": "28d5c3e866712eb8",
+      "replaced": false,
+      "mean_abs_vs_051": 0.547
+    },
+    {
+      "key": "c8d06ff0bca6eb49",
+      "replaced": true,
+      "mean_abs_vs_051": 9.688,
+      "webp_sha256": "0e88f1d8df4c4767b5b4f7e55c6df1278325a1d9c241e07b6d2e513ace6a5c38"
+    }
+  ]
+}
