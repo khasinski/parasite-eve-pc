@@ -45,6 +45,13 @@
 #define PE_AYA_BANK 10           /* her day-1 bundle: the model measured for her height */
 #define AYA_ROOM_RADIUS 280
 #define FIELD_MESH_TRIANGLES 1024
+#define FIELD_TEX_X 832
+#define FIELD_TEX_Y 256
+#define FIELD_TEX_WORDS 128
+#define FIELD_TEX_HEIGHT 256
+#define FIELD_CLUT_X 576
+#define FIELD_CLUT_Y 496
+#define FIELD_CLUT_ROWS 16
 #define FIELD_IDLE_KIND 0x1f
 #define FIELD_IDLE_MOVE 0
 #define FIELD_TURN_RADIANS (6.283185307179586 / 4096.0)
@@ -74,6 +81,24 @@ static int s_placement_count;
 static RenderColorTrianglePacket s_marker_packets[2][PE_RE_ENEMIES_MAX][2];
 static RenderColorTrianglePacket s_placeholder_packets[2][PE_RE_ENEMIES_MAX][2];
 static RenderColorTrianglePacket s_mesh_packets[2][PE_RE_ENEMIES_MAX][FIELD_MESH_TRIANGLES];
+typedef struct FieldTexturedTriangle {
+    RenderNativeTag tag;
+    RenderPacketColor color;
+    uint16_t x0, y0;
+    uint8_t u0, v0;
+    uint16_t clut, x1, y1;
+    uint8_t u1, v1;
+    uint16_t page, x2, y2;
+    uint8_t u2, v2;
+    uint16_t pad;
+} FieldTexturedTriangle;
+PE1_STATIC_ASSERT(PE1_OFFSETOF(FieldTexturedTriangle, pad) == sizeof(RenderNativeTag) + 26,
+                  field_textured_triangle_layout);
+static FieldTexturedTriangle s_tex_packets[2][PE_RE_ENEMIES_MAX][FIELD_MESH_TRIANGLES];
+static int s_texture_kind = -1, s_texture_checked;
+static uint16_t s_texture_words[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
+static uint16_t s_texture_clut[FIELD_CLUT_ROWS][256];
+static uint16_t s_vram_check[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
 static struct {
     PeImpModel model;
     int tried;
@@ -413,6 +438,69 @@ static void free_field_mesh(unsigned kind) {
     memset(&s_field_mesh[kind], 0, sizeof s_field_mesh[kind]);
 }
 
+static void clear_field_texture(void) {
+    if (s_texture_kind >= 0) {
+        const RECT areas[] = {{FIELD_TEX_X, FIELD_TEX_Y, FIELD_TEX_WORDS, FIELD_TEX_HEIGHT},
+                              {FIELD_CLUT_X, FIELD_CLUT_Y, 256, FIELD_CLUT_ROWS}};
+        const uint16_t *pixels[] = {s_texture_words, &s_texture_clut[0][0]};
+        for (int i = 0; i < 2; i++) {
+            const size_t bytes = (size_t)areas[i].w * areas[i].h * sizeof(uint16_t);
+            RECT rect = areas[i];
+            DrawSync(0);
+            StoreImage(&rect, s_vram_check);
+            DrawSync(0);
+            /* Scene loading may have assigned this rectangle to native graphics already. */
+            if (memcmp(s_vram_check, pixels[i], bytes) != 0) continue;
+            memset(s_vram_check, 0, bytes);
+            LoadImage(&rect, s_vram_check);
+            DrawSync(0);
+        }
+    }
+    s_texture_kind = -1;
+    s_texture_checked = 0;
+}
+
+static int empty_texture_area(RECT *rect) {
+    DrawSync(0);
+    StoreImage(rect, s_vram_check);
+    DrawSync(0);
+    for (int i = 0; i < rect->w * rect->h; i++)
+        if (s_vram_check[i]) return 0;
+    return 1;
+}
+
+static void prepare_field_texture(void) {
+    if (s_texture_checked) return;
+    s_texture_checked = 1;
+    /* Pick one compatible model. All placements using it share a single atlas upload. */
+    int kind = -1;
+    for (int i = 0; i < s_placement_count; i++) {
+        const unsigned candidate = s_placements[i].kind;
+        if (candidate >= 0x40) continue;
+        const PeImpModel *model = &s_field_mesh[candidate].model;
+        if (model->parts && model->h <= FIELD_TEX_HEIGHT && model->pal_rows <= FIELD_CLUT_ROWS) {
+            kind = (int)candidate;
+            break;
+        }
+    }
+    if (kind < 0) return;
+    RECT texture = {FIELD_TEX_X, FIELD_TEX_Y, FIELD_TEX_WORDS, FIELD_TEX_HEIGHT};
+    RECT clut = {FIELD_CLUT_X, FIELD_CLUT_Y, 256, FIELD_CLUT_ROWS};
+    if (!empty_texture_area(&texture) || !empty_texture_area(&clut)) return;
+    const PeImpModel *model = &s_field_mesh[kind].model;
+    const unsigned width = model->w < 2 * FIELD_TEX_WORDS ? model->w : 2 * FIELD_TEX_WORDS;
+    memset(s_texture_words, 0, sizeof s_texture_words);
+    memset(s_texture_clut, 0, sizeof s_texture_clut);
+    for (unsigned y = 0; y < model->h; y++)
+        for (unsigned x = 0; x < width; x++)
+            s_texture_words[y * FIELD_TEX_WORDS + x / 2] |= (uint16_t)model->image[y * model->w + x] << (8 * (x & 1));
+    memcpy(s_texture_clut, model->pal, model->pal_rows * sizeof s_texture_clut[0]);
+    LoadImage(&texture, s_texture_words);
+    LoadImage(&clut, &s_texture_clut[0][0]);
+    DrawSync(0);
+    s_texture_kind = kind;
+}
+
 static void load_field_idle(unsigned kind, const PeImpModel *model) {
     if (kind != FIELD_IDLE_KIND) return;
     for (uint32_t b = 0; b < model->bones; b++)
@@ -480,6 +568,7 @@ static int on_import_published(void *ctx, void *user) {
     (void)ctx;
     (void)user;
     /* Placements are independent of imported models. Replace the renderer's cache only. */
+    clear_field_texture();
     for (unsigned kind = 0; kind < 0x40; kind++)
         if (s_field_mesh[kind].tried) free_field_mesh(kind);
     if (s_placement_meshes) load_field_meshes();
@@ -537,6 +626,21 @@ static unsigned face_colour(const PeImpModel *model, const PeImpFace *face, cons
     return 0x10000u | (sum[0] / pixels) | (sum[1] / pixels) << 5 | (sum[2] / pixels) << 10;
 }
 
+static int field_face_texture(const PeImpModel *model, const PeImpFace *face, const int corners[3],
+                              unsigned first_page, unsigned first_palette, unsigned *page, unsigned *clut) {
+    const unsigned column = (face->page & 15u) - first_page;
+    const unsigned palette = (face->clut >> 6) - first_palette;
+    if (column >= FIELD_TEX_WORDS / 64 || palette >= model->pal_rows) return 0;
+    for (int i = 0; i < 3; i++) {
+        const unsigned u = face->uv[corners[i]][0], v = face->uv[corners[i]][1];
+        if (column * 128 + u >= 2 * FIELD_TEX_WORDS || column * 128 + u >= model->w || v >= model->h)
+            return 0;
+    }
+    *page = 0x80u | (FIELD_TEX_Y / 256) << 4 | (FIELD_TEX_X / 64 + column);
+    *clut = (FIELD_CLUT_Y + palette) << 6 | (FIELD_CLUT_X / 16);
+    return 1;
+}
+
 static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned shade) {
     static const int split[2][3] = {{0, 1, 2}, {1, 3, 2}};
     const uint64_t vblanks = (uint32_t)Psyz_VideoVSync(-1);
@@ -580,14 +684,33 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                     for (int t = 0; t <= quad && emitted < FIELD_MESH_TRIANGLES; t++) {
                         const int *v = split[t];
                         if ((visible & (t ? 14 : 7)) != (t ? 14 : 7)) continue;
-                        const unsigned rgb = face_colour(model, f, v, s_field_mesh[p->kind].first_page,
-                                                         s_field_mesh[p->kind].first_palette);
-                        if (!rgb) continue;
                         const double *a = screen[v[0]], *d = screen[v[1]], *c = screen[v[2]];
                         if ((a[0] < 0 && d[0] < 0 && c[0] < 0) || (a[0] >= PIC_W && d[0] >= PIC_W && c[0] >= PIC_W) ||
                             (a[1] < 0 && d[1] < 0 && c[1] < 0) || (a[1] >= FIELD_H && d[1] >= FIELD_H && c[1] >= FIELD_H)) continue;
                         const int depth = (int)((a[2] + d[2] + c[2]) / 3);
                         const int bucket = depth <= FIELD_UI_OT_LAST ? FIELD_UI_OT_LAST + 1 : depth;
+                        unsigned page, clut;
+                        const unsigned first_page = s_field_mesh[p->kind].first_page;
+                        const unsigned first_palette = s_field_mesh[p->kind].first_palette;
+                        if (s_texture_kind == p->kind &&
+                            field_face_texture(model, f, v, first_page, first_palette, &page, &clut)) {
+                            FieldTexturedTriangle *packet = &s_tex_packets[slot][i][emitted++];
+                            *packet = (FieldTexturedTriangle){
+                                .color.bytes = {shade, shade, shade, 0x24},
+                                .x0 = (uint16_t)(int)lround(a[0]), .y0 = (uint16_t)(int)lround(a[1]),
+                                .x1 = (uint16_t)(int)lround(d[0]), .y1 = (uint16_t)(int)lround(d[1]),
+                                .x2 = (uint16_t)(int)lround(c[0]), .y2 = (uint16_t)(int)lround(c[1]),
+                                .u0 = f->uv[v[0]][0], .v0 = f->uv[v[0]][1], .clut = clut,
+                                .u1 = f->uv[v[1]][0], .v1 = f->uv[v[1]][1], .page = page,
+                                .u2 = f->uv[v[2]][0], .v2 = f->uv[v[2]][1]
+                            };
+                            packet->tag.length = 7;
+                            packet->tag.address = ordering[bucket].address;
+                            ordering[bucket].address = (uintptr_t)packet;
+                            continue;
+                        }
+                        const unsigned rgb = face_colour(model, f, v, first_page, first_palette);
+                        if (!rgb) continue;
                         RenderColorTrianglePacket *packet = &s_mesh_packets[slot][i][emitted++];
                         *packet = (RenderColorTrianglePacket){
                             .color.bytes = {(rgb & 31) * 8 * shade / 128, ((rgb >> 5) & 31) * 8 * shade / 128,
@@ -672,7 +795,10 @@ static int on_background(void *ctx, void *user) {
     for (int k = 0; k < 2; k++) quads[k].color.bytes.r = quads[k].color.bytes.g = quads[k].color.bytes.b = shade;
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[0]);
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[1]);
-    if (s_placement_meshes && !s_hold) draw_placement_meshes(ordering, b->slot, shade);
+    if (s_placement_meshes && !s_hold) {
+        prepare_field_texture();
+        draw_placement_meshes(ordering, b->slot, shade);
+    }
     if ((s_placement_markers || s_placement_meshes) && !s_hold) draw_placement_markers(ordering, b->slot, shade);
     if (s_foreground)
         for (size_t i = 0; i < s_mask_count; i++) {
@@ -695,6 +821,7 @@ static int on_background(void *ctx, void *user) {
 /* PE loaded another room of its own: its pages are already in VRAM, so just stop. */
 static int on_scene(void *ctx, void *user) {
     (void)ctx, (void)user;
+    clear_field_texture();
     if (s_masks) DrawSync(0);
     free_masks();
     free(s_original_picture);
@@ -705,6 +832,7 @@ static int on_scene(void *ctx, void *user) {
 
 void pe_re_stage_hide(void) {
     s_shade = 128, s_curtain = s_hold = 0;
+    clear_field_texture();
     if (s_original_picture) {
         RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
         DrawSync(0);
@@ -723,9 +851,11 @@ void pe_re_stage_set_placement_idle(int on) { s_placement_idle = on; }
 void pe_re_stage_set_placement_meshes(int on) {
     if (s_placement_meshes == on) return;
     s_placement_meshes = on;
+    clear_field_texture();
     load_field_meshes();
 }
 void pe_re_stage_set_placements(const PeReEnemyPlacement *placements, int count) {
+    clear_field_texture();
     s_placement_count = count;
     if (count) memcpy(s_placements, placements, (size_t)count * sizeof *placements);
     if (s_placement_meshes) load_field_meshes();
@@ -782,6 +912,7 @@ void pe_re_stage_init(const char *mod_id, const char *store) {
 
 void pe_re_stage_shutdown(void) {
     s_show = s_walk.active = 0;
+    clear_field_texture();
     for (unsigned kind = 0; kind < 0x40; kind++)
         if (s_field_mesh[kind].tried) free_field_mesh(kind);
     free_masks();
