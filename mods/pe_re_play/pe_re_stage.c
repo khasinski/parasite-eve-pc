@@ -22,6 +22,7 @@
 #include "pe_game.h"
 #include "pe1/boot_display.h"
 #include "pe1/field_movement.h"
+#include "pe1/game_state.h"
 #include "pe1/geom_state.h"
 #include "pe1/pad_state.h"
 #include "pe1/player_entity.h"
@@ -54,6 +55,7 @@
 #define FIELD_CLUT_ROWS 16
 #define FIELD_IDLE_KIND 0x1f
 #define FIELD_IDLE_MOVE 0
+#define BACKDROP_SETTLE 10       /* frames Aya stands still before the battle's camera is fixed */
 #define FIELD_TURN_RADIANS (6.283185307179586 / 4096.0)
 
 typedef struct RoomMaskPacket {
@@ -71,6 +73,23 @@ static RenderTexturedQuad s_quads[2][2];               /* per draw slot: left an
 static RenderTexturedQuad s_curtain_quads[2][2];       /* black, in front of everything */
 static int s_shade = 128, s_curtain, s_hold;           /* a door's fade: picture brightness, black, no walking */
 static uint16_t *s_original_picture;
+static uint16_t *s_picture;                            /* the room's picture as uploaded, kept for battles */
+/* The room behind a battle: the trip's fight takes place in a PE room, but its picture is
+ * swapped for the imported room's and PE's own view matrix for the room's camera, anchored so
+ * Aya's place when the battle begins is where she stood in the room. Every native renderer
+ * (actors, effects, cursors) reads that matrix, so they agree with the picture. PE's pages
+ * and matrix come back when the battle ends. */
+static struct {
+    int armed, on, still;                              /* still: frames she hasn't moved */
+    double room[3];                                    /* where she stood, room units */
+    double anchor[3];                                  /* her PE position when the battle began */
+    GteMatrix saved_view;
+    s32 saved_distance;
+    uint16_t *saved_pages;
+    RenderLightColor light, saved_light;               /* the room's light (from the shell room), the PE room's */
+    s8 tint_level, saved_tint_level;
+    u8 shade, light_up, light_down;                    /* Aya's lighting in the room, given to every actor */
+} s_backdrop;
 static RoomMaskPacket *s_masks;
 static size_t s_mask_count;
 static int s_placement_markers;
@@ -232,10 +251,116 @@ static int on_move(void *ctx, void *user) {
     return 1;
 }
 
+static void backdrop_off(int restore) {
+    if (!s_backdrop.on) return;
+    if (restore) {
+        GeomScrollCoordinates *c = &g_GeomScroll.state.position;
+        if (c->matrixWords) *(GteMatrix *)c->matrixWords = s_backdrop.saved_view;
+        if (c->projectionDistance) *c->projectionDistance = s_backdrop.saved_distance;
+        c->lightTint = s_backdrop.saved_light, c->meshTintLevel = s_backdrop.saved_tint_level;
+        if (s_backdrop.saved_pages) {
+            RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
+            DrawSync(0);
+            LoadImage(&r, s_backdrop.saved_pages);
+            DrawSync(0);
+        }
+    }
+    free(s_backdrop.saved_pages);
+    s_backdrop.saved_pages = NULL;
+    s_backdrop.on = 0;
+}
+
+static void backdrop_on(const FieldActor *aya) {
+    GeomScrollCoordinates *c = &g_GeomScroll.state.position;
+    RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
+    if (!c->matrixWords || !c->projectionDistance || !s_picture) return;
+    s_backdrop.anchor[0] = aya->pos_x / 65536.0;
+    s_backdrop.anchor[1] = aya->pos_y / 65536.0;
+    s_backdrop.anchor[2] = aya->pos_z / 65536.0;
+    s_backdrop.still = 0;
+    s_backdrop.saved_view = *(GteMatrix *)c->matrixWords;
+    s_backdrop.saved_distance = *c->projectionDistance;
+    s_backdrop.saved_light = c->lightTint, s_backdrop.saved_tint_level = c->meshTintLevel;
+    DrawSync(0);
+    if ((s_backdrop.saved_pages = malloc(PIC_W * PIC_H * sizeof *s_backdrop.saved_pages)) != NULL) {
+        StoreImage(&r, s_backdrop.saved_pages);
+        DrawSync(0);
+    }
+    LoadImage(&r, s_picture);
+    DrawSync(0);
+    s_backdrop.on = 1;
+}
+
+/* During the battle: the room's camera as PE's own, the screen held where the picture is; the
+ * actors drawn through the same view (`out`). */
+static void backdrop_camera(PeHookFieldCamera *out) {
+    GeomScrollCoordinates *c = &g_GeomScroll.state.position;
+    GteMatrix v = s_camera.view;
+    const double delta[3] = {
+        (s_backdrop.room[0] - s_camera.eye[0]) / RE_UNITS_PER_PE_UNIT - s_backdrop.anchor[0],
+        (s_backdrop.room[1] - s_camera.eye[1]) / RE_UNITS_PER_PE_UNIT - s_backdrop.anchor[1],
+        (s_backdrop.room[2] - s_camera.eye[2]) / RE_UNITS_PER_PE_UNIT - s_backdrop.anchor[2]
+    };
+    for (int row = 0; row < 3; row++) {
+        const s16 *m = v.m[row];
+        v.t[row] = (s32)lround((m[0] * delta[0] + m[1] * delta[1] + m[2] * delta[2]) / 4096.0);
+    }
+    *(GteMatrix *)c->matrixWords = v;
+    *(GteMatrix *)out->matrix = v;
+    out->distance = s_camera.distance;
+    out->player_only = 0;
+    *c->projectionDistance = s_camera.distance;
+    c->screenOffsetX = 160, c->screenOffsetY = 112;
+    c->lightTint = s_backdrop.light, c->meshTintLevel = s_backdrop.tint_level;   /* lit as she was in the room */
+    for (FieldActor *a = g_FieldActorListHead; a; a = a->next) {   /* not by the PE room's light zones */
+        a->render_object.shade = s_backdrop.shade;
+        a->render_object.lightPositiveY = s_backdrop.light_up;
+        a->render_object.lightNegativeY = s_backdrop.light_down;
+    }
+}
+
+int pe_re_stage_backdrop_arm(void) {
+    if (!s_show || !s_walk.active || !s_picture || !s_camera.distance) return 0;
+    backdrop_off(1);
+    s_backdrop.room[0] = s_walk.x, s_backdrop.room[1] = s_walk.y, s_backdrop.room[2] = s_walk.z;
+    s_backdrop.light = g_GeomScroll.state.position.lightTint;
+    s_backdrop.tint_level = g_GeomScroll.state.position.meshTintLevel;
+    if (g_PlayerEntity) {
+        s_backdrop.shade = g_PlayerEntity->render_object.shade;
+        s_backdrop.light_up = g_PlayerEntity->render_object.lightPositiveY;
+        s_backdrop.light_down = g_PlayerEntity->render_object.lightNegativeY;
+    }
+    s_backdrop.armed = 1;
+    return 1;
+}
+
+void pe_re_stage_backdrop_release(void) {
+    backdrop_off(1);
+    s_backdrop.armed = 0;
+}
+
+int pe_re_stage_backdrop_shown(void) { return s_backdrop.on; }
+
 static int on_camera(void *ctx, void *user) {
     (void)user;
     PeHookFieldCamera *camera = ctx;
     const FieldActor *aya = camera->player;
+    if (s_backdrop.armed) {
+        const int battle = aya && pe_in_battle();
+        if (battle && !s_backdrop.on) backdrop_on(aya);
+        else if (!battle && s_backdrop.on) backdrop_off(1);
+        if (s_backdrop.on) {
+            /* PE walks her to her battle place first: follow her until she has stood still a moment */
+            if (s_backdrop.still < BACKDROP_SETTLE) {
+                const double x = aya->pos_x / 65536.0, y = aya->pos_y / 65536.0, z = aya->pos_z / 65536.0;
+                const int moved = x != s_backdrop.anchor[0] || y != s_backdrop.anchor[1] || z != s_backdrop.anchor[2];
+                s_backdrop.anchor[0] = x, s_backdrop.anchor[1] = y, s_backdrop.anchor[2] = z;
+                s_backdrop.still = moved ? 0 : s_backdrop.still + 1;
+            }
+            backdrop_camera(camera);
+            return 1;
+        }
+    }
     if (!s_show || !s_camera.distance || !aya || !s_walk.active) return 0;
     /* Only the render changes position. The native player stays at the
      * host location for its floor, contact checks, and save data. */
@@ -400,6 +525,8 @@ int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camer
             }
             LoadImage(&r, pix);
             DrawSync(0);                                     /* retires packets for the previous view */
+            free(s_picture);
+            s_picture = pix, pix = NULL;                     /* kept for a battle backdrop */
             free_masks();
             build_masks(set, &view, &s_masks, &s_mask_count);
             s_walk.active = 1;
@@ -784,6 +911,17 @@ static void draw_placement_markers(RenderNativeTag *ordering, int slot, unsigned
 static int on_background(void *ctx, void *user) {
     (void)user;
     PeHookFieldBackground *b = ctx;
+    if (s_backdrop.on) {                               /* a battle in front of the room's picture */
+        if (b->stage == 0) return 1;
+        if (b->slot < 0 || b->slot > 1 || !b->ordering) return 0;
+        RenderTexturedQuad *quads = s_quads[b->slot];
+        picture_quad(&quads[0], 0, PIC_TOP, PIC_SPLIT, PIC_TOP + FIELD_H);
+        picture_quad(&quads[1], PIC_SPLIT, PIC_TOP, PIC_W, PIC_TOP + FIELD_H);
+        for (int k = 0; k < 2; k++) quads[k].color.bytes.r = quads[k].color.bytes.g = quads[k].color.bytes.b = 128;
+        link_quad(&((RenderNativeTag *)b->ordering)[ROOM_BACKGROUND_OT], &quads[0]);
+        link_quad(&((RenderNativeTag *)b->ordering)[ROOM_BACKGROUND_OT], &quads[1]);
+        return 1;
+    }
     if (!s_show) return 0;
     if (b->stage == 0) return 1;                       /* skip the PE room's own tiles */
     if (b->slot < 0 || b->slot > 1 || !b->ordering) return 0;
@@ -821,6 +959,7 @@ static int on_background(void *ctx, void *user) {
 /* PE loaded another room of its own: its pages are already in VRAM, so just stop. */
 static int on_scene(void *ctx, void *user) {
     (void)ctx, (void)user;
+    backdrop_off(0);                                   /* a new room's pages and camera are coming */
     clear_field_texture();
     if (s_masks) DrawSync(0);
     free_masks();
@@ -918,4 +1057,8 @@ void pe_re_stage_shutdown(void) {
     free_masks();
     free(s_original_picture);
     s_original_picture = NULL;
+    backdrop_off(0);
+    s_backdrop.armed = 0;
+    free(s_picture);
+    s_picture = NULL;
 }

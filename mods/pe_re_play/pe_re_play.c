@@ -155,6 +155,7 @@ static int pause_for_battle(void) {
     pe_re_stage_player(&s_session.x, &s_session.z, &s_session.facing);
     s_session.floor = pe_re_stage_floor();
     s_battle_paused = 1;
+    pe_re_stage_backdrop_arm();                  /* the battle plays in front of this room */
     pe_re_stage_hide();
     snprintf(s_status, sizeof s_status, "Paused for battle.");
     return 1;
@@ -163,6 +164,7 @@ static int pause_for_battle(void) {
 static void resume_after_battle(void) {
     if (!s_battle_paused) return;
     s_battle_paused = 0;
+    pe_re_stage_backdrop_release();
     s_cross_held = s_square_held = 1;
     s_session.key = s_session.key_trg = 0;
 }
@@ -305,6 +307,7 @@ static void stop(void) {
     s_room_reported = 0;
     pe_re_stage_set_placements(NULL, 0);
     s_battle_paused = 0;
+    pe_re_stage_backdrop_release();
     snprintf(s_status, sizeof s_status, "Not playing.");
 }
 
@@ -361,6 +364,7 @@ static int on_save_read(void *ctx, void *user) {
     (void)ctx, (void)user;
     pe_re_door_cancel();
     s_battle_paused = 0;
+    pe_re_stage_backdrop_release();
     s_typing = TYPE_NONE;
     pe_re_stage_set_placements(NULL, 0);
     if (s_playing) {                            /* the loaded save replaces what was being played */

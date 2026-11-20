@@ -36,4 +36,11 @@ void pe_re_stage_set_size(int percent);
 double pe_re_stage_scale(void);                    /* room units per PE unit, for the status line */
 void pe_re_stage_shutdown(void);
 
+/* A battle trip: the room shown now (its picture, camera, Aya's place) is armed as the backdrop
+ * for the battle that follows in a PE room; during that battle it replaces the PE room's picture
+ * and camera. 1 when armed (the room must be shown). Release it when the trip ends. */
+int pe_re_stage_backdrop_arm(void);
+void pe_re_stage_backdrop_release(void);
+int pe_re_stage_backdrop_shown(void);
+
 #endif
