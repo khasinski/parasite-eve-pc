@@ -91,8 +91,16 @@ int pe_re_message(const PeImpRoomLogic *room, uint32_t index, char *out, size_t 
     return w ? 0 : -1;
 }
 
-static int unlocked(const PeReProgress *p, uint8_t id) { return (p->unlocked[id >> 3] >> (id & 7)) & 1; }
-static void unlock(PeReProgress *p, uint8_t id) { p->unlocked[id >> 3] |= (uint8_t)(1u << (id & 7)); }
+/* A lock's state is the game's own door-lock flag (RE2: Key_flg, flag group 31, bit lock id & 0x3F,
+ * which Sce_Door sets and room scripts read: SCE_AT.C), kept also in the progress list older saves
+ * hold. Either one open means open. */
+static int unlocked(const PeReProgress *p, uint8_t id) {
+    return ((p->unlocked[id >> 3] >> (id & 7)) & 1) || pe_re_flag(&p->flags, PE_RE_FG_KEY, id & 0x3Fu);
+}
+static void unlock(PeReProgress *p, uint8_t id) {
+    p->unlocked[id >> 3] |= (uint8_t)(1u << (id & 7));
+    pe_re_flag_set(&p->flags, PE_RE_FG_KEY, id & 0x3Fu, 1);
+}
 
 PeReDoorAnswer pe_re_door_try(PeReProgress *p, const PeImpDoor *d, const PeImpRoomLogic *items, char *say, size_t n) {
     char key[48];

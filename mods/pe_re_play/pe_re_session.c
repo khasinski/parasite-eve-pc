@@ -212,8 +212,8 @@ static PeReChange zone_act(PeReSession *s, const char *store, const PeReZoneHit 
         pe_re_flag_set(&s->progress.flags, (unsigned)h->data[0] | (unsigned)h->data[1] << 8,
                        ((unsigned)h->data[2] | (unsigned)h->data[3] << 8) & 0xFF, h->data[4] | h->data[5]);
         return PE_RE_STAY;
-    case PE_RE_ZONE_SAVE: case PE_RE_ZONE_ITEMBOX: case PE_RE_ZONE_STATUS:   /* for the mod: a typewriter,
-                                                       an item box, the pocket to use something */
+    case PE_RE_ZONE_SAVE: case PE_RE_ZONE_ITEMBOX: case PE_RE_ZONE_STATUS: case PE_RE_ZONE_WINDOWS:
+        /* for the mod: a typewriter, an item box, the pocket, a computer (pe_re_session_computer) */
         return PE_RE_ZONE;
     default: return PE_RE_STAY;                            /* water, damage, drawers, ...: not yet */
     }
@@ -256,7 +256,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
             continue;
         }
         if (hits[i].sce == PE_RE_ZONE_ITEM || hits[i].sce == PE_RE_ZONE_SAVE || hits[i].sce == PE_RE_ZONE_ITEMBOX ||
-            hits[i].sce == PE_RE_ZONE_STATUS)
+            hits[i].sce == PE_RE_ZONE_STATUS || hits[i].sce == PE_RE_ZONE_WINDOWS)
             continue;                                      /* those only ever answer an examine */
         const PeReChange c = zone_act(s, store, &hits[i], 0, why, n);
         if (c != PE_RE_STAY) return c;
@@ -290,6 +290,38 @@ PeReChange pe_re_session_tick(PeReSession *s) {
     s->run.message = -1;
     if (m >= 0 && !pe_re_message(s->logic, (uint32_t)m, s->said, sizeof s->said)) return PE_RE_SAID;
     return PE_RE_STAY;
+}
+
+/* RE2's computers are engine code (PC_EVENT.C), not room scripts. The main hall's (Computer200,
+ * room 2-00): its door-lock service releases the hall's side doors with the Blue Card (item 0x35),
+ * setting Common flag 0x46 and taking the card; the room's script then opens the doors. */
+#define RE2_BLUE_CARD 0x35
+#define RE2_COMMON_FLAGS 4
+#define RE2_HALL_DOORS_RELEASED 0x46
+
+static int main_hall(const PeReSession *s) {
+    return s->game && !strcmp(s->game->game, "re2") && s->stage == 1 && s->room == 0;
+}
+
+PeReComputer pe_re_session_computer(PeReSession *s, int use) {
+    s->said[0] = 0;
+    if (!main_hall(s)) {
+        snprintf(s->said, sizeof s->said, "The computer doesn't respond.");
+        return PE_RE_COMPUTER_SAID;
+    }
+    if (pe_re_flag(&s->progress.flags, RE2_COMMON_FLAGS, RE2_HALL_DOORS_RELEASED)) {
+        snprintf(s->said, sizeof s->said, "Door lock service: the hall's side doors are released.");
+        return PE_RE_COMPUTER_SAID;
+    }
+    if (!pe_re_has(&s->progress, RE2_BLUE_CARD)) {
+        snprintf(s->said, sizeof s->said, "Door lock service: the hall's side doors are locked. A card key releases them.");
+        return PE_RE_COMPUTER_SAID;
+    }
+    if (!use) return PE_RE_COMPUTER_ASK;                   /* "Use the Blue Card?" is the mod's to ask */
+    pe_re_flag_set(&s->progress.flags, RE2_COMMON_FLAGS, RE2_HALL_DOORS_RELEASED, 1);
+    pe_re_lose(&s->progress, RE2_BLUE_CARD, 0);
+    snprintf(s->said, sizeof s->said, "Door lock service: the hall's side doors are released.");
+    return PE_RE_COMPUTER_DONE;
 }
 
 PeReChange pe_re_session_use(PeReSession *s, uint16_t item) {

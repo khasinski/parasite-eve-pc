@@ -128,7 +128,7 @@ static void text_enemies(char *out, unsigned size) {
 }
 
 /* ---- the pocket and the item box ---- */
-enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE };
+enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE, PICK_COMPUTER };
 /* A typewriter save: the ribbon is used when she says yes; PE's own save screen opens on the next
  * free frame (as its save phones' script opcode opens it); backing out without a save gives the
  * ribbon back once the room is up again. */
@@ -206,6 +206,12 @@ static void open_item_box(int at) {
 static void zone_handed(void) {
     switch (s_session.zone.sce) {
     case PE_RE_ZONE_STATUS: open_pocket(); break;
+    case PE_RE_ZONE_WINDOWS: {                       /* a computer: says, or asks to use a card */
+        static const char *const yes_no[2] = {"Yes", "No"};
+        if (pe_re_session_computer(&s_session, 0) != PE_RE_COMPUTER_ASK) say(s_session.said);
+        else if (re_host()->choose("Use the Blue Card?", yes_no, 2, 0)) s_pick = PICK_COMPUTER;
+        break;
+    }
     case PE_RE_ZONE_ITEMBOX: open_item_box(0); break;
     case PE_RE_ZONE_SAVE: {
         static const char *const yes_no[2] = {"Yes", "No"};
@@ -227,6 +233,10 @@ static void picked(void) {
     const int mode = s_pick;
     s_pick = PICK_NONE;
     if (c < 0) return;                                      /* backed out */
+    if (mode == PICK_COMPUTER) {
+        if (c == 0 && pe_re_session_computer(&s_session, 1) == PE_RE_COMPUTER_DONE) say(s_session.said);
+        return;
+    }
     if (mode == PICK_SAVE) {
         if (c == 0 && !pe_re_lose(&s_session.progress, PE_RE2_INK_RIBBON, 1)) s_typing = TYPE_OPEN, s_typed = 0;
         return;
@@ -472,11 +482,12 @@ static int on_frame(void *ctx, void *user) {
 
 /* Testing: stand in the middle of the room's next doorway, pickup or message zone (those its scripts
  * set up), one after another each time (the camera stays as it is). */
+static int s_door_pick, s_door_start = -1;            /* testing: Go to that door */
 static void to_zone(uint32_t tag, int kind, const char *what) {
     static uint32_t s_next[10];
     static const PeImpRoomLogic *s_room;
     uint32_t n = 0, *next = &s_next[tag == PE_IMP_LOGIC_PICK ? 1 : tag != PE_IMP_LOGIC_TRIG ? 0 : 2 + (kind & 7)];
-    int front = 0;
+    int front = 0, zone_floor = -1;
     double bx = 0, bz = 0;
     int found = 0;
     if (s_battle_paused) return;
@@ -485,6 +496,7 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
         return;
     }
     if (s_room != s_session.logic) s_room = s_session.logic, memset(s_next, 0, sizeof s_next);
+    if (tag == PE_IMP_LOGIC_DOOR && s_door_start >= 0) *next = (uint32_t)s_door_start, s_door_start = -1;
     for (uint32_t k = 0; k < n && !found; k++) {
         const uint32_t i = (*next + k) % n;
         PeImpDoor d;
@@ -509,6 +521,7 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
             continue;
         }
         for (int c = 0; c < 4; c++) bx += zone->x[c] / 4.0, bz += zone->z[c] / 4.0;
+        zone_floor = zone->floor & 0x80 ? -1 : zone->floor;
         found = 1, *next = i + 1;
     }
     if (!found) { snprintf(s_status, sizeof s_status, "This room has no %ss.", what); return; }
@@ -521,13 +534,21 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
         }
         pe_re_front(bx, bz, face + 2048, &bx, &bz);
     }
-    re_host()->place_player(bx, bz);
-    if (front) re_host()->face_player(face), s_session.facing = face;
+    if (zone_floor >= 0 && zone_floor != s_session.floor) {   /* the zone is on another floor: put her on it */
+        s_session.x = bx, s_session.z = bz, s_session.floor = zone_floor;
+        if (front) s_session.facing = face;
+        show_room(1);
+        if (!s_playing) return;
+    } else {
+        re_host()->place_player(bx, bz);
+        if (front) re_host()->face_player(face), s_session.facing = face;
+    }
     s_session.x = bx, s_session.z = bz;
     snprintf(s_status, sizeof s_status, "At a %s in room %x-%02X: press Cross.", what, (unsigned)s_session.stage + 1,
              (unsigned)s_session.room);
 }
 static void to_door(void) { to_zone(PE_IMP_LOGIC_DOOR, 0, "door"); }
+static void to_that_door(void) { s_door_start = s_door_pick; to_zone(PE_IMP_LOGIC_DOOR, 0, "door"); }
 static void to_pickup(void) { to_zone(PE_IMP_LOGIC_PICK, 0, "pickup"); }
 static void to_message(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_SCE_MESSAGE, "message"); }
 static void to_event(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_EVENT, "event zone"); }
@@ -626,6 +647,8 @@ static int init(void) {
     pe_menu_register_int("Testing", "Stage", "The room to jump to: its stage.", &s_jump_stage, 1, 7, 1);
     pe_menu_register_int("Testing", "Room", "The room to jump to: its number in the stage (1-05 is 5).", &s_jump_room, 0, 63, 1);
     pe_menu_register_action("Testing", "Go to that room", "Jumps there, camera 0, keeping what's been picked up.", to_room);
+    pe_menu_register_int("Testing", "Door", "A door of this room by its number (0 first), for Go to that door.", &s_door_pick, 0, 31, 1);
+    pe_menu_register_action("Testing", "Go to that door", "Puts Aya in that doorway (or the next one the scripts set up).", to_that_door);
     pe_menu_register_action(0, "Refresh the list", "Looks for games imported since the game started.", refresh);
     pe_menu_register_info(0, "Status", "Where you are, or the last thing said.", text_status);
     pe_menu_register_info(0, "Pocket", "What you've picked up in this game.", text_pocket);

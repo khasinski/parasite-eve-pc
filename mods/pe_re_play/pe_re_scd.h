@@ -53,6 +53,7 @@
 #define PE_RE_ENEMIES_MAX 16
 #define PE_RE_FG_ENEMY 6                       /* Enemy_flg: placements killed (Enemy_flg2, 7, from stage 4) */
 #define PE_RE_FG_USE 10                        /* Use_flg: items usable here (bit = item) */
+#define PE_RE_FG_KEY 31                        /* Key_flg: door locks opened (bit = lock id & 0x3F) */
 #define PE_RE_LEVELS 4                         /* gosub levels a task keeps */
 #define PE_RE_SLOTS 256                        /* zone ids */
 #define PE_RE_WORK_F_ATARI 0                   /* the zone hit in front of the player (SCE_AT.C) */
