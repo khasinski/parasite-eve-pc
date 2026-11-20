@@ -41,9 +41,9 @@ int pe_re_camera_at(const PeImpRoomLogic *l, int camera, double x, double z);
  * up, and not turned into something else by an aot_reset. */
 int pe_re_door_at(const PeImpRoomLogic *l, const PeReScdRun *run, double x, double z, PeImpDoor *door);
 
-/* The nearest point to (x, z) where a body of `radius` stands clear of the collision (a door's
+/* The nearest point to (x, z) where a body of `radius` stands clear of `floor`'s walls (a door's
  * landing point can sit on a wall's edge): rings out to `reach`. 1 and the point, or 0. */
-int pe_re_free_spot(const PeRe2RoomCollision *c, double *x, double *z, int radius, int reach);
+int pe_re_free_spot(const PeRe2RoomCollision *c, int floor, double *x, double *z, int radius, int reach);
 
 /* ---- the session ---- */
 typedef struct {

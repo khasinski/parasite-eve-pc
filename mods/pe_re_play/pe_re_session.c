@@ -83,15 +83,15 @@ int pe_re_door_at(const PeImpRoomLogic *l, const PeReScdRun *run, double x, doub
     return -1;
 }
 
-int pe_re_free_spot(const PeRe2RoomCollision *c, double *x, double *z, int radius, int reach) {
-    if (!pe_imp_re2_blocked(c, *x, *z, radius)) return 1;
+int pe_re_free_spot(const PeRe2RoomCollision *c, int floor, double *x, double *z, int radius, int reach) {
+    if (!pe_imp_re2_blocked_on(c, (unsigned)floor, *x, *z, radius)) return 1;
     for (int r = 50; r <= reach; r += 50)                  /* rings of 16 points, nearest ring first */
         for (int k = 0; k < 16; k++) {
             static const double dir[16][2] = {{1, 0}, {.924, .383}, {.707, .707}, {.383, .924}, {0, 1}, {-.383, .924},
                                               {-.707, .707}, {-.924, .383}, {-1, 0}, {-.924, -.383}, {-.707, -.707},
                                               {-.383, -.924}, {0, -1}, {.383, -.924}, {.707, -.707}, {.924, -.383}};
             const double nx = *x + r * dir[k][0], nz = *z + r * dir[k][1];
-            if (!pe_imp_re2_blocked(c, nx, nz, radius)) { *x = nx, *z = nz; return 1; }
+            if (!pe_imp_re2_blocked_on(c, (unsigned)floor, nx, nz, radius)) { *x = nx, *z = nz; return 1; }
         }
     return 0;
 }

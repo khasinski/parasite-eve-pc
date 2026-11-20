@@ -108,6 +108,24 @@ int main(void) {
         free(l);
     }
 
+    /* ramps: a slope rising toward +x to floor 1; stairs rising toward -z from floor 1 to floor 2 */
+    static PeRe2RoomCollision ramps;
+    memset(&ramps, 0, sizeof ramps);
+    ramps.count = 3;
+    ramps.entries[0] = (PeRe2Collider){0, 0, 1000, 500, 11, (uint16_t)(1u << 6 | 0u << 4), 1};
+    ramps.entries[1] = (PeRe2Collider){2000, 0, 2500, 1000, 12, (uint16_t)(2u << 6 | 3u << 4), 2};
+    ramps.entries[2] = (PeRe2Collider){-500, 0, -400, 500, 0, 0, 2};   /* a wall on floor 1 only */
+    double gy = 1;
+    CHECK(pe_imp_re2_ground(&ramps, 0, 250, &gy) && gy == 0);
+    CHECK(pe_imp_re2_ground(&ramps, 400, 250, &gy) && gy == -720 && pe_re_floor_of((int)gy) == 0);
+    CHECK(pe_imp_re2_ground(&ramps, 500, 250, &gy) && gy == -900 && pe_re_floor_of((int)gy) == 1);   /* halfway: up, as the game rounds */
+    CHECK(pe_imp_re2_ground(&ramps, 1000, 250, &gy) && gy == -1800 && pe_re_floor_of((int)gy) == 1);
+    CHECK(pe_imp_re2_ground(&ramps, 2200, 1000, &gy) && gy == -1800);   /* stairs' bottom: their lowest floor */
+    CHECK(pe_imp_re2_ground(&ramps, 2200, 0, &gy) && gy == -3600 && pe_re_floor_of((int)gy) == 2);
+    CHECK(!pe_imp_re2_ground(&ramps, 1500, 250, &gy));
+    CHECK(!pe_imp_re2_blocked_on(&ramps, 0, 500, 250, 50));           /* ramps never block */
+    CHECK(pe_imp_re2_blocked_on(&ramps, 1, -450, 250, 50) && !pe_imp_re2_blocked_on(&ramps, 0, -450, 250, 50));
+
     char id[PE_IMP_ID_MAX];
     pe_re_logic_id("re2", 0, 0x0a, 1, id, sizeof id);
     CHECK(!strcmp(id, "re2:logic/10a-1"));
@@ -168,10 +186,11 @@ int main(void) {
             uint32_t coll = 0;
             const uint8_t *data = pe_imp_logic_section(t.logic, PE_IMP_LOGIC_COLL, NULL, &coll);
             PeRe2RoomCollision c;
-            if (data && !pe_imp_re2_collision_floor(data, coll, (unsigned)pe_re_floor_of(d.next_y), &c)) {
+            if (data && !pe_imp_re2_collision_all(data, coll, &c)) {
+                const int fl = pe_re_floor_of(d.next_y);
                 double fx = d.next_x, fz = d.next_z;
-                if (pe_imp_re2_blocked(&c, fx, fz, 280)) blocked++;
-                if (!pe_re_free_spot(&c, &fx, &fz, 280, 2000)) {          /* as the stage places Aya */
+                if (pe_imp_re2_blocked_on(&c, (unsigned)fl, fx, fz, 280)) blocked++;
+                if (!pe_re_free_spot(&c, fl, &fx, &fz, 280, 2000)) {      /* as the stage places Aya */
                     stuck++;
                     if (getenv("PE_TEST_RE_STUCK"))
                         printf("  stuck: %x%02x door %u -> %x%02x at %d,%d (y %d), %u colliders\n", stage + 1, room, i,

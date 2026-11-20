@@ -193,7 +193,7 @@ static int on_frame(void *ctx, void *user) {
     int facing;
     char why[200] = "";
     pe_re_stage_player(&x, &z, &facing);
-    s_session.facing = facing;
+    s_session.facing = facing, s_session.floor = pe_re_stage_floor();
     switch (pe_re_session_step(&s_session, s_store, x, z, pressed, why, sizeof why)) {
     case PE_RE_CAMERA: show_room(1); break;
     case PE_RE_ROOM:
@@ -261,6 +261,13 @@ static void to_zone(uint32_t tag, const char *what) {
 static void to_door(void) { to_zone(PE_IMP_LOGIC_DOOR, "door"); }
 static void to_pickup(void) { to_zone(PE_IMP_LOGIC_PICK, "pickup"); }
 static void to_message(void) { to_zone(PE_IMP_LOGIC_TRIG, "message"); }
+static void to_ramp(void) {
+    if (!s_playing) return;
+    if (!pe_re_stage_to_ramp()) { snprintf(s_status, sizeof s_status, "This room has no slopes or stairs."); return; }
+    pe_re_stage_player(&s_session.x, &s_session.z, &s_session.facing);
+    s_session.floor = pe_re_stage_floor();
+    snprintf(s_status, sizeof s_status, "At the foot of a slope or stairs: walk onto it.");
+}
 static void to_room(void) {
     char why[200] = "";
     if (!s_playing) { snprintf(s_status, sizeof s_status, "Start a game first."); return; }
@@ -295,8 +302,8 @@ static void text_pocket(char *out, unsigned size) {
     }
 }
 static void text_status(char *out, unsigned size) {
-    if (s_playing) snprintf(out, size, "%s x %.0f, z %.0f, doors %d, scale %.1f.", s_status, s_session.x, s_session.z,
-                            s_session.doors_taken, pe_re_stage_scale());
+    if (s_playing) snprintf(out, size, "%s x %.0f, z %.0f, floor %d, doors %d, scale %.1f.", s_status, s_session.x,
+                            s_session.z, s_session.floor, s_session.doors_taken, pe_re_stage_scale());
     else snprintf(out, size, "%s", s_status);
 }
 
@@ -316,6 +323,7 @@ static int init(void) {
     pe_menu_register_action(0, "Stop", "Back to the Parasite Eve room and camera; Continue picks it up again.", stop);
     pe_menu_register_action("Testing", "Go to the next door", "Puts Aya in the room's doorways, one after another.", to_door);
     pe_menu_register_action("Testing", "Go to the next pickup", "Puts Aya on the room's items, one after another.", to_pickup);
+    pe_menu_register_action("Testing", "Go to the next ramp", "Puts Aya at the foot of the room's slopes and stairs, one after another.", to_ramp);
     pe_menu_register_action("Testing", "Go to the next message", "Puts Aya where the room's messages are read, one after another.", to_message);
     pe_menu_register_int("Testing", "Stage", "The room to jump to: its stage.", &s_jump_stage, 1, 7, 1);
     pe_menu_register_int("Testing", "Room", "The room to jump to: its number in the stage (1-05 is 5).", &s_jump_room, 0, 63, 1);

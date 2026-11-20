@@ -73,6 +73,7 @@ static struct {
     int yaw;
     int active;
     int ghost;              /* landed where the collision has no free floor: walk freely until clear */
+    int floor;              /* the floor whose walls she meets; ramps change it */
 } s_walk;
 
 static void free_masks(void) {
@@ -107,6 +108,10 @@ static void prepare_camera(const PeImpRoomView *view) {
     s_camera.distance = distance;
 }
 
+static int blocked_here(double x, double z) {
+    return pe_imp_re2_blocked_on(&s_walk.collision, (unsigned)s_walk.floor, x, z, AYA_ROOM_RADIUS);
+}
+
 /* Prefer the ground under the middle of the view. Try nearby points on
  * the floor to avoid spawning inside a desk, staircase, or railing. */
 static int spawn_on_floor(void) {
@@ -126,7 +131,7 @@ static int spawn_on_floor(void) {
             double x = s_camera.eye[0] + depth * (m->m[2][0] + sy * m->m[1][0] + sx * m->m[0][0]) / 4096.0;
             double z = s_camera.eye[2] + depth * (m->m[2][2] + sy * m->m[1][2] + sx * m->m[0][2]) / 4096.0;
             if (!fallback) fallback = 1, fx = x, fz = z;
-            if (pe_imp_re2_blocked(&s_walk.collision, x, z, AYA_ROOM_RADIUS)) continue;
+            if (blocked_here(x, z)) continue;
             s_walk.x = x;
             s_walk.z = z;
             s_walk.ghost = 0;
@@ -163,9 +168,16 @@ static int on_move(void *ctx, void *user) {
             s_walk.yaw = (int)lround(atan2(-dx, -dz) * (2048.0 / acos(-1.0)));
             if (s_walk.ghost) {
                 s_walk.x += dx, s_walk.z += dz;
-                s_walk.ghost = pe_imp_re2_blocked(&s_walk.collision, s_walk.x, s_walk.z, AYA_ROOM_RADIUS);
+                s_walk.ghost = blocked_here(s_walk.x, s_walk.z);
             } else {
-                pe_imp_re2_slide(&s_walk.collision, &s_walk.x, &s_walk.z, dx, dz, AYA_ROOM_RADIUS);
+                pe_imp_re2_slide_on(&s_walk.collision, (unsigned)s_walk.floor, &s_walk.x, &s_walk.z, dx, dz, AYA_ROOM_RADIUS);
+            }
+            double ground;                             /* on a slope or stairs: their height, maybe a new floor */
+            if (pe_imp_re2_ground(&s_walk.collision, s_walk.x, s_walk.z, &ground)) {
+                s_walk.y = ground;
+                s_walk.floor = pe_re_floor_of((int)lround(ground));
+            } else {
+                s_walk.y = -(double)s_walk.floor * PE_RE2_FLOOR_HEIGHT;
             }
         }
     }
@@ -313,16 +325,17 @@ int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camer
         uint32_t coll = 0;
         const uint8_t *data = logic ? pe_imp_logic_section(logic, PE_IMP_LOGIC_COLL, NULL, &coll) : NULL;
         if (!s_camera.distance) snprintf(why, n, "camera %d has no projection", camera);
-        else if ((!data || pe_imp_re2_collision_floor(data, coll, (unsigned)floor, &s_walk.collision)) &&
+        else if ((!data || pe_imp_re2_collision_all(data, coll, &s_walk.collision)) &&
                  pe_imp_re2_image_collision(set, &s_walk.collision))
             snprintf(why, n, "%s has no collision", room_id);
         else if (!place && !spawn_on_floor()) snprintf(why, n, "no free floor in camera %d", camera);
         else {
+            s_walk.floor = floor;
             s_walk.y = -(double)floor * PE_RE2_FLOOR_HEIGHT;
             if (place) {                                     /* a door's landing point: clear of walls */
                 s_walk.x = x, s_walk.z = z, s_walk.yaw = facing;
                 /* The collision knows the ground floor only: upstairs a landing can be all "wall". */
-                s_walk.ghost = !pe_re_free_spot(&s_walk.collision, &s_walk.x, &s_walk.z, AYA_ROOM_RADIUS, 2000);
+                s_walk.ghost = !pe_re_free_spot(&s_walk.collision, floor, &s_walk.x, &s_walk.z, AYA_ROOM_RADIUS, 2000);
             } else {
                 s_walk.ghost = 0;
             }
@@ -400,9 +413,37 @@ void pe_re_stage_hide(void) {
 
 int pe_re_stage_active(void) { return s_show && s_walk.active; }
 void pe_re_stage_player(double *x, double *z, int *facing) { *x = s_walk.x, *z = s_walk.z, *facing = s_walk.yaw; }
+int pe_re_stage_floor(void) { return s_walk.floor; }
+
+/* Testing: stand at the foot of the room's next slope or stairs, just outside it. */
+int pe_re_stage_to_ramp(void) {
+    static unsigned s_next;
+    for (unsigned k = 0; k < s_walk.collision.count; k++) {
+        const unsigned i = (s_next + k) % s_walk.collision.count;
+        const PeRe2Collider *c = &s_walk.collision.entries[i];
+        if (c->shape != 11 && c->shape != 12) continue;
+        double x = (c->x0 + c->x1) / 2.0, z = (c->z0 + c->z1) / 2.0;
+        switch ((c->type >> 4) & 3) {                   /* the bottom end, a body's width outside */
+        case 0: x = c->x0 - AYA_ROOM_RADIUS; break;
+        case 1: x = c->x1 + AYA_ROOM_RADIUS; break;
+        case 2: z = c->z0 - AYA_ROOM_RADIUS; break;
+        default: z = c->z1 + AYA_ROOM_RADIUS; break;
+        }
+        uint32_t f = c->floors;
+        int low = 0;
+        if (c->shape == 12) for (; f && !(f & 1) && low < 31; low++, f >>= 1) {}
+        else low = ((c->type >> 6) & 0x1F) - 1;
+        s_walk.floor = low < 0 ? 0 : low;
+        s_walk.y = -(double)s_walk.floor * PE_RE2_FLOOR_HEIGHT;
+        pe_re_stage_place(x, z);
+        s_next = i + 1;
+        return 1;
+    }
+    return 0;
+}
 void pe_re_stage_place(double x, double z) {
     s_walk.x = x, s_walk.z = z;
-    s_walk.ghost = pe_imp_re2_blocked(&s_walk.collision, x, z, AYA_ROOM_RADIUS);
+    s_walk.ghost = blocked_here(x, z);
 }
 void pe_re_stage_set_masks(int on) { s_foreground = on; }
 void pe_re_stage_set_size(int percent) { if (percent != s_size) s_size = percent, pe_re_scale(); }

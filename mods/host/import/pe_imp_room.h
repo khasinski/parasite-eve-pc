@@ -45,7 +45,11 @@ int pe_imp_room_foreground_depth(const PeImpImageSet *set, uint32_t frame,
 #define PE_RE2_COLLIDER_MAX 512u
 typedef struct {
     int32_t x0, z0, x1, z1;
-    uint8_t shape;
+    uint8_t shape;            /* Id & 15: 0 box, 1-4 triangles, 5 diamond, 6 circle, 7-8 capsules, 9 box,
+                               * 10 no wall for the player, 11 slope, 12 stairs (SCA.C Sca_rtn_tbl) */
+    uint16_t type;            /* Type: bits 4-5 a ramp's direction, 6-10 its top's floor level, 11-15 a box's
+                               * height in 100s */
+    uint32_t floors;          /* the floors it belongs to (bit n: floor n) */
 } PeRe2Collider;
 
 typedef struct {
@@ -55,6 +59,18 @@ typedef struct {
 
 int pe_imp_re2_collision(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *out);
 int pe_imp_re2_collision_floor(const uint8_t *sca, uint32_t size, unsigned floor, PeRe2RoomCollision *out);
+/* Every floor's entries, for walking between floors: the _on calls below pick a floor's walls. */
+int pe_imp_re2_collision_all(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *out);
+/* Walls of `floor` only; slopes, stairs and shape 10 never block (the player walks them). */
+int pe_imp_re2_blocked_on(const PeRe2RoomCollision *room, unsigned floor, double x, double z, double radius);
+void pe_imp_re2_slide_on(const PeRe2RoomCollision *room, unsigned floor, double *x, double *z, double dx, double dz,
+                         double radius);
+/* Standing on a slope or stairs at (x, z): 1 and the ground's height (y down), else 0. A ramp runs
+ * from one floor below its top (a slope) or its lowest floor (stairs) up to its top, along its
+ * direction: 0 rises toward +x, 1 toward -x, 2 toward +z, 3 toward -z (SCA.C Sca_get_slope_high,
+ * Sca_get_high, Sca_get_low; read for behaviour). Heights are smooth: the game's 450-unit steps
+ * aren't modelled. */
+int pe_imp_re2_ground(const PeRe2RoomCollision *room, double x, double z, double *y);
 int pe_imp_re2_image_collision(const PeImpImageSet *set, PeRe2RoomCollision *out);
 int pe_imp_re2_blocked(const PeRe2RoomCollision *room, double x, double z, double radius);
 void pe_imp_re2_slide(const PeRe2RoomCollision *room, double *x, double *z,

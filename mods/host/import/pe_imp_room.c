@@ -260,7 +260,7 @@ int pe_imp_re2_collision(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *
     return pe_imp_re2_collision_floor(sca, size, 0, out);
 }
 
-int pe_imp_re2_collision_floor(const uint8_t *sca, uint32_t size, unsigned floor, PeRe2RoomCollision *out) {
+static int collision(const uint8_t *sca, uint32_t size, unsigned floor, int all, PeRe2RoomCollision *out) {
     out->count = 0;
     if (!sca) return 1;
     /* The count includes the 16-byte header. The next RDT section may
@@ -271,13 +271,21 @@ int pe_imp_re2_collision_floor(const uint8_t *sca, uint32_t size, unsigned floor
     for (uint32_t i = 1; i < count; i++) {
         const uint8_t *p = sca + i * 16;
         unsigned shape = le16(p + 8) & 15;
-        if (floor > 31 || !(le32(p + 12) & (1u << floor)) || shape > 12) continue;   /* this floor's */
+        const uint32_t floors = le32(p + 12);
+        if (shape > 12 || (!all && (floor > 31 || !(floors & (1u << floor))))) continue;   /* this floor's */
         int32_t x = signed16(le16(p)), z = signed16(le16(p + 2));
         out->entries[out->count++] = (PeRe2Collider){
-            x, z, x + (int32_t)le16(p + 4), z + (int32_t)le16(p + 6), (uint8_t)shape
+            x, z, x + (int32_t)le16(p + 4), z + (int32_t)le16(p + 6), (uint8_t)shape, (uint16_t)le16(p + 10), floors
         };
     }
     return out->count ? 0 : 1;
+}
+
+int pe_imp_re2_collision_floor(const uint8_t *sca, uint32_t size, unsigned floor, PeRe2RoomCollision *out) {
+    return collision(sca, size, floor, 0, out);
+}
+int pe_imp_re2_collision_all(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *out) {
+    return collision(sca, size, 0, 1, out);
 }
 
 int pe_imp_re2_image_collision(const PeImpImageSet *set, PeRe2RoomCollision *out) {
@@ -301,10 +309,12 @@ static int triangle_hit(const PeRe2Collider *c, double x, double z, double radiu
     return line >= -radius * hypot(w, h);
 }
 
-int pe_imp_re2_blocked(const PeRe2RoomCollision *room, double x, double z, double radius) {
+/* floor < 0: every entry, as decoded (pe_imp_re2_blocked); else that floor's walls */
+static int blocked(const PeRe2RoomCollision *room, int floor, double x, double z, double radius) {
     if (fabs(x) > 32000 || fabs(z) > 32000) return 1;
     for (unsigned i = 0; i < room->count; i++) {
         const PeRe2Collider *c = &room->entries[i];
+        if (floor >= 0 && (!(c->floors & (1u << floor)) || c->shape >= 10)) continue;
         double dx = x - fmin(c->x1, fmax(c->x0, x));
         double dz = z - fmin(c->z1, fmax(c->z0, z));
         if (dx * dx + dz * dz > radius * radius) continue;
@@ -323,8 +333,14 @@ int pe_imp_re2_blocked(const PeRe2RoomCollision *room, double x, double z, doubl
     return 0;
 }
 
-void pe_imp_re2_slide(const PeRe2RoomCollision *room, double *x, double *z,
-                      double dx, double dz, double radius) {
+int pe_imp_re2_blocked(const PeRe2RoomCollision *room, double x, double z, double radius) {
+    return blocked(room, -1, x, z, radius);
+}
+int pe_imp_re2_blocked_on(const PeRe2RoomCollision *room, unsigned floor, double x, double z, double radius) {
+    return blocked(room, floor > 31 ? 31 : (int)floor, x, z, radius);
+}
+
+static void slide(const PeRe2RoomCollision *room, int floor, double *x, double *z, double dx, double dz, double radius) {
     double distance = hypot(dx, dz);
     if (!isfinite(distance) || distance > 64000 || radius < 1) return;
     /* Substeps check the swept path. Test each axis after a blocked diagonal
@@ -333,14 +349,49 @@ void pe_imp_re2_slide(const PeRe2RoomCollision *room, double *x, double *z,
     dx /= steps;
     dz /= steps;
     for (unsigned i = 0; i < steps; i++) {
-        if (!pe_imp_re2_blocked(room, *x + dx, *z + dz, radius)) {
+        if (!blocked(room, floor, *x + dx, *z + dz, radius)) {
             *x += dx;
             *z += dz;
         } else {
-            if (!pe_imp_re2_blocked(room, *x + dx, *z, radius)) *x += dx;
-            if (!pe_imp_re2_blocked(room, *x, *z + dz, radius)) *z += dz;
+            if (!blocked(room, floor, *x + dx, *z, radius)) *x += dx;
+            if (!blocked(room, floor, *x, *z + dz, radius)) *z += dz;
         }
     }
+}
+
+void pe_imp_re2_slide(const PeRe2RoomCollision *room, double *x, double *z, double dx, double dz, double radius) {
+    slide(room, -1, x, z, dx, dz, radius);
+}
+void pe_imp_re2_slide_on(const PeRe2RoomCollision *room, unsigned floor, double *x, double *z, double dx, double dz,
+                         double radius) {
+    slide(room, floor > 31 ? 31 : (int)floor, x, z, dx, dz, radius);
+}
+
+int pe_imp_re2_ground(const PeRe2RoomCollision *room, double x, double z, double *y) {
+    for (unsigned i = 0; i < room->count; i++) {
+        const PeRe2Collider *c = &room->entries[i];
+        if ((c->shape != 11 && c->shape != 12) || x < c->x0 || x > c->x1 || z < c->z0 || z > c->z1) continue;
+        /* the top: its floor level only (the steps field is a box's height, not a ramp's: SCA.C's
+         * ground walk sets High_y = level * -1800 for these) */
+        const double top = -(double)((c->type >> 6) & 0x1F) * PE_RE2_FLOOR_HEIGHT;
+        double bottom = top + PE_RE2_FLOOR_HEIGHT;                 /* a slope: one floor */
+        if (c->shape == 12) {                                      /* stairs: from their lowest floor */
+            uint32_t f = c->floors;
+            bottom = 0;
+            for (int k = 0; f && !(f & 1) && k < 31; k++, f >>= 1) bottom -= PE_RE2_FLOOR_HEIGHT;
+        }
+        const double w = c->x1 - c->x0, d = c->z1 - c->z0;
+        double t;                                                  /* 0 at the bottom end, 1 at the top */
+        switch ((c->type >> 4) & 3) {
+        case 0: t = w ? (x - c->x0) / w : 0; break;
+        case 1: t = w ? (c->x1 - x) / w : 0; break;
+        case 2: t = d ? (z - c->z0) / d : 0; break;
+        default: t = d ? (c->z1 - z) / d : 0; break;
+        }
+        *y = bottom + (top - bottom) * fmin(1, fmax(0, t));
+        return 1;
+    }
+    return 0;
 }
 
 int pe_imp_room_view(const PeImpImageSet *set, uint32_t frame, PeImpRoomView *view) {
