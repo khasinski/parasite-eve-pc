@@ -43,8 +43,10 @@ static void play(int i) {
     if (s_played[i] || !s_wave[i] || !a || !au) return;
     const int ready = a->status(s_wave[i]);
     if (ready < 0) { s_played[i] = 1; return; }          /* not imported: the door is silent */
-    if (ready == 1 && au->preview_clip(s_wave[i]) != 0) {
-        s_played[i] = 1;
+    if (ready != 1) return;
+    const int played = au->preview_clip(s_wave[i]);
+    if (played != 0) s_played[i] = 1;
+    if (played > 0) {
         pe_mod_log("pe_re_play", "door: wave %d playing", i + 1);
     }
 }

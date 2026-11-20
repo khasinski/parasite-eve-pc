@@ -375,7 +375,8 @@ typedef struct PePhoneCallsApi {
  * The runtime only reports where the room's scripts put enemies; an encounter policy (another mod)
  * decides what happens: placement battles, random encounters, nothing. Events (pe_event_id):
  *   "re_play.room"     (const PeReRoomEvent *) the player came into a room (a door, a jump, a
- *                      loaded save), with the enemies its scripts placed
+ *                      loaded save), with the enemies its scripts placed. Door arrivals are
+ *                      published after the transition completes.
  *   "re_play.enemies"  (const PeReRoomEvent *) the room's scripts placed more since (an event)
  * Positions are the source game's room units (x, z on the floor, y down, 1,800 a floor). A placed
  * enemy's killed flag is the game's own: report a defeat with defeated() and the room's scripts stop
@@ -401,9 +402,9 @@ typedef struct PeReRoomEvent {
 
 typedef struct PeRePlayApi {
     uint32_t struct_size;
-    /* The room being played and its placements (valid until the next frame); 0, or -1 if not playing. */
+    /* The reported room and its placements (valid until the next frame); 0, or -1 if unavailable. */
     int (*room)(PeReRoomEvent *out);
-    /* A placed enemy was beaten: set its killed flag. 0, or -1 (not playing, flag 0xFF). */
+    /* A placed enemy was beaten: set its killed flag. 0, or -1 (room unavailable, flag 0xFF). */
     int (*defeated)(uint8_t killed_flag);
 } PeRePlayApi;
 

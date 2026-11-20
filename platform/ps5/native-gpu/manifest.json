@@ -4155,7 +4155,7 @@
     },
     {
       "path": "mods/host/pe_services.h",
-      "sha256": "d95d201fe06268ce85ee3efb9c9afd222df6b720400913063ecabf6aace1d251"
+      "sha256": "976a01a93af543accf4c579104482139bd0d7bd3781c7d9d048db5289ea5e9ba"
     },
     {
       "path": "mods/host/pe_shop_api.c",
@@ -4995,7 +4995,7 @@
     },
     {
       "path": "mods/pe_re_play/pe_re_play.c",
-      "sha256": "df9685d4e2c8204bca514608161f88b4aa072eff1121aceceabcbbc4f1989e90"
+      "sha256": "290883a20c2a5c1b36fc31b9835361fb1ac97cef3f4e5d024404f68ca0e65b49"
     },
     {
       "path": "mods/pe_re_play/pe_re_save.c",

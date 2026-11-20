@@ -83,12 +83,11 @@ static void say(const char *text) {
  * Each room's placements go out as "re_play.room" when she comes in and "re_play.enemies" when
  * its scripts place more; an encounter mod decides what to do with them. */
 static PeReEnemyPlacement s_enemies[PE_RE_ENEMIES_MAX];
-static int s_nenemies, s_reported;
-static const PeImpRoomLogic *s_reported_room;
+static int s_nenemies, s_reported, s_room_reported;
 static int s_room_event = -1, s_enemies_event = -1;
 
 static int api_room(PeReRoomEvent *out) {
-    if (!s_playing || !s_session.game) return -1;
+    if (!out || !s_playing || !s_room_reported || !pe_re_stage_active() || pe_re_door_busy()) return -1;
     memset(out, 0, sizeof *out);
     out->struct_size = sizeof *out;
     out->game = s_session.game->game, out->stage = s_session.stage, out->room = s_session.room;
@@ -96,7 +95,7 @@ static int api_room(PeReRoomEvent *out) {
     return 0;
 }
 static int api_defeated(uint8_t killed_flag) {
-    if (!s_playing) return -1;
+    if (!s_playing || !s_room_reported || !pe_re_stage_active() || pe_re_door_busy()) return -1;
     const int r = pe_re_session_defeated(&s_session, killed_flag);
     if (!r) s_nenemies = pe_re_session_enemies(&s_session, s_enemies, PE_RE_ENEMIES_MAX), s_reported = s_nenemies;
     return r;
@@ -104,12 +103,12 @@ static int api_defeated(uint8_t killed_flag) {
 static const PeRePlayApi s_api = {sizeof s_api, api_room, api_defeated};
 
 static void report_enemies(void) {
-    const int fresh = s_session.logic != s_reported_room;
+    const int fresh = !s_room_reported;
     const int n = pe_re_session_enemies(&s_session, s_enemies, PE_RE_ENEMIES_MAX);
     if (!fresh && n <= s_reported) { s_nenemies = n; return; }
-    s_nenemies = n, s_reported = n, s_reported_room = s_session.logic;
+    s_nenemies = n, s_reported = n, s_room_reported = 1;
     PeReRoomEvent e;
-    api_room(&e);
+    if (api_room(&e)) return;
     e.fresh = fresh;
     pe_event_emit(fresh ? s_room_event : s_enemies_event, &e);
     if (n) pe_mod_log(MOD_ID, "%s %x-%02X: %d enemies placed (first: kind 0x%02X at %d,%d)", fresh ? "room" : "more",
@@ -118,7 +117,8 @@ static void report_enemies(void) {
 }
 
 static void text_enemies(char *out, unsigned size) {
-    if (!s_playing) { snprintf(out, size, "-"); return; }
+    PeReRoomEvent room;
+    if (api_room(&room)) { snprintf(out, size, "-"); return; }
     if (!s_nenemies) { snprintf(out, size, "None placed here."); return; }
     int at = snprintf(out, size, "%d placed (reported for fights):", s_nenemies);
     for (int i = 0; i < s_nenemies && at > 0 && (unsigned)at < size; i++)
@@ -231,6 +231,7 @@ static void show_room(int place) {
     if (pe_re_stage_show(room, s_session.logic, s_session.camera, s_session.floor, place, s_session.x, s_session.z,
                          s_session.facing, why, sizeof why)) {
         snprintf(s_status, sizeof s_status, "Stopped: %s.", why);
+        pe_re_door_cancel();
         pe_re_stage_hide();
         pe_re_session_end(&s_session);
         s_playing = 0;
@@ -268,6 +269,7 @@ static void stop(void) {
     if (s_playing) pe_re_stage_hide();
     pe_re_session_end(&s_session);
     s_playing = 0;
+    s_room_reported = 0;
     snprintf(s_status, sizeof s_status, "Not playing.");
 }
 
@@ -374,12 +376,16 @@ static int on_frame(void *ctx, void *user) {
     pe_re_stage_set_masks(s_masks);
     pe_re_stage_set_size(s_size);
     if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */
-        s_cross_held = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;
-        if (pe_re_door_step() == PE_RE_DOOR_SWAP) {
+        const unsigned buttons = ~(unsigned)g_PadPackets[0].buttons;
+        s_cross_held = (buttons & PAD_CROSS) != 0;
+        s_square_held = (buttons & PAD_SQUARE) != 0;
+        const PeReDoorStep door_step = pe_re_door_step();
+        if (door_step == PE_RE_DOOR_SWAP) {
             show_room(1);
             if (s_playing && s_session.said[0]) say(s_session.said);
         }
         if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
+        if (s_playing && door_step == PE_RE_DOOR_IDLE) report_enemies();
         return 0;
     }
     s_session.talking = pe_re_box_busy;
@@ -413,6 +419,7 @@ static int on_frame(void *ctx, void *user) {
     switch (pe_re_session_step(&s_session, s_store, x, z, pressed, why, sizeof why)) {
     case PE_RE_CAMERA: show_room(1); break;
     case PE_RE_ROOM:                             /* the door's transition puts the next room up at black */
+        s_room_reported = 0;
         pe_re_door_begin(s_session.game->game, &s_session.door);
         snprintf(s_status, sizeof s_status, "Through the door to %x-%02X.%s%s", (unsigned)s_session.stage + 1,
                  (unsigned)s_session.room, s_session.said[0] ? " " : "", s_session.said);
@@ -426,7 +433,7 @@ static int on_frame(void *ctx, void *user) {
         if (*why) snprintf(s_status, sizeof s_status, "That door: %s.", why);
         break;
     }
-    if (s_playing) report_enemies();
+    if (s_playing && !pe_re_door_busy()) report_enemies();
     if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
     return 0;
 }
@@ -521,6 +528,8 @@ static void to_room(void) {
         snprintf(s_status, sizeof s_status, "Can't go there: %s.", why);
         return;
     }
+    pe_re_door_cancel();
+    s_room_reported = 0;
     show_room(0);
 }
 
