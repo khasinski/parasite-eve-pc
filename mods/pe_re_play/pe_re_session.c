@@ -134,6 +134,10 @@ int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint3
     return 0;
 }
 
+void pe_re_door_sound_id(const char *game, const PeImpDoor *d, unsigned wave, char *out, size_t n) {
+    snprintf(out, n, "%s:sound/door%02x/wave%02u", game, d->texture < 55 ? (unsigned)d->texture : 0u, wave);
+}
+
 int pe_re_floor_of(int y) {
     const int f = (y - PE_RE2_FLOOR_HEIGHT / 2) / -PE_RE2_FLOOR_HEIGHT;
     return f < 0 ? 0 : f > 31 ? 31 : f;
@@ -154,6 +158,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
         const uint32_t stage = d.stage == PE_RE_STAGE_HERE ? s->stage : d.stage;
         if (!pe_re_session_enter(s, store, stage, d.room, d.camera, d.next_x, d.next_z, d.next_dir, why, n)) {
             s->floor = pe_re_floor_of(d.next_y);
+            s->door = d;
             s->doors_taken++;
             return PE_RE_ROOM;
         }

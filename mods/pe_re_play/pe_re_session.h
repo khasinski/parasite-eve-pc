@@ -58,6 +58,7 @@ typedef struct {
     PeReProgress progress;            /* locks opened, pickups taken, the pocket, the game's flags */
     PeReScdRun run;                   /* what this room's scripts set up when the player came in */
     char said[200];                   /* the last thing to tell the player ("" if nothing) */
+    PeImpDoor door;                   /* the last door taken (for its transition) */
     int doors_taken;
 } PeReSession;
 
@@ -72,6 +73,10 @@ int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, ui
  * left as it is: set s->floor (pe_re_floor_of) for a landing on another. */
 int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint32_t room, int camera, double x,
                         double z, int facing, char *why, size_t n);
+/* A door's sound in the store: its door file is DOOR<texture, 2 hex digits>.DO2 (the game picks it by
+ * the door's Dtex_type: bio2-ds DOOR.C Dtex_file, read for behaviour; 55 and up reuse DOOR00), whose
+ * sound bank the importer files as sound/door<nn>; `wave` from 1 ("re2:sound/door0a/wave01"). */
+void pe_re_door_sound_id(const char *game, const PeImpDoor *d, unsigned wave, char *out, size_t n);
 /* The floor a height stands on (y down, 1,800 units a floor, as the game rounds it: SCA.C). */
 int pe_re_floor_of(int y);
 void pe_re_session_place(PeReSession *s, double x, double z, int facing);

@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "4dbe35602c6397521979bfb94e0c7421a040a0f2d959f50cb9c26d76bfc39bc5"
+      "sha256": "87f4f762ea8ea79f28d55cf8a8a03570fe498f876238d96296d68c159fdbb5d2"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",

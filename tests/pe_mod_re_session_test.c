@@ -143,7 +143,8 @@ int main(void) {
     }
     PeImpScan sc;
     pe_imp_registry_reset();
-    CHECK(!pe_imp_add_reader(&g_re2_logic_ps1) && !pe_imp_add_reader(&g_re2_rooms_ps1) && !pe_imp_add_reader(&g_re2_items_ps1));
+    CHECK(!pe_imp_add_reader(&g_re2_logic_ps1) && !pe_imp_add_reader(&g_re2_rooms_ps1) && !pe_imp_add_reader(&g_re2_items_ps1) &&
+          !pe_imp_add_reader(&g_re2_door_ps1));
     CHECK(!pe_imp_set_naming("re2", g_re2_naming));
     CHECK(!pe_imp_scan(s_store, re2, NULL, &sc));
     const PeReGame *g = pe_re_game_named("re2");
@@ -202,6 +203,37 @@ int main(void) {
             if (!seen[ts][d.room] && tail < ROOMS_MAX) seen[ts][d.room] = 1, queue[tail++] = ts << 8 | d.room;
         }
         free(rl);
+    }
+    /* every door's sound bank is in the store (as the importer files them) */
+    {
+        PeImpAsset *assets = NULL;
+        const int na = pe_imp_catalog_assets(s_store, "re2", &assets);
+        int with = 0, without = 0, waves[4] = {0};
+        for (uint32_t st = 0; st < 7; st++)
+            for (uint32_t rm = 0; rm < 64; rm++) {
+                char lid[PE_IMP_ID_MAX];
+                PeImpRoomLogic *rl = NULL;
+                pe_re_logic_id("re2", st, rm, 0, lid, sizeof lid);
+                if (pe_imp_catalog_roomlogic(s_store, lid, &rl, NULL, 0)) continue;
+                uint32_t n = 0;
+                pe_imp_logic_section(rl, PE_IMP_LOGIC_DOOR, &n, NULL);
+                for (uint32_t i = 0; i < n; i++) {
+                    PeImpDoor d;
+                    char sid[PE_IMP_ID_MAX];
+                    int found = 0;
+                    if (pe_imp_logic_door(rl, i, &d)) continue;
+                    for (unsigned w = 1; w <= 4; w++) {
+                        pe_re_door_sound_id("re2", &d, w, sid, sizeof sid);
+                        for (int a = 0; a < na; a++) if (!strcmp(assets[a].id, sid)) { found = 1, waves[w - 1]++; break; }
+                    }
+                    found ? with++ : without++;
+                }
+                free(rl);
+            }
+        free(assets);
+        printf("door sounds: %d doors with their bank, %d without; waves 1-4 present %d %d %d %d\n", with, without,
+               waves[0], waves[1], waves[2], waves[3]);
+        CHECK(with > 0 && without * 10 <= with);
     }
     printf("RE2 from the street: %d rooms reached, %d doors, %d to rooms not imported, %d without their camera, "
            "%d onto blocked floor, %d with no free floor near\n", tail, doors, missing, no_camera, blocked, stuck);

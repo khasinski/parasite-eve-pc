@@ -56,6 +56,8 @@ static int s_show, s_foreground = 1, s_view, s_size = 100;
 static double s_scale, s_aya_height;
 #define RE_UNITS_PER_PE_UNIT s_scale
 static RenderTexturedQuad s_quads[2][2];               /* per draw slot: left and right halves */
+static RenderTexturedQuad s_curtain_quads[2][2];       /* black, in front of everything */
+static int s_shade = 128, s_curtain, s_hold;           /* a door's fade: picture brightness, black, no walking */
 static uint16_t *s_original_picture;
 static RoomMaskPacket *s_masks;
 static size_t s_mask_count;
@@ -151,7 +153,7 @@ static int on_move(void *ctx, void *user) {
     (void)user;
     const FieldActor *aya = ctx;
     if (!s_show || !s_walk.active || aya != g_PlayerEntity || !pe_free_field()) return 0;
-    if (pe_re_box_busy()) return 1;                    /* reading a message: she stands still */
+    if (pe_re_box_busy() || s_hold) return 1;         /* reading a message, or a door: she stands still */
     int analog = (g_PadPackets[0].header & 0xF000) == 0x7000 &&
                  (abs(g_PadPackets[0].leftX - 128) > 16 || abs(g_PadPackets[0].leftY - 128) > 16);
     if (analog || (g_FieldPadBits & (FIELD_PAD_UP | FIELD_PAD_DOWN | FIELD_PAD_LEFT | FIELD_PAD_RIGHT))) {
@@ -378,12 +380,27 @@ static int on_background(void *ctx, void *user) {
     if (b->slot < 0 || b->slot > 1 || !b->ordering) return 0;
     RenderNativeTag *ordering = b->ordering;
     RenderTexturedQuad *quads = s_quads[b->slot];
+    const u8 shade = (u8)(s_shade < 0 ? 0 : s_shade > 128 ? 128 : s_shade);   /* the texture times shade / 128 */
     picture_quad(&quads[0], 0, PIC_TOP, PIC_SPLIT, PIC_TOP + FIELD_H);
     picture_quad(&quads[1], PIC_SPLIT, PIC_TOP, PIC_W, PIC_TOP + FIELD_H);
+    for (int k = 0; k < 2; k++) quads[k].color.bytes.r = quads[k].color.bytes.g = quads[k].color.bytes.b = shade;
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[0]);
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[1]);
     if (s_foreground)
-        for (size_t i = 0; i < s_mask_count; i++) link_quad(&ordering[s_masks[i].depth], &s_masks[i].quad[b->slot]);
+        for (size_t i = 0; i < s_mask_count; i++) {
+            RenderTexturedQuad *m = &s_masks[i].quad[b->slot];
+            m->color.bytes.r = m->color.bytes.g = m->color.bytes.b = shade;
+            link_quad(&ordering[s_masks[i].depth], m);
+        }
+    if (s_curtain) {                                   /* the picture's texels at colour 0: black, Aya too */
+        RenderTexturedQuad *c = s_curtain_quads[b->slot];
+        picture_quad(&c[0], 0, PIC_TOP, PIC_SPLIT, PIC_TOP + FIELD_H);
+        picture_quad(&c[1], PIC_SPLIT, PIC_TOP, PIC_W, PIC_TOP + FIELD_H);
+        for (int k = 0; k < 2; k++) {
+            c[k].color.bytes.r = c[k].color.bytes.g = c[k].color.bytes.b = 0;
+            link_quad(&ordering[FIELD_UI_OT_LAST + 1], &c[k]);
+        }
+    }
     return 1;
 }
 
@@ -399,6 +416,7 @@ static int on_scene(void *ctx, void *user) {
 }
 
 void pe_re_stage_hide(void) {
+    s_shade = 128, s_curtain = s_hold = 0;
     if (s_original_picture) {
         RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
         DrawSync(0);
@@ -446,6 +464,7 @@ void pe_re_stage_place(double x, double z) {
     s_walk.ghost = blocked_here(x, z);
 }
 void pe_re_stage_set_masks(int on) { s_foreground = on; }
+void pe_re_stage_fade(int shade, int curtain, int hold) { s_shade = shade, s_curtain = curtain, s_hold = hold; }
 void pe_re_stage_set_size(int percent) { if (percent != s_size) s_size = percent, pe_re_scale(); }
 double pe_re_stage_scale(void) { return s_scale; }
 

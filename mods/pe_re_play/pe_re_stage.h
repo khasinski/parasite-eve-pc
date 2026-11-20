@@ -21,6 +21,9 @@ int pe_re_stage_floor(void);                       /* the floor she's on now (ra
 int pe_re_stage_to_ramp(void);                     /* testing: the foot of the next slope or stairs; 0 if none */
 void pe_re_stage_place(double x, double z);        /* move the player (testing) */
 void pe_re_stage_set_masks(int on);
+/* A door's transition: the picture's brightness (128 full, 0 black), a black curtain in front of
+ * everything (Aya too), and no walking while `hold`. */
+void pe_re_stage_fade(int shade, int curtain, int hold);
 /* Aya's size in the room, percent of an RE person's height (100: as tall as Leon). */
 void pe_re_stage_set_size(int percent);
 double pe_re_stage_scale(void);                    /* room units per PE unit, for the status line */

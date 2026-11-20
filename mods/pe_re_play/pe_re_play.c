@@ -5,6 +5,7 @@
  *   pe_re_session.c  the session: room, camera, position; camera switch zones and doors (no PE code)
  *   pe_re_stage.c    the room on the field screen: picture, masks, camera, walking with collision
  *   pe_re_box.c      messages in the game's dialogue band
+ *   pe_re_door.c     going through a door: fade, the door's sounds, the next room
  *   pe_re_save.c     the progress, kept with the Parasite Eve save
  *   pe_re_play.c     the mod: F1 > Play imported games, and each frame's step
  *
@@ -30,6 +31,7 @@
 #include "pe_extension_store.h"
 #include "pe_game.h"
 #include "pe_re_box.h"
+#include "pe_re_door.h"
 #include "pe_re_save.h"
 #include "pe_re_session.h"
 #include "pe_re_stage.h"
@@ -95,6 +97,7 @@ static int keep_progress(void) {
 }
 
 static void stop(void) {
+    pe_re_door_cancel();
     pe_re_box_forget();
     if (s_session.game && keep_progress()) pe_re_save_encode(&s_session, 0, s_saved);   /* for Continue */
     if (s_playing) pe_re_stage_hide();
@@ -152,6 +155,7 @@ static void resume(void) {
 static int on_save_read(void *ctx, void *user) {
     PeReSaved saved;
     (void)ctx, (void)user;
+    pe_re_door_cancel();
     if (s_playing) {                            /* the loaded save replaces what was being played */
         pe_re_box_forget();
         pe_re_stage_hide();
@@ -186,6 +190,15 @@ static int on_frame(void *ctx, void *user) {
     g_FieldPadPressed &= ~FIELD_PRESS_CROSS;    /* the room underneath never hears Cross: no talk, no examine */
     pe_re_stage_set_masks(s_masks);
     pe_re_stage_set_size(s_size);
+    if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */
+        s_cross_held = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;
+        if (pe_re_door_step() == PE_RE_DOOR_SWAP) {
+            show_room(1);
+            if (s_playing && s_session.said[0]) say(s_session.said);
+        }
+        if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
+        return 0;
+    }
     const int cross = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;
     const int pressed = cross && !s_cross_held && !pe_re_box_busy();   /* a box's Cross is the box's */
     s_cross_held = cross;
@@ -196,13 +209,10 @@ static int on_frame(void *ctx, void *user) {
     s_session.facing = facing, s_session.floor = pe_re_stage_floor();
     switch (pe_re_session_step(&s_session, s_store, x, z, pressed, why, sizeof why)) {
     case PE_RE_CAMERA: show_room(1); break;
-    case PE_RE_ROOM:
-        show_room(1);
-        if (s_playing && s_session.said[0]) {
-            say(s_session.said);
-            const size_t used = strlen(s_status);
-            snprintf(s_status + used, sizeof s_status - used, " %s", s_session.said);
-        }
+    case PE_RE_ROOM:                             /* the door's transition puts the next room up at black */
+        pe_re_door_begin(s_session.game->game, &s_session.door);
+        snprintf(s_status, sizeof s_status, "Through the door to %x-%02X.%s%s", (unsigned)s_session.stage + 1,
+                 (unsigned)s_session.room, s_session.said[0] ? " " : "", s_session.said);
         break;
     case PE_RE_SAID:
         say(s_session.said);
