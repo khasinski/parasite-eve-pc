@@ -146,6 +146,18 @@ if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
     target_link_libraries(pe-mod-frequency PRIVATE psyz)
     add_test(NAME pe-mod-frequency COMMAND pe-mod-frequency)
 endif()
+if(BUILD_TESTING AND "pe_qol" IN_LIST PE_MOD_LIST)
+    # Hold to skip dialogue (issue 246) and the Auto Medicine order (issue 238).
+    add_executable(pe-mod-qol-skip-medicine
+        ${PROJECT_SOURCE_DIR}/tests/pe_mod_qol_skip_medicine_test.c
+        pe_qol/pe_dialogue_skip.c
+        pe_qol/pe_auto_medicine.c)
+    target_include_directories(pe-mod-qol-skip-medicine PRIVATE ${PROJECT_SOURCE_DIR}/include host pe_qol
+        "$<TARGET_PROPERTY:SDL3::SDL3,INTERFACE_INCLUDE_DIRECTORIES>")
+    target_compile_definitions(pe-mod-qol-skip-medicine PRIVATE __psyz PE_MODS=1)
+    target_link_libraries(pe-mod-qol-skip-medicine PRIVATE psyz)
+    add_test(NAME pe-mod-qol-skip-medicine COMMAND pe-mod-qol-skip-medicine)
+endif()
 
 # Font pictures: the reader, the page writes, and the shipped mods/fonts/ pictures.
 if(BUILD_TESTING AND "pe_fonts" IN_LIST PE_MOD_LIST)
