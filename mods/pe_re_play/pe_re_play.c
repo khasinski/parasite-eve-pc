@@ -81,9 +81,9 @@ static void say(const char *text) {
 
 /* ---- enemies: reported, not fought here ("re_play" in pe_services.h) ----
  * Each room's placements go out as "re_play.room" when she comes in and "re_play.enemies" when
- * its scripts place more; an encounter mod decides what to do with them. */
+ * the placement list changes; an encounter mod decides what to do with it. */
 static PeReEnemyPlacement s_enemies[PE_RE_ENEMIES_MAX];
-static int s_nenemies, s_reported, s_room_reported;
+static int s_nenemies, s_room_reported;
 static int s_room_event = -1, s_enemies_event = -1;
 
 static int api_room(PeReRoomEvent *out) {
@@ -96,22 +96,26 @@ static int api_room(PeReRoomEvent *out) {
 }
 static int api_defeated(uint8_t killed_flag) {
     if (!s_playing || !s_room_reported || !pe_re_stage_active() || pe_re_door_busy()) return -1;
-    const int r = pe_re_session_defeated(&s_session, killed_flag);
-    if (!r) s_nenemies = pe_re_session_enemies(&s_session, s_enemies, PE_RE_ENEMIES_MAX), s_reported = s_nenemies;
-    return r;
+    for (int i = 0; i < s_nenemies; i++) {
+        if (s_enemies[i].killed_flag == killed_flag)
+            return pe_re_session_defeated(&s_session, killed_flag);
+    }
+    return -1;
 }
 static const PeRePlayApi s_api = {sizeof s_api, api_room, api_defeated};
 
 static void report_enemies(void) {
+    PeReEnemyPlacement placements[PE_RE_ENEMIES_MAX];
     const int fresh = !s_room_reported;
-    const int n = pe_re_session_enemies(&s_session, s_enemies, PE_RE_ENEMIES_MAX);
-    if (!fresh && n <= s_reported) { s_nenemies = n; return; }
-    s_nenemies = n, s_reported = n, s_room_reported = 1;
+    const int n = pe_re_session_enemies(&s_session, placements, PE_RE_ENEMIES_MAX);
+    if (!fresh && n == s_nenemies && pe_re_enemy_lists_equal(s_enemies, placements, n)) return;
+    memcpy(s_enemies, placements, (size_t)n * sizeof *placements);
+    s_nenemies = n, s_room_reported = 1;
     PeReRoomEvent e;
     if (api_room(&e)) return;
     e.fresh = fresh;
     pe_event_emit(fresh ? s_room_event : s_enemies_event, &e);
-    if (n) pe_mod_log(MOD_ID, "%s %x-%02X: %d enemies placed (first: kind 0x%02X at %d,%d)", fresh ? "room" : "more",
+    if (n) pe_mod_log(MOD_ID, "%s %x-%02X: %d enemies placed (first: kind 0x%02X at %d,%d)", fresh ? "room" : "updated",
                       (unsigned)s_session.stage + 1, (unsigned)s_session.room, n, s_enemies[0].kind, s_enemies[0].x,
                       s_enemies[0].z);
 }
@@ -384,8 +388,8 @@ static int on_frame(void *ctx, void *user) {
             show_room(1);
             if (s_playing && s_session.said[0]) say(s_session.said);
         }
-        if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
         if (s_playing && door_step == PE_RE_DOOR_IDLE) report_enemies();
+        if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
         return 0;
     }
     s_session.talking = pe_re_box_busy;

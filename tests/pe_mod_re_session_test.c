@@ -29,6 +29,19 @@ static const char *s_store = "pe-re-session-test/store";
 int main(void) {
     char why[200] = "";
 
+    /* A script can replace or move a placement without changing the list length. */
+    {
+        const PeReEnemyPlacement original[] = {{.slot = 1, .kind = 3, .killed_flag = 8, .x = 20}};
+        PeReEnemyPlacement updated[] = {original[0]};
+        CHECK(pe_re_enemy_lists_equal(original, updated, 1));
+        updated[0].x = 21;
+        CHECK(!pe_re_enemy_lists_equal(original, updated, 1));
+        updated[0] = original[0];
+        updated[0].kind = 4;
+        CHECK(!pe_re_enemy_lists_equal(original, updated, 1));
+        CHECK(pe_re_enemy_lists_equal(original, updated, 0));
+    }
+
     /* zones: a square and a slanted four-corner zone */
     int16_t x[4], z[4];
     rect(x, z, 0, 0, 1000, 1000);

@@ -377,7 +377,8 @@ typedef struct PePhoneCallsApi {
  *   "re_play.room"     (const PeReRoomEvent *) the player came into a room (a door, a jump, a
  *                      loaded save), with the enemies its scripts placed. Door arrivals are
  *                      published after the transition completes.
- *   "re_play.enemies"  (const PeReRoomEvent *) the room's scripts placed more since (an event)
+ *   "re_play.enemies"  (const PeReRoomEvent *) the current placement list after an addition,
+ *                      removal or replacement. An empty list clears the previous placements.
  * Positions are the source game's room units (x, z on the floor, y down, 1,800 a floor). A placed
  * enemy's killed flag is the game's own: report a defeat with defeated() and the room's scripts stop
  * placing it, as after a kill in the source game (RE2: Enemy_flg, Enemy_flg2 from stage 4). */
@@ -395,7 +396,7 @@ typedef struct PeReRoomEvent {
     uint32_t struct_size;
     const char *game;              /* "re2" */
     uint32_t stage, room;          /* stage 0 = stage 1 */
-    int fresh;                     /* 1: came in; 0: more placed since */
+    int fresh;                     /* 1: came in; 0: the placement list changed */
     int count;
     const PeReEnemyPlacement *enemies;
 } PeReRoomEvent;
@@ -404,7 +405,8 @@ typedef struct PeRePlayApi {
     uint32_t struct_size;
     /* The reported room and its placements (valid until the next frame); 0, or -1 if unavailable. */
     int (*room)(PeReRoomEvent *out);
-    /* A placed enemy was beaten: set its killed flag. 0, or -1 (room unavailable, flag 0xFF). */
+    /* Set a currently placed enemy's killed flag. The next room update reflects the defeat.
+     * 0 on success, or -1 if the room or flag is unavailable or the flag is 0xFF. */
     int (*defeated)(uint8_t killed_flag);
 } PeRePlayApi;
 

@@ -107,6 +107,8 @@ void pe_re_session_end(PeReSession *s);
  * flag is set (Sce_em_set: Enemy_flg, or Enemy_flg2 from stage 4 or on the special run). How many
  * (up to `max`). */
 int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max);
+/* Compare the observable fields of two placement lists of the same length. */
+int pe_re_enemy_lists_equal(const PeReEnemyPlacement *a, const PeReEnemyPlacement *b, int count);
 /* A placed enemy beaten: its killed flag set. 0, or -1 (no game, flag 0xFF). */
 int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag);
 /* Use `item` from the pocket here, as choosing it on RE2's status screen does: when the room's

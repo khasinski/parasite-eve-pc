@@ -335,6 +335,17 @@ int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag) {
     return 0;
 }
 
+int pe_re_enemy_lists_equal(const PeReEnemyPlacement *a, const PeReEnemyPlacement *b, int count) {
+    for (int i = 0; i < count; i++, a++, b++) {
+        if (a->slot != b->slot || a->kind != b->kind || a->behaviour != b->behaviour ||
+            a->floor != b->floor || a->sound != b->sound || a->model != b->model ||
+            a->killed_flag != b->killed_flag || a->x != b->x || a->y != b->y ||
+            a->z != b->z || a->dir != b->dir || a->motion != b->motion || a->ctr != b->ctr)
+            return 0;
+    }
+    return 1;
+}
+
 void pe_re_session_end(PeReSession *s) {
     free(s->logic);
     free(s->items);
