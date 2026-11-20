@@ -15,7 +15,7 @@ area and the fight, `mod-action` presses Start fight, `battle-state` reads the b
          trip comes back each time. Prints each fight's enemies (id, HP).
 
 Set PE_TEST_DISC (USA Disc 1); otherwise skipped (77). Every run is headless, in its own folder.
-Use --imported-room with PE_TEST_RE2_DISC to check a battle trip from an imported room.
+Use --imported-room with PE_TEST_RE2_DISC to check win, escape and loss from an imported room.
 """
 import json
 import os
@@ -238,6 +238,17 @@ def part_imported_room(exe, disc, work, re2_disc):
         after = room_rows(game)
         check(after['Status'] == before['Status'] and after['Enemies'] == before['Enemies'], (before, after))
         print('imported room: native battle started, won, and returned to the same imported room and pose')
+        part_run(game)
+        after = room_rows(game)
+        check(after['Status'] == before['Status'] and after['Enemies'] == before['Enemies'], (before, after))
+        print('imported room: escape also restored the same room, pose and placements')
+
+        game.ask('ini-set Cheats/God mode 0')
+        game.ask('set-stat hp 1')
+        start_fight(game, 0, 1)
+        check(wait_battle(game) is not None, 'imported room: the fatal battle did not start')
+        wait_game_over(game)
+        print('imported room: losing returned to the title screen')
     finally:
         game.quit()
 
@@ -278,26 +289,30 @@ def part_run(game):
     print(f'run: M030 spot 1 started with {sorted(e["id"] for e in state["enemies"])}, ran away, back home')
 
 
+def wait_game_over(game):
+    end = game.vblank + 20000
+    while game.vblank < end:   # Aya stands; the rats attack. Game Over answers no commands.
+        try:
+            if not game.battle()['active']:
+                break
+        except Failed:
+            break
+        game.adv(200)
+    while game.vblank < end and game.scene != TITLE_TOKEN:
+        game.press(CROSS, 300)
+    check(game.scene == TITLE_TOKEN, f'lose: no title screen by vblank {game.vblank} (scene {game.scene:08X}); '
+          f'{game.work / "config"}')
+    check('lost (Game Over)' in game.picker_log(), 'lose: the picker did not give up the trip')
+    game.adv(600)   # the title keeps running
+
+
 def part_lose(exe, disc, work):
     game = Game(exe, disc, work / 'lose', limit=FIELD + 40000)
     try:
         game.ask('set-stat hp 1')
         start_fight(game, 0, 1)
         check(wait_battle(game) is not None, 'lose: the M030 battle did not start')
-        end = game.vblank + 20000
-        while game.vblank < end:   # Aya stands; the rats attack. Game Over answers no commands.
-            try:
-                if not game.battle()['active']:
-                    break
-            except Failed:
-                break
-            game.adv(200)
-        while game.vblank < end and game.scene != TITLE_TOKEN:  # Game Over, then on to the title
-            game.press(CROSS, 300)
-        check(game.scene == TITLE_TOKEN, f'lose: no title screen by vblank {game.vblank} (scene {game.scene:08X}); '
-              f'{game.work / "config"}')
-        check('lost (Game Over)' in game.picker_log(), 'lose: the picker did not give up the trip')
-        game.adv(600)   # the title keeps running
+        wait_game_over(game)
         print(f'lose: Game Over, title at vblank {game.vblank}; the picker gave up the trip')
     finally:
         game.quit()

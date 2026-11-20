@@ -512,6 +512,20 @@ int main(void) {
                 const int m = pe_re_session_enemies(&v, e, PE_RE_ENEMIES_MAX);
                 for (int i = 0; i < m; i++) back |= e[i].killed_flag == flag;
                 CHECK(m == n - 1 && !back);
+                uint8_t saved[PE_RE_SAVE_SIZE];
+                PeReSaved decoded;
+                pe_re_save_encode(&v, 1, saved);
+                const int decoded_ok = !pe_re_save_decode(saved, &decoded);
+                CHECK(decoded_ok);
+                pe_re_session_end(&v);
+                const int resumed = decoded_ok ? pe_re_session_resume(&v, s_store, &decoded, why, sizeof why) : -1;
+                CHECK(!resumed);
+                if (!resumed) {
+                    for (int f = 0; f < 30; f++) pe_re_session_tick(&v);
+                    const int remaining = pe_re_session_enemies(&v, e, PE_RE_ENEMIES_MAX);
+                    CHECK(remaining == n - 1);
+                    for (int i = 0; i < remaining; i++) CHECK(e[i].killed_flag != flag);
+                }
             }
             CHECK(pe_re_session_defeated(&v, 0xFF) < 0);
         }
