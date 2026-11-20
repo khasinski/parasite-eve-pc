@@ -28,6 +28,10 @@
 #include "pe_hooks.h"
 #include "pe1/battle_update.h"
 #include "pe1/pad_state.h"
+#include "pe1/game_state.h"
+#include "pe1/game_state_types.h"
+#include "pe1/scene_transition.h"
+#include "pe1/menu_dialog.h"
 #include "pe_extension_store.h"
 #include "pe_game.h"
 #include "pe_re_box.h"
@@ -49,8 +53,8 @@ static PeReSession s_session;
  * encoded while playing, and on Stop (so Continue picks it up). Loading a save that was in a game
  * resumes there once the field is free. */
 static uint8_t s_saved[PE_RE_SAVE_SIZE];
-static const PeExtensionSection s_section = {"pe_re_play/progress", PE_RE_SAVE_VERSION, PE_RE_SAVE_VERSION,
-                                             sizeof s_saved, s_saved};
+static const PeExtensionSection s_section = {"pe_re_play/progress", PE_RE_SAVE_VERSION, 1, sizeof s_saved, s_saved,
+                                             pe_re_save_upgrade, NULL, NULL};   /* min reader 1: the host loads it */
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown;
 static char s_status[200] = "Not playing.";
@@ -77,8 +81,18 @@ static void say(const char *text) {
 
 /* ---- the pocket and the item box, in the band (pe_re_box_choose) ---- */
 #define PAD_SQUARE 0x8000u                /* raw pad: Square opens the pocket to use something */
-enum { PICK_NONE, PICK_USE, PICK_BOX };
+enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE };
+/* A typewriter save: the ribbon is used when she says yes; PE's own save screen opens on the next
+ * free frame (as its save phones' script opcode opens it); backing out without a save gives the
+ * ribbon back once the room is up again. */
+enum { TYPE_NONE, TYPE_OPEN, TYPE_SCREEN };
+static int s_typing, s_typed;
 static int s_pick, s_pick_at;
+static int on_committed(void *ctx, void *user) {   /* a card save was written: a typewriter's counts */
+    (void)ctx, (void)user;
+    if (s_typing == TYPE_SCREEN) s_typed = 1;
+    return 0;
+}
 static uint16_t s_use_here;                       /* testing: the item the last place to use one takes */
 static uint16_t s_pick_item[PE_RE_BOX_CHOICES];
 static int s_pick_slot[PE_RE_BOX_CHOICES];        /* pocket slot, or -1 - box slot */
@@ -125,9 +139,15 @@ static void zone_handed(void) {
     switch (s_session.zone.sce) {
     case PE_RE_ZONE_STATUS: open_pocket(); break;
     case PE_RE_ZONE_ITEMBOX: open_item_box(0); break;
-    default:
-        snprintf(s_status, sizeof s_status, "A typewriter here (not built yet).");
+    case PE_RE_ZONE_SAVE: {
+        static const char *const yes_no[2] = {"Yes", "No"};
+        if (!pe_re_has(&s_session.progress, PE_RE2_INK_RIBBON))
+            say("There's a typewriter. With an Ink Ribbon you could record your progress.");
+        else if (pe_re_box_choose("Use an Ink Ribbon to save?", yes_no, 2, 0))
+            s_pick = PICK_SAVE;
         break;
+    }
+    default: break;
     }
     pe_mod_log("pe_re_play", "zone %u kind %u", (unsigned)s_session.zone.id, (unsigned)s_session.zone.sce);
 }
@@ -139,6 +159,10 @@ static void picked(void) {
     const int mode = s_pick;
     s_pick = PICK_NONE;
     if (c < 0) return;                                      /* backed out */
+    if (mode == PICK_SAVE) {
+        if (c == 0 && !pe_re_lose(&s_session.progress, PE_RE2_INK_RIBBON, 1)) s_typing = TYPE_OPEN, s_typed = 0;
+        return;
+    }
     if (mode == PICK_USE) {
         char name[48];
         pe_re_item_name(s_session.items, s_pick_item[c], name, sizeof name);
@@ -260,6 +284,22 @@ static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
     if (s_resume && !s_playing && pe_free_field()) resume();
     if (!s_playing) return 0;
+    if (s_typing == TYPE_OPEN && pe_re_stage_active() && !pe_re_box_busy() && pe_free_field()) {
+        if (s_enabled) pe_re_save_encode(&s_session, 1, s_saved);   /* the ribbon already used */
+        Render_BeginSceneLoad();                 /* what the save phones' opcode does (Script_OpenMemCardDialog) */
+        Menu_OpenStartupMemCardDialog();
+        g_GameState.flags |= 0x9000;
+        g_GameStateFlags |= 4;
+        s_typing = TYPE_SCREEN;
+        pe_mod_log("pe_re_play", "typewriter: save screen");
+        return 0;
+    }
+    if (s_typing == TYPE_SCREEN && pe_re_stage_active() && pe_free_field() && !(g_GameState.flags & 0x9000)) {
+        if (!s_typed) pe_re_give(&s_session.progress, PE_RE2_INK_RIBBON, 1);   /* backed out: not used */
+        snprintf(s_status, sizeof s_status, s_typed ? "Saved at the typewriter." : "Not saved.");
+        s_typing = TYPE_NONE;
+    }
+    if (g_GameState.flags & 0x9000) return 0;    /* PE's own menu (the save screen) has the pad */
     if (!pe_re_stage_active()) {                /* PE loaded a room of its own: it's only the shell */
         pe_re_box_forget();
         if (!pe_free_field()) return 0;         /* once it has settled, the imported room again */
@@ -331,9 +371,9 @@ static int on_frame(void *ctx, void *user) {
 /* Testing: stand in the middle of the room's next doorway, pickup or message zone (those its scripts
  * set up), one after another each time (the camera stays as it is). */
 static void to_zone(uint32_t tag, int kind, const char *what) {
-    static uint32_t s_next[8];
+    static uint32_t s_next[10];
     static const PeImpRoomLogic *s_room;
-    uint32_t n = 0, *next = &s_next[tag == PE_IMP_LOGIC_PICK ? 1 : tag != PE_IMP_LOGIC_TRIG ? 0 : kind & 7];
+    uint32_t n = 0, *next = &s_next[tag == PE_IMP_LOGIC_PICK ? 1 : tag != PE_IMP_LOGIC_TRIG ? 0 : 2 + (kind & 7)];
     int front = 0;
     double bx = 0, bz = 0;
     int found = 0;
@@ -369,9 +409,17 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
         found = 1, *next = i + 1;
     }
     if (!found) { snprintf(s_status, sizeof s_status, "This room has no %ss.", what); return; }
-    if (front) bz += PE_RE_FRONT_REACH;                  /* checked in front of her: stand back, facing it */
+    int face = 0;
+    if (front) {                                          /* checked in front of her: stand back, facing it */
+        double sx, sz;
+        for (int k = 0; k < 16; k++) {                    /* the first free spot round it */
+            pe_re_front(bx, bz, k * 256 + 2048, &sx, &sz);
+            if (!pe_re_stage_blocked(sx, sz) || k == 15) { face = k * 256; break; }
+        }
+        pe_re_front(bx, bz, face + 2048, &bx, &bz);
+    }
     pe_re_stage_place(bx, bz);
-    if (front) pe_re_stage_face(0), s_session.facing = 0;
+    if (front) pe_re_stage_face(face), s_session.facing = face;
     s_session.x = bx, s_session.z = bz;
     snprintf(s_status, sizeof s_status, "At a %s in room %x-%02X: press Cross.", what, (unsigned)s_session.stage + 1,
              (unsigned)s_session.room);
@@ -382,6 +430,12 @@ static void to_message(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_SCE_MESSAGE, "me
 static void to_event(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_EVENT, "event zone"); }
 static void to_item_spot(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_FLAG, "place to use an item"); }
 static void to_item_box(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_ITEMBOX, "item box"); }
+static void to_typewriter(void) { to_zone(PE_IMP_LOGIC_TRIG, PE_RE_ZONE_SAVE, "typewriter"); }
+static void give_ribbon(void) {
+    if (!s_playing) return;
+    if (pe_re_give(&s_session.progress, PE_RE2_INK_RIBBON, 1)) snprintf(s_status, sizeof s_status, "No room for an Ink Ribbon.");
+    else snprintf(s_status, sizeof s_status, "Given an Ink Ribbon.");
+}
 static void give_use_here(void) {           /* the item the last place to use one wants */
     char name[48];
     if (!s_playing || !s_use_here) { snprintf(s_status, sizeof s_status, "Go to a place to use an item first."); return; }
@@ -456,6 +510,8 @@ static int init(void) {
     pe_menu_register_action("Testing", "Go to the next message", "Puts Aya where the room's messages are read, one after another.", to_message);
     pe_menu_register_action("Testing", "Go to the next place to use an item", "Puts Aya facing where the room takes an item (a jewel in a statue), one after another.", to_item_spot);
     pe_menu_register_action("Testing", "Give the item used there", "Puts the item that place takes in the pocket.", give_use_here);
+    pe_menu_register_action("Testing", "Go to the next typewriter", "Puts Aya at the room's typewriter: press Cross.", to_typewriter);
+    pe_menu_register_action("Testing", "Give an Ink Ribbon", "One Ink Ribbon into the pocket, for a typewriter.", give_ribbon);
     pe_menu_register_action("Testing", "Go to the next item box", "Puts Aya at the room's item box: press Cross.", to_item_box);
     pe_menu_register_action("Testing", "Go to the next event zone", "Puts Aya where the room's events start (examined: press Cross), one after another.", to_event);
     pe_menu_register_int("Testing", "Stage", "The room to jump to: its stage.", &s_jump_stage, 1, 7, 1);
@@ -467,6 +523,7 @@ static int init(void) {
     pe_menu_register_info(0, "Scripts", "What this room's own scripts ran when you came in.", text_scripts);
     pe_hook_add(PE_HOOK_FRAME, on_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     s_registered = pe_extension_register(&s_section) >= 0;
+    pe_hook_add(pe_event_id(PE_EVENT_SAVE_COMMITTED), on_committed, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     if (!s_registered) pe_mod_log(MOD_ID, "progress section not registered: imported games won't be saved");
     pe_hook_add(PE_HOOK_SAVE_READ, on_save_read, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_NEW_GAME, on_new_game, NULL, PE_PRIORITY_NORMAL, MOD_ID);

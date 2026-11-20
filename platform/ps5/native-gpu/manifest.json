@@ -4995,7 +4995,11 @@
     },
     {
       "path": "mods/pe_re_play/pe_re_play.c",
-      "sha256": "244d08898d158c690f8c90a06755154fdf70d16ebb279836b5320235eb63a648"
+      "sha256": "aabe5beff73a4c8cd8458f6c3d33a786c5342deebac2173eef797cf22d9165b6"
+    },
+    {
+      "path": "mods/pe_re_play/pe_re_save.c",
+      "sha256": "1f4b634a3c1fe5faa7525d993e2a5181724eaf616978839d3bd15ffaab5ea605"
     }
   ]
 }

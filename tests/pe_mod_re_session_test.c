@@ -365,12 +365,23 @@ int main(void) {
         PeReSaved saved;
         PeReSession back;
         r.x = 1234, r.z = -5678, r.facing = 1024, r.camera = 0;
+        r.progress.box[0].item = 0x40, r.progress.box[0].count = 2, r.progress.boxed = 1;   /* v2: the box, work */
+        r.progress.flags.work[20] = 1234;
         pe_re_save_encode(&r, 1, bytes);
+        {
+            static uint8_t up[PE_RE_SAVE_SIZE];
+            PeReSaved old;
+            CHECK(!pe_re_save_upgrade(up, bytes, PE_RE_SAVE_SIZE_V1, 1) && !pe_re_save_decode(up, &old) &&
+                  old.room == 0x05 && pe_re_has(&old.progress, 88) && !old.progress.boxed && !old.progress.flags.work[20]);
+            CHECK(pe_re_save_upgrade(up, bytes, PE_RE_SAVE_SIZE_V1, 3) < 0);
+        }
         CHECK(!pe_re_save_decode(bytes, &saved) && saved.game == g && saved.playing && saved.room == 0x05 &&
               saved.x == 1234 && saved.z == -5678 && saved.facing == 1024 && pe_re_has(&saved.progress, 88));
         CHECK(!pe_re_session_resume(&back, s_store, &saved, why, sizeof why) && back.room == 0x05 && back.x == 1234);
         CHECK(pe_re_has(&back.progress, 88) && pe_re_flag(&back.progress.flags, PE_RE_FG_ITEM, 4));
         CHECK(!memcmp(back.progress.unlocked, r.progress.unlocked, sizeof r.progress.unlocked));
+        CHECK(back.progress.boxed == 1 && back.progress.box[0].item == 0x40 && back.progress.box[0].count == 2 &&
+              back.progress.flags.work[20] == 1234);
         pe_re_save_encode(&back, 1, again);
         CHECK(!memcmp(bytes, again, sizeof bytes));               /* stable */
         PeImpDoor cabin;                                          /* the cabin door stays open */
@@ -432,6 +443,40 @@ int main(void) {
             }
         } else {
             printf("1-08: %s\n", why);
+            CHECK(0);
+        }
+        pe_re_session_end(&v);
+    }
+
+    /* a typewriter and an item box (2-08): examined from in front, they're handed to the mod */
+    {
+        static PeReSession v;
+        if (!pe_re_session_start(&v, s_store, pe_re_game_named("re2"), 0, why, sizeof why) &&
+            !pe_re_session_enter(&v, s_store, 1, 0x08, 0, 0, 0, 0, why, sizeof why)) {
+            for (int f = 0; f < 30; f++) pe_re_session_tick(&v);
+            const int want[2] = {PE_RE_ZONE_SAVE, PE_RE_ZONE_ITEMBOX};
+            for (int w = 0; w < 2; w++) {
+                uint32_t n = 0;
+                PeImpTrigger tz;
+                int have = 0;
+                pe_imp_logic_section(v.logic, PE_IMP_LOGIC_TRIG, &n, NULL);
+                for (uint32_t i = 0; i < n && !have; i++)
+                    have = !pe_imp_logic_trigger(v.logic, i, &tz) && pe_re_scd_live(&v.run, tz.at) &&
+                           pe_re_zone_kind(&v.run, tz.zone.id, tz.zone.sce, NULL) == want[w];
+                CHECK(have);
+                if (!have) continue;
+                double cx = 0, cz = 0;
+                for (int c = 0; c < 4; c++) cx += tz.zone.x[c] / 4.0, cz += tz.zone.z[c] / 4.0;
+                v.facing = 0, v.floor = 0;
+                pe_re_session_tick(&v);
+                const PeReChange ch = pe_re_session_step(&v, s_store, cx, cz + PE_RE_FRONT_REACH, 1, why, sizeof why);
+                printf("2-08 kind %d zone %u (sat %02x floor %02x super %02x): change %d, zone kind %u\n", want[w],
+                       (unsigned)tz.zone.id, (unsigned)tz.zone.sat, (unsigned)tz.zone.floor, (unsigned)tz.zone.super,
+                       (int)ch, (unsigned)v.zone.sce);
+                CHECK(ch == PE_RE_ZONE && v.zone.sce == want[w]);
+            }
+        } else {
+            printf("2-08: %s\n", why);
             CHECK(0);
         }
         pe_re_session_end(&v);

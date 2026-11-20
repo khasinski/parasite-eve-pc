@@ -25,6 +25,7 @@
 #define PE_RE_SCE_MESSAGE 4
 #define PE_RE_SAT_CHECK 0x10u
 #define PE_RE_LOCK_BOLT 254
+#define PE_RE2_INK_RIBBON 0x1E                     /* a typewriter save takes one (SCE_AT.C Save_entrance) */
 #define PE_RE_LOCK_OTHER_SIDE 255
 
 typedef struct { uint16_t item, count; } PeReHeld;

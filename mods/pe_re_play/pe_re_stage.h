@@ -21,6 +21,7 @@ int pe_re_stage_floor(void);                       /* the floor she's on now (ra
 int pe_re_stage_to_ramp(void);                     /* testing: the foot of the next slope or stairs; 0 if none */
 void pe_re_stage_place(double x, double z);        /* move the player (testing) */
 void pe_re_stage_face(int facing);                 /* turn her (testing; 0 faces -z) */
+int pe_re_stage_blocked(double x, double z);       /* a wall at (x, z) on her floor (testing) */
 void pe_re_stage_set_masks(int on);
 /* A door's transition: the picture's brightness (128 full, 0 black), a black curtain in front of
  * everything (Aya too), and no walking while `hold`. */

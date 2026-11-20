@@ -8,6 +8,8 @@
 #define LOW_GROUPS 10                      /* stored whole */
 #define ALL_GROUPS 36
 #define HIGH_BYTES 16                      /* the first 128 bits of the others */
+#define BOX_AT 1040                        /* v2 */
+#define WORK_AT 1296
 
 static void put16(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v, p[1] = (uint8_t)(v >> 8); }
 static void put32(uint8_t *p, uint32_t v) { put16(p, v & 0xFFFF), put16(p + 2, v >> 16); }
@@ -33,6 +35,9 @@ void pe_re_save_encode(const PeReSession *s, int playing, uint8_t out[PE_RE_SAVE
     for (int g = 0; g < LOW_GROUPS; g++) memcpy(out + 304 + 32 * g, p->flags.bits[g], 32);
     for (int g = LOW_GROUPS; g < ALL_GROUPS && g < PE_RE_FLAG_GROUPS; g++)
         memcpy(out + 624 + HIGH_BYTES * (g - LOW_GROUPS), p->flags.bits[g], HIGH_BYTES);
+    for (int i = 0; i < p->boxed && i < PE_RE_BOX_MAX; i++)
+        put16(out + BOX_AT + 4 * i, p->box[i].item), put16(out + BOX_AT + 2 + 4 * i, p->box[i].count);
+    for (int i = 0; i < PE_RE_WORK; i++) put16(out + WORK_AT + 2 * i, (uint16_t)p->flags.work[i]);
 }
 
 int pe_re_save_decode(const uint8_t in[PE_RE_SAVE_SIZE], PeReSaved *out) {
@@ -53,6 +58,19 @@ int pe_re_save_decode(const uint8_t in[PE_RE_SAVE_SIZE], PeReSaved *out) {
     for (int g = 0; g < LOW_GROUPS; g++) memcpy(p->flags.bits[g], in + 304 + 32 * g, 32);
     for (int g = LOW_GROUPS; g < ALL_GROUPS && g < PE_RE_FLAG_GROUPS; g++)
         memcpy(p->flags.bits[g], in + 624 + HIGH_BYTES * (g - LOW_GROUPS), HIGH_BYTES);
+    for (int i = 0; i < PE_RE_BOX_MAX; i++) {
+        const uint16_t item = (uint16_t)get16(in + BOX_AT + 4 * i), count = (uint16_t)get16(in + BOX_AT + 2 + 4 * i);
+        if (!item) break;
+        p->box[p->boxed].item = item, p->box[p->boxed++].count = count;
+    }
+    for (int i = 0; i < PE_RE_WORK; i++) p->flags.work[i] = (int16_t)get16(in + WORK_AT + 2 * i);
+    return 0;
+}
+
+int pe_re_save_upgrade(void *candidate, const void *old, unsigned size, unsigned version) {
+    if (version != 1 || size != PE_RE_SAVE_SIZE_V1) return -1;
+    memset(candidate, 0, PE_RE_SAVE_SIZE);
+    memcpy(candidate, old, PE_RE_SAVE_SIZE_V1);
     return 0;
 }
 
