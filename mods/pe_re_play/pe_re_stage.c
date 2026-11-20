@@ -12,6 +12,7 @@
 
 #include "pe_re_stage.h"
 #include "pe_re_session.h"
+#include "pe_re_box.h"
 
 #include "pe_imp.h"
 #include "pe_imp_mdec.h"
@@ -145,6 +146,7 @@ static int on_move(void *ctx, void *user) {
     (void)user;
     const FieldActor *aya = ctx;
     if (!s_show || !s_walk.active || aya != g_PlayerEntity || !pe_free_field()) return 0;
+    if (pe_re_box_busy()) return 1;                    /* reading a message: she stands still */
     int analog = (g_PadPackets[0].header & 0xF000) == 0x7000 &&
                  (abs(g_PadPackets[0].leftX - 128) > 16 || abs(g_PadPackets[0].leftY - 128) > 16);
     if (analog || (g_FieldPadBits & (FIELD_PAD_UP | FIELD_PAD_DOWN | FIELD_PAD_LEFT | FIELD_PAD_RIGHT))) {

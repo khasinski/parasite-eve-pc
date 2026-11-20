@@ -4,12 +4,13 @@
  *
  *   pe_re_session.c  the session: room, camera, position; camera switch zones and doors (no PE code)
  *   pe_re_stage.c    the room on the field screen: picture, masks, camera, walking with collision
+ *   pe_re_box.c      messages in the game's dialogue band
  *   pe_re_play.c     the mod: F1 > Play imported games, and each frame's step
  *
  * The room is played inside whatever PE room Aya stands in (a shell room): she walks the imported
  * room's floor, cameras switch where its zones say, and Cross in a door's zone takes her through
  * to the next room and camera (pe_re_rules.c: locked doors need their key, or say why; Cross picks
- * up items into the session's pocket and reads message zones, shown as a toast for now; RE keys
+ * up items into the session's pocket and reads message zones, shown in the game's dialogue band (pe_re_box.c); RE keys
  * can't go into PE's key pocket, which holds PE items only). Not yet: the script interpreter
  * (events, flags the scripts set), door animations, enemies
  * (reported to the encounter host later), saving. RE2 only for now: RE1 and RE3 rooms need their
@@ -21,6 +22,7 @@
 #include "pe_mod_menu.h"
 #include "pe_hooks.h"
 #include "pe1/pad_state.h"
+#include "pe_re_box.h"
 #include "pe_re_session.h"
 #include "pe_re_stage.h"
 
@@ -50,6 +52,11 @@ static const char *game_name(unsigned i) {
     return name;
 }
 
+/* In the game's dialogue band; a toast if no box can be had (the font not loaded yet). */
+static void say(const char *text) {
+    if (!pe_re_box_say(text)) pe_toast(text);
+}
+
 static void show_room(int place) {
     char room[PE_IMP_ID_MAX], why[200] = "";
     pe_re_room_id(s_session.game->game, s_session.stage, s_session.room, room, sizeof room);
@@ -67,6 +74,7 @@ static void show_room(int place) {
 }
 
 static void stop(void) {
+    pe_re_box_forget();
     if (s_playing) pe_re_stage_hide();
     pe_re_session_end(&s_session);
     s_playing = 0;
@@ -96,6 +104,7 @@ static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
     if (!s_playing) return 0;
     if (!pe_re_stage_active()) {                /* PE moved to a room of its own */
+        pe_re_box_forget();
         pe_re_session_end(&s_session);
         s_playing = 0;
         snprintf(s_status, sizeof s_status, "Stopped: Parasite Eve loaded another room.");
@@ -104,7 +113,7 @@ static int on_frame(void *ctx, void *user) {
     pe_re_stage_set_masks(s_masks);
     pe_re_stage_set_size(s_size);
     const int cross = (~(unsigned)g_PadPackets[0].buttons & PAD_CROSS) != 0;
-    const int pressed = cross && !s_cross_held;
+    const int pressed = cross && !s_cross_held && !pe_re_box_busy();   /* a box's Cross is the box's */
     s_cross_held = cross;
     double x, z;
     int facing;
@@ -116,13 +125,13 @@ static int on_frame(void *ctx, void *user) {
     case PE_RE_ROOM:
         show_room(1);
         if (s_playing && s_session.said[0]) {
-            pe_toast(s_session.said);
+            say(s_session.said);
             const size_t used = strlen(s_status);
             snprintf(s_status + used, sizeof s_status - used, " %s", s_session.said);
         }
         break;
     case PE_RE_SAID:
-        pe_toast(s_session.said);
+        say(s_session.said);
         snprintf(s_status, sizeof s_status, "%s", s_session.said);
         break;
     case PE_RE_STAY:
@@ -135,24 +144,28 @@ static int on_frame(void *ctx, void *user) {
 /* Testing: stand in the middle of the room's next doorway or pickup, one after another each time
  * (the camera stays as it is). */
 static void to_zone(uint32_t tag, const char *what) {
-    static uint32_t s_next[2];
+    static uint32_t s_next[3];
     static const PeImpRoomLogic *s_room;
-    uint32_t n = 0, *next = &s_next[tag == PE_IMP_LOGIC_PICK];
+    uint32_t n = 0, *next = &s_next[tag == PE_IMP_LOGIC_PICK ? 1 : tag == PE_IMP_LOGIC_TRIG ? 2 : 0];
     double bx = 0, bz = 0;
     int found = 0;
     if (!s_playing || !pe_imp_logic_section(s_session.logic, tag, &n, NULL)) {
         snprintf(s_status, sizeof s_status, "This room has no %ss.", what);
         return;
     }
-    if (s_room != s_session.logic) s_room = s_session.logic, s_next[0] = s_next[1] = 0;
+    if (s_room != s_session.logic) s_room = s_session.logic, s_next[0] = s_next[1] = s_next[2] = 0;
     for (uint32_t k = 0; k < n && !found; k++) {
         const uint32_t i = (*next + k) % n;
         PeImpDoor d;
         PeImpPickup pk;
+        PeImpTrigger t;
         const PeImpZone *zone = &d.zone;
         if (tag == PE_IMP_LOGIC_PICK) {
             if (pe_imp_logic_pickup(s_session.logic, i, &pk)) continue;
             zone = &pk.zone;
+        } else if (tag == PE_IMP_LOGIC_TRIG) {
+            if (pe_imp_logic_trigger(s_session.logic, i, &t) || t.zone.sce != PE_RE_SCE_MESSAGE) continue;
+            zone = &t.zone;
         } else if (pe_imp_logic_door(s_session.logic, i, &d)) {
             continue;
         }
@@ -167,6 +180,7 @@ static void to_zone(uint32_t tag, const char *what) {
 }
 static void to_door(void) { to_zone(PE_IMP_LOGIC_DOOR, "door"); }
 static void to_pickup(void) { to_zone(PE_IMP_LOGIC_PICK, "pickup"); }
+static void to_message(void) { to_zone(PE_IMP_LOGIC_TRIG, "message"); }
 static void to_room(void) {
     char why[200] = "";
     if (!s_playing) { snprintf(s_status, sizeof s_status, "Start a game first."); return; }
@@ -202,6 +216,7 @@ static void text_status(char *out, unsigned size) {
 static int init(void) {
     if (pe_mod_path(s_store, sizeof s_store, "import/store")) return 1;
     pe_re_stage_init(MOD_ID, s_store);
+    pe_re_box_init(MOD_ID);
     pe_menu_begin(PAGE);
     pe_menu_top_page(PAGE, "Walk the rooms of a game you imported, as Aya.", 63);
     pe_menu_register_dynamic_choice(0, "Game", "A game imported from your own disc (F1 > Import).", &s_pick,
@@ -213,6 +228,7 @@ static int init(void) {
     pe_menu_register_action(0, "Stop", "Back to the Parasite Eve room and camera.", stop);
     pe_menu_register_action("Testing", "Go to the next door", "Puts Aya in the room's doorways, one after another.", to_door);
     pe_menu_register_action("Testing", "Go to the next pickup", "Puts Aya on the room's items, one after another.", to_pickup);
+    pe_menu_register_action("Testing", "Go to the next message", "Puts Aya where the room's messages are read, one after another.", to_message);
     pe_menu_register_int("Testing", "Stage", "The room to jump to: its stage.", &s_jump_stage, 1, 7, 1);
     pe_menu_register_int("Testing", "Room", "The room to jump to: its number in the stage (1-05 is 5).", &s_jump_room, 0, 63, 1);
     pe_menu_register_action("Testing", "Go to that room", "Jumps there, camera 0, keeping what's been picked up.", to_room);
