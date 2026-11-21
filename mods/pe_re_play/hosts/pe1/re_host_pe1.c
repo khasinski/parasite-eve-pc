@@ -56,6 +56,7 @@ const ReHost *re_host(void) {
         .place_player = pe_re_stage_place,
         .face_player = pe_re_stage_face,
         .position_blocked = pe_re_stage_blocked,
+        .set_collision_id = pe_re_stage_collision_id,
         .place_at_ramp = pe_re_stage_to_ramp,
         .set_masks = pe_re_stage_set_masks,
         .set_player_size = pe_re_stage_set_size,

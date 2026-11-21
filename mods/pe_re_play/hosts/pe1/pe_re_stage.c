@@ -1030,6 +1030,7 @@ int pe_re_stage_to_ramp(void) {
 }
 void pe_re_stage_face(int facing) { s_walk.yaw = facing & 4095; }
 int pe_re_stage_blocked(double x, double z) { return blocked_here(x, z); }
+void pe_re_stage_collision_id(unsigned slot, unsigned id) { pe_imp_re2_collision_set_id(&s_walk.collision, slot, id); }
 void pe_re_stage_place(double x, double z) {
     s_walk.x = x, s_walk.z = z;
     s_walk.ghost = blocked_here(x, z);

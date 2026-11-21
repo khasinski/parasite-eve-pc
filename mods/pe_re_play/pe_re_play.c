@@ -258,6 +258,14 @@ static void picked(void) {
     open_item_box(s_pick_at);
 }
 
+/* The scripts' wall switches (sca_id_set) to the walker: after a tick, and again once a room's shown */
+static void apply_collision(int all) {
+    if (!re_host()->set_collision_id || (!all && !s_session.run.sca_changed)) return;
+    for (unsigned k = 0; k < 256; k++)
+        if (s_session.run.sca_id[k]) re_host()->set_collision_id(k, s_session.run.sca_id[k] & 0xFF80u);
+    s_session.run.sca_changed = 0;
+}
+
 static void show_room(int place) {
     char room[PE_IMP_ID_MAX], why[200] = "";
     pe_re_room_id(s_session.game->game, s_session.stage, s_session.room, room, sizeof room);
@@ -271,6 +279,7 @@ static void show_room(int place) {
         return;
     }
     re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
+    apply_collision(1);
     snprintf(s_status, sizeof s_status, "Room %x-%02X, camera %d.", (unsigned)s_session.stage + 1,
              (unsigned)s_session.room, s_session.camera);
 }
@@ -288,6 +297,7 @@ static void show_cut(void) {
         return;
     }
     re_host()->player_pose(&s_session.x, &s_session.z, &s_session.facing);
+    apply_collision(1);
 }
 
 static int keep_progress(void) {
@@ -452,6 +462,7 @@ static int on_frame(void *ctx, void *user) {
     } else if (s_script_held) {
         s_script_held--;
     }
+    apply_collision(0);
     {   /* Square: the pocket, to use something here */
         const int square = (re_host()->held_buttons() & RE_HOST_SQUARE) != 0;
         if (square && !s_square_held && !re_host()->dialogue_busy()) open_pocket();

@@ -18,7 +18,7 @@ enum {
     OP_ITEM_GET = 0x76, OP_ITEM_CK_LOST = 0x88, OP_SCE_EM_SET = 0x44, OP_CUT_CHG = 0x29, OP_CUT_OLD = 0x2A,
     OP_CUT_AUTO = 0x3C, OP_PLC_DEST = 0x40, OP_WORK_SET = 0x2E, OP_POS_SET = 0x32, OP_DIR_SET = 0x33,
     OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
-    OP_MEMBER_CALC2 = 0x56,
+    OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -179,6 +179,19 @@ static int step(Vm *vm, PeReScdTask *t) {
     const uint8_t *ins = vm->rdt + t->pc, code = ins[0];
     const uint32_t n = pe_imp_scd_size(PE_IMP_RE2, code);
     if (!n || t->pc + n > vm->size) { t->status = 0; return YIELD; }   /* unreadable: the task ends */
+    uint8_t patched[64];
+    if (vm->run->npatch && n <= sizeof patched) {            /* work_copy wrote into this instruction? */
+        int any = 0;
+        for (int k = 0; k < vm->run->npatch; k++) {
+            const uint32_t at = vm->run->patch[k].at;
+            if (at <= t->pc || at >= t->pc + n) continue;    /* never the operation byte */
+            if (!any) memcpy(patched, ins, n), any = 1;
+            const uint16_t v = (uint16_t)vm->run->patch[k].value;
+            patched[at - t->pc] = (uint8_t)v;
+            if (vm->run->patch[k].wide && at + 1 < t->pc + n) patched[at + 1 - t->pc] = (uint8_t)(v >> 8);
+        }
+        if (any) ins = patched;
+    }
     int8_t *ifel = &t->ifel[t->sub], *loop = &t->loop[t->sub];
     const int s = t->sub, l = *loop;
     vm->run->executed++;
@@ -333,6 +346,23 @@ static int step(Vm *vm, PeReScdTask *t) {
         return CONTINUE;
     }
     case OP_CUT_AUTO: vm->run->camera_lock = ins[1] != 1; t->pc += n; return CONTINUE;
+    case OP_WORK_COPY: {                                   /* a work value into the script, ins[2] bytes past this */
+        PeReScdRun *r = vm->run;
+        const uint32_t at = t->pc + 4 + ins[2];
+        int k = 0;
+        while (k < r->npatch && r->patch[k].at != at) k++;
+        if (k < PE_RE_PATCHES) {
+            if (k == r->npatch) r->npatch++;
+            r->patch[k].at = at, r->patch[k].value = vm->flags->work[ins[1]], r->patch[k].wide = ins[3] != 0;
+        }
+        t->pc += n;
+        return CONTINUE;
+    }
+    case OP_SCA_ID_SET:                                    /* box ins[1] + 1's Id top bits: a wall on or off */
+        vm->run->sca_id[(ins[1] + 1) & 0xFF] = (uint16_t)((le16(ins + 2) & 0xFF80) | 1);
+        vm->run->sca_changed = 1;
+        t->pc += n;
+        return CONTINUE;
     case OP_WORK_SET: t->work = (int8_t)work_slot(ins[1], (int8_t)ins[2]); t->pc += n; return CONTINUE;
     case OP_POS_SET: case OP_DIR_SET: {
         const unsigned at = code == OP_POS_SET ? PE_RE_MEMBER_POS_X : 14;

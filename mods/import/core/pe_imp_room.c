@@ -275,7 +275,8 @@ static int collision(const uint8_t *sca, uint32_t size, unsigned floor, int all,
         if (shape > 12 || (!all && (floor > 31 || !(floors & (1u << floor))))) continue;   /* this floor's */
         int32_t x = signed16(le16(p)), z = signed16(le16(p + 2));
         out->entries[out->count++] = (PeRe2Collider){
-            x, z, x + (int32_t)le16(p + 4), z + (int32_t)le16(p + 6), (uint8_t)shape, (uint16_t)le16(p + 10), floors
+            x, z, x + (int32_t)le16(p + 4), z + (int32_t)le16(p + 6), (uint8_t)shape, (uint16_t)le16(p + 10), floors,
+            (uint16_t)le16(p + 8), (uint16_t)i
         };
     }
     return out->count ? 0 : 1;
@@ -314,7 +315,7 @@ static int blocked(const PeRe2RoomCollision *room, int floor, double x, double z
     if (fabs(x) > 32000 || fabs(z) > 32000) return 1;
     for (unsigned i = 0; i < room->count; i++) {
         const PeRe2Collider *c = &room->entries[i];
-        if (floor >= 0 && (!(c->floors & (1u << floor)) || c->shape >= 10)) continue;
+        if (floor >= 0 && (!(c->floors & (1u << floor)) || c->shape >= 10 || !(c->id & 0x8000))) continue;
         double dx = x - fmin(c->x1, fmax(c->x0, x));
         double dz = z - fmin(c->z1, fmax(c->z0, z));
         if (dx * dx + dz * dz > radius * radius) continue;
@@ -338,6 +339,11 @@ int pe_imp_re2_blocked(const PeRe2RoomCollision *room, double x, double z, doubl
 }
 int pe_imp_re2_blocked_on(const PeRe2RoomCollision *room, unsigned floor, double x, double z, double radius) {
     return blocked(room, floor > 31 ? 31 : (int)floor, x, z, radius);
+}
+
+void pe_imp_re2_collision_set_id(PeRe2RoomCollision *room, unsigned slot, unsigned id) {
+    for (unsigned i = 0; i < room->count; i++)
+        if (room->entries[i].slot == slot) room->entries[i].id = (uint16_t)((room->entries[i].id & 0x7F) | (id & 0xFF80));
 }
 
 static void slide(const PeRe2RoomCollision *room, int floor, double *x, double *z, double dx, double dz, double radius) {

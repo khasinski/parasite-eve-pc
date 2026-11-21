@@ -199,7 +199,7 @@ int main(void) {
     ramps.count = 3;
     ramps.entries[0] = (PeRe2Collider){0, 0, 1000, 500, 11, (uint16_t)(1u << 6 | 0u << 4), 1};
     ramps.entries[1] = (PeRe2Collider){2000, 0, 2500, 1000, 12, (uint16_t)(2u << 6 | 3u << 4), 2};
-    ramps.entries[2] = (PeRe2Collider){-500, 0, -400, 500, 0, 0, 2};   /* a wall on floor 1 only */
+    ramps.entries[2] = (PeRe2Collider){-500, 0, -400, 500, 0, 0, 2, 0x8000, 3};   /* a wall on floor 1 only */
     double gy = 1;
     CHECK(pe_imp_re2_ground(&ramps, 0, 250, &gy) && gy == 0);
     CHECK(pe_imp_re2_ground(&ramps, 400, 250, &gy) && gy == -720 && pe_re_floor_of((int)gy) == 0);

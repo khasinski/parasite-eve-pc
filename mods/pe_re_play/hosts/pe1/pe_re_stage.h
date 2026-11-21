@@ -34,6 +34,7 @@ void pe_re_stage_set_placements(const PeReEnemyPlacement *placements, int count)
 void pe_re_stage_fade(int shade, int curtain, int hold);
 /* Aya's size in the room, percent of an RE person's height (100: as tall as Leon). */
 void pe_re_stage_set_size(int percent);
+void pe_re_stage_collision_id(unsigned slot, unsigned id);   /* a script's wall switch (Sca_id_set) */
 double pe_re_stage_scale(void);                    /* room units per PE unit, for the status line */
 void pe_re_stage_shutdown(void);
 

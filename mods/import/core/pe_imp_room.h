@@ -50,6 +50,9 @@ typedef struct {
     uint16_t type;            /* Type: bits 4-5 a ramp's direction, 6-10 its top's floor level, 11-15 a box's
                                * height in 100s */
     uint32_t floors;          /* the floors it belongs to (bit n: floor n) */
+    uint16_t id;              /* the whole Id: bit 15 walls the player in (GAME.C tests 0x8000), the rest
+                               * other walkers; scripts switch the top nine bits (SCE2.C Sca_id_set) */
+    uint16_t slot;            /* its place in the room's list, the header 0 (Sca_id_set's) */
 } PeRe2Collider;
 
 typedef struct {
@@ -63,6 +66,8 @@ int pe_imp_re2_collision_floor(const uint8_t *sca, uint32_t size, unsigned floor
 int pe_imp_re2_collision_all(const uint8_t *sca, uint32_t size, PeRe2RoomCollision *out);
 /* Walls of `floor` only; slopes, stairs and shape 10 never block (the player walks them). */
 int pe_imp_re2_blocked_on(const PeRe2RoomCollision *room, unsigned floor, double x, double z, double radius);
+/* A script's switch of box `slot`: its Id's top nine bits become `id`'s (the shape stays). */
+void pe_imp_re2_collision_set_id(PeRe2RoomCollision *room, unsigned slot, unsigned id);
 void pe_imp_re2_slide_on(const PeRe2RoomCollision *room, unsigned floor, double *x, double *z, double dx, double dz,
                          double radius);
 /* Standing on a slope or stairs at (x, z): 1 and the ground's height (y down), else 0. A ramp runs

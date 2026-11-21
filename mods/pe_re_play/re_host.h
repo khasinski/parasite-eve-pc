@@ -34,6 +34,7 @@ typedef struct ReHost {
     void (*place_player)(double x, double z);
     void (*face_player)(int facing);
     int (*position_blocked)(double x, double z);
+    void (*set_collision_id)(unsigned slot, unsigned id);  /* optional: a script switched box `slot` (Id top bits) */
     int (*place_at_ramp)(void);
     void (*set_masks)(int on);
     void (*set_player_size)(int percent);

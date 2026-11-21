@@ -317,7 +317,9 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   (`SCE_AT.C` Sce_Door, Key_flg) and the main hall's door-lock computer (`PC_EVENT.C`), the scripts'
   objects and their fields (`SCE1.C` Work_set / Member_* / Pos_set / Dir_set, `def/SCENARIO.H`
   MEMBER_* and WORK_TYPE_*), the zone the player last touched (`SCE_AT.C` At_sce_no) and the walk to
-  a spot with its arrival flag (`SCE1.C` Plc_dest). Our interpreter and zone checks are
+  a spot with its arrival flag (`SCE1.C` Plc_dest), a work value written into the script
+  (`SCE1.C` Work_copy), and the scripts' wall switches and which walls stop the player (`SCE2.C`
+  Sca_id_set, `SCA.H`, `SCA.C` Sca_ck_hit, `GAME.C`). Our interpreter and zone checks are
   written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.
