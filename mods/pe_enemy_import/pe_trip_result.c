@@ -11,7 +11,8 @@ static int has_slot_api(const PeRePlayApi *api) {
 }
 
 int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
-                int (*prepare)(const char *asset, int already_selected, const char *entrance, void *ctx), void *ctx) {
+                int (*prepare)(const char *asset, int already_selected, const char *entrance,
+                               const PeReEnemyPlacement *placement, void *ctx), void *ctx) {
     memset(t, 0, sizeof *t);
     if (!room || !room->game || strlen(room->game) >= sizeof t->game) return 0;
     strcpy(t->game, room->game);
@@ -29,7 +30,7 @@ int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
         if (duplicate) continue;
         const PeImpEnemyStart *start = pe_imp_enemy_starts(asset);
         while (start && start->name && (e->behaviour & start->mask) != start->value) start++;
-        if (prepare && !prepare(asset, already_selected, start ? start->name : NULL, ctx)) continue;
+        if (prepare && !prepare(asset, already_selected, start ? start->name : NULL, e, ctx)) continue;
         kinds[t->count] = e->kind;
         t->slot[t->count++] = e->slot;
     }

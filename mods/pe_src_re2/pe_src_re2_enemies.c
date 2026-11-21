@@ -38,6 +38,7 @@ static const PeImpEnemyStart k_zombie_starts[] = {
     {"start_prone_2", 0x3f, 2, 0x16, 0x09},
     {"start_prone_4", 0x3f, 4, 0x17, 0x08},
     {"start_scripted_8", 0x3f, 8, 0x12, -1},
+    {"start_standing", 0x3f, 6, 1, -1},
     {0}
 };
 

@@ -110,8 +110,12 @@ static const char *api_enemy_archive(void) {
      * different enemy archives. Sce_em_set's Model_type controls animation handling. */
     return s_session.player == 1 ? "cdemd1" : "cdemd0";
 }
+static int api_enemy_room_move(unsigned slot, char *asset, size_t size) {
+    return s_playing ? pe_re_session_enemy_room_move(&s_session, slot, asset, size) : -1;
+}
 static const PeRePlayApi s_api = {
-    sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive
+    sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
+    api_enemy_room_move
 };
 
 static void report_enemies(void) {

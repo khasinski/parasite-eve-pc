@@ -17,7 +17,7 @@ int pe_enemy_battle_preview(PeEnemyPack *pack);
 void pe_enemy_battle_arm(int choice, int count, int send_away);
 /* Prepare a roster that replaces native foes. Each successful add corresponds to one source slot. */
 void pe_enemy_battle_begin_roster(void);
-int pe_enemy_battle_add_pack(const char *pack, const char *entrance);
+int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char *room_move);
 /* Number of room foes that spawned, if all of them died. */
 int pe_enemy_battle_room_defeated(void);
 void pe_enemy_battle_disarm(void);

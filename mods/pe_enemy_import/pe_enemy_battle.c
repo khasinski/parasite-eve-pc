@@ -96,7 +96,7 @@ typedef struct {
     int anim, role, attack;          /* attack: index + 1 while attacking */
     double frame;
     int blow_done, stagger, last_hp, dead;
-    int entrance_frames, wake_anim, forms;
+    int entrance_frames, entrance_loop, wake_anim, forms;
     int drawn_frames, tris, hits, damage_done, attacks_started;
     int event_frame, sounds;         /* last frame whose events ran; sounds played */
     unsigned seen;                   /* bit per role: idle walk hurt die, attack = 1 << 4 */
@@ -109,7 +109,7 @@ static char s_dir[1024];
 static PeBattlePack s_resources[PE_FOES_MAX * PE_FORMS_MAX];
 static int s_resource_count;
 static PeBattlePack *s_roster[PE_FOES_MAX];
-static struct { int pose, wake; } s_entrance[PE_FOES_MAX];
+static struct { int pose, wake, loop; } s_entrance[PE_FOES_MAX];
 static int s_armed;
 static int s_send_away, s_count = 1;
 
@@ -233,6 +233,7 @@ int pe_enemy_battle_preview(PeEnemyPack *pack) {
     resource->uploaded = 0;
     s_roster[0] = resource;
     s_entrance[0].pose = s_entrance[0].wake = -1;
+    s_entrance[0].loop = 0;
     s_send_away = s_count = s_armed = 1;
     return 0;
 }
@@ -296,6 +297,7 @@ void pe_enemy_battle_arm(int choice, int count, int send_away) {
     for (int i = 0; i < s_count; ++i) {
         s_roster[i] = resource;
         s_entrance[i].pose = s_entrance[i].wake = -1;
+        s_entrance[i].loop = 0;
     }
     s_armed = 1;
 }
@@ -309,7 +311,7 @@ void pe_enemy_battle_begin_roster(void) {
     pe_free_resources();
 }
 
-int pe_enemy_battle_add_pack(const char *pack, const char *entrance) {
+int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char *room_move) {
     if (s.active || s_count >= PE_FOES_MAX) return 0;
     char dir[1200];
     const int written = snprintf(dir, sizeof dir, "%s/%s", s_dir, pack);
@@ -319,11 +321,29 @@ int pe_enemy_battle_add_pack(const char *pack, const char *entrance) {
     pe_load_forms(resource);
     s_entrance[s_count].pose = entrance ? pe_enemy_pack_anim(&resource->pack, entrance) : -1;
     s_entrance[s_count].wake = -1;
+    s_entrance[s_count].loop = 0;
     if (s_entrance[s_count].pose >= 0) {
         char wake[sizeof resource->pack.anim[0].name];
         const int written = snprintf(wake, sizeof wake, "%s" PE_IMP_ENEMY_WAKE_SUFFIX, entrance);
         if (written >= 0 && (size_t)written < sizeof wake)
             s_entrance[s_count].wake = pe_enemy_pack_anim(&resource->pack, wake);
+    }
+    const char *move_name = room_move ? strrchr(room_move, '/') : NULL;
+    if (move_name) {
+        char store[1100], why[160], name[24];
+        snprintf(name, sizeof name, "feeding_%s", move_name + 1);
+        int pose = pe_enemy_pack_anim(&resource->pack, name);
+        PeImpAnimation moves;
+        if (pose < 0 && !pe_mod_path(store, sizeof store, "import/store") &&
+            !pe_imp_catalog_animation(store, room_move, &moves, why, sizeof why)) {
+            pose = pe_enemy_add_room_move(&resource->pack, &moves, name);
+            pe_imp_animation_free(&moves);
+        }
+        if (pose >= 0) {
+            s_entrance[s_count].pose = pose;
+            s_entrance[s_count].wake = -1;
+            s_entrance[s_count].loop = 1;
+        }
     }
     s_roster[s_count++] = resource;
     s_armed = 1;
@@ -460,7 +480,7 @@ static void pe_set_combat_stats(EnemyCombatant *core, const PeEnemyPack *pack) {
     core->hpMirror = (u16)(pack->exp > 0xFFFF ? 0xFFFF : pack->exp);
 }
 
-static int pe_spawn(PeBattlePack *resource, int entrance, int wake, int x, int y, int z) {
+static int pe_spawn(PeBattlePack *resource, int entrance, int wake, int loop, int x, int y, int z) {
     const PeEnemyPack *pack = &resource->pack;
     PeFoe *f = &s.foe[s.foes];
     FieldActor *a, *aya = g_PlayerEntity;
@@ -491,9 +511,10 @@ static int pe_spawn(PeBattlePack *resource, int entrance, int wake, int x, int y
     f->role = -1;
     f->last_hp = pack->hp;
     f->wake_anim = wake;
+    f->entrance_loop = loop;
     if (entrance >= 0) {
         pe_set_anim(f, ROLE_ENTRANCE, entrance);
-        f->entrance_frames = 24;
+        f->entrance_frames = loop ? 90 : 24;
         pe_mod_log(MOD_ID, "battle: %s starts with %s", pack->name, pack->anim[entrance].name);
     } else {
         pe_set_anim(f, PE_ANIM_IDLE, pack->role[PE_ANIM_IDLE]);
@@ -788,7 +809,8 @@ static void pe_join(int early) {
             pe_mod_log(MOD_ID, "battle: no VRAM left for %s", resource->pack.name);
             break;
         }
-        if (!pe_spawn(resource, s_entrance[i].pose, s_entrance[i].wake, x + (int)(sin(ang) * side * 65536.0), y,
+        if (!pe_spawn(resource, s_entrance[i].pose, s_entrance[i].wake, s_entrance[i].loop,
+                      x + (int)(sin(ang) * side * 65536.0), y,
                       z + (int)(cos(ang) * side * 65536.0))) break;
         if (!resource->uploaded) pe_vram(resource, 0);
     }
@@ -877,6 +899,8 @@ static void pe_foe_think(PeFoe *f) {
             } else {
                 pe_set_anim(f, PE_ANIM_IDLE, pack->role[PE_ANIM_IDLE]);
             }
+        } else if (f->entrance_loop) {
+            f->frame = fmod(f->frame + pack->fps / 30.0, cur->frames);
         }
         f->last_hp = hp;
         pe_place_targets(f);

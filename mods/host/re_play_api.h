@@ -60,6 +60,8 @@ typedef struct PeRePlayApi {
     /* Optional in v1. Preferred archive suffix for the current room's enemy assets.
      * NULL keeps the catalogue's default. The returned string is static. */
     const char *(*enemy_archive)(void);
+    /* Optional: animation assigned to this enemy slot by the current room. */
+    int (*enemy_room_move)(unsigned slot, char *asset, size_t size);
 } PeRePlayApi;
 
 #endif

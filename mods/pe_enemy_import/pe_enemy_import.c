@@ -303,13 +303,14 @@ static void pe_arrived(void) {
 
 typedef struct {
     const PeEnemyBuildApi *build;
+    const PeRePlayApi *play;
     const char *archive;
     char assets[PE_TRIP_FOES_MAX][PE_IMP_ID_MAX];
     char packs[PE_TRIP_FOES_MAX][64];
     int count;
 } PeRoomPacks;
 
-static int pe_try_room_pack(const PeEnemyBuildApi *b, const char *asset, const char *entrance,
+static int pe_try_room_pack(const PeEnemyBuildApi *b, const char *asset, const char *entrance, const char *room_move,
                             int quiet, char pack[64]) {
     char why[200] = "";
     if (pe_enemy_pack_name(asset, pack, 64)) return 0;
@@ -318,21 +319,33 @@ static int pe_try_room_pack(const PeEnemyBuildApi *b, const char *asset, const c
         if (quiet) return 0;
         pe_mod_log(MOD_ID, "the room's %s: no fresh build (%s); an older pack is used if there is one", asset, why);
     }
-    return pe_enemy_battle_add_pack(pack, entrance);
+    return pe_enemy_battle_add_pack(pack, entrance, room_move);
 }
 
-static int pe_add_room_pack(const char *asset, int already_selected, const char *entrance, void *ctx) {
+static int pe_add_room_pack(const char *asset, int already_selected, const char *entrance,
+                            const PeReEnemyPlacement *placement, void *ctx) {
     PeRoomPacks *p = ctx;
+    char move[PE_IMP_ID_MAX];
+    const char *room_move = NULL;
+    if (!strncmp(asset, "re2:enemy/em1", 13) && (placement->behaviour & 0x3f) == 10 &&
+        p->play->struct_size >= sizeof *p->play && p->play->enemy_room_move &&
+        !p->play->enemy_room_move(placement->slot, move, sizeof move)) room_move = move;
     if (already_selected)
         for (int i = 0; i < p->count; i++)
-            if (!strcmp(p->assets[i], asset)) return pe_enemy_battle_add_pack(p->packs[i], entrance);
+            if (!strcmp(p->assets[i], asset)) return pe_enemy_battle_add_pack(p->packs[i], entrance, room_move);
     char variant[PE_IMP_ID_MAX];
     const char *selected = asset;
     char *pack = p->packs[p->count];
-    if (p->archive && snprintf(variant, sizeof variant, "%s-%s", asset, p->archive) < (int)sizeof variant &&
-        pe_try_room_pack(p->build, variant, entrance, 1, pack))
-        selected = variant;
-    else if (!pe_try_room_pack(p->build, asset, entrance, 0, pack)) return 0;
+    if (p->archive) {
+        const char *archives[] = {p->archive, !strcmp(p->archive, "cdemd1") ? "cdemd3" : "cdemd2"};
+        for (unsigned i = 0; i < sizeof archives / sizeof archives[0]; ++i)
+            if (snprintf(variant, sizeof variant, "%s-%s", asset, archives[i]) < (int)sizeof variant &&
+                pe_try_room_pack(p->build, variant, entrance, room_move, 1, pack)) {
+                selected = variant;
+                break;
+            }
+    }
+    if (selected == asset && !pe_try_room_pack(p->build, asset, entrance, room_move, 0, pack)) return 0;
     snprintf(p->assets[p->count++], PE_IMP_ID_MAX, "%s", asset);
     pe_mod_log(MOD_ID, "trip from an imported room: selected %s (pack %s)", selected, pack);
     return 1;
@@ -342,8 +355,8 @@ static void pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
     if (api->room(&room)) return;
     pe_enemy_battle_begin_roster();
-    PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION)};
-    if (api->struct_size >= sizeof *api && api->enemy_archive) packs.archive = api->enemy_archive();
+    PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION), .play = api};
+    if (api->struct_size >= offsetof(PeRePlayApi, enemy_room_move) && api->enemy_archive) packs.archive = api->enemy_archive();
     if (!pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs))
         pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
 }

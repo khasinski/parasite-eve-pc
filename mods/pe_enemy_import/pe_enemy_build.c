@@ -131,12 +131,25 @@ static int anim_in(PeEnemyPack *p, const PeImpAnimation *a, const char *name, in
     if (!an->data || !an->event) { free(an->data), free(an->event); an->data = NULL, an->event = NULL; return fail(why, n, "%sout of memory", "", 0); }
     memcpy(an->data, mv->data, words * mv->frames * sizeof *an->data);
     for (uint32_t k = 0; k < mv->frames; k++) {
-        unsigned e = mv->event[k], s = e & PE_IMP_EVENT_SOUND;
+        unsigned e = mv->event ? mv->event[k] : 0, s = e & PE_IMP_EVENT_SOUND;
         an->event[k] = (uint16_t)((s < PE_ENEMY_MAX_SOUNDS ? s : 0) | (e & PE_IMP_EVENT_HIT ? PE_ENEMY_EVENT_HIT : 0));
     }
     snprintf(an->name, sizeof an->name, "%s", name);
     p->anims++;
     return 0;
+}
+
+int pe_enemy_add_room_move(PeEnemyPack *p, const PeImpAnimation *moves, const char *name) {
+    char why[100];
+    if (moves->bones != (unsigned)p->bones || anim_in(p, moves, name, 0, why, sizeof why)) return -1;
+    PeEnemyAnim *anim = &p->anim[p->anims - 1];
+    const size_t words = 3 + 3 * (size_t)p->bones;
+    for (int i = 0; i < anim->frames; i++) {
+        int16_t *frame = anim->data + i * words;
+        frame[0] = frame[1] = frame[2] = 0; /* choreography uses a room position; keep the PE battle position */
+        anim->event[i] = 0;                 /* room sound IDs are not enemy pack IDs */
+    }
+    return p->anims - 1;
 }
 
 /* floor to the top of the head in the idle pose (source units, y down) */

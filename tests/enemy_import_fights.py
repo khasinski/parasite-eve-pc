@@ -21,6 +21,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -242,6 +243,72 @@ def part_profile_editor(game, profile_path):
     check(built['hp'] == 123 and built['behavior']['speed'] == 5, built)
     game.ask('ini-set Fights/Imported enemy 0')
     print('profile editor: previewed a source move without saving, then applied HP, speed and attack')
+
+
+def part_room_variants(exe, disc, work, sources):
+    for player, source in enumerate(sources):
+        def setup(config):
+            folder = config / 'import'
+            folder.mkdir()
+            (folder / 'folders.txt').write_text(f'{source.parent}\n', encoding='utf-8')
+
+        game = Game(exe, disc, work / f'room-variants-{player}', setup=setup,
+                    ini='Cheats/God mode=1\nManage mods/Play imported games=1\n', limit=FIELD + 45000)
+        try:
+            game.ask(f'ini-set Play imported games/Scenario {player}')
+            game.ask('mod-action Play imported games/Start')
+            # Remove the main archive alias from this isolated fixture to exercise the real alternate's fallback.
+            catalog_path = game.config / 'import/store/re2/catalog.json'
+            catalog = json.loads(catalog_path.read_text(encoding='utf-8'))
+            alternate = f're2:enemy/em1f-cdemd{player + 2}'
+            check(alternate in catalog, f'no {alternate} in the disc catalog')
+            catalog.pop(f're2:enemy/em1f-cdemd{player}', None)
+            catalog_path.write_text(json.dumps(catalog), encoding='utf-8')
+            source = catalog[f're2:logic/112-{player}']['sources'][0]
+            logic = catalog_path.parent / source['sha256'] / source['item'] / 'roomlogic.bin'
+            fixture = bytearray(logic.read_bytes())
+            at = 28
+            while fixture[at:at + 4] != b'RDT0':
+                length, = struct.unpack_from('<I', fixture, at + 8)
+                at += 12 + (length + 3 & ~3)
+                check(at + 12 <= len(fixture), 'room variants: no RDT section')
+            rdt = at + 12
+            init, main, end = struct.unpack_from('<3I', fixture, rdt + 8 + 16 * 4)
+            placements = {}
+            for i in range(rdt + init, rdt + end - 21):
+                row = fixture[i:i + 22]
+                if row[:2] == b'\x44\0' and row[2] in (1, 2, 3) and row[3] == 0x1F and row[4] & 63 == 10:
+                    placements[row[2]] = row
+            check(len(placements) == 3, 'room variants: missing real feeding placements')
+            # Spawn the existing placements on entry, bypassing the room's story prerequisites.
+            script = b'\x02\0' + b''.join(placements[slot] for slot in (1, 2, 3)) + b'\x01\0'
+            check(len(script) < main - init, 'room variants: short init section')
+            fixture[rdt + init:rdt + init + len(script)] = script
+            logic.write_bytes(fixture)
+            game.ask('ini-set Play imported games/Testing/Stage 1')
+            game.ask('ini-set Play imported games/Testing/Room 18')
+            game.ask('mod-action Play imported games/Testing/Go to that room')
+            game.adv(120)
+            rows = json.loads(game.ask('mod-state pe_re_play'))['rows']
+            info = {row['label']: row['value'] for row in rows}
+            check(info['Status'].startswith('Room 1-12') and '0x1F' in info['Enemies'], info)
+            start_fight(game, 0, 1)
+            check(wait_battle(game) is not None, 'room variants: no native fight')
+            end = game.vblank + 3000
+            while game.vblank < end:
+                state = game.battle()
+                if sum(e['type'] == 0xEE for e in state['enemies']) >= 3:
+                    break
+                game.adv(10)
+            log = (game.config / 'pe_mods.log').read_text(encoding='utf-8', errors='replace')
+            check(f'selected {alternate} ' in log, f'room variants: did not select {alternate}')
+            check(re.search(rf'starts with feeding_112-\d+-p{player}', log),
+                  'room variants: did not play the room feeding animation')
+            win_when_ready(game)
+            wait_home(game)
+            print(f'room variants: {alternate} joined with room 1-12 feeding moves')
+        finally:
+            game.quit()
 
 
 def part_imported_room(exe, disc, work, re2_disc, boss_forms=False, profile_editor=False):
@@ -490,7 +557,13 @@ def main():
         return 77
     work.mkdir(parents=True, exist_ok=True)
     try:
-        if any(flag in sys.argv for flag in ('--imported-room', '--boss-forms', '--profile-editor')):
+        if '--room-variants' in sys.argv:
+            discs = [os.getenv(key) for key in ('PE_TEST_RE2_DISC', 'PE_TEST_RE2_DISC2')]
+            if not all(path and Path(path).is_file() for path in discs):
+                print('Both RE2 discs are needed for --room-variants: skipped')
+                return 77
+            part_room_variants(exe, disc, work, [Path(path).resolve() for path in discs])
+        elif any(flag in sys.argv for flag in ('--imported-room', '--boss-forms', '--profile-editor')):
             re2_disc = os.getenv('PE_TEST_RE2_DISC')
             if not re2_disc or not Path(re2_disc).is_file():
                 print('PE_TEST_RE2_DISC is not set: skipped')

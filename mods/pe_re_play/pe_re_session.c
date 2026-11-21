@@ -6,6 +6,7 @@
 
 #include "pe_re_session.h"
 #include "pe_re_zone.h"
+#include "pe_imp_rdt.h"
 
 /* First rooms: RE2 and RE3 open in the street (room 1-00); RE1 in the mansion's main hall (1-06).
  * Only RE2 has the cameras and collision the runtime uses so far (design doc, phase 4). */
@@ -454,6 +455,32 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
         p->motion = (int16_t)(e[18] | e[19] << 8), p->ctr = (int16_t)(e[20] | e[21] << 8);
     }
     return n;
+}
+
+static uint32_t room_move_word(const uint8_t *p) {
+    return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
+
+int pe_re_session_enemy_room_move(const PeReSession *s, unsigned slot, char *asset, size_t size) {
+    uint32_t bytes, at, length;
+    if (!s->game || strcmp(s->game->game, "re2") || !s->logic || slot >= 16) return -1;
+    const uint8_t *rdt = pe_imp_logic_section(s->logic, PE_IMP_LOGIC_RDT0, NULL, &bytes);
+    if (!rdt || pe_imp_rdt_section(rdt, bytes, 22, &at, &length) || length < 8) return -1;
+    const uint8_t *rbj = rdt + at;
+    const uint32_t table = room_move_word(rbj), count = room_move_word(rbj + 4);
+    if (table > length || count > 64 || count > (length - table) / 8) return -1;
+    /* bio2-ds EM_SUB.C: bit zero is for the player, then one bit per enemy slot.
+     * Later records supersede earlier ones for the same slot. */
+    for (uint32_t i = count; i > 0; i--) {
+        const uint32_t record = room_move_word(rbj + table + 8 * (i - 1));
+        if (record <= length - 4 && (room_move_word(rbj + record) & (1u << (slot + 1)))) {
+            const int written = snprintf(asset, size, "re2:roomanim/%x%02x-%u-p%u",
+                                         (unsigned)s->stage + 1, (unsigned)s->room, (unsigned)i - 1,
+                                         (unsigned)s->player);
+            return written >= 0 && (size_t)written < size ? 0 : -1;
+        }
+    }
+    return -1;
 }
 
 int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag) {
