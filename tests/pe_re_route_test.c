@@ -135,6 +135,13 @@ static PeReChange examine(PeReSession *s, const PeImpZone *zone, char *why, size
     zone_centre(zone, &cx, &cz);
     if (!(zone->floor & 0x80)) s->floor = zone->floor;      /* on its floor (the stairs walked), as Go to that door does */
     PeReChange c = PE_RE_STAY;
+    const int events = s->events;
+    const int is_event = pe_re_zone_kind(&s->run, zone->id, zone->sce, NULL) == PE_RE_ZONE_EVENT;
+    unsigned sat = zone->sat;                             /* its check bits as the scripts left them (aot_reset) */
+    for (int i = s->run.nreset - 1; i >= 0; i--)
+        if (s->run.reset[i].id == zone->id) { sat = s->run.reset[i].sat; break; }
+    if (getenv("PE_TEST_RE_SAT")) printf("    examine zone %u: sat %02x as left %02x, kind %d\n", (unsigned)zone->id, (unsigned)zone->sat, sat,
+                                         pe_re_zone_kind(&s->run, zone->id, zone->sce, NULL));
     for (int k = 0; k < 5; k++) {
         double x = cx, z = cz;
         int facing = 0;
@@ -145,9 +152,11 @@ static PeReChange examine(PeReSession *s, const PeImpZone *zone, char *why, size
         s->facing = facing;
         s->said[0] = 0;
         if (pe_re_session_tick(s) == PE_RE_ROOM) return PE_RE_ROOM;   /* a script took her through a door */
-        c = pe_re_session_step(s, s_store, x, z, 1, why, n);
+        /* a player zone with no button: walking into it; else a press (it may be another record of this id that's live) */
+        c = pe_re_session_step(s, s_store, x, z, !((sat & PE_RE_SAT_PLAYER) && !(sat & PE_RE_SAT_MANUAL)), why, n);
         if (c == PE_RE_ZONE) handed(s);
         if (c == PE_RE_ROOM || c == PE_RE_ZONE || (c == PE_RE_SAID && s->said[0])) return c;
+        if (is_event && s->events != events) return c;  /* its event started: once, as one press (a switch toggles) */
     }
     return c;
 }
@@ -285,6 +294,28 @@ static void search(PeReSession *s, FILE *log) {
             printf("    walked onto %s zone %u at %.0f %.0f (floor %d): step %d, %s\n", here, (unsigned)t.zone.id, cx, cz, s->floor,
                    (int)c, s->said[0] ? s->said : why);
         if (key_of(s) != from) { note_event(from, (int)t.zone.id, key_of(s), log); r->searched_at = 0, r->unfinished = 1; return; }
+    }
+    /* a zone only an object sets off (a statue pushed onto it): run its event as the push would. A test-bot
+     * step, like winning fights: pushing objects isn't built (in game either). Once per zone per room. */
+    for (uint32_t i = 0; i < n; i++) {
+        PeImpTrigger t;
+        static uint32_t pushed[256];
+        static int npushed;
+        if (pe_imp_logic_trigger(s->logic, i, &t) || !pe_re_scd_live(&s->run, t.at) || (t.zone.sat & PE_RE_SAT_PLAYER) ||
+            !(t.zone.sat & 0x04) || pe_re_zone_kind(&s->run, t.zone.id, t.zone.sce, t.data) != PE_RE_ZONE_EVENT)
+            continue;
+        const uint32_t key = (uint32_t)key_of(s) << 8 | t.zone.id;
+        int k = 0;
+        while (k < npushed && pushed[k] != key) k++;
+        if (k < npushed || npushed >= 256) continue;
+        pushed[npushed++] = key;
+        for (int w = 18; w < 50; w++) s->run.works[w][PE_RE_MEMBER_AT_SCE_NO] = (int16_t)t.zone.id;   /* "it's on the zone" */
+        pe_re_scd_exec(s->logic, &s->run, (unsigned)t.data[0] | (unsigned)t.data[1] << 8, t.data[3]);
+        pe_re_session_tick(s);
+        for (int w = 18; w < 50; w++) s->run.works[w][PE_RE_MEMBER_AT_SCE_NO] = 255;    /* cleared, as every frame */
+        settle(s, 300);
+        fprintf(log, "  %s: pushed something onto zone %u (its event played)\n", here, (unsigned)t.zone.id);
+        s_progress++;
     }
     /* everything a player can examine: events, messages, computers */
     for (uint32_t i = 0; i < n; i++) {
@@ -462,7 +493,8 @@ int main(void) {
     CHECK(!pe_imp_scan(s_store, re2, NULL, &sc));
     const PeReGame *g = pe_re_game_named("re2");
     PeReSession probe;
-    const unsigned scenario = pe_re_session_start(&probe, s_store, g, 0, why, sizeof why) != 0;   /* disc 2: Claire */
+    unsigned scenario = pe_re_session_start(&probe, s_store, g, 0, why, sizeof why) != 0;   /* disc 2: Claire */
+    if (getenv("PE_TEST_RE_PLAYER")) scenario = (unsigned)atoi(getenv("PE_TEST_RE_PLAYER"));   /* 0 Leon, 1 Claire */
     pe_re_session_end(&probe);
 
     static PeReSession s;
@@ -485,6 +517,7 @@ int main(void) {
     s_room[key_of(&s)].seen = 1, s_room[key_of(&s)].parent = -1, s_room[key_of(&s)].order = ++s_order;
     settle(&s, SETTLE);
     int moves = 0, first_typewriter = -1, ended = -1;
+    static unsigned char researched[256];                   /* searches of a room in a row (bounded) */
     while (moves < MOVES_MAX) {
         const int here = key_of(&s);
         if (flags_changed(&s)) s_progress++;
@@ -502,8 +535,13 @@ int main(void) {
             FILE *f = fopen(path, "wb");
             if (f) fwrite(bytes, 1, sizeof bytes, f), fclose(f);
         }
+        const int before = s_progress;
         search(&s, log);
         if (key_of(&s) != here) continue;                       /* a zone took her elsewhere: start over there */
+        if (s_progress != before) {                             /* something changed here: an item may have appeared */
+            s_room[here].searched_at = 0;
+            if (++researched[here & 0xFF] < 8) continue;
+        }
         if (events_running(&s) && walk_where_waited(&s, log)) {  /* a scene here waits for her to walk somewhere */
             s_progress++;
             continue;
