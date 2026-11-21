@@ -146,7 +146,7 @@ static int live(const PeReScdRun *run, uint32_t at) { return !run || pe_re_scd_l
 
 int pe_re_pickup_gone(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, const PeImpPickup *pk) {
     return !pk->item || was_taken(p, taken_key(room, pk->flag)) ||
-           (run && run->ran && pe_re_flag(&p->flags, PE_RE_FG_ITEM, pk->flag));
+           (run && run->ran && pe_re_flag(&p->flags, p->item_group ? p->item_group : PE_RE_FG_ITEM, pk->flag));
 }
 
 int pe_re_pickup_at(const PeImpRoomLogic *room, const PeReScdRun *run, const PeReProgress *p, double x, double z,
@@ -173,7 +173,7 @@ int pe_re_take(PeReProgress *p, const PeImpRoomLogic *room, const PeImpPickup *p
         return -1;
     }
     p->taken[p->ntaken++] = taken_key(room, pk->flag);
-    pe_re_flag_set(&p->flags, PE_RE_FG_ITEM, pk->flag, 1);
+    pe_re_flag_set(&p->flags, p->item_group ? p->item_group : PE_RE_FG_ITEM, pk->flag, 1);
     if (pk->count > 1) snprintf(say, n, "Picked up %u %s.", (unsigned)pk->count, name);
     else snprintf(say, n, "Picked up the %s.", name);
     return 0;

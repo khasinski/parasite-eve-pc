@@ -40,6 +40,8 @@ typedef struct {
     PeReFlags flags;                               /* the game's flags, as its scripts set them */
     PeReHeld box[PE_RE_BOX_MAX];                   /* in the item boxes */
     int boxed;
+    uint8_t item_group;                            /* the taken-item flags for this room's stage (not saved:
+                                                    * set on each room's load; 0 reads as Item_flg) */
 } PeReProgress;
 
 int pe_re_has(const PeReProgress *p, uint16_t item);

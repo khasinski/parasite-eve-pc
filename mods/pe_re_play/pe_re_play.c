@@ -461,6 +461,12 @@ static int on_frame(void *ctx, void *user) {
     case PE_RE_CAMERA: show_cut(); break;
     default: break;
     }
+    {   /* SYS_ENDING (script bit 0x0A of System_flg): the scenario is over; its ending isn't played here */
+        static int s_ending_said;
+        const int ending = pe_re_flag(&s_session.progress.flags, 0, 0x0A);
+        if (ending && !s_ending_said) say("The end. (The game's ending would play here.)");
+        s_ending_said = ending;
+    }
     if (s_session.moved) {                       /* a cutscene walked her somewhere: she's there */
         if (s_session.floor != re_host()->player_floor()) show_room(1);   /* on another floor: the room again there */
         else re_host()->place_player(s_session.x, s_session.z);
@@ -544,7 +550,7 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
         const PeImpZone *zone = &d.zone;
         if (tag == PE_IMP_LOGIC_PICK) {
             if (pe_imp_logic_pickup(s_session.logic, i, &pk) || !pe_re_scd_live(&s_session.run, pk.at) ||
-                pe_re_flag(&s_session.progress.flags, PE_RE_FG_ITEM, pk.flag))
+                pe_re_pickup_gone(s_session.logic, &s_session.run, &s_session.progress, &pk))
                 continue;
             zone = &pk.zone;
         } else if (tag == PE_IMP_LOGIC_TRIG) {

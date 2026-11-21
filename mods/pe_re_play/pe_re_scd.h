@@ -53,6 +53,7 @@
 #define PE_RE_FLAG_GROUPS 36                   /* RE2 scripts set groups 0-35 */
 #define PE_RE_FG_STATUS 1
 #define PE_RE_FG_ITEM 8
+#define PE_RE_FG_ITEM2 34                      /* Item_flg2: taken items from stage 5 on (SCE_AT.C, Stage_no >= 4) */
 #define PE_RE_WORK 256
 #define PE_RE_LIVE_MAX 256
 #define PE_RE_RESETS_MAX 64

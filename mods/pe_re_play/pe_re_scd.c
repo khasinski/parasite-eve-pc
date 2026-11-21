@@ -534,7 +534,9 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
  *   that checks Sce_free0 & 1). 5-09's scene waits on that.
  * - enemy 0x34 (a G form), Sce_free[0]: bit 1 brings it out, and it sets bit 2 once it's out
  *   (EM34.C Em34_mv0d / Em34_mv00); it sets bit 4 when it dies (Em34_die00). 6-17's lift scene
- *   waits on both; the death comes from the battle (pe_re_session_beaten), not a timer. */
+ *   waits on both; the death comes from the battle (pe_re_session_beaten), not a timer.
+ * - enemy 0x36 (the last G form): it sets bit 2 of Sce_free[0] when it dies (EM36.C Em36_die00).
+ *   7-04's train scene waits on it, again from the battle. */
 static void enemy_standins(PeReScdRun *run) {
     for (int n = 0; n < 16; n++) {
         int16_t *w = run->works[2 + n];
@@ -543,6 +545,9 @@ static void enemy_standins(PeReScdRun *run) {
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x31) {
             if (*f & 0x10) order = 0x10, frames = 60;              /* out of the pod: about a second */
             else if ((*f & 1) && !(*f & 2)) order = 1, frames = 90; /* out of the shell: a second and a half */
+        } else if (w[0] && w[PE_RE_MEMBER_ID] == 0x36) {
+            if (run->em_dead[n] == 1) *f |= 2, run->em_dead[n] = 2;   /* beaten: it died */
+            continue;
         } else if (w[0] && w[PE_RE_MEMBER_ID] == 0x34) {
             if (run->em_dead[n] == 1) { *f |= 4, run->em_dead[n] = 2; continue; }   /* beaten: it died */
             if ((*f & 1) && !(*f & 2)) order = 1, frames = 120;    /* out: about two seconds */

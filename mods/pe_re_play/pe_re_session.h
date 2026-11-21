@@ -70,6 +70,7 @@ typedef struct {
     int events;                       /* events zones started */
     int moved;                        /* a script moved her to (x, z): the mod places her, then clears it */
     int at_zone;                      /* the zone she set off last frame (her At_sce_no), 255 none */
+    int16_t cdir_y;                   /* her facing as the scripts last wrote it (unwrapped: a turn may count past 4095) */
     int uses;                         /* items used on the room */
 } PeReSession;
 

@@ -119,6 +119,7 @@ static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room
     }
     free(s->logic);
     s->logic = l, s->stage = stage, s->room = room;
+    s->progress.item_group = stage >= 4 ? PE_RE_FG_ITEM2 : PE_RE_FG_ITEM;   /* Item_flg2 from stage 5 on */
     const PeReScdHost host = host_of(s);
     memset(s->progress.flags.bits[PE_RE_FG_USE], 0, sizeof s->progress.flags.bits[PE_RE_FG_USE]);   /* Sce_work_clr */
     pe_re_scd_run(l, &s->progress.flags, &host, &s->run);   /* what its scripts set up */
@@ -287,7 +288,8 @@ PeReChange pe_re_session_tick(PeReSession *s) {
         int16_t *me = s->run.works[0];
         me[0] = 1, me[PE_RE_MEMBER_POS_X] = (int16_t)lround(s->x), me[PE_RE_MEMBER_POS_Z] = (int16_t)lround(s->z);
         me[PE_RE_MEMBER_POS_Y] = (int16_t)(-1800 * s->floor), me[PE_RE_MEMBER_NFLOOR] = (int16_t)s->floor;
-        me[PE_RE_MEMBER_CDIR_Y] = (int16_t)((s->facing + 1024) & 4095);
+        if (pe_re_facing_of(s->cdir_y) != s->facing) s->cdir_y = (int16_t)((s->facing + 1024) & 4095);
+        me[PE_RE_MEMBER_CDIR_Y] = s->cdir_y;              /* the game's Cdir_y isn't wrapped */
         me[PE_RE_MEMBER_AT_SCE_NO] = (int16_t)s->at_zone;   /* last frame's zone hit, then cleared (Sce_work_clr_at) */
         s->at_zone = 255;
         s->run.player_set = 0;
@@ -298,6 +300,7 @@ PeReChange pe_re_session_tick(PeReSession *s) {
         s->x = me[PE_RE_MEMBER_POS_X], s->z = me[PE_RE_MEMBER_POS_Z];
         s->floor = pe_re_floor_of(me[PE_RE_MEMBER_POS_Y]);   /* pos_set sets her height too: a lift's other floor */
         s->facing = pe_re_facing_of(me[PE_RE_MEMBER_CDIR_Y]);
+        s->cdir_y = me[PE_RE_MEMBER_CDIR_Y];
         s->moved = 1;
     }
     for (int i = 0; i < s->run.naot_on; i++) {             /* aot_on: a zone set off by its script */

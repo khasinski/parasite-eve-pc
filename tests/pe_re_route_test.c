@@ -211,6 +211,16 @@ static void search(PeReSession *s, FILE *log) {
             if (pe_imp_logic_pickup(s->logic, i, &pk) || !pe_re_scd_live(&s->run, pk.at) ||
                 pe_re_pickup_gone(s->logic, &s->run, &s->progress, &pk))
                 continue;
+            {   /* a placeholder (no area): its script hands it over (aot_on), nobody stands there */
+                int minx = pk.zone.x[0], maxx = minx, minz = pk.zone.z[0], maxz = minz;
+                for (int c = 1; c < 4; c++) {
+                    if (pk.zone.x[c] < minx) minx = pk.zone.x[c];
+                    if (pk.zone.x[c] > maxx) maxx = pk.zone.x[c];
+                    if (pk.zone.z[c] < minz) minz = pk.zone.z[c];
+                    if (pk.zone.z[c] > maxz) maxz = pk.zone.z[c];
+                }
+                if (maxx - minx <= 1 || maxz - minz <= 1) continue;
+            }
             if (examine(s, &pk.zone, why, sizeof why) == PE_RE_SAID && !strncmp(s->said, "Picked up", 9)) {
                 fprintf(log, "  %s: %s (item 0x%02X x%u, flag %u)\n", here, s->said, (unsigned)pk.item,
                         (unsigned)pk.count, (unsigned)pk.flag);
@@ -255,6 +265,7 @@ static void search(PeReSession *s, FILE *log) {
             else s_progress++;
         }
     }
+    if (s->progress.held >= PE_RE_POCKET_SLOTS) make_room(s);   /* a scene may hand her something */
     /* walk-on events: step into the middle of each (the game checks underfoot every frame) */
     for (uint32_t i = 0; i < n; i++) {
         PeImpTrigger t;
@@ -401,6 +412,38 @@ static int plan(const PeReSession *s, int from, int *first_door, int *goal) {
     return 0;
 }
 
+/* A scene waiting for her to walk somewhere: a running task on the player (work_set 1) near a
+ * member_cmp of her x (member 11) or z (13). Put her where the comparison holds, as a player walking
+ * there would, and let the scene go on. 1 if it moved her. (A test-bot step: it reads the bytes
+ * around the task, so it may misread; it only runs when the route is stuck.) */
+static int walk_where_waited(PeReSession *s, FILE *log) {
+    uint32_t size = 0;
+    const uint8_t *rdt = pe_imp_logic_section(s->logic, PE_IMP_LOGIC_RDT0, NULL, &size);
+    char a[8];
+    if (!rdt) return 0;
+    for (int k = 2; k < PE_RE_TASKS; k++) {
+        const PeReScdTask *t = &s->run.task[k];
+        if (!t->status || t->work != 0) continue;
+        for (uint32_t at = t->pc > 96 ? t->pc - 96 : 0; at + 6 <= size && at < t->pc + 32; at++) {
+            const uint8_t *m = rdt + at;
+            if (m[0] != 0x3E || m[1] != 0 || (m[2] != 11 && m[2] != 13) || m[3] < 1 || m[3] > 4) continue;
+            const int v = (int16_t)(m[4] | m[5] << 8);
+            const int want = m[3] == 1 ? v + 50 : m[3] == 2 ? v + 1 : m[3] == 3 ? v - 50 : v - 1;
+            const double before = m[2] == 11 ? s->x : s->z;
+            if ((m[3] == 1 && before > v) || (m[3] == 2 && before >= v) || (m[3] == 3 && before < v) || (m[3] == 4 && before <= v))
+                continue;                                  /* already holds */
+            if (m[2] == 11) s->x = want; else s->z = want;
+            fprintf(log, "  %s: walked to %s %d, where a scene waits for her\n", room_name(key_of(s), a, sizeof a),
+                    m[2] == 11 ? "x" : "z", want);
+            char why[200];
+            pe_re_session_step(s, s_store, s->x, s->z, 0, why, sizeof why);
+            settle(s, 300);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int door_count(const PeReSession *s) {
     uint32_t n = 0;
     pe_imp_logic_section(s->logic, PE_IMP_LOGIC_DOOR, &n, NULL);
@@ -441,10 +484,15 @@ int main(void) {
     printf("RE2 %s, from the street:\n", scenario ? "Claire" : "Leon");
     s_room[key_of(&s)].seen = 1, s_room[key_of(&s)].parent = -1, s_room[key_of(&s)].order = ++s_order;
     settle(&s, SETTLE);
-    int moves = 0, first_typewriter = -1;
+    int moves = 0, first_typewriter = -1, ended = -1;
     while (moves < MOVES_MAX) {
         const int here = key_of(&s);
         if (flags_changed(&s)) s_progress++;
+        if (pe_re_flag(&s.progress.flags, 0, 0x0A)) {           /* SYS_ENDING (script bit 0x0A of System_flg): the end */
+            ended = here;
+            fprintf(log, "  %s: the scenario's ending starts here\n", room_name(here, a, sizeof a));
+            break;
+        }
         if (ckpt && *ckpt && !s_room[here].checkpointed) {       /* PE_TEST_RE_CHECKPOINTS: this room's first visit */
             static uint8_t bytes[PE_RE_SAVE_SIZE];
             char path[600];
@@ -456,20 +504,30 @@ int main(void) {
         }
         search(&s, log);
         if (key_of(&s) != here) continue;                       /* a zone took her elsewhere: start over there */
+        if (events_running(&s) && walk_where_waited(&s, log)) {  /* a scene here waits for her to walk somewhere */
+            s_progress++;
+            continue;
+        }
         if (s_room[here].typewriter && first_typewriter < 0) first_typewriter = here;
         for (int i = door_count(&s); i < DOORS; i++) s_room[here].door_state[i] = DOOR_OPENS, s_room[here].door_to[i] = here;
         int door, goal;
         if (!plan(&s, here, &door, &goal)) {
             /* Stuck: every way out of here looked shut. Try this room's doors again, once per bit of progress. */
             static int stuck_at = -1;
-            if (stuck_at == s_progress) break;
+            if (stuck_at == s_progress) {                        /* nothing new since the last time: done */
+                fprintf(log, "  stuck in %s again: the run ends here\n", room_name(here, a, sizeof a));
+                for (int k = 0; k < PE_RE_TASKS; k++)
+                    if (s.run.task[k].status) fprintf(log, "    task %d: proc %d at %u (work %d)\n", k, s.run.task[k].proc,
+                                                      (unsigned)s.run.task[k].pc, s.run.task[k].work);
+                break;
+            }
             stuck_at = s_progress;
             {   /* a fight the way on waits for (a boss): she wins it, as the game's battle would */
                 PeReEnemyPlacement foes[32];
                 const int nfoes = pe_re_session_enemies(&s, foes, 32);
                 int beaten = 0;
                 for (int k = 0; k < nfoes; k++)                   /* each once (a boss has no killed flag) */
-                    if (foes[k].slot < 16 && !s.run.em_dead[foes[k].slot])
+                    if (foes[k].slot < 16 && foes[k].kind < 0x40 && !s.run.em_dead[foes[k].slot])
                         beaten += !pe_re_session_beaten(&s, foes[k].slot, foes[k].killed_flag);
                 if (beaten) {
                     fprintf(log, "  %s: fought and beat %d enemies\n", room_name(here, a, sizeof a), beaten);
@@ -477,6 +535,9 @@ int main(void) {
                     s_progress++;
                 }
             }
+            if (walk_where_waited(&s, log)) { s_progress++; continue; }
+            for (int k = 0; k < ROOMS; k++)                       /* rooms seen before: search them again */
+                if (s_room[k].seen && k != here) s_room[k].unfinished = 1, s_room[k].searched_at = 0;
             for (int i = 0; i < DOORS; i++)
                 if (s_room[here].door_state[i] != DOOR_OPENS) s_room[here].door_tried_at[i] = 0;
             for (int k = 0; k < ROOMS; k++)                       /* elevators: where they go may have changed */
@@ -484,6 +545,14 @@ int main(void) {
                     if (s_room[k].door_variable[i]) s_room[k].door_state[i] = DOOR_UNTRIED, s_room[k].door_variable[i] = 0;
             fprintf(log, "  stuck in %s: its doors again (came from %04x)\n", room_name(here, a, sizeof a),
                     (unsigned)(uint16_t)s.progress.flags.work[PE_RE_WORK_ROOM_OLD]);
+            for (const char *f = getenv("PE_TEST_RE_FLAGS"); f && *f;) {   /* PE_TEST_RE_FLAGS="4:88 4:89": those now */
+                unsigned g = 0, bit = 0;
+                int used = 0;
+                if (sscanf(f, "%u:%x%n", &g, &bit, &used) != 2) break;
+                printf("    flag %u:%02x = %d\n", g, bit, pe_re_flag(&s.progress.flags, g, bit));
+                f += used;
+                while (*f == ' ') f++;
+            }
             if (getenv("PE_TEST_RE_VERBOSE"))                    /* the map as the planner sees it */
                 for (int k = 0; k < ROOMS; k++) {
                     if (!s_room[k].seen) continue;
@@ -612,6 +681,8 @@ int main(void) {
         snprintf(pocket + strlen(pocket), sizeof pocket - strlen(pocket), "%s%s (0x%02X)", i ? ", " : "", name,
                  (unsigned)s.progress.pocket[i].item);
     }
+    if (ended >= 0) printf("ending: reached in %s\n", room_name(ended, a, sizeof a));
+    else printf("ending: not reached\n");
     printf("route: %d rooms reached in %d moves, %d doors still locked, %d not set up by their scripts; pocket: %s; "
            "item box used away from a box %d times\n", rooms, moves, locked, not_set, pocket[0] ? pocket : "empty", s_box_trips);
     if (first_typewriter >= 0) {
