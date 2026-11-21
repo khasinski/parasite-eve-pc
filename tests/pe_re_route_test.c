@@ -354,6 +354,16 @@ int main(void) {
             fprintf(log, "  stuck in %s: its doors again\n", room_name(here, a, sizeof a));
             for (int k = 0; k < PE_RE_TASKS; k++)                 /* what its scripts are waiting on */
                 if (s.run.task[k].status) fprintf(log, "    task %d: proc %d at %u\n", k, s.run.task[k].proc, (unsigned)s.run.task[k].pc);
+            uint32_t nt = 0;
+            pe_imp_logic_section(s.logic, PE_IMP_LOGIC_TRIG, &nt, NULL);
+            for (uint32_t k = 0; k < nt; k++) {                   /* and its zones */
+                PeImpTrigger t;
+                if (pe_imp_logic_trigger(s.logic, k, &t)) continue;
+                fprintf(log, "    zone %u: kind %d, sce %u, sat %02x, floor %u, live %d, at %u, data %02x %02x %02x %02x\n",
+                        (unsigned)t.zone.id, pe_re_zone_kind(&s.run, t.zone.id, t.zone.sce, t.data), (unsigned)t.zone.sce,
+                        (unsigned)t.zone.sat, (unsigned)t.zone.floor, pe_re_scd_live(&s.run, t.at), (unsigned)t.at,
+                        t.data[0], t.data[1], t.data[2], t.data[3]);
+            }
             continue;
         }
         if (goal == here) {                                     /* try the next untried or retriable door here */

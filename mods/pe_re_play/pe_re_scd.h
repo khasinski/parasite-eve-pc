@@ -64,9 +64,9 @@
 #define PE_RE_FG_KEY 31                        /* Key_flg: door locks opened (bit = lock id & 0x3F) */
 #define PE_RE_LEVELS 4                         /* gosub levels a task keeps */
 #define PE_RE_WORKS 64                         /* objects: 0 player, 1 partner, 2-17 enemies, 18-49 scene objects, 50-63 doors */
-#define PE_RE_PATCHES 32                       /* work_copy: values written into the room's script */
+#define PE_RE_PATCHES 512                      /* work_copy: values written into the room's script (a hash) */
 #define PE_RE_MEMBERS 44                       /* MEMBER_BE_FLAG0 .. MEMBER_DAMAGE_CNT */
-enum { PE_RE_MEMBER_AT_SCE_NO = 9, PE_RE_MEMBER_POS_X = 11, PE_RE_MEMBER_POS_Y = 12, PE_RE_MEMBER_POS_Z = 13, PE_RE_MEMBER_CDIR_Y = 15,
+enum { PE_RE_MEMBER_ID = 6, PE_RE_MEMBER_SCE_FREE0 = 23, PE_RE_MEMBER_AT_SCE_NO = 9, PE_RE_MEMBER_POS_X = 11, PE_RE_MEMBER_POS_Y = 12, PE_RE_MEMBER_POS_Z = 13, PE_RE_MEMBER_CDIR_Y = 15,
        PE_RE_MEMBER_NFLOOR = 17 };
 #define PE_RE_SLOTS 256                        /* zone ids */
 #define PE_RE_WORK_F_ATARI 0                   /* the zone hit in front of the player (SCE_AT.C) */
@@ -121,10 +121,12 @@ typedef struct {
     int16_t dest_x, dest_z;
     int16_t works[PE_RE_WORKS][PE_RE_MEMBERS]; /* the objects' fields (the player's kept current by the caller) */
     int player_set;                            /* pos_set / dir_set moved the player: works[0] */
-    struct { uint32_t at; int16_t value; uint8_t wide; } patch[PE_RE_PATCHES];  /* work_copy's script patches */
+    struct { uint32_t at; int16_t value; uint8_t wide; } patch[PE_RE_PATCHES];  /* work_copy's script patches,
+                                                * by address (0 empty) */
     int npatch;
     uint16_t sca_id[256];                      /* sca_id_set: box slot -> its Id's top bits | 1 (0: as built) */
     int sca_changed;                           /* set when one changes: the caller tells the walker, clears it */
+    uint8_t em_busy[16];                       /* enemy stand-ins: frames left on a scripted order (see the .c) */
     int nenemy;
     int naot_on;
 } PeReScdRun;

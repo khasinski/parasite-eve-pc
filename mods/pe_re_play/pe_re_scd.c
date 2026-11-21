@@ -75,6 +75,13 @@ static int work_slot(unsigned kind, int n) {
     }
 }
 
+/* work_copy's patch at `at`, or the empty slot it would go in (open addressing; never full) */
+static int patch_slot(const PeReScdRun *r, uint32_t at) {
+    int k = (int)((at * 2654435761u) >> 23) & (PE_RE_PATCHES - 1);
+    while (r->patch[k].at && r->patch[k].at != at) k = (k + 1) & (PE_RE_PATCHES - 1);
+    return k;
+}
+
 static int16_t *member(Vm *vm, const PeReScdTask *t, unsigned m) {
     static int16_t scratch;
     if (t->work < 0 || m >= PE_RE_MEMBERS) { scratch = 0; return &scratch; }
@@ -182,9 +189,9 @@ static int step(Vm *vm, PeReScdTask *t) {
     uint8_t patched[64];
     if (vm->run->npatch && n <= sizeof patched) {            /* work_copy wrote into this instruction? */
         int any = 0;
-        for (int k = 0; k < vm->run->npatch; k++) {
-            const uint32_t at = vm->run->patch[k].at;
-            if (at <= t->pc || at >= t->pc + n) continue;    /* never the operation byte */
+        for (uint32_t at = t->pc + 1; at < t->pc + n; at++) {   /* never the operation byte */
+            const int k = patch_slot(vm->run, at);
+            if (vm->run->patch[k].at != at) continue;
             if (!any) memcpy(patched, ins, n), any = 1;
             const uint16_t v = (uint16_t)vm->run->patch[k].value;
             patched[at - t->pc] = (uint8_t)v;
@@ -349,10 +356,9 @@ static int step(Vm *vm, PeReScdTask *t) {
     case OP_WORK_COPY: {                                   /* a work value into the script, ins[2] bytes past this */
         PeReScdRun *r = vm->run;
         const uint32_t at = t->pc + 4 + ins[2];
-        int k = 0;
-        while (k < r->npatch && r->patch[k].at != at) k++;
-        if (k < PE_RE_PATCHES) {
-            if (k == r->npatch) r->npatch++;
+        const int k = patch_slot(r, at);
+        if (r->patch[k].at == at || (!r->patch[k].at && r->npatch < PE_RE_PATCHES - 1)) {
+            if (!r->patch[k].at) r->npatch++;
             r->patch[k].at = at, r->patch[k].value = vm->flags->work[ins[1]], r->patch[k].wide = ins[3] != 0;
         }
         t->pc += n;
@@ -501,11 +507,26 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
     schedule(&vm);
 }
 
+/* Enemy stand-ins. Enemies' own code doesn't run here, but a few scenes wait on what it does to a
+ * field the scripts read. Each stand-in does just that part, after about how long it takes in game:
+ * - enemy 0x31 (a G form): bit 0x10 of Sce_free[0] is "come out of pod n" (the low nibble); its
+ *   appearing routine clears the bit when it's out (EM31.C Em31_mv08_br / Em31_mv08). 5-00's sky
+ *   tram scene waits on it four times. */
+static void enemy_standins(PeReScdRun *run) {
+    for (int n = 0; n < 16; n++) {
+        int16_t *w = run->works[2 + n];
+        if (!w[0] || w[PE_RE_MEMBER_ID] != 0x31 || !(w[PE_RE_MEMBER_SCE_FREE0] & 0x10)) { run->em_busy[n] = 0; continue; }
+        if (!run->em_busy[n]) run->em_busy[n] = 60;           /* the order's just come in: about a second */
+        else if (!--run->em_busy[n]) w[PE_RE_MEMBER_SCE_FREE0] &= ~0x10;
+    }
+}
+
 void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost *host, PeReScdRun *run) {
     Vm vm;
     if (!run->ran || !setup(&vm, l, flags, host, run, BUDGET_TICK)) return;
     for (int w = 0; w < PE_RE_WORKS; w++)                  /* they got there (at once): the engine's arrival flags, */
         if (run->arrived[w]) pe_re_flag_set(flags, 5, run->arrived[w], 1);   /* set again after each frame's clear */
+    enemy_standins(run);
     exec_task(&vm, 0, 1);                                  /* Event_exec(0, 1): the every-frame handler */
     schedule(&vm);
     work_clr(flags);
