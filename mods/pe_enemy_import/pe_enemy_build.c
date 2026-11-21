@@ -207,6 +207,13 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
     if (model_in(p, m, &info->skipped, why, n)) goto out;
     for (int i = 0; i < PE_IMP_ENEMY_ANIMS && prof->anim[i].name; i++)
         if (anim_in(p, a, prof->anim[i].name, prof->anim[i].move, why, n)) goto out;
+    const PeImpEnemyStart *start = pe_imp_enemy_starts(source);
+    for (; start && start->name; start++) {
+        if (p->anims == PE_ENEMY_MAX_ANIMS) break;
+        if (start->move < 0 || (uint32_t)start->move >= a->moves || !a->move[start->move].frames ||
+            pe_enemy_pack_anim(p, start->name) >= 0) continue;
+        if (anim_in(p, a, start->name, start->move, why, n)) goto out;
+    }
     static const char *const roles[PE_ANIM_ROLES] = {"idle", "walk", "hurt", "die"};
     for (int i = 0; i < PE_ANIM_ROLES; i++) p->role[i] = pe_enemy_pack_anim(p, roles[i]);
     if (p->role[PE_ANIM_IDLE] < 0) { fail(why, n, "%sthe profile has no \"idle\" move", "", 0); goto out; }

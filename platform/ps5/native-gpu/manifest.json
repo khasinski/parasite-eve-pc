@@ -4939,7 +4939,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_registry.c",
-      "sha256": "0e588e9f4c027d4f7881d8f098c073c4d29027f599b07f387df4eb9b945d9f6e"
+      "sha256": "23d4870ca3b96907df9adf216adfd25a0943e7da042652a0886f47f81de9f93a"
     },
     {
       "path": "mods/import/core/pe_imp_store.c",
@@ -4987,7 +4987,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_enemy.h",
-      "sha256": "5ffa75728941135900aee4b329d7d5eb9c4f4a223c5506dff3df5c123e99306f"
+      "sha256": "cc233050bd94728f3f6284bde4609fa72d284017a85919f7828f9c076e7eee12"
     },
     {
       "path": "mods/import/core/pe_imp_rdt.c",
@@ -5067,11 +5067,11 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_battle.c",
-      "sha256": "21f351262695ca9b5a50ac82ae84393901d96e5cb6fac1f36d147f217eadfd52"
+      "sha256": "d4dcca61a5291c7f6e8d716eae704ed4e8ddc1a9cf29c69dc479fc50f9aefc7c"
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_build.c",
-      "sha256": "949447382b704098226a74177b53421c932285c2790be9e18230e1cacb6bf260"
+      "sha256": "d4f22db9ec3b712e1b4cd0a55973b2b4d592242dbaf062a3c430ad22b359ae4c"
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_build.h",
@@ -5079,7 +5079,7 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_target.c",
-      "sha256": "7d9bffcc9e92d882b37c6218905593f233939880d5c1c0a9fcd31a395cd36b88"
+      "sha256": "fb780b45d78d22fe7d903131934b2871a6082c8d7babf54bfd7154104374b0f5"
     },
     {
       "path": "tests/enemy_import_nemesis.py",
@@ -5111,7 +5111,7 @@
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2_enemies.c",
-      "sha256": "aabfe37cf82de395736b6ad15ea9ebdefc5fefd4c7317a0e18fe21c7a611df20"
+      "sha256": "12a7f14ff09183941dd5183bfbbb50387d179c644b28f080a20b2c7de1da0b6b"
     }
   ]
 }

@@ -242,6 +242,9 @@ def part_imported_room(exe, disc, work, re2_disc):
             game.adv(10)
         status = game.picker()['Imported status']
         check('hp=' in status and 'foes=3' in status, f'imported room: expected three street foes, got {status}')
+        log = (game.config / 'pe_mods.log').read_text(encoding='utf-8', errors='replace')
+        check(log.count('battle: EM1F starts with start_prone_2') == 1,
+              'imported room: expected one prone zombie in the first street fight')
         packs = list((game.config / 'pe_enemies').glob('re2-em*/enemy.json'))
         check(len(packs) == 1 and (packs[0].parent / 'profile.json').is_file(),
               'imported room: no automatically built enemy pack and profile')

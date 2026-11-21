@@ -279,7 +279,12 @@ int pe_imp_enemy_strength(const char *asset_id, int *life, int *power) {
 }
 
 #define MAX_KINDS 256
-static struct { char game[16]; unsigned kind; char id[PE_IMP_ID_MAX]; } s_kind[MAX_KINDS];
+static struct {
+    char game[16];
+    unsigned kind;
+    char id[PE_IMP_ID_MAX];
+    const PeImpEnemyStart *starts;
+} s_kind[MAX_KINDS];
 static int s_kinds;
 
 int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id) {
@@ -287,7 +292,10 @@ int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id)
     int i = 0;
     while (i < s_kinds && !(s_kind[i].kind == kind && !strcmp(s_kind[i].game, game))) i++;
     if (i == MAX_KINDS) return -1;
-    if (i == s_kinds) s_kinds++;
+    if (i == s_kinds) {
+        s_kind[i].starts = NULL;
+        s_kinds++;
+    }
     snprintf(s_kind[i].game, sizeof s_kind[i].game, "%s", game);
     snprintf(s_kind[i].id, sizeof s_kind[i].id, "%s", local_id);
     s_kind[i].kind = kind;
@@ -301,6 +309,26 @@ int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, siz
             return 0;
         }
     return -1;
+}
+
+int pe_imp_set_enemy_starts(const char *game, unsigned kind, const PeImpEnemyStart *starts) {
+    for (int i = 0; game && i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            s_kind[i].starts = starts;
+            return 0;
+        }
+    return -1;
+}
+
+const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id) {
+    const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
+    if (!colon) return NULL;
+    const size_t prefix = (size_t)(colon - asset_id);
+    for (int i = 0; i < s_kinds; i++)
+        if (s_kind[i].starts && strlen(s_kind[i].game) == prefix &&
+            !strncmp(s_kind[i].game, asset_id, prefix) && !strcmp(s_kind[i].id, colon + 1))
+            return s_kind[i].starts;
+    return NULL;
 }
 
 int pe_imp_add_target(const PeImpTarget *t) {

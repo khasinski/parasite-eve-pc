@@ -32,6 +32,15 @@ static const struct { unsigned em; int life; } k_life[] = {
     {0x3A, 150},   /* moth */
 };
 
+/* Consulted bio2-ds EM10.C (Em10_Init) for the low six Type bits and first
+ * animation of the two prone zombies and the scripted type-8 opening. */
+static const PeImpEnemyStart k_zombie_starts[] = {
+    {"start_prone_2", 0x3f, 2, 0x16},
+    {"start_prone_4", 0x3f, 4, 0x17},
+    {"start_scripted_8", 0x3f, 8, 0x12},
+    {0}
+};
+
 int pe_re2_enemies_register(void) {
     int bad = 0;
     char id[32];
@@ -40,6 +49,7 @@ int pe_re2_enemies_register(void) {
     for (unsigned kind = 0x10; kind < 0x40; kind++) {
         snprintf(id, sizeof id, "enemy/em%02x", kind);
         bad |= pe_imp_add_enemy_kind("re2", kind, id) != 0;
+        if (kind < 0x20) bad |= pe_imp_set_enemy_starts("re2", kind, k_zombie_starts) != 0;
     }
     for (unsigned i = 0; i < sizeof k_life / sizeof k_life[0]; i++) {
         snprintf(id, sizeof id, "re2:enemy/em%02x", k_life[i].em);

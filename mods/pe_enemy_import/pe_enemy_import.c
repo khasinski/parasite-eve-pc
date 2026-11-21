@@ -296,13 +296,13 @@ static void pe_arrived(void) {
     pe_log("cheat_fight_picker", "spot map=%u spot=%u of %d at %d,%d", f->map, f->spot, n, x, z);
 }
 
-static int pe_add_room_pack(const char *asset, int already_selected, const void *ctx) {
+static int pe_add_room_pack(const char *asset, int already_selected, const char *entrance, const void *ctx) {
     const PeEnemyBuildApi *b = ctx;
     char pack[64], why[200] = "";
     if (pe_enemy_pack_name(asset, pack, sizeof pack)) return 0;
     if (!already_selected && b && b->struct_size >= sizeof *b && b->ensure(asset, why, sizeof why))
         pe_mod_log(MOD_ID, "the room's %s: no fresh build (%s); an older pack is used if there is one", asset, why);
-    if (!pe_enemy_battle_add_pack(pack)) return 0;
+    if (!pe_enemy_battle_add_pack(pack, entrance)) return 0;
     pe_mod_log(MOD_ID, "trip from an imported room: selected %s (pack %s)", asset, pack);
     return 1;
 }

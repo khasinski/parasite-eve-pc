@@ -321,7 +321,8 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   (`SCE1.C` Work_copy), and the scripts' wall switches and which walls stop the player (`SCE2.C`
   Sca_id_set, `SCA.H`, `SCA.C` Sca_ck_hit, `GAME.C`), the partner hand-over in scenes (`SCE2.C`
   Splc_sce / Splc_ret), the 4th Survivor's start (`TITLE.C` Title_game_init), and each enemy's
-  starting life (the `EM*.C` Init functions; our table in `pe_src_re2.c` holds the numbers only).
+  starting life (the `EM*.C` Init functions), and the opening poses for RE2 zombie placements
+  (`EM10.C`, Em10_Init). The tables in `pe_src_re2_enemies.c` record those values.
   Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

@@ -76,7 +76,7 @@ typedef struct {
     u32 color, xy0, uv0, xy1, uv1, xy2, uv2;
 } PeFt3;
 
-enum { ROLE_ATTACK = PE_ANIM_ROLES };
+enum { ROLE_ATTACK = PE_ANIM_ROLES, ROLE_ENTRANCE };
 
 typedef struct {
     PeEnemyPack pack;
@@ -93,6 +93,7 @@ typedef struct {
     int anim, role, attack;          /* attack: index + 1 while attacking */
     double frame;
     int blow_done, stagger, last_hp, dead;
+    int entrance_frames;
     int drawn_frames, tris, hits, damage_done, attacks_started;
     int event_frame, sounds;         /* last frame whose events ran; sounds played */
     unsigned seen;                   /* bit per role: idle walk hurt die, attack = 1 << 4 */
@@ -105,6 +106,7 @@ static char s_dir[1024];
 static PeBattlePack s_resources[PE_FOES_MAX];
 static int s_resource_count;
 static PeBattlePack *s_roster[PE_FOES_MAX];
+static int s_entrance[PE_FOES_MAX];
 static int s_armed;
 static int s_send_away, s_count = 1;
 
@@ -122,7 +124,7 @@ static struct {
 static int16_t s_posed[PE_ENEMY_MAX_VERTICES][3];
 static PeFt3 s_prims[PE_FOES_MAX][2][PE_ENEMY_MAX_TRIANGLES];
 
-static const char *const k_role_names[] = {"idle", "walk", "hurt", "die", "attack"};
+static const char *const k_role_names[] = {"idle", "walk", "hurt", "die", "attack", "entrance"};
 
 /* ---- the list of packs ---- */
 
@@ -216,7 +218,10 @@ void pe_enemy_battle_arm(int choice, int count, int send_away) {
     snprintf(dir, sizeof dir, "%s/%s", s_dir, s_list[choice - 1].folder);
     PeBattlePack *resource = pe_load(dir);
     if (!resource) return;
-    for (int i = 0; i < s_count; ++i) s_roster[i] = resource;
+    for (int i = 0; i < s_count; ++i) {
+        s_roster[i] = resource;
+        s_entrance[i] = -1;
+    }
     s_armed = 1;
 }
 
@@ -229,13 +234,14 @@ void pe_enemy_battle_begin_roster(void) {
     pe_free_resources();
 }
 
-int pe_enemy_battle_add_pack(const char *pack) {
+int pe_enemy_battle_add_pack(const char *pack, const char *entrance) {
     if (s.active || s_count >= PE_FOES_MAX) return 0;
     char dir[1200];
     const int written = snprintf(dir, sizeof dir, "%s/%s", s_dir, pack);
     if (written < 0 || (size_t)written >= sizeof dir) return 0;
     PeBattlePack *resource = pe_load(dir);
     if (!resource) return 0;
+    s_entrance[s_count] = entrance ? pe_enemy_pack_anim(&resource->pack, entrance) : -1;
     s_roster[s_count++] = resource;
     s_armed = 1;
     return 1;
@@ -364,7 +370,7 @@ static void pe_place_targets(PeFoe *f) {
     o->hit_body.radius = (s16)radius;
 }
 
-static int pe_spawn(PeBattlePack *resource, int x, int y, int z) {
+static int pe_spawn(PeBattlePack *resource, int entrance, int x, int y, int z) {
     const PeEnemyPack *pack = &resource->pack;
     PeFoe *f = &s.foe[s.foes];
     FieldActor *a, *aya = g_PlayerEntity;
@@ -397,7 +403,13 @@ static int pe_spawn(PeBattlePack *resource, int x, int y, int z) {
     f->serial = a->field_sfx_id;
     f->role = -1;
     f->last_hp = pack->hp;
-    pe_set_anim(f, PE_ANIM_IDLE, pack->role[PE_ANIM_IDLE]);
+    if (entrance >= 0) {
+        pe_set_anim(f, ROLE_ENTRANCE, entrance);
+        f->entrance_frames = 24;
+        pe_mod_log(MOD_ID, "battle: %s starts with %s", pack->name, pack->anim[entrance].name);
+    } else {
+        pe_set_anim(f, PE_ANIM_IDLE, pack->role[PE_ANIM_IDLE]);
+    }
     pe_place_targets(f);
     s.foes++;
     pe_mod_log(MOD_ID, "battle: %s joins at %d,%d (enemy place bit %d, hp %d%s)", pack->name, x >> 16, z >> 16,
@@ -688,7 +700,7 @@ static void pe_join(int early) {
             pe_mod_log(MOD_ID, "battle: no VRAM left for %s", resource->pack.name);
             break;
         }
-        if (!pe_spawn(resource, x + (int)(sin(ang) * side * 65536.0), y,
+        if (!pe_spawn(resource, s_entrance[i], x + (int)(sin(ang) * side * 65536.0), y,
                       z + (int)(cos(ang) * side * 65536.0))) break;
         if (!resource->uploaded) pe_vram(resource, 0);
     }
@@ -736,6 +748,16 @@ static void pe_foe_think(PeFoe *f) {
     if (!core) return;
     hp = core->hpAlive;
     if (g_GameStateFlags & 0x100) { pe_place_targets(f); return; }   /* enemies stopped */
+    if (f->entrance_frames && hp > 0) {
+        /* Show the source pose briefly. The native battle takes over when it
+         * ends or Aya attacks, without running the source room's wake script. */
+        if (hp < f->last_hp || !--f->entrance_frames) {
+            f->entrance_frames = 0;
+            pe_set_anim(f, PE_ANIM_IDLE, pack->role[PE_ANIM_IDLE]);
+        }
+        pe_place_targets(f);
+        return;
+    }
 
     /* the frame: idle and walk loop, the rest hold their last frame */
     loop = f->role == PE_ANIM_IDLE || f->role == PE_ANIM_WALK;
@@ -1031,7 +1053,7 @@ void pe_enemy_status_text(char *out, unsigned size) {
     if (!s.active) { snprintf(out, size, "%s", s.result[0] ? s.result : s_armed ? "ready for the next fight" : "none"); return; }
     if (!s.foes) { snprintf(out, size, "%s joining", s_roster[0]->pack.name); return; }
     const PeBattlePack *resource = f->resource;
-    for (i = 0; i <= ROLE_ATTACK; ++i)
+    for (i = 0; i <= ROLE_ENTRANCE; ++i)
         if (f->seen & (1u << i)) snprintf(seen + strlen(seen), sizeof seen - strlen(seen), "%s%s", seen[0] ? "+" : "", k_role_names[i]);
     core = pe_core(f);
     if (core && g_PlayerEntity) dist = (int)pe_dist(f->actor, g_PlayerEntity);

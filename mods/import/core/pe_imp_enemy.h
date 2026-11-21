@@ -51,6 +51,16 @@ int pe_imp_enemy_strength(const char *asset_id, int *life, int *power);   /* 0, 
 int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id);
 int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, size_t n);
 
+/* Optional opening poses for a placed creature. A source reader owns the static table,
+ * terminated by a NULL name. Move indices use the catalogued animation's order. */
+typedef struct {
+    const char *name;
+    uint16_t mask, value;
+    int move;
+} PeImpEnemyStart;
+int pe_imp_set_enemy_starts(const char *game, unsigned kind, const PeImpEnemyStart *starts);
+const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id);
+
 /* The Resident Evil games' (1, 2 and 3 share the EMD's axes and units): their models face +x, and a
  * person about 2900 units tall stands about 560 next to Aya (about 500), as RE3's zombie does. */
 #define PE_RE_ENEMY_YAW 3072
