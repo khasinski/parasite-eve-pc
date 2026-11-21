@@ -180,12 +180,13 @@ static int play(unsigned scenario) {
     s.start();
     frames(1, 0);
     EXPECT(s.active && !strcmp(s.room, "re2:room/100") && !s.api->room(&room));
+    int pick;
     {   /* a trip from here fights the room's own creature: RE2's kind -> model table picks it */
         char asset[96], want[96];
         if (pe_imp_enemy_kind_asset("re2", 0x10, NULL, 0))                /* no game's table yet: the player's pick */
             EXPECT(pe_trip_creature(&room, asset, sizeof asset) == -1);
         EXPECT(!pe_re2_enemies_register());
-        const int pick = pe_trip_creature(&room, asset, sizeof asset);
+        pick = pe_trip_creature(&room, asset, sizeof asset);
         EXPECT(pick >= 0 && pick < room.count && room.enemies[pick].kind < 0x40);
         snprintf(want, sizeof want, "re2:enemy/em%02x", (unsigned)room.enemies[pick].kind);
         EXPECT(!strcmp(asset, want));
@@ -195,23 +196,24 @@ static int play(unsigned scenario) {
     }
     PeTripResult trip;                                     /* a battle trip from here, won (pe_enemy_import) */
     const int placed = room.count;
-    int flagged = 0;
-    for (int i = 0; i < room.count; i++) flagged += room.enemies[i].killed_flag != 0xFF;
-    EXPECT(pe_trip_arm(&trip, s.api) && trip.count == placed);
+    const uint8_t flag = room.enemies[pick].killed_flag;
+    EXPECT(flag != 0xFF);
+    int shared = 0;
+    for (int i = 0; i < room.count; i++) shared += room.enemies[i].killed_flag == flag;
+    EXPECT(pe_trip_arm(&trip, &room, pick));
     EXPECT(s.api->pause_for_battle() == 1 && s.backdrop && !s.active);
     pe_trip_won(&trip, 1);
     EXPECT(pe_trip_report(&trip, s.api) == 0 && trip.armed);   /* paused: not yet */
     s.api->resume_after_battle();
     frames(2, 0);
     EXPECT(!s.backdrop && s.active && !s.api->room(&room));
-    EXPECT(pe_trip_report(&trip, s.api) == placed && !trip.armed);   /* back: each placed enemy beaten */
+    EXPECT(pe_trip_report(&trip, s.api) == 1 && !trip.armed);
     frames(1, 0);
-    EXPECT(!s.api->room(&room) && room.count == placed - flagged);   /* flagged ones gone; a flagless boss dies to the scripts */
-    printf("headless host: a won battle trip beat the street's %d placed enemies (%d with killed flags)\n", placed, flagged);
-    EXPECT(placed > 0);
+    EXPECT(!s.api->room(&room) && room.count == placed - shared && room.count > 0);
+    for (int i = 0; i < room.count; i++) EXPECT(room.enemies[i].killed_flag != flag);
     {   /* an escape or a loss reports nothing */
         PeTripResult lost;
-        EXPECT(pe_trip_arm(&lost, s.api) == 1);
+        EXPECT(pe_trip_arm(&lost, &room, 0));
         pe_trip_won(&lost, 0);
         EXPECT(pe_trip_report(&lost, s.api) == -1 && !lost.armed);
     }

@@ -10,12 +10,12 @@ static int has_slot_api(const PeRePlayApi *api) {
            api->room && api->defeated_slot;
 }
 
-int pe_trip_arm(PeTripResult *t, const PeRePlayApi *api) {
-    PeReRoomEvent room = {sizeof room};
+int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room, int placement) {
     memset(t, 0, sizeof *t);
-    if (!has_slot_api(api) || api->room(&room)) return 0;
-    t->armed = 1, t->stage = room.stage, t->room = room.room;
-    for (int i = 0; i < room.count && t->count < PE_TRIP_SLOTS; i++) t->slot[t->count++] = room.enemies[i].slot;
+    if (!room || !room->game || strlen(room->game) >= sizeof t->game || placement < 0 || placement >= room->count) return 0;
+    strcpy(t->game, room->game);
+    t->armed = 1, t->stage = room->stage, t->room = room->room;
+    t->slot = room->enemies[placement].slot;
     return 1;
 }
 
@@ -28,10 +28,8 @@ int pe_trip_report(PeTripResult *t, const PeRePlayApi *api) {
     if (!t->armed || !t->won || !has_slot_api(api)) { t->armed = 0; return -1; }
     if (api->room(&room)) return 0;                        /* not running yet: the trip back, a door */
     t->armed = 0;
-    if (room.stage != t->stage || room.room != t->room) return -1;
-    int beaten = 0;
-    for (int i = 0; i < t->count; i++) beaten += !api->defeated_slot(t->slot[i]);   /* only those still placed */
-    return beaten;
+    if (!room.game || strcmp(room.game, t->game) || room.stage != t->stage || room.room != t->room) return -1;
+    return api->defeated_slot(t->slot) ? -1 : 1;
 }
 
 int pe_trip_creature(const PeReRoomEvent *room, char *asset_id, size_t n) {

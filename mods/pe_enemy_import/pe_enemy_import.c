@@ -130,7 +130,7 @@ static struct {
     uint32_t vars[PE_VAR_COUNT];
 } s;
 static char s_last[96] = "none yet";
-static PeTripResult s_trip;         /* a trip from an imported room: a win beats its placed enemies */
+static PeTripResult s_trip;         /* the placement used by the current battle trip */
 static int s_trip_wait;              /* frames left to see that room again */
 static char s_room_foe[64];          /* the imported room's creature in the last trip, "" none */
 
@@ -303,12 +303,14 @@ static void pe_arrived(void) {
 static void pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
     char asset[96], pack[64], why[200] = "";
-    if (api->room(&room) || pe_trip_creature(&room, asset, sizeof asset) < 0 || pe_enemy_pack_name(asset, pack, sizeof pack))
-        return;
+    if (api->room(&room)) return;
+    const int placement = pe_trip_creature(&room, asset, sizeof asset);
+    if (placement < 0 || pe_enemy_pack_name(asset, pack, sizeof pack)) return;
     const PeEnemyBuildApi *b = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION);
     if (b && b->struct_size >= sizeof *b && b->ensure(asset, why, sizeof why))
         pe_mod_log(MOD_ID, "the room's %s: no fresh build (%s); an older pack is used if there is one", asset, why);
-    if (pe_enemy_battle_arm_pack(pack, s_enemy_count + 1, s_room_enemies == 1)) {
+    if (pe_enemy_battle_arm_pack(pack)) {
+        pe_trip_arm(&s_trip, &room, placement);
         pe_mod_log(MOD_ID, "trip from an imported room: fighting its %s (pack %s)", asset, pack);
         snprintf(s_room_foe, sizeof s_room_foe, "%s", pack);
         return;
@@ -327,7 +329,6 @@ static void pe_leave(void) {
     }
     const PeRePlayApi *api = pe_imported_room_api();
     if (api) {
-        pe_trip_arm(&s_trip, api);                         /* the room and its placements, before it pauses */
         pe_room_creature(api);                             /* and its own creature in the fight */
         const int paused = api->pause_for_battle();
         if (paused < 0) {
@@ -393,7 +394,7 @@ static void pe_step(void) {
     case PE_FIGHT:
         if (pe_in_battle()) break;
         pe_finish(s.live_enemies ? "ran away" : "won");
-        pe_trip_won(&s_trip, !s.live_enemies);
+        pe_trip_won(&s_trip, !s.live_enemies && pe_enemy_battle_room_defeated());
         s_trip_wait = 1800;                                /* the trip back, a door: half a minute at most */
         s.state = PE_AFTER;
         s.frames = 0;
@@ -421,8 +422,8 @@ static int pe_on_frame(void *ctx, void *user) {
     if (s_trip.armed && s.state == PE_IDLE) {             /* back in the imported room: the win counts there */
         const int beaten = pe_trip_report(&s_trip, pe_imported_room_api());
         if (beaten > 0) {
-            pe_log("cheat_fight_picker", "imported room: %d placed enemies beaten", beaten);
-            pe_toast("Fights: the room's enemies are beaten");
+            pe_log("cheat_fight_picker", "imported room: slot %u beaten", (unsigned)s_trip.slot);
+            pe_toast("Fights: the room's enemy is beaten");
         } else if (!beaten && --s_trip_wait <= 0) {
             s_trip.armed = 0;
         }
@@ -462,6 +463,7 @@ static int pe_on_drawn(void *ctx, void *user) {
 
 static int pe_on_new_game(void *ctx, void *user) {
     (void)ctx; (void)user;
+    s_trip.armed = 0;
     pe_end_trip();
     return 0;
 }
@@ -475,6 +477,7 @@ static void pe_start(void) {
     s.live_enemies = 0;
     pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);   /* the room's creature may take over */
     s_room_foe[0] = 0;
+    s_trip.armed = 0;
     s.state = PE_LEAVE;   /* on the next free field frame, once the panel closes */
 }
 

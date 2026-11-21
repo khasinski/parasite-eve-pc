@@ -59,7 +59,7 @@
 #define PE_FOES_MAX 3
 #define PE_TEX_X 320          /* the texture's first choice when free (Central Park leaves it free) */
 #define PE_TEX_Y 256
-#define PE_TEX_W 192          /* VRAM pixels: 384 8-bit texels */
+#define PE_TEX_W 256          /* VRAM words: 512 8-bit texels, the pack builder's limit */
 #define PE_TEX_H 256
 #define PE_CLUT_X 512         /* the palettes' first choice when free */
 #define PE_CLUT_Y 500
@@ -94,8 +94,8 @@ static int s_listed;
 static char s_dir[1024];
 
 static PeEnemyPack s_pack;
-static int s_loaded = -1;            /* list index of s_pack, -1 none */
-static int s_armed;                  /* list index + 1 for the next battle, 0 none */
+static char s_loaded[1200];           /* path of the loaded pack */
+static int s_armed;
 static int s_send_away, s_count = 1;
 
 static struct {
@@ -161,24 +161,24 @@ const char *pe_enemy_choice_name(unsigned i) {
     return i <= (unsigned)s_listed ? s_list[i - 1].name : "";
 }
 
-static int pe_load(int index) {
-    char dir[1200], err[200];
-    if (s_loaded == index) return 1;
-    if (s_loaded >= 0) pe_enemy_pack_free(&s_pack);
-    s_loaded = -1;
-    snprintf(dir, sizeof dir, "%s/%s", s_dir, s_list[index].folder);
+static int pe_load(const char *dir) {
+    char err[200];
+    if (!strcmp(s_loaded, dir)) return 1;
+    if (s_loaded[0]) pe_enemy_pack_free(&s_pack);
+    s_loaded[0] = 0;
     if (pe_enemy_pack_load(&s_pack, dir, err, sizeof err)) {
-        pe_mod_log(MOD_ID, "enemy pack %s refused: %s", s_list[index].folder, err);
+        pe_mod_log(MOD_ID, "enemy pack %s refused: %s", dir, err);
         pe_toast("Fights: that enemy pack can't be used (see pe_mods.log)");
         return 0;
     }
-    if (s_pack.tex_w > 2 * PE_TEX_W || (s_pack.tex_w & 1) || s_pack.palettes > PE_CLUTS_MAX) {
-        pe_mod_log(MOD_ID, "enemy pack %s refused: texture wider than %d or more than %d palettes",
-                   s_list[index].folder, 2 * PE_TEX_W, PE_CLUTS_MAX);
+    if (s_pack.tex_w > 2 * PE_TEX_W || (s_pack.tex_w & 1) || s_pack.tex_h > PE_TEX_H ||
+        s_pack.palettes > PE_CLUTS_MAX) {
+        pe_mod_log(MOD_ID, "enemy pack %s refused: texture must fit %dx%d with even width and up to %d palettes",
+                   dir, 2 * PE_TEX_W, PE_TEX_H, PE_CLUTS_MAX);
         pe_enemy_pack_free(&s_pack);
         return 0;
     }
-    s_loaded = index;
+    snprintf(s_loaded, sizeof s_loaded, "%s", dir);
     pe_mod_log(MOD_ID, "enemy pack %s loaded: %s, %d bones, %d vertices, %d triangles, %d anims, %d attacks, hp %d",
                s_pack.folder, s_pack.name, s_pack.bones, s_pack.vertices, s_pack.triangles, s_pack.anims,
                s_pack.attacks, s_pack.hp);
@@ -190,20 +190,27 @@ void pe_enemy_battle_arm(int choice, int count, int send_away) {
     if (choice <= 0 || choice > s_listed) return;
     s_count = count < 1 ? 1 : count > PE_FOES_MAX ? PE_FOES_MAX : count;
     s_send_away = send_away;
-    if (pe_load(choice - 1)) s_armed = choice;
+    char dir[1200];
+    snprintf(dir, sizeof dir, "%s/%s", s_dir, s_list[choice - 1].folder);
+    s_armed = pe_load(dir);
 }
 
-int pe_enemy_battle_arm_pack(const char *pack, int count, int send_away) {
+int pe_enemy_battle_arm_pack(const char *pack) {
+    if (s.active) return 0;
     s_armed = 0;
-    if (s.active) return 0;                    /* not mid-battle: the list is the battle's */
-    if (s_loaded >= 0) pe_enemy_pack_free(&s_pack), s_loaded = -1;   /* it may have been rebuilt */
-    pe_scan();
-    for (int i = 0; i < s_listed; i++)
-        if (!strcmp(s_list[i].folder, pack)) {
-            pe_enemy_battle_arm(i + 1, count, send_away);
-            return s_armed != 0;
-        }
-    return 0;
+    char dir[1200];
+    const int written = snprintf(dir, sizeof dir, "%s/%s", s_dir, pack);
+    if (written < 0 || (size_t)written >= sizeof dir) return 0;
+    /* A just-rebuilt pack can have the same path. Look it up directly, outside the menu limit. */
+    if (s_loaded[0]) pe_enemy_pack_free(&s_pack), s_loaded[0] = 0;
+    if (!pe_load(dir)) return 0;
+    s.foes = 0;
+    s_count = s_send_away = s_armed = 1;
+    return 1;
+}
+
+int pe_enemy_battle_room_defeated(void) {
+    return s.foes == 1 && s.foe[0].dead;
 }
 
 void pe_enemy_battle_disarm(void) { s_armed = 0; }
@@ -784,7 +791,7 @@ static void pe_foe_think(PeFoe *f) {
 
 static int pe_on_battle(void *ctx, void *user) {
     (void)ctx; (void)user;
-    if (!s.active && s_armed && s_loaded == s_armed - 1) {
+    if (!s.active && s_armed) {
         pe_begin();
         s_armed = 0;
     }
@@ -827,7 +834,7 @@ static int pe_on_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
     if (!s.active && !s_armed && SDL_GetAtomicInt(&s_rescan)) {
         SDL_SetAtomicInt(&s_rescan, 0);
-        if (s_loaded >= 0) pe_enemy_pack_free(&s_pack), s_loaded = -1;   /* list indexes may move */
+        if (s_loaded[0]) pe_enemy_pack_free(&s_pack), s_loaded[0] = 0;
         pe_scan();
     }
     if (s.active && !pe_in_battle()) {
