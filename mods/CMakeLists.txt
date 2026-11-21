@@ -500,6 +500,15 @@ if(BUILD_TESTING AND "pe_enemy_import" IN_LIST PE_MOD_LIST)
     target_include_directories(test-mod-enemy-build PRIVATE pe_enemy_import import/core pe_src_re3)
     target_link_libraries(test-mod-enemy-build PRIVATE pe_download_json)
     set_tests_properties(mod-enemy-build PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 300)
+    # The profile guesser: idle, walk, hurt, die and attacks picked from a model's own moves.
+    pe_feature_test(enemy-guess ${PROJECT_SOURCE_DIR}/tests/pe_enemy_guess_test.c pe_enemy_import/pe_enemy_guess.c
+        pe_enemy_import/pe_enemy_build.c pe_enemy_import/pe_enemy_pack.c ${pe_import_core_sources}
+        pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_objects.c
+        pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_rbj.c
+        pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_objects.c)
+    target_include_directories(test-mod-enemy-guess PRIVATE pe_enemy_import import/core pe_src_re1 pe_src_re2 pe_src_re3)
+    target_link_libraries(test-mod-enemy-guess PRIVATE pe_download_json)
+    set_tests_properties(mod-enemy-guess PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 300)
 endif()
 if(BUILD_TESTING AND "pe_phone" IN_LIST PE_MOD_LIST)
     # The pure core and the game's own pack; the game side is covered by pe-native-debug's

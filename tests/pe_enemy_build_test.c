@@ -8,7 +8,9 @@
  *             Nemesis built from the catalog as the importer's target does: 16 bones, his moves,
  *             the blows on m7 and m10's first hit frames, E_34's tones as sounds, footsteps on the
  *             walk; the pack loads back. Kept in <PE_TEST_DIR>/enemy-build-test/nemesis for the
- *             game test (PE_TEST_ENEMY_PACK). */
+ *             game test (PE_TEST_ENEMY_PACK). Nothing in the folder refused; Zombie, Cerberus, Hunter,
+ *             Giant Spider and Drain Deimos built too (bones, their anims, each blow inside its move,
+ *             their own sounds), each kept in its own folder there. */
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -46,19 +48,19 @@ static void made_up(PeImpModel *m, PeImpAnimation *a) {
     /* part 0 rigid (bone 0's frame): a quad from the floor (y +100 below the root) up to the root */
     static const int quad[4][3] = {{-10, 100, 0}, {10, 100, 0}, {-10, 0, 0}, {10, 0, 0}};
     m->part[0].quad = calloc(1, sizeof *m->part[0].quad), m->part[0].quads = 1;
-    face(&m->part[0].quad[0], quad, 4, 4, 0);
+    face(&m->part[0].quad[0], quad, 4, 0x81, 0x7800);   /* CLUT words: rows 480 and 481 */
     /* part 1 skinned (model frame): a triangle over the head, one corner joint between 1 and 0 */
     static const int tri[3][3] = {{0, -200, 0}, {5, -150, 0}, {-5, -150, 0}};
     m->part[1].tri = calloc(1, sizeof *m->part[1].tri), m->part[1].tris = 1;
-    face(&m->part[1].tri[0], tri, 3, 0, 1);
+    face(&m->part[1].tri[0], tri, 3, 0x80, 0x7840);
     m->part[1].tri_skin = calloc(1, sizeof *m->part[1].tri_skin);
     m->part[1].quad_skin = calloc(1, sizeof *m->part[1].quad_skin);
     uint8_t (*s)[2] = m->part[1].tri_skin[0];
     s[0][0] = 1, s[0][1] = PE_IMP_NO_BONE, s[1][0] = 1, s[1][1] = 0, s[2][0] = 1, s[2][1] = PE_IMP_NO_BONE;
-    m->w = 16, m->h = 4, m->pal_rows = 2;
+    m->w = 144, m->h = 4, m->pal_rows = 2;                 /* the quad on the second page */
     m->pal = calloc(2, sizeof *m->pal);
-    m->image = calloc(64, 1);
-    for (int i = 0; i < 64; i++) m->image[i] = (uint8_t)i;
+    m->image = calloc(576, 1);
+    for (int i = 0; i < 576; i++) m->image[i] = (uint8_t)i;
     m->pal[1][3] = 0x7fff;
     assert(!pe_imp_model_check(m, NULL, 0));
 
@@ -108,12 +110,30 @@ static void test_made_up(void) {
     found = 0;
     for (int i = 0; i < p.vertices; i++) found |= p.vertex[i].y == -300 && p.vertex[i].bone == 1 && p.vertex[i].bone2 == 0;
     assert(found);                                        /* the joint corner keeps its second bone */
-    assert(p.triangle[0].u[1] == 2 + 8 && p.triangle[2].palette == 1);   /* u + 2 * page */
+    assert(p.triangle[0].u[1] == 128 + 2 && p.triangle[2].palette == 1);   /* page 1 of 0: 128 + u */
     assert(p.anims == 2 && p.role[PE_ANIM_IDLE] == 0 && p.role[PE_ANIM_WALK] == -1);
     assert(p.anim[1].data[1] == -200);                    /* root height scaled */
     assert(p.attacks == 1 && p.attack[0].hit == 2 && p.attack[0].power == 30 && p.attack[0].range == 500);
     assert(p.anim[1].event[1] == 1 && p.anim[1].event[2] == PE_ENEMY_EVENT_HIT && p.anim[1].event[3] == PE_ENEMY_EVENT_HIT);
     assert(p.sounds == 2 && !p.sound[0].pcm && p.sound[1].frames == 100 && info.sounds == 1 && info.sound_events == 1);
+
+    {   /* range 0: measured, how far in front the scaled model gets at the blow frame (at least
+         * its radius) + 120; yaw
+         * 3072 (as RE3's): in front is +x */
+        PeImpEnemyProfile measured = k_profile;
+        PeEnemyPack q;
+        PeEnemyBuildInfo qi;
+        int16_t pose[16][3];
+        int front = 0;
+        measured.attack[0].range = 0;
+        measured.yaw = 3072;
+        rc = pe_enemy_build(&m, &a, &measured, snd, 2, "test:enemy/test", &q, &qi, why, sizeof why);
+        assert(!rc && q.vertices <= 16);
+        assert(!pe_enemy_pose(&q, q.attack[0].anim, q.attack[0].hit, pose));
+        for (int i = 0; i < q.vertices; i++) front = pose[i][0] > front ? pose[i][0] : front;
+        assert(abs(q.attack[0].range - ((front > q.radius ? front : q.radius) + 120)) <= 2);
+        pe_enemy_pack_free(&q);
+    }
 
     char folder[1100];
     snprintf(folder, sizeof folder, "%s/made-up", s_dir);
@@ -141,10 +161,78 @@ static void test_made_up(void) {
     bad = k_profile;
     bad.attack[0].anim = "kick";
     assert(pe_enemy_build(&m, &a, &bad, snd, 2, "x", &p, &info, why, sizeof why) == -1 && strstr(why, "kick"));
+    /* the profile's own hit frame wins over the move's flag; one past the move is passed over */
+    PeImpEnemyProfile own = k_profile;
+    own.attack[0].hit = 1;
+    assert(!pe_enemy_build(&m, &a, &own, snd, 2, "x", &p, &info, why, sizeof why) && p.attack[0].hit == 1);
+    pe_enemy_pack_free(&p);
+    own.attack[0].hit = 999;
+    assert(!pe_enemy_build(&m, &a, &own, snd, 2, "x", &p, &info, why, sizeof why) && p.attack[0].hit == 2);
+    pe_enemy_pack_free(&p);
     free(snd[1]);
     pe_imp_model_free(&m);
     pe_imp_animation_free(&a);
     printf("made-up: built, written and loaded back with events and sounds\n");
+}
+
+/* RE3's other enemies with a profile: built the same way, each pack kept beside Nemesis's */
+typedef struct { const char *id, *folder; const PeImpEnemyProfile *p; int bones; } More;
+static const More k_more[] = {
+    {"enemy/nemesis", "nemesis", &g_re3_nemesis, 16},
+    {"enemy/zombie", "zombie", &g_re3_zombie, 15},
+    {"enemy/cerberus", "cerberus", &g_re3_cerberus, 17},
+    {"enemy/hunter_beta", "hunter_beta", &g_re3_hunter, 20},
+    {"enemy/spider", "spider", &g_re3_spider, 20},
+    {"enemy/drain_deimos", "drain_deimos", &g_re3_drain_deimos, 21},
+};
+
+static void build_more(const char *store, const More *e) {
+    char asset[80], moves[80], why[200] = "";
+    snprintf(asset, sizeof asset, "re3:%s", e->id);
+    snprintf(moves, sizeof moves, "re3:%s", e->p->moves);
+    const PeImpEnemyProfile *prof = pe_imp_enemy_for(asset);
+    assert(prof == e->p);
+    PeImpModel m;
+    PeImpAnimation a;
+    if (pe_imp_catalog_model(store, asset, &m, why, sizeof why) || pe_imp_catalog_animation(store, moves, &a, why, sizeof why)) {
+        printf("real: %s: %s\n", asset, why);
+        assert(0);
+    }
+    PeImpSound *snd[PE_ENEMY_MAX_SOUNDS] = {0};
+    for (int i = 0; i < prof->sound_count; i++) {
+        char id[80];
+        snprintf(id, sizeof id, "re3:%s%02d", prof->sounds, i);
+        if (pe_imp_catalog_sound(store, id, &snd[i], why, sizeof why)) printf("real: %s: %s\n", id, why), assert(0);
+    }
+    PeEnemyPack p;
+    PeEnemyBuildInfo info;
+    int rc = pe_enemy_build(&m, &a, prof, snd, prof->sound_count, asset, &p, &info, why, sizeof why);
+    if (rc) printf("real: %s: %s\n", prof->name, why);
+    assert(!rc);
+    printf("real: %s %d bones, %d triangles, scale %.4f, hits %d/%d, %d sounds, %d sound frames\n", prof->name,
+           p.bones, p.triangles, info.scale, p.attack[0].hit, p.attacks > 1 ? p.attack[1].hit : -1, info.sounds,
+           info.sound_events);
+    int anims = 0, attacks = 0;
+    for (int k = 0; k < PE_IMP_ENEMY_ANIMS; k++) anims += prof->anim[k].name != NULL;
+    for (int k = 0; k < PE_IMP_ENEMY_ATTACKS; k++) attacks += prof->attack[k].anim != NULL;
+    assert(p.bones == e->bones && p.anims == anims && p.attacks == attacks && info.sounds == prof->sound_count);
+    for (int k = 0; k < attacks; k++) {                        /* the blow lands inside its move, not on its first frame */
+        int an = p.attack[k].anim;
+        assert(p.attack[k].hit > 0 && p.attack[k].hit < p.anim[an].frames);
+    }
+    char folder[1100];
+    snprintf(folder, sizeof folder, "%s/%s", s_dir, e->folder);
+    assert(!pe_enemy_write(&p, folder, why, sizeof why));
+    pe_enemy_pack_free(&p);
+    PeEnemyPack back;
+    char err[200] = "";
+    rc = pe_enemy_pack_load(&back, folder, err, sizeof err);
+    if (rc) printf("real: load %s: %s\n", folder, err);
+    assert(!rc && back.bones == e->bones);
+    pe_enemy_pack_free(&back);
+    for (int i = 0; i < prof->sound_count; i++) free(snd[i]);
+    pe_imp_model_free(&m);
+    pe_imp_animation_free(&a);
 }
 
 static void test_real(void) {
@@ -156,12 +244,13 @@ static void test_real(void) {
     pe_imp_registry_reset();
     assert(!pe_imp_add_game("re3", "Resident Evil 3", "Resident Evil"));
     assert(!pe_imp_add_reader(&g_re3_emd_pc) && !pe_imp_add_reader(&g_re3_tones_pc));
-    assert(!pe_imp_set_naming("re3", g_re3_naming) && !pe_imp_add_enemy("re3", "enemy/nemesis", &g_re3_nemesis));
+    assert(!pe_imp_set_naming("re3", g_re3_naming));
+    for (unsigned i = 0; i < sizeof k_more / sizeof k_more[0]; i++) assert(!pe_imp_add_enemy("re3", k_more[i].id, k_more[i].p));
     PeImpScan sc;
     int rc = pe_imp_scan(store, image, NULL, &sc);
     printf("real: scanned %d files, %d items, %d refused%s%s\n", sc.files_read, sc.items + sc.skipped, sc.refused,
            sc.last_error[0] ? ": " : "", sc.last_error);
-    assert(!rc && !strcmp(sc.game, "re3"));
+    assert(!rc && !strcmp(sc.game, "re3") && sc.refused == 0);   /* every enemy model and sound bank reads */
 
     const PeImpEnemyProfile *prof = pe_imp_enemy_for("re3:enemy/nemesis");
     assert(prof == &g_re3_nemesis);
@@ -201,6 +290,7 @@ static void test_real(void) {
     pe_imp_model_free(&m);
     pe_imp_animation_free(&a);
     printf("real: pack in %s\n", folder);
+    for (unsigned i = 1; i < sizeof k_more / sizeof k_more[0]; i++) build_more(store, &k_more[i]);
 }
 
 int main(void) {

@@ -5,7 +5,8 @@ battle record and its own fight logic); nothing of the room is replaced.
 A New Game is played to the first free field (as enemy_import_fights.py), Aya goes to level 30 and
 God mode keeps her up, and the picker starts M075's Bear fight with the pack's enemy.
   alone   Room's enemies "Sent away": the battle's only enemy is the imported one (its own actor
-          type, the pack's HP); its model is drawn every frame and its texture is in VRAM.
+          type, the pack's HP); its model is drawn every frame and its texture is in VRAM where
+          the mod says it put it (vram=, a block the room is not using).
           Aya waits: it walks to her (the distance shrinks), its time bar fills, it attacks and its
           blow lands through the game's enemy-hit path (Aya loses HP: the game's damage from the
           pack's attack power). Then Aya shoots: its HP goes down, it plays its hurt animation,
@@ -14,6 +15,11 @@ God mode keeps her up, and the picker starts M075's Bear fight with the pack's e
   with    Room's enemies "Fight too": the Bear and the imported enemy are both in the battle, the
           imported one standing apart; Aya runs away, the picker says "ran away" and the imported
           enemy is gone with the battle ("left behind").
+  late    M118 (Giant Dogman), Room's enemies "Sent away", with a slow player: the battle opens on
+          a story line that waits for a button. Aya waits past the mod's opening limit: the
+          imported enemy joins, but the Dogman stays (the opening's scene uses it; sent away
+          mid-scene, the scene never ended and neither did the battle). Pressed through, the clock
+          runs, the Dogman goes, Aya beats the imported enemy and the battle is won.
 Evidence (frames as PPM and VRAM, the battle trace) is kept in the work folder.
 
 Needs PE_TEST_DISC (USA Disc 1) and PE_TEST_ENEMY_PACK: a pack folder built from the player's own
@@ -31,11 +37,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import enemy_import_fights as F   # noqa: E402
 
 AREA, FIGHT, MAP = 1, 10, '75'     # Day 2 Central Park, M075: Bear
+LATE_AREA, LATE_FIGHT, LATE_MAP = 2, 8, '118'   # Day 3 museum, M118: Giant Dogman, opens on a story line
+LATE_WAIT = 2400                   # vblanks on the opening line: past the mod's PE_OPEN_LIMIT (900 battle frames)
 TEST_HP = 100
-REACH = 900                        # the Nemesis pack's attack reach
+REACH = 900                        # the pack's longest attack reach (read from enemy.json)
 FOE_TYPE = 0xEE                    # the imported enemy's actor type
-TEX_X, TEX_Y = 320, 256
-HAS_SOUNDS = False                 # the pack lists sounds: its moves' sound frames play
+HAS_SOUNDS = False                 # the pack lists sounds and its walk or attacks mark sound frames: they play
 
 
 def status(game):
@@ -57,9 +64,9 @@ def num(st, key):
         return -1
 
 
-def vram_block(path, width, height):
-    data = Path(path).read_bytes()
-    return [data[((TEX_Y + y) * 1024 + TEX_X) * 2:((TEX_Y + y) * 1024 + TEX_X) * 2 + width] for y in range(height)]
+def vram_block(path, at, width, height):
+    data, (x, y0) = Path(path).read_bytes(), at
+    return [data[((y0 + y) * 1024 + x) * 2:((y0 + y) * 1024 + x) * 2 + width] for y in range(height)]
 
 
 def wait_joined(game, limit=3000):
@@ -87,8 +94,10 @@ def part_alone(game, work, rows, tex_w, tex_h):
     game.adv(30)
     game.raw(f'capture {work / "appears"}')
     st = status(game)
+    at = tuple(int(v) for v in st.get('vram', '-1,-1').split(','))
     F.check(num(st, 'tris') > 0 and num(st, 'frames') > 0, f'alone: not drawn: {st["text"]}')
-    F.check(vram_block(work / 'appears.vram', tex_w, tex_h) == rows, 'alone: the pack texture is not in VRAM')
+    F.check(at[0] >= 0 and vram_block(work / 'appears.vram', at, tex_w, tex_h) == rows,
+            f'alone: the pack texture is not in VRAM at {at}')
     first_dist = num(st, 'dist')
     print(f'alone: joined: {st["text"]}', flush=True)
 
@@ -148,7 +157,53 @@ def part_alone(game, work, rows, tex_w, tex_h):
     F.check(last.endswith(': won'), f'alone: Last fight is {last!r}')
     F.check('beaten (beaten 1 of 1)' in text, f'alone: Imported status says {text!r}')
     game.raw(f'capture {work / "after"}')
-    F.check(vram_block(work / 'after.vram', tex_w, tex_h) != rows, 'alone: the VRAM block was not given back')
+    F.check(vram_block(work / 'after.vram', at, tex_w, tex_h) != rows, 'alone: the VRAM block was not given back')
+
+
+def shoot_until_over(game, limit=40000):
+    """Aya attacks whenever her time bar is full until the battle is over; once the imported enemy
+    is down, the button goes on through what the room shows after (M118: a story line)."""
+    end = game.vblank + limit
+    while game.vblank < end:
+        b = game.battle()
+        if not b['active']:
+            return
+        if 'die' in status(game)['seen']:
+            game.press(F.CROSS, 60)
+        elif b['player']['atb'] >= 9000:
+            game.press(F.CROSS, 20)
+            game.press(F.CROSS, 90)
+        else:
+            game.adv(30)
+    raise F.Failed(f'the battle never ended by vblank {game.vblank}: {status(game)["text"]}')
+
+
+def part_late(game, work):
+    game.ask("ini-set Fights/Room's enemies 1")
+    F.start_fight(game, LATE_AREA, LATE_FIGHT)
+    F.check(F.wait_battle(game) is not None, 'late: the M118 battle did not start')
+    F.check(game.room()['map'] == LATE_MAP, f'late: the battle is not in M{LATE_MAP}: {game.room()}')
+    game.adv(LATE_WAIT)
+    b = game.battle()
+    types = [e['type'] for e in b['enemies']]
+    F.check(FOE_TYPE in types, f'late: the imported enemy did not join during the opening: {status(game)["text"]}')
+    F.check(any(t != FOE_TYPE for t in types), f'late: the Dogman was sent away mid-scene: {b["enemies"]}')
+    F.check(b['player']['atb'] == 0, f"late: the clock runs before the opening line was pressed: {b['player']}")
+    game.raw(f'capture {work / "late-opening"}')
+    end = game.vblank + 3000
+    while game.vblank < end and game.battle()['player']['atb'] == 0:
+        game.press(F.CROSS, 60)
+    F.check(game.battle()['player']['atb'] > 0, 'late: the clock never ran after the opening line')
+    game.adv(30)
+    types = [e['type'] for e in game.battle()['enemies']]
+    F.check(types == [FOE_TYPE], f"late: the room's enemies did not go when the clock ran: {types}")
+    shoot_until_over(game)
+    F.wait_home(game)
+    last = game.picker()['Last fight']
+    text = game.picker()['Imported status']
+    print(f'late: {last}; {text}', flush=True)
+    F.check(last.endswith(': won'), f'late: Last fight is {last!r}')
+    F.check('beaten (beaten 1 of 1)' in text, f'late: Imported status says {text!r}')
 
 
 def part_with(game, work):
@@ -181,8 +236,9 @@ def run(exe, disc, pack, work):
     pixels = tex[12 + 512 * pals:]
     rows = [pixels[y * tex_w:(y + 1) * tex_w] for y in range(tex_h)]
     spec = json.loads((pack / 'enemy.json').read_text())
-    global HAS_SOUNDS
-    HAS_SOUNDS = bool(spec.get('sounds'))
+    global HAS_SOUNDS, REACH
+    HAS_SOUNDS = bool(spec.get('sounds')) and sound_frames(pack, spec)
+    REACH = max([a.get('range', 0) for a in spec.get('attacks', [])] or [REACH])
 
     def setup(config):
         dst = config / 'pe_enemies' / 'test-enemy'
@@ -196,6 +252,7 @@ def run(exe, disc, pack, work):
         game.ask('ini-set Fights/Imported enemy 1')
         part_alone(game, work, rows, tex_w, tex_h)
         part_with(game, work)
+        part_late(game, work)
         losses = []
         trace = game.ctl / 'battle.jsonl'
         for line in (trace.read_text().splitlines() if trace.exists() else []):
@@ -205,6 +262,20 @@ def run(exe, disc, pack, work):
         print(f"Aya's HP losses to enemy blows (trace): {losses}")
     finally:
         game.quit()
+
+
+def sound_frames(pack, spec):
+    """Whether the walk or an attack (the moves this test sees) marks a sound frame (PEEA v2 events)."""
+    names = [spec['anims'].get('walk')] + [spec['anims'].get(a['anim']) for a in spec.get('attacks', [])]
+    for name in filter(None, names):
+        data = (pack / name).read_bytes()
+        version, bones, frames = struct.unpack_from('<3H', data, 4)
+        if version < 2:
+            continue
+        at = 12 + frames * (3 + 3 * bones) * 2
+        if any(e & 0xff for e in struct.unpack_from(f'<{frames}H', data, at)):
+            return True
+    return False
 
 
 def main():

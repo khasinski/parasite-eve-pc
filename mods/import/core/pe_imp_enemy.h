@@ -19,14 +19,27 @@ typedef struct PeImpEnemyProfile {
     int yaw;                                  /* turn so +z faces Aya (4096 = a full turn) */
     /* roles idle, walk, hurt, die and every attack's own name -> a move of the Animation */
     struct { const char *name; int move; } anim[PE_IMP_ENEMY_ANIMS];
-    /* power: the game's attack power; range: reach in PE field units; the blow lands on the move's
-     * first frame marked PE_IMP_EVENT_HIT (else half way) */
-    struct { const char *anim; int power, range; } attack[PE_IMP_ENEMY_ATTACKS];
+    /* power: the game's attack power; range: reach in PE field units (0: measured, how far in front
+     * the model gets at the blow frame, at least its radius, plus Aya's half width); hit: the frame
+     * the blow lands
+     * (0: the move's first frame marked PE_IMP_EVENT_HIT, else where it reaches furthest forward) */
+    struct { const char *anim; int power, range, hit; } attack[PE_IMP_ENEMY_ATTACKS];
     int speed, charge, radius, stagger;       /* as the pack's "behavior" (pe_enemy_pack.h) */
 } PeImpEnemyProfile;
 
 /* Assets "<game>:<local ID>" fight with this profile ("re3", "enemy/nemesis"): exact match. */
 int pe_imp_add_enemy(const char *game, const char *local_id, const PeImpEnemyProfile *p);
 const PeImpEnemyProfile *pe_imp_enemy_for(const char *asset_id);
+
+/* A game's monsters that no profile names fight with a guessed one (pe_enemy_guess.c); what the
+ * guess can't see is the game's: `yaw` turns its models to face Aya, `scale` (per mille) takes its
+ * units to PE field units. A game without these still builds (yaw 0, 500 units tall). */
+int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale);
+int pe_imp_enemy_defaults(const char *game, int *yaw, int *scale);     /* 0, or -1: none set */
+
+/* The Resident Evil games' (1, 2 and 3 share the EMD's axes and units): their models face +x, and a
+ * person about 2900 units tall stands about 560 next to Aya (about 500), as RE3's zombie does. */
+#define PE_RE_ENEMY_YAW 3072
+#define PE_RE_ENEMY_SCALE 190
 
 #endif

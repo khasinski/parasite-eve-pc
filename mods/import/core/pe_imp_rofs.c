@@ -72,7 +72,9 @@ void pe_imp_rofs_decrypt(uint8_t *buf, uint32_t len, uint32_t key) {
 }
 
 uint32_t pe_imp_rofs_depack(const uint8_t *src, uint32_t len, uint8_t *dst, uint32_t max) {
-    uint8_t tmp[4096 + 256];
+    /* the window's 4096 bytes start as 16 of each byte value; the 256 after them start as zeros
+     * (a copy from near the end reads past 4096, and the files expect zeros there) */
+    uint8_t tmp[4096 + 256] = {0};
     uint32_t nbit = 0, si = 0, ti = 0, out = 0;
     for (int i = 0; i < 256; i++) memset(tmp + 16 * i, i, 16);
     while (si < len && out < max) {

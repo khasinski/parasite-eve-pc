@@ -110,12 +110,24 @@ static void write_rofs(const char *path, const char *a, const char *b, const RFi
     free(o.b);
 }
 
+/* leaves 0xAA all over the stack the next call will use */
+static void __attribute__((noinline)) dirty_stack(void) {
+    volatile uint8_t junk[16384];
+    for (size_t i = 0; i < sizeof junk; i++) junk[i] = 0xAA;
+}
+
 static void test_rofs(void) {
     /* the packer on its own */
     uint8_t src[64], out[64];
     uint32_t n = packed_sample(src);
     assert(pe_imp_rofs_depack(src, n, out, 7) == 7 && !memcmp(out, "HiAAAA!", 7));   /* the length stops it: padding bits */
     assert(pe_imp_rofs_depack(src, n, out, 3) == 3 && !memcmp(out, "HiA", 3));   /* bounded */
+    /* a copy from the window's last byte runs into the 256 after it: those start as zeros (left
+     * unset they took the stack's leftovers, and 69 of RE3's 100 enemy files came out wrong) */
+    static const uint8_t far_copy[] = {0xFF, 0xFF, 0x80};                    /* flag, start 0xFFF, 17 bytes */
+    static const uint8_t want[17] = {0xFF};
+    dirty_stack();
+    assert(pe_imp_rofs_depack(far_copy, sizeof far_copy, out, 17) == 17 && !memcmp(out, want, 17));
     /* encryption round trip */
     uint8_t buf[3000], copy[3000];
     for (int i = 0; i < 3000; i++) buf[i] = (uint8_t)(i * 7);
@@ -231,7 +243,7 @@ static void build_emd(Bytes *o) {
     uint32_t no1 = o->n - base;
     for (int i = 0; i < 4; i++) for (int c = 0; c < 4; c++) b16(o, c == 1 ? 4096 : 0);
     uint32_t qo1 = o->n - base;
-    uint8_t q[16] = {0, 0, 4, 0, 8, 0, 1, 0, 0, 8, 0, 1, 8, 8, 2, 3};   /* page 4: u + 8; clut 1 */
+    uint8_t q[16] = {0, 0, 64, 0, 8, 0, 1, 0, 0, 8, 0, 1, 8, 8, 2, 3};  /* page byte 64: page 1; palette row 1 */
     put(o, q, 16);
     uint32_t vo0 = o->n - base;
     for (int i = 0; i < 4; i++) for (int c = 0; c < 4; c++) b16(o, i < 3 && c < 3 ? (unsigned)(uint16_t)v0[i][c] : 0);
@@ -274,10 +286,10 @@ static void test_emd(void) {
     assert(m.bones == 2 && m.parent[0] == -1 && m.parent[1] == 0);
     assert(m.pos[1][1] == -1100 && m.parts == 2);
     assert(m.w == 16 && m.h == 4 && m.pal_rows == 2 && m.pal[1][5] == 6 && m.image[63] == 63);
-    /* rigid quad in bone 1's frame, page byte and palette row kept */
+    /* rigid quad in bone 1's frame, its page as a PS1 page word (8-bit, page 1), palette row kept */
     assert(m.part[1].quads == 1 && m.part[1].tris == 0 && !m.part[1].quad_skin && !m.part[1].tri_skin);
     const PeImpFace *q = &m.part[1].quad[0];
-    assert(q->v[0][0] == -10 && q->v[3][1] == 20 && q->page == 4 && q->clut == 1 && q->uv[1][0] == 8 && q->n[0][1] == 4096);
+    assert(q->v[0][0] == -10 && q->v[3][1] == 20 && q->page == 0x81 && q->clut == (1 << 6) && q->uv[1][0] == 8 && q->n[0][1] == 4096);
     /* bound triangle (part 0) */
     const PeImpPart *p1 = &m.part[0];
     assert(p1->tris == 1 && p1->tri_skin);
@@ -347,6 +359,7 @@ static void test_emd(void) {
 }
 
 /* ---- tones ---- */
+/* E_34's layout: one program, its two tones back to back */
 static void build_bank(Bytes *vh, Bytes *vb) {
     memset(vh, 0, sizeof *vh);
     memset(vb, 0, sizeof *vb);
@@ -354,15 +367,36 @@ static void build_bank(Bytes *vh, Bytes *vb) {
     pad(vh, 0x80 + 32);
     set16(vh, 0x80 + 18, 1), set16(vh, 0x80 + 20, 2), set16(vh, 0x80 + 22, 2);
     pad(vh, 0x80 + 32 + 16);
+    vh->b[0x80 + 32] = 2;                                        /* the program's tone count */
     uint8_t tone[2][32] = {{0}};
-    tone[0][2] = 127, tone[0][4] = 60, tone[0][5] = 0, tone[0][22] = 1;    /* note 60 on centre 60: 44100 */
-    tone[1][2] = 64, tone[1][4] = 73, tone[1][5] = 0, tone[1][22] = 2;     /* note 61 on centre 73: an octave down */
+    tone[0][2] = 127, tone[0][4] = 60, tone[0][6] = 60, tone[0][22] = 1;   /* note 60 on centre 60: 44100 */
+    tone[1][2] = 64, tone[1][4] = 73, tone[1][6] = 61, tone[1][22] = 2;    /* note 61 on centre 73: an octave down */
     put(vh, tone[0], 32), put(vh, tone[1], 32);
     b16(vh, 0), b16(vh, 4), b16(vh, 8);                          /* sample 1: 0-32, sample 2: 32-64 */
     for (int blk = 0; blk < 4; blk++) {
         b8(vb, 0x00), b8(vb, 0);                                 /* filter 0, shift 0: nibble * 4096 */
         for (int i = 0; i < 14; i++) b8(vb, 0x11);              /* every sample 1 -> 4096 */
     }
+}
+
+/* two programs (2 tones + 1) in a table of `slots` per program (0: packed, E_28), the file padded to
+ * 16 bytes; padded banks carry a wrong tone count in the header, as E_10 does */
+static void build_bank2(Bytes *vh, int slots) {
+    memset(vh, 0, sizeof *vh);
+    pad(vh, 0x80 + 32);
+    set16(vh, 0x80 + 18, 2), set16(vh, 0x80 + 20, slots ? 7 : 3), set16(vh, 0x80 + 22, 2);
+    pad(vh, 0x80 + 32 + 32);
+    vh->b[0x80 + 32] = 2, vh->b[0x80 + 48] = 1;
+    uint8_t tone[3][32] = {{0}}, empty[32] = {0};
+    tone[0][2] = 127, tone[0][4] = 60, tone[0][6] = 60, tone[0][22] = 1;
+    tone[1][2] = 64, tone[1][4] = 73, tone[1][6] = 61, tone[1][22] = 2;
+    tone[2][2] = 127, tone[2][4] = 72, tone[2][6] = 60, tone[2][22] = 2;   /* program 2: 60 on 72, an octave down */
+    put(vh, tone[0], 32), put(vh, tone[1], 32);
+    for (int i = 2; i < slots; i++) put(vh, empty, 32);
+    put(vh, tone[2], 32);
+    for (int i = 1; i < slots; i++) put(vh, empty, 32);
+    b16(vh, 0), b16(vh, 4), b16(vh, 8);
+    while (vh->n % 16) b8(vh, 0);
 }
 
 static void test_tones(void) {
@@ -379,8 +413,20 @@ static void test_tones(void) {
     assert(!re3_tone_sound(vh.b, vh.n, vb.b, vb.n, 2, why, sizeof why));
     assert(!re3_tone_sound(vh.b, vh.n, vb.b, 40, 1, why, sizeof why));           /* sample past the VB */
     assert(re3_tone_count(vh.b, 100) == -1);
+    /* the three tone table layouts: packed, 16 slots a program (E_10), the largest program's count (E_45) */
+    static const int layouts[3] = {0, 16, 2};
+    for (int l = 0; l < 3; l++) {
+        Bytes v2;
+        build_bank2(&v2, layouts[l]);
+        assert(re3_tone_count(v2.b, v2.n) == 3);
+        PeImpSound *a = re3_tone_sound(v2.b, v2.n, vb.b, vb.n, 1, why, sizeof why);
+        PeImpSound *c = re3_tone_sound(v2.b, v2.n, vb.b, vb.n, 2, why, sizeof why);   /* program 2's tone */
+        assert(a && a->frames == 56 && abs(a->pcm[3] - 2064) < 4);
+        assert(c && c->frames == 56 && c->pcm[3] == 4096);
+        free(a), free(c), free(v2.b);
+    }
     free(vh.b), free(vb.b);
-    printf("tones: rates from the tone table, resampled, volume\n");
+    printf("tones: rates from the tone table, resampled, volume; packed and padded tone tables\n");
 }
 
 /* ---- a made-up PC folder scanned into a store ---- */
@@ -478,6 +524,27 @@ static int real(void) {
     const uint8_t *t0 = vh + 0x80 + 32 + 16 * (vh[0x80 + 18] | vh[0x80 + 19] << 8);
     for (int k = 0; k < 3; k++) assert(lround(re3_tone_rate(60 + k, t0[32 * k + 4], t0[32 * k + 5])) == rate0[k]);
     free(emd), free(tim), free(vh), free(vb);
+    /* every enemy model in the folder (ROOM/EMD and ROOM/EMD08, 100 on RE3 PC) reads */
+    int all = 0;
+    uint32_t tn2;
+    for (int i = 0; i < pe_imp_disc_files(d); i++) {
+        const char *nm = pe_imp_disc_name(d, i);
+        size_t len = strlen(nm);
+        if (strncmp(nm, "ROOM/EMD", 8) || len < 4 || strcmp(nm + len - 4, ".EMD")) continue;
+        char tn[256];
+        snprintf(tn, sizeof tn, "%.*s.TIM", (int)len - 4, nm);
+        int ti = pe_imp_disc_find(d, tn);
+        assert(ti >= 0 && !pe_imp_disc_read(d, i, &emd, &en, why, sizeof why) && !pe_imp_disc_read(d, ti, &tim, &tn2, why, sizeof why));
+        rc = re3_emd_parse(emd, en, tim, tn2, &m, &a, why, sizeof why);
+        if (rc) printf("real: %s: %s\n", nm, why);
+        assert(!rc);
+        pe_imp_model_free(&m);
+        pe_imp_animation_free(&a);
+        free(emd), free(tim);
+        all++;
+    }
+    printf("real: all %d enemy models in the folder read\n", all);
+    assert(all >= 100);
     pe_imp_disc_close(d);
     printf("real: EM34 and E_34 from the RE3 PC folder\n");
     return 0;

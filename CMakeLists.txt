@@ -742,11 +742,19 @@ if(BUILD_TESTING)
                 TIMEOUT 3600 LABELS "game-assets;mods;slow")
             # An imported enemy (PE_TEST_ENEMY_PACK, built from the player's own files) in M075's
             # fight: it appears, attacks with its pack's damage, is hurt and dies; the battle is won.
+            # Then M118, whose opening line waits for the player: it joins late and still wins.
             add_test(NAME enemy-import-nemesis COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/enemy_import_nemesis.py $<TARGET_FILE:parasite-eve-pc>
                 ${CMAKE_BINARY_DIR}/enemy-import-nemesis-evidence)
             set_tests_properties(enemy-import-nemesis PROPERTIES SKIP_RETURN_CODE 77
-                TIMEOUT 900 LABELS "game-assets;mods")
+                TIMEOUT 1500 LABELS "game-assets;mods")
+            # The same pack in every fight of the list: joining leaves the room's picture whole
+            # (its texture goes to VRAM the room is not using).
+            add_test(NAME enemy-import-rooms COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_SOURCE_DIR}/tests/enemy_import_rooms.py $<TARGET_FILE:parasite-eve-pc>
+                ${CMAKE_BINARY_DIR}/enemy-import-rooms-evidence)
+            set_tests_properties(enemy-import-rooms PROPERTIES SKIP_RETURN_CODE 77
+                TIMEOUT 3600 LABELS "game-assets;mods;slow")
         endif()
         if(PE_MODS AND "pe_lang" IN_LIST PE_MOD_LIST)
             # The text renderer with language packs made from the disc: stretches, name letters,

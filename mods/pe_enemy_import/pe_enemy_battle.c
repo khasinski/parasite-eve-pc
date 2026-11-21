@@ -19,9 +19,12 @@
  *   - while the game stops enemies (Aya's command menu) it stands still.
  * The room's own enemies fight too, unless Fights > Room's enemies is "Sent away": they are taken
  * out of the battle as it opens (no EXP for them), and the imported enemy stands where the first
- * one was.
- * The texture goes to a VRAM block no battle room uses (x 320..511, y 256..511, palettes at
- * x 512, y 500..), saved before and put back when the battle ends. */
+ * one was. When the opening outlasts PE_OPEN_LIMIT (a story line the player has not pressed
+ * through yet, as M118's), the imported enemy joins then but the room's enemies stay until the
+ * clock runs (Aya's time bar moves): the opening's scene uses them (M118's Giant Dogman), and
+ * sent away mid-scene it never ends, nor the battle.
+ * The texture and palettes go to VRAM blocks the room is not using, chosen per battle (see
+ * "where the texture goes"), saved before and put back when the battle ends. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +39,7 @@
 #include "pe1/battle.h"
 #include "pe1/battle_entity_anim.h"
 #include "pe1/battle_runtime.h"
+#include "pe1/display_env.h"
 #include "pe1/draw_buffers.h"
 #include "pe1/entity_allocation.h"
 #include "pe1/entity_frame_update.h"
@@ -53,11 +57,11 @@
 #define MOD_ID "pe_enemy_import"
 #define PE_PACKS_MAX 16
 #define PE_FOES_MAX 3
-#define PE_TEX_X 320
+#define PE_TEX_X 320          /* the texture's first choice when free (Central Park leaves it free) */
 #define PE_TEX_Y 256
 #define PE_TEX_W 192          /* VRAM pixels: 384 8-bit texels */
 #define PE_TEX_H 256
-#define PE_CLUT_X 512
+#define PE_CLUT_X 512         /* the palettes' first choice when free */
 #define PE_CLUT_Y 500
 #define PE_CLUTS_MAX 12
 #define PE_PI 3.14159265358979323846
@@ -96,6 +100,9 @@ static int s_send_away, s_count = 1;
 
 static struct {
     int active, uploaded, frames, open_frames, joined, sent_away, room_enemies;
+    int away_later;                  /* joined during the opening: send the room's enemies away
+                                      * once the clock runs */
+    int tex_x, tex_y, clut_x, clut_y; /* where this battle's texture and palettes went */
     int height;                      /* the pack's standing height, field units */
     PeFoe foe[PE_FOES_MAX];
     int foes;
@@ -340,11 +347,14 @@ static int pe_spawn(int x, int y, int z) {
     return 1;
 }
 
-/* A room enemy out of the battle, as if never there: no EXP, no death steps. */
+/* A room enemy out of the battle, as if never there: no EXP, no death steps. One already at 0 HP
+ * (beaten before the room's enemies went, as by Cheats > Win this battle during an opening) is
+ * left to the game's death steps: the last of those checks for the victory. */
 static void pe_send_away(FieldActor *a) {
     EnemyCombatant *core = (EnemyCombatant *)a->state;
     FieldActor *c;
-    if (core->hpAlive > 0 && !(a->flags & 0x2000)) g_BattleLiveEnemyCount--;
+    if ((int)core->hpAlive <= 0) return;
+    if (!(a->flags & 0x2000)) g_BattleLiveEnemyCount--;
     core->hpAlive = 0;
     a->flags |= 0x10;   /* freed at the end of the frame, with its scripts and parts */
     for (c = g_FieldActorListHead; c; c = c->next)
@@ -356,39 +366,222 @@ static void pe_send_away(FieldActor *a) {
 /* ---- VRAM ---- */
 
 static void pe_vram(int put_back) {
-    RECT tex = {PE_TEX_X, PE_TEX_Y, PE_TEX_W, PE_TEX_H};
+    RECT tex = {(short)s.tex_x, (short)s.tex_y, (short)(s_pack.tex_w / 2), (short)s_pack.tex_h};
     int i;
     if (!put_back) {   /* save what is there, then ours */
         StoreImage(&tex, s_saved_tex);
         for (i = 0; i < s_pack.palettes; ++i) {
-            RECT c = {PE_CLUT_X, (short)(PE_CLUT_Y + i), 256, 1};
+            RECT c = {(short)s.clut_x, (short)(s.clut_y + i), 256, 1};
             StoreImage(&c, s_saved_clut[i]);
         }
         DrawSync(0);
-        {
-            RECT r = {PE_TEX_X, PE_TEX_Y, (short)(s_pack.tex_w / 2), (short)s_pack.tex_h};
-            LoadImage(&r, s_pack.pixels);
-        }
+        LoadImage(&tex, s_pack.pixels);
         for (i = 0; i < s_pack.palettes; ++i) {
-            RECT c = {PE_CLUT_X, (short)(PE_CLUT_Y + i), 256, 1};
+            RECT c = {(short)s.clut_x, (short)(s.clut_y + i), 256, 1};
             LoadImage(&c, s_pack.palette + 256 * i);
         }
     } else {
         LoadImage(&tex, s_saved_tex);
         for (i = 0; i < s_pack.palettes; ++i) {
-            RECT c = {PE_CLUT_X, (short)(PE_CLUT_Y + i), 256, 1};
+            RECT c = {(short)s.clut_x, (short)(s.clut_y + i), 256, 1};
             LoadImage(&c, s_saved_clut[i]);
         }
     }
     DrawSync(0);
 }
 
+/* ---- where the texture goes ----
+ * Rooms keep their pictures in VRAM in no fixed place: background tiles, enemy and effect
+ * textures (M152 keeps background tiles where Central Park leaves VRAM free). So the blocks for
+ * the imported enemy's texture and palettes are chosen per battle. While the battle opens, every
+ * textured packet of each frame marks the VRAM it reads (texels and palette) in s_used, a map of
+ * 16-pixel columns per VRAM line; the display and draw areas are marked too. At the join, each
+ * block goes where nothing drawn read, with the fewest non-black pixels (pictures loaded but not
+ * drawn yet, like menus and effects, are not black); the first choice wins a tie. */
+
+#define PE_COLS (1024 / 16)
+#ifndef PSYZ_MERGED_PRIM_NOP
+#define PSYZ_MERGED_PRIM_NOP 0x005A4D50U   /* PsyZ libgpu.h: marks a merged packet's packed words */
+#endif
+static u8 s_used[512][PE_COLS];
+static u16 s_vram[1024 * 512];
+static int s_used_frames;
+
+static void pe_mark(int x0, int y0, int x1, int y1) {
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > 1023) x1 = 1023;
+    if (y1 > 511) y1 = 511;
+    if (x0 > x1) return;
+    for (int y = y0; y <= y1; ++y) memset(&s_used[y][x0 >> 4], 1, (size_t)((x1 >> 4) - (x0 >> 4) + 1));
+}
+
+static void pe_mark_rect(const RECT *r) {
+    if (r->w > 0 && r->h > 0) pe_mark(r->x, r->y, r->x + r->w - 1, r->y + r->h - 1);
+}
+
+/* Texels u0..u1, v0..v1 of a texture page and the palette they use. */
+static void pe_mark_texels(u32 tpage, u32 clut, int u0, int v0, int u1, int v1) {
+    const int bx = (int)(tpage & 15) * 64, by = (int)((tpage >> 4) & 1) * 256;
+    const int depth = (int)((tpage >> 7) & 3), shift = depth == 0 ? 2 : depth == 1 ? 1 : 0;
+    const int cx = (int)(clut & 0x3F) * 16, cy = (int)((clut >> 6) & 0x1FF);
+    pe_mark(bx + (u0 >> shift), by + v0, bx + (u1 >> shift), by + v1);
+    if (depth < 2) pe_mark(cx, cy, cx + (depth ? 255 : 15), cy);
+}
+
+/* One packet's GPU commands (32-bit words); tpage follows the draw mode as the GPU does. */
+static void pe_mark_words(const u32 *w, int n, u32 *tpage) {
+    int i = 0;
+    while (i < n) {
+        const u32 c = w[i] >> 24;
+        int len = 1;
+        if (c >= 0x20 && c < 0x40) {   /* polygons */
+            const int gouraud = (c & 0x10) != 0, tex = (c & 4) != 0, verts = (c & 8) ? 4 : 3;
+            len = 1 + verts * (tex ? 2 : 1) + (gouraud ? verts - 1 : 0);
+            if (i + len > n) return;
+            if (tex) {
+                int u0 = 255, u1 = 0, v0 = 255, v1 = 0;
+                u32 clut = 0;
+                for (int k = 0; k < verts; ++k) {
+                    const u32 uv = w[i + (gouraud ? 2 + 3 * k : 2 + 2 * k)];
+                    const int u = (int)(uv & 0xFF), v = (int)((uv >> 8) & 0xFF);
+                    if (u < u0) u0 = u;
+                    if (u > u1) u1 = u;
+                    if (v < v0) v0 = v;
+                    if (v > v1) v1 = v;
+                    if (k == 0) clut = uv >> 16;
+                    if (k == 1) *tpage = (uv >> 16) & 0x1FF;
+                }
+                pe_mark_texels(*tpage, clut, u0, v0, u1, v1);
+            }
+        } else if (c >= 0x40 && c < 0x60) {   /* lines: no texture */
+            if (c & 8) {   /* a polyline ends at its 0x5xxx5xxx word */
+                for (len = 2; i + len < n && (w[i + len] & 0xF000F000u) != 0x50005000u; ++len) {}
+                ++len;
+            } else {
+                len = (c & 0x10) ? 4 : 3;
+            }
+        } else if (c >= 0x60 && c < 0x80) {   /* rectangles */
+            const int tex = (c & 4) != 0, size = (int)((c >> 3) & 3);
+            len = 2 + tex + (size == 0);
+            if (i + len > n) return;
+            if (tex) {
+                const u32 uv = w[i + 2];
+                const int u = (int)(uv & 0xFF), v = (int)((uv >> 8) & 0xFF);
+                int ww = size == 1 ? 1 : size == 2 ? 8 : 16, hh = ww;
+                if (size == 0) {
+                    ww = (int)(w[i + 3] & 0x3FF);
+                    hh = (int)((w[i + 3] >> 16) & 0x1FF);
+                }
+                if (ww > 0 && hh > 0)
+                    pe_mark_texels(*tpage, uv >> 16, u, v, u + ww - 1 > 255 ? 255 : u + ww - 1,
+                                   v + hh - 1 > 255 ? 255 : v + hh - 1);
+            }
+        } else if (c == 0x02 || (c >= 0xC0 && c < 0xE0)) {
+            len = 3;
+        } else if (c >= 0x80 && c < 0xA0) {
+            len = 4;
+        } else if (c >= 0xA0 && c < 0xC0) {   /* an upload carries its pixels */
+            if (i + 3 > n) return;
+            len = 3 + (int)(((w[i + 2] & 0xFFFF) * (w[i + 2] >> 16) + 1) / 2);
+        } else if (c == 0xE1) {
+            *tpage = w[i] & 0x1FF;
+        }
+        i += len;
+    }
+}
+
+/* Stage 1 of the room picture hook: the frame is linked, from entry 4095 (drawn first) down. */
+static int pe_on_background(void *ctx, void *user) {
+    const PeHookFieldBackground *b = (const PeHookFieldBackground *)ctx;
+    const RenderNativeTag *p;
+    u32 tpage = 0, words[256];
+    int guard = 0;
+    (void)user;
+    if (b->stage != 1 || !s.active || s.joined || !b->ordering) return 0;
+    for (p = (const RenderNativeTag *)b->ordering + 4095; p && guard < 1000000; ++guard) {
+        const int n = (int)p->length;
+        if (n > 0 && n <= 256) {
+            const u32 *w = (const u32 *)(p + 1);
+            int packed = (w[0] >> 24) >= 0x20 && (w[0] >> 24) < 0x80;
+            for (int i = 0; i < n && !packed; ++i) packed = w[i] == PSYZ_MERGED_PRIM_NOP;
+            if (packed) {
+                pe_mark_words(w, n, &tpage);
+            } else {   /* a u_long stream: each element's low word is the command word */
+                const uintptr_t *lw = (const uintptr_t *)(p + 1);
+                for (int i = 0; i < n; ++i) words[i] = (u32)lw[i];
+                pe_mark_words(words, n, &tpage);
+            }
+        }
+        if (p->address == 0xFFFFFF || p->address == 0) break;
+        p = (const RenderNativeTag *)p->address;
+    }
+    s_used_frames++;
+    return 0;
+}
+
+/* Cells the room read (times a million) plus pixels that are not black, in a VRAM block. */
+static long long pe_block_cost(int x, int y, int w, int h) {
+    long long used = 0, lit = 0;
+    for (int j = y; j < y + h; ++j) {
+        for (int c = x >> 4; c <= (x + w - 1) >> 4; ++c) used += s_used[j][c];
+        for (int i = x; i < x + w; ++i) lit += s_vram[j * 1024 + i] != 0;
+    }
+    return used * 1000000LL + lit;
+}
+
+static int pe_overlap(int ax, int ay, int aw, int ah, int bx, int by, int bw, int bh) {
+    return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
+}
+
+static void pe_place(void) {
+    const int tw = s_pack.tex_w / 2, th = s_pack.tex_h, rows = s_pack.palettes > 0 ? s_pack.palettes : 1;
+    RECT all = {0, 0, 1024, 512};
+    long long best, cost;
+    for (int i = 0; i < 2; ++i) {
+        pe_mark_rect(&g_RenderDrawEnvArray[i].clip);
+        pe_mark_rect(&g_RenderDispEnvArray[i].disp);
+    }
+    StoreImage(&all, s_vram);
+    DrawSync(0);
+    /* the texture: a texture page column (x a multiple of 64), its lines inside one page row */
+    s.tex_x = PE_TEX_X;
+    s.tex_y = PE_TEX_Y;
+    best = pe_block_cost(s.tex_x, s.tex_y, tw, th);
+    for (int page = 0; page < 2; ++page)
+        for (int dy = 0; dy + th <= 256; dy += 16)
+            for (int x = 0; x + tw <= 1024; x += 64)
+                if ((cost = pe_block_cost(x, page * 256 + dy, tw, th)) < best) {
+                    best = cost;
+                    s.tex_x = x;
+                    s.tex_y = page * 256 + dy;
+                }
+    pe_mod_log(MOD_ID, "battle: %s texture at %d,%d (%lld cells read by the room, %lld pixels not black; %d frames looked at)",
+               s_pack.name, s.tex_x, s.tex_y, best / 1000000LL, best % 1000000LL, s_used_frames);
+    /* the palettes: 256 wide (x a multiple of 256), clear of the texture */
+    s.clut_x = PE_CLUT_X;
+    s.clut_y = PE_CLUT_Y;
+    best = pe_overlap(s.clut_x, s.clut_y, 256, rows, s.tex_x, s.tex_y, tw, th) ? -1
+                                                                               : pe_block_cost(s.clut_x, s.clut_y, 256, rows);
+    for (int x = 0; x < 1024; x += 256)
+        for (int y = 0; y + rows <= 512; ++y)
+            if (!pe_overlap(x, y, 256, rows, s.tex_x, s.tex_y, tw, th) &&
+                ((cost = pe_block_cost(x, y, 256, rows)) < best || best < 0)) {
+                best = cost;
+                s.clut_x = x;
+                s.clut_y = y;
+            }
+    pe_mod_log(MOD_ID, "battle: %s palettes at %d,%d (%lld cells read by the room, %lld pixels not black)",
+               s_pack.name, s.clut_x, s.clut_y, best / 1000000LL, best % 1000000LL);
+}
+
 /* ---- the battle ---- */
 
-static void pe_join(void) {
+static void pe_join(int early) {
     FieldActor *a, *first = NULL, *aya = g_PlayerEntity;
     int x, y, z, i;
     s.joined = 1;
+    s.away_later = s_send_away && early;
     if (!aya) return;
     for (a = g_FieldActorListHead; a; a = a->next)
         if (pe_is_room_enemy(a) && !(a->flags & 0x4000) && ((EnemyCombatant *)a->state)->hpAlive > 0) {
@@ -401,7 +594,7 @@ static void pe_join(void) {
         y = aya->pos_y;
         z = aya->pos_z + (int)(cos(aya->rot_y * 2 * PE_PI / 4096.0) * 2000.0 * 65536.0);
     }
-    if (s_send_away)
+    if (s_send_away && !s.away_later)
         for (a = g_FieldActorListHead; a; a = a->next)
             if (pe_is_room_enemy(a)) pe_send_away(a);
     for (i = 0; i < s_count; ++i) {
@@ -409,13 +602,14 @@ static void pe_join(void) {
          * when it stays */
         const double ang = atan2((x - aya->pos_x) / 65536.0, (z - aya->pos_z) / 65536.0) + PE_PI / 2;
         double side = (i - (s_count - 1) / 2.0) * (s_pack.radius * 3.0);
-        if (!s_send_away && first) side += s_pack.radius * 3.0;
+        if ((!s_send_away || s.away_later) && first) side += s_pack.radius * 3.0;
         if (!pe_spawn(x + (int)(sin(ang) * side * 65536.0), y, z + (int)(cos(ang) * side * 65536.0))) break;
     }
     if (!s.foes) {
         pe_mod_log(MOD_ID, "battle: no free actor or enemy place for %s", s_pack.name);
         return;
     }
+    pe_place();
     pe_vram(0);
     s.uploaded = 1;
 }
@@ -423,6 +617,8 @@ static void pe_join(void) {
 static void pe_begin(void) {
     int top = 0;
     memset(&s, 0, sizeof s);
+    memset(s_used, 0, sizeof s_used);
+    s_used_frames = 0;
     s.active = 1;
     for (int i = 0; i < s_pack.vertices; ++i)   /* standing height: the highest rest vertex (-y up) */
         if (-s_pack.vertex[i].y > top) top = -s_pack.vertex[i].y;
@@ -554,7 +750,9 @@ static void pe_foe_think(PeFoe *f) {
             if (!reach || pe_reach(k) < reach) reach = pe_reach(k);
         if (!reach) reach = s_pack.radius * 3;
         const int moving = f->role == PE_ANIM_WALK;   /* starts a little further out than it stops */
-        if (aya && dist > reach * (moving ? 0.8 : 0.9) && s_pack.speed > 0 && abs(diff) < 0x400) {
+        /* (at least a unit to go: steps shrink as it closes in, and would never quite end) */
+        if (aya && dist > reach * (moving ? 0.8 : 0.9) && dist - reach * 0.8 >= 1.0 && s_pack.speed > 0 &&
+            abs(diff) < 0x400) {
             const double left = dist - reach * 0.8;
             const double step = s_pack.speed < left ? s_pack.speed : left;
             const double ang = a->rot_y * 2 * PE_PI / 4096.0;
@@ -584,15 +782,20 @@ static int pe_on_battle(void *ctx, void *user) {
          * would, and no time bar would fill. */
         ++s.frames;
         if (g_BattleEnemyEscapeFlag) s.open_frames++;
-        if (s.open_frames >= PE_OPEN_FRAMES) pe_join();
+        if (s.open_frames >= PE_OPEN_FRAMES) pe_join(0);
         else if (s.frames >= PE_OPEN_LIMIT) {
-            pe_mod_log(MOD_ID, "battle: the opening never ended; %s joins and the clock starts", s_pack.name);
+            pe_mod_log(MOD_ID, "battle: the opening is still on; %s joins%s", s_pack.name,
+                       s_send_away ? ", the room's enemies go when the clock runs" : "");
             g_BattleEnemyEscapeFlag = 1;
-            pe_join();
+            pe_join(1);
         }
         return 0;
     }
-    if (s_send_away) {   /* a room enemy that turns up later goes too */
+    if (s.away_later && g_PlayerEntity && g_PlayerEntity->state && ((Combatant *)g_PlayerEntity->state)->atb > 0) {
+        pe_mod_log(MOD_ID, "battle: the clock runs; the room's enemies go");
+        s.away_later = 0;
+    }
+    if (s_send_away && !s.away_later) {   /* a room enemy that turns up later goes too */
         for (FieldActor *a = g_FieldActorListHead; a; a = a->next)
             if (pe_is_room_enemy(a) && !(a->flags & 0x10)) pe_send_away(a);
     }
@@ -697,16 +900,16 @@ static void pe_draw(PeFoe *f, const u32 *view_words) {
         base = umin / 128 * 128;
         {
             PeFt3 *q = &prims[n++];
-            const int px = PE_TEX_X + base / 2;
-            const u32 tpage = 0x80u | ((PE_TEX_Y / 256) << 4) | (unsigned)(px >> 6);
-            const u32 clut = ((unsigned)(PE_CLUT_Y + t->palette) << 6) | (PE_CLUT_X >> 4);
+            const int px = s.tex_x + base / 2, dv = s.tex_y & 255;
+            const u32 tpage = 0x80u | ((unsigned)(s.tex_y / 256) << 4) | (unsigned)(px >> 6);
+            const u32 clut = ((unsigned)(s.clut_y + t->palette) << 6) | ((unsigned)s.clut_x >> 4);
             RenderNativeTag *entry = &D_800B0E38.ordering[g_ActiveDrawSlot][otz];
             q->tag.length = 7;
             q->color = (u32)light | (u32)light << 8 | (u32)light << 16 | 0x24u << 24;
             q->xy0 = (u32)sxy[0]; q->xy1 = (u32)sxy[1]; q->xy2 = (u32)sxy[2];
-            q->uv0 = (u32)(t->u[0] - base) | (u32)t->t[0] << 8 | clut << 16;
-            q->uv1 = (u32)(t->u[1] - base) | (u32)t->t[1] << 8 | tpage << 16;
-            q->uv2 = (u32)(t->u[2] - base) | (u32)t->t[2] << 8;
+            q->uv0 = (u32)(t->u[0] - base) | (u32)(t->t[0] + dv) << 8 | clut << 16;
+            q->uv1 = (u32)(t->u[1] - base) | (u32)(t->t[1] + dv) << 8 | tpage << 16;
+            q->uv2 = (u32)(t->u[2] - base) | (u32)(t->t[2] + dv) << 8;
             q->tag.address = entry->address;
             entry->address = (uintptr_t)&q->tag;
         }
@@ -747,10 +950,11 @@ void pe_enemy_status_text(char *out, unsigned size) {
         if (f->seen & (1u << i)) snprintf(seen + strlen(seen), sizeof seen - strlen(seen), "%s%s", seen[0] ? "+" : "", k_role_names[i]);
     core = pe_core(f);
     if (core && g_PlayerEntity) dist = (int)pe_dist(f->actor, g_PlayerEntity);
-    snprintf(out, size, "%s hp=%d/%d anim=%s frames=%d tris=%d seen=%s hits=%d damage=%d dist=%d charge=%d foes=%d room=%d sent=%d sounds=%d",
+    snprintf(out, size, "%s hp=%d/%d anim=%s frames=%d tris=%d seen=%s hits=%d damage=%d dist=%d charge=%d foes=%d room=%d sent=%d sounds=%d vram=%d,%d rot=%d to_aya=%d",
              s_pack.name, core ? core->hpAlive : 0, s_pack.hp, f->role >= 0 ? k_role_names[f->role] : "-",
              f->drawn_frames, f->tris, seen, f->hits, f->damage_done, dist, core ? (int)core->curHP : 0, s.foes,
-             s.room_enemies, s.sent_away, f->sounds);
+             s.room_enemies, s.sent_away, f->sounds, s.tex_x, s.tex_y, f->actor ? f->actor->rot_y & 0xFFF : -1,
+             f->actor && g_PlayerEntity ? pe_angle_to(f->actor, g_PlayerEntity) : -1);
 }
 
 void pe_enemy_battle_init(void) {
@@ -758,5 +962,6 @@ void pe_enemy_battle_init(void) {
     pe_hook_add(PE_HOOK_BATTLE_UPDATE, pe_on_battle, NULL, PE_PRIORITY_EARLY, MOD_ID);
     pe_hook_add(PE_HOOK_FRAME, pe_on_frame, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_ACTOR_RENDER, pe_on_render, NULL, PE_PRIORITY_NORMAL, MOD_ID);
+    pe_hook_add(PE_HOOK_FIELD_BACKGROUND, pe_on_background, NULL, PE_PRIORITY_LATE, MOD_ID);
     pe_hook_add(PE_HOOK_HP_LOSS, pe_on_hp_loss, NULL, PE_PRIORITY_EARLY, MOD_ID);
 }

@@ -35,8 +35,11 @@ static int add_vertex(PeEnemyPack *p, int x, int y, int z, int b1, int b2, int f
     return p->vertices++;
 }
 
+/* A texel's x in the model's picture: its page counted from the first page the faces use (a PS1
+ * texture page word: 8-bit pages are 128 texels wide), plus u. Its palette: the CLUT word's row
+ * counted from the first row the faces use (the picture's palettes are rows one under another). */
 static int add_face(PeEnemyPack *p, const PeImpModel *m, int part, const PeImpFace *f, const uint8_t (*skin)[2],
-                    int corners, int first, int *skipped) {
+                    int corners, int first, int page0, int row0, int *skipped) {
     static const int split[2][3] = {{0, 1, 2}, {1, 3, 2}};
     int idx[4];
     for (int k = 0; k < corners; k++) {
@@ -48,10 +51,10 @@ static int add_face(PeEnemyPack *p, const PeImpModel *m, int part, const PeImpFa
     for (int t = 0; t < (corners == 4 ? 2 : 1); t++) {
         int u[3], lo = 1 << 30, hi = 0;
         for (int k = 0; k < 3; k++) {
-            u[k] = f->uv[split[t][k]][0] + 2 * f->page;
+            u[k] = ((f->page & 15) - page0) * 128 + f->uv[split[t][k]][0];
             lo = u[k] < lo ? u[k] : lo, hi = u[k] > hi ? u[k] : hi;
         }
-        if (hi - lo / 128 * 128 > 255 || hi >= p->tex_w) { ++*skipped; continue; }   /* drawn from 8-bit pages 128 apart */
+        if (lo < 0 || hi - lo / 128 * 128 > 255 || hi >= p->tex_w) { ++*skipped; continue; }   /* drawn from 8-bit pages 128 apart */
         if (p->triangles == PE_ENEMY_MAX_TRIANGLES) return -1;
         PeEnemyTriangle *tr = &p->triangle[p->triangles++];
         for (int k = 0; k < 3; k++) {
@@ -59,7 +62,8 @@ static int add_face(PeEnemyPack *p, const PeImpModel *m, int part, const PeImpFa
             tr->u[k] = (uint16_t)u[k];
             tr->t[k] = f->uv[split[t][k]][1];
         }
-        tr->palette = (uint8_t)(f->clut < (unsigned)p->palettes ? f->clut : 0);
+        const int row = (f->clut >> 6) - row0;
+        tr->palette = (uint8_t)(row >= 0 && row < p->palettes ? row : 0);
     }
     return 0;
 }
@@ -82,18 +86,35 @@ static int model_in(PeEnemyPack *p, const PeImpModel *m, int *skipped, char *why
     if (!p->vertex || !p->triangle || !p->palette || !p->pixels) return fail(why, n, "%sout of memory", "", 0);
     for (uint32_t r = 0; r < m->pal_rows; r++) memcpy(p->palette + 256 * r, m->pal[r], 512);
     memcpy(p->pixels, m->image, (size_t)m->w * m->h);
+    int page0 = 15, row0 = 1 << 10;
+    for (uint32_t part = 0; part < m->parts && part < m->bones; part++) {
+        const PeImpPart *pt = &m->part[part];
+        for (uint32_t i = 0; i < pt->tris + pt->quads; i++) {
+            const PeImpFace *f = i < pt->tris ? &pt->tri[i] : &pt->quad[i - pt->tris];
+            page0 = (f->page & 15) < page0 ? f->page & 15 : page0;
+            row0 = (f->clut >> 6) < row0 ? f->clut >> 6 : row0;
+        }
+    }
     for (uint32_t part = 0; part < m->parts && part < m->bones; part++) {   /* extras past the bones: not drawn */
         const PeImpPart *pt = &m->part[part];
         int first = p->vertices;
         for (uint32_t i = 0; i < pt->tris; i++)
-            if (add_face(p, m, (int)part, &pt->tri[i], pt->tri_skin ? (const uint8_t (*)[2])pt->tri_skin[i] : NULL, 3, first, skipped)) goto full;
+            if (add_face(p, m, (int)part, &pt->tri[i], pt->tri_skin ? (const uint8_t (*)[2])pt->tri_skin[i] : NULL, 3, first, page0, row0, skipped)) goto full;
         for (uint32_t i = 0; i < pt->quads; i++)
-            if (add_face(p, m, (int)part, &pt->quad[i], pt->quad_skin ? (const uint8_t (*)[2])pt->quad_skin[i] : NULL, 4, first, skipped)) goto full;
+            if (add_face(p, m, (int)part, &pt->quad[i], pt->quad_skin ? (const uint8_t (*)[2])pt->quad_skin[i] : NULL, 4, first, page0, row0, skipped)) goto full;
     }
     if (p->vertices < 3 || !p->triangles) return fail(why, n, "%sthe model has nothing to draw", "", 0);
     return 0;
 full:
     return fail(why, n, "%sthe model has more than %ld vertices or triangles", "", PE_ENEMY_MAX_VERTICES);
+}
+
+int pe_enemy_build_model(PeEnemyPack *p, const PeImpModel *m, int *skipped, char *why, size_t n) {
+    int ignore = 0;
+    memset(p, 0, sizeof *p);
+    for (int i = 0; i < PE_ANIM_ROLES; i++) p->role[i] = -1;
+    if (model_in(p, m, skipped ? skipped : &ignore, why, n)) { pe_enemy_pack_free(p); return -1; }
+    return 0;
 }
 
 /* ---- moves ---- */
@@ -121,23 +142,43 @@ static int anim_in(PeEnemyPack *p, const PeImpAnimation *a, const char *name, in
 /* floor to the top of the head in the idle pose (source units, y down) */
 static int height_of(const PeEnemyPack *p, int idle, int16_t (*pose)[3]) {
     if (pe_enemy_pose(p, idle, 0, pose)) return 0;
-    int top = 0;
-    for (int i = 0; i < p->vertices; i++) top = pose[i][1] < top ? pose[i][1] : top;
-    return -top;
+    int top = 0, hi = -32768, lo = 32767;
+    for (int i = 0; i < p->vertices; i++) {
+        top = pose[i][1] < top ? pose[i][1] : top;
+        lo = pose[i][1] < lo ? pose[i][1] : lo, hi = pose[i][1] > hi ? pose[i][1] : hi;
+    }
+    /* how far it stands up from its origin; a model hung or floating under its origin (nothing above
+     * it, as RE1's EM1008 and EM100E): its own top-to-bottom size */
+    return -top > 0 ? -top : (p->vertices && hi > lo ? hi - lo : 0);
+}
+
+/* how far in front of its centre (source units) frame k of an anim reaches. In front is where the
+ * profile's yaw turns to face Aya: the model's (-sin yaw, cos yaw) in x and z (2048: -z, 3072: +x). */
+static int front_of(const PeEnemyPack *p, int anim, int k, int16_t (*pose)[3]) {
+    const double ang = p->yaw * 2 * 3.14159265358979323846 / 4096.0, fx = -sin(ang), fz = cos(ang);
+    double front = 0;
+    if (pe_enemy_pose(p, anim, k, pose)) return -1;
+    for (int i = 0; i < p->vertices; i++) {
+        const double d = pose[i][0] * fx + pose[i][2] * fz;
+        if (d > front) front = d;
+    }
+    return (int)lrint(front);
 }
 
 /* the frame a blow lands: the move's first hit frame, else where it reaches furthest forward */
 static int blow_frame(const PeEnemyPack *p, int anim, int16_t (*pose)[3]) {
     const PeEnemyAnim *a = &p->anim[anim];
     for (int k = 0; a->event && k < a->frames; k++) if (a->event[k] & PE_ENEMY_EVENT_HIT) return k;
-    int best = 0, front = 1 << 30;
+    int best = 0, front = -1;
     for (int k = 0; k < a->frames; k++) {
-        if (pe_enemy_pose(p, anim, k, pose)) break;
-        for (int i = 0; i < p->vertices; i++)
-            if (pose[i][2] < front) front = pose[i][2], best = k;        /* source models face -z */
+        const int f = front_of(p, anim, k, pose);
+        if (f < 0) break;
+        if (f > front) front = f, best = k;
     }
     return best;
 }
+
+#define PE_AYA_HALF_WIDTH 120   /* PE field units: a blow lands on her body, not her centre */
 
 static void scale(PeEnemyPack *p, double sc) {
     for (int i = 0; i < p->bones; i++)
@@ -177,7 +218,12 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
         PeEnemyAttack *at = &p->attack[p->attacks];
         if ((at->anim = pe_enemy_pack_anim(p, prof->attack[i].anim)) < 0) { fail(why, n, "an attack names \"%s\", not in the profile's moves", prof->attack[i].anim, 0); goto out; }
         at->power = at->damage = prof->attack[i].power, at->range = prof->attack[i].range;
-        at->hit = blow_frame(p, at->anim, pose);
+        int hit = prof->attack[i].hit;                 /* the profile's own frame, when it has one */
+        at->hit = hit > 0 && hit < p->anim[at->anim].frames ? hit : blow_frame(p, at->anim, pose);
+        if (at->range <= 0) {   /* never inside its own body (radius): it would stand in Aya */
+            const int front = (int)lrint(front_of(p, at->anim, at->hit, pose) * info->scale);
+            at->range = (front > p->radius ? front : p->radius) + PE_AYA_HALF_WIDTH;
+        }
         p->attacks++;
     }
     scale(p, info->scale);

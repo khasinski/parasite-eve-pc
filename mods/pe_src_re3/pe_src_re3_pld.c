@@ -337,7 +337,17 @@ const char g_re3_naming[] =
     " \"player/pl0a\": {\"id\": \"player/nikolai\", \"name\": \"Nikolai\"},"
     " \"player/pl0c\": {\"id\": \"player/dario\", \"name\": \"Dario\"},"
     " \"enemy/em34\": {\"id\": \"enemy/nemesis\", \"name\": \"Nemesis\"},"
-    " \"enemy/em34/moves\": {\"id\": \"enemy/nemesis/moves\", \"name\": \"Nemesis moves\"}}";
+    " \"enemy/em34/moves\": {\"id\": \"enemy/nemesis/moves\", \"name\": \"Nemesis moves\"},"
+    " \"enemy/em10\": {\"id\": \"enemy/zombie\", \"name\": \"Zombie\"},"
+    " \"enemy/em10/moves\": {\"id\": \"enemy/zombie/moves\", \"name\": \"Zombie moves\"},"
+    " \"enemy/em20\": {\"id\": \"enemy/cerberus\", \"name\": \"Cerberus\"},"
+    " \"enemy/em20/moves\": {\"id\": \"enemy/cerberus/moves\", \"name\": \"Cerberus moves\"},"
+    " \"enemy/em22\": {\"id\": \"enemy/hunter_beta\", \"name\": \"Hunter\"},"
+    " \"enemy/em22/moves\": {\"id\": \"enemy/hunter_beta/moves\", \"name\": \"Hunter moves\"},"
+    " \"enemy/em25\": {\"id\": \"enemy/spider\", \"name\": \"Giant Spider\"},"
+    " \"enemy/em25/moves\": {\"id\": \"enemy/spider/moves\", \"name\": \"Giant Spider moves\"},"
+    " \"enemy/em28\": {\"id\": \"enemy/drain_deimos\", \"name\": \"Drain Deimos\"},"
+    " \"enemy/em28/moves\": {\"id\": \"enemy/drain_deimos/moves\", \"name\": \"Drain Deimos moves\"}}";
 
 
 /* BioRand (biohazard-utils' emdui, MIT, Ted John): a weapon file's first mesh part replaces the
