@@ -45,7 +45,8 @@ typedef struct {
 } PeReProgress;
 
 int pe_re_has(const PeReProgress *p, uint16_t item);
-/* 0, or -1 when the pocket is full: a new item needs one of PE_RE_POCKET_SLOTS; one held already stacks. */
+/* 0, or -1 when the pocket is full: a new item needs one of PE_RE_POCKET_SLOTS; one held
+ * already stacks when either comes in a count (ammo); single items (keys, jewels) take a slot each. */
 int pe_re_give(PeReProgress *p, uint16_t item, uint16_t count);
 /* Out of the pocket: `count` of it, or all when 0 (Sce_Item_lost / Sce_Item_lost2). 0, or -1 if not held. */
 int pe_re_lose(PeReProgress *p, uint16_t item, uint16_t count);

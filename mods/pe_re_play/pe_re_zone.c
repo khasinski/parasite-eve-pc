@@ -13,6 +13,18 @@ void pe_re_front(double x, double z, int facing, double *fx, double *fz) {
     *fz = z - PE_RE_FRONT_REACH * cos(a);
 }
 
+int pe_re_zone_placed(const PeReScdRun *run, const PeImpZone *z, PeImpZone *out) {
+    *out = *z;
+    if (!(z->super & 0x80)) return 0;
+    const int n = z->super & 0x3F, slot = z->super & 0x40 ? (n < 16 ? 2 + n : -1) : (n < 32 ? 18 + n : -1);
+    if (!run || slot < 0 || !run->works[slot][0]) return -1;  /* its object isn't placed */
+    for (int c = 0; c < 4; c++) {                          /* its points are from the object's position */
+        out->x[c] = (int16_t)(z->x[c] + run->works[slot][PE_RE_MEMBER_POS_X]);
+        out->z[c] = (int16_t)(z->z[c] + run->works[slot][PE_RE_MEMBER_POS_Z]);
+    }
+    return 0;
+}
+
 typedef struct {
     PeImpZone zone;
     PeReZoneHit hit;
@@ -90,11 +102,12 @@ int pe_re_zone_check(const PeImpRoomLogic *room, const PeReScdRun *run, const Pe
     const unsigned want = manual ? PE_RE_SAT_MANUAL : 0;
     for (int i = 0; i < n; i++) {
         const PeReZoneHit *h = &c[i].hit;
-        const PeImpZone *zn = &c[i].zone;
+        PeImpZone placed;
+        if (pe_re_zone_placed(run, &c[i].zone, &placed)) continue;   /* on an object or enemy not there */
+        const PeImpZone *zn = &placed;
         const int16_t old_f = work ? work[PE_RE_WORK_F_ATARI] : 0, old_u = work ? work[PE_RE_WORK_U_ATARI] : 0;
         if (!(h->sat & PE_RE_SAT_PLAYER) || (h->sat & PE_RE_SAT_MANUAL) != want) continue;
         if (!(zn->floor & 0x80) && zn->floor != floor) continue;
-        if (zn->super & 0x80) continue;                    /* on an object or enemy: not tracked */
         if ((h->sat & PE_RE_SAT_UNDER) && pe_re_in_quad(zn->x, zn->z, x, z)) {
             if (work) work[PE_RE_WORK_U_ATARI] = h->id;
         } else if ((h->sat & PE_RE_SAT_FRONT) && pe_re_in_quad(zn->x, zn->z, fx, fz)) {

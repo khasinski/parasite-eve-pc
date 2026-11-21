@@ -252,9 +252,9 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
                              hits, 1) == 1) {
             s->at_zone = hits[0].id;                          /* At_sce_no: the zone she set off */
             const PeReChange c = zone_act(s, store, &hits[0], 1, why, n);
-            if (c != PE_RE_STAY || s->said[0] || hits[0].sce == PE_RE_ZONE_EVENT || hits[0].sce == PE_RE_ZONE_FLAG)
-                return c;
-        }
+            if (c != PE_RE_STAY || s->said[0]) return c;
+            if (hits[0].sce == PE_RE_ZONE_EVENT || hits[0].sce == PE_RE_ZONE_FLAG) goto every_frame;   /* then the same */
+        }                                                  /* frame's underfoot zones (Sce_at), before its event runs */
         /* else, more forgiving than the game: a door, pickup or message zone she stands in */
         if (pe_re_door_at(s->logic, &s->run, x, z, &d) >= 0) return take_door(s, store, &d, why, n);
         if (pe_re_pickup_at(s->logic, &s->run, &s->progress, x, z, &pk) >= 0) {
@@ -264,7 +264,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
         const int message = pe_re_message_at(s->logic, &s->run, x, z);
         if (message >= 0 && !pe_re_message(s->logic, (uint32_t)message, s->said, sizeof s->said)) return PE_RE_SAID;
     }
-    /* every frame: the zones that don't wait for an examine */
+every_frame:;                                              /* every frame: the zones that don't wait for an examine */
     const int nh = pe_re_zone_check(s->logic, &s->run, &s->progress, x, z, s->facing, s->floor, 0,
                                     s->progress.flags.work, hits, 16);
     if (nh > 0) s->at_zone = hits[nh - 1].id;              /* the last one handled, as Sce_at_check leaves it */
@@ -295,6 +295,7 @@ PeReChange pe_re_session_tick(PeReSession *s) {
     if (!s->game || !s->logic) return PE_RE_STAY;
     const PeReScdHost host = host_of(s);
     s->run.camera = s->camera;
+    s->progress.flags.work[PE_RE_WORK_CUT] = (int16_t)s->camera;   /* Cut_no: the camera now (the scripts test it) */
     {   /* the player's fields, as the scripts read them (RE2's facing: 0 faces +x) */
         int16_t *me = s->run.works[0];
         me[0] = 1, me[PE_RE_MEMBER_POS_X] = (int16_t)lround(s->x), me[PE_RE_MEMBER_POS_Z] = (int16_t)lround(s->z);
@@ -365,6 +366,29 @@ PeReComputer pe_re_session_computer(PeReSession *s, int use) {
     pe_re_lose(&s->progress, RE2_BLUE_CARD, 0);
     snprintf(s->said, sizeof s->said, "Door lock service: the hall's side doors are released.");
     return PE_RE_COMPUTER_DONE;
+}
+
+/* RE2's key-item pairs (item numbers as in its ItemTable): the halves of the Jaguar Stone, and the C4
+ * with its detonator. Weapon parts and herbs mix too in the game; nothing in the story waits on those. */
+static const uint16_t RE2_MIX[][3] = { {0x38, 0x39, 0x37}, {0x40, 0x41, 0x42} };
+
+uint16_t pe_re_combined(const PeReSession *s, uint16_t a, uint16_t b) {
+    if (!s->game || strcmp(s->game->game, "re2")) return 0;
+    for (size_t i = 0; i < sizeof RE2_MIX / sizeof *RE2_MIX; i++)
+        if ((RE2_MIX[i][0] == a && RE2_MIX[i][1] == b) || (RE2_MIX[i][0] == b && RE2_MIX[i][1] == a)) return RE2_MIX[i][2];
+    return 0;
+}
+
+uint16_t pe_re_session_combine(PeReSession *s, uint16_t a, uint16_t b) {
+    char name[48];
+    const uint16_t made = pe_re_combined(s, a, b);
+    s->said[0] = 0;
+    if (!made || !pe_re_has(&s->progress, a) || !pe_re_has(&s->progress, b)) return 0;
+    pe_re_lose(&s->progress, a, 1), pe_re_lose(&s->progress, b, 1);   /* two slots freed: the result fits */
+    pe_re_give(&s->progress, made, 1);
+    pe_re_item_name(s->items, made, name, sizeof name);
+    snprintf(s->said, sizeof s->said, "Made the %s.", name);
+    return made;
 }
 
 PeReChange pe_re_session_use(PeReSession *s, uint16_t item) {

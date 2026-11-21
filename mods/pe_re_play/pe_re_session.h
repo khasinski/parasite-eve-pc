@@ -126,6 +126,11 @@ int pe_re_session_beaten(PeReSession *s, uint8_t slot, uint8_t killed_flag);
  * scripts allow it here (flag group 10, Use_flg, its bit set) it becomes Use_id (work 2) for them
  * to act on (open the way, take the item); else PE_RE_SAID: "You can't use the Red Jewel here." */
 PeReChange pe_re_session_use(PeReSession *s, uint16_t item);
+/* Combine two pocket items, as RE2's status screen does (Mix): a pair that makes another item (Jaguar
+ * Stone L + R, C4 + Detonator) leaves one slot holding the result. The result, or 0 (no such pair,
+ * either not held). pe_re_combined only says what the pair makes. */
+uint16_t pe_re_combined(const PeReSession *s, uint16_t a, uint16_t b);
+uint16_t pe_re_session_combine(PeReSession *s, uint16_t a, uint16_t b);
 /* A computer zone (kind 14, handed over as PE_RE_ZONE): what it says (`said`), or that it asks to
  * use a card (PE_RE_COMPUTER_ASK; call again with `use` 1 on yes). RE2's main hall door-lock
  * service so far; others say they don't respond. */

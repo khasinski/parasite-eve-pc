@@ -10,9 +10,13 @@ int pe_re_has(const PeReProgress *p, uint16_t item) {
     return 0;
 }
 
+/* Two of an item share a slot when either comes in a count (ammo, ribbons); what comes one at a time
+ * (keys, jewels, herbs) takes a slot each, so a script's item_lost takes one of them, not both. */
+static int stacks(uint16_t held, uint16_t count) { return held > 1 || count > 1; }
+
 int pe_re_give(PeReProgress *p, uint16_t item, uint16_t count) {
     for (int i = 0; i < p->held; i++)
-        if (p->pocket[i].item == item) { p->pocket[i].count = (uint16_t)(p->pocket[i].count + (count ? count : 1)); return 0; }
+        if (p->pocket[i].item == item && stacks(p->pocket[i].count, count)) { p->pocket[i].count = (uint16_t)(p->pocket[i].count + (count ? count : 1)); return 0; }
     if (p->held >= PE_RE_POCKET_SLOTS) return -1;
     p->pocket[p->held].item = item, p->pocket[p->held++].count = count ? count : 1;
     return 0;
@@ -37,7 +41,7 @@ int pe_re_box_put(PeReProgress *p, int i) {
     if (i < 0 || i >= p->held) return -1;
     const PeReHeld h = p->pocket[i];
     int k = 0;
-    while (k < p->boxed && p->box[k].item != h.item) k++;
+    while (k < p->boxed && !(p->box[k].item == h.item && stacks(p->box[k].count, h.count))) k++;
     if (k == p->boxed) {
         if (p->boxed >= PE_RE_BOX_MAX) return -1;
         p->box[p->boxed++] = h;

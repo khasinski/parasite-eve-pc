@@ -46,6 +46,9 @@ typedef struct {
 /* The point the front test uses, for a player facing `facing` (0..4095, as the stage turns Aya:
  * 0 faces -z, 1024 faces -x). */
 void pe_re_front(double x, double z, int facing, double *fx, double *fz);
+/* Zone `z` where it is now: one on a scene object or an enemy (Super bit 0x80; 0x40 an enemy) has its
+ * points from that one's position (Sce_at_check). 0, or -1 when that object or enemy isn't placed. */
+int pe_re_zone_placed(const PeReScdRun *run, const PeImpZone *z, PeImpZone *out);
 
 /* Check the zones for the player at (x, z) on `floor`, facing `facing`: `manual` 1 for an examine
  * (zones with bit 0x10; stops at the first hit with a kind), 0 for the every-frame check. Sets

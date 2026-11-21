@@ -19,7 +19,7 @@ enum {
     OP_CUT_AUTO = 0x3C, OP_PLC_DEST = 0x40, OP_WORK_SET = 0x2E, OP_POS_SET = 0x32, OP_DIR_SET = 0x33,
     OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
     OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37, OP_PLC_RET = 0x42,
-    OP_SPEED_SET = 0x2F, OP_ADD_SPEED = 0x30, OP_ADD_ASPEED = 0x31,
+    OP_SPEED_SET = 0x2F, OP_ADD_SPEED = 0x30, OP_ADD_ASPEED = 0x31, OP_OBJ_MODEL_SET = 0x2D,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -443,6 +443,16 @@ static int step(Vm *vm, PeReScdTask *t) {
             int16_t *w = r->works[slot];
             w[0] = 1, w[6] = ins[3], w[7] = s16(ins + 4), w[17] = ins[6];
             w[11] = s16(ins + 10), w[12] = s16(ins + 12), w[13] = s16(ins + 14), w[15] = s16(ins + 16);
+        }
+        t->pc += n;
+        return CONTINUE;
+    }
+    case OP_OBJ_MODEL_SET: {                               /* a scene object (a shelf): where it stands, its facing */
+        const int slot = work_slot(4, ins[1]);             /* (zones on it are placed by it: pe_re_zone_base) */
+        if (slot >= 0) {
+            int16_t *w = vm->run->works[slot];
+            w[0] = 1;
+            for (int k = 0; k < 3; k++) w[PE_RE_MEMBER_POS_X + k] = s16(ins + 14 + 2 * k), w[14 + k] = s16(ins + 20 + 2 * k);
         }
         t->pc += n;
         return CONTINUE;

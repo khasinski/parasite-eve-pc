@@ -43,6 +43,7 @@ typedef struct {
     int nevent, event_zone[EVENTS], event_to[EVENTS];   /* examining zone event_zone took her to event_to */
     int checkpointed;
     int unfinished;                     /* a zone took her away before search was done here */
+    int foes, fight;                    /* enemies still standing here (last visit); go and fight them (when stuck) */
     unsigned char door_variable[DOORS]; /* took her somewhere else than it says (an elevator): tried again when stuck */
 } Room;
 static Room s_room[ROOMS];
@@ -61,7 +62,15 @@ static int make_room(PeReSession *s) {
         if (pick < 0 || p->pocket[i].count > p->pocket[pick].count) pick = i;
     }
     if (pick < 0 && p->held) pick = 0;                   /* all asked for: the oldest (the box hands it back when asked) */
-    if (pick < 0 || pe_re_box_put(p, pick)) return -1;
+    if (pick < 0) return -1;
+    if (p->boxed >= PE_RE_BOX_MAX)                       /* the box full (single herbs take a slot each): a player */
+        for (int k = 0; k < p->boxed; k++)               /* would use one up; the bot drops one nothing asked for */
+            if (!s_needed[p->box[k].item & 0xFF]) {
+                memmove(&p->box[k], &p->box[k + 1], sizeof *p->box * (size_t)(p->boxed - k - 1));
+                p->boxed--;
+                break;
+            }
+    if (pe_re_box_put(p, pick)) return -1;
     s_box_trips++;
     return 0;
 }
@@ -146,14 +155,41 @@ static int flags_changed(const PeReSession *s) {
     return changed;
 }
 
+/* The camera a player walking to (x, z) would see her from: the switch zones from the current camera
+ * followed until none holds the spot; if none does at first, in through a switch zone that holds it
+ * (from another camera) and on from there. The bot teleports, so the camera doesn't follow her by
+ * itself (a script that checks Cut_no, like 2-1B's stone panel, would never see it). */
+static int camera_for(const PeReSession *s, double x, double z) {
+    int camera = s->camera;
+    for (int hop = 0; hop < 8; hop++) camera = pe_re_camera_at(s->logic, camera, x, z);
+    if (camera != s->camera) return camera;
+    uint32_t n = 0;
+    int group = -1;
+    if (pe_imp_logic_section(s->logic, PE_IMP_LOGIC_CAMZ, &n, NULL))
+        for (uint32_t i = 0; i < n; i++) {
+            PeImpCameraZone c;
+            if (pe_imp_logic_camera_zone(s->logic, i, &c)) continue;
+            const int own = c.from != group;               /* each camera's first entry is its own area */
+            group = c.from;
+            if (own || c.to == c.from || !pe_re_in_quad(c.x, c.z, x, z)) continue;
+            camera = c.to;
+            for (int hop = 0; hop < 8; hop++) camera = pe_re_camera_at(s->logic, camera, x, z);
+            return camera;
+        }
+    return s->camera;
+}
+
 /* Examine a zone as a player does: standing 620 units out on one side, facing its middle (the
  * game's front check), else standing in it. What the step said. */
 static PeReChange examine(PeReSession *s, const PeImpZone *zone, char *why, size_t n) {
     double cx, cz;
+    PeImpZone placed;                                     /* one on a shelf: where the shelf is now */
+    if (pe_re_zone_placed(&s->run, zone, &placed)) return PE_RE_STAY;
+    zone = &placed;
     zone_centre(zone, &cx, &cz);
     if (!(zone->floor & 0x80)) s->floor = zone->floor;      /* on its floor (the stairs walked), as Go to that door does */
     PeReChange c = PE_RE_STAY;
-    const int events = s->events;
+    int events_seen = s->events;
     const int is_event = pe_re_zone_kind(&s->run, zone->id, zone->sce, NULL) == PE_RE_ZONE_EVENT;
     unsigned sat = zone->sat;                             /* its check bits as the scripts left them (aot_reset) */
     for (int i = s->run.nreset - 1; i >= 0; i--)
@@ -169,12 +205,32 @@ static PeReChange examine(PeReSession *s, const PeImpZone *zone, char *why, size
         }
         s->facing = facing;
         s->said[0] = 0;
+        if (!(s->run.ran && s->run.camera_lock)) s->camera = camera_for(s, x, z);   /* walked there: its camera */
         if (answer_tick(s) == PE_RE_ROOM) return PE_RE_ROOM;   /* a script took her through a door */
+        int busy[PE_RE_TASKS];                            /* the events already going (a room's loops) */
+        for (int t = 0; t < PE_RE_TASKS; t++) busy[t] = s->run.task[t].status != 0;
         /* a player zone with no button: walking into it; else a press (it may be another record of this id that's live) */
         c = pe_re_session_step(s, s_store, x, z, !((sat & PE_RE_SAT_PLAYER) && !(sat & PE_RE_SAT_MANUAL)), why, n);
         if (c == PE_RE_ZONE) handed(s);
         if (c == PE_RE_ROOM || c == PE_RE_ZONE || (c == PE_RE_SAID && s->said[0])) return c;
-        if (is_event && s->events != events) return c;  /* its event started: once, as one press (a switch toggles) */
+        if (is_event && s->events != events_seen) {            /* its event started: once, as one press (a switch toggles) */
+            uint8_t before[3][32];                        /* unless it ends at once, changing nothing: the wrong spot */
+            memcpy(before[0], s->progress.flags.bits[3], 32), memcpy(before[1], s->progress.flags.bits[4], 32);
+            memcpy(before[2], s->progress.flags.bits[5], 32);
+            const int messages = s->run.messages, from = key_of(s), held = s->progress.held;
+            if (answer_tick(s) == PE_RE_ROOM || key_of(s) != from) return PE_RE_ROOM;
+            int going = 0;
+            for (int t = 2; t < PE_RE_TASKS; t++) going |= s->run.task[t].status && !busy[t];
+            if (getenv("PE_TEST_RE_SPOT"))
+                printf("    spot %d (camera %d, locked %d, at %.0f %.0f): going %d messages %d held %d f3 %d f4 %d f5 %d\n", k, s->camera, s->run.camera_lock, x, z, going, s->run.messages != messages,
+                       s->progress.held != held, memcmp(before[0], s->progress.flags.bits[3], 32) != 0,
+                       memcmp(before[1], s->progress.flags.bits[4], 32) != 0, memcmp(before[2], s->progress.flags.bits[5], 4) != 0);
+            if (going || s->run.messages != messages || s->progress.held != held ||
+                memcmp(before[0], s->progress.flags.bits[3], 32) || memcmp(before[1], s->progress.flags.bits[4], 32) ||
+                memcmp(before[2], s->progress.flags.bits[5], 4))   /* Room_flg[0]: Room_flg[1] clears each frame */
+                return c;
+            events_seen = s->events;
+        }
     }
     return c;
 }
@@ -222,6 +278,50 @@ static int known_way(const Room *r, unsigned zone) {
     return 0;
 }
 
+/* A room puzzle of single questions (the library's shelves: each asks which way to move it, and the
+ * stone shows only for one arrangement): random answers at random zones of `zones` until a story flag
+ * this room hasn't shown before turns on. A test-bot step, like the answer patterns: a player reasons it
+ * out. Bounded (a few walks a room, 400 moves each) and repeatable (a fixed seed). */
+static void puzzle_walk(PeReSession *s, const uint8_t *zones, int nz, FILE *log) {
+    static uint8_t seen[ROOMS][2][32];                    /* story bits this room has shown */
+    static int walks[ROOMS];
+    const int from = key_of(s);
+    char why[200], here[8];
+    if (walks[from] >= 4) return;
+    walks[from]++;
+    room_name(from, here, sizeof here);
+    for (int g = 0; g < 2; g++)
+        for (int b = 0; b < 32; b++) seen[from][g][b] |= s->progress.flags.bits[3 + g][b];
+    uint32_t rng = 0x2545F491u ^ (uint32_t)from * 2654435761u, n = 0;
+    pe_imp_logic_section(s->logic, PE_IMP_LOGIC_TRIG, &n, NULL);
+    for (int step = 0; step < 400; step++) {
+        rng = rng * 1664525u + 1013904223u;
+        const unsigned zone = zones[(rng >> 8) % (uint32_t)nz], answer = rng >> 31;
+        for (uint32_t i = 0; i < n; i++) {
+            PeImpTrigger t;
+            if (pe_imp_logic_trigger(s->logic, i, &t) || t.zone.id != zone || !pe_re_scd_live(&s->run, t.at)) continue;
+            set_answers(answer);
+            examine(s, &t.zone, why, sizeof why);
+            settle(s, 300);
+            set_answers(0);
+            break;
+        }
+        if (key_of(s) != from) return;
+        int news = 0;
+        for (int g = 0; g < 2; g++)
+            for (int b = 0; b < 32; b++) {
+                news |= s->progress.flags.bits[3 + g][b] & ~seen[from][g][b];
+                seen[from][g][b] |= s->progress.flags.bits[3 + g][b];
+            }
+        if (news) {
+            fprintf(log, "  %s: its puzzle moved on after %d answers\n", here, step + 1);
+            s_progress++;
+            return;
+        }
+    }
+    fprintf(log, "  %s: its puzzle didn't give in 400 answers\n", here);
+}
+
 static void search(PeReSession *s, FILE *log) {
     Room *r = &s_room[key_of(s)];
     char why[200], name[48], here[8];
@@ -248,7 +348,10 @@ static void search(PeReSession *s, FILE *log) {
                 }
                 if (maxx - minx <= 1 || maxz - minz <= 1) continue;
             }
-            if (examine(s, &pk.zone, why, sizeof why) == PE_RE_SAID && !strncmp(s->said, "Picked up", 9)) {
+            const PeReChange got = examine(s, &pk.zone, why, sizeof why);
+            if (getenv("PE_TEST_RE_PICKS"))
+                printf("    pickup %u (item %02x) in %s: %d, %s\n", (unsigned)i, (unsigned)pk.item, here, (int)got, s->said[0] ? s->said : why);
+            if (got == PE_RE_SAID && !strncmp(s->said, "Picked up", 9)) {
                 fprintf(log, "  %s: %s (item 0x%02X x%u, flag %u)\n", here, s->said, (unsigned)pk.item,
                         (unsigned)pk.count, (unsigned)pk.flag);
                 took = 1, s_progress++;
@@ -258,6 +361,19 @@ static void search(PeReSession *s, FILE *log) {
             }
         }
     }
+    /* two halves held (pocket or box): put together, as a player does on the status screen */
+    for (int i = 0; i < s->progress.held + s->progress.boxed; i++)
+        for (int j = 0; j < s->progress.held + s->progress.boxed; j++) {
+            const uint16_t a = i < s->progress.held ? s->progress.pocket[i].item : s->progress.box[i - s->progress.held].item;
+            const uint16_t b = j < s->progress.held ? s->progress.pocket[j].item : s->progress.box[j - s->progress.held].item;
+            if (a == b || !pe_re_combined(s, a, b)) continue;
+            if ((!pe_re_has(&s->progress, a) && from_box(s, a)) || (!pe_re_has(&s->progress, b) && from_box(s, b))) continue;
+            if (pe_re_session_combine(s, a, b)) {
+                fprintf(log, "  %s: %s\n", here, s->said);
+                s_progress++;
+                i = j = 99;                               /* the lists moved: once a search */
+            }
+        }
     /* item spots: a walk-up flag zone arms an item (Use_flg); held, it's used */
     uint32_t n = 0;
     pe_imp_logic_section(s->logic, PE_IMP_LOGIC_TRIG, &n, NULL);
@@ -336,6 +452,8 @@ static void search(PeReSession *s, FILE *log) {
         s_progress++;
     }
     /* everything a player can examine: events, messages, computers */
+    int npuzzle = 0, moved = 0;
+    uint8_t puzzle[16];                                   /* zones that ask one thing; `moved`: one moved something (a shelf) */
     for (uint32_t i = 0; i < n; i++) {
         PeImpTrigger t;
         if (pe_imp_logic_trigger(s->logic, i, &t) || !pe_re_scd_live(&s->run, t.at) || !(t.zone.sat & PE_RE_SAT_MANUAL))
@@ -347,11 +465,20 @@ static void search(PeReSession *s, FILE *log) {
         uint8_t story[2][32];
         memcpy(story[0], s->progress.flags.bits[3], 32), memcpy(story[1], s->progress.flags.bits[4], 32);
         const int asked = s->run.messages;
+        uint8_t room_flags[32];
+        memcpy(room_flags, s->progress.flags.bits[5], 32);
         set_answers(0);
         examine(s, &t.zone, why, sizeof why);
         settle(s, 300);
         if (s->events != events) fprintf(log, "  %s: examined zone %u, its event played\n", here, (unsigned)t.zone.id);
         const int questions = s->run.messages - asked;
+        if (getenv("PE_TEST_RE_VERBOSE"))
+            printf("    examined %s zone %u: %d messages, room flags %s, at %.0f %.0f facing %d\n", here, (unsigned)t.zone.id,
+                   questions, memcmp(room_flags, s->progress.flags.bits[5], 32) ? "changed" : "same", s->x, s->z, s->facing);
+        if (questions >= 1 && questions < 3 && key_of(s) == from && npuzzle < 16) {
+            puzzle[npuzzle++] = t.zone.id;
+            moved |= memcmp(room_flags, s->progress.flags.bits[5], 32) != 0;
+        }
         for (unsigned pattern = 1; questions >= 3 && key_of(s) == from && pattern < (1u << (questions < 6 ? questions : 6)); pattern++) {
             int news = 0;                                 /* a puzzle (a panel of switches): other answers, until a story flag turns on */
             for (int b = 0; b < 32; b++)
@@ -371,6 +498,7 @@ static void search(PeReSession *s, FILE *log) {
             return;                                       /* this room's zones aren't the ones loaded now */
         }
     }
+    if (npuzzle >= 2 && moved) puzzle_walk(s, puzzle, npuzzle, log);
 }
 
 /* Through door `i` of the room she's in: 1 when she came out in another room. */
@@ -459,7 +587,7 @@ static int plan(const PeReSession *s, int from, int *first_door, int *goal) {
         const Room *r = &s_room[k];
         for (int i = 0; i < DOORS; i++)
             if (keys ? key_door(s, r, i)
-                     : (r->unfinished && k != from) ? 1
+                     : ((r->unfinished || r->fight) && k != from) ? 1
                      : r->door_state[i] == DOOR_UNTRIED ? r->searched_at > 0
                                                        : r->door_state[i] != DOOR_OPENS && r->door_tried_at[i] < s_progress) {
                 *goal = k, *first_door = -1;
@@ -515,6 +643,31 @@ static int door_count(const PeReSession *s) {
     uint32_t n = 0;
     pe_imp_logic_section(s->logic, PE_IMP_LOGIC_DOOR, &n, NULL);
     return n > DOORS ? DOORS : (int)n;
+}
+
+/* The enemies standing in the room she's in: she beats them, as the game's battles would (a boss the
+ * way on waits for). How many. */
+static uint16_t s_beaten[ROOMS];                 /* enemy slots beaten in each room once (they may stand again) */
+static int foes_here(PeReSession *s, int beat) {
+    PeReEnemyPlacement foes[32];
+    const int nfoes = pe_re_session_enemies(s, foes, 32);
+    int n = 0;
+    for (int k = 0; k < nfoes; k++) {                     /* each once (a boss has no killed flag) */
+        if (foes[k].slot >= 16 || foes[k].kind >= 0x40 || s->run.em_dead[foes[k].slot]) continue;
+        if (!beat) { n += !(s_beaten[key_of(s)] >> foes[k].slot & 1); continue; }   /* not fought here yet */
+        if (!pe_re_session_beaten(s, foes[k].slot, foes[k].killed_flag)) n++, s_beaten[key_of(s)] |= (uint16_t)(1u << foes[k].slot);
+    }
+    return n;
+}
+
+static void fight_here(PeReSession *s, FILE *log) {
+    char a[8];
+    const int beaten = foes_here(s, 1);
+    s_room[key_of(s)].fight = 0, s_room[key_of(s)].foes = 0;
+    if (!beaten) return;
+    fprintf(log, "  %s: fought and beat %d enemies\n", room_name(key_of(s), a, sizeof a), beaten);
+    settle(s, 300);
+    s_progress++;
 }
 
 int main(void) {
@@ -577,6 +730,8 @@ int main(void) {
         const int before = s_progress;
         search(&s, log);
         if (key_of(&s) != here) continue;                       /* a zone took her elsewhere: start over there */
+        s_room[here].foes = foes_here(&s, 0);
+        if (s_room[here].fight) fight_here(&s, log);             /* stuck elsewhere: the fight here may be the way on */
         if (s_progress != before) {                             /* something changed here: an item may have appeared */
             s_room[here].searched_at = 0;
             if (++researched[here & 0xFF] < 8) continue;
@@ -590,27 +745,27 @@ int main(void) {
         int door, goal;
         if (!plan(&s, here, &door, &goal)) {
             /* Stuck: every way out of here looked shut. Try this room's doors again, once per bit of progress. */
-            static int stuck_at = -1;
-            if (stuck_at == s_progress) {                        /* nothing new since the last time: done */
+            static int stuck_at = -1, stuck_in[ROOMS];          /* progress+1 when stuck in each room */
+            if (stuck_at == s_progress && stuck_in[here] == s_progress + 1) {   /* nothing new since, and here before: done */
                 fprintf(log, "  stuck in %s again: the run ends here\n", room_name(here, a, sizeof a));
                 for (int k = 0; k < PE_RE_TASKS; k++)
                     if (s.run.task[k].status) fprintf(log, "    task %d: proc %d at %u (work %d)\n", k, s.run.task[k].proc,
                                                       (unsigned)s.run.task[k].pc, s.run.task[k].work);
                 break;
             }
-            stuck_at = s_progress;
-            {   /* a fight the way on waits for (a boss): she wins it, as the game's battle would */
-                PeReEnemyPlacement foes[32];
-                const int nfoes = pe_re_session_enemies(&s, foes, 32);
-                int beaten = 0;
-                for (int k = 0; k < nfoes; k++)                   /* each once (a boss has no killed flag) */
-                    if (foes[k].slot < 16 && foes[k].kind < 0x40 && !s.run.em_dead[foes[k].slot])
-                        beaten += !pe_re_session_beaten(&s, foes[k].slot, foes[k].killed_flag);
-                if (beaten) {
-                    fprintf(log, "  %s: fought and beat %d enemies\n", room_name(here, a, sizeof a), beaten);
-                    settle(&s, 300);
-                    s_progress++;
-                }
+            const int again = stuck_at == s_progress;           /* stuck elsewhere with nothing new: this room's doors, no more */
+            stuck_at = s_progress, stuck_in[here] = s_progress + 1;
+            if (again) {
+                for (int i = 0; i < DOORS; i++)
+                    if (s_room[here].door_state[i] != DOOR_OPENS) s_room[here].door_tried_at[i] = 0;
+                fprintf(log, "  stuck in %s too: its doors again\n", room_name(here, a, sizeof a));
+                continue;
+            }
+            {   /* a fight the way on waits for (a boss): here, else where enemies still stand */
+                const int was = s_progress;
+                fight_here(&s, log);
+                if (s_progress == was)
+                    for (int k = 0; k < ROOMS; k++) if (s_room[k].seen && s_room[k].foes && k != here) s_room[k].fight = 1;
             }
             if (walk_where_waited(&s, log)) { s_progress++; continue; }
             for (int k = 0; k < ROOMS; k++)                       /* rooms seen before: search them again */
@@ -715,6 +870,27 @@ int main(void) {
             if (!pe_imp_logic_door(rl, k, &dd))
                 printf("  %x door %u: zone %u to stage %u room %02X, lock %u/%u, at %u\n", code, (unsigned)k, (unsigned)dd.zone.id,
                        (unsigned)dd.stage, (unsigned)dd.room, (unsigned)dd.lock_id, (unsigned)dd.lock_type, (unsigned)dd.at);
+        }
+        free(rl);
+    }
+    /* PE_TEST_RE_CAMS="21b": that room's camera switch zones (from, to, the four points) */
+    for (const char *t = getenv("PE_TEST_RE_CAMS"); t && *t;) {
+        unsigned code = 0;
+        int used = 0;
+        if (sscanf(t, "%x%n", &code, &used) != 1) break;
+        t += used;
+        while (*t == ' ') t++;
+        char id[PE_IMP_ID_MAX];
+        PeImpRoomLogic *rl = NULL;
+        uint32_t nc = 0;
+        pe_re_logic_id("re2", (code >> 8) - 1, code & 0xFF, scenario, id, sizeof id);
+        if (pe_imp_catalog_roomlogic(s_store, id, &rl, NULL, 0)) continue;
+        pe_imp_logic_section(rl, PE_IMP_LOGIC_CAMZ, &nc, NULL);
+        for (uint32_t k = 0; k < nc; k++) {
+            PeImpCameraZone cz;
+            if (!pe_imp_logic_camera_zone(rl, k, &cz))
+                printf("  %x camera zone %u: %u -> %u, flag %u: %d %d, %d %d, %d %d, %d %d\n", code, (unsigned)k, (unsigned)cz.from,
+                       (unsigned)cz.to, (unsigned)cz.flag, cz.x[0], cz.z[0], cz.x[1], cz.z[1], cz.x[2], cz.z[2], cz.x[3], cz.z[3]);
         }
         free(rl);
     }
