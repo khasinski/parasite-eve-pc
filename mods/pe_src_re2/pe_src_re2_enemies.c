@@ -32,12 +32,12 @@ static const struct { unsigned em; int life; } k_life[] = {
     {0x3A, 150},   /* moth */
 };
 
-/* Consulted bio2-ds EM10.C (Em10_Init) for the low six Type bits and first
- * animation of the two prone zombies and the scripted type-8 opening. */
+/* Consulted bio2-ds EM10.C (Em10_Init and Em10_mv07) for the opening and
+ * get-up moves. Type 8 starts in a script pose without this get-up path. */
 static const PeImpEnemyStart k_zombie_starts[] = {
-    {"start_prone_2", 0x3f, 2, 0x16},
-    {"start_prone_4", 0x3f, 4, 0x17},
-    {"start_scripted_8", 0x3f, 8, 0x12},
+    {"start_prone_2", 0x3f, 2, 0x16, 0x09},
+    {"start_prone_4", 0x3f, 4, 0x17, 0x08},
+    {"start_scripted_8", 0x3f, 8, 0x12, -1},
     {0}
 };
 

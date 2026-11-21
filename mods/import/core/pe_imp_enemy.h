@@ -56,8 +56,9 @@ int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, siz
 typedef struct {
     const char *name;
     uint16_t mask, value;
-    int move;
+    int move, wake_move;            /* -1 when there is no get-up move */
 } PeImpEnemyStart;
+#define PE_IMP_ENEMY_WAKE_SUFFIX "_wake"
 int pe_imp_set_enemy_starts(const char *game, unsigned kind, const PeImpEnemyStart *starts);
 const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id);
 

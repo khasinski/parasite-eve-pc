@@ -249,6 +249,16 @@ def part_imported_room(exe, disc, work, re2_disc):
         check(len(packs) == 1 and (packs[0].parent / 'profile.json').is_file(),
               'imported room: no automatically built enemy pack and profile')
         check(packs[0].parent.name == 're2-em1f-cdemd0', f'imported room: wrong Leon archive {packs[0]}')
+        end = game.vblank + 1000
+        while game.vblank < end:
+            status = game.picker()['Imported status']
+            if re.search(r'\bseen=\S*\bwake\b', status) and 'anim=wake' not in status:
+                break
+            game.adv(10)
+        else:
+            raise Failed(f'imported room: prone zombie did not finish getting up: {status}')
+        log = (game.config / 'pe_mods.log').read_text(encoding='utf-8', errors='replace')
+        check('EM1F-CDEMD0 wakes with start_prone_2_wake' in log, 'imported room: wrong get-up move')
         win_when_ready(game)
         wait_home(game)
         check_home(game, where, 'imported room')

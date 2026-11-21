@@ -210,9 +210,14 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
     const PeImpEnemyStart *start = pe_imp_enemy_starts(source);
     for (; start && start->name; start++) {
         if (p->anims == PE_ENEMY_MAX_ANIMS) break;
-        if (start->move < 0 || (uint32_t)start->move >= a->moves || !a->move[start->move].frames ||
-            pe_enemy_pack_anim(p, start->name) >= 0) continue;
-        if (anim_in(p, a, start->name, start->move, why, n)) goto out;
+        if (start->move < 0 || (uint32_t)start->move >= a->moves || !a->move[start->move].frames) continue;
+        if (pe_enemy_pack_anim(p, start->name) < 0 && anim_in(p, a, start->name, start->move, why, n)) goto out;
+        const int wake = start->wake_move;
+        if (p->anims == PE_ENEMY_MAX_ANIMS || wake < 0 || (uint32_t)wake >= a->moves || !a->move[wake].frames) continue;
+        char name[sizeof p->anim[0].name];
+        const int written = snprintf(name, sizeof name, "%s" PE_IMP_ENEMY_WAKE_SUFFIX, start->name);
+        if (written < 0 || (size_t)written >= sizeof name || pe_enemy_pack_anim(p, name) >= 0) continue;
+        if (anim_in(p, a, name, wake, why, n)) goto out;
     }
     static const char *const roles[PE_ANIM_ROLES] = {"idle", "walk", "hurt", "die"};
     for (int i = 0; i < PE_ANIM_ROLES; i++) p->role[i] = pe_enemy_pack_anim(p, roles[i]);
