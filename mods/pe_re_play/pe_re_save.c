@@ -1,6 +1,7 @@
 /* The imported game's progress in the save. See pe_re_save.h. */
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pe_re_save.h"
@@ -78,6 +79,7 @@ int pe_re_session_resume(PeReSession *s, const char *store, const PeReSaved *sav
     if (!saved->game) { snprintf(why, n, "no game in this save"); return -1; }
     if (pe_re_session_start(s, store, saved->game, saved->player, why, n)) return -1;
     s->progress = saved->progress;                        /* before the room's scripts run */
+    free(s->logic), s->logic = NULL;                       /* no room before: not a door (the saved bookkeeping stays) */
     s->floor = saved->floor;
     if (pe_re_session_enter(s, store, saved->stage, saved->room, saved->camera, saved->x, saved->z, saved->facing, why, n)) {
         pe_re_session_end(s);

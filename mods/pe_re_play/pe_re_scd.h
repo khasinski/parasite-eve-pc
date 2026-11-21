@@ -73,6 +73,10 @@ enum { PE_RE_MEMBER_ID = 6, PE_RE_MEMBER_SCE_FREE0 = 23, PE_RE_MEMBER_AT_SCE_NO 
 #define PE_RE_WORK_U_ATARI 1                   /* the zone hit under the player */
 #define PE_RE_WORK_USE_ID 2                    /* the item last used */
 #define PE_RE_WORK_GET_ID 3                    /* the item last picked up */
+#define PE_RE_WORK_STAGE 0x18                  /* Stage_no, Room_no, Cut_no (MEM_CARD.H's SaveData order) */
+#define PE_RE_WORK_ROOM 0x19
+#define PE_RE_WORK_CUT 0x1A
+#define PE_RE_WORK_ROOM_OLD 0x1B               /* the room before: room + (stage + 1) * 256 */
 
 typedef struct {
     uint8_t bits[PE_RE_FLAG_GROUPS][32];

@@ -142,6 +142,12 @@ int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, ui
 int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint32_t room, int camera, double x,
                         double z, int facing, char *why, size_t n) {
     if (!s->game) { snprintf(why, n, "no session"); return -1; }
+    int16_t *w = s->progress.flags.work;                   /* the game's room bookkeeping, as its scripts read it */
+    if (s->logic) {                                        /* through a door (GAME.C); a resumed save keeps its own */
+        w[PE_RE_WORK_ROOM_OLD] = (int16_t)(s->room + (s->stage + 1) * 256);
+        w[PE_RE_WORK_STAGE] = (int16_t)stage, w[PE_RE_WORK_ROOM] = (int16_t)room, w[PE_RE_WORK_CUT] = (int16_t)camera;
+        memset(s->progress.flags.bits[5], 0, 4);          /* Room_flg[0]: each room's own (SCE0.C Sce_work_clr_set) */
+    }
     if (load(s, store, stage, room, why, n)) return -1;
     s->camera = camera;
     pe_re_session_place(s, x, z, facing);

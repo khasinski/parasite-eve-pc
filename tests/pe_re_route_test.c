@@ -43,6 +43,7 @@ typedef struct {
     int nevent, event_zone[EVENTS], event_to[EVENTS];   /* examining zone event_zone took her to event_to */
     int checkpointed;
     int unfinished;                     /* a zone took her away before search was done here */
+    unsigned char door_variable[DOORS]; /* took her somewhere else than it says (an elevator): tried again when stuck */
 } Room;
 static Room s_room[ROOMS];
 static int s_progress = 1;              /* goes up with each item taken or used: locked doors are retried */
@@ -101,8 +102,15 @@ static int events_running(const PeReSession *s) {
 
 /* `frames` of the room's scripts, then on while an event plays (a cutscene), up to 100 s */
 static void settle(PeReSession *s, int frames) {
-    for (int f = 0; f < frames || (events_running(s) && f < 6000); f++)
-        if (pe_re_session_tick(s) == PE_RE_ZONE) handed(s);
+    char why[200];
+    for (int f = 0; f < frames || (events_running(s) && f < 6000); f++) {
+        const PeReChange c = pe_re_session_tick(s);
+        if (c == PE_RE_ZONE) handed(s);
+        else if (c == PE_RE_STAY && s->moved && !getenv("PE_TEST_RE_NOSTEP")) {           /* a scene walked her: the game's every-frame check */
+            s->moved = 0;                                 /* where she stands (a door that needs no button) */
+            if (pe_re_session_step(s, s_store, s->x, s->z, 0, why, sizeof why) == PE_RE_ZONE) handed(s);
+        }
+    }
 }
 
 /* The story's flags (scenario, common, items, door locks): one set for the first time is progress,
@@ -337,6 +345,7 @@ static int take(PeReSession *s, int i, FILE *log) {
         return 0;
     }
     r->door_state[i] = DOOR_OPENS;
+    if (key_of(s) != (int)((d.stage == PE_RE_STAGE_HERE ? (unsigned)(from >> 8) : d.stage) << 8 | d.room)) r->door_variable[i] = 1;
     r->door_to[i] = key_of(s);
     Room *to = &s_room[key_of(s)];
     if (!to->seen) {
@@ -468,7 +477,22 @@ int main(void) {
             }
             for (int i = 0; i < DOORS; i++)
                 if (s_room[here].door_state[i] != DOOR_OPENS) s_room[here].door_tried_at[i] = 0;
-            fprintf(log, "  stuck in %s: its doors again\n", room_name(here, a, sizeof a));
+            for (int k = 0; k < ROOMS; k++)                       /* elevators: where they go may have changed */
+                for (int i = 0; i < DOORS; i++)
+                    if (s_room[k].door_variable[i]) s_room[k].door_state[i] = DOOR_UNTRIED, s_room[k].door_variable[i] = 0;
+            fprintf(log, "  stuck in %s: its doors again (came from %04x)\n", room_name(here, a, sizeof a),
+                    (unsigned)(uint16_t)s.progress.flags.work[PE_RE_WORK_ROOM_OLD]);
+            if (getenv("PE_TEST_RE_VERBOSE"))                    /* the map as the planner sees it */
+                for (int k = 0; k < ROOMS; k++) {
+                    if (!s_room[k].seen) continue;
+                    printf("    map %s (searched %d%s):", room_name(k, a, sizeof a), s_room[k].searched_at,
+                           s_room[k].unfinished ? ", unfinished" : "");
+                    for (int i = 0; i < 8; i++)
+                        printf(" %d:%c>%s", i, "uolN"[s_room[k].door_state[i]], room_name(s_room[k].door_to[i], b, sizeof b));
+                    for (int e = 0; e < s_room[k].nevent; e++)
+                        printf(" z%d>%s", s_room[k].event_zone[e], room_name(s_room[k].event_to[e], b, sizeof b));
+                    printf("\n");
+                }
             for (int k = 0; k < PE_RE_TASKS; k++)                 /* what its scripts are waiting on */
                 if (s.run.task[k].status) fprintf(log, "    task %d: proc %d at %u\n", k, s.run.task[k].proc, (unsigned)s.run.task[k].pc);
             uint32_t nt = 0;
@@ -505,6 +529,47 @@ int main(void) {
         }
     }
 
+    /* PE_TEST_RE_FIND_ITEM=5f: every room where that item can be picked up (where a missing key lies) */
+    if (getenv("PE_TEST_RE_FIND_ITEM")) {
+        const unsigned want = (unsigned)strtoul(getenv("PE_TEST_RE_FIND_ITEM"), NULL, 16);
+        for (unsigned st = 0; st < 8; st++)
+            for (unsigned rm = 0; rm < 0x40; rm++) {
+                char id[PE_IMP_ID_MAX];
+                PeImpRoomLogic *rl = NULL;
+                uint32_t np = 0;
+                pe_re_logic_id("re2", st, rm, scenario, id, sizeof id);
+                if (pe_imp_catalog_roomlogic(s_store, id, &rl, NULL, 0)) continue;
+                pe_imp_logic_section(rl, PE_IMP_LOGIC_PICK, &np, NULL);
+                for (uint32_t k = 0; k < np; k++) {
+                    PeImpPickup pk;
+                    if (!pe_imp_logic_pickup(rl, k, &pk) && pk.item == want)
+                        printf("  item %02x: room %u-%02X, pickup %u (flag %u, set by the script at %u)\n", want, st + 1, rm,
+                               (unsigned)k, (unsigned)pk.flag, (unsigned)pk.at);
+                }
+                free(rl);
+            }
+    }
+    /* PE_TEST_RE_DOORS="606": that room's doors as imported (id, target, the script offset that sets each) */
+    for (const char *t = getenv("PE_TEST_RE_DOORS"); t && *t;) {
+        unsigned code = 0;
+        int used = 0;
+        if (sscanf(t, "%x%n", &code, &used) != 1) break;
+        t += used;
+        while (*t == ' ') t++;
+        char id[PE_IMP_ID_MAX];
+        PeImpRoomLogic *rl = NULL;
+        uint32_t nd = 0;
+        pe_re_logic_id("re2", (code >> 8) - 1, code & 0xFF, scenario, id, sizeof id);
+        if (pe_imp_catalog_roomlogic(s_store, id, &rl, NULL, 0)) continue;
+        pe_imp_logic_section(rl, PE_IMP_LOGIC_DOOR, &nd, NULL);
+        for (uint32_t k = 0; k < nd; k++) {
+            PeImpDoor dd;
+            if (!pe_imp_logic_door(rl, k, &dd))
+                printf("  %x door %u: zone %u to stage %u room %02X, lock %u/%u, at %u\n", code, (unsigned)k, (unsigned)dd.zone.id,
+                       (unsigned)dd.stage, (unsigned)dd.room, (unsigned)dd.lock_id, (unsigned)dd.lock_type, (unsigned)dd.at);
+        }
+        free(rl);
+    }
     /* PE_TEST_RE_TEXT="200 10b": those rooms' own messages, to tell rooms apart while debugging a route */
     const char *text_rooms = getenv("PE_TEST_RE_TEXT");
     for (const char *t = text_rooms; t && *t;) {
