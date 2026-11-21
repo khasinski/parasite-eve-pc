@@ -90,6 +90,8 @@ int pe_enemy_wav_parse(const uint8_t *data, unsigned size, PeEnemySound *s);
 int pe_enemy_pack_load(PeEnemyPack *pack, const char *dir, char *err, unsigned err_size);
 void pe_enemy_pack_free(PeEnemyPack *pack);
 int pe_enemy_pack_anim(const PeEnemyPack *pack, const char *name);
+/* Animation roles missing from the built pack. Stationary enemies do not need a walk. */
+void pe_enemy_pack_coverage(const PeEnemyPack *pack, int stationary, char *out, unsigned size);
 
 /* Every vertex posed for frame `frame` of anim `anim` (clamped to its last frame), into out
  * (pack->vertices entries, model frame: floor y 0). Returns 0, -1 for a bad anim. */

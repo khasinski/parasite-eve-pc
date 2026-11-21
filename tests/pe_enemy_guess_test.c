@@ -148,6 +148,9 @@ static void test_made_up(void) {
     rc = pe_enemy_build(&m, &a, p, NULL, 0, "test:enemy/made-up", &pk, &info, why, sizeof why);
     if (rc) printf("made-up build: %s\n", why);
     assert(!rc && pk.anims == 6 && pk.attacks == 2 && pk.role[PE_ANIM_DIE] >= 0 && pk.attack[0].hit == 10);
+    char coverage[64];
+    pe_enemy_pack_coverage(&pk, 0, coverage, sizeof coverage);
+    assert(!strcmp(coverage, "All animation roles covered"));
     pe_enemy_pack_free(&pk);
 
     /* the profile file: written, read back the same */
@@ -175,6 +178,12 @@ static void test_made_up(void) {
     assert(!strcmp(back.p.sounds, "sound/x/tone") && back.p.attack[0].power == 9 && back.p.attack[0].hit == 12 && back.p.speed == 5);
     rc = pe_enemy_build(&m, &a, &back.p, NULL, 0, "test:enemy/made-up", &pk, &info, why, sizeof why);
     assert(!rc && pk.anims == 3 && pk.attacks == 1 && pk.attack[0].hit == 12);
+    pk.role[PE_ANIM_WALK] = -1;
+    pk.attacks = 0;
+    pe_enemy_pack_coverage(&pk, 0, coverage, sizeof coverage);
+    assert(!strcmp(coverage, "Missing walk, hurt, death, attack"));
+    pe_enemy_pack_coverage(&pk, 1, coverage, sizeof coverage);
+    assert(!strcmp(coverage, "Missing hurt, death, attack"));
     pe_enemy_pack_free(&pk);
 
     /* refused: no idle, an attack naming a missing anim, not a profile */

@@ -5079,7 +5079,7 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_target.c",
-      "sha256": "90a7468479501b6061fe61a6a8d55fb7b88d262de97431eb1b895824e1daa5be"
+      "sha256": "16aa7a40c670e203f799c386f09f410ef354171f670a69a0bd022d40777e340b"
     },
     {
       "path": "tests/enemy_import_nemesis.py",
@@ -5095,7 +5095,7 @@
     },
     {
       "path": "tests/pe_enemy_guess_test.c",
-      "sha256": "66e92c48d2bcf6534cade55d4b4f78dbf5c23da14b18e779284ed37bebf3aa39"
+      "sha256": "fa217b9f6ef73eb9fad9d4b44fb3c07f6a0c5ba5fc326a45f665167475db0570"
     },
     {
       "path": "tests/pe_mod_re3_enemy_test.c",

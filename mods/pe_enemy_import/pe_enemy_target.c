@@ -117,9 +117,12 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
     if (rc) return -1;
     rc = pe_enemy_write(&p, folder, why, n);
     if (!rc) pe_enemy_packs_changed();
-    if (!rc && log && logn)
-        snprintf(log, logn, "%d bones, %d vertices, %d triangles, %d moves, %d sounds (%d sound frames), scale %.3f; profile %s",
-                 p.bones, p.vertices, p.triangles, p.anims, info.sounds, info.sound_events, info.scale, how);
+    if (!rc && log && logn) {
+        char coverage[64];
+        pe_enemy_pack_coverage(&p, pe_imp_enemy_body(asset_id) == PE_IMP_ENEMY_FIXED && p.speed == 0,
+                               coverage, sizeof coverage);
+        snprintf(log, logn, "%s. %d moves, %d sounds. Profile %s", coverage, p.anims, info.sounds, how);
+    }
     pe_enemy_pack_free(&p);
     return rc;
 }
