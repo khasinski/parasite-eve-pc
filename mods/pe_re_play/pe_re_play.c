@@ -46,6 +46,7 @@ static const PeExtensionSection s_section = {"pe_re_play/progress", PE_RE_SAVE_V
                                              pe_re_save_upgrade, NULL, NULL};   /* min reader 1: the host loads it */
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown;
+static int s_script_held;                  /* frames left since a script last moved her */
 static char s_status[200] = "Not playing.";
 
 static void list_games(void) {
@@ -444,6 +445,13 @@ static int on_frame(void *ctx, void *user) {
     case PE_RE_CAMERA: show_cut(); break;
     default: break;
     }
+    if (s_session.moved) {                       /* a cutscene walked her somewhere: she's there */
+        re_host()->place_player(s_session.x, s_session.z);
+        s_session.moved = 0;
+        s_script_held = 30;
+    } else if (s_script_held) {
+        s_script_held--;
+    }
     {   /* Square: the pocket, to use something here */
         const int square = (re_host()->held_buttons() & RE_HOST_SQUARE) != 0;
         if (square && !s_square_held && !re_host()->dialogue_busy()) open_pocket();
@@ -495,9 +503,22 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
         snprintf(s_status, sizeof s_status, "This room has no %ss.", what);
         return;
     }
+    if (s_script_held) {                                  /* a scene is moving her: it would undo the move */
+        snprintf(s_status, sizeof s_status, "A scene is playing: wait for it to end.");
+        s_door_start = -1;
+        return;
+    }
     if (s_room != s_session.logic) s_room = s_session.logic, memset(s_next, 0, sizeof s_next);
-    if (tag == PE_IMP_LOGIC_DOOR && s_door_start >= 0) *next = (uint32_t)s_door_start, s_door_start = -1;
-    for (uint32_t k = 0; k < n && !found; k++) {
+    const int picked = tag == PE_IMP_LOGIC_DOOR && s_door_start >= 0;  /* that door only, not the next one */
+    if (picked) {
+        if ((uint32_t)s_door_start >= n) {
+            snprintf(s_status, sizeof s_status, "This room has %u doors (0 to %u).", (unsigned)n, (unsigned)n - 1);
+            s_door_start = -1;
+            return;
+        }
+        *next = (uint32_t)s_door_start, s_door_start = -1;
+    }
+    for (uint32_t k = 0; k < (picked ? 1u : n) && !found; k++) {
         const uint32_t i = (*next + k) % n;
         PeImpDoor d;
         PeImpPickup pk;
@@ -519,10 +540,16 @@ static void to_zone(uint32_t tag, int kind, const char *what) {
         } else if (pe_imp_logic_door(s_session.logic, i, &d) || !pe_re_scd_live(&s_session.run, d.at) ||
                    pe_re_zone_kind(&s_session.run, d.zone.id, d.zone.sce, NULL) != d.zone.sce) {
             continue;
+        } else {                                          /* a door checked in front of her: face it too */
+            front = (d.zone.sat & (PE_RE_SAT_UNDER | PE_RE_SAT_FRONT)) == PE_RE_SAT_FRONT;
         }
         for (int c = 0; c < 4; c++) bx += zone->x[c] / 4.0, bz += zone->z[c] / 4.0;
         zone_floor = zone->floor & 0x80 ? -1 : zone->floor;
         found = 1, *next = i + 1;
+    }
+    if (!found && picked) {
+        snprintf(s_status, sizeof s_status, "Door %u isn't set up by the room's scripts (yet).", (unsigned)*next);
+        return;
     }
     if (!found) { snprintf(s_status, sizeof s_status, "This room has no %ss.", what); return; }
     int face = 0;

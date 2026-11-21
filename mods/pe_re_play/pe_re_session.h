@@ -68,6 +68,8 @@ typedef struct {
     PeReZoneHit zone;                 /* the last zone acted on (PE_RE_ZONE: what the mod handles) */
     int auto_message;                 /* the walk-in message zone she's in (shown once), -1 */
     int events;                       /* events zones started */
+    int moved;                        /* a script moved her to (x, z): the mod places her, then clears it */
+    int at_zone;                      /* the zone she set off last frame (her At_sce_no), 255 none */
     int uses;                         /* items used on the room */
 } PeReSession;
 

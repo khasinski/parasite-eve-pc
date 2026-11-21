@@ -495,6 +495,8 @@ static int emit_logic(PeImpSink *sink, unsigned game, const char *path, const ui
                       const uint8_t *ard, uint32_t ard_size, const char *const players[2], char *why, size_t n) {
     uint32_t stage, room, player;
     if (pe_imp_re_room_name(game, path, &stage, &room, &player) || player > 1) return 0;   /* not a room file */
+    if (size < (game == PE_IMP_RE1 ? 0x94u : 8u + 23 * 4)) return 0;   /* a placeholder too small to be a room
+                                                                          (the Japanese Director's Cut has one) */
     PeImpRoomLogic *l = build_logic(game, player, stage, room, rdt, size, ard, ard_size, why, n);
     if (!l) return -1;
     if (emit_room_sounds(sink, game, stage, room, rdt, size, why, n)) { free(l); return -1; }

@@ -35,13 +35,42 @@ enum { DOOR_UNTRIED, DOOR_OPENS, DOOR_LOCKED, DOOR_NOT_SET };
 typedef struct {
     int seen, parent, parent_door, order;
     int door_state[DOORS], door_tried_at[DOORS], door_to[DOORS], door_zone[DOORS];
-    char door_said[DOORS][96];
+    char door_said[DOORS][160];
     int searched_at;                    /* progress when its pickups and item spots were last done */
     int typewriter;
 } Room;
 static Room s_room[ROOMS];
 static int s_progress = 1;              /* goes up with each item taken or used: locked doors are retried */
 static int s_order;
+static unsigned char s_needed[256];     /* items a door or an item spot asked for: never put away */
+static int s_box_trips;
+static int s_tried_use[256];            /* progress when a use left the item in the pocket */                 /* times it used the item box away from a box (a shortcut) */
+
+/* Make room in a full pocket: into the box goes what nothing has asked for, stacks first. 0, or -1. */
+static int make_room(PeReSession *s) {
+    PeReProgress *p = &s->progress;
+    int pick = -1;
+    for (int i = 0; i < p->held; i++) {
+        if (s_needed[p->pocket[i].item & 0xFF]) continue;
+        if (pick < 0 || p->pocket[i].count > p->pocket[pick].count) pick = i;
+    }
+    if (pick < 0 || pe_re_box_put(p, pick)) return -1;
+    s_box_trips++;
+    return 0;
+}
+
+/* `item` back from the box into the pocket (room made first). 0, or -1 if it isn't there. */
+static int from_box(PeReSession *s, uint16_t item) {
+    PeReProgress *p = &s->progress;
+    for (int i = 0; i < p->boxed; i++)
+        if (p->box[i].item == item) {
+            if (p->held >= PE_RE_POCKET_SLOTS && make_room(s)) return -1;
+            if (pe_re_box_take(p, i)) return -1;
+            s_box_trips++;
+            return 0;
+        }
+    return -1;
+}
 
 static int key_of(const PeReSession *s) { return (int)(s->stage << 8 | (s->room & 0xFF)); }
 static void zone_centre(const PeImpZone *z, double *x, double *z_) {
@@ -60,22 +89,29 @@ static void handed(PeReSession *s) {
     fprintf(s_log, "  %s: computer: %s\n", room_name(key_of(s), here, sizeof here), s->said);
 }
 
+static int events_running(const PeReSession *s) {
+    for (int t = 2; t < PE_RE_TASKS; t++) if (s->run.task[t].status) return 1;
+    return 0;
+}
+
+/* `frames` of the room's scripts, then on while an event plays (a cutscene), up to 100 s */
 static void settle(PeReSession *s, int frames) {
-    for (int f = 0; f < frames; f++)
+    for (int f = 0; f < frames || (events_running(s) && f < 6000); f++)
         if (pe_re_session_tick(s) == PE_RE_ZONE) handed(s);
 }
 
-/* The save data's own flags (scenario, common, room, enemy, item, map, door locks): a change there
- * is progress, and locked doors are tried again. */
+/* The story's flags (scenario, common, items, door locks): one set for the first time is progress,
+ * and locked doors are tried again (a flag a script flips every frame isn't). Room, enemy and map flags change on every visit, so they don't count. */
 static int flags_changed(const PeReSession *s) {
-    static const int groups[] = {3, 4, 6, 7, 8, 9, 31};
-    static uint8_t last[sizeof groups / sizeof *groups][32], room_word[4];
-    int changed = memcmp(room_word, s->progress.flags.bits[5], 4) != 0;
-    memcpy(room_word, s->progress.flags.bits[5], 4);
-    for (size_t g = 0; g < sizeof groups / sizeof *groups; g++) {
-        changed |= memcmp(last[g], s->progress.flags.bits[groups[g]], 32) != 0;
-        memcpy(last[g], s->progress.flags.bits[groups[g]], 32);
-    }
+    static const int groups[] = {3, 4, 8, 31};               /* scenario, common, items, door locks */
+    static uint8_t last[sizeof groups / sizeof *groups][32];
+    int changed = 0;
+    for (size_t g = 0; g < sizeof groups / sizeof *groups; g++)    /* a bit set for the first time */
+        for (int b = 0; b < 32; b++) {
+            const uint8_t now = s->progress.flags.bits[groups[g]][b];
+            changed |= (now & ~last[g][b]) != 0;
+            last[g][b] |= now;
+        }
     return changed;
 }
 
@@ -128,9 +164,8 @@ static void search(PeReSession *s, FILE *log) {
                 fprintf(log, "  %s: %s (item 0x%02X x%u, flag %u)\n", here, s->said, (unsigned)pk.item,
                         (unsigned)pk.count, (unsigned)pk.flag);
                 took = 1, s_progress++;
-            } else if (!strncmp(s->said, "No room", 7) && s->progress.held) {
-                pe_re_box_put(&s->progress, 0);               /* a full pocket: into the box (counted) */
-                fprintf(log, "  %s: pocket full, one item to the box\n", here);
+            } else if (!strncmp(s->said, "No room", 7) && s->progress.held && !make_room(s)) {
+                fprintf(log, "  %s: pocket full: something nothing needs went to the box\n", here);
                 took = 1;
             }
         }
@@ -145,7 +180,9 @@ static void search(PeReSession *s, FILE *log) {
         if (kind == PE_RE_ZONE_SAVE) r->typewriter = 1;
         if (kind != PE_RE_ZONE_FLAG || (t.data[0] | t.data[1] << 8) != PE_RE_FG_USE || !t.data[4]) continue;
         const uint16_t item = (uint16_t)(t.data[2] | t.data[3] << 8);
-        if (!pe_re_has(&s->progress, item)) continue;
+        s_needed[item & 0xFF] = 1;
+        if (!pe_re_has(&s->progress, item) && from_box(s, item)) continue;
+        if (s_tried_use[item & 0xFF] == s_progress) continue;
         double cx, cz, x, z;
         zone_centre(&t.zone, &cx, &cz);
         for (int k = 0; k < 4; k++) {
@@ -158,8 +195,12 @@ static void search(PeReSession *s, FILE *log) {
         pe_re_item_name(s->items, item, name, sizeof name);
         if (pe_re_session_use(s, item) == PE_RE_STAY) {
             settle(s, 300);
-            fprintf(log, "  %s: used the %s\n", here, name);
-            s_progress++;
+            fprintf(log, "  %s: used the %s%s\n", here, name, pe_re_has(&s->progress, item) ? " (still held)" : "");
+            if (getenv("PE_TEST_RE_VERBOSE"))
+                for (int k = 0; k < PE_RE_TASKS; k++)
+                    if (s->run.task[k].status) printf("    task %d: proc %d at %u\n", k, s->run.task[k].proc, (unsigned)s->run.task[k].pc);
+            if (pe_re_has(&s->progress, item)) s_tried_use[item & 0xFF] = s_progress;   /* not again until something changes */
+            else s_progress++;
         }
     }
     /* everything a player can examine: events, messages, computers */
@@ -190,10 +231,19 @@ static int take(PeReSession *s, int i, FILE *log) {
         r->door_state[i] = DOOR_NOT_SET;                  /* the scripts haven't put it there (yet) */
         return 0;
     }
-    const PeReChange c = examine(s, &d.zone, why, sizeof why);
+    PeReChange c = examine(s, &d.zone, why, sizeof why);
+    if (c != PE_RE_ROOM && d.lock_type && d.lock_type < 254) {     /* a key: remember it, fetch it from the box */
+        s_needed[d.lock_type] = 1;
+        if (!pe_re_has(&s->progress, d.lock_type) && !from_box(s, d.lock_type)) c = examine(s, &d.zone, why, sizeof why);
+    }
+    if (getenv("PE_TEST_RE_VERBOSE"))
+        printf("    try %s door %d (progress %d): %s\n", room_name(from, a, sizeof a), i, s_progress,
+               c == PE_RE_ROOM ? "through" : s->said);
     if (c != PE_RE_ROOM) {
         r->door_state[i] = DOOR_LOCKED;
-        snprintf(r->door_said[i], sizeof r->door_said[i], "%s", s->said[0] ? s->said : why[0] ? why : "nothing happened");
+        snprintf(r->door_said[i], sizeof r->door_said[i], "%s (lock %u/%u, zone sat %02x floor %u, she's on %d)",
+                 s->said[0] ? s->said : why[0] ? why : "nothing happened", (unsigned)d.lock_id, (unsigned)d.lock_type,
+                 (unsigned)d.zone.sat, (unsigned)d.zone.floor, s->floor);
         return 0;
     }
     r->door_state[i] = DOOR_OPENS;
@@ -290,6 +340,22 @@ int main(void) {
         }
     }
 
+    /* PE_TEST_RE_TEXT="200 10b": those rooms' own messages, to tell rooms apart while debugging a route */
+    const char *text_rooms = getenv("PE_TEST_RE_TEXT");
+    for (const char *t = text_rooms; t && *t;) {
+        unsigned code = 0;
+        int used = 0;
+        if (sscanf(t, "%x%n", &code, &used) != 1) break;
+        t += used;
+        while (*t == ' ') t++;
+        char id[PE_IMP_ID_MAX], line[200];
+        PeImpRoomLogic *rl = NULL;
+        pe_re_logic_id("re2", (code >> 8) - 1, code & 0xFF, scenario, id, sizeof id);
+        if (pe_imp_catalog_roomlogic(s_store, id, &rl, NULL, 0)) continue;
+        for (uint32_t m = 0; m < 40 && !pe_re_message(rl, m, line, sizeof line); m++) printf("  %x text %u: %s\n", code, m, line);
+        free(rl);
+    }
+
     /* what it found */
     int rooms = 0, locked = 0, not_set = 0;
     for (int k = 0; k < ROOMS; k++) {
@@ -307,14 +373,15 @@ int main(void) {
             }
         }
     }
-    char pocket[400] = "";
+    char pocket[700] = "";
     for (int i = 0; i < s.progress.held; i++) {
         char name[48];
         pe_re_item_name(s.items, s.progress.pocket[i].item, name, sizeof name);
-        snprintf(pocket + strlen(pocket), sizeof pocket - strlen(pocket), "%s%s", i ? ", " : "", name);
+        snprintf(pocket + strlen(pocket), sizeof pocket - strlen(pocket), "%s%s (0x%02X)", i ? ", " : "", name,
+                 (unsigned)s.progress.pocket[i].item);
     }
-    printf("route: %d rooms reached in %d moves, %d doors still locked, %d not set up by their scripts; pocket: %s\n",
-           rooms, moves, locked, not_set, pocket[0] ? pocket : "empty");
+    printf("route: %d rooms reached in %d moves, %d doors still locked, %d not set up by their scripts; pocket: %s; "
+           "item box used away from a box %d times\n", rooms, moves, locked, not_set, pocket[0] ? pocket : "empty", s_box_trips);
     if (first_typewriter >= 0) {
         int path[64], n = 0;
         for (int k = first_typewriter; k >= 0 && n < 64; k = s_room[k].parent) path[n++] = k;
@@ -331,6 +398,16 @@ int main(void) {
         printf("first typewriter: not reached\n");
     }
     CHECK(rooms >= 5 && first_typewriter >= 0);
+    {   /* what the room scripts still skip, most met first (what events the runtime doesn't play yet) */
+        int order[256];
+        for (int i = 0; i < 256; i++) order[i] = i;
+        for (int i = 0; i < 256; i++)
+            for (int j = i + 1; j < 256; j++)
+                if (pe_re_scd_skips[order[j]] > pe_re_scd_skips[order[i]]) { const int t = order[i]; order[i] = order[j], order[j] = t; }
+        printf("skipped instructions:");
+        for (int i = 0; i < 24 && pe_re_scd_skips[order[i]]; i++) printf(" %02X:%u", order[i], (unsigned)pe_re_scd_skips[order[i]]);
+        printf("\n");
+    }
     pe_re_session_end(&s);
     printf(s_fail ? "re route FAILED\n" : "re route passed\n");
     return s_fail;

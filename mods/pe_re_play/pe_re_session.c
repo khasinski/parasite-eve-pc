@@ -1,4 +1,5 @@
 /* A play session in an imported game. See pe_re_session.h. */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -122,6 +123,7 @@ static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room
     memset(s->progress.flags.bits[PE_RE_FG_USE], 0, sizeof s->progress.flags.bits[PE_RE_FG_USE]);   /* Sce_work_clr */
     pe_re_scd_run(l, &s->progress.flags, &host, &s->run);   /* what its scripts set up */
     s->auto_message = -1;
+    s->at_zone = 255;
     return 0;
 }
 
@@ -230,6 +232,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
         /* an examine: the game's own check (the point in front, or underfoot, by the zone's bits) */
         if (pe_re_zone_check(s->logic, &s->run, &s->progress, x, z, s->facing, s->floor, 1, s->progress.flags.work,
                              hits, 1) == 1) {
+            s->at_zone = hits[0].id;                          /* At_sce_no: the zone she set off */
             const PeReChange c = zone_act(s, store, &hits[0], 1, why, n);
             if (c != PE_RE_STAY || s->said[0] || hits[0].sce == PE_RE_ZONE_EVENT || hits[0].sce == PE_RE_ZONE_FLAG)
                 return c;
@@ -246,6 +249,7 @@ PeReChange pe_re_session_step(PeReSession *s, const char *store, double x, doubl
     /* every frame: the zones that don't wait for an examine */
     const int nh = pe_re_zone_check(s->logic, &s->run, &s->progress, x, z, s->facing, s->floor, 0,
                                     s->progress.flags.work, hits, 16);
+    if (nh > 0) s->at_zone = hits[nh - 1].id;              /* the last one handled, as Sce_at_check leaves it */
     int message_zone = -1;
     for (int i = 0; i < nh; i++) {
         if (hits[i].sce == PE_RE_ZONE_MESSAGE) {           /* once each time she walks into it */
@@ -273,7 +277,22 @@ PeReChange pe_re_session_tick(PeReSession *s) {
     if (!s->game || !s->logic) return PE_RE_STAY;
     const PeReScdHost host = host_of(s);
     s->run.camera = s->camera;
+    {   /* the player's fields, as the scripts read them (RE2's facing: 0 faces +x) */
+        int16_t *me = s->run.works[0];
+        me[0] = 1, me[PE_RE_MEMBER_POS_X] = (int16_t)lround(s->x), me[PE_RE_MEMBER_POS_Z] = (int16_t)lround(s->z);
+        me[PE_RE_MEMBER_POS_Y] = (int16_t)(-1800 * s->floor), me[PE_RE_MEMBER_NFLOOR] = (int16_t)s->floor;
+        me[PE_RE_MEMBER_CDIR_Y] = (int16_t)((s->facing + 1024) & 4095);
+        me[PE_RE_MEMBER_AT_SCE_NO] = (int16_t)s->at_zone;   /* last frame's zone hit, then cleared (Sce_work_clr_at) */
+        s->at_zone = 255;
+        s->run.player_set = 0;
+    }
     pe_re_scd_tick(s->logic, &s->progress.flags, &host, &s->run);
+    if (s->run.player_set) {                               /* a script put her somewhere */
+        const int16_t *me = s->run.works[0];
+        s->x = me[PE_RE_MEMBER_POS_X], s->z = me[PE_RE_MEMBER_POS_Z];
+        s->facing = pe_re_facing_of(me[PE_RE_MEMBER_CDIR_Y]);
+        s->moved = 1;
+    }
     for (int i = 0; i < s->run.naot_on; i++) {             /* aot_on: a zone set off by its script */
         PeReZoneHit h;
         if (pe_re_zone_by_id(s->logic, &s->run, &s->progress, s->run.aot_on[i], &h)) continue;
@@ -282,6 +301,9 @@ PeReChange pe_re_session_tick(PeReSession *s) {
         if (c == PE_RE_SAID || c == PE_RE_ZONE) { s->run.naot_on = 0; return c; }
     }
     s->run.naot_on = 0;
+    if (s->run.dest_moved) {                               /* plc_dest: she's moved for the cutscene */
+        s->x = s->run.dest_x, s->z = s->run.dest_z, s->run.dest_moved = 0, s->moved = 1;
+    }
     if (s->run.ran && s->run.camera != s->camera) {        /* a script cut to another camera */
         s->camera = s->run.camera;
         return PE_RE_CAMERA;

@@ -16,7 +16,9 @@ enum {
     OP_MESSAGE_ON = 0x2B, OP_AOT_SET = 0x2C, OP_DOOR_AOT_SE = 0x3B, OP_AOT_RESET = 0x46, OP_ITEM_AOT_SET = 0x4E,
     OP_AOT_ON = 0x47, OP_SCE_KEY_CK = 0x4F, OP_SCE_TRG_CK = 0x50, OP_KEEP_ITEM_CK = 0x5E, OP_ITEM_LOST = 0x62,
     OP_ITEM_GET = 0x76, OP_ITEM_CK_LOST = 0x88, OP_SCE_EM_SET = 0x44, OP_CUT_CHG = 0x29, OP_CUT_OLD = 0x2A,
-    OP_CUT_AUTO = 0x3C,
+    OP_CUT_AUTO = 0x3C, OP_PLC_DEST = 0x40, OP_WORK_SET = 0x2E, OP_POS_SET = 0x32, OP_DIR_SET = 0x33,
+    OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
+    OP_MEMBER_CALC2 = 0x56,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -27,6 +29,8 @@ enum {
 #define BUDGET_TASK 800                        /* a task that won't yield gives up its frame */
 
 enum { FALSE_COND = 0, CONTINUE = 1, YIELD = 2 };
+
+uint32_t pe_re_scd_skips[256];
 
 int pe_re_flag(const PeReFlags *f, unsigned group, unsigned bit) {
     return group < PE_RE_FLAG_GROUPS && bit < 256 && (f->bits[group][bit >> 3] >> (bit & 7) & 1);
@@ -59,9 +63,28 @@ static uint32_t proc_start(const Vm *vm, int script, unsigned proc) {
     return a < len ? off + a : 0;
 }
 
+/* work_set's object (WORK_TYPE_*: 1 player, 2 partner, 3 enemy n, 4 scene object n, 5 door n) */
+static int work_slot(unsigned kind, int n) {
+    switch (kind) {
+    case 1: return 0;
+    case 2: return 1;
+    case 3: return n >= 0 && n < 16 ? 2 + n : -1;
+    case 4: return n >= 0 && n < 32 ? 18 + n : -1;
+    case 5: return n >= 0 && n < 14 ? 50 + n : -1;
+    default: return -1;
+    }
+}
+
+static int16_t *member(Vm *vm, const PeReScdTask *t, unsigned m) {
+    static int16_t scratch;
+    if (t->work < 0 || m >= PE_RE_MEMBERS) { scratch = 0; return &scratch; }
+    return &vm->run->works[t->work][m];
+}
+
 static void task_start(PeReScdTask *t, uint32_t pc) {      /* Event_init */
     t->status = pc != 0;
     t->ifel[0] = -1, t->loop[0] = -1;
+    t->work = 0;
     t->pc = pc;
 }
 
@@ -310,11 +333,55 @@ static int step(Vm *vm, PeReScdTask *t) {
         return CONTINUE;
     }
     case OP_CUT_AUTO: vm->run->camera_lock = ins[1] != 1; t->pc += n; return CONTINUE;
+    case OP_WORK_SET: t->work = (int8_t)work_slot(ins[1], (int8_t)ins[2]); t->pc += n; return CONTINUE;
+    case OP_POS_SET: case OP_DIR_SET: {
+        const unsigned at = code == OP_POS_SET ? PE_RE_MEMBER_POS_X : 14;
+        for (int k = 0; k < 3; k++) *member(vm, t, at + (unsigned)k) = s16(ins + 2 + 2 * k);
+        if (t->work == 0) vm->run->player_set = 1;
+        t->pc += n;
+        return CONTINUE;
+    }
+    case OP_MEMBER_SET: *member(vm, t, ins[1]) = s16(ins + 2); if (t->work == 0) vm->run->player_set = 1; t->pc += n; return CONTINUE;
+    case OP_MEMBER_SET2: *member(vm, t, ins[1]) = vm->flags->work[ins[2]]; if (t->work == 0) vm->run->player_set = 1; t->pc += n; return CONTINUE;
+    case OP_MEMBER_COPY: vm->flags->work[ins[1]] = *member(vm, t, ins[2]); t->pc += n; return CONTINUE;
+    case OP_MEMBER_CMP: {                                  /* the comparison word: operator << 8 | member */
+        const unsigned word = le16(ins + 2);
+        const int v = *member(vm, t, word & 0xFF), want = s16(ins + 4), op = (int)(word >> 8);
+        t->pc += n;
+        return (op == 6 ? (v & want) != 0 : compare(v, op, want)) ? CONTINUE : FALSE_COND;
+    }
+    case OP_MEMBER_CALC: {                                 /* the command word: member << 8 | operation */
+        const unsigned word = le16(ins + 2);
+        int16_t *m = member(vm, t, word >> 8);
+        *m = calc(*m, (int)(word & 0xFF), s16(ins + 4));
+        t->pc += n;
+        return CONTINUE;
+    }
+    case OP_MEMBER_CALC2: {
+        int16_t *m = member(vm, t, ins[2]);
+        *m = calc(*m, ins[1], vm->flags->work[ins[3]]);
+        t->pc += n;
+        return CONTINUE;
+    }
+    case OP_PLC_DEST: {                                    /* walk to (x, z); ins[3]: the arrival flag */
+        PeReScdRun *r = vm->run;
+        const int16_t x = s16(ins + 4), z = s16(ins + 6);
+        if (x || z) r->dest_x = x, r->dest_z = z, r->dest_moved = 1;
+        if (ins[3]) r->dest_flag = ins[3];
+        t->pc += n;
+        return CONTINUE;
+    }
     case OP_SCE_EM_SET: {                                  /* an enemy placed (the caller checks its flag) */
         PeReScdRun *r = vm->run;
         int k = 0;
         while (k < r->nenemy && r->enemy[k] != t->pc) k++;
         if (k == r->nenemy && r->nenemy < PE_RE_ENEMIES_MAX) r->enemy[r->nenemy++] = t->pc;
+        const int slot = work_slot(3, (int8_t)ins[2]);
+        if (slot >= 0) {                                   /* SCE_EM_SET_WORK: id, type, floor, position, facing */
+            int16_t *w = r->works[slot];
+            w[0] = 1, w[6] = ins[3], w[7] = s16(ins + 4), w[17] = ins[6];
+            w[11] = s16(ins + 10), w[12] = s16(ins + 12), w[13] = s16(ins + 14), w[15] = s16(ins + 16);
+        }
         t->pc += n;
         return CONTINUE;
     }
@@ -338,6 +405,8 @@ static int step(Vm *vm, PeReScdTask *t) {
         return CONTINUE;
     default:
         if (!vm->run->skipped++) vm->run->first_skipped = code;
+        if (vm->run->skipped_by_op[code] < 0xFFFF) vm->run->skipped_by_op[code]++;
+        pe_re_scd_skips[code]++;
         t->pc += n;
         return CONTINUE;
     }
@@ -382,6 +451,7 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
     Vm vm;
     memset(out, 0, sizeof *out);
     out->message = -1;
+    out->dest_flag = -1;
     if (!setup(&vm, l, flags, host, out, BUDGET_ENTRY)) return;
     if (pe_imp_rdt_section(vm.rdt, vm.size, SCRIPT_INIT, &out->sec[0], &out->len[0])) out->sec[0] = out->len[0] = 0;
     if (pe_imp_rdt_section(vm.rdt, vm.size, SCRIPT_MAIN, &out->sec[1], &out->len[1])) out->sec[1] = out->len[1] = 0;
@@ -397,6 +467,10 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
 void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost *host, PeReScdRun *run) {
     Vm vm;
     if (!run->ran || !setup(&vm, l, flags, host, run, BUDGET_TICK)) return;
+    if (run->dest_flag >= 0) {                             /* she got there: the engine's arrival flag */
+        pe_re_flag_set(flags, 5, (unsigned)run->dest_flag, 1);
+        run->dest_flag = -1;
+    }
     exec_task(&vm, 0, 1);                                  /* Event_exec(0, 1): the every-frame handler */
     schedule(&vm);
     work_clr(flags);

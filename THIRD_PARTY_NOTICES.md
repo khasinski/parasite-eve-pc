@@ -314,8 +314,10 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   and its every-frame handler (`GAME.C`, `SCE0.C` Sce_scheduler / Sce_work_clr), and item use, item
   scripts and item boxes (`ST_SUB00.C`, `SCE2.C`, `SCE_AT.C`), and enemy placements (`SCE2.C`
   Sce_em_set, `EM_SET.H`), camera cuts (`SCE1.C` Cut_chg / Cut_old / Cut_auto), door-lock flags
-  (`SCE_AT.C` Sce_Door, Key_flg) and the main hall's door-lock computer (`PC_EVENT.C`). Our interpreter
-  and zone checks are
+  (`SCE_AT.C` Sce_Door, Key_flg) and the main hall's door-lock computer (`PC_EVENT.C`), the scripts'
+  objects and their fields (`SCE1.C` Work_set / Member_* / Pos_set / Dir_set, `def/SCENARIO.H`
+  MEMBER_* and WORK_TYPE_*), the zone the player last touched (`SCE_AT.C` At_sce_no) and the walk to
+  a spot with its arrival flag (`SCE1.C` Plc_dest). Our interpreter and zone checks are
   written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

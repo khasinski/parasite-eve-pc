@@ -31,6 +31,14 @@
  *            of its id (a later zone with the same id replaces it, and clears that id's
  *            aot_reset); aot_reset: a zone's kind, check bits and data replaced (kind 0: gone)
  *   text     message_on: the room's message, for the caller to show
+ *   objects  work_set picks a task's object (the player, the partner, an enemy, a scene object,
+ *            a door); member_set / member_set2 / member_copy / member_cmp / member_calc /
+ *            member_calc2 / pos_set / dir_set read and write its fields (SCE1.C, def/SCENARIO.H's
+ *            MEMBER_*). The player's position, facing and floor follow the session; pos_set or
+ *            dir_set on her moves her (the caller places her). sce_em_set fills its enemy's.
+ *   player   plc_dest: the player is sent to a spot; she arrives at once (the caller moves her)
+ *            and the instruction's Room_flg bit is set the next frame, as the engine sets it on
+ *            arrival (cutscenes wait on it)
  *   camera   cut_chg (that camera; camera zones locked out), cut_old (back to the one before,
  *            unlocked), cut_auto (lock on / off) (SCE1.C Cut_chg / Cut_old / Cut_auto)
  *   enemies  sce_em_set: run = placed (its offset kept; the caller reads the record)
@@ -55,6 +63,10 @@
 #define PE_RE_FG_USE 10                        /* Use_flg: items usable here (bit = item) */
 #define PE_RE_FG_KEY 31                        /* Key_flg: door locks opened (bit = lock id & 0x3F) */
 #define PE_RE_LEVELS 4                         /* gosub levels a task keeps */
+#define PE_RE_WORKS 64                         /* objects: 0 player, 1 partner, 2-17 enemies, 18-49 scene objects, 50-63 doors */
+#define PE_RE_MEMBERS 44                       /* MEMBER_BE_FLAG0 .. MEMBER_DAMAGE_CNT */
+enum { PE_RE_MEMBER_AT_SCE_NO = 9, PE_RE_MEMBER_POS_X = 11, PE_RE_MEMBER_POS_Y = 12, PE_RE_MEMBER_POS_Z = 13, PE_RE_MEMBER_CDIR_Y = 15,
+       PE_RE_MEMBER_NFLOOR = 17 };
 #define PE_RE_SLOTS 256                        /* zone ids */
 #define PE_RE_WORK_F_ATARI 0                   /* the zone hit in front of the player (SCE_AT.C) */
 #define PE_RE_WORK_U_ATARI 1                   /* the zone hit under the player */
@@ -74,6 +86,7 @@ typedef struct { uint8_t id, sce, sat; uint8_t data[6]; } PeReReset;
 typedef struct {
     uint8_t status;                            /* 0 idle */
     int16_t proc;                              /* the main script's procedure it started on (-1 init) */
+    int8_t work;                               /* work_set's object, -1 none */
     int8_t sub;                                /* gosub level */
     int8_t ifel[PE_RE_LEVELS], loop[PE_RE_LEVELS], loop_if[PE_RE_LEVELS][4];
     uint32_t pc, ret[PE_RE_LEVELS];
@@ -91,6 +104,7 @@ typedef struct {
     int nreset;
     int executed, skipped, stopped;            /* instructions run, skipped (not handled), budgets run out */
     uint8_t first_skipped;                     /* an opcode skipped, for the log */
+    uint16_t skipped_by_op[256];               /* how often each skipped opcode was met (saturates) */
     int message;                               /* message_on's message, waiting to be shown; -1 none */
     int messages;                              /* message_on run so far */
     PeReScdTask task[PE_RE_TASKS];
@@ -100,6 +114,11 @@ typedef struct {
     uint32_t enemy[PE_RE_ENEMIES_MAX];         /* sce_em_set instructions that ran (RDT offsets) */
     int camera, camera_old;                    /* the camera now (the caller keeps it current), the last */
     int camera_lock;                           /* the scripts hold the camera: zones don't switch it */
+    int dest_flag;                             /* plc_dest's arrival flag (Room_flg bit), -1 none waiting */
+    int dest_moved;                            /* plc_dest sent the player somewhere: dest_x, dest_z */
+    int16_t dest_x, dest_z;
+    int16_t works[PE_RE_WORKS][PE_RE_MEMBERS]; /* the objects' fields (the player's kept current by the caller) */
+    int player_set;                            /* pos_set / dir_set moved the player: works[0] */
     int nenemy;
     int naot_on;
 } PeReScdRun;
@@ -123,6 +142,9 @@ void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost
 /* Did the zone instruction at `at` run? (1 when the scripts didn't run, or `at` is 0: a record
  * stored before RoomLogic kept its origin, ZAT0.) */
 int pe_re_scd_live(const PeReScdRun *r, uint32_t at);
+/* Diagnostics: every skipped instruction met so far, by opcode, across every run. */
+extern uint32_t pe_re_scd_skips[256];
+
 /* Start procedure `proc` of the main script on task `level` (10 and up: the first free task 2-9),
  * as an event zone does (Event_exec). It runs from the next tick. */
 void pe_re_scd_exec(const PeImpRoomLogic *l, PeReScdRun *run, unsigned level, unsigned proc);
