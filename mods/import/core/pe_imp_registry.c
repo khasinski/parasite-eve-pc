@@ -248,6 +248,31 @@ int pe_imp_enemy_defaults(const char *game, int *yaw, int *scale) {
 #define MAX_STRENGTHS 128
 static struct { char id[PE_IMP_ID_MAX]; int life, power; } s_strength[MAX_STRENGTHS];
 static int s_strengths;
+static struct { char id[PE_IMP_ID_MAX]; const PeImpEnemyCues *cues; } s_cue[MAX_STRENGTHS];
+static int s_cues;
+
+int pe_imp_add_enemy_cues(const char *asset_id, const PeImpEnemyCues *cues) {
+    if (!asset_id || !cues || !strchr(asset_id, ':') || strlen(asset_id) >= PE_IMP_ID_MAX) return -1;
+    int i = 0;
+    while (i < s_cues && strcmp(asset_id, s_cue[i].id)) i++;
+    if (i == MAX_STRENGTHS) return -1;
+    if (i == s_cues) s_cues++;
+    snprintf(s_cue[i].id, sizeof s_cue[i].id, "%s", asset_id);
+    s_cue[i].cues = cues;
+    return 0;
+}
+
+const PeImpEnemyCues *pe_imp_enemy_cues(const char *asset_id) {
+    if (!asset_id) return NULL;
+    const PeImpEnemyCues *base = NULL;
+    for (int i = 0; i < s_cues; i++) {
+        const size_t len = strlen(s_cue[i].id);
+        if (strncmp(asset_id, s_cue[i].id, len)) continue;
+        if (!asset_id[len]) return s_cue[i].cues;
+        if (asset_id[len] == '-') base = s_cue[i].cues;
+    }
+    return base;
+}
 
 int pe_imp_add_enemy_strength(const char *asset_id, int life, int power) {
     if (!asset_id || !strchr(asset_id, ':') || strlen(asset_id) >= PE_IMP_ID_MAX || life <= 0 || power < 0) return -1;
@@ -413,5 +438,5 @@ const PeImpTarget *pe_imp_target(int i) { return i >= 0 && i < s_targets ? s_tar
 void pe_imp_registry_reset(void) {
     for (int i = 0; i < s_namings; i++) pj_free(s_naming[i].root);
     s_readers = s_namings = s_games = s_rigs = s_targets = s_autos = s_enemies = s_enemy_games = 0;
-    s_strengths = s_kinds = 0;
+    s_strengths = s_kinds = s_cues = 0;
 }

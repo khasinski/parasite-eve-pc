@@ -8,6 +8,8 @@
 
 #define PE_IMP_ENEMY_ANIMS 8
 #define PE_IMP_ENEMY_ATTACKS 4
+enum { PE_IMP_CUE_ATTACK, PE_IMP_CUE_HURT, PE_IMP_CUE_DIE, PE_IMP_CUE_COUNT };
+typedef struct { const char *sound[PE_IMP_CUE_COUNT]; } PeImpEnemyCues;
 
 typedef struct PeImpEnemyProfile {
     const char *name;                         /* "Nemesis" */
@@ -27,6 +29,7 @@ typedef struct PeImpEnemyProfile {
     struct { const char *anim; int power, range, hit; } attack[PE_IMP_ENEMY_ATTACKS];
     int speed, charge, radius, stagger;       /* as the pack's "behavior" (pe_enemy_pack.h) */
     const char *next_form;                    /* full asset ID; empty or NULL ends the fight */
+    const PeImpEnemyCues *cues;                /* source defaults for profiles without an event bank */
 } PeImpEnemyProfile;
 
 /* Assets "<game>:<local ID>" fight with this profile ("re3", "enemy/nemesis"): exact match. */
@@ -55,6 +58,8 @@ int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, siz
 int pe_imp_enemy_model_allowed(const char *asset_id);
 int pe_imp_set_enemy_next_form(const char *game, unsigned kind, unsigned next);
 int pe_imp_enemy_next_form(const char *asset_id, char *out, size_t size);
+int pe_imp_add_enemy_cues(const char *asset_id, const PeImpEnemyCues *cues);
+const PeImpEnemyCues *pe_imp_enemy_cues(const char *asset_id);
 
 /* Optional opening poses for a placed creature. A source reader owns the static table,
  * terminated by a NULL name. Move indices use the catalogued animation's order. */

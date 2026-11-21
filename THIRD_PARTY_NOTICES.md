@@ -326,6 +326,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   The tables in `pe_src_re2_enemies.c` record those values. We also
   consulted `EM_SET.C` (Emd_load_file) for Leon's and Claire's enemy archive routing and
   `EM21.C`, `EM22.C`, `EM24.C`, `EM29.C`, `EM2F.C`, and `EM3A.C` for enemy locomotion.
+  `EM10.C`, `SCE0.C`, and `SND.C` were also consulted for zombie sound cues and enemy bank layout.
   Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

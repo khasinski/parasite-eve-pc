@@ -1,4 +1,12 @@
 #include "pe_imp_spu.h"
+#include "pe_imp_enemy.h"
+#include "pe_src_re1.h"
+
+int pe_re1_enemy_sounds_register(void) {
+    /* Curated cues from the first zombie room's imported VAB. */
+    static const PeImpEnemyCues zombie = {{"sound/room102/wave05", "sound/room102/wave06", "sound/room102/wave07"}};
+    return pe_imp_add_enemy_cues("re1:enemy/em1000", &zombie);
+}
 
 const PeImpReader g_re1_sound_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},

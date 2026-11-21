@@ -124,7 +124,18 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
     }
     PeEnemyPack p;
     PeEnemyBuildInfo info;
-    int rc = pe_enemy_build(&m, &a, prof, sounds, count, asset_id, &p, &info, why, n);
+    PeImpEnemyProfile with_cues = *prof;
+    if (!prof->sounds && (with_cues.cues = pe_imp_enemy_cues(asset_id))) {
+        count = PE_IMP_CUE_COUNT + 1; /* sound index zero is reserved for silence */
+        for (int i = 0; i < PE_IMP_CUE_COUNT; i++) {
+            const char *cue = with_cues.cues->sound[i];
+            char sid[PE_IMP_ID_MAX], ignore[160];
+            if (!cue) continue;
+            snprintf(sid, sizeof sid, "%s:%s", game, cue);
+            pe_imp_catalog_sound(ctx->store, sid, &sounds[i + 1], ignore, sizeof ignore);
+        }
+    }
+    int rc = pe_enemy_build(&m, &a, &with_cues, sounds, count, asset_id, &p, &info, why, n);
     pe_imp_model_free(&m);
     pe_imp_animation_free(&a);
     for (int i = 0; i < count; i++) free(sounds[i]);
@@ -214,7 +225,7 @@ static int enemies_current(const PeImpAsset *a, const char *builder) {
 }
 
 const PeImpTarget g_pe_enemy_target = {
-    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 8, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
+    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 9, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
     enemies_accepts, enemies_place, enemies_current};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }

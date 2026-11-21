@@ -167,9 +167,51 @@ static void test_enemy_preparation(PeImportJob *j) {
     assert(!j->enemies_built && j->enemies_current == enemies && !j->enemies_failed);
 }
 
+/* Use an already imported fixture and add just the new RE2 bank. */
+static void test_enemy_sounds(const char *store) {
+    char why[256], folder[1100], summary[180];
+    const char *disc = getenv("PE_TEST_RE2_DISC");
+    assert(disc && *disc);
+    pe_imp_registry_reset();
+    assert(!pe_imp_add_reader(&g_re2_enemy_sound_ps1));
+    PeImpScan scan;
+    assert(!pe_imp_scan(store, disc, "re2", &scan));
+    PeImpSound *sample = NULL;
+    assert(!pe_imp_catalog_sound(store, "re2:sound/enemy00/wave14", &sample, why, sizeof why));
+    assert(sample->frames > 0);
+    free(sample);
+    assert(!pe_re2_enemies_register() && !pe_re1_enemy_sounds_register() && !pe_enemy_target_register());
+    const PeImpTarget *target = pe_imp_target(0);
+    const PeImpBuild ctx = {store, NULL, NULL};
+    static const char *const ids[] = {"re2:enemy/em10", "re1:enemy/em1000"};
+    for (unsigned i = 0; i < sizeof ids / sizeof ids[0]; i++) {
+        snprintf(folder, sizeof folder, "%s/%s", s_dir, i ? "re1" : "re2");
+        assert(!pe_imp_mkdirs(folder));
+        assert(!target->build(&ctx, ids[i], folder, summary, sizeof summary, why, sizeof why));
+        PeEnemyPack pack;
+        assert(!pe_enemy_pack_load(&pack, folder, why, sizeof why));
+        assert(pack.sounds == PE_IMP_CUE_COUNT + 1);
+        for (int cue = 1; cue < pack.sounds; cue++) assert(pack.sound[cue].frames > 1);
+        assert(pack.attacks > 0);
+        const PeEnemyAttack *attack = &pack.attack[0];
+        assert((pack.anim[attack->anim].event[attack->hit] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_ATTACK + 1);
+        if (pack.role[PE_ANIM_HURT] >= 0)
+            assert((pack.anim[pack.role[PE_ANIM_HURT]].event[0] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_HURT + 1);
+        if (pack.role[PE_ANIM_DIE] >= 0)
+            assert((pack.anim[pack.role[PE_ANIM_DIE]].event[0] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_DIE + 1);
+        pe_enemy_pack_free(&pack);
+        printf("%s: %s\n", ids[i], summary);
+    }
+}
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     const char *test_dir = getenv("PE_TEST_DIR") ? getenv("PE_TEST_DIR") : ".";
+    if (argc == 3 && !strcmp(argv[1], "--enemy-sounds")) {
+        snprintf(s_dir, sizeof s_dir, "%s/pe-import-flow-sounds", test_dir);
+        test_enemy_sounds(argv[2]);
+        return 0;
+    }
     /* Repeat the enemy regression using a populated test catalog without rescanning the discs. */
     if (argc == 3 && !strcmp(argv[1], "--enemy-store")) {
         PeImportJob j = {.host = &k_test_host};

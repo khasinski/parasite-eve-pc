@@ -249,6 +249,14 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
         s->rate = (int)sounds[i]->rate, s->frames = (int)sounds[i]->frames;
         info->sounds++;
     }
+    if (prof->cues) {
+        for (int i = 0; i < p->anims; i++)
+            for (int k = 0; k < p->anim[i].frames; k++) p->anim[i].event[k] &= (uint16_t)~PE_ENEMY_EVENT_SOUND;
+        for (int i = 0; i < p->attacks; i++)
+            p->anim[p->attack[i].anim].event[p->attack[i].hit] |= PE_IMP_CUE_ATTACK + 1;
+        if (p->role[PE_ANIM_HURT] >= 0) p->anim[p->role[PE_ANIM_HURT]].event[0] |= PE_IMP_CUE_HURT + 1;
+        if (p->role[PE_ANIM_DIE] >= 0) p->anim[p->role[PE_ANIM_DIE]].event[0] |= PE_IMP_CUE_DIE + 1;
+    }
     for (int i = 0; i < p->anims; i++)
         for (int k = 0; k < p->anim[i].frames; k++) {
             unsigned s = p->anim[i].event[k] & PE_ENEMY_EVENT_SOUND;

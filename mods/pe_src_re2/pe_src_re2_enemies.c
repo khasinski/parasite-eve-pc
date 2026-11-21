@@ -44,12 +44,19 @@ static const PeImpEnemyStart k_zombie_starts[] = {
 int pe_re2_enemies_register(void) {
     int bad = 0;
     char id[32];
+    /* bio2-ds EM10.C and SND.C, consulted for cue behaviour. EDT cues 8, 9 and 12
+     * resolve to these waveforms in the disc's first ENEMSE set. */
+    static const PeImpEnemyCues zombie = {{"sound/enemy00/wave07", "sound/enemy00/wave08", "sound/enemy00/wave14"}};
     /* A placement's kind is the enemy's id, and its model is "enemy/em<id>" in the main archive
      * (pe_src_re2_emd.c); 0x40 and up are people (Sherry, Ada, Annette...): not fought. */
     for (unsigned kind = 0x10; kind < 0x40; kind++) {
         snprintf(id, sizeof id, "enemy/em%02x", kind);
         bad |= pe_imp_add_enemy_kind("re2", kind, id) != 0;
-        if (kind < 0x20) bad |= pe_imp_set_enemy_starts("re2", kind, k_zombie_starts) != 0;
+        if (kind < 0x20) {
+            bad |= pe_imp_set_enemy_starts("re2", kind, k_zombie_starts) != 0;
+            snprintf(id, sizeof id, "re2:enemy/em%02x", kind);
+            bad |= pe_imp_add_enemy_cues(id, &zombie) != 0;
+        }
     }
     for (unsigned i = 0; i < sizeof k_life / sizeof k_life[0]; i++) {
         snprintf(id, sizeof id, "re2:enemy/em%02x", k_life[i].em);
