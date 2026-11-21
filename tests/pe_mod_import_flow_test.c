@@ -169,23 +169,34 @@ static void test_enemy_preparation(PeImportJob *j) {
 
 /* Use an already imported fixture and add just the new RE2 bank. */
 static void test_enemy_sounds(const char *store) {
-    char why[256], folder[1100], summary[180];
+    char why[256], folder[1100], summary[180], re2_store[700];
     const char *disc = getenv("PE_TEST_RE2_DISC");
     assert(disc && *disc);
     pe_imp_registry_reset();
-    assert(!pe_imp_add_reader(&g_re2_enemy_sound_ps1));
+    assert(!pe_imp_add_reader(&g_re2_enemy_sound_ps1) && !pe_imp_add_reader(&g_re2_emd_ps1));
+    snprintf(re2_store, sizeof re2_store, "%s/store", s_dir);
     PeImpScan scan;
-    assert(!pe_imp_scan(store, disc, "re2", &scan));
-    PeImpSound *sample = NULL;
-    assert(!pe_imp_catalog_sound(store, "re2:sound/enemy00/wave14", &sample, why, sizeof why));
-    assert(sample->frames > 0);
-    free(sample);
+    assert(!pe_imp_scan(re2_store, disc, "re2", &scan));
+    assert(!scan.refused && scan.files_read + scan.skipped > 1);
+    for (unsigned bank = 0; bank < 72; bank++) {
+        char id[64];
+        PeImpSound *sample = NULL;
+        snprintf(id, sizeof id, "re2:sound/enemy%02u/wave01", bank);
+        if (pe_imp_catalog_sound(re2_store, id, &sample, why, sizeof why)) {
+            fprintf(stderr, "%s: %s\n", id, why);
+            assert(0);
+        }
+        assert(sample->frames > 0);
+        free(sample);
+    }
     assert(!pe_re2_enemies_register() && !pe_re1_enemy_sounds_register() && !pe_enemy_target_register());
     const PeImpTarget *target = pe_imp_target(0);
-    const PeImpBuild ctx = {store, NULL, NULL};
-    static const char *const ids[] = {"re2:enemy/em10", "re1:enemy/em1000"};
+    static const char *const ids[] = {
+        "re2:enemy/em10", "re2:enemy/em20", "re2:enemy/em22", "re2:enemy/em24", "re1:enemy/em1000"
+    };
     for (unsigned i = 0; i < sizeof ids / sizeof ids[0]; i++) {
-        snprintf(folder, sizeof folder, "%s/%s", s_dir, i ? "re1" : "re2");
+        const PeImpBuild ctx = {strncmp(ids[i], "re2:", 4) ? store : re2_store, NULL, NULL};
+        snprintf(folder, sizeof folder, "%s/%s", s_dir, strrchr(ids[i], '/') + 1);
         assert(!pe_imp_mkdirs(folder));
         assert(!target->build(&ctx, ids[i], folder, summary, sizeof summary, why, sizeof why));
         PeEnemyPack pack;
@@ -195,10 +206,9 @@ static void test_enemy_sounds(const char *store) {
         assert(pack.attacks > 0);
         const PeEnemyAttack *attack = &pack.attack[0];
         assert((pack.anim[attack->anim].event[attack->hit] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_ATTACK + 1);
-        if (pack.role[PE_ANIM_HURT] >= 0)
-            assert((pack.anim[pack.role[PE_ANIM_HURT]].event[0] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_HURT + 1);
-        if (pack.role[PE_ANIM_DIE] >= 0)
-            assert((pack.anim[pack.role[PE_ANIM_DIE]].event[0] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_DIE + 1);
+        assert(pack.role[PE_ANIM_HURT] >= 0 && pack.role[PE_ANIM_DIE] >= 0);
+        assert((pack.anim[pack.role[PE_ANIM_HURT]].event[0] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_HURT + 1);
+        assert((pack.anim[pack.role[PE_ANIM_DIE]].event[0] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_DIE + 1);
         pe_enemy_pack_free(&pack);
         printf("%s: %s\n", ids[i], summary);
     }

@@ -264,8 +264,11 @@ static void pick_moves(const PeImpMoveLook *look, int moves, PeImpEnemyBody body
     best = 0;
     for (int k = 0; k < moves; k++) {
         const PeImpMoveLook *l = &look[k];
-        if (taken(pick, R_COUNT, k) || l->frames < 6 || l->frames > 45 || l->hits || fabs(l->start - up) > 0.15 ||
-            fabs(l->end - up) > 0.15 || l->low < 0.6 * up || l->loop > 0.3 || reach_of(l) > 0.2)
+        const double height_tolerance = low_body ? 0.35 : 0.15;
+        if (taken(pick, R_COUNT, k) || l->frames < 6 || l->frames > 45 || l->hits ||
+            fabs(l->start - up) > height_tolerance || fabs(l->end - up) > height_tolerance ||
+            l->low < (low_body ? 0.35 : 0.6) * up || l->loop > (low_body ? 0.5 : 0.3) ||
+            reach_of(l) > (low_body ? 0.4 : 0.2))
             continue;
         if (l->motion > best) best = l->motion, pick[R_HURT] = k;
     }

@@ -73,5 +73,14 @@ int pe_re2_enemies_register(void) {
     bad |= pe_imp_set_enemy_next_form("re2", 0x31, 0x33) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x33, 0x34) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x34, 0x36) != 0;
+    /* The room placements select sound types 12, 14 and 51 respectively.
+     * Consulted bio2-ds SCE0.C, EM20.C, EM22.C and EM24.C for set selection and cue use.
+     * These are the solo sets, resolved to VAB waves from the discs' EDT and tone tables. */
+    static const PeImpEnemyCues dog = {{"sound/enemy06/wave04", "sound/enemy06/wave12", "sound/enemy06/wave13"}};
+    static const PeImpEnemyCues licker = {{"sound/enemy08/wave12", "sound/enemy08/wave11", "sound/enemy08/wave09"}};
+    static const PeImpEnemyCues evolved = {{"sound/enemy09/wave12", "sound/enemy09/wave11", "sound/enemy09/wave09"}};
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em20", &dog) != 0;
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em22", &licker) != 0;
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em24", &evolved) != 0;
     return bad ? -1 : 0;
 }
