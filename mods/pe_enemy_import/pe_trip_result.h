@@ -23,8 +23,7 @@ typedef struct {
 /* Keep up to PE_TRIP_FOES_MAX mapped placements whose packs the caller accepts, in room order.
  * Pass NULL for prepare to accept all mapped placements. */
 int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
-                int (*prepare)(const char *asset, int already_selected, const char *entrance, const void *ctx),
-                const void *ctx);
+                int (*prepare)(const char *asset, int already_selected, const char *entrance, void *ctx), void *ctx);
 /* On victory, record how many consecutive selected foes spawned and died. On
  * escape or loss pass 0. */
 void pe_trip_won(PeTripResult *t, int defeated);

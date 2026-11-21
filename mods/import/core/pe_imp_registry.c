@@ -324,9 +324,13 @@ const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id) {
     const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
     if (!colon) return NULL;
     const size_t prefix = (size_t)(colon - asset_id);
+    const char *dash = strchr(colon + 1, '-');
     for (int i = 0; i < s_kinds; i++)
         if (s_kind[i].starts && strlen(s_kind[i].game) == prefix &&
-            !strncmp(s_kind[i].game, asset_id, prefix) && !strcmp(s_kind[i].id, colon + 1))
+            !strncmp(s_kind[i].game, asset_id, prefix) &&
+            (!strcmp(s_kind[i].id, colon + 1) ||
+             (dash && strlen(s_kind[i].id) == (size_t)(dash - colon - 1) &&
+              !strncmp(s_kind[i].id, colon + 1, (size_t)(dash - colon - 1)))))
             return s_kind[i].starts;
     return NULL;
 }

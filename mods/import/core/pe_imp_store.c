@@ -47,8 +47,8 @@ int pe_imp_mkdirs(const char *path) {
 }
 
 /* ---- the sink a reader emits into ---- */
-typedef struct { uint32_t type; char id[PE_IMP_ID_MAX], name[PE_IMP_NAME_MAX]; void *obj; } Item;
-struct PeImpSink { Item item[MAX_ITEMS]; int items; };
+typedef struct { uint32_t type; char id[PE_IMP_ID_MAX], name[PE_IMP_NAME_MAX]; void *obj; int storage; } Item;
+struct PeImpSink { Item item[MAX_ITEMS]; int items, objects; };
 
 static unsigned schema_version(uint32_t type) {
     switch (type) {
@@ -132,8 +132,20 @@ int pe_imp_emit(PeImpSink *s, uint32_t type, const char *proposed, const char *n
     }
     Item *it = &s->item[s->items++];
     it->type = type, it->obj = obj;
+    it->storage = s->objects++;
     snprintf(it->id, sizeof it->id, "%s", proposed);
     snprintf(it->name, sizeof it->name, "%s", name ? name : proposed);
+    return 0;
+}
+
+int pe_imp_emit_alias(PeImpSink *s, const char *proposed, const char *name) {
+    if (!s || !s->items || s->items == MAX_ITEMS || !proposed || !local_id_ok(proposed)) return -1;
+    Item *previous = &s->item[s->items - 1];
+    Item *alias = &s->item[s->items++];
+    alias->type = previous->type;
+    alias->storage = previous->storage;
+    snprintf(alias->id, sizeof alias->id, "%s", proposed);
+    snprintf(alias->name, sizeof alias->name, "%s", name ? name : proposed);
     return 0;
 }
 
@@ -400,8 +412,9 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
     FILE *list = NULL;
     for (int i = 0; !rc && i < sink->items; i++) {
         Item *it = &sink->item[i];
+        if (!it->obj) continue;
         char sub[PE_IMP_PATH_MAX];
-        snprintf(sub, sizeof sub, "%s/%d", dir, i);
+        snprintf(sub, sizeof sub, "%s/%d", dir, it->storage);
         if (pe_imp_mkdirs(sub) || save_obj(it, sub, why, sizeof why)) rc = -1;
     }
     if (!rc) {
@@ -428,7 +441,7 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
                 Item *it = &sink->item[i];
                 fputs(i ? ",\n {\"id\": " : "{\"id\": ", list), pj_write_string(list, it->id);
                 fputs(", \"name\": ", list), pj_write_string(list, it->name);
-                fprintf(list, ", \"type\": \"%s\", \"dir\": \"%d\"}", pe_imp_type_name(it->type), i);
+                fprintf(list, ", \"type\": \"%s\", \"dir\": \"%d\"}", pe_imp_type_name(it->type), it->storage);
             }
             fputs("]\n", list);
             rc = fclose(list) ? -1 : 0;
@@ -438,7 +451,7 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
         for (int i = 0; i < sink->items; i++) {
             Source src = {{0}};
             snprintf(src.sha, sizeof src.sha, "%s", sha);
-            snprintf(src.dir, sizeof src.dir, "%d", i);
+            snprintf(src.dir, sizeof src.dir, "%d", sink->item[i].storage);
             snprintf(src.platform, sizeof src.platform, "%s", rd->platform);
             snprintf(src.image, sizeof src.image, "%s", image);
             snprintf(src.path, sizeof src.path, "%s", path);

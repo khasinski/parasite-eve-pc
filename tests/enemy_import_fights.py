@@ -243,11 +243,12 @@ def part_imported_room(exe, disc, work, re2_disc):
         status = game.picker()['Imported status']
         check('hp=' in status and 'foes=3' in status, f'imported room: expected three street foes, got {status}')
         log = (game.config / 'pe_mods.log').read_text(encoding='utf-8', errors='replace')
-        check(log.count('battle: EM1F starts with start_prone_2') == 1,
+        check(log.count('battle: EM1F-CDEMD0 starts with start_prone_2') == 1,
               'imported room: expected one prone zombie in the first street fight')
         packs = list((game.config / 'pe_enemies').glob('re2-em*/enemy.json'))
         check(len(packs) == 1 and (packs[0].parent / 'profile.json').is_file(),
               'imported room: no automatically built enemy pack and profile')
+        check(packs[0].parent.name == 're2-em1f-cdemd0', f'imported room: wrong Leon archive {packs[0]}')
         win_when_ready(game)
         wait_home(game)
         check_home(game, where, 'imported room')
@@ -279,8 +280,8 @@ def part_imported_room(exe, disc, work, re2_disc):
         else:
             raise Failed('mixed room: both imported enemies did not join')
         log = (game.config / 'pe_mods.log').read_text(encoding='utf-8', errors='replace')
-        check(all(f'battle: EM{kind} joins' in log for kind in ('12', '13')), 'mixed room: wrong actor models')
-        textures = re.findall(r'battle: EM1[23] texture at (\d+,\d+)', log)
+        check(all(f'battle: EM{kind}-CDEMD0 joins' in log for kind in ('12', '13')), 'mixed room: wrong actor models')
+        textures = re.findall(r'battle: EM1[23]-CDEMD0 texture at (\d+,\d+)', log)
         check(len(set(textures)) == 2, f'mixed room: expected separate texture origins, got {textures}')
         win_when_ready(game)
         wait_home(game)

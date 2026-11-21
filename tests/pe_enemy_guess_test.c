@@ -272,6 +272,36 @@ static void test_re3(const char *store) {
     }
 }
 
+static void test_re2_banks(const char *store, const char *first) {
+    const char *other = getenv("PE_TEST_RE2_OTHER_DISC");
+    if (!other || !*other) return;
+    scan(store, other, "re2");
+    scan(store, first, "re2");  /* verify aliases also survive a cached scan */
+    static const char *const ids[] = {"re2:enemy/em10-cdemd0", "re2:enemy/em10-cdemd1"};
+    static const char *const archives[] = {"CDEMD0.EMS", "CDEMD1.EMS"};
+    PeImpAsset *assets = NULL;
+    const int count = pe_imp_catalog_assets(store, "re2", &assets);
+    const PeImpAsset *bank[2] = {0};
+    for (int i = 0; i < count; i++)
+        for (int j = 0; j < 2; j++)
+            if (!strcmp(assets[i].id, ids[j])) bank[j] = &assets[i];
+    assert(bank[0] && bank[1] && strcmp(bank[0]->sha256, bank[1]->sha256));
+    for (int j = 0; j < 2; j++) {
+        char moves[PE_IMP_ID_MAX], why[200];
+        PeImpModel m;
+        PeImpAnimation a;
+        assert(strstr(bank[j]->path, archives[j]));
+        snprintf(moves, sizeof moves, "%s/moves", ids[j]);
+        assert(!pe_imp_catalog_model(store, ids[j], &m, why, sizeof why));
+        assert(!pe_imp_catalog_animation(store, moves, &a, why, sizeof why));
+        assert(m.bones == a.bones && a.moves > 0);
+        pe_imp_model_free(&m);
+        pe_imp_animation_free(&a);
+    }
+    free(assets);
+    printf("real re2: both campaign enemy aliases retain their own model and moves\n");
+}
+
 static void test_disc(const char *store, const char *env, const char *game) {
     const char *image = getenv(env);
     if (!image || !*image) { printf("real %s: skipped (no %s)\n", game, env); return; }
@@ -279,11 +309,13 @@ static void test_disc(const char *store, const char *env, const char *game) {
     else assert(!pe_imp_add_reader(&g_re1_emd_ps1) && !pe_imp_add_reader(&g_re1_monsters_ps1) && !pe_imp_set_naming("re1", g_re1_naming));
     assert(!pe_imp_set_enemy_defaults(game, PE_RE_ENEMY_YAW, PE_RE_ENEMY_SCALE));
     scan(store, image, game);
+    if (!strcmp(game, "re2")) test_re2_banks(store, image);
     PeImpAsset *as = NULL;
     int n = pe_imp_catalog_assets(store, game, &as), built = 0, partial = 0, refused = 0;
     for (int i = 0; i < n; i++) {
         PeImpEnemyGuess g;
         if (strcmp(as[i].type, pe_imp_type_name(PE_IMP_MODEL)) || !strstr(as[i].id, ":enemy/")) continue;
+        if (!strcmp(game, "re2") && (strstr(as[i].id, "-cdemd0") || strstr(as[i].id, "-cdemd1"))) continue;
         const int rc = guess_one(store, as[i].id, as[i].name, &g);
         if (rc < 0) refused++;
         else if (rc) partial++;

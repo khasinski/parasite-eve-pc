@@ -57,6 +57,9 @@ typedef struct PeRePlayApi {
      * flag is set if it has one, and the room's scripts see it die (a boss with no killed flag whose
      * death moves the story on). 0, or -1 if no placed enemy has that slot. */
     int (*defeated_slot)(uint8_t slot);
+    /* Optional in v1. Preferred archive suffix for the current room's enemy assets.
+     * NULL keeps the catalogue's default. The returned string is static. */
+    const char *(*enemy_archive)(void);
 } PeRePlayApi;
 
 #endif

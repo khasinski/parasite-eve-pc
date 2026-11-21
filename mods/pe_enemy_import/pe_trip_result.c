@@ -11,8 +11,7 @@ static int has_slot_api(const PeRePlayApi *api) {
 }
 
 int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
-                int (*prepare)(const char *asset, int already_selected, const char *entrance, const void *ctx),
-                const void *ctx) {
+                int (*prepare)(const char *asset, int already_selected, const char *entrance, void *ctx), void *ctx) {
     memset(t, 0, sizeof *t);
     if (!room || !room->game || strlen(room->game) >= sizeof t->game) return 0;
     strcpy(t->game, room->game);

@@ -180,6 +180,7 @@ static int play(unsigned scenario) {
     s.start();
     frames(1, 0);
     EXPECT(s.active && !strcmp(s.room, "re2:room/100") && !s.api->room(&room));
+    EXPECT(s.api->enemy_archive && !strcmp(s.api->enemy_archive(), scenario ? "cdemd1" : "cdemd0"));
     PeTripResult trip;
     {   /* a trip from here fights the room's own creature: RE2's kind -> model table picks it */
         char asset[96];

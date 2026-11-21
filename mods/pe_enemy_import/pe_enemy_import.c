@@ -11,6 +11,7 @@
  *      variables the trip changed go back as they were and Aya returns to where she stood.
  * Losing is the game's own Game Over, as in any fight; the picker forgets the trip then.
  * Rewards (EXP, items, BP) won in a picked fight are kept. */
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -239,7 +240,7 @@ static void pe_finish(const char *result) {
 
 static const PeRePlayApi *pe_imported_room_api(void) {
     const PeRePlayApi *api = pe_service_get(RE_PLAY_SERVICE, RE_PLAY_SERVICE_VERSION);
-    return api && api->struct_size >= sizeof *api && api->pause_for_battle &&
+    return api && api->struct_size >= offsetof(PeRePlayApi, defeated_slot) && api->pause_for_battle &&
            api->resume_after_battle ? api : NULL;
 }
 
@@ -296,14 +297,40 @@ static void pe_arrived(void) {
     pe_log("cheat_fight_picker", "spot map=%u spot=%u of %d at %d,%d", f->map, f->spot, n, x, z);
 }
 
-static int pe_add_room_pack(const char *asset, int already_selected, const char *entrance, const void *ctx) {
-    const PeEnemyBuildApi *b = ctx;
-    char pack[64], why[200] = "";
-    if (pe_enemy_pack_name(asset, pack, sizeof pack)) return 0;
-    if (!already_selected && b && b->struct_size >= sizeof *b && b->ensure(asset, why, sizeof why))
+typedef struct {
+    const PeEnemyBuildApi *build;
+    const char *archive;
+    char assets[PE_TRIP_FOES_MAX][PE_IMP_ID_MAX];
+    char packs[PE_TRIP_FOES_MAX][64];
+    int count;
+} PeRoomPacks;
+
+static int pe_try_room_pack(const PeEnemyBuildApi *b, const char *asset, const char *entrance,
+                            int quiet, char pack[64]) {
+    char why[200] = "";
+    if (pe_enemy_pack_name(asset, pack, 64)) return 0;
+    if (quiet && (!b || b->struct_size < sizeof *b)) return 0;
+    if (b && b->struct_size >= sizeof *b && b->ensure(asset, why, sizeof why)) {
+        if (quiet) return 0;
         pe_mod_log(MOD_ID, "the room's %s: no fresh build (%s); an older pack is used if there is one", asset, why);
-    if (!pe_enemy_battle_add_pack(pack, entrance)) return 0;
-    pe_mod_log(MOD_ID, "trip from an imported room: selected %s (pack %s)", asset, pack);
+    }
+    return pe_enemy_battle_add_pack(pack, entrance);
+}
+
+static int pe_add_room_pack(const char *asset, int already_selected, const char *entrance, void *ctx) {
+    PeRoomPacks *p = ctx;
+    if (already_selected)
+        for (int i = 0; i < p->count; i++)
+            if (!strcmp(p->assets[i], asset)) return pe_enemy_battle_add_pack(p->packs[i], entrance);
+    char variant[PE_IMP_ID_MAX];
+    const char *selected = asset;
+    char *pack = p->packs[p->count];
+    if (p->archive && snprintf(variant, sizeof variant, "%s-%s", asset, p->archive) < (int)sizeof variant &&
+        pe_try_room_pack(p->build, variant, entrance, 1, pack))
+        selected = variant;
+    else if (!pe_try_room_pack(p->build, asset, entrance, 0, pack)) return 0;
+    snprintf(p->assets[p->count++], PE_IMP_ID_MAX, "%s", asset);
+    pe_mod_log(MOD_ID, "trip from an imported room: selected %s (pack %s)", selected, pack);
     return 1;
 }
 
@@ -311,8 +338,9 @@ static void pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
     if (api->room(&room)) return;
     pe_enemy_battle_begin_roster();
-    const void *build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION);
-    if (!pe_trip_arm(&s_trip, &room, pe_add_room_pack, build))
+    PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION)};
+    if (api->struct_size >= sizeof *api && api->enemy_archive) packs.archive = api->enemy_archive();
+    if (!pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs))
         pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
 }
 

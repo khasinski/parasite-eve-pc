@@ -104,8 +104,14 @@ static int api_defeated_slot(uint8_t slot) {
 }
 static int pause_for_battle(void);
 static void resume_after_battle(void);
+static const char *api_enemy_archive(void) {
+    if (!s_playing || !s_session.game || strcmp(s_session.game->game, "re2")) return NULL;
+    /* bio2-ds EM_SET.C, Emd_load_file: Leon (including HUNK) and Claire use
+     * different enemy archives. Sce_em_set's Model_type controls animation handling. */
+    return s_session.player == 1 ? "cdemd1" : "cdemd0";
+}
 static const PeRePlayApi s_api = {
-    sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot
+    sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive
 };
 
 static void report_enemies(void) {
