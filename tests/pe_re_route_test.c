@@ -42,6 +42,7 @@ typedef struct {
     int typewriter;
     int nevent, event_zone[EVENTS], event_to[EVENTS];   /* examining zone event_zone took her to event_to */
     int checkpointed;
+    int unfinished;                     /* a zone took her away before search was done here */
 } Room;
 static Room s_room[ROOMS];
 static int s_progress = 1;              /* goes up with each item taken or used: locked doors are retried */
@@ -180,11 +181,18 @@ static int take_event(PeReSession *s, int zone) {
     return 0;
 }
 
+/* A zone of room `r` already known to take her elsewhere: the planner's, not search's */
+static int known_way(const Room *r, unsigned zone) {
+    for (int k = 0; k < r->nevent; k++) if (r->event_zone[k] == (int)zone) return 1;
+    return 0;
+}
+
 static void search(PeReSession *s, FILE *log) {
     Room *r = &s_room[key_of(s)];
     char why[200], name[48], here[8];
     if (r->searched_at == s_progress) return;
     r->searched_at = s_progress;
+    r->unfinished = 0;
     room_name(key_of(s), here, sizeof here);
     for (int pass = 0, took = 1; took && pass < 8; pass++) {
         uint32_t n = 0;
@@ -220,6 +228,7 @@ static void search(PeReSession *s, FILE *log) {
         if (s_tried_use[item & 0xFF] == s_progress) continue;
         double cx, cz, x, z;
         zone_centre(&t.zone, &cx, &cz);
+        if (!(t.zone.floor & 0x80)) s->floor = t.zone.floor;  /* on its floor */
         for (int k = 0; k < 4; k++) {
             s->facing = k * 1024;
             pe_re_front(cx, cz, s->facing + 2048, &x, &z);
@@ -244,7 +253,7 @@ static void search(PeReSession *s, FILE *log) {
         if (pe_imp_logic_trigger(s->logic, i, &t) || !pe_re_scd_live(&s->run, t.at) || (t.zone.sat & PE_RE_SAT_MANUAL) ||
             !(t.zone.sat & PE_RE_SAT_UNDER))
             continue;
-        if (pe_re_zone_kind(&s->run, t.zone.id, t.zone.sce, t.data) != PE_RE_ZONE_EVENT) continue;
+        if (pe_re_zone_kind(&s->run, t.zone.id, t.zone.sce, t.data) != PE_RE_ZONE_EVENT || known_way(r, t.zone.id)) continue;
         const int events = s->events, from = key_of(s);
         double cx, cz;
         zone_centre(&t.zone, &cx, &cz);
@@ -256,7 +265,7 @@ static void search(PeReSession *s, FILE *log) {
         else if (getenv("PE_TEST_RE_VERBOSE"))
             printf("    walked onto %s zone %u at %.0f %.0f (floor %d): step %d, %s\n", here, (unsigned)t.zone.id, cx, cz, s->floor,
                    (int)c, s->said[0] ? s->said : why);
-        if (key_of(s) != from) { note_event(from, (int)t.zone.id, key_of(s), log); return; }
+        if (key_of(s) != from) { note_event(from, (int)t.zone.id, key_of(s), log); r->searched_at = 0, r->unfinished = 1; return; }
     }
     /* everything a player can examine: events, messages, computers */
     for (uint32_t i = 0; i < n; i++) {
@@ -264,13 +273,15 @@ static void search(PeReSession *s, FILE *log) {
         if (pe_imp_logic_trigger(s->logic, i, &t) || !pe_re_scd_live(&s->run, t.at) || !(t.zone.sat & PE_RE_SAT_MANUAL))
             continue;
         const int kind = pe_re_zone_kind(&s->run, t.zone.id, t.zone.sce, t.data);
-        if (kind != PE_RE_ZONE_EVENT && kind != PE_RE_ZONE_MESSAGE && kind != PE_RE_ZONE_WINDOWS) continue;
+        if ((kind != PE_RE_ZONE_EVENT && kind != PE_RE_ZONE_MESSAGE && kind != PE_RE_ZONE_WINDOWS) || known_way(r, t.zone.id))
+            continue;
         const int events = s->events, from = key_of(s);
         examine(s, &t.zone, why, sizeof why);
         settle(s, 300);
         if (s->events != events) fprintf(log, "  %s: examined zone %u, its event played\n", here, (unsigned)t.zone.id);
         if (key_of(s) != from) {                          /* it took her somewhere: a way there, like a door */
             note_event(from, (int)t.zone.id, key_of(s), log);
+            r->searched_at = 0, r->unfinished = 1;        /* the rest next time she's here */
             return;                                       /* this room's zones aren't the ones loaded now */
         }
     }
@@ -361,6 +372,7 @@ static int plan(const PeReSession *s, int from, int *first_door, int *goal) {
         const Room *r = &s_room[k];
         for (int i = 0; i < DOORS; i++)
             if (keys ? key_door(s, r, i)
+                     : (r->unfinished && k != from) ? 1
                      : r->door_state[i] == DOOR_UNTRIED ? r->searched_at > 0
                                                        : r->door_state[i] != DOOR_OPENS && r->door_tried_at[i] < s_progress) {
                 *goal = k, *first_door = -1;
@@ -434,6 +446,7 @@ int main(void) {
             if (f) fwrite(bytes, 1, sizeof bytes, f), fclose(f);
         }
         search(&s, log);
+        if (key_of(&s) != here) continue;                       /* a zone took her elsewhere: start over there */
         if (s_room[here].typewriter && first_typewriter < 0) first_typewriter = here;
         for (int i = door_count(&s); i < DOORS; i++) s_room[here].door_state[i] = DOOR_OPENS, s_room[here].door_to[i] = here;
         int door, goal;
