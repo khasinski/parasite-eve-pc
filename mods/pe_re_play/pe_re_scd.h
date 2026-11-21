@@ -88,6 +88,7 @@ typedef struct {
     uint8_t status;                            /* 0 idle */
     int16_t proc;                              /* the main script's procedure it started on (-1 init) */
     int8_t work;                               /* work_set's object, -1 none */
+    int16_t spd[12];                           /* speed_set: speed x/y/z, turn x/y/z, then their accelerations */
     int8_t sub;                                /* gosub level */
     int8_t ifel[PE_RE_LEVELS], loop[PE_RE_LEVELS], loop_if[PE_RE_LEVELS][4];
     uint32_t pc, ret[PE_RE_LEVELS];

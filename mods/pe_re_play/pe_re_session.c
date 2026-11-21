@@ -290,6 +290,7 @@ PeReChange pe_re_session_tick(PeReSession *s) {
     if (s->run.player_set) {                               /* a script put her somewhere */
         const int16_t *me = s->run.works[0];
         s->x = me[PE_RE_MEMBER_POS_X], s->z = me[PE_RE_MEMBER_POS_Z];
+        s->floor = pe_re_floor_of(me[PE_RE_MEMBER_POS_Y]);   /* pos_set sets her height too: a lift's other floor */
         s->facing = pe_re_facing_of(me[PE_RE_MEMBER_CDIR_Y]);
         s->moved = 1;
     }

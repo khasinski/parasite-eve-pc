@@ -17,6 +17,7 @@
 #include "pe_imp_internal.h"
 #include "pe_imp_logic.h"
 #include "pe_imp_room.h"
+#include "pe_re_save.h"
 #include "pe_re_session.h"
 #include "pe_re_zone.h"
 #include "pe_src_re2.h"
@@ -28,6 +29,7 @@ static const char *s_store = "pe-re-route-test/store";
 
 #define ROOMS 2048                      /* stage << 8 | room */
 #define DOORS 32
+#define EVENTS 8                        /* zones that took her to another room, per room */
 #define MOVES_MAX 3000
 #define SETTLE 90                       /* frames of the room's scripts after coming in */
 
@@ -38,6 +40,8 @@ typedef struct {
     char door_said[DOORS][160];
     int searched_at;                    /* progress when its pickups and item spots were last done */
     int typewriter;
+    int nevent, event_zone[EVENTS], event_to[EVENTS];   /* examining zone event_zone took her to event_to */
+    int checkpointed;
 } Room;
 static Room s_room[ROOMS];
 static int s_progress = 1;              /* goes up with each item taken or used: locked doors are retried */
@@ -120,6 +124,7 @@ static int flags_changed(const PeReSession *s) {
 static PeReChange examine(PeReSession *s, const PeImpZone *zone, char *why, size_t n) {
     double cx, cz;
     zone_centre(zone, &cx, &cz);
+    if (!(zone->floor & 0x80)) s->floor = zone->floor;      /* on its floor (the stairs walked), as Go to that door does */
     PeReChange c = PE_RE_STAY;
     for (int k = 0; k < 5; k++) {
         double x = cx, z = cz;
@@ -145,6 +150,36 @@ static const char *room_name(int key, char *out, size_t n) {
 }
 
 /* In the room: everything in reach picked up, and held items used where the room takes them. */
+/* Examining zone `zone` in room `from` took her to `to`: remember it (the planner can use it) */
+static void note_event(int from, int zone, int to, FILE *log) {
+    Room *r = &s_room[from];
+    char a[8], b[8];
+    int k = 0;
+    while (k < r->nevent && r->event_zone[k] != zone) k++;
+    if (k == r->nevent && r->nevent < EVENTS) r->nevent++;
+    if (k < EVENTS) r->event_zone[k] = zone, r->event_to[k] = to;
+    if (!s_room[to].seen) {
+        s_room[to].seen = 1, s_room[to].parent = from, s_room[to].parent_door = -1, s_room[to].order = ++s_order;
+        fprintf(log, "%s -> %s (zone %d)\n", room_name(from, a, sizeof a), room_name(to, b, sizeof b), zone);
+    }
+}
+
+/* Examine zone `zone` of the room she's in again (a way found by search): 1 when she's elsewhere after */
+static int take_event(PeReSession *s, int zone) {
+    const int from = key_of(s);
+    uint32_t n = 0;
+    char why[200];
+    pe_imp_logic_section(s->logic, PE_IMP_LOGIC_TRIG, &n, NULL);
+    for (uint32_t i = 0; i < n; i++) {
+        PeImpTrigger t;
+        if (pe_imp_logic_trigger(s->logic, i, &t) || (int)t.zone.id != zone || !pe_re_scd_live(&s->run, t.at)) continue;
+        examine(s, &t.zone, why, sizeof why);
+        settle(s, 300);
+        if (key_of(s) != from) { settle(s, SETTLE); return 1; }
+    }
+    return 0;
+}
+
 static void search(PeReSession *s, FILE *log) {
     Room *r = &s_room[key_of(s)];
     char why[200], name[48], here[8];
@@ -203,6 +238,26 @@ static void search(PeReSession *s, FILE *log) {
             else s_progress++;
         }
     }
+    /* walk-on events: step into the middle of each (the game checks underfoot every frame) */
+    for (uint32_t i = 0; i < n; i++) {
+        PeImpTrigger t;
+        if (pe_imp_logic_trigger(s->logic, i, &t) || !pe_re_scd_live(&s->run, t.at) || (t.zone.sat & PE_RE_SAT_MANUAL) ||
+            !(t.zone.sat & PE_RE_SAT_UNDER))
+            continue;
+        if (pe_re_zone_kind(&s->run, t.zone.id, t.zone.sce, t.data) != PE_RE_ZONE_EVENT) continue;
+        const int events = s->events, from = key_of(s);
+        double cx, cz;
+        zone_centre(&t.zone, &cx, &cz);
+        if (!(t.zone.floor & 0x80)) s->floor = t.zone.floor;
+        pe_re_session_tick(s);
+        const PeReChange c = pe_re_session_step(s, s_store, cx, cz, 0, why, sizeof why);
+        settle(s, 300);
+        if (s->events != events) fprintf(log, "  %s: walked onto zone %u, its event played\n", here, (unsigned)t.zone.id);
+        else if (getenv("PE_TEST_RE_VERBOSE"))
+            printf("    walked onto %s zone %u at %.0f %.0f (floor %d): step %d, %s\n", here, (unsigned)t.zone.id, cx, cz, s->floor,
+                   (int)c, s->said[0] ? s->said : why);
+        if (key_of(s) != from) { note_event(from, (int)t.zone.id, key_of(s), log); return; }
+    }
     /* everything a player can examine: events, messages, computers */
     for (uint32_t i = 0; i < n; i++) {
         PeImpTrigger t;
@@ -210,10 +265,14 @@ static void search(PeReSession *s, FILE *log) {
             continue;
         const int kind = pe_re_zone_kind(&s->run, t.zone.id, t.zone.sce, t.data);
         if (kind != PE_RE_ZONE_EVENT && kind != PE_RE_ZONE_MESSAGE && kind != PE_RE_ZONE_WINDOWS) continue;
-        const int events = s->events;
+        const int events = s->events, from = key_of(s);
         examine(s, &t.zone, why, sizeof why);
         settle(s, 300);
         if (s->events != events) fprintf(log, "  %s: examined zone %u, its event played\n", here, (unsigned)t.zone.id);
+        if (key_of(s) != from) {                          /* it took her somewhere: a way there, like a door */
+            note_event(from, (int)t.zone.id, key_of(s), log);
+            return;                                       /* this room's zones aren't the ones loaded now */
+        }
     }
 }
 
@@ -228,7 +287,22 @@ static int take(PeReSession *s, int i, FILE *log) {
     r->door_zone[i] = d.zone.id;
     r->door_key[i] = d.lock_type && d.lock_type < 254 ? d.lock_type : 0;
     if (r->door_state[i] != DOOR_OPENS) r->door_to[i] = (int)((d.stage == PE_RE_STAGE_HERE ? s->stage : d.stage) << 8 | d.room);
-    if (!pe_re_scd_live(&s->run, d.at) || pe_re_zone_kind(&s->run, d.zone.id, d.zone.sce, NULL) != d.zone.sce) {
+    const int kind = pe_re_zone_kind(&s->run, d.zone.id, d.zone.sce, NULL);
+    if (pe_re_scd_live(&s->run, d.at) && (kind == PE_RE_ZONE_EVENT || kind == PE_RE_ZONE_MESSAGE)) {
+        examine(s, &d.zone, why, sizeof why);             /* a door its script made a scene (aot_reset) */
+        settle(s, 300);
+        if (key_of(s) != from) {                          /* a way on, like a door: take() finds it again */
+            r->door_state[i] = DOOR_OPENS, r->door_to[i] = key_of(s);
+            if (!s_room[key_of(s)].seen) {
+                s_room[key_of(s)].seen = 1, s_room[key_of(s)].parent = from, s_room[key_of(s)].parent_door = i;
+                s_room[key_of(s)].order = ++s_order;
+                fprintf(log, "%s -> %s (door %d, a scene)\n", room_name(from, a, sizeof a), room_name(key_of(s), b, sizeof b), i);
+            }
+            settle(s, SETTLE);
+            return 1;
+        }
+    }
+    if (!pe_re_scd_live(&s->run, d.at) || kind != d.zone.sce) {
         r->door_state[i] = DOOR_NOT_SET;                  /* the scripts haven't put it there (yet) */
         return 0;
     }
@@ -297,11 +371,10 @@ static int plan(const PeReSession *s, int from, int *first_door, int *goal) {
                 }
                 return 1;
             }
-        for (int i = 0; i < DOORS; i++)
-            if (r->door_state[i] == DOOR_OPENS && !seen[r->door_to[i]] && tail < ROOMS) {
-                const int to = r->door_to[i];
-                seen[to] = 1, prev[to] = k, prev_door[to] = i, queue[tail++] = to;
-            }
+        for (int i = 0; i < DOORS + r->nevent; i++) {         /* doors that open, then zones that took her */
+            const int to = i < DOORS ? (r->door_state[i] == DOOR_OPENS ? r->door_to[i] : -1) : r->event_to[i - DOORS];
+            if (to >= 0 && !seen[to] && tail < ROOMS) seen[to] = 1, prev[to] = k, prev_door[to] = i, queue[tail++] = to;
+        }
     }
     }
     return 0;
@@ -329,8 +402,19 @@ int main(void) {
     pe_re_session_end(&probe);
 
     static PeReSession s;
-    CHECK(!pe_re_session_start(&s, s_store, g, scenario, why, sizeof why));
-    if (s_fail) return 1;
+    const char *ckpt = getenv("PE_TEST_RE_CHECKPOINTS"), *start = getenv("PE_TEST_RE_START");
+    if (start && *start) {                                       /* from a checkpoint an earlier run saved */
+        static uint8_t bytes[PE_RE_SAVE_SIZE];
+        PeReSaved saved;
+        FILE *f = fopen(start, "rb");
+        CHECK(f && fread(bytes, 1, sizeof bytes, f) == sizeof bytes);
+        if (f) fclose(f);
+        CHECK(!pe_re_save_decode(bytes, &saved) && !pe_re_session_resume(&s, s_store, &saved, why, sizeof why));
+        if (!s_fail) printf("started from %s\n", start);
+    } else {
+        CHECK(!pe_re_session_start(&s, s_store, g, scenario, why, sizeof why));
+    }
+    if (s_fail) { printf("start: %s\n", why); return 1; }
     FILE *log = stdout;
     s_log = log;
     printf("RE2 %s, from the street:\n", scenario ? "Claire" : "Leon");
@@ -340,6 +424,15 @@ int main(void) {
     while (moves < MOVES_MAX) {
         const int here = key_of(&s);
         if (flags_changed(&s)) s_progress++;
+        if (ckpt && *ckpt && !s_room[here].checkpointed) {       /* PE_TEST_RE_CHECKPOINTS: this room's first visit */
+            static uint8_t bytes[PE_RE_SAVE_SIZE];
+            char path[600];
+            s_room[here].checkpointed = 1;
+            snprintf(path, sizeof path, "%s/%s.resave", ckpt, room_name(here, a, sizeof a));
+            pe_re_save_encode(&s, 1, bytes);
+            FILE *f = fopen(path, "wb");
+            if (f) fwrite(bytes, 1, sizeof bytes, f), fclose(f);
+        }
         search(&s, log);
         if (s_room[here].typewriter && first_typewriter < 0) first_typewriter = here;
         for (int i = door_count(&s); i < DOORS; i++) s_room[here].door_state[i] = DOOR_OPENS, s_room[here].door_to[i] = here;
@@ -349,6 +442,17 @@ int main(void) {
             static int stuck_at = -1;
             if (stuck_at == s_progress) break;
             stuck_at = s_progress;
+            {   /* a fight the way on waits for (a boss): she wins it, as the game's battle would */
+                PeReEnemyPlacement foes[32];
+                const int nfoes = pe_re_session_enemies(&s, foes, 32);
+                int beaten = 0;
+                for (int k = 0; k < nfoes; k++) beaten += !pe_re_session_defeated(&s, foes[k].killed_flag);
+                if (beaten) {
+                    fprintf(log, "  %s: fought and beat %d enemies\n", room_name(here, a, sizeof a), beaten);
+                    settle(&s, 300);
+                    s_progress++;
+                }
+            }
             for (int i = 0; i < DOORS; i++)
                 if (s_room[here].door_state[i] != DOOR_OPENS) s_room[here].door_tried_at[i] = 0;
             fprintf(log, "  stuck in %s: its doors again\n", room_name(here, a, sizeof a));
@@ -380,7 +484,11 @@ int main(void) {
             if (take(&s, i, log)) continue;
         } else {
             moves++;
-            if (!take(&s, door, log)) s_room[here].door_state[door] = DOOR_LOCKED;   /* it opened before: now it won't */
+            if (door >= DOORS) {                                  /* a zone that took her before */
+                if (!take_event(&s, s_room[here].event_zone[door - DOORS])) s_room[here].nevent = door - DOORS;   /* not now */
+            } else if (!take(&s, door, log)) {
+                s_room[here].door_state[door] = DOOR_LOCKED;      /* it opened before: now it won't */
+            }
         }
     }
 
@@ -441,7 +549,7 @@ int main(void) {
     } else {
         printf("first typewriter: not reached\n");
     }
-    CHECK(rooms >= 5 && first_typewriter >= 0);
+    CHECK(start && *start ? rooms >= 1 : rooms >= 5 && first_typewriter >= 0);   /* a checkpoint may be past the typewriters */
     {   /* what the room scripts still skip, most met first (what events the runtime doesn't play yet) */
         int order[256];
         for (int i = 0; i < 256; i++) order[i] = i;

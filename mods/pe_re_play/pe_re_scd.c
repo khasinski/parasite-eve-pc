@@ -19,6 +19,7 @@ enum {
     OP_CUT_AUTO = 0x3C, OP_PLC_DEST = 0x40, OP_WORK_SET = 0x2E, OP_POS_SET = 0x32, OP_DIR_SET = 0x33,
     OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
     OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37, OP_PLC_RET = 0x42,
+    OP_SPEED_SET = 0x2F, OP_ADD_SPEED = 0x30, OP_ADD_ASPEED = 0x31,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -92,6 +93,7 @@ static void task_start(PeReScdTask *t, uint32_t pc) {      /* Event_init */
     t->status = pc != 0;
     t->ifel[0] = -1, t->loop[0] = -1;
     t->work = 0;
+    memset(t->spd, 0, sizeof t->spd);
     t->pc = pc;
 }
 
@@ -411,6 +413,22 @@ static int step(Vm *vm, PeReScdTask *t) {
         t->pc += n;
         return CONTINUE;
     }
+    case OP_SPEED_SET:                                     /* one of the task's 12 speeds */
+        if (ins[1] < 12) t->spd[ins[1]] = s16(ins + 2);
+        t->pc += n;
+        return CONTINUE;
+    case OP_ADD_SPEED:                                     /* its object moves and turns by them */
+        for (int k = 0; k < 3; k++) {
+            *member(vm, t, PE_RE_MEMBER_POS_X + (unsigned)k) += t->spd[k];
+            *member(vm, t, 14 + (unsigned)k) += t->spd[3 + k];
+        }
+        if (t->work == 0) vm->run->player_set = 1;
+        t->pc += n;
+        return CONTINUE;
+    case OP_ADD_ASPEED:                                    /* the speeds change by their accelerations */
+        for (int k = 0; k < 6; k++) t->spd[k] = (int16_t)(t->spd[k] + t->spd[6 + k]);
+        t->pc += n;
+        return CONTINUE;
     case OP_PLC_RET:                                       /* back to normal: no more arrival flag */
         if (t->work >= 0) vm->run->arrived[t->work] = 0;
         t->pc += n;
@@ -509,15 +527,23 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
 
 /* Enemy stand-ins. Enemies' own code doesn't run here, but a few scenes wait on what it does to a
  * field the scripts read. Each stand-in does just that part, after about how long it takes in game:
- * - enemy 0x31 (a G form): bit 0x10 of Sce_free[0] is "come out of pod n" (the low nibble); its
- *   appearing routine clears the bit when it's out (EM31.C Em31_mv08_br / Em31_mv08). 5-00's sky
- *   tram scene waits on it four times. */
+ * - enemy 0x31 (a G form), Sce_free[0]:
+ *   bit 0x10 is "come out of pod n" (the low nibble); its appearing routine clears the bit when it's
+ *   out (EM31.C Em31_mv08_br / Em31_mv08). 5-00's sky tram scene waits on it four times.
+ *   bit 1 starts it breaking out of its shell; it sets bit 2 when it's out (EM31.C, the routine
+ *   that checks Sce_free0 & 1). 5-09's scene waits on that. */
 static void enemy_standins(PeReScdRun *run) {
     for (int n = 0; n < 16; n++) {
         int16_t *w = run->works[2 + n];
-        if (!w[0] || w[PE_RE_MEMBER_ID] != 0x31 || !(w[PE_RE_MEMBER_SCE_FREE0] & 0x10)) { run->em_busy[n] = 0; continue; }
-        if (!run->em_busy[n]) run->em_busy[n] = 60;           /* the order's just come in: about a second */
-        else if (!--run->em_busy[n]) w[PE_RE_MEMBER_SCE_FREE0] &= ~0x10;
+        int16_t *f = &w[PE_RE_MEMBER_SCE_FREE0];
+        int order = 0, frames = 0;
+        if (w[0] && w[PE_RE_MEMBER_ID] == 0x31) {
+            if (*f & 0x10) order = 0x10, frames = 60;              /* out of the pod: about a second */
+            else if ((*f & 1) && !(*f & 2)) order = 1, frames = 90; /* out of the shell: a second and a half */
+        }
+        if (!order) { run->em_busy[n] = 0; continue; }
+        if (!run->em_busy[n]) run->em_busy[n] = (uint8_t)frames;    /* the order's just come in */
+        else if (!--run->em_busy[n]) *f = (int16_t)(order == 0x10 ? *f & ~0x10 : *f | 2);
     }
 }
 
