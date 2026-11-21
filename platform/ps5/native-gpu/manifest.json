@@ -3871,7 +3871,7 @@
     },
     {
       "path": "mods/host/debug/pe_debug_settings.c",
-      "sha256": "0cc0ef9245101b4f10a770cade07e84c4457116fb97ce405eb3d12edeb272c3b"
+      "sha256": "094620e19514a5533cde437e4c63f14ca9bc56c32b6034f08b5f222e834dbe79"
     },
     {
       "path": "mods/host/debug/pe_debug_setup.c",
@@ -5067,7 +5067,7 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_battle.c",
-      "sha256": "773e2eb93e610edb464142c60548db0647aa9487545014bbe488ce63ca910e01"
+      "sha256": "963c9f0de558b113fabe35d847eb789a88a18b8b39ffca28c28991cdc7db5792"
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_build.c",

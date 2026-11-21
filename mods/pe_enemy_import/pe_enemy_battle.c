@@ -173,6 +173,19 @@ const char *pe_enemy_choice_name(unsigned i) {
     return i <= (unsigned)s_listed ? s_list[i - 1].name : "";
 }
 
+int pe_enemy_battle_pack_path(int choice, char *out, size_t size) {
+    if (choice <= 0 || choice > s_listed) return -1;
+    const int written = snprintf(out, size, "%s/%s", s_dir, s_list[choice - 1].folder);
+    return written < 0 || (size_t)written >= size ? -1 : 0;
+}
+
+static int pe_pack_height(const PeEnemyPack *pack) {
+    int top = 0;
+    for (int i = 0; i < pack->vertices; i++)
+        if (-pack->vertex[i].y > top) top = -pack->vertex[i].y;
+    return top > 50 ? top : 500;
+}
+
 static void pe_free_resources(void) {
     for (int i = 0; i < s_resource_count; i++) pe_enemy_pack_free(&s_resources[i].pack);
     s_resource_count = 0;
@@ -198,10 +211,7 @@ static PeBattlePack *pe_load(const char *dir) {
         return NULL;
     }
     snprintf(resource->path, sizeof resource->path, "%s", dir);
-    int top = 0;
-    for (int i = 0; i < pack->vertices; i++)
-        if (-pack->vertex[i].y > top) top = -pack->vertex[i].y;
-    resource->height = top > 50 ? top : 500;
+    resource->height = pe_pack_height(pack);
     resource->next = NULL;
     resource->uploaded = 0;
     s_resource_count++;
@@ -209,6 +219,22 @@ static PeBattlePack *pe_load(const char *dir) {
                pack->folder, pack->name, pack->bones, pack->vertices, pack->triangles, pack->anims,
                pack->attacks, pack->hp);
     return resource;
+}
+
+int pe_enemy_battle_preview(PeEnemyPack *pack) {
+    if (s.active || s_armed || pack->tex_w > 2 * PE_TEX_W || (pack->tex_w & 1) ||
+        pack->tex_h > PE_TEX_H || pack->palettes > PE_CLUTS_MAX) return -1;
+    pe_free_resources();
+    PeBattlePack *resource = &s_resources[s_resource_count++];
+    resource->pack = *pack;
+    resource->path[0] = 0;
+    resource->height = pe_pack_height(pack);
+    resource->next = NULL;
+    resource->uploaded = 0;
+    s_roster[0] = resource;
+    s_entrance[0].pose = s_entrance[0].wake = -1;
+    s_send_away = s_count = s_armed = 1;
+    return 0;
 }
 
 static PeBattlePack *pe_load_form(const char *asset) {
@@ -263,7 +289,7 @@ void pe_enemy_battle_arm(int choice, int count, int send_away) {
     s_count = count < 1 ? 1 : count > PE_FOES_MAX ? PE_FOES_MAX : count;
     s_send_away = send_away;
     char dir[1200];
-    snprintf(dir, sizeof dir, "%s/%s", s_dir, s_list[choice - 1].folder);
+    if (pe_enemy_battle_pack_path(choice, dir, sizeof dir)) return;
     PeBattlePack *resource = pe_load(dir);
     if (!resource) return;
     pe_load_forms(resource);

@@ -19,6 +19,9 @@
 #include "pe_encounter.h"
 #include "pe_enemy_battle.h"
 #include "pe_enemy_build.h"
+#include "pe_imp_guess.h"
+#include "pe_imp_fit.h"
+#include <SDL3/SDL.h>
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
@@ -38,6 +41,7 @@
 
 #define MOD_ID "pe_enemy_import"
 #define PE_PAGE_FIGHTS "Fights"
+#define PE_PROFILE_PAGE "Enemy profile"
 #define PE_VAR_STORY 74
 #define PE_VAR_COUNT 512
 #define PE_VAR_BATTLE_FLAGS 10
@@ -124,7 +128,7 @@ static int s_area, s_pick, s_enemy, s_enemy_count, s_room_enemies;
 static const char *const k_counts[] = {"1", "2", "3"};
 static const char *const k_room_enemies[] = {"Fight too", "Sent away"};
 static struct {
-    int state, fight, frames, travel, same_room, live_enemies, saw_enemies, imported_room_paused;
+    int state, fight, frames, travel, same_room, live_enemies, saw_enemies, imported_room_paused, preview;
     unsigned origin, target;
     int x, z, yaw;
     uintptr_t roll_next;   /* the forced roll's PeHookScriptRandom.next */
@@ -354,7 +358,7 @@ static void pe_leave(void) {
     }
     const PeRePlayApi *api = pe_imported_room_api();
     if (api) {
-        pe_room_creature(api);                             /* and its own creature in the fight */
+        if (!s.preview) pe_room_creature(api);
         const int paused = api->pause_for_battle();
         if (paused < 0) {
             pe_finish("the imported room is busy");
@@ -493,16 +497,203 @@ static int pe_on_new_game(void *ctx, void *user) {
     return 0;
 }
 
-static void pe_start(void) {
+static int pe_ready_fight(void) {
     int f = pe_fight_index(s_area, s_pick);
-    if (!pe_game_loaded()) { pe_toast("Fights: load a game first"); return; }
-    if (f < 0) return;
-    if (s.state != PE_IDLE) { pe_toast("Fights: a fight is already on its way"); return; }
+    if (!pe_game_loaded()) { pe_toast("Fights: load a game first"); return -1; }
+    if (s.state != PE_IDLE) { pe_toast("Fights: a fight is already on its way"); return -1; }
+    return f;
+}
+
+static void pe_begin_fight(int f, int preview) {
     s.fight = f;
     s.live_enemies = 0;
-    pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);   /* the room's creature may take over */
+    s.preview = preview;
     s_trip.armed = 0;
     s.state = PE_LEAVE;   /* on the next free field frame, once the panel closes */
+}
+
+static void pe_start(void) {
+    const int f = pe_ready_fight();
+    if (f < 0) return;
+    pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
+    pe_begin_fight(f, 0);
+}
+
+static struct {
+    char path[1240], asset[PE_IMP_ID_MAX], store[1100];
+    PeImpEnemyGuess profile;
+    PeImpAnimation moves;
+    SDL_Time modified;
+    int hp, speed, move, loaded;
+} s_edit;
+static char s_edit_status[200] = "Choose an imported enemy on the Fights page.";
+
+static void pe_edit_message(const char *message) {
+    snprintf(s_edit_status, sizeof s_edit_status, "%s", message);
+    pe_toast(s_edit_status);
+}
+
+static void pe_edit_load(void) {
+    char dir[1200], id[PE_IMP_ID_MAX], why[200];
+    PeEnemyPack pack;
+    pe_imp_animation_free(&s_edit.moves);
+    s_edit.loaded = 0;
+    if (pe_enemy_battle_pack_path(s_enemy, dir, sizeof dir)) {
+        pe_edit_message("Choose an imported enemy on the Fights page.");
+        return;
+    }
+    if (pe_enemy_pack_load(&pack, dir, why, sizeof why)) { pe_edit_message(why); return; }
+    snprintf(s_edit.asset, sizeof s_edit.asset, "%s", pack.source);
+    pe_enemy_pack_free(&pack);
+    const char *colon = strchr(s_edit.asset, ':');
+    if (!colon || pe_mod_path(s_edit.store, sizeof s_edit.store, "import/store")) {
+        pe_edit_message("Build this enemy from a scanned disc before editing its profile.");
+        return;
+    }
+    snprintf(s_edit.path, sizeof s_edit.path, "%s/profile.json", dir);
+    SDL_PathInfo info;
+    if (!SDL_GetPathInfo(s_edit.path, &info)) { pe_edit_message("This pack has no editable profile."); return; }
+    if (pe_imp_enemy_profile_load(s_edit.path, &s_edit.profile, why, sizeof why)) { pe_edit_message(why); return; }
+    snprintf(id, sizeof id, "%.*s:%s", (int)(colon - s_edit.asset), s_edit.asset, s_edit.profile.p.moves);
+    if (pe_imp_catalog_animation(s_edit.store, id, &s_edit.moves, why, sizeof why)) { pe_edit_message(why); return; }
+    s_edit.modified = info.modify_time;
+    s_edit.hp = s_edit.profile.p.hp;
+    s_edit.speed = s_edit.profile.p.speed;
+    s_edit.move = -1;
+    s_edit.loaded = 1;
+    pe_edit_message("Profile loaded. Changes are held until you apply them.");
+}
+
+static int pe_edit_hp(void) { return s_edit.hp; }
+static int pe_edit_speed(void) { return s_edit.speed; }
+static int pe_edit_move(void) { return s_edit.move; }
+static int pe_edit_set_hp(int value) { if (!s_edit.loaded) return 0; s_edit.hp = value; return 1; }
+static int pe_edit_set_speed(int value) { if (!s_edit.loaded) return 0; s_edit.speed = value; return 1; }
+static int pe_edit_set_move(int value) {
+    if (!s_edit.loaded || value < -1 || value >= (int)s_edit.moves.moves) return 0;
+    const int step = value < s_edit.move ? -1 : 1;
+    while (value >= 0 && value < (int)s_edit.moves.moves && !s_edit.moves.move[value].frames) value += step;
+    if (value >= (int)s_edit.moves.moves) return 0;
+    s_edit.move = value;
+    return 1;
+}
+
+static int pe_edit_attack_move(void) {
+    if (s_edit.move >= 0) return s_edit.move;
+    const PeImpEnemyProfile *p = &s_edit.profile.p;
+    for (int i = 0; p->attack[0].anim && i < PE_IMP_ENEMY_ANIMS && p->anim[i].name; i++)
+        if (!strcmp(p->attack[0].anim, p->anim[i].name)) return p->anim[i].move;
+    return -1;
+}
+
+static int pe_edit_draft(PeImpEnemyProfile *draft) {
+    *draft = s_edit.profile.p;
+    draft->hp = s_edit.hp;
+    draft->speed = s_edit.speed;
+    if (s_edit.move < 0) return 0;
+    const char *original = draft->attack[0].anim;
+    int shared = original && (!strcmp(original, "idle") || !strcmp(original, "walk") ||
+                              !strcmp(original, "hurt") || !strcmp(original, "die"));
+    for (int j = 1; original && j < PE_IMP_ENEMY_ATTACKS && draft->attack[j].anim; ++j)
+        if (!strcmp(original, draft->attack[j].anim)) shared = 1;
+    int i = 0;
+    while (i < PE_IMP_ENEMY_ANIMS && draft->anim[i].name &&
+           (!original || shared || strcmp(draft->anim[i].name, original))) i++;
+    if (i == PE_IMP_ENEMY_ANIMS) { pe_edit_message("This profile has no free animation role for an edited attack."); return -1; }
+    if (!original) draft->attack[0].power = 20;
+    if (!draft->anim[i].name) {
+        for (int j = 0; j < i; ++j)
+            if (!strcmp(draft->anim[j].name, "edited_attack")) {
+                pe_edit_message("The edited attack name is already in use.");
+                return -1;
+            }
+        draft->anim[i].name = "edited_attack";
+    }
+    draft->attack[0].anim = draft->anim[i].name;
+    draft->anim[i].move = s_edit.move;
+    draft->attack[0].hit = draft->attack[0].range = 0;
+    return 0;
+}
+
+static void pe_edit_preview(void) {
+    if (!s_edit.loaded) { pe_edit_message("Load an enemy profile first."); return; }
+    const int move = pe_edit_attack_move(), f = pe_ready_fight();
+    if (f < 0) return;
+    if (move < 0) { pe_edit_message("Choose an attack move first."); return; }
+    char why[200];
+    PeImpModel model;
+    if (pe_imp_fit(s_edit.store, s_edit.asset, PE_IMP_USE_ENEMY, &model, NULL, why, sizeof why)) {
+        pe_edit_message(why);
+        return;
+    }
+    const PeImpEnemyProfile *profile = &s_edit.profile.p;
+    PeImpEnemyProfile preview = {.name = profile->name, .height = profile->height, .yaw = profile->yaw,
+        .hp = s_edit.hp, .defense = profile->defense, .charge = profile->charge, .radius = profile->radius,
+        .anim = {{"idle", 0}, {"preview", move}}};
+    for (int i = 0; i < PE_IMP_ENEMY_ANIMS && profile->anim[i].name; ++i)
+        if (!strcmp(profile->anim[i].name, "idle")) preview.anim[0].move = profile->anim[i].move;
+    PeEnemyPack pack;
+    PeEnemyBuildInfo info;
+    const int rc = pe_enemy_build(&model, &s_edit.moves, &preview, NULL, 0, NULL, &pack, &info, why, sizeof why);
+    pe_imp_model_free(&model);
+    if (rc) { pe_edit_message(why); return; }
+    pack.role[PE_ANIM_IDLE] = pe_enemy_pack_anim(&pack, "preview");
+    if (pe_enemy_battle_preview(&pack)) {
+        pe_enemy_pack_free(&pack);
+        pe_edit_message("That move could not be previewed in the current game state.");
+        return;
+    }
+    pe_mod_log(MOD_ID, "previewing %s source move %d", s_edit.asset, move);
+    pe_begin_fight(f, 1);
+    pe_mod_panel_close();
+}
+
+static void pe_edit_apply(void) {
+    if (!s_edit.loaded) { pe_edit_message("Load an enemy profile first."); return; }
+    if (s.state != PE_IDLE || pe_in_battle()) { pe_edit_message("Finish the current fight before rebuilding."); return; }
+    const PeEnemyBuildApi *api = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION);
+    if (!api || api->struct_size < sizeof *api) { pe_edit_message("The importer is unavailable."); return; }
+    SDL_PathInfo info;
+    char why[200], temporary[1300], backup[1300];
+    if (!SDL_GetPathInfo(s_edit.path, &info) || info.modify_time != s_edit.modified) {
+        pe_edit_message("The profile changed on disk. Load it again before editing.");
+        return;
+    }
+    if (api->ensure(s_edit.asset, why, sizeof why)) { pe_edit_message(why); return; }
+    if (!SDL_GetPathInfo(s_edit.path, &info) || info.modify_time != s_edit.modified) {
+        pe_edit_message("The importer refreshed this profile. Load it again to edit the new version.");
+        return;
+    }
+    PeImpEnemyProfile draft;
+    if (pe_edit_draft(&draft)) return;
+    snprintf(temporary, sizeof temporary, "%s.edit.tmp", s_edit.path);
+    snprintf(backup, sizeof backup, "%s.edit.bak", s_edit.path);
+    if (pe_imp_enemy_profile_save(&draft, "Edited in Fights > Enemy profile.", temporary, why, sizeof why)) {
+        pe_edit_message(why);
+        return;
+    }
+    if (!SDL_CopyFile(s_edit.path, backup) || !SDL_RenamePath(temporary, s_edit.path)) {
+        SDL_RemovePath(temporary);
+        pe_edit_message("Could not replace profile.json.");
+        return;
+    }
+    if (api->ensure(s_edit.asset, why, sizeof why)) {
+        char ignored[200];
+        if (SDL_RenamePath(backup, s_edit.path)) api->ensure(s_edit.asset, ignored, sizeof ignored);
+        s_edit.loaded = 0;
+        pe_edit_message(why);
+        return;
+    }
+    SDL_RemovePath(backup);
+    if (SDL_GetPathInfo(s_edit.path, &info)) s_edit.modified = info.modify_time;
+    if (pe_imp_enemy_profile_load(s_edit.path, &s_edit.profile, why, sizeof why)) s_edit.loaded = 0;
+    s_edit.move = -1;
+    pe_edit_message("Profile saved and enemy pack rebuilt.");
+}
+
+static void pe_edit_text(char *out, unsigned size) { snprintf(out, size, "%s", s_edit_status); }
+static void pe_edit_name(char *out, unsigned size) {
+    snprintf(out, size, "%s", s_edit.loaded ? s_edit.profile.p.name : "-");
 }
 
 static void pe_status_text(char *out, unsigned size) { snprintf(out, size, "%s", k_state_names[s.state]); }
@@ -539,6 +730,16 @@ static int enemy_import_init(void) {
     pe_menu_register_info(0, "Status", "What the picker is doing.", pe_status_text);
     pe_menu_register_info(0, "Last fight", "How the last picked fight ended.", pe_last_text);
     pe_menu_register_info(0, "Imported status", "The imported enemy in the picked fight.", pe_enemy_text);
+    pe_menu_page(PE_PROFILE_PAGE, "Tune an imported enemy and preview its attack in the selected fight.", 10);
+    pe_menu_register_action(PE_PROFILE_PAGE, "Load selected enemy", "Loads the enemy selected on the Fights page.", pe_edit_load);
+    pe_menu_register_info(PE_PROFILE_PAGE, "Editing", "The loaded profile.", pe_edit_name);
+    pe_menu_register_live_int(PE_PROFILE_PAGE, "HP", "Maximum hit points.", 1, 99999, 1, pe_edit_hp, pe_edit_set_hp);
+    pe_menu_register_live_int(PE_PROFILE_PAGE, "Speed", "Movement per frame.", 0, 200, 1, pe_edit_speed, pe_edit_set_speed);
+    pe_menu_register_live_int(PE_PROFILE_PAGE, "Attack move", "Source animation index for the first attack. -1 keeps the current move.", -1,
+                              PE_IMP_ANIM_MOVES_MAX - 1, 1, pe_edit_move, pe_edit_set_move);
+    pe_menu_register_action(PE_PROFILE_PAGE, "Preview attack", "Loops the move in the selected fight. You can defeat the preview or escape.", pe_edit_preview);
+    pe_menu_register_action(PE_PROFILE_PAGE, "Apply and rebuild", "Saves and rebuilds the enemy pack.", pe_edit_apply);
+    pe_menu_register_info(PE_PROFILE_PAGE, "Editor status", "Profile editor status.", pe_edit_text);
     pe_menu_begin(0);
     return 0;
 }

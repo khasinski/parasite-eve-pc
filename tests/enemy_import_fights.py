@@ -211,7 +211,40 @@ def part_win(game):
     print(f'win: M030 spot 2 started with {ids}, won, back home at {where}')
 
 
-def part_imported_room(exe, disc, work, re2_disc, boss_forms=False):
+def part_profile_editor(game, profile_path):
+    before = profile_path.read_bytes()
+    game.ask('ini-set Fights/Imported enemy 17')
+    page = 'Fights/Enemy profile'
+    game.ask(f'mod-action {page}/Load selected enemy')
+    game.ask(f'mod-set {page}/HP 123')
+    game.ask(f'mod-set {page}/Speed 5')
+    game.ask(f'mod-set {page}/Attack move 0')
+    game.ask(f'mod-action {page}/Preview attack')
+    check(wait_battle(game) is not None, 'profile editor: the preview did not start')
+    end = game.vblank + 3000
+    while game.vblank < end:
+        state = game.battle()
+        if len(state['enemies']) == 1 and state['enemies'][0]['type'] == 0xEE:
+            check(state['enemies'][0]['max_hp'] == 123, state)
+            break
+        game.adv(10)
+    else:
+        raise Failed('profile editor: no preview actor')
+    check(profile_path.read_bytes() == before, 'profile editor: preview wrote to the profile')
+    win_when_ready(game)
+    wait_home(game)
+    game.ask(f'mod-action {page}/Apply and rebuild')
+    check(game.picker()['Editor status'] == 'Profile saved and enemy pack rebuilt.', game.picker())
+    edited = json.loads(profile_path.read_text(encoding='utf-8'))
+    check(edited['hp'] == 123 and edited['behavior']['speed'] == 5, edited)
+    check(edited['anims'][edited['attacks'][0]['anim']] == 0, edited)
+    built = json.loads(profile_path.with_name('enemy.json').read_text(encoding='utf-8'))
+    check(built['hp'] == 123 and built['behavior']['speed'] == 5, built)
+    game.ask('ini-set Fights/Imported enemy 0')
+    print('profile editor: previewed a source move without saving, then applied HP, speed and attack')
+
+
+def part_imported_room(exe, disc, work, re2_disc, boss_forms=False, profile_editor=False):
     def setup(config):
         folders = config / 'import' / 'folders.txt'
         folders.parent.mkdir()
@@ -267,6 +300,12 @@ def part_imported_room(exe, disc, work, re2_disc, boss_forms=False):
               int(after['Enemies'].split()[0]) == int(before['Enemies'].split()[0]) - 3, (before, after))
         check('imported room: 3 selected placements beaten' in game.picker_log(), 'imported room: wrong defeat count')
         print('imported room: three street foes joined and were defeated, and Aya returned to the same room and pose')
+        if profile_editor:
+            part_profile_editor(game, packs[0].parent / 'profile.json')
+            resumed = room_rows(game)
+            check(resumed['Status'] == after['Status'] and resumed['Enemies'] == after['Enemies'],
+                  'profile editor: preview changed the source room')
+            check_home(game, where, 'profile editor preview')
         after_win = after
         part_run(game)
         after = room_rows(game)
@@ -451,12 +490,13 @@ def main():
         return 77
     work.mkdir(parents=True, exist_ok=True)
     try:
-        if '--imported-room' in sys.argv or '--boss-forms' in sys.argv:
+        if any(flag in sys.argv for flag in ('--imported-room', '--boss-forms', '--profile-editor')):
             re2_disc = os.getenv('PE_TEST_RE2_DISC')
             if not re2_disc or not Path(re2_disc).is_file():
                 print('PE_TEST_RE2_DISC is not set: skipped')
                 return 77
-            part_imported_room(exe, disc, work, Path(re2_disc).resolve(), '--boss-forms' in sys.argv)
+            part_imported_room(exe, disc, work, Path(re2_disc).resolve(), '--boss-forms' in sys.argv,
+                               '--profile-editor' in sys.argv)
         elif '--all' in sys.argv:
             only = None   # --only AREA:FIGHT,... reruns some fights
             if '--only' in sys.argv:
