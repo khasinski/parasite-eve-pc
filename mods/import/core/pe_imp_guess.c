@@ -316,6 +316,14 @@ int pe_imp_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char 
     return 0;
 }
 
+int pe_imp_enemy_known_strength(const char *asset_id, PeImpEnemyProfile *p) {
+    int life = 0, power = 0;
+    if (pe_imp_enemy_strength(asset_id, &life, &power)) return 0;
+    p->hp = clampi(life, 1, 99999), p->exp = clampi(p->hp / 6.0, 5, 999);
+    for (int k = 0; power && k < PE_IMP_ENEMY_ATTACKS && p->attack[k].anim; k++) p->attack[k].power = clampi(power, 1, 999);
+    return 1;
+}
+
 /* ---- the profile as a file ---- */
 int pe_imp_enemy_profile_save(const PeImpEnemyProfile *p, const char *note, const char *path, char *why, size_t n) {
     FILE *f = fopen(path, "wb");

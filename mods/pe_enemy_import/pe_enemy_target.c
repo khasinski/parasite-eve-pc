@@ -95,6 +95,7 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
             pe_imp_model_free(&m), pe_imp_animation_free(&a), free(g);
             return -1;
         }
+        if (pe_imp_enemy_known_strength(asset_id, &g->p)) how = "guessed, its game's own strength";
         prof = &g->p;
     }
     PeImpSound *sounds[PE_ENEMY_MAX_SOUNDS] = {0};

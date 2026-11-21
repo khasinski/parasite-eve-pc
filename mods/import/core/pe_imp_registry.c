@@ -245,6 +245,39 @@ int pe_imp_enemy_defaults(const char *game, int *yaw, int *scale) {
     return -1;
 }
 
+#define MAX_STRENGTHS 128
+static struct { char id[PE_IMP_ID_MAX]; int life, power; } s_strength[MAX_STRENGTHS];
+static int s_strengths;
+
+int pe_imp_add_enemy_strength(const char *asset_id, int life, int power) {
+    if (!asset_id || !strchr(asset_id, ':') || strlen(asset_id) >= PE_IMP_ID_MAX || life <= 0 || power < 0) return -1;
+    int i = 0;
+    while (i < s_strengths && strcmp(s_strength[i].id, asset_id)) i++;
+    if (i == MAX_STRENGTHS) return -1;
+    if (i == s_strengths) s_strengths++;
+    snprintf(s_strength[i].id, sizeof s_strength[i].id, "%s", asset_id);
+    s_strength[i].life = life, s_strength[i].power = power;
+    return 0;
+}
+
+int pe_imp_enemy_strength(const char *asset_id, int *life, int *power) {
+    char base[PE_IMP_ID_MAX];
+    if (!asset_id) return -1;
+    snprintf(base, sizeof base, "%s", asset_id);
+    for (int pass = 0; pass < 2; pass++) {
+        for (int i = 0; i < s_strengths; i++)
+            if (!strcmp(s_strength[i].id, base)) {
+                if (life) *life = s_strength[i].life;
+                if (power) *power = s_strength[i].power;
+                return 0;
+            }
+        char *last = strrchr(base, '/'), *dash = last ? strrchr(last, '-') : NULL;   /* a variant: its base model */
+        if (!dash) break;
+        *dash = 0;
+    }
+    return -1;
+}
+
 int pe_imp_add_target(const PeImpTarget *t) {
     if (!t || t->api.version != PE_IMP_API_VERSION || t->api.size != sizeof *t || !t->build || !t->module ||
         !t->verb || s_targets == MAX_TARGETS)

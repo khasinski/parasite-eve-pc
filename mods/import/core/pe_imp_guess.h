@@ -41,6 +41,10 @@ typedef struct {
 int pe_imp_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
                    int yaw, int scale, PeImpEnemyGuess *g, char *why, size_t n);
 
+/* The source game's own strength for `asset_id` (pe_imp_enemy_strength), if it registered one, over
+ * a guessed profile: hp (and exp from it) and, when given, every attack's power. 1 applied, 0 none. */
+int pe_imp_enemy_known_strength(const char *asset_id, PeImpEnemyProfile *p);
+
 /* A profile as a file the player can change (profile.json in the enemy's pack folder): its moves by
  * number, sizes, attacks and behaviour; `note` is written first, for whoever opens it. */
 int pe_imp_enemy_profile_save(const PeImpEnemyProfile *p, const char *note, const char *path, char *why, size_t n);

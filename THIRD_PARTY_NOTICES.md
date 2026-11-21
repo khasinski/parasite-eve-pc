@@ -319,8 +319,10 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   MEMBER_* and WORK_TYPE_*), the zone the player last touched (`SCE_AT.C` At_sce_no) and the walk to
   a spot with its arrival flag (`SCE1.C` Plc_dest), a work value written into the script
   (`SCE1.C` Work_copy), and the scripts' wall switches and which walls stop the player (`SCE2.C`
-  Sca_id_set, `SCA.H`, `SCA.C` Sca_ck_hit, `GAME.C`). Our interpreter and zone checks are
-  written independently from what it shows.
+  Sca_id_set, `SCA.H`, `SCA.C` Sca_ck_hit, `GAME.C`), the partner hand-over in scenes (`SCE2.C`
+  Splc_sce / Splc_ret), the 4th Survivor's start (`TITLE.C` Title_game_init), and each enemy's
+  starting life (the `EM*.C` Init functions; our table in `pe_src_re2.c` holds the numbers only).
+  Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.
 - [Bio2ScriptViewer](https://github.com/OpenBiohazard2/Bio2ScriptViewer) (MIT, Copyright (c) 2021 Samuel

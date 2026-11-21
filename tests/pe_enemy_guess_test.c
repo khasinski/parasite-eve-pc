@@ -119,6 +119,18 @@ static void test_made_up(void) {
     assert(p->height == 200 && p->hp >= 30 && p->speed > 0 && p->radius >= 180);   /* 200 units at 1:1 */
     assert(p->attack[0].anim && !strcmp(p->attack[0].anim, "attack") && p->attack[1].anim && !p->attack[2].anim);
 
+    {   /* the game's own strength, where it gave one, over the height rule; a variant takes its base's */
+        PeImpEnemyGuess known = g;
+        assert(!pe_imp_enemy_known_strength("test:enemy/made-up", &known.p));    /* none registered: kept */
+        assert(known.p.hp == p->hp);
+        assert(!pe_imp_add_enemy_strength("test:enemy/made-up", 700, 33) && pe_imp_add_enemy_strength("no-game", 1, 0));
+        assert(pe_imp_enemy_known_strength("test:enemy/made-up-cdemd2", &known.p) == 1);
+        assert(known.p.hp == 700 && known.p.exp == 117 && known.p.attack[0].power == 33 && known.p.attack[1].power == 33);
+        assert(!pe_imp_add_enemy_strength("test:enemy/made-up", 500, 0) && pe_imp_enemy_known_strength("test:enemy/made-up", &known.p));
+        assert(known.p.hp == 500 && known.p.attack[0].power == 33);   /* power 0: the attacks keep theirs */
+        printf("made-up: known strength hp %d (guessed %d)\n", known.p.hp, p->hp);
+    }
+
     PeEnemyPack pk;
     PeEnemyBuildInfo info;
     rc = pe_enemy_build(&m, &a, p, NULL, 0, "test:enemy/made-up", &pk, &info, why, sizeof why);

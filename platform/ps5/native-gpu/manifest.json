@@ -4639,7 +4639,7 @@
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.c",
-      "sha256": "db6758085a61806df2a08f2b68e0687d3dba1e7abeb72f49ab3155e9fcf954db"
+      "sha256": "4fb4288212a2cb04f20893a916e4caf002adae7b046b881d71030646668d2b97"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.h",
@@ -4939,7 +4939,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_registry.c",
-      "sha256": "3277f9a22fb02c6b35d0a505a77b1b6111aa6697c160ba840e4acb79c89453c9"
+      "sha256": "e0e0181b121932fa963e8e1c786a1b93a47afbfedf0b17ff73fe695db5ab0038"
     },
     {
       "path": "mods/import/core/pe_imp_store.c",
@@ -4987,7 +4987,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_enemy.h",
-      "sha256": "83e4e20d19f3ce0ec1461478c4bf1694b8b49e383e161dc3dac7d2d1718d6c4b"
+      "sha256": "49bd81ad11c987159c9a7108e60816f908eec9b20eca7d86161db3bfbfb4ff2d"
     },
     {
       "path": "mods/import/core/pe_imp_rdt.c",
@@ -5079,7 +5079,7 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_target.c",
-      "sha256": "5f03ac0ace21c2d907ef2fc975cc805e9107f24a0cb01145f74012973bdbd400"
+      "sha256": "0a5fa33ae8f1230a5e6a812111822decd17a87e65a4b327aee925b48e4f90455"
     },
     {
       "path": "tests/enemy_import_nemesis.py",
@@ -5095,7 +5095,7 @@
     },
     {
       "path": "tests/pe_enemy_guess_test.c",
-      "sha256": "b03a03a9590823a8d8b377ad7e438bd9504337ee599e7603ae53153dace24a53"
+      "sha256": "7bd6e03aa13a0a20bae5a6abed65f0451c9a569b2d8b57f7f1bb3531c68b5a0f"
     },
     {
       "path": "tests/pe_mod_re3_enemy_test.c",
@@ -5103,11 +5103,11 @@
     },
     {
       "path": "mods/import/core/pe_imp_guess.c",
-      "sha256": "15d0f4aeeec7498bb676d78300541ef109330548d9e6f2b3c8485bf12899ef19"
+      "sha256": "7a87996d9d4dcc2048961186bffef3ce1d252c4175246e9188b25d716cc8a2e6"
     },
     {
       "path": "mods/import/core/pe_imp_guess.h",
-      "sha256": "bea6ccee95d9e1040c71589dc938862980145043e219882f7967e7763d53e553"
+      "sha256": "da55ffaa11fcc842f4f5a73ad73bda2637cd2fd9acd2d576bd6b4b71691cb25e"
     }
   ]
 }

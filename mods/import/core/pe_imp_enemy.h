@@ -37,6 +37,13 @@ const PeImpEnemyProfile *pe_imp_enemy_for(const char *asset_id);
 int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale);
 int pe_imp_enemy_defaults(const char *game, int *yaw, int *scale);     /* 0, or -1: none set */
 
+/* A monster's strength as its own game sets it, where that's known: `life` (its hit points) and,
+ * optionally, `power` for its attacks (0: guessed). It overrides the guess's height rule (a story
+ * boss isn't just a tall zombie); unknown models keep the guess. Assets "<game>:<local ID>"
+ * ("re2:enemy/em31"); a variant ("re2:enemy/em31-cdemd2") takes its base model's. */
+int pe_imp_add_enemy_strength(const char *asset_id, int life, int power);
+int pe_imp_enemy_strength(const char *asset_id, int *life, int *power);   /* 0, or -1: not known */
+
 /* The Resident Evil games' (1, 2 and 3 share the EMD's axes and units): their models face +x, and a
  * person about 2900 units tall stands about 560 next to Aya (about 500), as RE3's zombie does. */
 #define PE_RE_ENEMY_YAW 3072
