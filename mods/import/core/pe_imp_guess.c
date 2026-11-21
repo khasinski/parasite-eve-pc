@@ -1,13 +1,112 @@
-/* An enemy profile guessed from a model and its moves (see pe_enemy_guess.h). */
+/* An enemy profile guessed from a model and its moves (see pe_imp_guess.h). Game-neutral: the
+ * model is posed here (the Animation's layout, pe_imp.h), not through a host's enemy format. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "pe_enemy_build.h"
-#include "pe_enemy_guess.h"
-#include "pe_enemy_pack.h"
+#include "pe_imp_guess.h"
 #include "pe_imp_json.h"
+
+/* ---- posing: every face corner of the model, moved by a frame of a move ----
+ * Rigid parts' corners are in their bone's frame, put at the bone's rest position; a skinned
+ * corner (model.bin v2) is in the rest model frame and follows its bone, and half way a second.
+ * Corners shared within a part count once. Rotations X * Y * Z, parent first (pe_imp.h). */
+typedef struct { int16_t x, y, z; uint8_t bone, bone2; } Corner;
+typedef struct { double m[3][3], t[3]; } Frame;
+
+static int16_t clamp16(double v) {
+    long r = lround(v);
+    return (int16_t)(r > 32767 ? 32767 : r < -32768 ? -32768 : r);
+}
+
+static void corner_add(Corner *c, int *count, int first, int x, int y, int z, int b1, int b2) {
+    for (int i = first; i < *count; i++)
+        if (c[i].x == x && c[i].y == y && c[i].z == z && c[i].bone == b1 && c[i].bone2 == b2) return;
+    c[*count].x = (int16_t)x, c[*count].y = (int16_t)y, c[*count].z = (int16_t)z;
+    c[*count].bone = (uint8_t)b1, c[*count].bone2 = (uint8_t)b2;
+    (*count)++;
+}
+
+/* the model's corners (*out, malloc'd): their number, or -1 with a reason */
+static int corners_of(const PeImpModel *m, Corner **out, char *why, size_t n) {
+    size_t most = 0;
+    for (uint32_t part = 0; part < m->parts && part < m->bones; part++)
+        most += 3 * (size_t)m->part[part].tris + 4 * (size_t)m->part[part].quads;
+    for (uint32_t i = 0; i < m->bones; i++)
+        if (m->parent[i] >= (int)i || (i == 0) != (m->parent[i] < 0)) {
+            snprintf(why, n, "bone %u is out of order (a parent must come first, bone 0 the root)", (unsigned)i);
+            return -1;
+        }
+    Corner *c = malloc((most ? most : 1) * sizeof *c);
+    int count = 0;
+    if (!c) { snprintf(why, n, "out of memory"); return -1; }
+    for (uint32_t part = 0; part < m->parts && part < m->bones; part++) {   /* extras past the bones: not drawn */
+        const PeImpPart *pt = &m->part[part];
+        const int first = count;
+        for (uint32_t i = 0; i < pt->tris + pt->quads; i++) {
+            const int quad = i >= pt->tris;
+            const PeImpFace *f = quad ? &pt->quad[i - pt->tris] : &pt->tri[i];
+            const uint8_t (*skin)[2] = quad ? (pt->quad_skin ? (const uint8_t (*)[2])pt->quad_skin[i - pt->tris] : NULL)
+                                            : (pt->tri_skin ? (const uint8_t (*)[2])pt->tri_skin[i] : NULL);
+            for (int k = 0; k < (quad ? 4 : 3); k++) {
+                int x = f->v[k][0], y = f->v[k][1], z = f->v[k][2], b1 = (int)part, b2 = PE_IMP_NO_BONE;
+                if (skin) b1 = skin[k][0], b2 = skin[k][1];
+                else x += m->pos[part][0], y += m->pos[part][1], z += m->pos[part][2];   /* bone frame -> rest model frame */
+                corner_add(c, &count, first, x, y, z, b1, b2);
+            }
+        }
+    }
+    if (count < 3) { free(c); snprintf(why, n, "the model has nothing to draw"); return -1; }
+    *out = c;
+    return count;
+}
+
+static void rot_xyz(double ax, double ay, double az, double out[3][3]) {
+    const double k = 2.0 * acos(-1.0) / 4096.0;
+    double cx = cos(ax * k), sx = sin(ax * k), cy = cos(ay * k), sy = sin(ay * k), cz = cos(az * k), sz = sin(az * k);
+    double xy[3][3] = {{cy, 0, sy}, {sx * sy, cx, -sx * cy}, {-cx * sy, sx, cx * cy}};   /* X * Y */
+    double z[3][3] = {{cz, -sz, 0}, {sz, cz, 0}, {0, 0, 1}};
+    for (int r = 0; r < 3; ++r)
+        for (int col = 0; col < 3; ++col) out[r][col] = xy[r][0] * z[0][col] + xy[r][1] * z[1][col] + xy[r][2] * z[2][col];
+}
+
+/* one frame of move data `d` (pe_imp.h's layout) applied to the corners */
+static void pose(const PeImpModel *m, Frame *f, double (*rest)[3], const Corner *c, int count, const int16_t *d,
+                 int16_t (*out)[3]) {
+    for (uint32_t i = 0; i < m->bones; ++i) {
+        const double off[3] = {clamp16(m->rel[i][0]), clamp16(m->rel[i][1]), clamp16(m->rel[i][2])};
+        double loc[3][3];
+        const int16_t *ang = d + 3 + 3 * i;
+        rot_xyz(ang[0], ang[1], ang[2], loc);
+        if (m->parent[i] < 0) {
+            memcpy(f[i].m, loc, sizeof loc);
+            for (int r = 0; r < 3; ++r) f[i].t[r] = d[r], rest[i][r] = off[r];
+        } else {
+            const Frame *pf = &f[m->parent[i]];
+            for (int r = 0; r < 3; ++r) {
+                for (int col = 0; col < 3; ++col)
+                    f[i].m[r][col] = pf->m[r][0] * loc[0][col] + pf->m[r][1] * loc[1][col] + pf->m[r][2] * loc[2][col];
+                f[i].t[r] = pf->t[r] + pf->m[r][0] * off[0] + pf->m[r][1] * off[1] + pf->m[r][2] * off[2];
+                rest[i][r] = rest[m->parent[i]][r] + off[r];
+            }
+        }
+    }
+    for (int i = 0; i < count; ++i) {
+        const int bones[2] = {c[i].bone, c[i].bone2};
+        const int nb = c[i].bone2 == PE_IMP_NO_BONE ? 1 : 2;
+        double acc[3] = {0, 0, 0};
+        for (int k = 0; k < nb; ++k) {
+            const Frame *bf = &f[bones[k]];
+            const double l[3] = {c[i].x - rest[bones[k]][0], c[i].y - rest[bones[k]][1], c[i].z - rest[bones[k]][2]};
+            for (int r = 0; r < 3; ++r) acc[r] += bf->t[r] + bf->m[r][0] * l[0] + bf->m[r][1] * l[1] + bf->m[r][2] * l[2];
+        }
+        for (int r = 0; r < 3; ++r) {
+            const double w = acc[r] / nb;
+            out[i][r] = (int16_t)(w > 32767 ? 32767 : w < -32768 ? -32768 : lrint(w));
+        }
+    }
+}
 
 static double top_of(const int16_t (*pose)[3], int n) {
     int top = 0;
@@ -34,39 +133,40 @@ static double apart(const int16_t (*a)[3], const int16_t (*b)[3], int n) {
     return n ? s / n : 0;
 }
 
-int pe_enemy_look(const PeImpModel *m, const PeImpAnimation *a, PeEnemyMoveLook *look, double *height,
+int pe_imp_enemy_look(const PeImpModel *m, const PeImpAnimation *a, PeImpMoveLook *look, double *height,
                   char *why, size_t n) {
-    PeEnemyPack p;
+    Corner *corner = NULL;
     if (a->bones != m->bones) { snprintf(why, n, "the moves are for %u bones, not the model's", (unsigned)a->bones); return -1; }
-    if (pe_enemy_build_model(&p, m, NULL, why, n)) return -1;
-    const int nv = p.vertices;
+    const int nv = corners_of(m, &corner, why, n);
+    if (nv < 0) return -1;
+    Frame *frame = malloc((m->bones ? m->bones : 1) * sizeof *frame);
+    double (*rest)[3] = malloc((m->bones ? m->bones : 1) * sizeof *rest);
     int16_t (*first)[3] = malloc((size_t)nv * sizeof *first), (*prev)[3] = malloc((size_t)nv * sizeof *prev),
-            (*pose)[3] = malloc((size_t)nv * sizeof *pose);
+            (*posed)[3] = malloc((size_t)nv * sizeof *posed);
     double *starts = calloc(a->moves + 1, sizeof *starts);
     int rc = -1, ns = 0;
-    if (!first || !prev || !pose || !starts) { snprintf(why, n, "out of memory"); goto out; }
+    if (!first || !prev || !posed || !starts || !frame || !rest) { snprintf(why, n, "out of memory"); goto out; }
     memset(look, 0, a->moves * sizeof *look);
-    p.anims = 1;
     for (uint32_t k = 0; k < a->moves; k++) {          /* first pass: source units */
         const PeImpMove *mv = &a->move[k];
-        PeEnemyMoveLook *l = &look[k];
+        PeImpMoveLook *l = &look[k];
         if (!mv->frames) continue;
-        p.anim[0].frames = (int)mv->frames, p.anim[0].data = mv->data, p.anim[0].event = NULL;
+        const size_t step = 3 + 3 * (size_t)a->bones;
         double e0[4], e[4];
-        pe_enemy_pose(&p, 0, 0, first);
+        pose(m, frame, rest, corner, nv, mv->data, first);
         extent(first, nv, e0);
         l->frames = (int)mv->frames;
         l->start = l->low = l->end = top_of(first, nv);
         memcpy(prev, first, (size_t)nv * sizeof *prev);
         for (int f = 1; f < l->frames; f++) {
-            pe_enemy_pose(&p, 0, f, pose);
-            const double t = top_of(pose, nv);
+            pose(m, frame, rest, corner, nv, mv->data + (size_t)f * step, posed);
+            const double t = top_of(posed, nv);
             if (t < l->low) l->low = t;
             l->end = t;
-            extent(pose, nv, e);
+            extent(posed, nv, e);
             for (int d = 0; d < 4; d++) if (e[d] - e0[d] > l->reach[d]) l->reach[d] = e[d] - e0[d];
-            l->motion += apart(pose, prev, nv);
-            memcpy(prev, pose, (size_t)nv * sizeof *prev);
+            l->motion += apart(posed, prev, nv);
+            memcpy(prev, posed, (size_t)nv * sizeof *prev);
         }
         l->motion /= l->frames > 1 ? l->frames - 1 : 1;
         l->loop = apart(prev, first, nv);
@@ -85,21 +185,19 @@ int pe_enemy_look(const PeImpModel *m, const PeImpAnimation *a, PeEnemyMoveLook 
         for (int j = i; j > 0 && starts[j - 1] > starts[j]; j--) { double t = starts[j]; starts[j] = starts[j - 1], starts[j - 1] = t; }
     const double h = starts[ns / 2] > 1 ? starts[ns / 2] : 1;
     for (uint32_t k = 0; k < a->moves; k++) {
-        PeEnemyMoveLook *l = &look[k];
+        PeImpMoveLook *l = &look[k];
         l->loop /= h, l->motion /= h, l->start /= h, l->low /= h, l->end /= h, l->travel /= h;
         for (int d = 0; d < 4; d++) l->reach[d] /= h;
     }
     if (height) *height = h;
     rc = 0;
 out:
-    p.anims = 0;                                        /* the moves' data is borrowed */
-    free(first), free(prev), free(pose), free(starts);
-    pe_enemy_pack_free(&p);
+    free(first), free(prev), free(posed), free(starts), free(frame), free(rest), free(corner);
     return rc;
 }
 
 /* ---- picking moves ----
- * Heights and reaches are in the model's own height (pe_enemy_look), so one rule fits a dog and a
+ * Heights and reaches are in the model's own height (pe_imp_enemy_look), so one rule fits a dog and a
  * giant. Measured on RE2's and RE3's monsters (tests/pe_enemy_guess_test.c):
  *   idle    loops (last pose = first), stands, moves least
  *   die     starts standing, ends at half its height or lower: the first such move
@@ -107,7 +205,7 @@ out:
  *   hurt    short (6-45 frames), starts and ends standing, reaches out little: the one that moves most
  *   attack  starts and ends standing, reaches out furthest (any way: some lunges stretch the
  *           back legs, a swing swings both arms); a move the source marks with hit frames first */
-static double reach_of(const PeEnemyMoveLook *l) {
+static double reach_of(const PeImpMoveLook *l) {
     double r = 0;
     for (int d = 0; d < 4; d++) r = l->reach[d] > r ? l->reach[d] : r;
     return r;
@@ -120,38 +218,38 @@ static int taken(const int *pick, int count, int k) {
 
 enum { R_IDLE, R_WALK, R_HURT, R_DIE, R_ATTACK, R_ATTACK2, R_COUNT };
 
-static void pick_moves(const PeEnemyMoveLook *look, int moves, int pick[R_COUNT]) {
+static void pick_moves(const PeImpMoveLook *look, int moves, int pick[R_COUNT]) {
     for (int r = 0; r < R_COUNT; r++) pick[r] = -1;
     double best = 1e9;
     for (int k = 0; k < moves; k++) {                  /* idle (earlier moves win near ties) */
-        const PeEnemyMoveLook *l = &look[k];
+        const PeImpMoveLook *l = &look[k];
         if (l->frames < 10 || l->loop > 0.05 || l->start < 0.6 || l->end < 0.6 * l->start) continue;
         const double key = l->motion + 0.0002 * k;
         if (key < best) best = key, pick[R_IDLE] = k;
     }
     for (int k = 0; pick[R_IDLE] < 0 && k < moves; k++) if (look[k].frames) pick[R_IDLE] = k;
     if (pick[R_IDLE] < 0) return;
-    const PeEnemyMoveLook *idle = &look[pick[R_IDLE]];
+    const PeImpMoveLook *idle = &look[pick[R_IDLE]];
     const double up = idle->start;
 
     for (int k = 0; k < moves && pick[R_DIE] < 0; k++) {
-        const PeEnemyMoveLook *l = &look[k];
+        const PeImpMoveLook *l = &look[k];
         if (k != pick[R_IDLE] && l->frames >= 8 && l->start >= 0.8 * up && l->end <= 0.5 * l->start) pick[R_DIE] = k;
     }
     best = 0.8;
     for (int k = 0; pick[R_DIE] < 0 && k < moves; k++) {     /* none falls that far: the one that sinks most */
-        const PeEnemyMoveLook *l = &look[k];
+        const PeImpMoveLook *l = &look[k];
         if (k != pick[R_IDLE] && l->frames >= 8 && l->start > 0 && l->end / l->start < best) best = l->end / l->start, pick[R_DIE] = k;
     }
     for (int k = 0; k < moves && pick[R_WALK] < 0; k++) {
-        const PeEnemyMoveLook *l = &look[k];
+        const PeImpMoveLook *l = &look[k];
         if (taken(pick, R_COUNT, k) || l->frames < 16 || l->loop > 0.05 || fabs(l->start - up) > 0.15 || l->low < up - 0.25)
             continue;
         if (l->motion >= 1.5 * idle->motion && l->motion >= 0.005 && l->motion <= 0.06) pick[R_WALK] = k;
     }
     best = 0;
     for (int k = 0; k < moves; k++) {
-        const PeEnemyMoveLook *l = &look[k];
+        const PeImpMoveLook *l = &look[k];
         if (taken(pick, R_COUNT, k) || l->frames < 6 || l->frames > 45 || l->hits || fabs(l->start - up) > 0.15 ||
             fabs(l->end - up) > 0.15 || l->low < 0.6 * up || l->loop > 0.3 || reach_of(l) > 0.2)
             continue;
@@ -160,12 +258,12 @@ static void pick_moves(const PeEnemyMoveLook *look, int moves, int pick[R_COUNT]
     for (int r = R_ATTACK; r <= R_ATTACK2; r++) {
         best = 0.12;
         for (int k = 0; k < moves; k++) {
-            const PeEnemyMoveLook *l = &look[k];
+            const PeImpMoveLook *l = &look[k];
             if (taken(pick, R_COUNT, k) || l->frames < 12 || l->frames > 100 || fabs(l->start - up) > 0.2 ||
                 fabs(l->end - up) > 0.2 || l->low < 0.5 * up || l->loop > 0.4)
                 continue;
             if (r == R_ATTACK2) {                       /* not the first one again (sources keep copies) */
-                const PeEnemyMoveLook *f = &look[pick[R_ATTACK]];
+                const PeImpMoveLook *f = &look[pick[R_ATTACK]];
                 int same = f->frames == l->frames;
                 for (int d = 0; d < 4; d++) same &= fabs(f->reach[d] - l->reach[d]) < 0.005;
                 if (same) continue;
@@ -182,14 +280,14 @@ static int clampi(double v, int lo, int hi) {
     return (int)(r < lo ? lo : r > hi ? hi : r);
 }
 
-int pe_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
-                   int yaw, int scale, PeEnemyGuess *g, char *why, size_t n) {
-    PeEnemyMoveLook *look = calloc(a->moves ? a->moves : 1, sizeof *look);
+int pe_imp_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
+                   int yaw, int scale, PeImpEnemyGuess *g, char *why, size_t n) {
+    PeImpMoveLook *look = calloc(a->moves ? a->moves : 1, sizeof *look);
     double h = 0;
     int pick[R_COUNT];
     memset(g, 0, sizeof *g);
     if (!look) { snprintf(why, n, "out of memory"); return -1; }
-    if (pe_enemy_look(m, a, look, &h, why, n)) { free(look); return -1; }
+    if (pe_imp_enemy_look(m, a, look, &h, why, n)) { free(look); return -1; }
     pick_moves(look, (int)a->moves, pick);
     if (pick[R_IDLE] < 0) { free(look); snprintf(why, n, "every move is empty"); return -1; }
     static const char *const role[R_COUNT] = {"idle", "walk", "hurt", "die", "attack", "attack2"};
@@ -219,7 +317,7 @@ int pe_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char *nam
 }
 
 /* ---- the profile as a file ---- */
-int pe_enemy_profile_save(const PeImpEnemyProfile *p, const char *note, const char *path, char *why, size_t n) {
+int pe_imp_enemy_profile_save(const PeImpEnemyProfile *p, const char *note, const char *path, char *why, size_t n) {
     FILE *f = fopen(path, "wb");
     if (!f) { snprintf(why, n, "can't write %s", path); return -1; }
     fprintf(f, "{\n  \"format\": 1,\n");
@@ -242,7 +340,7 @@ int pe_enemy_profile_save(const PeImpEnemyProfile *p, const char *note, const ch
     return 0;
 }
 
-int pe_enemy_profile_load(const char *path, PeEnemyGuess *g, char *why, size_t n) {
+int pe_imp_enemy_profile_load(const char *path, PeImpEnemyGuess *g, char *why, size_t n) {
     PjNode *root = pj_load(path, why, n);
     int rc = -1;
     memset(g, 0, sizeof *g);

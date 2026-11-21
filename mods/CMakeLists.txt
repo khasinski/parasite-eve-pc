@@ -67,6 +67,7 @@ set(pe_import_core_sources
     import/core/pe_imp_logic.c      # the RoomLogic type: what happens in a room, for the runtime
     import/core/pe_imp_door.c       # RE door transitions as DoorScene records
     import/core/pe_imp_items.c      # a game's item table (names, icons)
+    import/core/pe_imp_guess.c      # an enemy profile guessed from a model's moves; profile.json
     import/core/pe_imp_movie.c      # PS1 STR movies, copied once
     import/core/pe_imp_pictures.c   # TIM pictures (files, maps) kept as stored, and a TIM decoder
     import/core/pe_imp_room.c       # Resident Evil PS1 cameras and foreground masks
@@ -503,7 +504,7 @@ if(BUILD_TESTING AND "pe_enemy_import" IN_LIST PE_MOD_LIST)
     target_link_libraries(test-mod-enemy-build PRIVATE pe_download_json)
     set_tests_properties(mod-enemy-build PROPERTIES ENVIRONMENT "PE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 300)
     # The profile guesser: idle, walk, hurt, die and attacks picked from a model's own moves.
-    pe_feature_test(enemy-guess ${PROJECT_SOURCE_DIR}/tests/pe_enemy_guess_test.c pe_enemy_import/pe_enemy_guess.c
+    pe_feature_test(enemy-guess ${PROJECT_SOURCE_DIR}/tests/pe_enemy_guess_test.c
         pe_enemy_import/pe_enemy_build.c pe_enemy_import/pe_enemy_pack.c ${pe_import_core_sources}
         pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1_objects.c
         pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_rbj.c

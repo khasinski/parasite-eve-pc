@@ -31,7 +31,7 @@ typedef struct PeImpEnemyProfile {
 int pe_imp_add_enemy(const char *game, const char *local_id, const PeImpEnemyProfile *p);
 const PeImpEnemyProfile *pe_imp_enemy_for(const char *asset_id);
 
-/* A game's monsters that no profile names fight with a guessed one (pe_enemy_guess.c); what the
+/* A game's monsters that no profile names fight with a guessed one (pe_imp_guess.c); what the
  * guess can't see is the game's: `yaw` turns its models to face Aya, `scale` (per mille) takes its
  * units to PE field units. A game without these still builds (yaw 0, 500 units tall). */
 int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale);

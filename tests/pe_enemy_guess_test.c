@@ -1,4 +1,4 @@
-/* The enemy profile guesser (mods/pe_enemy_import/pe_enemy_guess.c).
+/* The enemy profile guesser (mods/import/core/pe_imp_guess.c).
  *   made-up   a two-bone model (a body, an arm on top) with an idle, a walk (the arm swings), a
  *             hurt (a short jolt back), an attack (the arm swings forward), a fall, an empty move
  *             and a second attack the source marks with a hit frame: each role picked, the marked
@@ -19,7 +19,7 @@
 #include <string.h>
 
 #include "pe_enemy_build.h"
-#include "pe_enemy_guess.h"
+#include "pe_imp_guess.h"
 #include "pe_enemy_pack.h"
 #include "pe_imp.h"
 #include "pe_imp_internal.h"
@@ -103,10 +103,10 @@ static void write_text(const char *path, const char *text) {
 static void test_made_up(void) {
     PeImpModel m;
     PeImpAnimation a;
-    PeEnemyGuess g;
+    PeImpEnemyGuess g;
     char why[200] = "", dir[1100], path[1200];
     made_up(&m, &a);
-    int rc = pe_enemy_guess(&m, &a, "Made Up", "enemy/made-up/moves", 3072, 1000, &g, why, sizeof why);
+    int rc = pe_imp_enemy_guess(&m, &a, "Made Up", "enemy/made-up/moves", 3072, 1000, &g, why, sizeof why);
     if (rc) printf("made-up: %s\n", why);
     assert(!rc);
     const PeImpEnemyProfile *p = &g.p;
@@ -130,9 +130,9 @@ static void test_made_up(void) {
     snprintf(dir, sizeof dir, "%s/enemy-guess-test/made-up", s_dir);
     assert(!pe_imp_mkdirs(dir));
     snprintf(path, sizeof path, "%s/profile.json", dir);
-    assert(!pe_enemy_profile_save(p, "Guessed from the moves.", path, why, sizeof why));
-    PeEnemyGuess back;
-    rc = pe_enemy_profile_load(path, &back, why, sizeof why);
+    assert(!pe_imp_enemy_profile_save(p, "Guessed from the moves.", path, why, sizeof why));
+    PeImpEnemyGuess back;
+    rc = pe_imp_enemy_profile_load(path, &back, why, sizeof why);
     if (rc) printf("made-up load: %s\n", why);
     assert(!rc && !strcmp(back.p.name, "Made Up") && !strcmp(back.p.moves, p->moves) && back.p.height == p->height);
     assert(back.p.hp == p->hp && back.p.yaw == 3072 && back.p.speed == p->speed && !back.p.sounds);
@@ -146,7 +146,7 @@ static void test_made_up(void) {
     write_text(path, "{\"format\": 1, \"name\": \"Hand\", \"moves\": \"enemy/made-up/moves\", \"sounds\": \"sound/x/tone\", "
                      "\"sound_count\": 3, \"hp\": 77, \"height\": 300, \"anims\": {\"idle\": 0, \"walk\": 3, \"swing\": 6}, "
                      "\"attacks\": [{\"anim\": \"swing\", \"power\": 9, \"hit\": 12}], \"behavior\": {\"speed\": 5}}");
-    assert(!pe_enemy_profile_load(path, &back, why, sizeof why));
+    assert(!pe_imp_enemy_profile_load(path, &back, why, sizeof why));
     assert(!strcmp(back.p.name, "Hand") && back.p.hp == 77 && move_of(&back.p, "walk") == 3 && back.p.sound_count == 3);
     assert(!strcmp(back.p.sounds, "sound/x/tone") && back.p.attack[0].power == 9 && back.p.attack[0].hit == 12 && back.p.speed == 5);
     rc = pe_enemy_build(&m, &a, &back.p, NULL, 0, "test:enemy/made-up", &pk, &info, why, sizeof why);
@@ -155,33 +155,33 @@ static void test_made_up(void) {
 
     /* refused: no idle, an attack naming a missing anim, not a profile */
     write_text(path, "{\"format\": 1, \"anims\": {\"walk\": 1}}");
-    assert(pe_enemy_profile_load(path, &back, why, sizeof why) && strstr(why, "idle"));
+    assert(pe_imp_enemy_profile_load(path, &back, why, sizeof why) && strstr(why, "idle"));
     write_text(path, "{\"format\": 1, \"anims\": {\"idle\": 0}, \"attacks\": [{\"anim\": \"bite\"}]}");
-    assert(pe_enemy_profile_load(path, &back, why, sizeof why) && strstr(why, "bite"));
+    assert(pe_imp_enemy_profile_load(path, &back, why, sizeof why) && strstr(why, "bite"));
     write_text(path, "{\"anims\": {\"idle\": 0}}");
-    assert(pe_enemy_profile_load(path, &back, why, sizeof why));
+    assert(pe_imp_enemy_profile_load(path, &back, why, sizeof why));
     write_text(path, "{\"format\": 1, \"anims\": {\"idle\": \"zero\"}}");
-    assert(pe_enemy_profile_load(path, &back, why, sizeof why));
+    assert(pe_imp_enemy_profile_load(path, &back, why, sizeof why));
 
     /* nothing to pick from */
     PeImpAnimation empty = {2, 30, 1, NULL};
     PeImpMove none = {0, NULL, NULL};
     empty.move = &none;
-    assert(pe_enemy_guess(&m, &empty, "x", "y", 0, 0, &g, why, sizeof why) == -1);
+    assert(pe_imp_enemy_guess(&m, &empty, "x", "y", 0, 0, &g, why, sizeof why) == -1);
     pe_imp_animation_free(&a);
     pe_imp_model_free(&m);
 }
 
 /* ---- real ---- */
 static void dump(const char *id, const PeImpModel *m, const PeImpAnimation *a) {
-    PeEnemyMoveLook *look = calloc(a->moves, sizeof *look);
+    PeImpMoveLook *look = calloc(a->moves, sizeof *look);
     double h = 0;
     char why[200];
-    if (!look || pe_enemy_look(m, a, look, &h, why, sizeof why)) { free(look); return; }
+    if (!look || pe_imp_enemy_look(m, a, look, &h, why, sizeof why)) { free(look); return; }
     printf("== %s  height %.0f  bones %u  moves %u\n", id, h, (unsigned)a->bones, (unsigned)a->moves);
     printf("  m   fr  loop  motion start  low   end   +x    -x    +z    -z   hit snd\n");
     for (uint32_t k = 0; k < a->moves; k++) {
-        const PeEnemyMoveLook *l = &look[k];
+        const PeImpMoveLook *l = &look[k];
         if (l->frames)
             printf("  %-3u %3d %5.2f %6.3f %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f %3d %3d\n", (unsigned)k, l->frames, l->loop,
                    l->motion, l->start, l->low, l->end, l->reach[0], l->reach[1], l->reach[2], l->reach[3], l->hits, l->sounds);
@@ -191,7 +191,7 @@ static void dump(const char *id, const PeImpModel *m, const PeImpAnimation *a) {
 
 /* Guess `asset` ("re2:enemy/em10"), build it, write it to <dir>/enemy-guess-test/<game>-<id> and
  * load it back. 0 built; 1 built but missing a die or an attack; -1 refused (printed). */
-static int guess_one(const char *store, const char *asset, const char *name, PeEnemyGuess *g) {
+static int guess_one(const char *store, const char *asset, const char *name, PeImpEnemyGuess *g) {
     char moves[PE_IMP_ID_MAX + 8], why[200] = "", folder[1200];
     const char *colon = strchr(asset, ':');
     PeImpModel m;
@@ -210,7 +210,7 @@ static int guess_one(const char *store, const char *asset, const char *name, PeE
     if (getenv("PE_GUESS_DUMP")) dump(asset, &m, &a);
     PeEnemyPack pk;
     PeEnemyBuildInfo info;
-    if (pe_enemy_guess(&m, &a, name, moves + (colon - asset) + 1, yaw, scale, g, why, sizeof why) ||
+    if (pe_imp_enemy_guess(&m, &a, name, moves + (colon - asset) + 1, yaw, scale, g, why, sizeof why) ||
         pe_enemy_build(&m, &a, &g->p, NULL, 0, asset, &pk, &info, why, sizeof why)) {
         printf("  %-28s refused: %s\n", asset, why);
         goto out;
@@ -250,7 +250,7 @@ static void test_re3(const char *store) {
     assert(!pe_imp_set_enemy_defaults("re3", PE_RE_ENEMY_YAW, PE_RE_ENEMY_SCALE));
     scan(store, image, "re3");
     for (unsigned i = 0; i < sizeof k / sizeof k[0]; i++) {
-        PeEnemyGuess g;
+        PeImpEnemyGuess g;
         const PeImpEnemyProfile *h = k[i].hand;
         assert(guess_one(store, k[i].id, h->name, &g) == 0);
         printf("  %-28s %4d tall  idle %2d walk %2d hurt %2d die %2d   (by hand)\n", "", h->height, move_of(h, "idle"),
@@ -270,7 +270,7 @@ static void test_disc(const char *store, const char *env, const char *game) {
     PeImpAsset *as = NULL;
     int n = pe_imp_catalog_assets(store, game, &as), built = 0, partial = 0, refused = 0;
     for (int i = 0; i < n; i++) {
-        PeEnemyGuess g;
+        PeImpEnemyGuess g;
         if (strcmp(as[i].type, pe_imp_type_name(PE_IMP_MODEL)) || !strstr(as[i].id, ":enemy/")) continue;
         const int rc = guess_one(store, as[i].id, as[i].name, &g);
         if (rc < 0) refused++;

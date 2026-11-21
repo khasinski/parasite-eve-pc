@@ -3847,7 +3847,7 @@
     },
     {
       "path": "mods/CMakeLists.txt",
-      "sha256": "e143213dbdea109df01ffba2160daef6bafcc9452bbf4a57a0b2a84978326339"
+      "sha256": "03f6ec2f8f2309fa0d1042151c7b00534c999e7dd41fa16db3b4ee4acbf44e0b"
     },
     {
       "path": "mods/host/debug/pe_debug_battle.c",
@@ -4987,7 +4987,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_enemy.h",
-      "sha256": "13482b2eca77914e628609846fd412a6a854ba646dbef1ae54adefd0477d935a"
+      "sha256": "83e4e20d19f3ce0ec1461478c4bf1694b8b49e383e161dc3dac7d2d1718d6c4b"
     },
     {
       "path": "mods/import/core/pe_imp_rdt.c",
@@ -5071,23 +5071,15 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_build.c",
-      "sha256": "fb69fb9615c1e740bf2c1a192a0d927baa61f9cdaa226dee1a367f3d8fc9d196"
+      "sha256": "949447382b704098226a74177b53421c932285c2790be9e18230e1cacb6bf260"
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_build.h",
-      "sha256": "deaf4f4c155070a136a3d0b9b734995f60e5b15d963b5537b3ec82b5be8bc332"
-    },
-    {
-      "path": "mods/pe_enemy_import/pe_enemy_guess.c",
-      "sha256": "8bdece5e815c9a83d5eac83089e7c108b687f9d45ab4b240b9874c701ec4263c"
-    },
-    {
-      "path": "mods/pe_enemy_import/pe_enemy_guess.h",
-      "sha256": "759c0ad9c2917b7d21381a7a9452d672bcbef138b49182439f84755fb5cb6c7c"
+      "sha256": "3ffe498ecfc4a4b728da605786597e4bc5763386c56df080c6ed9ca20d6eed39"
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_target.c",
-      "sha256": "e553316d6e1d044761e9889944c01e899287c79e227759bc500e4f419474d675"
+      "sha256": "5f03ac0ace21c2d907ef2fc975cc805e9107f24a0cb01145f74012973bdbd400"
     },
     {
       "path": "tests/enemy_import_nemesis.py",
@@ -5103,11 +5095,19 @@
     },
     {
       "path": "tests/pe_enemy_guess_test.c",
-      "sha256": "3a0a1036723381282fbd84bacdf48bb43e2736b02d2ae65a293d5451d9ba43b7"
+      "sha256": "b03a03a9590823a8d8b377ad7e438bd9504337ee599e7603ae53153dace24a53"
     },
     {
       "path": "tests/pe_mod_re3_enemy_test.c",
       "sha256": "26eb800591d758033de49aa3de16b1d0d7177f34ab7137bc780990b7803daf97"
+    },
+    {
+      "path": "mods/import/core/pe_imp_guess.c",
+      "sha256": "15d0f4aeeec7498bb676d78300541ef109330548d9e6f2b3c8485bf12899ef19"
+    },
+    {
+      "path": "mods/import/core/pe_imp_guess.h",
+      "sha256": "bea6ccee95d9e1040c71589dc938862980145043e219882f7967e7763d53e553"
     }
   ]
 }

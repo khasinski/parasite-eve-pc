@@ -1,7 +1,7 @@
 /* The enemies module's builder target, registered with the importer (F1 > Import): a catalogued
  * enemy model, fitted as an enemy (pe_imp_fit.h), becomes an enemy pack (pe_enemy_build.c) with the
  * moves and sounds its profile names. The profile is the source game's hand-made one when it has
- * one, else guessed from the moves (pe_enemy_guess.c). Either way it is written into the pack
+ * one, else guessed from the moves (pe_imp_guess.c, the importer). Either way it is written into the pack
  * folder as profile.json; once the player changes that file, the next build uses it instead (and
  * the pack counts as out of date until then). Import mode only. */
 #include <stdio.h>
@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include "pe_enemy_battle.h"
-#include "pe_enemy_guess.h"
+#include "pe_imp_guess.h"
 #include "pe_imp_fit.h"
 #include "pe_enemy_build.h"
 #include "pe_mod_host.h"
@@ -47,7 +47,7 @@ static int profile_changed(const char *folder) {
 static int profile_write(const PeImpEnemyProfile *p, const char *folder, char *why, size_t n) {
     char path[1200], sha[65];
     snprintf(path, sizeof path, "%s/profile.json", folder);
-    if (pe_enemy_profile_save(p, PROFILE_NOTE, path, why, n)) return -1;
+    if (pe_imp_enemy_profile_save(p, PROFILE_NOTE, path, why, n)) return -1;
     file_sha(path, sha);
     snprintf(path, sizeof path, "%s/profile.made", folder);
     FILE *f = fopen(path, "wb");
@@ -72,13 +72,13 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
     const char *colon = strchr(asset_id, ':');
     char game[16], id[PE_IMP_ID_MAX], path[1200], name[48];
     const char *how = prof ? "made by hand" : "guessed";
-    PeEnemyGuess *g = calloc(1, sizeof *g);
+    PeImpEnemyGuess *g = calloc(1, sizeof *g);
     if (!g) { snprintf(why, n, "out of memory"); return -1; }
     snprintf(game, sizeof game, "%.*s", (int)(colon - asset_id), asset_id);
     if (profile_changed(folder)) {                     /* the player's own profile.json */
         char err[160];
         snprintf(path, sizeof path, "%s/profile.json", folder);
-        if (pe_enemy_profile_load(path, g, err, sizeof err)) { snprintf(why, n, "profile.json: %s", err); free(g); return -1; }
+        if (pe_imp_enemy_profile_load(path, g, err, sizeof err)) { snprintf(why, n, "profile.json: %s", err); free(g); return -1; }
         prof = &g->p, how = "yours (profile.json)";
     }
     PeImpModel m;
@@ -91,7 +91,7 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
         int yaw = 0, scale = 0;
         pe_imp_enemy_defaults(game, &yaw, &scale);
         name_of(asset_id, name, sizeof name);
-        if (pe_enemy_guess(&m, &a, name, id + (colon - asset_id) + 1, yaw, scale, g, why, n)) {
+        if (pe_imp_enemy_guess(&m, &a, name, id + (colon - asset_id) + 1, yaw, scale, g, why, n)) {
             pe_imp_model_free(&m), pe_imp_animation_free(&a), free(g);
             return -1;
         }
