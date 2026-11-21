@@ -9,6 +9,7 @@
 #include "pe_re_door.h"
 #include "pe_re_save.h"
 #include "pe_services.h"
+#include "pe_trip_result.h"
 #include "re_play_api.h"
 #include "re_host.h"
 
@@ -177,10 +178,28 @@ static int play(unsigned scenario) {
     s.start();
     frames(1, 0);
     EXPECT(s.active && !strcmp(s.room, "re2:room/100") && !s.api->room(&room));
+    PeTripResult trip;                                     /* a battle trip from here, won (pe_enemy_import) */
+    const int placed = room.count;
+    int flagged = 0;
+    for (int i = 0; i < room.count; i++) flagged += room.enemies[i].killed_flag != 0xFF;
+    EXPECT(pe_trip_arm(&trip, s.api) && trip.count == placed);
     EXPECT(s.api->pause_for_battle() == 1 && s.backdrop && !s.active);
+    pe_trip_won(&trip, 1);
+    EXPECT(pe_trip_report(&trip, s.api) == 0 && trip.armed);   /* paused: not yet */
     s.api->resume_after_battle();
     frames(2, 0);
     EXPECT(!s.backdrop && s.active && !s.api->room(&room));
+    EXPECT(pe_trip_report(&trip, s.api) == placed && !trip.armed);   /* back: each placed enemy beaten */
+    frames(1, 0);
+    EXPECT(!s.api->room(&room) && room.count == placed - flagged);   /* flagged ones gone; a flagless boss dies to the scripts */
+    printf("headless host: a won battle trip beat the street's %d placed enemies (%d with killed flags)\n", placed, flagged);
+    EXPECT(placed > 0);
+    {   /* an escape or a loss reports nothing */
+        PeTripResult lost;
+        EXPECT(pe_trip_arm(&lost, s.api) == 1);
+        pe_trip_won(&lost, 0);
+        EXPECT(pe_trip_report(&lost, s.api) == -1 && !lost.armed);
+    }
     PeReSaved saved;
     EXPECT(!pe_re_save_decode(s.progress->data, &saved) && saved.playing && saved.player == scenario);
     s.save_read(NULL, NULL);
