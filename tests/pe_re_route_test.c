@@ -499,6 +499,21 @@ static void search(PeReSession *s, FILE *log) {
         }
     }
     if (npuzzle >= 2 && moved) puzzle_walk(s, puzzle, npuzzle, log);
+    /* doors back into this room that a script made a scene (aot_reset to an event): 2-1B's becomes
+     * Sherry's scene. The planner never takes a door to the room she's in, so it's tried here. */
+    uint32_t nd = 0;
+    pe_imp_logic_section(s->logic, PE_IMP_LOGIC_DOOR, &nd, NULL);
+    for (uint32_t i = 0; i < nd && i < DOORS; i++) {
+        PeImpDoor d;
+        if (pe_imp_logic_door(s->logic, i, &d) || !pe_re_scd_live(&s->run, d.at) || r->door_state[i] != DOOR_OPENS || r->door_to[i] != key_of(s) ||
+            pe_re_zone_kind(&s->run, d.zone.id, d.zone.sce, NULL) != PE_RE_ZONE_EVENT)
+            continue;
+        const int events = s->events, from = key_of(s);
+        examine(s, &d.zone, why, sizeof why);
+        settle(s, 300);
+        if (s->events != events) fprintf(log, "  %s: door %u is a scene now: it played\n", here, (unsigned)i);
+        if (key_of(s) != from) { r->door_to[i] = key_of(s), r->searched_at = 0, r->unfinished = 1; return; }
+    }
 }
 
 /* Through door `i` of the room she's in: 1 when she came out in another room. */
@@ -615,7 +630,8 @@ static int walk_where_waited(PeReSession *s, FILE *log) {
     uint32_t size = 0;
     const uint8_t *rdt = pe_imp_logic_section(s->logic, PE_IMP_LOGIC_RDT0, NULL, &size);
     char a[8];
-    if (!rdt) return 0;
+    static int walks[ROOMS];                              /* a few a room: a scene whose wait she can't meet */
+    if (!rdt || walks[key_of(s)] >= 8) return 0;          /* (two checks that undo each other) isn't walked forever */
     for (int k = 2; k < PE_RE_TASKS; k++) {
         const PeReScdTask *t = &s->run.task[k];
         if (!t->status || t->work != 0) continue;
@@ -628,6 +644,7 @@ static int walk_where_waited(PeReSession *s, FILE *log) {
             if ((m[3] == 1 && before > v) || (m[3] == 2 && before >= v) || (m[3] == 3 && before < v) || (m[3] == 4 && before <= v))
                 continue;                                  /* already holds */
             if (m[2] == 11) s->x = want; else s->z = want;
+            walks[key_of(s)]++;
             fprintf(log, "  %s: walked to %s %d, where a scene waits for her\n", room_name(key_of(s), a, sizeof a),
                     m[2] == 11 ? "x" : "z", want);
             char why[200];
@@ -713,6 +730,15 @@ int main(void) {
     while (moves < MOVES_MAX) {
         const int here = key_of(&s);
         if (flags_changed(&s)) s_progress++;
+        {   /* PE_TEST_RE_WATCH="1:03": say where that flag changes (debugging a route) */
+            static int was = -1;
+            unsigned g = 0, bit = 0;
+            const char *w = getenv("PE_TEST_RE_WATCH");
+            if (w && sscanf(w, "%u:%x", &g, &bit) == 2 && pe_re_flag(&s.progress.flags, g, bit) != was) {
+                was = pe_re_flag(&s.progress.flags, g, bit);
+                fprintf(log, "  %s: flag %u:%02x is %d now\n", room_name(here, a, sizeof a), g, bit, was);
+            }
+        }
         if (pe_re_flag(&s.progress.flags, 0, 0x0A)) {           /* SYS_ENDING (script bit 0x0A of System_flg): the end */
             ended = here;
             fprintf(log, "  %s: the scenario's ending starts here\n", room_name(here, a, sizeof a));
