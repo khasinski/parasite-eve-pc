@@ -391,7 +391,8 @@ int pe_enemy_write(const PeEnemyPack *p, const char *folder, char *why, size_t n
         fprintf(f, "%s{\"anim\": \"%s\", \"damage\": %d, \"power\": %d, \"range\": %d, \"hit\": %d}", i ? ", " : "",
                 p->anim[at->anim].name, at->damage, at->power, at->range, at->hit);
     }
-    fprintf(f, "],\n  \"behavior\": {\"speed\": %d, \"charge\": %d, \"radius\": %d, \"stagger\": %d}", p->speed, p->charge, p->radius, p->stagger);
+    fprintf(f, "],\n  \"behavior\": {\"speed\": %d, \"charge\": %d, \"radius\": %d, \"stagger\": %d, \"altitude\": %d}",
+            p->speed, p->charge, p->radius, p->stagger, p->altitude);
     if (p->sounds) {
         fprintf(f, ",\n  \"sounds\": [");
         for (int s = 0; s < p->sounds; s++) fprintf(f, "%s\"sounds/%02d.wav\"", s ? ", " : "", s);

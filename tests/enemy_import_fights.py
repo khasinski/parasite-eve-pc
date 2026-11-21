@@ -311,6 +311,38 @@ def part_room_variants(exe, disc, work, sources):
             game.quit()
 
 
+def part_flight(exe, disc, work, pack):
+    def setup(config):
+        shutil.copytree(pack, config / 'pe_enemies' / 're2-em21')
+
+    game = Game(exe, disc, work / 'flyer', setup=setup, ini='Cheats/God mode=1\n')
+    try:
+        game.ask('ini-set Fights/Imported enemy 1')
+        game.ask('ini-set Fights/Room\'s enemies 1')
+        start_fight(game, 0, 1)
+        check(wait_battle(game) is not None, 'flyer: no battle')
+        cruise = dive = False
+        end = game.vblank + 7000
+        while game.vblank < end:
+            status = game.picker()['Imported status']
+            lift = re.search(r'\blift=(\d+)', status)
+            if lift:
+                height = int(lift[1])
+                cruise |= height >= 400
+                dive |= cruise and height < 400 and 'anim=attack' in status
+            if dive and re.search(r'\bsounds=[1-9]\d*', status):
+                break
+            game.adv(10)
+        else:
+            raise Failed(f'flyer: expected cruise, dive and a played cue, got {status}')
+        win_when_ready(game)
+        wait_home(game)
+        check(game.picker()['Last fight'].endswith(': won'), 'flyer: death did not finish the fight')
+        print('flyer: crow climbed, dived and played a sound in battle, then died')
+    finally:
+        game.quit()
+
+
 def part_imported_room(exe, disc, work, re2_disc, boss_forms=False, profile_editor=False):
     def setup(config):
         folders = config / 'import' / 'folders.txt'
@@ -557,7 +589,9 @@ def main():
         return 77
     work.mkdir(parents=True, exist_ok=True)
     try:
-        if '--room-variants' in sys.argv:
+        if '--flight-pack' in sys.argv:
+            part_flight(exe, disc, work, Path(sys.argv[sys.argv.index('--flight-pack') + 1]).resolve())
+        elif '--room-variants' in sys.argv:
             discs = [os.getenv(key) for key in ('PE_TEST_RE2_DISC', 'PE_TEST_RE2_DISC2')]
             if not all(path and Path(path).is_file() for path in discs):
                 print('Both RE2 discs are needed for --room-variants: skipped')

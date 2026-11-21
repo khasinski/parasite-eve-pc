@@ -96,7 +96,7 @@ typedef struct {
     int anim, role, attack;          /* attack: index + 1 while attacking */
     double frame;
     int blow_done, stagger, last_hp, dead;
-    int entrance_frames, entrance_loop, wake_anim, forms;
+    int entrance_frames, entrance_loop, wake_anim, forms, lift;
     int drawn_frames, tris, hits, damage_done, attacks_started;
     int event_frame, sounds;         /* last frame whose events ran; sounds played */
     unsigned seen;                   /* bit per role: idle walk hurt die, attack = 1 << 4 */
@@ -459,7 +459,7 @@ static void pe_place_targets(PeFoe *f) {
     FieldActor *a = f->actor;
     const int height = f->resource->height, radius = f->resource->pack.radius;
     RenderObjectEntity *o = &a->render_object;
-    const int x = a->pos_x >> 16, y = a->pos_y >> 16, z = a->pos_z >> 16;
+    const int x = a->pos_x >> 16, y = (a->pos_y >> 16) - f->lift, z = a->pos_z >> 16;
     o->target_x = (s16)x;
     o->target_y = (s16)(y - height * 6 / 10);
     o->target_z = (s16)z;
@@ -875,6 +875,25 @@ static int pe_transform(PeFoe *f, EnemyCombatant *core) {
     return 1;
 }
 
+/* Keep the actor's floor anchor for the native wall checks. Rendering and targeting
+ * use the same height, including the approach to a strike and the fall on death. */
+static void pe_step_lift(PeFoe *f, const FieldActor *aya, int hp) {
+    const int cruise = f->resource->pack.altitude;
+    int target = cruise;
+    int step = 12;
+    if (hp <= 0) {
+        target = 0;
+        step = 30;
+    } else if (f->attack && cruise) {
+        const int floor_delta = aya ? (f->actor->pos_y >> 16) - (aya->pos_y >> 16) : 0;
+        target = floor_delta + 300 - f->resource->height / 2;
+        target = target < 0 ? 0 : target > cruise ? cruise : target;
+        step = 24;
+    }
+    const int delta = target - f->lift;
+    f->lift += delta < -step ? -step : delta > step ? step : delta;
+}
+
 static void pe_foe_think(PeFoe *f) {
     FieldActor *a = f->actor, *aya = g_PlayerEntity;
     EnemyCombatant *core = pe_core(f);
@@ -889,6 +908,7 @@ static void pe_foe_think(PeFoe *f) {
     hp = core->hpAlive;
     if (hp <= 0 && !f->dead && pe_transform(f, core)) return;
     if (g_GameStateFlags & 0x100) { pe_place_targets(f); return; }   /* enemies stopped */
+    pe_step_lift(f, aya, hp);
     if (f->entrance_frames && hp > 0) {
         /* Hold the source pose through the battle opening or until a hit. */
         if (hp < f->last_hp || !--f->entrance_frames) {
@@ -928,7 +948,9 @@ static void pe_foe_think(PeFoe *f) {
             f->frame = 0;
             done = 0;
         }
-        a->anim.fixed = done ? core->deathAnimFrame << 16 : (int)(f->frame * 30.0 / pack->fps) << 16;
+        int elapsed = (int)(f->frame * 30.0 / pack->fps);
+        if (f->lift && elapsed >= core->deathAnimFrame) elapsed = core->deathAnimFrame - 1;
+        a->anim.fixed = (done && !f->lift ? core->deathAnimFrame : elapsed) << 16;
         pe_place_targets(f);
         return;
     }
@@ -961,7 +983,10 @@ static void pe_foe_think(PeFoe *f) {
         if (!f->blow_done && f->frame >= atk->hit) {
             f->blow_done = 1;
             diff = pe_turn_diff(a->rot_y, want);
-            if (aya && aya->state && dist <= pe_reach(pack, f->attack - 1) * 1.15 && abs(diff) < 0x300) {
+            const int aim_y = aya ? (aya->pos_y >> 16) - 300 : 0;
+            const int body_y = (a->pos_y >> 16) - f->lift - f->resource->height / 2;
+            if (aya && aya->state && dist <= pe_reach(pack, f->attack - 1) * 1.15 && abs(diff) < 0x300 &&
+                (!pack->altitude || abs(aim_y - body_y) <= 180)) {
                 /* the enemy-hit path: the attack record (power, ready), the hit bits on the
                  * enemy and on Aya; Menu_MainUpdate takes the HP with her defense and armor */
                 Combatant *ayc = (Combatant *)aya->state;
@@ -1103,7 +1128,7 @@ static void pe_draw(PeFoe *f, const u32 *view_words) {
     sy = sin(yaw * 2 * PE_PI / 4096.0);
     {
         const double m[3][3] = {{cy, 0, sy}, {0, 1, 0}, {-sy, 0, cy}};
-        const double t[3] = {a->pos_x / 65536.0, a->pos_y / 65536.0, a->pos_z / 65536.0};
+        const double t[3] = {a->pos_x / 65536.0, a->pos_y / 65536.0 - f->lift, a->pos_z / 65536.0};
         for (r = 0; r < 3; ++r) {   /* eye = view * world, in doubles (no GTE clamping) */
             double tr = view->t[r];
             for (c = 0; c < 3; ++c) {
@@ -1212,9 +1237,9 @@ void pe_enemy_status_text(char *out, unsigned size) {
         if (f->seen & (1u << i)) snprintf(seen + strlen(seen), sizeof seen - strlen(seen), "%s%s", seen[0] ? "+" : "", k_role_names[i]);
     core = pe_core(f);
     if (core && g_PlayerEntity) dist = (int)pe_dist(f->actor, g_PlayerEntity);
-    snprintf(out, size, "%s hp=%d/%d anim=%s frames=%d tris=%d seen=%s hits=%d damage=%d dist=%d charge=%d foes=%d room=%d sent=%d sounds=%d vram=%d,%d rot=%d to_aya=%d",
+    snprintf(out, size, "%s hp=%d/%d anim=%s lift=%d frames=%d tris=%d seen=%s hits=%d damage=%d dist=%d charge=%d foes=%d room=%d sent=%d sounds=%d vram=%d,%d rot=%d to_aya=%d",
              resource->pack.name, core ? core->hpAlive : 0, resource->pack.hp, f->role >= 0 ? k_role_names[f->role] : "-",
-             f->drawn_frames, f->tris, seen, f->hits, f->damage_done, dist, core ? (int)core->curHP : 0, s.foes,
+             f->lift, f->drawn_frames, f->tris, seen, f->hits, f->damage_done, dist, core ? (int)core->curHP : 0, s.foes,
              s.room_enemies, s.sent_away, f->sounds, resource->texture.x, resource->texture.y, f->actor ? f->actor->rot_y & 0xFFF : -1,
              f->actor && g_PlayerEntity ? pe_angle_to(f->actor, g_PlayerEntity) : -1);
 }

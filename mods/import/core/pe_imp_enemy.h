@@ -58,6 +58,10 @@ int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, siz
 int pe_imp_enemy_model_allowed(const char *asset_id);
 int pe_imp_set_enemy_next_form(const char *game, unsigned kind, unsigned next);
 int pe_imp_enemy_next_form(const char *asset_id, char *out, size_t size);
+/* Original moves the source reader has identified. -1 leaves the role to the guesser. */
+typedef struct { int attack, hurt; } PeImpEnemyMoveHints;
+int pe_imp_set_enemy_move_hints(const char *game, unsigned kind, PeImpEnemyMoveHints hints);
+PeImpEnemyMoveHints pe_imp_enemy_move_hints(const char *asset_id);
 int pe_imp_add_enemy_cues(const char *asset_id, const PeImpEnemyCues *cues);
 const PeImpEnemyCues *pe_imp_enemy_cues(const char *asset_id);
 

@@ -311,6 +311,7 @@ static struct {
     const PeImpEnemyStart *starts;
     PeImpEnemyBody body;
     unsigned next;
+    PeImpEnemyMoveHints moves;
 } s_kind[MAX_KINDS];
 static int s_kinds;
 
@@ -323,6 +324,7 @@ int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id)
         s_kind[i].starts = NULL;
         s_kind[i].body = PE_IMP_ENEMY_UPRIGHT;
         s_kind[i].next = 0;
+        s_kind[i].moves = (PeImpEnemyMoveHints){-1, -1};
         s_kinds++;
     }
     snprintf(s_kind[i].game, sizeof s_kind[i].game, "%s", game);
@@ -393,6 +395,20 @@ int pe_imp_enemy_next_form(const char *asset_id, char *out, size_t size) {
     const int i = enemy_asset_kind(asset_id);
     if (i < 0 || !s_kind[i].next) return -1;
     return pe_imp_enemy_kind_asset(s_kind[i].game, s_kind[i].next, out, size);
+}
+
+int pe_imp_set_enemy_move_hints(const char *game, unsigned kind, PeImpEnemyMoveHints hints) {
+    for (int i = 0; game && i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            s_kind[i].moves = hints;
+            return 0;
+        }
+    return -1;
+}
+
+PeImpEnemyMoveHints pe_imp_enemy_move_hints(const char *asset_id) {
+    const int i = enemy_asset_kind(asset_id);
+    return i < 0 ? (PeImpEnemyMoveHints){-1, -1} : s_kind[i].moves;
 }
 
 int pe_imp_set_enemy_body(const char *game, unsigned kind, PeImpEnemyBody body) {

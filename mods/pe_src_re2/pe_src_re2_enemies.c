@@ -71,6 +71,10 @@ int pe_re2_enemies_register(void) {
     };
     for (unsigned i = 0; i < sizeof bodies / sizeof bodies[0]; i++)
         bad |= pe_imp_set_enemy_body("re2", bodies[i].kind, bodies[i].body) != 0;
+    /* Consulted bio2-ds EM21.C, EM36.C and EM3A.C for these base-set moves. */
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x21, (PeImpEnemyMoveHints){5, 9}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x36, (PeImpEnemyMoveHints){9, -1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x3a, (PeImpEnemyMoveHints){4, -1}) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x31, 0x33) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x33, 0x34) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x34, 0x36) != 0;
@@ -83,5 +87,21 @@ int pe_re2_enemies_register(void) {
     bad |= pe_imp_add_enemy_cues("re2:enemy/em20", &dog) != 0;
     bad |= pe_imp_add_enemy_cues("re2:enemy/em22", &licker) != 0;
     bad |= pe_imp_add_enemy_cues("re2:enemy/em24", &evolved) != 0;
+    /* Crow and G role cues were checked in EM21.C and the EM31/33/34/36
+     * handlers, then mapped through the corresponding disc VAB tone tables. */
+    static const PeImpEnemyCues crow = {{"sound/enemy07/wave04", "sound/enemy07/wave05", "sound/enemy07/wave07"}};
+    static const PeImpEnemyCues roach = {{"sound/enemy10/wave05", "sound/enemy10/wave03", "sound/enemy10/wave02"}};
+    static const PeImpEnemyCues g1 = {{"sound/enemy21/wave07", "sound/enemy21/wave03", "sound/enemy21/wave12"}};
+    static const PeImpEnemyCues g2 = {{"sound/enemy23/wave03", "sound/enemy23/wave02", "sound/enemy23/wave15"}};
+    static const PeImpEnemyCues g3 = {{"sound/enemy24/wave20", NULL, NULL}};
+    static const PeImpEnemyCues g4 = {{"sound/enemy25/wave06", "sound/enemy25/wave02", "sound/enemy25/wave01"}};
+    static const PeImpEnemyCues moth = {{"sound/enemy18/wave09", "sound/enemy18/wave03", "sound/enemy18/wave05"}};
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em21", &crow) != 0;
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em29", &roach) != 0;
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em31", &g1) != 0;
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em33", &g2) != 0;
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em34", &g3) != 0;
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em36", &g4) != 0;
+    bad |= pe_imp_add_enemy_cues("re2:enemy/em3a", &moth) != 0;
     return bad ? -1 : 0;
 }

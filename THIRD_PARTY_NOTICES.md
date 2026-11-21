@@ -329,6 +329,8 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   `EM10.C`, `SCE0.C`, and `SND.C` were also consulted for zombie sound cues and enemy bank layout.
   `EM20.C`, `EM22.C`, and `EM24.C` were consulted for dog and Licker sound cues.
   `EM_SUB.C` and `EM10.C` were consulted for selecting feeding zombies' room animation.
+  `EM21.C`, `EM29.C`, `EM31.C`, `EM33.C`, `EM34.C`, `EM36.C`, and `EM3A.C` were consulted
+  for crow, roach and G sound cues and the airborne attack moves.
   Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

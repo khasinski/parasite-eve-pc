@@ -231,6 +231,7 @@ int pe_enemy_pack_load(PeEnemyPack *p, const char *dir, char *err, unsigned es) 
     {   /* how it fights: missing fields keep plain defaults, so format 1 packs still load */
         const cJSON *b = cJSON_GetObjectItemCaseSensitive(j, "behavior");
         p->speed = json_int(b, "speed", 10, 0, 200);
+        p->altitude = json_int(b, "altitude", 0, 0, 1000);
         p->charge = json_int(b, "charge", 45, 1, 2000);
         p->radius = json_int(b, "radius", 250, 20, 4000);
         p->stagger = json_int(b, "stagger", 1, 0, 1);

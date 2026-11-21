@@ -108,7 +108,7 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
         pe_imp_enemy_defaults(game, &yaw, &scale);
         name_of(asset_id, name, sizeof name);
         if (pe_imp_enemy_guess_body(&m, &a, name, id + (colon - asset_id) + 1, yaw, scale,
-                                    pe_imp_enemy_body(asset_id), g, why, n)) {
+                                    pe_imp_enemy_body(asset_id), pe_imp_enemy_move_hints(asset_id), g, why, n)) {
             pe_imp_model_free(&m), pe_imp_animation_free(&a), free(g);
             return -1;
         }
@@ -146,6 +146,8 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
     }
     free(g);
     if (rc) return -1;
+    if (pe_imp_enemy_body(asset_id) == PE_IMP_ENEMY_FLYER)
+        p.altitude = p.radius < 110 ? 440 : 540;
     rc = pe_enemy_write(&p, folder, why, n);
     if (!rc) {
         if (!custom) {
@@ -248,7 +250,7 @@ static int enemies_coverage(const PeImpAsset *a, char *out, size_t size) {
 }
 
 const PeImpTarget g_pe_enemy_target = {
-    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 11, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
+    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 12, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
     enemies_accepts, enemies_place, enemies_current, enemies_coverage};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }

@@ -3,9 +3,12 @@
 #include "pe_src_re1.h"
 
 int pe_re1_enemy_sounds_register(void) {
-    /* Curated cues from the first zombie room's imported VAB. */
+    /* Curated cues from the first zombie room's VAB, shared by both pairs of early zombie models. */
     static const PeImpEnemyCues zombie = {{"sound/room102/wave05", "sound/room102/wave06", "sound/room102/wave07"}};
-    return pe_imp_add_enemy_cues("re1:enemy/em1000", &zombie);
+    return pe_imp_add_enemy_cues("re1:enemy/em1000", &zombie) |
+           pe_imp_add_enemy_cues("re1:enemy/em1001", &zombie) |
+           pe_imp_add_enemy_cues("re1:enemy/em1100", &zombie) |
+           pe_imp_add_enemy_cues("re1:enemy/em1101", &zombie);
 }
 
 const PeImpReader g_re1_sound_ps1 = {

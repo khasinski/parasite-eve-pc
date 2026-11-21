@@ -42,7 +42,8 @@ typedef struct {
 int pe_imp_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
                    int yaw, int scale, PeImpEnemyGuess *g, char *why, size_t n);
 int pe_imp_enemy_guess_body(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
-                            int yaw, int scale, PeImpEnemyBody body, PeImpEnemyGuess *g, char *why, size_t n);
+                            int yaw, int scale, PeImpEnemyBody body, PeImpEnemyMoveHints hints, PeImpEnemyGuess *g,
+                            char *why, size_t n);
 
 /* The source game's own strength for `asset_id` (pe_imp_enemy_strength), if it registered one, over
  * a guessed profile: hp (and exp from it) and, when given, every attack's power. 1 applied, 0 none. */

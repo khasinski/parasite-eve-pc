@@ -203,7 +203,8 @@ static void test_enemy_sounds(const char *store) {
     assert(!pe_re2_enemies_register() && !pe_re1_enemy_sounds_register() && !pe_enemy_target_register());
     const PeImpTarget *target = pe_imp_target(0);
     static const char *const ids[] = {
-        "re2:enemy/em10", "re2:enemy/em20", "re2:enemy/em22", "re2:enemy/em24", "re1:enemy/em1000"
+        "re2:enemy/em10", "re2:enemy/em20", "re2:enemy/em22", "re2:enemy/em24",
+        "re1:enemy/em1000", "re1:enemy/em1001", "re1:enemy/em1100", "re1:enemy/em1101"
     };
     for (unsigned i = 0; i < sizeof ids / sizeof ids[0]; i++) {
         const PeImpBuild ctx = {strncmp(ids[i], "re2:", 4) ? store : re2_store, NULL, NULL};
@@ -222,6 +223,30 @@ static void test_enemy_sounds(const char *store) {
         assert((pack.anim[pack.role[PE_ANIM_DIE]].event[0] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_DIE + 1);
         pe_enemy_pack_free(&pack);
         printf("%s: %s\n", ids[i], summary);
+    }
+    static const struct { const char *id; int flight, attack, cues; } more[] = {
+        {"re2:enemy/em21", 1, 1, 3}, {"re2:enemy/em29", 0, 0, 3}, {"re2:enemy/em31", 0, 1, 3},
+        {"re2:enemy/em33", 0, 1, 3}, {"re2:enemy/em34", 0, 0, 1}, {"re2:enemy/em36", 0, 1, 3},
+        {"re2:enemy/em3a", 1, 1, 3}
+    };
+    const PeImpBuild ctx = {re2_store, NULL, NULL};
+    for (unsigned i = 0; i < sizeof more / sizeof more[0]; i++) {
+        snprintf(folder, sizeof folder, "%s/%s", s_dir, strrchr(more[i].id, '/') + 1);
+        assert(!pe_imp_mkdirs(folder));
+        assert(!target->build(&ctx, more[i].id, folder, summary, sizeof summary, why, sizeof why));
+        PeEnemyPack pack;
+        assert(!pe_enemy_pack_load(&pack, folder, why, sizeof why));
+        assert((pack.altitude > 0) == more[i].flight);
+        int cues = 0;
+        for (int cue = 1; cue < pack.sounds; cue++) cues += pack.sound[cue].frames > 1;
+        assert(cues == more[i].cues);
+        if (more[i].attack) {
+            assert(pack.attacks > 0);
+            const PeEnemyAttack *attack = &pack.attack[0];
+            assert((pack.anim[attack->anim].event[attack->hit] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_ATTACK + 1);
+        }
+        pe_enemy_pack_free(&pack);
+        printf("%s: %s\n", more[i].id, summary);
     }
 }
 
