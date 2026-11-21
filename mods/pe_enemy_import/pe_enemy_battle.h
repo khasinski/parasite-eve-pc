@@ -8,10 +8,10 @@ const char *pe_enemy_choice_name(unsigned i);
 /* The next battle gets `count` (1..3) enemies of pack `choice` (0: none) as enemies of their own,
  * with the room's enemies sent away when send_away is set. */
 void pe_enemy_battle_arm(int choice, int count, int send_away);
-/* Arm one foe from a named folder under pe_enemies and replace the native foes.
+/* Arm the given number of foes from a named folder under pe_enemies, replacing native foes.
  * Loads directly from disk. Returns 1 when armed, 0 if unavailable. */
-int pe_enemy_battle_arm_pack(const char *pack);
-/* True only when the single room foe spawned and died during this battle. */
+int pe_enemy_battle_arm_pack(const char *pack, int count);
+/* Number of room foes that spawned, if all of them died. */
 int pe_enemy_battle_room_defeated(void);
 void pe_enemy_battle_disarm(void);
 void pe_enemy_status_text(char *out, unsigned size);

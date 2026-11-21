@@ -200,9 +200,9 @@ static int play(unsigned scenario) {
     EXPECT(flag != 0xFF);
     int shared = 0;
     for (int i = 0; i < room.count; i++) shared += room.enemies[i].killed_flag == flag;
-    EXPECT(pe_trip_arm(&trip, &room, pick));
+    EXPECT(pe_trip_arm(&trip, &room, pick) > 1);
     EXPECT(s.api->pause_for_battle() == 1 && s.backdrop && !s.active);
-    pe_trip_won(&trip, 1);
+    pe_trip_won(&trip, 1);                                 /* a failure to spawn the rest must preserve their slots */
     EXPECT(pe_trip_report(&trip, s.api) == 0 && trip.armed);   /* paused: not yet */
     s.api->resume_after_battle();
     frames(2, 0);
@@ -213,7 +213,7 @@ static int play(unsigned scenario) {
     for (int i = 0; i < room.count; i++) EXPECT(room.enemies[i].killed_flag != flag);
     {   /* an escape or a loss reports nothing */
         PeTripResult lost;
-        EXPECT(pe_trip_arm(&lost, &room, 0));
+        EXPECT(pe_trip_arm(&lost, &room, 0) > 0);
         pe_trip_won(&lost, 0);
         EXPECT(pe_trip_report(&lost, s.api) == -1 && !lost.armed);
     }

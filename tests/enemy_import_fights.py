@@ -240,7 +240,8 @@ def part_imported_room(exe, disc, work, re2_disc):
         end = game.vblank + 3000
         while game.vblank < end and 'hp=' not in game.picker()['Imported status']:
             game.adv(10)
-        check('hp=' in game.picker()['Imported status'], 'imported room: its enemy never joined')
+        status = game.picker()['Imported status']
+        check('hp=' in status and 'foes=3' in status, f'imported room: expected three street foes, got {status}')
         packs = list((game.config / 'pe_enemies').glob('re2-em*/enemy.json'))
         check(len(packs) == 1 and (packs[0].parent / 'profile.json').is_file(),
               'imported room: no automatically built enemy pack and profile')
@@ -248,9 +249,10 @@ def part_imported_room(exe, disc, work, re2_disc):
         wait_home(game)
         check_home(game, where, 'imported room')
         after = room_rows(game)
-        check(after['Status'] == before['Status'] and after['Enemies'] != before['Enemies'], (before, after))
-        check('imported room: slot ' in game.picker_log(), 'imported room: no placement defeat reported')
-        print('imported room: its own enemy was built and defeated, and Aya returned to the same room and pose')
+        check(after['Status'] == before['Status'] and
+              int(after['Enemies'].split()[0]) == int(before['Enemies'].split()[0]) - 3, (before, after))
+        check('imported room: 3 selected placements beaten' in game.picker_log(), 'imported room: wrong defeat count')
+        print('imported room: three street foes joined and were defeated, and Aya returned to the same room and pose')
         after_win = after
         part_run(game)
         after = room_rows(game)

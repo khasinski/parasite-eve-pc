@@ -195,8 +195,8 @@ void pe_enemy_battle_arm(int choice, int count, int send_away) {
     s_armed = pe_load(dir);
 }
 
-int pe_enemy_battle_arm_pack(const char *pack) {
-    if (s.active) return 0;
+int pe_enemy_battle_arm_pack(const char *pack, int count) {
+    if (s.active || count < 1 || count > PE_FOES_MAX) return 0;
     s_armed = 0;
     char dir[1200];
     const int written = snprintf(dir, sizeof dir, "%s/%s", s_dir, pack);
@@ -205,12 +205,14 @@ int pe_enemy_battle_arm_pack(const char *pack) {
     if (s_loaded[0]) pe_enemy_pack_free(&s_pack), s_loaded[0] = 0;
     if (!pe_load(dir)) return 0;
     s.foes = 0;
-    s_count = s_send_away = s_armed = 1;
+    s_count = count;
+    s_send_away = s_armed = 1;
     return 1;
 }
 
 int pe_enemy_battle_room_defeated(void) {
-    return s.foes == 1 && s.foe[0].dead;
+    for (int i = 0; i < s.foes; i++) if (!s.foe[i].dead) return 0;
+    return s.foes;
 }
 
 void pe_enemy_battle_disarm(void) { s_armed = 0; }
