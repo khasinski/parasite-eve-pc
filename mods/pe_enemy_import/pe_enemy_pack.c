@@ -221,6 +221,8 @@ int pe_enemy_pack_load(PeEnemyPack *p, const char *dir, char *err, unsigned es) 
     if (json_int(j, "format", 0, 0, 99) != 1) { fail(err, es, "format must be 1", "enemy.json"); goto done; }
     s = json_str(j, "name");
     snprintf(p->name, sizeof p->name, "%s", s && *s ? s : p->folder);
+    if ((s = json_str(j, "source"))) snprintf(p->source, sizeof p->source, "%s", s);
+    if ((s = json_str(j, "next_form"))) snprintf(p->next_form, sizeof p->next_form, "%s", s);
     p->hp = json_int(j, "hp", 100, 1, 99999);
     p->exp = json_int(j, "exp", 0, 0, 99999);
     p->defense = json_int(j, "defense", -1, -1, 9999);

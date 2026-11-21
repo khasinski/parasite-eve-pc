@@ -202,6 +202,8 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
     if (a->bones != m->bones) { fail(why, n, "%sthe moves are for %ld bones, not the model's", "", (long)a->bones); goto out; }
     snprintf(p->name, sizeof p->name, "%s", prof->name ? prof->name : "Enemy");
     snprintf(p->folder, sizeof p->folder, "%s", source ? source : "");
+    snprintf(p->source, sizeof p->source, "%s", source ? source : "");
+    if (prof->next_form) snprintf(p->next_form, sizeof p->next_form, "%s", prof->next_form);
     p->hp = prof->hp, p->exp = prof->exp, p->defense = prof->defense, p->fps = (int)a->fps, p->yaw = prof->yaw;
     p->speed = prof->speed, p->charge = prof->charge, p->radius = prof->radius, p->stagger = prof->stagger;
     if (model_in(p, m, &info->skipped, why, n)) goto out;
@@ -354,7 +356,11 @@ int pe_enemy_write(const PeEnemyPack *p, const char *folder, char *why, size_t n
     fprintf(f, "{\n  \"format\": 1,\n  \"name\": ");
     json_text(f, p->name);
     fprintf(f, ",\n  \"source\": ");
-    json_text(f, p->folder);
+    json_text(f, p->source);
+    if (p->next_form[0]) {
+        fprintf(f, ",\n  \"next_form\": ");
+        json_text(f, p->next_form);
+    }
     fprintf(f, ",\n  \"hp\": %d, \"exp\": %d, \"defense\": %d, \"fps\": %d, \"yaw\": %d,\n", p->hp, p->exp, p->defense, p->fps, p->yaw);
     fprintf(f, "  \"model\": \"model.bin\", \"texture\": \"texture.bin\",\n  \"anims\": {");
     for (int a = 0; a < p->anims; a++) fprintf(f, "%s\"%s\": \"anims/%s.bin\"", a ? ", " : "", p->anim[a].name, p->anim[a].name);

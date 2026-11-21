@@ -355,6 +355,7 @@ int pe_imp_enemy_profile_save(const PeImpEnemyProfile *p, const char *note, cons
     if (note) fprintf(f, "  \"about\": "), pj_write_string(f, note), fprintf(f, ",\n");
     fprintf(f, "  \"name\": "), pj_write_string(f, p->name ? p->name : "Enemy");
     fprintf(f, ",\n  \"moves\": "), pj_write_string(f, p->moves ? p->moves : "");
+    if (p->next_form) fprintf(f, ",\n  \"next_form\": "), pj_write_string(f, p->next_form);
     if (p->sounds) fprintf(f, ",\n  \"sounds\": "), pj_write_string(f, p->sounds), fprintf(f, ", \"sound_count\": %d", p->sound_count);
     fprintf(f, ",\n  \"hp\": %d, \"exp\": %d, \"defense\": %d, \"height\": %d, \"yaw\": %d,\n  \"anims\": {", p->hp, p->exp,
             p->defense, p->height, p->yaw);
@@ -382,6 +383,15 @@ int pe_imp_enemy_profile_load(const char *path, PeImpEnemyGuess *g, char *why, s
     snprintf(g->name, sizeof g->name, "%s", pj_str(pj_get(root, "name"), "Enemy"));
     snprintf(g->moves, sizeof g->moves, "%s", pj_str(pj_get(root, "moves"), ""));
     p->name = g->name, p->moves = g->moves;
+    if (pj_get(root, "next_form")) {
+        const char *next = pj_str(pj_get(root, "next_form"), NULL);
+        if (!next || strlen(next) >= sizeof g->next_form || (*next && !strchr(next, ':'))) {
+            snprintf(why, n, "next_form must be an asset ID or an empty string");
+            goto out;
+        }
+        snprintf(g->next_form, sizeof g->next_form, "%s", next);
+        p->next_form = g->next_form;
+    }
     if (pj_get(root, "sounds")) {
         snprintf(g->sounds, sizeof g->sounds, "%s", pj_str(pj_get(root, "sounds"), ""));
         p->sounds = g->sounds, p->sound_count = (int)pj_int(pj_get(root, "sound_count"), 0);

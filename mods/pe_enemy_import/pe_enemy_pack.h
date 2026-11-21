@@ -62,6 +62,7 @@ typedef struct {
 
 typedef struct {
     char folder[64], name[32];
+    char source[128], next_form[128];  /* catalog asset IDs, optional in installed packs */
     int hp, exp, defense, fps, yaw;
     /* "behavior": speed (field units per game frame while walking), charge (its time bar: added
      * per frame, full at 9000), radius (body size for Aya's aim and reach), stagger (1: shots

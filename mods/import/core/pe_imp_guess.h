@@ -31,6 +31,7 @@ typedef struct {
     PeImpEnemyProfile p;
     char name[48], moves[PE_IMP_ID_MAX], sounds[PE_IMP_ID_MAX];
     char anim[PE_IMP_ENEMY_ANIMS][24];
+    char next_form[PE_IMP_ID_MAX];
 } PeImpEnemyGuess;
 
 /* The profile for a model named `name` whose moves are `moves_id` (the local ID): idle, walk, hurt,

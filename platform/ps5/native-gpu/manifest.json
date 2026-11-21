@@ -4939,7 +4939,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_registry.c",
-      "sha256": "b229b8b4c2141e0408cd93e7630918eb342e14f9daa2c72160d469a2c73062d4"
+      "sha256": "0874a1deecda09360bc453586ce81a89cd7bbe077f4b80635d5cc6bba70f69a3"
     },
     {
       "path": "mods/import/core/pe_imp_store.c",
@@ -4987,7 +4987,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_enemy.h",
-      "sha256": "d18c6655ed936c14fd723c64c7d85339968e0ad91811721aee45222ca90cc192"
+      "sha256": "1b878aa259c2609bd5984433a745441b755fd217c4cb400e1a80faba246bcdac"
     },
     {
       "path": "mods/import/core/pe_imp_rdt.c",
@@ -5067,11 +5067,11 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_battle.c",
-      "sha256": "671726c560a3325404d917b115d85ca3e695143f995cceeca46823e836de530f"
+      "sha256": "773e2eb93e610edb464142c60548db0647aa9487545014bbe488ce63ca910e01"
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_build.c",
-      "sha256": "40ebbfa88f03d214b2e3ab9b08d735aecd3acce0c6e6c8698575d3f15468598c"
+      "sha256": "fdb62e20f9d4cad45a0cf6e80b0a1b4cea657c9291fa15a81ad771a6fac6611f"
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_build.h",
@@ -5079,7 +5079,7 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_target.c",
-      "sha256": "4aa4524c28b9c132968a64588afbe4d08ee9c8719d5c3588829973bf883d8510"
+      "sha256": "f996eabdddfeb7bfac6b4bb58e17ead9c1bd708e4ed0ec6e045a409f928f7390"
     },
     {
       "path": "tests/enemy_import_nemesis.py",
@@ -5103,15 +5103,15 @@
     },
     {
       "path": "mods/import/core/pe_imp_guess.c",
-      "sha256": "92844d712a24d376fe51a3dcae70dd3f925bccb4185754a4fa2f85df7085483c"
+      "sha256": "9d9e4821c5e677ad0147c0558f0ca685ca0eac4750395567d64152646f351d3c"
     },
     {
       "path": "mods/import/core/pe_imp_guess.h",
-      "sha256": "968aaff52357969736ec7195c7ea9bf522c65205ef25354c939b4c4828719e5c"
+      "sha256": "61610afe3a0e2006fd9d3dc4537559cdecd7921f10fe8bc3b95f3794dfc4f56c"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2_enemies.c",
-      "sha256": "83b492f9df96874c77511bcfdec18507a7e563e85c5ba0c941d914d35aa4d14d"
+      "sha256": "36e853ec2f6149e442e831299cbdae8b9b21f0933b8ecbcd413fc487912fb4c4"
     }
   ]
 }

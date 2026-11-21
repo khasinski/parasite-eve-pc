@@ -285,6 +285,7 @@ static struct {
     char id[PE_IMP_ID_MAX];
     const PeImpEnemyStart *starts;
     PeImpEnemyBody body;
+    unsigned next;
 } s_kind[MAX_KINDS];
 static int s_kinds;
 
@@ -296,6 +297,7 @@ int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id)
     if (i == s_kinds) {
         s_kind[i].starts = NULL;
         s_kind[i].body = PE_IMP_ENEMY_UPRIGHT;
+        s_kind[i].next = 0;
         s_kinds++;
     }
     snprintf(s_kind[i].game, sizeof s_kind[i].game, "%s", game);
@@ -350,6 +352,22 @@ int pe_imp_enemy_model_allowed(const char *asset_id) {
         if (strlen(s_kind[i].game) == prefix && !strncmp(s_kind[i].game, asset_id, prefix))
             return enemy_asset_kind(asset_id) >= 0;
     return 1;
+}
+
+int pe_imp_set_enemy_next_form(const char *game, unsigned kind, unsigned next) {
+    if (!game || kind == next) return -1;
+    for (int i = 0; i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            s_kind[i].next = next;
+            return 0;
+        }
+    return -1;
+}
+
+int pe_imp_enemy_next_form(const char *asset_id, char *out, size_t size) {
+    const int i = enemy_asset_kind(asset_id);
+    if (i < 0 || !s_kind[i].next) return -1;
+    return pe_imp_enemy_kind_asset(s_kind[i].game, s_kind[i].next, out, size);
 }
 
 int pe_imp_set_enemy_body(const char *game, unsigned kind, PeImpEnemyBody body) {

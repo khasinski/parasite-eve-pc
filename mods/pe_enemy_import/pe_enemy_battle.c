@@ -32,6 +32,7 @@
 #include <SDL3/SDL.h>
 
 #include "pe_enemy_battle.h"
+#include "pe_enemy_build.h"
 #include "pe_enemy_pack.h"
 #include "pe_imp_enemy.h"
 #include "pe_game.h"
@@ -57,6 +58,7 @@
 
 #define MOD_ID "pe_enemy_import"
 #define PE_FOES_MAX 3
+#define PE_FORMS_MAX 5
 #define PE_TEX_X 320          /* the texture's first choice when free (Central Park leaves it free) */
 #define PE_TEX_Y 256
 #define PE_TEX_W 256          /* VRAM words: 512 8-bit texels, the pack builder's limit */
@@ -78,8 +80,9 @@ typedef struct {
 
 enum { ROLE_ATTACK = PE_ANIM_ROLES, ROLE_ENTRANCE, ROLE_WAKE };
 
-typedef struct {
+typedef struct PeBattlePack {
     PeEnemyPack pack;
+    struct PeBattlePack *next;
     char path[1200];
     RECT texture, clut;
     int height, uploaded;
@@ -93,7 +96,7 @@ typedef struct {
     int anim, role, attack;          /* attack: index + 1 while attacking */
     double frame;
     int blow_done, stagger, last_hp, dead;
-    int entrance_frames, wake_anim;
+    int entrance_frames, wake_anim, forms;
     int drawn_frames, tris, hits, damage_done, attacks_started;
     int event_frame, sounds;         /* last frame whose events ran; sounds played */
     unsigned seen;                   /* bit per role: idle walk hurt die, attack = 1 << 4 */
@@ -103,7 +106,7 @@ static struct { char folder[64], name[32]; } s_list[PE_ENEMY_PACKS_MAX];
 static int s_listed;
 static char s_dir[1024];
 
-static PeBattlePack s_resources[PE_FOES_MAX];
+static PeBattlePack s_resources[PE_FOES_MAX * PE_FORMS_MAX];
 static int s_resource_count;
 static PeBattlePack *s_roster[PE_FOES_MAX];
 static struct { int pose, wake; } s_entrance[PE_FOES_MAX];
@@ -179,7 +182,7 @@ static PeBattlePack *pe_load(const char *dir) {
     char err[200];
     for (int i = 0; i < s_resource_count; i++)
         if (!strcmp(s_resources[i].path, dir)) return &s_resources[i];
-    if (s_resource_count == PE_FOES_MAX) return NULL;
+    if (s_resource_count == PE_FOES_MAX * PE_FORMS_MAX) return NULL;
     PeBattlePack *resource = &s_resources[s_resource_count];
     PeEnemyPack *pack = &resource->pack;
     if (pe_enemy_pack_load(pack, dir, err, sizeof err)) {
@@ -199,12 +202,57 @@ static PeBattlePack *pe_load(const char *dir) {
     for (int i = 0; i < pack->vertices; i++)
         if (-pack->vertex[i].y > top) top = -pack->vertex[i].y;
     resource->height = top > 50 ? top : 500;
+    resource->next = NULL;
     resource->uploaded = 0;
     s_resource_count++;
     pe_mod_log(MOD_ID, "enemy pack %s loaded: %s, %d bones, %d vertices, %d triangles, %d anims, %d attacks, hp %d",
                pack->folder, pack->name, pack->bones, pack->vertices, pack->triangles, pack->anims,
                pack->attacks, pack->hp);
     return resource;
+}
+
+static PeBattlePack *pe_load_form(const char *asset) {
+    char folder[64], dir[1200], manifest[1240], why[160];
+    if (pe_enemy_pack_name(asset, folder, sizeof folder)) return NULL;
+    snprintf(dir, sizeof dir, "%s/%s", s_dir, folder);
+    const PeEnemyBuildApi *api = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION);
+    if (api && api->struct_size >= sizeof *api) api->ensure(asset, why, sizeof why);
+    snprintf(manifest, sizeof manifest, "%s/enemy.json", dir);
+    SDL_PathInfo info;
+    return SDL_GetPathInfo(manifest, &info) && info.type == SDL_PATHTYPE_FILE ? pe_load(dir) : NULL;
+}
+
+/* Resolve successors before combat. A missing form ends the chain at the last available model. */
+static void pe_load_forms(PeBattlePack *first) {
+    PeBattlePack *seen[PE_FORMS_MAX] = {first};
+    PeBattlePack *current = first;
+    for (int i = 1; i < PE_FORMS_MAX && current->pack.next_form[0]; i++) {
+        PeBattlePack *next = current->next;
+        if (!next) {
+            const char *asset = current->pack.next_form;
+            const char *source = current->pack.source;
+            const char *archive = strstr(source, "-cdemd");
+            const char *colon = strchr(source, ':');
+            char variant[sizeof current->pack.next_form];
+            if (archive && colon && !strstr(asset, "-cdemd") &&
+                !strncmp(source, asset, (size_t)(colon - source + 1)) &&
+                snprintf(variant, sizeof variant, "%s%s", asset, archive) < (int)sizeof variant)
+                next = pe_load_form(variant);
+            if (!next) next = pe_load_form(asset);
+        }
+        if (!next) {
+            pe_mod_log(MOD_ID, "next form %s unavailable for %s", current->pack.next_form, current->pack.name);
+            break;
+        }
+        for (int j = 0; j < i; j++)
+            if (seen[j] == next) {
+                current->next = NULL;
+                pe_mod_log(MOD_ID, "next form cycle for %s", current->pack.name);
+                return;
+            }
+        current->next = next;
+        seen[i] = current = next;
+    }
 }
 
 void pe_enemy_battle_arm(int choice, int count, int send_away) {
@@ -218,6 +266,7 @@ void pe_enemy_battle_arm(int choice, int count, int send_away) {
     snprintf(dir, sizeof dir, "%s/%s", s_dir, s_list[choice - 1].folder);
     PeBattlePack *resource = pe_load(dir);
     if (!resource) return;
+    pe_load_forms(resource);
     for (int i = 0; i < s_count; ++i) {
         s_roster[i] = resource;
         s_entrance[i].pose = s_entrance[i].wake = -1;
@@ -241,6 +290,7 @@ int pe_enemy_battle_add_pack(const char *pack, const char *entrance) {
     if (written < 0 || (size_t)written >= sizeof dir) return 0;
     PeBattlePack *resource = pe_load(dir);
     if (!resource) return 0;
+    pe_load_forms(resource);
     s_entrance[s_count].pose = entrance ? pe_enemy_pack_anim(&resource->pack, entrance) : -1;
     s_entrance[s_count].wake = -1;
     if (s_entrance[s_count].pose >= 0) {
@@ -377,6 +427,13 @@ static void pe_place_targets(PeFoe *f) {
     o->hit_body.radius = (s16)radius;
 }
 
+static void pe_set_combat_stats(EnemyCombatant *core, const PeEnemyPack *pack) {
+    core->hpAlive = core->hpAliveCap = core->previousHP = pack->hp;
+    core->defense = (u16)(pack->defense >= 0 ? pack->defense : 0);
+    core->chargeStep = (u16)pack->charge;
+    core->hpMirror = (u16)(pack->exp > 0xFFFF ? 0xFFFF : pack->exp);
+}
+
 static int pe_spawn(PeBattlePack *resource, int entrance, int wake, int x, int y, int z) {
     const PeEnemyPack *pack = &resource->pack;
     PeFoe *f = &s.foe[s.foes];
@@ -396,10 +453,7 @@ static int pe_spawn(PeBattlePack *resource, int entrance, int wake, int x, int y
         a->flags |= 0x10;
         return 0;
     }
-    core->hpAlive = core->hpAliveCap = core->previousHP = pack->hp;
-    core->defense = (u16)(pack->defense >= 0 ? pack->defense : 0);
-    core->chargeStep = (u16)pack->charge;
-    core->hpMirror = (u16)(pack->exp > 0xFFFF ? 0xFFFF : pack->exp);   /* the EXP it gives */
+    pe_set_combat_stats(core, pack);
     core->deathAssetEnabled = 0;
     core->deathAnimFrame = 0;
     core->effect = &core->records[0];
@@ -743,6 +797,36 @@ static void pe_end(const char *why) {
     s.active = 0;
 }
 
+static int pe_transform(PeFoe *f, EnemyCombatant *core) {
+    PeBattlePack *old = f->resource, *next = old->next;
+    if (!next || f->forms >= PE_FORMS_MAX - 1) return 0;
+    int shared = 0;
+    for (int i = 0; i < s.foes; i++)
+        if (&s.foe[i] != f && s.foe[i].resource == old && pe_actor_live(&s.foe[i])) shared = 1;
+    if (!shared) pe_vram(old, 1);
+    if (!next->uploaded) {
+        if (!pe_place(next)) {
+            if (!shared) pe_vram(old, 0);
+            pe_mod_log(MOD_ID, "battle: no VRAM left for next form %s", next->pack.name);
+            return 0;
+        }
+        pe_vram(next, 0);
+    }
+    ++f->forms;
+    f->resource = next;
+    f->attack = f->stagger = f->entrance_frames = 0;
+    f->wake_anim = -1;
+    f->last_hp = next->pack.hp;
+    pe_set_combat_stats(core, &next->pack);
+    core->coreFlags &= 0x7FFFFFFFu;
+    core->atbCharge = 0;
+    pe_set_anim(f, PE_ANIM_IDLE, next->pack.role[PE_ANIM_IDLE]);
+    pe_place_targets(f);
+    pe_mod_log(MOD_ID, "battle: %s transforms into %s (form %d, hp %d)", old->pack.name, next->pack.name,
+               f->forms + 1, core->hpAlive);
+    return 1;
+}
+
 static void pe_foe_think(PeFoe *f) {
     FieldActor *a = f->actor, *aya = g_PlayerEntity;
     EnemyCombatant *core = pe_core(f);
@@ -755,6 +839,7 @@ static void pe_foe_think(PeFoe *f) {
     a->anim_step = 0;
     if (!core) return;
     hp = core->hpAlive;
+    if (hp <= 0 && !f->dead && pe_transform(f, core)) return;
     if (g_GameStateFlags & 0x100) { pe_place_targets(f); return; }   /* enemies stopped */
     if (f->entrance_frames && hp > 0) {
         /* Hold the source pose through the battle opening or until a hit. */

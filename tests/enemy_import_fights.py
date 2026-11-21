@@ -211,7 +211,7 @@ def part_win(game):
     print(f'win: M030 spot 2 started with {ids}, won, back home at {where}')
 
 
-def part_imported_room(exe, disc, work, re2_disc):
+def part_imported_room(exe, disc, work, re2_disc, boss_forms=False):
     def setup(config):
         folders = config / 'import' / 'folders.txt'
         folders.parent.mkdir()
@@ -279,6 +279,13 @@ def part_imported_room(exe, disc, work, re2_disc):
         mixed = room_rows(game)
         check(mixed['Status'].startswith('Room 1-06') and
               all(kind in mixed['Enemies'] for kind in ('0x12', '0x13')), mixed)
+        if boss_forms:
+            folder = game.config / 'pe_enemies' / 're2-em12-cdemd0'
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / 'profile.json').write_text(json.dumps({
+                'format': 1, 'name': 'EM12-CDEMD0', 'moves': 'enemy/em12-cdemd0/moves',
+                'anims': {'idle': 0}, 'next_form': 're2:enemy/em31',
+            }), encoding='utf-8')
         start_fight(game, 0, 1)
         check(wait_battle(game) is not None, 'mixed room: the battle did not start')
         end = game.vblank + 3000
@@ -293,6 +300,18 @@ def part_imported_room(exe, disc, work, re2_disc):
         check(all(f'battle: EM{kind}-CDEMD0 joins' in log for kind in ('12', '13')), 'mixed room: wrong actor models')
         textures = re.findall(r'battle: EM1[23]-CDEMD0 texture at (\d+,\d+)', log)
         check(len(set(textures)) == 2, f'mixed room: expected separate texture origins, got {textures}')
+        if boss_forms:
+            boss_slot = None
+            for kind, hp in (('31', 700), ('33', 900), ('34', 1100), ('36', 600)):
+                win_when_ready(game)
+                state = game.battle()
+                bosses = [e for e in state['enemies'] if e['type'] == 0xEE and e['hp'] == hp]
+                check(state['active'] and len(bosses) == 1, f'EM{kind}: {state}')
+                slot = bosses[0]['actor']
+                check(boss_slot is None or boss_slot == slot, 'the transformed boss changed actors')
+                boss_slot = slot
+                check(room_rows(game)['Status'].startswith('Paused for battle.'), 'room resumed before final form')
+            print('boss forms: EM31, EM33, EM34 and EM36 used one battle slot')
         win_when_ready(game)
         wait_home(game)
         after_mixed = room_rows(game)
@@ -432,12 +451,12 @@ def main():
         return 77
     work.mkdir(parents=True, exist_ok=True)
     try:
-        if '--imported-room' in sys.argv:
+        if '--imported-room' in sys.argv or '--boss-forms' in sys.argv:
             re2_disc = os.getenv('PE_TEST_RE2_DISC')
             if not re2_disc or not Path(re2_disc).is_file():
                 print('PE_TEST_RE2_DISC is not set: skipped')
                 return 77
-            part_imported_room(exe, disc, work, Path(re2_disc).resolve())
+            part_imported_room(exe, disc, work, Path(re2_disc).resolve(), '--boss-forms' in sys.argv)
         elif '--all' in sys.argv:
             only = None   # --only AREA:FIGHT,... reruns some fights
             if '--only' in sys.argv:

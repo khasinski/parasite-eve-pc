@@ -112,6 +112,7 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
             return -1;
         }
         if (pe_imp_enemy_known_strength(asset_id, &g->p)) how = "guessed, its game's own strength";
+        if (!pe_imp_enemy_next_form(asset_id, g->next_form, sizeof g->next_form)) g->p.next_form = g->next_form;
         prof = &g->p;
     }
     PeImpSound *sounds[PE_ENEMY_MAX_SOUNDS] = {0};
@@ -213,7 +214,7 @@ static int enemies_current(const PeImpAsset *a, const char *builder) {
 }
 
 const PeImpTarget g_pe_enemy_target = {
-    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 7, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
+    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 8, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
     enemies_accepts, enemies_place, enemies_current};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }

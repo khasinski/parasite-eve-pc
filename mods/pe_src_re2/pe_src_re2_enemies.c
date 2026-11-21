@@ -63,5 +63,8 @@ int pe_re2_enemies_register(void) {
     };
     for (unsigned i = 0; i < sizeof bodies / sizeof bodies[0]; i++)
         bad |= pe_imp_set_enemy_body("re2", bodies[i].kind, bodies[i].body) != 0;
+    bad |= pe_imp_set_enemy_next_form("re2", 0x31, 0x33) != 0;
+    bad |= pe_imp_set_enemy_next_form("re2", 0x33, 0x34) != 0;
+    bad |= pe_imp_set_enemy_next_form("re2", 0x34, 0x36) != 0;
     return bad ? -1 : 0;
 }

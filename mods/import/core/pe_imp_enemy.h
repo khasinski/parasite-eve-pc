@@ -26,6 +26,7 @@ typedef struct PeImpEnemyProfile {
      * (0: the move's first frame marked PE_IMP_EVENT_HIT, else where it reaches furthest forward) */
     struct { const char *anim; int power, range, hit; } attack[PE_IMP_ENEMY_ATTACKS];
     int speed, charge, radius, stagger;       /* as the pack's "behavior" (pe_enemy_pack.h) */
+    const char *next_form;                    /* full asset ID; empty or NULL ends the fight */
 } PeImpEnemyProfile;
 
 /* Assets "<game>:<local ID>" fight with this profile ("re3", "enemy/nemesis"): exact match. */
@@ -52,6 +53,8 @@ int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id)
 int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, size_t n);
 /* For games with a placement table, only mapped models and their variants are eligible. */
 int pe_imp_enemy_model_allowed(const char *asset_id);
+int pe_imp_set_enemy_next_form(const char *game, unsigned kind, unsigned next);
+int pe_imp_enemy_next_form(const char *asset_id, char *out, size_t size);
 
 /* Optional opening poses for a placed creature. A source reader owns the static table,
  * terminated by a NULL name. Move indices use the catalogued animation's order. */
