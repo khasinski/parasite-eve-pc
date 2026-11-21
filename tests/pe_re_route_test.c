@@ -468,7 +468,9 @@ int main(void) {
                 PeReEnemyPlacement foes[32];
                 const int nfoes = pe_re_session_enemies(&s, foes, 32);
                 int beaten = 0;
-                for (int k = 0; k < nfoes; k++) beaten += !pe_re_session_defeated(&s, foes[k].killed_flag);
+                for (int k = 0; k < nfoes; k++)                   /* each once (a boss has no killed flag) */
+                    if (foes[k].slot < 16 && !s.run.em_dead[foes[k].slot])
+                        beaten += !pe_re_session_beaten(&s, foes[k].slot, foes[k].killed_flag);
                 if (beaten) {
                     fprintf(log, "  %s: fought and beat %d enemies\n", room_name(here, a, sizeof a), beaten);
                     settle(&s, 300);

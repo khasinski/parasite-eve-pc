@@ -96,10 +96,16 @@ static int api_defeated(uint8_t killed_flag) {
     }
     return -1;
 }
+static int api_defeated_slot(uint8_t slot) {
+    if (!s_playing || !s_room_reported || !re_host()->room_active() || pe_re_door_busy()) return -1;
+    for (int i = 0; i < s_nenemies; i++)
+        if (s_enemies[i].slot == slot) return pe_re_session_beaten(&s_session, slot, s_enemies[i].killed_flag);
+    return -1;
+}
 static int pause_for_battle(void);
 static void resume_after_battle(void);
 static const PeRePlayApi s_api = {
-    sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle
+    sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot
 };
 
 static void report_enemies(void) {

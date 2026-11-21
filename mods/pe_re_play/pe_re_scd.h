@@ -132,6 +132,7 @@ typedef struct {
     uint16_t sca_id[256];                      /* sca_id_set: box slot -> its Id's top bits | 1 (0: as built) */
     int sca_changed;                           /* set when one changes: the caller tells the walker, clears it */
     uint8_t em_busy[16];                       /* enemy stand-ins: frames left on a scripted order (see the .c) */
+    uint8_t em_dead[16];                       /* beaten (pe_re_session_beaten): 1, then 2 once the stand-in saw it */
     int nenemy;
     int naot_on;
 } PeReScdRun;

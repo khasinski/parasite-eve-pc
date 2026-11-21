@@ -397,6 +397,13 @@ int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag) {
     return 0;
 }
 
+int pe_re_session_beaten(PeReSession *s, uint8_t slot, uint8_t killed_flag) {
+    if (!s->game || slot >= 16) return -1;
+    if (killed_flag != 0xFF) pe_re_flag_set(&s->progress.flags, enemy_group(s), killed_flag, 1);
+    if (!s->run.em_dead[slot]) s->run.em_dead[slot] = 1;
+    return 0;
+}
+
 int pe_re_enemy_lists_equal(const PeReEnemyPlacement *a, const PeReEnemyPlacement *b, int count) {
     for (int i = 0; i < count; i++, a++, b++) {
         if (a->slot != b->slot || a->kind != b->kind || a->behaviour != b->behaviour ||

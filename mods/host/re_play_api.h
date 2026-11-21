@@ -53,6 +53,10 @@ typedef struct PeRePlayApi {
     int (*pause_for_battle)(void);
     /* Release the pause. The imported room returns on the next free field frame. */
     void (*resume_after_battle)(void);
+    /* Optional in v1 (check struct_size). A currently placed enemy beaten, by its slot: its killed
+     * flag is set if it has one, and the room's scripts see it die (a boss with no killed flag whose
+     * death moves the story on). 0, or -1 if no placed enemy has that slot. */
+    int (*defeated_slot)(uint8_t slot);
 } PeRePlayApi;
 
 #endif

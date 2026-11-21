@@ -531,7 +531,10 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
  *   bit 0x10 is "come out of pod n" (the low nibble); its appearing routine clears the bit when it's
  *   out (EM31.C Em31_mv08_br / Em31_mv08). 5-00's sky tram scene waits on it four times.
  *   bit 1 starts it breaking out of its shell; it sets bit 2 when it's out (EM31.C, the routine
- *   that checks Sce_free0 & 1). 5-09's scene waits on that. */
+ *   that checks Sce_free0 & 1). 5-09's scene waits on that.
+ * - enemy 0x34 (a G form), Sce_free[0]: bit 1 brings it out, and it sets bit 2 once it's out
+ *   (EM34.C Em34_mv0d / Em34_mv00); it sets bit 4 when it dies (Em34_die00). 6-17's lift scene
+ *   waits on both; the death comes from the battle (pe_re_session_beaten), not a timer. */
 static void enemy_standins(PeReScdRun *run) {
     for (int n = 0; n < 16; n++) {
         int16_t *w = run->works[2 + n];
@@ -540,6 +543,9 @@ static void enemy_standins(PeReScdRun *run) {
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x31) {
             if (*f & 0x10) order = 0x10, frames = 60;              /* out of the pod: about a second */
             else if ((*f & 1) && !(*f & 2)) order = 1, frames = 90; /* out of the shell: a second and a half */
+        } else if (w[0] && w[PE_RE_MEMBER_ID] == 0x34) {
+            if (run->em_dead[n] == 1) { *f |= 4, run->em_dead[n] = 2; continue; }   /* beaten: it died */
+            if ((*f & 1) && !(*f & 2)) order = 1, frames = 120;    /* out: about two seconds */
         }
         if (!order) { run->em_busy[n] = 0; continue; }
         if (!run->em_busy[n]) run->em_busy[n] = (uint8_t)frames;    /* the order's just come in */

@@ -113,6 +113,9 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
 int pe_re_enemy_lists_equal(const PeReEnemyPlacement *a, const PeReEnemyPlacement *b, int count);
 /* A placed enemy beaten: its killed flag set. 0, or -1 (no game, flag 0xFF). */
 int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag);
+/* A placed enemy beaten (a battle won): its killed flag set if it has one (not 0xFF), and the
+ * scripts see it die (enemy stand-ins: a boss whose death moves the story on). 0, or -1. */
+int pe_re_session_beaten(PeReSession *s, uint8_t slot, uint8_t killed_flag);
 /* Use `item` from the pocket here, as choosing it on RE2's status screen does: when the room's
  * scripts allow it here (flag group 10, Use_flg, its bit set) it becomes Use_id (work 2) for them
  * to act on (open the way, take the item); else PE_RE_SAID: "You can't use the Red Jewel here." */
