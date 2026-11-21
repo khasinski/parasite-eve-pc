@@ -20,6 +20,7 @@ enum {
     OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
     OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37, OP_PLC_RET = 0x42,
     OP_SPEED_SET = 0x2F, OP_ADD_SPEED = 0x30, OP_ADD_ASPEED = 0x31, OP_OBJ_MODEL_SET = 0x2D,
+    OP_SPLC_RET = 0x70, OP_SPLC_SCE = 0x71,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -447,6 +448,10 @@ static int step(Vm *vm, PeReScdTask *t) {
         t->pc += n;
         return CONTINUE;
     }
+    case OP_SPLC_RET: case OP_SPLC_SCE:                    /* the partner back to following / held by the scene: */
+        pe_re_flag_set(vm->flags, PE_RE_FG_STATUS, 3, code == OP_SPLC_RET);   /* STAT_SUB_PLAYER (SCE2.C) */
+        t->pc += n;
+        return CONTINUE;
     case OP_OBJ_MODEL_SET: {                               /* a scene object (a shelf): where it stands, its facing */
         const int slot = work_slot(4, ins[1]);             /* (zones on it are placed by it: pe_re_zone_base) */
         if (slot >= 0) {

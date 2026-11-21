@@ -719,6 +719,14 @@ int main(void) {
         CHECK(!pe_re_session_start(&s, s_store, g, scenario, why, sizeof why));
     }
     if (s_fail) { printf("start: %s\n", why); return 1; }
+    for (const char *f = getenv("PE_TEST_RE_SET"); f && *f;) {   /* PE_TEST_RE_SET="1:03=0": flags forced at the start (debugging) */
+        unsigned g = 0, bit = 0, v = 0;
+        int used = 0;
+        if (sscanf(f, "%u:%x=%u%n", &g, &bit, &v, &used) != 3) break;
+        pe_re_flag_set(&s.progress.flags, g, bit, v != 0);
+        f += used;
+        while (*f == ' ') f++;
+    }
     FILE *log = stdout;
     s_log = log;
     printf("RE2 %s %s, from the start:\n", scenario ? "Claire" : "Leon",

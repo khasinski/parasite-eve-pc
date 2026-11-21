@@ -291,8 +291,21 @@ every_frame:;                                              /* every frame: the z
     return PE_RE_CAMERA;
 }
 
+/* RE2's partner is enemy code, not room script: in scenario B Sherry collapses in 5-05 (its scene sets
+ * Common 0x6D; "She's unconscious...") and lies there, placed as type 0x4F, until Claire comes back
+ * for her (Common 0x78). No script clears STAT_SUB_PLAYER (status bit 3) for that, and the lab's lift
+ * (6-01) won't run while it's set, so it's kept off here for that stretch. (Inferred from the scripts:
+ * the 0x4F enemy's code isn't in the bio2-ds sources read.) */
+#define RE2_COMMON 4                                       /* Common_flg's group */
+static void re2_partner(PeReSession *s) {
+    PeReFlags *f = &s->progress.flags;
+    if (!s->game || strcmp(s->game->game, "re2") || !pe_re_flag(f, PE_RE_FG_STATUS, 1)) return;
+    if (pe_re_flag(f, RE2_COMMON, 0x6D) && !pe_re_flag(f, RE2_COMMON, 0x78)) pe_re_flag_set(f, PE_RE_FG_STATUS, 3, 0);
+}
+
 PeReChange pe_re_session_tick(PeReSession *s) {
     if (!s->game || !s->logic) return PE_RE_STAY;
+    re2_partner(s);
     const PeReScdHost host = host_of(s);
     s->run.camera = s->camera;
     s->progress.flags.work[PE_RE_WORK_CUT] = (int16_t)s->camera;   /* Cut_no: the camera now (the scripts test it) */
