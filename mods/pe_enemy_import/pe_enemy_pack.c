@@ -269,7 +269,7 @@ done:
     return rc;
 }
 
-void pe_enemy_pack_coverage(const PeEnemyPack *p, int stationary, char *out, unsigned size) {
+int pe_enemy_pack_coverage(const PeEnemyPack *p, int stationary, char *out, unsigned size) {
     static const char *const labels[] = {"idle", "walk", "hurt", "death", "attack"};
     char missing[40] = "";
     for (int i = 0; i <= PE_ANIM_ROLES; ++i) {
@@ -280,6 +280,7 @@ void pe_enemy_pack_coverage(const PeEnemyPack *p, int stationary, char *out, uns
     }
     if (missing[0]) snprintf(out, size, "Missing %s", missing);
     else snprintf(out, size, "All animation roles covered");
+    return !missing[0];
 }
 
 void pe_enemy_pack_free(PeEnemyPack *p) {

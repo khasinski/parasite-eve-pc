@@ -661,8 +661,9 @@ static void publish(void) {
     snprintf(s_scan, sizeof s_scan, "%d new disc%s read, %d unchanged (%s); %d not supported yet", j->discs_read,
              j->discs_read == 1 ? "" : "s", j->unchanged, j->games[0] ? j->games : "none", j->unknown);
     if (j->prepare_enemies) {
-        snprintf(s_enemy_build_summary, sizeof s_enemy_build_summary, "%d built, %d already current, %d failed",
-                 j->enemies_built, j->enemies_current, j->enemies_failed);
+        snprintf(s_enemy_build_summary, sizeof s_enemy_build_summary, "%d complete, %d incomplete, %d failed%s",
+                 j->enemies_complete, j->enemies_partial, j->enemies_failed,
+                 j->enemy_report_saved ? "" : " (report unavailable)");
         pe_mod_log(MOD_ID, "enemy preparation: %s", s_enemy_build_summary);
     }
     pe_mod_log(MOD_ID, "automatic import: %s; scan: %s; built: %s", s_auto, s_scan, j->built_names[0] ? j->built_names : "nothing new");
@@ -814,7 +815,7 @@ static int import_init(void) {
     pe_menu_register_action(0, "Scan again", "Reads new disc images and builds what's missing. Runs by itself when the game starts.", scan_again);
     pe_menu_register_info(0, "Last scan", "What the last scan found.", text_scan);
     pe_menu_register_toggle(0, "Prepare enemy packs", "Builds missing or changed enemy packs in the background after a disc scan. Use Scan again to start now.", &s_prepare_enemies, NULL);
-    pe_menu_register_info(0, "Enemy packs", "Results of the last preparation. See pe_mods.log for each new pack's animation coverage.", text_enemy_builds);
+    pe_menu_register_info(0, "Enemy packs", "Animation coverage from the last preparation. See import/store/enemy-report.tsv for details.", text_enemy_builds);
     pe_menu_page("Build by hand", "Build a model from your scanned discs as a costume or enemy.", 10);
     pe_menu_register_dynamic_choice("Build by hand", "Model", "A model from your scanned discs.", &s_pick, MAX_ITEMS, item_count, item_name);
     pe_menu_register_info("Build by hand", "From", "Where the selected model comes from.", text_asset);

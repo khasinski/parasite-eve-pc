@@ -19,6 +19,7 @@ typedef struct {
     /* results; unchanged: disc images skipped because nothing changed since they were last looked at */
     int discs_read, unknown, failed, items, built, current, missing, unchanged;
     int enemies_built, enemies_current, enemies_failed;
+    int enemies_complete, enemies_partial, enemy_report_saved;
     char games[200], problem[240], built_names[400], missing_discs[400];
 } PeImportJob;
 void pe_import_job_run(PeImportJob *j);

@@ -165,6 +165,17 @@ static void test_enemy_preparation(PeImportJob *j) {
     pe_enemy_pack_free(&edited);
     pe_import_job_run(j);
     assert(!j->enemies_built && j->enemies_current == enemies && !j->enemies_failed);
+    assert(j->enemy_report_saved && j->enemies_complete > 0 && j->enemies_partial > 0);
+    snprintf(profile, sizeof profile, "%s/enemy-report.tsv", j->store);
+    FILE *report = fopen(profile, "rb");
+    assert(report);
+    int edited_reported = 0, complete_reported = 0;
+    while (fgets(why, sizeof why, report)) {
+        edited_reported |= !strcmp(why, "re2:enemy/em10\tIncomplete\tMissing walk, hurt, death, attack\n");
+        complete_reported |= strstr(why, "\tComplete\tAll animation roles covered\n") != NULL;
+    }
+    fclose(report);
+    assert(edited_reported && complete_reported);
 }
 
 /* Use an already imported fixture and add just the new RE2 bank. */

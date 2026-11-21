@@ -4583,11 +4583,11 @@
     },
     {
       "path": "mods/pe_import/pe_import.c",
-      "sha256": "f9e5052f8dc7ce045e6cd5ca57550bc8b221687b9cc702991c6bc9a90d0c3a88"
+      "sha256": "94466079510601fb61d4513857c782c4b8f8ff2ebad885127b4084eee8b4cead"
     },
     {
       "path": "mods/pe_import/pe_import.h",
-      "sha256": "89869deffd006d6c4b7bf78b749f142c709c92246b19b610065edc5193a66d79"
+      "sha256": "91c93e8b1cceb15b7675a0b091876ffbb00df58e4624bf3108ba9b90bab0351c"
     },
     {
       "path": "mods/pe_src_dc1/pe_src_dc1.c",
@@ -4679,7 +4679,7 @@
     },
     {
       "path": "mods/pe_import/pe_import_job.c",
-      "sha256": "db4d1dac46b53af14329ebe80dc05b3d79a539709c5ec240e37a1b6a2b012217"
+      "sha256": "113801cf66714efe5aa0936fe76b9cd1d77a7f94917ef26251a3003875cedd7a"
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1_rooms.c",
@@ -4871,7 +4871,7 @@
     },
     {
       "path": "mods/import/core/pe_imp.h",
-      "sha256": "09b091f8f69e4b6ab57a64f4f14642d769555a65d23d20d6cc5b24be053b6b16"
+      "sha256": "c2491736a4d8368da9c6a70b8b3ca490a265ebb8a35858bb6c01a603ee69eb9c"
     },
     {
       "path": "mods/import/core/pe_imp_internal.h",
@@ -5079,7 +5079,7 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_target.c",
-      "sha256": "71787ea96987d5b10ba7f9337d5090264516c39c9d535b3107782efad5429287"
+      "sha256": "31b4018a4a033c540a814292a0ce99bbd6da02b19255ac2ab27fbfb8cb16b670"
     },
     {
       "path": "tests/enemy_import_nemesis.py",

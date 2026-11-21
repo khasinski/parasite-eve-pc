@@ -10,6 +10,7 @@
 
 #include "pe_enemy_battle.h"
 #include "pe_imp_guess.h"
+#include "pe_imp_json.h"
 #include "pe_imp_fit.h"
 #include "pe_enemy_build.h"
 #include "pe_mod_host.h"
@@ -224,8 +225,30 @@ static int enemies_current(const PeImpAsset *a, const char *builder) {
     return !strcmp(text, want);
 }
 
+static int enemies_coverage(const PeImpAsset *a, char *out, size_t size) {
+    char folder[1100], manifest[1200];
+    if (enemy_folder(a, folder, sizeof folder)) return -1;
+    snprintf(manifest, sizeof manifest, "%s/enemy.json", folder);
+    PjNode *root = pj_load(manifest, out, size);
+    if (!root) return -1;
+    const PjNode *anims = pj_get(root, "anims"), *attacks = pj_get(root, "attacks");
+    if (!anims || anims->kind != PJ_OBJECT || !attacks || attacks->kind != PJ_ARRAY) {
+        pj_free(root);
+        snprintf(out, size, "Invalid pack manifest");
+        return -1;
+    }
+    const char *const roles[] = {"idle", "walk", "hurt", "die"};
+    PeEnemyPack pack = {.attacks = attacks->count};
+    for (int i = 0; i < PE_ANIM_ROLES; ++i) pack.role[i] = pj_get(anims, roles[i]) ? i : -1;
+    const int stationary = pe_imp_enemy_body(a->id) == PE_IMP_ENEMY_FIXED &&
+                           !pj_int(pj_get(pj_get(root, "behavior"), "speed"), 10);
+    const int complete = pe_enemy_pack_coverage(&pack, stationary, out, (unsigned)size);
+    pj_free(root);
+    return complete;
+}
+
 const PeImpTarget g_pe_enemy_target = {
     {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 10, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
-    enemies_accepts, enemies_place, enemies_current};
+    enemies_accepts, enemies_place, enemies_current, enemies_coverage};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }
