@@ -115,7 +115,8 @@ typedef struct {
     uint32_t enemy[PE_RE_ENEMIES_MAX];         /* sce_em_set instructions that ran (RDT offsets) */
     int camera, camera_old;                    /* the camera now (the caller keeps it current), the last */
     int camera_lock;                           /* the scripts hold the camera: zones don't switch it */
-    int dest_flag;                             /* plc_dest's arrival flag (Room_flg bit), -1 none waiting */
+    uint8_t arrived[PE_RE_WORKS];              /* plc_dest's arrival flag (Room_flg bit) per walker, set every
+                                                * frame from the next one until plc_dest / plc_ret again; 0 none */
     int dest_moved;                            /* plc_dest sent the player somewhere: dest_x, dest_z */
     int16_t dest_x, dest_z;
     int16_t works[PE_RE_WORKS][PE_RE_MEMBERS]; /* the objects' fields (the player's kept current by the caller) */

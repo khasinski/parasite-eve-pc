@@ -34,7 +34,7 @@ static const char *s_store = "pe-re-route-test/store";
 enum { DOOR_UNTRIED, DOOR_OPENS, DOOR_LOCKED, DOOR_NOT_SET };
 typedef struct {
     int seen, parent, parent_door, order;
-    int door_state[DOORS], door_tried_at[DOORS], door_to[DOORS], door_zone[DOORS];
+    int door_state[DOORS], door_tried_at[DOORS], door_to[DOORS], door_zone[DOORS], door_key[DOORS];
     char door_said[DOORS][160];
     int searched_at;                    /* progress when its pickups and item spots were last done */
     int typewriter;
@@ -130,7 +130,7 @@ static PeReChange examine(PeReSession *s, const PeImpZone *zone, char *why, size
         }
         s->facing = facing;
         s->said[0] = 0;
-        pe_re_session_tick(s);
+        if (pe_re_session_tick(s) == PE_RE_ROOM) return PE_RE_ROOM;   /* a script took her through a door */
         c = pe_re_session_step(s, s_store, x, z, 1, why, n);
         if (c == PE_RE_ZONE) handed(s);
         if (c == PE_RE_ROOM || c == PE_RE_ZONE || (c == PE_RE_SAID && s->said[0])) return c;
@@ -226,16 +226,21 @@ static int take(PeReSession *s, int i, FILE *log) {
     if (pe_imp_logic_door(s->logic, (uint32_t)i, &d)) return 0;
     r->door_tried_at[i] = s_progress;
     r->door_zone[i] = d.zone.id;
+    r->door_key[i] = d.lock_type && d.lock_type < 254 ? d.lock_type : 0;
     if (r->door_state[i] != DOOR_OPENS) r->door_to[i] = (int)((d.stage == PE_RE_STAGE_HERE ? s->stage : d.stage) << 8 | d.room);
     if (!pe_re_scd_live(&s->run, d.at) || pe_re_zone_kind(&s->run, d.zone.id, d.zone.sce, NULL) != d.zone.sce) {
         r->door_state[i] = DOOR_NOT_SET;                  /* the scripts haven't put it there (yet) */
         return 0;
     }
     PeReChange c = examine(s, &d.zone, why, sizeof why);
+    if (key_of(s) != from) c = PE_RE_ROOM;                /* she's somewhere else, whatever the step said */
     if (c != PE_RE_ROOM && d.lock_type && d.lock_type < 254) {     /* a key: remember it, fetch it from the box */
         s_needed[d.lock_type] = 1;
         if (!pe_re_has(&s->progress, d.lock_type) && !from_box(s, d.lock_type)) c = examine(s, &d.zone, why, sizeof why);
+        if (key_of(s) != from) c = PE_RE_ROOM;
     }
+    if (c != PE_RE_ROOM) settle(s, 30);                   /* a scene the door started may take her out */
+    if (key_of(s) != from) c = PE_RE_ROOM;
     if (getenv("PE_TEST_RE_VERBOSE"))
         printf("    try %s door %d (progress %d): %s\n", room_name(from, a, sizeof a), i, s_progress,
                c == PE_RE_ROOM ? "through" : s->said);
@@ -258,10 +263,22 @@ static int take(PeReSession *s, int i, FILE *log) {
     return 1;
 }
 
-/* The nearest room (through doors known to open) with a door worth trying; its first step. */
-static int plan(int from, int *first_door, int *goal) {
+/* A locked door whose key she now has (pocket or box): go back to it before anything new, since the
+ * way on may be one way. */
+static int key_door(const PeReSession *s, const Room *r, int i) {
+    const int key = r->door_key[i];
+    if (!key || r->door_state[i] != DOOR_LOCKED || r->door_tried_at[i] >= s_progress) return 0;
+    if (pe_re_has(&s->progress, (uint16_t)key)) return 1;
+    for (int k = 0; k < s->progress.boxed; k++) if (s->progress.box[k].item == key) return 1;
+    return 0;
+}
+
+/* The nearest room (through doors known to open) with a door worth trying (one a held key opens
+ * first); its first step. */
+static int plan(const PeReSession *s, int from, int *first_door, int *goal) {
     static int prev[ROOMS], prev_door[ROOMS], queue[ROOMS];
     static unsigned char seen[ROOMS];
+    for (int keys = 1; keys >= 0; keys--) {
     int head = 0, tail = 0;
     memset(seen, 0, sizeof seen);
     queue[tail++] = from, seen[from] = 1, prev[from] = -1;
@@ -269,8 +286,9 @@ static int plan(int from, int *first_door, int *goal) {
         const int k = queue[head++];
         const Room *r = &s_room[k];
         for (int i = 0; i < DOORS; i++)
-            if (r->door_state[i] == DOOR_UNTRIED ? r->searched_at > 0
-                                                 : r->door_state[i] != DOOR_OPENS && r->door_tried_at[i] < s_progress) {
+            if (keys ? key_door(s, r, i)
+                     : r->door_state[i] == DOOR_UNTRIED ? r->searched_at > 0
+                                                       : r->door_state[i] != DOOR_OPENS && r->door_tried_at[i] < s_progress) {
                 *goal = k, *first_door = -1;
                 if (k != from) {                              /* back to the first door out of `from` */
                     int at = k;
@@ -284,6 +302,7 @@ static int plan(int from, int *first_door, int *goal) {
                 const int to = r->door_to[i];
                 seen[to] = 1, prev[to] = k, prev_door[to] = i, queue[tail++] = to;
             }
+    }
     }
     return 0;
 }
@@ -325,13 +344,28 @@ int main(void) {
         if (s_room[here].typewriter && first_typewriter < 0) first_typewriter = here;
         for (int i = door_count(&s); i < DOORS; i++) s_room[here].door_state[i] = DOOR_OPENS, s_room[here].door_to[i] = here;
         int door, goal;
-        if (!plan(here, &door, &goal)) break;
+        if (!plan(&s, here, &door, &goal)) {
+            /* Stuck: every way out of here looked shut. Try this room's doors again, once per bit of progress. */
+            static int stuck_at = -1;
+            if (stuck_at == s_progress) break;
+            stuck_at = s_progress;
+            for (int i = 0; i < DOORS; i++)
+                if (s_room[here].door_state[i] != DOOR_OPENS) s_room[here].door_tried_at[i] = 0;
+            fprintf(log, "  stuck in %s: its doors again\n", room_name(here, a, sizeof a));
+            for (int k = 0; k < PE_RE_TASKS; k++)                 /* what its scripts are waiting on */
+                if (s.run.task[k].status) fprintf(log, "    task %d: proc %d at %u\n", k, s.run.task[k].proc, (unsigned)s.run.task[k].pc);
+            continue;
+        }
         if (goal == here) {                                     /* try the next untried or retriable door here */
             int i = 0;
+            while (i < DOORS && !key_door(&s, &s_room[here], i)) i++;
+            if (i >= DOORS) i = 0;
+            else goto chosen;
             while (i < DOORS && !(s_room[here].door_state[i] == DOOR_UNTRIED ||
                                   (s_room[here].door_state[i] != DOOR_OPENS && s_room[here].door_tried_at[i] < s_progress)))
                 i++;
             if (i >= DOORS) break;
+        chosen:
             moves++;
             if (take(&s, i, log)) continue;
         } else {

@@ -18,7 +18,7 @@ enum {
     OP_ITEM_GET = 0x76, OP_ITEM_CK_LOST = 0x88, OP_SCE_EM_SET = 0x44, OP_CUT_CHG = 0x29, OP_CUT_OLD = 0x2A,
     OP_CUT_AUTO = 0x3C, OP_PLC_DEST = 0x40, OP_WORK_SET = 0x2E, OP_POS_SET = 0x32, OP_DIR_SET = 0x33,
     OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
-    OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37,
+    OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37, OP_PLC_RET = 0x42,
     OP_AOT_SET_4P = 0x67, OP_DOOR_AOT_SET_4P = 0x68, OP_ITEM_AOT_SET_4P = 0x69
 };
 
@@ -396,11 +396,19 @@ static int step(Vm *vm, PeReScdTask *t) {
     case OP_PLC_DEST: {                                    /* walk to (x, z); ins[3]: the arrival flag */
         PeReScdRun *r = vm->run;
         const int16_t x = s16(ins + 4), z = s16(ins + 6);
-        if (x || z) r->dest_x = x, r->dest_z = z, r->dest_moved = 1;
-        if (ins[3]) r->dest_flag = ins[3];
+        if (t->work == 0) {                                /* the player: the caller moves her */
+            if (x || z) r->dest_x = x, r->dest_z = z, r->dest_moved = 1;
+        } else if (x || z) {                               /* the partner or anyone else: just there */
+            *member(vm, t, PE_RE_MEMBER_POS_X) = x, *member(vm, t, PE_RE_MEMBER_POS_Z) = z;
+        }
+        if (t->work >= 0) r->arrived[t->work] = ins[3];   /* each walker's own flag, from the next frame on */
         t->pc += n;
         return CONTINUE;
     }
+    case OP_PLC_RET:                                       /* back to normal: no more arrival flag */
+        if (t->work >= 0) vm->run->arrived[t->work] = 0;
+        t->pc += n;
+        return CONTINUE;
     case OP_SCE_EM_SET: {                                  /* an enemy placed (the caller checks its flag) */
         PeReScdRun *r = vm->run;
         int k = 0;
@@ -481,7 +489,6 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
     Vm vm;
     memset(out, 0, sizeof *out);
     out->message = -1;
-    out->dest_flag = -1;
     if (!setup(&vm, l, flags, host, out, BUDGET_ENTRY)) return;
     if (pe_imp_rdt_section(vm.rdt, vm.size, SCRIPT_INIT, &out->sec[0], &out->len[0])) out->sec[0] = out->len[0] = 0;
     if (pe_imp_rdt_section(vm.rdt, vm.size, SCRIPT_MAIN, &out->sec[1], &out->len[1])) out->sec[1] = out->len[1] = 0;
@@ -497,10 +504,8 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
 void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost *host, PeReScdRun *run) {
     Vm vm;
     if (!run->ran || !setup(&vm, l, flags, host, run, BUDGET_TICK)) return;
-    if (run->dest_flag >= 0) {                             /* she got there: the engine's arrival flag */
-        pe_re_flag_set(flags, 5, (unsigned)run->dest_flag, 1);
-        run->dest_flag = -1;
-    }
+    for (int w = 0; w < PE_RE_WORKS; w++)                  /* they got there (at once): the engine's arrival flags, */
+        if (run->arrived[w]) pe_re_flag_set(flags, 5, run->arrived[w], 1);   /* set again after each frame's clear */
     exec_task(&vm, 0, 1);                                  /* Event_exec(0, 1): the every-frame handler */
     schedule(&vm);
     work_clr(flags);
