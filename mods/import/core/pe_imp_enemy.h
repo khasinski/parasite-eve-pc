@@ -3,6 +3,7 @@
 /* An enemy profile: how a source game's monster fights in Parasite Eve. Data owned by the source
  * game's mod (pe_src_re3 holds Nemesis's), the counterpart of a rig for costumes; the enemies
  * builder (pe_enemy_import) turns the asset's Model + Animation + sounds into an enemy pack. */
+#include <stddef.h>
 #include <stdint.h>
 
 #define PE_IMP_ENEMY_ANIMS 8
@@ -36,6 +37,12 @@ const PeImpEnemyProfile *pe_imp_enemy_for(const char *asset_id);
  * units to PE field units. A game without these still builds (yaw 0, 500 units tall). */
 int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale);
 int pe_imp_enemy_defaults(const char *game, int *yaw, int *scale);     /* 0, or -1: none set */
+
+/* Source readers translate a creature's placement kind to a local model ID. Return
+ * -1 for unrecognized kinds and noncombatants. The lookup adds the game prefix. */
+typedef int (*PeImpEnemyModelForKind)(uint8_t kind, char *local_id, size_t n);
+int pe_imp_set_enemy_models(const char *game, PeImpEnemyModelForKind lookup);
+int pe_imp_enemy_model(const char *game, uint8_t kind, char *asset_id, size_t n);
 
 /* A monster's strength as its own game sets it, where that's known: `life` (its hit points) and,
  * optionally, `power` for its attacks (0: guessed). It overrides the guess's height rule (a story

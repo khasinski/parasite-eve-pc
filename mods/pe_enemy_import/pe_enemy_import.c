@@ -252,6 +252,28 @@ static void pe_end_trip(void) {
     s.state = PE_IDLE;
 }
 
+static void pe_arm_room_enemy(const PeReRoomEvent *room) {
+    char store[1100];
+    uint8_t attempted[UINT8_MAX + 1] = {0};
+    if (pe_mod_path(store, sizeof store, "import/store")) return;
+    for (int i = 0; i < room->count; i++) {
+        const PeReEnemyPlacement *enemy = &room->enemies[i];
+        char asset[PE_IMP_ID_MAX], folder[1100], why[240] = "";
+        if (attempted[enemy->kind] || pe_imp_enemy_model(room->game, enemy->kind, asset, sizeof asset)) continue;
+        attempted[enemy->kind] = 1;
+        if (pe_enemy_prepare_pack(store, room->game, asset, folder, sizeof folder, why, sizeof why) ||
+            pe_enemy_battle_arm_room(folder)) {
+            pe_mod_log(MOD_ID, "room slot %u: can't use %s%s%s", (unsigned)enemy->slot, asset, why[0] ? ": " : "", why);
+            continue;
+        }
+        pe_trip_arm(&s_trip, room, enemy->slot);
+        pe_mod_log(MOD_ID, "room slot %u fights as %s", (unsigned)enemy->slot, asset);
+        return;
+    }
+    /* A failed candidate can unload the manual pack. Re-arm the fallback. */
+    pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
+}
+
 /* Fight over (or never started): put the script variables back and go home. */
 static void pe_go_home(void) {
     memcpy(g_ScriptVariableBank, s.vars, sizeof s.vars);
@@ -305,7 +327,9 @@ static void pe_leave(void) {
     }
     const PeRePlayApi *api = pe_imported_room_api();
     if (api) {
-        pe_trip_arm(&s_trip, api);                         /* the room and its placements, before it pauses */
+        PeReRoomEvent room = {sizeof room};
+        /* Take the placement snapshot while the imported room still runs. Pausing hides it. */
+        const int reported = api->room && !api->room(&room);
         const int paused = api->pause_for_battle();
         if (paused < 0) {
             pe_finish("the imported room is busy");
@@ -314,6 +338,7 @@ static void pe_leave(void) {
             return;
         }
         s.imported_room_paused = paused > 0;
+        if (paused > 0 && reported) pe_arm_room_enemy(&room);
     }
     memcpy(s.vars, g_ScriptVariableBank, sizeof s.vars);
     s.origin = (unsigned)g_SceneDispatchToken;
@@ -370,7 +395,7 @@ static void pe_step(void) {
     case PE_FIGHT:
         if (pe_in_battle()) break;
         pe_finish(s.live_enemies ? "ran away" : "won");
-        pe_trip_won(&s_trip, !s.live_enemies);
+        pe_trip_won(&s_trip, !s.live_enemies && pe_enemy_battle_room_defeated());
         s_trip_wait = 1800;                                /* the trip back, a door: half a minute at most */
         s.state = PE_AFTER;
         s.frames = 0;
@@ -398,8 +423,8 @@ static int pe_on_frame(void *ctx, void *user) {
     if (s_trip.armed && s.state == PE_IDLE) {             /* back in the imported room: the win counts there */
         const int beaten = pe_trip_report(&s_trip, pe_imported_room_api());
         if (beaten > 0) {
-            pe_log("cheat_fight_picker", "imported room: %d placed enemies beaten", beaten);
-            pe_toast("Fights: the room's enemies are beaten");
+            pe_log("cheat_fight_picker", "imported room: slot %u beaten", (unsigned)s_trip.slot);
+            pe_toast("Fights: the room's enemy is beaten");
         } else if (!beaten && --s_trip_wait <= 0) {
             s_trip.armed = 0;
         }
@@ -439,6 +464,7 @@ static int pe_on_drawn(void *ctx, void *user) {
 
 static int pe_on_new_game(void *ctx, void *user) {
     (void)ctx; (void)user;
+    s_trip.armed = 0;
     pe_end_trip();
     return 0;
 }
@@ -450,6 +476,7 @@ static void pe_start(void) {
     if (s.state != PE_IDLE) { pe_toast("Fights: a fight is already on its way"); return; }
     s.fight = f;
     s.live_enemies = 0;
+    s_trip.armed = 0;
     pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
     s.state = PE_LEAVE;   /* on the next free field frame, once the panel closes */
 }

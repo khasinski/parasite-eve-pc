@@ -232,20 +232,29 @@ def part_imported_room(exe, disc, work, re2_disc):
         check(wait_battle(game) is not None, 'imported room: the native battle did not start')
         paused = room_rows(game)
         check(paused['Status'].startswith('Paused for battle.') and paused['Enemies'] == '-', paused)
+        end = game.vblank + 3000
+        while game.vblank < end and 'hp=' not in game.picker()['Imported status']:
+            game.adv(10)
+        check('hp=' in game.picker()['Imported status'], 'imported room: its enemy never joined')
+        packs = list((game.config / 'pe_enemies').glob('re2-em*/enemy.json'))
+        check(len(packs) == 1 and (packs[0].parent / 'profile.json').is_file(),
+              'imported room: no automatically built enemy pack and profile')
         win_when_ready(game)
         wait_home(game)
         check_home(game, where, 'imported room')
         after = room_rows(game)
-        check(after['Status'] == before['Status'] and after['Enemies'] == before['Enemies'], (before, after))
-        print('imported room: native battle started, won, and returned to the same imported room and pose')
+        check(after['Status'] == before['Status'] and after['Enemies'] != before['Enemies'], (before, after))
+        check('imported room: slot ' in game.picker_log(), 'imported room: no placement defeat reported')
+        print('imported room: its own enemy was built and defeated, and Aya returned to the same room and pose')
+        after_win = after
         part_run(game)
         after = room_rows(game)
-        check(after['Status'] == before['Status'] and after['Enemies'] == before['Enemies'], (before, after))
+        check(after['Status'] == after_win['Status'] and after['Enemies'] == after_win['Enemies'], (after_win, after))
         print('imported room: escape also restored the same room, pose and placements')
 
         game.ask('ini-set Cheats/God mode 0')
         game.ask('set-stat hp 1')
-        start_fight(game, 0, 1)
+        start_fight(game, 1, 10)
         check(wait_battle(game) is not None, 'imported room: the fatal battle did not start')
         wait_game_over(game)
         print('imported room: losing returned to the title screen')

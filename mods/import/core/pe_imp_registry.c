@@ -221,28 +221,54 @@ const PeImpEnemyProfile *pe_imp_enemy_for(const char *asset_id) {
 }
 
 #define MAX_ENEMY_GAMES 16
-static struct { char game[16]; int yaw, scale; } s_enemy_game[MAX_ENEMY_GAMES];
+static struct {
+    char game[16];
+    int yaw, scale;
+    PeImpEnemyModelForKind model;
+} s_enemy_game[MAX_ENEMY_GAMES];
 static int s_enemy_games;
 
-int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale) {
-    if (!word_ok(game, 15) || scale <= 0) return -1;
+static int enemy_game_index(const char *game, int add) {
+    if (!word_ok(game, 15)) return -1;
     int i = 0;
     while (i < s_enemy_games && strcmp(s_enemy_game[i].game, game)) i++;
-    if (i == MAX_ENEMY_GAMES) return -1;
-    if (i == s_enemy_games) s_enemy_games++;
+    if (i < s_enemy_games) return i;
+    if (!add || i == MAX_ENEMY_GAMES) return -1;
+    memset(&s_enemy_game[i], 0, sizeof s_enemy_game[i]);
     snprintf(s_enemy_game[i].game, sizeof s_enemy_game[i].game, "%s", game);
+    s_enemy_games++;
+    return i;
+}
+
+int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale) {
+    const int i = scale > 0 ? enemy_game_index(game, 1) : -1;
+    if (i < 0) return -1;
     s_enemy_game[i].yaw = yaw & 4095, s_enemy_game[i].scale = scale;
     return 0;
 }
 
 int pe_imp_enemy_defaults(const char *game, int *yaw, int *scale) {
-    for (int i = 0; game && i < s_enemy_games; i++)
-        if (!strcmp(s_enemy_game[i].game, game)) {
-            if (yaw) *yaw = s_enemy_game[i].yaw;
-            if (scale) *scale = s_enemy_game[i].scale;
-            return 0;
-        }
-    return -1;
+    const int i = enemy_game_index(game, 0);
+    if (i < 0 || !s_enemy_game[i].scale) return -1;
+    if (yaw) *yaw = s_enemy_game[i].yaw;
+    if (scale) *scale = s_enemy_game[i].scale;
+    return 0;
+}
+
+int pe_imp_set_enemy_models(const char *game, PeImpEnemyModelForKind lookup) {
+    const int i = lookup ? enemy_game_index(game, 1) : -1;
+    if (i < 0) return -1;
+    s_enemy_game[i].model = lookup;
+    return 0;
+}
+
+int pe_imp_enemy_model(const char *game, uint8_t kind, char *asset_id, size_t n) {
+    const int i = enemy_game_index(game, 0);
+    char local[PE_IMP_ID_MAX];
+    if (i < 0 || !s_enemy_game[i].model || !asset_id || !n ||
+        s_enemy_game[i].model(kind, local, sizeof local)) return -1;
+    const int written = snprintf(asset_id, n, "%s:%s", game, local);
+    return written < 0 || (size_t)written >= n ? -1 : 0;
 }
 
 #define MAX_STRENGTHS 128

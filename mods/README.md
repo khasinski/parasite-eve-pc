@@ -139,7 +139,7 @@ refusals, posing, behavior fields; a real pack with PE_TEST_ENEMY_PACK) and `ene
 attacks, is hurt, dies, the battle is won and the VRAM block given back) and `enemy-import-rooms`
 (the same pack in every fight of the list: the room's picture stays whole when it joins).
 
-**Guessed profiles** (`pe_enemy_import/pe_enemy_guess.c`): any catalogued `enemy/` model with moves
+**Guessed profiles** (`import/core/pe_imp_guess.c`): any catalogued `enemy/` model with moves
 beside it (`<id>/moves`) is built as an enemy even when no game mod wrote it a profile. Every move is
 posed and measured in the model's own height (does it loop, how much it moves, its height at the
 start, lowest and end, how far it reaches out past its first frame, hit and sound frames), and the
@@ -156,6 +156,10 @@ when the player changes `profile.json`, the pack counts as out of date and the n
 file (a hand-made profile can be changed the same way). Tests: `mod-enemy-guess` (made-up moves;
 PE_TEST_RE3_PC, PE_TEST_RE2_DISC, PE_TEST_RE1_DISC for the real ones; PE_GUESS_DUMP=1 prints every
 move's measurements), and `enemy-import-nemesis` with a guessed pack (RE2 EM10, EM20, EM2A pass).
+
+From an imported RE2 room, a fight trip selects the first placement with a usable enemy model.
+It builds a pack on demand if needed, and clearing the enemy in battle clears that placement in
+the room. The Fights menu's manual enemy choice is the fallback for rooms without a usable model.
 **Texture pages and palettes**: a face's `page` and `clut` are PS1 words for every reader (the RE3 EMD
 reader now converts its page byte, x = u + 2 * byte, to page word 0x80 | byte / 64, and its palette
 row to a CLUT word, row << 6); the enemy builder places a texel at (page & 15 - the first page the

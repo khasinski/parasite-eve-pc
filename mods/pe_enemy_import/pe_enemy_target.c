@@ -174,3 +174,37 @@ const PeImpTarget g_pe_enemy_target = {
     enemies_accepts, enemies_place, enemies_current};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }
+
+int pe_enemy_prepare_pack(const char *store, const char *game, const char *asset_id,
+                          char *folder, size_t fn, char *why, size_t n) {
+    PeImpAsset *assets = NULL;
+    const int count = pe_imp_catalog_assets(store, game, &assets);
+    int i = 0;
+    while (i < count && strcmp(assets[i].id, asset_id)) i++;
+    if (i >= count || strcmp(assets[i].type, pe_imp_type_name(PE_IMP_MODEL))) {
+        snprintf(why, n, "%s has no imported model", asset_id);
+        free(assets);
+        return -1;
+    }
+    const PeImpAsset *a = &assets[i];
+    if (enemy_folder(a, folder, fn)) {
+        snprintf(why, n, "can't resolve the enemy pack folder");
+        free(assets);
+        return -1;
+    }
+    char path[1200];
+    snprintf(path, sizeof path, "%s/enemy.json", folder);
+    FILE *f = fopen(path, "rb");
+    if (f) {
+        fclose(f);
+        free(assets);
+        return 0;
+    }
+    char builder[64];
+    snprintf(builder, sizeof builder, "pe_import 1, %s %u", g_pe_enemy_target.module, g_pe_enemy_target.version);
+    const PeImpBuild ctx = {.store = store};
+    const int rc = enemies_place(a, builder, folder, fn, why, n) ||
+                   enemies_build(&ctx, asset_id, folder, NULL, 0, why, n);
+    free(assets);
+    return rc ? -1 : 0;
+}

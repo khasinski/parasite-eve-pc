@@ -180,23 +180,29 @@ static int play(unsigned scenario) {
     EXPECT(s.active && !strcmp(s.room, "re2:room/100") && !s.api->room(&room));
     PeTripResult trip;                                     /* a battle trip from here, won (pe_enemy_import) */
     const int placed = room.count;
-    int flagged = 0;
-    for (int i = 0; i < room.count; i++) flagged += room.enemies[i].killed_flag != 0xFF;
-    EXPECT(pe_trip_arm(&trip, s.api) && trip.count == placed);
+    int selected = -1;
+    for (int i = 0; i < room.count && selected < 0; i++)
+        if (room.enemies[i].killed_flag != 0xFF) selected = i;
+    EXPECT(selected >= 0);
+    const uint8_t slot = room.enemies[selected].slot;
+    const uint8_t flag = room.enemies[selected].killed_flag;
+    int shared = 0;
+    for (int i = 0; i < room.count; i++) shared += room.enemies[i].killed_flag == flag;
+    EXPECT(pe_trip_arm(&trip, &room, slot));
     EXPECT(s.api->pause_for_battle() == 1 && s.backdrop && !s.active);
     pe_trip_won(&trip, 1);
     EXPECT(pe_trip_report(&trip, s.api) == 0 && trip.armed);   /* paused: not yet */
     s.api->resume_after_battle();
     frames(2, 0);
     EXPECT(!s.backdrop && s.active && !s.api->room(&room));
-    EXPECT(pe_trip_report(&trip, s.api) == placed && !trip.armed);   /* back: each placed enemy beaten */
+    EXPECT(pe_trip_report(&trip, s.api) == 1 && !trip.armed);
     frames(1, 0);
-    EXPECT(!s.api->room(&room) && room.count == placed - flagged);   /* flagged ones gone; a flagless boss dies to the scripts */
-    printf("headless host: a won battle trip beat the street's %d placed enemies (%d with killed flags)\n", placed, flagged);
-    EXPECT(placed > 0);
+    EXPECT(!s.api->room(&room) && room.count == placed - shared);
+    for (int i = 0; i < room.count; i++) EXPECT(room.enemies[i].killed_flag != flag);
+    printf("headless host: a won battle trip cleared slot %u and left %d placements\n", (unsigned)slot, room.count);
     {   /* an escape or a loss reports nothing */
         PeTripResult lost;
-        EXPECT(pe_trip_arm(&lost, s.api) == 1);
+        EXPECT(room.count > 0 && pe_trip_arm(&lost, &room, room.enemies[0].slot));
         pe_trip_won(&lost, 0);
         EXPECT(pe_trip_report(&lost, s.api) == -1 && !lost.armed);
     }

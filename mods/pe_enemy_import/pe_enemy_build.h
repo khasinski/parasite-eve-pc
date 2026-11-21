@@ -28,5 +28,8 @@ int pe_enemy_write(const PeEnemyPack *p, const char *folder, char *why, size_t n
 /* The "enemies" target for F1 > Import ("Build as an enemy"). */
 int pe_enemy_target_register(void);
 extern const PeImpTarget g_pe_enemy_target;
+/* Find an installed pack for a room model, or build it from the local import catalog. */
+int pe_enemy_prepare_pack(const char *store, const char *game, const char *asset_id,
+                          char *folder, size_t fn, char *why, size_t n);
 
 #endif
