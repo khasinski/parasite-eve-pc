@@ -21,6 +21,7 @@
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_trip_result.h"
 #include "re_play_api.h"
 #include "pe1/asset_table.h"
 #include "pe1/battle_runtime.h"
@@ -128,6 +129,8 @@ static struct {
     uint32_t vars[PE_VAR_COUNT];
 } s;
 static char s_last[96] = "none yet";
+static PeTripResult s_trip;         /* a trip from an imported room: a win beats its placed enemies */
+static int s_trip_wait;              /* frames left to see that room again */
 
 /* ---- the list ---- */
 
@@ -302,6 +305,7 @@ static void pe_leave(void) {
     }
     const PeRePlayApi *api = pe_imported_room_api();
     if (api) {
+        pe_trip_arm(&s_trip, api);                         /* the room and its placements, before it pauses */
         const int paused = api->pause_for_battle();
         if (paused < 0) {
             pe_finish("the imported room is busy");
@@ -366,6 +370,8 @@ static void pe_step(void) {
     case PE_FIGHT:
         if (pe_in_battle()) break;
         pe_finish(s.live_enemies ? "ran away" : "won");
+        pe_trip_won(&s_trip, !s.live_enemies);
+        s_trip_wait = 1800;                                /* the trip back, a door: half a minute at most */
         s.state = PE_AFTER;
         s.frames = 0;
         break;
@@ -389,6 +395,15 @@ static void pe_step(void) {
 static int pe_on_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
     pe_step();
+    if (s_trip.armed && s.state == PE_IDLE) {             /* back in the imported room: the win counts there */
+        const int beaten = pe_trip_report(&s_trip, pe_imported_room_api());
+        if (beaten > 0) {
+            pe_log("cheat_fight_picker", "imported room: %d placed enemies beaten", beaten);
+            pe_toast("Fights: the room's enemies are beaten");
+        } else if (!beaten && --s_trip_wait <= 0) {
+            s_trip.armed = 0;
+        }
+    }
     return 0;
 }
 
