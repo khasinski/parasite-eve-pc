@@ -60,6 +60,7 @@ static int make_room(PeReSession *s) {
         if (s_needed[p->pocket[i].item & 0xFF]) continue;
         if (pick < 0 || p->pocket[i].count > p->pocket[pick].count) pick = i;
     }
+    if (pick < 0 && p->held) pick = 0;                   /* all asked for: the oldest (the box hands it back when asked) */
     if (pick < 0 || pe_re_box_put(p, pick)) return -1;
     s_box_trips++;
     return 0;
