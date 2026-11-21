@@ -144,7 +144,7 @@ int main(void) {
     /* start-up: RE1, RE2, RE3 and Dino Crisis's own mods register themselves, the Wardrobe its skins target, packs/ is empty */
     pe_imp_registry_reset();
     assert(pe_mod_pe_src_re1.init() == 0 && pe_mod_pe_src_re2.init() == 0 && pe_mod_pe_src_re3.init() == 0 && pe_mod_pe_src_dc1.init() == 0);
-    assert(!pe_skin_target_register() && pe_imp_targets() == 1 && pe_imp_autos() == 10);   /* 9 costumes, and RE3's Nemesis (an enemy) */
+    assert(!pe_skin_target_register() && pe_imp_targets() == 1 && pe_imp_autos() == 15);   /* 9 costumes, and RE3 PC enemies: Nemesis, Zombie, Cerberus, Hunter, Giant Spider, Drain Deimos */
     pe_packs_scan();
     pe_packs_register();
     assert(s_nadded == 0);
