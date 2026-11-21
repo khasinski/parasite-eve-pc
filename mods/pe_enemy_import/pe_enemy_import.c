@@ -526,7 +526,7 @@ static int enemy_import_init(void) {
     pe_menu_register_dynamic_choice(0, "Fight", "The room and its battle spot.", &s_pick, PE_FIGHTS,
                                     pe_pick_count, pe_pick_name);
     pe_menu_register_dynamic_choice(0, "Imported enemy", "An imported enemy (pe_enemies folder) that joins "
-                                    "the fight as an enemy of its own, with its own moves.", &s_enemy, 17,
+                                    "the fight as an enemy of its own, with its own moves.", &s_enemy, PE_ENEMY_PACKS_MAX + 1,
                                     pe_enemy_choice_count, pe_enemy_choice_name);
     pe_menu_register_choice(0, "How many", "How many of the imported enemy join.", &s_enemy_count,
                             k_counts, 3);

@@ -50,6 +50,8 @@ int pe_imp_enemy_strength(const char *asset_id, int *life, int *power);   /* 0, 
  * imported room can bring that room's creature. `asset_id` gets "<game>:<local ID>". 0, or -1. */
 int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id);
 int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, size_t n);
+/* For games with a placement table, only mapped models and their variants are eligible. */
+int pe_imp_enemy_model_allowed(const char *asset_id);
 
 /* Optional opening poses for a placed creature. A source reader owns the static table,
  * terminated by a NULL name. Move indices use the catalogued animation's order. */

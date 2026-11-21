@@ -30,9 +30,11 @@ static PeImportJob s_job;
 static SDL_Thread *s_thread;
 static SDL_AtomicInt s_state;                 /* 0 idle, 1 working, 2 done (to be published) */
 static int s_started;
+static int s_prepare_enemies;
 static char s_auto[400] = "starting";
 static char s_scan[240] = "-";
 static char s_build[240] = "-";
+static char s_enemy_build_summary[128] = "-";
 
 /* ---- folders the player added (import/folders.txt: one per line, # for comments) ----
  * So disc images can stay where they are (a folder of games, one per subfolder). PC adds them with
@@ -634,6 +636,7 @@ static int start_job(void) {
     s_builds_said = 0;
     if (s_lock) SDL_UnlockMutex(s_lock);
     s_job.progress = &k_job_progress, s_job.step = &k_step_progress;
+    s_job.prepare_enemies = s_prepare_enemies;
     if (!(s_thread = SDL_CreateThread(worker, "pe_import", NULL))) {
         pe_import_job_run(&s_job);                                    /* no threads: do it here */
         SDL_SetAtomicInt(&s_state, 2);
@@ -657,6 +660,11 @@ static void publish(void) {
     else snprintf(s_auto, sizeof s_auto, "all %d costume%s ready", ready, ready == 1 ? "" : "s");
     snprintf(s_scan, sizeof s_scan, "%d new disc%s read, %d unchanged (%s); %d not supported yet", j->discs_read,
              j->discs_read == 1 ? "" : "s", j->unchanged, j->games[0] ? j->games : "none", j->unknown);
+    if (j->prepare_enemies) {
+        snprintf(s_enemy_build_summary, sizeof s_enemy_build_summary, "%d built, %d already current, %d failed",
+                 j->enemies_built, j->enemies_current, j->enemies_failed);
+        pe_mod_log(MOD_ID, "enemy preparation: %s", s_enemy_build_summary);
+    }
     pe_mod_log(MOD_ID, "automatic import: %s; scan: %s; built: %s", s_auto, s_scan, j->built_names[0] ? j->built_names : "nothing new");
     if (n) {
         char msg[480];
@@ -745,6 +753,7 @@ static void text_auto(char *out, unsigned size) {                    /* F1 is op
 }
 static void text_folder(char *out, unsigned size) { snprintf(out, size, "%s", s_job.discs); }
 static void text_scan(char *out, unsigned size) { poll(); snprintf(out, size, "%s", s_scan); }
+static void text_enemy_builds(char *out, unsigned size) { poll(); snprintf(out, size, "%s", s_enemy_build_summary); }
 static void text_build(char *out, unsigned size) { snprintf(out, size, "%s", s_build); }
 static void text_asset(char *out, unsigned size) {
     listed();
@@ -763,6 +772,7 @@ static int enemy_ensure(const char *asset_id, char *why, size_t n) {
     for (int i = 0; i < pe_imp_targets() && !tg; i++)
         if (!strcmp(pe_imp_target(i)->module, "enemies")) tg = pe_imp_target(i);
     if (!tg || !tg->place) { snprintf(why, n, "no enemies builder"); return -1; }
+    if (tg->accepts && !tg->accepts(asset_id)) { snprintf(why, n, "%s is not a fightable model", asset_id); return -1; }
     snprintf(game, sizeof game, "%.*s", (int)(colon - asset_id), asset_id);
     PeImpAsset *list = NULL, a;
     const int count = pe_imp_catalog_assets(s_job.store, game, &list);
@@ -803,10 +813,12 @@ static int import_init(void) {
     pe_menu_register_action(0, "Forget added folders", "Stop reading the added folders. Costumes already built stay.", forget_folders);
     pe_menu_register_action(0, "Scan again", "Reads new disc images and builds what's missing. Runs by itself when the game starts.", scan_again);
     pe_menu_register_info(0, "Last scan", "What the last scan found.", text_scan);
-    pe_menu_page("Build by hand", "Any other model from your scanned discs, built as a costume.", 10);
+    pe_menu_register_toggle(0, "Prepare enemy packs", "Builds missing or changed enemy packs in the background after a disc scan. Use Scan again to start now.", &s_prepare_enemies, NULL);
+    pe_menu_register_info(0, "Enemy packs", "Results of the last preparation. See pe_mods.log for each new pack's animation coverage.", text_enemy_builds);
+    pe_menu_page("Build by hand", "Build a model from your scanned discs as a costume or enemy.", 10);
     pe_menu_register_dynamic_choice("Build by hand", "Model", "A model from your scanned discs.", &s_pick, MAX_ITEMS, item_count, item_name);
     pe_menu_register_info("Build by hand", "From", "Where the selected model comes from.", text_asset);
-    pe_menu_register_action("Build by hand", "Build as a costume", "Builds the selected model as a Wardrobe costume, in a pack of your own. For personal use only.", build);
+    pe_menu_register_action("Build by hand", "Build selected model", "Builds a costume for the Wardrobe or an enemy for Fights, depending on the model.", build);
     pe_menu_register_info("Build by hand", "Last build", "What the last build did.", text_build);
     pe_menu_page("Rooms", "Room backgrounds from your scanned discs, one picture per camera view, exported to look at.", 40);
     pe_menu_register_dynamic_choice("Rooms", "Source game", "Choose a game with imported rooms.",

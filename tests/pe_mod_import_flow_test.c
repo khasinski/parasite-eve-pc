@@ -30,8 +30,10 @@
 #include "pe_src_dc1.h"
 #include "pe_wardrobe.h"
 #include "pe_import.h"
+#include "pe_enemy_build.h"
 
 extern const PeMod pe_mod_pe_src_re1, pe_mod_pe_src_re2, pe_mod_pe_src_re3, pe_mod_pe_src_dc1;
+void pe_enemy_packs_changed(void) {}
 
 #ifndef PE_SOURCE_DIR
 #define PE_SOURCE_DIR "."
@@ -130,12 +132,57 @@ static void remove_tree(const char *path) {
     SDL_RemovePath(path);
 }
 
-int main(void) {
+static void test_enemy_preparation(PeImportJob *j) {
+    char enemy_dir[900], profile[950], why[200] = "";
+    snprintf(enemy_dir, sizeof enemy_dir, "%s/pe_enemies", s_dir);
+    remove_tree(enemy_dir);
+    pe_imp_registry_reset();
+    assert(!pe_mod_pe_src_re2.init() && !pe_enemy_target_register());
+    const PeImpTarget *target = pe_imp_target(0);
+    assert(target->accepts("re2:enemy/em10-cdemd2"));
+    assert(!target->accepts("re2:enemy/em40") && !target->accepts("re2:enemy/em40-cdemd0"));
+    j->nextra = 0;
+    j->prepare_enemies = 1;
+    pe_import_job_run(j);
+    printf("enemy preparation: %d built, %d current, %d failed\n", j->enemies_built, j->enemies_current, j->enemies_failed);
+    assert(j->enemies_built > 30 && !j->enemies_failed && !j->enemies_current);
+    const int enemies = j->enemies_built;
+    SDL_PathInfo info;
+    snprintf(profile, sizeof profile, "%s/re2-em40/enemy.json", enemy_dir);
+    assert(!SDL_GetPathInfo(profile, &info));
+
+    snprintf(enemy_dir, sizeof enemy_dir, "%s/pe_enemies/re2-em10", s_dir);
+    snprintf(profile, sizeof profile, "%s/profile.json", enemy_dir);
+    FILE *f = fopen(profile, "wb");
+    assert(f);
+    fputs("{\"format\":1,\"name\":\"Edited\",\"moves\":\"enemy/em10/moves\",\"hp\":123,\"height\":500,\"anims\":{\"idle\":0}}", f);
+    assert(!fclose(f));
+    pe_import_job_run(j);
+    assert(j->enemies_built == 1 && j->enemies_current == enemies - 1 && !j->enemies_failed);
+    PeEnemyPack edited;
+    assert(!pe_enemy_pack_load(&edited, enemy_dir, why, sizeof why));
+    assert(edited.hp == 123 && !strcmp(edited.name, "Edited"));
+    pe_enemy_pack_free(&edited);
+    pe_import_job_run(j);
+    assert(!j->enemies_built && j->enemies_current == enemies && !j->enemies_failed);
+}
+
+int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
+    const char *test_dir = getenv("PE_TEST_DIR") ? getenv("PE_TEST_DIR") : ".";
+    /* Repeat the enemy regression using a populated test catalog without rescanning the discs. */
+    if (argc == 3 && !strcmp(argv[1], "--enemy-store")) {
+        PeImportJob j = {.host = &k_test_host};
+        snprintf(s_dir, sizeof s_dir, "%s/pe-import-flow-enemies", test_dir);
+        snprintf(j.discs, sizeof j.discs, "%s/no-discs", s_dir);
+        snprintf(j.store, sizeof j.store, "%s", argv[2]);
+        test_enemy_preparation(&j);
+        return 0;
+    }
     const char *pe1 = getenv("PE_TEST_DISC"), *re2 = getenv("PE_TEST_RE2_DISC");
     if (!pe1 || !*pe1 || !re2 || !*re2) { printf("PE_TEST_DISC and PE_TEST_RE2_DISC not set: skipped\n"); return 77; }
     char store[700], packs[700];
-    snprintf(s_dir, sizeof s_dir, "%s/pe-import-flow", getenv("PE_TEST_DIR") ? getenv("PE_TEST_DIR") : ".");
+    snprintf(s_dir, sizeof s_dir, "%s/pe-import-flow", test_dir);
     snprintf(store, sizeof store, "%s/import/store", s_dir);
     snprintf(packs, sizeof packs, "%s/packs", s_dir);
     remove_tree(packs);
@@ -226,6 +273,9 @@ int main(void) {
     printf("last run: %d read, %d not supported, %d unchanged, built %d, current %d\n", j.discs_read, j.unknown,
            j.unchanged, j.built, j.current);
     assert(j.discs_read == 0 && j.unknown == 0 && j.unchanged >= 11 && j.built == 0 && j.current == 9 && !j.failed);
+
+    /* Prepare RE2's catalogued enemies through the real target, then check the incremental run. */
+    test_enemy_preparation(&j);
     printf("import flow passed\n");
     return 0;
 }

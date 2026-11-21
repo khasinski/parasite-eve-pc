@@ -2,6 +2,8 @@
 #ifndef PE_ENEMY_BATTLE_H
 #define PE_ENEMY_BATTLE_H
 
+#define PE_ENEMY_PACKS_MAX 512
+
 void pe_enemy_battle_init(void);
 unsigned pe_enemy_choice_count(void);          /* "None" + installed packs */
 const char *pe_enemy_choice_name(unsigned i);

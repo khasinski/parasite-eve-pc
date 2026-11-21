@@ -342,6 +342,16 @@ const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id) {
     return i >= 0 ? s_kind[i].starts : NULL;
 }
 
+int pe_imp_enemy_model_allowed(const char *asset_id) {
+    const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
+    if (!colon) return 0;
+    const size_t prefix = (size_t)(colon - asset_id);
+    for (int i = 0; i < s_kinds; i++)
+        if (strlen(s_kind[i].game) == prefix && !strncmp(s_kind[i].game, asset_id, prefix))
+            return enemy_asset_kind(asset_id) >= 0;
+    return 1;
+}
+
 int pe_imp_set_enemy_body(const char *game, unsigned kind, PeImpEnemyBody body) {
     if (body < PE_IMP_ENEMY_UPRIGHT || body > PE_IMP_ENEMY_FIXED) return -1;
     for (int i = 0; game && i < s_kinds; i++)

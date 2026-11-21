@@ -13,10 +13,12 @@
 #include <SDL3/SDL.h>
 
 #include "pe_imp.h"
+#include "pe_imp_enemy.h"
 #include "pe_imp_json.h"
 #include "pe_imp_logic.h"
 #include "pe_imp_pictures.h"
 #include "pe_import.h"
+#include "pe_mod_host.h"
 
 #define MAX_IMAGES 64
 
@@ -299,9 +301,55 @@ static void build_autos(PeImportJob *j) {
     if (targets) j->host->close_targets(targets);
 }
 
+static int compare_asset_id(const void *id, const void *item) {
+    const PeImpAsset *asset = item;
+    return strcmp(id, asset->id);
+}
+
+static void prepare_enemies(PeImportJob *j) {
+    const PeImpTarget *tg = target_for("enemies");
+    if (!tg || !tg->place || !tg->accepts || !tg->current) return;
+    char builder[64];
+    snprintf(builder, sizeof builder, "pe_import 1, %s %u", tg->module, tg->version);
+    for (int r = 0; r < pe_imp_readers(); r++) {
+        const char *game = pe_imp_reader(r)->game;
+        int seen = 0;
+        for (int earlier = 0; earlier < r; earlier++)
+            if (!strcmp(game, pe_imp_reader(earlier)->game)) seen = 1;
+        if (seen) continue;
+        PeImpAsset *assets = NULL;
+        const int count = pe_imp_catalog_assets(j->store, game, &assets);
+        for (int i = 0; i < count; i++) {
+            const PeImpAsset *a = &assets[i];
+            if (strcmp(a->type, "Model") || !tg->accepts(a->id)) continue;
+            const PeImpEnemyProfile *profile = pe_imp_enemy_for(a->id);
+            char moves[PE_IMP_ID_MAX], folder[1100], why[240], log[160], what[160];
+            if (profile) snprintf(moves, sizeof moves, "%s:%s", game, profile->moves);
+            else snprintf(moves, sizeof moves, "%s/moves", a->id);
+            const PeImpAsset *anim = bsearch(moves, assets, (size_t)count, sizeof *assets, compare_asset_id);
+            if (!anim || strcmp(anim->type, "Animation")) continue;
+            if (tg->current(a, builder)) { j->enemies_current++; continue; }
+            snprintf(what, sizeof what, "preparing %s (%s)", a->name, pe_imp_game_title(game));
+            PE_IMP_PROGRESS(j->progress, what, i + 1, count);
+            const PeImpBuild ctx = {j->store, NULL, j->step}; /* enemy packs use only the import store */
+            if (tg->place(a, builder, folder, sizeof folder, why, sizeof why) ||
+                tg->build(&ctx, a->id, folder, log, sizeof log, why, sizeof why)) {
+                j->enemies_failed++;
+                pe_mod_log("pe_import", "enemy %s: %s", a->id, why);
+                continue;
+            }
+            j->enemies_built++;
+            pe_mod_log("pe_import", "enemy %s: %s", a->id, log);
+        }
+        free(assets);
+    }
+}
+
 void pe_import_job_run(PeImportJob *j) {
     j->discs_read = j->unknown = j->failed = j->items = j->built = j->current = j->missing = j->unchanged = 0;
     j->games[0] = j->problem[0] = j->built_names[0] = j->missing_discs[0] = 0;
+    j->enemies_built = j->enemies_current = j->enemies_failed = 0;
     scan(j);
     build_autos(j);
+    if (j->prepare_enemies) prepare_enemies(j);
 }

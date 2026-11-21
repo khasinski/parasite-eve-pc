@@ -56,7 +56,6 @@
 #include "pe1/render_packets.h"
 
 #define MOD_ID "pe_enemy_import"
-#define PE_PACKS_MAX 16
 #define PE_FOES_MAX 3
 #define PE_TEX_X 320          /* the texture's first choice when free (Central Park leaves it free) */
 #define PE_TEX_Y 256
@@ -100,7 +99,7 @@ typedef struct {
     unsigned seen;                   /* bit per role: idle walk hurt die, attack = 1 << 4 */
 } PeFoe;
 
-static struct { char folder[64], name[32]; } s_list[PE_PACKS_MAX];
+static struct { char folder[64], name[32]; } s_list[PE_ENEMY_PACKS_MAX];
 static int s_listed;
 static char s_dir[1024];
 
@@ -138,7 +137,7 @@ static void pe_scan(void) {
     if (pe_mod_path(s_dir, sizeof s_dir, "pe_enemies") != 0) return;
     if (!(list = SDL_GlobDirectory(s_dir, "*", 0, &count))) return;
     qsort(list, (size_t)count, sizeof *list, pe_cmp);
-    for (i = 0; i < count && s_listed < PE_PACKS_MAX; ++i) {
+    for (i = 0; i < count && s_listed < PE_ENEMY_PACKS_MAX; ++i) {
         char path[1300];
         SDL_PathInfo info;
         FILE *f;

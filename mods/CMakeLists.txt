@@ -461,8 +461,9 @@ if(BUILD_TESTING)
             pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c
             pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c pe_src_dc1/pe_src_dc1_music.c pe_src_dc1/pe_src_dc1.c
             pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c
-            pe_wardrobe/pe_packs.c pe_import/pe_import_job.c)
-        target_include_directories(test-mod-import-flow PRIVATE import/core pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import)
+            pe_wardrobe/pe_packs.c pe_import/pe_import_job.c
+            pe_enemy_import/pe_enemy_pack.c pe_enemy_import/pe_enemy_build.c pe_enemy_import/pe_enemy_target.c)
+        target_include_directories(test-mod-import-flow PRIVATE import/core pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import pe_enemy_import)
         target_compile_definitions(test-mod-import-flow PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
         target_link_libraries(test-mod-import-flow PRIVATE pe_download_json pe_download_zip)
         set_tests_properties(mod-import-flow PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600
