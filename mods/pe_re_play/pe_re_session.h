@@ -22,6 +22,8 @@ typedef struct {
     const char *title;                /* "Resident Evil 2" */
     uint32_t stage, room;             /* the first room (stage 0 = stage 1) */
     int playable;                     /* the runtime can walk its rooms yet (cameras, collision) */
+    uint32_t b_stage, b_room;         /* the second scenario's first room (RE2's B), b_room 0: none */
+    int16_t b_x, b_z, b_dir;          /* where it puts the player, and her facing (the game's direction) */
 } PeReGame;
 
 const PeReGame *pe_re_game(int i);    /* 0 .. PE_RE_GAMES - 1 */
@@ -82,6 +84,9 @@ typedef enum { PE_RE_STAY, PE_RE_CAMERA, PE_RE_ROOM, PE_RE_SAID, PE_RE_ZONE } Pe
 /* Start at the game's first room, camera 0, standing at (x, z) chosen by the caller later
  * (pe_re_session_place). 0, or -1 with the reason. */
 int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, uint32_t player, char *why, size_t n);
+/* The second scenario (RE2's B, after the other character's A): the scenario-B status bit set, from its own
+ * first room (TITLE.C's new game). What the first run changed for it ("zapping") isn't carried yet. 0, or -1. */
+int pe_re_session_start_b(PeReSession *s, const char *store, const PeReGame *g, uint32_t player, char *why, size_t n);
 /* Load another room (a door's target): the new record replaces the old. 0 or -1. The floor is
  * left as it is: set s->floor (pe_re_floor_of) for a landing on another. */
 int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint32_t room, int camera, double x,

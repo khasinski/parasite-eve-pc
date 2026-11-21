@@ -11,7 +11,7 @@
  * Only RE2 has the cameras and collision the runtime uses so far (design doc, phase 4). */
 static const PeReGame k_games[PE_RE_GAMES] = {
     {"re1", "Resident Evil", 0, 0x06, 0},
-    {"re2", "Resident Evil 2", 0, 0x00, 1},
+    {"re2", "Resident Evil 2", 0, 0x00, 1, 0, 0x04, -0x4600, -0x54DA, 400},   /* B: 1-04 (TITLE.C) */
     {"re3", "Resident Evil 3", 0, 0x00, 0},
 };
 
@@ -128,16 +128,27 @@ static int load(PeReSession *s, const char *store, uint32_t stage, uint32_t room
     return 0;
 }
 
-int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, uint32_t player, char *why, size_t n) {
+static int start(PeReSession *s, const char *store, const PeReGame *g, uint32_t player, int b, char *why, size_t n) {
     memset(s, 0, sizeof *s);
     if (!g) { snprintf(why, n, "no such game"); return -1; }
+    if (b && !g->b_room) { snprintf(why, n, "%s has no second scenario", g->title); return -1; }
     s->game = g, s->player = player, s->store = store;
     pe_re_flag_set(&s->progress.flags, PE_RE_FG_STATUS, 0, player != 0);   /* who's playing (pe_re_scd.h) */
-    if (load(s, store, g->stage, g->room, why, n)) { s->game = NULL; return -1; }
+    pe_re_flag_set(&s->progress.flags, PE_RE_FG_STATUS, 1, b != 0);        /* STAT_SCENARIO_B (FLAG.H) */
+    if (load(s, store, b ? g->b_stage : g->stage, b ? g->b_room : g->room, why, n)) { s->game = NULL; return -1; }
+    if (b) pe_re_session_place(s, g->b_x, g->b_z, pe_re_facing_of(g->b_dir));
     char items[PE_IMP_ID_MAX];
     snprintf(items, sizeof items, "%s:items/all", g->game);
     if (pe_imp_catalog_itemtable(store, items, &s->items, NULL, 0)) s->items = NULL;   /* names fall back to numbers */
     return 0;
+}
+
+int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, uint32_t player, char *why, size_t n) {
+    return start(s, store, g, player, 0, why, n);
+}
+
+int pe_re_session_start_b(PeReSession *s, const char *store, const PeReGame *g, uint32_t player, char *why, size_t n) {
+    return start(s, store, g, player, 1, why, n);
 }
 
 int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint32_t room, int camera, double x,

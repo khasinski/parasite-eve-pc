@@ -101,11 +101,28 @@ static int events_running(const PeReSession *s) {
     return 0;
 }
 
+/* Answers to the scripts' questions ("Will you move it?"): bit k of s_answers answers the k-th question
+ * asked since it was set, 1 = No. The game keeps the answer in flag group 11, bit 0x1F (0 = Yes), which the
+ * script reads the frame after it asks. Default: always Yes. */
+static unsigned s_answers;
+static int s_answered, s_asked;
+static void set_answers(unsigned pattern) { s_answers = pattern, s_answered = 0; }
+static PeReChange answer_tick(PeReSession *s) {
+    const PeReChange c = pe_re_session_tick(s);
+    if (s->run.messages < s_asked) s_asked = 0;           /* another room: its own count */
+    if (s->run.messages != s_asked) {                     /* a message (maybe a question): answer it */
+        s_asked = s->run.messages;
+        pe_re_flag_set(&s->progress.flags, 11, 0x1F, (s_answers >> (s_answered & 31)) & 1);
+        s_answered++;
+    }
+    return c;
+}
+
 /* `frames` of the room's scripts, then on while an event plays (a cutscene), up to 100 s */
 static void settle(PeReSession *s, int frames) {
     char why[200];
     for (int f = 0; f < frames || (events_running(s) && f < 6000); f++) {
-        const PeReChange c = pe_re_session_tick(s);
+        const PeReChange c = answer_tick(s);
         if (c == PE_RE_ZONE) handed(s);
         else if (c == PE_RE_STAY && s->moved && !getenv("PE_TEST_RE_NOSTEP")) {           /* a scene walked her: the game's every-frame check */
             s->moved = 0;                                 /* where she stands (a door that needs no button) */
@@ -152,7 +169,7 @@ static PeReChange examine(PeReSession *s, const PeImpZone *zone, char *why, size
         }
         s->facing = facing;
         s->said[0] = 0;
-        if (pe_re_session_tick(s) == PE_RE_ROOM) return PE_RE_ROOM;   /* a script took her through a door */
+        if (answer_tick(s) == PE_RE_ROOM) return PE_RE_ROOM;   /* a script took her through a door */
         /* a player zone with no button: walking into it; else a press (it may be another record of this id that's live) */
         c = pe_re_session_step(s, s_store, x, z, !((sat & PE_RE_SAT_PLAYER) && !(sat & PE_RE_SAT_MANUAL)), why, n);
         if (c == PE_RE_ZONE) handed(s);
@@ -327,9 +344,27 @@ static void search(PeReSession *s, FILE *log) {
         if ((kind != PE_RE_ZONE_EVENT && kind != PE_RE_ZONE_MESSAGE && kind != PE_RE_ZONE_WINDOWS) || known_way(r, t.zone.id))
             continue;
         const int events = s->events, from = key_of(s);
+        uint8_t story[2][32];
+        memcpy(story[0], s->progress.flags.bits[3], 32), memcpy(story[1], s->progress.flags.bits[4], 32);
+        const int asked = s->run.messages;
+        set_answers(0);
         examine(s, &t.zone, why, sizeof why);
         settle(s, 300);
         if (s->events != events) fprintf(log, "  %s: examined zone %u, its event played\n", here, (unsigned)t.zone.id);
+        const int questions = s->run.messages - asked;
+        for (unsigned pattern = 1; questions >= 3 && key_of(s) == from && pattern < (1u << (questions < 6 ? questions : 6)); pattern++) {
+            int news = 0;                                 /* a puzzle (a panel of switches): other answers, until a story flag turns on */
+            for (int b = 0; b < 32; b++)
+                news |= (s->progress.flags.bits[3][b] & ~story[0][b]) | (s->progress.flags.bits[4][b] & ~story[1][b]);
+            if (news) {
+                if (pattern > 1) fprintf(log, "  %s: zone %u solved with answers %x (1 = no)\n", here, (unsigned)t.zone.id, pattern - 1);
+                break;
+            }
+            set_answers(pattern);
+            examine(s, &t.zone, why, sizeof why);
+            settle(s, 300);
+        }
+        set_answers(0);
         if (key_of(s) != from) {                          /* it took her somewhere: a way there, like a door */
             note_event(from, (int)t.zone.id, key_of(s), log);
             r->searched_at = 0, r->unfinished = 1;        /* the rest next time she's here */
@@ -508,13 +543,16 @@ int main(void) {
         if (f) fclose(f);
         CHECK(!pe_re_save_decode(bytes, &saved) && !pe_re_session_resume(&s, s_store, &saved, why, sizeof why));
         if (!s_fail) printf("started from %s\n", start);
+    } else if (getenv("PE_TEST_RE_SCENARIO_B") && *getenv("PE_TEST_RE_SCENARIO_B") == '1') {   /* the second scenario */
+        CHECK(!pe_re_session_start_b(&s, s_store, g, scenario, why, sizeof why));
     } else {
         CHECK(!pe_re_session_start(&s, s_store, g, scenario, why, sizeof why));
     }
     if (s_fail) { printf("start: %s\n", why); return 1; }
     FILE *log = stdout;
     s_log = log;
-    printf("RE2 %s, from the street:\n", scenario ? "Claire" : "Leon");
+    printf("RE2 %s %s, from the start:\n", scenario ? "Claire" : "Leon",
+           pe_re_flag(&s.progress.flags, PE_RE_FG_STATUS, 1) ? "B" : "A");
     s_room[key_of(&s)].seen = 1, s_room[key_of(&s)].parent = -1, s_room[key_of(&s)].order = ++s_order;
     settle(&s, SETTLE);
     int moves = 0, first_typewriter = -1, ended = -1;
