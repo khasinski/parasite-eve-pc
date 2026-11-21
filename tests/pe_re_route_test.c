@@ -713,6 +713,8 @@ int main(void) {
         if (f) fclose(f);
         CHECK(!pe_re_save_decode(bytes, &saved) && !pe_re_session_resume(&s, s_store, &saved, why, sizeof why));
         if (!s_fail) printf("started from %s\n", start);
+    } else if (getenv("PE_TEST_RE_HUNK") && *getenv("PE_TEST_RE_HUNK") == '1') {   /* the 4th Survivor (Leon's disc) */
+        CHECK(!pe_re_session_start_hunk(&s, s_store, g, why, sizeof why));
     } else if (getenv("PE_TEST_RE_SCENARIO_B") && *getenv("PE_TEST_RE_SCENARIO_B") == '1') {   /* the second scenario */
         CHECK(!pe_re_session_start_b(&s, s_store, g, scenario, why, sizeof why));
     } else {
@@ -729,7 +731,7 @@ int main(void) {
     }
     FILE *log = stdout;
     s_log = log;
-    printf("RE2 %s %s, from the start:\n", scenario ? "Claire" : "Leon",
+    printf("RE2 %s %s, from the start:\n", s.player_id == 12 ? "HUNK" : scenario ? "Claire" : "Leon",
            pe_re_flag(&s.progress.flags, PE_RE_FG_STATUS, 1) ? "B" : "A");
     s_room[key_of(&s)].seen = 1, s_room[key_of(&s)].parent = -1, s_room[key_of(&s)].order = ++s_order;
     settle(&s, SETTLE);

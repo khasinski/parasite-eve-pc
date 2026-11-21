@@ -151,6 +151,19 @@ int pe_re_session_start_b(PeReSession *s, const char *store, const PeReGame *g, 
     return start(s, store, g, player, 1, why, n);
 }
 
+int pe_re_session_start_hunk(PeReSession *s, const char *store, const PeReGame *g, char *why, size_t n) {
+    if (!g || strcmp(g->game, "re2")) { snprintf(why, n, "only RE2 has the 4th Survivor"); return -1; }
+    if (start(s, store, g, 0, 0, why, n)) return -1;
+    pe_re_flag_set(&s->progress.flags, 0, 0x1C, 1);        /* SYS_TIMER (System_flg 1 << 3: script bit 0x1C) */
+    pe_re_flag_set(&s->progress.flags, PE_RE_FG_STATUS, 6, 1);   /* STAT_SPECIAL_RUN (1 << 25) */
+    s->player_id = 12;                                     /* HUNK (To-fu: 13) */
+    free(s->logic), s->logic = NULL;                       /* his first room instead: 3-04, as Title_game_init puts him */
+    int16_t *w = s->progress.flags.work;
+    w[PE_RE_WORK_STAGE] = 2, w[PE_RE_WORK_ROOM] = 4, w[PE_RE_WORK_CUT] = 3;
+    if (pe_re_session_enter(s, store, 2, 4, 3, -0x1CFF, -0x5FAC, pe_re_facing_of(0x800), why, n)) { s->game = NULL; return -1; }
+    return 0;
+}
+
 int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint32_t room, int camera, double x,
                         double z, int facing, char *why, size_t n) {
     if (!s->game) { snprintf(why, n, "no session"); return -1; }
@@ -311,6 +324,7 @@ PeReChange pe_re_session_tick(PeReSession *s) {
     s->progress.flags.work[PE_RE_WORK_CUT] = (int16_t)s->camera;   /* Cut_no: the camera now (the scripts test it) */
     {   /* the player's fields, as the scripts read them (RE2's facing: 0 faces +x) */
         int16_t *me = s->run.works[0];
+        if (s->player_id) me[PE_RE_MEMBER_ID] = s->player_id;
         me[0] = 1, me[PE_RE_MEMBER_POS_X] = (int16_t)lround(s->x), me[PE_RE_MEMBER_POS_Z] = (int16_t)lround(s->z);
         me[PE_RE_MEMBER_POS_Y] = (int16_t)(-1800 * s->floor), me[PE_RE_MEMBER_NFLOOR] = (int16_t)s->floor;
         if (pe_re_facing_of(s->cdir_y) != s->facing) s->cdir_y = (int16_t)((s->facing + 1024) & 4095);

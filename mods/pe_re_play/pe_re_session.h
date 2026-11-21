@@ -73,6 +73,7 @@ typedef struct {
     int moved;                        /* a script moved her to (x, z): the mod places her, then clears it */
     int at_zone;                      /* the zone she set off last frame (her At_sce_no), 255 none */
     int16_t cdir_y;                   /* her facing as the scripts last wrote it (unwrapped: a turn may count past 4095) */
+    int16_t player_id;                /* the player's Id as the scripts read it (member 6); set for RE2's HUNK (12) */
     int uses;                         /* items used on the room */
 } PeReSession;
 
@@ -87,6 +88,9 @@ int pe_re_session_start(PeReSession *s, const char *store, const PeReGame *g, ui
 /* The second scenario (RE2's B, after the other character's A): the scenario-B status bit set, from its own
  * first room (TITLE.C's new game). What the first run changed for it ("zapping") isn't carried yet. 0, or -1. */
 int pe_re_session_start_b(PeReSession *s, const char *store, const PeReGame *g, uint32_t player, char *why, size_t n);
+/* RE2's special run ("The 4th Survivor", HUNK): SYS_TIMER and STAT_SPECIAL_RUN set, player Id 12, from 3-04,
+ * camera 3, as TITLE.C's new game puts him (Leon's room files). 0, or -1. */
+int pe_re_session_start_hunk(PeReSession *s, const char *store, const PeReGame *g, char *why, size_t n);
 /* Load another room (a door's target): the new record replaces the old. 0 or -1. The floor is
  * left as it is: set s->floor (pe_re_floor_of) for a landing on another. */
 int pe_re_session_enter(PeReSession *s, const char *store, uint32_t stage, uint32_t room, int camera, double x,
