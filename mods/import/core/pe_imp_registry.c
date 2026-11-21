@@ -284,6 +284,7 @@ static struct {
     unsigned kind;
     char id[PE_IMP_ID_MAX];
     const PeImpEnemyStart *starts;
+    PeImpEnemyBody body;
 } s_kind[MAX_KINDS];
 static int s_kinds;
 
@@ -294,6 +295,7 @@ int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id)
     if (i == MAX_KINDS) return -1;
     if (i == s_kinds) {
         s_kind[i].starts = NULL;
+        s_kind[i].body = PE_IMP_ENEMY_UPRIGHT;
         s_kinds++;
     }
     snprintf(s_kind[i].game, sizeof s_kind[i].game, "%s", game);
@@ -320,19 +322,39 @@ int pe_imp_set_enemy_starts(const char *game, unsigned kind, const PeImpEnemySta
     return -1;
 }
 
-const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id) {
+static int enemy_asset_kind(const char *asset_id) {
     const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
-    if (!colon) return NULL;
+    if (!colon) return -1;
     const size_t prefix = (size_t)(colon - asset_id);
-    const char *dash = strchr(colon + 1, '-');
+    const char *dash = strrchr(colon + 1, '-');
     for (int i = 0; i < s_kinds; i++)
-        if (s_kind[i].starts && strlen(s_kind[i].game) == prefix &&
+        if (strlen(s_kind[i].game) == prefix &&
             !strncmp(s_kind[i].game, asset_id, prefix) &&
             (!strcmp(s_kind[i].id, colon + 1) ||
              (dash && strlen(s_kind[i].id) == (size_t)(dash - colon - 1) &&
               !strncmp(s_kind[i].id, colon + 1, (size_t)(dash - colon - 1)))))
-            return s_kind[i].starts;
-    return NULL;
+            return i;
+    return -1;
+}
+
+const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id) {
+    const int i = enemy_asset_kind(asset_id);
+    return i >= 0 ? s_kind[i].starts : NULL;
+}
+
+int pe_imp_set_enemy_body(const char *game, unsigned kind, PeImpEnemyBody body) {
+    if (body < PE_IMP_ENEMY_UPRIGHT || body > PE_IMP_ENEMY_FIXED) return -1;
+    for (int i = 0; game && i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            s_kind[i].body = body;
+            return 0;
+        }
+    return -1;
+}
+
+PeImpEnemyBody pe_imp_enemy_body(const char *asset_id) {
+    const int i = enemy_asset_kind(asset_id);
+    return i >= 0 ? s_kind[i].body : PE_IMP_ENEMY_UPRIGHT;
 }
 
 int pe_imp_add_target(const PeImpTarget *t) {

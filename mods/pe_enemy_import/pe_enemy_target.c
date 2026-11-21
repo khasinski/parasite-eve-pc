@@ -91,7 +91,8 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
         int yaw = 0, scale = 0;
         pe_imp_enemy_defaults(game, &yaw, &scale);
         name_of(asset_id, name, sizeof name);
-        if (pe_imp_enemy_guess(&m, &a, name, id + (colon - asset_id) + 1, yaw, scale, g, why, n)) {
+        if (pe_imp_enemy_guess_body(&m, &a, name, id + (colon - asset_id) + 1, yaw, scale,
+                                    pe_imp_enemy_body(asset_id), g, why, n)) {
             pe_imp_model_free(&m), pe_imp_animation_free(&a), free(g);
             return -1;
         }
@@ -176,7 +177,7 @@ static int enemies_current(const PeImpAsset *a, const char *builder) {
 }
 
 const PeImpTarget g_pe_enemy_target = {
-    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 5, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
+    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 6, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
     enemies_accepts, enemies_place, enemies_current};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }

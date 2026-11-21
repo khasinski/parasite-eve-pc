@@ -62,6 +62,12 @@ typedef struct {
 int pe_imp_set_enemy_starts(const char *game, unsigned kind, const PeImpEnemyStart *starts);
 const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id);
 
+typedef enum {
+    PE_IMP_ENEMY_UPRIGHT, PE_IMP_ENEMY_CRAWLER, PE_IMP_ENEMY_FLYER, PE_IMP_ENEMY_FIXED
+} PeImpEnemyBody;
+int pe_imp_set_enemy_body(const char *game, unsigned kind, PeImpEnemyBody body);
+PeImpEnemyBody pe_imp_enemy_body(const char *asset_id);
+
 /* The Resident Evil games' (1, 2 and 3 share the EMD's axes and units): their models face +x, and a
  * person about 2900 units tall stands about 560 next to Aya (about 500), as RE3's zombie does. */
 #define PE_RE_ENEMY_YAW 3072

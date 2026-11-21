@@ -55,5 +55,13 @@ int pe_re2_enemies_register(void) {
         snprintf(id, sizeof id, "re2:enemy/em%02x", k_life[i].em);
         bad |= pe_imp_add_enemy_strength(id, k_life[i].life, 0) != 0;
     }
+    /* bio2-ds EM21/22/24/29/2F/3A: locomotion and EM2F's attached plant part. */
+    static const struct { unsigned kind; PeImpEnemyBody body; } bodies[] = {
+        {0x21, PE_IMP_ENEMY_FLYER}, {0x3a, PE_IMP_ENEMY_FLYER},
+        {0x22, PE_IMP_ENEMY_CRAWLER}, {0x24, PE_IMP_ENEMY_CRAWLER}, {0x29, PE_IMP_ENEMY_CRAWLER},
+        {0x2f, PE_IMP_ENEMY_FIXED}
+    };
+    for (unsigned i = 0; i < sizeof bodies / sizeof bodies[0]; i++)
+        bad |= pe_imp_set_enemy_body("re2", bodies[i].kind, bodies[i].body) != 0;
     return bad ? -1 : 0;
 }

@@ -119,6 +119,18 @@ static void test_made_up(void) {
     assert(p->height == 200 && p->hp >= 30 && p->speed > 0 && p->radius >= 180);   /* 200 units at 1:1 */
     assert(p->attack[0].anim && !strcmp(p->attack[0].anim, "attack") && p->attack[1].anim && !p->attack[2].anim);
 
+    PeImpEnemyGuess body;
+    assert(!pe_imp_add_enemy_kind("test", 1, "enemy/made-up"));
+    assert(!pe_imp_set_enemy_body("test", 1, PE_IMP_ENEMY_CRAWLER));
+    assert(pe_imp_enemy_body("test:enemy/made-up-cdemd2") == PE_IMP_ENEMY_CRAWLER);
+    assert(pe_imp_enemy_body("other:enemy/made-up") == PE_IMP_ENEMY_UPRIGHT);
+    assert(!pe_imp_enemy_guess_body(&m, &a, NULL, NULL, 0, 190, PE_IMP_ENEMY_CRAWLER, &body, why, sizeof why));
+    assert(move_of(&body.p, "walk") >= 0 && body.p.speed > 0 && body.p.speed <= 10 && body.p.radius == 45);
+    assert(!pe_imp_enemy_guess_body(&m, &a, NULL, NULL, 0, 190, PE_IMP_ENEMY_FLYER, &body, why, sizeof why));
+    assert(move_of(&body.p, "walk") >= 0 && body.p.speed >= 10 && body.p.radius == 65);
+    assert(!pe_imp_enemy_guess_body(&m, &a, NULL, NULL, 0, 190, PE_IMP_ENEMY_FIXED, &body, why, sizeof why));
+    assert(move_of(&body.p, "walk") < 0 && !body.p.speed && body.p.attack[0].anim);
+
     {   /* the game's own strength, where it gave one, over the height rule; a variant takes its base's */
         PeImpEnemyGuess known = g;
         assert(!pe_imp_enemy_known_strength("test:enemy/made-up", &known.p));    /* none registered: kept */
