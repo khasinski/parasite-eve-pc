@@ -278,6 +278,31 @@ int pe_imp_enemy_strength(const char *asset_id, int *life, int *power) {
     return -1;
 }
 
+#define MAX_KINDS 256
+static struct { char game[16]; unsigned kind; char id[PE_IMP_ID_MAX]; } s_kind[MAX_KINDS];
+static int s_kinds;
+
+int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id) {
+    if (!word_ok(game, 15) || !local_id || !*local_id || strlen(local_id) + strlen(game) + 1 >= PE_IMP_ID_MAX) return -1;
+    int i = 0;
+    while (i < s_kinds && !(s_kind[i].kind == kind && !strcmp(s_kind[i].game, game))) i++;
+    if (i == MAX_KINDS) return -1;
+    if (i == s_kinds) s_kinds++;
+    snprintf(s_kind[i].game, sizeof s_kind[i].game, "%s", game);
+    snprintf(s_kind[i].id, sizeof s_kind[i].id, "%s", local_id);
+    s_kind[i].kind = kind;
+    return 0;
+}
+
+int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, size_t n) {
+    for (int i = 0; game && i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            if (asset_id && n) snprintf(asset_id, n, "%s:%s", game, s_kind[i].id);
+            return 0;
+        }
+    return -1;
+}
+
 int pe_imp_add_target(const PeImpTarget *t) {
     if (!t || t->api.version != PE_IMP_API_VERSION || t->api.size != sizeof *t || !t->build || !t->module ||
         !t->verb || s_targets == MAX_TARGETS)
@@ -306,4 +331,5 @@ const PeImpTarget *pe_imp_target(int i) { return i >= 0 && i < s_targets ? s_tar
 void pe_imp_registry_reset(void) {
     for (int i = 0; i < s_namings; i++) pj_free(s_naming[i].root);
     s_readers = s_namings = s_games = s_rigs = s_targets = s_autos = s_enemies = s_enemy_games = 0;
+    s_strengths = s_kinds = 0;
 }

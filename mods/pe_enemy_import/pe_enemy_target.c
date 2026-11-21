@@ -129,13 +129,19 @@ static int enemies_accepts(const char *asset_id) {
     return pe_imp_enemy_for(asset_id) != NULL || (colon && !strncmp(colon + 1, "enemy/", 6));
 }
 
+int pe_enemy_pack_name(const char *asset_id, char *out, size_t n) {
+    const char *colon = asset_id ? strchr(asset_id, ':') : NULL, *last = asset_id ? strrchr(asset_id, '/') : NULL;
+    if (!colon || !n) return -1;
+    snprintf(out, n, "%.*s-%.40s", (int)(colon - asset_id), asset_id, last ? last + 1 : colon + 1);
+    for (char *c = out; *c; c++) if (!((*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') || *c == '-' || *c == '_')) *c = '_';
+    return 0;
+}
+
 /* <prefs>/pe_enemies/<game>-<name>: where F1 > Fights lists packs ("re3-nemesis") */
 static int enemy_folder(const PeImpAsset *a, char *folder, size_t fn) {
-    const char *colon = strchr(a->id, ':'), *last = strrchr(a->id, '/');
-    char sub[96];
-    if (!colon) return -1;
-    snprintf(sub, sizeof sub, "pe_enemies/%.*s-%.40s", (int)(colon - a->id), a->id, last ? last + 1 : colon + 1);
-    for (char *c = sub + 11; *c; c++) if (!((*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') || *c == '-' || *c == '_')) *c = '_';
+    char name[64], sub[96];
+    if (pe_enemy_pack_name(a->id, name, sizeof name)) return -1;
+    snprintf(sub, sizeof sub, "pe_enemies/%s", name);
     return pe_mod_path(folder, fn, sub);
 }
 

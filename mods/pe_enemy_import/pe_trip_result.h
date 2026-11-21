@@ -6,6 +6,7 @@
  * win, report it once the room runs again (the trip back is over): each slot still placed there is
  * beaten through defeated_slot(), its killed flag set, or for a boss with none its death seen by
  * the scripts (5-09's G, the lab lift's, 7-04's). Portable: only the service API. */
+#include <stddef.h>
 #include <stdint.h>
 
 #include "re_play_api.h"
@@ -28,5 +29,10 @@ void pe_trip_won(PeTripResult *t, int won);
  * beaten (and the result is spent), 0 while the room isn't back yet, -1 when there's nothing to
  * report or it can't be (another room, no defeated_slot). */
 int pe_trip_report(PeTripResult *t, const PeRePlayApi *api);
+
+/* The creature a trip from `room` fights: its first placement a game maps to a model
+ * (pe_imp_enemy_kind_asset), people (kind 0x40 and up) left out. `asset_id` gets the model
+ * ("re2:enemy/em31"). The placement's index, or -1 (no room, nothing mapped: the player's pick). */
+int pe_trip_creature(const PeReRoomEvent *room, char *asset_id, size_t n);
 
 #endif

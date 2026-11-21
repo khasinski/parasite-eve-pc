@@ -193,6 +193,19 @@ void pe_enemy_battle_arm(int choice, int count, int send_away) {
     if (pe_load(choice - 1)) s_armed = choice;
 }
 
+int pe_enemy_battle_arm_pack(const char *pack, int count, int send_away) {
+    s_armed = 0;
+    if (s.active) return 0;                    /* not mid-battle: the list is the battle's */
+    if (s_loaded >= 0) pe_enemy_pack_free(&s_pack), s_loaded = -1;   /* it may have been rebuilt */
+    pe_scan();
+    for (int i = 0; i < s_listed; i++)
+        if (!strcmp(s_list[i].folder, pack)) {
+            pe_enemy_battle_arm(i + 1, count, send_away);
+            return s_armed != 0;
+        }
+    return 0;
+}
+
 void pe_enemy_battle_disarm(void) { s_armed = 0; }
 
 /* ---- actors ---- */

@@ -21,6 +21,7 @@
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_mod_menu.h"
+#include "pe_services.h"
 #include "pe_trip_result.h"
 #include "re_play_api.h"
 #include "pe1/asset_table.h"
@@ -131,6 +132,7 @@ static struct {
 static char s_last[96] = "none yet";
 static PeTripResult s_trip;         /* a trip from an imported room: a win beats its placed enemies */
 static int s_trip_wait;              /* frames left to see that room again */
+static char s_room_foe[64];          /* the imported room's creature in the last trip, "" none */
 
 /* ---- the list ---- */
 
@@ -295,6 +297,26 @@ static void pe_arrived(void) {
     pe_log("cheat_fight_picker", "spot map=%u spot=%u of %d at %d,%d", f->map, f->spot, n, x, z);
 }
 
+/* A trip from an imported room fights that room's creature (its first placement a game maps to a
+ * model, pe_trip_creature): its pack, built now if it isn't yet (pe_import's "enemy_build"), with
+ * a guessed profile unless the game or the player gave one. Else the player's pick stays armed. */
+static void pe_room_creature(const PeRePlayApi *api) {
+    PeReRoomEvent room = {sizeof room};
+    char asset[96], pack[64], why[200] = "";
+    if (api->room(&room) || pe_trip_creature(&room, asset, sizeof asset) < 0 || pe_enemy_pack_name(asset, pack, sizeof pack))
+        return;
+    const PeEnemyBuildApi *b = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION);
+    if (b && b->struct_size >= sizeof *b && b->ensure(asset, why, sizeof why))
+        pe_mod_log(MOD_ID, "the room's %s: no fresh build (%s); an older pack is used if there is one", asset, why);
+    if (pe_enemy_battle_arm_pack(pack, s_enemy_count + 1, s_room_enemies == 1)) {
+        pe_mod_log(MOD_ID, "trip from an imported room: fighting its %s (pack %s)", asset, pack);
+        snprintf(s_room_foe, sizeof s_room_foe, "%s", pack);
+        return;
+    }
+    pe_mod_log(MOD_ID, "the room's %s has no usable pack; the picked enemy fights", asset);
+    pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
+}
+
 static void pe_leave(void) {
     const PeFight *f = &k_fights[s.fight];
     if (!pe_field_ready()) return;
@@ -306,6 +328,7 @@ static void pe_leave(void) {
     const PeRePlayApi *api = pe_imported_room_api();
     if (api) {
         pe_trip_arm(&s_trip, api);                         /* the room and its placements, before it pauses */
+        pe_room_creature(api);                             /* and its own creature in the fight */
         const int paused = api->pause_for_battle();
         if (paused < 0) {
             pe_finish("the imported room is busy");
@@ -450,7 +473,8 @@ static void pe_start(void) {
     if (s.state != PE_IDLE) { pe_toast("Fights: a fight is already on its way"); return; }
     s.fight = f;
     s.live_enemies = 0;
-    pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
+    pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);   /* the room's creature may take over */
+    s_room_foe[0] = 0;
     s.state = PE_LEAVE;   /* on the next free field frame, once the panel closes */
 }
 

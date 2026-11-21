@@ -20,4 +20,8 @@ extern const PeImpReader g_re2_music_ps1;
 extern const PeImpReader g_re2_rooms_ps1, g_re2_logic_ps1, g_re2_door_ps1, g_re2_items_ps1, g_re2_item_pictures_ps1, g_re2_movies_ps1, g_re2_player_movies_ps1, g_re2_files_ps1, g_re2_maps_ps1, g_re2_objects_ps1, g_re2_door_models_ps1, g_re2_rbj_ps1;
 extern const char g_re2_naming[];
 
+/* RE2's enemy kinds (placement kind -> model) and known strengths, into the importer's registry
+ * (pe_src_re2_enemies.c). 0, or -1 if any was refused. */
+int pe_re2_enemies_register(void);
+
 #endif

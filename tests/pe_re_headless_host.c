@@ -8,7 +8,9 @@
 #include "pe_mod_menu.h"
 #include "pe_re_door.h"
 #include "pe_re_save.h"
+#include "pe_imp_enemy.h"
 #include "pe_services.h"
+#include "pe_src_re2.h"
 #include "pe_trip_result.h"
 #include "re_play_api.h"
 #include "re_host.h"
@@ -178,6 +180,19 @@ static int play(unsigned scenario) {
     s.start();
     frames(1, 0);
     EXPECT(s.active && !strcmp(s.room, "re2:room/100") && !s.api->room(&room));
+    {   /* a trip from here fights the room's own creature: RE2's kind -> model table picks it */
+        char asset[96], want[96];
+        if (pe_imp_enemy_kind_asset("re2", 0x10, NULL, 0))                /* no game's table yet: the player's pick */
+            EXPECT(pe_trip_creature(&room, asset, sizeof asset) == -1);
+        EXPECT(!pe_re2_enemies_register());
+        const int pick = pe_trip_creature(&room, asset, sizeof asset);
+        EXPECT(pick >= 0 && pick < room.count && room.enemies[pick].kind < 0x40);
+        snprintf(want, sizeof want, "re2:enemy/em%02x", (unsigned)room.enemies[pick].kind);
+        EXPECT(!strcmp(asset, want));
+        int life = 0;
+        EXPECT(!pe_imp_enemy_strength(asset, &life, NULL) && life > 0);   /* and the game's own strength */
+        printf("headless host: a trip from the street fights its %s (placement %d, life %d)\n", asset, pick, life);
+    }
     PeTripResult trip;                                     /* a battle trip from here, won (pe_enemy_import) */
     const int placed = room.count;
     int flagged = 0;

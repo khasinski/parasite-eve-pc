@@ -753,12 +753,42 @@ static void text_asset(char *out, unsigned size) {
     snprintf(out, size, "%s, %s %s", it->a.id, it->a.platform, it->a.path);
 }
 
+/* ---- "enemy_build" (pe_services.h): a fight from an imported room brings that room's creature ---- */
+static int enemy_ensure(const char *asset_id, char *why, size_t n) {
+    const PeImpTarget *tg = NULL;
+    const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
+    char game[16], builder[64], folder[1100], log[160] = "";
+    if (!colon || colon - asset_id >= (long)sizeof game) { snprintf(why, n, "not an asset ID"); return -1; }
+    if (SDL_GetAtomicInt(&s_state) != 0) { snprintf(why, n, "the importer is busy"); return -1; }
+    for (int i = 0; i < pe_imp_targets() && !tg; i++)
+        if (!strcmp(pe_imp_target(i)->module, "enemies")) tg = pe_imp_target(i);
+    if (!tg || !tg->place) { snprintf(why, n, "no enemies builder"); return -1; }
+    snprintf(game, sizeof game, "%.*s", (int)(colon - asset_id), asset_id);
+    PeImpAsset *list = NULL, a;
+    const int count = pe_imp_catalog_assets(s_job.store, game, &list);
+    int found = 0;
+    for (int i = 0; i < count && !found; i++) if (!strcmp(list[i].id, asset_id)) a = list[i], found = 1;
+    free(list);
+    if (!found) { snprintf(why, n, "%s isn't in the import catalog (scan its disc in F1 > Import)", asset_id); return -1; }
+    snprintf(builder, sizeof builder, "pe_import 1, %s %u", tg->module, tg->version);
+    if (tg->current && tg->current(&a, builder)) return 0;   /* built already, and not changed since */
+    const void *targets = s_job.host->open_targets(why, n);
+    if (!targets) return -1;
+    PeImpBuild ctx = {s_job.store, targets, NULL};
+    const int rc = tg->place(&a, builder, folder, sizeof folder, why, n) || tg->build(&ctx, a.id, folder, log, sizeof log, why, n);
+    s_job.host->close_targets(targets);
+    if (!rc) pe_mod_log("pe_import", "enemy %s built for a fight: %s", asset_id, log);
+    return rc ? -1 : 0;
+}
+static const PeEnemyBuildApi s_enemy_build = {sizeof s_enemy_build, enemy_ensure};
+
 static int import_init(void) {
     if (pe_mod_path(s_job.discs, sizeof s_job.discs, "import/discs") || pe_mod_path(s_job.store, sizeof s_job.store, "import/store") ||
         pe_mod_path(s_job.packs, sizeof s_job.packs, "packs"))
         return 1;
     if (pe_mod_path(s_rooms_dir, sizeof s_rooms_dir, "import/rooms")) return 1;
     s_job.host = import_host();
+    pe_service_publish(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION, &s_enemy_build, "pe_import");
     s_job.host->init();                                       /* the game's own tables (PE1: MDEC) */
     pe_imp_mkdirs(s_job.discs);
     if (pe_mod_path(s_folders_file, sizeof s_folders_file, "import/folders.txt")) return 1;

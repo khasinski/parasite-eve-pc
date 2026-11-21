@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "pe_imp_enemy.h"
 #include "pe_trip_result.h"
 
 static int has_slot_api(const PeRePlayApi *api) {
@@ -31,4 +32,12 @@ int pe_trip_report(PeTripResult *t, const PeRePlayApi *api) {
     int beaten = 0;
     for (int i = 0; i < t->count; i++) beaten += !api->defeated_slot(t->slot[i]);   /* only those still placed */
     return beaten;
+}
+
+int pe_trip_creature(const PeReRoomEvent *room, char *asset_id, size_t n) {
+    for (int i = 0; room && room->game && i < room->count; i++) {
+        const PeReEnemyPlacement *e = &room->enemies[i];
+        if (e->kind < 0x40 && !pe_imp_enemy_kind_asset(room->game, e->kind, asset_id, n)) return i;
+    }
+    return -1;
 }
