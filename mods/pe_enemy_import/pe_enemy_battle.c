@@ -79,7 +79,16 @@ typedef struct {
 enum { ROLE_ATTACK = PE_ANIM_ROLES };
 
 typedef struct {
+    PeEnemyPack pack;
+    char path[1200];
+    RECT texture, clut;
+    int height, uploaded;
+    u16 saved_tex[PE_TEX_W * PE_TEX_H], saved_clut[PE_CLUTS_MAX][256];
+} PeBattlePack;
+
+typedef struct {
     FieldActor *actor;
+    PeBattlePack *resource;
     unsigned serial;                 /* the actor's field_sfx_id: a reused actor has another */
     int anim, role, attack;          /* attack: index + 1 while attacking */
     double frame;
@@ -93,17 +102,16 @@ static struct { char folder[64], name[32]; } s_list[PE_PACKS_MAX];
 static int s_listed;
 static char s_dir[1024];
 
-static PeEnemyPack s_pack;
-static char s_loaded[1200];           /* path of the loaded pack */
+static PeBattlePack s_resources[PE_FOES_MAX];
+static int s_resource_count;
+static PeBattlePack *s_roster[PE_FOES_MAX];
 static int s_armed;
 static int s_send_away, s_count = 1;
 
 static struct {
-    int active, uploaded, frames, open_frames, joined, sent_away, room_enemies;
+    int active, frames, open_frames, joined, sent_away, room_enemies;
     int away_later;                  /* joined during the opening: send the room's enemies away
                                       * once the clock runs */
-    int tex_x, tex_y, clut_x, clut_y; /* where this battle's texture and palettes went */
-    int height;                      /* the pack's standing height, field units */
     PeFoe foe[PE_FOES_MAX];
     int foes;
     PeFoe *last_blow;                /* the foe whose blow the game is taking now */
@@ -111,7 +119,6 @@ static struct {
     char result[96];
 } s;
 
-static u16 s_saved_tex[PE_TEX_W * PE_TEX_H], s_saved_clut[PE_CLUTS_MAX][256];
 static int16_t s_posed[PE_ENEMY_MAX_VERTICES][3];
 static PeFt3 s_prims[PE_FOES_MAX][2][PE_ENEMY_MAX_TRIANGLES];
 
@@ -161,52 +168,76 @@ const char *pe_enemy_choice_name(unsigned i) {
     return i <= (unsigned)s_listed ? s_list[i - 1].name : "";
 }
 
-static int pe_load(const char *dir) {
+static void pe_free_resources(void) {
+    for (int i = 0; i < s_resource_count; i++) pe_enemy_pack_free(&s_resources[i].pack);
+    s_resource_count = 0;
+}
+
+static PeBattlePack *pe_load(const char *dir) {
     char err[200];
-    if (!strcmp(s_loaded, dir)) return 1;
-    if (s_loaded[0]) pe_enemy_pack_free(&s_pack);
-    s_loaded[0] = 0;
-    if (pe_enemy_pack_load(&s_pack, dir, err, sizeof err)) {
+    for (int i = 0; i < s_resource_count; i++)
+        if (!strcmp(s_resources[i].path, dir)) return &s_resources[i];
+    if (s_resource_count == PE_FOES_MAX) return NULL;
+    PeBattlePack *resource = &s_resources[s_resource_count];
+    PeEnemyPack *pack = &resource->pack;
+    if (pe_enemy_pack_load(pack, dir, err, sizeof err)) {
         pe_mod_log(MOD_ID, "enemy pack %s refused: %s", dir, err);
         pe_toast("Fights: that enemy pack can't be used (see pe_mods.log)");
-        return 0;
+        return NULL;
     }
-    if (s_pack.tex_w > 2 * PE_TEX_W || (s_pack.tex_w & 1) || s_pack.tex_h > PE_TEX_H ||
-        s_pack.palettes > PE_CLUTS_MAX) {
+    if (pack->tex_w > 2 * PE_TEX_W || (pack->tex_w & 1) || pack->tex_h > PE_TEX_H ||
+        pack->palettes > PE_CLUTS_MAX) {
         pe_mod_log(MOD_ID, "enemy pack %s refused: texture must fit %dx%d with even width and up to %d palettes",
                    dir, 2 * PE_TEX_W, PE_TEX_H, PE_CLUTS_MAX);
-        pe_enemy_pack_free(&s_pack);
-        return 0;
+        pe_enemy_pack_free(pack);
+        return NULL;
     }
-    snprintf(s_loaded, sizeof s_loaded, "%s", dir);
+    snprintf(resource->path, sizeof resource->path, "%s", dir);
+    int top = 0;
+    for (int i = 0; i < pack->vertices; i++)
+        if (-pack->vertex[i].y > top) top = -pack->vertex[i].y;
+    resource->height = top > 50 ? top : 500;
+    resource->uploaded = 0;
+    s_resource_count++;
     pe_mod_log(MOD_ID, "enemy pack %s loaded: %s, %d bones, %d vertices, %d triangles, %d anims, %d attacks, hp %d",
-               s_pack.folder, s_pack.name, s_pack.bones, s_pack.vertices, s_pack.triangles, s_pack.anims,
-               s_pack.attacks, s_pack.hp);
-    return 1;
+               pack->folder, pack->name, pack->bones, pack->vertices, pack->triangles, pack->anims,
+               pack->attacks, pack->hp);
+    return resource;
 }
 
 void pe_enemy_battle_arm(int choice, int count, int send_away) {
+    if (s.active) return;
     s_armed = 0;
+    pe_free_resources();
     if (choice <= 0 || choice > s_listed) return;
     s_count = count < 1 ? 1 : count > PE_FOES_MAX ? PE_FOES_MAX : count;
     s_send_away = send_away;
     char dir[1200];
     snprintf(dir, sizeof dir, "%s/%s", s_dir, s_list[choice - 1].folder);
-    s_armed = pe_load(dir);
+    PeBattlePack *resource = pe_load(dir);
+    if (!resource) return;
+    for (int i = 0; i < s_count; ++i) s_roster[i] = resource;
+    s_armed = 1;
 }
 
-int pe_enemy_battle_arm_pack(const char *pack, int count) {
-    if (s.active || count < 1 || count > PE_FOES_MAX) return 0;
+void pe_enemy_battle_begin_roster(void) {
+    if (s.active) return;
     s_armed = 0;
+    s_count = 0;
+    s.foes = 0;
+    s_send_away = 1;
+    pe_free_resources();
+}
+
+int pe_enemy_battle_add_pack(const char *pack) {
+    if (s.active || s_count >= PE_FOES_MAX) return 0;
     char dir[1200];
     const int written = snprintf(dir, sizeof dir, "%s/%s", s_dir, pack);
     if (written < 0 || (size_t)written >= sizeof dir) return 0;
-    /* A just-rebuilt pack can have the same path. Look it up directly, outside the menu limit. */
-    if (s_loaded[0]) pe_enemy_pack_free(&s_pack), s_loaded[0] = 0;
-    if (!pe_load(dir)) return 0;
-    s.foes = 0;
-    s_count = count;
-    s_send_away = s_armed = 1;
+    PeBattlePack *resource = pe_load(dir);
+    if (!resource) return 0;
+    s_roster[s_count++] = resource;
+    s_armed = 1;
     return 1;
 }
 
@@ -266,7 +297,7 @@ static FieldActor *pe_new_actor(void) {
 }
 
 static void pe_set_anim(PeFoe *f, int role, int anim) {
-    if (anim < 0) anim = s_pack.role[PE_ANIM_IDLE];
+    if (anim < 0) anim = f->resource->pack.role[PE_ANIM_IDLE];
     if (f->role == role && f->anim == anim) return;
     f->role = role;
     f->anim = anim;
@@ -278,7 +309,8 @@ static void pe_set_anim(PeFoe *f, int role, int anim) {
 /* The anim's sound events from the last frame run up to `to` (wrapping when it loops), on the
  * audio service's effect voices (pe_assets): footsteps, swings. Silent without the service. */
 static void pe_play_events(PeFoe *f, int to) {
-    const PeEnemyAnim *an = &s_pack.anim[f->anim];
+    const PeEnemyPack *pack = &f->resource->pack;
+    const PeEnemyAnim *an = &pack->anim[f->anim];
     static const PeAudioApi *audio;
     if (!an->event || to == f->event_frame) return;
     if (!audio) {
@@ -288,9 +320,9 @@ static void pe_play_events(PeFoe *f, int to) {
     for (int guard = 0, k = f->event_frame; guard < an->frames && k != to; guard++) {
         k = k + 1 >= an->frames ? 0 : k + 1;
         unsigned snd = an->event[k] & PE_ENEMY_EVENT_SOUND;
-        if (snd && (int)snd < s_pack.sounds && s_pack.sound[snd].pcm) {
+        if (snd && (int)snd < pack->sounds && pack->sound[snd].pcm) {
             f->sounds++;
-            if (audio) audio->play_effect(s_pack.sound[snd].pcm, (uint32_t)s_pack.sound[snd].frames, (uint32_t)s_pack.sound[snd].rate, 1.0f);
+            if (audio) audio->play_effect(pack->sound[snd].pcm, (uint32_t)pack->sound[snd].frames, (uint32_t)pack->sound[snd].rate, 1.0f);
         }
     }
     f->event_frame = to;
@@ -309,28 +341,31 @@ static double pe_dist(const FieldActor *a, const FieldActor *b) {
 
 static int pe_turn_diff(int from, int to) { return ((to - from + 0x800) & 0xFFF) - 0x800; }
 
-static int pe_reach(int attack) {
-    return s_pack.attack[attack].range ? s_pack.attack[attack].range : s_pack.radius * 4;
+static int pe_reach(const PeEnemyPack *pack, int attack) {
+    return pack->attack[attack].range ? pack->attack[attack].range : pack->radius * 4;
 }
 
 /* Where Aya aims and where hits and numbers show: its middle, at its body size. */
-static void pe_place_targets(FieldActor *a) {
+static void pe_place_targets(PeFoe *f) {
+    FieldActor *a = f->actor;
+    const int height = f->resource->height, radius = f->resource->pack.radius;
     RenderObjectEntity *o = &a->render_object;
     const int x = a->pos_x >> 16, y = a->pos_y >> 16, z = a->pos_z >> 16;
     o->target_x = (s16)x;
-    o->target_y = (s16)(y - s.height * 6 / 10);
+    o->target_y = (s16)(y - height * 6 / 10);
     o->target_z = (s16)z;
     o->hit_cylinder.value0 = (s16)x;
     o->hit_cylinder.value1 = (s16)y;
     o->hit_cylinder.value2 = (s16)z;
-    o->hit_cylinder.radius = (s16)s_pack.radius;
+    o->hit_cylinder.radius = (s16)radius;
     o->hit_body.value0 = (s16)x;
-    o->hit_body.value1 = (s16)(y - s.height / 2);
+    o->hit_body.value1 = (s16)(y - height / 2);
     o->hit_body.value2 = (s16)z;
-    o->hit_body.radius = (s16)s_pack.radius;
+    o->hit_body.radius = (s16)radius;
 }
 
-static int pe_spawn(int x, int y, int z) {
+static int pe_spawn(PeBattlePack *resource, int x, int y, int z) {
+    const PeEnemyPack *pack = &resource->pack;
     PeFoe *f = &s.foe[s.foes];
     FieldActor *a, *aya = g_PlayerEntity;
     EnemyCombatant *core;
@@ -348,24 +383,25 @@ static int pe_spawn(int x, int y, int z) {
         a->flags |= 0x10;
         return 0;
     }
-    core->hpAlive = core->hpAliveCap = core->previousHP = s_pack.hp;
-    core->defense = (u16)(s_pack.defense >= 0 ? s_pack.defense : 0);
-    core->chargeStep = (u16)s_pack.charge;
-    core->hpMirror = (u16)(s_pack.exp > 0xFFFF ? 0xFFFF : s_pack.exp);   /* the EXP it gives */
+    core->hpAlive = core->hpAliveCap = core->previousHP = pack->hp;
+    core->defense = (u16)(pack->defense >= 0 ? pack->defense : 0);
+    core->chargeStep = (u16)pack->charge;
+    core->hpMirror = (u16)(pack->exp > 0xFFFF ? 0xFFFF : pack->exp);   /* the EXP it gives */
     core->deathAssetEnabled = 0;
     core->deathAnimFrame = 0;
     core->effect = &core->records[0];
     core->effect->state = 0;
     memset(f, 0, sizeof *f);
     f->actor = a;
+    f->resource = resource;
     f->serial = a->field_sfx_id;
     f->role = -1;
-    f->last_hp = s_pack.hp;
-    pe_set_anim(f, PE_ANIM_IDLE, s_pack.role[PE_ANIM_IDLE]);
-    pe_place_targets(a);
+    f->last_hp = pack->hp;
+    pe_set_anim(f, PE_ANIM_IDLE, pack->role[PE_ANIM_IDLE]);
+    pe_place_targets(f);
     s.foes++;
-    pe_mod_log(MOD_ID, "battle: %s joins at %d,%d (enemy place bit %d, hp %d%s)", s_pack.name, x >> 16, z >> 16,
-               core->slotBit, s_pack.hp, a->collision_face ? "" : ", no floor found");
+    pe_mod_log(MOD_ID, "battle: %s joins at %d,%d (enemy place bit %d, hp %d%s)", pack->name, x >> 16, z >> 16,
+               core->slotBit, pack->hp, a->collision_face ? "" : ", no floor found");
     return 1;
 }
 
@@ -387,29 +423,32 @@ static void pe_send_away(FieldActor *a) {
 
 /* ---- VRAM ---- */
 
-static void pe_vram(int put_back) {
-    RECT tex = {(short)s.tex_x, (short)s.tex_y, (short)(s_pack.tex_w / 2), (short)s_pack.tex_h};
+static void pe_vram(PeBattlePack *resource, int put_back) {
+    RECT tex = resource->texture;
+    const PeEnemyPack *pack = &resource->pack;
+    const int clut_x = resource->clut.x, clut_y = resource->clut.y;
     int i;
     if (!put_back) {   /* save what is there, then ours */
-        StoreImage(&tex, s_saved_tex);
-        for (i = 0; i < s_pack.palettes; ++i) {
-            RECT c = {(short)s.clut_x, (short)(s.clut_y + i), 256, 1};
-            StoreImage(&c, s_saved_clut[i]);
+        StoreImage(&tex, resource->saved_tex);
+        for (i = 0; i < pack->palettes; ++i) {
+            RECT c = {(short)clut_x, (short)(clut_y + i), 256, 1};
+            StoreImage(&c, resource->saved_clut[i]);
         }
         DrawSync(0);
-        LoadImage(&tex, s_pack.pixels);
-        for (i = 0; i < s_pack.palettes; ++i) {
-            RECT c = {(short)s.clut_x, (short)(s.clut_y + i), 256, 1};
-            LoadImage(&c, s_pack.palette + 256 * i);
+        LoadImage(&tex, pack->pixels);
+        for (i = 0; i < pack->palettes; ++i) {
+            RECT c = {(short)clut_x, (short)(clut_y + i), 256, 1};
+            LoadImage(&c, pack->palette + 256 * i);
         }
     } else {
-        LoadImage(&tex, s_saved_tex);
-        for (i = 0; i < s_pack.palettes; ++i) {
-            RECT c = {(short)s.clut_x, (short)(s.clut_y + i), 256, 1};
-            LoadImage(&c, s_saved_clut[i]);
+        LoadImage(&tex, resource->saved_tex);
+        for (i = 0; i < pack->palettes; ++i) {
+            RECT c = {(short)clut_x, (short)(clut_y + i), 256, 1};
+            LoadImage(&c, resource->saved_clut[i]);
         }
     }
     DrawSync(0);
+    resource->uploaded = !put_back;
 }
 
 /* ---- where the texture goes ----
@@ -556,8 +595,19 @@ static int pe_overlap(int ax, int ay, int aw, int ah, int bx, int by, int bw, in
     return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
 }
 
-static void pe_place(void) {
-    const int tw = s_pack.tex_w / 2, th = s_pack.tex_h, rows = s_pack.palettes > 0 ? s_pack.palettes : 1;
+static int pe_vram_reserved(int x, int y, int w, int h) {
+    for (int i = 0; i < s_resource_count; i++) {
+        const PeBattlePack *p = &s_resources[i];
+        if (!p->uploaded) continue;
+        if (pe_overlap(x, y, w, h, p->texture.x, p->texture.y, p->texture.w, p->texture.h) ||
+            pe_overlap(x, y, w, h, p->clut.x, p->clut.y, p->clut.w, p->clut.h)) return 1;
+    }
+    return 0;
+}
+
+static int pe_place(PeBattlePack *resource) {
+    const PeEnemyPack *pack = &resource->pack;
+    const int tw = pack->tex_w / 2, th = pack->tex_h, rows = pack->palettes;
     RECT all = {0, 0, 1024, 512};
     long long best, cost;
     for (int i = 0; i < 2; ++i) {
@@ -567,34 +617,39 @@ static void pe_place(void) {
     StoreImage(&all, s_vram);
     DrawSync(0);
     /* the texture: a texture page column (x a multiple of 64), its lines inside one page row */
-    s.tex_x = PE_TEX_X;
-    s.tex_y = PE_TEX_Y;
-    best = pe_block_cost(s.tex_x, s.tex_y, tw, th);
+    RECT texture = {PE_TEX_X, PE_TEX_Y, (short)tw, (short)th};
+    best = pe_vram_reserved(texture.x, texture.y, tw, th) ? -1 : pe_block_cost(texture.x, texture.y, tw, th);
     for (int page = 0; page < 2; ++page)
         for (int dy = 0; dy + th <= 256; dy += 16)
             for (int x = 0; x + tw <= 1024; x += 64)
-                if ((cost = pe_block_cost(x, page * 256 + dy, tw, th)) < best) {
+                if (!pe_vram_reserved(x, page * 256 + dy, tw, th) &&
+                    ((cost = pe_block_cost(x, page * 256 + dy, tw, th)) < best || best < 0)) {
                     best = cost;
-                    s.tex_x = x;
-                    s.tex_y = page * 256 + dy;
+                    texture.x = x;
+                    texture.y = page * 256 + dy;
                 }
+    if (best < 0) return 0;
     pe_mod_log(MOD_ID, "battle: %s texture at %d,%d (%lld cells read by the room, %lld pixels not black; %d frames looked at)",
-               s_pack.name, s.tex_x, s.tex_y, best / 1000000LL, best % 1000000LL, s_used_frames);
+               pack->name, texture.x, texture.y, best / 1000000LL, best % 1000000LL, s_used_frames);
     /* the palettes: 256 wide (x a multiple of 256), clear of the texture */
-    s.clut_x = PE_CLUT_X;
-    s.clut_y = PE_CLUT_Y;
-    best = pe_overlap(s.clut_x, s.clut_y, 256, rows, s.tex_x, s.tex_y, tw, th) ? -1
-                                                                               : pe_block_cost(s.clut_x, s.clut_y, 256, rows);
+    RECT clut = {PE_CLUT_X, PE_CLUT_Y, 256, (short)rows};
+    best = pe_overlap(clut.x, clut.y, 256, rows, texture.x, texture.y, tw, th) ||
+           pe_vram_reserved(clut.x, clut.y, 256, rows) ? -1 : pe_block_cost(clut.x, clut.y, 256, rows);
     for (int x = 0; x < 1024; x += 256)
         for (int y = 0; y + rows <= 512; ++y)
-            if (!pe_overlap(x, y, 256, rows, s.tex_x, s.tex_y, tw, th) &&
+            if (!pe_overlap(x, y, 256, rows, texture.x, texture.y, tw, th) &&
+                !pe_vram_reserved(x, y, 256, rows) &&
                 ((cost = pe_block_cost(x, y, 256, rows)) < best || best < 0)) {
                 best = cost;
-                s.clut_x = x;
-                s.clut_y = y;
+                clut.x = x;
+                clut.y = y;
             }
+    if (best < 0) return 0;
     pe_mod_log(MOD_ID, "battle: %s palettes at %d,%d (%lld cells read by the room, %lld pixels not black)",
-               s_pack.name, s.clut_x, s.clut_y, best / 1000000LL, best % 1000000LL);
+               pack->name, clut.x, clut.y, best / 1000000LL, best % 1000000LL);
+    resource->texture = texture;
+    resource->clut = clut;
+    return 1;
 }
 
 /* ---- the battle ---- */
@@ -619,32 +674,34 @@ static void pe_join(int early) {
     if (s_send_away && !s.away_later)
         for (a = g_FieldActorListHead; a; a = a->next)
             if (pe_is_room_enemy(a)) pe_send_away(a);
+    int radius = 0;
+    for (i = 0; i < s_count; ++i)
+        if (s_roster[i]->pack.radius > radius) radius = s_roster[i]->pack.radius;
     for (i = 0; i < s_count; ++i) {
+        PeBattlePack *resource = s_roster[i];
         /* more than one: side by side across Aya's view of the spot; beside the room's enemy
          * when it stays */
         const double ang = atan2((x - aya->pos_x) / 65536.0, (z - aya->pos_z) / 65536.0) + PE_PI / 2;
-        double side = (i - (s_count - 1) / 2.0) * (s_pack.radius * 3.0);
-        if ((!s_send_away || s.away_later) && first) side += s_pack.radius * 3.0;
-        if (!pe_spawn(x + (int)(sin(ang) * side * 65536.0), y, z + (int)(cos(ang) * side * 65536.0))) break;
+        double side = (i - (s_count - 1) / 2.0) * (radius * 3.0);
+        if ((!s_send_away || s.away_later) && first) side += radius * 3.0;
+        if (!resource->uploaded && !pe_place(resource)) {
+            pe_mod_log(MOD_ID, "battle: no VRAM left for %s", resource->pack.name);
+            break;
+        }
+        if (!pe_spawn(resource, x + (int)(sin(ang) * side * 65536.0), y,
+                      z + (int)(cos(ang) * side * 65536.0))) break;
+        if (!resource->uploaded) pe_vram(resource, 0);
     }
     if (!s.foes) {
-        pe_mod_log(MOD_ID, "battle: no free actor or enemy place for %s", s_pack.name);
-        return;
+        pe_mod_log(MOD_ID, "battle: no foe joined for %s", s_roster[0]->pack.name);
     }
-    pe_place();
-    pe_vram(0);
-    s.uploaded = 1;
 }
 
 static void pe_begin(void) {
-    int top = 0;
     memset(&s, 0, sizeof s);
     memset(s_used, 0, sizeof s_used);
     s_used_frames = 0;
     s.active = 1;
-    for (int i = 0; i < s_pack.vertices; ++i)   /* standing height: the highest rest vertex (-y up) */
-        if (-s_pack.vertex[i].y > top) top = -s_pack.vertex[i].y;
-    s.height = top > 50 ? top : 500;
 }
 
 static void pe_end(const char *why) {
@@ -658,8 +715,10 @@ static void pe_end(const char *why) {
         }
         beaten += f->dead;
     }
-    if (s.uploaded) pe_vram(1);
-    snprintf(s.result, sizeof s.result, "%s %s (beaten %d of %d)", s_pack.name, why, beaten, s.foes);
+    for (i = 0; i < s_resource_count; ++i)
+        if (s_resources[i].uploaded) pe_vram(&s_resources[i], 1);
+    snprintf(s.result, sizeof s.result, "%s %s (beaten %d of %d)",
+             s_resource_count == 1 ? s_roster[0]->pack.name : "Room enemies", why, beaten, s.foes);
     pe_mod_log(MOD_ID, "battle over: %s", s.result);
     s.active = 0;
 }
@@ -667,7 +726,8 @@ static void pe_end(const char *why) {
 static void pe_foe_think(PeFoe *f) {
     FieldActor *a = f->actor, *aya = g_PlayerEntity;
     EnemyCombatant *core = pe_core(f);
-    const PeEnemyAnim *cur = &s_pack.anim[f->anim];
+    const PeEnemyPack *pack = &f->resource->pack;
+    const PeEnemyAnim *cur = &pack->anim[f->anim];
     int hp, loop, done, want, diff;
     double dist;
 
@@ -675,19 +735,19 @@ static void pe_foe_think(PeFoe *f) {
     a->anim_step = 0;
     if (!core) return;
     hp = core->hpAlive;
-    if (g_GameStateFlags & 0x100) { pe_place_targets(a); return; }   /* enemies stopped */
+    if (g_GameStateFlags & 0x100) { pe_place_targets(f); return; }   /* enemies stopped */
 
     /* the frame: idle and walk loop, the rest hold their last frame */
     loop = f->role == PE_ANIM_IDLE || f->role == PE_ANIM_WALK;
-    f->frame += s_pack.fps / 30.0;
+    f->frame += pack->fps / 30.0;
     if (f->frame >= cur->frames) f->frame = loop ? fmod(f->frame, cur->frames) : cur->frames - 1;
     done = f->frame >= cur->frames - 1;
     pe_play_events(f, (int)f->frame);
 
     if (hp <= 0) {   /* death: its anim plays, then the game fades and frees it */
         if (!f->dead) {
-            const int die = s_pack.role[PE_ANIM_DIE];
-            const int frames = die >= 0 ? (int)(s_pack.anim[die].frames * 30.0 / s_pack.fps) : 1;
+            const int die = pack->role[PE_ANIM_DIE];
+            const int frames = die >= 0 ? (int)(pack->anim[die].frames * 30.0 / pack->fps) : 1;
             f->dead = 1;
             f->attack = 0;
             core->coreFlags &= 0x7FFFFFFFu;
@@ -698,21 +758,21 @@ static void pe_foe_think(PeFoe *f) {
             f->frame = 0;
             done = 0;
         }
-        a->anim.fixed = done ? core->deathAnimFrame << 16 : (int)(f->frame * 30.0 / s_pack.fps) << 16;
-        pe_place_targets(a);
+        a->anim.fixed = done ? core->deathAnimFrame << 16 : (int)(f->frame * 30.0 / pack->fps) << 16;
+        pe_place_targets(f);
         return;
     }
 
     /* hurt: a shot stops it for its hurt anim, unless it is mid-attack */
-    if (hp < f->last_hp && !f->attack && s_pack.stagger && s_pack.role[PE_ANIM_HURT] >= 0) {
+    if (hp < f->last_hp && !f->attack && pack->stagger && pack->role[PE_ANIM_HURT] >= 0) {
         f->role = -1;
-        pe_set_anim(f, PE_ANIM_HURT, s_pack.role[PE_ANIM_HURT]);
+        pe_set_anim(f, PE_ANIM_HURT, pack->role[PE_ANIM_HURT]);
         f->stagger = 1;
         done = 0;
     }
     f->last_hp = hp;
     if (f->stagger) {
-        if (!done) { pe_place_targets(a); return; }
+        if (!done) { pe_place_targets(f); return; }
         f->stagger = 0;
     }
 
@@ -720,11 +780,11 @@ static void pe_foe_think(PeFoe *f) {
     want = aya ? pe_angle_to(a, aya) : a->rot_y;
 
     if (f->attack) {
-        const PeEnemyAttack *atk = &s_pack.attack[f->attack - 1];
+        const PeEnemyAttack *atk = &pack->attack[f->attack - 1];
         if (!f->blow_done && f->frame >= atk->hit) {
             f->blow_done = 1;
             diff = pe_turn_diff(a->rot_y, want);
-            if (aya && aya->state && dist <= pe_reach(f->attack - 1) * 1.15 && abs(diff) < 0x300) {
+            if (aya && aya->state && dist <= pe_reach(pack, f->attack - 1) * 1.15 && abs(diff) < 0x300) {
                 /* the enemy-hit path: the attack record (power, ready), the hit bits on the
                  * enemy and on Aya; Menu_MainUpdate takes the HP with her defense and armor */
                 Combatant *ayc = (Combatant *)aya->state;
@@ -740,7 +800,7 @@ static void pe_foe_think(PeFoe *f) {
                 s.last_blow_frames = 3;
             }
         }
-        if (!done) { pe_place_targets(a); return; }
+        if (!done) { pe_place_targets(f); return; }
         f->attack = 0;
         core->coreFlags &= 0x7FFFFFFFu;   /* a blow the game did not take is over */
     }
@@ -750,17 +810,17 @@ static void pe_foe_think(PeFoe *f) {
     a->rot_y = (short)((a->rot_y + (diff > PE_TURN_STEP ? PE_TURN_STEP : diff < -PE_TURN_STEP ? -PE_TURN_STEP : diff)) & 0xFFF);
 
     /* attack when its time bar is full and Aya is in reach of one of its attacks */
-    if (s_pack.attacks && core->curHP >= PE_CHARGE_FULL && abs(diff) < 0x200) {
-        for (int k = 0; k < s_pack.attacks; ++k) {
-            const int c = (f->attacks_started + k) % s_pack.attacks;
-            if (dist <= pe_reach(c)) {
+    if (pack->attacks && core->curHP >= PE_CHARGE_FULL && abs(diff) < 0x200) {
+        for (int k = 0; k < pack->attacks; ++k) {
+            const int c = (f->attacks_started + k) % pack->attacks;
+            if (dist <= pe_reach(pack, c)) {
                 f->attack = c + 1;
                 f->blow_done = 0;
                 f->attacks_started++;
                 core->curHP = 0;   /* its turn spent */
                 f->role = -1;
-                pe_set_anim(f, ROLE_ATTACK, s_pack.attack[c].anim);
-                pe_place_targets(a);
+                pe_set_anim(f, ROLE_ATTACK, pack->attack[c].anim);
+                pe_place_targets(f);
                 return;
             }
         }
@@ -768,27 +828,27 @@ static void pe_foe_think(PeFoe *f) {
 
     {   /* walk to Aya, stopping a little inside its shortest reach */
         int reach = 0;
-        for (int k = 0; k < s_pack.attacks; ++k)
-            if (!reach || pe_reach(k) < reach) reach = pe_reach(k);
-        if (!reach) reach = s_pack.radius * 3;
+        for (int k = 0; k < pack->attacks; ++k)
+            if (!reach || pe_reach(pack, k) < reach) reach = pe_reach(pack, k);
+        if (!reach) reach = pack->radius * 3;
         const int moving = f->role == PE_ANIM_WALK;   /* starts a little further out than it stops */
         /* (at least a unit to go: steps shrink as it closes in, and would never quite end) */
-        if (aya && dist > reach * (moving ? 0.8 : 0.9) && dist - reach * 0.8 >= 1.0 && s_pack.speed > 0 &&
+        if (aya && dist > reach * (moving ? 0.8 : 0.9) && dist - reach * 0.8 >= 1.0 && pack->speed > 0 &&
             abs(diff) < 0x400) {
             const double left = dist - reach * 0.8;
-            const double step = s_pack.speed < left ? s_pack.speed : left;
+            const double step = pack->speed < left ? pack->speed : left;
             const double ang = a->rot_y * 2 * PE_PI / 4096.0;
             a->base_x = a->pos_x;
             a->base_y = a->pos_y;
             a->base_z = a->pos_z;
             a->pos_x += (int)(sin(ang) * step * 65536.0);
             a->pos_z += (int)(cos(ang) * step * 65536.0);
-            pe_set_anim(f, PE_ANIM_WALK, s_pack.role[PE_ANIM_WALK]);
+            pe_set_anim(f, PE_ANIM_WALK, pack->role[PE_ANIM_WALK]);
         } else {
-            pe_set_anim(f, PE_ANIM_IDLE, s_pack.role[PE_ANIM_IDLE]);
+            pe_set_anim(f, PE_ANIM_IDLE, pack->role[PE_ANIM_IDLE]);
         }
     }
-    pe_place_targets(a);
+    pe_place_targets(f);
 }
 
 static int pe_on_battle(void *ctx, void *user) {
@@ -806,7 +866,7 @@ static int pe_on_battle(void *ctx, void *user) {
         if (g_BattleEnemyEscapeFlag) s.open_frames++;
         if (s.open_frames >= PE_OPEN_FRAMES) pe_join(0);
         else if (s.frames >= PE_OPEN_LIMIT) {
-            pe_mod_log(MOD_ID, "battle: the opening is still on; %s joins%s", s_pack.name,
+            pe_mod_log(MOD_ID, "battle: the opening is still on; %s joins%s", s_roster[0]->pack.name,
                        s_send_away ? ", the room's enemies go when the clock runs" : "");
             g_BattleEnemyEscapeFlag = 1;
             pe_join(1);
@@ -836,7 +896,7 @@ static int pe_on_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
     if (!s.active && !s_armed && SDL_GetAtomicInt(&s_rescan)) {
         SDL_SetAtomicInt(&s_rescan, 0);
-        if (s_loaded[0]) pe_enemy_pack_free(&s_pack), s_loaded[0] = 0;
+        pe_free_resources();
         pe_scan();
     }
     if (s.active && !pe_in_battle()) {
@@ -851,6 +911,8 @@ static int pe_on_frame(void *ctx, void *user) {
 
 static void pe_draw(PeFoe *f, const u32 *view_words) {
     FieldActor *a = f->actor;
+    const PeBattlePack *resource = f->resource;
+    const PeEnemyPack *pack = &resource->pack;
     EnemyCombatant *core = (EnemyCombatant *)a->state;
     const GteMatrix *view = (const GteMatrix *)view_words;
     PeFt3 *prims = s_prims[f - s.foe][g_ActiveDrawSlot & 1];
@@ -858,8 +920,8 @@ static void pe_draw(PeFoe *f, const u32 *view_words) {
     int i, r, c, n = 0, yaw, shade = 0x80;
     double cy, sy;
 
-    pe_enemy_pose(&s_pack, f->anim, (int)f->frame, s_posed);
-    yaw = (a->rot_y + s_pack.yaw) & 0xFFF;
+    pe_enemy_pose(pack, f->anim, (int)f->frame, s_posed);
+    yaw = (a->rot_y + pack->yaw) & 0xFFF;
     cy = cos(yaw * 2 * PE_PI / 4096.0);
     sy = sin(yaw * 2 * PE_PI / 4096.0);
     {
@@ -884,7 +946,7 @@ static void pe_draw(PeFoe *f, const u32 *view_words) {
     if (shade <= 0) { f->tris = 0; return; }
 
     {   /* screen points for the game's panels: feet, and the middle for damage numbers */
-        GteShortVector feet = {0, 0, 0, 0}, mid = {0, (s16)(-s.height * 6 / 10), 0, 0};
+        GteShortVector feet = {0, 0, 0, 0}, mid = {0, (s16)(-resource->height * 6 / 10), 0, 0};
         int sxy = 0, p, flag;
         RotTransPers(&feet, &sxy, &p, &flag);
         a->render_object.projected_x = (s16)(sxy & 0xFFFF);
@@ -894,8 +956,8 @@ static void pe_draw(PeFoe *f, const u32 *view_words) {
         a->render_object.projected_target_y = (s16)((unsigned)sxy >> 16);
     }
 
-    for (i = 0; i < s_pack.triangles; ++i) {
-        const PeEnemyTriangle *t = &s_pack.triangle[i];
+    for (i = 0; i < pack->triangles; ++i) {
+        const PeEnemyTriangle *t = &pack->triangle[i];
         int sxy[3], z[3], p, flag, k, otz, base, umin, light;
         double e1[3], e2[3], nx, ny, nz, len;
         for (k = 0; k < 3; ++k) {
@@ -922,9 +984,9 @@ static void pe_draw(PeFoe *f, const u32 *view_words) {
         base = umin / 128 * 128;
         {
             PeFt3 *q = &prims[n++];
-            const int px = s.tex_x + base / 2, dv = s.tex_y & 255;
-            const u32 tpage = 0x80u | ((unsigned)(s.tex_y / 256) << 4) | (unsigned)(px >> 6);
-            const u32 clut = ((unsigned)(s.clut_y + t->palette) << 6) | ((unsigned)s.clut_x >> 4);
+            const int px = resource->texture.x + base / 2, dv = resource->texture.y & 255;
+            const u32 tpage = 0x80u | ((unsigned)(resource->texture.y / 256) << 4) | (unsigned)(px >> 6);
+            const u32 clut = ((unsigned)(resource->clut.y + t->palette) << 6) | ((unsigned)resource->clut.x >> 4);
             RenderNativeTag *entry = &D_800B0E38.ordering[g_ActiveDrawSlot][otz];
             q->tag.length = 7;
             q->color = (u32)light | (u32)light << 8 | (u32)light << 16 | 0x24u << 24;
@@ -967,15 +1029,16 @@ void pe_enemy_status_text(char *out, unsigned size) {
     EnemyCombatant *core;
     int i, dist = -1;
     if (!s.active) { snprintf(out, size, "%s", s.result[0] ? s.result : s_armed ? "ready for the next fight" : "none"); return; }
-    if (!s.foes) { snprintf(out, size, "%s joining", s_pack.name); return; }
+    if (!s.foes) { snprintf(out, size, "%s joining", s_roster[0]->pack.name); return; }
+    const PeBattlePack *resource = f->resource;
     for (i = 0; i <= ROLE_ATTACK; ++i)
         if (f->seen & (1u << i)) snprintf(seen + strlen(seen), sizeof seen - strlen(seen), "%s%s", seen[0] ? "+" : "", k_role_names[i]);
     core = pe_core(f);
     if (core && g_PlayerEntity) dist = (int)pe_dist(f->actor, g_PlayerEntity);
     snprintf(out, size, "%s hp=%d/%d anim=%s frames=%d tris=%d seen=%s hits=%d damage=%d dist=%d charge=%d foes=%d room=%d sent=%d sounds=%d vram=%d,%d rot=%d to_aya=%d",
-             s_pack.name, core ? core->hpAlive : 0, s_pack.hp, f->role >= 0 ? k_role_names[f->role] : "-",
+             resource->pack.name, core ? core->hpAlive : 0, resource->pack.hp, f->role >= 0 ? k_role_names[f->role] : "-",
              f->drawn_frames, f->tris, seen, f->hits, f->damage_done, dist, core ? (int)core->curHP : 0, s.foes,
-             s.room_enemies, s.sent_away, f->sounds, s.tex_x, s.tex_y, f->actor ? f->actor->rot_y & 0xFFF : -1,
+             s.room_enemies, s.sent_away, f->sounds, resource->texture.x, resource->texture.y, f->actor ? f->actor->rot_y & 0xFFF : -1,
              f->actor && g_PlayerEntity ? pe_angle_to(f->actor, g_PlayerEntity) : -1);
 }
 

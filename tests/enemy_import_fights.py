@@ -259,6 +259,34 @@ def part_imported_room(exe, disc, work, re2_disc):
         check(after['Status'] == after_win['Status'] and after['Enemies'] == after_win['Enemies'], (after_win, after))
         print('imported room: escape also restored the same room, pose and placements')
 
+        game.ask('ini-set Play imported games/Testing/Stage 1')
+        game.ask('ini-set Play imported games/Testing/Room 6')
+        game.ask('mod-action Play imported games/Testing/Go to that room')
+        mixed = room_rows(game)
+        check(mixed['Status'].startswith('Room 1-06') and
+              all(kind in mixed['Enemies'] for kind in ('0x12', '0x13')), mixed)
+        start_fight(game, 0, 1)
+        check(wait_battle(game) is not None, 'mixed room: the battle did not start')
+        end = game.vblank + 3000
+        while game.vblank < end:
+            state = game.battle()
+            if sum(e['type'] == 0xEE for e in state['enemies']) == 2:
+                break
+            game.adv(10)
+        else:
+            raise Failed('mixed room: both imported enemies did not join')
+        log = (game.config / 'pe_mods.log').read_text(encoding='utf-8', errors='replace')
+        check(all(f'battle: EM{kind} joins' in log for kind in ('12', '13')), 'mixed room: wrong actor models')
+        textures = re.findall(r'battle: EM1[23] texture at (\d+,\d+)', log)
+        check(len(set(textures)) == 2, f'mixed room: expected separate texture origins, got {textures}')
+        win_when_ready(game)
+        wait_home(game)
+        after_mixed = room_rows(game)
+        check(after_mixed['Status'] == mixed['Status'] and after_mixed['Enemies'] == 'None placed here.', after_mixed)
+        print('imported room: EM12 and EM13 shared a battle and their own room slots were cleared')
+
+        game.ask('ini-set Play imported games/Testing/Room 0')
+        game.ask('mod-action Play imported games/Testing/Go to that room')
         game.ask('ini-set Cheats/God mode 0')
         game.ask('set-stat hp 1')
         start_fight(game, 1, 10)

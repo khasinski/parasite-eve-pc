@@ -132,7 +132,6 @@ static struct {
 static char s_last[96] = "none yet";
 static PeTripResult s_trip;         /* the placement used by the current battle trip */
 static int s_trip_wait;              /* frames left to see that room again */
-static char s_room_foe[64];          /* the imported room's creature in the last trip, "" none */
 
 /* ---- the list ---- */
 
@@ -297,27 +296,24 @@ static void pe_arrived(void) {
     pe_log("cheat_fight_picker", "spot map=%u spot=%u of %d at %d,%d", f->map, f->spot, n, x, z);
 }
 
-/* A trip fights a group from the room's first mapped creature model. Its pack is built now
- * if it isn't ready yet (pe_import's "enemy_build"), with
- * a guessed profile unless the game or the player gave one. Else the player's pick stays armed. */
+static int pe_add_room_pack(const char *asset, int already_selected, const void *ctx) {
+    const PeEnemyBuildApi *b = ctx;
+    char pack[64], why[200] = "";
+    if (pe_enemy_pack_name(asset, pack, sizeof pack)) return 0;
+    if (!already_selected && b && b->struct_size >= sizeof *b && b->ensure(asset, why, sizeof why))
+        pe_mod_log(MOD_ID, "the room's %s: no fresh build (%s); an older pack is used if there is one", asset, why);
+    if (!pe_enemy_battle_add_pack(pack)) return 0;
+    pe_mod_log(MOD_ID, "trip from an imported room: selected %s (pack %s)", asset, pack);
+    return 1;
+}
+
 static void pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
-    char asset[96], pack[64], why[200] = "";
     if (api->room(&room)) return;
-    const int placement = pe_trip_creature(&room, asset, sizeof asset);
-    if (placement < 0 || pe_enemy_pack_name(asset, pack, sizeof pack)) return;
-    const PeEnemyBuildApi *b = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION);
-    if (b && b->struct_size >= sizeof *b && b->ensure(asset, why, sizeof why))
-        pe_mod_log(MOD_ID, "the room's %s: no fresh build (%s); an older pack is used if there is one", asset, why);
-    const int count = pe_trip_arm(&s_trip, &room, placement);
-    if (pe_enemy_battle_arm_pack(pack, count)) {
-        pe_mod_log(MOD_ID, "trip from an imported room: fighting %d of its %s (pack %s)", count, asset, pack);
-        snprintf(s_room_foe, sizeof s_room_foe, "%s", pack);
-        return;
-    }
-    s_trip.armed = 0;
-    pe_mod_log(MOD_ID, "the room's %s has no usable pack; the picked enemy fights", asset);
-    pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
+    pe_enemy_battle_begin_roster();
+    const void *build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION);
+    if (!pe_trip_arm(&s_trip, &room, pe_add_room_pack, build))
+        pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
 }
 
 static void pe_leave(void) {
@@ -477,7 +473,6 @@ static void pe_start(void) {
     s.fight = f;
     s.live_enemies = 0;
     pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);   /* the room's creature may take over */
-    s_room_foe[0] = 0;
     s_trip.armed = 0;
     s.state = PE_LEAVE;   /* on the next free field frame, once the panel closes */
 }

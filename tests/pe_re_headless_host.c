@@ -180,27 +180,24 @@ static int play(unsigned scenario) {
     s.start();
     frames(1, 0);
     EXPECT(s.active && !strcmp(s.room, "re2:room/100") && !s.api->room(&room));
-    int pick;
+    PeTripResult trip;
     {   /* a trip from here fights the room's own creature: RE2's kind -> model table picks it */
-        char asset[96], want[96];
+        char asset[96];
         if (pe_imp_enemy_kind_asset("re2", 0x10, NULL, 0))                /* no game's table yet: the player's pick */
-            EXPECT(pe_trip_creature(&room, asset, sizeof asset) == -1);
+            EXPECT(!pe_trip_arm(&trip, &room, NULL, NULL));
         EXPECT(!pe_re2_enemies_register());
-        pick = pe_trip_creature(&room, asset, sizeof asset);
-        EXPECT(pick >= 0 && pick < room.count && room.enemies[pick].kind < 0x40);
-        snprintf(want, sizeof want, "re2:enemy/em%02x", (unsigned)room.enemies[pick].kind);
-        EXPECT(!strcmp(asset, want));
+        EXPECT(room.count > 0);
+        EXPECT(!pe_imp_enemy_kind_asset("re2", room.enemies[0].kind, asset, sizeof asset));
         int life = 0;
         EXPECT(!pe_imp_enemy_strength(asset, &life, NULL) && life > 0);   /* and the game's own strength */
-        printf("headless host: a trip from the street fights its %s (placement %d, life %d)\n", asset, pick, life);
+        printf("headless host: a trip from the street fights its %s (life %d)\n", asset, life);
     }
-    PeTripResult trip;                                     /* a battle trip from here, won (pe_enemy_import) */
     const int placed = room.count;
-    const uint8_t flag = room.enemies[pick].killed_flag;
+    const uint8_t flag = room.enemies[0].killed_flag;
     EXPECT(flag != 0xFF);
     int shared = 0;
     for (int i = 0; i < room.count; i++) shared += room.enemies[i].killed_flag == flag;
-    EXPECT(pe_trip_arm(&trip, &room, pick) > 1);
+    EXPECT(pe_trip_arm(&trip, &room, NULL, NULL) > 1 && trip.slot[0] == room.enemies[0].slot);
     EXPECT(s.api->pause_for_battle() == 1 && s.backdrop && !s.active);
     pe_trip_won(&trip, 1);                                 /* a failure to spawn the rest must preserve their slots */
     EXPECT(pe_trip_report(&trip, s.api) == 0 && trip.armed);   /* paused: not yet */
@@ -213,7 +210,7 @@ static int play(unsigned scenario) {
     for (int i = 0; i < room.count; i++) EXPECT(room.enemies[i].killed_flag != flag);
     {   /* an escape or a loss reports nothing */
         PeTripResult lost;
-        EXPECT(pe_trip_arm(&lost, &room, 0) > 0);
+        EXPECT(pe_trip_arm(&lost, &room, NULL, NULL) > 0);
         pe_trip_won(&lost, 0);
         EXPECT(pe_trip_report(&lost, s.api) == -1 && !lost.armed);
     }

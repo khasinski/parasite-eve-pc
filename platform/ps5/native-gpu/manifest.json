@@ -5067,7 +5067,7 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_battle.c",
-      "sha256": "f7fcd3380b00123aa3cd428f714ef9589f94019329318d4d90304b2db2b08948"
+      "sha256": "21f351262695ca9b5a50ac82ae84393901d96e5cb6fac1f36d147f217eadfd52"
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_build.c",

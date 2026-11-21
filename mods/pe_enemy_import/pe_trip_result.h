@@ -10,7 +10,7 @@
 
 #include "re_play_api.h"
 
-#define PE_TRIP_FOES_MAX 3          /* the current host can share one pack across these foes */
+#define PE_TRIP_FOES_MAX 3
 
 typedef struct {
     int armed;                  /* a room to report to */
@@ -20,9 +20,10 @@ typedef struct {
     uint8_t slot[PE_TRIP_FOES_MAX];
 } PeTripResult;
 
-/* Keep the room and up to PE_TRIP_FOES_MAX placements using the selected model.
- * Returns the number selected, or 0 when invalid. */
-int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room, int placement);
+/* Keep up to PE_TRIP_FOES_MAX mapped placements whose packs the caller accepts, in room order.
+ * Pass NULL for prepare to accept all mapped placements. */
+int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
+                int (*prepare)(const char *asset, int already_selected, const void *ctx), const void *ctx);
 /* On victory, record how many consecutive selected foes spawned and died. On
  * escape or loss pass 0. */
 void pe_trip_won(PeTripResult *t, int defeated);
@@ -30,10 +31,5 @@ void pe_trip_won(PeTripResult *t, int defeated);
  * 0 while the room isn't back yet, -1 when there's nothing to
  * report or it can't be (another room, no defeated_slot). */
 int pe_trip_report(PeTripResult *t, const PeRePlayApi *api);
-
-/* The creature a trip from `room` fights: its first placement a game maps to a model
- * (pe_imp_enemy_kind_asset), people (kind 0x40 and up) left out. `asset_id` gets the model
- * ("re2:enemy/em31"). The placement's index, or -1 (no room, nothing mapped: the player's pick). */
-int pe_trip_creature(const PeReRoomEvent *room, char *asset_id, size_t n);
 
 #endif
