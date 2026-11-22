@@ -15,6 +15,20 @@
 #include "pe_enemy_build.h"
 #include "pe_mod_host.h"
 
+static int pack_coverage(const char *id, const PeEnemyPack *pack, char *out, unsigned size) {
+    const PeImpEnemyBody body = pe_imp_enemy_body(id);
+    if (body == PE_IMP_ENEMY_SCENE) {
+        snprintf(out, size, "Scripted scene actor");
+        return PE_IMP_COVERAGE_SCENE;
+    }
+    const PeImpEnemyMoveHints moves = pe_imp_enemy_move_hints(id);
+    unsigned optional = 0;
+    if (body == PE_IMP_ENEMY_FIXED && !pack->speed) optional |= 1u << PE_ANIM_WALK;
+    if (moves.hurt == PE_IMP_MOVE_NONE) optional |= 1u << PE_ANIM_HURT;
+    if (moves.die == PE_IMP_MOVE_NONE) optional |= 1u << PE_ANIM_DIE;
+    return pe_enemy_pack_coverage(pack, optional, out, size);
+}
+
 #define PROFILE_NOTE "Which moves this enemy uses (numbers count the source's moves from 0), its size, "                      "attacks and behaviour. Change it and build again in F1 > Import to use your changes."
 
 /* a file's SHA-256 (hex), or "" when it can't be read */
@@ -160,8 +174,7 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
     if (!rc) pe_enemy_packs_changed();
     if (!rc && log && logn) {
         char coverage[64];
-        pe_enemy_pack_coverage(&p, pe_imp_enemy_body(asset_id) == PE_IMP_ENEMY_FIXED && p.speed == 0,
-                               coverage, sizeof coverage);
+        pack_coverage(asset_id, &p, coverage, sizeof coverage);
         snprintf(log, logn, "%s. %d moves, %d sounds. Profile %s", coverage, p.anims, info.sounds, how);
     }
     pe_enemy_pack_free(&p);
@@ -242,9 +255,8 @@ static int enemies_coverage(const PeImpAsset *a, char *out, size_t size, char *a
     const char *const roles[] = {"idle", "walk", "hurt", "die"};
     PeEnemyPack pack = {.attacks = attacks->count};
     for (int i = 0; i < PE_ANIM_ROLES; ++i) pack.role[i] = pj_get(anims, roles[i]) ? i : -1;
-    const int stationary = pe_imp_enemy_body(a->id) == PE_IMP_ENEMY_FIXED &&
-                           !pj_int(pj_get(pj_get(root, "behavior"), "speed"), 10);
-    const int complete = pe_enemy_pack_coverage(&pack, stationary, out, (unsigned)size);
+    pack.speed = (int)pj_int(pj_get(pj_get(root, "behavior"), "speed"), 10);
+    const int complete = pack_coverage(a->id, &pack, out, (unsigned)size);
     const long long mask = pj_int(pj_get(root, "audio_roles"), -1);
     if (mask < 0) snprintf(audio, audio_size, "Unknown");
     else if (!mask) snprintf(audio, audio_size, "None");
@@ -265,7 +277,7 @@ static int enemies_coverage(const PeImpAsset *a, char *out, size_t size, char *a
 }
 
 const PeImpTarget g_pe_enemy_target = {
-    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 17, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
+    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 18, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
     enemies_accepts, enemies_place, enemies_current, enemies_coverage};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }

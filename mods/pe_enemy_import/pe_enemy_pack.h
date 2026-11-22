@@ -92,8 +92,8 @@ int pe_enemy_wav_parse(const uint8_t *data, unsigned size, PeEnemySound *s);
 int pe_enemy_pack_load(PeEnemyPack *pack, const char *dir, char *err, unsigned err_size);
 void pe_enemy_pack_free(PeEnemyPack *pack);
 int pe_enemy_pack_anim(const PeEnemyPack *pack, const char *name);
-/* Animation roles missing from the built pack. Stationary enemies do not need a walk. */
-int pe_enemy_pack_coverage(const PeEnemyPack *pack, int stationary, char *out, unsigned size);
+/* Reports required missing roles and optional omissions. Bits follow the role enum. */
+int pe_enemy_pack_coverage(const PeEnemyPack *pack, unsigned optional, char *out, unsigned size);
 enum { PE_AUDIO_ATTACK = 1, PE_AUDIO_HURT = 2, PE_AUDIO_DEATH = 4, PE_AUDIO_OTHER = 8 };
 unsigned pe_enemy_pack_audio_roles(const PeEnemyPack *pack);
 

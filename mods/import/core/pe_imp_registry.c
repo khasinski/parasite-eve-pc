@@ -324,7 +324,7 @@ int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id)
         s_kind[i].starts = NULL;
         s_kind[i].body = PE_IMP_ENEMY_UPRIGHT;
         s_kind[i].next = 0;
-        s_kind[i].moves = (PeImpEnemyMoveHints){-1, -1, -1, -1};
+        s_kind[i].moves = (PeImpEnemyMoveHints){.attack = -1, .hurt = -1, .walk = -1, .die = -1};
         s_kinds++;
     }
     snprintf(s_kind[i].game, sizeof s_kind[i].game, "%s", game);
@@ -408,11 +408,11 @@ int pe_imp_set_enemy_move_hints(const char *game, unsigned kind, PeImpEnemyMoveH
 
 PeImpEnemyMoveHints pe_imp_enemy_move_hints(const char *asset_id) {
     const int i = enemy_asset_kind(asset_id);
-    return i < 0 ? (PeImpEnemyMoveHints){-1, -1, -1, -1} : s_kind[i].moves;
+    return i < 0 ? (PeImpEnemyMoveHints){.attack = -1, .hurt = -1, .walk = -1, .die = -1} : s_kind[i].moves;
 }
 
 int pe_imp_set_enemy_body(const char *game, unsigned kind, PeImpEnemyBody body) {
-    if (body < PE_IMP_ENEMY_UPRIGHT || body > PE_IMP_ENEMY_FIXED) return -1;
+    if (body < PE_IMP_ENEMY_UPRIGHT || body > PE_IMP_ENEMY_SCENE) return -1;
     for (int i = 0; game && i < s_kinds; i++)
         if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
             s_kind[i].body = body;

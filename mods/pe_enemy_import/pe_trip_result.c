@@ -22,6 +22,7 @@ int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
         const PeReEnemyPlacement *e = &room->enemies[i];
         char asset[96];
         if (e->kind >= 0x40 || pe_imp_enemy_kind_asset(room->game, e->kind, asset, sizeof asset)) continue;
+        if (pe_imp_enemy_body(asset) == PE_IMP_ENEMY_SCENE) continue;
         int duplicate = 0, already_selected = 0;
         for (int j = 0; j < t->count; j++) {
             duplicate |= t->slot[j] == e->slot;

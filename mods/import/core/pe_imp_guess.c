@@ -220,11 +220,12 @@ enum { R_IDLE, R_WALK, R_HURT, R_DIE, R_ATTACK, R_ATTACK2, R_COUNT };
 
 static void pick_moves(const PeImpMoveLook *look, int moves, PeImpEnemyBody body, PeImpEnemyMoveHints hints, int pick[R_COUNT]) {
     const int low_body = body == PE_IMP_ENEMY_CRAWLER || body == PE_IMP_ENEMY_FLYER;
+    const int mobile = body != PE_IMP_ENEMY_FIXED && body != PE_IMP_ENEMY_SCENE;
     for (int r = 0; r < R_COUNT; r++) pick[r] = -1;
     if (hints.attack >= 0 && hints.attack < moves && look[hints.attack].frames) pick[R_ATTACK] = hints.attack;
     if (hints.hurt >= 0 && hints.hurt < moves && look[hints.hurt].frames) pick[R_HURT] = hints.hurt;
     if (hints.die >= 0 && hints.die < moves && look[hints.die].frames) pick[R_DIE] = hints.die;
-    if (body != PE_IMP_ENEMY_FIXED && hints.walk >= 0 && hints.walk < moves && look[hints.walk].frames)
+    if (mobile && hints.walk >= 0 && hints.walk < moves && look[hints.walk].frames)
         pick[R_WALK] = hints.walk;
     double best = 1e9;
     for (int k = 0; k < moves; k++) {                  /* idle (earlier moves win near ties) */
@@ -242,18 +243,18 @@ static void pick_moves(const PeImpMoveLook *look, int moves, PeImpEnemyBody body
     const PeImpMoveLook *idle = &look[pick[R_IDLE]];
     const double up = idle->start;
 
-    for (int k = 0; k < moves && pick[R_DIE] < 0; k++) {
+    for (int k = 0; hints.die != PE_IMP_MOVE_NONE && k < moves && pick[R_DIE] < 0; k++) {
         const PeImpMoveLook *l = &look[k];
         if (!taken(pick, R_COUNT, k) && l->frames >= 8 && l->start >= 0.8 * up && l->end <= 0.5 * l->start) pick[R_DIE] = k;
     }
     best = 0.8;
-    for (int k = 0; pick[R_DIE] < 0 && k < moves; k++) {     /* none falls that far: the one that sinks most */
+    for (int k = 0; hints.die != PE_IMP_MOVE_NONE && pick[R_DIE] < 0 && k < moves; k++) {
         const PeImpMoveLook *l = &look[k];
         if (!taken(pick, R_COUNT, k) && l->frames >= 8 && l->start > 0 && l->end / l->start < best)
             best = l->end / l->start, pick[R_DIE] = k;
     }
     best = 0;
-    const int guess_walk = pick[R_WALK] < 0 && body != PE_IMP_ENEMY_FIXED;
+    const int guess_walk = pick[R_WALK] < 0 && mobile && hints.walk != PE_IMP_MOVE_NONE;
     for (int k = 0; guess_walk && k < moves; k++) {
         const PeImpMoveLook *l = &look[k];
         if (taken(pick, R_COUNT, k) || (low_body && l->hits) ||
@@ -272,7 +273,7 @@ static void pick_moves(const PeImpMoveLook *look, int moves, PeImpEnemyBody body
         }
     }
     best = 0;
-    const int guess_hurt = pick[R_HURT] < 0;
+    const int guess_hurt = pick[R_HURT] < 0 && hints.hurt != PE_IMP_MOVE_NONE;
     for (int k = 0; guess_hurt && k < moves; k++) {
         const PeImpMoveLook *l = &look[k];
         const double height_tolerance = low_body ? 0.35 : 0.15;
@@ -283,7 +284,7 @@ static void pick_moves(const PeImpMoveLook *look, int moves, PeImpEnemyBody body
             continue;
         if (l->motion > best) best = l->motion, pick[R_HURT] = k;
     }
-    for (int r = R_ATTACK; r <= R_ATTACK2; r++) {
+    for (int r = R_ATTACK; hints.attack != PE_IMP_MOVE_NONE && r <= R_ATTACK2; r++) {
         if (pick[r] >= 0) continue;
         best = low_body || body == PE_IMP_ENEMY_FIXED ? 0.08 : 0.12;
         for (int k = 0; k < moves; k++) {
@@ -354,7 +355,7 @@ int pe_imp_enemy_guess_body(const PeImpModel *m, const PeImpAnimation *a, const 
 int pe_imp_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
                        int yaw, int scale, PeImpEnemyGuess *g, char *why, size_t n) {
     return pe_imp_enemy_guess_body(m, a, name, moves_id, yaw, scale, PE_IMP_ENEMY_UPRIGHT,
-                                   (PeImpEnemyMoveHints){-1, -1, -1, -1}, g, why, n);
+                                   (PeImpEnemyMoveHints){.attack = -1, .hurt = -1, .walk = -1, .die = -1}, g, why, n);
 }
 int pe_imp_enemy_known_strength(const char *asset_id, PeImpEnemyProfile *p) {
     int life = 0, power = 0;

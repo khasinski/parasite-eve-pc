@@ -58,8 +58,13 @@ int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, siz
 int pe_imp_enemy_model_allowed(const char *asset_id);
 int pe_imp_set_enemy_next_form(const char *game, unsigned kind, unsigned next);
 int pe_imp_enemy_next_form(const char *asset_id, char *out, size_t size);
-/* Original moves the source reader has identified. -1 leaves the role to the guesser. */
-typedef struct { int attack, hurt, walk, die; } PeImpEnemyMoveHints;
+/* Original moves the source reader has identified. -1 guesses and -2 means no separate clip. */
+enum { PE_IMP_MOVE_GUESS = -1, PE_IMP_MOVE_NONE = -2 };
+typedef struct {
+    int attack, hurt, walk, die;
+    unsigned attack_frames; /* minimum duration for a source pose held by the AI */
+    int leap_height, leap_reach; /* optional procedural hop in source model units */
+} PeImpEnemyMoveHints;
 int pe_imp_set_enemy_move_hints(const char *game, unsigned kind, PeImpEnemyMoveHints hints);
 PeImpEnemyMoveHints pe_imp_enemy_move_hints(const char *asset_id);
 int pe_imp_add_enemy_cues(const char *asset_id, const PeImpEnemyCues *cues);
@@ -77,7 +82,7 @@ int pe_imp_set_enemy_starts(const char *game, unsigned kind, const PeImpEnemySta
 const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id);
 
 typedef enum {
-    PE_IMP_ENEMY_UPRIGHT, PE_IMP_ENEMY_CRAWLER, PE_IMP_ENEMY_FLYER, PE_IMP_ENEMY_FIXED
+    PE_IMP_ENEMY_UPRIGHT, PE_IMP_ENEMY_CRAWLER, PE_IMP_ENEMY_FLYER, PE_IMP_ENEMY_FIXED, PE_IMP_ENEMY_SCENE
 } PeImpEnemyBody;
 int pe_imp_set_enemy_body(const char *game, unsigned kind, PeImpEnemyBody body);
 PeImpEnemyBody pe_imp_enemy_body(const char *asset_id);

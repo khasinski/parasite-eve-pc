@@ -187,6 +187,14 @@ static int play(unsigned scenario) {
         if (pe_imp_enemy_kind_asset("re2", 0x10, NULL, 0))                /* no game's table yet: the player's pick */
             EXPECT(!pe_trip_arm(&trip, &room, NULL, NULL));
         EXPECT(!pe_re2_enemies_register());
+        const PeReEnemyPlacement actors[] = {
+            {.kind = 0x2c, .slot = 1}, {.kind = 0x3e, .slot = 2},
+            {.kind = 0x3f, .slot = 3}, {.kind = 0x10, .slot = 4}
+        };
+        PeReRoomEvent mixed = room;
+        mixed.count = sizeof actors / sizeof actors[0];
+        mixed.enemies = actors;
+        EXPECT(pe_trip_arm(&trip, &mixed, NULL, NULL) == 1 && trip.slot[0] == 4);
         EXPECT(room.count > 0);
         EXPECT(!pe_imp_enemy_kind_asset("re2", room.enemies[0].kind, asset, sizeof asset));
         int life = 0;

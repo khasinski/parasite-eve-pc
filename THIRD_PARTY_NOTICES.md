@@ -337,6 +337,8 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   and attacks. `SCE0.C`, `EM28.C`, and `EM2D.C` were consulted for cues in paired sound banks.
   `EM29.C` and `EM37.C` were consulted for the roach grab and G4 tentacle attack.
   `EM2F.C` and `EM36.C` were consulted for the Ivy appendage's battle moves and G4's final collapse.
+  `EM26.C`, `EM27.C`, `EM29.C`, `EM2C.C`, `EM2D.C`, `EM2E.C`, `EM37.C`, `EM3B.C`,
+  `EM3E.C`, and `EM3F.C` were consulted for procedural attacks, flinches, and scene-only actors.
   Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

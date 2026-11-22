@@ -311,9 +311,16 @@ static void report_enemy(PeImportJob *j, FILE *report, const PeImpTarget *tg, co
     char detail[200] = "Pack could not be read";
     char audio[64] = "Unknown";
     const int coverage = tg->coverage(asset, detail, sizeof detail, audio, sizeof audio);
-    if (coverage == 1) j->enemies_complete++;
-    else j->enemies_partial++;
-    if (report) fprintf(report, "%s\t%s\t%s\t%s\n", asset->id, coverage == 1 ? "Complete" : "Incomplete", detail, audio);
+    const char *status = "Incomplete";
+    if (coverage == PE_IMP_COVERAGE_COMPLETE) {
+        j->enemies_complete++;
+        status = "Complete";
+    } else if (coverage == PE_IMP_COVERAGE_SCENE) {
+        status = "Scene only";
+    } else {
+        j->enemies_partial++;
+    }
+    if (report) fprintf(report, "%s\t%s\t%s\t%s\n", asset->id, status, detail, audio);
 }
 
 static void prepare_enemies(PeImportJob *j) {

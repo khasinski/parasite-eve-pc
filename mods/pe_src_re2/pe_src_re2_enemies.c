@@ -63,34 +63,48 @@ int pe_re2_enemies_register(void) {
         snprintf(id, sizeof id, "re2:enemy/em%02x", k_life[i].em);
         bad |= pe_imp_add_enemy_strength(id, k_life[i].life, 0) != 0;
     }
-    /* Consulted bio2-ds EM21/22/24/29/2F/37/3A for locomotion.
-     * EM2F is attached to its plant and EM37 is attached to G's fourth form. */
+    /* Consulted bio2-ds for locomotion and the scene-only overlays.
+     * EM2D pivots in place to grab, EM2F and EM37 are attached, and
+     * EM2C/3E/3F play scripted poses without combat handlers. */
     static const struct { unsigned kind; PeImpEnemyBody body; } bodies[] = {
         {0x21, PE_IMP_ENEMY_FLYER}, {0x3a, PE_IMP_ENEMY_FLYER},
-        {0x22, PE_IMP_ENEMY_CRAWLER}, {0x24, PE_IMP_ENEMY_CRAWLER}, {0x29, PE_IMP_ENEMY_CRAWLER},
-        {0x2f, PE_IMP_ENEMY_FIXED}, {0x37, PE_IMP_ENEMY_FIXED}
+        {0x22, PE_IMP_ENEMY_CRAWLER}, {0x24, PE_IMP_ENEMY_CRAWLER}, {0x26, PE_IMP_ENEMY_CRAWLER},
+        {0x29, PE_IMP_ENEMY_CRAWLER}, {0x3b, PE_IMP_ENEMY_CRAWLER},
+        {0x2d, PE_IMP_ENEMY_FIXED}, {0x2f, PE_IMP_ENEMY_FIXED}, {0x37, PE_IMP_ENEMY_FIXED},
+        {0x2c, PE_IMP_ENEMY_SCENE}, {0x3e, PE_IMP_ENEMY_SCENE}, {0x3f, PE_IMP_ENEMY_SCENE}
     };
     for (unsigned i = 0; i < sizeof bodies / sizeof bodies[0]; i++)
         bad |= pe_imp_set_enemy_body("re2", bodies[i].kind, bodies[i].body) != 0;
-    /* Consulted bio2-ds EM21/23/27/28/29/2B/2D/2E/2F/36/37/3A for base-set moves.
-     * EM23's grab cutscene supplies a move for its otherwise procedural bite.
-     * EM27 takes move 7 into its grab, EM28 move 4 into its close attack,
-     * and EM2D move 5 into its hold. */
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x21, (PeImpEnemyMoveHints){5, 9, -1, -1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x23, (PeImpEnemyMoveHints){4, 10, 0, -1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x27, (PeImpEnemyMoveHints){7, -1, 1, 9}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x28, (PeImpEnemyMoveHints){4, 9, -1, 14}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x29, (PeImpEnemyMoveHints){2, -1, -1, -1}) != 0; /* hold */
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x2b, (PeImpEnemyMoveHints){-1, 6, 1, 5}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x2d, (PeImpEnemyMoveHints){5, -1, -1, -1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x2e, (PeImpEnemyMoveHints){-1, -1, 1, -1}) != 0;
-    /* EM2F's fire defeat uses move 5 or 6. Keep its ordinary flinch (5)
-     * separate from its defeat (6). EM36's final collapse starts on move 10. */
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x2f, (PeImpEnemyMoveHints){1, 5, -1, 6}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x36, (PeImpEnemyMoveHints){9, 8, 1, 10}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x37, (PeImpEnemyMoveHints){2, -1, -1, -1}) != 0; /* tentacle lash */
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x39, (PeImpEnemyMoveHints){-1, -1, 1, -1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x3a, (PeImpEnemyMoveHints){4, -1, -1, -1}) != 0;
+    /* Consulted bio2-ds for the source moves. EM26 slides using its only pose,
+     * jumps to attack, and has a procedural defeat. EM3B crawls on pose 0 and
+     * holds pose 1 before releasing its attack effect. The Ivy forms use
+     * the same frontal heavy-hit move. EM2D uses move 4 for its retreat on
+     * damage or defeat. EM27/29/37 have no separate flinch. */
+    enum { A = PE_IMP_MOVE_GUESS, N = PE_IMP_MOVE_NONE };
+    static const struct { unsigned kind; PeImpEnemyMoveHints hints; } moves[] = {
+        {0x21, {.attack = 5, .hurt = 9, .walk = A, .die = A}},
+        {0x23, {.attack = 4, .hurt = 10, .walk = 0, .die = A}},
+        {0x26, {.attack = 0, .hurt = N, .walk = 0, .die = N,
+                .attack_frames = 16, .leap_height = 1100, .leap_reach = 1400}},
+        {0x27, {.attack = 7, .hurt = N, .walk = 1, .die = 9}},
+        {0x28, {.attack = 4, .hurt = 9, .walk = A, .die = 14}},
+        {0x29, {.attack = 2, .hurt = N, .walk = A, .die = A}},
+        {0x2b, {.attack = A, .hurt = 6, .walk = 1, .die = 5}},
+        {0x2d, {.attack = 5, .hurt = 4, .walk = N, .die = 4}},
+        {0x2e, {.attack = A, .hurt = 3, .walk = 1, .die = A}},
+        {0x2f, {.attack = 1, .hurt = 5, .walk = A, .die = 6}},
+        {0x36, {.attack = 9, .hurt = 8, .walk = 1, .die = 10}},
+        {0x37, {.attack = 2, .hurt = N, .walk = A, .die = A}},
+        {0x39, {.attack = A, .hurt = 3, .walk = 1, .die = A}},
+        {0x3a, {.attack = 4, .hurt = A, .walk = A, .die = A}},
+        {0x3b, {.attack = 1, .hurt = N, .walk = 0, .die = N, .attack_frames = 30}}
+    };
+    for (unsigned i = 0; i < sizeof moves / sizeof moves[0]; i++)
+        bad |= pe_imp_set_enemy_move_hints("re2", moves[i].kind, moves[i].hints) != 0;
+    const PeImpEnemyMoveHints scene = {.attack = N, .hurt = N, .walk = N, .die = N};
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x2c, scene) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x3e, scene) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x3f, scene) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x31, 0x33) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x33, 0x34) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x34, 0x36) != 0;

@@ -35,6 +35,7 @@
 #include "pe_enemy_build.h"
 #include "pe_enemy_pack.h"
 #include "pe_imp_enemy.h"
+#include "pe_imp_json.h"
 #include "pe_game.h"
 #include "pe_mod_host.h"
 #include "pe_services.h"
@@ -143,22 +144,20 @@ static void pe_scan(void) {
     for (i = 0; i < count && s_listed < PE_ENEMY_PACKS_MAX; ++i) {
         char path[1300];
         SDL_PathInfo info;
-        FILE *f;
         if (list[i][0] == '.' || strlen(list[i]) >= sizeof s_list[0].folder) continue;
         snprintf(path, sizeof path, "%s/%s/enemy.json", s_dir, list[i]);
         if (!SDL_GetPathInfo(path, &info) || info.type != SDL_PATHTYPE_FILE) continue;
         snprintf(s_list[s_listed].folder, sizeof s_list[0].folder, "%s", list[i]);
         snprintf(s_list[s_listed].name, sizeof s_list[0].name, "%s", list[i]);
-        if ((f = fopen(path, "rb"))) {   /* the name, for the list; the full check is at load */
-            char text[512], *p;
-            size_t n = fread(text, 1, sizeof text - 1, f);
-            text[n] = 0;
-            if ((p = strstr(text, "\"name\"")) && (p = strchr(p + 6, '"'))) {
-                char *e = strchr(++p, '"');
-                if (e && e - p > 0 && e - p < (long)sizeof s_list[0].name)
-                    snprintf(s_list[s_listed].name, sizeof s_list[0].name, "%.*s", (int)(e - p), p);
-            }
-            fclose(f);
+        PjNode *manifest = pj_load(path, NULL, 0);
+        if (manifest) {
+            const char *source = pj_str(pj_get(manifest, "source"), NULL);
+            const char *name = pj_str(pj_get(manifest, "name"), NULL);
+            const int scene = pe_imp_enemy_body(source) == PE_IMP_ENEMY_SCENE;
+            if (name && *name && strlen(name) < sizeof s_list[0].name)
+                snprintf(s_list[s_listed].name, sizeof s_list[0].name, "%s", name);
+            pj_free(manifest);
+            if (scene) continue;
         }
         pe_mod_log(MOD_ID, "enemy pack %s (%s) found", s_list[s_listed].folder, s_list[s_listed].name);
         s_listed++;
@@ -417,9 +416,9 @@ static void pe_set_anim(PeFoe *f, int role, int anim) {
 
 /* The anim's sound events from the last frame run up to `to` (wrapping when it loops), on the
  * audio service's effect voices (pe_assets): footsteps, swings. Silent without the service. */
-static void pe_play_sound(PeFoe *f, unsigned sound) {
+static int pe_play_sound(PeFoe *f, unsigned sound) {
     const PeEnemyPack *pack = &f->resource->pack;
-    if (!sound || sound >= (unsigned)pack->sounds || !pack->sound[sound].pcm || pack->sound[sound].frames <= 1) return;
+    if (!sound || sound >= (unsigned)pack->sounds || !pack->sound[sound].pcm || pack->sound[sound].frames <= 1) return 0;
     static const PeAudioApi *audio;
     if (!audio) {
         const PeAudioApi *a = pe_service_get("audio", 1);
@@ -428,14 +427,17 @@ static void pe_play_sound(PeFoe *f, unsigned sound) {
     f->sounds++;
     if (audio) audio->play_effect(pack->sound[sound].pcm, (uint32_t)pack->sound[sound].frames,
                                   (uint32_t)pack->sound[sound].rate, 1.0f);
+    return 1;
 }
 
 static void pe_play_events(PeFoe *f, int to) {
-    const PeEnemyAnim *an = &f->resource->pack.anim[f->anim];
+    const PeEnemyPack *pack = &f->resource->pack;
+    const PeEnemyAnim *an = &pack->anim[f->anim];
     if (!an->event || to == f->event_frame) return;
     for (int guard = 0, k = f->event_frame; guard < an->frames && k != to; guard++) {
         k = k + 1 >= an->frames ? 0 : k + 1;
-        pe_play_sound(f, an->event[k] & PE_ENEMY_EVENT_SOUND);
+        if (pe_play_sound(f, an->event[k] & PE_ENEMY_EVENT_SOUND) && f->anim == pack->role[PE_ANIM_DIE])
+            pe_mod_log(MOD_ID, "battle: %s played its death cue", pack->name);
     }
     f->event_frame = to;
 }
@@ -940,10 +942,8 @@ static void pe_foe_think(PeFoe *f) {
     if (hp <= 0) {   /* death: its anim plays, then the game fades and frees it */
         if (!f->dead) {
             const int die = pack->role[PE_ANIM_DIE];
-            if (die < 0 && pack->death_sound) {
-                pe_play_sound(f, (unsigned)pack->death_sound);
-                pe_mod_log(MOD_ID, "battle: %s used its fallback death cue", pack->name);
-            }
+            if (die < 0 && pe_play_sound(f, (unsigned)pack->death_sound))
+                pe_mod_log(MOD_ID, "battle: %s played its death cue", pack->name);
             const int frames = die >= 0 ? (int)(pack->anim[die].frames * 30.0 / pack->fps) : 1;
             f->dead = 1;
             f->attack = 0;

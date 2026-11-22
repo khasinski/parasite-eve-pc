@@ -285,6 +285,7 @@ typedef struct {
     const void *host;
     const PeImpProgress *progress;            /* may be NULL */
 } PeImpBuild;
+enum { PE_IMP_COVERAGE_INCOMPLETE, PE_IMP_COVERAGE_COMPLETE, PE_IMP_COVERAGE_SCENE };
 typedef struct {
     PeImpApi api;                             /* {PE_IMP_API_VERSION, sizeof(PeImpTarget)} */
     const char *module;                       /* "skins" */
@@ -300,7 +301,7 @@ typedef struct {
     int (*place)(const struct PeImpAsset *a, const char *builder, char *folder, size_t fn, char *why, size_t n);
     /* 1 if its place already holds a finished build of this source file by `builder` */
     int (*current)(const struct PeImpAsset *a, const char *builder);
-    /* Optional: read the installed pack's coverage, returning 1 complete, 0 incomplete, or -1 unreadable. */
+    /* Optional: read the installed pack's coverage, or return -1 when unreadable. */
     int (*coverage)(const struct PeImpAsset *a, char *out, size_t size, char *audio, size_t audio_size);
 } PeImpTarget;
 /* Where a target builds an asset: its place, else the Wardrobe's pack folder. */
