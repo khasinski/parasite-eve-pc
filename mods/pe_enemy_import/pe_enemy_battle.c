@@ -73,6 +73,7 @@
 #define PE_OPEN_FRAMES 10     /* battle frames after the opening before joining */
 #define PE_OPEN_LIMIT 900     /* an opening that never ends: join anyway, and start the clock */
 #define PE_TURN_STEP 0x60     /* turning per frame, 4096 = a full turn */
+#define PE_BATTLE_SQUARE 0x2000u /* Square after Boot_BuildRenderFlagTable maps the pad */
 
 typedef struct {
     RenderNativeTag tag;
@@ -111,8 +112,9 @@ static PeBattlePack s_resources[PE_FOES_MAX * PE_FORMS_MAX];
 static int s_resource_count;
 static PeBattlePack *s_roster[PE_FOES_MAX];
 static struct { int pose, wake, loop; } s_entrance[PE_FOES_MAX];
-static int s_armed, s_canister_armed;
+static int s_armed, s_canister_armed, s_launcher_armed;
 static int s_send_away, s_count = 1;
+enum { LAUNCHER_NONE, LAUNCHER_WAITING, LAUNCHER_DROPPED, LAUNCHER_HELD, LAUNCHER_FIRED };
 
 static struct {
     int active, frames, open_frames, joined, sent_away, room_enemies;
@@ -123,6 +125,7 @@ static struct {
     PeFoe *last_blow;                /* the foe whose blow the game is taking now */
     int last_blow_frames;
     int canister_exposed, canister_detonated;
+    int launcher;
     char result[96];
 } s;
 
@@ -358,8 +361,9 @@ unsigned pe_enemy_battle_defeated_mask(void) {
 }
 
 void pe_enemy_battle_arm_canister(void) { s_canister_armed = 1; }
+void pe_enemy_battle_arm_launcher(void) { s_launcher_armed = 1; }
 int pe_enemy_battle_canister_detonated(void) { return s.canister_detonated; }
-void pe_enemy_battle_disarm(void) { s_armed = s_canister_armed = 0; }
+void pe_enemy_battle_disarm(void) { s_armed = s_canister_armed = s_launcher_armed = 0; }
 
 /* ---- actors ---- */
 
@@ -837,7 +841,8 @@ static void pe_begin(void) {
     s_used_frames = 0;
     s.active = 1;
     s.canister_exposed = s_canister_armed;
-    s_canister_armed = 0;
+    s.launcher = s_launcher_armed ? LAUNCHER_WAITING : LAUNCHER_NONE;
+    s_canister_armed = s_launcher_armed = 0;
 }
 
 static void pe_end(const char *why) {
@@ -1070,6 +1075,37 @@ static void pe_foe_think(PeFoe *f) {
     pe_place_targets(f);
 }
 
+/* EM2B.C: damage opens the launcher sequence, and the Tyrant stays alive
+ * until the finisher. Here the pickup and shot use a temporary battle action. */
+static void pe_step_launcher(void) {
+    if (s.launcher < LAUNCHER_WAITING || s.launcher >= LAUNCHER_FIRED || !s.foes || !g_PlayerEntity) return;
+    EnemyCombatant *enemy = pe_core(&s.foe[0]);
+    Combatant *aya = (Combatant *)g_PlayerEntity->state;
+    if (!enemy || enemy->hpAlive <= 0 || !aya || !aya->curHP) return;
+    if (s.launcher == LAUNCHER_WAITING && enemy->hpAlive <= enemy->maxHp / 2) {
+        s.launcher = LAUNCHER_DROPPED;
+        pe_toast("Rocket launcher dropped. Square to pick it up.");
+        pe_mod_log(MOD_ID, "battle: Tyrant rocket launcher dropped");
+        return;
+    }
+    if (s.launcher == LAUNCHER_WAITING || g_BattleModeState != 0 || !g_BattleEnemyEscapeFlag ||
+        (g_GameStateFlags & 0x100) || !(g_FieldPadPressed & PE_BATTLE_SQUARE)) return;
+    g_FieldPadPressed &= ~PE_BATTLE_SQUARE;
+    if (s.launcher == LAUNCHER_DROPPED) {
+        s.launcher = LAUNCHER_HELD;
+        pe_toast("Rocket launcher ready. At full ATB, press Square to fire.");
+        pe_mod_log(MOD_ID, "battle: Aya picked up the Tyrant rocket launcher");
+    } else if (aya->atb >= PE_CHARGE_FULL) {
+        s.launcher = LAUNCHER_FIRED;
+        aya->atb = 0;
+        enemy->hpAlive = 0;
+        pe_toast("Rocket hit the Tyrant.");
+        pe_mod_log(MOD_ID, "battle: Aya fired the Tyrant rocket launcher");
+    } else {
+        pe_toast("Wait for full ATB, then press Square to fire.");
+    }
+}
+
 static int pe_on_battle(void *ctx, void *user) {
     (void)ctx; (void)user;
     if (!s.active && s_armed) {
@@ -1100,6 +1136,7 @@ static int pe_on_battle(void *ctx, void *user) {
         for (FieldActor *a = g_FieldActorListHead; a; a = a->next)
             if (pe_is_room_enemy(a) && !(a->flags & 0x10)) pe_send_away(a);
     }
+    pe_step_launcher();
     for (int i = 0; i < s.foes; ++i)
         if (pe_actor_live(&s.foe[i])) pe_foe_think(&s.foe[i]);
     if (s.last_blow_frames && !--s.last_blow_frames) s.last_blow = NULL;
@@ -1245,14 +1282,16 @@ static int pe_on_hp_loss(void *ctx, void *user) {
 static int pe_on_enemy_damage(void *ctx, void *user) {
     PeHookEnemyDamage *hit = ctx;
     (void)user;
-    if (!s.active || !s.canister_exposed || !s.foes || !g_PlayerEntity ||
-        hit->source != g_PlayerEntity->state || hit->target != s.foe[0].actor ||
-        !hit->ordinary || *hit->damage <= 0) return 0;
-    const Combatant *aya = hit->source;
+    if (!s.active || !s.foes || hit->target != s.foe[0].actor || *hit->damage <= 0) return 0;
     const EnemyCombatant *enemy = pe_core(&s.foe[0]);
+    if (!enemy || enemy->hpAlive <= 0) return 0;
+    if (s.launcher >= LAUNCHER_WAITING && s.launcher < LAUNCHER_FIRED && *hit->damage >= enemy->hpAlive)
+        *hit->damage = enemy->hpAlive - 1;
+    if (!s.canister_exposed || !g_PlayerEntity || hit->source != g_PlayerEntity->state || !hit->ordinary) return 0;
+    const Combatant *aya = hit->source;
     const ItemDataRecord *weapon = pe_equipped(0);
     if (!weapon || weapon->kind < 1 || weapon->kind >= 8 || !aya->action ||
-        aya->action->actionCode.actionId == 8 || !enemy || enemy->hpAlive <= 0) return 0;
+        aya->action->actionCode.actionId == 8) return 0;
     if (*hit->damage < enemy->hpAlive) *hit->damage = enemy->hpAlive;
     s.canister_exposed = 0;
     s.canister_detonated = 1;

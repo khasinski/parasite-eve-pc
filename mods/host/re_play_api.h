@@ -41,7 +41,7 @@ typedef struct PeReRoomEvent {
     const PeReEnemyPlacement *enemies;
 } PeReRoomEvent;
 
-enum { PE_RE_BOSS_WAIT = -1, PE_RE_BOSS_STANDARD, PE_RE_BOSS_CANISTER };
+enum { PE_RE_BOSS_WAIT = -1, PE_RE_BOSS_STANDARD, PE_RE_BOSS_CANISTER, PE_RE_BOSS_LAUNCHER };
 
 typedef struct PeRePlayApi {
     uint32_t struct_size;

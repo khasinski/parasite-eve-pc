@@ -402,8 +402,10 @@ static int pe_room_creature(const PeRePlayApi *api) {
     PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION), .play = api};
     if (api->struct_size >= offsetof(PeRePlayApi, enemy_room_move) && api->enemy_archive) packs.archive = api->enemy_archive();
     const int count = pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs);
-    if (count && s.automatic == PE_SCRIPTED_FIGHT && s_approach.effect == PE_RE_BOSS_CANISTER)
-        pe_enemy_battle_arm_canister();
+    if (count && s.automatic == PE_SCRIPTED_FIGHT) {
+        if (s_approach.effect == PE_RE_BOSS_CANISTER) pe_enemy_battle_arm_canister();
+        if (s_approach.effect == PE_RE_BOSS_LAUNCHER) pe_enemy_battle_arm_launcher();
+    }
     if (!count && !s.automatic) pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
     return count;
 }

@@ -344,7 +344,8 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   `SCE2.C` was consulted for enemy slot replacement and the killed flags that suppress spawns.
   `EM23.C` was consulted for the Alligator's entrance command, entrance motion, and exit camera
   after a damage defeat, and for the canister's grab, shot, and explosion signals.
-  `EM2B.C` was consulted for the final Tyrant's entrance command and persistent defeat.
+  `EM2B.C` was consulted for the final Tyrant's entrance command, damage-gated launcher
+  sequence, and persistent defeat.
   Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

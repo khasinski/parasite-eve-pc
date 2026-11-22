@@ -471,6 +471,11 @@ int pe_re_session_alligator(const PeReSession *s, unsigned slot) {
            s->run.works[2][0] && s->run.works[2][PE_RE_MEMBER_ID] == 0x23 && !s->run.em_dead[0];
 }
 
+int pe_re_session_final_tyrant(const PeReSession *s, unsigned slot) {
+    return s->game && !strcmp(s->game->game, "re2") && s->stage == 6 && s->room == 2 && slot == 0 &&
+           s->run.works[2][0] && s->run.works[2][PE_RE_MEMBER_ID] == 0x2b && !s->run.em_dead[0];
+}
+
 /* Room 4-0A's proc 10 releases the canister, then sets Room_flg bit 0. */
 int pe_re_session_canister_ready(const PeReSession *s) {
     return pe_re_session_alligator(s, 0) && pe_re_flag(&s->progress.flags, 5, 0);

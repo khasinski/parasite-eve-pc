@@ -176,6 +176,7 @@ static int s_typing, s_typed;
 static int s_pick, s_pick_at;
 
 static int prepare_boss(uint8_t slot) {
+    if (pe_re_session_final_tyrant(&s_session, slot)) return PE_RE_BOSS_LAUNCHER;
     if (!pe_re_session_alligator(&s_session, slot)) return PE_RE_BOSS_STANDARD;
     if (pe_re_scd_running(&s_session.run, 10)) return PE_RE_BOSS_WAIT;
     if (pe_re_session_canister_ready(&s_session)) return PE_RE_BOSS_CANISTER;

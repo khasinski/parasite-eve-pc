@@ -86,6 +86,7 @@ static void test_final_tyrant(const PeReGame *game, unsigned player) {
     pe_re_flag_set(flags, PE_RE_FG_STATUS, 1, 1);
     pe_re_scd_run(boss.logic, flags, NULL, &boss.run);
     CHECK(boss.run.works[2][0] && boss.run.works[2][PE_RE_MEMBER_ID] == 0x2b);
+    CHECK(pe_re_session_final_tyrant(&boss, 0) && !pe_re_session_final_tyrant(&boss, 1));
     CHECK(pe_re_session_ready_boss(&boss) == -1);
 
     pe_re_scd_exec(boss.logic, &boss.run, 2, 7);
@@ -96,6 +97,7 @@ static void test_final_tyrant(const PeReGame *game, unsigned player) {
     for (int ticks = 0; ticks < 500 && !pe_re_flag(flags, 4, 0x97); ticks++)
         pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
     CHECK(pe_re_flag(flags, 4, 0x97) && pe_re_session_ready_boss(&boss) == -1);
+    CHECK(!pe_re_session_final_tyrant(&boss, 0));
     pe_re_session_end(&boss);
 }
 
