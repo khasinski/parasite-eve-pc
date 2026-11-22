@@ -11,8 +11,10 @@ from re2_alligator_canister import TESTING, encounter_log, room_state
 
 INI = "Cheats/God mode=1\nManage mods/Play imported games=1\n"
 ROOM = "Room 2-04"
+SAVE_ROOM = "Room 2-08"
 ENCOUNTER = "room 2-04: encounter with enemy slot 1 at -14869,-3479"
 RIGHT = 0x0080  # Raw pad Right.
+CIRCLE = 0x2000  # Back out of the native memory-card menu.
 
 
 def load_card_pad():
@@ -53,6 +55,35 @@ def jump_to_licker(game):
     game.ask(f"mod-action {TESTING}/Go to that room")
 
 
+def save_at_typewriter(game):
+    game.ask(f"ini-set {TESTING}/Room 8")
+    game.ask(f"mod-action {TESTING}/Go to that room")
+    game.adv(250)
+    check(room_state(game)["Status"].startswith(SAVE_ROOM), room_state(game))
+    game.ask(f"mod-action {TESTING}/Give an Ink Ribbon")
+    game.ask(f"mod-action {TESTING}/Go to the next typewriter")
+    state = room_state(game)
+    check("Ink Ribbon" in state["Pocket"], state)
+    game.press(CROSS)
+    game.press(CROSS)
+    check("typewriter: save screen" in encounter_log(game),
+          f"The typewriter did not open the native save screen: {room_state(game)}")
+    card_dir = game.work / "bu00"
+    for _ in range(15):
+        if (card_dir / "BASLUS-006620000000A").is_file() and any((card_dir / ".pe-ext").glob("*.pex")):
+            break
+        game.press(CROSS, after=120)
+    else:
+        raise Failed("The native save card or its companion was not written")
+    for _ in range(6):
+        state = room_state(game)
+        if state["Status"].startswith("Saved at the typewriter."):
+            check("Ink Ribbon" not in state["Pocket"], state)
+            return
+        game.press(CIRCLE, after=100)
+    raise Failed(f"The native save menu did not return to the room: {room_state(game)}")
+
+
 def run_route(exe, disc, re2_disc, work):
     def import_disc(config):
         folders = config / "import" / "folders.txt"
@@ -87,35 +118,27 @@ def run_route(exe, disc, re2_disc, work):
         check(after["Status"].startswith(ROOM) and "0x22" not in after["Enemies"], after)
         check(game.picker()["Last fight"] == "RE2 RPD 2-04: won", game.picker())
         check(after["Enemies"].count("0x1F") == before["Enemies"].count("0x1F"), after)
-        save = game.ask("save-block 1").split()
-        check(save and (game.ctl / "block.bin").is_file(), "The native card save was not written")
+        save_at_typewriter(game)
     finally:
         game.quit()
 
     def install_card(config):
         # The second process uses the same imported disc catalog and its own card directory.
         shutil.move(game.config / "import", config / "import")
-        card_dir = config.parent / "bu00"
-        card_dir.mkdir()
-        shutil.copyfile(game.ctl / "block.bin", card_dir / save[0])
-        for field in save[1:]:
-            if field.startswith("companion="):
-                sidecars = card_dir / ".pe-ext"
-                sidecars.mkdir()
-                shutil.copyfile(game.ctl / "companion.pex", sidecars / field.split("=", 1)[1])
+        shutil.copytree(game.work / "bu00", config.parent / "bu00")
 
     loaded = Game(exe, str(disc), work / "reload", setup=install_card, ini=INI,
                   boot_pad=load_card_pad(), control_at=16400)
     try:
         restored = room_state(loaded)
-        check(restored["Status"].startswith(ROOM) and restored["Enemies"] == after["Enemies"],
-              f"Native reload did not restore the cleared room: {restored}")
+        check(restored["Status"].startswith(SAVE_ROOM) and "Ink Ribbon" not in restored["Pocket"],
+              f"Native reload did not restore the typewriter save: {restored}")
         jump_to_licker(loaded)
         loaded.adv(250)
         revisited = room_state(loaded)
-        check(revisited["Status"].startswith(ROOM) and "0x22" not in revisited["Enemies"], revisited)
+        check(revisited["Status"].startswith(ROOM) and revisited["Enemies"] == after["Enemies"], revisited)
         check(ENCOUNTER not in encounter_log(loaded), "The defeated Licker started a new encounter")
-        print("RPD 2-04: Licker released by the room, defeated in battle, and still gone after card reload")
+        print("RPD 2-04: Licker defeated in battle and still gone after reloading a native typewriter save")
     finally:
         loaded.quit()
 
