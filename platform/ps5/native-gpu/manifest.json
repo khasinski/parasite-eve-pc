@@ -4635,7 +4635,7 @@
     },
     {
       "path": "mods/pe_src_re1/pe_src_re1_sound.c",
-      "sha256": "2c80957b321360ce455c521a34bbd5cf80b7b5a5f20cefc0b047ede244c682f8"
+      "sha256": "ee1058a3856f9b08655200af481acfa0bf113398f72eeb57de025a38a5646c39"
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2.c",
@@ -4939,7 +4939,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_registry.c",
-      "sha256": "fb9817b3298892af6fb7ac8b6d869ac8bed89a4a0cc80da70150032c993cbe72"
+      "sha256": "e02ab6ba41d735a40bd50f49a82dda4141f17924705cdf192b69e97024050f67"
     },
     {
       "path": "mods/import/core/pe_imp_store.c",
@@ -4987,7 +4987,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_enemy.h",
-      "sha256": "af6ba2604307d3d6da4cdd86816ba69f470a83a9bc22a15141682b6296d0557e"
+      "sha256": "88f57bdba90cb92620cc982594d36c59ec2b1590a83c60acc4d8efbf5dbb9d03"
     },
     {
       "path": "mods/import/core/pe_imp_rdt.c",
@@ -5079,7 +5079,7 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_target.c",
-      "sha256": "86b55ef618ae3eb3efacae7b898fcca99e563c9c4cef96c6b0e4133c72255d43"
+      "sha256": "121ed4ff6b1c8d4e79bf5fd0039321f6282613630002e8e27214de83ccb3c45b"
     },
     {
       "path": "tests/enemy_import_nemesis.py",
@@ -5095,7 +5095,7 @@
     },
     {
       "path": "tests/pe_enemy_guess_test.c",
-      "sha256": "c0006c285bed5a2400a48ed0b5031c85f19ddeb08da6d81b72d17b558c87d5a5"
+      "sha256": "acec66fc7b4193fcb7567a7218be483e767ac8e65b8634b8188b00128df68a51"
     },
     {
       "path": "tests/pe_mod_re3_enemy_test.c",
@@ -5103,7 +5103,7 @@
     },
     {
       "path": "mods/import/core/pe_imp_guess.c",
-      "sha256": "a26c9b2968f5665e64845ccba1bbc865f43a0ba74e387330ecee435ea45dac08"
+      "sha256": "3ff81e350512f9f20c18e9dc1e0eea0a6f3ce73bf6789bd9068e6cad739eeab2"
     },
     {
       "path": "mods/import/core/pe_imp_guess.h",
@@ -5111,7 +5111,7 @@
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2_enemies.c",
-      "sha256": "0ffcb2dfd2073399d97dc5a999843f38b22152a0ba598e326a374cb181fd0500"
+      "sha256": "808b1a70e4b6b592c79f98b45cf110b740aea30b68e2132f34ddcb99131a9bef"
     },
     {
       "path": "tests/enemy_import_fights.py",

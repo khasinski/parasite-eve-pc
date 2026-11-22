@@ -201,7 +201,7 @@ static void test_enemy_sounds(const char *store) {
         free(sample);
     }
     assert(!pe_re2_enemies_register() && !pe_re1_enemy_sounds_register() && !pe_enemy_target_register());
-    static const unsigned added_kinds[] = {0x23, 0x25, 0x27, 0x2a, 0x2b, 0x2e, 0x2f, 0x30, 0x37, 0x39, 0x3b};
+    static const unsigned added_kinds[] = {0x23, 0x25, 0x27, 0x28, 0x2a, 0x2b, 0x2d, 0x2e, 0x2f, 0x30, 0x37, 0x39, 0x3b};
     for (unsigned i = 0; i < sizeof added_kinds / sizeof added_kinds[0]; ++i) {
         char asset[32], sample_id[64];
         snprintf(asset, sizeof asset, "re2:enemy/em%02x", added_kinds[i]);
@@ -219,7 +219,8 @@ static void test_enemy_sounds(const char *store) {
     const PeImpTarget *target = pe_imp_target(0);
     static const char *const ids[] = {
         "re2:enemy/em10", "re2:enemy/em20", "re2:enemy/em22", "re2:enemy/em24",
-        "re1:enemy/em1000", "re1:enemy/em1001", "re1:enemy/em1100", "re1:enemy/em1101"
+        "re1:enemy/em1000", "re1:enemy/em1001", "re1:enemy/em1011",
+        "re1:enemy/em1100", "re1:enemy/em1101", "re1:enemy/em1111"
     };
     for (unsigned i = 0; i < sizeof ids / sizeof ids[0]; i++) {
         const PeImpBuild ctx = {strncmp(ids[i], "re2:", 4) ? store : re2_store, NULL, NULL};
@@ -241,7 +242,10 @@ static void test_enemy_sounds(const char *store) {
         printf("%s: %s\n", ids[i], summary);
     }
     static const struct { const char *id; int flight, attack, cues; } more[] = {
-        {"re2:enemy/em21", 1, 1, 3}, {"re2:enemy/em29", 0, 0, 3}, {"re2:enemy/em31", 0, 1, 3},
+        {"re2:enemy/em21", 1, 1, 3}, {"re2:enemy/em23", 0, 0, 2},
+        {"re2:enemy/em27", 0, 1, 3}, {"re2:enemy/em28", 0, 1, 2},
+        {"re2:enemy/em29", 0, 0, 3}, {"re2:enemy/em2b", 0, 1, 1}, {"re2:enemy/em2d", 0, 1, 3},
+        {"re2:enemy/em31", 0, 1, 3},
         {"re2:enemy/em33", 0, 1, 3}, {"re2:enemy/em34", 0, 0, 1}, {"re2:enemy/em36", 0, 1, 3},
         {"re2:enemy/em3a", 1, 1, 3}
     };
@@ -256,6 +260,19 @@ static void test_enemy_sounds(const char *store) {
         int cues = 0;
         for (int cue = 1; cue < pack.sounds; cue++) cues += pack.sound[cue].frames > 1;
         assert(cues == more[i].cues);
+        const int audio = pe_enemy_pack_audio_roles(&pack);
+        if (!strcmp(more[i].id, "re2:enemy/em23"))
+            assert(pack.attacks > 0 && pack.role[PE_ANIM_WALK] >= 0 && pack.role[PE_ANIM_HURT] >= 0);
+        if (!strcmp(more[i].id, "re2:enemy/em27"))
+            assert(pack.role[PE_ANIM_WALK] >= 0 && pack.role[PE_ANIM_DIE] >= 0);
+        if (!strcmp(more[i].id, "re2:enemy/em28")) {
+            assert(pack.role[PE_ANIM_HURT] >= 0 && pack.role[PE_ANIM_DIE] >= 0);
+            assert(audio == (PE_AUDIO_ATTACK | PE_AUDIO_DEATH));
+        }
+        if (!strcmp(more[i].id, "re2:enemy/em2b"))
+            assert(pack.role[PE_ANIM_WALK] >= 0 && pack.role[PE_ANIM_HURT] >= 0 && pack.role[PE_ANIM_DIE] >= 0);
+        if (!strcmp(more[i].id, "re2:enemy/em2d"))
+            assert(audio == (PE_AUDIO_ATTACK | PE_AUDIO_HURT | PE_AUDIO_DEATH));
         if (!strcmp(more[i].id, "re2:enemy/em36")) {
             assert(pack.speed > 0 && pack.role[PE_ANIM_WALK] >= 0 && pack.role[PE_ANIM_HURT] >= 0);
             assert(pe_enemy_pack_audio_roles(&pack) == (PE_AUDIO_ATTACK | PE_AUDIO_HURT | PE_AUDIO_DEATH));

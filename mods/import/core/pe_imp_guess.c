@@ -223,6 +223,7 @@ static void pick_moves(const PeImpMoveLook *look, int moves, PeImpEnemyBody body
     for (int r = 0; r < R_COUNT; r++) pick[r] = -1;
     if (hints.attack >= 0 && hints.attack < moves && look[hints.attack].frames) pick[R_ATTACK] = hints.attack;
     if (hints.hurt >= 0 && hints.hurt < moves && look[hints.hurt].frames) pick[R_HURT] = hints.hurt;
+    if (hints.die >= 0 && hints.die < moves && look[hints.die].frames) pick[R_DIE] = hints.die;
     if (body != PE_IMP_ENEMY_FIXED && hints.walk >= 0 && hints.walk < moves && look[hints.walk].frames)
         pick[R_WALK] = hints.walk;
     double best = 1e9;
@@ -353,7 +354,7 @@ int pe_imp_enemy_guess_body(const PeImpModel *m, const PeImpAnimation *a, const 
 int pe_imp_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
                        int yaw, int scale, PeImpEnemyGuess *g, char *why, size_t n) {
     return pe_imp_enemy_guess_body(m, a, name, moves_id, yaw, scale, PE_IMP_ENEMY_UPRIGHT,
-                                   (PeImpEnemyMoveHints){-1, -1, -1}, g, why, n);
+                                   (PeImpEnemyMoveHints){-1, -1, -1, -1}, g, why, n);
 }
 int pe_imp_enemy_known_strength(const char *asset_id, PeImpEnemyProfile *p) {
     int life = 0, power = 0;

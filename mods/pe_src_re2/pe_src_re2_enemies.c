@@ -71,12 +71,20 @@ int pe_re2_enemies_register(void) {
     };
     for (unsigned i = 0; i < sizeof bodies / sizeof bodies[0]; i++)
         bad |= pe_imp_set_enemy_body("re2", bodies[i].kind, bodies[i].body) != 0;
-    /* Consulted bio2-ds EM21.C, EM2E.C, EM36.C and EM3A.C for these base-set moves. */
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x21, (PeImpEnemyMoveHints){5, 9, -1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x2e, (PeImpEnemyMoveHints){-1, -1, 1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x36, (PeImpEnemyMoveHints){9, 8, 1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x39, (PeImpEnemyMoveHints){-1, -1, 1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x3a, (PeImpEnemyMoveHints){4, -1, -1}) != 0;
+    /* Consulted bio2-ds EM21/23/27/28/2B/2D/2E/36/3A for base-set moves.
+     * EM23's grab cutscene supplies a move for its otherwise procedural bite.
+     * EM27 takes move 7 into its grab, EM28 move 4 into its close attack,
+     * and EM2D move 5 into its hold. */
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x21, (PeImpEnemyMoveHints){5, 9, -1, -1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x23, (PeImpEnemyMoveHints){4, 10, 0, -1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x27, (PeImpEnemyMoveHints){7, -1, 1, 9}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x28, (PeImpEnemyMoveHints){4, 9, -1, 14}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x2b, (PeImpEnemyMoveHints){-1, 6, 1, 5}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x2d, (PeImpEnemyMoveHints){5, -1, -1, -1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x2e, (PeImpEnemyMoveHints){-1, -1, 1, -1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x36, (PeImpEnemyMoveHints){9, 8, 1, -1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x39, (PeImpEnemyMoveHints){-1, -1, 1, -1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x3a, (PeImpEnemyMoveHints){4, -1, -1, -1}) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x31, 0x33) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x33, 0x34) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x34, 0x36) != 0;
@@ -106,13 +114,16 @@ int pe_re2_enemies_register(void) {
     bad |= pe_imp_add_enemy_cues("re2:enemy/em36", &g4) != 0;
     bad |= pe_imp_add_enemy_cues("re2:enemy/em3a", &moth) != 0;
     /* Room sound types and VAB waves were checked against both US discs.
-     * bio2-ds EM23/25/27/2A/2B/2E/2F/30/37/3B describe the individual actions. */
+     * bio2-ds EM23/25/27/28/2A/2B/2D/2E/2F/30/37/3B describe the individual actions.
+     * SCE0.C pairs sound types 20/21 and 5/17 in banks 59 and 42 respectively. */
     static const struct { unsigned kind; PeImpEnemyCues cues; } other_cues[] = {
         {0x23, {{NULL, "sound/enemy17/wave07", "sound/enemy17/wave06"}}},
         {0x25, {{"sound/enemy11/wave05", NULL, NULL}}},
         {0x27, {{"sound/enemy16/wave05", "sound/enemy16/wave10", "sound/enemy16/wave11"}}},
+        {0x28, {{"sound/enemy59/wave15", NULL, "sound/enemy59/wave14"}}},
         {0x2a, {{"sound/enemy12/wave04", NULL, NULL}}},
         {0x2b, {{"sound/enemy26/wave09", NULL, NULL}}},
+        {0x2d, {{"sound/enemy42/wave18", "sound/enemy42/wave14", "sound/enemy42/wave15"}}},
         {0x2e, {{"sound/enemy13/wave08", "sound/enemy13/wave05", "sound/enemy13/wave11"}}},
         {0x2f, {{NULL, NULL, "sound/enemy14/wave10"}}},
         {0x30, {{"sound/enemy20/wave04", "sound/enemy20/wave06", "sound/enemy20/wave02"}}},

@@ -124,11 +124,12 @@ static void test_made_up(void) {
     assert(!pe_imp_set_enemy_body("test", 1, PE_IMP_ENEMY_CRAWLER));
     assert(pe_imp_enemy_body("test:enemy/made-up-cdemd2") == PE_IMP_ENEMY_CRAWLER);
     assert(pe_imp_enemy_body("other:enemy/made-up") == PE_IMP_ENEMY_UPRIGHT);
-    const PeImpEnemyMoveHints no_hints = {-1, -1, -1}, hints = {M_ATTACK, M_HURT, M_WALK};
+    const PeImpEnemyMoveHints no_hints = {-1, -1, -1, -1}, hints = {M_ATTACK, M_HURT, M_WALK, M_DIE};
     assert(!pe_imp_enemy_guess_body(&m, &a, NULL, NULL, 0, 190, PE_IMP_ENEMY_CRAWLER, no_hints, &body, why, sizeof why));
     assert(move_of(&body.p, "walk") >= 0 && body.p.speed > 0 && body.p.speed <= 10 && body.p.radius == 45);
     assert(!pe_imp_enemy_guess_body(&m, &a, NULL, NULL, 0, 190, PE_IMP_ENEMY_FLYER, hints, &body, why, sizeof why));
     assert(move_of(&body.p, "attack") == M_ATTACK && move_of(&body.p, "hurt") == M_HURT && move_of(&body.p, "walk") == M_WALK);
+    assert(move_of(&body.p, "die") == M_DIE);
     assert(move_of(&body.p, "walk") >= 0 && body.p.speed >= 10 && body.p.radius == 65);
     assert(!pe_imp_enemy_guess_body(&m, &a, NULL, NULL, 0, 190, PE_IMP_ENEMY_FIXED, no_hints, &body, why, sizeof why));
     assert(move_of(&body.p, "walk") < 0 && !body.p.speed && body.p.attack[0].anim);
