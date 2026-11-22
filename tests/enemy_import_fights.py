@@ -16,6 +16,7 @@ area and the fight, `mod-action` presses Start fight, `battle-state` reads the b
 
 Set PE_TEST_DISC (USA Disc 1); otherwise skipped (77). Every run is headless, in its own folder.
 Use --imported-room with PE_TEST_RE2_DISC to check win, escape and loss from an imported room.
+Use --street with RE2 disc 1 to approach the opening zombies without the fight picker.
 """
 import json
 import os
@@ -359,7 +360,8 @@ def part_imported_room(exe, disc, work, re2_disc, boss_forms=False, profile_edit
         return {row['label']: row['value'] for row in rows}
 
     game = Game(exe, disc, work / 'imported-room', setup=setup,
-                ini='Cheats/God mode=1\nManage mods/Play imported games=1\n', limit=FIELD + 60000)
+                ini='Cheats/God mode=1\nManage mods/Play imported games=1\nFights/RE2 street encounters=0\n',
+                limit=FIELD + 60000)
     try:
         game.ask('mod-action Play imported games/Start')
         before = room_rows(game)
@@ -468,6 +470,60 @@ def part_imported_room(exe, disc, work, re2_disc, boss_forms=False, profile_edit
         check(wait_battle(game) is not None, 'imported room: the fatal battle did not start')
         wait_game_over(game)
         print('imported room: losing returned to the title screen')
+    finally:
+        game.quit()
+
+
+def part_street(exe, disc, work, re2_disc):
+    def setup(config):
+        folders = config / 'import' / 'folders.txt'
+        folders.parent.mkdir()
+        folders.write_text(f'{re2_disc.parent}\n', encoding='utf-8')
+
+    game = Game(exe, disc, work / 'opening-street', setup=setup,
+                ini='Cheats/God mode=1\nManage mods/Play imported games=1\n', limit=FIELD + 60000)
+
+    def placement_count():
+        rows = json.loads(game.ask('mod-state pe_re_play'))['rows']
+        values = {row['label']: row['value'] for row in rows}
+        check(values['Status'].startswith('Room 1-00'), values)
+        return values['Enemies'].count('0x1F')
+
+    def approach():
+        game.adv(55, 128)  # Right in the opening camera, along the accessible side of the street.
+        check(wait_battle(game) is not None, 'opening street: approach did not start a battle')
+        until = game.vblank + 2500
+        while game.vblank < until:
+            enemies = game.battle()['enemies']
+            if enemies and all(enemy['type'] == 0xee for enemy in enemies):
+                return len(enemies)
+            game.adv(15)
+        raise Failed('opening street: the imported roster did not take over')
+
+    try:
+        game.ask('mod-action Play imported games/Start')
+        initial = placement_count()
+        check(initial == 6, f'opening street: expected six living zombies, got {initial}')
+        game.adv(90)
+        check(game.picker()['Status'] == 'Ready', 'opening street: an encounter started while standing at the entrance')
+        count = approach()
+        escape(game)
+        wait_home(game)
+        game.adv(120)
+        check(game.picker()['Last fight'] == 'RE2 opening street: ran away', game.picker())
+        check(game.picker()['Status'] == 'Ready' and placement_count() == initial,
+              'opening street: an escape removed a survivor or immediately restarted the fight')
+
+        game.adv(48, 32)  # Left, far enough to leave the encounter radius before returning.
+        check(approach() == count, 'opening street: the escaped group did not return')
+        win_when_ready(game)
+        wait_home(game)
+        game.adv(120)
+        check(game.picker()['Last fight'] == 'RE2 opening street: won', game.picker())
+        check(placement_count() == initial - count, 'opening street: wrong zombies cleared after victory')
+        game.ask('save-block 1')
+        check((game.ctl / 'block.bin').stat().st_size > 0, 'opening street: could not build the native save')
+        print(f'opening street: escaped safely, re-approached, won and saved with {initial - count} zombies left')
     finally:
         game.quit()
 
@@ -601,6 +657,12 @@ def main():
                 print('Both RE2 discs are needed for --room-variants: skipped')
                 return 77
             part_room_variants(exe, disc, work, [Path(path).resolve() for path in discs])
+        elif '--street' in sys.argv:
+            re2_disc = os.getenv('PE_TEST_RE2_DISC')
+            if not re2_disc or not Path(re2_disc).is_file():
+                print('PE_TEST_RE2_DISC is not set: skipped')
+                return 77
+            part_street(exe, disc, work, Path(re2_disc).resolve())
         elif any(flag in sys.argv for flag in ('--imported-room', '--boss-forms', '--profile-editor')):
             re2_disc = os.getenv('PE_TEST_RE2_DISC')
             if not re2_disc or not Path(re2_disc).is_file():

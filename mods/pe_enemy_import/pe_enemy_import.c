@@ -52,6 +52,7 @@
 #define PE_TRAVEL_FRAMES 1800         /* a room transfer that hasn't settled by then is stuck (an event) */
 #define PE_ZONES_MAX 8
 #define PE_TOKEN_TITLE 0xA9400048u    /* the title screens (pe_warp) */
+#define PE_STREET_FIGHT 1              /* Day 1 Sewer, second spot: the native battle carrier */
 
 typedef struct { const char *name; unsigned story; } PeArea;
 typedef struct { unsigned char area; unsigned short map; unsigned char spot; const char *enemies; } PeFight;
@@ -125,10 +126,13 @@ static const char *const k_state_names[] = {
 };
 
 static int s_area, s_pick, s_enemy, s_enemy_count, s_room_enemies;
+static int s_street_encounters = 1;
+static int s_street_latched;
+static int16_t s_street_x, s_street_z;
 static const char *const k_counts[] = {"1", "2", "3"};
 static const char *const k_room_enemies[] = {"Fight too", "Sent away"};
 static struct {
-    int state, fight, frames, travel, same_room, live_enemies, saw_enemies, imported_room_paused, preview;
+    int state, fight, frames, travel, same_room, live_enemies, saw_enemies, imported_room_paused, preview, automatic;
     unsigned origin, target;
     int x, z, yaw;
     uintptr_t roll_next;   /* the forced roll's PeHookScriptRandom.next */
@@ -237,7 +241,7 @@ static const unsigned char *pe_room_blob(size_t *bytes) {
 
 static void pe_finish(const char *result) {
     pe_enemy_battle_disarm();
-    snprintf(s_last, sizeof s_last, "%s: %s", pe_fight_label(s.fight), result);
+    snprintf(s_last, sizeof s_last, "%s: %s", s.automatic ? "RE2 opening street" : pe_fight_label(s.fight), result);
     pe_log("cheat_fight_picker", "result fight=%d map=%u spot=%u %s", s.fight, k_fights[s.fight].map,
            k_fights[s.fight].spot, result);
 }
@@ -328,7 +332,7 @@ static int pe_add_room_pack(const char *asset, int already_selected, const char 
     char move[PE_IMP_ID_MAX];
     const char *room_move = NULL;
     if (!strncmp(asset, "re2:enemy/em1", 13) && (placement->behaviour & 0x3f) == 10 &&
-        p->play->struct_size >= sizeof *p->play && p->play->enemy_room_move &&
+        p->play->struct_size >= offsetof(PeRePlayApi, encounter_position) && p->play->enemy_room_move &&
         !p->play->enemy_room_move(placement->slot, move, sizeof move)) room_move = move;
     if (already_selected)
         for (int i = 0; i < p->count; i++)
@@ -351,14 +355,25 @@ static int pe_add_room_pack(const char *asset, int already_selected, const char 
     return 1;
 }
 
-static void pe_room_creature(const PeRePlayApi *api) {
+static int pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
-    if (api->room(&room)) return;
+    PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
+    if (api->room(&room)) return 0;
+    if (s.automatic) {
+        double x, z;
+        int floor;
+        if (api->struct_size < sizeof *api || !api->encounter_position ||
+            api->encounter_position(&x, &z, &floor)) return 0;
+        room.count = pe_trip_street(&room, x, z, floor, close);
+        room.enemies = close;
+        if (!room.count) return 0;
+    }
     pe_enemy_battle_begin_roster();
     PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION), .play = api};
     if (api->struct_size >= offsetof(PeRePlayApi, enemy_room_move) && api->enemy_archive) packs.archive = api->enemy_archive();
-    if (!pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs))
-        pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
+    const int count = pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs);
+    if (!count && !s.automatic) pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
+    return count;
 }
 
 static void pe_leave(void) {
@@ -370,13 +385,17 @@ static void pe_leave(void) {
         return;
     }
     const PeRePlayApi *api = pe_imported_room_api();
+    if (s.automatic && (!api || !pe_room_creature(api))) {
+        pe_end_trip();
+        return;
+    }
     if (api) {
-        if (!s.preview) pe_room_creature(api);
+        if (!s.preview && !s.automatic) pe_room_creature(api);
         const int paused = api->pause_for_battle();
         if (paused < 0) {
             pe_finish("the imported room is busy");
             pe_end_trip();
-            pe_toast("Fights: finish the current room action, then try again");
+            if (!s.automatic) pe_toast("Fights: finish the current room action, then try again");
             return;
         }
         s.imported_room_paused = paused > 0;
@@ -436,7 +455,7 @@ static void pe_step(void) {
     case PE_FIGHT:
         if (pe_in_battle()) break;
         pe_finish(s.live_enemies ? "ran away" : "won");
-        pe_trip_won(&s_trip, s.live_enemies ? 0 : pe_enemy_battle_room_defeated());
+        pe_trip_defeated(&s_trip, s.automatic || !s.live_enemies ? pe_enemy_battle_defeated_mask() : 0);
         s_trip_wait = 1800;                                /* the trip back, a door: half a minute at most */
         s.state = PE_AFTER;
         s.frames = 0;
@@ -458,10 +477,39 @@ static void pe_step(void) {
     }
 }
 
+static void pe_begin_fight(int f, int preview, int automatic);
+
+static void pe_check_street(void) {
+    if (!s_street_encounters || s.state != PE_IDLE || s_trip.armed || !pe_field_ready() ||
+        (g_ScriptVariableBank[PE_VAR_BATTLE_FLAGS] & PE_SKIP_BATTLES)) return;
+    const PeRePlayApi *api = pe_imported_room_api();
+    if (!api || api->struct_size < sizeof *api || !api->encounter_position) return;
+    PeReRoomEvent room = {sizeof room};
+    if (api->room(&room)) return;
+    if (strcmp(room.game, "re2") || room.stage || room.room) {
+        s_street_latched = 0;
+        return;
+    }
+    double x, z;
+    int floor;
+    if (api->encounter_position(&x, &z, &floor)) return;
+    if (s_street_latched) {
+        const double dx = x - s_street_x, dz = z - s_street_z;
+        if (dx * dx + dz * dz < PE_TRIP_STREET_REARM * PE_TRIP_STREET_REARM) return;
+        s_street_latched = 0;
+    }
+    PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
+    if (!pe_trip_street(&room, x, z, floor, close)) return;
+    s_street_x = close[0].x, s_street_z = close[0].z;
+    s_street_latched = 1;
+    pe_begin_fight(PE_STREET_FIGHT, 0, 1);
+    pe_mod_log(MOD_ID, "opening street: approached zombie slot %u at %d,%d", close[0].slot, s_street_x, s_street_z);
+}
+
 static int pe_on_frame(void *ctx, void *user) {
     (void)ctx; (void)user;
     pe_step();
-    if (s_trip.armed && s.state == PE_IDLE) {             /* back in the imported room: the win counts there */
+    if (s_trip.armed && s.state == PE_IDLE) {             /* record defeats once the imported room is back */
         const int beaten = pe_trip_report(&s_trip, pe_imported_room_api());
         if (beaten > 0) {
             pe_log("cheat_fight_picker", "imported room: %d selected placements beaten", beaten);
@@ -470,6 +518,7 @@ static int pe_on_frame(void *ctx, void *user) {
             s_trip.armed = 0;
         }
     }
+    pe_check_street();
     return 0;
 }
 
@@ -506,6 +555,7 @@ static int pe_on_drawn(void *ctx, void *user) {
 static int pe_on_new_game(void *ctx, void *user) {
     (void)ctx; (void)user;
     s_trip.armed = 0;
+    s_street_latched = 0;
     pe_end_trip();
     return 0;
 }
@@ -517,10 +567,11 @@ static int pe_ready_fight(void) {
     return f;
 }
 
-static void pe_begin_fight(int f, int preview) {
+static void pe_begin_fight(int f, int preview, int automatic) {
     s.fight = f;
     s.live_enemies = 0;
     s.preview = preview;
+    s.automatic = automatic;
     s_trip.armed = 0;
     s.state = PE_LEAVE;   /* on the next free field frame, once the panel closes */
 }
@@ -529,7 +580,7 @@ static void pe_start(void) {
     const int f = pe_ready_fight();
     if (f < 0) return;
     pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
-    pe_begin_fight(f, 0);
+    pe_begin_fight(f, 0, 0);
 }
 
 static struct {
@@ -657,7 +708,7 @@ static void pe_edit_preview(void) {
         return;
     }
     pe_mod_log(MOD_ID, "previewing %s source move %d", s_edit.asset, move);
-    pe_begin_fight(f, 1);
+    pe_begin_fight(f, 1, 0);
     pe_mod_panel_close();
 }
 
@@ -736,6 +787,8 @@ static int enemy_import_init(void) {
                             k_counts, 3);
     pe_menu_register_choice(0, "Room's enemies", "Whether the room's own enemies fight too, or are sent "
                             "away so the imported enemy fights alone.", &s_room_enemies, k_room_enemies, 2);
+    pe_menu_register_toggle(0, "RE2 street encounters", "Approaching zombies in RE2's opening street starts a fight.",
+                            &s_street_encounters, NULL);
     pe_menu_register_action(0, "Start fight",
                             "Takes Aya to the fight (once the panel closes) and back afterwards. The story "
                             "is set to the fight's point for the trip.",

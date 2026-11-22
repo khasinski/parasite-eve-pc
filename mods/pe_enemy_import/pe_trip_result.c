@@ -1,4 +1,4 @@
-/* A won battle trip from an imported room, reported back to it. See pe_trip_result.h. */
+/* A battle trip from an imported room, with defeats reported back to it. See pe_trip_result.h. */
 #include <stddef.h>
 #include <string.h>
 
@@ -39,7 +39,42 @@ int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
     return t->count;
 }
 void pe_trip_won(PeTripResult *t, int defeated) {
-    if (t->armed) t->defeated = defeated > 0 && defeated <= t->count ? defeated : 0;
+    pe_trip_defeated(t, defeated > 0 && defeated <= t->count ? (1u << defeated) - 1 : 0);
+}
+
+void pe_trip_defeated(PeTripResult *t, unsigned defeated) {
+    if (t->armed) t->defeated = defeated & ((1u << t->count) - 1);
+}
+
+static const PeReEnemyPlacement *street_nearest(const PeReRoomEvent *room, double x, double z, int floor,
+                                                 double limit, unsigned selected) {
+    const PeReEnemyPlacement *nearest = NULL;
+    for (int i = 0; i < room->count; i++) {
+        const PeReEnemyPlacement *e = &room->enemies[i];
+        if (e->kind < 0x10 || e->kind >= 0x20 || e->slot >= 16 || e->floor != floor ||
+            e->killed_flag == 0xFF || (selected & (1u << e->slot))) continue;
+        const double dx = e->x - x, dz = e->z - z, distance = dx * dx + dz * dz;
+        if (distance > limit || (nearest && distance == limit)) continue;
+        nearest = e;
+        limit = distance;
+    }
+    return nearest;
+}
+
+int pe_trip_street(const PeReRoomEvent *room, double x, double z, int floor, PeReEnemyPlacement *out) {
+    if (strcmp(room->game, "re2") || room->stage || room->room) return 0;
+    const PeReEnemyPlacement *lead = street_nearest(room, x, z, floor, PE_TRIP_STREET_ENTER * PE_TRIP_STREET_ENTER, 0);
+    if (!lead) return 0;
+    out[0] = *lead;
+    int count = 1;
+    unsigned selected = 1u << lead->slot;
+    while (count < PE_TRIP_FOES_MAX) {
+        const PeReEnemyPlacement *neighbor = street_nearest(room, lead->x, lead->z, floor, 6500.0 * 6500.0, selected);
+        if (!neighbor) break;
+        out[count++] = *neighbor;
+        selected |= 1u << neighbor->slot;
+    }
+    return count;
 }
 
 int pe_trip_report(PeTripResult *t, const PeRePlayApi *api) {
@@ -49,6 +84,7 @@ int pe_trip_report(PeTripResult *t, const PeRePlayApi *api) {
     t->armed = 0;
     if (!room.game || strcmp(room.game, t->game) || room.stage != t->stage || room.room != t->room) return -1;
     int reported = 0;
-    for (int i = 0; i < t->defeated; i++) reported += !api->defeated_slot(t->slot[i]);
+    for (int i = 0; i < t->count; i++)
+        if (t->defeated & (1u << i)) reported += !api->defeated_slot(t->slot[i]);
     return reported ? reported : -1;
 }

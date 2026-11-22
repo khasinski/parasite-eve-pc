@@ -62,6 +62,8 @@ typedef struct PeRePlayApi {
     const char *(*enemy_archive)(void);
     /* Optional: animation assigned to this enemy slot by the current room. */
     int (*enemy_room_move)(unsigned slot, char *asset, size_t size);
+    /* Optional: current player position when the imported room can start a fight. */
+    int (*encounter_position)(double *x, double *z, int *floor);
 } PeRePlayApi;
 
 #endif

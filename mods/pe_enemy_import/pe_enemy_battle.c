@@ -349,9 +349,11 @@ int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char 
     return 1;
 }
 
-int pe_enemy_battle_room_defeated(void) {
-    for (int i = 0; i < s.foes; i++) if (!s.foe[i].dead) return 0;
-    return s.foes;
+unsigned pe_enemy_battle_defeated_mask(void) {
+    unsigned defeated = 0;
+    for (int i = 0; i < s.foes; i++)
+        if (s.foe[i].dead) defeated |= 1u << i;
+    return defeated;
 }
 
 void pe_enemy_battle_disarm(void) { s_armed = 0; }

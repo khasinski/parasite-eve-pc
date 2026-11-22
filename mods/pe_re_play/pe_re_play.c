@@ -105,6 +105,7 @@ static int api_defeated_slot(uint8_t slot) {
 }
 static int pause_for_battle(void);
 static void resume_after_battle(void);
+static int encounter_position(double *x, double *z, int *floor);
 static const char *api_enemy_archive(void) {
     if (!s_playing || !s_session.game || strcmp(s_session.game->game, "re2")) return NULL;
     /* bio2-ds EM_SET.C, Emd_load_file: Leon (including HUNK) and Claire use
@@ -116,7 +117,7 @@ static int api_enemy_room_move(unsigned slot, char *asset, size_t size) {
 }
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
-    api_enemy_room_move
+    api_enemy_room_move, encounter_position
 };
 
 static void report_enemies(void) {
@@ -160,6 +161,17 @@ enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE, PICK_COMPUTER };
 enum { TYPE_NONE, TYPE_OPEN, TYPE_SCREEN };
 static int s_typing, s_typed;
 static int s_pick, s_pick_at;
+
+static int encounter_position(double *x, double *z, int *floor) {
+    const ReHost *host = re_host();
+    if (!s_playing || s_battle_paused || !host->room_active() || !host->field_free() ||
+        pe_re_door_busy() || host->dialogue_busy() || host->native_menu_active() ||
+        s_typing != TYPE_NONE || s_script_held || s_pick != PICK_NONE) return -1;
+    int facing;
+    host->player_pose(x, z, &facing);
+    *floor = host->player_floor();
+    return 0;
+}
 
 static int pause_for_battle(void) {
     if (!s_playing) return 0;
@@ -450,7 +462,8 @@ static int on_frame(void *ctx, void *user) {
     re_host()->set_masks(s_masks);
     re_host()->set_player_size(s_size);
     re_host()->set_placement_markers(s_placement_markers);
-    re_host()->set_placement_meshes(s_placement_meshes);
+    const int street = !strcmp(s_session.game->game, "re2") && !s_session.stage && !s_session.room;
+    re_host()->set_placement_meshes(s_placement_meshes || street);
     re_host()->set_placement_idle(s_placement_idle);
     if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */
         const unsigned buttons = re_host()->held_buttons();

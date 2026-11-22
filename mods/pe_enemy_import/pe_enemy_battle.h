@@ -19,7 +19,7 @@ void pe_enemy_battle_arm(int choice, int count, int send_away);
 void pe_enemy_battle_begin_roster(void);
 int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char *room_move);
 /* Number of room foes that spawned, if all of them died. */
-int pe_enemy_battle_room_defeated(void);
+unsigned pe_enemy_battle_defeated_mask(void);
 void pe_enemy_battle_disarm(void);
 void pe_enemy_status_text(char *out, unsigned size);
 void pe_enemy_packs_changed(void);              /* any thread: list the packs again between fights */

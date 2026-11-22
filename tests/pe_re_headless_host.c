@@ -223,12 +223,39 @@ static int play(unsigned scenario) {
         pe_trip_won(&lost, 0);
         EXPECT(pe_trip_report(&lost, s.api) == -1 && !lost.armed);
     }
+    {   /* An approach picks the closest living zombie first, even if it was placed later. */
+        PeReEnemyPlacement nearby[PE_TRIP_FOES_MAX];
+        const PeReEnemyPlacement lead = room.enemies[room.count - 1];
+        double x, z;
+        int floor;
+        EXPECT(!s.api->encounter_position(&x, &z, &floor));
+        EXPECT(!pe_trip_street(&room, 100000, 100000, lead.floor, nearby));
+        EXPECT(!pe_trip_street(&room, lead.x, lead.z, lead.floor + 1, nearby));
+        const int selected = pe_trip_street(&room, lead.x, lead.z, lead.floor, nearby);
+        EXPECT(selected > 0 && nearby[0].slot == lead.slot);
+        /* Escaping after a non-prefix kill leaves the other slots as they were. */
+        PeTripResult escaped;
+        EXPECT(pe_trip_arm(&escaped, &room, NULL, NULL) > 1);
+        const unsigned survivor_slot = escaped.slot[0], defeated_slot = escaped.slot[1];
+        pe_trip_defeated(&escaped, 2u);
+        EXPECT(pe_trip_report(&escaped, s.api) == 1);
+        frames(2, 0);
+        EXPECT(!s.api->room(&room));
+        int survivor_found = 0;
+        for (int i = 0; i < room.count; i++) {
+            EXPECT(room.enemies[i].slot != defeated_slot);
+            survivor_found |= room.enemies[i].slot == survivor_slot;
+        }
+        EXPECT(survivor_found);
+    }
+    const int remaining = room.count;
     PeReSaved saved;
     EXPECT(!pe_re_save_decode(s.progress->data, &saved) && saved.playing && saved.player == scenario);
     s.save_read(NULL, NULL);
     EXPECT(!s.active);
     frames(1, 0);
     EXPECT(s.active && !strcmp(s.room, "re2:room/100"));
+    EXPECT(!s.api->room(&room) && room.count == remaining);
 
     EXPECT(s.next_door);
     s.next_door();
