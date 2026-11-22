@@ -72,7 +72,7 @@ int pe_re2_enemies_register(void) {
     };
     for (unsigned i = 0; i < sizeof bodies / sizeof bodies[0]; i++)
         bad |= pe_imp_set_enemy_body("re2", bodies[i].kind, bodies[i].body) != 0;
-    /* Consulted bio2-ds EM21/23/27/28/29/2B/2D/2E/36/37/3A for base-set moves.
+    /* Consulted bio2-ds EM21/23/27/28/29/2B/2D/2E/2F/36/37/3A for base-set moves.
      * EM23's grab cutscene supplies a move for its otherwise procedural bite.
      * EM27 takes move 7 into its grab, EM28 move 4 into its close attack,
      * and EM2D move 5 into its hold. */
@@ -84,7 +84,10 @@ int pe_re2_enemies_register(void) {
     bad |= pe_imp_set_enemy_move_hints("re2", 0x2b, (PeImpEnemyMoveHints){-1, 6, 1, 5}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x2d, (PeImpEnemyMoveHints){5, -1, -1, -1}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x2e, (PeImpEnemyMoveHints){-1, -1, 1, -1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x36, (PeImpEnemyMoveHints){9, 8, 1, -1}) != 0;
+    /* EM2F's fire defeat uses move 5 or 6. Keep its ordinary flinch (5)
+     * separate from its defeat (6). EM36's final collapse starts on move 10. */
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x2f, (PeImpEnemyMoveHints){1, 5, -1, 6}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x36, (PeImpEnemyMoveHints){9, 8, 1, 10}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x37, (PeImpEnemyMoveHints){2, -1, -1, -1}) != 0; /* tentacle lash */
     bad |= pe_imp_set_enemy_move_hints("re2", 0x39, (PeImpEnemyMoveHints){-1, -1, 1, -1}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x3a, (PeImpEnemyMoveHints){4, -1, -1, -1}) != 0;
@@ -128,7 +131,7 @@ int pe_re2_enemies_register(void) {
         {0x2b, {{"sound/enemy26/wave09", NULL, NULL}}},
         {0x2d, {{"sound/enemy42/wave18", "sound/enemy42/wave14", "sound/enemy42/wave15"}}},
         {0x2e, {{"sound/enemy13/wave08", "sound/enemy13/wave05", "sound/enemy13/wave11"}}},
-        {0x2f, {{NULL, NULL, "sound/enemy14/wave10"}}},
+        {0x2f, {{"sound/enemy14/wave04", NULL, "sound/enemy14/wave10"}}},
         {0x30, {{"sound/enemy20/wave04", "sound/enemy20/wave06", "sound/enemy20/wave02"}}},
         {0x37, {{"sound/enemy25/wave13", NULL, NULL}}},
         {0x39, {{"sound/enemy13/wave08", "sound/enemy13/wave05", "sound/enemy13/wave11"}}},
