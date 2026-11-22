@@ -341,6 +341,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   `EM3E.C`, and `EM3F.C` were consulted for procedural attacks, flinches, and scene-only actors.
   `EM2C.C`, `EM3E.C`, `EM3F.C`, and `JOINT.C` were consulted for scene actor commands,
   reverse playback, completion flags, and movable parts.
+  `SCE2.C` was consulted for enemy slot replacement and the killed flags that suppress spawns.
   Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

@@ -47,13 +47,13 @@ void pe_trip_defeated(PeTripResult *t, unsigned defeated) {
     if (t->armed) t->defeated = defeated & ((1u << t->count) - 1);
 }
 
-static const PeReEnemyPlacement *nearest_zombie(const PeReRoomEvent *room, double x, double z, int floor,
+static const PeReEnemyPlacement *nearest_enemy(const PeReRoomEvent *room, double x, double z, int floor,
                                                 double limit, unsigned selected,
                                                 int (*reachable)(double, double, double, double)) {
     const PeReEnemyPlacement *nearest = NULL;
     for (int i = 0; i < room->count; i++) {
         const PeReEnemyPlacement *e = &room->enemies[i];
-        if (!pe_re2_proximity_zombie(e, room->stage) || e->floor != floor ||
+        if (!pe_re2_proximity_enemy(e, pe_re2_opening_street(room->stage, room->room)) || e->floor != floor ||
             (selected & (1u << e->slot))) continue;
         const double dx = e->x - x, dz = e->z - z, distance = dx * dx + dz * dz;
         if (distance > limit || (nearest && distance == limit)) continue;
@@ -66,18 +66,19 @@ static const PeReEnemyPlacement *nearest_zombie(const PeReRoomEvent *room, doubl
 
 int pe_trip_approach(const PeReRoomEvent *room, double x, double z, int floor,
                      int (*reachable)(double, double, double, double), PeReEnemyPlacement *out) {
-    if (strcmp(room->game, "re2") || !pe_re2_proximity_room(room->stage, room->room)) return 0;
-    if (!room->stage) reachable = NULL;
+    if (strcmp(room->game, "re2")) return 0;
+    const int street = pe_re2_opening_street(room->stage, room->room);
+    if (street) reachable = NULL;
     else if (!reachable) return 0;
-    const double radius = room->stage ? 1400 : 1600;
-    const double group_radius = room->stage ? 3900 : 6500;
-    const PeReEnemyPlacement *lead = nearest_zombie(room, x, z, floor, radius * radius, 0, reachable);
+    const double radius = street ? 1600 : 1400;
+    const double group_radius = street ? 6500 : 3900;
+    const PeReEnemyPlacement *lead = nearest_enemy(room, x, z, floor, radius * radius, 0, reachable);
     if (!lead) return 0;
     out[0] = *lead;
     int count = 1;
     unsigned selected = 1u << lead->slot;
     while (count < PE_TRIP_FOES_MAX) {
-        const PeReEnemyPlacement *neighbor = nearest_zombie(room, lead->x, lead->z, floor,
+        const PeReEnemyPlacement *neighbor = nearest_enemy(room, lead->x, lead->z, floor,
                                                             group_radius * group_radius, selected, reachable);
         if (!neighbor) break;
         out[count++] = *neighbor;

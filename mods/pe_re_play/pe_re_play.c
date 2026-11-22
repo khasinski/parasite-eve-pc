@@ -109,6 +109,7 @@ static int pause_for_battle(void);
 static void resume_after_battle(void);
 static int encounter_position(double *x, double *z, int *floor);
 static int encounter_reachable(double x, double z, double target_x, double target_z);
+static int encounter_boss(void) { return s_playing ? pe_re_session_ready_boss(&s_session) : -1; }
 static const char *api_enemy_archive(void) {
     if (!s_playing || !s_session.game || strcmp(s_session.game->game, "re2")) return NULL;
     /* bio2-ds EM_SET.C, Emd_load_file: Leon (including HUNK) and Claire use
@@ -120,7 +121,7 @@ static int api_enemy_room_move(unsigned slot, char *asset, size_t size) {
 }
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
-    api_enemy_room_move, encounter_position, encounter_reachable
+    api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss
 };
 
 static void report_enemies(void) {
@@ -474,8 +475,9 @@ static int on_frame(void *ctx, void *user) {
     re_host()->set_masks(s_masks);
     re_host()->set_player_size(s_size);
     re_host()->set_placement_markers(s_placement_markers);
-    const int encounters = !strcmp(s_session.game->game, "re2") && pe_re2_proximity_room(s_session.stage, s_session.room);
-    re_host()->set_placement_meshes(s_placement_meshes || (encounters && !s_session.stage) ? PE_RE_MESH_ALL :
+    const int encounters = !strcmp(s_session.game->game, "re2");
+    re_host()->set_placement_meshes(s_placement_meshes ||
+                                    (encounters && pe_re2_opening_street(s_session.stage, s_session.room)) ? PE_RE_MESH_ALL :
                                     encounters ? PE_RE_MESH_ENCOUNTERS : PE_RE_MESH_OFF);
     re_host()->set_placement_idle(s_placement_idle);
     if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */

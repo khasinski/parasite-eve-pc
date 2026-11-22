@@ -603,7 +603,7 @@ static int empty_texture_area(RECT *rect) {
 
 static int show_placement_mesh(const PeReEnemyPlacement *p) {
     return p->kind < 0x40 && (pe_re_scene_kind(p->kind) || s_placement_meshes == PE_RE_MESH_ALL ||
-           (s_placement_meshes == PE_RE_MESH_ENCOUNTERS && pe_re2_proximity_zombie(p, 1)));
+           (s_placement_meshes == PE_RE_MESH_ENCOUNTERS && pe_re2_proximity_enemy(p, 0)));
 }
 
 static void prepare_field_texture(void) {

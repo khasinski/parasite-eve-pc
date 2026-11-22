@@ -26,7 +26,7 @@ typedef struct {
 int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
                 int (*prepare)(const char *asset, int already_selected, const char *entrance,
                                const PeReEnemyPlacement *placement, void *ctx), void *ctx);
-/* Nearest eligible zombie and neighbors on the same floor. An indoor approach
+/* Nearest eligible enemy and neighbors on the same floor. An indoor approach
  * uses the host's collision callback for the lead and each neighbor. */
 #define PE_TRIP_APPROACH_REARM 2600
 int pe_trip_approach(const PeReRoomEvent *room, double x, double z, int floor,

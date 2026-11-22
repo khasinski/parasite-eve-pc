@@ -28,6 +28,27 @@ static void rect(int16_t x[4], int16_t z[4], int x0, int z0, int x1, int z1) {
 #define ROOMS_MAX 512
 static const char *s_store = "pe-re-session-test/store";
 
+static void test_lift_boss(const PeReGame *game, unsigned player) {
+    char id[PE_IMP_ID_MAX];
+    PeImpRoomLogic *logic = NULL;
+    PeReSession boss = {.game = game, .stage = 5, .room = 0x17};
+    PeReFlags *flags = &boss.progress.flags;
+    pe_re_logic_id("re2", boss.stage, boss.room, player, id, sizeof id);
+    CHECK(!pe_imp_catalog_roomlogic(s_store, id, &logic, NULL, 0));
+    if (!logic) return;
+    flags->work[PE_RE_WORK_STAGE] = boss.stage;
+    flags->work[PE_RE_WORK_ROOM] = boss.room;
+    pe_re_scd_run(logic, flags, NULL, &boss.run);
+    CHECK(pe_re_session_ready_boss(&boss) == -1);
+    pe_re_scd_exec(logic, &boss.run, 2, 7);
+    for (int ticks = 0; ticks < 800; ticks++) pe_re_scd_tick(logic, flags, NULL, &boss.run);
+    CHECK(pe_re_session_ready_boss(&boss) == 0);
+    CHECK(!pe_re_session_beaten(&boss, 0, 0xff));
+    pe_re_scd_tick(logic, flags, NULL, &boss.run);
+    CHECK(pe_re_session_ready_boss(&boss) == -1 && boss.run.em_dead[0] == 2);
+    free(logic);
+}
+
 /* Run the retail room procedures that order the three scene actors. */
 static void test_scene_actors(unsigned player) {
     static const struct {
@@ -91,6 +112,39 @@ static void test_scene_actors(unsigned player) {
 
 int main(void) {
     char why[200] = "";
+
+    {   /* Story triggers depend on the room's live work fields, including the train's parked flag. */
+        PeReSession boss = {.game = pe_re_game_named("re2"), .stage = 4, .room = 9};
+        int16_t *work = boss.run.works[2];
+        work[0] = 1;
+        work[PE_RE_MEMBER_ID] = 0x31;
+        work[PE_RE_MEMBER_SCE_FREE0] = 1;
+        CHECK(pe_re_session_ready_boss(&boss) == -1);
+        work[PE_RE_MEMBER_SCE_FREE0] = 3;
+        CHECK(pe_re_session_ready_boss(&boss) == -1);
+        work[PE_RE_MEMBER_SCE_FREE0] = 4;
+        CHECK(pe_re_session_ready_boss(&boss) == 0);
+        work[PE_RE_MEMBER_ID] = 0x33;
+        work[PE_RE_MEMBER_SCE_FREE0] = 3;
+        CHECK(pe_re_session_ready_boss(&boss) == -1);
+        work[PE_RE_MEMBER_SCE_FREE1] = 1;
+        CHECK(pe_re_session_ready_boss(&boss) == 0);
+        boss.stage = 5; boss.room = 0x17;
+        work[PE_RE_MEMBER_ID] = 0x34;
+        work[PE_RE_MEMBER_SCE_FREE0] = 0;
+        CHECK(pe_re_session_ready_boss(&boss) == -1);
+        boss.run.em_ready[0] = 1;
+        CHECK(pe_re_session_ready_boss(&boss) == 0);
+        CHECK(!pe_re_session_beaten(&boss, 0, 0xff) && pe_re_session_ready_boss(&boss) == -1);
+        boss.stage = 6; boss.room = 4;
+        boss.run.em_dead[0] = 0;
+        work[PE_RE_MEMBER_ID] = 0x36;
+        work[PE_RE_MEMBER_SCE_FREE0] = 1;
+        work[PE_RE_MEMBER_TYPE] = (int16_t)0x8000;
+        CHECK(pe_re_session_ready_boss(&boss) == -1);
+        work[PE_RE_MEMBER_TYPE] = 0;
+        CHECK(pe_re_session_ready_boss(&boss) == 0);
+    }
 
     /* A script can replace or move a placement without changing the list length. */
     {
@@ -302,6 +356,7 @@ int main(void) {
     pe_re_session_end(&probe);
     CHECK(!re_headless_smoke(s_store, scenario));
     test_scene_actors(scenario);
+    test_lift_boss(g, scenario);
 
     /* every room reachable through doors from the street, breadth first */
     static uint32_t queue[ROOMS_MAX];

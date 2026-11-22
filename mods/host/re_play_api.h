@@ -66,6 +66,8 @@ typedef struct PeRePlayApi {
     int (*encounter_position)(double *x, double *z, int *floor);
     /* Optional: check whether a straight approach crosses room collision. */
     int (*encounter_reachable)(double x, double z, double target_x, double target_z);
+    /* Optional: the slot released by a story scene, or -1 when none is ready. */
+    int (*encounter_boss)(void);
 } PeRePlayApi;
 
 #endif

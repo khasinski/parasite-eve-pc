@@ -310,14 +310,14 @@ void pe_enemy_battle_begin_roster(void) {
     pe_free_resources();
 }
 
-int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char *room_move) {
+int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char *room_move, int follow_forms) {
     if (s.active || s_count >= PE_FOES_MAX) return 0;
     char dir[1200];
     const int written = snprintf(dir, sizeof dir, "%s/%s", s_dir, pack);
     if (written < 0 || (size_t)written >= sizeof dir) return 0;
     PeBattlePack *resource = pe_load(dir);
     if (!resource) return 0;
-    pe_load_forms(resource);
+    if (follow_forms) pe_load_forms(resource);
     s_entrance[s_count].pose = entrance ? pe_enemy_pack_anim(&resource->pack, entrance) : -1;
     s_entrance[s_count].wake = -1;
     s_entrance[s_count].loop = 0;

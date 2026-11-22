@@ -447,14 +447,44 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
         if (at + 22 > size) continue;
         const uint8_t *e = rdt + at;                        /* SCE_EM_SET_WORK, 22 bytes */
         if (e[9] != 0xFF && pe_re_flag(&s->progress.flags, enemy_group(s), e[9])) continue;   /* killed */
+        if (e[2] < 16 && s->run.em_dead[e[2]]) continue;
         PeReEnemyPlacement *p = &out[n++];
         p->slot = e[2], p->kind = e[3], p->behaviour = (uint16_t)(e[4] | e[5] << 8);
         p->floor = e[6], p->sound = e[7], p->model = e[8], p->killed_flag = e[9];
         p->x = (int16_t)(e[10] | e[11] << 8), p->y = (int16_t)(e[12] | e[13] << 8);
         p->z = (int16_t)(e[14] | e[15] << 8), p->dir = (int16_t)(e[16] | e[17] << 8);
         p->motion = (int16_t)(e[18] | e[19] << 8), p->ctr = (int16_t)(e[20] | e[21] << 8);
+        if (p->slot < 16) {
+            const int16_t *work = s->run.works[2 + p->slot];
+            if (work[0] && work[PE_RE_MEMBER_ID] == p->kind) {
+                p->behaviour = (uint16_t)work[PE_RE_MEMBER_TYPE];
+                p->x = work[PE_RE_MEMBER_POS_X], p->y = work[PE_RE_MEMBER_POS_Y], p->z = work[PE_RE_MEMBER_POS_Z];
+                p->dir = work[PE_RE_MEMBER_CDIR_Y], p->floor = (uint8_t)work[PE_RE_MEMBER_NFLOOR];
+            }
+        }
     }
     return n;
+}
+
+/* Retail rooms 509, 617 and 704 write these commands when their G forms enter.
+ * EM31/34 signal readiness after emerging; the train script clears EM36's
+ * parked type after releasing it. See the stand-ins in pe_re_scd.c. */
+int pe_re_session_ready_boss(const PeReSession *s) {
+    if (!s->game || strcmp(s->game->game, "re2")) return -1;
+    const int sewer = s->stage == 4 && s->room == 9;
+    const int lift = s->stage == 5 && s->room == 0x17;
+    const int train = s->stage == 6 && s->room == 4;
+    if (!sewer && !lift && !train) return -1;
+    const int16_t *work = s->run.works[2];
+    if (!work[0] || s->run.em_dead[0]) return -1;
+    const unsigned kind = (unsigned)work[PE_RE_MEMBER_ID];
+    const unsigned command = (uint16_t)work[PE_RE_MEMBER_SCE_FREE0];
+    if (sewer && kind == 0x31 && (command & 4)) return 0;
+    if (sewer && kind == 0x33 && command == 3 && (work[PE_RE_MEMBER_SCE_FREE1] & 1)) return 0;
+    if (lift && kind == 0x34 && s->run.em_ready[0]) return 0;
+    if (train && kind == 0x36 && (command & 1) && !(command & 2) &&
+        !(work[PE_RE_MEMBER_TYPE] & 0x8000)) return 0;
+    return -1;
 }
 
 static uint32_t room_move_word(const uint8_t *p) {

@@ -67,7 +67,8 @@
 #define PE_RE_WORKS 64                         /* objects: 0 player, 1 partner, 2-17 enemies, 18-49 scene objects, 50-63 doors */
 #define PE_RE_PATCHES 512                      /* work_copy: values written into the room's script (a hash) */
 #define PE_RE_MEMBERS 44                       /* MEMBER_BE_FLAG0 .. MEMBER_DAMAGE_CNT */
-enum { PE_RE_MEMBER_ID = 6, PE_RE_MEMBER_SCE_FREE0 = 23, PE_RE_MEMBER_AT_SCE_NO = 9, PE_RE_MEMBER_POS_X = 11, PE_RE_MEMBER_POS_Y = 12, PE_RE_MEMBER_POS_Z = 13, PE_RE_MEMBER_CDIR_Y = 15,
+enum { PE_RE_MEMBER_ID = 6, PE_RE_MEMBER_TYPE = 7, PE_RE_MEMBER_SCE_FREE0 = 23, PE_RE_MEMBER_SCE_FREE1 = 24,
+       PE_RE_MEMBER_AT_SCE_NO = 9, PE_RE_MEMBER_POS_X = 11, PE_RE_MEMBER_POS_Y = 12, PE_RE_MEMBER_POS_Z = 13, PE_RE_MEMBER_CDIR_Y = 15,
        PE_RE_MEMBER_NFLOOR = 17, PE_RE_MEMBER_ROUTINE0 = 2, PE_RE_MEMBER_ROUTINE1 = 3 };
 #define PE_RE_SLOTS 256                        /* zone ids */
 #define PE_RE_WORK_F_ATARI 0                   /* the zone hit in front of the player (SCE_AT.C) */
@@ -145,6 +146,7 @@ typedef struct {
     uint16_t sca_id[256];                      /* sca_id_set: box slot -> its Id's top bits | 1 (0: as built) */
     int sca_changed;                           /* set when one changes: the caller tells the walker, clears it */
     uint8_t em_busy[16];                       /* enemy stand-ins: frames left on a scripted order (see the .c) */
+    uint8_t em_ready[16];                      /* emergence acknowledged, even after the script clears its reply */
     uint8_t em_dead[16];                       /* beaten (pe_re_session_beaten): 1, then 2 once the stand-in saw it */
     PeReSceneMotion scene[16];
     int nenemy;

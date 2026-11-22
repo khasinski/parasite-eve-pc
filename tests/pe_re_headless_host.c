@@ -261,21 +261,23 @@ static int play(unsigned scenario) {
             {.kind = 0x1f, .slot = 0, .x = -500, .killed_flag = 1},
             {.kind = 0x1f, .slot = 1, .x = 600, .killed_flag = 2},
             {.kind = 0x1f, .slot = 2, .x = 200, .behaviour = 0x4002, .killed_flag = 3},
-            {.kind = 0x22, .slot = 3, .x = 300, .killed_flag = 4},
+            {.kind = 0x22, .slot = 3, .x = 300, .behaviour = 0x4402, .killed_flag = 4},
             {.kind = 0x1f, .slot = 4, .x = 400, .floor = 1, .killed_flag = 5},
-            {.kind = 0x1f, .slot = 5, .x = 2200, .killed_flag = 6},
-            {.kind = 0x1f, .slot = 6, .x = 100, .killed_flag = 0xff}
+            {.kind = 0x20, .slot = 5, .x = 2200, .killed_flag = 6},
+            {.kind = 0x1f, .slot = 6, .x = 100, .killed_flag = 0xff},
+            {.kind = 0x3b, .slot = 7, .x = 3100, .behaviour = 0x2008, .killed_flag = 7}
         };
         PeReEnemyPlacement nearby[PE_TRIP_FOES_MAX];
         PeReRoomEvent rpd = {sizeof rpd, "re2", 1, 9, 1, sizeof actors / sizeof actors[0], actors};
         EXPECT(!pe_trip_approach(&rpd, 0, 0, 0, NULL, nearby));
         s.test_wall = 1;
         EXPECT(!s.api->encounter_reachable(0, 0, -500, 0));
-        EXPECT(pe_trip_approach(&rpd, 0, 0, 0, s.api->encounter_reachable, nearby) == 2);
-        EXPECT(nearby[0].slot == 1 && nearby[1].slot == 5);
+        EXPECT(pe_trip_approach(&rpd, 0, 0, 0, s.api->encounter_reachable, nearby) == 3);
+        EXPECT(nearby[0].slot == 1 && nearby[1].slot == 5 && nearby[2].slot == 7);
         s.test_wall = 0;
-        rpd.room = 3;
-        EXPECT(!pe_trip_approach(&rpd, 0, 0, 0, s.api->encounter_reachable, nearby));
+        rpd.stage = 2; rpd.room = 5;
+        EXPECT(pe_trip_approach(&rpd, 0, 0, 0, s.api->encounter_reachable, nearby) == PE_TRIP_FOES_MAX);
+        EXPECT(nearby[0].slot == 0 && nearby[1].slot == 1 && nearby[2].slot == 5);
     }
 
     EXPECT(s.next_door);

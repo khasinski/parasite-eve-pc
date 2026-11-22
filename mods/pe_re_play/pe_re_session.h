@@ -119,6 +119,8 @@ void pe_re_session_end(PeReSession *s);
  * flag is set (Sce_em_set: Enemy_flg, or Enemy_flg2 from stage 4 or on the special run). How many
  * (up to `max`). */
 int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max);
+/* Scripted boss slot ready to fight, or -1 while the entrance is running. */
+int pe_re_session_ready_boss(const PeReSession *s);
 int pe_re_session_enemy_room_move(const PeReSession *s, unsigned slot, char *asset, size_t size);
 /* Compare the observable fields of two placement lists of the same length. */
 int pe_re_enemy_lists_equal(const PeReEnemyPlacement *a, const PeReEnemyPlacement *b, int count);
