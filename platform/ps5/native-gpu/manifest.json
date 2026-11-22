@@ -4811,11 +4811,11 @@
     },
     {
       "path": "mods/pe_re_play/pe_re_session.c",
-      "sha256": "a9f63b7fd11dd2fa3cadf50767f359b4583d949692b987f0bd90320417ed6bba"
+      "sha256": "9818bc84eeb8068e78061703c81decbf0b000ef2d9fd08e84be11bb32469fd2c"
     },
     {
       "path": "mods/pe_re_play/pe_re_scd.c",
-      "sha256": "02b1708e0fe50c30340e4236afab2059e85e32729e992a437376f87d0a03eaa5"
+      "sha256": "f0ce80a7a81ccbacf1ed59358033ac08066cd4f98dbb9cc0143ce9152e4e66ca"
     },
     {
       "path": "mods/pe_re_play/hosts/pe1/pe_re_stage.c",
@@ -5079,7 +5079,7 @@
     },
     {
       "path": "mods/pe_enemy_import/pe_enemy_target.c",
-      "sha256": "7fdb40de9f6b15566ea64d857ddfc84d54c3b081259a093f95c5ad9bef4714d5"
+      "sha256": "1b1195788b9aef11521d446c521a47b05be64167c1c3c15690f9ff94f02eb7fc"
     },
     {
       "path": "tests/enemy_import_nemesis.py",
@@ -5111,7 +5111,7 @@
     },
     {
       "path": "mods/pe_src_re2/pe_src_re2_enemies.c",
-      "sha256": "5a50f9aa1b1adb53143e78a0999c709c45920089c31c3afa8310433fec1de585"
+      "sha256": "6d7cbe16f73c5827cbc14cc87550cacca5cc12178ee30c7bdf6ae8f3d19714dc"
     },
     {
       "path": "tests/enemy_import_fights.py",

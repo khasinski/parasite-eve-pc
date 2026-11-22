@@ -28,6 +28,33 @@ static void rect(int16_t x[4], int16_t z[4], int x0, int z0, int x1, int z1) {
 #define ROOMS_MAX 512
 static const char *s_store = "pe-re-session-test/store";
 
+static void test_alligator(const PeReGame *game, unsigned player) {
+    char id[PE_IMP_ID_MAX];
+    PeReSession boss = {.game = game, .stage = 3, .room = 0x0a};
+    PeReFlags *flags = &boss.progress.flags;
+    pe_re_logic_id("re2", boss.stage, boss.room, player, id, sizeof id);
+    CHECK(!pe_imp_catalog_roomlogic(s_store, id, &boss.logic, NULL, 0));
+    if (!boss.logic) return;
+    flags->work[PE_RE_WORK_STAGE] = boss.stage;
+    flags->work[PE_RE_WORK_ROOM] = boss.room;
+    pe_re_flag_set(flags, PE_RE_FG_STATUS, 0, player != 0);
+    pe_re_scd_run(boss.logic, flags, NULL, &boss.run);
+    CHECK(boss.run.works[2][0] && boss.run.works[2][PE_RE_MEMBER_ID] == 0x23);
+    CHECK(pe_re_session_ready_boss(&boss) == -1);
+
+    pe_re_scd_exec(boss.logic, &boss.run, 2, 2);
+    for (int ticks = 0; ticks < 800 && pe_re_session_ready_boss(&boss) < 0; ticks++)
+        pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
+    CHECK(pe_re_session_ready_boss(&boss) == 0);
+    CHECK(!pe_re_session_beaten(&boss, 0, 0));
+    pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
+    CHECK(boss.run.camera == 8 && !boss.run.camera_lock);
+    CHECK(pe_re_session_ready_boss(&boss) == -1 && pe_re_flag(flags, PE_RE_FG_ENEMY + 1, 0));
+    pe_re_scd_run(boss.logic, flags, NULL, &boss.run);
+    CHECK(!boss.run.works[2][0]);
+    pe_re_session_end(&boss);
+}
+
 static void test_lift_boss(const PeReGame *game, unsigned player) {
     char id[PE_IMP_ID_MAX];
     PeImpRoomLogic *logic = NULL;
@@ -356,6 +383,7 @@ int main(void) {
     pe_re_session_end(&probe);
     CHECK(!re_headless_smoke(s_store, scenario));
     test_scene_actors(scenario);
+    test_alligator(g, scenario);
     test_lift_boss(g, scenario);
 
     /* every room reachable through doors from the street, breadth first */

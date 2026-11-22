@@ -653,6 +653,7 @@ int pe_re_scd_scene_actors(const PeReScdRun *run, PeReSceneActor *out, int max) 
  * - enemy 0x36 (the last G form): it sets bit 2 of Sce_free[0] when it dies (EM36.C Em36_die00).
  *   7-04's train scene waits on it, again from the battle. */
 static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
+    const int alligator = flags->work[PE_RE_WORK_STAGE] == 3 && flags->work[PE_RE_WORK_ROOM] == 0x0a;
     const int sewer = flags->work[PE_RE_WORK_STAGE] == 4 && flags->work[PE_RE_WORK_ROOM] == 9;
     for (int n = 0; n < 16; n++) {
         int16_t *w = run->works[2 + n];
@@ -660,6 +661,15 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
         int order = 0, frames = 0;
         if (w[0] && pe_re_scene_kind((unsigned)w[PE_RE_MEMBER_ID])) {
             scene_tick(&run->scene[n], w);
+            continue;
+        }
+        if (w[0] && w[PE_RE_MEMBER_ID] == 0x23 && alligator) {
+            /* EM23.C: after the damage defeat, return to the unlocked exit view. */
+            if (*f && run->em_dead[n] == 1) {
+                run->camera = 8;
+                run->camera_lock = 0;
+                run->em_dead[n] = 2;
+            }
             continue;
         }
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x31) {

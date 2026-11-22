@@ -42,6 +42,12 @@ static const PeImpEnemyStart k_zombie_starts[] = {
     {0}
 };
 
+/* EM23.C's entrance motion after the room releases the Alligator. */
+static const PeImpEnemyStart k_alligator_starts[] = {
+    {"start_emerging", 0x3f, 0, 6, 6},
+    {0}
+};
+
 int pe_re2_enemies_register(void) {
     int bad = 0;
     char id[32];
@@ -63,6 +69,7 @@ int pe_re2_enemies_register(void) {
         snprintf(id, sizeof id, "re2:enemy/em%02x", k_life[i].em);
         bad |= pe_imp_add_enemy_strength(id, k_life[i].life, 0) != 0;
     }
+    bad |= pe_imp_set_enemy_starts("re2", 0x23, k_alligator_starts) != 0;
     /* Consulted bio2-ds for locomotion and the scene-only overlays.
      * EM2D pivots in place to grab, EM2F and EM37 are attached, and
      * EM2C/3E/3F play scripted poses without combat handlers. */
