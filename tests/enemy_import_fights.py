@@ -454,6 +454,10 @@ def part_imported_room(exe, disc, work, re2_disc, boss_forms=False, profile_edit
         wait_home(game)
         after_mixed = room_rows(game)
         check(after_mixed['Status'] == mixed['Status'] and after_mixed['Enemies'] == 'None placed here.', after_mixed)
+        if boss_forms:
+            log = (game.config / 'pe_mods.log').read_text(encoding='utf-8', errors='replace')
+            check(log.count('EM36-CDEMD0 used its fallback death cue') == 1,
+                  'boss forms: final form should play its death cue exactly once')
         print('imported room: EM12 and EM13 shared a battle and their own room slots were cleared')
 
         game.ask('ini-set Play imported games/Testing/Room 0')

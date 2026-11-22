@@ -81,6 +81,7 @@ typedef struct {
     int attacks;
     PeEnemyAttack attack[PE_ENEMY_MAX_ATTACKS];
     int sounds;
+    int hurt_sound, death_sound;  /* optional cue when the corresponding animation is absent */
     PeEnemySound sound[PE_ENEMY_MAX_SOUNDS];
 } PeEnemyPack;
 
@@ -93,6 +94,8 @@ void pe_enemy_pack_free(PeEnemyPack *pack);
 int pe_enemy_pack_anim(const PeEnemyPack *pack, const char *name);
 /* Animation roles missing from the built pack. Stationary enemies do not need a walk. */
 int pe_enemy_pack_coverage(const PeEnemyPack *pack, int stationary, char *out, unsigned size);
+enum { PE_AUDIO_ATTACK = 1, PE_AUDIO_HURT = 2, PE_AUDIO_DEATH = 4, PE_AUDIO_OTHER = 8 };
+unsigned pe_enemy_pack_audio_roles(const PeEnemyPack *pack);
 
 /* Every vertex posed for frame `frame` of anim `anim` (clamped to its last frame), into out
  * (pack->vertices entries, model frame: floor y 0). Returns 0, -1 for a bad anim. */

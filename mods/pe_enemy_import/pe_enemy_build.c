@@ -268,7 +268,9 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
         for (int i = 0; i < p->attacks; i++)
             p->anim[p->attack[i].anim].event[p->attack[i].hit] |= PE_IMP_CUE_ATTACK + 1;
         if (p->role[PE_ANIM_HURT] >= 0) p->anim[p->role[PE_ANIM_HURT]].event[0] |= PE_IMP_CUE_HURT + 1;
+        else if (p->sounds > PE_IMP_CUE_HURT + 1 && p->sound[PE_IMP_CUE_HURT + 1].pcm) p->hurt_sound = PE_IMP_CUE_HURT + 1;
         if (p->role[PE_ANIM_DIE] >= 0) p->anim[p->role[PE_ANIM_DIE]].event[0] |= PE_IMP_CUE_DIE + 1;
+        else if (p->sounds > PE_IMP_CUE_DIE + 1 && p->sound[PE_IMP_CUE_DIE + 1].pcm) p->death_sound = PE_IMP_CUE_DIE + 1;
     }
     for (int i = 0; i < p->anims; i++)
         for (int k = 0; k < p->anim[i].frames; k++) {
@@ -398,6 +400,8 @@ int pe_enemy_write(const PeEnemyPack *p, const char *folder, char *why, size_t n
         for (int s = 0; s < p->sounds; s++) fprintf(f, "%s\"sounds/%02d.wav\"", s ? ", " : "", s);
         fprintf(f, "]");
     }
-    fprintf(f, "\n}\n");
+    if (p->hurt_sound) fprintf(f, ",\n  \"hurt_sound\": %d", p->hurt_sound);
+    if (p->death_sound) fprintf(f, ",\n  \"death_sound\": %d", p->death_sound);
+    fprintf(f, ",\n  \"audio_roles\": %u\n}\n", pe_enemy_pack_audio_roles(p));
     return fclose(f) ? fail(why, n, "can't write %s", "enemy.json", 0) : 0;
 }

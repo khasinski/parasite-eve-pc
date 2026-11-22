@@ -417,22 +417,25 @@ static void pe_set_anim(PeFoe *f, int role, int anim) {
 
 /* The anim's sound events from the last frame run up to `to` (wrapping when it loops), on the
  * audio service's effect voices (pe_assets): footsteps, swings. Silent without the service. */
-static void pe_play_events(PeFoe *f, int to) {
+static void pe_play_sound(PeFoe *f, unsigned sound) {
     const PeEnemyPack *pack = &f->resource->pack;
-    const PeEnemyAnim *an = &pack->anim[f->anim];
+    if (!sound || sound >= (unsigned)pack->sounds || !pack->sound[sound].pcm || pack->sound[sound].frames <= 1) return;
     static const PeAudioApi *audio;
-    if (!an->event || to == f->event_frame) return;
     if (!audio) {
         const PeAudioApi *a = pe_service_get("audio", 1);
         if (a && a->struct_size >= sizeof *a && a->play_effect) audio = a;
     }
+    f->sounds++;
+    if (audio) audio->play_effect(pack->sound[sound].pcm, (uint32_t)pack->sound[sound].frames,
+                                  (uint32_t)pack->sound[sound].rate, 1.0f);
+}
+
+static void pe_play_events(PeFoe *f, int to) {
+    const PeEnemyAnim *an = &f->resource->pack.anim[f->anim];
+    if (!an->event || to == f->event_frame) return;
     for (int guard = 0, k = f->event_frame; guard < an->frames && k != to; guard++) {
         k = k + 1 >= an->frames ? 0 : k + 1;
-        unsigned snd = an->event[k] & PE_ENEMY_EVENT_SOUND;
-        if (snd && (int)snd < pack->sounds && pack->sound[snd].pcm) {
-            f->sounds++;
-            if (audio) audio->play_effect(pack->sound[snd].pcm, (uint32_t)pack->sound[snd].frames, (uint32_t)pack->sound[snd].rate, 1.0f);
-        }
+        pe_play_sound(f, an->event[k] & PE_ENEMY_EVENT_SOUND);
     }
     f->event_frame = to;
 }
@@ -937,6 +940,10 @@ static void pe_foe_think(PeFoe *f) {
     if (hp <= 0) {   /* death: its anim plays, then the game fades and frees it */
         if (!f->dead) {
             const int die = pack->role[PE_ANIM_DIE];
+            if (die < 0 && pack->death_sound) {
+                pe_play_sound(f, (unsigned)pack->death_sound);
+                pe_mod_log(MOD_ID, "battle: %s used its fallback death cue", pack->name);
+            }
             const int frames = die >= 0 ? (int)(pack->anim[die].frames * 30.0 / pack->fps) : 1;
             f->dead = 1;
             f->attack = 0;
@@ -969,6 +976,7 @@ static void pe_foe_think(PeFoe *f) {
         f->stagger = 1;
         done = 0;
     }
+    if (hp < f->last_hp && pack->role[PE_ANIM_HURT] < 0) pe_play_sound(f, (unsigned)pack->hurt_sound);
     f->last_hp = hp;
     if (f->stagger) {
         if (!done) { pe_place_targets(f); return; }

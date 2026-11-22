@@ -815,7 +815,7 @@ static int import_init(void) {
     pe_menu_register_action(0, "Scan again", "Reads new disc images and builds what's missing. Runs by itself when the game starts.", scan_again);
     pe_menu_register_info(0, "Last scan", "What the last scan found.", text_scan);
     pe_menu_register_toggle(0, "Prepare enemy packs", "Builds missing or changed enemy packs in the background after a disc scan. Use Scan again to start now.", &s_prepare_enemies, NULL);
-    pe_menu_register_info(0, "Enemy packs", "Animation coverage from the last preparation. See import/store/enemy-report.tsv for details.", text_enemy_builds);
+    pe_menu_register_info(0, "Enemy packs", "See import/store/enemy-report.tsv for animation and audio coverage from the last preparation.", text_enemy_builds);
     pe_menu_page("Build by hand", "Build a model from your scanned discs as a costume or enemy.", 10);
     pe_menu_register_dynamic_choice("Build by hand", "Model", "A model from your scanned discs.", &s_pick, MAX_ITEMS, item_count, item_name);
     pe_menu_register_info("Build by hand", "From", "Where the selected model comes from.", text_asset);

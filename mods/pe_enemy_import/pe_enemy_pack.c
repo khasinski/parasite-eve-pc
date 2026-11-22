@@ -263,11 +263,38 @@ int pe_enemy_pack_load(PeEnemyPack *p, const char *dir, char *err, unsigned es) 
         a->hit = json_int(it, "hit", p->anim[a->anim].frames / 2, 0, p->anim[a->anim].frames - 1);
         p->attacks++;
     }
+    p->hurt_sound = json_int(j, "hurt_sound", 0, 0, p->sounds ? p->sounds - 1 : 0);
+    p->death_sound = json_int(j, "death_sound", 0, 0, p->sounds ? p->sounds - 1 : 0);
     rc = 0;
 done:
     cJSON_Delete(j);
     if (rc) pe_enemy_pack_free(p);
     return rc;
+}
+
+static int audible_sound(const PeEnemyPack *p, unsigned sound) {
+    return sound > 0 && sound < (unsigned)p->sounds && p->sound[sound].pcm && p->sound[sound].frames > 1;
+}
+
+unsigned pe_enemy_pack_audio_roles(const PeEnemyPack *p) {
+    unsigned roles = 0;
+    if (p->role[PE_ANIM_HURT] < 0 && audible_sound(p, (unsigned)p->hurt_sound)) roles |= PE_AUDIO_HURT;
+    if (p->role[PE_ANIM_DIE] < 0 && audible_sound(p, (unsigned)p->death_sound)) roles |= PE_AUDIO_DEATH;
+    for (int i = 0; i < p->anims; i++) {
+        const PeEnemyAnim *anim = &p->anim[i];
+        for (int frame = 0; anim->event && frame < anim->frames; frame++) {
+            const unsigned sound = anim->event[frame] & PE_ENEMY_EVENT_SOUND;
+            if (!audible_sound(p, sound)) continue;
+            unsigned role = 0;
+            if (p->role[PE_ANIM_HURT] == i) role |= PE_AUDIO_HURT;
+            if (p->role[PE_ANIM_DIE] == i) role |= PE_AUDIO_DEATH;
+            for (int k = 0; k < p->attacks; k++)
+                if (p->attack[k].anim == i) role |= PE_AUDIO_ATTACK;
+            roles |= role ? role : PE_AUDIO_OTHER;
+            break;
+        }
+    }
+    return roles;
 }
 
 int pe_enemy_pack_coverage(const PeEnemyPack *p, int stationary, char *out, unsigned size) {

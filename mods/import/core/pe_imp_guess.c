@@ -223,6 +223,8 @@ static void pick_moves(const PeImpMoveLook *look, int moves, PeImpEnemyBody body
     for (int r = 0; r < R_COUNT; r++) pick[r] = -1;
     if (hints.attack >= 0 && hints.attack < moves && look[hints.attack].frames) pick[R_ATTACK] = hints.attack;
     if (hints.hurt >= 0 && hints.hurt < moves && look[hints.hurt].frames) pick[R_HURT] = hints.hurt;
+    if (body != PE_IMP_ENEMY_FIXED && hints.walk >= 0 && hints.walk < moves && look[hints.walk].frames)
+        pick[R_WALK] = hints.walk;
     double best = 1e9;
     for (int k = 0; k < moves; k++) {                  /* idle (earlier moves win near ties) */
         const PeImpMoveLook *l = &look[k];
@@ -233,7 +235,8 @@ static void pick_moves(const PeImpMoveLook *look, int moves, PeImpEnemyBody body
     }
     for (int k = 0; pick[R_IDLE] < 0 && k < moves; k++)
         if (look[k].frames && !taken(pick, R_COUNT, k)) pick[R_IDLE] = k;
-    if (pick[R_IDLE] < 0) pick[R_IDLE] = pick[R_ATTACK] >= 0 ? pick[R_ATTACK] : pick[R_HURT];
+    for (int k = 0; pick[R_IDLE] < 0 && k < moves; k++)
+        if (look[k].frames) pick[R_IDLE] = k;
     if (pick[R_IDLE] < 0) return;
     const PeImpMoveLook *idle = &look[pick[R_IDLE]];
     const double up = idle->start;
@@ -249,7 +252,8 @@ static void pick_moves(const PeImpMoveLook *look, int moves, PeImpEnemyBody body
             best = l->end / l->start, pick[R_DIE] = k;
     }
     best = 0;
-    for (int k = 0; k < moves && body != PE_IMP_ENEMY_FIXED; k++) {
+    const int guess_walk = pick[R_WALK] < 0 && body != PE_IMP_ENEMY_FIXED;
+    for (int k = 0; guess_walk && k < moves; k++) {
         const PeImpMoveLook *l = &look[k];
         if (taken(pick, R_COUNT, k) || (low_body && l->hits) ||
             l->frames < (low_body ? 6 : 16) || l->loop > (low_body ? 0.15 : 0.05) ||
@@ -349,7 +353,7 @@ int pe_imp_enemy_guess_body(const PeImpModel *m, const PeImpAnimation *a, const 
 int pe_imp_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
                        int yaw, int scale, PeImpEnemyGuess *g, char *why, size_t n) {
     return pe_imp_enemy_guess_body(m, a, name, moves_id, yaw, scale, PE_IMP_ENEMY_UPRIGHT,
-                                   (PeImpEnemyMoveHints){-1, -1}, g, why, n);
+                                   (PeImpEnemyMoveHints){-1, -1, -1}, g, why, n);
 }
 int pe_imp_enemy_known_strength(const char *asset_id, PeImpEnemyProfile *p) {
     int life = 0, power = 0;

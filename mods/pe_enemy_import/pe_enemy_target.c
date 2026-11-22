@@ -227,7 +227,7 @@ static int enemies_current(const PeImpAsset *a, const char *builder) {
     return !strcmp(text, want);
 }
 
-static int enemies_coverage(const PeImpAsset *a, char *out, size_t size) {
+static int enemies_coverage(const PeImpAsset *a, char *out, size_t size, char *audio, size_t audio_size) {
     char folder[1100], manifest[1200];
     if (enemy_folder(a, folder, sizeof folder)) return -1;
     snprintf(manifest, sizeof manifest, "%s/enemy.json", folder);
@@ -245,12 +245,27 @@ static int enemies_coverage(const PeImpAsset *a, char *out, size_t size) {
     const int stationary = pe_imp_enemy_body(a->id) == PE_IMP_ENEMY_FIXED &&
                            !pj_int(pj_get(pj_get(root, "behavior"), "speed"), 10);
     const int complete = pe_enemy_pack_coverage(&pack, stationary, out, (unsigned)size);
+    const long long mask = pj_int(pj_get(root, "audio_roles"), -1);
+    if (mask < 0) snprintf(audio, audio_size, "Unknown");
+    else if (!mask) snprintf(audio, audio_size, "None");
+    else {
+        static const struct { unsigned bit; const char *name; } labels[] = {
+            {PE_AUDIO_ATTACK, "attack"}, {PE_AUDIO_HURT, "hurt"}, {PE_AUDIO_DEATH, "death"}, {PE_AUDIO_OTHER, "other"}
+        };
+        char roles[32] = "";
+        for (unsigned i = 0; i < sizeof labels / sizeof labels[0]; ++i)
+            if (mask & labels[i].bit) {
+                size_t used = strlen(roles);
+                snprintf(roles + used, sizeof roles - used, "%s%s", used ? ", " : "", labels[i].name);
+            }
+        snprintf(audio, audio_size, "%s", roles[0] ? roles : "Unknown");
+    }
     pj_free(root);
     return complete;
 }
 
 const PeImpTarget g_pe_enemy_target = {
-    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 13, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
+    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 14, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
     enemies_accepts, enemies_place, enemies_current, enemies_coverage};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }

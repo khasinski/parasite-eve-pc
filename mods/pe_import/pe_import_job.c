@@ -309,10 +309,11 @@ static int compare_asset_id(const void *id, const void *item) {
 static void report_enemy(PeImportJob *j, FILE *report, const PeImpTarget *tg, const PeImpAsset *asset) {
     if (!tg->coverage) return;
     char detail[200] = "Pack could not be read";
-    const int coverage = tg->coverage(asset, detail, sizeof detail);
+    char audio[64] = "Unknown";
+    const int coverage = tg->coverage(asset, detail, sizeof detail, audio, sizeof audio);
     if (coverage == 1) j->enemies_complete++;
     else j->enemies_partial++;
-    if (report) fprintf(report, "%s\t%s\t%s\n", asset->id, coverage == 1 ? "Complete" : "Incomplete", detail);
+    if (report) fprintf(report, "%s\t%s\t%s\t%s\n", asset->id, coverage == 1 ? "Complete" : "Incomplete", detail, audio);
 }
 
 static void prepare_enemies(PeImportJob *j) {
@@ -324,7 +325,7 @@ static void prepare_enemies(PeImportJob *j) {
     snprintf(path, sizeof path, "%s/enemy-report.tsv", j->store);
     snprintf(temp, sizeof temp, "%s.tmp", path);
     FILE *report = fopen(temp, "wb");
-    if (report) fputs("Asset\tStatus\tAnimation coverage\n", report);
+    if (report) fputs("Asset\tStatus\tAnimation coverage\tAudio coverage\n", report);
     for (int r = 0; r < pe_imp_readers(); r++) {
         const char *game = pe_imp_reader(r)->game;
         int seen = 0;
@@ -344,7 +345,7 @@ static void prepare_enemies(PeImportJob *j) {
             if (tg->current(a, builder)) { j->enemies_current++; report_enemy(j, report, tg, a); continue; }
             if (!anim || strcmp(anim->type, "Animation")) {
                 j->enemies_partial++;
-                if (report) fprintf(report, "%s\tIncomplete\tMissing source animations\n", a->id);
+                if (report) fprintf(report, "%s\tIncomplete\tMissing source animations\tUnavailable\n", a->id);
                 continue;
             }
             snprintf(what, sizeof what, "preparing %s (%s)", a->name, pe_imp_game_title(game));
@@ -354,7 +355,7 @@ static void prepare_enemies(PeImportJob *j) {
                 tg->build(&ctx, a->id, folder, log, sizeof log, why, sizeof why)) {
                 j->enemies_failed++;
                 pe_mod_log("pe_import", "enemy %s: %s", a->id, why);
-                if (report) fprintf(report, "%s\tFailed\t%s\n", a->id, why);
+                if (report) fprintf(report, "%s\tFailed\t%s\tUnavailable\n", a->id, why);
                 continue;
             }
             j->enemies_built++;

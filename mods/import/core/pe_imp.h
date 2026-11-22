@@ -301,7 +301,7 @@ typedef struct {
     /* 1 if its place already holds a finished build of this source file by `builder` */
     int (*current)(const struct PeImpAsset *a, const char *builder);
     /* Optional: read the installed pack's coverage, returning 1 complete, 0 incomplete, or -1 unreadable. */
-    int (*coverage)(const struct PeImpAsset *a, char *out, size_t size);
+    int (*coverage)(const struct PeImpAsset *a, char *out, size_t size, char *audio, size_t audio_size);
 } PeImpTarget;
 /* Where a target builds an asset: its place, else the Wardrobe's pack folder. */
 int pe_imp_target_place(const PeImpTarget *t, const char *packs, const struct PeImpAsset *a, const char *builder,

@@ -71,10 +71,12 @@ int pe_re2_enemies_register(void) {
     };
     for (unsigned i = 0; i < sizeof bodies / sizeof bodies[0]; i++)
         bad |= pe_imp_set_enemy_body("re2", bodies[i].kind, bodies[i].body) != 0;
-    /* Consulted bio2-ds EM21.C, EM36.C and EM3A.C for these base-set moves. */
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x21, (PeImpEnemyMoveHints){5, 9}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x36, (PeImpEnemyMoveHints){9, -1}) != 0;
-    bad |= pe_imp_set_enemy_move_hints("re2", 0x3a, (PeImpEnemyMoveHints){4, -1}) != 0;
+    /* Consulted bio2-ds EM21.C, EM2E.C, EM36.C and EM3A.C for these base-set moves. */
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x21, (PeImpEnemyMoveHints){5, 9, -1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x2e, (PeImpEnemyMoveHints){-1, -1, 1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x36, (PeImpEnemyMoveHints){9, 8, 1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x39, (PeImpEnemyMoveHints){-1, -1, 1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x3a, (PeImpEnemyMoveHints){4, -1, -1}) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x31, 0x33) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x33, 0x34) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x34, 0x36) != 0;
@@ -94,7 +96,7 @@ int pe_re2_enemies_register(void) {
     static const PeImpEnemyCues g1 = {{"sound/enemy21/wave07", "sound/enemy21/wave03", "sound/enemy21/wave12"}};
     static const PeImpEnemyCues g2 = {{"sound/enemy23/wave03", "sound/enemy23/wave02", "sound/enemy23/wave15"}};
     static const PeImpEnemyCues g3 = {{"sound/enemy24/wave20", NULL, NULL}};
-    static const PeImpEnemyCues g4 = {{"sound/enemy25/wave06", "sound/enemy25/wave02", "sound/enemy25/wave01"}};
+    static const PeImpEnemyCues g4 = {{"sound/enemy25/wave06", "sound/enemy25/wave10", "sound/enemy25/wave01"}};
     static const PeImpEnemyCues moth = {{"sound/enemy18/wave09", "sound/enemy18/wave03", "sound/enemy18/wave05"}};
     bad |= pe_imp_add_enemy_cues("re2:enemy/em21", &crow) != 0;
     bad |= pe_imp_add_enemy_cues("re2:enemy/em29", &roach) != 0;

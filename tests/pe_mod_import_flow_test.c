@@ -171,8 +171,8 @@ static void test_enemy_preparation(PeImportJob *j) {
     assert(report);
     int edited_reported = 0, complete_reported = 0;
     while (fgets(why, sizeof why, report)) {
-        edited_reported |= !strcmp(why, "re2:enemy/em10\tIncomplete\tMissing walk, hurt, death, attack\n");
-        complete_reported |= strstr(why, "\tComplete\tAll animation roles covered\n") != NULL;
+        edited_reported |= !strcmp(why, "re2:enemy/em10\tIncomplete\tMissing walk, hurt, death, attack\thurt, death\n");
+        complete_reported |= !strcmp(why, "re2:enemy/em20\tComplete\tAll animation roles covered\tattack, hurt, death\n");
     }
     fclose(report);
     assert(edited_reported && complete_reported);
@@ -236,6 +236,7 @@ static void test_enemy_sounds(const char *store) {
         assert(pack.role[PE_ANIM_HURT] >= 0 && pack.role[PE_ANIM_DIE] >= 0);
         assert((pack.anim[pack.role[PE_ANIM_HURT]].event[0] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_HURT + 1);
         assert((pack.anim[pack.role[PE_ANIM_DIE]].event[0] & PE_ENEMY_EVENT_SOUND) == PE_IMP_CUE_DIE + 1);
+        assert(pe_enemy_pack_audio_roles(&pack) == (PE_AUDIO_ATTACK | PE_AUDIO_HURT | PE_AUDIO_DEATH));
         pe_enemy_pack_free(&pack);
         printf("%s: %s\n", ids[i], summary);
     }
@@ -255,6 +256,10 @@ static void test_enemy_sounds(const char *store) {
         int cues = 0;
         for (int cue = 1; cue < pack.sounds; cue++) cues += pack.sound[cue].frames > 1;
         assert(cues == more[i].cues);
+        if (!strcmp(more[i].id, "re2:enemy/em36")) {
+            assert(pack.speed > 0 && pack.role[PE_ANIM_WALK] >= 0 && pack.role[PE_ANIM_HURT] >= 0);
+            assert(pe_enemy_pack_audio_roles(&pack) == (PE_AUDIO_ATTACK | PE_AUDIO_HURT | PE_AUDIO_DEATH));
+        }
         if (more[i].attack) {
             assert(pack.attacks > 0);
             const PeEnemyAttack *attack = &pack.attack[0];
