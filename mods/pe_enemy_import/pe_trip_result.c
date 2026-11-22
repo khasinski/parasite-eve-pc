@@ -23,15 +23,18 @@ int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
     for (int i = 0; i < room->count && t->count < PE_TRIP_FOES_MAX; i++) {
         const PeReEnemyPlacement *e = &room->enemies[i];
         char asset[96];
-        if (re2 && e->kind == 0x2a && !pe_re2_mr_x_fightable(e)) continue;
+        if (re2 && pe_re2_scene_only_enemy(e)) continue;
         if (e->kind >= 0x40 || pe_imp_enemy_kind_asset(room->game, e->kind, asset, sizeof asset)) continue;
         if (pe_imp_enemy_body(asset) == PE_IMP_ENEMY_SCENE) continue;
-        int duplicate = 0, already_selected = 0;
+        int duplicate = 0, already_selected = 0, adult_g_selected = 0;
         for (int j = 0; j < t->count; j++) {
             duplicate |= t->slot[j] == e->slot;
             already_selected |= kinds[j] == e->kind;
+            adult_g_selected |= kinds[j] == 0x28 && t->slot[j] == 0;
         }
         if (duplicate) continue;
+        if (re2 && e->kind == 0x27 && e->killed_flag == 0xff &&
+            (!adult_g_selected || !pe_re2_g_attached_embryo(room->stage, room->room, e))) continue;
         const PeImpEnemyStart *start = pe_imp_enemy_starts(asset);
         while (start && start->name && (e->behaviour & start->mask) != start->value) start++;
         if (prepare && !prepare(asset, already_selected, start ? start->name : NULL, e, ctx)) continue;
@@ -85,6 +88,14 @@ int pe_trip_approach(const PeReRoomEvent *room, double x, double z, int floor,
         if (!neighbor) break;
         out[count++] = *neighbor;
         selected |= 1u << neighbor->slot;
+    }
+    if (count < PE_TRIP_FOES_MAX && lead->kind == 0x28 && lead->slot == 0) {
+        for (int i = 0; i < room->count; i++) {
+            const PeReEnemyPlacement *e = &room->enemies[i];
+            if (e->floor != floor || !pe_re2_g_attached_embryo(room->stage, room->room, e)) continue;
+            out[count++] = *e;
+            break;
+        }
     }
     return count;
 }

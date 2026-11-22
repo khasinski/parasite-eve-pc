@@ -201,6 +201,19 @@ static int play(unsigned scenario) {
         EXPECT(!pe_imp_enemy_strength(asset, &life, NULL) && life > 0);   /* and the game's own strength */
         printf("headless host: a trip from the street fights its %s (life %d)\n", asset, life);
     }
+    {
+        const PeReEnemyPlacement placements[] = {
+            {.kind = 0x22, .slot = 0, .behaviour = 0x4402, .killed_flag = 0x18},
+            {.kind = 0x27, .slot = 1, .behaviour = 1, .killed_flag = 0xff},
+            {.kind = 0x2d, .slot = 2, .killed_flag = 0xff},
+            {.kind = 0x29, .slot = 3, .killed_flag = 0xff},
+            {.kind = 0x30, .slot = 4, .killed_flag = 0xff},
+            {.kind = 0x37, .slot = 5, .killed_flag = 0xff},
+            {.kind = 0x27, .slot = 6, .behaviour = 3, .killed_flag = 0x81},
+        };
+        PeReRoomEvent mixed = {sizeof mixed, "re2", 1, 1, 0, sizeof placements / sizeof placements[0], placements};
+        EXPECT(pe_trip_arm(&trip, &mixed, NULL, NULL) == 1 && trip.slot[0] == 6);
+    }
     const int placed = room.count;
     const uint8_t flag = room.enemies[0].killed_flag;
     EXPECT(flag != 0xFF);

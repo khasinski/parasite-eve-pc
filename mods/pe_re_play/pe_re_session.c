@@ -7,6 +7,7 @@
 #include "pe_re_session.h"
 #include "pe_re_zone.h"
 #include "pe_imp_rdt.h"
+#include "re_encounter_rooms.h"
 
 /* First rooms: RE2 and RE3 open in the street (room 1-00); RE1 in the mansion's main hall (1-06).
  * Only RE2 has the cameras and collision the runtime uses so far (design doc, phase 4). */
@@ -437,6 +438,15 @@ static unsigned enemy_group(const PeReSession *s) {        /* Sce_em_set's flag 
     return s->stage >= 3 || pe_re_flag(&s->progress.flags, PE_RE_FG_STATUS, 6) ? PE_RE_FG_ENEMY + 1 : PE_RE_FG_ENEMY;
 }
 
+/* EM28.C: the first adult G begins dormant and wakes on Sce_free0. Its Type
+ * 1 re-entry placement is already awake. Wait for the room's entrance to end. */
+static int adult_g_dormant(const PeReSession *s, const int16_t *work) {
+    if (s->stage != 2 || (s->room != 3 && s->room != 9) || work[PE_RE_MEMBER_TYPE] != 0) return 0;
+    const unsigned entrance = s->room == 3 ? 16 : 10;
+    return !(work[PE_RE_MEMBER_SCE_FREE0] & 1) || pe_re_scd_running(&s->run, entrance) ||
+           pe_re_scd_running(&s->run, entrance + 1);
+}
+
 int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max) {
     uint32_t size = 0;
     int n = 0;
@@ -460,8 +470,11 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
                 p->behaviour = (uint16_t)work[PE_RE_MEMBER_TYPE];
                 p->x = work[PE_RE_MEMBER_POS_X], p->y = work[PE_RE_MEMBER_POS_Y], p->z = work[PE_RE_MEMBER_POS_Z];
                 p->dir = work[PE_RE_MEMBER_CDIR_Y], p->floor = (uint8_t)work[PE_RE_MEMBER_NFLOOR];
+                if (p->kind == 0x28 && adult_g_dormant(s, work)) p->behaviour |= 0x4000;
             }
         }
+        if (pe_re2_g_attached_embryo(s->stage, s->room, p) &&
+            (!s->run.works[2][0] || s->run.works[2][PE_RE_MEMBER_ID] != 0x28 || s->run.em_dead[0])) n--;
     }
     return n;
 }

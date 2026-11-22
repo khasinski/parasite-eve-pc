@@ -691,6 +691,23 @@ static void mr_x_standin(PeReScdRun *run, int slot, unsigned room) {
     w[PE_RE_MEMBER_TYPE] &= ~0x4000;
 }
 
+/* EM22.C: the window cameo in 2-01 stays scripted. The other marked entrances
+ * drop into combat after the room script hands the actor off. */
+static void licker_standin(PeReScdRun *run, int slot, unsigned room) {
+    int16_t *w = run->works[2 + slot];
+    if (run->em_dead[slot] || w[PE_RE_MEMBER_SCE_FREE0] != 1) return;
+    const uint16_t type = (uint16_t)w[PE_RE_MEMBER_TYPE];
+    unsigned proc;
+    int floor_y = 0;
+    if (room == 0x10b && slot == 0 && type == 0x4011) proc = 13;
+    else if (room == 0x204 && slot == 1 && type == 0x4510) proc = 9, floor_y = -5400;
+    else if (room == 0x20e && slot == 0 && type == 0x4013) proc = 2;
+    else return;
+    if (pe_re_scd_running(run, proc)) return;
+    w[PE_RE_MEMBER_POS_Y] = (int16_t)floor_y;
+    w[PE_RE_MEMBER_TYPE] &= ~0x4000;
+}
+
 static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
     const int alligator = flags->work[PE_RE_WORK_STAGE] == 3 && flags->work[PE_RE_WORK_ROOM] == 0x0a;
     const int sewer = flags->work[PE_RE_WORK_STAGE] == 4 && flags->work[PE_RE_WORK_ROOM] == 9;
@@ -699,6 +716,10 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
         int16_t *w = run->works[2 + n];
         int16_t *f = &w[PE_RE_MEMBER_SCE_FREE0];
         int order = 0, frames = 0;
+        if (w[0] && w[PE_RE_MEMBER_ID] == 0x22) {
+            licker_standin(run, n, room);
+            continue;
+        }
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x2a) {
             mr_x_standin(run, n, room);
             continue;

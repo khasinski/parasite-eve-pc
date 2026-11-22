@@ -347,6 +347,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   `EM2B.C` was consulted for the final Tyrant's entrance command, damage-gated launcher
   sequence, and persistent defeat.
   `EM2A.C` was consulted for Mr. X's room-specific combat releases and knockdown.
+    `EM22.C`, `EM27.C`, and `EM28.C` were consulted for Licker entrances and adult G offspring behaviour.
   Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

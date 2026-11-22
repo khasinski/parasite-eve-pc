@@ -66,6 +66,120 @@ static void test_mr_x(const PeReGame *game, unsigned player) {
     pe_re_session_end(&scene);
 }
 
+static void test_licker(const PeReGame *game, unsigned player) {
+    char id[PE_IMP_ID_MAX];
+    PeReSession scene = {.game = game, .stage = 1, .room = 4};
+    PeReFlags *flags = &scene.progress.flags;
+    PeReEnemyPlacement enemies[PE_RE_ENEMIES_MAX] = {0}, nearby[PE_TRIP_FOES_MAX];
+    pe_re_logic_id("re2", scene.stage, scene.room, player, id, sizeof id);
+    CHECK(!pe_imp_catalog_roomlogic(s_store, id, &scene.logic, NULL, 0));
+    if (!scene.logic) return;
+    flags->work[PE_RE_WORK_STAGE] = scene.stage;
+    flags->work[PE_RE_WORK_ROOM] = scene.room;
+    pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
+    pe_re_scd_exec(scene.logic, &scene.run, 2, 2);
+    pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+    const int16_t *licker = scene.run.works[3];
+    CHECK(licker[0] && licker[PE_RE_MEMBER_ID] == 0x22 && licker[PE_RE_MEMBER_TYPE] == 0x4510);
+    PeReRoomEvent room = {sizeof room, "re2", scene.stage, scene.room, 0, 0, enemies};
+    room.count = pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX);
+    CHECK(!pe_trip_approach(&room, 32000, 32000, 0, clear_approach, nearby));
+
+    pe_re_scd_exec(scene.logic, &scene.run, 2, 9);
+    int saw_entrance = 0;
+    for (int tick = 0; tick < 600; tick++) {
+        pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+        if (pe_re_scd_running(&scene.run, 9) && licker[PE_RE_MEMBER_SCE_FREE0] == 1) {
+            saw_entrance = 1;
+            CHECK(licker[PE_RE_MEMBER_TYPE] == 0x4510);
+        }
+    }
+    CHECK(saw_entrance && licker[PE_RE_MEMBER_TYPE] == 0x0510);
+    room.count = pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX);
+    CHECK(pe_trip_approach(&room, -14869, -3479, 0, clear_approach, nearby) > 0);
+    CHECK(nearby[0].kind == 0x22 && nearby[0].slot == 1 && nearby[0].killed_flag == 0x3d && nearby[0].y == -5400);
+    CHECK(!pe_re_session_beaten(&scene, 1, 0x3d));
+    CHECK(pe_re_flag(flags, PE_RE_FG_ENEMY, 0x3d));
+    pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
+    pe_re_scd_exec(scene.logic, &scene.run, 2, 2);
+    pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+    room.count = pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX);
+    CHECK(!pe_trip_approach(&room, -14869, -3479, 0, clear_approach, nearby));
+    pe_re_session_end(&scene);
+}
+
+static void test_adult_g(const PeReGame *game, unsigned player) {
+    char id[PE_IMP_ID_MAX];
+    PeReSession scene = {.game = game, .stage = 2, .room = player ? 9 : 3};
+    const unsigned setup = player ? 5 : 11;
+    PeReFlags *flags = &scene.progress.flags;
+    PeReEnemyPlacement enemies[PE_RE_ENEMIES_MAX], nearby[PE_TRIP_FOES_MAX] = {0};
+    pe_re_logic_id("re2", scene.stage, scene.room, player, id, sizeof id);
+    CHECK(!pe_imp_catalog_roomlogic(s_store, id, &scene.logic, NULL, 0));
+    if (!scene.logic) return;
+    flags->work[PE_RE_WORK_STAGE] = scene.stage;
+    flags->work[PE_RE_WORK_ROOM] = scene.room;
+    pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
+    pe_re_scd_exec(scene.logic, &scene.run, 2, setup);
+    pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+    PeReRoomEvent room = {sizeof room, "re2", scene.stage, scene.room, 0, 0, enemies};
+    room.count = pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX);
+    PeTripResult trip;
+    CHECK(!pe_trip_arm(&trip, &room, NULL, NULL));
+    pe_re_scd_exec(scene.logic, &scene.run, 2, player ? 10 : 16);
+    for (int tick = 0; tick < 1200; tick++) pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+    CHECK(scene.run.works[2][PE_RE_MEMBER_SCE_FREE0] & 1);
+    room.count = pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX);
+    int found = 0;
+    for (int i = 0; i < room.count; i++) {
+        const PeReEnemyPlacement *adult = &enemies[i];
+        if (adult->kind != 0x28 || adult->slot != 0) continue;
+        found = 1;
+        CHECK(pe_trip_approach(&room, adult->x, adult->z, adult->floor, clear_approach, nearby) == 2);
+        CHECK(nearby[0].killed_flag == 0x62 && nearby[1].kind == 0x27 && nearby[1].killed_flag == 0xff);
+    }
+    CHECK(found);
+    CHECK(pe_trip_arm(&trip, &room, NULL, NULL) == 2 && trip.slot[0] == 0 && trip.slot[1] == 1);
+    CHECK(!pe_re_session_beaten(&scene, 0, 0x62));
+    CHECK(pe_re_flag(flags, PE_RE_FG_ENEMY, 0x62));
+    room.count = pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX);
+    for (int i = 0; i < room.count; i++) CHECK(enemies[i].kind != 0x28 && enemies[i].kind != 0x27);
+    pe_re_session_end(&scene);
+}
+
+static void test_licker_variants(const PeReGame *game, unsigned player) {
+    const struct {
+        unsigned stage, room, cut, setup, entrance;
+        uint16_t initial, released;
+    } placements[] = {
+        {0, 0x0b, 0, 4, 13, 0x4011, 0x0011},
+        {1, 0x0e, 3, 0, 2, 0x4013, 0x0013},
+        {1, 0x01, 0, 2, 4, 0x4402, 0x4402},
+    };
+    for (int i = 0; i < 3; i++) {
+        char id[PE_IMP_ID_MAX];
+        PeReSession scene = {.game = game, .stage = placements[i].stage, .room = placements[i].room};
+        PeReFlags *flags = &scene.progress.flags;
+        pe_re_logic_id("re2", scene.stage, scene.room, player, id, sizeof id);
+        CHECK(!pe_imp_catalog_roomlogic(s_store, id, &scene.logic, NULL, 0));
+        if (!scene.logic) continue;
+        flags->work[PE_RE_WORK_STAGE] = scene.stage;
+        flags->work[PE_RE_WORK_ROOM] = scene.room;
+        flags->work[PE_RE_WORK_CUT] = (int16_t)placements[i].cut;
+        pe_re_flag_set(flags, PE_RE_FG_STATUS, 1, !scene.stage);
+        pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
+        if (placements[i].setup) pe_re_scd_exec(scene.logic, &scene.run, 2, placements[i].setup);
+        pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+        const int16_t *licker = scene.run.works[2];
+        CHECK(licker[0] && licker[PE_RE_MEMBER_ID] == 0x22 && licker[PE_RE_MEMBER_TYPE] == placements[i].initial);
+        if (!pe_re_scd_running(&scene.run, placements[i].entrance))
+            pe_re_scd_exec(scene.logic, &scene.run, 2, placements[i].entrance);
+        for (int tick = 0; tick < 1200; tick++) pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+        CHECK(licker[PE_RE_MEMBER_SCE_FREE0] == 1 && licker[PE_RE_MEMBER_TYPE] == placements[i].released);
+        pe_re_session_end(&scene);
+    }
+}
+
 static void test_alligator(const PeReGame *game, unsigned player) {
     char id[PE_IMP_ID_MAX];
     PeReSession boss = {.game = game, .stage = 3, .room = 0x0a};
@@ -468,6 +582,9 @@ int main(void) {
     CHECK(!re_headless_smoke(s_store, scenario));
     test_scene_actors(scenario);
     test_mr_x(g, scenario);
+    test_licker(g, scenario);
+    test_licker_variants(g, scenario);
+    test_adult_g(g, scenario);
     test_alligator(g, scenario);
     test_lift_boss(g, scenario);
     test_final_tyrant(g, scenario);
