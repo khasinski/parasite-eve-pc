@@ -2,7 +2,8 @@
  * the street, it goes where a player can go and does what a player does. It takes doors (locks
  * included: a key opens what it opens), picks up what lies in reach, uses a held item where the
  * room arms it, and lets the room's scripts run between moves. Rooms are left only through their
- * doors. It stops when nothing new opens up, and reports how far it got: rooms reached, items
+ * doors. It manages its pocket at live item boxes and verifies saves at typewriters. It stops
+ * when nothing new opens up, and reports how far it got: rooms reached, items
  * found, doors still locked and why, the first typewriter and the doors that lead to it.
  *
  * The route (the doors to the first typewriter, by room and door index) is written to
@@ -40,7 +41,7 @@ typedef struct {
     int door_state[DOORS], door_tried_at[DOORS], door_to[DOORS], door_zone[DOORS], door_key[DOORS];
     char door_said[DOORS][160];
     int searched_at;                    /* progress when its pickups and item spots were last done */
-    int typewriter;
+    int typewriter, item_box;
     int nevent, event_zone[EVENTS], event_to[EVENTS];   /* examining zone event_zone took her to event_to */
     int checkpointed;
     int unfinished;                     /* a zone took her away before search was done here */
@@ -51,45 +52,26 @@ static Room s_room[ROOMS];
 static int s_progress = 1;              /* goes up with each item taken or used: locked doors are retried */
 static int s_order;
 static unsigned char s_needed[256];     /* items a door or an item spot asked for: never put away */
-static int s_box_trips;
-static int s_tried_use[256];            /* progress when a use left the item in the pocket */                 /* times it used the item box away from a box (a shortcut) */
+static int s_box_visits, s_saves, s_saved_box;
+static int s_box_item = -1, s_box_origin, s_box_return = -1;
+static int s_tried_use[256];            /* progress when a use left the item in the pocket */
 
-/* Make room in a full pocket: into the box goes what nothing has asked for, stacks first. 0, or -1. */
-static int make_room(PeReSession *s) {
-    PeReProgress *p = &s->progress;
-    int pick = -1;
-    for (int i = 0; i < p->held; i++) {
-        if (s_needed[p->pocket[i].item & 0xFF]) continue;
-        if (pick < 0 || p->pocket[i].count > p->pocket[pick].count) pick = i;
-    }
-    if (pick < 0 && p->held) pick = 0;                   /* all asked for: the oldest (the box hands it back when asked) */
-    if (pick < 0) return -1;
-    if (p->boxed >= PE_RE_BOX_MAX)                       /* the box full (single herbs take a slot each): a player */
-        for (int k = 0; k < p->boxed; k++)               /* would use one up; the bot drops one nothing asked for */
-            if (!s_needed[p->box[k].item & 0xFF]) {
-                memmove(&p->box[k], &p->box[k + 1], sizeof *p->box * (size_t)(p->boxed - k - 1));
-                p->boxed--;
-                break;
-            }
-    if (pe_re_box_put(p, pick)) return -1;
-    s_box_trips++;
-    return 0;
+static int key_of(const PeReSession *s) { return (int)(s->stage << 8 | (s->room & 0xFF)); }
+
+static void request_box(const PeReSession *s, int item) {
+    if (s->player_id == 12 || s_box_item > 0 || s_box_item == item) return;
+    s_box_item = item;
+    s_box_origin = key_of(s);
 }
 
-/* `item` back from the box into the pocket (room made first). 0, or -1 if it isn't there. */
-static int from_box(PeReSession *s, uint16_t item) {
-    PeReProgress *p = &s->progress;
-    for (int i = 0; i < p->boxed; i++)
-        if (p->box[i].item == item) {
-            if (p->held >= PE_RE_POCKET_SLOTS && make_room(s)) return -1;
-            if (pe_re_box_take(p, i)) return -1;
-            s_box_trips++;
-            return 0;
-        }
+static int boxed_item(const PeReProgress *p, unsigned item) {
+    for (int i = 0; i < p->boxed; i++) if (p->box[i].item == item) return i;
     return -1;
 }
 
-static int key_of(const PeReSession *s) { return (int)(s->stage << 8 | (s->room & 0xFF)); }
+static void request_box_item(const PeReSession *s, uint16_t item) {
+    if (boxed_item(&s->progress, item) >= 0) request_box(s, item);
+}
 static void zone_centre(const PeImpZone *z, double *x, double *z_) {
     *x = *z_ = 0;
     for (int c = 0; c < 4; c++) *x += z->x[c] / 4.0, *z_ += z->z[c] / 4.0;
@@ -101,6 +83,7 @@ static const char *room_name(int key, char *out, size_t n);
 static void handed(PeReSession *s) {
     char here[8];
     if (s->zone.sce != PE_RE_ZONE_WINDOWS) return;
+    if (key_of(s) == 0x100 && !pe_re_has(&s->progress, 0x35)) request_box_item(s, 0x35); /* Blue Card */
     PeReComputer c = pe_re_session_computer(s, 0);
     if (c == PE_RE_COMPUTER_ASK) c = pe_re_session_computer(s, 1);
     fprintf(s_log, "  %s: computer: %s\n", room_name(key_of(s), here, sizeof here), s->said);
@@ -242,6 +225,80 @@ static const char *room_name(int key, char *out, size_t n) {
     return out;
 }
 
+/* Check the live action zone again, even when the room is already known to the planner. */
+static int open_fixture(PeReSession *s, unsigned kind) {
+    uint32_t count = 0;
+    char why[200];
+    pe_imp_logic_section(s->logic, PE_IMP_LOGIC_TRIG, &count, NULL);
+    for (uint32_t i = 0; i < count; i++) {
+        PeImpTrigger trigger;
+        if (pe_imp_logic_trigger(s->logic, i, &trigger) || !pe_re_scd_live(&s->run, trigger.at) ||
+            pe_re_zone_kind(&s->run, trigger.zone.id, trigger.zone.sce, NULL) != (int)kind) continue;
+        if (examine(s, &trigger.zone, why, sizeof why) == PE_RE_ZONE && s->zone.sce == kind) return 1;
+    }
+    return 0;
+}
+
+static int visit_box(PeReSession *s) {
+    if (!open_fixture(s, PE_RE_ZONE_ITEMBOX)) return 0;
+    PeReProgress *p = &s->progress;
+    const int slot = s_box_item > 0 ? boxed_item(p, (unsigned)s_box_item) : -1;
+    if (s_box_item > 0 && slot < 0) return 0;
+    if (s_box_item == 0 || p->held >= PE_RE_POCKET_SLOTS) {
+        int pick = -1;
+        for (int i = 0; i < p->held; i++) {
+            if (p->pocket[i].item == PE_RE2_INK_RIBBON && !s_saves) continue;
+            if (pick < 0 || s_needed[p->pocket[i].item & 0xff] < s_needed[p->pocket[pick].item & 0xff]) pick = i;
+        }
+        if (pe_re_box_put(p, pick)) return 0;
+    }
+    if (s_box_item > 0 && pe_re_box_take(p, slot)) return 0;
+    char room[8];
+    fprintf(s_log, "  %s: used an item box%s\n", room_name(key_of(s), room, sizeof room),
+            s_box_item > 0 ? " to retrieve a needed item" : " to make pocket space");
+    s_box_visits++;
+    s_box_return = s_box_origin;
+    s_room[s_box_return].searched_at = 0;
+    for (int i = 0; s_box_item > 0 && i < DOORS; i++)
+        if (s_room[s_box_return].door_key[i] == s_box_item) s_room[s_box_return].door_tried_at[i] = 0;
+    s_box_item = -1;
+    return 1;
+}
+
+static int needs_save(const PeReSession *s) {
+    return s->player_id != 12 && (!s_saves || (s->progress.boxed && !s_saved_box));
+}
+
+static void save_at_typewriter(PeReSession *s) {
+    if (!needs_save(s) || !pe_re_has(&s->progress, PE_RE2_INK_RIBBON) ||
+        !open_fixture(s, PE_RE_ZONE_SAVE)) return;
+    uint8_t bytes[PE_RE_SAVE_SIZE];
+    PeReSaved saved;
+    PeReSession reloaded;
+    char why[200], room[8];
+    CHECK(!pe_re_lose(&s->progress, PE_RE2_INK_RIBBON, 1));
+    pe_re_save_encode(s, 1, bytes);
+    if (pe_re_save_decode(bytes, &saved) || pe_re_session_resume(&reloaded, s_store, &saved, why, sizeof why)) {
+        CHECK(0 && "typewriter save could not be resumed");
+        return;
+    }
+    CHECK(key_of(s) == key_of(&reloaded));
+    CHECK(s->progress.held == reloaded.progress.held && !memcmp(s->progress.pocket, reloaded.progress.pocket,
+          sizeof *s->progress.pocket * (size_t)s->progress.held));
+    CHECK(s->progress.boxed == reloaded.progress.boxed && !memcmp(s->progress.box, reloaded.progress.box,
+          sizeof *s->progress.box * (size_t)s->progress.boxed));
+    CHECK(!memcmp(s->progress.unlocked, reloaded.progress.unlocked, sizeof s->progress.unlocked));
+    const unsigned banks[] = {PE_RE_FG_ENEMY, PE_RE_FG_ENEMY + 1, PE_RE_FG_KEY};
+    for (size_t i = 0; i < sizeof banks / sizeof *banks; i++)
+        CHECK(!memcmp(s->progress.flags.bits[banks[i]], reloaded.progress.flags.bits[banks[i]],
+              sizeof s->progress.flags.bits[banks[i]]));
+    pe_re_session_end(&reloaded);
+    fprintf(s_log, "  %s: verified a typewriter save (%d items in the box)\n",
+            room_name(key_of(s), room, sizeof room), s->progress.boxed);
+    s_saves++;
+    s_saved_box |= s->progress.boxed > 0;
+}
+
 /* In the room: everything in reach picked up, and held items used where the room takes them. */
 /* Examining zone `zone` in room `from` took her to `to`: remember it (the planner can use it) */
 static void note_event(int from, int zone, int to, FILE *log) {
@@ -328,7 +385,7 @@ static void search(PeReSession *s, FILE *log) {
     char why[200], name[48], here[8];
     if (r->searched_at == s_progress) return;
     r->searched_at = s_progress;
-    r->unfinished = 0;
+    r->unfinished = r->item_box = 0;
     room_name(key_of(s), here, sizeof here);
     for (int pass = 0, took = 1; took && pass < 8; pass++) {
         uint32_t n = 0;
@@ -339,6 +396,11 @@ static void search(PeReSession *s, FILE *log) {
             if (pe_imp_logic_pickup(s->logic, i, &pk) || !pe_re_scd_live(&s->run, pk.at) ||
                 pe_re_pickup_gone(s->logic, &s->run, &s->progress, &pk))
                 continue;
+            /* Route exploration spends its slots on progression items and a ribbon for the save. */
+            if (pk.item != PE_RE2_INK_RIBBON &&
+                (pk.item < 0x2f || pk.item >= 0x64 || pk.item == 0x31 || pk.item == 0x57 ||
+                 (pk.item >= 0x44 && pk.item <= 0x46) || pk.item == 0x50)) continue;
+            if (pk.item == PE_RE2_INK_RIBBON && (!needs_save(s) || pe_re_has(&s->progress, PE_RE2_INK_RIBBON))) continue;
             {   /* a placeholder (no area): its script hands it over (aot_on), nobody stands there */
                 int minx = pk.zone.x[0], maxx = minx, minz = pk.zone.z[0], maxz = minz;
                 for (int c = 1; c < 4; c++) {
@@ -356,10 +418,7 @@ static void search(PeReSession *s, FILE *log) {
                 fprintf(log, "  %s: %s (item 0x%02X x%u, flag %u)\n", here, s->said, (unsigned)pk.item,
                         (unsigned)pk.count, (unsigned)pk.flag);
                 took = 1, s_progress++;
-            } else if (!strncmp(s->said, "No room", 7) && s->progress.held && !make_room(s)) {
-                fprintf(log, "  %s: pocket full: something nothing needs went to the box\n", here);
-                took = 1;
-            }
+            } else if (!strncmp(s->said, "No room", 7)) request_box(s, 0);
         }
     }
     /* two halves held (pocket or box): put together, as a player does on the status screen */
@@ -368,7 +427,8 @@ static void search(PeReSession *s, FILE *log) {
             const uint16_t a = i < s->progress.held ? s->progress.pocket[i].item : s->progress.box[i - s->progress.held].item;
             const uint16_t b = j < s->progress.held ? s->progress.pocket[j].item : s->progress.box[j - s->progress.held].item;
             if (a == b || !pe_re_combined(s, a, b)) continue;
-            if ((!pe_re_has(&s->progress, a) && from_box(s, a)) || (!pe_re_has(&s->progress, b) && from_box(s, b))) continue;
+            if (!pe_re_has(&s->progress, a)) { request_box_item(s, a); continue; }
+            if (!pe_re_has(&s->progress, b)) { request_box_item(s, b); continue; }
             if (pe_re_session_combine(s, a, b)) {
                 fprintf(log, "  %s: %s\n", here, s->said);
                 s_progress++;
@@ -383,10 +443,11 @@ static void search(PeReSession *s, FILE *log) {
         if (pe_imp_logic_trigger(s->logic, i, &t) || !pe_re_scd_live(&s->run, t.at)) continue;
         const int kind = pe_re_zone_kind(&s->run, t.zone.id, t.zone.sce, t.data);
         if (kind == PE_RE_ZONE_SAVE) r->typewriter = 1;
+        if (kind == PE_RE_ZONE_ITEMBOX) r->item_box = 1;
         if (kind != PE_RE_ZONE_FLAG || (t.data[0] | t.data[1] << 8) != PE_RE_FG_USE || !t.data[4]) continue;
         const uint16_t item = (uint16_t)(t.data[2] | t.data[3] << 8);
         s_needed[item & 0xFF] = 1;
-        if (!pe_re_has(&s->progress, item) && from_box(s, item)) continue;
+        if (!pe_re_has(&s->progress, item)) { request_box_item(s, item); continue; }
         if (s_tried_use[item & 0xFF] == s_progress) continue;
         double cx, cz, x, z;
         zone_centre(&t.zone, &cx, &cz);
@@ -409,7 +470,8 @@ static void search(PeReSession *s, FILE *log) {
             else s_progress++;
         }
     }
-    if (s->progress.held >= PE_RE_POCKET_SLOTS) make_room(s);   /* a scene may hand her something */
+    if (s->progress.held >= PE_RE_POCKET_SLOTS) request_box(s, 0);   /* a scene may hand her something */
+    if (r->typewriter) save_at_typewriter(s);
     /* walk-on events: step into the middle of each (the game checks underfoot every frame) */
     for (uint32_t i = 0; i < n; i++) {
         PeImpTrigger t;
@@ -551,8 +613,7 @@ static int take(PeReSession *s, int i, FILE *log) {
     if (key_of(s) != from) c = PE_RE_ROOM;                /* she's somewhere else, whatever the step said */
     if (c != PE_RE_ROOM && d.lock_type && d.lock_type < 254) {     /* a key: remember it, fetch it from the box */
         s_needed[d.lock_type] = 1;
-        if (!pe_re_has(&s->progress, d.lock_type) && !from_box(s, d.lock_type)) c = examine(s, &d.zone, why, sizeof why);
-        if (key_of(s) != from) c = PE_RE_ROOM;
+        if (!pe_re_has(&s->progress, d.lock_type)) request_box_item(s, d.lock_type);
     }
     if (c != PE_RE_ROOM) settle(s, 30);                   /* a scene the door started may take her out */
     if (key_of(s) != from) c = PE_RE_ROOM;
@@ -585,35 +646,37 @@ static int key_door(const PeReSession *s, const Room *r, int i) {
     const int key = r->door_key[i];
     if (!key || r->door_state[i] != DOOR_LOCKED || r->door_tried_at[i] >= s_progress) return 0;
     if (pe_re_has(&s->progress, (uint16_t)key)) return 1;
-    for (int k = 0; k < s->progress.boxed; k++) if (s->progress.box[k].item == key) return 1;
-    return 0;
+    return boxed_item(&s->progress, (unsigned)key) >= 0;
 }
 
-/* The nearest room (through doors known to open) with a door worth trying (one a held key opens
- * first); its first step. */
-static int plan(const PeReSession *s, int from, int *first_door, int *goal) {
+/* First step toward the nearest usable box, an interrupted room, or a door worth trying. */
+enum { PLAN_EXPLORATION = -1, PLAN_ITEM_BOX = -2 };
+static int plan(const PeReSession *s, int from, int target, int *first_door, int *goal) {
     static int prev[ROOMS], prev_door[ROOMS], queue[ROOMS];
     static unsigned char seen[ROOMS];
-    for (int keys = 1; keys >= 0; keys--) {
+    for (int keys = target == PLAN_EXPLORATION; keys >= 0; keys--) {
     int head = 0, tail = 0;
     memset(seen, 0, sizeof seen);
     queue[tail++] = from, seen[from] = 1, prev[from] = -1;
     while (head < tail) {
         const int k = queue[head++];
         const Room *r = &s_room[k];
-        for (int i = 0; i < DOORS; i++)
+        int stops = target == PLAN_ITEM_BOX ? r->item_box : k == target;
+        for (int i = 0; target == PLAN_EXPLORATION && !stops && i < DOORS; i++)
             if (keys ? key_door(s, r, i)
                      : ((r->unfinished || r->fight) && k != from) ? 1
                      : r->door_state[i] == DOOR_UNTRIED ? r->searched_at > 0
-                                                       : r->door_state[i] != DOOR_OPENS && r->door_tried_at[i] < s_progress) {
-                *goal = k, *first_door = -1;
-                if (k != from) {                              /* back to the first door out of `from` */
-                    int at = k;
-                    while (prev[at] != from) at = prev[at];
-                    *first_door = prev_door[at];
-                }
-                return 1;
+                                                       : r->door_state[i] != DOOR_OPENS && r->door_tried_at[i] < s_progress)
+                stops = 1;
+        if (stops) {
+            *goal = k, *first_door = -1;
+            if (k != from) {                              /* back to the first door out of `from` */
+                int at = k;
+                while (prev[at] != from) at = prev[at];
+                *first_door = prev_door[at];
             }
+            return 1;
+        }
         for (int i = 0; i < DOORS + r->nevent; i++) {         /* doors that open, then zones that took her */
             const int to = i < DOORS ? (r->door_state[i] == DOOR_OPENS ? r->door_to[i] : -1) : r->event_to[i - DOORS];
             if (to >= 0 && !seen[to] && tail < ROOMS) seen[to] = 1, prev[to] = k, prev_door[to] = i, queue[tail++] = to;
@@ -781,7 +844,14 @@ int main(void) {
         if (s_room[here].typewriter && first_typewriter < 0) first_typewriter = here;
         for (int i = door_count(&s); i < DOORS; i++) s_room[here].door_state[i] = DOOR_OPENS, s_room[here].door_to[i] = here;
         int door, goal;
-        if (!plan(&s, here, &door, &goal)) {
+        if (s_box_return == here) s_box_return = -1;
+        const int target = s_box_item >= 0 ? PLAN_ITEM_BOX : s_box_return;
+        const int storage_route = target != PLAN_EXPLORATION && plan(&s, here, target, &door, &goal);
+        if (storage_route && goal == here) {
+            if (!visit_box(&s)) s_room[here].item_box = 0;
+            continue;
+        }
+        if (!storage_route && !plan(&s, here, PLAN_EXPLORATION, &door, &goal)) {
             /* Stuck: every way out of here looked shut. Try this room's doors again, once per bit of progress. */
             static int stuck_at = -1, stuck_in[ROOMS];          /* progress+1 when stuck in each room */
             if (stuck_at == s_progress && stuck_in[here] == s_progress + 1) {   /* nothing new since, and here before: done */
@@ -975,7 +1045,8 @@ int main(void) {
     if (ended >= 0) printf("ending: reached in %s\n", room_name(ended, a, sizeof a));
     else printf("ending: not reached\n");
     printf("route: %d rooms reached in %d moves, %d doors still locked, %d not set up by their scripts; pocket: %s; "
-           "item box used away from a box %d times\n", rooms, moves, locked, not_set, pocket[0] ? pocket : "empty", s_box_trips);
+           "%d item-box visits, %d typewriter saves verified%s\n", rooms, moves, locked, not_set,
+           pocket[0] ? pocket : "empty", s_box_visits, s_saves, s_saved_box ? " (including boxed items)" : "");
     if (first_typewriter >= 0) {
         int path[64], n = 0;
         for (int k = first_typewriter; k >= 0 && n < 64; k = s_room[k].parent) path[n++] = k;
@@ -991,7 +1062,12 @@ int main(void) {
     } else {
         printf("first typewriter: not reached\n");
     }
-    CHECK(start && *start ? rooms >= 1 : rooms >= 5 && first_typewriter >= 0);   /* a checkpoint may be past the typewriters */
+    CHECK(start && *start ? rooms >= 1 : rooms >= 5 && (s.player_id == 12 || first_typewriter >= 0));
+    if ((!start || !*start) && !getenv("PE_TEST_RE_SET")) {
+        CHECK(ended >= 0);
+        if (s.player_id == 12) CHECK(!s_box_visits && !s_saves);
+        else CHECK(s_saves > 0 && s_saved_box);
+    }
     {   /* what the room scripts still skip, most met first (what events the runtime doesn't play yet) */
         int order[256];
         for (int i = 0; i < 256; i++) order[i] = i;
