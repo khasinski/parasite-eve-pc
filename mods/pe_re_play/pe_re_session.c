@@ -473,8 +473,9 @@ int pe_re_session_ready_boss(const PeReSession *s) {
     const int alligator = s->stage == 3 && s->room == 0x0a;
     const int sewer = s->stage == 4 && s->room == 9;
     const int lift = s->stage == 5 && s->room == 0x17;
+    const int tyrant = s->stage == 6 && s->room == 2;
     const int train = s->stage == 6 && s->room == 4;
-    if (!alligator && !sewer && !lift && !train) return -1;
+    if (!alligator && !sewer && !lift && !tyrant && !train) return -1;
     const int16_t *work = s->run.works[2];
     if (!work[0] || s->run.em_dead[0]) return -1;
     const unsigned kind = (unsigned)work[PE_RE_MEMBER_ID];
@@ -485,6 +486,8 @@ int pe_re_session_ready_boss(const PeReSession *s) {
     if (sewer && kind == 0x31 && (command & 4)) return 0;
     if (sewer && kind == 0x33 && command == 3 && (work[PE_RE_MEMBER_SCE_FREE1] & 1)) return 0;
     if (lift && kind == 0x34 && s->run.em_ready[0]) return 0;
+    /* EM2B.C: the platform entrance's last command hands the Tyrant over to combat. */
+    if (tyrant && kind == 0x2b && command == 3 && !pe_re_scd_running(&s->run, 7)) return 0;
     if (train && kind == 0x36 && (command & 1) && !(command & 2) &&
         !(work[PE_RE_MEMBER_TYPE] & 0x8000)) return 0;
     return -1;

@@ -43,8 +43,11 @@ static void test_alligator(const PeReGame *game, unsigned player) {
     CHECK(pe_re_session_ready_boss(&boss) == -1);
 
     pe_re_scd_exec(boss.logic, &boss.run, 2, 2);
-    for (int ticks = 0; ticks < 800 && pe_re_session_ready_boss(&boss) < 0; ticks++)
+    for (int ticks = 0; ticks < 800 && pe_re_session_ready_boss(&boss) < 0; ticks++) {
+        /* Claire A's partner scene waits for the approach to cross these two camera zones. */
+        if (player) flags->work[PE_RE_WORK_CUT] = ticks < 300 ? 12 : 10;
         pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
+    }
     CHECK(pe_re_session_ready_boss(&boss) == 0);
     CHECK(!pe_re_session_beaten(&boss, 0, 0));
     pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
@@ -52,6 +55,32 @@ static void test_alligator(const PeReGame *game, unsigned player) {
     CHECK(pe_re_session_ready_boss(&boss) == -1 && pe_re_flag(flags, PE_RE_FG_ENEMY + 1, 0));
     pe_re_scd_run(boss.logic, flags, NULL, &boss.run);
     CHECK(!boss.run.works[2][0]);
+    pe_re_session_end(&boss);
+}
+
+static void test_final_tyrant(const PeReGame *game, unsigned player) {
+    char id[PE_IMP_ID_MAX];
+    PeReSession boss = {.game = game, .stage = 6, .room = 2};
+    PeReFlags *flags = &boss.progress.flags;
+    pe_re_logic_id("re2", boss.stage, boss.room, player, id, sizeof id);
+    CHECK(!pe_imp_catalog_roomlogic(s_store, id, &boss.logic, NULL, 0));
+    if (!boss.logic) return;
+    flags->work[PE_RE_WORK_STAGE] = boss.stage;
+    flags->work[PE_RE_WORK_ROOM] = boss.room;
+    pe_re_flag_set(flags, PE_RE_FG_STATUS, 0, player != 0);
+    pe_re_flag_set(flags, PE_RE_FG_STATUS, 1, 1);
+    pe_re_scd_run(boss.logic, flags, NULL, &boss.run);
+    CHECK(boss.run.works[2][0] && boss.run.works[2][PE_RE_MEMBER_ID] == 0x2b);
+    CHECK(pe_re_session_ready_boss(&boss) == -1);
+
+    pe_re_scd_exec(boss.logic, &boss.run, 2, 7);
+    for (int ticks = 0; ticks < 1000 && pe_re_session_ready_boss(&boss) < 0; ticks++)
+        pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
+    CHECK(pe_re_session_ready_boss(&boss) == 0);
+    CHECK(!pe_re_session_beaten(&boss, 0, 0x28));
+    for (int ticks = 0; ticks < 500 && !pe_re_flag(flags, 4, 0x97); ticks++)
+        pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
+    CHECK(pe_re_flag(flags, 4, 0x97) && pe_re_session_ready_boss(&boss) == -1);
     pe_re_session_end(&boss);
 }
 
@@ -385,6 +414,7 @@ int main(void) {
     test_scene_actors(scenario);
     test_alligator(g, scenario);
     test_lift_boss(g, scenario);
+    test_final_tyrant(g, scenario);
 
     /* every room reachable through doors from the street, breadth first */
     static uint32_t queue[ROOMS_MAX];
