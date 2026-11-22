@@ -21,6 +21,7 @@
 #include "pe_re_session.h"
 #include "pe_re_zone.h"
 #include "pe_src_re2.h"
+#include "re_encounter_rooms.h"
 
 static int s_fail;
 #define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); s_fail = 1; } } while (0)
@@ -671,6 +672,7 @@ static int foes_here(PeReSession *s, int beat) {
     int n = 0;
     for (int k = 0; k < nfoes; k++) {                     /* each once (a boss has no killed flag) */
         if (foes[k].slot >= 16 || foes[k].kind >= 0x40 || s->run.em_dead[foes[k].slot]) continue;
+        if (pe_re2_scene_only_enemy(&foes[k])) continue;
         if (!beat) { n += !(s_beaten[key_of(s)] >> foes[k].slot & 1); continue; }   /* not fought here yet */
         if (!pe_re_session_beaten(s, foes[k].slot, foes[k].killed_flag)) n++, s_beaten[key_of(s)] |= (uint16_t)(1u << foes[k].slot);
     }

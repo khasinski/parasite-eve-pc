@@ -25,11 +25,11 @@ int pe_enemy_build_model(PeEnemyPack *p, const PeImpModel *m, int *skipped, char
 /* Its files into `folder` (created): what pe_enemy_pack_load reads back. */
 int pe_enemy_write(const PeEnemyPack *p, const char *folder, char *why, size_t n);
 
+/* The pack folder (under pe_enemies) an asset builds into: "re2:enemy/em31" -> "re2-em31". 0 or -1. */
+int pe_enemy_pack_name(const char *asset_id, char *out, size_t n);
 /* The "enemies" target for F1 > Import ("Build as an enemy"). */
 int pe_enemy_target_register(void);
+int pe_enemy_add_room_move(PeEnemyPack *pack, const PeImpAnimation *moves, const char *name);
 extern const PeImpTarget g_pe_enemy_target;
-/* Find an installed pack for a room model, or build it from the local import catalog. */
-int pe_enemy_prepare_pack(const char *store, const char *game, const char *asset_id,
-                          char *folder, size_t fn, char *why, size_t n);
 
 #endif

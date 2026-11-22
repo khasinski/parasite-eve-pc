@@ -22,6 +22,7 @@ typedef struct PeBattleActionPolicyApi { int (*partial_actions)(void); } PeBattl
  *   "bp"        v1  pe_bp       BP upgrades: ranks, quotes, checked purchases, pauses (preview)
  *   "re_play"   v1  pe_re_play  an imported game being played: its room, enemy placements, defeats
  *                               (game-neutral: its types and events are in re_play_api.h)
+ *   "enemy_build" v1 pe_import  an imported enemy model built into an enemy pack now, if it isn't
  *
  * Providers (an import pack, a randomizer) register at their init, so they list "pe_collection"
  * in their PeMod requires. Keys are stable names saved in the player's profile ("pe1/rat",
@@ -469,5 +470,17 @@ typedef struct PeBpApi {
     int (*grant_pool)(uint32_t bp, const char *by);
     int (*pause)(const char *mod_id, uint32_t features);    /* 0 ok, -1 refused (table full, no id) */
 } PeBpApi;
+
+/* "enemy_build" v1 (pe_import): an enemy model from the import catalog ("re2:enemy/em31") built as an
+ * enemy pack by the "enemies" target, unless a current build is there already (its profile.made
+ * keeps a player's own profile.json). Main thread, outside a battle; it can take a moment. Where
+ * the pack goes is the target's to say (pe_enemy_import). 0, or -1 with the reason (not in the
+ * catalog, the importer busy, the build refused). */
+#define PE_ENEMY_BUILD_SERVICE "enemy_build"
+#define PE_ENEMY_BUILD_SERVICE_VERSION 1
+typedef struct PeEnemyBuildApi {
+    uint32_t struct_size;
+    int (*ensure)(const char *asset_id, char *why, size_t n);
+} PeEnemyBuildApi;
 
 #endif

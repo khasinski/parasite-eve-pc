@@ -221,6 +221,8 @@ int pe_enemy_pack_load(PeEnemyPack *p, const char *dir, char *err, unsigned es) 
     if (json_int(j, "format", 0, 0, 99) != 1) { fail(err, es, "format must be 1", "enemy.json"); goto done; }
     s = json_str(j, "name");
     snprintf(p->name, sizeof p->name, "%s", s && *s ? s : p->folder);
+    if ((s = json_str(j, "source"))) snprintf(p->source, sizeof p->source, "%s", s);
+    if ((s = json_str(j, "next_form"))) snprintf(p->next_form, sizeof p->next_form, "%s", s);
     p->hp = json_int(j, "hp", 100, 1, 99999);
     p->exp = json_int(j, "exp", 0, 0, 99999);
     p->defense = json_int(j, "defense", -1, -1, 9999);
@@ -229,6 +231,7 @@ int pe_enemy_pack_load(PeEnemyPack *p, const char *dir, char *err, unsigned es) 
     {   /* how it fights: missing fields keep plain defaults, so format 1 packs still load */
         const cJSON *b = cJSON_GetObjectItemCaseSensitive(j, "behavior");
         p->speed = json_int(b, "speed", 10, 0, 200);
+        p->altitude = json_int(b, "altitude", 0, 0, 1000);
         p->charge = json_int(b, "charge", 45, 1, 2000);
         p->radius = json_int(b, "radius", 250, 20, 4000);
         p->stagger = json_int(b, "stagger", 1, 0, 1);
@@ -260,11 +263,53 @@ int pe_enemy_pack_load(PeEnemyPack *p, const char *dir, char *err, unsigned es) 
         a->hit = json_int(it, "hit", p->anim[a->anim].frames / 2, 0, p->anim[a->anim].frames - 1);
         p->attacks++;
     }
+    p->hurt_sound = json_int(j, "hurt_sound", 0, 0, p->sounds ? p->sounds - 1 : 0);
+    p->death_sound = json_int(j, "death_sound", 0, 0, p->sounds ? p->sounds - 1 : 0);
     rc = 0;
 done:
     cJSON_Delete(j);
     if (rc) pe_enemy_pack_free(p);
     return rc;
+}
+
+static int audible_sound(const PeEnemyPack *p, unsigned sound) {
+    return sound > 0 && sound < (unsigned)p->sounds && p->sound[sound].pcm && p->sound[sound].frames > 1;
+}
+
+unsigned pe_enemy_pack_audio_roles(const PeEnemyPack *p) {
+    unsigned roles = 0;
+    if (p->role[PE_ANIM_HURT] < 0 && audible_sound(p, (unsigned)p->hurt_sound)) roles |= PE_AUDIO_HURT;
+    if (p->role[PE_ANIM_DIE] < 0 && audible_sound(p, (unsigned)p->death_sound)) roles |= PE_AUDIO_DEATH;
+    for (int i = 0; i < p->anims; i++) {
+        const PeEnemyAnim *anim = &p->anim[i];
+        for (int frame = 0; anim->event && frame < anim->frames; frame++) {
+            const unsigned sound = anim->event[frame] & PE_ENEMY_EVENT_SOUND;
+            if (!audible_sound(p, sound)) continue;
+            unsigned role = 0;
+            if (p->role[PE_ANIM_HURT] == i) role |= PE_AUDIO_HURT;
+            if (p->role[PE_ANIM_DIE] == i) role |= PE_AUDIO_DEATH;
+            for (int k = 0; k < p->attacks; k++)
+                if (p->attack[k].anim == i) role |= PE_AUDIO_ATTACK;
+            roles |= role ? role : PE_AUDIO_OTHER;
+            break;
+        }
+    }
+    return roles;
+}
+
+int pe_enemy_pack_coverage(const PeEnemyPack *p, unsigned optional, char *out, unsigned size) {
+    static const char *const labels[] = {"idle", "walk", "hurt", "death", "attack"};
+    char missing[40] = "", omitted[40] = "";
+    for (int i = 0; i <= PE_ANIM_ROLES; ++i) {
+        if (i == PE_ANIM_ROLES ? p->attacks > 0 : p->role[i] >= 0) continue;
+        char *list = optional & (1u << i) ? omitted : missing;
+        size_t used = strlen(list);
+        snprintf(list + used, sizeof missing - used, "%s%s", used ? ", " : "", labels[i]);
+    }
+    if (missing[0]) snprintf(out, size, "Missing %s", missing);
+    else if (omitted[0]) snprintf(out, size, "No separate clips for %s", omitted);
+    else snprintf(out, size, "All animation roles covered");
+    return !missing[0];
 }
 
 void pe_enemy_pack_free(PeEnemyPack *p) {

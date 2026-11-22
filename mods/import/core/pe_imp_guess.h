@@ -31,6 +31,7 @@ typedef struct {
     PeImpEnemyProfile p;
     char name[48], moves[PE_IMP_ID_MAX], sounds[PE_IMP_ID_MAX];
     char anim[PE_IMP_ENEMY_ANIMS][24];
+    char next_form[PE_IMP_ID_MAX];
 } PeImpEnemyGuess;
 
 /* The profile for a model named `name` whose moves are `moves_id` (the local ID): idle, walk, hurt,
@@ -40,6 +41,9 @@ typedef struct {
  * is needed). 0, or -1 with a reason (every move empty). */
 int pe_imp_enemy_guess(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
                    int yaw, int scale, PeImpEnemyGuess *g, char *why, size_t n);
+int pe_imp_enemy_guess_body(const PeImpModel *m, const PeImpAnimation *a, const char *name, const char *moves_id,
+                            int yaw, int scale, PeImpEnemyBody body, PeImpEnemyMoveHints hints, PeImpEnemyGuess *g,
+                            char *why, size_t n);
 
 /* The source game's own strength for `asset_id` (pe_imp_enemy_strength), if it registered one, over
  * a guessed profile: hp (and exp from it) and, when given, every attack's power. 1 applied, 0 none. */

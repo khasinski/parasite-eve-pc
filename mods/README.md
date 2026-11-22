@@ -157,9 +157,9 @@ file (a hand-made profile can be changed the same way). Tests: `mod-enemy-guess`
 PE_TEST_RE3_PC, PE_TEST_RE2_DISC, PE_TEST_RE1_DISC for the real ones; PE_GUESS_DUMP=1 prints every
 move's measurements), and `enemy-import-nemesis` with a guessed pack (RE2 EM10, EM20, EM2A pass).
 
-From an imported RE2 room, a fight trip selects the first placement with a usable enemy model.
-It builds a pack on demand if needed, and clearing the enemy in battle clears that placement in
-the room. The Fights menu's manual enemy choice is the fallback for rooms without a usable model.
+From an imported RE2 room, a fight trip can bring up to three eligible room placements into battle.
+It builds missing packs on demand and reports defeated placements back to the room. The Fights
+menu's manual enemy choice is the fallback when a manual trip finds no usable room enemies.
 **Texture pages and palettes**: a face's `page` and `clut` are PS1 words for every reader (the RE3 EMD
 reader now converts its page byte, x = u + 2 * byte, to page word 0x80 | byte / 64, and its palette
 row to a CLUT word, row << 6); the enemy builder places a texel at (page & 15 - the first page the

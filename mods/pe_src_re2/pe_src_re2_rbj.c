@@ -83,6 +83,11 @@ static int read_rbj(const uint8_t *rdt, uint32_t size, const char *path, PeImpSi
             if (why && n) snprintf(why, n, "couldn't catalog %s", id);
             return -1;
         }
+        snprintf(id, sizeof id, "roomanim/%x%02x-%u-p%u", (unsigned)stage + 1, (unsigned)room, (unsigned)i, (unsigned)player);
+        if (pe_imp_emit_alias(sink, id, name)) {
+            if (why && n) snprintf(why, n, "couldn't catalog %s", id);
+            return -1;
+        }
     }
     return 0;
 }
@@ -90,6 +95,6 @@ static int read_rbj(const uint8_t *rdt, uint32_t size, const char *path, PeImpSi
 const PeImpReader g_re2_rbj_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re2", .platform = "ps1", .format = "rdt-rbj",
-    .version = 1, .produces = PE_IMP_ANIMATION, .match = "PL?/RDT/ROOM*.RDT",
+    .version = 2, .produces = PE_IMP_ANIMATION, .match = "PL?/RDT/ROOM*.RDT",
     .tags = "room animation", .read = read_rbj, .path_key = 1
 };

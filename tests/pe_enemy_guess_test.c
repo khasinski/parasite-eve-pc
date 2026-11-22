@@ -119,6 +119,22 @@ static void test_made_up(void) {
     assert(p->height == 200 && p->hp >= 30 && p->speed > 0 && p->radius >= 180);   /* 200 units at 1:1 */
     assert(p->attack[0].anim && !strcmp(p->attack[0].anim, "attack") && p->attack[1].anim && !p->attack[2].anim);
 
+    PeImpEnemyGuess body;
+    assert(!pe_imp_add_enemy_kind("test", 1, "enemy/made-up"));
+    assert(!pe_imp_set_enemy_body("test", 1, PE_IMP_ENEMY_CRAWLER));
+    assert(pe_imp_enemy_body("test:enemy/made-up-cdemd2") == PE_IMP_ENEMY_CRAWLER);
+    assert(pe_imp_enemy_body("other:enemy/made-up") == PE_IMP_ENEMY_UPRIGHT);
+    const PeImpEnemyMoveHints no_hints = {.attack = -1, .hurt = -1, .walk = -1, .die = -1};
+    const PeImpEnemyMoveHints hints = {.attack = M_ATTACK, .hurt = M_HURT, .walk = M_WALK, .die = M_DIE};
+    assert(!pe_imp_enemy_guess_body(&m, &a, NULL, NULL, 0, 190, PE_IMP_ENEMY_CRAWLER, no_hints, &body, why, sizeof why));
+    assert(move_of(&body.p, "walk") >= 0 && body.p.speed > 0 && body.p.speed <= 10 && body.p.radius == 45);
+    assert(!pe_imp_enemy_guess_body(&m, &a, NULL, NULL, 0, 190, PE_IMP_ENEMY_FLYER, hints, &body, why, sizeof why));
+    assert(move_of(&body.p, "attack") == M_ATTACK && move_of(&body.p, "hurt") == M_HURT && move_of(&body.p, "walk") == M_WALK);
+    assert(move_of(&body.p, "die") == M_DIE);
+    assert(move_of(&body.p, "walk") >= 0 && body.p.speed >= 10 && body.p.radius == 65);
+    assert(!pe_imp_enemy_guess_body(&m, &a, NULL, NULL, 0, 190, PE_IMP_ENEMY_FIXED, no_hints, &body, why, sizeof why));
+    assert(move_of(&body.p, "walk") < 0 && !body.p.speed && body.p.attack[0].anim);
+
     {   /* the game's own strength, where it gave one, over the height rule; a variant takes its base's */
         PeImpEnemyGuess known = g;
         assert(!pe_imp_enemy_known_strength("test:enemy/made-up", &known.p));    /* none registered: kept */
@@ -136,6 +152,9 @@ static void test_made_up(void) {
     rc = pe_enemy_build(&m, &a, p, NULL, 0, "test:enemy/made-up", &pk, &info, why, sizeof why);
     if (rc) printf("made-up build: %s\n", why);
     assert(!rc && pk.anims == 6 && pk.attacks == 2 && pk.role[PE_ANIM_DIE] >= 0 && pk.attack[0].hit == 10);
+    char coverage[64];
+    pe_enemy_pack_coverage(&pk, 0, coverage, sizeof coverage);
+    assert(!strcmp(coverage, "All animation roles covered"));
     pe_enemy_pack_free(&pk);
 
     /* the profile file: written, read back the same */
@@ -163,6 +182,12 @@ static void test_made_up(void) {
     assert(!strcmp(back.p.sounds, "sound/x/tone") && back.p.attack[0].power == 9 && back.p.attack[0].hit == 12 && back.p.speed == 5);
     rc = pe_enemy_build(&m, &a, &back.p, NULL, 0, "test:enemy/made-up", &pk, &info, why, sizeof why);
     assert(!rc && pk.anims == 3 && pk.attacks == 1 && pk.attack[0].hit == 12);
+    pk.role[PE_ANIM_WALK] = -1;
+    pk.attacks = 0;
+    pe_enemy_pack_coverage(&pk, 0, coverage, sizeof coverage);
+    assert(!strcmp(coverage, "Missing walk, hurt, death, attack"));
+    pe_enemy_pack_coverage(&pk, 1u << PE_ANIM_WALK, coverage, sizeof coverage);
+    assert(!strcmp(coverage, "Missing hurt, death, attack"));
     pe_enemy_pack_free(&pk);
 
     /* refused: no idle, an attack naming a missing anim, not a profile */
@@ -272,6 +297,36 @@ static void test_re3(const char *store) {
     }
 }
 
+static void test_re2_banks(const char *store, const char *first) {
+    const char *other = getenv("PE_TEST_RE2_OTHER_DISC");
+    if (!other || !*other) return;
+    scan(store, other, "re2");
+    scan(store, first, "re2");  /* verify aliases also survive a cached scan */
+    static const char *const ids[] = {"re2:enemy/em10-cdemd0", "re2:enemy/em10-cdemd1"};
+    static const char *const archives[] = {"CDEMD0.EMS", "CDEMD1.EMS"};
+    PeImpAsset *assets = NULL;
+    const int count = pe_imp_catalog_assets(store, "re2", &assets);
+    const PeImpAsset *bank[2] = {0};
+    for (int i = 0; i < count; i++)
+        for (int j = 0; j < 2; j++)
+            if (!strcmp(assets[i].id, ids[j])) bank[j] = &assets[i];
+    assert(bank[0] && bank[1] && strcmp(bank[0]->sha256, bank[1]->sha256));
+    for (int j = 0; j < 2; j++) {
+        char moves[PE_IMP_ID_MAX], why[200];
+        PeImpModel m;
+        PeImpAnimation a;
+        assert(strstr(bank[j]->path, archives[j]));
+        snprintf(moves, sizeof moves, "%s/moves", ids[j]);
+        assert(!pe_imp_catalog_model(store, ids[j], &m, why, sizeof why));
+        assert(!pe_imp_catalog_animation(store, moves, &a, why, sizeof why));
+        assert(m.bones == a.bones && a.moves > 0);
+        pe_imp_model_free(&m);
+        pe_imp_animation_free(&a);
+    }
+    free(assets);
+    printf("real re2: both campaign enemy aliases retain their own model and moves\n");
+}
+
 static void test_disc(const char *store, const char *env, const char *game) {
     const char *image = getenv(env);
     if (!image || !*image) { printf("real %s: skipped (no %s)\n", game, env); return; }
@@ -279,11 +334,13 @@ static void test_disc(const char *store, const char *env, const char *game) {
     else assert(!pe_imp_add_reader(&g_re1_emd_ps1) && !pe_imp_add_reader(&g_re1_monsters_ps1) && !pe_imp_set_naming("re1", g_re1_naming));
     assert(!pe_imp_set_enemy_defaults(game, PE_RE_ENEMY_YAW, PE_RE_ENEMY_SCALE));
     scan(store, image, game);
+    if (!strcmp(game, "re2")) test_re2_banks(store, image);
     PeImpAsset *as = NULL;
     int n = pe_imp_catalog_assets(store, game, &as), built = 0, partial = 0, refused = 0;
     for (int i = 0; i < n; i++) {
         PeImpEnemyGuess g;
         if (strcmp(as[i].type, pe_imp_type_name(PE_IMP_MODEL)) || !strstr(as[i].id, ":enemy/")) continue;
+        if (!strcmp(game, "re2") && (strstr(as[i].id, "-cdemd0") || strstr(as[i].id, "-cdemd1"))) continue;
         const int rc = guess_one(store, as[i].id, as[i].name, &g);
         if (rc < 0) refused++;
         else if (rc) partial++;

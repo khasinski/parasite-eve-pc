@@ -1,5 +1,7 @@
 #ifndef PE_SRC_RE1_H
 #define PE_SRC_RE1_H
+
+int pe_re1_enemy_sounds_register(void);
 #include "pe_imp.h"
 #include "pe_imp_rig.h"
 

@@ -10,9 +10,24 @@
 
 #include "pe_enemy_battle.h"
 #include "pe_imp_guess.h"
+#include "pe_imp_json.h"
 #include "pe_imp_fit.h"
 #include "pe_enemy_build.h"
 #include "pe_mod_host.h"
+
+static int pack_coverage(const char *id, const PeEnemyPack *pack, char *out, unsigned size) {
+    const PeImpEnemyBody body = pe_imp_enemy_body(id);
+    if (body == PE_IMP_ENEMY_SCENE) {
+        snprintf(out, size, "Scripted scene actor");
+        return PE_IMP_COVERAGE_SCENE;
+    }
+    const PeImpEnemyMoveHints moves = pe_imp_enemy_move_hints(id);
+    unsigned optional = 0;
+    if (body == PE_IMP_ENEMY_FIXED && !pack->speed) optional |= 1u << PE_ANIM_WALK;
+    if (moves.hurt == PE_IMP_MOVE_NONE) optional |= 1u << PE_ANIM_HURT;
+    if (moves.die == PE_IMP_MOVE_NONE) optional |= 1u << PE_ANIM_DIE;
+    return pe_enemy_pack_coverage(pack, optional, out, size);
+}
 
 #define PROFILE_NOTE "Which moves this enemy uses (numbers count the source's moves from 0), its size, "                      "attacks and behaviour. Change it and build again in F1 > Import to use your changes."
 
@@ -28,6 +43,25 @@ static void file_sha(const char *path, char out[65]) {
     if (whole) pe_imp_sha256_hex((const uint8_t *)buf, got, out);
 }
 
+static int save_sha(const char *path, const char *sha, char *why, size_t n) {
+    FILE *f = fopen(path, "wb");
+    if (f) {
+        const int wrote = fputs(sha, f);
+        if (!fclose(f) && wrote >= 0) return 0;
+    }
+    snprintf(why, n, "can't write %s", path);
+    return -1;
+}
+
+static void read_sha(const char *path, char out[65]) {
+    FILE *f = fopen(path, "rb");
+    out[0] = 0;
+    if (f) {
+        out[fread(out, 1, 64, f)] = 0;
+        fclose(f);
+    }
+}
+
 /* 1 if <folder>/profile.json is there and not what the builder last wrote (profile.made) */
 static int profile_changed(const char *folder) {
     char path[1200], sha[65], made[65] = "";
@@ -35,12 +69,7 @@ static int profile_changed(const char *folder) {
     file_sha(path, sha);
     if (!sha[0]) return 0;
     snprintf(path, sizeof path, "%s/profile.made", folder);
-    FILE *f = fopen(path, "rb");
-    if (f) {
-        size_t got = fread(made, 1, 64, f);
-        made[got] = 0;
-        fclose(f);
-    }
+    read_sha(path, made);
     return strcmp(sha, made) != 0;
 }
 
@@ -50,9 +79,7 @@ static int profile_write(const PeImpEnemyProfile *p, const char *folder, char *w
     if (pe_imp_enemy_profile_save(p, PROFILE_NOTE, path, why, n)) return -1;
     file_sha(path, sha);
     snprintf(path, sizeof path, "%s/profile.made", folder);
-    FILE *f = fopen(path, "wb");
-    if (!f || fputs(sha, f) < 0 || fclose(f)) { snprintf(why, n, "can't write %s", path); return -1; }
-    return 0;
+    return save_sha(path, sha, why, n);
 }
 
 /* "re2:enemy/giant_moth" -> "Giant moth", "re2:enemy/em10" -> "EM10" */
@@ -71,13 +98,16 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
     const PeImpEnemyProfile *prof = pe_imp_enemy_for(asset_id);
     const char *colon = strchr(asset_id, ':');
     char game[16], id[PE_IMP_ID_MAX], path[1200], name[48];
+    const int custom = profile_changed(folder);
     const char *how = prof ? "made by hand" : "guessed";
+    char profile_sha[65];
     PeImpEnemyGuess *g = calloc(1, sizeof *g);
     if (!g) { snprintf(why, n, "out of memory"); return -1; }
     snprintf(game, sizeof game, "%.*s", (int)(colon - asset_id), asset_id);
-    if (profile_changed(folder)) {                     /* the player's own profile.json */
+    if (custom) {                     /* the player's own profile.json */
         char err[160];
         snprintf(path, sizeof path, "%s/profile.json", folder);
+        file_sha(path, profile_sha);
         if (pe_imp_enemy_profile_load(path, g, err, sizeof err)) { snprintf(why, n, "profile.json: %s", err); free(g); return -1; }
         prof = &g->p, how = "yours (profile.json)";
     }
@@ -91,11 +121,13 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
         int yaw = 0, scale = 0;
         pe_imp_enemy_defaults(game, &yaw, &scale);
         name_of(asset_id, name, sizeof name);
-        if (pe_imp_enemy_guess(&m, &a, name, id + (colon - asset_id) + 1, yaw, scale, g, why, n)) {
+        if (pe_imp_enemy_guess_body(&m, &a, name, id + (colon - asset_id) + 1, yaw, scale,
+                                    pe_imp_enemy_body(asset_id), pe_imp_enemy_move_hints(asset_id), g, why, n)) {
             pe_imp_model_free(&m), pe_imp_animation_free(&a), free(g);
             return -1;
         }
         if (pe_imp_enemy_known_strength(asset_id, &g->p)) how = "guessed, its game's own strength";
+        if (!pe_imp_enemy_next_form(asset_id, g->next_form, sizeof g->next_form)) g->p.next_form = g->next_form;
         prof = &g->p;
     }
     PeImpSound *sounds[PE_ENEMY_MAX_SOUNDS] = {0};
@@ -107,18 +139,44 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
     }
     PeEnemyPack p;
     PeEnemyBuildInfo info;
-    int rc = pe_enemy_build(&m, &a, prof, sounds, count, asset_id, &p, &info, why, n);
+    PeImpEnemyProfile with_cues = *prof;
+    if (!prof->sounds && (with_cues.cues = pe_imp_enemy_cues(asset_id))) {
+        count = PE_IMP_CUE_COUNT + 1; /* sound index zero is reserved for silence */
+        for (int i = 0; i < PE_IMP_CUE_COUNT; i++) {
+            const char *cue = with_cues.cues->sound[i];
+            char sid[PE_IMP_ID_MAX], ignore[160];
+            if (!cue) continue;
+            snprintf(sid, sizeof sid, "%s:%s", game, cue);
+            pe_imp_catalog_sound(ctx->store, sid, &sounds[i + 1], ignore, sizeof ignore);
+        }
+    }
+    int rc = pe_enemy_build(&m, &a, &with_cues, sounds, count, asset_id, &p, &info, why, n);
     pe_imp_model_free(&m);
     pe_imp_animation_free(&a);
     for (int i = 0; i < count; i++) free(sounds[i]);
-    if (!rc && strcmp(how, "yours (profile.json)")) rc = profile_write(prof, folder, why, n);
+    if (!rc && !custom && profile_write(prof, folder, why, n)) {
+        pe_enemy_pack_free(&p);
+        rc = -1;
+    }
     free(g);
     if (rc) return -1;
+    if (pe_imp_enemy_body(asset_id) == PE_IMP_ENEMY_FLYER)
+        p.altitude = p.radius < 110 ? 440 : 540;
     rc = pe_enemy_write(&p, folder, why, n);
+    if (!rc) {
+        if (!custom) {
+            snprintf(path, sizeof path, "%s/profile.json", folder);
+            file_sha(path, profile_sha);
+        }
+        snprintf(path, sizeof path, "%s/profile.applied", folder);
+        rc = save_sha(path, profile_sha, why, n);
+    }
     if (!rc) pe_enemy_packs_changed();
-    if (!rc && log && logn)
-        snprintf(log, logn, "%d bones, %d vertices, %d triangles, %d moves, %d sounds (%d sound frames), scale %.3f; profile %s",
-                 p.bones, p.vertices, p.triangles, p.anims, info.sounds, info.sound_events, info.scale, how);
+    if (!rc && log && logn) {
+        char coverage[64];
+        pack_coverage(asset_id, &p, coverage, sizeof coverage);
+        snprintf(log, logn, "%s. %d moves, %d sounds. Profile %s", coverage, p.anims, info.sounds, how);
+    }
     pe_enemy_pack_free(&p);
     return rc;
 }
@@ -126,25 +184,33 @@ static int enemies_build(const PeImpBuild *ctx, const char *asset_id, const char
 /* a model with a profile, or any enemy model (its profile guessed) */
 static int enemies_accepts(const char *asset_id) {
     const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
-    return pe_imp_enemy_for(asset_id) != NULL || (colon && !strncmp(colon + 1, "enemy/", 6));
+    return pe_imp_enemy_for(asset_id) != NULL ||
+           (colon && !strncmp(colon + 1, "enemy/", 6) && pe_imp_enemy_model_allowed(asset_id));
+}
+
+int pe_enemy_pack_name(const char *asset_id, char *out, size_t n) {
+    const char *colon = asset_id ? strchr(asset_id, ':') : NULL, *last = asset_id ? strrchr(asset_id, '/') : NULL;
+    if (!colon || !n) return -1;
+    snprintf(out, n, "%.*s-%.40s", (int)(colon - asset_id), asset_id, last ? last + 1 : colon + 1);
+    for (char *c = out; *c; c++) if (!((*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') || *c == '-' || *c == '_')) *c = '_';
+    return 0;
 }
 
 /* <prefs>/pe_enemies/<game>-<name>: where F1 > Fights lists packs ("re3-nemesis") */
 static int enemy_folder(const PeImpAsset *a, char *folder, size_t fn) {
-    const char *colon = strchr(a->id, ':'), *last = strrchr(a->id, '/');
-    char sub[96];
-    if (!colon) return -1;
-    snprintf(sub, sizeof sub, "pe_enemies/%.*s-%.40s", (int)(colon - a->id), a->id, last ? last + 1 : colon + 1);
-    for (char *c = sub + 11; *c; c++) if (!((*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') || *c == '-' || *c == '_')) *c = '_';
+    char name[64], sub[96];
+    if (pe_enemy_pack_name(a->id, name, sizeof name)) return -1;
+    snprintf(sub, sizeof sub, "pe_enemies/%s", name);
     return pe_mod_path(folder, fn, sub);
 }
 
-/* import.json: {"asset", "sha256", "builder"}, written before the build; enemy.json comes last, so a
- * build that stopped half way is not current */
+/* import.json identifies the source. Clear the old pack and applied profile markers before rebuilding. */
 static int enemies_place(const PeImpAsset *a, const char *builder, char *folder, size_t fn, char *why, size_t n) {
     char path[1200];
     if (enemy_folder(a, folder, fn) || pe_imp_mkdirs(folder)) { snprintf(why, n, "can't create the enemy pack folder"); return -1; }
     snprintf(path, sizeof path, "%s/enemy.json", folder);
+    remove(path);
+    snprintf(path, sizeof path, "%s/profile.applied", folder);
     remove(path);
     snprintf(path, sizeof path, "%s/import.json", folder);
     FILE *f = fopen(path, "wb");
@@ -154,8 +220,13 @@ static int enemies_place(const PeImpAsset *a, const char *builder, char *folder,
 }
 
 static int enemies_current(const PeImpAsset *a, const char *builder) {
-    char folder[1100], path[1200], text[512], want[512];
-    if (enemy_folder(a, folder, sizeof folder) || profile_changed(folder)) return 0;
+    char folder[1100], path[1200], text[512], want[512], sha[65], applied[65];
+    if (enemy_folder(a, folder, sizeof folder)) return 0;
+    snprintf(path, sizeof path, "%s/profile.json", folder);
+    file_sha(path, sha);
+    snprintf(path, sizeof path, "%s/profile.applied", folder);
+    read_sha(path, applied);
+    if (!sha[0] || strcmp(sha, applied)) return 0;
     snprintf(path, sizeof path, "%s/enemy.json", folder);
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
@@ -169,42 +240,44 @@ static int enemies_current(const PeImpAsset *a, const char *builder) {
     return !strcmp(text, want);
 }
 
+static int enemies_coverage(const PeImpAsset *a, char *out, size_t size, char *audio, size_t audio_size) {
+    char folder[1100], manifest[1200];
+    if (enemy_folder(a, folder, sizeof folder)) return -1;
+    snprintf(manifest, sizeof manifest, "%s/enemy.json", folder);
+    PjNode *root = pj_load(manifest, out, size);
+    if (!root) return -1;
+    const PjNode *anims = pj_get(root, "anims"), *attacks = pj_get(root, "attacks");
+    if (!anims || anims->kind != PJ_OBJECT || !attacks || attacks->kind != PJ_ARRAY) {
+        pj_free(root);
+        snprintf(out, size, "Invalid pack manifest");
+        return -1;
+    }
+    const char *const roles[] = {"idle", "walk", "hurt", "die"};
+    PeEnemyPack pack = {.attacks = attacks->count};
+    for (int i = 0; i < PE_ANIM_ROLES; ++i) pack.role[i] = pj_get(anims, roles[i]) ? i : -1;
+    pack.speed = (int)pj_int(pj_get(pj_get(root, "behavior"), "speed"), 10);
+    const int complete = pack_coverage(a->id, &pack, out, (unsigned)size);
+    const long long mask = pj_int(pj_get(root, "audio_roles"), -1);
+    if (mask < 0) snprintf(audio, audio_size, "Unknown");
+    else if (!mask) snprintf(audio, audio_size, "None");
+    else {
+        static const struct { unsigned bit; const char *name; } labels[] = {
+            {PE_AUDIO_ATTACK, "attack"}, {PE_AUDIO_HURT, "hurt"}, {PE_AUDIO_DEATH, "death"}, {PE_AUDIO_OTHER, "other"}
+        };
+        char roles[32] = "";
+        for (unsigned i = 0; i < sizeof labels / sizeof labels[0]; ++i)
+            if (mask & labels[i].bit) {
+                size_t used = strlen(roles);
+                snprintf(roles + used, sizeof roles - used, "%s%s", used ? ", " : "", labels[i].name);
+            }
+        snprintf(audio, audio_size, "%s", roles[0] ? roles : "Unknown");
+    }
+    pj_free(root);
+    return complete;
+}
+
 const PeImpTarget g_pe_enemy_target = {
-    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 3, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
-    enemies_accepts, enemies_place, enemies_current};
+    {PE_IMP_API_VERSION, sizeof(PeImpTarget)}, "enemies", 19, PE_IMP_MODEL, "Build as an enemy", 0, enemies_build,
+    enemies_accepts, enemies_place, enemies_current, enemies_coverage};
 
 int pe_enemy_target_register(void) { return pe_imp_add_target(&g_pe_enemy_target); }
-
-int pe_enemy_prepare_pack(const char *store, const char *game, const char *asset_id,
-                          char *folder, size_t fn, char *why, size_t n) {
-    PeImpAsset *assets = NULL;
-    const int count = pe_imp_catalog_assets(store, game, &assets);
-    int i = 0;
-    while (i < count && strcmp(assets[i].id, asset_id)) i++;
-    if (i >= count || strcmp(assets[i].type, pe_imp_type_name(PE_IMP_MODEL))) {
-        snprintf(why, n, "%s has no imported model", asset_id);
-        free(assets);
-        return -1;
-    }
-    const PeImpAsset *a = &assets[i];
-    if (enemy_folder(a, folder, fn)) {
-        snprintf(why, n, "can't resolve the enemy pack folder");
-        free(assets);
-        return -1;
-    }
-    char path[1200];
-    snprintf(path, sizeof path, "%s/enemy.json", folder);
-    FILE *f = fopen(path, "rb");
-    if (f) {
-        fclose(f);
-        free(assets);
-        return 0;
-    }
-    char builder[64];
-    snprintf(builder, sizeof builder, "pe_import 1, %s %u", g_pe_enemy_target.module, g_pe_enemy_target.version);
-    const PeImpBuild ctx = {.store = store};
-    const int rc = enemies_place(a, builder, folder, fn, why, n) ||
-                   enemies_build(&ctx, asset_id, folder, NULL, 0, why, n);
-    free(assets);
-    return rc ? -1 : 0;
-}

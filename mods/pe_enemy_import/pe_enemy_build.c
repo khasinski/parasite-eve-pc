@@ -118,25 +118,59 @@ int pe_enemy_build_model(PeEnemyPack *p, const PeImpModel *m, int *skipped, char
 }
 
 /* ---- moves ---- */
-static int anim_in(PeEnemyPack *p, const PeImpAnimation *a, const char *name, int move, char *why, size_t n) {
+static int anim_in(PeEnemyPack *p, const PeImpAnimation *a, const char *name, int move,
+                   const PeImpEnemyMoveHints *motion, char *why, size_t n) {
     if (move < 0 || (uint32_t)move >= a->moves || !a->move[move].frames)
         return fail(why, n, "the profile's \"%s\" names move %ld, which is empty or missing", name, move);
     if (p->anims == PE_ENEMY_MAX_ANIMS) return fail(why, n, "%stoo many anims", "", 0);
     const PeImpMove *mv = &a->move[move];
     PeEnemyAnim *an = &p->anim[p->anims];
     size_t words = 3 + 3 * (size_t)p->bones;
-    an->frames = (int)mv->frames;
-    an->data = malloc(words * mv->frames * sizeof *an->data);
-    an->event = malloc(mv->frames * sizeof *an->event);
+    const unsigned frames = motion && motion->attack_frames > mv->frames ? motion->attack_frames : mv->frames;
+    an->frames = (int)frames;
+    an->data = malloc(words * frames * sizeof *an->data);
+    an->event = malloc(frames * sizeof *an->event);
     if (!an->data || !an->event) { free(an->data), free(an->event); an->data = NULL, an->event = NULL; return fail(why, n, "%sout of memory", "", 0); }
-    memcpy(an->data, mv->data, words * mv->frames * sizeof *an->data);
-    for (uint32_t k = 0; k < mv->frames; k++) {
-        unsigned e = mv->event[k], s = e & PE_IMP_EVENT_SOUND;
+    const int leap = motion && motion->leap_height > 0 && frames > 2;
+    const double yaw = p->yaw * 2 * 3.14159265358979323846 / 4096.0;
+    const double dx = leap ? -sin(yaw) * motion->leap_reach : 0;
+    const double dz = leap ? cos(yaw) * motion->leap_reach : 0;
+    for (unsigned k = 0; k < frames; k++) {
+        const unsigned frame = k < mv->frames ? k : mv->frames - 1;
+        int16_t *dst = an->data + k * words;
+        memcpy(dst, mv->data + frame * words, words * sizeof *dst);
+        unsigned e = k < mv->frames && mv->event ? mv->event[k] : 0;
+        if (leap) {
+            /* Borrow the source pose for a forward hop and return to the battle position. */
+            const double t = (double)k / (frames - 1);
+            const double arc = 4 * t * (1 - t);
+            dst[0] = clamp16(dst[0] + arc * dx);
+            dst[1] = clamp16(dst[1] - arc * motion->leap_height);
+            dst[2] = clamp16(dst[2] + arc * dz);
+        }
+        if (leap || frames > mv->frames) {
+            e &= ~PE_IMP_EVENT_HIT;
+            if (k == (leap ? frames / 2 : frames - 1)) e |= PE_IMP_EVENT_HIT;
+        }
+        unsigned s = e & PE_IMP_EVENT_SOUND;
         an->event[k] = (uint16_t)((s < PE_ENEMY_MAX_SOUNDS ? s : 0) | (e & PE_IMP_EVENT_HIT ? PE_ENEMY_EVENT_HIT : 0));
     }
     snprintf(an->name, sizeof an->name, "%s", name);
     p->anims++;
     return 0;
+}
+
+int pe_enemy_add_room_move(PeEnemyPack *p, const PeImpAnimation *moves, const char *name) {
+    char why[100];
+    if (moves->bones != (unsigned)p->bones || anim_in(p, moves, name, 0, NULL, why, sizeof why)) return -1;
+    PeEnemyAnim *anim = &p->anim[p->anims - 1];
+    const size_t words = 3 + 3 * (size_t)p->bones;
+    for (int i = 0; i < anim->frames; i++) {
+        int16_t *frame = anim->data + i * words;
+        frame[0] = frame[1] = frame[2] = 0; /* choreography uses a room position; keep the PE battle position */
+        anim->event[i] = 0;                 /* room sound IDs are not enemy pack IDs */
+    }
+    return p->anims - 1;
 }
 
 /* floor to the top of the head in the idle pose (source units, y down) */
@@ -202,11 +236,30 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
     if (a->bones != m->bones) { fail(why, n, "%sthe moves are for %ld bones, not the model's", "", (long)a->bones); goto out; }
     snprintf(p->name, sizeof p->name, "%s", prof->name ? prof->name : "Enemy");
     snprintf(p->folder, sizeof p->folder, "%s", source ? source : "");
+    snprintf(p->source, sizeof p->source, "%s", source ? source : "");
+    if (prof->next_form) snprintf(p->next_form, sizeof p->next_form, "%s", prof->next_form);
     p->hp = prof->hp, p->exp = prof->exp, p->defense = prof->defense, p->fps = (int)a->fps, p->yaw = prof->yaw;
     p->speed = prof->speed, p->charge = prof->charge, p->radius = prof->radius, p->stagger = prof->stagger;
     if (model_in(p, m, &info->skipped, why, n)) goto out;
-    for (int i = 0; i < PE_IMP_ENEMY_ANIMS && prof->anim[i].name; i++)
-        if (anim_in(p, a, prof->anim[i].name, prof->anim[i].move, why, n)) goto out;
+    const PeImpEnemyMoveHints hints = pe_imp_enemy_move_hints(source);
+    for (int i = 0; i < PE_IMP_ENEMY_ANIMS && prof->anim[i].name; i++) {
+        const char *name = prof->anim[i].name;
+        const int move = prof->anim[i].move;
+        const PeImpEnemyMoveHints *motion = move == hints.attack && !strcmp(name, "attack") ? &hints : NULL;
+        if (anim_in(p, a, name, move, motion, why, n)) goto out;
+    }
+    const PeImpEnemyStart *start = pe_imp_enemy_starts(source);
+    for (; start && start->name; start++) {
+        if (p->anims == PE_ENEMY_MAX_ANIMS) break;
+        if (start->move < 0 || (uint32_t)start->move >= a->moves || !a->move[start->move].frames) continue;
+        if (pe_enemy_pack_anim(p, start->name) < 0 && anim_in(p, a, start->name, start->move, NULL, why, n)) goto out;
+        const int wake = start->wake_move;
+        if (p->anims == PE_ENEMY_MAX_ANIMS || wake < 0 || (uint32_t)wake >= a->moves || !a->move[wake].frames) continue;
+        char name[sizeof p->anim[0].name];
+        const int written = snprintf(name, sizeof name, "%s" PE_IMP_ENEMY_WAKE_SUFFIX, start->name);
+        if (written < 0 || (size_t)written >= sizeof name || pe_enemy_pack_anim(p, name) >= 0) continue;
+        if (anim_in(p, a, name, wake, NULL, why, n)) goto out;
+    }
     static const char *const roles[PE_ANIM_ROLES] = {"idle", "walk", "hurt", "die"};
     for (int i = 0; i < PE_ANIM_ROLES; i++) p->role[i] = pe_enemy_pack_anim(p, roles[i]);
     if (p->role[PE_ANIM_IDLE] < 0) { fail(why, n, "%sthe profile has no \"idle\" move", "", 0); goto out; }
@@ -234,6 +287,16 @@ int pe_enemy_build(const PeImpModel *m, const PeImpAnimation *a, const PeImpEnem
         memcpy(s->pcm, sounds[i]->pcm, sounds[i]->frames * sizeof *s->pcm);
         s->rate = (int)sounds[i]->rate, s->frames = (int)sounds[i]->frames;
         info->sounds++;
+    }
+    if (prof->cues) {
+        for (int i = 0; i < p->anims; i++)
+            for (int k = 0; k < p->anim[i].frames; k++) p->anim[i].event[k] &= (uint16_t)~PE_ENEMY_EVENT_SOUND;
+        for (int i = 0; i < p->attacks; i++)
+            p->anim[p->attack[i].anim].event[p->attack[i].hit] |= PE_IMP_CUE_ATTACK + 1;
+        if (p->role[PE_ANIM_HURT] >= 0) p->anim[p->role[PE_ANIM_HURT]].event[0] |= PE_IMP_CUE_HURT + 1;
+        else if (p->sounds > PE_IMP_CUE_HURT + 1 && p->sound[PE_IMP_CUE_HURT + 1].pcm) p->hurt_sound = PE_IMP_CUE_HURT + 1;
+        if (p->role[PE_ANIM_DIE] >= 0) p->anim[p->role[PE_ANIM_DIE]].event[0] |= PE_IMP_CUE_DIE + 1;
+        else if (p->sounds > PE_IMP_CUE_DIE + 1 && p->sound[PE_IMP_CUE_DIE + 1].pcm) p->death_sound = PE_IMP_CUE_DIE + 1;
     }
     for (int i = 0; i < p->anims; i++)
         for (int k = 0; k < p->anim[i].frames; k++) {
@@ -342,7 +405,11 @@ int pe_enemy_write(const PeEnemyPack *p, const char *folder, char *why, size_t n
     fprintf(f, "{\n  \"format\": 1,\n  \"name\": ");
     json_text(f, p->name);
     fprintf(f, ",\n  \"source\": ");
-    json_text(f, p->folder);
+    json_text(f, p->source);
+    if (p->next_form[0]) {
+        fprintf(f, ",\n  \"next_form\": ");
+        json_text(f, p->next_form);
+    }
     fprintf(f, ",\n  \"hp\": %d, \"exp\": %d, \"defense\": %d, \"fps\": %d, \"yaw\": %d,\n", p->hp, p->exp, p->defense, p->fps, p->yaw);
     fprintf(f, "  \"model\": \"model.bin\", \"texture\": \"texture.bin\",\n  \"anims\": {");
     for (int a = 0; a < p->anims; a++) fprintf(f, "%s\"%s\": \"anims/%s.bin\"", a ? ", " : "", p->anim[a].name, p->anim[a].name);
@@ -352,12 +419,15 @@ int pe_enemy_write(const PeEnemyPack *p, const char *folder, char *why, size_t n
         fprintf(f, "%s{\"anim\": \"%s\", \"damage\": %d, \"power\": %d, \"range\": %d, \"hit\": %d}", i ? ", " : "",
                 p->anim[at->anim].name, at->damage, at->power, at->range, at->hit);
     }
-    fprintf(f, "],\n  \"behavior\": {\"speed\": %d, \"charge\": %d, \"radius\": %d, \"stagger\": %d}", p->speed, p->charge, p->radius, p->stagger);
+    fprintf(f, "],\n  \"behavior\": {\"speed\": %d, \"charge\": %d, \"radius\": %d, \"stagger\": %d, \"altitude\": %d}",
+            p->speed, p->charge, p->radius, p->stagger, p->altitude);
     if (p->sounds) {
         fprintf(f, ",\n  \"sounds\": [");
         for (int s = 0; s < p->sounds; s++) fprintf(f, "%s\"sounds/%02d.wav\"", s ? ", " : "", s);
         fprintf(f, "]");
     }
-    fprintf(f, "\n}\n");
+    if (p->hurt_sound) fprintf(f, ",\n  \"hurt_sound\": %d", p->hurt_sound);
+    if (p->death_sound) fprintf(f, ",\n  \"death_sound\": %d", p->death_sound);
+    fprintf(f, ",\n  \"audio_roles\": %u\n}\n", pe_enemy_pack_audio_roles(p));
     return fclose(f) ? fail(why, n, "can't write %s", "enemy.json", 0) : 0;
 }

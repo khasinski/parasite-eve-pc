@@ -208,6 +208,8 @@ typedef struct PeImpSink PeImpSink;
 /* A reader hands each item it decodes to the sink: `proposed` is a local ID ("player/pl01"),
  * `name` a display name, `obj` the type's struct (the sink takes ownership, even on failure). */
 int pe_imp_emit(PeImpSink *s, uint32_t type, const char *proposed, const char *name, void *obj);
+/* Catalog another ID for the last emitted object, sharing its stored data. */
+int pe_imp_emit_alias(PeImpSink *s, const char *proposed, const char *name);
 typedef int (*PeImpReadFn)(const uint8_t *data, uint32_t size, const char *path, PeImpSink *sink,
                            char *why, size_t n);
 typedef int (*PeImpReadPairFn)(const uint8_t *primary, uint32_t primary_size,
@@ -283,6 +285,7 @@ typedef struct {
     const void *host;
     const PeImpProgress *progress;            /* may be NULL */
 } PeImpBuild;
+enum { PE_IMP_COVERAGE_INCOMPLETE, PE_IMP_COVERAGE_COMPLETE, PE_IMP_COVERAGE_SCENE };
 typedef struct {
     PeImpApi api;                             /* {PE_IMP_API_VERSION, sizeof(PeImpTarget)} */
     const char *module;                       /* "skins" */
@@ -298,6 +301,8 @@ typedef struct {
     int (*place)(const struct PeImpAsset *a, const char *builder, char *folder, size_t fn, char *why, size_t n);
     /* 1 if its place already holds a finished build of this source file by `builder` */
     int (*current)(const struct PeImpAsset *a, const char *builder);
+    /* Optional: read the installed pack's coverage, or return -1 when unreadable. */
+    int (*coverage)(const struct PeImpAsset *a, char *out, size_t size, char *audio, size_t audio_size);
 } PeImpTarget;
 /* Where a target builds an asset: its place, else the Wardrobe's pack folder. */
 int pe_imp_target_place(const PeImpTarget *t, const char *packs, const struct PeImpAsset *a, const char *builder,

@@ -10,7 +10,8 @@
  * TIM and the EMD. In the main archive's table (CDEMD0 on disc 1, CDEMD1 on disc 2) record k is
  * enemy 0x10 + k: lined up with biohazard-utils' Bio2ConstantTable g_enemyNames, every record's bone
  * count fits its name (15-bone zombies and people, the 17-bone dog, 22-bone lickers). Those become
- * "enemy/em<nn>". The other archives' tables start at 0x10 too (bone counts agree with the main
+ * "enemy/em<nn>", with archive-specific aliases for use when a campaign selects its own archive.
+ * The other archives' tables start at 0x10 too (bone counts agree with the main
  * archive's same-numbered enemies on both discs): "enemy/em<nn>-cdemd2" and so on. Read only. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -122,7 +123,7 @@ static int read_ems(const uint8_t *data, uint32_t size, const uint8_t *exe, uint
         have_tim = 0;                                                   /* each TIM goes with the EMD after it */
         PeImpModel *m = calloc(1, sizeof *m);
         if (!m) { snprintf(why, n, "out of memory"); return -1; }
-        char quiet[160], id[40], mid[48], name[48];
+        char quiet[160], id[40], mid[PE_IMP_ID_MAX], name[48], alias[48] = "";
         if (re2_skeleton_mesh(data, size, sec[2], sec[7], tim, m, quiet, sizeof quiet)) { free(m); continue; }
         PeImpAnimation *a = moves(data, size, sec, m->bones);
         uint32_t em = 0;
@@ -131,6 +132,7 @@ static int read_ems(const uint8_t *data, uint32_t size, const uint8_t *exe, uint
         if (em && main_archive) {
             snprintf(id, sizeof id, "enemy/em%02x", em);
             snprintf(name, sizeof name, "EM%02X", em);
+            snprintf(alias, sizeof alias, "%s-%s", id, stem);
         } else if (em) {                                                /* another archive's version of it */
             snprintf(id, sizeof id, "enemy/em%02x-%s", em, stem);
             snprintf(name, sizeof name, "EM%02X (%s)", em, stem);
@@ -144,10 +146,19 @@ static int read_ems(const uint8_t *data, uint32_t size, const uint8_t *exe, uint
             snprintf(why, n, "could not catalog %s", id);
             return -1;
         }
+        if (alias[0] && pe_imp_emit_alias(sink, alias, name)) {
+            if (a) pe_imp_animation_free(a), free(a);
+            snprintf(why, n, "could not catalog %s", alias);
+            return -1;
+        }
         if (!a) continue;
         snprintf(mid, sizeof mid, "%s/moves", id);
         strncat(name, " moves", sizeof name - strlen(name) - 1);
         if (pe_imp_emit(sink, PE_IMP_ANIMATION, mid, name, a)) { snprintf(why, n, "could not catalog %s", mid); return -1; }
+        if (alias[0]) {
+            snprintf(mid, sizeof mid, "%s/moves", alias);
+            if (pe_imp_emit_alias(sink, mid, name)) { snprintf(why, n, "could not catalog %s", mid); return -1; }
+        }
     }
     return 0;
 }
@@ -155,7 +166,7 @@ static int read_ems(const uint8_t *data, uint32_t size, const uint8_t *exe, uint
 const PeImpReader g_re2_emd_ps1 = {
     .api = {PE_IMP_API_VERSION, sizeof(PeImpReader)},
     .game = "re2", .platform = "ps1", .format = "ems",
-    .version = 3, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/CDEMD?.EMS",
+    .version = 4, .produces = PE_IMP_MODEL | PE_IMP_ANIMATION, .match = "PL?/PLD/CDEMD?.EMS",
     .tags = "enemy", .read_pair = read_ems, .find_companion = find_exe
 };
 

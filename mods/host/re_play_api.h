@@ -41,6 +41,8 @@ typedef struct PeReRoomEvent {
     const PeReEnemyPlacement *enemies;
 } PeReRoomEvent;
 
+enum { PE_RE_BOSS_WAIT = -1, PE_RE_BOSS_STANDARD, PE_RE_BOSS_CANISTER, PE_RE_BOSS_LAUNCHER };
+
 typedef struct PeRePlayApi {
     uint32_t struct_size;
     /* The reported room and its placements (valid until the next frame); 0, or -1 if unavailable. */
@@ -57,6 +59,20 @@ typedef struct PeRePlayApi {
      * flag is set if it has one, and the room's scripts see it die (a boss with no killed flag whose
      * death moves the story on). 0, or -1 if no placed enemy has that slot. */
     int (*defeated_slot)(uint8_t slot);
+    /* Optional in v1. Preferred archive suffix for the current room's enemy assets.
+     * NULL keeps the catalogue's default. The returned string is static. */
+    const char *(*enemy_archive)(void);
+    /* Optional: animation assigned to this enemy slot by the current room. */
+    int (*enemy_room_move)(unsigned slot, char *asset, size_t size);
+    /* Optional: current player position when the imported room can start a fight. */
+    int (*encounter_position)(double *x, double *z, int *floor);
+    /* Optional: check whether a straight approach crosses room collision. */
+    int (*encounter_reachable)(double x, double z, double target_x, double target_z);
+    /* Optional: the slot released by a story scene, or -1 when none is ready. */
+    int (*encounter_boss)(void);
+    /* Optional: prepare the authored setup after encounter_boss identifies a ready slot. */
+    int (*prepare_boss)(uint8_t slot);
+    int (*defeated_by_canister)(uint8_t slot);
 } PeRePlayApi;
 
 #endif

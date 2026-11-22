@@ -15,7 +15,7 @@
  *   triangles 16 bytes: u16 a, b, c; u16 u0, u1, u2 (texels); u8 v0, v1, v2, palette
  * texture.bin: char[4] "PEET", u16 version 1, width, height, palettes, 256 u16 colours per
  *   palette (PSX 15-bit, 0 = see-through), then width * height u8 colour indices.
- * enemy.json may add "behavior" {speed, charge, radius, stagger} and per attack "power" and
+ * enemy.json may add "behavior" {speed, charge, radius, stagger, altitude} and per attack "power" and
  *   "hit" (see PeEnemyPack, PeEnemyAttack); the imported enemy's own fight logic reads them.
  * anims (version 1): char[4] "PEEA", u16 version, bones, frames, 0; per frame s16 root x, y, z,
  *   then s16 x, y, z angles per bone (4096 = a full turn; rotation = X * Y * Z, parent first).
@@ -31,7 +31,7 @@
 #define PE_ENEMY_MAX_BONES 32
 #define PE_ENEMY_MAX_VERTICES 4096
 #define PE_ENEMY_MAX_TRIANGLES 4096
-#define PE_ENEMY_MAX_ANIMS 12
+#define PE_ENEMY_MAX_ANIMS 16
 #define PE_ENEMY_MAX_ATTACKS 4
 #define PE_ENEMY_NO_BONE 0xFF
 #define PE_ENEMY_MAX_SOUNDS 32
@@ -62,11 +62,12 @@ typedef struct {
 
 typedef struct {
     char folder[64], name[32];
+    char source[128], next_form[128];  /* catalog asset IDs, optional in installed packs */
     int hp, exp, defense, fps, yaw;
     /* "behavior": speed (field units per game frame while walking), charge (its time bar: added
      * per frame, full at 9000), radius (body size for Aya's aim and reach), stagger (1: shots
-     * stop it for its hurt anim, unless it is mid-attack) */
-    int speed, charge, radius, stagger;
+     * stop it for its hurt anim, unless it is mid-attack), altitude (flight height above the floor) */
+    int speed, charge, radius, stagger, altitude;
     int bones, vertices, triangles;
     PeEnemyBone bone[PE_ENEMY_MAX_BONES];
     PeEnemyVertex *vertex;
@@ -80,6 +81,7 @@ typedef struct {
     int attacks;
     PeEnemyAttack attack[PE_ENEMY_MAX_ATTACKS];
     int sounds;
+    int hurt_sound, death_sound;  /* optional cue when the corresponding animation is absent */
     PeEnemySound sound[PE_ENEMY_MAX_SOUNDS];
 } PeEnemyPack;
 
@@ -90,6 +92,10 @@ int pe_enemy_wav_parse(const uint8_t *data, unsigned size, PeEnemySound *s);
 int pe_enemy_pack_load(PeEnemyPack *pack, const char *dir, char *err, unsigned err_size);
 void pe_enemy_pack_free(PeEnemyPack *pack);
 int pe_enemy_pack_anim(const PeEnemyPack *pack, const char *name);
+/* Reports required missing roles and optional omissions. Bits follow the role enum. */
+int pe_enemy_pack_coverage(const PeEnemyPack *pack, unsigned optional, char *out, unsigned size);
+enum { PE_AUDIO_ATTACK = 1, PE_AUDIO_HURT = 2, PE_AUDIO_DEATH = 4, PE_AUDIO_OTHER = 8 };
+unsigned pe_enemy_pack_audio_roles(const PeEnemyPack *pack);
 
 /* Every vertex posed for frame `frame` of anim `anim` (clamped to its last frame), into out
  * (pack->vertices entries, model frame: floor y 0). Returns 0, -1 for a bad anim. */

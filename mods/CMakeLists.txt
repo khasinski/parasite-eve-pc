@@ -427,7 +427,7 @@ if(BUILD_TESTING)
         $<TARGET_OBJECTS:pe-import-core> $<TARGET_OBJECTS:pe-re-play-core>
         pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_rooms.c
         pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_door.c)
-    target_sources(test-mod-re-session PRIVATE pe_enemy_import/pe_trip_result.c)   # the headless host's battle trip
+    target_sources(test-mod-re-session PRIVATE pe_enemy_import/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
     target_include_directories(test-mod-re-session PRIVATE host import/core pe_src_re2 pe_re_play pe_enemy_import)
     set_tests_properties(mod-re-session PROPERTIES TIMEOUT 600)
     # A scripted run through RE2 from the street with the real session (tests/pe_re_route_test.c):
@@ -437,7 +437,7 @@ if(BUILD_TESTING)
         $<TARGET_OBJECTS:pe-import-core> $<TARGET_OBJECTS:pe-re-play-core>
         pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_rooms.c
         pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_door.c)
-    target_sources(test-mod-re-route PRIVATE pe_enemy_import/pe_trip_result.c)   # the headless host's battle trip
+    target_sources(test-mod-re-route PRIVATE pe_enemy_import/pe_trip_result.c pe_src_re2/pe_src_re2_enemies.c)   # the headless host's battle trip
     target_include_directories(test-mod-re-route PRIVATE host import/core pe_src_re2 pe_re_play pe_enemy_import)
     set_tests_properties(mod-re-route PROPERTIES TIMEOUT 900)
     # Model audit (not pass/fail): every Model on PE_TEST_RE1/2/3_DISC checked and measured into a CSV
@@ -456,13 +456,14 @@ if(BUILD_TESTING)
     if(TARGET pe_download_json AND TARGET pe_download_zip)
         # F1 > Import's scan and build, then the Wardrobe's pack reader loading the result.
         pe_feature_test(import-flow ${PROJECT_SOURCE_DIR}/tests/pe_mod_import_flow_test.c ${pe_import_sources}
-            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re1/pe_src_re1_items.c pe_src_re1/pe_src_re1_movies.c pe_src_re1/pe_src_re1_files.c pe_src_re1/pe_src_re1_objects.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_door.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_movies.c pe_src_re2/pe_src_re2_files.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2.c
+            pe_src_re1/pe_src_re1_emd.c pe_src_re1/pe_src_re1_sound.c pe_src_re1/pe_src_re1_music.c pe_src_re1/pe_src_re1_rooms.c pe_src_re1/pe_src_re1_logic.c pe_src_re1/pe_src_re1_door.c pe_src_re1/pe_src_re1_items.c pe_src_re1/pe_src_re1_movies.c pe_src_re1/pe_src_re1_files.c pe_src_re1/pe_src_re1_objects.c pe_src_re1/pe_src_re1_anims.c pe_src_re1/pe_src_re1.c pe_src_re2/pe_src_re2_pld.c pe_src_re2/pe_src_re2_sound.c pe_src_re2/pe_src_re2_music.c pe_src_re2/pe_src_re2_rooms.c pe_src_re2/pe_src_re2_logic.c pe_src_re2/pe_src_re2_door.c pe_src_re2/pe_src_re2_items.c pe_src_re2/pe_src_re2_movies.c pe_src_re2/pe_src_re2_files.c pe_src_re2/pe_src_re2_objects.c pe_src_re2/pe_src_re2_rbj.c pe_src_re2/pe_src_re2_emd.c pe_src_re2/pe_src_re2.c pe_src_re2/pe_src_re2_enemies.c
             pe_src_re3/pe_src_re3_pld.c pe_src_re3/pe_src_re3_sound.c pe_src_re3/pe_src_re3_music.c pe_src_re3/pe_src_re3_rooms.c pe_src_re3/pe_src_re3_logic.c pe_src_re3/pe_src_re3_door.c pe_src_re3/pe_src_re3_items.c pe_src_re3/pe_src_re3_movies.c pe_src_re3/pe_src_re3_files.c pe_src_re3/pe_src_re3_objects.c pe_src_re3/pe_src_re3.c
             pe_src_re3/pe_src_re3_emd.c pe_src_re3/pe_src_re3_tones.c pe_src_re3/pe_src_re3_enemies.c
             pe_src_dc1/pe_src_dc1_archive.c pe_src_dc1/pe_src_dc1_core.c pe_src_dc1/pe_src_dc1_sound.c pe_src_dc1/pe_src_dc1_music.c pe_src_dc1/pe_src_dc1.c
             pe_wardrobe/pe_skin_build.c pe_wardrobe/pe_skin_target.c
-            pe_wardrobe/pe_packs.c pe_import/pe_import_job.c)
-        target_include_directories(test-mod-import-flow PRIVATE import/core pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import)
+            pe_wardrobe/pe_packs.c pe_import/pe_import_job.c
+            pe_enemy_import/pe_enemy_pack.c pe_enemy_import/pe_enemy_build.c pe_enemy_import/pe_enemy_target.c)
+        target_include_directories(test-mod-import-flow PRIVATE import/core pe_src_re1 pe_src_re2 pe_src_re3 pe_src_dc1 pe_import pe_enemy_import)
         target_compile_definitions(test-mod-import-flow PRIVATE "PE_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
         target_link_libraries(test-mod-import-flow PRIVATE pe_download_json pe_download_zip)
         set_tests_properties(mod-import-flow PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600

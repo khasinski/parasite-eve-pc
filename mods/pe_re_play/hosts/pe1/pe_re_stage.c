@@ -18,6 +18,7 @@
 #include "pe_imp.h"
 #include "pe_imp_mdec.h"
 #include "pe_imp_room.h"
+#include "re_encounter_rooms.h"
 #include "pe_mod_host.h"
 #include "pe_game.h"
 #include "pe1/boot_display.h"
@@ -96,6 +97,8 @@ static int s_placement_markers;
 static int s_placement_meshes;
 static int s_placement_idle;
 static PeReEnemyPlacement s_placements[PE_RE_ENEMIES_MAX];
+static PeReSceneActor s_scene_actors[16];
+static int s_scene_count;
 static int s_placement_count;
 static RenderColorTrianglePacket s_marker_packets[2][PE_RE_ENEMIES_MAX][2];
 static RenderColorTrianglePacket s_placeholder_packets[2][PE_RE_ENEMIES_MAX][2];
@@ -125,6 +128,7 @@ static struct {
     unsigned first_page, first_palette;
     int16_t *idle;
     unsigned idle_frames, fps;
+    PeImpAnimation scene_moves;
 } s_field_mesh[0x40];
 
 static struct {
@@ -561,6 +565,7 @@ static int project_field_point(double x, double y, double z, double screen[3]) {
 
 static void free_field_mesh(unsigned kind) {
     pe_imp_model_free(&s_field_mesh[kind].model);
+    pe_imp_animation_free(&s_field_mesh[kind].scene_moves);
     free(s_field_mesh[kind].idle);
     memset(&s_field_mesh[kind], 0, sizeof s_field_mesh[kind]);
 }
@@ -596,6 +601,11 @@ static int empty_texture_area(RECT *rect) {
     return 1;
 }
 
+static int show_placement_mesh(const PeReEnemyPlacement *p) {
+    return p->kind < 0x40 && (pe_re_scene_kind(p->kind) || s_placement_meshes == PE_RE_MESH_ALL ||
+           (s_placement_meshes == PE_RE_MESH_ENCOUNTERS && pe_re2_proximity_enemy(p, 0)));
+}
+
 static void prepare_field_texture(void) {
     if (s_texture_checked) return;
     s_texture_checked = 1;
@@ -603,7 +613,7 @@ static void prepare_field_texture(void) {
     int kind = -1;
     for (int i = 0; i < s_placement_count; i++) {
         const unsigned candidate = s_placements[i].kind;
-        if (candidate >= 0x40) continue;
+        if (!show_placement_mesh(&s_placements[i])) continue;
         const PeImpModel *model = &s_field_mesh[candidate].model;
         if (model->parts && model->h <= FIELD_TEX_HEIGHT && model->pal_rows <= FIELD_CLUT_ROWS) {
             kind = (int)candidate;
@@ -629,7 +639,8 @@ static void prepare_field_texture(void) {
 }
 
 static void load_field_idle(unsigned kind, const PeImpModel *model) {
-    if (kind != FIELD_IDLE_KIND) return;
+    const int scene = pe_re_scene_kind(kind);
+    if (!scene && kind != FIELD_IDLE_KIND) return;
     for (uint32_t b = 0; b < model->bones; b++)
         if (model->parent[b] >= (int)b || (b != 0 && model->parent[b] < 0)) return;
     for (uint32_t p = 0; p < model->parts && p < model->bones; p++)
@@ -638,6 +649,10 @@ static void load_field_idle(unsigned kind, const PeImpModel *model) {
     PeImpAnimation animation = {0};
     snprintf(id, sizeof id, "re2:enemy/em%02x/moves", kind);
     if (pe_imp_catalog_animation(s_store, id, &animation, why, sizeof why)) return;
+    if (scene && animation.bones == model->bones) {
+        s_field_mesh[kind].scene_moves = animation;
+        return;
+    }
     if (animation.bones == model->bones && animation.moves > FIELD_IDLE_MOVE) {
         PeImpMove *idle = &animation.move[FIELD_IDLE_MOVE];
         s_field_mesh[kind].idle = idle->data;
@@ -650,9 +665,9 @@ static void load_field_idle(unsigned kind, const PeImpModel *model) {
 
 static void load_field_meshes(void) {
     int wanted[0x40] = {0};
-    if (s_placement_meshes) {
-        for (int i = 0; i < s_placement_count; i++)
-            if (s_placements[i].kind < 0x40) wanted[s_placements[i].kind] = 1;
+    for (int i = 0; i < s_placement_count; i++) {
+        const unsigned kind = s_placements[i].kind;
+        if (show_placement_mesh(&s_placements[i])) wanted[kind] = 1;
     }
     for (unsigned kind = 0; kind < 0x40; kind++) {
         PeImpModel *model = &s_field_mesh[kind].model;
@@ -698,7 +713,7 @@ static int on_import_published(void *ctx, void *user) {
     clear_field_texture();
     for (unsigned kind = 0; kind < 0x40; kind++)
         if (s_field_mesh[kind].tried) free_field_mesh(kind);
-    if (s_placement_meshes) load_field_meshes();
+    load_field_meshes();
     return 0;
 }
 
@@ -706,7 +721,8 @@ typedef struct FieldBonePose {
     double r[3][3], t[3];
 } FieldBonePose;
 
-static void idle_pose(const PeImpModel *model, const int16_t *frame, const int16_t *first, FieldBonePose *pose) {
+static void field_pose(const PeImpModel *model, const int16_t *frame, const int16_t *first,
+                       const PeReSceneActor *scene, FieldBonePose *pose) {
     for (uint32_t b = 0; b < model->bones; b++) {
         const int16_t *angle = frame + 3 + 3 * b;
         const double sx = sin(angle[0] * FIELD_TURN_RADIANS), cx = cos(angle[0] * FIELD_TURN_RADIANS);
@@ -721,13 +737,18 @@ static void idle_pose(const PeImpModel *model, const int16_t *frame, const int16
             if (b == 0) {
                 memcpy(pose[b].r[r], rotation[r], sizeof rotation[r]);
                 /* The placement already supplies the root's position. Keep only its idle motion. */
-                pose[b].t[r] = model->pos[0][r] + (double)frame[r] - first[r];
+                pose[b].t[r] = scene ? frame[r] : model->pos[0][r] + (double)frame[r] - first[r];
                 continue;
             }
             const FieldBonePose *parent = &pose[model->parent[b]];
             pose[b].t[r] = parent->t[r];
             for (int c = 0; c < 3; c++) {
-                pose[b].t[r] += parent->r[r][c] * model->rel[b][c];
+                int offset = model->rel[b][c];
+                if (scene && scene->kind == 0x3f && c == 1) {
+                    const int part = b == 1 ? 0 : b == 2 ? 1 : b >= 4 && b <= 10 && !(b & 1) ? 2 : -1;
+                    if (part >= 0) offset = (scene->absolute_parts ? 0 : offset) + scene->part_y[part];
+                }
+                pose[b].t[r] += parent->r[r][c] * offset;
                 pose[b].r[r][c] = parent->r[r][0] * rotation[0][c] + parent->r[r][1] * rotation[1][c] +
                                   parent->r[r][2] * rotation[2][c];
             }
@@ -773,18 +794,40 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
     const uint64_t vblanks = (uint32_t)Psyz_VideoVSync(-1);
     for (int i = 0; i < s_placement_count; i++) {
         const PeReEnemyPlacement *p = &s_placements[i];
-        if (p->kind >= 0x40) continue;
+        if (!show_placement_mesh(p)) continue;
+        const PeReSceneActor *scene = NULL;
+        if (pe_re_scene_kind(p->kind)) {
+            for (int j = 0; j < s_scene_count; j++)
+                if (s_scene_actors[j].slot == p->slot && s_scene_actors[j].kind == p->kind) {
+                    scene = &s_scene_actors[j];
+                    break;
+                }
+            if (!scene) continue;
+        }
         const PeImpModel *model = &s_field_mesh[p->kind].model;
-        const double foot = (double)s_field_mesh[p->kind].foot_y;
-        const double angle = pe_re_facing_of(p->dir) * FIELD_TURN_RADIANS;
+        const double world_x = scene ? scene->x : p->x;
+        const double world_y = scene ? scene->y : p->y - (double)s_field_mesh[p->kind].foot_y;
+        const double world_z = scene ? scene->z : p->z;
+        const double angle = (scene ? scene->dir : pe_re_facing_of(p->dir)) * FIELD_TURN_RADIANS;
         const double cs = cos(angle), sn = sin(angle);
         FieldBonePose pose[PE_IMP_MODEL_BONES_MAX];
         const int16_t *idle = s_field_mesh[p->kind].idle;
         const unsigned frames = s_field_mesh[p->kind].idle_frames;
-        const int animated = s_placement_idle && idle && frames;
-        if (animated) {
+        int animated = 0;
+        if (scene) {
+            const PeImpAnimation *moves = &s_field_mesh[p->kind].scene_moves;
+            if (scene->move < moves->moves) {
+                const PeImpMove *move = &moves->move[scene->move];
+                if (move->frames) {
+                    const unsigned frame = scene->frame < move->frames ? scene->frame : move->frames - 1;
+                    field_pose(model, move->data + frame * (3u + 3u * model->bones), NULL, scene, pose);
+                    animated = 1;
+                }
+            }
+        } else if (s_placement_idle && idle && frames) {
             const unsigned frame = (vblanks * s_field_mesh[p->kind].fps / 60 + 7u * p->slot) % frames;
-            idle_pose(model, idle + frame * (3u + 3u * model->bones), idle, pose);
+            field_pose(model, idle + frame * (3u + 3u * model->bones), idle, NULL, pose);
+            animated = 1;
         }
         int emitted = 0;
         for (uint32_t b = 0; b < model->parts && b < model->bones; b++) {
@@ -805,8 +848,8 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                                       pose[b].r[a][1] * f->v[k][1] + pose[b].r[a][2] * f->v[k][2] :
                                       (double)f->v[k][a] + offset[a];
                         const double x = mesh[0], z = mesh[2];
-                        if (project_field_point(p->x + cs * x + sn * z, p->y - foot + mesh[1],
-                                                p->z - sn * x + cs * z, screen[k])) visible |= 1 << k;
+                        if (project_field_point(world_x + cs * x + sn * z, world_y + mesh[1],
+                                                world_z - sn * x + cs * z, screen[k])) visible |= 1 << k;
                     }
                     for (int t = 0; t <= quad && emitted < FIELD_MESH_TRIANGLES; t++) {
                         const int *v = split[t];
@@ -873,7 +916,7 @@ static void draw_placement_markers(RenderNativeTag *ordering, int slot, unsigned
         if (x < 5 || x >= PIC_W - 5 || y < 5 || y >= FIELD_H - 5) continue;
         const int sx = (int)lround(x), sy = (int)lround(y);
         const int bucket = depth <= FIELD_UI_OT_LAST ? FIELD_UI_OT_LAST + 1 : (int)depth;
-        if (s_placement_meshes && !s_field_mesh[p->kind].model.parts) {
+        if (s_placement_meshes && show_placement_mesh(p) && !s_field_mesh[p->kind].model.parts) {
             double head[3];
             if (project_field_point(p->x, p->y - 2000, p->z, head)) {
                 const int height = (int)lround(y - head[1]);
@@ -933,7 +976,7 @@ static int on_background(void *ctx, void *user) {
     for (int k = 0; k < 2; k++) quads[k].color.bytes.r = quads[k].color.bytes.g = quads[k].color.bytes.b = shade;
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[0]);
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[1]);
-    if (s_placement_meshes && !s_hold) {
+    if ((s_placement_meshes || s_scene_count) && !s_hold) {
         prepare_field_texture();
         draw_placement_meshes(ordering, b->slot, shade);
     }
@@ -997,7 +1040,12 @@ void pe_re_stage_set_placements(const PeReEnemyPlacement *placements, int count)
     clear_field_texture();
     s_placement_count = count;
     if (count) memcpy(s_placements, placements, (size_t)count * sizeof *placements);
-    if (s_placement_meshes) load_field_meshes();
+    if (!count) s_scene_count = 0;
+    load_field_meshes();
+}
+void pe_re_stage_set_scene_actors(const PeReSceneActor *actors, int count) {
+    s_scene_count = count;
+    if (count) memcpy(s_scene_actors, actors, (size_t)count * sizeof *actors);
 }
 void pe_re_stage_player(double *x, double *z, int *facing) { *x = s_walk.x, *z = s_walk.z, *facing = s_walk.yaw; }
 int pe_re_stage_floor(void) { return s_walk.floor; }

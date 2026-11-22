@@ -434,14 +434,27 @@ static int step(Vm *vm, PeReScdTask *t) {
         if (t->work >= 0) vm->run->arrived[t->work] = 0;
         t->pc += n;
         return CONTINUE;
-    case OP_SCE_EM_SET: {                                  /* an enemy placed (the caller checks its flag) */
+    case OP_SCE_EM_SET: {                                  /* SCE2.C: the last successful spawn owns the slot. */
+        const unsigned group = PE_RE_FG_ENEMY +
+            (vm->flags->work[PE_RE_WORK_STAGE] >= 3 || pe_re_flag(vm->flags, PE_RE_FG_STATUS, 6));
+        if (ins[9] != 0xff && pe_re_flag(vm->flags, group, ins[9])) { t->pc += n; return CONTINUE; }
         PeReScdRun *r = vm->run;
         int k = 0;
-        while (k < r->nenemy && r->enemy[k] != t->pc) k++;
-        if (k == r->nenemy && r->nenemy < PE_RE_ENEMIES_MAX) r->enemy[r->nenemy++] = t->pc;
+        while (k < r->nenemy && vm->rdt[r->enemy[k] + 2] != ins[2]) k++;
+        if (k < PE_RE_ENEMIES_MAX) {
+            r->enemy[k] = t->pc;
+            if (k == r->nenemy) r->nenemy++;
+        }
         const int slot = work_slot(3, (int8_t)ins[2]);
         if (slot >= 0) {                                   /* SCE_EM_SET_WORK: id, type, floor, position, facing */
             int16_t *w = r->works[slot];
+            memset(w, 0, sizeof r->works[slot]);
+            r->em_dead[slot - 2] = r->em_busy[slot - 2] = 0;
+            r->em_ready[slot - 2] = 0;
+            r->scene[slot - 2] = (PeReSceneMotion){0};
+            if (pe_re_scene_kind(ins[3])) {
+                w[PE_RE_MEMBER_ROUTINE0] = ins[3] == 0x2c ? 1 : 2;
+            }
             w[0] = 1, w[6] = ins[3], w[7] = s16(ins + 4), w[17] = ins[6];
             w[11] = s16(ins + 10), w[12] = s16(ins + 12), w[13] = s16(ins + 14), w[15] = s16(ins + 16);
         }
@@ -540,6 +553,93 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
     schedule(&vm);
 }
 
+int pe_re_scene_kind(unsigned kind) {
+    return kind == 0x2c || kind == 0x3e || kind == 0x3f;
+}
+
+/* Clip lengths from the retail CDEMD archives. Consulted bio2-ds EM2C/3E/3F
+ * and JOINT.C for the commands, sequence completion and reverse playback. */
+static unsigned scene_frames(unsigned kind, unsigned move) {
+    if (kind == 0x2c) return 66;
+    if (kind == 0x3f) return 60;
+    return move < 2 ? 20 : 190;
+}
+
+static void scene_tick(PeReSceneMotion *motion, int16_t *work) {
+    const unsigned kind = (unsigned)work[PE_RE_MEMBER_ID];
+    int16_t *routine = &work[PE_RE_MEMBER_ROUTINE0];
+    int16_t *command = &work[PE_RE_MEMBER_ROUTINE1];
+    int16_t *trigger = &work[PE_RE_MEMBER_SCE_FREE0];
+    if (kind == 0x3f && *trigger == 1) {
+        *trigger = 0;
+        *routine = 2;
+        *command = 0;
+        *motion = (PeReSceneMotion){.elapsed = 59, .reset_parts = 1};
+        return;
+    }
+    if (!motion->active) {
+        if (*routine != 1 || (kind == 0x2c && (*command || !*trigger))) return;
+        if (kind == 0x3e && (*command < 0 || *command > 11)) { *routine = 2; return; }
+        const unsigned selected = (unsigned)*command;
+        *motion = (PeReSceneMotion){.active = 1};
+        if (kind == 0x3e) {
+            motion->move = (uint8_t)(selected >= 10 ? selected - 10 : selected / 2);
+            motion->reverse = (uint8_t)(selected & 1);
+            if (selected >= 10) motion->next = (uint8_t)(2 - motion->move);
+            *command = motion->next ? 12 : 13;
+        } else {
+            *command = 1;
+        }
+        return;
+    }
+    if (*routine != 1) { motion->active = 0; return; }
+    if ((unsigned)motion->elapsed + 1 < scene_frames(kind, motion->move)) {
+        motion->elapsed++;
+    } else if (motion->next) {
+        motion->move = motion->next - 1;
+        motion->elapsed = motion->next = 0;
+        *command = 13;
+    } else {
+        motion->active = 0;
+        if (kind == 0x2c) *command = 2;
+        else *routine = 2;
+    }
+}
+
+static int scene_part_delta(int frame, int start, int count, int step) {
+    const int span = frame - start;
+    return (span < 0 ? 0 : span > count ? count : span) * step;
+}
+
+int pe_re_scd_scene_actors(const PeReScdRun *run, PeReSceneActor *out, int max) {
+    int count = 0;
+    for (unsigned slot = 0; slot < 16 && count < max; slot++) {
+        const int16_t *work = run->works[2 + slot];
+        const unsigned kind = (unsigned)work[PE_RE_MEMBER_ID];
+        if (!work[0] || !pe_re_scene_kind(kind)) continue;
+        const PeReSceneMotion *motion = &run->scene[slot];
+        PeReSceneActor *actor = &out[count++];
+        *actor = (PeReSceneActor){
+            .slot = (uint8_t)slot, .kind = (uint8_t)kind, .move = motion->move,
+            .frame = (uint8_t)(motion->reverse ? scene_frames(kind, motion->move) - 1 - motion->elapsed : motion->elapsed),
+            .x = work[PE_RE_MEMBER_POS_X], .y = work[PE_RE_MEMBER_POS_Y], .z = work[PE_RE_MEMBER_POS_Z],
+            .dir = work[PE_RE_MEMBER_CDIR_Y]
+        };
+        if (kind != 0x3f) continue;
+        if (motion->reset_parts) {
+            actor->absolute_parts = 1;
+            actor->part_y[0] = 94, actor->part_y[1] = -103, actor->part_y[2] = 112;
+        } else {
+            const int frame = motion->elapsed + (motion->active || motion->elapsed);
+            actor->part_y[0] = (int16_t)(scene_part_delta(frame, 0, 10, 11) +
+                                        scene_part_delta(frame, 10, 13, 12) + scene_part_delta(frame, 23, 7, 11));
+            actor->part_y[1] = (int16_t)(scene_part_delta(frame, 40, 1, -12) + scene_part_delta(frame, 41, 7, -13));
+            actor->part_y[2] = (int16_t)(scene_part_delta(frame, 47, 7, 12) + scene_part_delta(frame, 54, 6, 11));
+        }
+    }
+    return count;
+}
+
 /* Enemy stand-ins. Enemies' own code doesn't run here, but a few scenes wait on what it does to a
  * field the scripts read. Each stand-in does just that part, after about how long it takes in game:
  * - enemy 0x31 (a G form), Sce_free[0]:
@@ -552,14 +652,97 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
  *   waits on both; the death comes from the battle (pe_re_session_beaten), not a timer.
  * - enemy 0x36 (the last G form): it sets bit 2 of Sce_free[0] when it dies (EM36.C Em36_die00).
  *   7-04's train scene waits on it, again from the battle. */
-static void enemy_standins(PeReScdRun *run) {
+/* EM2A.C: the scripted entrance handlers hand the actor back to combat
+ * after their room-specific cues. Cinematic-only handlers stay scripted. */
+static void mr_x_standin(PeReScdRun *run, int slot, unsigned room) {
+    int16_t *w = run->works[2 + slot];
+    if (!(w[PE_RE_MEMBER_TYPE] & 0x4000) || run->em_dead[slot]) return;
+    const unsigned command = (uint16_t)w[PE_RE_MEMBER_SCE_FREE0];
+    switch (room) {
+    case 0x117:
+        if (!command) return;
+        if (!w[PE_RE_MEMBER_SCE_FREE1]) {
+            if (++run->em_busy[slot] == 60) {
+                w[PE_RE_MEMBER_SCE_FREE1] = 1;
+                w[PE_RE_MEMBER_POS_X] = -25650;
+                w[PE_RE_MEMBER_POS_Y] = -14401;
+                w[PE_RE_MEMBER_POS_Z] = -4200;
+                w[PE_RE_MEMBER_CDIR_Y] = 0xc20;
+            }
+            return;
+        }
+        if (pe_re_scd_running(run, 6)) return;
+        break;
+    case 0x20c:
+        if (command != 1 || pe_re_scd_running(run, 5)) return;
+        break;
+    case 0x20d:
+        if (command != 1 || pe_re_scd_running(run, 15)) return;
+        break;
+    case 0x507:
+        if (!(command & 8) || pe_re_scd_running(run, 5)) return;
+        break;
+    case 0x602:
+        if (!command || !w[PE_RE_MEMBER_SCE_FREE1] || pe_re_scd_running(run, 17)) return;
+        break;
+    default:
+        return;
+    }
+    w[PE_RE_MEMBER_TYPE] &= ~0x4000;
+}
+
+/* EM22.C: the window cameo in 2-01 stays scripted. The other marked entrances
+ * drop into combat after the room script hands the actor off. */
+static void licker_standin(PeReScdRun *run, int slot, unsigned room) {
+    int16_t *w = run->works[2 + slot];
+    if (run->em_dead[slot] || w[PE_RE_MEMBER_SCE_FREE0] != 1) return;
+    const uint16_t type = (uint16_t)w[PE_RE_MEMBER_TYPE];
+    unsigned proc;
+    int floor_y = 0;
+    if (room == 0x10b && slot == 0 && type == 0x4011) proc = 13;
+    else if (room == 0x204 && slot == 1 && type == 0x4510) proc = 9, floor_y = -5400;
+    else if (room == 0x20e && slot == 0 && type == 0x4013) proc = 2;
+    else return;
+    if (pe_re_scd_running(run, proc)) return;
+    w[PE_RE_MEMBER_POS_Y] = (int16_t)floor_y;
+    w[PE_RE_MEMBER_TYPE] &= ~0x4000;
+}
+
+static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
+    const int alligator = flags->work[PE_RE_WORK_STAGE] == 3 && flags->work[PE_RE_WORK_ROOM] == 0x0a;
+    const int sewer = flags->work[PE_RE_WORK_STAGE] == 4 && flags->work[PE_RE_WORK_ROOM] == 9;
+    const unsigned room = (unsigned)(flags->work[PE_RE_WORK_STAGE] + 1) * 256 + flags->work[PE_RE_WORK_ROOM];
     for (int n = 0; n < 16; n++) {
         int16_t *w = run->works[2 + n];
         int16_t *f = &w[PE_RE_MEMBER_SCE_FREE0];
         int order = 0, frames = 0;
+        if (w[0] && w[PE_RE_MEMBER_ID] == 0x22) {
+            licker_standin(run, n, room);
+            continue;
+        }
+        if (w[0] && w[PE_RE_MEMBER_ID] == 0x2a) {
+            mr_x_standin(run, n, room);
+            continue;
+        }
+        if (w[0] && pe_re_scene_kind((unsigned)w[PE_RE_MEMBER_ID])) {
+            scene_tick(&run->scene[n], w);
+            continue;
+        }
+        if (w[0] && w[PE_RE_MEMBER_ID] == 0x23 && alligator) {
+            /* EM23.C: after the damage defeat, return to the unlocked exit view. */
+            if (*f && run->em_dead[n] == 1) {
+                run->camera = 8;
+                run->camera_lock = 0;
+                run->em_dead[n] = 2;
+            }
+            continue;
+        }
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x31) {
             if (*f & 0x10) order = 0x10, frames = 60;              /* out of the pod: about a second */
             else if ((*f & 1) && !(*f & 2)) order = 1, frames = 90; /* out of the shell: a second and a half */
+        } else if (w[0] && w[PE_RE_MEMBER_ID] == 0x33 && sewer) {
+            /* EM33.C: the 5-09 alternate entrance signals Sce_free1 after unfolding. */
+            if (*f == 3 && !(w[PE_RE_MEMBER_SCE_FREE1] & 1)) order = 3, frames = 90;
         } else if (w[0] && w[PE_RE_MEMBER_ID] == 0x36) {
             if (run->em_dead[n] == 1) *f |= 2, run->em_dead[n] = 2;   /* beaten: it died */
             continue;
@@ -569,7 +752,14 @@ static void enemy_standins(PeReScdRun *run) {
         }
         if (!order) { run->em_busy[n] = 0; continue; }
         if (!run->em_busy[n]) run->em_busy[n] = (uint8_t)frames;    /* the order's just come in */
-        else if (!--run->em_busy[n]) *f = (int16_t)(order == 0x10 ? *f & ~0x10 : *f | 2);
+        else if (!--run->em_busy[n]) {
+            if (order == 0x10) *f &= ~0x10;
+            else if (order == 3) w[PE_RE_MEMBER_SCE_FREE1] |= 1;
+            else {
+                *f |= 2;
+                run->em_ready[n] = 1;
+            }
+        }
     }
 }
 
@@ -578,7 +768,7 @@ void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost
     if (!run->ran || !setup(&vm, l, flags, host, run, BUDGET_TICK)) return;
     for (int w = 0; w < PE_RE_WORKS; w++)                  /* they got there (at once): the engine's arrival flags, */
         if (run->arrived[w]) pe_re_flag_set(flags, 5, run->arrived[w], 1);   /* set again after each frame's clear */
-    enemy_standins(run);
+    enemy_standins(run, flags);
     exec_task(&vm, 0, 1);                                  /* Event_exec(0, 1): the every-frame handler */
     schedule(&vm);
     work_clr(flags);

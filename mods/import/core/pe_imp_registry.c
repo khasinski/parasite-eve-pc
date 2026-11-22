@@ -221,59 +221,58 @@ const PeImpEnemyProfile *pe_imp_enemy_for(const char *asset_id) {
 }
 
 #define MAX_ENEMY_GAMES 16
-static struct {
-    char game[16];
-    int yaw, scale;
-    PeImpEnemyModelForKind model;
-} s_enemy_game[MAX_ENEMY_GAMES];
+static struct { char game[16]; int yaw, scale; } s_enemy_game[MAX_ENEMY_GAMES];
 static int s_enemy_games;
 
-static int enemy_game_index(const char *game, int add) {
-    if (!word_ok(game, 15)) return -1;
+int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale) {
+    if (!word_ok(game, 15) || scale <= 0) return -1;
     int i = 0;
     while (i < s_enemy_games && strcmp(s_enemy_game[i].game, game)) i++;
-    if (i < s_enemy_games) return i;
-    if (!add || i == MAX_ENEMY_GAMES) return -1;
-    memset(&s_enemy_game[i], 0, sizeof s_enemy_game[i]);
+    if (i == MAX_ENEMY_GAMES) return -1;
+    if (i == s_enemy_games) s_enemy_games++;
     snprintf(s_enemy_game[i].game, sizeof s_enemy_game[i].game, "%s", game);
-    s_enemy_games++;
-    return i;
-}
-
-int pe_imp_set_enemy_defaults(const char *game, int yaw, int scale) {
-    const int i = scale > 0 ? enemy_game_index(game, 1) : -1;
-    if (i < 0) return -1;
     s_enemy_game[i].yaw = yaw & 4095, s_enemy_game[i].scale = scale;
     return 0;
 }
 
 int pe_imp_enemy_defaults(const char *game, int *yaw, int *scale) {
-    const int i = enemy_game_index(game, 0);
-    if (i < 0 || !s_enemy_game[i].scale) return -1;
-    if (yaw) *yaw = s_enemy_game[i].yaw;
-    if (scale) *scale = s_enemy_game[i].scale;
-    return 0;
-}
-
-int pe_imp_set_enemy_models(const char *game, PeImpEnemyModelForKind lookup) {
-    const int i = lookup ? enemy_game_index(game, 1) : -1;
-    if (i < 0) return -1;
-    s_enemy_game[i].model = lookup;
-    return 0;
-}
-
-int pe_imp_enemy_model(const char *game, uint8_t kind, char *asset_id, size_t n) {
-    const int i = enemy_game_index(game, 0);
-    char local[PE_IMP_ID_MAX];
-    if (i < 0 || !s_enemy_game[i].model || !asset_id || !n ||
-        s_enemy_game[i].model(kind, local, sizeof local)) return -1;
-    const int written = snprintf(asset_id, n, "%s:%s", game, local);
-    return written < 0 || (size_t)written >= n ? -1 : 0;
+    for (int i = 0; game && i < s_enemy_games; i++)
+        if (!strcmp(s_enemy_game[i].game, game)) {
+            if (yaw) *yaw = s_enemy_game[i].yaw;
+            if (scale) *scale = s_enemy_game[i].scale;
+            return 0;
+        }
+    return -1;
 }
 
 #define MAX_STRENGTHS 128
 static struct { char id[PE_IMP_ID_MAX]; int life, power; } s_strength[MAX_STRENGTHS];
 static int s_strengths;
+static struct { char id[PE_IMP_ID_MAX]; const PeImpEnemyCues *cues; } s_cue[MAX_STRENGTHS];
+static int s_cues;
+
+int pe_imp_add_enemy_cues(const char *asset_id, const PeImpEnemyCues *cues) {
+    if (!asset_id || !cues || !strchr(asset_id, ':') || strlen(asset_id) >= PE_IMP_ID_MAX) return -1;
+    int i = 0;
+    while (i < s_cues && strcmp(asset_id, s_cue[i].id)) i++;
+    if (i == MAX_STRENGTHS) return -1;
+    if (i == s_cues) s_cues++;
+    snprintf(s_cue[i].id, sizeof s_cue[i].id, "%s", asset_id);
+    s_cue[i].cues = cues;
+    return 0;
+}
+
+const PeImpEnemyCues *pe_imp_enemy_cues(const char *asset_id) {
+    if (!asset_id) return NULL;
+    const PeImpEnemyCues *base = NULL;
+    for (int i = 0; i < s_cues; i++) {
+        const size_t len = strlen(s_cue[i].id);
+        if (strncmp(asset_id, s_cue[i].id, len)) continue;
+        if (!asset_id[len]) return s_cue[i].cues;
+        if (asset_id[len] == '-') base = s_cue[i].cues;
+    }
+    return base;
+}
 
 int pe_imp_add_enemy_strength(const char *asset_id, int life, int power) {
     if (!asset_id || !strchr(asset_id, ':') || strlen(asset_id) >= PE_IMP_ID_MAX || life <= 0 || power < 0) return -1;
@@ -304,6 +303,129 @@ int pe_imp_enemy_strength(const char *asset_id, int *life, int *power) {
     return -1;
 }
 
+#define MAX_KINDS 256
+static struct {
+    char game[16];
+    unsigned kind;
+    char id[PE_IMP_ID_MAX];
+    const PeImpEnemyStart *starts;
+    PeImpEnemyBody body;
+    unsigned next;
+    PeImpEnemyMoveHints moves;
+} s_kind[MAX_KINDS];
+static int s_kinds;
+
+int pe_imp_add_enemy_kind(const char *game, unsigned kind, const char *local_id) {
+    if (!word_ok(game, 15) || !local_id || !*local_id || strlen(local_id) + strlen(game) + 1 >= PE_IMP_ID_MAX) return -1;
+    int i = 0;
+    while (i < s_kinds && !(s_kind[i].kind == kind && !strcmp(s_kind[i].game, game))) i++;
+    if (i == MAX_KINDS) return -1;
+    if (i == s_kinds) {
+        s_kind[i].starts = NULL;
+        s_kind[i].body = PE_IMP_ENEMY_UPRIGHT;
+        s_kind[i].next = 0;
+        s_kind[i].moves = (PeImpEnemyMoveHints){.attack = -1, .hurt = -1, .walk = -1, .die = -1};
+        s_kinds++;
+    }
+    snprintf(s_kind[i].game, sizeof s_kind[i].game, "%s", game);
+    snprintf(s_kind[i].id, sizeof s_kind[i].id, "%s", local_id);
+    s_kind[i].kind = kind;
+    return 0;
+}
+
+int pe_imp_enemy_kind_asset(const char *game, unsigned kind, char *asset_id, size_t n) {
+    for (int i = 0; game && i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            if (asset_id && n) snprintf(asset_id, n, "%s:%s", game, s_kind[i].id);
+            return 0;
+        }
+    return -1;
+}
+
+int pe_imp_set_enemy_starts(const char *game, unsigned kind, const PeImpEnemyStart *starts) {
+    for (int i = 0; game && i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            s_kind[i].starts = starts;
+            return 0;
+        }
+    return -1;
+}
+
+static int enemy_asset_kind(const char *asset_id) {
+    const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
+    if (!colon) return -1;
+    const size_t prefix = (size_t)(colon - asset_id);
+    const char *dash = strrchr(colon + 1, '-');
+    for (int i = 0; i < s_kinds; i++)
+        if (strlen(s_kind[i].game) == prefix &&
+            !strncmp(s_kind[i].game, asset_id, prefix) &&
+            (!strcmp(s_kind[i].id, colon + 1) ||
+             (dash && strlen(s_kind[i].id) == (size_t)(dash - colon - 1) &&
+              !strncmp(s_kind[i].id, colon + 1, (size_t)(dash - colon - 1)))))
+            return i;
+    return -1;
+}
+
+const PeImpEnemyStart *pe_imp_enemy_starts(const char *asset_id) {
+    const int i = enemy_asset_kind(asset_id);
+    return i >= 0 ? s_kind[i].starts : NULL;
+}
+
+int pe_imp_enemy_model_allowed(const char *asset_id) {
+    const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
+    if (!colon) return 0;
+    const size_t prefix = (size_t)(colon - asset_id);
+    for (int i = 0; i < s_kinds; i++)
+        if (strlen(s_kind[i].game) == prefix && !strncmp(s_kind[i].game, asset_id, prefix))
+            return enemy_asset_kind(asset_id) >= 0;
+    return 1;
+}
+
+int pe_imp_set_enemy_next_form(const char *game, unsigned kind, unsigned next) {
+    if (!game || kind == next) return -1;
+    for (int i = 0; i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            s_kind[i].next = next;
+            return 0;
+        }
+    return -1;
+}
+
+int pe_imp_enemy_next_form(const char *asset_id, char *out, size_t size) {
+    const int i = enemy_asset_kind(asset_id);
+    if (i < 0 || !s_kind[i].next) return -1;
+    return pe_imp_enemy_kind_asset(s_kind[i].game, s_kind[i].next, out, size);
+}
+
+int pe_imp_set_enemy_move_hints(const char *game, unsigned kind, PeImpEnemyMoveHints hints) {
+    for (int i = 0; game && i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            s_kind[i].moves = hints;
+            return 0;
+        }
+    return -1;
+}
+
+PeImpEnemyMoveHints pe_imp_enemy_move_hints(const char *asset_id) {
+    const int i = enemy_asset_kind(asset_id);
+    return i < 0 ? (PeImpEnemyMoveHints){.attack = -1, .hurt = -1, .walk = -1, .die = -1} : s_kind[i].moves;
+}
+
+int pe_imp_set_enemy_body(const char *game, unsigned kind, PeImpEnemyBody body) {
+    if (body < PE_IMP_ENEMY_UPRIGHT || body > PE_IMP_ENEMY_SCENE) return -1;
+    for (int i = 0; game && i < s_kinds; i++)
+        if (s_kind[i].kind == kind && !strcmp(s_kind[i].game, game)) {
+            s_kind[i].body = body;
+            return 0;
+        }
+    return -1;
+}
+
+PeImpEnemyBody pe_imp_enemy_body(const char *asset_id) {
+    const int i = enemy_asset_kind(asset_id);
+    return i >= 0 ? s_kind[i].body : PE_IMP_ENEMY_UPRIGHT;
+}
+
 int pe_imp_add_target(const PeImpTarget *t) {
     if (!t || t->api.version != PE_IMP_API_VERSION || t->api.size != sizeof *t || !t->build || !t->module ||
         !t->verb || s_targets == MAX_TARGETS)
@@ -332,4 +454,5 @@ const PeImpTarget *pe_imp_target(int i) { return i >= 0 && i < s_targets ? s_tar
 void pe_imp_registry_reset(void) {
     for (int i = 0; i < s_namings; i++) pj_free(s_naming[i].root);
     s_readers = s_namings = s_games = s_rigs = s_targets = s_autos = s_enemies = s_enemy_games = 0;
+    s_strengths = s_kinds = s_cues = 0;
 }

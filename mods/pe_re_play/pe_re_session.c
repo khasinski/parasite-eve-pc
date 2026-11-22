@@ -6,6 +6,8 @@
 
 #include "pe_re_session.h"
 #include "pe_re_zone.h"
+#include "pe_imp_rdt.h"
+#include "re_encounter_rooms.h"
 
 /* First rooms: RE2 and RE3 open in the street (room 1-00); RE1 in the mansion's main hall (1-06).
  * Only RE2 has the cameras and collision the runtime uses so far (design doc, phase 4). */
@@ -436,6 +438,15 @@ static unsigned enemy_group(const PeReSession *s) {        /* Sce_em_set's flag 
     return s->stage >= 3 || pe_re_flag(&s->progress.flags, PE_RE_FG_STATUS, 6) ? PE_RE_FG_ENEMY + 1 : PE_RE_FG_ENEMY;
 }
 
+/* EM28.C: the first adult G begins dormant and wakes on Sce_free0. Its Type
+ * 1 re-entry placement is already awake. Wait for the room's entrance to end. */
+static int adult_g_dormant(const PeReSession *s, const int16_t *work) {
+    if (s->stage != 2 || (s->room != 3 && s->room != 9) || work[PE_RE_MEMBER_TYPE] != 0) return 0;
+    const unsigned entrance = s->room == 3 ? 16 : 10;
+    return !(work[PE_RE_MEMBER_SCE_FREE0] & 1) || pe_re_scd_running(&s->run, entrance) ||
+           pe_re_scd_running(&s->run, entrance + 1);
+}
+
 int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max) {
     uint32_t size = 0;
     int n = 0;
@@ -446,14 +457,109 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
         if (at + 22 > size) continue;
         const uint8_t *e = rdt + at;                        /* SCE_EM_SET_WORK, 22 bytes */
         if (e[9] != 0xFF && pe_re_flag(&s->progress.flags, enemy_group(s), e[9])) continue;   /* killed */
+        if (e[2] < 16 && s->run.em_dead[e[2]]) continue;
         PeReEnemyPlacement *p = &out[n++];
         p->slot = e[2], p->kind = e[3], p->behaviour = (uint16_t)(e[4] | e[5] << 8);
         p->floor = e[6], p->sound = e[7], p->model = e[8], p->killed_flag = e[9];
         p->x = (int16_t)(e[10] | e[11] << 8), p->y = (int16_t)(e[12] | e[13] << 8);
         p->z = (int16_t)(e[14] | e[15] << 8), p->dir = (int16_t)(e[16] | e[17] << 8);
         p->motion = (int16_t)(e[18] | e[19] << 8), p->ctr = (int16_t)(e[20] | e[21] << 8);
+        if (p->slot < 16) {
+            const int16_t *work = s->run.works[2 + p->slot];
+            if (work[0] && work[PE_RE_MEMBER_ID] == p->kind) {
+                p->behaviour = (uint16_t)work[PE_RE_MEMBER_TYPE];
+                p->x = work[PE_RE_MEMBER_POS_X], p->y = work[PE_RE_MEMBER_POS_Y], p->z = work[PE_RE_MEMBER_POS_Z];
+                p->dir = work[PE_RE_MEMBER_CDIR_Y], p->floor = (uint8_t)work[PE_RE_MEMBER_NFLOOR];
+                if (p->kind == 0x28 && adult_g_dormant(s, work)) p->behaviour |= 0x4000;
+            }
+        }
+        if (pe_re2_g_attached_embryo(s->stage, s->room, p) &&
+            (!s->run.works[2][0] || s->run.works[2][PE_RE_MEMBER_ID] != 0x28 || s->run.em_dead[0])) n--;
     }
     return n;
+}
+
+int pe_re_session_alligator(const PeReSession *s, unsigned slot) {
+    return s->game && !strcmp(s->game->game, "re2") && s->stage == 3 && s->room == 0x0a && slot == 0 &&
+           s->run.works[2][0] && s->run.works[2][PE_RE_MEMBER_ID] == 0x23 && !s->run.em_dead[0];
+}
+
+int pe_re_session_final_tyrant(const PeReSession *s, unsigned slot) {
+    return s->game && !strcmp(s->game->game, "re2") && s->stage == 6 && s->room == 2 && slot == 0 &&
+           s->run.works[2][0] && s->run.works[2][PE_RE_MEMBER_ID] == 0x2b && !s->run.em_dead[0];
+}
+
+/* Room 4-0A's proc 10 releases the canister, then sets Room_flg bit 0. */
+int pe_re_session_canister_ready(const PeReSession *s) {
+    return pe_re_session_alligator(s, 0) && pe_re_flag(&s->progress.flags, 5, 0);
+}
+
+void pe_re_session_release_canister(PeReSession *s) {
+    if (pe_re_session_alligator(s, 0) && !pe_re_session_canister_ready(s) && !pe_re_scd_running(&s->run, 10))
+        pe_re_scd_exec(s->logic, &s->run, PE_RE_TASKS, 10);
+}
+
+int pe_re_session_canister_win(PeReSession *s, unsigned slot, uint8_t killed_flag) {
+    if (slot != 0 || !pe_re_session_canister_ready(s)) return -1;
+    if (pe_re_session_beaten(s, (uint8_t)slot, killed_flag)) return -1;
+    /* EM23.C signals the canister grab and explosion separately. Room 4-0A
+     * uses those signals to update the scene and the exit. */
+    pe_re_flag_set(&s->progress.flags, 5, 0x1d, 1);
+    pe_re_flag_set(&s->progress.flags, 5, 0x1e, 1);
+    return 0;
+}
+
+/* The room scripts release these bosses from their parked state before the
+ * battle starts. See the enemy stand-ins in pe_re_scd.c. */
+int pe_re_session_ready_boss(const PeReSession *s) {
+    if (!s->game || strcmp(s->game->game, "re2")) return -1;
+    const int alligator = s->stage == 3 && s->room == 0x0a;
+    const int sewer = s->stage == 4 && s->room == 9;
+    const int lift = s->stage == 5 && s->room == 0x17;
+    const int tyrant = s->stage == 6 && s->room == 2;
+    const int train = s->stage == 6 && s->room == 4;
+    if (!alligator && !sewer && !lift && !tyrant && !train) return -1;
+    const int16_t *work = s->run.works[2];
+    if (!work[0] || s->run.em_dead[0]) return -1;
+    const unsigned kind = (unsigned)work[PE_RE_MEMBER_ID];
+    const unsigned command = (uint16_t)work[PE_RE_MEMBER_SCE_FREE0];
+    /* 4-0A calls proc 11 from proc 2 to set the entrance command. Let proc 2
+     * finish releasing the player before the host takes over for the battle. */
+    if (alligator && kind == 0x23 && command && !pe_re_scd_running(&s->run, 2)) return 0;
+    if (sewer && kind == 0x31 && (command & 4)) return 0;
+    if (sewer && kind == 0x33 && command == 3 && (work[PE_RE_MEMBER_SCE_FREE1] & 1)) return 0;
+    if (lift && kind == 0x34 && s->run.em_ready[0]) return 0;
+    /* EM2B.C: the platform entrance's last command hands the Tyrant over to combat. */
+    if (tyrant && kind == 0x2b && command == 3 && !pe_re_scd_running(&s->run, 7)) return 0;
+    if (train && kind == 0x36 && (command & 1) && !(command & 2) &&
+        !(work[PE_RE_MEMBER_TYPE] & 0x8000)) return 0;
+    return -1;
+}
+
+static uint32_t room_move_word(const uint8_t *p) {
+    return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+}
+
+int pe_re_session_enemy_room_move(const PeReSession *s, unsigned slot, char *asset, size_t size) {
+    uint32_t bytes, at, length;
+    if (!s->game || strcmp(s->game->game, "re2") || !s->logic || slot >= 16) return -1;
+    const uint8_t *rdt = pe_imp_logic_section(s->logic, PE_IMP_LOGIC_RDT0, NULL, &bytes);
+    if (!rdt || pe_imp_rdt_section(rdt, bytes, 22, &at, &length) || length < 8) return -1;
+    const uint8_t *rbj = rdt + at;
+    const uint32_t table = room_move_word(rbj), count = room_move_word(rbj + 4);
+    if (table > length || count > 64 || count > (length - table) / 8) return -1;
+    /* bio2-ds EM_SUB.C: bit zero is for the player, then one bit per enemy slot.
+     * Later records supersede earlier ones for the same slot. */
+    for (uint32_t i = count; i > 0; i--) {
+        const uint32_t record = room_move_word(rbj + table + 8 * (i - 1));
+        if (record <= length - 4 && (room_move_word(rbj + record) & (1u << (slot + 1)))) {
+            const int written = snprintf(asset, size, "re2:roomanim/%x%02x-%u-p%u",
+                                         (unsigned)s->stage + 1, (unsigned)s->room, (unsigned)i - 1,
+                                         (unsigned)s->player);
+            return written >= 0 && (size_t)written < size ? 0 : -1;
+        }
+    }
+    return -1;
 }
 
 int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag) {

@@ -30,9 +30,11 @@ static PeImportJob s_job;
 static SDL_Thread *s_thread;
 static SDL_AtomicInt s_state;                 /* 0 idle, 1 working, 2 done (to be published) */
 static int s_started;
+static int s_prepare_enemies;
 static char s_auto[400] = "starting";
 static char s_scan[240] = "-";
 static char s_build[240] = "-";
+static char s_enemy_build_summary[128] = "-";
 
 /* ---- folders the player added (import/folders.txt: one per line, # for comments) ----
  * So disc images can stay where they are (a folder of games, one per subfolder). PC adds them with
@@ -634,6 +636,7 @@ static int start_job(void) {
     s_builds_said = 0;
     if (s_lock) SDL_UnlockMutex(s_lock);
     s_job.progress = &k_job_progress, s_job.step = &k_step_progress;
+    s_job.prepare_enemies = s_prepare_enemies;
     if (!(s_thread = SDL_CreateThread(worker, "pe_import", NULL))) {
         pe_import_job_run(&s_job);                                    /* no threads: do it here */
         SDL_SetAtomicInt(&s_state, 2);
@@ -657,6 +660,12 @@ static void publish(void) {
     else snprintf(s_auto, sizeof s_auto, "all %d costume%s ready", ready, ready == 1 ? "" : "s");
     snprintf(s_scan, sizeof s_scan, "%d new disc%s read, %d unchanged (%s); %d not supported yet", j->discs_read,
              j->discs_read == 1 ? "" : "s", j->unchanged, j->games[0] ? j->games : "none", j->unknown);
+    if (j->prepare_enemies) {
+        snprintf(s_enemy_build_summary, sizeof s_enemy_build_summary, "%d complete, %d incomplete, %d failed%s",
+                 j->enemies_complete, j->enemies_partial, j->enemies_failed,
+                 j->enemy_report_saved ? "" : " (report unavailable)");
+        pe_mod_log(MOD_ID, "enemy preparation: %s", s_enemy_build_summary);
+    }
     pe_mod_log(MOD_ID, "automatic import: %s; scan: %s; built: %s", s_auto, s_scan, j->built_names[0] ? j->built_names : "nothing new");
     if (n) {
         char msg[480];
@@ -745,6 +754,7 @@ static void text_auto(char *out, unsigned size) {                    /* F1 is op
 }
 static void text_folder(char *out, unsigned size) { snprintf(out, size, "%s", s_job.discs); }
 static void text_scan(char *out, unsigned size) { poll(); snprintf(out, size, "%s", s_scan); }
+static void text_enemy_builds(char *out, unsigned size) { poll(); snprintf(out, size, "%s", s_enemy_build_summary); }
 static void text_build(char *out, unsigned size) { snprintf(out, size, "%s", s_build); }
 static void text_asset(char *out, unsigned size) {
     listed();
@@ -753,12 +763,43 @@ static void text_asset(char *out, unsigned size) {
     snprintf(out, size, "%s, %s %s", it->a.id, it->a.platform, it->a.path);
 }
 
+/* ---- "enemy_build" (pe_services.h): a fight from an imported room brings that room's creature ---- */
+static int enemy_ensure(const char *asset_id, char *why, size_t n) {
+    const PeImpTarget *tg = NULL;
+    const char *colon = asset_id ? strchr(asset_id, ':') : NULL;
+    char game[16], builder[64], folder[1100], log[160] = "";
+    if (!colon || colon - asset_id >= (long)sizeof game) { snprintf(why, n, "not an asset ID"); return -1; }
+    if (SDL_GetAtomicInt(&s_state) != 0) { snprintf(why, n, "the importer is busy"); return -1; }
+    for (int i = 0; i < pe_imp_targets() && !tg; i++)
+        if (!strcmp(pe_imp_target(i)->module, "enemies")) tg = pe_imp_target(i);
+    if (!tg || !tg->place) { snprintf(why, n, "no enemies builder"); return -1; }
+    if (tg->accepts && !tg->accepts(asset_id)) { snprintf(why, n, "%s is not a fightable model", asset_id); return -1; }
+    snprintf(game, sizeof game, "%.*s", (int)(colon - asset_id), asset_id);
+    PeImpAsset *list = NULL, a;
+    const int count = pe_imp_catalog_assets(s_job.store, game, &list);
+    int found = 0;
+    for (int i = 0; i < count && !found; i++) if (!strcmp(list[i].id, asset_id)) a = list[i], found = 1;
+    free(list);
+    if (!found) { snprintf(why, n, "%s isn't in the import catalog (scan its disc in F1 > Import)", asset_id); return -1; }
+    snprintf(builder, sizeof builder, "pe_import 1, %s %u", tg->module, tg->version);
+    if (tg->current && tg->current(&a, builder)) return 0;   /* built already, and not changed since */
+    const void *targets = s_job.host->open_targets(why, n);
+    if (!targets) return -1;
+    PeImpBuild ctx = {s_job.store, targets, NULL};
+    const int rc = tg->place(&a, builder, folder, sizeof folder, why, n) || tg->build(&ctx, a.id, folder, log, sizeof log, why, n);
+    s_job.host->close_targets(targets);
+    if (!rc) pe_mod_log("pe_import", "enemy %s built for a fight: %s", asset_id, log);
+    return rc ? -1 : 0;
+}
+static const PeEnemyBuildApi s_enemy_build = {sizeof s_enemy_build, enemy_ensure};
+
 static int import_init(void) {
     if (pe_mod_path(s_job.discs, sizeof s_job.discs, "import/discs") || pe_mod_path(s_job.store, sizeof s_job.store, "import/store") ||
         pe_mod_path(s_job.packs, sizeof s_job.packs, "packs"))
         return 1;
     if (pe_mod_path(s_rooms_dir, sizeof s_rooms_dir, "import/rooms")) return 1;
     s_job.host = import_host();
+    pe_service_publish(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION, &s_enemy_build, "pe_import");
     s_job.host->init();                                       /* the game's own tables (PE1: MDEC) */
     pe_imp_mkdirs(s_job.discs);
     if (pe_mod_path(s_folders_file, sizeof s_folders_file, "import/folders.txt")) return 1;
@@ -773,10 +814,12 @@ static int import_init(void) {
     pe_menu_register_action(0, "Forget added folders", "Stop reading the added folders. Costumes already built stay.", forget_folders);
     pe_menu_register_action(0, "Scan again", "Reads new disc images and builds what's missing. Runs by itself when the game starts.", scan_again);
     pe_menu_register_info(0, "Last scan", "What the last scan found.", text_scan);
-    pe_menu_page("Build by hand", "Any other model from your scanned discs, built as a costume.", 10);
+    pe_menu_register_toggle(0, "Prepare enemy packs", "Builds missing or changed enemy packs in the background after a disc scan. Use Scan again to start now.", &s_prepare_enemies, NULL);
+    pe_menu_register_info(0, "Enemy packs", "See import/store/enemy-report.tsv for animation and audio coverage from the last preparation.", text_enemy_builds);
+    pe_menu_page("Build by hand", "Build a model from your scanned discs as a costume or enemy.", 10);
     pe_menu_register_dynamic_choice("Build by hand", "Model", "A model from your scanned discs.", &s_pick, MAX_ITEMS, item_count, item_name);
     pe_menu_register_info("Build by hand", "From", "Where the selected model comes from.", text_asset);
-    pe_menu_register_action("Build by hand", "Build as a costume", "Builds the selected model as a Wardrobe costume, in a pack of your own. For personal use only.", build);
+    pe_menu_register_action("Build by hand", "Build selected model", "Builds a costume for the Wardrobe or an enemy for Fights, depending on the model.", build);
     pe_menu_register_info("Build by hand", "Last build", "What the last build did.", text_build);
     pe_menu_page("Rooms", "Room backgrounds from your scanned discs, one picture per camera view, exported to look at.", 40);
     pe_menu_register_dynamic_choice("Rooms", "Source game", "Choose a game with imported rooms.",

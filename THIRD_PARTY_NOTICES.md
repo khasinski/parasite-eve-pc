@@ -321,7 +321,33 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   (`SCE1.C` Work_copy), and the scripts' wall switches and which walls stop the player (`SCE2.C`
   Sca_id_set, `SCA.H`, `SCA.C` Sca_ck_hit, `GAME.C`), the partner hand-over in scenes (`SCE2.C`
   Splc_sce / Splc_ret), the 4th Survivor's start (`TITLE.C` Title_game_init), and each enemy's
-  starting life (the `EM*.C` Init functions; our table in `pe_src_re2.c` holds the numbers only).
+  starting life (the `EM*.C` Init functions), and the opening poses for RE2 zombie placements
+  and their get-up moves (`EM10.C`, Em10_Init and Em10_mv07).
+  The tables in `pe_src_re2_enemies.c` record those values. We also
+  consulted `EM_SET.C` (Emd_load_file) for Leon's and Claire's enemy archive routing and
+  `EM21.C`, `EM22.C`, `EM24.C`, `EM29.C`, `EM2F.C`, and `EM3A.C` for enemy locomotion.
+  `EM10.C`, `SCE0.C`, and `SND.C` were also consulted for zombie sound cues and enemy bank layout.
+  `EM20.C`, `EM22.C`, and `EM24.C` were consulted for dog and Licker sound cues.
+  `EM_SUB.C` and `EM10.C` were consulted for selecting feeding zombies' room animation.
+  `EM21.C`, `EM29.C`, `EM31.C`, `EM33.C`, `EM34.C`, `EM36.C`, and `EM3A.C` were consulted
+  for crow, roach and G sound cues and the airborne attack moves.
+  `EM23.C`, `EM25.C`, `EM27.C`, `EM2A.C`, `EM2B.C`, `EM2E.C`, `EM2F.C`, `EM30.C`,
+  `EM37.C`, and `EM3B.C` were consulted for additional enemy sound events.
+  `EM27.C`, `EM28.C`, `EM2B.C`, and `EM2D.C` were consulted for enemy movement
+  and attacks. `SCE0.C`, `EM28.C`, and `EM2D.C` were consulted for cues in paired sound banks.
+  `EM29.C` and `EM37.C` were consulted for the roach grab and G4 tentacle attack.
+  `EM2F.C` and `EM36.C` were consulted for the Ivy appendage's battle moves and G4's final collapse.
+  `EM26.C`, `EM27.C`, `EM29.C`, `EM2C.C`, `EM2D.C`, `EM2E.C`, `EM37.C`, `EM3B.C`,
+  `EM3E.C`, and `EM3F.C` were consulted for procedural attacks, flinches, and scene-only actors.
+  `EM2C.C`, `EM3E.C`, `EM3F.C`, and `JOINT.C` were consulted for scene actor commands,
+  reverse playback, completion flags, and movable parts.
+  `SCE2.C` was consulted for enemy slot replacement and the killed flags that suppress spawns.
+  `EM23.C` was consulted for the Alligator's entrance command, entrance motion, and exit camera
+  after a damage defeat, and for the canister's grab, shot, and explosion signals.
+  `EM2B.C` was consulted for the final Tyrant's entrance command, damage-gated launcher
+  sequence, and persistent defeat.
+  `EM2A.C` was consulted for Mr. X's room-specific combat releases and knockdown.
+    `EM22.C`, `EM27.C`, and `EM28.C` were consulted for Licker entrances and adult G offspring behaviour.
   Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

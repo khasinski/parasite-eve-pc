@@ -21,6 +21,8 @@
  * Parasite Eve loads a room of its own (an event, a warp) the imported room comes back over it once
  * the field is free. */
 #include <stdio.h>
+#include <stddef.h>
+#include <math.h>
 #include <string.h>
 
 #include "pe_mod_api.h"
@@ -30,6 +32,7 @@
 #include "pe_re_save.h"
 #include "pe_re_session.h"
 #include "re_host.h"
+#include "re_encounter_rooms.h"
 
 #define MOD_ID "pe_re_play"
 #define PAGE "Play imported games"
@@ -104,18 +107,47 @@ static int api_defeated_slot(uint8_t slot) {
 }
 static int pause_for_battle(void);
 static void resume_after_battle(void);
+static int encounter_position(double *x, double *z, int *floor);
+static int encounter_reachable(double x, double z, double target_x, double target_z);
+static int encounter_boss(void) { return s_playing ? pe_re_session_ready_boss(&s_session) : -1; }
+static int prepare_boss(uint8_t slot);
+static int api_canister_defeat(uint8_t slot) {
+    if (!s_playing || !s_room_reported || !re_host()->room_active() || pe_re_door_busy()) return -1;
+    for (int i = 0; i < s_nenemies; i++) {
+        if (s_enemies[i].slot == slot)
+            return pe_re_session_canister_win(&s_session, slot, s_enemies[i].killed_flag);
+    }
+    return -1;
+}
+static const char *api_enemy_archive(void) {
+    if (!s_playing || !s_session.game || strcmp(s_session.game->game, "re2")) return NULL;
+    /* bio2-ds EM_SET.C, Emd_load_file: Leon (including HUNK) and Claire use
+     * different enemy archives. Sce_em_set's Model_type controls animation handling. */
+    return s_session.player == 1 ? "cdemd1" : "cdemd0";
+}
+static int api_enemy_room_move(unsigned slot, char *asset, size_t size) {
+    return s_playing ? pe_re_session_enemy_room_move(&s_session, slot, asset, size) : -1;
+}
 static const PeRePlayApi s_api = {
-    sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot
+    sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
+    api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat
 };
 
 static void report_enemies(void) {
     PeReEnemyPlacement placements[PE_RE_ENEMIES_MAX];
     const int fresh = !s_room_reported;
     const int n = pe_re_session_enemies(&s_session, placements, PE_RE_ENEMIES_MAX);
+    const ReHost *host = re_host();
+    if (host->struct_size >= offsetof(ReHost, set_scene_actors) + sizeof host->set_scene_actors &&
+        host->set_scene_actors) {
+        PeReSceneActor actors[16];
+        const int count = pe_re_scd_scene_actors(&s_session.run, actors, 16);
+        host->set_scene_actors(actors, count);
+    }
     if (!fresh && n == s_nenemies && pe_re_enemy_lists_equal(s_enemies, placements, n)) return;
     memcpy(s_enemies, placements, (size_t)n * sizeof *placements);
     s_nenemies = n, s_room_reported = 1;
-    re_host()->set_placements(s_enemies, n);
+    host->set_placements(s_enemies, n);
     PeReRoomEvent e;
     if (api_room(&e)) return;
     e.fresh = fresh;
@@ -135,13 +167,46 @@ static void text_enemies(char *out, unsigned size) {
 }
 
 /* ---- the pocket and the item box ---- */
-enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE, PICK_COMPUTER };
+enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE, PICK_COMPUTER, PICK_ALLIGATOR };
 /* A typewriter save: the ribbon is used when she says yes; PE's own save screen opens on the next
  * free frame (as its save phones' script opcode opens it); backing out without a save gives the
  * ribbon back once the room is up again. */
 enum { TYPE_NONE, TYPE_OPEN, TYPE_SCREEN };
 static int s_typing, s_typed;
 static int s_pick, s_pick_at;
+
+static int prepare_boss(uint8_t slot) {
+    if (pe_re_session_final_tyrant(&s_session, slot)) return PE_RE_BOSS_LAUNCHER;
+    if (!pe_re_session_alligator(&s_session, slot)) return PE_RE_BOSS_STANDARD;
+    if (pe_re_scd_running(&s_session.run, 10)) return PE_RE_BOSS_WAIT;
+    if (pe_re_session_canister_ready(&s_session)) return PE_RE_BOSS_CANISTER;
+    if (s_session.run.alligator_chosen) return PE_RE_BOSS_STANDARD;
+    static const char *const choices[] = {"Fight directly", "Release the gas canister"};
+    if (!re_host()->choose("The Alligator is coming.", choices, 2, 0)) return PE_RE_BOSS_STANDARD;
+    s_pick = PICK_ALLIGATOR;
+    pe_mod_log("pe_re_play", "Alligator: approach choice opened");
+    return PE_RE_BOSS_WAIT;
+}
+
+static int encounter_position(double *x, double *z, int *floor) {
+    const ReHost *host = re_host();
+    if (!s_playing || s_battle_paused || !host->room_active() || !host->field_free() ||
+        pe_re_door_busy() || host->dialogue_busy() || host->native_menu_active() ||
+        s_typing != TYPE_NONE || s_script_held || s_pick != PICK_NONE) return -1;
+    int facing;
+    host->player_pose(x, z, &facing);
+    *floor = host->player_floor();
+    return 0;
+}
+
+static int encounter_reachable(double x, double z, double target_x, double target_z) {
+    const ReHost *host = re_host();
+    const double dx = target_x - x, dz = target_z - z;
+    const int steps = (int)(fmax(fabs(dx), fabs(dz)) / 220) + 2;
+    for (int i = 1; i < steps; i++)
+        if (host->position_blocked(x + dx * i / steps, z + dz * i / steps)) return 0;
+    return 1;
+}
 
 static int pause_for_battle(void) {
     if (!s_playing) return 0;
@@ -239,6 +304,11 @@ static void picked(void) {
     if (c == -1 || s_pick == PICK_NONE) return;
     const int mode = s_pick;
     s_pick = PICK_NONE;
+    if (mode == PICK_ALLIGATOR) {
+        s_session.run.alligator_chosen = 1;
+        if (c == 1) pe_re_session_release_canister(&s_session);
+        return;
+    }
     if (c < 0) return;                                      /* backed out */
     if (mode == PICK_COMPUTER) {
         if (c == 0 && pe_re_session_computer(&s_session, 1) == PE_RE_COMPUTER_DONE) say(s_session.said);
@@ -432,7 +502,10 @@ static int on_frame(void *ctx, void *user) {
     re_host()->set_masks(s_masks);
     re_host()->set_player_size(s_size);
     re_host()->set_placement_markers(s_placement_markers);
-    re_host()->set_placement_meshes(s_placement_meshes);
+    const int encounters = !strcmp(s_session.game->game, "re2");
+    re_host()->set_placement_meshes(s_placement_meshes ||
+                                    (encounters && pe_re2_opening_street(s_session.stage, s_session.room)) ? PE_RE_MESH_ALL :
+                                    encounters ? PE_RE_MESH_ENCOUNTERS : PE_RE_MESH_OFF);
     re_host()->set_placement_idle(s_placement_idle);
     if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */
         const unsigned buttons = re_host()->held_buttons();
