@@ -110,6 +110,15 @@ static void resume_after_battle(void);
 static int encounter_position(double *x, double *z, int *floor);
 static int encounter_reachable(double x, double z, double target_x, double target_z);
 static int encounter_boss(void) { return s_playing ? pe_re_session_ready_boss(&s_session) : -1; }
+static int prepare_boss(uint8_t slot);
+static int api_canister_defeat(uint8_t slot) {
+    if (!s_playing || !s_room_reported || !re_host()->room_active() || pe_re_door_busy()) return -1;
+    for (int i = 0; i < s_nenemies; i++) {
+        if (s_enemies[i].slot == slot)
+            return pe_re_session_canister_win(&s_session, slot, s_enemies[i].killed_flag);
+    }
+    return -1;
+}
 static const char *api_enemy_archive(void) {
     if (!s_playing || !s_session.game || strcmp(s_session.game->game, "re2")) return NULL;
     /* bio2-ds EM_SET.C, Emd_load_file: Leon (including HUNK) and Claire use
@@ -121,7 +130,7 @@ static int api_enemy_room_move(unsigned slot, char *asset, size_t size) {
 }
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
-    api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss
+    api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat
 };
 
 static void report_enemies(void) {
@@ -158,13 +167,25 @@ static void text_enemies(char *out, unsigned size) {
 }
 
 /* ---- the pocket and the item box ---- */
-enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE, PICK_COMPUTER };
+enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE, PICK_COMPUTER, PICK_ALLIGATOR };
 /* A typewriter save: the ribbon is used when she says yes; PE's own save screen opens on the next
  * free frame (as its save phones' script opcode opens it); backing out without a save gives the
  * ribbon back once the room is up again. */
 enum { TYPE_NONE, TYPE_OPEN, TYPE_SCREEN };
 static int s_typing, s_typed;
 static int s_pick, s_pick_at;
+
+static int prepare_boss(uint8_t slot) {
+    if (!pe_re_session_alligator(&s_session, slot)) return PE_RE_BOSS_STANDARD;
+    if (pe_re_scd_running(&s_session.run, 10)) return PE_RE_BOSS_WAIT;
+    if (pe_re_session_canister_ready(&s_session)) return PE_RE_BOSS_CANISTER;
+    if (s_session.run.alligator_chosen) return PE_RE_BOSS_STANDARD;
+    static const char *const choices[] = {"Fight directly", "Release the gas canister"};
+    if (!re_host()->choose("The Alligator is coming.", choices, 2, 0)) return PE_RE_BOSS_STANDARD;
+    s_pick = PICK_ALLIGATOR;
+    pe_mod_log("pe_re_play", "Alligator: approach choice opened");
+    return PE_RE_BOSS_WAIT;
+}
 
 static int encounter_position(double *x, double *z, int *floor) {
     const ReHost *host = re_host();
@@ -282,6 +303,11 @@ static void picked(void) {
     if (c == -1 || s_pick == PICK_NONE) return;
     const int mode = s_pick;
     s_pick = PICK_NONE;
+    if (mode == PICK_ALLIGATOR) {
+        s_session.run.alligator_chosen = 1;
+        if (c == 1) pe_re_session_release_canister(&s_session);
+        return;
+    }
     if (c < 0) return;                                      /* backed out */
     if (mode == PICK_COMPUTER) {
         if (c == 0 && pe_re_session_computer(&s_session, 1) == PE_RE_COMPUTER_DONE) say(s_session.said);

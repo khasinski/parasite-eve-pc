@@ -16,6 +16,7 @@ typedef struct {
     int armed;                  /* a room to report to */
     int count;
     unsigned defeated;          /* bit per selected placement that actually spawned and died */
+    int canister_detonated;
     uint32_t stage, room;
     char game[16];
     uint8_t slot[PE_TRIP_FOES_MAX];

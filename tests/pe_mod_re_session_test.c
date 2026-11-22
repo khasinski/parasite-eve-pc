@@ -49,12 +49,27 @@ static void test_alligator(const PeReGame *game, unsigned player) {
         pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
     }
     CHECK(pe_re_session_ready_boss(&boss) == 0);
+    const PeReFlags entrance_flags = *flags;
+    const PeReScdRun entrance_run = boss.run;
     CHECK(!pe_re_session_beaten(&boss, 0, 0));
     pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
     CHECK(boss.run.camera == 8 && !boss.run.camera_lock);
     CHECK(pe_re_session_ready_boss(&boss) == -1 && pe_re_flag(flags, PE_RE_FG_ENEMY + 1, 0));
     pe_re_scd_run(boss.logic, flags, NULL, &boss.run);
     CHECK(!boss.run.works[2][0]);
+
+    *flags = entrance_flags;
+    boss.run = entrance_run;
+    CHECK(!pe_re_session_canister_ready(&boss));
+    CHECK(pe_re_session_canister_win(&boss, 0, 0) < 0);
+    pe_re_session_release_canister(&boss);
+    for (int ticks = 0; ticks < 150 && pe_re_scd_running(&boss.run, 10); ticks++)
+        pe_re_scd_tick(boss.logic, flags, NULL, &boss.run);
+    CHECK(pe_re_session_canister_ready(&boss));
+    CHECK(pe_re_session_canister_win(&boss, 1, 0) < 0);
+    CHECK(!pe_re_session_canister_win(&boss, 0, 0));
+    CHECK(pe_re_flag(flags, 5, 0x1d) && pe_re_flag(flags, 5, 0x1e));
+    CHECK(pe_re_flag(flags, PE_RE_FG_ENEMY + 1, 0) && pe_re_session_ready_boss(&boss) == -1);
     pe_re_session_end(&boss);
 }
 

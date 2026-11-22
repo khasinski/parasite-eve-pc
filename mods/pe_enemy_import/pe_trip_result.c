@@ -94,7 +94,12 @@ int pe_trip_report(PeTripResult *t, const PeRePlayApi *api) {
     t->armed = 0;
     if (!room.game || strcmp(room.game, t->game) || room.stage != t->stage || room.room != t->room) return -1;
     int reported = 0;
-    for (int i = 0; i < t->count; i++)
-        if (t->defeated & (1u << i)) reported += !api->defeated_slot(t->slot[i]);
+    for (int i = 0; i < t->count; i++) {
+        if (!(t->defeated & (1u << i))) continue;
+        if (t->canister_detonated && api->struct_size >= sizeof *api && api->defeated_by_canister) {
+            if (!api->defeated_by_canister(t->slot[i])) { reported++; continue; }
+        }
+        reported += !api->defeated_slot(t->slot[i]);
+    }
     return reported ? reported : -1;
 }

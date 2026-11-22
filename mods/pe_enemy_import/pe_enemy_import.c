@@ -132,7 +132,7 @@ static int s_rpd_encounters = 1;
 static int s_re2_encounters = 1;
 enum { PE_MANUAL_FIGHT, PE_PROXIMITY_FIGHT, PE_SCRIPTED_FIGHT };
 static struct {
-    int latched, floor, won, slot, retry;
+    int latched, floor, won, slot, retry, effect;
     uint32_t stage, room;
     int16_t x, z;
 } s_approach;
@@ -376,7 +376,7 @@ static int pe_select_approach(const PeRePlayApi *api, const PeReRoomEvent *room,
 }
 
 static int pe_select_boss(const PeRePlayApi *api, const PeReRoomEvent *room, PeReEnemyPlacement *out) {
-    if (api->struct_size < sizeof *api || !api->encounter_boss) return 0;
+    if (api->struct_size < offsetof(PeRePlayApi, prepare_boss) || !api->encounter_boss) return 0;
     const int slot = api->encounter_boss();
     for (int i = 0; slot >= 0 && i < room->count; i++)
         if (room->enemies[i].slot == slot) { *out = room->enemies[i]; return 1; }
@@ -402,6 +402,8 @@ static int pe_room_creature(const PeRePlayApi *api) {
     PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION), .play = api};
     if (api->struct_size >= offsetof(PeRePlayApi, enemy_room_move) && api->enemy_archive) packs.archive = api->enemy_archive();
     const int count = pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs);
+    if (count && s.automatic == PE_SCRIPTED_FIGHT && s_approach.effect == PE_RE_BOSS_CANISTER)
+        pe_enemy_battle_arm_canister();
     if (!count && !s.automatic) pe_enemy_battle_arm(s_enemy, s_enemy_count + 1, s_room_enemies == 1);
     return count;
 }
@@ -489,6 +491,8 @@ static void pe_step(void) {
         if (s.automatic == PE_SCRIPTED_FIGHT && s.live_enemies) s_approach.retry = 180;
         if (s.automatic == PE_PROXIMITY_FIGHT) s_approach.won = !s.live_enemies;
         pe_trip_defeated(&s_trip, s.automatic || !s.live_enemies ? pe_enemy_battle_defeated_mask() : 0);
+        s_trip.canister_detonated = s.automatic == PE_SCRIPTED_FIGHT && s_approach.effect == PE_RE_BOSS_CANISTER &&
+                                    pe_enemy_battle_canister_detonated();
         s_trip_wait = 1800;                                /* the trip back, a door: half a minute at most */
         s.state = PE_AFTER;
         s.frames = 0;
@@ -542,9 +546,13 @@ static void pe_check_approach(void) {
         s_approach.latched = 0;
     }
     if (!scripted && !pe_select_approach(api, &room, x, z, floor, close)) return;
+    const int effect = scripted && api->struct_size >= sizeof *api && api->prepare_boss ?
+        api->prepare_boss(close[0].slot) : PE_RE_BOSS_STANDARD;
+    if (effect == PE_RE_BOSS_WAIT) return;
     s_approach.stage = room.stage, s_approach.room = room.room, s_approach.floor = floor;
     s_approach.x = close[0].x, s_approach.z = close[0].z;
     s_approach.slot = close[0].slot, s_approach.won = 0, s_approach.latched = !scripted;
+    s_approach.effect = effect;
     pe_begin_fight(PE_APPROACH_FIGHT, 0, scripted ? PE_SCRIPTED_FIGHT : PE_PROXIMITY_FIGHT);
     pe_mod_log(MOD_ID, "room %u-%02X: encounter with enemy slot %u at %d,%d",
                (unsigned)room.stage + 1, (unsigned)room.room, close[0].slot, s_approach.x, s_approach.z);

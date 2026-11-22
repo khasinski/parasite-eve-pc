@@ -41,6 +41,8 @@ typedef struct PeReRoomEvent {
     const PeReEnemyPlacement *enemies;
 } PeReRoomEvent;
 
+enum { PE_RE_BOSS_WAIT = -1, PE_RE_BOSS_STANDARD, PE_RE_BOSS_CANISTER };
+
 typedef struct PeRePlayApi {
     uint32_t struct_size;
     /* The reported room and its placements (valid until the next frame); 0, or -1 if unavailable. */
@@ -68,6 +70,9 @@ typedef struct PeRePlayApi {
     int (*encounter_reachable)(double x, double z, double target_x, double target_z);
     /* Optional: the slot released by a story scene, or -1 when none is ready. */
     int (*encounter_boss)(void);
+    /* Optional: prepare the authored setup after encounter_boss identifies a ready slot. */
+    int (*prepare_boss)(uint8_t slot);
+    int (*defeated_by_canister)(uint8_t slot);
 } PeRePlayApi;
 
 #endif

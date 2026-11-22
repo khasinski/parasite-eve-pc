@@ -466,6 +466,31 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
     return n;
 }
 
+int pe_re_session_alligator(const PeReSession *s, unsigned slot) {
+    return s->game && !strcmp(s->game->game, "re2") && s->stage == 3 && s->room == 0x0a && slot == 0 &&
+           s->run.works[2][0] && s->run.works[2][PE_RE_MEMBER_ID] == 0x23 && !s->run.em_dead[0];
+}
+
+/* Room 4-0A's proc 10 releases the canister, then sets Room_flg bit 0. */
+int pe_re_session_canister_ready(const PeReSession *s) {
+    return pe_re_session_alligator(s, 0) && pe_re_flag(&s->progress.flags, 5, 0);
+}
+
+void pe_re_session_release_canister(PeReSession *s) {
+    if (pe_re_session_alligator(s, 0) && !pe_re_session_canister_ready(s) && !pe_re_scd_running(&s->run, 10))
+        pe_re_scd_exec(s->logic, &s->run, PE_RE_TASKS, 10);
+}
+
+int pe_re_session_canister_win(PeReSession *s, unsigned slot, uint8_t killed_flag) {
+    if (slot != 0 || !pe_re_session_canister_ready(s)) return -1;
+    if (pe_re_session_beaten(s, (uint8_t)slot, killed_flag)) return -1;
+    /* EM23.C signals the canister grab and explosion separately. Room 4-0A
+     * uses those signals to update the scene and the exit. */
+    pe_re_flag_set(&s->progress.flags, 5, 0x1d, 1);
+    pe_re_flag_set(&s->progress.flags, 5, 0x1e, 1);
+    return 0;
+}
+
 /* The room scripts release these bosses from their parked state before the
  * battle starts. See the enemy stand-ins in pe_re_scd.c. */
 int pe_re_session_ready_boss(const PeReSession *s) {

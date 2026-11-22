@@ -111,7 +111,7 @@ static PeBattlePack s_resources[PE_FOES_MAX * PE_FORMS_MAX];
 static int s_resource_count;
 static PeBattlePack *s_roster[PE_FOES_MAX];
 static struct { int pose, wake, loop; } s_entrance[PE_FOES_MAX];
-static int s_armed;
+static int s_armed, s_canister_armed;
 static int s_send_away, s_count = 1;
 
 static struct {
@@ -122,6 +122,7 @@ static struct {
     int foes;
     PeFoe *last_blow;                /* the foe whose blow the game is taking now */
     int last_blow_frames;
+    int canister_exposed, canister_detonated;
     char result[96];
 } s;
 
@@ -356,7 +357,9 @@ unsigned pe_enemy_battle_defeated_mask(void) {
     return defeated;
 }
 
-void pe_enemy_battle_disarm(void) { s_armed = 0; }
+void pe_enemy_battle_arm_canister(void) { s_canister_armed = 1; }
+int pe_enemy_battle_canister_detonated(void) { return s.canister_detonated; }
+void pe_enemy_battle_disarm(void) { s_armed = s_canister_armed = 0; }
 
 /* ---- actors ---- */
 
@@ -823,6 +826,8 @@ static void pe_join(int early) {
     }
     if (!s.foes) {
         pe_mod_log(MOD_ID, "battle: no foe joined for %s", s_roster[0]->pack.name);
+    } else if (s.canister_exposed) {
+        pe_toast("The Alligator has the canister. Shoot it.");
     }
 }
 
@@ -831,6 +836,8 @@ static void pe_begin(void) {
     memset(s_used, 0, sizeof s_used);
     s_used_frames = 0;
     s.active = 1;
+    s.canister_exposed = s_canister_armed;
+    s_canister_armed = 0;
 }
 
 static void pe_end(const char *why) {
@@ -1235,6 +1242,25 @@ static int pe_on_hp_loss(void *ctx, void *user) {
     return 0;
 }
 
+static int pe_on_enemy_damage(void *ctx, void *user) {
+    PeHookEnemyDamage *hit = ctx;
+    (void)user;
+    if (!s.active || !s.canister_exposed || !s.foes || !g_PlayerEntity ||
+        hit->source != g_PlayerEntity->state || hit->target != s.foe[0].actor ||
+        !hit->ordinary || *hit->damage <= 0) return 0;
+    const Combatant *aya = hit->source;
+    const EnemyCombatant *enemy = pe_core(&s.foe[0]);
+    const ItemDataRecord *weapon = pe_equipped(0);
+    if (!weapon || weapon->kind < 1 || weapon->kind >= 8 || !aya->action ||
+        aya->action->actionCode.actionId == 8 || !enemy || enemy->hpAlive <= 0) return 0;
+    if (*hit->damage < enemy->hpAlive) *hit->damage = enemy->hpAlive;
+    s.canister_exposed = 0;
+    s.canister_detonated = 1;
+    pe_toast("The gas canister exploded.");
+    pe_mod_log(MOD_ID, "battle: Aya shot the Alligator's gas canister");
+    return 0;
+}
+
 void pe_enemy_status_text(char *out, unsigned size) {
     const PeFoe *f = &s.foe[0];
     char seen[64] = "";
@@ -1261,4 +1287,5 @@ void pe_enemy_battle_init(void) {
     pe_hook_add(PE_HOOK_ACTOR_RENDER, pe_on_render, NULL, PE_PRIORITY_NORMAL, MOD_ID);
     pe_hook_add(PE_HOOK_FIELD_BACKGROUND, pe_on_background, NULL, PE_PRIORITY_LATE, MOD_ID);
     pe_hook_add(PE_HOOK_HP_LOSS, pe_on_hp_loss, NULL, PE_PRIORITY_EARLY, MOD_ID);
+    pe_hook_add(PE_HOOK_ENEMY_DAMAGE, pe_on_enemy_damage, NULL, PE_PRIORITY_LATE + 50, MOD_ID);
 }

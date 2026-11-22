@@ -147,6 +147,7 @@ typedef struct {
     int sca_changed;                           /* set when one changes: the caller tells the walker, clears it */
     uint8_t em_busy[16];                       /* enemy stand-ins: frames left on a scripted order (see the .c) */
     uint8_t em_ready[16];                      /* emergence acknowledged, even after the script clears its reply */
+    uint8_t alligator_chosen;                  /* the player chose how to enter the battle in 4-0A */
     uint8_t em_dead[16];                       /* beaten (pe_re_session_beaten): 1, then 2 once the stand-in saw it */
     PeReSceneMotion scene[16];
     int nenemy;
