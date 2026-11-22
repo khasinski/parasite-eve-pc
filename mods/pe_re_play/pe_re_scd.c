@@ -442,6 +442,11 @@ static int step(Vm *vm, PeReScdTask *t) {
         const int slot = work_slot(3, (int8_t)ins[2]);
         if (slot >= 0) {                                   /* SCE_EM_SET_WORK: id, type, floor, position, facing */
             int16_t *w = r->works[slot];
+            if (pe_re_scene_kind(ins[3])) {
+                memset(w, 0, sizeof r->works[slot]);
+                r->scene[slot - 2] = (PeReSceneMotion){0};
+                w[PE_RE_MEMBER_ROUTINE0] = ins[3] == 0x2c ? 1 : 2;
+            }
             w[0] = 1, w[6] = ins[3], w[7] = s16(ins + 4), w[17] = ins[6];
             w[11] = s16(ins + 10), w[12] = s16(ins + 12), w[13] = s16(ins + 14), w[15] = s16(ins + 16);
         }
@@ -540,6 +545,93 @@ void pe_re_scd_run(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost 
     schedule(&vm);
 }
 
+int pe_re_scene_kind(unsigned kind) {
+    return kind == 0x2c || kind == 0x3e || kind == 0x3f;
+}
+
+/* Clip lengths from the retail CDEMD archives. Consulted bio2-ds EM2C/3E/3F
+ * and JOINT.C for the commands, sequence completion and reverse playback. */
+static unsigned scene_frames(unsigned kind, unsigned move) {
+    if (kind == 0x2c) return 66;
+    if (kind == 0x3f) return 60;
+    return move < 2 ? 20 : 190;
+}
+
+static void scene_tick(PeReSceneMotion *motion, int16_t *work) {
+    const unsigned kind = (unsigned)work[PE_RE_MEMBER_ID];
+    int16_t *routine = &work[PE_RE_MEMBER_ROUTINE0];
+    int16_t *command = &work[PE_RE_MEMBER_ROUTINE1];
+    int16_t *trigger = &work[PE_RE_MEMBER_SCE_FREE0];
+    if (kind == 0x3f && *trigger == 1) {
+        *trigger = 0;
+        *routine = 2;
+        *command = 0;
+        *motion = (PeReSceneMotion){.elapsed = 59, .reset_parts = 1};
+        return;
+    }
+    if (!motion->active) {
+        if (*routine != 1 || (kind == 0x2c && (*command || !*trigger))) return;
+        if (kind == 0x3e && (*command < 0 || *command > 11)) { *routine = 2; return; }
+        const unsigned selected = (unsigned)*command;
+        *motion = (PeReSceneMotion){.active = 1};
+        if (kind == 0x3e) {
+            motion->move = (uint8_t)(selected >= 10 ? selected - 10 : selected / 2);
+            motion->reverse = (uint8_t)(selected & 1);
+            if (selected >= 10) motion->next = (uint8_t)(2 - motion->move);
+            *command = motion->next ? 12 : 13;
+        } else {
+            *command = 1;
+        }
+        return;
+    }
+    if (*routine != 1) { motion->active = 0; return; }
+    if ((unsigned)motion->elapsed + 1 < scene_frames(kind, motion->move)) {
+        motion->elapsed++;
+    } else if (motion->next) {
+        motion->move = motion->next - 1;
+        motion->elapsed = motion->next = 0;
+        *command = 13;
+    } else {
+        motion->active = 0;
+        if (kind == 0x2c) *command = 2;
+        else *routine = 2;
+    }
+}
+
+static int scene_part_delta(int frame, int start, int count, int step) {
+    const int span = frame - start;
+    return (span < 0 ? 0 : span > count ? count : span) * step;
+}
+
+int pe_re_scd_scene_actors(const PeReScdRun *run, PeReSceneActor *out, int max) {
+    int count = 0;
+    for (unsigned slot = 0; slot < 16 && count < max; slot++) {
+        const int16_t *work = run->works[2 + slot];
+        const unsigned kind = (unsigned)work[PE_RE_MEMBER_ID];
+        if (!work[0] || !pe_re_scene_kind(kind)) continue;
+        const PeReSceneMotion *motion = &run->scene[slot];
+        PeReSceneActor *actor = &out[count++];
+        *actor = (PeReSceneActor){
+            .slot = (uint8_t)slot, .kind = (uint8_t)kind, .move = motion->move,
+            .frame = (uint8_t)(motion->reverse ? scene_frames(kind, motion->move) - 1 - motion->elapsed : motion->elapsed),
+            .x = work[PE_RE_MEMBER_POS_X], .y = work[PE_RE_MEMBER_POS_Y], .z = work[PE_RE_MEMBER_POS_Z],
+            .dir = work[PE_RE_MEMBER_CDIR_Y]
+        };
+        if (kind != 0x3f) continue;
+        if (motion->reset_parts) {
+            actor->absolute_parts = 1;
+            actor->part_y[0] = 94, actor->part_y[1] = -103, actor->part_y[2] = 112;
+        } else {
+            const int frame = motion->elapsed + (motion->active || motion->elapsed);
+            actor->part_y[0] = (int16_t)(scene_part_delta(frame, 0, 10, 11) +
+                                        scene_part_delta(frame, 10, 13, 12) + scene_part_delta(frame, 23, 7, 11));
+            actor->part_y[1] = (int16_t)(scene_part_delta(frame, 40, 1, -12) + scene_part_delta(frame, 41, 7, -13));
+            actor->part_y[2] = (int16_t)(scene_part_delta(frame, 47, 7, 12) + scene_part_delta(frame, 54, 6, 11));
+        }
+    }
+    return count;
+}
+
 /* Enemy stand-ins. Enemies' own code doesn't run here, but a few scenes wait on what it does to a
  * field the scripts read. Each stand-in does just that part, after about how long it takes in game:
  * - enemy 0x31 (a G form), Sce_free[0]:
@@ -557,6 +649,10 @@ static void enemy_standins(PeReScdRun *run) {
         int16_t *w = run->works[2 + n];
         int16_t *f = &w[PE_RE_MEMBER_SCE_FREE0];
         int order = 0, frames = 0;
+        if (w[0] && pe_re_scene_kind((unsigned)w[PE_RE_MEMBER_ID])) {
+            scene_tick(&run->scene[n], w);
+            continue;
+        }
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x31) {
             if (*f & 0x10) order = 0x10, frames = 60;              /* out of the pod: about a second */
             else if ((*f & 1) && !(*f & 2)) order = 1, frames = 90; /* out of the shell: a second and a half */

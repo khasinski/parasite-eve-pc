@@ -21,6 +21,7 @@
  * Parasite Eve loads a room of its own (an event, a warp) the imported room comes back over it once
  * the field is free. */
 #include <stdio.h>
+#include <stddef.h>
 #include <string.h>
 
 #include "pe_mod_api.h"
@@ -122,10 +123,17 @@ static void report_enemies(void) {
     PeReEnemyPlacement placements[PE_RE_ENEMIES_MAX];
     const int fresh = !s_room_reported;
     const int n = pe_re_session_enemies(&s_session, placements, PE_RE_ENEMIES_MAX);
+    const ReHost *host = re_host();
+    if (host->struct_size >= offsetof(ReHost, set_scene_actors) + sizeof host->set_scene_actors &&
+        host->set_scene_actors) {
+        PeReSceneActor actors[16];
+        const int count = pe_re_scd_scene_actors(&s_session.run, actors, 16);
+        host->set_scene_actors(actors, count);
+    }
     if (!fresh && n == s_nenemies && pe_re_enemy_lists_equal(s_enemies, placements, n)) return;
     memcpy(s_enemies, placements, (size_t)n * sizeof *placements);
     s_nenemies = n, s_room_reported = 1;
-    re_host()->set_placements(s_enemies, n);
+    host->set_placements(s_enemies, n);
     PeReRoomEvent e;
     if (api_room(&e)) return;
     e.fresh = fresh;

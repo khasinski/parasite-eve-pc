@@ -7,6 +7,7 @@
 #include "pe_imp_logic.h"
 
 struct PeReEnemyPlacement;
+struct PeReSceneActor;
 typedef int (*ReHostCallback)(void *event, void *user);
 
 /* Held buttons, active high in RE's byte order. */
@@ -59,6 +60,8 @@ typedef struct ReHost {
     void (*release_backdrop)(void);
     void (*bind_lifecycle)(const char *mod_id, ReHostCallback frame, ReHostCallback save_read,
                            ReHostCallback new_game);
+    /* Optional. The snapshot contains the script's current scene poses. */
+    void (*set_scene_actors)(const struct PeReSceneActor *actors, int count);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

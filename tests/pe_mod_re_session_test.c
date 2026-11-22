@@ -28,6 +28,67 @@ static void rect(int16_t x[4], int16_t z[4], int x0, int z0, int x1, int z1) {
 #define ROOMS_MAX 512
 static const char *s_store = "pe-re-session-test/store";
 
+/* Run the retail room procedures that order the three scene actors. */
+static void test_scene_actors(unsigned player) {
+    static const struct {
+        unsigned room, kind, procedure;
+    } cases[] = {{0x03, 0x2c, 27}, {0x08, 0x3f, 5}, {0x0d, 0x3e, 6}};
+    for (unsigned i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char id[PE_IMP_ID_MAX];
+        PeImpRoomLogic *logic = NULL;
+        pe_re_logic_id("re2", 5, cases[i].room, player, id, sizeof id);
+        CHECK(!pe_imp_catalog_roomlogic(s_store, id, &logic, NULL, 0));
+        if (!logic) continue;
+        PeReFlags flags = {0};
+        PeReScdRun run;
+        PeReSceneActor actor;
+        pe_re_scd_run(logic, &flags, NULL, &run);
+        if (cases[i].kind == 0x2c) {
+            /* Room 603's story checks before it creates the actor and starts its child procedure. */
+            pe_re_flag_set(&flags, 1, 1, 1);
+            pe_re_flag_set(&flags, 4, 0x73, 0);
+            pe_re_flag_set(&flags, 4, 0x5c, 1);
+            pe_re_scd_exec(logic, &run, 2, cases[i].procedure);
+            pe_re_scd_tick(logic, &flags, NULL, &run);
+        }
+        const int placed = pe_re_scd_scene_actors(&run, &actor, 1);
+        CHECK(placed == 1 && actor.kind == cases[i].kind);
+        if (placed != 1) { free(logic); continue; }
+        const int original_x = actor.x, original_z = actor.z;
+        if (cases[i].kind != 0x2c) pe_re_scd_exec(logic, &run, 2, cases[i].procedure);
+        unsigned moves = 0;
+        int advanced = 0, moved = 0, reversed = 0, part_moved = 0, last_frame = -1;
+        unsigned last_move = 255;
+        for (int ticks = 0; ticks < 1300; ticks++) {
+            pe_re_scd_tick(logic, &flags, NULL, &run);
+            if (!pe_re_scd_scene_actors(&run, &actor, 1)) continue;
+            moves |= 1u << actor.move;
+            advanced |= actor.frame > 0;
+            moved |= actor.x != original_x || actor.z != original_z;
+            reversed |= last_move == actor.move && last_frame > actor.frame;
+            part_moved |= actor.part_y[0] > 0;
+            last_frame = actor.frame;
+            last_move = actor.move;
+        }
+        CHECK(advanced);
+        if (cases[i].kind == 0x2c) CHECK(moved && actor.frame == 65);
+        if (cases[i].kind == 0x3e) {
+            CHECK(moved && reversed && (moves & 0x17) == 0x17);
+            CHECK(!pe_re_scd_running(&run, cases[i].procedure));
+        }
+        if (cases[i].kind == 0x3f) {
+            CHECK(part_moved && actor.frame == 59);
+            pe_re_flag_set(&flags, 4, 0x6a, 1);
+            pe_re_scd_exec(logic, &run, 2, 6);
+            for (int ticks = 0; ticks < 8; ticks++) pe_re_scd_tick(logic, &flags, NULL, &run);
+            CHECK(pe_re_scd_scene_actors(&run, &actor, 1) == 1 && actor.absolute_parts && actor.part_y[1] == -103);
+        }
+        printf("RE2 room 6-%02x: scene actor %02x, moves 0x%x, last frame %u\n",
+               cases[i].room, cases[i].kind, moves, (unsigned)actor.frame);
+        free(logic);
+    }
+}
+
 int main(void) {
     char why[200] = "";
 
@@ -240,6 +301,7 @@ int main(void) {
     const unsigned scenario = pe_re_session_start(&probe, s_store, g, 0, why, sizeof why) != 0;
     pe_re_session_end(&probe);
     CHECK(!re_headless_smoke(s_store, scenario));
+    test_scene_actors(scenario);
 
     /* every room reachable through doors from the street, breadth first */
     static uint32_t queue[ROOMS_MAX];

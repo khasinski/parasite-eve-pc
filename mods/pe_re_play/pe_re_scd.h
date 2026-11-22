@@ -68,7 +68,7 @@
 #define PE_RE_PATCHES 512                      /* work_copy: values written into the room's script (a hash) */
 #define PE_RE_MEMBERS 44                       /* MEMBER_BE_FLAG0 .. MEMBER_DAMAGE_CNT */
 enum { PE_RE_MEMBER_ID = 6, PE_RE_MEMBER_SCE_FREE0 = 23, PE_RE_MEMBER_AT_SCE_NO = 9, PE_RE_MEMBER_POS_X = 11, PE_RE_MEMBER_POS_Y = 12, PE_RE_MEMBER_POS_Z = 13, PE_RE_MEMBER_CDIR_Y = 15,
-       PE_RE_MEMBER_NFLOOR = 17 };
+       PE_RE_MEMBER_NFLOOR = 17, PE_RE_MEMBER_ROUTINE0 = 2, PE_RE_MEMBER_ROUTINE1 = 3 };
 #define PE_RE_SLOTS 256                        /* zone ids */
 #define PE_RE_WORK_F_ATARI 0                   /* the zone hit in front of the player (SCE_AT.C) */
 #define PE_RE_WORK_U_ATARI 1                   /* the zone hit under the player */
@@ -88,6 +88,18 @@ int pe_re_flag(const PeReFlags *f, unsigned group, unsigned bit);
 void pe_re_flag_set(PeReFlags *f, unsigned group, unsigned bit, int on);
 
 typedef struct { uint8_t id, sce, sat; uint8_t data[6]; } PeReReset;
+
+typedef struct PeReSceneActor {
+    uint8_t slot, kind, move, frame;
+    int16_t x, y, z, dir;
+    int16_t part_y[3]; /* EM3F: parts 1, 2 and 4/6/8/10 */
+    uint8_t absolute_parts;
+} PeReSceneActor;
+
+typedef struct {
+    uint8_t active, move, elapsed, reverse, next;
+    uint8_t reset_parts;
+} PeReSceneMotion;
 
 typedef struct {
     uint8_t status;                            /* 0 idle */
@@ -134,9 +146,13 @@ typedef struct {
     int sca_changed;                           /* set when one changes: the caller tells the walker, clears it */
     uint8_t em_busy[16];                       /* enemy stand-ins: frames left on a scripted order (see the .c) */
     uint8_t em_dead[16];                       /* beaten (pe_re_session_beaten): 1, then 2 once the stand-in saw it */
+    PeReSceneMotion scene[16];
     int nenemy;
     int naot_on;
 } PeReScdRun;
+
+int pe_re_scene_kind(unsigned kind);
+int pe_re_scd_scene_actors(const PeReScdRun *run, PeReSceneActor *out, int max);
 
 /* What the scripts ask of the game. */
 typedef struct {
