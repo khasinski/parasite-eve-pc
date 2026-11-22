@@ -19,9 +19,11 @@ int pe_trip_arm(PeTripResult *t, const PeReRoomEvent *room,
     strcpy(t->game, room->game);
     t->stage = room->stage, t->room = room->room;
     uint8_t kinds[PE_TRIP_FOES_MAX];
+    const int re2 = !strcmp(room->game, "re2");
     for (int i = 0; i < room->count && t->count < PE_TRIP_FOES_MAX; i++) {
         const PeReEnemyPlacement *e = &room->enemies[i];
         char asset[96];
+        if (re2 && e->kind == 0x2a && !pe_re2_mr_x_fightable(e)) continue;
         if (e->kind >= 0x40 || pe_imp_enemy_kind_asset(room->game, e->kind, asset, sizeof asset)) continue;
         if (pe_imp_enemy_body(asset) == PE_IMP_ENEMY_SCENE) continue;
         int duplicate = 0, already_selected = 0;

@@ -652,13 +652,57 @@ int pe_re_scd_scene_actors(const PeReScdRun *run, PeReSceneActor *out, int max) 
  *   waits on both; the death comes from the battle (pe_re_session_beaten), not a timer.
  * - enemy 0x36 (the last G form): it sets bit 2 of Sce_free[0] when it dies (EM36.C Em36_die00).
  *   7-04's train scene waits on it, again from the battle. */
+/* EM2A.C: the scripted entrance handlers hand the actor back to combat
+ * after their room-specific cues. Cinematic-only handlers stay scripted. */
+static void mr_x_standin(PeReScdRun *run, int slot, unsigned room) {
+    int16_t *w = run->works[2 + slot];
+    if (!(w[PE_RE_MEMBER_TYPE] & 0x4000) || run->em_dead[slot]) return;
+    const unsigned command = (uint16_t)w[PE_RE_MEMBER_SCE_FREE0];
+    switch (room) {
+    case 0x117:
+        if (!command) return;
+        if (!w[PE_RE_MEMBER_SCE_FREE1]) {
+            if (++run->em_busy[slot] == 60) {
+                w[PE_RE_MEMBER_SCE_FREE1] = 1;
+                w[PE_RE_MEMBER_POS_X] = -25650;
+                w[PE_RE_MEMBER_POS_Y] = -14401;
+                w[PE_RE_MEMBER_POS_Z] = -4200;
+                w[PE_RE_MEMBER_CDIR_Y] = 0xc20;
+            }
+            return;
+        }
+        if (pe_re_scd_running(run, 6)) return;
+        break;
+    case 0x20c:
+        if (command != 1 || pe_re_scd_running(run, 5)) return;
+        break;
+    case 0x20d:
+        if (command != 1 || pe_re_scd_running(run, 15)) return;
+        break;
+    case 0x507:
+        if (!(command & 8) || pe_re_scd_running(run, 5)) return;
+        break;
+    case 0x602:
+        if (!command || !w[PE_RE_MEMBER_SCE_FREE1] || pe_re_scd_running(run, 17)) return;
+        break;
+    default:
+        return;
+    }
+    w[PE_RE_MEMBER_TYPE] &= ~0x4000;
+}
+
 static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
     const int alligator = flags->work[PE_RE_WORK_STAGE] == 3 && flags->work[PE_RE_WORK_ROOM] == 0x0a;
     const int sewer = flags->work[PE_RE_WORK_STAGE] == 4 && flags->work[PE_RE_WORK_ROOM] == 9;
+    const unsigned room = (unsigned)(flags->work[PE_RE_WORK_STAGE] + 1) * 256 + flags->work[PE_RE_WORK_ROOM];
     for (int n = 0; n < 16; n++) {
         int16_t *w = run->works[2 + n];
         int16_t *f = &w[PE_RE_MEMBER_SCE_FREE0];
         int order = 0, frames = 0;
+        if (w[0] && w[PE_RE_MEMBER_ID] == 0x2a) {
+            mr_x_standin(run, n, room);
+            continue;
+        }
         if (w[0] && pe_re_scene_kind((unsigned)w[PE_RE_MEMBER_ID])) {
             scene_tick(&run->scene[n], w);
             continue;

@@ -4815,7 +4815,7 @@
     },
     {
       "path": "mods/pe_re_play/pe_re_scd.c",
-      "sha256": "f0ce80a7a81ccbacf1ed59358033ac08066cd4f98dbb9cc0143ce9152e4e66ca"
+      "sha256": "18d2db8694888556c1e06952adcdb53ee84e1aa8e0d0a98d70ff013bca64bc3c"
     },
     {
       "path": "mods/pe_re_play/hosts/pe1/pe_re_stage.c",
@@ -5119,7 +5119,7 @@
     },
     {
       "path": "mods/host/re_encounter_rooms.h",
-      "sha256": "c8bdb5486a86d7d267f9890aeadc24bea61b78f8519a763d84803685ea7a42bf"
+      "sha256": "58d2a4d56f621fdd064b96dd87f8a2c8a64c54084a00efa69ef03baff06e8025"
     }
   ]
 }

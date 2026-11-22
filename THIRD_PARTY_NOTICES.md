@@ -346,6 +346,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   after a damage defeat, and for the canister's grab, shot, and explosion signals.
   `EM2B.C` was consulted for the final Tyrant's entrance command, damage-gated launcher
   sequence, and persistent defeat.
+  `EM2A.C` was consulted for Mr. X's room-specific combat releases and knockdown.
   Our interpreter and zone checks are written independently from what it shows.
 - [OpenBiohazard2](https://github.com/OpenBiohazard2/OpenBiohazard2) (MIT, Copyright (c) 2020 Samuel
   Yuan), a reimplementation of the Resident Evil 2 engine.

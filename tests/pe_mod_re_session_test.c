@@ -14,6 +14,8 @@
 #include "pe_re_save.h"
 #include "pe_re_session.h"
 #include "pe_src_re2.h"
+#include "pe_trip_result.h"
+#include "re_encounter_rooms.h"
 
 int re_headless_smoke(const char *store, unsigned scenario);
 
@@ -27,6 +29,42 @@ static void rect(int16_t x[4], int16_t z[4], int x0, int z0, int x1, int z1) {
 
 #define ROOMS_MAX 512
 static const char *s_store = "pe-re-session-test/store";
+
+static int clear_approach(double x, double z, double target_x, double target_z) {
+    (void)x; (void)z; (void)target_x; (void)target_z;
+    return 1;
+}
+
+static void test_mr_x(const PeReGame *game, unsigned player) {
+    char id[PE_IMP_ID_MAX];
+    PeReSession scene = {.game = game, .stage = 4, .room = 7};
+    PeReFlags *flags = &scene.progress.flags;
+    PeReEnemyPlacement enemies[PE_RE_ENEMIES_MAX] = {0};
+    pe_re_logic_id("re2", scene.stage, scene.room, player, id, sizeof id);
+    CHECK(!pe_imp_catalog_roomlogic(s_store, id, &scene.logic, NULL, 0));
+    if (!scene.logic) return;
+    flags->work[PE_RE_WORK_STAGE] = scene.stage;
+    flags->work[PE_RE_WORK_ROOM] = scene.room;
+    flags->work[PE_RE_WORK_CUT] = 8;
+    pe_re_flag_set(flags, PE_RE_FG_ITEM2, 9, 1);  /* proc 2 checks the sewer lift's item flag */
+    pe_re_scd_run(scene.logic, flags, NULL, &scene.run);
+    CHECK(pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX) == 1);
+    CHECK(enemies[0].kind == 0x2a && !pe_re2_mr_x_fightable(&enemies[0]));
+    pe_re_scd_exec(scene.logic, &scene.run, 2, 2);
+    for (int tick = 0; tick < 20; tick++) pe_re_scd_tick(scene.logic, flags, NULL, &scene.run);
+    CHECK(pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX) == 1);
+    CHECK(pe_re2_mr_x_fightable(&enemies[0]) && enemies[0].killed_flag == 0x8e);
+    CHECK(enemies[0].x != -32000 && enemies[0].z != -32000);
+    PeReRoomEvent room = {sizeof room, "re2", scene.stage, scene.room, 0, 1, enemies};
+    PeReEnemyPlacement nearby[PE_TRIP_FOES_MAX];
+    CHECK(!pe_trip_approach(&room, enemies[0].x, enemies[0].z, enemies[0].floor + 1, clear_approach, nearby));
+    CHECK(pe_trip_approach(&room, enemies[0].x, enemies[0].z, enemies[0].floor, clear_approach, nearby) == 1);
+    CHECK(!pe_re_session_beaten(&scene, enemies[0].slot, enemies[0].killed_flag));
+    CHECK(pe_re_flag(flags, PE_RE_FG_ENEMY + 1, 0x8e));
+    CHECK(!pe_re_flag(flags, PE_RE_FG_ENEMY, 0xc4));
+    CHECK(pe_re_session_enemies(&scene, enemies, PE_RE_ENEMIES_MAX) == 0);
+    pe_re_session_end(&scene);
+}
 
 static void test_alligator(const PeReGame *game, unsigned player) {
     char id[PE_IMP_ID_MAX];
@@ -429,6 +467,7 @@ int main(void) {
     pe_re_session_end(&probe);
     CHECK(!re_headless_smoke(s_store, scenario));
     test_scene_actors(scenario);
+    test_mr_x(g, scenario);
     test_alligator(g, scenario);
     test_lift_boss(g, scenario);
     test_final_tyrant(g, scenario);
