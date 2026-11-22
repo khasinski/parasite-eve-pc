@@ -201,6 +201,21 @@ static void test_enemy_sounds(const char *store) {
         free(sample);
     }
     assert(!pe_re2_enemies_register() && !pe_re1_enemy_sounds_register() && !pe_enemy_target_register());
+    static const unsigned added_kinds[] = {0x23, 0x25, 0x27, 0x2a, 0x2b, 0x2e, 0x2f, 0x30, 0x37, 0x39, 0x3b};
+    for (unsigned i = 0; i < sizeof added_kinds / sizeof added_kinds[0]; ++i) {
+        char asset[32], sample_id[64];
+        snprintf(asset, sizeof asset, "re2:enemy/em%02x", added_kinds[i]);
+        const PeImpEnemyCues *cues = pe_imp_enemy_cues(asset);
+        assert(cues);
+        for (int c = 0; c < PE_IMP_CUE_COUNT; ++c) {
+            if (!cues->sound[c]) continue;
+            PeImpSound *sample = NULL;
+            snprintf(sample_id, sizeof sample_id, "re2:%s", cues->sound[c]);
+            assert(!pe_imp_catalog_sound(re2_store, sample_id, &sample, why, sizeof why));
+            assert(sample->frames > 1);
+            free(sample);
+        }
+    }
     const PeImpTarget *target = pe_imp_target(0);
     static const char *const ids[] = {
         "re2:enemy/em10", "re2:enemy/em20", "re2:enemy/em22", "re2:enemy/em24",

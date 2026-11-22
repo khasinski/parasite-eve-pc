@@ -103,5 +103,24 @@ int pe_re2_enemies_register(void) {
     bad |= pe_imp_add_enemy_cues("re2:enemy/em34", &g3) != 0;
     bad |= pe_imp_add_enemy_cues("re2:enemy/em36", &g4) != 0;
     bad |= pe_imp_add_enemy_cues("re2:enemy/em3a", &moth) != 0;
+    /* Room sound types and VAB waves were checked against both US discs.
+     * bio2-ds EM23/25/27/2A/2B/2E/2F/30/37/3B describe the individual actions. */
+    static const struct { unsigned kind; PeImpEnemyCues cues; } other_cues[] = {
+        {0x23, {{NULL, "sound/enemy17/wave07", "sound/enemy17/wave06"}}},
+        {0x25, {{"sound/enemy11/wave05", NULL, NULL}}},
+        {0x27, {{"sound/enemy16/wave05", "sound/enemy16/wave10", "sound/enemy16/wave11"}}},
+        {0x2a, {{"sound/enemy12/wave04", NULL, NULL}}},
+        {0x2b, {{"sound/enemy26/wave09", NULL, NULL}}},
+        {0x2e, {{"sound/enemy13/wave08", "sound/enemy13/wave05", "sound/enemy13/wave11"}}},
+        {0x2f, {{NULL, NULL, "sound/enemy14/wave10"}}},
+        {0x30, {{"sound/enemy20/wave04", "sound/enemy20/wave06", "sound/enemy20/wave02"}}},
+        {0x37, {{"sound/enemy25/wave13", NULL, NULL}}},
+        {0x39, {{"sound/enemy13/wave08", "sound/enemy13/wave05", "sound/enemy13/wave11"}}},
+        {0x3b, {{"sound/enemy27/wave02", NULL, "sound/enemy27/wave03"}}},
+    };
+    for (unsigned i = 0; i < sizeof other_cues / sizeof other_cues[0]; ++i) {
+        snprintf(id, sizeof id, "re2:enemy/em%02x", other_cues[i].kind);
+        bad |= pe_imp_add_enemy_cues(id, &other_cues[i].cues) != 0;
+    }
     return bad ? -1 : 0;
 }
