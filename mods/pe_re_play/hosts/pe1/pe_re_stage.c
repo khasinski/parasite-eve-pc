@@ -18,6 +18,7 @@
 #include "pe_imp.h"
 #include "pe_imp_mdec.h"
 #include "pe_imp_room.h"
+#include "re_encounter_rooms.h"
 #include "pe_mod_host.h"
 #include "pe_game.h"
 #include "pe1/boot_display.h"
@@ -600,6 +601,11 @@ static int empty_texture_area(RECT *rect) {
     return 1;
 }
 
+static int show_placement_mesh(const PeReEnemyPlacement *p) {
+    return p->kind < 0x40 && (pe_re_scene_kind(p->kind) || s_placement_meshes == PE_RE_MESH_ALL ||
+           (s_placement_meshes == PE_RE_MESH_ENCOUNTERS && pe_re2_proximity_zombie(p, 1)));
+}
+
 static void prepare_field_texture(void) {
     if (s_texture_checked) return;
     s_texture_checked = 1;
@@ -607,7 +613,7 @@ static void prepare_field_texture(void) {
     int kind = -1;
     for (int i = 0; i < s_placement_count; i++) {
         const unsigned candidate = s_placements[i].kind;
-        if (candidate >= 0x40 || (!s_placement_meshes && !pe_re_scene_kind(candidate))) continue;
+        if (!show_placement_mesh(&s_placements[i])) continue;
         const PeImpModel *model = &s_field_mesh[candidate].model;
         if (model->parts && model->h <= FIELD_TEX_HEIGHT && model->pal_rows <= FIELD_CLUT_ROWS) {
             kind = (int)candidate;
@@ -661,7 +667,7 @@ static void load_field_meshes(void) {
     int wanted[0x40] = {0};
     for (int i = 0; i < s_placement_count; i++) {
         const unsigned kind = s_placements[i].kind;
-        if (kind < 0x40 && (s_placement_meshes || pe_re_scene_kind(kind))) wanted[kind] = 1;
+        if (show_placement_mesh(&s_placements[i])) wanted[kind] = 1;
     }
     for (unsigned kind = 0; kind < 0x40; kind++) {
         PeImpModel *model = &s_field_mesh[kind].model;
@@ -788,7 +794,7 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
     const uint64_t vblanks = (uint32_t)Psyz_VideoVSync(-1);
     for (int i = 0; i < s_placement_count; i++) {
         const PeReEnemyPlacement *p = &s_placements[i];
-        if (p->kind >= 0x40) continue;
+        if (!show_placement_mesh(p)) continue;
         const PeReSceneActor *scene = NULL;
         if (pe_re_scene_kind(p->kind)) {
             for (int j = 0; j < s_scene_count; j++)
@@ -797,7 +803,7 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                     break;
                 }
             if (!scene) continue;
-        } else if (!s_placement_meshes) continue;
+        }
         const PeImpModel *model = &s_field_mesh[p->kind].model;
         const double world_x = scene ? scene->x : p->x;
         const double world_y = scene ? scene->y : p->y - (double)s_field_mesh[p->kind].foot_y;
@@ -910,7 +916,7 @@ static void draw_placement_markers(RenderNativeTag *ordering, int slot, unsigned
         if (x < 5 || x >= PIC_W - 5 || y < 5 || y >= FIELD_H - 5) continue;
         const int sx = (int)lround(x), sy = (int)lround(y);
         const int bucket = depth <= FIELD_UI_OT_LAST ? FIELD_UI_OT_LAST + 1 : (int)depth;
-        if (s_placement_meshes && !s_field_mesh[p->kind].model.parts) {
+        if (s_placement_meshes && show_placement_mesh(p) && !s_field_mesh[p->kind].model.parts) {
             double head[3];
             if (project_field_point(p->x, p->y - 2000, p->z, head)) {
                 const int height = (int)lround(y - head[1]);

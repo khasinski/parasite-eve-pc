@@ -28,6 +28,7 @@
 #include "pe_services.h"
 #include "pe_trip_result.h"
 #include "re_play_api.h"
+#include "re_encounter_rooms.h"
 #include "pe1/asset_table.h"
 #include "pe1/battle_runtime.h"
 #include "pe1/field_actor.h"
@@ -52,7 +53,7 @@
 #define PE_TRAVEL_FRAMES 1800         /* a room transfer that hasn't settled by then is stuck (an event) */
 #define PE_ZONES_MAX 8
 #define PE_TOKEN_TITLE 0xA9400048u    /* the title screens (pe_warp) */
-#define PE_STREET_FIGHT 1              /* Day 1 Sewer, second spot: the native battle carrier */
+#define PE_APPROACH_FIGHT 1            /* Day 1 Sewer, second spot: the native battle carrier */
 
 typedef struct { const char *name; unsigned story; } PeArea;
 typedef struct { unsigned char area; unsigned short map; unsigned char spot; const char *enemies; } PeFight;
@@ -127,8 +128,12 @@ static const char *const k_state_names[] = {
 
 static int s_area, s_pick, s_enemy, s_enemy_count, s_room_enemies;
 static int s_street_encounters = 1;
-static int s_street_latched;
-static int16_t s_street_x, s_street_z;
+static int s_rpd_encounters = 1;
+static struct {
+    int latched, floor;
+    uint32_t stage, room;
+    int16_t x, z;
+} s_approach;
 static const char *const k_counts[] = {"1", "2", "3"};
 static const char *const k_room_enemies[] = {"Fight too", "Sent away"};
 static struct {
@@ -241,7 +246,10 @@ static const unsigned char *pe_room_blob(size_t *bytes) {
 
 static void pe_finish(const char *result) {
     pe_enemy_battle_disarm();
-    snprintf(s_last, sizeof s_last, "%s: %s", s.automatic ? "RE2 opening street" : pe_fight_label(s.fight), result);
+    if (s.automatic && s_approach.stage)
+        snprintf(s_last, sizeof s_last, "RE2 RPD 2-%02X: %s", (unsigned)s_approach.room, result);
+    else
+        snprintf(s_last, sizeof s_last, "%s: %s", s.automatic ? "RE2 opening street" : pe_fight_label(s.fight), result);
     pe_log("cheat_fight_picker", "result fight=%d map=%u spot=%u %s", s.fight, k_fights[s.fight].map,
            k_fights[s.fight].spot, result);
 }
@@ -355,6 +363,12 @@ static int pe_add_room_pack(const char *asset, int already_selected, const char 
     return 1;
 }
 
+static int pe_select_approach(const PeRePlayApi *api, const PeReRoomEvent *room, double x, double z, int floor,
+                              PeReEnemyPlacement *close) {
+    return pe_trip_approach(room, x, z, floor,
+                           api->struct_size >= sizeof *api ? api->encounter_reachable : NULL, close);
+}
+
 static int pe_room_creature(const PeRePlayApi *api) {
     PeReRoomEvent room = {sizeof room};
     PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
@@ -362,9 +376,10 @@ static int pe_room_creature(const PeRePlayApi *api) {
     if (s.automatic) {
         double x, z;
         int floor;
-        if (api->struct_size < sizeof *api || !api->encounter_position ||
+        if (api->struct_size < offsetof(PeRePlayApi, encounter_reachable) || !api->encounter_position ||
+            room.stage != s_approach.stage || room.room != s_approach.room ||
             api->encounter_position(&x, &z, &floor)) return 0;
-        room.count = pe_trip_street(&room, x, z, floor, close);
+        room.count = pe_select_approach(api, &room, x, z, floor, close);
         room.enemies = close;
         if (!room.count) return 0;
     }
@@ -479,31 +494,35 @@ static void pe_step(void) {
 
 static void pe_begin_fight(int f, int preview, int automatic);
 
-static void pe_check_street(void) {
-    if (!s_street_encounters || s.state != PE_IDLE || s_trip.armed || !pe_field_ready() ||
+static void pe_check_approach(void) {
+    if ((!s_street_encounters && !s_rpd_encounters) || s.state != PE_IDLE || s_trip.armed || !pe_field_ready() ||
         (g_ScriptVariableBank[PE_VAR_BATTLE_FLAGS] & PE_SKIP_BATTLES)) return;
     const PeRePlayApi *api = pe_imported_room_api();
-    if (!api || api->struct_size < sizeof *api || !api->encounter_position) return;
+    if (!api || api->struct_size < offsetof(PeRePlayApi, encounter_reachable) || !api->encounter_position) return;
     PeReRoomEvent room = {sizeof room};
     if (api->room(&room)) return;
-    if (strcmp(room.game, "re2") || room.stage || room.room) {
-        s_street_latched = 0;
+    if (strcmp(room.game, "re2") || !pe_re2_proximity_room(room.stage, room.room) ||
+        !(room.stage ? s_rpd_encounters : s_street_encounters)) {
+        s_approach.latched = 0;
         return;
     }
     double x, z;
     int floor;
     if (api->encounter_position(&x, &z, &floor)) return;
-    if (s_street_latched) {
-        const double dx = x - s_street_x, dz = z - s_street_z;
-        if (dx * dx + dz * dz < PE_TRIP_STREET_REARM * PE_TRIP_STREET_REARM) return;
-        s_street_latched = 0;
+    if (s_approach.latched) {
+        const double dx = x - s_approach.x, dz = z - s_approach.z;
+        if (room.stage == s_approach.stage && room.room == s_approach.room && floor == s_approach.floor &&
+            dx * dx + dz * dz < PE_TRIP_APPROACH_REARM * PE_TRIP_APPROACH_REARM) return;
+        s_approach.latched = 0;
     }
     PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
-    if (!pe_trip_street(&room, x, z, floor, close)) return;
-    s_street_x = close[0].x, s_street_z = close[0].z;
-    s_street_latched = 1;
-    pe_begin_fight(PE_STREET_FIGHT, 0, 1);
-    pe_mod_log(MOD_ID, "opening street: approached zombie slot %u at %d,%d", close[0].slot, s_street_x, s_street_z);
+    if (!pe_select_approach(api, &room, x, z, floor, close)) return;
+    s_approach.stage = room.stage, s_approach.room = room.room, s_approach.floor = floor;
+    s_approach.x = close[0].x, s_approach.z = close[0].z;
+    s_approach.latched = 1;
+    pe_begin_fight(PE_APPROACH_FIGHT, 0, 1);
+    pe_mod_log(MOD_ID, "room %u-%02X: approached zombie slot %u at %d,%d",
+               (unsigned)room.stage + 1, (unsigned)room.room, close[0].slot, s_approach.x, s_approach.z);
 }
 
 static int pe_on_frame(void *ctx, void *user) {
@@ -518,7 +537,7 @@ static int pe_on_frame(void *ctx, void *user) {
             s_trip.armed = 0;
         }
     }
-    pe_check_street();
+    pe_check_approach();
     return 0;
 }
 
@@ -555,7 +574,7 @@ static int pe_on_drawn(void *ctx, void *user) {
 static int pe_on_new_game(void *ctx, void *user) {
     (void)ctx; (void)user;
     s_trip.armed = 0;
-    s_street_latched = 0;
+    s_approach.latched = 0;
     pe_end_trip();
     return 0;
 }
@@ -789,6 +808,8 @@ static int enemy_import_init(void) {
                             "away so the imported enemy fights alone.", &s_room_enemies, k_room_enemies, 2);
     pe_menu_register_toggle(0, "RE2 street encounters", "Approaching zombies in RE2's opening street starts a fight.",
                             &s_street_encounters, NULL);
+    pe_menu_register_toggle(0, "RE2 RPD encounters", "Approaching zombies in supported RPD rooms starts a fight.",
+                            &s_rpd_encounters, NULL);
     pe_menu_register_action(0, "Start fight",
                             "Takes Aya to the fight (once the panel closes) and back afterwards. The story "
                             "is set to the fight's point for the trip.",

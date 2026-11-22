@@ -22,6 +22,7 @@
  * the field is free. */
 #include <stdio.h>
 #include <stddef.h>
+#include <math.h>
 #include <string.h>
 
 #include "pe_mod_api.h"
@@ -31,6 +32,7 @@
 #include "pe_re_save.h"
 #include "pe_re_session.h"
 #include "re_host.h"
+#include "re_encounter_rooms.h"
 
 #define MOD_ID "pe_re_play"
 #define PAGE "Play imported games"
@@ -106,6 +108,7 @@ static int api_defeated_slot(uint8_t slot) {
 static int pause_for_battle(void);
 static void resume_after_battle(void);
 static int encounter_position(double *x, double *z, int *floor);
+static int encounter_reachable(double x, double z, double target_x, double target_z);
 static const char *api_enemy_archive(void) {
     if (!s_playing || !s_session.game || strcmp(s_session.game->game, "re2")) return NULL;
     /* bio2-ds EM_SET.C, Emd_load_file: Leon (including HUNK) and Claire use
@@ -117,7 +120,7 @@ static int api_enemy_room_move(unsigned slot, char *asset, size_t size) {
 }
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
-    api_enemy_room_move, encounter_position
+    api_enemy_room_move, encounter_position, encounter_reachable
 };
 
 static void report_enemies(void) {
@@ -171,6 +174,15 @@ static int encounter_position(double *x, double *z, int *floor) {
     host->player_pose(x, z, &facing);
     *floor = host->player_floor();
     return 0;
+}
+
+static int encounter_reachable(double x, double z, double target_x, double target_z) {
+    const ReHost *host = re_host();
+    const double dx = target_x - x, dz = target_z - z;
+    const int steps = (int)(fmax(fabs(dx), fabs(dz)) / 220) + 2;
+    for (int i = 1; i < steps; i++)
+        if (host->position_blocked(x + dx * i / steps, z + dz * i / steps)) return 0;
+    return 1;
 }
 
 static int pause_for_battle(void) {
@@ -462,8 +474,9 @@ static int on_frame(void *ctx, void *user) {
     re_host()->set_masks(s_masks);
     re_host()->set_player_size(s_size);
     re_host()->set_placement_markers(s_placement_markers);
-    const int street = !strcmp(s_session.game->game, "re2") && !s_session.stage && !s_session.room;
-    re_host()->set_placement_meshes(s_placement_meshes || street);
+    const int encounters = !strcmp(s_session.game->game, "re2") && pe_re2_proximity_room(s_session.stage, s_session.room);
+    re_host()->set_placement_meshes(s_placement_meshes || (encounters && !s_session.stage) ? PE_RE_MESH_ALL :
+                                    encounters ? PE_RE_MESH_ENCOUNTERS : PE_RE_MESH_OFF);
     re_host()->set_placement_idle(s_placement_idle);
     if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */
         const unsigned buttons = re_host()->held_buttons();

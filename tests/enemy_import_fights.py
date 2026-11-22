@@ -17,6 +17,7 @@ area and the fight, `mod-action` presses Start fight, `battle-state` reads the b
 Set PE_TEST_DISC (USA Disc 1); otherwise skipped (77). Every run is headless, in its own folder.
 Use --imported-room with PE_TEST_RE2_DISC to check win, escape and loss from an imported room.
 Use --street with RE2 disc 1 to approach the opening zombies without the fight picker.
+Use --rpd with RE2 disc 1 to test an automatic police station encounter.
 """
 import json
 import os
@@ -528,6 +529,51 @@ def part_street(exe, disc, work, re2_disc):
         game.quit()
 
 
+def part_rpd(exe, disc, work, re2_disc):
+    def setup(config):
+        folders = config / 'import' / 'folders.txt'
+        folders.parent.mkdir()
+        folders.write_text(f'{re2_disc.parent}\n', encoding='utf-8')
+
+    game = Game(exe, disc, work / 'rpd', setup=setup,
+                ini='Cheats/God mode=1\nManage mods/Play imported games=1\nFights/RE2 RPD encounters=0\n')
+
+    def room_rows():
+        rows = json.loads(game.ask('mod-state pe_re_play'))['rows']
+        return {row['label']: row['value'] for row in rows}
+
+    try:
+        game.ask('mod-action Play imported games/Start')
+        game.ask('ini-set Play imported games/Testing/Stage 2')
+        game.ask('ini-set Play imported games/Testing/Room 9')
+        game.ask('mod-action Play imported games/Testing/Go to that room')
+        before = room_rows()
+        check(before['Status'].startswith('Room 2-09') and before['Enemies'].count('0x1F') == 6, before)
+        game.adv(90)
+        check(game.picker()['Status'] == 'Ready', 'RPD fight started with the toggle off')
+        # The debug arrival point is already within reach of the nearest group.
+        game.ask('ini-set Fights/RE2 RPD encounters 1')
+        check(wait_battle(game) is not None, 'RPD: the nearby zombies did not start a fight')
+        until = game.vblank + 2500
+        while game.vblank < until:
+            enemies = game.battle()['enemies']
+            if enemies and all(enemy['type'] == 0xee for enemy in enemies):
+                break
+            game.adv(15)
+        else:
+            raise Failed('RPD: the imported roster did not take over')
+        win_when_ready(game)
+        wait_home(game)
+        game.adv(120)
+        after = room_rows()
+        check(after['Status'] == before['Status'], after)
+        check(game.picker()['Last fight'] == 'RE2 RPD 2-09: won', game.picker())
+        check(after['Enemies'].count('0x1F') == 6 - len(enemies), 'RPD: wrong zombies cleared')
+        print(f'RPD 2-09: defeated {len(enemies)} zombies and returned to the same position')
+    finally:
+        game.quit()
+
+
 def escape(game, limit=12000):
     """Battle menu, Down three times (Escape from Battle), Cross; again until it works.
     Only with Aya's time bar full: before that the menu holds just Use Item and Change Weapon, so
@@ -657,12 +703,13 @@ def main():
                 print('Both RE2 discs are needed for --room-variants: skipped')
                 return 77
             part_room_variants(exe, disc, work, [Path(path).resolve() for path in discs])
-        elif '--street' in sys.argv:
+        elif '--street' in sys.argv or '--rpd' in sys.argv:
             re2_disc = os.getenv('PE_TEST_RE2_DISC')
             if not re2_disc or not Path(re2_disc).is_file():
                 print('PE_TEST_RE2_DISC is not set: skipped')
                 return 77
-            part_street(exe, disc, work, Path(re2_disc).resolve())
+            test = part_rpd if '--rpd' in sys.argv else part_street
+            test(exe, disc, work, Path(re2_disc).resolve())
         elif any(flag in sys.argv for flag in ('--imported-room', '--boss-forms', '--profile-editor')):
             re2_disc = os.getenv('PE_TEST_RE2_DISC')
             if not re2_disc or not Path(re2_disc).is_file():

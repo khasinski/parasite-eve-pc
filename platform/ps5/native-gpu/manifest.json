@@ -4803,7 +4803,7 @@
     },
     {
       "path": "mods/pe_re_play/pe_re_play.c",
-      "sha256": "53b0fc26a2dd588dd5ca83a129cf82468eafac56430d9cc3e4016dc63a613f58"
+      "sha256": "3ed71b60d8a5076286e00e4a291c112ba2b26603932506268f2bb6ab776004c1"
     },
     {
       "path": "mods/pe_re_play/pe_re_save.c",
@@ -4819,7 +4819,7 @@
     },
     {
       "path": "mods/pe_re_play/hosts/pe1/pe_re_stage.c",
-      "sha256": "782f1224b9e4938ecc2b25bc02744829ee0d3bd6ad2e1f946c701722749854f9"
+      "sha256": "e633e10ce2991152d6ef404973d2ec99a99fd5c938a5764ca281eed43f0b5464"
     },
     {
       "path": "mods/pe_re_play/re_host.h",
@@ -4867,7 +4867,7 @@
     },
     {
       "path": "mods/host/re_play_api.h",
-      "sha256": "db6115da36ef2cdf024eab8aaf8c9b17de61beb718d965b56cb4045139314892"
+      "sha256": "062a935fdac862b94f7b192d3807acb0b68f467244dc319baa9f94311efd3b2e"
     },
     {
       "path": "mods/import/core/pe_imp.h",
@@ -5115,7 +5115,11 @@
     },
     {
       "path": "tests/enemy_import_fights.py",
-      "sha256": "4e57aa0fa74de72feeb8cae9d1bb2b3f02c3c8fbd0ec8a183f5b502530184fa5"
+      "sha256": "890f3b2e33ab42981f2daafdd397d292edc7f909ecca470866195bfac4c0cad9"
+    },
+    {
+      "path": "mods/host/re_encounter_rooms.h",
+      "sha256": "27819cee40ff0c21f1a9562b77b333761909dc29cd4302e82d295da308be46b6"
     }
   ]
 }

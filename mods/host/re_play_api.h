@@ -64,6 +64,8 @@ typedef struct PeRePlayApi {
     int (*enemy_room_move)(unsigned slot, char *asset, size_t size);
     /* Optional: current player position when the imported room can start a fight. */
     int (*encounter_position)(double *x, double *z, int *floor);
+    /* Optional: check whether a straight approach crosses room collision. */
+    int (*encounter_reachable)(double x, double z, double target_x, double target_z);
 } PeRePlayApi;
 
 #endif

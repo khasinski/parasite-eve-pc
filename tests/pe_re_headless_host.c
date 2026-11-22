@@ -22,7 +22,7 @@ static struct {
     double x, z;
     int facing, camera, floor, active, shade, curtain, hold, backdrop;
     unsigned rooms, placements, saves;
-    int choice, busy, menu;
+    int choice, busy, menu, test_wall;
     uint16_t buttons;
     ReHostCallback frame, save_read, new_game, save_committed;
     PeMenuAction start, next_door, jump, typewriter, give_ribbon;
@@ -35,7 +35,7 @@ static struct {
 static void noop(void) {}
 static void setting(int value) { (void)value; }
 static int unavailable(void) { return 0; }
-static int blocked(double x, double z) { (void)x; (void)z; return 0; }
+static int blocked(double x, double z) { (void)z; return s.test_wall && x < -50 && x > -400; }
 static void init(const char *mod_id, const char *store) { (void)mod_id; (void)store; }
 static void place(double x, double z) { s.x = x; s.z = z; }
 static void face(int facing) { s.facing = facing; }
@@ -229,9 +229,9 @@ static int play(unsigned scenario) {
         double x, z;
         int floor;
         EXPECT(!s.api->encounter_position(&x, &z, &floor));
-        EXPECT(!pe_trip_street(&room, 100000, 100000, lead.floor, nearby));
-        EXPECT(!pe_trip_street(&room, lead.x, lead.z, lead.floor + 1, nearby));
-        const int selected = pe_trip_street(&room, lead.x, lead.z, lead.floor, nearby);
+        EXPECT(!pe_trip_approach(&room, 100000, 100000, lead.floor, NULL, nearby));
+        EXPECT(!pe_trip_approach(&room, lead.x, lead.z, lead.floor + 1, NULL, nearby));
+        const int selected = pe_trip_approach(&room, lead.x, lead.z, lead.floor, NULL, nearby);
         EXPECT(selected > 0 && nearby[0].slot == lead.slot);
         /* Escaping after a non-prefix kill leaves the other slots as they were. */
         PeTripResult escaped;
@@ -256,6 +256,27 @@ static int play(unsigned scenario) {
     frames(1, 0);
     EXPECT(s.active && !strcmp(s.room, "re2:room/100"));
     EXPECT(!s.api->room(&room) && room.count == remaining);
+    {
+        const PeReEnemyPlacement actors[] = {
+            {.kind = 0x1f, .slot = 0, .x = -500, .killed_flag = 1},
+            {.kind = 0x1f, .slot = 1, .x = 600, .killed_flag = 2},
+            {.kind = 0x1f, .slot = 2, .x = 200, .behaviour = 0x4002, .killed_flag = 3},
+            {.kind = 0x22, .slot = 3, .x = 300, .killed_flag = 4},
+            {.kind = 0x1f, .slot = 4, .x = 400, .floor = 1, .killed_flag = 5},
+            {.kind = 0x1f, .slot = 5, .x = 2200, .killed_flag = 6},
+            {.kind = 0x1f, .slot = 6, .x = 100, .killed_flag = 0xff}
+        };
+        PeReEnemyPlacement nearby[PE_TRIP_FOES_MAX];
+        PeReRoomEvent rpd = {sizeof rpd, "re2", 1, 9, 1, sizeof actors / sizeof actors[0], actors};
+        EXPECT(!pe_trip_approach(&rpd, 0, 0, 0, NULL, nearby));
+        s.test_wall = 1;
+        EXPECT(!s.api->encounter_reachable(0, 0, -500, 0));
+        EXPECT(pe_trip_approach(&rpd, 0, 0, 0, s.api->encounter_reachable, nearby) == 2);
+        EXPECT(nearby[0].slot == 1 && nearby[1].slot == 5);
+        s.test_wall = 0;
+        rpd.room = 3;
+        EXPECT(!pe_trip_approach(&rpd, 0, 0, 0, s.api->encounter_reachable, nearby));
+    }
 
     EXPECT(s.next_door);
     s.next_door();
@@ -263,6 +284,27 @@ static int play(unsigned scenario) {
     EXPECT(s.hold);
     frames(75, 0);
     EXPECT(!s.hold && s.shade == 128 && strcmp(s.room, "re2:room/100"));
+
+    EXPECT(s.jump && s.stage && s.room_number);
+    *s.stage = 2;
+    *s.room_number = 9;
+    s.jump();
+    frames(2, 0);
+    EXPECT(!s.api->room(&room) && room.stage == 1 && room.room == 9 && room.count == 6);
+    const PeReEnemyPlacement anchor = room.enemies[0];
+    PeReEnemyPlacement nearby[PE_TRIP_FOES_MAX];
+    PeReRoomEvent group = room;
+    group.count = pe_trip_approach(&room, anchor.x, anchor.z, anchor.floor, s.api->encounter_reachable, nearby);
+    group.enemies = nearby;
+    EXPECT(group.count >= 1 && group.count <= PE_TRIP_FOES_MAX && nearby[0].slot == anchor.slot);
+    EXPECT(pe_trip_arm(&trip, &group, NULL, NULL) == group.count);
+    pe_trip_won(&trip, group.count);
+    EXPECT(pe_trip_report(&trip, s.api) == group.count);
+    frames(2, 0);
+    EXPECT(!s.api->room(&room) && room.count == 6 - group.count);
+    s.save_read(NULL, NULL);
+    frames(1, 0);
+    EXPECT(!s.api->room(&room) && room.stage == 1 && room.room == 9 && room.count == 6 - group.count);
     if (scenario) return 0;
 
     EXPECT(s.jump && s.stage && s.room_number && s.give_ribbon && s.typewriter && s.save_committed);
