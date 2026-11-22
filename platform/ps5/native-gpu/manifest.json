@@ -4843,7 +4843,7 @@
     },
     {
       "path": "CMakeLists.txt",
-      "sha256": "824206c281bdfb39dfbb46642d72a9f07b7ec251ff13135f8b600a7ccf4cb37a"
+      "sha256": "e980fa7d4a0b32c9033afee4401e11f1311c05bcdd80cddcd1574c59a0b3c9c8"
     },
     {
       "path": "mods/cmake/CheckRePortability.cmake",
@@ -5115,7 +5115,7 @@
     },
     {
       "path": "tests/enemy_import_fights.py",
-      "sha256": "890f3b2e33ab42981f2daafdd397d292edc7f909ecca470866195bfac4c0cad9"
+      "sha256": "2edee98b864020d3677c5f1d5d83391ffb386fd11ff2709192f5a8cd48c0fcfa"
     },
     {
       "path": "mods/host/re_encounter_rooms.h",

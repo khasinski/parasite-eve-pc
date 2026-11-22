@@ -735,6 +735,13 @@ if(BUILD_TESTING)
                 ${CMAKE_BINARY_DIR}/enemy-import-evidence)
             set_tests_properties(enemy-import-fights PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 900 LABELS "game-assets;mods")
+            if("pe_re_play" IN_LIST PE_MOD_LIST AND "pe_src_re2" IN_LIST PE_MOD_LIST)
+                add_test(NAME re2-rpd-licker COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_SOURCE_DIR}/tests/re2_rpd_licker.py $<TARGET_FILE:parasite-eve-pc>
+                    ${CMAKE_BINARY_DIR}/re2-rpd-licker-evidence)
+                set_tests_properties(re2-rpd-licker PROPERTIES SKIP_RETURN_CODE 77
+                    TIMEOUT 900 LABELS "game-assets;mods")
+            endif()
             add_test(NAME enemy-import-fights-all COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_SOURCE_DIR}/tests/enemy_import_fights.py $<TARGET_FILE:parasite-eve-pc>
                 ${CMAKE_BINARY_DIR}/enemy-import-all-evidence --all)

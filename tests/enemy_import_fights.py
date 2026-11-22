@@ -58,7 +58,8 @@ def new_game_route():
 class Game:
     """One headless game paused at each control point; commands go through the debug channel."""
 
-    def __init__(self, exe, disc, work, ini='', limit=900000, setup=None, headless='--headless'):
+    def __init__(self, exe, disc, work, ini='', limit=900000, setup=None, headless='--headless',
+                 *, boot_pad=None, control_at=FIELD):
         if work.exists():
             shutil.rmtree(work)
         self.work, self.ctl, config = work, work / 'ctl', work / 'config'
@@ -68,8 +69,8 @@ class Game:
         self.config = config
         if setup:
             setup(config)
-        args = [str(exe), '--disc', disc, headless, '--frame-limit', str(limit), '--control-at', str(FIELD)]
-        for tick, mask in new_game_route():
+        args = [str(exe), '--disc', disc, headless, '--frame-limit', str(limit), '--control-at', str(control_at)]
+        for tick, mask in new_game_route() if boot_pad is None else boot_pad:
             args += ['--pad-at', f'{tick}:{mask}']
         env = dict(os.environ, SDL_AUDIODRIVER='dummy', SDL_AUDIO_DRIVER='dummy', PSYZ_AUDIO_CLOCK='video',
                    PE_CONFIG_HOME=str(config), PE_DEBUG_CONTROL=str(self.ctl))
