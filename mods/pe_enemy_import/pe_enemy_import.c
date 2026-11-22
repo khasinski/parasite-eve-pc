@@ -402,6 +402,15 @@ static int pe_room_creature(const PeRePlayApi *api) {
     PeRoomPacks packs = {.build = pe_service_get(PE_ENEMY_BUILD_SERVICE, PE_ENEMY_BUILD_SERVICE_VERSION), .play = api};
     if (api->struct_size >= offsetof(PeRePlayApi, enemy_room_move) && api->enemy_archive) packs.archive = api->enemy_archive();
     const int count = pe_trip_arm(&s_trip, &room, pe_add_room_pack, &packs);
+    if (count && !strcmp(room.game, "re2")) {
+        /* Consulted bio2-ds EM28.C: the first adult G uses move 5 to produce EM27 offspring. */
+        for (int i = 0; i < room.count; ++i) {
+            const PeReEnemyPlacement *e = &room.enemies[i];
+            if (e->kind != 0x28 || e->behaviour != 0) continue;
+            for (int parent = 0; parent < count; ++parent)
+                if (s_trip.slot[parent] == e->slot) pe_enemy_battle_arm_summon(parent, "re2:enemy/em27", 5);
+        }
+    }
     if (count && s.automatic == PE_SCRIPTED_FIGHT) {
         if (s_approach.effect == PE_RE_BOSS_CANISTER) pe_enemy_battle_arm_canister();
         if (s_approach.effect == PE_RE_BOSS_LAUNCHER) pe_enemy_battle_arm_launcher();

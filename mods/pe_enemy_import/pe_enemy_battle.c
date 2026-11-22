@@ -80,7 +80,7 @@ typedef struct {
     u32 color, xy0, uv0, xy1, uv1, xy2, uv2;
 } PeFt3;
 
-enum { ROLE_ATTACK = PE_ANIM_ROLES, ROLE_ENTRANCE, ROLE_WAKE };
+enum { ROLE_ATTACK = PE_ANIM_ROLES, ROLE_ENTRANCE, ROLE_WAKE, ROLE_SUMMON };
 
 typedef struct PeBattlePack {
     PeEnemyPack pack;
@@ -112,6 +112,10 @@ static PeBattlePack s_resources[PE_FOES_MAX * PE_FORMS_MAX];
 static int s_resource_count;
 static PeBattlePack *s_roster[PE_FOES_MAX];
 static struct { int pose, wake, loop; } s_entrance[PE_FOES_MAX];
+static struct {
+    PeBattlePack *offspring;
+    int parent, anim;
+} s_summon;
 static int s_armed, s_canister_armed, s_launcher_armed;
 static int s_send_away, s_count = 1;
 enum { LAUNCHER_NONE, LAUNCHER_WAITING, LAUNCHER_DROPPED, LAUNCHER_HELD, LAUNCHER_FIRED };
@@ -121,7 +125,7 @@ static struct {
     int away_later;                  /* joined during the opening: send the room's enemies away
                                       * once the clock runs */
     PeFoe foe[PE_FOES_MAX];
-    int foes;
+    int foes, placed_foes;
     PeFoe *last_blow;                /* the foe whose blow the game is taking now */
     int last_blow_frames;
     int canister_exposed, canister_detonated;
@@ -132,7 +136,7 @@ static struct {
 static int16_t s_posed[PE_ENEMY_MAX_VERTICES][3];
 static PeFt3 s_prims[PE_FOES_MAX][2][PE_ENEMY_MAX_TRIANGLES];
 
-static const char *const k_role_names[] = {"idle", "walk", "hurt", "die", "attack", "entrance", "wake"};
+static const char *const k_role_names[] = {"idle", "walk", "hurt", "die", "attack", "entrance", "wake", "summon"};
 
 /* ---- the list of packs ---- */
 
@@ -192,6 +196,7 @@ static int pe_pack_height(const PeEnemyPack *pack) {
 static void pe_free_resources(void) {
     for (int i = 0; i < s_resource_count; i++) pe_enemy_pack_free(&s_resources[i].pack);
     s_resource_count = 0;
+    s_summon.offspring = NULL;
 }
 
 static PeBattlePack *pe_load(const char *dir) {
@@ -309,7 +314,7 @@ void pe_enemy_battle_begin_roster(void) {
     if (s.active) return;
     s_armed = 0;
     s_count = 0;
-    s.foes = 0;
+    s.foes = s.placed_foes = 0;
     s_send_away = 1;
     pe_free_resources();
 }
@@ -339,7 +344,7 @@ int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char 
         PeImpAnimation moves;
         if (pose < 0 && !pe_mod_path(store, sizeof store, "import/store") &&
             !pe_imp_catalog_animation(store, room_move, &moves, why, sizeof why)) {
-            pose = pe_enemy_add_room_move(&resource->pack, &moves, name);
+            pose = pe_enemy_add_room_move(&resource->pack, &moves, 0, name);
             pe_imp_animation_free(&moves);
         }
         if (pose >= 0) {
@@ -353,9 +358,33 @@ int pe_enemy_battle_add_pack(const char *pack, const char *entrance, const char 
     return 1;
 }
 
+void pe_enemy_battle_arm_summon(int parent, const char *offspring, unsigned move) {
+    if (!s_armed || s.active || parent < 0 || parent >= s_count || s_count >= PE_FOES_MAX) return;
+    PeEnemyPack *pack = &s_roster[parent]->pack;
+    char store[1100], asset[sizeof pack->source + sizeof "/moves"], why[160];
+    PeImpAnimation moves;
+    snprintf(asset, sizeof asset, "%s/moves", pack->source);
+    if (pe_mod_path(store, sizeof store, "import/store") ||
+        pe_imp_catalog_animation(store, asset, &moves, why, sizeof why)) return;
+    const int anim = pe_enemy_add_room_move(pack, &moves, move, "summon");
+    pe_imp_animation_free(&moves);
+    if (anim < 0) return;
+    const size_t length = strlen(offspring);
+    for (int i = 0; i < s_count; ++i) {
+        const char *source = s_roster[i]->pack.source;
+        if (!strncmp(source, offspring, length) && (source[length] == '\0' || source[length] == '-')) {
+            s_summon.offspring = s_roster[i];
+            break;
+        }
+    }
+    if (!s_summon.offspring) s_summon.offspring = pe_load_form(offspring);
+    s_summon.parent = parent;
+    s_summon.anim = anim;
+}
+
 unsigned pe_enemy_battle_defeated_mask(void) {
     unsigned defeated = 0;
-    for (int i = 0; i < s.foes; i++)
+    for (int i = 0; i < s.placed_foes; i++)
         if (s.foe[i].dead) defeated |= 1u << i;
     return defeated;
 }
@@ -828,6 +857,7 @@ static void pe_join(int early) {
                       z + (int)(cos(ang) * side * 65536.0))) break;
         if (!resource->uploaded) pe_vram(resource, 0);
     }
+    s.placed_foes = s.foes;
     if (!s.foes) {
         pe_mod_log(MOD_ID, "battle: no foe joined for %s", s_roster[0]->pack.name);
     } else if (s.canister_exposed) {
@@ -913,6 +943,20 @@ static void pe_step_lift(PeFoe *f, const FieldActor *aya, int hp) {
     f->lift += delta < -step ? -step : delta > step ? step : delta;
 }
 
+static void pe_summon(PeFoe *parent) {
+    PeBattlePack *offspring = s_summon.offspring;
+    s_summon.offspring = NULL;
+    if (!offspring->uploaded && !pe_place(offspring)) return;
+    const FieldActor *a = parent->actor;
+    const double angle = (a->rot_y + 768) * 2 * PE_PI / 4096.0;
+    const double offset = (parent->resource->pack.radius + offspring->pack.radius) * 65536.0;
+    if (pe_spawn(offspring, -1, -1, 0, a->pos_x + (int)(sin(angle) * offset), a->pos_y,
+                 a->pos_z + (int)(cos(angle) * offset))) {
+        if (!offspring->uploaded) pe_vram(offspring, 0);
+        pe_mod_log(MOD_ID, "battle: %s summoned %s", parent->resource->pack.name, offspring->pack.name);
+    }
+}
+
 static void pe_foe_think(PeFoe *f) {
     FieldActor *a = f->actor, *aya = g_PlayerEntity;
     EnemyCombatant *core = pe_core(f);
@@ -976,7 +1020,9 @@ static void pe_foe_think(PeFoe *f) {
         return;
     }
 
-    if (f->role == ROLE_WAKE) {
+    if (f->role == ROLE_WAKE || f->role == ROLE_SUMMON) {
+        if (f->role == ROLE_SUMMON && s_summon.offspring && f->frame >= (cur->frames - 1) / 2.0)
+            pe_summon(f);
         if (done) pe_set_anim(f, PE_ANIM_IDLE, pack->role[PE_ANIM_IDLE]);
         f->last_hp = hp;
         pe_place_targets(f);
@@ -1032,6 +1078,14 @@ static void pe_foe_think(PeFoe *f) {
     /* turn toward Aya */
     diff = pe_turn_diff(a->rot_y, want);
     a->rot_y = (short)((a->rot_y + (diff > PE_TURN_STEP ? PE_TURN_STEP : diff < -PE_TURN_STEP ? -PE_TURN_STEP : diff)) & 0xFFF);
+
+    if (s_summon.offspring && s_summon.parent < s.placed_foes && f == &s.foe[s_summon.parent] &&
+        core->curHP >= PE_CHARGE_FULL) {
+        core->curHP = 0;
+        pe_set_anim(f, ROLE_SUMMON, s_summon.anim);
+        pe_place_targets(f);
+        return;
+    }
 
     /* attack when its time bar is full and Aya is in reach of one of its attacks */
     if (pack->attacks && core->curHP >= PE_CHARGE_FULL && abs(diff) < 0x200) {
@@ -1308,7 +1362,7 @@ void pe_enemy_status_text(char *out, unsigned size) {
     if (!s.active) { snprintf(out, size, "%s", s.result[0] ? s.result : s_armed ? "ready for the next fight" : "none"); return; }
     if (!s.foes) { snprintf(out, size, "%s joining", s_roster[0]->pack.name); return; }
     const PeBattlePack *resource = f->resource;
-    for (i = 0; i <= ROLE_WAKE; ++i)
+    for (i = 0; i <= ROLE_SUMMON; ++i)
         if (f->seen & (1u << i)) snprintf(seen + strlen(seen), sizeof seen - strlen(seen), "%s%s", seen[0] ? "+" : "", k_role_names[i]);
     core = pe_core(f);
     if (core && g_PlayerEntity) dist = (int)pe_dist(f->actor, g_PlayerEntity);

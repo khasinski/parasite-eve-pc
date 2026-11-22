@@ -160,9 +160,9 @@ static int anim_in(PeEnemyPack *p, const PeImpAnimation *a, const char *name, in
     return 0;
 }
 
-int pe_enemy_add_room_move(PeEnemyPack *p, const PeImpAnimation *moves, const char *name) {
+int pe_enemy_add_room_move(PeEnemyPack *p, const PeImpAnimation *moves, unsigned move, const char *name) {
     char why[100];
-    if (moves->bones != (unsigned)p->bones || anim_in(p, moves, name, 0, NULL, why, sizeof why)) return -1;
+    if (moves->bones != (unsigned)p->bones || anim_in(p, moves, name, move, NULL, why, sizeof why)) return -1;
     PeEnemyAnim *anim = &p->anim[p->anims - 1];
     const size_t words = 3 + 3 * (size_t)p->bones;
     for (int i = 0; i < anim->frames; i++) {
