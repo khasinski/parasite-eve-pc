@@ -63,15 +63,16 @@ int pe_re2_enemies_register(void) {
         snprintf(id, sizeof id, "re2:enemy/em%02x", k_life[i].em);
         bad |= pe_imp_add_enemy_strength(id, k_life[i].life, 0) != 0;
     }
-    /* bio2-ds EM21/22/24/29/2F/3A: locomotion and EM2F's attached plant part. */
+    /* Consulted bio2-ds EM21/22/24/29/2F/37/3A for locomotion.
+     * EM2F is attached to its plant and EM37 is attached to G's fourth form. */
     static const struct { unsigned kind; PeImpEnemyBody body; } bodies[] = {
         {0x21, PE_IMP_ENEMY_FLYER}, {0x3a, PE_IMP_ENEMY_FLYER},
         {0x22, PE_IMP_ENEMY_CRAWLER}, {0x24, PE_IMP_ENEMY_CRAWLER}, {0x29, PE_IMP_ENEMY_CRAWLER},
-        {0x2f, PE_IMP_ENEMY_FIXED}
+        {0x2f, PE_IMP_ENEMY_FIXED}, {0x37, PE_IMP_ENEMY_FIXED}
     };
     for (unsigned i = 0; i < sizeof bodies / sizeof bodies[0]; i++)
         bad |= pe_imp_set_enemy_body("re2", bodies[i].kind, bodies[i].body) != 0;
-    /* Consulted bio2-ds EM21/23/27/28/2B/2D/2E/36/3A for base-set moves.
+    /* Consulted bio2-ds EM21/23/27/28/29/2B/2D/2E/36/37/3A for base-set moves.
      * EM23's grab cutscene supplies a move for its otherwise procedural bite.
      * EM27 takes move 7 into its grab, EM28 move 4 into its close attack,
      * and EM2D move 5 into its hold. */
@@ -79,10 +80,12 @@ int pe_re2_enemies_register(void) {
     bad |= pe_imp_set_enemy_move_hints("re2", 0x23, (PeImpEnemyMoveHints){4, 10, 0, -1}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x27, (PeImpEnemyMoveHints){7, -1, 1, 9}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x28, (PeImpEnemyMoveHints){4, 9, -1, 14}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x29, (PeImpEnemyMoveHints){2, -1, -1, -1}) != 0; /* hold */
     bad |= pe_imp_set_enemy_move_hints("re2", 0x2b, (PeImpEnemyMoveHints){-1, 6, 1, 5}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x2d, (PeImpEnemyMoveHints){5, -1, -1, -1}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x2e, (PeImpEnemyMoveHints){-1, -1, 1, -1}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x36, (PeImpEnemyMoveHints){9, 8, 1, -1}) != 0;
+    bad |= pe_imp_set_enemy_move_hints("re2", 0x37, (PeImpEnemyMoveHints){2, -1, -1, -1}) != 0; /* tentacle lash */
     bad |= pe_imp_set_enemy_move_hints("re2", 0x39, (PeImpEnemyMoveHints){-1, -1, 1, -1}) != 0;
     bad |= pe_imp_set_enemy_move_hints("re2", 0x3a, (PeImpEnemyMoveHints){4, -1, -1, -1}) != 0;
     bad |= pe_imp_set_enemy_next_form("re2", 0x31, 0x33) != 0;
