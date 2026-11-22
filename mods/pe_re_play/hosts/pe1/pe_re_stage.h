@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "pe_imp_logic.h"
+#include "pe_imp_room.h"
 #include "pe_services.h"
 #include "re_play_api.h"
 
@@ -24,6 +25,7 @@ int pe_re_stage_to_ramp(void);                     /* testing: the foot of the n
 void pe_re_stage_place(double x, double z);        /* move the player (testing) */
 void pe_re_stage_face(int facing);                 /* turn her (testing; 0 faces -z) */
 int pe_re_stage_blocked(double x, double z);       /* a wall at (x, z) on her floor (testing) */
+const PeRe2RoomCollision *pe_re_stage_collision(void);
 void pe_re_stage_set_masks(int on);
 void pe_re_stage_set_placement_markers(int on);
 void pe_re_stage_set_placement_meshes(int on);

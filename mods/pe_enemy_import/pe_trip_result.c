@@ -73,8 +73,7 @@ int pe_trip_approach(const PeReRoomEvent *room, double x, double z, int floor,
                      int (*reachable)(double, double, double, double), PeReEnemyPlacement *out) {
     if (strcmp(room->game, "re2")) return 0;
     const int street = pe_re2_opening_street(room->stage, room->room);
-    if (street) reachable = NULL;
-    else if (!reachable) return 0;
+    if (!street && !reachable) return 0;
     const double radius = street ? 1600 : 1400;
     const double group_radius = street ? 6500 : 3900;
     const PeReEnemyPlacement *lead = nearest_enemy(room, x, z, floor, radius * radius, 0, reachable);
@@ -109,7 +108,7 @@ int pe_trip_report(PeTripResult *t, const PeRePlayApi *api) {
     int reported = 0;
     for (int i = 0; i < t->count; i++) {
         if (!(t->defeated & (1u << i))) continue;
-        if (t->canister_detonated && api->struct_size >= sizeof *api && api->defeated_by_canister) {
+        if (t->canister_detonated && api->struct_size >= offsetof(PeRePlayApi, advance_enemies) && api->defeated_by_canister) {
             if (!api->defeated_by_canister(t->slot[i])) { reported++; continue; }
         }
         reported += !api->defeated_slot(t->slot[i]);

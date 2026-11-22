@@ -479,6 +479,51 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
     return n;
 }
 
+int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
+                       PeReEnemyPlacement *enemies, int count, double x, double z, int floor) {
+    if (!s->game || strcmp(s->game->game, "re2") || !collision || s->run.camera_lock) return 0;
+    const int street = pe_re2_opening_street(s->stage, s->room);
+    unsigned scripted = 0;
+    for (int i = 0; i < PE_RE_TASKS; i++) {
+        const PeReScdTask *task = &s->run.task[i];
+        if (task->status && task->work >= 2 && task->work < 18) scripted |= 1u << (task->work - 2);
+    }
+    int moved = 0;
+    for (int i = 0; i < count; i++) {
+        PeReEnemyPlacement *e = &enemies[i];
+        const int dog = e->kind == 0x20;
+        const unsigned type = e->behaviour & 0x3f;
+        /* Standing zombies and released dogs can chase. Leave scripted, feeding and prone poses to the room/battle. */
+        const int mobile = dog ? type <= 2 || type == 4 || type == 6 || type == 9 : type <= 1 || type == 6;
+        if (!mobile || !pe_re2_proximity_enemy(e, street) || e->kind > 0x20 || (e->behaviour & 0xe000) ||
+            e->floor != floor || pe_re_floor_of(e->y) != floor ||
+            (scripted & (1u << e->slot)) || s->run.em_dead[e->slot]) continue;
+        int16_t *work = s->run.works[2 + e->slot];
+        if (!work[0] || work[PE_RE_MEMBER_ID] != e->kind) continue;
+        const double dx = x - e->x, dz = z - e->z;
+        const double distance = hypot(dx, dz);
+        const double awareness = dog ? 5200 : street ? 2500 : 3300;
+        if (distance > awareness || distance <= 1200) continue;
+        const double speed = dog ? 62 : 22;
+        double next_x = e->x, next_z = e->z, ground = -(double)floor * PE_RE2_FLOOR_HEIGHT;
+        pe_imp_re2_slide_on(collision, (unsigned)floor, &next_x, &next_z,
+                           dx * speed / distance, dz * speed / distance, dog ? 210 : 240);
+        if (next_x < INT16_MIN || next_x > INT16_MAX || next_z < INT16_MIN || next_z > INT16_MAX) continue;
+        const int ix = (int)lround(next_x), iz = (int)lround(next_z);
+        if (ix == e->x && iz == e->z) continue;
+        if (pe_imp_re2_ground(collision, ix, iz, &ground) && pe_re_floor_of((int)lround(ground)) != floor) continue;
+        /* Rounding the position for the script's word fields must still leave clearance. */
+        if (pe_imp_re2_blocked_on(collision, (unsigned)floor, ix, iz, dog ? 210 : 240)) continue;
+        const int dir = (int)lround(atan2(e->x - ix, e->z - iz) * (2048.0 / acos(-1.0))) + 1024;
+        work[PE_RE_MEMBER_POS_X] = e->x = (int16_t)ix;
+        work[PE_RE_MEMBER_POS_Y] = e->y = (int16_t)lround(ground);
+        work[PE_RE_MEMBER_POS_Z] = e->z = (int16_t)iz;
+        work[PE_RE_MEMBER_CDIR_Y] = e->dir = (int16_t)(dir & 4095);
+        moved++;
+    }
+    return moved;
+}
+
 int pe_re_session_alligator(const PeReSession *s, unsigned slot) {
     return s->game && !strcmp(s->game->game, "re2") && s->stage == 3 && s->room == 0x0a && slot == 0 &&
            s->run.works[2][0] && s->run.works[2][PE_RE_MEMBER_ID] == 0x23 && !s->run.em_dead[0];

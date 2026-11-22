@@ -490,7 +490,10 @@ static void pe_step(void) {
     case PE_FIGHT:
         if (pe_in_battle()) break;
         pe_finish(s.live_enemies ? "ran away" : "won");
-        if (s.automatic == PE_SCRIPTED_FIGHT && s.live_enemies) s_approach.retry = 180;
+        if (s.automatic && s.live_enemies) {
+            s_approach.retry = 180;
+            s_approach.latched = 0;
+        }
         if (s.automatic == PE_PROXIMITY_FIGHT) s_approach.won = !s.live_enemies;
         pe_trip_defeated(&s_trip, s.automatic || !s.live_enemies ? pe_enemy_battle_defeated_mask() : 0);
         s_trip.canister_detonated = s.automatic == PE_SCRIPTED_FIGHT && s_approach.effect == PE_RE_BOSS_CANISTER &&
@@ -538,7 +541,7 @@ static void pe_check_approach(void) {
     if (!same_room) s_approach.retry = 0;
     PeReEnemyPlacement close[PE_TRIP_FOES_MAX];
     const int scripted = pe_select_boss(api, &room, close);
-    if (scripted && s_approach.retry > 0) { s_approach.retry--; return; }
+    if (s_approach.retry > 0) { s_approach.retry--; return; }
     if (s_approach.latched) {
         const double dx = x - s_approach.x, dz = z - s_approach.z;
         int anchor_alive = 0;
@@ -547,8 +550,10 @@ static void pe_check_approach(void) {
             dx * dx + dz * dz < PE_TRIP_APPROACH_REARM * PE_TRIP_APPROACH_REARM) return;
         s_approach.latched = 0;
     }
+    if (!scripted && api->struct_size >= sizeof *api && api->advance_enemies)
+        api->advance_enemies(x, z, floor);
     if (!scripted && !pe_select_approach(api, &room, x, z, floor, close)) return;
-    const int effect = scripted && api->struct_size >= sizeof *api && api->prepare_boss ?
+    const int effect = scripted && api->struct_size >= offsetof(PeRePlayApi, defeated_by_canister) && api->prepare_boss ?
         api->prepare_boss(close[0].slot) : PE_RE_BOSS_STANDARD;
     if (effect == PE_RE_BOSS_WAIT) return;
     s_approach.stage = room.stage, s_approach.room = room.room, s_approach.floor = floor;

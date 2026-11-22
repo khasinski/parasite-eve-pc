@@ -79,6 +79,7 @@ const ReHost *re_host(void) {
         .release_backdrop = pe_re_stage_backdrop_release,
         .bind_lifecycle = bind_lifecycle,
         .set_scene_actors = pe_re_stage_set_scene_actors,
+        .room_collision = pe_re_stage_collision,
     };
     return &host;
 }

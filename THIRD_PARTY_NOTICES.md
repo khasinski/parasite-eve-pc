@@ -329,6 +329,7 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
   `EM10.C`, `SCE0.C`, and `SND.C` were also consulted for zombie sound cues and enemy bank layout.
   `EM20.C`, `EM22.C`, and `EM24.C` were consulted for dog and Licker sound cues.
   `EM_SUB.C` and `EM10.C` were consulted for selecting feeding zombies' room animation.
+  `EM10.C` and `EM20.C` were consulted for zombie walk and dog run animation selection in the field.
   `EM21.C`, `EM29.C`, `EM31.C`, `EM33.C`, `EM34.C`, `EM36.C`, and `EM3A.C` were consulted
   for crow, roach and G sound cues and the airborne attack moves.
   `EM23.C`, `EM25.C`, `EM27.C`, `EM2A.C`, `EM2B.C`, `EM2E.C`, `EM2F.C`, `EM30.C`,

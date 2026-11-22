@@ -73,6 +73,9 @@ typedef struct PeRePlayApi {
     /* Optional: prepare the authored setup after encounter_boss identifies a ready slot. */
     int (*prepare_boss)(uint8_t slot);
     int (*defeated_by_canister)(uint8_t slot);
+    /* Optional: advance field enemies once before checking for an automatic encounter.
+     * Updates the current room snapshot in place. */
+    void (*advance_enemies)(double x, double z, int floor);
 } PeRePlayApi;
 
 #endif

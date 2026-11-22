@@ -109,6 +109,7 @@ static int pause_for_battle(void);
 static void resume_after_battle(void);
 static int encounter_position(double *x, double *z, int *floor);
 static int encounter_reachable(double x, double z, double target_x, double target_z);
+static void advance_enemies(double x, double z, int floor);
 static int encounter_boss(void) { return s_playing ? pe_re_session_ready_boss(&s_session) : -1; }
 static int prepare_boss(uint8_t slot);
 static int api_canister_defeat(uint8_t slot) {
@@ -130,7 +131,8 @@ static int api_enemy_room_move(unsigned slot, char *asset, size_t size) {
 }
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
-    api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat
+    api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat,
+    advance_enemies
 };
 
 static void report_enemies(void) {
@@ -206,6 +208,16 @@ static int encounter_reachable(double x, double z, double target_x, double targe
     for (int i = 1; i < steps; i++)
         if (host->position_blocked(x + dx * i / steps, z + dz * i / steps)) return 0;
     return 1;
+}
+
+static void advance_enemies(double x, double z, int floor) {
+    const ReHost *host = re_host();
+    if (!s_room_reported || host->struct_size < offsetof(ReHost, room_collision) + sizeof host->room_collision ||
+        !host->room_collision) return;
+    /* Update the live snapshot for the renderer and encounter selector without treating
+     * locomotion as an authored placement event. */
+    if (pe_re_session_chase(&s_session, host->room_collision(), s_enemies, s_nenemies, x, z, floor))
+        host->set_placements(s_enemies, s_nenemies);
 }
 
 static int pause_for_battle(void) {

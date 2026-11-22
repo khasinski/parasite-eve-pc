@@ -551,6 +551,37 @@ int main(void) {
     CHECK(!pe_imp_re2_blocked_on(&ramps, 0, 500, 250, 50));           /* ramps never block */
     CHECK(pe_imp_re2_blocked_on(&ramps, 1, -450, 250, 50) && !pe_imp_re2_blocked_on(&ramps, 0, -450, 250, 50));
 
+    /* Field chase uses the encounter snapshot and the same floor-filtered walls as walking. */
+    PeReSession chase = {.game = pe_re_game_named("re2"), .stage = 1};
+    PeReEnemyPlacement foes[] = {
+        {.slot = 0, .kind = 0x1f, .killed_flag = 1},
+        {.slot = 1, .kind = 0x20, .killed_flag = 2, .behaviour = 2, .z = 400},
+        {.slot = 2, .kind = 0x1f, .killed_flag = 3, .floor = 1, .y = -1800},
+        {.slot = 3, .kind = 0x1f, .killed_flag = 4, .behaviour = 2},
+        {.slot = 4, .kind = 0x1f, .killed_flag = 5, .behaviour = 0x4000},
+        {.slot = 5, .kind = 0x1f, .killed_flag = 6},
+    };
+    for (unsigned i = 0; i < sizeof foes / sizeof *foes; i++) {
+        chase.run.works[2 + i][0] = 1;
+        chase.run.works[2 + i][PE_RE_MEMBER_ID] = foes[i].kind;
+    }
+    chase.run.task[2].status = 1;
+    chase.run.task[2].work = 7;
+    static PeRe2RoomCollision chase_room = {
+        .count = 1, .entries = {{600, -5000, 660, 5000, 0, 0, 1, 0x8000, 0}}
+    };
+    CHECK(pe_re_session_chase(&chase, &chase_room, foes, 6, 2300, 0, 0) == 2);
+    CHECK(foes[0].x > 0 && foes[1].x > foes[0].x && foes[0].dir == 0);
+    CHECK(foes[2].x == 0 && foes[3].x == 0 && foes[4].x == 0 && foes[5].x == 0);
+    CHECK(chase.run.works[2][PE_RE_MEMBER_POS_X] == foes[0].x);
+    for (int tick = 0; tick < 64; tick++) pe_re_session_chase(&chase, &chase_room, foes, 6, 2300, 0, 0);
+    CHECK(foes[0].x < 360 && foes[1].x < 390);  /* each body stops short of the wall */
+    pe_imp_re2_collision_set_id(&chase_room, 0, 0);  /* the room script opens it */
+    for (int tick = 0; tick < 64; tick++) pe_re_session_chase(&chase, &chase_room, foes, 6, 2300, 0, 0);
+    CHECK(foes[0].x > 660 && foes[1].x > 660);
+    CHECK(pe_re_session_chase(&chase, &chase_room, foes, 6, 2300, 0, 1) == 1);
+    CHECK(foes[2].x > 0 && foes[2].y == -1800);
+
     char id[PE_IMP_ID_MAX];
     pe_re_logic_id("re2", 0, 0x0a, 1, id, sizeof id);
     CHECK(!strcmp(id, "re2:logic/10a-1"));

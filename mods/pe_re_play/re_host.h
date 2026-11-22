@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "pe_imp_logic.h"
+#include "pe_imp_room.h"
 
 struct PeReEnemyPlacement;
 struct PeReSceneActor;
@@ -62,6 +63,8 @@ typedef struct ReHost {
                            ReHostCallback new_game);
     /* Optional. The snapshot contains the script's current scene poses. */
     void (*set_scene_actors)(const struct PeReSceneActor *actors, int count);
+    /* Optional. Current collision, including wall switches from the room scripts. */
+    const PeRe2RoomCollision *(*room_collision)(void);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */
