@@ -179,7 +179,8 @@ static void text_enemy_movement(char *out, unsigned size) {
     if (api_room(&room) || !room.count) { snprintf(out, size, "-"); return; }
     static const char *const states[] = {
         "waiting", "scripted", "family unsupported", "inactive", "different floor",
-        "out of range", "within attack range", "blocked", "moving"
+        "out of range", "within attack range", "blocked", "moving",
+        "variant unsupported", "prone or rising", "corpse", "feeding"
     };
     int at = snprintf(out, size, "%d placed.", s_nenemies);
     for (int i = 0; i < s_nenemies && at > 0 && (unsigned)at < size; i++) {
@@ -188,8 +189,9 @@ static void text_enemy_movement(char *out, unsigned size) {
         if (s_enemy_debug_slot >= 0 && slot != (unsigned)s_enemy_debug_slot) continue;
         const unsigned state = slot < 16 ? s_session.enemy_state[slot] : PE_RE_ENEMY_UNCHECKED;
         const int routine = slot < 16 ? s_session.run.works[2 + slot][PE_RE_MEMBER_ROUTINE0] : -1;
-        at += snprintf(out + at, size - (unsigned)at, " Slot %u EM%02X type %04X routine %d at %d,%d: %s.",
-                       slot, enemy->kind, enemy->behaviour, routine, enemy->x, enemy->z, states[state]);
+        const int command = slot < 16 ? s_session.run.works[2 + slot][PE_RE_MEMBER_ROUTINE1] : -1;
+        at += snprintf(out + at, size - (unsigned)at, " Slot %u EM%02X type %04X routine %d/%d at %d,%d: %s.",
+                       slot, enemy->kind, enemy->behaviour, routine, command, enemy->x, enemy->z, states[state]);
         if (s_enemy_debug_slot >= 0 && slot < 16 && s_session.run.scene[slot].active &&
             at > 0 && (unsigned)at < size)
             at += snprintf(out + at, size - (unsigned)at, " Script clip %u, frame %u.",

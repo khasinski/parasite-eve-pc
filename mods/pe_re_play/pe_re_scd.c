@@ -454,6 +454,7 @@ static int step(Vm *vm, PeReScdTask *t) {
             memset(w, 0, sizeof r->works[slot]);
             r->em_dead[slot - 2] = r->em_busy[slot - 2] = 0;
             r->em_alerted[slot - 2] = 0;
+            r->em_idle_ticks[slot - 2] = 0;
             r->em_ready[slot - 2] = 0;
             r->scene[slot - 2] = (PeReSceneMotion){0};
             if (pe_re_scene_kind(ins[3])) {
@@ -750,48 +751,69 @@ static void licker_standin(PeReScdRun *run, int slot, unsigned room) {
     w[PE_RE_MEMBER_TYPE] &= ~0x4000;
 }
 
-/* EM10_S0: scripted rush and feeding states use the target in Sce_free3. */
+PeReZombieMode pe_re_zombie_mode(unsigned type, int routine) {
+    if (routine == 8) return PE_RE_ZOMBIE_SCRIPT;
+    switch (type & 0x3f) {
+    case 0: return PE_RE_ZOMBIE_IDLE;
+    case 1: case 3: return PE_RE_ZOMBIE_CRAWL;
+    case 2: case 4: return PE_RE_ZOMBIE_PRONE;
+    case 5: case 7: return PE_RE_ZOMBIE_CORPSE;
+    case 6: return PE_RE_ZOMBIE_PURSUIT;
+    case 8: return PE_RE_ZOMBIE_FEEDING;
+    default: return PE_RE_ZOMBIE_UNSUPPORTED;  /* includes room-specific RBJ animation (type 0x0a) */
+    }
+}
+
+/* EM10_S0: scripted walk uses its destination; rush and feeding use Sce_free3. */
 static void zombie_scene(PeReScdRun *run, int slot) {
     int16_t *work = run->works[2 + slot];
     PeReSceneMotion *motion = &run->scene[slot];
     const int order = work[PE_RE_MEMBER_ROUTINE1], target = work[PE_RE_MEMBER_SCE_FREE3];
-    if (work[PE_RE_MEMBER_ROUTINE0] != 8 || (order != 2 && order != 3) ||
-        target < 2 || target >= 18 || !run->works[target][0] || run->em_dead[slot]) {
+    const PeReZombieMode mode = pe_re_zombie_mode(work[PE_RE_MEMBER_TYPE], work[PE_RE_MEMBER_ROUTINE0]);
+    if ((mode != PE_RE_ZOMBIE_SCRIPT && mode != PE_RE_ZOMBIE_FEEDING) || run->em_dead[slot]) {
         *motion = (PeReSceneMotion){0};
         return;
     }
-    const unsigned clip = order == 2 ? 10 : 21;
+    const int command = mode == PE_RE_ZOMBIE_FEEDING ? 3 : order;
+    const int has_target = target >= 0 && target < 18 && target != 2 + slot &&
+                           (target == 0 || run->works[target][0]);
+    if (command < 0 || command > 3) {
+        *motion = (PeReSceneMotion){0};
+        return;
+    }
+    const unsigned clip = command == 0 ? 0 : command == 1 ? (uint8_t)work[PE_RE_MEMBER_SCE_FREE0] :
+                          command == 2 ? 10 : has_target && mode == PE_RE_ZOMBIE_SCRIPT ? 21 : 18;
     if (!motion->active || motion->move != clip)
         *motion = (PeReSceneMotion){.active = 1, .move = clip};
     else motion->elapsed++;
-    const double dx = (double)run->works[target][PE_RE_MEMBER_POS_X] - work[PE_RE_MEMBER_POS_X];
-    const double dz = (double)run->works[target][PE_RE_MEMBER_POS_Z] - work[PE_RE_MEMBER_POS_Z];
+    if (command == 0 || (command >= 2 && !has_target) || mode == PE_RE_ZOMBIE_FEEDING) return;
+    const double x = command == 1 ? work[PE_RE_MEMBER_DEST_X] : run->works[target][PE_RE_MEMBER_POS_X];
+    const double z = command == 1 ? work[PE_RE_MEMBER_DEST_Z] : run->works[target][PE_RE_MEMBER_POS_Z];
+    const double dx = x - work[PE_RE_MEMBER_POS_X], dz = z - work[PE_RE_MEMBER_POS_Z];
     const double distance = hypot(dx, dz);
     if (distance > 1) {
-        const int dir = (int)lround(atan2(-dx, -dz) * (2048.0 / acos(-1.0))) + 1024;
+        const int dir = (int)lround(atan2(-dz, dx) * (2048.0 / acos(-1.0)));
         work[PE_RE_MEMBER_CDIR_Y] = (int16_t)(dir & 4095);
-        if (order == 2 && distance > 350) {
-            const double step = fmin(110, distance - 350);
+        const double stop = command == 2 ? 350 : 0;
+        if ((command == 1 || command == 2) && distance > stop) {
+            const double step = fmin(command == 2 ? 110 : 22, distance - stop);
             work[PE_RE_MEMBER_POS_X] += (int16_t)lround(dx * step / distance);
             work[PE_RE_MEMBER_POS_Z] += (int16_t)lround(dz * step / distance);
         }
     }
-    if (order == 2 && motion->elapsed >= 17) work[PE_RE_MEMBER_ROUTINE1] = 3;
+    if (command == 2 && motion->elapsed >= 17) work[PE_RE_MEMBER_ROUTINE1] = 3;
 }
 
-/* EM10's prone states stand up once released. In the street, wait until
- * Aya is close enough to see the rise, then hand the same placement to pursuit. */
-static int street_zombie_rise(PeReScdRun *run, int slot) {
+/* EM10's prone states stand up when the hold flag clears. In the opening
+ * street, a timed room procedure clears the flag for the first zombie. */
+static int zombie_rise(PeReScdRun *run, int slot) {
     int16_t *work = run->works[2 + slot];
     PeReSceneMotion *motion = &run->scene[slot];
     const unsigned type = work[PE_RE_MEMBER_TYPE] & 0x3f;
     if ((type != 2 && type != 4) || (work[PE_RE_MEMBER_TYPE] & 0x4000) || run->em_dead[slot]) return 0;
-    if (!motion->active) {
-        const int16_t *player = run->works[0];
-        const double distance = hypot(player[PE_RE_MEMBER_POS_X] - work[PE_RE_MEMBER_POS_X],
-                                      player[PE_RE_MEMBER_POS_Z] - work[PE_RE_MEMBER_POS_Z]);
-        if (distance > 2600) return 0;
-        *motion = (PeReSceneMotion){.active = 1, .move = type == 2 ? 9 : 8};
+    const unsigned clip = type == 2 ? 9 : 8;
+    if (!motion->active || motion->move != clip) {
+        *motion = (PeReSceneMotion){.active = 1, .move = clip};
     } else if (++motion->elapsed >= 24) {
         work[PE_RE_MEMBER_TYPE] = (work[PE_RE_MEMBER_TYPE] & ~0x3f) | 6;
         *motion = (PeReSceneMotion){0};
@@ -808,7 +830,7 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
         int16_t *f = &w[PE_RE_MEMBER_SCE_FREE0];
         int order = 0, frames = 0;
         if (w[0] && w[PE_RE_MEMBER_ID] >= 0x10 && w[PE_RE_MEMBER_ID] < 0x20) {
-            if (room != 0x100 || !street_zombie_rise(run, n)) zombie_scene(run, n);
+            if (w[PE_RE_MEMBER_ROUTINE0] == 8 || !zombie_rise(run, n)) zombie_scene(run, n);
             continue;
         }
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x22) {

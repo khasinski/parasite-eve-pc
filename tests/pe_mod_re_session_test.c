@@ -680,7 +680,7 @@ int main(void) {
     const int prone_x = foes[5].x;
     CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 2, 2300, 0, 0) == 1);
     CHECK(foes[5].x == prone_x);
-    CHECK(chase.enemy_state[4] == PE_RE_ENEMY_MOVING && chase.enemy_state[5] == PE_RE_ENEMY_DORMANT);
+    CHECK(chase.enemy_state[4] == PE_RE_ENEMY_MOVING && chase.enemy_state[5] == PE_RE_ENEMY_PRONE);
 
     chase.room = 1;
     foes[4].behaviour = 0;
@@ -706,6 +706,34 @@ int main(void) {
     CHECK(!pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 3100, 0, 0));
     foes[4].behaviour = 0x0510;
     CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 3100, 0, 0) == 1);
+
+    /* An idle zombie does not acquire Aya from behind on distance alone.
+     * After its idle check, the first turn is bounded and the step is forward. */
+    foes[4].kind = 0x1f, foes[4].behaviour = 0, foes[4].dir = 0;
+    chase.run.works[6][PE_RE_MEMBER_ID] = 0x1f;
+    chase.run.em_alerted[4] = 0;
+    chase.run.em_idle_ticks[4] = 0;
+    const int zombie_x = foes[4].x;
+    CHECK(!pe_re_session_chase(&chase, &chase_room, foes + 4, 1, zombie_x - 2500, 0, 0));
+    CHECK(foes[4].x == zombie_x && foes[4].dir == 0);
+    chase.run.em_idle_ticks[4] = 299;
+    CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 1, zombie_x - 2500, 0, 0) == 1);
+    CHECK(foes[4].dir == 4096 - 24 && foes[4].x > zombie_x);
+
+    /* A no-defeat-flag crawler animates and advances as field scenery. */
+    foes[4].behaviour = 0x2003, foes[4].killed_flag = 0xff, foes[4].dir = 0;
+    CHECK(!pe_re2_proximity_enemy(&foes[4], 0));
+    CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 1, foes[4].x + 2400, 0, 0) == 1);
+    CHECK(chase.enemy_state[4] == PE_RE_ENEMY_MOVING);
+    foes[4].behaviour = 5;
+    CHECK(!pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 2300, 0, 0));
+    CHECK(chase.enemy_state[4] == PE_RE_ENEMY_CORPSE);
+    foes[4].behaviour = 8;
+    CHECK(!pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 2300, 0, 0));
+    CHECK(chase.enemy_state[4] == PE_RE_ENEMY_FEEDING);
+    foes[4].behaviour = 0x0a;
+    CHECK(!pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 2300, 0, 0));
+    CHECK(chase.enemy_state[4] == PE_RE_ENEMY_VARIANT);
 
     char id[PE_IMP_ID_MAX];
     pe_re_logic_id("re2", 0, 0x0a, 1, id, sizeof id);

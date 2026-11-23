@@ -499,44 +499,78 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
         const int licker = e->kind == 0x22;
         const int zombie = e->kind >= 0x10 && e->kind < 0x20;
         const unsigned type = e->behaviour & 0x3f;
+        const PeReZombieMode mode = pe_re_zombie_mode(type, work[PE_RE_MEMBER_ROUTINE0]);
         *state = PE_RE_ENEMY_FAMILY;
         if (!zombie && !dog && !licker) continue;
+        if (zombie) {
+            if (mode == PE_RE_ZOMBIE_UNSUPPORTED ||
+                (mode == PE_RE_ZOMBIE_SCRIPT && (work[PE_RE_MEMBER_ROUTINE1] < 0 || work[PE_RE_MEMBER_ROUTINE1] > 3))) {
+                *state = PE_RE_ENEMY_VARIANT;
+                continue;
+            }
+            if (mode == PE_RE_ZOMBIE_CORPSE || mode == PE_RE_ZOMBIE_FEEDING || mode == PE_RE_ZOMBIE_PRONE) {
+                *state = mode == PE_RE_ZOMBIE_CORPSE ? PE_RE_ENEMY_CORPSE :
+                         mode == PE_RE_ZOMBIE_FEEDING ? PE_RE_ENEMY_FEEDING : PE_RE_ENEMY_PRONE;
+                continue;
+            }
+        }
         *state = PE_RE_ENEMY_SCRIPTED;
         if (s->run.camera_lock || (scripted & (1u << e->slot)) ||
             (zombie && (work[PE_RE_MEMBER_ROUTINE0] == 8 || s->run.scene[e->slot].active))) continue;
-        /* Standing zombies and released dogs can chase. Leave scripted, feeding and prone poses to the room/battle. */
+        /* The field does not require a persistent battle defeat flag. */
         const int mobile = dog ? type <= 2 || type == 4 || type == 6 || type == 9 :
                            licker ? type == 0 || type == 0x10 || type == 0x11 || type == 0x13 :
-                           type <= 1 || type == 6;
-        /* Opening street placements use 0x4000 even for standing zombies. The
-         * street's encounter rules already make that exception. */
+                           mode == PE_RE_ZOMBIE_IDLE || mode == PE_RE_ZOMBIE_PURSUIT || mode == PE_RE_ZOMBIE_CRAWL;
+        const unsigned held = zombie ? (street ? 0x8000 : 0xc000) : 0xe000;
         *state = PE_RE_ENEMY_DORMANT;
-        if (!mobile || !pe_re2_proximity_enemy(e, street) || (e->behaviour & 0xa000) ||
+        if (!mobile || (e->behaviour & held) ||
             !work[0] || work[PE_RE_MEMBER_ID] != e->kind) continue;
         *state = PE_RE_ENEMY_FLOOR;
         if (e->floor != floor || pe_re_floor_of(e->y) != floor) continue;
         const double dx = x - e->x, dz = z - e->z;
         const double distance = hypot(dx, dz);
-        const double awareness = dog ? 5200 : licker ? 3900 : 3300;
+        const int target_dir = (int)lround(atan2(-dz, dx) * (2048.0 / acos(-1.0))) & 4095;
+        const int turn = ((target_dir - e->dir + 2048) & 4095) - 2048;
         uint8_t *alerted = &s->run.em_alerted[e->slot];
         *state = PE_RE_ENEMY_RANGE;
-        if (distance > awareness + (*alerted ? 1200 : 0)) {
-            *alerted = 0;
-            continue;
+        if (zombie) {
+            /* EM10: type 6 starts in pursuit. Standing type 0 notices a
+             * player in its forward arc or starts after its idle check. */
+            uint16_t *idle = &s->run.em_idle_ticks[e->slot];
+            if (*idle < UINT16_MAX) ++*idle;
+            if (!*alerted && mode == PE_RE_ZOMBIE_IDLE && !(distance < 5000 && abs(turn) < 1024) &&
+                !(*idle >= 300 && distance < 7500)) continue;
+        } else {
+            const double awareness = dog ? 5200 : 3900;
+            if (distance > awareness + (*alerted ? 1200 : 0)) {
+                *alerted = 0;
+                continue;
+            }
         }
         *alerted = 1;
         *state = PE_RE_ENEMY_CLOSE;
         if (distance <= 1200) continue;
-        const double speed = dog ? 62 : licker ? 44 : type == 1 ? 12 : 22;
+        const double speed = dog ? 62 : licker ? 44 : mode == PE_RE_ZOMBIE_CRAWL ? 12 : 22;
         const double radius = dog ? 210 : licker ? 310 : 240;
         *state = PE_RE_ENEMY_BLOCKED;
         double next_x = e->x, next_z = e->z, ground = -(double)floor * PE_RE2_FLOOR_HEIGHT;
+        /* Native walking turns toward a target over successive updates and
+         * applies movement along the actor's forward axis. */
+        const int turn_step = distance < 3000 ? 24 : 8;
+        const int dir = zombie ? (e->dir + (turn < -turn_step ? -turn_step : turn > turn_step ? turn_step : turn)) & 4095 :
+                                 target_dir;
+        const int turned = zombie && dir != e->dir;
+        if (turned) {
+            work[PE_RE_MEMBER_CDIR_Y] = e->dir = (int16_t)dir;
+            moved++;
+        }
         if (street && pe_imp_re2_blocked_on(collision, (unsigned)floor, next_x, next_z, radius)) {
             /* The prone street placement can overlap a wall after standing up. */
             if (!pe_re_free_spot(collision, floor, &next_x, &next_z, (int)radius, 900)) continue;
         } else {
+            const double yaw = dir * (acos(-1.0) / 2048);
             pe_imp_re2_slide_on(collision, (unsigned)floor, &next_x, &next_z,
-                               dx * speed / distance, dz * speed / distance, radius);
+                               cos(yaw) * speed, -sin(yaw) * speed, radius);
         }
         if (next_x < INT16_MIN || next_x > INT16_MAX || next_z < INT16_MIN || next_z > INT16_MAX) continue;
         const int ix = (int)lround(next_x), iz = (int)lround(next_z);
@@ -544,13 +578,14 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
         if (pe_imp_re2_ground(collision, ix, iz, &ground) && pe_re_floor_of((int)lround(ground)) != floor) continue;
         /* Rounding the position for the script's word fields must still leave clearance. */
         if (pe_imp_re2_blocked_on(collision, (unsigned)floor, ix, iz, radius)) continue;
-        const int dir = (int)lround(atan2(e->x - ix, e->z - iz) * (2048.0 / acos(-1.0))) + 1024;
+        const int move_dir = zombie ? dir :
+            (int)lround(atan2(e->z - iz, ix - e->x) * (2048.0 / acos(-1.0))) & 4095;
         work[PE_RE_MEMBER_POS_X] = e->x = (int16_t)ix;
         work[PE_RE_MEMBER_POS_Y] = e->y = (int16_t)lround(ground);
         work[PE_RE_MEMBER_POS_Z] = e->z = (int16_t)iz;
-        work[PE_RE_MEMBER_CDIR_Y] = e->dir = (int16_t)(dir & 4095);
+        work[PE_RE_MEMBER_CDIR_Y] = e->dir = (int16_t)move_dir;
         *state = PE_RE_ENEMY_MOVING;
-        moved++;
+        if (!turned) moved++;
     }
     return moved;
 }

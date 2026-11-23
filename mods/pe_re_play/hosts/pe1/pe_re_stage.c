@@ -646,7 +646,8 @@ static int empty_texture_area(RECT *rect) {
 
 static int show_placement_mesh(const PeReEnemyPlacement *p) {
     return p->kind < 0x40 && (pe_re_scene_kind(p->kind) || s_placement_meshes == PE_RE_MESH_ALL ||
-           (s_placement_meshes == PE_RE_MESH_ENCOUNTERS && pe_re2_proximity_enemy(p, 0)));
+           (s_placement_meshes == PE_RE_MESH_ENCOUNTERS &&
+            ((p->kind >= 0x10 && p->kind < 0x20) || pe_re2_proximity_enemy(p, 0))));
 }
 
 static void prepare_field_texture(void) {
@@ -848,7 +849,9 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
         const double world_x = scene ? scene->x : p->x;
         const double world_y = scene && !scene->field_pose ? scene->y : p->y - (double)s_field_mesh[p->kind].foot_y;
         const double world_z = scene ? scene->z : p->z;
-        const double angle = (scene && !scene->field_pose ? scene->dir : pe_re_facing_of(p->dir)) * FIELD_TURN_RADIANS;
+        /* Imported meshes and Cdir_y already share RE2's +X forward axis.
+         * Only Aya's native PE model needs pe_re_facing_of's quarter-turn. */
+        const double angle = (scene ? scene->dir : p->dir) * FIELD_TURN_RADIANS;
         const double cs = cos(angle), sn = sin(angle);
         FieldBonePose pose[PE_IMP_MODEL_BONES_MAX];
         const PeImpAnimation *moves = &s_field_mesh[p->kind].moves;
@@ -866,17 +869,20 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
             }
         } else if (s_placement_idle && moves->moves) {
             const unsigned type = p->behaviour & 0x3f;
+            const PeReZombieMode mode = pe_re_zombie_mode(type, 0);
             const int moving = s_last_motion[i] && (uint32_t)vblanks - s_last_motion[i] <= 3;
             /* EM10.C uses move 0 as one of the zombie walk cycles. EM20.C uses move 2 for the dog's run. */
             unsigned index = 0;
             if (p->kind == 0x20) index = moving ? 2 : 0;
-            else if (p->kind != 0x22 && type == 1) index = moving ? 4 : 0x17;
-            else if (type == 2) index = 0x16;
-            else if (type == 4) index = 0x17;
+            else if (p->kind != 0x22 && mode == PE_RE_ZOMBIE_CRAWL) index = moving ? 4 : 0x17;
+            else if (type == 2 || type == 5) index = 0x16;
+            else if (type == 4 || type == 7) index = 0x17;
             else if (type == 8) index = 0x12;
             if (index < moves->moves && moves->move[index].frames) {
                 const PeImpMove *move = &moves->move[index];
-                const unsigned frame = moving ? (vblanks * moves->fps / 60 + 7u * p->slot) % move->frames : 0;
+                const int animate = moving || (p->kind >= 0x10 && p->kind < 0x20 &&
+                                               (mode == PE_RE_ZOMBIE_IDLE || mode == PE_RE_ZOMBIE_PURSUIT));
+                const unsigned frame = animate ? (vblanks * moves->fps / 60 + 7u * p->slot) % move->frames : 0;
                 field_pose(model, move->data + frame * (3u + 3u * model->bones), move->data, NULL, pose);
                 animated = 1;
             }

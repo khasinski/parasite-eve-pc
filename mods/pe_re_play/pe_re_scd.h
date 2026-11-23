@@ -69,8 +69,16 @@
 #define PE_RE_MEMBERS 44                       /* MEMBER_BE_FLAG0 .. MEMBER_DAMAGE_CNT */
 enum { PE_RE_MEMBER_ID = 6, PE_RE_MEMBER_TYPE = 7, PE_RE_MEMBER_SCE_FREE0 = 23, PE_RE_MEMBER_SCE_FREE1 = 24,
        PE_RE_MEMBER_SCE_FREE3 = 26,
+       PE_RE_MEMBER_DEST_X = 20, PE_RE_MEMBER_DEST_Z = 21,
        PE_RE_MEMBER_AT_SCE_NO = 9, PE_RE_MEMBER_POS_X = 11, PE_RE_MEMBER_POS_Y = 12, PE_RE_MEMBER_POS_Z = 13, PE_RE_MEMBER_CDIR_Y = 15,
        PE_RE_MEMBER_NFLOOR = 17, PE_RE_MEMBER_ROUTINE0 = 2, PE_RE_MEMBER_ROUTINE1 = 3 };
+
+typedef enum {
+    PE_RE_ZOMBIE_IDLE, PE_RE_ZOMBIE_PURSUIT, PE_RE_ZOMBIE_CRAWL, PE_RE_ZOMBIE_PRONE,
+    PE_RE_ZOMBIE_CORPSE, PE_RE_ZOMBIE_FEEDING, PE_RE_ZOMBIE_SCRIPT, PE_RE_ZOMBIE_UNSUPPORTED
+} PeReZombieMode;
+
+PeReZombieMode pe_re_zombie_mode(unsigned type, int routine);
 #define PE_RE_SLOTS 256                        /* zone ids */
 #define PE_RE_WORK_F_ATARI 0                   /* the zone hit in front of the player (SCE_AT.C) */
 #define PE_RE_WORK_U_ATARI 1                   /* the zone hit under the player */
@@ -159,6 +167,7 @@ typedef struct {
     uint8_t alligator_chosen;                  /* the player chose how to enter the battle in 4-0A */
     uint8_t em_dead[16];                       /* beaten (pe_re_session_beaten): 1, then 2 once the stand-in saw it */
     uint8_t em_alerted[16];                    /* room-local awareness survives movement and camera cuts */
+    uint16_t em_idle_ticks[16];                /* standing zombie's time since script release */
     PeReSceneMotion scene[16];
     int nenemy;
     int naot_on;
