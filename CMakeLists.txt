@@ -736,6 +736,13 @@ if(BUILD_TESTING)
             set_tests_properties(enemy-import-fights PROPERTIES SKIP_RETURN_CODE 77
                 TIMEOUT 900 LABELS "game-assets;mods")
             if("pe_re_play" IN_LIST PE_MOD_LIST AND "pe_src_re2" IN_LIST PE_MOD_LIST)
+                foreach(campaign IN ITEMS claire leon)
+                    add_test(NAME re2-${campaign}-b-finale COMMAND ${Python3_EXECUTABLE}
+                        ${CMAKE_SOURCE_DIR}/tests/re2_b_finale.py $<TARGET_FILE:parasite-eve-pc>
+                        ${CMAKE_BINARY_DIR}/re2-${campaign}-b-finale-evidence ${campaign})
+                    set_tests_properties(re2-${campaign}-b-finale PROPERTIES SKIP_RETURN_CODE 77
+                        TIMEOUT 900 LABELS "game-assets;mods")
+                endforeach()
                 add_test(NAME re2-rpd-licker COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_SOURCE_DIR}/tests/re2_rpd_licker.py $<TARGET_FILE:parasite-eve-pc>
                     ${CMAKE_BINARY_DIR}/re2-rpd-licker-evidence)
