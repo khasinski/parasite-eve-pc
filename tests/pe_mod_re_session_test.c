@@ -418,11 +418,28 @@ static void test_kendo_zombies(const char *store) {
     free(room);
 }
 
+static void test_climb_camera_floors(const char *store) {
+    for (int player = 0; player < 2; player++) {
+        char id[PE_IMP_ID_MAX];
+        pe_re_logic_id("re2", 0, 0x18, player, id, sizeof id);
+        PeImpRoomLogic *room = NULL;
+        CHECK(!pe_imp_catalog_roomlogic(store, id, &room, NULL, 0));
+        if (!room) continue;
+        /* The dumpster camera's two switch polygons both contain this point. */
+        CHECK(pe_re_camera_at(room, 7, 0, -21000, -7000) == 7);
+        CHECK(pe_re_camera_at(room, 8, 0, -21000, -7000) == 7);
+        CHECK(pe_re_camera_at(room, 7, 1, -21000, -7000) == 8);
+        CHECK(pe_re_camera_at(room, 8, 1, -21000, -7000) == 8);
+        free(room);
+    }
+}
+
 int main(void) {
     const char *effect_store = getenv("PE_TEST_RE2_STORE");
     if (effect_store && *effect_store) {
         test_room_effects(effect_store);
         test_kendo_zombies(effect_store);
+        test_climb_camera_floors(effect_store);
     }
     char why[200] = "";
 
@@ -552,6 +569,7 @@ int main(void) {
     PeImpLogicBuilder *b = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
     PeImpCameraZone cz[4];                  /* as RE2 stores them: each camera's own area first */
     memset(cz, 0, sizeof cz);
+    for (int i = 0; i < 4; i++) cz[i].flag = 0xff01;  /* enabled on every floor */
     cz[0].from = 0, cz[0].to = 0, rect(cz[0].x, cz[0].z, 0, 0, 2100, 1000);
     cz[1].from = 0, cz[1].to = 1, rect(cz[1].x, cz[1].z, 2000, 0, 4000, 1000);
     cz[2].from = 1, cz[2].to = 0, rect(cz[2].x, cz[2].z, 0, 0, 4000, 1000);   /* camera 1's area, not a switch */
@@ -564,9 +582,9 @@ int main(void) {
     PeImpRoomLogic *l = pe_imp_logic_finish(b);
     CHECK(l != NULL);
     if (l) {
-        CHECK(pe_re_camera_at(l, 0, 1000, 500) == 0 && pe_re_camera_at(l, 0, 2500, 500) == 1);
-        CHECK(pe_re_camera_at(l, 1, 1900, 500) == 1 && pe_re_camera_at(l, 1, 1000, 500) == 0);   /* no flicker at the seam */
-        CHECK(pe_re_camera_at(l, 1, 3000, 500) == 1);          /* in camera 1's own area: stays */
+        CHECK(pe_re_camera_at(l, 0, 0, 1000, 500) == 0 && pe_re_camera_at(l, 0, 0, 2500, 500) == 1);
+        CHECK(pe_re_camera_at(l, 1, 0, 1900, 500) == 1 && pe_re_camera_at(l, 1, 0, 1000, 500) == 0);   /* no flicker at the seam */
+        CHECK(pe_re_camera_at(l, 1, 0, 3000, 500) == 1);          /* in camera 1's own area: stays */
         PeImpDoor d;
         CHECK(pe_re_door_at(l, NULL, 3900, 500, &d) == 0 && d.room == 0xEE && pe_re_door_at(l, NULL, 3000, 500, NULL) < 0);
         PeReSession s;                                          /* steps on a session holding it */

@@ -145,7 +145,7 @@ static int flags_changed(const PeReSession *s) {
  * itself (a script that checks Cut_no, like 2-1B's stone panel, would never see it). */
 static int camera_for(const PeReSession *s, double x, double z) {
     int camera = s->camera;
-    for (int hop = 0; hop < 8; hop++) camera = pe_re_camera_at(s->logic, camera, x, z);
+    for (int hop = 0; hop < 8; hop++) camera = pe_re_camera_at(s->logic, camera, s->floor, x, z);
     if (camera != s->camera) return camera;
     uint32_t n = 0;
     int group = -1;
@@ -155,9 +155,9 @@ static int camera_for(const PeReSession *s, double x, double z) {
             if (pe_imp_logic_camera_zone(s->logic, i, &c)) continue;
             const int own = c.from != group;               /* each camera's first entry is its own area */
             group = c.from;
-            if (own || c.to == c.from || !pe_re_in_quad(c.x, c.z, x, z)) continue;
+            if (own || c.to == c.from || pe_re_camera_at(s->logic, c.from, s->floor, x, z) != c.to) continue;
             camera = c.to;
-            for (int hop = 0; hop < 8; hop++) camera = pe_re_camera_at(s->logic, camera, x, z);
+            for (int hop = 0; hop < 8; hop++) camera = pe_re_camera_at(s->logic, camera, s->floor, x, z);
             return camera;
         }
     return s->camera;

@@ -61,7 +61,7 @@ int pe_re_in_quad(const int16_t x[4], const int16_t z[4], double px, double pz) 
 /* Switch zones come grouped by the camera they leave. Each group opens with that camera's own area,
  * not a switch: RE2 and RE3 store it as the group's first record ("from 1 to 0" in room 1-00, a
  * zone covering cameras 0 and 1, which taken as a switch flips 0 and 1 for ever); RE1 flags it 1. */
-int pe_re_camera_at(const PeImpRoomLogic *l, int camera, double x, double z) {
+int pe_re_camera_at(const PeImpRoomLogic *l, int camera, int floor, double x, double z) {
     uint32_t n = 0;
     int group = -1;
     if (!l || !pe_imp_logic_section(l, PE_IMP_LOGIC_CAMZ, &n, NULL)) return camera;
@@ -71,6 +71,12 @@ int pe_re_camera_at(const PeImpRoomLogic *l, int camera, double x, double z) {
         const int own = l->game == PE_IMP_RE1 ? c.flag == 1 : c.from != group;
         group = c.from;
         if (own || c.from != camera || c.to == camera) continue;
+        /* RE2 VCUT stores Be_flg in the low byte and nFloor in the high.
+         * Opposite cuts can share a footprint when they serve different floors. */
+        if (l->game == PE_IMP_RE2) {
+            const int zone_floor = c.flag >> 8;
+            if (!(c.flag & 0xff) || (zone_floor != 0xff && zone_floor != floor)) continue;
+        }
         if (pe_re_in_quad(c.x, c.z, x, z)) return c.to;
     }
     return camera;
@@ -300,7 +306,7 @@ every_frame:;                                              /* every frame: the z
     }
     if (message_zone < 0) s->auto_message = -1;
     if (s->run.ran && s->run.camera_lock) return PE_RE_STAY;   /* the scripts hold the camera */
-    const int camera = pe_re_camera_at(s->logic, s->camera, x, z);
+    const int camera = pe_re_camera_at(s->logic, s->camera, s->floor, x, z);
     if (camera == s->camera) return PE_RE_STAY;
     s->camera = camera;
     return PE_RE_CAMERA;
