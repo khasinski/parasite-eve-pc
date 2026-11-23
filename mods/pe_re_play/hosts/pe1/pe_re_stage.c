@@ -48,11 +48,11 @@
 #define PE_AYA_BANK 10           /* her day-1 bundle: the model measured for her height */
 #define AYA_ROOM_RADIUS 280
 #define FIELD_MESH_TRIANGLES 1024
-#define FIELD_TEX_X 832
-#define FIELD_TEX_Y 256
-#define FIELD_TEX_WORDS 128
-#define FIELD_TEX_HEIGHT 256
-#define FIELD_CLUT_X 576
+#define FIELD_TEX_X 320
+#define FIELD_TEX_Y 64
+#define FIELD_TEX_WORDS 64
+#define FIELD_TEX_HEIGHT 128
+#define FIELD_CLUT_X 320
 #define FIELD_CLUT_Y 496
 #define FIELD_CLUT_ROWS 16
 #define BACKDROP_SETTLE 10       /* frames Aya stands still before the battle's camera is fixed */
@@ -118,9 +118,10 @@ PE1_STATIC_ASSERT(PE1_OFFSETOF(FieldTexturedTriangle, pad) == sizeof(RenderNativ
                   field_textured_triangle_layout);
 static FieldTexturedTriangle s_tex_packets[2][PE_RE_ENEMIES_MAX][FIELD_MESH_TRIANGLES];
 static int s_texture_kind = -1, s_texture_checked;
+static unsigned s_texture_palette_rows;
 static uint16_t s_texture_words[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
 static uint16_t s_texture_clut[FIELD_CLUT_ROWS][256];
-static uint16_t s_vram_check[FIELD_TEX_WORDS * FIELD_TEX_HEIGHT];
+static uint16_t s_vram_check[64 * 256];
 static struct {
     PeImpModel model;
     int tried;
@@ -615,7 +616,7 @@ static void free_field_mesh(unsigned kind) {
 static void clear_field_texture(void) {
     if (s_texture_kind >= 0) {
         const RECT areas[] = {{FIELD_TEX_X, FIELD_TEX_Y, FIELD_TEX_WORDS, FIELD_TEX_HEIGHT},
-                              {FIELD_CLUT_X, FIELD_CLUT_Y, 256, FIELD_CLUT_ROWS}};
+                              {FIELD_CLUT_X, FIELD_CLUT_Y, 256, s_texture_palette_rows}};
         const uint16_t *pixels[] = {s_texture_words, &s_texture_clut[0][0]};
         for (int i = 0; i < 2; i++) {
             const size_t bytes = (size_t)areas[i].w * areas[i].h * sizeof(uint16_t);
@@ -657,31 +658,36 @@ static void prepare_field_texture(void) {
         const unsigned candidate = s_placements[i].kind;
         if (!show_placement_mesh(&s_placements[i])) continue;
         const PeImpModel *model = &s_field_mesh[candidate].model;
-        if (model->parts && model->h <= FIELD_TEX_HEIGHT && model->pal_rows <= FIELD_CLUT_ROWS) {
+        if (model->parts && model->h <= FIELD_TEX_HEIGHT * 2 && model->pal_rows &&
+            model->pal_rows <= FIELD_CLUT_ROWS) {
             kind = (int)candidate;
             break;
         }
     }
     if (kind < 0) return;
     RECT texture = {FIELD_TEX_X, FIELD_TEX_Y, FIELD_TEX_WORDS, FIELD_TEX_HEIGHT};
-    RECT clut = {FIELD_CLUT_X, FIELD_CLUT_Y, 256, FIELD_CLUT_ROWS};
-    if (!empty_texture_area(&texture) || !empty_texture_area(&clut)) return;
     const PeImpModel *model = &s_field_mesh[kind].model;
-    const unsigned width = model->w < 2 * FIELD_TEX_WORDS ? model->w : 2 * FIELD_TEX_WORDS;
+    RECT clut = {FIELD_CLUT_X, FIELD_CLUT_Y, 256, model->pal_rows};
+    if (!empty_texture_area(&texture) || !empty_texture_area(&clut)) return;
+    /* Pack two 128-texel source columns at half resolution into a single
+     * checked VRAM rectangle. The full atlas does not fit beside native textures. */
+    const unsigned width = model->w < 4 * FIELD_TEX_WORDS ? model->w : 4 * FIELD_TEX_WORDS;
     memset(s_texture_words, 0, sizeof s_texture_words);
     memset(s_texture_clut, 0, sizeof s_texture_clut);
-    for (unsigned y = 0; y < model->h; y++)
-        for (unsigned x = 0; x < width; x++)
-            s_texture_words[y * FIELD_TEX_WORDS + x / 2] |= (uint16_t)model->image[y * model->w + x] << (8 * (x & 1));
+    for (unsigned y = 0; y < model->h; y += 2)
+        for (unsigned x = 0; x < width; x += 2)
+            s_texture_words[(y / 2) * FIELD_TEX_WORDS + x / 4] |=
+                (uint16_t)model->image[y * model->w + x] << (8 * ((x / 2) & 1));
     memcpy(s_texture_clut, model->pal, model->pal_rows * sizeof s_texture_clut[0]);
     LoadImage(&texture, s_texture_words);
     LoadImage(&clut, &s_texture_clut[0][0]);
     DrawSync(0);
+    s_texture_palette_rows = model->pal_rows;
     s_texture_kind = kind;
 }
 
 static void load_field_moves(unsigned kind, const PeImpModel *model) {
-    if (!pe_re_scene_kind(kind) && (kind < 0x10 || kind > 0x20)) return;
+    if (!pe_re_scene_kind(kind) && (kind < 0x10 || (kind > 0x20 && kind != 0x22))) return;
     for (uint32_t b = 0; b < model->bones; b++)
         if (model->parent[b] >= (int)b || (b != 0 && model->parent[b] < 0)) return;
     for (uint32_t p = 0; p < model->parts && p < model->bones; p++)
@@ -809,16 +815,16 @@ static unsigned face_colour(const PeImpModel *model, const PeImpFace *face, cons
 }
 
 static int field_face_texture(const PeImpModel *model, const PeImpFace *face, const int corners[3],
-                              unsigned first_page, unsigned first_palette, unsigned *page, unsigned *clut) {
+                              unsigned first_page, unsigned first_palette, unsigned *clut, unsigned *u_offset) {
     const unsigned column = (face->page & 15u) - first_page;
     const unsigned palette = (face->clut >> 6) - first_palette;
-    if (column >= FIELD_TEX_WORDS / 64 || palette >= model->pal_rows) return 0;
+    if (column >= 2 || palette >= model->pal_rows) return 0;
     for (int i = 0; i < 3; i++) {
         const unsigned u = face->uv[corners[i]][0], v = face->uv[corners[i]][1];
-        if (column * 128 + u >= 2 * FIELD_TEX_WORDS || column * 128 + u >= model->w || v >= model->h)
+        if (u >= 128 || column * 128 + u >= model->w || v >= model->h)
             return 0;
     }
-    *page = 0x80u | (FIELD_TEX_Y / 256) << 4 | (FIELD_TEX_X / 64 + column);
+    *u_offset = column * 64;
     *clut = (FIELD_CLUT_Y + palette) << 6 | (FIELD_CLUT_X / 16);
     return 1;
 }
@@ -830,19 +836,19 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
         const PeReEnemyPlacement *p = &s_placements[i];
         if (!show_placement_mesh(p)) continue;
         const PeReSceneActor *scene = NULL;
-        if (pe_re_scene_kind(p->kind)) {
+        {
             for (int j = 0; j < s_scene_count; j++)
                 if (s_scene_actors[j].slot == p->slot && s_scene_actors[j].kind == p->kind) {
                     scene = &s_scene_actors[j];
                     break;
                 }
-            if (!scene) continue;
+            if (!scene && pe_re_scene_kind(p->kind)) continue;
         }
         const PeImpModel *model = &s_field_mesh[p->kind].model;
         const double world_x = scene ? scene->x : p->x;
-        const double world_y = scene ? scene->y : p->y - (double)s_field_mesh[p->kind].foot_y;
+        const double world_y = scene && !scene->field_pose ? scene->y : p->y - (double)s_field_mesh[p->kind].foot_y;
         const double world_z = scene ? scene->z : p->z;
-        const double angle = (scene ? scene->dir : pe_re_facing_of(p->dir)) * FIELD_TURN_RADIANS;
+        const double angle = (scene && !scene->field_pose ? scene->dir : pe_re_facing_of(p->dir)) * FIELD_TURN_RADIANS;
         const double cs = cos(angle), sn = sin(angle);
         FieldBonePose pose[PE_IMP_MODEL_BONES_MAX];
         const PeImpAnimation *moves = &s_field_mesh[p->kind].moves;
@@ -851,8 +857,10 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
             if (scene->move < moves->moves) {
                 const PeImpMove *move = &moves->move[scene->move];
                 if (move->frames) {
-                    const unsigned frame = scene->frame < move->frames ? scene->frame : move->frames - 1;
-                    field_pose(model, move->data + frame * (3u + 3u * model->bones), NULL, scene, pose);
+                    const unsigned frame = scene->field_pose ? scene->frame % move->frames :
+                        scene->frame < move->frames ? scene->frame : move->frames - 1;
+                    field_pose(model, move->data + frame * (3u + 3u * model->bones), move->data,
+                               scene->field_pose ? NULL : scene, pose);
                     animated = 1;
                 }
             }
@@ -862,6 +870,7 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
             /* EM10.C uses move 0 as one of the zombie walk cycles. EM20.C uses move 2 for the dog's run. */
             unsigned index = 0;
             if (p->kind == 0x20) index = moving ? 2 : 0;
+            else if (p->kind != 0x22 && type == 1) index = moving ? 4 : 0x17;
             else if (type == 2) index = 0x16;
             else if (type == 4) index = 0x17;
             else if (type == 8) index = 0x12;
@@ -902,20 +911,21 @@ static void draw_placement_meshes(RenderNativeTag *ordering, int slot, unsigned 
                             (a[1] < 0 && d[1] < 0 && c[1] < 0) || (a[1] >= FIELD_H && d[1] >= FIELD_H && c[1] >= FIELD_H)) continue;
                         const int depth = (int)((a[2] + d[2] + c[2]) / 3);
                         const int bucket = depth <= FIELD_UI_OT_LAST ? FIELD_UI_OT_LAST + 1 : depth;
-                        unsigned page, clut;
+                        unsigned clut, u_offset;
                         const unsigned first_page = s_field_mesh[p->kind].first_page;
                         const unsigned first_palette = s_field_mesh[p->kind].first_palette;
                         if (s_texture_kind == p->kind &&
-                            field_face_texture(model, f, v, first_page, first_palette, &page, &clut)) {
+                            field_face_texture(model, f, v, first_page, first_palette, &clut, &u_offset)) {
                             FieldTexturedTriangle *packet = &s_tex_packets[slot][i][emitted++];
                             *packet = (FieldTexturedTriangle){
                                 .color.bytes = {shade, shade, shade, 0x24},
                                 .x0 = (uint16_t)(int)lround(a[0]), .y0 = (uint16_t)(int)lround(a[1]),
                                 .x1 = (uint16_t)(int)lround(d[0]), .y1 = (uint16_t)(int)lround(d[1]),
                                 .x2 = (uint16_t)(int)lround(c[0]), .y2 = (uint16_t)(int)lround(c[1]),
-                                .u0 = f->uv[v[0]][0], .v0 = f->uv[v[0]][1], .clut = clut,
-                                .u1 = f->uv[v[1]][0], .v1 = f->uv[v[1]][1], .page = page,
-                                .u2 = f->uv[v[2]][0], .v2 = f->uv[v[2]][1]
+                                .u0 = u_offset + f->uv[v[0]][0] / 2, .v0 = FIELD_TEX_Y + f->uv[v[0]][1] / 2, .clut = clut,
+                                .u1 = u_offset + f->uv[v[1]][0] / 2, .v1 = FIELD_TEX_Y + f->uv[v[1]][1] / 2,
+                                .page = 0x80u | (FIELD_TEX_X / 64),
+                                .u2 = u_offset + f->uv[v[2]][0] / 2, .v2 = FIELD_TEX_Y + f->uv[v[2]][1] / 2
                             };
                             packet->tag.length = 7;
                             packet->tag.address = ordering[bucket].address;

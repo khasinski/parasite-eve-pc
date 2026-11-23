@@ -342,6 +342,19 @@ static void test_room_effects(const char *store) {
     PeReEffect effects[PE_RE_EFFECT_MAX];
     CHECK(!pe_imp_catalog_roomlogic(store, "re2:logic/100-0", &room, NULL, 0));
     if (!room) return;
+    uint32_t coll_size = 0;
+    const uint8_t *raw = pe_imp_logic_section(room, PE_IMP_LOGIC_COLL, NULL, &coll_size);
+    PeRe2RoomCollision collision;
+    if (!pe_imp_re2_collision_all(raw, coll_size, &collision)) {
+        PeReSession street = {.game = pe_re_game_named("re2")};
+        PeReEnemyPlacement zombie = {.slot = 0, .kind = 0x1f, .behaviour = 0x10c6,
+                                    .killed_flag = 0x23, .x = 22813, .z = 210};
+        street.run.works[2][0] = 1;
+        street.run.works[2][PE_RE_MEMBER_ID] = zombie.kind;
+        CHECK(pe_imp_re2_blocked_on(&collision, 0, zombie.x, zombie.z, 240));
+        CHECK(pe_re_session_chase(&street, &collision, &zombie, 1, 20888, 7, 0) == 1);
+        CHECK(!pe_imp_re2_blocked_on(&collision, 0, zombie.x, zombie.z, 240));
+    }
     pe_re_scd_run(room, &flags, NULL, &run);
     pe_re_scd_exec(room, &run, 2, 6);
     pe_re_scd_tick(room, &flags, NULL, &run);
@@ -379,9 +392,38 @@ static void test_room_effects(const char *store) {
     free(room);
 }
 
+static void test_kendo_zombies(const char *store) {
+    static PeReScdRun run;
+    PeReFlags flags = {0};
+    PeImpRoomLogic *room = NULL;
+    flags.work[PE_RE_WORK_ROOM] = 1;
+    CHECK(!pe_imp_catalog_roomlogic(store, "re2:logic/101-0", &room, NULL, 0));
+    if (!room) return;
+    pe_re_scd_run(room, &flags, NULL, &run);
+    pe_re_scd_exec(room, &run, 2, 10);  /* the shop's window event */
+    int advanced = 0, fed = 0, released = 0;
+    int last_x = 0, last_z = 0;
+    for (int tick = 0; tick < 450; tick++) {
+        pe_re_scd_tick(room, &flags, NULL, &run);
+        const int16_t *work = run.works[6];  /* first zombie that attacks Kendo */
+        if (work[PE_RE_MEMBER_ROUTINE0] == 8 && run.scene[4].active && run.scene[4].move == 10) {
+            if (run.scene[4].elapsed && (last_x != work[PE_RE_MEMBER_POS_X] || last_z != work[PE_RE_MEMBER_POS_Z]))
+                advanced = 1;
+            last_x = work[PE_RE_MEMBER_POS_X], last_z = work[PE_RE_MEMBER_POS_Z];
+        }
+        if (advanced && run.scene[4].active && run.scene[4].move == 21) fed = 1;
+        if (fed && work[PE_RE_MEMBER_ROUTINE0] == 1 && !(work[PE_RE_MEMBER_TYPE] & 0x4000)) released = 1;
+    }
+    CHECK(advanced && fed && released);
+    free(room);
+}
+
 int main(void) {
     const char *effect_store = getenv("PE_TEST_RE2_STORE");
-    if (effect_store && *effect_store) test_room_effects(effect_store);
+    if (effect_store && *effect_store) {
+        test_room_effects(effect_store);
+        test_kendo_zombies(effect_store);
+    }
     char why[200] = "";
 
     {   /* Story triggers depend on the room's live work fields, including the train's parked flag. */
@@ -638,6 +680,32 @@ int main(void) {
     const int prone_x = foes[5].x;
     CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 2, 2300, 0, 0) == 1);
     CHECK(foes[5].x == prone_x);
+    CHECK(chase.enemy_state[4] == PE_RE_ENEMY_MOVING && chase.enemy_state[5] == PE_RE_ENEMY_DORMANT);
+
+    chase.room = 1;
+    foes[4].behaviour = 0;
+    chase.run.works[6][PE_RE_MEMBER_ROUTINE0] = 8;
+    CHECK(!pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 2300, 0, 0));
+    CHECK(chase.enemy_state[4] == PE_RE_ENEMY_SCRIPTED);
+    chase.run.works[6][PE_RE_MEMBER_ROUTINE0] = 1;
+    CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 2300, 0, 0) == 1);
+    const int before_cut = foes[4].x;
+    chase.camera++;
+    CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 2300, 0, 0) == 1);
+    CHECK(foes[4].x > before_cut && chase.run.works[6][PE_RE_MEMBER_POS_X] == foes[4].x);
+    const int before_idle = foes[4].x;
+    const double stationary_aya = before_idle + 3800; /* outside acquisition, inside retention */
+    for (int tick = 0; tick < 3; tick++)
+        CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 1, stationary_aya, 0, 0) == 1);
+    CHECK(foes[4].x > before_idle && chase.run.em_alerted[foes[4].slot]);
+
+    chase.stage = 1;
+    foes[4].kind = 0x22;
+    chase.run.works[6][PE_RE_MEMBER_ID] = 0x22;
+    foes[4].behaviour = 0x4510;
+    CHECK(!pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 3100, 0, 0));
+    foes[4].behaviour = 0x0510;
+    CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 1, 3100, 0, 0) == 1);
 
     char id[PE_IMP_ID_MAX];
     pe_re_logic_id("re2", 0, 0x0a, 1, id, sizeof id);

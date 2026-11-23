@@ -708,6 +708,69 @@ static void audit_room_effects(const char *store) {
     assert(rooms);
 }
 
+typedef struct {
+    unsigned placements[256][64], commands[256];
+    uint32_t proc;
+    int enemy_selected;
+} EnemyAudit;
+
+static void audit_enemy_placement(void *ctx, uint32_t proc, uint32_t at, const uint8_t *ins, uint32_t size) {
+    (void)at;
+    EnemyAudit *audit = ctx;
+    if (proc != audit->proc) {
+        audit->proc = proc;
+        audit->enemy_selected = 0;
+    }
+    const unsigned opcode = ins[0];
+    if (opcode == 0x44 && size == 22) audit->placements[ins[3]][ins[4] & 0x3f]++;
+    if (opcode == 0x2e && size >= 3) audit->enemy_selected = ins[1] == 3;
+    /* Actor commands under a local WORK_SET, plus dedicated enemy commands.
+     * Static scan only. It does not follow branches or inherited work from callers. */
+    if (((opcode == 0x3f || opcode == 0x41 || opcode == 0x43) && audit->enemy_selected) ||
+        opcode == 0x85 || opcode == 0x8e) audit->commands[opcode]++;
+}
+
+static void audit_room_enemies(const char *store) {
+    static EnemyAudit audit;
+    PeImpAsset *assets = NULL;
+    const int n = pe_imp_catalog_assets(store, "re2", &assets);
+    assert(n > 0);
+    unsigned rooms = 0, total = 0, missing = 0;
+    for (int i = 0; i < n; i++) {
+        if (strncmp(assets[i].id, "re2:logic/", 10)) continue;
+        PeImpRoomLogic *room = NULL;
+        char why[200];
+        if (pe_imp_catalog_roomlogic(store, assets[i].id, &room, why, sizeof why)) {
+            printf("%s: %s\n", assets[i].id, why);
+            continue;
+        }
+        uint32_t size = 0, unreadable = 0;
+        const uint8_t *rdt = pe_imp_logic_section(room, PE_IMP_LOGIC_RDT0, NULL, &size);
+        audit.proc = UINT32_MAX;
+        if (pe_imp_scd_walk(PE_IMP_RE2, rdt, size, audit_enemy_placement, &audit, &unreadable) < 0 || unreadable)
+            printf("%s: incomplete script scan\n", assets[i].id);
+        rooms++;
+        free(room);
+    }
+    free(assets);
+    for (unsigned kind = 0; kind < 256; kind++) {
+        const int pursuit_family = (kind >= 0x10 && kind <= 0x20) || kind == 0x22;
+        for (unsigned type = 0; type < 64; type++) {
+            const unsigned count = audit.placements[kind][type];
+            if (!count) continue;
+            total += count;
+            if (!pursuit_family) missing += count;
+            printf("EM%02X type %02X: %u placements%s\n", kind, type, count,
+                   pursuit_family ? "" : " (no field pursuit handler)");
+        }
+    }
+    printf("Enemy audit: %u imported room scripts, %u placement cues, %u outside pursuit families\n",
+           rooms, total, missing);
+    for (unsigned opcode = 0; opcode < 256; opcode++)
+        if (audit.commands[opcode]) printf("  unhandled enemy opcode %02X: %u static cues\n", opcode, audit.commands[opcode]);
+    assert(rooms && total);
+}
+
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     made_up();
@@ -716,6 +779,7 @@ int main(void) {
     if (store && *store) {
         check_opening_effects(store);
         if (getenv("PE_TEST_RE2_EFFECT_AUDIT")) audit_room_effects(store);
+        if (getenv("PE_TEST_RE2_ENEMY_AUDIT")) audit_room_enemies(store);
     }
     const char *re1 = getenv("PE_TEST_RE1_DISC"), *re2 = getenv("PE_TEST_RE2_DISC"), *re3 = getenv("PE_TEST_RE3_DISC");
     if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1), scan_doors("RE1", re1, "re1", &g_re1_door_ps1, 0),

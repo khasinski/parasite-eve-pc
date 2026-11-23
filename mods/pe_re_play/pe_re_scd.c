@@ -453,6 +453,7 @@ static int step(Vm *vm, PeReScdTask *t) {
             int16_t *w = r->works[slot];
             memset(w, 0, sizeof r->works[slot]);
             r->em_dead[slot - 2] = r->em_busy[slot - 2] = 0;
+            r->em_alerted[slot - 2] = 0;
             r->em_ready[slot - 2] = 0;
             r->scene[slot - 2] = (PeReSceneMotion){0};
             if (pe_re_scene_kind(ins[3])) {
@@ -656,14 +657,15 @@ int pe_re_scd_scene_actors(const PeReScdRun *run, PeReSceneActor *out, int max) 
     for (unsigned slot = 0; slot < 16 && count < max; slot++) {
         const int16_t *work = run->works[2 + slot];
         const unsigned kind = (unsigned)work[PE_RE_MEMBER_ID];
-        if (!work[0] || !pe_re_scene_kind(kind)) continue;
+        const int field_pose = kind >= 0x10 && kind < 0x20 && run->scene[slot].active;
+        if (!work[0] || run->em_dead[slot] || (!field_pose && !pe_re_scene_kind(kind))) continue;
         const PeReSceneMotion *motion = &run->scene[slot];
         PeReSceneActor *actor = &out[count++];
         *actor = (PeReSceneActor){
             .slot = (uint8_t)slot, .kind = (uint8_t)kind, .move = motion->move,
             .frame = (uint8_t)(motion->reverse ? scene_frames(kind, motion->move) - 1 - motion->elapsed : motion->elapsed),
             .x = work[PE_RE_MEMBER_POS_X], .y = work[PE_RE_MEMBER_POS_Y], .z = work[PE_RE_MEMBER_POS_Z],
-            .dir = work[PE_RE_MEMBER_CDIR_Y]
+            .dir = work[PE_RE_MEMBER_CDIR_Y], .field_pose = field_pose
         };
         if (kind != 0x3f) continue;
         if (motion->reset_parts) {
@@ -748,6 +750,55 @@ static void licker_standin(PeReScdRun *run, int slot, unsigned room) {
     w[PE_RE_MEMBER_TYPE] &= ~0x4000;
 }
 
+/* EM10_S0: scripted rush and feeding states use the target in Sce_free3. */
+static void zombie_scene(PeReScdRun *run, int slot) {
+    int16_t *work = run->works[2 + slot];
+    PeReSceneMotion *motion = &run->scene[slot];
+    const int order = work[PE_RE_MEMBER_ROUTINE1], target = work[PE_RE_MEMBER_SCE_FREE3];
+    if (work[PE_RE_MEMBER_ROUTINE0] != 8 || (order != 2 && order != 3) ||
+        target < 2 || target >= 18 || !run->works[target][0] || run->em_dead[slot]) {
+        *motion = (PeReSceneMotion){0};
+        return;
+    }
+    const unsigned clip = order == 2 ? 10 : 21;
+    if (!motion->active || motion->move != clip)
+        *motion = (PeReSceneMotion){.active = 1, .move = clip};
+    else motion->elapsed++;
+    const double dx = (double)run->works[target][PE_RE_MEMBER_POS_X] - work[PE_RE_MEMBER_POS_X];
+    const double dz = (double)run->works[target][PE_RE_MEMBER_POS_Z] - work[PE_RE_MEMBER_POS_Z];
+    const double distance = hypot(dx, dz);
+    if (distance > 1) {
+        const int dir = (int)lround(atan2(-dx, -dz) * (2048.0 / acos(-1.0))) + 1024;
+        work[PE_RE_MEMBER_CDIR_Y] = (int16_t)(dir & 4095);
+        if (order == 2 && distance > 350) {
+            const double step = fmin(110, distance - 350);
+            work[PE_RE_MEMBER_POS_X] += (int16_t)lround(dx * step / distance);
+            work[PE_RE_MEMBER_POS_Z] += (int16_t)lround(dz * step / distance);
+        }
+    }
+    if (order == 2 && motion->elapsed >= 17) work[PE_RE_MEMBER_ROUTINE1] = 3;
+}
+
+/* EM10's prone states stand up once released. In the street, wait until
+ * Aya is close enough to see the rise, then hand the same placement to pursuit. */
+static int street_zombie_rise(PeReScdRun *run, int slot) {
+    int16_t *work = run->works[2 + slot];
+    PeReSceneMotion *motion = &run->scene[slot];
+    const unsigned type = work[PE_RE_MEMBER_TYPE] & 0x3f;
+    if ((type != 2 && type != 4) || (work[PE_RE_MEMBER_TYPE] & 0x4000) || run->em_dead[slot]) return 0;
+    if (!motion->active) {
+        const int16_t *player = run->works[0];
+        const double distance = hypot(player[PE_RE_MEMBER_POS_X] - work[PE_RE_MEMBER_POS_X],
+                                      player[PE_RE_MEMBER_POS_Z] - work[PE_RE_MEMBER_POS_Z]);
+        if (distance > 2600) return 0;
+        *motion = (PeReSceneMotion){.active = 1, .move = type == 2 ? 9 : 8};
+    } else if (++motion->elapsed >= 24) {
+        work[PE_RE_MEMBER_TYPE] = (work[PE_RE_MEMBER_TYPE] & ~0x3f) | 6;
+        *motion = (PeReSceneMotion){0};
+    }
+    return 1;
+}
+
 static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
     const int alligator = flags->work[PE_RE_WORK_STAGE] == 3 && flags->work[PE_RE_WORK_ROOM] == 0x0a;
     const int sewer = flags->work[PE_RE_WORK_STAGE] == 4 && flags->work[PE_RE_WORK_ROOM] == 9;
@@ -756,6 +807,10 @@ static void enemy_standins(PeReScdRun *run, const PeReFlags *flags) {
         int16_t *w = run->works[2 + n];
         int16_t *f = &w[PE_RE_MEMBER_SCE_FREE0];
         int order = 0, frames = 0;
+        if (w[0] && w[PE_RE_MEMBER_ID] >= 0x10 && w[PE_RE_MEMBER_ID] < 0x20) {
+            if (room != 0x100 || !street_zombie_rise(run, n)) zombie_scene(run, n);
+            continue;
+        }
         if (w[0] && w[PE_RE_MEMBER_ID] == 0x22) {
             licker_standin(run, n, room);
             continue;

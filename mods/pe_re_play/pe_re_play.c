@@ -77,6 +77,7 @@ static void say(const char *text) {
  * the placement list changes; an encounter mod decides what to do with it. */
 static PeReEnemyPlacement s_enemies[PE_RE_ENEMIES_MAX];
 static int s_nenemies, s_room_reported;
+static int s_enemy_debug_slot = -1;
 static int s_battle_paused;
 static int s_placement_markers;
 static int s_placement_meshes;
@@ -132,7 +133,7 @@ static int api_enemy_room_move(unsigned slot, char *asset, size_t size) {
 static const PeRePlayApi s_api = {
     sizeof s_api, api_room, api_defeated, pause_for_battle, resume_after_battle, api_defeated_slot, api_enemy_archive,
     api_enemy_room_move, encounter_position, encounter_reachable, encounter_boss, prepare_boss, api_canister_defeat,
-    advance_enemies
+    NULL /* field movement is driven by the room, independently of encounter selection */
 };
 
 static void report_enemies(void) {
@@ -171,6 +172,29 @@ static void text_enemies(char *out, unsigned size) {
     int at = snprintf(out, size, "%d placed (reported for fights):", s_nenemies);
     for (int i = 0; i < s_nenemies && at > 0 && (unsigned)at < size; i++)
         at += snprintf(out + at, size - (unsigned)at, " 0x%02X", s_enemies[i].kind);
+}
+
+static void text_enemy_movement(char *out, unsigned size) {
+    PeReRoomEvent room;
+    if (api_room(&room) || !room.count) { snprintf(out, size, "-"); return; }
+    static const char *const states[] = {
+        "waiting", "scripted", "family unsupported", "inactive", "different floor",
+        "out of range", "within attack range", "blocked", "moving"
+    };
+    int at = snprintf(out, size, "%d placed.", s_nenemies);
+    for (int i = 0; i < s_nenemies && at > 0 && (unsigned)at < size; i++) {
+        const PeReEnemyPlacement *enemy = &s_enemies[i];
+        const unsigned slot = enemy->slot;
+        if (s_enemy_debug_slot >= 0 && slot != (unsigned)s_enemy_debug_slot) continue;
+        const unsigned state = slot < 16 ? s_session.enemy_state[slot] : PE_RE_ENEMY_UNCHECKED;
+        const int routine = slot < 16 ? s_session.run.works[2 + slot][PE_RE_MEMBER_ROUTINE0] : -1;
+        at += snprintf(out + at, size - (unsigned)at, " Slot %u EM%02X type %04X routine %d at %d,%d: %s.",
+                       slot, enemy->kind, enemy->behaviour, routine, enemy->x, enemy->z, states[state]);
+        if (s_enemy_debug_slot >= 0 && slot < 16 && s_session.run.scene[slot].active &&
+            at > 0 && (unsigned)at < size)
+            at += snprintf(out + at, size - (unsigned)at, " Script clip %u, frame %u.",
+                           s_session.run.scene[slot].move, s_session.run.scene[slot].elapsed);
+    }
 }
 
 /* ---- the pocket and the item box ---- */
@@ -541,7 +565,7 @@ static int on_frame(void *ctx, void *user) {
     re_host()->set_placement_markers(s_placement_markers);
     const int encounters = !strcmp(s_session.game->game, "re2");
     re_host()->set_placement_meshes(s_placement_meshes ||
-                                    (encounters && pe_re2_opening_street(s_session.stage, s_session.room)) ? PE_RE_MESH_ALL :
+                                    (encounters && s_session.stage == 0 && s_session.room <= 1) ? PE_RE_MESH_ALL :
                                     encounters ? PE_RE_MESH_ENCOUNTERS : PE_RE_MESH_OFF);
     re_host()->set_placement_idle(s_placement_idle);
     if (pe_re_door_busy()) {                     /* a door: nothing else happens until it's through */
@@ -620,7 +644,10 @@ static int on_frame(void *ctx, void *user) {
         if (*why) snprintf(s_status, sizeof s_status, "That door: %s.", why);
         break;
     }
-    if (s_playing && !pe_re_door_busy()) report_enemies();
+    if (s_playing && !pe_re_door_busy()) {
+        report_enemies();
+        if (re_host()->field_free() && !re_host()->dialogue_busy()) advance_enemies(x, z, s_session.floor);
+    }
     if (s_playing && s_enabled) pe_re_save_encode(&s_session, 1, s_saved);
     return 0;
 }
@@ -817,7 +844,10 @@ static int init(void) {
     pe_menu_register_info(0, "Status", "Where you are, or the last thing said.", text_status);
     pe_menu_register_info(0, "Pocket", "What you've picked up in this game.", text_pocket);
     pe_menu_register_info(0, "Scripts", "What this room's own scripts ran when you came in.", text_scripts);
-    pe_menu_register_info(0, "Enemies", "Where this room's scripts put enemies: reported to an encounter mod, not fought here.", text_enemies);
+    pe_menu_register_info(0, "Enemies", "Live enemy placements reported to the encounter mod.", text_enemies);
+    pe_menu_register_int("Testing", "Enemy slot", "Choose a slot for movement details. -1 shows the room summary.",
+                         &s_enemy_debug_slot, -1, 15, 1);
+    pe_menu_register_info("Testing", "Enemy movement", "Enemy position, script routine and movement status in this room.", text_enemy_movement);
     re_host()->bind_lifecycle(MOD_ID, on_frame, on_save_read, on_new_game);
     s_registered = pe_extension_register(&s_section) >= 0;
     pe_hook_add(pe_event_id(PE_EVENT_SAVE_COMMITTED), on_committed, NULL, PE_PRIORITY_NORMAL, MOD_ID);

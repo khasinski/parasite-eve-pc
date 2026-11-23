@@ -481,7 +481,8 @@ int pe_re_session_enemies(const PeReSession *s, PeReEnemyPlacement *out, int max
 
 int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
                        PeReEnemyPlacement *enemies, int count, double x, double z, int floor) {
-    if (!s->game || strcmp(s->game->game, "re2") || !collision || s->run.camera_lock) return 0;
+    memset(s->enemy_state, 0, sizeof s->enemy_state);
+    if (!s->game || strcmp(s->game->game, "re2") || !collision) return 0;
     const int street = pe_re2_opening_street(s->stage, s->room);
     unsigned scripted = 0;
     for (int i = 0; i < PE_RE_TASKS; i++) {
@@ -491,36 +492,64 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
     int moved = 0;
     for (int i = 0; i < count; i++) {
         PeReEnemyPlacement *e = &enemies[i];
+        if (e->slot >= 16 || s->run.em_dead[e->slot]) continue;
+        PeReEnemyState *state = &s->enemy_state[e->slot];
+        int16_t *work = s->run.works[2 + e->slot];
         const int dog = e->kind == 0x20;
+        const int licker = e->kind == 0x22;
+        const int zombie = e->kind >= 0x10 && e->kind < 0x20;
         const unsigned type = e->behaviour & 0x3f;
+        *state = PE_RE_ENEMY_FAMILY;
+        if (!zombie && !dog && !licker) continue;
+        *state = PE_RE_ENEMY_SCRIPTED;
+        if (s->run.camera_lock || (scripted & (1u << e->slot)) ||
+            (zombie && (work[PE_RE_MEMBER_ROUTINE0] == 8 || s->run.scene[e->slot].active))) continue;
         /* Standing zombies and released dogs can chase. Leave scripted, feeding and prone poses to the room/battle. */
-        const int mobile = dog ? type <= 2 || type == 4 || type == 6 || type == 9 : type <= 1 || type == 6;
+        const int mobile = dog ? type <= 2 || type == 4 || type == 6 || type == 9 :
+                           licker ? type == 0 || type == 0x10 || type == 0x11 || type == 0x13 :
+                           type <= 1 || type == 6;
         /* Opening street placements use 0x4000 even for standing zombies. The
          * street's encounter rules already make that exception. */
-        if (!mobile || !pe_re2_proximity_enemy(e, street) || e->kind > 0x20 || (e->behaviour & 0xa000) ||
-            e->floor != floor || pe_re_floor_of(e->y) != floor ||
-            (scripted & (1u << e->slot)) || s->run.em_dead[e->slot]) continue;
-        int16_t *work = s->run.works[2 + e->slot];
-        if (!work[0] || work[PE_RE_MEMBER_ID] != e->kind) continue;
+        *state = PE_RE_ENEMY_DORMANT;
+        if (!mobile || !pe_re2_proximity_enemy(e, street) || (e->behaviour & 0xa000) ||
+            !work[0] || work[PE_RE_MEMBER_ID] != e->kind) continue;
+        *state = PE_RE_ENEMY_FLOOR;
+        if (e->floor != floor || pe_re_floor_of(e->y) != floor) continue;
         const double dx = x - e->x, dz = z - e->z;
         const double distance = hypot(dx, dz);
-        const double awareness = dog ? 5200 : street ? 2500 : 3300;
-        if (distance > awareness || distance <= 1200) continue;
-        const double speed = dog ? 62 : 22;
+        const double awareness = dog ? 5200 : licker ? 3900 : 3300;
+        uint8_t *alerted = &s->run.em_alerted[e->slot];
+        *state = PE_RE_ENEMY_RANGE;
+        if (distance > awareness + (*alerted ? 1200 : 0)) {
+            *alerted = 0;
+            continue;
+        }
+        *alerted = 1;
+        *state = PE_RE_ENEMY_CLOSE;
+        if (distance <= 1200) continue;
+        const double speed = dog ? 62 : licker ? 44 : type == 1 ? 12 : 22;
+        const double radius = dog ? 210 : licker ? 310 : 240;
+        *state = PE_RE_ENEMY_BLOCKED;
         double next_x = e->x, next_z = e->z, ground = -(double)floor * PE_RE2_FLOOR_HEIGHT;
-        pe_imp_re2_slide_on(collision, (unsigned)floor, &next_x, &next_z,
-                           dx * speed / distance, dz * speed / distance, dog ? 210 : 240);
+        if (street && pe_imp_re2_blocked_on(collision, (unsigned)floor, next_x, next_z, radius)) {
+            /* The prone street placement can overlap a wall after standing up. */
+            if (!pe_re_free_spot(collision, floor, &next_x, &next_z, (int)radius, 900)) continue;
+        } else {
+            pe_imp_re2_slide_on(collision, (unsigned)floor, &next_x, &next_z,
+                               dx * speed / distance, dz * speed / distance, radius);
+        }
         if (next_x < INT16_MIN || next_x > INT16_MAX || next_z < INT16_MIN || next_z > INT16_MAX) continue;
         const int ix = (int)lround(next_x), iz = (int)lround(next_z);
         if (ix == e->x && iz == e->z) continue;
         if (pe_imp_re2_ground(collision, ix, iz, &ground) && pe_re_floor_of((int)lround(ground)) != floor) continue;
         /* Rounding the position for the script's word fields must still leave clearance. */
-        if (pe_imp_re2_blocked_on(collision, (unsigned)floor, ix, iz, dog ? 210 : 240)) continue;
+        if (pe_imp_re2_blocked_on(collision, (unsigned)floor, ix, iz, radius)) continue;
         const int dir = (int)lround(atan2(e->x - ix, e->z - iz) * (2048.0 / acos(-1.0))) + 1024;
         work[PE_RE_MEMBER_POS_X] = e->x = (int16_t)ix;
         work[PE_RE_MEMBER_POS_Y] = e->y = (int16_t)lround(ground);
         work[PE_RE_MEMBER_POS_Z] = e->z = (int16_t)iz;
         work[PE_RE_MEMBER_CDIR_Y] = e->dir = (int16_t)(dir & 4095);
+        *state = PE_RE_ENEMY_MOVING;
         moved++;
     }
     return moved;

@@ -17,6 +17,11 @@
 #define PE_RE_GAMES 3
 #define PE_RE_STAGE_HERE 0xFFu        /* a door's stage: stay on this stage */
 
+typedef enum {
+    PE_RE_ENEMY_UNCHECKED, PE_RE_ENEMY_SCRIPTED, PE_RE_ENEMY_FAMILY, PE_RE_ENEMY_DORMANT,
+    PE_RE_ENEMY_FLOOR, PE_RE_ENEMY_RANGE, PE_RE_ENEMY_CLOSE, PE_RE_ENEMY_BLOCKED, PE_RE_ENEMY_MOVING
+} PeReEnemyState;
+
 typedef struct {
     const char *game;                 /* "re1", "re2", "re3" */
     const char *title;                /* "Resident Evil 2" */
@@ -61,6 +66,7 @@ typedef struct {
     PeImpRoomLogic *items;            /* the game's ItemTable, for names (owned; may be NULL) */
     PeReProgress progress;            /* locks opened, pickups taken, the pocket, the game's flags */
     PeReScdRun run;                   /* what this room's scripts set up when the player came in */
+    PeReEnemyState enemy_state[16];   /* last field update, indexed by room enemy slot */
     char said[200];                   /* the last thing to tell the player ("" if nothing) */
     PeImpDoor door;                   /* the last door taken (for its transition) */
     int (*talking)(void);             /* a message is up (scripts' wsleeping waits on it); NULL: never */

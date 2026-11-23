@@ -68,6 +68,7 @@
 #define PE_RE_PATCHES 512                      /* work_copy: values written into the room's script (a hash) */
 #define PE_RE_MEMBERS 44                       /* MEMBER_BE_FLAG0 .. MEMBER_DAMAGE_CNT */
 enum { PE_RE_MEMBER_ID = 6, PE_RE_MEMBER_TYPE = 7, PE_RE_MEMBER_SCE_FREE0 = 23, PE_RE_MEMBER_SCE_FREE1 = 24,
+       PE_RE_MEMBER_SCE_FREE3 = 26,
        PE_RE_MEMBER_AT_SCE_NO = 9, PE_RE_MEMBER_POS_X = 11, PE_RE_MEMBER_POS_Y = 12, PE_RE_MEMBER_POS_Z = 13, PE_RE_MEMBER_CDIR_Y = 15,
        PE_RE_MEMBER_NFLOOR = 17, PE_RE_MEMBER_ROUTINE0 = 2, PE_RE_MEMBER_ROUTINE1 = 3 };
 #define PE_RE_SLOTS 256                        /* zone ids */
@@ -95,6 +96,7 @@ typedef struct PeReSceneActor {
     int16_t x, y, z, dir;
     int16_t part_y[3]; /* EM3F: parts 1, 2 and 4/6/8/10 */
     uint8_t absolute_parts;
+    uint8_t field_pose;              /* field clip laid over the actor's simulated position */
 } PeReSceneActor;
 
 enum { PE_RE_EFFECT_MAX = 64 };
@@ -156,6 +158,7 @@ typedef struct {
     uint8_t em_ready[16];                      /* emergence acknowledged, even after the script clears its reply */
     uint8_t alligator_chosen;                  /* the player chose how to enter the battle in 4-0A */
     uint8_t em_dead[16];                       /* beaten (pe_re_session_beaten): 1, then 2 once the stand-in saw it */
+    uint8_t em_alerted[16];                    /* room-local awareness survives movement and camera cuts */
     PeReSceneMotion scene[16];
     int nenemy;
     int naot_on;
