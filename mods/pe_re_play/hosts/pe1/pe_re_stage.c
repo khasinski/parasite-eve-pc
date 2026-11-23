@@ -994,12 +994,14 @@ static void draw_placement_markers(RenderNativeTag *ordering, int slot, unsigned
     }
 }
 
-enum { EFFECT_PAGE_X = 960, EFFECT_CLUT_Y = 224, EFFECT_BANK_SIZE = 8, EFFECT_PACKET_MAX = 256 };
+/* Native actor texture pages are live while imported effects are drawn. */
+enum { EFFECT_PAGE_Y = 256, EFFECT_FIRST_ROW = 24, EFFECT_PIXEL_END = 240, EFFECT_CLUT_Y = 244,
+       EFFECT_BANK_SIZE = 8, EFFECT_PACKET_MAX = 256 };
+static const int s_effect_page_x[] = {640, 704};
 static const PeImpRoomLogic *s_effect_room;
 static PeReEffect s_effects[PE_RE_EFFECT_MAX];
 static int s_effect_count;
 static struct {
-    uint16_t backup[64 * 256];
     unsigned height, palettes;
 } s_effect_pages[2];
 typedef struct {
@@ -1016,9 +1018,12 @@ static void clear_effects(int restore) {
     for (unsigned i = 0; i < s_effect_texture_count; i++) free(s_effect_textures[i].frame_data);
     for (int i = 0; i < 2; i++) {
         if (restore && s_effect_pages[i].height) {
-            RECT page = {EFFECT_PAGE_X, i * 256, 64, 256};
+            RECT pixels = {s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_FIRST_ROW, 64, s_effect_pages[i].height};
+            RECT clut = {s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_CLUT_Y, 16, s_effect_pages[i].palettes};
             DrawSync(0);
-            LoadImage(&page, s_effect_pages[i].backup);
+            memset(s_vram_check, 0, sizeof s_vram_check);
+            LoadImage(&pixels, s_vram_check);
+            LoadImage(&clut, s_vram_check);
             DrawSync(0);
         }
         s_effect_pages[i].height = s_effect_pages[i].palettes = 0;
@@ -1044,8 +1049,11 @@ static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *lo
     const unsigned palettes = (clut_size - 12) / 32;
     if (w > 64) return;
     for (unsigned i = 0; i < 2; i++) {
-        const unsigned v = s_effect_pages[i].height, p = s_effect_pages[i].palettes;
-        if (v + h > EFFECT_CLUT_Y || p + palettes > 256 - EFFECT_CLUT_Y) continue;
+        const unsigned v = EFFECT_FIRST_ROW + s_effect_pages[i].height, p = s_effect_pages[i].palettes;
+        if (v + h > EFFECT_PIXEL_END || p + palettes > 256 - EFFECT_CLUT_Y) continue;
+        RECT reserved = {s_effect_page_x[i], EFFECT_PAGE_Y + v, 64, h};
+        RECT clut = {s_effect_page_x[i], EFFECT_PAGE_Y + EFFECT_CLUT_Y + p, 16, palettes};
+        if (!empty_texture_area(&reserved) || !empty_texture_area(&clut)) continue;
         const size_t frames = texture->asset.frame_count * 8, sprites = texture->asset.sprite_count * 4;
         texture->frame_data = malloc(frames + sprites);
         if (!texture->frame_data) return;
@@ -1054,19 +1062,13 @@ static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *lo
         texture->asset.frames = texture->frame_data;
         texture->asset.sprites = texture->frame_data + frames;
         texture->asset.tim = NULL;
-        RECT page = {EFFECT_PAGE_X, i * 256, 64, 256};
-        RECT pixels = {EFFECT_PAGE_X, i * 256 + v, w, h};
-        RECT clut = {EFFECT_PAGE_X, i * 256 + EFFECT_CLUT_Y + p, 16, palettes};
+        RECT pixels = {s_effect_page_x[i], EFFECT_PAGE_Y + v, w, h};
         uint16_t colours[16 * (256 - EFFECT_CLUT_Y)];
         for (unsigned c = 0; c < palettes * 16; c++) {
             const unsigned rgb = effect_word(tim + 20 + c * 2);
             colours[c] = rgb ? rgb | 0x8000 : 0;
         }
         DrawSync(0);
-        if (!v) {
-            StoreImage(&page, s_effect_pages[i].backup);
-            DrawSync(0);
-        }
         LoadImage(&pixels, (void *)(image + 12));
         LoadImage(&clut, colours);
         DrawSync(0);
@@ -1141,8 +1143,9 @@ static void draw_effects(RenderNativeTag *ordering, int slot, unsigned shade) {
             q->tag.length = 9;
             q->color.bytes.r = q->color.bytes.g = q->color.bytes.b = shade;
             q->color.bytes.code = 0x2e;
-            q->tpage = (EFFECT_PAGE_X / 64) | (texture->page << 4) | (1 << 5);
-            q->clut = ((texture->palette + (palette < texture->palette_count ? palette : 0)) << 6) | EFFECT_PAGE_X / 16;
+            const unsigned page_x = s_effect_page_x[texture->page];
+            q->tpage = (page_x / 64) | (EFFECT_PAGE_Y / 256 << 4) | (1 << 5);
+            q->clut = ((texture->palette + (palette < texture->palette_count ? palette : 0)) << 6) | page_x / 16;
             q->x0 = q->x2 = x;
             q->x1 = q->x3 = right;
             q->y0 = q->y1 = y;
