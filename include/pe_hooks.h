@@ -66,9 +66,7 @@ typedef enum PeHookId {
     PE_HOOK_SLOT_DRAWN,  /* PeHookSlotDrawn: a bag or storage row was drawn (presentation only) */
     PE_HOOK_HP_LOSS, /* PeHookHpLoss: combat HP commit only; previous hook IDs unchanged */
     PE_HOOK_EQUIPMENT_GUARD, /* PeHookEquipmentGuard: nonzero refuses BEFORE native mutation */
-    PE_HOOK_TITLE_FRAME, /* int *: each title-menu frame; set to 1 after loading a save into the runtime
-                          * (as the card load does) to leave the title the way Continue does; appended,
-                          * previous hook IDs unchanged */
+    PE_HOOK_TITLE_FRAME, /* int *: PeTitleRequest; each title-menu frame */
     PE_HOOK_TEXT_STRETCH, /* PeHookTextStretch: the Unicode letters of an F1 C6 stretch; nonzero
                            * gives them (pe1/text_render.h) */
     PE_HOOK_TEXT_LETTER,  /* PeHookTextLetter: how a Unicode letter draws; nonzero handles it */
@@ -310,6 +308,12 @@ typedef enum PeNewGameKind {
     PE_NEW_GAME_EX = 2,        /* the EX Game, from a Clear Data save */
     PE_NEW_GAME_TUTORIAL = 3,  /* MenuCard_RunListScreen result 3 */
 } PeNewGameKind;
+
+typedef enum PeTitleRequest {
+    PE_TITLE_STAY = 0,
+    PE_TITLE_CONTINUE = 1,
+    PE_TITLE_START_IMPORTED = 2
+} PeTitleRequest;
 
 typedef struct PeHookNewGame {
     int kind; /* PeNewGameKind */

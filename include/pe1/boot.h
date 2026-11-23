@@ -17,6 +17,7 @@ extern int g_BootHostActive;
 /* Asks whether to skip the story movie, with the movie paused; nonzero skips.
  * Without a host prompt the skip button skips at once. */
 extern int (*g_BootMovieSkipConfirm)(void);
+void Boot_RequestPrologueSkip(void);
 /* Called when a scene has loaded, after the mods' scene start hook, before
  * its first frame (the crash report's room snapshot). */
 extern void (*g_BootSceneStarted)(void);

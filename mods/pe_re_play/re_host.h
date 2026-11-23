@@ -65,6 +65,10 @@ typedef struct ReHost {
     void (*set_scene_actors)(const struct PeReSceneActor *actors, int count);
     /* Optional. Current collision, including wall switches from the room scripts. */
     const PeRe2RoomCollision *(*room_collision)(void);
+    /* Optional. Queue native New Game if the host is at its title. */
+    int (*start_from_title)(void);
+    /* Optional. The native field has its player and renderer ready. */
+    int (*start_ready)(void);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

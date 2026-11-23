@@ -522,7 +522,12 @@ s32 MenuCard_RunListScreen(void) {
         Draw_InitBuffers();
         Draw_SelectBuffer();
         Draw_PresentFrame(2);
-        if (loaded) {
+        if (loaded == PE_TITLE_START_IMPORTED) {
+            result = PE_NEW_GAME_TITLE;
+            GameTime_InitCounter2();
+            GameTime_InitCounter0();
+            Boot_RequestPrologueSkip();
+        } else if (loaded) {
             result = 2; /* a mod loaded a save: on as Continue */
         } else if (g_MemcardScreenTimer >= 0x3E9) {
             wantedKind = 7;

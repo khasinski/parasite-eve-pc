@@ -6,9 +6,12 @@
 #include "pe_mod_host.h"
 #include "pe1/field_movement.h"
 #include "pe1/game_state.h"
+#include "pe1/script_queue.h"
 #include "pe1/menu_dialog.h"
 #include "pe1/pad_state.h"
 #include "pe1/scene_transition.h"
+#include "pe1/scene_dispatch.h"
+#include "pe_mod_menu.h"
 
 static void init(const char *mod_id, const char *store) {
     pe_re_stage_init(mod_id, store);
@@ -35,8 +38,55 @@ static int native_menu_active(void) {
     return (g_GameState.flags & 0x9000) != 0;
 }
 
+enum {
+    PE_TITLE_SCENE = 0xA9400048u,
+    PE_PROLOGUE_SCENE = 0xA80830C8u,
+    PE_OPENING_DIALOGUE_SCENE = 0xA8001048u,
+    PE_CARNEGIE_FIELD_SCENE = 0xA8000148u,
+    PE_STORY_VAR = 74,
+    PE_CARNEGIE_FREE_FIELD_STORY = 9
+};
+
+static int s_title_start, s_opening_transfer;
+
+static int start_from_title(void) {
+    if ((unsigned)g_SceneDispatchToken != PE_TITLE_SCENE) return 0;
+    s_title_start = 1;
+    pe_mod_panel_close();
+    return 1;
+}
+
+static int on_title(void *ctx, void *user) {
+    (void)user;
+    int *request = ctx;
+    if (s_title_start && *request == PE_TITLE_STAY) {
+        *request = PE_TITLE_START_IMPORTED;
+        s_opening_transfer = 1;
+    }
+    s_title_start = 0;
+    return 0;
+}
+
+static int start_ready(void) {
+    const unsigned token = (unsigned)g_SceneDispatchToken;
+    if (token == PE_TITLE_SCENE || token == PE_PROLOGUE_SCENE ||
+        token != (unsigned)g_SceneDispatchCur || !pe_game_loaded()) return 0;
+    if (s_opening_transfer && token == PE_OPENING_DIALOGUE_SCENE) {
+        /* New Game has created Aya and her inventory. Use PE's normal room transfer
+         * to give the imported room an initialized field without its opening dialogue. */
+        int target = PE_CARNEGIE_FIELD_SCENE, *args[] = {&target};
+        g_ScriptVariableBank[PE_STORY_VAR] = PE_CARNEGIE_FREE_FIELD_STORY;
+        Script_EncodeBarcode(args);
+        s_opening_transfer = 0;
+        return 0;
+    }
+    s_opening_transfer = 0;
+    return pe_free_field();
+}
+
 static void bind_lifecycle(const char *mod_id, ReHostCallback frame, ReHostCallback save_read,
                            ReHostCallback new_game) {
+    pe_hook_add(PE_HOOK_TITLE_FRAME, on_title, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FRAME, frame, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_SAVE_READ, save_read, NULL, PE_PRIORITY_NORMAL, mod_id);
     pe_hook_add(PE_HOOK_NEW_GAME, new_game, NULL, PE_PRIORITY_NORMAL, mod_id);
@@ -80,6 +130,8 @@ const ReHost *re_host(void) {
         .bind_lifecycle = bind_lifecycle,
         .set_scene_actors = pe_re_stage_set_scene_actors,
         .room_collision = pe_re_stage_collision,
+        .start_from_title = start_from_title,
+        .start_ready = start_ready,
     };
     return &host;
 }

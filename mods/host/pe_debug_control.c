@@ -112,11 +112,18 @@ static int pe_ctl_frame(void *ctx, void *user) {
     return 0;
 }
 
+static int pe_ctl_title(void *ctx, void *user) {
+    (void)ctx; (void)user;
+    pe_debug_control_poll();
+    return 0;
+}
+
 int pe_debug_control_start(const char *dir) {
     size_t m;
     if (!dir || !*dir || strlen(dir) >= sizeof s_dir || s_dir[0]) return 0;
     snprintf(s_dir, sizeof s_dir, "%s", dir);
     pe_hook_add(PE_HOOK_FRAME, pe_ctl_frame, NULL, PE_PRIORITY_NORMAL, "host");
+    pe_hook_add(PE_HOOK_TITLE_FRAME, pe_ctl_title, NULL, PE_PRIORITY_NORMAL, "host");
     for (m = 0; m < sizeof s_modules / sizeof *s_modules; ++m)
         if (s_modules[m]->install) s_modules[m]->install();
     pe_mod_log(NULL, "debug control on: %s", s_dir);

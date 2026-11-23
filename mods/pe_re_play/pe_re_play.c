@@ -48,7 +48,7 @@ static uint8_t s_saved[PE_RE_SAVE_SIZE];
 static const PeExtensionSection s_section = {"pe_re_play/progress", PE_RE_SAVE_VERSION, 1, sizeof s_saved, s_saved,
                                              pe_re_save_upgrade, NULL, NULL};   /* min reader 1: the host loads it */
 static int s_registered, s_enabled, s_resume;
-static int s_playing, s_cross_held, s_square_held, s_reshown;
+static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
 static int s_script_held;                  /* frames left since a script last moved her */
 static char s_status[200] = "Not playing.";
 
@@ -394,6 +394,7 @@ static int keep_progress(void) {
 }
 
 static void stop(void) {
+    s_start_pending = 0;
     pe_re_door_cancel();
     re_host()->forget_dialogue();
     s_typing = TYPE_NONE;
@@ -408,6 +409,15 @@ static void stop(void) {
     snprintf(s_status, sizeof s_status, "Not playing.");
 }
 
+static void start_room(void) {
+    s_start_pending = 0;
+    s_playing = 1, s_cross_held = 1;           /* the Cross that chose Start isn't a door press */
+    if (!keep_progress()) pe_toast("Progress in this game won't be saved: the save's companion has no room.");
+    re_host()->set_masks(s_masks);
+    re_host()->set_player_size(s_size);
+    show_room(0);
+}
+
 static void start(void) {
     char why[200] = "";
     if (s_battle_paused) return;
@@ -418,15 +428,20 @@ static void start(void) {
         snprintf(s_status, sizeof s_status, "%s isn't playable yet: only RE2 rooms are.", s_offer[s_pick]->title);
         return;
     }
+    const ReHost *host = re_host();
     if (pe_re_session_start(&s_session, s_store, s_offer[s_pick], (uint32_t)s_player, why, sizeof why)) {
         snprintf(s_status, sizeof s_status, "Couldn't start: %s.", why);
         return;
     }
-    s_playing = 1, s_cross_held = 1;           /* the Cross that chose Start isn't a door press */
-    if (!keep_progress()) pe_toast("Progress in this game won't be saved: the save's companion has no room.");
-    re_host()->set_masks(s_masks);
-    re_host()->set_player_size(s_size);
-    show_room(0);
+    if (host->start_from_title && host->start_from_title()) {
+        s_start_pending = 1;
+        snprintf(s_status, sizeof s_status, "Starting %s...", s_session.game->title);
+    } else if (!host->start_ready || host->start_ready()) {
+        start_room();
+    } else {
+        pe_re_session_end(&s_session);
+        snprintf(s_status, sizeof s_status, "Start is available at the title or in the free field.");
+    }
 }
 
 /* Where the save (or the last Stop) left off. */
@@ -470,6 +485,10 @@ static int on_save_read(void *ctx, void *user) {
         pe_re_session_end(&s_session);
         s_playing = 0;
     }
+    if (s_start_pending) {
+        pe_re_session_end(&s_session);
+        s_start_pending = 0;
+    }
     s_resume = !pe_re_save_decode(s_saved, &saved) && saved.game && saved.playing;
     snprintf(s_status, sizeof s_status, s_resume ? "Back to %s when the field is free." : "Not playing.",
              saved.game ? saved.game->title : "");
@@ -478,7 +497,7 @@ static int on_save_read(void *ctx, void *user) {
 
 static int on_new_game(void *ctx, void *user) {    /* the host has cleared the section */
     (void)ctx, (void)user;
-    stop();
+    if (!s_start_pending) stop();
     memset(s_saved, 0, sizeof s_saved);
     s_resume = 0;
     return 0;
@@ -486,6 +505,7 @@ static int on_new_game(void *ctx, void *user) {    /* the host has cleared the s
 
 static int on_frame(void *ctx, void *user) {
     (void)ctx, (void)user;
+    if (s_start_pending && re_host()->start_ready()) start_room();
     if (s_resume && !s_playing && re_host()->field_free()) resume();
     if (!s_playing || s_battle_paused) return 0;
     if (s_typing == TYPE_OPEN && re_host()->room_active() && !re_host()->dialogue_busy() && re_host()->field_free()) {
