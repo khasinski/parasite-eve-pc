@@ -554,7 +554,10 @@ static int on_frame(void *ctx, void *user) {
     }
     if (s_session.moved) {                       /* a cutscene walked her somewhere: she's there */
         if (s_session.floor != re_host()->player_floor()) show_room(1);   /* on another floor: the room again there */
-        else re_host()->place_player(s_session.x, s_session.z);
+        else {
+            re_host()->place_player(s_session.x, s_session.z);
+            re_host()->face_player(s_session.facing);
+        }
         s_session.moved = 0;
         s_script_held = 30;
     } else if (s_script_held) {
