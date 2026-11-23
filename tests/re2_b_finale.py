@@ -2,6 +2,8 @@
 
 Set PE_TEST_DISC, PE_TEST_RE2_LEON_DISC or PE_TEST_RE2_CLAIRE_DISC, and the
 matching PE_TEST_RE2_LEON_B_FIXTURE or PE_TEST_RE2_CLAIRE_B_FIXTURE directory.
+Alternatively, set PE_TEST_RE2_STORE to an existing import/store directory
+containing the campaign and enemy assets, in place of the RE2 disc variables.
 The directory contains bu00/ with a single slot-A save and its .pe-ext
 companion, plus pads.json. Use the last convenient save before the Tyrant,
 with a weapon equipped and the required RE2 progression items. pads.json
@@ -116,7 +118,7 @@ def fight(game, launcher=False):
     raise Failed(f"Battle did not finish: {game.battle()}")
 
 
-def run_route(exe, disc, re2_disc, fixture, work, player):
+def run_route(exe, disc, re2_disc, store, fixture, work, player):
     ports = json.loads((fixture / "pads.json").read_text(encoding="utf-8"))
     check(isinstance(ports, dict), "pads.json must contain a replay object")
     ports.setdefault("ending", [])
@@ -130,14 +132,17 @@ def run_route(exe, disc, re2_disc, fixture, work, player):
           f"Missing slot A or its companion in {original_card}")
     # Game recreates each output directory. Reject overlapping fixture or disc inputs.
     for output in (work / "tyrant", work / "reload"):
-        for source in (fixture, disc, re2_disc):
-            check(not source.is_relative_to(output) and not output.is_relative_to(source),
+        for source in (fixture, disc, re2_disc, store):
+            check(source is None or (not source.is_relative_to(output) and not output.is_relative_to(source)),
                   f"Replay output overlaps an input: {output}")
 
     def setup(config):
-        folders = config / "import" / "folders.txt"
-        folders.parent.mkdir()
-        folders.write_text(f"{re2_disc.parent}\n", encoding="utf-8")
+        import_dir = config / "import"
+        import_dir.mkdir()
+        if store is not None:
+            shutil.copytree(store, import_dir / "store")
+        else:
+            (import_dir / "folders.txt").write_text(f"{re2_disc.parent}\n", encoding="utf-8")
         shutil.copytree(original_card, config.parent / "bu00")
 
     game = Game(exe, str(disc), work / "tyrant", setup=setup, ini=INI,
@@ -196,18 +201,30 @@ def main():
     parser.add_argument("campaign", choices=("claire", "leon"))
     args = parser.parse_args()
     campaign = args.campaign.upper()
+    fixture_var = f"PE_TEST_RE2_{campaign}_B_FIXTURE"
+    disc_var = f"PE_TEST_RE2_{campaign}_DISC"
+    required = ["PE_TEST_DISC", fixture_var]
+    store_var = "PE_TEST_RE2_STORE"
+    required.append(store_var if os.getenv(store_var) else disc_var)
     inputs = {}
-    for name in ("PE_TEST_DISC", f"PE_TEST_RE2_{campaign}_DISC", f"PE_TEST_RE2_{campaign}_B_FIXTURE"):
+    for name in required:
         value = os.getenv(name)
         if not value:
             print(f"{name} is unset: skipped")
             return 77
         inputs[name] = Path(value).resolve()
-    disc, re2_disc, fixture = inputs.values()
+    disc, re2_disc = inputs["PE_TEST_DISC"], inputs.get(disc_var)
+    fixture, store = inputs[fixture_var], inputs.get(store_var)
+    player = int(campaign == "CLAIRE")
     try:
-        check(disc.is_file() and re2_disc.is_file() and fixture.is_dir(),
-              "Configured discs or fixture directory do not exist")
-        run_route(args.exe.resolve(), disc, re2_disc, fixture, args.work.resolve(), int(campaign == "CLAIRE"))
+        check(disc.is_file() and fixture.is_dir(), "Configured PE disc or fixture directory does not exist")
+        if store is not None:
+            catalog = json.loads((store / "re2" / "catalog.json").read_text(encoding="utf-8"))
+            check(f"re2:logic/702-{player}" in catalog and f"re2:logic/704-{player}" in catalog,
+                  f"{store} is missing the {args.campaign} B finale room imports")
+        else:
+            check(re2_disc.is_file(), f"Configured RE2 disc does not exist: {re2_disc}")
+        run_route(args.exe.resolve(), disc, re2_disc, store, fixture, args.work.resolve(), player)
     except (Failed, OSError, ValueError) as error:
         print(f"FAILED ({args.campaign} B): {error}")
         return 1
