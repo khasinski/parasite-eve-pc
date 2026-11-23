@@ -55,7 +55,12 @@ Settings are saved in `pe_mods.ini`. The [mod directory](docs/MODS.md) lists ava
 
 ### PE Enhancements
 
-Open **F1 → PE Enhancements** for movement, combat, inventory, the Junk economy, shops, and collection features. The [PE Enhancements player guide](docs/pe-enhancements/README.md) explains the settings and defaults. For bundle drops and conversion, see [Super Junk and Duper Junk](docs/pe-enhancements/economy.md#super-junk-and-duper-junk).
+**In game, press F1 and open PE Enhancements.**
+
+- [PE Enhancements player guide](docs/pe-enhancements/README.md) explains movement, combat,
+  inventory, shops, and collection features, including what’s enabled by default.
+- [Super Junk and Duper Junk](docs/pe-enhancements/economy.md#super-junk-and-duper-junk) explains
+  how to earn bundles, turn them into spendable Junk, and change the rules.
 
 Mod builds are experimental; a passing build or test does not establish full in-game compatibility.
 
