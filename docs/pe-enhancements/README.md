@@ -2,6 +2,11 @@
 
 Open **F1 → Manage mods**, enable **All mods**, and restart the game. Then open **F1 → PE Enhancements**. Each part of the suite has its own switch in Manage mods. See the [mod directory](../MODS.md) for other mods and preferences.
 
+**Manage mods** changes apply after a restart. Most feature controls apply immediately.
+**Apply playstyle** commits economy settings to the current save, and a combat style change takes
+effect in the next battle. Bestiary and Wardrobe unlocks are shared across saves in the same
+preferences folder. Bag sort and **No random battles** belong to the current save.
+
 | What you want to do | Where to look |
 | --- | --- |
 | Change movement, encounters, sorting, or key-item storage | [Quality of life](#quality-of-life) |
@@ -30,7 +35,8 @@ Manage mods name: **PE Enhancements: quality of life**.
 **Combat** page:
 - **Battle frequency**: Normal, More (2x), Lots (4x) or Every check. Story battles and room rules
   still apply. This changes how often fights happen, not how big they are.
-- **No random battles**: this switch is saved with your game, not in `pe_mods.ini`.
+- **No random battles**: overrides **Battle frequency** while enabled. Story fights still run.
+  This switch is saved with your game.
 - **Auto Medicine order**: Strongest first (the original) or Weakest first. Sets which medicine
   the Auto Medicine armor effect uses first when Aya drops below a fifth of her HP.
 
@@ -112,6 +118,8 @@ The Wardrobe lets Aya wear other outfits. Unlocks are kept across every game in 
   reloads the room.
 - **Group** and **Costume** browse the collection. **Wear Aya's own** returns to her current story outfit.
 - **Instant swap (experimental)** is off by default.
+- **Costume unlock rules** controls which installed outfits require a purchase. See
+  [the economy guide](economy.md#economy-junk) for how this affects ownership.
 - **Outfits**: the evening dress and T-shirt use the game's own data, so they are always offered.
 - **Character skins**: these let Aya look like other characters. They are built from your own
   disc with the separate decomp bridge tools and placed in `pe_skins/<character>/` in your

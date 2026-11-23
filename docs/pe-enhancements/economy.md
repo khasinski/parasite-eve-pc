@@ -14,7 +14,8 @@ shared counter that holds up to 99999.
 - An empty steal still gets you a little Junk.
 - [Super Junk and Duper Junk](#super-junk-and-duper-junk) are bundles that can be redeemed into the counter.
 - **Inventory → Junk counter**, on by default, shows your Junk beside Quantity in Aya's inventory.
-- **Take out Junk** moves counter Junk back into the bag and storage.
+- **Take out Junk** moves counter Junk back into the bag and storage while Junk economy is off.
+  Make space first if you need to take out a large balance.
 - Turning Junk economy off puts Junk back in the bag, as in the original game.
 
 **Wayne hand-in** sets what Wayne's Discard junk gives him: **Next gun** (the default) gives only
@@ -45,7 +46,9 @@ in the field.
 
 Open these pages under **F1 → PE Enhancements → Economy**. Use **Choose playstyle** to preview
 added rewards, shop prices, and bundles that would be redeemed. **Apply playstyle** commits your
-choice in the field. An Enhanced rare reward that could not fit stays held for Enhanced.
+choice in the field. Switching playstyles can redeem bundles you already hold. Check
+**Bundles redeemed** first if you want to keep them as items. Enhanced and configurable playstyles
+keep separate progress. An Enhanced rare reward that could not fit waits for your return to Enhanced.
 
 | Page | What you can change |
 | --- | --- |
@@ -55,7 +58,8 @@ choice in the field. An Enhanced rare reward that could not fit stays held for E
 | **Junk Storage** | Choose Bag or Counter for ordinary Junk. Extra income and bundle redemption require Counter. |
 
 **Economy → Costume unlock rules** is on by default, so Wardrobe outfits must be bought with Junk.
-Turn it off to make every installed outfit free to wear.
+Turn it off to make every installed outfit free to wear. Your purchases stay owned. If you
+turn the rules back on, outfits you wore for free still require purchase.
 
 **Combat → Smoke Grenades** sells Smoke Grenades for Junk (15 before discounts). A Smoke Grenade
 escapes an ordinary battle.
@@ -65,7 +69,9 @@ escapes an ordinary battle.
 Super Junk and Duper Junk are bundle items. When redeemed, they add ordinary Junk to the shared counter, which you can spend in shops or hand in to Wayne.
 
 - **Get bundles.** Win battles. With the Enhanced playstyle, bundles can appear among battle rewards. For Custom, open **F1 → PE Enhancements → Economy → Bonus Drops** to set each bundle's chance per won battle. These rolls are separate from rare items.
-- **Collect them.** Take the bundle from the items-found list. A bundle can be held in Aya's bag or Wayne's storage until redemption.
+- **Collect them.** Take the bundle from the items-found list. Ordinary counter Junk is paid even
+  if you leave its display entry. Bundle items need to be collected to be redeemed. You can hold
+  them in Aya's bag or Wayne's storage until redemption.
 - **Redeem them.** With the default Enhanced playstyle and Junk economy enabled, Super Junk adds **75 Junk** and Duper Junk adds **150 Junk**. Bundles in the bag or storage are converted automatically once you're back in the field.
 - **Change the rules.** For Custom, open **Economy → Bundle Redemption**. You can enable redemption and set the value separately for each bundle. Turning redemption off keeps that bundle as an item. Use **Apply playstyle** in the field to apply draft settings.
 
@@ -80,6 +86,9 @@ Manage mods name: **PE Enhancements: battle rewards**. Needs Economy.
   Super Junk, a Tool, or a stat booster.
 - **Rare drop within**, on the Economy page, shows how many more won battles until a rare drop is
   guaranteed.
+- **Reward capacity.** Extra items are appended after ordinary drops when the results list has
+  room. A configurable bonus item or bundle that could not be displayed waits for a later
+  victory. Closing the list without taking a displayed reward declines it.
 
 ### Economy armor effects
 
@@ -127,4 +136,11 @@ the **Mod Catalog** entry in Aya's main menu or under **F1 → PE Enhancements �
   - Only one effect per group is allowed, so installing replaces an effect of the same group.
   - Bag-capacity armor effects are never removed or replaced.
 - **Remove** takes an effect off. The effect stays unlocked.
-- **Rebuild** buys a dismantled item back with its bonuses and slot count, but with empty slots.
+- **Rebuild** buys a dismantled item back with its bonuses and its slot count at dismantling,
+  including slots added by Mod Permits. All the slots come back empty.
+  Unlocked effects stay in the catalog. The list holds 30 entries. It drops the oldest entry
+  without added Mod Permit slots first when it fills.
+- **Tool salvage.** A normal Tool consumes the donor gear. Effects left on it can unlock in
+  the catalog, and the donor pays Junk and goes on the Rebuild list. If a transfer overwrites
+  an effect in the same group on the receiving gear, that effect also unlocks. A Super Tool
+  leaves the donor intact.
