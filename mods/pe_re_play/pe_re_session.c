@@ -495,7 +495,9 @@ int pe_re_session_chase(PeReSession *s, const PeRe2RoomCollision *collision,
         const unsigned type = e->behaviour & 0x3f;
         /* Standing zombies and released dogs can chase. Leave scripted, feeding and prone poses to the room/battle. */
         const int mobile = dog ? type <= 2 || type == 4 || type == 6 || type == 9 : type <= 1 || type == 6;
-        if (!mobile || !pe_re2_proximity_enemy(e, street) || e->kind > 0x20 || (e->behaviour & 0xe000) ||
+        /* Opening street placements use 0x4000 even for standing zombies. The
+         * street's encounter rules already make that exception. */
+        if (!mobile || !pe_re2_proximity_enemy(e, street) || e->kind > 0x20 || (e->behaviour & 0xa000) ||
             e->floor != floor || pe_re_floor_of(e->y) != floor ||
             (scripted & (1u << e->slot)) || s->run.em_dead[e->slot]) continue;
         int16_t *work = s->run.works[2 + e->slot];

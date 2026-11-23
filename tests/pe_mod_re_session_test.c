@@ -582,6 +582,17 @@ int main(void) {
     CHECK(pe_re_session_chase(&chase, &chase_room, foes, 6, 2300, 0, 1) == 1);
     CHECK(foes[2].x > 0 && foes[2].y == -1800);
 
+    /* Use the behaviour words from the opening street's room script. */
+    chase.stage = 0;
+    foes[4].behaviour = 0x1040;
+    foes[5].behaviour = 0x10c6;
+    chase.run.task[2].status = 0;
+    CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 2, 2300, 0, 0) == 2);
+    foes[5].behaviour = 0x50c2;  /* the prone zombie stays down */
+    const int prone_x = foes[5].x;
+    CHECK(pe_re_session_chase(&chase, &chase_room, foes + 4, 2, 2300, 0, 0) == 1);
+    CHECK(foes[5].x == prone_x);
+
     char id[PE_IMP_ID_MAX];
     pe_re_logic_id("re2", 0, 0x0a, 1, id, sizeof id);
     CHECK(!strcmp(id, "re2:logic/10a-1"));
