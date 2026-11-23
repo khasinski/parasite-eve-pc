@@ -142,7 +142,14 @@ static struct {
     int active;
     int ghost;              /* landed where the collision has no free floor: walk freely until clear */
     int floor;              /* the floor whose walls she meets; ramps change it */
+    char room_id[PE_IMP_ID_MAX];
 } s_walk;
+
+static struct {
+    unsigned buttons;
+    int analog_x, analog_y;
+    double right_x, right_z;
+} s_walk_input;
 
 static void free_masks(void) {
     free(s_masks);
@@ -215,14 +222,43 @@ static int spawn_on_floor(void) {
     return 1;
 }
 
+static void walk_input(unsigned buttons, int analog_x, int analog_y) {
+    const int analog = analog_x || analog_y;
+    const int previous_analog = s_walk_input.analog_x || s_walk_input.analog_y;
+    if (analog && previous_analog) {
+        const int dot = analog_x * s_walk_input.analog_x + analog_y * s_walk_input.analog_y;
+        const int length = analog_x * analog_x + analog_y * analog_y;
+        const int previous_length = s_walk_input.analog_x * s_walk_input.analog_x +
+                                    s_walk_input.analog_y * s_walk_input.analog_y;
+        /* About 22.5 degrees. Ignore small stick drift and changes in pressure. */
+        if (dot > 0 && (double)dot * dot >= 0.854 * length * previous_length) return;
+    } else if (!analog && !previous_analog && buttons == s_walk_input.buttons) {
+        return;
+    }
+    s_walk_input.buttons = buttons;
+    s_walk_input.analog_x = analog_x;
+    s_walk_input.analog_y = analog_y;
+    /* A held direction keeps the camera axes it started with, across cuts.
+     * A new direction uses the view on screen when the player chose it. */
+    s_walk_input.right_x = s_camera.right_x;
+    s_walk_input.right_z = s_camera.right_z;
+}
+
 static int on_move(void *ctx, void *user) {
     (void)user;
     const FieldActor *aya = ctx;
-    if (!s_show || !s_walk.active || aya != g_PlayerEntity || !pe_free_field()) return 0;
-    if (pe_re_box_busy() || s_hold) return 1;         /* reading a message, or a door: she stands still */
-    int analog = (g_PadPackets[0].header & 0xF000) == 0x7000 &&
-                 (abs(g_PadPackets[0].leftX - 128) > 16 || abs(g_PadPackets[0].leftY - 128) > 16);
-    if (analog || (g_FieldPadBits & (FIELD_PAD_UP | FIELD_PAD_DOWN | FIELD_PAD_LEFT | FIELD_PAD_RIGHT))) {
+    if (!s_show || !s_walk.active || aya != g_PlayerEntity) return 0;
+    const int free_field = pe_free_field();
+    if (!free_field || pe_re_box_busy() || s_hold) {
+        walk_input(0, 0, 0);
+        return free_field;
+    }
+    int analog_x = g_PadPackets[0].leftX - 128, analog_y = g_PadPackets[0].leftY - 128;
+    if ((g_PadPackets[0].header & 0xF000) != 0x7000 || (abs(analog_x) <= 16 && abs(analog_y) <= 16))
+        analog_x = analog_y = 0;
+    const unsigned buttons = g_FieldPadBits & (FIELD_PAD_UP | FIELD_PAD_DOWN | FIELD_PAD_LEFT | FIELD_PAD_RIGHT);
+    walk_input(analog_x || analog_y ? 0 : buttons, analog_x, analog_y);
+    if (analog_x || analog_y || buttons) {
         /* Recover the native walk/run step in screen axes. The native pad
          * mapping gives physical Up a positive local Z step. */
         double x = ((double)aya->pos_x - aya->base_x) * RE_UNITS_PER_PE_UNIT / 65536.0;
@@ -230,8 +266,8 @@ static int on_move(void *ctx, void *user) {
         const GteMatrix *basis = &g_GeomScroll.state.position.cameraBasis;
         double right = (basis->m[0][0] * x + basis->m[2][0] * z) / 4096.0;
         double forward = (basis->m[0][2] * x + basis->m[2][2] * z) / 4096.0;
-        double dx = right * s_camera.right_x - forward * s_camera.right_z;
-        double dz = right * s_camera.right_z + forward * s_camera.right_x;
+        double dx = right * s_walk_input.right_x - forward * s_walk_input.right_z;
+        double dz = right * s_walk_input.right_z + forward * s_walk_input.right_x;
         if (dx || dz) {
             s_walk.yaw = (int)lround(atan2(-dx, -dz) * (2048.0 / acos(-1.0)));
             if (s_walk.ghost) {
@@ -494,25 +530,31 @@ int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camer
         snprintf(why, n, "only RE2 cameras are drawn so far");
     else if (pe_imp_mdec_decode(frame, size, PIC_W, PIC_H, rgb, why, n)) {}
     else {
+        const int camera_only = s_walk.active && place && camera != s_view &&
+                                !strcmp(room_id, s_walk.room_id) && floor == s_walk.floor &&
+                                x == s_walk.x && z == s_walk.z;
         s_view = camera;
         prepare_camera(&view);
         uint32_t coll = 0;
         const uint8_t *data = logic ? pe_imp_logic_section(logic, PE_IMP_LOGIC_COLL, NULL, &coll) : NULL;
         if (!s_camera.distance) snprintf(why, n, "camera %d has no projection", camera);
-        else if ((!data || pe_imp_re2_collision_all(data, coll, &s_walk.collision)) &&
+        else if (!camera_only && (!data || pe_imp_re2_collision_all(data, coll, &s_walk.collision)) &&
                  pe_imp_re2_image_collision(set, &s_walk.collision))
             snprintf(why, n, "%s has no collision", room_id);
         else if (!place && !spawn_on_floor()) snprintf(why, n, "no free floor in camera %d", camera);
         else {
-            s_walk.floor = floor;
-            s_walk.y = -(double)floor * PE_RE2_FLOOR_HEIGHT;
-            if (place) {                                     /* a door's landing point: clear of walls */
-                s_walk.x = x, s_walk.z = z, s_walk.yaw = facing;
-                /* The collision knows the ground floor only: upstairs a landing can be all "wall". */
-                s_walk.ghost = !pe_re_free_spot(&s_walk.collision, floor, &s_walk.x, &s_walk.z, AYA_ROOM_RADIUS, 2000);
-            } else {
-                s_walk.ghost = 0;
+            if (!camera_only) {
+                walk_input(0, 0, 0);
+                s_walk.floor = floor;
+                s_walk.y = -(double)floor * PE_RE2_FLOOR_HEIGHT;
+                if (place) {                                 /* a door's landing point: clear of walls */
+                    s_walk.x = x, s_walk.z = z, s_walk.yaw = facing;
+                    s_walk.ghost = !pe_re_free_spot(&s_walk.collision, floor, &s_walk.x, &s_walk.z, AYA_ROOM_RADIUS, 2000);
+                } else {
+                    s_walk.ghost = 0;
+                }
             }
+            snprintf(s_walk.room_id, sizeof s_walk.room_id, "%s", room_id);
             for (int i = 0; i < PIC_W * PIC_H; i++) {
                 unsigned r = rgb[i * 3] >> 3, g = rgb[i * 3 + 1] >> 3, b = rgb[i * 3 + 2] >> 3;
                 uint16_t v = (uint16_t)(r | g << 5 | b << 10);
