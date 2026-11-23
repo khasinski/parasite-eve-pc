@@ -17,6 +17,7 @@
 
 #include "pe_imp.h"
 #include "pe_imp_mdec.h"
+#include "pe_imp_rdt.h"
 #include "pe_imp_room.h"
 #include "re_encounter_rooms.h"
 #include "pe_mod_host.h"
@@ -509,8 +510,11 @@ static void pe_re_scale(void) {
     s_scale = k < 1 ? 1 : k > 40 ? 40 : k;
 }
 
+static void clear_effects(int restore);
+
 int pe_re_stage_show(const char *room_id, const PeImpRoomLogic *logic, int camera, int floor, int place, double x,
                      double z, int facing, char *why, size_t n) {
+    if (strcmp(room_id, s_walk.room_id)) clear_effects(1);
     PeImpImageSet *set = NULL;
     pe_re_scale();
     int rc = -1;
@@ -990,6 +994,168 @@ static void draw_placement_markers(RenderNativeTag *ordering, int slot, unsigned
     }
 }
 
+enum { EFFECT_PAGE_X = 960, EFFECT_CLUT_Y = 224, EFFECT_BANK_SIZE = 8, EFFECT_PACKET_MAX = 256 };
+static const PeImpRoomLogic *s_effect_room;
+static PeReEffect s_effects[PE_RE_EFFECT_MAX];
+static int s_effect_count;
+static struct {
+    uint16_t backup[64 * 256];
+    unsigned height, palettes;
+} s_effect_pages[2];
+typedef struct {
+    PeImpRe2RoomEffect asset;
+    uint8_t *frame_data;
+    unsigned width, height, v, palette, palette_count, page;
+    uint8_t id;
+} EffectTexture;
+static EffectTexture s_effect_textures[EFFECT_BANK_SIZE];
+static unsigned s_effect_texture_count;
+static RenderTexturedQuad s_effect_packets[2][EFFECT_PACKET_MAX];
+
+static void clear_effects(int restore) {
+    for (unsigned i = 0; i < s_effect_texture_count; i++) free(s_effect_textures[i].frame_data);
+    for (int i = 0; i < 2; i++) {
+        if (restore && s_effect_pages[i].height) {
+            RECT page = {EFFECT_PAGE_X, i * 256, 64, 256};
+            DrawSync(0);
+            LoadImage(&page, s_effect_pages[i].backup);
+            DrawSync(0);
+        }
+        s_effect_pages[i].height = s_effect_pages[i].palettes = 0;
+    }
+    s_effect_texture_count = 0;
+    s_effect_room = NULL;
+    s_effect_count = 0;
+}
+
+static unsigned effect_word(const uint8_t *p) {
+    return p[0] | (unsigned)p[1] << 8;
+}
+
+static void load_effect_texture(EffectTexture *texture, const PeImpRoomLogic *logic) {
+    uint32_t size = 0;
+    const uint8_t *rdt = pe_imp_logic_section(logic, PE_IMP_LOGIC_RDT0, NULL, &size);
+    if (pe_imp_re2_room_effect(rdt, size, texture->id, &texture->asset)) return;
+    const uint8_t *tim = texture->asset.tim;
+    const unsigned clut_size = effect_word(tim + 8);
+    if (tim[4] != 8 || clut_size < 44 || clut_size > texture->asset.tim_size - 20) return;
+    const uint8_t *image = tim + 8 + clut_size;
+    const unsigned w = effect_word(image + 8), h = effect_word(image + 10);
+    const unsigned palettes = (clut_size - 12) / 32;
+    if (w > 64) return;
+    for (unsigned i = 0; i < 2; i++) {
+        const unsigned v = s_effect_pages[i].height, p = s_effect_pages[i].palettes;
+        if (v + h > EFFECT_CLUT_Y || p + palettes > 256 - EFFECT_CLUT_Y) continue;
+        const size_t frames = texture->asset.frame_count * 8, sprites = texture->asset.sprite_count * 4;
+        texture->frame_data = malloc(frames + sprites);
+        if (!texture->frame_data) return;
+        memcpy(texture->frame_data, texture->asset.frames, frames);
+        memcpy(texture->frame_data + frames, texture->asset.sprites, sprites);
+        texture->asset.frames = texture->frame_data;
+        texture->asset.sprites = texture->frame_data + frames;
+        texture->asset.tim = NULL;
+        RECT page = {EFFECT_PAGE_X, i * 256, 64, 256};
+        RECT pixels = {EFFECT_PAGE_X, i * 256 + v, w, h};
+        RECT clut = {EFFECT_PAGE_X, i * 256 + EFFECT_CLUT_Y + p, 16, palettes};
+        uint16_t colours[16 * (256 - EFFECT_CLUT_Y)];
+        for (unsigned c = 0; c < palettes * 16; c++) {
+            const unsigned rgb = effect_word(tim + 20 + c * 2);
+            colours[c] = rgb ? rgb | 0x8000 : 0;
+        }
+        DrawSync(0);
+        if (!v) {
+            StoreImage(&page, s_effect_pages[i].backup);
+            DrawSync(0);
+        }
+        LoadImage(&pixels, (void *)(image + 12));
+        LoadImage(&clut, colours);
+        DrawSync(0);
+        texture->width = w * 4;
+        texture->height = h;
+        texture->v = v;
+        texture->palette = clut.y;
+        texture->palette_count = palettes;
+        texture->page = i;
+        s_effect_pages[i].height += h;
+        s_effect_pages[i].palettes += palettes;
+        return;
+    }
+}
+
+static const EffectTexture *effect_texture(unsigned id) {
+    for (unsigned i = 0; i < s_effect_texture_count; i++)
+        if (s_effect_textures[i].id == id) return &s_effect_textures[i];
+    return NULL;
+}
+
+void pe_re_stage_set_effects(const PeImpRoomLogic *logic, const PeReEffect *effects, int count) {
+    if (logic != s_effect_room) {
+        clear_effects(1);
+        s_effect_room = logic;
+    }
+    for (int i = 0; i < count; i++) {
+        if (effect_texture(effects[i].id) || s_effect_texture_count == EFFECT_BANK_SIZE) continue;
+        EffectTexture *texture = &s_effect_textures[s_effect_texture_count++];
+        *texture = (EffectTexture){.id = effects[i].id};
+        load_effect_texture(texture, logic);
+        if (!texture->width) pe_mod_log("pe_re_play", "Cannot upload room effect 0x%02x", texture->id);
+    }
+    memcpy(s_effects, effects, (size_t)count * sizeof *effects);
+    s_effect_count = count;
+}
+
+static void draw_effects(RenderNativeTag *ordering, int slot, unsigned shade) {
+    unsigned emitted = 0;
+    for (int i = 0; i < s_effect_count; i++) {
+        const PeReEffect *e = &s_effects[i];
+        const EffectTexture *texture = effect_texture(e->id);
+        if (!texture || !texture->width) continue;
+        double screen[3];
+        if (!project_field_point(e->x, e->y, e->z, screen)) continue;
+        const unsigned phase = e->loop ? (e->age + i * 6) % e->duration : e->age;
+        unsigned time = phase / 2;
+        PeImpRe2EffectFrame frame;
+        unsigned frame_index = 0;
+        while (!pe_imp_re2_effect_frame(&texture->asset, frame_index, &frame) &&
+               frame.time && frame.time != 0xff && time >= frame.time) {
+            time -= frame.time;
+            frame_index++;
+        }
+        if (pe_imp_re2_effect_frame(&texture->asset, frame_index, &frame) || !frame.time || frame.time == 0xff) continue;
+        const double scale = s_camera.distance * e->scale / (screen[2] * 4 * RE_UNITS_PER_PE_UNIT);
+        const unsigned palette = e->type >> 3;
+        for (unsigned n = 0; n < frame.sprite_count && emitted < EFFECT_PACKET_MAX; n++) {
+            PeImpRe2EffectSprite sprite;
+            if (pe_imp_re2_effect_sprite(&texture->asset, frame.first_sprite + n, &sprite)) continue;
+            if (sprite.u >= texture->width || sprite.v >= texture->height) continue;
+            unsigned w = frame.size, h = frame.size;
+            if (sprite.u + w >= texture->width) w = texture->width - 1 - sprite.u;
+            if (sprite.v + h >= texture->height) h = texture->height - 1 - sprite.v;
+            if (!w || !h) continue;
+            const int x = (int)lround(screen[0] + (sprite.x - frame.origin_x) * scale);
+            const int y = (int)lround(screen[1] + (sprite.y - frame.origin_y) * scale);
+            const int right = x + (int)lround(w * scale), bottom = y + (int)lround(h * scale);
+            if (right <= 0 || bottom <= 0 || x >= PIC_W || y >= FIELD_H || right == x || bottom == y) continue;
+            RenderTexturedQuad *q = &s_effect_packets[slot][emitted++];
+            *q = (RenderTexturedQuad){0};
+            q->tag.length = 9;
+            q->color.bytes.r = q->color.bytes.g = q->color.bytes.b = shade;
+            q->color.bytes.code = 0x2e;
+            q->tpage = (EFFECT_PAGE_X / 64) | (texture->page << 4) | (1 << 5);
+            q->clut = ((texture->palette + (palette < texture->palette_count ? palette : 0)) << 6) | EFFECT_PAGE_X / 16;
+            q->x0 = q->x2 = x;
+            q->x1 = q->x3 = right;
+            q->y0 = q->y1 = y;
+            q->y2 = q->y3 = bottom;
+            q->u0 = q->u2 = sprite.u;
+            q->u1 = q->u3 = sprite.u + w;
+            q->v0 = q->v1 = texture->v + sprite.v;
+            q->v2 = q->v3 = texture->v + sprite.v + h;
+            const int depth = (int)screen[2];
+            link_quad(&ordering[depth > FIELD_UI_OT_LAST ? depth : FIELD_UI_OT_LAST + 1], q);
+        }
+    }
+}
 static int on_background(void *ctx, void *user) {
     (void)user;
     PeHookFieldBackground *b = ctx;
@@ -1015,6 +1181,7 @@ static int on_background(void *ctx, void *user) {
     for (int k = 0; k < 2; k++) quads[k].color.bytes.r = quads[k].color.bytes.g = quads[k].color.bytes.b = shade;
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[0]);
     link_quad(&ordering[ROOM_BACKGROUND_OT], &quads[1]);
+    if (!s_hold) draw_effects(ordering, b->slot, shade);
     if ((s_placement_meshes || s_scene_count) && !s_hold) {
         prepare_field_texture();
         draw_placement_meshes(ordering, b->slot, shade);
@@ -1042,6 +1209,7 @@ static int on_background(void *ctx, void *user) {
 static int on_scene(void *ctx, void *user) {
     (void)ctx, (void)user;
     backdrop_off(0);                                   /* a new room's pages and camera are coming */
+    clear_effects(0);
     clear_field_texture();
     if (s_masks) DrawSync(0);
     free_masks();
@@ -1053,6 +1221,7 @@ static int on_scene(void *ctx, void *user) {
 
 void pe_re_stage_hide(void) {
     s_shade = 128, s_curtain = s_hold = 0;
+    clear_effects(1);
     clear_field_texture();
     if (s_original_picture) {
         RECT r = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
@@ -1158,6 +1327,7 @@ void pe_re_stage_init(const char *mod_id, const char *store) {
 
 void pe_re_stage_shutdown(void) {
     s_show = s_walk.active = 0;
+    clear_effects(1);
     clear_field_texture();
     for (unsigned kind = 0; kind < 0x40; kind++)
         if (s_field_mesh[kind].tried) free_field_mesh(kind);

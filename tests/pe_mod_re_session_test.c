@@ -335,7 +335,53 @@ static void test_scene_actors(unsigned player) {
     }
 }
 
+static void test_room_effects(const char *store) {
+    static PeReScdRun run;
+    PeReFlags flags = {0};
+    PeImpRoomLogic *room = NULL;
+    PeReEffect effects[PE_RE_EFFECT_MAX];
+    CHECK(!pe_imp_catalog_roomlogic(store, "re2:logic/100-0", &room, NULL, 0));
+    if (!room) return;
+    pe_re_scd_run(room, &flags, NULL, &run);
+    pe_re_scd_exec(room, &run, 2, 6);
+    pe_re_scd_tick(room, &flags, NULL, &run);
+    CHECK(pe_re_scd_effects(&run, effects) >= 10 && effects[0].loop);
+    pe_re_scd_exec(room, &run, 2, 7);
+    pe_re_scd_tick(room, &flags, NULL, &run);
+    CHECK(pe_re_scd_effects(&run, effects) == 3);
+    free(room);
+
+    room = NULL;
+    memset(&flags, 0, sizeof flags);
+    flags.work[PE_RE_WORK_ROOM] = 1;
+    CHECK(!pe_imp_catalog_roomlogic(store, "re2:logic/101-0", &room, NULL, 0));
+    if (!room) return;
+    pe_re_scd_run(room, &flags, NULL, &run);
+    pe_re_scd_exec(room, &run, 2, 13);
+    pe_re_scd_tick(room, &flags, NULL, &run);
+    const int count = pe_re_scd_effects(&run, effects);
+    CHECK(count > 1 && effects[0].id == 0x13 && !effects[0].loop);
+    if (count) {
+        /* Exercise the actor transform with one of the real glass instances. */
+        const int x = effects[0].x;
+        run.effects[0].attachment = 1;
+        run.works[0][PE_RE_MEMBER_CDIR_Y] = 0;
+        run.works[0][PE_RE_MEMBER_POS_X] = 500;
+        CHECK(pe_re_scd_effects(&run, effects) == count && effects[0].x == x + 500);
+        run.works[0][PE_RE_MEMBER_POS_X] = 700;
+        CHECK(pe_re_scd_effects(&run, effects) == count && effects[0].x == x + 700);
+    }
+    /* The full room can issue more bursts. Check expiry of this spawn in isolation. */
+    memset(run.task, 0, sizeof run.task);
+    run.len[1] = 0;
+    for (int i = 0; i < 120; i++) pe_re_scd_tick(room, &flags, NULL, &run);
+    CHECK(pe_re_scd_effects(&run, effects) == 0);
+    free(room);
+}
+
 int main(void) {
+    const char *effect_store = getenv("PE_TEST_RE2_STORE");
+    if (effect_store && *effect_store) test_room_effects(effect_store);
     char why[200] = "";
 
     {   /* Story triggers depend on the room's live work fields, including the train's parked flag. */

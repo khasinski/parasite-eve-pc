@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "pe_imp_rdt.h"
+#include "pe_imp_pictures.h"
 #include "pe_imp_spu.h"
 
 /* biohazard-utils Bio2ConstantTable.cs g_instructionSizes (MIT, Ted John) */
@@ -79,6 +80,60 @@ static int section(unsigned game, const uint8_t *rdt, uint32_t size, unsigned in
 
 int pe_imp_rdt_section(const uint8_t *rdt, uint32_t size, unsigned index, uint32_t *offset, uint32_t *length) {
     return section(PE_IMP_RE2, rdt, size, index, offset, length);
+}
+
+int pe_imp_re2_room_effect(const uint8_t *rdt, uint32_t size, unsigned id, PeImpRe2RoomEffect *out) {
+    uint32_t start, span, footer, unused, textures, texture_span, texture_end;
+    *out = (PeImpRe2RoomEffect){0};
+    if (id >= 0xff || pe_imp_rdt_section(rdt, size, 18, &start, &span) || span < 8 ||
+        pe_imp_rdt_section(rdt, size, 19, &footer, &unused) || footer != start + span || size - footer < 4 ||
+        pe_imp_rdt_section(rdt, size, 20, &textures, &texture_span) || texture_span < 32) return -1;
+    /* Section 21 is an end marker and may equal the file size. */
+    texture_end = le32(rdt + 8 + 21 * 4);
+    if (texture_end != textures + texture_span) return -1;
+
+    unsigned count = 0, slot = 8;
+    while (count < 8 && rdt[start + count] != 0xff) {
+        if (rdt[start + count] == id) slot = count;
+        count++;
+    }
+    if (slot == 8 || span < 8 + (count - 1) * 4) return -1;
+
+    /* bio2-ds ESP.C uses a reverse offset table for each bank. The data
+     * table's first entry sits at section 19, while the TIM table ends at 21. */
+    const uint32_t bank_end = span - (count - 1) * 4;
+    const uint32_t at = le32(rdt + footer - slot * 4);
+    const uint32_t end = slot + 1 < count ? le32(rdt + footer - (slot + 1) * 4) : bank_end;
+    if (at < 8 || end > bank_end || at > end || end - at < 8) return -1;
+    const uint8_t *block = rdt + start + at;
+    const uint32_t frames = le16(block), sprites = le16(block + 2);
+    const uint32_t sprite_at = 8 + frames * 8;
+    if (!frames || sprite_at + sprites * 4 > end - at) return -1;
+
+    const uint32_t tim_at = le32(rdt + texture_end - (slot + 1) * 4);
+    const uint32_t tim_end = slot + 1 < count ? le32(rdt + texture_end - (slot + 2) * 4) : texture_span - 32;
+    if (tim_at >= tim_end || tim_end > texture_span - 32) return -1;
+    const uint8_t *tim = rdt + textures + tim_at;
+    const uint32_t tim_size = pe_imp_tim_size(tim, tim_end - tim_at);
+    if (!tim_size) return -1;
+
+    *out = (PeImpRe2RoomEffect){block + 8, block + sprite_at, tim, frames, sprites, tim_size};
+    return 0;
+}
+
+int pe_imp_re2_effect_frame(const PeImpRe2RoomEffect *effect, unsigned index, PeImpRe2EffectFrame *out) {
+    if (index >= effect->frame_count) return -1;
+    const uint8_t *p = effect->frames + index * 8;
+    if ((unsigned)p[0] + p[1] > effect->sprite_count) return -1;
+    *out = (PeImpRe2EffectFrame){p[0], p[1], p[2], p[3], s16(p + 4), s16(p + 6)};
+    return 0;
+}
+
+int pe_imp_re2_effect_sprite(const PeImpRe2RoomEffect *effect, unsigned index, PeImpRe2EffectSprite *out) {
+    if (index >= effect->sprite_count) return -1;
+    const uint8_t *p = effect->sprites + index * 4;
+    *out = (PeImpRe2EffectSprite){p[0], p[1], p[2] - (p[2] >= 128 ? 256 : 0), p[3] - (p[3] >= 128 ? 256 : 0)};
+    return 0;
 }
 
 /* RE1's chain of length-prefixed procedures */

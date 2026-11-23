@@ -44,6 +44,28 @@ typedef void (*PeImpScdVisit)(void *ctx, uint32_t proc, uint32_t at, const uint8
 /* Section `index` (0-22) of an RE2/RE3 RDT: its offset and length (up to the next section).
  * 0 with the range, or -1 if the section is absent or out of range. */
 int pe_imp_rdt_section(const uint8_t *rdt, uint32_t size, unsigned index, uint32_t *offset, uint32_t *length);
+
+/* Borrowed views into an RE2 room's RDT0. The associated TIM can be decoded with
+ * pe_imp_tim_decode. Frame time is the encoded byte: 0xff is a sequence marker. */
+typedef struct {
+    const uint8_t *frames, *sprites, *tim;
+    uint32_t frame_count, sprite_count, tim_size;
+} PeImpRe2RoomEffect;
+
+typedef struct {
+    uint8_t first_sprite, sprite_count, time, size;
+    int16_t origin_x, origin_y;
+} PeImpRe2EffectFrame;
+
+typedef struct {
+    uint8_t u, v;
+    int16_t x, y;
+} PeImpRe2EffectSprite;
+
+/* Returns 0 on success or -1 for a missing effect, invalid index or malformed data. */
+int pe_imp_re2_room_effect(const uint8_t *rdt, uint32_t size, unsigned id, PeImpRe2RoomEffect *out);
+int pe_imp_re2_effect_frame(const PeImpRe2RoomEffect *effect, unsigned index, PeImpRe2EffectFrame *out);
+int pe_imp_re2_effect_sprite(const PeImpRe2RoomEffect *effect, unsigned index, PeImpRe2EffectSprite *out);
 /* The bytes of one instruction of `game` (0 for an opcode it doesn't know). */
 uint32_t pe_imp_scd_size(unsigned game, uint8_t opcode);
 /* Walks every procedure of the room's scripts (RE1: init and main, not its event scripts); returns the procedures walked, or -1 for a bad RDT.

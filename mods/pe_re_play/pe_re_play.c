@@ -146,6 +146,11 @@ static void report_enemies(void) {
         const int count = pe_re_scd_scene_actors(&s_session.run, actors, 16);
         host->set_scene_actors(actors, count);
     }
+    if (host->struct_size >= offsetof(ReHost, set_effects) + sizeof host->set_effects && host->set_effects) {
+        PeReEffect effects[PE_RE_EFFECT_MAX];
+        const int count = pe_re_scd_effects(&s_session.run, effects);
+        host->set_effects(s_session.logic, effects, count);
+    }
     if (!fresh && n == s_nenemies && pe_re_enemy_lists_equal(s_enemies, placements, n)) return;
     memcpy(s_enemies, placements, (size_t)n * sizeof *placements);
     s_nenemies = n, s_room_reported = 1;

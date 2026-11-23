@@ -1,6 +1,7 @@
 /* The RE2 room script interpreter. See pe_re_scd.h. The handlers follow bio2-ds's SCE1.C in what
  * they do (read for behaviour, written here independently). */
 #include <string.h>
+#include <math.h>
 
 #include "pe_re_scd.h"
 #include "pe_imp_rdt.h"
@@ -16,7 +17,9 @@ enum {
     OP_MESSAGE_ON = 0x2B, OP_AOT_SET = 0x2C, OP_DOOR_AOT_SE = 0x3B, OP_AOT_RESET = 0x46, OP_ITEM_AOT_SET = 0x4E,
     OP_AOT_ON = 0x47, OP_SCE_KEY_CK = 0x4F, OP_SCE_TRG_CK = 0x50, OP_KEEP_ITEM_CK = 0x5E, OP_ITEM_LOST = 0x62,
     OP_ITEM_GET = 0x76, OP_ITEM_CK_LOST = 0x88, OP_SCE_EM_SET = 0x44, OP_CUT_CHG = 0x29, OP_CUT_OLD = 0x2A,
-    OP_CUT_AUTO = 0x3C, OP_PLC_DEST = 0x40, OP_WORK_SET = 0x2E, OP_POS_SET = 0x32, OP_DIR_SET = 0x33,
+    OP_CUT_AUTO = 0x3C, OP_ESPR_ON = 0x3A, OP_ESPR_KILL = 0x4C,
+    OP_ESPR_ON2 = 0x64, OP_ESPR_KILL2 = 0x65,
+    OP_PLC_DEST = 0x40, OP_WORK_SET = 0x2E, OP_POS_SET = 0x32, OP_DIR_SET = 0x33,
     OP_MEMBER_SET = 0x34, OP_MEMBER_SET2 = 0x35, OP_MEMBER_COPY = 0x3D, OP_MEMBER_CMP = 0x3E, OP_MEMBER_CALC = 0x55,
     OP_MEMBER_CALC2 = 0x56, OP_WORK_COPY = 0x1D, OP_SCA_ID_SET = 0x37, OP_PLC_RET = 0x42,
     OP_SPEED_SET = 0x2F, OP_ADD_SPEED = 0x30, OP_ADD_ASPEED = 0x31, OP_OBJ_MODEL_SET = 0x2D,
@@ -493,7 +496,44 @@ static int step(Vm *vm, PeReScdTask *t) {
         }
         t->pc += n;
         return CONTINUE;
+    case OP_ESPR_ON:
+    case OP_ESPR_ON2: {
+        PeReScdRun *r = vm->run;
+        PeImpRe2RoomEffect asset;
+        if (ins[4] > 4 || r->effect_count == PE_RE_EFFECT_MAX ||
+            pe_imp_re2_room_effect(vm->rdt, vm->size, ins[2], &asset)) goto unsupported;
+        unsigned duration = 0;
+        PeImpRe2EffectFrame frame;
+        for (unsigned i = 0; !pe_imp_re2_effect_frame(&asset, i, &frame) && frame.time && frame.time != 0xff; i++)
+            duration += frame.time;
+        if (!duration || duration > UINT16_MAX / 2) goto unsupported;
+        const int loop = !vm->flags->work[PE_RE_WORK_STAGE] && !vm->flags->work[PE_RE_WORK_ROOM] &&
+                         (ins[2] == 0x0d || ins[2] == 0x0e);
+        r->effects[r->effect_count++] = (PeReEffect){
+            .x = s16(ins + 8), .y = s16(ins + 10), .z = s16(ins + 12),
+            .duration = duration * 2, .id = ins[2], .type = ins[3], .scale = ins[7],
+            .attachment = ins[4], .target = ins[5], .handle = ins[1], .loop = loop,
+            .tagged = code == OP_ESPR_ON2
+        };
+        t->pc += n;
+        return CONTINUE;
+    }
+    case OP_ESPR_KILL:
+    case OP_ESPR_KILL2: {
+        PeReScdRun *r = vm->run;
+        int kept = 0;
+        for (int i = 0; i < r->effect_count; i++) {
+            const PeReEffect *e = &r->effects[i];
+            const int match = code == OP_ESPR_KILL2 ? e->tagged && e->handle == ins[1] :
+                e->id == ins[1] && e->type == ins[2] && e->attachment == ins[3] && e->target == ins[4];
+            if (!match) r->effects[kept++] = *e;
+        }
+        r->effect_count = kept;
+        t->pc += n;
+        return CONTINUE;
+    }
     default:
+    unsupported:
         if (!vm->run->skipped++) vm->run->first_skipped = code;
         if (vm->run->skipped_by_op[code] < 0xFFFF) vm->run->skipped_by_op[code]++;
         pe_re_scd_skips[code]++;
@@ -769,9 +809,38 @@ void pe_re_scd_tick(const PeImpRoomLogic *l, PeReFlags *flags, const PeReScdHost
     for (int w = 0; w < PE_RE_WORKS; w++)                  /* they got there (at once): the engine's arrival flags, */
         if (run->arrived[w]) pe_re_flag_set(flags, 5, run->arrived[w], 1);   /* set again after each frame's clear */
     enemy_standins(run, flags);
+    int kept = 0;
+    for (int i = 0; i < run->effect_count; i++) {
+        PeReEffect e = run->effects[i];
+        if (++e.age == e.duration) {
+            if (!e.loop) continue;
+            e.age = 0;
+        }
+        run->effects[kept++] = e;
+    }
+    run->effect_count = kept;
     exec_task(&vm, 0, 1);                                  /* Event_exec(0, 1): the every-frame handler */
     schedule(&vm);
     work_clr(flags);
+}
+
+int pe_re_scd_effects(const PeReScdRun *run, PeReEffect out[PE_RE_EFFECT_MAX]) {
+    int count = 0;
+    for (int i = 0; i < run->effect_count; i++) {
+        PeReEffect e = run->effects[i];
+        if (e.attachment) {
+            const int slot = work_slot(e.attachment, (int8_t)e.target);
+            if (slot < 0 || (e.attachment == 3 && (!run->works[slot][0] || run->em_dead[e.target]))) continue;
+            const int16_t *work = run->works[slot];
+            const double yaw = work[PE_RE_MEMBER_CDIR_Y] * (acos(-1.0) / 2048);
+            const int x = e.x;
+            e.x = work[PE_RE_MEMBER_POS_X] + (int)lround(x * cos(yaw) + e.z * sin(yaw));
+            e.y += work[PE_RE_MEMBER_POS_Y];
+            e.z = work[PE_RE_MEMBER_POS_Z] + (int)lround(e.z * cos(yaw) - x * sin(yaw));
+        }
+        out[count++] = e;
+    }
+    return count;
 }
 
 void pe_re_scd_exec(const PeImpRoomLogic *l, PeReScdRun *run, unsigned level, unsigned proc) {

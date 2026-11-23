@@ -32,6 +32,8 @@ void pe_re_stage_set_placement_meshes(int on);
 void pe_re_stage_set_placement_idle(int on);
 void pe_re_stage_set_placements(const PeReEnemyPlacement *placements, int count);
 struct PeReSceneActor;
+struct PeReEffect;
+void pe_re_stage_set_effects(const PeImpRoomLogic *logic, const struct PeReEffect *effects, int count);
 void pe_re_stage_set_scene_actors(const struct PeReSceneActor *actors, int count);
 /* A door's transition: the picture's brightness (128 full, 0 black), a black curtain in front of
  * everything (Aya too), and no walking while `hold`. */

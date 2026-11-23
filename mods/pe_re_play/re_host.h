@@ -19,6 +19,7 @@ enum { RE_HOST_CROSS = 0x0040, RE_HOST_SQUARE = 0x0080 };
  * A full turn is 4096 facing units, with 0 facing -z.
  * The adapter may resolve pictures, cameras and masks directly from that catalog.
  * All callbacks in this revision are required. Append new callbacks at the end. */
+struct PeReEffect;
 typedef struct ReHost {
     uint32_t struct_size;
     void (*init)(const char *mod_id, const char *store);
@@ -69,6 +70,8 @@ typedef struct ReHost {
     int (*start_from_title)(void);
     /* Optional. The native field has its player and renderer ready. */
     int (*start_ready)(void);
+    /* Optional. World-space effect instances after resolving script attachments. */
+    void (*set_effects)(const PeImpRoomLogic *logic, const struct PeReEffect *effects, int count);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

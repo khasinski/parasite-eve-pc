@@ -97,6 +97,13 @@ typedef struct PeReSceneActor {
     uint8_t absolute_parts;
 } PeReSceneActor;
 
+enum { PE_RE_EFFECT_MAX = 64 };
+typedef struct PeReEffect {
+    int x, y, z;
+    uint16_t age, duration;
+    uint8_t id, type, handle, scale, attachment, target, loop, tagged;
+} PeReEffect;
+
 typedef struct {
     uint8_t active, move, elapsed, reverse, next;
     uint8_t reset_parts;
@@ -152,10 +159,13 @@ typedef struct {
     PeReSceneMotion scene[16];
     int nenemy;
     int naot_on;
+    PeReEffect effects[PE_RE_EFFECT_MAX];
+    int effect_count;
 } PeReScdRun;
 
 int pe_re_scene_kind(unsigned kind);
 int pe_re_scd_scene_actors(const PeReScdRun *run, PeReSceneActor *out, int max);
+int pe_re_scd_effects(const PeReScdRun *run, PeReEffect out[PE_RE_EFFECT_MAX]);
 
 /* What the scripts ask of the game. */
 typedef struct {

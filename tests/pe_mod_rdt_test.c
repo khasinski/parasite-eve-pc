@@ -574,9 +574,149 @@ static void disc(const char *label, const char *cue, unsigned game) {
     else assert(bad * 100 < procs);
 }
 
+static void check_room_effects(void) {
+    uint8_t rdt[202] = {0};
+    put32(rdt + 8 + 18 * 4, 100);
+    put32(rdt + 8 + 19 * 4, 144);
+    put32(rdt + 8 + 20 * 4, 148);
+    put32(rdt + 8 + 21 * 4, 202);
+    memset(rdt + 100, 0xff, 8);
+    rdt[100] = 0x0d;
+    put16(rdt + 108, 2);
+    put16(rdt + 110, 1);
+    rdt[117] = 1, rdt[118] = 3, rdt[119] = 24;
+    put16(rdt + 120, -12);
+    rdt[125] = 1, rdt[126] = 0xff;
+    rdt[132] = 16, rdt[133] = 24, rdt[134] = 244, rdt[135] = 248;
+    put32(rdt + 144, 8);
+    put32(rdt + 148, 0x10);
+    put32(rdt + 152, 2);
+    put32(rdt + 156, 14);
+    put16(rdt + 164, 1);
+    put16(rdt + 166, 1);
+
+    PeImpRe2RoomEffect effect;
+    PeImpRe2EffectFrame frame;
+    PeImpRe2EffectSprite sprite;
+    assert(!pe_imp_re2_room_effect(rdt, sizeof rdt, 0x0d, &effect));
+    assert(effect.frame_count == 2 && effect.sprite_count == 1 && effect.tim_size == 22);
+    assert(!pe_imp_re2_effect_frame(&effect, 0, &frame));
+    assert(frame.time == 3 && frame.size == 24 && frame.origin_x == -12);
+    assert(!pe_imp_re2_effect_frame(&effect, 1, &frame) && frame.time == 0xff);
+    assert(pe_imp_re2_effect_frame(&effect, 2, &frame) == -1);
+    assert(!pe_imp_re2_effect_sprite(&effect, 0, &sprite));
+    assert(sprite.u == 16 && sprite.v == 24 && sprite.x == -12 && sprite.y == -8);
+    rdt[117] = 2;
+    assert(pe_imp_re2_effect_frame(&effect, 0, &frame) == -1);
+    assert(pe_imp_re2_room_effect(rdt, sizeof rdt, 0x0e, &effect) == -1);
+    assert(pe_imp_re2_room_effect(rdt, 190, 0x0d, &effect) == -1);
+    put32(rdt + 144, 0x7fffffff);
+    assert(pe_imp_re2_room_effect(rdt, sizeof rdt, 0x0d, &effect) == -1);
+}
+
+static void check_opening_effects(const char *store) {
+    const char *const rooms[] = {"re2:logic/100-0", "re2:logic/100-1"};
+    const unsigned effects[] = {0x0d, 0x0e};
+    for (unsigned i = 0; i < 2; i++) {
+        PeImpRoomLogic *room = NULL;
+        char why[200];
+        assert(!pe_imp_catalog_roomlogic(store, rooms[i], &room, why, sizeof why));
+        uint32_t size;
+        const uint8_t *rdt = pe_imp_logic_section(room, PE_IMP_LOGIC_RDT0, NULL, &size);
+        for (unsigned j = 0; j < 2; j++) {
+            PeImpRe2RoomEffect effect;
+            assert(!pe_imp_re2_room_effect(rdt, size, effects[j], &effect));
+            unsigned width, height, drawable = 0;
+            uint8_t *rgba = pe_imp_tim_decode(effect.tim, effect.tim_size, &width, &height);
+            assert(rgba && width && height);
+            for (unsigned k = 0; k < effect.frame_count; k++) {
+                PeImpRe2EffectFrame frame;
+                assert(!pe_imp_re2_effect_frame(&effect, k, &frame));
+                if (!frame.time || frame.time == 0xff) continue;
+                drawable++;
+                for (unsigned n = 0; n < frame.sprite_count; n++) {
+                    PeImpRe2EffectSprite sprite;
+                    assert(!pe_imp_re2_effect_sprite(&effect, frame.first_sprite + n, &sprite));
+                    assert(sprite.u < width && sprite.v < height);
+                }
+            }
+            assert(drawable > 1);
+            printf("%s effect %02x: %u drawable frames, %ux%u TIM\n", rooms[i], effects[j], drawable, width, height);
+            free(rgba);
+        }
+        free(room);
+    }
+}
+
+typedef struct {
+    const uint8_t *rdt;
+    uint32_t size;
+    const char *room;
+    unsigned *counts;
+} EffectAudit;
+
+static void audit_effect(void *ctx, uint32_t proc, uint32_t at, const uint8_t *ins, uint32_t size) {
+    (void)proc;
+    (void)size;
+    EffectAudit *audit = ctx;
+    const unsigned opcode = ins[0];
+    const char *gap = NULL;
+    switch (opcode) {
+    case 0x3a: case 0x64: {
+        PeImpRe2RoomEffect effect;
+        if (ins[4] > 4) gap = "attachment matrix";
+        else if (pe_imp_re2_room_effect(audit->rdt, audit->size, ins[2], &effect)) gap = "no local effect data";
+        else if (effect.tim[4] != 8) gap = "texture format";
+        else if (ins[3] & 7) gap = "effect-specific behavior";
+        break;
+    }
+    case 0x4c: case 0x65: break;
+    case 0x52: gap = "effect control"; break;
+    case 0x54: case 0x75: gap = "two-point 3D effect"; break;
+    case 0x82: gap = "effect task"; break;
+    default: return;
+    }
+    audit->counts[opcode]++;
+    if (gap) printf("%s +0x%x opcode %02x: %s\n", audit->room, at, opcode, gap);
+}
+
+static void audit_room_effects(const char *store) {
+    PeImpAsset *assets = NULL;
+    const int n = pe_imp_catalog_assets(store, "re2", &assets);
+    assert(n > 0);
+    unsigned counts[256] = {0}, rooms = 0;
+    for (int i = 0; i < n; i++) {
+        if (strncmp(assets[i].id, "re2:logic/", 10)) continue;
+        PeImpRoomLogic *room = NULL;
+        char why[200];
+        if (pe_imp_catalog_roomlogic(store, assets[i].id, &room, why, sizeof why)) {
+            printf("%s: %s\n", assets[i].id, why);
+            continue;
+        }
+        EffectAudit audit = {.room = assets[i].id, .counts = counts};
+        audit.rdt = pe_imp_logic_section(room, PE_IMP_LOGIC_RDT0, NULL, &audit.size);
+        uint32_t unreadable = 0;
+        if (pe_imp_scd_walk(PE_IMP_RE2, audit.rdt, audit.size, audit_effect, &audit, &unreadable) < 0 || unreadable)
+            printf("%s: incomplete script scan\n", assets[i].id);
+        rooms++;
+        free(room);
+    }
+    free(assets);
+    printf("Room-effect audit: %u imported room scripts\n", rooms);
+    for (unsigned op = 0; op < 256; op++)
+        if (counts[op]) printf("  opcode %02x: %u cues\n", op, counts[op]);
+    assert(rooms);
+}
+
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
     made_up();
+    check_room_effects();
+    const char *store = getenv("PE_TEST_RE2_STORE");
+    if (store && *store) {
+        check_opening_effects(store);
+        if (getenv("PE_TEST_RE2_EFFECT_AUDIT")) audit_room_effects(store);
+    }
     const char *re1 = getenv("PE_TEST_RE1_DISC"), *re2 = getenv("PE_TEST_RE2_DISC"), *re3 = getenv("PE_TEST_RE3_DISC");
     if (re1 && *re1) disc("RE1", re1, PE_IMP_RE1), scan_doors("RE1", re1, "re1", &g_re1_door_ps1, 0),
                      scan_items("RE1", re1, "re1", &g_re1_items_ps1, 2, "Beretta", 76),
