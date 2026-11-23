@@ -72,6 +72,9 @@ typedef struct ReHost {
     int (*start_ready)(void);
     /* Optional. World-space effect instances after resolving script attachments. */
     void (*set_effects)(const PeImpRoomLogic *logic, const struct PeReEffect *effects, int count);
+    /* 1 while traversal owns the player, 2 on the landing frame. */
+    int (*climb)(int pressed, const char *asset, unsigned player);
+    int (*place_at_ledge)(int *camera);
 } ReHost;
 
 /* The host links exactly one implementation. The table lasts for the process. */

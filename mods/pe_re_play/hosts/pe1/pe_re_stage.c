@@ -17,6 +17,9 @@
 
 #include "pe_imp.h"
 #include "pe_imp_mdec.h"
+#include "pe_imp_pe.h"
+#include "pe_actor_texture_pages.h"
+#include "pe1/entity_frame_update.h"
 #include "pe_imp_rdt.h"
 #include "pe_imp_room.h"
 #include "re_encounter_rooms.h"
@@ -146,6 +149,12 @@ static struct {
     int floor;              /* the floor whose walls she meets; ramps change it */
     char room_id[PE_IMP_ID_MAX];
 } s_walk;
+static struct {
+    PeImpBuf row;
+    unsigned frame, frames;
+    double x, z;
+    int floor;
+} s_climb;
 
 static struct {
     unsigned buttons;
@@ -251,7 +260,7 @@ static int on_move(void *ctx, void *user) {
     const FieldActor *aya = ctx;
     if (!s_show || !s_walk.active || aya != g_PlayerEntity) return 0;
     const int free_field = pe_free_field();
-    if (!free_field || pe_re_box_busy() || s_hold) {
+    if (!free_field || pe_re_box_busy() || s_hold || s_climb.row.b) {
         walk_input(0, 0, 0);
         return free_field;
     }
@@ -287,6 +296,197 @@ static int on_move(void *ctx, void *user) {
             }
         }
     }
+    return 1;
+}
+
+static void clear_climb(void) {
+    free(s_climb.row.b);
+    memset(&s_climb, 0, sizeof s_climb);
+}
+
+static void climb_source_tree(const PeImpModel *model, int bone, int8_t *commands, int *count) {
+    commands[(*count)++] = -1;
+    commands[(*count)++] = (int8_t)bone;
+    for (unsigned child = (unsigned)bone + 1; child < model->bones; child++)
+        if (model->parent[child] == bone) climb_source_tree(model, (int)child, commands, count);
+    commands[(*count)++] = -2;
+}
+
+static void re2_rotation(const int16_t angle[3], PeM3 out) {
+    const double sx = sin(angle[0] * FIELD_TURN_RADIANS), cx = cos(angle[0] * FIELD_TURN_RADIANS);
+    const double sy = sin(angle[1] * FIELD_TURN_RADIANS), cy = cos(angle[1] * FIELD_TURN_RADIANS);
+    const double sz = sin(angle[2] * FIELD_TURN_RADIANS), cz = cos(angle[2] * FIELD_TURN_RADIANS);
+    const double rotation[3][3] = {
+        {cy * cz, -cy * sz, sy},
+        {sx * sy * cz + cx * sz, cx * cz - sx * sy * sz, -sx * cy},
+        {sx * sz - cx * sy * cz, cx * sy * sz + sx * cz, cx * cy}
+    };
+    memcpy(out, rotation, sizeof rotation);
+}
+
+static void climb_source_angles(const int16_t *sample, unsigned bones, int angles[][3]) {
+    /* Convert RE2's XYZ Euler order and align RE2 +X with PE -Z. */
+    const PeM3 basis = {{0, 0, 1}, {0, 1, 0}, {-1, 0, 0}};
+    for (unsigned i = 0; i < bones; i++) {
+        PeM3 rotation;
+        re2_rotation(sample + 3 + 3 * i, rotation);
+        if (i == 0) pe_imp_mm(basis, rotation, rotation);
+        pe_imp_to_yxz(rotation, angles[i]);
+    }
+}
+
+static int climb_row(const char *asset, unsigned player) {
+    if (!g_PlayerEntity || !g_PlayerEntity->action_data) return 0;
+    const RenderObjectEntity *aya = &g_PlayerEntity->render_object;
+    RenderAnimationDataHeader *pose = g_PlayerEntity->action_data;
+    if (!aya->header || !aya->matrix_commands || !aya->parts ||
+        aya->header->part_count > PE_IMP_PARTS_MAX || pose->last_bone_index >= aya->header->part_count) return 0;
+    const int parts = aya->header->part_count;
+    /* Live room Aya can use a different mesh and skeleton than the model viewer. */
+    const unsigned channels = 3 + 3 * (pose->last_bone_index + 1u);
+    const PeImpBuf idle_row = {(uint8_t *)pose, sizeof *pose + channels * 4 * ((pose->frame_count >> 1) + 1u)};
+    PeImpFrame idle;
+    if (pe_imp_anim_frame(&idle_row, 0, (s16)g_PlayerEntity->anim.parts.integer, &idle)) return 0;
+
+    const char *model_id = player == 12 ? "re2:player/hunk" : player ? "re2:player/claire" : "re2:player/leon";
+    char why[160];
+    PeImpModel model = {0};
+    PeImpAnimation animation = {0};
+    int ok = 0;
+    if (pe_imp_catalog_model(s_store, model_id, &model, why, sizeof why) ||
+        pe_imp_catalog_animation(s_store, asset, &animation, why, sizeof why)) {
+        pe_mod_log("pe_re_play", "climb asset: %s", why);
+        goto done;
+    }
+    static const int16_t parent[] = {-1, 0, 1, 2, 3, 1, 5, 6, 0, 0, 9, 10, 0, 12, 13};
+    if (model.bones != sizeof parent / sizeof *parent || memcmp(model.parent, parent, sizeof parent) ||
+        animation.bones != model.bones || animation.moves <= 6) goto done;
+    const PeImpMove *move = &animation.move[6];
+    /* The human one-level climb in pl_mv08 uses room move 6 and lands at frame 29. */
+    if (move->frames != 50) goto done;
+    int8_t commands[3 * PE_IMP_PARTS_MAX];
+    PeImpMd from = {.parts = model.bones, .cmds = commands};
+    PeImpMd to = {.parts = parts, .ncmds = aya->header->matrix_command_bytes, .cmds = aya->matrix_commands};
+    for (unsigned i = 0; i < model.bones; i++) {
+        if (model.parent[i] >= (int)i) goto done;
+        if (model.parent[i] == -1) climb_source_tree(&model, i, commands, &from.ncmds);
+        if (i < model.parts) from.ptab[i].vc = model.part[i].tris + model.part[i].quads;
+    }
+    for (int i = 0; i < parts; i++) to.ptab[i].vc = aya->parts[i].vertex_count;
+    /* RE2 has no separate pelvis bone and its head branches from the root.
+     * Use the shared PE chain decoder for Aya and the verified RE2 layout. */
+    PeImpChain chains[CH_COUNT];
+    PeImpMap map;
+    if (pe_imp_chains(&to, chains)) {
+        pe_mod_log("pe_re_play", "climb target does not have the expected Aya bone chains");
+        goto done;
+    }
+    for (int i = 0; i < PE_IMP_PARTS_MAX; i++) map.map[i] = -1;
+    map.map[chains[CH_ROOT].p[0]] = 0;
+    map.map[chains[CH_PELVIS].p[0]] = 0;
+    map.map[chains[CH_CHEST].p[0]] = 1;
+    map.map[chains[CH_HEAD].p[chains[CH_HEAD].n - 1]] = 8;
+    static const unsigned limbs[] = {CH_ARMA, CH_ARMB, CH_LEGA, CH_LEGB};
+    static const int first[] = {2, 5, 9, 12};
+    for (unsigned i = 0; i < 4; i++) {
+        const PeImpChain *chain = &chains[limbs[i]];
+        const int skip = i < 2 && chain->n > 3;
+        for (int bone = 0; bone < 3 && bone + skip < chain->n; bone++)
+            map.map[chain->p[bone + skip]] = first[i] + bone;
+    }
+    int packed[50 * PE_IMP_PARTS_MAX][3] = {0}, input[PE_IMP_PARTS_MAX][3];
+    double root[50][3];
+    PeM3 source_rest[PE_IMP_PARTS_MAX], target_rest[PE_IMP_PARTS_MAX];
+    uint8_t source_has[PE_IMP_PARTS_MAX], target_has[PE_IMP_PARTS_MAX];
+    PeImpCorr correction = {0};
+    /* Use the opening pose to calibrate each joint against the live PE
+     * skeleton. RE2 and PE meshes use different axes for the same bones. */
+    climb_source_angles(move->data, model.bones, input);
+    pe_imp_world_rotations(&from, input, model.bones, source_rest, source_has);
+    pe_imp_world_rotations(&to, idle.ang, idle.n, target_rest, target_has);
+    for (int i = 0; i < parts; i++) {
+        int source = map.map[i];
+        if (source < 0 || !source_has[source] || !target_has[i]) continue;
+        PeM3 inverse;
+        pe_imp_transpose(source_rest[source], inverse);
+        pe_imp_mm(inverse, target_rest[i], correction.m[i]);
+        correction.has[i] = 1;
+    }
+    for (unsigned f = 0; f < 50; f++) {
+        const int16_t *sample = move->data + f * (3 + 3 * model.bones);
+        climb_source_angles(sample, model.bones, input);
+        pe_imp_retarget_world(&from, input, model.bones, &to, &map, idle.ang, idle.n,
+                              &correction, NULL, packed + f * parts);
+        for (int k = 0; k < 3; k++) root[f][k] = idle.tr[k];
+        /* RE2 faces local +X and Aya faces local -Z. The offsets reset
+         * against the new world origin at the ledge's landing frame. */
+        root[f][0] += (sample[2] - move->data[2]) / s_scale;
+        root[f][1] += (sample[1] - move->data[1]) / s_scale;
+        root[f][2] -= (sample[0] - move->data[0]) / s_scale;
+    }
+    const uint16_t hit[] = {pose->object_value74, pose->object_value76, pose->object_value78, pose->object_value7c};
+    ok = !pe_imp_encode_row(50, root, packed, parts, hit, &s_climb.row);
+done:
+    pe_imp_model_free(&model);
+    pe_imp_animation_free(&animation);
+    return ok;
+}
+
+static int climb_surface(const PeRe2Collider *c, int floor) {
+    const int top = ((c->type >> 6) & 31) * PE_RE2_FLOOR_HEIGHT + (c->type >> 11) * 100;
+    return c->shape == 9 && (c->id & 0x8000) && (c->floors & (1u << floor)) &&
+           top == (floor + 1) * PE_RE2_FLOOR_HEIGHT;
+}
+
+int pe_re_stage_climb(int pressed, const char *asset, unsigned player) {
+    if (s_climb.row.b) {
+        ++s_climb.frame;
+        if (s_climb.frame == 29 * 2) {
+            s_walk.x = s_climb.x, s_walk.z = s_climb.z, s_walk.floor = s_climb.floor;
+            s_walk.y = -(double)s_walk.floor * PE_RE2_FLOOR_HEIGHT;
+        }
+        if (s_climb.frame < s_climb.frames) return 1;
+        clear_climb();
+        return 2;
+    }
+    if (!pressed || !*asset || !s_show || !s_walk.active || s_hold || s_walk.floor < 0 || s_walk.floor >= 31) return 0;
+    const int dir = (s_walk.yaw + 1024 + 512) & 0xc00;
+    const double angle = dir * FIELD_TURN_RADIANS, dx = cos(angle), dz = -sin(angle);
+    const double probe_x = s_walk.x + 800 * dx, probe_z = s_walk.z + 800 * dz;
+    const double landing_x = s_walk.x + 1000 * dx, landing_z = s_walk.z + 1000 * dz;
+    for (unsigned i = 0; i < s_walk.collision.count; i++) {
+        const PeRe2Collider *c = &s_walk.collision.entries[i];
+        if (!climb_surface(c, s_walk.floor) ||
+            probe_x < c->x0 || probe_x > c->x1 || probe_z < c->z0 || probe_z > c->z1) continue;
+        if (pe_imp_re2_blocked_on(&s_walk.collision, (unsigned)s_walk.floor + 1, landing_x, landing_z, AYA_ROOM_RADIUS)) continue;
+        if (!climb_row(asset, player)) {
+            pe_mod_log("pe_re_play", "cannot retarget climb %s move 6 for player %u", asset, player);
+            return 0;
+        }
+        s_walk.yaw = pe_re_facing_of(dir);
+        s_climb.x = landing_x, s_climb.z = landing_z, s_climb.floor = s_walk.floor + 1;
+        s_climb.frames = 100;
+        walk_input(0, 0, 0);
+        pe_mod_log("pe_re_play", "climb %s move 6: floor %d to %d", asset, s_walk.floor, s_climb.floor);
+        return 1;
+    }
+    return 0;
+}
+
+static int on_climb_render(void *ctx, void *user) {
+    (void)user;
+    const PeHookActorDraw *draw = ctx;
+    FieldActor *aya = draw->actor;
+    if (!s_climb.row.b || !aya || aya != g_PlayerEntity) return 0;
+    RenderObjectEntity *object = &aya->render_object;
+    uint32_t *view = (uint32_t *)draw->view;
+    Render_InitRoomPrimState(object);
+    Anim_BuildRotationMatrices(object, (RenderAnimationDataHeader *)s_climb.row.b, s_climb.frame / 2);
+    Render_TransformVertices(object);
+    Render_TransformSkinnedVertices(object, view);
+    Render_TransformMorphVertices(object, view);
+    PeModelTextures_Actor(aya);
+    Render_DrawEntity(object, view);
     return 1;
 }
 
@@ -635,6 +835,59 @@ static void clear_field_texture(void) {
     s_texture_checked = 0;
 }
 
+static int ledge_camera(void) {
+    PeImpImageSet *set = NULL;
+    char why[160];
+    if (pe_imp_catalog_imageset(s_store, s_walk.room_id, &set, why, sizeof why)) return s_view;
+    PeImpRoomView current;
+    if (pe_imp_room_view(set, (uint32_t)s_view, &current)) {
+        free(set);
+        return s_view;
+    }
+    int best = s_view;
+    double score = HUGE_VAL;
+    const double yaw = s_walk.yaw * FIELD_TURN_RADIANS;
+    for (uint32_t i = 0; i < set->count; i++) {
+        PeImpRoomView view;
+        if (pe_imp_room_view(set, i, &view)) continue;
+        prepare_camera(&view);
+        double start[3], end[3];
+        if (!s_camera.distance ||
+            !project_field_point(s_walk.x, s_walk.y - 1000, s_walk.z, start) ||
+            !project_field_point(s_walk.x - 1000 * sin(yaw), s_walk.y - 2800,
+                                 s_walk.z - 1000 * cos(yaw), end)) continue;
+        const double distance = fmax(hypot(start[0] - PIC_W / 2, start[1] - FIELD_H / 2),
+                                     hypot(end[0] - PIC_W / 2, end[1] - FIELD_H / 2));
+        if (distance < score) best = (int)i, score = distance;
+    }
+    prepare_camera(&current);
+    free(set);
+    return best;
+}
+
+int pe_re_stage_to_ledge(int *camera) {
+    if (!s_walk.active || s_climb.row.b || s_walk.floor < 0 || s_walk.floor >= 31) return 0;
+    const double margin = AYA_ROOM_RADIUS + 40;
+    for (unsigned i = 0; i < s_walk.collision.count; i++) {
+        const PeRe2Collider *c = &s_walk.collision.entries[i];
+        if (!climb_surface(c, s_walk.floor)) continue;
+        const double mid_x = (c->x0 + c->x1) / 2.0, mid_z = (c->z0 + c->z1) / 2.0;
+        const double x[] = {c->x0 - margin, mid_x, c->x1 + margin, mid_x};
+        const double z[] = {mid_z, c->z1 + margin, mid_z, c->z0 - margin};
+        static const int dx[] = {1, 0, -1, 0}, dz[] = {0, -1, 0, 1};
+        for (int dir = 0; dir < 4; dir++) {
+            if (blocked_here(x[dir], z[dir]) || pe_imp_re2_blocked_on(&s_walk.collision,
+                (unsigned)s_walk.floor + 1, x[dir] + 1000 * dx[dir], z[dir] + 1000 * dz[dir], AYA_ROOM_RADIUS)) continue;
+            s_walk.x = x[dir], s_walk.z = z[dir], s_walk.yaw = pe_re_facing_of(dir * 1024);
+            s_walk.ghost = 0;
+            walk_input(0, 0, 0);
+            *camera = ledge_camera();
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int empty_texture_area(RECT *rect) {
     DrawSync(0);
     StoreImage(rect, s_vram_check);
@@ -766,14 +1019,8 @@ static void field_pose(const PeImpModel *model, const int16_t *frame, const int1
                        const PeReSceneActor *scene, FieldBonePose *pose) {
     for (uint32_t b = 0; b < model->bones; b++) {
         const int16_t *angle = frame + 3 + 3 * b;
-        const double sx = sin(angle[0] * FIELD_TURN_RADIANS), cx = cos(angle[0] * FIELD_TURN_RADIANS);
-        const double sy = sin(angle[1] * FIELD_TURN_RADIANS), cy = cos(angle[1] * FIELD_TURN_RADIANS);
-        const double sz = sin(angle[2] * FIELD_TURN_RADIANS), cz = cos(angle[2] * FIELD_TURN_RADIANS);
-        const double rotation[3][3] = {
-            {cy * cz, -cy * sz, sy},
-            {sx * sy * cz + cx * sz, cx * cz - sx * sy * sz, -sx * cy},
-            {sx * sz - cx * sy * cz, cx * sy * sz + sx * cz, cx * cy}
-        };
+        PeM3 rotation;
+        re2_rotation(angle, rotation);
         for (int r = 0; r < 3; r++) {
             if (b == 0) {
                 memcpy(pose[b].r[r], rotation[r], sizeof rotation[r]);
@@ -1228,6 +1475,7 @@ static int on_background(void *ctx, void *user) {
 static int on_scene(void *ctx, void *user) {
     (void)ctx, (void)user;
     backdrop_off(0);                                   /* a new room's pages and camera are coming */
+    clear_climb();
     clear_effects(0);
     clear_field_texture();
     if (s_masks) DrawSync(0);
@@ -1240,6 +1488,7 @@ static int on_scene(void *ctx, void *user) {
 
 void pe_re_stage_hide(void) {
     s_shade = 128, s_curtain = s_hold = 0;
+    clear_climb();
     clear_effects(1);
     clear_field_texture();
     if (s_original_picture) {
@@ -1340,12 +1589,14 @@ void pe_re_stage_init(const char *mod_id, const char *store) {
     pe_hook_add(PE_HOOK_FIELD_BACKGROUND, on_background, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FIELD_CAMERA, on_camera, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_FIELD_MOVE, on_move, NULL, PE_PRIORITY_LATE, mod_id);
+    pe_hook_add(PE_HOOK_ACTOR_RENDER, on_climb_render, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(PE_HOOK_SCENE_START, on_scene, NULL, PE_PRIORITY_LATE, mod_id);
     pe_hook_add(pe_event_id(PE_EVENT_IMPORT_PUBLISHED), on_import_published, NULL, PE_PRIORITY_NORMAL, mod_id);
 }
 
 void pe_re_stage_shutdown(void) {
     s_show = s_walk.active = 0;
+    clear_climb();
     clear_effects(1);
     clear_field_texture();
     for (unsigned kind = 0; kind < 0x40; kind++)

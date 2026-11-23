@@ -623,6 +623,16 @@ static int on_frame(void *ctx, void *user) {
     const int cross = (re_host()->held_buttons() & RE_HOST_CROSS) != 0;
     const int pressed = cross && !s_cross_held && !re_host()->dialogue_busy();   /* a box's Cross is the box's */
     s_cross_held = cross;
+    const ReHost *host = re_host();
+    if (host->struct_size >= offsetof(ReHost, climb) + sizeof host->climb && host->climb) {
+        char asset[PE_IMP_ID_MAX] = "";
+        if (pressed && !s_script_held && host->field_free()) pe_re_session_player_room_move(&s_session, asset, sizeof asset);
+        const int climb = host->climb(pressed, asset, s_session.player_id == 12 ? 12 : s_session.player);
+        if (climb == 1) {
+            s_script_held = 2;
+            return 0;
+        }
+    }
     double x, z;
     int facing;
     char why[200] = "";
@@ -760,6 +770,28 @@ static void give_use_here(void) {           /* the item the last place to use on
     if (pe_re_give(&s_session.progress, s_use_here, 1)) snprintf(s_status, sizeof s_status, "No room for the %s.", name);
     else snprintf(s_status, sizeof s_status, "Given the %s: press Square to use it.", name);
 }
+static void to_ledge(void) {
+    const ReHost *host = re_host();
+    if (!s_playing || s_battle_paused || s_script_held || host->struct_size < offsetof(ReHost, place_at_ledge) + sizeof host->place_at_ledge ||
+        !host->place_at_ledge) return;
+    char asset[PE_IMP_ID_MAX];
+    int camera;
+    if (pe_re_session_player_room_move(&s_session, asset, sizeof asset) || !host->place_at_ledge(&camera)) {
+        snprintf(s_status, sizeof s_status, "No reachable one-level ledge on this floor.");
+        return;
+    }
+    double x, z;
+    int facing;
+    host->player_pose(&x, &z, &facing);
+    pe_re_session_place(&s_session, x, z, facing);
+    if (s_session.camera != camera) {
+        s_session.camera = camera;
+        show_room(1);
+        if (!s_playing) return;
+    }
+    snprintf(s_status, sizeof s_status, "Facing a climbable ledge: press Cross.");
+}
+
 static void to_ramp(void) {
     if (!s_playing || s_battle_paused) return;
     if (!re_host()->place_at_ramp()) { snprintf(s_status, sizeof s_status, "This room has no slopes or stairs."); return; }
@@ -830,6 +862,7 @@ static int init(void) {
     pe_menu_register_action("Testing", "Go to the next door", "Puts Aya in the room's doorways, one after another.", to_door);
     pe_menu_register_action("Testing", "Go to the next pickup", "Puts Aya on the room's items, one after another.", to_pickup);
     pe_menu_register_action("Testing", "Go to the next ramp", "Puts Aya at the foot of the room's slopes and stairs, one after another.", to_ramp);
+    pe_menu_register_action("Testing", "Go to a climbable ledge", "Puts Aya in front of a one-level ledge in this room.", to_ledge);
     pe_menu_register_action("Testing", "Go to the next message", "Puts Aya where the room's messages are read, one after another.", to_message);
     pe_menu_register_action("Testing", "Go to the next place to use an item", "Puts Aya facing where the room takes an item (a jewel in a statue), one after another.", to_item_spot);
     pe_menu_register_action("Testing", "Give the item used there", "Puts the item that place takes in the pocket.", give_use_here);

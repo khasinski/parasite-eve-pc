@@ -130,6 +130,8 @@ const ReHost *re_host(void) {
         .bind_lifecycle = bind_lifecycle,
         .set_scene_actors = pe_re_stage_set_scene_actors,
         .set_effects = pe_re_stage_set_effects,
+        .climb = pe_re_stage_climb,
+        .place_at_ledge = pe_re_stage_to_ledge,
         .room_collision = pe_re_stage_collision,
         .start_from_title = start_from_title,
         .start_ready = start_ready,

@@ -137,6 +137,7 @@ int pe_re_session_canister_ready(const PeReSession *s);
 void pe_re_session_release_canister(PeReSession *s);
 int pe_re_session_canister_win(PeReSession *s, unsigned slot, uint8_t killed_flag);
 int pe_re_session_enemy_room_move(const PeReSession *s, unsigned slot, char *asset, size_t size);
+int pe_re_session_player_room_move(const PeReSession *s, char *asset, size_t size);
 /* Compare the observable fields of two placement lists of the same length. */
 int pe_re_enemy_lists_equal(const PeReEnemyPlacement *a, const PeReEnemyPlacement *b, int count);
 /* A placed enemy beaten: its killed flag set. 0, or -1 (no game, flag 0xFF). */

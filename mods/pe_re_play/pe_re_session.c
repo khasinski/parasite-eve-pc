@@ -651,19 +651,18 @@ static uint32_t room_move_word(const uint8_t *p) {
     return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
 }
 
-int pe_re_session_enemy_room_move(const PeReSession *s, unsigned slot, char *asset, size_t size) {
+static int room_move(const PeReSession *s, unsigned bit, char *asset, size_t size) {
     uint32_t bytes, at, length;
-    if (!s->game || strcmp(s->game->game, "re2") || !s->logic || slot >= 16) return -1;
+    if (!s->game || strcmp(s->game->game, "re2") || !s->logic || bit >= 32) return -1;
     const uint8_t *rdt = pe_imp_logic_section(s->logic, PE_IMP_LOGIC_RDT0, NULL, &bytes);
     if (!rdt || pe_imp_rdt_section(rdt, bytes, 22, &at, &length) || length < 8) return -1;
     const uint8_t *rbj = rdt + at;
     const uint32_t table = room_move_word(rbj), count = room_move_word(rbj + 4);
     if (table > length || count > 64 || count > (length - table) / 8) return -1;
-    /* bio2-ds EM_SUB.C: bit zero is for the player, then one bit per enemy slot.
-     * Later records supersede earlier ones for the same slot. */
+    /* Later records supersede earlier ones for the same actor. */
     for (uint32_t i = count; i > 0; i--) {
         const uint32_t record = room_move_word(rbj + table + 8 * (i - 1));
-        if (record <= length - 4 && (room_move_word(rbj + record) & (1u << (slot + 1)))) {
+        if (record <= length - 4 && (room_move_word(rbj + record) & (1u << bit))) {
             const int written = snprintf(asset, size, "re2:roomanim/%x%02x-%u-p%u",
                                          (unsigned)s->stage + 1, (unsigned)s->room, (unsigned)i - 1,
                                          (unsigned)s->player);
@@ -671,6 +670,14 @@ int pe_re_session_enemy_room_move(const PeReSession *s, unsigned slot, char *ass
         }
     }
     return -1;
+}
+
+int pe_re_session_enemy_room_move(const PeReSession *s, unsigned slot, char *asset, size_t size) {
+    return slot < 16 ? room_move(s, slot + 1, asset, size) : -1;
+}
+
+int pe_re_session_player_room_move(const PeReSession *s, char *asset, size_t size) {
+    return room_move(s, 0, asset, size);
 }
 
 int pe_re_session_defeated(PeReSession *s, uint8_t killed_flag) {
