@@ -12,7 +12,8 @@ typedef struct {
     char discs[1100], store[1100], packs[1100];               /* folders */
     char extra[PE_IMPORT_FOLDERS][1100];                      /* more folders the player added */
     int nextra;
-    int prepare_enemies;
+    int prepare_enemies, enemies_only;
+    const char *game;                 /* NULL scans all games; otherwise select this game's assets */
     const ImportHost *host;           /* the game: its data for the builder targets, opened only when something is built */
     const PeImpProgress *progress;    /* the job: "reading <disc>" i of n, "building <name>" k of m */
     const PeImpProgress *step;        /* inside a build: its steps and the room scan */

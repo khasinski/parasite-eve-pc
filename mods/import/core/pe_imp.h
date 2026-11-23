@@ -322,6 +322,8 @@ typedef struct {
 /* Extract one disc image into the store under `root`: the game is the one whose readers match
  * the most files (or `game` if given), every matching file is read, stored and catalogued. */
 int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan *out);
+/* Detect the game before importing. Returns 1 for a disc outside the selection. */
+int pe_imp_scan_selected(const char *root, const char *image, const char *game, PeImpScan *out);
 /* An asset's model from its first copy (PS1 first), loaded from the store. */
 int pe_imp_catalog_model(const char *root, const char *asset_id, PeImpModel *m, char *why, size_t n);
 int pe_imp_catalog_animation(const char *root, const char *asset_id, PeImpAnimation *a, char *why, size_t n);

@@ -222,6 +222,11 @@ def main():
             catalog = json.loads((store / "re2" / "catalog.json").read_text(encoding="utf-8"))
             check(f"re2:logic/702-{player}" in catalog and f"re2:logic/704-{player}" in catalog,
                   f"{store} is missing the {args.campaign} B finale room imports")
+            archives = ("cdemd1", "cdemd3") if player else ("cdemd0", "cdemd2")
+            for boss in ("em2b", "em36"):
+                variants = (boss, *(f"{boss}-{archive}" for archive in archives))
+                check(any(f"re2:enemy/{variant}" in catalog for variant in variants),
+                      f"{store} is missing the {args.campaign} B enemy model for {boss.upper()}")
         else:
             check(re2_disc.is_file(), f"Configured RE2 disc does not exist: {re2_disc}")
         run_route(args.exe.resolve(), disc, re2_disc, store, fixture, args.work.resolve(), player)

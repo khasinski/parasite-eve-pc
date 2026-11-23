@@ -338,6 +338,10 @@ static const char *pick_game(PeImpDisc *d) {
     int best_n = 0;
     for (int r = 0; r < pe_imp_readers(); r++) {
         const char *g = pe_imp_reader(r)->game;
+        int seen = 0;
+        for (int i = 0; i < r; i++)
+            if (!strcmp(g, pe_imp_reader(i)->game)) { seen = 1; break; }
+        if (seen) continue;
         int n = 0, ids = pe_imp_disc_id_count(g), have = !ids;
         for (int k = 0; k < ids && !have; k++)
             for (int i = 0; i < pe_imp_disc_files(d) && !have; i++) have = pe_imp_match(pe_imp_disc_id(g, k), pe_imp_disc_name(d, i));
@@ -467,7 +471,7 @@ static int store_file(Catalog *c, const char *root, const PeImpReader *rd, const
     return rc;
 }
 
-int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan *out) {
+static int scan_disc(const char *root, const char *image, const char *game, const char *selected, PeImpScan *out) {
     memset(out, 0, sizeof *out);
     char why[200] = "";
     PeImpDisc *d = pe_imp_disc_open(image, why, sizeof why);
@@ -477,6 +481,10 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
         snprintf(out->last_error, sizeof out->last_error, "%s: no reader recognises this disc", pe_imp_disc_label(d));
         pe_imp_disc_close(d);
         return -1;
+    }
+    if (selected && strcmp(game, selected)) {
+        pe_imp_disc_close(d);
+        return 1;
     }
     snprintf(out->game, sizeof out->game, "%s", game);
     char cat_path[PE_IMP_PATH_MAX], gdir[PE_IMP_PATH_MAX];
@@ -510,6 +518,14 @@ int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan
     pe_imp_disc_close(d);
     if (rc) snprintf(out->last_error, sizeof out->last_error, "can't write %s", cat_path);
     return rc;
+}
+
+int pe_imp_scan(const char *root, const char *image, const char *game, PeImpScan *out) {
+    return scan_disc(root, image, game, NULL, out);
+}
+
+int pe_imp_scan_selected(const char *root, const char *image, const char *game, PeImpScan *out) {
+    return scan_disc(root, image, NULL, game, out);
 }
 
 int pe_imp_catalog_assets(const char *root, const char *game, PeImpAsset **out) {

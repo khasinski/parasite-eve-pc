@@ -195,14 +195,22 @@ static void scan(PeImportJob *j) {
         if (SDL_GetPathInfo(f->path[i], &info)) size = (long long)info.size, mtime = (long long)info.modify_time;
         IndexEntry *e = index_find(&ix, f->path[i]);
         if (e && e->size == size && e->mtime == mtime && index_still_there(j, e)) {   /* nothing changed: not opened */
+            if (j->game && strcmp(j->game, e->game)) continue;
             j->unchanged++;
             if (e->game[0]) add_once(j->games, sizeof j->games, pe_imp_game_title(e->game));
             continue;
         }
         PeImpScan sc;
-        int rc = pe_imp_scan(j->store, f->path[i], NULL, &sc), unsupported = rc && strstr(sc.last_error, "no reader recognises");
-        if (rc && !unsupported) { j->failed++, snprintf(j->problem, sizeof j->problem, "%s", sc.last_error); continue; }
-        if (!rc && sc.refused) { j->failed++, snprintf(j->problem, sizeof j->problem, "%s", sc.last_error); continue; }
+        const int rc = j->game ? pe_imp_scan_selected(j->store, f->path[i], j->game, &sc)
+                               : pe_imp_scan(j->store, f->path[i], NULL, &sc);
+        if (rc == 1) continue;                              /* recognised as another game */
+        const int unsupported = rc && strstr(sc.last_error, "no reader recognises");
+        if ((rc && !unsupported) || (!rc && sc.refused)) {
+            j->failed++;
+            snprintf(j->problem, sizeof j->problem, "%.80s: %.151s", name, sc.last_error);
+            pe_mod_log("pe_import", "disc scan failed: %s: %s", f->path[i], sc.last_error);
+            continue;
+        }
         index_put(&ix, f->path[i], size, mtime, rc ? "" : sc.game);     /* read, or looked at and not supported */
         if (unsupported) { j->unknown++; continue; }
         j->discs_read++, j->items += sc.items + sc.skipped;
@@ -263,6 +271,12 @@ static int need(const PeImportJob *j, const PeImpAuto *au, const PeImpTarget **t
     return current(folder, a, builder) ? 0 : 1;
 }
 
+static int auto_selected(const PeImportJob *j, const PeImpAuto *entry) {
+    if (!j->game) return 1;
+    const size_t len = strlen(j->game);
+    return !strncmp(entry->asset_id, j->game, len) && entry->asset_id[len] == ':';
+}
+
 static void build_autos(PeImportJob *j) {
     const void *targets = NULL;                                     /* the game's data, opened once */
     int todo = 0, done = 0;
@@ -270,10 +284,13 @@ static void build_autos(PeImportJob *j) {
         const PeImpTarget *tg;
         PeImpAsset a;
         char folder[1100], builder[64], game[16];
-        todo += need(j, pe_imp_auto(i), &tg, &a, folder, sizeof folder, builder, sizeof builder, game, sizeof game) == 1;
+        const PeImpAuto *entry = pe_imp_auto(i);
+        if (auto_selected(j, entry))
+            todo += need(j, entry, &tg, &a, folder, sizeof folder, builder, sizeof builder, game, sizeof game) == 1;
     }
     for (int i = 0; i < pe_imp_autos(); i++) {
         const PeImpAuto *au = pe_imp_auto(i);
+        if (!auto_selected(j, au)) continue;
         const PeImpTarget *tg;
         PeImpAsset a;
         char builder[64], folder[1100], game[16], why[240] = "", log[160] = "", label[96], what[160];
@@ -329,12 +346,14 @@ static void prepare_enemies(PeImportJob *j) {
     char builder[64];
     snprintf(builder, sizeof builder, "pe_import 1, %s %u", tg->module, tg->version);
     char path[1200], temp[1232];
-    snprintf(path, sizeof path, "%s/enemy-report.tsv", j->store);
+    snprintf(path, sizeof path, "%s/%s%s", j->store, j->game ? j->game : "",
+             j->game ? "-enemy-report.tsv" : "enemy-report.tsv");
     snprintf(temp, sizeof temp, "%s.tmp", path);
     FILE *report = fopen(temp, "wb");
     if (report) fputs("Asset\tStatus\tAnimation coverage\tAudio coverage\n", report);
     for (int r = 0; r < pe_imp_readers(); r++) {
         const char *game = pe_imp_reader(r)->game;
+        if (j->game && strcmp(j->game, game)) continue;
         int seen = 0;
         for (int earlier = 0; earlier < r; earlier++)
             if (!strcmp(game, pe_imp_reader(earlier)->game)) seen = 1;
@@ -383,7 +402,9 @@ void pe_import_job_run(PeImportJob *j) {
     j->games[0] = j->problem[0] = j->built_names[0] = j->missing_discs[0] = 0;
     j->enemies_built = j->enemies_current = j->enemies_failed = 0;
     j->enemies_complete = j->enemies_partial = j->enemy_report_saved = 0;
-    scan(j);
-    build_autos(j);
+    if (!j->enemies_only) {
+        scan(j);
+        build_autos(j);
+    }
     if (j->prepare_enemies) prepare_enemies(j);
 }

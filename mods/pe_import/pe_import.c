@@ -30,7 +30,7 @@ static PeImportJob s_job;
 static SDL_Thread *s_thread;
 static SDL_AtomicInt s_state;                 /* 0 idle, 1 working, 2 done (to be published) */
 static int s_started;
-static int s_prepare_enemies;
+static int s_prepare_enemies, s_re2_only;
 static char s_auto[400] = "starting";
 static char s_scan[240] = "-";
 static char s_build[240] = "-";
@@ -43,6 +43,7 @@ static char s_folders_file[1100];
 static SDL_AtomicInt s_picked;                /* 1: s_pick_path holds a folder from the picker */
 static char s_pick_path[1100];
 static int start_job(void);
+static int start_import(const char *game, int prepare, int enemies_only);
 static void poll(void);
 
 static void folders_load(void) {
@@ -627,16 +628,22 @@ static int worker(void *user) {
 }
 
 static int start_job(void) {
+    return start_import(s_re2_only ? "re2" : NULL, s_prepare_enemies, 0);
+}
+
+static int start_import(const char *game, int prepare, int enemies_only) {
     if (SDL_GetAtomicInt(&s_state) != 0) return 0;
     SDL_SetAtomicInt(&s_state, 1);
-    snprintf(s_auto, sizeof s_auto, "working: reading your disc images and building...");
+    if (!enemies_only) snprintf(s_auto, sizeof s_auto, "working: reading your disc images and building...");
     if (!s_lock) s_lock = SDL_CreateMutex();
     if (s_lock) SDL_LockMutex(s_lock);
     memset(&s_prog, 0, sizeof s_prog);
     s_builds_said = 0;
     if (s_lock) SDL_UnlockMutex(s_lock);
     s_job.progress = &k_job_progress, s_job.step = &k_step_progress;
-    s_job.prepare_enemies = s_prepare_enemies;
+    s_job.game = game;
+    s_job.prepare_enemies = prepare;
+    s_job.enemies_only = enemies_only;
     if (!(s_thread = SDL_CreateThread(worker, "pe_import", NULL))) {
         pe_import_job_run(&s_job);                                    /* no threads: do it here */
         SDL_SetAtomicInt(&s_state, 2);
@@ -654,19 +661,23 @@ static void publish(void) {
         const PeWardrobePacksApi *w = pe_service_get("wardrobe_packs", 1);
         if (w && w->struct_size >= sizeof *w) n = w->add_new(added, sizeof added);
     }
-    int ready = j->built + j->current;
-    if (j->failed) snprintf(s_auto, sizeof s_auto, "%d costume%s ready; problem: %s", ready, ready == 1 ? "" : "s", j->problem);
-    else if (j->missing) snprintf(s_auto, sizeof s_auto, "%d costume%s ready; for the rest, add: %s", ready, ready == 1 ? "" : "s", j->missing_discs);
-    else snprintf(s_auto, sizeof s_auto, "all %d costume%s ready", ready, ready == 1 ? "" : "s");
-    snprintf(s_scan, sizeof s_scan, "%d new disc%s read, %d unchanged (%s); %d not supported yet", j->discs_read,
-             j->discs_read == 1 ? "" : "s", j->unchanged, j->games[0] ? j->games : "none", j->unknown);
+    if (!j->enemies_only) {
+        int ready = j->built + j->current;
+        if (j->failed) snprintf(s_auto, sizeof s_auto, "%d costume%s ready; problem: %s", ready, ready == 1 ? "" : "s", j->problem);
+        else if (j->missing) snprintf(s_auto, sizeof s_auto, "%d costume%s ready; for the rest, add: %s", ready, ready == 1 ? "" : "s", j->missing_discs);
+        else snprintf(s_auto, sizeof s_auto, "all %d costume%s ready", ready, ready == 1 ? "" : "s");
+        snprintf(s_scan, sizeof s_scan, "%s: %d new disc%s read, %d unchanged (%s); %d unsupported; %d failed",
+                 j->game ? "RE2" : "All games", j->discs_read,
+                 j->discs_read == 1 ? "" : "s", j->unchanged, j->games[0] ? j->games : "none", j->unknown, j->failed);
+    }
     if (j->prepare_enemies) {
         snprintf(s_enemy_build_summary, sizeof s_enemy_build_summary, "%d complete, %d incomplete, %d failed%s",
                  j->enemies_complete, j->enemies_partial, j->enemies_failed,
                  j->enemy_report_saved ? "" : " (report unavailable)");
-        pe_mod_log(MOD_ID, "enemy preparation: %s", s_enemy_build_summary);
+        pe_mod_log(MOD_ID, "%s enemy preparation: %s", j->game ? "RE2" : "All games", s_enemy_build_summary);
+        if (j->enemies_only) pe_toast(s_enemy_build_summary);
     }
-    pe_mod_log(MOD_ID, "automatic import: %s; scan: %s; built: %s", s_auto, s_scan, j->built_names[0] ? j->built_names : "nothing new");
+    if (!j->enemies_only) pe_mod_log(MOD_ID, "automatic import: %s; scan: %s; built: %s", s_auto, s_scan, j->built_names[0] ? j->built_names : "nothing new");
     if (n) {
         char msg[480];
         snprintf(msg, sizeof msg, "New in the Wardrobe: %s", added);
@@ -701,6 +712,16 @@ static int on_frame(void *ctx, void *user) {
 static void scan_again(void) {
     if (!start_job()) pe_toast("Import: already working");
     else pe_toast("Import: reading your disc images...");
+}
+
+static void scan_re2(void) {
+    if (!start_import("re2", 0, 0)) pe_toast("Import: already working");
+    else pe_toast("Import: scanning Resident Evil 2");
+}
+
+static void prepare_re2(void) {
+    if (!start_import("re2", 1, 1)) pe_toast("Import: already working");
+    else pe_toast("Import: preparing Resident Evil 2 enemy packs");
 }
 
 /* ---- by hand: any catalogued model ---- */
@@ -813,9 +834,12 @@ static int import_init(void) {
     pe_menu_register_action(0, "Add a folder", "Pick a folder that holds disc images (loose or one game per subfolder); it's read at once and at every start.", add_folder);
     pe_menu_register_action(0, "Forget added folders", "Stop reading the added folders. Costumes already built stay.", forget_folders);
     pe_menu_register_action(0, "Scan again", "Reads new disc images and builds what's missing. Runs by itself when the game starts.", scan_again);
+    pe_menu_register_toggle(0, "Only scan RE2", "Limit automatic and manual rescans to Resident Evil 2. Existing imports stay available.", &s_re2_only, NULL);
+    pe_menu_register_action(0, "Scan RE2", "Scan Resident Evil 2 without bulk enemy preparation.", scan_re2);
+    pe_menu_register_action(0, "Prepare RE2 enemy packs", "Build missing Resident Evil 2 packs from the store without rescanning discs.", prepare_re2);
     pe_menu_register_info(0, "Last scan", "What the last scan found.", text_scan);
     pe_menu_register_toggle(0, "Prepare enemy packs", "Builds missing or changed enemy packs in the background after a disc scan. Use Scan again to start now.", &s_prepare_enemies, NULL);
-    pe_menu_register_info(0, "Enemy packs", "See import/store/enemy-report.tsv for animation and audio coverage from the last preparation.", text_enemy_builds);
+    pe_menu_register_info(0, "Enemy packs", "See import/store/enemy-report.tsv or re2-enemy-report.tsv for animation and audio coverage.", text_enemy_builds);
     pe_menu_page("Build by hand", "Build a model from your scanned discs as a costume or enemy.", 10);
     pe_menu_register_dynamic_choice("Build by hand", "Model", "A model from your scanned discs.", &s_pick, MAX_ITEMS, item_count, item_name);
     pe_menu_register_info("Build by hand", "From", "Where the selected model comes from.", text_asset);
