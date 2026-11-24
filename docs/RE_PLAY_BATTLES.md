@@ -1,12 +1,20 @@
 # RE play battles: plan and decisions
 
 Parasite Eve battles inside imported Resident Evil rooms, for RE1, RE2 and RE3.
-This file is the plan we build from and the record of what was decided and why.
-Add a decision to the log before building something that changes the rules, and
-mark steps done as they land (with the commit).
+This is the plan we build from and the record of what was decided and why.
 
-Status: designed 2026-11-24. Phase 0 (battles start in place) is built for RE2;
-phases 1-6 are not.
+How to use it:
+
+- Add a decision to the log before building something that changes the rules.
+- Each phase lists its entry checks, its exit checks and its tests. A phase is
+  done when its exit checks pass; mark it with the commit.
+- Spikes (S#) are short experiments that settle a risk before a phase depends
+  on it. Record the result here, even when it's "fine".
+- Keep the module boundaries in "Architecture": a game or a host must be
+  addable without editing the shared battle code.
+
+Status (2026-11-24): phase 0 built for RE2. Spikes S1-S4 done; S5-S9 open.
+Phases 1-6 not started.
 
 ## The battle we want
 
@@ -19,160 +27,288 @@ uses a menu, the Escape command) and looks and moves like Resident Evil:
 - Enemies off screen keep closing in while battle time runs. One that comes
   into the picture joins, up to the cap; when one in the battle dies, the next
   in view takes its place.
+- Any enemy in the battle can be targeted, on screen or not; PE's weapon range
+  decides whether the shot is worth it.
 - Until the battle is resolved there is no door, examine, pick-up, typewriter,
   status screen or pause menu.
 - It is resolved when every enemy in it is dead, or Aya escapes with PE's
-  Escape command. Leaving the room is not a way out.
-- After an escape the enemies stay where the battle left them, and a grace
-  period keeps the same enemy from pulling her straight back in.
+  Escape command. After an escape the enemies stay where the battle left them,
+  and a grace period keeps the same enemy from pulling her straight back in.
 
 ## Decision log
 
-Newest last. Each entry: what, why, and where it lives.
+Newest last. A decision changes only by adding a new entry that replaces it.
 
 | # | Date | Decision | Why |
 |---|------|----------|-----|
 | D1 | 2026-11-24 | Battles start in place: the mod runs PE's battle entry (opcode 85's steps, `Battle_StartEncounter(2)`) without a PE room battle; RE2 encounters no longer travel to the Day 1 sewer. | The trip showed the sewer, its flash and its rats. Opcode 85 is room-independent; the imported enemy is the mod's own actor. |
-| D2 | 2026-11-24 | The RE room stays drawn while a battle sets up and the battle plays in front of it (the backdrop). No black cover. | The user wants a seamless transition. |
+| D2 | 2026-11-24 | The RE room stays drawn while a battle sets up and the battle plays in front of it (the backdrop). No black cover. | A seamless transition. |
 | D3 | 2026-11-24 | The hidden PE room under an imported game started from the title is a Central Park path (map 66, story 0xE4). | Its Aya (model bank 12) has battle moves; Carnegie Hall's (bank 11) folded up in battle, the sewer (bank 10) drew her wrong, map 59 had a flashing police car. |
 | D4 | 2026-11-24 | Enemies start a battle where they stood beside Aya in the room, and freeze whenever PE's own enemies would (mode not 0, flags 4 or 0x100). | They teleported away and kept moving through her menu. |
 | D5 | 2026-11-24 | Aya's battle steps follow the RE room's colliders, not the hidden PE room's floor. | Battle borders were tighter than the field's. |
-| D6 | 2026-11-24 | Option 3: fight across the room's cameras; enemies coming into view join. | The ideal way to play, chosen over a one-camera arena and a whole-room battle. |
+| D6 | 2026-11-24 | Fight across the room's cameras; enemies coming into view join (option 3). | Chosen over a one-camera arena and a whole-room battle. |
 | D7 | 2026-11-24 | Off-screen enemies keep closing in on Aya while battle time runs. | RE's enemies pursue; they come into view by themselves. |
 | D8 | 2026-11-24 | The room's foreground masks and effects are drawn in battle. | Not drawing them was unfinished work, not a choice. |
-| D9 | 2026-11-24 | Boss and story fights follow the same rules, and enemies the original game brings into that fight (G's embryos, for one) join it. | As in RE. |
-| D10 | 2026-11-24 | Proposed, to confirm: any enemy in the battle can be targeted, on screen or not (all are in Aya's room; one in another room never joins). PE's range still applies: a target past the weapon's `range` is marked out of range (`Battle_CycleTarget`) and gets PE's out-of-range treatment. Targets on screen come first in the default and the cycling order, nearest first, then off-screen ones by distance; an off-screen target gets a marker at the screen's edge. | RE lets you shoot what you can't see; PE makes distance cost. Together: no blind spot when the camera changes, but closing in still pays, which suits enemies that keep coming (D7). |
+| D9 | 2026-11-24 | Boss and story fights follow the same rules, and enemies the original game brings into that fight (G's embryos) join it. | As in RE. |
+| D10 | 2026-11-24 | Any enemy in the battle can be targeted, on screen or not; only enemies in Aya's room are ever in it. PE's range applies (`Battle_CheckEvasion`: distance scaled to the weapon's range, hit odds fall past 500 and 800, some actions can't hit past 1000). On-screen targets come first in the default and the cycling order, nearest first, then off-screen ones; an off-screen target gets a marker at the screen's edge. | RE lets you shoot what you can't see; PE makes distance cost. No blind spot at a camera change, and closing in still pays. Accepted by the user. |
 | D11 | 2026-11-24 | At most 6 enemies in a battle (the engine has 7 places; one is Aya); joining is rolling. | 5 RE2 rooms hold more than 6 (up to 16). |
 | D12 | 2026-11-24 | A battle stays on Aya's floor: only enemies on it join, and stairs and ramps act as walls until it is over. | 6 RE2 rooms have enemies on two floors. |
 | D13 | 2026-11-24 | No interaction until the battle is resolved: all enemies dead, or Escape. After an escape, Aya stays where she is with a grace period. | User's rule; RE play is already paused for the battle. |
-| D14 | 2026-11-24 | Battles are fought off the hidden PE room's map: Aya's native position moves to a battle anchor far from every zone the room has, and back afterwards. | The room's scripts are zones on her position: running in battle walked her into map 66's exit and changed rooms mid-battle. Refusing only the transfer leaves its locks set. |
-| D15 | 2026-11-24 | One battle system for RE1, RE2 and RE3: game rules are data and small callbacks per game; the battle logic is shared; the PE side is one adapter. | The user wants the same system across the three games, each adjusted where it differs. |
+| D14 | 2026-11-24 | Battles are fought off the hidden PE room's map: Aya's native position moves to a battle anchor far from every zone the room has, and back afterwards. | The room's scripts are zones on her position: running in battle walked her into map 66's exit mid-battle. Refusing only the transfer leaves its locks set. |
+| D15 | 2026-11-24 | One battle system for RE1, RE2 and RE3: per-game rules, a shared director, one adapter per host engine. | The same system across the three games, each adjusted where it differs. |
 
 ## Architecture
 
-Three layers, so a game or a host can change without touching the others.
+Three layers with one-way dependencies: adapter -> director -> rules. The
+director has no PE1 symbols (the portability check enforces it), so it can be
+tested headless and reused by another host (PE2).
 
-### Layer 1: game rules (per game, `mods/pe_re_play/`)
+```
+ pe_enemy_import (PE1 battle adapter)      pe_re_stage (PE1 room drawing)
+        |  PeRePlayApi (battle calls)              |  ReHost (camera, picture, view)
+        v                                          v
+             pe_re_battle  (director, shared, headless)
+                       |  PeReBattleRules (per game)
+                       v
+        pe_re_battle_re2.c / _re1.c / _re3.c   +  pe_re_session (rooms, scripts, chase)
+```
 
-What a game says about its own enemies and rooms. Data first, small callbacks
-where data isn't enough. One table per game, `PeReBattleRules`:
+### Layer 1: game rules (`mods/pe_re_play/pe_re_battle_rules.h`, one file per game)
 
-- `game`: "re1", "re2", "re3".
-- `combatant(placement)`: an enemy that fights (not a person, not a
-  scene-only actor). RE2 today: `pe_re2_proximity_enemy` and
-  `pe_re2_scene_only_enemy` (`mods/host/re_encounter_rooms.h`).
-- `pursues(placement)`: closes in on the player during battle time (D7). RE2
-  today: `pe_re2_ground_pursuit_kind`.
-- `encounter_radius(room)`, `group_radius(room)`: when an enemy reaching the
-  player starts a fight (RE2's street is wider).
-- `boss(room, placement)`: a story fight and what joins it (D9). RE2 today:
-  `pe_trip_select_boss`, `prepare_boss`, G's embryos (`pe_re2_g_attached_embryo`),
-  Mr. X (`pe_re2_mr_x_fightable`), canister and launcher finishes.
-- `floor_of(y)`, floor height (RE2: 1800 per floor, `PE_RE2_FLOOR_HEIGHT`).
-- Room access the shared layer already has per game: camera zones
-  (`pe_re_camera_at`; RE1's zones carry an own-area flag), collision
-  (`PeRe2RoomCollision`, `pe_imp_re2_slide_on`; RE1 and RE3 need their readers'
-  equivalents), enemy placements (`pe_re_session_enemies`).
+Data first; a callback only where data isn't enough. All take the session so
+they can read room state; none touch the host.
 
-RE2's helpers move from `re_encounter_rooms.h` into its table unchanged; RE1 and
-RE3 start with tables that say "no battles" until their rooms are playable.
+```c
+typedef struct PeReBattleRules {
+    const char *game;                       /* "re1", "re2", "re3" */
+    int max_foes;                           /* 6 (D11); a game may lower it */
+    double floor_height;                    /* room units per floor (RE2: 1800) */
+    int (*combatant)(const PeReSession *, const PeReEnemyPlacement *);   /* fights, not a person or scene actor */
+    int (*pursues)(const PeReSession *, const PeReEnemyPlacement *);     /* closes in during battle time (D7) */
+    double (*encounter_radius)(const PeReSession *);                     /* reaching the player starts a fight */
+    int (*boss)(const PeReSession *, PeReBossFight *out);                /* a story fight ready now, and its rules (D9) */
+    int (*joins_boss)(const PeReSession *, const PeReBossFight *, const PeReEnemyPlacement *);
+    void (*chase_step)(PeReSession *, PeReEnemyPlacement *, int, double x, double z, int floor);  /* one battle-time step */
+} PeReBattleRules;
 
-### Layer 2: battle director (shared, `mods/pe_re_play/`, headless-testable)
+const PeReBattleRules *pe_re_battle_rules(const char *game);   /* NULL: no battles in this game yet */
+```
 
-Game-neutral and engine-neutral: no PE1 symbols (the portability check holds).
-It owns one battle's state in RE room terms:
+RE2's table wraps what exists: `pe_re2_proximity_enemy`, `pe_re2_scene_only_enemy`,
+`pe_re2_ground_pursuit_kind` (`mods/host/re_encounter_rooms.h`),
+`pe_trip_select_boss`, `prepare_boss`, `pe_re2_g_attached_embryo`,
+`pe_re2_mr_x_fightable`, `pe_re_session_chase`. RE1 and RE3 return NULL until
+their rooms are playable (see "Per-game adjustments").
 
-- the roster: room slots in the battle, their order, the cap and the rolling
-  queue (D11);
-- each frame of battle time: the player's room position (from the adapter),
-  which camera that is in (`pe_re_camera_at`), which room enemies are on her
-  floor, alive, combatants and in the picture (`in_view`), and which of those
-  join (D6, D12);
-- off-screen pursuit (D7): RE play's chase (`advance_enemies`,
-  `pe_re_session_chase`) toward her room position, only while battle time runs;
-- the result: who died (slots), where survivors stand (written back to the
-  room's placements after an escape), the grace period (D13).
+### Layer 2: battle director (`mods/pe_re_play/pe_re_battle.{h,c}`)
 
-It talks to the host through `ReHost` (camera, picture, in_view) and to the
-battle adapter through `PeRePlayApi` (join, positions, result).
+Owns one battle in room terms. No drawing, no PE calls. Driven once per frame
+by the adapter; tells the adapter what to do through returned events.
 
-### Layer 3: PE battle adapter (`mods/pe_enemy_import/hosts/pe1/`, `mods/pe_re_play/hosts/pe1/`)
+```c
+typedef enum { PE_RE_BATTLE_IDLE, PE_RE_BATTLE_STARTING, PE_RE_BATTLE_RUNNING,
+               PE_RE_BATTLE_ENDING, PE_RE_BATTLE_GRACE } PeReBattlePhase;
 
-Everything that touches Parasite Eve's engine:
+typedef struct PeReBattleFoe {
+    uint8_t slot;          /* the room's enemy slot */
+    uint8_t state;         /* queued (seen, over the cap), joined, dead, left (escape) */
+    double x, z;           /* room position: from the room before joining, from the adapter after */
+} PeReBattleFoe;
 
-- start in place (D1, built: `pe_enemy_battle_start_here`), the off-map anchor
-  (D14), the movement lock and native position restored afterwards (built);
-- the backdrop (D2, built): the room's picture behind the battle; to add, the
-  camera swap (picture, masks, effects, view) when the director says so, and
-  masks and effects in battle (D8);
-- Aya's battle walk on the room's colliders (D5, built);
-- enemies: spawn at a room position mapped into the battle (D4, built for the
-  start; `pe_summon` already spawns mid-battle), freeze on time stop (built),
-  despawn and report on death;
-- targeting (D10): PE's `Battle_BuildTargetList` lists every live battle enemy
-  by distance; reorder it on screen first (the director's `in_view`), and draw
-  an edge marker for an off-screen target. Range and its out-of-range marking
-  are PE's own (`action->range` in `Battle_CycleTarget`).
+typedef struct PeReBattle {
+    PeReBattlePhase phase;
+    const PeReBattleRules *rules;
+    uint32_t stage, room; int floor;       /* the battle's room and floor (D12) */
+    double aya_x, aya_z;                   /* her room position, from the adapter each frame */
+    int camera;                            /* the room camera she's in */
+    PeReBattleFoe foe[PE_RE_ENEMIES_MAX];  /* every enemy the battle knows of, by slot */
+    int joined;                            /* live joined count (<= rules->max_foes) */
+    int grace_frames;                      /* D13 */
+} PeReBattle;
 
-The mapping between the two spaces is one formula, k = RE play's scale
-(`units_per_pe_unit`, about 5.7 at Aya's size 100):
+typedef enum { PE_RE_BATTLE_EV_NONE, PE_RE_BATTLE_EV_JOIN, PE_RE_BATTLE_EV_CAMERA,
+               PE_RE_BATTLE_EV_END } PeReBattleEventKind;
+typedef struct { PeReBattleEventKind kind; uint8_t slot; int camera; } PeReBattleEvent;
+
+/* Start from an encounter: the lead and whoever is in view (replaces the selection in
+ * pe_trip_select_approach). Fills the first joiners. 0, or -1 (nothing to fight). */
+int pe_re_battle_begin(PeReBattle *, PeReSession *, const PeReBattleRules *, const PeReEnemyPlacement *lead,
+                       int (*in_view)(const PeReEnemyPlacement *));
+/* Once per battle frame. time_runs: PE's battle clock runs (mode 0, no stop flags).
+ * Writes at most `max` events (join, camera change); returns how many. */
+int pe_re_battle_step(PeReBattle *, PeReSession *, double aya_x, double aya_z, int time_runs,
+                      int (*in_view)(const PeReEnemyPlacement *), PeReBattleEvent *ev, int max);
+void pe_re_battle_foe_moved(PeReBattle *, uint8_t slot, double x, double z);   /* adapter: a joined foe's room position */
+void pe_re_battle_foe_died(PeReBattle *, uint8_t slot);
+/* PE ended the battle: won (all dead) or escaped. Writes survivors' positions back to the
+ * room's placements and starts the grace period. */
+void pe_re_battle_end(PeReBattle *, PeReSession *, int escaped);
+int pe_re_battle_encounter_allowed(const PeReBattle *);   /* not in a battle or its grace period */
+```
+
+### Layer 3: the PE1 battle adapter
+
+Everything that touches Parasite Eve's engine. Two places, unchanged roles:
+
+- `mods/pe_enemy_import/hosts/pe1/`: starts the battle in place (D1, built:
+  `pe_enemy_battle_start_here`), moves Aya to the battle anchor and back (D14),
+  restores the movement lock (built), spawns joiners at mapped positions
+  (`pe_spawn`, as `pe_summon` already does mid-battle), reports each foe's room
+  position and death to the director, freezes on time stop (built), orders
+  targets on screen first and draws the edge marker (D10).
+- `mods/pe_re_play/hosts/pe1/pe_re_stage.c`: the backdrop (built), Aya's walk
+  on the room's colliders (D5, built), and new: swap camera, picture, masks and
+  effects when the director says so; draw masks and effects in battle (D8).
+
+The host interface grows by what the stage must offer the director (append-only,
+`struct_size` checked as today):
+
+```c
+/* re_host.h, appended */
+int (*in_view)(double x, double y, double z);          /* built */
+int (*battle_camera)(int camera);                      /* swap the backdrop to this camera: 0, or -1 */
+int (*battle_room_position)(double *x, double *z);     /* Aya's room position in battle (battle_walk's) */
+```
+
+### The two spaces
+
+PE battle positions and RE room positions convert by one formula, k = RE play's
+scale (`units_per_pe_unit`, 5.73 at Aya's size 100):
 
     pe = anchor + (re - room_at_start) / k
     re = room_at_start + (pe - anchor) * k
 
-PE positions are 16-bit (`posX.parts.integer`, +-32767): the anchor is chosen per
-battle so the whole room fits (about +-5,750 PE units at size 100, +-11,500 at 200)
-outside the host room's zones (map 66's are within about 6,000 of its centre).
+The anchor is chosen per battle (D14): the room's collision extent mapped at k
+must fit in PE's 16-bit positions beside the host room's zones (S1). Only the
+adapter and the stage use the formula; the director works in room units only.
+
+### One frame of a running battle
+
+1. PE runs its battle frame (`PE_HOOK_BATTLE_UPDATE`): the adapter learns
+   whether battle time runs (mode 0, no flags 4 or 0x100).
+2. The stage's camera hook (`on_camera`, backdrop on): Aya's step slides on the
+   room's colliders (`battle_walk`); her room position is known.
+3. The adapter calls `pe_re_battle_step` with that position. The director:
+   picks her camera (`pe_re_camera_at`) and emits CAMERA if it changed; if time
+   runs, moves pursuing enemies one step (`rules->chase_step`); finds enemies in
+   view, on her floor, combatant, not in the battle; queues them, and emits JOIN
+   for as many as the cap allows.
+4. The adapter acts: CAMERA -> `battle_camera`; JOIN -> load the pack if
+   needed, spawn at the mapped position, add to the trip's result.
+5. Each joined foe's position goes back to the director (`foe_moved`); deaths
+   (`foe_died`) free a place for the next in the queue.
+6. PE ends the battle: the adapter calls `pe_re_battle_end`, restores Aya's
+   native position, the movement lock, and resumes RE play.
+
+### Invariants (checked by tests and logged when broken)
+
+- I1: while a battle runs, Aya's native position is at the battle anchor's side
+  of the map; outside battles it is where RE play holds it.
+- I2: joined live foes <= `rules->max_foes`; every joined slot has one PE actor.
+- I3: room -> PE -> room round trip moves a point by less than 1 room unit.
+- I4: RE play is paused from battle start to battle end; no RE zone, door or
+  menu runs in between.
+- I5: no PE room transfer happens during a battle (`g_SceneDispatchToken`
+  unchanged).
+- I6: after the battle, the movement lock is what it was before it.
+
+## Spikes
+
+Settle each before the phase that needs it.
+
+| # | Question | Result |
+|---|----------|--------|
+| S1 | Does every room fit PE's 16-bit positions beside the host's zones, at every Aya size? | Done 2026-11-24. Widest RE2 room 1-03 spans 64,000 room units: 5,585 PE units at size 50, 11,169 at 100, 22,339 at 200. All 252 room states fit with 8,000 units of zone clearance. |
+| S2 | What does range do to a shot? | Done 2026-11-24. `Battle_CheckEvasion`: distance x 1000 / weapon range; hit odds bands at 500 and 800; some actions can't hit past 1000. Gap found: see S5. |
+| S3 | Do RE1 and RE3 rooms import what battles need? | Done 2026-11-24. Collision (COLL) and camera zones are imported for all three by the shared reader (`pe_imp_rdt.c`). Missing for RE1/RE3: RE play's script runtime and collision reader are RE2's; that is RE play's port, a prerequisite, not battle work. |
+| S4 | Can pursuit run while RE play is paused? | Done 2026-11-24. `pe_re_session_chase` takes the player's position, floor and collision as arguments: it can be driven with Aya's battle position. It's RE2-only today (moves into RE2's rules). |
+| S5 | Battle distances scale with Aya's size setting (k). At size 200 every enemy is twice as far in PE units, so weapons lose range. Fix k for battles (size 100's), or scale ranges? | Open. Needs a decision before phase 1. |
+| S6 | Does Aya at the off-map anchor render, shadow, light and sound as in place (positional sound, `g_GeomScroll`)? | Open. Before phase 1. |
+| S7 | Can the stage swap camera, picture and masks while the backdrop is on, and how long does a swap take? | Open. Before phase 3. |
+| S8 | Two enemy kinds in one battle, the second joining mid-battle: VRAM for both packs (rooms 1-03, 6-0E)? | Open. Before phase 4. |
+| S9 | Do masks and effects draw correctly over battle actors (order-table depths in battle)? | Open. Before phase 3. |
+
+## Phases
+
+Each phase: entry checks, what is built, exit checks (harness, from PE's title
+into the named room with the user's store), tests.
+
+0. **Battles in place (RE2).** Built: D1-D5 (c383bf512, a7e42b88f, 1f1b56ae6,
+   9d0db2f64, bdb868a05).
+1. **Off-map anchor (D14).** Entry: S5 decided, S6 done.
+   Build: anchor choice from the room's extent; native move at start, back at
+   end; I1, I5, I6 logged. Exit: 1-00, run the length of the street in a
+   battle; the PE room never changes; the battle ends normally.
+   Tests: T1, T2.
+2. **Rules tables and director skeleton (D15).** Entry: phase 1.
+   Build: `PeReBattleRules` for RE2 from today's helpers, NULL for RE1/RE3;
+   `pe_re_battle_begin` takes over `pe_trip_select_approach`'s selection; the
+   adapter calls the director but behaviour is unchanged. Exit: the five story
+   routes finish; battles start with the same enemies as before.
+   Tests: T3, T4, the route tests.
+3. **Camera follows, masks and effects (D6, D8).** Entry: S7, S9.
+   Build: `battle_camera`, `battle_room_position`; CAMERA events; masks and
+   effects in battle. Exit: 1-00, a battle from camera 0 into camera 1; the
+   picture, foreground and fires change with her; aiming still works. Tests: T5.
+4. **Join on sight, rolling cap, targeting (D6, D10, D11, D12).** Entry: S8.
+   Build: JOIN events, queue, spawn mid-battle, trip result per joiner, target
+   order and edge marker. Exit: 1-00's six zombies across two cameras all end
+   up in the battle; 2-05's ten come in waves of 6; 1-03 only takes enemies on
+   Aya's floor; an off-screen target shows its marker. Tests: T6, T7, T8.
+5. **Pursuit, escape, write-back, grace (D7, D13).** Build: `chase_step` in
+   battle time, `pe_re_battle_end`, grace. Exit: a zombie off screen walks into
+   view and joins; after Escape the survivors stand where the battle left them
+   and no battle starts during the grace period. Tests: T9, T10.
+6. **Bosses and story fights (D9).** Build: `boss`, `joins_boss` for RE2.
+   Exit: G's embryos join the G fight; the canister and launcher finishes still
+   work; the five story routes finish. Tests: T11, the route tests.
+
+RE1 and RE3: once their rooms are playable, fill in their rules tables and run
+phases 3-6's exit checks in one room of each.
+
+## Tests
+
+Headless tests (`tests/pe_mod_re_battle_test.c`, new) use synthetic rooms and a
+fake `in_view`; they need no disc.
+
+| # | Test | Phase |
+|---|------|-------|
+| T1 | Anchor choice: a room's extent at k fits the 16-bit space beside a given zone box; refuses when it can't. | 1 |
+| T2 | Round trip room -> PE -> room within 1 unit (I3), at k for sizes 50, 100, 200. | 1 |
+| T3 | RE2 rules: combatant and pursuer kinds match today's helpers for every RE2 kind. | 2 |
+| T4 | `begin`: lead plus in-view enemies on the floor, nearest first, cap 6; people and scene actors left out. | 2 |
+| T5 | CAMERA event when Aya's position crosses a camera zone; none while she stays. | 3 |
+| T6 | JOIN: an enemy entering view joins; a full battle queues it; a death lets the next in. | 4 |
+| T7 | Floors: an enemy on another floor never joins. | 4 |
+| T8 | Target order: in view first by distance, then out of view by distance. | 4 |
+| T9 | Pursuit moves only while time runs; positions are written back after an escape. | 5 |
+| T10 | Grace: no encounter for its length after an escape; encounters again after. | 5 |
+| T11 | Boss: who joins a boss fight follows `joins_boss`. | 6 |
+
+Disc tests: `mod-re-session` and the five story routes (`mod-re-route`) after
+every phase. Harness scenes as in each phase's exit check.
+
+Logs: one line per battle event, so a play-test report shows what happened:
+`battle: start 1-00 floor 0 camera 0 foes 2`, `battle: camera 1`,
+`battle: join slot 3 (queue 1)`, `battle: death slot 3`,
+`battle: end won|escaped survivors 2`, and any broken invariant.
 
 ## Per-game adjustments
 
 | | RE2 | RE1 | RE3 |
 |---|---|---|---|
-| Rooms playable in RE play | yes | not yet | not yet |
+| Rooms playable in RE play | yes | not yet (scripts, collision reader) | not yet (scripts, collision reader) |
+| Collision and camera zones imported | yes | yes (`pe_imp_rdt.c`) | yes (`pe_imp_rdt.c`) |
 | Enemy and person kinds | known (`re_encounter_rooms.h`) | to map (`pe_src_re1_emd.c`) | to map (`pe_src_re3_emd.c`) |
-| Bosses and story fights | partly (G, Alligator, Tyrant, Mr. X) | to list | to list (Nemesis pursuit is its own rule) |
+| Pursuit | `pe_re_session_chase` | to define | to define; Nemesis follows between rooms, but joins only in Aya's room (D10) |
+| Bosses and story fights | G, Alligator, Tyrant, Mr. X (partly) | to list | to list |
 | Camera zones | `pe_re_camera_at` | own-area flag (`flag` 1) | to check |
-| Collision and floors | `PeRe2RoomCollision`, 1800 per floor | to read | to read |
-| Pursuit during battle | chase kinds known | to define | Nemesis follows between rooms: D10 keeps him out until he enters Aya's room |
 
-## Phases
-
-Each phase ends with its harness check and the tests below passing.
-
-0. **Battles in place (RE2).** Built: D1-D5 (commits c383bf512, a7e42b88f,
-   1f1b56ae6, 9d0db2f64, bdb868a05).
-1. **Off-map anchor.** D14. The trip moves Aya's native position to the anchor
-   at battle start and back at the end. Check: run the length of the street in
-   a battle; the hidden room never changes and the battle carries on.
-2. **Rules table and director skeleton.** D15. Move RE2's encounter helpers into
-   its `PeReBattleRules`; the director owns the roster and the in-view check
-   that today lives in `pe_trip_select_approach`. Behaviour unchanged. Check:
-   headless director tests with synthetic rooms; the route tests still finish.
-3. **Camera follows, masks and effects.** D6, D8. The director picks the camera
-   from Aya's room position; the stage swaps picture, masks, effects and view in
-   battle. Check: a street battle crossing from camera 0 to 1; the picture,
-   foreground and fires change with her.
-4. **Join on sight, rolling cap.** D6, D11, D12. Check: the street's six
-   zombies across two cameras all end up in the battle; 2-05's ten crows come in
-   waves of 6; 1-03 only takes enemies on Aya's floor.
-5. **Pursuit, escape and write-back.** D7, D13. Check: a zombie off screen
-   walks into view and joins; after an Escape the survivors stand where the
-   battle left them and no battle starts for the grace period.
-6. **Bosses and story fights.** D9. Check: G's embryos join the G fight; the
-   canister and launcher finishes still work; the five story routes finish.
-
-RE1 and RE3 follow once their rooms are playable: fill in their rules tables
-and run the same checks in one room of each.
-
-## Tests
-
-- Headless (`tests/`): the director with synthetic rooms per game: who starts a
-  fight, who joins and when, the cap's queue, floors, the grace period.
-- Session (`mod-re-session`) and the five story routes (`mod-re-route`): the
-  game still finishes, with battles reported the same way.
-- Harness scenes (from PE's title, the user's store): 1-00 street (two
-  cameras, six zombies), 2-05 (ten), 4-0B (sixteen, a swarm), 1-03 (two
-  floors), a boss room.
+Adding a game: its rules table, its collision and camera access in the shared
+layer, T3-T11 with its kinds, and one room's exit checks per phase. Adding a
+host engine: implement the three `ReHost` battle calls and an adapter that
+turns director events into its own battle; the director and rules stay as
+they are.
 
 ## RE2 survey (2026-11-24)
 
@@ -190,22 +326,33 @@ run, people (kinds 0x40 and up) left out:
 
 - Targets: `Battle_BuildTargetList` takes every live battle enemy, no range or
   visibility check, sorted by distance.
+- Range: `Battle_CheckEvasion` (see D10, S2).
 - Mid-battle spawns work (`pe_summon` for G's embryos, through `pe_spawn`).
-- The engine ends a battle when the last live enemy dies
-  (`Battle_StepEntityDeath`); Escape is `Battle_StepEscapeOrDeath`.
+- The engine has 7 enemy places (`g_BattleEnemySlots[7]`) and ends a battle when
+  the last live enemy dies (`Battle_StepEntityDeath`); Escape is
+  `Battle_StepEscapeOrDeath`.
 - PE room scripts test zones on Aya's position (`Script_PointInPoly`), then
   lock movement and change rooms (`Script_SetSceneFlag2000`,
-  `Entity_SetGlobalFlag1`, `Script_EncodeBarcode`); battle ends from scripts
-  are mode 8 (`Menu_SetModeState8`).
+  `Entity_SetGlobalFlag1`, `Script_EncodeBarcode`); scripted battle ends are
+  mode 8 (`Menu_SetModeState8`).
 - A room battle's script locks field movement (`g_FieldMoveLock` bit 1) and
   lifts it after; in-place battles restore it themselves.
 - RE play is paused for the battle: the room's scripts, zones and other enemies
-  don't run until it resumes (D7 changes that for pursuit only).
+  don't run until it resumes (D7 drives pursuit only).
+
+## Risks
+
+| Risk | Mitigation |
+|------|------------|
+| VRAM runs out with two packs plus effects and masks | S8 and S9 first; a refused joiner stays in the room and is logged |
+| A camera swap stalls the battle | S7 measures it; decode once per change, not per frame |
+| Host rooms other than map 66 have zones near the anchor | the anchor is chosen from the host's own collision extent (T1) |
+| Story scripts expect enemies where they were before a battle | write-back only after an escape; won battles report deaths as today |
+| Aya's size setting changes weapon range | S5 decides before phase 1 |
 
 ## Open questions
 
-- D10: confirm the proposed targeting rule (off-screen targets allowed, range applies, on-screen first, edge marker).
-- How long the grace period is, and whether it ends early once Aya has walked a
-  set distance from the survivors.
-- Whether a joining enemy gets an entrance (RE's own walk-in) or simply
-  appears where it stands.
+- S5: fix battle scale to Aya's size 100, or scale weapon ranges?
+- Grace period: how long, and does it end early once Aya has walked a set
+  distance away?
+- Does a joining enemy walk in with RE's own entrance, or appear where it stands?
