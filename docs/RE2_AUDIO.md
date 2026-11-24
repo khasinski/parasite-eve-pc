@@ -24,12 +24,17 @@ The PE1 host can play selected imported STR movies requested by RE2's
 Cross press skips the clip, and the host restores the room picture on exit.
 Missing assets and unresolved movie IDs leave the script free to continue.
 
-The initial mapping covers IDs 4, 8–13, with IDs 8, 10, 12 and 13 limited to
-the verified Leon filenames. After rescanning the original raw disc, MOV2
-imports preserve the video and XA sector positions. Playback places XA file 1,
-channel 1 on the 150-sector-per-second STR timeline and selects video frames
-from the audio stream's consumed source samples. If that track or the audio
-device is unavailable, the host uses its video clock. Older MOV1 imports
-continue to play silently at 15 fps until rescanned. Verify the timing and
-channel choice on both retail discs. Scenario-specific movie variants and
-movies that seek to a segment remain follow-up work.
+The room-script mapping covers IDs 1, 2, 4–14 and 17. Character-specific
+entries (8, 10, 12–14 and 17) use verified Leon filenames. MOV3 imports
+preserve STR frame numbers as well as the video and XA sector positions.
+This lets R200, R505 and Leon's R704 play the excerpt requested by the room
+script, using the seek and end frame from the original movie table. Rescan
+the original raw disc to enable excerpts. Older MOV2 imports retain
+whole-movie playback with audio, and MOV1 imports play silently at 15 fps.
+
+Playback places XA file 1, channel 1 on the 150-sector-per-second STR
+timeline and selects video frames from the audio stream's consumed source
+samples. If the track or audio device is unavailable, the host uses its
+video clock. Verify the timing, excerpt boundaries, and channel choice on
+retail discs. Claire-specific filenames and title-menu movies remain
+unmapped.

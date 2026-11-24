@@ -179,8 +179,9 @@ int pe_imp_imageset_save(const PeImpImageSet *set, const char *folder, char *why
 int pe_imp_imageset_load(const char *folder, PeImpImageSet **set, char *why, size_t n);
 
 /* Movie: ordered PS1 STR frames and XA records. MOV2 preserves the source
- * sector of each frame and audio record. MOV1 remains readable without timing. */
-#define PE_IMP_MOVIE_VERSION 2
+ * sector of each frame and audio record. MOV3 also keeps STR frame numbers.
+ * MOV1 remains readable without timing. */
+#define PE_IMP_MOVIE_VERSION 3
 #define PE_IMP_MOVIE_MAX (160u << 20)
 #define PE_IMP_MOVIE_SECTOR_HZ 150u
 enum { PE_IMP_XA_BOTH = 2, PE_IMP_XA_INDEXED = 3 };
@@ -190,14 +191,23 @@ typedef struct {
     uint8_t *frame_data, *audio;
     uint32_t frame_bytes, sectors;
     uint32_t *frame_sector, *audio_sector;   /* zero-based source sectors */
+    uint32_t *frame_number;                 /* frameCount from the STR header */
 } PeImpMovie;
+
+typedef struct {
+    uint32_t first_frame, end_frame;        /* decoded frame indexes, end excluded */
+    uint32_t start_sector, end_sector;      /* source sectors, end excluded */
+} PeImpMovieClip;
+/* Resolve an STR seek and include the first frame at or above last_number.
+ * Passing zero for both arguments plays the full movie. */
+int pe_imp_movie_clip(const PeImpMovie *m, uint32_t start_sector, uint32_t last_number, PeImpMovieClip *clip);
 /* Read STR video and optional compacted XA (without audio timing). */
 PeImpMovie *pe_imp_movie_from_str(const uint8_t *str, uint32_t size, const uint8_t *xa, uint32_t xa_size);
 /* As above with one indexed XA record per source sector, with holes zeroed. */
 PeImpMovie *pe_imp_movie_from_indexed_str(const uint8_t *str, uint32_t size, const uint8_t *xa, uint32_t xa_size);
 /* Decode one XA file/channel onto the movie's sector timeline. Returns owned
  * PCM, or NULL if no compatible timed track is present. */
-int16_t *pe_imp_movie_pcm(const PeImpMovie *m, unsigned file, unsigned channel,
+int16_t *pe_imp_movie_pcm(const PeImpMovie *m, const PeImpMovieClip *clip, unsigned file, unsigned channel,
                           uint32_t *frames, unsigned *rate, unsigned *channels);
 void pe_imp_movie_free(PeImpMovie *m);
 int pe_imp_movie_save(const PeImpMovie *m, const char *folder, char *why, size_t n);

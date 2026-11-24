@@ -587,21 +587,30 @@ static void stop_movie(void) {
     s_movie_playing = 0;
 }
 
-/* Whole-file entries confirmed in bio2-ds MOVIE.C and FILECODE.H. R200,
- * R505 and R704 also have alternate segment plays which need STR timing.
- * Character-specific filenames here are confirmed for Leon's disc. */
-static const char *movie_asset(unsigned id, unsigned player) {
-    switch (id) {
-    case 4: return "re2:movie/r10b";
-    case 8: return player == 0 ? "re2:movie/r108l" : NULL;
-    case 9: return "re2:movie/r109";
-    case 10: return player == 0 ? "re2:movie/r204l" : NULL;
-    case 11: return "re2:movie/r409";
-    case 12: return player == 0 ? "re2:movie/r700l" : NULL;
-    case 13: return player == 0 ? "re2:movie/r703l" : NULL;
-    default: return NULL;
-    }
-}
+typedef struct {
+    const char *asset;
+    unsigned start_sector, last_frame;
+    int leon_only, silent;
+} ReMovie;
+
+/* Room-script entries from Movie_tbl. The alternate excerpts seek to five
+ * sectors per table offset unit. Character-specific names are verified for Leon. */
+static const ReMovie s_movies[] = {
+    [1] = {.asset = "re2:movie/r200", .last_frame = 250},
+    [2] = {.asset = "re2:movie/r200", .last_frame = 146},
+    [4] = {.asset = "re2:movie/r10b"},
+    [5] = {.asset = "re2:movie/r200", .last_frame = 90},
+    [6] = {.asset = "re2:movie/r505", .last_frame = 598},
+    [7] = {.asset = "re2:movie/r505", .start_sector = 407 * 5, .last_frame = 598},
+    [8] = {.asset = "re2:movie/r108l", .leon_only = 1},
+    [9] = {.asset = "re2:movie/r109"},
+    [10] = {.asset = "re2:movie/r204l", .leon_only = 1},
+    [11] = {.asset = "re2:movie/r409"},
+    [12] = {.asset = "re2:movie/r700l", .leon_only = 1},
+    [13] = {.asset = "re2:movie/r703l", .leon_only = 1},
+    [14] = {.asset = "re2:movie/r704l", .last_frame = 9187, .leon_only = 1},
+    [17] = {.asset = "re2:movie/r704l", .start_sector = 4589 * 5, .last_frame = 9247, .leon_only = 1, .silent = 1},
+};
 
 static int movie_frame(void) {
     const ReHost *host = re_host();
@@ -611,9 +620,11 @@ static int movie_frame(void) {
     const int cross = (buttons & RE_HOST_CROSS) != 0;
     if (request) {
         s_session.run.movie_request = 0;
-        const char *asset = movie_asset(request - 1, s_session.player);
-        if (!asset || !RE_HOST_HAS(host, movie_start) || !RE_HOST_HAS(host, movie_tick) ||
-            !RE_HOST_HAS(host, movie_stop) || !host->movie_start(asset)) {
+        const unsigned id = request - 1;
+        const ReMovie *movie = id < sizeof s_movies / sizeof *s_movies ? &s_movies[id] : NULL;
+        if (!movie || !movie->asset || (movie->leon_only && s_session.player != 0) ||
+            !RE_HOST_HAS(host, movie_start) || !RE_HOST_HAS(host, movie_tick) || !RE_HOST_HAS(host, movie_stop) ||
+            !host->movie_start(movie->asset, movie->start_sector, movie->last_frame, movie->silent)) {
             pe_mod_log(MOD_ID, "Movie_on %u unavailable for player %u", request - 1, (unsigned)s_session.player);
             return 0;
         }

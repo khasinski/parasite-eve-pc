@@ -215,23 +215,53 @@ static void test_movie_timeline(void) {
     PeImpMovie *back;
     assert(!pe_imp_movie_load(folder, &back, NULL, 0));
     assert(back->frame_sector[1] == 10 && back->audio_sector[1] == 3);
+    assert(back->frame_number[0] == 0 && back->frame_number[1] == 2);
+    PeImpMovieClip clip;
+    assert(pe_imp_movie_clip(back, 0, 0, &clip));
     uint32_t frames;
     unsigned rate, channels;
-    int16_t *pcm = pe_imp_movie_pcm(back, 1, 1, &frames, &rate, &channels);
+    int16_t *pcm = pe_imp_movie_pcm(back, &clip, 1, 1, &frames, &rate, &channels);
     assert(pcm && frames == sectors * frames_per_sector && rate == 37800 && channels == 2);
     assert(pcm[0] == 0 && pcm[frames_per_sector * 2] == 4096 && pcm[frames_per_sector * 2 + 1] == 4096);
     assert(pcm[3 * frames_per_sector * 2] == 0 && pcm[10 * frames_per_sector * 2] == 0);
     assert(pcm[11 * frames_per_sector * 2] == 8192);
     free(pcm);
+
+    /* Seek past the first frame and XA packet, preserving the initial gap. */
+    assert(pe_imp_movie_clip(back, 8, 2, &clip));
+    assert(clip.first_frame == 1 && clip.end_frame == 2 && clip.start_sector == 8 && clip.end_sector == 12);
+    pcm = pe_imp_movie_pcm(back, &clip, 1, 1, &frames, &rate, &channels);
+    assert(pcm && frames == 4 * frames_per_sector && pcm[0] == 0 && pcm[3 * frames_per_sector * 2] == 8192);
+    free(pcm);
+    assert(pe_imp_movie_clip(back, 0, 1, &clip));
+    assert(clip.end_frame == 2);  /* threshold frame 1 was skipped, so play frame 2 */
+    assert(!pe_imp_movie_clip(back, 11, 2, &clip));
+    assert(!pe_imp_movie_clip(back, 8, 1, &clip));
+
+    back->frame_number[0] = 4;  /* a second sequence starts in the same stream */
+    assert(pe_imp_movie_clip(back, 0, 8, &clip));
+    assert(clip.end_frame == 1 && clip.end_sector == 10);
+    pcm = pe_imp_movie_pcm(back, &clip, 1, 1, &frames, &rate, &channels);
+    assert(pcm && frames == 10 * frames_per_sector && pcm[frames_per_sector * 2] == 4096);
+    free(pcm);
+    pe_imp_movie_free(back);
+
+    /* MOV2 has whole-movie timing but lacks the frame numbers needed for excerpts. */
+    PeImpMovie legacy = *movie;
+    legacy.frame_number = NULL;
+    assert(!pe_imp_movie_save(&legacy, folder, NULL, 0));
+    assert(!pe_imp_movie_load(folder, &back, NULL, 0));
+    assert(!back->frame_number && pe_imp_movie_clip(back, 0, 0, &clip));
+    assert(!pe_imp_movie_clip(back, 8, 2, &clip));
     pe_imp_movie_free(back);
 
     /* MOV1 stays readable and its compacted audio has no timeline. */
-    PeImpMovie legacy = *movie;
     legacy.frame_sector = legacy.audio_sector = NULL;
     assert(!pe_imp_movie_save(&legacy, folder, NULL, 0));
     assert(!pe_imp_movie_load(folder, &back, NULL, 0));
     assert(back->frames == 2 && back->audio_records == 3 && !back->frame_sector && !back->audio_sector);
-    assert(!pe_imp_movie_pcm(back, 1, 1, &frames, &rate, &channels));
+    assert(pe_imp_movie_clip(back, 0, 0, &clip));
+    assert(!pe_imp_movie_pcm(back, &clip, 1, 1, &frames, &rate, &channels));
     pe_imp_movie_free(back);
     pe_imp_movie_free(movie);
 }

@@ -21,7 +21,7 @@ static void put32(uint8_t *p, uint32_t v) { for (int i = 0; i < 4; i++) p[i] = (
 void pe_imp_movie_free(PeImpMovie *m) {
     if (!m) return;
     free(m->offset), free(m->size), free(m->frame_data), free(m->audio);
-    free(m->frame_sector), free(m->audio_sector);
+    free(m->frame_sector), free(m->audio_sector), free(m->frame_number);
     free(m);
 }
 
@@ -34,8 +34,9 @@ static PeImpMovie *movie_from_str(const uint8_t *str, uint32_t size, const uint8
     m->offset = malloc((size_t)cap * sizeof *m->offset);
     m->size = malloc((size_t)cap * sizeof *m->size);
     m->frame_sector = malloc((size_t)cap * sizeof *m->frame_sector);
+    m->frame_number = malloc((size_t)cap * sizeof *m->frame_number);
     m->frame_data = malloc((size_t)size + 4);
-    if (!m->offset || !m->size || !m->frame_sector || !m->frame_data) goto fail;
+    if (!m->offset || !m->size || !m->frame_sector || !m->frame_number || !m->frame_data) goto fail;
     uint32_t number = 0, chunks = 0, expected = 0, bytes = 0, sector = 0;
     for (uint32_t at = 0; at + SECTOR_BYTES <= size && m->frames < cap; at += SECTOR_BYTES) {
         const uint8_t *s = str + at;
@@ -61,6 +62,7 @@ static PeImpMovie *movie_from_str(const uint8_t *str, uint32_t size, const uint8
         if (++chunks == expected) {
             m->offset[m->frames] = m->frame_bytes;
             m->size[m->frames] = bytes;
+            m->frame_number[m->frames] = number;
             m->frame_sector[m->frames++] = sector;
             m->frame_bytes += bytes;
             expected = 0;
@@ -97,32 +99,54 @@ PeImpMovie *pe_imp_movie_from_indexed_str(const uint8_t *str, uint32_t size, con
     return movie_from_str(str, size, xa, xa_size, 1);
 }
 
-int16_t *pe_imp_movie_pcm(const PeImpMovie *m, unsigned file, unsigned channel,
+int pe_imp_movie_clip(const PeImpMovie *m, uint32_t start_sector, uint32_t last_number, PeImpMovieClip *clip) {
+    *clip = (PeImpMovieClip){0, m->frames, 0, m->sectors};
+    if (!start_sector && !last_number) return m->frames != 0;
+    if (!m->frame_number || !m->frame_sector) return 0;
+
+    uint32_t first = 0;
+    while (first < m->frames && m->frame_sector[first] < start_sector) first++;
+    if (first == m->frames || (last_number && m->frame_number[first] > last_number)) return 0;
+
+    uint32_t last = first;
+    /* The original player stops after displaying the threshold frame, even
+     * when the source skips that exact number. A wrap also ends the clip. */
+    while (last + 1 < m->frames &&
+           (!last_number || m->frame_number[last] < last_number) &&
+           m->frame_number[last + 1] >= m->frame_number[last]) last++;
+    *clip = (PeImpMovieClip){first, last + 1, start_sector,
+                            last + 1 < m->frames ? m->frame_sector[last + 1] : m->sectors};
+    return 1;
+}
+
+int16_t *pe_imp_movie_pcm(const PeImpMovie *m, const PeImpMovieClip *clip, unsigned file, unsigned channel,
                           uint32_t *frames, unsigned *rate, unsigned *channels) {
     *frames = *rate = *channels = 0;
-    if (!m->audio_sector) return NULL;
+    if (!m->audio_sector || clip->start_sector >= clip->end_sector || clip->end_sector > m->sectors) return NULL;
     int16_t *pcm = NULL;
     unsigned coding = 0;
     int32_t state[2][2] = {{0}};
     uint32_t copied_end = 0;
     for (uint32_t i = 0; i < m->audio_records; i++) {
         const uint8_t *record = m->audio + (size_t)i * PE_IMP_XA_RECORD;
-        if (record[0] != file || record[1] != channel) continue;
+        const uint32_t sector = m->audio_sector[i];
+        if (sector < clip->start_sector || sector >= clip->end_sector ||
+            record[0] != file || record[1] != channel) continue;
         if (!pcm) {
             coding = record[3] & 0x15;
             *rate = coding & 4 ? 18900 : 37800;
             *channels = coding & 1 ? 2 : 1;
-            const uint64_t count = (uint64_t)m->sectors * (*rate / PE_IMP_MOVIE_SECTOR_HZ);
+            const uint64_t count = (uint64_t)(clip->end_sector - clip->start_sector) * (*rate / PE_IMP_MOVIE_SECTOR_HZ);
             if (!count || count * *channels * sizeof *pcm > PE_IMP_MOVIE_MAX) return NULL;
             *frames = (uint32_t)count;
             pcm = calloc((size_t)*frames * *channels, sizeof *pcm);
             if (!pcm) return NULL;
         }
-        if ((record[3] & 0x15) != coding || m->audio_sector[i] >= m->sectors) {
+        if ((record[3] & 0x15) != coding) {
             free(pcm);
             return NULL;
         }
-        const uint32_t first = m->audio_sector[i] * (*rate / PE_IMP_MOVIE_SECTOR_HZ);
+        const uint32_t first = (sector - clip->start_sector) * (*rate / PE_IMP_MOVIE_SECTOR_HZ);
         int16_t decoded[4032];
         unsigned count = pe_imp_xa_decode(record + 4, coding, state, decoded);
         if (count > *frames - first) count = *frames - first;
@@ -168,15 +192,18 @@ int pe_imp_movie_save(const PeImpMovie *m, const char *folder, char *why, size_t
     FILE *f = open_movie(folder, "wb");
     if (!f) return bad(why, n);
     const int timed = m->frame_sector != NULL;
-    uint8_t h[28] = {'M', 'O', 'V', timed ? '2' : '1'};
-    put32(h + 4, timed ? 2 : 1), put32(h + 8, m->width), put32(h + 12, m->height), put32(h + 16, m->frames);
+    const int numbered = timed && m->frame_number;
+    const unsigned version = numbered ? 3 : timed ? 2 : 1;
+    uint8_t h[28] = {'M', 'O', 'V', (uint8_t)('0' + version)};
+    put32(h + 4, version), put32(h + 8, m->width), put32(h + 12, m->height), put32(h + 16, m->frames);
     put32(h + 20, m->audio_records), put32(h + 24, m->sectors);
     int ok = fwrite(h, timed ? 28 : 24, 1, f) == 1;
     for (uint32_t i = 0; ok && i < m->frames; i++) {
-        uint8_t e[12];
+        uint8_t e[16];
         put32(e, m->offset[i]), put32(e + 4, m->size[i]);
         if (timed) put32(e + 8, m->frame_sector[i]);
-        ok = fwrite(e, timed ? 12 : 8, 1, f) == 1;
+        if (numbered) put32(e + 12, m->frame_number[i]);
+        ok = fwrite(e, numbered ? 16 : timed ? 12 : 8, 1, f) == 1;
     }
     if (timed) for (uint32_t i = 0; ok && i < m->audio_records; i++) {
         uint8_t e[4];
@@ -197,13 +224,15 @@ int pe_imp_movie_load(const char *folder, PeImpMovie **out, char *why, size_t n)
     uint8_t h[28];
     PeImpMovie *m = calloc(1, sizeof *m);
     if (!m || fread(h, 24, 1, f) != 1) goto fail;
-    const int timed = !memcmp(h, "MOV2", 4) && le32(h + 4) == 2;
+    const int numbered = !memcmp(h, "MOV3", 4) && le32(h + 4) == 3;
+    const int timed = numbered || (!memcmp(h, "MOV2", 4) && le32(h + 4) == 2);
     if (!timed && (memcmp(h, "MOV1", 4) || le32(h + 4) != 1)) goto fail;
     if (timed && fread(h + 24, 4, 1, f) != 1) goto fail;
     const long header = timed ? 28 : 24;
     m->width = le32(h + 8), m->height = le32(h + 12), m->frames = le32(h + 16), m->audio_records = le32(h + 20);
     m->sectors = timed ? le32(h + 24) : 0;
-    const uint64_t index = (uint64_t)m->frames * (timed ? 12 : 8) + (timed ? (uint64_t)m->audio_records * 4 : 0);
+    const unsigned frame_index_size = numbered ? 16 : timed ? 12 : 8;
+    const uint64_t index = (uint64_t)m->frames * frame_index_size + (timed ? (uint64_t)m->audio_records * 4 : 0);
     const uint64_t audio = (uint64_t)m->audio_records * PE_IMP_XA_RECORD;
     if (fseek(f, 0, SEEK_END)) goto fail;
     const long end = ftell(f);
@@ -218,13 +247,16 @@ int pe_imp_movie_load(const char *folder, PeImpMovie **out, char *why, size_t n)
         m->frame_sector = malloc((size_t)m->frames * sizeof *m->frame_sector);
         if (audio) m->audio_sector = malloc((size_t)m->audio_records * sizeof *m->audio_sector);
     }
+    if (numbered) m->frame_number = malloc((size_t)m->frames * sizeof *m->frame_number);
     if (!m->offset || !m->size || !m->frame_data || (audio && !m->audio) ||
+        (numbered && !m->frame_number) ||
         (timed && (!m->frame_sector || (audio && !m->audio_sector)))) goto fail;
     for (uint32_t i = 0; i < m->frames; i++) {
-        uint8_t e[12];
-        if (fread(e, timed ? 12 : 8, 1, f) != 1) goto fail;
+        uint8_t e[16];
+        if (fread(e, frame_index_size, 1, f) != 1) goto fail;
         m->offset[i] = le32(e), m->size[i] = le32(e + 4);
         if (timed) m->frame_sector[i] = le32(e + 8);
+        if (numbered) m->frame_number[i] = le32(e + 12);
     }
     if (m->audio_sector) {
         for (uint32_t i = 0; i < m->audio_records; i++) {

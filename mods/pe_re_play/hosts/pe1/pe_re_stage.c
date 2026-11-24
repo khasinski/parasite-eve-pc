@@ -84,6 +84,7 @@ static int s_shade = 128, s_curtain, s_hold;           /* a door's fade: picture
 static uint16_t *s_original_picture;
 static struct {
     PeImpMovie *asset;
+    PeImpMovieClip clip;
     uint8_t *rgb;
     uint16_t *pixels;
     uint32_t start_vblank, frame, hz, sector;
@@ -865,7 +866,7 @@ static void start_movie_audio(void) {
     if (clock && !strcmp(clock, "video")) return;    /* deterministic headless playback */
     uint32_t frames;
     /* RE2's movie player sets its CD-XA filter to file 1, channel 1. */
-    int16_t *pcm = pe_imp_movie_pcm(s_movie.asset, 1, 1, &frames,
+    int16_t *pcm = pe_imp_movie_pcm(s_movie.asset, &s_movie.clip, 1, 1, &frames,
                                    &s_movie.audio_rate, &s_movie.audio_channels);
     if (!pcm) return;
     SDL_AudioSpec spec = {SDL_AUDIO_S16, (int)s_movie.audio_channels, (int)s_movie.audio_rate};
@@ -881,7 +882,7 @@ static void start_movie_audio(void) {
     free(pcm);
 }
 
-int pe_re_stage_movie_start(const char *asset) {
+int pe_re_stage_movie_start(const char *asset, unsigned start_sector, unsigned last_frame, int silent) {
     char why[160] = "";
     if (!s_show || s_movie.asset || !s_picture) return 0;
     if (pe_imp_catalog_movie(s_store, asset, &s_movie.asset, why, sizeof why)) {
@@ -889,18 +890,25 @@ int pe_re_stage_movie_start(const char *asset) {
         return 0;
     }
     const PeImpMovie *m = s_movie.asset;
-    s_movie.rgb = malloc((size_t)movie_stride(m->width) * movie_stride(m->height) * 3);
-    s_movie.pixels = malloc(PIC_W * PIC_H * sizeof *s_movie.pixels);
-    if (!s_movie.rgb || !s_movie.pixels || !draw_movie_frame(0)) {
+    const PeImpMovieClip *clip = &s_movie.clip;
+    if (!pe_imp_movie_clip(m, start_sector, last_frame, &s_movie.clip)) {
+        pe_mod_log(NULL, "%s: clip at sector %u through frame %u unavailable (rescan raw disc for movie timing)",
+                   asset, start_sector, last_frame);
         clear_movie();
         return 0;
     }
-    if (m->frame_sector && m->frame_sector[0]) {
+    s_movie.rgb = malloc((size_t)movie_stride(m->width) * movie_stride(m->height) * 3);
+    s_movie.pixels = malloc(PIC_W * PIC_H * sizeof *s_movie.pixels);
+    if (!s_movie.rgb || !s_movie.pixels || !draw_movie_frame(clip->first_frame)) {
+        clear_movie();
+        return 0;
+    }
+    if (m->frame_sector && m->frame_sector[clip->first_frame] > clip->start_sector) {
         for (unsigned i = 0; i < PIC_W * PIC_H; i++) s_movie.pixels[i] = 0x8000;
         upload_movie_picture(s_movie.pixels);
         s_movie.frame = UINT32_MAX;
     }
-    start_movie_audio();
+    if (!silent) start_movie_audio();
     s_movie.hz = GetVideoMode() == PE_RE_PAL ? 50 : 60;
     s_movie.start_vblank = (uint32_t)Psyz_VideoVSync(-1);
     return 1;
@@ -917,6 +925,7 @@ int pe_re_stage_movie_tick(void) {
         return frame < m->frames && (frame == s_movie.frame || draw_movie_frame((uint32_t)frame));
     }
 
+    const PeImpMovieClip *clip = &s_movie.clip;
     uint32_t sector = (uint32_t)((uint64_t)elapsed * PE_IMP_MOVIE_SECTOR_HZ / s_movie.hz);
     if (s_movie.audio) {
         const int queued = SDL_GetAudioStreamQueued(s_movie.audio);
@@ -932,12 +941,13 @@ int pe_re_stage_movie_tick(void) {
             sector = s_movie.sector;
         }
     }
-    if (sector >= m->sectors) return 0;
+    if (sector >= clip->end_sector - clip->start_sector) return 0;
     if (sector < s_movie.sector) sector = s_movie.sector;
     s_movie.sector = sector;
-    if (sector < m->frame_sector[0]) return 1;
-    uint32_t frame = s_movie.frame == UINT32_MAX ? 0 : s_movie.frame;
-    while (frame + 1 < m->frames && m->frame_sector[frame + 1] <= sector) frame++;
+    const uint32_t source_sector = sector + clip->start_sector;
+    if (source_sector < m->frame_sector[clip->first_frame]) return 1;
+    uint32_t frame = s_movie.frame == UINT32_MAX ? clip->first_frame : s_movie.frame;
+    while (frame + 1 < clip->end_frame && m->frame_sector[frame + 1] <= source_sector) frame++;
     return frame == s_movie.frame || draw_movie_frame(frame);
 }
 
