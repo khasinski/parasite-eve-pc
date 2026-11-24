@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 #include "pe_imp.h"
 #include "pe_imp_internal.h"
 #include "pe_imp_pe.h"
@@ -323,6 +327,25 @@ static void test_scan(void) {
     uint32_t before = pe_imp_naming_hash();
     CHECK(!pe_imp_set_naming("re2", "{\"player/pl01\": {\"id\": \"player/claire_b\", \"name\": \"Claire B\"}}"));
     CHECK(pe_imp_naming_hash() != before);
+#ifdef _WIN32
+    {   /* something (a virus scanner) holding the new catalog.json.tmp as it's swapped in: the old
+         * remove-then-rename deleted catalog.json, then couldn't rename, leaving no catalog ("re2:logic/
+         * 100-0 is not in the catalog"). The swap waits, then keeps the old catalog (the scan says it
+         * couldn't save); the catalog must still be there */
+        FILE *t = fopen("pe-import-test/store/re2/catalog.json.tmp", "wb");
+        if (t) fclose(t);
+        HANDLE h = CreateFileA("pe-import-test/store/re2/catalog.json.tmp", GENERIC_READ,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        CHECK(h != INVALID_HANDLE_VALUE);
+        (void)pe_imp_scan("pe-import-test/store", "pe-import-test/discs/Made Up.cue", NULL, &sc);
+        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+        cat = pj_load("pe-import-test/store/re2/catalog.json", why, sizeof why);
+        CHECK(cat != NULL);
+        pj_free(cat);
+        CHECK(!pe_imp_set_naming("re2", g_re2_naming));       /* and again with nothing holding it */
+        CHECK(!pe_imp_set_naming("re2", "{\"player/pl01\": {\"id\": \"player/claire_b\", \"name\": \"Claire B\"}}"));
+    }
+#endif
     CHECK(!pe_imp_scan("pe-import-test/store", "pe-import-test/discs/Made Up.cue", NULL, &sc));
     cat = pj_load("pe-import-test/store/re2/catalog.json", why, sizeof why);
     CHECK(cat && !pj_get(cat, "re2:player/claire") && pj_get(cat, "re2:player/claire_b") &&

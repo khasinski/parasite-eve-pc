@@ -12,6 +12,9 @@
 #include <string.h>
 #ifdef _WIN32
 #include <direct.h>
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
 #define MKDIR(p) _mkdir(p)
 #else
 #include <sys/stat.h>
@@ -221,6 +224,22 @@ static int src_cmp(const void *a, const void *b) {
 
 static int entry_cmp(const void *a, const void *b) { return strcmp(((const Entry *)a)->id, ((const Entry *)b)->id); }
 
+/* A finished file over the old one in one step. Removing the old file first lost the catalog on
+ * Windows when something (a virus scanner) still held the new .tmp: the rename failed after the
+ * delete, leaving only catalog.json.tmp ("re2:logic/100-0 is not in the catalog"). Now a holder only
+ * delays the swap; if it never lets go, the old catalog stays. */
+static int replace_file(const char *from, const char *to) {
+#ifdef _WIN32
+    for (int tries = 0; tries < 100; tries++) {
+        if (MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return 0;
+        Sleep(20);
+    }
+    return -1;
+#else
+    return rename(from, to);
+#endif
+}
+
 static int cat_save(Catalog *c, const char *path) {
     char tmp[PE_IMP_PATH_MAX];
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
@@ -249,8 +268,7 @@ static int cat_save(Catalog *c, const char *path) {
     }
     fputs(first ? "}\n" : "\n}\n", f);
     if (fclose(f)) return -1;
-    remove(path);
-    return rename(tmp, path);
+    return replace_file(tmp, path);
 }
 
 static void cat_note(Catalog *c, const char *game, const char *proposed, const char *name, uint32_t type,
