@@ -38,7 +38,17 @@ sequence advances to the next clip or room.
 
 The room-script mapping covers IDs 1, 2, 4Ã¢â‚¬â€œ14 and 17. Character-specific
 entries (8, 10-14 and 17) use filenames from the respective retail discs.
-Claire uses R408 for ID 11, and her R700 and R703 clips have their own end frames.
+Claire's imported room scripts request the following clips. Procedure numbers
+refer to the room's main script.
+
+| Room | Procedure | Movie ID | Retail clip | Last STR frame |
+| --- | ---: | ---: | --- | ---: |
+| 1-08 | 2 | 8 | R108C | 1326 |
+| 2-04 | 9 | 10 | R204C | 500 |
+| 4-08 | 8 | 11 | R408 | 4287 |
+| 7-00 | 7 | 12 | R700C | 3043 |
+| 7-03 | 13 | 13 | R703C | 2345 |
+
 MOV3 imports
 preserve STR frame numbers as well as the video and XA sector positions.
 This lets R200, R505 and Leon's R704 play the excerpt requested by the room
