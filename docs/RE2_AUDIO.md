@@ -14,7 +14,7 @@
 - Room-bank script cues now use the imported room's EDT and VAB. Independent one-shot effects can overlap in the mixer.
 - XA script cues now select original stage or global dialogue from the standard Leon and Claire voice archives. They use a dedicated stream alongside room music, apply XA volume, and report whether dialogue is still playing to scene scripts. Dialogue stops when the room changes.
 - On an existing profile, use **F1 → Import → Scan RE2** with the original raw disc images available. The updated readers add the room sounds and voice lines to the import catalog.
-- Exact spatial mixing, redirected and layered tones, non-room script banks, special stage 8 dialogue, field actor cues, and synchronized movie audio remain follow-up work. An ISO without the raw XA sectors cannot supply the voice tracks.
+- Exact spatial mixing, redirected and layered tones, non-room script banks, special stage 8 dialogue, and field actor cues remain follow-up work. An ISO without the raw XA sectors cannot supply the voice tracks.
 
 
 ## Scripted FMV video
@@ -23,6 +23,11 @@ The PE1 host can play selected imported STR movies requested by RE2's
 `Movie_on` room opcode. The room script pauses while the video plays. A new
 Cross press skips the clip, and the host restores the room picture on exit.
 Missing assets and unresolved movie IDs leave the script free to continue.
+
+**New Game: Leon A** in the RE2 title menu plays the imported `OPN1STL`
+movie before room 1-00. It shares the room movie's playback and skip
+handling. If the opening movie is missing, the game enters the room
+directly.
 
 The room-script mapping covers IDs 1, 2, 4–14 and 17. Character-specific
 entries (8, 10, 12–14 and 17) use verified Leon filenames. MOV3 imports
@@ -36,5 +41,5 @@ Playback places XA file 1, channel 1 on the 150-sector-per-second STR
 timeline and selects video frames from the audio stream's consumed source
 samples. If the track or audio device is unavailable, the host uses its
 video clock. Verify the timing, excerpt boundaries, and channel choice on
-retail discs. Claire-specific filenames and title-menu movies remain
-unmapped.
+retail discs. Claire-specific filenames and the other scenario openings
+remain unmapped.

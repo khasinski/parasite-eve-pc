@@ -1,6 +1,7 @@
 /* A second host for the production RE play mod. It records presentation and lets the test
  * drive input and lifecycle events without the game, renderer or platform. */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "pe_mod_api.h"
@@ -8,6 +9,7 @@
 #include "pe_re_door.h"
 #include "pe_re_save.h"
 #include "pe_imp_enemy.h"
+#include "pe_imp_room.h"
 #include "pe_services.h"
 #include "pe_src_re2.h"
 #include "pe_trip_result.h"
@@ -22,6 +24,8 @@ static struct {
     double x, z;
     int facing, camera, floor, active, shade, curtain, hold, backdrop;
     unsigned rooms, placements, saves;
+    unsigned movie_starts, movie_stops, movie_frames;
+    int movie_missing, movie_muted, movie_locked;
     int choice, busy, menu, test_wall;
     uint16_t buttons;
     ReHostCallback frame, save_read, new_game, save_committed;
@@ -100,6 +104,18 @@ static int register_progress(const ReHostProgress *progress, ReHostCallback comm
 
 static int enable_progress(void) { return 0; }
 
+static int start_movie(const char *asset, unsigned start_sector, unsigned last_frame, int silent) {
+    s.movie_starts++;
+    if (s.active || s.movie_missing || strcmp(asset, "re2:movie/opn1stl") ||
+        start_sector || last_frame || silent) return 0;
+    s.movie_frames = 4;
+    return 1;
+}
+static int tick_movie(void) { return s.movie_frames && --s.movie_frames != 0; }
+static void stop_movie(void) { s.movie_stops++; s.movie_frames = 0; }
+static void mute(int muted) { s.movie_muted = muted; }
+static void scene_controls(int locked, int mode) { (void)mode; s.movie_locked = locked; }
+
 static int s_exploration_only;
 
 const ReHost *re_host(void) {
@@ -114,6 +130,8 @@ const ReHost *re_host(void) {
         .consume_native_interact = noop, .open_save_screen = open_save, .native_menu_active = menu_active,
         .arm_backdrop = arm, .release_backdrop = release, .bind_lifecycle = bind,
         .register_progress = register_progress, .enable_progress = enable_progress,
+        .movie_start = start_movie, .movie_tick = tick_movie, .movie_stop = stop_movie,
+        .set_native_music_muted = mute, .scene_controls = scene_controls,
     };
     if (!s_exploration_only) return &host;
     static ReHost exploration;
@@ -375,6 +393,66 @@ static int play(unsigned scenario) {
     return 0;
 }
 
+static int test_opening(void) {
+    const char *store = "pe-re-opening-test";
+    char sha[65], folder[180];
+    memset(sha, 'a', sizeof sha - 1);
+    sha[sizeof sha - 1] = 0;
+    snprintf(folder, sizeof folder, "%s/re2/%s/0", store, sha);
+    EXPECT(!pe_imp_mkdirs(folder));
+    PeImpLogicBuilder *builder = pe_imp_logic_begin(PE_IMP_RE2, 0, 0, 0);
+    EXPECT(builder);
+    PeImpRoomLogic *logic = pe_imp_logic_finish(builder);
+    EXPECT(logic);
+    const int saved = pe_imp_logic_save(logic, folder, NULL, 0);
+    free(logic);
+    EXPECT(!saved);
+    FILE *catalog = fopen("pe-re-opening-test/re2/catalog.json", "wb");
+    EXPECT(catalog);
+    fprintf(catalog, "{\"re2:logic/100-0\":{\"type\":\"RoomLogic\","
+                     "\"sources\":[{\"sha256\":\"%s\",\"item\":\"0\"}]},"
+                     "\"re2:room/100\":{\"type\":\"ImageSet\"}}\n", sha);
+    EXPECT(!fclose(catalog));
+
+    enum { FINISH, SKIP, MISSING, LOAD_SAVE };
+    for (int mode = FINISH; mode <= LOAD_SAVE; mode++) {
+        memset(&s, 0, sizeof s);
+        s.store = store;
+        s.movie_missing = mode == MISSING;
+        EXPECT(!pe_mod_pe_re_play.init());
+        s.title();
+        frames(1, 0);
+        EXPECT(s.busy && !s.active);
+        s.choice = 0;  /* Leon A */
+        s.busy = 0;
+        frames(2, RE_HOST_CROSS);
+        EXPECT(s.movie_starts == 1);
+        if (mode != MISSING) {
+            EXPECT(!s.active && !s.rooms && s.movie_locked && s.movie_muted);
+            frames(1, RE_HOST_CROSS);  /* holding the selection button must not skip */
+            EXPECT(!s.active && s.movie_stops == 0);
+            if (mode == SKIP) {
+                frames(1, 0);
+                frames(1, RE_HOST_CROSS);
+            } else if (mode == LOAD_SAVE) {
+                s.save_read(NULL, NULL);
+            } else {
+                frames(3, 0);
+            }
+            EXPECT(!s.active && s.movie_stops == 1 && !s.movie_locked && !s.movie_muted);
+        }
+        frames(1, mode == SKIP ? RE_HOST_CROSS : 0);
+        if (mode == LOAD_SAVE) {
+            EXPECT(!s.active && !s.rooms);
+        } else {
+            EXPECT(s.active && s.rooms == 1 && !strcmp(s.room, "re2:room/100"));
+        }
+        EXPECT(s.movie_starts == 1 && s.movie_stops == (unsigned)(mode != MISSING));
+        pe_mod_pe_re_play.shutdown();
+    }
+    return 0;
+}
+
 int re_headless_smoke(const char *store, unsigned scenario) {
     memset(&s, 0, sizeof s);
     EXPECT(re_host()->struct_size == sizeof(ReHost));
@@ -390,7 +468,7 @@ int re_headless_smoke(const char *store, unsigned scenario) {
             }
         }
         EXPECT(swaps == 1 && !s.hold && !s.curtain && s.shade == 128);
-        return 0;
+        return test_opening();
     }
     s.store = store;
     EXPECT(!pe_mod_pe_re_play.init());

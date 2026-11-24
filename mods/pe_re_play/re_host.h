@@ -95,7 +95,7 @@ typedef struct ReHost {
     int (*register_progress)(const ReHostProgress *progress, ReHostCallback committed);
     int (*enable_progress)(void);
     /* Optional movie renderer. Start returns 1 on success, tick returns 1 while
-     * playing, and stop restores the room. The host owns the loaded asset.
+     * playing, and stop restores the underlying view. The host owns the loaded asset.
      * Zero seek and frame limit request the whole movie. */
     int (*movie_start)(const char *asset, unsigned start_sector, unsigned last_frame, int silent);
     int (*movie_tick)(void);

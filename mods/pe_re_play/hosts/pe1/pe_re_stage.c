@@ -86,7 +86,7 @@ static struct {
     PeImpMovie *asset;
     PeImpMovieClip clip;
     uint8_t *rgb;
-    uint16_t *pixels;
+    uint16_t *pixels, *native_picture;
     uint32_t start_vblank, frame, hz, sector;
     SDL_AudioStream *audio;
     unsigned audio_rate, audio_channels;
@@ -284,7 +284,9 @@ static void walk_input(unsigned buttons, int analog_x, int analog_y) {
 static int on_move(void *ctx, void *user) {
     (void)user;
     const FieldActor *aya = ctx;
-    if (!s_show || !s_walk.active || aya != g_PlayerEntity) return 0;
+    if (aya != g_PlayerEntity) return 0;
+    if (s_movie.asset && !s_show) return 1;
+    if (!s_show || !s_walk.active) return 0;
     const int free_field = pe_free_field();
     if (!free_field || pe_re_box_busy() || s_hold || s_scene_locked || s_climb.row.b) {
         walk_input(0, 0, 0);
@@ -858,6 +860,7 @@ static void clear_movie(void) {
     pe_imp_movie_free(s_movie.asset);
     free(s_movie.rgb);
     free(s_movie.pixels);
+    free(s_movie.native_picture);
     memset(&s_movie, 0, sizeof s_movie);
 }
 
@@ -884,7 +887,7 @@ static void start_movie_audio(void) {
 
 int pe_re_stage_movie_start(const char *asset, unsigned start_sector, unsigned last_frame, int silent) {
     char why[160] = "";
-    if (!s_show || s_movie.asset || !s_picture) return 0;
+    if (s_movie.asset || s_backdrop.on || (!s_show && !pe_free_field())) return 0;
     if (pe_imp_catalog_movie(s_store, asset, &s_movie.asset, why, sizeof why)) {
         pe_mod_log(NULL, "%s: %s", asset, why);
         return 0;
@@ -899,7 +902,19 @@ int pe_re_stage_movie_start(const char *asset, unsigned start_sector, unsigned l
     }
     s_movie.rgb = malloc((size_t)movie_stride(m->width) * movie_stride(m->height) * 3);
     s_movie.pixels = malloc(PIC_W * PIC_H * sizeof *s_movie.pixels);
-    if (!s_movie.rgb || !s_movie.pixels || !draw_movie_frame(clip->first_frame)) {
+    if (!s_show) s_movie.native_picture = malloc(PIC_W * PIC_H * sizeof *s_movie.native_picture);
+    if (!s_movie.rgb || !s_movie.pixels || (!s_show && !s_movie.native_picture)) {
+        clear_movie();
+        return 0;
+    }
+    if (s_movie.native_picture) {
+        /* A scenario opening owns only the field texture until it finishes. */
+        RECT rect = {VRAM_X, VRAM_Y, PIC_W, PIC_H};
+        DrawSync(0);
+        StoreImage(&rect, s_movie.native_picture);
+        DrawSync(0);
+    }
+    if (!draw_movie_frame(clip->first_frame)) {
         clear_movie();
         return 0;
     }
@@ -953,8 +968,9 @@ int pe_re_stage_movie_tick(void) {
 
 void pe_re_stage_movie_stop(void) {
     if (!s_movie.asset) return;
+    if (s_movie.native_picture) upload_movie_picture(s_movie.native_picture);
+    else if (s_show && s_picture) upload_movie_picture(s_picture);
     clear_movie();
-    if (s_show && s_picture) upload_movie_picture(s_picture);
 }
 
 static void link_quad(RenderNativeTag *entry, RenderTexturedQuad *quad) {
@@ -1641,7 +1657,7 @@ static int on_background(void *ctx, void *user) {
         link_quad(&((RenderNativeTag *)b->ordering)[ROOM_BACKGROUND_OT], &quads[1]);
         return 1;
     }
-    if (!s_show) return 0;
+    if (!s_show && !s_movie.asset) return 0;
     if (b->stage == 0) return 1;                       /* skip the PE room's own tiles */
     if (b->slot < 0 || b->slot > 1 || !b->ordering) return 0;
     RenderNativeTag *ordering = b->ordering;
@@ -1700,6 +1716,7 @@ static int on_scene(void *ctx, void *user) {
 }
 
 void pe_re_stage_hide(void) {
+    pe_re_stage_movie_stop();
     clear_actor_banks();
     pe_re_stage_scene_controls(0, 0);
     s_shade = 128, s_curtain = s_hold = 0;
@@ -1823,7 +1840,8 @@ void pe_re_stage_scene_controls(int locked, int move_mode) {
     s_scene_frame = locked && s_scene_locked && pose == s_scene_pose ? s_scene_frame + 1 : 0;
     s_scene_locked = locked;
     s_scene_pose = pose;
-    if (locked) g_FieldPadPressed &= ~0x80u;  /* the native Aya inventory shortcut */
+    if (locked && s_movie.asset && !s_show) g_FieldPadPressed = 0;
+    else if (locked) g_FieldPadPressed &= ~0x80u;  /* the native Aya inventory shortcut */
 }
 void pe_re_stage_fade(int shade, int curtain, int hold) { s_shade = shade, s_curtain = curtain, s_hold = hold; }
 void pe_re_stage_set_size(int percent) { if (percent != s_size) s_size = percent, pe_re_scale(); }

@@ -49,6 +49,7 @@ static const ReHostProgress s_progress = {"pe_re_play/progress", PE_RE_SAVE_VERS
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
 static int s_start_held, s_select_held;          /* Start: the status screen; Select: the pause menu */
+enum { START_IDLE, START_ROOM, START_OPENING };
 static int s_climbing;
 enum { TITLE_CLOSED, TITLE_WAIT_FIELD, TITLE_CHOOSING, TITLE_STARTING };
 static int s_title, s_title_choice, s_title_wait;
@@ -585,6 +586,7 @@ static void stop_movie(void) {
     host->movie_stop();
     if (RE_HOST_HAS(host, set_native_music_muted)) host->set_native_music_muted(0);
     s_movie_playing = 0;
+    sync_scene_controls();
 }
 
 typedef struct {
@@ -593,11 +595,14 @@ typedef struct {
     int leon_only, silent;
 } ReMovie;
 
-/* Room-script entries from Movie_tbl. The alternate excerpts seek to five
+enum { RE2_MOVIE_LEON_A_OPENING = 3 };
+
+/* Entries from Movie_tbl. The alternate excerpts seek to five
  * sectors per table offset unit. Character-specific names are verified for Leon. */
 static const ReMovie s_movies[] = {
     [1] = {.asset = "re2:movie/r200", .last_frame = 250},
     [2] = {.asset = "re2:movie/r200", .last_frame = 146},
+    [RE2_MOVIE_LEON_A_OPENING] = {.asset = "re2:movie/opn1stl", .leon_only = 1},
     [4] = {.asset = "re2:movie/r10b"},
     [5] = {.asset = "re2:movie/r200", .last_frame = 90},
     [6] = {.asset = "re2:movie/r505", .last_frame = 598},
@@ -612,43 +617,55 @@ static const ReMovie s_movies[] = {
     [17] = {.asset = "re2:movie/r704l", .start_sector = 4589 * 5, .last_frame = 9247, .leon_only = 1, .silent = 1},
 };
 
-static int movie_frame(void) {
-    const ReHost *host = re_host();
-    const unsigned request = s_session.run.movie_request;
-    if (!request && !s_movie_playing) return 0;
-    const unsigned buttons = host->held_buttons();
-    const int cross = (buttons & RE_HOST_CROSS) != 0;
-    if (request) {
-        s_session.run.movie_request = 0;
-        const unsigned id = request - 1;
-        const ReMovie *movie = id < sizeof s_movies / sizeof *s_movies ? &s_movies[id] : NULL;
-        if (!movie || !movie->asset || (movie->leon_only && s_session.player != 0) ||
-            !RE_HOST_HAS(host, movie_start) || !RE_HOST_HAS(host, movie_tick) || !RE_HOST_HAS(host, movie_stop) ||
-            !host->movie_start(movie->asset, movie->start_sector, movie->last_frame, movie->silent)) {
-            pe_mod_log(MOD_ID, "Movie_on %u unavailable for player %u", request - 1, (unsigned)s_session.player);
-            return 0;
-        }
-        pe_re_music_stop();
-        if (RE_HOST_HAS(host, set_native_music_muted)) host->set_native_music_muted(1);
-        host->forget_dialogue();
-        s_movie_playing = 1;
-        s_movie_cross = cross;
-    } else if ((cross && !s_movie_cross) || !host->movie_tick()) {
-        stop_movie();
-    }
-    host->consume_native_interact();
-    s_cross_held = s_movie_cross = cross;
+static void movie_input(unsigned buttons) {
+    re_host()->consume_native_interact();
+    s_cross_held = s_movie_cross = (buttons & RE_HOST_CROSS) != 0;
     s_square_held = (buttons & RE_HOST_SQUARE) != 0;
     s_session.key = pe_re_scd_keys(buttons);
     s_session.key_trg = 0;
     sync_scene_controls();
+}
+
+static int start_movie(unsigned id) {
+    const ReHost *host = re_host();
+    const ReMovie *movie = id < sizeof s_movies / sizeof *s_movies ? &s_movies[id] : NULL;
+    if (s_movie_playing || !movie || !movie->asset || (movie->leon_only && s_session.player != 0) ||
+        !RE_HOST_HAS(host, movie_start) || !RE_HOST_HAS(host, movie_tick) || !RE_HOST_HAS(host, movie_stop) ||
+        !host->movie_start(movie->asset, movie->start_sector, movie->last_frame, movie->silent)) {
+        pe_mod_log(MOD_ID, "Movie %u unavailable for player %u", id, (unsigned)s_session.player);
+        return 0;
+    }
+    pe_re_music_stop();
+    if (RE_HOST_HAS(host, set_native_music_muted)) host->set_native_music_muted(1);
+    host->forget_dialogue();
+    s_movie_playing = 1;
+    movie_input(host->held_buttons());
     return 1;
+}
+
+/* Consume the whole frame, including the press that skips the movie. The
+ * caller continues its own sequence on the following frame. */
+static int tick_movie(void) {
+    if (!s_movie_playing) return 0;
+    const ReHost *host = re_host();
+    const unsigned buttons = host->held_buttons();
+    const int skip = (buttons & RE_HOST_CROSS) && !s_movie_cross;
+    movie_input(buttons);
+    if (skip || !host->movie_tick()) stop_movie();
+    return 1;
+}
+
+static int movie_frame(void) {
+    if (tick_movie()) return 1;
+    const unsigned request = s_session.run.movie_request;
+    s_session.run.movie_request = 0;
+    return request && start_movie(request - 1);
 }
 
 static void stop(void) {
     stop_movie();
     pe_re_music_stop();
-    s_start_pending = 0;
+    s_start_pending = START_IDLE;
     s_title = TITLE_CLOSED;
     s_climbing = 0;
     pe_re_door_cancel();
@@ -667,7 +684,7 @@ static void stop(void) {
 }
 
 static void start_room(void) {
-    s_start_pending = 0;
+    s_start_pending = START_IDLE;
     s_playing = 1, s_cross_held = 1;           /* the Cross that chose Start isn't a door press */
     if (s_registered && !keep_progress()) pe_toast("Progress in this game won't be saved: the save's companion has no room.");
     re_host()->set_masks(s_masks);
@@ -675,7 +692,18 @@ static void start_room(void) {
     show_room(0);
 }
 
-static void start_game(const PeReGame *game, unsigned player, int scenario_b)
+static void advance_start(void) {
+    if (s_start_pending == START_OPENING) {
+        s_start_pending = START_ROOM;
+        if (start_movie(RE2_MOVIE_LEON_A_OPENING)) {
+            snprintf(s_status, sizeof s_status, "Playing the Leon A opening.");
+            return;
+        }
+    }
+    start_room();
+}
+
+static void start_game(const PeReGame *game, unsigned player, int scenario_b, int play_opening)
 {
     char why[200] = "";
     if (s_battle_paused) return;
@@ -689,12 +717,13 @@ static void start_game(const PeReGame *game, unsigned player, int scenario_b)
         pe_toast(s_status);
         return;
     }
+    s_start_pending = play_opening ? START_OPENING : START_ROOM;
     if (host->start_from_title && host->start_from_title()) {
-        s_start_pending = 1;
         snprintf(s_status, sizeof s_status, "Starting %s...", s_session.game->title);
     } else if (!host->start_ready || host->start_ready()) {
-        start_room();
+        advance_start();
     } else {
+        s_start_pending = START_IDLE;
         pe_re_session_end(&s_session);
         snprintf(s_status, sizeof s_status, "Start is available at the title or in the free field.");
     }
@@ -710,7 +739,7 @@ static void start(void)
         snprintf(s_status, sizeof s_status, "%s isn't playable yet: only RE2 rooms are.", game->title);
         return;
     }
-    start_game(game, (unsigned)s_player, 0);
+    start_game(game, (unsigned)s_player, 0, 0);
 }
 
 /* Where the save (or the last Stop) left off. */
@@ -786,7 +815,8 @@ static void tick_title(void)
         if (!ready && ++s_title_wait < 300) return;
         s_title = TITLE_CLOSED;
         if (s_title_choice == TITLE_CONTINUE) resume();
-        else start_game(pe_re_game_named("re2"), (unsigned)s_title_choice % 2, s_title_choice >= TITLE_LEON_B);
+        else start_game(pe_re_game_named("re2"), (unsigned)s_title_choice % 2,
+                        s_title_choice >= TITLE_LEON_B, s_title_choice == TITLE_LEON_A);
         return;
     }
     const int choice = host->dialogue_choice();
@@ -830,7 +860,7 @@ static int on_save_read(void *ctx, void *user) {
     }
     if (s_start_pending) {
         pe_re_session_end(&s_session);
-        s_start_pending = 0;
+        s_start_pending = START_IDLE;
     }
     s_resume = !pe_re_save_decode(s_saved, &saved) && saved.game && saved.playing;
     snprintf(s_status, sizeof s_status, s_resume ? "Back to %s when the field is free." : "Not playing.",
@@ -852,7 +882,13 @@ static int on_frame(void *ctx, void *user) {
         tick_title();
         return 0;
     }
-    if (s_start_pending && (!re_host()->start_ready || re_host()->start_ready())) start_room();
+    if (s_start_pending) {
+        if (tick_movie()) return 0;
+        const ReHost *host = re_host();
+        if (host->native_menu_active() || (host->start_ready && !host->start_ready())) return 0;
+        advance_start();
+        if (s_movie_playing) return 0;
+    }
     if (s_resume && !s_playing && re_host()->field_free()) resume();
     if (!s_playing) return 0;
     const ReHost *music_host = re_host();
