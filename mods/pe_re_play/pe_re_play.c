@@ -48,6 +48,7 @@ static const ReHostProgress s_progress = {"pe_re_play/progress", PE_RE_SAVE_VERS
                                           sizeof s_saved, s_saved, pe_re_save_upgrade};
 static int s_registered, s_enabled, s_resume;
 static int s_playing, s_cross_held, s_square_held, s_reshown, s_start_pending;
+static int s_start_held, s_select_held;          /* Start: the status screen; Select: the pause menu */
 static int s_climbing;
 enum { TITLE_CLOSED, TITLE_WAIT_FIELD, TITLE_CHOOSING, TITLE_STARTING };
 static int s_title, s_title_choice, s_title_wait;
@@ -242,7 +243,8 @@ static void text_enemy_movement(char *out, unsigned size) {
 }
 
 /* ---- the pocket and the item box ---- */
-enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE, PICK_COMPUTER, PICK_ALLIGATOR };
+enum { PICK_NONE, PICK_USE, PICK_BOX, PICK_SAVE, PICK_COMPUTER, PICK_ALLIGATOR,
+       PICK_STATUS, PICK_STATUS_ACT, PICK_COMBINE, PICK_PAUSE };
 /* A typewriter save: the ribbon is used when she says yes; PE's own save screen opens on the next
  * free frame (as its save phones' script opcode opens it); backing out without a save gives the
  * ribbon back once the room is up again. */
@@ -343,6 +345,70 @@ static void open_pocket(void) {
     if (re_host()->choose("Use which item?", labels, n, 0)) s_pick = PICK_USE;
 }
 
+/* ---- RE2's status screen (Start), in boxes: the pocket, then what to do with an item ----
+ * As RE2's own (bio2-ds GAME.C opens it on KEY_STATUS): Use, Combine (Mix) and Check. Equip is left
+ * out: the fights are Parasite Eve's. */
+static int s_status_slot;
+static const char *who_plays(void) {
+    if (s_session.player_id == 12) return "HUNK";
+    return s_session.player ? "Claire" : "Leon";
+}
+static void open_status(int at) {
+    static char text[RE_HOST_DIALOGUE_CHOICES][41], title[64];
+    const char *labels[RE_HOST_DIALOGUE_CHOICES];
+    const PeReProgress *p = &s_session.progress;
+    int n = 0;
+    for (int i = 0; i < p->held && n < RE_HOST_DIALOGUE_CHOICES; i++, n++) {
+        held_label(&p->pocket[i], "", text[n], sizeof text[n]);
+        labels[n] = text[n], s_pick_item[n] = p->pocket[i].item, s_pick_slot[n] = i;
+    }
+    snprintf(title, sizeof title, "Status: %s  %d/%d", who_plays(), p->held, PE_RE_POCKET_SLOTS);
+    if (!n) { say("Status: nothing carried."); return; }
+    if (re_host()->choose(title, labels, n, at >= 0 && at < n ? at : 0)) s_pick = PICK_STATUS;
+}
+static void open_status_actions(void) {
+    static const char *const actions[] = {"Use", "Combine", "Check", "Back"};
+    static char title[64];
+    const PeReProgress *p = &s_session.progress;
+    if (s_status_slot >= p->held) { open_status(0); return; }
+    held_label(&p->pocket[s_status_slot], "", title, sizeof title);
+    if (re_host()->choose(title, actions, 4, 0)) s_pick = PICK_STATUS_ACT;
+}
+static void open_combine(void) {
+    static char text[RE_HOST_DIALOGUE_CHOICES][41];
+    const char *labels[RE_HOST_DIALOGUE_CHOICES];
+    const PeReProgress *p = &s_session.progress;
+    int n = 0;
+    for (int i = 0; i < p->held && n < RE_HOST_DIALOGUE_CHOICES; i++) {
+        if (i == s_status_slot) continue;
+        held_label(&p->pocket[i], "With ", text[n], sizeof text[n]);
+        labels[n] = text[n], s_pick_slot[n] = i, n++;
+    }
+    if (!n) { say("There's nothing to combine it with."); return; }
+    if (re_host()->choose("Combine", labels, n, 0)) s_pick = PICK_COMBINE;
+}
+static void check_item(void) {
+    char label[64], name[48], text[200];
+    const PeReProgress *p = &s_session.progress;
+    held_label(&p->pocket[s_status_slot], "", label, sizeof label);
+    int n = snprintf(text, sizeof text, "%s.", label);
+    for (int i = 0; i < p->held && n < (int)sizeof text - 48; i++) {   /* what it goes with, as a hint */
+        if (i == s_status_slot || !pe_re_combined(&s_session, p->pocket[s_status_slot].item, p->pocket[i].item)) continue;
+        pe_re_item_name(s_session.items, p->pocket[i].item, name, sizeof name);
+        n += snprintf(text + n, sizeof text - (size_t)n, " It goes with the %s.", name);
+    }
+    say(text);
+}
+
+/* ---- the pause menu (Select), as RE2's Select opens its own menu (GAME.C, SYS_CONFIG) ---- */
+static void open_title(void);
+static void stop(void);
+enum { PAUSE_RESUME, PAUSE_TITLE, PAUSE_QUIT };
+static void open_pause(void) {
+    static const char *const options[] = {"Resume", "RE2 title menu", "Back to Parasite Eve"};
+    if (re_host()->choose("Paused", options, 3, PAUSE_RESUME)) s_pick = PICK_PAUSE;
+}
+
 static void open_item_box(int at) {
     static char text[RE_HOST_DIALOGUE_CHOICES][41];
     const char *labels[RE_HOST_DIALOGUE_CHOICES];
@@ -396,6 +462,42 @@ static void picked(void) {
     if (mode == PICK_ALLIGATOR) {
         s_session.run.alligator_chosen = 1;
         if (c == 1) pe_re_session_release_canister(&s_session);
+        return;
+    }
+    if (mode == PICK_STATUS) {
+        if (c >= 0) s_status_slot = s_pick_slot[c], open_status_actions();
+        return;
+    }
+    if (mode == PICK_STATUS_ACT) {
+        if (c == -2 || c == 3) { open_status(s_status_slot); return; }   /* Back: the pocket again */
+        if (c == 0) {
+            const uint16_t item = s_session.progress.pocket[s_status_slot].item;
+            char name[48];
+            pe_re_item_name(s_session.items, item, name, sizeof name);
+            if (pe_re_session_use(&s_session, item) == PE_RE_SAID) say(s_session.said);
+            else snprintf(s_status, sizeof s_status, "Used the %s.", name);
+        } else if (c == 1) {
+            open_combine();
+        } else if (c == 2) {
+            check_item();
+        }
+        return;
+    }
+    if (mode == PICK_COMBINE) {
+        if (c < 0) { open_status_actions(); return; }
+        const PeReProgress *p = &s_session.progress;
+        const uint16_t a = p->pocket[s_status_slot].item, b = p->pocket[s_pick_slot[c]].item;
+        const uint16_t made = pe_re_session_combine(&s_session, a, b);
+        char name[48], text[96];
+        if (!made) { say("Those can't be combined."); return; }
+        pe_re_item_name(s_session.items, made, name, sizeof name);
+        snprintf(text, sizeof text, "Combined: the %s.", name);
+        say(text);
+        return;
+    }
+    if (mode == PICK_PAUSE) {
+        if (c == PAUSE_TITLE) open_title();
+        else if (c == PAUSE_QUIT) { stop(); snprintf(s_status, sizeof s_status, "Back in Parasite Eve. Continue picks the RE game up again."); }
         return;
     }
     if (c < 0) return;                                      /* backed out */
@@ -726,6 +828,7 @@ static int on_frame(void *ctx, void *user) {
         const unsigned buttons = re_host()->held_buttons();
         s_cross_held = (buttons & RE_HOST_CROSS) != 0;
         s_square_held = (buttons & RE_HOST_SQUARE) != 0;
+        s_start_held = (buttons & RE_HOST_START) != 0, s_select_held = (buttons & RE_HOST_SELECT) != 0;
         const PeReDoorStep door_step = pe_re_door_step();
         if (door_step == PE_RE_DOOR_SWAP) {
             show_room(1);
@@ -743,6 +846,7 @@ static int on_frame(void *ctx, void *user) {
         s_session.key = key;
     }
     picked();
+    if (!s_playing) return 0;                    /* the pause menu ended play (Back to Parasite Eve, the title menu) */
     const PeReChange script_change = pe_re_session_tick(&s_session);
     pe_re_music_update(&s_session);
     switch (script_change) {
@@ -770,10 +874,15 @@ static int on_frame(void *ctx, void *user) {
     sync_scene_controls();
     const int locked = scene_locked();
     apply_collision(0);
-    {   /* Square: the pocket, to use something here */
-        const int square = (re_host()->held_buttons() & RE_HOST_SQUARE) != 0;
-        if (square && !s_square_held && !locked && !s_climbing && !re_host()->dialogue_busy()) open_pocket();
-        s_square_held = square;
+    {   /* Square: the pocket, to use something here; Start: the status screen; Select: the pause menu */
+        const uint16_t held = re_host()->held_buttons();
+        const int square = (held & RE_HOST_SQUARE) != 0, start = (held & RE_HOST_START) != 0,
+                  select = (held & RE_HOST_SELECT) != 0;
+        const int free = !locked && !s_climbing && !re_host()->dialogue_busy() && s_pick == PICK_NONE;
+        if (square && !s_square_held && free) open_pocket();
+        else if (start && !s_start_held && free) open_status(0);
+        else if (select && !s_select_held && free) open_pause();
+        s_square_held = square, s_start_held = start, s_select_held = select;
     }
     const int cross = (re_host()->held_buttons() & RE_HOST_CROSS) != 0;
     const int pressed = cross && !s_cross_held && !locked && !re_host()->dialogue_busy();   /* a box's Cross is the box's */

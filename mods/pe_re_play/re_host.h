@@ -12,7 +12,7 @@ struct PeReSceneActor;
 typedef int (*ReHostCallback)(void *event, void *user);
 
 /* Held buttons, active high in RE's byte order. */
-enum { RE_HOST_CROSS = 0x0040, RE_HOST_SQUARE = 0x0080 };
+enum { RE_HOST_CROSS = 0x0040, RE_HOST_SQUARE = 0x0080, RE_HOST_START = 0x0800, RE_HOST_SELECT = 0x0100 };
 #define RE_HOST_DIALOGUE_CHOICES 80
 
 /* Room IDs refer to the shared catalog. Positions are in RE room units.

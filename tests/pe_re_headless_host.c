@@ -345,6 +345,22 @@ static int play(unsigned scenario) {
     s.jump();
     frames(30, 0);
     s.give_ribbon();
+    /* Start: RE2's status screen, the pocket, then what to do with the item (Check says what it is) */
+    frames(1, RE_HOST_START);
+    EXPECT(s.busy && !strncmp(s.text, "Status: Leon  1/8", 17));
+    s.busy = 0, s.choice = 0;
+    frames(2, 0);
+    EXPECT(s.busy && strstr(s.text, "Ink Ribbon"));
+    s.busy = 0, s.choice = 2;                                 /* Check */
+    frames(2, 0);
+    EXPECT(s.busy && strstr(s.text, "Ink Ribbon") && s.text[strlen(s.text) - 1] == '.');
+    s.busy = 0;
+    /* Select: the pause menu; Resume leaves her playing */
+    frames(1, RE_HOST_SELECT);
+    EXPECT(s.busy && !strcmp(s.text, "Paused"));
+    s.busy = 0, s.choice = 0;
+    frames(2, 0);
+    EXPECT(s.active && !s.busy);
     s.typewriter();
     frames(1, RE_HOST_CROSS);
     EXPECT(s.busy && !strcmp(s.text, "Use an Ink Ribbon to save?"));
